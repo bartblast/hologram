@@ -17,7 +17,8 @@ defmodule Reflex.MixProject do
       elixir: "~> 1.10",
       start_permanent: Mix.env() == :prod,
       deps: deps(),
-      package: package()
+      package: package(),
+      description: "Optimistic UI component library for Phoenix LiveView"
     ]
   end
 
