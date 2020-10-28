@@ -25,6 +25,11 @@ defmodule Reflex.TranspilerTest do
   end
 
   describe "transpile/1" do
+    test "string literal" do
+      ast = Transpiler.parse!("\"test\"")
+      assert Transpiler.transpile(ast) == "test"
+    end
+
     test "integer literal" do
       ast = Transpiler.parse!("1")
       assert Transpiler.transpile(ast) == "1"

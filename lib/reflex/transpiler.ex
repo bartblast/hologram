@@ -15,6 +15,10 @@ defmodule Reflex.Transpiler do
     |> Code.string_to_quoted()
   end
 
+  def transpile(ast) when is_binary(ast) do
+    ast
+  end
+
   def transpile(ast) when is_integer(ast) do
     to_string(ast)
   end
