@@ -34,5 +34,10 @@ defmodule Reflex.TranspilerTest do
       ast = Transpiler.parse!("1")
       assert Transpiler.transpile(ast) == "1"
     end
+
+    test "boolean literal" do
+      ast = Transpiler.parse!("true")
+      assert Transpiler.transpile(ast) == "true"
+    end
   end
 end

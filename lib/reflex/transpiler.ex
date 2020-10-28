@@ -22,4 +22,8 @@ defmodule Reflex.Transpiler do
   def transpile(ast) when is_integer(ast) do
     to_string(ast)
   end
+
+  def transpile(ast) when is_boolean(ast) do
+    to_string(ast)
+  end
 end
