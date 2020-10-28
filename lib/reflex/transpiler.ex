@@ -26,4 +26,8 @@ defmodule Reflex.Transpiler do
   def transpile(ast) when is_boolean(ast) do
     to_string(ast)
   end
+
+  def transpile({:if, _, [condition, [do: do_branch, else: else_branch]]}) do
+    "if (#{transpile(condition)}) { #{transpile(do_branch)} } else { #{transpile(else_branch)} }"
+  end
 end

@@ -39,5 +39,10 @@ defmodule Reflex.TranspilerTest do
       ast = Transpiler.parse!("true")
       assert Transpiler.transpile(ast) == "true"
     end
+
+    test "if statement" do
+      ast = Transpiler.parse!("if true, do: 1, else: 2")
+      assert Transpiler.transpile(ast) == "if (true) { 1 } else { 2 }"
+    end
   end
 end
