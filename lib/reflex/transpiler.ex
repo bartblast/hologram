@@ -37,6 +37,10 @@ defmodule Reflex.Transpiler do
     {:boolean, ast}
   end
 
+  def transpile({:%{}, _, map}) do
+    {:map, Enum.map(map, fn {k, v} -> {k, transpile(v)} end)}
+  end
+
   def transpile({:if, _, [condition, [do: do_block, else: else_block]]}) do
     {:if, {transpile(condition), transpile(do_block), transpile(else_block)}}
   end
