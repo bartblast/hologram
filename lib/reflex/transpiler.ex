@@ -23,21 +23,21 @@ defmodule Reflex.Transpiler do
     |> Code.string_to_quoted()
   end
 
-  def transpile(ast, vars \\ %{})
+  def transpile(ast)
 
-  def transpile(ast, _vars) when is_binary(ast) do
-    ast
+  def transpile(ast) when is_binary(ast) do
+    {:string, ast}
   end
 
-  def transpile(ast, _vars) when is_integer(ast) do
-    to_string(ast)
+  def transpile(ast) when is_integer(ast) do
+    {:integer, ast}
   end
 
-  def transpile(ast, _vars) when is_boolean(ast) do
-    to_string(ast)
+  def transpile(ast) when is_boolean(ast) do
+    {:boolean, ast}
   end
 
-  def transpile({:if, _, [condition, [do: do_branch, else: else_branch]]}, vars) do
-    "if (#{transpile(condition, vars)}) { #{transpile(do_branch, vars)} } else { #{transpile(else_branch, vars)} }"
+  def transpile({:if, _, [condition, [do: do_block, else: else_block]]}) do
+    {:if, {transpile(condition), transpile(do_block), transpile(else_block)}}
   end
 end

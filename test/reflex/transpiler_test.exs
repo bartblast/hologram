@@ -37,22 +37,22 @@ defmodule Reflex.TranspilerTest do
   describe "transpile/1" do
     test "string" do
       ast = Transpiler.parse!("\"test\"")
-      assert Transpiler.transpile(ast) == "test"
+      assert Transpiler.transpile(ast) == {:string, "test"}
     end
 
     test "integer" do
       ast = Transpiler.parse!("1")
-      assert Transpiler.transpile(ast) == "1"
+      assert Transpiler.transpile(ast) == {:integer, 1}
     end
 
     test "boolean" do
       ast = Transpiler.parse!("true")
-      assert Transpiler.transpile(ast) == "true"
+      assert Transpiler.transpile(ast) == {:boolean, true}
     end
 
     test "if" do
       ast = Transpiler.parse!("if true, do: 1, else: 2")
-      assert Transpiler.transpile(ast) == "if (true) { 1 } else { 2 }"
+      assert Transpiler.transpile(ast) == {:if, {{:boolean, true}, {:integer, 1}, {:integer, 2}}}
     end
   end
 end
