@@ -1,4 +1,8 @@
 defmodule Reflex.Transpiler do
+  def meta(var) when is_integer(var) do
+    {:integer, var}
+  end
+
   def parse!(str) do
     case Code.string_to_quoted(str) do
       {:ok, ast} ->
@@ -15,7 +19,7 @@ defmodule Reflex.Transpiler do
     |> Code.string_to_quoted()
   end
 
-  def transpile(ast, vars \\ [])
+  def transpile(ast, vars \\ %{})
 
   def transpile(ast, _vars) when is_binary(ast) do
     ast

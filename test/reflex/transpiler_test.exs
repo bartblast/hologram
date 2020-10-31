@@ -2,6 +2,12 @@ defmodule Reflex.TranspilerTest do
   use ExUnit.Case
   alias Reflex.Transpiler
 
+  describe "meta/1" do
+    test "integer" do
+      assert Transpiler.meta(123) == {:integer, 123}
+    end
+  end
+
   describe "parse!/1" do
     test "valid code" do
       assert Transpiler.parse!("1 + 2") == {:+, [line: 1], [1, 2]}
@@ -25,22 +31,22 @@ defmodule Reflex.TranspilerTest do
   end
 
   describe "transpile/1" do
-    test "string literal" do
+    test "string" do
       ast = Transpiler.parse!("\"test\"")
       assert Transpiler.transpile(ast) == "test"
     end
 
-    test "integer literal" do
+    test "integer" do
       ast = Transpiler.parse!("1")
       assert Transpiler.transpile(ast) == "1"
     end
 
-    test "boolean literal" do
+    test "boolean" do
       ast = Transpiler.parse!("true")
       assert Transpiler.transpile(ast) == "true"
     end
 
-    test "if statement" do
+    test "if" do
       ast = Transpiler.parse!("if true, do: 1, else: 2")
       assert Transpiler.transpile(ast) == "if (true) { 1 } else { 2 }"
     end
