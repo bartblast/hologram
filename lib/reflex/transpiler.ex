@@ -1,4 +1,8 @@
 defmodule Reflex.Transpiler do
+  def meta(var) when is_binary(var) do
+    {:string, var}
+  end
+
   def meta(var) when is_integer(var) do
     {:integer, var}
   end

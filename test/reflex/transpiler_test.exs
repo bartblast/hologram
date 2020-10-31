@@ -3,6 +3,10 @@ defmodule Reflex.TranspilerTest do
   alias Reflex.Transpiler
 
   describe "meta/1" do
+    test "string" do
+      assert Transpiler.meta("test") == {:string, "test"}
+    end
+
     test "integer" do
       assert Transpiler.meta(123) == {:integer, 123}
     end
