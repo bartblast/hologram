@@ -50,6 +50,11 @@ defmodule Reflex.TranspilerTest do
       assert Transpiler.transpile(ast) == {:boolean, true}
     end
 
+    test "atom" do
+      ast = Transpiler.parse!(":test")
+      assert Transpiler.transpile(ast) == {:atom, :test}
+    end
+
     test "map" do
       ast = Transpiler.parse!("%{a: 1, b: 2}")
       ast = Transpiler.transpile(ast) == {:map, [a: {:integer, 1}, b: {:integer, 2}]}

@@ -37,6 +37,10 @@ defmodule Reflex.Transpiler do
     {:boolean, ast}
   end
 
+  def transpile(ast) when is_atom(ast) do
+    {:atom, ast}
+  end
+
   def transpile({:%{}, _, map}) do
     {:map, Enum.map(map, fn {k, v} -> {k, transpile(v)} end)}
   end
