@@ -65,6 +65,11 @@ defmodule Reflex.TranspilerTest do
       assert Transpiler.transpile(ast) == {:var, :x}
     end
 
+    test "map with var matching" do
+      ast = Transpiler.parse!("%{a: 1, b: x}")
+      assert Transpiler.transpile(ast) == {:map, [a: {:integer, 1}, b: {:var, :x}]}
+    end
+
     test "if" do
       ast = Transpiler.parse!("if true, do: 1, else: 2")
       assert Transpiler.transpile(ast) == {:if, {{:boolean, true}, {:integer, 1}, {:integer, 2}}}
