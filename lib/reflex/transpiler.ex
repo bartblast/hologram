@@ -45,6 +45,10 @@ defmodule Reflex.Transpiler do
     {:map, Enum.map(map, fn {k, v} -> {k, transpile(v)} end)}
   end
 
+  def transpile({:|, _, [var_1, var_2]}) do
+    {:destructure, {transpile(var_1), transpile(var_2)}}
+  end
+
   def transpile({var, _, nil}) when is_atom(var) do
     {:var, var}
   end
