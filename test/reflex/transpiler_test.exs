@@ -2,6 +2,56 @@ defmodule Reflex.TranspilerTest do
   use ExUnit.Case
   alias Reflex.Transpiler
 
+  describe "aggregate_assignments/2" do
+    test "var" do
+      result =
+        Transpiler.parse!("x")
+        |> Transpiler.transpile()
+        |> Transpiler.aggregate_assignments()
+
+      assert result == [[[:x, :assign]]]
+    end
+
+    test "map, root keys" do
+      result =
+        Transpiler.parse!("%{a: x, b: y}")
+        |> Transpiler.transpile()
+        |> Transpiler.aggregate_assignments()
+
+      assert result == [
+        [[:map_access, :a], [:x, :assign]],
+        [[:map_access, :b], [:y, :assign]]
+      ]
+    end
+
+    test "map, nested keys" do
+      result =
+        Transpiler.parse!("%{a: 1, b: %{p: x, r: 4}, c: 3, d: %{m: 0, n: y}}")
+        |> Transpiler.transpile()
+        |> Transpiler.aggregate_assignments()
+
+      assert result ==
+        [
+          [[:map_access, :b], [:map_access, :p], [:x, :assign]],
+          [[:map_access, :d], [:map_access, :n], [:y, :assign]]
+        ]
+    end
+
+    test "map, root and nested keys" do
+      result =
+        Transpiler.parse!("%{a: 1, b: %{p: x, r: 4}, c: z, d: %{m: 0, n: y}}")
+        |> Transpiler.transpile()
+        |> Transpiler.aggregate_assignments()
+
+      assert result ==
+        [
+          [[:map_access, :b], [:map_access, :p], [:x, :assign]],
+          [[:map_access, :c], [:z, :assign]],
+          [[:map_access, :d], [:map_access, :n], [:y, :assign]]
+        ]
+    end
+  end
+
   describe "parse!/1" do
     test "valid code" do
       assert Transpiler.parse!("1 + 2") == {:+, [line: 1], [1, 2]}
@@ -60,7 +110,7 @@ defmodule Reflex.TranspilerTest do
       assert Transpiler.transpile(ast) == {:var, :x}
     end
 
-    test "map with var matching" do
+    test "map with var match" do
       ast = Transpiler.parse!("%{a: 1, b: x}")
       assert Transpiler.transpile(ast) == {:map, [a: {:integer, 1}, b: {:var, :x}]}
     end

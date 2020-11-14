@@ -1,4 +1,20 @@
 defmodule Reflex.Transpiler do
+  def aggregate_assignments(_, path \\ [])
+
+  def aggregate_assignments({:var, var}, path) do
+    [path ++ [[var, :assign]]]
+  end
+
+  def aggregate_assignments({:map, map}, path) do
+    Enum.reduce(map, [], fn {k, v}, acc ->
+      acc ++ aggregate_assignments(v, path ++ [[:map_access, k]])
+    end)
+  end
+
+  def aggregate_assignments(_, path) do
+    []
+  end
+
   def parse!(str) do
     case Code.string_to_quoted(str) do
       {:ok, ast} ->
