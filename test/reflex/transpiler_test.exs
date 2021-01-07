@@ -6,7 +6,7 @@ defmodule Reflex.TranspilerTest do
     test "var" do
       result =
         Transpiler.parse!("x")
-        |> Transpiler.transpile()
+        |> Transpiler.transform()
         |> Transpiler.aggregate_assignments()
 
       assert result == [[[:x, :assign]]]
@@ -15,7 +15,7 @@ defmodule Reflex.TranspilerTest do
     test "map, root keys" do
       result =
         Transpiler.parse!("%{a: x, b: y}")
-        |> Transpiler.transpile()
+        |> Transpiler.transform()
         |> Transpiler.aggregate_assignments()
 
       assert result == [
@@ -27,7 +27,7 @@ defmodule Reflex.TranspilerTest do
     test "map, nested keys" do
       result =
         Transpiler.parse!("%{a: 1, b: %{p: x, r: 4}, c: 3, d: %{m: 0, n: y}}")
-        |> Transpiler.transpile()
+        |> Transpiler.transform()
         |> Transpiler.aggregate_assignments()
 
       assert result ==
@@ -40,7 +40,7 @@ defmodule Reflex.TranspilerTest do
     test "map, root and nested keys" do
       result =
         Transpiler.parse!("%{a: 1, b: %{p: x, r: 4}, c: z, d: %{m: 0, n: y}}")
-        |> Transpiler.transpile()
+        |> Transpiler.transform()
         |> Transpiler.aggregate_assignments()
 
       assert result ==
@@ -74,50 +74,50 @@ defmodule Reflex.TranspilerTest do
     end
   end
 
-  describe "transpile/1" do
+  describe "transform/1" do
     test "string" do
       ast = Transpiler.parse!("\"test\"")
-      assert Transpiler.transpile(ast) == {:string, "test"}
+      assert Transpiler.transform(ast) == {:string, "test"}
     end
 
     test "integer" do
       ast = Transpiler.parse!("1")
-      assert Transpiler.transpile(ast) == {:integer, 1}
+      assert Transpiler.transform(ast) == {:integer, 1}
     end
 
     test "boolean" do
       ast = Transpiler.parse!("true")
-      assert Transpiler.transpile(ast) == {:boolean, true}
+      assert Transpiler.transform(ast) == {:boolean, true}
     end
 
     test "atom" do
       ast = Transpiler.parse!(":test")
-      assert Transpiler.transpile(ast) == {:atom, :test}
+      assert Transpiler.transform(ast) == {:atom, :test}
     end
 
     test "map" do
       ast = Transpiler.parse!("%{a: 1, b: 2}")
-      assert Transpiler.transpile(ast) == {:map, [a: {:integer, 1}, b: {:integer, 2}]}
+      assert Transpiler.transform(ast) == {:map, [a: {:integer, 1}, b: {:integer, 2}]}
     end
 
     test "destructure" do
       ast = Transpiler.parse!("head | tail")
-      assert Transpiler.transpile(ast) == {:destructure, {{:var, :head}, {:var, :tail}}}
+      assert Transpiler.transform(ast) == {:destructure, {{:var, :head}, {:var, :tail}}}
     end
 
     test "var" do
       ast = Transpiler.parse!("x")
-      assert Transpiler.transpile(ast) == {:var, :x}
+      assert Transpiler.transform(ast) == {:var, :x}
     end
 
     test "map with var match" do
       ast = Transpiler.parse!("%{a: 1, b: x}")
-      assert Transpiler.transpile(ast) == {:map, [a: {:integer, 1}, b: {:var, :x}]}
+      assert Transpiler.transform(ast) == {:map, [a: {:integer, 1}, b: {:var, :x}]}
     end
 
     test "if" do
       ast = Transpiler.parse!("if true, do: 1, else: 2")
-      assert Transpiler.transpile(ast) == {:if, {{:boolean, true}, {:integer, 1}, {:integer, 2}}}
+      assert Transpiler.transform(ast) == {:if, {{:boolean, true}, {:integer, 1}, {:integer, 2}}}
     end
   end
 end

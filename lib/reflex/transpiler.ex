@@ -31,37 +31,37 @@ defmodule Reflex.Transpiler do
     |> Code.string_to_quoted()
   end
 
-  def transpile(ast)
+  def transform(ast)
 
-  def transpile(ast) when is_binary(ast) do
+  def transform(ast) when is_binary(ast) do
     {:string, ast}
   end
 
-  def transpile(ast) when is_integer(ast) do
+  def transform(ast) when is_integer(ast) do
     {:integer, ast}
   end
 
-  def transpile(ast) when is_boolean(ast) do
+  def transform(ast) when is_boolean(ast) do
     {:boolean, ast}
   end
 
-  def transpile(ast) when is_atom(ast) do
+  def transform(ast) when is_atom(ast) do
     {:atom, ast}
   end
 
-  def transpile({:%{}, _, map}) do
-    {:map, Enum.map(map, fn {k, v} -> {k, transpile(v)} end)}
+  def transform({:%{}, _, map}) do
+    {:map, Enum.map(map, fn {k, v} -> {k, transform(v)} end)}
   end
 
-  def transpile({:|, _, [var_1, var_2]}) do
-    {:destructure, {transpile(var_1), transpile(var_2)}}
+  def transform({:|, _, [var_1, var_2]}) do
+    {:destructure, {transform(var_1), transform(var_2)}}
   end
 
-  def transpile({var, _, nil}) when is_atom(var) do
+  def transform({var, _, nil}) when is_atom(var) do
     {:var, var}
   end
 
-  def transpile({:if, _, [condition, [do: do_block, else: else_block]]}) do
-    {:if, {transpile(condition), transpile(do_block), transpile(else_block)}}
+  def transform({:if, _, [condition, [do: do_block, else: else_block]]}) do
+    {:if, {transform(condition), transform(do_block), transform(else_block)}}
   end
 end
