@@ -119,5 +119,21 @@ defmodule Reflex.TranspilerTest do
       ast = Transpiler.parse!("if true, do: 1, else: 2")
       assert Transpiler.transform(ast) == {:if, {{:boolean, true}, {:integer, 1}, {:integer, 2}}}
     end
+
+    test "case" do
+      ast = Transpiler.parse!("case x do 1 -> :result_1; 2 -> :result_2 end")
+      result = Transpiler.transform(ast)
+
+      expected = {
+        :case,
+        {:var, :x},
+        [
+          {:clause, {:integer, 1}, {:atom, :result_1}},
+          {:clause, {:integer, 2}, {:atom, :result_2}}
+        ]
+      }
+
+      assert result == expected
+    end
   end
 end

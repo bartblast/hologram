@@ -64,4 +64,12 @@ defmodule Reflex.Transpiler do
   def transform({:if, _, [condition, [do: do_block, else: else_block]]}) do
     {:if, {transform(condition), transform(do_block), transform(else_block)}}
   end
+
+  def transform({:case, _, [expression, [do: cases]]}) do
+    {:case, transform(expression), Enum.map(cases, fn c -> transform(c) end)}
+  end
+
+  def transform({:->, _, [[clause], block]}) do
+    {:clause, transform(clause), transform(block)}
+  end
 end
