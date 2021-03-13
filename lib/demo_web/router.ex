@@ -1,5 +1,6 @@
 defmodule DemoWeb.Router do
   use DemoWeb, :router
+  use Reflex.Router
 
   pipeline :browser do
     plug :accepts, ["html"]
@@ -17,6 +18,8 @@ defmodule DemoWeb.Router do
     pipe_through :browser
 
     get "/", PageController, :index
+
+    reflex "/", Somepage
   end
 
   # Other scopes may use custom stacks.
