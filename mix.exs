@@ -1,4 +1,4 @@
-defmodule Reflex.MixProject do
+defmodule Demo.MixProject do
   use Mix.Project
 
   def package do
@@ -30,7 +30,7 @@ defmodule Reflex.MixProject do
   # Type `mix help compile.app` for more information.
   def application do
     [
-      mod: {Reflex.Application, []},
+      mod: {Demo.Application, []},
       extra_applications: [:logger, :runtime_tools]
     ]
   end
