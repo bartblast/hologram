@@ -1,4 +1,4 @@
-defmodule ReflexWeb.Telemetry do
+defmodule DemoWeb.Telemetry do
   use Supervisor
   import Telemetry.Metrics
 
@@ -31,11 +31,11 @@ defmodule ReflexWeb.Telemetry do
       ),
 
       # Database Metrics
-      summary("reflex.repo.query.total_time", unit: {:native, :millisecond}),
-      summary("reflex.repo.query.decode_time", unit: {:native, :millisecond}),
-      summary("reflex.repo.query.query_time", unit: {:native, :millisecond}),
-      summary("reflex.repo.query.queue_time", unit: {:native, :millisecond}),
-      summary("reflex.repo.query.idle_time", unit: {:native, :millisecond}),
+      summary("demo.repo.query.total_time", unit: {:native, :millisecond}),
+      summary("demo.repo.query.decode_time", unit: {:native, :millisecond}),
+      summary("demo.repo.query.query_time", unit: {:native, :millisecond}),
+      summary("demo.repo.query.queue_time", unit: {:native, :millisecond}),
+      summary("demo.repo.query.idle_time", unit: {:native, :millisecond}),
 
       # VM Metrics
       summary("vm.memory.total", unit: {:byte, :kilobyte}),
@@ -49,7 +49,7 @@ defmodule ReflexWeb.Telemetry do
     [
       # A module, function and arguments to be invoked periodically.
       # This function must call :telemetry.execute/3 and a metric must be added above.
-      # {ReflexWeb, :count_users, []}
+      # {DemoWeb, :count_users, []}
     ]
   end
 end

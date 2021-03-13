@@ -7,16 +7,16 @@
 # General application configuration
 use Mix.Config
 
-config :reflex,
-  ecto_repos: [Reflex.Repo]
+config :demo,
+  ecto_repos: [Demo.Repo]
 
 # Configures the endpoint
-config :reflex, ReflexWeb.Endpoint,
+config :demo, DemoWeb.Endpoint,
   url: [host: "localhost"],
-  secret_key_base: "qCGQzelo6SqwgUaKW+PQXjKfaXampEm7dW8ulz3H+5c4fgMIPsAhsqve9MvU7v4L",
-  render_errors: [view: ReflexWeb.ErrorView, accepts: ~w(html json), layout: false],
-  pubsub_server: Reflex.PubSub,
-  live_view: [signing_salt: "rzNP37VB"]
+  secret_key_base: "yVz5aKrBHZaey4gZeR/oHoTTwxNKd28g4yGjTvZ18kwAAN6AAwf37h33edqpFPtV",
+  render_errors: [view: DemoWeb.ErrorView, accepts: ~w(html json), layout: false],
+  pubsub_server: Demo.PubSub,
+  live_view: [signing_salt: "5wOr/GQo"]
 
 # Configures Elixir's Logger
 config :logger, :console,

@@ -1,5 +1,5 @@
-defmodule Reflex.Repo do
+defmodule Demo.Repo do
   use Ecto.Repo,
-    otp_app: :reflex,
+    otp_app: :demo,
     adapter: Ecto.Adapters.Postgres
 end

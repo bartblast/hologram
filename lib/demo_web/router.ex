@@ -1,5 +1,5 @@
-defmodule ReflexWeb.Router do
-  use ReflexWeb, :router
+defmodule DemoWeb.Router do
+  use DemoWeb, :router
 
   pipeline :browser do
     plug :accepts, ["html"]
@@ -13,14 +13,14 @@ defmodule ReflexWeb.Router do
     plug :accepts, ["json"]
   end
 
-  scope "/", ReflexWeb do
+  scope "/", DemoWeb do
     pipe_through :browser
 
     get "/", PageController, :index
   end
 
   # Other scopes may use custom stacks.
-  # scope "/api", ReflexWeb do
+  # scope "/api", DemoWeb do
   #   pipe_through :api
   # end
 
@@ -36,7 +36,7 @@ defmodule ReflexWeb.Router do
 
     scope "/" do
       pipe_through :browser
-      live_dashboard "/dashboard", metrics: ReflexWeb.Telemetry
+      live_dashboard "/dashboard", metrics: DemoWeb.Telemetry
     end
   end
 end

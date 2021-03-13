@@ -1,10 +1,10 @@
 use Mix.Config
 
 # Configure your database
-config :reflex, Reflex.Repo,
+config :demo, Demo.Repo,
   username: "postgres",
   password: "postgres",
-  database: "reflex_dev",
+  database: "demo_dev",
   hostname: "localhost",
   show_sensitive_data_on_connection_error: true,
   pool_size: 10
@@ -15,7 +15,7 @@ config :reflex, Reflex.Repo,
 # The watchers configuration can be used to run external
 # watchers to your application. For example, we use it
 # with webpack to recompile .js and .css sources.
-config :reflex, ReflexWeb.Endpoint,
+config :demo, DemoWeb.Endpoint,
   http: [port: 4000],
   debug_errors: true,
   code_reloader: true,
@@ -55,13 +55,13 @@ config :reflex, ReflexWeb.Endpoint,
 # different ports.
 
 # Watch static and templates for browser reloading.
-config :reflex, ReflexWeb.Endpoint,
+config :demo, DemoWeb.Endpoint,
   live_reload: [
     patterns: [
       ~r"priv/static/.*(js|css|png|jpeg|jpg|gif|svg)$",
       ~r"priv/gettext/.*(po)$",
-      ~r"lib/reflex_web/(live|views)/.*(ex)$",
-      ~r"lib/reflex_web/templates/.*(eex)$"
+      ~r"lib/demo_web/(live|views)/.*(ex)$",
+      ~r"lib/demo_web/templates/.*(eex)$"
     ]
   ]
 

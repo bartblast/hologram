@@ -1,16 +1,16 @@
-defmodule ReflexWeb.Endpoint do
-  use Phoenix.Endpoint, otp_app: :reflex
+defmodule DemoWeb.Endpoint do
+  use Phoenix.Endpoint, otp_app: :demo
 
   # The session will be stored in the cookie and signed,
   # this means its contents can be read but not tampered with.
   # Set :encryption_salt if you would also like to encrypt it.
   @session_options [
     store: :cookie,
-    key: "_reflex_key",
-    signing_salt: "p2a4+OpF"
+    key: "_demo_key",
+    signing_salt: "sALHIFbA"
   ]
 
-  socket "/socket", ReflexWeb.UserSocket,
+  socket "/socket", DemoWeb.UserSocket,
     websocket: true,
     longpoll: false
 
@@ -22,7 +22,7 @@ defmodule ReflexWeb.Endpoint do
   # when deploying your static files in production.
   plug Plug.Static,
     at: "/",
-    from: :reflex,
+    from: :demo,
     gzip: false,
     only: ~w(css fonts images js favicon.ico robots.txt)
 
@@ -32,7 +32,7 @@ defmodule ReflexWeb.Endpoint do
     socket "/phoenix/live_reload/socket", Phoenix.LiveReloader.Socket
     plug Phoenix.LiveReloader
     plug Phoenix.CodeReloader
-    plug Phoenix.Ecto.CheckRepoStatus, otp_app: :reflex
+    plug Phoenix.Ecto.CheckRepoStatus, otp_app: :demo
   end
 
   plug Phoenix.LiveDashboard.RequestLogger,
@@ -50,5 +50,5 @@ defmodule ReflexWeb.Endpoint do
   plug Plug.MethodOverride
   plug Plug.Head
   plug Plug.Session, @session_options
-  plug ReflexWeb.Router
+  plug DemoWeb.Router
 end

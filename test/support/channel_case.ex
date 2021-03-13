@@ -1,4 +1,4 @@
-defmodule ReflexWeb.ChannelCase do
+defmodule DemoWeb.ChannelCase do
   @moduledoc """
   This module defines the test case to be used by
   channel tests.
@@ -11,7 +11,7 @@ defmodule ReflexWeb.ChannelCase do
   we enable the SQL sandbox, so changes done to the database
   are reverted at the end of every test. If you are using
   PostgreSQL, you can even run database tests asynchronously
-  by setting `use ReflexWeb.ChannelCase, async: true`, although
+  by setting `use DemoWeb.ChannelCase, async: true`, although
   this option is not recommended for other databases.
   """
 
@@ -21,18 +21,18 @@ defmodule ReflexWeb.ChannelCase do
     quote do
       # Import conveniences for testing with channels
       import Phoenix.ChannelTest
-      import ReflexWeb.ChannelCase
+      import DemoWeb.ChannelCase
 
       # The default endpoint for testing
-      @endpoint ReflexWeb.Endpoint
+      @endpoint DemoWeb.Endpoint
     end
   end
 
   setup tags do
-    :ok = Ecto.Adapters.SQL.Sandbox.checkout(Reflex.Repo)
+    :ok = Ecto.Adapters.SQL.Sandbox.checkout(Demo.Repo)
 
     unless tags[:async] do
-      Ecto.Adapters.SQL.Sandbox.mode(Reflex.Repo, {:shared, self()})
+      Ecto.Adapters.SQL.Sandbox.mode(Demo.Repo, {:shared, self()})
     end
 
     :ok

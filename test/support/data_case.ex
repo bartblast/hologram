@@ -1,4 +1,4 @@
-defmodule Reflex.DataCase do
+defmodule Demo.DataCase do
   @moduledoc """
   This module defines the setup for tests requiring
   access to the application's data layer.
@@ -10,7 +10,7 @@ defmodule Reflex.DataCase do
   we enable the SQL sandbox, so changes done to the database
   are reverted at the end of every test. If you are using
   PostgreSQL, you can even run database tests asynchronously
-  by setting `use Reflex.DataCase, async: true`, although
+  by setting `use Demo.DataCase, async: true`, although
   this option is not recommended for other databases.
   """
 
@@ -18,20 +18,20 @@ defmodule Reflex.DataCase do
 
   using do
     quote do
-      alias Reflex.Repo
+      alias Demo.Repo
 
       import Ecto
       import Ecto.Changeset
       import Ecto.Query
-      import Reflex.DataCase
+      import Demo.DataCase
     end
   end
 
   setup tags do
-    :ok = Ecto.Adapters.SQL.Sandbox.checkout(Reflex.Repo)
+    :ok = Ecto.Adapters.SQL.Sandbox.checkout(Demo.Repo)
 
     unless tags[:async] do
-      Ecto.Adapters.SQL.Sandbox.mode(Reflex.Repo, {:shared, self()})
+      Ecto.Adapters.SQL.Sandbox.mode(Demo.Repo, {:shared, self()})
     end
 
     :ok

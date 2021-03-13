@@ -1,6 +1,6 @@
-defmodule Reflex do
+defmodule Demo do
   @moduledoc """
-  Reflex keeps the contexts that define your domain
+  Demo keeps the contexts that define your domain
   and business logic.
 
   Contexts are also responsible for managing your data, regardless
