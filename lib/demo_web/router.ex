@@ -19,7 +19,7 @@ defmodule DemoWeb.Router do
 
     get "/", PageController, :index
 
-    reflex "/", Somepage
+    reflex "/somepage", Somepage
   end
 
   # Other scopes may use custom stacks.
