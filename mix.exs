@@ -12,7 +12,7 @@ defmodule Demo.MixProject do
 
   def project do
     [
-      app: :reflex,
+      app: :demo,
       version: "0.1.0",
       elixir: "~> 1.11",
       elixirc_paths: elixirc_paths(Mix.env()),
