@@ -9,7 +9,7 @@ defmodule Reflex.TranspilerTest do
         |> Transpiler.transform()
         |> Transpiler.aggregate_assignments()
 
-      assert result == [[[:x, :assign]]]
+      assert result == [[:x]]
     end
 
     test "map, root keys" do
@@ -19,8 +19,8 @@ defmodule Reflex.TranspilerTest do
         |> Transpiler.aggregate_assignments()
 
       assert result == [
-        [[:map_access, :a], [:x, :assign]],
-        [[:map_access, :b], [:y, :assign]]
+        [:x, [:map_access, :a]],
+        [:y, [:map_access, :b]]
       ]
     end
 
@@ -32,8 +32,8 @@ defmodule Reflex.TranspilerTest do
 
       assert result ==
         [
-          [[:map_access, :b], [:map_access, :p], [:x, :assign]],
-          [[:map_access, :d], [:map_access, :n], [:y, :assign]]
+          [:x, [:map_access, :b], [:map_access, :p]],
+          [:y, [:map_access, :d], [:map_access, :n]]
         ]
     end
 
@@ -45,9 +45,9 @@ defmodule Reflex.TranspilerTest do
 
       assert result ==
         [
-          [[:map_access, :b], [:map_access, :p], [:x, :assign]],
-          [[:map_access, :c], [:z, :assign]],
-          [[:map_access, :d], [:map_access, :n], [:y, :assign]]
+          [:x, [:map_access, :b], [:map_access, :p]],
+          [:z, [:map_access, :c]],
+          [:y, [:map_access, :d], [:map_access, :n]]
         ]
     end
   end
@@ -92,16 +92,21 @@ defmodule Reflex.TranspilerTest do
 
     test "assignment simple" do
       ast = Transpiler.parse!("x = 1")
-      assert Transpiler.transform(ast) == {:assignment, [[[:x, :assign]]], {:integer, 1}}
+      assert Transpiler.transform(ast) == {:assignment, [[:x]], {:integer, 1}}
     end
 
     test "assignment complex" do
-      ast = Transpiler.parse!("%{x: 1, y: b} = %{x: 1, y: 123}")
+      result =
+        Transpiler.parse!("%{a: x, b: y} = %{a: 1, b: 2}")
+        |> Transpiler.transform()
 
-      assert Transpiler.transform(ast) == {
+      assert result == {
         :assignment,
-        [[[:map_access, :y], [:b, :assign]]],
-        {:map, [x: {:integer, 1}, y: {:integer, 123}]}
+        [
+          [:x, [:map_access, :a]],
+          [:y, [:map_access, :b]]
+        ],
+        {:map, [a: {:integer, 1}, b: {:integer, 2}]},
       }
     end
 

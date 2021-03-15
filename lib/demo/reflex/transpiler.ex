@@ -2,7 +2,7 @@ defmodule Reflex.Transpiler do
   def aggregate_assignments(_, path \\ [])
 
   def aggregate_assignments({:var, var}, path) do
-    [path ++ [[var, :assign]]]
+    [[var] ++ path]
   end
 
   def aggregate_assignments({:map, map}, path) do
