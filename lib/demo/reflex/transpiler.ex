@@ -19,7 +19,7 @@ defmodule Reflex.Transpiler do
     Enum.map(left, fn pattern ->
       case pattern do
         [var | path] ->
-          "#{var} = #{generate(right)}#{generate_assignment_path(path)}"
+          "#{var} = #{generate(right)}#{generate_assignment_path(path)};"
       end
     end)
     |> Enum.join("\n")

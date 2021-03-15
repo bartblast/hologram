@@ -103,7 +103,7 @@ defmodule Reflex.TranspilerTest do
         |> Transpiler.transform()
         |> Transpiler.generate()
 
-      assert result == "x = 1"
+      assert result == "x = 1;"
     end
 
     test "assignment, nested" do
@@ -116,7 +116,7 @@ defmodule Reflex.TranspilerTest do
       |> Transpiler.transform()
       |> Transpiler.generate()
 
-      expected = "x = { 'a': 1, 'b': { 'p': 9, 'r': 4 }, 'c': 3, 'd': { 'm': 0, 'n': 8 } }['b']['p']\ny = { 'a': 1, 'b': { 'p': 9, 'r': 4 }, 'c': 3, 'd': { 'm': 0, 'n': 8 } }['d']['n']"
+      expected = "x = { 'a': 1, 'b': { 'p': 9, 'r': 4 }, 'c': 3, 'd': { 'm': 0, 'n': 8 } }['b']['p'];\ny = { 'a': 1, 'b': { 'p': 9, 'r': 4 }, 'c': 3, 'd': { 'm': 0, 'n': 8 } }['d']['n'];"
       assert result == expected
     end
   end
