@@ -71,7 +71,28 @@ defmodule Reflex.TranspilerTest do
     end
 
     test "map, nested" do
+      map = {
+        :map,
+        [
+          a: {:integer, 1},
+          b: {
+            :map,
+            [
+              c: {:integer, 2},
+              d: {
+                :map,
+                [
+                  e: {:integer, 3},
+                  f: {:integer, 4}
+                ]
+              }
+            ]
+          }
+        ]
+      }
 
+      result = Transpiler.generate(map)
+      assert result == "{ 'a': 1, 'b': { 'c': 2, 'd': { 'e': 3, 'f': 4 } } }"
     end
   end
 
