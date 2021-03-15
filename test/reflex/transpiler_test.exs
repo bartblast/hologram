@@ -90,6 +90,21 @@ defmodule Reflex.TranspilerTest do
       assert Transpiler.transform(ast) == {:boolean, true}
     end
 
+    test "assignment simple" do
+      ast = Transpiler.parse!("x = 1")
+      assert Transpiler.transform(ast) == {:assignment, [[[:x, :assign]]], {:integer, 1}}
+    end
+
+    test "assignment complex" do
+      ast = Transpiler.parse!("%{x: 1, y: b} = %{x: 1, y: 123}")
+      
+      assert Transpiler.transform(ast) == {
+        :assignment,
+        [[[:map_access, :y], [:b, :assign]]],
+        {:map, [x: {:integer, 1}, y: {:integer, 123}]}
+      }
+    end
+
     test "atom" do
       ast = Transpiler.parse!(":test")
       assert Transpiler.transform(ast) == {:atom, :test}

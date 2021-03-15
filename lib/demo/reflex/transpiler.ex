@@ -49,6 +49,11 @@ defmodule Reflex.Transpiler do
     {:atom, ast}
   end
 
+  def transform({:=, _, [left, right]}) do
+    left = transform(left) |> aggregate_assignments()
+    {:assignment, left, transform(right)}
+  end
+
   def transform({:%{}, _, map}) do
     {:map, Enum.map(map, fn {k, v} -> {k, transform(v)} end)}
   end
