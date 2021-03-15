@@ -20,7 +20,15 @@ defmodule Reflex.Transpiler do
   end
 
   def generate({:string, value}) do
-    "\"#{value}\""
+    "'#{value}'"
+  end
+
+  def generate({:map, value}) do
+    fields =
+      Enum.map(value, fn {k, v} -> "'#{k}': #{generate(v)}" end)
+      |> Enum.join(", ")
+
+    "{ #{fields} }"
   end
 
   def parse!(str) do

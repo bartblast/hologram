@@ -55,12 +55,19 @@ defmodule Reflex.TranspilerTest do
   describe "generate/1" do
     test "string" do
       result = Transpiler.generate({:string, "Test"})
-      assert result == "\"Test\""
+      assert result == "'Test'"
     end
 
     test "integer" do
       result = Transpiler.generate({:integer, 123})
       assert result == "123"
+    end
+
+    test "map, not nested" do
+      map = {:map, [a: {:integer, 1}, b: {:integer, 2}]}
+      result = Transpiler.generate(map)
+
+      assert result == "{ 'a': 1, 'b': 2 }"
     end
   end
 
