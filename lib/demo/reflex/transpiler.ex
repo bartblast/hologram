@@ -57,21 +57,21 @@ defmodule Reflex.Transpiler do
     {:atom, ast}
   end
 
+  def transform({:%{}, _, map}) do
+    {:map, Enum.map(map, fn {k, v} -> {k, transform(v)} end)}
+  end
+
   def transform({:=, _, [left, right]}) do
     left = transform(left) |> aggregate_assignments()
     {:assignment, left, transform(right)}
   end
 
-  def transform({:%{}, _, map}) do
-    {:map, Enum.map(map, fn {k, v} -> {k, transform(v)} end)}
+  def transform({var, _, nil}) when is_atom(var) do
+    {:var, var}
   end
 
   def transform({:|, _, [var_1, var_2]}) do
     {:destructure, {transform(var_1), transform(var_2)}}
-  end
-
-  def transform({var, _, nil}) when is_atom(var) do
-    {:var, var}
   end
 
   def transform({:if, _, [condition, [do: do_block, else: else_block]]}) do
