@@ -69,6 +69,10 @@ defmodule Reflex.TranspilerTest do
 
       assert result == "{ 'a': 1, 'b': 2 }"
     end
+
+    test "map, nested" do
+
+    end
   end
 
   describe "parse!/1" do
@@ -134,9 +138,35 @@ defmodule Reflex.TranspilerTest do
       assert Transpiler.transform(ast) == {:atom, :test}
     end
 
-    test "map" do
+    test "map, not nested" do
       ast = Transpiler.parse!("%{a: 1, b: 2}")
       assert Transpiler.transform(ast) == {:map, [a: {:integer, 1}, b: {:integer, 2}]}
+    end
+
+    test "map, nested" do
+      result =
+        Transpiler.parse!("%{a: 1, b: %{c: 2, d: %{e: 3, f: 4}}}")
+        |> Transpiler.transform()
+
+      assert result == {
+        :map,
+        [
+          a: {:integer, 1},
+          b: {
+            :map,
+            [
+              c: {:integer, 2},
+              d: {
+                :map,
+                [
+                  e: {:integer, 3},
+                  f: {:integer, 4}
+                ]
+              }
+            ]
+          }
+        ]
+      }
     end
 
     test "destructure" do
