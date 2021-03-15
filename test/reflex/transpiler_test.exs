@@ -66,7 +66,7 @@ defmodule Reflex.TranspilerTest do
 
   describe "parse_file/1" do
     test "valid code" do
-      assert {:ok, _} = Transpiler.parse_file("lib/reflex.ex")
+      assert {:ok, _} = Transpiler.parse_file("lib/demo/reflex/transpiler.ex")
     end
 
     test "invalid code" do
@@ -97,7 +97,7 @@ defmodule Reflex.TranspilerTest do
 
     test "assignment complex" do
       ast = Transpiler.parse!("%{x: 1, y: b} = %{x: 1, y: 123}")
-      
+
       assert Transpiler.transform(ast) == {
         :assignment,
         [[[:map_access, :y], [:b, :assign]]],
