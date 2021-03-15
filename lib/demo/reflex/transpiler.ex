@@ -15,6 +15,10 @@ defmodule Reflex.Transpiler do
     []
   end
 
+  def generate({:integer, value}) do
+    "#{value}"
+  end
+
   def generate({:string, value}) do
     "\"#{value}\""
   end

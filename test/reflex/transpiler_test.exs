@@ -57,6 +57,11 @@ defmodule Reflex.TranspilerTest do
       result = Transpiler.generate({:string, "Test"})
       assert result == "\"Test\""
     end
+
+    test "integer" do
+      result = Transpiler.generate({:integer, 123})
+      assert result == "123"
+    end
   end
 
   describe "parse!/1" do
