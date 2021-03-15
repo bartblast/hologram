@@ -52,6 +52,13 @@ defmodule Reflex.TranspilerTest do
     end
   end
 
+  describe "generate/1" do
+    test "string" do
+      result = Transpiler.generate({:string, "Test"})
+      assert result == "\"Test\""
+    end
+  end
+
   describe "parse!/1" do
     test "valid code" do
       assert Transpiler.parse!("1 + 2") == {:+, [line: 1], [1, 2]}

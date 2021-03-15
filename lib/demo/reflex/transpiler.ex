@@ -15,6 +15,10 @@ defmodule Reflex.Transpiler do
     []
   end
 
+  def generate({:string, value}) do
+    "\"#{value}\""
+  end
+
   def parse!(str) do
     case Code.string_to_quoted(str) do
       {:ok, ast} ->
