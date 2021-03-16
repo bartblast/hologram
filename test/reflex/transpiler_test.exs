@@ -3,8 +3,12 @@ defmodule Reflex.TranspilerTest do
 
   alias Reflex.Transpiler
   alias Reflex.Transpiler.Atom
+  alias Reflex.Transpiler.Boolean
+  alias Reflex.Transpiler.Function
   alias Reflex.Transpiler.Integer
   alias Reflex.Transpiler.Map
+  alias Reflex.Transpiler.String
+  alias Reflex.Transpiler.Variable
 
   describe "parse!/1" do
     test "valid code" do
@@ -36,7 +40,7 @@ defmodule Reflex.TranspilerTest do
 
     test "boolean" do
       ast = Transpiler.parse!("true")
-      assert Transpiler.transform(ast) == %Reflex.Transpiler.Boolean{value: true}
+      assert Transpiler.transform(ast) == %Boolean{value: true}
     end
 
     test "integer" do
@@ -46,7 +50,7 @@ defmodule Reflex.TranspilerTest do
 
     test "string" do
       ast = Transpiler.parse!("\"test\"")
-      assert Transpiler.transform(ast) == %Reflex.Transpiler.String{value: "test"}
+      assert Transpiler.transform(ast) == %String{value: "test"}
     end
   end
 
@@ -92,9 +96,35 @@ defmodule Reflex.TranspilerTest do
   end
 
   describe "other transform/1" do
+    test "function" do
+      code = """
+        def test(a, b) do
+          1
+          2
+        end
+      """
+      ast = Transpiler.parse!(code)
+      result = Transpiler.transform(ast)
+      IO.inspect(result)
+
+      expected = %Function{
+        args: [
+          %Variable{name: :a},
+          %Variable{name: :b}
+        ],
+        body: [
+          %Integer{value: 1},
+          %Integer{value: 2}
+        ],
+        name: :test
+      }
+
+      assert result == expected
+    end
+
     test "variable" do
       ast = Transpiler.parse!("x")
-      assert Transpiler.transform(ast) == %Reflex.Transpiler.Variable{name: :x}
+      assert Transpiler.transform(ast) == %Variable{name: :x}
     end
   end
 

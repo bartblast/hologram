@@ -7,6 +7,10 @@ defmodule Reflex.Transpiler do
     defstruct value: nil
   end
 
+  defmodule Function do
+    defstruct name: nil, args: nil, body: nil
+  end
+
   defmodule Integer do
     defstruct value: nil
   end
@@ -86,6 +90,13 @@ defmodule Reflex.Transpiler do
   end
 
   # OTHER
+
+  def transform({:def, _, [{name, _, args}, [do: {_, _, body}]]}) do
+    args = Enum.map(args, fn arg -> transform(arg) end)
+    body = Enum.map(body, fn expr -> transform(expr) end)
+
+    %Function{name: name, args: args, body: body}
+  end
 
   def transform({name, _, nil}) when is_atom(name) do
     %Variable{name: name}
