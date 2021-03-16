@@ -23,6 +23,10 @@ defmodule Reflex.Transpiler do
     defstruct left: nil, right: nil
   end
 
+  defmodule Module do
+    defstruct name: nil, body: nil
+  end
+
   defmodule String do
     defstruct value: nil
   end
@@ -46,6 +50,8 @@ defmodule Reflex.Transpiler do
     |> File.read!()
     |> Code.string_to_quoted()
   end
+
+  # TRANSFORM
 
   def transform(ast)
 
@@ -98,9 +104,18 @@ defmodule Reflex.Transpiler do
     %Function{name: name, args: args, body: body}
   end
 
+  def transform({:defmodule, _, [{_, _, name}, [do: {_, _, body}]]}) do
+    body = Enum.map(body, fn expr -> transform(expr) end)
+    %Module{name: name, body: body}
+  end
+
   def transform({name, _, nil}) when is_atom(name) do
     %Variable{name: name}
   end
+
+  # GENERATE
+
+  # PRIMITIVES
 
   def generate(%Integer{value: value}) do
   "#{value}"

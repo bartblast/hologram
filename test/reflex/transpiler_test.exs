@@ -7,6 +7,7 @@ defmodule Reflex.TranspilerTest do
   alias Reflex.Transpiler.Function
   alias Reflex.Transpiler.Integer
   alias Reflex.Transpiler.Map
+  alias Reflex.Transpiler.Module
   alias Reflex.Transpiler.String
   alias Reflex.Transpiler.Variable
 
@@ -121,13 +122,64 @@ defmodule Reflex.TranspilerTest do
       assert result == expected
     end
 
+    test "module" do
+      code = """
+        defmodule Test do
+          def test(a, b) do
+            1
+            2
+          end
+
+          def test(a, b, c) do
+            1
+            2
+            3
+          end
+        end
+      """
+
+      ast = Transpiler.parse!(code)
+      result = Transpiler.transform(ast)
+
+      expected =
+        %Module{
+          body: [
+            %Function{
+              args: [
+                %Variable{name: :a},
+                %Variable{name: :b}
+              ],
+              body: [
+                %Integer{value: 1},
+                %Integer{value: 2}
+              ],
+              name: :test
+            },
+            %Function{
+              args: [
+                %Variable{name: :a},
+                %Variable{name: :b},
+                %Variable{name: :c}
+              ],
+              body: [
+                %Integer{value: 1},
+                %Integer{value: 2},
+                %Integer{value: 3}
+              ],
+              name: :test
+            }
+          ],
+          name: [:Test]
+        }
+    end
+
     test "variable" do
       ast = Transpiler.parse!("x")
       assert Transpiler.transform(ast) == %Variable{name: :x}
     end
   end
 
-  describe "generate/1" do
+  describe "primitives generate/1" do
     test "integer" do
       result = Transpiler.generate(%Integer{value: 123})
       assert result == "123"
