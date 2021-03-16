@@ -6,10 +6,102 @@ defmodule Reflex.TranspilerTest do
   alias Reflex.Transpiler.Boolean
   alias Reflex.Transpiler.Function
   alias Reflex.Transpiler.Integer
-  alias Reflex.Transpiler.Map
+  alias Reflex.Transpiler.MapValue
   alias Reflex.Transpiler.Module
   alias Reflex.Transpiler.String
   alias Reflex.Transpiler.Variable
+
+  test "aggregate_functions/1" do
+    module =
+      %Module{
+        body: [
+          %Function{
+            args: [
+              %Variable{name: :a},
+              %Variable{name: :b}
+            ],
+            body: [
+              %Integer{value: 1},
+              %Integer{value: 2}
+            ],
+            name: :test_1
+          },
+          %Atom{value: :non_function},
+          %Function{
+            args: [
+              %Variable{name: :a},
+              %Variable{name: :b},
+              %Variable{name: :c}
+            ],
+            body: [
+              %Integer{value: 1},
+              %Integer{value: 2},
+              %Integer{value: 3}
+            ],
+            name: :test_1
+          },
+          %Atom{value: :non_function},
+          %Function{
+            args: [
+              %Variable{name: :a},
+              %Variable{name: :b}
+            ],
+            body: [
+              %Integer{value: 1},
+              %Integer{value: 2}
+            ],
+            name: :test_2
+          },
+        ],
+        name: [:Test]
+      }
+
+    result = Transpiler.aggregate_functions(module)
+
+    expected = %{
+      test_1: [
+        %Function{
+          args: [
+            %Variable{name: :a},
+            %Variable{name: :b}
+          ],
+          body: [
+            %Integer{value: 1},
+            %Integer{value: 2}
+          ],
+          name: :test_1
+        },
+        %Function{
+          args: [
+            %Variable{name: :a},
+            %Variable{name: :b},
+            %Variable{name: :c}
+          ],
+          body: [
+            %Integer{value: 1},
+            %Integer{value: 2},
+            %Integer{value: 3}
+          ],
+          name: :test_1
+        }
+      ],
+      test_2: [
+        %Function{
+          args: [
+            %Variable{name: :a},
+            %Variable{name: :b}
+          ],
+          body: [
+            %Integer{value: 1},
+            %Integer{value: 2}
+          ],
+          name: :test_2
+        }
+      ]
+    }
+
+    assert result == expected
+  end
 
   describe "parse!/1" do
     test "valid code" do
@@ -60,7 +152,7 @@ defmodule Reflex.TranspilerTest do
       ast = Transpiler.parse!("%{a: 1, b: 2}")
       result = Transpiler.transform(ast)
 
-      expected = %Map{
+      expected = %MapValue{
         data: [
           {%Atom{value: :a}, %Integer{value: 1}},
           {%Atom{value: :b}, %Integer{value: 2}}
@@ -75,13 +167,13 @@ defmodule Reflex.TranspilerTest do
         Transpiler.parse!("%{a: 1, b: %{c: 2, d: %{e: 3, f: 4}}}")
         |> Transpiler.transform()
 
-      expected = %Map{
+      expected = %MapValue{
         data: [
           {%Atom{value: :a}, %Integer{value: 1}},
-          {%Atom{value: :b}, %Map{
+          {%Atom{value: :b}, %MapValue{
             data: [
               {%Atom{value: :c}, %Integer{value: 2}},
-              {%Atom{value: :d}, %Map{
+              {%Atom{value: :d}, %MapValue{
                 data: [
                   {%Atom{value: :e}, %Integer{value: 3}},
                   {%Atom{value: :f}, %Integer{value: 4}},

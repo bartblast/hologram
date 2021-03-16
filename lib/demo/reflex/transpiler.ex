@@ -15,7 +15,7 @@ defmodule Reflex.Transpiler do
     defstruct value: nil
   end
 
-  defmodule Map do
+  defmodule MapValue do
     defstruct data: nil
   end
 
@@ -78,8 +78,7 @@ defmodule Reflex.Transpiler do
 
   def transform({:%{}, _, map}) do
     data = Enum.map(map, fn {k, v} -> {transform(k), transform(v)} end)
-
-    %Map{data: data}
+    %MapValue{data: data}
   end
 
   # OPERATORS
@@ -107,6 +106,21 @@ defmodule Reflex.Transpiler do
   def transform({:defmodule, _, [{_, _, name}, [do: {_, _, body}]]}) do
     body = Enum.map(body, fn expr -> transform(expr) end)
     %Module{name: name, body: body}
+  end
+
+  def aggregate_functions(module) do
+    Enum.reduce(module.body, %{}, fn expr, acc ->
+      case expr do
+        %Function{name: name} = fun ->
+          if Map.has_key?(acc, name) do
+            Map.put(acc, name, acc[name] ++ [fun])
+          else
+            Map.put(acc, name, [fun])
+          end
+        _ ->
+          acc
+      end
+    end)
   end
 
   def transform({name, _, nil}) when is_atom(name) do
