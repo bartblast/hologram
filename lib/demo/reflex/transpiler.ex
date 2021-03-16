@@ -1,59 +1,30 @@
 defmodule Reflex.Transpiler do
-  def aggregate_assignments(_, path \\ [])
-
-  def aggregate_assignments({:var, var}, path) do
-    [[var] ++ path]
+  defmodule Atom do
+    defstruct value: nil
   end
 
-  def aggregate_assignments({:map, map}, path) do
-    Enum.reduce(map, [], fn {k, v}, acc ->
-      acc ++ aggregate_assignments(v, path ++ [[:map_access, k]])
-    end)
+  defmodule Boolean do
+    defstruct value: nil
   end
 
-  def aggregate_assignments(_, path) do
-    []
+  defmodule Integer do
+    defstruct value: nil
   end
 
-  def generate({:assignment, left, right}) do
-    Enum.map(left, fn pattern ->
-      case pattern do
-        [var | path] ->
-          "#{var} = #{generate(right)}#{generate_assignment_path(path)};"
-      end
-    end)
-    |> Enum.join("\n")
+  defmodule Map do
+    defstruct data: nil
   end
 
-  def generate_assignment_path([]) do
-    ""
+  defmodule Matching do
+    defstruct left: nil, right: nil
   end
 
-  def generate_assignment_path([:map_access, key]) do
-    "['#{key}']"
+  defmodule String do
+    defstruct value: nil
   end
 
-  def generate_assignment_path(path) do
-    Enum.map(path, fn access_spec ->
-      generate_assignment_path(access_spec)
-    end)
-    |> Enum.join("")
-  end
-
-  def generate({:integer, value}) do
-    "#{value}"
-  end
-
-  def generate({:string, value}) do
-    "'#{value}'"
-  end
-
-  def generate({:map, value}) do
-    fields =
-      Enum.map(value, fn {k, v} -> "'#{k}': #{generate(v)}" end)
-      |> Enum.join(", ")
-
-    "{ #{fields} }"
+  defmodule Variable do
+    defstruct name: nil
   end
 
   def parse!(str) do
@@ -74,48 +45,118 @@ defmodule Reflex.Transpiler do
 
   def transform(ast)
 
-  def transform(ast) when is_binary(ast) do
-    {:string, ast}
-  end
+  # PRIMITIVES
 
-  def transform(ast) when is_integer(ast) do
-    {:integer, ast}
-  end
-
+  # boolean must be before atom
   def transform(ast) when is_boolean(ast) do
-    {:boolean, ast}
+    %Boolean{value: ast}
   end
 
   def transform(ast) when is_atom(ast) do
-    {:atom, ast}
+    %Atom{value: ast}
   end
 
-  def transform({:%{}, _, map}) do
-    {:map, Enum.map(map, fn {k, v} -> {k, transform(v)} end)}
+  def transform(ast) when is_integer(ast) do
+    %Integer{value: ast}
   end
+
+  def transform(ast) when is_binary(ast) do
+    %String{value: ast}
+  end
+
+  # DATA STRUCTURES
+
+  def transform({:%{}, _, map}) do
+    data = Enum.map(map, fn {k, v} -> {transform(k), transform(v)} end)
+
+    %Map{data: data}
+  end
+
+  # OPERATORS
 
   def transform({:=, _, [left, right]}) do
     left = transform(left) |> aggregate_assignments()
-    {:assignment, left, transform(right)}
+    %Matching{left: left, right: transform(right)}
   end
 
-  def transform({var, _, nil}) when is_atom(var) do
-    {:var, var}
+  def aggregate_assignments(_, path \\ [])
+
+  def aggregate_assignments(%Variable{name: name} = var, path) do
+    [[var] ++ path]
   end
 
-  def transform({:|, _, [var_1, var_2]}) do
-    {:destructure, {transform(var_1), transform(var_2)}}
+  # OTHER
+
+  def transform({name, _, nil}) when is_atom(name) do
+    %Variable{name: name}
   end
 
-  def transform({:if, _, [condition, [do: do_block, else: else_block]]}) do
-    {:if, {transform(condition), transform(do_block), transform(else_block)}}
-  end
+  # TODO: REFACTOR:
 
-  def transform({:case, _, [expression, [do: cases]]}) do
-    {:case, transform(expression), Enum.map(cases, fn c -> transform(c) end)}
-  end
+  # def aggregate_assignments({:map, map}, path) do
+  #   Enum.reduce(map, [], fn {k, v}, acc ->
+  #     acc ++ aggregate_assignments(v, path ++ [[:map_access, k]])
+  #   end)
+  # end
 
-  def transform({:->, _, [[clause], block]}) do
-    {:clause, transform(clause), transform(block)}
-  end
+  # def aggregate_assignments(_, path) do
+  #   []
+  # end
+
+  # def generate({:assignment, left, right}) do
+  #   Enum.map(left, fn pattern ->
+  #     case pattern do
+  #       [var | path] ->
+  #         "#{var} = #{generate(right)}#{generate_assignment_path(path)};"
+  #     end
+  #   end)
+  #   |> Enum.join("\n")
+  # end
+
+  # def generate_assignment_path([]) do
+  #   ""
+  # end
+
+  # def generate_assignment_path([:map_access, key]) do
+  #   "['#{key}']"
+  # end
+
+  # def generate_assignment_path(path) do
+  #   Enum.map(path, fn access_spec ->
+  #     generate_assignment_path(access_spec)
+  #   end)
+  #   |> Enum.join("")
+  # end
+
+  # def generate({:integer, value}) do
+  #   "#{value}"
+  # end
+
+  # def generate({:string, value}) do
+  #   "'#{value}'"
+  # end
+
+  # def generate({:map, value}) do
+  #   fields =
+  #     Enum.map(value, fn {k, v} -> "'#{k}': #{generate(v)}" end)
+  #     |> Enum.join(", ")
+
+  #   "{ #{fields} }"
+  # end
+
+  # def transform({:|, _, [var_1, var_2]}) do
+  #   {:destructure, {transform(var_1), transform(var_2)}}
+  # end
+
+  # def transform({:if, _, [condition, [do: do_block, else: else_block]]}) do
+  #   {:if, {transform(condition), transform(do_block), transform(else_block)}}
+  # end
+
+  # def transform({:case, _, [expression, [do: cases]]}) do
+  #   {:case, transform(expression), Enum.map(cases, fn c -> transform(c) end)}
+  # end
+
+  # def transform({:->, _, [[clause], block]}) do
+  #   {:clause, transform(clause), transform(block)}
+  # end
 end
