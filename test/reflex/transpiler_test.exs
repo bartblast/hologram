@@ -105,7 +105,6 @@ defmodule Reflex.TranspilerTest do
       """
       ast = Transpiler.parse!(code)
       result = Transpiler.transform(ast)
-      IO.inspect(result)
 
       expected = %Function{
         args: [
@@ -125,6 +124,13 @@ defmodule Reflex.TranspilerTest do
     test "variable" do
       ast = Transpiler.parse!("x")
       assert Transpiler.transform(ast) == %Variable{name: :x}
+    end
+  end
+
+  describe "generate/1" do
+    test "integer" do
+      result = Transpiler.generate(%Integer{value: 123})
+      assert result == "123"
     end
   end
 
@@ -184,11 +190,6 @@ defmodule Reflex.TranspilerTest do
   #   test "string" do
   #     result = Transpiler.generate({:string, "Test"})
   #     assert result == "'Test'"
-  #   end
-
-  #   test "integer" do
-  #     result = Transpiler.generate({:integer, 123})
-  #     assert result == "123"
   #   end
 
   #   test "map, not nested" do

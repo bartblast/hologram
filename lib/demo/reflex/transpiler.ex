@@ -102,6 +102,10 @@ defmodule Reflex.Transpiler do
     %Variable{name: name}
   end
 
+  def generate(%Integer{value: value}) do
+  "#{value}"
+  end
+
   # TODO: REFACTOR:
 
   # def aggregate_assignments({:map, map}, path) do
@@ -137,10 +141,6 @@ defmodule Reflex.Transpiler do
   #     generate_assignment_path(access_spec)
   #   end)
   #   |> Enum.join("")
-  # end
-
-  # def generate({:integer, value}) do
-  #   "#{value}"
   # end
 
   # def generate({:string, value}) do
