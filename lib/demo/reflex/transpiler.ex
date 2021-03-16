@@ -15,7 +15,7 @@ defmodule Reflex.Transpiler do
     defstruct value: nil
   end
 
-  defmodule MapValue do
+  defmodule MapType do
     defstruct data: nil
   end
 
@@ -78,7 +78,7 @@ defmodule Reflex.Transpiler do
 
   def transform({:%{}, _, map}) do
     data = Enum.map(map, fn {k, v} -> {transform(k), transform(v)} end)
-    %MapValue{data: data}
+    %MapType{data: data}
   end
 
   # OPERATORS

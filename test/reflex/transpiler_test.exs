@@ -6,7 +6,7 @@ defmodule Reflex.TranspilerTest do
   alias Reflex.Transpiler.Boolean
   alias Reflex.Transpiler.Function
   alias Reflex.Transpiler.Integer
-  alias Reflex.Transpiler.MapValue
+  alias Reflex.Transpiler.MapType
   alias Reflex.Transpiler.Module
   alias Reflex.Transpiler.String
   alias Reflex.Transpiler.Variable
@@ -152,7 +152,7 @@ defmodule Reflex.TranspilerTest do
       ast = Transpiler.parse!("%{a: 1, b: 2}")
       result = Transpiler.transform(ast)
 
-      expected = %MapValue{
+      expected = %MapType{
         data: [
           {%Atom{value: :a}, %Integer{value: 1}},
           {%Atom{value: :b}, %Integer{value: 2}}
@@ -167,13 +167,13 @@ defmodule Reflex.TranspilerTest do
         Transpiler.parse!("%{a: 1, b: %{c: 2, d: %{e: 3, f: 4}}}")
         |> Transpiler.transform()
 
-      expected = %MapValue{
+      expected = %MapType{
         data: [
           {%Atom{value: :a}, %Integer{value: 1}},
-          {%Atom{value: :b}, %MapValue{
+          {%Atom{value: :b}, %MapType{
             data: [
               {%Atom{value: :c}, %Integer{value: 2}},
-              {%Atom{value: :d}, %MapValue{
+              {%Atom{value: :d}, %MapType{
                 data: [
                   {%Atom{value: :e}, %Integer{value: 3}},
                   {%Atom{value: :f}, %Integer{value: 4}},
