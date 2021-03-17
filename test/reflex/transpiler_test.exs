@@ -8,7 +8,7 @@ defmodule Reflex.TranspilerTest do
   alias Reflex.Transpiler.Integer
   alias Reflex.Transpiler.MapType
   alias Reflex.Transpiler.Module
-  alias Reflex.Transpiler.String
+  alias Reflex.Transpiler.StringType
   alias Reflex.Transpiler.Variable
 
   test "aggregate_functions/1" do
@@ -53,7 +53,7 @@ defmodule Reflex.TranspilerTest do
             name: :test_2
           },
         ],
-        name: [:Test]
+        name: "Prefix.Test"
       }
 
     result = Transpiler.aggregate_functions(module)
@@ -143,7 +143,7 @@ defmodule Reflex.TranspilerTest do
 
     test "string" do
       ast = Transpiler.parse!("\"test\"")
-      assert Transpiler.transform(ast) == %String{value: "test"}
+      assert Transpiler.transform(ast) == %StringType{value: "test"}
     end
   end
 
@@ -216,7 +216,7 @@ defmodule Reflex.TranspilerTest do
 
     test "module" do
       code = """
-        defmodule Test do
+        defmodule Prefix.Test do
           def test(a, b) do
             1
             2
@@ -261,7 +261,7 @@ defmodule Reflex.TranspilerTest do
               name: :test
             }
           ],
-          name: [:Test]
+          name: "Prefix.Test"
         }
     end
 
@@ -275,6 +275,65 @@ defmodule Reflex.TranspilerTest do
     test "integer" do
       result = Transpiler.generate(%Integer{value: 123})
       assert result == "123"
+    end
+  end
+
+  describe "other generate/1" do
+    test "module" do
+      module =
+        %Module{
+          body: [
+            %Function{
+              args: [
+                %Variable{name: :a},
+                %Variable{name: :b}
+              ],
+              body: [
+                %Integer{value: 1},
+                %Integer{value: 2}
+              ],
+              name: :test_1
+            },
+            %Atom{value: :non_function},
+            %Function{
+              args: [
+                %Variable{name: :a},
+                %Variable{name: :b},
+                %Variable{name: :c}
+              ],
+              body: [
+                %Integer{value: 1},
+                %Integer{value: 2},
+                %Integer{value: 3}
+              ],
+              name: :test_1
+            },
+            %Atom{value: :non_function},
+            %Function{
+              args: [
+                %Variable{name: :a},
+                %Variable{name: :b}
+              ],
+              body: [
+                %Integer{value: 1},
+                %Integer{value: 2}
+              ],
+              name: :test_2
+            },
+          ],
+          name: "Prefix.Test"
+        }
+
+      result = Transpiler.generate(module)
+
+      expected = """
+        class PrefixTest {
+          static test_1() { }
+          static test_2() { }
+        }
+        """
+
+      assert result == expected
     end
   end
 

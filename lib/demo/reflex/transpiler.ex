@@ -27,7 +27,7 @@ defmodule Reflex.Transpiler do
     defstruct name: nil, body: nil
   end
 
-  defmodule String do
+  defmodule StringType do
     defstruct value: nil
   end
 
@@ -71,7 +71,7 @@ defmodule Reflex.Transpiler do
   end
 
   def transform(ast) when is_binary(ast) do
-    %String{value: ast}
+    %StringType{value: ast}
   end
 
   # DATA STRUCTURES
@@ -104,6 +104,10 @@ defmodule Reflex.Transpiler do
   end
 
   def transform({:defmodule, _, [{_, _, name}, [do: {_, _, body}]]}) do
+    name =
+      Enum.map(name, fn part -> "#{part}" end)
+      |> Enum.join(".")
+
     body = Enum.map(body, fn expr -> transform(expr) end)
     %Module{name: name, body: body}
   end
@@ -133,6 +137,23 @@ defmodule Reflex.Transpiler do
 
   def generate(%Integer{value: value}) do
   "#{value}"
+  end
+
+  # OTHER
+
+  def generate(%Module{name: name} = module) do
+    name = String.replace("#{name}", ".", "")
+
+    functions =
+      aggregate_functions(module)
+      |> Enum.map(fn {k, v} -> "  static #{k}() { }" end)
+      |> Enum.join("\n")
+
+    """
+    class #{name} {
+    #{functions}
+    }
+    """
   end
 
   # TODO: REFACTOR:
