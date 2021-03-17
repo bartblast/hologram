@@ -19,12 +19,12 @@ defmodule Reflex.Transpiler do
     defstruct data: nil
   end
 
-  defmodule Matching do
-    defstruct left: nil, right: nil
-  end
-
   defmodule Module do
     defstruct name: nil, body: nil
+  end
+
+  defmodule Pattern do
+    defstruct left: nil, right: nil
   end
 
   defmodule StringType do
@@ -85,7 +85,7 @@ defmodule Reflex.Transpiler do
 
   def transform({:=, _, [left, right]}) do
     left = transform(left) |> aggregate_assignments()
-    %Matching{left: left, right: transform(right)}
+    %Pattern{left: left, right: transform(right)}
   end
 
   def aggregate_assignments(_, path \\ [])
@@ -146,7 +146,7 @@ defmodule Reflex.Transpiler do
 
     functions =
       aggregate_functions(module)
-      |> Enum.map(fn {k, v} -> "  static #{k}() { }" end)
+      |> Enum.map(fn {k, v} -> "  static #{k}() { #{generate_function_body(v)} }" end)
       |> Enum.join("\n")
 
     """
@@ -154,6 +154,9 @@ defmodule Reflex.Transpiler do
     #{functions}
     }
     """
+  end
+
+  def generate_function_body(function_variants) do
   end
 
   # TODO: REFACTOR:

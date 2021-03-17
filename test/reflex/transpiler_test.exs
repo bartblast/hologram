@@ -8,6 +8,7 @@ defmodule Reflex.TranspilerTest do
   alias Reflex.Transpiler.Integer
   alias Reflex.Transpiler.MapType
   alias Reflex.Transpiler.Module
+  alias Reflex.Transpiler.Pattern
   alias Reflex.Transpiler.StringType
   alias Reflex.Transpiler.Variable
 
@@ -188,6 +189,21 @@ defmodule Reflex.TranspilerTest do
     end
   end
 
+  describe "operators transform/1" do
+    test "simple pattern" do
+      result =
+        Transpiler.parse!("x = 1")
+        |> Transpiler.transform()
+
+      expected = %Pattern{
+        left: [[%Variable{name: :x}]],
+        right: %Integer{value: 1}
+      }
+
+      assert result == expected
+    end
+  end
+
   describe "other transform/1" do
     test "function" do
       code = """
@@ -196,6 +212,7 @@ defmodule Reflex.TranspilerTest do
           2
         end
       """
+
       ast = Transpiler.parse!(code)
       result = Transpiler.transform(ast)
 
@@ -454,13 +471,6 @@ defmodule Reflex.TranspilerTest do
   # end
 
   # describe "transform/1" do
-
-
-  #   test "matching simple" do
-  #     ast = Transpiler.parse!("x = 1")
-  #     assert Transpiler.transform(ast) == {, [[:x]], {:integer, 1}}
-  #   end
-
   #   test "assignment complex" do
   #     result =
   #       Transpiler.parse!("%{a: x, b: y} = %{a: 1, b: 2}")
