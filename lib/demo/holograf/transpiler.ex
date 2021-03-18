@@ -144,14 +144,6 @@
 #   #   |> Enum.join("")
 #   # end
 
-#   # def generate({:map, value}) do
-#   #   fields =
-#   #     Enum.map(value, fn {k, v} -> "'#{k}': #{generate(v)}" end)
-#   #     |> Enum.join(", ")
-
-#   #   "{ #{fields} }"
-#   # end
-
 #   # def transform({:|, _, [var_1, var_2]}) do
 #   #   {:destructure, {transform(var_1), transform(var_2)}}
 #   # end

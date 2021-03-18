@@ -30,7 +30,7 @@ defmodule Holograf.Transpiler.TransformerTest do
   end
 
   describe "data structures" do
-    test "empty" do
+    test "map, empty" do
       result =
         parse!("%{}")
         |> Transformer.transform()
