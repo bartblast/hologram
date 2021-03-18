@@ -116,47 +116,6 @@
 #     end
 #   end
 
-#   describe "data structures transform/1" do
-#     test "map, not nested" do
-#       ast = Transpiler.parse!("%{a: 1, b: 2}")
-#       result = Transpiler.transform(ast)
-
-#       expected = %MapType{
-#         data: [
-#           {%Atom{value: :a}, %Integer{value: 1}},
-#           {%Atom{value: :b}, %Integer{value: 2}}
-#         ]
-#       }
-
-#       assert result == expected
-#     end
-
-#     test "map, nested" do
-#       result =
-#         Transpiler.parse!("%{a: 1, b: %{c: 2, d: %{e: 3, f: 4}}}")
-#         |> Transpiler.transform()
-
-#       expected = %MapType{
-#         data: [
-#           {%Atom{value: :a}, %Integer{value: 1}},
-#           {%Atom{value: :b}, %MapType{
-#             data: [
-#               {%Atom{value: :c}, %Integer{value: 2}},
-#               {%Atom{value: :d}, %MapType{
-#                 data: [
-#                   {%Atom{value: :e}, %Integer{value: 3}},
-#                   {%Atom{value: :f}, %Integer{value: 4}},
-#                 ]
-#               }}
-#             ]
-#           }}
-#         ]
-#       }
-
-#       assert result == expected
-#     end
-#   end
-
 #   describe "operators transform/1" do
 #     test "match operator, simple" do
 #       result =

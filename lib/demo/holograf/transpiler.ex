@@ -8,10 +8,6 @@
 #     defstruct key: nil
 #   end
 
-#   defmodule MapType do
-#     defstruct data: nil
-#   end
-
 #   defmodule MatchOperator do
 #     defstruct bindings: nil, left: nil, right: nil
 #   end
@@ -31,13 +27,6 @@
 #   end
 
 #   # TRANSFORM
-
-#   # DATA STRUCTURES
-
-#   def transform({:%{}, _, map}) do
-#     data = Enum.map(map, fn {k, v} -> {transform(k), transform(v)} end)
-#     %MapType{data: data}
-#   end
 
 #   # OPERATORS
 

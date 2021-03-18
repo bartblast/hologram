@@ -1,4 +1,6 @@
 defmodule Holograf.Transpiler.AST do
+  # PRIMITIVES
+
   defmodule AtomType do
     defstruct value: nil
   end
@@ -13,5 +15,11 @@ defmodule Holograf.Transpiler.AST do
 
   defmodule StringType do
     defstruct value: nil
+  end
+
+  # DATA STRUCTURES
+
+  defmodule MapType do
+    defstruct data: nil
   end
 end
