@@ -23,6 +23,18 @@ defmodule Holograf.Transpiler.AST do
     defstruct data: nil
   end
 
+  # OPERATORS
+
+  defmodule MatchOperator do
+    defstruct bindings: nil, left: nil, right: nil
+  end
+
+  # ACCESS
+
+  defmodule MapAccess do
+    defstruct key: nil
+  end
+
   # OTHER
 
   defmodule Variable do

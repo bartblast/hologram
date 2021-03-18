@@ -2,18 +2,6 @@
 # defmodule Holograf.TranspilerTest do
 #   use ExUnit.Case
 
-#   alias Holograf.Transpiler
-#   alias Holograf.Transpiler.Atom
-#   alias Holograf.Transpiler.Boolean
-#   alias Holograf.Transpiler.Function
-#   alias Holograf.Transpiler.Integer
-#   alias Holograf.Transpiler.MapAccess
-#   alias Holograf.Transpiler.MapType
-#   alias Holograf.Transpiler.MatchOperator
-#   alias Holograf.Transpiler.Module
-#   alias Holograf.Transpiler.StringType
-#   alias Holograf.Transpiler.Variable
-
 #   test "aggregate_functions/1" do
 #     module =
 #       %Module{
@@ -24,12 +12,12 @@
 #               %Variable{name: :b}
 #             ],
 #             body: [
-#               %Integer{value: 1},
-#               %Integer{value: 2}
+#               %IntegerType{value: 1},
+#               %IntegerType{value: 2}
 #             ],
 #             name: :test_1
 #           },
-#           %Atom{value: :non_function},
+#           %AtomType{value: :non_function},
 #           %Function{
 #             args: [
 #               %Variable{name: :a},
@@ -37,21 +25,21 @@
 #               %Variable{name: :c}
 #             ],
 #             body: [
-#               %Integer{value: 1},
-#               %Integer{value: 2},
-#               %Integer{value: 3}
+#               %IntegerType{value: 1},
+#               %IntegerType{value: 2},
+#               %IntegerType{value: 3}
 #             ],
 #             name: :test_1
 #           },
-#           %Atom{value: :non_function},
+#           %AtomType{value: :non_function},
 #           %Function{
 #             args: [
 #               %Variable{name: :a},
 #               %Variable{name: :b}
 #             ],
 #             body: [
-#               %Integer{value: 1},
-#               %Integer{value: 2}
+#               %IntegerType{value: 1},
+#               %IntegerType{value: 2}
 #             ],
 #             name: :test_2
 #           },
@@ -69,8 +57,8 @@
 #             %Variable{name: :b}
 #           ],
 #           body: [
-#             %Integer{value: 1},
-#             %Integer{value: 2}
+#             %IntegerType{value: 1},
+#             %IntegerType{value: 2}
 #           ],
 #           name: :test_1
 #         },
@@ -81,9 +69,9 @@
 #             %Variable{name: :c}
 #           ],
 #           body: [
-#             %Integer{value: 1},
-#             %Integer{value: 2},
-#             %Integer{value: 3}
+#             %IntegerType{value: 1},
+#             %IntegerType{value: 2},
+#             %IntegerType{value: 3}
 #           ],
 #           name: :test_1
 #         }
@@ -95,8 +83,8 @@
 #             %Variable{name: :b}
 #           ],
 #           body: [
-#             %Integer{value: 1},
-#             %Integer{value: 2}
+#             %IntegerType{value: 1},
+#             %IntegerType{value: 2}
 #           ],
 #           name: :test_2
 #         }
@@ -113,127 +101,6 @@
 
 #     test "invalid code" do
 #       assert {:error, _} = Transpiler.parse_file("README.md")
-#     end
-#   end
-
-#   describe "operators transform/1" do
-#     test "match operator, simple" do
-#       result =
-#         Transpiler.parse!("x = 1")
-#         |> Transpiler.transform()
-
-#       expected = %MatchOperator{
-#         bindings: [[%Variable{name: :x}]],
-#         left: %Variable{name: :x},
-#         right: %Integer{value: 1}
-#       }
-
-#       assert result == expected
-#     end
-
-#     test "match operator, map with root keys" do
-#       result =
-#         Transpiler.parse!("%{a: x, b: y} = %{a: 1, b: 2}")
-#         |> Transpiler.transform()
-
-#       expected =
-#         %MatchOperator{
-#           bindings: [
-#             [
-#               %Variable{name: :x},
-#               %MapAccess{key: %Atom{value: :a}}
-#             ],
-#             [
-#               %Variable{name: :y},
-#               %MapAccess{key: %Atom{value: :b}}
-#             ]
-#           ],
-#           left: %MapType{
-#             data: [
-#               {%Atom{value: :a}, %Variable{name: :x}},
-#               {%Atom{value: :b}, %Variable{name: :y}}
-#             ]
-#           },
-#           right: %MapType{
-#             data: [
-#               {%Atom{value: :a}, %Integer{value: 1}},
-#               {%Atom{value: :b}, %Integer{value: 2}}
-#             ]
-#           }
-#         }
-
-#       assert result == expected
-#     end
-
-#     test "match operator, map with nested keys" do
-#       result =
-#         Transpiler.parse!("%{a: 1, b: %{p: x, r: 4}, c: 3, d: %{m: 0, n: y}} = %{a: 1, b: %{p: 9, r: 4}, c: 3, d: %{m: 0, n: 8}}")
-#         |> Transpiler.transform()
-
-#       expected =
-#         %MatchOperator{
-#           bindings: [
-#             [
-#               %Variable{name: :x},
-#               %MapAccess{key: %Atom{value: :b}},
-#               %MapAccess{key: %Atom{value: :p}}
-#             ],
-#             [
-#               %Variable{name: :y},
-#               %MapAccess{key: %Atom{value: :d}},
-#               %MapAccess{key: %Atom{value: :n}}
-#             ]
-#           ],
-#           left: %MapType{
-#             data: [
-#               {%Atom{value: :a}, %Integer{value: 1}},
-#               {
-#                 %Atom{value: :b},
-#                 %MapType{
-#                   data: [
-#                     {%Atom{value: :p}, %Variable{name: :x}},
-#                     {%Atom{value: :r}, %Integer{value: 4}}
-#                   ]
-#                }},
-#               {%Atom{value: :c}, %Integer{value: 3}},
-#               {%Atom{value: :d},
-#                %MapType{
-#                  data: [
-#                    {%Atom{value: :m},
-#                     %Integer{value: 0}},
-#                    {%Atom{value: :n},
-#                     %Variable{name: :y}}
-#                  ]
-#                }}
-#             ]
-#           },
-#           right: %MapType{
-#             data: [
-#               {%Atom{value: :a}, %Integer{value: 1}},
-#               {%Atom{value: :b},
-#                %MapType{
-#                  data: [
-#                    {%Atom{value: :p},
-#                     %Integer{value: 9}},
-#                    {%Atom{value: :r},
-#                     %Integer{value: 4}}
-#                  ]
-#                }},
-#               {%Atom{value: :c}, %Integer{value: 3}},
-#               {%Atom{value: :d},
-#                %MapType{
-#                  data: [
-#                    {%Atom{value: :m},
-#                     %Integer{value: 0}},
-#                    {%Atom{value: :n},
-#                     %Integer{value: 8}}
-#                  ]
-#                }}
-#             ]
-#           }
-#         }
-
-#       assert result == expected
 #     end
 #   end
 
@@ -255,8 +122,8 @@
 #           %Variable{name: :b}
 #         ],
 #         body: [
-#           %Integer{value: 1},
-#           %Integer{value: 2}
+#           %IntegerType{value: 1},
+#           %IntegerType{value: 2}
 #         ],
 #         name: :test
 #       }
@@ -292,8 +159,8 @@
 #                 %Variable{name: :b}
 #               ],
 #               body: [
-#                 %Integer{value: 1},
-#                 %Integer{value: 2}
+#                 %IntegerType{value: 1},
+#                 %IntegerType{value: 2}
 #               ],
 #               name: :test
 #             },
@@ -304,9 +171,9 @@
 #                 %Variable{name: :c}
 #               ],
 #               body: [
-#                 %Integer{value: 1},
-#                 %Integer{value: 2},
-#                 %Integer{value: 3}
+#                 %IntegerType{value: 1},
+#                 %IntegerType{value: 2},
+#                 %IntegerType{value: 3}
 #               ],
 #               name: :test
 #             }
@@ -327,12 +194,12 @@
 #                 %Variable{name: :b}
 #               ],
 #               body: [
-#                 %Integer{value: 1},
-#                 %Integer{value: 2}
+#                 %IntegerType{value: 1},
+#                 %IntegerType{value: 2}
 #               ],
 #               name: :test_1
 #             },
-#             %Atom{value: :non_function},
+#             %AtomType{value: :non_function},
 #             %Function{
 #               args: [
 #                 %Variable{name: :a},
@@ -340,21 +207,21 @@
 #                 %Variable{name: :c}
 #               ],
 #               body: [
-#                 %Integer{value: 1},
-#                 %Integer{value: 2},
-#                 %Integer{value: 3}
+#                 %IntegerType{value: 1},
+#                 %IntegerType{value: 2},
+#                 %IntegerType{value: 3}
 #               ],
 #               name: :test_1
 #             },
-#             %Atom{value: :non_function},
+#             %AtomType{value: :non_function},
 #             %Function{
 #               args: [
 #                 %Variable{name: :a},
 #                 %Variable{name: :b}
 #               ],
 #               body: [
-#                 %Integer{value: 1},
-#                 %Integer{value: 2}
+#                 %IntegerType{value: 1},
+#                 %IntegerType{value: 2}
 #               ],
 #               name: :test_2
 #             },
@@ -374,25 +241,6 @@
 #       assert result == expected
 #     end
 #   end
-
-#   # TODO: REFACTOR:
-
-#   # describe "aggregate_assignments/2" do
-
-#   #   test "map, root and nested keys" do
-#   #     result =
-#   #       Transpiler.parse!("%{a: 1, b: %{p: x, r: 4}, c: z, d: %{m: 0, n: y}}")
-#   #       |> Transpiler.transform()
-#   #       |> Transpiler.aggregate_assignments()
-
-#   #     assert result ==
-#   #       [
-#   #         [:x, [:map_access, :b], [:map_access, :p]],
-#   #         [:z, [:map_access, :c]],
-#   #         [:y, [:map_access, :d], [:map_access, :n]]
-#   #       ]
-#   #   end
-#   # end
 
 #   # describe "generate/1" do
 #   #   test "assignment, simple" do

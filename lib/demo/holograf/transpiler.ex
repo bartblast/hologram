@@ -4,14 +4,6 @@
 #     defstruct name: nil, args: nil, body: nil
 #   end
 
-#   defmodule MapAccess do
-#     defstruct key: nil
-#   end
-
-#   defmodule MatchOperator do
-#     defstruct bindings: nil, left: nil, right: nil
-#   end
-
 #   defmodule Module do
 #     defstruct name: nil, body: nil
 #   end
@@ -23,34 +15,6 @@
 #   end
 
 #   # TRANSFORM
-
-#   # OPERATORS
-
-#   def transform({:=, _, [left, right]}) do
-#     left = transform(left)
-
-#     %MatchOperator{
-#       bindings: bindings(left),
-#       left: left,
-#       right: transform(right)
-#     }
-#   end
-
-#   defp bindings(_, path \\ [])
-
-#   defp bindings(%Variable{name: name} = var, path) do
-#     [[var] ++ path]
-#   end
-
-#   defp bindings(%MapType{data: data}, path) do
-#     Enum.reduce(data, [], fn {k, v}, acc ->
-#       acc ++ bindings(v, path ++ [%MapAccess{key: k}])
-#     end)
-#   end
-
-#   defp bindings(_, path) do
-#     []
-#   end
 
 #   # OTHER
 

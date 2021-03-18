@@ -1,6 +1,8 @@
 defmodule Holograf.Transpiler.Transformer do
   alias Holograf.Transpiler.AST.{AtomType, BooleanType, IntegerType, StringType}
   alias Holograf.Transpiler.AST.MapType
+  alias Holograf.Transpiler.AST.MatchOperator
+  alias Holograf.Transpiler.AST.MapAccess
   alias Holograf.Transpiler.AST.Variable
 
   def transform(ast)
@@ -29,6 +31,34 @@ defmodule Holograf.Transpiler.Transformer do
   def transform({:%{}, _, map}) do
     data = Enum.map(map, fn {k, v} -> {transform(k), transform(v)} end)
     %MapType{data: data}
+  end
+
+  # OPERATORS
+
+  def transform({:=, _, [left, right]}) do
+    left = transform(left)
+
+    %MatchOperator{
+      bindings: bindings(left),
+      left: left,
+      right: transform(right)
+    }
+  end
+
+  defp bindings(_, path \\ [])
+
+  defp bindings(%Variable{name: name} = var, path) do
+    [[var] ++ path]
+  end
+
+  defp bindings(%MapType{data: data}, path) do
+    Enum.reduce(data, [], fn {k, v}, acc ->
+      acc ++ bindings(v, path ++ [%MapAccess{key: k}])
+    end)
+  end
+
+  defp bindings(_, path) do
+    []
   end
 
   # OTHER
