@@ -1,21 +1,5 @@
 # # TODO: refactor
 # defmodule Holograf.Transpiler do
-#   defmodule Module do
-#     defstruct name: nil, body: nil
-#   end
-
-#   # TRANSFORM
-
-#   # OTHER
-
-#   def transform({:defmodule, _, [{_, _, name}, [do: {_, _, body}]]}) do
-#     name =
-#       Enum.map(name, fn part -> "#{part}" end)
-#       |> Enum.join(".")
-
-#     body = Enum.map(body, fn expr -> transform(expr) end)
-#     %Module{name: name, body: body}
-#   end
 
 #   def aggregate_functions(module) do
 #     Enum.reduce(module.body, %{}, fn expr, acc ->

@@ -35,10 +35,14 @@ defmodule Holograf.Transpiler.AST do
     defstruct key: nil
   end
 
-  # OTHER
+  # C
 
   defmodule Function do
     defstruct name: nil, args: nil, body: nil
+  end
+
+  defmodule Module do
+    defstruct name: nil, body: nil
   end
 
   defmodule Variable do

@@ -94,59 +94,6 @@
 #     assert result == expected
 #   end
 
-#   describe "other transform/1" do
-#     test "module" do
-#       code = """
-#         defmodule Prefix.Test do
-#           def test(a, b) do
-#             1
-#             2
-#           end
-
-#           def test(a, b, c) do
-#             1
-#             2
-#             3
-#           end
-#         end
-#       """
-
-#       ast = Transpiler.parse!(code)
-#       result = Transpiler.transform(ast)
-
-#       expected =
-#         %Module{
-#           body: [
-#             %Function{
-#               args: [
-#                 %Variable{name: :a},
-#                 %Variable{name: :b}
-#               ],
-#               body: [
-#                 %IntegerType{value: 1},
-#                 %IntegerType{value: 2}
-#               ],
-#               name: :test
-#             },
-#             %Function{
-#               args: [
-#                 %Variable{name: :a},
-#                 %Variable{name: :b},
-#                 %Variable{name: :c}
-#               ],
-#               body: [
-#                 %IntegerType{value: 1},
-#                 %IntegerType{value: 2},
-#                 %IntegerType{value: 3}
-#               ],
-#               name: :test
-#             }
-#           ],
-#           name: "Prefix.Test"
-#         }
-#     end
-#   end
-
 #   describe "other generate/1" do
 #     test "module" do
 #       module =
