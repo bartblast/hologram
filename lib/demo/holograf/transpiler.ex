@@ -4,12 +4,6 @@
 #     defstruct name: nil, body: nil
 #   end
 
-#   def parse_file(path) do
-#     path
-#     |> File.read!()
-#     |> Code.string_to_quoted()
-#   end
-
 #   # TRANSFORM
 
 #   # OTHER

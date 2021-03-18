@@ -94,16 +94,6 @@
 #     assert result == expected
 #   end
 
-#   describe "parse_file/1" do
-#     test "valid code" do
-#       assert {:ok, _} = Transpiler.parse_file("lib/demo/holograf/transpiler.ex")
-#     end
-
-#     test "invalid code" do
-#       assert {:error, _} = Transpiler.parse_file("README.md")
-#     end
-#   end
-
 #   describe "other transform/1" do
 #     test "module" do
 #       code = """
