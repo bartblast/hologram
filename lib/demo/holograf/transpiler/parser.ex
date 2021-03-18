@@ -1,4 +1,4 @@
-defmodule Holograf.Parser do
+defmodule Holograf.Transpiler.Parser do
   def parse!(str) do
     case Code.string_to_quoted(str) do
       {:ok, ast} ->
