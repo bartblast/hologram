@@ -1,4 +1,4 @@
-defmodule DemoWeb.HolofografController do
+defmodule DemoWeb.HolografController do
   use DemoWeb, :controller
 
   def index(conn, _params) do

@@ -1,6 +1,6 @@
 defmodule DemoWeb.Router do
   use DemoWeb, :router
-  use Holofograf.Router
+  use Holograf.Router
 
   pipeline :browser do
     plug :accepts, ["html"]

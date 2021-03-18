@@ -1,6 +1,6 @@
-defmodule Holofograf.Transpiler.ParserTest do
+defmodule Holograf.Transpiler.ParserTest do
   use ExUnit.Case
-  alias Holofograf.Transpiler.Parser
+  alias Holograf.Transpiler.Parser
 
   describe "parse!/1" do
     test "valid code" do

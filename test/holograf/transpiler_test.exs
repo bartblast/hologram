@@ -1,18 +1,18 @@
 # TODO: refactor
-defmodule Holofograf.TranspilerTest do
+defmodule Holograf.TranspilerTest do
   use ExUnit.Case
 
-  alias Holofograf.Transpiler
-  alias Holofograf.Transpiler.Atom
-  alias Holofograf.Transpiler.Boolean
-  alias Holofograf.Transpiler.Function
-  alias Holofograf.Transpiler.Integer
-  alias Holofograf.Transpiler.MapAccess
-  alias Holofograf.Transpiler.MapType
-  alias Holofograf.Transpiler.MatchOperator
-  alias Holofograf.Transpiler.Module
-  alias Holofograf.Transpiler.StringType
-  alias Holofograf.Transpiler.Variable
+  alias Holograf.Transpiler
+  alias Holograf.Transpiler.Atom
+  alias Holograf.Transpiler.Boolean
+  alias Holograf.Transpiler.Function
+  alias Holograf.Transpiler.Integer
+  alias Holograf.Transpiler.MapAccess
+  alias Holograf.Transpiler.MapType
+  alias Holograf.Transpiler.MatchOperator
+  alias Holograf.Transpiler.Module
+  alias Holograf.Transpiler.StringType
+  alias Holograf.Transpiler.Variable
 
   test "aggregate_functions/1" do
     module =

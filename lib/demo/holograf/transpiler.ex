@@ -1,5 +1,5 @@
 # TODO: refactor
-defmodule Holofograf.Transpiler do
+defmodule Holograf.Transpiler do
   defmodule Atom do
     defstruct value: nil
   end
