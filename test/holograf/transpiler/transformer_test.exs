@@ -5,6 +5,7 @@ defmodule Holograf.Transpiler.TransformerTest do
 
   alias Holograf.Transpiler.AST.{AtomType, BooleanType, IntegerType, StringType}
   alias Holograf.Transpiler.AST.MapType
+  alias Holograf.Transpiler.AST.Variable
   alias Holograf.Transpiler.Transformer
 
   describe "primitives" do
@@ -80,6 +81,13 @@ defmodule Holograf.Transpiler.TransformerTest do
       }
 
       assert result == expected
+    end
+  end
+
+  describe "other" do
+    test "variable" do
+      ast = parse!("x")
+      assert Transformer.transform(ast) == %Variable{name: :x}
     end
   end
 end

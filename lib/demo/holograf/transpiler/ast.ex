@@ -22,4 +22,10 @@ defmodule Holograf.Transpiler.AST do
   defmodule MapType do
     defstruct data: nil
   end
+
+  # OTHER
+
+  defmodule Variable do
+    defstruct name: nil
+  end
 end

@@ -1,6 +1,7 @@
 defmodule Holograf.Transpiler.Transformer do
   alias Holograf.Transpiler.AST.{AtomType, BooleanType, IntegerType, StringType}
   alias Holograf.Transpiler.AST.MapType
+  alias Holograf.Transpiler.AST.Variable
 
   def transform(ast)
 
@@ -28,5 +29,11 @@ defmodule Holograf.Transpiler.Transformer do
   def transform({:%{}, _, map}) do
     data = Enum.map(map, fn {k, v} -> {transform(k), transform(v)} end)
     %MapType{data: data}
+  end
+
+  # OTHER
+
+  def transform({name, _, nil}) when is_atom(name) do
+    %Variable{name: name}
   end
 end

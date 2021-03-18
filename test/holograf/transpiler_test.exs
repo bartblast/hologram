@@ -314,11 +314,6 @@
 #           name: "Prefix.Test"
 #         }
 #     end
-
-#     test "variable" do
-#       ast = Transpiler.parse!("x")
-#       assert Transpiler.transform(ast) == %Variable{name: :x}
-#     end
 #   end
 
 #   describe "other generate/1" do

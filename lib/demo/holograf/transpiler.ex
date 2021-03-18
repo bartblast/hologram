@@ -16,10 +16,6 @@
 #     defstruct name: nil, body: nil
 #   end
 
-#   defmodule Variable do
-#     defstruct name: nil
-#   end
-
 #   def parse_file(path) do
 #     path
 #     |> File.read!()
@@ -89,13 +85,7 @@
 #     end)
 #   end
 
-#   def transform({name, _, nil}) when is_atom(name) do
-#     %Variable{name: name}
-#   end
-
 #   # GENERATE
-
-#   # PRIMITIVES
 
 #   # OTHER
 
