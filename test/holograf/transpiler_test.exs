@@ -1,3 +1,4 @@
+# TODO: refactor
 defmodule Holofograf.TranspilerTest do
   use ExUnit.Case
 
@@ -103,18 +104,6 @@ defmodule Holofograf.TranspilerTest do
     }
 
     assert result == expected
-  end
-
-  describe "parse!/1" do
-    test "valid code" do
-      assert Transpiler.parse!("1 + 2") == {:+, [line: 1], [1, 2]}
-    end
-
-    test "invalid code" do
-      assert_raise RuntimeError, "Invalid code", fn ->
-        Transpiler.parse!(".1")
-      end
-    end
   end
 
   describe "parse_file/1" do

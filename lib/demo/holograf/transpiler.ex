@@ -1,4 +1,4 @@
-# TODO: REFACTOR
+# TODO: refactor
 defmodule Holofograf.Transpiler do
   defmodule Atom do
     defstruct value: nil
@@ -38,16 +38,6 @@ defmodule Holofograf.Transpiler do
 
   defmodule Variable do
     defstruct name: nil
-  end
-
-  def parse!(str) do
-    case Code.string_to_quoted(str) do
-      {:ok, ast} ->
-        ast
-
-      _ ->
-        raise "Invalid code"
-    end
   end
 
   def parse_file(path) do
