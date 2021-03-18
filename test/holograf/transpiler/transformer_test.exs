@@ -63,17 +63,19 @@ defmodule Holograf.Transpiler.TransformerTest do
       expected = %MapType{
         data: [
           {%AtomType{value: :a}, %IntegerType{value: 1}},
-          {%AtomType{value: :b}, %MapType{
-            data: [
-              {%AtomType{value: :c}, %IntegerType{value: 2}},
-              {%AtomType{value: :d}, %MapType{
-                data: [
-                  {%AtomType{value: :e}, %IntegerType{value: 3}},
-                  {%AtomType{value: :f}, %IntegerType{value: 4}},
-                ]
-              }}
-            ]
-          }}
+          {%AtomType{value: :b},
+           %MapType{
+             data: [
+               {%AtomType{value: :c}, %IntegerType{value: 2}},
+               {%AtomType{value: :d},
+                %MapType{
+                  data: [
+                    {%AtomType{value: :e}, %IntegerType{value: 3}},
+                    {%AtomType{value: :f}, %IntegerType{value: 4}}
+                  ]
+                }}
+             ]
+           }}
         ]
       }
 
