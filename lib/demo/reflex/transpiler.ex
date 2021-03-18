@@ -1,3 +1,4 @@
+# TODO: REFACTOR
 defmodule Reflex.Transpiler do
   defmodule Atom do
     defstruct value: nil
