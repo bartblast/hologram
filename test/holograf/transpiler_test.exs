@@ -1,17 +1,17 @@
-defmodule Reflex.TranspilerTest do
+defmodule Holofograf.TranspilerTest do
   use ExUnit.Case
 
-  alias Reflex.Transpiler
-  alias Reflex.Transpiler.Atom
-  alias Reflex.Transpiler.Boolean
-  alias Reflex.Transpiler.Function
-  alias Reflex.Transpiler.Integer
-  alias Reflex.Transpiler.MapAccess
-  alias Reflex.Transpiler.MapType
-  alias Reflex.Transpiler.MatchOperator
-  alias Reflex.Transpiler.Module
-  alias Reflex.Transpiler.StringType
-  alias Reflex.Transpiler.Variable
+  alias Holofograf.Transpiler
+  alias Holofograf.Transpiler.Atom
+  alias Holofograf.Transpiler.Boolean
+  alias Holofograf.Transpiler.Function
+  alias Holofograf.Transpiler.Integer
+  alias Holofograf.Transpiler.MapAccess
+  alias Holofograf.Transpiler.MapType
+  alias Holofograf.Transpiler.MatchOperator
+  alias Holofograf.Transpiler.Module
+  alias Holofograf.Transpiler.StringType
+  alias Holofograf.Transpiler.Variable
 
   test "aggregate_functions/1" do
     module =
@@ -119,7 +119,7 @@ defmodule Reflex.TranspilerTest do
 
   describe "parse_file/1" do
     test "valid code" do
-      assert {:ok, _} = Transpiler.parse_file("lib/demo/reflex/transpiler.ex")
+      assert {:ok, _} = Transpiler.parse_file("lib/demo/holograf/transpiler.ex")
     end
 
     test "invalid code" do

@@ -1,5 +1,5 @@
 # TODO: REFACTOR
-defmodule Reflex.Transpiler do
+defmodule Holofograf.Transpiler do
   defmodule Atom do
     defstruct value: nil
   end

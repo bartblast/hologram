@@ -6,7 +6,7 @@ defmodule Demo.MixProject do
       files: ["lib", "mix.exs", "README.md"],
       maintainers: ["Segmetric", "Bart Blast"],
       licenses: ["MIT"],
-      links: %{"GitHub" => "https://github.com/segmetric/reflex"}
+      links: %{"GitHub" => "https://github.com/segmetric/holograf"}
     ]
   end
 
