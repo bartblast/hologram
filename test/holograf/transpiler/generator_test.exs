@@ -79,6 +79,8 @@ defmodule Holograf.Transpiler.GeneratorTest do
   end
 
   describe "other" do
+    # TODO: test modules with 0 and 1 functions
+    
     test "module, multiple functions with multiple variants" do
       ast =
         %Module{
