@@ -97,10 +97,6 @@
 
 #   # PRIMITIVES
 
-#   def generate(%Integer{value: value}) do
-#   "#{value}"
-#   end
-
 #   # OTHER
 
 #   def generate(%Module{name: name} = module) do
@@ -146,10 +142,6 @@
 #   #     generate_assignment_path(access_spec)
 #   #   end)
 #   #   |> Enum.join("")
-#   # end
-
-#   # def generate({:string, value}) do
-#   #   "'#{value}'"
 #   # end
 
 #   # def generate({:map, value}) do

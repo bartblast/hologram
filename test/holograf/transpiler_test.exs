@@ -321,13 +321,6 @@
 #     end
 #   end
 
-#   describe "primitives generate/1" do
-#     test "integer" do
-#       result = Transpiler.generate(%Integer{value: 123})
-#       assert result == "123"
-#     end
-#   end
-
 #   describe "other generate/1" do
 #     test "module" do
 #       module =
@@ -407,11 +400,6 @@
 #   # end
 
 #   # describe "generate/1" do
-#   #   test "string" do
-#   #     result = Transpiler.generate({:string, "Test"})
-#   #     assert result == "'Test'"
-#   #   end
-
 #   #   test "map, not nested" do
 #   #     map = {:map, [a: {:integer, 1}, b: {:integer, 2}]}
 #   #     result = Transpiler.generate(map)
