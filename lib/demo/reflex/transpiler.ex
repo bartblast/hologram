@@ -15,16 +15,20 @@ defmodule Reflex.Transpiler do
     defstruct value: nil
   end
 
+  defmodule MapAccess do
+    defstruct key: nil
+  end
+
   defmodule MapType do
     defstruct data: nil
   end
 
-  defmodule Module do
-    defstruct name: nil, body: nil
+  defmodule MatchOperator do
+    defstruct bindings: nil, left: nil, right: nil
   end
 
-  defmodule Pattern do
-    defstruct left: nil, right: nil
+  defmodule Module do
+    defstruct name: nil, body: nil
   end
 
   defmodule StringType do
@@ -84,14 +88,29 @@ defmodule Reflex.Transpiler do
   # OPERATORS
 
   def transform({:=, _, [left, right]}) do
-    left = transform(left) |> aggregate_assignments()
-    %Pattern{left: left, right: transform(right)}
+    left = transform(left)
+
+    %MatchOperator{
+      bindings: bindings(left),
+      left: left,
+      right: transform(right)
+    }
   end
 
-  def aggregate_assignments(_, path \\ [])
+  defp bindings(_, path \\ [])
 
-  def aggregate_assignments(%Variable{name: name} = var, path) do
+  defp bindings(%Variable{name: name} = var, path) do
     [[var] ++ path]
+  end
+
+  defp bindings(%MapType{data: data}, path) do
+    Enum.reduce(data, [], fn {k, v}, acc ->
+      acc ++ bindings(v, path ++ [%MapAccess{key: k}])
+    end)
+  end
+
+  defp bindings(_, path) do
+    []
   end
 
   # OTHER
@@ -160,16 +179,6 @@ defmodule Reflex.Transpiler do
   end
 
   # TODO: REFACTOR:
-
-  # def aggregate_assignments({:map, map}, path) do
-  #   Enum.reduce(map, [], fn {k, v}, acc ->
-  #     acc ++ aggregate_assignments(v, path ++ [[:map_access, k]])
-  #   end)
-  # end
-
-  # def aggregate_assignments(_, path) do
-  #   []
-  # end
 
   # def generate({:assignment, left, right}) do
   #   Enum.map(left, fn pattern ->

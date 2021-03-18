@@ -6,9 +6,10 @@ defmodule Reflex.TranspilerTest do
   alias Reflex.Transpiler.Boolean
   alias Reflex.Transpiler.Function
   alias Reflex.Transpiler.Integer
+  alias Reflex.Transpiler.MapAccess
   alias Reflex.Transpiler.MapType
+  alias Reflex.Transpiler.MatchOperator
   alias Reflex.Transpiler.Module
-  alias Reflex.Transpiler.Pattern
   alias Reflex.Transpiler.StringType
   alias Reflex.Transpiler.Variable
 
@@ -190,15 +191,122 @@ defmodule Reflex.TranspilerTest do
   end
 
   describe "operators transform/1" do
-    test "simple pattern" do
+    test "match operator, simple" do
       result =
         Transpiler.parse!("x = 1")
         |> Transpiler.transform()
 
-      expected = %Pattern{
-        left: [[%Variable{name: :x}]],
+
+      expected = %MatchOperator{
+        bindings: [[%Variable{name: :x}]],
+        left: %Variable{name: :x},
         right: %Integer{value: 1}
       }
+
+      assert result == expected
+    end
+
+    test "match operator, map with root keys" do
+      result =
+        Transpiler.parse!("%{a: x, b: y} = %{a: 1, b: 2}")
+        |> Transpiler.transform()
+
+      expected =
+        %MatchOperator{
+          bindings: [
+            [
+              %Variable{name: :x},
+              %MapAccess{key: %Atom{value: :a}}
+            ],
+            [
+              %Variable{name: :y},
+              %MapAccess{key: %Atom{value: :b}}
+            ]
+          ],
+          left: %MapType{
+            data: [
+              {%Atom{value: :a}, %Variable{name: :x}},
+              {%Atom{value: :b}, %Variable{name: :y}}
+            ]
+          },
+          right: %MapType{
+            data: [
+              {%Atom{value: :a}, %Integer{value: 1}},
+              {%Atom{value: :b}, %Integer{value: 2}}
+            ]
+          }
+        }
+
+      assert result == expected
+    end
+
+    test "match operator, map with nested keys" do
+      result =
+        Transpiler.parse!("%{a: 1, b: %{p: x, r: 4}, c: 3, d: %{m: 0, n: y}} = %{a: 1, b: %{p: 9, r: 4}, c: 3, d: %{m: 0, n: 8}}")
+        |> Transpiler.transform()
+
+      expected =
+        %MatchOperator{
+          bindings: [
+            [
+              %Variable{name: :x},
+              %MapAccess{key: %Atom{value: :b}},
+              %MapAccess{key: %Atom{value: :p}}
+            ],
+            [
+              %Variable{name: :y},
+              %MapAccess{key: %Atom{value: :d}},
+              %MapAccess{key: %Atom{value: :n}}
+            ]
+          ],
+          left: %MapType{
+            data: [
+              {%Atom{value: :a}, %Integer{value: 1}},
+              {
+                %Atom{value: :b},
+                %MapType{
+                  data: [
+                    {%Atom{value: :p}, %Variable{name: :x}},
+                    {%Atom{value: :r}, %Integer{value: 4}}
+                  ]
+               }},
+              {%Atom{value: :c}, %Integer{value: 3}},
+              {%Atom{value: :d},
+               %MapType{
+                 data: [
+                   {%Atom{value: :m},
+                    %Integer{value: 0}},
+                   {%Atom{value: :n},
+                    %Variable{name: :y}}
+                 ]
+               }}
+            ]
+          },
+          right: %MapType{
+            data: [
+              {%Atom{value: :a}, %Integer{value: 1}},
+              {%Atom{value: :b},
+               %MapType{
+                 data: [
+                   {%Atom{value: :p},
+                    %Integer{value: 9}},
+                   {%Atom{value: :r},
+                    %Integer{value: 4}}
+                 ]
+               }},
+              {%Atom{value: :c}, %Integer{value: 3}},
+              {%Atom{value: :d},
+               %MapType{
+                 data: [
+                   {%Atom{value: :m},
+                    %Integer{value: 0}},
+                   {%Atom{value: :n},
+                    %Integer{value: 8}}
+                 ]
+               }}
+            ]
+          }
+        }
 
       assert result == expected
     end
@@ -357,39 +465,6 @@ defmodule Reflex.TranspilerTest do
   # TODO: REFACTOR:
 
   # describe "aggregate_assignments/2" do
-  #   test "var" do
-  #     result =
-  #       Transpiler.parse!("x")
-  #       |> Transpiler.transform()
-  #       |> Transpiler.aggregate_assignments()
-
-  #     assert result == [[:x]]
-  #   end
-
-  #   test "map, root keys" do
-  #     result =
-  #       Transpiler.parse!("%{a: x, b: y}")
-  #       |> Transpiler.transform()
-  #       |> Transpiler.aggregate_assignments()
-
-  #     assert result == [
-  #       [:x, [:map_access, :a]],
-  #       [:y, [:map_access, :b]]
-  #     ]
-  #   end
-
-  #   test "map, nested keys" do
-  #     result =
-  #       Transpiler.parse!("%{a: 1, b: %{p: x, r: 4}, c: 3, d: %{m: 0, n: y}}")
-  #       |> Transpiler.transform()
-  #       |> Transpiler.aggregate_assignments()
-
-  #     assert result ==
-  #       [
-  #         [:x, [:map_access, :b], [:map_access, :p]],
-  #         [:y, [:map_access, :d], [:map_access, :n]]
-  #       ]
-  #   end
 
   #   test "map, root and nested keys" do
   #     result =
@@ -471,29 +546,9 @@ defmodule Reflex.TranspilerTest do
   # end
 
   # describe "transform/1" do
-  #   test "assignment complex" do
-  #     result =
-  #       Transpiler.parse!("%{a: x, b: y} = %{a: 1, b: 2}")
-  #       |> Transpiler.transform()
-
-  #     assert result == {
-  #       :assignment,
-  #       [
-  #         [:x, [:map_access, :a]],
-  #         [:y, [:map_access, :b]]
-  #       ],
-  #       {:map, [a: {:integer, 1}, b: {:integer, 2}]},
-  #     }
-  #   end
-
   #   test "destructure" do
   #     ast = Transpiler.parse!("head | tail")
   #     assert Transpiler.transform(ast) == {:destructure, {{:var, :head}, {:var, :tail}}}
-  #   end
-
-  #   test "map with var match" do
-  #     ast = Transpiler.parse!("%{a: 1, b: x}")
-  #     assert Transpiler.transform(ast) == {:map, [a: {:integer, 1}, b: {:var, :x}]}
   #   end
 
   #   test "if" do
