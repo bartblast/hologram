@@ -1,43 +1,6 @@
 # # TODO: refactor
 # defmodule Holograf.Transpiler do
 
-#   def aggregate_functions(module) do
-#     Enum.reduce(module.body, %{}, fn expr, acc ->
-#       case expr do
-#         %Function{name: name} = fun ->
-#           if Map.has_key?(acc, name) do
-#             Map.put(acc, name, acc[name] ++ [fun])
-#           else
-#             Map.put(acc, name, [fun])
-#           end
-#         _ ->
-#           acc
-#       end
-#     end)
-#   end
-
-#   # GENERATE
-
-#   # OTHER
-
-#   def generate(%Module{name: name} = module) do
-#     name = String.replace("#{name}", ".", "")
-
-#     functions =
-#       aggregate_functions(module)
-#       |> Enum.map(fn {k, v} -> "  static #{k}() { #{generate_function_body(v)} }" end)
-#       |> Enum.join("\n")
-
-#     """
-#     class #{name} {
-#     #{functions}
-#     }
-#     """
-#   end
-
-#   def generate_function_body(function_variants) do
-#   end
-
 #   # TODO: REFACTOR:
 
 #   # def generate({:assignment, left, right}) do
@@ -63,21 +26,5 @@
 #   #     generate_assignment_path(access_spec)
 #   #   end)
 #   #   |> Enum.join("")
-#   # end
-
-#   # def transform({:|, _, [var_1, var_2]}) do
-#   #   {:destructure, {transform(var_1), transform(var_2)}}
-#   # end
-
-#   # def transform({:if, _, [condition, [do: do_block, else: else_block]]}) do
-#   #   {:if, {transform(condition), transform(do_block), transform(else_block)}}
-#   # end
-
-#   # def transform({:case, _, [expression, [do: cases]]}) do
-#   #   {:case, transform(expression), Enum.map(cases, fn c -> transform(c) end)}
-#   # end
-
-#   # def transform({:->, _, [[clause], block]}) do
-#   #   {:clause, transform(clause), transform(block)}
 #   # end
 # end

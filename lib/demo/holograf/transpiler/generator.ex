@@ -1,6 +1,7 @@
 defmodule Holograf.Transpiler.Generator do
   alias Holograf.Transpiler.AST.{AtomType, BooleanType, IntegerType, StringType}
   alias Holograf.Transpiler.AST.MapType
+  alias Holograf.Transpiler.AST.{Function, Module}
 
   # PRIMITIVES
 
@@ -32,5 +33,52 @@ defmodule Holograf.Transpiler.Generator do
     else
       "{}"
     end
+  end
+
+  # OTHER
+
+  def generate(%Module{name: name} = module) do
+    name = String.replace("#{name}", ".", "")
+
+    functions =
+      aggregate_functions(module)
+      |> Enum.map(fn {k, v} ->
+        body =
+          case generate_function_body(v) do
+            "" ->
+              "{}"
+            exprs ->
+              "{ #{exprs} }"
+          end
+
+        "  static #{k}() #{body}"
+      end)
+      |> Enum.join("\n")
+
+    """
+    class #{name} {
+    #{functions}
+    }
+    """
+  end
+
+  defp aggregate_functions(module) do
+    Enum.reduce(module.body, %{}, fn expr, acc ->
+      case expr do
+        %Function{name: name} = fun ->
+          if Map.has_key?(acc, name) do
+            Map.put(acc, name, acc[name] ++ [fun])
+          else
+            Map.put(acc, name, [fun])
+          end
+        _ ->
+          acc
+      end
+    end)
+  end
+
+  # TODO: implement
+  defp generate_function_body(function_variants) do
+    ""
   end
 end

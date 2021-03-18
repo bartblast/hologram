@@ -3,6 +3,7 @@ defmodule Holograf.Transpiler.GeneratorTest do
 
   alias Holograf.Transpiler.AST.{AtomType, BooleanType, IntegerType, StringType}
   alias Holograf.Transpiler.AST.MapType
+  alias Holograf.Transpiler.AST.{Function, Module, Variable}
   alias Holograf.Transpiler.Generator
 
   describe "primitives" do
@@ -74,6 +75,60 @@ defmodule Holograf.Transpiler.GeneratorTest do
       result = Generator.generate(ast)
 
       assert result == "{ 'a': 1, 'b': { 'c': 2, 'd': { 'e': 3, 'f': 4 } } }"
+    end
+  end
+
+  describe "other" do
+    test "module, multiple functions with multiple variants" do
+      ast =
+        %Module{
+          body: [
+            %Function{
+              args: [
+                %Variable{name: :a}
+              ],
+              body: [
+                %IntegerType{value: 1}
+              ],
+              name: :test_1
+            },
+            %AtomType{value: :non_function},
+            %Function{
+              args: [
+                %Variable{name: :a},
+                %Variable{name: :b}
+              ],
+              body: [
+                %IntegerType{value: 1},
+                %IntegerType{value: 2}
+              ],
+              name: :test_1
+            },
+            %AtomType{value: :non_function},
+            %Function{
+              args: [
+                %Variable{name: :a}
+              ],
+              body: [
+                %IntegerType{value: 1}
+              ],
+              name: :test_2
+            }
+          ],
+          name: "Prefix.Test"
+        }
+
+      result = Generator.generate(ast)
+
+      # TODO: update after function body generating is implemented
+      expected = """
+        class PrefixTest {
+          static test_1() {}
+          static test_2() {}
+        }
+        """
+
+      assert result == expected
     end
   end
 end
