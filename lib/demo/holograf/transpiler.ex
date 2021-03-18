@@ -1,9 +1,5 @@
 # # TODO: refactor
 # defmodule Holograf.Transpiler do
-#   defmodule Function do
-#     defstruct name: nil, args: nil, body: nil
-#   end
-
 #   defmodule Module do
 #     defstruct name: nil, body: nil
 #   end
@@ -17,13 +13,6 @@
 #   # TRANSFORM
 
 #   # OTHER
-
-#   def transform({:def, _, [{name, _, args}, [do: {_, _, body}]]}) do
-#     args = Enum.map(args, fn arg -> transform(arg) end)
-#     body = Enum.map(body, fn expr -> transform(expr) end)
-
-#     %Function{name: name, args: args, body: body}
-#   end
 
 #   def transform({:defmodule, _, [{_, _, name}, [do: {_, _, body}]]}) do
 #     name =

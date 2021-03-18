@@ -3,7 +3,7 @@ defmodule Holograf.Transpiler.Transformer do
   alias Holograf.Transpiler.AST.MapType
   alias Holograf.Transpiler.AST.MatchOperator
   alias Holograf.Transpiler.AST.MapAccess
-  alias Holograf.Transpiler.AST.Variable
+  alias Holograf.Transpiler.AST.{Function, Variable}
 
   def transform(ast)
 
@@ -62,6 +62,13 @@ defmodule Holograf.Transpiler.Transformer do
   end
 
   # OTHER
+
+  def transform({:def, _, [{name, _, args}, [do: {_, _, body}]]}) do
+    args = Enum.map(args, fn arg -> transform(arg) end)
+    body = Enum.map(body, fn expr -> transform(expr) end)
+
+    %Function{name: name, args: args, body: body}
+  end
 
   def transform({name, _, nil}) when is_atom(name) do
     %Variable{name: name}

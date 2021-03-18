@@ -7,7 +7,7 @@ defmodule Holograf.Transpiler.TransformerTest do
   alias Holograf.Transpiler.AST.MapType
   alias Holograf.Transpiler.AST.MatchOperator
   alias Holograf.Transpiler.AST.MapAccess
-  alias Holograf.Transpiler.AST.Variable
+  alias Holograf.Transpiler.AST.{Function, Variable}
   alias Holograf.Transpiler.Transformer
 
   describe "primitives" do
@@ -210,6 +210,33 @@ defmodule Holograf.Transpiler.TransformerTest do
   end
 
   describe "other" do
+    test "function" do
+      code = """
+        def test(a, b) do
+          1
+          2
+        end
+      """
+
+      result =
+        parse!(code)
+        |> Transformer.transform()
+
+      expected = %Function{
+        args: [
+          %Variable{name: :a},
+          %Variable{name: :b}
+        ],
+        body: [
+          %IntegerType{value: 1},
+          %IntegerType{value: 2}
+        ],
+        name: :test
+      }
+
+      assert result == expected
+    end
+
     test "variable" do
       ast = parse!("x")
       assert Transformer.transform(ast) == %Variable{name: :x}
