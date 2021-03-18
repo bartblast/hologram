@@ -78,6 +78,16 @@ defmodule Holograf.Transpiler.Transformer do
     %Function{name: name, args: args, body: body}
   end
 
+  def transform({:defmodule, _, [{_, _, name}, [do: {_, _, body}]]}) do
+    name =
+      Enum.map(name, fn part -> "#{part}" end)
+      |> Enum.join(".")
+
+    body = Enum.map(body, fn expr -> transform(expr) end)
+
+    %Module{name: name, body: body}
+  end
+
   def transform({name, _, nil}) when is_atom(name) do
     %Variable{name: name}
   end

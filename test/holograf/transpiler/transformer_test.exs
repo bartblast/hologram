@@ -264,6 +264,54 @@ defmodule Holograf.Transpiler.TransformerTest do
       assert result == expected
     end
 
+    test "module" do
+      code = """
+        defmodule Prefix.Test do
+          def test(a) do
+            1
+          end
+
+          def test(a, b) do
+            1
+            2
+          end
+        end
+      """
+
+      result =
+        parse!(code)
+        |> Transformer.transform()
+
+      expected =
+        %Module{
+          body: [
+            %Function{
+              args: [
+                %Variable{name: :a}
+              ],
+              body: [
+                %IntegerType{value: 1}
+              ],
+              name: :test
+            },
+            %Function{
+              args: [
+                %Variable{name: :a},
+                %Variable{name: :b}
+              ],
+              body: [
+                %IntegerType{value: 1},
+                %IntegerType{value: 2}
+              ],
+              name: :test
+            }
+          ],
+          name: "Prefix.Test"
+        }
+
+      assert result == expected
+    end
+
     test "variable" do
       ast = parse!("x")
       assert Transformer.transform(ast) == %Variable{name: :x}
