@@ -99,14 +99,22 @@ defmodule Holograf.Transpiler.Transformer do
   end
 
   defp aggregate_aliases(ast) do
-    Enum.reduce(ast, [], fn expr, acc ->
-      case expr do
-        {:alias, _, _} ->
-          acc ++ [transform(expr)]
-        _ ->
-          acc
-      end
-    end)
+    list =
+      Enum.reduce(ast, [], fn expr, acc ->
+        case expr do
+          {:alias, _, _} ->
+            acc ++ [transform(expr)]
+          _ ->
+            acc
+        end
+      end)
+
+    map =
+      Enum.reduce(list, %{}, fn elem, acc ->
+        Map.put(acc, List.last(elem.module), elem.module)
+      end)
+
+    %{list: list, map: map}
   end
 
   defp aggregate_functions(ast) do

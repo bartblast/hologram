@@ -344,10 +344,16 @@ defmodule Holograf.Transpiler.TransformerTest do
 
       expected =
         %Module{
-          aliases: [
-            %Alias{module: [:Abc, :Bcd]},
-            %Alias{module: [:Cde, :Efg]}
-          ],
+          aliases: %{
+            list: [
+              %Alias{module: [:Abc, :Bcd]},
+              %Alias{module: [:Cde, :Efg]}
+            ],
+            map: %{
+              Bcd: [:Abc, :Bcd],
+              Efg: [:Cde, :Efg]
+            }
+          },
           functions: [
             %Function{
               args: [
