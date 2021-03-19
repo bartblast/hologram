@@ -4,7 +4,7 @@ defmodule Holograf.Transpiler.TransformerTest do
   import Holograf.Transpiler.Parser, only: [parse!: 1]
 
   alias Holograf.Transpiler.AST.{AtomType, BooleanType, IntegerType, StringType}
-  alias Holograf.Transpiler.AST.MapType
+  alias Holograf.Transpiler.AST.{ListType, MapType}
   alias Holograf.Transpiler.AST.MatchOperator
   alias Holograf.Transpiler.AST.MapAccess
   alias Holograf.Transpiler.AST.{Function, Module, Variable}
@@ -33,6 +33,53 @@ defmodule Holograf.Transpiler.TransformerTest do
   end
 
   describe "data structures" do
+    test "list, empty" do
+      result =
+        parse!("[]")
+        |> Transformer.transform()
+
+      expected = %ListType{data: []}
+
+      assert result == expected
+    end
+
+    test "list, not nested" do
+      result =
+        parse!("[1, 2]")
+        |> Transformer.transform()
+
+      expected = %ListType{
+        data: [%IntegerType{value: 1}, %IntegerType{value: 2}]
+      }
+
+      assert result == expected
+    end
+
+    test "list, nested" do
+      result =
+        parse!("[1, [2, [3, 4]]]")
+        |> Transformer.transform()
+
+      expected = %ListType{
+        data: [
+          %IntegerType{value: 1},
+          %ListType{
+            data: [
+              %IntegerType{value: 2},
+              %ListType{
+                data: [
+                  %IntegerType{value: 3},
+                  %IntegerType{value: 4}
+                ]
+              }
+            ]
+          }
+        ]
+      }
+
+      assert result == expected
+    end
+
     test "map, empty" do
       result =
         parse!("%{}")

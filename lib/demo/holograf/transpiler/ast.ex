@@ -19,6 +19,10 @@ defmodule Holograf.Transpiler.AST do
 
   # DATA STRUCTURES
 
+  defmodule ListType do
+    defstruct data: nil
+  end
+
   defmodule MapType do
     defstruct data: nil
   end
@@ -35,7 +39,7 @@ defmodule Holograf.Transpiler.AST do
     defstruct key: nil
   end
 
-  # C
+  # OTHER
 
   defmodule Function do
     defstruct name: nil, args: nil, body: nil

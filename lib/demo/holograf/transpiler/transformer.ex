@@ -1,6 +1,6 @@
 defmodule Holograf.Transpiler.Transformer do
   alias Holograf.Transpiler.AST.{AtomType, BooleanType, IntegerType, StringType}
-  alias Holograf.Transpiler.AST.MapType
+  alias Holograf.Transpiler.AST.{ListType, MapType}
   alias Holograf.Transpiler.AST.MatchOperator
   alias Holograf.Transpiler.AST.MapAccess
   alias Holograf.Transpiler.AST.{Function, Module, Variable}
@@ -28,8 +28,13 @@ defmodule Holograf.Transpiler.Transformer do
 
   # DATA STRUCTURES
 
-  def transform({:%{}, _, map}) do
-    data = Enum.map(map, fn {k, v} -> {transform(k), transform(v)} end)
+  def transform(ast) when is_list(ast) do
+    data = Enum.map(ast, fn v -> transform(v) end)
+    %ListType{data: data}
+  end
+
+  def transform({:%{}, _, ast}) do
+    data = Enum.map(ast, fn {k, v} -> {transform(k), transform(v)} end)
     %MapType{data: data}
   end
 

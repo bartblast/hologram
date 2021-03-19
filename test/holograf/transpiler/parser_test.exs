@@ -26,7 +26,7 @@ defmodule Holograf.Transpiler.ParserTest do
 
   describe "parse_file/1" do
     test "valid code" do
-      assert {:ok, _} = Parser.parse_file("lib/demo/holograf/transpiler.ex")
+      assert {:ok, _} = Parser.parse_file("lib/demo/holograf/transpiler/transformer.ex")
     end
 
     test "invalid code" do

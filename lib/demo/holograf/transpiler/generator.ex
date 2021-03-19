@@ -78,7 +78,7 @@ defmodule Holograf.Transpiler.Generator do
   end
 
   # TODO: implement
-  defp generate_function_body(function_variants) do
+  defp generate_function_body(variants) do
     ""
   end
 end
