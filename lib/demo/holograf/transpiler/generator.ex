@@ -63,7 +63,7 @@ defmodule Holograf.Transpiler.Generator do
   end
 
   defp aggregate_functions(module) do
-    Enum.reduce(module.body, %{}, fn expr, acc ->
+    Enum.reduce(module.functions, %{}, fn expr, acc ->
       case expr do
         %Function{name: name} = fun ->
           if Map.has_key?(acc, name) do

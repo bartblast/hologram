@@ -87,14 +87,37 @@ defmodule Holograf.Transpiler.Transformer do
     %Function{name: name, args: args, body: body}
   end
 
-  def transform({:defmodule, _, [{_, _, name}, [do: {_, _, body}]]}) do
+  def transform({:defmodule, _, [{_, _, name}, [do: {_, _, ast}]]}) do
     name =
       Enum.map(name, fn part -> "#{part}" end)
       |> Enum.join(".")
 
-    body = Enum.map(body, fn expr -> transform(expr) end)
+    aliases = aggregate_aliases(ast)
+    functions = aggregate_functions(ast)
 
-    %Module{name: name, body: body}
+    %Module{name: name, aliases: aliases, functions: functions}
+  end
+
+  defp aggregate_aliases(ast) do
+    Enum.reduce(ast, [], fn expr, acc ->
+      case expr do
+        {:alias, _, _} ->
+          acc ++ [transform(expr)]
+        _ ->
+          acc
+      end
+    end)
+  end
+
+  defp aggregate_functions(ast) do
+    Enum.reduce(ast, [], fn expr, acc ->
+      case expr do
+        {:def, _, _} ->
+          acc ++ [transform(expr)]
+        _ ->
+          acc
+      end
+    end)
   end
 
   def transform({name, _, nil}) when is_atom(name) do

@@ -79,12 +79,14 @@ defmodule Holograf.Transpiler.GeneratorTest do
   end
 
   describe "other" do
-    # TODO: test modules with 0 and 1 functions
-    
+    # TODO: test modules with 0 and 1 functions;
+    # TODO: test aliases
+
     test "module, multiple functions with multiple variants" do
       ast =
         %Module{
-          body: [
+          aliases: [],
+          functions: [
             %Function{
               args: [
                 %Variable{name: :a}
@@ -94,7 +96,6 @@ defmodule Holograf.Transpiler.GeneratorTest do
               ],
               name: :test_1
             },
-            %AtomType{value: :non_function},
             %Function{
               args: [
                 %Variable{name: :a},
@@ -106,7 +107,6 @@ defmodule Holograf.Transpiler.GeneratorTest do
               ],
               name: :test_1
             },
-            %AtomType{value: :non_function},
             %Function{
               args: [
                 %Variable{name: :a}

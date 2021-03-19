@@ -322,9 +322,14 @@ defmodule Holograf.Transpiler.TransformerTest do
     test "module" do
       code = """
         defmodule Prefix.Test do
+          alias Abc.Bcd
+          alias Cde.Efg
+
           def test(a) do
             1
           end
+
+          :not_a_function
 
           def test(a, b) do
             1
@@ -339,7 +344,11 @@ defmodule Holograf.Transpiler.TransformerTest do
 
       expected =
         %Module{
-          body: [
+          aliases: [
+            %Alias{module: [:Abc, :Bcd]},
+            %Alias{module: [:Cde, :Efg]}
+          ],
+          functions: [
             %Function{
               args: [
                 %Variable{name: :a}
