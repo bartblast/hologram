@@ -27,6 +27,10 @@ defmodule Holograf.Transpiler.AST do
     defstruct data: nil
   end
 
+  defmodule StructType do
+    defstruct module: nil, data: nil
+  end
+
   # OPERATORS
 
   defmodule MatchOperator do

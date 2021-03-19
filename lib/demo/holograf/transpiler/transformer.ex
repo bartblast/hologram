@@ -1,11 +1,11 @@
 defmodule Holograf.Transpiler.Transformer do
   alias Holograf.Transpiler.AST.{AtomType, BooleanType, IntegerType, StringType}
-  alias Holograf.Transpiler.AST.{ListType, MapType}
+  alias Holograf.Transpiler.AST.{ListType, MapType, StructType}
   alias Holograf.Transpiler.AST.MatchOperator
   alias Holograf.Transpiler.AST.MapAccess
   alias Holograf.Transpiler.AST.{Alias, Function, Module, Variable}
 
-  def transform(ast, aliases \\ [])
+  def transform(ast, aliases \\ %{})
 
   # PRIMITIVES
 
@@ -39,6 +39,21 @@ defmodule Holograf.Transpiler.Transformer do
     end)
 
     %MapType{data: data}
+  end
+
+  def transform({:%, _, [{_, _, module}, ast]}, aliases) do
+    data = transform(ast, aliases).data
+
+    key = List.last(module)
+
+    module =
+      if Map.has_key?(aliases, key) do
+        aliases[key]
+      else
+        module
+      end
+
+    %StructType{module: module, data: data}
   end
 
   # OPERATORS

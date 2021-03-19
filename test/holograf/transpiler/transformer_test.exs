@@ -4,7 +4,7 @@ defmodule Holograf.Transpiler.TransformerTest do
   import Holograf.Transpiler.Parser, only: [parse!: 1]
 
   alias Holograf.Transpiler.AST.{AtomType, BooleanType, IntegerType, StringType}
-  alias Holograf.Transpiler.AST.{ListType, MapType}
+  alias Holograf.Transpiler.AST.{ListType, MapType, StructType}
   alias Holograf.Transpiler.AST.MatchOperator
   alias Holograf.Transpiler.AST.MapAccess
   alias Holograf.Transpiler.AST.{Alias, Function, Module, Variable}
@@ -378,6 +378,44 @@ defmodule Holograf.Transpiler.TransformerTest do
           ],
           name: "Prefix.Test"
         }
+
+      assert result == expected
+    end
+
+    # TODO: test structs with namespace which have aliases, e.g. alias Abc.Bcd -> %Bcd.Cde{} (not implemented yet)
+
+    test "struct, without namespace, not aliased" do
+      result =
+        parse!("%TestStruct{abc: 1}")
+        |> Transformer.transform()
+
+      expected = %StructType{
+        data: [
+          {%AtomType{value: :abc}, %IntegerType{value: 1}}
+        ],
+        module: [:TestStruct]
+      }
+
+      assert result == expected
+    end
+
+    test "struct, without namespace, aliased" do
+      code = "%TestStruct{abc: 1}"
+      aliases = %{
+        OtherStruct: [:Abc, :Bcd, :OtherStruct],
+        TestStruct: [:Cde, :Def, :TestStruct]
+      }
+
+      result =
+        parse!("%TestStruct{abc: 1}")
+        |> Transformer.transform(aliases)
+
+      expected = %StructType{
+        data: [
+          {%AtomType{value: :abc}, %IntegerType{value: 1}}
+        ],
+        module: [:Cde, :Def, :TestStruct]
+      }
 
       assert result == expected
     end
