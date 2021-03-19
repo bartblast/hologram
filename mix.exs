@@ -12,14 +12,14 @@ defmodule Demo.MixProject do
 
   def project do
     [
-      app: :demo,
-      version: "0.1.0",
+      app: :holograf,
+      version: "0.0.1",
       elixir: "~> 1.11",
       elixirc_paths: elixirc_paths(Mix.env()),
       compilers: [:phoenix, :gettext] ++ Mix.compilers(),
       start_permanent: Mix.env() == :prod,
       aliases: aliases(),
-      description: "Isomorphic Web Framework",
+      description: "Work in progress...",
       deps: deps(),
       package: package()
     ]
