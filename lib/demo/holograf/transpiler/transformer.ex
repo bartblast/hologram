@@ -62,25 +62,25 @@ defmodule Holograf.Transpiler.Transformer do
     left = transform(left, aliases)
 
     %MatchOperator{
-      bindings: bindings(left),
+      bindings: aggregate_bindings(left),
       left: left,
       right: transform(right, aliases)
     }
   end
 
-  defp bindings(_, path \\ [])
+  defp aggregate_bindings(_, path \\ [])
 
-  defp bindings(%Variable{name: name} = var, path) do
+  defp aggregate_bindings(%Variable{name: name} = var, path) do
     [[var] ++ path]
   end
 
-  defp bindings(%MapType{data: data}, path) do
+  defp aggregate_bindings(%MapType{data: data}, path) do
     Enum.reduce(data, [], fn {k, v}, acc ->
-      acc ++ bindings(v, path ++ [%MapAccess{key: k}])
+      acc ++ aggregate_bindings(v, path ++ [%MapAccess{key: k}])
     end)
   end
 
-  defp bindings(_, path) do
+  defp aggregate_bindings(_, path) do
     []
   end
 
