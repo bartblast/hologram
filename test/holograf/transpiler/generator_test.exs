@@ -2,7 +2,7 @@ defmodule Holograf.Transpiler.GeneratorTest do
   use ExUnit.Case
 
   alias Holograf.Transpiler.AST.{AtomType, BooleanType, IntegerType, StringType}
-  alias Holograf.Transpiler.AST.MapType
+  alias Holograf.Transpiler.AST.{MapType, StructType}
   alias Holograf.Transpiler.AST.{Function, Module, Variable}
   alias Holograf.Transpiler.Generator
 
@@ -75,6 +75,58 @@ defmodule Holograf.Transpiler.GeneratorTest do
       result = Generator.generate(ast)
 
       assert result == "{ 'a': 1, 'b': { 'c': 2, 'd': { 'e': 3, 'f': 4 } } }"
+    end
+
+    test "struct, empty" do
+      ast = %StructType{module: [:Abc, :Bcd], data: []}
+      result = Generator.generate(ast)
+      assert result == "{ __type__: 'struct', __module__: 'Abc.Bcd' }"
+    end
+
+    test "struct, not nested" do
+      ast = %StructType{
+        module: [:Abc, :Bcd],
+        data: [
+          {%AtomType{value: :a}, %IntegerType{value: 1}},
+          {%AtomType{value: :b}, %IntegerType{value: 2}}
+        ]
+      }
+
+      result = Generator.generate(ast)
+
+      assert result == "{ __type__: 'struct', __module__: 'Abc.Bcd', 'a': 1, 'b': 2 }"
+    end
+
+    test "struct, nested" do
+      ast = %StructType{
+        module: [:Abc, :Bcd],
+        data: [
+          {%AtomType{value: :a}, %IntegerType{value: 1}},
+          {
+            %AtomType{value: :b},
+            %StructType{
+              module: [:Bcd, :Cde],
+              data: [
+                {%AtomType{value: :c}, %IntegerType{value: 2}},
+                {
+                  %AtomType{value: :d},
+                  %StructType{
+                    module: [:Cde, :Def],
+                    data: [
+                      {%AtomType{value: :e}, %IntegerType{value: 3}},
+                      {%AtomType{value: :f}, %IntegerType{value: 4}}
+                    ]
+                  }
+                }
+              ]
+            }
+          }
+        ]
+      }
+
+      result = Generator.generate(ast)
+
+      assert result == "{ __type__: 'struct', __module__: 'Abc.Bcd', 'a': 1, 'b': { __type__: 'struct', __module__: 'Bcd.Cde', 'c': 2, 'd': { __type__: 'struct', __module__: 'Cde.Def', 'e': 3, 'f': 4 } } }"
     end
   end
 

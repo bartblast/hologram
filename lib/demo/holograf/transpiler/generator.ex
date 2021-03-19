@@ -33,6 +33,17 @@ defmodule Holograf.Transpiler.Generator do
     end
   end
 
+  def generate(%StructType{module: module, data: data}) do
+    meta = "__type__: 'struct', __module__: '#{Enum.join(module, ".")}'"
+    fields = generate_object_fields(data)
+
+    if fields != "" do
+      "{ #{meta}, #{fields} }"
+    else
+      "{ #{meta} }"
+    end
+  end
+
   def generate_object_fields(ast) do
     Enum.map(ast, fn {k, v} -> "#{generate(k)}: #{generate(v)}" end)
     |> Enum.join(", ")
