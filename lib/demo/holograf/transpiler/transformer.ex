@@ -106,10 +106,6 @@ defmodule Holograf.Transpiler.Transformer do
   end
 
   def transform({:defmodule, _, [{_, _, name}, [do: {_, _, ast}]]}, _aliases) do
-    name =
-      Enum.map(name, fn part -> "#{part}" end)
-      |> Enum.join(".")
-
     aliases = aggregate_aliases(ast)
     functions = aggregate_functions(ast, aliases.map)
 

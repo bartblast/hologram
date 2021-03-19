@@ -376,7 +376,7 @@ defmodule Holograf.Transpiler.TransformerTest do
               name: :test
             }
           ],
-          name: "Prefix.Test"
+          name: [:Prefix, :Test]
         }
 
       assert result == expected

@@ -1,6 +1,6 @@
 defmodule Holograf.Transpiler.Generator do
   alias Holograf.Transpiler.AST.{AtomType, BooleanType, IntegerType, StringType}
-  alias Holograf.Transpiler.AST.MapType
+  alias Holograf.Transpiler.AST.{MapType, StructType}
   alias Holograf.Transpiler.AST.{Function, Module}
 
   # PRIMITIVES
@@ -24,9 +24,7 @@ defmodule Holograf.Transpiler.Generator do
   # DATA STRUCTURES
 
   def generate(%MapType{data: data}) do
-    fields =
-      Enum.map(data, fn {k, v} -> "#{generate(k)}: #{generate(v)}" end)
-      |> Enum.join(", ")
+    fields = generate_object_fields(data)
 
     if fields != "" do
       "{ #{fields} }"
@@ -35,11 +33,14 @@ defmodule Holograf.Transpiler.Generator do
     end
   end
 
+  def generate_object_fields(ast) do
+    Enum.map(ast, fn {k, v} -> "#{generate(k)}: #{generate(v)}" end)
+    |> Enum.join(", ")
+  end
+
   # OTHER
 
   def generate(%Module{name: name} = module) do
-    name = String.replace("#{name}", ".", "")
-
     functions =
       aggregate_functions(module)
       |> Enum.map(fn {k, v} ->
@@ -56,7 +57,7 @@ defmodule Holograf.Transpiler.Generator do
       |> Enum.join("\n")
 
     """
-    class #{name} {
+    class #{generate_module_name(name)} {
     #{functions}
     }
     """
@@ -80,5 +81,11 @@ defmodule Holograf.Transpiler.Generator do
   # TODO: implement
   defp generate_function_body(variants) do
     ""
+  end
+
+  # HELPERS
+
+  defp generate_module_name(ast) do
+    String.replace("#{ast}", ".", "")
   end
 end
