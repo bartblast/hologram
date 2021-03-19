@@ -57,7 +57,7 @@ defmodule Holograf.Transpiler.Generator do
       |> Enum.join("\n")
 
     """
-    class #{generate_module_name(name)} {
+    class #{generate_class_name(name)} {
     #{functions}
     }
     """
@@ -85,7 +85,7 @@ defmodule Holograf.Transpiler.Generator do
 
   # HELPERS
 
-  defp generate_module_name(ast) do
+  defp generate_class_name(ast) do
     String.replace("#{ast}", ".", "")
   end
 end
