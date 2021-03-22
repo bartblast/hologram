@@ -50,7 +50,7 @@ defmodule Holograf.Transpiler.AST do
   end
 
   defmodule Function do
-    defstruct name: nil, args: nil, body: nil
+    defstruct name: nil, params: nil, body: nil
   end
 
   defmodule Module do

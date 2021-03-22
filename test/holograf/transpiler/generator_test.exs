@@ -140,33 +140,33 @@ defmodule Holograf.Transpiler.GeneratorTest do
           aliases: [],
           functions: [
             %Function{
-              args: [
-                %Variable{name: :a}
-              ],
               body: [
                 %IntegerType{value: 1}
               ],
-              name: :test_1
+              name: :test_1,
+              params: [
+                %Variable{name: :a}
+              ]
             },
             %Function{
-              args: [
-                %Variable{name: :a},
-                %Variable{name: :b}
-              ],
               body: [
                 %IntegerType{value: 1},
                 %IntegerType{value: 2}
               ],
-              name: :test_1
+              name: :test_1,
+              params: [
+                %Variable{name: :a},
+                %Variable{name: :b}
+              ]
             },
             %Function{
-              args: [
-                %Variable{name: :a}
-              ],
               body: [
                 %IntegerType{value: 1}
               ],
-              name: :test_2
+              name: :test_2,
+              params: [
+                %Variable{name: :a}
+              ]
             }
           ],
           name: "Prefix.Test"

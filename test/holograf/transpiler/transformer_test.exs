@@ -265,9 +265,9 @@ defmodule Holograf.Transpiler.TransformerTest do
       expected = %Alias{module: [:Prefix, :Test]}
     end
 
-    # TODO: test functions with 0 and 1 args
+    # TODO: test functions with 0 and 1 params
 
-    test "function, multiple args, single expression" do
+    test "function, multiple params, single expression" do
       code = """
         def test(a, b) do
           1
@@ -279,20 +279,20 @@ defmodule Holograf.Transpiler.TransformerTest do
         |> Transformer.transform()
 
       expected = %Function{
-        args: [
-          %Variable{name: :a},
-          %Variable{name: :b}
-        ],
         body: [
           %IntegerType{value: 1}
         ],
-        name: :test
+        name: :test,
+        params: [
+          %Variable{name: :a},
+          %Variable{name: :b}
+        ]
       }
 
       assert result == expected
     end
 
-    test "function, multiple args, multiple expressions" do
+    test "function, multiple params, multiple expressions" do
       code = """
         def test(a, b) do
           1
@@ -305,15 +305,15 @@ defmodule Holograf.Transpiler.TransformerTest do
         |> Transformer.transform()
 
       expected = %Function{
-        args: [
-          %Variable{name: :a},
-          %Variable{name: :b}
-        ],
         body: [
           %IntegerType{value: 1},
           %IntegerType{value: 2}
         ],
-        name: :test
+        name: :test,
+        params: [
+          %Variable{name: :a},
+          %Variable{name: :b}
+        ]
       }
 
       assert result == expected
@@ -356,24 +356,24 @@ defmodule Holograf.Transpiler.TransformerTest do
           },
           functions: [
             %Function{
-              args: [
-                %Variable{name: :a}
-              ],
               body: [
                 %IntegerType{value: 1}
               ],
-              name: :test
+              name: :test,
+              params: [
+                %Variable{name: :a}
+              ]
             },
             %Function{
-              args: [
-                %Variable{name: :a},
-                %Variable{name: :b}
-              ],
               body: [
                 %IntegerType{value: 1},
                 %IntegerType{value: 2}
               ],
-              name: :test
+              name: :test,
+              params: [
+                %Variable{name: :a},
+                %Variable{name: :b}
+              ]
             }
           ],
           name: [:Prefix, :Test]

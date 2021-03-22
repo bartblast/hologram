@@ -90,8 +90,8 @@ defmodule Holograf.Transpiler.Transformer do
     %Alias{module: module}
   end
 
-  def transform({:def, _, [{name, _, args}, [do: body]]}, aliases) do
-    args = Enum.map(args, fn arg -> transform(arg, aliases) end)
+  def transform({:def, _, [{name, _, params}, [do: body]]}, aliases) do
+    params = Enum.map(params, fn param -> transform(param, aliases) end)
 
     body =
       case body do
@@ -102,7 +102,7 @@ defmodule Holograf.Transpiler.Transformer do
       end
       |> Enum.map(fn expr -> transform(expr, aliases) end)
 
-    %Function{name: name, args: args, body: body}
+    %Function{name: name, params: params, body: body}
   end
 
   def transform({:defmodule, _, [{_, _, name}, [do: {_, _, ast}]]}, _aliases) do
