@@ -179,12 +179,12 @@ defmodule Holograf.Transpiler.GeneratorTest do
         class PrefixTest {
 
         static test_1() {
-        if (isMatched([ { __type__: 'variable', __module__: 'Holograf.Transpiler.AST.Variable' } ], arguments)) {}
-        else if (isMatched([ { __type__: 'variable', __module__: 'Holograf.Transpiler.AST.Variable' }, { __type__: 'variable', __module__: 'Holograf.Transpiler.AST.Variable' } ], arguments)) {}
+        if (patternMatchFunctionArgs([ { __type__: 'variable', __module__: 'Holograf.Transpiler.AST.Variable' } ], arguments)) {}
+        else if (patternMatchFunctionArgs([ { __type__: 'variable', __module__: 'Holograf.Transpiler.AST.Variable' }, { __type__: 'variable', __module__: 'Holograf.Transpiler.AST.Variable' } ], arguments)) {}
         }
 
         static test_2() {
-        if (isMatched([ { __type__: 'variable', __module__: 'Holograf.Transpiler.AST.Variable' } ], arguments)) {}
+        if (patternMatchFunctionArgs([ { __type__: 'variable', __module__: 'Holograf.Transpiler.AST.Variable' } ], arguments)) {}
         }
 
         }
