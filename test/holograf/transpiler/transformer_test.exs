@@ -10,7 +10,7 @@ defmodule Holograf.Transpiler.TransformerTest do
   alias Holograf.Transpiler.AST.{Alias, Function, Module, Variable}
   alias Holograf.Transpiler.Transformer
 
-  describe "primitives" do
+  describe "primitive types" do
     test "atom" do
       ast = parse!(":test")
       assert Transformer.transform(ast) == %AtomType{value: :test}

@@ -6,7 +6,7 @@ defmodule Holograf.Transpiler.GeneratorTest do
   alias Holograf.Transpiler.AST.{Function, Module, Variable}
   alias Holograf.Transpiler.Generator
 
-  describe "primitives" do
+  describe "primitive types" do
     test "atom" do
       result = Generator.generate(%AtomType{value: :test})
       assert result == "'test'"
