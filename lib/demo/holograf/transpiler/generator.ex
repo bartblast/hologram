@@ -58,17 +58,18 @@ defmodule Holograf.Transpiler.Generator do
         body =
           case generate_function_body(v) do
             "" ->
-              "{}"
+              "{}\n"
             exprs ->
-              "{ #{exprs} }"
+              "{\n#{exprs}}"
           end
 
-        "  static #{k}() #{body}"
+        "static #{k}() #{body}\n"
       end)
       |> Enum.join("\n")
 
     """
     class #{generate_class_name(name)} {
+
     #{functions}
     }
     """
@@ -92,7 +93,7 @@ defmodule Holograf.Transpiler.Generator do
   defp generate_function_body(variants) do
     Enum.reduce(variants, "", fn variant, acc ->
       statement = if acc == "", do: "if", else: "else if"
-      acc <> "#{statement} (isMatched(#{generate_function_params(variant.params)}, arguments) { }\n"
+      acc <> "#{statement} (isMatched(#{generate_function_params(variant.params)}, arguments)) {}\n"
     end)
   end
 

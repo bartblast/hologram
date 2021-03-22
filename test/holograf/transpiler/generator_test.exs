@@ -177,8 +177,16 @@ defmodule Holograf.Transpiler.GeneratorTest do
       # TODO: update after function body generating is implemented
       expected = """
         class PrefixTest {
-          static test_1() {}
-          static test_2() {}
+
+        static test_1() {
+        if (isMatched([ { __type__: 'variable', __module__: 'Holograf.Transpiler.AST.Variable' } ], arguments)) {}
+        else if (isMatched([ { __type__: 'variable', __module__: 'Holograf.Transpiler.AST.Variable' }, { __type__: 'variable', __module__: 'Holograf.Transpiler.AST.Variable' } ], arguments)) {}
+        }
+
+        static test_2() {
+        if (isMatched([ { __type__: 'variable', __module__: 'Holograf.Transpiler.AST.Variable' } ], arguments)) {}
+        }
+
         }
         """
 
