@@ -192,5 +192,11 @@ defmodule Holograf.Transpiler.GeneratorTest do
 
       assert result == expected
     end
+
+    test "variable" do
+      result = Generator.generate(%Variable{name: :test})
+      expected = "{ __type__: 'variable', __module__: 'Holograf.Transpiler.AST.Variable' }"
+      assert result == expected
+    end
   end
 end
