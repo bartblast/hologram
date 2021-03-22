@@ -3,7 +3,7 @@ defmodule Holograf.Transpiler.Generator do
   alias Holograf.Transpiler.AST.{ListType, MapType, StructType}
   alias Holograf.Transpiler.AST.{Function, Module, Variable}
 
-  # PRIMITIVES
+  # PRIMITIVE TYPES
 
   def generate(%AtomType{value: value}) do
     "'#{value}'"

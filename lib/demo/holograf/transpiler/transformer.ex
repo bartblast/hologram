@@ -7,7 +7,7 @@ defmodule Holograf.Transpiler.Transformer do
 
   def transform(ast, aliases \\ %{})
 
-  # PRIMITIVES
+  # PRIMITIVE TYPES
 
   # boolean must be before atom
   def transform(ast, _aliases) when is_boolean(ast) do

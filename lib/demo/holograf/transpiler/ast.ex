@@ -1,5 +1,5 @@
 defmodule Holograf.Transpiler.AST do
-  # PRIMITIVES
+  # PRIMITIVE TYPES
 
   defmodule AtomType do
     defstruct value: nil
