@@ -279,6 +279,10 @@ defmodule Holograf.Transpiler.TransformerTest do
         |> Transformer.transform()
 
       expected = %Function{
+        bindings: [
+          [%Variable{name: :a}],
+          [%Variable{name: :b}]
+        ],
         body: [
           %IntegerType{value: 1}
         ],
@@ -305,6 +309,10 @@ defmodule Holograf.Transpiler.TransformerTest do
         |> Transformer.transform()
 
       expected = %Function{
+        bindings: [
+          [%Variable{name: :a}],
+          [%Variable{name: :b}]
+        ],
         body: [
           %IntegerType{value: 1},
           %IntegerType{value: 2}
@@ -356,6 +364,9 @@ defmodule Holograf.Transpiler.TransformerTest do
           },
           functions: [
             %Function{
+              bindings: [
+                [%Variable{name: :a}]
+              ],
               body: [
                 %IntegerType{value: 1}
               ],
@@ -365,6 +376,10 @@ defmodule Holograf.Transpiler.TransformerTest do
               ]
             },
             %Function{
+              bindings: [
+                [%Variable{name: :a}],
+                [%Variable{name: :b}]
+              ],
               body: [
                 %IntegerType{value: 1},
                 %IntegerType{value: 2}
