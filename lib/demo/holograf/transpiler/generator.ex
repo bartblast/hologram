@@ -1,7 +1,7 @@
 defmodule Holograf.Transpiler.Generator do
   alias Holograf.Transpiler.AST.{AtomType, BooleanType, IntegerType, StringType}
   alias Holograf.Transpiler.AST.{MapType, StructType}
-  alias Holograf.Transpiler.AST.{Function, Module}
+  alias Holograf.Transpiler.AST.{Function, Module, Variable}
 
   # PRIMITIVES
 
@@ -89,9 +89,15 @@ defmodule Holograf.Transpiler.Generator do
     end)
   end
 
-  # TODO: implement
   defp generate_function_body(variants) do
-    ""
+    Enum.reduce(variants, "", fn variant, acc ->
+      statement = if acc == "", do: "if", else: "if else"
+      acc <> "#{statement} (isMatched(#{generate(variant.params)}, arguments) { }\n"
+    end)
+  end
+
+  def generate(%Variable{}) do
+    "{ __type__: 'variable', __module__: 'Holograf.Transpiler.AST.Variable' }"
   end
 
   # HELPERS
