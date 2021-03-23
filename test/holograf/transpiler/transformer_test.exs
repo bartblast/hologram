@@ -148,6 +148,8 @@ defmodule Holograf.Transpiler.TransformerTest do
       assert result == expected
     end
 
+    # TODO: test different kinds of bindings (map, list, etc.)
+
     test "match operator, map, not nested" do
       result =
         parse!("%{a: x, b: y} = %{a: 1, b: 2}")

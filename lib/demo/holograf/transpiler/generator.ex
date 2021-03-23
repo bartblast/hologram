@@ -1,6 +1,7 @@
 defmodule Holograf.Transpiler.Generator do
   alias Holograf.Transpiler.AST.{AtomType, BooleanType, IntegerType, StringType}
   alias Holograf.Transpiler.AST.{ListType, MapType, StructType}
+  alias Holograf.Transpiler.AST.{MapAccess}
   alias Holograf.Transpiler.AST.{Function, Module, Variable}
 
   # PRIMITIVE TYPES
@@ -93,7 +94,17 @@ defmodule Holograf.Transpiler.Generator do
   defp generate_function_body(variants) do
     Enum.reduce(variants, "", fn variant, acc ->
       statement = if acc == "", do: "if", else: "else if"
-      acc <> "#{statement} (patternMatchFunctionArgs(#{generate_function_params(variant.params)}, arguments)) {}\n"
+
+      params = generate_function_params(variant.params)
+      vars = generate_function_vars(variant.bindings)
+
+      code = """
+      #{statement} (patternMatchFunctionArgs(#{params}, arguments)) {
+      #{vars}
+      }
+      """
+
+      acc <> code
     end)
   end
 
@@ -103,6 +114,25 @@ defmodule Holograf.Transpiler.Generator do
       |> Enum.join(", ")
 
     "[ #{params} ]"
+  end
+
+  defp generate_function_vars(bindings) do
+    Stream.with_index(bindings)
+    |> Enum.map(fn {binding, idx} ->
+      Enum.reduce(binding, "", fn access, accumulator ->
+        part =
+          case access do
+            %Variable{name: name} ->
+              "let #{name} = arguments[#{idx}]"
+            %MapAccess{key: key} ->
+              "['#{key}']"
+          end
+
+        accumulator <> part
+      end)
+      <> ";\n"
+    end)
+    |> Enum.join("")
   end
 
   def generate(%Variable{}) do

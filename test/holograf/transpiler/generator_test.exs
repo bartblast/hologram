@@ -140,6 +140,9 @@ defmodule Holograf.Transpiler.GeneratorTest do
           aliases: [],
           functions: [
             %Function{
+              bindings: [
+                [%Variable{name: :a}]
+              ],
               body: [
                 %IntegerType{value: 1}
               ],
@@ -149,6 +152,10 @@ defmodule Holograf.Transpiler.GeneratorTest do
               ]
             },
             %Function{
+              bindings: [
+                [%Variable{name: :a}],
+                [%Variable{name: :b}]
+              ],
               body: [
                 %IntegerType{value: 1},
                 %IntegerType{value: 2}
@@ -160,6 +167,9 @@ defmodule Holograf.Transpiler.GeneratorTest do
               ]
             },
             %Function{
+              bindings: [
+                [%Variable{name: :a}]
+              ],
               body: [
                 %IntegerType{value: 1}
               ],
@@ -179,12 +189,22 @@ defmodule Holograf.Transpiler.GeneratorTest do
         class PrefixTest {
 
         static test_1() {
-        if (patternMatchFunctionArgs([ { __type__: 'variable', __module__: 'Holograf.Transpiler.AST.Variable' } ], arguments)) {}
-        else if (patternMatchFunctionArgs([ { __type__: 'variable', __module__: 'Holograf.Transpiler.AST.Variable' }, { __type__: 'variable', __module__: 'Holograf.Transpiler.AST.Variable' } ], arguments)) {}
+        if (patternMatchFunctionArgs([ { __type__: 'variable', __module__: 'Holograf.Transpiler.AST.Variable' } ], arguments)) {
+        let a = arguments[0];
+
+        }
+        else if (patternMatchFunctionArgs([ { __type__: 'variable', __module__: 'Holograf.Transpiler.AST.Variable' }, { __type__: 'variable', __module__: 'Holograf.Transpiler.AST.Variable' } ], arguments)) {
+        let a = arguments[0];
+        let b = arguments[1];
+
+        }
         }
 
         static test_2() {
-        if (patternMatchFunctionArgs([ { __type__: 'variable', __module__: 'Holograf.Transpiler.AST.Variable' } ], arguments)) {}
+        if (patternMatchFunctionArgs([ { __type__: 'variable', __module__: 'Holograf.Transpiler.AST.Variable' } ], arguments)) {
+        let a = arguments[0];
+
+        }
         }
 
         }
