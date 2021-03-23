@@ -15,8 +15,8 @@ function patternMatchFunctionArgs(params, args) {
 }
 
 function isPatternMatched(left, right) {
-  let lType = left.__type__;
-  let rType = right.__type__;
+  let lType = left.type;
+  let rType = right.type;
 
   if (lType != 'variable') {
     if (lType != rType) {

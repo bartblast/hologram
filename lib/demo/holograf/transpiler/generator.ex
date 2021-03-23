@@ -29,7 +29,23 @@ defmodule Holograf.Transpiler.Generator do
   # DATA STRUCTURES
 
   def generate(%MapType{data: data}) do
-    fields = generate_object_fields(data)
+    data = generate_map_data(data)
+    "{ type: 'map', data: #{data} }"
+  end
+
+  def generate(%StructType{module: module, data: data}) do
+    module = Enum.join(module, ".")
+    data = generate_map_data(data)
+
+    "{ type: 'struct', module: '#{module}', data: #{data} }"
+  end
+
+  def generate_map_data(ast) do
+    fields =
+      Enum.map(ast, fn {k, v} ->
+        "'#{generate_object_key(k)}': #{generate(v)}"
+      end)
+      |> Enum.join(", ")
 
     if fields != "" do
       "{ #{fields} }"
@@ -38,20 +54,20 @@ defmodule Holograf.Transpiler.Generator do
     end
   end
 
-  def generate(%StructType{module: module, data: data}) do
-    meta = "__type__: 'struct', __module__: '#{Enum.join(module, ".")}'"
-    fields = generate_object_fields(data)
-
-    if fields != "" do
-      "{ #{meta}, #{fields} }"
-    else
-      "{ #{meta} }"
-    end
+  defp generate_object_key(%AtomType{value: value}) do
+    "~Holograf.Transpiler.AST.AtomType[#{value}]"
   end
 
-  def generate_object_fields(ast) do
-    Enum.map(ast, fn {k, v} -> "#{generate(k)}: #{generate(v)}" end)
-    |> Enum.join(", ")
+  defp generate_object_key(%BooleanType{value: value}) do
+    "~Holograf.Transpiler.AST.BooleanType[#{value}]"
+  end
+
+  defp generate_object_key(%IntegerType{value: value}) do
+    "~Holograf.Transpiler.AST.IntegerType[#{value}]"
+  end
+
+  defp generate_object_key(%StringType{value: value}) do
+    "~Holograf.Transpiler.AST.StringType[#{value}]"
   end
 
   # OTHER
@@ -153,7 +169,7 @@ defmodule Holograf.Transpiler.Generator do
   end
 
   def generate(%Variable{}) do
-    "{ __type__: 'variable', __module__: 'Holograf.Transpiler.AST.Variable' }"
+    "{ type: 'variable', module: 'Holograf.Transpiler.AST.Variable' }"
   end
 
   # HELPERS

@@ -32,7 +32,7 @@ defmodule Holograf.Transpiler.GeneratorTest do
     test "map, empty" do
       ast = %MapType{data: []}
       result = Generator.generate(ast)
-      assert result == "{}"
+      assert result == "{ type: 'map', data: {} }"
     end
 
     test "map, not nested" do
@@ -44,8 +44,9 @@ defmodule Holograf.Transpiler.GeneratorTest do
       }
 
       result = Generator.generate(ast)
+      expected = "{ type: 'map', data: { '~Holograf.Transpiler.AST.AtomType[a]': { type: 'integer', value: 1 }, '~Holograf.Transpiler.AST.AtomType[b]': { type: 'integer', value: 2 } } }"
 
-      assert result == "{ 'a': 1, 'b': 2 }"
+      assert result == expected
     end
 
     test "map, nested" do
@@ -73,14 +74,15 @@ defmodule Holograf.Transpiler.GeneratorTest do
       }
 
       result = Generator.generate(ast)
+      expected = "{ type: 'map', data: { '~Holograf.Transpiler.AST.AtomType[a]': { type: 'integer', value: 1 }, '~Holograf.Transpiler.AST.AtomType[b]': { type: 'map', data: { '~Holograf.Transpiler.AST.AtomType[c]': { type: 'integer', value: 2 }, '~Holograf.Transpiler.AST.AtomType[d]': { type: 'map', data: { '~Holograf.Transpiler.AST.AtomType[e]': { type: 'integer', value: 3 }, '~Holograf.Transpiler.AST.AtomType[f]': { type: 'integer', value: 4 } } } } } } }"
 
-      assert result == "{ 'a': 1, 'b': { 'c': 2, 'd': { 'e': 3, 'f': 4 } } }"
+      assert result == expected
     end
 
     test "struct, empty" do
       ast = %StructType{module: [:Abc, :Bcd], data: []}
       result = Generator.generate(ast)
-      assert result == "{ __type__: 'struct', __module__: 'Abc.Bcd' }"
+      assert result == "{ type: 'struct', module: 'Abc.Bcd', data: {} }"
     end
 
     test "struct, not nested" do
@@ -93,8 +95,9 @@ defmodule Holograf.Transpiler.GeneratorTest do
       }
 
       result = Generator.generate(ast)
+      expected = "{ type: 'struct', module: 'Abc.Bcd', data: { '~Holograf.Transpiler.AST.AtomType[a]': { type: 'integer', value: 1 }, '~Holograf.Transpiler.AST.AtomType[b]': { type: 'integer', value: 2 } } }"
 
-      assert result == "{ __type__: 'struct', __module__: 'Abc.Bcd', 'a': 1, 'b': 2 }"
+      assert result == expected
     end
 
     test "struct, nested" do
@@ -125,8 +128,9 @@ defmodule Holograf.Transpiler.GeneratorTest do
       }
 
       result = Generator.generate(ast)
+      expected = "{ type: 'struct', module: 'Abc.Bcd', data: { '~Holograf.Transpiler.AST.AtomType[a]': { type: 'integer', value: 1 }, '~Holograf.Transpiler.AST.AtomType[b]': { type: 'struct', module: 'Bcd.Cde', data: { '~Holograf.Transpiler.AST.AtomType[c]': { type: 'integer', value: 2 }, '~Holograf.Transpiler.AST.AtomType[d]': { type: 'struct', module: 'Cde.Def', data: { '~Holograf.Transpiler.AST.AtomType[e]': { type: 'integer', value: 3 }, '~Holograf.Transpiler.AST.AtomType[f]': { type: 'integer', value: 4 } } } } } } }"
 
-      assert result == "{ __type__: 'struct', __module__: 'Abc.Bcd', 'a': 1, 'b': { __type__: 'struct', __module__: 'Bcd.Cde', 'c': 2, 'd': { __type__: 'struct', __module__: 'Cde.Def', 'e': 3, 'f': 4 } } }"
+      assert result == expected
     end
   end
 
@@ -189,11 +193,11 @@ defmodule Holograf.Transpiler.GeneratorTest do
       class PrefixTest {
 
       static test_1() {
-      if (patternMatchFunctionArgs([ { __type__: 'variable', __module__: 'Holograf.Transpiler.AST.Variable' } ], arguments)) {
+      if (patternMatchFunctionArgs([ { type: 'variable', module: 'Holograf.Transpiler.AST.Variable' } ], arguments)) {
       let a = arguments[0];
       return 1;
       }
-      else if (patternMatchFunctionArgs([ { __type__: 'variable', __module__: 'Holograf.Transpiler.AST.Variable' }, { __type__: 'variable', __module__: 'Holograf.Transpiler.AST.Variable' } ], arguments)) {
+      else if (patternMatchFunctionArgs([ { type: 'variable', module: 'Holograf.Transpiler.AST.Variable' }, { type: 'variable', module: 'Holograf.Transpiler.AST.Variable' } ], arguments)) {
       let a = arguments[0];
       let b = arguments[1];
       1;
@@ -202,7 +206,7 @@ defmodule Holograf.Transpiler.GeneratorTest do
       }
 
       static test_2() {
-      if (patternMatchFunctionArgs([ { __type__: 'variable', __module__: 'Holograf.Transpiler.AST.Variable' } ], arguments)) {
+      if (patternMatchFunctionArgs([ { type: 'variable', module: 'Holograf.Transpiler.AST.Variable' } ], arguments)) {
       let a = arguments[0];
       return 1;
       }
@@ -216,7 +220,7 @@ defmodule Holograf.Transpiler.GeneratorTest do
 
     test "variable" do
       result = Generator.generate(%Variable{name: :test})
-      expected = "{ __type__: 'variable', __module__: 'Holograf.Transpiler.AST.Variable' }"
+      expected = "{ type: 'variable', module: 'Holograf.Transpiler.AST.Variable' }"
       assert result == expected
     end
   end
