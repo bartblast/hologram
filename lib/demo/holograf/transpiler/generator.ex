@@ -7,19 +7,23 @@ defmodule Holograf.Transpiler.Generator do
   # PRIMITIVE TYPES
 
   def generate(%AtomType{value: value}) do
-    "'#{value}'"
+    generate_primitive_type(:atom, "'#{value}'")
   end
 
   def generate(%BooleanType{value: value}) do
-    "#{value}"
+    generate_primitive_type(:boolean, "#{value}")
   end
 
   def generate(%IntegerType{value: value}) do
-    "#{value}"
+    generate_primitive_type(:integer, "#{value}")
   end
 
   def generate(%StringType{value: value}) do
-    "'#{value}'"
+    generate_primitive_type(:string, "'#{value}'")
+  end
+
+  defp generate_primitive_type(type, value) do
+    "{ __type__: '#{type}', __value__: #{value} }"
   end
 
   # DATA STRUCTURES
