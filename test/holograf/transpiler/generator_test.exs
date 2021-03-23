@@ -186,29 +186,29 @@ defmodule Holograf.Transpiler.GeneratorTest do
 
       # TODO: update after function body generating is implemented
       expected = """
-        class PrefixTest {
+      class PrefixTest {
 
-        static test_1() {
-        if (patternMatchFunctionArgs([ { __type__: 'variable', __module__: 'Holograf.Transpiler.AST.Variable' } ], arguments)) {
-        let a = arguments[0];
+      static test_1() {
+      if (patternMatchFunctionArgs([ { __type__: 'variable', __module__: 'Holograf.Transpiler.AST.Variable' } ], arguments)) {
+      let a = arguments[0];
 
-        }
-        else if (patternMatchFunctionArgs([ { __type__: 'variable', __module__: 'Holograf.Transpiler.AST.Variable' }, { __type__: 'variable', __module__: 'Holograf.Transpiler.AST.Variable' } ], arguments)) {
-        let a = arguments[0];
-        let b = arguments[1];
+      }
+      else if (patternMatchFunctionArgs([ { __type__: 'variable', __module__: 'Holograf.Transpiler.AST.Variable' }, { __type__: 'variable', __module__: 'Holograf.Transpiler.AST.Variable' } ], arguments)) {
+      let a = arguments[0];
+      let b = arguments[1];
 
-        }
-        }
+      }
+      }
 
-        static test_2() {
-        if (patternMatchFunctionArgs([ { __type__: 'variable', __module__: 'Holograf.Transpiler.AST.Variable' } ], arguments)) {
-        let a = arguments[0];
+      static test_2() {
+      if (patternMatchFunctionArgs([ { __type__: 'variable', __module__: 'Holograf.Transpiler.AST.Variable' } ], arguments)) {
+      let a = arguments[0];
 
-        }
-        }
+      }
+      }
 
-        }
-        """
+      }
+      """
 
       assert result == expected
     end
