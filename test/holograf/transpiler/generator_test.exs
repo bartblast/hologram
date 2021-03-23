@@ -195,20 +195,20 @@ defmodule Holograf.Transpiler.GeneratorTest do
       static test_1() {
       if (patternMatchFunctionArgs([ { type: 'variable', module: 'Holograf.Transpiler.AST.Variable' } ], arguments)) {
       let a = arguments[0];
-      return 1;
+      return { type: 'integer', value: 1 };
       }
       else if (patternMatchFunctionArgs([ { type: 'variable', module: 'Holograf.Transpiler.AST.Variable' }, { type: 'variable', module: 'Holograf.Transpiler.AST.Variable' } ], arguments)) {
       let a = arguments[0];
       let b = arguments[1];
-      1;
-      return 2;
+      { type: 'integer', value: 1 };
+      return { type: 'integer', value: 2 };
       }
       }
 
       static test_2() {
       if (patternMatchFunctionArgs([ { type: 'variable', module: 'Holograf.Transpiler.AST.Variable' } ], arguments)) {
       let a = arguments[0];
-      return 1;
+      return { type: 'integer', value: 1 };
       }
       }
 
