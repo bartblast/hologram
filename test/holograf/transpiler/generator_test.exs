@@ -9,22 +9,22 @@ defmodule Holograf.Transpiler.GeneratorTest do
   describe "primitive types" do
     test "atom" do
       result = Generator.generate(%AtomType{value: :test})
-      assert result == "{ __type__: 'atom', __value__: 'test' }"
+      assert result == "{ type: 'atom', value: 'test' }"
     end
 
     test "boolean" do
       result = Generator.generate(%BooleanType{value: true})
-      assert result == "{ __type__: 'boolean', __value__: true }"
+      assert result == "{ type: 'boolean', value: true }"
     end
 
     test "integer" do
       result = Generator.generate(%IntegerType{value: 123})
-      assert result == "{ __type__: 'integer', __value__: 123 }"
+      assert result == "{ type: 'integer', value: 123 }"
     end
 
     test "string" do
       result = Generator.generate(%StringType{value: "Test"})
-      assert result == "{ __type__: 'string', __value__: 'Test' }"
+      assert result == "{ type: 'string', value: 'Test' }"
     end
   end
 

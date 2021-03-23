@@ -23,7 +23,7 @@ defmodule Holograf.Transpiler.Generator do
   end
 
   defp generate_primitive_type(type, value) do
-    "{ __type__: '#{type}', __value__: #{value} }"
+    "{ type: '#{type}', value: #{value} }"
   end
 
   # DATA STRUCTURES
