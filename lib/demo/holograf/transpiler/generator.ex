@@ -95,12 +95,14 @@ defmodule Holograf.Transpiler.Generator do
     Enum.reduce(variants, "", fn variant, acc ->
       statement = if acc == "", do: "if", else: "else if"
 
-      params = generate_function_params(variant.params)
-      vars = generate_function_vars(variant.bindings)
+      params = generate_function_params(variant)
+      vars = generate_function_vars(variant)
+      body = generate_function_expressions(variant)
 
       code = """
       #{statement} (patternMatchFunctionArgs(#{params}, arguments)) {
       #{vars}
+      #{body}
       }
       """
 
@@ -108,16 +110,27 @@ defmodule Holograf.Transpiler.Generator do
     end)
   end
 
-  defp generate_function_params(params) do
+  defp generate_function_expressions(variant) do
+    expr_count = Enum.count(variant.body)
+
+    Stream.with_index(variant.body)
+    |> Enum.map(fn {expr, idx} ->
+      return = if idx == expr_count - 1, do: "return ", else: ""
+      "#{return}#{generate(expr)};"
+    end)
+    |> Enum.join("\n")
+  end
+
+  defp generate_function_params(variant) do
     params =
-      Enum.map(params, fn param -> generate(param) end)
+      Enum.map(variant.params, fn param -> generate(param) end)
       |> Enum.join(", ")
 
     "[ #{params} ]"
   end
 
-  defp generate_function_vars(bindings) do
-    Stream.with_index(bindings)
+  defp generate_function_vars(variant) do
+    Stream.with_index(variant.bindings)
     |> Enum.map(fn {binding, idx} ->
       Enum.reduce(binding, "", fn access, accumulator ->
         part =
