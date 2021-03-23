@@ -169,7 +169,7 @@ defmodule Holograf.Transpiler.Generator do
   end
 
   def generate(%Variable{}) do
-    "{ type: 'variable', module: 'Holograf.Transpiler.AST.Variable' }"
+    "{ type: 'variable' }"
   end
 
   # HELPERS

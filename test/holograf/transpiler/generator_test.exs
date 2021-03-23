@@ -193,11 +193,11 @@ defmodule Holograf.Transpiler.GeneratorTest do
       class PrefixTest {
 
       static test_1() {
-      if (patternMatchFunctionArgs([ { type: 'variable', module: 'Holograf.Transpiler.AST.Variable' } ], arguments)) {
+      if (patternMatchFunctionArgs([ { type: 'variable' } ], arguments)) {
       let a = arguments[0];
       return { type: 'integer', value: 1 };
       }
-      else if (patternMatchFunctionArgs([ { type: 'variable', module: 'Holograf.Transpiler.AST.Variable' }, { type: 'variable', module: 'Holograf.Transpiler.AST.Variable' } ], arguments)) {
+      else if (patternMatchFunctionArgs([ { type: 'variable' }, { type: 'variable' } ], arguments)) {
       let a = arguments[0];
       let b = arguments[1];
       { type: 'integer', value: 1 };
@@ -206,7 +206,7 @@ defmodule Holograf.Transpiler.GeneratorTest do
       }
 
       static test_2() {
-      if (patternMatchFunctionArgs([ { type: 'variable', module: 'Holograf.Transpiler.AST.Variable' } ], arguments)) {
+      if (patternMatchFunctionArgs([ { type: 'variable' } ], arguments)) {
       let a = arguments[0];
       return { type: 'integer', value: 1 };
       }
@@ -220,7 +220,7 @@ defmodule Holograf.Transpiler.GeneratorTest do
 
     test "variable" do
       result = Generator.generate(%Variable{name: :test})
-      expected = "{ type: 'variable', module: 'Holograf.Transpiler.AST.Variable' }"
+      expected = "{ type: 'variable' }"
       assert result == expected
     end
   end
