@@ -191,13 +191,11 @@ defmodule Holograf.Transpiler.GeneratorTest do
       static test_1() {
       if (patternMatchFunctionArgs([ { __type__: 'variable', __module__: 'Holograf.Transpiler.AST.Variable' } ], arguments)) {
       let a = arguments[0];
-
       return 1;
       }
       else if (patternMatchFunctionArgs([ { __type__: 'variable', __module__: 'Holograf.Transpiler.AST.Variable' }, { __type__: 'variable', __module__: 'Holograf.Transpiler.AST.Variable' } ], arguments)) {
       let a = arguments[0];
       let b = arguments[1];
-
       1;
       return 2;
       }
@@ -206,7 +204,6 @@ defmodule Holograf.Transpiler.GeneratorTest do
       static test_2() {
       if (patternMatchFunctionArgs([ { __type__: 'variable', __module__: 'Holograf.Transpiler.AST.Variable' } ], arguments)) {
       let a = arguments[0];
-
       return 1;
       }
       }

@@ -143,9 +143,9 @@ defmodule Holograf.Transpiler.Generator do
 
         accumulator <> part
       end)
-      <> ";\n"
+      <> ";"
     end)
-    |> Enum.join("")
+    |> Enum.join("\n")
   end
 
   def generate(%Variable{}) do
