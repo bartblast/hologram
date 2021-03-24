@@ -7,7 +7,7 @@ defmodule Holograf.Transpiler.TransformerTest do
   alias Holograf.Transpiler.AST.{ListType, MapType, StructType}
   alias Holograf.Transpiler.AST.MatchOperator
   alias Holograf.Transpiler.AST.MapAccess
-  alias Holograf.Transpiler.AST.{Alias, Function, Module, Variable}
+  alias Holograf.Transpiler.AST.{Alias, Call, Function, Module, Variable}
   alias Holograf.Transpiler.Transformer
 
   describe "primitive types" do
@@ -267,9 +267,63 @@ defmodule Holograf.Transpiler.TransformerTest do
       expected = %Alias{module: [:Prefix, :Test]}
     end
 
+    test "function call on the current module" do
+      code = """
+      def test_1(a, b) do
+        1
+        test_2(c, d)
+        3
+      end
+      """
+
+      result =
+        parse!(code)
+        |> Transformer.transform()
+        |> Map.get(:body)
+        |> Enum.at(1)
+
+      expected = %Call{
+        function: :test_2,
+        module: nil,
+        params: [
+          %Variable{name: :c},
+          %Variable{name: :d}
+        ]
+      }
+
+      assert result == expected
+    end
+
+    test "function call on another module" do
+      code = """
+      def test_1(a, b) do
+        1
+        Prefix.Test.Abc.test_2(c, d)
+        3
+      end
+      """
+
+      result =
+        parse!(code)
+        |> Transformer.transform()
+        |> Map.get(:body)
+        |> Enum.at(1)
+
+      expected = %Call{
+        function: :test_2,
+        module: [:Prefix, :Test, :Abc],
+        params: [
+          %Variable{name: :c},
+          %Variable{name: :d}
+        ]
+      }
+
+      assert result == expected
+    end
+
     # TODO: test functions with 0 and 1 params
 
-    test "function, multiple params, single expression" do
+    test "function definition, multiple params, single expression" do
       code = """
         def test(a, b) do
           1
@@ -298,7 +352,7 @@ defmodule Holograf.Transpiler.TransformerTest do
       assert result == expected
     end
 
-    test "function, multiple params, multiple expressions" do
+    test "function definition, multiple params, multiple expressions" do
       code = """
         def test(a, b) do
           1
