@@ -472,14 +472,15 @@ defmodule Holograf.Transpiler.TransformerTest do
 
     test "struct, without namespace, aliased" do
       code = "%TestStruct{abc: 1}"
+
       aliases = %{
         OtherStruct: [:Abc, :Bcd, :OtherStruct],
         TestStruct: [:Cde, :Def, :TestStruct]
       }
 
       result =
-        parse!("%TestStruct{abc: 1}")
-        |> Transformer.transform(aliases)
+        parse!(code)
+        |> Transformer.transform(nil, aliases)
 
       expected = %StructType{
         data: [
