@@ -424,7 +424,65 @@ defmodule Holograf.Transpiler.TransformerTest do
       assert result == expected
     end
 
-    test "module" do
+    test "module without aliases" do
+      code = """
+        defmodule Prefix.Test do
+          def test(a) do
+            1
+          end
+
+          :not_a_function
+
+          def test(a, b) do
+            1
+            2
+          end
+        end
+      """
+
+      result =
+        parse!(code)
+        |> Transformer.transform()
+
+      expected =
+        %Module{
+          aliases: %{list: [], map: %{}},
+          functions: [
+            %Function{
+              bindings: [
+                [%Variable{name: :a}]
+              ],
+              body: [
+                %IntegerType{value: 1}
+              ],
+              name: :test,
+              params: [
+                %Variable{name: :a}
+              ]
+            },
+            %Function{
+              bindings: [
+                [%Variable{name: :a}],
+                [%Variable{name: :b}]
+              ],
+              body: [
+                %IntegerType{value: 1},
+                %IntegerType{value: 2}
+              ],
+              name: :test,
+              params: [
+                %Variable{name: :a},
+                %Variable{name: :b}
+              ]
+            }
+          ],
+          name: [:Prefix, :Test]
+        }
+
+      assert result == expected
+    end
+
+    test "module with aliases" do
       code = """
         defmodule Prefix.Test do
           alias Abc.Bcd
