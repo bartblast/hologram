@@ -269,22 +269,26 @@ defmodule Holograf.Transpiler.TransformerTest do
 
     test "function call on the current module" do
       code = """
-      def test_1(a, b) do
-        1
-        test_2(c, d)
-        3
+      defmodule Abc.Bce do
+        def test_1(a, b) do
+          1
+          test_2(c, d)
+          3
+        end
       end
       """
 
       result =
         parse!(code)
         |> Transformer.transform()
+        |> Map.get(:functions)
+        |> hd()
         |> Map.get(:body)
         |> Enum.at(1)
 
       expected = %Call{
         function: :test_2,
-        module: nil,
+        module: [:Abc, :Bce],
         params: [
           %Variable{name: :c},
           %Variable{name: :d}
@@ -296,22 +300,59 @@ defmodule Holograf.Transpiler.TransformerTest do
 
     test "function call on another module" do
       code = """
-      def test_1(a, b) do
-        1
-        Prefix.Test.Abc.test_2(c, d)
-        3
+      defmodule Abc.Bce do
+        def test_1(a, b) do
+          1
+          Cde.Def.test_2(c, d)
+          3
+        end
       end
       """
 
       result =
         parse!(code)
         |> Transformer.transform()
+        |> Map.get(:functions)
+        |> hd()
         |> Map.get(:body)
         |> Enum.at(1)
 
       expected = %Call{
         function: :test_2,
-        module: [:Prefix, :Test, :Abc],
+        module: [:Cde, :Def],
+        params: [
+          %Variable{name: :c},
+          %Variable{name: :d}
+        ]
+      }
+
+      assert result == expected
+    end
+
+    test "function call on aliased module" do
+      code = """
+      defmodule Abc.Bce do
+        alias Cde.Def.Efg
+
+        def test_1(a, b) do
+          1
+          Efg.test_2(c, d)
+          3
+        end
+      end
+      """
+
+      result =
+        parse!(code)
+        |> Transformer.transform()
+        |> Map.get(:functions)
+        |> hd()
+        |> Map.get(:body)
+        |> Enum.at(1)
+
+      expected = %Call{
+        function: :test_2,
+        module: [:Cde, :Def, :Efg],
         params: [
           %Variable{name: :c},
           %Variable{name: :d}

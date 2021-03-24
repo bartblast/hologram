@@ -111,9 +111,16 @@ defmodule Holograf.Transpiler.Transformer do
     %Function{name: name, params: params, bindings: bindings, body: body}
   end
 
-  def transform({:defmodule, _, [{_, _, name}, [do: {_, _, ast}]]}, _module, _aliases) do
+  def transform({:defmodule, _, [{:__aliases__, _, name}, [do: {:__block__, _, ast}]]}, _module, _aliases) do
     aliases = aggregate_aliases(ast)
-    functions = aggregate_functions(ast, name, aliases.map)
+    functions = aggregate_functions(ast, name, aliases)
+
+    %Module{name: name, aliases: aliases, functions: functions}
+  end
+
+  def transform({:defmodule, _, [{:__aliases__, _, name}, [do: ast]]}, _module, _aliases) do
+    aliases = %{list: [], map: %{}}
+    functions = aggregate_functions([ast], name, aliases)
 
     %Module{name: name, aliases: aliases, functions: functions}
   end
@@ -154,15 +161,29 @@ defmodule Holograf.Transpiler.Transformer do
 
   def transform({function, _, params}, module, aliases) when is_atom(function) do
     params = transform_call_params(params, module, aliases)
-    %Call{function: function, params: params}
+    module = resolve_module(module, aliases)
+
+    %Call{module: module, function: function, params: params}
   end
 
   def transform({{:., _, [{:__aliases__, _, module}, function]}, _, params}, parent_module, aliases) do
     params = transform_call_params(params, parent_module, aliases)
+    module = resolve_module(module, aliases)
+
     %Call{module: module, function: function, params: params}
   end
 
   defp transform_call_params(params, module, aliases) do
     Enum.map(params, fn param -> transform(param, module, aliases) end)
+  end
+
+  defp resolve_module(module, aliases) do
+    name = hd(module)
+
+    if Enum.count(module) == 1 && Map.has_key?(aliases.map, name) do
+      aliases.map[name]
+    else
+      module
+    end
   end
 end
