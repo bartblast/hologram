@@ -2,7 +2,7 @@ defmodule Holograf.Transpiler.Generator do
   alias Holograf.Transpiler.AST.{AtomType, BooleanType, IntegerType, StringType}
   alias Holograf.Transpiler.AST.{ListType, MapType, StructType}
   alias Holograf.Transpiler.AST.{MapAccess}
-  alias Holograf.Transpiler.AST.{Function, Module, Variable}
+  alias Holograf.Transpiler.AST.{Call, Function, Module, Variable}
 
   # PRIMITIVE TYPES
 
@@ -34,7 +34,7 @@ defmodule Holograf.Transpiler.Generator do
   end
 
   def generate(%StructType{module: module, data: data}) do
-    module = Enum.join(module, ".")
+    module = generate_module_fully_qualified_name(module)
     data = generate_map_data(data)
 
     "{ type: 'struct', module: '#{module}', data: #{data} }"
@@ -172,9 +172,31 @@ defmodule Holograf.Transpiler.Generator do
     "{ type: 'variable' }"
   end
 
+  def generate(%Call{module: module, function: function, params: params}) do
+    class = generate_class_name(module)
+
+    params =
+      Enum.map(params, fn param ->
+        case param do
+          %Variable{name: name} ->
+            name
+          _ ->
+            generate(param)
+        end
+      end)
+      |> Enum.join(", ")
+
+    "#{class}.#{function}(#{params})"
+  end
+
   # HELPERS
 
-  defp generate_class_name(ast) do
-    String.replace("#{ast}", ".", "")
+  defp generate_class_name(module) do
+    generate_module_fully_qualified_name(module)
+    |> String.replace(".", "")
+  end
+
+  defp generate_module_fully_qualified_name(module) do
+    Enum.join(module, ".")
   end
 end

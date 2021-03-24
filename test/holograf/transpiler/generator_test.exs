@@ -3,7 +3,7 @@ defmodule Holograf.Transpiler.GeneratorTest do
 
   alias Holograf.Transpiler.AST.{AtomType, BooleanType, IntegerType, StringType}
   alias Holograf.Transpiler.AST.{MapType, StructType}
-  alias Holograf.Transpiler.AST.{Function, Module, Variable}
+  alias Holograf.Transpiler.AST.{Call, Function, Module, Variable}
   alias Holograf.Transpiler.Generator
 
   describe "primitive types" do
@@ -183,7 +183,7 @@ defmodule Holograf.Transpiler.GeneratorTest do
               ]
             }
           ],
-          name: "Prefix.Test"
+          name: [:Prefix, :Test]
         }
 
       result = Generator.generate(ast)
@@ -221,6 +221,35 @@ defmodule Holograf.Transpiler.GeneratorTest do
     test "variable" do
       result = Generator.generate(%Variable{name: :test})
       expected = "{ type: 'variable' }"
+      assert result == expected
+    end
+
+    test "function call with params" do
+      ast = %Call{
+        module: [:Abc, :Bcd],
+        function: :test,
+        params: [
+          %IntegerType{value: 1},
+          %Variable{name: :xyz}
+        ]
+      }
+
+      result = Generator.generate(ast)
+      expected = "AbcBcd.test({ type: 'integer', value: 1 }, xyz)"
+
+      assert result == expected
+    end
+
+    test "function call without params" do
+      ast = %Call{
+        module: [:Abc, :Bcd],
+        function: :test,
+        params: []
+      }
+
+      result = Generator.generate(ast)
+      expected = "AbcBcd.test()"
+
       assert result == expected
     end
   end
