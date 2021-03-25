@@ -95,9 +95,15 @@ defmodule Holograf.Transpiler.Transformer do
 
     bindings =
       Enum.map(params, fn param ->
-        aggregate_bindings(param)
-        |> hd()
+        case aggregate_bindings(param) do
+          [] ->
+            nil
+          path ->
+            path
+            |> hd()
+        end
       end)
+      |> Enum.reject(fn item -> item == nil end)
 
     body =
       case body do

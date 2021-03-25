@@ -424,6 +424,98 @@ defmodule Holograf.Transpiler.TransformerTest do
       assert result == expected
     end
 
+    test "function definition, vars in args" do
+      code = """
+      defmodule Abc do
+        def test(a, b) do
+          1
+        end
+      end
+      """
+
+      result =
+        parse!(code)
+        |> Transformer.transform()
+        |> Map.get(:functions)
+        |> hd()
+
+      expected =
+        %Function{
+          bindings: [
+            [%Variable{name: :a}],
+            [%Variable{name: :b}]
+          ],
+          body: [%IntegerType{value: 1}],
+          name: :test,
+          params: [
+            %Variable{name: :a},
+            %Variable{name: :b}
+          ]
+        }
+
+      assert result == expected
+    end
+
+    test "function definition, non-vars in args" do
+      code = """
+      defmodule Abc do
+        def test(:a, 2) do
+          1
+        end
+      end
+      """
+
+      result =
+        parse!(code)
+        |> Transformer.transform()
+        |> Map.get(:functions)
+        |> hd()
+
+      expected =
+        %Function{
+          bindings: [],
+          body: [%IntegerType{value: 1}],
+          name: :test,
+          params: [
+            %AtomType{value: :a},
+            %IntegerType{value: 2}
+          ]
+        }
+
+      assert result == expected
+    end
+
+    test "function definition, vars and non-vars in args" do
+      code = """
+      defmodule Abc do
+        def test(:a, x) do
+          1
+        end
+      end
+      """
+
+      result =
+        parse!(code)
+        |> Transformer.transform()
+        |> Map.get(:functions)
+        |> hd()
+
+      expected =
+        %Function{
+          bindings: [
+            [%Variable{name: :x}],
+          ],
+          body: [%IntegerType{value: 1}],
+          name: :test,
+          params: [
+            %AtomType{value: :a},
+            %Variable{name: :x}
+          ]
+        }
+
+      assert result == expected
+    end
+
     test "module without aliases" do
       code = """
         defmodule Prefix.Test do
