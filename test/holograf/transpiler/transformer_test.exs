@@ -424,7 +424,7 @@ defmodule Holograf.Transpiler.TransformerTest do
       assert result == expected
     end
 
-    test "function definition, vars in args" do
+    test "function definition, vars in params" do
       code = """
       defmodule Abc do
         def test(a, b) do
@@ -456,7 +456,7 @@ defmodule Holograf.Transpiler.TransformerTest do
       assert result == expected
     end
 
-    test "function definition, non-vars in args" do
+    test "function definition, non-vars in params" do
       code = """
       defmodule Abc do
         def test(:a, 2) do
@@ -485,7 +485,7 @@ defmodule Holograf.Transpiler.TransformerTest do
       assert result == expected
     end
 
-    test "function definition, vars and non-vars in args" do
+    test "function definition, vars and non-vars in params" do
       code = """
       defmodule Abc do
         def test(:a, x) do
