@@ -43,12 +43,10 @@ class HolografPage {
   objectKey(key) {
     switch (key.type) {
       case 'atom':
-        `~Holograf.Transpiler.AST.AtomType[${key.value}]`
-        break;
+        return `~Holograf.Transpiler.AST.AtomType[${key.value}]`
 
       case 'string':
-        `~Holograf.Transpiler.AST.StringType[${key.value}]`
-        break;
+        return `~Holograf.Transpiler.AST.StringType[${key.value}]`
         
       default:
         throw 'Not implemented, at HolografPage.objectKey()'
