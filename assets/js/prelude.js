@@ -1,5 +1,7 @@
 // TODO: test
 
+import { cloneDeep } from 'lodash';
+
 function patternMatchFunctionArgs(params, args) {
   if (args.length != params.length) {
     return false;
@@ -29,4 +31,27 @@ function isPatternMatched(left, right) {
   }
 
   return true;
+}
+
+class HolografPage {
+  assign(state, key, value) {
+    let newState = cloneDeep(state)
+    newState.data[objectKey(key)] = value
+    return newState;
+  }
+
+  objectKey(key) {
+    switch (key.type) {
+      case 'atom':
+        `~Holograf.Transpiler.AST.AtomType[${key.value}]`
+        break;
+
+      case 'string':
+        `~Holograf.Transpiler.AST.StringType[${key.value}]`
+        break;
+        
+      default:
+        throw 'Not implemented, at HolografPage.objectKey()'
+    }
+  }
 }
