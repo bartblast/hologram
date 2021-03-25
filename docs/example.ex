@@ -1,4 +1,6 @@
 defmodule Somepage do
+  use Holograf.Page
+
   def state do
     %{
       a: 1,
