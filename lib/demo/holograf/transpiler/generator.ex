@@ -120,7 +120,7 @@ defmodule Holograf.Transpiler.Generator do
       body = generate_function_expressions(variant)
 
       code = """
-      #{statement} (patternMatchFunctionArgs(#{params}, arguments)) {
+      #{statement} (Holograf.patternMatchFunctionArgs(#{params}, arguments)) {
       #{vars}
       #{body}
       }

@@ -193,11 +193,11 @@ defmodule Holograf.Transpiler.GeneratorTest do
       class PrefixTest {
 
       static test_1() {
-      if (patternMatchFunctionArgs([ { type: 'variable' } ], arguments)) {
+      if (Holograf.patternMatchFunctionArgs([ { type: 'variable' } ], arguments)) {
       let a = arguments[0];
       return { type: 'integer', value: 1 };
       }
-      else if (patternMatchFunctionArgs([ { type: 'variable' }, { type: 'variable' } ], arguments)) {
+      else if (Holograf.patternMatchFunctionArgs([ { type: 'variable' }, { type: 'variable' } ], arguments)) {
       let a = arguments[0];
       let b = arguments[1];
       { type: 'integer', value: 1 };
@@ -206,7 +206,7 @@ defmodule Holograf.Transpiler.GeneratorTest do
       }
 
       static test_2() {
-      if (patternMatchFunctionArgs([ { type: 'variable' } ], arguments)) {
+      if (Holograf.patternMatchFunctionArgs([ { type: 'variable' } ], arguments)) {
       let a = arguments[0];
       return { type: 'integer', value: 1 };
       }
