@@ -18,4 +18,10 @@ defmodule Holograf.Transpiler.Parser do
     |> File.read!()
     |> parse()
   end
+
+  def parse_file!(filepath) do
+    filepath
+    |> File.read!()
+    |> parse!()
+  end
 end
