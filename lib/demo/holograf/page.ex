@@ -1,7 +1,7 @@
-defmodule Holograf.Page do
+defmodule Hologram.Page do
   defmacro __using__(_) do
     quote do
-      import Holograf.Page
+      import Hologram.Page
     end
   end
 

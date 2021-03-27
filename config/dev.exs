@@ -1,7 +1,7 @@
 use Mix.Config
 
 # Configure your database
-config :holograf, Demo.Repo,
+config :hologram, Demo.Repo,
   username: "postgres",
   password: "postgres",
   database: "demo_dev",
@@ -15,7 +15,7 @@ config :holograf, Demo.Repo,
 # The watchers configuration can be used to run external
 # watchers to your application. For example, we use it
 # with webpack to recompile .js and .css sources.
-config :holograf, DemoWeb.Endpoint,
+config :hologram, DemoWeb.Endpoint,
   http: [port: 4000],
   debug_errors: true,
   code_reloader: true,
@@ -55,7 +55,7 @@ config :holograf, DemoWeb.Endpoint,
 # different ports.
 
 # Watch static and templates for browser reloading.
-config :holograf, DemoWeb.Endpoint,
+config :hologram, DemoWeb.Endpoint,
   live_reload: [
     patterns: [
       ~r"priv/static/.*(js|css|png|jpeg|jpg|gif|svg)$",

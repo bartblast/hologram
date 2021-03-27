@@ -1,15 +1,15 @@
 # TODO: test
-defmodule Holograf.Router do
+defmodule Hologram.Router do
   defmacro __using__(_) do
     quote do
-      require Holograf.Router
-      import Holograf.Router
+      require Hologram.Router
+      import Hologram.Router
     end
   end
 
-  defmacro holograf(path, view) do
+  defmacro hologram(path, view) do
     quote do
-      get unquote(path), HolografController, :index, private: %{holograf_view: unquote(view)}
+      get unquote(path), HologramController, :index, private: %{hologram_view: unquote(view)}
     end
   end
 end

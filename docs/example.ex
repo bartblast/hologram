@@ -1,5 +1,5 @@
 defmodule Somepage do
-  use Holograf.Page
+  use Hologram.Page
 
   def state do
     %{

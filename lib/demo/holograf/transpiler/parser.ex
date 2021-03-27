@@ -1,4 +1,4 @@
-defmodule Holograf.Transpiler.Parser do
+defmodule Hologram.Transpiler.Parser do
   def parse(str) do
     Code.string_to_quoted(str)
   end

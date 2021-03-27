@@ -1,6 +1,6 @@
-defmodule Holograf.Transpiler.ParserTest do
+defmodule Hologram.Transpiler.ParserTest do
   use ExUnit.Case
-  alias Holograf.Transpiler.Parser
+  alias Hologram.Transpiler.Parser
 
   describe "parse/1" do
     test "valid code" do
@@ -26,7 +26,7 @@ defmodule Holograf.Transpiler.ParserTest do
 
   describe "parse_file/1" do
     test "valid code" do
-      assert {:ok, _} = Parser.parse_file("lib/demo/holograf/transpiler/transformer.ex")
+      assert {:ok, _} = Parser.parse_file("lib/demo/hologram/transpiler/transformer.ex")
     end
 
     test "invalid code" do
@@ -36,7 +36,7 @@ defmodule Holograf.Transpiler.ParserTest do
 
   describe "parse_file!/1" do
     test "valid code" do
-      assert {:defmodule, _, _} = Parser.parse_file!("lib/demo/holograf/transpiler/transformer.ex")
+      assert {:defmodule, _, _} = Parser.parse_file!("lib/demo/hologram/transpiler/transformer.ex")
     end
 
     test "invalid code" do

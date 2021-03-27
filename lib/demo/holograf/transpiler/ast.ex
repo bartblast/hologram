@@ -1,4 +1,4 @@
-defmodule Holograf.Transpiler.AST do
+defmodule Hologram.Transpiler.AST do
   # PRIMITIVE TYPES
 
   defmodule AtomType do

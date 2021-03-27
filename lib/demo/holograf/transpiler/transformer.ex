@@ -1,9 +1,9 @@
-defmodule Holograf.Transpiler.Transformer do
-  alias Holograf.Transpiler.AST.{AtomType, BooleanType, IntegerType, StringType}
-  alias Holograf.Transpiler.AST.{ListType, MapType, StructType}
-  alias Holograf.Transpiler.AST.MatchOperator
-  alias Holograf.Transpiler.AST.MapAccess
-  alias Holograf.Transpiler.AST.{Alias, Call, Function, Module, Variable}
+defmodule Hologram.Transpiler.Transformer do
+  alias Hologram.Transpiler.AST.{AtomType, BooleanType, IntegerType, StringType}
+  alias Hologram.Transpiler.AST.{ListType, MapType, StructType}
+  alias Hologram.Transpiler.AST.MatchOperator
+  alias Hologram.Transpiler.AST.MapAccess
+  alias Hologram.Transpiler.AST.{Alias, Call, Function, Module, Variable}
 
   def transform(ast, module \\ nil, aliases \\ %{})
 

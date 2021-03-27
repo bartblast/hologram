@@ -1,6 +1,6 @@
 defmodule DemoWeb.Router do
   use DemoWeb, :router
-  use Holograf.Router
+  use Hologram.Router
 
   pipeline :browser do
     plug :accepts, ["html"]
@@ -19,7 +19,7 @@ defmodule DemoWeb.Router do
 
     get "/", PageController, :index
 
-    holograf("/demo", Demo)
+    hologram("/demo", Demo)
   end
 
   # Other scopes may use custom stacks.

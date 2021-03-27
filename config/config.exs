@@ -7,11 +7,11 @@
 # General application configuration
 use Mix.Config
 
-config :holograf,
+config :hologram,
   ecto_repos: [Demo.Repo]
 
 # Configures the endpoint
-config :holograf, DemoWeb.Endpoint,
+config :hologram, DemoWeb.Endpoint,
   url: [host: "localhost"],
   secret_key_base: "yVz5aKrBHZaey4gZeR/oHoTTwxNKd28g4yGjTvZ18kwAAN6AAwf37h33edqpFPtV",
   render_errors: [view: DemoWeb.ErrorView, accepts: ~w(html json), layout: false],

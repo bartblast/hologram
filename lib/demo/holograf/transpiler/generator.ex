@@ -1,8 +1,8 @@
-defmodule Holograf.Transpiler.Generator do
-  alias Holograf.Transpiler.AST.{AtomType, BooleanType, IntegerType, StringType}
-  alias Holograf.Transpiler.AST.{ListType, MapType, StructType}
-  alias Holograf.Transpiler.AST.{MapAccess}
-  alias Holograf.Transpiler.AST.{Call, Function, Module, Variable}
+defmodule Hologram.Transpiler.Generator do
+  alias Hologram.Transpiler.AST.{AtomType, BooleanType, IntegerType, StringType}
+  alias Hologram.Transpiler.AST.{ListType, MapType, StructType}
+  alias Hologram.Transpiler.AST.{MapAccess}
+  alias Hologram.Transpiler.AST.{Call, Function, Module, Variable}
 
   # PRIMITIVE TYPES
 
@@ -55,19 +55,19 @@ defmodule Holograf.Transpiler.Generator do
   end
 
   defp generate_object_key(%AtomType{value: value}) do
-    "~Holograf.Transpiler.AST.AtomType[#{value}]"
+    "~Hologram.Transpiler.AST.AtomType[#{value}]"
   end
 
   defp generate_object_key(%BooleanType{value: value}) do
-    "~Holograf.Transpiler.AST.BooleanType[#{value}]"
+    "~Hologram.Transpiler.AST.BooleanType[#{value}]"
   end
 
   defp generate_object_key(%IntegerType{value: value}) do
-    "~Holograf.Transpiler.AST.IntegerType[#{value}]"
+    "~Hologram.Transpiler.AST.IntegerType[#{value}]"
   end
 
   defp generate_object_key(%StringType{value: value}) do
-    "~Holograf.Transpiler.AST.StringType[#{value}]"
+    "~Hologram.Transpiler.AST.StringType[#{value}]"
   end
 
   # OTHER
@@ -120,7 +120,7 @@ defmodule Holograf.Transpiler.Generator do
       body = generate_function_expressions(variant)
 
       code = """
-      #{statement} (Holograf.patternMatchFunctionArgs(#{params}, arguments)) {
+      #{statement} (Hologram.patternMatchFunctionArgs(#{params}, arguments)) {
       #{vars}
       #{body}
       }

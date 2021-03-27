@@ -1,14 +1,14 @@
-defmodule Holograf.Transpiler.TransformerTest do
+defmodule Hologram.Transpiler.TransformerTest do
   use ExUnit.Case
 
-  import Holograf.Transpiler.Parser, only: [parse!: 1]
+  import Hologram.Transpiler.Parser, only: [parse!: 1]
 
-  alias Holograf.Transpiler.AST.{AtomType, BooleanType, IntegerType, StringType}
-  alias Holograf.Transpiler.AST.{ListType, MapType, StructType}
-  alias Holograf.Transpiler.AST.MatchOperator
-  alias Holograf.Transpiler.AST.MapAccess
-  alias Holograf.Transpiler.AST.{Alias, Call, Function, Module, Variable}
-  alias Holograf.Transpiler.Transformer
+  alias Hologram.Transpiler.AST.{AtomType, BooleanType, IntegerType, StringType}
+  alias Hologram.Transpiler.AST.{ListType, MapType, StructType}
+  alias Hologram.Transpiler.AST.MatchOperator
+  alias Hologram.Transpiler.AST.MapAccess
+  alias Hologram.Transpiler.AST.{Alias, Call, Function, Module, Variable}
+  alias Hologram.Transpiler.Transformer
 
   describe "primitive types" do
     test "atom" do

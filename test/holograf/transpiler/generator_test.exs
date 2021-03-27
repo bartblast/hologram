@@ -1,10 +1,10 @@
-defmodule Holograf.Transpiler.GeneratorTest do
+defmodule Hologram.Transpiler.GeneratorTest do
   use ExUnit.Case
 
-  alias Holograf.Transpiler.AST.{AtomType, BooleanType, IntegerType, StringType}
-  alias Holograf.Transpiler.AST.{MapType, StructType}
-  alias Holograf.Transpiler.AST.{Call, Function, Module, Variable}
-  alias Holograf.Transpiler.Generator
+  alias Hologram.Transpiler.AST.{AtomType, BooleanType, IntegerType, StringType}
+  alias Hologram.Transpiler.AST.{MapType, StructType}
+  alias Hologram.Transpiler.AST.{Call, Function, Module, Variable}
+  alias Hologram.Transpiler.Generator
 
   describe "primitive types" do
     test "atom" do
@@ -44,7 +44,7 @@ defmodule Holograf.Transpiler.GeneratorTest do
       }
 
       result = Generator.generate(ast)
-      expected = "{ type: 'map', data: { '~Holograf.Transpiler.AST.AtomType[a]': { type: 'integer', value: 1 }, '~Holograf.Transpiler.AST.AtomType[b]': { type: 'integer', value: 2 } } }"
+      expected = "{ type: 'map', data: { '~Hologram.Transpiler.AST.AtomType[a]': { type: 'integer', value: 1 }, '~Hologram.Transpiler.AST.AtomType[b]': { type: 'integer', value: 2 } } }"
 
       assert result == expected
     end
@@ -74,7 +74,7 @@ defmodule Holograf.Transpiler.GeneratorTest do
       }
 
       result = Generator.generate(ast)
-      expected = "{ type: 'map', data: { '~Holograf.Transpiler.AST.AtomType[a]': { type: 'integer', value: 1 }, '~Holograf.Transpiler.AST.AtomType[b]': { type: 'map', data: { '~Holograf.Transpiler.AST.AtomType[c]': { type: 'integer', value: 2 }, '~Holograf.Transpiler.AST.AtomType[d]': { type: 'map', data: { '~Holograf.Transpiler.AST.AtomType[e]': { type: 'integer', value: 3 }, '~Holograf.Transpiler.AST.AtomType[f]': { type: 'integer', value: 4 } } } } } } }"
+      expected = "{ type: 'map', data: { '~Hologram.Transpiler.AST.AtomType[a]': { type: 'integer', value: 1 }, '~Hologram.Transpiler.AST.AtomType[b]': { type: 'map', data: { '~Hologram.Transpiler.AST.AtomType[c]': { type: 'integer', value: 2 }, '~Hologram.Transpiler.AST.AtomType[d]': { type: 'map', data: { '~Hologram.Transpiler.AST.AtomType[e]': { type: 'integer', value: 3 }, '~Hologram.Transpiler.AST.AtomType[f]': { type: 'integer', value: 4 } } } } } } }"
 
       assert result == expected
     end
@@ -95,7 +95,7 @@ defmodule Holograf.Transpiler.GeneratorTest do
       }
 
       result = Generator.generate(ast)
-      expected = "{ type: 'struct', module: 'Abc.Bcd', data: { '~Holograf.Transpiler.AST.AtomType[a]': { type: 'integer', value: 1 }, '~Holograf.Transpiler.AST.AtomType[b]': { type: 'integer', value: 2 } } }"
+      expected = "{ type: 'struct', module: 'Abc.Bcd', data: { '~Hologram.Transpiler.AST.AtomType[a]': { type: 'integer', value: 1 }, '~Hologram.Transpiler.AST.AtomType[b]': { type: 'integer', value: 2 } } }"
 
       assert result == expected
     end
@@ -128,7 +128,7 @@ defmodule Holograf.Transpiler.GeneratorTest do
       }
 
       result = Generator.generate(ast)
-      expected = "{ type: 'struct', module: 'Abc.Bcd', data: { '~Holograf.Transpiler.AST.AtomType[a]': { type: 'integer', value: 1 }, '~Holograf.Transpiler.AST.AtomType[b]': { type: 'struct', module: 'Bcd.Cde', data: { '~Holograf.Transpiler.AST.AtomType[c]': { type: 'integer', value: 2 }, '~Holograf.Transpiler.AST.AtomType[d]': { type: 'struct', module: 'Cde.Def', data: { '~Holograf.Transpiler.AST.AtomType[e]': { type: 'integer', value: 3 }, '~Holograf.Transpiler.AST.AtomType[f]': { type: 'integer', value: 4 } } } } } } }"
+      expected = "{ type: 'struct', module: 'Abc.Bcd', data: { '~Hologram.Transpiler.AST.AtomType[a]': { type: 'integer', value: 1 }, '~Hologram.Transpiler.AST.AtomType[b]': { type: 'struct', module: 'Bcd.Cde', data: { '~Hologram.Transpiler.AST.AtomType[c]': { type: 'integer', value: 2 }, '~Hologram.Transpiler.AST.AtomType[d]': { type: 'struct', module: 'Cde.Def', data: { '~Hologram.Transpiler.AST.AtomType[e]': { type: 'integer', value: 3 }, '~Hologram.Transpiler.AST.AtomType[f]': { type: 'integer', value: 4 } } } } } } }"
 
       assert result == expected
     end
@@ -193,11 +193,11 @@ defmodule Holograf.Transpiler.GeneratorTest do
       class PrefixTest {
 
       static test_1() {
-      if (Holograf.patternMatchFunctionArgs([ { type: 'variable' } ], arguments)) {
+      if (Hologram.patternMatchFunctionArgs([ { type: 'variable' } ], arguments)) {
       let a = arguments[0];
       return { type: 'integer', value: 1 };
       }
-      else if (Holograf.patternMatchFunctionArgs([ { type: 'variable' }, { type: 'variable' } ], arguments)) {
+      else if (Hologram.patternMatchFunctionArgs([ { type: 'variable' }, { type: 'variable' } ], arguments)) {
       let a = arguments[0];
       let b = arguments[1];
       { type: 'integer', value: 1 };
@@ -206,7 +206,7 @@ defmodule Holograf.Transpiler.GeneratorTest do
       }
 
       static test_2() {
-      if (Holograf.patternMatchFunctionArgs([ { type: 'variable' } ], arguments)) {
+      if (Hologram.patternMatchFunctionArgs([ { type: 'variable' } ], arguments)) {
       let a = arguments[0];
       return { type: 'integer', value: 1 };
       }
