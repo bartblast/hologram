@@ -26,7 +26,7 @@ defmodule Hologram.Transpiler.ParserTest do
 
   describe "parse_file/1" do
     test "valid code" do
-      assert {:ok, _} = Parser.parse_file("lib/demo/hologram/transpiler/transformer.ex")
+      assert {:ok, _} = Parser.parse_file("lib/hologram/transpiler/transformer.ex")
     end
 
     test "invalid code" do
@@ -36,7 +36,7 @@ defmodule Hologram.Transpiler.ParserTest do
 
   describe "parse_file!/1" do
     test "valid code" do
-      assert {:defmodule, _, _} = Parser.parse_file!("lib/demo/hologram/transpiler/transformer.ex")
+      assert {:defmodule, _, _} = Parser.parse_file!("lib/hologram/transpiler/transformer.ex")
     end
 
     test "invalid code" do

@@ -1,4 +1,4 @@
-defmodule Demo do
+defmodule DemoPage do
   use Hologram.Page
 
   # def state do
