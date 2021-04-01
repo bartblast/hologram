@@ -57,6 +57,7 @@ defmodule Demo.MixProject do
       {:jason, "~> 1.0"},
       {:plug_cowboy, "~> 2.0"},
       {:floki, "~> 0.30.0"},
+      {:saxy, "~> 1.3.0"},
 
       {:ex_doc, ">= 0.0.0", only: :dev, runtime: false}
     ]
