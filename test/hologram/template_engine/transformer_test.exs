@@ -11,7 +11,7 @@ defmodule Hologram.TemplateEngine.TransformerTest do
         parse!("<div><h1><span></span></h1></div>")
         |> Transformer.transform()
 
-      expected = [
+      expected =
         %TagNode{
           children: [
             %TagNode{
@@ -23,7 +23,6 @@ defmodule Hologram.TemplateEngine.TransformerTest do
           ],
           tag: "div"
         }
-      ]
 
       assert result == expected
     end
