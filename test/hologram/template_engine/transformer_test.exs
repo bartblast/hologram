@@ -14,10 +14,43 @@ defmodule Hologram.TemplateEngine.TransformerTest do
 
       expected =
         %TagNode{
+          attrs: %{},
           children: [
             %TagNode{
+              attrs: %{},
               children: [
-                %TagNode{children: [], tag: "span"}
+                %TagNode{attrs: %{}, children: [], tag: "span"}
+              ],
+              tag: "h1"
+            }
+          ],
+          tag: "div"
+        }
+
+      assert result == expected
+    end
+
+    test "tag nodes with attrs" do
+      html = """
+        <div class="class_1"><h1><span class="class_2" id="id_2"></span></h1></div>
+      """
+
+      result =
+        parse!(html)
+        |> Transformer.transform()
+
+      expected =
+        %TagNode{
+          attrs: %{"class" => "class_1"},
+          children: [
+            %TagNode{
+              attrs: %{},
+              children: [
+                %TagNode{
+                  attrs: %{"class" => "class_2", "id" => "id_2"},
+                  children: [],
+                  tag: "span"
+                }
               ],
               tag: "h1"
             }
@@ -35,11 +68,14 @@ defmodule Hologram.TemplateEngine.TransformerTest do
 
       expected =
         %TagNode{
+          attrs: %{},
           children: [
             %TextNode{text: "test_text_1"},
             %TagNode{
+              attrs: %{},
               children: [
                 %TagNode{
+                  attrs: %{},
                   children: [%TextNode{text: "test_text_2"}],
                   tag: "span"
                 }

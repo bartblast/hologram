@@ -4,7 +4,7 @@ defmodule Hologram.TemplateEngine.AST do
   end
 
   defmodule TagNode do
-    defstruct tag: nil, children: nil
+    defstruct tag: nil, attrs: nil, children: nil
   end
 
   defmodule TextNode do

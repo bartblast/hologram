@@ -7,10 +7,11 @@ defmodule Hologram.TemplateEngine.Transformer do
 
   def transform({type, attrs, children}, aliases) do
     children = Enum.map(children, fn child -> transform(child, aliases) end)
+    attrs = Enum.into(attrs, %{})
 
     case resolve_node_type(type, aliases) do
       :tag ->
-        %TagNode{tag: type, children: children}
+        %TagNode{tag: type, attrs: attrs, children: children}
       # TODO: imlement
       # :module ->
       #   %ComponentNode{module: module, children: children}
