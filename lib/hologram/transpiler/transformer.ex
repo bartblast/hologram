@@ -3,7 +3,7 @@ defmodule Hologram.Transpiler.Transformer do
   alias Hologram.Transpiler.AST.{ListType, MapType, StructType}
   alias Hologram.Transpiler.AST.MatchOperator
   alias Hologram.Transpiler.AST.MapAccess
-  alias Hologram.Transpiler.AST.{Alias, Call, Function, Module, Variable}
+  alias Hologram.Transpiler.AST.{Alias, Call, Function, Module, ModuleAttribute, Variable}
 
   def transform(ast, module \\ nil, aliases \\ %{})
 
@@ -163,6 +163,10 @@ defmodule Hologram.Transpiler.Transformer do
 
   def transform({name, _, nil}, _module, _aliases) when is_atom(name) do
     %Variable{name: name}
+  end
+
+  def transform({:@, _, [{name, _, _}]}, _module, _aliases) do
+    %ModuleAttribute{name: name}
   end
 
   def transform({function, _, params}, module, aliases) when is_atom(function) do

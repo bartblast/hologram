@@ -7,7 +7,7 @@ defmodule Hologram.Transpiler.TransformerTest do
   alias Hologram.Transpiler.AST.{ListType, MapType, StructType}
   alias Hologram.Transpiler.AST.MatchOperator
   alias Hologram.Transpiler.AST.MapAccess
-  alias Hologram.Transpiler.AST.{Alias, Call, Function, Module, Variable}
+  alias Hologram.Transpiler.AST.{Alias, Call, Function, Module, ModuleAttribute, Variable}
   alias Hologram.Transpiler.Transformer
 
   describe "primitive types" do
@@ -686,6 +686,11 @@ defmodule Hologram.Transpiler.TransformerTest do
     test "variable" do
       ast = parse!("x")
       assert Transformer.transform(ast) == %Variable{name: :x}
+    end
+
+    test "module attribute" do
+      ast = parse!("@x")
+      assert Transformer.transform(ast) == %ModuleAttribute{name: :x}
     end
   end
 end
