@@ -2,8 +2,7 @@ defmodule Hologram.TemplateEngine.TransformerTest do
   use ExUnit.Case
   import Hologram.TemplateEngine.Parser, only: [parse!: 1]
 
-  alias Hologram.TemplateEngine.AST.TagNode
-  alias Hologram.TemplateEngine.AST.TextNode
+  alias Hologram.TemplateEngine.AST.{ComponentNode, Expression, TagNode, TextNode}
   alias Hologram.TemplateEngine.Transformer
   alias Hologram.Transpiler.AST.{ModuleAttribute}
 
@@ -91,7 +90,7 @@ defmodule Hologram.TemplateEngine.TransformerTest do
       assert result == expected
     end
 
-    test "expression interpolation" do
+    test "expression interpolation in attrs" do
       html = """
         <div class="class_1" :if={{ @var_1 }} id="id_1" :show={{ @var_2 }}>
           <h1>
@@ -107,8 +106,8 @@ defmodule Hologram.TemplateEngine.TransformerTest do
       expected =
         %TagNode{
           attrs: %{
-            ":if" => %ModuleAttribute{name: :var_1},
-            ":show" => %ModuleAttribute{name: :var_2},
+            ":if" => %Expression{ast: %ModuleAttribute{name: :var_1}},
+            ":show" => %Expression{ast: %ModuleAttribute{name: :var_2}},
             "class" => "class_1",
             "id" => "id_1"
           },
@@ -120,8 +119,8 @@ defmodule Hologram.TemplateEngine.TransformerTest do
                 %TextNode{text: "\n      "},
                 %TagNode{
                   attrs: %{
-                    ":if" => %ModuleAttribute{name: :var_3},
-                    ":show" => %ModuleAttribute{name: :var_4},
+                    ":if" => %Expression{ast: %ModuleAttribute{name: :var_3}},
+                    ":show" => %Expression{ast: %ModuleAttribute{name: :var_4}},
                     "class" => "class_2",
                     "id" => "id_2"
                   },

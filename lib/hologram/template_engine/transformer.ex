@@ -1,7 +1,5 @@
 defmodule Hologram.TemplateEngine.Transformer do
-  alias Hologram.TemplateEngine.AST.ComponentNode
-  alias Hologram.TemplateEngine.AST.TagNode
-  alias Hologram.TemplateEngine.AST.TextNode
+  alias Hologram.TemplateEngine.AST.{ComponentNode, Expression, TagNode, TextNode}
   alias Hologram.Transpiler.Parser
   alias Hologram.Transpiler.Transformer
 
@@ -17,8 +15,11 @@ defmodule Hologram.TemplateEngine.Transformer do
         value =
           case Regex.run(regex, value) do
             [_, code] ->
-              Parser.parse!(code)
-              |> Hologram.Transpiler.Transformer.transform()
+              ast =
+                Parser.parse!(code)
+                |> Hologram.Transpiler.Transformer.transform()
+
+              %Expression{ast: ast}
             _ ->
               value
           end

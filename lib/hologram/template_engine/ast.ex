@@ -1,10 +1,10 @@
 defmodule Hologram.TemplateEngine.AST do
-  defmodule AttributeValue do
-    defstruct ast: nil, text: nil
-  end
-
   defmodule ComponentNode do
     defstruct module: nil, children: nil
+  end
+
+  defmodule Expression do
+    defstruct ast: nil
   end
 
   defmodule TagNode do
