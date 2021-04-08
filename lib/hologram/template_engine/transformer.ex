@@ -1,12 +1,15 @@
 defmodule Hologram.TemplateEngine.Transformer do
   alias Hologram.TemplateEngine.AST.{ComponentNode, Expression, TagNode, TextNode}
+  alias Hologram.TemplateEngine.Interpolator
   alias Hologram.Transpiler.Parser
   alias Hologram.Transpiler.Transformer
 
   def transform(ast, aliases \\ %{})
 
   def transform({type, attrs, children}, aliases) do
-    children = Enum.map(children, fn child -> transform(child, aliases) end)
+    children =
+      Enum.map(children, fn child -> transform(child, aliases) end)
+      |> Interpolator.interpolate()
 
     attrs =
       Enum.map(attrs, fn {key, value} ->

@@ -138,5 +138,31 @@ defmodule Hologram.TemplateEngine.TransformerTest do
 
       assert result == expected
     end
+
+    test "expression interpolation in text" do
+      html = "<div>test_1{{ @x1 }}test_2{{ @x2 }}test_3</div>"
+
+      result =
+        parse!(html)
+        |> Transformer.transform()
+
+      expected = %TagNode{
+        attrs: %{},
+        children: [
+          %TextNode{text: "test_1"},
+          %Expression{
+            ast: %ModuleAttribute{name: :x1}
+          },
+          %TextNode{text: "test_2"},
+          %Expression{
+            ast: %ModuleAttribute{name: :x2}
+          },
+          %TextNode{text: "test_3"}
+        ],
+        tag: "div"
+      }
+
+      assert result == expected
+    end
   end
 end
