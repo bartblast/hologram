@@ -8,6 +8,12 @@ defmodule DemoPage do
   #   }
   # end
 
+  def render do
+    ~H"""
+      <div>Hello World</div>
+    """
+  end
+
   def action(:increment, _params, state) do
     assign(state, :counter, 1)
   end
