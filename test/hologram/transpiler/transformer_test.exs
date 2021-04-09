@@ -362,7 +362,30 @@ defmodule Hologram.Transpiler.TransformerTest do
       assert result == expected
     end
 
-    # TODO: test functions with 0 and 1 params
+    # TODO: test function with 1 param only
+
+    test "function definition, no params, single expression" do
+      code = """
+        def test do
+          1
+        end
+      """
+
+      result =
+        parse!(code)
+        |> Transformer.transform()
+
+      expected = %Function{
+        bindings: [],
+        body: [
+          %IntegerType{value: 1}
+        ],
+        name: :test,
+        params: []
+      }
+
+      assert result == expected
+    end
 
     test "function definition, multiple params, single expression" do
       code = """

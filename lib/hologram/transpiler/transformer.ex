@@ -92,6 +92,11 @@ defmodule Hologram.Transpiler.Transformer do
     %Alias{module: module}
   end
 
+  def transform({:def, _, [{name, _, nil}, [do: body]]}, module, aliases) do
+    body = transform_function_body(body, module, aliases)
+    %Function{name: name, params: [], bindings: [], body: body}
+  end
+
   def transform({:def, _, [{name, _, params}, [do: body]]}, module, aliases) do
     params = Enum.map(params, fn param -> transform(param, module, aliases) end)
 
@@ -107,16 +112,19 @@ defmodule Hologram.Transpiler.Transformer do
       end)
       |> Enum.reject(fn item -> item == nil end)
 
-    body =
-      case body do
-        {:__block__, _, block} ->
-          block
-        expr ->
-          [expr]
-      end
-      |> Enum.map(fn expr -> transform(expr, module, aliases) end)
+    body = transform_function_body(body, module, aliases)
 
     %Function{name: name, params: params, bindings: bindings, body: body}
+  end
+
+  defp transform_function_body(body, module, aliases) do
+    case body do
+      {:__block__, _, block} ->
+        block
+      expr ->
+        [expr]
+    end
+    |> Enum.map(fn expr -> transform(expr, module, aliases) end)
   end
 
   def transform({:defmodule, _, [{:__aliases__, _, name}, [do: {:__block__, _, ast}]]}, _module, _aliases) do
@@ -168,7 +176,8 @@ defmodule Hologram.Transpiler.Transformer do
   end
 
   defp eliminated?(name, params) do
-    Enum.count(params) in Keyword.get_values(@eliminated_functions, name)
+    count = if params, do: Enum.count(params), else: 0
+    count in Keyword.get_values(@eliminated_functions, name)
   end
 
   def transform({name, _, nil}, _module, _aliases) when is_atom(name) do
