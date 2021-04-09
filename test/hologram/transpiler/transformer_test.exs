@@ -516,6 +516,46 @@ defmodule Hologram.Transpiler.TransformerTest do
       assert result == expected
     end
 
+    test "eliminated functions" do
+      code = """
+      defmodule Abc do
+        def render(a) do
+          1
+        end
+
+        def test(b) do
+          2
+        end
+
+        def render(c, d) do
+          3
+        end
+      end
+      """
+
+      result =
+        parse!(code)
+        |> Transformer.transform()
+        |> Map.get(:functions)
+
+      expected = [
+        %Function{
+          bindings: [[%Variable{name: :a}]],
+          body: [%IntegerType{value: 1}],
+          name: :render,
+          params: [%Variable{name: :a}]
+        },
+        %Function{
+          bindings: [[%Variable{name: :b}]],
+          body: [%IntegerType{value: 2}],
+          name: :test,
+          params: [%Variable{name: :b}]
+        }
+      ]
+
+      assert result == expected
+    end
+
     test "module without aliases" do
       code = """
         defmodule Prefix.Test do

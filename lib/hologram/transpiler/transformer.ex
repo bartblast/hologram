@@ -5,6 +5,8 @@ defmodule Hologram.Transpiler.Transformer do
   alias Hologram.Transpiler.AST.MapAccess
   alias Hologram.Transpiler.AST.{Alias, Call, Function, Module, ModuleAttribute, Variable}
 
+  @eliminated_functions [render: 2]
+
   def transform(ast, module \\ nil, aliases \\ %{})
 
   # PRIMITIVE TYPES
@@ -153,12 +155,20 @@ defmodule Hologram.Transpiler.Transformer do
   defp aggregate_functions(ast, module, aliases) do
     Enum.reduce(ast, [], fn expr, acc ->
       case expr do
-        {:def, _, _} ->
-          acc ++ [transform(expr, module, aliases)]
+        {:def, _, [{name, _, params}, _]} ->
+          if eliminated?(name, params) do
+            acc
+          else
+            acc ++ [transform(expr, module, aliases)]
+          end
         _ ->
           acc
       end
     end)
+  end
+
+  defp eliminated?(name, params) do
+    Enum.count(params) in Keyword.get_values(@eliminated_functions, name)
   end
 
   def transform({name, _, nil}, _module, _aliases) when is_atom(name) do
