@@ -6,4 +6,6 @@ defmodule Hologram.Page do
   end
 
   def assign(_, _, _), do: nil
+
+  def sigil_H(str, []), do: str
 end
