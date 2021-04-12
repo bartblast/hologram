@@ -563,16 +563,16 @@ defmodule Hologram.Transpiler.TransformerTest do
 
       expected = [
         %Function{
-          bindings: [[%Variable{name: :a}]],
-          body: [%IntegerType{value: 1}],
-          name: :render,
-          params: [%Variable{name: :a}]
-        },
-        %Function{
           bindings: [[%Variable{name: :b}]],
           body: [%IntegerType{value: 2}],
           name: :test,
           params: [%Variable{name: :b}]
+        },
+        %Function{
+          bindings: [[%Variable{name: :c}], [%Variable{name: :d}]],
+          body: [%IntegerType{value: 3}],
+          name: :render,
+          params: [%Variable{name: :c}, %Variable{name: :d}]
         }
       ]
 

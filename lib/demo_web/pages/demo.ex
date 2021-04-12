@@ -8,7 +8,7 @@ defmodule DemoPage do
   #   }
   # end
 
-  def render do
+  def render(state) do
     ~H"""
       <div>Hello World</div>
     """

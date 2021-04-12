@@ -5,7 +5,7 @@ defmodule Hologram.Transpiler.Transformer do
   alias Hologram.Transpiler.AST.MapAccess
   alias Hologram.Transpiler.AST.{Alias, Call, Function, Module, ModuleAttribute, Variable}
 
-  @eliminated_functions [render: 2]
+  @eliminated_functions [render: 1]
 
   def transform(ast, module \\ nil, aliases \\ %{})
 
