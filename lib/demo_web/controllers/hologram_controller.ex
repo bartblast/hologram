@@ -1,24 +1,34 @@
+# DEFER: test
 defmodule DemoWeb.HologramController do
   use DemoWeb, :controller
 
-  alias Hologram.Transpiler.Generator
-  alias Hologram.Transpiler.Parser
-  alias Hologram.Transpiler.Transformer
+  alias Hologram.TemplateEngine
+  alias Hologram.Transpiler
 
   def index(conn, params) do
     module = conn.private.hologram_view
     source = module.module_info()[:compile][:source]
 
-    # TODO: implement Transpiler.transpile_file!/1
-    js =
-      Parser.parse_file!(source)
-      |> Transformer.transform()
-      |> Generator.generate()
+    # TODO: implement state
+    state = %{}
 
-    html(conn, generate_html(conn, js))
+    # DEFER: use .holo template files
+    html =
+      module.render(state)
+      |> TemplateEngine.Parser.parse!()
+      |> TemplateEngine.Transformer.transform()
+      |> TemplateEngine.Renderer.render(state)
+
+    # DEFER: implement Transpiler.transpile_file!/1
+    js =
+      Transpiler.Parser.parse_file!(source)
+      |> Transpiler.Transformer.transform()
+      |> Transpiler.Generator.generate()
+
+    html(conn, generate_html(conn, html, js))
   end
 
-  defp generate_html(conn, js) do
+  defp generate_html(conn, html, js) do
     """
     <!DOCTYPE html>
     <html>
@@ -30,6 +40,7 @@ defmodule DemoWeb.HologramController do
         </script>
       </head>
       <body>
+    #{html}
       </body>
     </html>
     """
