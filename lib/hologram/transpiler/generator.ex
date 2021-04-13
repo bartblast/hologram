@@ -191,7 +191,7 @@ defmodule Hologram.Transpiler.Generator do
 
   # HELPERS
 
-  def generate_class_name(module) do
+  defp generate_class_name(module) do
     generate_module_fully_qualified_name(module)
     |> String.replace(".", "")
   end
