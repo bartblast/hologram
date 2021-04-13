@@ -1,8 +1,14 @@
 defmodule Hologram.TemplateEngine.Renderer do
+  alias Hologram.TemplateEngine.AST.Expression
   alias Hologram.TemplateEngine.AST.TagNode
   alias Hologram.TemplateEngine.AST.TextNode
+  alias Hologram.TemplateEngine.Evaluator
 
   def render(ast, state)
+
+  def render(%Expression{ast: ast}, state) do
+    Evaluator.evaluate(ast, state)
+  end
 
   def render(%TagNode{attrs: attrs, children: children, tag: tag}, state) do
     attrs_html =

@@ -1,9 +1,11 @@
 defmodule Hologram.TemplateEngine.RendererTest do
   use ExUnit.Case, async: true
 
+  alias Hologram.TemplateEngine.AST.Expression
   alias Hologram.TemplateEngine.AST.TagNode
   alias Hologram.TemplateEngine.AST.TextNode
   alias Hologram.TemplateEngine.Renderer
+  alias Hologram.Transpiler.AST.ModuleAttribute
 
   test "tag node" do
     ast = %TagNode{attrs: %{attr_1: "test_attr_value_1", attr_2: "test_attr_value_2"}, tag: "div", children: [
@@ -22,6 +24,16 @@ defmodule Hologram.TemplateEngine.RendererTest do
 
     result = Renderer.render(ast, %{})
     expected = "test"
+
+    assert result == expected
+  end
+
+  test "expression" do
+    ast = %Expression{ast: %ModuleAttribute{name: :a}}
+    state = %{a: 123}
+
+    result = Renderer.render(ast, state)
+    expected = "123"
 
     assert result == expected
   end
