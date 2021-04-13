@@ -3,14 +3,14 @@ defmodule DemoPage do
 
   def state do
     %{
-      a: 123,
-      b: 234
+      counter: 0
     }
   end
 
   def render(state) do
     ~H"""
-      <div>Hello World {{ @a }}</div>
+      <div>Hello World {{ @counter }}</div>
+      <div><button :click="increment">Increment</button></div>
     """
   end
 
