@@ -6,6 +6,10 @@ defmodule Hologram.TemplateEngine.Transformer do
 
   def transform(ast, aliases \\ %{})
 
+  def transform(nodes, aliases) when is_list(nodes) do
+    Enum.map(nodes, fn node -> transform(node, aliases) end)
+  end
+
   def transform({type, attrs, children}, aliases) do
     children =
       Enum.map(children, fn child -> transform(child, aliases) end)

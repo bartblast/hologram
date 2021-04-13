@@ -13,7 +13,7 @@ defmodule Hologram.TemplateEngine.TransformerTest do
         parse!("<div><h1><span></span></h1></div>")
         |> Transformer.transform()
 
-      expected =
+      expected = [
         %TagNode{
           attrs: %{},
           children: [
@@ -27,20 +27,21 @@ defmodule Hologram.TemplateEngine.TransformerTest do
           ],
           tag: "div"
         }
+      ]
 
       assert result == expected
     end
 
     test "tag nodes with attrs" do
       html = """
-        <div class="class_1"><h1><span class="class_2" id="id_2"></span></h1></div>
+      <div class="class_1"><h1><span class="class_2" id="id_2"></span></h1></div>
       """
 
       result =
         parse!(html)
         |> Transformer.transform()
 
-      expected =
+      expected = [
         %TagNode{
           attrs: %{"class" => "class_1"},
           children: [
@@ -57,7 +58,9 @@ defmodule Hologram.TemplateEngine.TransformerTest do
             }
           ],
           tag: "div"
-        }
+        },
+        %TextNode{text: "\n"}
+      ]
 
       assert result == expected
     end
@@ -67,7 +70,7 @@ defmodule Hologram.TemplateEngine.TransformerTest do
         parse!("<div>test_text_1<h1><span>test_text_2</span></h1></div>")
         |> Transformer.transform()
 
-      expected =
+      expected = [
         %TagNode{
           attrs: %{},
           children: [
@@ -86,24 +89,25 @@ defmodule Hologram.TemplateEngine.TransformerTest do
           ],
           tag: "div"
         }
+      ]
 
       assert result == expected
     end
 
     test "expression interpolation in attrs" do
       html = """
-        <div class="class_1" :if={{ @var_1 }} id="id_1" :show={{ @var_2 }}>
-          <h1>
-            <span class="class_2" :if={{ @var_3 }} id="id_2" :show={{ @var_4 }}></span>
-          </h1>
-        </div>
+      <div class="class_1" :if={{ @var_1 }} id="id_1" :show={{ @var_2 }}>
+        <h1>
+          <span class="class_2" :if={{ @var_3 }} id="id_2" :show={{ @var_4 }}></span>
+        </h1>
+      </div>
       """
 
       result =
         parse!(html)
         |> Transformer.transform()
 
-      expected =
+      expected = [
         %TagNode{
           attrs: %{
             ":if" => %Expression{ast: %ModuleAttribute{name: :var_1}},
@@ -112,11 +116,11 @@ defmodule Hologram.TemplateEngine.TransformerTest do
             "id" => "id_1"
           },
           children: [
-            %TextNode{text: "\n    "},
+            %TextNode{text: "\n  "},
             %TagNode{
               attrs: %{},
               children: [
-                %TextNode{text: "\n      "},
+                %TextNode{text: "\n    "},
                 %TagNode{
                   attrs: %{
                     ":if" => %Expression{ast: %ModuleAttribute{name: :var_3}},
@@ -127,14 +131,16 @@ defmodule Hologram.TemplateEngine.TransformerTest do
                   children: [],
                   tag: "span"
                 },
-                %TextNode{text: "\n    "}
+                %TextNode{text: "\n  "}
               ],
               tag: "h1"
             },
-            %TextNode{text: "\n  "}
+            %TextNode{text: "\n"}
           ],
           tag: "div"
-        }
+        },
+        %TextNode{text: "\n"}
+      ]
 
       assert result == expected
     end
@@ -146,21 +152,23 @@ defmodule Hologram.TemplateEngine.TransformerTest do
         parse!(html)
         |> Transformer.transform()
 
-      expected = %TagNode{
-        attrs: %{},
-        children: [
-          %TextNode{text: "test_1"},
-          %Expression{
-            ast: %ModuleAttribute{name: :x1}
-          },
-          %TextNode{text: "test_2"},
-          %Expression{
-            ast: %ModuleAttribute{name: :x2}
-          },
-          %TextNode{text: "test_3"}
-        ],
-        tag: "div"
-      }
+      expected = [
+        %TagNode{
+          attrs: %{},
+          children: [
+            %TextNode{text: "test_1"},
+            %Expression{
+              ast: %ModuleAttribute{name: :x1}
+            },
+            %TextNode{text: "test_2"},
+            %Expression{
+              ast: %ModuleAttribute{name: :x2}
+            },
+            %TextNode{text: "test_3"}
+          ],
+          tag: "div"
+        }
+      ]
 
       assert result == expected
     end
