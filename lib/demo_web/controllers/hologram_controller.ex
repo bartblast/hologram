@@ -24,10 +24,17 @@ defmodule DemoWeb.HologramController do
       |> Transpiler.Transformer.transform()
       |> Transpiler.Generator.generate()
 
-    html(conn, generate_html(conn, html, js))
+    class_name =
+      module
+      |> to_string()
+      |> String.split(".")
+      |> tl()
+      |> Enum.join("")
+
+    html(conn, generate_html(conn, html, class_name, js))
   end
 
-  defp generate_html(conn, html, js) do
+  defp generate_html(conn, html, class_name, js) do
     """
     <!DOCTYPE html>
     <html>
@@ -36,6 +43,7 @@ defmodule DemoWeb.HologramController do
         <script  src="#{Routes.static_path(conn, "/js/hologram.js")}"></script>
         <script>
     #{js}
+    let state = #{class_name}.state();
         </script>
       </head>
       <body>
