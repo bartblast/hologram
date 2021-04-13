@@ -2,8 +2,16 @@ defmodule Hologram.TemplateEngine.Parser do
   use Hologram.Parser
 
   def parse(str) do
-    fix_quotes(str)
-    |> Saxy.SimpleForm.parse_string()
+    result =
+      "<root>" <> fix_quotes(str) <> "</root>"
+      |> Saxy.SimpleForm.parse_string()
+
+    case result do
+      {:ok, {"root", [], nodes}} ->
+        {:ok, nodes}
+      _ ->
+        result
+    end
   end
 
   defp fix_quotes(str) do
