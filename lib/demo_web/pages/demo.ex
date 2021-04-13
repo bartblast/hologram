@@ -1,16 +1,16 @@
 defmodule DemoPage do
   use Hologram.Page
 
-  # def state do
-  #   %{
-  #     a: 1,
-  #     b: 2
-  #   }
-  # end
+  def state do
+    %{
+      a: 123,
+      b: 234
+    }
+  end
 
   def render(state) do
     ~H"""
-      <div>Hello World</div>
+      <div>Hello World {{ @a }}</div>
     """
   end
 

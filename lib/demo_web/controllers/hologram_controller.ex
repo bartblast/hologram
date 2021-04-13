@@ -9,8 +9,7 @@ defmodule DemoWeb.HologramController do
     module = conn.private.hologram_view
     source = module.module_info()[:compile][:source]
 
-    # TODO: implement state
-    state = %{}
+    state = module.state()
 
     # DEFER: use .holo template files
     html =
