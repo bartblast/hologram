@@ -1,4 +1,4 @@
-ga defmodule Hologram.TemplateEngine.Renderer do
+defmodule Hologram.TemplateEngine.Renderer do
   alias Hologram.TemplateEngine.AST.Expression
   alias Hologram.TemplateEngine.AST.TagNode
   alias Hologram.TemplateEngine.AST.TextNode
