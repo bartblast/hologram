@@ -9,7 +9,7 @@ defmodule Hologram.TemplateEngine.EvaluatorTest do
     ast = %ModuleAttribute{name: :a}
 
     result = Evaluator.evaluate(ast, state)
-    expected = "123"
+    expected = 123
 
     assert result == expected
   end
