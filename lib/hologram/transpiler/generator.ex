@@ -112,22 +112,31 @@ defmodule Hologram.Transpiler.Generator do
   end
 
   defp generate_function_body(variants) do
-    Enum.reduce(variants, "", fn variant, acc ->
-      statement = if acc == "", do: "if", else: "else if"
+    valid_cases =
+      Enum.reduce(variants, "", fn variant, acc ->
+        statement = if acc == "", do: "if", else: "else if"
 
-      params = generate_function_params(variant)
-      vars = generate_function_vars(variant)
-      body = generate_function_expressions(variant)
+        params = generate_function_params(variant)
+        vars = generate_function_vars(variant)
+        body = generate_function_expressions(variant)
 
-      code = """
-      #{statement} (Hologram.patternMatchFunctionArgs(#{params}, arguments)) {
-      #{vars}
-      #{body}
-      }
-      """
+        code = """
+        #{statement} (Hologram.patternMatchFunctionArgs(#{params}, arguments)) {
+        #{vars}
+        #{body}
+        }
+        """
 
-      acc <> code
-    end)
+        acc <> code
+      end)
+
+    invalid_case = """
+    else {
+      throw 'No match for the function call'
+    }
+    """
+
+    valid_cases <> invalid_case
   end
 
   defp generate_function_expressions(variant) do

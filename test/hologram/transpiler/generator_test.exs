@@ -203,12 +203,18 @@ defmodule Hologram.Transpiler.GeneratorTest do
       { type: 'integer', value: 1 };
       return { type: 'integer', value: 2 };
       }
+      else {
+        throw 'No match for the function call'
+      }
       }
 
       static test_2() {
       if (Hologram.patternMatchFunctionArgs([ { type: 'variable' } ], arguments)) {
       let a = arguments[0];
       return { type: 'integer', value: 1 };
+      }
+      else {
+        throw 'No match for the function call'
       }
       }
 
