@@ -7,6 +7,18 @@ defmodule Hologram.TemplateEngine.RendererTest do
   alias Hologram.TemplateEngine.Renderer
   alias Hologram.Transpiler.AST.ModuleAttribute
 
+  test "multiple nodes" do
+    nodes = [
+      %TextNode{text: "test_1"},
+      %TextNode{text: "test_2"},
+    ]
+
+    result = Renderer.render(nodes, %{})
+    expected = "test_1test_2"
+
+    assert result == expected
+  end
+
   test "tag node" do
     ast = %TagNode{attrs: %{attr_1: "test_attr_value_1", attr_2: "test_attr_value_2"}, tag: "div", children: [
       %TextNode{text: "test_text"},

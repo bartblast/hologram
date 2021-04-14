@@ -6,6 +6,11 @@ defmodule Hologram.TemplateEngine.Renderer do
 
   def render(ast, state)
 
+  def render(nodes, aliases) when is_list(nodes) do
+    Enum.map(nodes, fn node -> render(node, aliases) end)
+    |> Enum.join("")
+  end
+
   def render(%Expression{ast: ast}, state) do
     Evaluator.evaluate(ast, state)
     |> to_string()
