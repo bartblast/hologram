@@ -49,4 +49,15 @@ defmodule Hologram.TemplateEngine.RendererTest do
 
     assert result == expected
   end
+
+  describe "translate attribute" do
+    test ":click" do
+      node = %TagNode{attrs: %{":click" => "test"}, children: [], tag: "div"}
+
+      result = Renderer.render(node, %{})
+      expected = "<div holo-click=\"test\"></div>"
+
+      assert result == expected
+    end
+  end
 end
