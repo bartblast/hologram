@@ -3,20 +3,6 @@
 import { cloneDeep } from 'lodash';
 
 class Hologram {
-  static patternMatchFunctionArgs(params, args) {
-    if (args.length != params.length) {
-      return false;
-    }
-
-    for (let i = 0; i < params.length; ++ i) {
-      if (!Hologram.isPatternMatched(params[i], args[i])) {
-        return false;
-      }
-    }
-
-    return true;
-  }
-
   static isPatternMatched(left, right) {
     let lType = left.type;
     let rType = right.type;
@@ -32,6 +18,47 @@ class Hologram {
     }
 
     return true;
+  }
+
+  static onReady(document, callback) {
+    if (
+      document.readyState === "interactive" ||
+      document.readyState === "complete"
+    ) {
+      callback();
+    } else {
+      let that = this;
+      document.addEventListener("DOMContentLoaded", function listener() {
+        document.removeEventListener("DOMContentLoaded", listener);
+        callback();
+      });
+    }
+  }
+
+  static patternMatchFunctionArgs(params, args) {
+    if (args.length != params.length) {
+      return false;
+    }
+
+    for (let i = 0; i < params.length; ++ i) {
+      if (!Hologram.isPatternMatched(params[i], args[i])) {
+        return false;
+      }
+    }
+
+    return true;
+  }
+
+  static startEventLoop(window, state) {
+    let callback =  () => {
+      document.querySelectorAll("[holo-click]").forEach(element => {
+        element.addEventListener("click", () => {
+          alert("clicked")
+        })
+      })
+    }   
+
+    Hologram.onReady(window.document, callback)
   }
 }
 

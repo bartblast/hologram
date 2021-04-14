@@ -43,7 +43,8 @@ defmodule DemoWeb.HologramController do
         <script  src="#{Routes.static_path(conn, "/js/hologram.js")}"></script>
         <script>
     #{js}
-    let state = #{class_name}.state();
+    const state = #{class_name}.state();
+    Hologram.startEventLoop(window, state)
         </script>
       </head>
       <body>
