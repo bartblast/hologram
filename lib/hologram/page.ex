@@ -5,7 +5,7 @@ defmodule Hologram.Page do
     end
   end
 
-  def sigil_H(str, []), do: str
+  def sigil_H(str, [] = _modifiers), do: str
 
   def update(_state, _key, _value), do: nil
 end
