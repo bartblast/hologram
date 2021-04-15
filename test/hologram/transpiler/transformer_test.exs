@@ -7,7 +7,7 @@ defmodule Hologram.Transpiler.TransformerTest do
   alias Hologram.Transpiler.AST.{ListType, MapType, StructType}
   alias Hologram.Transpiler.AST.MatchOperator
   alias Hologram.Transpiler.AST.MapAccess
-  alias Hologram.Transpiler.AST.{Alias, Call, Function, Module, ModuleAttribute, Variable}
+  alias Hologram.Transpiler.AST.{Alias, Call, Function, Import, Module, ModuleAttribute, Variable}
   alias Hologram.Transpiler.Transformer
 
   describe "primitive types" do
@@ -259,12 +259,24 @@ defmodule Hologram.Transpiler.TransformerTest do
   end
 
   describe "other" do
+    test "import" do
+      result =
+        parse!("import Prefix.Test")
+        |> Transformer.transform()
+
+        expected = %Import{module: [:Prefix, :Test]}
+
+        assert result == expected
+    end
+
     test "alias" do
       result =
         parse!("alias Prefix.Test")
         |> Transformer.transform()
 
       expected = %Alias{module: [:Prefix, :Test]}
+
+      assert result == expected
     end
 
     test "function call on the current module" do
@@ -755,19 +767,5 @@ defmodule Hologram.Transpiler.TransformerTest do
       ast = parse!("@x")
       assert Transformer.transform(ast) == %ModuleAttribute{name: :x}
     end
-  end
-
-  test "test" do
-    ast = Hologram.Transpiler.Parser.parse_file!("lib/demo_web/pages/demo.ex")
-    # IO.inspect(ast)
-
-    module =
-    [:Elixir, :Hologram, :Page]
-    |> Enum.join(".")
-    |> String.to_existing_atom()
-
-    filepath = module.module_info()[:compile][:source]
-    ast = Hologram.Transpiler.Parser.parse_file!(filepath)
-    IO.inspect(ast)
   end
 end

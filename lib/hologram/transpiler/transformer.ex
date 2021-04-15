@@ -3,7 +3,7 @@ defmodule Hologram.Transpiler.Transformer do
   alias Hologram.Transpiler.AST.{ListType, MapType, StructType}
   alias Hologram.Transpiler.AST.MatchOperator
   alias Hologram.Transpiler.AST.MapAccess
-  alias Hologram.Transpiler.AST.{Alias, Call, Function, Module, ModuleAttribute, Variable}
+  alias Hologram.Transpiler.AST.{Alias, Call, Function, Import, Module, ModuleAttribute, Variable}
 
   @eliminated_functions [render: 1]
 
@@ -139,6 +139,10 @@ defmodule Hologram.Transpiler.Transformer do
   defp eliminated_function?(name, params) do
     count = if params, do: Enum.count(params), else: 0
     count in Keyword.get_values(@eliminated_functions, name)
+  end
+
+  def transform({:import, _, [{:__aliases__, _, module}]}, _parent_module, _aliases) do
+    %Import{module: module}
   end
 
   def transform({:alias, _, [{:__aliases__, _, module}]}, _parent_module, _aliases) do
