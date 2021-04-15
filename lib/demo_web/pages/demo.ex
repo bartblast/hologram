@@ -15,11 +15,11 @@ defmodule DemoPage do
   end
 
   def action(:increment, _params, state) do
-    assign(state, :counter, 1)
+    update(state, :counter, 1)
   end
 
   def action(:decrement, _params, state) do
-    assign(state, :counter, 0)
+    update(state, :counter, 0)
   end
 
   # def command(:save_record, value) do
