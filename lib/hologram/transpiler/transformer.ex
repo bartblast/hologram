@@ -164,7 +164,7 @@ defmodule Hologram.Transpiler.Transformer do
     Enum.reduce(ast, [], fn expr, acc ->
       case expr do
         {:def, _, [{name, _, params}, _]} ->
-          if eliminated?(name, params) do
+          if eliminated_function?(name, params) do
             acc
           else
             acc ++ [transform(expr, module, aliases)]
@@ -175,7 +175,7 @@ defmodule Hologram.Transpiler.Transformer do
     end)
   end
 
-  defp eliminated?(name, params) do
+  defp eliminated_function?(name, params) do
     count = if params, do: Enum.count(params), else: 0
     count in Keyword.get_values(@eliminated_functions, name)
   end
