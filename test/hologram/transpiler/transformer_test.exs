@@ -756,4 +756,18 @@ defmodule Hologram.Transpiler.TransformerTest do
       assert Transformer.transform(ast) == %ModuleAttribute{name: :x}
     end
   end
+
+  test "test" do
+    ast = Hologram.Transpiler.Parser.parse_file!("lib/demo_web/pages/demo.ex")
+    # IO.inspect(ast)
+
+    module =
+    [:Elixir, :Hologram, :Page]
+    |> Enum.join(".")
+    |> String.to_existing_atom()
+
+    filepath = module.module_info()[:compile][:source]
+    ast = Hologram.Transpiler.Parser.parse_file!(filepath)
+    IO.inspect(ast)
+  end
 end

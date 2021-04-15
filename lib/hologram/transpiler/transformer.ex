@@ -88,45 +88,6 @@ defmodule Hologram.Transpiler.Transformer do
 
   # OTHER
 
-  def transform({:alias, _, [{:__aliases__, _, module}]}, _parent_module, _aliases) do
-    %Alias{module: module}
-  end
-
-  def transform({:def, _, [{name, _, nil}, [do: body]]}, module, aliases) do
-    body = transform_function_body(body, module, aliases)
-    %Function{name: name, params: [], bindings: [], body: body}
-  end
-
-  def transform({:def, _, [{name, _, params}, [do: body]]}, module, aliases) do
-    params = Enum.map(params, fn param -> transform(param, module, aliases) end)
-
-    bindings =
-      Enum.map(params, fn param ->
-        case aggregate_bindings(param) do
-          [] ->
-            nil
-          path ->
-            path
-            |> hd()
-        end
-      end)
-      |> Enum.reject(fn item -> item == nil end)
-
-    body = transform_function_body(body, module, aliases)
-
-    %Function{name: name, params: params, bindings: bindings, body: body}
-  end
-
-  defp transform_function_body(body, module, aliases) do
-    case body do
-      {:__block__, _, block} ->
-        block
-      expr ->
-        [expr]
-    end
-    |> Enum.map(fn expr -> transform(expr, module, aliases) end)
-  end
-
   def transform({:defmodule, _, [{:__aliases__, _, name}, [do: {:__block__, _, ast}]]}, _module, _aliases) do
     aliases = aggregate_aliases(ast)
     functions = aggregate_functions(ast, name, aliases)
@@ -178,6 +139,45 @@ defmodule Hologram.Transpiler.Transformer do
   defp eliminated_function?(name, params) do
     count = if params, do: Enum.count(params), else: 0
     count in Keyword.get_values(@eliminated_functions, name)
+  end
+
+  def transform({:alias, _, [{:__aliases__, _, module}]}, _parent_module, _aliases) do
+    %Alias{module: module}
+  end
+
+  def transform({:def, _, [{name, _, nil}, [do: body]]}, module, aliases) do
+    body = transform_function_body(body, module, aliases)
+    %Function{name: name, params: [], bindings: [], body: body}
+  end
+
+  def transform({:def, _, [{name, _, params}, [do: body]]}, module, aliases) do
+    params = Enum.map(params, fn param -> transform(param, module, aliases) end)
+
+    bindings =
+      Enum.map(params, fn param ->
+        case aggregate_bindings(param) do
+          [] ->
+            nil
+          path ->
+            path
+            |> hd()
+        end
+      end)
+      |> Enum.reject(fn item -> item == nil end)
+
+    body = transform_function_body(body, module, aliases)
+
+    %Function{name: name, params: params, bindings: bindings, body: body}
+  end
+
+  defp transform_function_body(body, module, aliases) do
+    case body do
+      {:__block__, _, block} ->
+        block
+      expr ->
+        [expr]
+    end
+    |> Enum.map(fn expr -> transform(expr, module, aliases) end)
   end
 
   def transform({name, _, nil}, _module, _aliases) when is_atom(name) do
