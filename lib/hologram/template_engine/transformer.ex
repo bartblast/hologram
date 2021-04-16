@@ -1,8 +1,7 @@
 defmodule Hologram.TemplateEngine.Transformer do
   alias Hologram.TemplateEngine.AST.{ComponentNode, Expression, TagNode, TextNode}
   alias Hologram.TemplateEngine.Interpolator
-  alias Hologram.Transpiler.Parser
-  alias Hologram.Transpiler.Transformer
+  alias Hologram.Transpiler.{Parser, Transformer}
 
   def transform(ast, aliases \\ %{})
 
@@ -44,12 +43,12 @@ defmodule Hologram.TemplateEngine.Transformer do
     end
   end
 
+  def transform(ast, _aliases) when is_binary(ast) do
+    %TextNode{text: ast}
+  end
+  
   # TODO: implement
   defp resolve_node_type(type, aliases) do
     :tag
-  end
-
-  def transform(ast, _aliases) when is_binary(ast) do
-    %TextNode{text: ast}
   end
 end
