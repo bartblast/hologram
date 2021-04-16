@@ -5,6 +5,7 @@ defmodule Hologram.Transpiler.ExpanderTest do
   alias Hologram.Transpiler.Expander
   alias TestModule1
   alias TestModule3
+  alias TestModule5
 
   test "empty parent module" do
     code = """
@@ -137,7 +138,6 @@ defmodule Hologram.Transpiler.ExpanderTest do
     result =
       parse!(code)
       |> Expander.expand()
-      |> IO.inspect()
 
     expected = {:defmodule, [line: 1],
       [
@@ -150,6 +150,52 @@ defmodule Hologram.Transpiler.ExpanderTest do
           ]}
         ]
       ]}
+
+    assert result == expected
+  end
+
+  test "single quote at the root of __using__ macro with a single expression" do
+    code = """
+    defmodule Test do
+      use TestModule2
+    end
+    """
+
+    result =
+      parse!(code)
+      |> Expander.expand()
+
+    expected = {:defmodule, [line: 1],
+      [
+        {:__aliases__, [line: 1], [:Test]},
+        [do: {:import, [line: 4], [{:__aliases__, [line: 4], [:TestModule1]}]}]
+      ]}
+
+    assert result == expected
+  end
+
+  test "single quote at the root of __using__ macro with multiple expressions" do
+    code = """
+    defmodule Test do
+      use TestModule5
+    end
+    """
+
+    result =
+      parse!(code)
+      |> Expander.expand()
+
+    expected = {:defmodule, [line: 1],
+    [
+      {:__aliases__, [line: 1], [:Test]},
+      [
+        do: {:__block__, [],
+         [
+           {:import, [line: 4], [{:__aliases__, [line: 4], [:TestModule1]}]},
+           {:import, [line: 5], [{:__aliases__, [line: 5], [:TestModule3]}]}
+         ]}
+      ]
+    ]}
 
     assert result == expected
   end
