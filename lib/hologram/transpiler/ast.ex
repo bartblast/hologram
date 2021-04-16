@@ -1,5 +1,5 @@
 defmodule Hologram.Transpiler.AST do
-  # PRIMITIVE TYPES
+  # TYPES
 
   defmodule AtomType do
     defstruct value: nil
@@ -13,18 +13,16 @@ defmodule Hologram.Transpiler.AST do
     defstruct value: nil
   end
 
-  defmodule StringType do
-    defstruct value: nil
-  end
-
-  # DATA STRUCTURES
-
   defmodule ListType do
     defstruct data: nil
   end
 
   defmodule MapType do
     defstruct data: nil
+  end
+
+  defmodule StringType do
+    defstruct value: nil
   end
 
   defmodule StructType do
@@ -37,17 +35,17 @@ defmodule Hologram.Transpiler.AST do
     defstruct bindings: nil, left: nil, right: nil
   end
 
-  # ACCESS
-
-  defmodule MapAccess do
-    defstruct key: nil
-  end
-
-  # OTHER
+  # DIRECTIVES
 
   defmodule Alias do
     defstruct module: nil
   end
+
+  defmodule Import do
+    defstruct module: nil
+  end
+
+  # OTHER
 
   defmodule Call do
     defstruct module: nil, function: nil, params: nil
@@ -57,8 +55,8 @@ defmodule Hologram.Transpiler.AST do
     defstruct name: nil, params: nil, bindings: nil, body: nil
   end
 
-  defmodule Import do
-    defstruct module: nil
+  defmodule MapAccess do
+    defstruct key: nil
   end
 
   defmodule Module do
