@@ -1,7 +1,8 @@
 defmodule Hologram.Transpiler.Generator do
   alias Hologram.Transpiler.AST.{AtomType, BooleanType, IntegerType, ListType, MapType, StringType, StructType}
   alias Hologram.Transpiler.AST.{Call, Function, MapAccess, Module, Variable}
-  alias Hologram.Transpiler.Generators.{MapTypeGenerator, PrimitiveTypeGenerator}
+  alias Hologram.Transpiler.Generators.{MapTypeGenerator, PrimitiveTypeGenerator, StructTypeGenerator}
+  alias Hologram.Transpiler.Helpers
 
   # TYPES
 
@@ -17,23 +18,16 @@ defmodule Hologram.Transpiler.Generator do
     PrimitiveTypeGenerator.generate(:integer, "#{value}")
   end
 
-  def generate(%StringType{value: value}) do
-    PrimitiveTypeGenerator.generate(:string, "'#{value}'")
-  end
-
-  # DATA STRUCTURES
-
   def generate(%MapType{data: data}) do
     MapTypeGenerator.generate(data)
   end
 
-  def generate(%StructType{module: module, data: data}) do:
-    # FIXME:
-    import Hologram.Transpiler.Generators.MapTypeGenerator, only: [generate_data: 1]
-    module = generate_module_fully_qualified_name(module)
-    data = generate_data(data)
+  def generate(%StructType{module: module, data: data}) do
+    StructTypeGenerator.generate(module, data)
+  end
 
-    "{ type: 'struct', module: '#{module}', data: #{data} }"
+  def generate(%StringType{value: value}) do
+    PrimitiveTypeGenerator.generate(:string, "'#{value}'")
   end
 
   # OTHER
@@ -167,11 +161,7 @@ defmodule Hologram.Transpiler.Generator do
   # HELPERS
 
   defp generate_class_name(module) do
-    generate_module_fully_qualified_name(module)
+    Helpers.module_name(module)
     |> String.replace(".", "")
-  end
-
-  defp generate_module_fully_qualified_name(module) do
-    Enum.join(module, ".")
   end
 end

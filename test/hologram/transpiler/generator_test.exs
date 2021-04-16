@@ -6,7 +6,7 @@ defmodule Hologram.Transpiler.GeneratorTest do
   alias Hologram.Transpiler.AST.{Call, Function, Module, Variable}
   alias Hologram.Transpiler.Generator
 
-  describe "primitive types" do
+  describe "types" do
     test "atom" do
       result = Generator.generate(%AtomType{value: :test})
       assert result == "{ type: 'atom', value: 'test' }"
@@ -22,63 +22,25 @@ defmodule Hologram.Transpiler.GeneratorTest do
       assert result == "{ type: 'integer', value: 123 }"
     end
 
-    test "string" do
-      result = Generator.generate(%StringType{value: "Test"})
-      assert result == "{ type: 'string', value: 'Test' }"
-    end
-  end
-
-  describe "data structures" do
-    test "struct, empty" do
-      ast = %StructType{module: [:Abc, :Bcd], data: []}
-      result = Generator.generate(ast)
-      assert result == "{ type: 'struct', module: 'Abc.Bcd', data: {} }"
-    end
-
-    test "struct, not nested" do
-      ast = %StructType{
-        module: [:Abc, :Bcd],
-        data: [
-          {%AtomType{value: :a}, %IntegerType{value: 1}},
-          {%AtomType{value: :b}, %IntegerType{value: 2}}
-        ]
-      }
+    test "map" do
+      ast = %MapType{data: [{%AtomType{value: :a}, %IntegerType{value: 1}}]}
 
       result = Generator.generate(ast)
-      expected = "{ type: 'struct', module: 'Abc.Bcd', data: { '~Hologram.Transpiler.AST.AtomType[a]': { type: 'integer', value: 1 }, '~Hologram.Transpiler.AST.AtomType[b]': { type: 'integer', value: 2 } } }"
+      expected = "{ type: 'map', data: { '~Hologram.Transpiler.AST.AtomType[a]': { type: 'integer', value: 1 } } }"
 
       assert result == expected
     end
 
-    test "struct, nested" do
-      ast = %StructType{
-        module: [:Abc, :Bcd],
-        data: [
-          {%AtomType{value: :a}, %IntegerType{value: 1}},
-          {
-            %AtomType{value: :b},
-            %StructType{
-              module: [:Bcd, :Cde],
-              data: [
-                {%AtomType{value: :c}, %IntegerType{value: 2}},
-                {
-                  %AtomType{value: :d},
-                  %StructType{
-                    module: [:Cde, :Def],
-                    data: [
-                      {%AtomType{value: :e}, %IntegerType{value: 3}},
-                      {%AtomType{value: :f}, %IntegerType{value: 4}}
-                    ]
-                  }
-                }
-              ]
-            }
-          }
-        ]
-      }
+    test "string" do
+      result = Generator.generate(%StringType{value: "Test"})
+      assert result == "{ type: 'string', value: 'Test' }"
+    end
+
+    test "struct" do
+      ast = %StructType{data: [{%AtomType{value: :a}, %IntegerType{value: 1}}], module: [:Abc, :Bcd]}
 
       result = Generator.generate(ast)
-      expected = "{ type: 'struct', module: 'Abc.Bcd', data: { '~Hologram.Transpiler.AST.AtomType[a]': { type: 'integer', value: 1 }, '~Hologram.Transpiler.AST.AtomType[b]': { type: 'struct', module: 'Bcd.Cde', data: { '~Hologram.Transpiler.AST.AtomType[c]': { type: 'integer', value: 2 }, '~Hologram.Transpiler.AST.AtomType[d]': { type: 'struct', module: 'Cde.Def', data: { '~Hologram.Transpiler.AST.AtomType[e]': { type: 'integer', value: 3 }, '~Hologram.Transpiler.AST.AtomType[f]': { type: 'integer', value: 4 } } } } } } }"
+      expected = "{ type: 'struct', module: 'Abc.Bcd', data: { '~Hologram.Transpiler.AST.AtomType[a]': { type: 'integer', value: 1 } } }"
 
       assert result == expected
     end
