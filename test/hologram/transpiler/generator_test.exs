@@ -1,9 +1,11 @@
+# TODO: refactor
+
 defmodule Hologram.Transpiler.GeneratorTest do
   use ExUnit.Case, async: true
 
   alias Hologram.Transpiler.AST.{AtomType, BooleanType, IntegerType, StringType}
   alias Hologram.Transpiler.AST.{MapType, StructType}
-  alias Hologram.Transpiler.AST.{Call, Function, Module, Variable}
+  alias Hologram.Transpiler.AST.{Call, Variable}
   alias Hologram.Transpiler.Generator
 
   describe "types" do
@@ -47,95 +49,6 @@ defmodule Hologram.Transpiler.GeneratorTest do
   end
 
   describe "other" do
-    # TODO: test modules with 0 and 1 functions;
-    # TODO: test aliases
-
-    test "module, multiple functions with multiple variants" do
-      ast =
-        %Module{
-          aliases: [],
-          functions: [
-            %Function{
-              bindings: [
-                [%Variable{name: :a}]
-              ],
-              body: [
-                %IntegerType{value: 1}
-              ],
-              name: :test_1,
-              params: [
-                %Variable{name: :a}
-              ]
-            },
-            %Function{
-              bindings: [
-                [%Variable{name: :a}],
-                [%Variable{name: :b}]
-              ],
-              body: [
-                %IntegerType{value: 1},
-                %IntegerType{value: 2}
-              ],
-              name: :test_1,
-              params: [
-                %Variable{name: :a},
-                %Variable{name: :b}
-              ]
-            },
-            %Function{
-              bindings: [
-                [%Variable{name: :a}]
-              ],
-              body: [
-                %IntegerType{value: 1}
-              ],
-              name: :test_2,
-              params: [
-                %Variable{name: :a}
-              ]
-            }
-          ],
-          name: [:Prefix, :Test]
-        }
-
-      result = Generator.generate(ast)
-
-      # TODO: update after function body generating is implemented
-      expected = """
-      class PrefixTest {
-
-      static test_1() {
-      if (Hologram.patternMatchFunctionArgs([ { type: 'variable' } ], arguments)) {
-      let a = arguments[0];
-      return { type: 'integer', value: 1 };
-      }
-      else if (Hologram.patternMatchFunctionArgs([ { type: 'variable' }, { type: 'variable' } ], arguments)) {
-      let a = arguments[0];
-      let b = arguments[1];
-      { type: 'integer', value: 1 };
-      return { type: 'integer', value: 2 };
-      }
-      else {
-        throw 'No match for the function call'
-      }
-      }
-
-      static test_2() {
-      if (Hologram.patternMatchFunctionArgs([ { type: 'variable' } ], arguments)) {
-      let a = arguments[0];
-      return { type: 'integer', value: 1 };
-      }
-      else {
-        throw 'No match for the function call'
-      }
-      }
-
-      }
-      """
-
-      assert result == expected
-    end
-
     test "variable" do
       result = Generator.generate(%Variable{name: :test})
       expected = "{ type: 'variable' }"

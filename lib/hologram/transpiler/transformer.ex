@@ -1,3 +1,5 @@
+# TODO: refactor
+
 defmodule Hologram.Transpiler.Transformer do
   alias Hologram.Transpiler.AST.{AtomType, BooleanType, IntegerType, StringType}
   alias Hologram.Transpiler.AST.{ListType, MapType, StructType}
