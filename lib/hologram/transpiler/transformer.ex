@@ -6,6 +6,7 @@ defmodule Hologram.Transpiler.Transformer do
   alias Hologram.Transpiler.AST.MatchOperator
   alias Hologram.Transpiler.AST.MapAccess
   alias Hologram.Transpiler.AST.{Alias, Call, Function, Import, Module, ModuleAttribute, Variable}
+  alias Hologram.Transpiler.Expander
 
   @eliminated_functions [render: 1]
 
@@ -88,20 +89,36 @@ defmodule Hologram.Transpiler.Transformer do
     []
   end
 
-  # OTHER
+  # DIRECTIVES
 
-  def transform({:defmodule, _, [{:__aliases__, _, name}, [do: {:__block__, _, ast}]]}, _module, _aliases) do
-    aliases = aggregate_aliases(ast)
-    functions = aggregate_functions(ast, name, aliases)
-
-    %Module{name: name, aliases: aliases, functions: functions}
+  def transform({:alias, _, [{:__aliases__, _, module}]}, _parent_module, _aliases) do
+    %Alias{module: module}
   end
 
-  def transform({:defmodule, _, [{:__aliases__, _, name}, [do: ast]]}, _module, _aliases) do
-    aliases = %{list: [], map: %{}}
-    functions = aggregate_functions([ast], name, aliases)
+  def transform({:import, _, [{:__aliases__, _, module}]}, _parent_module, _aliases) do
+    %Import{module: module}
+  end
 
-    %Module{name: name, aliases: aliases, functions: functions}
+  # OTHER
+
+  def transform({:defmodule, _, [_, [do: {:__block__, _, _}]]} = ast, _module, _aliases) do
+    {:defmodule, _, [{:__aliases__, _, name}, [do: {:__block__, _, block}]]} = Expander.expand(ast)
+
+    imports = aggregate_imports(block)
+    aliases = aggregate_aliases(block)
+    functions = aggregate_functions(block, name, aliases)
+
+    %Module{name: name, imports: imports, aliases: aliases, functions: functions}
+  end
+
+  def transform({:defmodule, _, [_, [do: _]]} = ast, _module, _aliases) do
+    {:defmodule, _, [{:__aliases__, _, name}, [do: expression]]} = Expander.expand(ast)
+
+    imports = aggregate_imports([expression])
+    aliases = aggregate_aliases([expression])
+    functions = aggregate_functions([expression], name, aliases)
+
+    %Module{name: name, imports: imports, aliases: aliases, functions: functions}
   end
 
   defp aggregate_aliases(ast) do
@@ -138,17 +155,20 @@ defmodule Hologram.Transpiler.Transformer do
     end)
   end
 
+  defp aggregate_imports(ast) do
+    Enum.reduce(ast, [], fn expr, acc ->
+      case expr do
+        {:import, _, _} ->
+          acc ++ [transform(expr)]
+        _ ->
+          acc
+      end
+    end)
+  end
+
   defp eliminated_function?(name, params) do
     count = if params, do: Enum.count(params), else: 0
     count in Keyword.get_values(@eliminated_functions, name)
-  end
-
-  def transform({:import, _, [{:__aliases__, _, module}]}, _parent_module, _aliases) do
-    %Import{module: module}
-  end
-
-  def transform({:alias, _, [{:__aliases__, _, module}]}, _parent_module, _aliases) do
-    %Alias{module: module}
   end
 
   def transform({:def, _, [{name, _, nil}, [do: body]]}, module, aliases) do

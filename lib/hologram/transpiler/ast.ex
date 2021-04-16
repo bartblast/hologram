@@ -60,7 +60,7 @@ defmodule Hologram.Transpiler.AST do
   end
 
   defmodule Module do
-    defstruct name: nil, aliases: nil, functions: nil
+    defstruct name: nil, imports: nil, aliases: nil, functions: nil
   end
 
   defmodule ModuleAttribute do

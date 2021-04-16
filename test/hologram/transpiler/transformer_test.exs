@@ -11,6 +11,8 @@ defmodule Hologram.Transpiler.TransformerTest do
   alias Hologram.Transpiler.AST.MapAccess
   alias Hologram.Transpiler.AST.{Alias, Call, Function, Import, Module, ModuleAttribute, Variable}
   alias Hologram.Transpiler.Transformer
+  alias TestModule1
+  alias TestModule4
 
   describe "primitive types" do
     test "atom" do
@@ -593,7 +595,7 @@ defmodule Hologram.Transpiler.TransformerTest do
       assert result == expected
     end
 
-    test "module without aliases" do
+    test "module without directives" do
       code = """
         defmodule Prefix.Test do
           def test(a) do
@@ -645,12 +647,14 @@ defmodule Hologram.Transpiler.TransformerTest do
               ]
             }
           ],
+          imports: [],
           name: [:Prefix, :Test]
         }
 
       assert result == expected
     end
 
+    # TODO: test single and multiple aliases cases
     test "module with aliases" do
       code = """
         defmodule Prefix.Test do
@@ -714,6 +718,55 @@ defmodule Hologram.Transpiler.TransformerTest do
                 %Variable{name: :b}
               ]
             }
+          ],
+          imports: [],
+          name: [:Prefix, :Test]
+        }
+
+      assert result == expected
+    end
+
+    test "module with single use directive" do
+      code = """
+        defmodule Prefix.Test do
+          use TestModule2
+        end
+      """
+
+      result =
+        parse!(code)
+        |> Transformer.transform()
+
+      expected =
+        %Module{
+          aliases: %{list: [], map: %{}},
+          functions: [],
+          imports: [%Import{module: [:TestModule1]}],
+          name: [:Prefix, :Test]
+        }
+
+      assert result == expected
+    end
+
+    test "module with multiple use directives" do
+      code = """
+        defmodule Prefix.Test do
+          use TestModule2
+          use TestModule4
+        end
+      """
+
+      result =
+        parse!(code)
+        |> Transformer.transform()
+
+      expected =
+        %Module{
+          aliases: %{list: [], map: %{}},
+          functions: [],
+          imports: [
+            %Import{module: [:TestModule1]},
+            %Import{module: [:TestModule3]}
           ],
           name: [:Prefix, :Test]
         }
