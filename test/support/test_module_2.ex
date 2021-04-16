@@ -1,7 +1,7 @@
-defmodule TestModule4 do
+defmodule TestModule2 do
   defmacro __using__(_) do
     quote do
-      import TestModule3
+      import TestModule1
     end
   end
 end

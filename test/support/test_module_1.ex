@@ -1,2 +1,2 @@
-defmodule TestModule3 do
+defmodule TestModule1 do
 end
