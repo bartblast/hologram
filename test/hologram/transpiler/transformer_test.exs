@@ -1,5 +1,5 @@
 defmodule Hologram.Transpiler.TransformerTest do
-  use ExUnit.Case
+  use ExUnit.Case, async: true
 
   import Hologram.Transpiler.Parser, only: [parse!: 1]
 

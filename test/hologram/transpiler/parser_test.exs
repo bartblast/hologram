@@ -1,5 +1,5 @@
 defmodule Hologram.Transpiler.ParserTest do
-  use ExUnit.Case
+  use ExUnit.Case, async: true
   alias Hologram.Transpiler.Parser
 
   describe "parse/1" do

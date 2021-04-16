@@ -1,5 +1,5 @@
 defmodule Hologram.Transpiler.GeneratorTest do
-  use ExUnit.Case
+  use ExUnit.Case, async: true
 
   alias Hologram.Transpiler.AST.{AtomType, BooleanType, IntegerType, StringType}
   alias Hologram.Transpiler.AST.{MapType, StructType}

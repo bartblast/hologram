@@ -1,5 +1,5 @@
 defmodule Hologram.TemplateEngine.InterpolatorTest do
-  use ExUnit.Case
+  use ExUnit.Case, async: true
 
   alias Hologram.TemplateEngine.AST.{Expression, TagNode, TextNode}
   alias Hologram.TemplateEngine.Interpolator
