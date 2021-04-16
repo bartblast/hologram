@@ -1,7 +1,5 @@
 defmodule Hologram.TemplateEngine.Renderer do
-  alias Hologram.TemplateEngine.AST.Expression
-  alias Hologram.TemplateEngine.AST.TagNode
-  alias Hologram.TemplateEngine.AST.TextNode
+  alias Hologram.TemplateEngine.AST.{Expression, TagNode, TextNode}
   alias Hologram.TemplateEngine.Evaluator
 
   def render(ast, state)
@@ -28,14 +26,14 @@ defmodule Hologram.TemplateEngine.Renderer do
     "<#{tag}#{attrs_html}>#{children_html}</#{tag}>"
   end
 
+  def render(%TextNode{text: text}, _state) do
+    text
+  end
+
   defp translate_attr(key) do
     case key do
       ":click" -> "holo-click"
       _ -> key
     end
-  end
-
-  def render(%TextNode{text: text}, _state) do
-    text
   end
 end
