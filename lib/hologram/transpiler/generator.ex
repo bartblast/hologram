@@ -1,29 +1,24 @@
 defmodule Hologram.Transpiler.Generator do
-  alias Hologram.Transpiler.AST.{AtomType, BooleanType, IntegerType, StringType}
-  alias Hologram.Transpiler.AST.{ListType, MapType, StructType}
-  alias Hologram.Transpiler.AST.{MapAccess}
-  alias Hologram.Transpiler.AST.{Call, Function, Module, Variable}
+  alias Hologram.Transpiler.AST.{AtomType, BooleanType, IntegerType, ListType, MapType, StringType, StructType}
+  alias Hologram.Transpiler.AST.{Call, Function, MapAccess, Module, Variable}
+  alias Hologram.Transpiler.Generators.PrimitiveTypeGenerator
 
-  # PRIMITIVE TYPES
+  # TYPES
 
   def generate(%AtomType{value: value}) do
-    generate_primitive_type(:atom, "'#{value}'")
+    PrimitiveTypeGenerator.generate(:atom, "'#{value}'")
   end
 
   def generate(%BooleanType{value: value}) do
-    generate_primitive_type(:boolean, "#{value}")
+    PrimitiveTypeGenerator.generate(:boolean, "#{value}")
   end
 
   def generate(%IntegerType{value: value}) do
-    generate_primitive_type(:integer, "#{value}")
+    PrimitiveTypeGenerator.generate(:integer, "#{value}")
   end
 
   def generate(%StringType{value: value}) do
-    generate_primitive_type(:string, "'#{value}'")
-  end
-
-  defp generate_primitive_type(type, value) do
-    "{ type: '#{type}', value: #{value} }"
+    PrimitiveTypeGenerator.generate(:string, "'#{value}'")
   end
 
   # DATA STRUCTURES
