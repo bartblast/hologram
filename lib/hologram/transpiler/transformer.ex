@@ -103,20 +103,18 @@ defmodule Hologram.Transpiler.Transformer do
 
   def transform({:defmodule, _, [_, [do: {:__block__, _, _}]]} = ast, _module, _aliases) do
     {:defmodule, _, [{:__aliases__, _, name}, [do: {:__block__, _, block}]]} = Expander.expand(ast)
-
-    imports = aggregate_imports(block)
-    aliases = aggregate_aliases(block)
-    functions = aggregate_functions(block, name, aliases)
-
-    %Module{name: name, imports: imports, aliases: aliases, functions: functions}
+    build_module(name, block)
   end
 
   def transform({:defmodule, _, [_, [do: _]]} = ast, _module, _aliases) do
-    {:defmodule, _, [{:__aliases__, _, name}, [do: expression]]} = Expander.expand(ast)
+    {:defmodule, _, [{:__aliases__, _, name}, [do: expr]]} = Expander.expand(ast)
+    build_module(name, [expr])
+  end
 
-    imports = aggregate_imports([expression])
-    aliases = aggregate_aliases([expression])
-    functions = aggregate_functions([expression], name, aliases)
+  def build_module(name, ast) do
+    imports = aggregate_imports(ast)
+    aliases = aggregate_aliases(ast)
+    functions = aggregate_functions(ast, name, aliases)
 
     %Module{name: name, imports: imports, aliases: aliases, functions: functions}
   end
