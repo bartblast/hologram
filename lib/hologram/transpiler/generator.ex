@@ -1,7 +1,7 @@
 defmodule Hologram.Transpiler.Generator do
   alias Hologram.Transpiler.AST.{AtomType, BooleanType, IntegerType, ListType, MapType, StringType, StructType}
   alias Hologram.Transpiler.AST.{Call, Function, MapAccess, Module, Variable}
-  alias Hologram.Transpiler.Generators.PrimitiveTypeGenerator
+  alias Hologram.Transpiler.Generators.{MapTypeGenerator, PrimitiveTypeGenerator}
 
   # TYPES
 
@@ -24,45 +24,16 @@ defmodule Hologram.Transpiler.Generator do
   # DATA STRUCTURES
 
   def generate(%MapType{data: data}) do
-    data = generate_map_data(data)
-    "{ type: 'map', data: #{data} }"
+    MapTypeGenerator.generate(data)
   end
 
-  def generate(%StructType{module: module, data: data}) do
+  def generate(%StructType{module: module, data: data}) do:
+    # FIXME:
+    import Hologram.Transpiler.Generators.MapTypeGenerator, only: [generate_data: 1]
     module = generate_module_fully_qualified_name(module)
-    data = generate_map_data(data)
+    data = generate_data(data)
 
     "{ type: 'struct', module: '#{module}', data: #{data} }"
-  end
-
-  def generate_map_data(ast) do
-    fields =
-      Enum.map(ast, fn {k, v} ->
-        "'#{generate_object_key(k)}': #{generate(v)}"
-      end)
-      |> Enum.join(", ")
-
-    if fields != "" do
-      "{ #{fields} }"
-    else
-      "{}"
-    end
-  end
-
-  defp generate_object_key(%AtomType{value: value}) do
-    "~Hologram.Transpiler.AST.AtomType[#{value}]"
-  end
-
-  defp generate_object_key(%BooleanType{value: value}) do
-    "~Hologram.Transpiler.AST.BooleanType[#{value}]"
-  end
-
-  defp generate_object_key(%IntegerType{value: value}) do
-    "~Hologram.Transpiler.AST.IntegerType[#{value}]"
-  end
-
-  defp generate_object_key(%StringType{value: value}) do
-    "~Hologram.Transpiler.AST.StringType[#{value}]"
   end
 
   # OTHER
