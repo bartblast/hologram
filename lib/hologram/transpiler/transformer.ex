@@ -10,44 +10,44 @@ defmodule Hologram.Transpiler.Transformer do
 
   @eliminated_functions [render: 1]
 
-  def transform(ast, module \\ nil, aliases \\ %{})
+  def transform(ast, module \\ nil, imports \\ [], aliases \\ [])
 
   # PRIMITIVE TYPES
 
   # boolean must be before atom
-  def transform(ast, _module, _aliases) when is_boolean(ast) do
+  def transform(ast, _module, _imports, _aliases) when is_boolean(ast) do
     %BooleanType{value: ast}
   end
 
-  def transform(ast, _module, _aliases) when is_atom(ast) do
+  def transform(ast, _module, _imports, _aliases) when is_atom(ast) do
     %AtomType{value: ast}
   end
 
-  def transform(ast, _module, _aliases) when is_integer(ast) do
+  def transform(ast, _module, _imports, _aliases) when is_integer(ast) do
     %IntegerType{value: ast}
   end
 
-  def transform(ast, _module, _aliases) when is_binary(ast) do
+  def transform(ast, _module, _imports, _aliases) when is_binary(ast) do
     %StringType{value: ast}
   end
 
   # DATA STRUCTURES
 
-  def transform(ast, module, aliases) when is_list(ast) do
-    data = Enum.map(ast, fn v -> transform(v, module, aliases) end)
+  def transform(ast, module, imports, aliases) when is_list(ast) do
+    data = Enum.map(ast, fn v -> transform(v, module, imports, aliases) end)
     %ListType{data: data}
   end
 
-  def transform({:%{}, _, ast}, module, aliases) do
+  def transform({:%{}, _, ast}, module, imports, aliases) do
     data = Enum.map(ast, fn {k, v} ->
-      {transform(k, module, aliases), transform(v, module, aliases)}
+      {transform(k, module, imports, aliases), transform(v, module, imports, aliases)}
     end)
 
     %MapType{data: data}
   end
 
-  def transform({:%, _, [{_, _, module}, ast]}, _module, aliases) do
-    data = transform(ast, module, aliases).data
+  def transform({:%, _, [{_, _, module}, ast]}, _module, imports, aliases) do
+    data = transform(ast, module, imports, aliases).data
 
     key = List.last(module)
 
@@ -63,13 +63,13 @@ defmodule Hologram.Transpiler.Transformer do
 
   # OPERATORS
 
-  def transform({:=, _, [left, right]}, module, aliases) do
-    left = transform(left, module, aliases)
+  def transform({:=, _, [left, right]}, module, imports, aliases) do
+    left = transform(left, module, imports, aliases)
 
     %MatchOperator{
       bindings: aggregate_bindings(left),
       left: left,
-      right: transform(right, module, aliases)
+      right: transform(right, module, imports, aliases)
     }
   end
 
@@ -91,22 +91,22 @@ defmodule Hologram.Transpiler.Transformer do
 
   # DIRECTIVES
 
-  def transform({:alias, _, [{:__aliases__, _, module}]}, _parent_module, _aliases) do
-    %Alias{module: module}
+  def transform({:alias, _, [{:__aliases__, _, aliased_module}]}, _current_module, _imports, _aliases) do
+    %Alias{module: aliased_module}
   end
 
-  def transform({:import, _, [{:__aliases__, _, module}]}, _parent_module, _aliases) do
-    %Import{module: module}
+  def transform({:import, _, [{:__aliases__, _, imported_module}]}, _current_module, _imports, _aliases) do
+    %Import{module: imported_module}
   end
 
   # OTHER
 
-  def transform({:defmodule, _, [_, [do: {:__block__, _, _}]]} = ast, _module, _aliases) do
+  def transform({:defmodule, _, [_, [do: {:__block__, _, _}]]} = ast, _module, _imports, _aliases) do
     {:defmodule, _, [{:__aliases__, _, name}, [do: {:__block__, _, block}]]} = Expander.expand(ast)
     build_module(name, block)
   end
 
-  def transform({:defmodule, _, [_, [do: _]]} = ast, _module, _aliases) do
+  def transform({:defmodule, _, [_, [do: _]]} = ast, _module, _imports, _aliases) do
     {:defmodule, _, [{:__aliases__, _, name}, [do: expr]]} = Expander.expand(ast)
     build_module(name, [expr])
   end
@@ -114,38 +114,31 @@ defmodule Hologram.Transpiler.Transformer do
   def build_module(name, ast) do
     imports = aggregate_imports(ast)
     aliases = aggregate_aliases(ast)
-    functions = aggregate_functions(ast, name, aliases)
+    functions = aggregate_functions(ast, name, imports, aliases)
 
     %Module{name: name, imports: imports, aliases: aliases, functions: functions}
   end
 
+  # TODO: check
   defp aggregate_aliases(ast) do
-    list =
-      Enum.reduce(ast, [], fn expr, acc ->
-        case expr do
-          {:alias, _, _} ->
-            acc ++ [transform(expr)]
-          _ ->
-            acc
-        end
-      end)
-
-    map =
-      Enum.reduce(list, %{}, fn elem, acc ->
-        Map.put(acc, List.last(elem.module), elem.module)
-      end)
-
-    %{list: list, map: map}
+    Enum.reduce(ast, [], fn expr, acc ->
+      case expr do
+        {:alias, _, _} ->
+          acc ++ [transform(expr)]
+        _ ->
+          acc
+      end
+    end)
   end
 
-  defp aggregate_functions(ast, module, aliases) do
+  defp aggregate_functions(ast, module, imports, aliases) do
     Enum.reduce(ast, [], fn expr, acc ->
       case expr do
         {:def, _, [{name, _, params}, _]} ->
           if eliminated_function?(name, params) do
             acc
           else
-            acc ++ [transform(expr, module, aliases)]
+            acc ++ [transform(expr, module, imports, aliases)]
           end
         _ ->
           acc
@@ -169,13 +162,13 @@ defmodule Hologram.Transpiler.Transformer do
     count in Keyword.get_values(@eliminated_functions, name)
   end
 
-  def transform({:def, _, [{name, _, nil}, [do: body]]}, module, aliases) do
-    body = transform_function_body(body, module, aliases)
+  def transform({:def, _, [{name, _, nil}, [do: body]]}, module, imports, aliases) do
+    body = transform_function_body(body, module, imports, aliases)
     %Function{name: name, params: [], bindings: [], body: body}
   end
 
-  def transform({:def, _, [{name, _, params}, [do: body]]}, module, aliases) do
-    params = Enum.map(params, fn param -> transform(param, module, aliases) end)
+  def transform({:def, _, [{name, _, params}, [do: body]]}, module, imports, aliases) do
+    params = Enum.map(params, fn param -> transform(param, module, imports, aliases) end)
 
     bindings =
       Enum.map(params, fn param ->
@@ -189,54 +182,34 @@ defmodule Hologram.Transpiler.Transformer do
       end)
       |> Enum.reject(fn item -> item == nil end)
 
-    body = transform_function_body(body, module, aliases)
+    body = transform_function_body(body, module, imports, aliases)
 
     %Function{name: name, params: params, bindings: bindings, body: body}
   end
 
-  defp transform_function_body(body, module, aliases) do
+  defp transform_function_body(body, module, imports, aliases) do
     case body do
       {:__block__, _, block} ->
         block
       expr ->
         [expr]
     end
-    |> Enum.map(fn expr -> transform(expr, module, aliases) end)
+    |> Enum.map(fn expr -> transform(expr, module, imports, aliases) end)
   end
 
-  def transform({name, _, nil}, _module, _aliases) when is_atom(name) do
+  def transform({name, _, nil}, _module, _imports, _aliases) when is_atom(name) do
     %Variable{name: name}
   end
 
-  def transform({:@, _, [{name, _, _}]}, _module, _aliases) do
+  def transform({:@, _, [{name, _, _}]}, _module, _imports, _aliases) do
     %ModuleAttribute{name: name}
   end
 
-  def transform({function, _, params}, module, aliases) when is_atom(function) do
-    params = transform_call_params(params, module, aliases)
-    module = resolve_module(module, aliases)
-
-    %Call{module: module, function: function, params: params}
+  def transform({function, _, params}, module, imports, aliases) when is_atom(function) do
+    CallTransformer.transform(module, function, params, imports, aliases)
   end
 
-  def transform({{:., _, [{:__aliases__, _, module}, function]}, _, params}, parent_module, aliases) do
-    params = transform_call_params(params, parent_module, aliases)
-    module = resolve_module(module, aliases)
-
-    %Call{module: module, function: function, params: params}
-  end
-
-  defp transform_call_params(params, module, aliases) do
-    Enum.map(params, fn param -> transform(param, module, aliases) end)
-  end
-
-  defp resolve_module(module, aliases) do
-    name = hd(module)
-
-    if Enum.count(module) == 1 && Map.has_key?(aliases.map, name) do
-      aliases.map[name]
-    else
-      module
-    end
+  def transform({{:., _, [{:__aliases__, _, called_module}, function]}, _, params}, current_module, imports, aliases) do
+    CallTransformer.transform(called_module, function, params, imports, aliases)
   end
 end
