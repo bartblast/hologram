@@ -7,6 +7,7 @@ defmodule Hologram.Transpiler.Transformer do
   alias Hologram.Transpiler.AST.MapAccess
   alias Hologram.Transpiler.AST.{Alias, Call, Function, Import, Module, ModuleAttribute, Variable}
   alias Hologram.Transpiler.Expander
+  alias Hologram.Transpiler.Transformer.CallTransformer
 
   @eliminated_functions [render: 1]
 
