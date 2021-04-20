@@ -13,7 +13,7 @@ defmodule Hologram.Transpiler.Expander do
   def expand({:use, _, [{:__aliases__, _, module}]}) do
     Helpers.fully_qualified_module(module)
     |> apply(:module_info, [])
-    |> get_in([:compile][:source])
+    |> get_in([:compile, :source])
     |> Parser.parse_file!()
     |> aggregate_quotes()
   end

@@ -4,6 +4,7 @@ defmodule Hologram.Transpiler.ExpanderTest do
 
   alias Hologram.Transpiler.Expander
   alias TestModule1
+  alias TestModule2
   alias TestModule3
   alias TestModule5
 
