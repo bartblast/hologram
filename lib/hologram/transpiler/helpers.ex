@@ -4,6 +4,12 @@ defmodule Hologram.Transpiler.Helpers do
     |> String.replace(".", "")
   end
 
+  def fully_qualified_module(module) do
+    [:Elixir] ++ module
+    |> Enum.join(".")
+    |> String.to_existing_atom()
+  end
+
   def module_name(module) do
     Enum.join(module, ".")
   end

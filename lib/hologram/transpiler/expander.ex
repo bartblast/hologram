@@ -1,4 +1,5 @@
 defmodule Hologram.Transpiler.Expander do
+  alias Hologram.Transpiler.Helpers
   alias Hologram.Transpiler.Parser
 
   def expand({:defmodule, line, [aliases, [do: ast]]}) do
@@ -10,12 +11,9 @@ defmodule Hologram.Transpiler.Expander do
   end
 
   def expand({:use, _, [{:__aliases__, _, module}]}) do
-    module =
-      [:Elixir] ++ module
-      |> Enum.join(".")
-      |> String.to_existing_atom()
-
-    module.module_info()[:compile][:source]
+    Helpers.fully_qualified_module(module)
+    |> apply(:module_info, [])
+    |> get_in([:compile][:source])
     |> Parser.parse_file!()
     |> aggregate_quotes()
   end
