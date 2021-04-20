@@ -38,11 +38,11 @@ defmodule Hologram.Transpiler.AST do
   # DIRECTIVES
 
   defmodule Alias do
-    defstruct module: nil
+    defstruct module: nil, as: nil
   end
 
   defmodule Import do
-    defstruct module: nil
+    defstruct module: nil, only: nil
   end
 
   # OTHER
