@@ -3,12 +3,13 @@ defmodule Hologram.TemplateEngine.Parser do
 
   def parse(str) do
     result =
-      "<root>" <> fix_quotes(str) <> "</root>"
+      ("<root>" <> fix_quotes(str) <> "</root>")
       |> Saxy.SimpleForm.parse_string()
 
     case result do
       {:ok, {"root", [], nodes}} ->
         {:ok, nodes}
+
       _ ->
         result
     end

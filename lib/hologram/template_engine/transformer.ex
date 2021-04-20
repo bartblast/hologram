@@ -26,6 +26,7 @@ defmodule Hologram.TemplateEngine.Transformer do
                 |> Hologram.Transpiler.Transformer.transform()
 
               %Expression{ast: ast}
+
             _ ->
               value
           end
@@ -37,16 +38,16 @@ defmodule Hologram.TemplateEngine.Transformer do
     case resolve_node_type(type, aliases) do
       :tag ->
         %TagNode{tag: type, attrs: attrs, children: children}
-      # TODO: imlement
-      # :module ->
-      #   %ComponentNode{module: module, children: children}
+        # TODO: imlement
+        # :module ->
+        #   %ComponentNode{module: module, children: children}
     end
   end
 
   def transform(ast, _aliases) when is_binary(ast) do
     %TextNode{text: ast}
   end
-  
+
   # TODO: implement
   defp resolve_node_type(type, aliases) do
     :tag

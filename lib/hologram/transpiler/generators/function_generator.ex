@@ -10,6 +10,7 @@ defmodule Hologram.Transpiler.Generators.FunctionGenerator do
         # TODO: determine what's this case for, comment and test it
         "" ->
           "{}\n"
+
         exprs ->
           "{\n#{exprs}}"
       end
@@ -72,13 +73,14 @@ defmodule Hologram.Transpiler.Generators.FunctionGenerator do
           case access do
             %Variable{name: name} ->
               "let #{name} = arguments[#{idx}]"
+
             %MapAccess{key: key} ->
               "['#{key}']"
           end
 
         accumulator <> part
-      end)
-      <> ";"
+      end) <>
+        ";"
     end)
     |> Enum.join("\n")
   end

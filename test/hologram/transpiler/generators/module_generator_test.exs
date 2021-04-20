@@ -7,25 +7,24 @@ defmodule Hologram.Transpiler.Generators.ModuleGeneratorTest do
   # TODO: test aliases
 
   test "single function without muliptle variants" do
-    ast =
-      %Module{
-        aliases: [],
-        functions: [
-          %Function{
-            bindings: [
-              [%Variable{name: :a}]
-            ],
-            body: [
-              %IntegerType{value: 1}
-            ],
-            name: :test_1,
-            params: [
-              %Variable{name: :a}
-            ]
-          }
-        ],
-        name: [:Prefix, :Test]
-      }
+    ast = %Module{
+      aliases: [],
+      functions: [
+        %Function{
+          bindings: [
+            [%Variable{name: :a}]
+          ],
+          body: [
+            %IntegerType{value: 1}
+          ],
+          name: :test_1,
+          params: [
+            %Variable{name: :a}
+          ]
+        }
+      ],
+      name: [:Prefix, :Test]
+    }
 
     result = Generator.generate(ast)
 
@@ -49,40 +48,39 @@ defmodule Hologram.Transpiler.Generators.ModuleGeneratorTest do
   end
 
   test "single function with multiple variants" do
-    ast =
-      %Module{
-        aliases: [],
-        functions: [
-          %Function{
-            bindings: [
-              [%Variable{name: :a}]
-            ],
-            body: [
-              %IntegerType{value: 1}
-            ],
-            name: :test_1,
-            params: [
-              %Variable{name: :a}
-            ]
-          },
-          %Function{
-            bindings: [
-              [%Variable{name: :a}],
-              [%Variable{name: :b}]
-            ],
-            body: [
-              %IntegerType{value: 1},
-              %IntegerType{value: 2}
-            ],
-            name: :test_1,
-            params: [
-              %Variable{name: :a},
-              %Variable{name: :b}
-            ]
-          }
-        ],
-        name: [:Prefix, :Test]
-      }
+    ast = %Module{
+      aliases: [],
+      functions: [
+        %Function{
+          bindings: [
+            [%Variable{name: :a}]
+          ],
+          body: [
+            %IntegerType{value: 1}
+          ],
+          name: :test_1,
+          params: [
+            %Variable{name: :a}
+          ]
+        },
+        %Function{
+          bindings: [
+            [%Variable{name: :a}],
+            [%Variable{name: :b}]
+          ],
+          body: [
+            %IntegerType{value: 1},
+            %IntegerType{value: 2}
+          ],
+          name: :test_1,
+          params: [
+            %Variable{name: :a},
+            %Variable{name: :b}
+          ]
+        }
+      ],
+      name: [:Prefix, :Test]
+    }
 
     result = Generator.generate(ast)
 
@@ -112,37 +110,36 @@ defmodule Hologram.Transpiler.Generators.ModuleGeneratorTest do
   end
 
   test "multiple functions without multiple variants" do
-    ast =
-      %Module{
-        aliases: [],
-        functions: [
-          %Function{
-            bindings: [
-              [%Variable{name: :a}]
-            ],
-            body: [
-              %IntegerType{value: 1}
-            ],
-            name: :test_1,
-            params: [
-              %Variable{name: :a}
-            ]
-          },
-          %Function{
-            bindings: [
-              [%Variable{name: :a}]
-            ],
-            body: [
-              %IntegerType{value: 1}
-            ],
-            name: :test_2,
-            params: [
-              %Variable{name: :a}
-            ]
-          }
-        ],
-        name: [:Prefix, :Test]
-      }
+    ast = %Module{
+      aliases: [],
+      functions: [
+        %Function{
+          bindings: [
+            [%Variable{name: :a}]
+          ],
+          body: [
+            %IntegerType{value: 1}
+          ],
+          name: :test_1,
+          params: [
+            %Variable{name: :a}
+          ]
+        },
+        %Function{
+          bindings: [
+            [%Variable{name: :a}]
+          ],
+          body: [
+            %IntegerType{value: 1}
+          ],
+          name: :test_2,
+          params: [
+            %Variable{name: :a}
+          ]
+        }
+      ],
+      name: [:Prefix, :Test]
+    }
 
     result = Generator.generate(ast)
 
@@ -176,52 +173,51 @@ defmodule Hologram.Transpiler.Generators.ModuleGeneratorTest do
   end
 
   test "multiple functions with multiple variants" do
-    ast =
-      %Module{
-        aliases: [],
-        functions: [
-          %Function{
-            bindings: [
-              [%Variable{name: :a}]
-            ],
-            body: [
-              %IntegerType{value: 1}
-            ],
-            name: :test_1,
-            params: [
-              %Variable{name: :a}
-            ]
-          },
-          %Function{
-            bindings: [
-              [%Variable{name: :a}],
-              [%Variable{name: :b}]
-            ],
-            body: [
-              %IntegerType{value: 1},
-              %IntegerType{value: 2}
-            ],
-            name: :test_1,
-            params: [
-              %Variable{name: :a},
-              %Variable{name: :b}
-            ]
-          },
-          %Function{
-            bindings: [
-              [%Variable{name: :a}]
-            ],
-            body: [
-              %IntegerType{value: 1}
-            ],
-            name: :test_2,
-            params: [
-              %Variable{name: :a}
-            ]
-          }
-        ],
-        name: [:Prefix, :Test]
-      }
+    ast = %Module{
+      aliases: [],
+      functions: [
+        %Function{
+          bindings: [
+            [%Variable{name: :a}]
+          ],
+          body: [
+            %IntegerType{value: 1}
+          ],
+          name: :test_1,
+          params: [
+            %Variable{name: :a}
+          ]
+        },
+        %Function{
+          bindings: [
+            [%Variable{name: :a}],
+            [%Variable{name: :b}]
+          ],
+          body: [
+            %IntegerType{value: 1},
+            %IntegerType{value: 2}
+          ],
+          name: :test_1,
+          params: [
+            %Variable{name: :a},
+            %Variable{name: :b}
+          ]
+        },
+        %Function{
+          bindings: [
+            [%Variable{name: :a}]
+          ],
+          body: [
+            %IntegerType{value: 1}
+          ],
+          name: :test_2,
+          params: [
+            %Variable{name: :a}
+          ]
+        }
+      ],
+      name: [:Prefix, :Test]
+    }
 
     result = Generator.generate(ast)
 

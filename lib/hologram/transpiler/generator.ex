@@ -1,9 +1,25 @@
 # TODO: refactor
 
 defmodule Hologram.Transpiler.Generator do
-  alias Hologram.Transpiler.AST.{AtomType, BooleanType, IntegerType, ListType, MapType, StringType, StructType}
+  alias Hologram.Transpiler.AST.{
+    AtomType,
+    BooleanType,
+    IntegerType,
+    ListType,
+    MapType,
+    StringType,
+    StructType
+  }
+
   alias Hologram.Transpiler.AST.{Call, Function, MapAccess, Module, Variable}
-  alias Hologram.Transpiler.Generators.{MapTypeGenerator, ModuleGenerator, PrimitiveTypeGenerator, StructTypeGenerator}
+
+  alias Hologram.Transpiler.Generators.{
+    MapTypeGenerator,
+    ModuleGenerator,
+    PrimitiveTypeGenerator,
+    StructTypeGenerator
+  }
+
   alias Hologram.Transpiler.Helpers
 
   # TYPES
@@ -50,6 +66,7 @@ defmodule Hologram.Transpiler.Generator do
         case param do
           %Variable{name: name} ->
             name
+
           _ ->
             generate(param)
         end

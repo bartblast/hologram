@@ -28,7 +28,9 @@ defmodule Hologram.Transpiler.GeneratorTest do
       ast = %MapType{data: [{%AtomType{value: :a}, %IntegerType{value: 1}}]}
 
       result = Generator.generate(ast)
-      expected = "{ type: 'map', data: { '~Hologram.Transpiler.AST.AtomType[a]': { type: 'integer', value: 1 } } }"
+
+      expected =
+        "{ type: 'map', data: { '~Hologram.Transpiler.AST.AtomType[a]': { type: 'integer', value: 1 } } }"
 
       assert result == expected
     end
@@ -39,10 +41,15 @@ defmodule Hologram.Transpiler.GeneratorTest do
     end
 
     test "struct" do
-      ast = %StructType{data: [{%AtomType{value: :a}, %IntegerType{value: 1}}], module: [:Abc, :Bcd]}
+      ast = %StructType{
+        data: [{%AtomType{value: :a}, %IntegerType{value: 1}}],
+        module: [:Abc, :Bcd]
+      }
 
       result = Generator.generate(ast)
-      expected = "{ type: 'struct', module: 'Abc.Bcd', data: { '~Hologram.Transpiler.AST.AtomType[a]': { type: 'integer', value: 1 } } }"
+
+      expected =
+        "{ type: 'struct', module: 'Abc.Bcd', data: { '~Hologram.Transpiler.AST.AtomType[a]': { type: 'integer', value: 1 } } }"
 
       assert result == expected
     end

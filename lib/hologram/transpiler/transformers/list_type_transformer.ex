@@ -3,7 +3,7 @@ defmodule Hologram.Transpiler.Transformers.ListTypeTransformer do
   alias Hologram.Transpiler.Transformer
 
   def transform(ast, module, imports, aliases) do
-    data = Enum.map(ast, &(Transformer.transform(&1, module, imports, aliases)))
+    data = Enum.map(ast, &Transformer.transform(&1, module, imports, aliases))
     %ListType{data: data}
   end
 end

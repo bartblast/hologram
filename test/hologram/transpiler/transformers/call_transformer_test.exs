@@ -24,7 +24,14 @@ defmodule Hologram.Transpiler.Transformers.CallTransformerTest do
     params = [1, 2]
 
     result =
-      CallTransformer.transform(called_module, function, params, current_module, @imports, @aliases)
+      CallTransformer.transform(
+        called_module,
+        function,
+        params,
+        current_module,
+        @imports,
+        @aliases
+      )
 
     expected_params = [%IntegerType{value: 1}, %IntegerType{value: 2}]
 
@@ -38,11 +45,22 @@ defmodule Hologram.Transpiler.Transformers.CallTransformerTest do
     params = [1, 2]
 
     result =
-      CallTransformer.transform(called_module, function, params, current_module, @imports, @aliases)
+      CallTransformer.transform(
+        called_module,
+        function,
+        params,
+        current_module,
+        @imports,
+        @aliases
+      )
 
     expected_params = [%IntegerType{value: 1}, %IntegerType{value: 2}]
 
-    assert result == %Call{module: [:Task, :Supervisor], function: function, params: expected_params}
+    assert result == %Call{
+             module: [:Task, :Supervisor],
+             function: function,
+             params: expected_params
+           }
   end
 
   test "aliased module function" do
@@ -52,11 +70,22 @@ defmodule Hologram.Transpiler.Transformers.CallTransformerTest do
     params = [1, 2]
 
     result =
-      CallTransformer.transform(called_module, function, params, current_module, @imports, @aliases)
+      CallTransformer.transform(
+        called_module,
+        function,
+        params,
+        current_module,
+        @imports,
+        @aliases
+      )
 
     expected_params = [%IntegerType{value: 1}, %IntegerType{value: 2}]
 
-    assert result == %Call{module: [:Task, :Supervisor], function: function, params: expected_params}
+    assert result == %Call{
+             module: [:Task, :Supervisor],
+             function: function,
+             params: expected_params
+           }
   end
 
   test "fully qualified module function" do
@@ -66,7 +95,14 @@ defmodule Hologram.Transpiler.Transformers.CallTransformerTest do
     params = [1, 2]
 
     result =
-      CallTransformer.transform(called_module, function, params, current_module, @imports, @aliases)
+      CallTransformer.transform(
+        called_module,
+        function,
+        params,
+        current_module,
+        @imports,
+        @aliases
+      )
 
     expected_params = [%IntegerType{value: 1}, %IntegerType{value: 2}]
 

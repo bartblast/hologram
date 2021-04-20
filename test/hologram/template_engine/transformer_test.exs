@@ -6,7 +6,6 @@ defmodule Hologram.TemplateEngine.TransformerTest do
   alias Hologram.TemplateEngine.Transformer
   alias Hologram.Transpiler.AST.{ModuleAttribute}
 
-
   describe "transform/1" do
     test "tag nodes without attrs" do
       result =

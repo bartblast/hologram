@@ -40,6 +40,6 @@ defmodule Hologram.Transpiler.Transformers.CallTransformer do
   end
 
   defp transform_call_params(params, module, imports, aliases) do
-    Enum.map(params, &(Transformer.transform(&1, module, imports, aliases)))
+    Enum.map(params, &Transformer.transform(&1, module, imports, aliases))
   end
 end

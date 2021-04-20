@@ -16,6 +16,7 @@ defmodule Hologram.TemplateEngine.Interpolator do
 
   defp handle_match(match, char_count, nodes) do
     text = Enum.at(match, 1)
+
     {char_count, nodes} =
       if text != "" do
         {char_count + String.length(text), nodes ++ [%TextNode{text: text}]}
@@ -24,12 +25,12 @@ defmodule Hologram.TemplateEngine.Interpolator do
       end
 
     code = Enum.at(match, 3)
+
     ast =
       Parser.parse!(code)
       |> Hologram.Transpiler.Transformer.transform()
 
-    {char_count, nodes} =
-      {char_count + 4 + String.length(code), nodes ++ [%Expression{ast: ast}]}
+    {char_count, nodes} = {char_count + 4 + String.length(code), nodes ++ [%Expression{ast: ast}]}
   end
 
   defp handle_matches(text, matches) do

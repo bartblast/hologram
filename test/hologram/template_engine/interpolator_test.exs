@@ -17,7 +17,7 @@ defmodule Hologram.TemplateEngine.InterpolatorTest do
 
   test "text" do
     nodes = [
-      %TextNode{text: "test"},
+      %TextNode{text: "test"}
     ]
 
     result = Interpolator.interpolate(nodes)
@@ -146,7 +146,7 @@ defmodule Hologram.TemplateEngine.InterpolatorTest do
       %TextNode{text: "bcd"},
       %Expression{
         ast: %ModuleAttribute{name: :def}
-      },
+      }
     ]
 
     assert result == expected
@@ -167,7 +167,7 @@ defmodule Hologram.TemplateEngine.InterpolatorTest do
       %Expression{
         ast: %ModuleAttribute{name: :cde}
       },
-      %TextNode{text: "def"},
+      %TextNode{text: "def"}
     ]
 
     assert result == expected
@@ -176,9 +176,13 @@ defmodule Hologram.TemplateEngine.InterpolatorTest do
   test "nested text node" do
     nodes = [
       %TextNode{text: "abc{{ @bcd }}"},
-      %TagNode{tag: "div", attrs: %{}, children: [
-        %TextNode{text: "cde{{ @def }}"}
-      ]}
+      %TagNode{
+        tag: "div",
+        attrs: %{},
+        children: [
+          %TextNode{text: "cde{{ @def }}"}
+        ]
+      }
     ]
 
     result = Interpolator.interpolate(nodes)

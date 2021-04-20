@@ -39,9 +39,10 @@ defmodule Hologram.Transpiler.Transformer do
   end
 
   def transform({:%{}, _, ast}, module, imports, aliases) do
-    data = Enum.map(ast, fn {k, v} ->
-      {transform(k, module, imports, aliases), transform(v, module, imports, aliases)}
-    end)
+    data =
+      Enum.map(ast, fn {k, v} ->
+        {transform(k, module, imports, aliases), transform(v, module, imports, aliases)}
+      end)
 
     %MapType{data: data}
   end
@@ -91,18 +92,30 @@ defmodule Hologram.Transpiler.Transformer do
 
   # DIRECTIVES
 
-  def transform({:alias, _, [{:__aliases__, _, aliased_module}]}, _current_module, _imports, _aliases) do
+  def transform(
+        {:alias, _, [{:__aliases__, _, aliased_module}]},
+        _current_module,
+        _imports,
+        _aliases
+      ) do
     %Alias{module: aliased_module}
   end
 
-  def transform({:import, _, [{:__aliases__, _, imported_module}]}, _current_module, _imports, _aliases) do
+  def transform(
+        {:import, _, [{:__aliases__, _, imported_module}]},
+        _current_module,
+        _imports,
+        _aliases
+      ) do
     %Import{module: imported_module}
   end
 
   # OTHER
 
   def transform({:defmodule, _, [_, [do: {:__block__, _, _}]]} = ast, _module, _imports, _aliases) do
-    {:defmodule, _, [{:__aliases__, _, name}, [do: {:__block__, _, block}]]} = Expander.expand(ast)
+    {:defmodule, _, [{:__aliases__, _, name}, [do: {:__block__, _, block}]]} =
+      Expander.expand(ast)
+
     build_module(name, block)
   end
 
@@ -125,6 +138,7 @@ defmodule Hologram.Transpiler.Transformer do
       case expr do
         {:alias, _, _} ->
           acc ++ [transform(expr)]
+
         _ ->
           acc
       end
@@ -140,6 +154,7 @@ defmodule Hologram.Transpiler.Transformer do
           else
             acc ++ [transform(expr, module, imports, aliases)]
           end
+
         _ ->
           acc
       end
@@ -151,6 +166,7 @@ defmodule Hologram.Transpiler.Transformer do
       case expr do
         {:import, _, _} ->
           acc ++ [transform(expr)]
+
         _ ->
           acc
       end
@@ -175,6 +191,7 @@ defmodule Hologram.Transpiler.Transformer do
         case aggregate_bindings(param) do
           [] ->
             nil
+
           path ->
             path
             |> hd()
@@ -191,6 +208,7 @@ defmodule Hologram.Transpiler.Transformer do
     case body do
       {:__block__, _, block} ->
         block
+
       expr ->
         [expr]
     end
@@ -209,7 +227,12 @@ defmodule Hologram.Transpiler.Transformer do
     CallTransformer.transform(module, function, params, imports, aliases)
   end
 
-  def transform({{:., _, [{:__aliases__, _, called_module}, function]}, _, params}, current_module, imports, aliases) do
+  def transform(
+        {{:., _, [{:__aliases__, _, called_module}, function]}, _, params},
+        current_module,
+        imports,
+        aliases
+      ) do
     CallTransformer.transform(called_module, function, params, imports, aliases)
   end
 end

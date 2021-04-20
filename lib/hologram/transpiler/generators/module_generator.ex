@@ -26,6 +26,7 @@ defmodule Hologram.Transpiler.Generators.ModuleGenerator do
           else
             Map.put(acc, name, [fun])
           end
+
         # TODO: determine what's this case for, comment and test it
         _ ->
           acc

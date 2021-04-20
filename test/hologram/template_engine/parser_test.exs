@@ -21,27 +21,29 @@ defmodule Hologram.TemplateEngine.ParserTest do
 
       result = Parser.parse(html)
 
-      expected = {:ok, [
-        {"div",
-        [
-          {"class", "test_class_1"},
-          {"abc", "{{ @abc }}"},
-          {"id", "test_id_1"},
-          {"bcd", "{{ @bcd }}"}
-        ],
-        [
-          "\n  ",
-          {"span",
+      expected =
+        {:ok,
+         [
+           {"div",
             [
-              {"class", "test_class_2"},
-              {"cde", "{{ @cde }}"},
-              {"id", "test_id_2"},
-              {"def", "{{ @def }}"}
-            ], []},
-          "\n"
-        ]},
-        "\n"
-      ]}
+              {"class", "test_class_1"},
+              {"abc", "{{ @abc }}"},
+              {"id", "test_id_1"},
+              {"bcd", "{{ @bcd }}"}
+            ],
+            [
+              "\n  ",
+              {"span",
+               [
+                 {"class", "test_class_2"},
+                 {"cde", "{{ @cde }}"},
+                 {"id", "test_id_2"},
+                 {"def", "{{ @def }}"}
+               ], []},
+              "\n"
+            ]},
+           "\n"
+         ]}
 
       assert result == expected
     end

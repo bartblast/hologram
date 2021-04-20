@@ -10,7 +10,7 @@ defmodule Hologram.TemplateEngine.RendererTest do
   test "multiple nodes" do
     nodes = [
       %TextNode{text: "test_1"},
-      %TextNode{text: "test_2"},
+      %TextNode{text: "test_2"}
     ]
 
     result = Renderer.render(nodes, %{})
@@ -20,13 +20,19 @@ defmodule Hologram.TemplateEngine.RendererTest do
   end
 
   test "tag node" do
-    ast = %TagNode{attrs: %{attr_1: "test_attr_value_1", attr_2: "test_attr_value_2"}, tag: "div", children: [
-      %TextNode{text: "test_text"},
-      %TagNode{attrs: %{}, children: [], tag: "span"}
-    ]}
+    ast = %TagNode{
+      attrs: %{attr_1: "test_attr_value_1", attr_2: "test_attr_value_2"},
+      tag: "div",
+      children: [
+        %TextNode{text: "test_text"},
+        %TagNode{attrs: %{}, children: [], tag: "span"}
+      ]
+    }
 
     result = Renderer.render(ast, %{})
-    expected = "<div attr_1=\"test_attr_value_1\" attr_2=\"test_attr_value_2\">test_text<span></span></div>"
+
+    expected =
+      "<div attr_1=\"test_attr_value_1\" attr_2=\"test_attr_value_2\">test_text<span></span></div>"
 
     assert result == expected
   end

@@ -5,7 +5,7 @@ defmodule Hologram.Transpiler.Helpers do
   end
 
   def fully_qualified_module(module) do
-    [:Elixir] ++ module
+    ([:"Elixir"] ++ module)
     |> Enum.join(".")
     |> String.to_existing_atom()
   end

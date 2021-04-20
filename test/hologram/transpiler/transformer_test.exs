@@ -112,104 +112,98 @@ defmodule Hologram.Transpiler.TransformerTest do
         parse!("%{a: x, b: y} = %{a: 1, b: 2}")
         |> Transformer.transform()
 
-      expected =
-        %MatchOperator{
-          bindings: [
-            [
-              %Variable{name: :x},
-              %MapAccess{key: %AtomType{value: :a}}
-            ],
-            [
-              %Variable{name: :y},
-              %MapAccess{key: %AtomType{value: :b}}
-            ]
+      expected = %MatchOperator{
+        bindings: [
+          [
+            %Variable{name: :x},
+            %MapAccess{key: %AtomType{value: :a}}
           ],
-          left: %MapType{
-            data: [
-              {%AtomType{value: :a}, %Variable{name: :x}},
-              {%AtomType{value: :b}, %Variable{name: :y}}
-            ]
-          },
-          right: %MapType{
-            data: [
-              {%AtomType{value: :a}, %IntegerType{value: 1}},
-              {%AtomType{value: :b}, %IntegerType{value: 2}}
-            ]
-          }
+          [
+            %Variable{name: :y},
+            %MapAccess{key: %AtomType{value: :b}}
+          ]
+        ],
+        left: %MapType{
+          data: [
+            {%AtomType{value: :a}, %Variable{name: :x}},
+            {%AtomType{value: :b}, %Variable{name: :y}}
+          ]
+        },
+        right: %MapType{
+          data: [
+            {%AtomType{value: :a}, %IntegerType{value: 1}},
+            {%AtomType{value: :b}, %IntegerType{value: 2}}
+          ]
         }
+      }
 
       assert result == expected
     end
 
     test "match operator, map, nested" do
-      code = "%{a: 1, b: %{p: x, r: 4}, c: 3, d: %{m: 0, n: y}} = %{a: 1, b: %{p: 9, r: 4}, c: 3, d: %{m: 0, n: 8}}"
+      code =
+        "%{a: 1, b: %{p: x, r: 4}, c: 3, d: %{m: 0, n: y}} = %{a: 1, b: %{p: 9, r: 4}, c: 3, d: %{m: 0, n: 8}}"
 
       result =
         parse!(code)
         |> Transformer.transform()
 
-      expected =
-        %MatchOperator{
-          bindings: [
-            [
-              %Variable{name: :x},
-              %MapAccess{key: %AtomType{value: :b}},
-              %MapAccess{key: %AtomType{value: :p}}
-            ],
-            [
-              %Variable{name: :y},
-              %MapAccess{key: %AtomType{value: :d}},
-              %MapAccess{key: %AtomType{value: :n}}
-            ]
+      expected = %MatchOperator{
+        bindings: [
+          [
+            %Variable{name: :x},
+            %MapAccess{key: %AtomType{value: :b}},
+            %MapAccess{key: %AtomType{value: :p}}
           ],
-          left: %MapType{
-            data: [
-              {%AtomType{value: :a}, %IntegerType{value: 1}},
-              {
-                %AtomType{value: :b},
-                %MapType{
-                  data: [
-                    {%AtomType{value: :p}, %Variable{name: :x}},
-                    {%AtomType{value: :r}, %IntegerType{value: 4}}
-                  ]
-                }},
-              {%AtomType{value: :c}, %IntegerType{value: 3}},
-              {%AtomType{value: :d},
-                %MapType{
-                  data: [
-                    {%AtomType{value: :m},
-                    %IntegerType{value: 0}},
-                    {%AtomType{value: :n},
-                    %Variable{name: :y}}
-                  ]
-                }}
-            ]
-          },
-          right: %MapType{
-            data: [
-              {%AtomType{value: :a}, %IntegerType{value: 1}},
-              {%AtomType{value: :b},
-                %MapType{
-                  data: [
-                    {%AtomType{value: :p},
-                    %IntegerType{value: 9}},
-                    {%AtomType{value: :r},
-                    %IntegerType{value: 4}}
-                  ]
-                }},
-              {%AtomType{value: :c}, %IntegerType{value: 3}},
-              {%AtomType{value: :d},
-                %MapType{
-                  data: [
-                    {%AtomType{value: :m},
-                    %IntegerType{value: 0}},
-                    {%AtomType{value: :n},
-                    %IntegerType{value: 8}}
-                  ]
-                }}
-            ]
-          }
+          [
+            %Variable{name: :y},
+            %MapAccess{key: %AtomType{value: :d}},
+            %MapAccess{key: %AtomType{value: :n}}
+          ]
+        ],
+        left: %MapType{
+          data: [
+            {%AtomType{value: :a}, %IntegerType{value: 1}},
+            {
+              %AtomType{value: :b},
+              %MapType{
+                data: [
+                  {%AtomType{value: :p}, %Variable{name: :x}},
+                  {%AtomType{value: :r}, %IntegerType{value: 4}}
+                ]
+              }
+            },
+            {%AtomType{value: :c}, %IntegerType{value: 3}},
+            {%AtomType{value: :d},
+             %MapType{
+               data: [
+                 {%AtomType{value: :m}, %IntegerType{value: 0}},
+                 {%AtomType{value: :n}, %Variable{name: :y}}
+               ]
+             }}
+          ]
+        },
+        right: %MapType{
+          data: [
+            {%AtomType{value: :a}, %IntegerType{value: 1}},
+            {%AtomType{value: :b},
+             %MapType{
+               data: [
+                 {%AtomType{value: :p}, %IntegerType{value: 9}},
+                 {%AtomType{value: :r}, %IntegerType{value: 4}}
+               ]
+             }},
+            {%AtomType{value: :c}, %IntegerType{value: 3}},
+            {%AtomType{value: :d},
+             %MapType{
+               data: [
+                 {%AtomType{value: :m}, %IntegerType{value: 0}},
+                 {%AtomType{value: :n}, %IntegerType{value: 8}}
+               ]
+             }}
+          ]
         }
+      }
 
       assert result == expected
     end
@@ -221,9 +215,9 @@ defmodule Hologram.Transpiler.TransformerTest do
         parse!("import Prefix.Test")
         |> Transformer.transform()
 
-        expected = %Import{module: [:Prefix, :Test]}
+      expected = %Import{module: [:Prefix, :Test]}
 
-        assert result == expected
+      assert result == expected
     end
 
     test "alias" do
@@ -431,19 +425,18 @@ defmodule Hologram.Transpiler.TransformerTest do
         |> Map.get(:functions)
         |> hd()
 
-      expected =
-        %Function{
-          bindings: [
-            [%Variable{name: :a}],
-            [%Variable{name: :b}]
-          ],
-          body: [%IntegerType{value: 1}],
-          name: :test,
-          params: [
-            %Variable{name: :a},
-            %Variable{name: :b}
-          ]
-        }
+      expected = %Function{
+        bindings: [
+          [%Variable{name: :a}],
+          [%Variable{name: :b}]
+        ],
+        body: [%IntegerType{value: 1}],
+        name: :test,
+        params: [
+          %Variable{name: :a},
+          %Variable{name: :b}
+        ]
+      }
 
       assert result == expected
     end
@@ -463,16 +456,15 @@ defmodule Hologram.Transpiler.TransformerTest do
         |> Map.get(:functions)
         |> hd()
 
-      expected =
-        %Function{
-          bindings: [],
-          body: [%IntegerType{value: 1}],
-          name: :test,
-          params: [
-            %AtomType{value: :a},
-            %IntegerType{value: 2}
-          ]
-        }
+      expected = %Function{
+        bindings: [],
+        body: [%IntegerType{value: 1}],
+        name: :test,
+        params: [
+          %AtomType{value: :a},
+          %IntegerType{value: 2}
+        ]
+      }
 
       assert result == expected
     end
@@ -492,18 +484,17 @@ defmodule Hologram.Transpiler.TransformerTest do
         |> Map.get(:functions)
         |> hd()
 
-      expected =
-        %Function{
-          bindings: [
-            [%Variable{name: :x}],
-          ],
-          body: [%IntegerType{value: 1}],
-          name: :test,
-          params: [
-            %AtomType{value: :a},
-            %Variable{name: :x}
-          ]
-        }
+      expected = %Function{
+        bindings: [
+          [%Variable{name: :x}]
+        ],
+        body: [%IntegerType{value: 1}],
+        name: :test,
+        params: [
+          %AtomType{value: :a},
+          %Variable{name: :x}
+        ]
+      }
 
       assert result == expected
     end
@@ -568,41 +559,40 @@ defmodule Hologram.Transpiler.TransformerTest do
         parse!(code)
         |> Transformer.transform()
 
-      expected =
-        %Module{
-          aliases: %{list: [], map: %{}},
-          functions: [
-            %Function{
-              bindings: [
-                [%Variable{name: :a}]
-              ],
-              body: [
-                %IntegerType{value: 1}
-              ],
-              name: :test,
-              params: [
-                %Variable{name: :a}
-              ]
-            },
-            %Function{
-              bindings: [
-                [%Variable{name: :a}],
-                [%Variable{name: :b}]
-              ],
-              body: [
-                %IntegerType{value: 1},
-                %IntegerType{value: 2}
-              ],
-              name: :test,
-              params: [
-                %Variable{name: :a},
-                %Variable{name: :b}
-              ]
-            }
-          ],
-          imports: [],
-          name: [:Prefix, :Test]
-        }
+      expected = %Module{
+        aliases: %{list: [], map: %{}},
+        functions: [
+          %Function{
+            bindings: [
+              [%Variable{name: :a}]
+            ],
+            body: [
+              %IntegerType{value: 1}
+            ],
+            name: :test,
+            params: [
+              %Variable{name: :a}
+            ]
+          },
+          %Function{
+            bindings: [
+              [%Variable{name: :a}],
+              [%Variable{name: :b}]
+            ],
+            body: [
+              %IntegerType{value: 1},
+              %IntegerType{value: 2}
+            ],
+            name: :test,
+            params: [
+              %Variable{name: :a},
+              %Variable{name: :b}
+            ]
+          }
+        ],
+        imports: [],
+        name: [:Prefix, :Test]
+      }
 
       assert result == expected
     end
@@ -631,50 +621,49 @@ defmodule Hologram.Transpiler.TransformerTest do
         parse!(code)
         |> Transformer.transform()
 
-      expected =
-        %Module{
-          aliases: %{
-            list: [
-              %Alias{module: [:Abc, :Bcd]},
-              %Alias{module: [:Cde, :Efg]}
-            ],
-            map: %{
-              Bcd: [:Abc, :Bcd],
-              Efg: [:Cde, :Efg]
-            }
-          },
-          functions: [
-            %Function{
-              bindings: [
-                [%Variable{name: :a}]
-              ],
-              body: [
-                %IntegerType{value: 1}
-              ],
-              name: :test,
-              params: [
-                %Variable{name: :a}
-              ]
-            },
-            %Function{
-              bindings: [
-                [%Variable{name: :a}],
-                [%Variable{name: :b}]
-              ],
-              body: [
-                %IntegerType{value: 1},
-                %IntegerType{value: 2}
-              ],
-              name: :test,
-              params: [
-                %Variable{name: :a},
-                %Variable{name: :b}
-              ]
-            }
+      expected = %Module{
+        aliases: %{
+          list: [
+            %Alias{module: [:Abc, :Bcd]},
+            %Alias{module: [:Cde, :Efg]}
           ],
-          imports: [],
-          name: [:Prefix, :Test]
-        }
+          map: %{
+            Bcd: [:Abc, :Bcd],
+            Efg: [:Cde, :Efg]
+          }
+        },
+        functions: [
+          %Function{
+            bindings: [
+              [%Variable{name: :a}]
+            ],
+            body: [
+              %IntegerType{value: 1}
+            ],
+            name: :test,
+            params: [
+              %Variable{name: :a}
+            ]
+          },
+          %Function{
+            bindings: [
+              [%Variable{name: :a}],
+              [%Variable{name: :b}]
+            ],
+            body: [
+              %IntegerType{value: 1},
+              %IntegerType{value: 2}
+            ],
+            name: :test,
+            params: [
+              %Variable{name: :a},
+              %Variable{name: :b}
+            ]
+          }
+        ],
+        imports: [],
+        name: [:Prefix, :Test]
+      }
 
       assert result == expected
     end
@@ -690,13 +679,12 @@ defmodule Hologram.Transpiler.TransformerTest do
         parse!(code)
         |> Transformer.transform()
 
-      expected =
-        %Module{
-          aliases: %{list: [], map: %{}},
-          functions: [],
-          imports: [%Import{module: [:TestModule1]}],
-          name: [:Prefix, :Test]
-        }
+      expected = %Module{
+        aliases: %{list: [], map: %{}},
+        functions: [],
+        imports: [%Import{module: [:TestModule1]}],
+        name: [:Prefix, :Test]
+      }
 
       assert result == expected
     end
@@ -713,16 +701,15 @@ defmodule Hologram.Transpiler.TransformerTest do
         parse!(code)
         |> Transformer.transform()
 
-      expected =
-        %Module{
-          aliases: %{list: [], map: %{}},
-          functions: [],
-          imports: [
-            %Import{module: [:TestModule1]},
-            %Import{module: [:TestModule3]}
-          ],
-          name: [:Prefix, :Test]
-        }
+      expected = %Module{
+        aliases: %{list: [], map: %{}},
+        functions: [],
+        imports: [
+          %Import{module: [:TestModule1]},
+          %Import{module: [:TestModule3]}
+        ],
+        name: [:Prefix, :Test]
+      }
 
       assert result == expected
     end
