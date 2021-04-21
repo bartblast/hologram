@@ -7,7 +7,7 @@ defmodule Hologram.Transpiler.Transformer do
   alias Hologram.Transpiler.AST.MapAccess
   alias Hologram.Transpiler.AST.{Alias, Function, FunctionCall, Import, Module, ModuleAttribute, Variable}
   alias Hologram.Transpiler.Expander
-  alias Hologram.Transpiler.{FunctionCallTransformer, ListTypeTransformer, MapTransformer}
+  alias Hologram.Transpiler.{FunctionCallTransformer, ListTypeTransformer, MapTransformer, StructTypeTransformer}
 
   @eliminated_functions [render: 1]
 
@@ -42,19 +42,8 @@ defmodule Hologram.Transpiler.Transformer do
     MapTransformer.transform(ast, module, imports, aliases)
   end
 
-  def transform({:%, _, [{_, _, module}, ast]}, _module, imports, aliases) do
-    data = transform(ast, module, imports, aliases).data
-
-    key = List.last(module)
-
-    module =
-      if Map.has_key?(aliases, key) do
-        aliases[key]
-      else
-        module
-      end
-
-    %StructType{module: module, data: data}
+  def transform({:%, _, [{_, _, struct_module}, ast]}, current_module, imports, aliases) do
+    StructTypeTransformer.transform(ast, struct_module, current_module, imports, aliases)
   end
 
   # OPERATORS

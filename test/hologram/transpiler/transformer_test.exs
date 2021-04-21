@@ -660,45 +660,6 @@ defmodule Hologram.Transpiler.TransformerTest do
       assert result == expected
     end
 
-    # TODO: test structs with namespace which have aliases, e.g. alias Abc.Bcd -> %Bcd.Cde{} (not implemented yet)
-
-    test "struct, without namespace, not aliased" do
-      result =
-        parse!("%TestStruct{abc: 1}")
-        |> Transformer.transform()
-
-      expected = %StructType{
-        data: [
-          {%AtomType{value: :abc}, %IntegerType{value: 1}}
-        ],
-        module: [:TestStruct]
-      }
-
-      assert result == expected
-    end
-
-    test "struct, without namespace, aliased" do
-      code = "%TestStruct{abc: 1}"
-
-      aliases = %{
-        OtherStruct: [:Abc, :Bcd, :OtherStruct],
-        TestStruct: [:Cde, :Def, :TestStruct]
-      }
-
-      result =
-        parse!(code)
-        |> Transformer.transform(nil, aliases)
-
-      expected = %StructType{
-        data: [
-          {%AtomType{value: :abc}, %IntegerType{value: 1}}
-        ],
-        module: [:Cde, :Def, :TestStruct]
-      }
-
-      assert result == expected
-    end
-
     test "variable" do
       ast = parse!("x")
       assert Transformer.transform(ast) == %Variable{name: :x}
