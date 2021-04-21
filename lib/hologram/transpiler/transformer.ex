@@ -7,7 +7,7 @@ defmodule Hologram.Transpiler.Transformer do
   alias Hologram.Transpiler.AST.MapAccess
   alias Hologram.Transpiler.AST.{Alias, Function, FunctionCall, Import, Module, ModuleAttribute, Variable}
   alias Hologram.Transpiler.Expander
-  alias Hologram.Transpiler.{FunctionCallTransformer, ListTypeTransformer}
+  alias Hologram.Transpiler.{FunctionCallTransformer, ListTypeTransformer, MapTransformer}
 
   @eliminated_functions [render: 1]
 
@@ -39,12 +39,7 @@ defmodule Hologram.Transpiler.Transformer do
   end
 
   def transform({:%{}, _, ast}, module, imports, aliases) do
-    data =
-      Enum.map(ast, fn {k, v} ->
-        {transform(k, module, imports, aliases), transform(v, module, imports, aliases)}
-      end)
-
-    %MapType{data: data}
+    MapTransformer.transform(ast, module, imports, aliases)
   end
 
   def transform({:%, _, [{_, _, module}, ast]}, _module, imports, aliases) do
