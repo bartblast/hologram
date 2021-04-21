@@ -7,7 +7,7 @@ defmodule DemoPage do
     }
   end
 
-  def render(state) do
+  def render do
     ~H"""
       <div>Hello World {{ @counter }}</div>
       <div><button :click="increment">Increment</button></div>
