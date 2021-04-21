@@ -1,5 +1,5 @@
-defmodule Hologram.Transpiler.Transformers.CallTransformer do
-  alias Hologram.Transpiler.AST.Call
+defmodule Hologram.Transpiler.Transformers.FunctionCallTransformer do
+  alias Hologram.Transpiler.AST.FunctionCall
   alias Hologram.Transpiler.Helpers
   alias Hologram.Transpiler.Transformer
 
@@ -9,7 +9,7 @@ defmodule Hologram.Transpiler.Transformers.CallTransformer do
     resolved_module =
       resolve_module(called_module, function, params, current_module, imports, aliases)
 
-    %Call{module: resolved_module, function: function, params: params}
+    %FunctionCall{module: resolved_module, function: function, params: params}
   end
 
   defp resolve_aliased_module(as, aliases) do

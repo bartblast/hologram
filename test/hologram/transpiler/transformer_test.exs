@@ -9,7 +9,7 @@ defmodule Hologram.Transpiler.TransformerTest do
   alias Hologram.Transpiler.AST.{ListType, MapType, StructType}
   alias Hologram.Transpiler.AST.MatchOperator
   alias Hologram.Transpiler.AST.MapAccess
-  alias Hologram.Transpiler.AST.{Alias, Call, Function, Import, Module, ModuleAttribute, Variable}
+  alias Hologram.Transpiler.AST.{Alias, Function, FunctionCall, Import, Module, ModuleAttribute, Variable}
   alias Hologram.Transpiler.Transformer
   alias TestModule1
   alias TestModule4
@@ -249,7 +249,7 @@ defmodule Hologram.Transpiler.TransformerTest do
         |> Map.get(:body)
         |> Enum.at(1)
 
-      expected = %Call{
+      expected = %FunctionCall{
         function: :test_2,
         module: [:Abc, :Bce],
         params: [
@@ -280,7 +280,7 @@ defmodule Hologram.Transpiler.TransformerTest do
         |> Map.get(:body)
         |> Enum.at(1)
 
-      expected = %Call{
+      expected = %FunctionCall{
         function: :test_2,
         module: [:Cde, :Def],
         params: [
@@ -313,7 +313,7 @@ defmodule Hologram.Transpiler.TransformerTest do
         |> Map.get(:body)
         |> Enum.at(1)
 
-      expected = %Call{
+      expected = %FunctionCall{
         function: :test_2,
         module: [:Cde, :Def, :Efg],
         params: [

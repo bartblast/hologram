@@ -1,11 +1,11 @@
-defmodule Hologram.Transpiler.Transformers.CallTransformerTest do
+defmodule Hologram.Transpiler.Transformers.FunctionCallTransformerTest do
   use ExUnit.Case, async: true
 
   alias Hologram.Transpiler.AST.Alias
-  alias Hologram.Transpiler.AST.Call
+  alias Hologram.Transpiler.AST.FunctionCall
   alias Hologram.Transpiler.AST.Import
   alias Hologram.Transpiler.AST.IntegerType
-  alias Hologram.Transpiler.Transformers.CallTransformer
+  alias Hologram.Transpiler.Transformers.FunctionCallTransformer
 
   @aliases [
     %Alias{module: [:Calendar, :ISO], as: [:Abc]},
@@ -24,7 +24,7 @@ defmodule Hologram.Transpiler.Transformers.CallTransformerTest do
     params = [1, 2]
 
     result =
-      CallTransformer.transform(
+      FunctionCallTransformer.transform(
         called_module,
         function,
         params,
@@ -35,7 +35,7 @@ defmodule Hologram.Transpiler.Transformers.CallTransformerTest do
 
     expected_params = [%IntegerType{value: 1}, %IntegerType{value: 2}]
 
-    assert result == %Call{module: current_module, function: function, params: expected_params}
+    assert result == %FunctionCall{module: current_module, function: function, params: expected_params}
   end
 
   test "imported module function" do
@@ -45,7 +45,7 @@ defmodule Hologram.Transpiler.Transformers.CallTransformerTest do
     params = [1, 2]
 
     result =
-      CallTransformer.transform(
+      FunctionCallTransformer.transform(
         called_module,
         function,
         params,
@@ -56,7 +56,7 @@ defmodule Hologram.Transpiler.Transformers.CallTransformerTest do
 
     expected_params = [%IntegerType{value: 1}, %IntegerType{value: 2}]
 
-    assert result == %Call{
+    assert result == %FunctionCall{
              module: [:Task, :Supervisor],
              function: function,
              params: expected_params
@@ -70,7 +70,7 @@ defmodule Hologram.Transpiler.Transformers.CallTransformerTest do
     params = [1, 2]
 
     result =
-      CallTransformer.transform(
+      FunctionCallTransformer.transform(
         called_module,
         function,
         params,
@@ -81,7 +81,7 @@ defmodule Hologram.Transpiler.Transformers.CallTransformerTest do
 
     expected_params = [%IntegerType{value: 1}, %IntegerType{value: 2}]
 
-    assert result == %Call{
+    assert result == %FunctionCall{
              module: [:Task, :Supervisor],
              function: function,
              params: expected_params
@@ -95,7 +95,7 @@ defmodule Hologram.Transpiler.Transformers.CallTransformerTest do
     params = [1, 2]
 
     result =
-      CallTransformer.transform(
+      FunctionCallTransformer.transform(
         called_module,
         function,
         params,
@@ -106,6 +106,6 @@ defmodule Hologram.Transpiler.Transformers.CallTransformerTest do
 
     expected_params = [%IntegerType{value: 1}, %IntegerType{value: 2}]
 
-    assert result == %Call{module: [:Cde, :Def], function: function, params: expected_params}
+    assert result == %FunctionCall{module: [:Cde, :Def], function: function, params: expected_params}
   end
 end

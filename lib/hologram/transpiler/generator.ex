@@ -11,7 +11,7 @@ defmodule Hologram.Transpiler.Generator do
     StructType
   }
 
-  alias Hologram.Transpiler.AST.{Call, Function, MapAccess, Module, Variable}
+  alias Hologram.Transpiler.AST.{Function, FunctionCall, MapAccess, Module, Variable}
 
   alias Hologram.Transpiler.Generators.{
     MapTypeGenerator,
@@ -58,7 +58,7 @@ defmodule Hologram.Transpiler.Generator do
     "{ type: 'variable' }"
   end
 
-  def generate(%Call{module: module, function: function, params: params}) do
+  def generate(%FunctionCall{module: module, function: function, params: params}) do
     class = Helpers.class_name(module)
 
     params =

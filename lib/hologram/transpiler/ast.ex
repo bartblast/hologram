@@ -47,12 +47,12 @@ defmodule Hologram.Transpiler.AST do
 
   # OTHER
 
-  defmodule Call do
-    defstruct module: nil, function: nil, params: nil
-  end
-
   defmodule Function do
     defstruct name: nil, arity: nil, params: nil, bindings: nil, body: nil
+  end
+
+  defmodule FunctionCall do
+    defstruct module: nil, function: nil, params: nil
   end
 
   defmodule MapAccess do

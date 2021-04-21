@@ -5,7 +5,7 @@ defmodule Hologram.Transpiler.GeneratorTest do
 
   alias Hologram.Transpiler.AST.{AtomType, BooleanType, IntegerType, StringType}
   alias Hologram.Transpiler.AST.{MapType, StructType}
-  alias Hologram.Transpiler.AST.{Call, Variable}
+  alias Hologram.Transpiler.AST.{FunctionCall, Variable}
   alias Hologram.Transpiler.Generator
 
   describe "types" do
@@ -63,7 +63,7 @@ defmodule Hologram.Transpiler.GeneratorTest do
     end
 
     test "function call with params" do
-      ast = %Call{
+      ast = %FunctionCall{
         module: [:Abc, :Bcd],
         function: :test,
         params: [
@@ -79,7 +79,7 @@ defmodule Hologram.Transpiler.GeneratorTest do
     end
 
     test "function call without params" do
-      ast = %Call{
+      ast = %FunctionCall{
         module: [:Abc, :Bcd],
         function: :test,
         params: []

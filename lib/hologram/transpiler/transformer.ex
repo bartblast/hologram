@@ -5,9 +5,9 @@ defmodule Hologram.Transpiler.Transformer do
   alias Hologram.Transpiler.AST.{ListType, MapType, StructType}
   alias Hologram.Transpiler.AST.MatchOperator
   alias Hologram.Transpiler.AST.MapAccess
-  alias Hologram.Transpiler.AST.{Alias, Call, Function, Import, Module, ModuleAttribute, Variable}
+  alias Hologram.Transpiler.AST.{Alias, Function, FunctionCall, Import, Module, ModuleAttribute, Variable}
   alias Hologram.Transpiler.Expander
-  alias Hologram.Transpiler.Transformers.{CallTransformer, ListTypeTransformer}
+  alias Hologram.Transpiler.Transformers.{FunctionCallTransformer, ListTypeTransformer}
 
   @eliminated_functions [render: 1]
 
@@ -224,7 +224,7 @@ defmodule Hologram.Transpiler.Transformer do
   end
 
   def transform({function, _, params}, module, imports, aliases) when is_atom(function) do
-    CallTransformer.transform(module, function, params, imports, aliases)
+    FunctionCallTransformer.transform(module, function, params, imports, aliases)
   end
 
   def transform(
@@ -233,6 +233,6 @@ defmodule Hologram.Transpiler.Transformer do
         imports,
         aliases
       ) do
-    CallTransformer.transform(called_module, function, params, imports, aliases)
+    FunctionCallTransformer.transform(called_module, function, params, imports, aliases)
   end
 end
