@@ -1,6 +1,7 @@
 defmodule Hologram.Transpiler.FunctionCallTransformer do
   alias Hologram.Transpiler.AST.FunctionCall
   alias Hologram.Transpiler.Helpers
+  alias Hologram.Transpiler.Resolver
   alias Hologram.Transpiler.Transformer
 
   def transform(called_module, function, params, current_module, imports, aliases) do
@@ -10,11 +11,6 @@ defmodule Hologram.Transpiler.FunctionCallTransformer do
       resolve_module(called_module, function, params, current_module, imports, aliases)
 
     %FunctionCall{module: resolved_module, function: function, params: params}
-  end
-
-  defp resolve_aliased_module(as, aliases) do
-    resolved = Enum.find(aliases, &(&1.as == as))
-    if resolved, do: resolved.module, else: nil
   end
 
   defp resolve_imported_module(function, arity, imports) do
@@ -34,7 +30,7 @@ defmodule Hologram.Transpiler.FunctionCallTransformer do
       imported_module = resolve_imported_module(function, arity, imports)
       if imported_module, do: imported_module, else: current_module
     else
-      aliased_module = resolve_aliased_module(called_module, aliases)
+      aliased_module = Resolver.resolve_aliased_module(called_module, aliases)
       if aliased_module, do: aliased_module, else: called_module
     end
   end
