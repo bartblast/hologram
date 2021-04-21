@@ -1,6 +1,5 @@
 defmodule Hologram.Transpiler.StructTypeTransformerTest do
   use ExUnit.Case, async: true
-  import Hologram.Transpiler.Parser, only: [parse!: 1]
 
   alias Hologram.Transpiler.AST.{Alias, AtomType, IntegerType, StructType}
   alias Hologram.Transpiler.StructTypeTransformer
