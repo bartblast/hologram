@@ -1,36 +1,31 @@
 defmodule Hologram.Transpiler.ListTypeTransformerTest do
   use ExUnit.Case, async: true
-  import Hologram.Transpiler.Parser, only: [parse!: 1]
 
   alias Hologram.Transpiler.AST.{IntegerType, ListType}
   alias Hologram.Transpiler.ListTypeTransformer
 
   test "empty list" do
-    result =
-      parse!("[]")
-      |> ListTypeTransformer.transform([:Abc], [], [])
-
+    result = ListTypeTransformer.transform([], [:Abc], [], [])
     expected = %ListType{data: []}
 
     assert result == expected
   end
 
   test "non-nested list" do
-    result =
-      parse!("[1, 2]")
-      |> ListTypeTransformer.transform([:Abc], [], [])
+    result = ListTypeTransformer.transform([1, 2], [:Abc], [], [])
 
     expected = %ListType{
-      data: [%IntegerType{value: 1}, %IntegerType{value: 2}]
+      data: [
+        %IntegerType{value: 1},
+        %IntegerType{value: 2}
+      ]
     }
 
     assert result == expected
   end
 
   test "nested list" do
-    result =
-      parse!("[1, [2, [3, 4]]]")
-      |> ListTypeTransformer.transform([:Abc], [], [])
+    result = ListTypeTransformer.transform([1, [2, [3, 4]]], [:Abc], [], [])
 
     expected = %ListType{
       data: [
