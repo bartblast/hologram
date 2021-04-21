@@ -1,4 +1,4 @@
-defmodule Hologram.Transpiler.Generators.MapKeyGenerator do
+defmodule Hologram.Transpiler.MapKeyGenerator do
   alias Hologram.Transpiler.AST.{AtomType, BooleanType, IntegerType, StringType}
 
   def generate(%AtomType{value: value}) do

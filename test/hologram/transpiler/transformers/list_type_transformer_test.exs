@@ -1,9 +1,9 @@
-defmodule Hologram.Transpiler.Transformers.ListTypeTransformerTest do
+defmodule Hologram.Transpiler.ListTypeTransformerTest do
   use ExUnit.Case, async: true
   import Hologram.Transpiler.Parser, only: [parse!: 1]
 
   alias Hologram.Transpiler.AST.{IntegerType, ListType}
-  alias Hologram.Transpiler.Transformers.ListTypeTransformer
+  alias Hologram.Transpiler.ListTypeTransformer
 
   test "empty list" do
     result =

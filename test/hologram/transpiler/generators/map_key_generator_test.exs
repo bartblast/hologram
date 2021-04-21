@@ -1,8 +1,8 @@
-defmodule Hologram.Transpiler.Generators.MapKeyGeneratorTest do
+defmodule Hologram.Transpiler.MapKeyGeneratorTest do
   use ExUnit.Case, async: true
 
   alias Hologram.Transpiler.AST.{AtomType, BooleanType, IntegerType, StringType}
-  alias Hologram.Transpiler.Generators.MapKeyGenerator
+  alias Hologram.Transpiler.MapKeyGenerator
 
   test "atom" do
     result = MapKeyGenerator.generate(%AtomType{value: :test})

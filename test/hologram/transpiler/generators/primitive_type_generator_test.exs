@@ -1,6 +1,6 @@
-defmodule Hologram.Transpiler.Generators.PrimitiveTypeGeneratorTest do
+defmodule Hologram.Transpiler.PrimitiveTypeGeneratorTest do
   use ExUnit.Case, async: true
-  alias Hologram.Transpiler.Generators.PrimitiveTypeGenerator
+  alias Hologram.Transpiler.PrimitiveTypeGenerator
 
   test "generator/2" do
     result = PrimitiveTypeGenerator.generate(:atom, "'test'")

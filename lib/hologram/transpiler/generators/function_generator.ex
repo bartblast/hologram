@@ -1,6 +1,6 @@
 # TODO: refactor & test
 
-defmodule Hologram.Transpiler.Generators.FunctionGenerator do
+defmodule Hologram.Transpiler.FunctionGenerator do
   alias Hologram.Transpiler.AST.{MapAccess, Variable}
   alias Hologram.Transpiler.Generator
 

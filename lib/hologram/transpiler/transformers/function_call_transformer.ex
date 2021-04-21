@@ -1,4 +1,4 @@
-defmodule Hologram.Transpiler.Transformers.FunctionCallTransformer do
+defmodule Hologram.Transpiler.FunctionCallTransformer do
   alias Hologram.Transpiler.AST.FunctionCall
   alias Hologram.Transpiler.Helpers
   alias Hologram.Transpiler.Transformer

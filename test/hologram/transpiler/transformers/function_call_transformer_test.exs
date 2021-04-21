@@ -1,11 +1,8 @@
-defmodule Hologram.Transpiler.Transformers.FunctionCallTransformerTest do
+defmodule Hologram.Transpiler.FunctionCallTransformerTest do
   use ExUnit.Case, async: true
 
-  alias Hologram.Transpiler.AST.Alias
-  alias Hologram.Transpiler.AST.FunctionCall
-  alias Hologram.Transpiler.AST.Import
-  alias Hologram.Transpiler.AST.IntegerType
-  alias Hologram.Transpiler.Transformers.FunctionCallTransformer
+  alias Hologram.Transpiler.AST.{Alias, FunctionCall, Import, IntegerType}
+  alias Hologram.Transpiler.FunctionCallTransformer
 
   @aliases [
     %Alias{module: [:Calendar, :ISO], as: [:Abc]},

@@ -1,7 +1,7 @@
-defmodule Hologram.Transpiler.Generators.StructTypeGenerator do
+defmodule Hologram.Transpiler.StructTypeGenerator do
   alias Hologram.Transpiler.Generator
-  alias Hologram.Transpiler.Generators.MapTypeGenerator
   alias Hologram.Transpiler.Helpers
+  alias Hologram.Transpiler.MapTypeGenerator
 
   def generate(module, data) do
     module_name = Helpers.module_name(module)

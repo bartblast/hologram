@@ -1,4 +1,4 @@
-defmodule Hologram.Transpiler.Generators.PrimitiveTypeGenerator do
+defmodule Hologram.Transpiler.PrimitiveTypeGenerator do
   def generate(type, value) do
     "{ type: '#{type}', value: #{value} }"
   end

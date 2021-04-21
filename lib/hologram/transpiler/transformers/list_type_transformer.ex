@@ -1,4 +1,4 @@
-defmodule Hologram.Transpiler.Transformers.ListTypeTransformer do
+defmodule Hologram.Transpiler.ListTypeTransformer do
   alias Hologram.Transpiler.AST.ListType
   alias Hologram.Transpiler.Transformer
 

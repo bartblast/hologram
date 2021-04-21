@@ -13,7 +13,7 @@ defmodule Hologram.Transpiler.Generator do
 
   alias Hologram.Transpiler.AST.{Function, FunctionCall, MapAccess, Module, Variable}
 
-  alias Hologram.Transpiler.Generators.{
+  alias Hologram.Transpiler.{
     MapTypeGenerator,
     ModuleGenerator,
     PrimitiveTypeGenerator,

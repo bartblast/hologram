@@ -1,8 +1,8 @@
-defmodule Hologram.Transpiler.Generators.MapTypeGeneratorTest do
+defmodule Hologram.Transpiler.MapTypeGeneratorTest do
   use ExUnit.Case, async: true
 
   alias Hologram.Transpiler.AST.{AtomType, IntegerType, MapType}
-  alias Hologram.Transpiler.Generators.MapTypeGenerator
+  alias Hologram.Transpiler.MapTypeGenerator
 
   test "generate/1" do
     ast = %MapType{data: [{%AtomType{value: :a}, %IntegerType{value: 1}}]}

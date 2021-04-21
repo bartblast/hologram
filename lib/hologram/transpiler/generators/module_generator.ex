@@ -1,6 +1,6 @@
-defmodule Hologram.Transpiler.Generators.ModuleGenerator do
+defmodule Hologram.Transpiler.ModuleGenerator do
   alias Hologram.Transpiler.AST.Function
-  alias Hologram.Transpiler.Generators.FunctionGenerator
+  alias Hologram.Transpiler.FunctionGenerator
   alias Hologram.Transpiler.Helpers
 
   def generate(ast, name) do

@@ -1,8 +1,8 @@
-defmodule Hologram.Transpiler.Generators.StructTypeGeneratorTest do
+defmodule Hologram.Transpiler.StructTypeGeneratorTest do
   use ExUnit.Case, async: true
 
   alias Hologram.Transpiler.AST.{AtomType, IntegerType, StructType}
-  alias Hologram.Transpiler.Generators.StructTypeGenerator
+  alias Hologram.Transpiler.StructTypeGenerator
 
   test "generate/1" do
     ast = %StructType{
