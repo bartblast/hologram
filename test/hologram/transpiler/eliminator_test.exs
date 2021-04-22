@@ -12,6 +12,7 @@ defmodule Hologram.Transpiler.EliminatorTest do
           imports: [],
           aliases: [],
           functions: [
+            %Function{name: :render, arity: 1},
             %Function{name: :test, arity: 0},
             %Function{name: :render, arity: 0}
           ]
@@ -25,6 +26,7 @@ defmodule Hologram.Transpiler.EliminatorTest do
           imports: [],
           aliases: [],
           functions: [
+            %Function{name: :render, arity: 1},
             %Function{name: :test, arity: 0}
           ]
         }

@@ -6,7 +6,8 @@ defmodule Hologram.Transpiler.Eliminator do
   def eliminate_dead_code(%Module{functions: functions} = module) do
     preserved_functions =
       Enum.reject(functions, fn %Function{name: name, arity: arity} ->
-        if @hologram_backend_functions[name] == arity, do: true, else: false
+        arities = Keyword.get_values(@hologram_backend_functions, name)
+        if arity in arities, do: true, else: false
       end)
 
     %{module | functions: preserved_functions}
