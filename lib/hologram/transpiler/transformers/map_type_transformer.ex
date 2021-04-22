@@ -1,4 +1,4 @@
-defmodule Hologram.Transpiler.MapTransformer do
+defmodule Hologram.Transpiler.MapTypeTransformer do
   alias Hologram.Transpiler.AST.MapType
   alias Hologram.Transpiler.Transformer
 

@@ -1,18 +1,18 @@
-defmodule Hologram.Transpiler.MapTransformerTest do
+defmodule Hologram.Transpiler.MapTypeTransformerTest do
   use ExUnit.Case, async: true
 
   alias Hologram.Transpiler.AST.{AtomType, IntegerType, MapType}
-  alias Hologram.Transpiler.MapTransformer
+  alias Hologram.Transpiler.MapTypeTransformer
 
   test "empty map" do
-    result = MapTransformer.transform([], [:Abc], [], [])
+    result = MapTypeTransformer.transform([], [:Abc], [], [])
     expected = %MapType{data: []}
 
     assert result == expected
   end
 
   test "non-nested map" do
-    result = MapTransformer.transform([a: 1, b: 2], [:Abc], [], [])
+    result = MapTypeTransformer.transform([a: 1, b: 2], [:Abc], [], [])
 
     expected = %MapType{
       data: [
@@ -36,7 +36,7 @@ defmodule Hologram.Transpiler.MapTransformerTest do
       ]}
     ]
 
-    result = MapTransformer.transform(ast, [:Abc], [], [])
+    result = MapTypeTransformer.transform(ast, [:Abc], [], [])
 
     expected = %MapType{
       data: [
