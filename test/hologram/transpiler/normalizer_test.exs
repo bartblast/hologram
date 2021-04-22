@@ -4,7 +4,7 @@ defmodule Hologram.Transpiler.NormalizerTest do
   alias Hologram.Transpiler.Normalizer
 
   test "module without block" do
-    # AST from this code:
+    # AST from:
     # defmodule Test do
     #   def test do
     #     1
@@ -33,7 +33,7 @@ defmodule Hologram.Transpiler.NormalizerTest do
   end
 
   test "module with block" do
-    # AST from this code:
+    # AST from:
     # defmodule Test do
     #   alias Abc
 
