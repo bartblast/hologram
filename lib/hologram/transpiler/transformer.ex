@@ -7,7 +7,7 @@ defmodule Hologram.Transpiler.Transformer do
   alias Hologram.Transpiler.AST.MapAccess
   alias Hologram.Transpiler.AST.{Alias, Function, FunctionCall, Import, Module, ModuleAttribute, Variable}
   alias Hologram.Transpiler.Expander
-  alias Hologram.Transpiler.{FunctionCallTransformer, ListTypeTransformer, MapTransformer, StructTypeTransformer}
+  alias Hologram.Transpiler.{FunctionCallTransformer, ListTypeTransformer, MapTypeTransformer, ModuleTransformer, StructTypeTransformer}
 
   @eliminated_functions [render: 1]
 
@@ -39,7 +39,7 @@ defmodule Hologram.Transpiler.Transformer do
   end
 
   def transform({:%{}, _, ast}, module, imports, aliases) do
-    MapTransformer.transform(ast, module, imports, aliases)
+    MapTypeTransformer.transform(ast, module, imports, aliases)
   end
 
   def transform({:%, _, [{_, _, struct_module}, ast]}, current_module, imports, aliases) do
@@ -97,69 +97,7 @@ defmodule Hologram.Transpiler.Transformer do
   # OTHER
 
   def transform({:defmodule, _, [_, [do: {:__block__, _, _}]]} = ast, _module, _imports, _aliases) do
-    {:defmodule, _, [{:__aliases__, _, name}, [do: {:__block__, _, block}]]} =
-      Expander.expand(ast)
-
-    build_module(name, block)
-  end
-
-  def transform({:defmodule, _, [_, [do: _]]} = ast, _module, _imports, _aliases) do
-    {:defmodule, _, [{:__aliases__, _, name}, [do: expr]]} = Expander.expand(ast)
-    build_module(name, [expr])
-  end
-
-  def build_module(name, ast) do
-    imports = aggregate_imports(ast)
-    aliases = aggregate_aliases(ast)
-    functions = aggregate_functions(ast, name, imports, aliases)
-
-    %Module{name: name, imports: imports, aliases: aliases, functions: functions}
-  end
-
-  # TODO: check
-  defp aggregate_aliases(ast) do
-    Enum.reduce(ast, [], fn expr, acc ->
-      case expr do
-        {:alias, _, _} ->
-          acc ++ [transform(expr)]
-
-        _ ->
-          acc
-      end
-    end)
-  end
-
-  defp aggregate_functions(ast, module, imports, aliases) do
-    Enum.reduce(ast, [], fn expr, acc ->
-      case expr do
-        {:def, _, [{name, _, params}, _]} ->
-          if eliminated_function?(name, params) do
-            acc
-          else
-            acc ++ [transform(expr, module, imports, aliases)]
-          end
-
-        _ ->
-          acc
-      end
-    end)
-  end
-
-  defp aggregate_imports(ast) do
-    Enum.reduce(ast, [], fn expr, acc ->
-      case expr do
-        {:import, _, _} ->
-          acc ++ [transform(expr)]
-
-        _ ->
-          acc
-      end
-    end)
-  end
-
-  defp eliminated_function?(name, params) do
-    count = if params, do: Enum.count(params), else: 0
-    count in Keyword.get_values(@eliminated_functions, name)
+    ModuleTransformer.transform(ast)
   end
 
   def transform({:def, _, [{name, _, nil}, [do: body]]}, module, imports, aliases) do
@@ -208,7 +146,7 @@ defmodule Hologram.Transpiler.Transformer do
   end
 
   def transform({function, _, params}, module, imports, aliases) when is_atom(function) do
-    FunctionCallTransformer.transform(module, function, params, imports, aliases)
+    FunctionCallTransformer.transform([], function, params, module, imports, aliases)
   end
 
   def transform(
@@ -217,6 +155,6 @@ defmodule Hologram.Transpiler.Transformer do
         imports,
         aliases
       ) do
-    FunctionCallTransformer.transform(called_module, function, params, imports, aliases)
+    FunctionCallTransformer.transform(called_module, function, params, current_module, imports, aliases)
   end
 end
