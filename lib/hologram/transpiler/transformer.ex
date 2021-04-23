@@ -6,10 +6,9 @@ defmodule Hologram.Transpiler.Transformer do
   alias Hologram.Transpiler.AST.MatchOperator
   alias Hologram.Transpiler.AST.MapAccess
   alias Hologram.Transpiler.AST.{Alias, Function, FunctionCall, Import, Module, ModuleAttribute, Variable}
+  alias Hologram.Transpiler.Binder
   alias Hologram.Transpiler.Expander
-  alias Hologram.Transpiler.{FunctionCallTransformer, ListTypeTransformer, MapTypeTransformer, ModuleTransformer, StructTypeTransformer}
-
-  @eliminated_functions [render: 1]
+  alias Hologram.Transpiler.{FunctionTransformer, FunctionCallTransformer, ListTypeTransformer, MapTypeTransformer, ModuleTransformer, StructTypeTransformer}
 
   def transform(ast, module \\ nil, imports \\ [], aliases \\ [])
 
@@ -52,26 +51,10 @@ defmodule Hologram.Transpiler.Transformer do
     left = transform(left, module, imports, aliases)
 
     %MatchOperator{
-      bindings: aggregate_bindings(left),
+      bindings: Binder.bind(left),
       left: left,
       right: transform(right, module, imports, aliases)
     }
-  end
-
-  defp aggregate_bindings(_, path \\ [])
-
-  defp aggregate_bindings(%Variable{name: name} = var, path) do
-    [[var] ++ path]
-  end
-
-  defp aggregate_bindings(%MapType{data: data}, path) do
-    Enum.reduce(data, [], fn {k, v}, acc ->
-      acc ++ aggregate_bindings(v, path ++ [%MapAccess{key: k}])
-    end)
-  end
-
-  defp aggregate_bindings(_, path) do
-    []
   end
 
   # DIRECTIVES
@@ -100,41 +83,8 @@ defmodule Hologram.Transpiler.Transformer do
     ModuleTransformer.transform(ast)
   end
 
-  def transform({:def, _, [{name, _, nil}, [do: body]]}, module, imports, aliases) do
-    body = transform_function_body(body, module, imports, aliases)
-    %Function{name: name, params: [], bindings: [], body: body}
-  end
-
-  def transform({:def, _, [{name, _, params}, [do: body]]}, module, imports, aliases) do
-    params = Enum.map(params, fn param -> transform(param, module, imports, aliases) end)
-
-    bindings =
-      Enum.map(params, fn param ->
-        case aggregate_bindings(param) do
-          [] ->
-            nil
-
-          path ->
-            path
-            |> hd()
-        end
-      end)
-      |> Enum.reject(fn item -> item == nil end)
-
-    body = transform_function_body(body, module, imports, aliases)
-
-    %Function{name: name, params: params, bindings: bindings, body: body}
-  end
-
-  defp transform_function_body(body, module, imports, aliases) do
-    case body do
-      {:__block__, _, block} ->
-        block
-
-      expr ->
-        [expr]
-    end
-    |> Enum.map(fn expr -> transform(expr, module, imports, aliases) end)
+  def transform({:def, _, [{name, _, params}, [do: {:__block__, _, body}]]}, module, imports, aliases) do
+    FunctionTransformer.transform(name, params, body, module, imports, aliases)
   end
 
   def transform({name, _, nil}, _module, _imports, _aliases) when is_atom(name) do
