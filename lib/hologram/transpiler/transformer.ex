@@ -1,13 +1,10 @@
 # TODO: refactor
 
 defmodule Hologram.Transpiler.Transformer do
-  alias Hologram.Transpiler.AST.{AtomType, BooleanType, IntegerType, StringType}
-  alias Hologram.Transpiler.AST.{ListType, MapType, StructType}
+  alias Hologram.Transpiler.AST.{AtomType, BooleanType, IntegerType, MatchOperator, StringType}
   alias Hologram.Transpiler.AST.MatchOperator
-  alias Hologram.Transpiler.AST.MapAccess
-  alias Hologram.Transpiler.AST.{Alias, Function, FunctionCall, Import, Module, ModuleAttribute, Variable}
+  alias Hologram.Transpiler.AST.{Alias, Import, ModuleAttribute, Variable}
   alias Hologram.Transpiler.Binder
-  alias Hologram.Transpiler.Expander
   alias Hologram.Transpiler.{FunctionTransformer, FunctionCallTransformer, ListTypeTransformer, MapTypeTransformer, ModuleTransformer, StructTypeTransformer}
 
   def transform(ast, module \\ nil, imports \\ [], aliases \\ [])

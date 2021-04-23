@@ -5,11 +5,10 @@ defmodule Hologram.Transpiler.TransformerTest do
 
   import Hologram.Transpiler.Parser, only: [parse!: 1]
 
-  alias Hologram.Transpiler.AST.{AtomType, BooleanType, IntegerType, StringType}
-  alias Hologram.Transpiler.AST.{ListType, MapType, StructType}
+  alias Hologram.Transpiler.AST.{AtomType, BooleanType, IntegerType, MapType, StringType}
   alias Hologram.Transpiler.AST.MatchOperator
   alias Hologram.Transpiler.AST.MapAccess
-  alias Hologram.Transpiler.AST.{Alias, Function, FunctionCall, Import, Module, ModuleAttribute, Variable}
+  alias Hologram.Transpiler.AST.{Alias, Import, ModuleAttribute, Variable}
   alias Hologram.Transpiler.Transformer
   alias TestModule1
   alias TestModule4
