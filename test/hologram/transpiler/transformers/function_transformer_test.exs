@@ -14,6 +14,7 @@ defmodule Hologram.Transpiler.FunctionTransformerTest do
     result = FunctionTransformer.transform(:test, nil, [1], [:Test], [], [])
 
     expected = %Function{
+      arity: 0,
       bindings: [],
       body: [
         %IntegerType{value: 1}
@@ -36,6 +37,7 @@ defmodule Hologram.Transpiler.FunctionTransformerTest do
     result = FunctionTransformer.transform(:test, nil, [1, 2], [:Test], [], [])
 
     expected = %Function{
+      arity: 0,
       bindings: [],
       body: [
         %IntegerType{value: 1},
@@ -58,6 +60,7 @@ defmodule Hologram.Transpiler.FunctionTransformerTest do
     result = FunctionTransformer.transform(:test, nil, [1], [:Test], [], [])
 
     expected = %Function{
+      arity: 0,
       bindings: [],
       body: [
         %IntegerType{value: 1}
@@ -80,6 +83,7 @@ defmodule Hologram.Transpiler.FunctionTransformerTest do
     result = FunctionTransformer.transform(:test, params, [1], [:Test], [], [])
 
     expected = %Function{
+      arity: 2,
       bindings: [
         [%Variable{name: :a}],
         [%Variable{name: :b}]
@@ -109,6 +113,7 @@ defmodule Hologram.Transpiler.FunctionTransformerTest do
     result = FunctionTransformer.transform(:test, [:a, 2], [1], [:Test], [], [])
 
     expected = %Function{
+      arity: 2,
       bindings: [],
       body: [%IntegerType{value: 1}],
       name: :test,
@@ -135,7 +140,7 @@ defmodule Hologram.Transpiler.FunctionTransformerTest do
 
     expected =
       %Function{
-        arity: nil,
+        arity: 2,
         bindings: [
           [
             %Variable{name: :x},

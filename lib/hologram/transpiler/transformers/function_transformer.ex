@@ -8,10 +8,12 @@ defmodule Hologram.Transpiler.FunctionTransformer do
       (if params, do: params, else: [])
       |> Enum.map(&Transformer.transform(&1, module, imports, aliases))
 
+    arity = Enum.count(params)
+
     bindings = aggregate_bindings(params)
     body = Enum.map(body, &Transformer.transform(&1, module, imports, aliases))
 
-    %Function{name: name, params: params, bindings: bindings, body: body}
+    %Function{name: name, arity: arity, params: params, bindings: bindings, body: body}
   end
 
   defp aggregate_bindings(params) do

@@ -40,14 +40,14 @@ defmodule Hologram.Transpiler.ModuleTransformerTest do
           aliases: [],
           functions: [
             %Function{
-              arity: nil,
+              arity: 0,
               bindings: [],
               body: [%IntegerType{value: 1}],
               name: :test_1,
               params: []
             },
             %Function{
-              arity: nil,
+              arity: 0,
               bindings: [],
               body: [%IntegerType{value: 2}],
               name: :test_2,
