@@ -13,7 +13,7 @@ defmodule DemoWeb.HologramController do
 
     # DEFER: use .holo template files
     html =
-      module.render(state)
+      module.render()
       |> TemplateEngine.Parser.parse!()
       |> TemplateEngine.Transformer.transform()
       |> TemplateEngine.Renderer.render(state)
@@ -21,6 +21,7 @@ defmodule DemoWeb.HologramController do
     # DEFER: implement Transpiler.transpile_file!/1
     js =
       Transpiler.Parser.parse_file!(source)
+      |> Transpiler.Normalizer.normalize()
       |> Transpiler.Transformer.transform()
       |> Transpiler.Generator.generate()
 
