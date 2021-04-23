@@ -23,6 +23,7 @@ defmodule DemoWeb.HologramController do
       Transpiler.Parser.parse_file!(source)
       |> Transpiler.Normalizer.normalize()
       |> Transpiler.Transformer.transform()
+      |> Transpiler.Eliminator.eliminate_dead_code()
       |> Transpiler.Generator.generate()
 
     class_name =
