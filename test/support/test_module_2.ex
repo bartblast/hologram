@@ -4,4 +4,8 @@ defmodule TestModule2 do
       import TestModule1
     end
   end
+
+  def test do
+    1
+  end
 end
