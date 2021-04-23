@@ -94,7 +94,7 @@ defmodule Hologram.Transpiler.NormalizerTest do
         ]
       ]}
 
-    assert result = expected
+    assert result == expected
   end
 
   test "do expression without block" do
