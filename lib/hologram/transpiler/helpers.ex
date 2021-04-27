@@ -23,5 +23,6 @@ defmodule Hologram.Transpiler.Helpers do
     to_string(module)
     |> String.split(".")
     |> Enum.map(&String.to_atom/1)
+    |> tl()
   end
 end
