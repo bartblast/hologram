@@ -20,6 +20,19 @@ class Hologram {
     return true;
   }
 
+  static objectKey(key) {
+    switch (key.type) {
+      case 'atom':
+        return `~Hologram.Transpiler.AST.AtomType[${key.value}]`
+
+      case 'string':
+        return `~Hologram.Transpiler.AST.StringType[${key.value}]`
+        
+      default:
+        throw 'Not implemented, at HologramPage.objectKey()'
+    }
+  }
+
   static onReady(document, callback) {
     if (
       document.readyState === "interactive" ||
@@ -67,26 +80,13 @@ class Hologram {
   }
 }
 
-class HologramPage {
-  static assign(state, key, value) {
-    let newState = cloneDeep(state)
-    newState.data[HologramPage.objectKey(key)] = value
-    return newState;
-  }
-
-  static objectKey(key) {
-    switch (key.type) {
-      case 'atom':
-        return `~Hologram.Transpiler.AST.AtomType[${key.value}]`
-
-      case 'string':
-        return `~Hologram.Transpiler.AST.StringType[${key.value}]`
-        
-      default:
-        throw 'Not implemented, at HologramPage.objectKey()'
-    }
+class Map {
+  static put(map, key, value) {
+    let mapClone = cloneDeep(map)
+    mapClone.data[Hologram.objectKey(key)] = value
+    return mapClone;
   }
 }
 
 window.Hologram = Hologram
-window.HologramPage = HologramPage
+window.Map = Map
