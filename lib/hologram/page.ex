@@ -1,3 +1,4 @@
+# TODO: test
 defmodule Hologram.Page do
   defmacro __using__(_) do
     quote do
@@ -7,5 +8,7 @@ defmodule Hologram.Page do
 
   def sigil_H(str, [] = _modifiers), do: str
 
-  def update(_state, _key, _value), do: nil
+  def update(state, key, value) do
+    Map.put(state, key, value)
+  end
 end
