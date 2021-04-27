@@ -49,14 +49,14 @@ class Hologram {
     return true;
   }
 
-  static startEventLoop(window) {
+  static startEventLoop(window, module, moduleName) {
     let callback = () => {
       document.querySelectorAll("[holo-click]").forEach(element => {
         element.addEventListener("click", () => {
-          let fun = window.pageModule["action"]
+          let fun = module["action"]
           let action = { type: 'atom', value: element.getAttribute("holo-click") }
 
-          console.log(`Function call: ${window.pageModuleName}.action()`)
+          console.log(`Function call: ${moduleName}.action()`)
           console.debug([action, {}, window.state])
           fun(action, {}, window.state)
         })

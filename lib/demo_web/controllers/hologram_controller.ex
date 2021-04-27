@@ -41,10 +41,8 @@ defmodule DemoWeb.HologramController do
         <script  src="#{Routes.static_path(conn, "/js/hologram.js")}"></script>
         <script>
     #{js}
-    window.pageModule = #{class_name};
-    window.pageModuleName = '#{class_name}'
     window.state = {}//#{class_name}.state();
-    Hologram.startEventLoop(window, '#{class_name}')
+    Hologram.startEventLoop(window, #{class_name}, '#{class_name}')
         </script>
       </head>
       <body>
