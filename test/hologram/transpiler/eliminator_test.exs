@@ -9,7 +9,7 @@ defmodule Hologram.Transpiler.EliminatorTest do
     main_module = [:Hologram, :Transpiler, :Eliminator, :TestModule1]
     compiled_modules = Compiler.compile(main_module)
 
-    result = Eliminator.eliminate(main_module, compiled_modules)
+    result = Eliminator.eliminate(compiled_modules, main_module)
 
     assert (Map.keys(result) |> Enum.count()) == 1
     assert Map.has_key?(result, main_module)
@@ -32,7 +32,7 @@ defmodule Hologram.Transpiler.EliminatorTest do
     another_module = [:Hologram, :Transpiler, :Eliminator, :TestModule3]
     compiled_modules = Compiler.compile(main_module)
 
-    result = Eliminator.eliminate(main_module, compiled_modules)
+    result = Eliminator.eliminate(compiled_modules, main_module)
 
     assert (Map.keys(result) |> Enum.count()) == 2
     assert Map.has_key?(result, main_module)
@@ -46,7 +46,7 @@ defmodule Hologram.Transpiler.EliminatorTest do
     main_module = [:Hologram, :Transpiler, :Eliminator, :TestModule4]
     compiled_modules = Compiler.compile(main_module)
 
-    result = Eliminator.eliminate(main_module, compiled_modules)
+    result = Eliminator.eliminate(compiled_modules, main_module)
 
     assert (Map.keys(result) |> Enum.count()) == 1
     assert Map.has_key?(result, main_module)

@@ -4,7 +4,7 @@ defmodule Hologram.Transpiler.Eliminator do
   @doc """
   Eliminates dead code.
   """
-  def eliminate(main_module, compiled_modules) do
+  def eliminate(compiled_modules, main_module) do
     aggregate_used_functions(main_module, compiled_modules)
     |> purge_redundant_functions(compiled_modules)
     |> purge_redundant_modules()
