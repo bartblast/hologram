@@ -19,8 +19,14 @@ defmodule Hologram.Transpiler.Eliminator do
   end
 
   defp get_functions(compiled_modules, {module, function, arity}) do
-    compiled_modules[module].functions
-    |> Enum.filter(&(&1.name == function && &1.arity == arity))
+    case compiled_modules[module] do
+      # Elixir standar library
+      nil ->
+        []
+
+      %{functions: functions} ->
+        Enum.filter(functions, &(&1.name == function && &1.arity == arity))
+    end
   end
 
   defp handle_expr(acc, compiled_modules, %FunctionCall{module: module, function: function, params: params}) do

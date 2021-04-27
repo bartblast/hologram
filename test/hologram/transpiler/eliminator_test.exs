@@ -51,4 +51,14 @@ defmodule Hologram.Transpiler.EliminatorTest do
     assert (Map.keys(result) |> Enum.count()) == 1
     assert Map.has_key?(result, main_module)
   end
+
+  test "handles Elixir standard library functions" do
+    main_module = [:Hologram, :Transpiler, :Eliminator, :TestModule6]
+    compiled_modules = Compiler.compile(main_module)
+
+    result = Eliminator.eliminate(compiled_modules, main_module)
+
+    assert (Map.keys(result) |> Enum.count()) == 1
+    assert Map.has_key?(result, main_module)
+  end
 end
