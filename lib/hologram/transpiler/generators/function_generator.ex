@@ -39,7 +39,7 @@ defmodule Hologram.Transpiler.FunctionGenerator do
 
     invalid_case = """
     else {
-      throw 'No match for the function call'
+    throw 'No match for the function call'
     }
     """
 

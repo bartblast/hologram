@@ -37,7 +37,7 @@ defmodule Hologram.Transpiler.ModuleGeneratorTest do
     return { type: 'integer', value: 1 };
     }
     else {
-      throw 'No match for the function call'
+    throw 'No match for the function call'
     }
     }
 
@@ -99,7 +99,7 @@ defmodule Hologram.Transpiler.ModuleGeneratorTest do
     return { type: 'integer', value: 2 };
     }
     else {
-      throw 'No match for the function call'
+    throw 'No match for the function call'
     }
     }
 
@@ -152,7 +152,7 @@ defmodule Hologram.Transpiler.ModuleGeneratorTest do
     return { type: 'integer', value: 1 };
     }
     else {
-      throw 'No match for the function call'
+    throw 'No match for the function call'
     }
     }
 
@@ -162,7 +162,7 @@ defmodule Hologram.Transpiler.ModuleGeneratorTest do
     return { type: 'integer', value: 1 };
     }
     else {
-      throw 'No match for the function call'
+    throw 'No match for the function call'
     }
     }
 
@@ -236,7 +236,7 @@ defmodule Hologram.Transpiler.ModuleGeneratorTest do
     return { type: 'integer', value: 2 };
     }
     else {
-      throw 'No match for the function call'
+    throw 'No match for the function call'
     }
     }
 
@@ -246,7 +246,7 @@ defmodule Hologram.Transpiler.ModuleGeneratorTest do
     return { type: 'integer', value: 1 };
     }
     else {
-      throw 'No match for the function call'
+    throw 'No match for the function call'
     }
     }
 
