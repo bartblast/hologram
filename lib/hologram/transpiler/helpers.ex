@@ -18,4 +18,10 @@ defmodule Hologram.Transpiler.Helpers do
     module_name(module)
     |> String.to_atom()
   end
+
+  def module_name_parts(module) do
+    to_string(module)
+    |> String.split(".")
+    |> Enum.map(&String.to_atom/1)
+  end
 end

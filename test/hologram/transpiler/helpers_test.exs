@@ -19,4 +19,8 @@ defmodule Hologram.Transpiler.HelpersTest do
   test "module_name_atom/1" do
     assert Helpers.module_name_atom([:Abc, :Bcd]) == :"Abc.Bcd"
   end
+
+  test "module_name_parts/1" do
+    assert Helpers.module_name_parts(Abc.Bcd) == [:Elixir, :Abc, :Bcd]
+  end
 end
