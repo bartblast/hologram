@@ -26,4 +26,29 @@ defmodule Hologram.Transpiler.EliminatorTest do
 
     assert function_3.name == :called_function
   end
+
+  test "preserves used functions from another module" do
+    main_module = [:Hologram, :Transpiler, :Eliminator, :TestModule2]
+    another_module = [:Hologram, :Transpiler, :Eliminator, :TestModule3]
+    compiled_modules = Compiler.compile(main_module)
+
+    result = Eliminator.eliminate(main_module, compiled_modules)
+
+    assert (Map.keys(result) |> Enum.count()) == 2
+    assert Map.has_key?(result, main_module)
+    assert Map.has_key?(result, another_module)
+
+    assert [%Function{name: :action}] = result[main_module].functions
+    assert [%Function{name: :test_3}] = result[another_module].functions
+  end
+
+  test "purges redundant modules" do
+    main_module = [:Hologram, :Transpiler, :Eliminator, :TestModule4]
+    compiled_modules = Compiler.compile(main_module)
+
+    result = Eliminator.eliminate(main_module, compiled_modules)
+
+    assert (Map.keys(result) |> Enum.count()) == 1
+    assert Map.has_key?(result, main_module)
+  end
 end
