@@ -18,13 +18,9 @@ defmodule DemoWeb.HologramController do
       |> TemplateEngine.Transformer.transform()
       |> TemplateEngine.Renderer.render(state)
 
-    # DEFER: implement Transpiler.transpile_file!/1
     js =
-      Transpiler.Parser.parse_file!(source)
-      |> Transpiler.Normalizer.normalize()
-      |> Transpiler.Transformer.transform()
-      |> Transpiler.Eliminator.eliminate_dead_code()
-      |> Transpiler.Generator.generate()
+      Transpiler.Helpers.module_name_parts(module)
+      |> Transpiler.Builder.build()
 
     class_name =
       module
@@ -45,10 +41,9 @@ defmodule DemoWeb.HologramController do
         <script  src="#{Routes.static_path(conn, "/js/hologram.js")}"></script>
         <script>
     #{js}
-    window.modules = {
-      "#{class_name}": #{class_name}
-    }
-    window.state = #{class_name}.state();
+    window.pageModule = #{class_name};
+    window.pageModuleName = '#{class_name}'
+    window.state = {}//#{class_name}.state();
     Hologram.startEventLoop(window, '#{class_name}')
         </script>
       </head>
