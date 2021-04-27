@@ -2,7 +2,7 @@ defmodule Hologram.Transpiler.EliminatorTest do
   use ExUnit.Case, async: true
 
   alias Hologram.Compiler
-  alias Hologram.Transpiler.AST.{AtomType, Function, FunctionCall, IntegerType, Module}
+  alias Hologram.Transpiler.AST.{AtomType, Function}
   alias Hologram.Transpiler.Eliminator
 
   test "preserves actions of arity 3 and functions called from these actions" do
