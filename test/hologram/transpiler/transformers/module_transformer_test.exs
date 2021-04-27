@@ -87,8 +87,8 @@ defmodule Hologram.Transpiler.ModuleTransformerTest do
       expected =
         %Module{
           aliases: [
-            %Alias{as: nil, module: [:Ghi, :Hij]},
-            %Alias{as: nil, module: [:Ijk, :Jkl]}
+            %Alias{as: [:Hij], module: [:Ghi, :Hij]},
+            %Alias{as: [:Jkl], module: [:Ijk, :Jkl]}
           ],
           functions: [],
           imports: [],

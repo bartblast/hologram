@@ -170,7 +170,7 @@ defmodule Hologram.Transpiler.TransformerTest do
         parse!("alias Prefix.Test")
         |> Transformer.transform()
 
-      expected = %Alias{module: [:Prefix, :Test]}
+      expected = %Alias{module: [:Prefix, :Test], as: [:Test]}
 
       assert result == expected
     end

@@ -48,7 +48,7 @@ defmodule Hologram.CompilerTest do
           name: [:TestModule6]
         },
         [:TestModule7] => %Module{
-          aliases: [%Alias{as: nil, module: [:TestModule6]}],
+          aliases: [%Alias{as: [:TestModule6], module: [:TestModule6]}],
           functions: [],
           imports: [],
           name: [:TestModule7]
@@ -64,7 +64,7 @@ defmodule Hologram.CompilerTest do
     expected =
       %{
         [:TestModule10] => %Module{
-          aliases: [%Alias{as: nil, module: [:TestModule7]}],
+          aliases: [%Alias{as: [:TestModule7], module: [:TestModule7]}],
           functions: [],
           imports: [],
           name: [:TestModule10]
@@ -84,7 +84,7 @@ defmodule Hologram.CompilerTest do
           name: [:TestModule6]
         },
         [:TestModule7] => %Module{
-          aliases: [%Alias{as: nil, module: [:TestModule6]}],
+          aliases: [%Alias{as: [:TestModule6], module: [:TestModule6]}],
           functions: [],
           imports: [],
           name: [:TestModule7]
@@ -100,13 +100,13 @@ defmodule Hologram.CompilerTest do
     expected =
       %{
         [:TestModule8] => %Module{
-          aliases: [%Alias{as: nil, module: [:TestModule9]}],
+          aliases: [%Alias{as: [:TestModule9], module: [:TestModule9]}],
           functions: [],
           imports: [],
           name: [:TestModule8]
         },
         [:TestModule9] => %Module{
-          aliases: [%Alias{as: nil, module: [:TestModule8]}],
+          aliases: [%Alias{as: [:TestModule8], module: [:TestModule8]}],
           functions: [],
           imports: [],
           name: [:TestModule9]
