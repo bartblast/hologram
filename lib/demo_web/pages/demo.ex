@@ -15,7 +15,7 @@ defmodule DemoPage do
   end
 
   def action(:increment, _params, state) do
-    update(state, :counter, 1)
+    update(state, :counter, state.counter + 1)
   end
 
   def action(:decrement, _params, state) do
