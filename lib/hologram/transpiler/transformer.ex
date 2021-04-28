@@ -5,7 +5,7 @@ defmodule Hologram.Transpiler.Transformer do
   alias Hologram.Transpiler.AST.MatchOperator
   alias Hologram.Transpiler.AST.{Alias, Import, ModuleAttribute, Variable}
   alias Hologram.Transpiler.Binder
-  alias Hologram.Transpiler.{AliasTransformer, FunctionTransformer, FunctionCallTransformer, ListTypeTransformer, MapTypeTransformer, ModuleTransformer, StructTypeTransformer}
+  alias Hologram.Transpiler.{AliasTransformer, DotOperatorTransformer, FunctionTransformer, FunctionCallTransformer, ListTypeTransformer, MapTypeTransformer, ModuleTransformer, StructTypeTransformer}
 
   def transform(ast, module \\ nil, imports \\ [], aliases \\ [])
 
@@ -43,6 +43,10 @@ defmodule Hologram.Transpiler.Transformer do
   end
 
   # OPERATORS
+
+  def transform({{:., _, [left, right]}, [no_parens: true, line: _], []}, current_module, imports, aliases) do
+    DotOperatorTransformer.transform(left, right, current_module, imports, aliases)
+  end
 
   def transform({:=, _, [left, right]}, module, imports, aliases) do
     left = transform(left, module, imports, aliases)

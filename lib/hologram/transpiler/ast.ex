@@ -31,6 +31,10 @@ defmodule Hologram.Transpiler.AST do
 
   # OPERATORS
 
+  defmodule DotOperator do
+    defstruct left: nil, right: nil
+  end
+
   defmodule MatchOperator do
     defstruct bindings: nil, left: nil, right: nil
   end
