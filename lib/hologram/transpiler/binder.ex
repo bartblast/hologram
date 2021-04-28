@@ -10,7 +10,7 @@ defmodule Hologram.Transpiler.Binder do
   end
 
   def bind(%Variable{name: name} = var, path) do
-    [[var] ++ path]
+    [path ++ [var]]
   end
 
   def bind(_, path) do

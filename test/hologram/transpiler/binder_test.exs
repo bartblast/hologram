@@ -30,10 +30,10 @@ defmodule Hologram.Transpiler.BinderTest do
 
       expected = [
         [
-          %Variable{name: :x},
           %MapAccess{
             key: %AtomType{value: :b}
-          }
+          },
+          %Variable{name: :x}
         ]
       ]
 
@@ -54,16 +54,16 @@ defmodule Hologram.Transpiler.BinderTest do
 
       expected = [
         [
-          %Variable{name: :x},
           %MapAccess{
             key: %AtomType{value: :a}
-          }
+          },
+          %Variable{name: :x}
         ],
         [
-          %Variable{name: :y},
           %MapAccess{
             key: %AtomType{value: :c}
-          }
+          },
+          %Variable{name: :y}
         ]
       ]
 
@@ -105,13 +105,13 @@ defmodule Hologram.Transpiler.BinderTest do
 
       expected = [
         [
-          %Variable{name: :x},
           %MapAccess{
             key: %AtomType{value: :b}
           },
           %MapAccess{
             key: %AtomType{value: :c}
-          }
+          },
+          %Variable{name: :x}
         ]
       ]
 
@@ -137,19 +137,19 @@ defmodule Hologram.Transpiler.BinderTest do
 
       expected = [
         [
-          %Variable{name: :x},
           %MapAccess{
             key: %AtomType{value: :b}
-          }
+          },
+          %Variable{name: :x}
         ],
         [
-          %Variable{name: :y},
           %MapAccess{
             key: %AtomType{value: :c}
           },
           %MapAccess{
             key: %AtomType{value: :d}
-          }
+          },
+          %Variable{name: :y}
         ]
       ]
 
