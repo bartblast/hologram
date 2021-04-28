@@ -66,21 +66,22 @@ defmodule Hologram.Transpiler.FunctionGenerator do
   end
 
   defp generate_function_vars(variant) do
-    Stream.with_index(variant.bindings)
-    |> Enum.map(fn {binding, idx} ->
-      Enum.reduce(binding, "", fn access, accumulator ->
-        part =
-          case access do
-            %Variable{name: name} ->
-              "let #{name} = arguments[#{idx}]"
+    Enum.map(variant.bindings, fn {name, {idx, binding}} ->
+      acc = "let #{List.last(binding).name} = "
 
-            %MapAccess{key: key} ->
-              "['#{key}']"
-          end
+      Enum.reduce(binding, acc, fn access, acc ->
+        acc
+        <>
+        case access do
+          %Variable{name: name} ->
+            "arguments[#{idx}]"
 
-        accumulator <> part
-      end) <>
-        ";"
+          %MapAccess{key: key} ->
+            "['#{key}']"
+        end
+      end)
+      <>
+      ";"
     end)
     |> Enum.join("\n")
   end
