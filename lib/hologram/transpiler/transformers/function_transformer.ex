@@ -17,16 +17,14 @@ defmodule Hologram.Transpiler.FunctionTransformer do
   end
 
   defp aggregate_bindings(params) do
-    Enum.map(params, fn param ->
-      case Binder.bind(param) do
-        [] ->
-          nil
-
-        path ->
-          path
-          |> hd()
-      end
+    Enum.with_index(params)
+    |> Enum.reduce([], fn {param, idx}, acc ->
+      Binder.bind(param)
+      |> Enum.reduce(acc, fn binding, acc ->
+        name = List.last(binding).name
+        if Keyword.has_key?(acc, name), do: acc, else: Keyword.put(acc, name, {idx, binding})
+      end)
     end)
-    |> Enum.reject(&(&1 == nil))
+    |> Enum.sort()
   end
 end
