@@ -60,12 +60,12 @@ defmodule Hologram.Transpiler.TransformerTest do
       expected = %MatchOperator{
         bindings: [
           [
-            %Variable{name: :x},
-            %MapAccess{key: %AtomType{value: :a}}
+            %MapAccess{key: %AtomType{value: :a}},
+            %Variable{name: :x}
           ],
           [
-            %Variable{name: :y},
-            %MapAccess{key: %AtomType{value: :b}}
+            %MapAccess{key: %AtomType{value: :b}},
+            %Variable{name: :y}
           ]
         ],
         left: %MapType{
@@ -96,14 +96,14 @@ defmodule Hologram.Transpiler.TransformerTest do
       expected = %MatchOperator{
         bindings: [
           [
-            %Variable{name: :x},
             %MapAccess{key: %AtomType{value: :b}},
-            %MapAccess{key: %AtomType{value: :p}}
+            %MapAccess{key: %AtomType{value: :p}},
+            %Variable{name: :x}
           ],
           [
-            %Variable{name: :y},
             %MapAccess{key: %AtomType{value: :d}},
-            %MapAccess{key: %AtomType{value: :n}}
+            %MapAccess{key: %AtomType{value: :n}},
+            %Variable{name: :y}
           ]
         ],
         left: %MapType{
