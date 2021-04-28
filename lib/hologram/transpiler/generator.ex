@@ -4,6 +4,7 @@ defmodule Hologram.Transpiler.Generator do
   alias Hologram.Transpiler.AST.{
     AtomType,
     BooleanType,
+    DotOperator,
     IntegerType,
     ListType,
     MapType,
@@ -14,6 +15,7 @@ defmodule Hologram.Transpiler.Generator do
   alias Hologram.Transpiler.AST.{Function, FunctionCall, MapAccess, Module, Variable}
 
   alias Hologram.Transpiler.{
+    DotOperatorGenerator,
     MapTypeGenerator,
     ModuleGenerator,
     PrimitiveTypeGenerator,
@@ -46,6 +48,12 @@ defmodule Hologram.Transpiler.Generator do
 
   def generate(%StringType{value: value}) do
     PrimitiveTypeGenerator.generate(:string, "'#{value}'")
+  end
+
+  # OPERATORS
+
+  def generate(%DotOperator{left: left, right: right}) do
+    DotOperatorGenerator.generate(left, right)
   end
 
   # OTHER
