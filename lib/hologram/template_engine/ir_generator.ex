@@ -30,4 +30,8 @@ defmodule Hologram.TemplateEngine.IRGenerator do
   def generate(%TextNode{text: text}) do
     "{ type: 'text_node', text: '#{text}' }"
   end
+
+  def generate(nodes) when is_list(nodes) do
+    Enum.map(nodes, &generate(&1))
+  end
 end
