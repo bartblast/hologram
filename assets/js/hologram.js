@@ -80,6 +80,12 @@ class Hologram {
   }
 }
 
+class Kernel {
+  static dotOperator(left, right) {
+    return cloneDeep(left.data[Hologram.objectKey(right)])
+  }
+}
+
 class Map {
   static put(map, key, value) {
     let mapClone = cloneDeep(map)
