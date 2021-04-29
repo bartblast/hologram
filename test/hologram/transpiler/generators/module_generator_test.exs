@@ -12,7 +12,7 @@ defmodule Hologram.Transpiler.ModuleGeneratorTest do
       functions: [
         %Function{
           bindings: [
-            [%Variable{name: :a}]
+            a: {0, [%Variable{name: :a}]}
           ],
           body: [
             %IntegerType{value: 1}
@@ -53,7 +53,7 @@ defmodule Hologram.Transpiler.ModuleGeneratorTest do
       functions: [
         %Function{
           bindings: [
-            [%Variable{name: :a}]
+            a: {0, [%Variable{name: :a}]}
           ],
           body: [
             %IntegerType{value: 1}
@@ -65,8 +65,8 @@ defmodule Hologram.Transpiler.ModuleGeneratorTest do
         },
         %Function{
           bindings: [
-            [%Variable{name: :a}],
-            [%Variable{name: :b}]
+            a: {0, [%Variable{name: :a}]},
+            b: {1, [%Variable{name: :b}]}
           ],
           body: [
             %IntegerType{value: 1},
@@ -115,7 +115,7 @@ defmodule Hologram.Transpiler.ModuleGeneratorTest do
       functions: [
         %Function{
           bindings: [
-            [%Variable{name: :a}]
+            a: {0, [%Variable{name: :a}]}
           ],
           body: [
             %IntegerType{value: 1}
@@ -127,7 +127,7 @@ defmodule Hologram.Transpiler.ModuleGeneratorTest do
         },
         %Function{
           bindings: [
-            [%Variable{name: :a}]
+            a: {0, [%Variable{name: :a}]}
           ],
           body: [
             %IntegerType{value: 1}
@@ -178,7 +178,7 @@ defmodule Hologram.Transpiler.ModuleGeneratorTest do
       functions: [
         %Function{
           bindings: [
-            [%Variable{name: :a}]
+            a: {0, [%Variable{name: :a}]}
           ],
           body: [
             %IntegerType{value: 1}
@@ -190,8 +190,8 @@ defmodule Hologram.Transpiler.ModuleGeneratorTest do
         },
         %Function{
           bindings: [
-            [%Variable{name: :a}],
-            [%Variable{name: :b}]
+            a: {0, [%Variable{name: :a}]},
+            b: {1, [%Variable{name: :b}]}
           ],
           body: [
             %IntegerType{value: 1},
@@ -205,7 +205,7 @@ defmodule Hologram.Transpiler.ModuleGeneratorTest do
         },
         %Function{
           bindings: [
-            [%Variable{name: :a}]
+            a: {0, [%Variable{name: :a}]}
           ],
           body: [
             %IntegerType{value: 1}
