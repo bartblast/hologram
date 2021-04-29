@@ -7,63 +7,73 @@ defmodule Hologram.TemplateEngine.RendererTest do
   alias Hologram.TemplateEngine.Renderer
   alias Hologram.Transpiler.AST.ModuleAttribute
 
-  test "multiple nodes" do
-    nodes = [
-      %TextNode{text: "test_1"},
-      %TextNode{text: "test_2"}
-    ]
-
-    result = Renderer.render(nodes, %{})
-    expected = "test_1test_2"
-
-    assert result == expected
-  end
-
-  test "tag node" do
-    ast = %TagNode{
-      attrs: %{attr_1: "test_attr_value_1", attr_2: "test_attr_value_2"},
-      tag: "div",
-      children: [
-        %TextNode{text: "test_text"},
-        %TagNode{attrs: %{}, children: [], tag: "span"}
+  describe "render/2" do
+    test "multiple nodes" do
+      nodes = [
+        %TextNode{text: "test_1"},
+        %TextNode{text: "test_2"}
       ]
-    }
 
-    result = Renderer.render(ast, %{})
+      result = Renderer.render(nodes, %{})
+      expected = "test_1test_2"
 
-    expected =
-      "<div attr_1=\"test_attr_value_1\" attr_2=\"test_attr_value_2\">test_text<span></span></div>"
+      assert result == expected
+    end
 
-    assert result == expected
-  end
+    test "tag node" do
+      ast = %TagNode{
+        attrs: %{attr_1: "test_attr_value_1", attr_2: "test_attr_value_2"},
+        tag: "div",
+        children: [
+          %TextNode{text: "test_text"},
+          %TagNode{attrs: %{}, children: [], tag: "span"}
+        ]
+      }
 
-  test "text node" do
-    ast = %TextNode{text: "test"}
+      result = Renderer.render(ast, %{})
 
-    result = Renderer.render(ast, %{})
-    expected = "test"
+      expected =
+        "<div attr_1=\"test_attr_value_1\" attr_2=\"test_attr_value_2\">test_text<span></span></div>"
 
-    assert result == expected
-  end
+      assert result == expected
+    end
 
-  test "expression" do
-    ast = %Expression{ast: %ModuleAttribute{name: :a}}
-    state = %{a: 123}
+    test "text node" do
+      ast = %TextNode{text: "test"}
 
-    result = Renderer.render(ast, state)
-    expected = "123"
+      result = Renderer.render(ast, %{})
+      expected = "test"
 
-    assert result == expected
-  end
+      assert result == expected
+    end
 
-  describe "translate attribute" do
-    test ":click" do
+    test "expression" do
+      ast = %Expression{ast: %ModuleAttribute{name: :a}}
+      state = %{a: 123}
+
+      result = Renderer.render(ast, state)
+      expected = "123"
+
+      assert result == expected
+    end
+
+    test "attribute name" do
       node = %TagNode{attrs: %{":click" => "test"}, children: [], tag: "div"}
 
       result = Renderer.render(node, %{})
       expected = "<div holo-click=\"test\"></div>"
 
       assert result == expected
+    end
+  end
+
+  describe "render_attr_name/1" do
+    test "mapped" do
+      assert Renderer.render_attr_name(":click") == "holo-click"
+    end
+
+    test "not mapped" do
+      assert Renderer.render_attr_name("test") == "test"
     end
   end
 end
