@@ -24,53 +24,55 @@ defmodule Hologram.Transpiler.Generator do
 
   alias Hologram.Transpiler.Helpers
 
+  def generate(ast, opts \\ [])
+
   # TYPES
 
-  def generate(%AtomType{value: value}) do
+  def generate(%AtomType{value: value}, _) do
     PrimitiveTypeGenerator.generate(:atom, "'#{value}'")
   end
 
-  def generate(%BooleanType{value: value}) do
+  def generate(%BooleanType{value: value}, _) do
     PrimitiveTypeGenerator.generate(:boolean, "#{value}")
   end
 
-  def generate(%IntegerType{value: value}) do
+  def generate(%IntegerType{value: value}, _) do
     PrimitiveTypeGenerator.generate(:integer, "#{value}")
   end
 
-  def generate(%MapType{data: data}) do
+  def generate(%MapType{data: data}, _) do
     MapTypeGenerator.generate(data)
   end
 
-  def generate(%StructType{module: module, data: data}) do
+  def generate(%StructType{module: module, data: data}, _) do
     StructTypeGenerator.generate(module, data)
   end
 
-  def generate(%StringType{value: value}) do
+  def generate(%StringType{value: value}, _) do
     PrimitiveTypeGenerator.generate(:string, "'#{value}'")
   end
 
   # OPERATORS
 
-  def generate(%DotOperator{left: left, right: right}) do
+  def generate(%DotOperator{left: left, right: right}, _) do
     DotOperatorGenerator.generate(left, right)
   end
 
   # OTHER
 
-  def generate(%Module{name: name} = ast) do
+  def generate(%Module{name: name} = ast, _) do
     ModuleGenerator.generate(ast, name)
   end
 
-  def generate(%Variable{name: name}) do
-    "#{name}"
-  end
-
-  def generate(%Variable{name: name}, :boxed) do
+  def generate(%Variable{name: name}, boxed: true) do
     "{ type: 'variable', name: '#{name}' }"
   end
 
-  def generate(%FunctionCall{module: module, function: function, params: params}) do
+  def generate(%Variable{name: name}, _) do
+    "#{name}"
+  end
+
+  def generate(%FunctionCall{module: module, function: function, params: params}, _) do
     class = Helpers.class_name(module)
 
     params =
