@@ -11,7 +11,7 @@ defmodule Hologram.Transpiler.DotOperatorGeneratorTest do
     result = DotOperatorGenerator.generate(left, right)
 
     expected =
-      "Kernel.dot_operator(x, { type: 'atom', value: 'a' })"
+      "Kernel.dot_operator({ type: 'variable', name: 'x' }, { type: 'atom', value: 'a' })"
 
     assert result == expected
   end

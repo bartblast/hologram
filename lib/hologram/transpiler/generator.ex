@@ -63,7 +63,7 @@ defmodule Hologram.Transpiler.Generator do
   end
 
   def generate(%Variable{name: name}) do
-    name
+    "{ type: 'variable', name: '#{name}' }"
   end
 
   def generate(%FunctionCall{module: module, function: function, params: params}) do
