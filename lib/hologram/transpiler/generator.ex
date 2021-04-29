@@ -1,4 +1,4 @@
-# TODO: refactor
+# TODO: refactor & test
 
 defmodule Hologram.Transpiler.Generator do
   alias Hologram.Transpiler.AST.{
@@ -12,9 +12,12 @@ defmodule Hologram.Transpiler.Generator do
     StructType
   }
 
+  alias Hologram.Transpiler.AST.AdditionOperator
+
   alias Hologram.Transpiler.AST.{Function, FunctionCall, MapAccess, Module, Variable}
 
   alias Hologram.Transpiler.{
+    AdditionOperatorGenerator,
     DotOperatorGenerator,
     MapTypeGenerator,
     ModuleGenerator,
@@ -53,6 +56,10 @@ defmodule Hologram.Transpiler.Generator do
   end
 
   # OPERATORS
+
+  def generate(%AdditionOperator{left: left, right: right}, _) do
+    AdditionOperatorGenerator.generate(left, right)
+  end
 
   def generate(%DotOperator{left: left, right: right}, _) do
     DotOperatorGenerator.generate(left, right)
