@@ -71,7 +71,11 @@ class Hologram {
 
           console.log(`Function call: ${moduleName}.action()`)
           console.debug([action, {}, window.state])
-          fun(action, {}, window.state)
+          
+          window.state = fun(action, {}, window.state)
+
+          console.log("State after action:")
+          console.debug(window.state.data)
         })
       })
     }   
