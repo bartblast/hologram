@@ -30,7 +30,6 @@ defmodule Hologram.TemplateEngine.Renderer do
     text
   end
 
-
   def render_attr_name(key) do
     case key do
       ":click" ->
