@@ -100,4 +100,5 @@ class Map {
 }
 
 window.Hologram = Hologram
+window.Kernel = Kernel
 window.Map = Map
