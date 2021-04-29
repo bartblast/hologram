@@ -63,6 +63,10 @@ defmodule Hologram.Transpiler.Generator do
   end
 
   def generate(%Variable{name: name}) do
+    "#{name}"
+  end
+
+  def generate(%Variable{name: name}, :boxed) do
     "{ type: 'variable', name: '#{name}' }"
   end
 
