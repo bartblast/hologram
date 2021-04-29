@@ -62,7 +62,7 @@ defmodule Hologram.Transpiler.GeneratorTest do
       assert result == expected
     end
 
-    test "variable, nboxed" do
+    test "variable, boxed" do
       result = Generator.generate(%Variable{name: :test}, :boxed)
       expected = "{ type: 'variable', name: 'test' }"
       assert result == expected
