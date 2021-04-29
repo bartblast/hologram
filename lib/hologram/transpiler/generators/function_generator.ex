@@ -59,7 +59,7 @@ defmodule Hologram.Transpiler.FunctionGenerator do
 
   defp generate_function_params(variant) do
     params =
-      Enum.map(variant.params, fn param -> Generator.generate(param) end)
+      Enum.map(variant.params, fn param -> Generator.generate(param, boxed: true) end)
       |> Enum.join(", ")
 
     "[ #{params} ]"
