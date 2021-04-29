@@ -5,7 +5,7 @@ defmodule Hologram.TemplateEngine.Renderer do
   def render(ast, state \\ %{})
 
   def render(nodes, state) when is_list(nodes) do
-    Enum.map(nodes, fn node -> render(node, state) end)
+    Enum.map(nodes, &render(&1, state))
     |> Enum.join("")
   end
 
