@@ -81,6 +81,11 @@ class Hologram {
 }
 
 class Kernel {
+  static additionOperator(left, right) {
+    let type = left.type == "integer" && right.type == "integer" ? "integer" : "float"
+    return { type: type, value: left.value + right.value }
+  }
+
   static dotOperator(left, right) {
     return cloneDeep(left.data[Hologram.objectKey(right)])
   }
