@@ -5,6 +5,7 @@ defmodule Hologram.Transpiler.DotOperatorTransformerTest do
   alias Hologram.Transpiler.DotOperatorTransformer
 
   test "transform/5" do
+    # a.b
     left = {:a, [line: 1], nil}
     right = :b
 
