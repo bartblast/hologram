@@ -37,6 +37,10 @@ defmodule Hologram.TemplateEngine.IRGenerator do
   end
 
   def generate(nodes) when is_list(nodes) do
-    Enum.map(nodes, &generate(&1))
+    nodes_js =
+      Enum.map(nodes, &generate(&1))
+      |> Enum.join(", ")
+
+    "[#{nodes_js}]"
   end
 end
