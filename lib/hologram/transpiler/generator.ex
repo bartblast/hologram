@@ -12,7 +12,7 @@ defmodule Hologram.Transpiler.Generator do
     StructType
   }
 
-  alias Hologram.Transpiler.AST.AdditionOperator
+  alias Hologram.Transpiler.AST.{AdditionOperator, ModuleAttributeOperator}
 
   alias Hologram.Transpiler.AST.{Function, FunctionCall, MapAccess, Module, Variable}
 
@@ -21,6 +21,7 @@ defmodule Hologram.Transpiler.Generator do
     DotOperatorGenerator,
     MapTypeGenerator,
     ModuleGenerator,
+    ModuleAttributeOperatorGenerator,
     PrimitiveTypeGenerator,
     StructTypeGenerator
   }
@@ -63,6 +64,10 @@ defmodule Hologram.Transpiler.Generator do
 
   def generate(%DotOperator{left: left, right: right}, context, _) do
     DotOperatorGenerator.generate(left, right, context)
+  end
+
+  def generate(%ModuleAttributeOperator{name: name}, context, _) do
+    ModuleAttributeOperatorGenerator.generate(name, context)
   end
 
   # OTHER
