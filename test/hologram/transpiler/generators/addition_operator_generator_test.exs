@@ -7,8 +7,9 @@ defmodule Hologram.Transpiler.AdditionOperatorGeneratorTest do
   test "generate/2" do
     left = %Variable{name: :x}
     right = %AtomType{value: :a}
+    context = [module_attributes: []]
 
-    result = AdditionOperatorGenerator.generate(left, right)
+    result = AdditionOperatorGenerator.generate(left, right, context)
 
     expected =
       "Kernel.additionOperator(x, { type: 'atom', value: 'a' })"

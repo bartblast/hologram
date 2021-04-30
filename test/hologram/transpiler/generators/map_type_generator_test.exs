@@ -4,10 +4,16 @@ defmodule Hologram.Transpiler.MapTypeGeneratorTest do
   alias Hologram.Transpiler.AST.{AtomType, IntegerType, MapType}
   alias Hologram.Transpiler.MapTypeGenerator
 
-  test "generate/1" do
+  setup do
+    [
+      module_attributes: []
+    ]
+  end
+
+  test "generate/1", context do
     ast = %MapType{data: [{%AtomType{value: :a}, %IntegerType{value: 1}}]}
 
-    result = MapTypeGenerator.generate(ast.data)
+    result = MapTypeGenerator.generate(ast.data, context)
 
     expected =
       "{ type: 'map', data: { '~Hologram.Transpiler.AST.AtomType[a]': { type: 'integer', value: 1 } } }"
@@ -16,22 +22,22 @@ defmodule Hologram.Transpiler.MapTypeGeneratorTest do
   end
 
   describe "generate_data/1" do
-    test "empty data" do
+    test "empty data", context do
       data = []
 
-      result = MapTypeGenerator.generate_data(data)
+      result = MapTypeGenerator.generate_data(data, context)
       expected = "{}"
 
       assert result == expected
     end
 
-    test "not nested data" do
+    test "not nested data", context do
       data = [
         {%AtomType{value: :a}, %IntegerType{value: 1}},
         {%AtomType{value: :b}, %IntegerType{value: 2}}
       ]
 
-      result = MapTypeGenerator.generate_data(data)
+      result = MapTypeGenerator.generate_data(data, context)
 
       expected =
         "{ '~Hologram.Transpiler.AST.AtomType[a]': { type: 'integer', value: 1 }, '~Hologram.Transpiler.AST.AtomType[b]': { type: 'integer', value: 2 } }"
@@ -39,7 +45,7 @@ defmodule Hologram.Transpiler.MapTypeGeneratorTest do
       assert result == expected
     end
 
-    test "nested data" do
+    test "nested data", context do
       data = [
         {%AtomType{value: :a}, %IntegerType{value: 1}},
         {
@@ -61,7 +67,7 @@ defmodule Hologram.Transpiler.MapTypeGeneratorTest do
         }
       ]
 
-      result = MapTypeGenerator.generate_data(data)
+      result = MapTypeGenerator.generate_data(data, context)
 
       expected =
         "{ '~Hologram.Transpiler.AST.AtomType[a]': { type: 'integer', value: 1 }, '~Hologram.Transpiler.AST.AtomType[b]': { type: 'map', data: { '~Hologram.Transpiler.AST.AtomType[c]': { type: 'integer', value: 2 }, '~Hologram.Transpiler.AST.AtomType[d]': { type: 'map', data: { '~Hologram.Transpiler.AST.AtomType[e]': { type: 'integer', value: 3 }, '~Hologram.Transpiler.AST.AtomType[f]': { type: 'integer', value: 4 } } } } } }"

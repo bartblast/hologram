@@ -10,7 +10,9 @@ defmodule Hologram.Transpiler.StructTypeGeneratorTest do
       module: [:Abc, :Bcd]
     }
 
-    result = StructTypeGenerator.generate(ast.module, ast.data)
+    context = [module_attributes: []]
+
+    result = StructTypeGenerator.generate(ast.module, ast.data, context)
 
     expected =
       "{ type: 'struct', module: 'Abc.Bcd', data: { '~Hologram.Transpiler.AST.AtomType[a]': { type: 'integer', value: 1 } } }"

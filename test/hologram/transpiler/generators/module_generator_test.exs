@@ -9,6 +9,7 @@ defmodule Hologram.Transpiler.ModuleGeneratorTest do
   test "single function without muliptle variants" do
     ast = %Module{
       aliases: [],
+      attributes: [],
       functions: [
         %Function{
           bindings: [
@@ -112,6 +113,7 @@ defmodule Hologram.Transpiler.ModuleGeneratorTest do
   test "multiple functions without multiple variants" do
     ast = %Module{
       aliases: [],
+      attributes: [],
       functions: [
         %Function{
           bindings: [

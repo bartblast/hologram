@@ -1,7 +1,7 @@
 defmodule Hologram.Transpiler.DotOperatorGenerator do
   alias Hologram.Transpiler.Generator
 
-  def generate(left, right) do
-    "Kernel.dotOperator(#{Generator.generate(left)}, #{Generator.generate(right)})"
+  def generate(left, right, context) do
+    "Kernel.dotOperator(#{Generator.generate(left, context)}, #{Generator.generate(right, context)})"
   end
 end

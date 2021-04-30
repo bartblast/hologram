@@ -4,9 +4,11 @@ defmodule Hologram.Transpiler.ModuleGenerator do
   alias Hologram.Transpiler.Helpers
 
   def generate(ast, name) do
+    context = [module_attributes: ast.attributes]
+
     functions =
       aggregate_functions(ast)
-      |> Enum.map(fn {k, v} -> FunctionGenerator.generate(k, v) end)
+      |> Enum.map(fn {k, v} -> FunctionGenerator.generate(k, v, context) end)
       |> Enum.join("\n")
 
     """

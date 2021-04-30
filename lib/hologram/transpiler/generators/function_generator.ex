@@ -4,9 +4,9 @@ defmodule Hologram.Transpiler.FunctionGenerator do
   alias Hologram.Transpiler.AST.{MapAccess, Variable}
   alias Hologram.Transpiler.Generator
 
-  def generate(name, variants) do
+  def generate(name, variants, context) do
     body =
-      case generate_function_body(variants) do
+      case generate_function_body(variants, context) do
         # TODO: determine what's this case for, comment and test it
         "" ->
           "{}\n"
@@ -18,14 +18,14 @@ defmodule Hologram.Transpiler.FunctionGenerator do
     "static #{name}() #{body}\n"
   end
 
-  defp generate_function_body(variants) do
+  defp generate_function_body(variants, context) do
     valid_cases =
       Enum.reduce(variants, "", fn variant, acc ->
         statement = if acc == "", do: "if", else: "else if"
 
-        params = generate_function_params(variant)
+        params = generate_function_params(variant, context)
         vars = generate_function_vars(variant)
-        body = generate_function_expressions(variant)
+        body = generate_function_expressions(variant, context)
 
         code = """
         #{statement} (Hologram.patternMatchFunctionArgs(#{params}, arguments)) {
@@ -46,20 +46,20 @@ defmodule Hologram.Transpiler.FunctionGenerator do
     valid_cases <> invalid_case
   end
 
-  defp generate_function_expressions(variant) do
+  defp generate_function_expressions(variant, context) do
     expr_count = Enum.count(variant.body)
 
     Stream.with_index(variant.body)
     |> Enum.map(fn {expr, idx} ->
       return = if idx == expr_count - 1, do: "return ", else: ""
-      "#{return}#{Generator.generate(expr)};"
+      "#{return}#{Generator.generate(expr, context)};"
     end)
     |> Enum.join("\n")
   end
 
-  defp generate_function_params(variant) do
+  defp generate_function_params(variant, context) do
     params =
-      Enum.map(variant.params, fn param -> Generator.generate(param, boxed: true) end)
+      Enum.map(variant.params, fn param -> Generator.generate(param, context, boxed: true) end)
       |> Enum.join(", ")
 
     "[ #{params} ]"
