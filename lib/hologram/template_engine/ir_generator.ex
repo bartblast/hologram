@@ -3,6 +3,8 @@ defmodule Hologram.TemplateEngine.IRGenerator do
   alias Hologram.TemplateEngine.Renderer
   alias Hologram.Transpiler
   alias Hologram.Transpiler.AST.ModuleAttribute
+  alias Hologram.Transpiler.Normalizer
+  alias Hologram.Transpiler.Transformer
 
   def generate(ast, context \\ [module_attributes: []])
 
@@ -40,6 +42,11 @@ defmodule Hologram.TemplateEngine.IRGenerator do
   def generate(nodes, state) when is_list(nodes) do
     module_attributes =
       Enum.map(state, fn {key, value} ->
+        value =
+          Macro.escape(value)
+          |> Normalizer.normalize()
+          |> Transformer.transform()
+
         %ModuleAttribute{name: key, value: value}
       end)
 
