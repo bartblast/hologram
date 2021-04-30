@@ -44,7 +44,7 @@ defmodule Hologram.Transpiler.AST do
   end
 
   defmodule ModuleAttribute do
-    defstruct name: nil
+    defstruct name: nil, value: nil
   end
 
   # DIRECTIVES
