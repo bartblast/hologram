@@ -1,8 +1,18 @@
 defmodule Hologram.TemplateEngine.IRGeneratorTest do
   use ExUnit.Case, async: true
 
-  alias Hologram.TemplateEngine.AST.{TagNode, TextNode}
+  alias Hologram.TemplateEngine.AST.{Expression, TagNode, TextNode}
   alias Hologram.TemplateEngine.IRGenerator
+  alias Hologram.Transpiler.AST.AtomType
+
+  test "expression" do
+    ast = %Expression{ast: %AtomType{value: "x"}}
+
+    result = IRGenerator.generate(ast)
+    expected = "{ type: 'expression', ast: { type: 'atom', value: 'x' } }"
+
+    assert result == expected
+  end
 
   describe "tag node" do
     test "not attrs, no children" do
