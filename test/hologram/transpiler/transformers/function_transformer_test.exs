@@ -1,7 +1,7 @@
 defmodule Hologram.Transpiler.FunctionTransformerTest do
   use ExUnit.Case, async: true
 
-  alias Hologram.Transpiler.AST.{AtomType, Function, IntegerType, MapAccess, MapType, Variable}
+  alias Hologram.Transpiler.AST.{AtomType, Function, IntegerType, MapAccess, Variable}
   alias Hologram.Transpiler.FunctionTransformer
 
   test "arity" do
