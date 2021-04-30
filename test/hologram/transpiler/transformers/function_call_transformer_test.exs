@@ -4,52 +4,38 @@ defmodule Hologram.Transpiler.FunctionCallTransformerTest do
   alias Hologram.Transpiler.AST.{Alias, FunctionCall, Import, IntegerType}
   alias Hologram.Transpiler.FunctionCallTransformer
 
-  @aliases [
-    %Alias{module: [:Calendar, :ISO], as: [:Abc]},
-    %Alias{module: [:Config, :Reader], as: [:Bcd]}
-  ]
+  setup do
+    [
+      module: [:Abc, :Bcd],
+      imports: [
+        %Import{module: [:Task, :Supervisor]},
+        %Import{module: [:Kernel, :ParallelCompiler]}
+      ],
+      aliases: [
+        %Alias{module: [:Calendar, :ISO], as: [:Abc]},
+        %Alias{module: [:Config, :Reader], as: [:Bcd]}
+      ]
+    ]
+  end
 
-  @imports [
-    %Import{module: [:Task, :Supervisor]},
-    %Import{module: [:Kernel, :ParallelCompiler]}
-  ]
-
-  test "current module function" do
+  test "current module function", context do
     called_module = []
-    current_module = [:Abc, :Bcd]
     function = :test
     params = [1, 2]
 
-    result =
-      FunctionCallTransformer.transform(
-        called_module,
-        function,
-        params,
-        current_module,
-        @imports,
-        @aliases
-      )
+    result = FunctionCallTransformer.transform(called_module, function, params, context)
 
     expected_params = [%IntegerType{value: 1}, %IntegerType{value: 2}]
 
-    assert result == %FunctionCall{module: current_module, function: function, params: expected_params}
+    assert result == %FunctionCall{module: context[:module], function: function, params: expected_params}
   end
 
-  test "imported module function" do
+  test "imported module function", context do
     called_module = []
-    current_module = [:Abc, :Bcd]
     function = :start_child
     params = [1, 2]
 
-    result =
-      FunctionCallTransformer.transform(
-        called_module,
-        function,
-        params,
-        current_module,
-        @imports,
-        @aliases
-      )
+    result = FunctionCallTransformer.transform(called_module, function, params, context)
 
     expected_params = [%IntegerType{value: 1}, %IntegerType{value: 2}]
 
@@ -60,21 +46,12 @@ defmodule Hologram.Transpiler.FunctionCallTransformerTest do
            }
   end
 
-  test "aliased module function" do
+  test "aliased module function", context do
     called_module = []
-    current_module = [:Abc, :Bcd]
     function = :start_child
     params = [1, 2]
 
-    result =
-      FunctionCallTransformer.transform(
-        called_module,
-        function,
-        params,
-        current_module,
-        @imports,
-        @aliases
-      )
+    result = FunctionCallTransformer.transform(called_module, function, params, context)
 
     expected_params = [%IntegerType{value: 1}, %IntegerType{value: 2}]
 
@@ -85,21 +62,12 @@ defmodule Hologram.Transpiler.FunctionCallTransformerTest do
            }
   end
 
-  test "fully qualified module function" do
+  test "fully qualified module function", context do
     called_module = [:Cde, :Def]
-    current_module = [:Abc, :Bcd]
     function = :test
     params = [1, 2]
 
-    result =
-      FunctionCallTransformer.transform(
-        called_module,
-        function,
-        params,
-        current_module,
-        @imports,
-        @aliases
-      )
+    result = FunctionCallTransformer.transform(called_module, function, params, context)
 
     expected_params = [%IntegerType{value: 1}, %IntegerType{value: 2}]
 

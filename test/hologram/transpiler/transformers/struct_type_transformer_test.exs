@@ -7,7 +7,8 @@ defmodule Hologram.Transpiler.StructTypeTransformerTest do
    test "not aliased" do
     ast = {:%{}, [line: 1], [a: 2]}
 
-    result = StructTypeTransformer.transform(ast, [:Abc], [:Bcd], [], [])
+    context = [module: [:Bcd], imports: [], aliases: []]
+    result = StructTypeTransformer.transform(ast, [:Abc], context)
 
     expected = %StructType{
       data: [
@@ -25,12 +26,16 @@ defmodule Hologram.Transpiler.StructTypeTransformerTest do
   test "aliased" do
     ast = {:%{}, [line: 1], [a: 2]}
 
-    aliases = [
-      %Alias{module: [:Abc, :Bcd], as: [:Bcd]},
-      %Alias{module: [:Bcd, :Cde], as: [:Cde]}
+    context = [
+      module: [:Xyz],
+      imports: [],
+      aliases: [
+        %Alias{module: [:Abc, :Bcd], as: [:Bcd]},
+        %Alias{module: [:Bcd, :Cde], as: [:Cde]}
+      ]
     ]
 
-    result = StructTypeTransformer.transform(ast, [:Cde], [:Xyz], [], aliases)
+    result = StructTypeTransformer.transform(ast, [:Cde], context)
 
     expected = %StructType{
       data: [

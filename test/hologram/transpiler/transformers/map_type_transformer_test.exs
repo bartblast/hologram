@@ -4,15 +4,23 @@ defmodule Hologram.Transpiler.MapTypeTransformerTest do
   alias Hologram.Transpiler.AST.{AtomType, IntegerType, MapType}
   alias Hologram.Transpiler.MapTypeTransformer
 
-  test "empty map" do
-    result = MapTypeTransformer.transform([], [:Abc], [], [])
+  setup do
+    [
+      module: [:Abc],
+      imports: [],
+      aliases: []
+    ]
+  end
+
+  test "empty map", context do
+    result = MapTypeTransformer.transform([], context)
     expected = %MapType{data: []}
 
     assert result == expected
   end
 
-  test "non-nested map" do
-    result = MapTypeTransformer.transform([a: 1, b: 2], [:Abc], [], [])
+  test "non-nested map", context do
+    result = MapTypeTransformer.transform([a: 1, b: 2], context)
 
     expected = %MapType{
       data: [
@@ -24,7 +32,7 @@ defmodule Hologram.Transpiler.MapTypeTransformerTest do
     assert result == expected
   end
 
-  test "nested map" do
+  test "nested map", context do
     ast = [
       a: 1,
       b: {:%{}, [line: 1], [
@@ -36,7 +44,7 @@ defmodule Hologram.Transpiler.MapTypeTransformerTest do
       ]}
     ]
 
-    result = MapTypeTransformer.transform(ast, [:Abc], [], [])
+    result = MapTypeTransformer.transform(ast, context)
 
     expected = %MapType{
       data: [

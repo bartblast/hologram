@@ -4,15 +4,23 @@ defmodule Hologram.Transpiler.ListTypeTransformerTest do
   alias Hologram.Transpiler.AST.{IntegerType, ListType}
   alias Hologram.Transpiler.ListTypeTransformer
 
-  test "empty list" do
-    result = ListTypeTransformer.transform([], [:Abc], [], [])
+  setup do
+    [
+      module: [:Abc],
+      imports: [],
+      aliases: []
+    ]
+  end
+
+  test "empty list", context do
+    result = ListTypeTransformer.transform([], context)
     expected = %ListType{data: []}
 
     assert result == expected
   end
 
-  test "non-nested list" do
-    result = ListTypeTransformer.transform([1, 2], [:Abc], [], [])
+  test "non-nested list", context do
+    result = ListTypeTransformer.transform([1, 2], context)
 
     expected = %ListType{
       data: [
@@ -24,8 +32,8 @@ defmodule Hologram.Transpiler.ListTypeTransformerTest do
     assert result == expected
   end
 
-  test "nested list" do
-    result = ListTypeTransformer.transform([1, [2, [3, 4]]], [:Abc], [], [])
+  test "nested list", context do
+    result = ListTypeTransformer.transform([1, [2, [3, 4]]], context)
 
     expected = %ListType{
       data: [

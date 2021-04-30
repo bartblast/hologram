@@ -9,7 +9,8 @@ defmodule Hologram.Transpiler.AdditionOperatorTransformerTest do
     left = {:a, [line: 1], nil}
     right = 2
 
-    result = AdditionOperatorTransformer.transform(left, right, [:Test], [], [])
+    context = [module: [:Test], imports: [], aliases: []]
+    result = AdditionOperatorTransformer.transform(left, right, context)
 
     expected =
       %AdditionOperator{

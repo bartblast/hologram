@@ -4,7 +4,15 @@ defmodule Hologram.Transpiler.FunctionTransformerTest do
   alias Hologram.Transpiler.AST.{AtomType, Function, IntegerType, MapAccess, Variable}
   alias Hologram.Transpiler.FunctionTransformer
 
-  test "arity" do
+  setup do
+    [
+      module: [:Test],
+      imports: [],
+      aliases: []
+    ]
+  end
+
+  test "arity", context do
     # normalized AST from
     #
     # defmodule Abc do
@@ -14,14 +22,14 @@ defmodule Hologram.Transpiler.FunctionTransformerTest do
     # end
 
     params = [1, 2, 3]
-    result = FunctionTransformer.transform(:test, params, [1], [:Test], [], [])
+    result = FunctionTransformer.transform(:test, params, [1], context)
 
     assert %Function{} = result
     assert result.arity == 3
   end
 
   describe "bindings" do
-    test "no bindings" do
+    test "no bindings", context do
       # normalized AST from
       #
       # defmodule Abc do
@@ -31,13 +39,13 @@ defmodule Hologram.Transpiler.FunctionTransformerTest do
       # end
 
       params = [1, 2]
-      result = FunctionTransformer.transform(:test, params, [1], [:Test], [], [])
+      result = FunctionTransformer.transform(:test, params, [1], context)
 
       assert %Function{} = result
       assert result.bindings == []
     end
 
-    test "single binding in single param" do
+    test "single binding in single param", context do
       # normalized AST from
       #
       # defmodule Abc do
@@ -47,7 +55,7 @@ defmodule Hologram.Transpiler.FunctionTransformerTest do
       # end
 
       params = [1, {:%{}, [line: 2], [a: {:x, [line: 2], nil}]}]
-      result = FunctionTransformer.transform(:test, params, [1], [:Test], [], [])
+      result = FunctionTransformer.transform(:test, params, [1], context)
 
       expected =
         [
@@ -63,7 +71,7 @@ defmodule Hologram.Transpiler.FunctionTransformerTest do
       assert result.bindings == expected
     end
 
-    test "multiple bindings in single param" do
+    test "multiple bindings in single param", context do
       # normalized AST from
       #
       # defmodule Abc do
@@ -73,7 +81,7 @@ defmodule Hologram.Transpiler.FunctionTransformerTest do
       # end
 
       params = [1, {:%{}, [line: 2], [a: {:x, [line: 2], nil}, b: {:y, [line: 2], nil}]}]
-      result = FunctionTransformer.transform(:test, params, [1], [:Test], [], [])
+      result = FunctionTransformer.transform(:test, params, [1], context)
 
       expected =
         [
@@ -95,7 +103,7 @@ defmodule Hologram.Transpiler.FunctionTransformerTest do
       assert result.bindings == expected
     end
 
-    test "multiple bindings in multiple params" do
+    test "multiple bindings in multiple params", context do
       # normalized AST from
       #
       # defmodule Abc do
@@ -111,7 +119,7 @@ defmodule Hologram.Transpiler.FunctionTransformerTest do
         {:%{}, [line: 2], [c: {:s, [line: 2], nil}, d: {:t, [line: 2], nil}]},
       ]
 
-      result = FunctionTransformer.transform(:test, params, [1], [:Test], [], [])
+      result = FunctionTransformer.transform(:test, params, [1], context)
 
       expected =
         [
@@ -145,7 +153,7 @@ defmodule Hologram.Transpiler.FunctionTransformerTest do
       assert result.bindings == expected
     end
 
-    test "sorting" do
+    test "sorting", context do
       # normalized AST from
       #
       # defmodule Abc do
@@ -155,7 +163,7 @@ defmodule Hologram.Transpiler.FunctionTransformerTest do
       # end
 
       params = [{:y, [line: 2], nil}, {:x, [line: 2], nil}]
-      result = FunctionTransformer.transform(:test, params, [1], [:Test], [], [])
+      result = FunctionTransformer.transform(:test, params, [1], context)
 
       expected =
       [
@@ -173,21 +181,21 @@ defmodule Hologram.Transpiler.FunctionTransformerTest do
   end
 
   describe "body" do
-    test "single expression" do
+    test "single expression", context do
       # normalized AST from:
       #
       # def test do
       #   1
       # end
 
-      result = FunctionTransformer.transform(:test, nil, [1], [:Test], [], [])
+      result = FunctionTransformer.transform(:test, nil, [1], context)
       expected = [%IntegerType{value: 1}]
 
       assert %Function{} = result
       assert result.body == expected
     end
 
-    test "multiple expressions" do
+    test "multiple expressions", context do
       # normalized AST from:
       #
       # def test do
@@ -195,7 +203,7 @@ defmodule Hologram.Transpiler.FunctionTransformerTest do
       #   2
       # end
 
-      result = FunctionTransformer.transform(:test, nil, [1, 2], [:Test], [], [])
+      result = FunctionTransformer.transform(:test, nil, [1, 2], context)
 
       expected =
         [
@@ -208,7 +216,7 @@ defmodule Hologram.Transpiler.FunctionTransformerTest do
     end
   end
 
-  test "name" do
+  test "name", context do
     # normalized AST from
     #
     # defmodule Abc do
@@ -217,27 +225,27 @@ defmodule Hologram.Transpiler.FunctionTransformerTest do
     #   end
     # end
 
-    result = FunctionTransformer.transform(:test, [1, 2], [1], [:Test], [], [])
+    result = FunctionTransformer.transform(:test, [1, 2], [1], context)
 
     assert %Function{} = result
     assert result.name == :test
   end
 
   describe "params" do
-    test "no params" do
+    test "no params", context do
       # normalized AST from:
       #
       # def test do
       #   1
       # end
 
-      result = FunctionTransformer.transform(:test, nil, [1], [:Test], [], [])
+      result = FunctionTransformer.transform(:test, nil, [1], context)
 
       assert %Function{} = result
       assert result.params == []
     end
 
-    test "var params" do
+    test "var params", context do
       # normalized AST from:
       #
       # def test(a, b) do
@@ -245,7 +253,7 @@ defmodule Hologram.Transpiler.FunctionTransformerTest do
       # end
 
       params = [{:a, [line: 1], nil}, {:b, [line: 1], nil}]
-      result = FunctionTransformer.transform(:test, params, [1], [:Test], [], [])
+      result = FunctionTransformer.transform(:test, params, [1], context)
 
       expected =
         [
@@ -257,7 +265,7 @@ defmodule Hologram.Transpiler.FunctionTransformerTest do
       assert result.params == expected
     end
 
-    test "primitive type params" do
+    test "primitive type params", context do
       # normalized AST from
       #
       # defmodule Abc do
@@ -266,7 +274,7 @@ defmodule Hologram.Transpiler.FunctionTransformerTest do
       #   end
       # end
 
-      result = FunctionTransformer.transform(:test, [:a, 2], [1], [:Test], [], [])
+      result = FunctionTransformer.transform(:test, [:a, 2], [1], context)
 
       expected =
         [

@@ -3,15 +3,15 @@ defmodule Hologram.Transpiler.FunctionTransformer do
   alias Hologram.Transpiler.Binder
   alias Hologram.Transpiler.Transformer
 
-  def transform(name, params, body, module, imports, aliases) do
+  def transform(name, params, body, context) do
     params =
       (if params, do: params, else: [])
-      |> Enum.map(&Transformer.transform(&1, module, imports, aliases))
+      |> Enum.map(&Transformer.transform(&1, context))
 
     arity = Enum.count(params)
 
     bindings = aggregate_bindings(params)
-    body = Enum.map(body, &Transformer.transform(&1, module, imports, aliases))
+    body = Enum.map(body, &Transformer.transform(&1, context))
 
     %Function{name: name, arity: arity, params: params, bindings: bindings, body: body}
   end

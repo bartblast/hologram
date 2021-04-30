@@ -9,7 +9,8 @@ defmodule Hologram.Transpiler.DotOperatorTransformerTest do
     left = {:a, [line: 1], nil}
     right = :b
 
-    result = DotOperatorTransformer.transform(left, right, [:Test], [], [])
+    context = [module: [:Test], imports: [], aliases: []]
+    result = DotOperatorTransformer.transform(left, right, context)
 
     expected =
       %DotOperator{
