@@ -20,7 +20,7 @@ defmodule DemoWeb.HologramController do
     # DEFER: use .holo template files
     html = TemplateEngine.Renderer.render(template_ast, state)
 
-    template_ir = TemplateEngine.IRGenerator.generate(template_ast)
+    template_ir = TemplateEngine.IRGenerator.generate(template_ast, state)
 
     js =
       Transpiler.Helpers.module_name_parts(module)
