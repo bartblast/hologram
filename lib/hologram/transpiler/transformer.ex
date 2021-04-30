@@ -60,6 +60,10 @@ defmodule Hologram.Transpiler.Transformer do
       right: transform(right, module, imports, aliases)
     }
   end
+  
+  def transform({:@, _, [{name, _, _}]}, _module, _imports, _aliases) do
+    %ModuleAttribute{name: name}
+  end
 
   # DIRECTIVES
 
@@ -88,10 +92,6 @@ defmodule Hologram.Transpiler.Transformer do
 
   def transform({name, _, nil}, _module, _imports, _aliases) when is_atom(name) do
     %Variable{name: name}
-  end
-
-  def transform({:@, _, [{name, _, _}]}, _module, _imports, _aliases) do
-    %ModuleAttribute{name: name}
   end
 
   def transform({function, _, params}, module, imports, aliases) when is_atom(function) do

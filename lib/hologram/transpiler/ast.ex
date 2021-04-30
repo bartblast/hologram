@@ -43,6 +43,10 @@ defmodule Hologram.Transpiler.AST do
     defstruct bindings: nil, left: nil, right: nil
   end
 
+  defmodule ModuleAttribute do
+    defstruct name: nil
+  end
+
   # DIRECTIVES
 
   defmodule Alias do
@@ -69,10 +73,6 @@ defmodule Hologram.Transpiler.AST do
 
   defmodule Module do
     defstruct name: nil, imports: nil, aliases: nil, functions: nil
-  end
-
-  defmodule ModuleAttribute do
-    defstruct name: nil
   end
 
   defmodule Variable do
