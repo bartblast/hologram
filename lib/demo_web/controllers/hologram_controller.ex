@@ -7,7 +7,6 @@ defmodule DemoWeb.HologramController do
 
   def index(conn, params) do
     module = conn.private.hologram_view
-    source = module.module_info()[:compile][:source]
 
     state = module.state()
     hydrated_state = Transpiler.Hydrator.hydrate(state)
