@@ -5,7 +5,7 @@ defmodule Hologram.TemplateEngine.RendererTest do
   alias Hologram.TemplateEngine.AST.TagNode
   alias Hologram.TemplateEngine.AST.TextNode
   alias Hologram.TemplateEngine.Renderer
-  alias Hologram.Transpiler.AST.ModuleAttribute
+  alias Hologram.Transpiler.AST.ModuleAttributeOperator
 
   describe "render/2" do
     test "multiple nodes" do
@@ -48,7 +48,7 @@ defmodule Hologram.TemplateEngine.RendererTest do
     end
 
     test "expression" do
-      ast = %Expression{ast: %ModuleAttribute{name: :a}}
+      ast = %Expression{ast: %ModuleAttributeOperator{name: :a}}
       state = %{a: 123}
 
       result = Renderer.render(ast, state)

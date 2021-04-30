@@ -4,7 +4,7 @@ defmodule Hologram.TemplateEngine.TransformerTest do
 
   alias Hologram.TemplateEngine.AST.{Expression, TagNode, TextNode}
   alias Hologram.TemplateEngine.Transformer
-  alias Hologram.Transpiler.AST.{ModuleAttribute}
+  alias Hologram.Transpiler.AST.{ModuleAttributeOperator}
 
   describe "transform/1" do
     test "tag nodes without attrs" do
@@ -109,8 +109,8 @@ defmodule Hologram.TemplateEngine.TransformerTest do
       expected = [
         %TagNode{
           attrs: %{
-            ":if" => %Expression{ast: %ModuleAttribute{name: :var_1}},
-            ":show" => %Expression{ast: %ModuleAttribute{name: :var_2}},
+            ":if" => %Expression{ast: %ModuleAttributeOperator{name: :var_1}},
+            ":show" => %Expression{ast: %ModuleAttributeOperator{name: :var_2}},
             "class" => "class_1",
             "id" => "id_1"
           },
@@ -122,8 +122,8 @@ defmodule Hologram.TemplateEngine.TransformerTest do
                 %TextNode{text: "\n    "},
                 %TagNode{
                   attrs: %{
-                    ":if" => %Expression{ast: %ModuleAttribute{name: :var_3}},
-                    ":show" => %Expression{ast: %ModuleAttribute{name: :var_4}},
+                    ":if" => %Expression{ast: %ModuleAttributeOperator{name: :var_3}},
+                    ":show" => %Expression{ast: %ModuleAttributeOperator{name: :var_4}},
                     "class" => "class_2",
                     "id" => "id_2"
                   },
@@ -157,11 +157,11 @@ defmodule Hologram.TemplateEngine.TransformerTest do
           children: [
             %TextNode{text: "test_1"},
             %Expression{
-              ast: %ModuleAttribute{name: :x1}
+              ast: %ModuleAttributeOperator{name: :x1}
             },
             %TextNode{text: "test_2"},
             %Expression{
-              ast: %ModuleAttribute{name: :x2}
+              ast: %ModuleAttributeOperator{name: :x2}
             },
             %TextNode{text: "test_3"}
           ],

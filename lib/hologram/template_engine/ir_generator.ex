@@ -2,7 +2,7 @@ defmodule Hologram.TemplateEngine.IRGenerator do
   alias Hologram.TemplateEngine.AST.{Expression, TagNode, TextNode}
   alias Hologram.TemplateEngine.Renderer
   alias Hologram.Transpiler
-  alias Hologram.Transpiler.AST.ModuleAttribute
+  alias Hologram.Transpiler.AST.ModuleAttributeDef
   alias Hologram.Transpiler.Normalizer
   alias Hologram.Transpiler.Transformer
 
@@ -47,7 +47,7 @@ defmodule Hologram.TemplateEngine.IRGenerator do
           |> Normalizer.normalize()
           |> Transformer.transform()
 
-        %ModuleAttribute{name: key, value: value}
+        %ModuleAttributeDef{name: key, value: value}
       end)
 
     context = [module_attributes: module_attributes]
