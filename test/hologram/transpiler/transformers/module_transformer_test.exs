@@ -1,7 +1,7 @@
 defmodule Hologram.Transpiler.ModuleTransformerTest do
   use ExUnit.Case, async: true
 
-  alias Hologram.Transpiler.AST.{Alias, Function, Import, IntegerType, Module}
+  alias Hologram.Transpiler.AST.{Alias, Function, Import, IntegerType, Module, ModuleAttributeDef}
   alias Hologram.Transpiler.ModuleTransformer
 
   test "functions" do
