@@ -4,7 +4,7 @@ defmodule Hologram.Transpiler.ModuleGenerator do
   alias Hologram.Transpiler.Helpers
 
   def generate(ast, name) do
-    context = [module_attributes: ast.attributes]
+    context = [class_name: Helpers.class_name(name)]
 
     functions =
       aggregate_functions(ast)
@@ -12,7 +12,7 @@ defmodule Hologram.Transpiler.ModuleGenerator do
       |> Enum.join("\n")
 
     """
-    class #{Helpers.class_name(name)} {
+    class #{context[:class_name]} {
 
     #{functions}
     }
