@@ -6,7 +6,7 @@ defmodule Hologram.Transpiler.ModuleAttributeOperatorGeneratorTest do
     context = [current_module: [:Abc, :Bcd]]
 
     result = ModuleAttributeOperatorGenerator.generate(:xyz, context)
-    expected = "AbcBcd.$xyz"
+    expected = "AbcBcd.$state.data.xyz"
 
     assert result == expected
   end
