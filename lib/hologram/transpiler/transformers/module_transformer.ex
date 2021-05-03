@@ -10,22 +10,10 @@ defmodule Hologram.Transpiler.ModuleTransformer do
     build_module(block, module)
   end
 
-  defp aggregate_directives(ast, type) do
+  defp aggregate_expressions(type, ast, context) do
     Enum.reduce(ast, [], fn expr, acc ->
       case expr do
         {^type, _, _} ->
-          acc ++ [Transformer.transform(expr)]
-
-        _ ->
-          acc
-      end
-    end)
-  end
-
-  defp aggregate_functions(ast, context) do
-    Enum.reduce(ast, [], fn expr, acc ->
-      case expr do
-        {:def, _, _} ->
           acc ++ [Transformer.transform(expr, context)]
 
         _ ->
@@ -35,12 +23,19 @@ defmodule Hologram.Transpiler.ModuleTransformer do
   end
 
   defp build_module(ast, module) do
-    imports = aggregate_directives(ast, :import)
-    aliases = aggregate_directives(ast, :alias)
+    imports = aggregate_expressions(:import, ast, [])
+    aliases = aggregate_expressions(:alias, ast, [])
+    attributes = aggregate_expressions(:@, ast, [])
+
     context = [module: module, imports: imports, aliases: aliases]
+    functions = aggregate_expressions(:def, ast, context)
 
-    functions = aggregate_functions(ast, context)
-
-    %Module{name: module, imports: imports, aliases: aliases, functions: functions}
+    %Module{
+      name: module,
+      imports: imports,
+      aliases: aliases,
+      attributes: attributes,
+      functions: functions
+    }
   end
 end
