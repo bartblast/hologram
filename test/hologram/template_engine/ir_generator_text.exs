@@ -57,10 +57,10 @@ defmodule Hologram.TemplateEngine.IRGeneratorTest do
   end
 
   test "text node" do
-    ast = %TextNode{text: "test'test\ntest"}
+    ast = %TextNode{text: "a'b\nc'd\ne"}
 
     result = IRGenerator.generate(ast)
-    expected = "{ type: 'text_node', text: 'test\\'test\\ntest' }"
+    expected = "{ type: 'text_node', text: 'a\\'b\\nc\\'d\\ne' }"
 
     assert result == expected
   end
