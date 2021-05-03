@@ -1,10 +1,9 @@
 defmodule Hologram.Transpiler.ModuleAttributeOperatorGenerator do
-  alias Hologram.Transpiler.Generator
+  alias Hologram.Transpiler.Helpers
 
   def generate(name, context) do
-    context[:module_attributes]
-    |> Enum.find(&(&1.name == name))
-    |> Map.get(:value)
-    |> Generator.generate(context)
+    context[:current_module]
+    |> Helpers.class_name()
+    |> Kernel.<>(".$#{name}")
   end
 end
