@@ -11,6 +11,7 @@ defmodule Hologram.CompilerTest do
       %{
         [:TestModule6] => %Module{
           aliases: [],
+          attributes: [],
           functions: [
             %Function{
               arity: 0,
@@ -35,6 +36,7 @@ defmodule Hologram.CompilerTest do
       %{
         [:TestModule6] => %Module{
           aliases: [],
+          attributes: [],
           functions: [
             %Function{
               arity: 0,
@@ -49,6 +51,7 @@ defmodule Hologram.CompilerTest do
         },
         [:TestModule7] => %Module{
           aliases: [%Alias{as: [:TestModule6], module: [:TestModule6]}],
+          attributes: [],
           functions: [],
           imports: [],
           name: [:TestModule7]
@@ -65,12 +68,14 @@ defmodule Hologram.CompilerTest do
       %{
         [:TestModule10] => %Module{
           aliases: [%Alias{as: [:TestModule7], module: [:TestModule7]}],
+          attributes: [],
           functions: [],
           imports: [],
           name: [:TestModule10]
         },
         [:TestModule6] => %Module{
           aliases: [],
+          attributes: [],
           functions: [
             %Function{
               arity: 0,
@@ -85,6 +90,7 @@ defmodule Hologram.CompilerTest do
         },
         [:TestModule7] => %Module{
           aliases: [%Alias{as: [:TestModule6], module: [:TestModule6]}],
+          attributes: [],
           functions: [],
           imports: [],
           name: [:TestModule7]
@@ -101,12 +107,14 @@ defmodule Hologram.CompilerTest do
       %{
         [:TestModule8] => %Module{
           aliases: [%Alias{as: [:TestModule9], module: [:TestModule9]}],
+          attributes: [],
           functions: [],
           imports: [],
           name: [:TestModule8]
         },
         [:TestModule9] => %Module{
           aliases: [%Alias{as: [:TestModule8], module: [:TestModule8]}],
+          attributes: [],
           functions: [],
           imports: [],
           name: [:TestModule9]

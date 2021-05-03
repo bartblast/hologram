@@ -37,6 +37,7 @@ defmodule Hologram.Transpiler.ModuleTransformerTest do
     expected =
       %Module{
         aliases: [],
+        attributes: [],
         functions: [
           %Function{
             arity: 0,
@@ -89,6 +90,7 @@ defmodule Hologram.Transpiler.ModuleTransformerTest do
           %Alias{as: [:Hij], module: [:Ghi, :Hij]},
           %Alias{as: [:Jkl], module: [:Ijk, :Jkl]}
         ],
+        attributes: [],
         functions: [],
         imports: [],
         name: [:Abc, :Bcd]
@@ -123,6 +125,7 @@ defmodule Hologram.Transpiler.ModuleTransformerTest do
     expected =
       %Module{
         aliases: [],
+        attributes: [],
         functions: [],
         imports: [
           %Import{module: [:Cde, :Def], only: nil},
@@ -156,6 +159,7 @@ defmodule Hologram.Transpiler.ModuleTransformerTest do
     expected =
       %Module{
         aliases: [],
+        attributes: [],
         functions: [],
         imports: [%Import{module: [:TestModule1], only: nil}],
         name: [:Test]
