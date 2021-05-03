@@ -36,6 +36,10 @@ defmodule Hologram.TemplateEngine.IRGenerator do
   end
 
   def generate(%TextNode{text: text}, _) do
+    text =
+      String.replace(text, "\n", "\\n", global: true)
+      |> String.replace("'", "\\'", global: true)
+
     "{ type: 'text_node', text: '#{text}' }"
   end
 
