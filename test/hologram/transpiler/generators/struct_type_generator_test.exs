@@ -4,13 +4,15 @@ defmodule Hologram.Transpiler.StructTypeGeneratorTest do
   alias Hologram.Transpiler.AST.{AtomType, IntegerType, StructType}
   alias Hologram.Transpiler.StructTypeGenerator
 
-  test "generate/1" do
+  setup do
+    []
+  end
+
+  test "generate/1", context do
     ast = %StructType{
       data: [{%AtomType{value: :a}, %IntegerType{value: 1}}],
       module: [:Abc, :Bcd]
     }
-
-    context = [module_attributes: []]
 
     result = StructTypeGenerator.generate(ast.module, ast.data, context)
 
