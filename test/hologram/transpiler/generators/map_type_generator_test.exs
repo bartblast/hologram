@@ -5,9 +5,7 @@ defmodule Hologram.Transpiler.MapTypeGeneratorTest do
   alias Hologram.Transpiler.MapTypeGenerator
 
   setup do
-    [
-      module_attributes: []
-    ]
+    []
   end
 
   test "generate/1", context do

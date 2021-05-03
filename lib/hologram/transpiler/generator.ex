@@ -28,7 +28,7 @@ defmodule Hologram.Transpiler.Generator do
 
   alias Hologram.Transpiler.Helpers
 
-  def generate(ast, context \\ [module_attributs: []], opts \\ [])
+  def generate(ast, context \\ [], opts \\ [])
 
   # TYPES
 

@@ -7,9 +7,8 @@ defmodule Hologram.Transpiler.DotOperatorGeneratorTest do
   test "generate/2" do
     left = %Variable{name: :x}
     right = %AtomType{value: :a}
-    context = [module_attributes: []]
 
-    result = DotOperatorGenerator.generate(left, right, context)
+    result = DotOperatorGenerator.generate(left, right, [])
 
     expected =
       "Kernel.dotOperator(x, { type: 'atom', value: 'a' })"

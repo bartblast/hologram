@@ -63,11 +63,9 @@ defmodule Hologram.Transpiler.GeneratorTest do
     end
 
     test "variable, boxed" do
-      context = [module_attributes: []]
-
-      result = Generator.generate(%Variable{name: :test}, context, boxed: true)
+      result = Generator.generate(%Variable{name: :test}, [], boxed: true)
       expected = "{ type: 'variable', name: 'test' }"
-      
+
       assert result == expected
     end
 
