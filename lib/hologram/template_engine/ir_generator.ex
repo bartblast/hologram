@@ -9,7 +9,7 @@ defmodule Hologram.TemplateEngine.IRGenerator do
   def generate(ast, context \\ [module_attributes: []])
 
   def generate(%Expression{ast: ast}, context) do
-    "{ type: 'expression', ast: #{Transpiler.Generator.generate(ast, context)} }"
+    "{ type: 'expression', callback: ($state) => { return #{Transpiler.Generator.generate(ast, context)} } }"
   end
 
   def generate(%TagNode{attrs: attrs, children: children, tag: tag}, context) do

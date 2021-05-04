@@ -9,7 +9,7 @@ defmodule Hologram.TemplateEngine.IRGeneratorTest do
     ast = %Expression{ast: %AtomType{value: "x"}}
 
     result = IRGenerator.generate(ast)
-    expected = "{ type: 'expression', ast: { type: 'atom', value: 'x' } }"
+    expected = "{ type: 'expression', callback: ($state) => { type: 'atom', value: 'x' } }"
 
     assert result == expected
   end
