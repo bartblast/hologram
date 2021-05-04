@@ -3,10 +3,8 @@ defmodule Hologram.Transpiler.ModuleAttributeOperatorGeneratorTest do
   alias Hologram.Transpiler.ModuleAttributeOperatorGenerator
 
   test "generate/2" do
-    context = [current_module: [:Abc, :Bcd]]
-
-    result = ModuleAttributeOperatorGenerator.generate(:xyz, context)
-    expected = "AbcBcd.$state.data.xyz"
+    result = ModuleAttributeOperatorGenerator.generate(:xyz, [])
+    expected = "$state.data.xyz"
 
     assert result == expected
   end
