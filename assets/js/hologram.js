@@ -1,6 +1,7 @@
 // TODO: test
 
-import { cloneDeep } from 'lodash';
+// see: https://www.blazemeter.com/blog/the-correct-way-to-import-lodash-libraries-a-benchmark
+import cloneDeep from 'lodash/cloneDeep';
 
 class Hologram {
   static evaluate(value) {
