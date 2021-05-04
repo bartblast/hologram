@@ -3,6 +3,13 @@
 import { cloneDeep } from 'lodash';
 
 class Hologram {
+  static evaluate(value) {
+    switch (value.type) {
+      case "integer":
+        return `${value.value}`
+    }
+  }
+
   static isPatternMatched(left, right) {
     let lType = left.type;
     let rType = right.type;
@@ -48,6 +55,31 @@ class Hologram {
     }
   }
 
+  static render(ir, state) {
+    if (Array.isArray(ir)) {
+      return ir.map((node) => { return Hologram.render(node, state)}).join("")
+    }
+
+    switch (ir.type) {
+      case "expression":
+        return Hologram.evaluate(ir.callback(state))
+        
+      case "tag_node":
+        let attrs = Object.keys(ir.attrs).reduce((acc, key) => {
+          return acc.concat([`${key}="${ir.attrs[key]}"`])
+        }, []).join(" ")
+
+        let children = ir.children.map((child) => {
+          return Hologram.render(child, state)
+        }).join("")
+
+        return `<${ir.tag} ${attrs}>${children}</${ir.tag}>`
+
+      case "text_node":
+        return ir.text
+    }
+  }
+
   static patternMatchFunctionArgs(params, args) {
     if (args.length != params.length) {
       return false;
@@ -76,6 +108,8 @@ class Hologram {
 
           console.log("State after action:")
           console.debug(window.state.data)
+
+          let html = Hologram.render(window.ir[moduleName], window.state)
         })
       })
     }   
