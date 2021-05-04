@@ -2,6 +2,7 @@
 
 // see: https://www.blazemeter.com/blog/the-correct-way-to-import-lodash-libraries-a-benchmark
 import cloneDeep from 'lodash/cloneDeep';
+import { DiffDOM } from "diff-dom"
 
 class Hologram {
   static evaluate(value) {
@@ -96,6 +97,8 @@ class Hologram {
   }
 
   static startEventLoop(window, module, moduleName) {
+    let dd = new DiffDOM();
+
     let callback = () => {
       document.querySelectorAll("[holo-click]").forEach(element => {
         element.addEventListener("click", () => {
@@ -111,6 +114,8 @@ class Hologram {
           console.debug(window.state.data)
 
           let html = Hologram.render(window.ir[moduleName], window.state)
+          let diff = dd.diff(window.document.body, "<body>" + html + "</body>");
+          dd.apply(window.document.body, diff)
         })
       })
     }   
