@@ -4,7 +4,7 @@ defmodule Hologram.Transpiler.ModuleAttributeOperatorGeneratorTest do
 
   test "generate/2" do
     result = ModuleAttributeOperatorGenerator.generate(:xyz, [])
-    expected = "$state.data.xyz"
+    expected = "$state.data['~Hologram.Transpiler.AST.AtomType[xyz]']"
 
     assert result == expected
   end
