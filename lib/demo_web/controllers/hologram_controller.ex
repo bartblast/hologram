@@ -6,7 +6,7 @@ defmodule DemoWeb.HologramController do
   alias Hologram.Compiler.Processor
 
   def index(conn, params) do
-    module = conn.private.hologram_view
+    module = conn.private.hologram_page
 
     state = module.state()
     hydrated_state = Compiler.Hydrator.hydrate(state)
