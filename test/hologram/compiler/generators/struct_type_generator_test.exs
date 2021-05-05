@@ -1,10 +1,10 @@
 defmodule Hologram.Compiler.StructTypeGeneratorTest do
   use ExUnit.Case, async: true
 
-  alias Hologram.Compiler.AST.{AtomType, IntegerType, StructType}
+  alias Hologram.Compiler.AST.{AtomType, IntegerType}
   alias Hologram.Compiler.StructTypeGenerator
 
-  test "generate/3", context do
+  test "generate/3" do
     data = [{%AtomType{value: :a}, %IntegerType{value: 1}}]
     module = [:Abc, :Bcd]
 
