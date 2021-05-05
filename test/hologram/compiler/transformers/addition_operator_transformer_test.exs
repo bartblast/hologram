@@ -1,10 +1,10 @@
 defmodule Hologram.Compiler.AdditionOperatorTransformerTest do
   use ExUnit.Case, async: true
 
-  alias Hologram.Compiler.AST.{AdditionOperator, IntegerType, Variable}
   alias Hologram.Compiler.AdditionOperatorTransformer
+  alias Hologram.Compiler.AST.{AdditionOperator, IntegerType, Variable}
 
-  test "transform/5" do
+  test "transform/3" do
     # a + 2
     left = {:a, [line: 1], nil}
     right = 2
