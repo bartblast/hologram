@@ -1,5 +1,5 @@
-defmodule Hologram.Transpiler.Eliminator.TestModule4 do
-  alias Hologram.Transpiler.Eliminator.TestModule5
+defmodule Hologram.Compiler.Eliminator.TestModule4 do
+  alias Hologram.Compiler.Eliminator.TestModule5
 
   def action(:test, a, b) do
     :ok

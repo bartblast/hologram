@@ -1,8 +1,8 @@
 defmodule Hologram.Compiler do
-  alias Hologram.Transpiler.Helpers
-  alias Hologram.Transpiler.Normalizer
-  alias Hologram.Transpiler.Parser
-  alias Hologram.Transpiler.Transformer
+  alias Hologram.Compiler.Helpers
+  alias Hologram.Compiler.Normalizer
+  alias Hologram.Compiler.Parser
+  alias Hologram.Compiler.Transformer
 
   def compile(module, acc \\ %{}) do
     fully_qualified_module = Helpers.fully_qualified_module(module)

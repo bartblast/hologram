@@ -1,7 +1,7 @@
 defmodule Hologram.TemplateEngine.Transformer do
   alias Hologram.TemplateEngine.AST.{ComponentNode, Expression, TagNode, TextNode}
   alias Hologram.TemplateEngine.Interpolator
-  alias Hologram.Transpiler.{Parser, Transformer}
+  alias Hologram.Compiler.{Parser, Transformer}
 
   def transform(ast, aliases \\ %{})
 
@@ -23,7 +23,7 @@ defmodule Hologram.TemplateEngine.Transformer do
             [_, code] ->
               ast =
                 Parser.parse!(code)
-                |> Hologram.Transpiler.Transformer.transform()
+                |> Hologram.Compiler.Transformer.transform()
 
               %Expression{ast: ast}
 

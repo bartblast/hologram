@@ -1,3 +1,3 @@
-defmodule Hologram.Transpiler.Eliminator.TestModule5 do
+defmodule Hologram.Compiler.Eliminator.TestModule5 do
   def test_5, do: nil
 end

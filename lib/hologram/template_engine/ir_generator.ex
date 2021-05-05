@@ -1,15 +1,15 @@
 defmodule Hologram.TemplateEngine.IRGenerator do
   alias Hologram.TemplateEngine.AST.{Expression, TagNode, TextNode}
   alias Hologram.TemplateEngine.Renderer
-  alias Hologram.Transpiler
-  alias Hologram.Transpiler.AST.ModuleAttributeDef
-  alias Hologram.Transpiler.Normalizer
-  alias Hologram.Transpiler.Transformer
+  alias Hologram.Compiler
+  alias Hologram.Compiler.AST.ModuleAttributeDef
+  alias Hologram.Compiler.Normalizer
+  alias Hologram.Compiler.Transformer
 
   def generate(ast, context \\ [module_attributes: []])
 
   def generate(%Expression{ast: ast}, context) do
-    "{ type: 'expression', callback: ($state) => { return #{Transpiler.Generator.generate(ast, context)} } }"
+    "{ type: 'expression', callback: ($state) => { return #{Compiler.Generator.generate(ast, context)} } }"
   end
 
   def generate(%TagNode{attrs: attrs, children: children, tag: tag}, context) do

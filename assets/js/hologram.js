@@ -32,10 +32,10 @@ class Hologram {
   static objectKey(key) {
     switch (key.type) {
       case 'atom':
-        return `~Hologram.Transpiler.AST.AtomType[${key.value}]`
+        return `~Hologram.Compiler.AST.AtomType[${key.value}]`
 
       case 'string':
-        return `~Hologram.Transpiler.AST.StringType[${key.value}]`
+        return `~Hologram.Compiler.AST.StringType[${key.value}]`
         
       default:
         throw 'Not implemented, at HologramPage.objectKey()'

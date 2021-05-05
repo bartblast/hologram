@@ -3,7 +3,7 @@ defmodule Hologram.TemplateEngine.InterpolatorTest do
 
   alias Hologram.TemplateEngine.AST.{Expression, TagNode, TextNode}
   alias Hologram.TemplateEngine.Interpolator
-  alias Hologram.Transpiler.AST.ModuleAttributeOperator
+  alias Hologram.Compiler.AST.ModuleAttributeOperator
 
   test "multiple text nodes" do
     nodes = [

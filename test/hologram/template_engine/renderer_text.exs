@@ -5,7 +5,7 @@ defmodule Hologram.TemplateEngine.RendererTest do
   alias Hologram.TemplateEngine.AST.TagNode
   alias Hologram.TemplateEngine.AST.TextNode
   alias Hologram.TemplateEngine.Renderer
-  alias Hologram.Transpiler.AST.ModuleAttributeOperator
+  alias Hologram.Compiler.AST.ModuleAttributeOperator
 
   describe "render/2" do
     test "multiple nodes" do

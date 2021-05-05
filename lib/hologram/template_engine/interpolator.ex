@@ -1,6 +1,6 @@
 defmodule Hologram.TemplateEngine.Interpolator do
   alias Hologram.TemplateEngine.AST.{Expression, TextNode}
-  alias Hologram.Transpiler.Parser
+  alias Hologram.Compiler.Parser
 
   def interpolate(nodes) do
     Enum.reduce(nodes, [], fn node, acc ->
@@ -28,7 +28,7 @@ defmodule Hologram.TemplateEngine.Interpolator do
 
     ast =
       Parser.parse!(code)
-      |> Hologram.Transpiler.Transformer.transform()
+      |> Hologram.Compiler.Transformer.transform()
 
     {char_count, nodes} = {char_count + 4 + String.length(code), nodes ++ [%Expression{ast: ast}]}
   end

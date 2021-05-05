@@ -4,7 +4,7 @@ defmodule Hologram.TemplateEngine.TransformerTest do
 
   alias Hologram.TemplateEngine.AST.{Expression, TagNode, TextNode}
   alias Hologram.TemplateEngine.Transformer
-  alias Hologram.Transpiler.AST.{ModuleAttributeOperator}
+  alias Hologram.Compiler.AST.{ModuleAttributeOperator}
 
   describe "transform/1" do
     test "tag nodes without attrs" do

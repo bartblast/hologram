@@ -3,7 +3,7 @@ defmodule Hologram.TemplateEngine.IRGeneratorTest do
 
   alias Hologram.TemplateEngine.AST.{Expression, TagNode, TextNode}
   alias Hologram.TemplateEngine.IRGenerator
-  alias Hologram.Transpiler.AST.AtomType
+  alias Hologram.Compiler.AST.AtomType
 
   test "expression" do
     ast = %Expression{ast: %AtomType{value: "x"}}

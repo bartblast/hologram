@@ -2,7 +2,7 @@ defmodule Hologram.CompilerTest do
   use ExUnit.Case, async: true
 
   alias Hologram.Compiler
-  alias Hologram.Transpiler.AST.{Alias, Function, IntegerType, Module}
+  alias Hologram.Compiler.AST.{Alias, Function, IntegerType, Module}
 
   test "module without directives" do
     result = Compiler.compile([:TestModule6])

@@ -1,4 +1,4 @@
-defmodule Hologram.Transpiler.Eliminator.TestModule1 do
+defmodule Hologram.Compiler.Eliminator.TestModule1 do
   def not_action_1, do: nil
 
   def action(:test_1, a, b) do
