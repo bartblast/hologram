@@ -1,5 +1,4 @@
 defmodule Hologram.Compiler.StructTypeGenerator do
-  alias Hologram.Compiler.Generator
   alias Hologram.Compiler.Helpers
   alias Hologram.Compiler.MapTypeGenerator
 
