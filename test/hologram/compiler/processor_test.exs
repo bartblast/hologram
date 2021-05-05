@@ -1,11 +1,11 @@
-defmodule Hologram.CompilerTest do
+defmodule Hologram.Compiler.ProcessorTest do
   use ExUnit.Case, async: true
 
-  alias Hologram.Compiler
   alias Hologram.Compiler.AST.{Alias, Function, IntegerType, Module}
+  alias Hologram.Compiler.Processor
 
   test "module without directives" do
-    result = Compiler.compile([:TestModule6])
+    result = Processor.compile([:TestModule6])
 
     expected =
       %{
@@ -30,7 +30,7 @@ defmodule Hologram.CompilerTest do
   end
 
   test "module with a directive" do
-    result = Compiler.compile([:TestModule7])
+    result = Processor.compile([:TestModule7])
 
     expected =
       %{
@@ -62,7 +62,7 @@ defmodule Hologram.CompilerTest do
   end
 
   test "nested directives" do
-    result = Compiler.compile([:TestModule10])
+    result = Processor.compile([:TestModule10])
 
     expected =
       %{
@@ -101,7 +101,7 @@ defmodule Hologram.CompilerTest do
   end
 
   test "circular dependency" do
-    result = Compiler.compile([:TestModule8])
+    result = Processor.compile([:TestModule8])
 
     expected =
       %{

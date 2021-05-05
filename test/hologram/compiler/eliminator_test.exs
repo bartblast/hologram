@@ -1,13 +1,13 @@
 defmodule Hologram.Compiler.EliminatorTest do
   use ExUnit.Case, async: true
 
-  alias Hologram.Compiler
   alias Hologram.Compiler.AST.{AtomType, Function}
   alias Hologram.Compiler.Eliminator
+  alias Hologram.Compiler.Processor
 
   test "preserves actions of arity 3 and functions called from these actions" do
     main_module = [:Hologram, :Compiler, :Eliminator, :TestModule1]
-    compiled_modules = Compiler.compile(main_module)
+    compiled_modules = Processor.compile(main_module)
 
     result = Eliminator.eliminate(compiled_modules, main_module)
 
@@ -30,7 +30,7 @@ defmodule Hologram.Compiler.EliminatorTest do
   test "preserves used functions from another module" do
     main_module = [:Hologram, :Compiler, :Eliminator, :TestModule2]
     another_module = [:Hologram, :Compiler, :Eliminator, :TestModule3]
-    compiled_modules = Compiler.compile(main_module)
+    compiled_modules = Processor.compile(main_module)
 
     result = Eliminator.eliminate(compiled_modules, main_module)
 
@@ -44,7 +44,7 @@ defmodule Hologram.Compiler.EliminatorTest do
 
   test "purges redundant modules" do
     main_module = [:Hologram, :Compiler, :Eliminator, :TestModule4]
-    compiled_modules = Compiler.compile(main_module)
+    compiled_modules = Processor.compile(main_module)
 
     result = Eliminator.eliminate(compiled_modules, main_module)
 
@@ -54,7 +54,7 @@ defmodule Hologram.Compiler.EliminatorTest do
 
   test "handles Elixir standard library functions" do
     main_module = [:Hologram, :Compiler, :Eliminator, :TestModule6]
-    compiled_modules = Compiler.compile(main_module)
+    compiled_modules = Processor.compile(main_module)
 
     result = Eliminator.eliminate(compiled_modules, main_module)
 

@@ -3,7 +3,7 @@ defmodule DemoWeb.HologramController do
   use DemoWeb, :controller
 
   alias Hologram.TemplateEngine
-  alias Hologram.Compiler
+  alias Hologram.Compiler.Processor
 
   def index(conn, params) do
     module = conn.private.hologram_view

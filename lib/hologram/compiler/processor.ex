@@ -1,4 +1,4 @@
-defmodule Hologram.Compiler do
+defmodule Hologram.Compiler.Processor do
   alias Hologram.Compiler.Helpers
   alias Hologram.Compiler.Normalizer
   alias Hologram.Compiler.Parser
