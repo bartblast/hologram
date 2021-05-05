@@ -6,21 +6,21 @@ defmodule Hologram.Compiler.MapKeyGeneratorTest do
 
   test "atom" do
     result = MapKeyGenerator.generate(%AtomType{value: :test})
-    assert result == "~Hologram.Compiler.AST.AtomType[test]"
+    assert result == "~atom[test]"
   end
 
   test "boolean" do
     result = MapKeyGenerator.generate(%BooleanType{value: true})
-    assert result == "~Hologram.Compiler.AST.BooleanType[true]"
+    assert result == "~boolean[true]"
   end
 
   test "integer" do
     result = MapKeyGenerator.generate(%IntegerType{value: 123})
-    assert result == "~Hologram.Compiler.AST.IntegerType[123]"
+    assert result == "~integer[123]"
   end
 
   test "string" do
     result = MapKeyGenerator.generate(%StringType{value: "test"})
-    assert result == "~Hologram.Compiler.AST.StringType[test]"
+    assert result == "~string[test]"
   end
 end

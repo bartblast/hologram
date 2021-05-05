@@ -4,18 +4,18 @@ defmodule Hologram.Compiler.MapKeyGenerator do
   def generate(ast, context \\ [])
 
   def generate(%AtomType{value: value}, _) do
-    "~Hologram.Compiler.AST.AtomType[#{value}]"
+    "~atom[#{value}]"
   end
 
   def generate(%BooleanType{value: value}, _) do
-    "~Hologram.Compiler.AST.BooleanType[#{value}]"
+    "~boolean[#{value}]"
   end
 
   def generate(%IntegerType{value: value}, _) do
-    "~Hologram.Compiler.AST.IntegerType[#{value}]"
+    "~integer[#{value}]"
   end
 
   def generate(%StringType{value: value}, _) do
-    "~Hologram.Compiler.AST.StringType[#{value}]"
+    "~string[#{value}]"
   end
 end
