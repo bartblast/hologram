@@ -1,126 +1,65 @@
 defmodule Hologram.Compiler.ProcessorTest do
   use ExUnit.Case, async: true
 
-  alias Hologram.Compiler.AST.{Alias, Function, IntegerType, Module}
+  alias Hologram.Compiler.AST.{Alias, Module}
   alias Hologram.Compiler.Processor
 
-  test "module without directives" do
-    result = Processor.compile([:TestModule6])
+  describe "aliases" do
+    test "no aliases" do
+      module_6 = [:TestModule6]
+      result = Processor.compile(module_6)
 
-    expected =
-      %{
-        [:TestModule6] => %Module{
-          aliases: [],
-          attributes: [],
-          functions: [
-            %Function{
-              arity: 0,
-              bindings: [],
-              body: [%IntegerType{value: 6}],
-              name: :test_6,
-              params: []
-            }
-          ],
-          imports: [],
-          name: [:TestModule6]
-        }
-      }
+      assert Enum.count(Map.keys(result)) == 1
+      assert Map.has_key?(result, module_6)
 
-    assert result == expected
+      assert result[module_6].aliases == []
+    end
+
+    test "non-nested alias" do
+      module_7 = [:TestModule7]
+      module_6 = [:TestModule6]
+
+      result = Processor.compile(module_7)
+
+      assert Enum.count(Map.keys(result)) == 2
+      assert Map.has_key?(result, module_7)
+      assert Map.has_key?(result, module_6)
+
+      assert result[module_7].aliases == [%Alias{as: module_6, module: module_6}]
+      assert result[module_6].aliases == []
+    end
+
+    test "nested alias" do
+      module_10 = [:TestModule10]
+      module_7 = [:TestModule7]
+      module_6 = [:TestModule6]
+
+      result = Processor.compile(module_10)
+
+      assert Enum.count(Map.keys(result)) == 3
+      assert Map.has_key?(result, module_10)
+      assert Map.has_key?(result, module_7)
+      assert Map.has_key?(result, module_6)
+
+      assert result[module_10].aliases == [%Alias{as: module_7, module: module_7}]
+      assert result[module_7].aliases == [%Alias{as: module_6, module: module_6}]
+      assert result[module_6].aliases == []
+    end
+
+    test "alias circular dependency" do
+      module_8 = [:TestModule8]
+      module_9 = [:TestModule9]
+
+      result = Processor.compile(module_8)
+
+      assert Enum.count(Map.keys(result)) == 2
+      assert Map.has_key?(result, module_8)
+      assert Map.has_key?(result, module_9)
+
+      assert result[module_8].aliases == [%Alias{as: module_9, module: module_9}]
+      assert result[module_9].aliases == [%Alias{as: module_8, module: module_8}]
+    end
   end
 
-  test "module with a directive" do
-    result = Processor.compile([:TestModule7])
-
-    expected =
-      %{
-        [:TestModule6] => %Module{
-          aliases: [],
-          attributes: [],
-          functions: [
-            %Function{
-              arity: 0,
-              bindings: [],
-              body: [%IntegerType{value: 6}],
-              name: :test_6,
-              params: []
-            }
-          ],
-          imports: [],
-          name: [:TestModule6]
-        },
-        [:TestModule7] => %Module{
-          aliases: [%Alias{as: [:TestModule6], module: [:TestModule6]}],
-          attributes: [],
-          functions: [],
-          imports: [],
-          name: [:TestModule7]
-        }
-      }
-
-    assert result == expected
-  end
-
-  test "nested directives" do
-    result = Processor.compile([:TestModule10])
-
-    expected =
-      %{
-        [:TestModule10] => %Module{
-          aliases: [%Alias{as: [:TestModule7], module: [:TestModule7]}],
-          attributes: [],
-          functions: [],
-          imports: [],
-          name: [:TestModule10]
-        },
-        [:TestModule6] => %Module{
-          aliases: [],
-          attributes: [],
-          functions: [
-            %Function{
-              arity: 0,
-              bindings: [],
-              body: [%IntegerType{value: 6}],
-              name: :test_6,
-              params: []
-            }
-          ],
-          imports: [],
-          name: [:TestModule6]
-        },
-        [:TestModule7] => %Module{
-          aliases: [%Alias{as: [:TestModule6], module: [:TestModule6]}],
-          attributes: [],
-          functions: [],
-          imports: [],
-          name: [:TestModule7]
-        }
-      }
-
-    assert result == expected
-  end
-
-  test "circular dependency" do
-    result = Processor.compile([:TestModule8])
-
-    expected =
-      %{
-        [:TestModule8] => %Module{
-          aliases: [%Alias{as: [:TestModule9], module: [:TestModule9]}],
-          attributes: [],
-          functions: [],
-          imports: [],
-          name: [:TestModule8]
-        },
-        [:TestModule9] => %Module{
-          aliases: [%Alias{as: [:TestModule8], module: [:TestModule8]}],
-          attributes: [],
-          functions: [],
-          imports: [],
-          name: [:TestModule9]
-        }
-      }
-
-    assert result == expected
-  end
+  # TODO: attributes, functions, imports, name
 end
