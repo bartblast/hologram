@@ -1,4 +1,3 @@
-# TODO: test
 defmodule Hologram.Router do
   defmacro __using__(_) do
     quote do
@@ -7,9 +6,9 @@ defmodule Hologram.Router do
     end
   end
 
-  defmacro hologram(path, view) do
+  defmacro hologram(path, page) do
     quote do
-      get unquote(path), HologramController, :index, private: %{hologram_view: unquote(view)}
+      get unquote(path), HologramController, :index, private: %{hologram_page: unquote(page)}
     end
   end
 end
