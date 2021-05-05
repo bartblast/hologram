@@ -7,10 +7,8 @@ defmodule Hologram.Compiler.ProcessorTest do
   describe "aliases" do
     test "no aliases" do
       module_6 = [:TestModule6]
-      result = Processor.compile(module_6)
 
-      assert Enum.count(Map.keys(result)) == 1
-      assert Map.has_key?(result, module_6)
+      result = Processor.compile(module_6)
 
       assert result[module_6].aliases == []
     end
@@ -20,10 +18,6 @@ defmodule Hologram.Compiler.ProcessorTest do
       module_6 = [:TestModule6]
 
       result = Processor.compile(module_7)
-
-      assert Enum.count(Map.keys(result)) == 2
-      assert Map.has_key?(result, module_7)
-      assert Map.has_key?(result, module_6)
 
       assert result[module_7].aliases == [%Alias{as: module_6, module: module_6}]
       assert result[module_6].aliases == []
@@ -36,11 +30,6 @@ defmodule Hologram.Compiler.ProcessorTest do
 
       result = Processor.compile(module_10)
 
-      assert Enum.count(Map.keys(result)) == 3
-      assert Map.has_key?(result, module_10)
-      assert Map.has_key?(result, module_7)
-      assert Map.has_key?(result, module_6)
-
       assert result[module_10].aliases == [%Alias{as: module_7, module: module_7}]
       assert result[module_7].aliases == [%Alias{as: module_6, module: module_6}]
       assert result[module_6].aliases == []
@@ -51,10 +40,6 @@ defmodule Hologram.Compiler.ProcessorTest do
       module_9 = [:TestModule9]
 
       result = Processor.compile(module_8)
-
-      assert Enum.count(Map.keys(result)) == 2
-      assert Map.has_key?(result, module_8)
-      assert Map.has_key?(result, module_9)
 
       assert result[module_8].aliases == [%Alias{as: module_9, module: module_9}]
       assert result[module_9].aliases == [%Alias{as: module_8, module: module_8}]
