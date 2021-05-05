@@ -1,6 +1,6 @@
-defmodule Hologram.TemplateEngine.Renderer do
-  alias Hologram.TemplateEngine.AST.{Expression, TagNode, TextNode}
-  alias Hologram.TemplateEngine.Evaluator
+defmodule Hologram.Template.Renderer do
+  alias Hologram.Template.AST.{Expression, TagNode, TextNode}
+  alias Hologram.Template.Evaluator
 
   def render(ast, state \\ %{})
 

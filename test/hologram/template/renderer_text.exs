@@ -1,10 +1,10 @@
-defmodule Hologram.TemplateEngine.RendererTest do
+defmodule Hologram.Template.RendererTest do
   use ExUnit.Case, async: true
 
-  alias Hologram.TemplateEngine.AST.Expression
-  alias Hologram.TemplateEngine.AST.TagNode
-  alias Hologram.TemplateEngine.AST.TextNode
-  alias Hologram.TemplateEngine.Renderer
+  alias Hologram.Template.AST.Expression
+  alias Hologram.Template.AST.TagNode
+  alias Hologram.Template.AST.TextNode
+  alias Hologram.Template.Renderer
   alias Hologram.Compiler.AST.ModuleAttributeOperator
 
   describe "render/2" do

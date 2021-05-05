@@ -1,7 +1,7 @@
-defmodule Hologram.TemplateEngine.EvaluatorTest do
+defmodule Hologram.Template.EvaluatorTest do
   use ExUnit.Case, async: true
 
-  alias Hologram.TemplateEngine.Evaluator
+  alias Hologram.Template.Evaluator
   alias Hologram.Compiler.AST.ModuleAttributeOperator
 
   test "module attribute" do

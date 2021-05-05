@@ -1,5 +1,5 @@
-defmodule Hologram.TemplateEngine.Interpolator do
-  alias Hologram.TemplateEngine.AST.{Expression, TextNode}
+defmodule Hologram.Template.Interpolator do
+  alias Hologram.Template.AST.{Expression, TextNode}
   alias Hologram.Compiler.Parser
 
   def interpolate(nodes) do

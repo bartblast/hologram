@@ -1,6 +1,6 @@
-defmodule Hologram.TemplateEngine.Transformer do
-  alias Hologram.TemplateEngine.AST.{ComponentNode, Expression, TagNode, TextNode}
-  alias Hologram.TemplateEngine.Interpolator
+defmodule Hologram.Template.Transformer do
+  alias Hologram.Template.AST.{ComponentNode, Expression, TagNode, TextNode}
+  alias Hologram.Template.Interpolator
   alias Hologram.Compiler.{Parser, Transformer}
 
   def transform(ast, aliases \\ %{})

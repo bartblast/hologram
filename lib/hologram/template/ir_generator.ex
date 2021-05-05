@@ -1,6 +1,6 @@
-defmodule Hologram.TemplateEngine.IRGenerator do
-  alias Hologram.TemplateEngine.AST.{Expression, TagNode, TextNode}
-  alias Hologram.TemplateEngine.Renderer
+defmodule Hologram.Template.IRGenerator do
+  alias Hologram.Template.AST.{Expression, TagNode, TextNode}
+  alias Hologram.Template.Renderer
   alias Hologram.Compiler
   alias Hologram.Compiler.AST.ModuleAttributeDef
   alias Hologram.Compiler.Normalizer

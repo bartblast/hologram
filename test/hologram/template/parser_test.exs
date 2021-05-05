@@ -1,6 +1,6 @@
-defmodule Hologram.TemplateEngine.ParserTest do
+defmodule Hologram.Template.ParserTest do
   use ExUnit.Case, async: true
-  alias Hologram.TemplateEngine.Parser
+  alias Hologram.Template.Parser
 
   describe "parse/1" do
     test "valid html" do

@@ -1,9 +1,9 @@
-defmodule Hologram.TemplateEngine.TransformerTest do
+defmodule Hologram.Template.TransformerTest do
   use ExUnit.Case, async: true
-  import Hologram.TemplateEngine.Parser, only: [parse!: 1]
+  import Hologram.Template.Parser, only: [parse!: 1]
 
-  alias Hologram.TemplateEngine.AST.{Expression, TagNode, TextNode}
-  alias Hologram.TemplateEngine.Transformer
+  alias Hologram.Template.AST.{Expression, TagNode, TextNode}
+  alias Hologram.Template.Transformer
   alias Hologram.Compiler.AST.{ModuleAttributeOperator}
 
   describe "transform/1" do

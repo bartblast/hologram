@@ -2,7 +2,7 @@
 defmodule DemoWeb.HologramController do
   use DemoWeb, :controller
 
-  alias Hologram.TemplateEngine
+  alias Hologram.Template
   alias Hologram.Compiler.Processor
 
   def index(conn, params) do
@@ -13,13 +13,13 @@ defmodule DemoWeb.HologramController do
 
     template_ast =
       module.render()
-      |> TemplateEngine.Parser.parse!()
-      |> TemplateEngine.Transformer.transform()
+      |> Template.Parser.parse!()
+      |> Template.Transformer.transform()
 
     # DEFER: use .holo template files
-    html = TemplateEngine.Renderer.render(template_ast, state)
+    html = Template.Renderer.render(template_ast, state)
 
-    template_ir = TemplateEngine.IRGenerator.generate(template_ast, state)
+    template_ir = Template.IRGenerator.generate(template_ast, state)
 
     js =
       Compiler.Helpers.module_name_parts(module)

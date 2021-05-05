@@ -1,4 +1,4 @@
-defmodule Hologram.TemplateEngine.Parser do
+defmodule Hologram.Template.Parser do
   use Hologram.Parser
 
   def parse(str) do

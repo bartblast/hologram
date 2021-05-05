@@ -1,4 +1,4 @@
-defmodule Hologram.TemplateEngine.Evaluator do
+defmodule Hologram.Template.Evaluator do
   alias Hologram.Compiler.AST.ModuleAttributeOperator
 
   def evaluate(ast, state)

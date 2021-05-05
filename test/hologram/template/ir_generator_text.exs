@@ -1,8 +1,8 @@
-defmodule Hologram.TemplateEngine.IRGeneratorTest do
+defmodule Hologram.Template.IRGeneratorTest do
   use ExUnit.Case, async: true
 
-  alias Hologram.TemplateEngine.AST.{Expression, TagNode, TextNode}
-  alias Hologram.TemplateEngine.IRGenerator
+  alias Hologram.Template.AST.{Expression, TagNode, TextNode}
+  alias Hologram.Template.IRGenerator
   alias Hologram.Compiler.AST.AtomType
 
   test "expression" do

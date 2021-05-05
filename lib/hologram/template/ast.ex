@@ -1,4 +1,4 @@
-defmodule Hologram.TemplateEngine.AST do
+defmodule Hologram.Template.AST do
   defmodule ComponentNode do
     defstruct module: nil, children: nil
   end
