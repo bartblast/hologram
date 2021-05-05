@@ -8,7 +8,7 @@ defmodule Hologram.Compiler.HydratorTest do
     result = Hydrator.hydrate(state)
 
     expected =
-      "{ type: 'map', data: { '~Hologram.Compiler.AST.AtomType[a]': { type: 'integer', value: 1 }, '~Hologram.Compiler.AST.AtomType[b]': { type: 'integer', value: 2 } } }"
+      "{ type: 'map', data: { '~atom[a]': { type: 'integer', value: 1 }, '~atom[b]': { type: 'integer', value: 2 } } }"
 
     assert result == expected
   end

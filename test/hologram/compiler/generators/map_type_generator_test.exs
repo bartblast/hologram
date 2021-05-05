@@ -14,7 +14,7 @@ defmodule Hologram.Compiler.MapTypeGeneratorTest do
     result = MapTypeGenerator.generate(ast.data, context)
 
     expected =
-      "{ type: 'map', data: { '~Hologram.Compiler.AST.AtomType[a]': { type: 'integer', value: 1 } } }"
+      "{ type: 'map', data: { '~atom[a]': { type: 'integer', value: 1 } } }"
 
     assert result == expected
   end
@@ -38,7 +38,7 @@ defmodule Hologram.Compiler.MapTypeGeneratorTest do
       result = MapTypeGenerator.generate_data(data, context)
 
       expected =
-        "{ '~Hologram.Compiler.AST.AtomType[a]': { type: 'integer', value: 1 }, '~Hologram.Compiler.AST.AtomType[b]': { type: 'integer', value: 2 } }"
+        "{ '~atom[a]': { type: 'integer', value: 1 }, '~atom[b]': { type: 'integer', value: 2 } }"
 
       assert result == expected
     end
@@ -68,7 +68,7 @@ defmodule Hologram.Compiler.MapTypeGeneratorTest do
       result = MapTypeGenerator.generate_data(data, context)
 
       expected =
-        "{ '~Hologram.Compiler.AST.AtomType[a]': { type: 'integer', value: 1 }, '~Hologram.Compiler.AST.AtomType[b]': { type: 'map', data: { '~Hologram.Compiler.AST.AtomType[c]': { type: 'integer', value: 2 }, '~Hologram.Compiler.AST.AtomType[d]': { type: 'map', data: { '~Hologram.Compiler.AST.AtomType[e]': { type: 'integer', value: 3 }, '~Hologram.Compiler.AST.AtomType[f]': { type: 'integer', value: 4 } } } } } }"
+        "{ '~atom[a]': { type: 'integer', value: 1 }, '~atom[b]': { type: 'map', data: { '~atom[c]': { type: 'integer', value: 2 }, '~atom[d]': { type: 'map', data: { '~atom[e]': { type: 'integer', value: 3 }, '~atom[f]': { type: 'integer', value: 4 } } } } } }"
 
       assert result == expected
     end

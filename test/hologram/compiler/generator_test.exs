@@ -30,7 +30,7 @@ defmodule Hologram.Compiler.GeneratorTest do
       result = Generator.generate(ast)
 
       expected =
-        "{ type: 'map', data: { '~Hologram.Compiler.AST.AtomType[a]': { type: 'integer', value: 1 } } }"
+        "{ type: 'map', data: { '~atom[a]': { type: 'integer', value: 1 } } }"
 
       assert result == expected
     end
@@ -49,7 +49,7 @@ defmodule Hologram.Compiler.GeneratorTest do
       result = Generator.generate(ast)
 
       expected =
-        "{ type: 'struct', module: 'Abc.Bcd', data: { '~Hologram.Compiler.AST.AtomType[a]': { type: 'integer', value: 1 } } }"
+        "{ type: 'struct', module: 'Abc.Bcd', data: { '~atom[a]': { type: 'integer', value: 1 } } }"
 
       assert result == expected
     end
