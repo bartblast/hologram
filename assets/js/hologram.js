@@ -125,7 +125,7 @@ class Hologram {
 }
 
 class Kernel {
-  static addition_operator(left, right) {
+  static $add(left, right) {
     let type = left.type == "integer" && right.type == "integer" ? "integer" : "float"
     return { type: type, value: left.value + right.value }
   }

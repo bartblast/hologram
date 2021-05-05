@@ -5,6 +5,6 @@ defmodule Hologram.Compiler.AdditionOperatorGenerator do
     left = Generator.generate(left, context)
     right = Generator.generate(right, context)
 
-    "Kernel.addition_operator(#{left}, #{right})"
+    "Kernel.$add(#{left}, #{right})"
   end
 end
