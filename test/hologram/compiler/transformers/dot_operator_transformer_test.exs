@@ -4,7 +4,7 @@ defmodule Hologram.Compiler.DotOperatorTransformerTest do
   alias Hologram.Compiler.AST.{AtomType, DotOperator, Variable}
   alias Hologram.Compiler.DotOperatorTransformer
 
-  test "transform/5" do
+  test "transform/3" do
     # a.b
     left = {:a, [line: 1], nil}
     right = :b
