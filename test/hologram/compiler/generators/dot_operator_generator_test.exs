@@ -11,7 +11,7 @@ defmodule Hologram.Compiler.DotOperatorGeneratorTest do
     result = DotOperatorGenerator.generate(left, right, [])
 
     expected =
-      "Kernel.dot_operator(x, { type: 'atom', value: 'a' })"
+      "Kernel.$dot(x, { type: 'atom', value: 'a' })"
 
     assert result == expected
   end

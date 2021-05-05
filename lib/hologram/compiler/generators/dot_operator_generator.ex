@@ -5,6 +5,6 @@ defmodule Hologram.Compiler.DotOperatorGenerator do
     left = Generator.generate(left, context)
     right = Generator.generate(right, context)
 
-    "Kernel.dot_operator(#{left}, #{right})"
+    "Kernel.$dot(#{left}, #{right})"
   end
 end
