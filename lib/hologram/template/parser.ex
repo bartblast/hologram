@@ -1,5 +1,5 @@
 defmodule Hologram.Template.Parser do
-  use Hologram.Parser
+  use Hologram.Commons.Parser
 
   def parse(str) do
     result =

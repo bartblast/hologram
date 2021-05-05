@@ -1,4 +1,4 @@
-defmodule Hologram.Parser do
+defmodule Hologram.Commons.Parser do
   defmacro __using__(_) do
     quote do
       def parse!(str) do

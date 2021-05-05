@@ -16,22 +16,22 @@ defmodule Hologram.ParserTest do
 
   describe "parse_file/1" do
     test "valid code" do
-      assert {:ok, _} = Parser.parse_file("lib/hologram/compiler/transformer.ex")
+      assert {:ok, _} = Parser.parse_file("test/fixtures/commons/file_1.ex")
     end
 
     test "invalid code" do
-      assert {:error, _} = Parser.parse_file("README.md")
+      assert {:error, _} = Parser.parse_file("test/fixtures/commons/file_2.txt")
     end
   end
 
   describe "parse_file!/1" do
     test "valid code" do
-      assert {:defmodule, _, _} = Parser.parse_file!("lib/hologram/compiler/transformer.ex")
+      assert Parser.parse_file!("test/fixtures/commons/file_1.ex")
     end
 
     test "invalid code" do
       assert_raise RuntimeError, "Invalid code", fn ->
-        Parser.parse_file!("README.md")
+        Parser.parse_file!("test/fixtures/commons/file_2.txt")
       end
     end
   end
