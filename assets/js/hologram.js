@@ -130,7 +130,7 @@ class Kernel {
     return { type: type, value: left.value + right.value }
   }
 
-  static dotOperator(left, right) {
+  static dot_operator(left, right) {
     return cloneDeep(left.data[Hologram.objectKey(right)])
   }
 }

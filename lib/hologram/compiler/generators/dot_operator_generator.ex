@@ -2,6 +2,9 @@ defmodule Hologram.Compiler.DotOperatorGenerator do
   alias Hologram.Compiler.Generator
 
   def generate(left, right, context) do
-    "Kernel.dotOperator(#{Generator.generate(left, context)}, #{Generator.generate(right, context)})"
+    left = Generator.generate(left, context)
+    right = Generator.generate(right, context)
+
+    "Kernel.dot_operator(#{left}, #{right})"
   end
 end
