@@ -1,5 +1,5 @@
 defmodule Hologram.Compiler.MapTypeTransformerTest do
-  use ExUnit.Case, async: true
+  use Hologram.TestCase, async: true
 
   alias Hologram.Compiler.AST.{AtomType, IntegerType, MapType}
   alias Hologram.Compiler.MapTypeTransformer
@@ -13,14 +13,20 @@ defmodule Hologram.Compiler.MapTypeTransformerTest do
   end
 
   test "empty map", context do
-    result = MapTypeTransformer.transform([], context)
+    code = "%{}"
+    {:%{}, _, ast} = ast(code)
+
+    result = MapTypeTransformer.transform(ast, context)
     expected = %MapType{data: []}
 
     assert result == expected
   end
 
   test "non-nested map", context do
-    result = MapTypeTransformer.transform([a: 1, b: 2], context)
+    code = "%{a: 1, b: 2}"
+    {:%{}, _, ast} = ast(code)
+
+    result = MapTypeTransformer.transform(ast, context)
 
     expected = %MapType{
       data: [
@@ -33,16 +39,8 @@ defmodule Hologram.Compiler.MapTypeTransformerTest do
   end
 
   test "nested map", context do
-    ast = [
-      a: 1,
-      b: {:%{}, [line: 1], [
-        c: 2,
-        d: {:%{}, [line: 1], [
-          e: 3,
-          f: 4
-        ]}
-      ]}
-    ]
+    code = "%{a: 1, b: %{c: 2, d: %{e: 3, f: 4}}}"
+    {:%{}, _, ast} = ast(code)
 
     result = MapTypeTransformer.transform(ast, context)
 
