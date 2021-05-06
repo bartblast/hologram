@@ -3,13 +3,16 @@ defmodule DemoWeb.HologramController do
   use DemoWeb, :controller
 
   alias Hologram.Template
+  alias Hologram.Compiler.Builder
+  alias Hologram.Compiler.Helpers
+  alias Hologram.Compiler.Hydrator
   alias Hologram.Compiler.Processor
 
   def index(conn, params) do
     module = conn.private.hologram_page
 
     state = module.state()
-    hydrated_state = Compiler.Hydrator.hydrate(state)
+    hydrated_state = Hydrator.hydrate(state)
 
     template_ast =
       module.render()
@@ -22,8 +25,8 @@ defmodule DemoWeb.HologramController do
     template_ir = Template.IRGenerator.generate(template_ast, state)
 
     js =
-      Compiler.Helpers.module_name_parts(module)
-      |> Compiler.Builder.build()
+      Helpers.module_name_parts(module)
+      |> Builder.build()
 
     class_name =
       module
