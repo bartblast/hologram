@@ -1,8 +1,5 @@
-# TODO: refactor & test
-
 defmodule Hologram.Compiler.Transformer do
-  alias Hologram.Compiler.AST.{AtomType, BooleanType, IntegerType, MatchOperator, StringType}
-  alias Hologram.Compiler.AST.{Import, ModuleAttributeOperator, Variable}
+  alias Hologram.Compiler.AST.{AtomType, BooleanType, Import, IntegerType, MatchOperator, ModuleAttributeOperator, StringType, Variable}
   alias Hologram.Compiler.Binder
   alias Hologram.Compiler.{AdditionOperatorTransformer, AliasTransformer, DotOperatorTransformer, FunctionTransformer, FunctionCallTransformer, ListTypeTransformer, MapTypeTransformer, MatchOperatorTransformer, ModuleAttributeDefTransformer, ModuleTransformer, StructTypeTransformer}
 
@@ -10,13 +7,12 @@ defmodule Hologram.Compiler.Transformer do
 
   # TYPES
 
-  # boolean must be before atom
-  def transform(ast, _) when is_boolean(ast) do
-    %BooleanType{value: ast}
+  def transform(ast, _) when is_atom(ast) and ast not in [:false, :true] do
+    %AtomType{value: ast}
   end
 
-  def transform(ast, _) when is_atom(ast) do
-    %AtomType{value: ast}
+  def transform(ast, _) when is_boolean(ast) do
+    %BooleanType{value: ast}
   end
 
   def transform(ast, _) when is_integer(ast) do
@@ -53,12 +49,22 @@ defmodule Hologram.Compiler.Transformer do
     MatchOperatorTransformer.transform(left, right, context)
   end
 
-  def transform({:@, _, [{name, _, [ast]}]}, context) do
-    ModuleAttributeDefTransformer.transform(name, ast, context)
-  end
-
   def transform({:@, _, [{name, _, nil}]}, _) do
     %ModuleAttributeOperator{name: name}
+  end
+
+  # DEFINITIONS
+
+  def transform({:def, _, [{name, _, params}, [do: {:__block__, _, body}]]}, context) do
+    FunctionTransformer.transform(name, params, body, context)
+  end
+
+  def transform({:defmodule, _, _} = ast, _) do
+    ModuleTransformer.transform(ast)
+  end
+
+  def transform({:@, _, [{name, _, [ast]}]}, context) do
+    ModuleAttributeDefTransformer.transform(name, ast, context)
   end
 
   # DIRECTIVES
@@ -73,23 +79,15 @@ defmodule Hologram.Compiler.Transformer do
 
   # OTHER
 
-  def transform({:defmodule, _, [_, [do: {:__block__, _, _}]]} = ast, _) do
-    ModuleTransformer.transform(ast)
+  def transform({{:., _, [{:__aliases__, _, module}, function]}, _, params}, context) do
+    FunctionCallTransformer.transform(module, function, params, context)
   end
 
-  def transform({:def, _, [{name, _, params}, [do: {:__block__, _, body}]]}, context) do
-    FunctionTransformer.transform(name, params, body, context)
+  def transform({function, _, params}, context) when is_atom(function) and is_list(params) do
+    FunctionCallTransformer.transform([], function, params, context)
   end
 
   def transform({name, _, nil}, _) when is_atom(name) do
     %Variable{name: name}
-  end
-
-  def transform({function, _, params}, context) when is_atom(function) do
-    FunctionCallTransformer.transform([], function, params, context)
-  end
-
-  def transform({{:., _, [{:__aliases__, _, module}, function]}, _, params}, context) do
-    FunctionCallTransformer.transform(module, function, params, context)
   end
 end
