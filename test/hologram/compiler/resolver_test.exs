@@ -4,20 +4,18 @@ defmodule Hologram.Compiler.ResolverTest do
   alias Hologram.Compiler.AST.Alias
   alias Hologram.Compiler.Resolver
 
-  describe "resolve_aliased_module/2" do
-    @aliases [
-      %Alias{module: [:Abc, :Bcd], as: [:Bcd]},
-      %Alias{module: [:Bcd, :Cde], as: [:Cde]}
-    ]
+  @aliases [
+    %Alias{module: [:Abc, :Bcd], as: [:Bcd]},
+    %Alias{module: [:Bcd, :Cde], as: [:Cde]}
+  ]
 
-    test "resolved" do
-      result = Resolver.resolve_aliased_module([:Cde], @aliases)
-      assert result == [:Bcd, :Cde]
-    end
+  test "resolved" do
+    result = Resolver.resolve([:Cde], @aliases)
+    assert result == [:Bcd, :Cde]
+  end
 
-    test "not resolved" do
-      result = Resolver.resolve_aliased_module([:Xyz], @aliases)
-      refute result
-    end
+  test "not resolved" do
+    result = Resolver.resolve([:Xyz], @aliases)
+    refute result
   end
 end

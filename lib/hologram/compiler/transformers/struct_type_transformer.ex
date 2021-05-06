@@ -5,7 +5,7 @@ defmodule Hologram.Compiler.StructTypeTransformer do
 
   def transform(ast, struct_module, context) do
     resolved_module =
-      case Resolver.resolve_aliased_module(struct_module, context[:aliases]) do
+      case Resolver.resolve(struct_module, context[:aliases]) do
         nil ->
           struct_module
         aliased_module ->
