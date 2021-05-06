@@ -4,7 +4,7 @@ defmodule Hologram.Compiler.Transformer do
   alias Hologram.Compiler.AST.{AtomType, BooleanType, IntegerType, MatchOperator, StringType}
   alias Hologram.Compiler.AST.{Import, ModuleAttributeOperator, Variable}
   alias Hologram.Compiler.Binder
-  alias Hologram.Compiler.{AdditionOperatorTransformer, AliasTransformer, DotOperatorTransformer, FunctionTransformer, FunctionCallTransformer, ListTypeTransformer, MapTypeTransformer, ModuleAttributeDefTransformer, ModuleTransformer, StructTypeTransformer}
+  alias Hologram.Compiler.{AdditionOperatorTransformer, AliasTransformer, DotOperatorTransformer, FunctionTransformer, FunctionCallTransformer, ListTypeTransformer, MapTypeTransformer, MatchOperatorTransformer, ModuleAttributeDefTransformer, ModuleTransformer, StructTypeTransformer}
 
   def transform(ast, context \\ [module: [], imports: [], aliases: []])
 
@@ -50,13 +50,7 @@ defmodule Hologram.Compiler.Transformer do
   end
 
   def transform({:=, _, [left, right]}, context) do
-    left = transform(left, context)
-
-    %MatchOperator{
-      bindings: Binder.bind(left),
-      left: left,
-      right: transform(right, context)
-    }
+    MatchOperatorTransformer.transform(left, right, context)
   end
 
   def transform({:@, _, [{name, _, [ast]}]}, context) do
