@@ -3,11 +3,11 @@ defmodule Hologram.Compiler.BuilderTest do
   alias Hologram.Compiler.Builder
 
   test "build/1" do
-    result = Builder.build([:Hologram, :Compiler, :Builder, :TestModule1])
+    result = Builder.build([:Hologram, :Test, :Fixtures, :Compiler, :Builder, :Module1])
 
-    assert result =~ ~r/^\nclass HologramCompilerBuilderTestModule1.+/
-    assert result =~ ~r/\n\nclass HologramCompilerBuilderTestModule3.+/
+    assert result =~ ~r/^\nclass HologramTestFixturesCompilerBuilderModule1.+/
+    assert result =~ ~r/\n\nclass HologramTestFixturesCompilerBuilderModule3.+/
 
-    refute result =~ ~r/HologramCompilerBuilderTestModule2/
+    refute result =~ ~r/HologramTestFixturesCompilerBuilderModule2/
   end
 end
