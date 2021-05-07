@@ -1,8 +1,8 @@
 defmodule Hologram.Template.EvaluatorTest do
   use ExUnit.Case, async: true
 
-  alias Hologram.Template.Evaluator
   alias Hologram.Compiler.AST.ModuleAttributeOperator
+  alias Hologram.Template.Evaluator
 
   test "module attribute" do
     state = %{a: 123}
