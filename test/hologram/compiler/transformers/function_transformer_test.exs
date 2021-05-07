@@ -1,61 +1,111 @@
 defmodule Hologram.Compiler.FunctionTransformerTest do
-  use ExUnit.Case, async: true
+  use Hologram.TestCase, async: true
 
   alias Hologram.Compiler.AST.{AtomType, Function, IntegerType, MapAccess, Variable}
   alias Hologram.Compiler.FunctionTransformer
 
   setup do
     [
-      module: [:Test],
+      module: [:Abc],
       imports: [],
       aliases: []
     ]
   end
 
-  test "arity", context do
-    # normalized AST from
-    #
-    # defmodule Abc do
-    #   def test(1, 2, 3) do
-    #     1
-    #   end
+  test "name", context do
+    # def test(1, 2) do
     # end
 
-    params = [1, 2, 3]
-    result = FunctionTransformer.transform(:test, params, [1], context)
+    name = :test
+    params = [1, 2]
+    body = []
 
-    assert %Function{} = result
-    assert result.arity == 3
+    assert %Function{name: :test} = FunctionTransformer.transform(name, params, body, context)
+  end
+
+  test "arity", context do
+    # def test(1, 2) do
+    # end
+
+    name = :test
+    params = [1, 2]
+    body = []
+
+    assert %Function{arity: 2} = FunctionTransformer.transform(name, params, body, context)
+  end
+
+  describe "params" do
+    test "no params", context do
+      # def test do
+      # end
+
+      name = :test
+      params = nil
+      body = []
+
+      assert %Function{params: []} = FunctionTransformer.transform(name, params, body, context)
+    end
+
+    test "vars", context do
+      # def test(a, b) do
+      # end
+
+      name = :test
+      params = [{:a, [line: 1], nil}, {:b, [line: 1], nil}]
+      body = []
+
+      assert %Function{} = result = FunctionTransformer.transform(name, params, body, context)
+
+      expected =
+        [
+          %Variable{name: :a},
+          %Variable{name: :b}
+        ]
+
+      assert result.params == expected
+    end
+
+    test "primitive types", context do
+      # def test(:a, 2) do
+      # end
+
+      name = :test
+      params = [:a, 2]
+      body = []
+
+      assert %Function{} = result = FunctionTransformer.transform(name, params, body, context)
+
+      expected =
+        [
+          %AtomType{value: :a},
+          %IntegerType{value: 2}
+        ]
+
+      assert result.params == expected
+    end
   end
 
   describe "bindings" do
     test "no bindings", context do
-      # normalized AST from
-      #
-      # defmodule Abc do
-      #   def test(1, 2) do
-      #     1
-      #   end
+      # def test(1, 2) do
       # end
 
+      name = :test
       params = [1, 2]
-      result = FunctionTransformer.transform(:test, params, [1], context)
+      body = []
 
-      assert %Function{} = result
-      assert result.bindings == []
+      assert %Function{bindings: []} = FunctionTransformer.transform(name, params, body, context)
     end
 
     test "single binding in single param", context do
-      # normalized AST from
-      #
-      # defmodule Abc do
-      #   def test(1, %{a: x}) do
-      #     1
-      #   end
+      # def test(1, %{a: x}) do
       # end
 
+      name = :test
       params = [1, {:%{}, [line: 2], [a: {:x, [line: 2], nil}]}]
-      result = FunctionTransformer.transform(:test, params, [1], context)
+      body = []
+
+      assert %Function{} = result = FunctionTransformer.transform(name, params, body, context)
 
       expected =
         [
@@ -67,21 +117,18 @@ defmodule Hologram.Compiler.FunctionTransformerTest do
           ]}
         ]
 
-      assert %Function{} = result
       assert result.bindings == expected
     end
 
     test "multiple bindings in single param", context do
-      # normalized AST from
-      #
-      # defmodule Abc do
-      #   def test(1, %{a: x, b: y}) do
-      #     1
-      #   end
+      # def test(1, %{a: x, b: y}) do
       # end
 
+      name = :test
       params = [1, {:%{}, [line: 2], [a: {:x, [line: 2], nil}, b: {:y, [line: 2], nil}]}]
-      result = FunctionTransformer.transform(:test, params, [1], context)
+      body = []
+
+      assert %Function{} = result = FunctionTransformer.transform(name, params, body, context)
 
       expected =
         [
@@ -99,18 +146,15 @@ defmodule Hologram.Compiler.FunctionTransformerTest do
           ]}
         ]
 
-      assert %Function{} = result
       assert result.bindings == expected
     end
 
     test "multiple bindings in multiple params", context do
-      # normalized AST from
-      #
-      # defmodule Abc do
-      #   def test(1, %{a: k, b: m}, 2, %{c: s, d: t}) do
-      #     1
-      #   end
+      # def test(1, %{a: k, b: m}, 2, %{c: s, d: t}) do
       # end
+
+      name = :test
+      body = []
 
       params = [
         1,
@@ -119,7 +163,7 @@ defmodule Hologram.Compiler.FunctionTransformerTest do
         {:%{}, [line: 2], [c: {:s, [line: 2], nil}, d: {:t, [line: 2], nil}]},
       ]
 
-      result = FunctionTransformer.transform(:test, params, [1], context)
+      assert %Function{} = result = FunctionTransformer.transform(name, params, body, context)
 
       expected =
         [
@@ -149,21 +193,18 @@ defmodule Hologram.Compiler.FunctionTransformerTest do
           ]}
         ]
 
-      assert %Function{} = result
       assert result.bindings == expected
     end
 
     test "sorting", context do
-      # normalized AST from
-      #
-      # defmodule Abc do
-      #   def test(y, z) do
-      #     1
-      #   end
+      # def test(y, z) do
       # end
 
+      name = :test
       params = [{:y, [line: 2], nil}, {:x, [line: 2], nil}]
-      result = FunctionTransformer.transform(:test, params, [1], context)
+      body = []
+
+      assert %Function{} = result = FunctionTransformer.transform(name, params, body, context)
 
       expected =
       [
@@ -175,35 +216,36 @@ defmodule Hologram.Compiler.FunctionTransformerTest do
         ]},
       ]
 
-      assert %Function{} = result
       assert result.bindings == expected
     end
   end
 
   describe "body" do
     test "single expression", context do
-      # normalized AST from:
-      #
       # def test do
       #   1
       # end
 
-      result = FunctionTransformer.transform(:test, nil, [1], context)
-      expected = [%IntegerType{value: 1}]
+      name = :test
+      params = nil
+      body = [1]
 
-      assert %Function{} = result
-      assert result.body == expected
+      assert %Function{} = result = FunctionTransformer.transform(name, params, body, context)
+
+      assert result.body == [%IntegerType{value: 1}]
     end
 
     test "multiple expressions", context do
-      # normalized AST from:
-      #
       # def test do
       #   1
       #   2
       # end
 
-      result = FunctionTransformer.transform(:test, nil, [1, 2], context)
+      name = :test
+      params = nil
+      body = [1, 2]
+
+      assert %Function{} = result = FunctionTransformer.transform(name, params, body, context)
 
       expected =
         [
@@ -211,79 +253,7 @@ defmodule Hologram.Compiler.FunctionTransformerTest do
           %IntegerType{value: 2}
         ]
 
-      assert %Function{} = result
       assert result.body == expected
-    end
-  end
-
-  test "name", context do
-    # normalized AST from
-    #
-    # defmodule Abc do
-    #   def test(1, 2) do
-    #     1
-    #   end
-    # end
-
-    result = FunctionTransformer.transform(:test, [1, 2], [1], context)
-
-    assert %Function{} = result
-    assert result.name == :test
-  end
-
-  describe "params" do
-    test "no params", context do
-      # normalized AST from:
-      #
-      # def test do
-      #   1
-      # end
-
-      result = FunctionTransformer.transform(:test, nil, [1], context)
-
-      assert %Function{} = result
-      assert result.params == []
-    end
-
-    test "var params", context do
-      # normalized AST from:
-      #
-      # def test(a, b) do
-      #   1
-      # end
-
-      params = [{:a, [line: 1], nil}, {:b, [line: 1], nil}]
-      result = FunctionTransformer.transform(:test, params, [1], context)
-
-      expected =
-        [
-          %Variable{name: :a},
-          %Variable{name: :b}
-        ]
-
-      assert %Function{} = result
-      assert result.params == expected
-    end
-
-    test "primitive type params", context do
-      # normalized AST from
-      #
-      # defmodule Abc do
-      #   def test(:a, 2) do
-      #     1
-      #   end
-      # end
-
-      result = FunctionTransformer.transform(:test, [:a, 2], [1], context)
-
-      expected =
-        [
-          %AtomType{value: :a},
-          %IntegerType{value: 2}
-        ]
-
-      assert %Function{} = result
-      assert result.params == expected
     end
   end
 end
