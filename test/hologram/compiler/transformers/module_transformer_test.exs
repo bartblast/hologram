@@ -44,8 +44,7 @@ defmodule Hologram.Compiler.ModuleTransformerTest do
     """
 
     ast = ast(code)
-
-    %Module{} = result = ModuleTransformer.transform(ast)
+    assert %Module{} = result = ModuleTransformer.transform(ast)
 
     expected = [
       %Import{module: [:Cde, :Def], only: nil},
@@ -64,8 +63,7 @@ defmodule Hologram.Compiler.ModuleTransformerTest do
     """
 
     ast = ast(code)
-
-    %Module{} = result = ModuleTransformer.transform(ast)
+    assert %Module{} = result = ModuleTransformer.transform(ast)
 
     expected = [
       %Alias{module: [:Cde, :Def], as: [:Def]},
@@ -84,8 +82,7 @@ defmodule Hologram.Compiler.ModuleTransformerTest do
     """
 
     ast = ast(code)
-
-    %Module{} = result = ModuleTransformer.transform(ast)
+    assert %Module{} = result = ModuleTransformer.transform(ast)
 
     expected = [
       %ModuleAttributeDef{
@@ -115,8 +112,7 @@ defmodule Hologram.Compiler.ModuleTransformerTest do
     """
 
     ast = ast(code)
-
-    %Module{} = result = ModuleTransformer.transform(ast)
+    assert %Module{} = result = ModuleTransformer.transform(ast)
 
     expected = [
       %Function{
