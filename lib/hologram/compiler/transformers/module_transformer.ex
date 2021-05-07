@@ -27,7 +27,7 @@ defmodule Hologram.Compiler.ModuleTransformer do
     aliases = aggregate_expressions(:alias, ast, [])
     attributes = aggregate_expressions(:@, ast, [])
 
-    context = [module: module, imports: imports, aliases: aliases]
+    context = [module: module, imports: imports, aliases: aliases, attributes: attributes]
     functions = aggregate_expressions(:def, ast, context)
 
     %Module{

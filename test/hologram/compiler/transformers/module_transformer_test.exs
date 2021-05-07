@@ -1,214 +1,140 @@
 defmodule Hologram.Compiler.ModuleTransformerTest do
-  use ExUnit.Case, async: true
+  use Hologram.TestCase, async: true
 
   alias Hologram.Compiler.AST.{Alias, Function, Import, IntegerType, Module, ModuleAttributeDef}
   alias Hologram.Compiler.ModuleTransformer
 
-  test "functions" do
-    # normalized AST from:
-    #
-    # defmodule Abc.Bcd do
-    #   def test_1 do
-    #     1
-    #   end
+  test "name" do
+    code = """
+    defmodule Abc.Bcd do
+    end
+    """
 
-    #   def test_2 do
-    #     2
-    #   end
-    # end
+    ast = ast(code)
 
-    ast =
-      {:defmodule, [line: 1],
-        [
-          {:__aliases__, [line: 1], [:Abc, :Bcd]},
-          [
-            do: {:__block__, [],
-              [
-                {:def, [line: 2],
-                [{:test_1, [line: 2], nil}, [do: {:__block__, [], [1]}]]},
-                {:def, [line: 6],
-                [{:test_2, [line: 6], nil}, [do: {:__block__, [], [2]}]]}
-              ]}
-          ]
-        ]}
-
-    result = ModuleTransformer.transform(ast)
-
-    expected =
-      %Module{
-        aliases: [],
-        attributes: [],
-        functions: [
-          %Function{
-            arity: 0,
-            bindings: [],
-            body: [%IntegerType{value: 1}],
-            name: :test_1,
-            params: []
-          },
-          %Function{
-            arity: 0,
-            bindings: [],
-            body: [%IntegerType{value: 2}],
-            name: :test_2,
-            params: []
-          }
-        ],
-        imports: [],
-        name: [:Abc, :Bcd]
-      }
-
-    assert result == expected
+    assert %Module{name: [:Abc, :Bcd]} = ModuleTransformer.transform(ast)
   end
 
-  test "aliases" do
-    # normalized AST from:
-    #
-    # defmodule Abc.Bcd do
-    #   alias Ghi.Hij
-    #   alias Ijk.Jkl
-    # end
+  test "macros expansion" do
+    code = """
+    defmodule Abc do
+      use Hologram.Test.Fixtures.ModuleTransformer.Module2
+    end
+    """
 
-    ast =
-      {:defmodule, [line: 1],
-        [
-          {:__aliases__, [line: 1], [:Abc, :Bcd]},
-          [
-            do: {:__block__, [],
-              [
-                {:alias, [line: 2], [{:__aliases__, [line: 2], [:Ghi, :Hij]}]},
-                {:alias, [line: 3], [{:__aliases__, [line: 3], [:Ijk, :Jkl]}]}
-              ]}
-          ]
-        ]}
+    ast = ast(code)
+    assert %Module{} = result = ModuleTransformer.transform(ast)
 
-    result = ModuleTransformer.transform(ast)
-
-    expected =
-      %Module{
-        aliases: [
-          %Alias{as: [:Hij], module: [:Ghi, :Hij]},
-          %Alias{as: [:Jkl], module: [:Ijk, :Jkl]}
-        ],
-        attributes: [],
-        functions: [],
-        imports: [],
-        name: [:Abc, :Bcd]
+    expected = [
+      %Import{
+        module: [:Hologram, :Test, :Fixtures, :ModuleTransformer, :Module1],
+        only: nil
       }
+    ]
 
-    assert result == expected
+    assert result.imports == expected
   end
 
   test "imports" do
-    # normalized AST from:
-    #
-    # defmodule Abc.Bcd do
-    #   import Cde.Def
-    #   import Efg.Fgh
-    # end
+    code = """
+    defmodule Abc.Bcd do
+      import Cde.Def
+      import Efg.Fgh
+    end
+    """
 
-    ast =
-      {:defmodule, [line: 1],
-        [
-          {:__aliases__, [line: 1], [:Abc, :Bcd]},
-          [
-            do: {:__block__, [],
-              [
-                {:import, [line: 2], [{:__aliases__, [line: 2], [:Cde, :Def]}]},
-                {:import, [line: 3], [{:__aliases__, [line: 3], [:Efg, :Fgh]}]}
-              ]}
-          ]
-        ]}
+    ast = ast(code)
 
-    result = ModuleTransformer.transform(ast)
+    %Module{} = result = ModuleTransformer.transform(ast)
 
-    expected =
-      %Module{
-        aliases: [],
-        attributes: [],
-        functions: [],
-        imports: [
-          %Import{module: [:Cde, :Def], only: nil},
-          %Import{module: [:Efg, :Fgh], only: nil}
-        ],
-        name: [:Abc, :Bcd]
-      }
+    expected = [
+      %Import{module: [:Cde, :Def], only: nil},
+      %Import{module: [:Efg, :Fgh], only: nil}
+    ]
 
-    assert result == expected
+    assert result.imports == expected
   end
 
-  test "macro expansion" do
-    # normalized AST from:
-    #
-    # defmodule Test do
-    #   use TestModule2
-    # end
+  test "aliases" do
+    code = """
+    defmodule Abc.Bcd do
+      alias Cde.Def
+      alias Efg.Fgh
+    end
+    """
 
-    ast =
-      {:defmodule, [line: 1],
-        [
-          {:__aliases__, [line: 1], [:Test]},
-          [
-            do: {:__block__, [],
-              [{:use, [line: 2], [{:__aliases__, [line: 2], [:TestModule2]}]}]}
-          ]
-        ]}
+    ast = ast(code)
 
-    result = ModuleTransformer.transform(ast)
+    %Module{} = result = ModuleTransformer.transform(ast)
 
-    expected =
-      %Module{
-        aliases: [],
-        attributes: [],
-        functions: [],
-        imports: [%Import{module: [:TestModule1], only: nil}],
-        name: [:Test]
-      }
+    expected = [
+      %Alias{module: [:Cde, :Def], as: [:Def]},
+      %Alias{module: [:Efg, :Fgh], as: [:Fgh]}
+    ]
 
-    assert result == expected
+    assert result.aliases == expected
   end
 
-  test "module attributes" do
-    # normalized AST from:
-    #
-    # defmodule Abc.Bcd do
-    #   @x 1
-    #   @y 2
-    # end
+  test "attributes" do
+    code = """
+    defmodule Abc do
+      @x 1
+      @y 2
+    end
+    """
 
-    ast =
-      {:defmodule, [line: 1],
-      [
-        {:__aliases__, [line: 1], [:Abc, :Bcd]},
-        [
-          do: {:__block__, [],
-            [
-              {:@, [line: 2], [{:x, [line: 2], [1]}]},
-              {:@, [line: 3], [{:y, [line: 3], [2]}]}
-            ]}
-        ]
-      ]}
+    ast = ast(code)
 
-    result = ModuleTransformer.transform(ast)
+    %Module{} = result = ModuleTransformer.transform(ast)
 
-    expected =
-      %Module{
-        aliases: [],
-        attributes: [
-          %ModuleAttributeDef{
-            name: :x,
-            value: %IntegerType{value: 1}
-          },
-          %ModuleAttributeDef{
-            name: :y,
-            value: %IntegerType{value: 2}
-          }
-        ],
-        functions: [],
-        imports: [],
-        name: [:Abc, :Bcd]
+    expected = [
+      %ModuleAttributeDef{
+        name: :x,
+        value: %IntegerType{value: 1}
+      },
+      %ModuleAttributeDef{
+        name: :y,
+        value: %IntegerType{value: 2}
       }
+    ]
 
-    assert result == expected
+    assert result.attributes == expected
+  end
+
+  test "functions" do
+    code = """
+    defmodule Abc do
+      def test_1 do
+        1
+      end
+
+      def test_2 do
+        2
+      end
+    end
+    """
+
+    ast = ast(code)
+
+    %Module{} = result = ModuleTransformer.transform(ast)
+
+    expected = [
+      %Function{
+        arity: 0,
+        bindings: [],
+        body: [%IntegerType{value: 1}],
+        name: :test_1,
+        params: []
+      },
+      %Function{
+        arity: 0,
+        bindings: [],
+        body: [%IntegerType{value: 2}],
+        name: :test_2,
+        params: []
+      }
+    ]
+
+    assert result.functions == expected
   end
 end
