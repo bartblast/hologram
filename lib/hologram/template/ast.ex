@@ -1,4 +1,5 @@
 defmodule Hologram.Template.AST do
+  # TODO: implement (it's not supported yet)
   defmodule ComponentNode do
     defstruct module: nil, children: nil
   end
