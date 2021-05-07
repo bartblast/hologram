@@ -18,7 +18,7 @@ defmodule Hologram.Compiler.ModuleTransformerTest do
   test "macros expansion" do
     code = """
     defmodule Abc do
-      use Hologram.Test.Fixtures.ModuleTransformer.Module2
+      use Hologram.Test.Fixtures.Compiler.ModuleTransformer.Module2
     end
     """
 
@@ -27,7 +27,7 @@ defmodule Hologram.Compiler.ModuleTransformerTest do
 
     expected = [
       %Import{
-        module: [:Hologram, :Test, :Fixtures, :ModuleTransformer, :Module1],
+        module: [:Hologram, :Test, :Fixtures, :Compiler, :ModuleTransformer, :Module1],
         only: nil
       }
     ]

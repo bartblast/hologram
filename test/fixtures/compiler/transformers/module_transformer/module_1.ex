@@ -1,2 +1,2 @@
-defmodule Hologram.Test.Fixtures.ModuleTransformer.Module1 do
+defmodule Hologram.Test.Fixtures.Compiler.ModuleTransformer.Module1 do
 end
