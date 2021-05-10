@@ -1,5 +1,5 @@
 defmodule Hologram.Compiler.Eliminator do
-  alias Hologram.Compiler.AST.{Function, FunctionCall, Module}
+  alias Hologram.Compiler.AST.{FunctionDefinition, FunctionCall, Module}
 
   @doc """
   Eliminates dead code.
@@ -70,7 +70,7 @@ defmodule Hologram.Compiler.Eliminator do
   end
 
   # TODO: support function calls nested in blocks
-  defp recurse(acc, compiled_modules, %Function{body: body}) do
+  defp recurse(acc, compiled_modules, %FunctionDefinition{body: body}) do
     Enum.reduce(body, acc, &handle_expr(&2, compiled_modules, &1))
   end
 end

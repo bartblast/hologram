@@ -1,7 +1,7 @@
 defmodule Hologram.Compiler.FunctionTransformerTest do
   use Hologram.TestCase, async: true
 
-  alias Hologram.Compiler.AST.{AtomType, Function, IntegerType, MapAccess, Variable}
+  alias Hologram.Compiler.AST.{AtomType, FunctionDefinition, IntegerType, MapAccess, Variable}
   alias Hologram.Compiler.FunctionTransformer
 
   setup do
@@ -20,7 +20,7 @@ defmodule Hologram.Compiler.FunctionTransformerTest do
     params = [1, 2]
     body = []
 
-    assert %Function{name: :test} = FunctionTransformer.transform(name, params, body, context)
+    assert %FunctionDefinition{name: :test} = FunctionTransformer.transform(name, params, body, context)
   end
 
   test "arity", context do
@@ -31,7 +31,7 @@ defmodule Hologram.Compiler.FunctionTransformerTest do
     params = [1, 2]
     body = []
 
-    assert %Function{arity: 2} = FunctionTransformer.transform(name, params, body, context)
+    assert %FunctionDefinition{arity: 2} = FunctionTransformer.transform(name, params, body, context)
   end
 
   describe "params" do
@@ -43,7 +43,7 @@ defmodule Hologram.Compiler.FunctionTransformerTest do
       params = nil
       body = []
 
-      assert %Function{params: []} = FunctionTransformer.transform(name, params, body, context)
+      assert %FunctionDefinition{params: []} = FunctionTransformer.transform(name, params, body, context)
     end
 
     test "vars", context do
@@ -54,7 +54,7 @@ defmodule Hologram.Compiler.FunctionTransformerTest do
       params = [{:a, [line: 1], nil}, {:b, [line: 1], nil}]
       body = []
 
-      assert %Function{} = result = FunctionTransformer.transform(name, params, body, context)
+      assert %FunctionDefinition{} = result = FunctionTransformer.transform(name, params, body, context)
 
       expected =
         [
@@ -73,7 +73,7 @@ defmodule Hologram.Compiler.FunctionTransformerTest do
       params = [:a, 2]
       body = []
 
-      assert %Function{} = result = FunctionTransformer.transform(name, params, body, context)
+      assert %FunctionDefinition{} = result = FunctionTransformer.transform(name, params, body, context)
 
       expected =
         [
@@ -94,7 +94,7 @@ defmodule Hologram.Compiler.FunctionTransformerTest do
       params = [1, 2]
       body = []
 
-      assert %Function{bindings: []} = FunctionTransformer.transform(name, params, body, context)
+      assert %FunctionDefinition{bindings: []} = FunctionTransformer.transform(name, params, body, context)
     end
 
     test "single binding in single param", context do
@@ -105,7 +105,7 @@ defmodule Hologram.Compiler.FunctionTransformerTest do
       params = [1, {:%{}, [line: 2], [a: {:x, [line: 2], nil}]}]
       body = []
 
-      assert %Function{} = result = FunctionTransformer.transform(name, params, body, context)
+      assert %FunctionDefinition{} = result = FunctionTransformer.transform(name, params, body, context)
 
       expected =
         [
@@ -128,7 +128,7 @@ defmodule Hologram.Compiler.FunctionTransformerTest do
       params = [1, {:%{}, [line: 2], [a: {:x, [line: 2], nil}, b: {:y, [line: 2], nil}]}]
       body = []
 
-      assert %Function{} = result = FunctionTransformer.transform(name, params, body, context)
+      assert %FunctionDefinition{} = result = FunctionTransformer.transform(name, params, body, context)
 
       expected =
         [
@@ -163,7 +163,7 @@ defmodule Hologram.Compiler.FunctionTransformerTest do
         {:%{}, [line: 2], [c: {:s, [line: 2], nil}, d: {:t, [line: 2], nil}]},
       ]
 
-      assert %Function{} = result = FunctionTransformer.transform(name, params, body, context)
+      assert %FunctionDefinition{} = result = FunctionTransformer.transform(name, params, body, context)
 
       expected =
         [
@@ -204,7 +204,7 @@ defmodule Hologram.Compiler.FunctionTransformerTest do
       params = [{:y, [line: 2], nil}, {:x, [line: 2], nil}]
       body = []
 
-      assert %Function{} = result = FunctionTransformer.transform(name, params, body, context)
+      assert %FunctionDefinition{} = result = FunctionTransformer.transform(name, params, body, context)
 
       expected =
       [
@@ -230,7 +230,7 @@ defmodule Hologram.Compiler.FunctionTransformerTest do
       params = nil
       body = [1]
 
-      assert %Function{} = result = FunctionTransformer.transform(name, params, body, context)
+      assert %FunctionDefinition{} = result = FunctionTransformer.transform(name, params, body, context)
 
       assert result.body == [%IntegerType{value: 1}]
     end
@@ -245,7 +245,7 @@ defmodule Hologram.Compiler.FunctionTransformerTest do
       params = nil
       body = [1, 2]
 
-      assert %Function{} = result = FunctionTransformer.transform(name, params, body, context)
+      assert %FunctionDefinition{} = result = FunctionTransformer.transform(name, params, body, context)
 
       expected =
         [

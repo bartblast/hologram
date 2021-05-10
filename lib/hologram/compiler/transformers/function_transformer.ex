@@ -1,5 +1,5 @@
 defmodule Hologram.Compiler.FunctionTransformer do
-  alias Hologram.Compiler.AST.Function
+  alias Hologram.Compiler.AST.FunctionDefinition
   alias Hologram.Compiler.Binder
   alias Hologram.Compiler.Transformer
 
@@ -13,7 +13,7 @@ defmodule Hologram.Compiler.FunctionTransformer do
     bindings = aggregate_bindings(params)
     body = Enum.map(body, &Transformer.transform(&1, context))
 
-    %Function{name: name, arity: arity, params: params, bindings: bindings, body: body}
+    %FunctionDefinition{name: name, arity: arity, params: params, bindings: bindings, body: body}
   end
 
   defp aggregate_bindings(params) do

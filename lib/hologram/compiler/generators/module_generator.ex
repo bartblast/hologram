@@ -1,5 +1,5 @@
 defmodule Hologram.Compiler.ModuleGenerator do
-  alias Hologram.Compiler.AST.Function
+  alias Hologram.Compiler.AST.FunctionDefinition
   alias Hologram.Compiler.FunctionGenerator
   alias Hologram.Compiler.Helpers
 
@@ -22,7 +22,7 @@ defmodule Hologram.Compiler.ModuleGenerator do
   defp aggregate_functions(module) do
     Enum.reduce(module.functions, %{}, fn expr, acc ->
       case expr do
-        %Function{name: name} = fun ->
+        %FunctionDefinition{name: name} = fun ->
           if Map.has_key?(acc, name) do
             Map.put(acc, name, acc[name] ++ [fun])
           else

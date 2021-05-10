@@ -14,7 +14,7 @@ defmodule Hologram.Compiler.Generator do
 
   alias Hologram.Compiler.AST.{AdditionOperator, ModuleAttributeOperator}
 
-  alias Hologram.Compiler.AST.{Function, FunctionCall, MapAccess, Module, Variable}
+  alias Hologram.Compiler.AST.{FunctionDefinition, FunctionCall, MapAccess, Module, Variable}
 
   alias Hologram.Compiler.{
     AdditionOperatorGenerator,

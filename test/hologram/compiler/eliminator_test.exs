@@ -1,7 +1,7 @@
 defmodule Hologram.Compiler.EliminatorTest do
   use ExUnit.Case, async: true
 
-  alias Hologram.Compiler.AST.{AtomType, Function}
+  alias Hologram.Compiler.AST.{AtomType, FunctionDefinition}
   alias Hologram.Compiler.Eliminator
   alias Hologram.Compiler.Processor
 
@@ -38,8 +38,8 @@ defmodule Hologram.Compiler.EliminatorTest do
     assert Map.has_key?(result, main_module)
     assert Map.has_key?(result, another_module)
 
-    assert [%Function{name: :action}] = result[main_module].functions
-    assert [%Function{name: :test_3}] = result[another_module].functions
+    assert [%FunctionDefinition{name: :action}] = result[main_module].functions
+    assert [%FunctionDefinition{name: :test_3}] = result[another_module].functions
   end
 
   test "purges redundant modules" do

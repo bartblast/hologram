@@ -47,6 +47,12 @@ defmodule Hologram.Compiler.AST do
     defstruct name: nil
   end
 
+  # DEFINITIONS
+
+  defmodule FunctionDefinition do
+    defstruct name: nil, arity: nil, params: nil, bindings: nil, body: nil
+  end
+
   # DIRECTIVES
 
   defmodule Alias do
@@ -58,10 +64,6 @@ defmodule Hologram.Compiler.AST do
   end
 
   # OTHER
-
-  defmodule Function do
-    defstruct name: nil, arity: nil, params: nil, bindings: nil, body: nil
-  end
 
   defmodule FunctionCall do
     defstruct module: nil, function: nil, params: nil

@@ -1,7 +1,7 @@
 defmodule Hologram.Compiler.ModuleGeneratorTest do
   use ExUnit.Case, async: true
 
-  alias Hologram.Compiler.AST.{Function, IntegerType, Module, Variable}
+  alias Hologram.Compiler.AST.{FunctionDefinition, IntegerType, Module, Variable}
   alias Hologram.Compiler.Generator
 
   # TODO: test aliases
@@ -11,7 +11,7 @@ defmodule Hologram.Compiler.ModuleGeneratorTest do
       aliases: [],
       attributes: [],
       functions: [
-        %Function{
+        %FunctionDefinition{
           bindings: [
             a: {0, [%Variable{name: :a}]}
           ],
@@ -53,7 +53,7 @@ defmodule Hologram.Compiler.ModuleGeneratorTest do
       aliases: [],
       attributes: [],
       functions: [
-        %Function{
+        %FunctionDefinition{
           bindings: [
             a: {0, [%Variable{name: :a}]}
           ],
@@ -65,7 +65,7 @@ defmodule Hologram.Compiler.ModuleGeneratorTest do
             %Variable{name: :a}
           ]
         },
-        %Function{
+        %FunctionDefinition{
           bindings: [
             a: {0, [%Variable{name: :a}]},
             b: {1, [%Variable{name: :b}]}
@@ -116,7 +116,7 @@ defmodule Hologram.Compiler.ModuleGeneratorTest do
       aliases: [],
       attributes: [],
       functions: [
-        %Function{
+        %FunctionDefinition{
           bindings: [
             a: {0, [%Variable{name: :a}]}
           ],
@@ -128,7 +128,7 @@ defmodule Hologram.Compiler.ModuleGeneratorTest do
             %Variable{name: :a}
           ]
         },
-        %Function{
+        %FunctionDefinition{
           bindings: [
             a: {0, [%Variable{name: :a}]}
           ],
@@ -180,7 +180,7 @@ defmodule Hologram.Compiler.ModuleGeneratorTest do
       aliases: [],
       attributes: [],
       functions: [
-        %Function{
+        %FunctionDefinition{
           bindings: [
             a: {0, [%Variable{name: :a}]}
           ],
@@ -192,7 +192,7 @@ defmodule Hologram.Compiler.ModuleGeneratorTest do
             %Variable{name: :a}
           ]
         },
-        %Function{
+        %FunctionDefinition{
           bindings: [
             a: {0, [%Variable{name: :a}]},
             b: {1, [%Variable{name: :b}]}
@@ -207,7 +207,7 @@ defmodule Hologram.Compiler.ModuleGeneratorTest do
             %Variable{name: :b}
           ]
         },
-        %Function{
+        %FunctionDefinition{
           bindings: [
             a: {0, [%Variable{name: :a}]}
           ],
