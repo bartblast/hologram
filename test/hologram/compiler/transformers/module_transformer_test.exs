@@ -1,7 +1,7 @@
 defmodule Hologram.Compiler.ModuleTransformerTest do
   use Hologram.TestCase, async: true
 
-  alias Hologram.Compiler.AST.{Alias, FunctionDefinition, Import, IntegerType, ModuleDefinition, ModuleAttributeDef}
+  alias Hologram.Compiler.AST.{Alias, FunctionDefinition, Import, IntegerType, ModuleDefinition, ModuleAttributeDefinition}
   alias Hologram.Compiler.ModuleTransformer
 
   test "name" do
@@ -85,11 +85,11 @@ defmodule Hologram.Compiler.ModuleTransformerTest do
     assert %ModuleDefinition{} = result = ModuleTransformer.transform(ast)
 
     expected = [
-      %ModuleAttributeDef{
+      %ModuleAttributeDefinition{
         name: :x,
         value: %IntegerType{value: 1}
       },
-      %ModuleAttributeDef{
+      %ModuleAttributeDefinition{
         name: :y,
         value: %IntegerType{value: 2}
       }

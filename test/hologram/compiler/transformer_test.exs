@@ -1,7 +1,7 @@
 defmodule Hologram.Compiler.TransformerTest do
   use Hologram.TestCase, async: true
 
-  alias Hologram.Compiler.AST.{AdditionOperator, Alias, AtomType, BooleanType, DotOperator, FunctionDefinition, FunctionCall, Import, IntegerType, ListType, MapType, MatchOperator, ModuleDefinition, ModuleAttributeDef, ModuleAttributeOperator, StringType, StructType, Variable}
+  alias Hologram.Compiler.AST.{AdditionOperator, Alias, AtomType, BooleanType, DotOperator, FunctionDefinition, FunctionCall, Import, IntegerType, ListType, MapType, MatchOperator, ModuleDefinition, ModuleAttributeDefinition, ModuleAttributeOperator, StringType, StructType, Variable}
   alias Hologram.Compiler.Transformer
 
   describe "types" do
@@ -104,7 +104,7 @@ defmodule Hologram.Compiler.TransformerTest do
       code = "@a 1"
       ast = ast(code)
 
-      assert %ModuleAttributeDef{} = Transformer.transform(ast)
+      assert %ModuleAttributeDefinition{} = Transformer.transform(ast)
     end
   end
 

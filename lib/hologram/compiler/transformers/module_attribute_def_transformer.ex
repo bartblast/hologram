@@ -1,9 +1,9 @@
-defmodule Hologram.Compiler.ModuleAttributeDefTransformer do
-  alias Hologram.Compiler.AST.ModuleAttributeDef
+defmodule Hologram.Compiler.ModuleAttributeDefinitionTransformer do
+  alias Hologram.Compiler.AST.ModuleAttributeDefinition
   alias Hologram.Compiler.Transformer
 
   def transform(name, ast, context) do
-    %ModuleAttributeDef{
+    %ModuleAttributeDefinition{
       name: name,
       value: Transformer.transform(ast, context)
     }
