@@ -70,19 +70,13 @@ defmodule Hologram.Compiler.Generator do
     ModuleAttributeOperatorGenerator.generate(name, context)
   end
 
-  # OTHER
+  # DEFINITIONS
 
   def generate(%ModuleDefinition{name: name} = ast, _, _) do
     ModuleGenerator.generate(ast, name)
   end
 
-  def generate(%Variable{name: name}, _, boxed: true) do
-    "{ type: 'variable', name: '#{name}' }"
-  end
-
-  def generate(%Variable{name: name}, _, _) do
-    "#{name}"
-  end
+  # OTHER
 
   def generate(%FunctionCall{module: module, function: function, params: params}, context, _) do
     class = Helpers.class_name(module)
@@ -100,5 +94,13 @@ defmodule Hologram.Compiler.Generator do
       |> Enum.join(", ")
 
     "#{class}.#{function}(#{params})"
+  end
+
+  def generate(%Variable{name: name}, _, boxed: true) do
+    "{ type: 'variable', name: '#{name}' }"
+  end
+
+  def generate(%Variable{name: name}, _, _) do
+    "#{name}"
   end
 end
