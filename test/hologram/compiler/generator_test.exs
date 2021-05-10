@@ -51,7 +51,21 @@ defmodule Hologram.Compiler.GeneratorTest do
     end
   end
 
+  describe "operators" do
+    test "addition" do
+      ast =
+        %AdditionOperator{
+          left: %IntegerType{value: 1},
+          right: %IntegerType{value: 2}
+        }
 
+      result = Generator.generate(ast)
+
+      expected = "Kernel.$add({ type: 'integer', value: 1 }, { type: 'integer', value: 2 })"
+
+      assert result == expected
+    end
+  end
 
 
 
