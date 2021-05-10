@@ -1,4 +1,4 @@
-defmodule Hologram.Compiler.ModuleGenerator do
+defmodule Hologram.Compiler.ModuleDefinitionGenerator do
   alias Hologram.Compiler.AST.FunctionDefinition
   alias Hologram.Compiler.FunctionDefinitionGenerator
   alias Hologram.Compiler.Helpers

@@ -20,7 +20,7 @@ defmodule Hologram.Compiler.Generator do
     AdditionOperatorGenerator,
     DotOperatorGenerator,
     MapTypeGenerator,
-    ModuleGenerator,
+    ModuleDefinitionGenerator,
     ModuleAttributeOperatorGenerator,
     PrimitiveTypeGenerator,
     StructTypeGenerator
@@ -73,7 +73,7 @@ defmodule Hologram.Compiler.Generator do
   # DEFINITIONS
 
   def generate(%ModuleDefinition{name: name} = ast, _, _) do
-    ModuleGenerator.generate(ast, name)
+    ModuleDefinitionGenerator.generate(ast, name)
   end
 
   # OTHER

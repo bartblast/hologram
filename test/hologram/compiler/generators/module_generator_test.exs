@@ -1,4 +1,4 @@
-defmodule Hologram.Compiler.ModuleGeneratorTest do
+defmodule Hologram.Compiler.ModuleDefinitionGeneratorTest do
   use ExUnit.Case, async: true
 
   alias Hologram.Compiler.AST.{FunctionDefinition, IntegerType, ModuleDefinition, Variable}
