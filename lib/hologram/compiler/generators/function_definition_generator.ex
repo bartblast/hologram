@@ -1,6 +1,6 @@
 # TODO: refactor & test
 
-defmodule Hologram.Compiler.FunctionGenerator do
+defmodule Hologram.Compiler.FunctionDefinitionGenerator do
   alias Hologram.Compiler.AST.{AccessOperator, Variable}
   alias Hologram.Compiler.Generator
 
@@ -75,7 +75,7 @@ defmodule Hologram.Compiler.FunctionGenerator do
         case access do
           %AccessOperator{key: key} ->
             "['#{key}']"
-            
+
           %Variable{name: name} ->
             "arguments[#{idx}]"
         end

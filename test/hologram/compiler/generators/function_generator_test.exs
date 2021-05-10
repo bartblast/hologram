@@ -1,3 +1,3 @@
-defmodule Hologram.Compiler.FunctionGeneratorTest do
+defmodule Hologram.Compiler.FunctionDefinitionGeneratorTest do
   use ExUnit.Case, async: true
 end
