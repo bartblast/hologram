@@ -1,5 +1,5 @@
 defmodule Hologram.Compiler.Eliminator do
-  alias Hologram.Compiler.AST.{FunctionDefinition, FunctionCall, ModuleDefinition}
+  alias Hologram.Compiler.AST.{FunctionCall, FunctionDefinition, ModuleDefinition}
 
   @doc """
   Eliminates dead code.
@@ -10,7 +10,7 @@ defmodule Hologram.Compiler.Eliminator do
     |> purge_redundant_modules()
   end
 
-  def aggregate_used_functions(main_module, compiled_modules) do
+  defp aggregate_used_functions(main_module, compiled_modules) do
     spec = {main_module, :action, 3}
     acc = MapSet.new([spec])
 
