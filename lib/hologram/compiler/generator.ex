@@ -1,20 +1,21 @@
-# TODO: refactor & test
-
 defmodule Hologram.Compiler.Generator do
   alias Hologram.Compiler.AST.{
+    AccessOperator,
+    AdditionOperator,
     AtomType,
     BooleanType,
     DotOperator,
+    FunctionCall,
+    FunctionDefinition,
     IntegerType,
     ListType,
     MapType,
+    ModuleAttributeOperator,
+    ModuleDefinition,
     StringType,
-    StructType
+    StructType,
+    Variable
   }
-
-  alias Hologram.Compiler.AST.{AdditionOperator, ModuleAttributeOperator}
-
-  alias Hologram.Compiler.AST.{AccessOperator, FunctionDefinition, FunctionCall, ModuleDefinition, Variable}
 
   alias Hologram.Compiler.{
     AdditionOperatorGenerator,
@@ -48,12 +49,12 @@ defmodule Hologram.Compiler.Generator do
     MapTypeGenerator.generate(data, context)
   end
 
-  def generate(%StructType{module: module, data: data}, context, _) do
-    StructTypeGenerator.generate(module, data, context)
-  end
-
   def generate(%StringType{value: value}, _, _) do
     PrimitiveTypeGenerator.generate(:string, "'#{value}'")
+  end
+
+  def generate(%StructType{module: module, data: data}, context, _) do
+    StructTypeGenerator.generate(module, data, context)
   end
 
   # OPERATORS
@@ -61,6 +62,34 @@ defmodule Hologram.Compiler.Generator do
   def generate(%AdditionOperator{left: left, right: right}, context, _) do
     AdditionOperatorGenerator.generate(left, right, context)
   end
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
   def generate(%DotOperator{left: left, right: right}, context, _) do
     DotOperatorGenerator.generate(left, right, context)

@@ -1,11 +1,7 @@
-# TODO: refactor
-
 defmodule Hologram.Compiler.GeneratorTest do
-  use ExUnit.Case, async: true
+  use Hologram.TestCase, async: true
 
-  alias Hologram.Compiler.AST.{AtomType, BooleanType, IntegerType, StringType}
-  alias Hologram.Compiler.AST.{MapType, StructType}
-  alias Hologram.Compiler.AST.{FunctionCall, Variable}
+  alias Hologram.Compiler.AST.{AdditionOperator, AtomType, BooleanType, FunctionCall, IntegerType, MapType, StringType, StructType, Variable}
   alias Hologram.Compiler.Generator
 
   describe "types" do
@@ -54,6 +50,47 @@ defmodule Hologram.Compiler.GeneratorTest do
       assert result == expected
     end
   end
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
   describe "other" do
     test "variable, not boxed" do
