@@ -53,6 +53,10 @@ defmodule Hologram.Compiler.AST do
     defstruct name: nil, arity: nil, params: nil, bindings: nil, body: nil
   end
 
+  defmodule ModuleDefinition do
+    defstruct name: nil, imports: nil, aliases: nil, attributes: nil, functions: nil
+  end
+
   # DIRECTIVES
 
   defmodule Alias do
@@ -71,10 +75,6 @@ defmodule Hologram.Compiler.AST do
 
   defmodule MapAccess do
     defstruct key: nil
-  end
-
-  defmodule Module do
-    defstruct name: nil, imports: nil, aliases: nil, attributes: nil, functions: nil
   end
 
   defmodule ModuleAttributeDef do

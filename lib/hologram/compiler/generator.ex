@@ -14,7 +14,7 @@ defmodule Hologram.Compiler.Generator do
 
   alias Hologram.Compiler.AST.{AdditionOperator, ModuleAttributeOperator}
 
-  alias Hologram.Compiler.AST.{FunctionDefinition, FunctionCall, MapAccess, Module, Variable}
+  alias Hologram.Compiler.AST.{FunctionDefinition, FunctionCall, MapAccess, ModuleDefinition, Variable}
 
   alias Hologram.Compiler.{
     AdditionOperatorGenerator,
@@ -72,7 +72,7 @@ defmodule Hologram.Compiler.Generator do
 
   # OTHER
 
-  def generate(%Module{name: name} = ast, _, _) do
+  def generate(%ModuleDefinition{name: name} = ast, _, _) do
     ModuleGenerator.generate(ast, name)
   end
 

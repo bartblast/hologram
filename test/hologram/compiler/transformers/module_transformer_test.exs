@@ -1,7 +1,7 @@
 defmodule Hologram.Compiler.ModuleTransformerTest do
   use Hologram.TestCase, async: true
 
-  alias Hologram.Compiler.AST.{Alias, FunctionDefinition, Import, IntegerType, Module, ModuleAttributeDef}
+  alias Hologram.Compiler.AST.{Alias, FunctionDefinition, Import, IntegerType, ModuleDefinition, ModuleAttributeDef}
   alias Hologram.Compiler.ModuleTransformer
 
   test "name" do
@@ -12,7 +12,7 @@ defmodule Hologram.Compiler.ModuleTransformerTest do
 
     ast = ast(code)
 
-    assert %Module{name: [:Abc, :Bcd]} = ModuleTransformer.transform(ast)
+    assert %ModuleDefinition{name: [:Abc, :Bcd]} = ModuleTransformer.transform(ast)
   end
 
   test "macros expansion" do
@@ -23,7 +23,7 @@ defmodule Hologram.Compiler.ModuleTransformerTest do
     """
 
     ast = ast(code)
-    assert %Module{} = result = ModuleTransformer.transform(ast)
+    assert %ModuleDefinition{} = result = ModuleTransformer.transform(ast)
 
     expected = [
       %Import{
@@ -44,7 +44,7 @@ defmodule Hologram.Compiler.ModuleTransformerTest do
     """
 
     ast = ast(code)
-    assert %Module{} = result = ModuleTransformer.transform(ast)
+    assert %ModuleDefinition{} = result = ModuleTransformer.transform(ast)
 
     expected = [
       %Import{module: [:Cde, :Def], only: nil},
@@ -63,7 +63,7 @@ defmodule Hologram.Compiler.ModuleTransformerTest do
     """
 
     ast = ast(code)
-    assert %Module{} = result = ModuleTransformer.transform(ast)
+    assert %ModuleDefinition{} = result = ModuleTransformer.transform(ast)
 
     expected = [
       %Alias{module: [:Cde, :Def], as: [:Def]},
@@ -82,7 +82,7 @@ defmodule Hologram.Compiler.ModuleTransformerTest do
     """
 
     ast = ast(code)
-    assert %Module{} = result = ModuleTransformer.transform(ast)
+    assert %ModuleDefinition{} = result = ModuleTransformer.transform(ast)
 
     expected = [
       %ModuleAttributeDef{
@@ -112,7 +112,7 @@ defmodule Hologram.Compiler.ModuleTransformerTest do
     """
 
     ast = ast(code)
-    assert %Module{} = result = ModuleTransformer.transform(ast)
+    assert %ModuleDefinition{} = result = ModuleTransformer.transform(ast)
 
     expected = [
       %FunctionDefinition{

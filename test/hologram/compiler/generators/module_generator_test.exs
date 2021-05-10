@@ -1,13 +1,13 @@
 defmodule Hologram.Compiler.ModuleGeneratorTest do
   use ExUnit.Case, async: true
 
-  alias Hologram.Compiler.AST.{FunctionDefinition, IntegerType, Module, Variable}
+  alias Hologram.Compiler.AST.{FunctionDefinition, IntegerType, ModuleDefinition, Variable}
   alias Hologram.Compiler.Generator
 
   # TODO: test aliases
 
   test "single function without muliptle variants" do
-    ast = %Module{
+    ast = %ModuleDefinition{
       aliases: [],
       attributes: [],
       functions: [
@@ -49,7 +49,7 @@ defmodule Hologram.Compiler.ModuleGeneratorTest do
   end
 
   test "single function with multiple variants" do
-    ast = %Module{
+    ast = %ModuleDefinition{
       aliases: [],
       attributes: [],
       functions: [
@@ -112,7 +112,7 @@ defmodule Hologram.Compiler.ModuleGeneratorTest do
   end
 
   test "multiple functions without multiple variants" do
-    ast = %Module{
+    ast = %ModuleDefinition{
       aliases: [],
       attributes: [],
       functions: [
@@ -176,7 +176,7 @@ defmodule Hologram.Compiler.ModuleGeneratorTest do
   end
 
   test "multiple functions with multiple variants" do
-    ast = %Module{
+    ast = %ModuleDefinition{
       aliases: [],
       attributes: [],
       functions: [

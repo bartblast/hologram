@@ -1,5 +1,5 @@
 defmodule Hologram.Compiler.Eliminator do
-  alias Hologram.Compiler.AST.{FunctionDefinition, FunctionCall, Module}
+  alias Hologram.Compiler.AST.{FunctionDefinition, FunctionCall, ModuleDefinition}
 
   @doc """
   Eliminates dead code.

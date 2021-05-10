@@ -1,5 +1,5 @@
 defmodule Hologram.Compiler.ModuleTransformer do
-  alias Hologram.Compiler.AST.Module
+  alias Hologram.Compiler.AST.ModuleDefinition
   alias Hologram.Compiler.Expander
   alias Hologram.Compiler.Transformer
 
@@ -30,7 +30,7 @@ defmodule Hologram.Compiler.ModuleTransformer do
     context = [module: module, imports: imports, aliases: aliases, attributes: attributes]
     functions = aggregate_expressions(:def, ast, context)
 
-    %Module{
+    %ModuleDefinition{
       name: module,
       imports: imports,
       aliases: aliases,
