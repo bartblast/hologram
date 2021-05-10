@@ -63,37 +63,37 @@ defmodule Hologram.Compiler.Generator do
     AdditionOperatorGenerator.generate(left, right, context)
   end
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
   def generate(%DotOperator{left: left, right: right}, context, _) do
     DotOperatorGenerator.generate(left, right, context)
   end
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
   def generate(%ModuleAttributeOperator{name: name}, context, _) do
     ModuleAttributeOperatorGenerator.generate(name, context)

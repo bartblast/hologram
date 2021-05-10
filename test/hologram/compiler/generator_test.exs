@@ -1,7 +1,7 @@
 defmodule Hologram.Compiler.GeneratorTest do
   use Hologram.TestCase, async: true
 
-  alias Hologram.Compiler.AST.{AdditionOperator, AtomType, BooleanType, FunctionCall, IntegerType, MapType, StringType, StructType, Variable}
+  alias Hologram.Compiler.AST.{AdditionOperator, AtomType, BooleanType, DotOperator, FunctionCall, IntegerType, MapType, StringType, StructType, Variable}
   alias Hologram.Compiler.Generator
 
   describe "types" do
@@ -61,7 +61,21 @@ defmodule Hologram.Compiler.GeneratorTest do
 
       result = Generator.generate(ast)
 
-      expected = "Kernel.$add({ type: 'integer', value: 1 }, { type: 'integer', value: 2 })"
+      expected =
+        "Kernel.$add( { type: 'integer', value: 1 }, { type: 'integer', value: 2 })"
+
+      assert result == expected
+    end
+
+    test "dot" do
+      ast =
+        %DotOperator{
+          left: %Variable{name: :x},
+          right: %AtomType{value: :a}
+        }
+
+      result = Generator.generate(ast)
+      expected = "Kernel.$dot(x, { type: 'atom', value: 'a' })"
 
       assert result == expected
     end
