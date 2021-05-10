@@ -1,7 +1,7 @@
 defmodule Hologram.Compiler.BinderTest do
   use ExUnit.Case, async: true
 
-  alias Hologram.Compiler.AST.{AtomType, IntegerType, MapAccess, MapType, Variable}
+  alias Hologram.Compiler.AST.{AccessOperator, AtomType, IntegerType, MapType, Variable}
   alias Hologram.Compiler.Binder
 
   describe "map" do
@@ -30,7 +30,7 @@ defmodule Hologram.Compiler.BinderTest do
 
       expected = [
         [
-          %MapAccess{
+          %AccessOperator{
             key: %AtomType{value: :b}
           },
           %Variable{name: :x}
@@ -54,13 +54,13 @@ defmodule Hologram.Compiler.BinderTest do
 
       expected = [
         [
-          %MapAccess{
+          %AccessOperator{
             key: %AtomType{value: :a}
           },
           %Variable{name: :x}
         ],
         [
-          %MapAccess{
+          %AccessOperator{
             key: %AtomType{value: :c}
           },
           %Variable{name: :y}
@@ -105,10 +105,10 @@ defmodule Hologram.Compiler.BinderTest do
 
       expected = [
         [
-          %MapAccess{
+          %AccessOperator{
             key: %AtomType{value: :b}
           },
-          %MapAccess{
+          %AccessOperator{
             key: %AtomType{value: :c}
           },
           %Variable{name: :x}
@@ -137,16 +137,16 @@ defmodule Hologram.Compiler.BinderTest do
 
       expected = [
         [
-          %MapAccess{
+          %AccessOperator{
             key: %AtomType{value: :b}
           },
           %Variable{name: :x}
         ],
         [
-          %MapAccess{
+          %AccessOperator{
             key: %AtomType{value: :c}
           },
-          %MapAccess{
+          %AccessOperator{
             key: %AtomType{value: :d}
           },
           %Variable{name: :y}

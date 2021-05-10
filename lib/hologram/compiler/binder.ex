@@ -1,11 +1,11 @@
 defmodule Hologram.Compiler.Binder do
-  alias Hologram.Compiler.AST.{MapAccess, MapType, Variable}
+  alias Hologram.Compiler.AST.{AccessOperator, MapType, Variable}
 
   def bind(_, path \\ [])
 
   def bind(%MapType{data: data}, path) do
     Enum.reduce(data, [], fn {key, value}, acc ->
-      acc ++ bind(value, path ++ [%MapAccess{key: key}])
+      acc ++ bind(value, path ++ [%AccessOperator{key: key}])
     end)
   end
 

@@ -31,6 +31,10 @@ defmodule Hologram.Compiler.AST do
 
   # OPERATORS
 
+  defmodule AccessOperator do
+    defstruct key: nil
+  end
+
   defmodule AdditionOperator do
     defstruct left: nil, right: nil
   end
@@ -75,10 +79,6 @@ defmodule Hologram.Compiler.AST do
 
   defmodule FunctionCall do
     defstruct module: nil, function: nil, params: nil
-  end
-
-  defmodule MapAccess do
-    defstruct key: nil
   end
 
   defmodule Variable do

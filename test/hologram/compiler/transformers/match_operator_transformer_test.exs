@@ -1,7 +1,7 @@
 defmodule Hologram.Compiler.MatchOperatorTransformerTest do
   use Hologram.TestCase, async: true
 
-  alias Hologram.Compiler.AST.{AtomType, IntegerType, MapAccess, MapType, MatchOperator, Variable}
+  alias Hologram.Compiler.AST.{AccessOperator, AtomType, IntegerType, MapType, MatchOperator, Variable}
   alias Hologram.Compiler.MatchOperatorTransformer
 
   test "variable" do
@@ -29,11 +29,11 @@ defmodule Hologram.Compiler.MatchOperatorTransformerTest do
       expected = %MatchOperator{
         bindings: [
           [
-            %MapAccess{key: %AtomType{value: :a}},
+            %AccessOperator{key: %AtomType{value: :a}},
             %Variable{name: :x}
           ],
           [
-            %MapAccess{key: %AtomType{value: :b}},
+            %AccessOperator{key: %AtomType{value: :b}},
             %Variable{name: :y}
           ]
         ],
@@ -65,13 +65,13 @@ defmodule Hologram.Compiler.MatchOperatorTransformerTest do
       expected = %MatchOperator{
         bindings: [
           [
-            %MapAccess{key: %AtomType{value: :b}},
-            %MapAccess{key: %AtomType{value: :p}},
+            %AccessOperator{key: %AtomType{value: :b}},
+            %AccessOperator{key: %AtomType{value: :p}},
             %Variable{name: :x}
           ],
           [
-            %MapAccess{key: %AtomType{value: :d}},
-            %MapAccess{key: %AtomType{value: :n}},
+            %AccessOperator{key: %AtomType{value: :d}},
+            %AccessOperator{key: %AtomType{value: :n}},
             %Variable{name: :y}
           ]
         ],

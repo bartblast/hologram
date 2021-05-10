@@ -1,7 +1,7 @@
 defmodule Hologram.Compiler.FunctionTransformerTest do
   use Hologram.TestCase, async: true
 
-  alias Hologram.Compiler.AST.{AtomType, FunctionDefinition, IntegerType, MapAccess, Variable}
+  alias Hologram.Compiler.AST.{AccessOperator, AtomType, FunctionDefinition, IntegerType, Variable}
   alias Hologram.Compiler.FunctionTransformer
 
   setup do
@@ -110,7 +110,7 @@ defmodule Hologram.Compiler.FunctionTransformerTest do
       expected =
         [
           x: {1, [
-            %MapAccess{
+            %AccessOperator{
               key: %AtomType{value: :a}
             },
             %Variable{name: :x}
@@ -133,13 +133,13 @@ defmodule Hologram.Compiler.FunctionTransformerTest do
       expected =
         [
           x: {1, [
-            %MapAccess{
+            %AccessOperator{
               key: %AtomType{value: :a}
             },
             %Variable{name: :x}
           ]},
           y: {1, [
-            %MapAccess{
+            %AccessOperator{
               key: %AtomType{value: :b}
             },
             %Variable{name: :y}
@@ -168,25 +168,25 @@ defmodule Hologram.Compiler.FunctionTransformerTest do
       expected =
         [
           k: {1, [
-            %MapAccess{
+            %AccessOperator{
               key: %AtomType{value: :a}
             },
             %Variable{name: :k}
           ]},
           m: {1, [
-            %MapAccess{
+            %AccessOperator{
               key: %AtomType{value: :b}
             },
             %Variable{name: :m}
           ]},
           s: {3, [
-            %MapAccess{
+            %AccessOperator{
               key: %AtomType{value: :c}
             },
             %Variable{name: :s}
           ]},
           t: {3, [
-            %MapAccess{
+            %AccessOperator{
               key: %AtomType{value: :d}
             },
             %Variable{name: :t}

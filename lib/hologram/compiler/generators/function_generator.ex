@@ -1,7 +1,7 @@
 # TODO: refactor & test
 
 defmodule Hologram.Compiler.FunctionGenerator do
-  alias Hologram.Compiler.AST.{MapAccess, Variable}
+  alias Hologram.Compiler.AST.{AccessOperator, Variable}
   alias Hologram.Compiler.Generator
 
   def generate(name, variants, context) do
@@ -73,11 +73,11 @@ defmodule Hologram.Compiler.FunctionGenerator do
         acc
         <>
         case access do
+          %AccessOperator{key: key} ->
+            "['#{key}']"
+            
           %Variable{name: name} ->
             "arguments[#{idx}]"
-
-          %MapAccess{key: key} ->
-            "['#{key}']"
         end
       end)
       <>
