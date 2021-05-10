@@ -84,35 +84,6 @@ defmodule Hologram.Compiler.Generator do
     FunctionCallGenerator.generate(module, function, params, context)
   end
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
   def generate(%Variable{name: name}, _, boxed: true) do
     "{ type: 'variable', name: '#{name}' }"
   end

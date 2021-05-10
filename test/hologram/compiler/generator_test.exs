@@ -122,69 +122,17 @@ defmodule Hologram.Compiler.GeneratorTest do
     assert result == expected
   end
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-  describe "other" do
-    test "variable, not boxed" do
-      result = Generator.generate(%Variable{name: :test})
-      expected = "test"
-      assert result == expected
-    end
-
-    test "variable, boxed" do
+  describe "variable" do
+    test "boxed" do
       result = Generator.generate(%Variable{name: :test}, [], boxed: true)
       expected = "{ type: 'variable', name: 'test' }"
 
       assert result == expected
     end
 
-    test "function call with params" do
-      ast = %FunctionCall{
-        module: [:Abc, :Bcd],
-        function: :test,
-        params: [
-          %IntegerType{value: 1},
-          %Variable{name: :xyz}
-        ]
-      }
-
-      result = Generator.generate(ast)
-      expected = "AbcBcd.test({ type: 'integer', value: 1 }, xyz)"
-
-      assert result == expected
-    end
-
-    test "function call without params" do
-      ast = %FunctionCall{
-        module: [:Abc, :Bcd],
-        function: :test,
-        params: []
-      }
-
-      result = Generator.generate(ast)
-      expected = "AbcBcd.test()"
+    test "not boxed" do
+      result = Generator.generate(%Variable{name: :test})
+      expected = "test"
 
       assert result == expected
     end
