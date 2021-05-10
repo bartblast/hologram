@@ -108,18 +108,19 @@ defmodule Hologram.Compiler.GeneratorTest do
     end
   end
 
+  test "function call" do
+    ast =
+      %FunctionCall{
+        function: :abc,
+        module: [:Test],
+        params: [%IntegerType{value: 1}]
+      }
 
+    result = Generator.generate(ast)
+    expected = "Test.abc({ type: 'integer', value: 1 })"
 
-
-
-
-
-
-
-
-
-
-
+    assert result == expected
+  end
 
 
 
