@@ -71,40 +71,40 @@ defmodule Hologram.Compiler.Generator do
     ModuleAttributeOperatorGenerator.generate(name, context)
   end
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
   # DEFINITIONS
 
   def generate(%ModuleDefinition{name: name} = ast, _, _) do
     ModuleDefinitionGenerator.generate(ast, name)
   end
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
   # OTHER
 

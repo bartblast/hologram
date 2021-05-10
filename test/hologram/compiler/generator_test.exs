@@ -1,7 +1,7 @@
 defmodule Hologram.Compiler.GeneratorTest do
   use Hologram.TestCase, async: true
 
-  alias Hologram.Compiler.AST.{AdditionOperator, AtomType, BooleanType, DotOperator, FunctionCall, IntegerType, MapType, ModuleAttributeOperator, StringType, StructType, Variable}
+  alias Hologram.Compiler.AST.{AdditionOperator, AtomType, BooleanType, DotOperator, FunctionCall, IntegerType, MapType, ModuleAttributeOperator, ModuleDefinition, StringType, StructType, Variable}
   alias Hologram.Compiler.Generator
 
   describe "types" do
@@ -81,16 +81,32 @@ defmodule Hologram.Compiler.GeneratorTest do
     end
 
     test "module attribute" do
-      ast = %ModuleAttributeOperator{name: :xyz}
+      ast = %ModuleAttributeOperator{name: :x}
 
       result = Generator.generate(ast)
-      expected = "$state.data['~atom[xyz]']"
+      expected = "$state.data['~atom[x]']"
 
       assert result == expected
     end
   end
 
+  describe "definitions" do
+    test "module" do
+      ast =
+        %ModuleDefinition{
+          aliases: [],
+          attributes: [],
+          functions: [],
+          imports: [],
+          name: [:Test]
+        }
 
+      result = Generator.generate(ast)
+      expected = "class Test {\n\n\n}\n"
+
+      assert result == expected
+    end
+  end
 
 
 
