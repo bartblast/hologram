@@ -62,7 +62,7 @@ defmodule Hologram.Compiler.GeneratorTest do
       result = Generator.generate(ast)
 
       expected =
-        "Kernel.$add( { type: 'integer', value: 1 }, { type: 'integer', value: 2 })"
+        "Kernel.$add({ type: 'integer', value: 1 }, { type: 'integer', value: 2 })"
 
       assert result == expected
     end

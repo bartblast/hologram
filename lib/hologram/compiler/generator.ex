@@ -20,6 +20,7 @@ defmodule Hologram.Compiler.Generator do
   alias Hologram.Compiler.{
     AdditionOperatorGenerator,
     DotOperatorGenerator,
+    FunctionCallGenerator,
     MapTypeGenerator,
     ModuleDefinitionGenerator,
     ModuleAttributeOperatorGenerator,
@@ -77,54 +78,40 @@ defmodule Hologram.Compiler.Generator do
     ModuleDefinitionGenerator.generate(ast, name)
   end
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
   # OTHER
 
   def generate(%FunctionCall{module: module, function: function, params: params}, context, _) do
-    class = Helpers.class_name(module)
-
-    params =
-      Enum.map(params, fn param ->
-        case param do
-          %Variable{name: name} ->
-            name
-
-          _ ->
-            generate(param, context)
-        end
-      end)
-      |> Enum.join(", ")
-
-    "#{class}.#{function}(#{params})"
+    FunctionCallGenerator.generate(module, function, params, context)
   end
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
   def generate(%Variable{name: name}, _, boxed: true) do
     "{ type: 'variable', name: '#{name}' }"
