@@ -1,8 +1,8 @@
-defmodule Hologram.Compiler.ModuleTransformerTest do
+defmodule Hologram.Compiler.ModuleDefinitionTransformerTest do
   use Hologram.TestCase, async: true
 
   alias Hologram.Compiler.AST.{Alias, FunctionDefinition, Import, IntegerType, ModuleDefinition, ModuleAttributeDefinition}
-  alias Hologram.Compiler.ModuleTransformer
+  alias Hologram.Compiler.ModuleDefinitionTransformer
 
   test "name" do
     code = """
@@ -12,22 +12,22 @@ defmodule Hologram.Compiler.ModuleTransformerTest do
 
     ast = ast(code)
 
-    assert %ModuleDefinition{name: [:Abc, :Bcd]} = ModuleTransformer.transform(ast)
+    assert %ModuleDefinition{name: [:Abc, :Bcd]} = ModuleDefinitionTransformer.transform(ast)
   end
 
   test "macros expansion" do
     code = """
     defmodule Abc do
-      use Hologram.Test.Fixtures.Compiler.ModuleTransformer.Module2
+      use Hologram.Test.Fixtures.Compiler.ModuleDefinitionTransformer.Module2
     end
     """
 
     ast = ast(code)
-    assert %ModuleDefinition{} = result = ModuleTransformer.transform(ast)
+    assert %ModuleDefinition{} = result = ModuleDefinitionTransformer.transform(ast)
 
     expected = [
       %Import{
-        module: [:Hologram, :Test, :Fixtures, :Compiler, :ModuleTransformer, :Module1],
+        module: [:Hologram, :Test, :Fixtures, :Compiler, :ModuleDefinitionTransformer, :Module1],
         only: nil
       }
     ]
@@ -44,7 +44,7 @@ defmodule Hologram.Compiler.ModuleTransformerTest do
     """
 
     ast = ast(code)
-    assert %ModuleDefinition{} = result = ModuleTransformer.transform(ast)
+    assert %ModuleDefinition{} = result = ModuleDefinitionTransformer.transform(ast)
 
     expected = [
       %Import{module: [:Cde, :Def], only: nil},
@@ -63,7 +63,7 @@ defmodule Hologram.Compiler.ModuleTransformerTest do
     """
 
     ast = ast(code)
-    assert %ModuleDefinition{} = result = ModuleTransformer.transform(ast)
+    assert %ModuleDefinition{} = result = ModuleDefinitionTransformer.transform(ast)
 
     expected = [
       %Alias{module: [:Cde, :Def], as: [:Def]},
@@ -82,7 +82,7 @@ defmodule Hologram.Compiler.ModuleTransformerTest do
     """
 
     ast = ast(code)
-    assert %ModuleDefinition{} = result = ModuleTransformer.transform(ast)
+    assert %ModuleDefinition{} = result = ModuleDefinitionTransformer.transform(ast)
 
     expected = [
       %ModuleAttributeDefinition{
@@ -112,7 +112,7 @@ defmodule Hologram.Compiler.ModuleTransformerTest do
     """
 
     ast = ast(code)
-    assert %ModuleDefinition{} = result = ModuleTransformer.transform(ast)
+    assert %ModuleDefinition{} = result = ModuleDefinitionTransformer.transform(ast)
 
     expected = [
       %FunctionDefinition{
