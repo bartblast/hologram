@@ -1,55 +1,33 @@
 defmodule Hologram.Compiler.ExpanderTest do
-  use ExUnit.Case, async: true
-
+  use Hologram.TestCase, async: true
   alias Hologram.Compiler.Expander
-  alias TestModule1
-  alias TestModule2
-  alias TestModule3
-  alias TestModule5
+
+  @module_1 [:Hologram, :Test, :Fixtures, :Compiler, :Expander, :Module1]
+  @module_3 [:Hologram, :Test, :Fixtures, :Compiler, :Expander, :Module3]
 
   test "no use directives" do
-    # normalized AST from:
-    #
-    # defmodule Test do
-    #   def test do
-    #       1
-    #   end
-    # end
+    code = """
+    defmodule Test do
+      def test do
+          1
+      end
+    end
+    """
 
-    ast =
-      {:defmodule, [line: 1],
-      [
-        {:__aliases__, [line: 1], [:Test]},
-        [
-          do: {:__block__, [],
-          [
-            {:def, [line: 2],
-              [{:test, [line: 2], nil}, [do: {:__block__, [], [1]}]]}
-          ]}
-        ]
-      ]}
-
+    ast = ast(code)
     result = Expander.expand(ast)
 
     assert result == ast
   end
 
   test "single use directive" do
-    # normalized AST from:
-    #
-    # defmodule Test do
-    #   use TestModule2
-    # end
+    code = """
+    defmodule Test do
+      use Hologram.Test.Fixtures.Compiler.Expander.Module2
+    end
+    """
 
-    ast =
-      {:defmodule, [line: 1],
-        [
-          {:__aliases__, [line: 1], [:Test]},
-          [
-            do: {:__block__, [],
-              [{:use, [line: 2], [{:__aliases__, [line: 2], [:TestModule2]}]}]}
-          ]
-        ]}
+    ast = ast(code)
 
     result = Expander.expand(ast)
 
@@ -59,7 +37,7 @@ defmodule Hologram.Compiler.ExpanderTest do
         {:__aliases__, [line: 1], [:Test]},
         [
           do: {:__block__, [],
-            [{:import, [line: 4], [{:__aliases__, [line: 4], [:TestModule1]}]}]}
+            [{:import, [line: 4], [{:__aliases__, [line: 4], @module_1}]}]}
         ]
       ]}
 
@@ -67,25 +45,14 @@ defmodule Hologram.Compiler.ExpanderTest do
   end
 
   test "multiple use directives" do
-    # normalized AST from:
-    #
-    # defmodule Test do
-    #   use TestModule2
-    #   use TestModule4
-    # end
+    code = """
+    defmodule Test do
+      use Hologram.Test.Fixtures.Compiler.Expander.Module2
+      use Hologram.Test.Fixtures.Compiler.Expander.Module4
+    end
+    """
 
-    ast =
-      {:defmodule, [line: 1],
-      [
-        {:__aliases__, [line: 1], [:Test]},
-        [
-          do: {:__block__, [],
-           [
-             {:use, [line: 2], [{:__aliases__, [line: 2], [:TestModule2]}]},
-             {:use, [line: 3], [{:__aliases__, [line: 3], [:TestModule4]}]}
-           ]}
-        ]
-      ]}
+    ast = ast(code)
 
     result = Expander.expand(ast)
 
@@ -96,8 +63,8 @@ defmodule Hologram.Compiler.ExpanderTest do
         [
           do: {:__block__, [],
            [
-             {:import, [line: 4], [{:__aliases__, [line: 4], [:TestModule1]}]},
-             {:import, [line: 4], [{:__aliases__, [line: 4], [:TestModule3]}]}
+             {:import, [line: 4], [{:__aliases__, [line: 4], @module_1}]},
+             {:import, [line: 4], [{:__aliases__, [line: 4], @module_3}]}
            ]}
         ]
       ]}
@@ -106,21 +73,13 @@ defmodule Hologram.Compiler.ExpanderTest do
   end
 
   test "single quote at the root of __using__ macro with a single expression" do
-    # normalized AST from:
-    #
-    # defmodule Test do
-    #   use TestModule2
-    # end
+    code = """
+    defmodule Test do
+      use Hologram.Test.Fixtures.Compiler.Expander.Module2
+    end
+    """
 
-    ast =
-      {:defmodule, [line: 1],
-        [
-          {:__aliases__, [line: 1], [:Test]},
-          [
-            do: {:__block__, [],
-              [{:use, [line: 2], [{:__aliases__, [line: 2], [:TestModule2]}]}]}
-          ]
-        ]}
+    ast = ast(code)
 
     result = Expander.expand(ast)
 
@@ -130,7 +89,7 @@ defmodule Hologram.Compiler.ExpanderTest do
         {:__aliases__, [line: 1], [:Test]},
         [
           do: {:__block__, [],
-            [{:import, [line: 4], [{:__aliases__, [line: 4], [:TestModule1]}]}]}
+            [{:import, [line: 4], [{:__aliases__, [line: 4], @module_1}]}]}
         ]
       ]}
 
@@ -138,21 +97,13 @@ defmodule Hologram.Compiler.ExpanderTest do
   end
 
   test "single quote at the root of __using__ macro with multiple expressions" do
-    # normalized AST from:
-    #
-    # defmodule Test do
-    #   use TestModule5
-    # end
+    code = """
+    defmodule Test do
+      use Hologram.Test.Fixtures.Compiler.Expander.Module5
+    end
+    """
 
-    ast =
-      {:defmodule, [line: 1],
-        [
-          {:__aliases__, [line: 1], [:Test]},
-          [
-            do: {:__block__, [],
-              [{:use, [line: 2], [{:__aliases__, [line: 2], [:TestModule5]}]}]}
-          ]
-        ]}
+    ast = ast(code)
 
     result = Expander.expand(ast)
 
@@ -163,8 +114,8 @@ defmodule Hologram.Compiler.ExpanderTest do
         [
           do: {:__block__, [],
             [
-              {:import, [line: 4], [{:__aliases__, [line: 4], [:TestModule1]}]},
-              {:import, [line: 5], [{:__aliases__, [line: 5], [:TestModule3]}]}
+              {:import, [line: 4], [{:__aliases__, [line: 4], @module_1}]},
+              {:import, [line: 5], [{:__aliases__, [line: 5], @module_3}]}
             ]
           }
         ]
