@@ -1,30 +1,19 @@
 defmodule Hologram.Compiler.NormalizerTest do
   use ExUnit.Case, async: true
+
   alias Hologram.Compiler.Normalizer
+  alias Hologram.Compiler.Parser
 
   test "do expression with non-nested block" do
-    # AST from:
-    #
-    # defmodule Test do
-    #   alias Abc
+    code = """
+    defmodule Test do
+      def test do
+        1
+      end
+    end
+    """
 
-    #   def test do
-    #     1
-    #   end
-    # end
-
-    ast =
-      {:defmodule, [line: 1],
-      [
-        {:__aliases__, [line: 1], [:Test]},
-        [
-          do: {:__block__, [],
-          [
-            {:alias, [line: 2], [{:__aliases__, [line: 2], [:Abc]}]},
-            {:def, [line: 4], [{:test, [line: 4], nil}, [do: 1]]}
-          ]}
-        ]
-      ]}
+    ast = Parser.parse!(code)
 
     result = Normalizer.normalize(ast)
 
@@ -34,11 +23,10 @@ defmodule Hologram.Compiler.NormalizerTest do
         {:__aliases__, [line: 1], [:Test]},
         [
           do: {:__block__, [],
-            [
-              {:alias, [line: 2], [{:__aliases__, [line: 2], [:Abc]}]},
-              {:def, [line: 4],
-              [{:test, [line: 4], nil}, [do: {:__block__, [], [1]}]]}
-            ]}
+           [
+             {:def, [line: 2],
+              [{:test, [line: 2], nil}, [do: {:__block__, [], [1]}]]}
+           ]}
         ]
       ]}
 
@@ -46,70 +34,50 @@ defmodule Hologram.Compiler.NormalizerTest do
   end
 
   test "do expression with nested block" do
-    # AST from:
-    #
-    # defmodule Test do
-    #   alias Abc
+    code = """
+    defmodule Test do
+      def test do
+        nested do
+          1
+        end
+      end
+    end
+    """
 
-    #   def test do
-    #     nested do
-    #       1
-    #     end
-    #   end
-    # end
-
-    ast =
-      {:defmodule, [line: 1],
-      [
-        {:__aliases__, [line: 1], [:Test]},
-        [
-          do: {:__block__, [],
-            [
-              {:alias, [line: 2], [{:__aliases__, [line: 2], [:Abc]}]},
-              {:def, [line: 4],
-              [{:test, [line: 4], nil}, [do: {:nested, [line: 5], [[do: 1]]}]]}
-            ]}
-        ]
-      ]}
+    ast = Parser.parse!(code)
 
     result = Normalizer.normalize(ast)
 
     expected =
       {:defmodule, [line: 1],
-      [
-        {:__aliases__, [line: 1], [:Test]},
         [
-          do: {:__block__, [],
-            [
-              {:alias, [line: 2], [{:__aliases__, [line: 2], [:Abc]}]},
-              {:def, [line: 4],
+          {:__aliases__, [line: 1], [:Test]},
+          [
+            do: {:__block__, [],
               [
-                {:test, [line: 4], nil},
+                {:def, [line: 2],
                 [
-                  do: {:__block__, [],
-                    [{:nested, [line: 5], [[do: {:__block__, [], [1]}]]}]}
-                ]
+                  {:test, [line: 2], nil},
+                  [
+                    do: {:__block__, [],
+                      [{:nested, [line: 3], [[do: {:__block__, [], [1]}]]}]}
+                  ]
+                ]}
               ]}
-            ]}
-        ]
-      ]}
+          ]
+        ]}
 
     assert result == expected
   end
 
   test "do expression without block" do
-    # AST from:
-    #
-    # defmodule Test do
-    #   alias Abc
-    # end
+    code = """
+    defmodule Test do
+      alias Abc
+    end
+    """
 
-    ast =
-      {:defmodule, [line: 1],
-        [
-          {:__aliases__, [line: 1], [:Test]},
-          [do: {:alias, [line: 2], [{:__aliases__, [line: 2], [:Abc]}]}]
-        ]}
+    ast = Parser.parse!(code)
 
     result = Normalizer.normalize(ast)
 
@@ -124,5 +92,13 @@ defmodule Hologram.Compiler.NormalizerTest do
         ]}
 
     assert result == expected
+  end
+
+  test "other expression" do
+    code = "1 + 2"
+    ast = Parser.parse!(code)
+    
+    result = Normalizer.normalize(ast)
+    assert result == ast
   end
 end
