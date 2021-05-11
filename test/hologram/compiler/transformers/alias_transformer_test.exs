@@ -1,12 +1,12 @@
 defmodule Hologram.Compiler.AliasTransformerTest do
-  use ExUnit.Case, async: true
+  use Hologram.TestCase, async: true
 
   alias Hologram.Compiler.AliasTransformer
   alias Hologram.Compiler.AST.Alias
 
   test "default as" do
-    # alias Abc.Bcd
-    ast = [{:__aliases__, [line: 1], [:Abc, :Bcd]}]
+    code = "alias Abc.Bcd"
+    {:alias, _, ast} = ast(code)
 
     result = AliasTransformer.transform(ast)
     expected = %Alias{module: [:Abc, :Bcd], as: [:Bcd]}
@@ -15,12 +15,8 @@ defmodule Hologram.Compiler.AliasTransformerTest do
   end
 
   test "specified one-part as" do
-    # alias Abc.Bcd, as: Xyz
-    ast =
-      [
-        {:__aliases__, [line: 1], [:Abc, :Bcd]},
-        [as: {:__aliases__, [line: 1], [:Xyz]}]
-      ]
+    code = "alias Abc.Bcd, as: Xyz"
+    {:alias, _, ast} = ast(code)
 
     result = AliasTransformer.transform(ast)
     expected = %Alias{module: [:Abc, :Bcd], as: [:Xyz]}
@@ -29,12 +25,8 @@ defmodule Hologram.Compiler.AliasTransformerTest do
   end
 
   test "specified multiple-part as" do
-    # alias Abc.Bcd, as: Xyz.Kmn
-    ast =
-      [
-        {:__aliases__, [line: 1], [:Abc, :Bcd]},
-        [as: {:__aliases__, [line: 1], [:Xyz, :Kmn]}]
-      ]
+    code = "alias Abc.Bcd, as: Xyz.Kmn"
+    {:alias, _, ast} = ast(code)
 
     result = AliasTransformer.transform(ast)
     expected = %Alias{module: [:Abc, :Bcd], as: [:Xyz, :Kmn]}
