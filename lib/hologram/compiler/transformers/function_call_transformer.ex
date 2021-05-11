@@ -8,9 +8,21 @@ defmodule Hologram.Compiler.FunctionCallTransformer do
     params = transform_call_params(params, context)
 
     resolved_module =
-      resolve_module(called_module, function, params, context)
+      resolve_called_module(called_module, function, params, context)
 
     %FunctionCall{module: resolved_module, function: function, params: params}
+  end
+
+  defp resolve_called_module(called_module, function, params, context) do
+    arity = Enum.count(params)
+
+    if Enum.count(called_module) == 0 do
+      imported_module = resolve_imported_module(function, arity, context[:imports])
+      if imported_module, do: imported_module, else: context[:module]
+    else
+      aliased_module = Resolver.resolve(called_module, context[:aliases])
+      if aliased_module, do: aliased_module, else: called_module
+    end
   end
 
   defp resolve_imported_module(function, arity, imports) do
@@ -21,18 +33,6 @@ defmodule Hologram.Compiler.FunctionCallTransformer do
       end)
 
     if resolved, do: resolved.module, else: nil
-  end
-
-  defp resolve_module(called_module, function, params, context) do
-    arity = Enum.count(params)
-
-    if Enum.count(called_module) == 0 do
-      imported_module = resolve_imported_module(function, arity, context[:imports])
-      if imported_module, do: imported_module, else: context[:module]
-    else
-      aliased_module = Resolver.resolve(called_module, context[:aliases])
-      if aliased_module, do: aliased_module, else: called_module
-    end
   end
 
   defp transform_call_params(params, context) do
