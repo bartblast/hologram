@@ -4,8 +4,4 @@ defmodule Hologram.Test.Fixtures.Compiler.Expander.Module2 do
       import Hologram.Test.Fixtures.Compiler.Expander.Module1
     end
   end
-
-  def test do
-    1
-  end
 end
