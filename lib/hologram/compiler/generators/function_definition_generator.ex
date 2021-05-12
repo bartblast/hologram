@@ -1,18 +1,10 @@
 defmodule Hologram.Compiler.FunctionDefinitionGenerator do
   alias Hologram.Compiler.AST.{AccessOperator, Variable}
-  alias Hologram.Compiler.Generator
+  alias Hologram.Compiler.{Generator, MapKeyGenerator}
 
   def generate(name, variants, context) do
-    body =
-      case generate_body(variants, context) do
-        "" ->
-          "{}\n"
-
-        exprs ->
-          "{\n#{exprs}}"
-      end
-
-    "static #{name}() #{body}\n"
+    body = generate_body(variants, context)
+    "static #{name}() {\n#{body}}\n"
   end
 
   defp generate_body(variants, context) do
@@ -35,9 +27,7 @@ defmodule Hologram.Compiler.FunctionDefinitionGenerator do
       body = generate_exprs(variant, context)
 
       code = """
-      #{statement} (Hologram.patternMatchFunctionArgs(#{params}, arguments)) {
-      #{vars}
-      #{body}
+      #{statement} (Hologram.patternMatchFunctionArgs(#{params}, arguments)) {#{vars}#{body}
       }
       """
 
@@ -47,7 +37,7 @@ defmodule Hologram.Compiler.FunctionDefinitionGenerator do
 
   defp generate_expr(expr, idx, expr_count, context) do
     return = if idx == expr_count - 1, do: "return ", else: ""
-    "#{return}#{Generator.generate(expr, context)};"
+    "\n#{return}#{Generator.generate(expr, context)};"
   end
 
   defp generate_exprs(variant, context) do
@@ -55,7 +45,6 @@ defmodule Hologram.Compiler.FunctionDefinitionGenerator do
 
     Enum.with_index(variant.body)
     |> Enum.map(fn {expr, idx} -> generate_expr(expr, idx, expr_count, context) end)
-    |> Enum.join("\n")
   end
 
   defp generate_params(variant, context) do
@@ -67,24 +56,25 @@ defmodule Hologram.Compiler.FunctionDefinitionGenerator do
   end
 
   defp generate_var({name, {idx, path}}) do
-    acc = "let #{name} = "
+    acc = "\nlet #{name} = arguments[#{idx}]"
 
-    Enum.reduce(path, acc, fn type, acc ->
-      acc
-      <>
-      case type do
-        %AccessOperator{key: key} ->
-          "['#{key}']"
+    value =
+      Enum.reduce(path, acc, fn type, acc ->
+        acc
+        <>
+        case type do
+          %AccessOperator{key: key} ->
+            ".data['#{MapKeyGenerator.generate(key)}']"
 
-        %Variable{name: name} ->
-          "arguments[#{idx}]"
-      end
-    end)
-    <> ";"
+          %Variable{name: name} ->
+            ""
+        end
+      end)
+
+    "#{value};"
   end
 
   defp generate_vars(variant) do
     Enum.map(variant.bindings, &generate_var(&1))
-    |> Enum.join("\n")
   end
 end
