@@ -27,7 +27,7 @@ defmodule Hologram.Compiler.FunctionDefinitionGenerator do
     """
   end
 
-  def generate_body_valid_cases(variants, context) do
+  defp generate_body_valid_cases(variants, context) do
     Enum.reduce(variants, "", fn variant, acc ->
       statement = if acc == "", do: "if", else: "else if"
       params = generate_params(variant, context)
