@@ -1,7 +1,5 @@
 defmodule Hologram.Compiler.FunctionDefinitionGeneratorTest do
   use Hologram.TestCase, async: true
-
-  alias Hologram.Compiler.AST.FunctionDefinition
   alias Hologram.Compiler.FunctionDefinitionGenerator
 
   setup do
