@@ -1,51 +1,51 @@
 defmodule Hologram.Compiler.StructTypeTransformerTest do
-  use ExUnit.Case, async: true
+  use Hologram.TestCase, async: true
 
   alias Hologram.Compiler.AST.{Alias, AtomType, IntegerType, StructType}
   alias Hologram.Compiler.StructTypeTransformer
 
-   test "not aliased" do
-    ast = {:%{}, [line: 1], [a: 2]}
+  test "not aliased" do
+    code = "%TestStruct{a: 1}"
 
-    context = [module: [:Bcd], imports: [], aliases: []]
-    result = StructTypeTransformer.transform(ast, [:Abc], context)
+    {:%, _, [{_, _, module}, ast]} = ast(code)
+    context = [module: [:Abc], imports: [], aliases: []]
 
-    expected = %StructType{
-      data: [
-        {
-          %AtomType{value: :a},
-          %IntegerType{value: 2}
-        }
-      ],
-      module: [:Abc]
-    }
+    result = StructTypeTransformer.transform(ast, module, context)
+
+    expected =
+      %StructType{
+        data: [
+          {%AtomType{value: :a},
+           %IntegerType{value: 1}}
+        ],
+        module: [:TestStruct]
+      }
 
     assert result == expected
   end
 
   test "aliased" do
-    ast = {:%{}, [line: 1], [a: 2]}
+    code = "%Cde{a: 1}"
+    {:%, _, [{_, _, module}, ast]} = ast(code)
 
     context = [
-      module: [:Xyz],
+      module: [:Abc],
       imports: [],
       aliases: [
-        %Alias{module: [:Abc, :Bcd], as: [:Bcd]},
         %Alias{module: [:Bcd, :Cde], as: [:Cde]}
       ]
     ]
 
-    result = StructTypeTransformer.transform(ast, [:Cde], context)
+    result = StructTypeTransformer.transform(ast, module, context)
 
-    expected = %StructType{
-      data: [
-        {
-          %AtomType{value: :a},
-          %IntegerType{value: 2}
-        }
-      ],
-      module: [:Bcd, :Cde]
-    }
+    expected =
+      %StructType{
+        data: [
+          {%AtomType{value: :a},
+           %IntegerType{value: 1}}
+        ],
+        module: [:Bcd, :Cde]
+      }
 
     assert result == expected
   end
