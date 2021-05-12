@@ -46,16 +46,16 @@ defmodule Hologram.Compiler.Generator do
     PrimitiveTypeGenerator.generate(:integer, "#{value}")
   end
 
-  def generate(%MapType{data: data}, context, _) do
-    MapTypeGenerator.generate(data, context)
+  def generate(%MapType{data: data}, context, opts) do
+    MapTypeGenerator.generate(data, context, opts)
   end
 
   def generate(%StringType{value: value}, _, _) do
     PrimitiveTypeGenerator.generate(:string, "'#{value}'")
   end
 
-  def generate(%StructType{module: module, data: data}, context, _) do
-    StructTypeGenerator.generate(module, data, context)
+  def generate(%StructType{module: module, data: data}, context, opts) do
+    StructTypeGenerator.generate(module, data, context, opts)
   end
 
   # OPERATORS

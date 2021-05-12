@@ -2,14 +2,14 @@ defmodule Hologram.Compiler.MapTypeGenerator do
   alias Hologram.Compiler.Generator
   alias Hologram.Compiler.MapKeyGenerator
 
-  def generate(data, context) do
-    "{ type: 'map', data: #{generate_data(data, context)} }"
+  def generate(data, context, opts) do
+    "{ type: 'map', data: #{generate_data(data, context, opts)} }"
   end
 
-  def generate_data(data, context) do
+  def generate_data(data, context, opts) do
     fields =
       Enum.map(data, fn {k, v} ->
-        "'#{MapKeyGenerator.generate(k, context)}': #{Generator.generate(v, context)}"
+        "'#{MapKeyGenerator.generate(k, context)}': #{Generator.generate(v, context, opts)}"
       end)
       |> Enum.join(", ")
 

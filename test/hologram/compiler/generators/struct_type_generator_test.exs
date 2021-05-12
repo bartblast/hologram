@@ -4,11 +4,11 @@ defmodule Hologram.Compiler.StructTypeGeneratorTest do
   alias Hologram.Compiler.AST.{AtomType, IntegerType}
   alias Hologram.Compiler.StructTypeGenerator
 
-  test "generate/3" do
+  test "generate/4" do
     data = [{%AtomType{value: :a}, %IntegerType{value: 1}}]
     module = [:Abc, :Bcd]
 
-    result = StructTypeGenerator.generate(module, data, [])
+    result = StructTypeGenerator.generate(module, data, [], [])
 
     expected =
       "{ type: 'struct', module: 'Abc.Bcd', data: { '~atom[a]': { type: 'integer', value: 1 } } }"

@@ -8,10 +8,10 @@ defmodule Hologram.Compiler.MapTypeGeneratorTest do
     []
   end
 
-  test "generate/1", context do
+  test "generate/3", context do
     ast = %MapType{data: [{%AtomType{value: :a}, %IntegerType{value: 1}}]}
 
-    result = MapTypeGenerator.generate(ast.data, context)
+    result = MapTypeGenerator.generate(ast.data, context, [])
 
     expected =
       "{ type: 'map', data: { '~atom[a]': { type: 'integer', value: 1 } } }"
@@ -19,11 +19,11 @@ defmodule Hologram.Compiler.MapTypeGeneratorTest do
     assert result == expected
   end
 
-  describe "generate_data/1" do
+  describe "generate_data/3" do
     test "empty data", context do
       data = []
 
-      result = MapTypeGenerator.generate_data(data, context)
+      result = MapTypeGenerator.generate_data(data, context, [])
       expected = "{}"
 
       assert result == expected
@@ -35,7 +35,7 @@ defmodule Hologram.Compiler.MapTypeGeneratorTest do
         {%AtomType{value: :b}, %IntegerType{value: 2}}
       ]
 
-      result = MapTypeGenerator.generate_data(data, context)
+      result = MapTypeGenerator.generate_data(data, context, [])
 
       expected =
         "{ '~atom[a]': { type: 'integer', value: 1 }, '~atom[b]': { type: 'integer', value: 2 } }"
@@ -65,7 +65,7 @@ defmodule Hologram.Compiler.MapTypeGeneratorTest do
         }
       ]
 
-      result = MapTypeGenerator.generate_data(data, context)
+      result = MapTypeGenerator.generate_data(data, context, [])
 
       expected =
         "{ '~atom[a]': { type: 'integer', value: 1 }, '~atom[b]': { type: 'map', data: { '~atom[c]': { type: 'integer', value: 2 }, '~atom[d]': { type: 'map', data: { '~atom[e]': { type: 'integer', value: 3 }, '~atom[f]': { type: 'integer', value: 4 } } } } } }"
