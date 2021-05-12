@@ -19,7 +19,6 @@ defmodule Hologram.Compiler.FunctionDefinitionGeneratorTest do
   # variable access, map access
   # only return statement, expression + return statement
 
-
   test "no args, no vars, only return statement", context do
     code = """
     def test, do: nil
