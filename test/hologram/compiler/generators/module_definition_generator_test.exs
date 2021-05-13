@@ -4,9 +4,7 @@ defmodule Hologram.Compiler.ModuleDefinitionGeneratorTest do
   alias Hologram.Compiler.AST.{FunctionDefinition, IntegerType, ModuleDefinition, Variable}
   alias Hologram.Compiler.Generator
 
-  # TODO: test aliases
-
-  test "single function without muliptle variants" do
+  test "single function with single variant" do
     ast = %ModuleDefinition{
       aliases: [],
       attributes: [],
@@ -18,21 +16,21 @@ defmodule Hologram.Compiler.ModuleDefinitionGeneratorTest do
           body: [
             %IntegerType{value: 1}
           ],
-          name: :test_1,
+          name: :test,
           params: [
             %Variable{name: :a}
           ]
         }
       ],
-      name: [:Prefix, :Test]
+      name: [:Abc, :Bcd]
     }
 
     result = Generator.generate(ast)
 
     expected = """
-    class PrefixTest {
+    class AbcBcd {
 
-    static test_1() {
+    static test() {
     if (Hologram.patternMatchFunctionArgs([{ type: 'variable', name: 'a' }], arguments)) {
     let a = arguments[0];
     return { type: 'integer', value: 1 };
@@ -60,7 +58,7 @@ defmodule Hologram.Compiler.ModuleDefinitionGeneratorTest do
           body: [
             %IntegerType{value: 1}
           ],
-          name: :test_1,
+          name: :test,
           params: [
             %Variable{name: :a}
           ]
@@ -71,25 +69,24 @@ defmodule Hologram.Compiler.ModuleDefinitionGeneratorTest do
             b: {1, [%Variable{name: :b}]}
           ],
           body: [
-            %IntegerType{value: 1},
             %IntegerType{value: 2}
           ],
-          name: :test_1,
+          name: :test,
           params: [
             %Variable{name: :a},
             %Variable{name: :b}
           ]
         }
       ],
-      name: [:Prefix, :Test]
+      name: [:Abc, :Bcd]
     }
 
     result = Generator.generate(ast)
 
     expected = """
-    class PrefixTest {
+    class AbcBcd {
 
-    static test_1() {
+    static test() {
     if (Hologram.patternMatchFunctionArgs([{ type: 'variable', name: 'a' }], arguments)) {
     let a = arguments[0];
     return { type: 'integer', value: 1 };
@@ -97,7 +94,6 @@ defmodule Hologram.Compiler.ModuleDefinitionGeneratorTest do
     else if (Hologram.patternMatchFunctionArgs([{ type: 'variable', name: 'a' }, { type: 'variable', name: 'b' }], arguments)) {
     let a = arguments[0];
     let b = arguments[1];
-    { type: 'integer', value: 1 };
     return { type: 'integer', value: 2 };
     }
     else {
@@ -111,7 +107,7 @@ defmodule Hologram.Compiler.ModuleDefinitionGeneratorTest do
     assert result == expected
   end
 
-  test "multiple functions without multiple variants" do
+  test "multiple functions with single variant" do
     ast = %ModuleDefinition{
       aliases: [],
       attributes: [],
@@ -133,7 +129,7 @@ defmodule Hologram.Compiler.ModuleDefinitionGeneratorTest do
             a: {0, [%Variable{name: :a}]}
           ],
           body: [
-            %IntegerType{value: 1}
+            %IntegerType{value: 2}
           ],
           name: :test_2,
           params: [
@@ -141,13 +137,13 @@ defmodule Hologram.Compiler.ModuleDefinitionGeneratorTest do
           ]
         }
       ],
-      name: [:Prefix, :Test]
+      name: [:Abc, :Bcd]
     }
 
     result = Generator.generate(ast)
 
     expected = """
-    class PrefixTest {
+    class AbcBcd {
 
     static test_1() {
     if (Hologram.patternMatchFunctionArgs([{ type: 'variable', name: 'a' }], arguments)) {
@@ -162,7 +158,7 @@ defmodule Hologram.Compiler.ModuleDefinitionGeneratorTest do
     static test_2() {
     if (Hologram.patternMatchFunctionArgs([{ type: 'variable', name: 'a' }], arguments)) {
     let a = arguments[0];
-    return { type: 'integer', value: 1 };
+    return { type: 'integer', value: 2 };
     }
     else {
     throw 'No match for the function call'
@@ -198,7 +194,6 @@ defmodule Hologram.Compiler.ModuleDefinitionGeneratorTest do
             b: {1, [%Variable{name: :b}]}
           ],
           body: [
-            %IntegerType{value: 1},
             %IntegerType{value: 2}
           ],
           name: :test_1,
@@ -212,7 +207,7 @@ defmodule Hologram.Compiler.ModuleDefinitionGeneratorTest do
             a: {0, [%Variable{name: :a}]}
           ],
           body: [
-            %IntegerType{value: 1}
+            %IntegerType{value: 3}
           ],
           name: :test_2,
           params: [
@@ -220,13 +215,13 @@ defmodule Hologram.Compiler.ModuleDefinitionGeneratorTest do
           ]
         }
       ],
-      name: [:Prefix, :Test]
+      name: [:Abc, :Bcd]
     }
 
     result = Generator.generate(ast)
 
     expected = """
-    class PrefixTest {
+    class AbcBcd {
 
     static test_1() {
     if (Hologram.patternMatchFunctionArgs([{ type: 'variable', name: 'a' }], arguments)) {
@@ -236,7 +231,6 @@ defmodule Hologram.Compiler.ModuleDefinitionGeneratorTest do
     else if (Hologram.patternMatchFunctionArgs([{ type: 'variable', name: 'a' }, { type: 'variable', name: 'b' }], arguments)) {
     let a = arguments[0];
     let b = arguments[1];
-    { type: 'integer', value: 1 };
     return { type: 'integer', value: 2 };
     }
     else {
@@ -247,7 +241,7 @@ defmodule Hologram.Compiler.ModuleDefinitionGeneratorTest do
     static test_2() {
     if (Hologram.patternMatchFunctionArgs([{ type: 'variable', name: 'a' }], arguments)) {
     let a = arguments[0];
-    return { type: 'integer', value: 1 };
+    return { type: 'integer', value: 3 };
     }
     else {
     throw 'No match for the function call'

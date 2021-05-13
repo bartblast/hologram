@@ -1,7 +1,6 @@
 defmodule Hologram.Compiler.ModuleDefinitionGenerator do
   alias Hologram.Compiler.AST.FunctionDefinition
-  alias Hologram.Compiler.FunctionDefinitionGenerator
-  alias Hologram.Compiler.Helpers
+  alias Hologram.Compiler.{FunctionDefinitionGenerator, Helpers}
 
   def generate(ast, name) do
     context = [class_name: Helpers.class_name(name)]
@@ -20,18 +19,11 @@ defmodule Hologram.Compiler.ModuleDefinitionGenerator do
   end
 
   defp aggregate_functions(module) do
-    Enum.reduce(module.functions, %{}, fn expr, acc ->
-      case expr do
-        %FunctionDefinition{name: name} = fun ->
-          if Map.has_key?(acc, name) do
-            Map.put(acc, name, acc[name] ++ [fun])
-          else
-            Map.put(acc, name, [fun])
-          end
-
-        # TODO: determine what's this case for, comment and test it
-        _ ->
-          acc
+    Enum.reduce(module.functions, %{}, fn fun, acc ->
+      if Map.has_key?(acc, fun.name) do
+        Map.put(acc, fun.name, acc[fun.name] ++ [fun])
+      else
+        Map.put(acc, fun.name, [fun])
       end
     end)
   end
