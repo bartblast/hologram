@@ -1,6 +1,5 @@
 defmodule Hologram.Compiler.MapTypeGenerator do
-  alias Hologram.Compiler.Generator
-  alias Hologram.Compiler.MapKeyGenerator
+  alias Hologram.Compiler.{Generator, MapKeyGenerator}
 
   def generate(data, context, opts) do
     "{ type: 'map', data: #{generate_data(data, context, opts)} }"
