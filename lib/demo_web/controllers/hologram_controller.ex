@@ -44,7 +44,7 @@ defmodule DemoWeb.HologramController do
     <html>
       <head>
         <title>Hologram Demo</title>
-        <script  src="#{Routes.static_path(conn, "/js/hologram.js")}"></script>
+        <script src="#{Routes.static_path(conn, "/js/hologram.js")}"></script>
         <script>
     #{js}
     window.state = #{hydrated_state};
