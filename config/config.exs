@@ -7,7 +7,8 @@
 # General application configuration
 use Mix.Config
 
-config :hologram, :hologram,
+# Framework config
+config :hologram,
   pages_path: "lib/demo_web/hologram/pages"
 
 config :hologram,
