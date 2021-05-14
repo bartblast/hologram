@@ -7,6 +7,9 @@
 # General application configuration
 use Mix.Config
 
+config :hologram, :hologram,
+  pages_path: "lib/demo_web/hologram/pages"
+
 config :hologram,
   ecto_repos: [Demo.Repo]
 
