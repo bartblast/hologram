@@ -1,6 +1,8 @@
 defmodule DemoPage do
   use Hologram.Page
 
+  route "/demo"
+
   def state do
     %{
       counter: 0
