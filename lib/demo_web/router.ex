@@ -19,7 +19,7 @@ defmodule DemoWeb.Router do
 
     get "/", PageController, :index
 
-    hologram("/demo", DemoPage)
+    hologram_routes()
   end
 
   # Other scopes may use custom stacks.
