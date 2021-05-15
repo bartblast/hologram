@@ -13,6 +13,7 @@ defmodule Hologram.Router do
     end
   end
 
+  # TODO: test
   defmacro hologram_routes do
     for page <- find_pages() do
       quote do
@@ -21,6 +22,7 @@ defmodule Hologram.Router do
     end
   end
 
+  # TODO: test
   defp find_pages do
     app_name = Mix.Project.get.project[:app]
     app_path = File.cwd!()
