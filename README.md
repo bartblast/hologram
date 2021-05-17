@@ -28,3 +28,32 @@
 | String             | :x:                |     
 | Struct             | :x:                |     
 | Tuple              | :x:                |     
+
+#### Operators
+
+##### General Operators
+
+| Operator | Status             |
+| -------- |:------------------:|
+| unary +  | :x:                |
+| unary -  | :x:                |
+| +        | :x:                |
+| -        | :x:                |
+| *        | :x:                |
+| /        | :x:                |
+| ++       | :x:                |
+| --       | :x:                |
+| and      | :x:                |
+| &&       | :x:                |
+| or       | :x:                |
+| ||       | :x:                |
+| not      | :x:                |
+| !        | :x:                |
+| in       | :x:                |
+| not in   | :x:                |
+| @        | :x:                |
+| ..       | :x:                |
+| <>       | :x:                |
+| |>       | :x:                |
+| =~       | :x:                |
+
