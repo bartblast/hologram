@@ -25,3 +25,7 @@
 :x: String\
 :x: Struct\
 :x: Tuple
+
+| Status                  | Type               | 
+| ----------------------- | ------------------ |
+| :x:                     | Anonymous Function |
