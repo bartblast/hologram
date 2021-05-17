@@ -89,4 +89,18 @@
 | <<<      | :x:                |  
 | >>>      | :x:                |  
 | \|\|\|   | :x:                |  
-| ~~~      | :x:                |  
+| ~~~      | :x:                |
+
+#### Pattern Matching
+
+| Type      | Status             |
+| --------- |:------------------:|
+| Binary    | :x:                |
+| Bitstring | :x:                |
+| Charlist  | :x:                |
+| List      | :x:                |
+| Map       | :x:                |       
+| Range     | :x:                |          
+| Struct    | :x:                |          
+| Tuple     | :x:                |          
+| Other     | :x:                |          
