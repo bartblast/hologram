@@ -1,5 +1,5 @@
 defmodule Hologram.Compiler.NormalizerTest do
-  use ExUnit.Case, async: true
+  use Hologram.TestCase, async: true
 
   alias Hologram.Compiler.Normalizer
   alias Hologram.Compiler.Parser
@@ -97,7 +97,7 @@ defmodule Hologram.Compiler.NormalizerTest do
   test "other expression" do
     code = "1 + 2"
     ast = Parser.parse!(code)
-    
+
     result = Normalizer.normalize(ast)
     assert result == ast
   end

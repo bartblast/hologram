@@ -1,5 +1,5 @@
 defmodule Hologram.Template.RendererTest do
-  use ExUnit.Case, async: true
+  use Hologram.TestCase, async: true
 
   alias Hologram.Template.AST.Expression
   alias Hologram.Template.AST.TagNode

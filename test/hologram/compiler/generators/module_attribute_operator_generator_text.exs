@@ -1,5 +1,5 @@
 defmodule Hologram.Compiler.ModuleAttributeOperatorGeneratorTest do
-  use ExUnit.Case, async: true
+  use Hologram.TestCase, async: true
   alias Hologram.Compiler.ModuleAttributeOperatorGenerator
 
   test "generate/2" do

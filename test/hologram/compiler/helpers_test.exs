@@ -1,5 +1,5 @@
 defmodule Hologram.Compiler.HelpersTest do
-  use ExUnit.Case, async: true
+  use Hologram.TestCase, async: true
   alias Hologram.Compiler.Helpers
 
   test "class_name/1" do

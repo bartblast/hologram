@@ -1,5 +1,5 @@
 defmodule Hologram.PageTest do
-  use ExUnit.Case, async: true
+  use Hologram.TestCase, async: true
   alias Hologram.Page
 
   test "sigil_H/2" do

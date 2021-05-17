@@ -1,5 +1,5 @@
 defmodule Hologram.Compiler.EliminatorTest do
-  use ExUnit.Case, async: true
+  use Hologram.TestCase, async: true
 
   alias Hologram.Compiler.AST.{AtomType, FunctionDefinition}
   alias Hologram.Compiler.Eliminator

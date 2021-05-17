@@ -1,5 +1,5 @@
 defmodule Hologram.Template.IRGeneratorTest do
-  use ExUnit.Case, async: true
+  use Hologram.TestCase, async: true
 
   alias Hologram.Template.AST.{Expression, TagNode, TextNode}
   alias Hologram.Template.IRGenerator

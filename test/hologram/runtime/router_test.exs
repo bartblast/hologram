@@ -1,5 +1,5 @@
 defmodule Hologram.RouterTest do
-  use ExUnit.Case, async: true
+  use Hologram.TestCase, async: true
   require Hologram.Router
 
   test "hologram/2" do

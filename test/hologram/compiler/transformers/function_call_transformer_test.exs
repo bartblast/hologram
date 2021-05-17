@@ -1,5 +1,5 @@
 defmodule Hologram.Compiler.FunctionCallTransformerTest do
-  use ExUnit.Case, async: true
+  use Hologram.TestCase, async: true
 
   alias Hologram.Compiler.AST.{Alias, FunctionCall, Import, IntegerType}
   alias Hologram.Compiler.FunctionCallTransformer

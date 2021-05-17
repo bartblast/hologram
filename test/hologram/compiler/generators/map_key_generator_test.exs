@@ -1,5 +1,5 @@
 defmodule Hologram.Compiler.MapKeyGeneratorTest do
-  use ExUnit.Case, async: true
+  use Hologram.TestCase, async: true
 
   alias Hologram.Compiler.AST.{AtomType, BooleanType, IntegerType, StringType}
   alias Hologram.Compiler.MapKeyGenerator

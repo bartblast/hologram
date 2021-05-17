@@ -1,5 +1,5 @@
 defmodule Hologram.Compiler.StructTypeGeneratorTest do
-  use ExUnit.Case, async: true
+  use Hologram.TestCase, async: true
 
   alias Hologram.Compiler.AST.{AtomType, IntegerType}
   alias Hologram.Compiler.StructTypeGenerator

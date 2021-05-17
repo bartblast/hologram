@@ -1,5 +1,5 @@
 defmodule Hologram.Compiler.ProcessorTest do
-  use ExUnit.Case, async: true
+  use Hologram.TestCase, async: true
 
   alias Hologram.Compiler.AST.Alias
   alias Hologram.Compiler.Processor

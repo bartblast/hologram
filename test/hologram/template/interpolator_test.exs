@@ -1,5 +1,5 @@
 defmodule Hologram.Template.InterpolatorTest do
-  use ExUnit.Case, async: true
+  use Hologram.TestCase, async: true
 
   alias Hologram.Compiler.AST.ModuleAttributeOperator
   alias Hologram.Template.AST.{Expression, TagNode, TextNode}
@@ -172,7 +172,7 @@ defmodule Hologram.Template.InterpolatorTest do
     result = Interpolator.interpolate(nodes)
     assert result == nodes
   end
-  
+
   test "nested node" do
     nodes = [
       %TextNode{text: "abc{{ @bcd }}"},

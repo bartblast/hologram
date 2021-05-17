@@ -1,5 +1,5 @@
 defmodule Hologram.Template.TransformerTest do
-  use ExUnit.Case, async: true
+  use Hologram.TestCase, async: true
   import Hologram.Template.Parser, only: [parse!: 1]
 
   alias Hologram.Template.AST.{Expression, TagNode, TextNode}

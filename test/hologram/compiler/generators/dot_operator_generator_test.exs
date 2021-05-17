@@ -1,5 +1,5 @@
 defmodule Hologram.Compiler.DotOperatorGeneratorTest do
-  use ExUnit.Case, async: true
+  use Hologram.TestCase, async: true
 
   alias Hologram.Compiler.AST.{AtomType, Variable}
   alias Hologram.Compiler.DotOperatorGenerator

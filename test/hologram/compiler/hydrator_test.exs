@@ -1,5 +1,5 @@
 defmodule Hologram.Compiler.HydratorTest do
-  use ExUnit.Case, async: true
+  use Hologram.TestCase, async: true
   alias Hologram.Compiler.Hydrator
 
   test "hydrate/1" do

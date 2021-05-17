@@ -1,5 +1,5 @@
 defmodule Hologram.Compiler.MapTypeGeneratorTest do
-  use ExUnit.Case, async: true
+  use Hologram.TestCase, async: true
 
   alias Hologram.Compiler.AST.{AtomType, IntegerType, MapType}
   alias Hologram.Compiler.MapTypeGenerator
