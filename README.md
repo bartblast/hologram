@@ -5,8 +5,8 @@
 ### Elixir Syntax
 
 #### Types
-:x: Anonymous Function\
-:white_check_mark: Atom\
+
+ Atom\
 :x: Binary\
 :x: Bitstring\
 :x: Boolean\
@@ -26,6 +26,7 @@
 :x: Struct\
 :x: Tuple
 
-| Status                  | Type               | 
-| ----------------------- | ------------------ |
-| :x:                     | Anonymous Function |
+| Type               | Status             |
+| ------------------ |:------------------:|
+| Anonymous Function | :x:                |
+| Atom               | :white_check_mark: |
