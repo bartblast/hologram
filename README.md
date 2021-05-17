@@ -5,13 +5,23 @@
 ### Elixir Syntax
 
 #### Types
-:red_circle: Anonymous Function\
-:green_circle: Atom\
-:red_circle: Boolean\
-:red_circle: Float\
-:red_circle: Integer\
-:red_circle: List\
-:red_circle: Map\
-:red_circle: String\
-:red_circle: Struct\
-:red_circle: Tuple
+:x: Anonymous Function\
+:white_check_mark: Atom\
+:x: Binary\
+:x: Bitstring\
+:x: Boolean\
+:x: Charlist\
+:x: Exception\
+:x: Float\
+:x: Integer\
+:x: List\
+:x: Map\
+:x: Nil\
+:x: PID\
+:x: Port\
+:x: Range\
+:x: Reference\
+:x: Regex\
+:x: String\
+:x: Struct\
+:x: Tuple
