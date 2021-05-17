@@ -31,7 +31,7 @@
 
 #### Operators
 
-##### General Operators
+##### Overridable General Operators
 
 | Operator | Status             |
 | -------- |:------------------:|
@@ -56,9 +56,13 @@
 | <>       | :x:                |
 | \|>      | :x:                |
 | =~       | :x:                |
+
+##### Non-Overridable General Operators
+
+| Operator | Status             |
+| -------- |:------------------:|
 | ^        | :x:                |
 | .        | :x:                |
 | =        | :x:                |
 | &        | :x:                |
 | ::       | :x:                |
-
