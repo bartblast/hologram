@@ -6,7 +6,7 @@
 
 #### Types
 :red_circle: Anonymous Function\
-:white_check_mark: Atom\
+:green_circle: Atom\
 :red_circle: Boolean\
 :red_circle: Float\
 :red_circle: Integer\
