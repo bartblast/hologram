@@ -137,19 +137,22 @@
 | ----- |:------------------:|
 | ~c    | :x:                |
 | ~C    | :x:                |
+| ~D    | :x:                |
 | ~N    | :x:                |
 | ~r    | :x:                |
 | ~R    | :x:                |
 | ~s    | :x:                |
 | ~S    | :x:                |
+| ~T    | :x:                |
 | ~U    | :x:                |
 | ~w    | :x:                |
 | ~W    | :x:                |
 
 #### Other
 
-| Item                          | Status             |
+| Feature                       | Status             |
 | ----------------------------- |:------------------:|
+| Custom Sigils                 | :x:                |
 | Default Arguments             | :x:                |
 | Function Capturing            | :x:                |
 | Map Update Syntax             | :x:                |
