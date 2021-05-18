@@ -170,4 +170,5 @@
 #### Not on Roadmap
 * Types: PID, Port, Reference
 * Control Flow: Exit
+* Operators: Custom Operators, Operator Overriding
 * Other: Erlang Libraries
