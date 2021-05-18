@@ -19,11 +19,8 @@
 | Integer            | :x:                |     
 | List               | :x:                |     
 | Map                | :x:                |     
-| Nil                | :x:                |     
-| PID                | :x:                |     
-| Port               | :x:                |     
+| Nil                | :x:                |    
 | Range              | :x:                |     
-| Reference          | :x:                |     
 | Regex              | :x:                |     
 | String             | :x:                |     
 | Struct             | :x:                |     
@@ -114,3 +111,21 @@
 | Cond      | :x:                |
 | If        | :x:                |
 | Unless    | :x:                |
+
+#### Definitions
+
+| Structure        | Status             |
+| ---------------- |:------------------:|
+| Function         | :x:                |
+| Module           | :x:                |
+| Module Attribute | :x:                |
+
+#### Other
+
+| Item               | Status             |
+| ------------------ |:------------------:|
+| Default Arguments  | :x:                |
+| Function Capturing | :x:                |
+
+#### Not on Roadmap
+* Types: PID, Port, Reference
