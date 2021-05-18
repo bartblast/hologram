@@ -131,6 +131,21 @@
 | Require          | :x:                |
 | Use              | :x:                |
 
+#### Sigils
+
+| Sigil | Status             |
+| ----- |:------------------:|
+| ~c    | :x:                |
+| ~C    | :x:                |
+| ~N    | :x:                |
+| ~r    | :x:                |
+| ~R    | :x:                |
+| ~s    | :x:                |
+| ~S    | :x:                |
+| ~U    | :x:                |
+| ~w    | :x:                |
+| ~W    | :x:                |
+
 #### Other
 
 | Item                          | Status             |
