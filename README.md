@@ -1,6 +1,6 @@
 # Hologram
 
-## Features
+## Roadmap
 
 ### Elixir Syntax
 
@@ -90,27 +90,28 @@
 
 #### Pattern Matching
 
-| Type      | Status             |
-| --------- |:------------------:|
-| Binary    | :x:                |
-| Bitstring | :x:                |
-| Case      | :x:                |
-| Charlist  | :x:                |
-| List      | :x:                |
-| Map       | :x:                |       
-| Range     | :x:                |          
-| Struct    | :x:                |          
-| Tuple     | :x:                |          
-| Other     | :x:                |
+| Type          | Status             |
+| ------------- |:------------------:|
+| Binary        | :x:                |
+| Bitstring     | :x:                |
+| Case          | :x:                |
+| Charlist      | :x:                |
+| Comprehension | :x:                |
+| List          | :x:                |
+| Map           | :x:                |       
+| Range         | :x:                |          
+| Struct        | :x:                |          
+| Tuple         | :x:                |          
 
 #### Control Flow
 
-| Structure | Status             |
-| --------- |:------------------:|
-| Case      | :x:                |
-| Cond      | :x:                |
-| If        | :x:                |
-| Unless    | :x:                |
+| Structure     | Status             |
+| ------------- |:------------------:|
+| Case          | :x:                |
+| Comprehension | :x:                |
+| Cond          | :x:                |
+| If            | :x:                |
+| Unless        | :x:                |
 
 #### Definitions
 
@@ -132,11 +133,13 @@
 
 #### Other
 
-| Item               | Status             |
-| ------------------ |:------------------:|
-| Default Arguments  | :x:                |
-| Function Capturing | :x:                |
-| Module Nesting     | :x:                |
+| Item                          | Status             |
+| ----------------------------- |:------------------:|
+| Default Arguments             | :x:                |
+| Function Capturing            | :x:                |
+| Map Update Syntax             | :x:                |
+| Module Attribute Accumulation | :x:                |
+| Module Nesting                | :x:                |
 
 #### Not on Roadmap
 * Types: PID, Port, Reference
