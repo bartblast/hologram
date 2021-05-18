@@ -97,10 +97,20 @@
 | --------- |:------------------:|
 | Binary    | :x:                |
 | Bitstring | :x:                |
+| Case      | :x:                |
 | Charlist  | :x:                |
 | List      | :x:                |
 | Map       | :x:                |       
 | Range     | :x:                |          
 | Struct    | :x:                |          
 | Tuple     | :x:                |          
-| Other     | :x:                |          
+| Other     | :x:                |
+
+#### Control Flow
+
+| Structure | Status             |
+| --------- |:------------------:|
+| Case      | :x:                |
+| Cond      | :x:                |
+| If        | :x:                |
+| Unless    | :x:                |
