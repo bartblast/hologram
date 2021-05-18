@@ -120,12 +120,23 @@
 | Module           | :x:                |
 | Module Attribute | :x:                |
 
+#### Directives
+
+| Directive        | Status             |
+| ---------------- |:------------------:|
+| Alias            | :x:                |
+| Import           | :x:                |
+| Multi            | :x:                |
+| Require          | :x:                |
+| Use              | :x:                |
+
 #### Other
 
 | Item               | Status             |
 | ------------------ |:------------------:|
 | Default Arguments  | :x:                |
 | Function Capturing | :x:                |
+| Module Nesting     | :x:                |
 
 #### Not on Roadmap
 * Types: PID, Port, Reference
