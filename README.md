@@ -107,16 +107,24 @@
 
 | Structure     | Status             |
 | ------------- |:------------------:|
+| After         | :x:                |
 | Case          | :x:                |
+| Catch         | :x:                |
 | Comprehension | :x:                |
 | Cond          | :x:                |
+| Else (If)     | :x:                |
+| Else (Rescue) | :x:                |
 | If            | :x:                |
+| Raise         | :x:                |
+| Rescue        | :x:                |
+| Throw         | :x:                |
 | Unless        | :x:                |
 
 #### Definitions
 
 | Structure        | Status             |
 | ---------------- |:------------------:|
+| Exception        | :x:                |
 | Function         | :x:                |
 | Module           | :x:                |
 | Module Attribute | :x:                |
@@ -161,3 +169,5 @@
 
 #### Not on Roadmap
 * Types: PID, Port, Reference
+* Control Flow: Exit
+* Other: Erlang Libraries
