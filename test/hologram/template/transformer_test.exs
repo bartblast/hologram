@@ -1,15 +1,14 @@
 defmodule Hologram.Template.TransformerTest do
   use Hologram.TestCase, async: true
-  import Hologram.Template.Parser, only: [parse!: 1]
 
   alias Hologram.Template.AST.{Expression, TagNode, TextNode}
-  alias Hologram.Template.Transformer
+  alias Hologram.Template.{Parser, Transformer}
   alias Hologram.Compiler.AST.{ModuleAttributeOperator}
 
   describe "transform/1" do
     test "tag nodes without attrs" do
       result =
-        parse!("<div><h1><span></span></h1></div>")
+        Parser.parse!("<div><h1><span></span></h1></div>")
         |> Transformer.transform()
 
       expected = [
@@ -37,7 +36,7 @@ defmodule Hologram.Template.TransformerTest do
       """
 
       result =
-        parse!(html)
+        Parser.parse!(html)
         |> Transformer.transform()
 
       expected = [
@@ -66,7 +65,7 @@ defmodule Hologram.Template.TransformerTest do
 
     test "text nodes" do
       result =
-        parse!("<div>test_text_1<h1><span>test_text_2</span></h1></div>")
+        Parser.parse!("<div>test_text_1<h1><span>test_text_2</span></h1></div>")
         |> Transformer.transform()
 
       expected = [
@@ -103,7 +102,7 @@ defmodule Hologram.Template.TransformerTest do
       """
 
       result =
-        parse!(html)
+        Parser.parse!(html)
         |> Transformer.transform()
 
       expected = [
@@ -148,7 +147,7 @@ defmodule Hologram.Template.TransformerTest do
       html = "<div>test_1{{ @x1 }}test_2{{ @x2 }}test_3</div>"
 
       result =
-        parse!(html)
+        Parser.parse!(html)
         |> Transformer.transform()
 
       expected = [
