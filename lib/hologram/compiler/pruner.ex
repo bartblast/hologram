@@ -1,13 +1,13 @@
-defmodule Hologram.Compiler.Eliminator do
+defmodule Hologram.Compiler.Pruner do
   alias Hologram.Compiler.AST.{FunctionCall, FunctionDefinition, ModuleDefinition}
 
   @doc """
-  Eliminates dead code.
+  Prunes unused modules and functions.
   """
-  def eliminate(compiled_modules, main_module) do
+  def prune(compiled_modules, main_module) do
     aggregate_used_functions(main_module, compiled_modules)
-    |> purge_redundant_functions(compiled_modules)
-    |> purge_redundant_modules()
+    |> prune_unused_functions(compiled_modules)
+    |> prune_unused_modules()
   end
 
   defp aggregate_used_functions(main_module, compiled_modules) do
@@ -46,7 +46,7 @@ defmodule Hologram.Compiler.Eliminator do
     acc
   end
 
-  defp purge_redundant_functions(used_functions, compiled_modules) do
+  defp prune_unused_functions(used_functions, compiled_modules) do
     Enum.map(compiled_modules, fn {module_name, module} ->
       preserved_functions =
         Enum.reduce(module.functions, [], fn function, acc ->
@@ -62,7 +62,7 @@ defmodule Hologram.Compiler.Eliminator do
     |> Enum.into(%{})
   end
 
-  defp purge_redundant_modules(compiled_modules) do
+  defp prune_unused_modules(compiled_modules) do
     Enum.filter(compiled_modules, fn {_, module} ->
       Enum.any?(module.functions)
     end)

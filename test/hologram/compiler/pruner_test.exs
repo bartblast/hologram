@@ -1,15 +1,14 @@
-defmodule Hologram.Compiler.EliminatorTest do
+defmodule Hologram.Compiler.PrunerTest do
   use Hologram.TestCase, async: true
 
   alias Hologram.Compiler.AST.{AtomType, FunctionDefinition}
-  alias Hologram.Compiler.Eliminator
-  alias Hologram.Compiler.Processor
+  alias Hologram.Compiler.{Processor, Pruner}
 
   test "preserves actions of arity 3 and functions called from these actions" do
-    main_module = [:Hologram, :Test, :Fixtures, :Compiler, :Eliminator, :Module1]
+    main_module = [:Hologram, :Test, :Fixtures, :Compiler, :Pruner, :Module1]
     compiled_modules = Processor.compile(main_module)
 
-    result = Eliminator.eliminate(compiled_modules, main_module)
+    result = Pruner.prune(compiled_modules, main_module)
 
     assert (Map.keys(result) |> Enum.count()) == 1
     assert Map.has_key?(result, main_module)
@@ -28,11 +27,11 @@ defmodule Hologram.Compiler.EliminatorTest do
   end
 
   test "preserves used functions from another module" do
-    main_module = [:Hologram, :Test, :Fixtures, :Compiler, :Eliminator, :Module2]
-    another_module = [:Hologram, :Test, :Fixtures, :Compiler, :Eliminator, :Module3]
+    main_module = [:Hologram, :Test, :Fixtures, :Compiler, :Pruner, :Module2]
+    another_module = [:Hologram, :Test, :Fixtures, :Compiler, :Pruner, :Module3]
     compiled_modules = Processor.compile(main_module)
 
-    result = Eliminator.eliminate(compiled_modules, main_module)
+    result = Pruner.prune(compiled_modules, main_module)
 
     assert (Map.keys(result) |> Enum.count()) == 2
     assert Map.has_key?(result, main_module)
@@ -42,21 +41,21 @@ defmodule Hologram.Compiler.EliminatorTest do
     assert [%FunctionDefinition{name: :test_3}] = result[another_module].functions
   end
 
-  test "purges redundant modules" do
-    main_module = [:Hologram, :Test, :Fixtures, :Compiler, :Eliminator, :Module4]
+  test "prunes unused modules" do
+    main_module = [:Hologram, :Test, :Fixtures, :Compiler, :Pruner, :Module4]
     compiled_modules = Processor.compile(main_module)
 
-    result = Eliminator.eliminate(compiled_modules, main_module)
+    result = Pruner.prune(compiled_modules, main_module)
 
     assert (Map.keys(result) |> Enum.count()) == 1
     assert Map.has_key?(result, main_module)
   end
 
   test "handles Elixir standard library functions" do
-    main_module = [:Hologram, :Test, :Fixtures, :Compiler, :Eliminator, :Module6]
+    main_module = [:Hologram, :Test, :Fixtures, :Compiler, :Pruner, :Module6]
     compiled_modules = Processor.compile(main_module)
 
-    result = Eliminator.eliminate(compiled_modules, main_module)
+    result = Pruner.prune(compiled_modules, main_module)
 
     assert (Map.keys(result) |> Enum.count()) == 1
     assert Map.has_key?(result, main_module)

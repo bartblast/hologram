@@ -1,11 +1,9 @@
 defmodule Hologram.Compiler.Builder do
-  alias Hologram.Compiler.Eliminator
-  alias Hologram.Compiler.Generator
-  alias Hologram.Compiler.Processor
+  alias Hologram.Compiler.{Generator, Processor, Pruner}
 
   def build(module) do
     Processor.compile(module)
-    |> Eliminator.eliminate(module)
+    |> Pruner.prune(module)
     |> Enum.reduce("", fn {_, ast}, acc ->
       acc <> "\n" <> Generator.generate(ast)
     end)
