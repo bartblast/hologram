@@ -209,6 +209,7 @@
 
 | Feature                       | Status             |
 | ----------------------------- |:------------------:|
+| Codepoints                    | :x:                |
 | Custom Sigils                 | :x:                |
 | Default Arguments             | :x:                |
 | Function Capturing            | :x:                |
