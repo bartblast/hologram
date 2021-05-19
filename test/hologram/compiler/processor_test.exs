@@ -6,43 +6,41 @@ defmodule Hologram.Compiler.ProcessorTest do
 
   describe "aliases" do
     test "no aliases" do
-      module_6 = [:TestModule6]
-
-      result = Processor.compile(module_6)
-
-      assert result[module_6].aliases == []
+      module = [:Hologram, :Test, :Fixtures, :Compiler, :Processor, :Module1]
+      result = Processor.compile(module)
+      assert result[module].aliases == []
     end
 
     test "non-nested alias" do
-      module_7 = [:TestModule7]
-      module_6 = [:TestModule6]
+      module_2 = [:Hologram, :Test, :Fixtures, :Compiler, :Processor, :Module2]
+      module_1 = [:Hologram, :Test, :Fixtures, :Compiler, :Processor, :Module1]
 
-      result = Processor.compile(module_7)
+      result = Processor.compile(module_2)
 
-      assert result[module_7].aliases == [%Alias{as: module_6, module: module_6}]
-      assert result[module_6].aliases == []
+      assert result[module_2].aliases == [%Alias{as: [:Module1], module: module_1}]
+      assert result[module_1].aliases == []
     end
 
     test "nested alias" do
-      module_10 = [:TestModule10]
-      module_7 = [:TestModule7]
-      module_6 = [:TestModule6]
+      module_5 = [:Hologram, :Test, :Fixtures, :Compiler, :Processor, :Module5]
+      module_2 = [:Hologram, :Test, :Fixtures, :Compiler, :Processor, :Module2]
+      module_1 = [:Hologram, :Test, :Fixtures, :Compiler, :Processor, :Module1]
 
-      result = Processor.compile(module_10)
+      result = Processor.compile(module_5)
 
-      assert result[module_10].aliases == [%Alias{as: module_7, module: module_7}]
-      assert result[module_7].aliases == [%Alias{as: module_6, module: module_6}]
-      assert result[module_6].aliases == []
+      assert result[module_5].aliases == [%Alias{as: [:Module2], module: module_2}]
+      assert result[module_2].aliases == [%Alias{as: [:Module1], module: module_1}]
+      assert result[module_1].aliases == []
     end
 
     test "alias circular dependency" do
-      module_8 = [:TestModule8]
-      module_9 = [:TestModule9]
+      module_3 = [:Hologram, :Test, :Fixtures, :Compiler, :Processor, :Module3]
+      module_4 = [:Hologram, :Test, :Fixtures, :Compiler, :Processor, :Module4]
 
-      result = Processor.compile(module_8)
+      result = Processor.compile(module_3)
 
-      assert result[module_8].aliases == [%Alias{as: module_9, module: module_9}]
-      assert result[module_9].aliases == [%Alias{as: module_8, module: module_8}]
+      assert result[module_3].aliases == [%Alias{as: [:Module4], module: module_4}]
+      assert result[module_4].aliases == [%Alias{as: [:Module3], module: module_3}]
     end
   end
 
