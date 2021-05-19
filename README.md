@@ -6,15 +6,16 @@
 
 #### Core
 
-| Feature    | Status             |
-| ---------- |:------------------:|
-| Actions    | :x:                |
-| Commands   | :x:                |
-| Components | :x:                |
-| Navigation | :x:                |
-| Pages      | :x:                |
-| Routing    | :x:                |
-| Templates  | :x:                |
+| Feature     | Status             |
+| ----------- |:------------------:|
+| Actions     | :x:                |
+| Commands    | :x:                |
+| Components  | :x:                |
+| Navigation  | :x:                |
+| Pages       | :x:                |
+| Routing     | :x:                |
+| Session     | :x:                |
+| Templates   | :x:                |
 
 #### Events
 
@@ -39,6 +40,16 @@
 | Touch End    | :x:                |
 | Touch Move   | :x:                |
 | Touch Start  | :x:                |
+
+#### Tools
+
+| Tool           | Status             |
+| -------------- |:------------------:|
+| Authentication | :x:                |
+| Authorization  | :x:                |
+| Caching        | :x:                |
+| Code Reload    | :x:                |
+| Time Travel    | :x:                |
 
 ### Elixir Syntax
 
