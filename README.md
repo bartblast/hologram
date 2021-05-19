@@ -2,6 +2,44 @@
 
 ## Roadmap
 
+### Runtime
+
+#### Core
+
+| Feature    | Status             |
+| ---------- |:------------------:|
+| Actions    | :x:                |
+| Commands   | :x:                |
+| Components | :x:                |
+| Navigation | :x:                |
+| Pages      | :x:                |
+| Routing    | :x:                |
+| Templates  | :x:                |
+
+#### Events
+
+| Event        | Status             |
+| ------------ |:------------------:|
+| Blur         | :x:                |
+| Change       | :x:                |
+| Click        | :x:                |
+| Focus        | :x:                |
+| Key Down     | :x:                |
+| Key Press    | :x:                |
+| Key Up       | :x:                |
+| Mouse Move   | :x:                |
+| Params       | :x:                |
+| Resize       | :x:                |
+| Scroll       | :x:                |
+| Select       | :x:                |
+| Submit       | :x:                |
+| Tap          | :x:                |
+| Target       | :x:                |
+| Touch Cancel | :x:                |
+| Touch End    | :x:                |
+| Touch Move   | :x:                |
+| Touch Start  | :x:                |
+
 ### Elixir Syntax
 
 #### Types
