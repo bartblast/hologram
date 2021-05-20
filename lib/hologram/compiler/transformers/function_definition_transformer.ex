@@ -1,5 +1,5 @@
 defmodule Hologram.Compiler.FunctionDefinitionTransformer do
-  alias Hologram.Compiler.AST.FunctionDefinition
+  alias Hologram.Compiler.IR.FunctionDefinition
   alias Hologram.Compiler.Binder
   alias Hologram.Compiler.Transformer
 

@@ -1,5 +1,5 @@
 defmodule Hologram.Compiler.FunctionDefinitionGenerator do
-  alias Hologram.Compiler.AST.{AccessOperator, Variable}
+  alias Hologram.Compiler.IR.{AccessOperator, Variable}
   alias Hologram.Compiler.{Generator, MapKeyGenerator}
 
   def generate(name, variants, context) do

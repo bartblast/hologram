@@ -1,5 +1,5 @@
 defmodule Hologram.Compiler.Binder do
-  alias Hologram.Compiler.AST.{AccessOperator, MapType, Variable}
+  alias Hologram.Compiler.IR.{AccessOperator, MapType, Variable}
 
   def bind(_, path \\ [])
 

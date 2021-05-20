@@ -1,7 +1,7 @@
 defmodule Hologram.Compiler.DotOperatorTransformerTest do
   use Hologram.TestCase, async: true
 
-  alias Hologram.Compiler.AST.{AtomType, DotOperator, Variable}
+  alias Hologram.Compiler.IR.{AtomType, DotOperator, Variable}
   alias Hologram.Compiler.DotOperatorTransformer
 
   test "transform/3" do

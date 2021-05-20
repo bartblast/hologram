@@ -1,5 +1,5 @@
 defmodule Hologram.Compiler.FunctionCallGenerator do
-  alias Hologram.Compiler.AST.Variable
+  alias Hologram.Compiler.IR.Variable
   alias Hologram.Compiler.Generator
   alias Hologram.Compiler.Helpers
 

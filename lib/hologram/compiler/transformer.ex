@@ -1,5 +1,5 @@
 defmodule Hologram.Compiler.Transformer do
-  alias Hologram.Compiler.AST.{AtomType, BooleanType, Import, IntegerType, MatchOperator, ModuleAttributeOperator, StringType, Variable}
+  alias Hologram.Compiler.IR.{AtomType, BooleanType, Import, IntegerType, MatchOperator, ModuleAttributeOperator, StringType, Variable}
   alias Hologram.Compiler.Binder
   alias Hologram.Compiler.{AdditionOperatorTransformer, AliasTransformer, DotOperatorTransformer, FunctionDefinitionTransformer, FunctionCallTransformer, ListTypeTransformer, MapTypeTransformer, MatchOperatorTransformer, ModuleAttributeDefinitionTransformer, ModuleDefinitionTransformer, StructTypeTransformer}
 

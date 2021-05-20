@@ -1,5 +1,5 @@
 defmodule Hologram.Compiler.FunctionCallTransformer do
-  alias Hologram.Compiler.AST.FunctionCall
+  alias Hologram.Compiler.IR.FunctionCall
   alias Hologram.Compiler.Helpers
   alias Hologram.Compiler.Resolver
   alias Hologram.Compiler.Transformer

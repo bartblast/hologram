@@ -1,7 +1,7 @@
 defmodule Hologram.Compiler.ResolverTest do
   use Hologram.TestCase, async: true
 
-  alias Hologram.Compiler.AST.Alias
+  alias Hologram.Compiler.IR.Alias
   alias Hologram.Compiler.Resolver
 
   @aliases [

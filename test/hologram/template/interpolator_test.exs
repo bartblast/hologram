@@ -1,8 +1,8 @@
 defmodule Hologram.Template.InterpolatorTest do
   use Hologram.TestCase, async: true
 
-  alias Hologram.Compiler.AST.ModuleAttributeOperator
-  alias Hologram.Template.AST.{Expression, TagNode, TextNode}
+  alias Hologram.Compiler.IR.ModuleAttributeOperator
+  alias Hologram.Template.VirtualDOM.{Expression, TagNode, TextNode}
   alias Hologram.Template.Interpolator
 
   test "text" do
@@ -23,7 +23,7 @@ defmodule Hologram.Template.InterpolatorTest do
 
     expected = [
       %Expression{
-        ast: %ModuleAttributeOperator{name: :abc}
+        ir: %ModuleAttributeOperator{name: :abc}
       }
     ]
 
@@ -40,7 +40,7 @@ defmodule Hologram.Template.InterpolatorTest do
     expected = [
       %TextNode{text: "bcd"},
       %Expression{
-        ast: %ModuleAttributeOperator{name: :abc}
+        ir: %ModuleAttributeOperator{name: :abc}
       }
     ]
 
@@ -56,7 +56,7 @@ defmodule Hologram.Template.InterpolatorTest do
 
     expected = [
       %Expression{
-        ast: %ModuleAttributeOperator{name: :abc}
+        ir: %ModuleAttributeOperator{name: :abc}
       },
       %TextNode{text: "bcd"}
     ]
@@ -73,10 +73,10 @@ defmodule Hologram.Template.InterpolatorTest do
 
     expected = [
       %Expression{
-        ast: %ModuleAttributeOperator{name: :abc}
+        ir: %ModuleAttributeOperator{name: :abc}
       },
       %Expression{
-        ast: %ModuleAttributeOperator{name: :bcd}
+        ir: %ModuleAttributeOperator{name: :bcd}
       }
     ]
 
@@ -93,7 +93,7 @@ defmodule Hologram.Template.InterpolatorTest do
     expected = [
       %TextNode{text: "cde"},
       %Expression{
-        ast: %ModuleAttributeOperator{name: :abc}
+        ir: %ModuleAttributeOperator{name: :abc}
       },
       %TextNode{text: "bcd"}
     ]
@@ -110,11 +110,11 @@ defmodule Hologram.Template.InterpolatorTest do
 
     expected = [
       %Expression{
-        ast: %ModuleAttributeOperator{name: :abc}
+        ir: %ModuleAttributeOperator{name: :abc}
       },
       %TextNode{text: "bcd"},
       %Expression{
-        ast: %ModuleAttributeOperator{name: :cde}
+        ir: %ModuleAttributeOperator{name: :cde}
       }
     ]
 
@@ -131,11 +131,11 @@ defmodule Hologram.Template.InterpolatorTest do
     expected = [
       %TextNode{text: "cde"},
       %Expression{
-        ast: %ModuleAttributeOperator{name: :abc}
+        ir: %ModuleAttributeOperator{name: :abc}
       },
       %TextNode{text: "bcd"},
       %Expression{
-        ast: %ModuleAttributeOperator{name: :def}
+        ir: %ModuleAttributeOperator{name: :def}
       }
     ]
 
@@ -151,11 +151,11 @@ defmodule Hologram.Template.InterpolatorTest do
 
     expected = [
       %Expression{
-        ast: %ModuleAttributeOperator{name: :abc}
+        ir: %ModuleAttributeOperator{name: :abc}
       },
       %TextNode{text: "bcd"},
       %Expression{
-        ast: %ModuleAttributeOperator{name: :cde}
+        ir: %ModuleAttributeOperator{name: :cde}
       },
       %TextNode{text: "def"}
     ]
@@ -190,14 +190,14 @@ defmodule Hologram.Template.InterpolatorTest do
     expected = [
       %TextNode{text: "abc"},
       %Expression{
-        ast: %ModuleAttributeOperator{name: :bcd}
+        ir: %ModuleAttributeOperator{name: :bcd}
       },
       %TagNode{
         attrs: %{},
         children: [
           %TextNode{text: "cde"},
           %Expression{
-            ast: %ModuleAttributeOperator{name: :def}
+            ir: %ModuleAttributeOperator{name: :def}
           }
         ],
         tag: "div"

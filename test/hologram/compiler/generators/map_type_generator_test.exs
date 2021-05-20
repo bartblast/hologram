@@ -1,7 +1,7 @@
 defmodule Hologram.Compiler.MapTypeGeneratorTest do
   use Hologram.TestCase, async: true
 
-  alias Hologram.Compiler.AST.{AtomType, IntegerType, MapType}
+  alias Hologram.Compiler.IR.{AtomType, IntegerType, MapType}
   alias Hologram.Compiler.MapTypeGenerator
 
   setup do
@@ -12,9 +12,9 @@ defmodule Hologram.Compiler.MapTypeGeneratorTest do
   end
 
   test "generate/3", context do
-    ast = %MapType{data: [{%AtomType{value: :a}, %IntegerType{value: 1}}]}
+    ir = %MapType{data: [{%AtomType{value: :a}, %IntegerType{value: 1}}]}
 
-    result = MapTypeGenerator.generate(ast.data, context[:context], context[:opts])
+    result = MapTypeGenerator.generate(ir.data, context[:context], context[:opts])
 
     expected =
       "{ type: 'map', data: { '~atom[a]': { type: 'integer', value: 1 } } }"

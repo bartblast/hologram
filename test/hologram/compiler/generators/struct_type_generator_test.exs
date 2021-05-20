@@ -1,7 +1,7 @@
 defmodule Hologram.Compiler.StructTypeGeneratorTest do
   use Hologram.TestCase, async: true
 
-  alias Hologram.Compiler.AST.{AtomType, IntegerType}
+  alias Hologram.Compiler.IR.{AtomType, IntegerType}
   alias Hologram.Compiler.StructTypeGenerator
 
   test "generate/4" do

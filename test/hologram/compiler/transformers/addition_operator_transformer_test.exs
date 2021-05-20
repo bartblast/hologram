@@ -2,7 +2,7 @@ defmodule Hologram.Compiler.AdditionOperatorTransformerTest do
   use Hologram.TestCase, async: true
 
   alias Hologram.Compiler.AdditionOperatorTransformer
-  alias Hologram.Compiler.AST.{AdditionOperator, IntegerType, Variable}
+  alias Hologram.Compiler.IR.{AdditionOperator, IntegerType, Variable}
 
   test "transform/3" do
     code = "a + 2"

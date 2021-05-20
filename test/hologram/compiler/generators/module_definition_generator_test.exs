@@ -1,11 +1,11 @@
 defmodule Hologram.Compiler.ModuleDefinitionGeneratorTest do
   use Hologram.TestCase, async: true
 
-  alias Hologram.Compiler.AST.{FunctionDefinition, IntegerType, ModuleDefinition, Variable}
+  alias Hologram.Compiler.IR.{FunctionDefinition, IntegerType, ModuleDefinition, Variable}
   alias Hologram.Compiler.Generator
 
   test "single function with single variant" do
-    ast = %ModuleDefinition{
+    ir = %ModuleDefinition{
       aliases: [],
       attributes: [],
       functions: [
@@ -25,7 +25,7 @@ defmodule Hologram.Compiler.ModuleDefinitionGeneratorTest do
       name: [:Abc, :Bcd]
     }
 
-    result = Generator.generate(ast)
+    result = Generator.generate(ir)
 
     expected = """
     class AbcBcd {
@@ -47,7 +47,7 @@ defmodule Hologram.Compiler.ModuleDefinitionGeneratorTest do
   end
 
   test "single function with multiple variants" do
-    ast = %ModuleDefinition{
+    ir = %ModuleDefinition{
       aliases: [],
       attributes: [],
       functions: [
@@ -81,7 +81,7 @@ defmodule Hologram.Compiler.ModuleDefinitionGeneratorTest do
       name: [:Abc, :Bcd]
     }
 
-    result = Generator.generate(ast)
+    result = Generator.generate(ir)
 
     expected = """
     class AbcBcd {
@@ -108,7 +108,7 @@ defmodule Hologram.Compiler.ModuleDefinitionGeneratorTest do
   end
 
   test "multiple functions with single variant" do
-    ast = %ModuleDefinition{
+    ir = %ModuleDefinition{
       aliases: [],
       attributes: [],
       functions: [
@@ -140,7 +140,7 @@ defmodule Hologram.Compiler.ModuleDefinitionGeneratorTest do
       name: [:Abc, :Bcd]
     }
 
-    result = Generator.generate(ast)
+    result = Generator.generate(ir)
 
     expected = """
     class AbcBcd {
@@ -172,7 +172,7 @@ defmodule Hologram.Compiler.ModuleDefinitionGeneratorTest do
   end
 
   test "multiple functions with multiple variants" do
-    ast = %ModuleDefinition{
+    ir = %ModuleDefinition{
       aliases: [],
       attributes: [],
       functions: [
@@ -218,7 +218,7 @@ defmodule Hologram.Compiler.ModuleDefinitionGeneratorTest do
       name: [:Abc, :Bcd]
     }
 
-    result = Generator.generate(ast)
+    result = Generator.generate(ir)
 
     expected = """
     class AbcBcd {

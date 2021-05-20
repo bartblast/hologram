@@ -1,7 +1,7 @@
 defmodule Hologram.Compiler.MatchOperatorTransformerTest do
   use Hologram.TestCase, async: true
 
-  alias Hologram.Compiler.AST.{AccessOperator, AtomType, IntegerType, MapType, MatchOperator, Variable}
+  alias Hologram.Compiler.IR.{AccessOperator, AtomType, IntegerType, MapType, MatchOperator, Variable}
   alias Hologram.Compiler.MatchOperatorTransformer
 
   test "variable" do

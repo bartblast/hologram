@@ -1,7 +1,7 @@
 defmodule Hologram.Compiler.ModuleAttributeDefinitionTransformerTest do
   use Hologram.TestCase, async: true
 
-  alias Hologram.Compiler.AST.{IntegerType, ModuleAttributeDefinition}
+  alias Hologram.Compiler.IR.{IntegerType, ModuleAttributeDefinition}
   alias Hologram.Compiler.ModuleAttributeDefinitionTransformer
 
   test "transform/3" do

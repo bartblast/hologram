@@ -1,7 +1,7 @@
 defmodule Hologram.Compiler.MapKeyGeneratorTest do
   use Hologram.TestCase, async: true
 
-  alias Hologram.Compiler.AST.{AtomType, BooleanType, IntegerType, StringType}
+  alias Hologram.Compiler.IR.{AtomType, BooleanType, IntegerType, StringType}
   alias Hologram.Compiler.MapKeyGenerator
 
   test "atom" do

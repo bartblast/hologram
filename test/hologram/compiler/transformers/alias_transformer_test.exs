@@ -2,7 +2,7 @@ defmodule Hologram.Compiler.AliasTransformerTest do
   use Hologram.TestCase, async: true
 
   alias Hologram.Compiler.AliasTransformer
-  alias Hologram.Compiler.AST.Alias
+  alias Hologram.Compiler.IR.Alias
 
   test "default as" do
     code = "alias Abc.Bcd"

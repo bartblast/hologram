@@ -1,5 +1,5 @@
 defmodule Hologram.Compiler.Generator do
-  alias Hologram.Compiler.AST.{
+  alias Hologram.Compiler.IR.{
     AccessOperator,
     AdditionOperator,
     AtomType,
@@ -30,7 +30,7 @@ defmodule Hologram.Compiler.Generator do
 
   alias Hologram.Compiler.Helpers
 
-  def generate(ast, context \\ [], opts \\ [])
+  def generate(ir, context \\ [], opts \\ [])
 
   # TYPES
 
@@ -74,8 +74,8 @@ defmodule Hologram.Compiler.Generator do
 
   # DEFINITIONS
 
-  def generate(%ModuleDefinition{name: name} = ast, _, _) do
-    ModuleDefinitionGenerator.generate(ast, name)
+  def generate(%ModuleDefinition{name: name} = ir, _, _) do
+    ModuleDefinitionGenerator.generate(ir, name)
   end
 
   # OTHER

@@ -1,5 +1,5 @@
 defmodule Hologram.Compiler.MatchOperatorTransformer do
-  alias Hologram.Compiler.AST.MatchOperator
+  alias Hologram.Compiler.IR.MatchOperator
   alias Hologram.Compiler.Binder
   alias Hologram.Compiler.Transformer
 

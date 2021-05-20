@@ -8,14 +8,14 @@ defmodule Hologram.Compiler.Processor do
     fully_qualified_module = Helpers.fully_qualified_module(module)
     source = fully_qualified_module.module_info()[:compile][:source]
 
-    module_ast =
+    ir =
       Parser.parse_file!(source)
       |> Normalizer.normalize()
       |> Transformer.transform()
 
-    Map.put(acc, module, module_ast)
-    |> compile_directives(module_ast, :imports)
-    |> compile_directives(module_ast, :aliases)
+    Map.put(acc, module, ir)
+    |> compile_directives(ir, :imports)
+    |> compile_directives(ir, :aliases)
   end
 
   defp compile_directives(acc, current_module, directive_key) do

@@ -1,14 +1,14 @@
-defmodule Hologram.Template.IRGeneratorTest do
+defmodule Hologram.Template.GeneratorTest do
   use Hologram.TestCase, async: true
 
-  alias Hologram.Template.AST.{Expression, TagNode, TextNode}
-  alias Hologram.Template.IRGenerator
-  alias Hologram.Compiler.AST.AtomType
+  alias Hologram.Template.VirtualDOM.{Expression, TagNode, TextNode}
+  alias Hologram.Template.Generator
+  alias Hologram.Compiler.IR.AtomType
 
   test "expression" do
-    ast = %Expression{ast: %AtomType{value: "x"}}
+    virtual_dom = %Expression{ir: %AtomType{value: "x"}}
 
-    result = IRGenerator.generate(ast)
+    result = Generator.generate(virtual_dom)
     expected = "{ type: 'expression', callback: ($state) => { type: 'atom', value: 'x' } }"
 
     assert result == expected
@@ -16,40 +16,40 @@ defmodule Hologram.Template.IRGeneratorTest do
 
   describe "tag node" do
     test "not attrs, no children" do
-      ast = %TagNode{tag: "div", attrs: %{}, children: []}
+      virtual_dom = %TagNode{tag: "div", attrs: %{}, children: []}
 
-      result = IRGenerator.generate(ast)
+      result = Generator.generate(virtual_dom)
       expected = "{ type: 'tag_node', tag: 'div', attrs: {}, children: [] }"
 
       assert result == expected
     end
 
     test "has attrs" do
-      ast = %TagNode{tag: "div", attrs: %{"attr_1" => "value_1", "attr_2" => "value_2"}, children: []}
+      virtual_dom = %TagNode{tag: "div", attrs: %{"attr_1" => "value_1", "attr_2" => "value_2"}, children: []}
 
-      result = IRGenerator.generate(ast)
+      result = Generator.generate(virtual_dom)
       expected = "{ type: 'tag_node', tag: 'div', attrs: { 'attr_1': 'value_1', 'attr_2': 'value_2' }, children: [] }"
 
       assert result == expected
     end
 
     test "has children" do
-      ast =
+      virtual_dom =
         %TagNode{tag: "div", attrs: %{}, children: [
           %TagNode{tag: "span", attrs: %{}, children: []},
           %TagNode{tag: "h1", attrs: %{}, children: []}
         ]}
 
-      result = IRGenerator.generate(ast)
+      result = Generator.generate(virtual_dom)
       expected = "{ type: 'tag_node', tag: 'div', attrs: {}, children: [{ type: 'tag_node', tag: 'span', attrs: {}, children: [] }, { type: 'tag_node', tag: 'h1', attrs: {}, children: [] }] }"
 
       assert result == expected
     end
 
     test "attr name" do
-      ast = %TagNode{tag: "div", attrs: %{":click" => "test"}, children: []}
+      virtual_dom = %TagNode{tag: "div", attrs: %{":click" => "test"}, children: []}
 
-      result = IRGenerator.generate(ast)
+      result = Generator.generate(virtual_dom)
       expected = "{ type: 'tag_node', tag: 'div', attrs: { 'holo-click': 'test' }, children: [] }"
 
       assert result == expected
@@ -57,9 +57,9 @@ defmodule Hologram.Template.IRGeneratorTest do
   end
 
   test "text node" do
-    ast = %TextNode{text: "a'b\nc'd\ne"}
+    virtual_dom = %TextNode{text: "a'b\nc'd\ne"}
 
-    result = IRGenerator.generate(ast)
+    result = Generator.generate(virtual_dom)
     expected = "{ type: 'text_node', text: 'a\\'b\\nc\\'d\\ne' }"
 
     assert result == expected
@@ -71,7 +71,7 @@ defmodule Hologram.Template.IRGeneratorTest do
       %TextNode{text: "test_2"}
     ]
 
-    result = IRGenerator.generate(nodes)
+    result = Generator.generate(nodes)
     expected = "[{ type: 'text_node', text: 'test_1' }, { type: 'text_node', text: 'test_2' }]"
 
     assert result == expected

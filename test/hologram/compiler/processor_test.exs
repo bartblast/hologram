@@ -1,7 +1,7 @@
 defmodule Hologram.Compiler.ProcessorTest do
   use Hologram.TestCase, async: true
 
-  alias Hologram.Compiler.AST.Alias
+  alias Hologram.Compiler.IR.Alias
   alias Hologram.Compiler.Processor
 
   describe "aliases" do

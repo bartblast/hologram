@@ -1,6 +1,6 @@
 defmodule Hologram.Template.Interpolator do
-  alias Hologram.Template.AST.{Expression, TextNode}
   alias Hologram.Compiler.{Normalizer, Parser, Transformer}
+  alias Hologram.Template.VirtualDOM.{Expression, TextNode}
 
   def interpolate(nodes) do
     Enum.reduce(nodes, [], fn node, acc ->
@@ -26,12 +26,12 @@ defmodule Hologram.Template.Interpolator do
 
     code = Enum.at(match, 3)
 
-    ast =
+    ir =
       Parser.parse!(code)
       |> Normalizer.normalize()
       |> Transformer.transform()
 
-    {char_count, nodes} = {char_count + 4 + String.length(code), nodes ++ [%Expression{ast: ast}]}
+    {char_count, nodes} = {char_count + 4 + String.length(code), nodes ++ [%Expression{ir: ir}]}
   end
 
   defp handle_matches(text, matches) do

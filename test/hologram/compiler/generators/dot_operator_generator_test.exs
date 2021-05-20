@@ -1,7 +1,7 @@
 defmodule Hologram.Compiler.DotOperatorGeneratorTest do
   use Hologram.TestCase, async: true
 
-  alias Hologram.Compiler.AST.{AtomType, Variable}
+  alias Hologram.Compiler.IR.{AtomType, Variable}
   alias Hologram.Compiler.DotOperatorGenerator
 
   test "generate/2" do

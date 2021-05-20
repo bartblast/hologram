@@ -1,7 +1,7 @@
 defmodule Hologram.Compiler.ListTypeTransformerTest do
   use Hologram.TestCase, async: true
 
-  alias Hologram.Compiler.AST.{IntegerType, ListType}
+  alias Hologram.Compiler.IR.{IntegerType, ListType}
   alias Hologram.Compiler.ListTypeTransformer
 
   setup do

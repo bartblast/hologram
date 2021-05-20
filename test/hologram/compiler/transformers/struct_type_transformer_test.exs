@@ -1,7 +1,7 @@
 defmodule Hologram.Compiler.StructTypeTransformerTest do
   use Hologram.TestCase, async: true
 
-  alias Hologram.Compiler.AST.{Alias, AtomType, IntegerType, StructType}
+  alias Hologram.Compiler.IR.{Alias, AtomType, IntegerType, StructType}
   alias Hologram.Compiler.StructTypeTransformer
 
   test "not aliased" do

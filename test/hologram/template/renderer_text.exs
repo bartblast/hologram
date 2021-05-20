@@ -1,11 +1,11 @@
 defmodule Hologram.Template.RendererTest do
   use Hologram.TestCase, async: true
 
-  alias Hologram.Template.AST.Expression
-  alias Hologram.Template.AST.TagNode
-  alias Hologram.Template.AST.TextNode
+  alias Hologram.Template.VirtualDOM.Expression
+  alias Hologram.Template.VirtualDOM.TagNode
+  alias Hologram.Template.VirtualDOM.TextNode
   alias Hologram.Template.Renderer
-  alias Hologram.Compiler.AST.ModuleAttributeOperator
+  alias Hologram.Compiler.IR.ModuleAttributeOperator
 
   describe "render/2" do
     test "multiple nodes" do
@@ -21,7 +21,7 @@ defmodule Hologram.Template.RendererTest do
     end
 
     test "tag node" do
-      ast = %TagNode{
+      virtual_dom = %TagNode{
         attrs: %{attr_1: "test_attr_value_1", attr_2: "test_attr_value_2"},
         tag: "div",
         children: [
@@ -30,7 +30,7 @@ defmodule Hologram.Template.RendererTest do
         ]
       }
 
-      result = Renderer.render(ast, %{})
+      result = Renderer.render(virtual_dom, %{})
 
       expected =
         "<div attr_1=\"test_attr_value_1\" attr_2=\"test_attr_value_2\">test_text<span></span></div>"
@@ -39,19 +39,19 @@ defmodule Hologram.Template.RendererTest do
     end
 
     test "text node" do
-      ast = %TextNode{text: "test"}
+      virtual_dom = %TextNode{text: "test"}
 
-      result = Renderer.render(ast, %{})
+      result = Renderer.render(virtual_dom, %{})
       expected = "test"
 
       assert result == expected
     end
 
     test "expression" do
-      ast = %Expression{ast: %ModuleAttributeOperator{name: :a}}
+      virtual_dom = %Expression{ir: %ModuleAttributeOperator{name: :a}}
       state = %{a: 123}
 
-      result = Renderer.render(ast, state)
+      result = Renderer.render(virtual_dom, state)
       expected = "123"
 
       assert result == expected

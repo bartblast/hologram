@@ -1,7 +1,7 @@
 defmodule Hologram.Compiler.PrunerTest do
   use Hologram.TestCase, async: true
 
-  alias Hologram.Compiler.AST.{AtomType, FunctionDefinition}
+  alias Hologram.Compiler.IR.{AtomType, FunctionDefinition}
   alias Hologram.Compiler.{Processor, Pruner}
 
   test "preserves actions of arity 3 and functions called from these actions" do

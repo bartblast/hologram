@@ -1,7 +1,7 @@
 defmodule Hologram.Compiler.FunctionDefinitionTransformerTest do
   use Hologram.TestCase, async: true
 
-  alias Hologram.Compiler.AST.{AccessOperator, AtomType, FunctionDefinition, IntegerType, Variable}
+  alias Hologram.Compiler.IR.{AccessOperator, AtomType, FunctionDefinition, IntegerType, Variable}
   alias Hologram.Compiler.FunctionDefinitionTransformer
 
   setup do

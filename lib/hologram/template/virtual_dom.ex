@@ -1,11 +1,11 @@
-defmodule Hologram.Template.AST do
+defmodule Hologram.Template.VirtualDOM do
   # TODO: implement (it's not supported yet)
   defmodule ComponentNode do
     defstruct module: nil, children: nil
   end
 
   defmodule Expression do
-    defstruct ast: nil
+    defstruct ir: nil
   end
 
   defmodule TagNode do

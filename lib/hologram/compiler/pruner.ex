@@ -1,5 +1,5 @@
 defmodule Hologram.Compiler.Pruner do
-  alias Hologram.Compiler.AST.{FunctionCall, FunctionDefinition, ModuleDefinition}
+  alias Hologram.Compiler.IR.{FunctionCall, FunctionDefinition, ModuleDefinition}
 
   @doc """
   Prunes unused modules and functions.

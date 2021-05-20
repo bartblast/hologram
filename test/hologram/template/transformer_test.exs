@@ -1,9 +1,9 @@
 defmodule Hologram.Template.TransformerTest do
   use Hologram.TestCase, async: true
 
-  alias Hologram.Template.AST.{Expression, TagNode, TextNode}
+  alias Hologram.Template.VirtualDOM.{Expression, TagNode, TextNode}
   alias Hologram.Template.{Parser, Transformer}
-  alias Hologram.Compiler.AST.{ModuleAttributeOperator}
+  alias Hologram.Compiler.IR.{ModuleAttributeOperator}
 
   describe "transform/1" do
     test "tag nodes without attrs" do
@@ -108,8 +108,8 @@ defmodule Hologram.Template.TransformerTest do
       expected = [
         %TagNode{
           attrs: %{
-            ":if" => %Expression{ast: %ModuleAttributeOperator{name: :var_1}},
-            ":show" => %Expression{ast: %ModuleAttributeOperator{name: :var_2}},
+            ":if" => %Expression{ir: %ModuleAttributeOperator{name: :var_1}},
+            ":show" => %Expression{ir: %ModuleAttributeOperator{name: :var_2}},
             "class" => "class_1",
             "id" => "id_1"
           },
@@ -121,8 +121,8 @@ defmodule Hologram.Template.TransformerTest do
                 %TextNode{text: "\n    "},
                 %TagNode{
                   attrs: %{
-                    ":if" => %Expression{ast: %ModuleAttributeOperator{name: :var_3}},
-                    ":show" => %Expression{ast: %ModuleAttributeOperator{name: :var_4}},
+                    ":if" => %Expression{ir: %ModuleAttributeOperator{name: :var_3}},
+                    ":show" => %Expression{ir: %ModuleAttributeOperator{name: :var_4}},
                     "class" => "class_2",
                     "id" => "id_2"
                   },
@@ -156,11 +156,11 @@ defmodule Hologram.Template.TransformerTest do
           children: [
             %TextNode{text: "test_1"},
             %Expression{
-              ast: %ModuleAttributeOperator{name: :x1}
+              ir: %ModuleAttributeOperator{name: :x1}
             },
             %TextNode{text: "test_2"},
             %Expression{
-              ast: %ModuleAttributeOperator{name: :x2}
+              ir: %ModuleAttributeOperator{name: :x2}
             },
             %TextNode{text: "test_3"}
           ],

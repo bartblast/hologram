@@ -1,7 +1,7 @@
 defmodule Hologram.Compiler.FunctionCallGeneratorTest do
   use Hologram.TestCase, async: true
 
-  alias Hologram.Compiler.AST.{IntegerType, Variable}
+  alias Hologram.Compiler.IR.{IntegerType, Variable}
   alias Hologram.Compiler.FunctionCallGenerator
 
   setup do

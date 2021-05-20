@@ -1,12 +1,12 @@
 defmodule Hologram.Compiler.BinderTest do
   use Hologram.TestCase, async: true
 
-  alias Hologram.Compiler.AST.{AccessOperator, AtomType, IntegerType, MapType, Variable}
   alias Hologram.Compiler.Binder
+  alias Hologram.Compiler.IR.{AccessOperator, AtomType, IntegerType, MapType, Variable}
 
   describe "map" do
     test "non-nested map without vars" do
-      ast =
+      ir =
         %MapType{
           data: [
             {%AtomType{value: :a}, %IntegerType{value: 1}},
@@ -14,11 +14,11 @@ defmodule Hologram.Compiler.BinderTest do
           ]
         }
 
-      assert Binder.bind(ast) == []
+      assert Binder.bind(ir) == []
     end
 
     test "non-nested map with single var" do
-      ast =
+      ir =
         %MapType{
           data: [
             {%AtomType{value: :a}, %IntegerType{value: 1}},
@@ -26,7 +26,7 @@ defmodule Hologram.Compiler.BinderTest do
           ]
         }
 
-      result = Binder.bind(ast)
+      result = Binder.bind(ir)
 
       expected = [
         [
@@ -41,7 +41,7 @@ defmodule Hologram.Compiler.BinderTest do
     end
 
     test "non-nested map with multiple vars" do
-      ast =
+      ir =
         %MapType{
           data: [
             {%AtomType{value: :a}, %Variable{name: :x}},
@@ -50,7 +50,7 @@ defmodule Hologram.Compiler.BinderTest do
           ]
         }
 
-      result = Binder.bind(ast)
+      result = Binder.bind(ir)
 
       expected = [
         [
@@ -71,7 +71,7 @@ defmodule Hologram.Compiler.BinderTest do
     end
 
     test "nested map without vars" do
-      ast =
+      ir =
         %MapType{
           data: [
             {%AtomType{value: :a}, %IntegerType{value: 1}},
@@ -84,11 +84,11 @@ defmodule Hologram.Compiler.BinderTest do
           ]
         }
 
-      assert Binder.bind(ast) == []
+      assert Binder.bind(ir) == []
     end
 
     test "nested map with single var" do
-      ast =
+      ir =
         %MapType{
           data: [
             {%AtomType{value: :a}, %IntegerType{value: 1}},
@@ -101,7 +101,7 @@ defmodule Hologram.Compiler.BinderTest do
           ]
         }
 
-      result = Binder.bind(ast)
+      result = Binder.bind(ir)
 
       expected = [
         [
@@ -119,7 +119,7 @@ defmodule Hologram.Compiler.BinderTest do
     end
 
     test "nested map with multiple vars" do
-      ast =
+      ir =
         %MapType{
           data: [
             {%AtomType{value: :a}, %IntegerType{value: 1}},
@@ -133,7 +133,7 @@ defmodule Hologram.Compiler.BinderTest do
           ]
         }
 
-      result = Binder.bind(ast)
+      result = Binder.bind(ir)
 
       expected = [
         [
@@ -158,8 +158,8 @@ defmodule Hologram.Compiler.BinderTest do
   end
 
   test "variable" do
-    ast = %Variable{name: :test}
+    ir = %Variable{name: :test}
     expected = [[%Variable{name: :test}]]
-    assert Binder.bind(ast) == expected
+    assert Binder.bind(ir) == expected
   end
 end

@@ -1,7 +1,7 @@
 defmodule Hologram.Template.Evaluator do
-  alias Hologram.Compiler.AST.ModuleAttributeOperator
+  alias Hologram.Compiler.IR.ModuleAttributeOperator
 
-  def evaluate(ast, state)
+  def evaluate(ir, state)
 
   def evaluate(%ModuleAttributeOperator{name: name}, state) do
     Map.get(state, name)

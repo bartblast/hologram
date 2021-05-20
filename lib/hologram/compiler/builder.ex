@@ -4,8 +4,8 @@ defmodule Hologram.Compiler.Builder do
   def build(module) do
     Processor.compile(module)
     |> Pruner.prune(module)
-    |> Enum.reduce("", fn {_, ast}, acc ->
-      acc <> "\n" <> Generator.generate(ast)
+    |> Enum.reduce("", fn {_, ir}, acc ->
+      acc <> "\n" <> Generator.generate(ir)
     end)
   end
 end

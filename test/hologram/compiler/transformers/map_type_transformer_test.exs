@@ -1,7 +1,7 @@
 defmodule Hologram.Compiler.MapTypeTransformerTest do
   use Hologram.TestCase, async: true
 
-  alias Hologram.Compiler.AST.{AtomType, IntegerType, MapType}
+  alias Hologram.Compiler.IR.{AtomType, IntegerType, MapType}
   alias Hologram.Compiler.MapTypeTransformer
 
   setup do

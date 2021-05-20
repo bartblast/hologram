@@ -1,5 +1,5 @@
 defmodule Hologram.Compiler.MapTypeTransformer do
-  alias Hologram.Compiler.AST.MapType
+  alias Hologram.Compiler.IR.MapType
   alias Hologram.Compiler.Transformer
 
   def transform(ast, context) do

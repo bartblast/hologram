@@ -1,16 +1,16 @@
 defmodule Hologram.Template.Renderer do
-  alias Hologram.Template.AST.{Expression, TagNode, TextNode}
   alias Hologram.Template.Evaluator
+  alias Hologram.Template.VirtualDOM.{Expression, TagNode, TextNode}
 
-  def render(ast, state \\ %{})
+  def render(virtual_dom, state \\ %{})
 
   def render(nodes, state) when is_list(nodes) do
     Enum.map(nodes, &render(&1, state))
     |> Enum.join("")
   end
 
-  def render(%Expression{ast: ast}, state) do
-    Evaluator.evaluate(ast, state)
+  def render(%Expression{ir: ir}, state) do
+    Evaluator.evaluate(ir, state)
     |> to_string()
   end
 

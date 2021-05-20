@@ -1,5 +1,5 @@
 defmodule Hologram.Compiler.ModuleAttributeOperatorGenerator do
-  alias Hologram.Compiler.AST.AtomType
+  alias Hologram.Compiler.IR.AtomType
   alias Hologram.Compiler.MapKeyGenerator
 
   def generate(name, context) do

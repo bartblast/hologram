@@ -1,5 +1,5 @@
 defmodule Hologram.Compiler.AdditionOperatorTransformer do
-  alias Hologram.Compiler.AST.AdditionOperator
+  alias Hologram.Compiler.IR.AdditionOperator
   alias Hologram.Compiler.Transformer
 
   def transform(left, right, context) do

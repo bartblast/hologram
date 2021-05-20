@@ -1,4 +1,4 @@
-defmodule Hologram.Compiler.AST do
+defmodule Hologram.Compiler.IR do
   # TYPES
 
   defmodule AtomType do

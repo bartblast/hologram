@@ -1,7 +1,7 @@
 defmodule Hologram.Compiler.ModuleDefinitionTransformerTest do
   use Hologram.TestCase, async: true
 
-  alias Hologram.Compiler.AST.{Alias, FunctionDefinition, Import, IntegerType, ModuleDefinition, ModuleAttributeDefinition}
+  alias Hologram.Compiler.IR.{Alias, FunctionDefinition, Import, IntegerType, ModuleDefinition, ModuleAttributeDefinition}
   alias Hologram.Compiler.ModuleDefinitionTransformer
 
   test "name" do
