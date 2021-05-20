@@ -175,6 +175,7 @@
 | ---------------- |:------------------:|
 | Exception        | :x:                |
 | Function         | :x:                |
+| Macro            | :x:                |
 | Module           | :x:                |
 | Module Attribute | :x:                |
 
@@ -184,7 +185,7 @@
 | ---------------- |:------------------:|
 | Alias            | :x:                |
 | Import           | :x:                |
-| Multi            | :x:                |
+| Multi-Alias      | :x:                |
 | Require          | :x:                |
 | Use              | :x:                |
 
