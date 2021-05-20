@@ -123,14 +123,14 @@ defmodule Hologram.Compiler.GeneratorTest do
   end
 
   describe "variable" do
-    test "boxed" do
-      result = Generator.generate(%Variable{name: :test}, [], boxed: true)
-      expected = "{ type: 'variable', name: 'test' }"
+    test "placeholder" do
+      result = Generator.generate(%Variable{name: :test}, [], placeholder: true)
+      expected = "{ type: 'placeholder' }"
 
       assert result == expected
     end
 
-    test "not boxed" do
+    test "not placeholder" do
       result = Generator.generate(%Variable{name: :test})
       expected = "test"
 

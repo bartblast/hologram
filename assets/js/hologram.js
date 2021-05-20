@@ -16,7 +16,7 @@ class Hologram {
     let lType = left.type;
     let rType = right.type;
 
-    if (lType != 'variable') {
+    if (lType != 'placeholder') {
       if (lType != rType) {
         return false;
       }

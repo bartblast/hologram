@@ -31,7 +31,7 @@ defmodule Hologram.Compiler.ModuleDefinitionGeneratorTest do
     class AbcBcd {
 
     static test() {
-    if (Hologram.patternMatchFunctionArgs([{ type: 'variable', name: 'a' }], arguments)) {
+    if (Hologram.patternMatchFunctionArgs([{ type: 'placeholder' }], arguments)) {
     let a = arguments[0];
     return { type: 'integer', value: 1 };
     }
@@ -87,11 +87,11 @@ defmodule Hologram.Compiler.ModuleDefinitionGeneratorTest do
     class AbcBcd {
 
     static test() {
-    if (Hologram.patternMatchFunctionArgs([{ type: 'variable', name: 'a' }], arguments)) {
+    if (Hologram.patternMatchFunctionArgs([{ type: 'placeholder' }], arguments)) {
     let a = arguments[0];
     return { type: 'integer', value: 1 };
     }
-    else if (Hologram.patternMatchFunctionArgs([{ type: 'variable', name: 'a' }, { type: 'variable', name: 'b' }], arguments)) {
+    else if (Hologram.patternMatchFunctionArgs([{ type: 'placeholder' }, { type: 'placeholder' }], arguments)) {
     let a = arguments[0];
     let b = arguments[1];
     return { type: 'integer', value: 2 };
@@ -146,7 +146,7 @@ defmodule Hologram.Compiler.ModuleDefinitionGeneratorTest do
     class AbcBcd {
 
     static test_1() {
-    if (Hologram.patternMatchFunctionArgs([{ type: 'variable', name: 'a' }], arguments)) {
+    if (Hologram.patternMatchFunctionArgs([{ type: 'placeholder' }], arguments)) {
     let a = arguments[0];
     return { type: 'integer', value: 1 };
     }
@@ -156,7 +156,7 @@ defmodule Hologram.Compiler.ModuleDefinitionGeneratorTest do
     }
 
     static test_2() {
-    if (Hologram.patternMatchFunctionArgs([{ type: 'variable', name: 'a' }], arguments)) {
+    if (Hologram.patternMatchFunctionArgs([{ type: 'placeholder' }], arguments)) {
     let a = arguments[0];
     return { type: 'integer', value: 2 };
     }
@@ -224,11 +224,11 @@ defmodule Hologram.Compiler.ModuleDefinitionGeneratorTest do
     class AbcBcd {
 
     static test_1() {
-    if (Hologram.patternMatchFunctionArgs([{ type: 'variable', name: 'a' }], arguments)) {
+    if (Hologram.patternMatchFunctionArgs([{ type: 'placeholder' }], arguments)) {
     let a = arguments[0];
     return { type: 'integer', value: 1 };
     }
-    else if (Hologram.patternMatchFunctionArgs([{ type: 'variable', name: 'a' }, { type: 'variable', name: 'b' }], arguments)) {
+    else if (Hologram.patternMatchFunctionArgs([{ type: 'placeholder' }, { type: 'placeholder' }], arguments)) {
     let a = arguments[0];
     let b = arguments[1];
     return { type: 'integer', value: 2 };
@@ -239,7 +239,7 @@ defmodule Hologram.Compiler.ModuleDefinitionGeneratorTest do
     }
 
     static test_2() {
-    if (Hologram.patternMatchFunctionArgs([{ type: 'variable', name: 'a' }], arguments)) {
+    if (Hologram.patternMatchFunctionArgs([{ type: 'placeholder' }], arguments)) {
     let a = arguments[0];
     return { type: 'integer', value: 3 };
     }

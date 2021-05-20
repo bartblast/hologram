@@ -49,7 +49,7 @@ defmodule Hologram.Compiler.FunctionDefinitionGenerator do
 
   defp generate_params(variant, context) do
     params =
-      Enum.map(variant.params, &Generator.generate(&1, context, boxed: true))
+      Enum.map(variant.params, &Generator.generate(&1, context, placeholder: true))
       |> Enum.join(", ")
 
     "[#{params}]"

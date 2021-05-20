@@ -55,7 +55,7 @@ defmodule Hologram.Compiler.FunctionDefinitionGeneratorTest do
     expected =
       """
       static test() {
-      if (Hologram.patternMatchFunctionArgs([{ type: 'variable', name: 'x' }], arguments)) {
+      if (Hologram.patternMatchFunctionArgs([{ type: 'placeholder' }], arguments)) {
       let x = arguments[0];
       return { type: 'atom', value: '' };
       }
@@ -92,7 +92,7 @@ defmodule Hologram.Compiler.FunctionDefinitionGeneratorTest do
       if (Hologram.patternMatchFunctionArgs([{ type: 'integer', value: 1 }], arguments)) {
       return { type: 'atom', value: '' };
       }
-      else if (Hologram.patternMatchFunctionArgs([{ type: 'map', data: { '~atom[a]': { type: 'variable', name: 'x' } } }], arguments)) {
+      else if (Hologram.patternMatchFunctionArgs([{ type: 'map', data: { '~atom[a]': { type: 'placeholder' } } }], arguments)) {
       let x = arguments[0].data['~atom[a]'];
       { type: 'integer', value: 1 };
       return { type: 'integer', value: 2 };
