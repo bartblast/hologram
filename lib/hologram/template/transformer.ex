@@ -3,10 +3,10 @@ defmodule Hologram.Template.Transformer do
   alias Hologram.Template.Interpolator
   alias Hologram.Template.VirtualDOM.{ComponentNode, Expression, TagNode, TextNode}
 
-  def transform(ast, aliases \\ %{})
+  def transform(dom, aliases \\ %{})
 
-  def transform(nodes, aliases) when is_list(nodes) do
-    Enum.map(nodes, fn node -> transform(node, aliases) end)
+  def transform(dom, aliases) when is_list(dom) do
+    Enum.map(dom, fn node -> transform(node, aliases) end)
   end
 
   def transform({type, attrs, children}, aliases) do
@@ -44,8 +44,8 @@ defmodule Hologram.Template.Transformer do
     end
   end
 
-  def transform(ast, _aliases) when is_binary(ast) do
-    %TextNode{text: ast}
+  def transform(dom, _aliases) when is_binary(dom) do
+    %TextNode{text: dom}
   end
 
   # TODO: implement
