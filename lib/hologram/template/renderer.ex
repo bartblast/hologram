@@ -1,5 +1,5 @@
 defmodule Hologram.Template.Renderer do
-  alias Hologram.Template.ExpressionRenderer
+  alias Hologram.Template.{ExpressionRenderer, TagNodeRenderer}
   alias Hologram.Template.VirtualDOM.{Expression, TagNode, TextNode}
 
   def render(virtual_dom, state \\ %{})
@@ -14,28 +14,10 @@ defmodule Hologram.Template.Renderer do
   end
 
   def render(%TagNode{attrs: attrs, children: children, tag: tag}, state) do
-    attrs_html =
-      Enum.map(attrs, fn {key, value} -> " #{render_attr_name(key)}=\"#{value}\"" end)
-      |> Enum.join("")
-
-    children_html =
-      Enum.map(children, fn child -> render(child, state) end)
-      |> Enum.join("")
-
-    "<#{tag}#{attrs_html}>#{children_html}</#{tag}>"
+    TagNodeRenderer.render(tag, attrs, children, state)
   end
 
   def render(%TextNode{text: text}, _state) do
     text
-  end
-
-  def render_attr_name(key) do
-    case key do
-      ":click" ->
-        "holo-click"
-
-      _ ->
-        key
-    end
   end
 end

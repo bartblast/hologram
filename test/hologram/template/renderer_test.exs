@@ -21,21 +21,6 @@ defmodule Hologram.Template.RendererTest do
     end
 
     test "tag node" do
-      virtual_dom = %TagNode{
-        attrs: %{attr_1: "test_attr_value_1", attr_2: "test_attr_value_2"},
-        tag: "div",
-        children: [
-          %TextNode{text: "test_text"},
-          %TagNode{attrs: %{}, children: [], tag: "span"}
-        ]
-      }
-
-      result = Renderer.render(virtual_dom, %{})
-
-      expected =
-        "<div attr_1=\"test_attr_value_1\" attr_2=\"test_attr_value_2\">test_text<span></span></div>"
-
-      assert result == expected
     end
 
     test "text node" do
@@ -64,16 +49,6 @@ defmodule Hologram.Template.RendererTest do
       expected = "<div holo-click=\"test\"></div>"
 
       assert result == expected
-    end
-  end
-
-  describe "render_attr_name/1" do
-    test "mapped" do
-      assert Renderer.render_attr_name(":click") == "holo-click"
-    end
-
-    test "not mapped" do
-      assert Renderer.render_attr_name("test") == "test"
     end
   end
 end
