@@ -1,5 +1,5 @@
 defmodule Hologram.Template.Renderer do
-  alias Hologram.Template.Evaluator
+  alias Hologram.Template.ExpressionRenderer
   alias Hologram.Template.VirtualDOM.{Expression, TagNode, TextNode}
 
   def render(virtual_dom, state \\ %{})
@@ -10,8 +10,7 @@ defmodule Hologram.Template.Renderer do
   end
 
   def render(%Expression{ir: ir}, state) do
-    Evaluator.evaluate(ir, state)
-    |> to_string()
+    ExpressionRenderer.render(ir, state)
   end
 
   def render(%TagNode{attrs: attrs, children: children, tag: tag}, state) do
