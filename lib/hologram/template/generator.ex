@@ -1,6 +1,6 @@
 defmodule Hologram.Template.Generator do
   alias Hologram.Template.VirtualDOM.{Expression, TagNode, TextNode}
-  alias Hologram.Template.{ExpressionGenerator, Renderer, TagNodeGenerator}
+  alias Hologram.Template.{ExpressionGenerator, Renderer, TagNodeGenerator, TextNodeGenerator}
   alias Hologram.Compiler.IR.ModuleAttributeDefinition
   alias Hologram.Compiler.{Normalizer, Transformer}
 
@@ -15,11 +15,7 @@ defmodule Hologram.Template.Generator do
   end
 
   def generate(%TextNode{text: text}, _) do
-    text =
-      String.replace(text, "\n", "\\n", global: true)
-      |> String.replace("'", "\\'", global: true)
-
-    "{ type: 'text_node', text: '#{text}' }"
+    TextNodeGenerator.generate(text)
   end
 
   def generate(nodes, state) when is_list(nodes) do

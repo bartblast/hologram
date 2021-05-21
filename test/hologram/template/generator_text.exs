@@ -12,12 +12,6 @@ defmodule Hologram.Template.GeneratorTest do
   end
 
   test "text node" do
-    virtual_dom = %TextNode{text: "a'b\nc'd\ne"}
-
-    result = Generator.generate(virtual_dom)
-    expected = "{ type: 'text_node', text: 'a\\'b\\nc\\'d\\ne' }"
-
-    assert result == expected
   end
 
   test "multiple nodes" do
