@@ -1,8 +1,6 @@
 defmodule Hologram.Template.Generator do
   alias Hologram.Template.VirtualDOM.{Expression, TagNode, TextNode}
-  alias Hologram.Template.{ExpressionGenerator, Renderer, TagNodeGenerator, TextNodeGenerator}
-  alias Hologram.Compiler.IR.ModuleAttributeDefinition
-  alias Hologram.Compiler.{Normalizer, Transformer}
+  alias Hologram.Template.{ExpressionGenerator, NodeListGenerator, Renderer, TagNodeGenerator, TextNodeGenerator}
 
   def generate(virtual_dom, context \\ [module_attributes: []])
 
@@ -19,22 +17,6 @@ defmodule Hologram.Template.Generator do
   end
 
   def generate(nodes, state) when is_list(nodes) do
-    module_attributes =
-      Enum.map(state, fn {key, value} ->
-        value =
-          Macro.escape(value)
-          |> Normalizer.normalize()
-          |> Transformer.transform()
-
-        %ModuleAttributeDefinition{name: key, value: value}
-      end)
-
-    context = [module_attributes: module_attributes]
-
-    nodes_js =
-      Enum.map(nodes, &generate(&1, context))
-      |> Enum.join(", ")
-
-    "[#{nodes_js}]"
+    NodeListGenerator.generate(nodes, state)
   end
 end

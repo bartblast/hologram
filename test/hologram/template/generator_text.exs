@@ -15,14 +15,5 @@ defmodule Hologram.Template.GeneratorTest do
   end
 
   test "multiple nodes" do
-    nodes = [
-      %TextNode{text: "test_1"},
-      %TextNode{text: "test_2"}
-    ]
-
-    result = Generator.generate(nodes)
-    expected = "[{ type: 'text_node', text: 'test_1' }, { type: 'text_node', text: 'test_2' }]"
-
-    assert result == expected
   end
 end
