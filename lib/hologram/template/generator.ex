@@ -1,6 +1,6 @@
 defmodule Hologram.Template.Generator do
   alias Hologram.Template.VirtualDOM.{Expression, TagNode, TextNode}
-  alias Hologram.Template.{ExpressionGenerator, Renderer}
+  alias Hologram.Template.{ExpressionGenerator, Renderer, TagNodeGenerator}
   alias Hologram.Compiler.IR.ModuleAttributeDefinition
   alias Hologram.Compiler.{Normalizer, Transformer}
 
@@ -11,26 +11,7 @@ defmodule Hologram.Template.Generator do
   end
 
   def generate(%TagNode{attrs: attrs, children: children, tag: tag}, context) do
-    attrs_js =
-      if Enum.any?(attrs) do
-        js =
-          Enum.map(attrs, fn {key, value} ->
-            "'#{Renderer.render_attr_name(key)}': '#{value}'"
-          end)
-          |> Enum.join(", ")
-
-        "{ #{js} }"
-      else
-        "{}"
-      end
-
-      children_str =
-        Enum.map(children, &generate(&1, context))
-        |> Enum.join(", ")
-
-      children_js = "[#{children_str}]"
-
-    "{ type: 'tag_node', tag: '#{tag}', attrs: #{attrs_js}, children: #{children_js} }"
+    TagNodeGenerator.generate(tag, attrs, children, context)
   end
 
   def generate(%TextNode{text: text}, _) do
