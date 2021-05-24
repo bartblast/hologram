@@ -14,33 +14,13 @@ defmodule Hologram.Template.Transformer do
       Enum.map(children, fn child -> transform(child, aliases) end)
       |> Interpolator.interpolate()
 
-    attrs =
-      Enum.map(attrs, fn {key, value} ->
-        regex = ~r/^{{(.+)}}$/
-
-        value =
-          case Regex.run(regex, value) do
-            [_, code] ->
-              ir =
-                Parser.parse!(code)
-                |> Hologram.Compiler.Transformer.transform()
-
-              %Expression{ir: ir}
-
-            _ ->
-              value
-          end
-
-        {key, value}
-      end)
-      |> Enum.into(%{})
-
-    case resolve_node_type(type, aliases) do
+    case determine_node_type(tag, aliases) do
       :tag ->
+        attrs = build_tag_node_attrs(attrs)
         %TagNode{tag: type, attrs: attrs, children: children}
-        # TODO: imlement
-        # :module ->
-        #   %ComponentNode{module: module, children: children}
+
+      # :component ->
+        # %ComponentNode{module: module, children: children}
     end
   end
 
@@ -48,8 +28,30 @@ defmodule Hologram.Template.Transformer do
     %TextNode{text: dom}
   end
 
+  defp build_tag_node_attrs(attrs) do
+    Enum.map(attrs, fn {key, value} ->
+      regex = ~r/^{{(.+)}}$/
+
+      value =
+        case Regex.run(regex, value) do
+          [_, code] ->
+            ir =
+              Parser.parse!(code)
+              |> Hologram.Compiler.Transformer.transform()
+
+            %Expression{ir: ir}
+
+          _ ->
+            value
+        end
+
+      {key, value}
+    end)
+    |> Enum.into(%{})
+  end
+
   # TODO: implement
-  defp resolve_node_type(type, aliases) do
+  defp determine_node_type(type, aliases) do
     :tag
   end
 end
