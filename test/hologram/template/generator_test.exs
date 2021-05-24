@@ -13,14 +13,14 @@ defmodule Hologram.Template.GeneratorTest do
 
   test "node list" do
     nodes = [
-      %TextNode{text: "test_1"},
-      %TextNode{text: "test_2"}
+      %TextNode{content: "test_1"},
+      %TextNode{content: "test_2"}
     ]
 
     state = %{}
 
     result = Generator.generate(nodes, state)
-    expected = "[{ type: 'text_node', text: 'test_1' }, { type: 'text_node', text: 'test_2' }]"
+    expected = "[{ type: 'text_node', content: 'test_1' }, { type: 'text_node', content: 'test_2' }]"
 
     assert result == expected
   end
@@ -44,10 +44,10 @@ defmodule Hologram.Template.GeneratorTest do
   end
 
   test "text node", context do
-    virtual_dom = %TextNode{text: "abc"}
+    virtual_dom = %TextNode{content: "abc"}
 
     result = Generator.generate(virtual_dom, context)
-    expected = "{ type: 'text_node', text: 'abc' }"
+    expected = "{ type: 'text_node', content: 'abc' }"
 
     assert result == expected
   end

@@ -3,10 +3,10 @@ defmodule Hologram.Template.TextNodeGeneratorTest do
   alias Hologram.Template.TextNodeGenerator
 
   test "generate/1" do
-    text = "a'b\nc'd\ne"
+    content = "a'b\nc'd\ne"
 
-    result = TextNodeGenerator.generate(text)
-    expected = "{ type: 'text_node', text: 'a\\'b\\nc\\'d\\ne' }"
+    result = TextNodeGenerator.generate(content)
+    expected = "{ type: 'text_node', content: 'a\\'b\\nc\\'d\\ne' }"
 
     assert result == expected
   end

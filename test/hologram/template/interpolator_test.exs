@@ -7,7 +7,7 @@ defmodule Hologram.Template.InterpolatorTest do
 
   test "text" do
     nodes = [
-      %TextNode{text: "test"}
+      %TextNode{content: "test"}
     ]
 
     result = Interpolator.interpolate(nodes)
@@ -16,7 +16,7 @@ defmodule Hologram.Template.InterpolatorTest do
 
   test "expression" do
     nodes = [
-      %TextNode{text: "{{ @abc }}"}
+      %TextNode{content: "{{ @abc }}"}
     ]
 
     result = Interpolator.interpolate(nodes)
@@ -32,13 +32,13 @@ defmodule Hologram.Template.InterpolatorTest do
 
   test "text, expression" do
     nodes = [
-      %TextNode{text: "bcd{{ @abc }}"}
+      %TextNode{content: "bcd{{ @abc }}"}
     ]
 
     result = Interpolator.interpolate(nodes)
 
     expected = [
-      %TextNode{text: "bcd"},
+      %TextNode{content: "bcd"},
       %Expression{
         ir: %ModuleAttributeOperator{name: :abc}
       }
@@ -49,7 +49,7 @@ defmodule Hologram.Template.InterpolatorTest do
 
   test "expression, text" do
     nodes = [
-      %TextNode{text: "{{ @abc }}bcd"}
+      %TextNode{content: "{{ @abc }}bcd"}
     ]
 
     result = Interpolator.interpolate(nodes)
@@ -58,7 +58,7 @@ defmodule Hologram.Template.InterpolatorTest do
       %Expression{
         ir: %ModuleAttributeOperator{name: :abc}
       },
-      %TextNode{text: "bcd"}
+      %TextNode{content: "bcd"}
     ]
 
     assert result == expected
@@ -66,7 +66,7 @@ defmodule Hologram.Template.InterpolatorTest do
 
   test "expression, expression" do
     nodes = [
-      %TextNode{text: "{{ @abc }}{{ @bcd }}"}
+      %TextNode{content: "{{ @abc }}{{ @bcd }}"}
     ]
 
     result = Interpolator.interpolate(nodes)
@@ -85,17 +85,17 @@ defmodule Hologram.Template.InterpolatorTest do
 
   test "text, expression, text" do
     nodes = [
-      %TextNode{text: "cde{{ @abc }}bcd"}
+      %TextNode{content: "cde{{ @abc }}bcd"}
     ]
 
     result = Interpolator.interpolate(nodes)
 
     expected = [
-      %TextNode{text: "cde"},
+      %TextNode{content: "cde"},
       %Expression{
         ir: %ModuleAttributeOperator{name: :abc}
       },
-      %TextNode{text: "bcd"}
+      %TextNode{content: "bcd"}
     ]
 
     assert result == expected
@@ -103,7 +103,7 @@ defmodule Hologram.Template.InterpolatorTest do
 
   test "expression, text, expression" do
     nodes = [
-      %TextNode{text: "{{ @abc }}bcd{{ @cde }}"}
+      %TextNode{content: "{{ @abc }}bcd{{ @cde }}"}
     ]
 
     result = Interpolator.interpolate(nodes)
@@ -112,7 +112,7 @@ defmodule Hologram.Template.InterpolatorTest do
       %Expression{
         ir: %ModuleAttributeOperator{name: :abc}
       },
-      %TextNode{text: "bcd"},
+      %TextNode{content: "bcd"},
       %Expression{
         ir: %ModuleAttributeOperator{name: :cde}
       }
@@ -123,17 +123,17 @@ defmodule Hologram.Template.InterpolatorTest do
 
   test "text, expression, text, expression" do
     nodes = [
-      %TextNode{text: "cde{{ @abc }}bcd{{ @def }}"}
+      %TextNode{content: "cde{{ @abc }}bcd{{ @def }}"}
     ]
 
     result = Interpolator.interpolate(nodes)
 
     expected = [
-      %TextNode{text: "cde"},
+      %TextNode{content: "cde"},
       %Expression{
         ir: %ModuleAttributeOperator{name: :abc}
       },
-      %TextNode{text: "bcd"},
+      %TextNode{content: "bcd"},
       %Expression{
         ir: %ModuleAttributeOperator{name: :def}
       }
@@ -144,7 +144,7 @@ defmodule Hologram.Template.InterpolatorTest do
 
   test "expression, text, expression, text" do
     nodes = [
-      %TextNode{text: "{{ @abc }}bcd{{ @cde }}def"}
+      %TextNode{content: "{{ @abc }}bcd{{ @cde }}def"}
     ]
 
     result = Interpolator.interpolate(nodes)
@@ -153,11 +153,11 @@ defmodule Hologram.Template.InterpolatorTest do
       %Expression{
         ir: %ModuleAttributeOperator{name: :abc}
       },
-      %TextNode{text: "bcd"},
+      %TextNode{content: "bcd"},
       %Expression{
         ir: %ModuleAttributeOperator{name: :cde}
       },
-      %TextNode{text: "def"}
+      %TextNode{content: "def"}
     ]
 
     assert result == expected
@@ -165,8 +165,8 @@ defmodule Hologram.Template.InterpolatorTest do
 
   test "multiple nodes" do
     nodes = [
-      %TextNode{text: "test_1"},
-      %TextNode{text: "test_2"}
+      %TextNode{content: "test_1"},
+      %TextNode{content: "test_2"}
     ]
 
     result = Interpolator.interpolate(nodes)
@@ -175,12 +175,12 @@ defmodule Hologram.Template.InterpolatorTest do
 
   test "nested node" do
     nodes = [
-      %TextNode{text: "abc{{ @bcd }}"},
+      %TextNode{content: "abc{{ @bcd }}"},
       %ElementNode{
         tag: "div",
         attrs: %{},
         children: [
-          %TextNode{text: "cde{{ @def }}"}
+          %TextNode{content: "cde{{ @def }}"}
         ]
       }
     ]
@@ -188,14 +188,14 @@ defmodule Hologram.Template.InterpolatorTest do
     result = Interpolator.interpolate(nodes)
 
     expected = [
-      %TextNode{text: "abc"},
+      %TextNode{content: "abc"},
       %Expression{
         ir: %ModuleAttributeOperator{name: :bcd}
       },
       %ElementNode{
         attrs: %{},
         children: [
-          %TextNode{text: "cde"},
+          %TextNode{content: "cde"},
           %Expression{
             ir: %ModuleAttributeOperator{name: :def}
           }

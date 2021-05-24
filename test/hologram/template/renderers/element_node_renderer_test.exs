@@ -14,7 +14,7 @@ defmodule Hologram.Template.ElementNodeRendererTest do
     tag = "div"
     attrs = %{attr_1: "test_attr_value_1", attr_2: "test_attr_value_2"}
     children = [
-      %TextNode{text: "test_text"},
+      %TextNode{content: "test_text"},
       %ElementNode{attrs: %{}, children: [], tag: "span"}
     ]
 

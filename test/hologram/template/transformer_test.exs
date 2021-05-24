@@ -57,7 +57,7 @@ defmodule Hologram.Template.TransformerTest do
           ],
           tag: "div"
         },
-        %TextNode{text: "\n"}
+        %TextNode{content: "\n"}
       ]
 
       assert result == expected
@@ -72,13 +72,13 @@ defmodule Hologram.Template.TransformerTest do
         %ElementNode{
           attrs: %{},
           children: [
-            %TextNode{text: "test_text_1"},
+            %TextNode{content: "test_text_1"},
             %ElementNode{
               attrs: %{},
               children: [
                 %ElementNode{
                   attrs: %{},
-                  children: [%TextNode{text: "test_text_2"}],
+                  children: [%TextNode{content: "test_text_2"}],
                   tag: "span"
                 }
               ],
@@ -114,11 +114,11 @@ defmodule Hologram.Template.TransformerTest do
             "id" => "id_1"
           },
           children: [
-            %TextNode{text: "\n  "},
+            %TextNode{content: "\n  "},
             %ElementNode{
               attrs: %{},
               children: [
-                %TextNode{text: "\n    "},
+                %TextNode{content: "\n    "},
                 %ElementNode{
                   attrs: %{
                     ":if" => %Expression{ir: %ModuleAttributeOperator{name: :var_3}},
@@ -129,15 +129,15 @@ defmodule Hologram.Template.TransformerTest do
                   children: [],
                   tag: "span"
                 },
-                %TextNode{text: "\n  "}
+                %TextNode{content: "\n  "}
               ],
               tag: "h1"
             },
-            %TextNode{text: "\n"}
+            %TextNode{content: "\n"}
           ],
           tag: "div"
         },
-        %TextNode{text: "\n"}
+        %TextNode{content: "\n"}
       ]
 
       assert result == expected
@@ -154,15 +154,15 @@ defmodule Hologram.Template.TransformerTest do
         %ElementNode{
           attrs: %{},
           children: [
-            %TextNode{text: "test_1"},
+            %TextNode{content: "test_1"},
             %Expression{
               ir: %ModuleAttributeOperator{name: :x1}
             },
-            %TextNode{text: "test_2"},
+            %TextNode{content: "test_2"},
             %Expression{
               ir: %ModuleAttributeOperator{name: :x2}
             },
-            %TextNode{text: "test_3"}
+            %TextNode{content: "test_3"}
           ],
           tag: "div"
         }

@@ -6,8 +6,8 @@ defmodule Hologram.Template.NodeListRendererTest do
 
   test "render/2" do
     nodes = [
-      %TextNode{text: "test_1"},
-      %TextNode{text: "test_2"}
+      %TextNode{content: "test_1"},
+      %TextNode{content: "test_2"}
     ]
 
     state = %{}

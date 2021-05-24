@@ -16,7 +16,7 @@ defmodule Hologram.Template.Renderer do
     ElementNodeRenderer.render(tag, attrs, children, state)
   end
 
-  def render(%TextNode{text: text}, _state) do
-    text
+  def render(%TextNode{content: content}, _state) do
+    content
   end
 end

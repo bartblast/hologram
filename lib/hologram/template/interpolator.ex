@@ -5,8 +5,8 @@ defmodule Hologram.Template.Interpolator do
   def interpolate(nodes) do
     Enum.reduce(nodes, [], fn node, acc ->
       case node do
-        %TextNode{text: text} ->
-          acc ++ split_text_node(nodes, node, text)
+        %TextNode{content: content} ->
+          acc ++ split_text_node(nodes, node, content)
 
         _ ->
           acc ++ [Map.put(node, :children, interpolate(node.children))]
@@ -15,11 +15,11 @@ defmodule Hologram.Template.Interpolator do
   end
 
   defp handle_match(match, char_count, nodes) do
-    text = Enum.at(match, 1)
+    content = Enum.at(match, 1)
 
     {char_count, nodes} =
-      if text != "" do
-        {char_count + String.length(text), nodes ++ [%TextNode{text: text}]}
+      if content != "" do
+        {char_count + String.length(content), nodes ++ [%TextNode{content: content}]}
       else
         {char_count, nodes}
       end
@@ -34,31 +34,31 @@ defmodule Hologram.Template.Interpolator do
     {char_count, nodes} = {char_count + 4 + String.length(code), nodes ++ [%Expression{ir: ir}]}
   end
 
-  defp handle_matches(text, matches) do
+  defp handle_matches(content, matches) do
     {char_count, nodes} =
       Enum.reduce(matches, {0, []}, fn match, {char_count, nodes} ->
         handle_match(match, char_count, nodes)
       end)
 
-    length = String.length(text)
-    remainder = String.slice(text, char_count, length - char_count)
+    length = String.length(content)
+    remainder = String.slice(content, char_count, length - char_count)
 
     if remainder != "" do
-      nodes ++ [%TextNode{text: remainder}]
+      nodes ++ [%TextNode{content: remainder}]
     else
       nodes
     end
   end
 
-  defp split_text_node(nodes, node, text) do
+  defp split_text_node(nodes, node, content) do
     regex = ~r/(.*)(\{\{(.+)\}\})/U
 
-    case Regex.scan(regex, text) do
+    case Regex.scan(regex, content) do
       [] ->
         [node]
 
       matches ->
-        handle_matches(text, matches)
+        handle_matches(content, matches)
     end
   end
 end

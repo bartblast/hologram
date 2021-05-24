@@ -14,8 +14,8 @@ defmodule Hologram.Template.RendererTest do
   describe "render/2" do
     test "node list", %{state: state} do
       nodes = [
-        %TextNode{text: "test_1"},
-        %TextNode{text: "test_2"}
+        %TextNode{content: "test_1"},
+        %TextNode{content: "test_2"}
       ]
 
       result = Renderer.render(nodes, state)
@@ -44,7 +44,7 @@ defmodule Hologram.Template.RendererTest do
     end
 
     test "text node" do
-      virtual_dom = %TextNode{text: "test"}
+      virtual_dom = %TextNode{content: "test"}
 
       result = Renderer.render(virtual_dom)
       expected = "test"

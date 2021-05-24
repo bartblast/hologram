@@ -25,7 +25,7 @@ defmodule Hologram.Template.Transformer do
   end
 
   def transform(dom, _aliases) when is_binary(dom) do
-    %TextNode{text: dom}
+    %TextNode{content: dom}
   end
 
   defp build_element_attrs(attrs) do

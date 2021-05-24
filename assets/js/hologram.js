@@ -78,7 +78,7 @@ class Hologram {
         return Hologram.evaluate(ir.callback(state))
 
       case "text":
-        return ir.text
+        return ir.content
     }
   }
 
