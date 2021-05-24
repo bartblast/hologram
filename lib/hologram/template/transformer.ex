@@ -16,7 +16,7 @@ defmodule Hologram.Template.Transformer do
 
     case determine_node_type(type, aliases) do
       :tag ->
-        attrs = build_tag_node_attrs(attrs)
+        attrs = build_element_attrs(attrs)
         %ElementNode{tag: type, attrs: attrs, children: children}
 
       # :component ->
@@ -28,7 +28,7 @@ defmodule Hologram.Template.Transformer do
     %TextNode{text: dom}
   end
 
-  defp build_tag_node_attrs(attrs) do
+  defp build_element_attrs(attrs) do
     Enum.map(attrs, fn {key, value} ->
       regex = ~r/^{{(.+)}}$/
 

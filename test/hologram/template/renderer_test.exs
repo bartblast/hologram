@@ -34,7 +34,7 @@ defmodule Hologram.Template.RendererTest do
       assert result == expected
     end
 
-    test "tag node", %{state: state} do
+    test "element node", %{state: state} do
       virtual_dom = %ElementNode{tag: "div", attrs: %{}, children: []}
 
       result = Renderer.render(virtual_dom, state)

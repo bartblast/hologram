@@ -21,6 +21,6 @@ defmodule Hologram.Template.ElementNodeGenerator do
 
       children_js = "[#{children_str}]"
 
-    "{ type: 'tag_node', tag: '#{tag}', attrs: #{attrs_js}, children: #{children_js} }"
+    "{ type: 'element', tag: '#{tag}', attrs: #{attrs_js}, children: #{children_js} }"
   end
 end

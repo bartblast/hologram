@@ -6,7 +6,7 @@ defmodule Hologram.Template.TransformerTest do
   alias Hologram.Compiler.IR.{ModuleAttributeOperator}
 
   describe "transform/1" do
-    test "tag nodes without attrs" do
+    test "element nodes without attrs" do
       result =
         Parser.parse!("<div><h1><span></span></h1></div>")
         |> Transformer.transform()
@@ -30,7 +30,7 @@ defmodule Hologram.Template.TransformerTest do
       assert result == expected
     end
 
-    test "tag nodes with attrs" do
+    test "element nodes with attrs" do
       html = """
       <div class="class_1"><h1><span class="class_2" id="id_2"></span></h1></div>
       """

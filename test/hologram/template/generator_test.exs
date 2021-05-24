@@ -34,11 +34,11 @@ defmodule Hologram.Template.GeneratorTest do
     assert result == expected
   end
 
-  test "tag node", context do
+  test "element node", context do
     virtual_dom = %ElementNode{tag: "div", attrs: %{}, children: []}
 
     result = Generator.generate(virtual_dom, context)
-    expected = "{ type: 'tag_node', tag: 'div', attrs: {}, children: [] }"
+    expected = "{ type: 'element', tag: 'div', attrs: {}, children: [] }"
 
     assert result == expected
   end

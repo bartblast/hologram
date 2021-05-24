@@ -63,10 +63,7 @@ class Hologram {
     }
 
     switch (ir.type) {
-      case "expression":
-        return Hologram.evaluate(ir.callback(state))
-        
-      case "tag_node":
+      case "element":
         let attrs = Object.keys(ir.attrs).reduce((acc, key) => {
           return acc.concat([`${key}="${ir.attrs[key]}"`])
         }, []).join(" ")
@@ -76,8 +73,11 @@ class Hologram {
         }).join("")
 
         return `<${ir.tag} ${attrs}>${children}</${ir.tag}>`
+        
+      case "expression":
+        return Hologram.evaluate(ir.callback(state))
 
-      case "text_node":
+      case "text":
         return ir.text
     }
   }

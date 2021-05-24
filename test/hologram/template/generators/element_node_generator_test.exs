@@ -16,7 +16,7 @@ defmodule Hologram.Template.ElementNodeGeneratorTest do
     children = []
 
     result = ElementNodeGenerator.generate(tag, attrs, children, context)
-    expected = "{ type: 'tag_node', tag: 'div', attrs: {}, children: [] }"
+    expected = "{ type: 'element', tag: 'div', attrs: {}, children: [] }"
 
     assert result == expected
   end
@@ -27,7 +27,7 @@ defmodule Hologram.Template.ElementNodeGeneratorTest do
     children = []
 
     result = ElementNodeGenerator.generate(tag, attrs, children, context)
-    expected = "{ type: 'tag_node', tag: 'div', attrs: { 'attr_1': 'value_1', 'attr_2': 'value_2' }, children: [] }"
+    expected = "{ type: 'element', tag: 'div', attrs: { 'attr_1': 'value_1', 'attr_2': 'value_2' }, children: [] }"
 
     assert result == expected
   end
@@ -42,7 +42,7 @@ defmodule Hologram.Template.ElementNodeGeneratorTest do
     ]
 
     result = ElementNodeGenerator.generate(tag, attrs, children, context)
-    expected = "{ type: 'tag_node', tag: 'div', attrs: {}, children: [{ type: 'tag_node', tag: 'span', attrs: {}, children: [] }, { type: 'tag_node', tag: 'h1', attrs: {}, children: [] }] }"
+    expected = "{ type: 'element', tag: 'div', attrs: {}, children: [{ type: 'element', tag: 'span', attrs: {}, children: [] }, { type: 'element', tag: 'h1', attrs: {}, children: [] }] }"
 
     assert result == expected
   end
@@ -53,7 +53,7 @@ defmodule Hologram.Template.ElementNodeGeneratorTest do
     children = []
 
     result = ElementNodeGenerator.generate(tag, attrs, children, context)
-    expected = "{ type: 'tag_node', tag: 'div', attrs: { 'holo-click': 'test' }, children: [] }"
+    expected = "{ type: 'element', tag: 'div', attrs: { 'holo-click': 'test' }, children: [] }"
 
     assert result == expected
   end
