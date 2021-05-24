@@ -43,7 +43,7 @@ defmodule Hologram.Template.RendererTest do
       assert result == expected
     end
 
-    test "text node", %{state: state} do
+    test "text node" do
       virtual_dom = %TextNode{text: "test"}
 
       result = Renderer.render(virtual_dom)

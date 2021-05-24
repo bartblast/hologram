@@ -24,9 +24,9 @@ defmodule Hologram.Template.ParserTest do
     html = "<div class=\"value_class\" id=\"value_id\"></div>"
 
     result = Parser.parse(html)
-    expected = {:ok, [{"div", [{"class", "value_class", "id", "value_id"}], []}]}
+    expected = {:ok, [{"div", [{"class", "value_class"}, {"id", "value_id"}], []}]}
 
-    assert result = expected
+    assert result == expected
   end
 
   test "children" do
@@ -35,7 +35,7 @@ defmodule Hologram.Template.ParserTest do
     result = Parser.parse(html)
     expected = {:ok, [{"div", [], [{"span", [], []}, {"h1", [], []}]}]}
 
-    assert result = expected
+    assert result == expected
   end
 
   test "interpolation quotes fixing" do
