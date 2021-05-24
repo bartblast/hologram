@@ -1,4 +1,4 @@
-defmodule Hologram.Template.TagNodeRenderer do
+defmodule Hologram.Template.ElementNodeRenderer do
   alias Hologram.Template.Renderer
 
   def render(tag, attrs, children, state) do

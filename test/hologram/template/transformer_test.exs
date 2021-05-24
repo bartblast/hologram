@@ -1,7 +1,7 @@
 defmodule Hologram.Template.TransformerTest do
   use Hologram.TestCase, async: true
 
-  alias Hologram.Template.VirtualDOM.{Expression, TagNode, TextNode}
+  alias Hologram.Template.VirtualDOM.{Expression, ElementNode, TextNode}
   alias Hologram.Template.{Parser, Transformer}
   alias Hologram.Compiler.IR.{ModuleAttributeOperator}
 
@@ -12,13 +12,13 @@ defmodule Hologram.Template.TransformerTest do
         |> Transformer.transform()
 
       expected = [
-        %TagNode{
+        %ElementNode{
           attrs: %{},
           children: [
-            %TagNode{
+            %ElementNode{
               attrs: %{},
               children: [
-                %TagNode{attrs: %{}, children: [], tag: "span"}
+                %ElementNode{attrs: %{}, children: [], tag: "span"}
               ],
               tag: "h1"
             }
@@ -40,13 +40,13 @@ defmodule Hologram.Template.TransformerTest do
         |> Transformer.transform()
 
       expected = [
-        %TagNode{
+        %ElementNode{
           attrs: %{"class" => "class_1"},
           children: [
-            %TagNode{
+            %ElementNode{
               attrs: %{},
               children: [
-                %TagNode{
+                %ElementNode{
                   attrs: %{"class" => "class_2", "id" => "id_2"},
                   children: [],
                   tag: "span"
@@ -69,14 +69,14 @@ defmodule Hologram.Template.TransformerTest do
         |> Transformer.transform()
 
       expected = [
-        %TagNode{
+        %ElementNode{
           attrs: %{},
           children: [
             %TextNode{text: "test_text_1"},
-            %TagNode{
+            %ElementNode{
               attrs: %{},
               children: [
-                %TagNode{
+                %ElementNode{
                   attrs: %{},
                   children: [%TextNode{text: "test_text_2"}],
                   tag: "span"
@@ -106,7 +106,7 @@ defmodule Hologram.Template.TransformerTest do
         |> Transformer.transform()
 
       expected = [
-        %TagNode{
+        %ElementNode{
           attrs: %{
             ":if" => %Expression{ir: %ModuleAttributeOperator{name: :var_1}},
             ":show" => %Expression{ir: %ModuleAttributeOperator{name: :var_2}},
@@ -115,11 +115,11 @@ defmodule Hologram.Template.TransformerTest do
           },
           children: [
             %TextNode{text: "\n  "},
-            %TagNode{
+            %ElementNode{
               attrs: %{},
               children: [
                 %TextNode{text: "\n    "},
-                %TagNode{
+                %ElementNode{
                   attrs: %{
                     ":if" => %Expression{ir: %ModuleAttributeOperator{name: :var_3}},
                     ":show" => %Expression{ir: %ModuleAttributeOperator{name: :var_4}},
@@ -151,7 +151,7 @@ defmodule Hologram.Template.TransformerTest do
         |> Transformer.transform()
 
       expected = [
-        %TagNode{
+        %ElementNode{
           attrs: %{},
           children: [
             %TextNode{text: "test_1"},

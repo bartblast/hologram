@@ -3,7 +3,7 @@ defmodule Hologram.Template.RendererTest do
 
   alias Hologram.Compiler.IR.ModuleAttributeOperator
   alias Hologram.Template.Renderer
-  alias Hologram.Template.VirtualDOM.{Expression, TagNode, TextNode}
+  alias Hologram.Template.VirtualDOM.{Expression, ElementNode, TextNode}
 
   setup do
     [
@@ -35,7 +35,7 @@ defmodule Hologram.Template.RendererTest do
     end
 
     test "tag node", %{state: state} do
-      virtual_dom = %TagNode{tag: "div", attrs: %{}, children: []}
+      virtual_dom = %ElementNode{tag: "div", attrs: %{}, children: []}
 
       result = Renderer.render(virtual_dom, state)
       expected = "<div></div>"

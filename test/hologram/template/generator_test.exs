@@ -1,7 +1,7 @@
 defmodule Hologram.Template.GeneratorTest do
   use Hologram.TestCase, async: true
 
-  alias Hologram.Template.VirtualDOM.{Expression, TagNode, TextNode}
+  alias Hologram.Template.VirtualDOM.{Expression, ElementNode, TextNode}
   alias Hologram.Template.Generator
   alias Hologram.Compiler.IR.AtomType
 
@@ -35,7 +35,7 @@ defmodule Hologram.Template.GeneratorTest do
   end
 
   test "tag node", context do
-    virtual_dom = %TagNode{tag: "div", attrs: %{}, children: []}
+    virtual_dom = %ElementNode{tag: "div", attrs: %{}, children: []}
 
     result = Generator.generate(virtual_dom, context)
     expected = "{ type: 'tag_node', tag: 'div', attrs: {}, children: [] }"

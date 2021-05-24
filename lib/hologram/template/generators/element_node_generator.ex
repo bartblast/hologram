@@ -1,12 +1,12 @@
-defmodule Hologram.Template.TagNodeGenerator do
-  alias Hologram.Template.{Generator, TagNodeRenderer}
+defmodule Hologram.Template.ElementNodeGenerator do
+  alias Hologram.Template.{ElementNodeRenderer, Generator}
 
   def generate(tag, attrs, children, context) do
     attrs_js =
       if Enum.any?(attrs) do
         js =
           Enum.map(attrs, fn {key, value} ->
-            "'#{TagNodeRenderer.render_attr_name(key)}': '#{value}'"
+            "'#{ElementNodeRenderer.render_attr_name(key)}': '#{value}'"
           end)
           |> Enum.join(", ")
 

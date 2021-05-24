@@ -1,6 +1,6 @@
 defmodule Hologram.Template.Renderer do
-  alias Hologram.Template.{ExpressionRenderer, NodeListRenderer, TagNodeRenderer}
-  alias Hologram.Template.VirtualDOM.{Expression, TagNode, TextNode}
+  alias Hologram.Template.{ExpressionRenderer, NodeListRenderer, ElementNodeRenderer}
+  alias Hologram.Template.VirtualDOM.{Expression, ElementNode, TextNode}
 
   def render(virtual_dom, state \\ %{})
 
@@ -12,8 +12,8 @@ defmodule Hologram.Template.Renderer do
     ExpressionRenderer.render(ir, state)
   end
 
-  def render(%TagNode{attrs: attrs, children: children, tag: tag}, state) do
-    TagNodeRenderer.render(tag, attrs, children, state)
+  def render(%ElementNode{attrs: attrs, children: children, tag: tag}, state) do
+    ElementNodeRenderer.render(tag, attrs, children, state)
   end
 
   def render(%TextNode{text: text}, _state) do

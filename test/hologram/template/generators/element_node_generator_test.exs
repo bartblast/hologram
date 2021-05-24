@@ -1,8 +1,8 @@
-defmodule Hologram.Template.TagNodeGeneratorTest do
+defmodule Hologram.Template.ElementNodeGeneratorTest do
   use Hologram.TestCase, async: true
 
-  alias Hologram.Template.VirtualDOM.TagNode
-  alias Hologram.Template.TagNodeGenerator
+  alias Hologram.Template.ElementNodeGenerator
+  alias Hologram.Template.VirtualDOM.ElementNode
 
   setup do
     [
@@ -15,7 +15,7 @@ defmodule Hologram.Template.TagNodeGeneratorTest do
     attrs = %{}
     children = []
 
-    result = TagNodeGenerator.generate(tag, attrs, children, context)
+    result = ElementNodeGenerator.generate(tag, attrs, children, context)
     expected = "{ type: 'tag_node', tag: 'div', attrs: {}, children: [] }"
 
     assert result == expected
@@ -26,7 +26,7 @@ defmodule Hologram.Template.TagNodeGeneratorTest do
     attrs = %{"attr_1" => "value_1", "attr_2" => "value_2"}
     children = []
 
-    result = TagNodeGenerator.generate(tag, attrs, children, context)
+    result = ElementNodeGenerator.generate(tag, attrs, children, context)
     expected = "{ type: 'tag_node', tag: 'div', attrs: { 'attr_1': 'value_1', 'attr_2': 'value_2' }, children: [] }"
 
     assert result == expected
@@ -37,11 +37,11 @@ defmodule Hologram.Template.TagNodeGeneratorTest do
     attrs = %{}
 
     children = [
-      %TagNode{tag: "span", attrs: %{}, children: []},
-      %TagNode{tag: "h1", attrs: %{}, children: []}
+      %ElementNode{tag: "span", attrs: %{}, children: []},
+      %ElementNode{tag: "h1", attrs: %{}, children: []}
     ]
 
-    result = TagNodeGenerator.generate(tag, attrs, children, context)
+    result = ElementNodeGenerator.generate(tag, attrs, children, context)
     expected = "{ type: 'tag_node', tag: 'div', attrs: {}, children: [{ type: 'tag_node', tag: 'span', attrs: {}, children: [] }, { type: 'tag_node', tag: 'h1', attrs: {}, children: [] }] }"
 
     assert result == expected
@@ -52,7 +52,7 @@ defmodule Hologram.Template.TagNodeGeneratorTest do
     attrs = %{":click" => "test"}
     children = []
 
-    result = TagNodeGenerator.generate(tag, attrs, children, context)
+    result = ElementNodeGenerator.generate(tag, attrs, children, context)
     expected = "{ type: 'tag_node', tag: 'div', attrs: { 'holo-click': 'test' }, children: [] }"
 
     assert result == expected

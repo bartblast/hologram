@@ -1,7 +1,7 @@
 defmodule Hologram.Template.Transformer do
   alias Hologram.Compiler.{Parser, Transformer}
   alias Hologram.Template.Interpolator
-  alias Hologram.Template.VirtualDOM.{ComponentNode, Expression, TagNode, TextNode}
+  alias Hologram.Template.VirtualDOM.{ComponentNode, ElementNode, Expression, TextNode}
 
   def transform(dom, aliases \\ %{})
 
@@ -14,10 +14,10 @@ defmodule Hologram.Template.Transformer do
       Enum.map(children, fn child -> transform(child, aliases) end)
       |> Interpolator.interpolate()
 
-    case determine_node_type(tag, aliases) do
+    case determine_node_type(type, aliases) do
       :tag ->
         attrs = build_tag_node_attrs(attrs)
-        %TagNode{tag: type, attrs: attrs, children: children}
+        %ElementNode{tag: type, attrs: attrs, children: children}
 
       # :component ->
         # %ComponentNode{module: module, children: children}

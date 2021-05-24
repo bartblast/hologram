@@ -1,6 +1,6 @@
 defmodule Hologram.Template.Generator do
-  alias Hologram.Template.VirtualDOM.{Expression, TagNode, TextNode}
-  alias Hologram.Template.{ExpressionGenerator, NodeListGenerator, TagNodeGenerator, TextNodeGenerator}
+  alias Hologram.Template.VirtualDOM.{Expression, ElementNode, TextNode}
+  alias Hologram.Template.{ExpressionGenerator, NodeListGenerator, ElementNodeGenerator, TextNodeGenerator}
 
   def generate(virtual_dom, context \\ [module_attributes: []])
 
@@ -12,8 +12,8 @@ defmodule Hologram.Template.Generator do
     ExpressionGenerator.generate(ir, context)
   end
 
-  def generate(%TagNode{attrs: attrs, children: children, tag: tag}, context) do
-    TagNodeGenerator.generate(tag, attrs, children, context)
+  def generate(%ElementNode{attrs: attrs, children: children, tag: tag}, context) do
+    ElementNodeGenerator.generate(tag, attrs, children, context)
   end
 
   def generate(%TextNode{text: text}, _) do

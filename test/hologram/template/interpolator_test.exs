@@ -2,7 +2,7 @@ defmodule Hologram.Template.InterpolatorTest do
   use Hologram.TestCase, async: true
 
   alias Hologram.Compiler.IR.ModuleAttributeOperator
-  alias Hologram.Template.VirtualDOM.{Expression, TagNode, TextNode}
+  alias Hologram.Template.VirtualDOM.{Expression, ElementNode, TextNode}
   alias Hologram.Template.Interpolator
 
   test "text" do
@@ -176,7 +176,7 @@ defmodule Hologram.Template.InterpolatorTest do
   test "nested node" do
     nodes = [
       %TextNode{text: "abc{{ @bcd }}"},
-      %TagNode{
+      %ElementNode{
         tag: "div",
         attrs: %{},
         children: [
@@ -192,7 +192,7 @@ defmodule Hologram.Template.InterpolatorTest do
       %Expression{
         ir: %ModuleAttributeOperator{name: :bcd}
       },
-      %TagNode{
+      %ElementNode{
         attrs: %{},
         children: [
           %TextNode{text: "cde"},
