@@ -3,13 +3,8 @@ defmodule Hologram.Page do
     quote do
       require Hologram.Page
       import Hologram.Page
+      import Hologram.Runtime.Commons, only: [sigil_H: 2]
     end
-  end
-
-  def sigil_H(str, _), do: str
-
-  def update(state, key, value) do
-    Map.put(state, key, value)
   end
 
   defmacro route(path) do
@@ -18,5 +13,9 @@ defmodule Hologram.Page do
         unquote(path)
       end
     end
+  end
+
+  def update(state, key, value) do
+    Map.put(state, key, value)
   end
 end
