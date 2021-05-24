@@ -8,17 +8,7 @@ defmodule Hologram.Template.RendererTest do
   alias Hologram.Compiler.IR.ModuleAttributeOperator
 
   describe "render/2" do
-    test "multiple nodes" do
-      nodes = [
-        %TextNode{text: "test_1"},
-        %TextNode{text: "test_2"}
-      ]
 
-      result = Renderer.render(nodes, %{})
-      expected = "test_1test_2"
-
-      assert result == expected
-    end
 
     test "tag node" do
     end
