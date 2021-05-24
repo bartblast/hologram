@@ -16,7 +16,7 @@ defmodule Hologram.Template.Generator do
     ElementNodeGenerator.generate(tag, attrs, children, context)
   end
 
-  def generate(%TextNode{text: text}, _) do
-    TextNodeGenerator.generate(text)
+  def generate(%TextNode{content: content}, _) do
+    TextNodeGenerator.generate(content)
   end
 end
