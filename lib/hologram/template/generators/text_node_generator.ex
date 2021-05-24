@@ -4,6 +4,6 @@ defmodule Hologram.Template.TextNodeGenerator do
       String.replace(content, "\n", "\\n", global: true)
       |> String.replace("'", "\\'", global: true)
 
-    "{ type: 'text_node', content: '#{content}' }"
+    "{ type: 'text', content: '#{content}' }"
   end
 end

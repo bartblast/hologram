@@ -13,7 +13,7 @@ defmodule Hologram.Template.NodeListGeneratorTest do
     state = %{}
 
     result = NodeListGenerator.generate(nodes, state)
-    expected = "[{ type: 'text_node', content: 'test_1' }, { type: 'text_node', content: 'test_2' }]"
+    expected = "[{ type: 'text', content: 'test_1' }, { type: 'text', content: 'test_2' }]"
 
     assert result == expected
   end
