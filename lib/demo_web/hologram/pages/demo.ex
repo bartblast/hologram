@@ -11,7 +11,8 @@ defmodule DemoPage do
 
   def render do
     ~H"""
-      <div>Hello World {{ @counter }}</div>
+      <h1>Demo Page</h1>
+      <Counter value={{ @counter }} />
       <div><button :click="increment">Increment</button></div>
     """
   end
