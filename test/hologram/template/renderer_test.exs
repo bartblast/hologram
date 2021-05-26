@@ -3,7 +3,7 @@ defmodule Hologram.Template.RendererTest do
 
   alias Hologram.Compiler.IR.ModuleAttributeOperator
   alias Hologram.Template.Renderer
-  alias Hologram.Template.VirtualDOM.{Expression, ElementNode, TextNode}
+  alias Hologram.Template.VirtualDOM.{Component, ElementNode, Expression, TextNode}
 
   setup do
     [
@@ -24,12 +24,12 @@ defmodule Hologram.Template.RendererTest do
       assert result == expected
     end
 
-    test "expression" do
-      virtual_dom = %Expression{ir: %ModuleAttributeOperator{name: :a}}
-      state = %{a: 123}
+    test "component", %{state: state} do
+      module = [:Hologram, :Test, :Fixtures, :Template, :Renderer, :Module1]
+      virtual_dom = %Component{module: module}
 
       result = Renderer.render(virtual_dom, state)
-      expected = "123"
+      expected = "<div>test template</div>"
 
       assert result == expected
     end
@@ -39,6 +39,16 @@ defmodule Hologram.Template.RendererTest do
 
       result = Renderer.render(virtual_dom, state)
       expected = "<div></div>"
+
+      assert result == expected
+    end
+
+    test "expression" do
+      virtual_dom = %Expression{ir: %ModuleAttributeOperator{name: :a}}
+      state = %{a: 123}
+
+      result = Renderer.render(virtual_dom, state)
+      expected = "123"
 
       assert result == expected
     end
