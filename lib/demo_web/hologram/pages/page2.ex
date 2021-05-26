@@ -9,7 +9,7 @@ defmodule Page2 do
 
   def render do
     ~H"""
-      Page2
+    Page2
     """
   end
 end
