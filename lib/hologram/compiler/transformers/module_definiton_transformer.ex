@@ -4,13 +4,13 @@ defmodule Hologram.Compiler.ModuleDefinitionTransformer do
   alias Hologram.Compiler.Transformer
 
   def transform(ast) do
-    {:defmodule, _, [{:__aliases__, _, module}, [do: {:__block__, _, block}]]} = ast
-    uses = aggregate_expressions(:use, block, [])
+    {:defmodule, _, [_, [do: {:__block__, _, block_before_expansion}]]} = ast
+    uses = aggregate_expressions(:use, block_before_expansion, [])
 
-    {:defmodule, _, [{:__aliases__, _, module}, [do: {:__block__, _, block}]]} =
+    {:defmodule, _, [{:__aliases__, _, module}, [do: {:__block__, _, block_after_expansion}]]} =
       Expander.expand(ast)
 
-    build_module(block, module, uses)
+    build_module(block_after_expansion, module, uses)
   end
 
   defp aggregate_expressions(type, ast, context) do
