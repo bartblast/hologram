@@ -1,7 +1,8 @@
+# TODO: test
 defmodule Hologram.Template.Transformer do
   alias Hologram.Compiler.{Parser, Transformer}
   alias Hologram.Template.Interpolator
-  alias Hologram.Template.VirtualDOM.{ComponentNode, ElementNode, Expression, TextNode}
+  alias Hologram.Template.VirtualDOM.{Component, ElementNode, Expression, TextNode}
 
   def transform(dom, aliases \\ %{})
 
@@ -15,12 +16,13 @@ defmodule Hologram.Template.Transformer do
       |> Interpolator.interpolate()
 
     case determine_node_type(type, aliases) do
-      :tag ->
+      :component ->
+        module = String.split(type, ".") |> Enum.map(&String.to_atom/1)
+        %Component{module: module}
+
+      :element ->
         attrs = build_element_attrs(attrs)
         %ElementNode{tag: type, attrs: attrs, children: children}
-
-      # :component ->
-        # %ComponentNode{module: module, children: children}
     end
   end
 
@@ -50,8 +52,13 @@ defmodule Hologram.Template.Transformer do
     |> Enum.into(%{})
   end
 
-  # TODO: implement
   defp determine_node_type(type, aliases) do
-    :tag
+    first_char = String.at(type, 0)
+
+    if first_char == String.downcase(first_char) do
+      :element
+    else
+      :component
+    end
   end
 end
