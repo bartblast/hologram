@@ -3,6 +3,6 @@ defmodule Hologram.Runtime.CommonsTest do
   alias Hologram.Runtime.Commons
 
   test "sigil_H/2" do
-    assert Commons.sigil_H("test", []) == "test"
+    assert Commons.sigil_H(" \ntest \n", []) == "test"
   end
 end
