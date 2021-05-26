@@ -1,7 +1,6 @@
 defmodule Hologram.Template.VirtualDOM do
-  # TODO: implement (it's not supported yet)
-  defmodule ComponentNode do
-    defstruct module: nil, children: nil
+  defmodule Component do
+    defstruct module: nil
   end
 
   defmodule ElementNode do
