@@ -14,15 +14,15 @@ defmodule DemoWeb.HologramController do
     state = module.state()
     hydrated_state = Hydrator.hydrate(state)
 
-    template_ast =
+    virtual_dom =
       module.render()
       |> Template.Parser.parse!()
       |> Template.Transformer.transform()
 
     # DEFER: use .holo template files
-    html = Template.Renderer.render(template_ast, state)
+    html = Template.Renderer.render(virtual_dom, state)
 
-    template_ir = Template.Generator.generate(template_ast, state)
+    template_ir = Template.Generator.generate(virtual_dom, state)
 
     js =
       Helpers.module_name_parts(module)
