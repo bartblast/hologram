@@ -1,7 +1,7 @@
 defmodule Hologram.Compiler.ModuleDefinitionTransformerTest do
   use Hologram.TestCase, async: true
 
-  alias Hologram.Compiler.IR.{Alias, FunctionDefinition, Import, IntegerType, ModuleDefinition, ModuleAttributeDefinition}
+  alias Hologram.Compiler.IR.{Alias, FunctionDefinition, Import, IntegerType, ModuleDefinition, ModuleAttributeDefinition, UseDirective}
   alias Hologram.Compiler.ModuleDefinitionTransformer
 
   test "name" do
@@ -33,6 +33,28 @@ defmodule Hologram.Compiler.ModuleDefinitionTransformerTest do
     ]
 
     assert result.imports == expected
+  end
+
+  test "uses" do
+    code = """
+    defmodule Abc.Bcd do
+      use Hologram.Test.Fixtures.Compiler.ModuleDefinitionTransformer.Module1
+      use Hologram.Test.Fixtures.Compiler.ModuleDefinitionTransformer.Module2
+    end
+    """
+
+    ast = ast(code)
+    assert %ModuleDefinition{} = result = ModuleDefinitionTransformer.transform(ast)
+
+    module_1 = [:Hologram, :Test, :Fixtures, :Compiler, :ModuleDefinitionTransformer, :Module1]
+    module_2 = [:Hologram, :Test, :Fixtures, :Compiler, :ModuleDefinitionTransformer, :Module2]
+
+    expected = [
+      %UseDirective{module: module_1},
+      %UseDirective{module: module_2}
+    ]
+
+    assert result.uses == expected
   end
 
   test "imports" do

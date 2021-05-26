@@ -58,7 +58,7 @@ defmodule Hologram.Compiler.IR do
   end
 
   defmodule ModuleDefinition do
-    defstruct name: nil, imports: nil, aliases: nil, attributes: nil, functions: nil
+    defstruct name: nil, uses: nil, imports: nil, aliases: nil, attributes: nil, functions: nil
   end
 
   defmodule ModuleAttributeDefinition do
