@@ -28,7 +28,7 @@ defmodule Hologram.Compiler.ModuleDefinitionTransformerTest do
     expected = [
       %Import{
         module: [:Hologram, :Test, :Fixtures, :Compiler, :ModuleDefinitionTransformer, :Module1],
-        only: nil
+        only: []
       }
     ]
 
@@ -47,8 +47,8 @@ defmodule Hologram.Compiler.ModuleDefinitionTransformerTest do
     assert %ModuleDefinition{} = result = ModuleDefinitionTransformer.transform(ast)
 
     expected = [
-      %Import{module: [:Cde, :Def], only: nil},
-      %Import{module: [:Efg, :Fgh], only: nil}
+      %Import{module: [:Cde, :Def], only: []},
+      %Import{module: [:Efg, :Fgh], only: []}
     ]
 
     assert result.imports == expected
