@@ -74,7 +74,11 @@ defmodule Hologram.Compiler.Transformer do
   end
 
   def transform({:import, _, [{:__aliases__, _, module}]}, _) do
-    %Import{module: module}
+    %Import{module: module, only: []}
+  end
+
+  def transform({:import, _, [{:__aliases__, _, module}, [only: only]]}, _) do
+    %Import{module: module, only: only}
   end
 
   # OTHER

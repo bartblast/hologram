@@ -116,11 +116,18 @@ defmodule Hologram.Compiler.TransformerTest do
       assert %Alias{} = Transformer.transform(ast)
     end
 
-    test "import" do
+    test "import without 'only' clause" do
       code = "import Abc.Bcd"
       ast = ast(code)
 
-      assert Transformer.transform(ast) == %Import{module: [:Abc, :Bcd]}
+      assert Transformer.transform(ast) == %Import{module: [:Abc, :Bcd], only: []}
+    end
+
+    test "import with 'only' cluase" do
+      code = "import Abc.Bcd, only: [cde: 2]"
+      ast = ast(code)
+
+      assert Transformer.transform(ast) == %Import{module: [:Abc, :Bcd], only: [cde: 2]}
     end
   end
 
