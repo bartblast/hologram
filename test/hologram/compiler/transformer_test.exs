@@ -1,7 +1,7 @@
 defmodule Hologram.Compiler.TransformerTest do
   use Hologram.TestCase, async: true
 
-  alias Hologram.Compiler.IR.{AdditionOperator, Alias, AtomType, BooleanType, DotOperator, FunctionDefinition, FunctionCall, Import, IntegerType, ListType, MapType, MatchOperator, ModuleDefinition, ModuleAttributeDefinition, ModuleAttributeOperator, StringType, StructType, Variable}
+  alias Hologram.Compiler.IR.{AdditionOperator, Alias, AtomType, BooleanType, DotOperator, FunctionDefinition, FunctionCall, Import, IntegerType, ListType, MapType, MatchOperator, ModuleDefinition, ModuleAttributeDefinition, ModuleAttributeOperator, StringType, StructType, UseDirective, Variable}
   alias Hologram.Compiler.Transformer
 
   describe "types" do
@@ -123,11 +123,18 @@ defmodule Hologram.Compiler.TransformerTest do
       assert Transformer.transform(ast) == %Import{module: [:Abc, :Bcd], only: []}
     end
 
-    test "import with 'only' cluase" do
+    test "import with 'only' clause" do
       code = "import Abc.Bcd, only: [cde: 2]"
       ast = ast(code)
 
       assert Transformer.transform(ast) == %Import{module: [:Abc, :Bcd], only: [cde: 2]}
+    end
+
+    test "use" do
+      code = "use Abc.Bcd"
+      ast = ast(code)
+
+      assert Transformer.transform(ast) == %UseDirective{module: [:Abc, :Bcd]}
     end
   end
 

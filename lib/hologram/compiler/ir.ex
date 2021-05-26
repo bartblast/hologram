@@ -75,6 +75,10 @@ defmodule Hologram.Compiler.IR do
     defstruct module: nil, only: nil
   end
 
+  defmodule UseDirective do
+    defstruct module: nil
+  end
+
   # OTHER
 
   defmodule FunctionCall do
