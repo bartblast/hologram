@@ -220,6 +220,6 @@
 
 #### Not on Roadmap
 * Types: PID, Port, Reference
-* Control Flow: Exit
+* Control Flow: Exit, Receive
 * Operators: Custom, Overriding
 * Other: Erlang Libraries
