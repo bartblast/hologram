@@ -168,6 +168,7 @@
 | Rescue        | :x:                |
 | Throw         | :x:                |
 | Unless        | :x:                |
+| With          | :x:                |
 
 #### Definitions
 
