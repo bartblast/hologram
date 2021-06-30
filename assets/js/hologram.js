@@ -1,8 +1,10 @@
 // TODO: test
 
 // see: https://www.blazemeter.com/blog/the-correct-way-to-import-lodash-libraries-a-benchmark
-import cloneDeep from 'lodash/cloneDeep';
-import { DiffDOM } from "diff-dom"
+import cloneDeep from "lodash/cloneDeep";
+
+import {init, eventListenersModule, h, toVNode} from "snabbdom";
+const patch = init([eventListenersModule]);
 
 class Hologram {
   static evaluate(value) {
@@ -11,6 +13,31 @@ class Hologram {
         return `${value.value}`
     }
   }
+
+  static ir_to_hyperscript(ir, state) {
+    if (Array.isArray(ir)) {
+      return ir.map((node) => { return Hologram.ir_to_hyperscript(node, state)})
+    }
+
+    switch (ir.type) {
+      case "component":
+        // TODO: implement
+        return h("section", {}, [])
+
+      case "element":
+        let children = ir.children.map((child) => {
+          return Hologram.ir_to_hyperscript(child, state)
+        })
+
+        return h(ir.tag, {attrs: ir.attrs}, children)
+
+      case "expression":
+        return Hologram.evaluate(ir.callback(state))        
+
+      case "text":
+        return ir.content        
+    } 
+  }  
 
   static isPatternMatched(left, right) {
     let lType = left.type;
@@ -57,31 +84,6 @@ class Hologram {
     }
   }
 
-  static render(ir, state) {
-    if (Array.isArray(ir)) {
-      return ir.map((node) => { return Hologram.render(node, state)}).join("")
-    }
-
-    switch (ir.type) {
-      case "element":
-        let attrs = Object.keys(ir.attrs).reduce((acc, key) => {
-          return acc.concat([`${key}="${ir.attrs[key]}"`])
-        }, []).join(" ")
-
-        let children = ir.children.map((child) => {
-          return Hologram.render(child, state)
-        }).join("")
-
-        return `<${ir.tag} ${attrs}>${children}</${ir.tag}>`
-        
-      case "expression":
-        return Hologram.evaluate(ir.callback(state))
-
-      case "text":
-        return ir.content
-    }
-  }
-
   static patternMatchFunctionArgs(params, args) {
     if (args.length != params.length) {
       return false;
@@ -97,28 +99,33 @@ class Hologram {
   }
 
   static startEventLoop(window, module, moduleName) {
-    let dd = new DiffDOM();
+    // TODO: implement click handler
+    // let callback = () => {
+    //   document.querySelectorAll("[holo-click]").forEach(element => {
+    //     element.addEventListener("click", () => {
+    //       let fun = module["action"]
+    //       let action = { type: 'atom', value: element.getAttribute("holo-click") }
 
-    let callback = () => {
-      document.querySelectorAll("[holo-click]").forEach(element => {
-        element.addEventListener("click", () => {
-          let fun = module["action"]
-          let action = { type: 'atom', value: element.getAttribute("holo-click") }
-
-          console.log(`Function call: ${moduleName}.action()`)
-          console.debug([action, {}, window.state])
+    //       console.log(`Function call: ${moduleName}.action()`)
+    //       console.debug([action, {}, window.state])
           
-          window.state = fun(action, {}, window.state)
+    //       window.state = fun(action, {}, window.state)
 
-          console.log("State after action:")
-          console.debug(window.state.data)
+    //       console.log("State after action:")
+    //       console.debug(window.state.data)
 
-          let html = Hologram.render(window.ir[moduleName], window.state)
-          let diff = dd.diff(window.document.body, "<body>" + html + "</body>");
-          dd.apply(window.document.body, diff)
-        })
-      })
-    }   
+    //       let html = Hologram.render(window.ir[moduleName], window.state)
+    //       let diff = dd.diff(window.document.body, "<body>" + html + "</body>");
+    //       dd.apply(window.document.body, diff)
+    //     })
+    //   })
+    // }   
+
+    const callback = () => {
+      let container = window.document.body
+      let vnode = Hologram.ir_to_hyperscript(window.ir[moduleName][0], window.state)
+      patch(toVNode(container), vnode)
+    }
 
     Hologram.onReady(window.document, callback)
   }
