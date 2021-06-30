@@ -18,7 +18,7 @@ defmodule Hologram.Template.Transformer do
     case determine_node_type(type, aliases) do
       :component ->
         module = String.split(type, ".") |> Enum.map(&String.to_atom/1)
-        %Component{module: module}
+        %Component{module: module, children: children}
 
       :element ->
         attrs = build_element_attrs(attrs)
