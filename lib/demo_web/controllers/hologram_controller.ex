@@ -52,9 +52,7 @@ defmodule DemoWeb.HologramController do
     Hologram.startEventLoop(window, #{class_name}, '#{class_name}')
         </script>
       </head>
-      <body>
     #{html}
-      </body>
     </html>
     """
   end
