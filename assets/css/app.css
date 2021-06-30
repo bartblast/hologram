@@ -1,6 +1,10 @@
 /* This file is for your main application css. */
 @import "./phoenix.css";
 
+@import 'tailwindcss/base';
+@import 'tailwindcss/components';
+@import 'tailwindcss/utilities';
+
 /* Alerts and form errors */
 .alert {
   padding: 15px;
