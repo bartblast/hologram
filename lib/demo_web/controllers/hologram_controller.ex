@@ -15,7 +15,7 @@ defmodule DemoWeb.HologramController do
     hydrated_state = Hydrator.hydrate(state)
 
     virtual_dom =
-      module.render()
+      module.template()
       |> Template.Parser.parse!()
       |> Template.Transformer.transform()
 

@@ -114,7 +114,7 @@ class Hologram {
     //       console.log("State after action:")
     //       console.debug(window.state.data)
 
-    //       let html = Hologram.render(window.ir[moduleName], window.state)
+    //       let html = Hologram.template(window.ir[moduleName], window.state)
     //       let diff = dd.diff(window.document.body, "<body>" + html + "</body>");
     //       dd.apply(window.document.body, diff)
     //     })

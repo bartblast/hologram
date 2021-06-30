@@ -9,7 +9,7 @@ defmodule DemoPage do
     }
   end
 
-  def render do
+  def template do
     ~H"""
     <body>
       <h1>Demo Page</h1>
