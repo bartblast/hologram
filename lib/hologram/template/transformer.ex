@@ -1,4 +1,3 @@
-# TODO: test
 defmodule Hologram.Template.Transformer do
   alias Hologram.Compiler.{Parser, Transformer}
   alias Hologram.Template.Interpolator
@@ -8,6 +7,10 @@ defmodule Hologram.Template.Transformer do
 
   def transform(dom, aliases) when is_list(dom) do
     Enum.map(dom, fn node -> transform(node, aliases) end)
+  end
+
+  def transform(dom, _) when is_binary(dom) do
+    %TextNode{content: dom}
   end
 
   def transform({type, attrs, children}, aliases) do
@@ -24,10 +27,6 @@ defmodule Hologram.Template.Transformer do
         attrs = build_element_attrs(attrs)
         %ElementNode{tag: type, attrs: attrs, children: children}
     end
-  end
-
-  def transform(dom, _aliases) when is_binary(dom) do
-    %TextNode{content: dom}
   end
 
   defp build_element_attrs(attrs) do
@@ -52,10 +51,11 @@ defmodule Hologram.Template.Transformer do
     |> Enum.into(%{})
   end
 
-  defp determine_node_type(type, aliases) do
+  defp determine_node_type(type, _) do
     first_char = String.at(type, 0)
+    downcased_first_char = String.downcase(first_char)
 
-    if first_char == String.downcase(first_char) do
+    if first_char == downcased_first_char do
       :element
     else
       :component

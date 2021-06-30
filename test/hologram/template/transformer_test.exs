@@ -1,14 +1,117 @@
 defmodule Hologram.Template.TransformerTest do
   use Hologram.TestCase, async: true
 
-  alias Hologram.Template.VirtualDOM.{Expression, ElementNode, TextNode}
-  alias Hologram.Template.{Parser, Transformer}
   alias Hologram.Compiler.IR.{ModuleAttributeOperator}
+  alias Hologram.Template.{Parser, Transformer}
+  alias Hologram.Template.VirtualDOM.{Component, Expression, ElementNode, TextNode}
 
-  describe "transform/1" do
-    test "element nodes without attrs" do
+  describe "transform/2" do
+    test "list of nodes" do
+      html = "<div></div><span></span>"
+
       result =
-        Parser.parse!("<div><h1><span></span></h1></div>")
+        Parser.parse!(html)
+        |> Transformer.transform()
+
+      expected =
+        [
+          %ElementNode{
+            attrs: %{},
+            children: [],
+            tag: "div"
+          },
+          %ElementNode{
+            attrs: %{},
+            children: [],
+            tag: "span"
+          }
+        ]
+
+      assert result == expected
+    end
+
+    test "component node without children" do
+      html = "<Prefix.Module></Prefix.Module>"
+
+      result =
+        Parser.parse!(html)
+        |> Transformer.transform()
+
+      expected = [%Component{children: [], module: [:Prefix, :Module]}]
+
+      assert result == expected
+    end
+
+    test "component node with children" do
+      html = "<Prefix.Module><div></div><span></span></Prefix.Module>"
+
+      result =
+        Parser.parse!(html)
+        |> Transformer.transform()
+
+      expected =
+        [
+          %Component{
+            children: [
+              %ElementNode{
+                attrs: %{},
+                children: [],
+                tag: "div"
+              },
+              %ElementNode{
+                attrs: %{},
+                children: [],
+                tag: "span"
+              }
+            ],
+            module: [:Prefix, :Module]
+          }
+        ]
+
+      assert result == expected
+    end
+
+    test "element node without children, without attrs" do
+      html = "<div></div>"
+
+      result =
+        Parser.parse!(html)
+        |> Transformer.transform()
+
+      expected = [
+        %ElementNode{
+          attrs: %{},
+          children: [],
+          tag: "div"
+        }
+      ]
+
+      assert result == expected
+    end
+
+    test "element node without children, with attrs" do
+      html = "<div id=\"test-id\" class=\"test-class\"></div>"
+
+      result =
+        Parser.parse!(html)
+        |> Transformer.transform()
+
+      expected = [
+        %ElementNode{
+          attrs: %{"class" => "test-class", "id" => "test-id"},
+          children: [],
+          tag: "div"
+        }
+      ]
+
+      assert result == expected
+    end
+
+    test "element node with children, without attrs" do
+      html = "<div><h1><span></span></h1></div>"
+
+      result =
+        Parser.parse!(html)
         |> Transformer.transform()
 
       expected = [
@@ -30,7 +133,7 @@ defmodule Hologram.Template.TransformerTest do
       assert result == expected
     end
 
-    test "element nodes with attrs" do
+    test "element node with children, with attrs" do
       html = """
       <div class="class_1"><h1><span class="class_2" id="id_2"></span></h1></div>
       """
@@ -63,27 +166,18 @@ defmodule Hologram.Template.TransformerTest do
       assert result == expected
     end
 
-    test "text nodes" do
+    test "text node" do
+      html = "<div>test_text</div>"
+
       result =
-        Parser.parse!("<div>test_text_1<h1><span>test_text_2</span></h1></div>")
+        Parser.parse!(html)
         |> Transformer.transform()
 
       expected = [
         %ElementNode{
           attrs: %{},
           children: [
-            %TextNode{content: "test_text_1"},
-            %ElementNode{
-              attrs: %{},
-              children: [
-                %ElementNode{
-                  attrs: %{},
-                  children: [%TextNode{content: "test_text_2"}],
-                  tag: "span"
-                }
-              ],
-              tag: "h1"
-            }
+            %TextNode{content: "test_text"}
           ],
           tag: "div"
         }
