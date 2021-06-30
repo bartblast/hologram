@@ -1,8 +1,5 @@
 defmodule Hologram.Compiler.Helpers do
-  @typedoc """
-  e.g. [:Hologram, :Compiler, :Helpers]
-  """
-  @type module_segments :: list(atom())
+  alias Hologram.Typespecs, as: T
 
   def class_name(module) do
     module_name(module)
@@ -14,7 +11,7 @@ defmodule Hologram.Compiler.Helpers do
       iex> Hologram.Compiler.Helpers.fully_qualified_module([:Abc, :Bcd])
       Elixir.Abc.Bcd
   """
-  @spec fully_qualified_module(module_segments) :: module()
+  @spec fully_qualified_module(T.module_segments) :: module()
 
   def fully_qualified_module(module) do
     [:Elixir | module]
