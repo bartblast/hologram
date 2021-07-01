@@ -20,12 +20,12 @@ defmodule Hologram.Compiler.HelpersTest do
     assert Helpers.module_name_atom([:Abc, :Bcd]) == :"Abc.Bcd"
   end
 
-  test "module_name_parts/1" do
-    assert Helpers.module_name_parts(Abc.Bcd) == [:Abc, :Bcd]
+  test "module_name_segments/1" do
+    assert Helpers.module_name_segments(Abc.Bcd) == [:Abc, :Bcd]
   end
 
-  test "module_source_path/1" do
-    result = Helpers.module_source_path([:Hologram, :Compiler, :HelpersTest])
+  test "module_source_path" do
+    result = Helpers.module_source([:Hologram, :Compiler, :HelpersTest])
     expected = __ENV__.file
 
     assert result == expected

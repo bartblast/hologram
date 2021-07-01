@@ -25,7 +25,7 @@ defmodule DemoWeb.HologramController do
     template_ir = Template.Generator.generate(virtual_dom, state)
 
     js =
-      Helpers.module_name_parts(module)
+      Helpers.module_name_segments(module)
       |> Builder.build()
 
     class_name =

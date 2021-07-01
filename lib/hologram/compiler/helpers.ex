@@ -30,7 +30,7 @@ defmodule Hologram.Compiler.Helpers do
     |> String.to_atom()
   end
 
-  def module_name_parts(module) do
+  def module_name_segments(module) do
     to_string(module)
     |> String.split(".")
     |> Enum.map(&String.to_atom/1)
