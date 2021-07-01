@@ -3,12 +3,17 @@ defmodule Hologram.Compiler.Expander do
   alias Hologram.Compiler.Normalizer
   alias Hologram.Compiler.Parser
 
+  @doc """
+  Go through each module expression and expand recursively those which are expandable (e.g. use directive).
+  """
   def expand({:defmodule, line, [aliases, [do: {:__block__, [], exprs}]]}) do
     expanded =
       Enum.reduce(exprs, [], fn expr, acc ->
         case expand(expr) do
+          # expansion of use directive returns a list of expressions
           e when is_list(e) ->
             acc ++ e
+          # non-expandable expression
           e ->
             acc ++ [e]
         end
@@ -18,9 +23,7 @@ defmodule Hologram.Compiler.Expander do
   end
 
   def expand({:use, _, [{:__aliases__, _, module}]}) do
-    Helpers.fully_qualified_module(module)
-    |> apply(:module_info, [])
-    |> get_in([:compile, :source])
+    Helpers.module_source(module)
     |> Parser.parse_file!()
     |> Normalizer.normalize()
     |> aggregate_quotes()
