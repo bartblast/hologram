@@ -1,13 +1,14 @@
 defmodule Hologram.Compiler.ProcessorTest do
   use Hologram.TestCase, async: true
 
-  alias Hologram.Compiler.IR.Alias
+  alias Hologram.Compiler.IR.{Alias, ModuleDefinition}
   alias Hologram.Compiler.Processor
 
-  describe "aliases" do
+  describe "compile/2, aliases" do
     test "no aliases" do
       module = [:Hologram, :Test, :Fixtures, :Compiler, :Processor, :Module1]
       result = Processor.compile(module)
+
       assert result[module].aliases == []
     end
 
@@ -42,6 +43,60 @@ defmodule Hologram.Compiler.ProcessorTest do
       assert result[module_3].aliases == [%Alias{as: [:Module4], module: module_4}]
       assert result[module_4].aliases == [%Alias{as: [:Module3], module: module_3}]
     end
+  end
+
+  describe "compile/2, components" do
+    test "not a component" do
+      module = [:Hologram, :Test, :Fixtures, :Compiler, :Processor, :Module1]
+      result = Processor.compile(module)
+
+      assert Enum.count(result) == 1
+      assert result[module]
+    end
+
+    test "component which doesn't use other components" do
+      module = [:Hologram, :Test, :Fixtures, :Compiler, :Processor, :Module6]
+      result = Processor.compile(module)
+
+      assert Enum.count(result) == 3
+      assert result[module]
+    end
+
+    test "component which uses other non-aliased components" do
+      module = [:Hologram, :Test, :Fixtures, :Compiler, :Processor, :Module8]
+      result = Processor.compile(module)
+
+      assert Enum.count(result) == 5
+      assert result[module]
+      assert result[[:Hologram, :Test, :Fixtures, :Compiler, :Processor, :Module6]]
+      assert result[[:Hologram, :Test, :Fixtures, :Compiler, :Processor, :Module7]]
+    end
+
+    test "component which uses other aliased components" do
+      module = [:Hologram, :Test, :Fixtures, :Compiler, :Processor, :Module9]
+      result = Processor.compile(module)
+
+      assert Enum.count(result) == 5
+      assert result[module]
+      assert result[[:Hologram, :Test, :Fixtures, :Compiler, :Processor, :Module6]]
+      assert result[[:Hologram, :Test, :Fixtures, :Compiler, :Processor, :Module7]]
+    end
+
+    test "nested components" do
+      module = [:Hologram, :Test, :Fixtures, :Compiler, :Processor, :Module10]
+      result = Processor.compile(module)
+
+      assert Enum.count(result) == 6
+      assert result[module]
+      assert result[[:Hologram, :Test, :Fixtures, :Compiler, :Processor, :Module6]]
+      assert result[[:Hologram, :Test, :Fixtures, :Compiler, :Processor, :Module7]]
+      assert result[[:Hologram, :Test, :Fixtures, :Compiler, :Processor, :Module9]]
+    end
+  end
+
+  test "get_module_definition/1" do
+    module = [:Hologram, :Test, :Fixtures, :Compiler, :Processor, :Module1]
+    assert %ModuleDefinition{} = Processor.get_module_definition(module)
   end
 
   # TODO: attributes, functions, imports, name
