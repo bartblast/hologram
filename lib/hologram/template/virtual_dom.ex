@@ -1,4 +1,5 @@
 defmodule Hologram.Template.VirtualDOM do
+  alias Hologram.Compiler.{Helpers, Processor}
   alias Hologram.Template.{Parser, Transformer}
 
   defmodule Component do
@@ -18,8 +19,13 @@ defmodule Hologram.Template.VirtualDOM do
   end
 
   def build(module) do
+    aliases =
+      Helpers.module_name_segments(module)
+      |> Processor.get_module_definition()
+      |> Map.get(:aliases)
+
     module.template()
     |> Parser.parse!()
-    |> Transformer.transform()
+    |> Transformer.transform(aliases)
   end
 end
