@@ -7,7 +7,9 @@ defmodule Hologram.Compiler.Helpers do
   end
 
   @doc """
-  ## Example
+  Returns module atom containing "Elixir" segment at the beginning.
+
+  ## Examples
       iex> Hologram.Compiler.Helpers.fully_qualified_module([:Abc, :Bcd])
       Elixir.Abc.Bcd
   """
