@@ -23,7 +23,7 @@ defmodule Hologram.Compiler.Expander do
   end
 
   def expand({:use, _, [{:__aliases__, _, module}]}) do
-    Helpers.module_source(module)
+    Helpers.module_source_path(module)
     |> Parser.parse_file!()
     |> Normalizer.normalize()
     |> aggregate_quotes()
