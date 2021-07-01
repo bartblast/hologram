@@ -1,7 +1,7 @@
 defmodule Hologram.Template.TransformerTest do
   use Hologram.TestCase, async: true
 
-  alias Hologram.Compiler.IR.{ModuleAttributeOperator}
+  alias Hologram.Compiler.IR.{Alias, ModuleAttributeOperator}
   alias Hologram.Template.{Parser, Transformer}
   alias Hologram.Template.VirtualDOM.{Component, Expression, ElementNode, TextNode}
 
@@ -65,6 +65,25 @@ defmodule Hologram.Template.TransformerTest do
               }
             ],
             module: [:Prefix, :Module]
+          }
+        ]
+
+      assert result == expected
+    end
+
+    test "aliased component node" do
+      html = "<Bcd></Bcd>"
+      aliases = [%Alias{module: [:Abc, :Bcd], as: [:Bcd]}]
+
+      result =
+        Parser.parse!(html)
+        |> Transformer.transform(aliases)
+
+      expected =
+        [
+          %Component{
+            children: [],
+            module: [:Abc, :Bcd]
           }
         ]
 

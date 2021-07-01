@@ -1,5 +1,5 @@
 defmodule Hologram.Template.Transformer do
-  alias Hologram.Compiler.{Parser, Transformer}
+  alias Hologram.Compiler.{Parser, Resolver, Transformer}
   alias Hologram.Template.Interpolator
   alias Hologram.Template.VirtualDOM.{Component, ElementNode, Expression, TextNode}
 
@@ -20,7 +20,11 @@ defmodule Hologram.Template.Transformer do
 
     case determine_node_type(type, aliases) do
       :component ->
-        module = String.split(type, ".") |> Enum.map(&String.to_atom/1)
+        module =
+          String.split(type, ".")
+          |> Enum.map(&String.to_atom/1)
+          |> Resolver.resolve(aliases)
+
         %Component{module: module, children: children}
 
       :element ->
