@@ -25,7 +25,7 @@ defmodule Hologram.Compiler.HelpersTest do
   end
 
   test "module_source_path" do
-    result = Helpers.module_source([:Hologram, :Compiler, :HelpersTest])
+    result = Helpers.module_source_path([:Hologram, :Compiler, :HelpersTest])
     expected = __ENV__.file
 
     assert result == expected
