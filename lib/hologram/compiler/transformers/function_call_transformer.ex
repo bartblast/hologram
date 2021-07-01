@@ -20,8 +20,7 @@ defmodule Hologram.Compiler.FunctionCallTransformer do
       imported_module = resolve_imported_module(function, arity, context[:imports])
       if imported_module, do: imported_module, else: context[:module]
     else
-      aliased_module = Resolver.resolve(called_module, context[:aliases])
-      if aliased_module, do: aliased_module, else: called_module
+      Resolver.resolve(called_module, context[:aliases])
     end
   end
 
