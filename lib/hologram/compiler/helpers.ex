@@ -15,8 +15,8 @@ defmodule Hologram.Compiler.Helpers do
   """
   @spec fully_qualified_module(T.module_segments) :: module()
 
-  def fully_qualified_module(module) do
-    [:Elixir | module]
+  def fully_qualified_module(module_segments) do
+    [:Elixir | module_segments]
     |> Enum.join(".")
     |> String.to_existing_atom()
   end
@@ -29,6 +29,15 @@ defmodule Hologram.Compiler.Helpers do
     module_name(module)
     |> String.to_atom()
   end
+
+  @doc """
+  Returns module name segments without the "Elixir" segment at the beginning.
+
+  ## Examples
+      iex> Hologram.Compiler.Helpers.module_name_segments(Abc.Bcd)
+      [:Abc, :Bcd]
+  """
+  @spec module_name_segments(module()) :: T.module_segments
 
   def module_name_segments(module) do
     to_string(module)
