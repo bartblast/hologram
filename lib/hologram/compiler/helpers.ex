@@ -36,4 +36,11 @@ defmodule Hologram.Compiler.Helpers do
     |> Enum.map(&String.to_atom/1)
     |> tl()
   end
+
+  def module_source_path(module) do
+    fully_qualified_module(module)
+    |> apply(:module_info, [])
+    |> get_in([:compile, :source])
+    |> to_string()
+  end
 end
