@@ -1,23 +1,17 @@
-# DEFER: test
+# DEFER: refactor & test
 defmodule DemoWeb.HologramController do
   use DemoWeb, :controller
 
+  alias Hologram.Compiler.{Builder, Helpers, Hydrator, Processor}
   alias Hologram.Template
-  alias Hologram.Compiler.Builder
-  alias Hologram.Compiler.Helpers
-  alias Hologram.Compiler.Hydrator
-  alias Hologram.Compiler.Processor
+  alias Hologram.Template.VirtualDOM
 
   def index(conn, params) do
     module = conn.private.hologram_page
 
     state = module.state()
     hydrated_state = Hydrator.hydrate(state)
-
-    virtual_dom =
-      module.template()
-      |> Template.Parser.parse!()
-      |> Template.Transformer.transform()
+    virtual_dom = VirtualDOM.build(module)
 
     # DEFER: use .holo template files
     html = Template.Renderer.render(virtual_dom, state)
