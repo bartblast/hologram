@@ -9,13 +9,13 @@ defmodule Hologram.Compiler.ResolverTest do
     %Alias{module: [:Bcd, :Cde], as: [:Cde]}
   ]
 
-  test "resolved" do
+  test "alias found" do
     result = Resolver.resolve([:Cde], @aliases)
     assert result == [:Bcd, :Cde]
   end
 
-  test "not resolved" do
+  test "alias not found" do
     result = Resolver.resolve([:Xyz], @aliases)
-    refute result
+    assert result == [:Xyz]
   end
 end
