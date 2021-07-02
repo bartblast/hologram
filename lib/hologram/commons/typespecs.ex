@@ -4,10 +4,10 @@ defmodule Hologram.Typespecs do
   @typedoc """
   e.g. %{[:Hologram, :Typespecs] => %ModuleDefinition{}}
   """
-  @type modules_map :: %{module_segments => %ModuleDefinition{}}
+  @type module_definitions_map :: %{module_name_segments => %ModuleDefinition{}}
 
   @typedoc """
   e.g. [:Hologram, :Typespecs]
   """
-  @type module_segments :: list(atom())
+  @type module_name_segments :: list(atom())
 end
