@@ -1,64 +1,102 @@
 defmodule Hologram.Template.Interpolator do
   alias Hologram.Compiler.{Normalizer, Parser, Transformer}
-  alias Hologram.Template.VirtualDOM.{Expression, TextNode}
+  alias Hologram.Template.VirtualDOM.{ElementNode, Expression, TextNode}
 
-  def interpolate(nodes) do
-    Enum.reduce(nodes, [], fn node, acc ->
-      case node do
-        %TextNode{content: content} ->
-          acc ++ split_text_node(nodes, node, content)
+  @doc """
+  Splits text nodes into text nodes and expression nodes
+  and replaces element nodes' attribute values containing expressions with expression nodes.
+  Works on the nodes tree recursively.
 
-        _ ->
-          acc ++ [Map.put(node, :children, interpolate(node.children))]
-      end
-    end)
+  ## Examples
+      iex> nodes = [
+      iex>   %TextNode{},
+      iex>   %ElementNode{
+      iex>     children: [%TextNode{}],
+      iex>     attrs: %{"key" => "{{ 1 }}"}
+      iex>   }
+      iex> ]
+      iex> interpolate(nodes)
+      [
+        %Expression{}
+        %TextNode{},
+        %ElementNode{
+          children: [%TextNode{}, %Expression{}],
+          attrs: %{"key" => %Expression{}}
+        }
+      ]
+  """
+
+  def interpolate(nodes) when is_list(nodes) do
+    Enum.reduce(nodes, [], &(&2 ++ interpolate(&1)))
   end
 
-  defp handle_match(match, char_count, nodes) do
-    content = Enum.at(match, 1)
+  def interpolate(%ElementNode{children: children, attrs: attrs} = node) do
+    children = interpolate(children)
 
-    {char_count, nodes} =
-      if content != "" do
-        {char_count + String.length(content), nodes ++ [%TextNode{content: content}]}
-      else
-        {char_count, nodes}
-      end
+    attrs =
+      Enum.map(attrs, fn {key, value} -> {key, interpolate_attr(value)} end)
+      |> Enum.into(%{})
 
-    code = Enum.at(match, 3)
-
-    ir =
-      Parser.parse!(code)
-      |> Normalizer.normalize()
-      |> Transformer.transform()
-
-    {char_count, nodes} = {char_count + 4 + String.length(code), nodes ++ [%Expression{ir: ir}]}
+    [%{node | children: children, attrs: attrs}]
   end
 
-  defp handle_matches(content, matches) do
-    {char_count, nodes} =
-      Enum.reduce(matches, {0, []}, fn match, {char_count, nodes} ->
-        handle_match(match, char_count, nodes)
+  def interpolate(%TextNode{content: content} = node) do
+    regex = ~r/([^\{]*)(\{\{([^\}]*)\}\})([^\{]*)/
+
+    nodes =
+      Regex.scan(regex, content)
+      |> Enum.reduce([], fn [_, left, _, expr, right], acc ->
+        acc
+        |> maybe_include_text_node(left)
+        |> maybe_include_expression(expr)
+        |> maybe_include_text_node(right)
       end)
 
-    length = String.length(content)
-    remainder = String.slice(content, char_count, length - char_count)
+    if nodes != [], do: nodes, else: [node]
+  end
 
-    if remainder != "" do
-      nodes ++ [%TextNode{content: remainder}]
-    else
-      nodes
+  def interpolate(node), do: [node]
+
+  """
+  Returns the corresponding expression node if an expression is found in the attribute value string.
+  If there is no expression in the attribute value string, the string itself is returned.
+
+  ## Examples
+      iex> interpolate_attr("{{ 1 }}")
+      %Expression{ir: %IntegerType{value: 1}}
+  """
+  @spec interpolate_attr(String.t) :: %Expression{} | String.t
+
+  defp interpolate_attr(str) do
+    regex = ~r/^\{\{(.+)\}\}$/
+
+    case Regex.run(regex, str) do
+      [_, code] ->
+        %Expression{ir: get_ir(code)}
+
+      _ ->
+        str
     end
   end
 
-  defp split_text_node(nodes, node, content) do
-    regex = ~r/(.*)(\{\{(.+)\}\})/U
+  defp get_ir(code) do
+    Parser.parse!(code)
+    |> Hologram.Compiler.Transformer.transform()
+  end
 
-    case Regex.scan(regex, content) do
-      [] ->
-        [node]
+  defp maybe_include_expression(acc, code) do
+    if String.length(code) > 0 do
+      acc ++ [%Expression{ir: get_ir(code)}]
+    else
+      acc
+    end
+  end
 
-      matches ->
-        handle_matches(content, matches)
+  defp maybe_include_text_node(acc, str) do
+    if String.length(str) > 0 do
+      acc ++ [%TextNode{content: str}]
+    else
+      acc
     end
   end
 end
