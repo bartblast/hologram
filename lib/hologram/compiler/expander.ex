@@ -1,7 +1,5 @@
 defmodule Hologram.Compiler.Expander do
-  alias Hologram.Compiler.Helpers
-  alias Hologram.Compiler.Normalizer
-  alias Hologram.Compiler.Parser
+  alias Hologram.Compiler.{Helpers, Normalizer, Parser}
 
   @doc """
   Go through each module expression and expand recursively those which are expandable (e.g. use directive).
