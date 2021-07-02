@@ -43,7 +43,7 @@ defmodule Hologram.Compiler.Expander do
     exprs
   end
 
-  defp aggregate_quotes(ast), do: []
+  defp aggregate_quotes(_), do: []
 
   defp aggregate_quotes_in_block(exprs) do
     Enum.reduce(exprs, [], fn expr, acc ->
