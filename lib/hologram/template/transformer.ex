@@ -1,58 +1,48 @@
 defmodule Hologram.Template.Transformer do
-  alias Hologram.Compiler.{Parser, Resolver, Transformer}
+  alias Hologram.Compiler.{Helpers, Parser, Resolver, Transformer}
+  alias Hologram.Compiler.IR.Alias
   alias Hologram.Template.Interpolator
   alias Hologram.Template.VirtualDOM.{Component, ElementNode, Expression, TextNode}
+  alias Hologram.Typespecs, as: T
 
-  def transform(dom, aliases \\ %{})
+  @doc """
+  Builds virtual DOM from parsed HTML.
+  Interpolates expression nodes in text nodes and attribute values.
+  """
+  @spec transform(Saxy.SimpleForm.t, list(%Alias{})) :: list(T.virtual_dom_node)
 
-  def transform(dom, aliases) when is_list(dom) do
-    Enum.map(dom, fn node -> transform(node, aliases) end)
+  def transform(dom, aliases \\ []) do
+    Enum.map(dom, fn node -> transform_node(node, aliases) end)
+    |> Interpolator.interpolate()
   end
 
-  def transform(dom, _) when is_binary(dom) do
+  defp transform_node(dom, _) when is_binary(dom) do
     %TextNode{content: dom}
   end
 
-  def transform({type, attrs, children}, aliases) do
-    children =
-      Enum.map(children, fn child -> transform(child, aliases) end)
-      |> Interpolator.interpolate()
+  defp transform_node({type, attrs, children}, aliases) do
+    children = Enum.map(children, &transform_node(&1, aliases))
 
     case determine_node_type(type, aliases) do
       :component ->
-        module =
-          String.split(type, ".")
-          |> Enum.map(&String.to_atom/1)
-          |> Resolver.resolve(aliases)
-
-        %Component{module: module, children: children}
+        build_component(type, children, aliases)
 
       :element ->
-        attrs = build_element_attrs(attrs)
-        %ElementNode{tag: type, attrs: attrs, children: children}
+        build_element_node(type, children, attrs)
     end
   end
 
-  defp build_element_attrs(attrs) do
-    Enum.map(attrs, fn {key, value} ->
-      regex = ~r/^{{(.+)}}$/
+  defp build_component(module_name, children, aliases) do
+    module =
+      Helpers.module_name_segments(module_name)
+      |> Resolver.resolve(aliases)
 
-      value =
-        case Regex.run(regex, value) do
-          [_, code] ->
-            ir =
-              Parser.parse!(code)
-              |> Hologram.Compiler.Transformer.transform()
+    %Component{module: module, children: children}
+  end
 
-            %Expression{ir: ir}
-
-          _ ->
-            value
-        end
-
-      {key, value}
-    end)
-    |> Enum.into(%{})
+  defp build_element_node(tag, children, attrs) do
+    attrs = Enum.into(attrs, %{})
+    %ElementNode{tag: tag, children: children, attrs: attrs}
   end
 
   defp determine_node_type(type, _) do
