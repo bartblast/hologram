@@ -1,4 +1,5 @@
 defmodule Hologram.Compiler.Helpers do
+  alias Hologram.Compiler.IR.ModuleDefinition
   alias Hologram.Typespecs, as: T
 
   @doc """
@@ -87,5 +88,19 @@ defmodule Hologram.Compiler.Helpers do
     |> apply(:module_info, [])
     |> get_in([:compile, :source])
     |> to_string()
+  end
+
+  @doc """
+  Returns true if the first module has a "use" directive for the second module.
+
+  ## Examples
+      iex> user_module = %ModuleDefinition{module: [:Hologram, :Compiler, :Parser], ...}
+      iex> Helpers.uses_module?(user_module, [:Hologram, :Commons, :Parser])
+      true
+  """
+  @spec uses_module?(%ModuleDefinition{}, T.module_name_segments) :: boolean()
+
+  def uses_module?(user_module, used_module) do
+    Enum.any?(user_module.uses, &(&1.module == used_module))
   end
 end

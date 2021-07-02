@@ -1,6 +1,8 @@
 defmodule Hologram.Compiler.HelpersTest do
   use Hologram.TestCase, async: true
+
   alias Hologram.Compiler.Helpers
+  alias Hologram.Compiler.IR.{ModuleDefinition, UseDirective}
 
   test "class_name/1" do
     assert Helpers.class_name([:Abc, :Bcd]) == "AbcBcd"
@@ -24,10 +26,32 @@ defmodule Hologram.Compiler.HelpersTest do
     assert Helpers.module_name_segments(Abc.Bcd) == [:Abc, :Bcd]
   end
 
-  test "module_source_path" do
+  test "module_source_path/1" do
     result = Helpers.module_source_path([:Hologram, :Compiler, :HelpersTest])
     expected = __ENV__.file
 
     assert result == expected
+  end
+
+  describe "uses_module?/2" do
+    @used_module [:Hologram, :Commons, :Parser]
+
+    test "true" do
+      user_module =
+        %ModuleDefinition{
+          uses: [
+            %UseDirective{
+              module: @used_module
+            }
+          ]
+        }
+
+      assert Helpers.uses_module?(user_module, @used_module)
+    end
+
+    test "false" do
+      user_module = %ModuleDefinition{uses: []}
+      refute Helpers.uses_module?(user_module, @used_module)
+    end
   end
 end
