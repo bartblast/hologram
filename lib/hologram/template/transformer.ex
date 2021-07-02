@@ -8,6 +8,26 @@ defmodule Hologram.Template.Transformer do
   @doc """
   Builds virtual DOM from parsed HTML.
   Interpolates expression nodes in text nodes and attribute values.
+
+  ## Examples
+      iex> transform([{"div", [{"class", "{{ 1 }}"}, {"id", "some-id"}], ["some-text{{ 2 }}"]}])
+      [
+        %ElementNode{
+          attrs: %{
+            "class" => %Expression{
+              ir: %IntegerType{value: 1}
+            },
+            "id" => "some-id"
+          },
+          children: [
+            %TextNode{content: "some-text"},
+            %Expression{
+              ir: %IntegerType{value: 2}
+            }
+          ],
+          tag: "div"
+        }
+      ]
   """
   @spec transform(Saxy.SimpleForm.t, list(%Alias{})) :: list(T.virtual_dom_node)
 
