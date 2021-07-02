@@ -62,6 +62,21 @@ defmodule Hologram.Compiler.Helpers do
   Returns the corresponding module name segments (without the "Elixir" segment at the beginning).
 
   ## Examples
+      iex> Helpers.module_name_segments("Abc.Bcd")
+      [:Abc, :Bcd]
+  """
+  @spec module_name_segments(String.t) :: T.module_name_segments
+
+  def module_name_segments(module_name) when is_binary(module_name) do
+    module_name
+    |> String.split(".")
+    |> Enum.map(&String.to_atom/1)
+  end
+
+  @doc """
+  Returns the corresponding module name segments (without the "Elixir" segment at the beginning).
+
+  ## Examples
       iex> Helpers.module_name_segments(Abc.Bcd)
       [:Abc, :Bcd]
   """
@@ -69,8 +84,7 @@ defmodule Hologram.Compiler.Helpers do
 
   def module_name_segments(module) do
     to_string(module)
-    |> String.split(".")
-    |> Enum.map(&String.to_atom/1)
+    |> module_name_segments()
     |> tl()
   end
 
