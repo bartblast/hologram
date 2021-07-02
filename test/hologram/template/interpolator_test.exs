@@ -7,15 +7,15 @@ defmodule Hologram.Template.InterpolatorTest do
 
   describe "text node" do
     test "text" do
-      node = %TextNode{content: "test"}
-      result = Interpolator.interpolate(node)
+      nodes = [%TextNode{content: "test"}]
+      result = Interpolator.interpolate(nodes)
 
-      assert result == [node]
+      assert result == nodes
     end
 
     test "expression" do
-      node = %TextNode{content: "{{ @abc }}"}
-      result = Interpolator.interpolate(node)
+      nodes = [%TextNode{content: "{{ @abc }}"}]
+      result = Interpolator.interpolate(nodes)
 
       expected = [
         %Expression{
@@ -27,8 +27,8 @@ defmodule Hologram.Template.InterpolatorTest do
     end
 
     test "text, expression" do
-      node = %TextNode{content: "bcd{{ @abc }}"}
-      result = Interpolator.interpolate(node)
+      nodes = [%TextNode{content: "bcd{{ @abc }}"}]
+      result = Interpolator.interpolate(nodes)
 
       expected = [
         %TextNode{content: "bcd"},
@@ -41,8 +41,8 @@ defmodule Hologram.Template.InterpolatorTest do
     end
 
     test "expression, text" do
-      node = %TextNode{content: "{{ @abc }}bcd"}
-      result = Interpolator.interpolate(node)
+      nodes = [%TextNode{content: "{{ @abc }}bcd"}]
+      result = Interpolator.interpolate(nodes)
 
       expected = [
         %Expression{
@@ -55,8 +55,8 @@ defmodule Hologram.Template.InterpolatorTest do
     end
 
     test "expression, expression" do
-      node = %TextNode{content: "{{ @abc }}{{ @bcd }}"}
-      result = Interpolator.interpolate(node)
+      nodes = [%TextNode{content: "{{ @abc }}{{ @bcd }}"}]
+      result = Interpolator.interpolate(nodes)
 
       expected = [
         %Expression{
@@ -71,8 +71,8 @@ defmodule Hologram.Template.InterpolatorTest do
     end
 
     test "text, expression, text" do
-      node = %TextNode{content: "cde{{ @abc }}bcd"}
-      result = Interpolator.interpolate(node)
+      nodes = [%TextNode{content: "cde{{ @abc }}bcd"}]
+      result = Interpolator.interpolate(nodes)
 
       expected = [
         %TextNode{content: "cde"},
@@ -86,8 +86,8 @@ defmodule Hologram.Template.InterpolatorTest do
     end
 
     test "expression, text, expression" do
-      node = %TextNode{content: "{{ @abc }}bcd{{ @cde }}"}
-      result = Interpolator.interpolate(node)
+      nodes = [%TextNode{content: "{{ @abc }}bcd{{ @cde }}"}]
+      result = Interpolator.interpolate(nodes)
 
       expected = [
         %Expression{
@@ -103,8 +103,8 @@ defmodule Hologram.Template.InterpolatorTest do
     end
 
     test "text, expression, text, expression" do
-      node = %TextNode{content: "cde{{ @abc }}bcd{{ @def }}"}
-      result = Interpolator.interpolate(node)
+      nodes = [%TextNode{content: "cde{{ @abc }}bcd{{ @def }}"}]
+      result = Interpolator.interpolate(nodes)
 
       expected = [
         %TextNode{content: "cde"},
@@ -121,8 +121,8 @@ defmodule Hologram.Template.InterpolatorTest do
     end
 
     test "expression, text, expression, text" do
-      node = %TextNode{content: "{{ @abc }}bcd{{ @cde }}def"}
-      result = Interpolator.interpolate(node)
+      nodes = [%TextNode{content: "{{ @abc }}bcd{{ @cde }}def"}]
+      result = Interpolator.interpolate(nodes)
 
       expected = [
         %Expression{
@@ -141,27 +141,27 @@ defmodule Hologram.Template.InterpolatorTest do
 
   describe "element node" do
     test "doesn't have children and attributes" do
-      node = %ElementNode{children: [], attrs: %{}}
-      result = Interpolator.interpolate(node)
+      nodes = [%ElementNode{children: [], attrs: %{}}]
+      result = Interpolator.interpolate(nodes)
 
-      assert result == [node]
+      assert result == nodes
     end
 
     test "string attribute" do
-      node = %ElementNode{children: [], attrs: %{"key" => "value"}}
-      result = Interpolator.interpolate(node)
+      nodes = [%ElementNode{children: [], attrs: %{"key" => "value"}}]
+      result = Interpolator.interpolate(nodes)
 
-      assert result == [node]
+      assert result == nodes
     end
 
     test "expression attribute" do
-      node = %ElementNode{
+      nodes = [%ElementNode{
         tag: "div",
         children: [],
         attrs: %{"key" => "{{ 1 }}"}
-      }
+      }]
 
-      result = Interpolator.interpolate(node)
+      result = Interpolator.interpolate(nodes)
 
       expected =
         [
@@ -179,17 +179,17 @@ defmodule Hologram.Template.InterpolatorTest do
     end
 
     test "has children" do
-      node = %ElementNode{
+      nodes = [%ElementNode{
         children: [
           %TextNode{content: "abc"},
           %TextNode{content: "xyz"}
         ],
         attrs: %{}
-      }
+      }]
 
-      result = Interpolator.interpolate(node)
+      result = Interpolator.interpolate(nodes)
 
-      assert result == [node]
+      assert result == nodes
     end
   end
 

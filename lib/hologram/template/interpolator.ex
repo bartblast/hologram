@@ -26,11 +26,11 @@ defmodule Hologram.Template.Interpolator do
       ]
   """
 
-  def interpolate(nodes) when is_list(nodes) do
-    Enum.reduce(nodes, [], &(&2 ++ interpolate(&1)))
+  def interpolate(nodes) do
+    Enum.reduce(nodes, [], &(&2 ++ interpolate_node(&1)))
   end
 
-  def interpolate(%ElementNode{children: children, attrs: attrs} = node) do
+  defp interpolate_node(%ElementNode{children: children, attrs: attrs} = node) do
     children = interpolate(children)
 
     attrs =
@@ -40,7 +40,7 @@ defmodule Hologram.Template.Interpolator do
     [%{node | children: children, attrs: attrs}]
   end
 
-  def interpolate(%TextNode{content: content} = node) do
+  defp interpolate_node(%TextNode{content: content} = node) do
     regex = ~r/([^\{]*)(\{\{([^\}]*)\}\})([^\{]*)/
 
     nodes =
@@ -55,7 +55,7 @@ defmodule Hologram.Template.Interpolator do
     if nodes != [], do: nodes, else: [node]
   end
 
-  def interpolate(node), do: [node]
+  defp interpolate_node(node), do: [node]
 
   """
   Returns the corresponding expression node if an expression is found in the attribute value string.
