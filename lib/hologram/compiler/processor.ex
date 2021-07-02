@@ -8,23 +8,23 @@ defmodule Hologram.Compiler.Processor do
   @doc """
   Creates the module definitions map of modules used by the given module.
   """
-  @spec compile(T.module_segments, map()) :: T.modules_map
+  @spec compile(T.module_name_segments, map()) :: T.module_definitions_map
 
-  def compile(module_segments, acc \\ %{}) do
-    module_definition = get_module_definition(module_segments)
+  def compile(module_name_segments, acc \\ %{}) do
+    definition = get_module_definition(module_name_segments)
 
     acc
-    |> Map.put(module_segments, module_definition)
-    |> include_imported_modules(module_definition)
-    |> include_aliased_modules(module_definition)
-    |> include_components(module_definition)
+    |> Map.put(module_name_segments, definition)
+    |> include_imported_modules(definition)
+    |> include_aliased_modules(definition)
+    |> include_components(definition)
   end
 
-  defp find_components(module) do
-    Helpers.fully_qualified_module(module)
+  defp find_components(module_name_segments) do
+    Helpers.module(module_name_segments)
     |> VirtualDOM.build()
     |> find_nested_components()
-    |> Enum.concat([module])
+    |> Enum.concat([module_name_segments])
     |> Enum.uniq()
   end
 
@@ -42,8 +42,17 @@ defmodule Hologram.Compiler.Processor do
 
   defp find_nested_components(%TextNode{}), do: []
 
-  def get_module_definition(module_segments) do
-    Helpers.module_source_path(module_segments)
+  @doc """
+  Returns the corresponding module definition.
+
+  ## Examples
+      iex> Processor.get_module_definition([:Abc, :Bcd])
+      %ModuleDefinition{module: [:Abc, :Bcd], ...}
+  """
+  @spec get_module_definition(T.module_name_segments) :: %ModuleDefinition{}
+
+  def get_module_definition(module_name_segments) do
+    Helpers.module_source_path(module_name_segments)
     |> Parser.parse_file!()
     |> Normalizer.normalize()
     |> Transformer.transform()
@@ -68,13 +77,10 @@ defmodule Hologram.Compiler.Processor do
     |> Enum.reduce(acc, &include_module(&2, &1.module))
   end
 
-  defp include_module(acc, module) do
-    if acc[module], do: acc, else: compile(module, acc)
+  defp include_module(acc, module_name_segments) do
+    if acc[module_name_segments], do: acc, else: compile(module_name_segments, acc)
   end
 
-  @doc """
-  Returns true if the given module has a use directive for Hologram.Component module.
-  """
   @spec is_component?(%ModuleDefinition{}) :: boolean()
 
   defp is_component?(module_definition) do
