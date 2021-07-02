@@ -27,7 +27,7 @@ defmodule Hologram.Compiler.FunctionCallTransformer do
   defp resolve_imported_module(function, arity, imports) do
     resolved =
       Enum.find(imports, fn i ->
-        module = Helpers.fully_qualified_module(i.module)
+        module = Helpers.module(i.module)
         {function, arity} in module.module_info()[:exports]
       end)
 

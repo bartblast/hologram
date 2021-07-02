@@ -6,8 +6,8 @@ defmodule Hologram.Compiler.HelpersTest do
     assert Helpers.class_name([:Abc, :Bcd]) == "AbcBcd"
   end
 
-  test "fully_qualified_module/1" do
-    result = Helpers.fully_qualified_module([:Hologram, :Compiler, :HelpersTest])
+  test "module/1" do
+    result = Helpers.module([:Hologram, :Compiler, :HelpersTest])
     expected = Elixir.Hologram.Compiler.HelpersTest
     assert result == expected
   end

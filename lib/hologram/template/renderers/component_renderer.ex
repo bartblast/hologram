@@ -3,7 +3,7 @@ defmodule Hologram.Template.ComponentRenderer do
   alias Hologram.Template.{Parser, Renderer, Transformer}
 
   def render(module, state) do
-    Helpers.fully_qualified_module(module)
+    Helpers.module(module)
     |> apply(:template, [])
     |> Parser.parse!()
     |> Transformer.transform()
