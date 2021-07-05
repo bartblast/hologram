@@ -67,7 +67,7 @@ defmodule Hologram.Compiler.Processor do
   end
 
   defp include_components(acc, definition) do
-    if is_page?(definition) || is_component?(definition) do
+    if Helpers.is_page?(definition) || Helpers.is_component?(definition) do
       find_components(definition.name)
       |> Enum.reduce(acc, &include_module(&2, &1))
     else
@@ -82,15 +82,5 @@ defmodule Hologram.Compiler.Processor do
 
   defp include_module(acc, module_name_segments) do
     if acc[module_name_segments], do: acc, else: compile(module_name_segments, acc)
-  end
-
-  @spec is_component?(%ModuleDefinition{}) :: boolean()
-
-  defp is_component?(module_definition) do
-    Helpers.uses_module?(module_definition, [:Hologram, :Component])
-  end
-
-  defp is_page?(module_definition) do
-    Helpers.uses_module?(module_definition, [:Hologram, :Page])
   end
 end

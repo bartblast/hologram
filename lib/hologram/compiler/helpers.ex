@@ -17,6 +17,26 @@ defmodule Hologram.Compiler.Helpers do
   end
 
   @doc """
+  Returns true if the given module is a component,
+  i.e. it contains a use directive for the Hologram.Component module.
+  """
+  @spec is_component?(%ModuleDefinition{}) :: boolean()
+
+  def is_component?(module_definition) do
+    uses_module?(module_definition, [:Hologram, :Component])
+  end
+
+  @doc """
+  Returns true if the given module is a page,
+  i.e. it contains a use directive for the Hologram.Page module.
+  """
+  @spec is_component?(%ModuleDefinition{}) :: boolean()
+
+  def is_page?(module_definition) do
+    uses_module?(module_definition, [:Hologram, :Page])
+  end
+
+  @doc """
   Returns the corresponding Elixir module.
 
   ## Examples
