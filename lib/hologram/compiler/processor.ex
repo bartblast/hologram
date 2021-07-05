@@ -2,7 +2,7 @@ defmodule Hologram.Compiler.Processor do
   alias Hologram.Compiler.{Helpers, Normalizer, Parser, Transformer}
   alias Hologram.Compiler.IR.ModuleDefinition
   alias Hologram.Template.VirtualDOM
-  alias Hologram.Template.VirtualDOM.{Component, ElementNode, TextNode}
+  alias Hologram.Template.VirtualDOM.{Component, ElementNode, Expression, TextNode}
   alias Hologram.Typespecs, as: T
 
   @doc """
@@ -40,6 +40,9 @@ defmodule Hologram.Compiler.Processor do
     Enum.reduce(node.children, [], &(&2 ++ find_nested_components(&1)))
   end
 
+  # DEFER: find modules & functions used by template expressions
+  defp find_nested_components(%Expression{} = node), do: []
+
   defp find_nested_components(%TextNode{}), do: []
 
   @doc """
@@ -63,9 +66,9 @@ defmodule Hologram.Compiler.Processor do
     |> Enum.reduce(acc, &include_module(&2, &1.module))
   end
 
-  defp include_components(acc, module_definition) do
-    if is_component?(module_definition) do
-      find_components(module_definition.name)
+  defp include_components(acc, definition) do
+    if is_page?(definition) || is_component?(definition) do
+      find_components(definition.name)
       |> Enum.reduce(acc, &include_module(&2, &1))
     else
       acc
@@ -84,6 +87,10 @@ defmodule Hologram.Compiler.Processor do
   @spec is_component?(%ModuleDefinition{}) :: boolean()
 
   defp is_component?(module_definition) do
-    Enum.any?(module_definition.uses, &(&1.module == [:Hologram, :Component]))
+    Helpers.uses_module?(module_definition, [:Hologram, :Component])
+  end
+
+  defp is_page?(module_definition) do
+    Helpers.uses_module?(module_definition, [:Hologram, :Page])
   end
 end

@@ -82,7 +82,7 @@ defmodule Hologram.Compiler.ProcessorTest do
       assert result[[:Hologram, :Test, :Fixtures, :Compiler, :Processor, :Module7]]
     end
 
-    test "nested components" do
+    test "components nested in a component" do
       module = [:Hologram, :Test, :Fixtures, :Compiler, :Processor, :Module10]
       result = Processor.compile(module)
 
@@ -91,6 +91,69 @@ defmodule Hologram.Compiler.ProcessorTest do
       assert result[[:Hologram, :Test, :Fixtures, :Compiler, :Processor, :Module6]]
       assert result[[:Hologram, :Test, :Fixtures, :Compiler, :Processor, :Module7]]
       assert result[[:Hologram, :Test, :Fixtures, :Compiler, :Processor, :Module9]]
+    end
+
+    test "handles element, text and expression nodes in component template" do
+      module = [:Hologram, :Test, :Fixtures, :Compiler, :Processor, :Module11]
+
+      result = Processor.compile(module)
+      assert result[module]
+    end
+  end
+
+  describe "compile/2, pages" do
+    test "not a page" do
+      module = [:Hologram, :Test, :Fixtures, :Compiler, :Processor, :Module1]
+      result = Processor.compile(module)
+
+      assert Enum.count(result) == 1
+      assert result[module]
+    end
+
+    test "page which doesn't use other components" do
+      module = [:Hologram, :Test, :Fixtures, :Compiler, :Processor, :Module13]
+      result = Processor.compile(module)
+
+      assert Enum.count(result) == 3
+      assert result[module]
+    end
+
+    test "page which uses other non-aliased components" do
+      module = [:Hologram, :Test, :Fixtures, :Compiler, :Processor, :Module14]
+      result = Processor.compile(module)
+
+      assert Enum.count(result) == 6
+      assert result[module]
+      assert result[[:Hologram, :Test, :Fixtures, :Compiler, :Processor, :Module6]]
+      assert result[[:Hologram, :Test, :Fixtures, :Compiler, :Processor, :Module7]]
+    end
+
+    test "page which uses other aliased components" do
+      module = [:Hologram, :Test, :Fixtures, :Compiler, :Processor, :Module15]
+      result = Processor.compile(module)
+
+      assert Enum.count(result) == 6
+      assert result[module]
+      assert result[[:Hologram, :Test, :Fixtures, :Compiler, :Processor, :Module6]]
+      assert result[[:Hologram, :Test, :Fixtures, :Compiler, :Processor, :Module7]]
+    end
+
+    test "components nested in a page" do
+      module = [:Hologram, :Test, :Fixtures, :Compiler, :Processor, :Module16]
+      result = Processor.compile(module)
+
+      assert Enum.count(result) == 7
+      assert result[module]
+      assert result[[:Hologram, :Test, :Fixtures, :Compiler, :Processor, :Module6]]
+      assert result[[:Hologram, :Test, :Fixtures, :Compiler, :Processor, :Module7]]
+      assert result[[:Hologram, :Test, :Fixtures, :Compiler, :Processor, :Module9]]
+    end
+
+    test "handles element, text and expression nodes in page template" do
+      module = [:Hologram, :Test, :Fixtures, :Compiler, :Processor, :Module12]
+
+      result = Processor.compile(module)
+      assert result[module]
     end
   end
 
