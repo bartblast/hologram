@@ -30,7 +30,7 @@ defmodule Hologram.Compiler.Helpers do
   Returns true if the given module is a page,
   i.e. it contains a use directive for the Hologram.Page module.
   """
-  @spec is_component?(%ModuleDefinition{}) :: boolean()
+  @spec is_page?(%ModuleDefinition{}) :: boolean()
 
   def is_page?(module_definition) do
     uses_module?(module_definition, [:Hologram, :Page])
