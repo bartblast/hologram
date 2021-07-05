@@ -19,6 +19,14 @@ defmodule Hologram.Compiler.Helpers do
   @doc """
   Returns true if the given module is a component,
   i.e. it contains a use directive for the Hologram.Component module.
+
+  ## Examples
+      iex> module_definition = %ModuleDefinition{
+      iex>   name: [:TestModule],
+      iex>   uses: [%UseDirective{module: [:Hologram, :Component]}]
+      iex> }
+      iex> is_component?(module_definition)
+      true
   """
   @spec is_component?(%ModuleDefinition{}) :: boolean()
 
@@ -29,6 +37,14 @@ defmodule Hologram.Compiler.Helpers do
   @doc """
   Returns true if the given module is a page,
   i.e. it contains a use directive for the Hologram.Page module.
+
+  ## Examples
+      iex> module_definition = %ModuleDefinition{
+      iex>   name: [:TestModule],
+      iex>   uses: [%UseDirective{module: [:Hologram, :Page]}]
+      iex> }
+      iex> is_page?(module_definition)
+      true
   """
   @spec is_page?(%ModuleDefinition{}) :: boolean()
 
