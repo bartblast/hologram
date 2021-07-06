@@ -3,7 +3,7 @@ defmodule Hologram.Compiler.Builder do
 
   def build(module) do
     Processor.compile(module)
-    |> Pruner.prune(module)
+    |> Pruner.prune()
     |> Enum.reduce("", fn {_, ir}, acc ->
       acc <> "\n" <> Generator.generate(ir)
     end)
