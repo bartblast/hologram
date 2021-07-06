@@ -21,11 +21,16 @@ defmodule Hologram.Compiler.Processor do
   end
 
   defp find_components(module_name_segments) do
-    Helpers.module(module_name_segments)
-    |> VirtualDOM.build()
-    |> find_nested_components()
-    |> Enum.concat([module_name_segments])
-    |> Enum.uniq()
+    module = Helpers.module(module_name_segments)
+
+    if function_exported?(module, :template, 0) do
+      VirtualDOM.build(module)
+      |> find_nested_components()
+      |> Enum.concat([module_name_segments])
+      |> Enum.uniq()
+    else
+      []
+    end
   end
 
   defp find_nested_components(nodes) when is_list(nodes) do
