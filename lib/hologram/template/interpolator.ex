@@ -59,7 +59,7 @@ defmodule Hologram.Template.Interpolator do
 
   defp interpolate_node(node), do: [node]
 
-  """
+  _ = """
   Returns the corresponding expression node if an expression is found in the attribute value string.
   If there is no expression in the attribute value string, the string itself is returned.
 

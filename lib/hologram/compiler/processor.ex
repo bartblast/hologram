@@ -41,7 +41,7 @@ defmodule Hologram.Compiler.Processor do
   end
 
   # DEFER: find modules & functions used by template expressions
-  defp find_nested_components(%Expression{} = node), do: []
+  defp find_nested_components(%Expression{}), do: []
 
   defp find_nested_components(%TextNode{}), do: []
 
