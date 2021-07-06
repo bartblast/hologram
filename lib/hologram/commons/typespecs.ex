@@ -2,6 +2,8 @@ defmodule Hologram.Typespecs do
   alias Hologram.Compiler.IR.ModuleDefinition
   alias Hologram.Template.VirtualDOM.{Component, ElementNode, Expression, TextNode}
 
+  @type function_name :: atom()
+
   @typedoc """
   e.g. %{[:Hologram, :Typespecs] => %ModuleDefinition{}}
   """
