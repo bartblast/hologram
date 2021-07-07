@@ -1,7 +1,7 @@
 defmodule Hologram.Compiler.DotOperatorGenerator do
-  alias Hologram.Compiler.Generator
+  alias Hologram.Compiler.{Context, Generator}
 
-  def generate(left, right, context) do
+  def generate(left, right, %Context{} = context) do
     left = Generator.generate(left, context)
     right = Generator.generate(right, context)
 
