@@ -6,8 +6,10 @@ defmodule Hologram.Compiler.MapTypeTransformerTest do
 
   @context %Context{
     module: [:Abc],
+    uses: [],
     imports: [],
-    aliases: []
+    aliases: [],
+    attributes: []
   }
 
   test "empty map" do

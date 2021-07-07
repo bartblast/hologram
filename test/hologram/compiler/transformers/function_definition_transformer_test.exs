@@ -6,8 +6,10 @@ defmodule Hologram.Compiler.FunctionDefinitionTransformerTest do
 
   @context %Context{
     module: [:Abc],
+    uses: [],
     imports: [],
-    aliases: []
+    aliases: [],
+    attributes: []
   }
 
   test "name" do

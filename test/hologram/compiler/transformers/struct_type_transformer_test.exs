@@ -8,7 +8,7 @@ defmodule Hologram.Compiler.StructTypeTransformerTest do
     code = "%TestStruct{a: 1}"
 
     {:%, _, [{_, _, module}, ast]} = ast(code)
-    context = %Context{module: [:Abc], imports: [], aliases: []}
+    context = %Context{module: [:Abc], uses: [], imports: [], aliases: [], attributes: []}
 
     result = StructTypeTransformer.transform(ast, module, context)
 
@@ -28,10 +28,12 @@ defmodule Hologram.Compiler.StructTypeTransformerTest do
 
     context = %Context{
       module: [:Abc],
+      uses: [],
       imports: [],
       aliases: [
         %Alias{module: [:Bcd, :Cde], as: [:Cde]}
-      ]
+      ],
+      attributes: []
     }
 
     result = StructTypeTransformer.transform(ast, module, context)

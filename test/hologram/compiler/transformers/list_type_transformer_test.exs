@@ -6,8 +6,10 @@ defmodule Hologram.Compiler.ListTypeTransformerTest do
 
   @context %Context{
     module: [:Abc],
+    uses: [],
     imports: [],
-    aliases: []
+    aliases: [],
+    attributes: []
   }
 
   test "empty list" do

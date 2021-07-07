@@ -14,8 +14,10 @@ defmodule Hologram.Compiler.MatchOperatorTransformerTest do
 
   @context %Context{
     module: [],
+    uses: [],
     imports: [],
-    aliases: []
+    aliases: [],
+    attributes: []
   }
 
   test "variable" do

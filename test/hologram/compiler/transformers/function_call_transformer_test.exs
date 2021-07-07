@@ -8,7 +8,7 @@ defmodule Hologram.Compiler.FunctionCallTransformerTest do
     called_module = [:Abc, :Bcd]
     function = :test
     params = [1, 2]
-    context = %Context{module: [:Xyz], imports: [], aliases: []}
+    context = %Context{module: [], uses: [], imports: [], aliases: [], attributes: []}
 
     expected = %FunctionCall{
       module: called_module,
