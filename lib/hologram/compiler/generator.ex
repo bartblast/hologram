@@ -31,6 +31,8 @@ defmodule Hologram.Compiler.Generator do
     Variable
   }
 
+  def generate(ir, context, opts \\ [])
+
   # TYPES
 
   def generate(%AtomType{value: value}, _, _) do
