@@ -1,9 +1,8 @@
 defmodule Hologram.Compiler.FunctionDefinitionTransformer do
+  alias Hologram.Compiler.{Binder, Context, Transformer}
   alias Hologram.Compiler.IR.FunctionDefinition
-  alias Hologram.Compiler.Binder
-  alias Hologram.Compiler.Transformer
 
-  def transform(name, params, body, context) do
+  def transform(name, params, body, %Context{} = context) do
     params =
       if(params, do: params, else: [])
       |> Enum.map(&Transformer.transform(&1, context))
