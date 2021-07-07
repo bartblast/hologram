@@ -1,6 +1,8 @@
 defmodule Hologram.Compiler.MatchOperatorTransformerTest do
   use Hologram.TestCase, async: true
 
+  alias Hologram.Compiler.{Context, MatchOperatorTransformer}
+
   alias Hologram.Compiler.IR.{
     AccessOperator,
     AtomType,
@@ -10,13 +12,17 @@ defmodule Hologram.Compiler.MatchOperatorTransformerTest do
     Variable
   }
 
-  alias Hologram.Compiler.MatchOperatorTransformer
+  @context %Context{
+    module: [],
+    imports: [],
+    aliases: []
+  }
 
   test "variable" do
     code = "x = 1"
     {:=, _, [left, right]} = ast(code)
 
-    result = MatchOperatorTransformer.transform(left, right, [])
+    result = MatchOperatorTransformer.transform(left, right, @context)
 
     expected = %MatchOperator{
       bindings: [[%Variable{name: :x}]],
@@ -32,7 +38,7 @@ defmodule Hologram.Compiler.MatchOperatorTransformerTest do
       code = "%{a: x, b: y} = %{a: 1, b: 2}"
       {:=, _, [left, right]} = ast(code)
 
-      result = MatchOperatorTransformer.transform(left, right, [])
+      result = MatchOperatorTransformer.transform(left, right, @context)
 
       expected = %MatchOperator{
         bindings: [
@@ -68,7 +74,7 @@ defmodule Hologram.Compiler.MatchOperatorTransformerTest do
 
       {:=, _, [left, right]} = ast(code)
 
-      result = MatchOperatorTransformer.transform(left, right, [])
+      result = MatchOperatorTransformer.transform(left, right, @context)
 
       expected = %MatchOperator{
         bindings: [
