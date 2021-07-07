@@ -10,8 +10,7 @@ defmodule Hologram.Compiler.AdditionOperatorGeneratorTest do
 
     result = AdditionOperatorGenerator.generate(left, right, [])
 
-    expected =
-      "Kernel.$add(x, { type: 'atom', value: 'a' })"
+    expected = "Kernel.$add(x, { type: 'atom', value: 'a' })"
 
     assert result == expected
   end

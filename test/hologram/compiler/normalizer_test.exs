@@ -19,16 +19,16 @@ defmodule Hologram.Compiler.NormalizerTest do
 
     expected =
       {:defmodule, [line: 1],
-      [
-        {:__aliases__, [line: 1], [:Test]},
-        [
-          do: {:__block__, [],
-           [
-             {:def, [line: 2],
-              [{:test, [line: 2], nil}, [do: {:__block__, [], [1]}]]}
-           ]}
-        ]
-      ]}
+       [
+         {:__aliases__, [line: 1], [:Test]},
+         [
+           do:
+             {:__block__, [],
+              [
+                {:def, [line: 2], [{:test, [line: 2], nil}, [do: {:__block__, [], [1]}]]}
+              ]}
+         ]
+       ]}
 
     assert result == expected
   end
@@ -50,22 +50,22 @@ defmodule Hologram.Compiler.NormalizerTest do
 
     expected =
       {:defmodule, [line: 1],
-        [
-          {:__aliases__, [line: 1], [:Test]},
-          [
-            do: {:__block__, [],
+       [
+         {:__aliases__, [line: 1], [:Test]},
+         [
+           do:
+             {:__block__, [],
               [
                 {:def, [line: 2],
-                [
-                  {:test, [line: 2], nil},
-                  [
-                    do: {:__block__, [],
-                      [{:nested, [line: 3], [[do: {:__block__, [], [1]}]]}]}
-                  ]
-                ]}
+                 [
+                   {:test, [line: 2], nil},
+                   [
+                     do: {:__block__, [], [{:nested, [line: 3], [[do: {:__block__, [], [1]}]]}]}
+                   ]
+                 ]}
               ]}
-          ]
-        ]}
+         ]
+       ]}
 
     assert result == expected
   end
@@ -83,13 +83,12 @@ defmodule Hologram.Compiler.NormalizerTest do
 
     expected =
       {:defmodule, [line: 1],
-        [
-          {:__aliases__, [line: 1], [:Test]},
-          [
-            do: {:__block__, [],
-              [{:alias, [line: 2], [{:__aliases__, [line: 2], [:Abc]}]}]}
-          ]
-        ]}
+       [
+         {:__aliases__, [line: 1], [:Test]},
+         [
+           do: {:__block__, [], [{:alias, [line: 2], [{:__aliases__, [line: 2], [:Abc]}]}]}
+         ]
+       ]}
 
     assert result == expected
   end

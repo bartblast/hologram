@@ -26,7 +26,7 @@ defmodule Hologram.Template.Interpolator do
         }
       ]
   """
-  @spec interpolate(list(T.virtual_dom_node)) :: list(T.virtual_dom_node)
+  @spec interpolate(list(T.virtual_dom_node())) :: list(T.virtual_dom_node())
 
   def interpolate(nodes) do
     Enum.reduce(nodes, [], &(&2 ++ interpolate_node(&1)))
@@ -67,7 +67,8 @@ defmodule Hologram.Template.Interpolator do
       iex> interpolate_attr("{{ 1 }}")
       %Expression{ir: %IntegerType{value: 1}}
   """
-  @spec interpolate_attr(String.t) :: %Expression{} | String.t
+
+  @spec interpolate_attr(String.t()) :: %Expression{} | String.t()
 
   defp interpolate_attr(str) do
     regex = ~r/^\{\{(.+)\}\}$/

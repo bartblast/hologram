@@ -5,7 +5,7 @@ defmodule Hologram.Compiler.FunctionDefinitionTransformer do
 
   def transform(name, params, body, context) do
     params =
-      (if params, do: params, else: [])
+      if(params, do: params, else: [])
       |> Enum.map(&Transformer.transform(&1, context))
 
     arity = Enum.count(params)

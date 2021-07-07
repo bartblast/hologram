@@ -6,25 +6,23 @@ defmodule Hologram.Compiler.BinderTest do
 
   describe "map" do
     test "non-nested map without vars" do
-      ir =
-        %MapType{
-          data: [
-            {%AtomType{value: :a}, %IntegerType{value: 1}},
-            {%AtomType{value: :b}, %IntegerType{value: 2}}
-          ]
-        }
+      ir = %MapType{
+        data: [
+          {%AtomType{value: :a}, %IntegerType{value: 1}},
+          {%AtomType{value: :b}, %IntegerType{value: 2}}
+        ]
+      }
 
       assert Binder.bind(ir) == []
     end
 
     test "non-nested map with single var" do
-      ir =
-        %MapType{
-          data: [
-            {%AtomType{value: :a}, %IntegerType{value: 1}},
-            {%AtomType{value: :b}, %Variable{name: :x}}
-          ]
-        }
+      ir = %MapType{
+        data: [
+          {%AtomType{value: :a}, %IntegerType{value: 1}},
+          {%AtomType{value: :b}, %Variable{name: :x}}
+        ]
+      }
 
       result = Binder.bind(ir)
 
@@ -41,14 +39,13 @@ defmodule Hologram.Compiler.BinderTest do
     end
 
     test "non-nested map with multiple vars" do
-      ir =
-        %MapType{
-          data: [
-            {%AtomType{value: :a}, %Variable{name: :x}},
-            {%AtomType{value: :b}, %IntegerType{value: 2}},
-            {%AtomType{value: :c}, %Variable{name: :y}}
-          ]
-        }
+      ir = %MapType{
+        data: [
+          {%AtomType{value: :a}, %Variable{name: :x}},
+          {%AtomType{value: :b}, %IntegerType{value: 2}},
+          {%AtomType{value: :c}, %Variable{name: :y}}
+        ]
+      }
 
       result = Binder.bind(ir)
 
@@ -71,35 +68,35 @@ defmodule Hologram.Compiler.BinderTest do
     end
 
     test "nested map without vars" do
-      ir =
-        %MapType{
-          data: [
-            {%AtomType{value: :a}, %IntegerType{value: 1}},
-            {%AtomType{value: :b}, %MapType{
-              data: [
-                {%AtomType{value: :c}, %IntegerType{value: 3}},
-                {%AtomType{value: :d}, %IntegerType{value: 4}}
-              ]
-            }}
-          ]
-        }
+      ir = %MapType{
+        data: [
+          {%AtomType{value: :a}, %IntegerType{value: 1}},
+          {%AtomType{value: :b},
+           %MapType{
+             data: [
+               {%AtomType{value: :c}, %IntegerType{value: 3}},
+               {%AtomType{value: :d}, %IntegerType{value: 4}}
+             ]
+           }}
+        ]
+      }
 
       assert Binder.bind(ir) == []
     end
 
     test "nested map with single var" do
-      ir =
-        %MapType{
-          data: [
-            {%AtomType{value: :a}, %IntegerType{value: 1}},
-            {%AtomType{value: :b}, %MapType{
-              data: [
-                {%AtomType{value: :c}, %Variable{name: :x}},
-                {%AtomType{value: :d}, %IntegerType{value: 4}}
-              ]
-            }}
-          ]
-        }
+      ir = %MapType{
+        data: [
+          {%AtomType{value: :a}, %IntegerType{value: 1}},
+          {%AtomType{value: :b},
+           %MapType{
+             data: [
+               {%AtomType{value: :c}, %Variable{name: :x}},
+               {%AtomType{value: :d}, %IntegerType{value: 4}}
+             ]
+           }}
+        ]
+      }
 
       result = Binder.bind(ir)
 
@@ -119,19 +116,19 @@ defmodule Hologram.Compiler.BinderTest do
     end
 
     test "nested map with multiple vars" do
-      ir =
-        %MapType{
-          data: [
-            {%AtomType{value: :a}, %IntegerType{value: 1}},
-            {%AtomType{value: :b}, %Variable{name: :x}},
-            {%AtomType{value: :c}, %MapType{
-              data: [
-                {%AtomType{value: :d}, %Variable{name: :y}},
-                {%AtomType{value: :e}, %IntegerType{value: 4}}
-              ]
-            }}
-          ]
-        }
+      ir = %MapType{
+        data: [
+          {%AtomType{value: :a}, %IntegerType{value: 1}},
+          {%AtomType{value: :b}, %Variable{name: :x}},
+          {%AtomType{value: :c},
+           %MapType{
+             data: [
+               {%AtomType{value: :d}, %Variable{name: :y}},
+               {%AtomType{value: :e}, %IntegerType{value: 4}}
+             ]
+           }}
+        ]
+      }
 
       result = Binder.bind(ir)
 

@@ -20,7 +20,8 @@ defmodule Hologram.Compiler.FunctionDefinitionTransformerTest do
     params = [1, 2]
     body = []
 
-    assert %FunctionDefinition{name: :test} = FunctionDefinitionTransformer.transform(name, params, body, context)
+    assert %FunctionDefinition{name: :test} =
+             FunctionDefinitionTransformer.transform(name, params, body, context)
   end
 
   test "arity", context do
@@ -31,7 +32,8 @@ defmodule Hologram.Compiler.FunctionDefinitionTransformerTest do
     params = [1, 2]
     body = []
 
-    assert %FunctionDefinition{arity: 2} = FunctionDefinitionTransformer.transform(name, params, body, context)
+    assert %FunctionDefinition{arity: 2} =
+             FunctionDefinitionTransformer.transform(name, params, body, context)
   end
 
   describe "params" do
@@ -43,7 +45,8 @@ defmodule Hologram.Compiler.FunctionDefinitionTransformerTest do
       params = nil
       body = []
 
-      assert %FunctionDefinition{params: []} = FunctionDefinitionTransformer.transform(name, params, body, context)
+      assert %FunctionDefinition{params: []} =
+               FunctionDefinitionTransformer.transform(name, params, body, context)
     end
 
     test "vars", context do
@@ -54,13 +57,13 @@ defmodule Hologram.Compiler.FunctionDefinitionTransformerTest do
       params = [{:a, [line: 1], nil}, {:b, [line: 1], nil}]
       body = []
 
-      assert %FunctionDefinition{} = result = FunctionDefinitionTransformer.transform(name, params, body, context)
+      assert %FunctionDefinition{} =
+               result = FunctionDefinitionTransformer.transform(name, params, body, context)
 
-      expected =
-        [
-          %Variable{name: :a},
-          %Variable{name: :b}
-        ]
+      expected = [
+        %Variable{name: :a},
+        %Variable{name: :b}
+      ]
 
       assert result.params == expected
     end
@@ -73,13 +76,13 @@ defmodule Hologram.Compiler.FunctionDefinitionTransformerTest do
       params = [:a, 2]
       body = []
 
-      assert %FunctionDefinition{} = result = FunctionDefinitionTransformer.transform(name, params, body, context)
+      assert %FunctionDefinition{} =
+               result = FunctionDefinitionTransformer.transform(name, params, body, context)
 
-      expected =
-        [
-          %AtomType{value: :a},
-          %IntegerType{value: 2}
-        ]
+      expected = [
+        %AtomType{value: :a},
+        %IntegerType{value: 2}
+      ]
 
       assert result.params == expected
     end
@@ -94,7 +97,8 @@ defmodule Hologram.Compiler.FunctionDefinitionTransformerTest do
       params = [1, 2]
       body = []
 
-      assert %FunctionDefinition{bindings: []} = FunctionDefinitionTransformer.transform(name, params, body, context)
+      assert %FunctionDefinition{bindings: []} =
+               FunctionDefinitionTransformer.transform(name, params, body, context)
     end
 
     test "single binding in single param", context do
@@ -105,17 +109,19 @@ defmodule Hologram.Compiler.FunctionDefinitionTransformerTest do
       params = [1, {:%{}, [line: 2], [a: {:x, [line: 2], nil}]}]
       body = []
 
-      assert %FunctionDefinition{} = result = FunctionDefinitionTransformer.transform(name, params, body, context)
+      assert %FunctionDefinition{} =
+               result = FunctionDefinitionTransformer.transform(name, params, body, context)
 
-      expected =
-        [
-          x: {1, [
-            %AccessOperator{
-              key: %AtomType{value: :a}
-            },
-            %Variable{name: :x}
-          ]}
-        ]
+      expected = [
+        x:
+          {1,
+           [
+             %AccessOperator{
+               key: %AtomType{value: :a}
+             },
+             %Variable{name: :x}
+           ]}
+      ]
 
       assert result.bindings == expected
     end
@@ -128,23 +134,27 @@ defmodule Hologram.Compiler.FunctionDefinitionTransformerTest do
       params = [1, {:%{}, [line: 2], [a: {:x, [line: 2], nil}, b: {:y, [line: 2], nil}]}]
       body = []
 
-      assert %FunctionDefinition{} = result = FunctionDefinitionTransformer.transform(name, params, body, context)
+      assert %FunctionDefinition{} =
+               result = FunctionDefinitionTransformer.transform(name, params, body, context)
 
-      expected =
-        [
-          x: {1, [
-            %AccessOperator{
-              key: %AtomType{value: :a}
-            },
-            %Variable{name: :x}
-          ]},
-          y: {1, [
-            %AccessOperator{
-              key: %AtomType{value: :b}
-            },
-            %Variable{name: :y}
-          ]}
-        ]
+      expected = [
+        x:
+          {1,
+           [
+             %AccessOperator{
+               key: %AtomType{value: :a}
+             },
+             %Variable{name: :x}
+           ]},
+        y:
+          {1,
+           [
+             %AccessOperator{
+               key: %AtomType{value: :b}
+             },
+             %Variable{name: :y}
+           ]}
+      ]
 
       assert result.bindings == expected
     end
@@ -160,38 +170,46 @@ defmodule Hologram.Compiler.FunctionDefinitionTransformerTest do
         1,
         {:%{}, [line: 2], [a: {:k, [line: 2], nil}, b: {:m, [line: 2], nil}]},
         2,
-        {:%{}, [line: 2], [c: {:s, [line: 2], nil}, d: {:t, [line: 2], nil}]},
+        {:%{}, [line: 2], [c: {:s, [line: 2], nil}, d: {:t, [line: 2], nil}]}
       ]
 
-      assert %FunctionDefinition{} = result = FunctionDefinitionTransformer.transform(name, params, body, context)
+      assert %FunctionDefinition{} =
+               result = FunctionDefinitionTransformer.transform(name, params, body, context)
 
-      expected =
-        [
-          k: {1, [
-            %AccessOperator{
-              key: %AtomType{value: :a}
-            },
-            %Variable{name: :k}
-          ]},
-          m: {1, [
-            %AccessOperator{
-              key: %AtomType{value: :b}
-            },
-            %Variable{name: :m}
-          ]},
-          s: {3, [
-            %AccessOperator{
-              key: %AtomType{value: :c}
-            },
-            %Variable{name: :s}
-          ]},
-          t: {3, [
-            %AccessOperator{
-              key: %AtomType{value: :d}
-            },
-            %Variable{name: :t}
-          ]}
-        ]
+      expected = [
+        k:
+          {1,
+           [
+             %AccessOperator{
+               key: %AtomType{value: :a}
+             },
+             %Variable{name: :k}
+           ]},
+        m:
+          {1,
+           [
+             %AccessOperator{
+               key: %AtomType{value: :b}
+             },
+             %Variable{name: :m}
+           ]},
+        s:
+          {3,
+           [
+             %AccessOperator{
+               key: %AtomType{value: :c}
+             },
+             %Variable{name: :s}
+           ]},
+        t:
+          {3,
+           [
+             %AccessOperator{
+               key: %AtomType{value: :d}
+             },
+             %Variable{name: :t}
+           ]}
+      ]
 
       assert result.bindings == expected
     end
@@ -204,16 +222,20 @@ defmodule Hologram.Compiler.FunctionDefinitionTransformerTest do
       params = [{:y, [line: 2], nil}, {:x, [line: 2], nil}]
       body = []
 
-      assert %FunctionDefinition{} = result = FunctionDefinitionTransformer.transform(name, params, body, context)
+      assert %FunctionDefinition{} =
+               result = FunctionDefinitionTransformer.transform(name, params, body, context)
 
-      expected =
-      [
-        x: {1, [
-          %Variable{name: :x}
-        ]},
-        y: {0, [
-          %Variable{name: :y}
-        ]},
+      expected = [
+        x:
+          {1,
+           [
+             %Variable{name: :x}
+           ]},
+        y:
+          {0,
+           [
+             %Variable{name: :y}
+           ]}
       ]
 
       assert result.bindings == expected
@@ -230,7 +252,8 @@ defmodule Hologram.Compiler.FunctionDefinitionTransformerTest do
       params = nil
       body = [1]
 
-      assert %FunctionDefinition{} = result = FunctionDefinitionTransformer.transform(name, params, body, context)
+      assert %FunctionDefinition{} =
+               result = FunctionDefinitionTransformer.transform(name, params, body, context)
 
       assert result.body == [%IntegerType{value: 1}]
     end
@@ -245,13 +268,13 @@ defmodule Hologram.Compiler.FunctionDefinitionTransformerTest do
       params = nil
       body = [1, 2]
 
-      assert %FunctionDefinition{} = result = FunctionDefinitionTransformer.transform(name, params, body, context)
+      assert %FunctionDefinition{} =
+               result = FunctionDefinitionTransformer.transform(name, params, body, context)
 
-      expected =
-        [
-          %IntegerType{value: 1},
-          %IntegerType{value: 2}
-        ]
+      expected = [
+        %IntegerType{value: 1},
+        %IntegerType{value: 2}
+      ]
 
       assert result.body == expected
     end

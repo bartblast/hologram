@@ -1,7 +1,21 @@
 defmodule Hologram.Compiler.GeneratorTest do
   use Hologram.TestCase, async: true
 
-  alias Hologram.Compiler.IR.{AdditionOperator, AtomType, BooleanType, DotOperator, FunctionCall, IntegerType, MapType, ModuleAttributeOperator, ModuleDefinition, StringType, StructType, Variable}
+  alias Hologram.Compiler.IR.{
+    AdditionOperator,
+    AtomType,
+    BooleanType,
+    DotOperator,
+    FunctionCall,
+    IntegerType,
+    MapType,
+    ModuleAttributeOperator,
+    ModuleDefinition,
+    StringType,
+    StructType,
+    Variable
+  }
+
   alias Hologram.Compiler.Generator
 
   describe "types" do
@@ -25,8 +39,7 @@ defmodule Hologram.Compiler.GeneratorTest do
 
       result = Generator.generate(ir)
 
-      expected =
-        "{ type: 'map', data: { '~atom[a]': { type: 'integer', value: 1 } } }"
+      expected = "{ type: 'map', data: { '~atom[a]': { type: 'integer', value: 1 } } }"
 
       assert result == expected
     end
@@ -53,26 +66,23 @@ defmodule Hologram.Compiler.GeneratorTest do
 
   describe "operators" do
     test "addition" do
-      ir =
-        %AdditionOperator{
-          left: %IntegerType{value: 1},
-          right: %IntegerType{value: 2}
-        }
+      ir = %AdditionOperator{
+        left: %IntegerType{value: 1},
+        right: %IntegerType{value: 2}
+      }
 
       result = Generator.generate(ir)
 
-      expected =
-        "Kernel.$add({ type: 'integer', value: 1 }, { type: 'integer', value: 2 })"
+      expected = "Kernel.$add({ type: 'integer', value: 1 }, { type: 'integer', value: 2 })"
 
       assert result == expected
     end
 
     test "dot" do
-      ir =
-        %DotOperator{
-          left: %Variable{name: :x},
-          right: %AtomType{value: :a}
-        }
+      ir = %DotOperator{
+        left: %Variable{name: :x},
+        right: %AtomType{value: :a}
+      }
 
       result = Generator.generate(ir)
       expected = "Kernel.$dot(x, { type: 'atom', value: 'a' })"
@@ -92,14 +102,13 @@ defmodule Hologram.Compiler.GeneratorTest do
 
   describe "definitions" do
     test "module" do
-      ir =
-        %ModuleDefinition{
-          aliases: [],
-          attributes: [],
-          functions: [],
-          imports: [],
-          name: [:Test]
-        }
+      ir = %ModuleDefinition{
+        aliases: [],
+        attributes: [],
+        functions: [],
+        imports: [],
+        name: [:Test]
+      }
 
       result = Generator.generate(ir)
       expected = "class Test {\n\n\n}\n"
@@ -109,12 +118,11 @@ defmodule Hologram.Compiler.GeneratorTest do
   end
 
   test "function call" do
-    ir =
-      %FunctionCall{
-        function: :abc,
-        module: [:Test],
-        params: [%IntegerType{value: 1}]
-      }
+    ir = %FunctionCall{
+      function: :abc,
+      module: [:Test],
+      params: [%IntegerType{value: 1}]
+    }
 
     result = Generator.generate(ir)
     expected = "Test.abc({ type: 'integer', value: 1 })"

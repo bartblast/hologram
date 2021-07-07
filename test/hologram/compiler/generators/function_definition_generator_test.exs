@@ -27,17 +27,16 @@ defmodule Hologram.Compiler.FunctionDefinitionGeneratorTest do
 
     result = FunctionDefinitionGenerator.generate(ir.name, variants, context)
 
-    expected =
-      """
-      static test() {
-      if (Hologram.patternMatchFunctionArgs([], arguments)) {
-      return { type: 'atom', value: '' };
-      }
-      else {
-      throw 'No match for the function call'
-      }
-      }
-      """
+    expected = """
+    static test() {
+    if (Hologram.patternMatchFunctionArgs([], arguments)) {
+    return { type: 'atom', value: '' };
+    }
+    else {
+    throw 'No match for the function call'
+    }
+    }
+    """
 
     assert result == expected
   end
@@ -52,18 +51,17 @@ defmodule Hologram.Compiler.FunctionDefinitionGeneratorTest do
 
     result = FunctionDefinitionGenerator.generate(ir.name, variants, context)
 
-    expected =
-      """
-      static test() {
-      if (Hologram.patternMatchFunctionArgs([{ type: 'placeholder' }], arguments)) {
-      let x = arguments[0];
-      return { type: 'atom', value: '' };
-      }
-      else {
-      throw 'No match for the function call'
-      }
-      }
-      """
+    expected = """
+    static test() {
+    if (Hologram.patternMatchFunctionArgs([{ type: 'placeholder' }], arguments)) {
+    let x = arguments[0];
+    return { type: 'atom', value: '' };
+    }
+    else {
+    throw 'No match for the function call'
+    }
+    }
+    """
 
     assert result == expected
   end
@@ -86,22 +84,21 @@ defmodule Hologram.Compiler.FunctionDefinitionGeneratorTest do
 
     result = FunctionDefinitionGenerator.generate(name, variants, context)
 
-    expected =
-      """
-      static test() {
-      if (Hologram.patternMatchFunctionArgs([{ type: 'integer', value: 1 }], arguments)) {
-      return { type: 'atom', value: '' };
-      }
-      else if (Hologram.patternMatchFunctionArgs([{ type: 'map', data: { '~atom[a]': { type: 'placeholder' } } }], arguments)) {
-      let x = arguments[0].data['~atom[a]'];
-      { type: 'integer', value: 1 };
-      return { type: 'integer', value: 2 };
-      }
-      else {
-      throw 'No match for the function call'
-      }
-      }
-      """
+    expected = """
+    static test() {
+    if (Hologram.patternMatchFunctionArgs([{ type: 'integer', value: 1 }], arguments)) {
+    return { type: 'atom', value: '' };
+    }
+    else if (Hologram.patternMatchFunctionArgs([{ type: 'map', data: { '~atom[a]': { type: 'placeholder' } } }], arguments)) {
+    let x = arguments[0].data['~atom[a]'];
+    { type: 'integer', value: 1 };
+    return { type: 'integer', value: 2 };
+    }
+    else {
+    throw 'No match for the function call'
+    }
+    }
+    """
 
     assert result == expected
   end

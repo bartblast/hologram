@@ -49,8 +49,8 @@ defmodule Hologram.Template.ParserTest do
 
     expected =
       {:ok,
-        [
-          {"div",
+       [
+         {"div",
           [
             {"class", "test_class_1"},
             {"abc", "{{ @abc }}"},
@@ -60,16 +60,16 @@ defmodule Hologram.Template.ParserTest do
           [
             "\n  ",
             {"span",
-              [
-                {"class", "test_class_2"},
-                {"cde", "{{ @cde }}"},
-                {"id", "test_id_2"},
-                {"def", "{{ @def }}"}
-              ], []},
+             [
+               {"class", "test_class_2"},
+               {"cde", "{{ @cde }}"},
+               {"id", "test_id_2"},
+               {"def", "{{ @def }}"}
+             ], []},
             "\n"
           ]},
-          "\n"
-        ]}
+         "\n"
+       ]}
 
     assert result == expected
   end
@@ -80,11 +80,11 @@ defmodule Hologram.Template.ParserTest do
 
     expected =
       {:error,
-        %Saxy.ParseError{
-          binary: "<root><div</root>",
-          position: 10,
-          reason: {:token, :name_start_char}
-        }}
+       %Saxy.ParseError{
+         binary: "<root><div</root>",
+         position: 10,
+         reason: {:token, :name_start_char}
+       }}
 
     assert result == expected
   end

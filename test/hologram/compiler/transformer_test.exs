@@ -1,7 +1,28 @@
 defmodule Hologram.Compiler.TransformerTest do
   use Hologram.TestCase, async: true
 
-  alias Hologram.Compiler.IR.{AdditionOperator, Alias, AtomType, BooleanType, DotOperator, FunctionDefinition, FunctionCall, Import, IntegerType, ListType, MapType, MatchOperator, ModuleDefinition, ModuleAttributeDefinition, ModuleAttributeOperator, StringType, StructType, UseDirective, Variable}
+  alias Hologram.Compiler.IR.{
+    AdditionOperator,
+    Alias,
+    AtomType,
+    BooleanType,
+    DotOperator,
+    FunctionDefinition,
+    FunctionCall,
+    Import,
+    IntegerType,
+    ListType,
+    MapType,
+    MatchOperator,
+    ModuleDefinition,
+    ModuleAttributeDefinition,
+    ModuleAttributeOperator,
+    StringType,
+    StructType,
+    UseDirective,
+    Variable
+  }
+
   alias Hologram.Compiler.Transformer
 
   describe "types" do

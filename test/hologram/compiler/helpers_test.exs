@@ -81,14 +81,13 @@ defmodule Hologram.Compiler.HelpersTest do
     @used_module [:Hologram, :Commons, :Parser]
 
     test "true" do
-      user_module =
-        %ModuleDefinition{
-          uses: [
-            %UseDirective{
-              module: @used_module
-            }
-          ]
-        }
+      user_module = %ModuleDefinition{
+        uses: [
+          %UseDirective{
+            module: @used_module
+          }
+        ]
+      }
 
       assert Helpers.uses_module?(user_module, @used_module)
     end

@@ -11,11 +11,10 @@ defmodule Hologram.Compiler.DotOperatorTransformerTest do
     context = [module: [:Test], imports: [], aliases: []]
     result = DotOperatorTransformer.transform(left, right, context)
 
-    expected =
-      %DotOperator{
-        left: %Variable{name: :a},
-        right: %AtomType{value: :b}
-      }
+    expected = %DotOperator{
+      left: %Variable{name: :a},
+      right: %AtomType{value: :b}
+    }
 
     assert result == expected
   end

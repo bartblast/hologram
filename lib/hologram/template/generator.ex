@@ -1,6 +1,13 @@
 defmodule Hologram.Template.Generator do
   alias Hologram.Template.VirtualDOM.{Component, Expression, ElementNode, TextNode}
-  alias Hologram.Template.{ComponentGenerator, ElementNodeGenerator, ExpressionGenerator, NodeListGenerator, TextNodeGenerator}
+
+  alias Hologram.Template.{
+    ComponentGenerator,
+    ElementNodeGenerator,
+    ExpressionGenerator,
+    NodeListGenerator,
+    TextNodeGenerator
+  }
 
   def generate(virtual_dom, context \\ [module_attributes: []])
 

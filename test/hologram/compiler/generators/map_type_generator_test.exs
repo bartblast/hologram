@@ -16,8 +16,7 @@ defmodule Hologram.Compiler.MapTypeGeneratorTest do
 
     result = MapTypeGenerator.generate(ir.data, context[:context], context[:opts])
 
-    expected =
-      "{ type: 'map', data: { '~atom[a]': { type: 'integer', value: 1 } } }"
+    expected = "{ type: 'map', data: { '~atom[a]': { type: 'integer', value: 1 } } }"
 
     assert result == expected
   end

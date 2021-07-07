@@ -7,7 +7,14 @@ defmodule Hologram.Compiler.FunctionCallTransformer do
     arity = Enum.count(params)
 
     resolved_module =
-      Resolver.resolve(called_module, function, arity, context[:imports], context[:aliases], context[:module])
+      Resolver.resolve(
+        called_module,
+        function,
+        arity,
+        context[:imports],
+        context[:aliases],
+        context[:module]
+      )
 
     %FunctionCall{module: resolved_module, function: function, params: params}
   end

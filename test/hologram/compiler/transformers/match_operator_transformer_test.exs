@@ -1,7 +1,15 @@
 defmodule Hologram.Compiler.MatchOperatorTransformerTest do
   use Hologram.TestCase, async: true
 
-  alias Hologram.Compiler.IR.{AccessOperator, AtomType, IntegerType, MapType, MatchOperator, Variable}
+  alias Hologram.Compiler.IR.{
+    AccessOperator,
+    AtomType,
+    IntegerType,
+    MapType,
+    MatchOperator,
+    Variable
+  }
+
   alias Hologram.Compiler.MatchOperatorTransformer
 
   test "variable" do
@@ -89,32 +97,32 @@ defmodule Hologram.Compiler.MatchOperatorTransformerTest do
             },
             {%AtomType{value: :c}, %IntegerType{value: 3}},
             {%AtomType{value: :d},
-            %MapType{
-              data: [
-                {%AtomType{value: :m}, %IntegerType{value: 0}},
-                {%AtomType{value: :n}, %Variable{name: :y}}
-              ]
-            }}
+             %MapType{
+               data: [
+                 {%AtomType{value: :m}, %IntegerType{value: 0}},
+                 {%AtomType{value: :n}, %Variable{name: :y}}
+               ]
+             }}
           ]
         },
         right: %MapType{
           data: [
             {%AtomType{value: :a}, %IntegerType{value: 1}},
             {%AtomType{value: :b},
-            %MapType{
-              data: [
-                {%AtomType{value: :p}, %IntegerType{value: 9}},
-                {%AtomType{value: :r}, %IntegerType{value: 4}}
-              ]
-            }},
+             %MapType{
+               data: [
+                 {%AtomType{value: :p}, %IntegerType{value: 9}},
+                 {%AtomType{value: :r}, %IntegerType{value: 4}}
+               ]
+             }},
             {%AtomType{value: :c}, %IntegerType{value: 3}},
             {%AtomType{value: :d},
-            %MapType{
-              data: [
-                {%AtomType{value: :m}, %IntegerType{value: 0}},
-                {%AtomType{value: :n}, %IntegerType{value: 8}}
-              ]
-            }}
+             %MapType{
+               data: [
+                 {%AtomType{value: :m}, %IntegerType{value: 0}},
+                 {%AtomType{value: :n}, %IntegerType{value: 8}}
+               ]
+             }}
           ]
         }
       }

@@ -33,13 +33,12 @@ defmodule Hologram.Compiler.ExpanderTest do
 
     expected =
       {:defmodule, [line: 1],
-      [
-        {:__aliases__, [line: 1], [:Test]},
-        [
-          do: {:__block__, [],
-            [{:import, [line: 4], [{:__aliases__, [line: 4], @module_1}]}]}
-        ]
-      ]}
+       [
+         {:__aliases__, [line: 1], [:Test]},
+         [
+           do: {:__block__, [], [{:import, [line: 4], [{:__aliases__, [line: 4], @module_1}]}]}
+         ]
+       ]}
 
     assert result == expected
   end
@@ -58,16 +57,17 @@ defmodule Hologram.Compiler.ExpanderTest do
 
     expected =
       {:defmodule, [line: 1],
-      [
-        {:__aliases__, [line: 1], [:Test]},
-        [
-          do: {:__block__, [],
-           [
-             {:import, [line: 4], [{:__aliases__, [line: 4], @module_1}]},
-             {:import, [line: 4], [{:__aliases__, [line: 4], @module_3}]}
-           ]}
-        ]
-      ]}
+       [
+         {:__aliases__, [line: 1], [:Test]},
+         [
+           do:
+             {:__block__, [],
+              [
+                {:import, [line: 4], [{:__aliases__, [line: 4], @module_1}]},
+                {:import, [line: 4], [{:__aliases__, [line: 4], @module_3}]}
+              ]}
+         ]
+       ]}
 
     assert result == expected
   end
@@ -85,13 +85,12 @@ defmodule Hologram.Compiler.ExpanderTest do
 
     expected =
       {:defmodule, [line: 1],
-      [
-        {:__aliases__, [line: 1], [:Test]},
-        [
-          do: {:__block__, [],
-            [{:import, [line: 4], [{:__aliases__, [line: 4], @module_1}]}]}
-        ]
-      ]}
+       [
+         {:__aliases__, [line: 1], [:Test]},
+         [
+           do: {:__block__, [], [{:import, [line: 4], [{:__aliases__, [line: 4], @module_1}]}]}
+         ]
+       ]}
 
     assert result == expected
   end
@@ -109,17 +108,17 @@ defmodule Hologram.Compiler.ExpanderTest do
 
     expected =
       {:defmodule, [line: 1],
-      [
-        {:__aliases__, [line: 1], [:Test]},
-        [
-          do: {:__block__, [],
-            [
-              {:import, [line: 4], [{:__aliases__, [line: 4], @module_1}]},
-              {:import, [line: 5], [{:__aliases__, [line: 5], @module_3}]}
-            ]
-          }
-        ]
-      ]}
+       [
+         {:__aliases__, [line: 1], [:Test]},
+         [
+           do:
+             {:__block__, [],
+              [
+                {:import, [line: 4], [{:__aliases__, [line: 4], @module_1}]},
+                {:import, [line: 5], [{:__aliases__, [line: 5], @module_3}]}
+              ]}
+         ]
+       ]}
 
     assert result == expected
   end

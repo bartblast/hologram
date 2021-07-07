@@ -29,7 +29,7 @@ defmodule Hologram.Template.Transformer do
         }
       ]
   """
-  @spec transform(Saxy.SimpleForm.t, list(%Alias{})) :: list(T.virtual_dom_node)
+  @spec transform(Saxy.SimpleForm.t(), list(%Alias{})) :: list(T.virtual_dom_node())
 
   def transform(dom, aliases \\ []) do
     Enum.map(dom, fn node -> transform_node(node, aliases) end)

@@ -15,11 +15,11 @@ defmodule Hologram.Template.ElementNodeGenerator do
         "{}"
       end
 
-      children_str =
-        Enum.map(children, &Generator.generate(&1, context))
-        |> Enum.join(", ")
+    children_str =
+      Enum.map(children, &Generator.generate(&1, context))
+      |> Enum.join(", ")
 
-      children_js = "[#{children_str}]"
+    children_js = "[#{children_str}]"
 
     "{ type: 'element', tag: '#{tag}', attrs: #{attrs_js}, children: #{children_js} }"
   end

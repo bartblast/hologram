@@ -1,13 +1,37 @@
 defmodule Hologram.Compiler.Transformer do
-  alias Hologram.Compiler.IR.{AtomType, BooleanType, Import, IntegerType, MatchOperator, ModuleAttributeOperator, StringType, UseDirective, Variable}
+  alias Hologram.Compiler.IR.{
+    AtomType,
+    BooleanType,
+    Import,
+    IntegerType,
+    MatchOperator,
+    ModuleAttributeOperator,
+    StringType,
+    UseDirective,
+    Variable
+  }
+
   alias Hologram.Compiler.Binder
-  alias Hologram.Compiler.{AdditionOperatorTransformer, AliasTransformer, DotOperatorTransformer, FunctionDefinitionTransformer, FunctionCallTransformer, ListTypeTransformer, MapTypeTransformer, MatchOperatorTransformer, ModuleAttributeDefinitionTransformer, ModuleDefinitionTransformer, StructTypeTransformer}
+
+  alias Hologram.Compiler.{
+    AdditionOperatorTransformer,
+    AliasTransformer,
+    DotOperatorTransformer,
+    FunctionDefinitionTransformer,
+    FunctionCallTransformer,
+    ListTypeTransformer,
+    MapTypeTransformer,
+    MatchOperatorTransformer,
+    ModuleAttributeDefinitionTransformer,
+    ModuleDefinitionTransformer,
+    StructTypeTransformer
+  }
 
   def transform(ast, context \\ [module: [], imports: [], aliases: []])
 
   # TYPES
 
-  def transform(ast, _) when is_atom(ast) and ast not in [:false, :true] do
+  def transform(ast, _) when is_atom(ast) and ast not in [false, true] do
     %AtomType{value: ast}
   end
 

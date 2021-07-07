@@ -30,7 +30,14 @@ defmodule Hologram.Compiler.ModuleDefinitionTransformer do
     aliases = aggregate_expressions(:alias, ast, [])
     attributes = aggregate_expressions(:@, ast, [])
 
-    context = [module: module, uses: uses, imports: imports, aliases: aliases, attributes: attributes]
+    context = [
+      module: module,
+      uses: uses,
+      imports: imports,
+      aliases: aliases,
+      attributes: attributes
+    ]
+
     functions = aggregate_expressions(:def, ast, context)
 
     %ModuleDefinition{

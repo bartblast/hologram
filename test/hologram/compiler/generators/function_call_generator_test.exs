@@ -8,7 +8,7 @@ defmodule Hologram.Compiler.FunctionCallGeneratorTest do
     [
       context: [],
       function: :abc,
-      module: [:Test],
+      module: [:Test]
     ]
   end
 
@@ -26,8 +26,7 @@ defmodule Hologram.Compiler.FunctionCallGeneratorTest do
 
     result = FunctionCallGenerator.generate(module, function, params, context)
 
-    expected =
-      "Test.abc({ type: 'integer', value: 1 }, { type: 'integer', value: 2 })"
+    expected = "Test.abc({ type: 'integer', value: 1 }, { type: 'integer', value: 2 })"
 
     assert result == expected
   end

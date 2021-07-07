@@ -7,12 +7,12 @@ defmodule Hologram.Compiler.Normalizer do
     }
   end
 
-  def normalize([do: {:__block__, [], exprs}]) do
+  def normalize(do: {:__block__, [], exprs}) do
     [do: {:__block__, [], Enum.map(exprs, &normalize/1)}]
   end
 
-  def normalize([do: expr]) do
-    [do: {:__block__, [],  [normalize(expr)]}]
+  def normalize(do: expr) do
+    [do: {:__block__, [], [normalize(expr)]}]
   end
 
   def normalize(ast) when is_list(ast) do

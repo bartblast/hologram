@@ -11,6 +11,7 @@ defmodule Hologram.Compiler.Expander do
           # expansion of use directive returns a list of expressions
           e when is_list(e) ->
             acc ++ e
+
           # non-expandable expression
           e ->
             acc ++ [e]

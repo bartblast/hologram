@@ -9,7 +9,7 @@ defmodule Hologram.Compiler.Helpers do
       iex> Helpers.class_name([:Abc, :Bcd])
       "AbcBcd"
   """
-  @spec class_name(T.module_name_segments) :: String.t
+  @spec class_name(T.module_name_segments()) :: String.t()
 
   def class_name(segments) do
     module_name(segments)
@@ -59,10 +59,10 @@ defmodule Hologram.Compiler.Helpers do
       iex> Helpers.module([:Abc, :Bcd])
       Elixir.Abc.Bcd
   """
-  @spec module(T.module_name_segments) :: module()
+  @spec module(T.module_name_segments()) :: module()
 
   def module(segments) do
-    [:Elixir | segments]
+    [:"Elixir" | segments]
     |> Enum.join(".")
     |> String.to_existing_atom()
   end
@@ -74,7 +74,7 @@ defmodule Hologram.Compiler.Helpers do
       iex> Helpers.module_name([:Abc, :Bcd])
       "Abc.Bcd"
   """
-  @spec module_name(T.module_name_segments) :: String.t
+  @spec module_name(T.module_name_segments()) :: String.t()
 
   def module_name(segments) do
     Enum.join(segments, ".")
@@ -87,7 +87,7 @@ defmodule Hologram.Compiler.Helpers do
       iex> Helpers.module_name_atom([:Abc, :Bcd])
       :"Abc.Bcd"
   """
-  @spec module_name(T.module_name_segments) :: atom()
+  @spec module_name(T.module_name_segments()) :: atom()
 
   def module_name_atom(segments) do
     module_name(segments)
@@ -103,7 +103,7 @@ defmodule Hologram.Compiler.Helpers do
       iex> Helpers.module_name_segments(Abc.Bcd)
       [:Abc, :Bcd]
   """
-  @spec module_name_segments(String.t | module()) :: T.module_name_segments
+  @spec module_name_segments(String.t() | module()) :: T.module_name_segments()
 
   def module_name_segments(module_name) when is_binary(module_name) do
     module_name
@@ -124,7 +124,7 @@ defmodule Hologram.Compiler.Helpers do
       iex> Helpers.module_source_path([:Hologram, :Compiler, :Helpers])
       "/Users/bart/Files/Projects/hologram/lib/hologram/compiler/helpers.ex"
   """
-  @spec module_source_path(T.module_name_segments) :: String.t
+  @spec module_source_path(T.module_name_segments()) :: String.t()
 
   def module_source_path(segments) do
     module(segments)
@@ -141,7 +141,7 @@ defmodule Hologram.Compiler.Helpers do
       iex> Helpers.uses_module?(user_module, [:Hologram, :Commons, :Parser])
       true
   """
-  @spec uses_module?(%ModuleDefinition{}, T.module_name_segments) :: boolean()
+  @spec uses_module?(%ModuleDefinition{}, T.module_name_segments()) :: boolean()
 
   def uses_module?(user_module, used_module) do
     Enum.any?(user_module.uses, &(&1.module == used_module))

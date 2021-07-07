@@ -12,14 +12,12 @@ defmodule Hologram.Compiler.StructTypeTransformerTest do
 
     result = StructTypeTransformer.transform(ast, module, context)
 
-    expected =
-      %StructType{
-        data: [
-          {%AtomType{value: :a},
-           %IntegerType{value: 1}}
-        ],
-        module: [:TestStruct]
-      }
+    expected = %StructType{
+      data: [
+        {%AtomType{value: :a}, %IntegerType{value: 1}}
+      ],
+      module: [:TestStruct]
+    }
 
     assert result == expected
   end
@@ -38,14 +36,12 @@ defmodule Hologram.Compiler.StructTypeTransformerTest do
 
     result = StructTypeTransformer.transform(ast, module, context)
 
-    expected =
-      %StructType{
-        data: [
-          {%AtomType{value: :a},
-           %IntegerType{value: 1}}
-        ],
-        module: [:Bcd, :Cde]
-      }
+    expected = %StructType{
+      data: [
+        {%AtomType{value: :a}, %IntegerType{value: 1}}
+      ],
+      module: [:Bcd, :Cde]
+    }
 
     assert result == expected
   end

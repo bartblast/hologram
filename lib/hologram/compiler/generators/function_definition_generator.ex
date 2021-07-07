@@ -60,15 +60,14 @@ defmodule Hologram.Compiler.FunctionDefinitionGenerator do
 
     value =
       Enum.reduce(path, acc, fn type, acc ->
-        acc
-        <>
-        case type do
-          %AccessOperator{key: key} ->
-            ".data['#{MapKeyGenerator.generate(key)}']"
+        acc <>
+          case type do
+            %AccessOperator{key: key} ->
+              ".data['#{MapKeyGenerator.generate(key)}']"
 
-          %Variable{name: name} ->
-            ""
-        end
+            %Variable{name: name} ->
+              ""
+          end
       end)
 
     "#{value};"

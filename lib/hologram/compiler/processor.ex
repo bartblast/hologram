@@ -8,7 +8,7 @@ defmodule Hologram.Compiler.Processor do
   @doc """
   Creates the module definitions map of modules used by the given module.
   """
-  @spec compile(T.module_name_segments, map()) :: T.module_definitions_map
+  @spec compile(T.module_name_segments(), map()) :: T.module_definitions_map()
 
   def compile(module_name_segments, acc \\ %{}) do
     definition = get_module_definition(module_name_segments)
@@ -57,7 +57,7 @@ defmodule Hologram.Compiler.Processor do
       iex> Processor.get_module_definition([:Abc, :Bcd])
       %ModuleDefinition{module: [:Abc, :Bcd], ...}
   """
-  @spec get_module_definition(T.module_name_segments) :: %ModuleDefinition{}
+  @spec get_module_definition(T.module_name_segments()) :: %ModuleDefinition{}
 
   def get_module_definition(module_name_segments) do
     Helpers.module_source_path(module_name_segments)

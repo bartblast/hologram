@@ -155,37 +155,41 @@ defmodule Hologram.Template.InterpolatorTest do
     end
 
     test "expression attribute" do
-      nodes = [%ElementNode{
-        tag: "div",
-        children: [],
-        attrs: %{"key" => "{{ 1 }}"}
-      }]
+      nodes = [
+        %ElementNode{
+          tag: "div",
+          children: [],
+          attrs: %{"key" => "{{ 1 }}"}
+        }
+      ]
 
       result = Interpolator.interpolate(nodes)
 
-      expected =
-        [
-          %ElementNode{
-            attrs: %{
-              "key" => %Expression{
-                ir: %IntegerType{value: 1}
-              }
-            },
-            children: [],
-            tag: "div"
-          }
-        ]
+      expected = [
+        %ElementNode{
+          attrs: %{
+            "key" => %Expression{
+              ir: %IntegerType{value: 1}
+            }
+          },
+          children: [],
+          tag: "div"
+        }
+      ]
+
       assert result == expected
     end
 
     test "has children" do
-      nodes = [%ElementNode{
-        children: [
-          %TextNode{content: "abc"},
-          %TextNode{content: "xyz"}
-        ],
-        attrs: %{}
-      }]
+      nodes = [
+        %ElementNode{
+          children: [
+            %TextNode{content: "abc"},
+            %TextNode{content: "xyz"}
+          ],
+          attrs: %{}
+        }
+      ]
 
       result = Interpolator.interpolate(nodes)
 
@@ -194,53 +198,51 @@ defmodule Hologram.Template.InterpolatorTest do
   end
 
   test "nodes tree" do
-    nodes =
-      [
-        %TextNode{content: "abc{{ 1 }}cde"},
-        %ElementNode{
-          tag: "div",
-          attrs: %{"m" => "{{ 2 }}"},
-          children: [
-            %TextNode{content: "xyz"},
-            %ElementNode{
-              tag: "div",
-              children: [
-                %ElementNode{tag: "span", children: [], attrs: %{}}
-              ],
-              attrs: %{"n" => "{{ 3 }}"}
-            },
-            %TextNode{content: "def{{ 4 }}fgh"}
-          ]
-        },
-        %TextNode{content: "ghi"}
-      ]
+    nodes = [
+      %TextNode{content: "abc{{ 1 }}cde"},
+      %ElementNode{
+        tag: "div",
+        attrs: %{"m" => "{{ 2 }}"},
+        children: [
+          %TextNode{content: "xyz"},
+          %ElementNode{
+            tag: "div",
+            children: [
+              %ElementNode{tag: "span", children: [], attrs: %{}}
+            ],
+            attrs: %{"n" => "{{ 3 }}"}
+          },
+          %TextNode{content: "def{{ 4 }}fgh"}
+        ]
+      },
+      %TextNode{content: "ghi"}
+    ]
 
     result = Interpolator.interpolate(nodes)
 
-    expected =
-      [
-        %TextNode{content: "abc"},
-        %Expression{ir: %IntegerType{value: 1}},
-        %TextNode{content: "cde"},
-        %ElementNode{
-          tag: "div",
-          attrs: %{"m" => %Expression{ir: %IntegerType{value: 2}}},
-          children: [
-            %TextNode{content: "xyz"},
-            %ElementNode{
-              tag: "div",
-              children: [
-                %ElementNode{tag: "span", children: [], attrs: %{}}
-              ],
-              attrs: %{"n" => %Expression{ir: %IntegerType{value: 3}}}
-            },
-            %TextNode{content: "def"},
-            %Expression{ir: %IntegerType{value: 4}},
-            %TextNode{content: "fgh"}
-          ]
-        },
-        %TextNode{content: "ghi"}
-      ]
+    expected = [
+      %TextNode{content: "abc"},
+      %Expression{ir: %IntegerType{value: 1}},
+      %TextNode{content: "cde"},
+      %ElementNode{
+        tag: "div",
+        attrs: %{"m" => %Expression{ir: %IntegerType{value: 2}}},
+        children: [
+          %TextNode{content: "xyz"},
+          %ElementNode{
+            tag: "div",
+            children: [
+              %ElementNode{tag: "span", children: [], attrs: %{}}
+            ],
+            attrs: %{"n" => %Expression{ir: %IntegerType{value: 3}}}
+          },
+          %TextNode{content: "def"},
+          %Expression{ir: %IntegerType{value: 4}},
+          %TextNode{content: "fgh"}
+        ]
+      },
+      %TextNode{content: "ghi"}
+    ]
 
     assert result == expected
   end

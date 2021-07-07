@@ -17,14 +17,15 @@ defmodule Hologram.Router do
   defmacro hologram_routes do
     for page <- find_pages() do
       quote do
-        get unquote(page.route()), HologramController, :index, private: %{hologram_page: unquote(page)}
+        get unquote(page.route()), HologramController, :index,
+          private: %{hologram_page: unquote(page)}
       end
     end
   end
 
   # TODO: test
   defp find_pages do
-    app_name = Mix.Project.get.project[:app]
+    app_name = Mix.Project.get().project[:app]
     app_path = File.cwd!()
 
     pages_path =

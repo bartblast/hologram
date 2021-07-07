@@ -6,7 +6,7 @@ defmodule Hologram.Compiler.Pruner do
   @doc """
   Prunes unused modules and functions.
   """
-  @spec prune(T.module_definitions_map) :: T.module_definitions_map
+  @spec prune(T.module_definitions_map()) :: T.module_definitions_map()
 
   def prune(module_defs_map) do
     find_used_functions(module_defs_map)
@@ -14,7 +14,9 @@ defmodule Hologram.Compiler.Pruner do
     |> prune_unused_modules()
   end
 
-  @spec determine_preserved_module_functions(%ModuleDefinition{}, T.function_set) :: list(%FunctionDefinition{})
+  @spec determine_preserved_module_functions(%ModuleDefinition{}, T.function_set()) ::
+          list(%FunctionDefinition{})
+
   defp determine_preserved_module_functions(module_def, used_functions) do
     Enum.reduce(module_def.functions, [], fn function_def, acc ->
       # The function call may use default parameter values,
@@ -28,13 +30,19 @@ defmodule Hologram.Compiler.Pruner do
     end)
   end
 
-  @spec find_actions(list(%ModuleDefinition{}), list(%ModuleDefinition{}), T.module_definitions_map) :: list({T.module_name_segments, %FunctionDefinition{}})
+  @spec find_actions(
+          list(%ModuleDefinition{}),
+          list(%ModuleDefinition{}),
+          T.module_definitions_map()
+        ) :: list({T.module_name_segments(), %FunctionDefinition{}})
+
   defp find_actions(pages, components, module_defs_map) do
     (pages ++ components)
     |> Enum.reduce([], &(&2 ++ find_module_actions(&1, module_defs_map)))
   end
 
-  @spec find_components(T.module_definitions_map) :: list(%ModuleDefinition{})
+  @spec find_components(T.module_definitions_map()) :: list(%ModuleDefinition{})
+
   defp find_components(module_defs_map) do
     module_defs_map
     |> Enum.filter(fn {_, module_def} ->
@@ -43,7 +51,12 @@ defmodule Hologram.Compiler.Pruner do
     |> Enum.map(fn {_, module_def} -> module_def end)
   end
 
-  @spec find_function_defs(T.module_name_segments, T.function_name, T.module_definitions_map) :: list({%FunctionDefinition{}})
+  @spec find_function_defs(
+          T.module_name_segments(),
+          T.function_name(),
+          T.module_definitions_map()
+        ) :: list({%FunctionDefinition{}})
+
   defp find_function_defs(module_name_segs, function_name, module_defs_map) do
     if module_defs_map[module_name_segs] do
       module_defs_map[module_name_segs].functions
@@ -53,13 +66,16 @@ defmodule Hologram.Compiler.Pruner do
     end
   end
 
-  @spec find_module_actions(%ModuleDefinition{}, T.module_definitions_map) :: list({T.module_name_segments, %FunctionDefinition{}})
+  @spec find_module_actions(%ModuleDefinition{}, T.module_definitions_map()) ::
+          list({T.module_name_segments(), %FunctionDefinition{}})
+
   defp find_module_actions(module_def, module_defs_map) do
     find_function_defs(module_def.name, :action, module_defs_map)
     |> Enum.map(&{module_def.name, &1})
   end
 
-  @spec find_pages(T.module_definitions_map) :: list(%ModuleDefinition{})
+  @spec find_pages(T.module_definitions_map()) :: list(%ModuleDefinition{})
+
   defp find_pages(module_defs_map) do
     module_defs_map
     |> Enum.filter(fn {_, module_def} ->
@@ -68,7 +84,8 @@ defmodule Hologram.Compiler.Pruner do
     |> Enum.map(fn {_, module_def} -> module_def end)
   end
 
-  @spec find_used_functions(T.module_definitions_map) :: T.function_set
+  @spec find_used_functions(T.module_definitions_map()) :: T.function_set()
+
   defp find_used_functions(module_defs_map) do
     pages = find_pages(module_defs_map)
     components = find_components(module_defs_map)
@@ -83,18 +100,27 @@ defmodule Hologram.Compiler.Pruner do
     |> Enum.reduce(acc, &include_actions_and_templates/2)
   end
 
-  @spec include_actions_and_templates(list(%ModuleDefinition{}), T.function_set) :: T.function_set
+  @spec include_actions_and_templates(list(%ModuleDefinition{}), T.function_set()) ::
+          T.function_set()
+
   defp include_actions_and_templates(module_def, acc) do
     MapSet.put(acc, {module_def.name, :action})
     |> MapSet.put({module_def.name, :template})
   end
 
-  @spec include_function_calls(T.function_set, %FunctionDefinition{}, T.module_definitions_map) :: T.function_set
+  @spec include_function_calls(
+          T.function_set(),
+          %FunctionDefinition{},
+          T.module_definitions_map()
+        ) :: T.function_set()
+
   defp include_function_calls(acc, %FunctionDefinition{body: body}, module_defs_map) do
     Enum.reduce(body, acc, &include_function_calls(&2, &1, module_defs_map))
   end
 
-  @spec include_function_calls(T.function_set, %FunctionCall{}, T.module_definitions_map) :: T.function_set
+  @spec include_function_calls(T.function_set(), %FunctionCall{}, T.module_definitions_map()) ::
+          T.function_set()
+
   defp include_function_calls(acc, %FunctionCall{} = function_call, module_defs_map) do
     # The function call may use default parameter values,
     # so we include all functions matching the name (regardless of their arity).
@@ -109,10 +135,18 @@ defmodule Hologram.Compiler.Pruner do
     end
   end
 
-  @spec include_function_calls(T.function_set, any(), T.module_definitions_map) :: T.function_set
+  @spec include_function_calls(T.function_set(), any(), T.module_definitions_map()) ::
+          T.function_set()
+
   defp include_function_calls(acc, _, _), do: acc
 
-  @spec include_function_calls(T.function_set, T.module_name_segments, T.function_name, T.module_definitions_map) :: T.function_set
+  @spec include_function_calls(
+          T.function_set(),
+          T.module_name_segments(),
+          T.function_name(),
+          T.module_definitions_map()
+        ) :: T.function_set()
+
   defp include_function_calls(acc, module_name_segs, function_name, module_defs_map) do
     find_function_defs(module_name_segs, function_name, module_defs_map)
     |> Enum.reduce(acc, &include_function_calls(&2, &1, module_defs_map))
@@ -120,12 +154,19 @@ defmodule Hologram.Compiler.Pruner do
 
   # TODO: implement include_function_calls which includes function calls nested in blocks
 
-  @spec include_functions_used_by_action({T.module_name_segments, %FunctionDefinition{}}, T.function_set, T.module_definition_map) :: T.function_set
+  @spec include_functions_used_by_action(
+          {T.module_name_segments(), %FunctionDefinition{}},
+          T.function_set(),
+          T.module_definition_map()
+        ) :: T.function_set()
+
   defp include_functions_used_by_action({_, function_def}, acc, module_defs_map) do
     include_function_calls(acc, function_def, module_defs_map)
   end
 
-  @spec prune_unused_functions(T.function_set, T.module_definitions_map) :: T.module_definitions_map
+  @spec prune_unused_functions(T.function_set(), T.module_definitions_map()) ::
+          T.module_definitions_map()
+
   defp prune_unused_functions(used_functions, module_defs_map) do
     Enum.map(module_defs_map, fn {module_name_segs, module_def} ->
       preserved_functions = determine_preserved_module_functions(module_def, used_functions)
@@ -134,7 +175,8 @@ defmodule Hologram.Compiler.Pruner do
     |> Enum.into(%{})
   end
 
-  @spec prune_unused_modules(T.module_definitions_map) :: T.module_definitions_map
+  @spec prune_unused_modules(T.module_definitions_map()) :: T.module_definitions_map()
+
   defp prune_unused_modules(module_defs_map) do
     Enum.filter(module_defs_map, fn {_, module_def} ->
       Enum.any?(module_def.functions)

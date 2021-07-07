@@ -10,7 +10,7 @@ defmodule Hologram.Compiler.PrunerTest do
       module_defs_map = Processor.compile(entry_module)
       result = Pruner.prune(module_defs_map)
 
-      assert (Map.keys(result) |> Enum.count()) == 1
+      assert Map.keys(result) |> Enum.count() == 1
       assert Map.has_key?(result, entry_module)
 
       assert [function_1, function_2] = result[entry_module].functions
@@ -29,7 +29,7 @@ defmodule Hologram.Compiler.PrunerTest do
       module_defs_map = Processor.compile(entry_module)
       result = Pruner.prune(module_defs_map)
 
-      assert (Map.keys(result) |> Enum.count()) == 1
+      assert Map.keys(result) |> Enum.count() == 1
       assert Map.has_key?(result, entry_module)
 
       assert [function] = result[entry_module].functions
@@ -44,7 +44,7 @@ defmodule Hologram.Compiler.PrunerTest do
       module_defs_map = Processor.compile(entry_module)
       result = Pruner.prune(module_defs_map)
 
-      assert (Map.keys(result) |> Enum.count()) == 1
+      assert Map.keys(result) |> Enum.count() == 1
       assert Map.has_key?(result, entry_module)
 
       assert [function_1, function_2] = result[entry_module].functions
@@ -65,7 +65,7 @@ defmodule Hologram.Compiler.PrunerTest do
       module_defs_map = Processor.compile(entry_module)
       result = Pruner.prune(module_defs_map)
 
-      assert (Map.keys(result) |> Enum.count()) == 2
+      assert Map.keys(result) |> Enum.count() == 2
 
       assert Map.has_key?(result, entry_module)
       assert [function_1] = result[entry_module].functions
@@ -88,7 +88,7 @@ defmodule Hologram.Compiler.PrunerTest do
       module_defs_map = Processor.compile(entry_module)
       result = Pruner.prune(module_defs_map)
 
-      assert (Map.keys(result) |> Enum.count()) == 1
+      assert Map.keys(result) |> Enum.count() == 1
       assert Map.has_key?(result, entry_module)
 
       assert [function_1, function_2, function_3] = result[entry_module].functions
@@ -114,7 +114,7 @@ defmodule Hologram.Compiler.PrunerTest do
       module_defs_map = Processor.compile(entry_module)
       result = Pruner.prune(module_defs_map)
 
-      assert (Map.keys(result) |> Enum.count()) == 3
+      assert Map.keys(result) |> Enum.count() == 3
 
       assert Map.has_key?(result, entry_module)
       assert [function_1] = result[entry_module].functions
@@ -145,7 +145,7 @@ defmodule Hologram.Compiler.PrunerTest do
       module_defs_map = Processor.compile(entry_module)
       result = Pruner.prune(module_defs_map)
 
-      assert (Map.keys(result) |> Enum.count()) == 1
+      assert Map.keys(result) |> Enum.count() == 1
       assert Map.has_key?(result, entry_module)
 
       assert [function_1, function_2] = result[entry_module].functions
@@ -164,7 +164,7 @@ defmodule Hologram.Compiler.PrunerTest do
       module_defs_map = Processor.compile(entry_module)
       result = Pruner.prune(module_defs_map)
 
-      assert (Map.keys(result) |> Enum.count()) == 1
+      assert Map.keys(result) |> Enum.count() == 1
       assert Map.has_key?(result, entry_module)
 
       assert [function] = result[entry_module].functions
@@ -179,7 +179,7 @@ defmodule Hologram.Compiler.PrunerTest do
       module_defs_map = Processor.compile(entry_module)
       result = Pruner.prune(module_defs_map)
 
-      assert (Map.keys(result) |> Enum.count()) == 1
+      assert Map.keys(result) |> Enum.count() == 1
       assert Map.has_key?(result, entry_module)
 
       assert [function_1, function_2] = result[entry_module].functions
@@ -200,7 +200,7 @@ defmodule Hologram.Compiler.PrunerTest do
       module_defs_map = Processor.compile(entry_module)
       result = Pruner.prune(module_defs_map)
 
-      assert (Map.keys(result) |> Enum.count()) == 2
+      assert Map.keys(result) |> Enum.count() == 2
 
       assert Map.has_key?(result, entry_module)
       assert [function_1] = result[entry_module].functions
@@ -223,7 +223,7 @@ defmodule Hologram.Compiler.PrunerTest do
       module_defs_map = Processor.compile(entry_module)
       result = Pruner.prune(module_defs_map)
 
-      assert (Map.keys(result) |> Enum.count()) == 1
+      assert Map.keys(result) |> Enum.count() == 1
       assert Map.has_key?(result, entry_module)
 
       assert [function_1, function_2, function_3] = result[entry_module].functions
@@ -249,7 +249,7 @@ defmodule Hologram.Compiler.PrunerTest do
       module_defs_map = Processor.compile(entry_module)
       result = Pruner.prune(module_defs_map)
 
-      assert (Map.keys(result) |> Enum.count()) == 3
+      assert Map.keys(result) |> Enum.count() == 3
 
       assert Map.has_key?(result, entry_module)
       assert [function_1] = result[entry_module].functions
@@ -295,7 +295,7 @@ defmodule Hologram.Compiler.PrunerTest do
       module_defs_map = Processor.compile(entry_module)
       result = Pruner.prune(module_defs_map)
 
-      assert (Map.keys(result) |> Enum.count()) == 1
+      assert Map.keys(result) |> Enum.count() == 1
       assert Map.has_key?(result, entry_module)
 
       assert [function] = result[entry_module].functions
@@ -311,7 +311,7 @@ defmodule Hologram.Compiler.PrunerTest do
       module_defs_map = Processor.compile(entry_module)
       result = Pruner.prune(module_defs_map)
 
-      assert (Map.keys(result) |> Enum.count()) == 1
+      assert Map.keys(result) |> Enum.count() == 1
       assert Map.has_key?(result, entry_module)
 
       assert [function] = result[entry_module].functions

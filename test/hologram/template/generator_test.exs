@@ -47,7 +47,9 @@ defmodule Hologram.Template.GeneratorTest do
     virtual_dom = %Expression{ir: %AtomType{value: "x"}}
 
     result = Generator.generate(virtual_dom, context)
-    expected = "{ type: 'expression', callback: ($state) => { return { type: 'atom', value: 'x' } } }"
+
+    expected =
+      "{ type: 'expression', callback: ($state) => { return { type: 'atom', value: 'x' } } }"
 
     assert result == expected
   end

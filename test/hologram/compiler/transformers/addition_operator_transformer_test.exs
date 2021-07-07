@@ -11,11 +11,10 @@ defmodule Hologram.Compiler.AdditionOperatorTransformerTest do
     context = [module: [:Test], imports: [], aliases: []]
     result = AdditionOperatorTransformer.transform(left, right, context)
 
-    expected =
-      %AdditionOperator{
-        left: %Variable{name: :a},
-        right: %IntegerType{value: 2}
-      }
+    expected = %AdditionOperator{
+      left: %Variable{name: :a},
+      right: %IntegerType{value: 2}
+    }
 
     assert result == expected
   end

@@ -28,14 +28,18 @@ defmodule Hologram.Compiler.ResolverTest do
     aliased_module = [:Hologram, :Test, :Fixtures, :Compiler, :Resolver, :Module1]
     aliases = [%Alias{module: aliased_module, as: [:Module1]}]
 
-    result = Resolver.resolve([:Module1], :test, 2, [], aliases, [:Hologram, :Compiler, :ResolverTest])
+    result =
+      Resolver.resolve([:Module1], :test, 2, [], aliases, [:Hologram, :Compiler, :ResolverTest])
+
     assert result == aliased_module
   end
 
   test "vertbatim module" do
     verbatim_module = [:Abc, :Bcd]
 
-    result = Resolver.resolve(verbatim_module, :test, 2, [], [], [:Hologram, :Compiler, :ResolverTest])
+    result =
+      Resolver.resolve(verbatim_module, :test, 2, [], [], [:Hologram, :Compiler, :ResolverTest])
+
     assert result == verbatim_module
   end
 end

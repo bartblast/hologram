@@ -9,7 +9,9 @@ defmodule Hologram.Template.ExpressionGeneratorTest do
     context = [module_attributes: []]
 
     result = ExpressionGenerator.generate(ir, context)
-    expected = "{ type: 'expression', callback: ($state) => { return { type: 'atom', value: 'x' } } }"
+
+    expected =
+      "{ type: 'expression', callback: ($state) => { return { type: 'atom', value: 'x' } } }"
 
     assert result == expected
   end

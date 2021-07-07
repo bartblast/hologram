@@ -11,12 +11,20 @@ defmodule Hologram.Compiler.Resolver do
       iex> resolve([], :put, 3, imports, [], [:Hologram, :Compiler, :Resolver])
       [:Enum]
   """
-  @spec resolve(T.module_name_segments, T.function_name, integer(), list(%Import{}), list(%Alias{}), T.module_name_segments) :: T.module_name_segments
+  @spec resolve(
+          T.module_name_segments(),
+          T.function_name(),
+          integer(),
+          list(%Import{}),
+          list(%Alias{}),
+          T.module_name_segments()
+        ) :: T.module_name_segments()
 
   def resolve(verbatim_module, function, arity, imports, aliases, calling_module) do
     case verbatim_module do
       [] ->
         imported_module = resolve_to_imported_module(function, arity, imports)
+
         if imported_module do
           imported_module
         else

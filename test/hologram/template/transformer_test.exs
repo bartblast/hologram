@@ -12,19 +12,18 @@ defmodule Hologram.Template.TransformerTest do
       Parser.parse!(html)
       |> Transformer.transform()
 
-    expected =
-      [
-        %ElementNode{
-          attrs: %{},
-          children: [],
-          tag: "div"
-        },
-        %ElementNode{
-          attrs: %{},
-          children: [],
-          tag: "span"
-        }
-      ]
+    expected = [
+      %ElementNode{
+        attrs: %{},
+        children: [],
+        tag: "div"
+      },
+      %ElementNode{
+        attrs: %{},
+        children: [],
+        tag: "span"
+      }
+    ]
 
     assert result == expected
   end
@@ -48,24 +47,23 @@ defmodule Hologram.Template.TransformerTest do
       Parser.parse!(html)
       |> Transformer.transform()
 
-    expected =
-      [
-        %Component{
-          children: [
-            %ElementNode{
-              attrs: %{},
-              children: [],
-              tag: "div"
-            },
-            %ElementNode{
-              attrs: %{},
-              children: [],
-              tag: "span"
-            }
-          ],
-          module: [:Prefix, :Module]
-        }
-      ]
+    expected = [
+      %Component{
+        children: [
+          %ElementNode{
+            attrs: %{},
+            children: [],
+            tag: "div"
+          },
+          %ElementNode{
+            attrs: %{},
+            children: [],
+            tag: "span"
+          }
+        ],
+        module: [:Prefix, :Module]
+      }
+    ]
 
     assert result == expected
   end
@@ -78,13 +76,12 @@ defmodule Hologram.Template.TransformerTest do
       Parser.parse!(html)
       |> Transformer.transform(aliases)
 
-    expected =
-      [
-        %Component{
-          children: [],
-          module: [:Abc, :Bcd]
-        }
-      ]
+    expected = [
+      %Component{
+        children: [],
+        module: [:Abc, :Bcd]
+      }
+    ]
 
     assert result == expected
   end
@@ -290,18 +287,17 @@ defmodule Hologram.Template.TransformerTest do
       Parser.parse!(html)
       |> Transformer.transform()
 
-    expected =
-      [
-        %TextNode{content: "test_1"},
-        %Expression{
-          ir: %ModuleAttributeOperator{name: :x1}
-        },
-        %TextNode{content: "test_2"},
-        %Expression{
-          ir: %ModuleAttributeOperator{name: :x2}
-        },
-        %TextNode{content: "test_3"}
-      ]
+    expected = [
+      %TextNode{content: "test_1"},
+      %Expression{
+        ir: %ModuleAttributeOperator{name: :x1}
+      },
+      %TextNode{content: "test_2"},
+      %Expression{
+        ir: %ModuleAttributeOperator{name: :x2}
+      },
+      %TextNode{content: "test_3"}
+    ]
 
     assert result == expected
   end
