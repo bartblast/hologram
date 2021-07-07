@@ -1,43 +1,38 @@
 defmodule Hologram.Compiler.MapTypeGeneratorTest do
   use Hologram.TestCase, async: true
 
+  alias Hologram.Compiler.{Context, MapTypeGenerator}
   alias Hologram.Compiler.IR.{AtomType, IntegerType, MapType}
-  alias Hologram.Compiler.MapTypeGenerator
 
-  setup do
-    [
-      context: [],
-      opts: []
-    ]
-  end
+  @context %Context{module: [], uses: [], imports: [], aliases: [], attributes: []}
+  @opts []
 
-  test "generate/3", context do
+  test "generate/3" do
     ir = %MapType{data: [{%AtomType{value: :a}, %IntegerType{value: 1}}]}
 
-    result = MapTypeGenerator.generate(ir.data, context[:context], context[:opts])
-
+    result = MapTypeGenerator.generate(ir.data, @context, @opts)
     expected = "{ type: 'map', data: { '~atom[a]': { type: 'integer', value: 1 } } }"
 
     assert result == expected
   end
 
   describe "generate_data/3" do
-    test "empty data", context do
+    test "empty data" do
       data = []
 
-      result = MapTypeGenerator.generate_data(data, context[:context], context[:opts])
+      result = MapTypeGenerator.generate_data(data, @context, @opts)
       expected = "{}"
 
       assert result == expected
     end
 
-    test "not nested data", context do
+    test "not nested data" do
       data = [
         {%AtomType{value: :a}, %IntegerType{value: 1}},
         {%AtomType{value: :b}, %IntegerType{value: 2}}
       ]
 
-      result = MapTypeGenerator.generate_data(data, context[:context], context[:opts])
+      result = MapTypeGenerator.generate_data(data, @context, @opts)
 
       expected =
         "{ '~atom[a]': { type: 'integer', value: 1 }, '~atom[b]': { type: 'integer', value: 2 } }"
@@ -45,7 +40,7 @@ defmodule Hologram.Compiler.MapTypeGeneratorTest do
       assert result == expected
     end
 
-    test "nested data", context do
+    test "nested data" do
       data = [
         {%AtomType{value: :a}, %IntegerType{value: 1}},
         {
@@ -67,7 +62,7 @@ defmodule Hologram.Compiler.MapTypeGeneratorTest do
         }
       ]
 
-      result = MapTypeGenerator.generate_data(data, context[:context], context[:opts])
+      result = MapTypeGenerator.generate_data(data, @context, @opts)
 
       expected =
         "{ '~atom[a]': { type: 'integer', value: 1 }, '~atom[b]': { type: 'map', data: { '~atom[c]': { type: 'integer', value: 2 }, '~atom[d]': { type: 'map', data: { '~atom[e]': { type: 'integer', value: 3 }, '~atom[f]': { type: 'integer', value: 4 } } } } } }"
