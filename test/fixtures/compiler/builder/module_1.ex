@@ -1,4 +1,6 @@
 defmodule Hologram.Test.Fixtures.Compiler.Builder.Module1 do
+  use Hologram.Page
+  
   alias Hologram.Test.Fixtures.Compiler.Builder.Module2
   alias Hologram.Test.Fixtures.Compiler.Builder.Module3
 
