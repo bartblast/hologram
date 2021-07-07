@@ -4,14 +4,11 @@ defmodule Hologram.Compiler.Transformer do
     BooleanType,
     Import,
     IntegerType,
-    MatchOperator,
     ModuleAttributeOperator,
     StringType,
     UseDirective,
     Variable
   }
-
-  alias Hologram.Compiler.Binder
 
   alias Hologram.Compiler.{
     AdditionOperatorTransformer,

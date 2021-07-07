@@ -65,7 +65,7 @@ defmodule Hologram.Compiler.FunctionDefinitionGenerator do
             %AccessOperator{key: key} ->
               ".data['#{MapKeyGenerator.generate(key)}']"
 
-            %Variable{name: name} ->
+            %Variable{} ->
               ""
           end
       end)

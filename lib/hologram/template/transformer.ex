@@ -1,8 +1,8 @@
 defmodule Hologram.Template.Transformer do
-  alias Hologram.Compiler.{Helpers, Parser, Resolver, Transformer}
+  alias Hologram.Compiler.{Helpers, Resolver}
   alias Hologram.Compiler.IR.Alias
   alias Hologram.Template.Interpolator
-  alias Hologram.Template.VirtualDOM.{Component, ElementNode, Expression, TextNode}
+  alias Hologram.Template.VirtualDOM.{Component, ElementNode, TextNode}
   alias Hologram.Typespecs, as: T
 
   @doc """
