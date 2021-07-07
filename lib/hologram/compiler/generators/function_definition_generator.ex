@@ -1,8 +1,8 @@
 defmodule Hologram.Compiler.FunctionDefinitionGenerator do
+  alias Hologram.Compiler.{Context, Generator, MapKeyGenerator}
   alias Hologram.Compiler.IR.{AccessOperator, Variable}
-  alias Hologram.Compiler.{Generator, MapKeyGenerator}
 
-  def generate(name, variants, context) do
+  def generate(name, variants, %Context{} = context) do
     body = generate_body(variants, context)
     "static #{name}() {\n#{body}}\n"
   end
@@ -23,7 +23,7 @@ defmodule Hologram.Compiler.FunctionDefinitionGenerator do
     Enum.reduce(variants, "", fn variant, acc ->
       statement = if acc == "", do: "if", else: "else if"
       params = generate_params(variant, context)
-      vars = generate_vars(variant)
+      vars = generate_vars(variant, context)
       body = generate_exprs(variant, context)
 
       code = """
@@ -55,7 +55,7 @@ defmodule Hologram.Compiler.FunctionDefinitionGenerator do
     "[#{params}]"
   end
 
-  defp generate_var({name, {idx, path}}) do
+  defp generate_var({name, {idx, path}}, context) do
     acc = "\nlet #{name} = arguments[#{idx}]"
 
     value =
@@ -63,7 +63,7 @@ defmodule Hologram.Compiler.FunctionDefinitionGenerator do
         acc <>
           case type do
             %AccessOperator{key: key} ->
-              ".data['#{MapKeyGenerator.generate(key)}']"
+              ".data['#{MapKeyGenerator.generate(key, context)}']"
 
             %Variable{} ->
               ""
@@ -73,7 +73,7 @@ defmodule Hologram.Compiler.FunctionDefinitionGenerator do
     "#{value};"
   end
 
-  defp generate_vars(variant) do
-    Enum.map(variant.bindings, &generate_var(&1))
+  defp generate_vars(variant, context) do
+    Enum.map(variant.bindings, &generate_var(&1, context))
   end
 end

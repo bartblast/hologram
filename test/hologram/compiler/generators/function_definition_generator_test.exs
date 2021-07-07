@@ -1,14 +1,14 @@
 defmodule Hologram.Compiler.FunctionDefinitionGeneratorTest do
   use Hologram.TestCase, async: true
-  alias Hologram.Compiler.FunctionDefinitionGenerator
+  alias Hologram.Compiler.{Context, FunctionDefinitionGenerator}
 
-  setup do
-    [
-      modules: [],
-      imports: [],
-      aliases: []
-    ]
-  end
+  @context %Context{
+    module: [],
+    uses: [],
+    imports: [],
+    aliases: [],
+    attributes: []
+  }
 
   # cases:
   # has args, no args
@@ -17,7 +17,7 @@ defmodule Hologram.Compiler.FunctionDefinitionGeneratorTest do
   # variable access, map access
   # only return statement, expression + return statement
 
-  test "no args, no vars, only return statement", context do
+  test "no args, no vars, only return statement" do
     code = """
     def test, do: nil
     """
@@ -25,7 +25,7 @@ defmodule Hologram.Compiler.FunctionDefinitionGeneratorTest do
     ir = ir(code)
     variants = [ir]
 
-    result = FunctionDefinitionGenerator.generate(ir.name, variants, context)
+    result = FunctionDefinitionGenerator.generate(ir.name, variants, @context)
 
     expected = """
     static test() {
@@ -41,7 +41,7 @@ defmodule Hologram.Compiler.FunctionDefinitionGeneratorTest do
     assert result == expected
   end
 
-  test "has args, has vars, single variant, variable access", context do
+  test "has args, has vars, single variant, variable access" do
     code = """
     def test(x), do: nil
     """
@@ -49,7 +49,7 @@ defmodule Hologram.Compiler.FunctionDefinitionGeneratorTest do
     ir = ir(code)
     variants = [ir]
 
-    result = FunctionDefinitionGenerator.generate(ir.name, variants, context)
+    result = FunctionDefinitionGenerator.generate(ir.name, variants, @context)
 
     expected = """
     static test() {
@@ -66,7 +66,7 @@ defmodule Hologram.Compiler.FunctionDefinitionGeneratorTest do
     assert result == expected
   end
 
-  test "multiple variants, map access, expression + return statement", context do
+  test "multiple variants, map access, expression + return statement" do
     code = """
     defmodule Test do
       def test(1), do: nil
@@ -82,7 +82,7 @@ defmodule Hologram.Compiler.FunctionDefinitionGeneratorTest do
     variants = ir.functions
     name = :test
 
-    result = FunctionDefinitionGenerator.generate(name, variants, context)
+    result = FunctionDefinitionGenerator.generate(name, variants, @context)
 
     expected = """
     static test() {
