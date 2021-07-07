@@ -1,5 +1,5 @@
 defmodule Hologram.Test.Helpers do
-  alias Hologram.Compiler.{Normalizer, Parser, Transformer}
+  alias Hologram.Compiler.{Context, Normalizer, Parser, Transformer}
 
   def ast(code) do
     Parser.parse!(code)
@@ -7,7 +7,9 @@ defmodule Hologram.Test.Helpers do
   end
 
   def ir(code) do
+    context = %Context{module: [], uses: [], imports: [], aliases: [], attributes: []}
+
     ast(code)
-    |> Transformer.transform()
+    |> Transformer.transform(context)
   end
 end
