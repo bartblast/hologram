@@ -1,6 +1,8 @@
 defmodule Hologram.Compiler.GeneratorTest do
   use Hologram.TestCase, async: true
 
+  alias Hologram.Compiler.{Context, Generator}
+
   alias Hologram.Compiler.IR.{
     AdditionOperator,
     AtomType,
@@ -17,36 +19,41 @@ defmodule Hologram.Compiler.GeneratorTest do
     Variable
   }
 
-  alias Hologram.Compiler.Generator
+  @context %Context{module: [], uses: [], imports: [], aliases: [], attributes: []}
+  @opts []
 
   describe "types" do
     test "atom" do
-      result = Generator.generate(%AtomType{value: :test})
+      ir = %AtomType{value: :test}
+      result = Generator.generate(ir, @context, @opts)
       assert result == "{ type: 'atom', value: 'test' }"
     end
 
     test "boolean" do
-      result = Generator.generate(%BooleanType{value: true})
+      ir = %BooleanType{value: true}
+      result = Generator.generate(ir, @context, @opts)
       assert result == "{ type: 'boolean', value: true }"
     end
 
     test "integer" do
-      result = Generator.generate(%IntegerType{value: 123})
+      ir = %IntegerType{value: 123}
+      result = Generator.generate(ir, @context, @opts)
       assert result == "{ type: 'integer', value: 123 }"
     end
 
     test "map" do
       ir = %MapType{data: [{%AtomType{value: :a}, %IntegerType{value: 1}}]}
 
-      result = Generator.generate(ir)
-
+      result = Generator.generate(ir, @context, @opts)
       expected = "{ type: 'map', data: { '~atom[a]': { type: 'integer', value: 1 } } }"
 
       assert result == expected
     end
 
     test "string" do
-      result = Generator.generate(%StringType{value: "Test"})
+      ir = %StringType{value: "Test"}
+      result = Generator.generate(ir, @context, @opts)
+
       assert result == "{ type: 'string', value: 'Test' }"
     end
 
@@ -56,7 +63,7 @@ defmodule Hologram.Compiler.GeneratorTest do
         module: [:Abc, :Bcd]
       }
 
-      result = Generator.generate(ir)
+      result = Generator.generate(ir, @context, @opts)
 
       expected =
         "{ type: 'struct', module: 'Abc.Bcd', data: { '~atom[a]': { type: 'integer', value: 1 } } }"
@@ -72,7 +79,7 @@ defmodule Hologram.Compiler.GeneratorTest do
         right: %IntegerType{value: 2}
       }
 
-      result = Generator.generate(ir)
+      result = Generator.generate(ir, @context, @opts)
 
       expected = "Kernel.$add({ type: 'integer', value: 1 }, { type: 'integer', value: 2 })"
 
@@ -85,7 +92,7 @@ defmodule Hologram.Compiler.GeneratorTest do
         right: %AtomType{value: :a}
       }
 
-      result = Generator.generate(ir)
+      result = Generator.generate(ir, @context, @opts)
       expected = "Kernel.$dot(x, { type: 'atom', value: 'a' })"
 
       assert result == expected
@@ -94,7 +101,7 @@ defmodule Hologram.Compiler.GeneratorTest do
     test "module attribute" do
       ir = %ModuleAttributeOperator{name: :x}
 
-      result = Generator.generate(ir)
+      result = Generator.generate(ir, @context, @opts)
       expected = "$state.data['~atom[x]']"
 
       assert result == expected
@@ -111,7 +118,7 @@ defmodule Hologram.Compiler.GeneratorTest do
         name: [:Test]
       }
 
-      result = Generator.generate(ir)
+      result = Generator.generate(ir, @context, @opts)
       expected = "class Test {\n\n\n}\n"
 
       assert result == expected
@@ -138,7 +145,7 @@ defmodule Hologram.Compiler.GeneratorTest do
           ]
         }
 
-      result = Generator.generate(ir)
+      result = Generator.generate(ir, @context, @opts)
       expected = "[{ type: 'text', content: 'test' }]"
 
       assert result == expected
@@ -151,21 +158,25 @@ defmodule Hologram.Compiler.GeneratorTest do
         params: [%IntegerType{value: 1}]
       }
 
-      result = Generator.generate(ir)
+      result = Generator.generate(ir, @context, @opts)
       expected = "Test.abc({ type: 'integer', value: 1 })"
 
       assert result == expected
     end
 
     test "variable, placeholder" do
-      result = Generator.generate(%Variable{name: :test}, [], placeholder: true)
+      ir = %Variable{name: :test}
+
+      result = Generator.generate(ir, @context, placeholder: true)
       expected = "{ type: 'placeholder' }"
 
       assert result == expected
     end
 
     test "variable, not placeholder" do
-      result = Generator.generate(%Variable{name: :test})
+      ir = %Variable{name: :test}
+
+      result = Generator.generate(ir, @context, @opts)
       expected = "test"
 
       assert result == expected
