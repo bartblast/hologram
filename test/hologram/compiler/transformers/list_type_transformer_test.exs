@@ -1,32 +1,30 @@
 defmodule Hologram.Compiler.ListTypeTransformerTest do
   use Hologram.TestCase, async: true
 
+  alias Hologram.Compiler.{Context, ListTypeTransformer}
   alias Hologram.Compiler.IR.{IntegerType, ListType}
-  alias Hologram.Compiler.ListTypeTransformer
 
-  setup do
-    [
-      module: [:Abc],
-      imports: [],
-      aliases: []
-    ]
-  end
+  @context %Context{
+    module: [:Abc],
+    imports: [],
+    aliases: []
+  }
 
-  test "empty list", context do
+  test "empty list" do
     code = "[]"
     ast = ast(code)
 
-    result = ListTypeTransformer.transform(ast, context)
+    result = ListTypeTransformer.transform(ast, @context)
     expected = %ListType{data: []}
 
     assert result == expected
   end
 
-  test "non-nested list", context do
+  test "non-nested list" do
     code = "[1, 2]"
     ast = ast(code)
 
-    result = ListTypeTransformer.transform(ast, context)
+    result = ListTypeTransformer.transform(ast, @context)
 
     expected = %ListType{
       data: [
@@ -38,11 +36,11 @@ defmodule Hologram.Compiler.ListTypeTransformerTest do
     assert result == expected
   end
 
-  test "nested list", context do
+  test "nested list" do
     code = "[1, [2, [3, 4]]]"
     ast = ast(code)
 
-    result = ListTypeTransformer.transform(ast, context)
+    result = ListTypeTransformer.transform(ast, @context)
 
     expected = %ListType{
       data: [
