@@ -1,26 +1,34 @@
 defmodule Hologram.Compiler.MapKeyGeneratorTest do
   use Hologram.TestCase, async: true
 
+  alias Hologram.Compiler.{Context, MapKeyGenerator}
   alias Hologram.Compiler.IR.{AtomType, BooleanType, IntegerType, StringType}
-  alias Hologram.Compiler.MapKeyGenerator
+
+  @context %Context{
+    module: [],
+    uses: [],
+    imports: [],
+    aliases: [],
+    attributes: []
+  }
 
   test "atom" do
-    result = MapKeyGenerator.generate(%AtomType{value: :test})
+    result = MapKeyGenerator.generate(%AtomType{value: :test}, @context)
     assert result == "~atom[test]"
   end
 
   test "boolean" do
-    result = MapKeyGenerator.generate(%BooleanType{value: true})
+    result = MapKeyGenerator.generate(%BooleanType{value: true}, @context)
     assert result == "~boolean[true]"
   end
 
   test "integer" do
-    result = MapKeyGenerator.generate(%IntegerType{value: 123})
+    result = MapKeyGenerator.generate(%IntegerType{value: 123}, @context)
     assert result == "~integer[123]"
   end
 
   test "string" do
-    result = MapKeyGenerator.generate(%StringType{value: "test"})
+    result = MapKeyGenerator.generate(%StringType{value: "test"}, @context)
     assert result == "~string[test]"
   end
 end

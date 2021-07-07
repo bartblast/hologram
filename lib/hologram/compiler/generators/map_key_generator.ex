@@ -1,8 +1,6 @@
 defmodule Hologram.Compiler.MapKeyGenerator do
   alias Hologram.Compiler.IR.{AtomType, BooleanType, IntegerType, StringType}
 
-  def generate(ir, context \\ [])
-
   def generate(%AtomType{value: value}, _) do
     "~atom[#{value}]"
   end
