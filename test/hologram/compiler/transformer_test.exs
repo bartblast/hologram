@@ -25,7 +25,7 @@ defmodule Hologram.Compiler.TransformerTest do
 
   alias Hologram.Compiler.{Context, Transformer}
 
-  @context %Context{module: [], imports: [], aliases: []}
+  @context %Context{module: [], uses: [], imports: [], aliases: [], attributes: []}
 
   describe "types" do
     test "atom" do
