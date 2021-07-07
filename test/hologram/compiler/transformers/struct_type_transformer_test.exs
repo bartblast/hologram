@@ -2,13 +2,13 @@ defmodule Hologram.Compiler.StructTypeTransformerTest do
   use Hologram.TestCase, async: true
 
   alias Hologram.Compiler.IR.{Alias, AtomType, IntegerType, StructType}
-  alias Hologram.Compiler.StructTypeTransformer
+  alias Hologram.Compiler.{Context, StructTypeTransformer}
 
   test "not aliased" do
     code = "%TestStruct{a: 1}"
 
     {:%, _, [{_, _, module}, ast]} = ast(code)
-    context = [module: [:Abc], imports: [], aliases: []]
+    context = %Context{module: [:Abc], imports: [], aliases: []}
 
     result = StructTypeTransformer.transform(ast, module, context)
 
@@ -26,13 +26,13 @@ defmodule Hologram.Compiler.StructTypeTransformerTest do
     code = "%Cde{a: 1}"
     {:%, _, [{_, _, module}, ast]} = ast(code)
 
-    context = [
+    context = %Context{
       module: [:Abc],
       imports: [],
       aliases: [
         %Alias{module: [:Bcd, :Cde], as: [:Cde]}
       ]
-    ]
+    }
 
     result = StructTypeTransformer.transform(ast, module, context)
 
