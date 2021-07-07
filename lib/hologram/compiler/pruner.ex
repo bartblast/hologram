@@ -1,76 +1,144 @@
 defmodule Hologram.Compiler.Pruner do
+  alias Hologram.Compiler.Helpers
   alias Hologram.Compiler.IR.{FunctionCall, FunctionDefinition, ModuleDefinition}
+  alias Hologram.Typespecs, as: T
 
   @doc """
   Prunes unused modules and functions.
   """
-  def prune(compiled_modules, main_module) do
-    aggregate_used_functions(main_module, compiled_modules)
-    |> prune_unused_functions(compiled_modules)
+  @spec prune(T.module_definitions_map) :: T.module_definitions_map
+
+  def prune(module_defs_map) do
+    find_used_functions(module_defs_map)
+    |> prune_unused_functions(module_defs_map)
     |> prune_unused_modules()
   end
 
-  defp aggregate_used_functions(main_module, compiled_modules) do
-    spec = {main_module, :action, 3}
-    acc = MapSet.new([spec])
-
-    get_functions(compiled_modules, spec)
-    |> Enum.reduce(acc, &recurse(&2, compiled_modules, &1))
+  @spec determine_preserved_module_functions(%ModuleDefinition{}, T.function_set) :: list(%FunctionDefinition{})
+  defp determine_preserved_module_functions(module_def, used_functions) do
+    Enum.reduce(module_def.functions, [], fn function_def, acc ->
+      # The function call may use default parameter values,
+      # so we include all functions matching the name (regardless of their arity).
+      # DEFER: include only functions with matching arity
+      if {module_def.name, function_def.name} in used_functions do
+        acc ++ [function_def]
+      else
+        acc
+      end
+    end)
   end
 
-  defp get_functions(compiled_modules, {module, function, arity}) do
-    case compiled_modules[module] do
-      # Elixir standar library
-      nil ->
-        []
+  @spec find_actions(list(%ModuleDefinition{}), list(%ModuleDefinition{}), T.module_definitions_map) :: list({T.module_name_segments, %FunctionDefinition{}})
+  defp find_actions(pages, components, module_defs_map) do
+    (pages ++ components)
+    |> Enum.reduce([], &(&2 ++ find_module_actions(&1, module_defs_map)))
+  end
 
-      %{functions: functions} ->
-        Enum.filter(functions, &(&1.name == function && &1.arity == arity))
+  @spec find_components(T.module_definitions_map) :: list(%ModuleDefinition{})
+  defp find_components(module_defs_map) do
+    module_defs_map
+    |> Enum.filter(fn {_, module_def} ->
+      Helpers.is_component?(module_def)
+    end)
+    |> Enum.map(fn {_, module_def} -> module_def end)
+  end
+
+  @spec find_function_defs(T.module_name_segments, T.function_name, T.module_definitions_map) :: list({%FunctionDefinition{}})
+  defp find_function_defs(module_name_segs, function_name, module_defs_map) do
+    if module_defs_map[module_name_segs] do
+      module_defs_map[module_name_segs].functions
+      |> Enum.filter(&(&1.name == function_name))
+    else
+      []
     end
   end
 
-  defp handle_expr(acc, compiled_modules, %FunctionCall{module: module, function: function, params: params}) do
-    spec = {module, function, Enum.count(params)}
+  @spec find_module_actions(%ModuleDefinition{}, T.module_definitions_map) :: list({T.module_name_segments, %FunctionDefinition{}})
+  defp find_module_actions(module_def, module_defs_map) do
+    find_function_defs(module_def.name, :action, module_defs_map)
+    |> Enum.map(&{module_def.name, &1})
+  end
 
-    if spec not in acc do
-      acc = MapSet.put(acc, spec)
+  @spec find_pages(T.module_definitions_map) :: list(%ModuleDefinition{})
+  defp find_pages(module_defs_map) do
+    module_defs_map
+    |> Enum.filter(fn {_, module_def} ->
+      Helpers.is_page?(module_def)
+    end)
+    |> Enum.map(fn {_, module_def} -> module_def end)
+  end
 
-      functions = get_functions(compiled_modules, spec)
-      |> Enum.reduce(acc, &recurse(&2, compiled_modules, &1))
+  @spec find_used_functions(T.module_definitions_map) :: T.function_set
+  defp find_used_functions(module_defs_map) do
+    pages = find_pages(module_defs_map)
+    components = find_components(module_defs_map)
+    actions = find_actions(pages, components, module_defs_map)
+
+    acc =
+      Enum.reduce(actions, MapSet.new([]), fn action, acc ->
+        include_functions_used_by_action(action, acc, module_defs_map)
+      end)
+
+    (pages ++ components)
+    |> Enum.reduce(acc, &include_actions_and_templates/2)
+  end
+
+  @spec include_actions_and_templates(list(%ModuleDefinition{}), T.function_set) :: T.function_set
+  defp include_actions_and_templates(module_def, acc) do
+    MapSet.put(acc, {module_def.name, :action})
+    |> MapSet.put({module_def.name, :template})
+  end
+
+  @spec include_function_calls(T.function_set, %FunctionDefinition{}, T.module_definitions_map) :: T.function_set
+  defp include_function_calls(acc, %FunctionDefinition{body: body}, module_defs_map) do
+    Enum.reduce(body, acc, &include_function_calls(&2, &1, module_defs_map))
+  end
+
+  @spec include_function_calls(T.function_set, %FunctionCall{}, T.module_definitions_map) :: T.function_set
+  defp include_function_calls(acc, %FunctionCall{} = function_call, module_defs_map) do
+    # The function call may use default parameter values,
+    # so we include all functions matching the name (regardless of their arity).
+    # DEFER: include only functions with matching arity
+    elem = {function_call.module, function_call.function}
+
+    unless elem in acc do
+      MapSet.put(acc, elem)
+      |> include_function_calls(function_call.module, function_call.function, module_defs_map)
     else
       acc
     end
   end
 
-  defp handle_expr(acc, _, _) do
-    acc
+  @spec include_function_calls(T.function_set, any(), T.module_definitions_map) :: T.function_set
+  defp include_function_calls(acc, _, _), do: acc
+
+  @spec include_function_calls(T.function_set, T.module_name_segments, T.function_name, T.module_definitions_map) :: T.function_set
+  defp include_function_calls(acc, module_name_segs, function_name, module_defs_map) do
+    find_function_defs(module_name_segs, function_name, module_defs_map)
+    |> Enum.reduce(acc, &include_function_calls(&2, &1, module_defs_map))
   end
 
-  defp prune_unused_functions(used_functions, compiled_modules) do
-    Enum.map(compiled_modules, fn {module_name, module} ->
-      preserved_functions =
-        Enum.reduce(module.functions, [], fn function, acc ->
-          if {module_name, function.name, function.arity} in used_functions do
-            acc ++ [function]
-          else
-            acc
-          end
-        end)
+  # TODO: implement include_function_calls which includes function calls nested in blocks
 
-      {module_name, %{module | functions: preserved_functions}}
+  @spec include_functions_used_by_action({T.module_name_segments, %FunctionDefinition{}}, T.function_set, T.module_definition_map) :: T.function_set
+  defp include_functions_used_by_action({_, function_def}, acc, module_defs_map) do
+    include_function_calls(acc, function_def, module_defs_map)
+  end
+
+  @spec prune_unused_functions(T.function_set, T.module_definitions_map) :: T.module_definitions_map
+  defp prune_unused_functions(used_functions, module_defs_map) do
+    Enum.map(module_defs_map, fn {module_name_segs, module_def} ->
+      preserved_functions = determine_preserved_module_functions(module_def, used_functions)
+      {module_name_segs, %{module_def | functions: preserved_functions}}
     end)
     |> Enum.into(%{})
   end
 
-  defp prune_unused_modules(compiled_modules) do
-    Enum.filter(compiled_modules, fn {_, module} ->
-      Enum.any?(module.functions)
+  @spec prune_unused_modules(T.module_definitions_map) :: T.module_definitions_map
+  defp prune_unused_modules(module_defs_map) do
+    Enum.filter(module_defs_map, fn {_, module_def} ->
+      Enum.any?(module_def.functions)
     end)
     |> Enum.into(%{})
-  end
-
-  # TODO: support function calls nested in blocks
-  defp recurse(acc, compiled_modules, %FunctionDefinition{body: body}) do
-    Enum.reduce(body, acc, &handle_expr(&2, compiled_modules, &1))
   end
 end

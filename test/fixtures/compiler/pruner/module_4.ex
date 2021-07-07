@@ -1,7 +1,7 @@
 defmodule Hologram.Test.Fixtures.Compiler.Pruner.Module4 do
-  alias Hologram.Test.Fixtures.Compiler.Pruner.Module5
+  use Hologram.Page
 
-  def action(:test, a, b) do
-    :ok
+  def template do
+    ""
   end
 end

@@ -1,3 +1,7 @@
 defmodule Hologram.Test.Fixtures.Compiler.Pruner.Module5 do
-  def test_5, do: nil
+  use Hologram.Component
+
+  def template do
+    ""
+  end
 end
