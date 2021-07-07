@@ -1,8 +1,11 @@
 defmodule Hologram.Compiler.ModuleDefinitionGeneratorTest do
   use Hologram.TestCase, async: true
 
+  alias Hologram.Compiler.{Context, ModuleDefinitionGenerator}
   alias Hologram.Compiler.IR.{FunctionDefinition, IntegerType, ModuleDefinition, Variable}
-  alias Hologram.Compiler.Generator
+
+  @context %Context{module: [], uses: [], imports: [], aliases: [], attributes: []}
+  @name [:Abc, :Bcd]
 
   test "single function with single variant" do
     ir = %ModuleDefinition{
@@ -22,10 +25,11 @@ defmodule Hologram.Compiler.ModuleDefinitionGeneratorTest do
           ]
         }
       ],
-      name: [:Abc, :Bcd]
+      name: @name
     }
 
-    result = Generator.generate(ir)
+
+    result = ModuleDefinitionGenerator.generate(ir, @name, @context)
 
     expected = """
     class AbcBcd {
@@ -78,10 +82,10 @@ defmodule Hologram.Compiler.ModuleDefinitionGeneratorTest do
           ]
         }
       ],
-      name: [:Abc, :Bcd]
+      name: @name
     }
 
-    result = Generator.generate(ir)
+    result = ModuleDefinitionGenerator.generate(ir, @name, @context)
 
     expected = """
     class AbcBcd {
@@ -137,10 +141,10 @@ defmodule Hologram.Compiler.ModuleDefinitionGeneratorTest do
           ]
         }
       ],
-      name: [:Abc, :Bcd]
+      name: @name
     }
 
-    result = Generator.generate(ir)
+    result = ModuleDefinitionGenerator.generate(ir, @name, @context)
 
     expected = """
     class AbcBcd {
@@ -215,10 +219,10 @@ defmodule Hologram.Compiler.ModuleDefinitionGeneratorTest do
           ]
         }
       ],
-      name: [:Abc, :Bcd]
+      name: @name
     }
 
-    result = Generator.generate(ir)
+    result = ModuleDefinitionGenerator.generate(ir, @name, @context)
 
     expected = """
     class AbcBcd {

@@ -75,8 +75,8 @@ defmodule Hologram.Compiler.Generator do
 
   # DEFINITIONS
 
-  def generate(%ModuleDefinition{name: name} = ir, _, _) do
-    ModuleDefinitionGenerator.generate(ir, name)
+  def generate(%ModuleDefinition{name: name} = ir, %Context{} = context, _) do
+    ModuleDefinitionGenerator.generate(ir, name, context)
   end
 
   # OTHER

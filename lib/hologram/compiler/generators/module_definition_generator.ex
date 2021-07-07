@@ -1,9 +1,9 @@
 defmodule Hologram.Compiler.ModuleDefinitionGenerator do
+  alias Hologram.Compiler.{Context, FunctionDefinitionGenerator, Helpers}
   alias Hologram.Compiler.IR.FunctionDefinition
-  alias Hologram.Compiler.{FunctionDefinitionGenerator, Helpers}
 
-  def generate(ir, name) do
-    context = [class_name: Helpers.class_name(name)]
+  def generate(ir, name, %Context{} = context) do
+    class = Helpers.class_name(name)
 
     functions =
       aggregate_functions(ir)
@@ -11,7 +11,7 @@ defmodule Hologram.Compiler.ModuleDefinitionGenerator do
       |> Enum.join("\n")
 
     """
-    class #{context[:class_name]} {
+    class #{class} {
 
     #{functions}
     }
