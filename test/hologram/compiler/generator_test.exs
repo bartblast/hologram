@@ -8,6 +8,7 @@ defmodule Hologram.Compiler.GeneratorTest do
     DotOperator,
     FunctionCall,
     IntegerType,
+    ListType,
     MapType,
     ModuleAttributeOperator,
     ModuleDefinition,
@@ -117,28 +118,53 @@ defmodule Hologram.Compiler.GeneratorTest do
     end
   end
 
-  test "function call" do
-    ir = %FunctionCall{
-      function: :abc,
-      module: [:Test],
-      params: [%IntegerType{value: 1}]
-    }
+  describe "other" do
+    test "sigil_H" do
+      ir =
+        %FunctionCall{
+          function: :sigil_H,
+          module: [:Hologram, :Runtime, :Commons],
+          params: [
+            %FunctionCall{
+              function: :<<>>,
+              module: [:Kernel],
+              params: [
+                %StringType{
+                  value: "test"
+                }
+              ]
+            },
+            %ListType{data: []}
+          ]
+        }
 
-    result = Generator.generate(ir)
-    expected = "Test.abc({ type: 'integer', value: 1 })"
+      result = Generator.generate(ir)
+      expected = "[{ type: 'text', content: 'test' }]"
 
-    assert result == expected
-  end
+      assert result == expected
+    end
 
-  describe "variable" do
-    test "placeholder" do
+    test "function call" do
+      ir = %FunctionCall{
+        function: :abc,
+        module: [:Test],
+        params: [%IntegerType{value: 1}]
+      }
+
+      result = Generator.generate(ir)
+      expected = "Test.abc({ type: 'integer', value: 1 })"
+
+      assert result == expected
+    end
+
+    test "variable, placeholder" do
       result = Generator.generate(%Variable{name: :test}, [], placeholder: true)
       expected = "{ type: 'placeholder' }"
 
       assert result == expected
     end
 
-    test "not placeholder" do
+    test "variable, not placeholder" do
       result = Generator.generate(%Variable{name: :test})
       expected = "test"
 

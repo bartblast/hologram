@@ -25,6 +25,7 @@ defmodule Hologram.Compiler.Generator do
     ModuleDefinitionGenerator,
     ModuleAttributeOperatorGenerator,
     PrimitiveTypeGenerator,
+    SigilHGenerator,
     StructTypeGenerator
   }
 
@@ -79,6 +80,10 @@ defmodule Hologram.Compiler.Generator do
   end
 
   # OTHER
+
+  def generate(%FunctionCall{function: :sigil_H} = ir, context, _) do
+    SigilHGenerator.generate(ir, context)
+  end
 
   def generate(%FunctionCall{module: module, function: function, params: params}, context, _) do
     FunctionCallGenerator.generate(module, function, params, context)
