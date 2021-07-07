@@ -1,14 +1,14 @@
 defmodule Hologram.Compiler.AdditionOperatorTransformerTest do
   use Hologram.TestCase, async: true
 
-  alias Hologram.Compiler.AdditionOperatorTransformer
+  alias Hologram.Compiler.{Context, AdditionOperatorTransformer}
   alias Hologram.Compiler.IR.{AdditionOperator, IntegerType, Variable}
 
   test "transform/3" do
     code = "a + 2"
     {:+, _, [left, right]} = ast(code)
 
-    context = [module: [:Test], imports: [], aliases: []]
+    context = %Context{module: [:Test], imports: [], aliases: []}
     result = AdditionOperatorTransformer.transform(left, right, context)
 
     expected = %AdditionOperator{

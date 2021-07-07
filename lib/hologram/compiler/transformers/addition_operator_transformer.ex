@@ -1,8 +1,8 @@
 defmodule Hologram.Compiler.AdditionOperatorTransformer do
+  alias Hologram.Compiler.{Context, Transformer}
   alias Hologram.Compiler.IR.AdditionOperator
-  alias Hologram.Compiler.Transformer
 
-  def transform(left, right, context) do
+  def transform(left, right, %Context{} = context) do
     %AdditionOperator{
       left: Transformer.transform(left, context),
       right: Transformer.transform(right, context)
