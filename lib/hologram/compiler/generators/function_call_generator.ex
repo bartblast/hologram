@@ -1,9 +1,8 @@
 defmodule Hologram.Compiler.FunctionCallGenerator do
+  alias Hologram.Compiler.{Context, Generator, Helpers}
   alias Hologram.Compiler.IR.Variable
-  alias Hologram.Compiler.Generator
-  alias Hologram.Compiler.Helpers
 
-  def generate(module, function, params, context) do
+  def generate(module, function, params, %Context{} = context) do
     class = Helpers.class_name(module)
 
     params =
