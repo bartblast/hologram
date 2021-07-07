@@ -1,8 +1,8 @@
 defmodule Hologram.Compiler.FunctionCallTransformer do
   alias Hologram.Compiler.IR.FunctionCall
-  alias Hologram.Compiler.{Resolver, Transformer}
+  alias Hologram.Compiler.{Context, Resolver, Transformer}
 
-  def transform(called_module, function, params, context) do
+  def transform(called_module, function, params, %Context{} = context) do
     params = transform_call_params(params, context)
     arity = Enum.count(params)
 
@@ -11,9 +11,9 @@ defmodule Hologram.Compiler.FunctionCallTransformer do
         called_module,
         function,
         arity,
-        context[:imports],
-        context[:aliases],
-        context[:module]
+        context.imports,
+        context.aliases,
+        context.module
       )
 
     %FunctionCall{module: resolved_module, function: function, params: params}

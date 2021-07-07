@@ -2,13 +2,13 @@ defmodule Hologram.Compiler.FunctionCallTransformerTest do
   use Hologram.TestCase, async: true
 
   alias Hologram.Compiler.IR.{FunctionCall, IntegerType}
-  alias Hologram.Compiler.FunctionCallTransformer
+  alias Hologram.Compiler.{Context, FunctionCallTransformer}
 
   test "transform/4" do
     called_module = [:Abc, :Bcd]
     function = :test
     params = [1, 2]
-    context = [module: [:Xyz], imports: [], aliases: []]
+    context = %Context{module: [:Xyz], imports: [], aliases: []}
 
     expected = %FunctionCall{
       module: called_module,
