@@ -24,7 +24,7 @@ defmodule Hologram.Compiler.Transformer do
     StructTypeTransformer
   }
 
-  def transform(ast, context \\ [module: [], imports: [], aliases: []])
+  alias Hologram.Compiler.Context
 
   # TYPES
 
@@ -44,29 +44,29 @@ defmodule Hologram.Compiler.Transformer do
     %StringType{value: ast}
   end
 
-  def transform(ast, context) when is_list(ast) do
+  def transform(ast, %Context{} = context) when is_list(ast) do
     ListTypeTransformer.transform(ast, context)
   end
 
-  def transform({:%{}, _, ast}, context) do
+  def transform({:%{}, _, ast}, %Context{} = context) do
     MapTypeTransformer.transform(ast, context)
   end
 
-  def transform({:%, _, [{_, _, module}, ast]}, context) do
+  def transform({:%, _, [{_, _, module}, ast]}, %Context{} = context) do
     StructTypeTransformer.transform(ast, module, context)
   end
 
   # OPERATORS
 
-  def transform({:+, _, [left, right]}, context) do
+  def transform({:+, _, [left, right]}, %Context{} = context) do
     AdditionOperatorTransformer.transform(left, right, context)
   end
 
-  def transform({{:., _, [left, right]}, [no_parens: true, line: _], []}, context) do
+  def transform({{:., _, [left, right]}, [no_parens: true, line: _], []}, %Context{} = context) do
     DotOperatorTransformer.transform(left, right, context)
   end
 
-  def transform({:=, _, [left, right]}, context) do
+  def transform({:=, _, [left, right]}, %Context{} = context) do
     MatchOperatorTransformer.transform(left, right, context)
   end
 
@@ -76,7 +76,7 @@ defmodule Hologram.Compiler.Transformer do
 
   # DEFINITIONS
 
-  def transform({:def, _, [{name, _, params}, [do: {:__block__, _, body}]]}, context) do
+  def transform({:def, _, [{name, _, params}, [do: {:__block__, _, body}]]}, %Context{} = context) do
     FunctionDefinitionTransformer.transform(name, params, body, context)
   end
 
@@ -84,7 +84,7 @@ defmodule Hologram.Compiler.Transformer do
     ModuleDefinitionTransformer.transform(ast)
   end
 
-  def transform({:@, _, [{name, _, [ast]}]}, context) do
+  def transform({:@, _, [{name, _, [ast]}]}, %Context{} = context) do
     ModuleAttributeDefinitionTransformer.transform(name, ast, context)
   end
 
@@ -108,11 +108,11 @@ defmodule Hologram.Compiler.Transformer do
 
   # OTHER
 
-  def transform({{:., _, [{:__aliases__, _, module}, function]}, _, params}, context) do
+  def transform({{:., _, [{:__aliases__, _, module}, function]}, _, params}, %Context{} = context) do
     FunctionCallTransformer.transform(module, function, params, context)
   end
 
-  def transform({function, _, params}, context) when is_atom(function) and is_list(params) do
+  def transform({function, _, params}, %Context{} = context) when is_atom(function) and is_list(params) do
     FunctionCallTransformer.transform([], function, params, context)
   end
 
