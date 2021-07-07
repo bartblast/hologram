@@ -1,14 +1,14 @@
 defmodule Hologram.Compiler.DotOperatorTransformerTest do
   use Hologram.TestCase, async: true
 
+  alias Hologram.Compiler.{Context, DotOperatorTransformer}
   alias Hologram.Compiler.IR.{AtomType, DotOperator, Variable}
-  alias Hologram.Compiler.DotOperatorTransformer
 
   test "transform/3" do
     code = "a.b"
     {{:., _, [left, right]}, _, []} = ast(code)
 
-    context = [module: [:Test], imports: [], aliases: []]
+    context = %Context{module: [:Test], imports: [], aliases: []}
     result = DotOperatorTransformer.transform(left, right, context)
 
     expected = %DotOperator{
