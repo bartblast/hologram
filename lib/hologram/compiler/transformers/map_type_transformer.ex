@@ -1,8 +1,8 @@
 defmodule Hologram.Compiler.MapTypeTransformer do
+  alias Hologram.Compiler.{Context, Transformer}
   alias Hologram.Compiler.IR.MapType
-  alias Hologram.Compiler.Transformer
 
-  def transform(ast, context) do
+  def transform(ast, %Context{} = context) do
     data =
       Enum.map(ast, fn {key, value} ->
         {
