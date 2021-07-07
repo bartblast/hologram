@@ -16,8 +16,6 @@ defmodule DemoWeb.HologramController do
     # DEFER: use .holo template files
     html = Template.Renderer.render(virtual_dom, state)
 
-    template_ir = Template.Generator.generate(virtual_dom, state)
-
     js =
       Helpers.module_name_segments(module)
       |> Builder.build()
@@ -29,10 +27,10 @@ defmodule DemoWeb.HologramController do
       |> tl()
       |> Enum.join("")
 
-    html(conn, generate_html(conn, html, template_ir, class_name, js, hydrated_state))
+    html(conn, generate_html(conn, html, class_name, js, hydrated_state))
   end
 
-  defp generate_html(conn, html, template_ir, class_name, js, hydrated_state) do
+  defp generate_html(conn, html, class_name, js, hydrated_state) do
     """
     <!DOCTYPE html>
     <html>
@@ -42,7 +40,6 @@ defmodule DemoWeb.HologramController do
         <script>
     #{js}
     window.state = #{hydrated_state};
-    window.ir = { '#{class_name}': #{template_ir} };
     Hologram.startEventLoop(window, #{class_name}, '#{class_name}')
         </script>
       </head>
