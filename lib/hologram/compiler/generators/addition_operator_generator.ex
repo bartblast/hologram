@@ -1,9 +1,9 @@
 defmodule Hologram.Compiler.AdditionOperatorGenerator do
-  alias Hologram.Compiler.Generator
+  alias Hologram.Compiler.{Context, Generator}
 
-  def generate(left, right, context) do
-    left = Generator.generate(left, context)
-    right = Generator.generate(right, context)
+  def generate(left, right, %Context{} = context) do
+    left = Generator.generate(left, context, [])
+    right = Generator.generate(right, context, [])
 
     "Kernel.$add(#{left}, #{right})"
   end
