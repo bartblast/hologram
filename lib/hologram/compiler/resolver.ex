@@ -38,6 +38,20 @@ defmodule Hologram.Compiler.Resolver do
     end
   end
 
+  @doc """
+  Returns the called module's name segments.
+
+  ## Examples
+      iex> aliases = [%Alias{module: [:Abc, :Bcd], as: [:Bcd]}]
+      iex> resolve([:Bcd], aliases)
+      [:Abc, :Bcd]
+  """
+  @spec resolve(T.module_name_segments(), list(%Alias{})) :: T.module_name_segments()
+
+  def resolve(verbatim_module, aliases) do
+    resolve(verbatim_module, nil, nil, [], aliases, nil)
+  end
+
   defp resolve_to_aliased_module(verbatim_module, aliases) do
     resolved = Enum.find(aliases, &(&1.as == verbatim_module))
     if resolved, do: resolved.module, else: nil
