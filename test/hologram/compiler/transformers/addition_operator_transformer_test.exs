@@ -8,7 +8,7 @@ defmodule Hologram.Compiler.AdditionOperatorTransformerTest do
     code = "a + 2"
     {:+, _, [left, right]} = ast(code)
 
-    context = %Context{module: [], uses: [], imports: [], aliases: [], attribute: []}
+    context = %Context{module: [], uses: [], imports: [], aliases: [], attributes: []}
     result = AdditionOperatorTransformer.transform(left, right, context)
 
     expected = %AdditionOperator{
