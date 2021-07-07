@@ -1,37 +1,15 @@
 defmodule Hologram.Compiler.FunctionCallTransformer do
   alias Hologram.Compiler.IR.FunctionCall
-  alias Hologram.Compiler.Helpers
-  alias Hologram.Compiler.Resolver
-  alias Hologram.Compiler.Transformer
+  alias Hologram.Compiler.{Resolver, Transformer}
 
   def transform(called_module, function, params, context) do
     params = transform_call_params(params, context)
-
-    resolved_module =
-      resolve_called_module(called_module, function, params, context)
-
-    %FunctionCall{module: resolved_module, function: function, params: params}
-  end
-
-  defp resolve_called_module(called_module, function, params, context) do
     arity = Enum.count(params)
 
-    if Enum.count(called_module) == 0 do
-      imported_module = resolve_imported_module(function, arity, context[:imports])
-      if imported_module, do: imported_module, else: context[:module]
-    else
-      Resolver.resolve(called_module, context[:aliases])
-    end
-  end
+    resolved_module =
+      Resolver.resolve(called_module, function, arity, context[:imports], context[:aliases], context[:module])
 
-  defp resolve_imported_module(function, arity, imports) do
-    resolved =
-      Enum.find(imports, fn i ->
-        module = Helpers.module(i.module)
-        {function, arity} in module.module_info()[:exports]
-      end)
-
-    if resolved, do: resolved.module, else: nil
+    %FunctionCall{module: resolved_module, function: function, params: params}
   end
 
   defp transform_call_params(params, context) do
