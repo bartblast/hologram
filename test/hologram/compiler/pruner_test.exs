@@ -1,7 +1,7 @@
 defmodule Hologram.Compiler.PrunerTest do
   use Hologram.TestCase, async: true
 
-  alias Hologram.Compiler.IR.{AtomType, FunctionDefinition}
+  alias Hologram.Compiler.IR.AtomType
   alias Hologram.Compiler.{Processor, Pruner}
 
   describe "pages" do
