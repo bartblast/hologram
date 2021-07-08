@@ -1,8 +1,8 @@
 defmodule Hologram.Template.NodeListRendererTest do
   use Hologram.TestCase, async: true
 
+  alias Hologram.Template.Document.TextNode
   alias Hologram.Template.NodeListRenderer
-  alias Hologram.Template.VirtualDOM.TextNode
 
   test "render/2" do
     nodes = [

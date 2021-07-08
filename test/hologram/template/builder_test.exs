@@ -2,7 +2,7 @@ defmodule Hologram.Template.BuilderTest do
   use Hologram.TestCase, async: true
 
   alias Hologram.Template.Builder
-  alias Hologram.Template.VirtualDOM.{Component, ElementNode, TextNode}
+  alias Hologram.Template.Document.{Component, ElementNode, TextNode}
 
   test "build/1" do
     module = Hologram.Test.Fixtures.Template.Builder.Module1

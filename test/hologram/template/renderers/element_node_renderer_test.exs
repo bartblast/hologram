@@ -1,8 +1,8 @@
 defmodule Hologram.Template.ElementNodeRendererTest do
   use Hologram.TestCase, async: true
 
+  alias Hologram.Template.Document.{ElementNode, TextNode}
   alias Hologram.Template.ElementNodeRenderer
-  alias Hologram.Template.VirtualDOM.{ElementNode, TextNode}
 
   setup do
     [

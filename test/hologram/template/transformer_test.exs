@@ -3,7 +3,7 @@ defmodule Hologram.Template.TransformerTest do
 
   alias Hologram.Compiler.IR.{Alias, ModuleAttributeOperator}
   alias Hologram.Template.{Parser, Transformer}
-  alias Hologram.Template.VirtualDOM.{Component, Expression, ElementNode, TextNode}
+  alias Hologram.Template.Document.{Component, Expression, ElementNode, TextNode}
 
   test "list of nodes" do
     html = "<div></div><span></span>"

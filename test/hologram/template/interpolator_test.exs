@@ -2,7 +2,7 @@ defmodule Hologram.Template.InterpolatorTest do
   use Hologram.TestCase, async: true
 
   alias Hologram.Compiler.IR.{IntegerType, ModuleAttributeOperator}
-  alias Hologram.Template.VirtualDOM.{Expression, ElementNode, TextNode}
+  alias Hologram.Template.Document.{Expression, ElementNode, TextNode}
   alias Hologram.Template.Interpolator
 
   describe "text node" do

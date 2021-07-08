@@ -2,8 +2,8 @@ defmodule Hologram.Template.RendererTest do
   use Hologram.TestCase, async: true
 
   alias Hologram.Compiler.IR.ModuleAttributeOperator
+  alias Hologram.Template.Document.{Component, ElementNode, Expression, TextNode}
   alias Hologram.Template.Renderer
-  alias Hologram.Template.VirtualDOM.{Component, ElementNode, Expression, TextNode}
 
   setup do
     [

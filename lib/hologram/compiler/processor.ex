@@ -1,6 +1,7 @@
 defmodule Hologram.Compiler.Processor do
   alias Hologram.Compiler.{Context, Helpers, Normalizer, Parser, Transformer}
   alias Hologram.Compiler.IR.ModuleDefinition
+  alias Hologram.Template
   alias Hologram.Template.Document.{Component, ElementNode, Expression, TextNode}
   alias Hologram.Typespecs, as: T
 
@@ -23,7 +24,7 @@ defmodule Hologram.Compiler.Processor do
     module = Helpers.module(module_name_segments)
 
     if function_exported?(module, :template, 0) do
-      VirtualDOM.build(module)
+      Template.Builder.build(module)
       |> find_nested_components()
       |> Enum.concat([module_name_segments])
       |> Enum.uniq()
