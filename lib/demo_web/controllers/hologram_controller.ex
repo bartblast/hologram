@@ -12,7 +12,6 @@ defmodule DemoWeb.HologramController do
     state = module.state()
     hydrated_state = Hydrator.hydrate(state)
     virtual_dom = Template.Builder.build(module)
-    IO.inspect(virtual_dom)
 
     # DEFER: use .holo template files
     html = Template.Renderer.render(virtual_dom, state)
