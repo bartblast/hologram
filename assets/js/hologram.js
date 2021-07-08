@@ -7,16 +7,9 @@ import {init, eventListenersModule, h, toVNode} from "snabbdom";
 const patch = init([eventListenersModule]);
 
 class Hologram {
-  static evaluate(value) {
-    switch (value.type) {
-      case "integer":
-        return `${value.value}`
-    }
-  }
-
-  static ir_to_hyperscript(ir, state) {
+  static build_virtual_dom(ir, state) {
     if (Array.isArray(ir)) {
-      return ir.map((node) => { return Hologram.ir_to_hyperscript(node, state)})
+      return ir.map((node) => { return Hologram.build_virtual_dom(node, state)})
     }
 
     switch (ir.type) {
@@ -26,7 +19,7 @@ class Hologram {
 
       case "element":
         let children = ir.children.map((child) => {
-          return Hologram.ir_to_hyperscript(child, state)
+          return Hologram.build_virtual_dom(child, state)
         })
 
         return h(ir.tag, {attrs: ir.attrs}, children)
@@ -38,6 +31,13 @@ class Hologram {
         return ir.content        
     } 
   }  
+
+  static evaluate(value) {
+    switch (value.type) {
+      case "integer":
+        return `${value.value}`
+    }
+  }
 
   static isPatternMatched(left, right) {
     let lType = left.type;
@@ -98,7 +98,7 @@ class Hologram {
     return true;
   }
 
-  static startEventLoop(window, module, moduleName) {
+  static start_runtime(window, module, moduleName) {
     // TODO: implement click handler
     // let callback = () => {
     //   document.querySelectorAll("[holo-click]").forEach(element => {
@@ -123,7 +123,7 @@ class Hologram {
 
     const callback = () => {
       let container = window.document.body
-      let vnode = Hologram.ir_to_hyperscript(window.ir[moduleName][0], window.state)
+      let vnode = Hologram.build_virtual_dom(module.template(), window.state)[0]
       patch(toVNode(container), vnode)
     }
 

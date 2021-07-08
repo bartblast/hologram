@@ -40,7 +40,7 @@ defmodule DemoWeb.HologramController do
         <script>
     #{js}
     window.state = #{hydrated_state};
-    Hologram.startEventLoop(window, #{class_name}, '#{class_name}')
+    Hologram.start_runtime(window, #{class_name}, '#{class_name}')
         </script>
       </head>
     #{html}
