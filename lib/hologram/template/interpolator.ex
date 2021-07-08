@@ -1,5 +1,5 @@
 defmodule Hologram.Template.Interpolator do
-  alias Hologram.Compiler.Parser
+  alias Hologram.Compiler.{Context, Parser}
   alias Hologram.Compiler.Typespecs, as: T
   alias Hologram.Template.Document.{ElementNode, Expression, TextNode}
 
@@ -83,8 +83,11 @@ defmodule Hologram.Template.Interpolator do
   end
 
   defp get_ir(code) do
+    # TODO: pass actual %Context{} struct received from compiler
+    context = %Context{module: [], uses: [], imports: [], aliases: [], attributes: []}
+
     Parser.parse!(code)
-    |> Hologram.Compiler.Transformer.transform()
+    |> Hologram.Compiler.Transformer.transform(context)
   end
 
   defp maybe_include_expression(acc, code) do
