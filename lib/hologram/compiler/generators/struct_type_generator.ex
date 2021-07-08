@@ -1,8 +1,7 @@
 defmodule Hologram.Compiler.StructTypeGenerator do
-  alias Hologram.Compiler.Helpers
-  alias Hologram.Compiler.MapTypeGenerator
+  alias Hologram.Compiler.{Context, Helpers, MapTypeGenerator}
 
-  def generate(module, data, context, opts) do
+  def generate(module, data, %Context{} = context, opts) do
     module_name = Helpers.module_name(module)
     data = MapTypeGenerator.generate_data(data, context, opts)
 
