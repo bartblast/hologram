@@ -1,15 +1,9 @@
 defmodule Hologram.Template.GeneratorTest do
   use Hologram.TestCase, async: true
 
-  alias Hologram.Template.VirtualDOM.{Component, ElementNode, Expression, TextNode}
-  alias Hologram.Template.Generator
   alias Hologram.Compiler.IR.AtomType
-
-  setup do
-    [
-      module_attributes: []
-    ]
-  end
+  alias Hologram.Template.Document.{Component, ElementNode, Expression, TextNode}
+  alias Hologram.Template.Generator
 
   test "node list" do
     nodes = [
@@ -17,36 +11,34 @@ defmodule Hologram.Template.GeneratorTest do
       %TextNode{content: "test_2"}
     ]
 
-    state = %{}
-
-    result = Generator.generate(nodes, state)
+    result = Generator.generate(nodes)
     expected = "[{ type: 'text', content: 'test_1' }, { type: 'text', content: 'test_2' }]"
 
     assert result == expected
   end
 
-  test "component", context do
-    virtual_dom = %Component{module: [:Abc, :Bcd]}
+  test "component" do
+    node = %Component{module: [:Abc, :Bcd]}
 
-    result = Generator.generate(virtual_dom, context)
+    result = Generator.generate(node)
     expected = "{ type: 'component', module: 'Abc.Bcd' }"
 
     assert result == expected
   end
 
-  test "element node", context do
-    virtual_dom = %ElementNode{tag: "div", attrs: %{}, children: []}
+  test "element node" do
+    node = %ElementNode{tag: "div", attrs: %{}, children: []}
 
-    result = Generator.generate(virtual_dom, context)
+    result = Generator.generate(node)
     expected = "{ type: 'element', tag: 'div', attrs: {}, children: [] }"
 
     assert result == expected
   end
 
-  test "expression", context do
-    virtual_dom = %Expression{ir: %AtomType{value: "x"}}
+  test "expression" do
+    node = %Expression{ir: %AtomType{value: "x"}}
 
-    result = Generator.generate(virtual_dom, context)
+    result = Generator.generate(node)
 
     expected =
       "{ type: 'expression', callback: ($state) => { return { type: 'atom', value: 'x' } } }"
@@ -54,10 +46,10 @@ defmodule Hologram.Template.GeneratorTest do
     assert result == expected
   end
 
-  test "text node", context do
-    virtual_dom = %TextNode{content: "abc"}
+  test "text node" do
+    node = %TextNode{content: "abc"}
 
-    result = Generator.generate(virtual_dom, context)
+    result = Generator.generate(node)
     expected = "{ type: 'text', content: 'abc' }"
 
     assert result == expected
