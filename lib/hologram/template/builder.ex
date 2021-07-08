@@ -1,7 +1,19 @@
 defmodule Hologram.Template.Builder do
   alias Hologram.Compiler.{Helpers, Processor}
   alias Hologram.Template.{Parser, Transformer}
-  
+
+  @doc """
+  Returns module's document tree template.
+
+  ## Examples
+      iex> build(Demo.Homepage)
+      [
+        %ElementNode{tag: "h1", children: [%TextNode{content: "Homepage Title"}]},
+        %TextNode{content: "Footer content"}
+      ]
+  """
+  @spec build(module()) ::
+
   def build(module) do
     aliases =
       Helpers.module_name_segments(module)
