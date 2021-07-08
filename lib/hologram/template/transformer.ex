@@ -6,7 +6,7 @@ defmodule Hologram.Template.Transformer do
   alias Hologram.Typespecs, as: T
 
   @doc """
-  Builds virtual DOM from parsed HTML.
+  Builds document tree template from parsed markup.
   Interpolates expression nodes in text nodes and attribute values.
 
   ## Examples
