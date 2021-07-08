@@ -1,7 +1,7 @@
 defmodule Hologram.Template.Interpolator do
   alias Hologram.Compiler.Parser
-  alias Hologram.Template.VirtualDOM.{ElementNode, Expression, TextNode}
   alias Hologram.Compiler.Typespecs, as: T
+  alias Hologram.Template.Document.{ElementNode, Expression, TextNode}
 
   @doc """
   Splits text nodes into text nodes and expression nodes
@@ -26,7 +26,7 @@ defmodule Hologram.Template.Interpolator do
         }
       ]
   """
-  @spec interpolate(list(T.virtual_dom_node())) :: list(T.virtual_dom_node())
+  @spec interpolate(list(T.document_node())) :: list(T.document_node())
 
   def interpolate(nodes) do
     Enum.reduce(nodes, [], &(&2 ++ interpolate_node(&1)))

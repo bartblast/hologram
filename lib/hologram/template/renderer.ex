@@ -6,7 +6,7 @@ defmodule Hologram.Template.Renderer do
     ElementNodeRenderer
   }
 
-  alias Hologram.Template.VirtualDOM.{Component, Expression, ElementNode, TextNode}
+  alias Hologram.Template.Document.{Component, Expression, ElementNode, TextNode}
 
   def render(virtual_dom, state \\ %{})
 

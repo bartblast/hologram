@@ -1,6 +1,8 @@
 defmodule Hologram.Typespecs do
   alias Hologram.Compiler.IR.ModuleDefinition
-  alias Hologram.Template.VirtualDOM.{Component, ElementNode, Expression, TextNode}
+  alias Hologram.Template.Document.{Component, ElementNode, Expression, TextNode}
+
+  @type document_node :: %Component{} | %ElementNode{} | %Expression{} | %TextNode{}
 
   @type function_name :: atom()
 
@@ -18,6 +20,4 @@ defmodule Hologram.Typespecs do
   e.g. [:Hologram, :Typespecs]
   """
   @type module_name_segments :: list(atom())
-
-  @type virtual_dom_node :: %Component{} | %ElementNode{} | %Expression{} | %TextNode{}
 end

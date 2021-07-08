@@ -1,8 +1,7 @@
 defmodule Hologram.Compiler.Processor do
   alias Hologram.Compiler.{Context, Helpers, Normalizer, Parser, Transformer}
   alias Hologram.Compiler.IR.ModuleDefinition
-  alias Hologram.Template.VirtualDOM
-  alias Hologram.Template.VirtualDOM.{Component, ElementNode, Expression, TextNode}
+  alias Hologram.Template.Document.{Component, ElementNode, Expression, TextNode}
   alias Hologram.Typespecs, as: T
 
   @doc """

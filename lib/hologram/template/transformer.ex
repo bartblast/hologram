@@ -1,8 +1,8 @@
 defmodule Hologram.Template.Transformer do
   alias Hologram.Compiler.{Helpers, Resolver}
   alias Hologram.Compiler.IR.Alias
+  alias Hologram.Template.Document.{Component, ElementNode, TextNode}
   alias Hologram.Template.Interpolator
-  alias Hologram.Template.VirtualDOM.{Component, ElementNode, TextNode}
   alias Hologram.Typespecs, as: T
 
   @doc """
@@ -29,7 +29,7 @@ defmodule Hologram.Template.Transformer do
         }
       ]
   """
-  @spec transform(Saxy.SimpleForm.t(), list(%Alias{})) :: list(T.virtual_dom_node())
+  @spec transform(Saxy.SimpleForm.t(), list(%Alias{})) :: list(T.document_node())
 
   def transform(dom, aliases \\ []) do
     Enum.map(dom, fn node -> transform_node(node, aliases) end)
