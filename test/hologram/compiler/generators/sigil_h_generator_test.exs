@@ -1,8 +1,8 @@
 defmodule Hologram.Compiler.SigilHGeneratorTest do
   use Hologram.TestCase, async: true
 
+  alias Hologram.Compiler.{Context, SigilHGenerator}
   alias Hologram.Compiler.IR.{FunctionCall, ListType, StringType}
-  alias Hologram.Compiler.SigilHGenerator
 
   test "generate/2" do
     ir =
@@ -23,8 +23,8 @@ defmodule Hologram.Compiler.SigilHGeneratorTest do
         ]
       }
 
-    context = [aliases: []]
-    
+    context = %Context{module: [], uses: [], imports: [], aliases: [], attributes: []}
+
     expected = "[{ type: 'element', tag: 'div', attrs: {}, children: [{ type: 'text', content: 'Hello World ' }, { type: 'expression', callback: ($state) => { return $state.data['~atom[counter]'] } }] }, { type: 'text', content: '\\n' }]"
 
     result = SigilHGenerator.generate(ir, context)
