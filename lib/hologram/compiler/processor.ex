@@ -1,5 +1,5 @@
 defmodule Hologram.Compiler.Processor do
-  alias Hologram.Compiler.{Helpers, Normalizer, Parser, Transformer}
+  alias Hologram.Compiler.{Context, Helpers, Normalizer, Parser, Transformer}
   alias Hologram.Compiler.IR.ModuleDefinition
   alias Hologram.Template.VirtualDOM
   alias Hologram.Template.VirtualDOM.{Component, ElementNode, Expression, TextNode}
@@ -60,10 +60,12 @@ defmodule Hologram.Compiler.Processor do
   @spec get_module_definition(T.module_name_segments()) :: %ModuleDefinition{}
 
   def get_module_definition(module_name_segments) do
+    context = %Context{module: [], uses: [], imports: [], aliases: [], attributes: []}
+
     Helpers.module_source_path(module_name_segments)
     |> Parser.parse_file!()
     |> Normalizer.normalize()
-    |> Transformer.transform()
+    |> Transformer.transform(context)
   end
 
   defp include_aliased_modules(acc, module_definition) do
