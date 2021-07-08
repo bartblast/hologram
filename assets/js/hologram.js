@@ -3,34 +3,56 @@
 // see: https://www.blazemeter.com/blog/the-correct-way-to-import-lodash-libraries-a-benchmark
 import cloneDeep from "lodash/cloneDeep";
 
-import {init, eventListenersModule, h, toVNode} from "snabbdom";
-const patch = init([eventListenersModule]);
+import {attributesModule, eventListenersModule, h, init, toVNode} from "snabbdom";
+const patch = init([eventListenersModule, attributesModule]);
 
 class Hologram {
-  static build_virtual_dom(ir, state) {
-    if (Array.isArray(ir)) {
-      return ir.map((node) => { return Hologram.build_virtual_dom(node, state)})
+  static build_vnode(node, state, context) {
+    if (Array.isArray(node)) {
+      return node.map((n) => { return Hologram.build_vnode(n, state, context)})
     }
 
-    switch (ir.type) {
+    switch (node.type) {
       case "component":
         // TODO: implement
         return h("section", {}, [])
 
       case "element":
-        let children = ir.children.map((child) => {
-          return Hologram.build_virtual_dom(child, state)
+        let children = node.children.map((child) => {
+          return Hologram.build_vnode(child, state, context)
         })
 
-        return h(ir.tag, {attrs: ir.attrs}, children)
+        let event_handlers = Hologram.build_vnode_event_handlers(node, state, context)
+        let attrs = Hologram.build_vnode_attrs(node)
+
+        return h(node.tag, {attrs: attrs, on: event_handlers}, children)
 
       case "expression":
-        return Hologram.evaluate(ir.callback(state))        
+        return Hologram.evaluate(node.callback(state))        
 
       case "text":
-        return ir.content        
+        return node.content        
     } 
-  }  
+  }
+
+  static build_vnode_attrs(node) {
+    delete node.attrs.on_click
+    return node.attrs
+  }
+
+  static build_vnode_event_handlers(node, state, context) {
+    let event_handlers = {}
+
+    if (node.attrs.on_click) {
+      event_handlers.click = Hologram.click_handler.bind(null, context.module, node.attrs.on_click, state)
+    }
+
+    return event_handlers
+  }
+
+  static click_handler(module, action, state, _event) {
+    module.action({ type: 'atom', value: action }, {}, state)
+  }
 
   static evaluate(value) {
     switch (value.type) {
@@ -123,7 +145,8 @@ class Hologram {
 
     const callback = () => {
       let container = window.document.body
-      let vnode = Hologram.build_virtual_dom(module.template(), window.state)[0]
+      let context = {module: module}
+      let vnode = Hologram.build_vnode(module.template(), window.state, context)[0]
       patch(toVNode(container), vnode)
     }
 

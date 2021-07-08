@@ -14,7 +14,7 @@ defmodule DemoPage do
     <body>
       <h1>Demo Page</h1>
       <Counter value={{ @counter }} />
-      <div><button :click="increment">Increment</button></div>
+      <div><button on_click="increment">Increment</button></div>
     </body>
     """
   end

@@ -14,6 +14,7 @@ defmodule Hologram.Compiler.FunctionDefinitionGenerator do
   defp generate_body_invalid_case do
     """
     else {
+    console.debug(arguments)
     throw 'No match for the function call'
     }
     """
