@@ -2,23 +2,23 @@
 defmodule DemoWeb.HologramController do
   use DemoWeb, :controller
 
-  alias Hologram.Compiler.{Builder, Helpers, Hydrator, Processor}
+  alias Hologram.Compiler
+  alias Hologram.Compiler.{Helpers, Hydrator, Processor}
   alias Hologram.Template
-  alias Hologram.Template.VirtualDOM
 
   def index(conn, params) do
     module = conn.private.hologram_page
 
     state = module.state()
     hydrated_state = Hydrator.hydrate(state)
-    virtual_dom = VirtualDOM.build(module)
+    virtual_dom = Template.Builder.build(module)
 
     # DEFER: use .holo template files
     html = Template.Renderer.render(virtual_dom, state)
 
     js =
       Helpers.module_name_segments(module)
-      |> Builder.build()
+      |> Compiler.Builder.build()
 
     class_name =
       module

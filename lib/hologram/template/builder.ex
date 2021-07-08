@@ -1,6 +1,7 @@
 defmodule Hologram.Template.Builder do
   alias Hologram.Compiler.{Helpers, Processor}
   alias Hologram.Template.{Parser, Transformer}
+  alias Hologram.Typespecs, as: T
 
   @doc """
   Returns module's document tree template.
@@ -12,7 +13,7 @@ defmodule Hologram.Template.Builder do
         %TextNode{content: "Footer content"}
       ]
   """
-  @spec build(module()) ::
+  @spec build(module()) :: list(T.document_node)
 
   def build(module) do
     aliases =
