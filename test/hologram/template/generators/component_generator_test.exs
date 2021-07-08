@@ -4,9 +4,8 @@ defmodule Hologram.Template.ComponentGeneratorTest do
 
   test "generate/1" do
     module = [:Abc, :Bcd]
-    context = []
 
-    result = ComponentGenerator.generate(module, context)
+    result = ComponentGenerator.generate(module)
     expected = "{ type: 'component', module: 'Abc.Bcd' }"
 
     assert result == expected
