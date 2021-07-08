@@ -6,9 +6,7 @@ defmodule Hologram.Template.ExpressionGeneratorTest do
 
   test "generate/2" do
     ir = %AtomType{value: "x"}
-    context = [module_attributes: []]
-
-    result = ExpressionGenerator.generate(ir, context)
+    result = ExpressionGenerator.generate(ir)
 
     expected =
       "{ type: 'expression', callback: ($state) => { return { type: 'atom', value: 'x' } } }"
