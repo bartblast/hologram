@@ -1,9 +1,9 @@
 defmodule Hologram.Template.Parser do
   use Hologram.Commons.Parser
 
-  def parse(str) do
+  def parse(markup) do
     result =
-      ("<root>" <> fix_quotes(str) <> "</root>")
+      ("<root>" <> fix_quotes(markup) <> "</root>")
       |> Saxy.SimpleForm.parse_string()
 
     case result do

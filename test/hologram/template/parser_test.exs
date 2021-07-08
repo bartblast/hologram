@@ -3,49 +3,49 @@ defmodule Hologram.Template.ParserTest do
   alias Hologram.Template.Parser
 
   test "single node" do
-    html = "<div></div>"
+    markup = "<div></div>"
 
-    result = Parser.parse(html)
+    result = Parser.parse(markup)
     expected = {:ok, [{"div", [], []}]}
 
     assert result == expected
   end
 
   test "multiple nodes" do
-    html = "<div></div><span></span>"
+    markup = "<div></div><span></span>"
 
-    result = Parser.parse(html)
+    result = Parser.parse(markup)
     expected = {:ok, [{"div", [], []}, {"span", [], []}]}
 
     assert result == expected
   end
 
   test "attrs" do
-    html = "<div class=\"value_class\" id=\"value_id\"></div>"
+    markup = "<div class=\"value_class\" id=\"value_id\"></div>"
 
-    result = Parser.parse(html)
+    result = Parser.parse(markup)
     expected = {:ok, [{"div", [{"class", "value_class"}, {"id", "value_id"}], []}]}
 
     assert result == expected
   end
 
   test "children" do
-    html = "<div><span></span><h1></h1></div>"
+    markup = "<div><span></span><h1></h1></div>"
 
-    result = Parser.parse(html)
+    result = Parser.parse(markup)
     expected = {:ok, [{"div", [], [{"span", [], []}, {"h1", [], []}]}]}
 
     assert result == expected
   end
 
   test "interpolation quotes fixing" do
-    html = """
+    markup = """
     <div class=\"test_class_1\" abc={{ @abc }} id=\"test_id_1\" bcd={{ @bcd }}>
       <span class=\"test_class_2\" cde={{ @cde }} id=\"test_id_2\" def={{ @def }}></span>
     </div>
     """
 
-    result = Parser.parse(html)
+    result = Parser.parse(markup)
 
     expected =
       {:ok,
@@ -75,8 +75,8 @@ defmodule Hologram.Template.ParserTest do
   end
 
   test "invalid html" do
-    html = "<div"
-    result = Parser.parse(html)
+    markup = "<div"
+    result = Parser.parse(markup)
 
     expected =
       {:error,
