@@ -17,6 +17,12 @@ class Hologram {
 
     switch (node.type) {
       case "component":
+        let module = Hologram.get_module(node.module)
+        if (module.hasOwnProperty("action")) {
+          context = Object.assign({}, context)
+          context.module = module
+        }
+
         return Hologram.build_vnode(node.children, state, context)
 
       case "element":
@@ -47,7 +53,7 @@ class Hologram {
     let event_handlers = {}
 
     if (node.attrs.on_click) {
-      event_handlers.click = Hologram.handle_click.bind(null, context.module, node.attrs.on_click, state, context)
+      event_handlers.click = Hologram.handle_click.bind(null, context, node.attrs.on_click, state)
     }
 
     return event_handlers
@@ -60,8 +66,12 @@ class Hologram {
     }
   }
 
-  static handle_click(module, action, state, context, _event) {
-    window.state = module.action({ type: 'atom', value: action }, {}, state)
+  static get_module(name) {
+    return eval(name.replace(/\./g, ""))
+  }
+
+  static handle_click(context, action, state, _event) {
+    window.state = context.module.action({ type: 'atom', value: action }, {}, state)
     Hologram.render(window.prev_vnode, context)
   }
 
@@ -125,7 +135,7 @@ class Hologram {
   }
 
   static render(prev_vnode, context) {
-    let template = context.module.template()
+    let template = context.page.template()
     let vnode = Hologram.build_vnode(template, window.state, context)[0]
     patch(prev_vnode, vnode)
 
@@ -136,7 +146,7 @@ class Hologram {
     const callback = () => {
       let container = window.document.body
       window.prev_vnode = toVNode(container)
-      let context = {module: module}
+      let context = {module: module, page: module}
       window.prev_vnode = Hologram.render(window.prev_vnode, context)
     }
 
