@@ -1,4 +1,4 @@
-// TODO: test
+// TODO: refactor & test
 
 // see: https://www.blazemeter.com/blog/the-correct-way-to-import-lodash-libraries-a-benchmark
 import cloneDeep from "lodash/cloneDeep";
@@ -47,14 +47,10 @@ class Hologram {
     let event_handlers = {}
 
     if (node.attrs.on_click) {
-      event_handlers.click = Hologram.click_handler.bind(null, context.module, node.attrs.on_click, state)
+      event_handlers.click = Hologram.handle_click.bind(null, context.module, node.attrs.on_click, state, context)
     }
 
     return event_handlers
-  }
-
-  static click_handler(module, action, state, _event) {
-    module.action({ type: 'atom', value: action }, {}, state)
   }
 
   static evaluate(value) {
@@ -62,6 +58,11 @@ class Hologram {
       case "integer":
         return `${value.value}`
     }
+  }
+
+  static handle_click(module, action, state, context, _event) {
+    window.state = module.action({ type: 'atom', value: action }, {}, state)
+    Hologram.render(window.prev_vnode, context)
   }
 
   static isPatternMatched(left, right) {
@@ -127,16 +128,16 @@ class Hologram {
     let template = context.module.template()
     let vnode = Hologram.build_vnode(template, window.state, context)[0]
     patch(prev_vnode, vnode)
-    
+
     return vnode
   }
 
   static start_runtime(window, module, moduleName) {
     const callback = () => {
       let container = window.document.body
-      window.prev_node = toVNode(container)
+      window.prev_vnode = toVNode(container)
       let context = {module: module}
-      window.prev_node = Hologram.render(window.prev_node, context)
+      window.prev_vnode = Hologram.render(window.prev_vnode, context)
     }
 
     Hologram.onReady(window.document, callback)
