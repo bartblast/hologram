@@ -93,6 +93,10 @@ class Hologram {
     return true;
   }
 
+  static js(js) {
+    eval(js.value)
+  }
+
   static objectKey(key) {
     switch (key.type) {
       case 'atom':
