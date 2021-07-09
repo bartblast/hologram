@@ -18,6 +18,7 @@ class Hologram {
     switch (node.type) {
       case "component":
         let module = Hologram.get_module(node.module)
+
         if (module.hasOwnProperty("action")) {
           context = Object.assign({}, context)
           context.module = module
@@ -136,6 +137,7 @@ class Hologram {
 
   static render(prev_vnode, context) {
     let template = context.page.template()
+    context.module = context.page
     let vnode = Hologram.build_vnode(template, window.state, context)[0]
     patch(prev_vnode, vnode)
 
