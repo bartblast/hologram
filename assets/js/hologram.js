@@ -15,23 +15,24 @@ class Hologram {
     switch (node.type) {
       case "component":
         // TODO: implement
-        return h("section", {}, [])
+        return [h("section", {}, [])]
 
       case "element":
-        let children = node.children.map((child) => {
-          return Hologram.build_vnode(child, state, context)
-        })
+        let children = node.children.reduce((acc, child) => {
+          acc.push(...Hologram.build_vnode(child, state, context))
+          return acc
+        }, [])
 
         let event_handlers = Hologram.build_vnode_event_handlers(node, state, context)
         let attrs = Hologram.build_vnode_attrs(node)
 
-        return h(node.tag, {attrs: attrs, on: event_handlers}, children)
+        return [h(node.tag, {attrs: attrs, on: event_handlers}, children)]
 
       case "expression":
-        return Hologram.evaluate(node.callback(state))        
+        return [Hologram.evaluate(node.callback(state))]
 
       case "text":
-        return node.content        
+        return [node.content]
     } 
   }
 
@@ -146,7 +147,7 @@ class Hologram {
     const callback = () => {
       let container = window.document.body
       let context = {module: module}
-      let vnode = Hologram.build_vnode(module.template(), window.state, context)[0]
+      let vnode = Hologram.build_vnode(module.template(), window.state, context)[0][0]
       patch(toVNode(container), vnode)
     }
 
