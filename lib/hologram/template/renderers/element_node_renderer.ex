@@ -1,25 +1,23 @@
 defmodule Hologram.Template.ElementNodeRenderer do
   alias Hologram.Template.Renderer
 
-  def render(tag, attrs, children, state) do
-    attrs_html =
-      Enum.map(attrs, fn {key, value} -> " #{render_attr_name(key)}=\"#{value}\"" end)
-      |> Enum.join("")
+  @pruned_attrs [:on_click]
 
-    children_html =
-      Enum.map(children, fn child -> Renderer.render(child, state) end)
-      |> Enum.join("")
+  def render(tag, attrs, children, state) do
+    attrs_html = render_attrs(attrs)
+    children_html = render_children(children, state)
 
     "<#{tag}#{attrs_html}>#{children_html}</#{tag}>"
   end
 
-  def render_attr_name(key) do
-    case key do
-      ":click" ->
-        "holo-click"
+  defp render_attrs(attrs) do
+    Enum.reject(attrs, fn {key, value} -> key in @pruned_attrs end)
+    |> Enum.map(fn {key, value} -> " #{key}=\"#{value}\"" end)
+    |> Enum.join("")
+  end
 
-      _ ->
-        key
-    end
+  defp render_children(children, state) do
+    Enum.map(children, fn child -> Renderer.render(child, state) end)
+    |> Enum.join("")
   end
 end
