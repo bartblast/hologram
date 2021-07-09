@@ -113,7 +113,7 @@ defmodule Hologram.Template.TransformerTest do
 
     expected = [
       %ElementNode{
-        attrs: %{"class" => "test-class", "id" => "test-id"},
+        attrs: %{class: "test-class", id: "test-id"},
         children: [],
         tag: "div"
       }
@@ -159,13 +159,13 @@ defmodule Hologram.Template.TransformerTest do
 
     expected = [
       %ElementNode{
-        attrs: %{"class" => "class_1"},
+        attrs: %{class: "class_1"},
         children: [
           %ElementNode{
             attrs: %{},
             children: [
               %ElementNode{
-                attrs: %{"class" => "class_2", "id" => "id_2"},
+                attrs: %{class: "class_2", id: "id_2"},
                 children: [],
                 tag: "span"
               }
@@ -217,10 +217,10 @@ defmodule Hologram.Template.TransformerTest do
     expected = [
       %ElementNode{
         attrs: %{
-          ":if" => %Expression{ir: %ModuleAttributeOperator{name: :var_1}},
-          ":show" => %Expression{ir: %ModuleAttributeOperator{name: :var_2}},
-          "class" => "class_1",
-          "id" => "id_1"
+          ":if": %Expression{ir: %ModuleAttributeOperator{name: :var_1}},
+          ":show": %Expression{ir: %ModuleAttributeOperator{name: :var_2}},
+          class: "class_1",
+          id: "id_1"
         },
         children: [
           %TextNode{content: "\n  "},
@@ -230,10 +230,10 @@ defmodule Hologram.Template.TransformerTest do
               %TextNode{content: "\n    "},
               %ElementNode{
                 attrs: %{
-                  ":if" => %Expression{ir: %ModuleAttributeOperator{name: :var_3}},
-                  ":show" => %Expression{ir: %ModuleAttributeOperator{name: :var_4}},
-                  "class" => "class_2",
-                  "id" => "id_2"
+                  ":if": %Expression{ir: %ModuleAttributeOperator{name: :var_3}},
+                  ":show": %Expression{ir: %ModuleAttributeOperator{name: :var_4}},
+                  class: "class_2",
+                  id: "id_2"
                 },
                 children: [],
                 tag: "span"

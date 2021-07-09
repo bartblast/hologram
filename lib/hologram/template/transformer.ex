@@ -4,6 +4,7 @@ defmodule Hologram.Template.Transformer do
   alias Hologram.Template.Document.{Component, ElementNode, TextNode}
   alias Hologram.Template.Interpolator
   alias Hologram.Typespecs, as: T
+  alias Hologram.Utils
 
   @doc """
   Transforms parsed markup into a document tree template.
@@ -61,8 +62,13 @@ defmodule Hologram.Template.Transformer do
   end
 
   defp build_element_node(tag, children, attrs) do
-    attrs = Enum.into(attrs, %{})
+    attrs = build_element_node_attrs(attrs)
     %ElementNode{tag: tag, children: children, attrs: attrs}
+  end
+
+  defp build_element_node_attrs(attrs) do
+    Enum.into(attrs, %{})
+    |> Utils.atomize_keys()
   end
 
   defp determine_node_type(type, _) do
