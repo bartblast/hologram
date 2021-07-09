@@ -9,13 +9,15 @@ const patch = init([eventListenersModule, attributesModule]);
 class Hologram {
   static build_vnode(node, state, context) {
     if (Array.isArray(node)) {
-      return node.map((n) => { return Hologram.build_vnode(n, state, context)})
+      return node.reduce((acc, n) => {
+        acc.push(...Hologram.build_vnode(n, state, context))
+        return acc
+      }, [])
     }
 
     switch (node.type) {
       case "component":
-        // TODO: implement
-        return [h("section", {}, [])]
+        return Hologram.build_vnode(node.children, state, context)
 
       case "element":
         let children = node.children.reduce((acc, child) => {
@@ -121,34 +123,20 @@ class Hologram {
     return true;
   }
 
+  static render(prev_vnode, context) {
+    let template = context.module.template()
+    let vnode = Hologram.build_vnode(template, window.state, context)[0]
+    patch(prev_vnode, vnode)
+    
+    return vnode
+  }
+
   static start_runtime(window, module, moduleName) {
-    // TODO: implement click handler
-    // let callback = () => {
-    //   document.querySelectorAll("[holo-click]").forEach(element => {
-    //     element.addEventListener("click", () => {
-    //       let fun = module["action"]
-    //       let action = { type: 'atom', value: element.getAttribute("holo-click") }
-
-    //       console.log(`Function call: ${moduleName}.action()`)
-    //       console.debug([action, {}, window.state])
-          
-    //       window.state = fun(action, {}, window.state)
-
-    //       console.log("State after action:")
-    //       console.debug(window.state.data)
-
-    //       let html = Hologram.template(window.ir[moduleName], window.state)
-    //       let diff = dd.diff(window.document.body, "<body>" + html + "</body>");
-    //       dd.apply(window.document.body, diff)
-    //     })
-    //   })
-    // }   
-
     const callback = () => {
       let container = window.document.body
+      window.prev_node = toVNode(container)
       let context = {module: module}
-      let vnode = Hologram.build_vnode(module.template(), window.state, context)[0][0]
-      patch(toVNode(container), vnode)
+      window.prev_node = Hologram.render(window.prev_node, context)
     }
 
     Hologram.onReady(window.document, callback)
