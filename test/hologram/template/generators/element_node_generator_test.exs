@@ -45,13 +45,13 @@ defmodule Hologram.Template.ElementNodeGeneratorTest do
     assert result == expected
   end
 
-  test "attr name" do
+  test "doesn't remove any attrs" do
     tag = "div"
-    attrs = %{":click" => "test"}
+    attrs = %{"on_click" => "test"}
     children = []
 
     result = ElementNodeGenerator.generate(tag, attrs, children)
-    expected = "{ type: 'element', tag: 'div', attrs: { 'holo-click': 'test' }, children: [] }"
+    expected = "{ type: 'element', tag: 'div', attrs: { 'on_click': 'test' }, children: [] }"
 
     assert result == expected
   end

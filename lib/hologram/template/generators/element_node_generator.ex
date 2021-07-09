@@ -1,26 +1,33 @@
 defmodule Hologram.Template.ElementNodeGenerator do
-  alias Hologram.Template.{ElementNodeRenderer, Generator}
+  alias Hologram.Template.Generator
 
   def generate(tag, attrs, children) do
-    attrs_js =
-      if Enum.any?(attrs) do
-        js =
-          Enum.map(attrs, fn {key, value} ->
-            "'#{ElementNodeRenderer.render_attr_name(key)}': '#{value}'"
-          end)
-          |> Enum.join(", ")
+    attrs_js = generate_attrs(attrs)
+    children_js = generate_children(children)
 
-        "{ #{js} }"
-      else
-        "{}"
-      end
+    "{ type: 'element', tag: '#{tag}', attrs: #{attrs_js}, children: #{children_js} }"
+  end
 
-    children_str =
+  defp generate_attrs(attrs) do
+    if Enum.any?(attrs) do
+      js =
+        attrs
+        |> Enum.map(fn {key, value} ->
+          "'#{key}': '#{value}'"
+        end)
+        |> Enum.join(", ")
+
+      "{ #{js} }"
+    else
+      "{}"
+    end
+  end
+
+  defp generate_children(children) do
+    js =
       Enum.map(children, &Generator.generate/1)
       |> Enum.join(", ")
 
-    children_js = "[#{children_str}]"
-
-    "{ type: 'element', tag: '#{tag}', attrs: #{attrs_js}, children: #{children_js} }"
+    "[#{js}]"
   end
 end
