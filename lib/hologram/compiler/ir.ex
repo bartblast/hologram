@@ -29,6 +29,10 @@ defmodule Hologram.Compiler.IR do
     defstruct module: nil, data: nil
   end
 
+  defmodule TupleType do
+    defstruct data: nil
+  end
+
   # OPERATORS
 
   defmodule AccessOperator do

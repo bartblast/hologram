@@ -21,7 +21,8 @@ defmodule Hologram.Compiler.Transformer do
     MatchOperatorTransformer,
     ModuleAttributeDefinitionTransformer,
     ModuleDefinitionTransformer,
-    StructTypeTransformer
+    StructTypeTransformer,
+    TupleTypeTransformer
   }
 
   alias Hologram.Compiler.Context
@@ -54,6 +55,14 @@ defmodule Hologram.Compiler.Transformer do
 
   def transform({:%, _, [{_, _, module}, ast]}, %Context{} = context) do
     StructTypeTransformer.transform(ast, module, context)
+  end
+
+  def transform({:{}, _, ast}, %Context{} = context) do
+    TupleTypeTransformer.transform(ast, context)
+  end
+
+  def transform({_, _} = ast, %Context{} = context) do
+    TupleTypeTransformer.transform(ast, context)
   end
 
   # OPERATORS

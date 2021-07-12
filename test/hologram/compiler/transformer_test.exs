@@ -19,6 +19,7 @@ defmodule Hologram.Compiler.TransformerTest do
     ModuleAttributeOperator,
     StringType,
     StructType,
+    TupleType,
     UseDirective,
     Variable
   }
@@ -79,6 +80,20 @@ defmodule Hologram.Compiler.TransformerTest do
       ast = ast(code)
 
       assert %StructType{} = Transformer.transform(ast, @context)
+    end
+
+    test "tuple, 2 elements" do
+      code = "{1, 2}"
+      ast = ast(code)
+
+      assert %TupleType{} = Transformer.transform(ast, @context)
+    end
+
+    test "tuple, non-2 elements" do
+      code = "{1, 2, 3}"
+      ast = ast(code)
+
+      assert %TupleType{} = Transformer.transform(ast, @context)
     end
   end
 
