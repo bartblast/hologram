@@ -2,7 +2,7 @@ defmodule DemoWeb.UserSocket do
   use Phoenix.Socket
 
   ## Channels
-  # channel "room:*", DemoWeb.RoomChannel
+  channel "hologram", Hologram.Channel
 
   # Socket params are passed from the client and can
   # be used to verify and authenticate a user. After
