@@ -72,7 +72,7 @@ class Hologram {
   }
 
   static handle_click(context, action, state, _event) {
-    window.state = context.module.action({ type: 'atom', value: action }, {}, state)
+    window.state  = context.module.action({ type: 'atom', value: action }, {}, state)
     Hologram.render(window.prev_vnode, context)
   }
 
