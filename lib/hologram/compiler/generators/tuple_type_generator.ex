@@ -11,9 +11,9 @@ defmodule Hologram.Compiler.TupleTypeGenerator do
       |> Enum.join(", ")
 
     if fields != "" do
-      "{ #{fields} }"
+      "[ #{fields} ]"
     else
-      "{}"
+      "[]"
     end
   end
 end

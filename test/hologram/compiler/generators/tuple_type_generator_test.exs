@@ -9,7 +9,7 @@ defmodule Hologram.Compiler.TupleTypeGeneratorTest do
 
   test "empty tuple" do
     result = TupleTypeGenerator.generate([], @context, @opts)
-    expected = "{ type: 'tuple', data: {} }"
+    expected = "{ type: 'tuple', data: [] }"
 
     assert result == expected
   end
@@ -18,7 +18,7 @@ defmodule Hologram.Compiler.TupleTypeGeneratorTest do
     data = [%IntegerType{value: 1}, %IntegerType{value: 2}]
 
     result = TupleTypeGenerator.generate(data, @context, @opts)
-    expected = "{ type: 'tuple', data: { { type: 'integer', value: 1 }, { type: 'integer', value: 2 } } }"
+    expected = "{ type: 'tuple', data: [ { type: 'integer', value: 1 }, { type: 'integer', value: 2 } ] }"
 
     assert result == expected
   end
