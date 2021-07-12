@@ -16,6 +16,7 @@ defmodule Hologram.Compiler.GeneratorTest do
     ModuleDefinition,
     StringType,
     StructType,
+    TupleType,
     Variable
   }
 
@@ -66,6 +67,15 @@ defmodule Hologram.Compiler.GeneratorTest do
 
       expected =
         "{ type: 'struct', module: 'Abc.Bcd', data: { '~atom[a]': { type: 'integer', value: 1 } } }"
+
+      assert result == expected
+    end
+
+    test "tuple" do
+      ir = %TupleType{data: []}
+
+      result = Generator.generate(ir, @context)
+      expected = "{ type: 'tuple', data: {} }"
 
       assert result == expected
     end
