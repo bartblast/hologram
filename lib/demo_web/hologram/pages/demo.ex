@@ -27,8 +27,11 @@ defmodule DemoPage do
     update(state, :counter, 0)
   end
 
-  # def command(:save_record, value) do
-  #   Repo.update(...)
-  #   :ok
-  # end
+  def command(:run_command, _params) do
+    IO.puts("command started")
+    :timer.sleep(5_000)
+    IO.puts("command finished")
+
+    :command_finished
+  end
 end
