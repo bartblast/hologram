@@ -5,6 +5,7 @@ defmodule Hologram.Compiler.Transformer do
     Import,
     IntegerType,
     ModuleAttributeOperator,
+    NotSupportedExpression,
     StringType,
     UseDirective,
     Variable
@@ -127,5 +128,11 @@ defmodule Hologram.Compiler.Transformer do
 
   def transform({name, _, nil}, _) when is_atom(name) do
     %Variable{name: name}
+  end
+
+  # NOT SUPPORTED
+
+  def transform({{:., _, [_, _]}, _, _} = ast, _) do
+    %NotSupportedExpression{ast: ast, type: :erlang_function_call}
   end
 end

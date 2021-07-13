@@ -17,6 +17,7 @@ defmodule Hologram.Compiler.TransformerTest do
     ModuleDefinition,
     ModuleAttributeDefinition,
     ModuleAttributeOperator,
+    NotSupportedExpression,
     StringType,
     StructType,
     TupleType,
@@ -205,6 +206,18 @@ defmodule Hologram.Compiler.TransformerTest do
 
       result = Transformer.transform(ast, @context)
       assert result == %Variable{name: :a}
+    end
+  end
+
+  describe "not supported" do
+    test "erlan function call" do
+      code = ":timer.sleep(1_000)"
+      ast = ast(code)
+
+      result = Transformer.transform(ast, @context)
+      expected = %NotSupportedExpression{ast: ast, type: :erlang_function_call}
+
+      assert result == expected
     end
   end
 end

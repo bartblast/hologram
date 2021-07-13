@@ -92,4 +92,10 @@ defmodule Hologram.Compiler.IR do
   defmodule Variable do
     defstruct name: nil
   end
+
+  # NOT SUPPORTED
+
+  defmodule NotSupportedExpression do
+    defstruct ast: nil, type: nil
+  end
 end
