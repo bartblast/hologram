@@ -1,16 +1,42 @@
-// TODO: refactor & test
+import "core-js/stable";
+import "regenerator-runtime/runtime"; 
 
 // see: https://www.blazemeter.com/blog/the-correct-way-to-import-lodash-libraries-a-benchmark
 import cloneDeep from "lodash/cloneDeep";
-import { Socket } from "phoenix";
 
 import {attributesModule, eventListenersModule, h, init, toVNode} from "snabbdom";
 const patch = init([eventListenersModule, attributesModule]);
 
-import "core-js/stable";
-import "regenerator-runtime/runtime"; 
+import Client from "./hologram/client"
 
 class Hologram {
+  static onReady(document, callback) {
+    if (
+      document.readyState === "interactive" ||
+      document.readyState === "complete"
+    ) {
+      callback();
+    } else {
+      document.addEventListener("DOMContentLoaded", function listener() {
+        document.removeEventListener("DOMContentLoaded", listener);
+        callback();
+      });
+    }
+  }
+
+  static async start(window, pageModule) {
+    Hologram.onReady(window.document, () => {
+      this.client = new Client()
+
+      let container = window.document.body
+      window.prev_vnode = toVNode(container)
+      let context = {module: module, page: pageModule}
+      window.prev_vnode = Hologram.render(window.prev_vnode, context)
+    })
+  }
+
+  // TODO: refactor & test functions below
+
   static build_vnode(node, state, context) {
     if (Array.isArray(node)) {
       return node.reduce((acc, n) => {
@@ -62,18 +88,6 @@ class Hologram {
     }
 
     return event_handlers
-  }
-
-  static async connect() {
-    const socket = new Socket("/socket");
-    socket.connect();
-    const channel = socket.channel("hologram");
-
-    channel
-      .join()
-      .receive("ok", (_response) => {
-        window.hologram.connected = true
-      });
   }
 
   static evaluate(value) {
@@ -133,21 +147,6 @@ class Hologram {
     }
   }
 
-  static onReady(document, callback) {
-    if (
-      document.readyState === "interactive" ||
-      document.readyState === "complete"
-    ) {
-      callback();
-    } else {
-      let that = this;
-      document.addEventListener("DOMContentLoaded", function listener() {
-        document.removeEventListener("DOMContentLoaded", listener);
-        callback();
-      });
-    }
-  }
-
   static patternMatchFunctionArgs(params, args) {
     if (args.length != params.length) {
       return false;
@@ -169,19 +168,6 @@ class Hologram {
     patch(prev_vnode, vnode)
 
     return vnode
-  }
-
-  static start_runtime(window, module, moduleName) {
-    const callback = () => {
-      Hologram.connect()
-
-      let container = window.document.body
-      window.prev_vnode = toVNode(container)
-      let context = {module: module, page: module}
-      window.prev_vnode = Hologram.render(window.prev_vnode, context)
-    }
-
-    Hologram.onReady(window.document, callback)
   }
 }
 
