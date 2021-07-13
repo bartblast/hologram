@@ -210,7 +210,7 @@ defmodule Hologram.Compiler.TransformerTest do
   end
 
   describe "not supported" do
-    test "erlan function call" do
+    test "Erlang function call" do
       code = ":timer.sleep(1_000)"
       ast = ast(code)
 
