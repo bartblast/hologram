@@ -20,7 +20,17 @@ defmodule DemoPage do
   end
 
   def action(:increment, _params, state) do
-    update(state, :counter, state.counter + 1)
+    {update(state, :counter, state.counter + 1), :run_command}
+
+    # DEFER: implement
+    # alternative API when there is no command or redirect
+    # new state
+
+    # DEFER: implement
+    # alternative API for piping:
+    # update(state, abc: 123, xyz: 987)
+    # |> push_command(:some_command, abc: 123, xyz: 987)
+    # |> push_redirect(SomePage, abc: 123, xyz: 987)
   end
 
   def action(:decrement, _params, state) do
@@ -28,10 +38,16 @@ defmodule DemoPage do
   end
 
   def command(:run_command, _params) do
-    IO.puts("command started")
     :timer.sleep(5_000)
-    IO.puts("command finished")
+    :some_action
 
-    :command_finished
+    # DEFER: implement
+    # alternative API when there are action param:
+    # {:some_action, abc: 123, xyz: 987)
+
+    # DEFER: implement
+    # alternative API for piping:
+    # push_action(:some_action, abc: 123, xyz: 987)
+    # |> push_redirect(SomePage, abc: 123, xyz: 987)
   end
 end
