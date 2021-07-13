@@ -2,9 +2,13 @@
 
 // see: https://www.blazemeter.com/blog/the-correct-way-to-import-lodash-libraries-a-benchmark
 import cloneDeep from "lodash/cloneDeep";
+import { Socket } from "phoenix";
 
 import {attributesModule, eventListenersModule, h, init, toVNode} from "snabbdom";
 const patch = init([eventListenersModule, attributesModule]);
+
+import "core-js/stable";
+import "regenerator-runtime/runtime"; 
 
 class Hologram {
   static build_vnode(node, state, context) {
@@ -60,6 +64,18 @@ class Hologram {
     return event_handlers
   }
 
+  static async connect() {
+    const socket = new Socket("/socket");
+    socket.connect();
+    const channel = socket.channel("hologram");
+
+    channel
+      .join()
+      .receive("ok", (_response) => {
+        window.hologram.connected = true
+      });
+  }
+
   static evaluate(value) {
     switch (value.type) {
       case "integer":
@@ -72,7 +88,14 @@ class Hologram {
   }
 
   static handle_click(context, action, state, _event) {
-    window.state = context.module.action({ type: 'atom', value: action }, {}, state)
+    let action_result = context.module.action({ type: "atom", value: action }, {}, state)
+
+    if (action_result.type == "tuple") {
+      window.state = action_result.data[0]
+    } else {
+      window.state = action_result
+    }
+
     Hologram.render(window.prev_vnode, context)
   }
 
@@ -150,6 +173,8 @@ class Hologram {
 
   static start_runtime(window, module, moduleName) {
     const callback = () => {
+      Hologram.connect()
+
       let container = window.document.body
       window.prev_vnode = toVNode(container)
       let context = {module: module, page: module}

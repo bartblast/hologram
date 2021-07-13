@@ -39,6 +39,7 @@ defmodule DemoWeb.HologramController do
         <script src="#{Routes.static_path(conn, "/js/hologram.js")}"></script>
         <script>
     #{js}
+    window.hologram = {connected: false}
     window.state = #{hydrated_state};
     Hologram.start_runtime(window, #{class_name}, '#{class_name}')
         </script>

@@ -7,7 +7,6 @@ defmodule Hologram.Channel do
   end
 
   def handle_in("command", {command, params}, socket) do
-    IO.inspect("command received...")
     {:reply, :ok, socket}
   end
 end
