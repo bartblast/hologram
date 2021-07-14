@@ -27,18 +27,24 @@ defmodule DemoWeb.HologramController do
       |> tl()
       |> Enum.join("")
 
-    html(conn, generate_html(conn, html, class_name, js, hydrated_state))
+    html(conn, generate_html(module, conn, html, class_name, js, hydrated_state))
   end
 
-  defp generate_html(conn, html, class_name, js, hydrated_state) do
+  defp generate_html(module, conn, html, class_name, js, hydrated_state) do
+    digest =
+      File.cwd!() <> "/priv/static/hologram/manifest.json"
+      |> File.read!()
+      |> Jason.decode!()
+      |> Map.get("#{module}")
+
     """
     <!DOCTYPE html>
     <html>
       <head>
         <title>Hologram Demo</title>
         <script src="#{Routes.static_path(conn, "/js/hologram.js")}"></script>
+        <script src="#{Routes.static_path(conn, "/hologram/page-#{digest}.js")}"></script>
         <script>
-    #{js}
     window.hologram = {connected: false}
     window.state = #{hydrated_state};
     Hologram.start(window, #{class_name})
