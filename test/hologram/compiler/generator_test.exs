@@ -75,7 +75,7 @@ defmodule Hologram.Compiler.GeneratorTest do
       ir = %TupleType{data: []}
 
       result = Generator.generate(ir, @context)
-      expected = "{ type: 'tuple', data: {} }"
+      expected = "{ type: 'tuple', data: [] }"
 
       assert result == expected
     end

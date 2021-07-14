@@ -2,7 +2,7 @@ defmodule Hologram.Compiler.TupleTypeGeneratorTest do
   use Hologram.TestCase, async: true
 
   alias Hologram.Compiler.{Context, TupleTypeGenerator}
-  alias Hologram.Compiler.IR.{IntegerType, TupleType}
+  alias Hologram.Compiler.IR.IntegerType
 
   @context %Context{module: [], uses: [], imports: [], aliases: [], attributes: []}
   @opts []

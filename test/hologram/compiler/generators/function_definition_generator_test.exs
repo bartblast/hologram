@@ -33,6 +33,7 @@ defmodule Hologram.Compiler.FunctionDefinitionGeneratorTest do
     return { type: 'atom', value: '' };
     }
     else {
+    console.debug(arguments)
     throw 'No match for the function call'
     }
     }
@@ -58,6 +59,7 @@ defmodule Hologram.Compiler.FunctionDefinitionGeneratorTest do
     return { type: 'atom', value: '' };
     }
     else {
+    console.debug(arguments)
     throw 'No match for the function call'
     }
     }
@@ -95,6 +97,7 @@ defmodule Hologram.Compiler.FunctionDefinitionGeneratorTest do
     return { type: 'integer', value: 2 };
     }
     else {
+    console.debug(arguments)
     throw 'No match for the function call'
     }
     }

@@ -40,6 +40,7 @@ defmodule Hologram.Compiler.ModuleDefinitionGeneratorTest do
     return { type: 'integer', value: 1 };
     }
     else {
+    console.debug(arguments)
     throw 'No match for the function call'
     }
     }
@@ -101,6 +102,7 @@ defmodule Hologram.Compiler.ModuleDefinitionGeneratorTest do
     return { type: 'integer', value: 2 };
     }
     else {
+    console.debug(arguments)
     throw 'No match for the function call'
     }
     }
@@ -155,6 +157,7 @@ defmodule Hologram.Compiler.ModuleDefinitionGeneratorTest do
     return { type: 'integer', value: 1 };
     }
     else {
+    console.debug(arguments)
     throw 'No match for the function call'
     }
     }
@@ -165,6 +168,7 @@ defmodule Hologram.Compiler.ModuleDefinitionGeneratorTest do
     return { type: 'integer', value: 2 };
     }
     else {
+    console.debug(arguments)
     throw 'No match for the function call'
     }
     }
@@ -238,6 +242,7 @@ defmodule Hologram.Compiler.ModuleDefinitionGeneratorTest do
     return { type: 'integer', value: 2 };
     }
     else {
+    console.debug(arguments)
     throw 'No match for the function call'
     }
     }
@@ -248,6 +253,7 @@ defmodule Hologram.Compiler.ModuleDefinitionGeneratorTest do
     return { type: 'integer', value: 3 };
     }
     else {
+    console.debug(arguments)
     throw 'No match for the function call'
     }
     }

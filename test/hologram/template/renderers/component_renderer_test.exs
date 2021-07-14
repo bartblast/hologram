@@ -7,7 +7,7 @@ defmodule Hologram.Template.ComponentRendererTest do
     state = %{}
 
     result = ComponentRenderer.render(module, state)
-    expected = "<div>test template</div>"
+    expected = "<div>test</div>"
 
     assert result == expected
   end
