@@ -1,6 +1,6 @@
 defmodule Hologram.Runtime.Reflection do
   # TODO: test
-  defp find_pages do
+  def list_pages do
     app_name = Mix.Project.get().project[:app]
     app_path = File.cwd!()
 
