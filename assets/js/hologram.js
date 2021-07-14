@@ -64,7 +64,7 @@ export default class Hologram {
         }, [])
 
         let event_handlers = DOM.buildVNodeEventHandlers(node, state, context)
-        let attrs = Hologram.build_vnode_attrs(node)
+        let attrs = DOM.buildVNodeAttrs(node)
 
         return [h(node.tag, {attrs: attrs, on: event_handlers}, children)]
 
@@ -74,11 +74,6 @@ export default class Hologram {
       case "text":
         return [node.content]
     } 
-  }
-
-  static build_vnode_attrs(node) {
-    delete node.attrs.on_click
-    return node.attrs
   }
 
   static evaluate(value) {

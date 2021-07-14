@@ -1,4 +1,4 @@
-// TODO: refactor
+// TODO: refactor & test
 
 import Hologram from "../hologram"
 
