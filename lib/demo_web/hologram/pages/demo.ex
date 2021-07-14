@@ -37,7 +37,7 @@ defmodule DemoPage do
     update(state, :counter, 0)
   end
 
-  def command(:run_command, _params) do
+  def command(:some_command, _params) do
     :timer.sleep(5_000)
     :some_action
 

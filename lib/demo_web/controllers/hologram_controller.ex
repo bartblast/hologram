@@ -41,7 +41,7 @@ defmodule DemoWeb.HologramController do
     #{js}
     window.hologram = {connected: false}
     window.state = #{hydrated_state};
-    Hologram.start_runtime(window, #{class_name}, '#{class_name}')
+    Hologram.start(window, #{class_name})
         </script>
       </head>
     #{html}
