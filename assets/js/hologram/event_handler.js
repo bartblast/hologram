@@ -1,3 +1,5 @@
+// TODO: refactor
+
 import Hologram from "../hologram"
 
 export default class EventHandler {

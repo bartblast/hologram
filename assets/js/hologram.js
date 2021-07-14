@@ -8,7 +8,7 @@ import {attributesModule, eventListenersModule, h, init, toVNode} from "snabbdom
 const patch = init([eventListenersModule, attributesModule]);
 
 import Client from "./hologram/client"
-import EventHandler from "./hologram/event_handler"
+import DOM from "./hologram/dom"
 
 export default class Hologram {
   static onReady(document, callback) {
@@ -63,7 +63,7 @@ export default class Hologram {
           return acc
         }, [])
 
-        let event_handlers = Hologram.build_vnode_event_handlers(node, state, context)
+        let event_handlers = DOM.buildVNodeEventHandlers(node, state, context)
         let attrs = Hologram.build_vnode_attrs(node)
 
         return [h(node.tag, {attrs: attrs, on: event_handlers}, children)]
@@ -79,16 +79,6 @@ export default class Hologram {
   static build_vnode_attrs(node) {
     delete node.attrs.on_click
     return node.attrs
-  }
-
-  static build_vnode_event_handlers(node, state, context) {
-    let event_handlers = {}
-
-    if (node.attrs.on_click) {
-      event_handlers.click = EventHandler.handleClickEvent.bind(null, context, node.attrs.on_click, state)
-    }
-
-    return event_handlers
   }
 
   static evaluate(value) {
