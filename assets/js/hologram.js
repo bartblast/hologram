@@ -30,7 +30,7 @@ class Hologram {
 
       let container = window.document.body
       window.prev_vnode = toVNode(container)
-      let context = {module: module, page: pageModule}
+      let context = {scopeModule: pageModule, pageModule: pageModule}
       window.prev_vnode = Hologram.render(window.prev_vnode, context)
     })
   }
@@ -51,7 +51,7 @@ class Hologram {
 
         if (module.hasOwnProperty("action")) {
           context = Object.assign({}, context)
-          context.module = module
+          context.scopeModule = module
         }
 
         return Hologram.build_vnode(node.children, state, context)
@@ -102,7 +102,7 @@ class Hologram {
   }
 
   static handle_click(context, action, state, _event) {
-    let action_result = context.module.action({ type: "atom", value: action }, {}, state)
+    let action_result = context.scopeModule.action({ type: "atom", value: action }, {}, state)
 
     if (action_result.type == "tuple") {
       window.state = action_result.data[0]
@@ -162,8 +162,8 @@ class Hologram {
   }
 
   static render(prev_vnode, context) {
-    let template = context.page.template()
-    context.module = context.page
+    let template = context.pageModule.template()
+    context.scopeModule = context.pageModule
     let vnode = Hologram.build_vnode(template, window.state, context)[0]
     patch(prev_vnode, vnode)
 
