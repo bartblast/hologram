@@ -11,7 +11,7 @@ defmodule Hologram.Compiler.ModuleDefinitionGenerator do
       |> Enum.join("\n")
 
     """
-    class #{class} {
+    window.#{class} = class #{class} {
 
     #{functions}
     }

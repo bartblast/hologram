@@ -128,7 +128,7 @@ defmodule Hologram.Compiler.GeneratorTest do
       }
 
       result = Generator.generate(ir, @context)
-      expected = "class Test {\n\n\n}\n"
+      expected = "window.Test = class Test {\n\n\n}\n"
 
       assert result == expected
     end
