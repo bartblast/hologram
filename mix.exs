@@ -16,7 +16,7 @@ defmodule Demo.MixProject do
       version: "0.0.1",
       elixir: "~> 1.11",
       elixirc_paths: elixirc_paths(Mix.env()),
-      compilers: [:phoenix, :gettext] ++ Mix.compilers(),
+      compilers: [:phoenix, :gettext] ++ Mix.compilers() ++ [:hologram],
       start_permanent: Mix.env() == :prod,
       aliases: aliases(),
       description: "Work in progress...",
