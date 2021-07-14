@@ -49,7 +49,6 @@ defmodule Demo.MixProject do
       {:ecto_sql, "~> 3.4"},
       {:postgrex, ">= 0.0.0"},
       {:phoenix_html, "~> 2.11"},
-      {:phoenix_live_reload, "~> 1.2", only: :dev},
       {:phoenix_live_dashboard, "~> 0.4"},
       {:telemetry_metrics, "~> 0.4"},
       {:telemetry_poller, "~> 0.4"},
@@ -57,7 +56,10 @@ defmodule Demo.MixProject do
       {:jason, "~> 1.0"},
       {:plug_cowboy, "~> 2.0"},
       {:saxy, "~> 1.3.0"},
-      {:ex_doc, ">= 0.0.0", only: :dev, runtime: false}
+
+      {:ex_doc, ">= 0.0.0", only: :dev, runtime: false},
+      {:file_system, "~> 0.2.10", only: :dev},
+      {:phoenix_live_reload, "~> 1.2", only: :dev}
     ]
   end
 
