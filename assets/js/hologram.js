@@ -8,8 +8,9 @@ import {attributesModule, eventListenersModule, h, init, toVNode} from "snabbdom
 const patch = init([eventListenersModule, attributesModule]);
 
 import Client from "./hologram/client"
+import EventHandler from "./hologram/event_handler"
 
-class Hologram {
+export default class Hologram {
   static onReady(document, callback) {
     if (
       document.readyState === "interactive" ||
@@ -84,7 +85,7 @@ class Hologram {
     let event_handlers = {}
 
     if (node.attrs.on_click) {
-      event_handlers.click = Hologram.handle_click.bind(null, context, node.attrs.on_click, state)
+      event_handlers.click = EventHandler.handleClickEvent.bind(null, context, node.attrs.on_click, state)
     }
 
     return event_handlers
@@ -99,18 +100,6 @@ class Hologram {
 
   static get_module(name) {
     return eval(name.replace(/\./g, ""))
-  }
-
-  static handle_click(context, action, state, _event) {
-    let action_result = context.scopeModule.action({ type: "atom", value: action }, {}, state)
-
-    if (action_result.type == "tuple") {
-      window.state = action_result.data[0]
-    } else {
-      window.state = action_result
-    }
-
-    Hologram.render(window.prev_vnode, context)
   }
 
   static isPatternMatched(left, right) {
