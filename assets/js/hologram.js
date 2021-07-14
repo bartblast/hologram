@@ -38,44 +38,6 @@ export default class Hologram {
 
   // TODO: refactor & test functions below
 
-  static build_vnode(node, state, context) {
-    if (Array.isArray(node)) {
-      return node.reduce((acc, n) => {
-        acc.push(...Hologram.build_vnode(n, state, context))
-        return acc
-      }, [])
-    }
-
-    switch (node.type) {
-      case "component":
-        let module = Hologram.get_module(node.module)
-
-        if (module.hasOwnProperty("action")) {
-          context = Object.assign({}, context)
-          context.scopeModule = module
-        }
-
-        return Hologram.build_vnode(node.children, state, context)
-
-      case "element":
-        let children = node.children.reduce((acc, child) => {
-          acc.push(...Hologram.build_vnode(child, state, context))
-          return acc
-        }, [])
-
-        let event_handlers = DOM.buildVNodeEventHandlers(node, state, context)
-        let attrs = DOM.buildVNodeAttrs(node)
-
-        return [h(node.tag, {attrs: attrs, on: event_handlers}, children)]
-
-      case "expression":
-        return [Hologram.evaluate(node.callback(state))]
-
-      case "text":
-        return [node.content]
-    } 
-  }
-
   static evaluate(value) {
     switch (value.type) {
       case "integer":
@@ -138,7 +100,7 @@ export default class Hologram {
   static render(prev_vnode, context) {
     let template = context.pageModule.template()
     context.scopeModule = context.pageModule
-    let vnode = Hologram.build_vnode(template, window.state, context)[0]
+    let vnode = DOM.buildVNode(template, window.state, context)[0]
     patch(prev_vnode, vnode)
 
     return vnode
