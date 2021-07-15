@@ -87,15 +87,6 @@ export default class Hologram {
     return true;
   }
 
-  static render(prev_vnode, context, runtime) {
-    let template = context.pageModule.template()
-    context.scopeModule = context.pageModule
-    let vnode = DOM.buildVNode(template, runtime.state, context, runtime)[0]
-    patch(prev_vnode, vnode)
-
-    return vnode
-  }
-
   static run(window, pageModule, state) {
     Hologram.onReady(window.document, () => {
       const client = new Client()
@@ -104,7 +95,7 @@ export default class Hologram {
       let container = window.document.body
       window.prev_vnode = toVNode(container)
       let context = {scopeModule: pageModule, pageModule: pageModule}
-      window.prev_vnode = Hologram.render(window.prev_vnode, context, runtime)
+      window.prev_vnode = DOM.render(window.prev_vnode, context, runtime)
     })
   }
 }

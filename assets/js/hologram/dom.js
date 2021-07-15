@@ -63,4 +63,13 @@ export default class DOM {
 
     return eventHandlers
   }
+
+  static render(prev_vnode, context, runtime) {
+    let template = context.pageModule.template()
+    context.scopeModule = context.pageModule
+    let vnode = DOM.buildVNode(template, runtime.state, context, runtime)[0]
+    patch(prev_vnode, vnode)
+
+    return vnode
+  }
 }

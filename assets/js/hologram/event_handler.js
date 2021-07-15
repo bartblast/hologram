@@ -1,6 +1,6 @@
 // TODO: refactor & test
 
-import Hologram from "../hologram"
+import DOM from "./dom"
 
 export default class EventHandler {
   static handleClickEvent(context, action, state, runtime, _event) {
@@ -12,6 +12,6 @@ export default class EventHandler {
       runtime.state = actionResult
     }
 
-    Hologram.render(window.prev_vnode, context, runtime)
+    DOM.render(window.prev_vnode, context, runtime)
   }
 }
