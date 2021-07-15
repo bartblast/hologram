@@ -4,11 +4,6 @@ import "regenerator-runtime/runtime";
 // see: https://www.blazemeter.com/blog/the-correct-way-to-import-lodash-libraries-a-benchmark
 import cloneDeep from "lodash/cloneDeep";
 
-import {attributesModule, eventListenersModule, h, init, toVNode} from "snabbdom";
-const patch = init([eventListenersModule, attributesModule]);
-
-import Client from "./hologram/client"
-import DOM from "./hologram/dom"
 import Runtime from "./hologram/runtime"
 
 export default class Hologram {
@@ -89,10 +84,8 @@ export default class Hologram {
 
   static run(window, pageModule, state) {
     Hologram.onReady(window.document, () => {
-      const client = new Client()
-      const runtime = new Runtime(state)
-      const dom = new DOM()
-      dom.render(runtime, pageModule)
+      window.hologramRuntime = new Runtime(pageModule, state)
+      window.hologramRuntime.start()
     })
   }
 }

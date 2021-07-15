@@ -1,5 +1,15 @@
+import Client from "./client"
+import DOM from "./dom"
+
 export default class Runtime {
-  constructor(state) {
+  constructor(pageModule, state) {
+    this.client = new Client()
+    this.dom = new DOM()
+    this.pageModule = pageModule
     this.state = state
+  }
+
+  start() {
+    this.dom.render(this, this.pageModule)
   }
 }
