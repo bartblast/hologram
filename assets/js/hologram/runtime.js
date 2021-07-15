@@ -5,7 +5,7 @@ import DOM from "./dom"
 
 export default class Runtime {
   constructor() {
-    this.client = new Client()
+    this.client = new Client(this)
     this.client.connect()
 
     this.dom = new DOM(this)
@@ -18,11 +18,17 @@ export default class Runtime {
 
     if (actionResult.type == "tuple") {
       this.state = actionResult.data[0]
+      this.client.pushCommand(actionResult.data[1].value)
     } else {
       this.state = actionResult
     }
 
     this.dom.render(context.pageModule)
+  }
+
+  handleCommandResponse(result) {
+    console.log("command returned")
+    console.debug(result)
   }
 
   handleNewPage(pageModule, state) {

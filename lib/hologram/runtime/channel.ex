@@ -6,7 +6,8 @@ defmodule Hologram.Channel do
     {:ok, socket}
   end
 
-  def handle_in("command", {command, params}, socket) do
-    {:reply, :ok, socket}
+  def handle_in("command", command, socket) do
+    result = "some command result"
+    {:reply, {:ok, result}, socket}
   end
 end
