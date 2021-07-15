@@ -6,6 +6,8 @@ import DOM from "./dom"
 export default class Runtime {
   constructor() {
     this.client = new Client()
+    this.client.connect()
+
     this.dom = new DOM(this)
     this.pageModule = null
     this.state = null
@@ -23,7 +25,7 @@ export default class Runtime {
     this.dom.render(context.pageModule)
   }
 
-  restart(pageModule, state) {
+  handleNewPage(pageModule, state) {
     this.pageModule = pageModule
     this.state = state
 

@@ -9,7 +9,7 @@ export default class Client {
     this.socket = null
   }
 
-  static async connect() {
+  async connect() {
     const socket = new Socket("/socket");
     socket.connect();
 

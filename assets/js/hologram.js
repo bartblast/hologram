@@ -92,7 +92,7 @@ export default class Hologram {
 
   static run(window, pageModule, state) {
     Hologram.onReady(window.document, () => {
-      Hologram.getRuntime().restart(pageModule, state)
+      Hologram.getRuntime().handleNewPage(pageModule, state)
     })
   }
 }
