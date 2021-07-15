@@ -10,10 +10,14 @@ import EventHandler from "./event_handler"
 import Hologram from "../hologram"
 
 export default class DOM {
-  static buildVNode(node, state, context, runtime) {
+  constructor() {
+    this.oldVNode = null
+  }
+
+  static buildVNode(node, state, context, runtime, dom) {
     if (Array.isArray(node)) {
       return node.reduce((acc, n) => {
-        acc.push(...DOM.buildVNode(n, state, context, runtime))
+        acc.push(...DOM.buildVNode(n, state, context, runtime, dom))
         return acc
       }, [])
     }
@@ -27,15 +31,15 @@ export default class DOM {
           context.scopeModule = module
         }
 
-        return DOM.buildVNode(node.children, state, context, runtime)
+        return DOM.buildVNode(node.children, state, context, runtime, dom)
 
       case "element":
         let children = node.children.reduce((acc, child) => {
-          acc.push(...DOM.buildVNode(child, state, context, runtime))
+          acc.push(...DOM.buildVNode(child, state, context, runtime, dom))
           return acc
         }, [])
 
-        let event_handlers = DOM.buildVNodeEventHandlers(node, state, context, runtime)
+        let event_handlers = DOM.buildVNodeEventHandlers(node, state, context, runtime, dom)
         let attrs = DOM.buildVNodeAttrs(node)
 
         return [h(node.tag, {attrs: attrs, on: event_handlers}, children)]
@@ -54,22 +58,27 @@ export default class DOM {
     return attrs
   }
 
-  static buildVNodeEventHandlers(node, state, context, runtime) {
+  static buildVNodeEventHandlers(node, state, context, runtime, dom) {
     const eventHandlers = {}
 
     if (node.attrs.on_click) {
-      eventHandlers.click = EventHandler.handleClickEvent.bind(null, context, node.attrs.on_click, state, runtime)
+      eventHandlers.click = EventHandler.handleClickEvent.bind(null, context, node.attrs.on_click, state, runtime, dom)
     }
 
     return eventHandlers
   }
 
-  static render(prev_vnode, context, runtime) {
-    let template = context.pageModule.template()
-    context.scopeModule = context.pageModule
-    let vnode = DOM.buildVNode(template, runtime.state, context, runtime)[0]
-    patch(prev_vnode, vnode)
+  render(runtime, pageModule) {
+    if (!this.oldVNode) {
+      const container = window.document.body
+      this.oldVNode = toVNode(container)
+    }
 
-    return vnode
+    let context = {scopeModule: pageModule, pageModule: pageModule}
+    let template = context.pageModule.template()
+
+    let newVNode = DOM.buildVNode(template, runtime.state, context, runtime, this)[0]
+    patch(this.oldVNode, newVNode)
+    this.oldVNode = newVNode
   }
 }

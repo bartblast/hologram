@@ -91,11 +91,8 @@ export default class Hologram {
     Hologram.onReady(window.document, () => {
       const client = new Client()
       const runtime = new Runtime(state)
-
-      let container = window.document.body
-      window.prev_vnode = toVNode(container)
-      let context = {scopeModule: pageModule, pageModule: pageModule}
-      window.prev_vnode = DOM.render(window.prev_vnode, context, runtime)
+      const dom = new DOM()
+      dom.render(runtime, pageModule)
     })
   }
 }
