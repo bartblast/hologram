@@ -6,9 +6,13 @@ defmodule Mix.Tasks.Compile.Hologram do
   alias Hologram.Compiler.{Builder, Helpers}
   alias Hologram.Runtime.Reflection
 
+  @cwd File.cwd!()
+
   def run(_) do
-    File.cwd!() <> "/priv/static/hologram"
+    "#{@cwd}/priv/static/hologram"
     |> File.mkdir_p!()
+
+    remove_old_files()
 
     # DEFER: parallelize
     Reflection.list_pages()
@@ -23,7 +27,7 @@ defmodule Mix.Tasks.Compile.Hologram do
       Enum.into(digests, %{})
       |> Jason.encode!()
 
-    File.cwd!() <> "/priv/static/hologram/manifest.json"
+    "#{@cwd}/priv/static/hologram/manifest.json"
     |> File.write!(json)
   end
 
@@ -37,9 +41,15 @@ defmodule Mix.Tasks.Compile.Hologram do
       |> Base.encode16()
       |> String.downcase()
 
-    File.cwd!() <> "/priv/static/hologram/page-#{digest}.js"
+    "#{@cwd}/priv/static/hologram/page-#{digest}.js"
     |> File.write!(js)
 
     {page, digest}
+  end
+
+  defp remove_old_files do
+    "#{@cwd}/priv/static/hologram/*"
+    |> Path.wildcard()
+    |> Enum.each(&File.rm!/1)
   end
 end

@@ -19,6 +19,13 @@ defmodule Demo.Application do
       # {Demo.Worker, arg}
     ]
 
+    children =
+      if Mix.env() == :dev do
+        children ++ [Hologram.Runtime.Watcher]
+      else
+        children
+      end
+
     # See https://hexdocs.pm/elixir/Supervisor.html
     # for other strategies and supported options
     opts = [strategy: :one_for_one, name: Demo.Supervisor]
