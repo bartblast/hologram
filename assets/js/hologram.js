@@ -1,3 +1,5 @@
+// DEFER: refactor & test
+
 import "core-js/stable";
 import "regenerator-runtime/runtime"; 
 
@@ -7,8 +9,6 @@ import cloneDeep from "lodash/cloneDeep";
 import Runtime from "./hologram/runtime"
 
 export default class Hologram {
-  // TODO: refactor & test functions below
-
   static evaluate(value) {
     switch (value.type) {
       case "integer":

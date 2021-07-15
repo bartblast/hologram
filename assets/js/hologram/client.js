@@ -1,4 +1,4 @@
-// DEFER: already refactored, implement tests
+// DEFER: refactor & test
 
 import { Socket } from "phoenix";
 

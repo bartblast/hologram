@@ -1,3 +1,5 @@
+// DEFER: refactor & test
+
 import Client from "./client"
 import DOM from "./dom"
 

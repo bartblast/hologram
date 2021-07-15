@@ -1,4 +1,4 @@
-// TODO: refactor & test
+// DEFER: refactor & test
 
 // see: https://www.blazemeter.com/blog/the-correct-way-to-import-lodash-libraries-a-benchmark
 import cloneDeep from "lodash/cloneDeep";
