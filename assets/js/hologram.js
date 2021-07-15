@@ -20,9 +20,9 @@ export default class Hologram {
     return eval(name.replace(/\./g, ""))
   }
 
-  static getRuntime(pageModule, state) {
+  static getRuntime() {
     if (!window.hologramRuntime) {
-      window.hologramRuntime = new Runtime(pageModule, state)
+      window.hologramRuntime = new Runtime()
     }
 
     return window.hologramRuntime
@@ -92,8 +92,7 @@ export default class Hologram {
 
   static run(window, pageModule, state) {
     Hologram.onReady(window.document, () => {
-      const runtime = Hologram.getRuntime(pageModule, state)
-      runtime.restart()
+      Hologram.getRuntime().restart(pageModule, state)
     })
   }
 }
