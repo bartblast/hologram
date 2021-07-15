@@ -9,7 +9,7 @@ export default class Runtime {
     this.state = state
   }
 
-  start() {
+  restart() {
     this.dom.render(this, this.pageModule)
   }
 }

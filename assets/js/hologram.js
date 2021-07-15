@@ -20,6 +20,14 @@ export default class Hologram {
     return eval(name.replace(/\./g, ""))
   }
 
+  static getRuntime(pageModule, state) {
+    if (!window.hologramRuntime) {
+      window.hologramRuntime = new Runtime(pageModule, state)
+    }
+
+    return window.hologramRuntime
+  }
+
   static isPatternMatched(left, right) {
     let lType = left.type;
     let rType = right.type;
@@ -84,8 +92,8 @@ export default class Hologram {
 
   static run(window, pageModule, state) {
     Hologram.onReady(window.document, () => {
-      window.hologramRuntime = new Runtime(pageModule, state)
-      window.hologramRuntime.start()
+      const runtime = Hologram.getRuntime(pageModule, state)
+      runtime.restart()
     })
   }
 }
