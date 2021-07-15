@@ -6,7 +6,6 @@ import cloneDeep from "lodash/cloneDeep";
 import {attributesModule, eventListenersModule, h, init, toVNode} from "snabbdom";
 const patch = init([eventListenersModule, attributesModule]);
 
-import EventHandler from "./event_handler"
 import Hologram from "../hologram"
 
 export default class DOM {
@@ -62,7 +61,7 @@ export default class DOM {
     const eventHandlers = {}
 
     if (node.attrs.on_click) {
-      eventHandlers.click = EventHandler.handleClickEvent.bind(null, context, node.attrs.on_click, state, runtime)
+      eventHandlers.click = runtime.handleClickEvent.bind(runtime, context, node.attrs.on_click, state)
     }
 
     return eventHandlers

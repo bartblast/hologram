@@ -9,6 +9,18 @@ export default class Runtime {
     this.state = null
   }
 
+  handleClickEvent(context, action, state, _event) {
+    let actionResult = context.scopeModule.action({ type: "atom", value: action }, {}, state)
+
+    if (actionResult.type == "tuple") {
+      this.state = actionResult.data[0]
+    } else {
+      this.state = actionResult
+    }
+
+    this.dom.render(this, context.pageModule)
+  }
+
   restart(pageModule, state) {
     this.pageModule = pageModule
     this.state = state
