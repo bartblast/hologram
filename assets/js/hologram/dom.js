@@ -14,10 +14,10 @@ export default class DOM {
     this.oldVNode = null
   }
 
-  static buildVNode(node, state, context, runtime, dom) {
+  static buildVNode(node, state, context, runtime) {
     if (Array.isArray(node)) {
       return node.reduce((acc, n) => {
-        acc.push(...DOM.buildVNode(n, state, context, runtime, dom))
+        acc.push(...DOM.buildVNode(n, state, context, runtime))
         return acc
       }, [])
     }
@@ -31,15 +31,15 @@ export default class DOM {
           context.scopeModule = module
         }
 
-        return DOM.buildVNode(node.children, state, context, runtime, dom)
+        return DOM.buildVNode(node.children, state, context, runtime)
 
       case "element":
         let children = node.children.reduce((acc, child) => {
-          acc.push(...DOM.buildVNode(child, state, context, runtime, dom))
+          acc.push(...DOM.buildVNode(child, state, context, runtime))
           return acc
         }, [])
 
-        let event_handlers = DOM.buildVNodeEventHandlers(node, state, context, runtime, dom)
+        let event_handlers = DOM.buildVNodeEventHandlers(node, state, context, runtime)
         let attrs = DOM.buildVNodeAttrs(node)
 
         return [h(node.tag, {attrs: attrs, on: event_handlers}, children)]
@@ -58,11 +58,11 @@ export default class DOM {
     return attrs
   }
 
-  static buildVNodeEventHandlers(node, state, context, runtime, dom) {
+  static buildVNodeEventHandlers(node, state, context, runtime) {
     const eventHandlers = {}
 
     if (node.attrs.on_click) {
-      eventHandlers.click = EventHandler.handleClickEvent.bind(null, context, node.attrs.on_click, state, runtime, dom)
+      eventHandlers.click = EventHandler.handleClickEvent.bind(null, context, node.attrs.on_click, state, runtime)
     }
 
     return eventHandlers
@@ -77,7 +77,7 @@ export default class DOM {
     let context = {scopeModule: pageModule, pageModule: pageModule}
     let template = context.pageModule.template()
 
-    let newVNode = DOM.buildVNode(template, runtime.state, context, runtime, this)[0]
+    let newVNode = DOM.buildVNode(template, runtime.state, context, runtime)[0]
     patch(this.oldVNode, newVNode)
     this.oldVNode = newVNode
   }

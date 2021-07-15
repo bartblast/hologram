@@ -3,7 +3,7 @@
 import DOM from "./dom"
 
 export default class EventHandler {
-  static handleClickEvent(context, action, state, runtime, dom, _event) {
+  static handleClickEvent(context, action, state, runtime, _event) {
     let actionResult = context.scopeModule.action({ type: "atom", value: action }, {}, state)
 
     if (actionResult.type == "tuple") {
@@ -12,6 +12,6 @@ export default class EventHandler {
       runtime.state = actionResult
     }
 
-    dom.render(runtime, context.pageModule)
+    runtime.dom.render(runtime, context.pageModule)
   }
 }
