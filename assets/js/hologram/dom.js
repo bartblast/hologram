@@ -59,6 +59,7 @@ export default class DOM {
     const eventHandlers = {}
 
     if (node.attrs.on_click) {
+      // DEFER: research whether this creates a new handler on each render (how to optimize it?)
       eventHandlers.click = this.runtime.handleClickEvent.bind(this.runtime, context, node.attrs.on_click, state)
     }
 
