@@ -1,22 +1,20 @@
 // DEFER: refactor & test
 
-// see: https://www.blazemeter.com/blog/the-correct-way-to-import-lodash-libraries-a-benchmark
-import cloneDeep from "lodash/cloneDeep";
-
 import {attributesModule, eventListenersModule, h, init, toVNode} from "snabbdom";
 const patch = init([eventListenersModule, attributesModule]);
 
 import Hologram from "../hologram"
 
 export default class DOM {
-  constructor() {
+  constructor(runtime) {
     this.oldVNode = null
+    this.runtime = runtime
   }
 
-  static buildVNode(node, state, context, runtime) {
+  buildVNode(node, state, context) {
     if (Array.isArray(node)) {
       return node.reduce((acc, n) => {
-        acc.push(...DOM.buildVNode(n, state, context, runtime))
+        acc.push(...this.buildVNode(n, state, context))
         return acc
       }, [])
     }
@@ -30,15 +28,15 @@ export default class DOM {
           context.scopeModule = module
         }
 
-        return DOM.buildVNode(node.children, state, context, runtime)
+        return this.buildVNode(node.children, state, context)
 
       case "element":
         let children = node.children.reduce((acc, child) => {
-          acc.push(...DOM.buildVNode(child, state, context, runtime))
+          acc.push(...this.buildVNode(child, state, context))
           return acc
         }, [])
 
-        let event_handlers = DOM.buildVNodeEventHandlers(node, state, context, runtime)
+        let event_handlers = this.buildVNodeEventHandlers(node, state, context)
         let attrs = DOM.buildVNodeAttrs(node)
 
         return [h(node.tag, {attrs: attrs, on: event_handlers}, children)]
@@ -57,17 +55,17 @@ export default class DOM {
     return attrs
   }
 
-  static buildVNodeEventHandlers(node, state, context, runtime) {
+  buildVNodeEventHandlers(node, state, context) {
     const eventHandlers = {}
 
     if (node.attrs.on_click) {
-      eventHandlers.click = runtime.handleClickEvent.bind(runtime, context, node.attrs.on_click, state)
+      eventHandlers.click = this.runtime.handleClickEvent.bind(this.runtime, context, node.attrs.on_click, state)
     }
 
     return eventHandlers
   }
 
-  render(runtime, pageModule) {
+  render(pageModule) {
     if (!this.oldVNode) {
       const container = window.document.body
       this.oldVNode = toVNode(container)
@@ -76,7 +74,7 @@ export default class DOM {
     let context = {scopeModule: pageModule, pageModule: pageModule}
     let template = context.pageModule.template()
 
-    let newVNode = DOM.buildVNode(template, runtime.state, context, runtime)[0]
+    let newVNode = this.buildVNode(template, this.runtime.state, context)[0]
     patch(this.oldVNode, newVNode)
     this.oldVNode = newVNode
   }

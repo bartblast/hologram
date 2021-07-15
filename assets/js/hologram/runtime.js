@@ -6,7 +6,7 @@ import DOM from "./dom"
 export default class Runtime {
   constructor() {
     this.client = new Client()
-    this.dom = new DOM()
+    this.dom = new DOM(this)
     this.pageModule = null
     this.state = null
   }
@@ -20,13 +20,13 @@ export default class Runtime {
       this.state = actionResult
     }
 
-    this.dom.render(this, context.pageModule)
+    this.dom.render(context.pageModule)
   }
 
   restart(pageModule, state) {
     this.pageModule = pageModule
     this.state = state
 
-    this.dom.render(this, this.pageModule)
+    this.dom.render(this.pageModule)
   }
 }
