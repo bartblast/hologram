@@ -11,31 +11,6 @@ import Client from "./hologram/client"
 import DOM from "./hologram/dom"
 
 export default class Hologram {
-  static onReady(document, callback) {
-    if (
-      document.readyState === "interactive" ||
-      document.readyState === "complete"
-    ) {
-      callback();
-    } else {
-      document.addEventListener("DOMContentLoaded", function listener() {
-        document.removeEventListener("DOMContentLoaded", listener);
-        callback();
-      });
-    }
-  }
-
-  static async start(window, pageModule) {
-    Hologram.onReady(window.document, () => {
-      this.client = new Client()
-
-      let container = window.document.body
-      window.prev_vnode = toVNode(container)
-      let context = {scopeModule: pageModule, pageModule: pageModule}
-      window.prev_vnode = Hologram.render(window.prev_vnode, context)
-    })
-  }
-
   // TODO: refactor & test functions below
 
   static evaluate(value) {
@@ -83,6 +58,20 @@ export default class Hologram {
     }
   }
 
+  static onReady(document, callback) {
+    if (
+      document.readyState === "interactive" ||
+      document.readyState === "complete"
+    ) {
+      callback();
+    } else {
+      document.addEventListener("DOMContentLoaded", function listener() {
+        document.removeEventListener("DOMContentLoaded", listener);
+        callback();
+      });
+    }
+  }
+
   static patternMatchFunctionArgs(params, args) {
     if (args.length != params.length) {
       return false;
@@ -104,6 +93,18 @@ export default class Hologram {
     patch(prev_vnode, vnode)
 
     return vnode
+  }
+
+  static run(window, pageModule, state) {
+    Hologram.onReady(window.document, () => {
+      this.client = new Client()
+      window.state = state
+
+      let container = window.document.body
+      window.prev_vnode = toVNode(container)
+      let context = {scopeModule: pageModule, pageModule: pageModule}
+      window.prev_vnode = Hologram.render(window.prev_vnode, context)
+    })
   }
 }
 
