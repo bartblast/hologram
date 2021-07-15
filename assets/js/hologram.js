@@ -9,6 +9,7 @@ const patch = init([eventListenersModule, attributesModule]);
 
 import Client from "./hologram/client"
 import DOM from "./hologram/dom"
+import Runtime from "./hologram/runtime"
 
 export default class Hologram {
   // TODO: refactor & test functions below
@@ -86,10 +87,10 @@ export default class Hologram {
     return true;
   }
 
-  static render(prev_vnode, context) {
+  static render(prev_vnode, context, runtime) {
     let template = context.pageModule.template()
     context.scopeModule = context.pageModule
-    let vnode = DOM.buildVNode(template, window.state, context)[0]
+    let vnode = DOM.buildVNode(template, runtime.state, context, runtime)[0]
     patch(prev_vnode, vnode)
 
     return vnode
@@ -97,13 +98,13 @@ export default class Hologram {
 
   static run(window, pageModule, state) {
     Hologram.onReady(window.document, () => {
-      this.client = new Client()
-      window.state = state
+      const client = new Client()
+      const runtime = new Runtime(state)
 
       let container = window.document.body
       window.prev_vnode = toVNode(container)
       let context = {scopeModule: pageModule, pageModule: pageModule}
-      window.prev_vnode = Hologram.render(window.prev_vnode, context)
+      window.prev_vnode = Hologram.render(window.prev_vnode, context, runtime)
     })
   }
 }

@@ -10,10 +10,10 @@ import EventHandler from "./event_handler"
 import Hologram from "../hologram"
 
 export default class DOM {
-  static buildVNode(node, state, context) {
+  static buildVNode(node, state, context, runtime) {
     if (Array.isArray(node)) {
       return node.reduce((acc, n) => {
-        acc.push(...DOM.buildVNode(n, state, context))
+        acc.push(...DOM.buildVNode(n, state, context, runtime))
         return acc
       }, [])
     }
@@ -27,15 +27,15 @@ export default class DOM {
           context.scopeModule = module
         }
 
-        return DOM.buildVNode(node.children, state, context)
+        return DOM.buildVNode(node.children, state, context, runtime)
 
       case "element":
         let children = node.children.reduce((acc, child) => {
-          acc.push(...DOM.buildVNode(child, state, context))
+          acc.push(...DOM.buildVNode(child, state, context, runtime))
           return acc
         }, [])
 
-        let event_handlers = DOM.buildVNodeEventHandlers(node, state, context)
+        let event_handlers = DOM.buildVNodeEventHandlers(node, state, context, runtime)
         let attrs = DOM.buildVNodeAttrs(node)
 
         return [h(node.tag, {attrs: attrs, on: event_handlers}, children)]
@@ -54,11 +54,11 @@ export default class DOM {
     return attrs
   }
 
-  static buildVNodeEventHandlers(node, state, context) {
+  static buildVNodeEventHandlers(node, state, context, runtime) {
     const eventHandlers = {}
 
     if (node.attrs.on_click) {
-      eventHandlers.click = EventHandler.handleClickEvent.bind(null, context, node.attrs.on_click, state)
+      eventHandlers.click = EventHandler.handleClickEvent.bind(null, context, node.attrs.on_click, state, runtime)
     }
 
     return eventHandlers

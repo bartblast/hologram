@@ -3,15 +3,15 @@
 import Hologram from "../hologram"
 
 export default class EventHandler {
-  static handleClickEvent(context, action, state, _event) {
+  static handleClickEvent(context, action, state, runtime, _event) {
     let actionResult = context.scopeModule.action({ type: "atom", value: action }, {}, state)
 
     if (actionResult.type == "tuple") {
-      window.state = actionResult.data[0]
+      runtime.state = actionResult.data[0]
     } else {
-      window.state = actionResult
+      runtime.state = actionResult
     }
 
-    Hologram.render(window.prev_vnode, context)
+    Hologram.render(window.prev_vnode, context, runtime)
   }
 }
