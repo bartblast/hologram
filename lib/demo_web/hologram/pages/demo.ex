@@ -20,7 +20,7 @@ defmodule DemoPage do
   end
 
   def action(:increment, _params, state) do
-    {update(state, :counter, state.counter + 1), :run_command}
+    {update(state, :counter, state.counter + 1), :some_command}
 
     # DEFER: implement
     # alternative API when there is no command or redirect
