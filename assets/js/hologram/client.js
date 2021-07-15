@@ -26,9 +26,17 @@ export default class Client {
     this.channel = channel
   }
 
-  async pushCommand(command) {
+  async pushCommand(command, context) {
+    const payload = {
+      command: command,
+      context: {
+        page_module: context.pageModule.name,
+        scope_module: context.scopeModule.name
+      }
+    }
+
     this.channel
-      .push("command", command)
+      .push("command", payload)
       .receive("ok", (response) => {
         this.runtime.handleCommandResponse(response)
       })

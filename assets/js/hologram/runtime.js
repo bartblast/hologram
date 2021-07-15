@@ -18,7 +18,7 @@ export default class Runtime {
 
     if (actionResult.type == "tuple") {
       this.state = actionResult.data[0]
-      this.client.pushCommand(actionResult.data[1].value)
+      this.client.pushCommand(actionResult.data[1].value, context)
     } else {
       this.state = actionResult
     }
@@ -26,9 +26,9 @@ export default class Runtime {
     this.dom.render(context.pageModule)
   }
 
-  handleCommandResponse(result) {
+  handleCommandResponse(response) {
     console.log("command returned")
-    console.debug(result)
+    console.debug(response)
   }
 
   handleNewPage(pageModule, state) {
