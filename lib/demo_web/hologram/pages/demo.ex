@@ -17,6 +17,10 @@ defmodule DemoPage do
       <Counter value={{ @counter }} />
       <div><button on_click="increment">Increment</button></div>
       <div>{{ @text }}</div>
+      <form on_submit="submit_form">
+        <input type="text" name="email" />
+        <button type="submit">Submit</button>
+      </form>
     </body>
     """
   end

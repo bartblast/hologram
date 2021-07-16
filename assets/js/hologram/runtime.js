@@ -36,7 +36,7 @@ export default class Runtime {
 
     // TODO: return context in command response
     const context = {pageModule: this.pageModule, scopeModule: this.pageModule}
-    
+
     this.executeAction(action, {}, this.state, context)
   }
 
@@ -45,5 +45,10 @@ export default class Runtime {
     this.state = state
 
     this.dom.render(this.pageModule)
+  }
+
+  handleSubmitEvent(context, action, state, event) {
+    console.log("submit event...")
+    event.preventDefault()
   }
 }
