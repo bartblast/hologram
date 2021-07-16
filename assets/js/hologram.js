@@ -9,7 +9,7 @@ import cloneDeep from "lodash/cloneDeep";
 import Runtime from "./hologram/runtime"
 
 export default class Hologram {
-  static evaluate(value) {
+  static interpolate(value) {
     switch (value.type) {
       case "integer":
         return `${value.value}`

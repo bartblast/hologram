@@ -42,7 +42,7 @@ export default class DOM {
         return [h(node.tag, {attrs: attrs, on: event_handlers}, children)]
 
       case "expression":
-        return [Hologram.evaluate(node.callback(state))]
+        return [Hologram.interpolate(node.callback(state))]
 
       case "text":
         return [node.content]
