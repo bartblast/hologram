@@ -26,6 +26,7 @@ defmodule DemoWeb.HologramController do
   end
 
   defp generate_html(module, conn, html, class_name, hydrated_state) do
+    # DEFER: optimize, e.g. load the manifest in config
     digest =
       File.cwd!() <> "/priv/static/hologram/manifest.json"
       |> File.read!()
