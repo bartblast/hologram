@@ -39,8 +39,12 @@ defmodule DemoPage do
     update(state, :counter, 0)
   end
 
+  def action(:update_text_1, _params, state) do
+    update(state, :text, "hello!")
+  end
+
   def command(:some_command, _params) do
-    :some_action
+    :update_text_1
 
     # DEFER: implement
     # alternative API when there are action param:

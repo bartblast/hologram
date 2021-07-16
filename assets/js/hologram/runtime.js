@@ -13,8 +13,8 @@ export default class Runtime {
     this.state = null
   }
 
-  handleClickEvent(context, action, state, _event) {
-    let actionResult = context.scopeModule.action({ type: "atom", value: action }, {}, state)
+  executeAction(action, params, state, context) {
+    const actionResult = context.scopeModule.action({ type: "atom", value: action }, params, state)
 
     if (actionResult.type == "tuple") {
       this.state = actionResult.data[0]
@@ -26,8 +26,18 @@ export default class Runtime {
     this.dom.render(context.pageModule)
   }
 
+  handleClickEvent(context, action, state, _event) {
+    this.executeAction(action, {}, state, context)
+  }
+
   handleCommandResponse(response) {
-    console.debug(response)
+    const action = response[0]
+    const params = response[1]
+
+    // TODO: return context in command response
+    const context = {pageModule: this.pageModule, scopeModule: this.pageModule}
+    
+    this.executeAction(action, {}, this.state, context)
   }
 
   handleNewPage(pageModule, state) {

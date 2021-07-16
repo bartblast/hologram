@@ -19,6 +19,15 @@ defmodule Hologram.Channel do
       |> Helpers.module()
       |> apply(:command, [command, %{}])
 
-    {:reply, {:ok, result}, socket}
+    payload =
+      case result do
+        {action, params} ->
+          # TODO: implement
+          [result, []]
+        _ ->
+          [result, []]
+      end
+
+    {:reply, {:ok, payload}, socket}
   end
 end
