@@ -1,6 +1,5 @@
 defmodule Hologram.Compiler.ModuleDefinitionGenerator do
   alias Hologram.Compiler.{Context, FunctionDefinitionGenerator, Helpers}
-  alias Hologram.Compiler.IR.FunctionDefinition
 
   def generate(ir, name, %Context{} = context) do
     class = Helpers.class_name(name)

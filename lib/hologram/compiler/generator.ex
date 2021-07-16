@@ -1,5 +1,5 @@
 defmodule Hologram.Compiler.Generator do
-  alias Hologram.Compiler.{Context, Helpers}
+  alias Hologram.Compiler.Context
 
   alias Hologram.Compiler.{
     AdditionOperatorGenerator,
@@ -15,15 +15,12 @@ defmodule Hologram.Compiler.Generator do
   }
 
   alias Hologram.Compiler.IR.{
-    AccessOperator,
     AdditionOperator,
     AtomType,
     BooleanType,
     DotOperator,
     FunctionCall,
-    FunctionDefinition,
     IntegerType,
-    ListType,
     MapType,
     ModuleAttributeOperator,
     ModuleDefinition,
@@ -95,7 +92,7 @@ defmodule Hologram.Compiler.Generator do
     FunctionCallGenerator.generate(module, function, params, context)
   end
 
-  def generate(%Variable{name: name}, _, placeholder: true) do
+  def generate(%Variable{}, _, placeholder: true) do
     "{ type: 'placeholder' }"
   end
 

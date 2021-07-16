@@ -27,7 +27,7 @@ defmodule Hologram.Channel do
 
     payload =
       case result do
-        {action, params} ->
+        {_action, _params} ->
           # TODO: implement
           [result, []]
         _ ->

@@ -11,4 +11,8 @@ defmodule Hologram.Test.Fixtures.Compiler.Processor.Module9 do
     <Module7></Module7>
     """
   end
+
+  # prevent unused alias compiler warning
+  Module6
+  Module7
 end

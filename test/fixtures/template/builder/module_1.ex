@@ -8,4 +8,7 @@ defmodule Hologram.Test.Fixtures.Template.Builder.Module1 do
     <Module2></Module2>
     """
   end
+
+  # prevent unused alias compiler warning
+  Module2
 end

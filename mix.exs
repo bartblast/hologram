@@ -56,9 +56,9 @@ defmodule Demo.MixProject do
       {:jason, "~> 1.0"},
       {:plug_cowboy, "~> 2.0"},
       {:saxy, "~> 1.3.0"},
+      {:file_system, "~> 0.2.10"},
 
       {:ex_doc, ">= 0.0.0", only: :dev, runtime: false},
-      {:file_system, "~> 0.2.10", only: :dev},
       {:phoenix_live_reload, "~> 1.2", only: :dev}
     ]
   end

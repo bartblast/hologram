@@ -9,11 +9,11 @@ defmodule Hologram.Compiler.Binder do
     end)
   end
 
-  def bind(%Variable{name: name} = var, path) do
+  def bind(%Variable{} = var, path) do
     [path ++ [var]]
   end
 
-  def bind(_, path) do
+  def bind(_, _) do
     []
   end
 end

@@ -16,12 +16,12 @@ defmodule Hologram.Runtime.Watcher do
     {:ok, pid}
   end
 
-  def handle_info({:file_event, _, _}, state) do
-    Mix.Tasks.Compile.Hologram.run(:no_args)
+  def handle_info({:file_event, _, :stop}, state) do
     {:noreply, state}
   end
-
-  def handle_info({:file_event, _, :stop}, state) do
+  
+  def handle_info({:file_event, _, _}, state) do
+    Mix.Tasks.Compile.Hologram.run(:no_args)
     {:noreply, state}
   end
 

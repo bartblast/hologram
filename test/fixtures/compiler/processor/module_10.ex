@@ -9,4 +9,7 @@ defmodule Hologram.Test.Fixtures.Compiler.Processor.Module10 do
     test_text
     """
   end
+
+  # prevent unused alias compiler warning
+  Module9
 end

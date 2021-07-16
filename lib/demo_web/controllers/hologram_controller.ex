@@ -6,7 +6,7 @@ defmodule DemoWeb.HologramController do
   alias Hologram.Compiler.{Helpers, Hydrator, Processor}
   alias Hologram.Template
 
-  def index(conn, params) do
+  def index(conn, _params) do
     module = conn.private.hologram_page
 
     state = module.state()

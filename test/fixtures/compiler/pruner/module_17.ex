@@ -1,7 +1,7 @@
 defmodule Hologram.Test.Fixtures.Compiler.Pruner.Module17 do
   use Hologram.Component
 
-  def action(:test_1, a, b) do
+  def action(:test_1, _a, _b) do
     some_fun_1()
   end
 
