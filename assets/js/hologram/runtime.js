@@ -51,10 +51,10 @@ export default class Runtime {
     event.preventDefault()
 
     let formData = new FormData(event.target)
-    let params = {}
+    let params = {type: 'map', data: {}}
 
     for (var el of formData.entries()) {
-      params[el[0]] = el[1]
+      params.data[`~string[${el[0]}]`] = {type: "string", value: el[1]}
     }
 
     this.executeAction(action, params, state, context)
