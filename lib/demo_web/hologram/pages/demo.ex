@@ -38,7 +38,6 @@ defmodule DemoPage do
   end
 
   def command(:some_command, _params) do
-    :timer.sleep(5_000)
     :some_action
 
     # DEFER: implement

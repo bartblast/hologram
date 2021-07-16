@@ -27,7 +27,6 @@ export default class Runtime {
   }
 
   handleCommandResponse(response) {
-    console.log("command returned")
     console.debug(response)
   }
 
