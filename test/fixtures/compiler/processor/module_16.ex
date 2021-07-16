@@ -1,6 +1,6 @@
 defmodule Hologram.Test.Fixtures.Compiler.Processor.Module16 do
   use Hologram.Page
-  alias Hologram.Test.Fixtures.Compiler.Processor.Module9
+  alias Hologram.Test.Fixtures.Compiler.Processor.Module9, warn: false
 
   def template do
     ~H"""
@@ -9,7 +9,4 @@ defmodule Hologram.Test.Fixtures.Compiler.Processor.Module16 do
     test_text
     """
   end
-
-  # prevent unused alias compiler warning
-  Module9
 end
