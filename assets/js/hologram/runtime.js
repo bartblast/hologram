@@ -48,7 +48,15 @@ export default class Runtime {
   }
 
   handleSubmitEvent(context, action, state, event) {
-    console.log("submit event...")
     event.preventDefault()
+
+    let formData = new FormData(event.target)
+    let params = {}
+
+    for (var el of formData.entries()) {
+      params[el[0]] = el[1]
+    }
+
+    this.executeAction(action, params, state, context)
   }
 }

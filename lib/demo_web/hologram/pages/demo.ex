@@ -19,6 +19,7 @@ defmodule DemoPage do
       <div>{{ @text }}</div>
       <form on_submit="submit_form">
         <input type="text" name="email" />
+        <input type="text" name="first_name" />
         <button type="submit">Submit</button>
       </form>
     </body>
