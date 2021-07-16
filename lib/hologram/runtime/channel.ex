@@ -8,7 +8,13 @@ defmodule Hologram.Channel do
     {:ok, socket}
   end
 
-  def handle_in("command", %{"command" => command, "context" => context} = request, socket) do
+  def handle_in("command", payload, socket) do
+    %{
+      "command" => command,
+      "context" => context,
+      "params" => params
+    } = payload
+
     command = String.to_atom(command)
 
     # TODO: handle modules with multiple name segments
@@ -17,7 +23,7 @@ defmodule Hologram.Channel do
       |> String.to_atom()
       |> (&[&1]).()
       |> Helpers.module()
-      |> apply(:command, [command, %{}])
+      |> apply(:command, [command, params])
 
     payload =
       case result do

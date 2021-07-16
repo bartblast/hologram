@@ -67,4 +67,9 @@ defmodule DemoPage do
     # push_action(:some_action, abc: 123, xyz: 987)
     # |> push_redirect(SomePage, abc: 123, xyz: 987)
   end
+
+  def command(:save_form, params) do
+    IO.inspect(params)
+    :update_text_1
+  end
 end

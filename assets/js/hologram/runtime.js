@@ -18,7 +18,13 @@ export default class Runtime {
 
     if (actionResult.type == "tuple") {
       this.state = actionResult.data[0]
-      this.client.pushCommand(actionResult.data[1].value, context)
+
+      let params = {}
+      if (actionResult.data[2]) {
+        params = actionResult.data[2]
+      }
+
+      this.client.pushCommand(actionResult.data[1].value, context, params)
     } else {
       this.state = actionResult
     }

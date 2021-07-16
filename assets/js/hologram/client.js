@@ -26,13 +26,14 @@ export default class Client {
     this.channel = channel
   }
 
-  async pushCommand(command, context) {
+  async pushCommand(command, context, params) {
     const payload = {
       command: command,
       context: {
         page_module: context.pageModule.name,
         scope_module: context.scopeModule.name
-      }
+      },
+      params: params
     }
 
     this.channel
