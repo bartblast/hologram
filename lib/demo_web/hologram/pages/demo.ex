@@ -5,7 +5,8 @@ defmodule DemoPage do
 
   def state do
     %{
-      counter: 0
+      counter: 0,
+      text: "abc"
     }
   end
 
@@ -15,6 +16,7 @@ defmodule DemoPage do
       <h1>Demo Page</h1>
       <Counter value={{ @counter }} />
       <div><button on_click="increment">Increment</button></div>
+      <div>{{ @text }}</div>
     </body>
     """
   end
