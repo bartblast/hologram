@@ -13,6 +13,9 @@ export default class Hologram {
     switch (value.type) {
       case "integer":
         return `${value.value}`
+        
+      case "string":
+        return `${value.value}`
     }
   }
 
