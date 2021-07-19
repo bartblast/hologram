@@ -61,7 +61,7 @@ defmodule Hologram.Compiler.Helpers do
   """
   @spec module(T.module_name_segments()) :: module()
 
-  def module(module_segs) when is_list(module_segs) do
+  def module(module_segs) do
     [:"Elixir" | module_segs]
     |> Enum.join(".")
     |> String.to_existing_atom()
