@@ -61,8 +61,8 @@ defmodule Hologram.Compiler.Helpers do
   """
   @spec module(T.module_name_segments()) :: module()
 
-  def module(module_name_segs) do
-    [:"Elixir" | module_name_segs]
+  def module(module_segs) when is_list(module_segs) do
+    [:"Elixir" | module_segs]
     |> Enum.join(".")
     |> String.to_existing_atom()
   end
@@ -96,15 +96,15 @@ defmodule Hologram.Compiler.Helpers do
   end
 
   @doc """
-  Returns the corresponding module name segments (without the "Elixir" segment at the beginning).
+  Returns the corresponding module segments (without the "Elixir" segment at the beginning).
 
   ## Examples
-      iex> Helpers.module_name_segments(Abc.Bcd)
+      iex> Helpers.module_segments(Abc.Bcd)
       [:Abc, :Bcd]
   """
-  @spec module_name_segments(module()) :: T.module_name_segments()
+  @spec module_segments(module()) :: T.module_segments()
 
-  def module_name_segments(module) do
+  def module_segments(module) do
     Module.split(module)
     |> Enum.map(&String.to_atom/1)
   end
