@@ -4,13 +4,24 @@ defmodule Hologram.Compiler.ImportTransformerTest do
   alias Hologram.Compiler.ImportTransformer
   alias Hologram.Compiler.IR.Import
 
-  test "transform/2" do
-    module_segs = [:Hologram, :Compiler, :ImportTransformerTest]
-    only = [abc: 2]
+  @expected_module Hologram.Test.Fixtures.Compiler.Transformer.Module1
 
-    result = ImportTransformer.transform(module_segs, only)
-    expected_module = Hologram.Compiler.ImportTransformerTest
-    expected = %Import{module: expected_module, only: only}
+  test "without 'only' clause" do
+    code = "import Hologram.Test.Fixtures.Compiler.Transformer.Module1"
+    {:import, _, ast} = ast(code)
+
+    result = ImportTransformer.transform(ast)
+    expected = %Import{module: @expected_module, only: []}
+
+    assert result == expected
+  end
+
+  test "with 'only' clause" do
+    code = "import Hologram.Test.Fixtures.Compiler.Transformer.Module1, only: [abc: 2]"
+    {:import, _, ast} = ast(code)
+
+    result = ImportTransformer.transform(ast)
+    expected = %Import{module: @expected_module, only: [abc: 2]}
 
     assert result == expected
   end

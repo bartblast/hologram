@@ -160,26 +160,11 @@ defmodule Hologram.Compiler.TransformerTest do
       assert %Alias{} = Transformer.transform(ast, @context)
     end
 
-    test "import without 'only' clause" do
+    test "import" do
       code = "import Hologram.Test.Fixtures.Compiler.Transformer.Module1"
       ast = ast(code)
 
-      result = Transformer.transform(ast, @context)
-      expected_module = Hologram.Test.Fixtures.Compiler.Transformer.Module1
-      expected = %Import{module: expected_module, only: []}
-
-      assert result == expected
-    end
-
-    test "import with 'only' clause" do
-      code = "import Hologram.Test.Fixtures.Compiler.Transformer.Module1, only: [abc: 2]"
-      ast = ast(code)
-
-      result = Transformer.transform(ast, @context)
-      expected_module = Hologram.Test.Fixtures.Compiler.Transformer.Module1
-      expected = %Import{module: expected_module, only: [abc: 2]}
-
-      assert result == expected
+      assert %Import{} = Transformer.transform(ast, @context)
     end
 
     test "use" do
