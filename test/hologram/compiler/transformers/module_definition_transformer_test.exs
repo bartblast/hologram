@@ -36,7 +36,7 @@ defmodule Hologram.Compiler.ModuleDefinitionTransformerTest do
 
     expected = [
       %Import{
-        module: [:Hologram, :Test, :Fixtures, :Compiler, :ModuleDefinitionTransformer, :Module1],
+        module: Hologram.Test.Fixtures.Compiler.ModuleDefinitionTransformer.Module1,
         only: []
       }
     ]
@@ -69,8 +69,8 @@ defmodule Hologram.Compiler.ModuleDefinitionTransformerTest do
   test "imports" do
     code = """
     defmodule Abc.Bcd do
-      import Cde.Def
-      import Efg.Fgh
+      import Hologram.Test.Fixtures.Compiler.ModuleDefinitionTransformer.Module1
+      import Hologram.Test.Fixtures.Compiler.ModuleDefinitionTransformer.Module2
     end
     """
 
@@ -78,8 +78,8 @@ defmodule Hologram.Compiler.ModuleDefinitionTransformerTest do
     assert %ModuleDefinition{} = result = ModuleDefinitionTransformer.transform(ast)
 
     expected = [
-      %Import{module: [:Cde, :Def], only: []},
-      %Import{module: [:Efg, :Fgh], only: []}
+      %Import{module: Hologram.Test.Fixtures.Compiler.ModuleDefinitionTransformer.Module1, only: []},
+      %Import{module: Hologram.Test.Fixtures.Compiler.ModuleDefinitionTransformer.Module2, only: []}
     ]
 
     assert result.imports == expected
