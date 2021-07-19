@@ -77,7 +77,7 @@ defmodule Hologram.Compiler.TransformerTest do
     end
 
     test "struct" do
-      code = "%Test{a: 1, b: 2}"
+      code = "%Hologram.Test.Fixtures.Compiler.Transformer.Module2{a: 1}"
       ast = ast(code)
 
       assert %StructType{} = Transformer.transform(ast, @context)
@@ -161,19 +161,25 @@ defmodule Hologram.Compiler.TransformerTest do
     end
 
     test "import without 'only' clause" do
-      code = "import Abc.Bcd"
+      code = "import Hologram.Test.Fixtures.Compiler.Transformer.Module1"
       ast = ast(code)
 
       result = Transformer.transform(ast, @context)
-      assert result == %Import{module: [:Abc, :Bcd], only: []}
+      expected_module = Hologram.Test.Fixtures.Compiler.Transformer.Module1
+      expected = %Import{module: expected_module, only: []}
+
+      assert result == expected
     end
 
     test "import with 'only' clause" do
-      code = "import Abc.Bcd, only: [cde: 2]"
+      code = "import Hologram.Test.Fixtures.Compiler.Transformer.Module1, only: [abc: 2]"
       ast = ast(code)
 
       result = Transformer.transform(ast, @context)
-      assert result == %Import{module: [:Abc, :Bcd], only: [cde: 2]}
+      expected_module = Hologram.Test.Fixtures.Compiler.Transformer.Module1
+      expected = %Import{module: expected_module, only: [abc: 2]}
+
+      assert result == expected
     end
 
     test "use" do
