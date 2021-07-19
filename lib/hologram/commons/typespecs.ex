@@ -12,9 +12,9 @@ defmodule Hologram.Typespecs do
   @type function_set :: MapSet.t({module_segments, function_name})
 
   @typedoc """
-  e.g. %{[:Hologram, :Typespecs] => %ModuleDefinition{}}
+  e.g. %{Hologram.Typespecs => %ModuleDefinition{}}
   """
-  @type module_definitions_map :: %{module_segments => %ModuleDefinition{}}
+  @type module_definitions_map :: %{module() => %ModuleDefinition{}}
 
   @typedoc """
   e.g. [:Hologram, :Typespecs]
