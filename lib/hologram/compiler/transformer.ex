@@ -54,8 +54,8 @@ defmodule Hologram.Compiler.Transformer do
     MapTypeTransformer.transform(ast, context)
   end
 
-  def transform({:%, _, [{_, _, module}, ast]}, %Context{} = context) do
-    StructTypeTransformer.transform(ast, module, context)
+  def transform({:%, _, [{_, _, module_segs}, ast]}, %Context{} = context) do
+    StructTypeTransformer.transform(ast, module_segs, context)
   end
 
   def transform({:{}, _, ast}, %Context{} = context) do
