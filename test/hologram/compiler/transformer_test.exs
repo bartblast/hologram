@@ -27,7 +27,7 @@ defmodule Hologram.Compiler.TransformerTest do
 
   alias Hologram.Compiler.{Context, Transformer}
 
-  @context %Context{module: [], uses: [], imports: [], aliases: [], attributes: []}
+  @context %Context{module: nil, uses: [], imports: [], aliases: [], attributes: []}
 
   describe "types" do
     test "atom" do
@@ -194,7 +194,7 @@ defmodule Hologram.Compiler.TransformerTest do
     end
 
     test "aliased module function call" do
-      code = "Abc.test(123)"
+      code = "Hologram.Compiler.TransformerTest.test(123)"
       ast = ast(code)
 
       assert %FunctionCall{} = Transformer.transform(ast, @context)

@@ -5,13 +5,13 @@ defmodule Hologram.Compiler.FunctionCallTransformerTest do
   alias Hologram.Compiler.{Context, FunctionCallTransformer}
 
   test "transform/4" do
-    called_module = [:Abc, :Bcd]
+    module_segs = [:Hologram, :Compiler, :FunctionCallTransformerTest]
     function = :test
     params = [1, 2]
     context = %Context{module: [], uses: [], imports: [], aliases: [], attributes: []}
 
     expected = %FunctionCall{
-      module: called_module,
+      module: Hologram.Compiler.FunctionCallTransformerTest,
       function: function,
       params: [
         %IntegerType{value: 1},
@@ -19,7 +19,7 @@ defmodule Hologram.Compiler.FunctionCallTransformerTest do
       ]
     }
 
-    result = FunctionCallTransformer.transform(called_module, function, params, context)
+    result = FunctionCallTransformer.transform(module_segs, function, params, context)
     assert result == expected
   end
 end

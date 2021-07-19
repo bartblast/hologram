@@ -118,8 +118,8 @@ defmodule Hologram.Compiler.Transformer do
 
   # OTHER
 
-  def transform({{:., _, [{:__aliases__, _, module}, function]}, _, params}, %Context{} = context) do
-    FunctionCallTransformer.transform(module, function, params, context)
+  def transform({{:., _, [{:__aliases__, _, module_segs}, function]}, _, params}, %Context{} = context) do
+    FunctionCallTransformer.transform(module_segs, function, params, context)
   end
 
   def transform({function, _, params}, %Context{} = context) when is_atom(function) and is_list(params) do
