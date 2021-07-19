@@ -1,6 +1,11 @@
 defmodule Demo.MixProject do
   use Mix.Project
 
+  def compilers do
+    compilers = [:gettext] ++ Mix.compilers()
+    if Mix.env() == :test, do: compilers, else: compilers ++ [:hologram]
+  end
+
   def package do
     [
       files: ["lib", "mix.exs", "README.md"],
@@ -16,7 +21,7 @@ defmodule Demo.MixProject do
       version: "0.0.1",
       elixir: "~> 1.11",
       elixirc_paths: elixirc_paths(Mix.env()),
-      compilers: [:phoenix, :gettext] ++ Mix.compilers() ++ [:hologram],
+      compilers: compilers(),
       start_permanent: Mix.env() == :prod,
       aliases: aliases(),
       description: "Work in progress...",
