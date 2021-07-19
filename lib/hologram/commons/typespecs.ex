@@ -9,15 +9,15 @@ defmodule Hologram.Typespecs do
   @typedoc """
   e.g. MapSet.new([{[:Hologram, :Compiler, :Processor], :compile}])
   """
-  @type function_set :: MapSet.t({module_name_segments, function_name})
+  @type function_set :: MapSet.t({module_segments, function_name})
 
   @typedoc """
   e.g. %{[:Hologram, :Typespecs] => %ModuleDefinition{}}
   """
-  @type module_definitions_map :: %{module_name_segments => %ModuleDefinition{}}
+  @type module_definitions_map :: %{module_segments => %ModuleDefinition{}}
 
   @typedoc """
   e.g. [:Hologram, :Typespecs]
   """
-  @type module_name_segments :: list(atom())
+  @type module_segments :: list(atom())
 end
