@@ -53,7 +53,7 @@ defmodule Hologram.Compiler.HelpersTest do
   end
 
   test "module_name/1" do
-    assert Helpers.module_name([:Abc, :Bcd]) == "Abc.Bcd"
+    assert Helpers.module_name(Abc.Bcd) == "Abc.Bcd"
   end
 
   test "module_name_atom/1" do

@@ -71,13 +71,14 @@ defmodule Hologram.Compiler.Helpers do
   Returns the corresponding module name (without the "Elixir" segment at the beginning).
 
   ## Examples
-      iex> Helpers.module_name([:Abc, :Bcd])
+      iex> Helpers.module_name(Abc.Bcd)
       "Abc.Bcd"
   """
-  @spec module_name(T.module_name_segments()) :: String.t()
+  @spec module_name(module()) :: String.t()
 
-  def module_name(segments) do
-    Enum.join(segments, ".")
+  def module_name(module) do
+    Module.split(module)
+    |> Enum.join(".")
   end
 
   @doc """
