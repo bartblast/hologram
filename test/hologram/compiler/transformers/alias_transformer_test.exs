@@ -4,52 +4,54 @@ defmodule Hologram.Compiler.AliasTransformerTest do
   alias Hologram.Compiler.AliasTransformer
   alias Hologram.Compiler.IR.Alias
 
+  @expected_module Hologram.Test.Fixtures.Compiler.AliasTransformer.Module1
+
   test "default 'as' option" do
-    code = "alias Abc.Bcd"
+    code = "alias Hologram.Test.Fixtures.Compiler.AliasTransformer.Module1"
     {:alias, _, ast} = ast(code)
 
     result = AliasTransformer.transform(ast)
-    expected = %Alias{module: [:Abc, :Bcd], as: [:Bcd]}
+    expected = %Alias{module: @expected_module, as: [:Module1]}
 
     assert result == expected
   end
 
   test "one-part 'as' option" do
-    code = "alias Abc.Bcd, as: Xyz"
+    code = "alias Hologram.Test.Fixtures.Compiler.AliasTransformer.Module1, as: Xyz"
     {:alias, _, ast} = ast(code)
 
     result = AliasTransformer.transform(ast)
-    expected = %Alias{module: [:Abc, :Bcd], as: [:Xyz]}
+    expected = %Alias{module: @expected_module, as: [:Xyz]}
 
     assert result == expected
   end
 
   test "multiple-part 'as' option" do
-    code = "alias Abc.Bcd, as: Xyz.Kmn"
+    code = "alias Hologram.Test.Fixtures.Compiler.AliasTransformer.Module1, as: Xyz.Kmn"
     {:alias, _, ast} = ast(code)
 
     result = AliasTransformer.transform(ast)
-    expected = %Alias{module: [:Abc, :Bcd], as: [:Xyz, :Kmn]}
+    expected = %Alias{module: @expected_module, as: [:Xyz, :Kmn]}
 
     assert result == expected
   end
 
   test "'warn' option" do
-    code = "alias Abc.Bcd, warn: false"
+    code = "alias Hologram.Test.Fixtures.Compiler.AliasTransformer.Module1, warn: false"
     {:alias, _, ast} = ast(code)
 
     result = AliasTransformer.transform(ast)
-    expected = %Alias{module: [:Abc, :Bcd], as: [:Bcd]}
+    expected = %Alias{module: @expected_module, as: [:Module1]}
 
     assert result == expected
   end
 
   test "'as' option + 'warn' option" do
-    code = "alias Abc.Bcd, as: Xyz, warn: false"
+    code = "alias Hologram.Test.Fixtures.Compiler.AliasTransformer.Module1, as: Xyz, warn: false"
     {:alias, _, ast} = ast(code)
 
     result = AliasTransformer.transform(ast)
-    expected = %Alias{module: [:Abc, :Bcd], as: [:Xyz]}
+    expected = %Alias{module: @expected_module, as: [:Xyz]}
 
     assert result == expected
   end
