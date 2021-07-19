@@ -6,47 +6,50 @@ defmodule Hologram.Compiler.ResolverTest do
 
   describe "resolve/5" do
     test "imported module" do
-      imported_module = [:Hologram, :Test, :Fixtures, :Compiler, :Resolver, :Module1]
+      imported_module = Hologram.Test.Fixtures.Compiler.Resolver.Module1
       imports = [%Import{module: imported_module}]
 
-      result = Resolver.resolve([], :test, 2, imports, [], [:Hologram, :Compiler, :ResolverTest])
+      result = Resolver.resolve([], :test, 2, imports, [], Hologram.Compiler.ResolverTest)
       assert result == imported_module
     end
 
     test "calling module" do
-      calling_module = [:Hologram, :Test, :Fixtures, :Compiler, :Resolver, :Module1]
+      calling_module = Hologram.Test.Fixtures.Compiler.Resolver.Module1
 
       result = Resolver.resolve([], :test, 2, [], [], calling_module)
       assert result == calling_module
     end
 
     test "Kernel" do
-      result = Resolver.resolve([], :to_string, 1, [], [], [:Hologram, :Compiler, :ResolverTest])
-      assert result == [:Kernel]
+      calling_module = Hologram.Compiler.ResolverTest
+      result = Resolver.resolve([], :to_string, 1, [], [], calling_module)
+
+      assert result == Kernel
     end
 
     test "aliased module" do
-      aliased_module = [:Hologram, :Test, :Fixtures, :Compiler, :Resolver, :Module1]
+      aliased_module = Hologram.Test.Fixtures.Compiler.Resolver.Module1
       aliases = [%Alias{module: aliased_module, as: [:Module1]}]
+      calling_module = Hologram.Compiler.ResolverTest
 
       result =
-        Resolver.resolve([:Module1], :test, 2, [], aliases, [:Hologram, :Compiler, :ResolverTest])
+        Resolver.resolve([:Module1], :test, 2, [], aliases, calling_module)
 
       assert result == aliased_module
     end
 
     test "vertbatim module" do
-      verbatim_module = [:Abc, :Bcd]
+      verbatim_module = [:Hologram, :Test, :Fixtures, :Compiler, :Resolver, :Module1]
 
       result =
-        Resolver.resolve(verbatim_module, :test, 2, [], [], [:Hologram, :Compiler, :ResolverTest])
+        Resolver.resolve(verbatim_module, :test, 2, [], [], Hologram.Compiler.ResolverTest)
 
-      assert result == verbatim_module
+      assert result == Hologram.Test.Fixtures.Compiler.Resolver.Module1
     end
   end
 
   test "resolve/2" do
-    aliased_module = [:Hologram, :Test, :Fixtures, :Compiler, :Resolver, :Module1]
+    aliased_module = Hologram.Test.Fixtures.Compiler.Resolver.Module1
     aliases = [%Alias{module: aliased_module, as: [:Module1]}]
 
     result = Resolver.resolve([:Module1], aliases)
