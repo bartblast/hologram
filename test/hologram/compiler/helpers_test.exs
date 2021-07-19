@@ -5,7 +5,7 @@ defmodule Hologram.Compiler.HelpersTest do
   alias Hologram.Compiler.IR.{ModuleDefinition, UseDirective}
 
   test "class_name/1" do
-    assert Helpers.class_name([:Abc, :Bcd]) == "AbcBcd"
+    assert Helpers.class_name(Abc.Bcd) == "AbcBcd"
   end
 
   describe "is_component?/1" do

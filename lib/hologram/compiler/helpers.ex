@@ -6,14 +6,14 @@ defmodule Hologram.Compiler.Helpers do
   Returns the corresponding class name which can be used in JavaScript.
 
   ## Examples
-      iex> Helpers.class_name([:Abc, :Bcd])
+      iex> Helpers.class_name(Abc.Bcd)
       "AbcBcd"
   """
-  @spec class_name(T.module_name_segments()) :: String.t()
+  @spec class_name(module()) :: String.t()
 
-  def class_name(segments) do
-    module_name(segments)
-    |> String.replace(".", "")
+  def class_name(module) do
+    Module.split(module)
+    |> Enum.join("")
   end
 
   @doc """
