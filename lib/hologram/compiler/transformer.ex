@@ -23,7 +23,8 @@ defmodule Hologram.Compiler.Transformer do
     ModuleAttributeDefinitionTransformer,
     ModuleDefinitionTransformer,
     StructTypeTransformer,
-    TupleTypeTransformer
+    TupleTypeTransformer,
+    UseDirectiveTransformer
   }
 
   alias Hologram.Compiler.Context
@@ -108,8 +109,8 @@ defmodule Hologram.Compiler.Transformer do
     ImportTransformer.transform(ast)
   end
 
-  def transform({:use, _, [{:__aliases__, _, module}]}, _) do
-    %UseDirective{module: module}
+  def transform({:use, _, [{:__aliases__, _, module_segs}]}, _) do
+    UseDirectiveTransformer.transform(module_segs)
   end
 
   # OTHER

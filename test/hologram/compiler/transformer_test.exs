@@ -168,11 +168,10 @@ defmodule Hologram.Compiler.TransformerTest do
     end
 
     test "use" do
-      code = "use Abc.Bcd"
+      code = "use Hologram.Compiler.TransformerTest"
       ast = ast(code)
 
-      result = Transformer.transform(ast, @context)
-      assert result == %UseDirective{module: [:Abc, :Bcd]}
+      assert %UseDirective{} = Transformer.transform(ast, @context)
     end
   end
 
