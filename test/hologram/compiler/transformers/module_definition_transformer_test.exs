@@ -13,20 +13,25 @@ defmodule Hologram.Compiler.ModuleDefinitionTransformerTest do
 
   alias Hologram.Compiler.ModuleDefinitionTransformer
 
-  test "name" do
+  @module_1 Hologram.Test.Fixtures.Compiler.ModuleDefinitionTransformer.Module1
+  @module_2 Hologram.Test.Fixtures.Compiler.ModuleDefinitionTransformer.Module2
+  @module_3 Hologram.Test.Fixtures.Compiler.ModuleDefinitionTransformer.Module3
+
+  test "module" do
     code = """
-    defmodule Abc.Bcd do
+    defmodule Hologram.Test.Fixtures.Compiler.ModuleDefinitionTransformer.Module1 do
     end
     """
 
     ast = ast(code)
 
-    assert %ModuleDefinition{name: [:Abc, :Bcd]} = ModuleDefinitionTransformer.transform(ast)
+    assert %ModuleDefinition{module: module} = ModuleDefinitionTransformer.transform(ast)
+    assert module == @module_1
   end
 
   test "macros expansion" do
     code = """
-    defmodule Abc do
+    defmodule Hologram.Test.Fixtures.Compiler.ModuleDefinitionTransformer.Module3 do
       use Hologram.Test.Fixtures.Compiler.ModuleDefinitionTransformer.Module2
     end
     """
@@ -36,7 +41,7 @@ defmodule Hologram.Compiler.ModuleDefinitionTransformerTest do
 
     expected = [
       %Import{
-        module: Hologram.Test.Fixtures.Compiler.ModuleDefinitionTransformer.Module1,
+        module: @module_1,
         only: []
       }
     ]
@@ -46,7 +51,7 @@ defmodule Hologram.Compiler.ModuleDefinitionTransformerTest do
 
   test "uses" do
     code = """
-    defmodule Abc.Bcd do
+    defmodule Hologram.Test.Fixtures.Compiler.ModuleDefinitionTransformer.Module3 do
       use Hologram.Test.Fixtures.Compiler.ModuleDefinitionTransformer.Module1
       use Hologram.Test.Fixtures.Compiler.ModuleDefinitionTransformer.Module2
     end
@@ -55,12 +60,9 @@ defmodule Hologram.Compiler.ModuleDefinitionTransformerTest do
     ast = ast(code)
     assert %ModuleDefinition{} = result = ModuleDefinitionTransformer.transform(ast)
 
-    module_1 = [:Hologram, :Test, :Fixtures, :Compiler, :ModuleDefinitionTransformer, :Module1]
-    module_2 = [:Hologram, :Test, :Fixtures, :Compiler, :ModuleDefinitionTransformer, :Module2]
-
     expected = [
-      %UseDirective{module: module_1},
-      %UseDirective{module: module_2}
+      %UseDirective{module: @module_1},
+      %UseDirective{module: @module_2}
     ]
 
     assert result.uses == expected
@@ -68,7 +70,7 @@ defmodule Hologram.Compiler.ModuleDefinitionTransformerTest do
 
   test "imports" do
     code = """
-    defmodule Abc.Bcd do
+    defmodule Hologram.Test.Fixtures.Compiler.ModuleDefinitionTransformer.Module3 do
       import Hologram.Test.Fixtures.Compiler.ModuleDefinitionTransformer.Module1
       import Hologram.Test.Fixtures.Compiler.ModuleDefinitionTransformer.Module2
     end
@@ -78,8 +80,8 @@ defmodule Hologram.Compiler.ModuleDefinitionTransformerTest do
     assert %ModuleDefinition{} = result = ModuleDefinitionTransformer.transform(ast)
 
     expected = [
-      %Import{module: Hologram.Test.Fixtures.Compiler.ModuleDefinitionTransformer.Module1, only: []},
-      %Import{module: Hologram.Test.Fixtures.Compiler.ModuleDefinitionTransformer.Module2, only: []}
+      %Import{module: @module_1, only: []},
+      %Import{module: @module_2, only: []}
     ]
 
     assert result.imports == expected
@@ -87,9 +89,9 @@ defmodule Hologram.Compiler.ModuleDefinitionTransformerTest do
 
   test "aliases" do
     code = """
-    defmodule Abc.Bcd do
-      alias Cde.Def
-      alias Efg.Fgh
+    defmodule Hologram.Test.Fixtures.Compiler.ModuleDefinitionTransformer.Module3 do
+      alias Hologram.Test.Fixtures.Compiler.ModuleDefinitionTransformer.Module1
+      alias Hologram.Test.Fixtures.Compiler.ModuleDefinitionTransformer.Module2
     end
     """
 
@@ -97,8 +99,8 @@ defmodule Hologram.Compiler.ModuleDefinitionTransformerTest do
     assert %ModuleDefinition{} = result = ModuleDefinitionTransformer.transform(ast)
 
     expected = [
-      %Alias{module: [:Cde, :Def], as: [:Def]},
-      %Alias{module: [:Efg, :Fgh], as: [:Fgh]}
+      %Alias{module: @module_1, as: [:Module1]},
+      %Alias{module: @module_2, as: [:Module2]}
     ]
 
     assert result.aliases == expected
@@ -106,7 +108,7 @@ defmodule Hologram.Compiler.ModuleDefinitionTransformerTest do
 
   test "attributes" do
     code = """
-    defmodule Abc do
+    defmodule Hologram.Test.Fixtures.Compiler.ModuleDefinitionTransformer.Module1 do
       @x 1
       @y 2
     end
@@ -131,7 +133,7 @@ defmodule Hologram.Compiler.ModuleDefinitionTransformerTest do
 
   test "functions" do
     code = """
-    defmodule Abc do
+    defmodule Hologram.Test.Fixtures.Compiler.ModuleDefinitionTransformer.Module1 do
       def test_1 do
         1
       end
