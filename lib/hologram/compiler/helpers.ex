@@ -102,9 +102,14 @@ defmodule Hologram.Compiler.Helpers do
       iex> Helpers.module_segments(Abc.Bcd)
       [:Abc, :Bcd]
   """
-  @spec module_segments(module()) :: T.module_segments()
+  @spec module_segments(module() | String.T) :: T.module_segments()
 
-  def module_segments(module) do
+  def module_segments(module_name) when is_binary(module_name) do
+    Module.split("Elixir.#{module_name}")
+    |> Enum.map(&String.to_atom/1)
+  end
+
+  def module_segments(module)  do
     Module.split(module)
     |> Enum.map(&String.to_atom/1)
   end

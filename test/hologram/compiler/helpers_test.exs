@@ -60,8 +60,14 @@ defmodule Hologram.Compiler.HelpersTest do
     assert Helpers.module_name_atom([:Abc, :Bcd]) == :"Abc.Bcd"
   end
 
-  test "module_segments/1" do
-    assert Helpers.module_segments(Abc.Bcd) == [:Abc, :Bcd]
+  describe "module_segments/1" do
+    test "module" do
+      assert Helpers.module_segments(Abc.Bcd) == [:Abc, :Bcd]
+    end
+
+    test "string" do
+      assert Helpers.module_segments("Abc.Bcd") == [:Abc, :Bcd]
+    end
   end
 
   test "module_source_path/1" do
