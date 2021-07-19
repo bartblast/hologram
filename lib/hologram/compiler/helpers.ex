@@ -112,9 +112,8 @@ defmodule Hologram.Compiler.Helpers do
   end
 
   def module_name_segments(module) do
-    to_string(module)
-    |> module_name_segments()
-    |> tl()
+    Module.split(module)
+    |> Enum.map(&String.to_atom/1)
   end
 
   @doc """
