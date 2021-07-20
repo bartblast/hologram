@@ -4,9 +4,9 @@ defmodule Hologram.Compiler.FunctionCallGeneratorTest do
   alias Hologram.Compiler.{Context, FunctionCallGenerator}
   alias Hologram.Compiler.IR.{IntegerType, Variable}
 
-  @context %Context{module: [], uses: [], imports: [], aliases: [], attributes: []}
+  @context %Context{module: nil, uses: [], imports: [], aliases: [], attributes: []}
   @function :abc
-  @module [:Test]
+  @module Test
 
   test "single param" do
     params = [%IntegerType{value: 1}]
