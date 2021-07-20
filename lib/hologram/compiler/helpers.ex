@@ -12,8 +12,8 @@ defmodule Hologram.Compiler.Helpers do
   @spec class_name(module()) :: String.t()
 
   def class_name(module) do
-    Module.split(module)
-    |> Enum.join("")
+    [:Elixir | Module.split(module)]
+    |> Enum.join("_")
   end
 
   @doc """
