@@ -55,7 +55,7 @@ defmodule Hologram.Template.Transformer do
 
   defp build_component(module_name, children, aliases) do
     module =
-      Helpers.module_name_segments(module_name)
+      Helpers.module_segments(module_name)
       |> Resolver.resolve(aliases)
 
     %Component{module: module, children: children}

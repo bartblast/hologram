@@ -29,19 +29,19 @@ defmodule Hologram.Template.TransformerTest do
   end
 
   test "component node without children" do
-    html = "<Prefix.Module></Prefix.Module>"
+    html = "<Hologram.Template.TransformerTest></Hologram.Template.TransformerTest>"
 
     result =
       Parser.parse!(html)
       |> Transformer.transform()
 
-    expected = [%Component{children: [], module: [:Prefix, :Module]}]
+    expected = [%Component{children: [], module: Hologram.Template.TransformerTest}]
 
     assert result == expected
   end
 
   test "component node with children" do
-    html = "<Prefix.Module><div></div><span></span></Prefix.Module>"
+    html = "<Hologram.Template.TransformerTest><div></div><span></span></Hologram.Template.TransformerTest>"
 
     result =
       Parser.parse!(html)
@@ -61,7 +61,7 @@ defmodule Hologram.Template.TransformerTest do
             tag: "span"
           }
         ],
-        module: [:Prefix, :Module]
+        module: Hologram.Template.TransformerTest
       }
     ]
 
