@@ -1,39 +1,36 @@
-# DEFER: refactor & test
+# TODO: already refactored, test
 
 defmodule Hologram.Channel do
   use Phoenix.Channel
   alias Hologram.Compiler.Helpers
 
-  def join("hologram", _payload, socket) do
+  def join("hologram", _, socket) do
     {:ok, socket}
   end
 
   def handle_in("command", payload, socket) do
-    %{
-      "command" => command,
-      "context" => context,
-      "params" => params
-    } = payload
+    response =
+      run_command(payload)
+      |> build_response()
 
+    {:reply, {:ok, response}, socket}
+  end
+
+  defp build_response({action, params}) do
+    [action, Enum.into(params, %{})]
+  end
+
+  defp build_response(action) do
+    [action, %{}]
+  end
+
+  defp run_command(%{"command" => command, "params" => params, "context" => context}) do
     command = String.to_atom(command)
 
-    # TODO: handle modules with multiple name segments
-    result =
-      context["page_module"]
-      |> String.to_atom()
-      |> (&[&1]).()
-      |> Helpers.module()
-      |> apply(:command, [command, params])
-
-    payload =
-      case result do
-        {_action, _params} ->
-          # TODO: implement
-          [result, []]
-        _ ->
-          [result, []]
-      end
-
-    {:reply, {:ok, payload}, socket}
+    context["page_module"]
+    |> String.split("_")
+    |> tl()
+    |> Helpers.module()
+    |> apply(:command, [command, params])
   end
 end
