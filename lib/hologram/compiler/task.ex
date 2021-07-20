@@ -3,7 +3,7 @@
 defmodule Mix.Tasks.Compile.Hologram do
   use Mix.Task.Compiler
 
-  alias Hologram.Compiler.{Builder, Helpers}
+  alias Hologram.Compiler.Builder
   alias Hologram.Runtime.Reflection
 
   @cwd File.cwd!()
@@ -32,9 +32,7 @@ defmodule Mix.Tasks.Compile.Hologram do
   end
 
   defp build_page(page) do
-    js =
-      Helpers.module_segments(page)
-      |> Builder.build()
+    js = Builder.build(page)
 
     digest =
       :crypto.hash(:md5, js)
