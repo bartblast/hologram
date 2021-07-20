@@ -33,7 +33,7 @@ defmodule Mix.Tasks.Compile.Hologram do
 
   defp build_page(page) do
     js =
-      Helpers.module_name_segments(page)
+      Helpers.module_segments(page)
       |> Builder.build()
 
     digest =
