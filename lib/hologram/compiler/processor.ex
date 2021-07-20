@@ -8,25 +8,23 @@ defmodule Hologram.Compiler.Processor do
   @doc """
   Creates the module definitions map of modules used by the given module.
   """
-  @spec compile(T.module_name_segments(), map()) :: T.module_definitions_map()
+  @spec compile(module(), map()) :: T.module_definitions_map()
 
-  def compile(module_name_segments, acc \\ %{}) do
-    definition = get_module_definition(module_name_segments)
+  def compile(module, acc \\ %{}) do
+    definition = get_module_definition(module)
 
     acc
-    |> Map.put(module_name_segments, definition)
+    |> Map.put(module, definition)
     |> include_imported_modules(definition)
     |> include_aliased_modules(definition)
     |> include_components(definition)
   end
 
-  defp find_components(module_name_segments) do
-    module = Helpers.module(module_name_segments)
-
+  defp find_components(module) do
     if function_exported?(module, :template, 0) do
       Template.Builder.build(module)
       |> find_nested_components()
-      |> Enum.concat([module_name_segments])
+      |> Enum.concat([module])
       |> Enum.uniq()
     else
       []
@@ -54,15 +52,15 @@ defmodule Hologram.Compiler.Processor do
   Returns the corresponding module definition.
 
   ## Examples
-      iex> Processor.get_module_definition([:Abc, :Bcd])
-      %ModuleDefinition{module: [:Abc, :Bcd], ...}
+      iex> Processor.get_module_definition(Abc.Bcd)
+      %ModuleDefinition{module: Abc.Bcd, ...}
   """
-  @spec get_module_definition(T.module_name_segments()) :: %ModuleDefinition{}
+  @spec get_module_definition(module()) :: %ModuleDefinition{}
 
-  def get_module_definition(module_name_segments) do
-    context = %Context{module: [], uses: [], imports: [], aliases: [], attributes: []}
+  def get_module_definition(module) do
+    context = %Context{module: nil, uses: [], imports: [], aliases: [], attributes: []}
 
-    Helpers.module_source_path(module_name_segments)
+    Helpers.module_source_path(module)
     |> Parser.parse_file!()
     |> Normalizer.normalize()
     |> Transformer.transform(context)
@@ -75,7 +73,7 @@ defmodule Hologram.Compiler.Processor do
 
   defp include_components(acc, definition) do
     if Helpers.is_page?(definition) || Helpers.is_component?(definition) do
-      find_components(definition.name)
+      find_components(definition.module)
       |> Enum.reduce(acc, &include_module(&2, &1))
     else
       acc
@@ -87,7 +85,7 @@ defmodule Hologram.Compiler.Processor do
     |> Enum.reduce(acc, &include_module(&2, &1.module))
   end
 
-  defp include_module(acc, module_name_segments) do
-    if acc[module_name_segments], do: acc, else: compile(module_name_segments, acc)
+  defp include_module(acc, module) do
+    if acc[module], do: acc, else: compile(module, acc)
   end
 end
