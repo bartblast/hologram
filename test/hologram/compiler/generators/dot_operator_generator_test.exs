@@ -10,7 +10,7 @@ defmodule Hologram.Compiler.DotOperatorGeneratorTest do
     context = %Context{module: nil, uses: [], imports: [], aliases: [], attributes: []}
 
     result = DotOperatorGenerator.generate(left, right, context)
-    expected = "Kernel.$dot(x, { type: 'atom', value: 'a' })"
+    expected = "Elixir_Kernel.$dot(x, { type: 'atom', value: 'a' })"
 
     assert result == expected
   end

@@ -5,9 +5,9 @@ defmodule Hologram.Compiler.BuilderTest do
   test "build/1" do
     result = Builder.build(Hologram.Test.Fixtures.Compiler.Builder.Module1)
 
-    assert result =~ ~r/class HologramTestFixturesCompilerBuilderModule1/
-    assert result =~ ~r/class HologramTestFixturesCompilerBuilderModule3/
+    assert result =~ ~r/class Elixir_Hologram_Test_Fixtures_Compiler_Builder_Module1/
+    assert result =~ ~r/class Elixir_Hologram_Test_Fixtures_Compiler_Builder_Module3/
 
-    refute result =~ ~r/HologramTestFixturesCompilerBuilderModule2/
+    refute result =~ ~r/Elixir_Hologram_Test_Fixtures_Compiler_Builder_Module2/
   end
 end

@@ -2,7 +2,7 @@
 defmodule DemoWeb.HologramController do
   use DemoWeb, :controller
 
-  alias Hologram.Compiler.Hydrator
+  alias Hologram.Compiler.{Helpers, Hydrator}
   alias Hologram.Template.{Builder, Renderer}
 
   def index(conn, _params) do
@@ -15,17 +15,12 @@ defmodule DemoWeb.HologramController do
     # DEFER: use .holo template files
     html = Renderer.render(virtual_dom, state)
 
-    class_name =
-      module
-      |> to_string()
-      |> String.split(".")
-      |> tl()
-      |> Enum.join("")
-
-    html(conn, generate_html(module, conn, html, class_name, hydrated_state))
+    html(conn, generate_html(module, conn, html, hydrated_state))
   end
 
-  defp generate_html(module, conn, html, class_name, hydrated_state) do
+  defp generate_html(module, conn, html, hydrated_state) do
+    class_name = Helpers.class_name(module)
+
     # DEFER: optimize, e.g. load the manifest in config
     digest =
       File.cwd!() <> "/priv/static/hologram/manifest.json"

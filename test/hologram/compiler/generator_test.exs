@@ -66,7 +66,7 @@ defmodule Hologram.Compiler.GeneratorTest do
       result = Generator.generate(ir, @context)
 
       expected =
-        "{ type: 'struct', module: 'Abc.Bcd', data: { '~atom[a]': { type: 'integer', value: 1 } } }"
+        "{ type: 'struct', module: 'Elixir_Abc_Bcd', data: { '~atom[a]': { type: 'integer', value: 1 } } }"
 
       assert result == expected
     end
@@ -90,7 +90,7 @@ defmodule Hologram.Compiler.GeneratorTest do
 
       result = Generator.generate(ir, @context)
 
-      expected = "Kernel.$add({ type: 'integer', value: 1 }, { type: 'integer', value: 2 })"
+      expected = "Elixir_Kernel.$add({ type: 'integer', value: 1 }, { type: 'integer', value: 2 })"
 
       assert result == expected
     end
@@ -102,7 +102,7 @@ defmodule Hologram.Compiler.GeneratorTest do
       }
 
       result = Generator.generate(ir, @context)
-      expected = "Kernel.$dot(x, { type: 'atom', value: 'a' })"
+      expected = "Elixir_Kernel.$dot(x, { type: 'atom', value: 'a' })"
 
       assert result == expected
     end
@@ -128,7 +128,7 @@ defmodule Hologram.Compiler.GeneratorTest do
       }
 
       result = Generator.generate(ir, @context)
-      expected = "window.Test = class Test {\n\n\n}\n"
+      expected = "window.Elixir_Test = class Elixir_Test {\n\n\n}\n"
 
       assert result == expected
     end
@@ -168,7 +168,7 @@ defmodule Hologram.Compiler.GeneratorTest do
       }
 
       result = Generator.generate(ir, @context)
-      expected = "Test.abc({ type: 'integer', value: 1 })"
+      expected = "Elixir_Test.abc({ type: 'integer', value: 1 })"
 
       assert result == expected
     end

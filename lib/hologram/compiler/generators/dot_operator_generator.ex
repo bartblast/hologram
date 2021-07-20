@@ -1,10 +1,11 @@
 defmodule Hologram.Compiler.DotOperatorGenerator do
-  alias Hologram.Compiler.{Context, Generator}
+  alias Hologram.Compiler.{Context, Generator, Helpers}
 
   def generate(left, right, %Context{} = context) do
     left = Generator.generate(left, context)
     right = Generator.generate(right, context)
+    class_name = Helpers.class_name(Kernel)
 
-    "Kernel.$dot(#{left}, #{right})"
+    "#{class_name}.$dot(#{left}, #{right})"
   end
 end

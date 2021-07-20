@@ -10,7 +10,7 @@ defmodule Hologram.Compiler.AdditionOperatorGeneratorTest do
     context = %Context{module: nil, uses: [], imports: [], aliases: [], attributes: []}
 
     result = AdditionOperatorGenerator.generate(left, right, context)
-    expected = "Kernel.$add(x, { type: 'atom', value: 'a' })"
+    expected = "Elixir_Kernel.$add(x, { type: 'atom', value: 'a' })"
 
     assert result == expected
   end

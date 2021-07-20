@@ -100,7 +100,7 @@ export default class Hologram {
   }
 }
 
-class Kernel {
+window.Elixir_Kernel = class {
   static $add(left, right) {
     let type = left.type == "integer" && right.type == "integer" ? "integer" : "float"
     return { type: type, value: left.value + right.value }
@@ -111,7 +111,7 @@ class Kernel {
   }
 }
 
-class Map {
+window.Elixir_Map = class {
   static put(map, key, value) {
     let mapClone = cloneDeep(map)
     mapClone.data[Hologram.objectKey(key)] = value
@@ -120,5 +120,3 @@ class Map {
 }
 
 window.Hologram = Hologram
-window.Kernel = Kernel
-window.Map = Map

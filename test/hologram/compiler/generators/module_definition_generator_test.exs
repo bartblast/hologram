@@ -32,7 +32,7 @@ defmodule Hologram.Compiler.ModuleDefinitionGeneratorTest do
     result = ModuleDefinitionGenerator.generate(ir, @module, @context)
 
     expected = """
-    window.AbcBcd = class AbcBcd {
+    window.Elixir_Abc_Bcd = class Elixir_Abc_Bcd {
 
     static test() {
     if (Hologram.patternMatchFunctionArgs([{ type: 'placeholder' }], arguments)) {
@@ -89,7 +89,7 @@ defmodule Hologram.Compiler.ModuleDefinitionGeneratorTest do
     result = ModuleDefinitionGenerator.generate(ir, @module, @context)
 
     expected = """
-    window.AbcBcd = class AbcBcd {
+    window.Elixir_Abc_Bcd = class Elixir_Abc_Bcd {
 
     static test() {
     if (Hologram.patternMatchFunctionArgs([{ type: 'placeholder' }], arguments)) {
@@ -149,7 +149,7 @@ defmodule Hologram.Compiler.ModuleDefinitionGeneratorTest do
     result = ModuleDefinitionGenerator.generate(ir, @module, @context)
 
     expected = """
-    window.AbcBcd = class AbcBcd {
+    window.Elixir_Abc_Bcd = class Elixir_Abc_Bcd {
 
     static test_1() {
     if (Hologram.patternMatchFunctionArgs([{ type: 'placeholder' }], arguments)) {
@@ -229,7 +229,7 @@ defmodule Hologram.Compiler.ModuleDefinitionGeneratorTest do
     result = ModuleDefinitionGenerator.generate(ir, @module, @context)
 
     expected = """
-    window.AbcBcd = class AbcBcd {
+    window.Elixir_Abc_Bcd = class Elixir_Abc_Bcd {
 
     static test_1() {
     if (Hologram.patternMatchFunctionArgs([{ type: 'placeholder' }], arguments)) {

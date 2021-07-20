@@ -3,12 +3,12 @@ defmodule Hologram.Template.ComponentGenerator do
   alias Hologram.Template.{Builder, Generator}
 
   def generate(module) do
-    module_name = Helpers.module_name(module)
+    class_name = Helpers.class_name(module)
 
     children_js =
       Builder.build(module)
       |> Generator.generate()
 
-    "{ type: 'component', module: '#{module_name}', children: #{children_js} }"
+    "{ type: 'component', module: '#{class_name}', children: #{children_js} }"
   end
 end

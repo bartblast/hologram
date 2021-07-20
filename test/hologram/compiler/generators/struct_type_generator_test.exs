@@ -11,7 +11,7 @@ defmodule Hologram.Compiler.StructTypeGeneratorTest do
     result = StructTypeGenerator.generate(Abc.Bcd, data, context, [])
 
     expected =
-      "{ type: 'struct', module: 'Abc.Bcd', data: { '~atom[a]': { type: 'integer', value: 1 } } }"
+      "{ type: 'struct', module: 'Elixir_Abc_Bcd', data: { '~atom[a]': { type: 'integer', value: 1 } } }"
 
     assert result == expected
   end
