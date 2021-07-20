@@ -15,7 +15,6 @@ defmodule Hologram.Compiler.ModuleDefinitionTransformerTest do
 
   @module_1 Hologram.Test.Fixtures.Compiler.ModuleDefinitionTransformer.Module1
   @module_2 Hologram.Test.Fixtures.Compiler.ModuleDefinitionTransformer.Module2
-  @module_3 Hologram.Test.Fixtures.Compiler.ModuleDefinitionTransformer.Module3
 
   test "module" do
     code = """
