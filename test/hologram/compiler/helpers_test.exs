@@ -13,7 +13,7 @@ defmodule Hologram.Compiler.HelpersTest do
       module_definition = %ModuleDefinition{
         uses: [
           %UseDirective{
-            module: [:Hologram, :Component]
+            module: Hologram.Component
           }
         ]
       }
@@ -32,7 +32,7 @@ defmodule Hologram.Compiler.HelpersTest do
       module_definition = %ModuleDefinition{
         uses: [
           %UseDirective{
-            module: [:Hologram, :Page]
+            module: Hologram.Page
           }
         ]
       }
@@ -54,10 +54,6 @@ defmodule Hologram.Compiler.HelpersTest do
 
   test "module_name/1" do
     assert Helpers.module_name(Abc.Bcd) == "Abc.Bcd"
-  end
-
-  test "module_name_atom/1" do
-    assert Helpers.module_name_atom([:Abc, :Bcd]) == :"Abc.Bcd"
   end
 
   describe "module_segments/1" do
