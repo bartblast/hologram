@@ -21,8 +21,9 @@ defmodule Hologram.Compiler.Expander do
     {:defmodule, line, [aliases, [do: {:__block__, [], expanded}]]}
   end
 
-  def expand({:use, _, [{:__aliases__, _, module}]}) do
-    Helpers.module_source_path(module)
+  def expand({:use, _, [{:__aliases__, _, module_segs}]}) do
+    Helpers.module(module_segs)
+    |> Helpers.module_source_path()
     |> Parser.parse_file!()
     |> Normalizer.normalize()
     |> aggregate_quotes()
