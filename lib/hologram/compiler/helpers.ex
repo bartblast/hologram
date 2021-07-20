@@ -7,7 +7,7 @@ defmodule Hologram.Compiler.Helpers do
 
   ## Examples
       iex> Helpers.class_name(Abc.Bcd)
-      "AbcBcd"
+      "Elixir_Abc_Bcd"
   """
   @spec class_name(module()) :: String.t()
 
