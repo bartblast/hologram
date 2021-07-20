@@ -34,7 +34,7 @@ defmodule Hologram.Compiler.Resolver do
           module()
         ) :: module()
 
-  def resolve([], function, arity, imports, aliases, calling_module) do
+  def resolve([], function, arity, imports, _aliases, calling_module) do
     imported_module = resolve_to_imported_module(function, arity, imports)
 
     if imported_module do
@@ -45,7 +45,7 @@ defmodule Hologram.Compiler.Resolver do
     end
   end
 
-  def resolve(module_segs, function, arity, imports, aliases, calling_module) do
+  def resolve(module_segs, _function, _arity, _imports, aliases, _calling_module) do
     aliased_module = resolve_to_aliased_module(module_segs, aliases)
     if aliased_module, do: aliased_module, else: Helpers.module(module_segs)
   end

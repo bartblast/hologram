@@ -6,7 +6,6 @@ defmodule Hologram.Compiler.Transformer do
     ModuleAttributeOperator,
     NotSupportedExpression,
     StringType,
-    UseDirective,
     Variable
   }
 
