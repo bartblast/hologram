@@ -163,7 +163,7 @@ defmodule Hologram.Compiler.GeneratorTest do
     test "function call" do
       ir = %FunctionCall{
         function: :abc,
-        module: [:Test],
+        module: Test,
         params: [%IntegerType{value: 1}]
       }
 
