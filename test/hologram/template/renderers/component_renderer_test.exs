@@ -3,7 +3,7 @@ defmodule Hologram.Template.ComponentRendererTest do
   alias Hologram.Template.ComponentRenderer
 
   test "render/2" do
-    module = [:Hologram, :Test, :Fixtures, :Template, :ComponentRenderer, :Module1]
+    module = Hologram.Test.Fixtures.Template.ComponentRenderer.Module1
     state = %{}
 
     result = ComponentRenderer.render(module, state)
