@@ -20,7 +20,7 @@ defmodule Hologram.Compiler.GeneratorTest do
     Variable
   }
 
-  @context %Context{module: [], uses: [], imports: [], aliases: [], attributes: []}
+  @context %Context{module: nil, uses: [], imports: [], aliases: [], attributes: []}
 
   describe "types" do
     test "atom" do
@@ -60,7 +60,7 @@ defmodule Hologram.Compiler.GeneratorTest do
     test "struct" do
       ir = %StructType{
         data: [{%AtomType{value: :a}, %IntegerType{value: 1}}],
-        module: [:Abc, :Bcd]
+        module: Abc.Bcd
       }
 
       result = Generator.generate(ir, @context)
@@ -124,7 +124,7 @@ defmodule Hologram.Compiler.GeneratorTest do
         attributes: [],
         functions: [],
         imports: [],
-        name: [:Test]
+        module: Test
       }
 
       result = Generator.generate(ir, @context)
