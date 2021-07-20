@@ -5,7 +5,7 @@ defmodule Hologram.Compiler.MapKeyGeneratorTest do
   alias Hologram.Compiler.IR.{AtomType, BooleanType, IntegerType, StringType}
 
   @context %Context{
-    module: [],
+    module: nil,
     uses: [],
     imports: [],
     aliases: [],

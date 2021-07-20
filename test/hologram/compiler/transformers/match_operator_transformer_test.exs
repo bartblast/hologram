@@ -13,7 +13,7 @@ defmodule Hologram.Compiler.MatchOperatorTransformerTest do
   }
 
   @context %Context{
-    module: [],
+    module: nil,
     uses: [],
     imports: [],
     aliases: [],

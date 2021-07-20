@@ -5,7 +5,7 @@ defmodule Hologram.Compiler.FunctionDefinitionTransformerTest do
   alias Hologram.Compiler.IR.{AccessOperator, AtomType, FunctionDefinition, IntegerType, Variable}
 
   @context %Context{
-    module: [:Abc],
+    module: Abc,
     uses: [],
     imports: [],
     aliases: [],

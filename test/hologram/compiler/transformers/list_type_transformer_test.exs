@@ -5,7 +5,7 @@ defmodule Hologram.Compiler.ListTypeTransformerTest do
   alias Hologram.Compiler.IR.{IntegerType, ListType}
 
   @context %Context{
-    module: [:Abc],
+    module: Abc,
     uses: [],
     imports: [],
     aliases: [],

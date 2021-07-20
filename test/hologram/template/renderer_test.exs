@@ -25,7 +25,7 @@ defmodule Hologram.Template.RendererTest do
     end
 
     test "component", %{state: state} do
-      module = [:Hologram, :Test, :Fixtures, :Template, :Renderer, :Module1]
+      module = Hologram.Test.Fixtures.Template.Renderer.Module1
       virtual_dom = %Component{module: module}
 
       result = Renderer.render(virtual_dom, state)

@@ -70,7 +70,7 @@ defmodule Hologram.Template.TransformerTest do
 
   test "aliased component node" do
     html = "<Bcd></Bcd>"
-    aliases = [%Alias{module: [:Abc, :Bcd], as: [:Bcd]}]
+    aliases = [%Alias{module: Abc.Bcd, as: [:Bcd]}]
 
     result =
       Parser.parse!(html)
@@ -79,7 +79,7 @@ defmodule Hologram.Template.TransformerTest do
     expected = [
       %Component{
         children: [],
-        module: [:Abc, :Bcd]
+        module: Abc.Bcd
       }
     ]
 

@@ -74,7 +74,7 @@ defmodule Hologram.Compiler.HelpersTest do
   end
 
   describe "uses_module?/2" do
-    @used_module [:Hologram, :Commons, :Parser]
+    @used_module Hologram.Commons.Parser
 
     test "true" do
       user_module = %ModuleDefinition{

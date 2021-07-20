@@ -4,7 +4,7 @@ defmodule Hologram.Compiler.ModuleDefinitionGeneratorTest do
   alias Hologram.Compiler.{Context, ModuleDefinitionGenerator}
   alias Hologram.Compiler.IR.{FunctionDefinition, IntegerType, ModuleDefinition, Variable}
 
-  @context %Context{module: [], uses: [], imports: [], aliases: [], attributes: []}
+  @context %Context{module: nil, uses: [], imports: [], aliases: [], attributes: []}
   @module Abc.Bcd
 
   test "single function with single variant" do

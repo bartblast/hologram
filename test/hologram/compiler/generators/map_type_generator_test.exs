@@ -4,7 +4,7 @@ defmodule Hologram.Compiler.MapTypeGeneratorTest do
   alias Hologram.Compiler.{Context, MapTypeGenerator}
   alias Hologram.Compiler.IR.{AtomType, IntegerType, MapType}
 
-  @context %Context{module: [], uses: [], imports: [], aliases: [], attributes: []}
+  @context %Context{module: nil, uses: [], imports: [], aliases: [], attributes: []}
   @opts []
 
   test "generate/3" do

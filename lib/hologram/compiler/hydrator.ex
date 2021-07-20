@@ -3,7 +3,7 @@ defmodule Hologram.Compiler.Hydrator do
 
   def hydrate(state) do
     # TODO: pass actual %Context{} struct received from compiler
-    context = %Context{module: [], uses: [], imports: [], aliases: [], attributes: []}
+    context = %Context{module: nil, uses: [], imports: [], aliases: [], attributes: []}
 
     Macro.escape(state)
     |> Normalizer.normalize()

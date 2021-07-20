@@ -7,7 +7,7 @@ defmodule Hologram.Compiler.DotOperatorGeneratorTest do
   test "generate/2" do
     left = %Variable{name: :x}
     right = %AtomType{value: :a}
-    context = %Context{module: [], uses: [], imports: [], aliases: [], attributes: []}
+    context = %Context{module: nil, uses: [], imports: [], aliases: [], attributes: []}
 
     result = DotOperatorGenerator.generate(left, right, context)
     expected = "Kernel.$dot(x, { type: 'atom', value: 'a' })"

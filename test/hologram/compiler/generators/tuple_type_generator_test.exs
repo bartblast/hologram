@@ -4,7 +4,7 @@ defmodule Hologram.Compiler.TupleTypeGeneratorTest do
   alias Hologram.Compiler.{Context, TupleTypeGenerator}
   alias Hologram.Compiler.IR.IntegerType
 
-  @context %Context{module: [], uses: [], imports: [], aliases: [], attributes: []}
+  @context %Context{module: nil, uses: [], imports: [], aliases: [], attributes: []}
   @opts []
 
   test "empty tuple" do

@@ -8,11 +8,11 @@ defmodule Hologram.Compiler.SigilHGeneratorTest do
     ir =
       %FunctionCall{
         function: :sigil_H,
-        module: [:Hologram, :Runtime, :Commons],
+        module: Hologram.Runtime.Commons,
         params: [
           %FunctionCall{
             function: :<<>>,
-            module: [:Kernel],
+            module: Kernel,
             params: [
               %StringType{
                 value: "<div>Hello World {{ @counter }}</div>\n"
@@ -23,7 +23,7 @@ defmodule Hologram.Compiler.SigilHGeneratorTest do
         ]
       }
 
-    context = %Context{module: [], uses: [], imports: [], aliases: [], attributes: []}
+    context = %Context{module: nil, uses: [], imports: [], aliases: [], attributes: []}
 
     expected = "[{ type: 'element', tag: 'div', attrs: {}, children: [{ type: 'text', content: 'Hello World ' }, { type: 'expression', callback: ($state) => { return $state.data['~atom[counter]'] } }] }, { type: 'text', content: '\\n' }]"
 

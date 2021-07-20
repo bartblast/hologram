@@ -3,7 +3,7 @@ defmodule Hologram.Compiler.FunctionDefinitionGeneratorTest do
   alias Hologram.Compiler.{Context, FunctionDefinitionGenerator}
 
   @context %Context{
-    module: [],
+    module: nil,
     uses: [],
     imports: [],
     aliases: [],

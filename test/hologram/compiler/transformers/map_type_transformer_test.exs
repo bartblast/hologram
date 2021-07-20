@@ -5,7 +5,7 @@ defmodule Hologram.Compiler.MapTypeTransformerTest do
   alias Hologram.Compiler.IR.{AtomType, IntegerType, MapType}
 
   @context %Context{
-    module: [:Abc],
+    module: Abc,
     uses: [],
     imports: [],
     aliases: [],

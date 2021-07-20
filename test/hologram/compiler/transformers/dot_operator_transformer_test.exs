@@ -8,7 +8,7 @@ defmodule Hologram.Compiler.DotOperatorTransformerTest do
     code = "a.b"
     {{:., _, [left, right]}, _, []} = ast(code)
 
-    context = %Context{module: [], uses: [], imports: [], aliases: [], attributes: []}
+    context = %Context{module: nil, uses: [], imports: [], aliases: [], attributes: []}
     result = DotOperatorTransformer.transform(left, right, context)
 
     expected = %DotOperator{

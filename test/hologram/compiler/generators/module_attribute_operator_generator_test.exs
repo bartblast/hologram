@@ -3,7 +3,7 @@ defmodule Hologram.Compiler.ModuleAttributeOperatorGeneratorTest do
   alias Hologram.Compiler.{Context, ModuleAttributeOperatorGenerator}
 
   test "generate/2" do
-    context = %Context{module: [], uses: [], imports: [], aliases: [], attributes: []}
+    context = %Context{module: nil, uses: [], imports: [], aliases: [], attributes: []}
 
     result = ModuleAttributeOperatorGenerator.generate(:xyz, context)
     expected = "$state.data['~atom[xyz]']"

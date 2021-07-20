@@ -139,11 +139,11 @@ defmodule Hologram.Compiler.GeneratorTest do
       ir =
         %FunctionCall{
           function: :sigil_H,
-          module: [:Hologram, :Runtime, :Commons],
+          module: Hologram.Runtime.Commons,
           params: [
             %FunctionCall{
               function: :<<>>,
-              module: [:Kernel],
+              module: Kernel,
               params: [
                 %StringType{
                   value: "test"

@@ -7,9 +7,9 @@ defmodule Hologram.Compiler.Resolver do
   Determines the module based on the given module segments and aliases.
 
   ## Examples
-      iex> aliases = [%Alias{module: [:Abc, :Bcd], as: [:Bcd]}]
+      iex> aliases = [%Alias{module: Abc.Bcd, as: [:Bcd]}]
       iex> resolve([:Bcd], aliases)
-      [:Abc, :Bcd]
+      Abc.Bcd
   """
   @spec resolve(T.module_segments(), list(%Alias{})) :: module()
 
@@ -21,9 +21,9 @@ defmodule Hologram.Compiler.Resolver do
   Determines the module based on the given module segments, called function, imports, aliases and the calling module.
 
   ## Examples
-      iex> imports = [%Import{module: [:Enum]}]
+      iex> imports = [%Import{module: Enum}]
       iex> resolve([], :put, 3, imports, [], Hologram.Compiler.Resolver)
-      [:Enum]
+      Enum
   """
   @spec resolve(
           T.module_segments(),

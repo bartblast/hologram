@@ -8,7 +8,7 @@ defmodule Hologram.Compiler.FunctionCallTransformerTest do
     module_segs = [:Hologram, :Compiler, :FunctionCallTransformerTest]
     function = :test
     params = [1, 2]
-    context = %Context{module: [], uses: [], imports: [], aliases: [], attributes: []}
+    context = %Context{module: nil, uses: [], imports: [], aliases: [], attributes: []}
 
     expected = %FunctionCall{
       module: Hologram.Compiler.FunctionCallTransformerTest,
