@@ -18,7 +18,7 @@ defmodule Hologram.Template.GeneratorTest do
   end
 
   test "component" do
-    node = %Component{module: [:Hologram, :Test, :Fixtures, :Template, :Generator, :Module1]}
+    node = %Component{module: Hologram.Test.Fixtures.Template.Generator.Module1}
 
     result = Generator.generate(node)
     expected = "{ type: 'component', module: 'Hologram.Test.Fixtures.Template.Generator.Module1', children: [] }"
