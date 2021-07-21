@@ -13,7 +13,6 @@ module.exports = (env, options) => {
       minimizer: ['...', new CssMinimizerPlugin()],
     },
     entry: {
-      'app': glob.sync('./vendor/**/*.js').concat(['./js/app.js']),
       'hologram': glob.sync('./vendor/**/*.js').concat(['./js/hologram.js']),
     },
     output: {
