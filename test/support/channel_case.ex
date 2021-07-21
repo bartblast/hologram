@@ -1,4 +1,4 @@
-defmodule DemoWeb.ChannelCase do
+defmodule Hologram.ChannelCase do
   @moduledoc """
   This module defines the test case to be used by
   channel tests.
@@ -21,7 +21,10 @@ defmodule DemoWeb.ChannelCase do
     quote do
       # Import conveniences for testing with channels
       import Phoenix.ChannelTest
-      import DemoWeb.ChannelCase
+      import Hologram.ChannelCase
+
+      alias Hologram.Runtime.Channel
+      alias Hologram.Runtime.Socket
 
       # The default endpoint for testing
       @endpoint DemoWeb.Endpoint

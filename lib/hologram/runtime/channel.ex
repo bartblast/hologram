@@ -1,8 +1,8 @@
-# TODO: already refactored, test
-
-defmodule Hologram.Channel do
+defmodule Hologram.Runtime.Channel do
   use Phoenix.Channel
+
   alias Hologram.Compiler.Helpers
+  alias Hologram.Utils
 
   def join("hologram", _, socket) do
     {:ok, socket}
@@ -10,7 +10,7 @@ defmodule Hologram.Channel do
 
   def handle_in("command", payload, socket) do
     response =
-      run_command(payload)
+      execute_command(payload)
       |> build_response()
 
     {:reply, {:ok, response}, socket}
@@ -24,8 +24,9 @@ defmodule Hologram.Channel do
     [action, %{}]
   end
 
-  defp run_command(%{"command" => command, "params" => params, "context" => context}) do
+  defp execute_command(%{"command" => command, "params" => params, "context" => context}) do
     command = String.to_atom(command)
+    params = Utils.atomize_keys(params)
 
     context["page_module"]
     |> String.split("_")

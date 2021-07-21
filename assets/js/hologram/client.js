@@ -11,7 +11,7 @@ export default class Client {
   }
 
   async connect() {
-    const socket = new Socket("/socket");
+    const socket = new Socket("/hologram");
     socket.connect();
 
     const channel = socket.channel("hologram");
