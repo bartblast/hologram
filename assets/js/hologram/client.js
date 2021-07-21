@@ -1,5 +1,3 @@
-// DEFER: refactor & test
-
 import { Socket } from "phoenix";
 
 export default class Client {
