@@ -1,5 +1,3 @@
-// DEFER: refactor & test
-
 import "core-js/stable";
 import "regenerator-runtime/runtime"; 
 
@@ -9,6 +7,7 @@ import cloneDeep from "lodash/cloneDeep";
 import Runtime from "./hologram/runtime"
 
 export default class Hologram {
+  // TODO: refactor & test
   static interpolate(value) {
     switch (value.type) {
       case "integer":
@@ -19,10 +18,12 @@ export default class Hologram {
     }
   }
 
+  // TODO: refactor & test
   static get_module(name) {
     return eval(name.replace(/\./g, ""))
   }
 
+  // TODO: refactor & test
   static getRuntime() {
     if (!window.hologramRuntime) {
       window.hologramRuntime = new Runtime()
@@ -31,6 +32,7 @@ export default class Hologram {
     return window.hologramRuntime
   }
 
+  // TODO: refactor & test
   static isPatternMatched(left, right) {
     let lType = left.type;
     let rType = right.type;
@@ -48,10 +50,12 @@ export default class Hologram {
     return true;
   }
 
+  // TODO: refactor & test
   static js(js) {
     eval(js.value)
   }
 
+  // TODO: refactor & test
   static objectKey(key) {
     switch (key.type) {
       case 'atom':
@@ -65,6 +69,7 @@ export default class Hologram {
     }
   }
 
+  // TODO: refactor & test
   static onReady(document, callback) {
     if (
       document.readyState === "interactive" ||
@@ -79,6 +84,7 @@ export default class Hologram {
     }
   }
 
+  // TODO: refactor & test
   static patternMatchFunctionArgs(params, args) {
     if (args.length != params.length) {
       return false;
@@ -93,6 +99,7 @@ export default class Hologram {
     return true;
   }
 
+  // TODO: refactor & test
   static run(window, pageModule, state) {
     Hologram.onReady(window.document, () => {
       Hologram.getRuntime().handleNewPage(pageModule, state)
@@ -101,17 +108,20 @@ export default class Hologram {
 }
 
 window.Elixir_Kernel = class {
+  // TODO: refactor & test
   static $add(left, right) {
     let type = left.type == "integer" && right.type == "integer" ? "integer" : "float"
     return { type: type, value: left.value + right.value }
   }
 
+  // TODO: refactor & test
   static $dot(left, right) {
     return cloneDeep(left.data[Hologram.objectKey(right)])
   }
 }
 
 window.Elixir_Map = class {
+  // TODO: refactor & test
   static put(map, key, value) {
     let mapClone = cloneDeep(map)
     mapClone.data[Hologram.objectKey(key)] = value

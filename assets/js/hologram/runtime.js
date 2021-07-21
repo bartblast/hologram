@@ -1,9 +1,8 @@
-// DEFER: refactor & test
-
 import Client from "./client"
 import DOM from "./dom"
 
 export default class Runtime {
+  // TODO: refactor & test
   constructor() {
     this.client = new Client(this)
     this.client.connect()
@@ -13,6 +12,7 @@ export default class Runtime {
     this.state = null
   }
 
+  // TODO: refactor & test
   executeAction(action, params, state, context) {
     const actionResult = context.scopeModule.action({ type: "atom", value: action }, params, state)
 
@@ -32,10 +32,12 @@ export default class Runtime {
     this.dom.render(context.pageModule)
   }
 
+  // TODO: refactor & test
   handleClickEvent(context, action, state, _event) {
     this.executeAction(action, {}, state, context)
   }
 
+  // TODO: refactor & test
   handleCommandResponse(response) {
     const action = response[0]
     const params = response[1]
@@ -46,6 +48,7 @@ export default class Runtime {
     this.executeAction(action, {}, this.state, context)
   }
 
+  // TODO: refactor & test
   handleNewPage(pageModule, state) {
     this.pageModule = pageModule
     this.state = state
@@ -53,6 +56,7 @@ export default class Runtime {
     this.dom.render(this.pageModule)
   }
 
+  // TODO: refactor & test
   handleSubmitEvent(context, action, state, event) {
     event.preventDefault()
 

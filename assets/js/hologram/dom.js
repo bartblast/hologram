@@ -1,16 +1,16 @@
-// DEFER: refactor & test
-
 import {attributesModule, eventListenersModule, h, init, toVNode} from "snabbdom";
-const patch = init([eventListenersModule, attributesModule]);
+const patch = init([attributesModule, eventListenersModule]);
 
 import Hologram from "../hologram"
 
 export default class DOM {
+  // TODO: refactor & test
   constructor(runtime) {
     this.oldVNode = null
     this.runtime = runtime
   }
 
+  // TODO: refactor & test
   buildVNode(node, state, context) {
     if (Array.isArray(node)) {
       return node.reduce((acc, n) => {
@@ -49,12 +49,14 @@ export default class DOM {
     } 
   }
 
+  // TODO: refactor & test
   static buildVNodeAttrs(node) {
     const attrs = Object.assign({}, node.attrs)
     delete attrs.on_click
     return attrs
   }
 
+  // TODO: refactor & test
   // DEFER: research whether this creates a new handler on each render (how to optimize it?)
   buildVNodeEventHandlers(node, state, context) {
     const eventHandlers = {}
@@ -70,6 +72,7 @@ export default class DOM {
     return eventHandlers
   }
 
+  // TODO: refactor & test
   render(pageModule) {
     if (!this.oldVNode) {
       const container = window.document.body
