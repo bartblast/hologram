@@ -9,7 +9,7 @@ use Mix.Config
 
 # Framework config
 config :hologram,
-  pages_path: "lib/demo_web/hologram/pages"
+  pages_path: "#{File.cwd!()}/lib/e2e/pages"
 
 config :hologram,
   ecto_repos: [Demo.Repo]
