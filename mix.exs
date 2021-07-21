@@ -64,7 +64,8 @@ defmodule Demo.MixProject do
       {:file_system, "~> 0.2.10"},
 
       {:ex_doc, ">= 0.0.0", only: :dev, runtime: false},
-      {:phoenix_live_reload, "~> 1.2", only: :dev}
+      {:phoenix_live_reload, "~> 1.2", only: :dev},
+      {:wallaby, "~> 0.28.0", only: :test, runtime: false}
     ]
   end
 

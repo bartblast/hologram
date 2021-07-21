@@ -16,7 +16,12 @@ config :hologram, Demo.Repo,
 # you can enable the server option below.
 config :hologram, DemoWeb.Endpoint,
   http: [port: 4002],
-  server: false
+  server: true
 
 # Print only warnings and errors during test
 config :logger, level: :warn
+
+config :wallaby,
+  driver: Wallaby.Chrome,
+  otp_app: :hologram,
+  screenshot_dir: "./tmp/screenshots"
