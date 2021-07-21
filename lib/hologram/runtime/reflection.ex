@@ -1,17 +1,17 @@
 defmodule Hologram.Runtime.Reflection do
-  # TODO: test
+  # TODO: refactor & test
+  def app_name do
+    Mix.Project.get().project[:app]
+  end
+
+  # TODO: refactor & test
+  def app_path do
+    File.cwd!()
+  end
+
+  # TODO: refactor & test
   def list_pages do
-    app_name = Mix.Project.get().project[:app]
-    app_path = File.cwd!()
-
-    pages_path =
-      if path = Application.get_env(:hologram, :pages_path) do
-        path
-      else
-        "#{app_path}/lib/#{app_name}_web/hologram/pages"
-      end
-
-    glob = "#{pages_path}/**/*.ex"
+    glob = "#{pages_path()}/**/*.ex"
     regex = ~r/defmodule\s+([\w\.]+)\s+do\s+/
 
     Path.wildcard(glob)
@@ -20,5 +20,15 @@ defmodule Hologram.Runtime.Reflection do
       [_, module] = Regex.run(regex, code)
       String.to_existing_atom("Elixir.#{module}")
     end)
+  end
+
+  # TODO: refactor & test
+  def pages_path do
+    case Application.get_env(:hologram, :pages_path) do
+      nil ->
+        "#{app_path()}/lib/#{app_name()}_web/hologram/pages"
+      path ->
+        path
+    end
   end
 end
