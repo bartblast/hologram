@@ -1,4 +1,4 @@
-defmodule DemoPage do
+defmodule Demo.Page1 do
   use Hologram.Page
 
   route("/demo")
