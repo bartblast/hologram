@@ -50,6 +50,7 @@
 | Authorization  | :x:                |
 | Caching        | :x:                |
 | Code Reload    | :x:                |
+| Localization   | :x:                |
 | Time Travel    | :x:                |
 
 ### Elixir Syntax
