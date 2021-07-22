@@ -1,3 +1,3 @@
 defmodule Hologram.Test.Fixtures.Compiler.Processor.Module2 do
-  alias Hologram.Test.Fixtures.Compiler.Processor.Module1
+  alias Hologram.Test.Fixtures.Compiler.Processor.Module1, warn: false
 end
