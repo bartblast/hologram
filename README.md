@@ -9,8 +9,9 @@
 | Feature     | Status             |
 | ----------- |:------------------:|
 | Actions     | :x:                |
-| Commands    | :x:                |
+| Commands    | :white_check_mark: |
 | Components  | :x:                |
+| Layouts     | :x:                |
 | Navigation  | :x:                |
 | Pages       | :x:                |
 | Routing     | :x:                |
