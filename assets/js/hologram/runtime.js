@@ -24,7 +24,7 @@ export default class Runtime {
         params = actionResult.data[2]
       }
 
-      this.client.pushCommand(actionResult.data[1].value, context, params)
+      this.client.pushCommand(actionResult.data[1].value, params, context)
     } else {
       this.state = actionResult
     }

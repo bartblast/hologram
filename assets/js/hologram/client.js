@@ -8,6 +8,17 @@ export default class Client {
     this.socket = null
   }
 
+  static buildMessagePayload(command, params, context) {
+    return {
+      command: command,
+      context: {
+        page_module: context.pageModule.name,
+        scope_module: context.scopeModule.name
+      },
+      params: params
+    }
+  }
+
   async connect() {
     const socket = new Socket("/hologram");
     socket.connect();
@@ -24,15 +35,8 @@ export default class Client {
     this.channel = channel
   }
 
-  async pushCommand(command, context, params) {
-    const payload = {
-      command: command,
-      context: {
-        page_module: context.pageModule.name,
-        scope_module: context.scopeModule.name
-      },
-      params: params
-    }
+  async pushCommand(command, params, context) {
+    const payload = Client.buildMessagePayload(command, params, context)
 
     this.channel
       .push("command", payload)
