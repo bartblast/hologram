@@ -15,7 +15,7 @@ defmodule Hologram.Compiler.SigilHGeneratorTest do
             module: Kernel,
             params: [
               %StringType{
-                value: "<div>Hello World {{ @counter }}</div>\n"
+                value: "<div>Hello World {@counter}</div>\n"
               }
             ]
           },

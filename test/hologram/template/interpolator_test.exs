@@ -14,7 +14,7 @@ defmodule Hologram.Template.InterpolatorTest do
     end
 
     test "expression" do
-      nodes = [%TextNode{content: "{{ @abc }}"}]
+      nodes = [%TextNode{content: "{@abc}"}]
       result = Interpolator.interpolate(nodes)
 
       expected = [
@@ -27,7 +27,7 @@ defmodule Hologram.Template.InterpolatorTest do
     end
 
     test "text, expression" do
-      nodes = [%TextNode{content: "bcd{{ @abc }}"}]
+      nodes = [%TextNode{content: "bcd{@abc}"}]
       result = Interpolator.interpolate(nodes)
 
       expected = [
@@ -41,7 +41,7 @@ defmodule Hologram.Template.InterpolatorTest do
     end
 
     test "expression, text" do
-      nodes = [%TextNode{content: "{{ @abc }}bcd"}]
+      nodes = [%TextNode{content: "{@abc}bcd"}]
       result = Interpolator.interpolate(nodes)
 
       expected = [
@@ -55,7 +55,7 @@ defmodule Hologram.Template.InterpolatorTest do
     end
 
     test "expression, expression" do
-      nodes = [%TextNode{content: "{{ @abc }}{{ @bcd }}"}]
+      nodes = [%TextNode{content: "{@abc}{@bcd}"}]
       result = Interpolator.interpolate(nodes)
 
       expected = [
@@ -71,7 +71,7 @@ defmodule Hologram.Template.InterpolatorTest do
     end
 
     test "text, expression, text" do
-      nodes = [%TextNode{content: "cde{{ @abc }}bcd"}]
+      nodes = [%TextNode{content: "cde{@abc}bcd"}]
       result = Interpolator.interpolate(nodes)
 
       expected = [
@@ -86,7 +86,7 @@ defmodule Hologram.Template.InterpolatorTest do
     end
 
     test "expression, text, expression" do
-      nodes = [%TextNode{content: "{{ @abc }}bcd{{ @cde }}"}]
+      nodes = [%TextNode{content: "{@abc}bcd{@cde}"}]
       result = Interpolator.interpolate(nodes)
 
       expected = [
@@ -103,7 +103,7 @@ defmodule Hologram.Template.InterpolatorTest do
     end
 
     test "text, expression, text, expression" do
-      nodes = [%TextNode{content: "cde{{ @abc }}bcd{{ @def }}"}]
+      nodes = [%TextNode{content: "cde{@abc}bcd{@def}"}]
       result = Interpolator.interpolate(nodes)
 
       expected = [
@@ -121,7 +121,7 @@ defmodule Hologram.Template.InterpolatorTest do
     end
 
     test "expression, text, expression, text" do
-      nodes = [%TextNode{content: "{{ @abc }}bcd{{ @cde }}def"}]
+      nodes = [%TextNode{content: "{@abc}bcd{@cde}def"}]
       result = Interpolator.interpolate(nodes)
 
       expected = [
@@ -159,7 +159,7 @@ defmodule Hologram.Template.InterpolatorTest do
         %ElementNode{
           tag: "div",
           children: [],
-          attrs: %{"key" => "{{ 1 }}"}
+          attrs: %{"key" => "{1}"}
         }
       ]
 
@@ -199,10 +199,10 @@ defmodule Hologram.Template.InterpolatorTest do
 
   test "nodes tree" do
     nodes = [
-      %TextNode{content: "abc{{ 1 }}cde"},
+      %TextNode{content: "abc{1}cde"},
       %ElementNode{
         tag: "div",
-        attrs: %{"m" => "{{ 2 }}"},
+        attrs: %{"m" => "{2}"},
         children: [
           %TextNode{content: "xyz"},
           %ElementNode{
@@ -210,9 +210,9 @@ defmodule Hologram.Template.InterpolatorTest do
             children: [
               %ElementNode{tag: "span", children: [], attrs: %{}}
             ],
-            attrs: %{"n" => "{{ 3 }}"}
+            attrs: %{"n" => "{3}"}
           },
-          %TextNode{content: "def{{ 4 }}fgh"}
+          %TextNode{content: "def{4}fgh"}
         ]
       },
       %TextNode{content: "ghi"}

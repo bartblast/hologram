@@ -13,7 +13,7 @@ defmodule Hologram.Template.Interpolator do
       iex>   %TextNode{},
       iex>   %ElementNode{
       iex>     children: [%TextNode{}],
-      iex>     attrs: %{"key" => "{{ 1 }}"}
+      iex>     attrs: %{"key" => "{1}"}
       iex>   }
       iex> ]
       iex> interpolate(nodes)
@@ -43,7 +43,7 @@ defmodule Hologram.Template.Interpolator do
   end
 
   defp interpolate_node(%TextNode{content: content} = node) do
-    regex = ~r/([^\{]*)(\{\{([^\}]*)\}\})([^\{]*)/
+    regex = ~r/([^\{]*)(\{([^\}]*)\})([^\{]*)/
 
     nodes =
       Regex.scan(regex, content)
@@ -64,14 +64,14 @@ defmodule Hologram.Template.Interpolator do
   If there is no expression in the attribute value string, the string itself is returned.
 
   ## Examples
-      iex> interpolate_attr("{{ 1 }}")
+      iex> interpolate_attr("{1}")
       %Expression{ir: %IntegerType{value: 1}}
   """
 
   @spec interpolate_attr(String.t()) :: %Expression{} | String.t()
 
   defp interpolate_attr(str) do
-    regex = ~r/^\{\{(.+)\}\}$/
+    regex = ~r/^\{(.+)\}$/
 
     case Regex.run(regex, str) do
       [_, code] ->

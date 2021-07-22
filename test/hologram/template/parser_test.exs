@@ -40,8 +40,8 @@ defmodule Hologram.Template.ParserTest do
 
   test "interpolation quotes fixing" do
     markup = """
-    <div class=\"test_class_1\" abc={{ @abc }} id=\"test_id_1\" bcd={{ @bcd }}>
-      <span class=\"test_class_2\" cde={{ @cde }} id=\"test_id_2\" def={{ @def }}></span>
+    <div class=\"test_class_1\" abc={@abc} id=\"test_id_1\" bcd={@bcd}>
+      <span class=\"test_class_2\" cde={@cde} id=\"test_id_2\" def={@def}></span>
     </div>
     """
 
@@ -53,18 +53,18 @@ defmodule Hologram.Template.ParserTest do
          {"div",
           [
             {"class", "test_class_1"},
-            {"abc", "{{ @abc }}"},
+            {"abc", "{@abc}"},
             {"id", "test_id_1"},
-            {"bcd", "{{ @bcd }}"}
+            {"bcd", "{@bcd}"}
           ],
           [
             "\n  ",
             {"span",
              [
                {"class", "test_class_2"},
-               {"cde", "{{ @cde }}"},
+               {"cde", "{@cde}"},
                {"id", "test_id_2"},
-               {"def", "{{ @def }}"}
+               {"def", "{@def}"}
              ], []},
             "\n"
           ]},

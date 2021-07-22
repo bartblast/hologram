@@ -203,9 +203,9 @@ defmodule Hologram.Template.TransformerTest do
 
   test "expression interpolation in attrs" do
     html = """
-    <div class="class_1" :if={{ @var_1 }} id="id_1" :show={{ @var_2 }}>
+    <div class="class_1" :if={@var_1} id="id_1" :show={@var_2}>
       <h1>
-        <span class="class_2" :if={{ @var_3 }} id="id_2" :show={{ @var_4 }}></span>
+        <span class="class_2" :if={@var_3} id="id_2" :show={@var_4}></span>
       </h1>
     </div>
     """
@@ -253,7 +253,7 @@ defmodule Hologram.Template.TransformerTest do
   end
 
   test "expression interpolation in text node nested in element node" do
-    html = "<div>test_1{{ @x1 }}test_2{{ @x2 }}test_3</div>"
+    html = "<div>test_1{@x1}test_2{@x2}test_3</div>"
 
     result =
       Parser.parse!(html)
@@ -281,7 +281,7 @@ defmodule Hologram.Template.TransformerTest do
   end
 
   test "expression interpolation in text node not nested in element node" do
-    html = "test_1{{ @x1 }}test_2{{ @x2 }}test_3"
+    html = "test_1{@x1}test_2{@x2}test_3"
 
     result =
       Parser.parse!(html)

@@ -14,7 +14,7 @@ defmodule Hologram.E2E.Page1 do
     <body>
       <h1>Page 1</h1>
       <button id="button" on_click="button_clicked">Request async job</button>
-      <div id="text">{{ @text }}</div>
+      <div id="text">{@text}</div>
     </body>
     """
   end

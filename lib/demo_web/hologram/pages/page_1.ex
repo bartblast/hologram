@@ -14,9 +14,9 @@ defmodule Demo.Page1 do
     ~H"""
     <body>
       <h1>Demo Page</h1>
-      <Counter value={{ @counter }} />
+      <Counter value={@counter} />
       <div><button on_click="increment">Increment</button></div>
-      <div>{{ @text }}</div>
+      <div>{@text}</div>
       <form on_submit="submit_form">
         <input type="text" name="email" />
         <input type="text" name="first_name" />

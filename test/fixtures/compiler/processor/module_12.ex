@@ -5,7 +5,7 @@ defmodule Hologram.Test.Fixtures.Compiler.Processor.Module12 do
     ~H"""
     <div></div>
     test_text
-    {{ @value }}
+    {@value}
     """
   end
 end

@@ -3,7 +3,7 @@ defmodule Counter do
 
   def template do
     ~H"""
-    <div>Hello World {{ @counter }}</div>
+    <div>Hello World {@counter}</div>
     """
   end
 end

@@ -16,7 +16,7 @@ defmodule Hologram.Template.Parser do
   end
 
   defp fix_quotes(str) do
-    regex = ~r/=(\{\{.+\}\})/U
+    regex = ~r/=(\{.+\})/U
     Regex.replace(regex, str, "=\"\\1\"")
   end
 end

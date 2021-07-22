@@ -11,7 +11,7 @@ defmodule Hologram.Template.Transformer do
   Interpolates expression nodes in text nodes and attribute values.
 
   ## Examples
-      iex> transform([{"div", [{"class", "{{ 1 }}"}, {"id", "some-id"}], ["some-text-{{ 2 }}"]}])
+      iex> transform([{"div", [{"class", "{1}"}, {"id", "some-id"}], ["some-text-{2}"]}])
       [
         %ElementNode{
           attrs: %{

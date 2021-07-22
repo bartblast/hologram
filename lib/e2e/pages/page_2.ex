@@ -14,7 +14,7 @@ defmodule Hologram.E2E.Page2 do
     <body>
       <h1>Page 2</h1>
       <button id="button" on_click="update_text">Update text</button>
-      <div id="text">{{ @text }}</div>
+      <div id="text">{@text}</div>
     </body>
     """
   end
