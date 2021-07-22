@@ -1,7 +1,7 @@
 defmodule Hologram.Template.RendererTest do
   use Hologram.TestCase, async: true
 
-  alias Hologram.Compiler.IR.ModuleAttributeOperator
+  alias Hologram.Compiler.IR.{ModuleAttributeOperator, TupleType}
   alias Hologram.Template.Document.{Component, ElementNode, Expression, TextNode}
   alias Hologram.Template.Renderer
 
@@ -44,7 +44,12 @@ defmodule Hologram.Template.RendererTest do
     end
 
     test "expression" do
-      virtual_dom = %Expression{ir: %ModuleAttributeOperator{name: :a}}
+      virtual_dom = %Expression{
+        ir: %TupleType{
+          data: [%ModuleAttributeOperator{name: :a}]
+        }
+      }
+
       state = %{a: 123}
 
       result = Renderer.render(virtual_dom, state)
