@@ -16,14 +16,18 @@ defmodule Hologram.Template.Transformer do
         %ElementNode{
           attrs: %{
             "class" => %Expression{
-              ir: %IntegerType{value: 1}
+              ir: %TupleType{
+                data: [%IntegerType{value: 1}]
+              }
             },
             "id" => "some-id"
           },
           children: [
             %TextNode{content: "some-text-"},
             %Expression{
-              ir: %IntegerType{value: 2}
+              ir: %TupleType{
+                data: [%IntegerType{value: 2}]
+              }
             }
           ],
           tag: "div"

@@ -5,7 +5,8 @@ defmodule Hologram.Template.ExpressionGenerator do
     # TODO: pass actual %Context{} struct received from compiler
     context = %Context{module: nil, uses: [], imports: [], aliases: [], attributes: []}
 
-    callback_return = Generator.generate(ir, context)
+    tuple_first_elem_ir = hd(ir.data)
+    callback_return = Generator.generate(tuple_first_elem_ir, context)
     "{ type: 'expression', callback: ($state) => { return #{callback_return} } }"
   end
 end

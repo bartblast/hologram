@@ -1,7 +1,7 @@
 defmodule Hologram.Template.TransformerTest do
   use Hologram.TestCase, async: true
 
-  alias Hologram.Compiler.IR.{Alias, ModuleAttributeOperator}
+  alias Hologram.Compiler.IR.{Alias, ModuleAttributeOperator, TupleType}
   alias Hologram.Template.{Parser, Transformer}
   alias Hologram.Template.Document.{Component, Expression, ElementNode, TextNode}
 
@@ -217,8 +217,16 @@ defmodule Hologram.Template.TransformerTest do
     expected = [
       %ElementNode{
         attrs: %{
-          ":if": %Expression{ir: %ModuleAttributeOperator{name: :var_1}},
-          ":show": %Expression{ir: %ModuleAttributeOperator{name: :var_2}},
+          ":if": %Expression{
+            ir: %TupleType{
+              data: [%ModuleAttributeOperator{name: :var_1}]
+            }
+          },
+          ":show": %Expression{
+            ir: %TupleType{
+              data: [%ModuleAttributeOperator{name: :var_2}]
+            }
+          },
           class: "class_1",
           id: "id_1"
         },
@@ -230,8 +238,16 @@ defmodule Hologram.Template.TransformerTest do
               %TextNode{content: "\n    "},
               %ElementNode{
                 attrs: %{
-                  ":if": %Expression{ir: %ModuleAttributeOperator{name: :var_3}},
-                  ":show": %Expression{ir: %ModuleAttributeOperator{name: :var_4}},
+                  ":if": %Expression{
+                    ir: %TupleType{
+                      data: [%ModuleAttributeOperator{name: :var_3}]
+                    }
+                  },
+                  ":show": %Expression{
+                    ir: %TupleType{
+                      data: [%ModuleAttributeOperator{name: :var_4}]
+                    }
+                  },
                   class: "class_2",
                   id: "id_2"
                 },
@@ -265,11 +281,15 @@ defmodule Hologram.Template.TransformerTest do
         children: [
           %TextNode{content: "test_1"},
           %Expression{
-            ir: %ModuleAttributeOperator{name: :x1}
+            ir: %TupleType{
+              data: [%ModuleAttributeOperator{name: :x1}]
+            }
           },
           %TextNode{content: "test_2"},
           %Expression{
-            ir: %ModuleAttributeOperator{name: :x2}
+            ir: %TupleType{
+              data: [%ModuleAttributeOperator{name: :x2}]
+            }
           },
           %TextNode{content: "test_3"}
         ],
@@ -290,11 +310,15 @@ defmodule Hologram.Template.TransformerTest do
     expected = [
       %TextNode{content: "test_1"},
       %Expression{
-        ir: %ModuleAttributeOperator{name: :x1}
+        ir: %TupleType{
+          data: [%ModuleAttributeOperator{name: :x1}]
+        }
       },
       %TextNode{content: "test_2"},
       %Expression{
-        ir: %ModuleAttributeOperator{name: :x2}
+        ir: %TupleType{
+          data: [%ModuleAttributeOperator{name: :x2}]
+        }
       },
       %TextNode{content: "test_3"}
     ]

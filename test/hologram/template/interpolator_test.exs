@@ -1,7 +1,7 @@
 defmodule Hologram.Template.InterpolatorTest do
   use Hologram.TestCase, async: true
 
-  alias Hologram.Compiler.IR.{IntegerType, ModuleAttributeOperator}
+  alias Hologram.Compiler.IR.{IntegerType, ModuleAttributeOperator, TupleType}
   alias Hologram.Template.Document.{Expression, ElementNode, TextNode}
   alias Hologram.Template.Interpolator
 
@@ -19,7 +19,9 @@ defmodule Hologram.Template.InterpolatorTest do
 
       expected = [
         %Expression{
-          ir: %ModuleAttributeOperator{name: :abc}
+          ir: %TupleType{
+            data: [%ModuleAttributeOperator{name: :abc}]
+          }
         }
       ]
 
@@ -33,7 +35,9 @@ defmodule Hologram.Template.InterpolatorTest do
       expected = [
         %TextNode{content: "bcd"},
         %Expression{
-          ir: %ModuleAttributeOperator{name: :abc}
+          ir: %TupleType{
+            data: [%ModuleAttributeOperator{name: :abc}]
+          }
         }
       ]
 
@@ -46,7 +50,9 @@ defmodule Hologram.Template.InterpolatorTest do
 
       expected = [
         %Expression{
-          ir: %ModuleAttributeOperator{name: :abc}
+          ir: %TupleType{
+            data: [%ModuleAttributeOperator{name: :abc}]
+          }
         },
         %TextNode{content: "bcd"}
       ]
@@ -60,10 +66,14 @@ defmodule Hologram.Template.InterpolatorTest do
 
       expected = [
         %Expression{
-          ir: %ModuleAttributeOperator{name: :abc}
+          ir: %TupleType{
+            data: [%ModuleAttributeOperator{name: :abc}]
+          }
         },
         %Expression{
-          ir: %ModuleAttributeOperator{name: :bcd}
+          ir: %TupleType{
+            data: [%ModuleAttributeOperator{name: :bcd}]
+          }
         }
       ]
 
@@ -77,7 +87,9 @@ defmodule Hologram.Template.InterpolatorTest do
       expected = [
         %TextNode{content: "cde"},
         %Expression{
-          ir: %ModuleAttributeOperator{name: :abc}
+          ir: %TupleType{
+            data: [%ModuleAttributeOperator{name: :abc}]
+          }
         },
         %TextNode{content: "bcd"}
       ]
@@ -91,11 +103,15 @@ defmodule Hologram.Template.InterpolatorTest do
 
       expected = [
         %Expression{
-          ir: %ModuleAttributeOperator{name: :abc}
+          ir: %TupleType{
+            data: [%ModuleAttributeOperator{name: :abc}]
+          }
         },
         %TextNode{content: "bcd"},
         %Expression{
-          ir: %ModuleAttributeOperator{name: :cde}
+          ir: %TupleType{
+            data: [%ModuleAttributeOperator{name: :cde}]
+          }
         }
       ]
 
@@ -109,11 +125,15 @@ defmodule Hologram.Template.InterpolatorTest do
       expected = [
         %TextNode{content: "cde"},
         %Expression{
-          ir: %ModuleAttributeOperator{name: :abc}
+          ir: %TupleType{
+            data: [%ModuleAttributeOperator{name: :abc}]
+          }
         },
         %TextNode{content: "bcd"},
         %Expression{
-          ir: %ModuleAttributeOperator{name: :def}
+          ir: %TupleType{
+            data: [%ModuleAttributeOperator{name: :def}]
+          }
         }
       ]
 
@@ -126,11 +146,15 @@ defmodule Hologram.Template.InterpolatorTest do
 
       expected = [
         %Expression{
-          ir: %ModuleAttributeOperator{name: :abc}
+          ir: %TupleType{
+            data: [%ModuleAttributeOperator{name: :abc}]
+          }
         },
         %TextNode{content: "bcd"},
         %Expression{
-          ir: %ModuleAttributeOperator{name: :cde}
+          ir: %TupleType{
+            data: [%ModuleAttributeOperator{name: :cde}]
+          }
         },
         %TextNode{content: "def"}
       ]
@@ -169,7 +193,9 @@ defmodule Hologram.Template.InterpolatorTest do
         %ElementNode{
           attrs: %{
             "key" => %Expression{
-              ir: %IntegerType{value: 1}
+              ir: %TupleType{
+                data: [%IntegerType{value: 1}]
+              }
             }
           },
           children: [],
@@ -222,11 +248,18 @@ defmodule Hologram.Template.InterpolatorTest do
 
     expected = [
       %TextNode{content: "abc"},
-      %Expression{ir: %IntegerType{value: 1}},
+      %Expression{ir: %TupleType{
+        data: [%IntegerType{value: 1}]
+        }
+      },
       %TextNode{content: "cde"},
       %ElementNode{
         tag: "div",
-        attrs: %{"m" => %Expression{ir: %IntegerType{value: 2}}},
+        attrs: %{"m" => %Expression{
+          ir: %TupleType{
+            data: [%IntegerType{value: 2}]
+          }
+        }},
         children: [
           %TextNode{content: "xyz"},
           %ElementNode{
@@ -234,10 +267,18 @@ defmodule Hologram.Template.InterpolatorTest do
             children: [
               %ElementNode{tag: "span", children: [], attrs: %{}}
             ],
-            attrs: %{"n" => %Expression{ir: %IntegerType{value: 3}}}
+            attrs: %{"n" => %Expression{
+              ir: %TupleType{
+                data: [%IntegerType{value: 3}]
+              }
+            }}
           },
           %TextNode{content: "def"},
-          %Expression{ir: %IntegerType{value: 4}},
+          %Expression{
+            ir: %TupleType{
+              data: [%IntegerType{value: 4}]
+            }
+          },
           %TextNode{content: "fgh"}
         ]
       },

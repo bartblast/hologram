@@ -1,7 +1,7 @@
 defmodule Hologram.Template.GeneratorTest do
   use Hologram.TestCase, async: true
 
-  alias Hologram.Compiler.IR.AtomType
+  alias Hologram.Compiler.IR.{AtomType, TupleType}
   alias Hologram.Template.Document.{Component, ElementNode, Expression, TextNode}
   alias Hologram.Template.Generator
 
@@ -37,7 +37,12 @@ defmodule Hologram.Template.GeneratorTest do
   end
 
   test "expression" do
-    node = %Expression{ir: %AtomType{value: "x"}}
+    node =
+      %Expression{
+        ir: %TupleType{
+          data: [%AtomType{value: "x"}]
+        }
+      }
 
     result = Generator.generate(node)
 

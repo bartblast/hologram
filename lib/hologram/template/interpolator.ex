@@ -43,11 +43,11 @@ defmodule Hologram.Template.Interpolator do
   end
 
   defp interpolate_node(%TextNode{content: content} = node) do
-    regex = ~r/([^\{]*)(\{([^\}]*)\})([^\{]*)/
+    regex = ~r/([^\{]*)(\{[^\}]*\})([^\{]*)/
 
     nodes =
       Regex.scan(regex, content)
-      |> Enum.reduce([], fn [_, left, _, expr, right], acc ->
+      |> Enum.reduce([], fn [_, left, expr, right], acc ->
         acc
         |> maybe_include_text_node(left)
         |> maybe_include_expression(expr)
@@ -71,7 +71,7 @@ defmodule Hologram.Template.Interpolator do
   @spec interpolate_attr(String.t()) :: %Expression{} | String.t()
 
   defp interpolate_attr(str) do
-    regex = ~r/^\{(.+)\}$/
+    regex = ~r/^(\{.+\})$/
 
     case Regex.run(regex, str) do
       [_, code] ->
