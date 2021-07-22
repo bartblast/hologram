@@ -10,13 +10,19 @@
 | ----------- |:------------------:|
 | Actions     | :x:                |
 | Commands    | :white_check_mark: |
-| Components  | :x:                |
-| Layouts     | :x:                |
-| Navigation  | :x:                |
-| Pages       | :x:                |
 | Routing     | :x:                |
 | Session     | :x:                |
-| Templates   | :x:                |
+
+#### Template Engine
+
+| Feature         | Status             |
+| --------------- |:------------------:|
+| Components      | :x:                |
+| Layouts         | :x:                |
+| Navigation      | :x:                |
+| Pages           | :x:                |
+| Templates       | :x:                |
+| Two-Way Binding | :x:                |
 
 #### Events
 
