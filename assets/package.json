@@ -4,7 +4,7 @@
   "license": "MIT",
   "scripts": {
     "deploy": "NODE_ENV=production webpack --mode production",
-    "test": "mochapack --mode development --webpack-config webpack.config.test.js \"../test/javascript/**/*.js\"",
+    "test": "mochapack --mode development --webpack-config webpack.config.test.js \"../test/js/**/*.js\"",
     "test-file": "mochapack --mode development --webpack-config webpack.config.test.js",    
     "watch": "webpack --mode development --watch"
   },

@@ -80,7 +80,16 @@ defmodule Demo.MixProject do
       setup: ["deps.get", "ecto.setup", "cmd npm install --prefix assets"],
       "ecto.setup": ["ecto.create", "ecto.migrate", "run priv/repo/seeds.exs"],
       "ecto.reset": ["ecto.drop", "ecto.setup"],
-      test: ["ecto.create --quiet", "ecto.migrate --quiet", "test"]
+      test: [&test_js/1, "test"]
     ]
+  end
+
+  defp test_js(_) do
+    opts = [cd: "assets", into: IO.stream(:stdio, :line)]
+    {_, status} = System.cmd("npm", ["test"], opts)
+
+    if status > 0 do
+      Mix.raise "JavaScript tests failed!"
+    end
   end
 end
