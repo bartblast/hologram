@@ -24,7 +24,7 @@
 | ------------ |:------------------:|
 | Blur         | :x:                |
 | Change       | :x:                |
-| Click        | :x:                |
+| Click        | :white_check_mark: |
 | Focus        | :x:                |
 | Key Down     | :x:                |
 | Key Press    | :x:                |
