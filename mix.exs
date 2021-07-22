@@ -15,6 +15,10 @@ defmodule Demo.MixProject do
     ]
   end
 
+  defp preferred_cli_env do
+    ["test.all": :test]
+  end
+
   def project do
     [
       app: :hologram,
@@ -26,7 +30,8 @@ defmodule Demo.MixProject do
       aliases: aliases(),
       description: "Work in progress...",
       deps: deps(),
-      package: package()
+      package: package(),
+      preferred_cli_env: preferred_cli_env()
     ]
   end
 
@@ -80,8 +85,9 @@ defmodule Demo.MixProject do
       setup: ["deps.get", "ecto.setup", "cmd npm install --prefix assets"],
       "ecto.setup": ["ecto.create", "ecto.migrate", "run priv/repo/seeds.exs"],
       "ecto.reset": ["ecto.drop", "ecto.setup"],
+      test: ["test --exclude e2e"],
       # we run mix compile here to trigger the Hologram compiler (to reload routes)
-      test: ["compile", &test_js/1, "test"]
+      "test.all": ["compile", &test_js/1, "test --include e2e"]
     ]
   end
 
