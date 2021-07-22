@@ -60,7 +60,7 @@
 | Type               | Status             |
 | ------------------ |:------------------:|
 | Anonymous Function | :x:                |
-| Atom               | :white_check_mark: |
+| Atom               | :x:                |
 | Binary             | :x:                |
 | Bitstring          | :x:                |     
 | Boolean            | :x:                |     
