@@ -42,6 +42,12 @@ defmodule Hologram.Compiler.GeneratorTest do
       assert result == "{ type: 'integer', value: 123 }"
     end
 
+    test "list" do
+      ir = %ListType{data: [%IntegerType{value: 123}]}
+      result = Generator.generate(ir, @context)
+      assert result == "{ type: 'list', data: [ { type: 'integer', value: 123 } ] }"
+    end
+
     test "map" do
       ir = %MapType{data: [{%AtomType{value: :a}, %IntegerType{value: 1}}]}
 

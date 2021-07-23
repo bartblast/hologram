@@ -5,6 +5,7 @@ defmodule Hologram.Compiler.Generator do
     AdditionOperatorGenerator,
     DotOperatorGenerator,
     FunctionCallGenerator,
+    ListTypeGenerator,
     MapTypeGenerator,
     ModuleDefinitionGenerator,
     ModuleAttributeOperatorGenerator,
@@ -21,6 +22,7 @@ defmodule Hologram.Compiler.Generator do
     DotOperator,
     FunctionCall,
     IntegerType,
+    ListType,
     MapType,
     ModuleAttributeOperator,
     ModuleDefinition,
@@ -44,6 +46,10 @@ defmodule Hologram.Compiler.Generator do
 
   def generate(%IntegerType{value: value}, _, _) do
     PrimitiveTypeGenerator.generate(:integer, "#{value}")
+  end
+
+  def generate(%ListType{data: data}, %Context{} = context, opts) do
+    ListTypeGenerator.generate(data, context, opts)
   end
 
   def generate(%MapType{data: data}, %Context{} = context, opts) do
