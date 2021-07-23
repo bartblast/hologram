@@ -1,4 +1,5 @@
 defmodule Hologram.Template.ElementNodeGenerator do
+  alias Hologram.Template.Document.Expression
   alias Hologram.Template.Generator
 
   def generate(tag, attrs, children) do
@@ -13,7 +14,7 @@ defmodule Hologram.Template.ElementNodeGenerator do
       js =
         attrs
         |> Enum.map(fn {key, value} ->
-          "'#{key}': '#{value}'"
+          "'#{key}': #{generate_attr_value(value)}"
         end)
         |> Enum.join(", ")
 
@@ -22,6 +23,12 @@ defmodule Hologram.Template.ElementNodeGenerator do
       "{}"
     end
   end
+
+  defp generate_attr_value(%Expression{} = expr) do
+    Generator.generate(expr)
+  end
+
+  defp generate_attr_value(value), do: "'#{value}'"
 
   defp generate_children(children) do
     js =
