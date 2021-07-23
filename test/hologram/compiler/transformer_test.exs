@@ -206,6 +206,29 @@ defmodule Hologram.Compiler.TransformerTest do
       assert %FunctionCall{} = Transformer.transform(ast, @context)
     end
 
+    test "string interpolation" do
+      code = "\"\#{sth}\""
+      ast = ast(code)
+
+      result = Transformer.transform(ast, @context)
+
+      expected =
+        %BinaryType{
+          parts: [
+            %TypeOperator{
+              left: %FunctionCall{
+                function: :to_string,
+                module: Kernel,
+                params: [%Variable{name: :sth}]
+              },
+              right: :binary
+            }
+          ]
+        }
+      
+      assert result == expected
+    end
+
     test "variable" do
       code = "a"
       ast = ast(code)

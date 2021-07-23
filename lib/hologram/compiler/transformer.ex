@@ -128,6 +128,10 @@ defmodule Hologram.Compiler.Transformer do
     FunctionCallTransformer.transform(module_segs, function, params, context)
   end
 
+  def transform({{:., _, [Kernel, :to_string]}, _, params}, %Context{} = context) do
+    FunctionCallTransformer.transform([:Kernel], :to_string, params, context)
+  end
+
   def transform({function, _, params}, %Context{} = context) when is_atom(function) and is_list(params) do
     FunctionCallTransformer.transform([], function, params, context)
   end
