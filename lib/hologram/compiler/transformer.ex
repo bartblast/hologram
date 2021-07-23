@@ -23,6 +23,7 @@ defmodule Hologram.Compiler.Transformer do
     ModuleAttributeDefinitionTransformer,
     ModuleDefinitionTransformer,
     StructTypeTransformer,
+    TypeOperatorTransformer,
     TupleTypeTransformer,
     UseDirectiveTransformer
   }
@@ -87,6 +88,10 @@ defmodule Hologram.Compiler.Transformer do
 
   def transform({:@, _, [{name, _, nil}]}, _) do
     %ModuleAttributeOperator{name: name}
+  end
+
+  def transform({:"::", _, ast}, %Context{} = context) do
+    TypeOperatorTransformer.transform(ast, context)
   end
 
   # DEFINITIONS

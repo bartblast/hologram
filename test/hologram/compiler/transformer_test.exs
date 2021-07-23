@@ -22,6 +22,7 @@ defmodule Hologram.Compiler.TransformerTest do
     StringType,
     StructType,
     TupleType,
+    TypeOperator,
     UseDirective,
     Variable
   }
@@ -134,6 +135,13 @@ defmodule Hologram.Compiler.TransformerTest do
 
       result = Transformer.transform(ast, @context)
       assert result == %ModuleAttributeOperator{name: :a}
+    end
+
+    test "type" do
+      code = "str::binary"
+      ast = ast(code)
+
+      assert %TypeOperator{} = Transformer.transform(ast, @context)
     end
   end
 

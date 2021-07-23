@@ -59,6 +59,10 @@ defmodule Hologram.Compiler.IR do
     defstruct name: nil
   end
 
+  defmodule TypeOperator do
+    defstruct left: nil, right: nil
+  end
+
   # DEFINITIONS
 
   defmodule FunctionDefinition do
