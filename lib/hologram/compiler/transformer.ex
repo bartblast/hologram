@@ -12,6 +12,7 @@ defmodule Hologram.Compiler.Transformer do
   alias Hologram.Compiler.{
     AdditionOperatorTransformer,
     AliasTransformer,
+    BinaryTypeTransformer,
     DotOperatorTransformer,
     FunctionDefinitionTransformer,
     FunctionCallTransformer,
@@ -64,6 +65,10 @@ defmodule Hologram.Compiler.Transformer do
 
   def transform({_, _} = ast, %Context{} = context) do
     TupleTypeTransformer.transform(ast, context)
+  end
+
+  def transform({:<<>>, _, parts}, %Context{} = context) do
+    BinaryTypeTransformer.transform(parts, context)
   end
 
   # OPERATORS

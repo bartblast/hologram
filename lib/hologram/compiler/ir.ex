@@ -5,6 +5,10 @@ defmodule Hologram.Compiler.IR do
     defstruct value: nil
   end
 
+  defmodule BinaryType do
+    defstruct parts: nil
+  end
+
   defmodule BooleanType do
     defstruct value: nil
   end

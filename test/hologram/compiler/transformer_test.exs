@@ -5,6 +5,7 @@ defmodule Hologram.Compiler.TransformerTest do
     AdditionOperator,
     Alias,
     AtomType,
+    BinaryType,
     BooleanType,
     DotOperator,
     FunctionDefinition,
@@ -96,6 +97,13 @@ defmodule Hologram.Compiler.TransformerTest do
 
       assert %TupleType{} = Transformer.transform(ast, @context)
     end
+
+    test "binary" do
+      code = "<<1, 2>>"
+      ast = ast(code)
+
+      assert %BinaryType{} = Transformer.transform(ast, @context)
+    end
   end
 
   describe "operators" do
@@ -138,7 +146,7 @@ defmodule Hologram.Compiler.TransformerTest do
     end
 
     test "module" do
-      code = "defmodule Test do end"
+      code = "defmodule Hologram.Test.Fixtures.Compiler.Transformer.Module1 do end"
       ast = ast(code)
 
       assert %ModuleDefinition{} = Transformer.transform(ast, @context)
@@ -154,7 +162,7 @@ defmodule Hologram.Compiler.TransformerTest do
 
   describe "directives" do
     test "alias" do
-      code = "alias Abc.Bcd"
+      code = "alias Hologram.Test.Fixtures.Compiler.Transformer.Module1"
       ast = ast(code)
 
       assert %Alias{} = Transformer.transform(ast, @context)
