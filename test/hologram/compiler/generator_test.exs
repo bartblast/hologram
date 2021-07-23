@@ -6,6 +6,7 @@ defmodule Hologram.Compiler.GeneratorTest do
   alias Hologram.Compiler.IR.{
     AdditionOperator,
     AtomType,
+    BinaryType,
     BooleanType,
     DotOperator,
     FunctionCall,
@@ -141,13 +142,9 @@ defmodule Hologram.Compiler.GeneratorTest do
           function: :sigil_H,
           module: Hologram.Runtime.Commons,
           params: [
-            %FunctionCall{
-              function: :<<>>,
-              module: Kernel,
-              params: [
-                %StringType{
-                  value: "test"
-                }
+            %BinaryType{
+              parts: [
+                %StringType{value: "test"}
               ]
             },
             %ListType{data: []}
