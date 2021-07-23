@@ -23,5 +23,7 @@ defmodule Hologram.Compiler.TypeOperatorTransformerTest do
         left: %Variable{name: :str},
         right: :binary
       }
+
+    assert result == expected
   end
 end
