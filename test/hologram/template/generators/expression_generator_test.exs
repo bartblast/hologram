@@ -8,11 +8,11 @@ defmodule Hologram.Template.ExpressionGeneratorTest do
     ir = %TupleType{
       data: [%AtomType{value: "x"}]
     }
-    
+
     result = ExpressionGenerator.generate(ir)
 
     expected =
-      "{ type: 'expression', callback: ($state) => { return { type: 'atom', value: 'x' } } }"
+      "{ type: 'expression', callback: ($state) => { return { type: 'tuple', data: [ { type: 'atom', value: 'x' } ] } } }"
 
     assert result == expected
   end
