@@ -2,7 +2,7 @@ defmodule Hologram.Compiler.SigilHGeneratorTest do
   use Hologram.TestCase, async: true
 
   alias Hologram.Compiler.{Context, SigilHGenerator}
-  alias Hologram.Compiler.IR.{FunctionCall, ListType, StringType}
+  alias Hologram.Compiler.IR.{BinaryType, FunctionCall, ListType, StringType}
 
   test "generate/2" do
     ir =
@@ -10,13 +10,9 @@ defmodule Hologram.Compiler.SigilHGeneratorTest do
         function: :sigil_H,
         module: Hologram.Runtime.Commons,
         params: [
-          %FunctionCall{
-            function: :<<>>,
-            module: Kernel,
-            params: [
-              %StringType{
-                value: "<div>Hello World {@counter}</div>\n"
-              }
+          %BinaryType{
+            parts: [
+              %StringType{value: "<div>Hello World {@counter}</div>\n"}
             ]
           },
           %ListType{data: []}

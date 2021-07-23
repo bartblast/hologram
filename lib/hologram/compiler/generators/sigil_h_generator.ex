@@ -6,7 +6,7 @@ defmodule Hologram.Compiler.SigilHGenerator do
     ir
     |> Map.get(:params)
     |> hd()
-    |> Map.get(:params)
+    |> Map.get(:parts)
     |> hd()
     |> Map.get(:value)
     |> Parser.parse!()
