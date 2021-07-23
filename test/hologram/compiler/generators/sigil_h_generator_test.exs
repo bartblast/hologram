@@ -21,7 +21,7 @@ defmodule Hologram.Compiler.SigilHGeneratorTest do
 
     context = %Context{module: nil, uses: [], imports: [], aliases: [], attributes: []}
 
-    expected = "[{ type: 'element', tag: 'div', attrs: {}, children: [{ type: 'text', content: 'Hello World ' }, { type: 'expression', callback: ($state) => { return $state.data['~atom[counter]'] } }] }, { type: 'text', content: '\\n' }]"
+    expected = "[{ type: 'element', tag: 'div', attrs: {}, children: [{ type: 'text', content: 'Hello World ' }, { type: 'expression', callback: ($state) => { return { type: 'tuple', data: [ $state.data['~atom[counter]'] ] } } }] }, { type: 'text', content: '\\n' }]"
 
     result = SigilHGenerator.generate(ir, context)
     assert result == expected

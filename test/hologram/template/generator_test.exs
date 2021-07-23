@@ -47,7 +47,7 @@ defmodule Hologram.Template.GeneratorTest do
     result = Generator.generate(node)
 
     expected =
-      "{ type: 'expression', callback: ($state) => { return { type: 'atom', value: 'x' } } }"
+      "{ type: 'expression', callback: ($state) => { return { type: 'tuple', data: [ { type: 'atom', value: 'x' } ] } } }"
 
     assert result == expected
   end
