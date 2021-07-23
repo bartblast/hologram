@@ -65,7 +65,6 @@ defmodule Hologram.Template.ElementNodeGeneratorTest do
     children = []
 
     result = ElementNodeGenerator.generate("div", attrs, children)
-
     expected = "{ type: 'element', tag: 'div', attrs: { 'on_click': { type: 'expression', callback: ($state) => { return { type: 'tuple', data: [ { type: 'string', value: 'abc' } ] } } } }, children: [] }"
 
     assert result == expected
