@@ -76,8 +76,6 @@ export default class DOM {
 
   // TODO: refactor & test
   render(pageModule) {
-    console.log("rendering with state:")
-    console.debug(this.runtime.state)
     if (!this.oldVNode) {
       const container = this.window.document.body
       this.oldVNode = toVNode(container)
