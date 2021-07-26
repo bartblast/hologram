@@ -11,10 +11,8 @@ export default class Runtime {
     this.state = null
   }
 
-  // TODO: consider - pass boxed action name directly
   executeAction(actionName, actionParams, state, context) {
-    const actionNameBoxed = {type: "atom", value: actionName}
-    const actionResult = context.scopeModule.action(actionNameBoxed, actionParams, state)
+    const actionResult = context.scopeModule.action(actionName, actionParams, state)
 
     if (actionResult.type == "tuple") {
       this.state = actionResult.data[0]
@@ -39,7 +37,15 @@ export default class Runtime {
 
   // TODO: refactor & test
   handleClickEvent(context, action, state, _event) {
-    this.executeAction(action, {}, state, context)
+    let actionName;
+    
+    if (action.type == "expression") {
+      actionName = action.callback(state).data[0]
+    } else {
+      actionName = {type: "atom", value: action}
+    }
+
+    this.executeAction(actionName, {}, state, context)
   }
 
   // TODO: refactor & test

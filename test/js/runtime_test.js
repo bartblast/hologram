@@ -2,10 +2,10 @@ import { assert, mockWindow, sinon } from "./support/commons";
 import Runtime from "../../assets/js/hologram/runtime";
 
 describe("executeAction()", () => {
-  let actionName, actionParams, clientPushCommandFake, command, domRenderFake, runtime, state, window;
+  let action, actionParams, clientPushCommandFake, command, domRenderFake, runtime, state, window;
 
   beforeEach(() => {
-    actionName = "test_action"
+    action = {type: "atom", value: "test_action"}
     command = {type: "atom", value: "test_command"}
 
     actionParams = {
@@ -39,14 +39,14 @@ describe("executeAction()", () => {
     const context = {
       pageModule: class {},
       scopeModule: class {
-        static action(_name, params, state) {
+        static action(_action, params, state) {
           state.data["~atom[x]"].value += params.data["~atom[b]"].value
           return {type: "tuple", data: [state, command]}
         }
       }
     }
 
-    runtime.executeAction(actionName, actionParams, state, context)
+    runtime.executeAction(action, actionParams, state, context)
 
     const expectedState = {
       type: "map", 
@@ -74,14 +74,14 @@ describe("executeAction()", () => {
     const context = {
       pageModule: class {},
       scopeModule: class {
-        static action(_name, params, state) {
+        static action(_action, params, state) {
           state.data["~atom[x]"].value += params.data["~atom[b]"].value
           return {type: "tuple", data: [state, command, commandParams]}
         }
       }
     }
 
-    runtime.executeAction(actionName, actionParams, state, context)
+    runtime.executeAction(action, actionParams, state, context)
 
     const expectedState = {
       type: "map",
@@ -101,14 +101,14 @@ describe("executeAction()", () => {
     const context = {
       pageModule: class {},
       scopeModule: class {
-        static action(_name, params, state) {
+        static action(_action, params, state) {
           state.data["~atom[x]"].value += params.data["~atom[b]"].value
           return state
         }
       }
     }
 
-    runtime.executeAction(actionName, actionParams, state, context)
+    runtime.executeAction(action, actionParams, state, context)
 
     const expectedState = {
       type: "map", 
