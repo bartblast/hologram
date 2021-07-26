@@ -34,6 +34,7 @@
     "postcss-loader": "^6.1.0",
     "regenerator-runtime": "^0.13.7",
     "sinon": "^11.1.0",
+    "source-map-loader": "^3.0.0",
     "tailwindcss": "^2.2.4",
     "terser-webpack-plugin": "^5.1.4",
     "webpack": "^5.41.1",
