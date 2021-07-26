@@ -1,13 +1,12 @@
 import {attributesModule, eventListenersModule, h, init, toVNode} from "snabbdom";
 const patch = init([attributesModule, eventListenersModule]);
 
-import Hologram from "../hologram"
-
 export default class DOM {
   // TODO: refactor & test
-  constructor(runtime) {
+  constructor(runtime, window) {
     this.oldVNode = null
     this.runtime = runtime
+    this.window = window
   }
 
   // TODO: refactor & test
@@ -21,7 +20,7 @@ export default class DOM {
 
     switch (node.type) {
       case "component":
-        let module = Hologram.get_module(node.module)
+        let module = this.runtime.get_module(node.module)
 
         if (module.hasOwnProperty("action")) {
           context = Object.assign({}, context)
@@ -42,7 +41,7 @@ export default class DOM {
         return [h(node.tag, {attrs: attrs, on: event_handlers}, children)]
 
       case "expression":
-        return [Hologram.interpolate(node.callback(state))]
+        return [this.runtime.interpolate(node.callback(state))]
 
       case "text":
         return [node.content]
@@ -75,7 +74,7 @@ export default class DOM {
   // TODO: refactor & test
   render(pageModule) {
     if (!this.oldVNode) {
-      const container = window.document.body
+      const container = this.window.document.body
       this.oldVNode = toVNode(container)
     }
 

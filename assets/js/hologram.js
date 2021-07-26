@@ -8,25 +8,9 @@ import Runtime from "./hologram/runtime"
 
 export default class Hologram {
   // TODO: refactor & test
-  static interpolate(value) {
-    switch (value.type) {
-      case "integer":
-        return `${value.value}`
-        
-      case "string":
-        return `${value.value}`
-    }
-  }
-
-  // TODO: refactor & test
-  static get_module(name) {
-    return eval(name.replace(/\./g, ""))
-  }
-
-  // TODO: refactor & test
-  static getRuntime() {
+  static getRuntime(window) {
     if (!window.hologramRuntime) {
-      window.hologramRuntime = new Runtime()
+      window.hologramRuntime = new Runtime(window)
     }
 
     return window.hologramRuntime
@@ -102,7 +86,7 @@ export default class Hologram {
   // TODO: refactor & test
   static run(window, pageModule, state) {
     Hologram.onReady(window.document, () => {
-      Hologram.getRuntime().handleNewPage(pageModule, state)
+      Hologram.getRuntime(window).handleNewPage(pageModule, state)
     })
   }
 }
