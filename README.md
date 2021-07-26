@@ -18,6 +18,7 @@
 | Feature         | Status             |
 | --------------- |:------------------:|
 | Components      | :x:                |
+| Interpolation   | :x:                |
 | Layouts         | :x:                |
 | Navigation      | :x:                |
 | Pages           | :x:                |
