@@ -28,7 +28,7 @@ export default class Runtime {
     } else {
       this.state = actionResult
     }
-
+    
     this.dom.render(context.pageModule)
   }
 

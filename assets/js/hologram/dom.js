@@ -1,6 +1,8 @@
 import {attributesModule, eventListenersModule, h, init, toVNode} from "snabbdom";
 const patch = init([attributesModule, eventListenersModule]);
 
+import Runtime from "./runtime"
+
 export default class DOM {
   // TODO: refactor & test
   constructor(runtime, window) {
@@ -41,7 +43,7 @@ export default class DOM {
         return [h(node.tag, {attrs: attrs, on: event_handlers}, children)]
 
       case "expression":
-        return [this.runtime.interpolate(node.callback(state))]
+        return [Runtime.interpolate(node.callback(state))]
 
       case "text":
         return [node.content]

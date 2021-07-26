@@ -3,6 +3,7 @@ import Runtime from "../../assets/js/hologram/runtime";
 
 describe("executeAction()", () => {
   let actionName, actionParams, clientPushCommandFake, command, domRenderFake, runtime, state, window;
+  
   beforeEach(() => {
     actionName = "test_action"
     command = {type: "atom", value: "test_command"}
