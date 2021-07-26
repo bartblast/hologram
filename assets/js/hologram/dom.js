@@ -43,7 +43,8 @@ export default class DOM {
         return [h(node.tag, {attrs: attrs, on: event_handlers}, children)]
 
       case "expression":
-        return [Runtime.interpolate(node.callback(state))]
+        const evaluatedExpression = node.callback(state).data[0]
+        return [Runtime.interpolate(evaluatedExpression)]
 
       case "text":
         return [node.content]
@@ -75,6 +76,8 @@ export default class DOM {
 
   // TODO: refactor & test
   render(pageModule) {
+    console.log("rendering with state:")
+    console.debug(this.runtime.state)
     if (!this.oldVNode) {
       const container = this.window.document.body
       this.oldVNode = toVNode(container)

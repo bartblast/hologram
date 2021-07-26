@@ -28,7 +28,7 @@ export default class Runtime {
     } else {
       this.state = actionResult
     }
-    
+
     this.dom.render(context.pageModule)
   }
 
@@ -50,7 +50,7 @@ export default class Runtime {
     // TODO: return context in command response
     const context = {pageModule: this.pageModule, scopeModule: this.pageModule}
 
-    this.executeAction(action, {}, this.state, context)
+    this.executeAction(action, {type: "map", data: {}}, this.state, context)
   }
 
   // TODO: refactor & test
