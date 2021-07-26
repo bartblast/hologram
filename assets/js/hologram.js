@@ -5,6 +5,7 @@ import "regenerator-runtime/runtime";
 import cloneDeep from "lodash/cloneDeep";
 
 import Runtime from "./hologram/runtime"
+import Utils from "./hologram/utils"
 
 export default class Hologram {
   // TODO: refactor & test
@@ -37,20 +38,6 @@ export default class Hologram {
   // TODO: refactor & test
   static js(js) {
     eval(js.value)
-  }
-
-  // TODO: refactor & test
-  static objectKey(key) {
-    switch (key.type) {
-      case 'atom':
-        return `~atom[${key.value}]`
-
-      case 'string':
-        return `~string[${key.value}]`
-        
-      default:
-        throw 'Not implemented, at HologramPage.objectKey()'
-    }
   }
 
   // TODO: refactor & test
@@ -100,7 +87,7 @@ window.Elixir_Kernel = class {
 
   // TODO: refactor & test
   static $dot(left, right) {
-    return cloneDeep(left.data[Hologram.objectKey(right)])
+    return cloneDeep(left.data[Utils.serialize(right)])
   }
 }
 
@@ -108,7 +95,7 @@ window.Elixir_Map = class {
   // TODO: refactor & test
   static put(map, key, value) {
     let mapClone = cloneDeep(map)
-    mapClone.data[Hologram.objectKey(key)] = value
+    mapClone.data[Utils.serialize(key)] = value
     return mapClone;
   }
 }

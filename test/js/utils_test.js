@@ -86,3 +86,24 @@ describe("keywordToMap()", () => {
     assert.deepStrictEqual(result, expected) 
   })
 })
+
+describe("serialize()", () => {
+  it("serializes atom", () => {
+    const arg = {type: "atom", value: "test"}
+    const result = Utils.serialize(arg)
+
+    assert.equal(result, "~atom[test]")
+  })
+
+  it("serializes string", () => {
+    const arg = {type: "string", value: "test"}
+    const result = Utils.serialize(arg)
+
+    assert.equal(result, "~string[test]")
+  })
+
+  it("throws an error for unsupported types", () => {
+    const arg = {type: "invalid", value: "test"}
+    assert.throw(() => { Utils.serialize(arg) }, "Not implemented, at Utils.serialize()");
+  })
+})
