@@ -3,12 +3,26 @@ import Runtime from "../../assets/js/hologram/runtime";
 
 describe("executeAction()", () => {
   let actionName, actionParams, clientPushCommandFake, command, domRenderFake, runtime, state, window;
-  
+
   beforeEach(() => {
     actionName = "test_action"
     command = {type: "atom", value: "test_command"}
-    actionParams = {type: "map", data: {a: {type: "integer", value: 1}, b: {type: "integer", value: 2}}}
-    state = {type: "map", data: {x: {type: "integer", value: 1}, y: {type: "integer", value: 2}}}
+
+    actionParams = {
+      type: "map", 
+      data: {
+        "~atom[a]": {type: "integer", value: 1},
+        "~atom[b]": {type: "integer", value: 2}
+      }
+    }
+
+    state = {
+      type: "map", 
+      data: {
+        "~atom[x]": {type: "integer", value: 1}, 
+        "~atom[y]": {type: "integer", value: 2}
+      }
+    }
 
     window = mockWindow()
     runtime = new Runtime(window)
@@ -26,7 +40,7 @@ describe("executeAction()", () => {
       pageModule: class {},
       scopeModule: class {
         static action(_name, params, state) {
-          state.data.x.value += params.data.b.value
+          state.data["~atom[x]"].value += params.data["~atom[b]"].value
           return {type: "tuple", data: [state, command]}
         }
       }
@@ -34,7 +48,14 @@ describe("executeAction()", () => {
 
     runtime.executeAction(actionName, actionParams, state, context)
 
-    const expectedState = {type: "map", data: {x: {type: "integer", value: 3}, y: {type: "integer", value: 2}}}
+    const expectedState = {
+      type: "map", 
+      data: {
+        "~atom[x]": {type: "integer", value: 3},
+        "~atom[y]": {type: "integer", value: 2}
+      }
+    }
+
     assert.deepStrictEqual(runtime.state, expectedState)
 
     sinon.assert.calledWith(clientPushCommandFake, "test_command", {type: "map", data: {}}, context);
@@ -45,8 +66,8 @@ describe("executeAction()", () => {
     const commandParams = {
       type: "map",
       data: {
-        m: {type: "integer", value: 9},
-        n: {type: "integer", value: 8}
+        "~atom[m]": {type: "integer", value: 9},
+        "~atom[n]": {type: "integer", value: 8}
       }
     }
 
@@ -54,7 +75,7 @@ describe("executeAction()", () => {
       pageModule: class {},
       scopeModule: class {
         static action(_name, params, state) {
-          state.data.x.value += params.data.b.value
+          state.data["~atom[x]"].value += params.data["~atom[b]"].value
           return {type: "tuple", data: [state, command, commandParams]}
         }
       }
@@ -62,7 +83,14 @@ describe("executeAction()", () => {
 
     runtime.executeAction(actionName, actionParams, state, context)
 
-    const expectedState = {type: "map", data: {x: {type: "integer", value: 3}, y: {type: "integer", value: 2}}}
+    const expectedState = {
+      type: "map",
+      data: {
+        "~atom[x]": {type: "integer", value: 3},
+        "~atom[y]": {type: "integer", value: 2}
+      }
+    }
+
     assert.deepStrictEqual(runtime.state, expectedState)
 
     sinon.assert.calledWith(clientPushCommandFake, "test_command", commandParams, context);
@@ -74,7 +102,7 @@ describe("executeAction()", () => {
       pageModule: class {},
       scopeModule: class {
         static action(_name, params, state) {
-          state.data.x.value += params.data.b.value
+          state.data["~atom[x]"].value += params.data["~atom[b]"].value
           return state
         }
       }
@@ -82,7 +110,14 @@ describe("executeAction()", () => {
 
     runtime.executeAction(actionName, actionParams, state, context)
 
-    const expectedState = {type: "map", data: {x: {type: "integer", value: 3}, y: {type: "integer", value: 2}}}
+    const expectedState = {
+      type: "map", 
+      data: {
+        "~atom[x]": {type: "integer", value: 3},
+        "~atom[y]": {type: "integer", value: 2}
+      }
+    }
+
     assert.deepStrictEqual(runtime.state, expectedState)
 
     sinon.assert.notCalled(clientPushCommandFake);
