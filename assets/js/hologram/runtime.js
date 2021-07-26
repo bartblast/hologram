@@ -2,35 +2,40 @@ import Client from "./client"
 import DOM from "./dom"
 
 export default class Runtime {
-  // TODO: refactor & test
-  constructor() {
+  constructor(window) {
     this.client = new Client(this)
     this.client.connect()
 
-    this.dom = new DOM(this)
+    this.dom = new DOM(this, window)
     this.pageModule = null
     this.state = null
   }
 
-  // TODO: refactor & test
-  executeAction(action, params, state, context) {
-    const actionResult = context.scopeModule.action({ type: "atom", value: action }, params, state)
+  // TODO: consider - pass boxed action name directly
+  executeAction(actionName, actionParams, state, context) {
+    const actionNameBoxed = {type: "atom", value: actionName}
+    const actionResult = context.scopeModule.action(actionNameBoxed, actionParams, state)
 
     if (actionResult.type == "tuple") {
       this.state = actionResult.data[0]
 
-      let params = {}
+      let commandParams = {type: "map", data: {}}
       if (actionResult.data[2]) {
-        params = actionResult.data[2]
+        commandParams = actionResult.data[2]
       }
 
-      this.client.pushCommand(actionResult.data[1].value, params, context)
+      this.client.pushCommand(actionResult.data[1].value, commandParams, context)
     } else {
       this.state = actionResult
     }
 
     this.dom.render(context.pageModule)
   }
+
+  // TODO: refactor & test
+  static get_module(name) {
+    return eval(name.replace(/\./g, ""))
+  }  
 
   // TODO: refactor & test
   handleClickEvent(context, action, state, _event) {
@@ -69,4 +74,15 @@ export default class Runtime {
 
     this.executeAction(action, params, state, context)
   }
+
+  // TODO: refactor & test
+  static interpolate(value) {
+    switch (value.type) {
+      case "integer":
+        return `${value.value}`
+        
+      case "string":
+        return `${value.value}`
+    }
+  }  
 }
