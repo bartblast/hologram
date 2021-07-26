@@ -6,6 +6,7 @@ const CssMinimizerPlugin = require('css-minimizer-webpack-plugin');
 const MiniCssExtractPlugin = require('mini-css-extract-plugin');
 
 module.exports = {
+  devtool: "source-map",
   entry: {
     'hologram': glob.sync('./vendor/**/*.js').concat(['./js/hologram.js']),
   },
@@ -42,7 +43,8 @@ module.exports = {
   output: {
     filename: '[name].js',
     path: path.resolve(__dirname, '../priv/static/js'),
-    publicPath: '/js/'
+    publicPath: '/js/',
+    sourceMapFilename: "[name].js.map"
   },
   plugins: [
     new MiniCssExtractPlugin({ filename: '../css/[name].css' }),
