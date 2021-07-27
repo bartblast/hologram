@@ -9,6 +9,10 @@ defmodule Hologram.Compiler.Decoder do
     value
   end
 
+  def decode(%{"type" => "list", "data" => data}) do
+    ListTypeDecoder.decode(data)
+  end
+
   def decode(%{"type" => "map", "data" => data}) do
     MapTypeDecoder.decode(data)
   end

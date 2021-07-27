@@ -12,9 +12,16 @@ defmodule Hologram.Compiler.DecoderTest do
     assert Decoder.decode(input) == 1
   end
 
-  test "string" do
-    input = %{"type" => "string", "value" => "test"}
-    assert Decoder.decode(input) == "test"
+  test "list" do
+    input = %{
+      "type" => "list",
+      "data" => [
+        %{"type" => "integer", "value" => 1},
+        %{"type" => "integer", "value" => 2}
+      ]
+    }
+
+    assert Decoder.decode(input) == [1, 2]
   end
 
   test "map" do
@@ -33,5 +40,10 @@ defmodule Hologram.Compiler.DecoderTest do
     expected = %{"test_key" => "test_value"}
 
     assert result == expected
+  end
+
+  test "string" do
+    input = %{"type" => "string", "value" => "test"}
+    assert Decoder.decode(input) == "test"
   end
 end
