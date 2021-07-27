@@ -124,3 +124,87 @@ describe("executeAction()", () => {
     sinon.assert.calledWith(domRenderFake, context.pageModule)
   })
 })
+
+describe("handleClickEvent()", () => {
+  let context, event, fake, runtime, state;
+
+  beforeEach(() => {
+    const window = mockWindow()
+    runtime = new Runtime(window)
+
+    fake = sinon.fake();
+    runtime.executeAction = fake
+
+    state = {
+      type: "map", 
+      data: {
+        "~atom[a]": {type: "integer", value: 123}
+      }
+    }
+
+    context = {
+      pageModule: class {},
+      scopeModule: class {}
+    }
+
+    event = {}
+  });
+
+  it("handles string on-click prop", () => {
+    const onClickProp = "test_action_name"
+
+    runtime.handleClickEvent(onClickProp, state, context, event)
+
+    const actionName = {type: "atom", value: "test_action_name"}
+    const actionParams = {type: "map", data: {}}
+
+    sinon.assert.calledWith(fake, actionName, actionParams, state, context)
+  })
+
+  it("handles expression on-click prop", () => {
+    const onClickProp = {
+      type: "expression",
+      callback: (_$state) => {
+        return {
+          type: "tuple",
+          data: [
+            {type: "atom", value: "test_action_name"},
+            {
+              type: "list",
+              data: [
+                {
+                  type: "tuple", 
+                  data: [
+                    {type: "atom", value: "a"},
+                    {type: "integer", value: 1}
+                  ]
+                },
+                {
+                  type: "tuple", 
+                  data: [
+                    {type: "atom", value: "b"},
+                    {type: "integer", value: 2}
+                  ]
+                },
+              ]
+            }
+          ]
+        }
+      }
+    }
+
+    runtime.handleClickEvent(onClickProp, state, context, event)
+
+    const actionName = {type: "atom", value: "test_action_name"}
+
+    const actionParams = {
+      type: "map", 
+      data: {
+        "~atom[a]": {type: "integer", value: 1},
+        "~atom[b]": {type: "integer", value: 2}
+      }
+    }
+
+    sinon.assert.calledWith(fake, actionName, actionParams, state, context)
+  })
+})

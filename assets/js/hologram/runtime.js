@@ -1,5 +1,6 @@
 import Client from "./client"
 import DOM from "./dom"
+import Utils from "./utils"
 
 export default class Runtime {
   constructor(window) {
@@ -35,17 +36,19 @@ export default class Runtime {
     return eval(name.replace(/\./g, ""))
   }  
 
-  // TODO: refactor & test
-  handleClickEvent(context, action, state, _event) {
-    let actionName;
-    
-    if (action.type == "expression") {
-      actionName = action.callback(state).data[0]
+  handleClickEvent(onClickProp, state, context, _event) {
+    let actionName, actionParams;
+
+    if (onClickProp.type == "expression") {
+      const callbackResult = onClickProp.callback(state)
+      actionName = callbackResult.data[0]
+      actionParams = Utils.keywordToMap(callbackResult.data[1])
     } else {
-      actionName = {type: "atom", value: action}
+      actionName = {type: "atom", value: onClickProp}
+      actionParams = {type: "map", data: {}}
     }
 
-    this.executeAction(actionName, {}, state, context)
+    this.executeAction(actionName, actionParams, state, context)
   }
 
   // TODO: refactor & test

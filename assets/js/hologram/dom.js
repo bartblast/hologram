@@ -64,7 +64,7 @@ export default class DOM {
     const eventHandlers = {}
 
     if (node.attrs.on_click) {
-      eventHandlers.click = this.runtime.handleClickEvent.bind(this.runtime, context, node.attrs.on_click, state)
+      eventHandlers.click = this.runtime.handleClickEvent.bind(this.runtime, node.attrs.on_click, state, context)
     }
 
     if (node.attrs.on_submit) {
