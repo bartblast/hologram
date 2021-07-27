@@ -1,5 +1,5 @@
 defmodule Hologram.Compiler.Decoder do
-  alias Hologram.Compiler.{ListTypeDecoder, MapTypeDecoder}
+  alias Hologram.Compiler.{ListTypeDecoder, MapTypeDecoder, TupleTypeDecoder}
 
   def decode(%{"type" => "atom", "value" => value}) do
     String.to_atom(value)
@@ -19,5 +19,9 @@ defmodule Hologram.Compiler.Decoder do
 
   def decode(%{"type" => "string", "value" => value}) do
     value
+  end
+
+  def decode(%{"type" => "tuple", "data" => data}) do
+    TupleTypeDecoder.decode(data)
   end
 end

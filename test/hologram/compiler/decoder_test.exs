@@ -46,4 +46,16 @@ defmodule Hologram.Compiler.DecoderTest do
     input = %{"type" => "string", "value" => "test"}
     assert Decoder.decode(input) == "test"
   end
+
+  test "tuple" do
+    input = %{
+      "type" => "tuple",
+      "data" => [
+        %{"type" => "integer", "value" => 1},
+        %{"type" => "integer", "value" => 2}
+      ]
+    }
+
+    assert Decoder.decode(input) == {1, 2}
+  end
 end
