@@ -19,7 +19,7 @@ defmodule Hologram.Runtime.ChannelTest do
       %{
         command: "test_command",
         context: context,
-        params: %{}
+        params: %{"type" => "map", data: %{}}
       }
 
     ref = push(socket, "command", message)
@@ -40,7 +40,7 @@ defmodule Hologram.Runtime.ChannelTest do
       %{
         command: "test_command",
         context: context,
-        params: %{}
+        params: %{"type" => "map", data: %{}}
       }
 
     ref = push(socket, "command", message)
@@ -61,7 +61,13 @@ defmodule Hologram.Runtime.ChannelTest do
       %{
         command: "test_command",
         context: context,
-        params: %{"a" => 1, "b" => 2}
+        params: %{
+          "type" => "map",
+          "data" => %{
+            "~atom[a]" => %{"type" => "integer", "value" => 1},
+            "~atom[b]" => %{"type" => "integer", "value" => 2},
+          }
+        }
       }
 
     ref = push(socket, "command", message)
@@ -82,7 +88,13 @@ defmodule Hologram.Runtime.ChannelTest do
       %{
         command: "test_command",
         context: context,
-        params: %{"a" => 1, "b" => 2}
+        params: %{
+          "type" => "map",
+          "data" => %{
+            "~atom[a]" => %{"type" => "integer", "value" => 1},
+            "~atom[b]" => %{"type" => "integer", "value" => 2},
+          }
+        }
       }
 
     ref = push(socket, "command", message)

@@ -1,8 +1,6 @@
 defmodule Hologram.Runtime.Channel do
   use Phoenix.Channel
-
-  alias Hologram.Compiler.{Helpers, Serializer}
-  alias Hologram.Utils
+  alias Hologram.Compiler.{Decoder, Helpers, Serializer}
 
   def join("hologram", _, socket) do
     {:ok, socket}
@@ -27,7 +25,7 @@ defmodule Hologram.Runtime.Channel do
 
   defp execute_command(%{"command" => command, "params" => params, "context" => context}) do
     command = String.to_atom(command)
-    params = Utils.atomize_keys(params)
+    params = Decoder.decode(params)
 
     context["page_module"]
     |> String.split("_")
