@@ -19,7 +19,7 @@ defmodule Hologram.Runtime.ChannelTest do
       %{
         command: "test_command",
         context: context,
-        params: %{"type" => "map", data: %{}}
+        params: %{"type" => "list", data: []}
       }
 
     ref = push(socket, "command", message)
@@ -28,7 +28,7 @@ defmodule Hologram.Runtime.ChannelTest do
       {:test_action, %{}, context}
       |> Serializer.serialize()
 
-    assert_reply ref, :ok, expected_response
+    assert_reply ref, :ok, ^expected_response
   end
 
   test "command without params that returns action with params", %{socket: socket} do
@@ -40,7 +40,7 @@ defmodule Hologram.Runtime.ChannelTest do
       %{
         command: "test_command",
         context: context,
-        params: %{"type" => "map", data: %{}}
+        params: %{"type" => "list", data: []}
       }
 
     ref = push(socket, "command", message)
@@ -49,7 +49,7 @@ defmodule Hologram.Runtime.ChannelTest do
       {:test_action, %{a: 1, b: 2}, context}
       |> Serializer.serialize()
 
-    assert_reply ref, :ok, expected_response
+    assert_reply ref, :ok, ^expected_response
   end
 
   test "command with params that returns action without params", %{socket: socket} do
@@ -62,11 +62,23 @@ defmodule Hologram.Runtime.ChannelTest do
         command: "test_command",
         context: context,
         params: %{
-          "type" => "map",
-          "data" => %{
-            "~atom[a]" => %{"type" => "integer", "value" => 1},
-            "~atom[b]" => %{"type" => "integer", "value" => 2},
-          }
+          "type" => "list",
+          "data" => [
+            %{
+              "type" => "tuple",
+              "data" => [
+                %{"type" => "atom", "value" => "a"},
+                %{"type" => "integer", "value" => 1}
+              ]
+            },
+            %{
+              "type" => "tuple",
+              "data" => [
+                %{"type" => "atom", "value" => "b"},
+                %{"type" => "integer", "value" => 2}
+              ]
+            }
+          ]
         }
       }
 
@@ -76,7 +88,7 @@ defmodule Hologram.Runtime.ChannelTest do
       {:test_action_1, %{}, context}
       |> Serializer.serialize()
 
-    assert_reply ref, :ok, expected_response
+    assert_reply ref, :ok, ^expected_response
   end
 
   test "command with params that returns action with params", %{socket: socket} do
@@ -89,11 +101,23 @@ defmodule Hologram.Runtime.ChannelTest do
         command: "test_command",
         context: context,
         params: %{
-          "type" => "map",
-          "data" => %{
-            "~atom[a]" => %{"type" => "integer", "value" => 1},
-            "~atom[b]" => %{"type" => "integer", "value" => 2},
-          }
+          "type" => "list",
+          "data" => [
+            %{
+              "type" => "tuple",
+              "data" => [
+                %{"type" => "atom", "value" => "a"},
+                %{"type" => "integer", "value" => 1}
+              ]
+            },
+            %{
+              "type" => "tuple",
+              "data" => [
+                %{"type" => "atom", "value" => "b"},
+                %{"type" => "integer", "value" => 2}
+              ]
+            }
+          ]
         }
       }
 
@@ -103,6 +127,6 @@ defmodule Hologram.Runtime.ChannelTest do
       {:test_action, %{a: 10, b: 20}, context}
       |> Serializer.serialize()
 
-    assert_reply ref, :ok, expected_response
+    assert_reply ref, :ok, ^expected_response
   end
 end

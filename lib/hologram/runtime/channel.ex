@@ -25,7 +25,10 @@ defmodule Hologram.Runtime.Channel do
 
   defp execute_command(%{"command" => command, "params" => params, "context" => context}) do
     command = String.to_atom(command)
-    params = Decoder.decode(params)
+
+    params =
+      Decoder.decode(params)
+      |> Enum.into(%{})
 
     context["page_module"]
     |> String.split("_")
