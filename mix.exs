@@ -91,7 +91,7 @@ defmodule Demo.MixProject do
       test: ["test --exclude e2e"],
       # we run mix compile here to trigger the Hologram compiler (to reload routes)
       "test.all": ["cmd mix compile", &test_js/1, "test --include e2e"],
-      "test.e2e": ["test --include e2e"]
+      "test.e2e": ["cmd mix compile", "test --include e2e"]
     ]
   end
 
