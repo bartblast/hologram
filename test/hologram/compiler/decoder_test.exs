@@ -2,6 +2,11 @@ defmodule Hologram.Compiler.DecoderTest do
   use Hologram.TestCase, async: true
   alias Hologram.Compiler.Decoder
 
+  test "atom" do
+    input = %{"type" => "atom", "value" => "test"}
+    assert Decoder.decode(input) == :test
+  end
+
   test "integer" do
     input = %{"type" => "integer", "value" => 1}
     assert Decoder.decode(input) == 1
