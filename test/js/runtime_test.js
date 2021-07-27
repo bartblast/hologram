@@ -208,3 +208,53 @@ describe("handleClickEvent()", () => {
     sinon.assert.calledWith(fake, actionName, actionParams, state, context)
   })
 })
+
+describe("handleCommandResponse()", () => {
+  it("handles command response", () => {
+    const action = "{ type: 'atom', value: 'test_action' }"
+    const param1 = "{ type: 'integer', value: 1 }"
+    const param2 = "{ type: 'integer', value: 2 }"
+    const params = `{ type: 'map', data: { '~atom[a]': ${param1}, '~atom[b]': ${param2} } }`
+    const pageModule = "{ type: 'string', value: 'Module_Stub_1' }"
+    const scopeModule = "{ type: 'string', value: 'Module_Stub_2' }"
+    const context = `{ type: 'map', data: { '~string[page_module]': ${pageModule}, '~string[scope_module]': ${scopeModule} } }`
+    const response = `{ type: 'tuple', data: [ ${action}, ${params}, ${context} ] }`
+
+    const window = mockWindow()
+    const runtime = new Runtime(window)
+    
+    const fake = sinon.fake();
+    runtime.executeAction = fake
+
+    const state = {
+      type: 'map',
+      data: {
+        '~atom[x]': {type: 'integer', value: 9},
+        '~atom[y]': {type: 'integer', value: 8}
+      }
+    }
+
+    runtime.state = state
+    runtime.handleCommandResponse(response)
+
+    const expectedAction = {
+      type: 'atom',
+      value: 'test_action' 
+    }
+
+    const expectedParams = {
+      type: 'map',
+      data: {
+        '~atom[a]': {type: 'integer', value: 1},
+        '~atom[b]': {type: 'integer', value: 2}
+      }
+    }
+
+    const expectedContext = {
+      pageModule: Module_Stub_1,
+      scopeModule: Module_Stub_2
+    }
+
+    sinon.assert.calledWith(fake, expectedAction, expectedParams, state, expectedContext)
+  })
+})

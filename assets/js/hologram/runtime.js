@@ -51,15 +51,17 @@ export default class Runtime {
     this.executeAction(actionName, actionParams, state, context)
   }
 
-  // TODO: refactor & test
   handleCommandResponse(response) {
-    const action = response[0]
-    const params = response[1]
+    eval(`response = ${response}`)
+    const action = response.data[0]
+    const params = response.data[1]
 
-    // TODO: return context in command response
-    const context = {pageModule: this.pageModule, scopeModule: this.pageModule}
+    const context = {
+      pageModule: Runtime.get_module(response.data[2].data["~string[page_module]"].value),
+      scopeModule: Runtime.get_module(response.data[2].data["~string[scope_module]"].value)
+    }
 
-    this.executeAction(action, {type: "map", data: {}}, this.state, context)
+    this.executeAction(action, params, this.state, context)
   }
 
   // TODO: refactor & test
