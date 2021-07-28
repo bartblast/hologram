@@ -85,14 +85,16 @@ defmodule Demo.MixProject do
   # See the documentation for `Mix` for more info on aliases.
   defp aliases do
     [
-      setup: ["deps.get", "ecto.setup", "cmd npm install --prefix assets"],
-      "ecto.setup": ["ecto.create", "ecto.migrate", "run priv/repo/seeds.exs"],
-      "ecto.reset": ["ecto.drop", "ecto.setup"],
+      "assets.compile": &compile_assets/1,
       test: ["test --exclude e2e"],
       # we run mix compile here to trigger the Hologram compiler (to reload routes)
-      "test.all": ["cmd mix compile", &test_js/1, "test --include e2e"],
-      "test.e2e": ["cmd mix compile", "test --include e2e"]
+      "test.all": ["assets.compile", "cmd mix compile", &test_js/1, "test --include e2e"],
+      "test.e2e": ["assets.compile", "cmd mix compile", "test --include e2e"]
     ]
+  end
+
+  defp compile_assets(_) do
+    Mix.shell().cmd("cd assets && node_modules/webpack/bin/webpack.js --mode development")
   end
 
   defp test_js(_) do
