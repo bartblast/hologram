@@ -3,10 +3,49 @@ defmodule Hologram.Features.RuntimeTest do
 
   @moduletag :e2e
 
-  feature "command", %{session: session} do
+  feature "action without params trigerred by event", %{session: session} do
     session
     |> visit("/e2e/page-1")
-    |> click(css("#button"))
-    |> assert_has(css("#text", text: "test updated text"))
+    |> click(css("#button_1"))
+    |> assert_has(css("#text", text: "text updated by action_1"))
+  end
+
+  feature "action with params trigerred by event", %{session: session} do
+    session
+    |> visit("/e2e/page-1")
+    |> click(css("#button_2"))
+    |> assert_has(css("#text", text: "text updated by action_2_5_6"))
+  end
+
+  feature "action without params trigerred by command", %{session: session} do
+    session
+    |> visit("/e2e/page-1")
+    |> click(css("#button_3"))
+    |> assert_has(css("#text", text: "text updated by action_3a"))
+  end
+
+  feature "action with params trigerred by command", %{session: session} do
+    session
+    |> visit("/e2e/page-1")
+    |> click(css("#button_4"))
+    |> assert_has(css("#text", text: "text updated by action_4a_5_6"))
+  end
+
+  # DEFER: test when commands triggered by event are implemented
+  # feature "command without params trigerred by event", %{session: session}
+  # feature "command with params trigerred by event", %{session: session}
+
+  feature "command without params trigerred by action", %{session: session} do
+    session
+    |> visit("/e2e/page-1")
+    |> click(css("#button_7"))
+    |> assert_has(css("#text", text: "text updated by action_7a"))
+  end
+
+  feature "command with params trigerred by action", %{session: session} do
+    session
+    |> visit("/e2e/page-1")
+    |> click(css("#button_8"))
+    |> assert_has(css("#text", text: "text updated by action_8a_5_6"))
   end
 end
