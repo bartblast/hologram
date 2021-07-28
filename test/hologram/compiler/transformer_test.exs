@@ -40,6 +40,13 @@ defmodule Hologram.Compiler.TransformerTest do
       assert result == %AtomType{value: :test}
     end
 
+    test "binary" do
+      code = "<<1, 2>>"
+      ast = ast(code)
+
+      assert %BinaryType{} = Transformer.transform(ast, @context)
+    end
+
     test "boolean" do
       code = "true"
       ast = ast(code)
@@ -56,14 +63,6 @@ defmodule Hologram.Compiler.TransformerTest do
       assert result == %IntegerType{value: 1}
     end
 
-    test "string" do
-      code = "\"test\""
-      ast = ast(code)
-
-      result = Transformer.transform(ast, @context)
-      assert result == %StringType{value: "test"}
-    end
-
     test "list" do
       code = "[1, 2]"
       ast = ast(code)
@@ -76,6 +75,14 @@ defmodule Hologram.Compiler.TransformerTest do
       ast = ast(code)
 
       assert %MapType{} = Transformer.transform(ast, @context)
+    end
+
+    test "string" do
+      code = "\"test\""
+      ast = ast(code)
+
+      result = Transformer.transform(ast, @context)
+      assert result == %StringType{value: "test"}
     end
 
     test "struct" do
@@ -99,11 +106,26 @@ defmodule Hologram.Compiler.TransformerTest do
       assert %TupleType{} = Transformer.transform(ast, @context)
     end
 
-    test "binary" do
-      code = "<<1, 2>>"
+    test "nested" do
+      code = "[1, {2, 3, 4}]"
       ast = ast(code)
+      result = Transformer.transform(ast, @context)
 
-      assert %BinaryType{} = Transformer.transform(ast, @context)
+      expected =
+        %ListType{
+          data: [
+            %IntegerType{value: 1},
+            %TupleType{
+              data: [
+                %IntegerType{value: 2},
+                %IntegerType{value: 3},
+                %IntegerType{value: 4}
+              ]
+            }
+          ]
+        }
+
+      assert result == expected
     end
   end
 
@@ -225,7 +247,7 @@ defmodule Hologram.Compiler.TransformerTest do
             }
           ]
         }
-      
+
       assert result == expected
     end
 
