@@ -94,12 +94,17 @@ window.Elixir_Kernel = class {
   // TODO: refactor & test
   static $add(left, right) {
     let type = left.type == "integer" && right.type == "integer" ? "integer" : "float"
-    return { type: type, value: left.value + right.value }
+    return {type: type, value: left.value + right.value}
   }
 
   // TODO: refactor & test
   static $dot(left, right) {
     return cloneDeep(left.data[Utils.serialize(right)])
+  }
+
+  // TODO: refactor & test
+  static to_string(arg) {
+    return {type: 'string', value: `${arg.value.toString()}`}
   }
 }
 
