@@ -18,6 +18,7 @@ defmodule Hologram.Compiler.GeneratorTest do
     StringType,
     StructType,
     TupleType,
+    TypeOperator,
     Variable
   }
 
@@ -155,6 +156,19 @@ defmodule Hologram.Compiler.GeneratorTest do
 
       result = Generator.generate(ir, @context)
       expected = "$state.data['~atom[x]']"
+
+      assert result == expected
+    end
+
+    test "type" do
+      ir =
+        %TypeOperator{
+          left: %IntegerType{value: 1},
+          right: :binary
+        }
+
+      result = Generator.generate(ir, @context, @opts)
+      expected = "Elixir.typeOperator({ type: 'integer', value: 1 }, 'binary')"
 
       assert result == expected
     end

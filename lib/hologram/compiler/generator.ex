@@ -14,6 +14,7 @@ defmodule Hologram.Compiler.Generator do
     SigilHGenerator,
     StructTypeGenerator,
     TupleTypeGenerator,
+    TypeOperatorEncoder
   }
 
   alias Hologram.Compiler.IR.{
@@ -31,6 +32,7 @@ defmodule Hologram.Compiler.Generator do
     StringType,
     StructType,
     TupleType,
+    TypeOperator,
     Variable
   }
 
@@ -86,6 +88,10 @@ defmodule Hologram.Compiler.Generator do
 
   def generate(%ModuleAttributeOperator{name: name}, %Context{} = context, _) do
     ModuleAttributeOperatorGenerator.generate(name, context)
+  end
+
+  def generate(%TypeOperator{left: left, right: right}, %Context{} = context, opts) do
+    TypeOperatorEncoder.encode(left, right, context, opts)
   end
 
   # DEFINITIONS
