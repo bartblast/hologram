@@ -58,4 +58,26 @@ defmodule Hologram.Compiler.DecoderTest do
 
     assert Decoder.decode(input) == {1, 2}
   end
+
+  test "nested" do
+    input =
+      %{
+        "type" => "list",
+        "data" => [
+          %{"type" => "integer", "value" => 1},
+          %{
+            "type" => "tuple",
+            "data" => [
+              %{"type" => "integer", "value" => 2},
+              %{"type" => "integer", "value" => 3}
+            ]
+          }
+        ]
+      }
+
+    result = Decoder.decode(input)
+    expected = [1, {2, 3}]
+
+    assert result == expected
+  end
 end
