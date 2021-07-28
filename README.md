@@ -9,7 +9,7 @@
 | Feature     | Status             |
 | ----------- |:------------------:|
 | Actions     | :x:                |
-| Commands    | :white_check_mark: |
+| Commands    | :construction:     |
 | Routing     | :x:                |
 | Session     | :x:                |
 
@@ -233,3 +233,9 @@
 * Control Flow: Exit, Receive
 * Operators: Custom, Overriding
 * Other: Erlang Libraries
+
+### Work in progress
+
+#### Runtime / Core / Commands
+done: commands trigerred by action\
+todo: commands trigerred by event
