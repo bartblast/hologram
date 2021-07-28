@@ -78,6 +78,16 @@ export default class Hologram {
   }
 }
 
+window.Elixir = class {
+  // TODO: refactor & test
+  // DEFER: implement other types
+  static typeOperator(value, type) {
+    if (type == "binary" && value.type == "string") {
+      return value
+    }
+  }
+}
+
 window.Elixir_Kernel = class {
   // TODO: refactor & test
   static $add(left, right) {
