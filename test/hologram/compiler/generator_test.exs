@@ -101,6 +101,27 @@ defmodule Hologram.Compiler.GeneratorTest do
 
       assert result == expected
     end
+
+    test "nested" do
+      ir =
+        %ListType{
+          data: [
+            %IntegerType{value: 1},
+            %TupleType{
+              data: [
+                %IntegerType{value: 2},
+                %IntegerType{value: 3},
+                %IntegerType{value: 4}
+              ]
+            }
+          ]
+        }
+
+      result = Generator.generate(ir, @context)
+      expected = "{ type: 'list', data: [ { type: 'integer', value: 1 }, { type: 'tuple', data: [ { type: 'integer', value: 2 }, { type: 'integer', value: 3 }, { type: 'integer', value: 4 } ] } ] }"
+
+      assert result == expected
+    end
   end
 
   describe "operators" do
