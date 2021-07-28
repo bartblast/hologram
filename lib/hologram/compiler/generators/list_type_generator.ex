@@ -1,19 +1,8 @@
 defmodule Hologram.Compiler.ListTypeGenerator do
-  alias Hologram.Compiler.{Context, Generator}
+  use Hologram.Compiler.TypeEncoder
+  alias Hologram.Compiler.Context
 
   def generate(data, %Context{} = context, opts) do
-    "{ type: 'list', data: #{generate_data(data, context, opts)} }"
-  end
-
-  def generate_data(data, %Context{} = context, opts) do
-    data =
-      Enum.map(data, &Generator.generate(&1, context, opts))
-      |> Enum.join(", ")
-
-    if data != "" do
-      "[ #{data} ]"
-    else
-      "[]"
-    end
+    "{ type: 'list', data: #{encode_as_list(data, context, opts)} }"
   end
 end
