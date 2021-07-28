@@ -89,6 +89,9 @@ export default class Runtime {
   // TODO: refactor & test
   static interpolate(value) {
     switch (value.type) {
+      case "binary":
+        return value.data.map((elem) => elem.value).join("")
+
       case "integer":
         return `${value.value}`
         
