@@ -8,7 +8,7 @@
 
 | Feature     | Status             |
 | ----------- |:------------------:|
-| Actions     | :x:                |
+| Actions     | :white_check_mark: |
 | Commands    | :construction:     |
 | Routing     | :x:                |
 | Session     | :x:                |
@@ -237,5 +237,5 @@
 ### Work in progress
 
 #### Runtime / Core / Commands
-done: commands trigerred by action\
-todo: commands trigerred by event
+Done: commands trigerred by action\
+Todo: commands trigerred by event
