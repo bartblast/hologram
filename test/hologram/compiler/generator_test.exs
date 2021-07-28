@@ -22,12 +22,27 @@ defmodule Hologram.Compiler.GeneratorTest do
   }
 
   @context %Context{module: nil, uses: [], imports: [], aliases: [], attributes: []}
+  @opts []
 
   describe "types" do
     test "atom" do
       ir = %AtomType{value: :test}
       result = Generator.generate(ir, @context)
       assert result == "{ type: 'atom', value: 'test' }"
+    end
+
+    test "binary" do
+      ir = %BinaryType{
+        parts: [
+          %StringType{value: "abc"},
+          %StringType{value: "xyz"}
+        ]
+      }
+
+      result = Generator.generate(ir, @context, @opts)
+      expected = "{ type: 'binary', data: [ { type: 'string', value: 'abc' }, { type: 'string', value: 'xyz' } ] }"
+
+      assert result == expected
     end
 
     test "boolean" do

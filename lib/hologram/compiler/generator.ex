@@ -3,6 +3,7 @@ defmodule Hologram.Compiler.Generator do
 
   alias Hologram.Compiler.{
     AdditionOperatorGenerator,
+    BinaryTypeEncoder,
     DotOperatorGenerator,
     FunctionCallGenerator,
     ListTypeGenerator,
@@ -18,6 +19,7 @@ defmodule Hologram.Compiler.Generator do
   alias Hologram.Compiler.IR.{
     AdditionOperator,
     AtomType,
+    BinaryType,
     BooleanType,
     DotOperator,
     FunctionCall,
@@ -38,6 +40,10 @@ defmodule Hologram.Compiler.Generator do
 
   def generate(%AtomType{value: value}, _, _) do
     PrimitiveTypeGenerator.generate(:atom, "'#{value}'")
+  end
+
+  def generate(%BinaryType{parts: parts}, %Context{} = context, opts) do
+    BinaryTypeEncoder.encode(parts, context, opts)
   end
 
   def generate(%BooleanType{value: value}, _, _) do
