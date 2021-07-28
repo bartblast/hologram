@@ -84,6 +84,8 @@ window.Elixir = class {
   static typeOperator(value, type) {
     if (type == "binary" && value.type == "string") {
       return value
+    } else {
+      throw "Not supported! (in Elixir.typeOperator)"
     }
   }
 }
