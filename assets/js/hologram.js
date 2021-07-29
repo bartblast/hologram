@@ -90,6 +90,13 @@ window.Elixir = class {
   }
 }
 
+window.Elixir_IO = class {
+  // TODO: refactor & test
+  static inspect(arg) {
+    console.debug(arg)
+  }
+}
+
 window.Elixir_Kernel = class {
   // TODO: refactor & test
   static $add(left, right) {
