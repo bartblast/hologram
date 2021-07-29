@@ -6,9 +6,7 @@ defmodule Hologram.Compiler.StructTypeGeneratorTest do
 
   test "generate/4" do
     data = [{%AtomType{value: :a}, %IntegerType{value: 1}}]
-    context = %Context{module: nil, uses: [], imports: [], aliases: [], attributes: []}
-
-    result = StructTypeGenerator.generate(Abc.Bcd, data, context, [])
+    result = StructTypeGenerator.generate(Abc.Bcd, data, %Context{}, [])
 
     expected =
       "{ type: 'struct', module: 'Elixir_Abc_Bcd', data: { '~atom[a]': { type: 'integer', value: 1 } } }"

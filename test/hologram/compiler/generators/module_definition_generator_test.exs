@@ -4,13 +4,10 @@ defmodule Hologram.Compiler.ModuleDefinitionGeneratorTest do
   alias Hologram.Compiler.{Context, ModuleDefinitionGenerator}
   alias Hologram.Compiler.IR.{FunctionDefinition, IntegerType, ModuleDefinition, Variable}
 
-  @context %Context{module: nil, uses: [], imports: [], aliases: [], attributes: []}
   @module Abc.Bcd
 
   test "single function with single variant" do
     ir = %ModuleDefinition{
-      aliases: [],
-      attributes: [],
       functions: [
         %FunctionDefinition{
           bindings: [
@@ -29,7 +26,7 @@ defmodule Hologram.Compiler.ModuleDefinitionGeneratorTest do
     }
 
 
-    result = ModuleDefinitionGenerator.generate(ir, @module, @context)
+    result = ModuleDefinitionGenerator.generate(ir, @module, %Context{})
 
     expected = """
     window.Elixir_Abc_Bcd = class Elixir_Abc_Bcd {
@@ -53,8 +50,6 @@ defmodule Hologram.Compiler.ModuleDefinitionGeneratorTest do
 
   test "single function with multiple variants" do
     ir = %ModuleDefinition{
-      aliases: [],
-      attributes: [],
       functions: [
         %FunctionDefinition{
           bindings: [
@@ -86,7 +81,7 @@ defmodule Hologram.Compiler.ModuleDefinitionGeneratorTest do
       module: @module
     }
 
-    result = ModuleDefinitionGenerator.generate(ir, @module, @context)
+    result = ModuleDefinitionGenerator.generate(ir, @module, %Context{})
 
     expected = """
     window.Elixir_Abc_Bcd = class Elixir_Abc_Bcd {
@@ -115,8 +110,6 @@ defmodule Hologram.Compiler.ModuleDefinitionGeneratorTest do
 
   test "multiple functions with single variant" do
     ir = %ModuleDefinition{
-      aliases: [],
-      attributes: [],
       functions: [
         %FunctionDefinition{
           bindings: [
@@ -146,7 +139,7 @@ defmodule Hologram.Compiler.ModuleDefinitionGeneratorTest do
       module: @module
     }
 
-    result = ModuleDefinitionGenerator.generate(ir, @module, @context)
+    result = ModuleDefinitionGenerator.generate(ir, @module, %Context{})
 
     expected = """
     window.Elixir_Abc_Bcd = class Elixir_Abc_Bcd {
@@ -181,8 +174,6 @@ defmodule Hologram.Compiler.ModuleDefinitionGeneratorTest do
 
   test "multiple functions with multiple variants" do
     ir = %ModuleDefinition{
-      aliases: [],
-      attributes: [],
       functions: [
         %FunctionDefinition{
           bindings: [
@@ -226,7 +217,7 @@ defmodule Hologram.Compiler.ModuleDefinitionGeneratorTest do
       module: @module
     }
 
-    result = ModuleDefinitionGenerator.generate(ir, @module, @context)
+    result = ModuleDefinitionGenerator.generate(ir, @module, %Context{})
 
     expected = """
     window.Elixir_Abc_Bcd = class Elixir_Abc_Bcd {

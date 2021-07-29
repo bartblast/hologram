@@ -1,4 +1,3 @@
 defmodule Hologram.Compiler.Context do
-  @enforce_keys [:module, :uses, :imports, :aliases, :attributes]
-  defstruct @enforce_keys
+  defstruct module: nil, uses: [], imports: [], requires: [], aliases: [], attributes: []
 end

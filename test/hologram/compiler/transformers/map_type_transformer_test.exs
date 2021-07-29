@@ -4,13 +4,7 @@ defmodule Hologram.Compiler.MapTypeTransformerTest do
   alias Hologram.Compiler.{Context, MapTypeTransformer}
   alias Hologram.Compiler.IR.{AtomType, IntegerType, MapType}
 
-  @context %Context{
-    module: Abc,
-    uses: [],
-    imports: [],
-    aliases: [],
-    attributes: []
-  }
+  @context %Context{module: Abc}
 
   test "transform/2" do
     code = "%{a: 1, b: 2}"

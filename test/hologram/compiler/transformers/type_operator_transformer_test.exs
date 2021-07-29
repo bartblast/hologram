@@ -4,19 +4,11 @@ defmodule Hologram.Compiler.TypeOperatorTransformerTest do
   alias Hologram.Compiler.{Context, TypeOperatorTransformer}
   alias Hologram.Compiler.IR.{TypeOperator, Variable}
 
-  @context %Context{
-    module: nil,
-    uses: [],
-    imports: [],
-    aliases: [],
-    attributes: []
-  }
-
   test "transform/2" do
     code = "str::binary"
     {:"::", _, ast} = ast(code)
 
-    result = TypeOperatorTransformer.transform(ast, @context)
+    result = TypeOperatorTransformer.transform(ast, %Context{})
 
     expected =
       %TypeOperator{

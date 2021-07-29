@@ -12,19 +12,11 @@ defmodule Hologram.Compiler.MatchOperatorTransformerTest do
     Variable
   }
 
-  @context %Context{
-    module: nil,
-    uses: [],
-    imports: [],
-    aliases: [],
-    attributes: []
-  }
-
   test "variable" do
     code = "x = 1"
     {:=, _, [left, right]} = ast(code)
 
-    result = MatchOperatorTransformer.transform(left, right, @context)
+    result = MatchOperatorTransformer.transform(left, right, %Context{})
 
     expected = %MatchOperator{
       bindings: [[%Variable{name: :x}]],
@@ -40,7 +32,7 @@ defmodule Hologram.Compiler.MatchOperatorTransformerTest do
       code = "%{a: x, b: y} = %{a: 1, b: 2}"
       {:=, _, [left, right]} = ast(code)
 
-      result = MatchOperatorTransformer.transform(left, right, @context)
+      result = MatchOperatorTransformer.transform(left, right, %Context{})
 
       expected = %MatchOperator{
         bindings: [
@@ -76,7 +68,7 @@ defmodule Hologram.Compiler.MatchOperatorTransformerTest do
 
       {:=, _, [left, right]} = ast(code)
 
-      result = MatchOperatorTransformer.transform(left, right, @context)
+      result = MatchOperatorTransformer.transform(left, right, %Context{})
 
       expected = %MatchOperator{
         bindings: [

@@ -4,13 +4,7 @@ defmodule Hologram.Compiler.TupleTypeTransformerTest do
   alias Hologram.Compiler.{Context, TupleTypeTransformer}
   alias Hologram.Compiler.IR.{IntegerType, TupleType}
 
-  @context %Context{
-    module: Abc,
-    uses: [],
-    imports: [],
-    aliases: [],
-    attributes: []
-  }
+  @context %Context{module: Abc}
 
   test "transform/2" do
     code = "{1, 2}"

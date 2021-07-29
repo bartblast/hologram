@@ -2,11 +2,9 @@ defmodule Hologram.Compiler.ModuleDefinitionTransformer do
   alias Hologram.Compiler.{Context, Expander, Helpers, Transformer}
   alias Hologram.Compiler.IR.ModuleDefinition
 
-  @empty_context %Context{module: nil, uses: [], imports: [], aliases: [], attributes: []}
-
   def transform(ast) do
     {:defmodule, _, [_, [do: {:__block__, _, block_before_expansion}]]} = ast
-    uses = aggregate_expressions(:use, block_before_expansion, @empty_context)
+    uses = aggregate_expressions(:use, block_before_expansion, %Context{})
 
     {:defmodule, _, [{:__aliases__, _, module_segs}, [do: {:__block__, _, block_after_expansion}]]} =
       Expander.expand(ast)
@@ -28,14 +26,16 @@ defmodule Hologram.Compiler.ModuleDefinitionTransformer do
 
   defp build_module(ast, module_segs, uses) do
     module = Helpers.module(module_segs)
-    imports = aggregate_expressions(:import, ast, @empty_context)
-    aliases = aggregate_expressions(:alias, ast, @empty_context)
-    attributes = aggregate_expressions(:@, ast, @empty_context)
+    imports = aggregate_expressions(:import, ast, %Context{})
+    requires = aggregate_expressions(:require, ast, %Context{})
+    aliases = aggregate_expressions(:alias, ast, %Context{})
+    attributes = aggregate_expressions(:@, ast, %Context{})
 
     context = %Context{
       module: module,
       uses: uses,
       imports: imports,
+      requires: requires,
       aliases: aliases,
       attributes: attributes
     }
@@ -46,9 +46,16 @@ defmodule Hologram.Compiler.ModuleDefinitionTransformer do
       module: module,
       uses: uses,
       imports: imports,
+      requires: requires,
       aliases: aliases,
       attributes: attributes,
       functions: functions
     }
+
+    fields =
+      Map.from_struct(context)
+      |> Map.put(:functions, functions)
+
+    struct(ModuleDefinition, fields)
   end
 end

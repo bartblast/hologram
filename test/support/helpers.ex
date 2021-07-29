@@ -7,9 +7,7 @@ defmodule Hologram.Test.Helpers do
   end
 
   def ir(code) do
-    context = %Context{module: nil, uses: [], imports: [], aliases: [], attributes: []}
-
     ast(code)
-    |> Transformer.transform(context)
+    |> Transformer.transform(%Context{})
   end
 end

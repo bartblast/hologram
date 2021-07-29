@@ -8,7 +8,6 @@ defmodule Hologram.Compiler.FunctionCallTransformerTest do
     module_segs = [:Hologram, :Compiler, :FunctionCallTransformerTest]
     function = :test
     params = [1, 2]
-    context = %Context{module: nil, uses: [], imports: [], aliases: [], attributes: []}
 
     expected = %FunctionCall{
       module: Hologram.Compiler.FunctionCallTransformerTest,
@@ -19,7 +18,7 @@ defmodule Hologram.Compiler.FunctionCallTransformerTest do
       ]
     }
 
-    result = FunctionCallTransformer.transform(module_segs, function, params, context)
+    result = FunctionCallTransformer.transform(module_segs, function, params, %Context{})
     assert result == expected
   end
 end

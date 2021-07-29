@@ -58,12 +58,10 @@ defmodule Hologram.Compiler.Processor do
   @spec get_module_definition(module()) :: %ModuleDefinition{}
 
   def get_module_definition(module) do
-    context = %Context{module: nil, uses: [], imports: [], aliases: [], attributes: []}
-
     Helpers.module_source_path(module)
     |> Parser.parse_file!()
     |> Normalizer.normalize()
-    |> Transformer.transform(context)
+    |> Transformer.transform(%Context{})
   end
 
   defp include_aliased_modules(acc, module_definition) do

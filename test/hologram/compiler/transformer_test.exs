@@ -30,14 +30,12 @@ defmodule Hologram.Compiler.TransformerTest do
 
   alias Hologram.Compiler.{Context, Transformer}
 
-  @context %Context{module: nil, uses: [], imports: [], aliases: [], attributes: []}
-
   describe "types" do
     test "atom" do
       code = ":test"
       ast = ast(code)
 
-      result = Transformer.transform(ast, @context)
+      result = Transformer.transform(ast, %Context{})
       assert result == %AtomType{value: :test}
     end
 
@@ -45,14 +43,14 @@ defmodule Hologram.Compiler.TransformerTest do
       code = "<<1, 2>>"
       ast = ast(code)
 
-      assert %BinaryType{} = Transformer.transform(ast, @context)
+      assert %BinaryType{} = Transformer.transform(ast, %Context{})
     end
 
     test "boolean" do
       code = "true"
       ast = ast(code)
 
-      result = Transformer.transform(ast, @context)
+      result = Transformer.transform(ast, %Context{})
       assert result == %BooleanType{value: true}
     end
 
@@ -60,7 +58,7 @@ defmodule Hologram.Compiler.TransformerTest do
       code = "1"
       ast = ast(code)
 
-      result = Transformer.transform(ast, @context)
+      result = Transformer.transform(ast, %Context{})
       assert result == %IntegerType{value: 1}
     end
 
@@ -68,21 +66,21 @@ defmodule Hologram.Compiler.TransformerTest do
       code = "[1, 2]"
       ast = ast(code)
 
-      assert %ListType{} = Transformer.transform(ast, @context)
+      assert %ListType{} = Transformer.transform(ast, %Context{})
     end
 
     test "map" do
       code = "%{a: 1, b: 2}"
       ast = ast(code)
 
-      assert %MapType{} = Transformer.transform(ast, @context)
+      assert %MapType{} = Transformer.transform(ast, %Context{})
     end
 
     test "string" do
       code = "\"test\""
       ast = ast(code)
 
-      result = Transformer.transform(ast, @context)
+      result = Transformer.transform(ast, %Context{})
       assert result == %StringType{value: "test"}
     end
 
@@ -90,27 +88,27 @@ defmodule Hologram.Compiler.TransformerTest do
       code = "%Hologram.Test.Fixtures.Compiler.Transformer.Module2{a: 1}"
       ast = ast(code)
 
-      assert %StructType{} = Transformer.transform(ast, @context)
+      assert %StructType{} = Transformer.transform(ast, %Context{})
     end
 
     test "tuple, 2 elements" do
       code = "{1, 2}"
       ast = ast(code)
 
-      assert %TupleType{} = Transformer.transform(ast, @context)
+      assert %TupleType{} = Transformer.transform(ast, %Context{})
     end
 
     test "tuple, non-2 elements" do
       code = "{1, 2, 3}"
       ast = ast(code)
 
-      assert %TupleType{} = Transformer.transform(ast, @context)
+      assert %TupleType{} = Transformer.transform(ast, %Context{})
     end
 
     test "nested" do
       code = "[1, {2, 3, 4}]"
       ast = ast(code)
-      result = Transformer.transform(ast, @context)
+      result = Transformer.transform(ast, %Context{})
 
       expected =
         %ListType{
@@ -135,28 +133,28 @@ defmodule Hologram.Compiler.TransformerTest do
       code = "1 + 2"
       ast = ast(code)
 
-      assert %AdditionOperator{} = Transformer.transform(ast, @context)
+      assert %AdditionOperator{} = Transformer.transform(ast, %Context{})
     end
 
     test "dot" do
       code = "a.b"
       ast = ast(code)
 
-      assert %DotOperator{} = Transformer.transform(ast, @context)
+      assert %DotOperator{} = Transformer.transform(ast, %Context{})
     end
 
     test "match" do
       code = "a = 1"
       ast = ast(code)
 
-      assert %MatchOperator{} = Transformer.transform(ast, @context)
+      assert %MatchOperator{} = Transformer.transform(ast, %Context{})
     end
 
     test "module attribute" do
       code = "@a"
       ast = ast(code)
 
-      result = Transformer.transform(ast, @context)
+      result = Transformer.transform(ast, %Context{})
       assert result == %ModuleAttributeOperator{name: :a}
     end
 
@@ -164,7 +162,7 @@ defmodule Hologram.Compiler.TransformerTest do
       code = "str::binary"
       ast = ast(code)
 
-      assert %TypeOperator{} = Transformer.transform(ast, @context)
+      assert %TypeOperator{} = Transformer.transform(ast, %Context{})
     end
   end
 
@@ -173,21 +171,21 @@ defmodule Hologram.Compiler.TransformerTest do
       code = "def test, do: :ok"
       ast = ast(code)
 
-      assert %FunctionDefinition{} = Transformer.transform(ast, @context)
+      assert %FunctionDefinition{} = Transformer.transform(ast, %Context{})
     end
 
     test "module" do
       code = "defmodule Hologram.Test.Fixtures.Compiler.Transformer.Module1 do end"
       ast = ast(code)
 
-      assert %ModuleDefinition{} = Transformer.transform(ast, @context)
+      assert %ModuleDefinition{} = Transformer.transform(ast, %Context{})
     end
 
     test "module attribute" do
       code = "@a 1"
       ast = ast(code)
 
-      assert %ModuleAttributeDefinition{} = Transformer.transform(ast, @context)
+      assert %ModuleAttributeDefinition{} = Transformer.transform(ast, %Context{})
     end
   end
 
@@ -196,28 +194,28 @@ defmodule Hologram.Compiler.TransformerTest do
       code = "alias Hologram.Test.Fixtures.Compiler.Transformer.Module1"
       ast = ast(code)
 
-      assert %Alias{} = Transformer.transform(ast, @context)
+      assert %Alias{} = Transformer.transform(ast, %Context{})
     end
 
     test "import" do
       code = "import Hologram.Test.Fixtures.Compiler.Transformer.Module1"
       ast = ast(code)
 
-      assert %Import{} = Transformer.transform(ast, @context)
+      assert %Import{} = Transformer.transform(ast, %Context{})
     end
 
     test "require" do
       code = "require Hologram.Test.Fixtures.Compiler.Transformer.Module1"
       ast = ast(code)
 
-      assert %RequireDirective{} = Transformer.transform(ast, @context)
+      assert %RequireDirective{} = Transformer.transform(ast, %Context{})
     end
 
     test "use" do
       code = "use Hologram.Compiler.TransformerTest"
       ast = ast(code)
 
-      assert %UseDirective{} = Transformer.transform(ast, @context)
+      assert %UseDirective{} = Transformer.transform(ast, %Context{})
     end
   end
 
@@ -226,21 +224,21 @@ defmodule Hologram.Compiler.TransformerTest do
       code = "test(123)"
       ast = ast(code)
 
-      assert %FunctionCall{} = Transformer.transform(ast, @context)
+      assert %FunctionCall{} = Transformer.transform(ast, %Context{})
     end
 
     test "aliased module function call" do
       code = "Hologram.Compiler.TransformerTest.test(123)"
       ast = ast(code)
 
-      assert %FunctionCall{} = Transformer.transform(ast, @context)
+      assert %FunctionCall{} = Transformer.transform(ast, %Context{})
     end
 
     test "string interpolation" do
       code = "\"\#{sth}\""
       ast = ast(code)
 
-      result = Transformer.transform(ast, @context)
+      result = Transformer.transform(ast, %Context{})
 
       expected =
         %BinaryType{
@@ -263,7 +261,7 @@ defmodule Hologram.Compiler.TransformerTest do
       code = "a"
       ast = ast(code)
 
-      result = Transformer.transform(ast, @context)
+      result = Transformer.transform(ast, %Context{})
       assert result == %Variable{name: :a}
     end
   end
@@ -273,7 +271,7 @@ defmodule Hologram.Compiler.TransformerTest do
       code = ":timer.sleep(1_000)"
       ast = ast(code)
 
-      result = Transformer.transform(ast, @context)
+      result = Transformer.transform(ast, %Context{})
       expected = %NotSupportedExpression{ast: ast, type: :erlang_function_call}
 
       assert result == expected

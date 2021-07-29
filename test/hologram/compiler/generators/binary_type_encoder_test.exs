@@ -4,12 +4,11 @@ defmodule Hologram.Compiler.BinaryTypeEncoderTest do
   alias Hologram.Compiler.{Context, BinaryTypeEncoder}
   alias Hologram.Compiler.IR.StringType
 
-  @context %Context{module: nil, uses: [], imports: [], aliases: [], attributes: []}
   @opts []
 
   test "encode/3" do
     parts = [%StringType{value: "abc"}, %StringType{value: "xyz"}]
-    result = BinaryTypeEncoder.encode(parts, @context, @opts)
+    result = BinaryTypeEncoder.encode(parts, %Context{}, @opts)
     expected = "{ type: 'binary', data: [ { type: 'string', value: 'abc' }, { type: 'string', value: 'xyz' } ] }"
 
     assert result == expected

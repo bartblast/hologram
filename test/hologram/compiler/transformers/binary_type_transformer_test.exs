@@ -4,19 +4,11 @@ defmodule Hologram.Compiler.BinaryTypeTransformerTest do
   alias Hologram.Compiler.{Context, BinaryTypeTransformer}
   alias Hologram.Compiler.IR.{BinaryType, IntegerType}
 
-  @context %Context{
-    module: nil,
-    uses: [],
-    imports: [],
-    aliases: [],
-    attributes: []
-  }
-
   test "empty binary" do
     code = "<<>>"
     {:<<>>, _, parts} = ast(code)
 
-    result = BinaryTypeTransformer.transform(parts, @context)
+    result = BinaryTypeTransformer.transform(parts, %Context{})
     expected = %BinaryType{parts: []}
 
     assert result == expected
@@ -26,7 +18,7 @@ defmodule Hologram.Compiler.BinaryTypeTransformerTest do
     code = "<<1, 2>>"
     {:<<>>, _, parts} = ast(code)
 
-    result = BinaryTypeTransformer.transform(parts, @context)
+    result = BinaryTypeTransformer.transform(parts, %Context{})
 
     expected =
       %BinaryType{

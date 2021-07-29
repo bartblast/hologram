@@ -2,14 +2,6 @@ defmodule Hologram.Compiler.FunctionDefinitionGeneratorTest do
   use Hologram.TestCase, async: true
   alias Hologram.Compiler.{Context, FunctionDefinitionGenerator}
 
-  @context %Context{
-    module: nil,
-    uses: [],
-    imports: [],
-    aliases: [],
-    attributes: []
-  }
-
   # cases:
   # has args, no args
   # single variant, multiple variants
@@ -25,7 +17,7 @@ defmodule Hologram.Compiler.FunctionDefinitionGeneratorTest do
     ir = ir(code)
     variants = [ir]
 
-    result = FunctionDefinitionGenerator.generate(ir.name, variants, @context)
+    result = FunctionDefinitionGenerator.generate(ir.name, variants, %Context{})
 
     expected = """
     static test() {
@@ -50,7 +42,7 @@ defmodule Hologram.Compiler.FunctionDefinitionGeneratorTest do
     ir = ir(code)
     variants = [ir]
 
-    result = FunctionDefinitionGenerator.generate(ir.name, variants, @context)
+    result = FunctionDefinitionGenerator.generate(ir.name, variants, %Context{})
 
     expected = """
     static test() {
@@ -84,7 +76,7 @@ defmodule Hologram.Compiler.FunctionDefinitionGeneratorTest do
     variants = ir.functions
     name = :test
 
-    result = FunctionDefinitionGenerator.generate(name, variants, @context)
+    result = FunctionDefinitionGenerator.generate(name, variants, %Context{})
 
     expected = """
     static test() {

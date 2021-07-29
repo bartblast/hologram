@@ -4,13 +4,7 @@ defmodule Hologram.Compiler.FunctionDefinitionTransformerTest do
   alias Hologram.Compiler.{Context, FunctionDefinitionTransformer}
   alias Hologram.Compiler.IR.{AccessOperator, AtomType, FunctionDefinition, IntegerType, Variable}
 
-  @context %Context{
-    module: Abc,
-    uses: [],
-    imports: [],
-    aliases: [],
-    attributes: []
-  }
+  @context %Context{module: Abc}
 
   test "name" do
     # def test(1, 2) do

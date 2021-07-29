@@ -3,11 +3,10 @@ defmodule Hologram.Compiler.Serializer do
 
   def serialize(state) do
     # TODO: pass actual %Context{} struct received from compiler
-    context = %Context{module: nil, uses: [], imports: [], aliases: [], attributes: []}
 
     Macro.escape(state)
     |> Normalizer.normalize()
-    |> Transformer.transform(context)
-    |> Generator.generate(context)
+    |> Transformer.transform(%Context{})
+    |> Generator.generate(%Context{})
   end
 end

@@ -7,9 +7,8 @@ defmodule Hologram.Compiler.AdditionOperatorGeneratorTest do
   test "generate/3" do
     left = %Variable{name: :x}
     right = %AtomType{value: :a}
-    context = %Context{module: nil, uses: [], imports: [], aliases: [], attributes: []}
 
-    result = AdditionOperatorGenerator.generate(left, right, context)
+    result = AdditionOperatorGenerator.generate(left, right, %Context{})
     expected = "Elixir_Kernel.$add(x, { type: 'atom', value: 'a' })"
 
     assert result == expected

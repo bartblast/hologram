@@ -8,6 +8,7 @@ defmodule Hologram.Compiler.ModuleDefinitionTransformerTest do
     IntegerType,
     ModuleDefinition,
     ModuleAttributeDefinition,
+    RequireDirective,
     UseDirective
   }
 
@@ -84,6 +85,25 @@ defmodule Hologram.Compiler.ModuleDefinitionTransformerTest do
     ]
 
     assert result.imports == expected
+  end
+
+  test "requires" do
+    code = """
+    defmodule Hologram.Test.Fixtures.Compiler.ModuleDefinitionTransformer.Module3 do
+      require Hologram.Test.Fixtures.Compiler.ModuleDefinitionTransformer.Module1
+      require Hologram.Test.Fixtures.Compiler.ModuleDefinitionTransformer.Module2
+    end
+    """
+
+    ast = ast(code)
+    assert %ModuleDefinition{} = result = ModuleDefinitionTransformer.transform(ast)
+
+    expected = [
+      %RequireDirective{module: @module_1},
+      %RequireDirective{module: @module_2}
+    ]
+
+    assert result.requires == expected
   end
 
   test "aliases" do

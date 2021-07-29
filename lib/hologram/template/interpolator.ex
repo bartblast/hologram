@@ -83,11 +83,9 @@ defmodule Hologram.Template.Interpolator do
   end
 
   defp get_ir(code) do
-    # TODO: pass actual %Context{} struct received from compiler
-    context = %Context{module: nil, uses: [], imports: [], aliases: [], attributes: []}
-
     Parser.parse!(code)
-    |> Hologram.Compiler.Transformer.transform(context)
+    # TODO: pass actual %Context{} struct received from compiler
+    |> Hologram.Compiler.Transformer.transform(%Context{})
   end
 
   defp maybe_include_expression(acc, code) do

@@ -4,13 +4,12 @@ defmodule Hologram.Compiler.MapTypeGeneratorTest do
   alias Hologram.Compiler.{Context, MapTypeGenerator}
   alias Hologram.Compiler.IR.{AtomType, IntegerType, MapType}
 
-  @context %Context{module: nil, uses: [], imports: [], aliases: [], attributes: []}
   @opts []
 
   test "generate/3" do
     ir = %MapType{data: [{%AtomType{value: :a}, %IntegerType{value: 1}}]}
 
-    result = MapTypeGenerator.generate(ir.data, @context, @opts)
+    result = MapTypeGenerator.generate(ir.data, %Context{}, @opts)
     expected = "{ type: 'map', data: { '~atom[a]': { type: 'integer', value: 1 } } }"
 
     assert result == expected
@@ -20,7 +19,7 @@ defmodule Hologram.Compiler.MapTypeGeneratorTest do
     test "empty data" do
       data = []
 
-      result = MapTypeGenerator.generate_data(data, @context, @opts)
+      result = MapTypeGenerator.generate_data(data, %Context{}, @opts)
       expected = "{}"
 
       assert result == expected
@@ -32,7 +31,7 @@ defmodule Hologram.Compiler.MapTypeGeneratorTest do
         {%AtomType{value: :b}, %IntegerType{value: 2}}
       ]
 
-      result = MapTypeGenerator.generate_data(data, @context, @opts)
+      result = MapTypeGenerator.generate_data(data, %Context{}, @opts)
 
       expected =
         "{ '~atom[a]': { type: 'integer', value: 1 }, '~atom[b]': { type: 'integer', value: 2 } }"
