@@ -5,39 +5,35 @@ defmodule Hologram.Template.RendererTest do
   alias Hologram.Template.Document.{Component, ElementNode, Expression, TextNode}
   alias Hologram.Template.Renderer
 
-  setup do
-    [
-      state: %{}
-    ]
-  end
+  @state %{}
 
   describe "render/2" do
-    test "node list", %{state: state} do
+    test "node list" do
       nodes = [
         %TextNode{content: "test_1"},
         %TextNode{content: "test_2"}
       ]
 
-      result = Renderer.render(nodes, state)
+      result = Renderer.render(nodes, @state)
       expected = "test_1test_2"
 
       assert result == expected
     end
 
-    test "component", %{state: state} do
+    test "component" do
       module = Hologram.Test.Fixtures.Template.Renderer.Module1
       virtual_dom = %Component{module: module}
 
-      result = Renderer.render(virtual_dom, state)
+      result = Renderer.render(virtual_dom, @state)
       expected = "<div>test template</div>"
 
       assert result == expected
     end
 
-    test "element node", %{state: state} do
+    test "element node" do
       virtual_dom = %ElementNode{tag: "div", attrs: %{}, children: []}
 
-      result = Renderer.render(virtual_dom, state)
+      result = Renderer.render(virtual_dom, @state)
       expected = "<div></div>"
 
       assert result == expected
