@@ -36,7 +36,7 @@ defmodule Hologram.Template.Transformer do
   """
   @spec transform(Saxy.SimpleForm.t(), list(%Alias{})) :: list(T.document_node())
 
-  def transform(dom, aliases \\ []) do
+  def transform(dom, aliases) do
     Enum.map(dom, fn node -> transform_node(node, aliases) end)
     |> Interpolator.interpolate()
   end

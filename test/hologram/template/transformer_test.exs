@@ -5,12 +5,14 @@ defmodule Hologram.Template.TransformerTest do
   alias Hologram.Template.{Parser, Transformer}
   alias Hologram.Template.Document.{Component, Expression, ElementNode, TextNode}
 
+  @aliases []
+
   test "list of nodes" do
     html = "<div></div><span></span>"
 
     result =
       Parser.parse!(html)
-      |> Transformer.transform()
+      |> Transformer.transform(@aliases)
 
     expected = [
       %ElementNode{
@@ -33,7 +35,7 @@ defmodule Hologram.Template.TransformerTest do
 
     result =
       Parser.parse!(html)
-      |> Transformer.transform()
+      |> Transformer.transform(@aliases)
 
     expected = [%Component{children: [], module: Hologram.Template.TransformerTest}]
 
@@ -45,7 +47,7 @@ defmodule Hologram.Template.TransformerTest do
 
     result =
       Parser.parse!(html)
-      |> Transformer.transform()
+      |> Transformer.transform(@aliases)
 
     expected = [
       %Component{
@@ -91,7 +93,7 @@ defmodule Hologram.Template.TransformerTest do
 
     result =
       Parser.parse!(html)
-      |> Transformer.transform()
+      |> Transformer.transform(@aliases)
 
     expected = [
       %ElementNode{
@@ -109,7 +111,7 @@ defmodule Hologram.Template.TransformerTest do
 
     result =
       Parser.parse!(html)
-      |> Transformer.transform()
+      |> Transformer.transform(@aliases)
 
     expected = [
       %ElementNode{
@@ -127,7 +129,7 @@ defmodule Hologram.Template.TransformerTest do
 
     result =
       Parser.parse!(html)
-      |> Transformer.transform()
+      |> Transformer.transform(@aliases)
 
     expected = [
       %ElementNode{
@@ -155,7 +157,7 @@ defmodule Hologram.Template.TransformerTest do
 
     result =
       Parser.parse!(html)
-      |> Transformer.transform()
+      |> Transformer.transform(@aliases)
 
     expected = [
       %ElementNode{
@@ -186,7 +188,7 @@ defmodule Hologram.Template.TransformerTest do
 
     result =
       Parser.parse!(html)
-      |> Transformer.transform()
+      |> Transformer.transform(@aliases)
 
     expected = [
       %ElementNode{
@@ -212,7 +214,7 @@ defmodule Hologram.Template.TransformerTest do
 
     result =
       Parser.parse!(html)
-      |> Transformer.transform()
+      |> Transformer.transform(@aliases)
 
     expected = [
       %ElementNode{
@@ -273,7 +275,7 @@ defmodule Hologram.Template.TransformerTest do
 
     result =
       Parser.parse!(html)
-      |> Transformer.transform()
+      |> Transformer.transform(@aliases)
 
     expected = [
       %ElementNode{
@@ -305,7 +307,7 @@ defmodule Hologram.Template.TransformerTest do
 
     result =
       Parser.parse!(html)
-      |> Transformer.transform()
+      |> Transformer.transform(@aliases)
 
     expected = [
       %TextNode{content: "test_1"},
