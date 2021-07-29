@@ -3,7 +3,7 @@ defmodule Hologram.Test.Fixtures.Template.ComponentRenderer.Module1 do
 
   def template do
     ~H"""
-    <div>test</div>
+    <span>test</span>
     """
   end
 end
