@@ -13,6 +13,7 @@ defmodule Hologram.Compiler.TransformerTest do
     Import,
     IntegerType,
     ListType,
+    MacroDefinition,
     MapType,
     MatchOperator,
     ModuleDefinition,
@@ -172,6 +173,20 @@ defmodule Hologram.Compiler.TransformerTest do
       ast = ast(code)
 
       assert %FunctionDefinition{} = Transformer.transform(ast, %Context{})
+    end
+
+    test "macro" do
+      code = """
+      defmacro test_macro(a, b) do
+        quote do
+          1
+        end
+      end
+      """
+
+      ast = ast(code)
+
+      assert %MacroDefinition{} = Transformer.transform(ast, %Context{})
     end
 
     test "module" do

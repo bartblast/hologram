@@ -18,6 +18,7 @@ defmodule Hologram.Compiler.Transformer do
     FunctionCallTransformer,
     ImportTransformer,
     ListTypeTransformer,
+    MacroDefinitionTransformer,
     MapTypeTransformer,
     MatchOperatorTransformer,
     ModuleAttributeDefinitionTransformer,
@@ -99,6 +100,10 @@ defmodule Hologram.Compiler.Transformer do
 
   def transform({:def, _, [{name, _, params}, [do: {:__block__, _, body}]]}, %Context{} = context) do
     FunctionDefinitionTransformer.transform(name, params, body, context)
+  end
+
+  def transform({:defmacro, _, [{name, _, params}, [do: {:__block__, _, body}]]}, %Context{} = context) do
+    MacroDefinitionTransformer.transform(name, params, body, context)
   end
 
   def transform({:defmodule, _, _} = ast, _) do

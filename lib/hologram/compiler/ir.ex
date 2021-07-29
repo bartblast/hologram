@@ -69,6 +69,10 @@ defmodule Hologram.Compiler.IR do
     defstruct name: nil, arity: nil, params: nil, bindings: nil, body: nil
   end
 
+  defmodule MacroDefinition do
+    defstruct name: nil, arity: nil, params: [], bindings: [], body: nil
+  end
+
   defmodule ModuleDefinition do
     defstruct module: nil, uses: [], imports: [], requires: [], aliases: [], attributes: [], functions: []
   end
