@@ -42,16 +42,6 @@ defmodule Hologram.Compiler.ModuleDefinitionTransformer do
 
     functions = aggregate_expressions(:def, ast, context)
 
-    %ModuleDefinition{
-      module: module,
-      uses: uses,
-      imports: imports,
-      requires: requires,
-      aliases: aliases,
-      attributes: attributes,
-      functions: functions
-    }
-
     fields =
       Map.from_struct(context)
       |> Map.put(:functions, functions)
