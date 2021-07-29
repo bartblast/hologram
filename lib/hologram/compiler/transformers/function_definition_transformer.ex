@@ -3,19 +3,15 @@ defmodule Hologram.Compiler.FunctionDefinitionTransformer do
   alias Hologram.Compiler.IR.FunctionDefinition
 
   def transform(name, params, body, %Context{} = context) do
-    params =
-      if(params, do: params, else: [])
-      |> Enum.map(&Transformer.transform(&1, context))
-
+    params = transform_params(params, context)
     arity = Enum.count(params)
-
     bindings = aggregate_bindings(params)
     body = Enum.map(body, &Transformer.transform(&1, context))
 
     %FunctionDefinition{name: name, arity: arity, params: params, bindings: bindings, body: body}
   end
 
-  defp aggregate_bindings(params) do
+  def aggregate_bindings(params) do
     Enum.with_index(params)
     |> Enum.reduce([], fn {param, idx}, acc ->
       Binder.bind(param)
@@ -25,5 +21,10 @@ defmodule Hologram.Compiler.FunctionDefinitionTransformer do
       end)
     end)
     |> Enum.sort()
+  end
+
+  def transform_params(params, context) do
+    if(params, do: params, else: [])
+    |> Enum.map(&Transformer.transform(&1, context))
   end
 end
