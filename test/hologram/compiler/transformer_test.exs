@@ -19,6 +19,7 @@ defmodule Hologram.Compiler.TransformerTest do
     ModuleAttributeDefinition,
     ModuleAttributeOperator,
     NotSupportedExpression,
+    RequireDirective,
     StringType,
     StructType,
     TupleType,
@@ -203,6 +204,13 @@ defmodule Hologram.Compiler.TransformerTest do
       ast = ast(code)
 
       assert %Import{} = Transformer.transform(ast, @context)
+    end
+
+    test "require" do
+      code = "require Hologram.Test.Fixtures.Compiler.Transformer.Module1"
+      ast = ast(code)
+
+      assert %RequireDirective{} = Transformer.transform(ast, @context)
     end
 
     test "use" do

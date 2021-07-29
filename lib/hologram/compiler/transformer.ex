@@ -22,6 +22,7 @@ defmodule Hologram.Compiler.Transformer do
     MatchOperatorTransformer,
     ModuleAttributeDefinitionTransformer,
     ModuleDefinitionTransformer,
+    RequireDirectiveTransformer,
     StructTypeTransformer,
     TypeOperatorTransformer,
     TupleTypeTransformer,
@@ -116,6 +117,10 @@ defmodule Hologram.Compiler.Transformer do
 
   def transform({:import, _, ast}, _) do
     ImportTransformer.transform(ast)
+  end
+
+  def transform({:require, _, ast}, _) do
+    RequireDirectiveTransformer.transform(ast)
   end
 
   def transform({:use, _, [{:__aliases__, _, module_segs}]}, _) do
