@@ -19,6 +19,7 @@ defmodule Hologram.Compiler.TransformerTest do
     ModuleDefinition,
     ModuleAttributeDefinition,
     ModuleAttributeOperator,
+    ModuleType,
     NotSupportedExpression,
     RequireDirective,
     StringType,
@@ -75,6 +76,13 @@ defmodule Hologram.Compiler.TransformerTest do
       ast = ast(code)
 
       assert %MapType{} = Transformer.transform(ast, %Context{})
+    end
+
+    test "module" do
+      code = "Abc.Bcd"
+      ast = ast(code)
+
+      assert %ModuleType{} = Transformer.transform(ast, %Context{})
     end
 
     test "string" do

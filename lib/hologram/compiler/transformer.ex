@@ -23,6 +23,7 @@ defmodule Hologram.Compiler.Transformer do
     MatchOperatorTransformer,
     ModuleAttributeDefinitionTransformer,
     ModuleDefinitionTransformer,
+    ModuleTypeTransformer,
     RequireDirectiveTransformer,
     StructTypeTransformer,
     TypeOperatorTransformer,
@@ -44,6 +45,10 @@ defmodule Hologram.Compiler.Transformer do
 
   def transform(ast, _) when is_integer(ast) do
     %IntegerType{value: ast}
+  end
+
+  def transform({:__aliases__, _, module_segs}, %Context{} = context) do
+    ModuleTypeTransformer.transform(module_segs, context)
   end
 
   def transform(ast, _) when is_binary(ast) do

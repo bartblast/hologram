@@ -25,6 +25,10 @@ defmodule Hologram.Compiler.IR do
     defstruct data: nil
   end
 
+  defmodule ModuleType do
+    defstruct module: nil
+  end
+
   defmodule StringType do
     defstruct value: nil
   end
