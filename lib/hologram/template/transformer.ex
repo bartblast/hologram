@@ -2,7 +2,7 @@ defmodule Hologram.Template.Transformer do
   alias Hologram.Compiler.{Helpers, Resolver}
   alias Hologram.Compiler.IR.Alias
   alias Hologram.Template.Document.{Component, ElementNode, TextNode}
-  alias Hologram.Template.Interpolator
+  alias Hologram.Template.{ElementNodeTransformer, Interpolator}
   alias Hologram.Typespecs, as: T
   alias Hologram.Utils
 
@@ -53,26 +53,17 @@ defmodule Hologram.Template.Transformer do
         build_component(type, children, aliases)
 
       :element ->
-        build_element_node(type, children, attrs)
+        ElementNodeTransformer.transform(type, children, attrs)
     end
   end
 
+  # DEFER: make a separate module similar to ElementNodeTransformer
   defp build_component(module_name, children, aliases) do
     module =
       Helpers.module_segments(module_name)
       |> Resolver.resolve(aliases)
 
     %Component{module: module, children: children}
-  end
-
-  defp build_element_node(tag, children, attrs) do
-    attrs = build_element_node_attrs(attrs)
-    %ElementNode{tag: tag, children: children, attrs: attrs}
-  end
-
-  defp build_element_node_attrs(attrs) do
-    Enum.into(attrs, %{})
-    |> Utils.atomize_keys()
   end
 
   defp determine_node_type(type, _) do

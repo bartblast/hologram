@@ -88,99 +88,14 @@ defmodule Hologram.Template.TransformerTest do
     assert result == expected
   end
 
-  test "element node without children, without attrs" do
-    html = "<div></div>"
+  test "element node" do
+    html = "<div><span></span></div>"
 
     result =
       Parser.parse!(html)
       |> Transformer.transform(@aliases)
 
-    expected = [
-      %ElementNode{
-        attrs: %{},
-        children: [],
-        tag: "div"
-      }
-    ]
-
-    assert result == expected
-  end
-
-  test "element node without children, with attrs" do
-    html = "<div id=\"test-id\" class=\"test-class\"></div>"
-
-    result =
-      Parser.parse!(html)
-      |> Transformer.transform(@aliases)
-
-    expected = [
-      %ElementNode{
-        attrs: %{class: "test-class", id: "test-id"},
-        children: [],
-        tag: "div"
-      }
-    ]
-
-    assert result == expected
-  end
-
-  test "element node with children, without attrs" do
-    html = "<div><h1><span></span></h1></div>"
-
-    result =
-      Parser.parse!(html)
-      |> Transformer.transform(@aliases)
-
-    expected = [
-      %ElementNode{
-        attrs: %{},
-        children: [
-          %ElementNode{
-            attrs: %{},
-            children: [
-              %ElementNode{attrs: %{}, children: [], tag: "span"}
-            ],
-            tag: "h1"
-          }
-        ],
-        tag: "div"
-      }
-    ]
-
-    assert result == expected
-  end
-
-  test "element node with children, with attrs" do
-    html = """
-    <div class="class_1"><h1><span class="class_2" id="id_2"></span></h1></div>
-    """
-
-    result =
-      Parser.parse!(html)
-      |> Transformer.transform(@aliases)
-
-    expected = [
-      %ElementNode{
-        attrs: %{class: "class_1"},
-        children: [
-          %ElementNode{
-            attrs: %{},
-            children: [
-              %ElementNode{
-                attrs: %{class: "class_2", id: "id_2"},
-                children: [],
-                tag: "span"
-              }
-            ],
-            tag: "h1"
-          }
-        ],
-        tag: "div"
-      },
-      %TextNode{content: "\n"}
-    ]
-
-    assert result == expected
+    assert [%ElementNode{children: [%ElementNode{}]}] = result
   end
 
   test "text node" do
@@ -205,11 +120,7 @@ defmodule Hologram.Template.TransformerTest do
 
   test "expression interpolation in attrs" do
     html = """
-    <div class="class_1" :if={@var_1} id="id_1" :show={@var_2}>
-      <h1>
-        <span class="class_2" :if={@var_3} id="id_2" :show={@var_4}></span>
-      </h1>
-    </div>
+    <div attr_1="value_1" attr_2={@value_2} attr_3="value_3"></div>
     """
 
     result =
@@ -219,49 +130,18 @@ defmodule Hologram.Template.TransformerTest do
     expected = [
       %ElementNode{
         attrs: %{
-          ":if": %Expression{
-            ir: %TupleType{
-              data: [%ModuleAttributeOperator{name: :var_1}]
-            }
+          attr_1: %{value: "value_1", modifiers: []},
+          attr_2: %{
+            value: %Expression{
+              ir: %TupleType{
+                data: [%ModuleAttributeOperator{name: :value_2}]
+              }
+            },
+            modifiers: []
           },
-          ":show": %Expression{
-            ir: %TupleType{
-              data: [%ModuleAttributeOperator{name: :var_2}]
-            }
-          },
-          class: "class_1",
-          id: "id_1"
+          attr_3: %{value: "value_3", modifiers: []}
         },
-        children: [
-          %TextNode{content: "\n  "},
-          %ElementNode{
-            attrs: %{},
-            children: [
-              %TextNode{content: "\n    "},
-              %ElementNode{
-                attrs: %{
-                  ":if": %Expression{
-                    ir: %TupleType{
-                      data: [%ModuleAttributeOperator{name: :var_3}]
-                    }
-                  },
-                  ":show": %Expression{
-                    ir: %TupleType{
-                      data: [%ModuleAttributeOperator{name: :var_4}]
-                    }
-                  },
-                  class: "class_2",
-                  id: "id_2"
-                },
-                children: [],
-                tag: "span"
-              },
-              %TextNode{content: "\n  "}
-            ],
-            tag: "h1"
-          },
-          %TextNode{content: "\n"}
-        ],
+        children: [],
         tag: "div"
       },
       %TextNode{content: "\n"}
@@ -270,40 +150,8 @@ defmodule Hologram.Template.TransformerTest do
     assert result == expected
   end
 
-  test "expression interpolation in text node nested in element node" do
-    html = "<div>test_1{@x1}test_2{@x2}test_3</div>"
-
-    result =
-      Parser.parse!(html)
-      |> Transformer.transform(@aliases)
-
-    expected = [
-      %ElementNode{
-        attrs: %{},
-        children: [
-          %TextNode{content: "test_1"},
-          %Expression{
-            ir: %TupleType{
-              data: [%ModuleAttributeOperator{name: :x1}]
-            }
-          },
-          %TextNode{content: "test_2"},
-          %Expression{
-            ir: %TupleType{
-              data: [%ModuleAttributeOperator{name: :x2}]
-            }
-          },
-          %TextNode{content: "test_3"}
-        ],
-        tag: "div"
-      }
-    ]
-
-    assert result == expected
-  end
-
-  test "expression interpolation in text node not nested in element node" do
-    html = "test_1{@x1}test_2{@x2}test_3"
+  test "expression interpolation in text node" do
+    html = "test_1{@x1}test_2"
 
     result =
       Parser.parse!(html)
@@ -316,13 +164,7 @@ defmodule Hologram.Template.TransformerTest do
           data: [%ModuleAttributeOperator{name: :x1}]
         }
       },
-      %TextNode{content: "test_2"},
-      %Expression{
-        ir: %TupleType{
-          data: [%ModuleAttributeOperator{name: :x2}]
-        }
-      },
-      %TextNode{content: "test_3"}
+      %TextNode{content: "test_2"}
     ]
 
     assert result == expected
