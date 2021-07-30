@@ -1,5 +1,5 @@
 defmodule Hologram.Compiler.Generator do
-  alias Hologram.Compiler.Context
+  alias Hologram.Compiler.{Context, Helpers}
 
   alias Hologram.Compiler.{
     AdditionOperatorGenerator,
@@ -29,6 +29,7 @@ defmodule Hologram.Compiler.Generator do
     MapType,
     ModuleAttributeOperator,
     ModuleDefinition,
+    ModuleType,
     StringType,
     StructType,
     TupleType,
@@ -62,6 +63,10 @@ defmodule Hologram.Compiler.Generator do
 
   def generate(%MapType{data: data}, %Context{} = context, opts) do
     MapTypeGenerator.generate(data, context, opts)
+  end
+
+  def generate(%ModuleType{module: module}, _, _) do
+    "{ type: 'module', class: '#{Helpers.class_name(module)}' }"
   end
 
   def generate(%StringType{value: value}, _, _) do

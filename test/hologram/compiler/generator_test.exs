@@ -15,6 +15,7 @@ defmodule Hologram.Compiler.GeneratorTest do
     MapType,
     ModuleAttributeOperator,
     ModuleDefinition,
+    ModuleType,
     StringType,
     StructType,
     TupleType,
@@ -68,6 +69,15 @@ defmodule Hologram.Compiler.GeneratorTest do
 
       result = Generator.generate(ir, %Context{})
       expected = "{ type: 'map', data: { '~atom[a]': { type: 'integer', value: 1 } } }"
+
+      assert result == expected
+    end
+
+    test "module" do
+      ir = %ModuleType{module: Abc.Bcd}
+
+      result = Generator.generate(ir, %Context{})
+      expected = "{ type: 'module', class: 'Elixir_Abc_Bcd' }"
 
       assert result == expected
     end
