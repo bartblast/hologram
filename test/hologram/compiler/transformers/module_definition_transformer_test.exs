@@ -6,6 +6,7 @@ defmodule Hologram.Compiler.ModuleDefinitionTransformerTest do
     FunctionDefinition,
     Import,
     IntegerType,
+    MacroDefinition,
     ModuleDefinition,
     ModuleAttributeDefinition,
     RequireDirective,
@@ -184,5 +185,43 @@ defmodule Hologram.Compiler.ModuleDefinitionTransformerTest do
     ]
 
     assert result.functions == expected
+  end
+
+  test "macros" do
+    code = """
+    defmodule Hologram.Test.Fixtures.Compiler.ModuleDefinitionTransformer.Module1 do
+      defmacro test_1 do
+        quote do
+          1
+        end
+      end
+
+      defmacro test_2 do
+        quote do
+          2
+        end
+      end
+    end
+    """
+
+    ast = ast(code)
+    assert %ModuleDefinition{} = result = ModuleDefinitionTransformer.transform(ast)
+
+    expected = [
+      %MacroDefinition{
+        arity: 0,
+        bindings: [],
+        body: [{:quote, [line: 3], [[do: {:__block__, [], [1]}]]}],
+        name: :test_1,
+        params: []
+      },
+      %MacroDefinition{
+        arity: 0,
+        bindings: [],
+        body: [{:quote, [line: 9], [[do: {:__block__, [], [2]}]]}],
+        name: :test_2,
+        params: []
+      }
+    ]
   end
 end

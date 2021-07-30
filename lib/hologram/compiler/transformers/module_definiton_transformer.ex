@@ -30,6 +30,7 @@ defmodule Hologram.Compiler.ModuleDefinitionTransformer do
     requires = aggregate_expressions(:require, ast, %Context{})
     aliases = aggregate_expressions(:alias, ast, %Context{})
     attributes = aggregate_expressions(:@, ast, %Context{})
+    macros = aggregate_expressions(:defmacro, ast, %Context{})
 
     context = %Context{
       module: module,
@@ -45,6 +46,7 @@ defmodule Hologram.Compiler.ModuleDefinitionTransformer do
     fields =
       Map.from_struct(context)
       |> Map.put(:functions, functions)
+      |> Map.put(:macros, macros)
 
     struct(ModuleDefinition, fields)
   end
