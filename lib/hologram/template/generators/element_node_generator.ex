@@ -13,15 +13,20 @@ defmodule Hologram.Template.ElementNodeGenerator do
     if Enum.any?(attrs) do
       js =
         attrs
-        |> Enum.map(fn {key, value} ->
-          "'#{key}': { value: #{generate_attr_value(value)}, modifiers: [] }"
-        end)
+        |> Enum.map(fn {key, value} -> generate_attr(key, value) end)
         |> Enum.join(", ")
 
       "{ #{js} }"
     else
       "{}"
     end
+  end
+
+  defp generate_attr(key, value) do
+    [name | modifiers] = String.split(key, ".")
+    value = generate_attr_value(value)
+    modifiers = encode_modifiers(modifiers)
+    "'#{name}': { value: #{value}, modifiers: #{modifiers} }"
   end
 
   defp generate_attr_value(%Expression{} = expr) do
@@ -36,5 +41,13 @@ defmodule Hologram.Template.ElementNodeGenerator do
       |> Enum.join(", ")
 
     "[#{js}]"
+  end
+
+  defp encode_modifiers(modifiers) do
+    elems =
+      Enum.map(modifiers, &"'#{&1}'")
+      |> Enum.join(", ")
+
+    "[#{elems}]"
   end
 end

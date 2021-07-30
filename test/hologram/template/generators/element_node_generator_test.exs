@@ -15,7 +15,7 @@ defmodule Hologram.Template.ElementNodeGeneratorTest do
     assert result == expected
   end
 
-  test "has attrs" do
+  test "has attrs without modifiers" do
     attrs = %{"attr_1" => "value_1", "attr_2" => "value_2"}
     children = []
 
@@ -23,6 +23,20 @@ defmodule Hologram.Template.ElementNodeGeneratorTest do
 
     attr_1 = "{ value: 'value_1', modifiers: [] }"
     attr_2 = "{ value: 'value_2', modifiers: [] }"
+    expected =
+      "{ type: 'element', tag: 'div', attrs: { 'attr_1': #{attr_1}, 'attr_2': #{attr_2} }, children: [] }"
+
+    assert result == expected
+  end
+
+  test "has attrs with modifiers" do
+    attrs = %{"attr_1.abc" => "value_1", "attr_2.bcd.cde" => "value_2"}
+    children = []
+
+    result = ElementNodeGenerator.generate("div", attrs, children)
+
+    attr_1 = "{ value: 'value_1', modifiers: ['abc'] }"
+    attr_2 = "{ value: 'value_2', modifiers: ['bcd', 'cde'] }"
     expected =
       "{ type: 'element', tag: 'div', attrs: { 'attr_1': #{attr_1}, 'attr_2': #{attr_2} }, children: [] }"
 
