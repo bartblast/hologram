@@ -24,5 +24,4 @@ defmodule Hologram.Compiler.ModuleTypeTransformerTest do
 
     assert result == expected
   end
-
 end
