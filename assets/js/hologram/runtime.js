@@ -36,15 +36,15 @@ export default class Runtime {
     return eval(name.replace(/\./g, ""))
   }  
 
-  handleClickEvent(onClickProp, state, context, _event) {
+  handleClickEvent(onClickSpec, state, context, _event) {
     let actionName, actionParams;
 
-    if (onClickProp.type == "expression") {
-      const callbackResult = onClickProp.callback(state)
+    if (onClickSpec.value.type == "expression") {
+      const callbackResult = onClickSpec.value.callback(state)
       actionName = callbackResult.data[0]
       actionParams = Utils.keywordToMap(callbackResult.data[1])
     } else {
-      actionName = {type: "atom", value: onClickProp}
+      actionName = {type: "atom", value: onClickSpec.value}
       actionParams = {type: "map", data: {}}
     }
 
@@ -73,7 +73,7 @@ export default class Runtime {
   }
 
   // TODO: refactor & test
-  handleSubmitEvent(context, action, state, event) {
+  handleSubmitEvent(context, onSubmitSpec, state, event) {
     event.preventDefault()
 
     let formData = new FormData(event.target)
@@ -83,7 +83,7 @@ export default class Runtime {
       params.data[`~string[${el[0]}]`] = {type: "string", value: el[1]}
     }
 
-    this.executeAction(action, params, state, context)
+    this.executeAction(onSubmitSpec.value, params, state, context)
   }
 
   // TODO: refactor & test
