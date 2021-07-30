@@ -15,6 +15,20 @@ defmodule Hologram.Template.EvaluatorTest do
 
       assert result == expected
     end
+
+    test "list" do
+      ir = %ListType{
+        data: [
+        %IntegerType{value: 1},
+        %IntegerType{value: 2}
+        ]
+      }
+
+      result = Evaluator.evaluate(ir, @state)
+      expected = [1, 2]
+
+      assert result == expected
+    end
   end
 
   describe "operators" do
