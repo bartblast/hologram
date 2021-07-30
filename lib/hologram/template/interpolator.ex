@@ -36,7 +36,9 @@ defmodule Hologram.Template.Interpolator do
     children = interpolate(children)
 
     attrs =
-      Enum.map(attrs, fn {key, value} -> {key, interpolate_attr(value)} end)
+      Enum.map(attrs, fn {key, spec} ->
+        {key, %{spec | value: interpolate_attr(spec.value)}}
+      end)
       |> Enum.into(%{})
 
     [%{node | children: children, attrs: attrs}]

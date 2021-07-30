@@ -171,19 +171,28 @@ defmodule Hologram.Template.InterpolatorTest do
       assert result == nodes
     end
 
-    test "string attribute" do
-      nodes = [%ElementNode{children: [], attrs: %{"key" => "value"}}]
-      result = Interpolator.interpolate(nodes)
+    test "attribute with string value" do
+      nodes = [
+        %ElementNode{
+          children: [],
+          attrs: %{
+            test_key: %{value: "test_value", modifiers: []}
+          }
+        }
+      ]
 
+      result = Interpolator.interpolate(nodes)
       assert result == nodes
     end
 
-    test "expression attribute" do
+    test "attribute with expression value" do
       nodes = [
         %ElementNode{
           tag: "div",
           children: [],
-          attrs: %{"key" => "{1}"}
+          attrs: %{
+            key: %{value: "{1}", modifiers: []}
+          }
         }
       ]
 
@@ -192,10 +201,13 @@ defmodule Hologram.Template.InterpolatorTest do
       expected = [
         %ElementNode{
           attrs: %{
-            "key" => %Expression{
-              ir: %TupleType{
-                data: [%IntegerType{value: 1}]
-              }
+            key: %{
+              value: %Expression{
+                ir: %TupleType{
+                  data: [%IntegerType{value: 1}]
+                }
+              },
+              modifiers: []
             }
           },
           children: [],
@@ -228,7 +240,7 @@ defmodule Hologram.Template.InterpolatorTest do
       %TextNode{content: "abc{1}cde"},
       %ElementNode{
         tag: "div",
-        attrs: %{"m" => "{2}"},
+        attrs: %{m: %{value: "{2}", modifiers: []}},
         children: [
           %TextNode{content: "xyz"},
           %ElementNode{
@@ -236,7 +248,7 @@ defmodule Hologram.Template.InterpolatorTest do
             children: [
               %ElementNode{tag: "span", children: [], attrs: %{}}
             ],
-            attrs: %{"n" => "{3}"}
+            attrs: %{n: %{value: "{3}", modifiers: []}}
           },
           %TextNode{content: "def{4}fgh"}
         ]
@@ -255,11 +267,16 @@ defmodule Hologram.Template.InterpolatorTest do
       %TextNode{content: "cde"},
       %ElementNode{
         tag: "div",
-        attrs: %{"m" => %Expression{
-          ir: %TupleType{
-            data: [%IntegerType{value: 2}]
+        attrs: %{
+          m: %{
+            value: %Expression{
+              ir: %TupleType{
+                data: [%IntegerType{value: 2}]
+              }
+            },
+            modifiers: []
           }
-        }},
+        },
         children: [
           %TextNode{content: "xyz"},
           %ElementNode{
@@ -267,11 +284,16 @@ defmodule Hologram.Template.InterpolatorTest do
             children: [
               %ElementNode{tag: "span", children: [], attrs: %{}}
             ],
-            attrs: %{"n" => %Expression{
-              ir: %TupleType{
-                data: [%IntegerType{value: 3}]
+            attrs: %{
+              n: %{
+                value: %Expression{
+                  ir: %TupleType{
+                    data: [%IntegerType{value: 3}]
+                  }
+                },
+                modifiers: []
               }
-            }}
+            }
           },
           %TextNode{content: "def"},
           %Expression{
