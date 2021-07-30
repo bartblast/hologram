@@ -210,18 +210,16 @@ defmodule Hologram.Compiler.ModuleDefinitionTransformerTest do
     expected = [
       %MacroDefinition{
         arity: 0,
-        bindings: [],
         body: [{:quote, [line: 3], [[do: {:__block__, [], [1]}]]}],
-        name: :test_1,
-        params: []
+        name: :test_1
       },
       %MacroDefinition{
         arity: 0,
-        bindings: [],
         body: [{:quote, [line: 9], [[do: {:__block__, [], [2]}]]}],
-        name: :test_2,
-        params: []
+        name: :test_2
       }
     ]
+
+    assert result.macros == expected
   end
 end
