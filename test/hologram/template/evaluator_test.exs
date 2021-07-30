@@ -42,4 +42,24 @@ defmodule Hologram.Template.EvaluatorTest do
       assert result == expected
     end
   end
+
+  describe "other" do
+    test "function call" do
+      params = [
+        %ListType{
+          data: [
+            %IntegerType{value: 1},
+            %IntegerType{value: 2}
+          ]
+        }
+      ]
+
+      ir = %FunctionCall{module: Kernel, function: :hd, params: params}
+
+      result = Evaluator.evaluate(ir, @state)
+      expected = 1
+
+      assert result == expected
+    end
+  end
 end
