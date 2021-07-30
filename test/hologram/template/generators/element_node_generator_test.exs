@@ -16,7 +16,11 @@ defmodule Hologram.Template.ElementNodeGeneratorTest do
   end
 
   test "has attrs without modifiers" do
-    attrs = %{"attr_1" => "value_1", "attr_2" => "value_2"}
+    attrs = %{
+      attr_1: %{value: "value_1", modifiers: []},
+      attr_2: %{value: "value_2", modifiers: []}
+    }
+
     children = []
 
     result = ElementNodeGenerator.generate("div", attrs, children)
@@ -30,7 +34,11 @@ defmodule Hologram.Template.ElementNodeGeneratorTest do
   end
 
   test "has attrs with modifiers" do
-    attrs = %{"attr_1.abc" => "value_1", "attr_2.bcd.cde" => "value_2"}
+    attrs = %{
+      attr_1: %{value: "value_1", modifiers: [:abc]},
+      attr_2: %{value: "value_2", modifiers: [:bcd, :cde]}
+    }
+
     children = []
 
     result = ElementNodeGenerator.generate("div", attrs, children)
@@ -62,7 +70,7 @@ defmodule Hologram.Template.ElementNodeGeneratorTest do
   end
 
   test "doesn't remove any attrs" do
-    attrs = %{"on_click" => "test"}
+    attrs = %{on_click: %{value: "test", modifiers: []}}
     children = []
 
     result = ElementNodeGenerator.generate("div", attrs, children)
@@ -81,7 +89,7 @@ defmodule Hologram.Template.ElementNodeGeneratorTest do
         }
       }
 
-    attrs = %{"on_click" => expr}
+    attrs = %{on_click: %{value: expr, modifiers: []}}
     children = []
 
     result = ElementNodeGenerator.generate("div", attrs, children)
