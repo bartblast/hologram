@@ -14,7 +14,7 @@ defmodule Hologram.Template.ElementNodeGenerator do
       js =
         attrs
         |> Enum.map(fn {key, value} ->
-          "'#{key}': #{generate_attr_value(value)}"
+          "'#{key}': { value: #{generate_attr_value(value)}, modifiers: [] }"
         end)
         |> Enum.join(", ")
 

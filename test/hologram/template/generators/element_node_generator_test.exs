@@ -21,8 +21,10 @@ defmodule Hologram.Template.ElementNodeGeneratorTest do
 
     result = ElementNodeGenerator.generate("div", attrs, children)
 
+    attr_1 = "{ value: 'value_1', modifiers: [] }"
+    attr_2 = "{ value: 'value_2', modifiers: [] }"
     expected =
-      "{ type: 'element', tag: 'div', attrs: { 'attr_1': 'value_1', 'attr_2': 'value_2' }, children: [] }"
+      "{ type: 'element', tag: 'div', attrs: { 'attr_1': #{attr_1}, 'attr_2': #{attr_2} }, children: [] }"
 
     assert result == expected
   end
@@ -37,8 +39,10 @@ defmodule Hologram.Template.ElementNodeGeneratorTest do
 
     result = ElementNodeGenerator.generate("div", attrs, children)
 
+    child_1 = "{ type: 'element', tag: 'span', attrs: {}, children: [] }"
+    child_2 = "{ type: 'element', tag: 'h1', attrs: {}, children: [] }"
     expected =
-      "{ type: 'element', tag: 'div', attrs: {}, children: [{ type: 'element', tag: 'span', attrs: {}, children: [] }, { type: 'element', tag: 'h1', attrs: {}, children: [] }] }"
+      "{ type: 'element', tag: 'div', attrs: {}, children: [#{child_1}, #{child_2}] }"
 
     assert result == expected
   end
@@ -48,7 +52,9 @@ defmodule Hologram.Template.ElementNodeGeneratorTest do
     children = []
 
     result = ElementNodeGenerator.generate("div", attrs, children)
-    expected = "{ type: 'element', tag: 'div', attrs: { 'on_click': 'test' }, children: [] }"
+
+    on_click = "{ value: 'test', modifiers: [] }"
+    expected = "{ type: 'element', tag: 'div', attrs: { 'on_click': #{on_click} }, children: [] }"
 
     assert result == expected
   end
@@ -65,7 +71,9 @@ defmodule Hologram.Template.ElementNodeGeneratorTest do
     children = []
 
     result = ElementNodeGenerator.generate("div", attrs, children)
-    expected = "{ type: 'element', tag: 'div', attrs: { 'on_click': { type: 'expression', callback: ($state) => { return { type: 'tuple', data: [ { type: 'string', value: 'abc' } ] } } } }, children: [] }"
+
+    callback = "($state) => { return { type: 'tuple', data: [ { type: 'string', value: 'abc' } ] } }"
+    expected = "{ type: 'element', tag: 'div', attrs: { 'on_click': { value: { type: 'expression', callback: #{callback} }, modifiers: [] } }, children: [] }"
 
     assert result == expected
   end
