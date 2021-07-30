@@ -4,21 +4,21 @@ defmodule Hologram.Template.ElementNodeRendererTest do
   alias Hologram.Template.Document.{ElementNode, TextNode}
   alias Hologram.Template.ElementNodeRenderer
 
-  setup do
-    [
-      state: %{}
-    ]
-  end
+  @state %{}
 
-  test "render/4", %{state: state} do
-    attrs = %{attr_1: "test_attr_value_1", on_click: "test_on_click", attr_2: "test_attr_value_2"}
+  test "render/4" do
+    attrs = %{
+      attr_1: %{value: "test_attr_value_1", modifiers: []},
+      on_click: %{value: "test_on_click", modifiers: []},
+      attr_2: %{value: "test_attr_value_2", modifiers: []}
+    }
 
     children = [
       %TextNode{content: "test_text"},
       %ElementNode{attrs: %{}, children: [], tag: "span"}
     ]
 
-    result = ElementNodeRenderer.render("div", attrs, children, state)
+    result = ElementNodeRenderer.render("div", attrs, children, @state)
 
     expected =
       "<div attr_1=\"test_attr_value_1\" attr_2=\"test_attr_value_2\">test_text<span></span></div>"

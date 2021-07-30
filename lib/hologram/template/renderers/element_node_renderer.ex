@@ -12,7 +12,7 @@ defmodule Hologram.Template.ElementNodeRenderer do
 
   defp render_attrs(attrs) do
     Enum.reject(attrs, fn {key, _} -> key in @pruned_attrs end)
-    |> Enum.map(fn {key, value} -> " #{key}=\"#{value}\"" end)
+    |> Enum.map(fn {key, spec} -> " #{key}=\"#{spec.value}\"" end)
     |> Enum.join("")
   end
 
