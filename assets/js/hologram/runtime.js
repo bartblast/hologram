@@ -18,12 +18,14 @@ export default class Runtime {
     if (actionResult.type == "tuple") {
       this.state = actionResult.data[0]
 
+      let commandName = {type: "atom", value: actionResult.data[1].value}
+
       let commandParams = {type: "map", data: {}}
       if (actionResult.data[2]) {
         commandParams = actionResult.data[2]
       }
 
-      this.client.pushCommand(actionResult.data[1].value, commandParams, context)
+      this.client.pushCommand(commandName, commandParams, context)
 
     } else {
       this.state = actionResult

@@ -58,7 +58,9 @@ describe("executeAction()", () => {
 
     assert.deepStrictEqual(runtime.state, expectedState)
 
-    sinon.assert.calledWith(clientPushCommandFake, "test_command", {type: "map", data: {}}, context);
+    const commandName = {type: "atom", value: "test_command"}
+    const commandParams = {type: "map", data: {}}
+    sinon.assert.calledWith(clientPushCommandFake, commandName, commandParams, context);
     sinon.assert.calledWith(domRenderFake, context.pageModule)
   })
 
@@ -93,7 +95,8 @@ describe("executeAction()", () => {
 
     assert.deepStrictEqual(runtime.state, expectedState)
 
-    sinon.assert.calledWith(clientPushCommandFake, "test_command", commandParams, context);
+    const commandName = {type: "atom", value: "test_command"}
+    sinon.assert.calledWith(clientPushCommandFake, commandName, commandParams, context);
     sinon.assert.calledWith(domRenderFake, context.pageModule)
   })
 
