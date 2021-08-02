@@ -1,14 +1,14 @@
 defmodule Hologram.Compiler.FunctionDefinitionGenerator do
-  alias Hologram.Compiler.{Context, Generator, MapKeyGenerator}
+  alias Hologram.Compiler.{Context, Generator, MapKeyGenerator, Opts}
   alias Hologram.Compiler.IR.{AccessOperator, Variable}
 
-  def generate(name, variants, %Context{} = context) do
-    body = generate_body(variants, context)
+  def generate(name, variants, %Context{} = context, %Opts{} = opts) do
+    body = generate_body(variants, context, opts)
     "static #{name}() {\n#{body}}\n"
   end
 
-  defp generate_body(variants, context) do
-    generate_body_valid_cases(variants, context) <> generate_body_invalid_case()
+  defp generate_body(variants, context, opts) do
+    generate_body_valid_cases(variants, context, opts) <> generate_body_invalid_case()
   end
 
   defp generate_body_invalid_case do
@@ -20,12 +20,12 @@ defmodule Hologram.Compiler.FunctionDefinitionGenerator do
     """
   end
 
-  defp generate_body_valid_cases(variants, context) do
+  defp generate_body_valid_cases(variants, context, opts) do
     Enum.reduce(variants, "", fn variant, acc ->
       statement = if acc == "", do: "if", else: "else if"
       params = generate_params(variant, context)
       vars = generate_vars(variant, context)
-      body = generate_exprs(variant, context)
+      body = generate_exprs(variant, context, opts)
 
       code = """
       #{statement} (Hologram.patternMatchFunctionArgs(#{params}, arguments)) {#{vars}#{body}
@@ -36,21 +36,21 @@ defmodule Hologram.Compiler.FunctionDefinitionGenerator do
     end)
   end
 
-  defp generate_expr(expr, idx, expr_count, context) do
+  defp generate_expr(expr, idx, expr_count, context, opts) do
     return = if idx == expr_count - 1, do: "return ", else: ""
-    "\n#{return}#{Generator.generate(expr, context)};"
+    "\n#{return}#{Generator.generate(expr, context, opts)};"
   end
 
-  defp generate_exprs(variant, context) do
+  defp generate_exprs(variant, context, opts) do
     expr_count = Enum.count(variant.body)
 
     Enum.with_index(variant.body)
-    |> Enum.map(fn {expr, idx} -> generate_expr(expr, idx, expr_count, context) end)
+    |> Enum.map(fn {expr, idx} -> generate_expr(expr, idx, expr_count, context, opts) end)
   end
 
   defp generate_params(variant, context) do
     params =
-      Enum.map(variant.params, &Generator.generate(&1, context, placeholder: true))
+      Enum.map(variant.params, &Generator.generate(&1, context, %Opts{placeholder: true}))
       |> Enum.join(", ")
 
     "[#{params}]"

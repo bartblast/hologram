@@ -1,5 +1,5 @@
 defmodule Hologram.Compiler.TypeEncoder do
-  alias Hologram.Compiler.{Context, Generator}
+  alias Hologram.Compiler.{Context, Generator, Opts}
 
   defmacro __using__(_) do
     quote do
@@ -7,7 +7,7 @@ defmodule Hologram.Compiler.TypeEncoder do
     end
   end
 
-  def encode_as_list(data, %Context{} = context, opts) do
+  def encode_as_list(data, %Context{} = context, %Opts{} = opts) do
     data =
       Enum.map(data, &Generator.generate(&1, context, opts))
       |> Enum.join(", ")

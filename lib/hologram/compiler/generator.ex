@@ -1,5 +1,5 @@
 defmodule Hologram.Compiler.Generator do
-  alias Hologram.Compiler.{Context, Helpers}
+  alias Hologram.Compiler.{Context, Helpers, Opts}
 
   alias Hologram.Compiler.{
     AdditionOperatorGenerator,
@@ -37,7 +37,7 @@ defmodule Hologram.Compiler.Generator do
     Variable
   }
 
-  def generate(ir, context, opts \\ [])
+  def generate(ir, context, opts)
 
   # TYPES
 
@@ -45,7 +45,7 @@ defmodule Hologram.Compiler.Generator do
     PrimitiveTypeGenerator.generate(:atom, "'#{value}'")
   end
 
-  def generate(%BinaryType{parts: parts}, %Context{} = context, opts) do
+  def generate(%BinaryType{parts: parts}, %Context{} = context, %Opts{} = opts) do
     BinaryTypeEncoder.encode(parts, context, opts)
   end
 
@@ -57,11 +57,11 @@ defmodule Hologram.Compiler.Generator do
     PrimitiveTypeGenerator.generate(:integer, "#{value}")
   end
 
-  def generate(%ListType{data: data}, %Context{} = context, opts) do
+  def generate(%ListType{data: data}, %Context{} = context, %Opts{} = opts) do
     ListTypeGenerator.generate(data, context, opts)
   end
 
-  def generate(%MapType{data: data}, %Context{} = context, opts) do
+  def generate(%MapType{data: data}, %Context{} = context, %Opts{} = opts) do
     MapTypeGenerator.generate(data, context, opts)
   end
 
@@ -73,36 +73,36 @@ defmodule Hologram.Compiler.Generator do
     PrimitiveTypeGenerator.generate(:string, "'#{value}'")
   end
 
-  def generate(%StructType{module: module, data: data}, %Context{} = context, opts) do
+  def generate(%StructType{module: module, data: data}, %Context{} = context, %Opts{} = opts) do
     StructTypeGenerator.generate(module, data, context, opts)
   end
 
-  def generate(%TupleType{data: data}, %Context{} = context, opts) do
+  def generate(%TupleType{data: data}, %Context{} = context, %Opts{} = opts) do
     TupleTypeGenerator.generate(data, context, opts)
   end
 
   # OPERATORS
 
-  def generate(%AdditionOperator{left: left, right: right}, %Context{} = context, _) do
-    AdditionOperatorGenerator.generate(left, right, context)
+  def generate(%AdditionOperator{left: left, right: right}, %Context{} = context, %Opts{} = opts) do
+    AdditionOperatorGenerator.generate(left, right, context, opts)
   end
 
-  def generate(%DotOperator{left: left, right: right}, %Context{} = context, _) do
-    DotOperatorGenerator.generate(left, right, context)
+  def generate(%DotOperator{left: left, right: right}, %Context{} = context, %Opts{} = opts) do
+    DotOperatorGenerator.generate(left, right, context, opts)
   end
 
-  def generate(%ModuleAttributeOperator{name: name}, %Context{} = context, _) do
-    ModuleAttributeOperatorGenerator.generate(name, context)
+  def generate(%ModuleAttributeOperator{name: name}, %Context{} = context, %Opts{} = opts) do
+    ModuleAttributeOperatorGenerator.generate(name, context, opts)
   end
 
-  def generate(%TypeOperator{left: left, right: right}, %Context{} = context, opts) do
+  def generate(%TypeOperator{left: left, right: right}, %Context{} = context, %Opts{} = opts) do
     TypeOperatorEncoder.encode(left, right, context, opts)
   end
 
   # DEFINITIONS
 
-  def generate(%ModuleDefinition{module: module} = ir, %Context{} = context, _) do
-    ModuleDefinitionGenerator.generate(ir, module, context)
+  def generate(%ModuleDefinition{module: module} = ir, %Context{} = context, %Opts{} = opts) do
+    ModuleDefinitionGenerator.generate(ir, module, context, opts)
   end
 
   # OTHER
@@ -111,11 +111,11 @@ defmodule Hologram.Compiler.Generator do
     SigilHGenerator.generate(ir, context)
   end
 
-  def generate(%FunctionCall{module: module, function: function, params: params}, %Context{} = context, _) do
-    FunctionCallGenerator.generate(module, function, params, context)
+  def generate(%FunctionCall{module: module, function: function, params: params}, %Context{} = context, %Opts{} = opts) do
+    FunctionCallGenerator.generate(module, function, params, context, opts)
   end
 
-  def generate(%Variable{}, _, placeholder: true) do
+  def generate(%Variable{}, _, %Opts{placeholder: true}) do
     "{ type: 'placeholder' }"
   end
 

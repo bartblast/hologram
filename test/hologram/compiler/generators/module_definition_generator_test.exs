@@ -1,7 +1,7 @@
 defmodule Hologram.Compiler.ModuleDefinitionGeneratorTest do
   use Hologram.TestCase, async: true
 
-  alias Hologram.Compiler.{Context, ModuleDefinitionGenerator}
+  alias Hologram.Compiler.{Context, ModuleDefinitionGenerator, Opts}
   alias Hologram.Compiler.IR.{FunctionDefinition, IntegerType, ModuleDefinition, Variable}
 
   @module Abc.Bcd
@@ -26,7 +26,7 @@ defmodule Hologram.Compiler.ModuleDefinitionGeneratorTest do
     }
 
 
-    result = ModuleDefinitionGenerator.generate(ir, @module, %Context{})
+    result = ModuleDefinitionGenerator.generate(ir, @module, %Context{}, %Opts{})
 
     expected = """
     window.Elixir_Abc_Bcd = class Elixir_Abc_Bcd {
@@ -81,7 +81,7 @@ defmodule Hologram.Compiler.ModuleDefinitionGeneratorTest do
       module: @module
     }
 
-    result = ModuleDefinitionGenerator.generate(ir, @module, %Context{})
+    result = ModuleDefinitionGenerator.generate(ir, @module, %Context{}, %Opts{})
 
     expected = """
     window.Elixir_Abc_Bcd = class Elixir_Abc_Bcd {
@@ -139,7 +139,7 @@ defmodule Hologram.Compiler.ModuleDefinitionGeneratorTest do
       module: @module
     }
 
-    result = ModuleDefinitionGenerator.generate(ir, @module, %Context{})
+    result = ModuleDefinitionGenerator.generate(ir, @module, %Context{}, %Opts{})
 
     expected = """
     window.Elixir_Abc_Bcd = class Elixir_Abc_Bcd {
@@ -217,7 +217,7 @@ defmodule Hologram.Compiler.ModuleDefinitionGeneratorTest do
       module: @module
     }
 
-    result = ModuleDefinitionGenerator.generate(ir, @module, %Context{})
+    result = ModuleDefinitionGenerator.generate(ir, @module, %Context{}, %Opts{})
 
     expected = """
     window.Elixir_Abc_Bcd = class Elixir_Abc_Bcd {

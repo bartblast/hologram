@@ -1,6 +1,6 @@
 defmodule Hologram.Compiler.FunctionDefinitionGeneratorTest do
   use Hologram.TestCase, async: true
-  alias Hologram.Compiler.{Context, FunctionDefinitionGenerator}
+  alias Hologram.Compiler.{Context, FunctionDefinitionGenerator, Opts}
 
   # cases:
   # has args, no args
@@ -17,7 +17,7 @@ defmodule Hologram.Compiler.FunctionDefinitionGeneratorTest do
     ir = ir(code)
     variants = [ir]
 
-    result = FunctionDefinitionGenerator.generate(ir.name, variants, %Context{})
+    result = FunctionDefinitionGenerator.generate(ir.name, variants, %Context{}, %Opts{})
 
     expected = """
     static test() {
@@ -42,7 +42,7 @@ defmodule Hologram.Compiler.FunctionDefinitionGeneratorTest do
     ir = ir(code)
     variants = [ir]
 
-    result = FunctionDefinitionGenerator.generate(ir.name, variants, %Context{})
+    result = FunctionDefinitionGenerator.generate(ir.name, variants, %Context{}, %Opts{})
 
     expected = """
     static test() {
@@ -76,7 +76,7 @@ defmodule Hologram.Compiler.FunctionDefinitionGeneratorTest do
     variants = ir.functions
     name = :test
 
-    result = FunctionDefinitionGenerator.generate(name, variants, %Context{})
+    result = FunctionDefinitionGenerator.generate(name, variants, %Context{}, %Opts{})
 
     expected = """
     static test() {
