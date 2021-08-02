@@ -24,7 +24,7 @@ defmodule Hologram.Runtime.Channel do
   end
 
   defp execute_command(%{"command" => command, "params" => params, "context" => context}) do
-    command = String.to_atom(command)
+    command = Decoder.decode(command)
 
     params =
       Decoder.decode(params)

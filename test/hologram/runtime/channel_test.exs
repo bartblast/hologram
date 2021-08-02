@@ -17,7 +17,7 @@ defmodule Hologram.Runtime.ChannelTest do
 
     message =
       %{
-        command: "test_command",
+        command: %{"type" => "atom", "value" => "test_command"},
         context: context,
         params: %{"type" => "list", data: []}
       }
@@ -38,7 +38,7 @@ defmodule Hologram.Runtime.ChannelTest do
 
     message =
       %{
-        command: "test_command",
+        command: %{"type" => "atom", "value" => "test_command"},
         context: context,
         params: %{"type" => "list", data: []}
       }
@@ -59,7 +59,7 @@ defmodule Hologram.Runtime.ChannelTest do
 
     message =
       %{
-        command: "test_command",
+        command: %{"type" => "atom", "value" => "test_command"},
         context: context,
         params: %{
           "type" => "list",
@@ -98,7 +98,7 @@ defmodule Hologram.Runtime.ChannelTest do
 
     message =
       %{
-        command: "test_command",
+        command: %{"type" => "atom", "value" => "test_command"},
         context: context,
         params: %{
           "type" => "list",
