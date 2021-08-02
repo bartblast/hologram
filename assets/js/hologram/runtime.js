@@ -24,6 +24,7 @@ export default class Runtime {
       }
 
       this.client.pushCommand(actionResult.data[1].value, commandParams, context)
+
     } else {
       this.state = actionResult
     }
@@ -36,19 +37,14 @@ export default class Runtime {
     return eval(name.replace(/\./g, ""))
   }  
 
+  // TODO: refactor & test
   handleClickEvent(onClickSpec, state, context, _event) {
-    let actionName, actionParams;
+    if (onClickSpec.modifiers.includes("command")) {
+      return this.handleEventCommand()
 
-    if (onClickSpec.value.type == "expression") {
-      const callbackResult = onClickSpec.value.callback(state)
-      actionName = callbackResult.data[0]
-      actionParams = Utils.keywordToMap(callbackResult.data[1])
     } else {
-      actionName = {type: "atom", value: onClickSpec.value}
-      actionParams = {type: "map", data: {}}
+      return this.handleEventAction(onClickSpec.value, state, context)
     }
-
-    this.executeAction(actionName, actionParams, state, context)
   }
 
   handleCommandResponse(response) {
@@ -62,6 +58,21 @@ export default class Runtime {
     }
 
     this.executeAction(action, params, this.state, context)
+  }
+
+  handleEventAction(value, state, context) {
+    let actionName, actionParams;
+
+    if (value.type == "expression") {
+      const callbackResult = value.callback(state)
+      actionName = callbackResult.data[0]
+      actionParams = Utils.keywordToMap(callbackResult.data[1])
+    } else {
+      actionName = {type: "atom", value: value}
+      actionParams = {type: "map", data: {}}
+    }
+
+    this.executeAction(actionName, actionParams, state, context)
   }
 
   // TODO: refactor & test
