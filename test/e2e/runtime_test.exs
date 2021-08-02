@@ -31,9 +31,19 @@ defmodule Hologram.Features.RuntimeTest do
     |> assert_has(css("#text", text: "text updated by action_4a_5_6"))
   end
 
-  # DEFER: test when commands triggered by event are implemented
-  # feature "command without params trigerred by event", %{session: session}
-  # feature "command with params trigerred by event", %{session: session}
+  feature "command without params trigerred by event", %{session: session} do
+    session
+    |> visit("/e2e/page-1")
+    |> click(css("#button_5"))
+    |> assert_has(css("#text", text: "text updated by action_5a"))
+  end
+
+  feature "command with params trigerred by event", %{session: session} do
+    session
+    |> visit("/e2e/page-1")
+    |> click(css("#button_6"))
+    |> assert_has(css("#text", text: "text updated by action_6a_1_2"))
+  end
 
   feature "command without params trigerred by action", %{session: session} do
     session
