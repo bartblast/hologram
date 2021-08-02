@@ -40,7 +40,7 @@ export default class Runtime {
   // TODO: refactor & test
   handleClickEvent(onClickSpec, state, context, _event) {
     if (onClickSpec.modifiers.includes("command")) {
-      return this.handleEventCommand()
+      return this.handleEventCommand(onClickSpec.value, context)
 
     } else {
       return this.handleEventAction(onClickSpec.value, state, context)
@@ -60,19 +60,34 @@ export default class Runtime {
     this.executeAction(action, params, this.state, context)
   }
 
-  handleEventAction(value, state, context) {
+  handleEventAction(eventValue, state, context) {
     let actionName, actionParams;
 
-    if (value.type == "expression") {
-      const callbackResult = value.callback(state)
+    if (eventValue.type == "expression") {
+      const callbackResult = eventValue.callback(state)
       actionName = callbackResult.data[0]
       actionParams = Utils.keywordToMap(callbackResult.data[1])
     } else {
-      actionName = {type: "atom", value: value}
+      actionName = {type: "atom", value: eventValue}
       actionParams = {type: "map", data: {}}
     }
 
     this.executeAction(actionName, actionParams, state, context)
+  }
+
+  handleEventCommand(eventValue, state, context) {
+    let commandName, commandParams;
+
+    if (eventValue.type == "expression") {
+      const callbackResult = eventValue.callback(state)
+      commandName = callbackResult.data[0]
+      commandParams = Utils.keywordToMap(callbackResult.data[1])
+    } else {
+      commandName = {type: "atom", value: eventValue}
+      commandParams = {type: "map", data: {}}
+    }
+
+    this.client.pushCommand(commandName, commandParams, context)
   }
 
   // TODO: refactor & test
