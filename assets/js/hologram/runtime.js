@@ -40,7 +40,7 @@ export default class Runtime {
   // TODO: refactor & test
   handleClickEvent(onClickSpec, state, context, _event) {
     if (onClickSpec.modifiers.includes("command")) {
-      return this.handleEventCommand(onClickSpec.value, context)
+      return this.handleEventCommand(onClickSpec.value, state, context)
 
     } else {
       return this.handleEventAction(onClickSpec.value, state, context)
