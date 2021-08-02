@@ -4,6 +4,8 @@ const patch = init([attributesModule, eventListenersModule]);
 import Runtime from "./runtime"
 
 export default class DOM {
+  static PRUNED_ATTRS = ["on_click"]
+
   // TODO: refactor & test
   constructor(runtime, window) {
     this.oldVNode = null
@@ -51,11 +53,13 @@ export default class DOM {
     } 
   }
 
-  // TODO: refactor & test
   static buildVNodeAttrs(node) {
-    const attrs = Object.assign({}, node.attrs)
-    delete attrs.on_click
-    return attrs
+    return Object.keys(node.attrs).reduce((acc, key) => {
+      if (!DOM.PRUNED_ATTRS.includes(key)) {
+        acc[key] = node.attrs[key].value
+      }
+      return acc
+    }, {})
   }
 
   // TODO: refactor & test
