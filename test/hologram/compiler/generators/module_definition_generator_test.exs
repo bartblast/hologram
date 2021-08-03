@@ -6,16 +6,16 @@ defmodule Hologram.Compiler.ModuleDefinitionGeneratorTest do
 
   @module Abc.Bcd
 
+  test "empty module" do
+    ir = %ModuleDefinition{functions: []}
+
+    result = ModuleDefinitionGenerator.generate(ir, @module, %Context{}, %Opts{})
+    expected = "window.Elixir_Abc_Bcd = class Elixir_Abc_Bcd {}\n"
+
+    assert result == expected
+  end
+
   describe "functions" do
-    test "no functions" do
-      ir = %ModuleDefinition{functions: []}
-
-      result = ModuleDefinitionGenerator.generate(ir, @module, %Context{}, %Opts{})
-      expected = "window.Elixir_Abc_Bcd = class Elixir_Abc_Bcd {}\n"
-
-      assert result == expected
-    end
-
     test "single function with single variant" do
       ir = %ModuleDefinition{
         functions: [
