@@ -2,17 +2,62 @@ defmodule Hologram.Compiler.ModuleDefinitionGeneratorTest do
   use Hologram.TestCase, async: true
 
   alias Hologram.Compiler.{Context, ModuleDefinitionGenerator, Opts}
-  alias Hologram.Compiler.IR.{FunctionDefinition, IntegerType, ModuleDefinition, Variable}
+  alias Hologram.Compiler.IR.{AtomType, FunctionDefinition, IntegerType, ModuleAttributeDefinition, ModuleDefinition, Variable}
 
   @module Abc.Bcd
 
-  test "empty module" do
-    ir = %ModuleDefinition{functions: []}
+  # this case is not possible, because such module would be pruned:
+  # test "empty module"
 
-    result = ModuleDefinitionGenerator.generate(ir, @module, %Context{}, %Opts{})
-    expected = "window.Elixir_Abc_Bcd = class Elixir_Abc_Bcd {}\n"
+  describe "attributes" do
+    test "single attribute" do
+      ir = %ModuleDefinition{
+        attributes: [
+          %ModuleAttributeDefinition{
+            name: :abc,
+            value: %IntegerType{value: 123}
+          }
+        ]
+      }
 
-    assert result == expected
+      result = ModuleDefinitionGenerator.generate(ir, @module, %Context{}, %Opts{})
+
+      expected = """
+      window.Elixir_Abc_Bcd = class Elixir_Abc_Bcd {
+
+      static $abc = { type: 'integer', value: 123 };
+      }
+      """
+
+      assert result == expected
+    end
+
+    test "multiple attributes" do
+      ir = %ModuleDefinition{
+        attributes: [
+          %ModuleAttributeDefinition{
+            name: :abc,
+            value: %IntegerType{value: 123}
+          },
+          %ModuleAttributeDefinition{
+            name: :bcd,
+            value: %AtomType{value: :bcd_value}
+          }
+        ]
+      }
+
+      result = ModuleDefinitionGenerator.generate(ir, @module, %Context{}, %Opts{})
+
+      expected = """
+      window.Elixir_Abc_Bcd = class Elixir_Abc_Bcd {
+
+      static $abc = { type: 'integer', value: 123 };
+      static $bcd = { type: 'atom', value: 'bcd_value' };
+      }
+      """
+
+      assert result == expected
+    end
   end
 
   describe "functions" do
@@ -249,6 +294,53 @@ defmodule Hologram.Compiler.ModuleDefinitionGeneratorTest do
       if (Hologram.patternMatchFunctionArgs([{ type: 'placeholder' }], arguments)) {
       let a = arguments[0];
       return { type: 'integer', value: 3 };
+      }
+      else {
+      console.debug(arguments)
+      throw 'No match for the function call'
+      }
+      }
+      }
+      """
+
+      assert result == expected
+    end
+
+    test "has preceding attributes section" do
+      ir = %ModuleDefinition{
+        attributes: [
+          %ModuleAttributeDefinition{
+            name: :abc,
+            value: %IntegerType{value: 123}
+          }
+        ],
+        functions: [
+          %FunctionDefinition{
+            bindings: [
+              a: {0, [%Variable{name: :a}]}
+            ],
+            body: [
+              %IntegerType{value: 1}
+            ],
+            name: :test,
+            params: [
+              %Variable{name: :a}
+            ]
+          }
+        ],
+      }
+
+      result = ModuleDefinitionGenerator.generate(ir, @module, %Context{}, %Opts{})
+
+      expected = """
+      window.Elixir_Abc_Bcd = class Elixir_Abc_Bcd {
+
+      static $abc = { type: 'integer', value: 123 };
+
+      static test() {
+      if (Hologram.patternMatchFunctionArgs([{ type: 'placeholder' }], arguments)) {
+      let a = arguments[0];
+      return { type: 'integer', value: 1 };
       }
       else {
       console.debug(arguments)
