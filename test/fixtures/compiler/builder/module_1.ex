@@ -7,5 +7,4 @@ defmodule Hologram.Test.Fixtures.Compiler.Builder.Module1 do
   def action(:test, _a, _b) do
     Module3.test_3()
   end
-
 end
