@@ -48,6 +48,15 @@ defmodule Hologram.Compiler.Processor do
 
   defp find_nested_components(%TextNode{}), do: []
 
+  # DEFER: instead of matching the macro on arity, pattern match the params
+  def get_macro_definition(module, name, params) do
+    arity = Enum.count(params)
+
+    get_module_definition(module).macros
+    |> Enum.filter(&(&1.name == name && &1.arity == arity))
+    |> hd()
+  end
+
   @doc """
   Returns the corresponding module definition.
 
