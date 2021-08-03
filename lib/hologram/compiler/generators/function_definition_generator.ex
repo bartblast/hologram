@@ -1,14 +1,20 @@
 defmodule Hologram.Compiler.FunctionDefinitionGenerator do
-  alias Hologram.Compiler.{Context, Generator, MapKeyGenerator, Opts}
+  alias Hologram.Compiler.{Context, Formatter, Generator, MapKeyGenerator, Opts}
   alias Hologram.Compiler.IR.{AccessOperator, Variable}
 
   def generate(name, variants, %Context{} = context, %Opts{} = opts) do
     body = generate_body(variants, context, opts)
-    "static #{name}() {\n#{body}}\n"
+
+    "static #{name}() {#{body}"
+    |> Formatter.maybe_append_new_line("}")
+    |> Formatter.append_line_break()
   end
 
   defp generate_body(variants, context, opts) do
-    generate_body_valid_cases(variants, context, opts) <> generate_body_invalid_case()
+    invalid_case = generate_body_invalid_case()
+
+    generate_body_valid_cases(variants, context, opts)
+    |> Formatter.maybe_append_new_line(invalid_case)
   end
 
   defp generate_body_invalid_case do
@@ -16,7 +22,7 @@ defmodule Hologram.Compiler.FunctionDefinitionGenerator do
     else {
     console.debug(arguments)
     throw 'No match for the function call'
-    }
+    }\
     """
   end
 
@@ -27,18 +33,17 @@ defmodule Hologram.Compiler.FunctionDefinitionGenerator do
       vars = generate_vars(variant, context)
       body = generate_exprs(variant, context, opts)
 
-      code = """
-      #{statement} (Hologram.patternMatchFunctionArgs(#{params}, arguments)) {#{vars}#{body}
-      }
-      """
-
-      acc <> code
+      acc
+      |> Formatter.maybe_append_new_line("#{statement} (Hologram.patternMatchFunctionArgs(#{params}, arguments)) {")
+      |> Formatter.maybe_append_new_line(vars)
+      |> Formatter.maybe_append_new_line(body)
+      |> Formatter.maybe_append_new_line("}")
     end)
   end
 
   defp generate_expr(expr, idx, expr_count, context, opts) do
     return = if idx == expr_count - 1, do: "return ", else: ""
-    "\n#{return}#{Generator.generate(expr, context, opts)};"
+    "#{return}#{Generator.generate(expr, context, opts)};"
   end
 
   defp generate_exprs(variant, context, opts) do
@@ -46,6 +51,7 @@ defmodule Hologram.Compiler.FunctionDefinitionGenerator do
 
     Enum.with_index(variant.body)
     |> Enum.map(fn {expr, idx} -> generate_expr(expr, idx, expr_count, context, opts) end)
+    |> Enum.join("\n")
   end
 
   defp generate_params(variant, context) do
@@ -57,7 +63,7 @@ defmodule Hologram.Compiler.FunctionDefinitionGenerator do
   end
 
   defp generate_var({name, {idx, path}}, context) do
-    acc = "\nlet #{name} = arguments[#{idx}]"
+    acc = "let #{name} = arguments[#{idx}]"
 
     value =
       Enum.reduce(path, acc, fn type, acc ->
@@ -76,5 +82,6 @@ defmodule Hologram.Compiler.FunctionDefinitionGenerator do
 
   defp generate_vars(variant, context) do
     Enum.map(variant.bindings, &generate_var(&1, context))
+    |> Enum.join("\n")
   end
 end

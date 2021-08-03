@@ -62,7 +62,7 @@ defmodule Hologram.Compiler.FunctionDefinitionGeneratorTest do
 
   test "multiple variants, map access, expression + return statement" do
     code = """
-    defmodule Test do
+    defmodule Hologram.Test.Fixtures.PlaceholderModule do
       def test(1), do: nil
 
       def test(%{a: x}) do
