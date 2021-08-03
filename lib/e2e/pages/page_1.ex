@@ -42,7 +42,7 @@ defmodule Hologram.E2E.Page1 do
     update(state, :text, "text updated by action_4a_#{params.a}_#{params.b}")
   end
 
-  def action(:action_5a, params, state) do
+  def action(:action_5a, _params, state) do
     update(state, :text, "text updated by action_5a")
   end
 
