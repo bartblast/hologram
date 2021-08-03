@@ -13,6 +13,7 @@ defmodule Hologram.Compiler.GeneratorTest do
     IntegerType,
     ListType,
     MapType,
+    ModuleAttributeDefinition,
     ModuleAttributeOperator,
     ModuleDefinition,
     ModuleType,
@@ -184,10 +185,24 @@ defmodule Hologram.Compiler.GeneratorTest do
 
   describe "definitions" do
     test "module" do
-      ir = %ModuleDefinition{module: Test}
+      ir = %ModuleDefinition{
+        attributes: [
+          %ModuleAttributeDefinition{
+            name: :abc,
+            value: %IntegerType{value: 123}
+          }
+        ],
+        module: Hologram.Test.Fixtures.PlaceholderModule
+      }
 
       result = Generator.generate(ir, %Context{}, %Opts{})
-      expected = "window.Elixir_Test = class Elixir_Test {\n\n\n}\n"
+
+      expected = """
+      window.Elixir_Hologram_Test_Fixtures_PlaceholderModule = class Elixir_Hologram_Test_Fixtures_PlaceholderModule {
+
+      static $abc = { type: 'integer', value: 123 };
+      }
+      """
 
       assert result == expected
     end

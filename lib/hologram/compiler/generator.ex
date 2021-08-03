@@ -1,5 +1,5 @@
 defmodule Hologram.Compiler.Generator do
-  alias Hologram.Compiler.{Context, Helpers, Opts}
+  alias Hologram.Compiler.{Context, Encoder, Helpers, Opts}
 
   alias Hologram.Compiler.{
     AdditionOperatorGenerator,
@@ -121,5 +121,10 @@ defmodule Hologram.Compiler.Generator do
 
   def generate(%Variable{name: name}, _, _) do
     "#{name}"
+  end
+
+  # TODO: use Encoder protocol instead all of these generete/3 functions and remove this module
+  def generate(ir, %Context{} = context, %Opts{} = opts) do
+    Encoder.encode(ir, context, opts)
   end
 end
