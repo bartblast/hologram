@@ -24,10 +24,12 @@ defmodule Hologram.Compiler.Transformer do
     ModuleAttributeDefinitionTransformer,
     ModuleDefinitionTransformer,
     ModuleTypeTransformer,
+    QuoteTransformer,
     RequireDirectiveTransformer,
     StructTypeTransformer,
     TypeOperatorTransformer,
     TupleTypeTransformer,
+    UnquoteTransformer,
     UseDirectiveTransformer
   }
 

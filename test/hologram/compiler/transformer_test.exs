@@ -27,6 +27,7 @@ defmodule Hologram.Compiler.TransformerTest do
     StructType,
     TupleType,
     TypeOperator,
+    Unquote,
     UseDirective,
     Variable
   }
