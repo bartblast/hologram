@@ -9,6 +9,7 @@ defmodule Hologram.Compiler.ModuleDefinitionTransformerTest do
     MacroDefinition,
     ModuleDefinition,
     ModuleAttributeDefinition,
+    Quote,
     RequireDirective,
     UseDirective
   }
@@ -210,12 +211,12 @@ defmodule Hologram.Compiler.ModuleDefinitionTransformerTest do
     expected = [
       %MacroDefinition{
         arity: 0,
-        body: [{:quote, [line: 3], [[do: {:__block__, [], [1]}]]}],
+        body: [%Quote{body: [%IntegerType{value: 1}]}],
         name: :test_1
       },
       %MacroDefinition{
         arity: 0,
-        body: [{:quote, [line: 9], [[do: {:__block__, [], [2]}]]}],
+        body: [%Quote{body: [%IntegerType{value: 2}]}],
         name: :test_2
       }
     ]

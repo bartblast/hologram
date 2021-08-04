@@ -1,7 +1,7 @@
 defmodule Hologram.Compiler.ProcessorTest do
   use Hologram.TestCase, async: true
 
-  alias Hologram.Compiler.IR.{Alias, MacroDefinition, ModuleDefinition}
+  alias Hologram.Compiler.IR.{Alias, MacroDefinition}
   alias Hologram.Compiler.Processor
 
   @module_1 Hologram.Test.Fixtures.Compiler.Processor.Module1
