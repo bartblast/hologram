@@ -258,11 +258,18 @@ defmodule Hologram.Compiler.TransformerTest do
       assert %FunctionCall{} = Transformer.transform(ast, %Context{})
     end
 
-    tes "quote" do
+    test "quote" do
       code = "quote do 1 end"
       ast = ast(code)
 
       assert %Quote{} = Transformer.transform(ast, %Context{})
+    end
+
+    test "unquote" do
+      code = "unquote(abc)"
+      ast = ast(code)
+
+      assert %Unquote{} = Transformer.transform(ast, %Context{})
     end
 
     test "string interpolation" do

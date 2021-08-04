@@ -151,6 +151,10 @@ defmodule Hologram.Compiler.Transformer do
     QuoteTransformer.transform(ast, context)
   end
 
+  def transform({:unquote, _, _} = ast, %Context{} = context) do
+    UnquoteTransformer.transform(ast, context)
+  end
+
   def transform({function, _, params}, %Context{} = context) when is_atom(function) and is_list(params) do
     FunctionCallTransformer.transform([], function, params, context)
   end
