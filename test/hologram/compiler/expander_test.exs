@@ -5,121 +5,123 @@ defmodule Hologram.Compiler.ExpanderTest do
   @module_1 [:Hologram, :Test, :Fixtures, :Compiler, :Expander, :Module1]
   @module_3 [:Hologram, :Test, :Fixtures, :Compiler, :Expander, :Module3]
 
-  test "no use directives" do
-    code = """
-    defmodule Test do
-      def test do
-          1
+  describe "use directives" do
+    test "no use directives" do
+      code = """
+      defmodule Test do
+        def test do
+            1
+        end
       end
+      """
+
+      ast = ast(code)
+      result = Expander.expand(ast)
+
+      assert result == ast
     end
-    """
 
-    ast = ast(code)
-    result = Expander.expand(ast)
+    test "single use directive" do
+      code = """
+      defmodule Test do
+        use Hologram.Test.Fixtures.Compiler.Expander.Module2
+      end
+      """
 
-    assert result == ast
-  end
+      ast = ast(code)
 
-  test "single use directive" do
-    code = """
-    defmodule Test do
-      use Hologram.Test.Fixtures.Compiler.Expander.Module2
+      result = Expander.expand(ast)
+
+      expected =
+        {:defmodule, [line: 1],
+        [
+          {:__aliases__, [line: 1], [:Test]},
+          [
+            do: {:__block__, [], [{:import, [line: 4], [{:__aliases__, [line: 4], @module_1}]}]}
+          ]
+        ]}
+
+      assert result == expected
     end
-    """
 
-    ast = ast(code)
+    test "multiple use directives" do
+      code = """
+      defmodule Test do
+        use Hologram.Test.Fixtures.Compiler.Expander.Module2
+        use Hologram.Test.Fixtures.Compiler.Expander.Module4
+      end
+      """
 
-    result = Expander.expand(ast)
+      ast = ast(code)
 
-    expected =
-      {:defmodule, [line: 1],
-       [
-         {:__aliases__, [line: 1], [:Test]},
-         [
-           do: {:__block__, [], [{:import, [line: 4], [{:__aliases__, [line: 4], @module_1}]}]}
-         ]
-       ]}
+      result = Expander.expand(ast)
 
-    assert result == expected
-  end
+      expected =
+        {:defmodule, [line: 1],
+        [
+          {:__aliases__, [line: 1], [:Test]},
+          [
+            do:
+              {:__block__, [],
+                [
+                  {:import, [line: 4], [{:__aliases__, [line: 4], @module_1}]},
+                  {:import, [line: 4], [{:__aliases__, [line: 4], @module_3}]}
+                ]}
+          ]
+        ]}
 
-  test "multiple use directives" do
-    code = """
-    defmodule Test do
-      use Hologram.Test.Fixtures.Compiler.Expander.Module2
-      use Hologram.Test.Fixtures.Compiler.Expander.Module4
+      assert result == expected
     end
-    """
 
-    ast = ast(code)
+    test "single quote at the root of __using__ macro with a single expression" do
+      code = """
+      defmodule Test do
+        use Hologram.Test.Fixtures.Compiler.Expander.Module2
+      end
+      """
 
-    result = Expander.expand(ast)
+      ast = ast(code)
 
-    expected =
-      {:defmodule, [line: 1],
-       [
-         {:__aliases__, [line: 1], [:Test]},
-         [
-           do:
-             {:__block__, [],
-              [
-                {:import, [line: 4], [{:__aliases__, [line: 4], @module_1}]},
-                {:import, [line: 4], [{:__aliases__, [line: 4], @module_3}]}
-              ]}
-         ]
-       ]}
+      result = Expander.expand(ast)
 
-    assert result == expected
-  end
+      expected =
+        {:defmodule, [line: 1],
+        [
+          {:__aliases__, [line: 1], [:Test]},
+          [
+            do: {:__block__, [], [{:import, [line: 4], [{:__aliases__, [line: 4], @module_1}]}]}
+          ]
+        ]}
 
-  test "single quote at the root of __using__ macro with a single expression" do
-    code = """
-    defmodule Test do
-      use Hologram.Test.Fixtures.Compiler.Expander.Module2
+      assert result == expected
     end
-    """
 
-    ast = ast(code)
+    test "single quote at the root of __using__ macro with multiple expressions" do
+      code = """
+      defmodule Test do
+        use Hologram.Test.Fixtures.Compiler.Expander.Module5
+      end
+      """
 
-    result = Expander.expand(ast)
+      ast = ast(code)
 
-    expected =
-      {:defmodule, [line: 1],
-       [
-         {:__aliases__, [line: 1], [:Test]},
-         [
-           do: {:__block__, [], [{:import, [line: 4], [{:__aliases__, [line: 4], @module_1}]}]}
-         ]
-       ]}
+      result = Expander.expand(ast)
 
-    assert result == expected
-  end
+      expected =
+        {:defmodule, [line: 1],
+        [
+          {:__aliases__, [line: 1], [:Test]},
+          [
+            do:
+              {:__block__, [],
+                [
+                  {:import, [line: 4], [{:__aliases__, [line: 4], @module_1}]},
+                  {:import, [line: 5], [{:__aliases__, [line: 5], @module_3}]}
+                ]}
+          ]
+        ]}
 
-  test "single quote at the root of __using__ macro with multiple expressions" do
-    code = """
-    defmodule Test do
-      use Hologram.Test.Fixtures.Compiler.Expander.Module5
+      assert result == expected
     end
-    """
-
-    ast = ast(code)
-
-    result = Expander.expand(ast)
-
-    expected =
-      {:defmodule, [line: 1],
-       [
-         {:__aliases__, [line: 1], [:Test]},
-         [
-           do:
-             {:__block__, [],
-              [
-                {:import, [line: 4], [{:__aliases__, [line: 4], @module_1}]},
-                {:import, [line: 5], [{:__aliases__, [line: 5], @module_3}]}
-              ]}
-         ]
-       ]}
-
-    assert result == expected
   end
 end
