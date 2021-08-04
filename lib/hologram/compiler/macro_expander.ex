@@ -7,8 +7,6 @@ defmodule Hologram.Compiler.MacroExpander do
   end
 
   def expand(module, name, params) do
-    name = if name == :__using__, do: :__using, else: name
-
     expanded =
       apply(module, :"MACRO-#{name}", [__ENV__] ++ params)
       |> Normalizer.normalize()
