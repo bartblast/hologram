@@ -8,11 +8,17 @@ defmodule Hologram.Compiler.UseDirectiveExpanderTest do
   @module_segs_1 [:Hologram, :Test, :Fixtures, :Compiler, :Expander, :Module1]
   @module_segs_3 [:Hologram, :Test, :Fixtures, :Compiler, :Expander, :Module3]
 
-  test "no use directives" do
-    code = "defmodule Test do end"
-    ast = ast(code)
+  test "no use directives / non-expandable expressions only" do
+    code = """
+    defmodule Test do
+      1
+      2
+    end
+    """
 
+    ast = ast(code)
     result = UseDirectiveExpander.expand(ast)
+
     assert result == ast
   end
 
