@@ -1,19 +1,19 @@
 defmodule Hologram.Compiler.ModuleDefinitionTransformer do
-  alias Hologram.Compiler.{Context, Expander, Helpers, Transformer}
+  alias Hologram.Compiler.{Context, Helpers, Transformer, UseDirectiveExpander}
   alias Hologram.Compiler.IR.ModuleDefinition
 
   def transform(ast) do
-    {:defmodule, _, [_, [do: {:__block__, _, block_before_expansion}]]} = ast
-    uses = aggregate_expressions(:use, block_before_expansion, %Context{})
+    {:defmodule, _, [_, [do: {:__block__, _, exprs}]]} = ast
+    uses = aggregate_expressions(:use, exprs, %Context{})
 
-    {:defmodule, _, [{:__aliases__, _, module_segs}, [do: {:__block__, _, block_after_expansion}]]} =
-      Expander.expand(ast)
+    {:defmodule, _, [{:__aliases__, _, module_segs}, [do: {:__block__, _, exprs}]]} =
+      UseDirectiveExpander.expand(ast)
 
-    build_module(block_after_expansion, module_segs, uses)
+    build_module(exprs, module_segs, uses)
   end
 
-  defp aggregate_expressions(type, ast, context) do
-    Enum.reduce(ast, [], fn expr, acc ->
+  defp aggregate_expressions(type, exprs, context) do
+    Enum.reduce(exprs, [], fn expr, acc ->
       case expr do
         {^type, _, _} ->
           acc ++ [Transformer.transform(expr, context)]
@@ -23,6 +23,7 @@ defmodule Hologram.Compiler.ModuleDefinitionTransformer do
       end
     end)
   end
+
 
   defp build_module(ast, module_segs, uses) do
     module = Helpers.module(module_segs)

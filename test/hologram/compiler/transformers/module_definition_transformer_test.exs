@@ -18,6 +18,7 @@ defmodule Hologram.Compiler.ModuleDefinitionTransformerTest do
 
   @module_1 Hologram.Test.Fixtures.Compiler.ModuleDefinitionTransformer.Module1
   @module_2 Hologram.Test.Fixtures.Compiler.ModuleDefinitionTransformer.Module2
+  @module_4 Hologram.Test.Fixtures.Compiler.ModuleDefinitionTransformer.Module4
 
   test "module" do
     code = """
@@ -53,9 +54,9 @@ defmodule Hologram.Compiler.ModuleDefinitionTransformerTest do
 
   test "uses" do
     code = """
-    defmodule Hologram.Test.Fixtures.Compiler.ModuleDefinitionTransformer.Module3 do
-      use Hologram.Test.Fixtures.Compiler.ModuleDefinitionTransformer.Module1
+    defmodule Hologram.Test.Fixtures.PlaceholderModule do
       use Hologram.Test.Fixtures.Compiler.ModuleDefinitionTransformer.Module2
+      use Hologram.Test.Fixtures.Compiler.ModuleDefinitionTransformer.Module4
     end
     """
 
@@ -63,8 +64,8 @@ defmodule Hologram.Compiler.ModuleDefinitionTransformerTest do
     assert %ModuleDefinition{} = result = ModuleDefinitionTransformer.transform(ast)
 
     expected = [
-      %UseDirective{module: @module_1},
-      %UseDirective{module: @module_2}
+      %UseDirective{module: @module_2},
+      %UseDirective{module: @module_4}
     ]
 
     assert result.uses == expected
