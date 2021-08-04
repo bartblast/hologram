@@ -109,6 +109,10 @@ defmodule Hologram.Compiler.IR do
     defstruct module: nil, function: nil, params: nil
   end
 
+  defmodule Quote do
+    defstruct body: []
+  end
+
   defmodule Variable do
     defstruct name: nil
   end

@@ -21,6 +21,7 @@ defmodule Hologram.Compiler.TransformerTest do
     ModuleAttributeOperator,
     ModuleType,
     NotSupportedExpression,
+    Quote,
     RequireDirective,
     StringType,
     StructType,
@@ -255,6 +256,13 @@ defmodule Hologram.Compiler.TransformerTest do
       ast = ast(code)
 
       assert %FunctionCall{} = Transformer.transform(ast, %Context{})
+    end
+
+    tes "quote" do
+      code = "quote do 1 end"
+      ast = ast(code)
+
+      assert %Quote{} = Transformer.transform(ast, %Context{})
     end
 
     test "string interpolation" do
