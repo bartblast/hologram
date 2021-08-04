@@ -2,45 +2,30 @@ defmodule Hologram.Compiler.MacroDefinitionTransformerTest do
   use Hologram.TestCase, async: true
 
   alias Hologram.Compiler.{Context, MacroDefinitionTransformer}
-  alias Hologram.Compiler.IR.{AccessOperator, AtomType, MacroDefinition, Variable}
+  alias Hologram.Compiler.IR.{AccessOperator, AtomType, IntegerType, MacroDefinition, Variable}
 
   @context %Context{module: Abc}
 
-  describe "transform/4" do
+  describe "transform/2" do
     test "name" do
-      # defmacro test(1, 2) do
-      # end
+      code = "defmacro test(1, 2) do end"
+      ast = ast(code)
 
-      name = :test
-      params = [1, 2]
-      body = []
-
-      assert %MacroDefinition{name: :test} =
-        MacroDefinitionTransformer.transform(name, params, body, @context)
+      assert %MacroDefinition{name: :test} = MacroDefinitionTransformer.transform(ast, @context)
     end
 
     test "arity" do
-      # defmacro test(1, 2) do
-      # end
+      code = "defmacro test(1, 2) do end"
+      ast = ast(code)
 
-      name = :test
-      params = [1, 2]
-      body = []
-
-      assert %MacroDefinition{arity: 2} =
-              MacroDefinitionTransformer.transform(name, params, body, @context)
+      assert %MacroDefinition{arity: 2} = MacroDefinitionTransformer.transform(ast, @context)
     end
 
     test "params" do
-      # defmacro test(a, b) do
-      # end
+      code = "defmacro test(a, b) do end"
+      ast = ast(code)
 
-      name = :test
-      params = [{:a, [line: 1], nil}, {:b, [line: 1], nil}]
-      body = []
-
-      assert %MacroDefinition{} =
-               result = MacroDefinitionTransformer.transform(name, params, body, @context)
+      assert %MacroDefinition{} = result = MacroDefinitionTransformer.transform(ast, @context)
 
       expected = [
         %Variable{name: :a},
@@ -51,15 +36,10 @@ defmodule Hologram.Compiler.MacroDefinitionTransformerTest do
     end
 
     test "bindings" do
-      # defmacro test(1, %{a: x, b: y}) do
-      # end
+      code = "defmacro test(1, %{a: x, b: y}) do end"
+      ast = ast(code)
 
-      name = :test
-      params = [1, {:%{}, [line: 2], [a: {:x, [line: 2], nil}, b: {:y, [line: 2], nil}]}]
-      body = []
-
-      assert %MacroDefinition{} =
-               result = MacroDefinitionTransformer.transform(name, params, body, @context)
+      assert %MacroDefinition{} = result = MacroDefinitionTransformer.transform(ast, @context)
 
       expected = [
         x:
@@ -84,38 +64,30 @@ defmodule Hologram.Compiler.MacroDefinitionTransformerTest do
     end
 
     test "body, single expression" do
-      # defmacro test do
-      #   quote do 1 end
-      # end
+      code = """
+      defmacro test do
+        1
+      end
+      """
 
-      name = :test
-      params = nil
-      body = [{:quote, [line: 2], [[do: {:__block__, [], [1]}]]}]
+      ast = ast(code)
 
-      assert %MacroDefinition{} =
-               result = MacroDefinitionTransformer.transform(name, params, body, @context)
-
-      assert result.body == body
+      assert %MacroDefinition{} = result = MacroDefinitionTransformer.transform(ast, @context)
+      assert result.body == [%IntegerType{value: 1}]
     end
 
     test "body, multiple expressions" do
-      # def test do
-      #   1
-      #   2
-      # end
+      code = """
+      defmacro test do
+        1
+        2
+      end
+      """
 
-      name = :test
-      params = nil
+      ast = ast(code)
 
-      body = [
-        {:quote, [line: 2], [[do: {:__block__, [], [1]}]]},
-        {:quote, [line: 3], [[do: {:__block__, [], [2]}]]}
-      ]
-
-      assert %MacroDefinition{} =
-               result = MacroDefinitionTransformer.transform(name, params, body, @context)
-
-      assert result.body == body
+      assert %MacroDefinition{} = result = MacroDefinitionTransformer.transform(ast, @context)
+      assert result.body == [%IntegerType{value: 1}, %IntegerType{value: 2}]
     end
   end
 end

@@ -107,8 +107,8 @@ defmodule Hologram.Compiler.Transformer do
     FunctionDefinitionTransformer.transform(name, params, body, context)
   end
 
-  def transform({:defmacro, _, [{name, _, params}, [do: {:__block__, _, body}]]}, %Context{} = context) do
-    MacroDefinitionTransformer.transform(name, params, body, context)
+  def transform({:defmacro, _, _} = ast, %Context{} = context) do
+    MacroDefinitionTransformer.transform(ast, context)
   end
 
   def transform({:defmodule, _, _} = ast, _) do
