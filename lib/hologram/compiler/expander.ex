@@ -1,5 +1,6 @@
 defmodule Hologram.Compiler.Expander do
-  alias Hologram.Compiler.{Helpers, Normalizer, Parser}
+  alias Hologram.Compiler.{Helpers, Normalizer, Parser, Processor}
+  alias Hologram.Compiler.IR.{MacroDefinition, RequireDirective}
 
   @doc """
   Go through each module expression and expand recursively those which are expandable (e.g. use directive).
@@ -8,7 +9,7 @@ defmodule Hologram.Compiler.Expander do
     expanded =
       Enum.reduce(exprs, [], fn expr, acc ->
         case expand(expr) do
-          # expansion of use directive returns a list of expressions
+          # expanded expression is returned wrapped in a list
           e when is_list(e) ->
             acc ++ e
 
