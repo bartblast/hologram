@@ -74,7 +74,7 @@ defmodule Hologram.Compiler.IR do
   end
 
   defmodule MacroDefinition do
-    defstruct name: nil, arity: nil, params: [], bindings: [], body: nil
+    defstruct module: nil, name: nil, arity: nil, params: [], bindings: [], body: nil
   end
 
   defmodule ModuleDefinition do

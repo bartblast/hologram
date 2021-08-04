@@ -7,6 +7,13 @@ defmodule Hologram.Compiler.MacroDefinitionTransformerTest do
   @context %Context{module: Abc}
 
   describe "transform/2" do
+    test "module" do
+      code = "defmacro test(1, 2) do end"
+      ast = ast(code)
+
+      assert %MacroDefinition{module: Abc} = MacroDefinitionTransformer.transform(ast, @context)
+    end
+
     test "name" do
       code = "defmacro test(1, 2) do end"
       ast = ast(code)
