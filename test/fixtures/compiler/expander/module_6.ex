@@ -26,6 +26,21 @@ defmodule Hologram.Test.Fixtures.Compiler.Expander.Module6 do
     end
   end
 
+  defmacro test_macro_5 do
+    quote do
+      def test_function, do: 123
+    end
+  end
+
+  defmacro test_macro_6 do
+    quote do
+      def test_function do
+        1
+        2
+      end
+    end
+  end
+
   defmacro __using(_) do
     quote do
       import Hologram.Test.Fixtures.Compiler.Expander.Module5

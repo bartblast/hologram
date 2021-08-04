@@ -43,8 +43,7 @@ defmodule Hologram.Compiler.MacroExpanderTest do
 
     result = MacroExpander.expand(macro_def, [5, 6])
 
-    context = [context: @module, import: Kernel]
-    expected = {:+, context, [{:+, context, [{:z, [], @module}, 5]}, 6]}
+    expected = {:+, [context: @module, import: Kernel], [{:+, [context: @module, import: Kernel], [{:z, [], @module}, 5]}, 6]}
 
     assert result == expected
   end
@@ -59,6 +58,40 @@ defmodule Hologram.Compiler.MacroExpanderTest do
         [
           {:__aliases__, [alias: false],
             [:Hologram, :Test, :Fixtures, :Compiler, :Expander, :Module5]}
+        ]}
+
+    assert result == expected
+  end
+
+  test "function definition, single expression" do
+    macro_def = %MacroDefinition{module: @module, name: :test_macro_5}
+
+    result = MacroExpander.expand(macro_def, [])
+
+    expected =
+      {:def,
+        [context: @module, import: Kernel],
+        [
+          {:test_function, [context: @module],
+            @module},
+          [do: {:__block__, [], [123]}]
+        ]}
+
+    assert result == expected
+  end
+
+  test "function definition, multiple expressions" do
+    macro_def = %MacroDefinition{module: @module, name: :test_macro_6}
+
+    result = MacroExpander.expand(macro_def, [])
+
+    expected =
+      {:def,
+        [context: @module, import: Kernel],
+        [
+          {:test_function, [context: @module],
+            @module},
+          [do: {:__block__, [], [1, 2]}]
         ]}
 
     assert result == expected
