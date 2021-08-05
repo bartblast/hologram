@@ -81,7 +81,7 @@ defmodule Hologram.Compiler.TransformerTest do
     end
 
     test "module" do
-      code = "Abc.Bcd"
+      code = "Hologram.Compiler.TransformerTest"
       ast = ast(code)
 
       assert %ModuleType{} = Transformer.transform(ast, %Context{})
@@ -296,9 +296,16 @@ defmodule Hologram.Compiler.TransformerTest do
       assert result == expected
     end
 
-    test "variable" do
+    test "variable, last AST tuple elem is nil" do
       code = "a"
       ast = ast(code)
+
+      result = Transformer.transform(ast, %Context{})
+      assert result == %Variable{name: :a}
+    end
+
+    test "variable, last AST tuple elem is module" do
+      ast = {:a, [line: 1], Hologram.Compiler.TransformerTest}
 
       result = Transformer.transform(ast, %Context{})
       assert result == %Variable{name: :a}

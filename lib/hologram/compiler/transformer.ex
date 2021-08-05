@@ -157,14 +157,19 @@ defmodule Hologram.Compiler.Transformer do
     UnquoteTransformer.transform(ast, context)
   end
 
-  def transform({function, _, params}, %Context{} = context) when is_atom(function) and not is_nil(params) do
-    FunctionCallTransformer.transform([], function, params, context)
-  end
-
   def transform({name, _, nil}, _) when is_atom(name) do
     %Variable{name: name}
   end
-  
+
+  def transform({name, _, module}, _) when is_atom(name) and is_atom(module) do
+    %Variable{name: name}
+  end
+
+  # this needs to be defined after variable case
+  def transform({function, _, params}, %Context{} = context) when is_atom(function) do
+    FunctionCallTransformer.transform([], function, params, context)
+  end
+
   # NOT SUPPORTED
 
   def transform({{:., _, [_, _]}, _, _} = ast, _) do
