@@ -2,7 +2,9 @@ defmodule Hologram.Compiler.ModuleDefinitionTransformerTest do
   use Hologram.TestCase, async: true
 
   alias Hologram.Compiler.IR.{
+    AdditionOperator,
     Alias,
+    FunctionCall,
     FunctionDefinition,
     Import,
     IntegerType,
@@ -32,7 +34,7 @@ defmodule Hologram.Compiler.ModuleDefinitionTransformerTest do
     assert module == @module_1
   end
 
-  test "macros expansion" do
+  test "use directive expansion" do
     code = """
     defmodule Hologram.Test.Fixtures.Compiler.ModuleDefinitionTransformer.Module3 do
       use Hologram.Test.Fixtures.Compiler.ModuleDefinitionTransformer.Module2
@@ -50,6 +52,36 @@ defmodule Hologram.Compiler.ModuleDefinitionTransformerTest do
     ]
 
     assert result.imports == expected
+  end
+
+  test "macro expansion" do
+    code = """
+    defmodule Hologram.Test.Fixtures.Compiler.ModuleDefinitionTransformer.Module3 do
+      require Hologram.Test.Fixtures.Compiler.ModuleDefinitionTransformer.Module5
+      test_macro(123)
+    end
+    """
+
+    ast = ast(code)
+    assert %ModuleDefinition{} = result = ModuleDefinitionTransformer.transform(ast)
+
+    expected =
+      [
+        %FunctionDefinition{
+          arity: 1,
+          bindings: [b: {0, [%Variable{name: :b}]}],
+          body: [
+            %AdditionOperator{
+              left: %IntegerType{value: 123},
+              right: %Variable{name: :b}
+            }
+          ],
+          name: :test_function,
+          params: [%Variable{name: :b}]
+        }
+      ]
+
+    assert result.functions == expected
   end
 
   test "uses" do

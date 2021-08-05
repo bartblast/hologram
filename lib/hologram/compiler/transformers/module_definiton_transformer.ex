@@ -1,12 +1,17 @@
 defmodule Hologram.Compiler.ModuleDefinitionTransformer do
-  alias Hologram.Compiler.{Context, Helpers, Transformer, UseDirectiveExpander}
+  alias Hologram.Compiler.{Context, Helpers, MacrosExpander, Transformer, UseDirectiveExpander}
   alias Hologram.Compiler.IR.ModuleDefinition
 
   def transform(ast) do
-    uses = aggregate_use_expressions(ast)
+    exprs = fetch_module_body(ast)
+    uses = aggregate_expressions(:use, exprs, %Context{})
 
-    UseDirectiveExpander.expand(ast)
-    |> build_module(uses)
+    ast = UseDirectiveExpander.expand(ast)
+    exprs = fetch_module_body(ast)
+    requires = aggregate_expressions(:require, exprs, %Context{})
+
+    MacrosExpander.expand(ast, requires)
+    |> build_module(uses, requires)
   end
 
   defp aggregate_expressions(type, exprs, context) do
@@ -21,20 +26,14 @@ defmodule Hologram.Compiler.ModuleDefinitionTransformer do
     end)
   end
 
-  defp aggregate_use_expressions(ast) do
-    {:defmodule, _, [_, [do: {:__block__, _, exprs}]]} = ast
-    aggregate_expressions(:use, exprs, %Context{})
-  end
-
-  defp build_module(ast, uses) do
+  defp build_module(ast, uses, requires) do
     {:defmodule, _, [{:__aliases__, _, module_segs}, [do: {:__block__, _, exprs}]]} = ast
 
     module = Helpers.module(module_segs)
     imports = aggregate_expressions(:import, exprs, %Context{})
-    requires = aggregate_expressions(:require, exprs, %Context{})
     aliases = aggregate_expressions(:alias, exprs, %Context{})
     attributes = aggregate_expressions(:@, exprs, %Context{})
-    macros = aggregate_expressions(:defmacro, exprs, %Context{})
+    macros = aggregate_expressions(:defmacro, exprs, %Context{module: module})
 
     context = %Context{
       module: module,
@@ -53,5 +52,10 @@ defmodule Hologram.Compiler.ModuleDefinitionTransformer do
       |> Map.put(:macros, macros)
 
     struct(ModuleDefinition, fields)
+  end
+
+  defp fetch_module_body(ast) do
+    {:defmodule, _, [_, [do: {:__block__, _, exprs}]]} = ast
+    exprs
   end
 end
