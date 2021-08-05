@@ -20,6 +20,7 @@ defmodule Hologram.Compiler.FunctionCallTransformer do
   end
 
   defp transform_call_params(params, context) do
+    params = unless is_list(params), do: [], else: params
     Enum.map(params, &Transformer.transform(&1, context))
   end
 end

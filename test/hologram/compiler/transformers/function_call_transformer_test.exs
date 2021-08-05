@@ -4,7 +4,7 @@ defmodule Hologram.Compiler.FunctionCallTransformerTest do
   alias Hologram.Compiler.IR.{FunctionCall, IntegerType}
   alias Hologram.Compiler.{Context, FunctionCallTransformer}
 
-  test "transform/4" do
+  test "params list" do
     module_segs = [:Hologram, :Compiler, :FunctionCallTransformerTest]
     function = :test
     params = [1, 2]
@@ -16,6 +16,21 @@ defmodule Hologram.Compiler.FunctionCallTransformerTest do
         %IntegerType{value: 1},
         %IntegerType{value: 2}
       ]
+    }
+
+    result = FunctionCallTransformer.transform(module_segs, function, params, %Context{})
+    assert result == expected
+  end
+
+  test "params nil" do
+    module_segs = [:Hologram, :Compiler, :FunctionCallTransformerTest]
+    function = :test
+    params = nil
+
+    expected = %FunctionCall{
+      module: Hologram.Compiler.FunctionCallTransformerTest,
+      function: function,
+      params: []
     }
 
     result = FunctionCallTransformer.transform(module_segs, function, params, %Context{})
