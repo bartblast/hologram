@@ -3,8 +3,7 @@ defmodule Hologram.Compiler.ModuleDefinitionTransformer do
   alias Hologram.Compiler.IR.ModuleDefinition
 
   def transform(ast) do
-    {:defmodule, _, [_, [do: {:__block__, _, exprs}]]} = ast
-    uses = aggregate_expressions(:use, exprs, %Context{})
+    uses = aggregate_use_expressions(ast)
 
     UseDirectiveExpander.expand(ast)
     |> build_module(uses)
@@ -22,6 +21,10 @@ defmodule Hologram.Compiler.ModuleDefinitionTransformer do
     end)
   end
 
+  defp aggregate_use_expressions(ast) do
+    {:defmodule, _, [_, [do: {:__block__, _, exprs}]]} = ast
+    aggregate_expressions(:use, exprs, %Context{})
+  end
 
   defp build_module(ast, uses) do
     {:defmodule, _, [{:__aliases__, _, module_segs}, [do: {:__block__, _, exprs}]]} = ast
