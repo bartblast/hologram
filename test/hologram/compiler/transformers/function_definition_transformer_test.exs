@@ -8,39 +8,39 @@ defmodule Hologram.Compiler.FunctionDefinitionTransformerTest do
 
   describe "transform/4" do
     test "name" do
-      # def test(1, 2) do
-      # end
+      code = """
+      def test(1, 2) do
+      end
+      """
 
-      name = :test
-      params = [1, 2]
-      body = []
+      ast = ast(code)
 
       assert %FunctionDefinition{name: :test} =
-              FunctionDefinitionTransformer.transform(name, params, body, @context)
+              FunctionDefinitionTransformer.transform(ast, @context)
     end
 
     test "arity" do
-      # def test(1, 2) do
-      # end
+      code = """
+      def test(1, 2) do
+      end
+      """
 
-      name = :test
-      params = [1, 2]
-      body = []
+      ast = ast(code)
 
       assert %FunctionDefinition{arity: 2} =
-              FunctionDefinitionTransformer.transform(name, params, body, @context)
+              FunctionDefinitionTransformer.transform(ast, @context)
     end
 
     test "params" do
-      # def test(a, b) do
-      # end
+      code = """
+      def test(a, b) do
+      end
+      """
 
-      name = :test
-      params = [{:a, [line: 1], nil}, {:b, [line: 1], nil}]
-      body = []
+      ast = ast(code)
 
       assert %FunctionDefinition{} =
-               result = FunctionDefinitionTransformer.transform(name, params, body, @context)
+               result = FunctionDefinitionTransformer.transform(ast, @context)
 
       expected = [
         %Variable{name: :a},
@@ -51,15 +51,15 @@ defmodule Hologram.Compiler.FunctionDefinitionTransformerTest do
     end
 
     test "bindings" do
-      # def test(1, %{a: x, b: y}) do
-      # end
+      code = """
+      def test(1, %{a: x, b: y}) do
+      end
+      """
 
-      name = :test
-      params = [1, {:%{}, [line: 2], [a: {:x, [line: 2], nil}, b: {:y, [line: 2], nil}]}]
-      body = []
+      ast = ast(code)
 
       assert %FunctionDefinition{} =
-               result = FunctionDefinitionTransformer.transform(name, params, body, @context)
+               result = FunctionDefinitionTransformer.transform(ast, @context)
 
       expected = [
         x:
@@ -84,32 +84,32 @@ defmodule Hologram.Compiler.FunctionDefinitionTransformerTest do
     end
 
     test "body, single expression" do
-      # def test do
-      #   1
-      # end
+      code = """
+      def test do
+        1
+      end
+      """
 
-      name = :test
-      params = nil
-      body = [1]
+      ast = ast(code)
 
       assert %FunctionDefinition{} =
-               result = FunctionDefinitionTransformer.transform(name, params, body, @context)
+               result = FunctionDefinitionTransformer.transform(ast, @context)
 
       assert result.body == [%IntegerType{value: 1}]
     end
 
     test "body, multiple expressions" do
-      # def test do
-      #   1
-      #   2
-      # end
+      code = """
+      def test do
+        1
+        2
+      end
+      """
 
-      name = :test
-      params = nil
-      body = [1, 2]
+      ast = ast(code)
 
       assert %FunctionDefinition{} =
-               result = FunctionDefinitionTransformer.transform(name, params, body, @context)
+               result = FunctionDefinitionTransformer.transform(ast, @context)
 
       expected = [
         %IntegerType{value: 1},
