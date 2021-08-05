@@ -1,7 +1,7 @@
 defmodule Hologram.Compiler.ProcessorTest do
   use Hologram.TestCase, async: true
 
-  alias Hologram.Compiler.IR.{Alias, MacroDefinition}
+  alias Hologram.Compiler.IR.{Alias, MacroDefinition, ModuleDefinition}
   alias Hologram.Compiler.Processor
 
   @module_1 Hologram.Test.Fixtures.Compiler.Processor.Module1
@@ -152,6 +152,12 @@ defmodule Hologram.Compiler.ProcessorTest do
   test "get_macro_definition/3" do
     result = Processor.get_macro_definition(@module_17, :macro_2, [1, 2])
     assert %MacroDefinition{arity: 2, name: :macro_2} = result
+  end
+
+  test "get_module_definition/1" do
+    result = Processor.get_module_definition(@module_1)
+    expected = %ModuleDefinition{module: @module_1}
+    assert result == expected
   end
 
   # TODO: attributes, functions, imports, name
