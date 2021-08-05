@@ -4,7 +4,6 @@ defmodule Hologram.Compiler.ModuleDefinitionTransformerTest do
   alias Hologram.Compiler.IR.{
     AdditionOperator,
     Alias,
-    FunctionCall,
     FunctionDefinition,
     Import,
     IntegerType,
@@ -13,7 +12,8 @@ defmodule Hologram.Compiler.ModuleDefinitionTransformerTest do
     ModuleAttributeDefinition,
     Quote,
     RequireDirective,
-    UseDirective
+    UseDirective,
+    Variable
   }
 
   alias Hologram.Compiler.ModuleDefinitionTransformer
