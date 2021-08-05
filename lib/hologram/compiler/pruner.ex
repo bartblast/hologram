@@ -97,15 +97,17 @@ defmodule Hologram.Compiler.Pruner do
       end)
 
     (pages ++ components)
-    |> Enum.reduce(acc, &include_actions_and_templates/2)
+    |> Enum.reduce(acc, &include_core_functions/2)
   end
 
-  @spec include_actions_and_templates(list(%ModuleDefinition{}), T.function_set()) ::
+  @spec include_core_functions(list(%ModuleDefinition{}), T.function_set()) ::
           T.function_set()
 
-  defp include_actions_and_templates(module_def, acc) do
+  defp include_core_functions(module_def, acc) do
     MapSet.put(acc, {module_def.module, :action})
     |> MapSet.put({module_def.module, :template})
+    # DEFER: detect core functions except action and template dynamically
+    |> MapSet.put({module_def.module, :route})
   end
 
   @spec include_function_calls(
