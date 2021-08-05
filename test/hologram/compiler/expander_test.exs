@@ -1,6 +1,6 @@
-defmodule Hologram.Compiler.UseDirectiveExpanderTest do
+defmodule Hologram.Compiler.ExpanderTest do
   use Hologram.TestCase, async: true
-  alias Hologram.Compiler.UseDirectiveExpander
+  alias Hologram.Compiler.Expander
 
   @module_2 Hologram.Test.Fixtures.Compiler.Expander.Module2
   @module_4 Hologram.Test.Fixtures.Compiler.Expander.Module4
@@ -17,7 +17,7 @@ defmodule Hologram.Compiler.UseDirectiveExpanderTest do
     """
 
     ast = ast(code)
-    result = UseDirectiveExpander.expand(ast)
+    result = Expander.expand_use_directives(ast)
 
     assert result == ast
   end
@@ -31,7 +31,7 @@ defmodule Hologram.Compiler.UseDirectiveExpanderTest do
 
     ast = ast(code)
 
-    result = UseDirectiveExpander.expand(ast)
+    result = Expander.expand_use_directives(ast)
 
     expected =
       {:defmodule, [line: 1],
@@ -61,7 +61,7 @@ defmodule Hologram.Compiler.UseDirectiveExpanderTest do
 
     ast = ast(code)
 
-    result = UseDirectiveExpander.expand(ast)
+    result = Expander.expand_use_directives(ast)
 
     expected =
       {:defmodule, [line: 1],
@@ -94,7 +94,7 @@ defmodule Hologram.Compiler.UseDirectiveExpanderTest do
 
     ast = ast(code)
 
-    result = UseDirectiveExpander.expand(ast)
+    result = Expander.expand_use_directives(ast)
 
     expected =
       {:defmodule, [line: 1],
