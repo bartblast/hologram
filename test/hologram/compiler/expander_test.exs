@@ -8,113 +8,115 @@ defmodule Hologram.Compiler.ExpanderTest do
   @module_segs_1 [:Hologram, :Test, :Fixtures, :Compiler, :Expander, :Module1]
   @module_segs_3 [:Hologram, :Test, :Fixtures, :Compiler, :Expander, :Module3]
 
-  test "no use directives / non-expandable expressions only" do
-    code = """
-    defmodule Test do
-      1
-      2
+  describe "expand_use_directives/1" do
+    test "no use directives / non-expandable expressions only" do
+      code = """
+      defmodule Test do
+        1
+        2
+      end
+      """
+
+      ast = ast(code)
+      result = Expander.expand_use_directives(ast)
+
+      assert result == ast
     end
-    """
 
-    ast = ast(code)
-    result = Expander.expand_use_directives(ast)
+    test "single use directive" do
+      code = """
+      defmodule Test do
+        use Hologram.Test.Fixtures.Compiler.Expander.Module2
+      end
+      """
 
-    assert result == ast
-  end
+      ast = ast(code)
 
-  test "single use directive" do
-    code = """
-    defmodule Test do
-      use Hologram.Test.Fixtures.Compiler.Expander.Module2
-    end
-    """
+      result = Expander.expand_use_directives(ast)
 
-    ast = ast(code)
-
-    result = Expander.expand_use_directives(ast)
-
-    expected =
-      {:defmodule, [line: 1],
-      [
-        {:__aliases__, [line: 1], [:Test]},
-        [
-          do: {:__block__, [],
-           [
-             {:import, [context: @module_2],
-              [
-                {:__aliases__, [alias: false], @module_segs_1}
-              ]}
-           ]}
-        ]
-      ]}
-
-    assert result == expected
-  end
-
-  test "multiple use directives" do
-    code = """
-    defmodule Test do
-      use Hologram.Test.Fixtures.Compiler.Expander.Module2
-      use Hologram.Test.Fixtures.Compiler.Expander.Module4
-    end
-    """
-
-    ast = ast(code)
-
-    result = Expander.expand_use_directives(ast)
-
-    expected =
-      {:defmodule, [line: 1],
+      expected =
+        {:defmodule, [line: 1],
         [
           {:__aliases__, [line: 1], [:Test]},
           [
             do: {:__block__, [],
-              [
-                {:import, [context: @module_2],
+            [
+              {:import, [context: @module_2],
                 [
                   {:__aliases__, [alias: false], @module_segs_1}
-                ]},
-                {:import, [context: @module_4],
-                [
-                  {:__aliases__, [alias: false], @module_segs_3}
                 ]}
-              ]}
+            ]}
           ]
         ]}
 
-    assert result == expected
-  end
-
-  test "multiple expressions expanded" do
-    code = """
-    defmodule Test do
-      use Hologram.Test.Fixtures.Compiler.Expander.Module5
+      assert result == expected
     end
-    """
 
-    ast = ast(code)
+    test "multiple use directives" do
+      code = """
+      defmodule Test do
+        use Hologram.Test.Fixtures.Compiler.Expander.Module2
+        use Hologram.Test.Fixtures.Compiler.Expander.Module4
+      end
+      """
 
-    result = Expander.expand_use_directives(ast)
+      ast = ast(code)
 
-    expected =
-      {:defmodule, [line: 1],
-        [
-          {:__aliases__, [line: 1], [:Test]},
+      result = Expander.expand_use_directives(ast)
+
+      expected =
+        {:defmodule, [line: 1],
           [
-            do: {:__block__, [],
-              [
-                {:import, [context: @module_5],
+            {:__aliases__, [line: 1], [:Test]},
+            [
+              do: {:__block__, [],
                 [
-                  {:__aliases__, [alias: false], @module_segs_1}
-                ]},
-                {:import, [context: @module_5],
-                [
-                  {:__aliases__, [alias: false], @module_segs_3}
+                  {:import, [context: @module_2],
+                  [
+                    {:__aliases__, [alias: false], @module_segs_1}
+                  ]},
+                  {:import, [context: @module_4],
+                  [
+                    {:__aliases__, [alias: false], @module_segs_3}
+                  ]}
                 ]}
-              ]}
-          ]
-        ]}
+            ]
+          ]}
 
-    assert result == expected
+      assert result == expected
+    end
+
+    test "multiple expressions expanded" do
+      code = """
+      defmodule Test do
+        use Hologram.Test.Fixtures.Compiler.Expander.Module5
+      end
+      """
+
+      ast = ast(code)
+
+      result = Expander.expand_use_directives(ast)
+
+      expected =
+        {:defmodule, [line: 1],
+          [
+            {:__aliases__, [line: 1], [:Test]},
+            [
+              do: {:__block__, [],
+                [
+                  {:import, [context: @module_5],
+                  [
+                    {:__aliases__, [alias: false], @module_segs_1}
+                  ]},
+                  {:import, [context: @module_5],
+                  [
+                    {:__aliases__, [alias: false], @module_segs_3}
+                  ]}
+                ]}
+            ]
+          ]}
+
+      assert result == expected
+    end
   end
 end
