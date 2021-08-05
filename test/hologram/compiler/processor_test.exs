@@ -21,6 +21,7 @@ defmodule Hologram.Compiler.ProcessorTest do
   @module_15 Hologram.Test.Fixtures.Compiler.Processor.Module15
   @module_16 Hologram.Test.Fixtures.Compiler.Processor.Module16
   @module_17 Hologram.Test.Fixtures.Compiler.Processor.Module17
+  @module_segs_1 [:Hologram, :Test, :Fixtures, :Compiler, :Processor, :Module1]
 
   describe "compile/2, aliases" do
     test "no aliases" do
@@ -152,6 +153,23 @@ defmodule Hologram.Compiler.ProcessorTest do
   test "get_macro_definition/3" do
     result = Processor.get_macro_definition(@module_17, :macro_2, [1, 2])
     assert %MacroDefinition{arity: 2, name: :macro_2} = result
+  end
+
+  describe "get_module_ast/1" do
+    @expected {:defmodule, [line: 1], [
+        {:__aliases__, [line: 1], @module_segs_1},
+        [do: {:__block__, [], []}]
+      ]}
+
+    test "module segments arg" do
+      result = Processor.get_module_ast(@module_segs_1)
+      assert result == @expected
+    end
+
+    test "module arg" do
+      result = Processor.get_module_ast(@module_1)
+      assert result == @expected
+    end
   end
 
   test "get_module_definition/1" do

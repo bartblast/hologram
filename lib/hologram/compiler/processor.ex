@@ -57,6 +57,17 @@ defmodule Hologram.Compiler.Processor do
     |> hd()
   end
 
+  def get_module_ast(module_segs) when is_list(module_segs) do
+    Helpers.module(module_segs)
+    |> get_module_ast()
+  end
+
+  def get_module_ast(module) do
+    Helpers.module_source_path(module)
+    |> Parser.parse_file!()
+    |> Normalizer.normalize()
+  end
+
   @doc """
   Returns the corresponding module definition.
 
@@ -67,9 +78,7 @@ defmodule Hologram.Compiler.Processor do
   @spec get_module_definition(module()) :: %ModuleDefinition{}
 
   def get_module_definition(module) do
-    Helpers.module_source_path(module)
-    |> Parser.parse_file!()
-    |> Normalizer.normalize()
+    get_module_ast(module)
     |> Transformer.transform(%Context{})
   end
 
