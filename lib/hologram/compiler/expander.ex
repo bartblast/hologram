@@ -41,9 +41,7 @@ defmodule Hologram.Compiler.Expander do
     |> expand_macro(:__using__, [nil])
   end
 
-  defp expand_use_directive(ast) do
-    ast
-  end
+  defp expand_use_directive(ast), do: ast
 
   def expand_use_directives(ast) do
     expand_with_fun(ast, &expand_use_directive/1)
