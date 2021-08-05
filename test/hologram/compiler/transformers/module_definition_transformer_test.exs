@@ -211,14 +211,16 @@ defmodule Hologram.Compiler.ModuleDefinitionTransformerTest do
 
     expected = [
       %MacroDefinition{
+        module: @module_1,
+        name: :test_1,
         arity: 0,
-        body: [%Quote{body: [%IntegerType{value: 1}]}],
-        name: :test_1
+        body: [%Quote{body: [%IntegerType{value: 1}]}]
       },
       %MacroDefinition{
+        module: @module_1,
+        name: :test_2,
         arity: 0,
-        body: [%Quote{body: [%IntegerType{value: 2}]}],
-        name: :test_2
+        body: [%Quote{body: [%IntegerType{value: 2}]}]
       }
     ]
 
