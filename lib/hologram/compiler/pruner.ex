@@ -104,10 +104,16 @@ defmodule Hologram.Compiler.Pruner do
           T.function_set()
 
   defp include_core_functions(module_def, acc) do
-    MapSet.put(acc, {module_def.module, :action})
-    |> MapSet.put({module_def.module, :template})
-    # DEFER: detect core functions except action and template dynamically
-    |> MapSet.put({module_def.module, :route})
+    acc =
+      MapSet.put(acc, {module_def.module, :action})
+      |> MapSet.put({module_def.module, :template})
+
+    # DEFER: detect core functions except actions and templates dynamically
+    if Helpers.is_page?(module_def) do
+      MapSet.put(acc, {module_def.module, :route})
+    else
+      acc
+    end
   end
 
   @spec include_function_calls(

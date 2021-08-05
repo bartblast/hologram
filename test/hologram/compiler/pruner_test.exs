@@ -26,6 +26,8 @@ defmodule Hologram.Compiler.PrunerTest do
   @module_20 Hologram.Test.Fixtures.Compiler.Pruner.Module20
   @module_21 Hologram.Test.Fixtures.Compiler.Pruner.Module21
   @module_22 Hologram.Test.Fixtures.Compiler.Pruner.Module22
+  @module_23 Hologram.Test.Fixtures.Compiler.Pruner.Module23
+  @module_24 Hologram.Test.Fixtures.Compiler.Pruner.Module24
 
   describe "pages" do
     test "preserves actions in pages" do
@@ -56,6 +58,20 @@ defmodule Hologram.Compiler.PrunerTest do
       assert [function] = result[@module_4].functions
 
       assert function.name == :template
+      assert function.arity == 0
+      assert function.params == []
+    end
+
+    test "preserves route/0 function in pages" do
+      module_defs_map = Processor.compile(@module_23)
+      result = Pruner.prune(module_defs_map)
+
+      assert Map.keys(result) |> Enum.count() == 1
+      assert Map.has_key?(result, @module_23)
+
+      assert [function] = result[@module_23].functions
+
+      assert function.name == :route
       assert function.arity == 0
       assert function.params == []
     end
@@ -181,6 +197,11 @@ defmodule Hologram.Compiler.PrunerTest do
       assert function.name == :template
       assert function.arity == 0
       assert function.params == []
+    end
+
+    test "doesn't preserve route/0 function in components" do
+      module_defs_map = Processor.compile(@module_24)
+      assert Pruner.prune(module_defs_map) == %{}
     end
 
     test "preserves functions in the same module called by component actions" do
