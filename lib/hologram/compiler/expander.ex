@@ -1,5 +1,23 @@
 defmodule Hologram.Compiler.Expander do
-  alias Hologram.Compiler.{Helpers, MacroExpander}
+  alias Hologram.Compiler.{Helpers, Normalizer}
+  alias Hologram.Compiler.IR.MacroDefinition
+
+  def expand_macro(%MacroDefinition{module: module, name: name}, params) do
+    expand_macro(module, name, params)
+  end
+
+  def expand_macro(module, name, params) do
+    expanded =
+      apply(module, :"MACRO-#{name}", [__ENV__] ++ params)
+      |> Normalizer.normalize()
+
+    case expanded do
+      {:__block__, [], exprs} ->
+        exprs
+      _ ->
+        [expanded]
+    end
+  end
 
   def expand_use_directives(ast) do
     expand(ast, &expand_use_directive/1)
@@ -24,7 +42,7 @@ defmodule Hologram.Compiler.Expander do
 
   defp expand_use_directive({:use, _, [{:__aliases__, _, module_segs}]}) do
     Helpers.module(module_segs)
-    |> MacroExpander.expand(:__using__, [nil])
+    |> expand_macro(:__using__, [nil])
   end
 
   defp expand_use_directive(ast) do

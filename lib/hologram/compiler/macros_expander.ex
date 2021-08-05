@@ -1,6 +1,6 @@
 defmodule Hologram.Compiler.MacrosExpander do
   alias Hologram.Compiler.IR.RequireDirective
-  alias Hologram.Compiler.{MacroExpander, Processor}
+  alias Hologram.Compiler.{Expander, Processor}
 
   def expand({:defmodule, line, [aliases, [do: {:__block__, _, exprs}]]} = ast, requires) do
     expanded =
@@ -24,7 +24,7 @@ defmodule Hologram.Compiler.MacrosExpander do
     macro_def = find_macro_definition(name, params, requires)
 
     if macro_def do
-      MacroExpander.expand(macro_def, params)
+      Expander.expand_macro(macro_def, params)
     else
       ast
     end
