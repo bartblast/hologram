@@ -1,5 +1,5 @@
 defmodule Hologram.Compiler.ModuleDefinitionTransformer do
-  alias Hologram.Compiler.{Context, Expander, Helpers, MacrosExpander, Transformer}
+  alias Hologram.Compiler.{Context, Expander, Helpers, Transformer}
   alias Hologram.Compiler.IR.ModuleDefinition
 
   def transform(ast) do
@@ -10,7 +10,7 @@ defmodule Hologram.Compiler.ModuleDefinitionTransformer do
     exprs = fetch_module_body(ast)
     requires = aggregate_expressions(:require, exprs, %Context{})
 
-    MacrosExpander.expand(ast, requires)
+    Expander.expand_macros(ast, requires)
     |> build_module(uses, requires)
   end
 

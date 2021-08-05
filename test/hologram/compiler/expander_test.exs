@@ -2,7 +2,7 @@ defmodule Hologram.Compiler.ExpanderTest do
   use Hologram.TestCase, async: true
 
   alias Hologram.Compiler.Expander
-  alias Hologram.Compiler.IR.MacroDefinition
+  alias Hologram.Compiler.IR.{MacroDefinition, RequireDirective}
 
   @module_2 Hologram.Test.Fixtures.Compiler.Expander.Module2
   @module_4 Hologram.Test.Fixtures.Compiler.Expander.Module4
@@ -10,6 +10,7 @@ defmodule Hologram.Compiler.ExpanderTest do
   @module_6 Hologram.Test.Fixtures.Compiler.Expander.Module6
   @module_segs_1 [:Hologram, :Test, :Fixtures, :Compiler, :Expander, :Module1]
   @module_segs_3 [:Hologram, :Test, :Fixtures, :Compiler, :Expander, :Module3]
+  @requires [%RequireDirective{module: Hologram.Test.Fixtures.Compiler.Expander.Module6}]
 
   describe "expand_macro/2" do
     test "single expression / no params" do
@@ -109,6 +110,134 @@ defmodule Hologram.Compiler.ExpanderTest do
     expected = [11]
 
     assert result == expected
+  end
+
+  describe "expand_macros/2" do
+    test "no macros / non-expandable expressions only" do
+      code = """
+      defmodule Test do
+        1
+        2
+      end
+      """
+
+      ast = ast(code)
+      result = Expander.expand_macros(ast, @requires)
+
+      assert result == ast
+    end
+
+    test "single macro" do
+      code = """
+      defmodule Test do
+        test_macro_1
+      end
+      """
+
+      ast = ast(code)
+
+      result = Expander.expand_macros(ast, @requires)
+
+      expected =
+        {:defmodule, [line: 1],
+          [
+            {:__aliases__, [line: 1], [:Test]},
+            [
+              do: {:__block__, [],
+                [{:abc, [], @module_6}]}
+            ]
+          ]}
+
+
+      assert result == expected
+    end
+
+    test "multiple macros" do
+      code = """
+      defmodule Test do
+        test_macro_1
+        test_macro_7
+      end
+      """
+
+      ast = ast(code)
+
+      result = Expander.expand_macros(ast, @requires)
+
+      expected =
+        {:defmodule, [line: 1],
+          [
+            {:__aliases__, [line: 1], [:Test]},
+            [
+              do: {:__block__, [],
+                [{:abc, [], @module_6}, 777]}
+            ]
+          ]}
+
+      assert result == expected
+    end
+
+    test "multiple expressions expanded" do
+      code = """
+      defmodule Test do
+        test_macro_2
+      end
+      """
+
+      ast = ast(code)
+
+      result = Expander.expand_macros(ast, @requires)
+
+      expected =
+        {:defmodule, [line: 1],
+          [
+            {:__aliases__, [line: 1], [:Test]},
+            [
+              do: {:__block__, [],
+                [
+                  {:abc, [], @module_6},
+                  {:bcd, [], @module_6}
+                ]}
+            ]
+          ]}
+
+      assert result == expected
+    end
+
+    test "macro with params" do
+      code = """
+      defmodule Test do
+        test_macro_4(1, 2)
+      end
+      """
+
+      ast = ast(code)
+
+      result = Expander.expand_macros(ast, @requires)
+
+      expected =
+        {:defmodule, [line: 1],
+          [
+            {:__aliases__, [line: 1], [:Test]},
+            [
+              do: {:__block__, [],
+                [
+                  {:+, [context: @module_6, import: Kernel],
+                  [
+                    {:+,
+                      [context: @module_6, import: Kernel], [
+                        {:z, [], @module_6},
+                        1
+                      ]
+                    },
+                    2
+                  ]}
+                ]}
+            ]
+          ]}
+
+      assert result == expected
+    end
   end
 
   describe "expand_use_directives/1" do
