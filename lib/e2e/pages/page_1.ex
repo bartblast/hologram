@@ -21,7 +21,6 @@ defmodule Hologram.E2E.Page1 do
       <button id="button_6" on_click.command={:command_6, a: 1, b: 2}>Command 6</button>
       <button id="button_7" on_click="action_7">Action 7</button>
       <button id="button_8" on_click="action_8">Action 8</button>
-      <div id="text">{@text}</div>
     </body>
     """
   end
