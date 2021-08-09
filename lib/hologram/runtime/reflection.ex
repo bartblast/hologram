@@ -18,7 +18,7 @@ defmodule Hologram.Runtime.Reflection do
     |> Enum.map(fn filepath ->
       code = File.read!(filepath)
       [_, module] = Regex.run(regex, code)
-      String.to_existing_atom("Elixir.#{module}")
+      String.to_atom("Elixir.#{module}")
     end)
   end
 
