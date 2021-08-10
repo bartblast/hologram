@@ -25,18 +25,18 @@ defimpl Renderer, for: Atom do
     serialized_state = Serializer.serialize(state)
 
     part_1 =
-    """
-    <!DOCTYPE html>
-    <html>
-      <head>
-        <title>Hologram Demo</title>
-        <script src="/js/hologram.js"></script>
-        <script src="/hologram/page-#{digest}.js"></script>
-        <script>
-          Hologram.run(window, #{class_name}, #{serialized_state})
-        </script>
-      </head>
-    """
+      """
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <title>Hologram Demo</title>
+          <script src="/js/hologram.js"></script>
+          <script src="/hologram/page-#{digest}.js"></script>
+          <script>
+            Hologram.run(window, #{class_name}, #{serialized_state})
+          </script>
+        </head>
+      """
 
     # fix indentation
     part_2 =
