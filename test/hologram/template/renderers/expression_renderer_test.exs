@@ -2,17 +2,20 @@ defmodule Hologram.Template.ExpressionRendererTest do
   use Hologram.TestCase, async: true
 
   alias Hologram.Compiler.IR.{ModuleAttributeOperator, TupleType}
-  alias Hologram.Template.ExpressionRenderer
+  alias Hologram.Template.Document.Expression
+  alias Hologram.Template.Renderer
 
   test "render/2" do
-    ir =
-      %TupleType{
-        data: [%ModuleAttributeOperator{name: :a}]
+    expression =
+      %Expression{
+        ir: %TupleType{
+          data: [%ModuleAttributeOperator{name: :a}]
+        }
       }
 
     state = %{a: 123}
 
-    result = ExpressionRenderer.render(ir, state)
+    result = Renderer.render(expression, state)
     expected = "123"
 
     assert result == expected
