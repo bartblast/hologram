@@ -3,12 +3,12 @@ defmodule Hologram.Compiler.TupleTypeDecoderTest do
   alias Hologram.Compiler.TupleTypeDecoder
 
   test "decode/1" do
-    input = [
+    data = [
       %{"type" => "integer", "value" => 1},
       %{"type" => "atom", "value" => "test"}
     ]
 
-    result = TupleTypeDecoder.decode(input)
+    result = TupleTypeDecoder.decode(data)
     expected = {1, :test}
 
     assert result == expected
