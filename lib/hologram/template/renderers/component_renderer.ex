@@ -1,7 +1,8 @@
-defmodule Hologram.Template.ComponentRenderer do
-  alias Hologram.Template.{Builder, Renderer}
+alias Hologram.Template.Document.Component
+alias Hologram.Template.{Builder, Renderer}
 
-  def render(module, state) do
+defimpl Renderer, for: Component do
+  def render(%{module: module}, state) do
     Builder.build(module)
     |> Renderer.render(state)
   end

@@ -1,12 +1,14 @@
 defmodule Hologram.Template.ComponentRendererTest do
   use Hologram.TestCase, async: true
-  alias Hologram.Template.ComponentRenderer
+
+  alias Hologram.Template.Document.Component
+  alias Hologram.Template.Renderer
 
   test "html only in template" do
     module = Hologram.Test.Fixtures.Template.ComponentRenderer.Module1
     state = %{}
 
-    result = ComponentRenderer.render(module, state)
+    result = Renderer.render(%Component{module: module}, state)
     expected = "<span>test</span>"
 
     assert result == expected
@@ -16,7 +18,7 @@ defmodule Hologram.Template.ComponentRendererTest do
     module = Hologram.Test.Fixtures.Template.ComponentRenderer.Module2
     state = %{}
 
-    result = ComponentRenderer.render(module, state)
+    result = Renderer.render(%Component{module: module}, state)
     expected = "<div><span>test</span></div>"
 
     assert result == expected
@@ -26,7 +28,7 @@ defmodule Hologram.Template.ComponentRendererTest do
     module = Hologram.Test.Fixtures.Template.ComponentRenderer.Module3
     state = %{}
 
-    result = ComponentRenderer.render(module, state)
+    result = Renderer.render(%Component{module: module}, state)
     expected = "<div><span>test</span></div>"
 
     assert result == expected
