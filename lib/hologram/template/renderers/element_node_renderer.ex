@@ -1,9 +1,10 @@
-defmodule Hologram.Template.ElementNodeRenderer do
-  alias Hologram.Template.{Evaluator, Renderer}
+alias Hologram.Template.Document.ElementNode
+alias Hologram.Template.{Evaluator, Renderer}
 
+defimpl Renderer, for: ElementNode do
   @pruned_attrs [:on_click]
 
-  def render(tag, attrs, children, state) do
+  def render(%{attrs: attrs, children: children, tag: tag}, state) do
     attrs_html = render_attrs(attrs, state)
     children_html = render_children(children, state)
 
