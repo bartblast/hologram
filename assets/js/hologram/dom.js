@@ -40,7 +40,7 @@ export default class DOM {
         }, [])
 
         let event_handlers = this.buildVNodeEventHandlers(node, state, context)
-        let attrs = DOM.buildVNodeAttrs(node)
+        let attrs = DOM.buildVNodeAttrs(node, state)
 
         return [h(node.tag, {attrs: attrs, on: event_handlers}, children)]
 
@@ -53,10 +53,10 @@ export default class DOM {
     } 
   }
 
-  static buildVNodeAttrs(node) {
+  static buildVNodeAttrs(node, state) {
     return Object.keys(node.attrs).reduce((acc, key) => {
       if (!DOM.PRUNED_ATTRS.includes(key)) {
-        acc[key] = node.attrs[key].value
+        acc[key] = DOM.evaluateAttributeValue(node.attrs[key].value, state)
       }
       return acc
     }, {})
@@ -76,6 +76,16 @@ export default class DOM {
     }
 
     return eventHandlers
+  }
+
+  static evaluateAttributeValue(value, state) {
+    if (value.type == "expression") {
+      const result = value.callback(state).data[0]
+      return Runtime.interpolate(result)
+
+    } else {
+      return value
+    }
   }
 
   // TODO: refactor & test

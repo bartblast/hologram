@@ -30,3 +30,32 @@ describe("buildVNodeAttrs()", () => {
     assert.deepStrictEqual(result, expected)
   })
 })
+
+describe("evaluateAttributeValue()", () => {
+  it("expression", () => {
+    const value = {
+      type: "expression",
+      callback: (state) => {
+        return {
+          type: "tuple",
+          data: [
+            {
+              type: "string",
+              value: `test-${state.testKey}`
+            }
+          ]
+        }
+      }
+    }
+  
+    const state = {testKey: "expression-value"}
+    const result = DOM.evaluateAttributeValue(value, state)
+
+    assert.equal(result, "test-expression-value")
+  })
+
+  it("non-expression", () => {
+    const result = DOM.evaluateAttributeValue("test-value", {})
+    assert.equal(result, "test-value")
+  })
+})
