@@ -18,7 +18,7 @@ config :hologram, Demo.Repo,
 config :hologram, DemoWeb.Endpoint,
   http: [port: 4000],
   debug_errors: true,
-  code_reloader: true,
+  code_reloader: false,
   check_origin: false,
   watchers: [
     node: [
@@ -53,17 +53,6 @@ config :hologram, DemoWeb.Endpoint,
 # If desired, both `http:` and `https:` keys can be
 # configured to run both http and https servers on
 # different ports.
-
-# Watch static and templates for browser reloading.
-config :hologram, DemoWeb.Endpoint,
-  live_reload: [
-    patterns: [
-      ~r"priv/static/.*(js|css|png|jpeg|jpg|gif|svg)$",
-      ~r"priv/gettext/.*(po)$",
-      ~r"lib/demo_web/(live|views)/.*(ex)$",
-      ~r"lib/demo_web/templates/.*(eex)$"
-    ]
-  ]
 
 # Do not include metadata nor timestamps in development logs
 config :logger, :console, format: "[$level] $message\n"
