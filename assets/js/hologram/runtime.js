@@ -40,7 +40,9 @@ export default class Runtime {
   }  
 
   // TODO: refactor & test
-  handleClickEvent(onClickSpec, state, context, _event) {
+  handleClickEvent(onClickSpec, state, context, event) {
+    event.preventDefault()
+
     if (onClickSpec.modifiers.includes("command")) {
       return this.handleEventCommand(onClickSpec.value, state, context)
 
