@@ -8,6 +8,36 @@ defmodule Hologram.Compiler.HelpersTest do
     assert Helpers.class_name(Abc.Bcd) == "Elixir_Abc_Bcd"
   end
 
+  test "find_components/1" do
+    module_def_1 =
+      %ModuleDefinition{
+        module: Bcd.Cde,
+        uses: [
+          %UseDirective{module: Hologram.Component}
+        ]
+      }
+
+    module_def_2 =
+      %ModuleDefinition{
+        module: Def.Efg,
+        uses: [
+          %UseDirective{module: Hologram.Component}
+        ]
+      }
+
+    module_defs_map = %{
+      Abc.Bcd => %ModuleDefinition{uses: []},
+      Bcd.Cde => module_def_1,
+      Cde.Def => %ModuleDefinition{uses: []},
+      Def.Efg => module_def_2
+    }
+
+    result = Helpers.find_components(module_defs_map)
+    expected = [module_def_1, module_def_2]
+
+    assert result == expected
+  end
+
   describe "is_component?/1" do
     test "true" do
       module_definition = %ModuleDefinition{

@@ -41,16 +41,6 @@ defmodule Hologram.Compiler.Pruner do
     |> Enum.reduce([], &(&2 ++ find_module_actions(&1, module_defs_map)))
   end
 
-  @spec find_components(T.module_definitions_map()) :: list(%ModuleDefinition{})
-
-  defp find_components(module_defs_map) do
-    module_defs_map
-    |> Enum.filter(fn {_, module_def} ->
-      Helpers.is_component?(module_def)
-    end)
-    |> Enum.map(fn {_, module_def} -> module_def end)
-  end
-
   @spec find_function_defs(
           T.module(),
           T.function_name(),
@@ -88,7 +78,7 @@ defmodule Hologram.Compiler.Pruner do
 
   defp find_used_functions(module_defs_map) do
     pages = find_pages(module_defs_map)
-    components = find_components(module_defs_map)
+    components = Helpers.find_components(module_defs_map)
     actions = find_actions(pages, components, module_defs_map)
 
     acc =

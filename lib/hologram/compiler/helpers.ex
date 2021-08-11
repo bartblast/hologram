@@ -16,6 +16,15 @@ defmodule Hologram.Compiler.Helpers do
     |> Enum.join("_")
   end
 
+  @spec find_components(T.module_definitions_map()) :: list(%ModuleDefinition{})
+  def find_components(module_defs_map) do
+    module_defs_map
+    |> Enum.filter(fn {_, module_def} ->
+      is_component?(module_def)
+    end)
+    |> Enum.map(fn {_, module_def} -> module_def end)
+  end
+
   @doc """
   Returns true if the given module is a component,
   i.e. it contains a use directive for the Hologram.Component module.
