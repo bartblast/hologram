@@ -98,10 +98,10 @@ defmodule Hologram.Compiler.Processor do
   end
 
   defp include_modules_used_in_templates(acc) do
-    components = Helpers.get_components(acc)
     pages = Helpers.get_pages(acc)
+    components = Helpers.get_components(acc)
 
-    (components ++ pages)
+    (pages ++ components)
     |> Enum.reduce(acc, fn %{module: module}, acc ->
       if function_exported?(module, :template, 0) do
         Template.Builder.build(module)
