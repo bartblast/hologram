@@ -150,6 +150,50 @@ defmodule Hologram.Compiler.ProcessorTest do
     end
   end
 
+  describe "compile/2, modules used by templates" do
+    test "module used in page template text node" do
+      module_18 = Hologram.Test.Fixtures.Compiler.Processor.Module18
+      result = Processor.compile(module_18)
+
+      assert result[@module_17]
+    end
+
+    test "module used in component template text node" do
+      module_19 = Hologram.Test.Fixtures.Compiler.Processor.Module19
+      result = Processor.compile(module_19)
+
+      assert result[@module_17]
+    end
+
+    test "module used in page template element node attribute" do
+      module_20 = Hologram.Test.Fixtures.Compiler.Processor.Module20
+      result = Processor.compile(module_20)
+
+      assert result[@module_17]
+    end
+
+    test "module used in component template element node attribute" do
+      module_21 = Hologram.Test.Fixtures.Compiler.Processor.Module21
+      result = Processor.compile(module_21)
+
+      assert result[@module_17]
+    end
+
+    test "module used in nested component template text node" do
+      module_22 = Hologram.Test.Fixtures.Compiler.Processor.Module21
+      result = Processor.compile(module_22)
+
+      assert result[@module_17]
+    end
+
+    test "module used in nested component template element node attribute" do
+      module_23 = Hologram.Test.Fixtures.Compiler.Processor.Module21
+      result = Processor.compile(module_23)
+
+      assert result[@module_17]
+    end
+  end
+
   test "get_macro_definition/3" do
     result = Processor.get_macro_definition(@module_17, :macro_2, [1, 2])
     assert %MacroDefinition{arity: 2, name: :macro_2} = result

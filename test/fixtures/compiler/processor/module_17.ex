@@ -18,4 +18,8 @@ defmodule Hologram.Test.Fixtures.Compiler.Processor.Module17 do
   defmacro macro_3 do
     quote do 3 end
   end
+
+  def fun_1 do
+    1
+  end
 end

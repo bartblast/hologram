@@ -1,6 +1,6 @@
 defmodule Hologram.Compiler.Processor do
   alias Hologram.Compiler.{Context, Helpers, Normalizer, Parser, Transformer}
-  alias Hologram.Compiler.IR.ModuleDefinition
+  alias Hologram.Compiler.IR.{FunctionCall, ModuleDefinition, TupleType}
   alias Hologram.Template
   alias Hologram.Template.Document.{Component, ElementNode, Expression, TextNode}
   alias Hologram.Typespecs, as: T
@@ -17,7 +17,8 @@ defmodule Hologram.Compiler.Processor do
     |> Map.put(module, definition)
     |> include_imported_modules(definition)
     |> include_aliased_modules(definition)
-    |> include_components(definition)
+    |> include_pages_and_components(definition)
+    |> include_modules_used_in_templates()
   end
 
   defp find_components(module) do
@@ -87,15 +88,6 @@ defmodule Hologram.Compiler.Processor do
     |> Enum.reduce(acc, &include_module(&2, &1.module))
   end
 
-  defp include_components(acc, definition) do
-    if Helpers.is_page?(definition) || Helpers.is_component?(definition) do
-      find_components(definition.module)
-      |> Enum.reduce(acc, &include_module(&2, &1))
-    else
-      acc
-    end
-  end
-
   defp include_imported_modules(acc, module_definition) do
     module_definition.imports
     |> Enum.reduce(acc, &include_module(&2, &1.module))
@@ -103,5 +95,72 @@ defmodule Hologram.Compiler.Processor do
 
   defp include_module(acc, module) do
     if acc[module], do: acc, else: compile(module, acc)
+  end
+
+  defp include_modules_used_in_templates(acc) do
+    components = Helpers.get_components(acc)
+    pages = Helpers.get_pages(acc)
+
+    (components ++ pages)
+    |> Enum.reduce(acc, fn %{module: module}, acc ->
+      if function_exported?(module, :template, 0) do
+        Template.Builder.build(module)
+        |> include_modules_used_in_templates(acc)
+      else
+        acc
+      end
+    end)
+  end
+
+  defp include_modules_used_in_templates(nodes, acc) when is_list(nodes) do
+    Enum.reduce(nodes, acc, &include_modules_used_in_templates(&1, &2))
+  end
+
+  # DEFER: handle attributes and slots
+  defp include_modules_used_in_templates(%Component{}, acc) do
+    acc
+  end
+
+  defp include_modules_used_in_templates(%ElementNode{attrs: attrs, children: children}, acc) do
+    acc =
+      Enum.reduce(attrs, acc, fn {_, %{value: value}}, acc ->
+        include_modules_used_in_templates(value, acc)
+      end)
+
+    Enum.reduce(children, acc, &include_modules_used_in_templates(&1, &2))
+  end
+
+  defp include_modules_used_in_templates(%Expression{ir: ir}, acc) do
+    include_modules_used_in_templates(ir, acc)
+  end
+
+  defp include_modules_used_in_templates(%FunctionCall{module: module}, acc) do
+    include_module(acc, module)
+  end
+
+  defp include_modules_used_in_templates(%TupleType{data: data}, acc) do
+    Enum.reduce(data, acc, &include_modules_used_in_templates(&1, &2))
+  end
+
+  # DEFER: implement other types
+  # DEFER: consider - implement a protocol and move to separate modules
+  defp include_modules_used_in_templates(%{}, acc), do: acc
+
+  defp include_modules_used_in_templates(attr_value, acc) do
+    case attr_value do
+      %Expression{ir: ir} ->
+        include_modules_used_in_templates(ir, acc)
+      _ ->
+        acc
+    end
+  end
+
+  defp include_pages_and_components(acc, definition) do
+    if Helpers.is_page?(definition) || Helpers.is_component?(definition) do
+      find_components(definition.module)
+      |> Enum.reduce(acc, &include_module(&2, &1))
+    else
+      acc
+    end
   end
 end
