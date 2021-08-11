@@ -67,8 +67,8 @@ defmodule Hologram.Compiler.Pruner do
   @spec find_used_functions(T.module_definitions_map()) :: T.function_set()
 
   defp find_used_functions(module_defs_map) do
-    pages = Helpers.find_pages(module_defs_map)
-    components = Helpers.find_components(module_defs_map)
+    pages = Helpers.get_pages(module_defs_map)
+    components = Helpers.get_components(module_defs_map)
     actions = find_actions(pages, components, module_defs_map)
 
     acc =

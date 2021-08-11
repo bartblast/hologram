@@ -8,7 +8,7 @@ defmodule Hologram.Compiler.HelpersTest do
     assert Helpers.class_name(Abc.Bcd) == "Elixir_Abc_Bcd"
   end
 
-  test "find_components/1" do
+  test "get_components/1" do
     module_def_1 =
       %ModuleDefinition{
         module: Bcd.Cde,
@@ -32,13 +32,13 @@ defmodule Hologram.Compiler.HelpersTest do
       Def.Efg => module_def_2
     }
 
-    result = Helpers.find_components(module_defs_map)
+    result = Helpers.get_components(module_defs_map)
     expected = [module_def_1, module_def_2]
 
     assert result == expected
   end
 
-  test "find_pages/1" do
+  test "get_pages/1" do
     module_def_1 =
       %ModuleDefinition{
         module: Bcd.Cde,
@@ -62,7 +62,7 @@ defmodule Hologram.Compiler.HelpersTest do
       Def.Efg => module_def_2
     }
 
-    result = Helpers.find_pages(module_defs_map)
+    result = Helpers.get_pages(module_defs_map)
     expected = [module_def_1, module_def_2]
 
     assert result == expected
