@@ -180,14 +180,14 @@ defmodule Hologram.Compiler.ProcessorTest do
     end
 
     test "module used in nested component template text node" do
-      module_22 = Hologram.Test.Fixtures.Compiler.Processor.Module21
+      module_22 = Hologram.Test.Fixtures.Compiler.Processor.Module22
       result = Processor.compile(module_22)
 
       assert result[@module_17]
     end
 
     test "module used in nested component template element node attribute" do
-      module_23 = Hologram.Test.Fixtures.Compiler.Processor.Module21
+      module_23 = Hologram.Test.Fixtures.Compiler.Processor.Module23
       result = Processor.compile(module_23)
 
       assert result[@module_17]
