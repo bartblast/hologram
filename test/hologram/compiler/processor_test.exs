@@ -151,46 +151,33 @@ defmodule Hologram.Compiler.ProcessorTest do
   end
 
   describe "compile/2, modules used by templates" do
-    test "module used in page template text node" do
-      module_18 = Hologram.Test.Fixtures.Compiler.Processor.Module18
-      result = Processor.compile(module_18)
-
+    def test_modules_used_by_templates(module) do
+      result = Processor.compile(module)
       assert result[@module_17]
+    end
+
+    test "module used in page template text node" do
+      test_modules_used_by_templates(Hologram.Test.Fixtures.Compiler.Processor.Module18)
     end
 
     test "module used in component template text node" do
-      module_19 = Hologram.Test.Fixtures.Compiler.Processor.Module19
-      result = Processor.compile(module_19)
-
-      assert result[@module_17]
+      test_modules_used_by_templates(Hologram.Test.Fixtures.Compiler.Processor.Module19)
     end
 
     test "module used in page template element node attribute" do
-      module_20 = Hologram.Test.Fixtures.Compiler.Processor.Module20
-      result = Processor.compile(module_20)
-
-      assert result[@module_17]
+      test_modules_used_by_templates(Hologram.Test.Fixtures.Compiler.Processor.Module20)
     end
 
     test "module used in component template element node attribute" do
-      module_21 = Hologram.Test.Fixtures.Compiler.Processor.Module21
-      result = Processor.compile(module_21)
-
-      assert result[@module_17]
+      test_modules_used_by_templates(Hologram.Test.Fixtures.Compiler.Processor.Module21)
     end
 
     test "module used in nested component template text node" do
-      module_22 = Hologram.Test.Fixtures.Compiler.Processor.Module22
-      result = Processor.compile(module_22)
-
-      assert result[@module_17]
+      test_modules_used_by_templates(Hologram.Test.Fixtures.Compiler.Processor.Module22)
     end
 
     test "module used in nested component template element node attribute" do
-      module_23 = Hologram.Test.Fixtures.Compiler.Processor.Module23
-      result = Processor.compile(module_23)
-
-      assert result[@module_17]
+      test_modules_used_by_templates(Hologram.Test.Fixtures.Compiler.Processor.Module23)
     end
   end
 

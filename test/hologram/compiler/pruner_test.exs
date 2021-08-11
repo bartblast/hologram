@@ -335,58 +335,35 @@ defmodule Hologram.Compiler.PrunerTest do
   end
 
   describe "functions used by templates" do
-    test "function used in page template text node" do
-      module_25 = Hologram.Test.Fixtures.Compiler.Pruner.Module25
-      module_defs_map = Processor.compile(module_25)
-
+    def test_functions_used_by_templates(module) do
+      module_defs_map = Processor.compile(module)
       result = Pruner.prune(module_defs_map)
 
       assert [%{name: :some_fun_2, arity: 0, params: []}] = result[@module_20].functions
+    end
+
+    test "function used in page template text node" do
+      test_functions_used_by_templates(Hologram.Test.Fixtures.Compiler.Pruner.Module25)
     end
 
     test "function used in component template text node" do
-      module_26 = Hologram.Test.Fixtures.Compiler.Pruner.Module26
-      module_defs_map = Processor.compile(module_26)
-
-      result = Pruner.prune(module_defs_map)
-
-      assert [%{name: :some_fun_2, arity: 0, params: []}] = result[@module_20].functions
+      test_functions_used_by_templates(Hologram.Test.Fixtures.Compiler.Pruner.Module26)
     end
 
     test "function used in page template element node attribute" do
-      module_27 = Hologram.Test.Fixtures.Compiler.Pruner.Module27
-      module_defs_map = Processor.compile(module_27)
-
-      result = Pruner.prune(module_defs_map)
-
-      assert [%{name: :some_fun_2, arity: 0, params: []}] = result[@module_20].functions
+      test_functions_used_by_templates(Hologram.Test.Fixtures.Compiler.Pruner.Module27)
     end
 
     test "function used in component template element node attribute" do
-      module_28 = Hologram.Test.Fixtures.Compiler.Pruner.Module28
-      module_defs_map = Processor.compile(module_28)
-
-      result = Pruner.prune(module_defs_map)
-
-      assert [%{name: :some_fun_2, arity: 0, params: []}] = result[@module_20].functions
+      test_functions_used_by_templates(Hologram.Test.Fixtures.Compiler.Pruner.Module28)
     end
 
     test "function used in nested component template text node" do
-      module_29 = Hologram.Test.Fixtures.Compiler.Pruner.Module29
-      module_defs_map = Processor.compile(module_29)
-
-      result = Pruner.prune(module_defs_map)
-
-      assert [%{name: :some_fun_2, arity: 0, params: []}] = result[@module_20].functions
+      test_functions_used_by_templates(Hologram.Test.Fixtures.Compiler.Pruner.Module29)
     end
 
     test "function used in nested component template element node attribute" do
-      module_30 = Hologram.Test.Fixtures.Compiler.Pruner.Module30
-      module_defs_map = Processor.compile(module_30)
-
-      result = Pruner.prune(module_defs_map)
-
-      assert [%{name: :some_fun_2, arity: 0, params: []}] = result[@module_20].functions
+      test_functions_used_by_templates(Hologram.Test.Fixtures.Compiler.Pruner.Module30)
     end
   end
 end
