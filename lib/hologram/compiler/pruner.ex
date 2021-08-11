@@ -1,6 +1,8 @@
 defmodule Hologram.Compiler.Pruner do
   alias Hologram.Compiler.Helpers
-  alias Hologram.Compiler.IR.{FunctionCall, FunctionDefinition, ModuleDefinition}
+  alias Hologram.Compiler.IR.{FunctionCall, FunctionDefinition, ModuleDefinition, TupleType}
+  alias Hologram.Template
+  alias Hologram.Template.Document.{Component, ElementNode, Expression}
   alias Hologram.Typespecs, as: T
 
   @doc """
@@ -78,6 +80,7 @@ defmodule Hologram.Compiler.Pruner do
 
     (pages ++ components)
     |> Enum.reduce(acc, &include_core_functions/2)
+    |> include_functions_used_by_templates(pages, components, module_defs_map)
   end
 
   @spec include_core_functions(list(%ModuleDefinition{}), T.function_set()) ::
@@ -150,6 +153,62 @@ defmodule Hologram.Compiler.Pruner do
 
   defp include_functions_used_by_action({_, function_def}, acc, module_defs_map) do
     include_function_calls(acc, function_def, module_defs_map)
+  end
+
+  defp include_functions_used_by_templates(acc, pages, components, module_defs_map) do
+    (pages ++ components)
+    |> Enum.reduce(acc, fn %{module: module}, acc ->
+      if function_exported?(module, :template, 0) do
+        Template.Builder.build(module)
+        |> include_functions_used_by_templates(acc, module_defs_map)
+      else
+        acc
+      end
+    end)
+  end
+
+  defp include_functions_used_by_templates(nodes, acc, module_defs_map) when is_list(nodes) do
+    Enum.reduce(nodes, acc, &include_functions_used_by_templates(&1, &2, module_defs_map))
+  end
+
+  # DEFER: handle attributes and slots
+  defp include_functions_used_by_templates(%Component{}, acc, _module_defs_map) do
+    acc
+  end
+
+  defp include_functions_used_by_templates(%ElementNode{attrs: attrs, children: children}, acc, module_defs_map) do
+    acc =
+      Enum.reduce(attrs, acc, fn {_, %{value: value}}, acc ->
+        include_functions_used_by_templates(value, acc, module_defs_map)
+      end)
+
+    Enum.reduce(children, acc, &include_functions_used_by_templates(&1, &2, module_defs_map))
+  end
+
+  defp include_functions_used_by_templates(%Expression{ir: ir}, acc, module_defs_map) do
+    include_functions_used_by_templates(ir, acc, module_defs_map)
+  end
+
+  defp include_functions_used_by_templates(%FunctionCall{} = function_call, acc, module_defs_map) do
+    include_function_calls(acc, function_call, module_defs_map)
+  end
+
+  defp include_functions_used_by_templates(%TupleType{data: data}, acc, module_defs_map) do
+    Enum.reduce(data, acc, &include_functions_used_by_templates(&1, &2, module_defs_map))
+  end
+
+  # DEFER: consider - this is very similar to Processor.include_modules_used_in_templates/2
+  # DEFER: implement other types
+  # DEFER: consider - implement a protocol and move to separate modules
+  defp include_functions_used_by_templates(%{}, acc, _module_defs_map), do: acc
+
+  defp include_functions_used_by_templates(attr_value, acc, module_defs_map) do
+    case attr_value do
+      %Expression{ir: ir} ->
+        include_functions_used_by_templates(ir, acc, module_defs_map)
+      _ ->
+        acc
+    end
   end
 
   @spec prune_unused_functions(T.function_set(), T.module_definitions_map()) ::
