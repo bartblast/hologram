@@ -142,6 +142,7 @@ defmodule Hologram.Compiler.Processor do
     Enum.reduce(data, acc, &include_modules_used_in_templates(&1, &2))
   end
 
+  # DEFER: consider - this is very similar to Pruner.include_functions_used_by_templates/3
   # DEFER: implement other types
   # DEFER: consider - implement a protocol and move to separate modules
   defp include_modules_used_in_templates(%{}, acc), do: acc
