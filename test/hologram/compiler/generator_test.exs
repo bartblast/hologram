@@ -81,13 +81,6 @@ defmodule Hologram.Compiler.GeneratorTest do
       assert result == expected
     end
 
-    test "string" do
-      ir = %StringType{value: "Test"}
-      result = Generator.generate(ir, %Context{}, %Opts{})
-
-      assert result == "{ type: 'string', value: 'Test' }"
-    end
-
     test "struct" do
       ir = %StructType{
         data: [{%AtomType{value: :a}, %IntegerType{value: 1}}],

@@ -30,7 +30,6 @@ defmodule Hologram.Compiler.Generator do
     ModuleAttributeOperator,
     ModuleDefinition,
     ModuleType,
-    StringType,
     StructType,
     TupleType,
     TypeOperator,
@@ -67,10 +66,6 @@ defmodule Hologram.Compiler.Generator do
 
   def generate(%ModuleType{module: module}, _, _) do
     "{ type: 'module', class: '#{Helpers.class_name(module)}' }"
-  end
-
-  def generate(%StringType{value: value}, _, _) do
-    PrimitiveTypeGenerator.generate(:string, "'#{value}'")
   end
 
   def generate(%StructType{module: module, data: data}, %Context{} = context, %Opts{} = opts) do
@@ -123,7 +118,7 @@ defmodule Hologram.Compiler.Generator do
     "#{name}"
   end
 
-  # TODO: use Encoder protocol instead all of these generete/3 functions and remove this module
+  # TODO: use Encoder protocol instead all of these generate/3 functions and remove this module
   def generate(ir, %Context{} = context, %Opts{} = opts) do
     Encoder.encode(ir, context, opts)
   end
