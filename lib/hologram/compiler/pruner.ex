@@ -64,20 +64,10 @@ defmodule Hologram.Compiler.Pruner do
     |> Enum.map(&{module_def.module, &1})
   end
 
-  @spec find_pages(T.module_definitions_map()) :: list(%ModuleDefinition{})
-
-  defp find_pages(module_defs_map) do
-    module_defs_map
-    |> Enum.filter(fn {_, module_def} ->
-      Helpers.is_page?(module_def)
-    end)
-    |> Enum.map(fn {_, module_def} -> module_def end)
-  end
-
   @spec find_used_functions(T.module_definitions_map()) :: T.function_set()
 
   defp find_used_functions(module_defs_map) do
-    pages = find_pages(module_defs_map)
+    pages = Helpers.find_pages(module_defs_map)
     components = Helpers.find_components(module_defs_map)
     actions = find_actions(pages, components, module_defs_map)
 
