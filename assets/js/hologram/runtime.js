@@ -40,7 +40,7 @@ export default class Runtime {
   }
 
   // TODO: refactor & test
-  static get_module(name) {
+  static getModule(name) {
     return eval(name.replace(/\./g, ""))
   }  
 
@@ -66,8 +66,8 @@ export default class Runtime {
 
     } else {
       const context = {
-        pageModule: Runtime.get_module(response.data[2].data["~string[page_module]"].value),
-        scopeModule: Runtime.get_module(response.data[2].data["~string[scope_module]"].value)
+        pageModule: Runtime.getModule(response.data[2].data["~string[page_module]"].value),
+        scopeModule: Runtime.getModule(response.data[2].data["~string[scope_module]"].value)
       }
 
       this.executeAction(action, params, this.state, context)
@@ -167,7 +167,7 @@ export default class Runtime {
     // DEFER: consider - there are limitations for state object size, e.g. 2 MB for Firefox
     this.window.history.replaceState(html, null)
   }
-  
+
   // TODO: refactor & test
   updateURL(url) {
     this.window.history.pushState(null, null, url)

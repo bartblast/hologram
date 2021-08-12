@@ -25,7 +25,7 @@ export default class DOM {
 
     switch (node.type) {
       case "component":
-        let module = this.runtime.get_module(node.module)
+        let module = this.runtime.getModule(node.module)
 
         if (module.hasOwnProperty("action")) {
           context = Object.assign({}, context)
