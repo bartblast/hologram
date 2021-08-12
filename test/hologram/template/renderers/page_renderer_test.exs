@@ -1,11 +1,9 @@
 defmodule Hologram.Template.PageRendererTest do
   use Hologram.TestCase, async: true
-
   alias Hologram.Template.Renderer
-  alias Mix.Tasks.Compile.Hologram, as: Task
 
   test "render/2" do
-    Task.run(pages_path: "test/fixtures/template/renderers/page_renderer")
+    compile_pages("test/fixtures/template/renderers/page_renderer")
 
     module = Hologram.Test.Fixtures.Template.PageRenderer.Module1
     result = Renderer.render(module, %{})
