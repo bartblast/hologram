@@ -1,5 +1,6 @@
 import Client from "./client"
 import DOM from "./dom"
+import ScriptsReloader from "./scripts_reloader"
 import Utils from "./utils"
 
 export default class Runtime {
@@ -7,9 +8,13 @@ export default class Runtime {
     this.client = new Client(this)
     this.client.connect()
 
+    this.document = window.document
     this.dom = new DOM(this, window)
     this.pageModule = null
     this.state = null
+    this.window = window
+
+    this.loadPageOnPopStateEvents()
   }
 
   executeAction(actionName, actionParams, state, context) {
@@ -56,12 +61,17 @@ export default class Runtime {
     const action = response.data[0]
     const params = response.data[1]
 
-    const context = {
-      pageModule: Runtime.get_module(response.data[2].data["~string[page_module]"].value),
-      scopeModule: Runtime.get_module(response.data[2].data["~string[scope_module]"].value)
-    }
+    if (action.value == "__redirect__") {
+      this.handleRedirect(params)
 
-    this.executeAction(action, params, this.state, context)
+    } else {
+      const context = {
+        pageModule: Runtime.get_module(response.data[2].data["~string[page_module]"].value),
+        scopeModule: Runtime.get_module(response.data[2].data["~string[scope_module]"].value)
+      }
+
+      this.executeAction(action, params, this.state, context)
+    }
   }
 
   handleEventAction(eventValue, state, context) {
@@ -95,11 +105,12 @@ export default class Runtime {
   }
 
   // TODO: refactor & test
-  handleNewPage(pageModule, state) {
-    this.pageModule = pageModule
-    this.state = state
+  handleRedirect(params) {
+    const html = params.data["~atom[html]"].value
+    this.loadPage(html)
 
-    this.dom.render(this.pageModule)
+    const url = params.data["~atom[url]"].value
+    this.updateURL(url)
   }
 
   // TODO: refactor & test
@@ -128,5 +139,37 @@ export default class Runtime {
       case "string":
         return `${value.value}`
     }
-  }  
+  }
+
+  // TODO: refactor & test
+  loadPage(html) {
+    // TODO: copy html node attributes (because only the inner HTML is updated)
+    this.document.documentElement.innerHTML = html
+
+    this.dom.reset()
+    ScriptsReloader.reload(this.document)
+  }
+
+  // TODO: refactor & test
+  loadPageOnPopStateEvents() {
+    this.window.addEventListener("popstate", event => {
+      this.loadPage(event.state)
+    })
+  }
+
+  // TODO: refactor & test
+  mountPage(pageModule, state) {
+    this.pageModule = pageModule
+    this.state = state
+    this.dom.render(this.pageModule)
+
+    const html = this.dom.getHTML()
+    // DEFER: consider - there are limitations for state object size, e.g. 2 MB for Firefox
+    this.window.history.replaceState(html, null)
+  }
+  
+  // TODO: refactor & test
+  updateURL(url) {
+    this.window.history.pushState(null, null, url)
+  }
 }

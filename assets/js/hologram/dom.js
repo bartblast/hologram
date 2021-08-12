@@ -110,4 +110,9 @@ export default class DOM {
     patch(this.oldVNode, newVNode)
     this.oldVNode = newVNode
   }
+
+  // TODO: refactor & test
+  reset() {
+    this.oldVNode = null
+  }
 }
