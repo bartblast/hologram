@@ -5,10 +5,12 @@ defmodule Hologram.Template.TextNodeRendererTest do
   alias Hologram.Template.Renderer
 
   test "render/2" do
-    content = "test_content"
+    content = "a&lcub;b&rcub;ca&lcub;b&rcub;c"
     text_node = %TextNode{content: content}
+
     result = Renderer.render(text_node, %{})
 
-    assert result == content
+    expected = "a{b}ca{b}c"
+    assert result == expected
   end
 end

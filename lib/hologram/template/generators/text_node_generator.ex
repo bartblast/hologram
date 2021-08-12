@@ -1,8 +1,13 @@
 defmodule Hologram.Template.TextNodeGenerator do
   def generate(content) do
+    opts = [global: true]
+
     content =
-      String.replace(content, "\n", "\\n", global: true)
-      |> String.replace("'", "\\'", global: true)
+      content
+      |> String.replace("\n", "\\n", opts)
+      |> String.replace("'", "\\'", opts)
+      |> String.replace("&lcub;", "{", opts)
+      |> String.replace("&rcub;", "}", opts)
 
     "{ type: 'text', content: '#{content}' }"
   end
