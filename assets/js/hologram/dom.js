@@ -8,6 +8,7 @@ export default class DOM {
 
   // TODO: refactor & test
   constructor(runtime, window) {
+    this.document = window.document
     this.oldVNode = null
     this.runtime = runtime
     this.window = window
@@ -88,10 +89,17 @@ export default class DOM {
     }
   }
 
+  // TODO: already refactored; test
+  getHTML() {
+    const doctype = new XMLSerializer().serializeToString(this.document.doctype)
+    const html = this.document.documentElement.outerHTML
+    return doctype + html;
+  }
+
   // TODO: refactor & test
   render(pageModule) {
     if (!this.oldVNode) {
-      const container = this.window.document.body
+      const container = this.document.body
       this.oldVNode = toVNode(container)
     }
 
