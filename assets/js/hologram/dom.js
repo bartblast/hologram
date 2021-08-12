@@ -92,8 +92,8 @@ export default class DOM {
   // TODO: already refactored; test
   getHTML() {
     const doctype = new XMLSerializer().serializeToString(this.document.doctype)
-    const html = this.document.documentElement.outerHTML
-    return doctype + html;
+    const outerHTML = this.document.documentElement.outerHTML
+    return doctype + outerHTML;
   }
 
   // TODO: refactor & test
