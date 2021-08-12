@@ -1,6 +1,8 @@
 defmodule Hologram.Runtime.ChannelTest do
   use Hologram.ChannelCase, async: true
+
   alias Hologram.Compiler.Serializer
+  alias Hologram.Template.Renderer
 
   setup do
     {:ok, _, socket} =
@@ -127,6 +129,39 @@ defmodule Hologram.Runtime.ChannelTest do
       {:test_action, %{a: 10, b: 20}, context}
       |> Serializer.serialize()
 
+    assert_reply ref, :ok, ^expected_response
+  end
+
+  test "redirect", %{socket: socket} do
+    compile_pages("test/fixtures/runtime/channel")
+
+    page_module = "Elixir_Hologram_Test_Fixtures_Runtime_Module5"
+    context = %{"page_module" => page_module, "scope_module" => page_module}
+
+    message =
+      %{
+        command: %{"type" => "atom", "value" => "__redirect__"},
+        context: context,
+        params: %{
+          "type" => "list",
+          "data" => [
+            %{
+              "type" => "tuple",
+              "data" => [
+                %{"type" => "atom", "value" => "page"},
+                %{"type" => "module", "class" => page_module}
+              ]
+            }
+          ]
+        }
+      }
+    html = Renderer.render(Hologram.Test.Fixtures.Runtime.Module5, %{})
+
+    expected_response =
+      {:__redirect__, %{html: html}, context}
+      |> Serializer.serialize()
+
+    ref = push(socket, "command", message)
     assert_reply ref, :ok, ^expected_response
   end
 end

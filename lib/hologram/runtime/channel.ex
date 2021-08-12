@@ -1,6 +1,8 @@
 defmodule Hologram.Runtime.Channel do
   use Phoenix.Channel
+
   alias Hologram.Compiler.{Decoder, Helpers, Serializer}
+  alias Hologram.Template.Renderer
 
   def join("hologram", _, socket) do
     {:ok, socket}
@@ -30,10 +32,15 @@ defmodule Hologram.Runtime.Channel do
       Decoder.decode(params)
       |> Enum.into(%{})
 
-    context["page_module"]
-    |> String.split("_")
-    |> tl()
-    |> Helpers.module()
-    |> apply(:command, [command, params])
+    if command == :__redirect__ do
+      html = Renderer.render(params.page, %{})
+      {:__redirect__, html: html}
+    else
+      context["page_module"]
+      |> String.split("_")
+      |> tl()
+      |> Helpers.module()
+      |> apply(:command, [command, params])
+    end
   end
 end
