@@ -34,7 +34,9 @@ defmodule Hologram.Runtime.Channel do
 
     if command == :__redirect__ do
       html = Renderer.render(params.page, %{})
-      {:__redirect__, html: html}
+      # DEFER: inject params
+      url = params.page.route()
+      {:__redirect__, html: html, url: url}
     else
       context["page_module"]
       |> String.split("_")

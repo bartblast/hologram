@@ -158,7 +158,7 @@ defmodule Hologram.Runtime.ChannelTest do
     html = Renderer.render(Hologram.Test.Fixtures.Runtime.Module5, %{})
 
     expected_response =
-      {:__redirect__, %{html: html}, context}
+      {:__redirect__, %{html: html, url: "/test-route"}, context}
       |> Serializer.serialize()
 
     ref = push(socket, "command", message)
