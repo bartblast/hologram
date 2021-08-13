@@ -1,5 +1,5 @@
 defmodule Hologram.Features.RuntimeTest do
-  use Hologram.E2ECase, async: true
+  use Hologram.E2ECase, async: false
 
   @moduletag :e2e
 
