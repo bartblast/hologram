@@ -13,14 +13,14 @@ defmodule Hologram.E2E.Page1 do
     ~H"""
     <body>
       <h1>Page 1</h1>
-      <button id="button_1" on_click="action_1">Action 1</button>
-      <button id="button_2" on_click={:action_2, a: 5, b: 6}>Action 2</button>
-      <button id="button_3" on_click.command="command_3">Command 3</button>
-      <button id="button_4" on_click.command="command_4">Command 4</button>
-      <button id="button_5" on_click.command="command_5">Command 5</button>
-      <button id="button_6" on_click.command={:command_6, a: 1, b: 2}>Command 6</button>
-      <button id="button_7" on_click="action_7">Action 7</button>
-      <button id="button_8" on_click="action_8">Action 8</button>
+      <button id="page-1-action-1-button" on_click="action_1">Action 1</button>
+      <button id="page-1-action-2-button" on_click={:action_2, a: 5, b: 6}>Action 2</button>
+      <button id="page-1-command-3-button" on_click.command="command_3">Command 3</button>
+      <button id="page-1-command-4-button" on_click.command="command_4">Command 4</button>
+      <button id="page-1-command-5-button" on_click.command="command_5">Command 5</button>
+      <button id="page-1-command-6-button" on_click.command={:command_6, a: 1, b: 2}>Command 6</button>
+      <button id="page-1-action-7-button" on_click="action_7">Action 7</button>
+      <button id="page-1-action-8-button" on_click="action_8">Action 8</button>
       <div id="text">{@text}</div>
     </body>
     """
