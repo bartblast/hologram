@@ -6,7 +6,7 @@ defmodule Hologram.Features.EventsTest do
   feature "click event", %{session: session} do
     session
     |> visit("/e2e/page-2")
-    |> click(css("#button"))
+    |> click(css("#page-2-update-text-button"))
 
     |> assert_has(css("#text", text: "updated text"))
   end
