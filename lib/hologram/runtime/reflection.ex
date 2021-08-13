@@ -23,7 +23,7 @@ defmodule Hologram.Runtime.Reflection do
   end
 
   # TODO: refactor & test
-  def pages_path(opts) do
+  def pages_path(opts \\ []) do
     config_pages_path = Application.get_env(:hologram, :pages_path)
 
     cond do
