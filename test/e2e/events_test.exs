@@ -8,6 +8,6 @@ defmodule Hologram.Features.EventsTest do
     |> visit("/e2e/page-2")
     |> click(css("#button"))
 
-    |> assert_has(css("#text", text: "test updated text"))
+    |> assert_has(css("#text", text: "updated text"))
   end
 end

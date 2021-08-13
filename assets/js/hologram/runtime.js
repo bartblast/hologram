@@ -56,6 +56,7 @@ export default class Runtime {
     }
   }
 
+  // Covered by E2E tests.
   handleCommandResponse(response) {
     eval(`response = ${response}`)
     const action = response.data[0]
