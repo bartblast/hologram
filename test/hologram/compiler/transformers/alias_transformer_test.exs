@@ -57,7 +57,7 @@ defmodule Hologram.Compiler.AliasTransformerTest do
     assert result == expected
   end
 
-  test "multi-alias, without options" do
+  test "multi-alias without options" do
     code = "alias Hologram.Test.Fixtures.Compiler.AliasTransformer.{Module1, Module2}"
     {:alias, _, ast} = ast(code)
 
