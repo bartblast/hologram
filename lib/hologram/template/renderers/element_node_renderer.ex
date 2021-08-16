@@ -4,7 +4,11 @@ alias Hologram.Template.{Evaluator, Renderer}
 defimpl Renderer, for: ElementNode do
   @pruned_attrs [:on_click]
 
-  def render(%{attrs: attrs, children: children, tag: tag}, state) do
+  def render(%{tag: "slot"}, state, slots) do
+    Renderer.render(slots[:default], state, nil)
+  end
+
+  def render(%{attrs: attrs, children: children, tag: tag}, state, _) do
     attrs_html = render_attrs(attrs, state)
     children_html = render_children(children, state)
 

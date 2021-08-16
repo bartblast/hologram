@@ -6,7 +6,7 @@ defmodule Hologram.Template.ElementNodeRendererTest do
 
   @state %{}
 
-  test "render/2" do
+  test "non-slot" do
     attrs = %{
       attr_1: %{value: "test_attr_value_1", modifiers: []},
       on_click: %{value: "test_on_click", modifiers: []},
@@ -23,6 +23,20 @@ defmodule Hologram.Template.ElementNodeRendererTest do
 
     expected =
       "<div attr_1=\"test_attr_value_1\" attr_2=\"test_attr_value_2\">test_text<span></span></div>"
+
+    assert result == expected
+  end
+
+  test "slot" do
+    children = [
+      %TextNode{content: "test_text"},
+      %ElementNode{attrs: %{}, children: [], tag: "span"}
+    ]
+
+    slot_node = %ElementNode{attrs: %{}, children: [], tag: "slot"}
+
+    result = Renderer.render(slot_node, @state, default: children)
+    expected = "test_text<span></span>"
 
     assert result == expected
   end
