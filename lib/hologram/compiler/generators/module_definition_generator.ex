@@ -1,8 +1,9 @@
 defmodule Hologram.Compiler.ModuleDefinitionGenerator do
   alias Hologram.Compiler.{Context, Formatter, FunctionDefinitionGenerator, Generator, Helpers, Opts}
 
-  def generate(ir, module, %Context{} = context, %Opts{} = opts) do
+  def generate(ir, module, %Opts{} = opts) do
     class = Helpers.class_name(module)
+    context = struct(Context, Map.from_struct(ir))
 
     attributes =
       Enum.map(ir.attributes, &Generator.generate(&1, context, opts))
