@@ -57,8 +57,22 @@ defmodule Hologram.Compiler.AliasTransformerTest do
     assert result == expected
   end
 
-  test "multi-alias" do
+  test "multi-alias, without options" do
     code = "alias Hologram.Test.Fixtures.Compiler.AliasTransformer.{Module1, Module2}"
+    {:alias, _, ast} = ast(code)
+
+    result = AliasTransformer.transform(ast)
+
+    expected = [
+      %Alias{module: @module_1, as: [:Module1]},
+      %Alias{module: @module_2, as: [:Module2]}
+    ]
+
+    assert result == expected
+  end
+
+  test "multi-alias with options" do
+    code = "alias Hologram.Test.Fixtures.Compiler.AliasTransformer.{Module1, Module2}, warn: false"
     {:alias, _, ast} = ast(code)
 
     result = AliasTransformer.transform(ast)
