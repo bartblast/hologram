@@ -4,14 +4,15 @@ defmodule Hologram.Compiler.AliasTransformerTest do
   alias Hologram.Compiler.AliasTransformer
   alias Hologram.Compiler.IR.Alias
 
-  @expected_module Hologram.Test.Fixtures.Compiler.AliasTransformer.Module1
+  @module_1 Hologram.Test.Fixtures.Compiler.AliasTransformer.Module1
+  @module_2 Hologram.Test.Fixtures.Compiler.AliasTransformer.Module2
 
   test "default 'as' option" do
     code = "alias Hologram.Test.Fixtures.Compiler.AliasTransformer.Module1"
     {:alias, _, ast} = ast(code)
 
     result = AliasTransformer.transform(ast)
-    expected = %Alias{module: @expected_module, as: [:Module1]}
+    expected = %Alias{module: @module_1, as: [:Module1]}
 
     assert result == expected
   end
@@ -21,7 +22,7 @@ defmodule Hologram.Compiler.AliasTransformerTest do
     {:alias, _, ast} = ast(code)
 
     result = AliasTransformer.transform(ast)
-    expected = %Alias{module: @expected_module, as: [:Xyz]}
+    expected = %Alias{module: @module_1, as: [:Xyz]}
 
     assert result == expected
   end
@@ -31,7 +32,7 @@ defmodule Hologram.Compiler.AliasTransformerTest do
     {:alias, _, ast} = ast(code)
 
     result = AliasTransformer.transform(ast)
-    expected = %Alias{module: @expected_module, as: [:Xyz, :Kmn]}
+    expected = %Alias{module: @module_1, as: [:Xyz, :Kmn]}
 
     assert result == expected
   end
@@ -41,7 +42,7 @@ defmodule Hologram.Compiler.AliasTransformerTest do
     {:alias, _, ast} = ast(code)
 
     result = AliasTransformer.transform(ast)
-    expected = %Alias{module: @expected_module, as: [:Module1]}
+    expected = %Alias{module: @module_1, as: [:Module1]}
 
     assert result == expected
   end
@@ -51,7 +52,21 @@ defmodule Hologram.Compiler.AliasTransformerTest do
     {:alias, _, ast} = ast(code)
 
     result = AliasTransformer.transform(ast)
-    expected = %Alias{module: @expected_module, as: [:Xyz]}
+    expected = %Alias{module: @module_1, as: [:Xyz]}
+
+    assert result == expected
+  end
+
+  test "multi-alias" do
+    code = "alias Hologram.Test.Fixtures.Compiler.AliasTransformer.{Module1, Module2}"
+    {:alias, _, ast} = ast(code)
+
+    result = AliasTransformer.transform(ast)
+
+    expected = [
+      %Alias{module: @module_1, as: [:Module1]},
+      %Alias{module: @module_2, as: [:Module2]}
+    ]
 
     assert result == expected
   end
