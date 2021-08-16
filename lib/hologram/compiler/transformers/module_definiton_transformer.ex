@@ -18,7 +18,11 @@ defmodule Hologram.Compiler.ModuleDefinitionTransformer do
     Enum.reduce(exprs, [], fn expr, acc ->
       case expr do
         {^type, _, _} ->
-          acc ++ [Transformer.transform(expr, context)]
+          ir = Transformer.transform(expr, context)
+          # multi-alias is returned as a list of alias structs
+          # DEFER: always return a list of alias structs
+          ir = if is_list(ir), do: ir, else: [ir]
+          acc ++ ir
 
         _ ->
           acc

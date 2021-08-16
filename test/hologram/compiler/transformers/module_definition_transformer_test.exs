@@ -160,6 +160,24 @@ defmodule Hologram.Compiler.ModuleDefinitionTransformerTest do
     assert result.aliases == expected
   end
 
+  test "multi-aliases" do
+    code = """
+    defmodule Hologram.Test.Fixtures.Compiler.ModuleDefinitionTransformer.Module3 do
+      alias Hologram.Test.Fixtures.Compiler.ModuleDefinitionTransformer.{Module1, Module2}
+    end
+    """
+
+    ast = ast(code)
+    assert %ModuleDefinition{} = result = ModuleDefinitionTransformer.transform(ast)
+
+    expected = [
+      %Alias{module: @module_1, as: [:Module1]},
+      %Alias{module: @module_2, as: [:Module2]}
+    ]
+
+    assert result.aliases == expected
+  end
+
   test "attributes" do
     code = """
     defmodule Hologram.Test.Fixtures.Compiler.ModuleDefinitionTransformer.Module1 do
