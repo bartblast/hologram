@@ -2,12 +2,12 @@ alias Hologram.Compiler.{Helpers, Serializer}
 alias Hologram.Template.{Builder, Renderer}
 
 defimpl Renderer, for: Atom do
-  def render(module, _params) do
+  def render(module, _params, slots) do
     # DEFER: pass params to state function
     state = module.state()
 
     Builder.build(module)
-    |> Renderer.render(state)
+    |> Renderer.render(state, slots)
     |> render_layout(module, state)
   end
 
