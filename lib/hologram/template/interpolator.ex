@@ -33,7 +33,7 @@ defmodule Hologram.Template.Interpolator do
   end
 
   defp interpolate_node(%Component{children: children} = node) do
-    children = Enum.map(children, &interpolate_node/1)
+    children = interpolate(children)
     [%{node | children: children}]
   end
 

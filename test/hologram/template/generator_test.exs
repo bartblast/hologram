@@ -18,7 +18,7 @@ defmodule Hologram.Template.GeneratorTest do
   end
 
   test "component" do
-    node = %Component{module: Hologram.Test.Fixtures.Template.Generator.Module1}
+    node = %Component{module: Hologram.Test.Fixtures.Template.Generator.Module1, children: []}
 
     result = Generator.generate(node)
     expected_module = "Elixir_Hologram_Test_Fixtures_Template_Generator_Module1"

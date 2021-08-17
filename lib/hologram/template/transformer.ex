@@ -1,10 +1,9 @@
 defmodule Hologram.Template.Transformer do
   alias Hologram.Compiler.{Helpers, Resolver}
   alias Hologram.Compiler.IR.Alias
-  alias Hologram.Template.Document.{Component, ElementNode, TextNode}
+  alias Hologram.Template.Document.{Component, TextNode}
   alias Hologram.Template.{ElementNodeTransformer, Interpolator}
   alias Hologram.Typespecs, as: T
-  alias Hologram.Utils
 
   @doc """
   Transforms parsed markup into a document tree template.
