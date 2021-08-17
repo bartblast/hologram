@@ -15,6 +15,7 @@ export default class DOM {
   }
 
   // TODO: refactor & test
+  // TODO: Cover in document E2E tests.
   buildVNode(node, state, context) {
     if (Array.isArray(node)) {
       return node.reduce((acc, n) => {
