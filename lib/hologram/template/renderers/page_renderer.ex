@@ -8,20 +8,27 @@ defimpl Renderer, for: Atom do
 
     Builder.build(module)
     |> Renderer.render(state, slots)
-    |> render_layout(module, state)
+    |> render_layout(state)
+    |> inject_runtime_values(module)
   end
 
   # DEFER: optimize, e.g. load the manifest in config
-  defp get_page_js_digest(module) do
+  defp get_runtime_digest(module) do
     File.cwd!() <> "/priv/static/hologram/manifest.json"
     |> File.read!()
     |> Jason.decode!()
     |> Map.get("#{module}")
   end
 
-  defp render_layout(inner_html, module, state) do
-    digest = get_page_js_digest(module)
+  defp inject_runtime_values(html, module) do
+    digest = get_runtime_digest(module)
     class_name = Helpers.class_name(module)
+
+    String.replace(html, "{#runtime_digest}", digest)
+    |> String.replace("{#class_name}", class_name)
+  end
+
+  defp render_layout(inner_html, state) do
     serialized_state = Serializer.serialize(state)
 
     part_1 =
@@ -31,9 +38,9 @@ defimpl Renderer, for: Atom do
         <head>
           <title>Hologram Demo</title>
           <script src="/js/hologram.js"></script>
-          <script src="/hologram/page-#{digest}.js"></script>
+          <script src="/hologram/page-{#runtime_digest}.js"></script>
           <script>
-            Hologram.run(window, #{class_name}, #{serialized_state})
+            Hologram.run(window, {#class_name}, #{serialized_state})
           </script>
         </head>
       """
