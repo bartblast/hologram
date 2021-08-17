@@ -25,16 +25,22 @@ export default class DOM {
 
     switch (node.type) {
       case "component":
-        let module = this.runtime.getModule(node.module)
+        let module = Runtime.getModule(node.module)
 
-        if (module.hasOwnProperty("action")) {
+        if (DOM.hasActionHandlers(module)) {
           context = Object.assign({}, context)
           context.scopeModule = module
         }
 
-        return this.buildVNode(node.children, state, context)
+        context.slots = { default: node.children }
+
+        return this.buildVNode(module.template(), state, context)
 
       case "element":
+        if (node.tag == "slot") {
+          return this.buildVNode(context.slots.default, state, context)
+        }
+
         let children = node.children.reduce((acc, child) => {
           acc.push(...this.buildVNode(child, state, context))
           return acc
@@ -94,6 +100,11 @@ export default class DOM {
     const doctype = new XMLSerializer().serializeToString(this.document.doctype)
     const outerHTML = this.document.documentElement.outerHTML
     return doctype + outerHTML;
+  }
+
+  // TODO: already refactored; test
+  static hasActionHandlers(module) {
+    return module.hasOwnProperty("action")
   }
 
   // TODO: refactor & test
