@@ -2,7 +2,7 @@ defmodule Hologram.Template.InterpolatorTest do
   use Hologram.TestCase, async: true
 
   alias Hologram.Compiler.IR.{IntegerType, ModuleAttributeOperator, TupleType}
-  alias Hologram.Template.Document.{Expression, ElementNode, TextNode}
+  alias Hologram.Template.Document.{Component, Expression, ElementNode, TextNode}
   alias Hologram.Template.Interpolator
 
   describe "text node" do
@@ -305,6 +305,82 @@ defmodule Hologram.Template.InterpolatorTest do
         ]
       },
       %TextNode{content: "ghi"}
+    ]
+
+    assert result == expected
+  end
+
+  describe "component" do
+    test "text node" do
+      nodes = [
+        %Component{
+          module: Abc.Bcd,
+          children: [%TextNode{content: "bcd{@abc}"}]
+        }
+      ]
+
+      result = Interpolator.interpolate(nodes)
+
+      expected = [
+        %Component{
+          children: [
+            [
+              %TextNode{content: "bcd"},
+              %Expression{
+                ir: %TupleType{
+                  data: [%ModuleAttributeOperator{name: :abc}]
+                }
+              }
+            ]
+          ],
+          module: Abc.Bcd
+        }
+      ]
+
+      assert result == expected
+    end
+  end
+
+  test "element node" do
+    nodes = [
+      %Component{
+        module: Abc.Bcd,
+        children: [
+          %ElementNode{
+            tag: "div",
+            children: [],
+            attrs: %{
+              key: %{value: "{1}", modifiers: []}
+            }
+          }
+        ]
+      }
+    ]
+
+    result = Interpolator.interpolate(nodes)
+
+    expected = [
+      %Component{
+        children: [
+          [
+            %ElementNode{
+              attrs: %{
+                key: %{
+                  modifiers: [],
+                  value: %Expression{
+                    ir: %TupleType{
+                      data: [%IntegerType{value: 1}]
+                    }
+                  }
+                }
+              },
+              children: [],
+              tag: "div"
+            }
+          ]
+        ],
+        module: Abc.Bcd
+      }
     ]
 
     assert result == expected

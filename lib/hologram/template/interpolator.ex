@@ -1,7 +1,7 @@
 defmodule Hologram.Template.Interpolator do
   alias Hologram.Compiler.{Context, Parser}
   alias Hologram.Compiler.Typespecs, as: T
-  alias Hologram.Template.Document.{ElementNode, Expression, TextNode}
+  alias Hologram.Template.Document.{Component, ElementNode, Expression, TextNode}
 
   @doc """
   Splits text nodes into text nodes and expression nodes
@@ -30,6 +30,11 @@ defmodule Hologram.Template.Interpolator do
 
   def interpolate(nodes) do
     Enum.reduce(nodes, [], &(&2 ++ interpolate_node(&1)))
+  end
+
+  defp interpolate_node(%Component{children: children} = node) do
+    children = Enum.map(children, &interpolate_node/1)
+    [%{node | children: children}]
   end
 
   defp interpolate_node(%ElementNode{children: children, attrs: attrs} = node) do
