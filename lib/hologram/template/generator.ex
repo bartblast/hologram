@@ -26,8 +26,8 @@ defmodule Hologram.Template.Generator do
     NodeListGenerator.generate(document_tree)
   end
 
-  def generate(%Component{module: module}) do
-    ComponentGenerator.generate(module)
+  def generate(%Component{module: module, children: children}) do
+    ComponentGenerator.generate(module, children)
   end
 
   def generate(%ElementNode{attrs: attrs, children: children, tag: tag}) do
