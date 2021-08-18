@@ -1,13 +1,12 @@
-defmodule Hologram.Template.Transformer do
-  alias Hologram.Compiler.{Helpers, Resolver}
+defmodule Hologram.Template.Transformer do  alias Hologram.Compiler.IR.Alias
   alias Hologram.Compiler.IR.Alias
-  alias Hologram.Template.Document.{Component, TextNode}
-  alias Hologram.Template.{ElementNodeTransformer, Interpolator}
+  alias Hologram.Template.{ComponentTransformer, ElementNodeTransformer, Interpolator}
+  alias Hologram.Template.Document.TextNode
   alias Hologram.Typespecs, as: T
 
   @doc """
   Transforms parsed markup into a document tree template.
-  Interpolates expression nodes in text nodes and attribute values.
+  Interpolates expression nodes in text nodes and attribute/prop values.
 
   ## Examples
       iex> transform([{"div", [{"class", "{1}"}, {"id", "some-id"}], ["some-text-{2}"]}])
@@ -49,20 +48,11 @@ defmodule Hologram.Template.Transformer do
 
     case determine_node_type(type, aliases) do
       :component ->
-        build_component(type, children, aliases)
+        ComponentTransformer.transform(type, attrs, children, aliases)
 
       :element ->
         ElementNodeTransformer.transform(type, children, attrs)
     end
-  end
-
-  # DEFER: make a separate module similar to ElementNodeTransformer
-  defp build_component(module_name, children, aliases) do
-    module =
-      Helpers.module_segments(module_name)
-      |> Resolver.resolve(aliases)
-
-    %Component{module: module, children: children}
   end
 
   defp determine_node_type(type, _) do

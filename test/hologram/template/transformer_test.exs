@@ -1,7 +1,7 @@
 defmodule Hologram.Template.TransformerTest do
   use Hologram.TestCase, async: true
 
-  alias Hologram.Compiler.IR.{Alias, ModuleAttributeOperator, TupleType}
+  alias Hologram.Compiler.IR.{ModuleAttributeOperator, TupleType}
   alias Hologram.Template.{Parser, Transformer}
   alias Hologram.Template.Document.{Component, Expression, ElementNode, TextNode}
 
@@ -30,62 +30,14 @@ defmodule Hologram.Template.TransformerTest do
     assert result == expected
   end
 
-  test "component node without children" do
-    html = "<Hologram.Template.TransformerTest></Hologram.Template.TransformerTest>"
+  test "component node" do
+    html = "<Hologram.Test.Fixtures.PlaceholderComponent />"
 
     result =
       Parser.parse!(html)
       |> Transformer.transform(@aliases)
 
-    expected = [%Component{children: [], module: Hologram.Template.TransformerTest}]
-
-    assert result == expected
-  end
-
-  test "component node with children" do
-    html = "<Hologram.Template.TransformerTest><div></div><span></span></Hologram.Template.TransformerTest>"
-
-    result =
-      Parser.parse!(html)
-      |> Transformer.transform(@aliases)
-
-    expected = [
-      %Component{
-        children: [
-          %ElementNode{
-            attrs: %{},
-            children: [],
-            tag: "div"
-          },
-          %ElementNode{
-            attrs: %{},
-            children: [],
-            tag: "span"
-          }
-        ],
-        module: Hologram.Template.TransformerTest
-      }
-    ]
-
-    assert result == expected
-  end
-
-  test "aliased component node" do
-    html = "<Bcd></Bcd>"
-    aliases = [%Alias{module: Abc.Bcd, as: [:Bcd]}]
-
-    result =
-      Parser.parse!(html)
-      |> Transformer.transform(aliases)
-
-    expected = [
-      %Component{
-        children: [],
-        module: Abc.Bcd
-      }
-    ]
-
-    assert result == expected
+    assert [%Component{}] = result
   end
 
   test "element node" do
