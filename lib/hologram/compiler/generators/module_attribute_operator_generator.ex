@@ -7,7 +7,7 @@ defmodule Hologram.Compiler.ModuleAttributeOperatorGenerator do
     "$state.data['#{key}']"
   end
 
-  def generate(name, %Context{} = context, %Opts{} = opts) do
+  def generate(name, %Context{} = context, %Opts{}) do
     class_name = Helpers.class_name(context.module)
     "#{class_name}.$#{name}"
   end
