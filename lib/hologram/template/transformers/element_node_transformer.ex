@@ -6,7 +6,7 @@ defmodule Hologram.Template.ElementNodeTransformer do
     %ElementNode{tag: tag, children: children, attrs: attrs}
   end
 
-  def transform_attrs(attrs) do
+  defp transform_attrs(attrs) do
     Enum.map(attrs, fn {key, value} ->
       [name | modifiers] = String.split(key, ".")
       name = String.to_atom(name)
