@@ -1,10 +1,10 @@
 defmodule Hologram.Template.Document do
   defmodule Component do
-    defstruct module: nil, props: nil, children: nil
+    defstruct module: nil, props: %{}, children: []
   end
 
   defmodule ElementNode do
-    defstruct tag: nil, attrs: nil, children: nil
+    defstruct tag: nil, attrs: nil, children: []
   end
 
   defmodule Expression do

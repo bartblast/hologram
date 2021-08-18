@@ -235,6 +235,108 @@ defmodule Hologram.Template.InterpolatorTest do
     end
   end
 
+  describe "component" do
+    test "child text node interpolation" do
+      nodes = [
+        %Component{
+          module: Abc.Bcd,
+          children: [%TextNode{content: "bcd{@abc}"}]
+        }
+      ]
+
+      result = Interpolator.interpolate(nodes)
+
+      expected = [
+        %Component{
+          children: [
+            %TextNode{content: "bcd"},
+            %Expression{
+              ir: %TupleType{
+                data: [%ModuleAttributeOperator{name: :abc}]
+              }
+            }
+          ],
+          module: Abc.Bcd
+        }
+      ]
+
+      assert result == expected
+    end
+
+    test "child element node interpolation" do
+      nodes = [
+        %Component{
+          module: Abc.Bcd,
+          children: [
+            %ElementNode{
+              tag: "div",
+              children: [],
+              attrs: %{
+                key: %{value: "{1}", modifiers: []}
+              }
+            }
+          ]
+        }
+      ]
+
+      result = Interpolator.interpolate(nodes)
+
+      expected = [
+        %Component{
+          children: [
+            %ElementNode{
+              attrs: %{
+                key: %{
+                  modifiers: [],
+                  value: %Expression{
+                    ir: %TupleType{
+                      data: [%IntegerType{value: 1}]
+                    }
+                  }
+                }
+              },
+              children: [],
+              tag: "div"
+            }
+          ],
+          module: Abc.Bcd
+        }
+      ]
+
+      assert result == expected
+    end
+
+    test "prop interpolation" do
+      nodes = [
+        %Component{
+          module: Abc.Bcd,
+          props: %{
+            key: "{1}"
+          },
+          children: []
+        }
+      ]
+
+      result = Interpolator.interpolate(nodes)
+
+      expected = [
+        %Component{
+          children: [],
+          module: Abc.Bcd,
+          props: %{
+            key: %Expression{
+              ir: %TupleType{
+                data: [%IntegerType{value: 1}]
+              }
+            }
+          }
+        }
+      ]
+
+      assert result == expected
+    end
+  end
+
   test "nodes tree" do
     nodes = [
       %TextNode{content: "abc{1}cde"},
@@ -305,78 +407,6 @@ defmodule Hologram.Template.InterpolatorTest do
         ]
       },
       %TextNode{content: "ghi"}
-    ]
-
-    assert result == expected
-  end
-
-  describe "component" do
-    test "text node" do
-      nodes = [
-        %Component{
-          module: Abc.Bcd,
-          children: [%TextNode{content: "bcd{@abc}"}]
-        }
-      ]
-
-      result = Interpolator.interpolate(nodes)
-
-      expected = [
-        %Component{
-          children: [
-            %TextNode{content: "bcd"},
-            %Expression{
-              ir: %TupleType{
-                data: [%ModuleAttributeOperator{name: :abc}]
-              }
-            }
-          ],
-          module: Abc.Bcd
-        }
-      ]
-
-      assert result == expected
-    end
-  end
-
-  test "element node" do
-    nodes = [
-      %Component{
-        module: Abc.Bcd,
-        children: [
-          %ElementNode{
-            tag: "div",
-            children: [],
-            attrs: %{
-              key: %{value: "{1}", modifiers: []}
-            }
-          }
-        ]
-      }
-    ]
-
-    result = Interpolator.interpolate(nodes)
-
-    expected = [
-      %Component{
-        children: [
-          %ElementNode{
-            attrs: %{
-              key: %{
-                modifiers: [],
-                value: %Expression{
-                  ir: %TupleType{
-                    data: [%IntegerType{value: 1}]
-                  }
-                }
-              }
-            },
-            children: [],
-            tag: "div"
-          }
-        ],
-        module: Abc.Bcd
-      }
     ]
 
     assert result == expected

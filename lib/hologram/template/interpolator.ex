@@ -32,19 +32,16 @@ defmodule Hologram.Template.Interpolator do
     Enum.reduce(nodes, [], &(&2 ++ interpolate_node(&1)))
   end
 
-  defp interpolate_node(%Component{children: children} = node) do
+  defp interpolate_node(%Component{children: children, props: props} = node) do
     children = interpolate(children)
-    [%{node | children: children}]
+    props = interpolate_props(props)
+
+    [%{node | children: children, props: props}]
   end
 
   defp interpolate_node(%ElementNode{children: children, attrs: attrs} = node) do
     children = interpolate(children)
-
-    attrs =
-      Enum.map(attrs, fn {key, spec} ->
-        {key, %{spec | value: interpolate_attr(spec.value)}}
-      end)
-      |> Enum.into(%{})
+    attrs = interpolate_attrs(attrs)
 
     [%{node | children: children, attrs: attrs}]
   end
@@ -66,18 +63,32 @@ defmodule Hologram.Template.Interpolator do
 
   defp interpolate_node(node), do: [node]
 
+  defp interpolate_attrs(attrs) do
+    Enum.map(attrs, fn {key, spec} ->
+      {key, %{spec | value: interpolate_value(spec.value)}}
+    end)
+    |> Enum.into(%{})
+  end
+
+  defp interpolate_props(props) do
+    Enum.map(props, fn {key, value} ->
+      {key, interpolate_value(value)}
+    end)
+    |> Enum.into(%{})
+  end
+
   _ = """
-  Returns the corresponding expression node if an expression is found in the attribute value string.
-  If there is no expression in the attribute value string, the string itself is returned.
+  Returns the corresponding expression node if an expression is found in the value string.
+  If there is no expression in the value string, the string itself is returned.
 
   ## Examples
-      iex> interpolate_attr("{1}")
+      iex> interpolate_value("{1}")
       %Expression{ir: %IntegerType{value: 1}}
   """
 
-  @spec interpolate_attr(String.t()) :: %Expression{} | String.t()
+  @spec interpolate_value(String.t()) :: %Expression{} | String.t()
 
-  defp interpolate_attr(str) do
+  defp interpolate_value(str) do
     regex = ~r/^(\{.+\})$/
 
     case Regex.run(regex, str) do
