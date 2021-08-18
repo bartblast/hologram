@@ -7,6 +7,14 @@ defmodule Hologram.Page do
     end
   end
 
+  defmacro layout(module) do
+    quote do
+      def layout do
+        unquote(module)
+      end
+    end
+  end
+
   defmacro route(path) do
     quote do
       def route do
