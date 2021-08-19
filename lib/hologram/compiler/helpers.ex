@@ -115,20 +115,6 @@ defmodule Hologram.Compiler.Helpers do
   end
 
   @doc """
-  Returns the file path of the given module's source code.
-
-  ## Examples
-      iex> Helpers.module_source_path(Hologram.Compiler.Helpers)
-      "/Users/bart/Files/Projects/hologram/lib/hologram/compiler/helpers.ex"
-  """
-  @spec module_source_path(module()) :: String.t()
-
-  def module_source_path(module) do
-    module.module_info()[:compile][:source]
-    |> to_string()
-  end
-
-  @doc """
   Returns true if the first module has a "use" directive for the second module.
 
   ## Examples

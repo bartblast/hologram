@@ -37,4 +37,18 @@ defmodule Hologram.Compiler.Reflection do
         "#{app_path()}/lib/#{app_name()}_web/hologram/pages"
     end
   end
+
+    @doc """
+  Returns the file path of the given module's source code.
+
+  ## Examples
+      iex> Reflection.source_path(Hologram.Compiler.Helpers)
+      "/Users/bart/Files/Projects/hologram/lib/hologram/compiler/helpers.ex"
+  """
+  @spec source_path(module()) :: String.t()
+
+  def source_path(module) do
+    module.module_info()[:compile][:source]
+    |> to_string()
+  end
 end
