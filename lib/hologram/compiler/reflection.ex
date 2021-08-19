@@ -1,4 +1,6 @@
 defmodule Hologram.Compiler.Reflection do
+  alias Hologram.Compiler.{Helpers, Normalizer, Parser}
+
   # TODO: refactor & test
   def app_name do
     Mix.Project.get().project[:app]
@@ -20,6 +22,17 @@ defmodule Hologram.Compiler.Reflection do
       [_, module] = Regex.run(regex, code)
       String.to_atom("Elixir.#{module}")
     end)
+  end
+
+  def module_ast(module_segs) when is_list(module_segs) do
+    Helpers.module(module_segs)
+    |> module_ast()
+  end
+
+  def module_ast(module) do
+    source_path(module)
+    |> Parser.parse_file!()
+    |> Normalizer.normalize()
   end
 
   # TODO: refactor & test
