@@ -2,9 +2,7 @@
 
 defmodule Mix.Tasks.Compile.Hologram do
   use Mix.Task.Compiler
-
-  alias Hologram.Compiler.Builder
-  alias Hologram.Runtime.Reflection
+  alias Hologram.Compiler.{Builder, Reflection}
 
   @app_path Reflection.app_path()
 

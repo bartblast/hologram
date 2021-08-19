@@ -1,5 +1,5 @@
 defmodule Hologram.Router do
-  alias Hologram.Runtime.Reflection
+  alias Hologram.Compiler.Reflection
 
   defmacro __using__(_) do
     quote do

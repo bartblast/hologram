@@ -1,4 +1,4 @@
-defmodule Hologram.Runtime.Reflection do
+defmodule Hologram.Compiler.Reflection do
   # TODO: refactor & test
   def app_name do
     Mix.Project.get().project[:app]
