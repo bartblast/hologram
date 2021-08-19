@@ -38,12 +38,12 @@ defmodule Hologram.Compiler.Reflection do
     end
   end
 
-    @doc """
+  @doc """
   Returns the file path of the given module's source code.
 
   ## Examples
-      iex> Reflection.source_path(Hologram.Compiler.Helpers)
-      "/Users/bart/Files/Projects/hologram/lib/hologram/compiler/helpers.ex"
+      iex> Reflection.source_path(Hologram.Compiler.Reflection)
+      "/Users/bart/Files/Projects/hologram/lib/hologram/compiler/reflection.ex"
   """
   @spec source_path(module()) :: String.t()
 
