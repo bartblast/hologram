@@ -1,5 +1,5 @@
 defmodule Hologram.Compiler.Expander do
-  alias Hologram.Compiler.{Helpers, Normalizer, Processor}
+  alias Hologram.Compiler.{Helpers, Normalizer, Reflection}
   alias Hologram.Compiler.IR.{MacroDefinition, RequireDirective}
 
   def expand_macro(%MacroDefinition{module: module, name: name}, params) do
@@ -71,7 +71,7 @@ defmodule Hologram.Compiler.Expander do
       end)
 
     if require_directive do
-      Processor.get_macro_definition(require_directive.module, name, params)
+      Reflection.macro_definition(require_directive.module, name, params)
     else
       nil
     end
