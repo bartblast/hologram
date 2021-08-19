@@ -1,11 +1,17 @@
 defmodule Hologram.Compiler.ReflectionTest do
   use Hologram.TestCase, async: true
 
-  alias Hologram.Compiler.IR.ModuleDefinition
+  alias Hologram.Compiler.IR.{MacroDefinition, ModuleDefinition}
   alias Hologram.Compiler.Reflection
 
   @module_1 Hologram.Test.Fixtures.Compiler.Reflection.Module1
+  @module_2 Hologram.Test.Fixtures.Compiler.Reflection.Module2
   @module_segs_1 [:Hologram, :Test, :Fixtures, :Compiler, :Reflection, :Module1]
+
+  test "macro_definition/3" do
+    result = Reflection.macro_definition(@module_2, :test_macro, [1, 2])
+    assert %MacroDefinition{arity: 2, name: :test_macro} = result
+  end
 
   describe "module_ast/1" do
     @expected {:defmodule, [line: 1], [

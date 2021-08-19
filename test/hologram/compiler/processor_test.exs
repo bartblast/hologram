@@ -181,10 +181,5 @@ defmodule Hologram.Compiler.ProcessorTest do
     end
   end
 
-  test "get_macro_definition/3" do
-    result = Processor.get_macro_definition(@module_17, :macro_2, [1, 2])
-    assert %MacroDefinition{arity: 2, name: :macro_2} = result
-  end
-
   # TODO: attributes, functions, imports, name
 end
