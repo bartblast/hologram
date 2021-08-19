@@ -12,12 +12,12 @@ defmodule Hologram.Compiler.ReflectionTest do
       ]}
 
     test "module segments arg" do
-      result = Reflection.module_ast(@module_segs_1)
+      result = Reflection.ast(@module_segs_1)
       assert result == @expected
     end
 
     test "module arg" do
-      result = Reflection.module_ast(@module_1)
+      result = Reflection.ast(@module_1)
       assert result == @expected
     end
   end

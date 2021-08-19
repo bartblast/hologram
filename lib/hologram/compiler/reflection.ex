@@ -11,6 +11,17 @@ defmodule Hologram.Compiler.Reflection do
     File.cwd!()
   end
 
+  def ast(module_segs) when is_list(module_segs) do
+    Helpers.module(module_segs)
+    |> ast()
+  end
+
+  def ast(module) do
+    source_path(module)
+    |> Parser.parse_file!()
+    |> Normalizer.normalize()
+  end
+
   # TODO: refactor & test
   def list_pages(opts \\ []) do
     glob = "#{pages_path(opts)}/**/*.ex"
@@ -22,17 +33,6 @@ defmodule Hologram.Compiler.Reflection do
       [_, module] = Regex.run(regex, code)
       String.to_atom("Elixir.#{module}")
     end)
-  end
-
-  def module_ast(module_segs) when is_list(module_segs) do
-    Helpers.module(module_segs)
-    |> module_ast()
-  end
-
-  def module_ast(module) do
-    source_path(module)
-    |> Parser.parse_file!()
-    |> Normalizer.normalize()
   end
 
   # TODO: refactor & test
