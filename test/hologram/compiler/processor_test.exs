@@ -186,28 +186,5 @@ defmodule Hologram.Compiler.ProcessorTest do
     assert %MacroDefinition{arity: 2, name: :macro_2} = result
   end
 
-  describe "get_module_ast/1" do
-    @expected {:defmodule, [line: 1], [
-        {:__aliases__, [line: 1], @module_segs_1},
-        [do: {:__block__, [], []}]
-      ]}
-
-    test "module segments arg" do
-      result = Processor.get_module_ast(@module_segs_1)
-      assert result == @expected
-    end
-
-    test "module arg" do
-      result = Processor.get_module_ast(@module_1)
-      assert result == @expected
-    end
-  end
-
-  test "get_module_definition/1" do
-    result = Processor.get_module_definition(@module_1)
-    expected = %ModuleDefinition{module: @module_1}
-    assert result == expected
-  end
-
   # TODO: attributes, functions, imports, name
 end

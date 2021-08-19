@@ -1,5 +1,5 @@
 defmodule Hologram.Template.Builder do
-  alias Hologram.Compiler.Processor
+  alias Hologram.Compiler.Reflection
   alias Hologram.Template.{Parser, Transformer}
   alias Hologram.Typespecs, as: T
 
@@ -17,7 +17,7 @@ defmodule Hologram.Template.Builder do
 
   def build(module) do
     aliases =
-      Processor.get_module_definition(module)
+      Reflection.module_definition(module)
       |> Map.get(:aliases)
 
     module.template()

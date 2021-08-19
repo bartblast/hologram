@@ -1,5 +1,6 @@
 defmodule Hologram.Compiler.Reflection do
-  alias Hologram.Compiler.{Helpers, Normalizer, Parser}
+  alias Hologram.Compiler.IR.ModuleDefinition
+  alias Hologram.Compiler.{Context, Helpers, Normalizer, Parser, Transformer}
 
   # TODO: refactor & test
   def app_name do
@@ -33,6 +34,21 @@ defmodule Hologram.Compiler.Reflection do
       [_, module] = Regex.run(regex, code)
       String.to_atom("Elixir.#{module}")
     end)
+  end
+
+
+  @doc """
+  Returns the corresponding module definition.
+
+  ## Examples
+      iex> Reflection.get_module_definition(Abc.Bcd)
+      %ModuleDefinition{module: Abc.Bcd, ...}
+  """
+  @spec module_definition(module()) :: %ModuleDefinition{}
+
+  def module_definition(module) do
+    ast(module)
+    |> Transformer.transform(%Context{})
   end
 
   # TODO: refactor & test

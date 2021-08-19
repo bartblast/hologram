@@ -1,5 +1,7 @@
 defmodule Hologram.Compiler.ReflectionTest do
   use Hologram.TestCase, async: true
+
+  alias Hologram.Compiler.IR.ModuleDefinition
   alias Hologram.Compiler.Reflection
 
   @module_1 Hologram.Test.Fixtures.Compiler.Reflection.Module1
@@ -20,6 +22,12 @@ defmodule Hologram.Compiler.ReflectionTest do
       result = Reflection.ast(@module_1)
       assert result == @expected
     end
+  end
+
+  test "module_definition/1" do
+    result = Reflection.module_definition(@module_1)
+    expected = %ModuleDefinition{module: @module_1}
+    assert result == expected
   end
 
   test "source_path/1" do
