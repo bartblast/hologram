@@ -126,13 +126,6 @@ defmodule Hologram.Compiler.HelpersTest do
     end
   end
 
-  test "module_source_path/1" do
-    result = Helpers.module_source_path(Hologram.Compiler.HelpersTest)
-    expected = __ENV__.file
-
-    assert result == expected
-  end
-
   describe "uses_module?/2" do
     @used_module Hologram.Commons.Parser
 
