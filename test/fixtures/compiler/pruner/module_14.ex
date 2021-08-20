@@ -1,11 +1,11 @@
 defmodule Hologram.Test.Fixtures.Compiler.Pruner.Module14 do
-  use Hologram.Component
+  use Hologram.Page
 
-  def action(:test_1, _a, _b) do
-    some_fun()
-  end
-
-  def some_fun do
-    :ok
+  def template do
+    ~H"""
+    <div>
+      <span test_attr={Hologram.Test.Fixtures.Compiler.Pruner.Module8.test_8()}></span>
+    </div>
+    """
   end
 end

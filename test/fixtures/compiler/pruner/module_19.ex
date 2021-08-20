@@ -1,7 +1,5 @@
 defmodule Hologram.Test.Fixtures.Compiler.Pruner.Module19 do
-  alias Hologram.Test.Fixtures.Compiler.Pruner.Module20
-
-  def some_fun_1 do
-    Module20.some_fun_2()
+  def test_19 do
+    Hologram.Test.Fixtures.Compiler.Pruner.Module18.test_18()
   end
 end

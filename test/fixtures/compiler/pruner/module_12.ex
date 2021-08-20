@@ -1,7 +1,9 @@
 defmodule Hologram.Test.Fixtures.Compiler.Pruner.Module12 do
-  alias Hologram.Test.Fixtures.Compiler.Pruner.Module13
+  use Hologram.Page
 
-  def some_fun_1 do
-    Module13.some_fun_2()
+  def template do
+    ~H"""
+      <div test_attr={Hologram.Test.Fixtures.Compiler.Pruner.Module8.test_8()}></div>
+    """
   end
 end

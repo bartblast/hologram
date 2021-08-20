@@ -1,15 +1,13 @@
 defmodule Hologram.Test.Fixtures.Compiler.Pruner.Module17 do
-  use Hologram.Component
+  use Hologram.Page
+  alias Hologram.Test.Fixtures.Compiler.Pruner.Module16, warn: false
 
-  def action(:test_1, _a, _b) do
-    some_fun_1()
+  def action(:test_15) do
+    15
   end
 
-  def some_fun_1 do
-    some_fun_2()
-  end
-
-  def some_fun_2 do
-    :ok
+  def template do
+    ~H"""
+    """
   end
 end
