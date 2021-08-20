@@ -43,6 +43,20 @@ defmodule Hologram.Compiler.ReflectionTest do
     assert result == expected
   end
 
+  describe "standard_lib?/1" do
+    test "standard lib module" do
+      assert Reflection.standard_lib?(Map)
+    end
+
+    test "lib module" do
+      refute Reflection.standard_lib?(Hologram.E2E.Page1)
+    end
+
+    test "deps module" do
+      refute Reflection.standard_lib?(Phoenix)
+    end
+  end
+
   describe "templatable/1" do
     test "page" do
       module_def = %ModuleDefinition{uses: [%UseDirective{module: Hologram.Page}]}

@@ -89,6 +89,14 @@ defmodule Hologram.Compiler.Reflection do
     |> to_string()
   end
 
+  def standard_lib?(module) do
+    source_path = source_path(module)
+    app_path = app_path()
+
+    !String.starts_with?(source_path, "#{app_path}/deps/")
+    && !String.starts_with?(source_path, "#{app_path}/lib/")
+  end
+
   def templatable?(module_def) do
     Helpers.is_page?(module_def) || Helpers.is_component?(module_def)
   end
