@@ -95,6 +95,7 @@ defmodule Hologram.Compiler.Reflection do
 
     !String.starts_with?(source_path, "#{app_path}/deps/")
     && !String.starts_with?(source_path, "#{app_path}/lib/")
+    && !String.starts_with?(source_path, "#{app_path}/test/")
   end
 
   def templatable?(module_def) do

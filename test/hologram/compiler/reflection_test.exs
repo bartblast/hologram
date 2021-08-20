@@ -55,6 +55,10 @@ defmodule Hologram.Compiler.ReflectionTest do
     test "deps module" do
       refute Reflection.standard_lib?(Phoenix)
     end
+
+    test "test module" do
+      refute Reflection.standard_lib?(Hologram.Compiler.ReflectionTest)
+    end
   end
 
   describe "templatable/1" do
