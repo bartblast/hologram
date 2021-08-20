@@ -8,9 +8,9 @@ defimpl Renderer, for: ElementNode do
     Renderer.render(slots[:default], state, nil)
   end
 
-  def render(%{attrs: attrs, children: children, tag: tag}, state, _) do
+  def render(%{attrs: attrs, children: children, tag: tag}, state, slots) do
     attrs_html = render_attrs(attrs, state)
-    children_html = render_children(children, state)
+    children_html = render_children(children, state, slots)
 
     "<#{tag}#{attrs_html}>#{children_html}</#{tag}>"
   end
@@ -24,8 +24,8 @@ defimpl Renderer, for: ElementNode do
     |> Enum.join("")
   end
 
-  defp render_children(children, state) do
-    Enum.map(children, fn child -> Renderer.render(child, state) end)
+  defp render_children(children, state, slots) do
+    Enum.map(children, fn child -> Renderer.render(child, state, slots) end)
     |> Enum.join("")
   end
 end
