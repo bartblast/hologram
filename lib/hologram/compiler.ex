@@ -21,8 +21,9 @@ defmodule Hologram.Compiler do
     |> include_templatables(module_def)
   end
 
-  defp include_module(acc, module) do
-    if acc[module], do: acc, else: compile(module, acc)
+  defp include_aliases(acc, module_def) do
+    module_def.aliases
+    |> Enum.reduce(acc, &include_module(&2, &1.module))
   end
 
   defp include_imports(acc, module_def) do
@@ -30,9 +31,17 @@ defmodule Hologram.Compiler do
     |> Enum.reduce(acc, &include_module(&2, &1.module))
   end
 
-  defp include_aliases(acc, module_def) do
-    module_def.aliases
-    |> Enum.reduce(acc, &include_module(&2, &1.module))
+  defp include_module(acc, module) do
+    if acc[module], do: acc, else: compile(module, acc)
+  end
+
+  defp include_templatables(acc, %ModuleDefinition{module: module} = module_def) do
+    if Reflection.is_templatable?(module_def) do
+      document = Template.Builder.build(module)
+      traverse_template(acc, document)
+    else
+      acc
+    end
   end
 
   defp include_used_modules(acc, module_def) do
@@ -55,15 +64,6 @@ defmodule Hologram.Compiler do
 
   # DEFER: traverse nested code blocks
   defp traverse_function_defs(acc, _), do: acc
-
-  defp include_templatables(acc, %ModuleDefinition{module: module} = module_def) do
-    if Reflection.is_templatable?(module_def) do
-      document = Template.Builder.build(module)
-      traverse_template(acc, document)
-    else
-      acc
-    end
-  end
 
   defp traverse_template(acc, nodes) when is_list(nodes) do
     Enum.reduce(nodes, acc, &traverse_template(&2, &1))
