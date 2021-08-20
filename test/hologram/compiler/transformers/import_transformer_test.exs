@@ -25,4 +25,14 @@ defmodule Hologram.Compiler.ImportTransformerTest do
 
     assert result == expected
   end
+
+  test "ignores other opts" do
+    code = "import Hologram.Test.Fixtures.Compiler.Transformer.Module1, warn: false"
+    {:import, _, ast} = ast(code)
+
+    result = ImportTransformer.transform(ast)
+    expected = %Import{module: @expected_module, only: []}
+
+    assert result == expected
+  end
 end
