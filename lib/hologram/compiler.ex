@@ -1,5 +1,5 @@
 defmodule Hologram.Compiler do
-  alias Hologram.Compiler.IR.{FunctionCall, ModuleDefinition, TupleType}
+  alias Hologram.Compiler.IR.{FunctionCall, FunctionDefinition, ModuleDefinition, TupleType}
   alias Hologram.Compiler.Reflection
   alias Hologram.Template
   alias Hologram.Template.Document.{Component, ElementNode, Expression}
@@ -17,6 +17,7 @@ defmodule Hologram.Compiler do
     |> Map.put(module, module_def)
     |> include_imports(module_def)
     |> include_aliases(module_def)
+    |> include_used_modules(module_def)
     |> include_templatables(module_def)
   end
 
@@ -33,6 +34,27 @@ defmodule Hologram.Compiler do
     module_def.aliases
     |> Enum.reduce(acc, &include_module(&2, &1.module))
   end
+
+  defp include_used_modules(acc, module_def) do
+    module_def.functions
+    |> Enum.reduce(acc, &traverse_function_defs(&2, &1))
+  end
+
+  defp standard_lib?(module) do
+    modules = [Map, String]
+    Enum.member?(modules, module)
+  end
+
+  defp traverse_function_defs(acc, %FunctionDefinition{body: body}) do
+    Enum.reduce(body, acc, &traverse_function_defs(&2, &1))
+  end
+
+  defp traverse_function_defs(acc, %FunctionCall{module: module}) do
+    unless standard_lib?(module), do: include_module(acc, module), else: acc
+  end
+
+  # DEFER: traverse nested code blocks
+  defp traverse_function_defs(acc, _), do: acc
 
   defp include_templatables(acc, %ModuleDefinition{module: module} = module_def) do
     if Reflection.is_templatable?(module_def) do
