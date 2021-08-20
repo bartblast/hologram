@@ -1,7 +1,7 @@
 defmodule Hologram.Compiler.ReflectionTest do
   use Hologram.TestCase, async: true
 
-  alias Hologram.Compiler.IR.{MacroDefinition, ModuleDefinition}
+  alias Hologram.Compiler.IR.{MacroDefinition, ModuleDefinition, UseDirective}
   alias Hologram.Compiler.Reflection
 
   @module_1 Hologram.Test.Fixtures.Compiler.Reflection.Module1
@@ -41,5 +41,22 @@ defmodule Hologram.Compiler.ReflectionTest do
     expected = __ENV__.file
 
     assert result == expected
+  end
+
+  describe "templatable/1" do
+    test "page" do
+      module_def = %ModuleDefinition{uses: [%UseDirective{module: Hologram.Page}]}
+      assert Reflection.templatable?(module_def)
+    end
+
+    test "component" do
+      module_def = %ModuleDefinition{uses: [%UseDirective{module: Hologram.Component}]}
+      assert Reflection.templatable?(module_def)
+    end
+
+    test "other modules" do
+      module_def = %ModuleDefinition{uses: []}
+      refute Reflection.templatable?(module_def)
+    end
   end
 end

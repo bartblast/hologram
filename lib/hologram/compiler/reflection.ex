@@ -35,7 +35,7 @@ defmodule Hologram.Compiler.Reflection do
       String.to_atom("Elixir.#{module}")
     end)
   end
-  
+
   # DEFER: instead of matching the macro on arity, pattern match the params as well
   def macro_definition(module, name, params) do
     arity = Enum.count(params)
@@ -87,5 +87,9 @@ defmodule Hologram.Compiler.Reflection do
   def source_path(module) do
     module.module_info()[:compile][:source]
     |> to_string()
+  end
+
+  def templatable?(module_def) do
+    Helpers.is_page?(module_def) || Helpers.is_component?(module_def)
   end
 end
