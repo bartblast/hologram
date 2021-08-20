@@ -4,7 +4,7 @@ defmodule Hologram.Compiler.Builder do
 
   def build(module) do
     Compiler.compile(module)
-    |> Pruner.prune()
+    |> Pruner.prune(module)
     |> Enum.reduce("", fn {_, ir}, acc ->
       # TODO: pass actual %Context{} struct received from compiler
       acc <> "\n" <> Generator.generate(ir, %Context{}, %Opts{})
