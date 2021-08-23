@@ -95,7 +95,7 @@ defmodule Hologram.Compiler.Transformer do
     MatchOperatorTransformer.transform(left, right, context)
   end
 
-  def transform({:@, _, [{name, _, nil}]}, _) do
+  def transform({:@, _, [{name, _, ast}]}, _) when not is_list(ast) do
     %ModuleAttributeOperator{name: name}
   end
 
@@ -117,8 +117,8 @@ defmodule Hologram.Compiler.Transformer do
     ModuleDefinitionTransformer.transform(ast)
   end
 
-  def transform({:@, _, [{name, _, [ast]}]}, %Context{} = context) do
-    ModuleAttributeDefinitionTransformer.transform(name, ast, context)
+  def transform({:@, _, _} = ast, %Context{} = context) do
+    ModuleAttributeDefinitionTransformer.transform(ast, context)
   end
 
   # DIRECTIVES
