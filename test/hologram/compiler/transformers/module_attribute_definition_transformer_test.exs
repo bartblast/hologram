@@ -4,9 +4,12 @@ defmodule Hologram.Compiler.ModuleAttributeDefinitionTransformerTest do
   alias Hologram.Compiler.{Context, ModuleAttributeDefinitionTransformer}
   alias Hologram.Compiler.IR.{IntegerType, ModuleAttributeDefinition}
 
-  test "transform/3" do
-    result = ModuleAttributeDefinitionTransformer.transform(:x, 1, %Context{})
-    expected = %ModuleAttributeDefinition{name: :x, value: %IntegerType{value: 1}}
+  test "transform/1" do
+    code = "@abc 1 + 2"
+    ast = ast(code)
+
+    result = ModuleAttributeDefinitionTransformer.transform(ast, %Context{})
+    expected = %ModuleAttributeDefinition{name: :abc, value: %IntegerType{value: 3}}
 
     assert result == expected
   end
