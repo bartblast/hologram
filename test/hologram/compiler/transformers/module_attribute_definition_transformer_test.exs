@@ -4,7 +4,7 @@ defmodule Hologram.Compiler.ModuleAttributeDefinitionTransformerTest do
   alias Hologram.Compiler.{Context, ModuleAttributeDefinitionTransformer}
   alias Hologram.Compiler.IR.{IntegerType, ModuleAttributeDefinition}
 
-  test "transform/1" do
+  test "transform/2" do
     code = "@abc 1 + 2"
     ast = ast(code)
 
