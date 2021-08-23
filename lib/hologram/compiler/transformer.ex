@@ -117,7 +117,7 @@ defmodule Hologram.Compiler.Transformer do
     ModuleDefinitionTransformer.transform(ast)
   end
 
-  def transform({:@, _, _} = ast, %Context{} = context) do
+  def transform({:@, _, [{_, _, exprs}]} = ast, %Context{} = context) when is_list(exprs) do
     ModuleAttributeDefinitionTransformer.transform(ast, context)
   end
 
