@@ -159,7 +159,7 @@ defmodule Hologram.Compiler.Transformer do
   end
 
   # this needs to be defined before variable case
-  def transform({:__MODULE__, _, nil}, _) do
+  def transform({:__MODULE__, _, _}, _) do
     %ModuleMacro{}
   end
 
