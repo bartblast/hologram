@@ -59,7 +59,7 @@ defmodule Hologram.Compiler.ModuleDefinitionGeneratorTest do
       assert result == expected
     end
 
-    test "behaviour callback" do
+    test "behaviour callback spec" do
       ir = %ModuleDefinition{
         attributes: [%NotSupportedExpression{type: :behaviour_callback_spec}]
       }
