@@ -4,6 +4,7 @@ defmodule Hologram.Compiler.Transformer do
     BooleanType,
     IntegerType,
     ModuleAttributeOperator,
+    ModuleMacro,
     NotSupportedExpression,
     StringType,
     Variable
@@ -155,6 +156,11 @@ defmodule Hologram.Compiler.Transformer do
 
   def transform({:unquote, _, _} = ast, %Context{} = context) do
     UnquoteTransformer.transform(ast, context)
+  end
+
+  # this needs to be defined before variable case
+  def transform({:__MODULE__, _, nil}, _) do
+    %ModuleMacro{}
   end
 
   def transform({name, _, nil}, _) when is_atom(name) do

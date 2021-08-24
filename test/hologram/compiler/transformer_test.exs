@@ -19,6 +19,7 @@ defmodule Hologram.Compiler.TransformerTest do
     ModuleDefinition,
     ModuleAttributeDefinition,
     ModuleAttributeOperator,
+    ModuleMacro,
     ModuleType,
     NotSupportedExpression,
     Quote,
@@ -309,6 +310,14 @@ defmodule Hologram.Compiler.TransformerTest do
 
       result = Transformer.transform(ast, %Context{})
       assert result == %Variable{name: :a}
+    end
+
+    test "__MODULE__ macro" do
+      code = "__MODULE__"
+      ast = ast(code)
+
+      result = Transformer.transform(ast, %Context{})
+      assert result == %ModuleMacro{}
     end
   end
 

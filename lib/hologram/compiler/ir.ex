@@ -113,6 +113,10 @@ defmodule Hologram.Compiler.IR do
     defstruct body: []
   end
 
+  defmodule ModuleMacro do
+    defstruct []
+  end
+
   defmodule Unquote do
     defstruct expression: nil
   end
