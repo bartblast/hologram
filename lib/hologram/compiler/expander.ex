@@ -36,6 +36,31 @@ defmodule Hologram.Compiler.Expander do
 
   defp expand_macros_in_expression(expr, _), do: expr
 
+  def expand_module_pseudo_variable({:defmodule, a, [{:__aliases__, b, module_segs}, [do: {:__block__, c, exprs}]]}) do
+    exprs =
+      Enum.reduce(exprs, [], fn expr, acc ->
+        acc ++ [expand_module_pseudo_variable(expr, module_segs)]
+      end)
+
+    {:defmodule, a, [{:__aliases__, b, module_segs}, [do: {:__block__, c, exprs}]]}
+  end
+
+  defp expand_module_pseudo_variable({:__MODULE__, line, _}, module_segs) do
+    {:__aliases__, line, module_segs}
+  end
+
+  defp expand_module_pseudo_variable(ast, module_segs) when is_tuple(ast) do
+    Tuple.to_list(ast)
+    |> expand_module_pseudo_variable(module_segs)
+    |> List.to_tuple()
+  end
+
+  defp expand_module_pseudo_variable(ast, module_segs) when is_list(ast) do
+    Enum.map(ast, &expand_module_pseudo_variable(&1, module_segs))
+  end
+
+  defp expand_module_pseudo_variable(ast, _), do: ast
+
   defp expand_use_directive({:use, _, [{:__aliases__, _, module_segs}]}) do
     Helpers.module(module_segs)
     |> expand_macro(:__using__, [nil])

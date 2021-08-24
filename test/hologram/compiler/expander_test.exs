@@ -240,6 +240,42 @@ defmodule Hologram.Compiler.ExpanderTest do
     end
   end
 
+  test "expand_module_pseudo_variable/1" do
+    code = """
+    defmodule Abc.Bcd do
+      def test(a, b) do
+        __MODULE__.some_fun(1, 2)
+      end
+    end
+    """
+
+    ast = ast(code)
+    result = Expander.expand_module_pseudo_variable(ast)
+
+    expected = {:defmodule, [line: 1],
+    [
+      {:__aliases__, [line: 1], [:Abc, :Bcd]},
+      [
+        do: {:__block__, [],
+         [
+           {:def, [line: 2],
+            [
+              {:test, [line: 2], [{:a, [line: 2], nil}, {:b, [line: 2], nil}]},
+              [
+                do: {:__block__, [],
+                 [
+                   {{:., [line: 3], [{:__aliases__, [line: 3], [:Abc, :Bcd]}, :some_fun]},
+                    [line: 3], [1, 2]}
+                 ]}
+              ]
+            ]}
+         ]}
+      ]
+    ]}
+
+    assert result == expected
+  end
+
   describe "expand_use_directives/1" do
     test "no use directives / non-expandable expressions only" do
       code = """
