@@ -80,6 +80,25 @@ defmodule Hologram.Compiler.FunctionCallTransformerTest do
     assert result == expected
   end
 
+  test "function call on __MODULE__ macro result" do
+    code = "__MODULE__.test(1, 2)"
+    ast = ast(code)
+    context = %Context{module: Hologram.Test.Fixtures.PlaceholderModule}
+
+    result = FunctionCallTransformer.transform(ast, context)
+
+    expected = %FunctionCall{
+      function: :test,
+      module: Hologram.Test.Fixtures.PlaceholderModule,
+      params: [
+        %IntegerType{value: 1},
+        %IntegerType{value: 2}
+      ]
+    }
+
+    assert result == expected
+  end
+
   test "Erlang function call" do
     code = ":timer.sleep(1_000)"
     ast = ast(code)
