@@ -36,13 +36,13 @@ defmodule Hologram.Compiler.Expander do
 
   defp expand_macros_in_expression(expr, _), do: expr
 
-  def expand_module_pseudo_variable({:defmodule, a, [{:__aliases__, b, module_segs}, [do: {:__block__, c, exprs}]]}) do
+  def expand_module_pseudo_variable({:defmodule, ast_1, [{:__aliases__, ast_2, module_segs}, [do: {:__block__, ast_3, exprs}]]}) do
     exprs =
       Enum.reduce(exprs, [], fn expr, acc ->
         acc ++ [expand_module_pseudo_variable(expr, module_segs)]
       end)
 
-    {:defmodule, a, [{:__aliases__, b, module_segs}, [do: {:__block__, c, exprs}]]}
+    {:defmodule, ast_1, [{:__aliases__, ast_2, module_segs}, [do: {:__block__, ast_3, exprs}]]}
   end
 
   defp expand_module_pseudo_variable({:__MODULE__, line, _}, module_segs) do
