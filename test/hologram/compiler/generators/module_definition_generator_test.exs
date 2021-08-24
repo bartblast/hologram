@@ -2,7 +2,7 @@ defmodule Hologram.Compiler.ModuleDefinitionGeneratorTest do
   use Hologram.TestCase, async: true
 
   alias Hologram.Compiler.{ModuleDefinitionGenerator, Opts}
-  alias Hologram.Compiler.IR.{AtomType, FunctionDefinition, IntegerType, ModuleAttributeDefinition, ModuleDefinition, Variable}
+  alias Hologram.Compiler.IR.{AtomType, FunctionDefinition, IntegerType, ModuleAttributeDefinition, ModuleDefinition, NotSupportedExpression, Variable}
 
   @module Abc.Bcd
 
@@ -55,6 +55,17 @@ defmodule Hologram.Compiler.ModuleDefinitionGeneratorTest do
       static $bcd = { type: 'atom', value: 'bcd_value' };
       }
       """
+
+      assert result == expected
+    end
+
+    test "behaviour callback" do
+      ir = %ModuleDefinition{
+        attributes: [%NotSupportedExpression{type: :behaviour_callback_spec}]
+      }
+
+      result = ModuleDefinitionGenerator.generate(ir, @module, %Opts{})
+      expected = "window.Elixir_Abc_Bcd = class Elixir_Abc_Bcd {\n}\n"
 
       assert result == expected
     end

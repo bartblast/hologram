@@ -1,12 +1,15 @@
 defmodule Hologram.Compiler.ModuleDefinitionGenerator do
   alias Hologram.Compiler.{Context, Formatter, FunctionDefinitionGenerator, Generator, Helpers, Opts}
+  alias Hologram.Compiler.IR.NotSupportedExpression
 
   def generate(ir, module, %Opts{} = opts) do
     class = Helpers.class_name(module)
     context = struct(Context, Map.from_struct(ir))
 
     attributes =
-      Enum.map(ir.attributes, &Generator.generate(&1, context, opts))
+      ir.attributes
+      |> Enum.reject(&match?(%NotSupportedExpression{}, &1))
+      |> Enum.map(&Generator.generate(&1, context, opts))
       |> Enum.join("\n")
 
     functions =
