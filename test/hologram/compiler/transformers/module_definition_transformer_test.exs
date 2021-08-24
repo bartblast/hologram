@@ -10,6 +10,7 @@ defmodule Hologram.Compiler.ModuleDefinitionTransformerTest do
     MacroDefinition,
     ModuleDefinition,
     ModuleAttributeDefinition,
+    ModuleType,
     Quote,
     RequireDirective,
     UseDirective,
@@ -82,6 +83,29 @@ defmodule Hologram.Compiler.ModuleDefinitionTransformerTest do
       ]
 
     assert result.functions == expected
+  end
+
+  test "__MODULE__ pseudo-variable expansion" do
+    code = """
+    defmodule Abc.Bcd do
+      def test do
+        __MODULE__
+      end
+    end
+    """
+
+    ast = ast(code)
+    result = ModuleDefinitionTransformer.transform(ast)
+
+    assert %ModuleDefinition{
+      functions: [
+        %FunctionDefinition{
+          body: [
+            %ModuleType{module: Abc.Bcd}
+          ]
+        }
+      ]
+    } = result
   end
 
   test "uses" do
