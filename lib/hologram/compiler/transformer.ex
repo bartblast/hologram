@@ -5,7 +5,6 @@ defmodule Hologram.Compiler.Transformer do
     IntegerType,
     ModuleAttributeOperator,
     ModuleMacro,
-    NotSupportedExpression,
     StringType,
     Variable
   }
@@ -142,12 +141,8 @@ defmodule Hologram.Compiler.Transformer do
 
   # OTHER
 
-  def transform({{:., _, [{:__aliases__, _, module_segs}, function]}, _, params}, %Context{} = context) do
-    FunctionCallTransformer.transform(module_segs, function, params, context)
-  end
-
-  def transform({{:., _, [Kernel, :to_string]}, _, params}, %Context{} = context) do
-    FunctionCallTransformer.transform([:Kernel], :to_string, params, context)
+  def transform({{:., _, _}, _, _} = ast, %Context{} = context) do
+    FunctionCallTransformer.transform(ast, context)
   end
 
   def transform({:quote, _, _} = ast, %Context{} = context) do
@@ -172,13 +167,7 @@ defmodule Hologram.Compiler.Transformer do
   end
 
   # this needs to be defined after variable case
-  def transform({function, _, params}, %Context{} = context) when is_atom(function) do
-    FunctionCallTransformer.transform([], function, params, context)
-  end
-
-  # NOT SUPPORTED
-
-  def transform({{:., _, [_, _]}, _, _} = ast, _) do
-    %NotSupportedExpression{ast: ast, type: :erlang_function_call}
+  def transform({function, _, _} = ast, %Context{} = context) when is_atom(function) do
+    FunctionCallTransformer.transform(ast, context)
   end
 end

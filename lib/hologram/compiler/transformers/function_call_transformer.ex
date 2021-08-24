@@ -1,9 +1,25 @@
 defmodule Hologram.Compiler.FunctionCallTransformer do
-  alias Hologram.Compiler.IR.FunctionCall
+  alias Hologram.Compiler.IR.{FunctionCall, NotSupportedExpression}
   alias Hologram.Compiler.{Context, Resolver, Transformer}
 
-  def transform(module_segs, function, params, %Context{} = context) do
-    params = transform_call_params(params, context)
+  def transform({{:., _, [{:__aliases__, _, module_segs}, function]}, _, params}, %Context{} = context) do
+    build_function_call(module_segs, function, params, context)
+  end
+
+  def transform({{:., _, [Kernel, :to_string]}, _, params}, %Context{} = context) do
+    build_function_call([:Kernel], :to_string, params, context)
+  end
+
+  def transform({{:., _, [_, _]}, _, _} = ast, _) do
+    %NotSupportedExpression{ast: ast, type: :erlang_function_call}
+  end
+
+  def transform({function, _, params}, %Context{} = context) do
+    build_function_call([], function, params, context)
+  end
+
+  defp build_function_call(module_segs, function, params, %Context{} = context) do
+    params = build_params(params, context)
     arity = Enum.count(params)
 
     module =
@@ -19,7 +35,7 @@ defmodule Hologram.Compiler.FunctionCallTransformer do
     %FunctionCall{module: module, function: function, params: params}
   end
 
-  defp transform_call_params(params, context) do
+  defp build_params(params, context) do
     params = unless is_list(params), do: [], else: params
     Enum.map(params, &Transformer.transform(&1, context))
   end

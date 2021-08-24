@@ -246,14 +246,14 @@ defmodule Hologram.Compiler.TransformerTest do
   end
 
   describe "other" do
-    test "local function call" do
+    test "function called without a module" do
       code = "test(123)"
       ast = ast(code)
 
       assert %FunctionCall{} = Transformer.transform(ast, %Context{})
     end
 
-    test "aliased module function call" do
+    test "function called on module" do
       code = "Hologram.Compiler.TransformerTest.test(123)"
       ast = ast(code)
 
@@ -272,29 +272,6 @@ defmodule Hologram.Compiler.TransformerTest do
       ast = ast(code)
 
       assert %Unquote{} = Transformer.transform(ast, %Context{})
-    end
-
-    test "string interpolation" do
-      code = "\"\#{sth}\""
-      ast = ast(code)
-
-      result = Transformer.transform(ast, %Context{})
-
-      expected =
-        %BinaryType{
-          parts: [
-            %TypeOperator{
-              left: %FunctionCall{
-                function: :to_string,
-                module: Kernel,
-                params: [%Variable{name: :sth}]
-              },
-              right: :binary
-            }
-          ]
-        }
-
-      assert result == expected
     end
 
     test "variable, last AST tuple elem is nil" do
@@ -318,18 +295,6 @@ defmodule Hologram.Compiler.TransformerTest do
 
       result = Transformer.transform(ast, %Context{})
       assert result == %ModuleMacro{}
-    end
-  end
-
-  describe "not supported" do
-    test "Erlang function call" do
-      code = ":timer.sleep(1_000)"
-      ast = ast(code)
-
-      result = Transformer.transform(ast, %Context{})
-      expected = %NotSupportedExpression{ast: ast, type: :erlang_function_call}
-
-      assert result == expected
     end
   end
 end
