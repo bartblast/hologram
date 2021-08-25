@@ -1,8 +1,149 @@
 defmodule Hologram.Compiler.HelpersTest do
   use Hologram.TestCase, async: true
 
-  alias Hologram.Compiler.Helpers
-  alias Hologram.Compiler.IR.{ModuleDefinition, UseDirective}
+  alias Hologram.Compiler.{Context, FunctionDefinitionTransformer, Helpers}
+  alias Hologram.Compiler.IR.{AccessOperator, AtomType, ModuleDefinition, UseDirective, Variable}
+
+  describe "aggregate_bindings/1" do
+    test "no bindings" do
+      # def test(1, 2) do
+      # end
+
+      params_ast = [1, 2]
+      params = FunctionDefinitionTransformer.transform_params(params_ast, %Context{})
+      result = Helpers.aggregate_bindings(params)
+
+      assert result == []
+    end
+
+    test "single binding in single param" do
+      # def test(1, %{a: x}) do
+      # end
+
+      params_ast = [1, {:%{}, [line: 2], [a: {:x, [line: 2], nil}]}]
+      params = FunctionDefinitionTransformer.transform_params(params_ast, %Context{})
+      result = Helpers.aggregate_bindings(params)
+
+      expected = [
+        x:
+          {1,
+           [
+             %AccessOperator{
+               key: %AtomType{value: :a}
+             },
+             %Variable{name: :x}
+           ]}
+      ]
+
+      assert result == expected
+    end
+
+    test "multiple bindings in single param" do
+      # def test(1, %{a: x, b: y}) do
+      # end
+
+      params_ast = [1, {:%{}, [line: 2], [a: {:x, [line: 2], nil}, b: {:y, [line: 2], nil}]}]
+      params = FunctionDefinitionTransformer.transform_params(params_ast, %Context{})
+      result = Helpers.aggregate_bindings(params)
+
+      expected = [
+        x:
+          {1,
+           [
+             %AccessOperator{
+               key: %AtomType{value: :a}
+             },
+             %Variable{name: :x}
+           ]},
+        y:
+          {1,
+           [
+             %AccessOperator{
+               key: %AtomType{value: :b}
+             },
+             %Variable{name: :y}
+           ]}
+      ]
+
+      assert result == expected
+    end
+
+    test "multiple bindings in multiple params" do
+      # def test(1, %{a: k, b: m}, 2, %{c: s, d: t}) do
+      # end
+
+      params_ast = [
+        1,
+        {:%{}, [line: 2], [a: {:k, [line: 2], nil}, b: {:m, [line: 2], nil}]},
+        2,
+        {:%{}, [line: 2], [c: {:s, [line: 2], nil}, d: {:t, [line: 2], nil}]}
+      ]
+
+      params = FunctionDefinitionTransformer.transform_params(params_ast, %Context{})
+      result = Helpers.aggregate_bindings(params)
+
+      expected = [
+        k:
+          {1,
+           [
+             %AccessOperator{
+               key: %AtomType{value: :a}
+             },
+             %Variable{name: :k}
+           ]},
+        m:
+          {1,
+           [
+             %AccessOperator{
+               key: %AtomType{value: :b}
+             },
+             %Variable{name: :m}
+           ]},
+        s:
+          {3,
+           [
+             %AccessOperator{
+               key: %AtomType{value: :c}
+             },
+             %Variable{name: :s}
+           ]},
+        t:
+          {3,
+           [
+             %AccessOperator{
+               key: %AtomType{value: :d}
+             },
+             %Variable{name: :t}
+           ]}
+      ]
+
+      assert result == expected
+    end
+
+    test "sorting" do
+      # def test(y, z) do
+      # end
+
+      params_ast = [{:y, [line: 2], nil}, {:x, [line: 2], nil}]
+      params = FunctionDefinitionTransformer.transform_params(params_ast, %Context{})
+      result = Helpers.aggregate_bindings(params)
+
+      expected = [
+        x:
+          {1,
+           [
+             %Variable{name: :x}
+           ]},
+        y:
+          {0,
+           [
+             %Variable{name: :y}
+           ]}
+      ]
+
+      assert result == expected
+    end
+  end
 
   test "class_name/1" do
     assert Helpers.class_name(Abc.Bcd) == "Elixir_Abc_Bcd"

@@ -1,6 +1,19 @@
 defmodule Hologram.Compiler.Helpers do
+  alias Hologram.Compiler.Binder
   alias Hologram.Compiler.IR.ModuleDefinition
   alias Hologram.Typespecs, as: T
+
+  def aggregate_bindings(params) do
+    Enum.with_index(params)
+    |> Enum.reduce([], fn {param, idx}, acc ->
+      Binder.bind(param)
+      |> Enum.reduce(acc, fn binding, acc ->
+        name = List.last(binding).name
+        if Keyword.has_key?(acc, name), do: acc, else: Keyword.put(acc, name, {idx, binding})
+      end)
+    end)
+    |> Enum.sort()
+  end
 
   @doc """
   Returns the corresponding class name which can be used in JavaScript.

@@ -1,7 +1,7 @@
 defmodule Hologram.Compiler.MacroDefinitionTransformer do
-  import Hologram.Compiler.FunctionDefinitionTransformer, only: [aggregate_bindings: 1, transform_params: 2]
+  import Hologram.Compiler.FunctionDefinitionTransformer, only: [transform_params: 2]
 
-  alias Hologram.Compiler.{Context, Transformer}
+  alias Hologram.Compiler.{Context, Helpers, Transformer}
   alias Hologram.Compiler.IR.MacroDefinition
 
   def transform(ast, %Context{} = context) do
@@ -9,7 +9,7 @@ defmodule Hologram.Compiler.MacroDefinitionTransformer do
 
     params = transform_params(params, context)
     arity = Enum.count(params)
-    bindings = aggregate_bindings(params)
+    bindings = Helpers.aggregate_bindings(params)
     body = Enum.map(body, &Transformer.transform(&1, context))
 
     %MacroDefinition{
