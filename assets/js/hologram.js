@@ -7,6 +7,11 @@ import cloneDeep from "lodash/cloneDeep";
 import Runtime from "./hologram/runtime"
 import Utils from "./hologram/utils"
 
+// Elixir standard library
+import IO from "./hologram/elixir/io"
+import Kernel from "./hologram/elixir/kernel"
+import Map from "./hologram/elixir/map"
+
 export default class Hologram {
   // TODO: refactor & test
   static getRuntime(window) {
@@ -90,38 +95,8 @@ window.Elixir = class {
   }
 }
 
-window.Elixir_IO = class {
-  // TODO: refactor & test
-  static inspect(arg) {
-    console.debug(arg)
-  }
-}
-
-window.Elixir_Kernel = class {
-  // TODO: refactor & test
-  static $add(left, right) {
-    let type = left.type == "integer" && right.type == "integer" ? "integer" : "float"
-    return {type: type, value: left.value + right.value}
-  }
-
-  // TODO: refactor & test
-  static $dot(left, right) {
-    return cloneDeep(left.data[Utils.serialize(right)])
-  }
-
-  // TODO: refactor & test
-  static to_string(arg) {
-    return {type: 'string', value: `${arg.value.toString()}`}
-  }
-}
-
-window.Elixir_Map = class {
-  // TODO: refactor & test
-  static put(map, key, value) {
-    let mapClone = cloneDeep(map)
-    mapClone.data[Utils.serialize(key)] = value
-    return mapClone;
-  }
-}
+window.Elixir_IO = IO
+window.Elixir_Kernel = Kernel
+window.Elixir_Map = Map
 
 window.Hologram = Hologram
