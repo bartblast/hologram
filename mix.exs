@@ -18,7 +18,8 @@ defmodule Demo.MixProject do
   defp preferred_cli_env do
     [
       "test.all": :test,
-      "test.e2e": :test
+      "test.e2e": :test,
+      "test.js": :test
     ]
   end
 
@@ -88,7 +89,8 @@ defmodule Demo.MixProject do
       test: ["test --exclude e2e"],
       # we run mix compile here to trigger the Hologram compiler (to reload routes)
       "test.all": ["assets.compile", "cmd mix compile", &test_js/1, "test --include e2e"],
-      "test.e2e": ["assets.compile", "cmd mix compile", "test --include e2e"]
+      "test.e2e": ["assets.compile", "cmd mix compile", "test --include e2e"],
+      "test.js": ["assets.compile", &test_js/1]
     ]
   end
 
@@ -96,9 +98,16 @@ defmodule Demo.MixProject do
     Mix.shell().cmd("cd assets && node_modules/webpack/bin/webpack.js --mode development")
   end
 
-  defp test_js(_) do
+  defp test_js(args) do
+    cmd =
+      if Enum.empty?(args) do
+        ["test"]
+      else
+        ["run", "test-file", "../#{hd(args)}"]
+      end
+
     opts = [cd: "assets", into: IO.stream(:stdio, :line)]
-    {_, status} = System.cmd("npm", ["test"], opts)
+    {_, status} = System.cmd("npm", cmd, opts)
 
     if status > 0 do
       Mix.raise "JavaScript tests failed!"

@@ -5,7 +5,7 @@
   "scripts": {
     "deploy": "NODE_ENV=production webpack --mode production",
     "test": "mochapack --mode development --webpack-config webpack.config.test.js \"../test/js/**/*.js\" --color",
-    "test-file": "mochapack --mode development --webpack-config webpack.config.test.js",
+    "test-file": "mochapack --mode development --webpack-config webpack.config.test.js --color",
     "watch": "webpack --mode development --watch"
   },
   "dependencies": {
