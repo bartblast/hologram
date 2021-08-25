@@ -16,6 +16,15 @@ defmodule Hologram.Compiler.Helpers do
     |> Enum.join("_")
   end
 
+  def fetch_block_body(ast) do
+    case ast do
+      {:__block__, _, body} ->
+        body
+      _ ->
+        [ast]
+    end
+  end
+
   @spec get_components(T.module_definitions_map()) :: list(%ModuleDefinition{})
   def get_components(module_defs_map) do
     module_defs_map
