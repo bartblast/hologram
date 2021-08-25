@@ -1,5 +1,5 @@
 defmodule Hologram.Compiler.Helpers do
-  alias Hologram.Compiler.Binder
+  alias Hologram.Compiler.{Binder, Transformer}
   alias Hologram.Compiler.IR.ModuleDefinition
   alias Hologram.Typespecs, as: T
 
@@ -134,6 +134,11 @@ defmodule Hologram.Compiler.Helpers do
   def module_segments(module)  do
     Module.split(module)
     |> Enum.map(&String.to_atom/1)
+  end
+
+  def transform_params(params, context) do
+    if(params, do: params, else: [])
+    |> Enum.map(&Transformer.transform(&1, context))
   end
 
   @doc """

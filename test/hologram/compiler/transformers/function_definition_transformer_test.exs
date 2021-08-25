@@ -130,46 +130,4 @@ defmodule Hologram.Compiler.FunctionDefinitionTransformerTest do
       assert %FunctionDefinition{} = FunctionDefinitionTransformer.transform(ast, @context)
     end
   end
-
-  describe "transform_params/2" do
-    test "no params" do
-      # def test do
-      # end
-
-      params = nil
-      result = FunctionDefinitionTransformer.transform_params(params, @context)
-
-      assert result == []
-    end
-
-    test "vars" do
-      # def test(a, b) do
-      # end
-
-      params = [{:a, [line: 1], nil}, {:b, [line: 1], nil}]
-      result = FunctionDefinitionTransformer.transform_params(params, @context)
-
-      expected = [
-        %Variable{name: :a},
-        %Variable{name: :b}
-      ]
-
-      assert result == expected
-    end
-
-    test "primitive types" do
-      # def test(:a, 2) do
-      # end
-
-      params = [:a, 2]
-      result = FunctionDefinitionTransformer.transform_params(params, @context)
-
-      expected = [
-        %AtomType{value: :a},
-        %IntegerType{value: 2}
-      ]
-
-      assert result == expected
-    end
-  end
 end

@@ -11,16 +11,11 @@ defmodule Hologram.Compiler.FunctionDefinitionTransformer do
   end
 
   defp build_function_definition(name, params, body, context) do
-    params = transform_params(params, context)
+    params = Helpers.transform_params(params, context)
     arity = Enum.count(params)
     bindings = Helpers.aggregate_bindings(params)
     body = Enum.map(body, &Transformer.transform(&1, context))
 
     %FunctionDefinition{name: name, arity: arity, params: params, bindings: bindings, body: body}
-  end
-
-  def transform_params(params, context) do
-    if(params, do: params, else: [])
-    |> Enum.map(&Transformer.transform(&1, context))
   end
 end

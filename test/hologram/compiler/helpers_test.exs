@@ -1,8 +1,8 @@
 defmodule Hologram.Compiler.HelpersTest do
   use Hologram.TestCase, async: true
 
-  alias Hologram.Compiler.{Context, FunctionDefinitionTransformer, Helpers}
-  alias Hologram.Compiler.IR.{AccessOperator, AtomType, ModuleDefinition, UseDirective, Variable}
+  alias Hologram.Compiler.{Context, Helpers}
+  alias Hologram.Compiler.IR.{AccessOperator, AtomType, IntegerType, ModuleDefinition, UseDirective, Variable}
 
   describe "aggregate_bindings/1" do
     test "no bindings" do
@@ -10,7 +10,7 @@ defmodule Hologram.Compiler.HelpersTest do
       # end
 
       params_ast = [1, 2]
-      params = FunctionDefinitionTransformer.transform_params(params_ast, %Context{})
+      params = Helpers.transform_params(params_ast, %Context{})
       result = Helpers.aggregate_bindings(params)
 
       assert result == []
@@ -21,7 +21,7 @@ defmodule Hologram.Compiler.HelpersTest do
       # end
 
       params_ast = [1, {:%{}, [line: 2], [a: {:x, [line: 2], nil}]}]
-      params = FunctionDefinitionTransformer.transform_params(params_ast, %Context{})
+      params = Helpers.transform_params(params_ast, %Context{})
       result = Helpers.aggregate_bindings(params)
 
       expected = [
@@ -43,7 +43,7 @@ defmodule Hologram.Compiler.HelpersTest do
       # end
 
       params_ast = [1, {:%{}, [line: 2], [a: {:x, [line: 2], nil}, b: {:y, [line: 2], nil}]}]
-      params = FunctionDefinitionTransformer.transform_params(params_ast, %Context{})
+      params = Helpers.transform_params(params_ast, %Context{})
       result = Helpers.aggregate_bindings(params)
 
       expected = [
@@ -79,7 +79,7 @@ defmodule Hologram.Compiler.HelpersTest do
         {:%{}, [line: 2], [c: {:s, [line: 2], nil}, d: {:t, [line: 2], nil}]}
       ]
 
-      params = FunctionDefinitionTransformer.transform_params(params_ast, %Context{})
+      params = Helpers.transform_params(params_ast, %Context{})
       result = Helpers.aggregate_bindings(params)
 
       expected = [
@@ -125,7 +125,7 @@ defmodule Hologram.Compiler.HelpersTest do
       # end
 
       params_ast = [{:y, [line: 2], nil}, {:x, [line: 2], nil}]
-      params = FunctionDefinitionTransformer.transform_params(params_ast, %Context{})
+      params = Helpers.transform_params(params_ast, %Context{})
       result = Helpers.aggregate_bindings(params)
 
       expected = [
@@ -280,6 +280,48 @@ defmodule Hologram.Compiler.HelpersTest do
 
     test "string" do
       assert Helpers.module_segments("Abc.Bcd") == [:Abc, :Bcd]
+    end
+  end
+
+  describe "transform_params/2" do
+    test "no params" do
+      # def test do
+      # end
+
+      params = nil
+      result = Helpers.transform_params(params, %Context{})
+
+      assert result == []
+    end
+
+    test "vars" do
+      # def test(a, b) do
+      # end
+
+      params = [{:a, [line: 1], nil}, {:b, [line: 1], nil}]
+      result = Helpers.transform_params(params, %Context{})
+
+      expected = [
+        %Variable{name: :a},
+        %Variable{name: :b}
+      ]
+
+      assert result == expected
+    end
+
+    test "primitive types" do
+      # def test(:a, 2) do
+      # end
+
+      params = [:a, 2]
+      result = Helpers.transform_params(params, %Context{})
+
+      expected = [
+        %AtomType{value: :a},
+        %IntegerType{value: 2}
+      ]
+
+      assert result == expected
     end
   end
 
