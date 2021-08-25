@@ -12,6 +12,7 @@ defmodule Hologram.Compiler.Transformer do
   alias Hologram.Compiler.{
     AdditionOperatorTransformer,
     AliasTransformer,
+    AnonymousFunctionTypeTransformer,
     BinaryTypeTransformer,
     DotOperatorTransformer,
     FunctionDefinitionTransformer,
@@ -37,6 +38,10 @@ defmodule Hologram.Compiler.Transformer do
   alias Hologram.Compiler.Context
 
   # TYPES
+
+  def transform({:fn, _, _} = ast, %Context{} = context) do
+    AnonymousFunctionTypeTransformer.transform(ast, context)
+  end
 
   def transform(ast, _) when is_atom(ast) and ast not in [false, true] do
     %AtomType{value: ast}

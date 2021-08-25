@@ -4,6 +4,7 @@ defmodule Hologram.Compiler.TransformerTest do
   alias Hologram.Compiler.IR.{
     AdditionOperator,
     Alias,
+    AnonymousFunctionType,
     AtomType,
     BinaryType,
     BooleanType,
@@ -36,6 +37,13 @@ defmodule Hologram.Compiler.TransformerTest do
   alias Hologram.Compiler.{Context, Transformer}
 
   describe "types" do
+    test "anonymous function" do
+      code = "fn -> 1 end"
+      ast = ast(code)
+
+      assert %AnonymousFunctionType{} = Transformer.transform(ast, %Context{})
+    end
+
     test "atom" do
       code = ":test"
       ast = ast(code)
