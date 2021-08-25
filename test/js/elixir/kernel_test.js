@@ -3,40 +3,40 @@ import Kernel from "../../../assets/js/hologram/elixir/kernel";
 
 describe("$add()", () => {
   it("adds integer and integer", () => {
-    const val1 = {type: "integer", value: 1}
-    const val2 = {type: "integer", value: 2}
+    const arg1 = {type: "integer", value: 1}
+    const arg2 = {type: "integer", value: 2}
 
-    const result = Kernel.$add(val1, val2)
+    const result = Kernel.$add(arg1, arg2)
     const expected = {type: "integer", value: 3}
 
     assert.deepStrictEqual(result, expected) 
   })
 
   it("adds integer and float", () => {
-    const val1 = {type: "integer", value: 1}
-    const val2 = {type: "float", value: 2.0}
+    const arg1 = {type: "integer", value: 1}
+    const arg2 = {type: "float", value: 2.0}
 
-    const result = Kernel.$add(val1, val2)
+    const result = Kernel.$add(arg1, arg2)
     const expected = {type: "float", value: 3.0}
 
     assert.deepStrictEqual(result, expected) 
   })
 
   it("adds float and integer", () => {
-    const val1 = {type: "float", value: 1.0}
-    const val2 = {type: "integer", value: 2}
+    const arg1 = {type: "float", value: 1.0}
+    const arg2 = {type: "integer", value: 2}
 
-    const result = Kernel.$add(val1, val2)
+    const result = Kernel.$add(arg1, arg2)
     const expected = {type: "float", value: 3.0}
 
     assert.deepStrictEqual(result, expected) 
   })
 
   it("adds float and float", () => {
-    const val1 = {type: "float", value: 1.0}
-    const val2 = {type: "float", value: 2.0}
+    const arg1 = {type: "float", value: 1.0}
+    const arg2 = {type: "float", value: 2.0}
 
-    const result = Kernel.$add(val1, val2)
+    const result = Kernel.$add(arg1, arg2)
     const expected = {type: "float", value: 3.0}
 
     assert.deepStrictEqual(result, expected) 
