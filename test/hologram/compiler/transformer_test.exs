@@ -10,6 +10,7 @@ defmodule Hologram.Compiler.TransformerTest do
     DotOperator,
     FunctionDefinition,
     FunctionCall,
+    IfExpression,
     Import,
     IntegerType,
     ListType,
@@ -21,7 +22,6 @@ defmodule Hologram.Compiler.TransformerTest do
     ModuleAttributeOperator,
     ModuleMacro,
     ModuleType,
-    NotSupportedExpression,
     Quote,
     RequireDirective,
     StringType,
@@ -242,6 +242,15 @@ defmodule Hologram.Compiler.TransformerTest do
       ast = ast(code)
 
       assert %UseDirective{} = Transformer.transform(ast, %Context{})
+    end
+  end
+
+  describe "control flow" do
+    test "if expression" do
+      code = "if true, do: 1, else: 2"
+      ast = ast(code)
+
+      assert %IfExpression{} = Transformer.transform(ast, %Context{})
     end
   end
 

@@ -103,6 +103,12 @@ defmodule Hologram.Compiler.IR do
     defstruct module: nil
   end
 
+  # CONTROL FLOW
+
+  defmodule IfExpression do
+    defstruct condition: nil, do: nil, else: nil
+  end
+
   # OTHER
 
   defmodule FunctionCall do

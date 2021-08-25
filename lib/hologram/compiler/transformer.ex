@@ -16,6 +16,7 @@ defmodule Hologram.Compiler.Transformer do
     DotOperatorTransformer,
     FunctionDefinitionTransformer,
     FunctionCallTransformer,
+    IfExpressionTransformer,
     ImportTransformer,
     ListTypeTransformer,
     MacroDefinitionTransformer,
@@ -137,6 +138,12 @@ defmodule Hologram.Compiler.Transformer do
 
   def transform({:use, _, [{:__aliases__, _, module_segs}]}, _) do
     UseDirectiveTransformer.transform(module_segs)
+  end
+
+  # CONTROL FLOW
+
+  def transform({:if, _, _} = ast, %Context{} = context) do
+    IfExpressionTransformer.transform(ast, context)
   end
 
   # OTHER
