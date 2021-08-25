@@ -42,6 +42,10 @@ defmodule Hologram.Compiler.Transformer do
     %AtomType{value: ast}
   end
 
+  def transform({:<<>>, _, parts}, %Context{} = context) do
+    BinaryTypeTransformer.transform(parts, context)
+  end
+
   def transform(ast, _) when is_boolean(ast) do
     %BooleanType{value: ast}
   end
@@ -50,20 +54,20 @@ defmodule Hologram.Compiler.Transformer do
     %IntegerType{value: ast}
   end
 
-  def transform({:__aliases__, _, module_segs}, %Context{} = context) do
-    ModuleTypeTransformer.transform(module_segs, context)
-  end
-
-  def transform(ast, _) when is_binary(ast) do
-    %StringType{value: ast}
-  end
-
   def transform(ast, %Context{} = context) when is_list(ast) do
     ListTypeTransformer.transform(ast, context)
   end
 
   def transform({:%{}, _, ast}, %Context{} = context) do
     MapTypeTransformer.transform(ast, context)
+  end
+
+  def transform({:__aliases__, _, module_segs}, %Context{} = context) do
+    ModuleTypeTransformer.transform(module_segs, context)
+  end
+
+  def transform(ast, _) when is_binary(ast) do
+    %StringType{value: ast}
   end
 
   def transform({:%, _, [{_, _, module_segs}, ast]}, %Context{} = context) do
@@ -76,10 +80,6 @@ defmodule Hologram.Compiler.Transformer do
 
   def transform({_, _} = ast, %Context{} = context) do
     TupleTypeTransformer.transform(ast, context)
-  end
-
-  def transform({:<<>>, _, parts}, %Context{} = context) do
-    BinaryTypeTransformer.transform(parts, context)
   end
 
   # OPERATORS
