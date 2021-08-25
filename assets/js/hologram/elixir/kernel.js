@@ -1,9 +1,9 @@
 import Utils from "../utils"
 
 export default class Kernel {
-  static $add(val1, val2) {
-    const type = val1.type == "integer" && val2.type == "integer" ? "integer" : "float"
-    return {type: type, value: val1.value + val2.value}
+  static $add(arg1, arg2) {
+    const type = arg1.type == "integer" && arg2.type == "integer" ? "integer" : "float"
+    return {type: type, value: arg1.value + arg2.value}
   }
 
   static $dot(left, right) {
