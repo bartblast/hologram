@@ -1,5 +1,5 @@
 defmodule Hologram.Compiler.FunctionDefinitionTransformer do
-  alias Hologram.Compiler.{Binder, Context, Transformer}
+  alias Hologram.Compiler.{Binder, Context, Helpers, Transformer}
   alias Hologram.Compiler.IR.FunctionDefinition
 
   def transform({:def, _, [{name, _, params}, [do: {:__block__, _, body}]]}, %Context{} = context) when is_list(params) do
