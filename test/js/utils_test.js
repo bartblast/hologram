@@ -1,6 +1,16 @@
 import { assert } from "./support/commons";
 import Utils from "../../assets/js/hologram/utils";
 
+describe("clone()", () => {
+  it("clones the given value", () => {
+    const value = {a: 1, b: {c: 3, d: 4}}
+    const result = Utils.clone(value)
+
+    assert.deepStrictEqual(result, value) 
+    assert.notEqual(result, value)
+  })
+})
+
 describe("keywordToMap()", () => {
   it("converts empty keyword list", () => {
     const keyword = {type: "list", data: []}

@@ -1,4 +1,11 @@
+// see: https://www.blazemeter.com/blog/the-correct-way-to-import-lodash-libraries-a-benchmark
+import cloneDeep from "lodash/cloneDeep";
+
 export default class Utils {
+  static clone(value) {
+    return cloneDeep(value)
+  }
+
   static keywordToMap(keyword) {
     return keyword.data.reduce((acc, elem) => {
       const key = Utils.serialize(elem.data[0])
