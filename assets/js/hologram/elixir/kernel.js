@@ -10,6 +10,16 @@ export default class Kernel {
     return Utils.clone(left.data[Utils.serialize(right)])
   }
 
+  static if(condition, doClause, elseClause) {
+    const conditionResult = condition()
+
+    if (Utils.isTruthy(conditionResult)) {
+      return doClause()
+    } else {
+      return elseClause()
+    }
+  }
+
   static to_string(arg) {
     return {type: 'string', value: `${arg.value.toString()}`}
   }
