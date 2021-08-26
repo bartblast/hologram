@@ -4,15 +4,18 @@ defmodule Hologram.Compiler.ModuleDefinitionTransformerTest do
   alias Hologram.Compiler.IR.{
     AdditionOperator,
     Alias,
+    AtomType,
     FunctionDefinition,
     Import,
     IntegerType,
+    ListType,
     MacroDefinition,
     ModuleDefinition,
     ModuleAttributeDefinition,
     ModuleType,
     Quote,
     RequireDirective,
+    TupleType,
     UseDirective,
     Variable
   }
@@ -67,22 +70,20 @@ defmodule Hologram.Compiler.ModuleDefinitionTransformerTest do
     assert %ModuleDefinition{} = result = ModuleDefinitionTransformer.transform(ast)
 
     expected =
-      [
-        %FunctionDefinition{
-          arity: 1,
-          bindings: [b: {0, [%Variable{name: :b}]}],
-          body: [
-            %AdditionOperator{
-              left: %IntegerType{value: 123},
-              right: %Variable{name: :b}
-            }
-          ],
-          name: :test_function,
-          params: [%Variable{name: :b}]
-        }
-      ]
+      %FunctionDefinition{
+        arity: 1,
+        bindings: [b: {0, [%Variable{name: :b}]}],
+        body: [
+          %AdditionOperator{
+            left: %IntegerType{value: 123},
+            right: %Variable{name: :b}
+          }
+        ],
+        name: :test_function,
+        params: [%Variable{name: :b}]
+      }
 
-    assert result.functions == expected
+    assert Enum.member?(result.functions, expected)
   end
 
   test "__MODULE__ pseudo-variable expansion" do
@@ -97,15 +98,18 @@ defmodule Hologram.Compiler.ModuleDefinitionTransformerTest do
     ast = ast(code)
     result = ModuleDefinitionTransformer.transform(ast)
 
-    assert %ModuleDefinition{
-      functions: [
-        %FunctionDefinition{
-          body: [
-            %ModuleType{module: Abc.Bcd}
-          ]
-        }
-      ]
-    } = result
+    expected =
+      %FunctionDefinition{
+        arity: 0,
+        bindings: [],
+        body: [
+          %ModuleType{module: Abc.Bcd}
+        ],
+        name: :test,
+        params: []
+      }
+
+    assert Enum.member?(result.functions, expected)
   end
 
   test "uses" do
@@ -243,14 +247,16 @@ defmodule Hologram.Compiler.ModuleDefinitionTransformerTest do
     ast = ast(code)
     assert %ModuleDefinition{} = result = ModuleDefinitionTransformer.transform(ast)
 
-    expected = [
+    expected_1 =
       %FunctionDefinition{
         arity: 0,
         bindings: [],
         body: [%IntegerType{value: 1}],
         name: :test_1,
         params: []
-      },
+      }
+
+    expected_2 =
       %FunctionDefinition{
         arity: 0,
         bindings: [],
@@ -258,9 +264,50 @@ defmodule Hologram.Compiler.ModuleDefinitionTransformerTest do
         name: :test_2,
         params: []
       }
-    ]
 
-    assert result.functions == expected
+    assert Enum.count(result.functions) == 3
+    assert Enum.member?(result.functions, expected_1)
+    assert Enum.member?(result.functions, expected_2)
+  end
+
+  test "__info__/1 module callback injection" do
+    code = """
+    defmodule Hologram.Test.Fixtures.PlaceholderModule do
+      def test_1, do: 1
+      def test_2(x), do: 2
+    end
+    """
+
+    ast = ast(code)
+    assert %ModuleDefinition{} = result = ModuleDefinitionTransformer.transform(ast)
+
+    expected =
+      %FunctionDefinition{
+        arity: 1,
+        bindings: [],
+        body: [
+          %ListType{
+            data: [
+              %TupleType{
+                data: [
+                  %AtomType{value: :test_1},
+                  %IntegerType{value: 0}
+                ]
+              },
+              %TupleType{
+                data: [
+                  %AtomType{value: :test_2},
+                  %IntegerType{value: 1}
+                ]
+              }
+            ]
+          }
+        ],
+        name: :__info__,
+        params: [%AtomType{value: :functions}]
+      }
+
+    assert Enum.member?(result.functions, expected)
   end
 
   test "macros" do
