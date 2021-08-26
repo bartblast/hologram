@@ -1,4 +1,6 @@
 defmodule Hologram.Compiler.FunctionDefinitionGenerator do
+  import Hologram.Compiler.Encoder.Commons
+
   alias Hologram.Compiler.{Context, Formatter, Generator, MapKeyGenerator, Opts}
   alias Hologram.Compiler.IR.{AccessOperator, Variable}
 
@@ -30,8 +32,8 @@ defmodule Hologram.Compiler.FunctionDefinitionGenerator do
     Enum.reduce(variants, "", fn variant, acc ->
       statement = if acc == "", do: "if", else: "else if"
       params = generate_params(variant, context)
-      vars = generate_vars(variant, context)
-      body = generate_exprs(variant, context, opts)
+      vars = generate_vars(variant.bindings, context, "\n")
+      body = generate_expressions(variant.body, context, opts, "\n")
 
       acc
       |> Formatter.maybe_append_new_line("#{statement} (Hologram.patternMatchFunctionArgs(#{params}, arguments)) {")
@@ -39,19 +41,6 @@ defmodule Hologram.Compiler.FunctionDefinitionGenerator do
       |> Formatter.maybe_append_new_line(body)
       |> Formatter.maybe_append_new_line("}")
     end)
-  end
-
-  defp generate_expr(expr, idx, expr_count, context, opts) do
-    return = if idx == expr_count - 1, do: "return ", else: ""
-    "#{return}#{Generator.generate(expr, context, opts)};"
-  end
-
-  defp generate_exprs(variant, context, opts) do
-    expr_count = Enum.count(variant.body)
-
-    Enum.with_index(variant.body)
-    |> Enum.map(fn {expr, idx} -> generate_expr(expr, idx, expr_count, context, opts) end)
-    |> Enum.join("\n")
   end
 
   defp generate_params(variant, context) do
@@ -80,8 +69,8 @@ defmodule Hologram.Compiler.FunctionDefinitionGenerator do
     "#{value};"
   end
 
-  defp generate_vars(variant, context) do
-    Enum.map(variant.bindings, &generate_var(&1, context))
-    |> Enum.join("\n")
+  def generate_vars(bindings, context, separator) do
+    Enum.map(bindings, &generate_var(&1, context))
+    |> Enum.join(separator)
   end
 end
