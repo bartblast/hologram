@@ -1,4 +1,4 @@
-defmodule Hologram.Compiler.StrintTypeEncoderTest do
+defmodule Hologram.Compiler.StringTypeEncoderTest do
   use Hologram.TestCase, async: true
 
   alias Hologram.Compiler.{Context, Encoder, Opts}
