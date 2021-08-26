@@ -218,15 +218,16 @@
 
 #### Other
 
-| Feature                       | Status             |
-| ----------------------------- |:------------------:|
-| Codepoints                    | :x:                |
-| Custom Sigils                 | :x:                |
-| Default Arguments             | :x:                |
-| Function Capturing            | :x:                |
-| Map Update Syntax             | :x:                |
-| Module Attribute Accumulation | :x:                |
-| Module Nesting                | :x:                |
+| Feature                        | Status             |
+| ------------------------------ |:------------------:|
+| Codepoints                     | :x:                |
+| Custom Sigils                  | :x:                |
+| Default Arguments              | :x:                |
+| Function Capturing             | :x:                |
+| Map Update Syntax              | :x:                |
+| Module Attribute Accumulation  | :x:                |
+| Module \_\_info\_\_/1 callback | :x:                |
+| Module Nesting                 | :x:                |
 
 #### Not on Roadmap
 * Types: PID, Port, Reference
