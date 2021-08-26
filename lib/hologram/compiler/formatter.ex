@@ -3,6 +3,15 @@ defmodule Hologram.Compiler.Formatter do
     output <> "\n"
   end
 
+  def maybe_append_new_expression(output, "") do
+    output
+  end
+
+  def maybe_append_new_expression(output, str) do
+    separator = if String.ends_with?(output, " "), do: "", else: " "
+    output <> separator <> str
+  end
+
   def maybe_append_new_line(output, "") do
     output
   end

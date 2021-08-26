@@ -7,6 +7,23 @@ defmodule Hologram.Compiler.FormatterTest do
     assert result == "abc\n"
   end
 
+  describe "maybe_append_new_expression/2" do
+    test "empty string appended" do
+      result = Formatter.maybe_append_new_expression("abc", "")
+      assert result == "abc"
+    end
+
+    test "non-empty string appended to a string ending with a space" do
+      result = Formatter.maybe_append_new_expression("abc ", "xyz")
+      assert result == "abc xyz"
+    end
+
+    test "non-empty string appended to a string not ending with a space" do
+      result = Formatter.maybe_append_new_expression("abc", "xyz")
+      assert result == "abc xyz"
+    end
+  end
+
   describe "maybe_append_new_line/2" do
     test "empty string appended" do
       result = Formatter.maybe_append_new_line("abc", "")
