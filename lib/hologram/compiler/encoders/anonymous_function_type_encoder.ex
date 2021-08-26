@@ -5,7 +5,7 @@ defimpl Encoder, for: AnonymousFunctionType  do
   import Hologram.Compiler.Encoder.Commons
 
   def encode(%{bindings: bindings, body: body}, %Context{} = context, %Opts{} = opts) do
-    vars = Hologram.Compiler.FunctionDefinitionGenerator.generate_vars(bindings, context, " ")
+    vars = generate_vars(bindings, context, " ")
     body = generate_expressions(body, context, opts, " ")
 
     "(function() {"

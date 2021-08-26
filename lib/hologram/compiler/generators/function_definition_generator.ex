@@ -1,8 +1,6 @@
 defmodule Hologram.Compiler.FunctionDefinitionGenerator do
   import Hologram.Compiler.Encoder.Commons
-
-  alias Hologram.Compiler.{Context, Formatter, Generator, MapKeyGenerator, Opts}
-  alias Hologram.Compiler.IR.{AccessOperator, Variable}
+  alias Hologram.Compiler.{Context, Formatter, Generator, Opts}
 
   def generate(name, variants, %Context{} = context, %Opts{} = opts) do
     body = generate_body(variants, context, opts)
@@ -49,28 +47,5 @@ defmodule Hologram.Compiler.FunctionDefinitionGenerator do
       |> Enum.join(", ")
 
     "[#{params}]"
-  end
-
-  defp generate_var({name, {idx, path}}, context) do
-    acc = "let #{name} = arguments[#{idx}]"
-
-    value =
-      Enum.reduce(path, acc, fn type, acc ->
-        acc <>
-          case type do
-            %AccessOperator{key: key} ->
-              ".data['#{MapKeyGenerator.generate(key, context)}']"
-
-            %Variable{} ->
-              ""
-          end
-      end)
-
-    "#{value};"
-  end
-
-  def generate_vars(bindings, context, separator) do
-    Enum.map(bindings, &generate_var(&1, context))
-    |> Enum.join(separator)
   end
 end
