@@ -11,6 +11,22 @@ describe("clone()", () => {
   })
 })
 
+describe("isFalse()", () => {
+  it("is false", () => {
+    const arg = {type: "boolean", value: false}
+    const result = Utils.isFalse(arg)
+
+    assert.isTrue(result)
+  })
+
+  it("is not false", () => {
+    const arg = {type: "boolean", value: true}
+    const result = Utils.isFalse(arg)
+    
+    assert.isFalse(result)
+  })
+})
+
 describe("keywordToMap()", () => {
   it("converts empty keyword list", () => {
     const keyword = {type: "list", data: []}

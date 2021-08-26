@@ -6,6 +6,10 @@ export default class Utils {
     return cloneDeep(value)
   }
 
+  static isFalse(arg) {
+    return arg.type == "boolean" && arg.value == false
+  }
+
   static keywordToMap(keyword) {
     return keyword.data.reduce((acc, elem) => {
       const key = Utils.serialize(elem.data[0])
