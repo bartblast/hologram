@@ -5,6 +5,7 @@ defmodule Hologram.Compiler.Transformer do
     IntegerType,
     ModuleAttributeOperator,
     ModuleMacro,
+    NilType,
     StringType,
     Variable
   }
@@ -43,7 +44,7 @@ defmodule Hologram.Compiler.Transformer do
     AnonymousFunctionTypeTransformer.transform(ast, context)
   end
 
-  def transform(ast, _) when is_atom(ast) and ast not in [false, true] do
+  def transform(ast, _) when is_atom(ast) and ast not in [nil, false, true] do
     %AtomType{value: ast}
   end
 
@@ -69,6 +70,10 @@ defmodule Hologram.Compiler.Transformer do
 
   def transform({:__aliases__, _, module_segs}, %Context{} = context) do
     ModuleTypeTransformer.transform(module_segs, context)
+  end
+
+  def transform(nil, _) do
+    %NilType{}
   end
 
   def transform(ast, _) when is_binary(ast) do

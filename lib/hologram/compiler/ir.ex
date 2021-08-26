@@ -2,7 +2,7 @@ defmodule Hologram.Compiler.IR do
   # TYPES
 
   defmodule AnonymousFunctionType do
-    defstruct arity: nil, params: nil, bindings: nil, body: nil
+    defstruct arity: nil, params: [], bindings: [], body: nil
   end
 
   defmodule AtomType do
@@ -31,6 +31,10 @@ defmodule Hologram.Compiler.IR do
 
   defmodule ModuleType do
     defstruct module: nil
+  end
+
+  defmodule NilType do
+    defstruct []
   end
 
   defmodule StringType do

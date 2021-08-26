@@ -23,6 +23,7 @@ defmodule Hologram.Compiler.TransformerTest do
     ModuleAttributeOperator,
     ModuleMacro,
     ModuleType,
+    NilType,
     Quote,
     RequireDirective,
     StringType,
@@ -94,6 +95,13 @@ defmodule Hologram.Compiler.TransformerTest do
       ast = ast(code)
 
       assert %ModuleType{} = Transformer.transform(ast, %Context{})
+    end
+
+    test "nil" do
+      code = "nil"
+      ast = ast(code)
+
+      assert %NilType{} = Transformer.transform(ast, %Context{})
     end
 
     test "string" do
