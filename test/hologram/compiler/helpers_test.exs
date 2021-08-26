@@ -2,7 +2,7 @@ defmodule Hologram.Compiler.HelpersTest do
   use Hologram.TestCase, async: true
 
   alias Hologram.Compiler.{Context, Helpers}
-  alias Hologram.Compiler.IR.{AccessOperator, AtomType, IntegerType, ModuleDefinition, UseDirective, Variable}
+  alias Hologram.Compiler.IR.{AccessOperator, AtomType, FunctionDefinition, IntegerType, ModuleDefinition, UseDirective, Variable}
 
   describe "aggregate_bindings/1" do
     test "no bindings" do
@@ -145,6 +145,15 @@ defmodule Hologram.Compiler.HelpersTest do
     end
   end
 
+  test "ast/1" do
+    code = "def fun, do: 1"
+
+    result = Helpers.ast(code)
+    expected = {:def, [line: 1], [{:fun, [line: 1], nil}, [do: {:__block__, [], [1]}]]}
+
+    assert result == expected
+  end
+
   test "class_name/1" do
     assert Helpers.class_name(Abc.Bcd) == "Elixir_Abc_Bcd"
   end
@@ -223,6 +232,11 @@ defmodule Hologram.Compiler.HelpersTest do
     expected = [module_def_1, module_def_2]
 
     assert result == expected
+  end
+
+  test "ir/1" do
+    code = "def fun, do: 1"
+    assert %FunctionDefinition{} = Helpers.ir(code)
   end
 
   describe "is_component?/1" do

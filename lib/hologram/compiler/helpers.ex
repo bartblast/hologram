@@ -1,5 +1,5 @@
 defmodule Hologram.Compiler.Helpers do
-  alias Hologram.Compiler.{Binder, Transformer}
+  alias Hologram.Compiler.{Binder, Context, Normalizer, Parser, Transformer}
   alias Hologram.Compiler.IR.ModuleDefinition
   alias Hologram.Typespecs, as: T
 
@@ -13,6 +13,11 @@ defmodule Hologram.Compiler.Helpers do
       end)
     end)
     |> Enum.sort()
+  end
+
+  def ast(code) do
+    Parser.parse!(code)
+    |> Normalizer.normalize()
   end
 
   @doc """
@@ -50,6 +55,11 @@ defmodule Hologram.Compiler.Helpers do
     module_defs_map
     |> Enum.filter(fn {_, module_def} -> is_page?(module_def) end)
     |> Enum.map(fn {_, module_def} -> module_def end)
+  end
+
+  def ir(code) do
+    ast(code)
+    |> Transformer.transform(%Context{})
   end
 
   @doc """
