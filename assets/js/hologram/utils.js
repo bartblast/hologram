@@ -10,6 +10,10 @@ export default class Utils {
     return arg.type == "boolean" && arg.value == false
   }
 
+  static isNil(arg) {
+    return arg.type == "nil"
+  }
+
   static keywordToMap(keyword) {
     return keyword.data.reduce((acc, elem) => {
       const key = Utils.serialize(elem.data[0])
