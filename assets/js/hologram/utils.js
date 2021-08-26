@@ -18,6 +18,10 @@ export default class Utils {
     return arg.type == "nil"
   }
 
+  static isTruthy(arg) {
+    return !Utils.isFalsy(arg)
+  }
+
   static keywordToMap(keyword) {
     return keyword.data.reduce((acc, elem) => {
       const key = Utils.serialize(elem.data[0])

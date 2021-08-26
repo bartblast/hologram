@@ -66,6 +66,29 @@ describe("isNil()", () => {
   })
 })
 
+describe("isTruthy()", () => {
+  it("is false", () => {
+    const arg = {type: "boolean", value: false}
+    const result = Utils.isTruthy(arg)
+
+    assert.isFalse(result)
+  })
+
+  it("is nil", () => {
+    const arg = {type: "nil"}
+    const result = Utils.isTruthy(arg)
+    
+    assert.isFalse(result)
+  })
+
+  it("is not false nor nil", () => {
+    const arg = {type: "integer", value: 0}
+    const result = Utils.isTruthy(arg)
+
+    assert.isTrue(result)
+  })
+})
+
 describe("keywordToMap()", () => {
   it("converts empty keyword list", () => {
     const keyword = {type: "list", data: []}
