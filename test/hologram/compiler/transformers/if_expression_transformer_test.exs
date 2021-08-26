@@ -2,7 +2,7 @@ defmodule Hologram.Compiler.IfExpressionTransformerTest do
   use Hologram.TestCase, async: true
 
   alias Hologram.Compiler.{Context, IfExpressionTransformer}
-  alias Hologram.Compiler.IR.{BooleanType, IfExpression, IntegerType}
+  alias Hologram.Compiler.IR.{BooleanType, IfExpression, IntegerType, NilType}
 
   test "do clause with single expression" do
     code = "if true, do: 1"
@@ -12,7 +12,7 @@ defmodule Hologram.Compiler.IfExpressionTransformerTest do
     expected = %IfExpression{
       condition: %BooleanType{value: true},
       do: [%IntegerType{value: 1}],
-      else: nil
+      else: [%NilType{}]
     }
 
     assert result == expected
@@ -35,7 +35,7 @@ defmodule Hologram.Compiler.IfExpressionTransformerTest do
         %IntegerType{value: 1},
         %IntegerType{value: 2}
       ],
-      else: nil
+      else: [%NilType{}]
     }
 
     assert result == expected
