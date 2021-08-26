@@ -10,6 +10,10 @@ export default class Utils {
     return arg.type == "boolean" && arg.value == false
   }
 
+  static isFalsy(arg) {
+    return Utils.isFalse(arg) || Utils.isNil(arg)
+  }
+
   static isNil(arg) {
     return arg.type == "nil"
   }
