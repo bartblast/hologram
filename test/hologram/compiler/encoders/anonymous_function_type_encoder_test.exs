@@ -2,7 +2,7 @@ defmodule Hologram.Compiler.AnonymousFunctionTypeEncoderTest do
   use Hologram.TestCase, async: true
   alias Hologram.Compiler.{Context, Encoder, Opts}
 
-  test "no args, no vars, only return statement" do
+  test "no vars / single expression" do
     code = "fn -> 1 end"
     ir = ir(code)
 
@@ -12,7 +12,7 @@ defmodule Hologram.Compiler.AnonymousFunctionTypeEncoderTest do
     assert result == expected
   end
 
-  test "has args, has vars, variable access" do
+  test "single var" do
     code = "fn x -> 1 end"
     ir = ir(code)
 
@@ -22,9 +22,19 @@ defmodule Hologram.Compiler.AnonymousFunctionTypeEncoderTest do
     assert result == expected
   end
 
-  test "map access, expression + return statement" do
+  test "multiple vars" do
+    code = "fn x, y -> 1 end"
+    ir = ir(code)
+
+    result = Encoder.encode(ir, %Context{}, %Opts{})
+    expected = "(function() { let x = arguments[0]; let y = arguments[1]; return { type: 'integer', value: 1 }; })"
+
+    assert result == expected
+  end
+
+  test "multiple expressions" do
     code = """
-    fn %{a: x} ->
+    fn ->
       1
       2
     end
@@ -33,7 +43,7 @@ defmodule Hologram.Compiler.AnonymousFunctionTypeEncoderTest do
     ir = ir(code)
 
     result = Encoder.encode(ir, %Context{}, %Opts{})
-    expected = "(function() { let x = arguments[0].data['~atom[a]']; { type: 'integer', value: 1 }; return { type: 'integer', value: 2 }; })"
+    expected = "(function() { { type: 'integer', value: 1 }; return { type: 'integer', value: 2 }; })"
 
     assert result == expected
   end
