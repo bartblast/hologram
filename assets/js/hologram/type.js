@@ -1,4 +1,8 @@
 export default class Type {
+  static atom(value) {
+    return {type: "atom", value: value}
+  }
+
   static boolean(value) {
     return {type: "boolean", value: value}
   }

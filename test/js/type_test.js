@@ -1,6 +1,14 @@
 import { assert } from "./support/commons";
 import Type from "../../assets/js/hologram/type";
 
+describe("atom()", () => {
+  it("returns boxed atom value", () => {
+    const expected = {type: "atom", value: "test"}
+    const result = Type.atom("test")
+    assert.deepStrictEqual(result, expected)
+  })
+})
+
 describe("boolean()", () => {
   it("returns boxed boolean value", () => {
     const expected = {type: "boolean", value: true}
