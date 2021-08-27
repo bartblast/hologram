@@ -13,6 +13,16 @@ defmodule Hologram.Compiler.ReflectionTest do
     assert %MacroDefinition{arity: 2, name: :test_macro} = result
   end
 
+  describe "module?/1" do
+    test "is a module" do
+      assert Reflection.module?(Hologram.Compiler.ReflectionTest)
+    end
+
+    test "isn't a module" do
+      refute Reflection.module?(:test)
+    end
+  end
+
   describe "module_ast/1" do
     @expected {:defmodule, [line: 1], [
         {:__aliases__, [line: 1], @module_segs_1},

@@ -45,6 +45,10 @@ defmodule Hologram.Compiler.Reflection do
     |> hd()
   end
 
+  def module?(arg) do
+    Code.ensure_loaded?(arg)
+  end
+
   @doc """
   Returns the corresponding module definition.
 
