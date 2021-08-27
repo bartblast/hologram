@@ -36,3 +36,6 @@ npm-debug.log
 # Temporary files.
 /tmp/*
 !/tmp/.keep
+
+# Tests used for debugging purposes.
+/debugger.exs
