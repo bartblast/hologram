@@ -109,8 +109,8 @@ defmodule Hologram.Compiler.FunctionDefinitionGeneratorTest do
     """
 
     ir = ir(code)
-    variants = ir.functions
     name = :test
+    variants = ir.functions |> Enum.filter(&(&1.name == name))
 
     result = FunctionDefinitionGenerator.generate(name, variants, %Context{}, %Opts{})
 
