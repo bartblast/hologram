@@ -58,8 +58,7 @@ defmodule Hologram.Compiler.ReflectionTest do
 
   test "module_definition/1" do
     result = Reflection.module_definition(@module_1)
-    expected = %ModuleDefinition{module: @module_1}
-    assert result == expected
+    assert %ModuleDefinition{module: @module_1} = result
   end
 
   test "source_path/1" do
