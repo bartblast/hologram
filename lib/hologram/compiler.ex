@@ -1,6 +1,6 @@
 defmodule Hologram.Compiler do
   alias Hologram.Compiler.IR.{FunctionCall, FunctionDefinition, ModuleDefinition, TupleType}
-  alias Hologram.Compiler.Reflection
+  alias Hologram.Compiler.{Helpers, Reflection}
   alias Hologram.Template
   alias Hologram.Template.Document.{Component, ElementNode, Expression}
   alias Hologram.Typespecs, as: T
@@ -33,6 +33,11 @@ defmodule Hologram.Compiler do
 
   defp include_templatables(acc, %ModuleDefinition{module: module} = module_def) do
     if Reflection.templatable?(module_def) do
+      acc =
+        if Helpers.is_page?(module_def) do
+          maybe_include_module(acc, module.layout())
+        end
+
       document = Template.Builder.build(module)
       traverse_template(acc, document)
     else

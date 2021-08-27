@@ -2,6 +2,7 @@ defmodule Hologram.CompilerTest do
   use Hologram.TestCase, async: true
   alias Hologram.Compiler
 
+  @default_layout Application.get_env(:hologram, :default_layout)
   @module_2 Hologram.Test.Fixtures.Compiler.Module2
   @module_8 Hologram.Test.Fixtures.Compiler.Module8
   @module_11 Hologram.Test.Fixtures.Compiler.Module11
@@ -89,5 +90,12 @@ defmodule Hologram.CompilerTest do
     result = Compiler.compile(module_16)
 
     assert Map.has_key?(result, @module_8)
+  end
+
+  test "includes layout modules for compiled page modules" do
+    module_18 = Hologram.Test.Fixtures.Compiler.Module18
+    result = Compiler.compile(module_18)
+
+    assert Map.has_key?(result, @default_layout)
   end
 end
