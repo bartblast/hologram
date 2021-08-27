@@ -42,4 +42,14 @@ defmodule Hologram.Compiler.FunctionCallGeneratorTest do
 
     assert result == expected
   end
+
+  test "? question mark char" do
+    function = "member?"
+    params = []
+
+    result = FunctionCallGenerator.generate(@module, function, params, %Context{}, %Opts{})
+    expected = "Elixir_Test.member$question()"
+
+    assert result == expected
+  end
 end

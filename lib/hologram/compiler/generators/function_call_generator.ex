@@ -4,6 +4,7 @@ defmodule Hologram.Compiler.FunctionCallGenerator do
 
   def generate(module, function, params, %Context{} = context, %Opts{} = opts) do
     class = Helpers.class_name(module)
+    function = String.replace("#{function}", "?", "$question")
 
     params =
       Enum.map(params, fn param ->
