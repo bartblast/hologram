@@ -9,6 +9,14 @@ describe("boolean()", () => {
   })
 })
 
+describe("integer()", () => {
+  it("returns boxed integer value", () => {
+    const expected = {type: "integer", value: 1}
+    const result = Type.integer(1)
+    assert.deepStrictEqual(result, expected)
+  })
+})
+
 describe("module()", () => {
   it("returns boxed module value", () => {
     const expected = {type: "module", class_name: "Elixir_ClassStub"}

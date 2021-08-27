@@ -3,6 +3,10 @@ export default class Type {
     return {type: "boolean", value: value}
   }
 
+  static integer(value) {
+    return {type: "integer", value: value}
+  }
+
   static module(className) {
     return {type: "module", class_name: className}
   }
