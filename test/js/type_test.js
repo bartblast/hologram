@@ -25,6 +25,16 @@ describe("integer()", () => {
   })
 })
 
+describe("list()", () => {
+  it("returns boxed list value", () => {
+    const elements = [Type.integer(1), Type.integer(2)]
+    const expected = {type: "list", data: elements}
+    const result = Type.list(elements)
+  
+    assert.deepStrictEqual(result, expected)
+  })
+})
+
 describe("module()", () => {
   it("returns boxed module value", () => {
     const expected = {type: "module", class_name: "Elixir_ClassStub"}
