@@ -26,12 +26,16 @@ defmodule Hologram.Compiler.ReflectionTest do
   end
 
   describe "module?/1" do
-    test "is a module" do
+    test "is module" do
       assert Reflection.module?(Hologram.Compiler.ReflectionTest)
     end
 
-    test "isn't a module" do
+    test "is atom" do
       refute Reflection.module?(:test)
+    end
+
+    test "is Erlang module" do
+      refute Reflection.module?(:c)
     end
   end
 

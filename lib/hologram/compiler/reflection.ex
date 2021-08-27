@@ -50,7 +50,14 @@ defmodule Hologram.Compiler.Reflection do
   end
 
   def module?(arg) do
-    Code.ensure_loaded?(arg)
+    if Code.ensure_loaded?(arg) do
+      to_string(arg)
+      |> String.split(".")
+      |> hd()
+      |> Kernel.==("Elixir")
+    else
+      false
+    end
   end
 
   @doc """
