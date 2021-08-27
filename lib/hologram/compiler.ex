@@ -36,6 +36,8 @@ defmodule Hologram.Compiler do
       acc =
         if Helpers.is_page?(module_def) do
           maybe_include_module(acc, module.layout())
+        else
+          acc
         end
 
       document = Template.Builder.build(module)
