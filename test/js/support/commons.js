@@ -1,3 +1,5 @@
+import Type from "../../../assets/js/hologram/type"
+
 export const assert = require("chai").assert;
 export const sinon = require("sinon");
 
@@ -12,5 +14,8 @@ export function mockWindow() {
   return new JSDOM().window;
 }
 
-global.Module_Stub_1 = class Module_Stub_1 {}
-global.Module_Stub_2 = class Module_Stub_2 {}
+global.ModuleStub1 = class ModuleStub1 {
+  static test(arg1, arg2) {
+    return Type.integer(arg1.value + arg2.value)
+  }
+}

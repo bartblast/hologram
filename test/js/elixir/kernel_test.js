@@ -1,5 +1,6 @@
 import { assert } from "../support/commons"
 import Kernel from "../../../assets/js/hologram/elixir/kernel";
+import Type from "../../../assets/js/hologram/type";
 
 describe("$add()", () => {
   it("adds integer and integer", () => {
@@ -60,6 +61,19 @@ describe("$dot()", () => {
 
     assert.deepStrictEqual(result, value) 
     assert.notEqual(result, value)
+  })
+})
+
+describe("apply()", () => {
+  it("apply/3", () => {
+    const module = Type.module("ModuleStub1")
+    const function_name = Type.atom("test")
+    const args = Type.list([Type.integer(1), Type.integer(2)])
+
+    const result = Kernel.apply(module, function_name, args)
+    const expected = Type.integer(3)
+
+    assert.deepStrictEqual(result, expected) 
   })
 })
 
