@@ -9,6 +9,7 @@ use Mix.Config
 
 # Framework config
 config :hologram,
+  default_layout: Hologram.E2E.DefaultLayout,
   pages_path: "#{File.cwd!()}/lib/e2e/pages"
 
 config :hologram,
