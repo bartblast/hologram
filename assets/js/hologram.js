@@ -11,6 +11,7 @@ import Utils from "./hologram/utils"
 import Enum from "./hologram/elixir/enum"
 import IO from "./hologram/elixir/io"
 import Kernel from "./hologram/elixir/kernel"
+import Keyword from "./hologram/elixir/keyword"
 import Map from "./hologram/elixir/map"
 
 export default class Hologram {
@@ -99,6 +100,7 @@ window.Elixir = class {
 window.Elixir_Enum = Enum
 window.Elixir_IO = IO
 window.Elixir_Kernel = Kernel
+window.Elixir_Keyword = Keyword
 window.Elixir_Map = Map
 
 window.Hologram = Hologram
