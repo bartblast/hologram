@@ -8,6 +8,18 @@ defmodule Hologram.Compiler.ReflectionTest do
   @module_2 Hologram.Test.Fixtures.Compiler.Reflection.Module2
   @module_segs_1 [:Hologram, :Test, :Fixtures, :Compiler, :Reflection, :Module1]
 
+  describe "has_template?/1" do
+    test "true" do
+      module = Hologram.Test.Fixtures.Compiler.Reflection.Module3
+      assert Reflection.has_template?(module)
+    end
+
+    test "false" do
+      module = Hologram.Compiler.ReflectionTest
+      refute Reflection.has_template?(module)
+    end
+  end
+
   test "macro_definition/3" do
     result = Reflection.macro_definition(@module_2, :test_macro, [1, 2])
     assert %MacroDefinition{arity: 2, name: :test_macro} = result

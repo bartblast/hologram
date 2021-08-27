@@ -23,6 +23,10 @@ defmodule Hologram.Compiler.Reflection do
     |> Normalizer.normalize()
   end
 
+  def has_template?(module) do
+    function_exported?(module, :template, 0)
+  end
+
   # TODO: refactor & test
   def list_pages(opts \\ []) do
     glob = "#{pages_path(opts)}/**/*.ex"
