@@ -90,11 +90,16 @@ defmodule Hologram.Compiler.TransformerTest do
       assert %MapType{} = Transformer.transform(ast, %Context{})
     end
 
-    test "module" do
+    test "module from module segments" do
       code = "Hologram.Compiler.TransformerTest"
       ast = ast(code)
 
       assert %ModuleType{} = Transformer.transform(ast, %Context{})
+    end
+
+    test "module from atom" do
+      module = Hologram.Compiler.TransformerTest
+      assert %ModuleType{} = Transformer.transform(module, %Context{})
     end
 
     test "nil" do

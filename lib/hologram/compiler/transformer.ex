@@ -36,7 +36,7 @@ defmodule Hologram.Compiler.Transformer do
     UseDirectiveTransformer
   }
 
-  alias Hologram.Compiler.Context
+  alias Hologram.Compiler.{Context, Reflection}
 
   # TYPES
 
@@ -44,8 +44,12 @@ defmodule Hologram.Compiler.Transformer do
     AnonymousFunctionTypeTransformer.transform(ast, context)
   end
 
-  def transform(ast, _) when is_atom(ast) and ast not in [nil, false, true] do
-    %AtomType{value: ast}
+  def transform(ast, %Context{} = context) when is_atom(ast) and ast not in [nil, false, true] do
+    if Reflection.module?(ast) do
+      ModuleTypeTransformer.transform(ast, context)
+    else
+      %AtomType{value: ast}
+    end
   end
 
   def transform({:<<>>, _, parts}, %Context{} = context) do
@@ -68,8 +72,8 @@ defmodule Hologram.Compiler.Transformer do
     MapTypeTransformer.transform(ast, context)
   end
 
-  def transform({:__aliases__, _, module_segs}, %Context{} = context) do
-    ModuleTypeTransformer.transform(module_segs, context)
+  def transform({:__aliases__, _, _} = ast, %Context{} = context) do
+    ModuleTypeTransformer.transform(ast, context)
   end
 
   def transform(nil, _) do

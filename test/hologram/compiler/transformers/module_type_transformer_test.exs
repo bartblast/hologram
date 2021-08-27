@@ -4,22 +4,31 @@ defmodule Hologram.Compiler.ModuleTypeTransformerTest do
   alias Hologram.Compiler.{Context, ModuleTypeTransformer}
   alias Hologram.Compiler.IR.{Alias, ModuleType}
 
-  test "not aliased" do
-    module_segs = [:Abc, :Bcd]
-    context = %Context{aliases: []}
+  test "non-aliased module segments" do
+    code = "Abc.Bcd"
+    ast = ast(code)
 
-    result = ModuleTypeTransformer.transform(module_segs, context)
+    result = ModuleTypeTransformer.transform(ast, %Context{})
     expected = %ModuleType{module: Abc.Bcd}
 
     assert result == expected
   end
 
-  test "aliased" do
-    module_segs = [:Bcd]
+  test "aliased module segments" do
     aliases = [%Alias{module: Abc.Bcd, as: [:Bcd]}]
     context = %Context{aliases: aliases}
 
-    result = ModuleTypeTransformer.transform(module_segs, context)
+    code = "Bcd"
+    ast = ast(code)
+
+    result = ModuleTypeTransformer.transform(ast, context)
+    expected = %ModuleType{module: Abc.Bcd}
+
+    assert result == expected
+  end
+
+  test "module atom" do
+    result = ModuleTypeTransformer.transform(Abc.Bcd, %Context{})
     expected = %ModuleType{module: Abc.Bcd}
 
     assert result == expected
