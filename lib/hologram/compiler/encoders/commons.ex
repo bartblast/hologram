@@ -15,6 +15,12 @@ defmodule Hologram.Compiler.Encoder.Commons do
     |> Enum.join(separator)
   end
 
+  def encode_function_name(function_name) do
+    to_string(function_name)
+    |> String.replace("?", "$question")
+    |> String.replace("!", "$bang")
+  end
+
   defp encode_var({name, {idx, path}}, context) do
     acc = "let #{name} = arguments[#{idx}]"
 

@@ -28,6 +28,28 @@ defmodule Hologram.Compiler.Encoder.CommonsTest do
     end
   end
 
+  describe "encode_function_name/1" do
+    test "string" do
+      result = Commons.encode_function_name("test")
+      assert result == "test"
+    end
+
+    test "atom" do
+      result = Commons.encode_function_name(:test)
+      assert result == "test"
+    end
+
+    test "question mark" do
+      result = Commons.encode_function_name("test?")
+      assert result == "test$question"
+    end
+
+    test "exclamation mark" do
+      result = Commons.encode_function_name("test!")
+      assert result == "test$bang"
+    end
+  end
+
   describe "encode_vars/3" do
     test "single binding / variable" do
       code = "fn x -> 1 end"
