@@ -8,6 +8,7 @@ import Runtime from "./hologram/runtime"
 import Utils from "./hologram/utils"
 
 // Elixir standard library
+import Enum from "./hologram/elixir/enum"
 import IO from "./hologram/elixir/io"
 import Kernel from "./hologram/elixir/kernel"
 import Map from "./hologram/elixir/map"
@@ -95,6 +96,7 @@ window.Elixir = class {
   }
 }
 
+window.Elixir_Enum = Enum
 window.Elixir_IO = IO
 window.Elixir_Kernel = Kernel
 window.Elixir_Map = Map
