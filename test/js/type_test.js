@@ -8,3 +8,11 @@ describe("boolean()", () => {
     assert.deepStrictEqual(result, expected)
   })
 })
+
+describe("module()", () => {
+  it("returns boxed module value", () => {
+    const expected = {type: "module", class_name: "Elixir_ClassStub"}
+    const result = Type.module("Elixir_ClassStub")
+    assert.deepStrictEqual(result, expected)
+  })
+})
