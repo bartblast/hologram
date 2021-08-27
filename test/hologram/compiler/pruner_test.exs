@@ -4,6 +4,7 @@ defmodule Hologram.Compiler.PrunerTest do
   alias Hologram.Compiler
   alias Hologram.Compiler.Pruner
 
+  @default_layout Application.get_env(:hologram, :default_layout)
   @module_4 Hologram.Test.Fixtures.Compiler.Pruner.Module4
   @module_8 Hologram.Test.Fixtures.Compiler.Pruner.Module8
   @module_16 Hologram.Test.Fixtures.Compiler.Pruner.Module16
@@ -32,6 +33,11 @@ defmodule Hologram.Compiler.PrunerTest do
     test "page template" do
       module_2 = Hologram.Test.Fixtures.Compiler.Pruner.Module2
       test_module(module_2, module_2, :template)
+    end
+
+    test "layout template" do
+      module_2 = Hologram.Test.Fixtures.Compiler.Pruner.Module2
+      test_module(module_2, @default_layout, :template)
     end
 
     test "template of component used in page template" do

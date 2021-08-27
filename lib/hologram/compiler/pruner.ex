@@ -1,4 +1,5 @@
 defmodule Hologram.Compiler.Pruner do
+  alias Hologram.Compiler.{Helpers, Reflection}
   alias Hologram.Compiler.IR.{FunctionCall, FunctionDefinition, TupleType}
   alias Hologram.Template
   alias Hologram.Template.Document.{Component, ElementNode, Expression}
@@ -15,8 +16,8 @@ defmodule Hologram.Compiler.Pruner do
     |> prune_unused_modules()
   end
 
-  defp find_used_functions(module_defs_map, module) do
-    MapSet.new()
+  defp find_used_functions(module_defs_map, module, acc \\ MapSet.new()) do
+    acc
     |> traverse_function_defs(module_defs_map, {module, :action})
     |> traverse_template(module_defs_map, module)
   end
@@ -84,10 +85,17 @@ defmodule Hologram.Compiler.Pruner do
   defp traverse_template(acc, module_defs_map, module) when is_atom(module) do
     spec = {module, :template}
 
-    unless MapSet.member?(acc, spec) do
+    unless MapSet.member?(acc, spec) || !Reflection.has_template?(module) do
       acc =
         MapSet.put(acc, spec)
         |> traverse_function_defs(module_defs_map, spec)
+
+      acc =
+        if Helpers.is_page?(module_defs_map[module]) do
+          find_used_functions(module_defs_map, module.layout(), acc)
+        else
+          acc
+        end
 
       document = Template.Builder.build(module)
       traverse_template(acc, module_defs_map, document)
