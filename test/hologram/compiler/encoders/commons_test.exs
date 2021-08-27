@@ -5,11 +5,11 @@ defmodule Hologram.Compiler.Encoder.CommonsTest do
   alias Hologram.Compiler.Encoder.Commons
   alias Hologram.Compiler.IR.IntegerType
 
-  describe "generate_expression/4" do
+  describe "encode_expression/4" do
     test "single expression" do
       body = [%IntegerType{value: 1}]
 
-      result = Commons.generate_expressions(body, %Context{}, %Opts{}, "\n")
+      result = Commons.encode_expressions(body, %Context{}, %Opts{}, "\n")
       expected = "return { type: 'integer', value: 1 };"
 
       assert result == expected
@@ -21,19 +21,19 @@ defmodule Hologram.Compiler.Encoder.CommonsTest do
         %IntegerType{value: 2}
       ]
 
-      result = Commons.generate_expressions(body, %Context{}, %Opts{}, "\n")
+      result = Commons.encode_expressions(body, %Context{}, %Opts{}, "\n")
       expected = "{ type: 'integer', value: 1 };\nreturn { type: 'integer', value: 2 };"
 
       assert result == expected
     end
   end
 
-  describe "generate_vars/3" do
+  describe "encode_vars/3" do
     test "single binding / variable" do
       code = "fn x -> 1 end"
       %{bindings: bindings} = ir(code)
 
-      result = Commons.generate_vars(bindings, %Context{}, "\n")
+      result = Commons.encode_vars(bindings, %Context{}, "\n")
       expected = "let x = arguments[0];"
 
       assert result == expected
@@ -43,7 +43,7 @@ defmodule Hologram.Compiler.Encoder.CommonsTest do
       code = "fn x, y -> 1 end"
       %{bindings: bindings} = ir(code)
 
-      result = Commons.generate_vars(bindings, %Context{}, "\n")
+      result = Commons.encode_vars(bindings, %Context{}, "\n")
       expected = "let x = arguments[0];\nlet y = arguments[1];"
 
       assert result == expected
@@ -53,7 +53,7 @@ defmodule Hologram.Compiler.Encoder.CommonsTest do
       code = "fn %{a: x} -> 1 end"
       %{bindings: bindings} = ir(code)
 
-      result = Commons.generate_vars(bindings, %Context{}, "\n")
+      result = Commons.encode_vars(bindings, %Context{}, "\n")
       expected = "let x = arguments[0].data['~atom[a]'];"
 
       assert result == expected

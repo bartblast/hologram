@@ -30,8 +30,8 @@ defmodule Hologram.Compiler.FunctionDefinitionGenerator do
     Enum.reduce(variants, "", fn variant, acc ->
       statement = if acc == "", do: "if", else: "else if"
       params = generate_params(variant, context)
-      vars = generate_vars(variant.bindings, context, "\n")
-      body = generate_expressions(variant.body, context, opts, "\n")
+      vars = encode_vars(variant.bindings, context, "\n")
+      body = encode_expressions(variant.body, context, opts, "\n")
 
       acc
       |> Formatter.maybe_append_new_line("#{statement} (Hologram.patternMatchFunctionArgs(#{params}, arguments)) {")
