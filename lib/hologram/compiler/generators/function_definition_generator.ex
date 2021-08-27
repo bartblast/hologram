@@ -4,6 +4,7 @@ defmodule Hologram.Compiler.FunctionDefinitionGenerator do
 
   def generate(name, variants, %Context{} = context, %Opts{} = opts) do
     body = generate_body(variants, context, opts)
+    name = encode_function_name(name)
 
     "static #{name}() {#{body}"
     |> Formatter.maybe_append_new_line("}")

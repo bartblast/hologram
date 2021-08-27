@@ -4,7 +4,6 @@ defmodule Hologram.Compiler.FunctionDefinitionGeneratorTest do
 
   test "no vars / single expression / single variant" do
     code = "def test, do: 1"
-
     ir = ir(code)
     variants = [ir]
 
@@ -27,7 +26,6 @@ defmodule Hologram.Compiler.FunctionDefinitionGeneratorTest do
 
   test "single var" do
     code = "def test(x), do: 1"
-
     ir = ir(code)
     variants = [ir]
 
@@ -51,7 +49,6 @@ defmodule Hologram.Compiler.FunctionDefinitionGeneratorTest do
 
   test "multiple vars" do
     code = "def test(x, y), do: 1"
-
     ir = ir(code)
     variants = [ir]
 
@@ -124,6 +121,28 @@ defmodule Hologram.Compiler.FunctionDefinitionGeneratorTest do
     }
     else if (Hologram.patternMatchFunctionArgs([{ type: 'integer', value: 2 }], arguments)) {
     return { type: 'integer', value: 2 };
+    }
+    else {
+    console.debug(arguments)
+    throw 'No match for the function call'
+    }
+    }
+    """
+
+    assert result == expected
+  end
+
+  test "name" do
+    code = "def test?, do: 1"
+    ir = ir(code)
+    variants = [ir]
+
+    result = FunctionDefinitionGenerator.generate(ir.name, variants, %Context{}, %Opts{})
+
+    expected = """
+    static test$question() {
+    if (Hologram.patternMatchFunctionArgs([], arguments)) {
+    return { type: 'integer', value: 1 };
     }
     else {
     console.debug(arguments)
