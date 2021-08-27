@@ -274,7 +274,8 @@ defmodule Hologram.Compiler.ModuleDefinitionTransformerTest do
     code = """
     defmodule Hologram.Test.Fixtures.PlaceholderModule do
       def test_1, do: 1
-      def test_2(x), do: 2
+      def test_2(9), do: 9
+      def test_2(8), do: 8
     end
     """
 

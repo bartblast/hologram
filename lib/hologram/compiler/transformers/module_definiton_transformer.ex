@@ -67,7 +67,9 @@ defmodule Hologram.Compiler.ModuleDefinitionTransformer do
   end
 
   defp inject_module_info_callback(functions) do
-    name_arity_pairs = Enum.map(functions, &"#{&1.name}: #{&1.arity}")
+    name_arity_pairs =
+      Enum.map(functions, &"#{&1.name}: #{&1.arity}")
+      |> Enum.uniq()
 
     ir =
       "def __info__(:functions), do: [#{Enum.join(name_arity_pairs, ", ")}]"
