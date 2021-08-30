@@ -9,7 +9,7 @@ defmodule Hologram.Page do
 
       def layout do
         if Keyword.has_key?(__MODULE__.__info__(:functions), :page_layout) do
-          apply(__MODULE__, :page_layout, [])
+          __MODULE__.page_layout()
         else
           unquote(@default_layout)
         end
