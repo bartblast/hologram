@@ -15,11 +15,15 @@ defmodule Hologram.Compiler.PrunerTest do
       module_defs_map = Compiler.compile(compiled_module)
 
       result = Pruner.prune(module_defs_map, compiled_module)
-      functions = result[tested_module].functions
 
-      Enum.any?(functions, fn %{arity: arity, name: name} ->
-        arity == function_arity && name == function_name
-      end)
+      if result[tested_module] do
+        result[tested_module].functions
+        |> Enum.any?(fn %{arity: arity, name: name} ->
+          arity == function_arity && name == function_name
+        end)
+      else
+        false
+      end
     end
 
     test "page actions" do
@@ -80,6 +84,13 @@ defmodule Hologram.Compiler.PrunerTest do
 
     test "layout function of the pruned page module" do
       assert function_preserved?(@module_20, @module_20, :layout, 0)
+    end
+
+    test "functions used inside if expression" do
+      module_22 = Hologram.Test.Fixtures.Compiler.Pruner.Module22
+      assert function_preserved?(module_22, @module_20, :fun_1, 0)
+      assert function_preserved?(module_22, @module_20, :fun_2, 0)
+      assert function_preserved?(module_22, @module_20, :fun_3, 0)
     end
   end
 

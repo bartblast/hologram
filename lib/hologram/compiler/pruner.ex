@@ -1,6 +1,6 @@
 defmodule Hologram.Compiler.Pruner do
   alias Hologram.Compiler.{Helpers, Reflection}
-  alias Hologram.Compiler.IR.{FunctionCall, FunctionDefinition, TupleType}
+  alias Hologram.Compiler.IR.{FunctionCall, FunctionDefinition, IfExpression, TupleType}
   alias Hologram.Template
   alias Hologram.Template.Document.{Component, ElementNode, Expression}
   alias Hologram.Typespecs, as: T
@@ -82,12 +82,22 @@ defmodule Hologram.Compiler.Pruner do
     end
   end
 
-  defp traverse_function_defs(acc, module_defs_map, %FunctionDefinition{body: body}) do
-    Enum.reduce(body, acc, &traverse_function_defs(&2, module_defs_map, &1))
+  defp traverse_function_defs(acc, module_defs_map, exprs) when is_list(exprs) do
+    Enum.reduce(exprs, acc, &traverse_function_defs(&2, module_defs_map, &1))
   end
 
   defp traverse_function_defs(acc, module_defs_map, %FunctionCall{module: module, function: function}) do
     traverse_function_defs(acc, module_defs_map, {module, function})
+  end
+
+  defp traverse_function_defs(acc, module_defs_map, %FunctionDefinition{body: body}) do
+    traverse_function_defs(acc, module_defs_map, body)
+  end
+
+  defp traverse_function_defs(acc, module_defs_map, %IfExpression{condition: condition, do: do_clause, else: else_clause} = expr) do
+    traverse_function_defs(acc, module_defs_map, condition)
+    |> traverse_function_defs(module_defs_map, do_clause)
+    |> traverse_function_defs(module_defs_map, else_clause)
   end
 
   # DEFER: traverse nested code blocks
