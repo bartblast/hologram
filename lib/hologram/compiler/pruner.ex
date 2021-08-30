@@ -94,7 +94,7 @@ defmodule Hologram.Compiler.Pruner do
     traverse_function_defs(acc, module_defs_map, body)
   end
 
-  defp traverse_function_defs(acc, module_defs_map, %IfExpression{condition: condition, do: do_clause, else: else_clause} = expr) do
+  defp traverse_function_defs(acc, module_defs_map, %IfExpression{condition: condition, do: do_clause, else: else_clause}) do
     traverse_function_defs(acc, module_defs_map, condition)
     |> traverse_function_defs(module_defs_map, do_clause)
     |> traverse_function_defs(module_defs_map, else_clause)
