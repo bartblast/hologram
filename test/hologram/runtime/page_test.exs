@@ -3,6 +3,24 @@ defmodule Hologram.PageTest do
   require Hologram.Page
   alias Hologram.Page
 
+  @default_layout Application.get_env(:hologram, :default_layout)
+
+  describe "layout/0" do
+    test "default layout" do
+      page_module = Hologram.Test.Fixtures.Runtime.Page.Module1
+      result = page_module.layout()
+
+      assert result == @default_layout
+    end
+
+    test "non-default layout" do
+      page_module = Hologram.Test.Fixtures.Runtime.Page.Module2
+      result = page_module.layout()
+
+      assert result == :test_layout
+    end
+  end
+
   test "layout/1" do
     ast =
       Macro.expand_once(

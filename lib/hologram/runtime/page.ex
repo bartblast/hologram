@@ -1,15 +1,25 @@
 defmodule Hologram.Page do
+  @default_layout Application.get_env(:hologram, :default_layout)
+
   defmacro __using__(_) do
     quote do
       require Hologram.Page
       import Hologram.Page
       import Hologram.Runtime.Commons, only: [sigil_H: 2]
+
+      def layout do
+        if Keyword.has_key?(__MODULE__.__info__(:functions), :page_layout) do
+          apply(__MODULE__, :page_layout, [])
+        else
+          unquote(@default_layout)
+        end
+      end
     end
   end
 
   defmacro layout(module) do
     quote do
-      def layout do
+      def page_layout do
         unquote(module)
       end
     end
