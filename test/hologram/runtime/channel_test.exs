@@ -20,8 +20,8 @@ defmodule Hologram.Runtime.ChannelTest do
   end
 
   test "command without params that returns action without params", %{socket: socket} do
-    page_module = "Elixir_Hologram_Test_Fixtures_Runtime_Module1"
-    scope_module = "Elixir_Hologram_Test_Fixtures_Runtime_Module2"
+    page_module = "Elixir_Hologram_Test_Fixtures_Runtime_Channel_Module1"
+    scope_module = "Elixir_Hologram_Test_Fixtures_Runtime_Channel_Module2"
     context = %{"page_module" => page_module, "scope_module" => scope_module}
 
     message =
@@ -41,8 +41,8 @@ defmodule Hologram.Runtime.ChannelTest do
   end
 
   test "command without params that returns action with params", %{socket: socket} do
-    page_module = "Elixir_Hologram_Test_Fixtures_Runtime_Module3"
-    scope_module = "Elixir_Hologram_Test_Fixtures_Runtime_Module2"
+    page_module = "Elixir_Hologram_Test_Fixtures_Runtime_Channel_Module3"
+    scope_module = "Elixir_Hologram_Test_Fixtures_Runtime_Channel_Module2"
     context = %{"page_module" => page_module, "scope_module" => scope_module}
 
     message =
@@ -62,8 +62,8 @@ defmodule Hologram.Runtime.ChannelTest do
   end
 
   test "command with params that returns action without params", %{socket: socket} do
-    page_module = "Elixir_Hologram_Test_Fixtures_Runtime_Module4"
-    scope_module = "Elixir_Hologram_Test_Fixtures_Runtime_Module2"
+    page_module = "Elixir_Hologram_Test_Fixtures_Runtime_Channel_Module4"
+    scope_module = "Elixir_Hologram_Test_Fixtures_Runtime_Channel_Module2"
     context = %{"page_module" => page_module, "scope_module" => scope_module}
 
     message =
@@ -101,8 +101,8 @@ defmodule Hologram.Runtime.ChannelTest do
   end
 
   test "command with params that returns action with params", %{socket: socket} do
-    page_module = "Elixir_Hologram_Test_Fixtures_Runtime_Module2"
-    scope_module = "Elixir_Hologram_Test_Fixtures_Runtime_Module3"
+    page_module = "Elixir_Hologram_Test_Fixtures_Runtime_Channel_Module2"
+    scope_module = "Elixir_Hologram_Test_Fixtures_Runtime_Channel_Module3"
     context = %{"page_module" => page_module, "scope_module" => scope_module}
 
     message =
@@ -142,7 +142,7 @@ defmodule Hologram.Runtime.ChannelTest do
   test "redirect", %{socket: socket} do
     compile_pages("test/fixtures/runtime/channel")
 
-    page_module = "Elixir_Hologram_Test_Fixtures_Runtime_Module5"
+    page_module = "Elixir_Hologram_Test_Fixtures_Runtime_Channel_Module5"
     context = %{"page_module" => page_module, "scope_module" => page_module}
 
     message =
@@ -162,7 +162,7 @@ defmodule Hologram.Runtime.ChannelTest do
           ]
         }
       }
-    html = Renderer.render(Hologram.Test.Fixtures.Runtime.Module5, %{})
+    html = Renderer.render(Hologram.Test.Fixtures.Runtime.Channel.Module5, %{})
 
     expected_response =
       {:__redirect__, %{html: html, url: "/test-route"}, context}
