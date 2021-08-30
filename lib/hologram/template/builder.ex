@@ -20,16 +20,17 @@ defmodule Hologram.Template.Builder do
       Reflection.module_definition(module)
       |> Map.get(:aliases)
 
-    template =
-      if layout do
-        layout_name = Helpers.module_name(layout)
-        "<#{layout_name}>#{module.template()}</#{layout_name}>"
-      else
-        module.template()
-      end
-
-    template
+    build_template(module, layout)
     |> Parser.parse!()
     |> Transformer.transform(aliases)
+  end
+
+  defp build_template(module, layout) do
+    if layout do
+      layout_name = Helpers.module_name(layout)
+      "<#{layout_name}>#{module.template()}</#{layout_name}>"
+    else
+      module.template()
+    end
   end
 end
