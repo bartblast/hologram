@@ -8,83 +8,90 @@ defmodule Hologram.Compiler.PrunerTest do
   @module_4 Hologram.Test.Fixtures.Compiler.Pruner.Module4
   @module_8 Hologram.Test.Fixtures.Compiler.Pruner.Module8
   @module_16 Hologram.Test.Fixtures.Compiler.Pruner.Module16
+  @module_20 Hologram.Test.Fixtures.Compiler.Pruner.Module20
 
   describe "kept functions" do
-    def test_module(compiled_module, expected_module, expected_function) do
+    def function_preserved?(compiled_module, tested_module, function_name, function_arity) do
       module_defs_map = Compiler.compile(compiled_module)
-      result = Pruner.prune(module_defs_map, compiled_module)
 
-      assert [function] = result[expected_module].functions
-      assert function.name == expected_function
+      result = Pruner.prune(module_defs_map, compiled_module)
+      functions = result[tested_module].functions
+
+      Enum.any?(functions, fn %{arity: arity, name: name} ->
+        arity == function_arity && name == function_name
+      end)
     end
 
     test "page actions" do
       module_1 = Hologram.Test.Fixtures.Compiler.Pruner.Module1
-      module_defs_map = Compiler.compile(module_1)
-      result = Pruner.prune(module_defs_map, module_1)
-
-      assert [function_1, function_2, _] = result[module_1].functions
-      assert function_1.name == :action
-      assert function_1.arity == 3
-      assert function_2.name == :action
-      assert function_2.arity == 4
+      assert function_preserved?(module_1, module_1, :action, 3)
+      assert function_preserved?(module_1, module_1, :action, 4)
     end
 
     test "page template" do
       module_2 = Hologram.Test.Fixtures.Compiler.Pruner.Module2
-      test_module(module_2, module_2, :template)
+      assert function_preserved?(module_2, module_2, :template, 0)
     end
 
     test "layout template" do
       module_2 = Hologram.Test.Fixtures.Compiler.Pruner.Module2
-      test_module(module_2, @default_layout, :template)
+      assert function_preserved?(module_2, @default_layout, :template, 0)
     end
 
     test "template of component used in page template" do
       module_3 = Hologram.Test.Fixtures.Compiler.Pruner.Module3
-      test_module(module_3, @module_4, :template)
+      assert function_preserved?(module_3, @module_4, :template, 0)
     end
 
     test "template of component used in component's slot used in page template" do
       module_5 = Hologram.Test.Fixtures.Compiler.Pruner.Module5
-      test_module(module_5, @module_4, :template)
+      assert function_preserved?(module_5, @module_4, :template, 0)
     end
 
     test "functions used by page actions" do
       module_7 = Hologram.Test.Fixtures.Compiler.Pruner.Module7
-      test_module(module_7, @module_8, :test_8)
+      assert function_preserved?(module_7, @module_8, :test_8, 0)
     end
 
     test "functions used by fuctions used by page actions" do
       module_10 = Hologram.Test.Fixtures.Compiler.Pruner.Module10
-      test_module(module_10, @module_8, :test_8)
+      assert function_preserved?(module_10, @module_8, :test_8, 0)
     end
 
     test "functions used in component props" do
       module_11 = Hologram.Test.Fixtures.Compiler.Pruner.Module11
-      test_module(module_11, @module_8, :test_8)
+      assert function_preserved?(module_11, @module_8, :test_8, 0)
     end
 
     test "functions used in element node attrs" do
       module_12 = Hologram.Test.Fixtures.Compiler.Pruner.Module12
-      test_module(module_12, @module_8, :test_8)
+      assert function_preserved?(module_12, @module_8, :test_8, 0)
     end
 
     test "functions used in text node expressions" do
       module_13 = Hologram.Test.Fixtures.Compiler.Pruner.Module13
-      test_module(module_13, @module_8, :test_8)
+      assert function_preserved?(module_13, @module_8, :test_8, 0)
     end
 
     test "functions used in nested nodes" do
       module_14 = Hologram.Test.Fixtures.Compiler.Pruner.Module14
-      test_module(module_14, @module_8, :test_8)
+      assert function_preserved?(module_14, @module_8, :test_8, 0)
+    end
+
+    test "layout function of the pruned page module" do
+      assert function_preserved?(@module_20, @module_20, :layout, 0)
     end
   end
 
   describe "pruned functions" do
+    test "layout function of a page module other than the pruned one" do
+      module_21 = Hologram.Test.Fixtures.Compiler.Pruner.Module21
+      refute function_preserved?(module_21, @module_20, :layout, 0)
+    end
+
     test "not used functions" do
       module_15 = Hologram.Test.Fixtures.Compiler.Pruner.Module15
-      test_module(module_15, @module_16, :test_16a)
+      refute function_preserved?(module_15, @module_16, :test_16b, 0)
     end
 
     test "not used modules" do
