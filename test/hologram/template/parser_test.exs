@@ -88,4 +88,14 @@ defmodule Hologram.Template.ParserTest do
 
     assert result == expected
   end
+
+  test "removes doctype" do
+    markup = """
+    \n\t <!DoCtYpE html test_1 test_2>
+    content
+    """
+
+    result = Parser.parse(markup)
+    assert result == {:ok, ["\ncontent\n"]}
+  end
 end
