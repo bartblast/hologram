@@ -25,12 +25,10 @@ defmodule Hologram.Template.Builder do
     |> Transformer.transform(aliases)
   end
 
+  defp build_template(module, nil), do: module.template()
+
   defp build_template(module, layout) do
-    if layout do
-      layout_name = Helpers.module_name(layout)
-      "<#{layout_name}>#{module.template()}</#{layout_name}>"
-    else
-      module.template()
-    end
+    layout_name = Helpers.module_name(layout)
+    "<#{layout_name}>#{module.template()}</#{layout_name}>"
   end
 end
