@@ -14,6 +14,7 @@ defmodule Hologram.Template.PageRendererTest do
 
     module = Hologram.Test.Fixtures.Template.PageRenderer.Module1
     result = Renderer.render(module, %{})
+    IO.inspect(result)
 
     expected =
       """
@@ -22,12 +23,13 @@ defmodule Hologram.Template.PageRendererTest do
         <head>
           <title>Hologram Demo</title>
           <script src="/js/hologram.js"></script>
-          <script src="/hologram/page-6b852779c06374d754ee658116cbc197.js"></script>
+          <script src="/hologram/page-6cbbce3122c5014da00df8782f15a1ed.js"></script>
           <script>
-            Hologram.run(window, Elixir_Hologram_Test_Fixtures_Template_PageRenderer_Module1, { type: 'map', data: { '~atom[a]': { type: 'integer', value: 123 } } })
+            Hologram.run(window, Elixir_Hologram_Test_Fixtures_Template_PageRenderer_Module1, { type: 'map', data: { '~atom[a]': { type: 'integer', value: 123 }, '~atom[context]': { type: 'map', data: { '~atom[__class_name__]': { type: 'string', value: 'Elixir_Hologram_Test_Fixtures_Template_PageRenderer_Module1' }, '~atom[__digest__]': { type: 'string', value: '6cbbce3122c5014da00df8782f15a1ed' }, '~atom[__page_src__]': { type: 'string', value: '/hologram/page-6cbbce3122c5014da00df8782f15a1ed.js' } } } } })
           </script>
         </head>
         <body>
+          default layout:
           <div>test template 123</div>
         </body>
       </html>\

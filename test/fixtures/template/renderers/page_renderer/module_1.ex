@@ -1,5 +1,5 @@
 defmodule Hologram.Test.Fixtures.Template.PageRenderer.Module1 do
-  use Hologram.Component
+  use Hologram.Page
 
   def state do
     %{
@@ -9,9 +9,7 @@ defmodule Hologram.Test.Fixtures.Template.PageRenderer.Module1 do
 
   def template do
     ~H"""
-    <body>
-      <div>test template {@a}</div>
-    </body>
+    <div>test template {@a}</div>
     """
   end
 end

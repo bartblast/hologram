@@ -1,56 +1,41 @@
 alias Hologram.Compiler.{Helpers, Serializer}
 alias Hologram.Template.{Builder, Renderer}
+alias Hologram.Utils
 
 defimpl Renderer, for: Atom do
   def render(module, _params, slots) do
-    # DEFER: pass params to state function
-    state = module.state()
+    state = init_state(module)
+    layout = module.layout()
 
-    Builder.build(module)
+    Builder.build(module, layout)
     |> Renderer.render(state, slots)
-    |> render_layout(state)
-    |> inject_runtime_values(module)
+    |> Utils.prepend("<!DOCTYPE html>")
   end
 
   # DEFER: optimize, e.g. load the manifest in config
-  defp get_runtime_digest(module) do
+  defp get_digest(module) do
     File.cwd!() <> "/priv/static/hologram/manifest.json"
     |> File.read!()
     |> Jason.decode!()
     |> Map.get("#{module}")
   end
 
-  defp inject_runtime_values(html, module) do
-    digest = get_runtime_digest(module)
+  defp init_state(module) do
     class_name = Helpers.class_name(module)
+    digest = get_digest(module)
 
-    String.replace(html, "{#runtime_digest}", digest)
-    |> String.replace("{#class_name}", class_name)
-  end
+    # DEFER: pass page params to state function
+    state =
+      module.state()
+      |> Map.put(:context, %{
+        __class_name__: class_name,
+        __digest__: digest,
+        # TODO: use __digest__ interpolation instead of __page_src__
+        __page_src__: "/hologram/page-#{digest}.js"
+      })
 
-  defp render_layout(inner_html, state) do
     serialized_state = Serializer.serialize(state)
-
-    part_1 =
-      """
-      <!DOCTYPE html>
-      <html>
-        <head>
-          <title>Hologram Demo</title>
-          <script src="/js/hologram.js"></script>
-          <script src="/hologram/page-{#runtime_digest}.js"></script>
-          <script>
-            Hologram.run(window, {#class_name}, #{serialized_state})
-          </script>
-        </head>
-      """
-
-    # fix indentation
-    part_2 =
-      String.split(inner_html, "\n")
-      |> Enum.map(&("  " <> &1))
-      |> Enum.join("\n")
-
-    part_1 <> part_2 <> "\n</html>"
+    context = Map.put(state.context, :__serialized_state__, serialized_state)
+    Map.put(state, :context, context)
   end
 end
