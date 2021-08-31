@@ -86,8 +86,9 @@ defmodule Hologram.Compiler.Pruner do
     Enum.reduce(exprs, acc, &traverse_function_defs(&2, module_defs_map, &1))
   end
 
-  defp traverse_function_defs(acc, module_defs_map, %FunctionCall{module: module, function: function}) do
-    traverse_function_defs(acc, module_defs_map, {module, function})
+  defp traverse_function_defs(acc, module_defs_map, %FunctionCall{module: module, function: function, params: params}) do
+    Enum.reduce(params, acc, &traverse_function_defs(&2, module_defs_map, &1))
+    |> traverse_function_defs( module_defs_map, {module, function})
   end
 
   defp traverse_function_defs(acc, module_defs_map, %FunctionDefinition{body: body}) do
