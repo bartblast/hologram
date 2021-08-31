@@ -9,6 +9,7 @@ defmodule Hologram.Compiler.SigilHGenerator do
     |> Map.get(:parts)
     |> hd()
     |> Map.get(:value)
+    |> String.trim()
     |> Parser.parse!()
     |> Transformer.transform(context.aliases)
     |> Generator.generate()

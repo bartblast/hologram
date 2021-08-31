@@ -12,14 +12,14 @@ defmodule Hologram.Compiler.SigilHGeneratorTest do
         params: [
           %BinaryType{
             parts: [
-              %StringType{value: "<div>Hello World {@counter}</div>\n"}
+              %StringType{value: "\n<div>Hello World {@counter}</div>\n"}
             ]
           },
           %ListType{data: []}
         ]
       }
 
-    expected = "[{ type: 'element', tag: 'div', attrs: {}, children: [{ type: 'text', content: 'Hello World ' }, { type: 'expression', callback: ($state) => { return { type: 'tuple', data: [ $state.data['~atom[counter]'] ] } } }] }, { type: 'text', content: '\\n' }]"
+    expected = "[{ type: 'element', tag: 'div', attrs: {}, children: [{ type: 'text', content: 'Hello World ' }, { type: 'expression', callback: ($state) => { return { type: 'tuple', data: [ $state.data['~atom[counter]'] ] } } }] }]"
 
     result = SigilHGenerator.generate(ir, %Context{})
     assert result == expected
