@@ -28,14 +28,13 @@ defimpl Renderer, for: Atom do
     state =
       module.state()
       |> Map.put(:context, %{
-        __class_name__: class_name,
-        __digest__: digest,
+        __class__: class_name,
         # TODO: use __digest__ interpolation instead of __page_src__
-        __page_src__: "/hologram/page-#{digest}.js"
+        __src__: "/hologram/page-#{digest}.js"
       })
 
     serialized_state = Serializer.serialize(state)
-    context = Map.put(state.context, :__serialized_state__, serialized_state)
+    context = Map.put(state.context, :__state__, serialized_state)
     Map.put(state, :context, context)
   end
 end

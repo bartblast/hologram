@@ -17,14 +17,13 @@ defmodule Hologram.Template.PageRendererTest do
 
     expected =
       """
-      <!DOCTYPE html>
-      <html>
+      <!DOCTYPE html><html>
         <head>
           <title>Hologram Demo</title>
           <script src="/js/hologram.js"></script>
-          <script src="/hologram/page-6cbbce3122c5014da00df8782f15a1ed.js"></script>
+          <script src="/hologram/page-6f56263e38be28e0045ad607eeb9c4c4.js"></script>
           <script>
-            Hologram.run(window, Elixir_Hologram_Test_Fixtures_Template_PageRenderer_Module1, { type: 'map', data: { '~atom[a]': { type: 'integer', value: 123 }, '~atom[context]': { type: 'map', data: { '~atom[__class_name__]': { type: 'string', value: 'Elixir_Hologram_Test_Fixtures_Template_PageRenderer_Module1' }, '~atom[__digest__]': { type: 'string', value: '6cbbce3122c5014da00df8782f15a1ed' }, '~atom[__page_src__]': { type: 'string', value: '/hologram/page-6cbbce3122c5014da00df8782f15a1ed.js' } } } } })
+            Hologram.run(window, Elixir_Hologram_Test_Fixtures_Template_PageRenderer_Module1, "{ type: 'map', data: { '~atom[a]': { type: 'integer', value: 123 }, '~atom[context]': { type: 'map', data: { '~atom[__class__]': { type: 'string', value: 'Elixir_Hologram_Test_Fixtures_Template_PageRenderer_Module1' }, '~atom[__src__]': { type: 'string', value: '/hologram/page-6f56263e38be28e0045ad607eeb9c4c4.js' } } } } }")
           </script>
         </head>
         <body>
