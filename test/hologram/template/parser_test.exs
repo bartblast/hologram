@@ -67,8 +67,7 @@ defmodule Hologram.Template.ParserTest do
                {"def", "{@def}"}
              ], []},
             "\n"
-          ]},
-         "\n"
+          ]}
        ]}
 
     assert result == expected
@@ -89,13 +88,13 @@ defmodule Hologram.Template.ParserTest do
     assert result == expected
   end
 
-  test "removes doctype" do
+  test "removes doctype and trims leading and trailing white chars" do
     markup = """
-    \n\t <!DoCtYpE html test_1 test_2>
-    content
+    \n\t <!DoCtYpE html test_1 test_2> \t\n
+    content \t\n
     """
 
     result = Parser.parse(markup)
-    assert result == {:ok, ["\ncontent\n"]}
+    assert result == {:ok, ["content"]}
   end
 end

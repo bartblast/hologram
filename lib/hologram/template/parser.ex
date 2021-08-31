@@ -4,6 +4,7 @@ defmodule Hologram.Template.Parser do
   def parse(markup) do
     result =
       remove_doctype(markup)
+      |> String.trim()
       |> wrap_root_around()
       |> fix_quotes()
       |> Saxy.SimpleForm.parse_string()
@@ -23,7 +24,7 @@ defmodule Hologram.Template.Parser do
   end
 
   defp remove_doctype(markup) do
-    regex = ~r/^\s*<!DOCTYPE[^>]*>/i
+    regex = ~r/^\s*<!DOCTYPE[^>]*>\s*/i
     String.replace(markup, regex, "")
   end
 
