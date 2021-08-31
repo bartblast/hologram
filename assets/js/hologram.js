@@ -78,9 +78,9 @@ export default class Hologram {
   }
 
   // TODO: refactor & test
-  static run(window, pageModule, state) {
+  static run(window, pageModule, serializedState) {
     Hologram.onReady(window.document, () => {
-      Hologram.getRuntime(window).mountPage(pageModule, state)
+      Hologram.getRuntime(window).mountPage(pageModule, serializedState)
     })
   }
 }

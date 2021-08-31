@@ -111,14 +111,16 @@ export default class DOM {
   // TODO: refactor & test
   render(pageModule) {
     if (!this.oldVNode) {
-      const container = this.document.body
-      this.oldVNode = toVNode(container)
+      this.oldVNode = toVNode(this.document.documentElement)
     }
 
-    let context = {scopeModule: pageModule, pageModule: pageModule}
-    let template = context.pageModule.template()
+    const pageTemplate = pageModule.template()
+    const layoutClassName = pageModule.layout().class
+    const layoutTemplate = Runtime.getModule(layoutClassName).template()
 
-    let newVNode = this.buildVNode(template, this.runtime.state, context)[0]
+    const context = {scopeModule: pageModule, pageModule: pageModule, slots: {default: pageTemplate}}
+
+    let newVNode = this.buildVNode(layoutTemplate, this.runtime.state, context)[0]
     patch(this.oldVNode, newVNode)
     this.oldVNode = newVNode
   }

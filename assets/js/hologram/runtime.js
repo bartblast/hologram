@@ -40,7 +40,15 @@ export default class Runtime {
   }
 
   // TODO: refactor & test
-  static getModule(name) {
+  static getModule(module) {
+    let name;
+
+    if (module.type == "module") {
+      name = module.class
+    } else {
+      name = module
+    }
+
     return eval(name.replace(/\./g, ""))
   }  
 
@@ -159,9 +167,11 @@ export default class Runtime {
   }
 
   // TODO: refactor & test
-  mountPage(pageModule, state) {
+  mountPage(pageModule, serializedState) {
+    eval(`this.state = ${serializedState}`)
+    this.state.data["~atom[context]"].data['~atom[__state__]'] = {type: "string", value: serializedState}
+
     this.pageModule = pageModule
-    this.state = state
     this.dom.render(this.pageModule)
 
     const html = this.dom.getHTML()
