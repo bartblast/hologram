@@ -32,4 +32,8 @@ defmodule Hologram.UtilsTest do
       assert Utils.atomize_keys(9) == 9
     end
   end
+
+  test "prepend/2" do
+    assert Utils.prepend("string", "prefix") == "prefixstring"
+  end
 end

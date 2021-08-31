@@ -14,4 +14,6 @@ defmodule Hologram.Utils do
   end
 
   def atomize_keys(data), do: data
+
+  def prepend(str, prefix), do: prefix <> str
 end
