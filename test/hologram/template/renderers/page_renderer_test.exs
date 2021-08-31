@@ -14,7 +14,6 @@ defmodule Hologram.Template.PageRendererTest do
 
     module = Hologram.Test.Fixtures.Template.PageRenderer.Module1
     result = Renderer.render(module, %{})
-    IO.inspect(result)
 
     expected =
       """
