@@ -7,11 +7,7 @@ defmodule Hologram.E2E.DefaultLayout do
     <html>
       <head>
         <title>Hologram Demo</title>
-        <script src="/js/hologram.js"></script>
-        <script src="{@context.__src__}"></script>
-        <script>
-          Hologram.run(window, {@context.__class__}, "{@context.__state__}")
-        </script>
+        <Hologram.UI.Runtime />
       </head>
       <body>
         default layout:
