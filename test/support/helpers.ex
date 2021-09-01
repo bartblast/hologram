@@ -9,5 +9,6 @@ defmodule Hologram.Test.Helpers do
     Task.run(pages_path: pages_path)
   end
 
+  defdelegate uuid_hex_regex, to: Utils
   defdelegate uuid_regex, to: Utils
 end
