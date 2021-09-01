@@ -49,10 +49,6 @@ export default class ScriptsReloader {
     }
   }
 
-  static insertAfter(newNode, existingNode) {
-    existingNode.parentNode.insertBefore(newNode, existingNode.nextSibling);
-  }
-
   static isExecutableScript(script) {
     const type = script.getAttribute('type')
     return !type || ScriptsReloader.EXECUTABLE_TYPES.includes(type)
