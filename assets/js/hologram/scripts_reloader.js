@@ -38,14 +38,19 @@ export default class ScriptsReloader {
     } else {
       reloadedScript.textContent = script.innerText
     }
+
   
-    // DEFER: re-insert in the original location instead of head
-    document.head.appendChild(reloadedScript)
-    script.parentNode.removeChild(script)
-  
-    if (ScriptsReloader.isInlineScript(script)) {
+    if (ScriptsReloader.isInlineScript(reloadedScript)) {
+      eval(reloadedScript.textContent)
       callback()
+    } else {
+      script.parentNode.insertBefore(reloadedScript, script)
+      script.parentNode.removeChild(script)
     }
+  }
+
+  static insertAfter(newNode, existingNode) {
+    existingNode.parentNode.insertBefore(newNode, existingNode.nextSibling);
   }
 
   static isExecutableScript(script) {
