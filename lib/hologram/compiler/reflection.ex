@@ -23,6 +23,14 @@ defmodule Hologram.Compiler.Reflection do
     |> Normalizer.normalize()
   end
 
+  # DEFER: optimize, e.g. load the manifest in config
+  def get_page_digest(module) do
+    File.cwd!() <> "/priv/static/hologram/manifest.json"
+    |> File.read!()
+    |> Jason.decode!()
+    |> Map.get("#{module}")
+  end
+
   def has_template?(module) do
     function_exported?(module, :template, 0)
   end

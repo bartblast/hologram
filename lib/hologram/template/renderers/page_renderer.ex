@@ -1,4 +1,4 @@
-alias Hologram.Compiler.{Helpers, Serializer}
+alias Hologram.Compiler.{Helpers, Reflection, Serializer}
 alias Hologram.Template.{Builder, Renderer}
 alias Hologram.Utils
 
@@ -12,17 +12,9 @@ defimpl Renderer, for: Atom do
     |> Utils.prepend("<!DOCTYPE html>\n")
   end
 
-  # DEFER: optimize, e.g. load the manifest in config
-  defp get_digest(module) do
-    File.cwd!() <> "/priv/static/hologram/manifest.json"
-    |> File.read!()
-    |> Jason.decode!()
-    |> Map.get("#{module}")
-  end
-
   defp init_state(module) do
     class_name = Helpers.class_name(module)
-    digest = get_digest(module)
+    digest = Reflection.get_page_digest(module)
 
     # DEFER: pass page params to state function
     state =

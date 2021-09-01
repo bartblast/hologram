@@ -8,6 +8,11 @@ defmodule Hologram.Compiler.ReflectionTest do
   @module_2 Hologram.Test.Fixtures.Compiler.Reflection.Module2
   @module_segs_1 [:Hologram, :Test, :Fixtures, :Compiler, :Reflection, :Module1]
 
+  test "get_page_digest/1" do
+    result = Reflection.get_page_digest(Elixir.Hologram.E2E.Page1)
+    assert result =~ uuid_hex_regex()
+  end
+
   describe "has_template?/1" do
     test "true" do
       module = Hologram.Test.Fixtures.Compiler.Reflection.Module3
