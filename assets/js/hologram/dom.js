@@ -2,6 +2,7 @@ import {attributesModule, eventListenersModule, h, init, toVNode} from "snabbdom
 const patch = init([attributesModule, eventListenersModule]);
 
 import Runtime from "./runtime"
+import Utils from "./utils"
 
 export default class DOM {
   static PRUNED_ATTRS = ["on_click"]
@@ -33,6 +34,7 @@ export default class DOM {
           context.scopeModule = module
         }
 
+        context = Utils.clone(context)
         context.slots = { default: node.children }
 
         return this.buildVNode(module.template(), state, context)
