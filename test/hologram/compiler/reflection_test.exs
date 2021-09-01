@@ -92,13 +92,18 @@ defmodule Hologram.Compiler.ReflectionTest do
   end
 
   describe "templatable/1" do
+    test "component" do
+      module_def = %ModuleDefinition{uses: [%UseDirective{module: Hologram.Component}]}
+      assert Reflection.templatable?(module_def)
+    end
+
     test "page" do
       module_def = %ModuleDefinition{uses: [%UseDirective{module: Hologram.Page}]}
       assert Reflection.templatable?(module_def)
     end
 
-    test "component" do
-      module_def = %ModuleDefinition{uses: [%UseDirective{module: Hologram.Component}]}
+    test "layout" do
+      module_def = %ModuleDefinition{uses: [%UseDirective{module: Hologram.Layout}]}
       assert Reflection.templatable?(module_def)
     end
 

@@ -122,6 +122,8 @@ defmodule Hologram.Compiler.Reflection do
   end
 
   def templatable?(module_def) do
-    Helpers.is_page?(module_def) || Helpers.is_component?(module_def)
+    Helpers.is_component?(module_def)
+    || Helpers.is_page?(module_def)
+    || Helpers.is_layout?(module_def)
   end
 end
