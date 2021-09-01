@@ -17,7 +17,8 @@ defmodule Hologram.Template.PageRendererTest do
 
     expected =
       """
-      <!DOCTYPE html><html>
+      <!DOCTYPE html>
+      <html>
         <head>
           <title>Hologram Demo</title>
           <script src="/js/hologram.js"></script>

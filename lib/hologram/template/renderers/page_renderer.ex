@@ -9,7 +9,7 @@ defimpl Renderer, for: Atom do
 
     Builder.build(module, layout)
     |> Renderer.render(state, slots)
-    |> Utils.prepend("<!DOCTYPE html>")
+    |> Utils.prepend("<!DOCTYPE html>\n")
   end
 
   # DEFER: optimize, e.g. load the manifest in config
