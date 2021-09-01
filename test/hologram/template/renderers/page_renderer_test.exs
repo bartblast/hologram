@@ -26,10 +26,10 @@ defmodule Hologram.Template.PageRendererTest do
         <head>
           <title>Hologram Demo</title>
           <script src="/js/hologram.js"></script>
-          <script src="/hologram/page-#{digest}.js"></script>
-          <script>
-            Hologram.run(window, Elixir_Hologram_Test_Fixtures_Template_PageRenderer_Module1, "{ type: 'map', data: { '~atom[a]': { type: 'integer', value: 123 }, '~atom[context]': { type: 'map', data: { '~atom[__class__]': { type: 'string', value: 'Elixir_Hologram_Test_Fixtures_Template_PageRenderer_Module1' }, '~atom[__src__]': { type: 'string', value: '/hologram/page-#{digest}.js' } } } } }")
-          </script>
+      <script src="/hologram/page-#{digest}.js"></script>
+      <script>
+        Hologram.run(window, Elixir_Hologram_Test_Fixtures_Template_PageRenderer_Module1, "{ type: 'map', data: { '~atom[a]': { type: 'integer', value: 123 }, '~atom[context]': { type: 'map', data: { '~atom[__class__]': { type: 'string', value: 'Elixir_Hologram_Test_Fixtures_Template_PageRenderer_Module1' }, '~atom[__src__]': { type: 'string', value: '/hologram/page-#{digest}.js' } } } } }")
+      </script>
         </head>
         <body>
           default layout:

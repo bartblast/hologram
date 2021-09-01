@@ -95,8 +95,7 @@ defmodule Hologram.Template.TransformerTest do
         },
         children: [],
         tag: "div"
-      },
-      %TextNode{content: "\n"}
+      }
     ]
 
     assert result == expected
