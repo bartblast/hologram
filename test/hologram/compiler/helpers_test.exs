@@ -258,6 +258,25 @@ defmodule Hologram.Compiler.HelpersTest do
     end
   end
 
+  describe "is_layout?/1" do
+    test "true" do
+      module_def = %ModuleDefinition{
+        uses: [
+          %UseDirective{
+            module: Hologram.Layout
+          }
+        ]
+      }
+
+      assert Helpers.is_layout?(module_def)
+    end
+
+    test "false" do
+      module_def = %ModuleDefinition{uses: []}
+      refute Helpers.is_layout?(module_def)
+    end
+  end
+
   describe "is_page?/1" do
     test "true" do
       module_definition = %ModuleDefinition{

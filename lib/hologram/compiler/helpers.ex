@@ -80,6 +80,10 @@ defmodule Hologram.Compiler.Helpers do
     uses_module?(module_definition, Hologram.Component)
   end
 
+  def is_layout?(module_def) do
+    uses_module?(module_def, Hologram.Layout)
+  end
+
   @doc """
   Returns true if the given module is a page,
   i.e. it contains a use directive for the Hologram.Page module.
