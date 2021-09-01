@@ -98,4 +98,11 @@ defmodule Hologram.CompilerTest do
 
     assert Map.has_key?(result, @default_layout)
   end
+
+  test "includes components used in the layout template" do
+    module_18 = Hologram.Test.Fixtures.Compiler.Module18
+    result = Compiler.compile(module_18)
+
+    assert Map.has_key?(result, Hologram.UI.Runtime)
+  end
 end
