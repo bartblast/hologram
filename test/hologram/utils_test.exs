@@ -36,4 +36,17 @@ defmodule Hologram.UtilsTest do
   test "prepend/2" do
     assert Utils.prepend("string", "prefix") == "prefixstring"
   end
+
+  test "uuid/0" do
+    assert Utils.uuid() =~ uuid_regex()
+  end
+
+  test "uuid/1" do
+    regex = ~r/^[0-9a-f]{32}$/
+    assert Utils.uuid(:hex) =~ regex
+  end
+
+  test "uuid_regex/0" do
+    assert Ecto.UUID.generate() =~ uuid_regex()
+  end
 end

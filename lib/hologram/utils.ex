@@ -16,4 +16,17 @@ defmodule Hologram.Utils do
   def atomize_keys(data), do: data
 
   def prepend(str, prefix), do: prefix <> str
+
+  def uuid do
+    Ecto.UUID.generate()
+  end
+
+  def uuid(:hex) do
+    uuid()
+    |> String.replace("-", "")
+  end
+  
+  def uuid_regex do
+    ~r/^[0-9a-f]{8}\-[0-9a-f]{4}\-[0-9a-f]{4}\-[0-9a-f]{4}\-[0-9a-f]{12}$/
+  end
 end
