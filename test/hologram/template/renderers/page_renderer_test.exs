@@ -1,5 +1,7 @@
 defmodule Hologram.Template.PageRendererTest do
   use Hologram.TestCase, async: false
+
+  alias Hologram.Compiler.Reflection
   alias Hologram.Template.Renderer
 
   setup_all do
@@ -13,6 +15,8 @@ defmodule Hologram.Template.PageRendererTest do
     compile_pages("test/fixtures/template/renderers/page_renderer")
 
     module = Hologram.Test.Fixtures.Template.PageRenderer.Module1
+    digest = Reflection.get_page_digest(module)
+
     result = Renderer.render(module, %{})
 
     expected =
