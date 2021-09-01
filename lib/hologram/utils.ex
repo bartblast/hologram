@@ -25,7 +25,11 @@ defmodule Hologram.Utils do
     uuid()
     |> String.replace("-", "")
   end
-  
+
+  def uuid_hex_regex do
+    ~r/^[0-9a-f]{32}$/
+  end
+
   def uuid_regex do
     ~r/^[0-9a-f]{8}\-[0-9a-f]{4}\-[0-9a-f]{4}\-[0-9a-f]{4}\-[0-9a-f]{12}$/
   end

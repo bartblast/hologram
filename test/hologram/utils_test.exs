@@ -42,8 +42,7 @@ defmodule Hologram.UtilsTest do
   end
 
   test "uuid/1" do
-    regex = ~r/^[0-9a-f]{32}$/
-    assert Utils.uuid(:hex) =~ regex
+    assert Utils.uuid(:hex) =~ uuid_hex_regex()
   end
 
   test "uuid_regex/0" do
