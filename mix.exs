@@ -3,7 +3,7 @@ defmodule Demo.MixProject do
 
   def compilers do
     compilers = [:phoenix, :gettext] ++ Mix.compilers()
-    if Mix.env() == :test, do: compilers, else: compilers ++ [:hologram]
+    # if Mix.env() == :test, do: compilers, else: compilers ++ [:hologram]
   end
 
   def package do
