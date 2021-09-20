@@ -8,7 +8,7 @@ defmodule Demo.MixProject do
 
   def package do
     [
-      files: ["mix.exs", "README.md"],
+      files: ["lib", "mix.exs", "README.md"],
       maintainers: ["Segmetric", "Bart Blast"],
       licenses: ["MIT"],
       links: %{"GitHub" => "https://github.com/segmetric/hologram"}
@@ -51,7 +51,7 @@ defmodule Demo.MixProject do
 
   # Specifies which paths to compile per environment.
   defp elixirc_paths(:test), do: ["lib", "test/fixtures", "test/support"]
-  defp elixirc_paths(_), do: ["lib/hologram"]
+  defp elixirc_paths(_), do: ["lib"]
 
   # Specifies your project dependencies.
   #
