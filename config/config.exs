@@ -12,7 +12,8 @@ config :hologram,
   default_layout: Hologram.E2E.DefaultLayout,
   pages_path: "#{File.cwd!()}/e2e/pages"
 
-config :e2e, :hologram,
+# E2E tests
+config :hologram, :hologram,
   app_path: "#{File.cwd!()}/e2e",
   router_module: DemoWeb.Router
 

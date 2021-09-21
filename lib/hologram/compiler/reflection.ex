@@ -2,7 +2,8 @@ defmodule Hologram.Compiler.Reflection do
   alias Hologram.Compiler.IR.ModuleDefinition
   alias Hologram.Compiler.{Context, Helpers, Normalizer, Parser, Transformer}
 
-  @config Application.get_env(:e2e, :hologram)
+  # Can't call app_name() during compilation.
+  @config Application.get_env(Mix.Project.get().project[:app], :hologram)
 
   # TODO: refactor & test
   def app_name do
