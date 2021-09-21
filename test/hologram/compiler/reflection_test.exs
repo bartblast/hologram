@@ -8,6 +8,10 @@ defmodule Hologram.Compiler.ReflectionTest do
   @module_2 Hologram.Test.Fixtures.Compiler.Reflection.Module2
   @module_segs_1 [:Hologram, :Test, :Fixtures, :Compiler, :Reflection, :Module1]
 
+  test "app_name/0" do
+    assert Reflection.app_name() == :hologram
+  end
+
   describe "app_path/1" do
     test "default" do
       result = Reflection.app_path([])
@@ -123,7 +127,7 @@ defmodule Hologram.Compiler.ReflectionTest do
 
   test "router_path/0" do
     result = Reflection.router_path()
-    expected = "#{File.cwd!()}/e2e/router.ex"
+    expected = "#{File.cwd!()}/e2e/phoenix/demo_web/router.ex"
 
     assert result == expected
   end

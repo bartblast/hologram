@@ -3,9 +3,8 @@ defmodule Hologram.Compiler.Reflection do
   alias Hologram.Compiler.{Context, Helpers, Normalizer, Parser, Transformer}
   alias Hologram.Utils
 
-  # TODO: refactor & test
   def app_name do
-    Mix.Project.get().project[:app]
+    get_config()[:app_name]
   end
 
   def app_path(config \\ get_config()) do
@@ -26,8 +25,8 @@ defmodule Hologram.Compiler.Reflection do
     |> Normalizer.normalize()
   end
 
-  def get_config do
-    Application.get_env(app_name(), :hologram)
+  defp get_config do
+    Application.get_all_env(:hologram)
   end
 
   # DEFER: optimize, e.g. load the manifest in config
