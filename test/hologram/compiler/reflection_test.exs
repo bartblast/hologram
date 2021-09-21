@@ -12,7 +12,7 @@ defmodule Hologram.Compiler.ReflectionTest do
     test "default" do
       result = Reflection.app_path([])
       expected = "#{File.cwd!()}/app"
-      
+
       assert result == expected
     end
 
@@ -99,16 +99,20 @@ defmodule Hologram.Compiler.ReflectionTest do
       assert Reflection.standard_lib?(Map)
     end
 
-    test "lib module" do
+    test "app module" do
       refute Reflection.standard_lib?(Hologram.E2E.Page1)
     end
 
-    test "deps module" do
-      refute Reflection.standard_lib?(Phoenix)
+    test "lib module" do
+      refute Reflection.standard_lib?(Hologram.Compiler)
     end
 
     test "test module" do
       refute Reflection.standard_lib?(Hologram.Compiler.ReflectionTest)
+    end
+
+    test "deps module" do
+      refute Reflection.standard_lib?(Phoenix)
     end
   end
 

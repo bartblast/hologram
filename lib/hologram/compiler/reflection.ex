@@ -122,11 +122,13 @@ defmodule Hologram.Compiler.Reflection do
 
   def standard_lib?(module) do
     source_path = source_path(module)
+    root_path = root_path()
     app_path = app_path()
 
-    !String.starts_with?(source_path, "#{app_path}/deps/")
-    && !String.starts_with?(source_path, "#{app_path}/lib/")
-    && !String.starts_with?(source_path, "#{app_path}/test/")
+    !String.starts_with?(source_path, "#{app_path}/")
+    && !String.starts_with?(source_path, "#{root_path}/lib/")
+    && !String.starts_with?(source_path, "#{root_path}/test/")
+    && !String.starts_with?(source_path, "#{root_path}/deps/")
   end
 
   def templatable?(module_def) do
