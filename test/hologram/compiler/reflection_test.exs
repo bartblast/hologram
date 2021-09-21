@@ -107,7 +107,7 @@ defmodule Hologram.Compiler.ReflectionTest do
   describe "root_path/0" do
     test "default" do
       result = Reflection.root_path([])
-      expected = Path.expand("#{File.cwd!()}/../..")
+      expected = File.cwd!()
 
       assert result == expected
     end
