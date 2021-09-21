@@ -106,6 +106,17 @@ defmodule Hologram.Compiler.Reflection do
     File.cwd!()
   end
 
+  def router_module(config \\ @config) do
+    case Keyword.get(config, :router_module) do
+      nil ->
+        app_module = app_name() |> to_string() |> Macro.camelize()
+        Helpers.module([app_module, :Router])
+
+      router_module ->
+        router_module
+    end
+  end
+
   @doc """
   Returns the file path of the given module's source code.
 
