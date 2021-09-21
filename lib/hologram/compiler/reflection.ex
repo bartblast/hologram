@@ -1,6 +1,7 @@
 defmodule Hologram.Compiler.Reflection do
   alias Hologram.Compiler.IR.ModuleDefinition
   alias Hologram.Compiler.{Context, Helpers, Normalizer, Parser, Transformer}
+  alias Hologram.Utils
 
   # TODO: refactor & test
   def app_name do
@@ -111,8 +112,14 @@ defmodule Hologram.Compiler.Reflection do
   def router_module(config \\ get_config()) do
     case Keyword.get(config, :router_module) do
       nil ->
-        app_module = app_name() |> to_string() |> Macro.camelize()
-        Helpers.module([app_module, :Router])
+        app_web_namespace =
+          app_name()
+          |> to_string()
+          |> Utils.append("_web")
+          |> Macro.camelize()
+          |> String.to_atom()
+
+        Helpers.module([app_web_namespace, :Router])
 
       router_module ->
         router_module

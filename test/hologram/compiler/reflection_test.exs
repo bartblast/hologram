@@ -90,7 +90,7 @@ defmodule Hologram.Compiler.ReflectionTest do
   describe "router_module/1" do
     test "default" do
       result = Reflection.router_module([])
-      expected = Hologram.Router
+      expected = HologramWeb.Router
 
       assert result == expected
     end
