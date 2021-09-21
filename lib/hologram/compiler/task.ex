@@ -4,10 +4,10 @@ defmodule Mix.Tasks.Compile.Hologram do
   use Mix.Task.Compiler
   alias Hologram.Compiler.{Builder, Reflection}
 
-  @app_path Reflection.app_path()
+  @root_path Reflection.root_path()
 
   def run(args) do
-    "#{@app_path}/priv/static/hologram"
+    "#{@root_path}/priv/static/hologram"
     |> File.mkdir_p!()
 
     remove_old_files()
@@ -27,7 +27,7 @@ defmodule Mix.Tasks.Compile.Hologram do
       Enum.into(digests, %{})
       |> Jason.encode!()
 
-    "#{@app_path}/priv/static/hologram/manifest.json"
+    "#{@root_path}/priv/static/hologram/manifest.json"
     |> File.write!(json)
   end
 
@@ -39,7 +39,7 @@ defmodule Mix.Tasks.Compile.Hologram do
       |> Base.encode16()
       |> String.downcase()
 
-    "#{@app_path}/priv/static/hologram/page-#{digest}.js"
+    "#{@root_path}/priv/static/hologram/page-#{digest}.js"
     |> File.write!(js)
 
     {page, digest}
@@ -49,7 +49,7 @@ defmodule Mix.Tasks.Compile.Hologram do
   # So everytime a route is updated in a page module, we need to explicitely recompile the router module, so that
   # it rebuilds the list of routes.
   defp reload_routes do
-    router_path = "#{@app_path}/lib/demo_web/router.ex"
+    router_path = Reflection.router_path()
 
     opts = Code.compiler_options()
     Code.compiler_options(ignore_module_conflict: true)
@@ -58,7 +58,7 @@ defmodule Mix.Tasks.Compile.Hologram do
   end
 
   defp remove_old_files do
-    "#{@app_path}/priv/static/hologram/*"
+    "#{@root_path}/priv/static/hologram/*"
     |> Path.wildcard()
     |> Enum.each(&File.rm!/1)
   end

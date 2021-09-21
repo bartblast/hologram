@@ -13,7 +13,8 @@ config :hologram,
   pages_path: "#{File.cwd!()}/e2e/pages"
 
 config :e2e, :hologram,
-  app_path: "#{File.cwd!()}/e2e"
+  app_path: "#{File.cwd!()}/e2e",
+  router_module: DemoWeb.Router
 
 config :hologram,
   ecto_repos: [Demo.Repo]
