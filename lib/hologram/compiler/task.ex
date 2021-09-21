@@ -6,14 +6,14 @@ defmodule Mix.Tasks.Compile.Hologram do
 
   @root_path Reflection.root_path()
 
-  def run(args) do
+  def run(_) do
     "#{@root_path}/priv/static/hologram"
     |> File.mkdir_p!()
 
     remove_old_files()
 
     # DEFER: parallelize
-    Reflection.list_pages(args)
+    Reflection.list_pages()
     |> Enum.map(&build_page/1)
     |> build_manifest()
 

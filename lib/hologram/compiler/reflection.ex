@@ -43,8 +43,8 @@ defmodule Hologram.Compiler.Reflection do
   end
 
   # TODO: refactor & test
-  def list_pages(opts \\ []) do
-    glob = "#{pages_path()}/**/*.ex"
+  def list_pages(config \\ get_config()) do
+    glob = "#{pages_path(config)}/**/*.ex"
     regex = ~r/defmodule\s+([\w\.]+)\s+do\s+/
 
     Path.wildcard(glob)
