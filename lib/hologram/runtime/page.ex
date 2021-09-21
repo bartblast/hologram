@@ -1,6 +1,5 @@
 defmodule Hologram.Page do
-  # Can't use Hologram.Compiler.Reflection.app_name/0 in compile-time.
-  @default_layout Application.get_env(Mix.Project.get().project[:app], :hologram)[:default_layout]
+  @default_layout Application.get_env(:hologram, :default_layout)
 
   defmacro __using__(_) do
     quote do

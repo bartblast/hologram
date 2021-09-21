@@ -8,7 +8,8 @@
 use Mix.Config
 
 # E2E tests
-config :hologram, :hologram,
+config :hologram,
+  app_name: :hologram,
   app_path: "#{File.cwd!()}/e2e",
   default_layout: Hologram.E2E.DefaultLayout,
   router_module: DemoWeb.Router
