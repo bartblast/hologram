@@ -3,12 +3,12 @@ defmodule Demo.MixProject do
 
   def compilers do
     compilers = [:phoenix, :gettext] ++ Mix.compilers()
-    # if Mix.env() == :test, do: compilers, else: compilers ++ [:hologram]
+    if Mix.env() == :test, do: compilers, else: compilers ++ [:hologram]
   end
 
   def package do
     [
-      files: ["lib", "mix.exs", "README.md"],
+      files: ["lib/hologram", "mix.exs", "README.md"],
       maintainers: ["Segmetric", "Bart Blast"],
       licenses: ["MIT"],
       links: %{"GitHub" => "https://github.com/segmetric/hologram"}
@@ -43,18 +43,15 @@ defmodule Demo.MixProject do
   #
   # Type `mix help compile.app` for more information.
   def application do
-    # [
-    #   mod: {Demo.Application, []},
-    #   extra_applications: [:logger, :runtime_tools]
-    # ]
     [
-      extra_applications: [:logger]
+      mod: {Demo.Application, []},
+      extra_applications: [:logger, :runtime_tools]
     ]
   end
 
   # Specifies which paths to compile per environment.
   defp elixirc_paths(:test), do: ["lib", "test/fixtures", "test/support"]
-  defp elixirc_paths(_), do: ["lib"]
+  defp elixirc_paths(_), do: ["lib/hologram"]
 
   # Specifies your project dependencies.
   #
