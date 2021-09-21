@@ -7,14 +7,10 @@
 # General application configuration
 use Mix.Config
 
-# Framework config
-config :hologram,
-  default_layout: Hologram.E2E.DefaultLayout,
-  pages_path: "#{File.cwd!()}/e2e/pages"
-
 # E2E tests
 config :hologram, :hologram,
   app_path: "#{File.cwd!()}/e2e",
+  default_layout: Hologram.E2E.DefaultLayout,
   router_module: DemoWeb.Router
 
 config :hologram,
