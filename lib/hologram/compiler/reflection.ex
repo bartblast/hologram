@@ -31,7 +31,7 @@ defmodule Hologram.Compiler.Reflection do
 
   # DEFER: optimize, e.g. load the manifest in config
   def get_page_digest(module) do
-    File.cwd!() <> "/priv/static/hologram/manifest.json"
+    "#{root_path()}/priv/static/hologram/manifest.json"
     |> File.read!()
     |> Jason.decode!()
     |> Map.get("#{module}")
