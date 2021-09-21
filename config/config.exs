@@ -10,7 +10,10 @@ use Mix.Config
 # Framework config
 config :hologram,
   default_layout: Hologram.E2E.DefaultLayout,
-  pages_path: "#{File.cwd!()}/lib/e2e/pages"
+  pages_path: "#{File.cwd!()}/e2e/pages"
+
+config :e2e, :hologram,
+  app_path: "#{File.cwd!()}/e2e"
 
 config :hologram,
   ecto_repos: [Demo.Repo]
