@@ -39,3 +39,6 @@ npm-debug.log
 
 # Tests used for debugging purposes.
 /debugger.exs
+
+# Elixir Language Server build.
+/.elixir_ls/*
