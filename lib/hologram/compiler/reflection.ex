@@ -95,8 +95,11 @@ defmodule Hologram.Compiler.Reflection do
     end
   end
 
-  def root_path do
-    File.cwd!()
+  def root_path(config \\ get_config()) do
+    case Keyword.get(config, :root_path) do
+      nil -> Path.expand("#{File.cwd!()}/../..")
+      root_path -> root_path
+    end
   end
 
   def router_module(config \\ get_config()) do

@@ -12,6 +12,7 @@ config :hologram,
   app_name: :hologram,
   app_path: "#{File.cwd!()}/e2e",
   default_layout: Hologram.E2E.DefaultLayout,
+  root_path: File.cwd!(),
   router_module: DemoWeb.Router
 
 config :hologram,
