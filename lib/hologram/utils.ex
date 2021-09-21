@@ -1,4 +1,6 @@
 defmodule Hologram.Utils do
+  def append(str, suffix), do: str <> suffix
+
   def atomize_keys(data) when is_struct(data), do: data
 
   def atomize_keys(data) when is_map(data) do

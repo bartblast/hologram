@@ -4,6 +4,10 @@ defmodule Hologram.UtilsTest do
   alias Hologram.Test.Fixtures.Utils.Module1
   alias Hologram.Utils
 
+  test "append/2" do
+    assert Utils.append("string", "suffix") == "stringsuffix"
+  end
+
   describe "atomize_keys/1" do
     test "map" do
       map = %{"key_1" => 1, "key_2" => %{"key_3" => 3}, key_4: 4}
