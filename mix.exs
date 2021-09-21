@@ -50,8 +50,27 @@ defmodule Demo.MixProject do
   end
 
   # Specifies which paths to compile per environment.
-  defp elixirc_paths(:test), do: ["e2e", "lib", "test/fixtures", "test/support"]
-  defp elixirc_paths(_), do: ["e2e", "lib"]
+  defp elixirc_paths(:test) do
+    if is_dep?() do
+      ["lib"]
+    else
+      ["e2e", "lib", "test/fixtures", "test/support"]
+    end
+  end
+
+  defp elixirc_paths(_) do
+    if is_dep?() do
+      ["lib"]
+    else
+      ["e2e", "lib"]
+    end
+  end
+
+  defp is_dep? do
+    __MODULE__.module_info()[:compile][:source]
+    |> to_string()
+    |> String.ends_with?("/deps/hologram/mix.exs")
+  end
 
   # Specifies your project dependencies.
   #
