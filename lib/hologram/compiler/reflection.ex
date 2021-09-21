@@ -2,15 +2,12 @@ defmodule Hologram.Compiler.Reflection do
   alias Hologram.Compiler.IR.ModuleDefinition
   alias Hologram.Compiler.{Context, Helpers, Normalizer, Parser, Transformer}
 
-  # Can't call app_name() during compilation.
-  @config Application.get_env(Mix.Project.get().project[:app], :hologram)
-
   # TODO: refactor & test
   def app_name do
     Mix.Project.get().project[:app]
   end
 
-  def app_path(config \\ @config) do
+  def app_path(config \\ get_config()) do
     case Keyword.get(config, :app_path) do
       nil -> "#{root_path()}/app"
       app_path -> app_path
@@ -26,6 +23,10 @@ defmodule Hologram.Compiler.Reflection do
     source_path(module)
     |> Parser.parse_file!()
     |> Normalizer.normalize()
+  end
+
+  def get_config do
+    Application.get_env(app_name(), :hologram)
   end
 
   # DEFER: optimize, e.g. load the manifest in config
@@ -107,7 +108,7 @@ defmodule Hologram.Compiler.Reflection do
     File.cwd!()
   end
 
-  def router_module(config \\ @config) do
+  def router_module(config \\ get_config()) do
     case Keyword.get(config, :router_module) do
       nil ->
         app_module = app_name() |> to_string() |> Macro.camelize()
