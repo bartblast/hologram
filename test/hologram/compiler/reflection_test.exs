@@ -104,6 +104,13 @@ defmodule Hologram.Compiler.ReflectionTest do
     end
   end
 
+  test "router_path/0" do
+    result = Reflection.router_path()
+    expected = "#{File.cwd!()}/e2e/router.ex"
+
+    assert result == expected
+  end
+
   test "source_path/1" do
     result = Reflection.source_path(Hologram.Compiler.ReflectionTest)
     expected = __ENV__.file
