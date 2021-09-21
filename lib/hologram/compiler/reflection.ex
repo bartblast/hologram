@@ -2,14 +2,18 @@ defmodule Hologram.Compiler.Reflection do
   alias Hologram.Compiler.IR.ModuleDefinition
   alias Hologram.Compiler.{Context, Helpers, Normalizer, Parser, Transformer}
 
+  @config Application.get_env(:e2e, :hologram)
+
   # TODO: refactor & test
   def app_name do
     Mix.Project.get().project[:app]
   end
 
-  # TODO: refactor & test
-  def app_path do
-    File.cwd!()
+  def app_path(config \\ @config) do
+    case Keyword.get(config, :app_path) do
+      nil -> "#{root_path()}/app"
+      app_path -> app_path
+    end
   end
 
   def ast(module_segs) when is_list(module_segs) do

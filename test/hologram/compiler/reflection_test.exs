@@ -8,6 +8,23 @@ defmodule Hologram.Compiler.ReflectionTest do
   @module_2 Hologram.Test.Fixtures.Compiler.Reflection.Module2
   @module_segs_1 [:Hologram, :Test, :Fixtures, :Compiler, :Reflection, :Module1]
 
+  describe "app_path/1" do
+    test "default" do
+      result = Reflection.app_path([])
+      expected = "#{File.cwd!()}/app"
+      
+      assert result == expected
+    end
+
+    test "custom" do
+      expected = "/test/path"
+      config = [app_path: expected]
+      result = Reflection.app_path(config)
+
+      assert result == expected
+    end
+  end
+
   test "get_page_digest/1" do
     result = Reflection.get_page_digest(Elixir.Hologram.E2E.Page1)
     assert result =~ uuid_hex_regex()
