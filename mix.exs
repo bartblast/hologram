@@ -47,10 +47,16 @@ defmodule Demo.MixProject do
   #
   # Type `mix help compile.app` for more information.
   def application do
-    [
-      mod: {Demo.Application, []},
-      extra_applications: [:logger, :runtime_tools]
-    ]
+    if is_dep?() do
+      [
+        extra_applications: [:logger]
+      ]
+    else
+      [
+        mod: {Hologram.E2E.Application, []},
+        extra_applications: [:logger, :runtime_tools]
+      ]
+    end
   end
 
   # Specifies which paths to compile per environment.

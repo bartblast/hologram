@@ -1,4 +1,4 @@
-defmodule Demo.Application do
+defmodule Hologram.E2E.Application do
   # See https://hexdocs.pm/elixir/Application.html
   # for more information on OTP Applications
   @moduledoc false
