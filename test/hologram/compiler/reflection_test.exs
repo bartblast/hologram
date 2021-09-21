@@ -66,6 +66,10 @@ defmodule Hologram.Compiler.ReflectionTest do
     assert %ModuleDefinition{module: @module_1} = result
   end
 
+  test "root_path/0" do
+    assert Reflection.root_path() == File.cwd!()
+  end
+
   test "source_path/1" do
     result = Reflection.source_path(Hologram.Compiler.ReflectionTest)
     expected = __ENV__.file
