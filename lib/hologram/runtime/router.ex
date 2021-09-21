@@ -8,18 +8,11 @@ defmodule Hologram.Router do
     end
   end
 
-  # TODO: consider - remove (it's not used anymore)
-  defmacro hologram(path, page) do
-    quote do
-      get unquote(path), HologramController, :index, private: %{hologram_page: unquote(page)}
-    end
-  end
-
   # TODO: test
   defmacro hologram_routes do
     for page <- Reflection.list_pages() do
       quote do
-        get unquote(page.route()), HologramController, :index,
+        get unquote(page.route()), Hologram.Runtime.Controller, :index,
           private: %{hologram_page: unquote(page)}
       end
     end

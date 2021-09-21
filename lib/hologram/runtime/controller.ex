@@ -1,6 +1,6 @@
 # DEFER: refactor & test
-defmodule DemoWeb.HologramController do
-  use DemoWeb, :controller
+defmodule Hologram.Runtime.Controller do
+  use Phoenix.Controller
   alias Hologram.Template.Renderer
 
   def index(conn, params) do

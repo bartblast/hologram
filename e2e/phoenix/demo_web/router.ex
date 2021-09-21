@@ -14,10 +14,10 @@ defmodule DemoWeb.Router do
     plug :accepts, ["json"]
   end
 
-  scope "/", DemoWeb do
+  scope "/" do
     pipe_through :browser
 
-    get "/", PageController, :index
+    get "/", DemoWeb.PageController, :index
 
     hologram_routes()
   end
