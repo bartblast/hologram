@@ -83,6 +83,23 @@ defmodule Hologram.Compiler.ReflectionTest do
     assert %ModuleDefinition{module: @module_1} = result
   end
 
+  describe "pages_path/1" do
+    test "default" do
+      result = Reflection.pages_path([])
+      expected = "#{File.cwd!()}/e2e/pages"
+
+      assert result == expected
+    end
+
+    test "custom" do
+      expected = "/test/path"
+      config = [pages_path: expected]
+      result = Reflection.pages_path(config)
+
+      assert result == expected
+    end
+  end
+
   test "root_path/0" do
     assert Reflection.root_path() == File.cwd!()
   end

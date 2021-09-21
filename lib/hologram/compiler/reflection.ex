@@ -44,7 +44,7 @@ defmodule Hologram.Compiler.Reflection do
 
   # TODO: refactor & test
   def list_pages(opts \\ []) do
-    glob = "#{pages_path(opts)}/**/*.ex"
+    glob = "#{pages_path()}/**/*.ex"
     regex = ~r/defmodule\s+([\w\.]+)\s+do\s+/
 
     Path.wildcard(glob)
@@ -89,19 +89,10 @@ defmodule Hologram.Compiler.Reflection do
     |> Transformer.transform(%Context{})
   end
 
-  # TODO: refactor & test
-  def pages_path(opts \\ []) do
-    config_pages_path = Application.get_env(:hologram, :pages_path)
-
-    cond do
-      opts[:pages_path] ->
-        opts[:pages_path]
-
-      config_pages_path ->
-        config_pages_path
-
-      true ->
-        "#{app_path()}/lib/#{app_name()}_web/hologram/pages"
+  def pages_path(config \\ get_config()) do
+    case Keyword.get(config, :pages_path) do
+      nil -> "#{app_path()}/pages"
+      pages_path -> pages_path
     end
   end
 
