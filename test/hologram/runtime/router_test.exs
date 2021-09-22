@@ -11,18 +11,10 @@ defmodule Hologram.RouterTest do
         __ENV__
       )
 
-    assert {:get, [],
-            [
-              "/test-path",
-              {:__aliases__, [counter: _, alias: false], [:HologramController]},
-              :index,
-              [
-                private:
-                  {:%{}, [],
-                   [
-                     hologram_page: {:__aliases__, [counter: _, alias: false], [:TestPage]}
-                   ]}
-              ]
-            ]} = ast
+    assert {
+      {:., [], [{:__aliases__, [alias: false], [:Hologram, :Router]}, :hologram]},
+      [],
+      ["/test-path", {:__aliases__, [alias: false], [:TestPage]}]
+    } = ast
   end
 end

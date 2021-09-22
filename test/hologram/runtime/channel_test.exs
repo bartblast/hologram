@@ -2,6 +2,7 @@ defmodule Hologram.Runtime.ChannelTest do
   use Hologram.ChannelCase, async: false
 
   alias Hologram.Compiler.Serializer
+  alias Hologram.Runtime.{Channel, Socket}
   alias Hologram.Template.Renderer
 
   setup_all do

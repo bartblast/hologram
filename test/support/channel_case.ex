@@ -1,10 +1,11 @@
-defmodule Hologram.E2E.Web.ChannelCase do
+defmodule Hologram.ChannelCase do
   use ExUnit.CaseTemplate
 
   using do
     quote do
       import Phoenix.ChannelTest
-      import Hologram.E2E.Web.ChannelCase
+      import Hologram.ChannelCase
+      import Hologram.Test.Helpers
 
       @endpoint Hologram.E2E.Web.Endpoint
     end

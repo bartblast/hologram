@@ -24,7 +24,7 @@ defmodule Hologram.Template.PageRendererTest do
       <!DOCTYPE html>
       <html>
         <head>
-          <title>Hologram Demo</title>
+          <title>Hologram E2E</title>
           <script src="/hologram/runtime.js"></script>
       <script src="/hologram/page-#{digest}.js"></script>
       <script>
