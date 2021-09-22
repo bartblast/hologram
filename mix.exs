@@ -3,13 +3,13 @@ defmodule Hologram.MixProject do
 
   defp aliases do
     [
-      "assets.compile": &compile_assets/1,
       "assets.deploy": ["esbuild default --minify", "phx.digest"],
+      "hologram.compile": ["cmd mix compile", "cmd mix esbuild default"],
       test: ["test --exclude e2e"],
       # we run mix compile here to trigger the Hologram compiler (to reload routes)
-      "test.all": ["assets.compile", "cmd mix compile", &test_js/1, "test --include e2e"],
-      "test.e2e": ["assets.compile", "cmd mix compile", "test --only e2e"],
-      "test.js": ["assets.compile", &test_js/1]
+      "test.all": ["hologram.compile", &test_js/1, "test --include e2e"],
+      "test.e2e": ["hologram.compile", "test --only e2e"],
+      "test.js": ["hologram.compile", &test_js/1]
     ]
   end
 
@@ -24,10 +24,6 @@ defmodule Hologram.MixProject do
         extra_applications: [:logger, :runtime_tools]
       ]
     end
-  end
-
-  defp compile_assets(_) do
-    Mix.shell().cmd("cd assets && node_modules/webpack/bin/webpack.js --mode development")
   end
 
   def compilers do
