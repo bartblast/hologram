@@ -87,6 +87,7 @@ defmodule Hologram.MixProject do
   # Type `mix help deps` for examples and options.
   defp deps do
     [
+      {:ecto_sql, "~> 3.6"},
       {:esbuild, "~> 0.2", runtime: Mix.env() == :dev},
       {:file_system, "~> 0.2"},
       {:floki, ">= 0.30.0", only: :test},
