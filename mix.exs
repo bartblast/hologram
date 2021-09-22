@@ -1,4 +1,4 @@
-defmodule Demo.MixProject do
+defmodule Hologram.MixProject do
   use Mix.Project
 
   def compilers do
@@ -29,17 +29,17 @@ defmodule Demo.MixProject do
 
   def project do
     [
-      app: :hologram,
-      version: "0.0.1",
-      elixir: "~> 1.11",
-      elixirc_paths: elixirc_paths(Mix.env()),
-      compilers: compilers(),
-      start_permanent: Mix.env() == :prod,
       aliases: aliases(),
-      description: "Work in progress...",
+      app: :hologram,
+      compilers: compilers(),
       deps: deps(),
+      description: "Work in progress...",
+      elixir: "~> 1.12",
+      elixirc_paths: elixirc_paths(Mix.env()),
       package: package(),
-      preferred_cli_env: preferred_cli_env()
+      preferred_cli_env: preferred_cli_env(),
+      start_permanent: Mix.env() == :prod,
+      version: "0.0.1"
     ]
   end
 
@@ -87,21 +87,20 @@ defmodule Demo.MixProject do
   # Type `mix help deps` for examples and options.
   defp deps do
     [
-      {:ecto_sql, "~> 3.7"},
+      {:esbuild, "~> 0.2", runtime: Mix.env() == :dev},
       {:file_system, "~> 0.2"},
+      {:floki, ">= 0.30.0", only: :test},
       {:gettext, "~> 0.18"},
       {:jason, "~> 1.2"},
-      {:phoenix, "~> 1.5"},
-      {:phoenix_ecto, "~> 4.4"},
+      {:phoenix, "~> 1.6.0-rc.0", override: true},
       {:phoenix_html, "~> 3.0"},
       {:phoenix_live_dashboard, "~> 0.5"},
+      {:phoenix_live_reload, "~> 1.2", only: :dev},
+      {:phoenix_live_view, "~> 0.16.0"},
       {:plug_cowboy, "~> 2.5"},
-      {:postgrex, "~> 0.15"},
       {:saxy, "~> 1.4"},
       {:telemetry_metrics, "~> 0.6"},
-      {:telemetry_poller, "~> 0.1"},
-
-      {:ex_doc, "~> 0.25", only: :dev, runtime: false},
+      {:telemetry_poller, "~> 1.0"},
       {:wallaby, "~> 0.29", only: :test, runtime: false}
     ]
   end
@@ -115,8 +114,11 @@ defmodule Demo.MixProject do
   defp aliases do
     [
       "assets.compile": &compile_assets/1,
+      "assets.deploy": ["esbuild default --minify", "phx.digest"],
+      "ecto.setup": ["ecto.create", "ecto.migrate", "run priv/repo/seeds.exs"],
+      "ecto.reset": ["ecto.drop", "ecto.setup"],
+      setup: ["deps.get", "ecto.setup"],
       test: ["test --exclude e2e"],
-      # we run mix compile here to trigger the Hologram compiler (to reload routes)
       "test.all": ["assets.compile", "cmd mix compile", &test_js/1, "test --include e2e"],
       "test.e2e": ["assets.compile", "cmd mix compile", "test --only e2e"],
       "test.js": ["assets.compile", &test_js/1]

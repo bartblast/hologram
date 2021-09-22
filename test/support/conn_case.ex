@@ -1,4 +1,4 @@
-defmodule DemoWeb.ConnCase do
+defmodule HologramWeb.ConnCase do
   @moduledoc """
   This module defines the test case to be used by
   tests that require setting up a connection.
@@ -11,7 +11,7 @@ defmodule DemoWeb.ConnCase do
   we enable the SQL sandbox, so changes done to the database
   are reverted at the end of every test. If you are using
   PostgreSQL, you can even run database tests asynchronously
-  by setting `use DemoWeb.ConnCase, async: true`, although
+  by setting `use HologramWeb.ConnCase, async: true`, although
   this option is not recommended for other databases.
   """
 
@@ -22,22 +22,18 @@ defmodule DemoWeb.ConnCase do
       # Import conveniences for testing with connections
       import Plug.Conn
       import Phoenix.ConnTest
-      import DemoWeb.ConnCase
+      import HologramWeb.ConnCase
 
-      alias DemoWeb.Router.Helpers, as: Routes
+      alias HologramWeb.Router.Helpers, as: Routes
 
       # The default endpoint for testing
-      @endpoint DemoWeb.Endpoint
+      @endpoint HologramWeb.Endpoint
     end
   end
 
   setup tags do
-    :ok = Ecto.Adapters.SQL.Sandbox.checkout(Demo.Repo)
-
-    unless tags[:async] do
-      Ecto.Adapters.SQL.Sandbox.mode(Demo.Repo, {:shared, self()})
-    end
-
+    pid = Ecto.Adapters.SQL.Sandbox.start_owner!(Hologram.Repo, shared: not tags[:async])
+    on_exit(fn -> Ecto.Adapters.SQL.Sandbox.stop_owner(pid) end)
     {:ok, conn: Phoenix.ConnTest.build_conn()}
   end
 end
