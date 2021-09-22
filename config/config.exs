@@ -1,10 +1,3 @@
-# This file is responsible for configuring your application
-# and its dependencies with the aid of the Config module.
-#
-# This configuration file is loaded before any dependency and
-# is restricted to this project.
-
-# General application configuration
 import Config
 
 # E2E tests
@@ -14,15 +7,12 @@ config :hologram,
   default_layout: Hologram.E2E.DefaultLayout,
   router_module: Hologram.E2E.Web.Router
 
-# Configures the endpoint
 config :hologram, Hologram.E2E.Web.Endpoint,
   url: [host: "localhost"],
   secret_key_base: "/t99BcKoIa8IKka6K9dhpfoRHHYP0fK/FXFNdWO5Wlt+h1wlFeBODgIi8U4XACBE",
   render_errors: [view: Hologram.E2E.Web.ErrorView, accepts: ~w(html json), layout: false],
-  pubsub_server: Hologram.E2E.PubSub,
-  live_view: [signing_salt: "Wa1Wmntm"]
+  pubsub_server: Hologram.E2E.PubSub
 
-# Configure esbuild (the version is required)
 config :esbuild,
   version: "0.12.18",
   default: [
@@ -31,12 +21,10 @@ config :esbuild,
     env: %{"NODE_PATH" => Path.expand("../deps", __DIR__)}
   ]
 
-# Configures Elixir's Logger
 config :logger, :console,
   format: "$time $metadata[$level] $message\n",
   metadata: [:request_id]
 
-# Use Jason for JSON parsing in Phoenix
 config :phoenix, :json_library, Jason
 
 # Import environment specific config. This must remain at the bottom

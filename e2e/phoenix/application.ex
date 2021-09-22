@@ -1,6 +1,4 @@
 defmodule Hologram.E2E.Application do
-  # See https://hexdocs.pm/elixir/Application.html
-  # for more information on OTP Applications
   @moduledoc false
 
   use Application
@@ -8,12 +6,8 @@ defmodule Hologram.E2E.Application do
   @impl true
   def start(_type, _args) do
     children = [
-      # Start the PubSub system
       {Phoenix.PubSub, name: Hologram.E2E.PubSub},
-      # Start the Endpoint (http/https)
       Hologram.E2E.Web.Endpoint
-      # Start a worker by calling: Hologram.Worker.start_link(arg)
-      # {Hologram.Worker, arg}
     ]
 
     children =
@@ -23,8 +17,6 @@ defmodule Hologram.E2E.Application do
         children
       end
 
-    # See https://hexdocs.pm/elixir/Supervisor.html
-    # for other strategies and supported options
     opts = [strategy: :one_for_one, name: Hologram.E2E.Supervisor]
     Supervisor.start_link(children, opts)
   end
