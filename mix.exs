@@ -4,12 +4,10 @@ defmodule Hologram.MixProject do
   defp aliases do
     [
       "assets.deploy": ["esbuild default --minify", "phx.digest"],
-      "hologram.compile": ["cmd mix compile", "cmd mix esbuild default"],
       test: ["test --exclude e2e"],
-      # we run mix compile here to trigger the Hologram compiler (to reload routes)
-      "test.all": ["hologram.compile", &test_js/1, "test --include e2e"],
-      "test.e2e": ["hologram.compile", "test --only e2e"],
-      "test.js": ["hologram.compile", &test_js/1]
+      "test.all": [&test_js/1, "test --include e2e"],
+      "test.e2e": ["test --only e2e"],
+      "test.js": [&test_js/1]
     ]
   end
 
@@ -113,7 +111,9 @@ defmodule Hologram.MixProject do
         ["run", "test-file", "../#{hd(args)}"]
       end
 
+
     opts = [cd: "assets", into: IO.stream(:stdio, :line)]
+    System.cmd("npm", ["install"], opts)
     {_, status} = System.cmd("npm", cmd, opts)
 
     if status > 0 do

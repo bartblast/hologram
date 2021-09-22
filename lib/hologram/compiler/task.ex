@@ -12,6 +12,8 @@ defmodule Mix.Tasks.Compile.Hologram do
 
     remove_old_files()
 
+    build_runtime()
+
     # DEFER: parallelize
     Reflection.list_pages()
     |> Enum.map(&build_page/1)
@@ -43,6 +45,10 @@ defmodule Mix.Tasks.Compile.Hologram do
     |> File.write!(js)
 
     {page, digest}
+  end
+
+  defp build_runtime do
+    Mix.Task.run("esbuild", ["default", "--log-level=warning"])
   end
 
   # Routes are defined in page modules and the router aggregates the routes dynamically by reflection.
