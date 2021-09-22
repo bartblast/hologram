@@ -12,7 +12,9 @@ defmodule Mix.Tasks.Compile.Hologram do
 
     remove_old_files()
 
-    build_runtime()
+    unless is_dep?() do
+      build_runtime()
+    end
 
     # DEFER: parallelize
     Reflection.list_pages()
@@ -49,6 +51,12 @@ defmodule Mix.Tasks.Compile.Hologram do
 
   defp build_runtime do
     Mix.Task.run("esbuild", ["hologram", "--log-level=warning"])
+  end
+
+  defp is_dep? do
+    __MODULE__.module_info()[:compile][:source]
+    |> to_string()
+    |> String.ends_with?("/deps/hologram/lib/hologram/compiler/task.ex")
   end
 
   # Routes are defined in page modules and the router aggregates the routes dynamically by reflection.
