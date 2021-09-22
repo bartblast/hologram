@@ -48,8 +48,21 @@ defmodule Mix.Tasks.Compile.Hologram do
   end
 
   defp build_runtime do
-    System.cmd("npm", ["install"], [cd: "assets"])
+    assets_path =
+      if is_dep?() do
+        "deps/hologram/assets"
+      else
+        "assets"
+      end
+
+    System.cmd("npm", ["install"], [cd: assets_path])
     Mix.Task.run("esbuild", ["hologram", "--log-level=warning"])
+  end
+
+  defp is_dep? do
+    __MODULE__.module_info()[:compile][:source]
+    |> to_string()
+    |> String.ends_with?("/deps/hologram/mix.exs")
   end
 
   # Routes are defined in page modules and the router aggregates the routes dynamically by reflection.
