@@ -6,7 +6,7 @@ defmodule Hologram.E2E.DefaultLayout do
     <!DOCTYPE html>
     <html>
       <head>
-        <title>Hologram Demo</title>
+        <title>Hologram E2E</title>
         <Hologram.UI.Runtime />
       </head>
       <body>

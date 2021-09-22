@@ -7,7 +7,7 @@ defmodule Hologram.Template.Builder do
   Returns module's document tree template.
 
   ## Examples
-      iex> build(Demo.Homepage)
+      iex> build(MyApp.Homepage)
       [
         %ElementNode{tag: "h1", children: [%TextNode{content: "Homepage Title"}]},
         %TextNode{content: "Footer content"}

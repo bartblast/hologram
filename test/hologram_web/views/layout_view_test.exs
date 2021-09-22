@@ -1,5 +1,5 @@
-defmodule HologramWeb.LayoutViewTest do
-  use HologramWeb.ConnCase, async: true
+defmodule Hologram.E2E.Web.LayoutViewTest do
+  use Hologram.E2E.Web.ConnCase, async: true
 
   # When testing helpers, you may want to import Phoenix.HTML and
   # use functions such as safe_to_string() to convert the helper

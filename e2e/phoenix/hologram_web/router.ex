@@ -1,12 +1,12 @@
-defmodule HologramWeb.Router do
-  use HologramWeb, :router
+defmodule Hologram.E2E.Web.Router do
+  use Hologram.E2E.Web, :router
   use Hologram.Router
 
   pipeline :browser do
     plug :accepts, ["html"]
     plug :fetch_session
     plug :fetch_live_flash
-    plug :put_root_layout, {HologramWeb.LayoutView, :root}
+    plug :put_root_layout, {Hologram.E2E.Web.LayoutView, :root}
     plug :protect_from_forgery
     plug :put_secure_browser_headers
   end
@@ -15,16 +15,18 @@ defmodule HologramWeb.Router do
     plug :accepts, ["json"]
   end
 
-  scope "/", HologramWeb do
+  scope "/", Hologram.E2E.Web do
     pipe_through :browser
 
     get "/", PageController, :index
+  end
 
+  scope "/" do
     hologram_routes()
   end
 
   # Other scopes may use custom stacks.
-  # scope "/api", HologramWeb do
+  # scope "/api", Hologram.E2E.Web do
   #   pipe_through :api
   # end
 
@@ -40,7 +42,7 @@ defmodule HologramWeb.Router do
 
     scope "/" do
       pipe_through :browser
-      live_dashboard "/dashboard", metrics: HologramWeb.Telemetry
+      live_dashboard "/dashboard", metrics: Hologram.E2E.Web.Telemetry
     end
   end
 end

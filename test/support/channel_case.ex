@@ -1,4 +1,4 @@
-defmodule HologramWeb.ChannelCase do
+defmodule Hologram.E2E.Web.ChannelCase do
   @moduledoc """
   This module defines the test case to be used by
   channel tests.
@@ -11,7 +11,7 @@ defmodule HologramWeb.ChannelCase do
   we enable the SQL sandbox, so changes done to the database
   are reverted at the end of every test. If you are using
   PostgreSQL, you can even run database tests asynchronously
-  by setting `use HologramWeb.ChannelCase, async: true`, although
+  by setting `use Hologram.E2E.Web.ChannelCase, async: true`, although
   this option is not recommended for other databases.
   """
 
@@ -21,10 +21,10 @@ defmodule HologramWeb.ChannelCase do
     quote do
       # Import conveniences for testing with channels
       import Phoenix.ChannelTest
-      import HologramWeb.ChannelCase
+      import Hologram.E2E.Web.ChannelCase
 
       # The default endpoint for testing
-      @endpoint HologramWeb.Endpoint
+      @endpoint Hologram.E2E.Web.Endpoint
     end
   end
 

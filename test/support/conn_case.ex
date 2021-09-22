@@ -1,4 +1,4 @@
-defmodule HologramWeb.ConnCase do
+defmodule Hologram.E2E.Web.ConnCase do
   @moduledoc """
   This module defines the test case to be used by
   tests that require setting up a connection.
@@ -11,7 +11,7 @@ defmodule HologramWeb.ConnCase do
   we enable the SQL sandbox, so changes done to the database
   are reverted at the end of every test. If you are using
   PostgreSQL, you can even run database tests asynchronously
-  by setting `use HologramWeb.ConnCase, async: true`, although
+  by setting `use Hologram.E2E.Web.ConnCase, async: true`, although
   this option is not recommended for other databases.
   """
 
@@ -22,12 +22,12 @@ defmodule HologramWeb.ConnCase do
       # Import conveniences for testing with connections
       import Plug.Conn
       import Phoenix.ConnTest
-      import HologramWeb.ConnCase
+      import Hologram.E2E.Web.ConnCase
 
-      alias HologramWeb.Router.Helpers, as: Routes
+      alias Hologram.E2E.Web.Router.Helpers, as: Routes
 
       # The default endpoint for testing
-      @endpoint HologramWeb.Endpoint
+      @endpoint Hologram.E2E.Web.Endpoint
     end
   end
 

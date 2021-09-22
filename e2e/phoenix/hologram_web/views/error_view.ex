@@ -1,5 +1,5 @@
-defmodule HologramWeb.ErrorView do
-  use HologramWeb, :view
+defmodule Hologram.E2E.Web.ErrorView do
+  use Hologram.E2E.Web, :view
 
   # If you want to customize a particular status code
   # for a certain format, you may uncomment below.

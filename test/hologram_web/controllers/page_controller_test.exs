@@ -1,5 +1,5 @@
-defmodule HologramWeb.PageControllerTest do
-  use HologramWeb.ConnCase
+defmodule Hologram.E2E.Web.PageControllerTest do
+  use Hologram.E2E.Web.ConnCase
 
   test "GET /", %{conn: conn} do
     conn = get(conn, "/")

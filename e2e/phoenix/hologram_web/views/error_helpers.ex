@@ -1,4 +1,4 @@
-defmodule HologramWeb.ErrorHelpers do
+defmodule Hologram.E2E.Web.ErrorHelpers do
   @moduledoc """
   Conveniences for translating and building error messages.
   """
@@ -39,9 +39,9 @@ defmodule HologramWeb.ErrorHelpers do
     # should be written to the errors.po file. The :count option is
     # set by Ecto and indicates we should also apply plural rules.
     if count = opts[:count] do
-      Gettext.dngettext(HologramWeb.Gettext, "errors", msg, msg, count, opts)
+      Gettext.dngettext(Hologram.E2E.Web.Gettext, "errors", msg, msg, count, opts)
     else
-      Gettext.dgettext(HologramWeb.Gettext, "errors", msg, opts)
+      Gettext.dgettext(Hologram.E2E.Web.Gettext, "errors", msg, opts)
     end
   end
 end

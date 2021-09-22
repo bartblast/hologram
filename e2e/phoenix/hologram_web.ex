@@ -1,12 +1,12 @@
-defmodule HologramWeb do
+defmodule Hologram.E2E.Web do
   @moduledoc """
   The entrypoint for defining your web interface, such
   as controllers, views, channels and so on.
 
   This can be used in your application as:
 
-      use HologramWeb, :controller
-      use HologramWeb, :view
+      use Hologram.E2E.Web, :controller
+      use Hologram.E2E.Web, :view
 
   The definitions below will be executed for every view,
   controller, etc, so keep them short and clean, focused
@@ -19,11 +19,11 @@ defmodule HologramWeb do
 
   def controller do
     quote do
-      use Phoenix.Controller, namespace: HologramWeb
+      use Phoenix.Controller, namespace: Hologram.E2E.Web
 
       import Plug.Conn
-      import HologramWeb.Gettext
-      alias HologramWeb.Router.Helpers, as: Routes
+      import Hologram.E2E.Web.Gettext
+      alias Hologram.E2E.Web.Router.Helpers, as: Routes
     end
   end
 
@@ -31,7 +31,7 @@ defmodule HologramWeb do
     quote do
       use Phoenix.View,
         root: "lib/hologram_web/templates",
-        namespace: HologramWeb
+        namespace: Hologram.E2E.Web
 
       # Import convenience functions from controllers
       import Phoenix.Controller,
@@ -45,7 +45,7 @@ defmodule HologramWeb do
   def live_view do
     quote do
       use Phoenix.LiveView,
-        layout: {HologramWeb.LayoutView, "live.html"}
+        layout: {Hologram.E2E.Web.LayoutView, "live.html"}
 
       unquote(view_helpers())
     end
@@ -72,7 +72,7 @@ defmodule HologramWeb do
   def channel do
     quote do
       use Phoenix.Channel
-      import HologramWeb.Gettext
+      import Hologram.E2E.Web.Gettext
     end
   end
 
@@ -87,9 +87,9 @@ defmodule HologramWeb do
       # Import basic rendering functionality (render, render_layout, etc)
       import Phoenix.View
 
-      import HologramWeb.ErrorHelpers
-      import HologramWeb.Gettext
-      alias HologramWeb.Router.Helpers, as: Routes
+      import Hologram.E2E.Web.ErrorHelpers
+      import Hologram.E2E.Web.Gettext
+      alias Hologram.E2E.Web.Router.Helpers, as: Routes
     end
   end
 

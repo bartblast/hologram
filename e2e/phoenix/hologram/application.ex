@@ -9,11 +9,11 @@ defmodule Hologram.E2E.Application do
   def start(_type, _args) do
     children = [
       # Start the Telemetry supervisor
-      HologramWeb.Telemetry,
+      Hologram.E2E.Web.Telemetry,
       # Start the PubSub system
-      {Phoenix.PubSub, name: Hologram.PubSub},
+      {Phoenix.PubSub, name: Hologram.E2E.PubSub},
       # Start the Endpoint (http/https)
-      HologramWeb.Endpoint
+      Hologram.E2E.Web.Endpoint
       # Start a worker by calling: Hologram.Worker.start_link(arg)
       # {Hologram.Worker, arg}
     ]
@@ -27,7 +27,7 @@ defmodule Hologram.E2E.Application do
 
     # See https://hexdocs.pm/elixir/Supervisor.html
     # for other strategies and supported options
-    opts = [strategy: :one_for_one, name: Hologram.Supervisor]
+    opts = [strategy: :one_for_one, name: Hologram.E2E.Supervisor]
     Supervisor.start_link(children, opts)
   end
 
@@ -35,7 +35,7 @@ defmodule Hologram.E2E.Application do
   # whenever the application is updated.
   @impl true
   def config_change(changed, _new, removed) do
-    HologramWeb.Endpoint.config_change(changed, removed)
+    Hologram.E2E.Web.Endpoint.config_change(changed, removed)
     :ok
   end
 end

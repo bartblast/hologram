@@ -1,5 +1,5 @@
-defmodule HologramWeb.LayoutView do
-  use HologramWeb, :view
+defmodule Hologram.E2E.Web.LayoutView do
+  use Hologram.E2E.Web, :view
 
   # Phoenix LiveDashboard is available only in development by default,
   # so we instruct Elixir to not warn if the dashboard route is missing.

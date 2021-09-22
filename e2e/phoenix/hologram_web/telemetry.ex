@@ -1,4 +1,4 @@
-defmodule HologramWeb.Telemetry do
+defmodule Hologram.E2E.Web.Telemetry do
   use Supervisor
   import Telemetry.Metrics
 
@@ -65,7 +65,7 @@ defmodule HologramWeb.Telemetry do
     [
       # A module, function and arguments to be invoked periodically.
       # This function must call :telemetry.execute/3 and a metric must be added above.
-      # {HologramWeb, :count_users, []}
+      # {Hologram.E2E.Web, :count_users, []}
     ]
   end
 end
