@@ -48,7 +48,7 @@ defmodule Mix.Tasks.Compile.Hologram do
   end
 
   defp build_runtime do
-    Mix.Task.run("esbuild", ["default", "--log-level=warning"])
+    Mix.Task.run("esbuild", ["hologram", "--log-level=warning"])
   end
 
   # Routes are defined in page modules and the router aggregates the routes dynamically by reflection.

@@ -6,7 +6,7 @@ config :hologram, Hologram.E2E.Web.Endpoint,
   code_reloader: false,
   check_origin: false,
   watchers: [
-    esbuild: {Esbuild, :install_and_run, [:default, ~w(--sourcemap=inline --watch)]}
+    esbuild: {Esbuild, :install_and_run, [:hologram, ~w(--sourcemap=inline --watch)]}
   ]
 config :logger, :console, format: "[$level] $message\n"
 
