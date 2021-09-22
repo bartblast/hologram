@@ -48,6 +48,7 @@ defmodule Mix.Tasks.Compile.Hologram do
   end
 
   defp build_runtime do
+    System.cmd("npm", ["install"], [cd: "assets"])
     Mix.Task.run("esbuild", ["hologram", "--log-level=warning"])
   end
 
