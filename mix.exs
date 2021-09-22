@@ -5,7 +5,7 @@ defmodule Hologram.MixProject do
     if is_dep?() do
       Mix.compilers()
     else
-      compilers = [:phoenix, :gettext] ++ Mix.compilers()
+      compilers = [:phoenix] ++ Mix.compilers()
       if Mix.env() == :test, do: compilers, else: compilers ++ [:hologram]
     end
   end
@@ -91,7 +91,6 @@ defmodule Hologram.MixProject do
       {:esbuild, "~> 0.2", runtime: Mix.env() == :dev},
       {:file_system, "~> 0.2"},
       {:floki, ">= 0.30.0", only: :test},
-      {:gettext, "~> 0.18"},
       {:jason, "~> 1.2"},
       {:phoenix, "~> 1.6.0-rc.0", override: true},
       {:phoenix_html, "~> 3.0"},
@@ -100,8 +99,6 @@ defmodule Hologram.MixProject do
       {:phoenix_live_view, "~> 0.16.0"},
       {:plug_cowboy, "~> 2.5"},
       {:saxy, "~> 1.4"},
-      {:telemetry_metrics, "~> 0.6"},
-      {:telemetry_poller, "~> 1.0"},
       {:wallaby, "~> 0.29", only: :test, runtime: false}
     ]
   end

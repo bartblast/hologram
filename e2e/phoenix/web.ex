@@ -22,7 +22,6 @@ defmodule Hologram.E2E.Web do
       use Phoenix.Controller, namespace: Hologram.E2E.Web
 
       import Plug.Conn
-      import Hologram.E2E.Web.Gettext
       alias Hologram.E2E.Web.Router.Helpers, as: Routes
     end
   end
@@ -72,7 +71,6 @@ defmodule Hologram.E2E.Web do
   def channel do
     quote do
       use Phoenix.Channel
-      import Hologram.E2E.Web.Gettext
     end
   end
 
@@ -88,7 +86,6 @@ defmodule Hologram.E2E.Web do
       import Phoenix.View
 
       import Hologram.E2E.Web.ErrorHelpers
-      import Hologram.E2E.Web.Gettext
       alias Hologram.E2E.Web.Router.Helpers, as: Routes
     end
   end

@@ -8,8 +8,6 @@ defmodule Hologram.E2E.Application do
   @impl true
   def start(_type, _args) do
     children = [
-      # Start the Telemetry supervisor
-      Hologram.E2E.Web.Telemetry,
       # Start the PubSub system
       {Phoenix.PubSub, name: Hologram.E2E.PubSub},
       # Start the Endpoint (http/https)
