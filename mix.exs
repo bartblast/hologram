@@ -3,7 +3,6 @@ defmodule Hologram.MixProject do
 
   defp aliases do
     [
-      "assets.deploy": ["esbuild default --minify", "phx.digest"],
       test: ["test --exclude e2e"],
       "test.all": [&test_js/1, "test --include e2e"],
       "test.e2e": ["test --only e2e"],
