@@ -49,7 +49,7 @@ export default class Runtime {
       name = module
     }
 
-    return eval(name.replace(/\./g, ""))
+    return Utils.eval(name.replace(/\./g, ""))
   }  
 
   // TODO: refactor & test
@@ -66,7 +66,7 @@ export default class Runtime {
 
   // Covered by E2E tests.
   handleCommandResponse(response) {
-    eval(`response = ${response}`)
+    response = Utils.eval(response)
     const action = response.data[0]
     const params = response.data[1]
 
@@ -168,7 +168,7 @@ export default class Runtime {
 
   // TODO: refactor & test
   mountPage(pageModule, serializedState) {
-    eval(`this.state = ${serializedState}`)
+    this.state = Utils.eval(serializedState)
     this.state.data["~atom[context]"].data['~atom[__state__]'] = {type: "string", value: serializedState}
 
     this.pageModule = pageModule

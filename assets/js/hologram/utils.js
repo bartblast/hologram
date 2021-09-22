@@ -6,6 +6,10 @@ export default class Utils {
     return cloneDeep(value)
   }
 
+  static eval(code) {
+    return (new Function(`return (${code});`)());
+  }
+
   static isFalse(arg) {
     return arg.type == "boolean" && arg.value == false
   }

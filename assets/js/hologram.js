@@ -41,7 +41,7 @@ export default class Hologram {
 
   // TODO: refactor & test
   static js(js) {
-    eval(js.value)
+    Utils.eval(js.value)
   }
 
   // TODO: refactor & test

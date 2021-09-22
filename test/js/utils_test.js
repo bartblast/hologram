@@ -11,6 +11,13 @@ describe("clone()", () => {
   })
 })
 
+describe("eval()", () => {
+  it("evaluates code", () => {
+    const result = Utils.eval("2 + 2")
+    assert.equal(result, 4)
+  })
+})
+
 describe("isFalse()", () => {
   it("is false", () => {
     const arg = {type: "boolean", value: false}

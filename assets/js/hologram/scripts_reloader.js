@@ -1,4 +1,7 @@
 // based on: https://ghinda.net/article/script-tags/
+
+import Utils from "./utils"
+
 // DEFER: already refactored; test
 export default class ScriptsReloader {
   // https://html.spec.whatwg.org/multipage/scripting.html
@@ -41,7 +44,7 @@ export default class ScriptsReloader {
 
   
     if (ScriptsReloader.isInlineScript(reloadedScript)) {
-      eval(reloadedScript.textContent)
+      Utils.eval(reloadedScript.textContent)
       callback()
     } else {
       script.parentNode.insertBefore(reloadedScript, script)
