@@ -7,33 +7,39 @@ defmodule Mix.Tasks.Compile.Hologram do
   @root_path Reflection.root_path()
 
   def run(_) do
-    "#{@root_path}/priv/static/hologram"
-    |> File.mkdir_p!()
+    output_path =
+      if is_dep?() do
+        "#{@root_path}/../../priv/static/hologram"
+      else
+        "#{@root_path}/priv/static/hologram"
+      end
 
-    remove_old_files()
+
+    File.mkdir_p!(output_path)
+    remove_old_files(output_path)
 
     build_runtime()
 
     # DEFER: parallelize
     Reflection.list_pages()
-    |> Enum.map(&build_page/1)
-    |> build_manifest()
+    |> Enum.map(&build_page(&1, output_path))
+    |> build_manifest(output_path)
 
     reload_routes()
 
     :ok
   end
 
-  defp build_manifest(digests) do
+  defp build_manifest(digests, output_path) do
     json =
       Enum.into(digests, %{})
       |> Jason.encode!()
 
-    "#{@root_path}/priv/static/hologram/manifest.json"
+    "#{output_path}/manifest.json"
     |> File.write!(json)
   end
 
-  defp build_page(page) do
+  defp build_page(page, output_path) do
     js = Builder.build(page)
 
     digest =
@@ -41,7 +47,7 @@ defmodule Mix.Tasks.Compile.Hologram do
       |> Base.encode16()
       |> String.downcase()
 
-    "#{@root_path}/priv/static/hologram/page-#{digest}.js"
+    "#{output_path}/page-#{digest}.js"
     |> File.write!(js)
 
     {page, digest}
@@ -77,8 +83,8 @@ defmodule Mix.Tasks.Compile.Hologram do
     Code.compiler_options(ignore_module_conflict: opts.ignore_module_conflict)
   end
 
-  defp remove_old_files do
-    "#{@root_path}/priv/static/hologram/*"
+  defp remove_old_files(output_path) do
+    "#{output_path}/*"
     |> Path.wildcard()
     |> Enum.each(&File.rm!/1)
   end
