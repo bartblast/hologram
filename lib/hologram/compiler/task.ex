@@ -62,7 +62,7 @@ defmodule Mix.Tasks.Compile.Hologram do
   defp is_dep? do
     __MODULE__.module_info()[:compile][:source]
     |> to_string()
-    |> String.ends_with?("/deps/hologram/mix.exs")
+    |> String.ends_with?("/deps/hologram/lib/hologram/compiler/task.ex")
   end
 
   # Routes are defined in page modules and the router aggregates the routes dynamically by reflection.
