@@ -119,6 +119,7 @@ defmodule Hologram.MixProject do
       "ecto.reset": ["ecto.drop", "ecto.setup"],
       setup: ["deps.get", "ecto.setup"],
       test: ["test --exclude e2e"],
+      # we run mix compile here to trigger the Hologram compiler (to reload routes)
       "test.all": ["assets.compile", "cmd mix compile", &test_js/1, "test --include e2e"],
       "test.e2e": ["assets.compile", "cmd mix compile", "test --only e2e"],
       "test.js": ["assets.compile", &test_js/1]
