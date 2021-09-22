@@ -1,5 +1,5 @@
 defmodule Hologram.Template.ElementNodeGeneratorTest do
-  use Hologram.TestCase, async: true
+  use Hologram.Test.UnitCase , async: true
 
   alias Hologram.Compiler.IR.{StringType, TupleType}
   alias Hologram.Template.Document.{ElementNode, Expression}

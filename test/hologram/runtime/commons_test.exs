@@ -1,5 +1,5 @@
 defmodule Hologram.Runtime.CommonsTest do
-  use Hologram.TestCase, async: true
+  use Hologram.Test.UnitCase , async: true
   alias Hologram.Runtime.Commons
 
   test "sigil_H/2" do

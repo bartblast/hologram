@@ -1,5 +1,5 @@
 defmodule Hologram.Template.ComponentRendererTest do
-  use Hologram.TestCase, async: true
+  use Hologram.Test.UnitCase , async: true
 
   alias Hologram.Compiler.IR.{ModuleAttributeOperator, TupleType}
   alias Hologram.Template.Document.{Component, ElementNode, Expression, TextNode}

@@ -1,5 +1,5 @@
 defmodule Hologram.Template.ElementNodeRendererTest do
-  use Hologram.TestCase, async: true
+  use Hologram.Test.UnitCase , async: true
 
   alias Hologram.Template.Document.{ElementNode, TextNode}
   alias Hologram.Template.Renderer

@@ -1,5 +1,5 @@
 defmodule Hologram.Compiler.BinderTest do
-  use Hologram.TestCase, async: true
+  use Hologram.Test.UnitCase , async: true
 
   alias Hologram.Compiler.Binder
   alias Hologram.Compiler.IR.{AccessOperator, AtomType, IntegerType, MapType, Variable}

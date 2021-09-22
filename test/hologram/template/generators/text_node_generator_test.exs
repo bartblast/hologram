@@ -1,5 +1,5 @@
 defmodule Hologram.Template.TextNodeGeneratorTest do
-  use Hologram.TestCase, async: true
+  use Hologram.Test.UnitCase , async: true
   alias Hologram.Template.TextNodeGenerator
 
   test "generate/1" do

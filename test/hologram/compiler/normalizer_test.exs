@@ -1,5 +1,5 @@
 defmodule Hologram.Compiler.NormalizerTest do
-  use Hologram.TestCase, async: true
+  use Hologram.Test.UnitCase , async: true
 
   alias Hologram.Compiler.Normalizer
   alias Hologram.Compiler.Parser

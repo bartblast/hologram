@@ -1,5 +1,5 @@
 defmodule Hologram.Compiler.ExpanderTest do
-  use Hologram.TestCase, async: true
+  use Hologram.Test.UnitCase , async: true
 
   alias Hologram.Compiler.Expander
   alias Hologram.Compiler.IR.{MacroDefinition, RequireDirective}

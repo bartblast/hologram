@@ -1,5 +1,5 @@
 defmodule Hologram.PageTest do
-  use Hologram.TestCase, async: true
+  use Hologram.Test.UnitCase , async: true
   require Hologram.Page
   alias Hologram.Page
 

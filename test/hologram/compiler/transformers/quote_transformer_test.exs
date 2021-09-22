@@ -1,5 +1,5 @@
 defmodule Hologram.Compiler.QuoteTransformerTest do
-  use Hologram.TestCase, async: true
+  use Hologram.Test.UnitCase , async: true
 
   alias Hologram.Compiler.{Context, QuoteTransformer}
   alias Hologram.Compiler.IR.{IntegerType, Quote}

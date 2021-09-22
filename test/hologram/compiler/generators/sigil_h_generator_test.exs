@@ -1,5 +1,5 @@
 defmodule Hologram.Compiler.SigilHGeneratorTest do
-  use Hologram.TestCase, async: true
+  use Hologram.Test.UnitCase , async: true
 
   alias Hologram.Compiler.{Context, SigilHGenerator}
   alias Hologram.Compiler.IR.{BinaryType, FunctionCall, ListType, StringType}

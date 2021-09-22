@@ -1,5 +1,5 @@
 defmodule Hologram.ParserTest do
-  use Hologram.TestCase, async: true
+  use Hologram.Test.UnitCase , async: true
   alias Hologram.Compiler.Parser
 
   describe "parse!/1" do

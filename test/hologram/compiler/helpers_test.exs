@@ -1,5 +1,5 @@
 defmodule Hologram.Compiler.HelpersTest do
-  use Hologram.TestCase, async: true
+  use Hologram.Test.UnitCase , async: true
 
   alias Hologram.Compiler.{Context, Helpers}
   alias Hologram.Compiler.IR.{AccessOperator, AtomType, FunctionDefinition, IntegerType, ModuleDefinition, UseDirective, Variable}

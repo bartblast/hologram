@@ -1,5 +1,5 @@
 defmodule Hologram.Compiler.StructTypeTransformerTest do
-  use Hologram.TestCase, async: true
+  use Hologram.Test.UnitCase , async: true
 
   alias Hologram.Compiler.IR.{Alias, AtomType, IntegerType, StructType}
   alias Hologram.Compiler.{Context, StructTypeTransformer}

@@ -1,5 +1,5 @@
 defmodule Hologram.Template.ExpressionGeneratorTest do
-  use Hologram.TestCase, async: true
+  use Hologram.Test.UnitCase , async: true
 
   alias Hologram.Compiler.IR.{AtomType, TupleType}
   alias Hologram.Template.ExpressionGenerator

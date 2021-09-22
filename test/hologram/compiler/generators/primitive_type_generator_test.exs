@@ -1,5 +1,5 @@
 defmodule Hologram.Compiler.PrimitiveTypeGeneratorTest do
-  use Hologram.TestCase, async: true
+  use Hologram.Test.UnitCase , async: true
   alias Hologram.Compiler.PrimitiveTypeGenerator
 
   test "generator/2" do

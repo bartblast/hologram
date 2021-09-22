@@ -1,5 +1,5 @@
 defmodule Hologram.Template.ParserTest do
-  use Hologram.TestCase, async: true
+  use Hologram.Test.UnitCase , async: true
   alias Hologram.Template.Parser
 
   test "single node" do

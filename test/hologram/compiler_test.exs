@@ -1,5 +1,5 @@
 defmodule Hologram.CompilerTest do
-  use Hologram.TestCase, async: true
+  use Hologram.Test.UnitCase , async: true
   alias Hologram.Compiler
 
   @default_layout Application.get_env(:hologram, :default_layout)

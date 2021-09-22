@@ -1,5 +1,5 @@
 defmodule Hologram.Compiler.FunctionDefinitionTransformerTest do
-  use Hologram.TestCase, async: true
+  use Hologram.Test.UnitCase , async: true
 
   alias Hologram.Compiler.{Context, FunctionDefinitionTransformer}
   alias Hologram.Compiler.IR.{AccessOperator, AtomType, FunctionDefinition, IntegerType, Variable}

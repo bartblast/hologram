@@ -1,5 +1,5 @@
 defmodule Hologram.Compiler.AnonymousFunctionTypeEncoderTest do
-  use Hologram.TestCase, async: true
+  use Hologram.Test.UnitCase , async: true
   alias Hologram.Compiler.{Context, Encoder, Opts}
 
   test "no vars / single expression" do

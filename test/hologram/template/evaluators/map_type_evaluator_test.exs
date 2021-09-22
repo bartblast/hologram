@@ -1,5 +1,5 @@
 defmodule Hologram.Template.MapTypeEvaluatorTest do
-  use Hologram.TestCase, async: true
+  use Hologram.Test.UnitCase , async: true
 
   alias Hologram.Compiler.IR.{AtomType, IntegerType, MapType}
   alias Hologram.Template.Evaluator

@@ -1,5 +1,5 @@
 defmodule Hologram.Compiler.UseDirectiveTransformerTest do
-  use Hologram.TestCase, async: true
+  use Hologram.Test.UnitCase , async: true
 
   alias Hologram.Compiler.IR.UseDirective
   alias Hologram.Compiler.UseDirectiveTransformer

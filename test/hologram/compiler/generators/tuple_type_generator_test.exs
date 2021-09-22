@@ -1,5 +1,5 @@
 defmodule Hologram.Compiler.TupleTypeGeneratorTest do
-  use Hologram.TestCase, async: true
+  use Hologram.Test.UnitCase , async: true
 
   alias Hologram.Compiler.{Context, Opts, TupleTypeGenerator}
   alias Hologram.Compiler.IR.IntegerType

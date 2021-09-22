@@ -1,5 +1,5 @@
 defmodule Hologram.Compiler.ModuleAttributeDefinitionEncoderTest do
-  use Hologram.TestCase, async: true
+  use Hologram.Test.UnitCase , async: true
 
   alias Hologram.Compiler.{Context, Encoder, Opts}
   alias Hologram.Compiler.IR.{IntegerType, ModuleAttributeDefinition}

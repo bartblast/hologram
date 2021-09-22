@@ -1,5 +1,5 @@
 defmodule Hologram.Compiler.TupleTypeTransformerTest do
-  use Hologram.TestCase, async: true
+  use Hologram.Test.UnitCase , async: true
 
   alias Hologram.Compiler.{Context, TupleTypeTransformer}
   alias Hologram.Compiler.IR.{IntegerType, TupleType}

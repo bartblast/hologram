@@ -1,5 +1,5 @@
 defmodule Hologram.Compiler.UnquoteTransformerTest do
-  use Hologram.TestCase, async: true
+  use Hologram.Test.UnitCase , async: true
 
   alias Hologram.Compiler.{Context, UnquoteTransformer}
   alias Hologram.Compiler.IR.{Unquote, Variable}
@@ -10,7 +10,7 @@ defmodule Hologram.Compiler.UnquoteTransformerTest do
 
     result = UnquoteTransformer.transform(ast, %Context{})
     expected = %Unquote{expression: %Variable{name: :abc}}
-    
+
     assert result == expected
   end
 end

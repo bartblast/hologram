@@ -1,5 +1,5 @@
 defmodule Hologram.Template.ListTypeEvaluatorTest do
-  use Hologram.TestCase, async: true
+  use Hologram.Test.UnitCase , async: true
 
   alias Hologram.Compiler.IR.{IntegerType, ListType}
   alias Hologram.Template.Evaluator

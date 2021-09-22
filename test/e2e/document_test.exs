@@ -1,5 +1,5 @@
 defmodule Hologram.Features.DocumentTest do
-  use Hologram.E2ECase, async: false
+  use Hologram.Test.E2ECase, async: false
 
   @moduletag :e2e
 

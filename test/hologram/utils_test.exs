@@ -1,5 +1,5 @@
 defmodule Hologram.UtilsTest do
-  use Hologram.TestCase, async: true
+  use Hologram.Test.UnitCase , async: true
 
   alias Hologram.Test.Fixtures.Utils.Module1
   alias Hologram.Utils

@@ -1,5 +1,5 @@
 defmodule Hologram.Template.PageRendererTest do
-  use Hologram.TestCase, async: false
+  use Hologram.Test.UnitCase , async: false
 
   alias Hologram.Compiler.Reflection
   alias Hologram.Template.Renderer

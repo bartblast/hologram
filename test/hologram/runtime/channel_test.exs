@@ -1,5 +1,5 @@
 defmodule Hologram.Runtime.ChannelTest do
-  use Hologram.ChannelCase, async: false
+  use Hologram.Test.ChannelCase, async: false
 
   alias Hologram.Compiler.Serializer
   alias Hologram.Runtime.{Channel, Socket}

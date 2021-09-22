@@ -1,5 +1,5 @@
 defmodule Hologram.Compiler.MacroDefinitionTransformerTest do
-  use Hologram.TestCase, async: true
+  use Hologram.Test.UnitCase , async: true
 
   alias Hologram.Compiler.{Context, MacroDefinitionTransformer}
   alias Hologram.Compiler.IR.{AccessOperator, AtomType, IntegerType, MacroDefinition, Variable}

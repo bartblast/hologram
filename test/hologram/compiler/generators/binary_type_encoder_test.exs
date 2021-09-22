@@ -1,5 +1,5 @@
 defmodule Hologram.Compiler.BinaryTypeEncoderTest do
-  use Hologram.TestCase, async: true
+  use Hologram.Test.UnitCase , async: true
 
   alias Hologram.Compiler.{BinaryTypeEncoder, Context, Opts}
   alias Hologram.Compiler.IR.StringType

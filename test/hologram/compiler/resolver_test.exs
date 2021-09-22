@@ -1,5 +1,5 @@
 defmodule Hologram.Compiler.ResolverTest do
-  use Hologram.TestCase, async: true
+  use Hologram.Test.UnitCase , async: true
 
   alias Hologram.Compiler.IR.{Alias, Import}
   alias Hologram.Compiler.Resolver

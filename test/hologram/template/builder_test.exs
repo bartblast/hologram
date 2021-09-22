@@ -1,5 +1,5 @@
 defmodule Hologram.Template.BuilderTest do
-  use Hologram.TestCase, async: true
+  use Hologram.Test.UnitCase , async: true
 
   alias Hologram.Template.Builder
   alias Hologram.Template.Document.{Component, ElementNode, TextNode}

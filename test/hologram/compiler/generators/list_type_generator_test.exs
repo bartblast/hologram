@@ -1,5 +1,5 @@
 defmodule Hologram.Compiler.ListTypeGeneratorTest do
-  use Hologram.TestCase, async: true
+  use Hologram.Test.UnitCase , async: true
 
   alias Hologram.Compiler.{Context, ListTypeGenerator, Opts}
   alias Hologram.Compiler.IR.IntegerType

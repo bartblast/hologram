@@ -1,5 +1,5 @@
 defmodule Hologram.Template.InterpolatorTest do
-  use Hologram.TestCase, async: true
+  use Hologram.Test.UnitCase , async: true
 
   alias Hologram.Compiler.IR.{IntegerType, ModuleAttributeOperator, TupleType}
   alias Hologram.Template.Document.{Component, Expression, ElementNode, TextNode}

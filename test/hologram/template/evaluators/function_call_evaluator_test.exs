@@ -1,5 +1,5 @@
 defmodule Hologram.Template.FunctionCallEvaluatorTest do
-  use Hologram.TestCase, async: true
+  use Hologram.Test.UnitCase , async: true
 
   alias Hologram.Compiler.IR.{FunctionCall, IntegerType, ListType}
   alias Hologram.Template.Evaluator

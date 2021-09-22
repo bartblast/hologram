@@ -1,5 +1,5 @@
 defmodule Hologram.Compiler.ReflectionTest do
-  use Hologram.TestCase, async: true
+  use Hologram.Test.UnitCase , async: true
 
   alias Hologram.Compiler.IR.{MacroDefinition, ModuleDefinition, UseDirective}
   alias Hologram.Compiler.Reflection

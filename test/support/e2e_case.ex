@@ -1,10 +1,10 @@
-defmodule Hologram.E2ECase do
+defmodule Hologram.Test.E2ECase do
   use ExUnit.CaseTemplate
 
   using do
     quote do
       use Wallaby.Feature
-      
+
       import Hologram.Test.Helpers
       import Wallaby.Query
     end

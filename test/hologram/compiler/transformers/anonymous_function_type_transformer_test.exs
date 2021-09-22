@@ -1,5 +1,5 @@
 defmodule Hologram.Compiler.AnonymousFunctionTypeTransformerTest do
-  use Hologram.TestCase, async: true
+  use Hologram.Test.UnitCase , async: true
 
   alias Hologram.Compiler.{AnonymousFunctionTypeTransformer, Context}
   alias Hologram.Compiler.IR.{AccessOperator, AnonymousFunctionType, AtomType, IntegerType, Variable}
