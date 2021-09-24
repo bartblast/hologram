@@ -14,6 +14,10 @@ export default class Kernel {
   // TODO: implement other types
   static $equal_to(left, right) {
     switch (left.type) {
+      case "boolean": 
+        const value = right.type == "boolean" && left.value == right.value
+        return {type: "boolean", value: value}
+
       case "float":
         return Kernel._equal_to_number(left, right)
 

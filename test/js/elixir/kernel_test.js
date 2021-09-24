@@ -65,6 +65,36 @@ describe("$dot()", () => {
 })
 
 describe("$equal_to()", () => {
+  it("boolean == boolean", () => {
+    const value1 = {type: "boolean", value: true}
+    const value2 = {type: "boolean", value: true}
+
+    const result = Kernel.$equal_to(value1, value2)
+    const expected = {type: "boolean", value: true}
+
+    assert.deepStrictEqual(result, expected)
+  })
+
+  it("boolean != boolean", () => {
+    const value1 = {type: "boolean", value: true}
+    const value2 = {type: "boolean", value: false}
+
+    const result = Kernel.$equal_to(value1, value2)
+    const expected = {type: "boolean", value: false}
+
+    assert.deepStrictEqual(result, expected)
+  })
+
+  it("boolean != non-boolean", () => {
+    const value1 = {type: "boolean", value: true}
+    const value2 = {type: "string", value: "true"}
+
+    const result = Kernel.$equal_to(value1, value2)
+    const expected = {type: "boolean", value: false}
+
+    assert.deepStrictEqual(result, expected)
+  })
+
   it("integer == integer", () => {
     const value1 = {type: "integer", value: 1}
     const value2 = {type: "integer", value: 1}
