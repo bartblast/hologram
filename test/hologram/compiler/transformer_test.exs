@@ -9,6 +9,7 @@ defmodule Hologram.Compiler.TransformerTest do
     BinaryType,
     BooleanType,
     DotOperator,
+    EqualToOperator,
     FunctionDefinition,
     FunctionCall,
     IfExpression,
@@ -174,6 +175,13 @@ defmodule Hologram.Compiler.TransformerTest do
       ast = ast(code)
 
       assert %DotOperator{} = Transformer.transform(ast, %Context{})
+    end
+
+    test "equal to" do
+      code = "1 == 2"
+      ast = ast(code)
+
+      assert %EqualToOperator{} = Transformer.transform(ast, %Context{})
     end
 
     test "match" do

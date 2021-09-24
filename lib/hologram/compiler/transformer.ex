@@ -16,6 +16,7 @@ defmodule Hologram.Compiler.Transformer do
     AnonymousFunctionTypeTransformer,
     BinaryTypeTransformer,
     DotOperatorTransformer,
+    EqualToOperatorTransformer,
     FunctionDefinitionTransformer,
     FunctionCallTransformer,
     IfExpressionTransformer,
@@ -104,6 +105,10 @@ defmodule Hologram.Compiler.Transformer do
 
   def transform({{:., _, [left, right]}, [no_parens: true, line: _], []}, %Context{} = context) do
     DotOperatorTransformer.transform(left, right, context)
+  end
+
+  def transform({:==, _, _} = ast, %Context{} = context) do
+    EqualToOperatorTransformer.transform(ast, context)
   end
 
   def transform({:=, _, [left, right]}, %Context{} = context) do

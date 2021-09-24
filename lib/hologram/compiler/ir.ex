@@ -63,6 +63,10 @@ defmodule Hologram.Compiler.IR do
     defstruct left: nil, right: nil
   end
 
+  defmodule EqualToOperator do
+    defstruct left: nil, right: nil
+  end
+
   defmodule MatchOperator do
     defstruct bindings: nil, left: nil, right: nil
   end
