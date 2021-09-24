@@ -115,26 +115,6 @@ describe("$equal_to()", () => {
     assert.deepStrictEqual(result, expected)
   })
 
-  it("float == float", () => {
-    const value1 = {type: "float", value: 1.0}
-    const value2 = {type: "float", value: 1.0}
-
-    const result = Kernel.$equal_to(value1, value2)
-    const expected = {type: "boolean", value: true}
-
-    assert.deepStrictEqual(result, expected)
-  })
-
-  it("float != float", () => {
-    const value1 = {type: "float", value: 1.0}
-    const value2 = {type: "float", value: 2.0}
-
-    const result = Kernel.$equal_to(value1, value2)
-    const expected = {type: "boolean", value: false}
-
-    assert.deepStrictEqual(result, expected)
-  })
-
   it("integer == float", () => {
     const value1 = {type: "integer", value: 1}
     const value2 = {type: "float", value: 1.0}
@@ -147,6 +127,36 @@ describe("$equal_to()", () => {
 
   it("integer != float", () => {
     const value1 = {type: "float", value: 1}
+    const value2 = {type: "float", value: 2.0}
+
+    const result = Kernel.$equal_to(value1, value2)
+    const expected = {type: "boolean", value: false}
+
+    assert.deepStrictEqual(result, expected)
+  })
+
+  it("integer != non-number", () => {
+    const value1 = {type: "integer", value: 1}
+    const value2 = {type: "string", value: "1"}
+
+    const result = Kernel.$equal_to(value1, value2)
+    const expected = {type: "boolean", value: false}
+
+    assert.deepStrictEqual(result, expected)
+  })
+
+  it("float == float", () => {
+    const value1 = {type: "float", value: 1.0}
+    const value2 = {type: "float", value: 1.0}
+
+    const result = Kernel.$equal_to(value1, value2)
+    const expected = {type: "boolean", value: true}
+
+    assert.deepStrictEqual(result, expected)
+  })
+
+  it("float != float", () => {
+    const value1 = {type: "float", value: 1.0}
     const value2 = {type: "float", value: 2.0}
 
     const result = Kernel.$equal_to(value1, value2)
@@ -168,16 +178,6 @@ describe("$equal_to()", () => {
   it("float != integer", () => {
     const value1 = {type: "float", value: 1.0}
     const value2 = {type: "integer", value: 2}
-
-    const result = Kernel.$equal_to(value1, value2)
-    const expected = {type: "boolean", value: false}
-
-    assert.deepStrictEqual(result, expected)
-  })
-
-  it("integer != non-number", () => {
-    const value1 = {type: "integer", value: 1}
-    const value2 = {type: "string", value: "1"}
 
     const result = Kernel.$equal_to(value1, value2)
     const expected = {type: "boolean", value: false}
