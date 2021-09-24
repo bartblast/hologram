@@ -1,5 +1,5 @@
 defmodule Hologram.Compiler.ReflectionTest do
-  use Hologram.Test.UnitCase , async: true
+  use Hologram.Test.UnitCase , async: false
 
   alias Hologram.Compiler.IR.{MacroDefinition, ModuleDefinition, UseDirective}
   alias Hologram.Compiler.Reflection
@@ -7,6 +7,10 @@ defmodule Hologram.Compiler.ReflectionTest do
   @module_1 Hologram.Test.Fixtures.Compiler.Reflection.Module1
   @module_2 Hologram.Test.Fixtures.Compiler.Reflection.Module2
   @module_segs_1 [:Hologram, :Test, :Fixtures, :Compiler, :Reflection, :Module1]
+
+  setup_all do
+    on_exit(&compile_pages/0)
+  end
 
   test "app_name/0" do
     assert Reflection.app_name() == :hologram
@@ -30,6 +34,7 @@ defmodule Hologram.Compiler.ReflectionTest do
   end
 
   test "get_page_digest/1" do
+    compile_pages()
     result = Reflection.get_page_digest(Elixir.Hologram.E2E.Page1)
     assert result =~ uuid_hex_regex()
   end

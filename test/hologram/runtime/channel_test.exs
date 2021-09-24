@@ -6,9 +6,6 @@ defmodule Hologram.Runtime.ChannelTest do
   alias Hologram.Template.Renderer
 
   setup_all do
-    # When compile_pages/1 test helper is used, the router is recompiled with the pages found in the given pages_path.
-    # After the tests, the router needs to be recompiled with the default pages_path.
-    # Also, in such case the tests need to be non-async.
     on_exit(&compile_pages/0)
   end
 
