@@ -1,4 +1,4 @@
-defmodule Hologram.Template.ExpressionEvaluatorTest do
+defmodule Hologram.Template.NodeListEvaluatorTest do
   use Hologram.Test.UnitCase , async: true
 
   alias Hologram.Compiler.IR.{IntegerType, TupleType}
