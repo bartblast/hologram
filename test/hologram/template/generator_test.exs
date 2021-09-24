@@ -12,7 +12,7 @@ defmodule Hologram.Template.GeneratorTest do
     ]
 
     result = Generator.generate(nodes)
-    expected = "[{ type: 'text', content: 'test_1' }, { type: 'text', content: 'test_2' }]"
+    expected = "[ { type: 'text', content: 'test_1' }, { type: 'text', content: 'test_2' } ]"
 
     assert result == expected
   end

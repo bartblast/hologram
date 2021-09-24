@@ -6,6 +6,6 @@ defmodule Hologram.Template.NodeListGenerator do
       Enum.map(nodes, &Generator.generate/1)
       |> Enum.join(", ")
 
-    "[#{js}]"
+    if js != "", do: "[ #{js} ]", else: "[]"
   end
 end

@@ -33,7 +33,7 @@ defmodule Hologram.Compiler.FunctionDefinitionGeneratorTest do
 
     expected = """
     static test() {
-    if (Hologram.patternMatchFunctionArgs([{ type: 'placeholder' }], arguments)) {
+    if (Hologram.patternMatchFunctionArgs([ { type: 'placeholder' } ], arguments)) {
     let x = arguments[0];
     return { type: 'integer', value: 1 };
     }
@@ -56,7 +56,7 @@ defmodule Hologram.Compiler.FunctionDefinitionGeneratorTest do
 
     expected = """
     static test() {
-    if (Hologram.patternMatchFunctionArgs([{ type: 'placeholder' }, { type: 'placeholder' }], arguments)) {
+    if (Hologram.patternMatchFunctionArgs([ { type: 'placeholder' }, { type: 'placeholder' } ], arguments)) {
     let x = arguments[0];
     let y = arguments[1];
     return { type: 'integer', value: 1 };
@@ -116,10 +116,10 @@ defmodule Hologram.Compiler.FunctionDefinitionGeneratorTest do
 
     expected = """
     static test() {
-    if (Hologram.patternMatchFunctionArgs([{ type: 'integer', value: 1 }], arguments)) {
+    if (Hologram.patternMatchFunctionArgs([ { type: 'integer', value: 1 } ], arguments)) {
     return { type: 'integer', value: 1 };
     }
-    else if (Hologram.patternMatchFunctionArgs([{ type: 'integer', value: 2 }], arguments)) {
+    else if (Hologram.patternMatchFunctionArgs([ { type: 'integer', value: 2 } ], arguments)) {
     return { type: 'integer', value: 2 };
     }
     else {

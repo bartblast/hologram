@@ -218,7 +218,7 @@ defmodule Hologram.Compiler.GeneratorTest do
         }
 
       result = Generator.generate(ir, %Context{}, %Opts{})
-      expected = "[{ type: 'text', content: 'test' }]"
+      expected = "[ { type: 'text', content: 'test' } ]"
 
       assert result == expected
     end

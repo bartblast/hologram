@@ -47,6 +47,6 @@ defmodule Hologram.Compiler.FunctionDefinitionGenerator do
       Enum.map(variant.params, &Generator.generate(&1, context, %Opts{placeholder: true}))
       |> Enum.join(", ")
 
-    "[#{params}]"
+    if params != "", do: "[ #{params} ]", else: "[]"
   end
 end

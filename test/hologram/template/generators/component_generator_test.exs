@@ -16,7 +16,7 @@ defmodule Hologram.Template.ComponentGeneratorTest do
     result = ComponentGenerator.generate(module, children)
 
     expected_module = "Elixir_Hologram_Test_Fixtures_Template_ComponentGenerator_Module1"
-    expected = "{ type: 'component', module: '#{expected_module}', children: [{ type: 'text', content: 'test_content' }, { type: 'expression', callback: ($state) => { return { type: 'tuple', data: [ { type: 'integer', value: 1 } ] } } }] }"
+    expected = "{ type: 'component', module: '#{expected_module}', children: [ { type: 'text', content: 'test_content' }, { type: 'expression', callback: ($state) => { return { type: 'tuple', data: [ { type: 'integer', value: 1 } ] } } } ] }"
 
     assert result == expected
   end
