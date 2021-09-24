@@ -12,10 +12,6 @@ defmodule Hologram.Compiler.ReflectionTest do
     on_exit(&compile_pages/0)
   end
 
-  test "app_name/0" do
-    assert Reflection.app_name() == :hologram
-  end
-
   describe "app_path/1" do
     test "default" do
       result = Reflection.app_path([])
@@ -90,6 +86,10 @@ defmodule Hologram.Compiler.ReflectionTest do
   test "module_definition/1" do
     result = Reflection.module_definition(@module_1)
     assert %ModuleDefinition{module: @module_1} = result
+  end
+
+  test "otp_app/0" do
+    assert Reflection.otp_app() == :hologram
   end
 
   describe "pages_path/1" do

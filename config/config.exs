@@ -2,7 +2,7 @@ import Config
 
 # E2E tests
 config :hologram,
-  app_name: :hologram,
+  otp_app: :hologram,
   app_path: "#{File.cwd!()}/e2e",
   default_layout: Hologram.E2E.DefaultLayout,
   router_module: Hologram.E2E.Web.Router

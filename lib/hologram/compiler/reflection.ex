@@ -3,10 +3,6 @@ defmodule Hologram.Compiler.Reflection do
   alias Hologram.Compiler.{Context, Helpers, Normalizer, Parser, Transformer}
   alias Hologram.Utils
 
-  def app_name do
-    get_config()[:app_name]
-  end
-
   def app_path(config \\ get_config()) do
     case Keyword.get(config, :app_path) do
       nil -> "#{root_path()}/app"
@@ -88,6 +84,10 @@ defmodule Hologram.Compiler.Reflection do
     |> Transformer.transform(%Context{})
   end
 
+  def otp_app do
+    get_config()[:otp_app]
+  end
+
   def pages_path(config \\ get_config()) do
     case Keyword.get(config, :pages_path) do
       nil -> "#{app_path()}/pages"
@@ -106,7 +106,7 @@ defmodule Hologram.Compiler.Reflection do
     case Keyword.get(config, :router_module) do
       nil ->
         app_web_namespace =
-          app_name()
+          otp_app()
           |> to_string()
           |> Utils.append("_web")
           |> Macro.camelize()
