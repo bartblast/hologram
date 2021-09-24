@@ -11,6 +11,26 @@ export default class Kernel {
     return Utils.clone(left.data[Utils.serialize(right)])
   }
 
+  // TODO: implement other types
+  static $equal_to(left, right) {
+    switch (left.type) {
+      case "float":
+        return Kernel._equal_to_number(left, right)
+
+      case "integer":
+        return Kernel._equal_to_number(left, right)
+    }
+  }
+
+  static _equal_to_number(left, right) {
+    if (right.type == "integer" || right.type == "float") {
+      return {type: "boolean", value: left.value == right.value}
+
+    } else {
+      return {type: "boolean", value: false}
+    }
+  }
+
   static apply() {
     if (arguments.length == 3) {
       const module = Runtime.getModule(arguments[0].class_name)
