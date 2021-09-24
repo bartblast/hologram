@@ -47,17 +47,7 @@ defmodule Hologram.Template.Interpolator do
   end
 
   defp interpolate_node(%TextNode{content: content} = node) do
-    regex = ~r/([^\{]*)(\{[^\}]*\})([^\{]*)/
-
-    nodes =
-      Regex.scan(regex, content)
-      |> Enum.reduce([], fn [_, left, expr, right], acc ->
-        acc
-        |> maybe_include_text_node(left)
-        |> maybe_include_expression(expr)
-        |> maybe_include_text_node(right)
-      end)
-
+    nodes = split_into_expressions_and_text_nodes(content)
     if nodes != [], do: nodes, else: [node]
   end
 
@@ -65,39 +55,18 @@ defmodule Hologram.Template.Interpolator do
 
   defp interpolate_attrs(attrs) do
     Enum.map(attrs, fn {key, spec} ->
-      {key, %{spec | value: interpolate_value(spec.value)}}
+      nodes = split_into_expressions_and_text_nodes(spec.value)
+      {key, %{spec | value: nodes}}
     end)
     |> Enum.into(%{})
   end
 
   defp interpolate_props(props) do
     Enum.map(props, fn {key, value} ->
-      {key, interpolate_value(value)}
+      nodes = split_into_expressions_and_text_nodes(value)
+      {key, nodes}
     end)
     |> Enum.into(%{})
-  end
-
-  _ = """
-  Returns the corresponding expression node if an expression is found in the value string.
-  If there is no expression in the value string, the string itself is returned.
-
-  ## Examples
-      iex> interpolate_value("{1}")
-      %Expression{ir: %IntegerType{value: 1}}
-  """
-
-  @spec interpolate_value(String.t()) :: %Expression{} | String.t()
-
-  defp interpolate_value(str) do
-    regex = ~r/^(\{.+\})$/
-
-    case Regex.run(regex, str) do
-      [_, code] ->
-        %Expression{ir: get_ir(code)}
-
-      _ ->
-        str
-    end
   end
 
   defp get_ir(code) do
@@ -119,6 +88,27 @@ defmodule Hologram.Template.Interpolator do
       acc ++ [%TextNode{content: str}]
     else
       acc
+    end
+  end
+
+  defp split_into_expressions_and_text_nodes(str) do
+    nodes =
+      ~r/([^\{]*)(\{[^\}]*\})([^\{]*)/
+      |> Regex.scan(str)
+      |> Enum.reduce([], fn [_, left, expr, right], acc ->
+        acc
+        |> maybe_include_text_node(left)
+        |> maybe_include_expression(expr)
+        |> maybe_include_text_node(right)
+      end)
+
+    cond do
+      Enum.count(nodes) > 0 ->
+        nodes
+      str != "" ->
+        [%TextNode{content: str}]
+      true ->
+        []
     end
   end
 end

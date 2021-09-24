@@ -182,10 +182,23 @@ defmodule Hologram.Template.InterpolatorTest do
       ]
 
       result = Interpolator.interpolate(nodes)
-      assert result == nodes
+
+      expected = [
+        %ElementNode{
+          children: [],
+          attrs: %{
+            test_key: %{
+              value: [%TextNode{content: "test_value"}],
+              modifiers: []
+            }
+          }
+        }
+      ]
+
+      assert result == expected
     end
 
-    test "attribute with expression value" do
+    test "attribute with expression only" do
       nodes = [
         %ElementNode{
           tag: "div",
@@ -202,11 +215,133 @@ defmodule Hologram.Template.InterpolatorTest do
         %ElementNode{
           attrs: %{
             key: %{
-              value: %Expression{
-                ir: %TupleType{
-                  data: [%IntegerType{value: 1}]
+              value: [
+                %Expression{
+                  ir: %TupleType{
+                    data: [%IntegerType{value: 1}]
+                  }
                 }
-              },
+              ],
+              modifiers: []
+            }
+          },
+          children: [],
+          tag: "div"
+        }
+      ]
+
+      assert result == expected
+    end
+
+    test "attribute with expression surrounded by strings" do
+      nodes = [
+        %ElementNode{
+          tag: "div",
+          children: [],
+          attrs: %{
+            key: %{value: "abc{1}xyz", modifiers: []}
+          }
+        }
+      ]
+
+      result = Interpolator.interpolate(nodes)
+
+      expected = [
+        %ElementNode{
+          attrs: %{
+            key: %{
+              value: [
+                %TextNode{content: "abc"},
+                %Expression{
+                  ir: %TupleType{
+                    data: [%IntegerType{value: 1}]
+                  }
+                },
+                %TextNode{content: "xyz"}
+              ],
+              modifiers: []
+            }
+          },
+          children: [],
+          tag: "div"
+        }
+      ]
+
+      assert result == expected
+    end
+
+    test "attribute with multiple expressions surrounded by strings" do
+      nodes = [
+        %ElementNode{
+          tag: "div",
+          children: [],
+          attrs: %{
+            key: %{value: "abc{1}kmn{2}xyz", modifiers: []}
+          }
+        }
+      ]
+
+      result = Interpolator.interpolate(nodes)
+
+      expected = [
+        %ElementNode{
+          attrs: %{
+            key: %{
+              value: [
+                %TextNode{content: "abc"},
+                %Expression{
+                  ir: %TupleType{
+                    data: [%IntegerType{value: 1}]
+                  }
+                },
+                %TextNode{content: "kmn"},
+                %Expression{
+                  ir: %TupleType{
+                    data: [%IntegerType{value: 2}]
+                  }
+                },
+                %TextNode{content: "xyz"}
+              ],
+              modifiers: []
+            }
+          },
+          children: [],
+          tag: "div"
+        }
+      ]
+
+      assert result == expected
+    end
+
+    test "attribute with multiple expressions only" do
+      nodes = [
+        %ElementNode{
+          tag: "div",
+          children: [],
+          attrs: %{
+            key: %{value: "{1}{2}", modifiers: []}
+          }
+        }
+      ]
+
+      result = Interpolator.interpolate(nodes)
+
+      expected = [
+        %ElementNode{
+          attrs: %{
+            key: %{
+              value: [
+                %Expression{
+                  ir: %TupleType{
+                    data: [%IntegerType{value: 1}]
+                  }
+                },
+                %Expression{
+                  ir: %TupleType{
+                    data: [%IntegerType{value: 2}]
+                  }
+                }
+              ],
               modifiers: []
             }
           },
@@ -288,11 +423,13 @@ defmodule Hologram.Template.InterpolatorTest do
               attrs: %{
                 key: %{
                   modifiers: [],
-                  value: %Expression{
-                    ir: %TupleType{
-                      data: [%IntegerType{value: 1}]
+                  value: [
+                    %Expression{
+                      ir: %TupleType{
+                        data: [%IntegerType{value: 1}]
+                      }
                     }
-                  }
+                  ]
                 }
               },
               children: [],
@@ -324,11 +461,13 @@ defmodule Hologram.Template.InterpolatorTest do
           children: [],
           module: Abc.Bcd,
           props: %{
-            key: %Expression{
-              ir: %TupleType{
-                data: [%IntegerType{value: 1}]
+            key: [
+              %Expression{
+                ir: %TupleType{
+                  data: [%IntegerType{value: 1}]
+                }
               }
-            }
+            ]
           }
         }
       ]
@@ -371,11 +510,13 @@ defmodule Hologram.Template.InterpolatorTest do
         tag: "div",
         attrs: %{
           m: %{
-            value: %Expression{
-              ir: %TupleType{
-                data: [%IntegerType{value: 2}]
+            value: [
+              %Expression{
+                ir: %TupleType{
+                  data: [%IntegerType{value: 2}]
+                }
               }
-            },
+            ],
             modifiers: []
           }
         },
@@ -388,11 +529,13 @@ defmodule Hologram.Template.InterpolatorTest do
             ],
             attrs: %{
               n: %{
-                value: %Expression{
-                  ir: %TupleType{
-                    data: [%IntegerType{value: 3}]
+                value: [
+                  %Expression{
+                    ir: %TupleType{
+                      data: [%IntegerType{value: 3}]
+                    }
                   }
-                },
+                ],
                 modifiers: []
               }
             }
