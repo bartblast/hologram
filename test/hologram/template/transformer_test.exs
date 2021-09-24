@@ -82,16 +82,18 @@ defmodule Hologram.Template.TransformerTest do
     expected = [
       %ElementNode{
         attrs: %{
-          attr_1: %{value: "value_1", modifiers: []},
+          attr_1: %{value: [%TextNode{content: "value_1"}], modifiers: []},
           attr_2: %{
-            value: %Expression{
-              ir: %TupleType{
-                data: [%ModuleAttributeOperator{name: :value_2}]
+            value: [
+              %Expression{
+                ir: %TupleType{
+                  data: [%ModuleAttributeOperator{name: :value_2}]
+                }
               }
-            },
+            ],
             modifiers: []
           },
-          attr_3: %{value: "value_3", modifiers: []}
+          attr_3: %{value: [%TextNode{content: "value_3"}], modifiers: []}
         },
         children: [],
         tag: "div"
