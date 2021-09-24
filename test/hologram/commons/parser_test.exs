@@ -8,7 +8,7 @@ defmodule Hologram.ParserTest do
     end
 
     test "invalid code" do
-      assert_raise RuntimeError, "Invalid code", fn ->
+      assert_raise RuntimeError, ~r/Invalid code/, fn ->
         Parser.parse!(".1")
       end
     end
@@ -30,7 +30,7 @@ defmodule Hologram.ParserTest do
     end
 
     test "invalid code" do
-      assert_raise RuntimeError, "Invalid code", fn ->
+      assert_raise RuntimeError, ~r/Invalid code/, fn ->
         Parser.parse_file!("test/fixtures/commons/file_2.txt")
       end
     end
