@@ -66,7 +66,8 @@ export default class DOM {
   static buildVNodeAttrs(node, state) {
     return Object.keys(node.attrs).reduce((acc, key) => {
       if (!DOM.PRUNED_ATTRS.includes(key)) {
-        acc[key] = DOM.evaluateAttributeValue(node.attrs[key].value, state)
+        let value = node.attrs[key].value
+        acc[key] = DOM.evaluateAttributeValue(value, state)         
       }
       return acc
     }, {})
@@ -89,12 +90,18 @@ export default class DOM {
   }
 
   static evaluateAttributeValue(value, state) {
+    return value.reduce((acc, part) => {
+      return acc + DOM.evaluateAttributeValuePart(part, state)
+    }, "")
+  }
+
+  static evaluateAttributeValuePart(value, state) {
     if (value.type == "expression") {
       const result = value.callback(state).data[0]
       return Runtime.interpolate(result)
 
     } else {
-      return value
+      return value.content
     }
   }
 

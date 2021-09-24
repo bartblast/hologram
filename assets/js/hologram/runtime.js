@@ -16,6 +16,25 @@ export default class Runtime {
 
     this.loadPageOnPopStateEvents()
   }
+  
+  // TODO: test
+  static evaluateActionOrCommandSpec(eventValue, state) {
+    const eventValueFirstPart = eventValue[0]
+    let name, params
+
+    if (eventValueFirstPart.type == "expression") {
+      const callbackResult = eventValueFirstPart.callback(state)
+      name = callbackResult.data[0]
+      params = Utils.keywordToMap(callbackResult.data[1])
+
+    // type = text
+    } else {
+      name = {type: "atom", value: eventValueFirstPart.content}
+      params = {type: "map", data: {}}
+    }
+
+    return [name, params]
+  }
 
   executeAction(actionName, actionParams, state, context) {
     const actionResult = context.scopeModule.action(actionName, actionParams, state)
@@ -85,30 +104,14 @@ export default class Runtime {
 
   handleEventAction(eventValue, state, context) {
     let actionName, actionParams;
-
-    if (eventValue.type == "expression") {
-      const callbackResult = eventValue.callback(state)
-      actionName = callbackResult.data[0]
-      actionParams = Utils.keywordToMap(callbackResult.data[1])
-    } else {
-      actionName = {type: "atom", value: eventValue}
-      actionParams = {type: "map", data: {}}
-    }
+    [actionName, actionParams] = Runtime.evaluateActionOrCommandSpec(eventValue, state)
 
     this.executeAction(actionName, actionParams, state, context)
   }
 
   handleEventCommand(eventValue, state, context) {
     let commandName, commandParams;
-
-    if (eventValue.type == "expression") {
-      const callbackResult = eventValue.callback(state)
-      commandName = callbackResult.data[0]
-      commandParams = Utils.keywordToMap(callbackResult.data[1])
-    } else {
-      commandName = {type: "atom", value: eventValue}
-      commandParams = {type: "map", data: {}}
-    }
+    [commandName, commandParams] = Runtime.evaluateActionOrCommandSpec(eventValue, state)
 
     this.client.pushCommand(commandName, commandParams, context)
   }
