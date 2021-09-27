@@ -199,6 +199,13 @@ defmodule Hologram.Compiler.TransformerTest do
       assert result == %ModuleAttributeOperator{name: :a}
     end
 
+    test "pipe" do
+      code = "100 |> div(2)"
+      ast = ast(code)
+
+      assert %FunctionCall{} = Transformer.transform(ast, %Context{})
+    end
+
     test "type" do
       code = "str::binary"
       ast = ast(code)

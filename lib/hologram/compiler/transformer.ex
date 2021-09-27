@@ -29,6 +29,7 @@ defmodule Hologram.Compiler.Transformer do
     ModuleDefinitionTransformer,
     ModuleTypeTransformer,
     QuoteTransformer,
+    PipeOperatorTransformer,
     RequireDirectiveTransformer,
     StructTypeTransformer,
     TypeOperatorTransformer,
@@ -117,6 +118,10 @@ defmodule Hologram.Compiler.Transformer do
 
   def transform({:@, _, [{name, _, ast}]}, _) when not is_list(ast) do
     %ModuleAttributeOperator{name: name}
+  end
+
+  def transform({:|>, _, _,} = ast, %Context{} = context) do
+    PipeOperatorTransformer.transform(ast, context)
   end
 
   def transform({:"::", _, ast}, %Context{} = context) do
