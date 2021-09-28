@@ -1,5 +1,5 @@
 defmodule Hologram.Template.ComponentTransformer do
-  alias Hologram.Compiler.{Helpers, Resolver}
+  alias Hologram.Compiler.{Helpers, Reflection, Resolver}
   alias Hologram.Template.Document.Component
 
   def transform(module_name, props, children, aliases) do
@@ -7,9 +7,10 @@ defmodule Hologram.Template.ComponentTransformer do
       Helpers.module_segments(module_name)
       |> Resolver.resolve(aliases)
 
+    module_def = Reflection.module_definition(module)
     props = transform_props(props)
 
-    %Component{module: module, props: props, children: children}
+    %Component{module: module, module_def: module_def, props: props, children: children}
   end
 
   defp transform_props(props) do

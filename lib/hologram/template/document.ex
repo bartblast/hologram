@@ -1,6 +1,6 @@
 defmodule Hologram.Template.Document do
   defmodule Component do
-    defstruct module: nil, props: %{}, children: []
+    defstruct module: nil, module_def: nil, props: %{}, children: []
   end
 
   defmodule ElementNode do
