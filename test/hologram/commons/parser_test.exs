@@ -1,4 +1,4 @@
-defmodule Hologram.ParserTest do
+defmodule Hologram.Commons.ParserTest do
   use Hologram.Test.UnitCase , async: true
   alias Hologram.Compiler.Parser
 
