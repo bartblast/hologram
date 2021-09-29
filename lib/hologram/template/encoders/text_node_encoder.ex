@@ -1,5 +1,8 @@
-defmodule Hologram.Template.TextNodeGenerator do
-  def generate(content) do
+alias Hologram.Template.Document.TextNode
+alias Hologram.Template.Encoder
+
+defimpl Encoder, for: TextNode do
+  def encode(%{content: content}) do
     content =
       content
       |> String.replace("\n", "\\n")
