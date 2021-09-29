@@ -1,24 +1,24 @@
-defmodule Hologram.Template.NodeListGeneratorTest do
+defmodule Hologram.Template.NodeListEncoderTest do
   use Hologram.Test.UnitCase , async: true
 
   alias Hologram.Template.Document.TextNode
-  alias Hologram.Template.NodeListGenerator
+  alias Hologram.Template.Encoder
 
-  describe "generate/1" do
+  describe "encode/1" do
     test "non-empty" do
       nodes = [
         %TextNode{content: "test_1"},
         %TextNode{content: "test_2"}
       ]
 
-      result = NodeListGenerator.generate(nodes)
+      result = Encoder.encode(nodes)
       expected = "[ { type: 'text', content: 'test_1' }, { type: 'text', content: 'test_2' } ]"
 
       assert result == expected
     end
 
     test "empty" do
-      assert NodeListGenerator.generate([]) == "[]"
+      assert Encoder.encode([]) == "[]"
     end
   end
 end
