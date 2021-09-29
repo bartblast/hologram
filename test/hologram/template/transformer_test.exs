@@ -1,8 +1,9 @@
 defmodule Hologram.Template.TransformerTest do
   use Hologram.Test.UnitCase , async: true
 
+  alias Hologram.Compiler.IR.{IntegerType, TupleType}
   alias Hologram.Template.{Parser, Transformer}
-  alias Hologram.Template.Document.{Component, ElementNode, TextNode}
+  alias Hologram.Template.Document.{Component, ElementNode, Expression, TextNode}
 
   @aliases []
 
@@ -50,20 +51,32 @@ defmodule Hologram.Template.TransformerTest do
   end
 
   test "text node" do
-    html = "<div>test_text</div>"
+    html = "test_text"
+
+    result =
+      Parser.parse!(html)
+      |> Transformer.transform(@aliases)
+
+    expected = [%TextNode{content: "test_text"} ]
+
+    assert result == expected
+  end
+
+  test "embedded expression" do
+    html = "a{1}b"
 
     result =
       Parser.parse!(html)
       |> Transformer.transform(@aliases)
 
     expected = [
-      %ElementNode{
-        attrs: %{},
-        children: [
-          %TextNode{content: "test_text"}
-        ],
-        tag: "div"
-      }
+      %TextNode{content: "a"},
+      %Expression{
+        ir: %TupleType{
+          data: [%IntegerType{value: 1}]
+        }
+      },
+      %TextNode{content: "b"}
     ]
 
     assert result == expected
