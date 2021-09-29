@@ -1,4 +1,4 @@
-defmodule Hologram.Template.InterpolationParser do
+defmodule Hologram.Template.EmbeddedExpressionParser do
   use Hologram.Commons.Parser
 
   alias Hologram.Compiler.{Context, Transformer}
@@ -6,7 +6,7 @@ defmodule Hologram.Template.InterpolationParser do
   alias Hologram.Template.Document.{Expression, TextNode}
 
   @doc """
-  Splits a string which may contain interpolations into a list of expressions and text nodes.
+  Splits a string which may contain embedded expressions into a list of expression nodes and text nodes.
   """
   def parse(str) do
     nodes =

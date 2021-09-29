@@ -1,20 +1,20 @@
-defmodule Hologram.Template.InterpolationParserTest do
+defmodule Hologram.Template.EmbeddedExpressionParserTest do
   use Hologram.Test.UnitCase, async: true
 
   alias Hologram.Compiler.IR.{ModuleAttributeOperator, TupleType}
   alias Hologram.Template.Document.{Expression, TextNode}
-  alias Hologram.Template.InterpolationParser
+  alias Hologram.Template.EmbeddedExpressionParser
 
   test "text" do
     str = "test"
-    result = InterpolationParser.parse(str)
+    result = EmbeddedExpressionParser.parse(str)
 
     assert result == [%TextNode{content: str}]
   end
 
   test "expression" do
     str = "{@abc}"
-    result = InterpolationParser.parse(str)
+    result = EmbeddedExpressionParser.parse(str)
 
     expected = [
       %Expression{
@@ -29,7 +29,7 @@ defmodule Hologram.Template.InterpolationParserTest do
 
   test "text, expression" do
     str = "bcd{@abc}"
-    result = InterpolationParser.parse(str)
+    result = EmbeddedExpressionParser.parse(str)
 
     expected = [
       %TextNode{content: "bcd"},
@@ -45,7 +45,7 @@ defmodule Hologram.Template.InterpolationParserTest do
 
   test "expression, text" do
     str = "{@abc}bcd"
-    result = InterpolationParser.parse(str)
+    result = EmbeddedExpressionParser.parse(str)
 
     expected = [
       %Expression{
@@ -61,7 +61,7 @@ defmodule Hologram.Template.InterpolationParserTest do
 
   test "expression, expression" do
     str = "{@abc}{@bcd}"
-    result = InterpolationParser.parse(str)
+    result = EmbeddedExpressionParser.parse(str)
 
     expected = [
       %Expression{
@@ -81,7 +81,7 @@ defmodule Hologram.Template.InterpolationParserTest do
 
   test "text, expression, text" do
     str = "cde{@abc}bcd"
-    result = InterpolationParser.parse(str)
+    result = EmbeddedExpressionParser.parse(str)
 
     expected = [
       %TextNode{content: "cde"},
@@ -98,7 +98,7 @@ defmodule Hologram.Template.InterpolationParserTest do
 
   test "expression, text, expression" do
     str = "{@abc}bcd{@cde}"
-    result = InterpolationParser.parse(str)
+    result = EmbeddedExpressionParser.parse(str)
 
     expected = [
       %Expression{
@@ -119,7 +119,7 @@ defmodule Hologram.Template.InterpolationParserTest do
 
   test "text, expression, text, expression" do
     str = "cde{@abc}bcd{@def}"
-    result = InterpolationParser.parse(str)
+    result = EmbeddedExpressionParser.parse(str)
 
     expected = [
       %TextNode{content: "cde"},
@@ -141,8 +141,8 @@ defmodule Hologram.Template.InterpolationParserTest do
 
   test "expression, text, expression, text" do
     str = "{@abc}bcd{@cde}def"
-    result = InterpolationParser.parse(str)
-    
+    result = EmbeddedExpressionParser.parse(str)
+
     expected = [
       %Expression{
         ir: %TupleType{
