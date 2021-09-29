@@ -1,6 +1,6 @@
 defmodule Hologram.Compiler.SigilHGenerator do
   alias Hologram.Compiler.Context
-  alias Hologram.Template.{Generator, Parser, Transformer}
+  alias Hologram.Template.{Encoder, Parser, Transformer}
 
   def generate(ir, %Context{} = context) do
     ir
@@ -12,6 +12,6 @@ defmodule Hologram.Compiler.SigilHGenerator do
     |> String.trim()
     |> Parser.parse!()
     |> Transformer.transform(context.aliases)
-    |> Generator.generate()
+    |> Encoder.encode()
   end
 end
