@@ -1,6 +1,7 @@
 defmodule Hologram.Template.ComponentTransformer do
   alias Hologram.Compiler.{Helpers, Reflection, Resolver}
   alias Hologram.Template.Document.Component
+  alias Hologram.Template.EmbeddedExpressionParser
 
   def transform(module_name, props, children, aliases) do
     module =
@@ -14,7 +15,10 @@ defmodule Hologram.Template.ComponentTransformer do
   end
 
   defp transform_props(props) do
-    Enum.map(props, fn {key, value} -> {String.to_atom(key), value} end)
+    Enum.map(props, fn {key, value} ->
+      value = EmbeddedExpressionParser.parse(value)
+      {String.to_atom(key), value}
+    end)
     |> Enum.into(%{})
   end
 end

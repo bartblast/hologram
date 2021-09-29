@@ -3,7 +3,7 @@ defmodule Hologram.Template.ComponentTransformerTest do
 
   alias Hologram.Compiler.IR.{Alias, ModuleDefinition}
   alias Hologram.Template.ComponentTransformer
-  alias Hologram.Template.Document.Component
+  alias Hologram.Template.Document.{Component, Expression, TextNode}
 
   @aliases []
   @attrs []
@@ -44,9 +44,9 @@ defmodule Hologram.Template.ComponentTransformerTest do
   end
 
   test "props" do
-    attrs = [{"attr_1", "value_1"}, {"attr_2", "value_2"}]
+    props = [{"attr_1", "text"}, {"attr_2", "abc{@k}xyz"}]
 
-    result = ComponentTransformer.transform(@module_name, attrs, @children, @aliases)
+    result = ComponentTransformer.transform(@module_name, props, @children, @aliases)
 
     assert %ModuleDefinition{} = result.module_def
 
@@ -54,7 +54,18 @@ defmodule Hologram.Template.ComponentTransformerTest do
       children: @children,
       module: @module,
       module_def: result.module_def,
-      props: %{attr_1: "value_1", attr_2: "value_2"}
+      props: %{
+        attr_1: [%TextNode{content: "text"}],
+        attr_2: [
+          %TextNode{content: "abc"},
+          %Expression{
+            ir: %Hologram.Compiler.IR.TupleType{
+              data: [%Hologram.Compiler.IR.ModuleAttributeOperator{name: :k}]
+            }
+          },
+          %TextNode{content: "xyz"}
+        ]
+      }
     }
 
     assert result == expected
