@@ -47,6 +47,6 @@ defmodule Hologram.Compiler.FunctionDefinitionGenerator do
   defp generate_params(variant, context) do
     Enum.map(variant.params, &Generator.generate(&1, context, %Opts{placeholder: true}))
     |> Enum.join(", ")
-    |> encode_array()
+    |> wrap_with_array()
   end
 end
