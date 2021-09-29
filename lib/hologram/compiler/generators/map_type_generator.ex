@@ -1,4 +1,5 @@
 defmodule Hologram.Compiler.MapTypeGenerator do
+  import Hologram.Commons.Encoder
   alias Hologram.Compiler.{Context, Generator, MapKeyGenerator, Opts}
 
   def generate(data, %Context{} = context, %Opts{} = opts) do
@@ -6,16 +7,10 @@ defmodule Hologram.Compiler.MapTypeGenerator do
   end
 
   def generate_data(data, %Context{} = context, %Opts{} = opts) do
-    fields =
-      Enum.map(data, fn {k, v} ->
-        "'#{MapKeyGenerator.generate(k, context)}': #{Generator.generate(v, context, opts)}"
-      end)
-      |> Enum.join(", ")
-
-    if fields != "" do
-      "{ #{fields} }"
-    else
-      "{}"
-    end
+    Enum.map(data, fn {k, v} ->
+      "'#{MapKeyGenerator.generate(k, context)}': #{Generator.generate(v, context, opts)}"
+    end)
+    |> Enum.join(", ")
+    |> wrap_with_object()
   end
 end
