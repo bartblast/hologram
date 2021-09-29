@@ -3,6 +3,6 @@ defmodule Hologram.Compiler.TupleTypeGenerator do
   alias Hologram.Compiler.{Context, Opts}
 
   def generate(data, %Context{} = context, %Opts{} = opts) do
-    "{ type: 'tuple', data: #{encode_as_list(data, context, opts)} }"
+    "{ type: 'tuple', data: #{encode_as_array(data, context, opts)} }"
   end
 end

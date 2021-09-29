@@ -1,4 +1,5 @@
 defmodule Hologram.Compiler.TypeEncoder do
+  import Hologram.Commons.Encoder
   alias Hologram.Compiler.{Context, Generator, Opts}
 
   defmacro __using__(_) do
@@ -7,15 +8,9 @@ defmodule Hologram.Compiler.TypeEncoder do
     end
   end
 
-  def encode_as_list(data, %Context{} = context, %Opts{} = opts) do
-    data =
-      Enum.map(data, &Generator.generate(&1, context, opts))
-      |> Enum.join(", ")
-
-    if data != "" do
-      "[ #{data} ]"
-    else
-      "[]"
-    end
+  def encode_as_array(data, %Context{} = context, %Opts{} = opts) do
+    Enum.map(data, &Generator.generate(&1, context, opts))
+    |> Enum.join(", ")
+    |> wrap_with_array()
   end
 end
