@@ -1,12 +1,10 @@
 defmodule Hologram.Template.Transformer do  alias Hologram.Compiler.IR.Alias
   alias Hologram.Compiler.IR.Alias
-  alias Hologram.Template.{ComponentTransformer, ElementNodeTransformer, Interpolator}
-  alias Hologram.Template.Document.TextNode
+  alias Hologram.Template.{ComponentTransformer, ElementNodeTransformer, EmbeddedExpressionParser}
   alias Hologram.Typespecs, as: T
 
   @doc """
   Transforms parsed markup into a document tree template.
-  Interpolates expression nodes in text nodes and attribute/prop values.
 
   ## Examples
       iex> transform([{"div", [{"class", "{1}"}, {"id", "some-id"}], ["some-text-{2}"]}])
@@ -34,24 +32,23 @@ defmodule Hologram.Template.Transformer do  alias Hologram.Compiler.IR.Alias
   """
   @spec transform(Saxy.SimpleForm.t(), list(%Alias{})) :: list(T.document_node())
 
-  def transform(dom, aliases) do
-    Enum.map(dom, fn node -> transform_node(node, aliases) end)
-    |> Interpolator.interpolate()
+  def transform(nodes, aliases) do
+    Enum.reduce(nodes, [], &(&2 ++ transform_node(&1, aliases)))
   end
 
-  defp transform_node(dom, _) when is_binary(dom) do
-    %TextNode{content: dom}
+  defp transform_node(node, _) when is_binary(node) do
+    EmbeddedExpressionParser.parse(node)
   end
 
   defp transform_node({type, attrs, children}, aliases) do
-    children = Enum.map(children, &transform_node(&1, aliases))
+    children = Enum.reduce(children, [], &(&2 ++ transform_node(&1, aliases)))
 
     case determine_node_type(type, aliases) do
       :component ->
-        ComponentTransformer.transform(type, attrs, children, aliases)
+        [ComponentTransformer.transform(type, attrs, children, aliases)]
 
       :element ->
-        ElementNodeTransformer.transform(type, children, attrs)
+        [ElementNodeTransformer.transform(type, children, attrs)]
     end
   end
 

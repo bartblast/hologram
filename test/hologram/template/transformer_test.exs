@@ -1,9 +1,8 @@
 defmodule Hologram.Template.TransformerTest do
   use Hologram.Test.UnitCase , async: true
 
-  alias Hologram.Compiler.IR.{ModuleAttributeOperator, TupleType}
   alias Hologram.Template.{Parser, Transformer}
-  alias Hologram.Template.Document.{Component, Expression, ElementNode, TextNode}
+  alias Hologram.Template.Document.{Component, ElementNode, TextNode}
 
   @aliases []
 
@@ -65,59 +64,6 @@ defmodule Hologram.Template.TransformerTest do
         ],
         tag: "div"
       }
-    ]
-
-    assert result == expected
-  end
-
-  test "expression interpolation in attrs" do
-    html = """
-    <div attr_1="value_1" attr_2={@value_2} attr_3="value_3"></div>
-    """
-
-    result =
-      Parser.parse!(html)
-      |> Transformer.transform(@aliases)
-
-    expected = [
-      %ElementNode{
-        attrs: %{
-          attr_1: %{value: [%TextNode{content: "value_1"}], modifiers: []},
-          attr_2: %{
-            value: [
-              %Expression{
-                ir: %TupleType{
-                  data: [%ModuleAttributeOperator{name: :value_2}]
-                }
-              }
-            ],
-            modifiers: []
-          },
-          attr_3: %{value: [%TextNode{content: "value_3"}], modifiers: []}
-        },
-        children: [],
-        tag: "div"
-      }
-    ]
-
-    assert result == expected
-  end
-
-  test "expression interpolation in text node" do
-    html = "test_1{@x1}test_2"
-
-    result =
-      Parser.parse!(html)
-      |> Transformer.transform(@aliases)
-
-    expected = [
-      %TextNode{content: "test_1"},
-      %Expression{
-        ir: %TupleType{
-          data: [%ModuleAttributeOperator{name: :x1}]
-        }
-      },
-      %TextNode{content: "test_2"}
     ]
 
     assert result == expected
