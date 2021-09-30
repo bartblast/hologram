@@ -15,6 +15,33 @@ export default class DOM {
     this.window = window
   }
 
+  static buildComponentState(props, state) {
+    return Object.keys(props).reduce((acc, key) => {
+      acc.data[`~atom[${key}]`] = DOM.evaluateProp(props[key], state)
+      return acc
+    }, {type: "map", data: {"~atom[context]": state.data["~atom[context]"]}})
+  }
+
+  static evaluateNode(node, state) {
+    switch (node.type) {
+      case "text":
+        return {type: "string", value: node.content}
+
+      case "expression":
+        return node.callback(state).data[0]
+    }
+  }
+
+  static evaluateProp(nodes, state) {
+    if (nodes.length == 1) {
+      return DOM.evaluateNode(nodes[0], state)
+    } else {
+      return nodes.reduce((acc, node) => {
+        return acc + Runtime.interpolate(DOM.evaluateNode(node, state))
+      }, "")
+    }
+  }
+
   // TODO: refactor & test
   // TODO: Cover in document E2E tests.
   buildVNode(node, state, context) {
@@ -37,7 +64,8 @@ export default class DOM {
         context = Utils.clone(context)
         context.slots = { default: node.children }
 
-        return this.buildVNode(module.template(), state, context)
+        let componentState = DOM.buildComponentState(node.props, state)
+        return this.buildVNode(module.template(), componentState, context)
 
       case "element":
         if (node.tag == "slot") {
