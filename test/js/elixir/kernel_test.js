@@ -237,6 +237,23 @@ describe("$equal_to()", () => {
   })
 })
 
+describe("to_string()", () => {
+  it("converts boxed value to boxed string type value", () => {
+    const val = {type: "integer", value: 1}
+
+    const expected = {type: "string", value: "1"}
+    const result = Kernel.to_string(val)
+
+    assert.deepStrictEqual(result, expected)
+  })
+
+  it("returns freezed object", () => {
+    const val = {type: "integer", value: 1}
+    const result = Kernel.to_string(val)
+    
+    assertFreezed(result)
+  })
+})
 
 
 
@@ -275,13 +292,3 @@ describe("if()", () => {
   })
 })
 
-describe("to_string()", () => {
-  it("converts a value to string type", () => {
-    const value = {type: "integer", value: 1}
-
-    const expected = {type: "string", value: "1"}
-    const result = Kernel.to_string(value)
-
-    assert.deepStrictEqual(result, expected)
-  })
-})

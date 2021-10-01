@@ -58,7 +58,10 @@ export default class Kernel {
     return Utils.freeze({type: "boolean", value: value})
   }
 
-
+  static to_string(boxedValue) {
+    const value = `${boxedValue.value.toString()}`
+    return Utils.freeze({type: 'string', value: value})
+  }
 
 
 
@@ -76,9 +79,5 @@ export default class Kernel {
     } else {
       return elseClause()
     }
-  }
-
-  static to_string(arg) {
-    return {type: 'string', value: `${arg.value.toString()}`}
   }
 }
