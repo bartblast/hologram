@@ -10,6 +10,20 @@ export default class Kernel {
     return Utils.freeze({type: type, value: result})
   }
 
+  static apply() {
+    if (arguments.length === 3) {
+      const module = Runtime.getModule(arguments[0].class_name)
+      const functionName = arguments[1].value
+      const args = arguments[2].data
+
+      return module[functionName](...args)
+
+    } else {
+      const message = `Kernel.apply(): arguments = ${JSON.stringify(arguments)}`
+      throw new HologramNotImplementedError(message)
+    }
+  }
+
   static _areBoxedNumbersEqual(boxedNumber1, boxedNumber2) {
     if (Type.isNumber(boxedNumber1) && Type.isNumber(boxedNumber2)) {
       return boxedNumber1.value == boxedNumber2.value
@@ -52,18 +66,7 @@ export default class Kernel {
 
 
 
-  static apply() {
-    if (arguments.length == 3) {
-      const module = Runtime.getModule(arguments[0].class_name)
-      const function_name = arguments[1].value
-      const args = arguments[2].data
 
-      return module[function_name](...args)
-
-    } else {
-      throw "Kernel.apply: Unsupported yet case!"
-    }
-  }
 
   static if(condition, doClause, elseClause) {
     const conditionResult = condition()

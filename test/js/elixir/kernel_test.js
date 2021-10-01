@@ -53,6 +53,31 @@ describe("$add()", () => {
   })
 })
 
+describe("apply()", () => {
+  let functionName, module;
+
+  beforeEach(() => {
+    module = Type.module("ModuleStub1")
+    functionName = Type.atom("test")
+  })
+
+  // apply/3
+  it("invokes a given function on a given module with given args", () => {
+    const args = Type.list([Type.integer(1), Type.integer(2)])
+
+    const result = Kernel.apply(module, functionName, args)
+    const expected = Type.integer(3)
+
+    assert.deepStrictEqual(result, expected) 
+  })
+
+  // apply/2
+  it("throws an error if number of args given is different than 3", () => {
+    const expectedMessage = 'Kernel.apply(): arguments = {"0":{"type":"module","class_name":"ModuleStub1"},"1":{"type":"atom","value":"test"}}'
+    assert.throw(() => { Kernel.apply(module, functionName) }, HologramNotImplementedError, expectedMessage);
+  })
+})
+
 describe("$dot()", () => {
   let key, map, val, result;
 
@@ -200,8 +225,8 @@ describe("$equal_to()", () => {
 
   it("throws an error for not implemented types", () => {
     const val = {type: "not implemented", value: "test"}
-    const expected_message = 'Kernel.$equal_to(): boxedVal1 = {"type":"not implemented","value":"test"}'
-    assert.throw(() => { Kernel.$equal_to(val, val) }, HologramNotImplementedError, expected_message);
+    const expectedMessage = 'Kernel.$equal_to(): boxedVal1 = {"type":"not implemented","value":"test"}'
+    assert.throw(() => { Kernel.$equal_to(val, val) }, HologramNotImplementedError, expectedMessage);
   })
 
   it("returns freezed object", () => {
@@ -226,18 +251,7 @@ describe("$equal_to()", () => {
 
 
 
-describe("apply()", () => {
-  it("apply/3", () => {
-    const module = Type.module("ModuleStub1")
-    const function_name = Type.atom("test")
-    const args = Type.list([Type.integer(1), Type.integer(2)])
 
-    const result = Kernel.apply(module, function_name, args)
-    const expected = Type.integer(3)
-
-    assert.deepStrictEqual(result, expected) 
-  })
-})
 
 describe("if()", () => {
   it("condition is truthy", () => {
