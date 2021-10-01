@@ -33,23 +33,23 @@ export default class Utils {
     return boxedValue.type === "boolean" && boxedValue.value === false
   }
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-  static isFalsy(arg) {
-    return Utils.isFalse(arg) || Utils.isNil(arg)
+  static isFalsy(boxedValue) {
+    return Utils.isFalse(boxedValue) || Utils.isNil(boxedValue)
   }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
   static isNil(arg) {
     return arg.type == "nil"
