@@ -17,27 +17,46 @@ export default class Runtime {
     this.loadPageOnPopStateEvents()
   }
   
-  // TODO: test
-  static evaluateActionOrCommandSpec(eventValue, state) {
-    const eventValueFirstPart = eventValue[0]
-    let name, params
+  static evaluateActionOrCommandSpec(eventSpec, scopeState) {
+    const eventValueFirstPart = eventSpec.value[0]
+    let name, params, target
 
     if (eventValueFirstPart.type == "expression") {
-      const callbackResult = eventValueFirstPart.callback(state)
-      name = callbackResult.data[0]
-      params = Utils.keywordToMap(callbackResult.data[1])
+      const callbackResult = eventValueFirstPart.callback(scopeState)
+
+      if (eventSpec.modifiers.includes("forward")) {
+        target = callbackResult.data[0]
+        name = callbackResult.data[1]
+        params = Utils.keywordToMap(callbackResult.data[2])
+      } else {
+        target = {type: "atom", value: "page"}
+        name = callbackResult.data[0]
+        params = Utils.keywordToMap(callbackResult.data[1])
+      }
 
     // type = text
     } else {
+      target = "page"
       name = {type: "atom", value: eventValueFirstPart.content}
       params = {type: "map", data: {}}
     }
 
-    return [name, params]
+    return [target, name, params]
   }
 
-  executeAction(actionName, actionParams, state, context) {
-    const actionResult = context.scopeModule.action(actionName, actionParams, state)
+  executeAction(actionTarget, actionName, actionParams, fullState, scopeState, context) {
+    let module, state;
+    let isPageTarget = actionTarget.type == "atom" && actionTarget.value == "page"
+
+    if (isPageTarget) {
+      module = context.pageModule
+      state = fullState
+    } else {
+      module = context.scopeModule
+      state = scopeState
+    }
+
+    const actionResult = module.action(actionName, actionParams, state)
 
     if (actionResult.type == "tuple") {
       this.state = actionResult.data[0]
@@ -52,7 +71,11 @@ export default class Runtime {
       this.client.pushCommand(commandName, commandParams, context)
 
     } else {
-      this.state = actionResult
+      if (isPageTarget) {
+        this.state = actionResult
+      } else {
+        // TODO: handle non-page targets
+      }
     }
 
     this.dom.render(context.pageModule)
@@ -72,14 +95,14 @@ export default class Runtime {
   }  
 
   // TODO: refactor & test
-  handleClickEvent(onClickSpec, state, context, event) {
+  handleClickEvent(onClickSpec, fullState, scopeState, context, event) {
     event.preventDefault()
 
     if (onClickSpec.modifiers.includes("command")) {
-      return this.handleEventCommand(onClickSpec.value, state, context)
+      return this.handleEventCommand(onClickSpec, fullState, scopeState, context)
 
     } else {
-      return this.handleEventAction(onClickSpec.value, state, context)
+      return this.handleEventAction(onClickSpec, fullState, scopeState, context)
     }
   }
 
@@ -102,16 +125,16 @@ export default class Runtime {
     }
   }
 
-  handleEventAction(eventValue, state, context) {
-    let actionName, actionParams;
-    [actionName, actionParams] = Runtime.evaluateActionOrCommandSpec(eventValue, state)
+  handleEventAction(eventSpec, fullState, scopeState, context) {
+    let actionName, actionParams, actionTarget;
+    [actionTarget, actionName, actionParams] = Runtime.evaluateActionOrCommandSpec(eventSpec, scopeState)
 
-    this.executeAction(actionName, actionParams, state, context)
+    this.executeAction(actionTarget, actionName, actionParams, fullState, scopeState, context)
   }
 
-  handleEventCommand(eventValue, state, context) {
-    let commandName, commandParams;
-    [commandName, commandParams] = Runtime.evaluateActionOrCommandSpec(eventValue, state)
+  handleEventCommand(eventSpec, fullState, scopeState, context) {
+    let commandName, commandParams, commandTarget;
+    [commandTarget, commandName, commandParams] = Runtime.evaluateActionOrCommandSpec(eventSpec, scopeState)
 
     this.client.pushCommand(commandName, commandParams, context)
   }
@@ -126,7 +149,7 @@ export default class Runtime {
   }
 
   // TODO: refactor & test
-  handleSubmitEvent(context, onSubmitSpec, state, event) {
+  handleSubmitEvent(onSubmitSpec, fullState, scopeState, context, event) {
     event.preventDefault()
 
     let formData = new FormData(event.target)
@@ -136,10 +159,9 @@ export default class Runtime {
       params.data[`~string[${el[0]}]`] = {type: "string", value: el[1]}
     }
 
-    this.executeAction(onSubmitSpec.value, params, state, context)
+    this.executeAction(onSubmitSpec.value, params, fullState, scopeState, context)
   }
 
-  // TODO: refactor & test
   static interpolate(value) {
     switch (value.type) {
       case "binary":

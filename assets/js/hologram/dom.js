@@ -42,12 +42,10 @@ export default class DOM {
     }
   }
 
-  // TODO: refactor & test
-  // TODO: Cover in document E2E tests.
-  buildVNode(node, state, context) {
+  buildVNode(node, fullState, scopeState, context) {
     if (Array.isArray(node)) {
       return node.reduce((acc, n) => {
-        acc.push(...this.buildVNode(n, state, context))
+        acc.push(...this.buildVNode(n, fullState, scopeState, context))
         return acc
       }, [])
     }
@@ -64,26 +62,26 @@ export default class DOM {
         context = Utils.clone(context)
         context.slots = { default: node.children }
 
-        let componentState = DOM.buildComponentState(node.props, state)
-        return this.buildVNode(module.template(), componentState, context)
+        let componentState = DOM.buildComponentState(node.props, scopeState)
+        return this.buildVNode(module.template(), fullState, componentState, context)
 
       case "element":
         if (node.tag == "slot") {
-          return this.buildVNode(context.slots.default, state, context)
+          return this.buildVNode(context.slots.default, fullState, scopeState, context)
         }
 
         let children = node.children.reduce((acc, child) => {
-          acc.push(...this.buildVNode(child, state, context))
+          acc.push(...this.buildVNode(child, fullState, scopeState, context))
           return acc
         }, [])
 
-        let event_handlers = this.buildVNodeEventHandlers(node, state, context)
-        let attrs = DOM.buildVNodeAttrs(node, state)
+        let event_handlers = this.buildVNodeEventHandlers(node, fullState, scopeState, context)
+        let attrs = DOM.buildVNodeAttrs(node, scopeState)
 
         return [h(node.tag, {attrs: attrs, on: event_handlers}, children)]
 
       case "expression":
-        const evaluatedExpression = node.callback(state).data[0]
+        const evaluatedExpression = node.callback(scopeState).data[0]
         return [Runtime.interpolate(evaluatedExpression)]
 
       case "text":
@@ -91,11 +89,11 @@ export default class DOM {
     } 
   }
 
-  static buildVNodeAttrs(node, state) {
+  static buildVNodeAttrs(node, scopeState) {
     return Object.keys(node.attrs).reduce((acc, key) => {
       if (!DOM.PRUNED_ATTRS.includes(key)) {
         let value = node.attrs[key].value
-        acc[key] = DOM.evaluateAttributeValue(value, state)         
+        acc[key] = DOM.evaluateAttributeValue(value, scopeState)         
       }
       return acc
     }, {})
@@ -103,29 +101,29 @@ export default class DOM {
 
   // TODO: refactor & test
   // DEFER: research whether this creates a new handler on each render (how to optimize it?)
-  buildVNodeEventHandlers(node, state, context) {
+  buildVNodeEventHandlers(node, fullState, scopeState, context) {
     const eventHandlers = {}
 
     if (node.attrs.on_click) {
-      eventHandlers.click = this.runtime.handleClickEvent.bind(this.runtime, node.attrs.on_click, state, context)
+      eventHandlers.click = this.runtime.handleClickEvent.bind(this.runtime, node.attrs.on_click, fullState, scopeState, context)
     }
 
     if (node.attrs.on_submit) {
-      eventHandlers.submit = this.runtime.handleSubmitEvent.bind(this.runtime, context, node.attrs.on_submit, state)
+      eventHandlers.submit = this.runtime.handleSubmitEvent.bind(this.runtime, node.attrs.on_submit, fullState, scopeState, context)
     }
 
     return eventHandlers
   }
 
-  static evaluateAttributeValue(value, state) {
+  static evaluateAttributeValue(value, scopeState) {
     return value.reduce((acc, part) => {
-      return acc + DOM.evaluateAttributeValuePart(part, state)
+      return acc + DOM.evaluateAttributeValuePart(part, scopeState)
     }, "")
   }
 
-  static evaluateAttributeValuePart(value, state) {
+  static evaluateAttributeValuePart(value, scopeState) {
     if (value.type == "expression") {
-      const result = value.callback(state).data[0]
+      const result = value.callback(scopeState).data[0]
       return Runtime.interpolate(result)
 
     } else {
@@ -157,7 +155,7 @@ export default class DOM {
 
     const context = {scopeModule: pageModule, pageModule: pageModule, slots: {default: pageTemplate}}
 
-    let newVNode = this.buildVNode(layoutTemplate, this.runtime.state, context)[0]
+    let newVNode = this.buildVNode(layoutTemplate, this.runtime.state, this.runtime.state, context)[0]
     patch(this.oldVNode, newVNode)
     this.oldVNode = newVNode
   }
