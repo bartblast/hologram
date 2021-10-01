@@ -1,21 +1,23 @@
+import Utils from "./utils"
+
 export default class Type {
   static atom(value) {
-    return {type: "atom", value: value}
+    return Utils.freeze({type: "atom", value: value})
   }
 
   static boolean(value) {
-    return {type: "boolean", value: value}
+    return Utils.freeze({type: "boolean", value: value})
   }
 
   static integer(value) {
-    return {type: "integer", value: value}
+    return Utils.freeze({type: "integer", value: value})
   }
 
-  static list(elements) {
-    return {type: "list", data: elements}
+  static list(elems) {
+    return Utils.freeze({type: "list", data: elems})
   }
 
   static module(className) {
-    return {type: "module", class_name: className}
+    return Utils.freeze({type: "module", class_name: className})
   }
 }
