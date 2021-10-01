@@ -72,7 +72,7 @@ describe("serialize()", () => {
 
   it("throws an error for not implemented types", () => {
     const arg = {type: "not implemented", value: "test"}
-    const expected_message = 'Utils.serialize(): boxedValue = {"type":"not implemented","value":"test"}'
-    assert.throw(() => { Utils.serialize(arg) }, HologramNotImplementedError, expected_message);
+    const expectedMessage = 'Utils.serialize(): boxedValue = {"type":"not implemented","value":"test"}'
+    assert.throw(() => { Utils.serialize(arg) }, HologramNotImplementedError, expectedMessage);
   })
 })

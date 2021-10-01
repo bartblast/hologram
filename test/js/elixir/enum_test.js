@@ -36,7 +36,7 @@ describe("member$question()", () => {
   it("throws an error for not implemented enumerable types", () => {
     const enumerable = {type: "not implemented", value: "test"}
     const elem = {type: "integer", value: 1}
-    const expected_message = 'Enum.member$question(): enumerable = {"type":"not implemented","value":"test"}, elem = {"type":"integer","value":1}'
-    assert.throw(() => { Enum.member$question(enumerable, elem) }, HologramNotImplementedError, expected_message);
+    const expectedMessage = 'Enum.member$question(): enumerable = {"type":"not implemented","value":"test"}, elem = {"type":"integer","value":1}'
+    assert.throw(() => { Enum.member$question(enumerable, elem) }, HologramNotImplementedError, expectedMessage);
   })
 })
