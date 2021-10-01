@@ -6,6 +6,10 @@ export const sinon = require("sinon");
 const { JSDOM } = require("jsdom");
 const util = require("util");
 
+export function assertFreezed(obj) {
+  assert.throw(() => {obj.__freezeTest__ = 1}, TypeError, /object is not extensible/);
+}
+
 export function debug(obj) {
   console.log(util.inspect(obj, { showHidden: false, depth: null }));
 }
