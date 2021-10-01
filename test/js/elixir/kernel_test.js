@@ -1,4 +1,5 @@
 import { assert, assertBoxedFalse, assertBoxedTrue, assertFreezed } from "../support/commons"
+import HologramNotImplementedError from "../../../assets/js/hologram/errors";
 import Kernel from "../../../assets/js/hologram/elixir/kernel";
 import Type from "../../../assets/js/hologram/type";
 
@@ -195,6 +196,12 @@ describe("$equal_to()", () => {
 
     const result = Kernel.$equal_to(value1, value2)
     assertBoxedFalse(result)
+  })
+
+  it("throws an error for not implemented types", () => {
+    const val = {type: "not implemented", value: "test"}
+    const expected_message = 'Kernel.$equal_to(): boxedVal1 = {"type":"not implemented","value":"test"}'
+    assert.throw(() => { Kernel.$equal_to(val, val) }, HologramNotImplementedError, expected_message);
   })
 })
 

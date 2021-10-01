@@ -1,3 +1,4 @@
+import HologramNotImplementedError from "../errors";
 import Runtime from "../runtime"
 import Type from "../type"
 import Utils from "../utils"
@@ -34,6 +35,10 @@ export default class Kernel {
       case "integer":
         value = Kernel._areBoxedNumbersEqual(boxedVal1, boxedVal2)
         break;
+
+      default:
+        const message = `Kernel.$equal_to(): boxedVal1 = ${JSON.stringify(boxedVal1)}`
+        throw new HologramNotImplementedError(message)
     }
 
     return Utils.freeze({type: "boolean", value: value})
