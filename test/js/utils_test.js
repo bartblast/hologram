@@ -1,3 +1,5 @@
+"use strict";
+
 import { assert } from "./support/commons";
 import Utils from "../../assets/js/hologram/utils";
 
@@ -15,6 +17,24 @@ describe("eval()", () => {
   it("evaluates code", () => {
     const result = Utils.eval("2 + 2")
     assert.equal(result, 4)
+  })
+})
+
+describe("freeze()", () => {
+  it("freezes the object and all of its properties recursively (deep freeze)", () => {
+    let obj = {
+      a: {
+        b: {
+          c: {
+            d: 1
+          }
+        }
+      }
+    }
+
+    Utils.freeze(obj)
+    
+    assert.throw(() => { obj.a.b.c.d = 2 }, TypeError, /read only/);
   })
 })
 
