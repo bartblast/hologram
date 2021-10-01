@@ -4,21 +4,56 @@ import { assert, assertFreezed } from "./support/commons";
 import Utils from "../../assets/js/hologram/utils";
 
 describe("clone()", () => {
-  it("clones the given value", () => {
-    const value = {a: 1, b: {c: 3, d: 4}}
-    const result = Utils.clone(value)
+  let obj, result;
 
-    assert.deepStrictEqual(result, value) 
-    assert.notEqual(result, value)
+  beforeEach(() => {
+    obj = {a: 1, b: {c: 3, d: 4}}
+    result = Utils.clone(obj)
+  })
+
+  it("clones object recursively (deep clone)", () => {
+    assert.deepStrictEqual(result, obj) 
+    assert.notEqual(result, obj)
+  })
+
+  it("returns freezed object", () => {
+    assertFreezed(result)
   })
 })
 
 describe("eval()", () => {
+  let result;
+
+  beforeEach(() => {
+    result = Utils.eval("{value: 2 + 2}")
+  })
+
   it("evaluates code", () => {
-    const result = Utils.eval("2 + 2")
-    assert.equal(result, 4)
+    assert.deepStrictEqual(result, {value: 4})
+  })
+
+  it("returns freezed object", () => {
+    assertFreezed(result)
   })
 })
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 describe("freeze()", () => {
   it("freezes the object and all of its properties recursively (deep freeze)", () => {

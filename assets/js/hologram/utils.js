@@ -4,13 +4,30 @@
 import cloneDeep from "lodash/cloneDeep";
 
 export default class Utils {
-  static clone(value) {
-    return cloneDeep(value)
+  static clone(obj) {
+    const cloned = cloneDeep(obj)
+    return Utils.freeze(cloned)
   }
 
   static eval(code) {
-    return (new Function(`return (${code});`)());
+    const result = (new Function(`return (${code});`)());
+    return Utils.freeze(result)
   }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
   static freeze(obj) {
     const props = Object.getOwnPropertyNames(obj);
