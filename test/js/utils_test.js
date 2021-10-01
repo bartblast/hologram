@@ -133,47 +133,9 @@ describe("isTruthy()", () => {
   })
 })
 
-describe("serialize()", () => {
-  it("serializes atom boxed value", () => {
-    const arg = {type: "atom", value: "test"}
-    const result = Utils.serialize(arg)
-
-    assert.equal(result, "~atom[test]")
-  })
-
-  it("serializes string boxed value", () => {
-    const arg = {type: "string", value: "test"}
-    const result = Utils.serialize(arg)
-
-    assert.equal(result, "~string[test]")
-  })
-
-  it("throws an error for not implemented types", () => {
-    const arg = {type: "not implemented", value: "test"}
-    const expected_message = 'Utils.serialize(): boxedValue = {"type":"not implemented","value":"test"}'
-    assert.throw(() => { Utils.serialize(arg) }, HologramNotImplementedError, expected_message);
-  })
-})
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 describe("keywordToMap()", () => {
-  it("converts empty keyword list", () => {
-    const keyword = {type: "list", data: []}
+  it("converts empty boxed keyword list to boxed map", () => {
+    const keyword = Object.freeze({type: "list", data: []})
 
     const result = Utils.keywordToMap(keyword)
     const expected = {type: "map", data: {}}
@@ -181,8 +143,8 @@ describe("keywordToMap()", () => {
     assert.deepStrictEqual(result, expected) 
   })
 
-  it("converts non-empty keyword list", () => {
-    const keyword = {
+  it("converts non-empty boxed keyword list to boxed map ", () => {
+    const keyword = Utils.freeze({
       type: "list",
       data: [
         {
@@ -200,7 +162,7 @@ describe("keywordToMap()", () => {
           ]
         }
       ]
-    }
+    })
 
     const result = Utils.keywordToMap(keyword)
 
@@ -215,8 +177,8 @@ describe("keywordToMap()", () => {
     assert.deepStrictEqual(result, expected) 
   })
 
-  it("overwrites same keys", () => {
-    const keyword = {
+  it("overwrites the same keys", () => {
+    const keyword = Utils.freeze({
       type: "list",
       data: [
         {
@@ -241,7 +203,7 @@ describe("keywordToMap()", () => {
           ]
         },
       ]
-    }
+    })
 
     const result = Utils.keywordToMap(keyword)
 
@@ -255,5 +217,31 @@ describe("keywordToMap()", () => {
     
     assert.deepStrictEqual(result, expected) 
   })
+
+  it("returns freezed object", () => {
+    const result = Object.freeze({type: "list", data: []})
+    assertFreezed(result)
+  })
 })
 
+describe("serialize()", () => {
+  it("serializes atom boxed value", () => {
+    const arg = {type: "atom", value: "test"}
+    const result = Utils.serialize(arg)
+
+    assert.equal(result, "~atom[test]")
+  })
+
+  it("serializes string boxed value", () => {
+    const arg = {type: "string", value: "test"}
+    const result = Utils.serialize(arg)
+
+    assert.equal(result, "~string[test]")
+  })
+
+  it("throws an error for not implemented types", () => {
+    const arg = {type: "not implemented", value: "test"}
+    const expected_message = 'Utils.serialize(): boxedValue = {"type":"not implemented","value":"test"}'
+    assert.throw(() => { Utils.serialize(arg) }, HologramNotImplementedError, expected_message);
+  })
+})

@@ -46,6 +46,16 @@ export default class Utils {
     return !Utils.isFalsy(boxedValue)
   }
 
+  static keywordToMap(keyword) {
+    const result = keyword.data.reduce((acc, elem) => {
+      const key = Utils.serialize(elem.data[0])
+      acc.data[key] = elem.data[1]
+      return acc
+    }, {type: "map", data: {}})
+
+    return Utils.freeze(result)
+  }
+
   static serialize(boxedValue) {
     switch (boxedValue.type) {
       case "atom":
@@ -59,27 +69,4 @@ export default class Utils {
         throw new HologramNotImplementedError(message)
     }
   }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-  static keywordToMap(keyword) {
-    return keyword.data.reduce((acc, elem) => {
-      const key = Utils.serialize(elem.data[0])
-      acc.data[key] = elem.data[1]
-      return acc
-    }, {type: "map", data: {}})
-  }
-
-
 }
