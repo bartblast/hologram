@@ -2,14 +2,25 @@ import Runtime from "../runtime"
 import Utils from "../utils"
 
 export default class Kernel {
-  static $add(arg1, arg2) {
-    const type = arg1.type == "integer" && arg2.type == "integer" ? "integer" : "float"
-    return {type: type, value: arg1.value + arg2.value}
+  static $add(boxedNumber1, boxedNumber2) {
+    const type = boxedNumber1.type == "integer" && boxedNumber2.type == "integer" ? "integer" : "float"
+    const result = boxedNumber1.value + boxedNumber2.value
+    return Utils.freeze({type: type, value: result})
   }
 
-  static $dot(left, right) {
-    return Utils.clone(left.data[Utils.serialize(right)])
+  static $dot(boxedMap, boxedKey) {
+    const result = boxedMap.data[Utils.serialize(boxedKey)]
+    return Utils.clone(result)
   }
+
+
+
+
+
+
+
+
+
 
   // TODO: implement other types
   static $equal_to(left, right) {

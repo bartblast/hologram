@@ -1,4 +1,4 @@
-import { assert } from "../support/commons"
+import { assert, assertFreezed } from "../support/commons"
 import Kernel from "../../../assets/js/hologram/elixir/kernel";
 import Type from "../../../assets/js/hologram/type";
 
@@ -42,27 +42,56 @@ describe("$add()", () => {
 
     assert.deepStrictEqual(result, expected) 
   })
+
+  it("returns freezed object", () => {
+    const arg1 = {type: "integer", value: 1}
+    const arg2 = {type: "integer", value: 2}
+    const result = Kernel.$add(arg1, arg2)
+    
+    assertFreezed(result)
+  })
 })
 
 describe("$dot()", () => {
-  it("fetches map value by key", () => {
-    const value = {type: "integer", value: 2}
+  let key, map, val, result;
 
-    const map =  {
+  beforeEach(() => {
+    val = {type: "integer", value: 2}
+
+    map =  {
       type: "map", 
       data: {
         "~atom[a]": {type: "integer", value: 1},
-        "~atom[b]": value
+        "~atom[b]": val
       }
     }
 
-    const key = {type: "atom", value: "b"}
-    const result = Kernel.$dot(map, key)
+    key = {type: "atom", value: "b"}
+    result = Kernel.$dot(map, key)
+  })
 
-    assert.deepStrictEqual(result, value) 
-    assert.notEqual(result, value)
+  it("fetches boxed map value by boxed key", () => {
+    assert.deepStrictEqual(result, val) 
+  })
+
+  it("returns freezed object", () => {
+    assertFreezed(result)
   })
 })
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 describe("$equal_to()", () => {
   it("boolean == boolean", () => {
