@@ -41,23 +41,23 @@ export default class Utils {
     return boxedValue.type === "nil"
   }
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-  static isTruthy(arg) {
-    return !Utils.isFalsy(arg)
+  static isTruthy(boxedValue) {
+    return !Utils.isFalsy(boxedValue)
   }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
   static keywordToMap(keyword) {
     return keyword.data.reduce((acc, elem) => {
