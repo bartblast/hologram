@@ -93,39 +93,39 @@ describe("isFalsy()", () => {
   })
 })
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 describe("isNil()", () => {
-  it("is nil", () => {
+  it("returns true for boxed nil value", () => {
     const arg = {type: "nil"}
     const result = Utils.isNil(arg)
 
     assert.isTrue(result)
   })
 
-  it("is not nil", () => {
+  it("returns false for values other than boxed nil value", () => {
     const arg = {type: "boolean", value: false}
     const result = Utils.isNil(arg)
     
     assert.isFalse(result)
   })
 })
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 describe("isTruthy()", () => {
   it("is false", () => {
