@@ -14,6 +14,7 @@ defmodule Hologram.Compiler.MapTypeDecoder do
     case type do
       "atom" ->
         String.to_atom(value)
+
       "string" ->
         value
     end

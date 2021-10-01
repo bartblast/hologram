@@ -1,5 +1,5 @@
 defmodule Hologram.Compiler.GeneratorTest do
-  use Hologram.Test.UnitCase , async: true
+  use Hologram.Test.UnitCase, async: true
 
   alias Hologram.Compiler.{Context, Generator, Opts}
 
@@ -40,7 +40,9 @@ defmodule Hologram.Compiler.GeneratorTest do
       }
 
       result = Generator.generate(ir, %Context{}, %Opts{})
-      expected = "{ type: 'binary', data: [ { type: 'string', value: 'abc' }, { type: 'string', value: 'xyz' } ] }"
+
+      expected =
+        "{ type: 'binary', data: [ { type: 'string', value: 'abc' }, { type: 'string', value: 'xyz' } ] }"
 
       assert result == expected
     end
@@ -105,22 +107,23 @@ defmodule Hologram.Compiler.GeneratorTest do
     end
 
     test "nested" do
-      ir =
-        %ListType{
-          data: [
-            %IntegerType{value: 1},
-            %TupleType{
-              data: [
-                %IntegerType{value: 2},
-                %IntegerType{value: 3},
-                %IntegerType{value: 4}
-              ]
-            }
-          ]
-        }
+      ir = %ListType{
+        data: [
+          %IntegerType{value: 1},
+          %TupleType{
+            data: [
+              %IntegerType{value: 2},
+              %IntegerType{value: 3},
+              %IntegerType{value: 4}
+            ]
+          }
+        ]
+      }
 
       result = Generator.generate(ir, %Context{}, %Opts{})
-      expected = "{ type: 'list', data: [ { type: 'integer', value: 1 }, { type: 'tuple', data: [ { type: 'integer', value: 2 }, { type: 'integer', value: 3 }, { type: 'integer', value: 4 } ] } ] }"
+
+      expected =
+        "{ type: 'list', data: [ { type: 'integer', value: 1 }, { type: 'tuple', data: [ { type: 'integer', value: 2 }, { type: 'integer', value: 3 }, { type: 'integer', value: 4 } ] } ] }"
 
       assert result == expected
     end
@@ -135,7 +138,8 @@ defmodule Hologram.Compiler.GeneratorTest do
 
       result = Generator.generate(ir, %Context{}, %Opts{})
 
-      expected = "Elixir_Kernel.$add({ type: 'integer', value: 1 }, { type: 'integer', value: 2 })"
+      expected =
+        "Elixir_Kernel.$add({ type: 'integer', value: 1 }, { type: 'integer', value: 2 })"
 
       assert result == expected
     end
@@ -163,11 +167,10 @@ defmodule Hologram.Compiler.GeneratorTest do
     end
 
     test "type" do
-      ir =
-        %TypeOperator{
-          left: %IntegerType{value: 1},
-          right: :binary
-        }
+      ir = %TypeOperator{
+        left: %IntegerType{value: 1},
+        right: :binary
+      }
 
       result = Generator.generate(ir, %Context{}, %Opts{})
       expected = "Elixir.typeOperator({ type: 'integer', value: 1 }, 'binary')"
@@ -203,19 +206,18 @@ defmodule Hologram.Compiler.GeneratorTest do
 
   describe "other" do
     test "sigil_H" do
-      ir =
-        %FunctionCall{
-          function: :sigil_H,
-          module: Hologram.Runtime.Commons,
-          params: [
-            %BinaryType{
-              parts: [
-                %StringType{value: "test"}
-              ]
-            },
-            %ListType{data: []}
-          ]
-        }
+      ir = %FunctionCall{
+        function: :sigil_H,
+        module: Hologram.Runtime.Commons,
+        params: [
+          %BinaryType{
+            parts: [
+              %StringType{value: "test"}
+            ]
+          },
+          %ListType{data: []}
+        ]
+      }
 
       result = Generator.generate(ir, %Context{}, %Opts{})
       expected = "[ { type: 'text', content: 'test' } ]"

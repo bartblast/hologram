@@ -1,5 +1,5 @@
 defmodule Hologram.Compiler.PrunerTest do
-  use Hologram.Test.UnitCase , async: true
+  use Hologram.Test.UnitCase, async: true
 
   alias Hologram.Compiler
   alias Hologram.Compiler.Pruner

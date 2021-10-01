@@ -16,7 +16,8 @@ config :hologram, Hologram.E2E.Web.Endpoint,
 config :esbuild,
   version: "0.12.18",
   hologram: [
-    args: ~w(js/hologram.js --bundle --target=es2016 --outfile=../priv/static/hologram/runtime.js),
+    args:
+      ~w(js/hologram.js --bundle --target=es2016 --outfile=../priv/static/hologram/runtime.js),
     cd: Path.expand("../assets", __DIR__),
     env: %{"NODE_PATH" => Path.expand("../deps", __DIR__)}
   ]

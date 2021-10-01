@@ -1,5 +1,5 @@
 defmodule Hologram.Template.AtomTypeEvaluatorTest do
-  use Hologram.Test.UnitCase , async: true
+  use Hologram.Test.UnitCase, async: true
 
   alias Hologram.Compiler.IR.AtomType
   alias Hologram.Template.Evaluator

@@ -1,5 +1,5 @@
 defmodule Hologram.Template.FallbackEvaluatorTest do
-  use Hologram.Test.UnitCase , async: true
+  use Hologram.Test.UnitCase, async: true
   alias Hologram.Template.Evaluator
 
   test "evaluate/2" do

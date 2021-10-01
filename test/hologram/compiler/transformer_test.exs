@@ -1,5 +1,5 @@
 defmodule Hologram.Compiler.TransformerTest do
-  use Hologram.Test.UnitCase , async: true
+  use Hologram.Test.UnitCase, async: true
 
   alias Hologram.Compiler.IR.{
     AdditionOperator,
@@ -144,19 +144,18 @@ defmodule Hologram.Compiler.TransformerTest do
       ast = ast(code)
       result = Transformer.transform(ast, %Context{})
 
-      expected =
-        %ListType{
-          data: [
-            %IntegerType{value: 1},
-            %TupleType{
-              data: [
-                %IntegerType{value: 2},
-                %IntegerType{value: 3},
-                %IntegerType{value: 4}
-              ]
-            }
-          ]
-        }
+      expected = %ListType{
+        data: [
+          %IntegerType{value: 1},
+          %TupleType{
+            data: [
+              %IntegerType{value: 2},
+              %IntegerType{value: 3},
+              %IntegerType{value: 4}
+            ]
+          }
+        ]
+      }
 
       assert result == expected
     end

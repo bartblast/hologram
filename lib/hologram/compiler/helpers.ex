@@ -30,7 +30,7 @@ defmodule Hologram.Compiler.Helpers do
   @spec class_name(module()) :: String.t()
 
   def class_name(module) do
-    [:Elixir | Module.split(module)]
+    [:"Elixir" | Module.split(module)]
     |> Enum.join("_")
   end
 
@@ -38,6 +38,7 @@ defmodule Hologram.Compiler.Helpers do
     case ast do
       {:__block__, _, body} ->
         body
+
       _ ->
         [ast]
     end
@@ -145,7 +146,7 @@ defmodule Hologram.Compiler.Helpers do
     |> Enum.map(&String.to_atom/1)
   end
 
-  def module_segments(module)  do
+  def module_segments(module) do
     Module.split(module)
     |> Enum.map(&String.to_atom/1)
   end

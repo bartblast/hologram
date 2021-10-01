@@ -1,5 +1,5 @@
 defmodule Hologram.Compiler.Encoder.CommonsTest do
-  use Hologram.Test.UnitCase , async: true
+  use Hologram.Test.UnitCase, async: true
 
   alias Hologram.Compiler.{Context, Opts}
   alias Hologram.Compiler.Encoder.Commons

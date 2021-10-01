@@ -1,5 +1,5 @@
 defmodule Hologram.Compiler.ResolverTest do
-  use Hologram.Test.UnitCase , async: true
+  use Hologram.Test.UnitCase, async: true
 
   alias Hologram.Compiler.IR.{Alias, Import}
   alias Hologram.Compiler.Resolver
@@ -32,8 +32,7 @@ defmodule Hologram.Compiler.ResolverTest do
       aliases = [%Alias{module: aliased_module, as: [:Module1]}]
       calling_module = Hologram.Compiler.ResolverTest
 
-      result =
-        Resolver.resolve([:Module1], :test, 2, [], aliases, calling_module)
+      result = Resolver.resolve([:Module1], :test, 2, [], aliases, calling_module)
 
       assert result == aliased_module
     end
@@ -41,8 +40,7 @@ defmodule Hologram.Compiler.ResolverTest do
     test "vertbatim module" do
       verbatim_module = [:Hologram, :Test, :Fixtures, :Compiler, :Resolver, :Module1]
 
-      result =
-        Resolver.resolve(verbatim_module, :test, 2, [], [], Hologram.Compiler.ResolverTest)
+      result = Resolver.resolve(verbatim_module, :test, 2, [], [], Hologram.Compiler.ResolverTest)
 
       assert result == Hologram.Test.Fixtures.Compiler.Resolver.Module1
     end

@@ -1,5 +1,5 @@
 defmodule Hologram.Compiler.UnquoteTransformerTest do
-  use Hologram.Test.UnitCase , async: true
+  use Hologram.Test.UnitCase, async: true
 
   alias Hologram.Compiler.{Context, UnquoteTransformer}
   alias Hologram.Compiler.IR.{Unquote, Variable}

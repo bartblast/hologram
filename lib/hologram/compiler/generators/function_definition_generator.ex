@@ -37,7 +37,9 @@ defmodule Hologram.Compiler.FunctionDefinitionGenerator do
       body = encode_expressions(variant.body, context, opts, "\n")
 
       acc
-      |> Formatter.maybe_append_new_line("#{statement} (Hologram.patternMatchFunctionArgs(#{params}, arguments)) {")
+      |> Formatter.maybe_append_new_line(
+        "#{statement} (Hologram.patternMatchFunctionArgs(#{params}, arguments)) {"
+      )
       |> Formatter.maybe_append_new_line(vars)
       |> Formatter.maybe_append_new_line(body)
       |> Formatter.maybe_append_new_line("}")

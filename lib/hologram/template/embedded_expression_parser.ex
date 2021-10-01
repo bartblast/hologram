@@ -22,8 +22,10 @@ defmodule Hologram.Template.EmbeddedExpressionParser do
     cond do
       Enum.count(nodes) > 0 ->
         nodes
+
       str != "" ->
         [%TextNode{content: str}]
+
       true ->
         []
     end

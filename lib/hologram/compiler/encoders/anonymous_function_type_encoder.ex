@@ -1,7 +1,7 @@
 alias Hologram.Compiler.{Context, Encoder, Formatter, Opts}
 alias Hologram.Compiler.IR.AnonymousFunctionType
 
-defimpl Encoder, for: AnonymousFunctionType  do
+defimpl Encoder, for: AnonymousFunctionType do
   import Hologram.Compiler.Encoder.Commons
 
   def encode(%{bindings: bindings, body: body}, %Context{} = context, %Opts{} = opts) do

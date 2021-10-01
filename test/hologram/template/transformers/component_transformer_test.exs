@@ -1,5 +1,5 @@
 defmodule Hologram.Template.ComponentTransformerTest do
-  use Hologram.Test.UnitCase , async: true
+  use Hologram.Test.UnitCase, async: true
 
   alias Hologram.Compiler.IR.{Alias, ModuleDefinition}
   alias Hologram.Template.ComponentTransformer
@@ -22,6 +22,7 @@ defmodule Hologram.Template.ComponentTransformerTest do
       props: %{},
       children: @children
     }
+
     assert result == expected
   end
 

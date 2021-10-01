@@ -1,5 +1,5 @@
 defmodule Hologram.Compiler.EqualToOperatorTransformerTest do
-  use Hologram.Test.UnitCase , async: true
+  use Hologram.Test.UnitCase, async: true
 
   alias Hologram.Compiler.{Context, EqualToOperatorTransformer}
   alias Hologram.Compiler.IR.{EqualToOperator, IntegerType}

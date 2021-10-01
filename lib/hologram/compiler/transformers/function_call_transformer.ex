@@ -2,7 +2,10 @@ defmodule Hologram.Compiler.FunctionCallTransformer do
   alias Hologram.Compiler.IR.{FunctionCall, NotSupportedExpression}
   alias Hologram.Compiler.{Context, Helpers, Resolver, Transformer}
 
-  def transform({{:., _, [{:__aliases__, _, module_segs}, function]}, _, params}, %Context{} = context) do
+  def transform(
+        {{:., _, [{:__aliases__, _, module_segs}, function]}, _, params},
+        %Context{} = context
+      ) do
     build_function_call(module_segs, function, params, context)
   end
 

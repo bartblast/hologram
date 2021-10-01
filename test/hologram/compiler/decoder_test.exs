@@ -1,5 +1,5 @@
 defmodule Hologram.Compiler.DecoderTest do
-  use Hologram.Test.UnitCase , async: true
+  use Hologram.Test.UnitCase, async: true
   alias Hologram.Compiler.Decoder
 
   test "atom" do
@@ -28,16 +28,15 @@ defmodule Hologram.Compiler.DecoderTest do
   end
 
   test "map" do
-    input =
-      %{
-        "type" => "map",
-        "data" => %{
-          "~string[test_key]" => %{
-            "type" => "string",
-            "value" => "test_value"
-          }
+    input = %{
+      "type" => "map",
+      "data" => %{
+        "~string[test_key]" => %{
+          "type" => "string",
+          "value" => "test_value"
         }
       }
+    }
 
     result = Decoder.decode(input)
     assert is_map(result)
@@ -69,20 +68,19 @@ defmodule Hologram.Compiler.DecoderTest do
   end
 
   test "nested" do
-    input =
-      %{
-        "type" => "list",
-        "data" => [
-          %{"type" => "integer", "value" => 1},
-          %{
-            "type" => "tuple",
-            "data" => [
-              %{"type" => "integer", "value" => 2},
-              %{"type" => "integer", "value" => 3}
-            ]
-          }
-        ]
-      }
+    input = %{
+      "type" => "list",
+      "data" => [
+        %{"type" => "integer", "value" => 1},
+        %{
+          "type" => "tuple",
+          "data" => [
+            %{"type" => "integer", "value" => 2},
+            %{"type" => "integer", "value" => 3}
+          ]
+        }
+      ]
+    }
 
     result = Decoder.decode(input)
     expected = [1, {2, 3}]

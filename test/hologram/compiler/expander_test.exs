@@ -1,5 +1,5 @@
 defmodule Hologram.Compiler.ExpanderTest do
-  use Hologram.Test.UnitCase , async: true
+  use Hologram.Test.UnitCase, async: true
 
   alias Hologram.Compiler.Expander
   alias Hologram.Compiler.IR.{MacroDefinition, RequireDirective}
@@ -27,11 +27,10 @@ defmodule Hologram.Compiler.ExpanderTest do
 
       result = Expander.expand_macro(macro_def, [])
 
-      expected =
-        [
-          {:abc, [], @module_6},
-          {:bcd, [], @module_6}
-        ]
+      expected = [
+        {:abc, [], @module_6},
+        {:bcd, [], @module_6}
+      ]
 
       assert result == expected
     end
@@ -50,7 +49,10 @@ defmodule Hologram.Compiler.ExpanderTest do
 
       result = Expander.expand_macro(macro_def, [5, 6])
 
-      expected = [{:+, [context: @module_6, import: Kernel], [{:+, [context: @module_6, import: Kernel], [{:z, [], @module_6}, 5]}, 6]}]
+      expected = [
+        {:+, [context: @module_6, import: Kernel],
+         [{:+, [context: @module_6, import: Kernel], [{:z, [], @module_6}, 5]}, 6]}
+      ]
 
       assert result == expected
     end
@@ -60,12 +62,13 @@ defmodule Hologram.Compiler.ExpanderTest do
 
       result = Expander.expand_macro(macro_def, [nil])
 
-      expected =
-        [{:import, [context: @module_6],
-          [
-            {:__aliases__, [alias: false],
-              [:Hologram, :Test, :Fixtures, :Compiler, :Expander, :Module5]}
-          ]}]
+      expected = [
+        {:import, [context: @module_6],
+         [
+           {:__aliases__, [alias: false],
+            [:Hologram, :Test, :Fixtures, :Compiler, :Expander, :Module5]}
+         ]}
+      ]
 
       assert result == expected
     end
@@ -75,14 +78,13 @@ defmodule Hologram.Compiler.ExpanderTest do
 
       result = Expander.expand_macro(macro_def, [])
 
-      expected =
-        [{:def,
-          [context: @module_6, import: Kernel],
-          [
-            {:test_function, [context: @module_6],
-              @module_6},
-            [do: {:__block__, [], [123]}]
-          ]}]
+      expected = [
+        {:def, [context: @module_6, import: Kernel],
+         [
+           {:test_function, [context: @module_6], @module_6},
+           [do: {:__block__, [], [123]}]
+         ]}
+      ]
 
       assert result == expected
     end
@@ -92,14 +94,13 @@ defmodule Hologram.Compiler.ExpanderTest do
 
       result = Expander.expand_macro(macro_def, [])
 
-      expected =
-        [{:def,
-          [context: @module_6, import: Kernel],
-          [
-            {:test_function, [context: @module_6],
-              @module_6},
-            [do: {:__block__, [], [1, 2]}]
-          ]}]
+      expected = [
+        {:def, [context: @module_6, import: Kernel],
+         [
+           {:test_function, [context: @module_6], @module_6},
+           [do: {:__block__, [], [1, 2]}]
+         ]}
+      ]
 
       assert result == expected
     end
@@ -140,14 +141,12 @@ defmodule Hologram.Compiler.ExpanderTest do
 
       expected =
         {:defmodule, [line: 1],
-          [
-            {:__aliases__, [line: 1], [:Test]},
-            [
-              do: {:__block__, [],
-                [{:abc, [], @module_6}]}
-            ]
-          ]}
-
+         [
+           {:__aliases__, [line: 1], [:Test]},
+           [
+             do: {:__block__, [], [{:abc, [], @module_6}]}
+           ]
+         ]}
 
       assert result == expected
     end
@@ -166,13 +165,12 @@ defmodule Hologram.Compiler.ExpanderTest do
 
       expected =
         {:defmodule, [line: 1],
-          [
-            {:__aliases__, [line: 1], [:Test]},
-            [
-              do: {:__block__, [],
-                [{:abc, [], @module_6}, 777]}
-            ]
-          ]}
+         [
+           {:__aliases__, [line: 1], [:Test]},
+           [
+             do: {:__block__, [], [{:abc, [], @module_6}, 777]}
+           ]
+         ]}
 
       assert result == expected
     end
@@ -190,16 +188,17 @@ defmodule Hologram.Compiler.ExpanderTest do
 
       expected =
         {:defmodule, [line: 1],
-          [
-            {:__aliases__, [line: 1], [:Test]},
-            [
-              do: {:__block__, [],
+         [
+           {:__aliases__, [line: 1], [:Test]},
+           [
+             do:
+               {:__block__, [],
                 [
                   {:abc, [], @module_6},
                   {:bcd, [], @module_6}
                 ]}
-            ]
-          ]}
+           ]
+         ]}
 
       assert result == expected
     end
@@ -217,24 +216,24 @@ defmodule Hologram.Compiler.ExpanderTest do
 
       expected =
         {:defmodule, [line: 1],
-          [
-            {:__aliases__, [line: 1], [:Test]},
-            [
-              do: {:__block__, [],
+         [
+           {:__aliases__, [line: 1], [:Test]},
+           [
+             do:
+               {:__block__, [],
                 [
                   {:+, [context: @module_6, import: Kernel],
-                  [
-                    {:+,
-                      [context: @module_6, import: Kernel], [
+                   [
+                     {:+, [context: @module_6, import: Kernel],
+                      [
                         {:z, [], @module_6},
                         1
-                      ]
-                    },
-                    2
-                  ]}
+                      ]},
+                     2
+                   ]}
                 ]}
-            ]
-          ]}
+           ]
+         ]}
 
       assert result == expected
     end
@@ -252,26 +251,29 @@ defmodule Hologram.Compiler.ExpanderTest do
     ast = ast(code)
     result = Expander.expand_module_pseudo_variable(ast)
 
-    expected = {:defmodule, [line: 1],
-    [
-      {:__aliases__, [line: 1], [:Abc, :Bcd]},
-      [
-        do: {:__block__, [],
+    expected =
+      {:defmodule, [line: 1],
+       [
+         {:__aliases__, [line: 1], [:Abc, :Bcd]},
          [
-           {:def, [line: 2],
-            [
-              {:test, [line: 2], [{:a, [line: 2], nil}, {:b, [line: 2], nil}]},
+           do:
+             {:__block__, [],
               [
-                do: {:__block__, [],
+                {:def, [line: 2],
                  [
-                   {{:., [line: 3], [{:__aliases__, [line: 3], [:Abc, :Bcd]}, :some_fun]},
-                    [line: 3], [1, 2]}
+                   {:test, [line: 2], [{:a, [line: 2], nil}, {:b, [line: 2], nil}]},
+                   [
+                     do:
+                       {:__block__, [],
+                        [
+                          {{:., [line: 3], [{:__aliases__, [line: 3], [:Abc, :Bcd]}, :some_fun]},
+                           [line: 3], [1, 2]}
+                        ]}
+                   ]
                  ]}
-              ]
-            ]}
-         ]}
-      ]
-    ]}
+              ]}
+         ]
+       ]}
 
     assert result == expected
   end
@@ -304,18 +306,19 @@ defmodule Hologram.Compiler.ExpanderTest do
 
       expected =
         {:defmodule, [line: 1],
-        [
-          {:__aliases__, [line: 1], [:Test]},
-          [
-            do: {:__block__, [],
-            [
-              {:import, [context: @module_2],
+         [
+           {:__aliases__, [line: 1], [:Test]},
+           [
+             do:
+               {:__block__, [],
                 [
-                  {:__aliases__, [alias: false], @module_segs_1}
+                  {:import, [context: @module_2],
+                   [
+                     {:__aliases__, [alias: false], @module_segs_1}
+                   ]}
                 ]}
-            ]}
-          ]
-        ]}
+           ]
+         ]}
 
       assert result == expected
     end
@@ -334,22 +337,23 @@ defmodule Hologram.Compiler.ExpanderTest do
 
       expected =
         {:defmodule, [line: 1],
-          [
-            {:__aliases__, [line: 1], [:Test]},
-            [
-              do: {:__block__, [],
+         [
+           {:__aliases__, [line: 1], [:Test]},
+           [
+             do:
+               {:__block__, [],
                 [
                   {:import, [context: @module_2],
-                  [
-                    {:__aliases__, [alias: false], @module_segs_1}
-                  ]},
+                   [
+                     {:__aliases__, [alias: false], @module_segs_1}
+                   ]},
                   {:import, [context: @module_4],
-                  [
-                    {:__aliases__, [alias: false], @module_segs_3}
-                  ]}
+                   [
+                     {:__aliases__, [alias: false], @module_segs_3}
+                   ]}
                 ]}
-            ]
-          ]}
+           ]
+         ]}
 
       assert result == expected
     end
@@ -367,22 +371,23 @@ defmodule Hologram.Compiler.ExpanderTest do
 
       expected =
         {:defmodule, [line: 1],
-          [
-            {:__aliases__, [line: 1], [:Test]},
-            [
-              do: {:__block__, [],
+         [
+           {:__aliases__, [line: 1], [:Test]},
+           [
+             do:
+               {:__block__, [],
                 [
                   {:import, [context: @module_5],
-                  [
-                    {:__aliases__, [alias: false], @module_segs_1}
-                  ]},
+                   [
+                     {:__aliases__, [alias: false], @module_segs_1}
+                   ]},
                   {:import, [context: @module_5],
-                  [
-                    {:__aliases__, [alias: false], @module_segs_3}
-                  ]}
+                   [
+                     {:__aliases__, [alias: false], @module_segs_3}
+                   ]}
                 ]}
-            ]
-          ]}
+           ]
+         ]}
 
       assert result == expected
     end

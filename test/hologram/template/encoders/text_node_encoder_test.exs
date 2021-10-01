@@ -1,5 +1,5 @@
 defmodule Hologram.Template.TextNodeEncoderTest do
-  use Hologram.Test.UnitCase , async: true
+  use Hologram.Test.UnitCase, async: true
 
   alias Hologram.Template.Document.TextNode
   alias Hologram.Template.Encoder

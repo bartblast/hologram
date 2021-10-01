@@ -1,5 +1,5 @@
 defmodule Hologram.Compiler.ModuleDefinitionTransformerTest do
-  use Hologram.Test.UnitCase , async: true
+  use Hologram.Test.UnitCase, async: true
 
   alias Hologram.Compiler.IR.{
     AdditionOperator,
@@ -69,19 +69,18 @@ defmodule Hologram.Compiler.ModuleDefinitionTransformerTest do
     ast = ast(code)
     assert %ModuleDefinition{} = result = ModuleDefinitionTransformer.transform(ast)
 
-    expected =
-      %FunctionDefinition{
-        arity: 1,
-        bindings: [b: {0, [%Variable{name: :b}]}],
-        body: [
-          %AdditionOperator{
-            left: %IntegerType{value: 123},
-            right: %Variable{name: :b}
-          }
-        ],
-        name: :test_function,
-        params: [%Variable{name: :b}]
-      }
+    expected = %FunctionDefinition{
+      arity: 1,
+      bindings: [b: {0, [%Variable{name: :b}]}],
+      body: [
+        %AdditionOperator{
+          left: %IntegerType{value: 123},
+          right: %Variable{name: :b}
+        }
+      ],
+      name: :test_function,
+      params: [%Variable{name: :b}]
+    }
 
     assert Enum.member?(result.functions, expected)
   end
@@ -98,16 +97,15 @@ defmodule Hologram.Compiler.ModuleDefinitionTransformerTest do
     ast = ast(code)
     result = ModuleDefinitionTransformer.transform(ast)
 
-    expected =
-      %FunctionDefinition{
-        arity: 0,
-        bindings: [],
-        body: [
-          %ModuleType{module: Abc.Bcd}
-        ],
-        name: :test,
-        params: []
-      }
+    expected = %FunctionDefinition{
+      arity: 0,
+      bindings: [],
+      body: [
+        %ModuleType{module: Abc.Bcd}
+      ],
+      name: :test,
+      params: []
+    }
 
     assert Enum.member?(result.functions, expected)
   end
@@ -247,23 +245,21 @@ defmodule Hologram.Compiler.ModuleDefinitionTransformerTest do
     ast = ast(code)
     assert %ModuleDefinition{} = result = ModuleDefinitionTransformer.transform(ast)
 
-    expected_1 =
-      %FunctionDefinition{
-        arity: 0,
-        bindings: [],
-        body: [%IntegerType{value: 1}],
-        name: :test_1,
-        params: []
-      }
+    expected_1 = %FunctionDefinition{
+      arity: 0,
+      bindings: [],
+      body: [%IntegerType{value: 1}],
+      name: :test_1,
+      params: []
+    }
 
-    expected_2 =
-      %FunctionDefinition{
-        arity: 0,
-        bindings: [],
-        body: [%IntegerType{value: 2}],
-        name: :test_2,
-        params: []
-      }
+    expected_2 = %FunctionDefinition{
+      arity: 0,
+      bindings: [],
+      body: [%IntegerType{value: 2}],
+      name: :test_2,
+      params: []
+    }
 
     assert Enum.count(result.functions) == 3
     assert Enum.member?(result.functions, expected_1)
@@ -282,31 +278,30 @@ defmodule Hologram.Compiler.ModuleDefinitionTransformerTest do
     ast = ast(code)
     assert %ModuleDefinition{} = result = ModuleDefinitionTransformer.transform(ast)
 
-    expected =
-      %FunctionDefinition{
-        arity: 1,
-        bindings: [],
-        body: [
-          %ListType{
-            data: [
-              %TupleType{
-                data: [
-                  %AtomType{value: :test_1},
-                  %IntegerType{value: 0}
-                ]
-              },
-              %TupleType{
-                data: [
-                  %AtomType{value: :test_2},
-                  %IntegerType{value: 1}
-                ]
-              }
-            ]
-          }
-        ],
-        name: :__info__,
-        params: [%AtomType{value: :functions}]
-      }
+    expected = %FunctionDefinition{
+      arity: 1,
+      bindings: [],
+      body: [
+        %ListType{
+          data: [
+            %TupleType{
+              data: [
+                %AtomType{value: :test_1},
+                %IntegerType{value: 0}
+              ]
+            },
+            %TupleType{
+              data: [
+                %AtomType{value: :test_2},
+                %IntegerType{value: 1}
+              ]
+            }
+          ]
+        }
+      ],
+      name: :__info__,
+      params: [%AtomType{value: :functions}]
+    }
 
     assert Enum.member?(result.functions, expected)
   end

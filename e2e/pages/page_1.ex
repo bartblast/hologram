@@ -1,7 +1,7 @@
 defmodule Hologram.E2E.Page1 do
   use Hologram.Page
 
-  route "/e2e/page-1"
+  route("/e2e/page-1")
 
   def state do
     %{

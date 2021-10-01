@@ -1,5 +1,5 @@
 defmodule Hologram.Compiler.TypeOperatorTransformerTest do
-  use Hologram.Test.UnitCase , async: true
+  use Hologram.Test.UnitCase, async: true
 
   alias Hologram.Compiler.{Context, TypeOperatorTransformer}
   alias Hologram.Compiler.IR.{TypeOperator, Variable}
@@ -10,11 +10,10 @@ defmodule Hologram.Compiler.TypeOperatorTransformerTest do
 
     result = TypeOperatorTransformer.transform(ast, %Context{})
 
-    expected =
-      %TypeOperator{
-        left: %Variable{name: :str},
-        right: :binary
-      }
+    expected = %TypeOperator{
+      left: %Variable{name: :str},
+      right: :binary
+    }
 
     assert result == expected
   end

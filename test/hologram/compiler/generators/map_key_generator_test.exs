@@ -1,5 +1,5 @@
 defmodule Hologram.Compiler.MapKeyGeneratorTest do
-  use Hologram.Test.UnitCase , async: true
+  use Hologram.Test.UnitCase, async: true
 
   alias Hologram.Compiler.{Context, MapKeyGenerator}
   alias Hologram.Compiler.IR.{AtomType, BooleanType, IntegerType, StringType}

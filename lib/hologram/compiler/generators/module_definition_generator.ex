@@ -1,5 +1,13 @@
 defmodule Hologram.Compiler.ModuleDefinitionGenerator do
-  alias Hologram.Compiler.{Context, Formatter, FunctionDefinitionGenerator, Generator, Helpers, Opts}
+  alias Hologram.Compiler.{
+    Context,
+    Formatter,
+    FunctionDefinitionGenerator,
+    Generator,
+    Helpers,
+    Opts
+  }
+
   alias Hologram.Compiler.IR.NotSupportedExpression
 
   def generate(ir, module, %Opts{} = opts) do

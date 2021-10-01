@@ -1,5 +1,5 @@
 defmodule Hologram.Template.PageRendererTest do
-  use Hologram.Test.UnitCase , async: false
+  use Hologram.Test.UnitCase, async: false
 
   alias Hologram.Compiler.Reflection
   alias Hologram.Template.Renderer
@@ -16,24 +16,23 @@ defmodule Hologram.Template.PageRendererTest do
 
     result = Renderer.render(module, %{})
 
-    expected =
-      """
-      <!DOCTYPE html>
-      <html>
-        <head>
-          <title>Hologram E2E</title>
-          <script src="/hologram/runtime.js"></script>
-      <script src="/hologram/page-#{digest}.js"></script>
-      <script>
-        Hologram.run(window, Elixir_Hologram_Test_Fixtures_Template_PageRenderer_Module1, "{ type: 'map', data: { '~atom[a]': { type: 'integer', value: 123 }, '~atom[context]': { type: 'map', data: { '~atom[__class__]': { type: 'string', value: 'Elixir_Hologram_Test_Fixtures_Template_PageRenderer_Module1' }, '~atom[__src__]': { type: 'string', value: '/hologram/page-#{digest}.js' } } } } }")
-      </script>
-        </head>
-        <body>
-          default layout:
-          <div>test template 123</div>
-        </body>
-      </html>\
-      """
+    expected = """
+    <!DOCTYPE html>
+    <html>
+      <head>
+        <title>Hologram E2E</title>
+        <script src="/hologram/runtime.js"></script>
+    <script src="/hologram/page-#{digest}.js"></script>
+    <script>
+      Hologram.run(window, Elixir_Hologram_Test_Fixtures_Template_PageRenderer_Module1, "{ type: 'map', data: { '~atom[a]': { type: 'integer', value: 123 }, '~atom[context]': { type: 'map', data: { '~atom[__class__]': { type: 'string', value: 'Elixir_Hologram_Test_Fixtures_Template_PageRenderer_Module1' }, '~atom[__src__]': { type: 'string', value: '/hologram/page-#{digest}.js' } } } } }")
+    </script>
+      </head>
+      <body>
+        default layout:
+        <div>test template 123</div>
+      </body>
+    </html>\
+    """
 
     assert result == expected
   end

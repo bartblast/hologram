@@ -1,5 +1,5 @@
 defmodule Hologram.Compiler.TupleTypeTransformerTest do
-  use Hologram.Test.UnitCase , async: true
+  use Hologram.Test.UnitCase, async: true
 
   alias Hologram.Compiler.{Context, TupleTypeTransformer}
   alias Hologram.Compiler.IR.{IntegerType, TupleType}
@@ -12,13 +12,12 @@ defmodule Hologram.Compiler.TupleTypeTransformerTest do
 
     result = TupleTypeTransformer.transform(ast, @context)
 
-    expected =
-      %TupleType{
-        data: [
-          %IntegerType{value: 1},
-          %IntegerType{value: 2}
-        ]
-      }
+    expected = %TupleType{
+      data: [
+        %IntegerType{value: 1},
+        %IntegerType{value: 2}
+      ]
+    }
 
     assert result == expected
   end

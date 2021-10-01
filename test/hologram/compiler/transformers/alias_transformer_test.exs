@@ -1,5 +1,5 @@
 defmodule Hologram.Compiler.AliasTransformerTest do
-  use Hologram.Test.UnitCase , async: true
+  use Hologram.Test.UnitCase, async: true
 
   alias Hologram.Compiler.AliasTransformer
   alias Hologram.Compiler.IR.Alias
@@ -72,7 +72,9 @@ defmodule Hologram.Compiler.AliasTransformerTest do
   end
 
   test "multi-alias with options" do
-    code = "alias Hologram.Test.Fixtures.Compiler.AliasTransformer.{Module1, Module2}, warn: false"
+    code =
+      "alias Hologram.Test.Fixtures.Compiler.AliasTransformer.{Module1, Module2}, warn: false"
+
     {:alias, _, ast} = ast(code)
 
     result = AliasTransformer.transform(ast)

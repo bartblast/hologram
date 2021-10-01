@@ -1,5 +1,5 @@
 defmodule Hologram.Template.TransformerTest do
-  use Hologram.Test.UnitCase , async: true
+  use Hologram.Test.UnitCase, async: true
 
   alias Hologram.Compiler.IR.{IntegerType, TupleType}
   alias Hologram.Template.{Parser, Transformer}
@@ -57,7 +57,7 @@ defmodule Hologram.Template.TransformerTest do
       Parser.parse!(html)
       |> Transformer.transform(@aliases)
 
-    expected = [%TextNode{content: "test_text"} ]
+    expected = [%TextNode{content: "test_text"}]
 
     assert result == expected
   end

@@ -1,5 +1,5 @@
 defmodule Hologram.Compiler.PipeOperatorTransformerTest do
-  use Hologram.Test.UnitCase , async: true
+  use Hologram.Test.UnitCase, async: true
 
   alias Hologram.Compiler.{Context, PipeOperatorTransformer}
   alias Hologram.Compiler.IR.{FunctionCall, IntegerType}

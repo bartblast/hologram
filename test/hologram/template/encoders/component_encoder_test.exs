@@ -1,5 +1,5 @@
 defmodule Hologram.Template.ComponentEncoderTest do
-  use Hologram.Test.UnitCase , async: true
+  use Hologram.Test.UnitCase, async: true
 
   alias Hologram.Compiler.IR.{IntegerType, TupleType}
   alias Hologram.Template.Document.{Component, Expression, TextNode}
@@ -19,8 +19,12 @@ defmodule Hologram.Template.ComponentEncoderTest do
         |> Encoder.encode()
 
       encoded_module = "Elixir_Hologram_Test_Fixtures_Template_ComponentGenerator_Module1"
-      encoded_children = "[ { type: 'text', content: 'test_content' }, { type: 'expression', callback: ($state) => { return { type: 'tuple', data: [ { type: 'integer', value: 1 } ] } } } ]"
-      expected = "{ type: 'component', module: '#{encoded_module}', children: #{encoded_children}, props: {} }"
+
+      encoded_children =
+        "[ { type: 'text', content: 'test_content' }, { type: 'expression', callback: ($state) => { return { type: 'tuple', data: [ { type: 'integer', value: 1 } ] } } } ]"
+
+      expected =
+        "{ type: 'component', module: '#{encoded_module}', children: #{encoded_children}, props: {} }"
 
       assert result == expected
     end
@@ -38,7 +42,9 @@ defmodule Hologram.Template.ComponentEncoderTest do
 
       encoded_module = "Elixir_Hologram_Test_Fixtures_Template_ComponentGenerator_Module1"
       encoded_props = "{ 'prop_1': [ { type: 'text', content: 'value_1' } ] }"
-      expected = "{ type: 'component', module: '#{encoded_module}', children: [], props: #{encoded_props} }"
+
+      expected =
+        "{ type: 'component', module: '#{encoded_module}', children: [], props: #{encoded_props} }"
 
       assert result == expected
     end
@@ -59,7 +65,9 @@ defmodule Hologram.Template.ComponentEncoderTest do
       encoded_prop_1 = "'prop_1': [ { type: 'text', content: 'value_1' } ]"
       encoded_prop_2 = "'prop_2': [ { type: 'text', content: 'value_2' } ]"
       encoded_props = "{ #{encoded_prop_1}, #{encoded_prop_2} }"
-      expected = "{ type: 'component', module: '#{encoded_module}', children: [], props: #{encoded_props} }"
+
+      expected =
+        "{ type: 'component', module: '#{encoded_module}', children: [], props: #{encoded_props} }"
 
       assert result == expected
     end

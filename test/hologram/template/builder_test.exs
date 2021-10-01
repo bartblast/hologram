@@ -1,5 +1,5 @@
 defmodule Hologram.Template.BuilderTest do
-  use Hologram.Test.UnitCase , async: true
+  use Hologram.Test.UnitCase, async: true
 
   alias Hologram.Template.Builder
   alias Hologram.Template.Document.{Component, ElementNode, TextNode}
@@ -18,17 +18,17 @@ defmodule Hologram.Template.BuilderTest do
       result = Builder.build(@module_1, @module_3)
 
       assert [
-        %Component{
-          children: [
-            %ElementNode{},
-            %TextNode{},
-            %Component{
-              module: @module_2,
-            }
-          ],
-          module: @module_3,
-        }
-      ] = result
+               %Component{
+                 children: [
+                   %ElementNode{},
+                   %TextNode{},
+                   %Component{
+                     module: @module_2
+                   }
+                 ],
+                 module: @module_3
+               }
+             ] = result
     end
   end
 end

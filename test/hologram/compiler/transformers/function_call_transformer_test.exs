@@ -1,5 +1,5 @@
 defmodule Hologram.Compiler.FunctionCallTransformerTest do
-  use Hologram.Test.UnitCase , async: true
+  use Hologram.Test.UnitCase, async: true
 
   alias Hologram.Compiler.IR.{FunctionCall, IntegerType, NotSupportedExpression, Variable}
   alias Hologram.Compiler.{Context, FunctionCallTransformer}

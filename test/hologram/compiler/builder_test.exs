@@ -1,5 +1,5 @@
 defmodule Hologram.Compiler.BuilderTest do
-  use Hologram.Test.UnitCase , async: true
+  use Hologram.Test.UnitCase, async: true
   alias Hologram.Compiler.Builder
 
   test "build/1" do

@@ -1,8 +1,17 @@
 defmodule Hologram.Compiler.ModuleDefinitionGeneratorTest do
-  use Hologram.Test.UnitCase , async: true
+  use Hologram.Test.UnitCase, async: true
 
   alias Hologram.Compiler.{ModuleDefinitionGenerator, Opts}
-  alias Hologram.Compiler.IR.{AtomType, FunctionDefinition, IntegerType, ModuleAttributeDefinition, ModuleDefinition, NotSupportedExpression, Variable}
+
+  alias Hologram.Compiler.IR.{
+    AtomType,
+    FunctionDefinition,
+    IntegerType,
+    ModuleAttributeDefinition,
+    ModuleDefinition,
+    NotSupportedExpression,
+    Variable
+  }
 
   @module Abc.Bcd
 
@@ -90,7 +99,6 @@ defmodule Hologram.Compiler.ModuleDefinitionGeneratorTest do
         ],
         module: @module
       }
-
 
       result = ModuleDefinitionGenerator.generate(ir, @module, %Opts{})
 
@@ -338,7 +346,7 @@ defmodule Hologram.Compiler.ModuleDefinitionGeneratorTest do
               %Variable{name: :a}
             ]
           }
-        ],
+        ]
       }
 
       result = ModuleDefinitionGenerator.generate(ir, @module, %Opts{})

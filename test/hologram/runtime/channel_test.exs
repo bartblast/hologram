@@ -22,12 +22,11 @@ defmodule Hologram.Runtime.ChannelTest do
     scope_module = "Elixir_Hologram_Test_Fixtures_Runtime_Channel_Module2"
     context = %{"page_module" => page_module, "scope_module" => scope_module}
 
-    message =
-      %{
-        command: %{"type" => "atom", "value" => "test_command"},
-        context: context,
-        params: %{"type" => "list", data: []}
-      }
+    message = %{
+      command: %{"type" => "atom", "value" => "test_command"},
+      context: context,
+      params: %{"type" => "list", data: []}
+    }
 
     ref = push(socket, "command", message)
 
@@ -43,12 +42,11 @@ defmodule Hologram.Runtime.ChannelTest do
     scope_module = "Elixir_Hologram_Test_Fixtures_Runtime_Channel_Module2"
     context = %{"page_module" => page_module, "scope_module" => scope_module}
 
-    message =
-      %{
-        command: %{"type" => "atom", "value" => "test_command"},
-        context: context,
-        params: %{"type" => "list", data: []}
-      }
+    message = %{
+      command: %{"type" => "atom", "value" => "test_command"},
+      context: context,
+      params: %{"type" => "list", data: []}
+    }
 
     ref = push(socket, "command", message)
 
@@ -64,30 +62,29 @@ defmodule Hologram.Runtime.ChannelTest do
     scope_module = "Elixir_Hologram_Test_Fixtures_Runtime_Channel_Module2"
     context = %{"page_module" => page_module, "scope_module" => scope_module}
 
-    message =
-      %{
-        command: %{"type" => "atom", "value" => "test_command"},
-        context: context,
-        params: %{
-          "type" => "list",
-          "data" => [
-            %{
-              "type" => "tuple",
-              "data" => [
-                %{"type" => "atom", "value" => "a"},
-                %{"type" => "integer", "value" => 1}
-              ]
-            },
-            %{
-              "type" => "tuple",
-              "data" => [
-                %{"type" => "atom", "value" => "b"},
-                %{"type" => "integer", "value" => 2}
-              ]
-            }
-          ]
-        }
+    message = %{
+      command: %{"type" => "atom", "value" => "test_command"},
+      context: context,
+      params: %{
+        "type" => "list",
+        "data" => [
+          %{
+            "type" => "tuple",
+            "data" => [
+              %{"type" => "atom", "value" => "a"},
+              %{"type" => "integer", "value" => 1}
+            ]
+          },
+          %{
+            "type" => "tuple",
+            "data" => [
+              %{"type" => "atom", "value" => "b"},
+              %{"type" => "integer", "value" => 2}
+            ]
+          }
+        ]
       }
+    }
 
     ref = push(socket, "command", message)
 
@@ -103,30 +100,29 @@ defmodule Hologram.Runtime.ChannelTest do
     scope_module = "Elixir_Hologram_Test_Fixtures_Runtime_Channel_Module3"
     context = %{"page_module" => page_module, "scope_module" => scope_module}
 
-    message =
-      %{
-        command: %{"type" => "atom", "value" => "test_command"},
-        context: context,
-        params: %{
-          "type" => "list",
-          "data" => [
-            %{
-              "type" => "tuple",
-              "data" => [
-                %{"type" => "atom", "value" => "a"},
-                %{"type" => "integer", "value" => 1}
-              ]
-            },
-            %{
-              "type" => "tuple",
-              "data" => [
-                %{"type" => "atom", "value" => "b"},
-                %{"type" => "integer", "value" => 2}
-              ]
-            }
-          ]
-        }
+    message = %{
+      command: %{"type" => "atom", "value" => "test_command"},
+      context: context,
+      params: %{
+        "type" => "list",
+        "data" => [
+          %{
+            "type" => "tuple",
+            "data" => [
+              %{"type" => "atom", "value" => "a"},
+              %{"type" => "integer", "value" => 1}
+            ]
+          },
+          %{
+            "type" => "tuple",
+            "data" => [
+              %{"type" => "atom", "value" => "b"},
+              %{"type" => "integer", "value" => 2}
+            ]
+          }
+        ]
       }
+    }
 
     ref = push(socket, "command", message)
 
@@ -143,23 +139,23 @@ defmodule Hologram.Runtime.ChannelTest do
     page_module = "Elixir_Hologram_Test_Fixtures_Runtime_Channel_Module5"
     context = %{"page_module" => page_module, "scope_module" => page_module}
 
-    message =
-      %{
-        command: %{"type" => "atom", "value" => "__redirect__"},
-        context: context,
-        params: %{
-          "type" => "list",
-          "data" => [
-            %{
-              "type" => "tuple",
-              "data" => [
-                %{"type" => "atom", "value" => "page"},
-                %{"type" => "module", "class" => page_module}
-              ]
-            }
-          ]
-        }
+    message = %{
+      command: %{"type" => "atom", "value" => "__redirect__"},
+      context: context,
+      params: %{
+        "type" => "list",
+        "data" => [
+          %{
+            "type" => "tuple",
+            "data" => [
+              %{"type" => "atom", "value" => "page"},
+              %{"type" => "module", "class" => page_module}
+            ]
+          }
+        ]
       }
+    }
+
     html = Renderer.render(Hologram.Test.Fixtures.Runtime.Channel.Module5, %{})
 
     expected_response =

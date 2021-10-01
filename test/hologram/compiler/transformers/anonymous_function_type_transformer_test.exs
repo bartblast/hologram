@@ -1,15 +1,22 @@
 defmodule Hologram.Compiler.AnonymousFunctionTypeTransformerTest do
-  use Hologram.Test.UnitCase , async: true
+  use Hologram.Test.UnitCase, async: true
 
   alias Hologram.Compiler.{AnonymousFunctionTypeTransformer, Context}
-  alias Hologram.Compiler.IR.{AccessOperator, AnonymousFunctionType, AtomType, IntegerType, Variable}
+
+  alias Hologram.Compiler.IR.{
+    AccessOperator,
+    AnonymousFunctionType,
+    AtomType,
+    IntegerType,
+    Variable
+  }
 
   test "arity" do
     code = "fn 1, 2 -> 9 end"
     ast = ast(code)
 
     assert %AnonymousFunctionType{arity: 2} =
-      AnonymousFunctionTypeTransformer.transform(ast, %Context{})
+             AnonymousFunctionTypeTransformer.transform(ast, %Context{})
   end
 
   test "params" do

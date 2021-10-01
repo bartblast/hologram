@@ -110,13 +110,12 @@ defmodule Hologram.MixProject do
         ["run", "test-file", "../#{hd(args)}"]
       end
 
-
     opts = [cd: "assets", into: IO.stream(:stdio, :line)]
     System.cmd("npm", ["install"], opts)
     {_, status} = System.cmd("npm", cmd, opts)
 
     if status > 0 do
-      Mix.raise "JavaScript tests failed!"
+      Mix.raise("JavaScript tests failed!")
     end
   end
 end

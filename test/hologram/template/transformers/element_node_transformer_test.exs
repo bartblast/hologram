@@ -1,5 +1,5 @@
 defmodule Hologram.Template.ElementNodeTransformerTest do
-  use Hologram.Test.UnitCase , async: true
+  use Hologram.Test.UnitCase, async: true
 
   alias Hologram.Compiler.IR.{ModuleAttributeOperator, TupleType}
   alias Hologram.Template.Document.{ElementNode, Expression, TextNode}
@@ -12,21 +12,20 @@ defmodule Hologram.Template.ElementNodeTransformerTest do
 
     result = ElementNodeTransformer.transform(tag, children, attrs)
 
-    expected =
-      %ElementNode{
-        tag: tag,
-        children: children,
-        attrs: %{
-          attr_1: %{
-            value: [%TextNode{content: "value_1"}],
-            modifiers: []
-          },
-          attr_2: %{
-            value: [%TextNode{content: "value_2"}],
-            modifiers: []
-          }
+    expected = %ElementNode{
+      tag: tag,
+      children: children,
+      attrs: %{
+        attr_1: %{
+          value: [%TextNode{content: "value_1"}],
+          modifiers: []
+        },
+        attr_2: %{
+          value: [%TextNode{content: "value_2"}],
+          modifiers: []
         }
       }
+    }
 
     assert result == expected
   end
@@ -38,21 +37,20 @@ defmodule Hologram.Template.ElementNodeTransformerTest do
 
     result = ElementNodeTransformer.transform(tag, children, attrs)
 
-    expected =
-      %ElementNode{
-        tag: tag,
-        children: children,
-        attrs: %{
-          attr_1: %{
-            value: [%TextNode{content: "value_1"}],
-            modifiers: [:modifier_1]
-          },
-          attr_2: %{
-            value: [%TextNode{content: "value_2"}],
-            modifiers: [:modifier_2, :modifier_3]
-          }
+    expected = %ElementNode{
+      tag: tag,
+      children: children,
+      attrs: %{
+        attr_1: %{
+          value: [%TextNode{content: "value_1"}],
+          modifiers: [:modifier_1]
+        },
+        attr_2: %{
+          value: [%TextNode{content: "value_2"}],
+          modifiers: [:modifier_2, :modifier_3]
         }
       }
+    }
 
     assert result == expected
   end
@@ -64,31 +62,30 @@ defmodule Hologram.Template.ElementNodeTransformerTest do
 
     result = ElementNodeTransformer.transform(tag, children, attrs)
 
-    expected =
-      %ElementNode{
-        tag: tag,
-        children: children,
-        attrs: %{
-          attr_1: %{
-            value: [%TextNode{content: "value_1"}],
-            modifiers: []
-          },
-          attr_2: %{
-            value: [
-              %TextNode{content: "abc"},
-              %Expression{
-                ir: %TupleType{
-                  data: [
-                    %ModuleAttributeOperator{name: :k}
-                  ]
-                }
-              },
-              %TextNode{content: "xyz"}
-            ],
-            modifiers: []
-          }
+    expected = %ElementNode{
+      tag: tag,
+      children: children,
+      attrs: %{
+        attr_1: %{
+          value: [%TextNode{content: "value_1"}],
+          modifiers: []
+        },
+        attr_2: %{
+          value: [
+            %TextNode{content: "abc"},
+            %Expression{
+              ir: %TupleType{
+                data: [
+                  %ModuleAttributeOperator{name: :k}
+                ]
+              }
+            },
+            %TextNode{content: "xyz"}
+          ],
+          modifiers: []
         }
       }
+    }
 
     assert result == expected
   end

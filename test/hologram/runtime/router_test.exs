@@ -1,5 +1,5 @@
 defmodule Hologram.RouterTest do
-  use Hologram.Test.UnitCase , async: true
+  use Hologram.Test.UnitCase, async: true
   require Hologram.Router
 
   test "hologram/2" do
@@ -12,9 +12,9 @@ defmodule Hologram.RouterTest do
       )
 
     assert {
-      {:., [], [{:__aliases__, [alias: false], [:Hologram, :Router]}, :hologram]},
-      [],
-      ["/test-path", {:__aliases__, [alias: false], [:TestPage]}]
-    } = ast
+             {:., [], [{:__aliases__, [alias: false], [:Hologram, :Router]}, :hologram]},
+             [],
+             ["/test-path", {:__aliases__, [alias: false], [:TestPage]}]
+           } = ast
   end
 end

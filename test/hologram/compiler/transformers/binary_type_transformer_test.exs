@@ -1,5 +1,5 @@
 defmodule Hologram.Compiler.BinaryTypeTransformerTest do
-  use Hologram.Test.UnitCase , async: true
+  use Hologram.Test.UnitCase, async: true
 
   alias Hologram.Compiler.{Context, BinaryTypeTransformer}
   alias Hologram.Compiler.IR.{BinaryType, IntegerType}
@@ -20,13 +20,12 @@ defmodule Hologram.Compiler.BinaryTypeTransformerTest do
 
     result = BinaryTypeTransformer.transform(parts, %Context{})
 
-    expected =
-      %BinaryType{
-        parts: [
-          %IntegerType{value: 1},
-          %IntegerType{value: 2}
-        ]
-      }
+    expected = %BinaryType{
+      parts: [
+        %IntegerType{value: 1},
+        %IntegerType{value: 2}
+      ]
+    }
 
     assert result == expected
   end

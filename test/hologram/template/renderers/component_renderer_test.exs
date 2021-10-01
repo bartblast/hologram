@@ -1,5 +1,5 @@
 defmodule Hologram.Template.ComponentRendererTest do
-  use Hologram.Test.UnitCase , async: true
+  use Hologram.Test.UnitCase, async: true
 
   alias Hologram.Compiler.IR.{IntegerType, ModuleAttributeOperator, TupleType}
   alias Hologram.Compiler.Reflection
@@ -51,12 +51,11 @@ defmodule Hologram.Template.ComponentRendererTest do
   test "non-nested slot" do
     state = %{a: 123, context: nil}
 
-    expression =
-      %Expression{
-        ir: %TupleType{
-          data: [%ModuleAttributeOperator{name: :a}]
-        }
+    expression = %Expression{
+      ir: %TupleType{
+        data: [%ModuleAttributeOperator{name: :a}]
       }
+    }
 
     children = [
       %TextNode{content: "test_text"},
@@ -75,7 +74,13 @@ defmodule Hologram.Template.ComponentRendererTest do
     }
 
     module_def = Reflection.module_definition(@module_4)
-    component = %Component{module: @module_4, module_def: module_def, children: children, props: props}
+
+    component = %Component{
+      module: @module_4,
+      module_def: module_def,
+      children: children,
+      props: props
+    }
 
     result = Renderer.render(component, state)
     expected = "<div>div node</div>\ntest_text123<h1></h1>\n<span>span node</span>"
@@ -86,19 +91,17 @@ defmodule Hologram.Template.ComponentRendererTest do
   test "nested slot" do
     state = %{a: 1, b: 2, context: nil}
 
-    expression_1 =
-      %Expression{
-        ir: %TupleType{
-          data: [%ModuleAttributeOperator{name: :a}]
-        }
+    expression_1 = %Expression{
+      ir: %TupleType{
+        data: [%ModuleAttributeOperator{name: :a}]
       }
+    }
 
-    expression_2 =
-      %Expression{
-        ir: %TupleType{
-          data: [%ModuleAttributeOperator{name: :b}]
-        }
+    expression_2 = %Expression{
+      ir: %TupleType{
+        data: [%ModuleAttributeOperator{name: :b}]
       }
+    }
 
     module_def_5 = Reflection.module_definition(@module_5)
 
@@ -142,7 +145,9 @@ defmodule Hologram.Template.ComponentRendererTest do
     }
 
     result = Renderer.render(component_1, state)
-    expected = "<div>div node</div>\ntext_node_11<h1>h1 node</h1>\ntext_node_22\n<p>p node</p>\n<span>span node</span>"
+
+    expected =
+      "<div>div node</div>\ntext_node_11<h1>h1 node</h1>\ntext_node_22\n<p>p node</p>\n<span>span node</span>"
 
     assert result == expected
   end
@@ -220,7 +225,7 @@ defmodule Hologram.Template.ComponentRendererTest do
               data: [%IntegerType{value: 123}]
             }
           },
-          %TextNode{content: "m"},
+          %TextNode{content: "m"}
         ]
       }
     }

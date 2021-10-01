@@ -1,5 +1,5 @@
 defmodule Hologram.Compiler.ModuleAttributeDefinitionTransformerTest do
-  use Hologram.Test.UnitCase , async: true
+  use Hologram.Test.UnitCase, async: true
 
   alias Hologram.Compiler.{Context, ModuleAttributeDefinitionTransformer}
   alias Hologram.Compiler.IR.{IntegerType, ModuleAttributeDefinition, NotSupportedExpression}

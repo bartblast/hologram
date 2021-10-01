@@ -1,5 +1,5 @@
 defmodule Hologram.Compiler.StructTypeTransformerTest do
-  use Hologram.Test.UnitCase , async: true
+  use Hologram.Test.UnitCase, async: true
 
   alias Hologram.Compiler.IR.{Alias, AtomType, IntegerType, StructType}
   alias Hologram.Compiler.{Context, StructTypeTransformer}
@@ -27,7 +27,7 @@ defmodule Hologram.Compiler.StructTypeTransformerTest do
     context = %Context{
       aliases: [
         %Alias{module: Hologram.Test.Fixtures.Compiler.StructTypeTransformer.Module2, as: [:Abc]}
-      ],
+      ]
     }
 
     result = StructTypeTransformer.transform(ast, module_segs, context)

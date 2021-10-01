@@ -90,7 +90,14 @@ defmodule Hologram.Compiler.IR do
   end
 
   defmodule ModuleDefinition do
-    defstruct module: nil, uses: [], imports: [], requires: [], aliases: [], attributes: [], functions: [], macros: []
+    defstruct module: nil,
+              uses: [],
+              imports: [],
+              requires: [],
+              aliases: [],
+              attributes: [],
+              functions: [],
+              macros: []
   end
 
   defmodule ModuleAttributeDefinition do

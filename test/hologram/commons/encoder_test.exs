@@ -1,5 +1,5 @@
 defmodule Hologram.Commons.EncoderTest do
-  use Hologram.Test.UnitCase , async: true
+  use Hologram.Test.UnitCase, async: true
   alias Hologram.Commons.Encoder
 
   describe "wrap_with_array/1" do

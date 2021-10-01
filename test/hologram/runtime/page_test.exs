@@ -1,5 +1,5 @@
 defmodule Hologram.PageTest do
-  use Hologram.Test.UnitCase , async: true
+  use Hologram.Test.UnitCase, async: true
   require Hologram.Page
   alias Hologram.Page
 
@@ -31,13 +31,13 @@ defmodule Hologram.PageTest do
       )
 
     assert {
-      :def,
-      [context: Hologram.Page, import: Kernel],
-      [
-        {:page_layout, [counter: _, context: Hologram.Page], Hologram.Page},
-        [do: {:__aliases__, [counter: _, alias: false], [:Hologram, :PageTest]}]
-      ]
-    } = ast
+             :def,
+             [context: Hologram.Page, import: Kernel],
+             [
+               {:page_layout, [counter: _, context: Hologram.Page], Hologram.Page},
+               [do: {:__aliases__, [counter: _, alias: false], [:Hologram, :PageTest]}]
+             ]
+           } = ast
   end
 
   test "route/1" do
@@ -49,7 +49,9 @@ defmodule Hologram.PageTest do
         __ENV__
       )
 
-    assert {:def, [context: Hologram.Page, import: Kernel], [{:route, [counter: _, context: Hologram.Page], Hologram.Page}, [do: "/test-path"]]} = ast
+    assert {:def, [context: Hologram.Page, import: Kernel],
+            [{:route, [counter: _, context: Hologram.Page], Hologram.Page}, [do: "/test-path"]]} =
+             ast
   end
 
   test "update/3" do

@@ -13,7 +13,7 @@ defmodule Hologram.Template.Builder do
         %TextNode{content: "Footer content"}
       ]
   """
-  @spec build(module()) :: list(T.document_node)
+  @spec build(module()) :: list(T.document_node())
 
   def build(module, layout \\ nil) do
     aliases =

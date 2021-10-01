@@ -1,5 +1,5 @@
 defmodule Hologram.Compiler.FunctionCallGeneratorTest do
-  use Hologram.Test.UnitCase , async: true
+  use Hologram.Test.UnitCase, async: true
 
   alias Hologram.Compiler.{Context, FunctionCallGenerator, Opts}
   alias Hologram.Compiler.IR.{IntegerType, Variable}

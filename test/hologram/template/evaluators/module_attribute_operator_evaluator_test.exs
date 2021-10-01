@@ -1,5 +1,5 @@
 defmodule Hologram.Template.ModuleAttributeOperatorEvaluatorTest do
-  use Hologram.Test.UnitCase , async: true
+  use Hologram.Test.UnitCase, async: true
 
   alias Hologram.Compiler.IR.ModuleAttributeOperator
   alias Hologram.Template.Evaluator

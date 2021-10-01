@@ -1,8 +1,17 @@
 defmodule Hologram.Compiler.HelpersTest do
-  use Hologram.Test.UnitCase , async: true
+  use Hologram.Test.UnitCase, async: true
 
   alias Hologram.Compiler.{Context, Helpers}
-  alias Hologram.Compiler.IR.{AccessOperator, AtomType, FunctionDefinition, IntegerType, ModuleDefinition, UseDirective, Variable}
+
+  alias Hologram.Compiler.IR.{
+    AccessOperator,
+    AtomType,
+    FunctionDefinition,
+    IntegerType,
+    ModuleDefinition,
+    UseDirective,
+    Variable
+  }
 
   describe "aggregate_bindings/1" do
     test "no bindings" do
@@ -175,21 +184,19 @@ defmodule Hologram.Compiler.HelpersTest do
   end
 
   test "get_components/1" do
-    module_def_1 =
-      %ModuleDefinition{
-        module: Bcd.Cde,
-        uses: [
-          %UseDirective{module: Hologram.Component}
-        ]
-      }
+    module_def_1 = %ModuleDefinition{
+      module: Bcd.Cde,
+      uses: [
+        %UseDirective{module: Hologram.Component}
+      ]
+    }
 
-    module_def_2 =
-      %ModuleDefinition{
-        module: Def.Efg,
-        uses: [
-          %UseDirective{module: Hologram.Component}
-        ]
-      }
+    module_def_2 = %ModuleDefinition{
+      module: Def.Efg,
+      uses: [
+        %UseDirective{module: Hologram.Component}
+      ]
+    }
 
     module_defs_map = %{
       Abc.Bcd => %ModuleDefinition{uses: []},
@@ -205,21 +212,19 @@ defmodule Hologram.Compiler.HelpersTest do
   end
 
   test "get_pages/1" do
-    module_def_1 =
-      %ModuleDefinition{
-        module: Bcd.Cde,
-        uses: [
-          %UseDirective{module: Hologram.Page}
-        ]
-      }
+    module_def_1 = %ModuleDefinition{
+      module: Bcd.Cde,
+      uses: [
+        %UseDirective{module: Hologram.Page}
+      ]
+    }
 
-    module_def_2 =
-      %ModuleDefinition{
-        module: Def.Efg,
-        uses: [
-          %UseDirective{module: Hologram.Page}
-        ]
-      }
+    module_def_2 = %ModuleDefinition{
+      module: Def.Efg,
+      uses: [
+        %UseDirective{module: Hologram.Page}
+      ]
+    }
 
     module_defs_map = %{
       Abc.Bcd => %ModuleDefinition{uses: []},

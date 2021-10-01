@@ -1,7 +1,7 @@
 alias Hologram.Compiler.{Context, Encoder, Generator, Helpers, Opts}
 alias Hologram.Compiler.IR.EqualToOperator
 
-defimpl Encoder, for: EqualToOperator  do
+defimpl Encoder, for: EqualToOperator do
   def encode(%{left: left, right: right}, %Context{} = context, %Opts{} = opts) do
     left = Generator.generate(left, context, opts)
     right = Generator.generate(right, context, opts)

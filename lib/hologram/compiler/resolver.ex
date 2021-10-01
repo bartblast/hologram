@@ -61,8 +61,7 @@ defmodule Hologram.Compiler.Resolver do
 
   # TODO: take into account "only" and "except" import opts
   defp resolve_to_imported_module(function, arity, imports) do
-    resolved =
-      Enum.find(imports, &function_exported?(&1.module, function, arity))
+    resolved = Enum.find(imports, &function_exported?(&1.module, function, arity))
 
     if resolved, do: resolved.module, else: nil
   end

@@ -1,5 +1,5 @@
 defmodule Hologram.Compiler.ModuleAttributeOperatorGeneratorTest do
-  use Hologram.Test.UnitCase , async: true
+  use Hologram.Test.UnitCase, async: true
   alias Hologram.Compiler.{Context, ModuleAttributeOperatorGenerator, Opts}
 
   test "doesn't have template opt" do

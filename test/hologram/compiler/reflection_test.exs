@@ -1,5 +1,5 @@
 defmodule Hologram.Compiler.ReflectionTest do
-  use Hologram.Test.UnitCase , async: false
+  use Hologram.Test.UnitCase, async: false
 
   alias Hologram.Compiler.IR.{MacroDefinition, ModuleDefinition, UseDirective}
   alias Hologram.Compiler.Reflection
@@ -67,10 +67,11 @@ defmodule Hologram.Compiler.ReflectionTest do
   end
 
   describe "module_ast/1" do
-    @expected {:defmodule, [line: 1], [
-        {:__aliases__, [line: 1], @module_segs_1},
-        [do: {:__block__, [], []}]
-      ]}
+    @expected {:defmodule, [line: 1],
+               [
+                 {:__aliases__, [line: 1], @module_segs_1},
+                 [do: {:__block__, [], []}]
+               ]}
 
     test "module segments arg" do
       result = Reflection.ast(@module_segs_1)

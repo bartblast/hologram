@@ -14,7 +14,6 @@ defmodule Mix.Tasks.Compile.Hologram do
         "#{@root_path}/priv/static/hologram"
       end
 
-
     File.mkdir_p!(output_path)
     remove_old_files(output_path)
 
@@ -61,7 +60,7 @@ defmodule Mix.Tasks.Compile.Hologram do
         "assets"
       end
 
-    System.cmd("npm", ["install"], [cd: assets_path])
+    System.cmd("npm", ["install"], cd: assets_path)
     Mix.Task.run("esbuild", ["hologram", "--log-level=warning"])
   end
 

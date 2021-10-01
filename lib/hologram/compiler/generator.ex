@@ -106,7 +106,11 @@ defmodule Hologram.Compiler.Generator do
     SigilHGenerator.generate(ir, context)
   end
 
-  def generate(%FunctionCall{module: module, function: function, params: params}, %Context{} = context, %Opts{} = opts) do
+  def generate(
+        %FunctionCall{module: module, function: function, params: params},
+        %Context{} = context,
+        %Opts{} = opts
+      ) do
     FunctionCallGenerator.generate(module, function, params, context, opts)
   end
 

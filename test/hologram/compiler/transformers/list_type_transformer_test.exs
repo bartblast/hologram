@@ -1,5 +1,5 @@
 defmodule Hologram.Compiler.ListTypeTransformerTest do
-  use Hologram.Test.UnitCase , async: true
+  use Hologram.Test.UnitCase, async: true
 
   alias Hologram.Compiler.{Context, ListTypeTransformer}
   alias Hologram.Compiler.IR.{IntegerType, ListType}

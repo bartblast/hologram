@@ -8,7 +8,7 @@ defmodule Hologram.Compiler.Pruner do
   @doc """
   Prunes unused modules and functions.
   """
-  @spec prune(T.module_definitions_map, module()) :: T.module_definitions_map()
+  @spec prune(T.module_definitions_map(), module()) :: T.module_definitions_map()
 
   def prune(module_defs_map, module) do
     find_used_functions(module_defs_map, module, module)
@@ -86,16 +86,24 @@ defmodule Hologram.Compiler.Pruner do
     Enum.reduce(exprs, acc, &traverse_function_defs(&2, module_defs_map, &1))
   end
 
-  defp traverse_function_defs(acc, module_defs_map, %FunctionCall{module: module, function: function, params: params}) do
+  defp traverse_function_defs(acc, module_defs_map, %FunctionCall{
+         module: module,
+         function: function,
+         params: params
+       }) do
     Enum.reduce(params, acc, &traverse_function_defs(&2, module_defs_map, &1))
-    |> traverse_function_defs( module_defs_map, {module, function})
+    |> traverse_function_defs(module_defs_map, {module, function})
   end
 
   defp traverse_function_defs(acc, module_defs_map, %FunctionDefinition{body: body}) do
     traverse_function_defs(acc, module_defs_map, body)
   end
 
-  defp traverse_function_defs(acc, module_defs_map, %IfExpression{condition: condition, do: do_clause, else: else_clause}) do
+  defp traverse_function_defs(acc, module_defs_map, %IfExpression{
+         condition: condition,
+         do: do_clause,
+         else: else_clause
+       }) do
     traverse_function_defs(acc, module_defs_map, condition)
     |> traverse_function_defs(module_defs_map, do_clause)
     |> traverse_function_defs(module_defs_map, else_clause)
@@ -104,7 +112,8 @@ defmodule Hologram.Compiler.Pruner do
   # DEFER: traverse nested code blocks
   defp traverse_function_defs(acc, _, _), do: acc
 
-  defp traverse_template(acc, module_defs_map, traversed_module, pruned_module) when is_atom(traversed_module) do
+  defp traverse_template(acc, module_defs_map, traversed_module, pruned_module)
+       when is_atom(traversed_module) do
     spec = {traversed_module, :template}
 
     unless MapSet.member?(acc, spec) || !Reflection.has_template?(traversed_module) do
@@ -130,7 +139,12 @@ defmodule Hologram.Compiler.Pruner do
     Enum.reduce(nodes, acc, &traverse_template(&2, module_defs_map, &1, pruned_module))
   end
 
-  defp traverse_template(acc, module_defs_map, %Component{module: module, props: props, children: children}, pruned_module) do
+  defp traverse_template(
+         acc,
+         module_defs_map,
+         %Component{module: module, props: props, children: children},
+         pruned_module
+       ) do
     acc = traverse_template(acc, module_defs_map, module, pruned_module)
 
     acc =
@@ -141,7 +155,12 @@ defmodule Hologram.Compiler.Pruner do
     Enum.reduce(children, acc, &traverse_template(&2, module_defs_map, &1, pruned_module))
   end
 
-  defp traverse_template(acc, module_defs_map, %ElementNode{attrs: attrs, children: children}, pruned_module) do
+  defp traverse_template(
+         acc,
+         module_defs_map,
+         %ElementNode{attrs: attrs, children: children},
+         pruned_module
+       ) do
     acc =
       Enum.reduce(attrs, acc, fn {_, %{value: value}}, acc ->
         traverse_template(acc, module_defs_map, value, pruned_module)

@@ -14,6 +14,7 @@ defmodule Hologram.Compiler.Expander do
     case expanded do
       {:__block__, [], exprs} ->
         exprs
+
       _ ->
         [expanded]
     end
@@ -36,7 +37,10 @@ defmodule Hologram.Compiler.Expander do
 
   defp expand_macros_in_expression(expr, _), do: expr
 
-  def expand_module_pseudo_variable({:defmodule, ast_1, [{:__aliases__, ast_2, module_segs}, [do: {:__block__, ast_3, exprs}]]}) do
+  def expand_module_pseudo_variable(
+        {:defmodule, ast_1,
+         [{:__aliases__, ast_2, module_segs}, [do: {:__block__, ast_3, exprs}]]}
+      ) do
     exprs =
       Enum.reduce(exprs, [], fn expr, acc ->
         acc ++ [expand_module_pseudo_variable(expr, module_segs)]

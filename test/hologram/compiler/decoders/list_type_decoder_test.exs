@@ -1,5 +1,5 @@
 defmodule Hologram.Compiler.ListTypeDecoderTest do
-  use Hologram.Test.UnitCase , async: true
+  use Hologram.Test.UnitCase, async: true
   alias Hologram.Compiler.ListTypeDecoder
 
   test "decode/1" do

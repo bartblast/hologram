@@ -1,5 +1,5 @@
 defmodule Hologram.Compiler.FunctionDefinitionTransformerTest do
-  use Hologram.Test.UnitCase , async: true
+  use Hologram.Test.UnitCase, async: true
 
   alias Hologram.Compiler.{Context, FunctionDefinitionTransformer}
   alias Hologram.Compiler.IR.{AccessOperator, AtomType, FunctionDefinition, IntegerType, Variable}
@@ -16,7 +16,7 @@ defmodule Hologram.Compiler.FunctionDefinitionTransformerTest do
       ast = ast(code)
 
       assert %FunctionDefinition{name: :test} =
-              FunctionDefinitionTransformer.transform(ast, @context)
+               FunctionDefinitionTransformer.transform(ast, @context)
     end
 
     test "arity" do
@@ -28,7 +28,7 @@ defmodule Hologram.Compiler.FunctionDefinitionTransformerTest do
       ast = ast(code)
 
       assert %FunctionDefinition{arity: 2} =
-              FunctionDefinitionTransformer.transform(ast, @context)
+               FunctionDefinitionTransformer.transform(ast, @context)
     end
 
     test "params" do

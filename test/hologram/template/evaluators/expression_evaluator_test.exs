@@ -1,5 +1,5 @@
 defmodule Hologram.Template.ExpressionEvaluatorTest do
-  use Hologram.Test.UnitCase , async: true
+  use Hologram.Test.UnitCase, async: true
 
   alias Hologram.Compiler.IR.{IntegerType, TupleType}
   alias Hologram.Template.Document.Expression

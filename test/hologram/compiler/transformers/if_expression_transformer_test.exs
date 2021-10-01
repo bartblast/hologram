@@ -1,5 +1,5 @@
 defmodule Hologram.Compiler.IfExpressionTransformerTest do
-  use Hologram.Test.UnitCase , async: true
+  use Hologram.Test.UnitCase, async: true
 
   alias Hologram.Compiler.{Context, IfExpressionTransformer}
   alias Hologram.Compiler.IR.{BooleanType, IfExpression, IntegerType, NilType}

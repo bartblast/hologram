@@ -1,5 +1,5 @@
 defmodule Hologram.Compiler.FunctionDefinitionGeneratorTest do
-  use Hologram.Test.UnitCase , async: true
+  use Hologram.Test.UnitCase, async: true
   alias Hologram.Compiler.{Context, FunctionDefinitionGenerator, Opts}
 
   test "no vars / single expression / single variant" do

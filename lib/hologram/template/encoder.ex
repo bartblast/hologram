@@ -9,7 +9,7 @@ defprotocol Hologram.Template.Encoder do
       iex> encode(%ElementNode{tag: "div", children: [%TextNode{content: "test}]})
       "{ type: 'element', tag: 'div', attrs: {}, children: [{ type: 'text', content: 'test' }] }"
   """
-  @spec encode(T.document_node | list(T.document_node)) :: String.t
+  @spec encode(T.document_node() | list(T.document_node())) :: String.t()
 
   def encode(document_tree)
 end

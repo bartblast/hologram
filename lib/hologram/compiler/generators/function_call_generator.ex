@@ -1,6 +1,6 @@
 defmodule Hologram.Compiler.FunctionCallGenerator do
   import Hologram.Compiler.Encoder.Commons
-  
+
   alias Hologram.Compiler.{Context, Generator, Helpers, Opts}
   alias Hologram.Compiler.IR.Variable
 

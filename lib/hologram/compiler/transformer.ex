@@ -120,7 +120,7 @@ defmodule Hologram.Compiler.Transformer do
     %ModuleAttributeOperator{name: name}
   end
 
-  def transform({:|>, _, _,} = ast, %Context{} = context) do
+  def transform({:|>, _, _} = ast, %Context{} = context) do
     PipeOperatorTransformer.transform(ast, context)
   end
 
