@@ -2,6 +2,7 @@
 
 // see: https://www.blazemeter.com/blog/the-correct-way-to-import-lodash-libraries-a-benchmark
 import cloneDeep from "lodash/cloneDeep";
+
 import HologramNotImplementedError from "./errors";
 
 export default class Utils {
