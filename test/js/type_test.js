@@ -113,6 +113,29 @@ describe("isNumber()", () => {
   })
 })
 
+describe("isTrue()", () => {
+  it("returns true for boxed true value", () => {
+    const arg = {type: "boolean", value: true}
+    const result = Type.isTrue(arg)
+
+    assert.isTrue(result)
+  })
+
+  it("returns false for boxed false value", () => {
+    const arg = {type: "boolean", value: false}
+    const result = Type.isTrue(arg)
+
+    assert.isFalse(result)
+  })
+
+  it("returns false for values of types other than boxed boolean", () => {
+    const arg = {type: "string", value: "true"}
+    const result = Type.isTrue(arg)
+    
+    assert.isFalse(result)
+  })
+})
+
 describe("isTruthy()", () => {
   it("returns false for boxed false value", () => {
     const arg = {type: "boolean", value: false}

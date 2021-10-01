@@ -29,6 +29,10 @@ export default class Type {
     return boxedValue.type === "float" || boxedValue.type === "integer"
   }
 
+  static isTrue(boxedValue) {
+    return boxedValue.type === "boolean" && boxedValue.value === true
+  }
+
   static isTruthy(boxedValue) {
     return !Type.isFalsy(boxedValue)
   }
