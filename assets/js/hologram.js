@@ -10,6 +10,7 @@ import IO from "./hologram/elixir/io"
 import Kernel from "./hologram/elixir/kernel"
 import Keyword from "./hologram/elixir/keyword"
 import Map from "./hologram/elixir/map"
+import String from "./hologram/elixir/string"
 
 export default class Hologram {
   // TODO: refactor & test
@@ -99,5 +100,6 @@ window.Elixir_IO = IO
 window.Elixir_Kernel = Kernel
 window.Elixir_Keyword = Keyword
 window.Elixir_Map = Map
+window.Elixir_String = String
 
 window.Hologram = Hologram
