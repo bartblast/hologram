@@ -203,6 +203,13 @@ describe("$equal_to()", () => {
     const expected_message = 'Kernel.$equal_to(): boxedVal1 = {"type":"not implemented","value":"test"}'
     assert.throw(() => { Kernel.$equal_to(val, val) }, HologramNotImplementedError, expected_message);
   })
+
+  it("returns freezed object", () => {
+    const val = {type: "integer", value: 1}
+    const result = Kernel.$equal_to(val, val)
+    
+    assertFreezed(result)
+  })
 })
 
 
