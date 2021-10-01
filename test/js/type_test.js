@@ -49,8 +49,15 @@ describe("isFalse()", () => {
     assert.isTrue(result)
   })
 
-  it("returns false for values other than boxed false value", () => {
+  it("returns false for boxed true value", () => {
     const arg = {type: "boolean", value: true}
+    const result = Type.isFalse(arg)
+
+    assert.isFalse(result)
+  })
+
+  it("returns false for values of type other than boxed boolean", () => {
+    const arg = {type: "string", value: "false"}
     const result = Type.isFalse(arg)
     
     assert.isFalse(result)
