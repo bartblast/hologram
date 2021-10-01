@@ -1,5 +1,6 @@
 export default class IO {
-  static inspect(value) {
-    console.debug(value)
+  static inspect(val) {
+    console.debug(val)
+    return val
   }
 }
