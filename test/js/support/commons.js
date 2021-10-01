@@ -6,6 +6,14 @@ export const sinon = require("sinon");
 const { JSDOM } = require("jsdom");
 const util = require("util");
 
+export function assertBoxedFalse(boxedValue) {
+  assert.isTrue(Type.isFalse(boxedValue))
+}
+
+export function assertBoxedTrue(boxedValue) {
+  assert.isTrue(Type.isTrue(boxedValue))
+}
+
 export function assertFreezed(obj) {
   assert.throw(() => {obj.__freezeTest__ = 1}, TypeError, /object is not extensible/);
 }

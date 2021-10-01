@@ -1,4 +1,4 @@
-import { assert, assertFreezed } from "../support/commons"
+import { assert, assertBoxedFalse, assertBoxedTrue, assertFreezed } from "../support/commons"
 import Kernel from "../../../assets/js/hologram/elixir/kernel";
 import Type from "../../../assets/js/hologram/type";
 
@@ -79,151 +79,138 @@ describe("$dot()", () => {
   })
 })
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 describe("$equal_to()", () => {
-  it("boolean == boolean", () => {
+  // boolean == boolean
+  it("returns boxed true for a boxed boolean equal to another boxed boolean", () => {
     const value1 = {type: "boolean", value: true}
     const value2 = {type: "boolean", value: true}
 
     const result = Kernel.$equal_to(value1, value2)
-    const expected = {type: "boolean", value: true}
-
-    assert.deepStrictEqual(result, expected)
+    assertBoxedTrue(result)
   })
 
-  it("boolean != boolean", () => {
+  // boolean != boolean
+  it("returns boxed false for a boxed boolean not equal to another boxed boolean", () => {
     const value1 = {type: "boolean", value: true}
     const value2 = {type: "boolean", value: false}
 
     const result = Kernel.$equal_to(value1, value2)
-    const expected = {type: "boolean", value: false}
-
-    assert.deepStrictEqual(result, expected)
+    assertBoxedFalse(result)
   })
 
-  it("boolean != non-boolean", () => {
+  // boolean != non-boolean
+  it("returns boxed false when a boxed boolean is compared to a boxed value of different type", () => {
     const value1 = {type: "boolean", value: true}
     const value2 = {type: "string", value: "true"}
 
     const result = Kernel.$equal_to(value1, value2)
-    const expected = {type: "boolean", value: false}
-
-    assert.deepStrictEqual(result, expected)
+    assertBoxedFalse(result)
   })
 
-  it("integer == integer", () => {
+  // integer == integer
+  it("returns boxed true for a boxed integer equal to another boxed integer", () => {
     const value1 = {type: "integer", value: 1}
     const value2 = {type: "integer", value: 1}
-
+    
     const result = Kernel.$equal_to(value1, value2)
-    const expected = {type: "boolean", value: true}
-
-    assert.deepStrictEqual(result, expected)
+    assertBoxedTrue(result)
   })
 
-  it("integer != integer", () => {
+  // integer != integer
+  it("returns boxed false for a boxed integer not equal to another boxed integer", () => {
     const value1 = {type: "integer", value: 1}
     const value2 = {type: "integer", value: 2}
 
     const result = Kernel.$equal_to(value1, value2)
-    const expected = {type: "boolean", value: false}
-
-    assert.deepStrictEqual(result, expected)
+    assertBoxedFalse(result)
   })
 
-  it("integer == float", () => {
+  // integer == float
+  it("returns boxed true for a boxed integer equal to a boxed float", () => {
     const value1 = {type: "integer", value: 1}
     const value2 = {type: "float", value: 1.0}
 
     const result = Kernel.$equal_to(value1, value2)
-    const expected = {type: "boolean", value: true}
-
-    assert.deepStrictEqual(result, expected)
+    assertBoxedTrue(result)
   })
 
-  it("integer != float", () => {
-    const value1 = {type: "float", value: 1}
+  // integer != float
+  it("returns boxed false for a boxed integer not equal to a boxed float", () => {
+    const value1 = {type: "integer", value: 1}
     const value2 = {type: "float", value: 2.0}
 
     const result = Kernel.$equal_to(value1, value2)
-    const expected = {type: "boolean", value: false}
-
-    assert.deepStrictEqual(result, expected)
+    assertBoxedFalse(result)
   })
 
-  it("integer != non-number", () => {
+  // integer != non-number
+  it("returns boxed false when a boxed integer is compared to a boxed value of non-number type", () => {
     const value1 = {type: "integer", value: 1}
     const value2 = {type: "string", value: "1"}
 
     const result = Kernel.$equal_to(value1, value2)
-    const expected = {type: "boolean", value: false}
-
-    assert.deepStrictEqual(result, expected)
+    assertBoxedFalse(result)
   })
 
-  it("float == float", () => {
+  // float == float
+  it("returns boxed true for a boxed float equal to another boxed float", () => {
     const value1 = {type: "float", value: 1.0}
     const value2 = {type: "float", value: 1.0}
 
     const result = Kernel.$equal_to(value1, value2)
-    const expected = {type: "boolean", value: true}
-
-    assert.deepStrictEqual(result, expected)
+    assertBoxedTrue(result)
   })
 
-  it("float != float", () => {
+  // float != float
+  it("returns boxed false for a boxed float not equal to another boxed float", () => {
     const value1 = {type: "float", value: 1.0}
     const value2 = {type: "float", value: 2.0}
 
     const result = Kernel.$equal_to(value1, value2)
-    const expected = {type: "boolean", value: false}
-
-    assert.deepStrictEqual(result, expected)
+    assertBoxedFalse(result)
   })
 
-  it("float == integer", () => {
+  // float == integer
+  it("returns boxed true for a boxed float equal to a boxed integer", () => {
     const value1 = {type: "float", value: 1.0}
     const value2 = {type: "integer", value: 1}
 
     const result = Kernel.$equal_to(value1, value2)
-    const expected = {type: "boolean", value: true}
-
-    assert.deepStrictEqual(result, expected)
+    assertBoxedTrue(result)
   })
 
-  it("float != integer", () => {
+  // float != integer
+  it("returns boxed false for a boxed float not equal to a boxed integer", () => {
     const value1 = {type: "float", value: 1.0}
     const value2 = {type: "integer", value: 2}
 
     const result = Kernel.$equal_to(value1, value2)
-    const expected = {type: "boolean", value: false}
-
-    assert.deepStrictEqual(result, expected)
+    assertBoxedFalse(result)
   })
 
-  it("float != non-number", () => {
+  // float != non-number
+  it("returns boxed false when a boxed float is compared to a boxed value of non-number type", () => {
     const value1 = {type: "float", value: 1.0}
-    const value2 = {type: "string", value: "1"}
+    const value2 = {type: "string", value: "1.0"}
 
     const result = Kernel.$equal_to(value1, value2)
-    const expected = {type: "boolean", value: false}
-
-    assert.deepStrictEqual(result, expected)
+    assertBoxedFalse(result)
   })
 })
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 describe("apply()", () => {
   it("apply/3", () => {

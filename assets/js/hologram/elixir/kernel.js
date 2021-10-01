@@ -1,11 +1,20 @@
 import Runtime from "../runtime"
+import Type from "../type"
 import Utils from "../utils"
 
 export default class Kernel {
   static $add(boxedNumber1, boxedNumber2) {
-    const type = boxedNumber1.type == "integer" && boxedNumber2.type == "integer" ? "integer" : "float"
+    const type = boxedNumber1.type === "integer" && boxedNumber2.type === "integer" ? "integer" : "float"
     const result = boxedNumber1.value + boxedNumber2.value
     return Utils.freeze({type: type, value: result})
+  }
+
+  static _areBoxedNumbersEqual(boxedNumber1, boxedNumber2) {
+    if (Type.isNumber(boxedNumber1) && Type.isNumber(boxedNumber2)) {
+      return boxedNumber1.value == boxedNumber2.value
+    } else {
+      return false
+    }
   }
 
   static $dot(boxedMap, boxedKey) {
@@ -13,38 +22,30 @@ export default class Kernel {
     return Utils.clone(result)
   }
 
+  static $equal_to(boxedVal1, boxedVal2) {
+    let value;
 
-
-
-
-
-
-
-
-
-  // TODO: implement other types
-  static $equal_to(left, right) {
-    switch (left.type) {
+    switch (boxedVal1.type) {
       case "boolean": 
-        const value = right.type == "boolean" && left.value == right.value
-        return {type: "boolean", value: value}
-
+        value = boxedVal2.type === "boolean" && boxedVal1.value === boxedVal2.value
+        break;
+        
       case "float":
-        return Kernel._equal_to_number(left, right)
-
       case "integer":
-        return Kernel._equal_to_number(left, right)
+        value = Kernel._areBoxedNumbersEqual(boxedVal1, boxedVal2)
+        break;
     }
+
+    return Utils.freeze({type: "boolean", value: value})
   }
 
-  static _equal_to_number(left, right) {
-    if (right.type == "integer" || right.type == "float") {
-      return {type: "boolean", value: left.value == right.value}
 
-    } else {
-      return {type: "boolean", value: false}
-    }
-  }
+
+
+
+
+
+
 
   static apply() {
     if (arguments.length == 3) {
@@ -62,7 +63,7 @@ export default class Kernel {
   static if(condition, doClause, elseClause) {
     const conditionResult = condition()
 
-    if (Utils.isTruthy(conditionResult)) {
+    if (Type.isTruthy(conditionResult)) {
       return doClause()
     } else {
       return elseClause()
