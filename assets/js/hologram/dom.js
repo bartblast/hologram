@@ -1,3 +1,5 @@
+"use strict";
+
 import {attributesModule, eventListenersModule, h, init, toVNode} from "snabbdom";
 const patch = init([attributesModule, eventListenersModule]);
 

@@ -1,3 +1,5 @@
+"use strict";
+
 import { assert } from "../support/commons"
 import Map from "../../../assets/js/hologram/elixir/map";
 

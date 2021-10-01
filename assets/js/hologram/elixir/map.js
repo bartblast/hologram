@@ -1,3 +1,5 @@
+"use strict";
+
 import Utils from "../utils"
 
 export default class Map {

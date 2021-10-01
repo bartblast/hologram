@@ -1,3 +1,5 @@
+"use strict";
+
 import { assert, mockWindow, sinon } from "./support/commons";
 import Runtime from "../../assets/js/hologram/runtime";
 

@@ -1,3 +1,5 @@
+"use strict";
+
 import { assert, sinon } from "../support/commons"
 import IO from "../../../assets/js/hologram/elixir/io";
 

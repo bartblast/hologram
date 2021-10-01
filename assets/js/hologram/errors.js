@@ -1,3 +1,5 @@
+"use strict";
+
 export default class HologramNotImplementedError extends Error {
   constructor(message) {
     super(message);

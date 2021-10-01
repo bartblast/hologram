@@ -1,3 +1,5 @@
+"use strict";
+
 // based on: https://ghinda.net/article/script-tags/
 
 import Utils from "./utils"

@@ -1,3 +1,5 @@
+"use strict";
+
 import HologramNotImplementedError from "../errors";
 import Runtime from "../runtime"
 import Type from "../type"
@@ -69,7 +71,7 @@ export default class Kernel {
 
     return Utils.freeze(result)
   }
-  
+
   static to_string(boxedValue) {
     const value = `${boxedValue.value.toString()}`
     return Utils.freeze({type: 'string', value: value})

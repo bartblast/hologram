@@ -1,3 +1,5 @@
+"use strict";
+
 import { assert } from "../support/commons"
 
 import Keyword from "../../../assets/js/hologram/elixir/keyword";

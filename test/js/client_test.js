@@ -1,3 +1,5 @@
+"use strict";
+
 import { assert } from "./support/commons";
 import Client from "../../assets/js/hologram/client";
 

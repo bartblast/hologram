@@ -1,3 +1,5 @@
+"use strict";
+
 // see: https://www.blazemeter.com/blog/the-correct-way-to-import-lodash-libraries-a-benchmark
 import isEqual from "lodash/isEqual";
 

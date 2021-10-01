@@ -1,3 +1,5 @@
+"use strict";
+
 import Type from "../../../assets/js/hologram/type"
 
 export const assert = require("chai").assert;

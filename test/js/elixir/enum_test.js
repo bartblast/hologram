@@ -1,3 +1,5 @@
+"use strict";
+
 import { assert } from "../support/commons"
 
 import Enum from "../../../assets/js/hologram/elixir/enum";

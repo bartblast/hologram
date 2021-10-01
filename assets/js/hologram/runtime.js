@@ -1,3 +1,5 @@
+"use strict";
+
 import Client from "./client"
 import DOM from "./dom"
 import ScriptsReloader from "./scripts_reloader"

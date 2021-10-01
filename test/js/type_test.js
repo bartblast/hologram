@@ -1,3 +1,5 @@
+"use strict";
+
 import { assert, assertFreezed } from "./support/commons";
 import Type from "../../assets/js/hologram/type";
 import Utils from "../../assets/js/hologram/utils";
