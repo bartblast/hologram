@@ -1,6 +1,7 @@
 import Client from "./client"
 import DOM from "./dom"
 import ScriptsReloader from "./scripts_reloader"
+import Type from "./type"
 import Utils from "./utils"
 
 export default class Runtime {
@@ -27,11 +28,11 @@ export default class Runtime {
       if (eventSpec.modifiers.includes("forward")) {
         target = callbackResult.data[0]
         name = callbackResult.data[1]
-        params = Utils.keywordToMap(callbackResult.data[2])
+        params = Type.keywordToMap(callbackResult.data[2])
       } else {
         target = {type: "atom", value: "page"}
         name = callbackResult.data[0]
-        params = Utils.keywordToMap(callbackResult.data[1])
+        params = Type.keywordToMap(callbackResult.data[1])
       }
 
     // type = text
