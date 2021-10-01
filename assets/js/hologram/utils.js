@@ -43,6 +43,10 @@ export default class Utils {
     return boxedValue.type === "nil"
   }
 
+  static isNumber(boxedValue) {
+    return boxedValue.type === "float" || boxedValue.type === "integer"
+  }
+
   static isTruthy(boxedValue) {
     return !Utils.isFalsy(boxedValue)
   }

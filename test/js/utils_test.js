@@ -110,6 +110,23 @@ describe("isNil()", () => {
   })
 })
 
+describe("isNumber()", () => {
+  it("returns true for boxed floats", () => {
+    const result = Utils.isNumber({type: "float", value: 1.0})
+    assert.isTrue(result)
+  })
+
+  it("returns true for boxed integers", () => {
+    const result = Utils.isNumber({type: "integer", value: 1})
+    assert.isTrue(result)
+  })
+
+  it("returns false for boxed types other than float or integer", () => {
+    const result = Utils.isNumber({type: "string", value: "1"})
+    assert.isFalse(result)
+  })
+})
+
 describe("isTruthy()", () => {
   it("returns false for boxed false value", () => {
     const arg = {type: "boolean", value: false}
