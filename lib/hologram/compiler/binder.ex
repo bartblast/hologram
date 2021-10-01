@@ -1,7 +1,7 @@
 defmodule Hologram.Compiler.Binder do
   alias Hologram.Compiler.IR.{AccessOperator, MapType, Variable}
 
-  def bind(_, path \\ [])
+  def bind(value, path \\ [])
 
   def bind(%MapType{data: data}, path) do
     Enum.reduce(data, [], fn {key, value}, acc ->
