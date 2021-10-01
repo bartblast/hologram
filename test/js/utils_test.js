@@ -1,6 +1,7 @@
 "use strict";
 
 import { assert, assertFreezed } from "./support/commons";
+import HologramNotImplementedError from "../../assets/js/hologram/errors";
 import Utils from "../../assets/js/hologram/utils";
 
 describe("clone()", () => {
@@ -132,7 +133,27 @@ describe("isTruthy()", () => {
   })
 })
 
+describe("serialize()", () => {
+  it("serializes atom boxed value", () => {
+    const arg = {type: "atom", value: "test"}
+    const result = Utils.serialize(arg)
 
+    assert.equal(result, "~atom[test]")
+  })
+
+  it("serializes string boxed value", () => {
+    const arg = {type: "string", value: "test"}
+    const result = Utils.serialize(arg)
+
+    assert.equal(result, "~string[test]")
+  })
+
+  it("throws an error for not implemented types", () => {
+    const arg = {type: "not implemented", value: "test"}
+    const expected_message = 'Utils.serialize(): boxedValue = {"type":"not implemented","value":"test"}'
+    assert.throw(() => { Utils.serialize(arg) }, HologramNotImplementedError, expected_message);
+  })
+})
 
 
 
@@ -236,23 +257,3 @@ describe("keywordToMap()", () => {
   })
 })
 
-describe("serialize()", () => {
-  it("serializes atom", () => {
-    const arg = {type: "atom", value: "test"}
-    const result = Utils.serialize(arg)
-
-    assert.equal(result, "~atom[test]")
-  })
-
-  it("serializes string", () => {
-    const arg = {type: "string", value: "test"}
-    const result = Utils.serialize(arg)
-
-    assert.equal(result, "~string[test]")
-  })
-
-  it("throws an error for unsupported types", () => {
-    const arg = {type: "invalid", value: "test"}
-    assert.throw(() => { Utils.serialize(arg) }, "Not implemented, at Utils.serialize()");
-  })
-})
