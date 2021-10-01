@@ -1,6 +1,6 @@
 "use strict";
 
-import { assert } from "./support/commons";
+import { assert, assertFreezed } from "./support/commons";
 import Utils from "../../assets/js/hologram/utils";
 
 describe("clone()", () => {
@@ -33,8 +33,7 @@ describe("freeze()", () => {
     }
 
     Utils.freeze(obj)
-    
-    assert.throw(() => { obj.a.b.c.d = 2 }, TypeError, /read only/);
+    assertFreezed(obj)
   })
 })
 
