@@ -37,26 +37,8 @@ describe("eval()", () => {
   })
 })
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 describe("freeze()", () => {
-  it("freezes the object and all of its properties recursively (deep freeze)", () => {
+  it("freezes object and all of its properties recursively (deep freeze)", () => {
     let obj = {
       a: {
         b: {
@@ -71,6 +53,24 @@ describe("freeze()", () => {
     assertFreezed(obj)
   })
 })
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 describe("isFalse()", () => {
   it("is false", () => {

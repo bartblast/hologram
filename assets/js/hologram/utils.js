@@ -14,21 +14,7 @@ export default class Utils {
     return Utils.freeze(result)
   }
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+  // based on deepFreeze() from: https://developer.mozilla.org/pl/docs/Web/JavaScript/Reference/Global_Objects/Object/freeze
   static freeze(obj) {
     const props = Object.getOwnPropertyNames(obj);
     
@@ -42,6 +28,21 @@ export default class Utils {
   
     return Object.freeze(obj);
   }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
   static isFalse(arg) {
     return arg.type == "boolean" && arg.value == false
