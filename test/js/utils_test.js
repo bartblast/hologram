@@ -54,39 +54,39 @@ describe("freeze()", () => {
   })
 })
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 describe("isFalse()", () => {
-  it("is false", () => {
+  it("returns true for boxed false value", () => {
     const arg = {type: "boolean", value: false}
     const result = Utils.isFalse(arg)
 
     assert.isTrue(result)
   })
 
-  it("is not false", () => {
+  it("returns false for values other than boxed false value", () => {
     const arg = {type: "boolean", value: true}
     const result = Utils.isFalse(arg)
     
     assert.isFalse(result)
   })
 })
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 describe("isFalsy()", () => {
   it("is false", () => {

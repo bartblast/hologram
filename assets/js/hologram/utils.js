@@ -29,24 +29,23 @@ export default class Utils {
     return Object.freeze(obj);
   }
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-  static isFalse(arg) {
-    return arg.type == "boolean" && arg.value == false
+  static isFalse(boxedValue) {
+    return boxedValue.type === "boolean" && boxedValue.value === false
   }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
   static isFalsy(arg) {
     return Utils.isFalse(arg) || Utils.isNil(arg)
