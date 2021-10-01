@@ -2,7 +2,7 @@ defmodule Hologram.E2E.Page3 do
   use Hologram.Page
   alias Hologram.E2E.{Component1, Component2}, warn: false
 
-  route("/e2e/page-3")
+  route "/e2e/page-3"
 
   def state do
     %{
