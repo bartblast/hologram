@@ -58,26 +58,20 @@ export default class Kernel {
     return Utils.freeze({type: "boolean", value: value})
   }
 
+  static if(condition, doClause, elseClause) {
+    let result;
+
+    if (Type.isTruthy(condition())) {
+      result = doClause()
+    } else {
+      result = elseClause()
+    }
+
+    return Utils.freeze(result)
+  }
+  
   static to_string(boxedValue) {
     const value = `${boxedValue.value.toString()}`
     return Utils.freeze({type: 'string', value: value})
-  }
-
-
-
-
-
-
-
-
-
-  static if(condition, doClause, elseClause) {
-    const conditionResult = condition()
-
-    if (Type.isTruthy(conditionResult)) {
-      return doClause()
-    } else {
-      return elseClause()
-    }
   }
 }

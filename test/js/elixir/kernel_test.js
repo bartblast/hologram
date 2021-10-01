@@ -237,6 +237,37 @@ describe("$equal_to()", () => {
   })
 })
 
+describe("if()", () => {
+  it("returns doClause result if condition is truthy", () => {
+    const expected = {type: "integer", value: 1}
+    const condition = (function() { return {type: "boolean", value: true} })
+    const doClause = (function() { return expected })
+    const elseClause = (function() { return {type: "integer", value: 2} })
+    
+    const result = Kernel.if(condition, doClause, elseClause)
+    assert.equal(result, expected) 
+  })
+
+  it("returns elseClause result if condition is not truthy", () => {
+    const expected = {type: "integer", value: 2}
+    const condition = (function() { return {type: "boolean", value: false} })
+    const doClause = (function() { return {type: "integer", value: 1} })
+    const elseClause = (function() { return expected })
+    
+    const result = Kernel.if(condition, doClause, elseClause)
+    assert.equal(result, expected) 
+  })
+
+  it("returns freezed object", () => {
+    const condition = (function() { return {type: "boolean", value: true} })
+    const doClause = (function() { return {type: "integer", value: 1} })
+    const elseClause = (function() { return {type: "integer", value: 2} })
+    
+    const result = Kernel.if(condition, doClause, elseClause)
+    assertFreezed(result)
+  })
+})
+
 describe("to_string()", () => {
   it("converts boxed value to boxed string type value", () => {
     const val = {type: "integer", value: 1}
@@ -254,41 +285,3 @@ describe("to_string()", () => {
     assertFreezed(result)
   })
 })
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-describe("if()", () => {
-  it("condition is truthy", () => {
-    const expected = {type: "integer", value: 1}
-    const condition = (function() { return {type: "boolean", value: true} })
-    const doClause = (function() { return expected })
-    const elseClause = (function() { return {type: "integer", value: 2} })
-    
-    const result = Kernel.if(condition, doClause, elseClause)
-    assert.equal(result, expected) 
-  })
-
-  it("condition is not truthy", () => {
-    const expected = {type: "integer", value: 2}
-    const condition = (function() { return {type: "boolean", value: false} })
-    const doClause = (function() { return {type: "integer", value: 1} })
-    const elseClause = (function() { return expected })
-    
-    const result = Kernel.if(condition, doClause, elseClause)
-    assert.equal(result, expected) 
-  })
-})
-
