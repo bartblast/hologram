@@ -7,6 +7,10 @@ export default class Type {
     return Utils.freeze({type: "atom", value: value})
   }
 
+  static atomKey(key) {
+    return `~atom[${key}]`
+  }
+
   static boolean(value) {
     return Utils.freeze({type: "boolean", value: value})
   }

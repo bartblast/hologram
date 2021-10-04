@@ -17,6 +17,13 @@ describe("atom()", () => {
   })
 })
 
+describe("atomKey()", () => {
+  it("returns serialized boxed atom value", () => {
+    const result = Type.atomKey("test")
+    assert.equal(result, "~atom[test]")
+  })
+})
+
 describe("boolean()", () => {
   it("returns boxed boolean value", () => {
     const expected = {type: "boolean", value: true}
