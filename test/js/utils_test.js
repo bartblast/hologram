@@ -1,6 +1,6 @@
 "use strict";
 
-import { assert, assertFreezed } from "./support/commons";
+import { assert, assertFrozen, assertNotFrozen } from "./support/commons";
 import HologramNotImplementedError from "../../assets/js/hologram/errors";
 import Utils from "../../assets/js/hologram/utils";
 
@@ -17,8 +17,8 @@ describe("clone()", () => {
     assert.notEqual(result, obj)
   })
 
-  it("returns freezed object", () => {
-    assertFreezed(result)
+  it("returns unfrozen object", () => {
+    assertNotFrozen(result)
   })
 })
 
@@ -33,8 +33,8 @@ describe("eval()", () => {
     assert.deepStrictEqual(result, {value: 4})
   })
 
-  it("returns freezed object", () => {
-    assertFreezed(result)
+  it("returns frozen object", () => {
+    assertFrozen(result)
   })
 })
 
@@ -51,7 +51,7 @@ describe("freeze()", () => {
     }
 
     Utils.freeze(obj)
-    assertFreezed(obj)
+    assertFrozen(obj)
   })
 })
 

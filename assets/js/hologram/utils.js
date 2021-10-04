@@ -7,8 +7,7 @@ import HologramNotImplementedError from "./errors";
 
 export default class Utils {
   static clone(obj) {
-    const cloned = cloneDeep(obj)
-    return Utils.freeze(cloned)
+    return cloneDeep(obj)
   }
 
   static eval(code) {
