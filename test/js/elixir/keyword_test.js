@@ -1,12 +1,12 @@
 "use strict";
 
-import { assert } from "../support/commons"
+import { assertBoxedFalse, assertBoxedTrue } from "../support/commons"
 
 import Keyword from "../../../assets/js/hologram/elixir/keyword";
-import Type from "../../../assets/js/hologram/type";
 
 describe("has_key$question()", () => {
   let keywords;
+
   beforeEach(() => {
     keywords = {
       type: "list",
@@ -29,19 +29,17 @@ describe("has_key$question()", () => {
     }
   })
   
-  it("has key", () => {
+  it("returns boxed true if the keyword list has the key", () => {
     const key = {type: "atom", value: "b"}
     const result = Keyword.has_key$question(keywords, key)
-    const expected = Type.boolean(true)
 
-    assert.deepStrictEqual(result, expected)
+    assertBoxedTrue(result)
   })
 
-  it("doesn't have key", () => {
+  it("returns boxed false if the keyword list doesn't have the key", () => {
     const key = {type: "atom", value: "c"}
     const result = Keyword.has_key$question(keywords, key)
-    const expected = Type.boolean(false)
 
-    assert.deepStrictEqual(result, expected)
+    assertBoxedFalse(result)
   })
 })
