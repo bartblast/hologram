@@ -53,6 +53,10 @@ export default class Type {
     return Utils.freeze({type: "list", data: elems})
   }
 
+  static map(elems) {
+    return Utils.freeze({type: "map", data: elems})
+  }
+
   static module(className) {
     return Utils.freeze({type: "module", class_name: className})
   }

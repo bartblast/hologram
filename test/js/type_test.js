@@ -274,6 +274,24 @@ describe("list()", () => {
   })
 })
 
+describe("map()", () => {
+  let elems, result;
+
+  beforeEach(() => {
+    elems = {"~atom[a]": Type.integer(1), "~atom[b]": Type.integer(2)}
+    result = Type.map(elems)
+  })
+
+  it("returns boxed map value", () => {
+    const expected = {type: "map", data: elems}
+    assert.deepStrictEqual(result, expected)
+  })
+
+  it("returns frozen object", () => {
+    assertFrozen(result)
+  })
+})
+
 describe("module()", () => {
   it("returns boxed module value", () => {
     const expected = {type: "module", class_name: "Elixir_ClassStub"}
