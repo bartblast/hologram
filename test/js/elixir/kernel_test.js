@@ -4,6 +4,7 @@ import { assert, assertBoxedFalse, assertBoxedTrue, assertFreezed } from "../sup
 import HologramNotImplementedError from "../../../assets/js/hologram/errors";
 import Kernel from "../../../assets/js/hologram/elixir/kernel";
 import Type from "../../../assets/js/hologram/type";
+import Utils from "../../../assets/js/hologram/utils";
 
 describe("$add()", () => {
   it("adds integer and integer", () => {
@@ -86,13 +87,13 @@ describe("$dot()", () => {
   beforeEach(() => {
     val = {type: "integer", value: 2}
 
-    map =  {
+    map =  Utils.freeze({
       type: "map", 
       data: {
         "~atom[a]": {type: "integer", value: 1},
         "~atom[b]": val
       }
-    }
+    })
 
     key = {type: "atom", value: "b"}
     result = Kernel.$dot(map, key)

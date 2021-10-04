@@ -35,8 +35,7 @@ export default class Kernel {
   }
 
   static $dot(boxedMap, boxedKey) {
-    const result = boxedMap.data[Utils.serialize(boxedKey)]
-    return Utils.clone(result)
+    return boxedMap.data[Utils.serialize(boxedKey)]
   }
 
   static $equal_to(boxedVal1, boxedVal2) {
