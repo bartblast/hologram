@@ -16,8 +16,12 @@ export function assertBoxedTrue(boxedValue) {
   assert.isTrue(Type.isTrue(boxedValue))
 }
 
-export function assertFreezed(obj) {
-  assert.throw(() => {obj.__freezeTest__ = 1}, TypeError, /object is not extensible/);
+export function assertFrozen(obj) {
+  assert.isTrue(Object.isFrozen(obj))
+}
+
+export function assertNotFrozen(obj) {
+  assert.isFalse(Object.isFrozen(obj))
 }
 
 export function debug(obj) {

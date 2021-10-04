@@ -1,6 +1,6 @@
 "use strict";
 
-import { assert, assertFreezed } from "../support/commons"
+import { assert, assertFrozen } from "../support/commons"
 import String from "../../../assets/js/hologram/elixir/string";
 import Utils from "../../../assets/js/hologram/utils";
 
@@ -17,7 +17,7 @@ describe("to_atom()", () => {
     assert.deepStrictEqual(result, expected)
   })
 
-  it("returns freezed object", () => {
-    assertFreezed(result)
+  it("returns frozen object", () => {
+    assertFrozen(result)
   })
 })

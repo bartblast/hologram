@@ -1,6 +1,6 @@
 "use strict";
 
-import { assert, assertFreezed } from "./support/commons";
+import { assert, assertFrozen } from "./support/commons";
 import Type from "../../assets/js/hologram/type";
 import Utils from "../../assets/js/hologram/utils";
 
@@ -11,9 +11,9 @@ describe("atom()", () => {
     assert.deepStrictEqual(result, expected)
   })
 
-  it("returns freezed object", () => {
+  it("returns frozen object", () => {
     const result = Type.atom("test")
-    assertFreezed(result)
+    assertFrozen(result)
   })
 })
 
@@ -24,9 +24,9 @@ describe("boolean()", () => {
     assert.deepStrictEqual(result, expected)
   })
 
-  it("returns freezed object", () => {
+  it("returns frozen object", () => {
     const result = Type.boolean(true)
-    assertFreezed(result)
+    assertFrozen(result)
   })
 })
 
@@ -37,9 +37,9 @@ describe("integer()", () => {
     assert.deepStrictEqual(result, expected)
   })
 
-  it("returns freezed object", () => {
+  it("returns frozen object", () => {
     const result = Type.integer(1)
-    assertFreezed(result)
+    assertFrozen(result)
   })
 })
 
@@ -253,9 +253,9 @@ describe("keywordToMap()", () => {
     assert.deepStrictEqual(result, expected) 
   })
 
-  it("returns freezed object", () => {
+  it("returns frozen object", () => {
     const result = Type.keywordToMap({type: "list", data: []})
-    assertFreezed(result)
+    assertFrozen(result)
   })
 })
 
@@ -268,9 +268,9 @@ describe("list()", () => {
     assert.deepStrictEqual(result, expected)
   })
 
-  it("returns freezed object", () => {
+  it("returns frozen object", () => {
     const result = Type.list([[Type.integer(1), Type.integer(2)]])
-    assertFreezed(result)
+    assertFrozen(result)
   })
 })
 
@@ -282,8 +282,8 @@ describe("module()", () => {
   })
 
 
-  it("returns freezed object", () => {
+  it("returns frozen object", () => {
     const result = Type.module("Elixir_ClassStub")
-    assertFreezed(result)
+    assertFrozen(result)
   })
 })

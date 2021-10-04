@@ -1,6 +1,6 @@
 "use strict";
 
-import { assert, assertBoxedFalse, assertBoxedTrue, assertFreezed } from "../support/commons"
+import { assert, assertBoxedFalse, assertBoxedTrue, assertFrozen } from "../support/commons"
 import HologramNotImplementedError from "../../../assets/js/hologram/errors";
 import Kernel from "../../../assets/js/hologram/elixir/kernel";
 import Type from "../../../assets/js/hologram/type";
@@ -47,12 +47,12 @@ describe("$add()", () => {
     assert.deepStrictEqual(result, expected) 
   })
 
-  it("returns freezed object", () => {
+  it("returns frozen object", () => {
     const arg1 = {type: "integer", value: 1}
     const arg2 = {type: "integer", value: 2}
     const result = Kernel.$add(arg1, arg2)
     
-    assertFreezed(result)
+    assertFrozen(result)
   })
 })
 
@@ -103,8 +103,8 @@ describe("$dot()", () => {
     assert.deepStrictEqual(result, val) 
   })
 
-  it("returns freezed object", () => {
-    assertFreezed(result)
+  it("returns frozen object", () => {
+    assertFrozen(result)
   })
 })
 
@@ -232,11 +232,11 @@ describe("$equal_to()", () => {
     assert.throw(() => { Kernel.$equal_to(val, val) }, HologramNotImplementedError, expectedMessage);
   })
 
-  it("returns freezed object", () => {
+  it("returns frozen object", () => {
     const val = {type: "integer", value: 1}
     const result = Kernel.$equal_to(val, val)
     
-    assertFreezed(result)
+    assertFrozen(result)
   })
 })
 
@@ -261,13 +261,13 @@ describe("if()", () => {
     assert.equal(result, expected) 
   })
 
-  it("returns freezed object", () => {
+  it("returns frozen object", () => {
     const condition = (function() { return {type: "boolean", value: true} })
     const doClause = (function() { return {type: "integer", value: 1} })
     const elseClause = (function() { return {type: "integer", value: 2} })
     
     const result = Kernel.if(condition, doClause, elseClause)
-    assertFreezed(result)
+    assertFrozen(result)
   })
 })
 
@@ -281,10 +281,10 @@ describe("to_string()", () => {
     assert.deepStrictEqual(result, expected)
   })
 
-  it("returns freezed object", () => {
+  it("returns frozen object", () => {
     const val = {type: "integer", value: 1}
     const result = Kernel.to_string(val)
     
-    assertFreezed(result)
+    assertFrozen(result)
   })
 })
