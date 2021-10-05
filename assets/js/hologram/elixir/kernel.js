@@ -56,7 +56,7 @@ export default class Kernel {
         throw new HologramNotImplementedError(message)
     }
 
-    return Utils.freeze({type: "boolean", value: value})
+    return Type.boolean(value)
   }
 
   static if(condition, doClause, elseClause) {
@@ -73,6 +73,6 @@ export default class Kernel {
 
   static to_string(boxedValue) {
     const value = `${boxedValue.value.toString()}`
-    return Utils.freeze({type: 'string', value: value})
+    return Type.string(value)
   }
 }
