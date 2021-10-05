@@ -85,6 +85,15 @@ export default class Runtime {
   }
 
   // TODO: refactor & test
+  static getInstance(window) {
+    if (!window.hologramRuntime) {
+      window.hologramRuntime = new Runtime(window)
+    }
+
+    return window.hologramRuntime
+  }
+
+  // TODO: refactor & test
   static getModule(module) {
     let name;
 

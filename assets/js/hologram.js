@@ -9,19 +9,9 @@ import IO from "./hologram/elixir/io"
 import Kernel from "./hologram/elixir/kernel"
 import Keyword from "./hologram/elixir/keyword"
 import Map from "./hologram/elixir/map"
-import PatternMatcher from "./hologram/pattern_matcher";
 import String from "./hologram/elixir/string"
 
 export default class Hologram {
-  // TODO: refactor & test
-  static getRuntime(window) {
-    if (!window.hologramRuntime) {
-      window.hologramRuntime = new Runtime(window)
-    }
-
-    return window.hologramRuntime
-  }
-
   // TODO: refactor & test
   static onReady(document, callback) {
     if (
@@ -40,7 +30,7 @@ export default class Hologram {
   // TODO: refactor & test
   static run(window, pageModule, serializedState) {
     Hologram.onReady(window.document, () => {
-      Hologram.getRuntime(window).mountPage(pageModule, serializedState)
+      Runtime.getInstance(window).mountPage(pageModule, serializedState)
     })
   }
 }
