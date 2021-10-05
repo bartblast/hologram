@@ -1,22 +1,25 @@
 "use strict";
 
-import { assert } from "../support/commons"
+import { assert, assertFrozen } from "../support/commons"
 import Map from "../../../assets/js/hologram/elixir/map";
+import Type from "../../../assets/js/hologram/type";
 
 describe("put()", () => {
-  it("adds a key-value pair to the map", () => {
-    const map =  {
-      type: "map", 
-      data: {
-        "~atom[a]": {type: "integer", value: 1},
-        "~atom[b]": {type: "integer", value: 2}
-      }
-    }
-    
-    const key = {type: "atom", value: "c"}
-    const value = {type: "integer", value: 3}
-    const result = Map.put(map, key, value)
+  let data, key, map, result, value;
 
+  beforeEach(() => {
+    data = {}
+    data[Type.atomKey("a")] = Type.integer(1)
+    data[Type.atomKey("b")] = Type.integer(2)
+    map = Type.map(data)
+    
+    key = Type.atom("c")
+    value = Type.integer(3)
+
+    result = Map.put(map, key, value)
+  })
+
+  it("adds the key-value pair to the map", () => {
     const expected =  {
       type: "map", 
       data: {
@@ -27,6 +30,13 @@ describe("put()", () => {
     }
 
     assert.deepStrictEqual(result, expected) 
+  })
+
+  it("clones the orignal map object", () => {
     assert.notEqual(result, map)
+  })
+
+  it("returns frozen object", () => {    
+    assertFrozen(result)
   })
 })

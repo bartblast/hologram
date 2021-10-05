@@ -1,12 +1,13 @@
 "use strict";
 
+import Type from "../type";
 import Utils from "../utils"
 
 export default class Map {
   static put(map, key, value) {
     let newMap = Utils.clone(map)
-    newMap.data[Utils.serialize(key)] = value
+    newMap.data[Type.mapKey(key)] = value
 
-    return newMap;
+    return Utils.freeze(newMap);
   }
 }
