@@ -35,7 +35,7 @@ export default class Kernel {
   }
 
   static $dot(boxedMap, boxedKey) {
-    return boxedMap.data[Type.mapKey(boxedKey)]
+    return boxedMap.data[Type.serializedKey(boxedKey)]
   }
 
   static $equal_to(boxedVal1, boxedVal2) {

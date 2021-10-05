@@ -16,6 +16,10 @@ export default class Type {
     return Utils.freeze({type: "boolean", value: value})
   }
 
+  static float(value) {
+    return Utils.freeze({type: "float", value: value})
+  }
+
   static integer(value) {
     return Utils.freeze({type: "integer", value: value})
   }
@@ -46,7 +50,7 @@ export default class Type {
 
   static keywordToMap(keyword) {
     const result = keyword.data.reduce((acc, elem) => {
-      const key = Type.mapKey(elem.data[0])
+      const key = Type.serializedKey(elem.data[0])
       acc.data[key] = elem.data[1]
       return acc
     }, {type: "map", data: {}})
@@ -62,25 +66,37 @@ export default class Type {
     return Utils.freeze({type: "map", data: elems})
   }
 
-  static mapKey(boxedValue) {
-    switch (boxedValue.type) {
-      case "atom":
-        return `~atom[${boxedValue.value}]`
-
-      case "string":
-        return `~string[${boxedValue.value}]`
-        
-      default:
-        const message = `Type.mapKey(): boxedValue = ${JSON.stringify(boxedValue)}`
-        throw new HologramNotImplementedError(message)
-    }
-  }
-
   static module(className) {
     return Utils.freeze({type: "module", class_name: className})
   }
 
+  static nil() {
+    return Utils.freeze({type: "nil"})
+  }
+
+  static serializedKey(boxedValue) {
+    switch (boxedValue.type) {
+      case "atom":
+        return Type.atomKey(boxedValue.value)
+
+      case "string":
+        return Type.stringKey(boxedValue.value)
+        
+      default:
+        const message = `Type.serializedKey(): boxedValue = ${JSON.stringify(boxedValue)}`
+        throw new HologramNotImplementedError(message)
+    }
+  }
+
   static string(value) {
     return Utils.freeze({type: "string", value: value})
+  }
+
+  static stringKey(key) {
+    return `~string[${key}]`
+  }
+
+  static tuple(elems) {
+    return Utils.freeze({type: "tuple", data: elems})
   }
 }
