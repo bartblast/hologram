@@ -10,17 +10,12 @@ describe("member$question()", () => {
   let list;
 
   beforeEach(() => {
-    list = {
-      type: "list",
-      data: [
-        {type: "integer", value: 1},
-        {type: "integer", value: 2}
-      ]
-    }
+    const elems = [Type.integer(1), Type.integer(2)]
+    list = Type.list(elems)
   })
 
   it("returns boxed true boolean value if the list contains the element", () => {
-    const elem = {type: "integer", value: 2}
+    const elem = Type.integer(2)
     const result = Enum.member$question(list, elem)
     const expected = Type.boolean(true)
 
@@ -28,7 +23,7 @@ describe("member$question()", () => {
   })
 
   it("returns boxed false boolean value if the list doesn't contain the element", () => {
-    const elem = {type: "integer", value: 3}
+    const elem = Type.integer(3)
     const result = Enum.member$question(list, elem)
     const expected = Type.boolean(false)
 
@@ -37,8 +32,9 @@ describe("member$question()", () => {
 
   it("throws an error for not implemented enumerable types", () => {
     const enumerable = {type: "not implemented", value: "test"}
-    const elem = {type: "integer", value: 1}
+    const elem = Type.integer(1)
     const expectedMessage = 'Enum.member$question(): enumerable = {"type":"not implemented","value":"test"}, elem = {"type":"integer","value":1}'
+
     assert.throw(() => { Enum.member$question(enumerable, elem) }, HologramNotImplementedError, expectedMessage);
   })
 })
