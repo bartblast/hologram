@@ -317,6 +317,20 @@ describe("nil()", () => {
   })
 })
 
+describe("placeholder()", () => {
+  it("returns boxed placeholder value", () => {
+    const expected = {type: "placeholder"}
+    const result = Type.placeholder()
+
+    assert.deepStrictEqual(result, expected)
+  })
+
+  it("returns frozen object", () => {
+    const result = Type.placeholder()
+    assertFrozen(result)
+  })
+})
+
 describe("serializedKey()", () => {
   it("serializes boxed atom value for use as a boxed map key", () => {
     const arg = Type.atom("test")

@@ -74,6 +74,10 @@ export default class Type {
     return Utils.freeze({type: "nil"})
   }
 
+  static placeholder() {
+    return Utils.freeze({type: "placeholder"})
+  }
+
   static serializedKey(boxedValue) {
     switch (boxedValue.type) {
       case "atom":
