@@ -1,4 +1,4 @@
- "use strict";
+"use strict";
 
 import { assert, assertFrozen } from "./support/commons";
 import HologramNotImplementedError from "../../assets/js/hologram/errors";
