@@ -5,13 +5,13 @@ import Map from "../../../assets/js/hologram/elixir/map";
 import Type from "../../../assets/js/hologram/type";
 
 describe("put()", () => {
-  let data, key, map, result, value;
+  let elems, key, map, result, value;
 
   beforeEach(() => {
-    data = {}
-    data[Type.atomKey("a")] = Type.integer(1)
-    data[Type.atomKey("b")] = Type.integer(2)
-    map = Type.map(data)
+    elems = {}
+    elems[Type.atomKey("a")] = Type.integer(1)
+    elems[Type.atomKey("b")] = Type.integer(2)
+    map = Type.map(elems)
     
     key = Type.atom("c")
     value = Type.integer(3)
@@ -20,11 +20,11 @@ describe("put()", () => {
   })
 
   it("adds the key-value pair to the map", () => {
-    data = {}
-    data[Type.atomKey("a")] = Type.integer(1)
-    data[Type.atomKey("b")] = Type.integer(2)
-    data[Type.atomKey("c")] = Type.integer(3)
-    const expected = Type.map(data)
+    elems = {}
+    elems[Type.atomKey("a")] = Type.integer(1)
+    elems[Type.atomKey("b")] = Type.integer(2)
+    elems[Type.atomKey("c")] = Type.integer(3)
+    const expected = Type.map(elems)
 
     assert.deepStrictEqual(result, expected) 
   })
