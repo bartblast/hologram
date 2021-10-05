@@ -1,8 +1,5 @@
 "use strict";
 
-// see: https://www.blazemeter.com/blog/the-correct-way-to-import-lodash-libraries-a-benchmark
-import cloneDeep from "lodash/cloneDeep";
-
 import Runtime from "./hologram/runtime"
 import Utils from "./hologram/utils"
 
@@ -12,6 +9,7 @@ import IO from "./hologram/elixir/io"
 import Kernel from "./hologram/elixir/kernel"
 import Keyword from "./hologram/elixir/keyword"
 import Map from "./hologram/elixir/map"
+import PatternMatcher from "./hologram/pattern_matcher";
 import String from "./hologram/elixir/string"
 
 export default class Hologram {
@@ -22,24 +20,6 @@ export default class Hologram {
     }
 
     return window.hologramRuntime
-  }
-
-  // TODO: refactor & test
-  static isPatternMatched(left, right) {
-    let lType = left.type;
-    let rType = right.type;
-
-    if (lType != 'placeholder') {
-      if (lType != rType) {
-        return false;
-      }
-
-      if (lType == 'atom' && left.value != right.value) {
-        return false;
-      }
-    }
-
-    return true;
   }
 
   // TODO: refactor & test
@@ -69,7 +49,7 @@ export default class Hologram {
     }
 
     for (let i = 0; i < params.length; ++ i) {
-      if (!Hologram.isPatternMatched(params[i], args[i])) {
+      if (!PatternMatcher.isPatternMatched(params[i], args[i])) {
         return false;
       }
     }
