@@ -38,7 +38,7 @@ defmodule Hologram.Compiler.FunctionDefinitionGenerator do
 
       acc
       |> Formatter.maybe_append_new_line(
-        "#{statement} (Hologram.patternMatchFunctionArgs(#{params}, arguments)) {"
+        "#{statement} (PatternMatcher.isFunctionArgsPatternMatched(#{params}, arguments)) {"
       )
       |> Formatter.maybe_append_new_line(vars)
       |> Formatter.maybe_append_new_line(body)

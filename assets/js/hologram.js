@@ -43,21 +43,6 @@ export default class Hologram {
   }
 
   // TODO: refactor & test
-  static patternMatchFunctionArgs(params, args) {
-    if (args.length != params.length) {
-      return false;
-    }
-
-    for (let i = 0; i < params.length; ++ i) {
-      if (!PatternMatcher.isPatternMatched(params[i], args[i])) {
-        return false;
-      }
-    }
-
-    return true;
-  }
-
-  // TODO: refactor & test
   static run(window, pageModule, serializedState) {
     Hologram.onReady(window.document, () => {
       Hologram.getRuntime(window).mountPage(pageModule, serializedState)
