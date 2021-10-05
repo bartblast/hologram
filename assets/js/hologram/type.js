@@ -79,4 +79,8 @@ export default class Type {
   static module(className) {
     return Utils.freeze({type: "module", class_name: className})
   }
+
+  static string(value) {
+    return Utils.freeze({type: "string", value: value})
+  }
 }

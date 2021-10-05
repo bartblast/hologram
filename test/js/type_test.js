@@ -309,7 +309,7 @@ describe("mapKey()", () => {
   })
 
   it("generates boxed string key for boxed map", () => {
-    const arg = {type: "string", value: "test"}
+    const arg = Type.string("test")
     const result = Type.mapKey(arg)
 
     assert.equal(result, "~string[test]")
@@ -332,6 +332,19 @@ describe("module()", () => {
 
   it("returns frozen object", () => {
     const result = Type.module("Elixir_ClassStub")
+    assertFrozen(result)
+  })
+})
+
+describe("string()", () => {
+  it("returns boxed string value", () => {
+    const expected = {type: "string", value: "test"}
+    const result = Type.string("test")
+    assert.deepStrictEqual(result, expected)
+  })
+
+  it("returns frozen object", () => {
+    const result = Type.string("test")
     assertFrozen(result)
   })
 })
