@@ -1,7 +1,6 @@
 "use strict";
 
 import { assert, assertFrozen, assertNotFrozen } from "./support/commons";
-import HologramNotImplementedError from "../../assets/js/hologram/errors";
 import Utils from "../../assets/js/hologram/utils";
 
 describe("clone()", () => {
@@ -52,27 +51,5 @@ describe("freeze()", () => {
 
     Utils.freeze(obj)
     assertFrozen(obj)
-  })
-})
-
-describe("serialize()", () => {
-  it("serializes atom boxed value", () => {
-    const arg = {type: "atom", value: "test"}
-    const result = Utils.serialize(arg)
-
-    assert.equal(result, "~atom[test]")
-  })
-
-  it("serializes string boxed value", () => {
-    const arg = {type: "string", value: "test"}
-    const result = Utils.serialize(arg)
-
-    assert.equal(result, "~string[test]")
-  })
-
-  it("throws an error for not implemented types", () => {
-    const arg = {type: "not implemented", value: "test"}
-    const expectedMessage = 'Utils.serialize(): boxedValue = {"type":"not implemented","value":"test"}'
-    assert.throw(() => { Utils.serialize(arg) }, HologramNotImplementedError, expectedMessage);
   })
 })

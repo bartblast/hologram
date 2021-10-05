@@ -1,5 +1,6 @@
 "use strict";
 
+import HologramNotImplementedError from "./errors";
 import Utils from "./utils"
 
 export default class Type {
@@ -45,7 +46,7 @@ export default class Type {
 
   static keywordToMap(keyword) {
     const result = keyword.data.reduce((acc, elem) => {
-      const key = Utils.serialize(elem.data[0])
+      const key = Type.mapKey(elem.data[0])
       acc.data[key] = elem.data[1]
       return acc
     }, {type: "map", data: {}})
@@ -59,6 +60,20 @@ export default class Type {
 
   static map(elems) {
     return Utils.freeze({type: "map", data: elems})
+  }
+
+  static mapKey(boxedValue) {
+    switch (boxedValue.type) {
+      case "atom":
+        return `~atom[${boxedValue.value}]`
+
+      case "string":
+        return `~string[${boxedValue.value}]`
+        
+      default:
+        const message = `Type.mapKey(): boxedValue = ${JSON.stringify(boxedValue)}`
+        throw new HologramNotImplementedError(message)
+    }
   }
 
   static module(className) {

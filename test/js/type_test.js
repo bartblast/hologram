@@ -1,6 +1,7 @@
-"use strict";
+ "use strict";
 
 import { assert, assertFrozen } from "./support/commons";
+import HologramNotImplementedError from "../../assets/js/hologram/errors";
 import Type from "../../assets/js/hologram/type";
 import Utils from "../../assets/js/hologram/utils";
 
@@ -296,6 +297,28 @@ describe("map()", () => {
 
   it("returns frozen object", () => {
     assertFrozen(result)
+  })
+})
+
+describe("mapKey()", () => {
+  it("generates boxed atom key for boxed map", () => {
+    const arg = Type.atom("test")
+    const result = Type.mapKey(arg)
+
+    assert.equal(result, "~atom[test]")
+  })
+
+  it("generates boxed string key for boxed map", () => {
+    const arg = {type: "string", value: "test"}
+    const result = Type.mapKey(arg)
+
+    assert.equal(result, "~string[test]")
+  })
+
+  it("throws an error for not implemented types", () => {
+    const arg = {type: "not implemented", value: "test"}
+    const expectedMessage = 'Type.mapKey(): boxedValue = {"type":"not implemented","value":"test"}'
+    assert.throw(() => { Type.mapKey(arg) }, HologramNotImplementedError, expectedMessage);
   })
 })
 

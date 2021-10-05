@@ -3,8 +3,6 @@
 // see: https://www.blazemeter.com/blog/the-correct-way-to-import-lodash-libraries-a-benchmark
 import cloneDeep from "lodash/cloneDeep";
 
-import HologramNotImplementedError from "./errors";
-
 export default class Utils {
   static clone(obj) {
     return cloneDeep(obj)
@@ -28,19 +26,5 @@ export default class Utils {
     }
   
     return Object.freeze(obj);
-  }
-
-  static serialize(boxedValue) {
-    switch (boxedValue.type) {
-      case "atom":
-        return `~atom[${boxedValue.value}]`
-
-      case "string":
-        return `~string[${boxedValue.value}]`
-        
-      default:
-        const message = `Utils.serialize(): boxedValue = ${JSON.stringify(boxedValue)}`
-        throw new HologramNotImplementedError(message)
-    }
   }
 }
