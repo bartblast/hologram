@@ -2,18 +2,18 @@
 
 import { assert, assertFrozen } from "../support/commons"
 import String from "../../../assets/js/hologram/elixir/string";
-import Utils from "../../../assets/js/hologram/utils";
+import Type from "../../../assets/js/hologram/type";
 
 describe("to_atom()", () => {
   let result;
 
   beforeEach(() => {
-    const arg = Utils.freeze({type: "string", value: "test"})
+    const arg = Type.string("test")
     result = String.to_atom(arg)
   })
 
   it("converts boxed string to boxed atom", () => {
-    const expected = {type: "atom", value: "test"}
+    const expected = Type.atom("test")
     assert.deepStrictEqual(result, expected)
   })
 

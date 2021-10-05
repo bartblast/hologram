@@ -1,10 +1,9 @@
 "use strict";
 
-import Utils from "../utils"
+import Type from "../type";
 
 export default class String {
   static to_atom(boxedString) {
-    const boxedAtom = {type: "atom", value: boxedString.value}
-    return Utils.freeze(boxedAtom)
+    return Type.atom(boxedString.value)
   }
 }
