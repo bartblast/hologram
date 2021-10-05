@@ -20,14 +20,11 @@ describe("put()", () => {
   })
 
   it("adds the key-value pair to the map", () => {
-    const expected =  {
-      type: "map", 
-      data: {
-        "~atom[a]": {type: "integer", value: 1},
-        "~atom[b]": {type: "integer", value: 2},
-        "~atom[c]": {type: "integer", value: 3}
-      }
-    }
+    data = {}
+    data[Type.atomKey("a")] = Type.integer(1)
+    data[Type.atomKey("b")] = Type.integer(2)
+    data[Type.atomKey("c")] = Type.integer(3)
+    const expected = Type.map(data)
 
     assert.deepStrictEqual(result, expected) 
   })
