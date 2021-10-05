@@ -19,12 +19,12 @@ export default class Utils {
     
     for (const prop of props) {
       const val = obj[prop];
-  
+
       if (val && typeof val === "object") {
         Utils.freeze(val);
       }
     }
-  
+
     return Object.freeze(obj);
   }
 }

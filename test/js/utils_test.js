@@ -50,6 +50,9 @@ describe("freeze()", () => {
     }
 
     Utils.freeze(obj)
-    assertFrozen(obj)
+
+    assertFrozen(obj.a)
+    assertFrozen(obj.a.b)
+    assertFrozen(obj.a.b.c)
   })
 })
