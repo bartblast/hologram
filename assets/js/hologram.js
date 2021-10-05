@@ -23,11 +23,6 @@ export default class Hologram {
   }
 
   // TODO: refactor & test
-  static js(js) {
-    Utils.eval(js.value)
-  }
-
-  // TODO: refactor & test
   static onReady(document, callback) {
     if (
       document.readyState === "interactive" ||
