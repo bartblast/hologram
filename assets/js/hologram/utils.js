@@ -8,9 +8,9 @@ export default class Utils {
     return cloneDeep(obj)
   }
 
-  static eval(code) {
+  static eval(code, freeze = true) {
     const result = (new Function(`return (${code});`)());
-    return Utils.freeze(result)
+    return freeze ? Utils.freeze(result) : result
   }
 
   // based on deepFreeze() from: https://developer.mozilla.org/pl/docs/Web/JavaScript/Reference/Global_Objects/Object/freeze

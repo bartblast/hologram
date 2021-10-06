@@ -32,8 +32,13 @@ describe("eval()", () => {
     assert.deepStrictEqual(result, {value: 4})
   })
 
-  it("returns frozen object", () => {
+  it("returns frozen object by default", () => {
     assertFrozen(result)
+  })
+
+  it("returns not frozen object if second arg is false", () => {
+    result = Utils.eval("{value: 2 + 2}", false)
+    assertNotFrozen(result)
   })
 })
 
