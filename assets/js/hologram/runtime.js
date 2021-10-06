@@ -74,6 +74,7 @@ export default class Runtime {
     if (actionResult.type == "tuple") {
       this.state = actionResult.data[0]
 
+      console.debug(actionResult)
       let commandName = {type: "atom", value: actionResult.data[1].value}
 
       let commandParams = {type: "map", data: {}}

@@ -4,10 +4,10 @@ import { assert } from "./support/commons";
 import Client from "../../assets/js/hologram/client";
 import Type from "../../assets/js/hologram/type";
 
-describe("buildMessagePayload()", () => {
+describe("buildCommandPayload()", () => {
   it("builds payload of a command message sent to backend", () => {
     const TestTargetModule = class {}
-    const command = "test_command"
+    const name = Type.atom("test_command")
 
     let elems = {}
     elems[Type.atomKey("a")] = Type.integer(1)
@@ -16,11 +16,11 @@ describe("buildMessagePayload()", () => {
 
     const expected = {
       target_module: {type: "module", className: "TestTargetModule"},
-      command: {type: "atom", value: "test_command"},
+      name: name,
       params: params
     }
 
-    const result = Client.buildMessagePayload(TestTargetModule, command, params)
+    const result = Client.buildCommandPayload(TestTargetModule, name, params)
 
     assert.deepStrictEqual(result, expected);
   });

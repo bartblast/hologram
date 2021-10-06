@@ -37,7 +37,7 @@ defmodule Hologram.Runtime.ChannelTest do
 
     message = %{
       target_module: target_module,
-      command: %{"type" => "atom", "value" => "test_command"},
+      name: %{"type" => "atom", "value" => "test_command"},
       params: %{"type" => "list", data: []}
     }
 
@@ -58,7 +58,7 @@ defmodule Hologram.Runtime.ChannelTest do
 
     message = %{
       target_module: target_module,
-      command: %{"type" => "atom", "value" => "test_command"},
+      name: %{"type" => "atom", "value" => "test_command"},
       params: %{"type" => "list", data: []}
     }
 
@@ -79,7 +79,7 @@ defmodule Hologram.Runtime.ChannelTest do
 
     message = %{
       target_module: target_module,
-      command: %{"type" => "atom", "value" => "test_command"},
+      name: %{"type" => "atom", "value" => "test_command"},
       params: %{
         "type" => "list",
         "data" => [
@@ -118,7 +118,7 @@ defmodule Hologram.Runtime.ChannelTest do
 
     message = %{
       target_module: target_module,
-      command: %{"type" => "atom", "value" => "test_command"},
+      name: %{"type" => "atom", "value" => "test_command"},
       params: %{
         "type" => "list",
         "data" => [
@@ -159,7 +159,7 @@ defmodule Hologram.Runtime.ChannelTest do
 
     message = %{
       target_module: target_module,
-      command: %{"type" => "atom", "value" => "__redirect__"},
+      name: %{"type" => "atom", "value" => "__redirect__"},
       params: %{
         "type" => "list",
         "data" => [

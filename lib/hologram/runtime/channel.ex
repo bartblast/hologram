@@ -27,20 +27,20 @@ defmodule Hologram.Runtime.Channel do
     {action, %{}, target_module}
   end
 
-  defp execute_command(target_module, %{"command" => command, "params" => params}) do
-    command = Decoder.decode(command)
+  defp execute_command(target_module, %{"name" => name, "params" => params}) do
+    name = Decoder.decode(name)
 
     params =
       Decoder.decode(params)
       |> Enum.into(%{})
 
-    if command == :__redirect__ do
+    if name == :__redirect__ do
       html = Renderer.render(params.page, %{})
       # DEFER: inject params
       url = params.page.route()
       {:__redirect__, html: html, url: url}
     else
-      apply(target_module, :command, [command, params])
+      apply(target_module, :command, [name, params])
     end
   end
 end

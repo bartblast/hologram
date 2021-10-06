@@ -10,10 +10,10 @@ export default class Client {
     this.socket = null
   }
 
-  static buildMessagePayload(targetModule, command, boxedParams) {
+  static buildCommandPayload(targetModule, boxedName, boxedParams) {
     return {
       target_module: Type.module(targetModule.name),
-      command: Type.atom(command),
+      name: boxedName,
       params: boxedParams,
     }
   }
@@ -36,8 +36,8 @@ export default class Client {
   }
 
   // Tested implicitely in E2E tests.
-  async pushCommand(targetModule, command, boxedParams, callback) {
-    const payload = Client.buildMessagePayload(targetModule, command, boxedParams)
+  async pushCommand(targetModule, boxedName, boxedParams, callback) {
+    const payload = Client.buildCommandPayload(targetModule, boxedName, boxedParams)
 
     this.channel
       .push("command", payload)
