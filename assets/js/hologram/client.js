@@ -19,6 +19,7 @@ export default class Client {
     }
   }
 
+  // Tested implicitely in E2E tests.
   async connect() {
     const socket = new Socket("/hologram");
     socket.connect();
@@ -35,6 +36,7 @@ export default class Client {
     this.channel = channel
   }
 
+  // Tested implicitely in E2E tests.
   async pushCommand(targetModule, command, boxedParams) {
     const payload = Client.buildMessagePayload(targetModule, command, boxedParams)
 
@@ -47,7 +49,7 @@ export default class Client {
         console.log("Command error")
         console.debug(arguments)
       })
-      .receive("timeout", () => {
+      .receive("timeout", (_response) => {
         console.log("Command timeout")
         console.debug(arguments)
       });
