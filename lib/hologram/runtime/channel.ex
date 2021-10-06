@@ -1,31 +1,33 @@
 defmodule Hologram.Runtime.Channel do
   use Phoenix.Channel
 
-  alias Hologram.Compiler.{Decoder, Helpers, Serializer}
+  alias Hologram.Compiler.{Decoder, Serializer}
   alias Hologram.Template.Renderer
 
   def join("hologram", _, socket) do
     {:ok, socket}
   end
 
-  def handle_in("command", %{"context" => context} = payload, socket) do
+  def handle_in("command", %{"target_module" => target_module} = payload, socket) do
+    target_module = Decoder.decode(target_module)
+
     response =
-      execute_command(payload)
-      |> build_response(context)
+      execute_command(target_module, payload)
+      |> build_response(target_module)
       |> Serializer.serialize()
 
     {:reply, {:ok, response}, socket}
   end
 
-  defp build_response({action, params}, context) do
-    {action, Enum.into(params, %{}), context}
+  defp build_response({action, params}, target_module) do
+    {action, Enum.into(params, %{}), target_module}
   end
 
-  defp build_response(action, context) do
-    {action, %{}, context}
+  defp build_response(action, target_module) do
+    {action, %{}, target_module}
   end
 
-  defp execute_command(%{"command" => command, "params" => params, "context" => context}) do
+  defp execute_command(target_module, %{"command" => command, "params" => params}) do
     command = Decoder.decode(command)
 
     params =
@@ -38,11 +40,7 @@ defmodule Hologram.Runtime.Channel do
       url = params.page.route()
       {:__redirect__, html: html, url: url}
     else
-      context["page_module"]
-      |> String.split("_")
-      |> tl()
-      |> Helpers.module()
-      |> apply(:command, [command, params])
+      apply(target_module, :command, [command, params])
     end
   end
 end
