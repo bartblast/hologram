@@ -1,3 +1,5 @@
+"use strict";
+
 import HologramNotImplementedError from "./errors";
 
 export default class PatternMatcher {
