@@ -4,10 +4,9 @@ import { Socket } from "phoenix";
 import Type from "./type"
 
 export default class Client {
-  constructor(runtime) {
+  constructor() {
     this.channel = null
     this.isConnected = false
-    this.runtime = runtime
     this.socket = null
   }
 
@@ -37,14 +36,12 @@ export default class Client {
   }
 
   // Tested implicitely in E2E tests.
-  async pushCommand(targetModule, command, boxedParams) {
+  async pushCommand(targetModule, command, boxedParams, callback) {
     const payload = Client.buildMessagePayload(targetModule, command, boxedParams)
 
     this.channel
       .push("command", payload)
-      .receive("ok", (response) => {
-        this.runtime.handleCommandResponse(response)
-      })
+      .receive("ok", callback)
       .receive("error", (_response) => {
         console.log("Command error")
         console.debug(arguments)

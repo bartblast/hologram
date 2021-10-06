@@ -3,6 +3,24 @@
 import { assert, mockWindow, sinon } from "./support/commons";
 import Runtime from "../../assets/js/hologram/runtime";
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 describe("executeAction()", () => {
   let action, actionParams, clientPushCommandFake, command, domRenderFake, runtime, state, window;
 

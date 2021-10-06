@@ -6,9 +6,19 @@ import ScriptsReloader from "./scripts_reloader"
 import Type from "./type"
 import Utils from "./utils"
 
+
+
+
+
+
+
+
+
+
+
 export default class Runtime {
   constructor(window) {
-    this.client = new Client(this)
+    this.client = new Client()
     this.client.connect()
 
     this.document = window.document
@@ -71,7 +81,7 @@ export default class Runtime {
         commandParams = actionResult.data[2]
       }
 
-      this.client.pushCommand(targetModule, commandName, commandParams)
+      this.client.pushCommand(targetModule, commandName, commandParams, this.handleCommandResponse)
 
     } else {
       if (isPageTarget) {
@@ -148,7 +158,7 @@ export default class Runtime {
     let commandName, commandParams, commandTarget;
     [commandTarget, commandName, commandParams] = Runtime.evaluateActionOrCommandSpec(eventSpec, scopeState)
 
-    this.client.pushCommand(context.pageModule, commandName, commandParams)
+    this.client.pushCommand(context.pageModule, commandName, commandParams, this.handleCommandResponse)
   }
 
   // TODO: refactor & test
