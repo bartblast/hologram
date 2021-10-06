@@ -3,12 +3,15 @@ defmodule Hologram.Compiler.ListTypeDecoderTest do
   alias Hologram.Compiler.ListTypeDecoder
 
   test "decode/1" do
-    data = [
-      %{"type" => "integer", "value" => 1},
-      %{"type" => "atom", "value" => "test"}
-    ]
+    value = %{
+      "type" => "list",
+      "data" => [
+        %{"type" => "integer", "value" => 1},
+        %{"type" => "atom", "value" => "test"}
+      ]
+    }
 
-    result = ListTypeDecoder.decode(data)
+    result = ListTypeDecoder.decode(value)
     expected = [1, :test]
 
     assert result == expected
