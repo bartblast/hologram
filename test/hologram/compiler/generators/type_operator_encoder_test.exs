@@ -9,7 +9,7 @@ defmodule Hologram.Compiler.TypeOperatorEncoderTest do
     right = :binary
 
     result = TypeOperatorEncoder.encode(left, right, %Context{}, %Opts{})
-    expected = "Elixir.typeOperator({ type: 'integer', value: 1 }, 'binary')"
+    expected = "Elixir_Kernel_SpecialForms.$type({ type: 'integer', value: 1 }, 'binary')"
 
     assert result == expected
   end

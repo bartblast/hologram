@@ -1,7 +1,6 @@
 "use strict";
 
 import Runtime from "./hologram/runtime"
-import Utils from "./hologram/utils"
 
 // Elixir standard library
 import Enum from "./hologram/elixir/enum"
@@ -9,6 +8,7 @@ import IO from "./hologram/elixir/io"
 import Kernel from "./hologram/elixir/kernel"
 import Keyword from "./hologram/elixir/keyword"
 import Map from "./hologram/elixir/map"
+import SpecialForms from "./hologram/elixir/kernel/special_forms";
 import String from "./hologram/elixir/string"
 
 export default class Hologram {
@@ -35,21 +35,10 @@ export default class Hologram {
   }
 }
 
-window.Elixir = class {
-  // TODO: refactor & test
-  // DEFER: implement other types
-  static typeOperator(value, type) {
-    if (type == "binary" && value.type == "string") {
-      return value
-    } else {
-      throw "Not supported! (in Elixir.typeOperator)"
-    }
-  }
-}
-
 window.Elixir_Enum = Enum
 window.Elixir_IO = IO
 window.Elixir_Kernel = Kernel
+window.Elixir_Kernel_SpecialForms = SpecialForms
 window.Elixir_Keyword = Keyword
 window.Elixir_Map = Map
 window.Elixir_String = String

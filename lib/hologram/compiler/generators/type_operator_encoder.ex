@@ -4,6 +4,6 @@ defmodule Hologram.Compiler.TypeOperatorEncoder do
   # DEFER: implement other type modifiers
   def encode(value, :binary, %Context{} = context, %Opts{} = opts) do
     value = Generator.generate(value, context, opts)
-    "Elixir.typeOperator(#{value}, 'binary')"
+    "Elixir_Kernel_SpecialForms.$type(#{value}, 'binary')"
   end
 end

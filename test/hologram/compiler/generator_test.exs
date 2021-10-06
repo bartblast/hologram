@@ -173,7 +173,7 @@ defmodule Hologram.Compiler.GeneratorTest do
       }
 
       result = Generator.generate(ir, %Context{}, %Opts{})
-      expected = "Elixir.typeOperator({ type: 'integer', value: 1 }, 'binary')"
+      expected = "Elixir_Kernel_SpecialForms.$type({ type: 'integer', value: 1 }, 'binary')"
 
       assert result == expected
     end
