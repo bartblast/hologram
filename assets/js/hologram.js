@@ -12,7 +12,7 @@ import SpecialForms from "./hologram/elixir/kernel/special_forms";
 import String from "./hologram/elixir/string"
 
 export default class Hologram {
-  // TODO: refactor & test
+  // Tested implicitely in E2E tests
   static onReady(document, callback) {
     if (
       document.readyState === "interactive" ||
@@ -27,7 +27,7 @@ export default class Hologram {
     }
   }
 
-  // TODO: refactor & test
+  // Tested implicitely in E2E tests
   static run(window, pageModule, serializedState) {
     Hologram.onReady(window.document, () => {
       Runtime.getInstance(window).mountPage(pageModule, serializedState)
