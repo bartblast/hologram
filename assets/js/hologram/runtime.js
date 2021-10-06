@@ -215,8 +215,9 @@ export default class Runtime {
 
   // TODO: refactor & test
   mountPage(pageModule, serializedState) {
-    this.state = Utils.eval(serializedState)
+    this.state = Utils.eval(serializedState, false)
     this.state.data["~atom[context]"].data['~atom[__state__]'] = {type: "string", value: serializedState}
+    Utils.freeze(this.state)
 
     this.pageModule = pageModule
     this.dom.render(this.pageModule)
