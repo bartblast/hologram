@@ -40,6 +40,10 @@ export default class Type {
     return boxedValue.type === "float" || boxedValue.type === "integer"
   }
 
+  static isString(boxedValue) {
+    return boxedValue.type === "string"
+  }
+
   static isTrue(boxedValue) {
     return boxedValue.type === "boolean" && boxedValue.value === true
   }

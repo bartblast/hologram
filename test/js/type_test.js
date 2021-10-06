@@ -152,6 +152,22 @@ describe("isNumber()", () => {
   })
 })
 
+describe("isString()", () => {
+  it("returns true for boxed string value", () => {
+    const arg = Type.string("test")
+    const result = Type.isString(arg)
+
+    assert.isTrue(result)
+  })
+
+  it("returns false for values other than boxed string value", () => {
+    const arg = Type.boolean(false)
+    const result = Type.isString(arg)
+    
+    assert.isFalse(result)
+  })
+})
+
 describe("isTrue()", () => {
   it("returns true for boxed true value", () => {
     const arg = Type.boolean(true)
