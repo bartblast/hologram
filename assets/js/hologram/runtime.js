@@ -71,7 +71,7 @@ export default class Runtime {
         commandParams = actionResult.data[2]
       }
 
-      this.client.pushCommand(commandName, commandParams, targetModule)
+      this.client.pushCommand(targetModule, commandName, commandParams)
 
     } else {
       if (isPageTarget) {
@@ -148,7 +148,7 @@ export default class Runtime {
     let commandName, commandParams, commandTarget;
     [commandTarget, commandName, commandParams] = Runtime.evaluateActionOrCommandSpec(eventSpec, scopeState)
 
-    this.client.pushCommand(commandName, commandParams, context.pageModule)
+    this.client.pushCommand(context.pageModule, commandName, commandParams)
   }
 
   // TODO: refactor & test

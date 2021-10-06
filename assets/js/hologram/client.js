@@ -12,7 +12,7 @@ export default class Client {
 
   static buildMessagePayload(targetModule, command, params) {
     return {
-      target_module: targetModule.name,
+      target_module: targetModule,
       command: command,
       params: params,
     }
@@ -34,7 +34,7 @@ export default class Client {
     this.channel = channel
   }
 
-  async pushCommand(command, params, targetModule) {
+  async pushCommand(targetModule, command, params) {
     const payload = Client.buildMessagePayload(targetModule, command, params)
 
     this.channel
