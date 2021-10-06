@@ -44,7 +44,6 @@ export default class ScriptsReloader {
       reloadedScript.textContent = script.innerText
     }
 
-  
     if (ScriptsReloader.isInlineScript(reloadedScript)) {
       Utils.eval(reloadedScript.textContent)
       callback()
