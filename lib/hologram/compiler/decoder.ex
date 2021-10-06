@@ -17,8 +17,8 @@ defmodule Hologram.Compiler.Decoder do
     MapTypeDecoder.decode(value)
   end
 
-  def decode(%{"type" => "module", "class" => class}) do
-    ModuleTypeDecoder.decode(class)
+  def decode(%{"type" => "module", "className" => class_name}) do
+    ModuleTypeDecoder.decode(class_name)
   end
 
   def decode(%{"type" => "string", "value" => value}) do

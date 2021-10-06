@@ -11,7 +11,7 @@ defmodule Hologram.Compiler.ModuleDefinitionGenerator do
   alias Hologram.Compiler.IR.NotSupportedExpression
 
   def generate(ir, module, %Opts{} = opts) do
-    class = Helpers.class_name(module)
+    class_name = Helpers.class_name(module)
     context = struct(Context, Map.from_struct(ir))
 
     attributes =
@@ -25,7 +25,7 @@ defmodule Hologram.Compiler.ModuleDefinitionGenerator do
       |> Enum.map(fn {k, v} -> FunctionDefinitionGenerator.generate(k, v, context, opts) end)
       |> Enum.join("\n")
 
-    "window.#{class} = class #{class} {"
+    "window.#{class_name} = class #{class_name} {"
     |> Formatter.maybe_append_new_section(attributes)
     |> Formatter.maybe_append_new_section(functions)
     |> Formatter.maybe_append_new_line("}")

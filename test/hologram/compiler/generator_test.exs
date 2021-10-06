@@ -78,7 +78,7 @@ defmodule Hologram.Compiler.GeneratorTest do
       ir = %ModuleType{module: Abc.Bcd}
 
       result = Generator.generate(ir, %Context{}, %Opts{})
-      expected = "{ type: 'module', class_name: 'Elixir_Abc_Bcd' }"
+      expected = "{ type: 'module', className: 'Elixir_Abc_Bcd' }"
 
       assert result == expected
     end

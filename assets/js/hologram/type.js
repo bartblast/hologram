@@ -71,7 +71,7 @@ export default class Type {
   }
 
   static module(className) {
-    return Utils.freeze({type: "module", class_name: className})
+    return Utils.freeze({type: "module", className: className})
   }
 
   static nil() {

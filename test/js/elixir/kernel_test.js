@@ -75,7 +75,7 @@ describe("apply()", () => {
 
   // apply/2
   it("throws an error if number of args is different than 3", () => {
-    const expectedMessage = 'Kernel.apply(): arguments = {"0":{"type":"module","class_name":"ModuleStub1"},"1":{"type":"atom","value":"test"}}'
+    const expectedMessage = 'Kernel.apply(): arguments = {"0":{"type":"module","className":"ModuleStub1"},"1":{"type":"atom","value":"test"}}'
     assert.throw(() => { Kernel.apply(module, functionName) }, HologramNotImplementedError, expectedMessage);
   })
 })

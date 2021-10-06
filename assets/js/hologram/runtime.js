@@ -98,7 +98,7 @@ export default class Runtime {
     let name;
 
     if (module.type == "module") {
-      name = module.class
+      name = module.className
     } else {
       name = module
     }

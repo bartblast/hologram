@@ -43,7 +43,7 @@ defmodule Hologram.Compiler.DecoderTest do
   end
 
   test "module" do
-    input = %{"type" => "module", "class" => "Elixir_Hologram_Compiler_DecoderTest"}
+    input = %{"type" => "module", "className" => "Elixir_Hologram_Compiler_DecoderTest"}
     result = Decoder.decode(input)
     assert is_atom(result)
   end

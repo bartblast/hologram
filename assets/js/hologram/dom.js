@@ -152,7 +152,7 @@ export default class DOM {
     }
 
     const pageTemplate = pageModule.template()
-    const layoutClassName = pageModule.layout().class
+    const layoutClassName = pageModule.layout().className
     const layoutTemplate = Runtime.getModule(layoutClassName).template()
 
     const context = {scopeModule: pageModule, pageModule: pageModule, slots: {default: pageTemplate}}

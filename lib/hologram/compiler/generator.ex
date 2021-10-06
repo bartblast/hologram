@@ -65,7 +65,7 @@ defmodule Hologram.Compiler.Generator do
   end
 
   def generate(%ModuleType{module: module}, _, _) do
-    "{ type: 'module', class_name: '#{Helpers.class_name(module)}' }"
+    "{ type: 'module', className: '#{Helpers.class_name(module)}' }"
   end
 
   def generate(%StructType{module: module, data: data}, %Context{} = context, %Opts{} = opts) do

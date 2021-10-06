@@ -5,7 +5,7 @@ defmodule Hologram.Compiler.FunctionCallGenerator do
   alias Hologram.Compiler.IR.Variable
 
   def generate(module, function, params, %Context{} = context, %Opts{} = opts) do
-    class = Helpers.class_name(module)
+    class_name = Helpers.class_name(module)
     function = encode_function_name(function)
 
     params =
@@ -20,6 +20,6 @@ defmodule Hologram.Compiler.FunctionCallGenerator do
       end)
       |> Enum.join(", ")
 
-    "#{class}.#{function}(#{params})"
+    "#{class_name}.#{function}(#{params})"
   end
 end
