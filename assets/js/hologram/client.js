@@ -1,6 +1,7 @@
 "use strict";
 
 import { Socket } from "phoenix";
+import Type from "./type"
 
 export default class Client {
   constructor(runtime) {
@@ -10,11 +11,11 @@ export default class Client {
     this.socket = null
   }
 
-  static buildMessagePayload(targetModule, command, params) {
+  static buildMessagePayload(targetModule, command, boxedParams) {
     return {
-      target_module: targetModule,
-      command: command,
-      params: params,
+      target_module: Type.module(targetModule.name),
+      command: Type.atom(command),
+      params: boxedParams,
     }
   }
 
@@ -34,8 +35,8 @@ export default class Client {
     this.channel = channel
   }
 
-  async pushCommand(targetModule, command, params) {
-    const payload = Client.buildMessagePayload(targetModule, command, params)
+  async pushCommand(targetModule, command, boxedParams) {
+    const payload = Client.buildMessagePayload(targetModule, command, boxedParams)
 
     this.channel
       .push("command", payload)
