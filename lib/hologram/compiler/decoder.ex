@@ -25,7 +25,7 @@ defmodule Hologram.Compiler.Decoder do
     value
   end
 
-  def decode(%{"type" => "tuple", "data" => data}) do
-    TupleTypeDecoder.decode(data)
+  def decode(%{"type" => "tuple"} = value) do
+    TupleTypeDecoder.decode(value)
   end
 end
