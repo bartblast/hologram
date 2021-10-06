@@ -1,5 +1,6 @@
 "use strict";
 
+import PatternMatcher from "./hologram/pattern_matcher";
 import Runtime from "./hologram/runtime"
 
 // Elixir standard library
@@ -32,6 +33,12 @@ export default class Hologram {
     Hologram.onReady(window.document, () => {
       Runtime.getInstance(window).mountPage(pageModule, serializedState)
     })
+  }
+
+  // DELEGATES
+  
+  static isFunctionArgsPatternMatched(params, args) {
+    return PatternMatcher.isFunctionArgsPatternMatched(params, args)
   }
 }
 

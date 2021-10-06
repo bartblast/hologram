@@ -9,7 +9,7 @@ describe("isFunctionArgsPatternMatched()", () => {
   it("returns false if number of args is different than number of params", () => {
     const params = [Type.placeholder(), Type.placeholder()]
     const args = [Type.integer(1)]
-    const result = PatternMatcher.isFunctionArgsPatternMatched(params, args)
+    const result = Hologram.isFunctionArgsPatternMatched(params, args)
 
     assert.isFalse(result)
   })
@@ -17,7 +17,7 @@ describe("isFunctionArgsPatternMatched()", () => {
   it("returns false if at least one arg doesn't match the params pattern", () => {
     const params = [Type.placeholder(), Type.atom("a")]
     const args = [Type.atom("b"), Type.atom("c")]
-    const result = PatternMatcher.isFunctionArgsPatternMatched(params, args)
+    const result = Hologram.isFunctionArgsPatternMatched(params, args)
 
     assert.isFalse(result)
   })
@@ -25,7 +25,7 @@ describe("isFunctionArgsPatternMatched()", () => {
   it("returns true if the args match the params pattern", () => {
     const params = [Type.placeholder(), Type.atom("a")]
     const args = [Type.atom("b"), Type.atom("a")]
-    const result = PatternMatcher.isFunctionArgsPatternMatched(params, args)
+    const result = Hologram.isFunctionArgsPatternMatched(params, args)
 
     assert.isTrue(result)
   })
