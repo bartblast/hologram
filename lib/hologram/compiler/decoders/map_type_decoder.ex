@@ -1,7 +1,7 @@
 defmodule Hologram.Compiler.MapTypeDecoder do
   alias Hologram.Compiler.Decoder
 
-  def decode(data) do
+  def decode(%{"data" => data}) do
     Enum.map(data, fn {key, value} -> {decode_key(key), Decoder.decode(value)} end)
     |> Enum.into(%{})
   end
