@@ -48,18 +48,18 @@ export default class Runtime {
   }
 
   executeAction(actionTarget, actionName, actionParams, fullState, scopeState, context) {
-    let module, state;
+    let state, targetModule;
     let isPageTarget = actionTarget.type == "atom" && actionTarget.value == "page"
 
     if (isPageTarget) {
-      module = context.pageModule
+      targetModule = context.pageModule
       state = fullState
     } else {
-      module = context.scopeModule
+      targetModule = context.scopeModule
       state = scopeState
     }
 
-    const actionResult = module.action(actionName, actionParams, state)
+    const actionResult = targetModule.action(actionName, actionParams, state)
 
     if (actionResult.type == "tuple") {
       this.state = actionResult.data[0]
@@ -71,7 +71,7 @@ export default class Runtime {
         commandParams = actionResult.data[2]
       }
 
-      this.client.pushCommand(commandName, commandParams, context)
+      this.client.pushCommand(commandName, commandParams, targetModule)
 
     } else {
       if (isPageTarget) {
@@ -148,7 +148,7 @@ export default class Runtime {
     let commandName, commandParams, commandTarget;
     [commandTarget, commandName, commandParams] = Runtime.evaluateActionOrCommandSpec(eventSpec, scopeState)
 
-    this.client.pushCommand(commandName, commandParams, context)
+    this.client.pushCommand(commandName, commandParams, context.pageModule)
   }
 
   // TODO: refactor & test

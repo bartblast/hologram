@@ -10,14 +10,11 @@ export default class Client {
     this.socket = null
   }
 
-  static buildMessagePayload(command, params, context) {
+  static buildMessagePayload(targetModule, command, params) {
     return {
+      target_module: targetModule.name,
       command: command,
-      context: {
-        page_module: context.pageModule.name,
-        scope_module: context.scopeModule.name
-      },
-      params: params
+      params: params,
     }
   }
 
@@ -37,8 +34,8 @@ export default class Client {
     this.channel = channel
   }
 
-  async pushCommand(command, params, context) {
-    const payload = Client.buildMessagePayload(command, params, context)
+  async pushCommand(command, params, targetModule) {
+    const payload = Client.buildMessagePayload(targetModule, command, params)
 
     this.channel
       .push("command", payload)
