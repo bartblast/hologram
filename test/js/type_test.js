@@ -40,6 +40,26 @@ describe("boolean()", () => {
   })
 })
 
+describe("expressionNode()", () => {
+  let callback;
+
+  beforeEach(() => {
+    callback = () => { return Type.nil() }
+  })
+
+  it("builds an expression node", () => {
+    const expected = {type: "expression", callback: callback}
+    const result = Type.expressionNode(callback)
+
+    assert.deepStrictEqual(result, expected)
+  })
+
+  it("returns frozen object", () => {
+    const result = Type.expressionNode(callback)
+    assertFrozen(result)
+  })
+})
+
 describe("float()", () => {
   it("returns boxed float value", () => {
     const expected = {type: "float", value: 1.0}
