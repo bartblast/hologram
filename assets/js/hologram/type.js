@@ -16,8 +16,11 @@ export default class Type {
     return Utils.freeze({type: "boolean", value: value})
   }
 
-  static expressionNode(callback) {
-    return Utils.freeze({type: "expression", callback: callback})
+  static expressionNode(tuple) {
+    const callback = (_$state) => { return tuple }
+    const expressionNode = {type: "expression", callback: callback}
+
+    return Utils.freeze(expressionNode)
   }
 
   static float(value) {

@@ -41,22 +41,22 @@ describe("boolean()", () => {
 })
 
 describe("expressionNode()", () => {
-  let callback;
+  let tuple, node;
 
   beforeEach(() => {
-    callback = () => { return Type.nil() }
+    tuple = Type.tuple([Type.atom("a"), Type.atom("b")])
+    node = Type.expressionNode(tuple)
   })
 
-  it("builds an expression node", () => {
-    const expected = {type: "expression", callback: callback}
-    const result = Type.expressionNode(callback)
+  it("builds an expression node", () => {  
+    const callbackResult = node.callback(Type.map({}))
 
-    assert.deepStrictEqual(result, expected)
+    assert.equal(node.type, "expression")
+    assert.deepStrictEqual(callbackResult, tuple)
   })
 
   it("returns frozen object", () => {
-    const result = Type.expressionNode(callback)
-    assertFrozen(result)
+    assertFrozen(node)
   })
 })
 
