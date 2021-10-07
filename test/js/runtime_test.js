@@ -4,6 +4,42 @@ import { assert, mockWindow, sinon } from "./support/commons";
 import Runtime from "../../assets/js/hologram/runtime";
 import Type from "../../assets/js/hologram/type";
 
+describe("buildOperationSpecFromExpressionWithoutTarget()", () => {
+  it("builds operation spec from an expression without target specified", () => {
+    const name = Type.atom("test")
+
+    const paramsTuples = [
+      Type.tuple([Type.atom("a"), Type.integer(1)]),
+      Type.tuple([Type.atom("b"), Type.integer(2)])
+    ]
+    const paramsKeyword = Type.list(paramsTuples)
+
+    const specElems = [
+      name,
+      paramsKeyword
+    ]
+
+    const TestModule = class {}
+    const context = {targetModule: TestModule}
+
+    const result = Runtime.buildOperationSpecFromExpressionWithoutTarget(specElems, context)
+
+    let paramsMapData = {}
+    paramsMapData[Type.atomKey("a")] = Type.integer(1)
+    paramsMapData[Type.atomKey("b")] = Type.integer(2)
+    const paramsMap = Type.map(paramsMapData)
+
+    const expected = {
+      targetModule: TestModule,
+      targetId: null,
+      name: name,
+      params: paramsMap
+    }
+
+    assert.deepStrictEqual(result, expected)
+  })
+})
+
 describe("buildOperationSpecFromTextNode()", () => {
   it("builds operation spec from a text node", () => {
     const TestTargetModule = class {}
@@ -61,30 +97,30 @@ describe("getModuleByComponentId()", () => {
 })
 
 describe("hasOperationTarget()", () => {
-  it("returns true if the first 2 elems are bounded atoms", () => {
-    const elems = [Type.atom("a"), Type.atom("b")]
-    const result = Runtime.hasOperationTarget(elems)
+  it("returns true if the first 2 spec elems are bounded atoms", () => {
+    const specElems = [Type.atom("a"), Type.atom("b")]
+    const result = Runtime.hasOperationTarget(specElems)
 
     assert.isTrue(result)
   })
 
-  it("returns false if there is only 1 elem", () => {
-    const elems = [Type.atom("a")]
-    const result = Runtime.hasOperationTarget(elems)
+  it("returns false if there is only 1 spec elem", () => {
+    const specElems = [Type.atom("a")]
+    const result = Runtime.hasOperationTarget(specElems)
 
     assert.isFalse(result)
   })
 
-  it("returns false if the first elem is not a bounded atom", () => {
-    const elems = [Type.integer(1), Type.atom("b")]
-    const result = Runtime.hasOperationTarget(elems)
+  it("returns false if the first spec elem is not a bounded atom", () => {
+    const specElems = [Type.integer(1), Type.atom("b")]
+    const result = Runtime.hasOperationTarget(specElems)
 
     assert.isFalse(result)
   })
 
-  it("returns false if the second elem is not a bounded atom", () => {
-    const elems = [Type.atom("a"), Type.integer(2)]
-    const result = Runtime.hasOperationTarget(elems)
+  it("returns false if the second spec elem is not a bounded atom", () => {
+    const specElems = [Type.atom("a"), Type.integer(2)]
+    const result = Runtime.hasOperationTarget(specElems)
 
     assert.isFalse(result)
   })

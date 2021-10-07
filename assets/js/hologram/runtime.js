@@ -8,6 +8,15 @@ import Type from "./type"
 import Utils from "./utils"
 
 export default class Runtime {
+  static buildOperationSpecFromExpressionWithoutTarget(specElems, context) {
+    return {
+      targetModule: context.targetModule,
+      targetId: null,
+      name: specElems[0],
+      params: Type.keywordToMap(specElems[1])
+    }
+  }
+
   static buildOperationSpecFromTextNode(textNode, context) {
     return {
       targetModule: context.targetModule,
@@ -29,8 +38,8 @@ export default class Runtime {
     return this.componentModules[componentId]
   }
 
-  static hasOperationTarget(elems) {
-    return elems.length >= 2 && Type.isAtom(elems[0]) && Type.isAtom(elems[1])
+  static hasOperationTarget(specElems) {
+    return specElems.length >= 2 && Type.isAtom(specElems[0]) && Type.isAtom(specElems[1])
   }
 
 
@@ -49,7 +58,41 @@ export default class Runtime {
 
 
 
+// buildOperationSpecFromExpression(expression, context) {
+  //   const elems = expression.callback(context.bindings).data
+  //   let name, params, targetModule, targetId
 
+  //   if (hasOperationTarget(elems)) {
+  //     this.buildOperationSpecFromExpressionWithTarget(elems, context)
+  //     const target = elems[0].value
+
+  //     if (target === "page") {
+  //       targetModule = context.pageModule
+  //       targetId = null;
+
+  //     } else if (target === "layout") {
+  //       targetModule = context.layoutModule
+  //       targetId = null;
+
+  //     } else {
+  //       targetModule = this.getModuleByComponentId(target);
+  //       targetId = target
+  //     }
+
+  //     name = elems[1]
+  //     params = Type.keywordToMap(elems[2])
+
+  //   } else {
+  //     return this.buildOperationSpecFromExpressionWithoutTarget()
+  //   }
+
+  //   return {
+  //     targetModule: targetModule,
+  //     targetId: targetId,
+  //     name: name,
+  //     params: params
+  //   }
+  // }
 
   static evaluateOperationSpec(spec, context) {
     // const node = spec.value[0];
