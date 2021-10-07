@@ -1,25 +1,77 @@
 "use strict";
 
-import { assert, mockWindow, sinon } from "./support/commons";
+import { assert, fixtureOperationParamsKeyword, fixtureOperationParamsMap, fixtureOperationSpecExpressionNode, mockWindow, sinon } from "./support/commons";
 import Runtime from "../../assets/js/hologram/runtime";
 import Type from "../../assets/js/hologram/type";
+
+describe("buildOperationSpecFromExpression()", () => {
+  let context, runtime, TestPageModule, TestTargetModule;
+
+  beforeEach(() => {
+    const window = mockWindow()
+    runtime = new Runtime(window)
+
+    const TestLayoutModule = class {}
+    TestPageModule = class {}
+    TestTargetModule = class {}
+
+    context = {
+      bindings: Type.map({}),
+      layoutModule: TestLayoutModule,
+      pageModule: TestPageModule,
+      targetModule: TestTargetModule
+    }
+  })
+
+  it("builds operation spec from an expression node with target specified", () => {
+    const specTuple = Type.tuple([
+      Type.atom("page"),
+      Type.atom("test_action"),
+      fixtureOperationParamsKeyword()
+    ])
+
+    const expressionNode = fixtureOperationSpecExpressionNode(specTuple)
+
+    const result = runtime.buildOperationSpecFromExpression(expressionNode, context)
+
+    const expected = {
+      targetModule: TestPageModule,
+      targetId: null,
+      name: Type.atom("test_action"),
+      params: fixtureOperationParamsMap()
+    }
+
+    assert.deepStrictEqual(result, expected)
+  })
+
+  it("builds operation spec from an expression node without target specified", () => {
+    const specTuple = Type.tuple([
+      Type.atom("test_action"),
+      fixtureOperationParamsKeyword()
+    ])
+
+    const expressionNode = fixtureOperationSpecExpressionNode(specTuple)
+
+    const result = runtime.buildOperationSpecFromExpression(expressionNode, context)
+
+    const expected = {
+      targetModule: TestTargetModule,
+      targetId: null,
+      name: Type.atom("test_action"),
+      params: fixtureOperationParamsMap()
+    }
+
+    assert.deepStrictEqual(result, expected)
+  })
+})
 
 describe("buildOperationSpecFromExpressionWithTarget()", () => {
   let name, paramsMap, paramsKeyword, runtime, TestComponent2Module;
 
   beforeEach(() => {
     name = Type.atom("test")
-
-    const paramsTuples = [
-      Type.tuple([Type.atom("a"), Type.integer(1)]),
-      Type.tuple([Type.atom("b"), Type.integer(2)])
-    ]
-    paramsKeyword = Type.list(paramsTuples)
-
-    let paramsMapData = {}
-    paramsMapData[Type.atomKey("a")] = Type.integer(1)
-    paramsMapData[Type.atomKey("b")] = Type.integer(2)
-    paramsMap = Type.map(paramsMapData)
+    paramsKeyword = fixtureOperationParamsKeyword()
+    paramsMap = fixtureOperationParamsMap()
 
     const window = mockWindow()
     runtime = new Runtime(window)
@@ -106,12 +158,7 @@ describe("buildOperationSpecFromExpressionWithTarget()", () => {
 describe("buildOperationSpecFromExpressionWithoutTarget()", () => {
   it("builds operation spec from an expression without target specified", () => {
     const name = Type.atom("test")
-
-    const paramsTuples = [
-      Type.tuple([Type.atom("a"), Type.integer(1)]),
-      Type.tuple([Type.atom("b"), Type.integer(2)])
-    ]
-    const paramsKeyword = Type.list(paramsTuples)
+    const paramsKeyword = fixtureOperationParamsKeyword()
 
     const specElems = [
       name,
@@ -123,16 +170,11 @@ describe("buildOperationSpecFromExpressionWithoutTarget()", () => {
 
     const result = Runtime.buildOperationSpecFromExpressionWithoutTarget(specElems, context)
 
-    let paramsMapData = {}
-    paramsMapData[Type.atomKey("a")] = Type.integer(1)
-    paramsMapData[Type.atomKey("b")] = Type.integer(2)
-    const paramsMap = Type.map(paramsMapData)
-
     const expected = {
       targetModule: TestTargetModule,
       targetId: null,
       name: name,
-      params: paramsMap
+      params: fixtureOperationParamsMap()
     }
 
     assert.deepStrictEqual(result, expected)

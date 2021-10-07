@@ -40,7 +40,7 @@ export function fixtureOperationParamsKeyword() {
 
 export function fixtureOperationParamsMap() {
   const operationParamsKeyword = fixtureOperationParamsKeyword()
-  Type.keywordToMap(operationParamsKeyword)
+  return Type.keywordToMap(operationParamsKeyword)
 }
 
 export function fixtureOperationSpecExpressionNode(specTuple) {

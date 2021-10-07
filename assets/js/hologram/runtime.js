@@ -8,6 +8,16 @@ import Type from "./type"
 import Utils from "./utils"
 
 export default class Runtime {
+  buildOperationSpecFromExpression(expressionNode, context) {
+    const specElems = expressionNode.callback(context.bindings).data
+
+    if (Runtime.hasOperationTarget(specElems)) {
+      return this.buildOperationSpecFromExpressionWithTarget(specElems, context)
+    } else {
+      return Runtime.buildOperationSpecFromExpressionWithoutTarget(specElems, context)
+    }
+  }
+
   buildOperationSpecFromExpressionWithTarget(specElems, context) {
     let targetModule, targetId;
     const target = specElems[0].value
@@ -87,41 +97,7 @@ export default class Runtime {
 
 
 
-// buildOperationSpecFromExpression(expression, context) {
-  //   const elems = expression.callback(context.bindings).data
-  //   let name, params, targetModule, targetId
 
-  //   if (hasOperationTarget(elems)) {
-  //     this.buildOperationSpecFromExpressionWithTarget(elems, context)
-  //     const target = elems[0].value
-
-  //     if (target === "page") {
-  //       targetModule = context.pageModule
-  //       targetId = null;
-
-  //     } else if (target === "layout") {
-  //       targetModule = context.layoutModule
-  //       targetId = null;
-
-  //     } else {
-  //       targetModule = this.getModuleByComponentId(target);
-  //       targetId = target
-  //     }
-
-  //     name = elems[1]
-  //     params = Type.keywordToMap(elems[2])
-
-  //   } else {
-  //     return this.buildOperationSpecFromExpressionWithoutTarget()
-  //   }
-
-  //   return {
-  //     targetModule: targetModule,
-  //     targetId: targetId,
-  //     name: name,
-  //     params: params
-  //   }
-  // }
 
   static evaluateOperationSpec(spec, context) {
     // const node = spec.value[0];
