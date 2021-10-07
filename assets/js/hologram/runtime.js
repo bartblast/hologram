@@ -3,6 +3,7 @@
 import Client from "./client"
 import DOM from "./dom"
 import ScriptsReloader from "./scripts_reloader"
+import Store from "./store";
 import Type from "./type"
 import Utils from "./utils"
 
@@ -74,6 +75,7 @@ export default class Runtime {
     this.dom = new DOM(this, window)
     this.pageModule = null
     this.state = null
+    this.store = new Store()
     this.window = window
 
     this.loadPageOnPopStateEvents()
