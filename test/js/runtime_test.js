@@ -19,7 +19,8 @@ describe("buildOperationSpecFromExpression()", () => {
       bindings: Type.map({}),
       layoutModule: TestLayoutModule,
       pageModule: TestPageModule,
-      targetModule: TestTargetModule
+      targetModule: TestTargetModule,
+      targetId: "test_target_id"
     }
   })
 
@@ -56,7 +57,7 @@ describe("buildOperationSpecFromExpression()", () => {
 
     const expected = {
       targetModule: TestTargetModule,
-      targetId: null,
+      targetId: "test_target_id",
       name: Type.atom("test_action"),
       params: fixtureOperationParamsMap()
     }
@@ -166,13 +167,13 @@ describe("buildOperationSpecFromExpressionWithoutTarget()", () => {
     ]
 
     const TestTargetModule = class {}
-    const context = {targetModule: TestTargetModule}
+    const context = {targetModule: TestTargetModule, targetId: "test_id"}
 
     const result = Runtime.buildOperationSpecFromExpressionWithoutTarget(specElems, context)
 
     const expected = {
       targetModule: TestTargetModule,
-      targetId: null,
+      targetId: "test_id",
       name: name,
       params: fixtureOperationParamsMap()
     }

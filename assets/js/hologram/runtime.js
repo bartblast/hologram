@@ -50,7 +50,7 @@ export default class Runtime {
   static buildOperationSpecFromExpressionWithoutTarget(specElems, context) {
     return {
       targetModule: context.targetModule,
-      targetId: null,
+      targetId: context.targetId,
       name: specElems[0],
       params: Type.keywordToMap(specElems[1])
     }
