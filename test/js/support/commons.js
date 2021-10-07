@@ -1,6 +1,7 @@
 "use strict";
 
 import Type from "../../../assets/js/hologram/type"
+import Utils from "../../../assets/js/hologram/utils"
 
 export const assert = require("chai").assert;
 export const sinon = require("sinon");
@@ -26,6 +27,27 @@ export function assertNotFrozen(obj) {
 
 export function debug(obj) {
   console.log(util.inspect(obj, { showHidden: false, depth: null }));
+}
+
+export function fixtureOperationParamsKeyword() {
+  const paramsTuples = [
+    Type.tuple([Type.atom("a"), Type.integer(1)]),
+    Type.tuple([Type.atom("b"), Type.integer(2)])
+  ]
+
+  return Type.list(paramsTuples)
+}
+
+export function fixtureOperationParamsMap() {
+  const operationParamsKeyword = fixtureOperationParamsKeyword()
+  Type.keywordToMap(operationParamsKeyword)
+}
+
+export function fixtureOperationSpecExpressionNode(specTuple) {
+  const callback = (_$state) => { return specTuple }
+  const expressionNode = {type: "expression", callback: callback}
+
+  return Utils.freeze(expressionNode)
 }
 
 export function mockWindow() {
