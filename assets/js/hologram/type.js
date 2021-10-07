@@ -24,6 +24,10 @@ export default class Type {
     return Utils.freeze({type: "integer", value: value})
   }
 
+  static isAtom(boxedValue) {
+    return boxedValue.type === "atom"
+  }
+
   static isFalse(boxedValue) {
     return boxedValue.type === "boolean" && boxedValue.value === false
   }

@@ -67,6 +67,22 @@ describe("integer()", () => {
   })
 })
 
+describe("isAtom()", () => {
+  it("returns true for boxed atom value", () => {
+    const arg = Type.atom("test")
+    const result = Type.isAtom(arg)
+
+    assert.isTrue(result)
+  })
+
+  it("returns false for values of type other than boxed atom", () => {
+    const arg = Type.boolean(false)
+    const result = Type.isAtom(arg)
+    
+    assert.isFalse(result)
+  })
+})
+
 describe("isFalse()", () => {
   it("returns true for boxed false value", () => {
     const arg = Type.boolean(false)
