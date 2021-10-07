@@ -104,6 +104,10 @@ export default class Type {
     return `~string[${key}]`
   }
 
+  static textNode(content) {
+    return Utils.freeze({type: "text", content: content})
+  }
+
   static tuple(elems) {
     return Utils.freeze({type: "tuple", data: elems})
   }

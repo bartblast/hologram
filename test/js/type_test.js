@@ -391,6 +391,20 @@ describe("stringKey()", () => {
   })
 })
 
+describe("textNode()", () => {
+  it("builds a text node", () => {
+    const expected = {type: "text", content: "test"}
+    const result = Type.textNode("test")
+
+    assert.deepStrictEqual(result, expected)
+  })
+
+  it("returns frozen object", () => {
+    const result = Type.textNode("test")
+    assertFrozen(result)
+  })
+})
+
 describe("tuple()", () => {
   let elems, expected, result;
 
