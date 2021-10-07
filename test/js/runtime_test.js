@@ -4,6 +4,105 @@ import { assert, mockWindow, sinon } from "./support/commons";
 import Runtime from "../../assets/js/hologram/runtime";
 import Type from "../../assets/js/hologram/type";
 
+describe("buildOperationSpecFromExpressionWithTarget()", () => {
+  let name, paramsMap, paramsKeyword, runtime, TestComponent2Module;
+
+  beforeEach(() => {
+    name = Type.atom("test")
+
+    const paramsTuples = [
+      Type.tuple([Type.atom("a"), Type.integer(1)]),
+      Type.tuple([Type.atom("b"), Type.integer(2)])
+    ]
+    paramsKeyword = Type.list(paramsTuples)
+
+    let paramsMapData = {}
+    paramsMapData[Type.atomKey("a")] = Type.integer(1)
+    paramsMapData[Type.atomKey("b")] = Type.integer(2)
+    paramsMap = Type.map(paramsMapData)
+
+    const window = mockWindow()
+    runtime = new Runtime(window)
+
+    const TestComponent1Module = class {}
+    TestComponent2Module = class {}
+
+    runtime.componentModules = {
+      test_component_1: TestComponent1Module,
+      test_component_2: TestComponent2Module
+    }
+  })
+
+  it("builds layout operation spec if the first spec elem is equal to :layout boxed atom", () => {
+    const target = Type.atom("layout")
+
+    const specElems = [
+      target,
+      name,
+      paramsKeyword
+    ]
+
+    const TestLayoutModule = class {}
+    const context = {layoutModule: TestLayoutModule}
+
+    const result = runtime.buildOperationSpecFromExpressionWithTarget(specElems, context)
+
+    const expected = {
+      targetModule: TestLayoutModule,
+      targetId: null,
+      name: name,
+      params: paramsMap
+    }
+
+    assert.deepStrictEqual(result, expected)
+  })
+
+  it("builds page operation spec if the first spec elem is equal to :page boxed atom", () => {
+    const target = Type.atom("page")
+
+    const specElems = [
+      target,
+      name,
+      paramsKeyword
+    ]
+
+    const TestPageModule = class {}
+    const context = {pageModule: TestPageModule}
+
+    const result = runtime.buildOperationSpecFromExpressionWithTarget(specElems, context)
+
+    const expected = {
+      targetModule: TestPageModule,
+      targetId: null,
+      name: name,
+      params: paramsMap
+    }
+
+    assert.deepStrictEqual(result, expected)
+  })
+
+  it("builds component operation spec if the first spec elem is different than :page or :layout boxed atom", () => {
+    const target = Type.atom("test_component_2")
+
+    const specElems = [
+      target,
+      name,
+      paramsKeyword
+    ]
+
+    const result = runtime.buildOperationSpecFromExpressionWithTarget(specElems, {})
+
+    const expected = {
+      targetModule: TestComponent2Module,
+      targetId: "test_component_2",
+      name: name,
+      params: paramsMap
+    }
+
+    assert.deepStrictEqual(result, expected)
+  })
+})
+
 describe("buildOperationSpecFromExpressionWithoutTarget()", () => {
   it("builds operation spec from an expression without target specified", () => {
     const name = Type.atom("test")
@@ -19,8 +118,8 @@ describe("buildOperationSpecFromExpressionWithoutTarget()", () => {
       paramsKeyword
     ]
 
-    const TestModule = class {}
-    const context = {targetModule: TestModule}
+    const TestTargetModule = class {}
+    const context = {targetModule: TestTargetModule}
 
     const result = Runtime.buildOperationSpecFromExpressionWithoutTarget(specElems, context)
 
@@ -30,7 +129,7 @@ describe("buildOperationSpecFromExpressionWithoutTarget()", () => {
     const paramsMap = Type.map(paramsMapData)
 
     const expected = {
-      targetModule: TestModule,
+      targetModule: TestTargetModule,
       targetId: null,
       name: name,
       params: paramsMap

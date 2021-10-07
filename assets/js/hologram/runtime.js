@@ -8,6 +8,35 @@ import Type from "./type"
 import Utils from "./utils"
 
 export default class Runtime {
+  buildOperationSpecFromExpressionWithTarget(specElems, context) {
+    let targetModule, targetId;
+    const target = specElems[0].value
+
+    switch (target) {
+      case "layout":
+        targetModule = context.layoutModule
+        targetId = null
+        break;
+
+      case "page":
+        targetModule = context.pageModule
+        targetId = null
+        break;
+
+      default:
+        targetModule = this.getModuleByComponentId(target);
+        targetId = target
+        break;
+    }
+
+    return {
+      targetModule: targetModule,
+      targetId: targetId,
+      name: specElems[1],
+      params: Type.keywordToMap(specElems[2])
+    }
+  }
+
   static buildOperationSpecFromExpressionWithoutTarget(specElems, context) {
     return {
       targetModule: context.targetModule,
