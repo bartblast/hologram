@@ -2,6 +2,26 @@
 
 import { assert, mockWindow, sinon } from "./support/commons";
 import Runtime from "../../assets/js/hologram/runtime";
+import Type from "../../assets/js/hologram/type";
+
+describe("buildOperationSpecFromTextNode()", () => {
+  it("builds operation spec from a text node", () => {
+    const TestTargetModule = class {}
+    const context = {targetModule: TestTargetModule}
+    const textNode = Type.textNode("test")
+
+    const expected = {
+      targetModule: TestTargetModule,
+      targetId: null,
+      name: Type.atom("test"),
+      params: Type.map({})
+    }
+
+    const result = Runtime.buildOperationSpecFromTextNode(textNode, context)
+
+    assert.deepStrictEqual(result, expected)
+  })
+})
 
 describe("getInstance()", () => {
   it("creates a new Runtime object if it doesn't exist yet", () => {

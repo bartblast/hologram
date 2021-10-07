@@ -8,6 +8,43 @@ import Type from "./type"
 import Utils from "./utils"
 
 export default class Runtime {
+  static evaluateOperationSpec(spec, context) {
+    // const node = spec.value[0];
+    // let name, params, target
+
+    // switch (node.type) {
+    //   case "expression":
+    //     return Runtime.evaluateTextNodeOperationSpecevaluateExpressionOperationSpec(node)
+
+    //   case "text":
+    //     return Runtime.buildOperationSpecFromTextNode(node)
+
+    //   default:
+    //     throw...
+    // }
+
+    // if (node.type === "text") {
+
+
+    // } else {
+    //   const callbackResult = node.callback(bindings)
+    //   target = {type: "atom", value: "page"}
+    //   name = callbackResult.data[0]
+    //   params = Type.keywordToMap(callbackResult.data[1])
+    // }
+
+    // return [target, name, params]
+  }
+
+  static buildOperationSpecFromTextNode(textNode, context) {
+    return {
+      targetModule: context.targetModule,
+      targetId: null,
+      name: Type.atom(textNode.content),
+      params: Type.map({})
+    }
+  }
+
   static getInstance(window) {
     if (!window.__hologramRuntime__) {
       window.__hologramRuntime__ = new Runtime(window)
@@ -81,32 +118,7 @@ export default class Runtime {
     this.loadPageOnPopStateEvents()
   }
   
-  static evaluateActionOrCommandSpec(eventSpec, scopeState) {
-    const eventValueFirstPart = eventSpec.value[0]
-    let name, params, target
-
-    if (eventValueFirstPart.type == "expression") {
-      const callbackResult = eventValueFirstPart.callback(scopeState)
-
-      if (eventSpec.modifiers.includes("forward")) {
-        target = callbackResult.data[0]
-        name = callbackResult.data[1]
-        params = Type.keywordToMap(callbackResult.data[2])
-      } else {
-        target = {type: "atom", value: "page"}
-        name = callbackResult.data[0]
-        params = Type.keywordToMap(callbackResult.data[1])
-      }
-
-    // type = text
-    } else {
-      target = "page"
-      name = {type: "atom", value: eventValueFirstPart.content}
-      params = {type: "map", data: {}}
-    }
-
-    return [target, name, params]
-  }
+  
 
   // TODO: refactor & test
   static getModule(module) {
