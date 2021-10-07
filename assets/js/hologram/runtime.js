@@ -27,10 +27,7 @@ export default class Runtime {
 
 
     // } else {
-    //   const callbackResult = node.callback(bindings)
-    //   target = {type: "atom", value: "page"}
-    //   name = callbackResult.data[0]
-    //   params = Type.keywordToMap(callbackResult.data[1])
+
     // }
 
     // return [target, name, params]
@@ -52,6 +49,13 @@ export default class Runtime {
 
     return window.__hologramRuntime__
   }
+
+  getModuleByComponentId(componentId) {
+    return this.componentModules[componentId]
+  }
+
+
+
 
 
 

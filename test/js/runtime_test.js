@@ -41,6 +41,25 @@ describe("getInstance()", () => {
   })
 })
 
+describe("getModuleByComponentId()", () => {
+  it("returns the class of the component with the given ID", () => {
+    const window = mockWindow()
+    const runtime = Runtime.getInstance(window)
+
+    const TestComponentModule1 = class {}
+    const TestComponentModule2 = class {}
+
+    runtime.componentModules = {
+      component1: TestComponentModule1,
+      component2: TestComponentModule2
+    }
+
+    const result = runtime.getModuleByComponentId("component2")
+
+    assert.equal(result, TestComponentModule2)
+  })
+})
+
 
 
 
