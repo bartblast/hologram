@@ -231,34 +231,6 @@ describe("isTruthy()", () => {
   })
 })
 
-describe("keyword()", () => {
-  let elems;
-
-  beforeEach(() => {
-    elems = {
-      a: Type.integer(1),
-      b: Type.integer(2)
-    }
-  })
-
-  it("returns boxed list value which has the structure of a keyword list", () => {
-    const tuples = [
-      Type.tuple([Type.atom("a"), Type.integer(1)]),
-      Type.tuple([Type.atom("b"), Type.integer(2)])
-    ]
-
-    const expected = Type.list(tuples)
-    const result = Type.keyword(elems)
-
-    assert.deepStrictEqual(result, expected)
-  })
-
-  it("returns frozen object", () => {
-    const result = Type.keyword(elems)
-    assertFrozen(result)
-  })
-})
-
 describe("keywordToMap()", () => {
   it("converts empty boxed keyword list to boxed map", () => {
     const keyword = Type.list([])
