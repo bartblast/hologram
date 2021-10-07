@@ -3,6 +3,23 @@
 import { assert, mockWindow, sinon } from "./support/commons";
 import Runtime from "../../assets/js/hologram/runtime";
 
+describe("getInstance()", () => {
+  it("creates a new Runtime object if it doesn't exist yet", () => {
+    const window = mockWindow()
+    const runtime = Runtime.getInstance(window)
+
+    assert.isTrue(runtime instanceof Runtime)
+    assert.equal(window.__hologramRuntime__, runtime)
+  })
+
+  it("doesn't create a new Runtime object if it already exists", () => {
+    const window = mockWindow()
+    const runtime1 = Runtime.getInstance(window)
+    const runtime2 = Runtime.getInstance(window)
+
+    assert.equal(runtime2, runtime1)
+  })
+})
 
 
 
@@ -20,8 +37,7 @@ import Runtime from "../../assets/js/hologram/runtime";
 
 
 
-
-describe("executeAction()", () => {
+describe("executeAction2()", () => {
   let action, actionParams, clientPushCommandFake, command, domRenderFake, runtime, state, window;
 
   beforeEach(() => {
@@ -66,7 +82,7 @@ describe("executeAction()", () => {
       }
     }
 
-    runtime.executeAction(action, actionParams, state, context)
+    runtime.executeAction2(action, actionParams, state, context)
 
     const expectedState = {
       type: "map", 
@@ -103,7 +119,7 @@ describe("executeAction()", () => {
       }
     }
 
-    runtime.executeAction(action, actionParams, state, context)
+    runtime.executeAction2(action, actionParams, state, context)
 
     const expectedState = {
       type: "map",
@@ -131,7 +147,7 @@ describe("executeAction()", () => {
       }
     }
 
-    runtime.executeAction(action, actionParams, state, context)
+    runtime.executeAction2(action, actionParams, state, context)
 
     const expectedState = {
       type: "map", 

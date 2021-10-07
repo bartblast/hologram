@@ -6,17 +6,66 @@ import ScriptsReloader from "./scripts_reloader"
 import Type from "./type"
 import Utils from "./utils"
 
-
-
-
-
-
-
-
-
-
-
 export default class Runtime {
+  static getInstance(window) {
+    if (!window.__hologramRuntime__) {
+      window.__hologramRuntime__ = new Runtime(window)
+    }
+
+    return window.__hologramRuntime__
+  }
+
+
+
+
+
+
+
+
+
+
+
+
+
+  
+  executeAction2(actionTarget, actionName, actionParams, fullState, scopeState, context) {
+    let state, targetModule;
+    let isPageTarget = actionTarget.type == "atom" && actionTarget.value == "page"
+
+    if (isPageTarget) {
+      targetModule = context.pageModule
+      state = fullState
+    } else {
+      targetModule = context.scopeModule
+      state = scopeState
+    }
+
+    const actionResult = targetModule.action(actionName, actionParams, state)
+
+    if (actionResult.type == "tuple") {
+      this.state = actionResult.data[0]
+
+      let commandName = {type: "atom", value: actionResult.data[1].value}
+
+      let commandParams = {type: "map", data: {}}
+      if (actionResult.data[2]) {
+        commandParams = actionResult.data[2]
+      }
+
+      this.client.pushCommand(targetModule, commandName, commandParams, this.handleCommandResponse)
+
+    } else {
+      if (isPageTarget) {
+        this.state = actionResult
+      } else {
+        // TODO: handle non-page targets
+      }
+    }
+
+    this.dom.render(context.pageModule)
+  }
+
+
   constructor(window) {
     this.client = new Client()
     this.client.connect()
@@ -57,52 +106,6 @@ export default class Runtime {
     return [target, name, params]
   }
 
-  executeAction(actionTarget, actionName, actionParams, fullState, scopeState, context) {
-    let state, targetModule;
-    let isPageTarget = actionTarget.type == "atom" && actionTarget.value == "page"
-
-    if (isPageTarget) {
-      targetModule = context.pageModule
-      state = fullState
-    } else {
-      targetModule = context.scopeModule
-      state = scopeState
-    }
-
-    const actionResult = targetModule.action(actionName, actionParams, state)
-
-    if (actionResult.type == "tuple") {
-      this.state = actionResult.data[0]
-
-      let commandName = {type: "atom", value: actionResult.data[1].value}
-
-      let commandParams = {type: "map", data: {}}
-      if (actionResult.data[2]) {
-        commandParams = actionResult.data[2]
-      }
-
-      this.client.pushCommand(targetModule, commandName, commandParams, this.handleCommandResponse)
-
-    } else {
-      if (isPageTarget) {
-        this.state = actionResult
-      } else {
-        // TODO: handle non-page targets
-      }
-    }
-
-    this.dom.render(context.pageModule)
-  }
-
-  // TODO: refactor & test
-  static getInstance(window) {
-    if (!window.hologramRuntime) {
-      window.hologramRuntime = new Runtime(window)
-    }
-
-    return window.hologramRuntime
-  }
-
   // TODO: refactor & test
   static getModule(module) {
     let name;
@@ -138,12 +141,8 @@ export default class Runtime {
       this.handleRedirect(params)
 
     } else {
-      const context = {
-        pageModule: Runtime.getModule(response.data[2].data["~string[page_module]"].value),
-        scopeModule: Runtime.getModule(response.data[2].data["~string[scope_module]"].value)
-      }
-
-      this.executeAction(action, params, this.state, context)
+      const targetModule = this.getModule(response.data[2].className)
+      this.executeAction2(targetModule, action, params, this.state)
     }
   }
 
@@ -151,7 +150,7 @@ export default class Runtime {
     let actionName, actionParams, actionTarget;
     [actionTarget, actionName, actionParams] = Runtime.evaluateActionOrCommandSpec(eventSpec, scopeState)
 
-    this.executeAction(actionTarget, actionName, actionParams, fullState, scopeState, context)
+    this.executeAction2(actionTarget, actionName, actionParams, fullState, scopeState, context)
   }
 
   handleEventCommand(eventSpec, fullState, scopeState, context) {
@@ -181,7 +180,7 @@ export default class Runtime {
       params.data[`~string[${el[0]}]`] = {type: "string", value: el[1]}
     }
 
-    this.executeAction(onSubmitSpec.value, params, fullState, scopeState, context)
+    this.executeAction2(onSubmitSpec.value, params, fullState, scopeState, context)
   }
 
   static interpolate(value) {
