@@ -3,6 +3,7 @@
 import { assert, assertFrozen } from "./support/commons";
 import HologramNotImplementedError from "../../assets/js/hologram/errors";
 import Type from "../../assets/js/hologram/type";
+import { before } from "lodash";
 
 describe("atom()", () => {
   it("returns boxed atom value", () => {
@@ -227,6 +228,34 @@ describe("isTruthy()", () => {
     const result = Type.isTruthy(arg)
 
     assert.isTrue(result)
+  })
+})
+
+describe("keyword()", () => {
+  let elems;
+
+  beforeEach(() => {
+    elems = {
+      a: Type.integer(1),
+      b: Type.integer(2)
+    }
+  })
+
+  it("returns boxed list value which has the structure of a keyword list", () => {
+    const tuples = [
+      Type.tuple([Type.atom("a"), Type.integer(1)]),
+      Type.tuple([Type.atom("b"), Type.integer(2)])
+    ]
+
+    const expected = Type.list(tuples)
+    const result = Type.keyword(elems)
+
+    assert.deepStrictEqual(result, expected)
+  })
+
+  it("returns frozen object", () => {
+    const result = Type.keyword(elems)
+    assertFrozen(result)
   })
 })
 

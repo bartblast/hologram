@@ -56,6 +56,15 @@ export default class Type {
     return !Type.isFalsy(boxedValue)
   }
 
+  static keyword(elems) {
+    const tuples = Object.keys(elems).reduce((acc, key) => {
+      acc.push(Type.tuple([Type.atom(key), elems[key]]))
+      return acc
+    }, [])
+
+    return Utils.freeze({type: "list", data: tuples})
+  }
+
   static keywordToMap(keyword) {
     const result = keyword.data.reduce((acc, elem) => {
       const key = Type.serializedKey(elem.data[0])
