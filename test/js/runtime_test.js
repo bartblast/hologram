@@ -60,7 +60,35 @@ describe("getModuleByComponentId()", () => {
   })
 })
 
+describe("hasOperationTarget()", () => {
+  it("returns true if the first 2 elems are bounded atoms", () => {
+    const elems = [Type.atom("a"), Type.atom("b")]
+    const result = Runtime.hasOperationTarget(elems)
 
+    assert.isTrue(result)
+  })
+
+  it("returns false if there is only 1 elem", () => {
+    const elems = [Type.atom("a")]
+    const result = Runtime.hasOperationTarget(elems)
+
+    assert.isFalse(result)
+  })
+
+  it("returns false if the first elem is not a bounded atom", () => {
+    const elems = [Type.integer(1), Type.atom("b")]
+    const result = Runtime.hasOperationTarget(elems)
+
+    assert.isFalse(result)
+  })
+
+  it("returns false if the second elem is not a bounded atom", () => {
+    const elems = [Type.atom("a"), Type.integer(2)]
+    const result = Runtime.hasOperationTarget(elems)
+
+    assert.isFalse(result)
+  })
+})
 
 
 

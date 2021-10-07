@@ -8,6 +8,49 @@ import Type from "./type"
 import Utils from "./utils"
 
 export default class Runtime {
+  static buildOperationSpecFromTextNode(textNode, context) {
+    return {
+      targetModule: context.targetModule,
+      targetId: null,
+      name: Type.atom(textNode.content),
+      params: Type.map({})
+    }
+  }
+
+  static getInstance(window) {
+    if (!window.__hologramRuntime__) {
+      window.__hologramRuntime__ = new Runtime(window)
+    }
+
+    return window.__hologramRuntime__
+  }
+
+  getModuleByComponentId(componentId) {
+    return this.componentModules[componentId]
+  }
+
+  static hasOperationTarget(elems) {
+    return elems.length >= 2 && Type.isAtom(elems[0]) && Type.isAtom(elems[1])
+  }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
   static evaluateOperationSpec(spec, context) {
     // const node = spec.value[0];
     // let name, params, target
@@ -32,43 +75,6 @@ export default class Runtime {
 
     // return [target, name, params]
   }
-
-  static buildOperationSpecFromTextNode(textNode, context) {
-    return {
-      targetModule: context.targetModule,
-      targetId: null,
-      name: Type.atom(textNode.content),
-      params: Type.map({})
-    }
-  }
-
-  static getInstance(window) {
-    if (!window.__hologramRuntime__) {
-      window.__hologramRuntime__ = new Runtime(window)
-    }
-
-    return window.__hologramRuntime__
-  }
-
-  getModuleByComponentId(componentId) {
-    return this.componentModules[componentId]
-  }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
   
   executeAction2(actionTarget, actionName, actionParams, fullState, scopeState, context) {
     let state, targetModule;
