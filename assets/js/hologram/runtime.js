@@ -8,6 +8,17 @@ import Type from "./type"
 import Utils from "./utils"
 
 export default class Runtime {
+  buildOperation(eventHandlerSpec, context) {
+    const node = eventHandlerSpec.value[0];
+
+    if (node.type === "expression") {
+      return this.buildOperationFromExpressionNode(node, context)
+
+    } else { // node.type === "text"
+      return Runtime.buildOperationFromTextNode(node, context)
+    }
+  }
+  
   buildOperationFromExpressionNode(node, context) {
     const specElems = node.callback(context.bindings).data
 

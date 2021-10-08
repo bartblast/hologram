@@ -4,6 +4,54 @@ import { assert, fixtureOperationParamsKeyword, fixtureOperationParamsMap, fixtu
 import Runtime from "../../assets/js/hologram/runtime";
 import Type from "../../assets/js/hologram/type";
 
+describe("buildOperation()", () => {
+  let context, expected, runtime;
+
+  beforeEach(() => {
+    const window = mockWindow()
+    runtime = new Runtime(window)
+
+    const TestLayoutModule = class {}
+    const TestPageModule = class {}
+    const TestTargetModule = class {}
+
+    context = {
+      bindings: Type.map({}),
+      layoutModule: TestLayoutModule,
+      pageModule: TestPageModule,
+      targetModule: TestTargetModule,
+      targetId: "test_target_id"
+    }
+
+    expected = Type.atom("test_action")
+  })
+
+  it("builds operation from event handler spec with expression node", () => {
+    const specTuple = Type.tuple([
+      Type.atom("test_action"),
+      fixtureOperationParamsKeyword()
+    ])
+
+    const eventHandlerSpec = {
+      value: [fixtureOperationSpecExpressionNode(specTuple)]
+    }
+
+    const result = runtime.buildOperation(eventHandlerSpec, context)
+    
+    assert.deepStrictEqual(result.name, expected)
+  })
+
+  it("builds operation from event handler spec with text node", () => {
+    const eventHandlerSpec = {
+      value: [Type.textNode("test_action")]
+    }
+
+    const result = runtime.buildOperation(eventHandlerSpec, context)
+    
+    assert.deepStrictEqual(result.name, expected)
+  })
+})
+
 describe("buildOperationFromExpressionNode()", () => {
   let context, runtime, TestPageModule, TestTargetModule;
 
