@@ -368,7 +368,7 @@ describe("getCommandNameFromActionResult()", () => {
     assert.isNull(commandName)
   })
 
-  it("fetches the command name from an action result that is a boxed tuple and contains target", () => {
+  it("fetches the command name from an action result that is a boxed tuple that contains target", () => {
     const actionResult = Type.tuple([
       Type.map({}),
       Type.atom("test_target"),
@@ -381,7 +381,7 @@ describe("getCommandNameFromActionResult()", () => {
     assert.deepStrictEqual(commandName, expected)
   })
 
-  it("fetches the command name from an action result that is a boxed tuple and doesn't contain target", () => {
+  it("fetches the command name from an action result that is a boxed tuple that doesn't contain target", () => {
     const actionResult = Type.tuple([
       Type.map({}),
       Type.atom("test_command")
@@ -401,6 +401,52 @@ describe("getCommandNameFromActionResult()", () => {
     const commandName = Runtime.getCommandNameFromActionResult(actionResult)
 
     assert.isNull(commandName)
+  })
+})
+
+describe("getCommandParamsFromActionResult()", () => {
+  it("returns null if the action result is a boxed map", () => {
+    const actionResult = Type.map({})
+    const commandParams = Runtime.getCommandParamsFromActionResult(actionResult)
+
+    assert.isNull(commandParams)
+  })
+
+  it("fetches the command params from an action result that is a boxed tuple that contains target", () => {
+    const actionResult = Type.tuple([
+      Type.map({}),
+      Type.atom("test_target"),
+      Type.atom("test_command"),
+      fixtureOperationParamsKeyword()
+    ])
+
+    const commandParams = Runtime.getCommandParamsFromActionResult(actionResult)
+    const expected = fixtureOperationParamsKeyword()
+
+    assert.deepStrictEqual(commandParams, expected)
+  })
+
+  it("fetches the command params from an action result that is a boxed tuple that doesn't contain target", () => {
+    const actionResult = Type.tuple([
+      Type.map({}),
+      Type.atom("test_command"),
+      fixtureOperationParamsKeyword()
+    ])
+
+    const commandParams = Runtime.getCommandParamsFromActionResult(actionResult)
+    const expected = fixtureOperationParamsKeyword()
+
+    assert.deepStrictEqual(commandParams, expected)
+  })
+
+  it("returns null if the action result is a boxed tuple that doesn't contain command params", () => {
+    const actionResult = Type.tuple([
+      Type.map({}),
+    ])
+
+    const commandParams = Runtime.getCommandNameFromActionResult(actionResult)
+
+    assert.isNull(commandParams)
   })
 })
 
@@ -428,7 +474,7 @@ describe("getTargetFromActionResult()", () => {
     assert.isNull(target)
   })
 
-  it("fetches the target from an action result that is a boxed tuple and contains target", () => {
+  it("fetches the target from an action result that is a boxed tuple that contains target", () => {
     const actionResult = Type.tuple([
       Type.map({}),
       Type.atom("test_target"),
