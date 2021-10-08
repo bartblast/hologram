@@ -2,6 +2,7 @@
 
 import Client from "./client"
 import DOM from "./dom"
+import Operation from "./operation"
 import ScriptsReloader from "./scripts_reloader"
 import Store from "./store";
 import Type from "./type"
@@ -15,7 +16,7 @@ export default class Runtime {
       return this.buildOperationFromExpressionNode(node, context)
 
     } else { // node.type === "text"
-      return Runtime.buildOperationFromTextNode(node, context)
+      return Operation.buildFromTextNodeSpec(node, context)
     }
   }
   
@@ -64,15 +65,6 @@ export default class Runtime {
       targetId: context.targetId,
       name: specElems[0],
       params: Type.keywordToMap(specElems[1])
-    }
-  }
-
-  static buildOperationFromTextNode(textNode, context) {
-    return {
-      targetModule: context.targetModule,
-      targetId: null,
-      name: Type.atom(textNode.content),
-      params: Type.map({})
     }
   }
 

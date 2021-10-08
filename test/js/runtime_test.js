@@ -216,24 +216,6 @@ describe("buildOperationFromExpressionNodeWithoutTarget()", () => {
   })
 })
 
-describe("buildOperationFromTextNode()", () => {
-  it("builds operation from a text node spec", () => {
-    const context = {targetModule: TestTargetModule}
-    const textNode = Type.textNode("test")
-
-    const expected = {
-      targetModule: TestTargetModule,
-      targetId: null,
-      name: Type.atom("test"),
-      params: Type.map({})
-    }
-
-    const result = Runtime.buildOperationFromTextNode(textNode, context)
-
-    assert.deepStrictEqual(result, expected)
-  })
-})
-
 describe("executeAction()", () => {
   let actionSpec, context;
 
