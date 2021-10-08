@@ -10,6 +10,31 @@ export default class Operation {
     this.params = params
   }
 
+  static buildFromExpressionNodeSpecWithTarget(node, context, componentRegistry) {
+    const specElems = node.callback(context.bindings).data
+    const target = specElems[0].value
+    let targetModule, targetId;
+
+    switch (target) {
+      case "layout":
+        targetModule = context.layoutModule
+        targetId = null
+        break;
+
+      case "page":
+        targetModule = context.pageModule
+        targetId = null
+        break;
+
+      default:
+        targetModule = componentRegistry[target];
+        targetId = target
+        break;
+    }
+
+    return new Operation(targetModule, targetId, specElems[1], Type.keywordToMap(specElems[2]))
+  }
+
   static buildFromTextNodeSpec(textNode, context) {
     const targetModule = context.targetModule
     const targetId = null

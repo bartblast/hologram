@@ -24,38 +24,9 @@ export default class Runtime {
     const specElems = node.callback(context.bindings).data
 
     if (Runtime.hasOperationTarget(specElems)) {
-      return this.buildOperationFromExpressionNodeWithTarget(specElems, context)
+      return Operation.buildFromExpressionNodeSpecWithTarget(node, context, this.componentRegistry)
     } else {
       return Runtime.buildOperationFromExpressionNodeWithoutTarget(specElems, context)
-    }
-  }
-
-  buildOperationFromExpressionNodeWithTarget(specElems, context) {
-    let targetModule, targetId;
-    const target = specElems[0].value
-
-    switch (target) {
-      case "layout":
-        targetModule = context.layoutModule
-        targetId = null
-        break;
-
-      case "page":
-        targetModule = context.pageModule
-        targetId = null
-        break;
-
-      default:
-        targetModule = this.getModuleByComponentId(target);
-        targetId = target
-        break;
-    }
-
-    return {
-      targetModule: targetModule,
-      targetId: targetId,
-      name: specElems[1],
-      params: Type.keywordToMap(specElems[2])
     }
   }
 
@@ -107,10 +78,6 @@ export default class Runtime {
     }
 
     return window.__hologramRuntime__
-  }
-
-  getModuleByComponentId(componentId) {
-    return this.componentModules[componentId]
   }
 
   static getCommandNameFromActionResult(actionResult) {
@@ -207,6 +174,7 @@ export default class Runtime {
     this.client = new Client()
     this.client.connect()
 
+    this.componentRegistry = {}
     this.document = window.document
     this.dom = new DOM(this, window)
     this.pageModule = null

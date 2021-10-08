@@ -43,11 +43,11 @@ export function fixtureOperationParamsMap() {
   return Type.keywordToMap(operationParamsKeyword)
 }
 
-export function fixtureOperationSpecExpressionNode(specTuple) {
-  const callback = (_$state) => { return specTuple }
-  const expressionNode = {type: "expression", callback: callback}
+export function fixtureOperationSpecExpressionNode(specElems) {
+  const callback = (_$state) => { return Type.tuple(specElems) }
+  const expressionNodeSpec = {type: "expression", callback: callback}
 
-  return Utils.freeze(expressionNode)
+  return Utils.freeze(expressionNodeSpec)
 }
 
 export function mockWindow() {
