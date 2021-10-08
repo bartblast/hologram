@@ -4,17 +4,19 @@ import { assert, fixtureOperationParamsKeyword, fixtureOperationParamsMap, fixtu
 import Runtime from "../../assets/js/hologram/runtime";
 import Type from "../../assets/js/hologram/type";
 
+const TestLayoutModule = class {}
+const TestPageModule = class {}
+const TestTargetModule = class {}
+const TestComponentModule1 = class {}
+const TestComponentModule2 = class {}
+
+const window = mockWindow()
+const runtime = Runtime.getInstance(window)
+
 describe("buildOperation()", () => {
-  let context, expected, runtime;
+  let context, expected;
 
   beforeEach(() => {
-    const window = mockWindow()
-    runtime = new Runtime(window)
-
-    const TestLayoutModule = class {}
-    const TestPageModule = class {}
-    const TestTargetModule = class {}
-
     context = {
       bindings: Type.map({}),
       layoutModule: TestLayoutModule,
@@ -53,16 +55,9 @@ describe("buildOperation()", () => {
 })
 
 describe("buildOperationFromExpressionNode()", () => {
-  let context, runtime, TestPageModule, TestTargetModule;
+  let context;
 
   beforeEach(() => {
-    const window = mockWindow()
-    runtime = new Runtime(window)
-
-    const TestLayoutModule = class {}
-    TestPageModule = class {}
-    TestTargetModule = class {}
-
     context = {
       bindings: Type.map({}),
       layoutModule: TestLayoutModule,
@@ -115,22 +110,16 @@ describe("buildOperationFromExpressionNode()", () => {
 })
 
 describe("buildOperationFromExpressionNodeWithTarget()", () => {
-  let name, paramsMap, paramsKeyword, runtime, TestComponent2Module;
+  let name, paramsMap, paramsKeyword;
 
   beforeEach(() => {
     name = Type.atom("test")
     paramsKeyword = fixtureOperationParamsKeyword()
     paramsMap = fixtureOperationParamsMap()
 
-    const window = mockWindow()
-    runtime = new Runtime(window)
-
-    const TestComponent1Module = class {}
-    TestComponent2Module = class {}
-
     runtime.componentModules = {
-      test_component_1: TestComponent1Module,
-      test_component_2: TestComponent2Module
+      test_component_1: TestComponentModule1,
+      test_component_2: TestComponentModule2
     }
   })
 
@@ -143,7 +132,6 @@ describe("buildOperationFromExpressionNodeWithTarget()", () => {
       paramsKeyword
     ]
 
-    const TestLayoutModule = class {}
     const context = {layoutModule: TestLayoutModule}
 
     const result = runtime.buildOperationFromExpressionNodeWithTarget(specElems, context)
@@ -167,7 +155,6 @@ describe("buildOperationFromExpressionNodeWithTarget()", () => {
       paramsKeyword
     ]
 
-    const TestPageModule = class {}
     const context = {pageModule: TestPageModule}
 
     const result = runtime.buildOperationFromExpressionNodeWithTarget(specElems, context)
@@ -194,7 +181,7 @@ describe("buildOperationFromExpressionNodeWithTarget()", () => {
     const result = runtime.buildOperationFromExpressionNodeWithTarget(specElems, {})
 
     const expected = {
-      targetModule: TestComponent2Module,
+      targetModule: TestComponentModule2,
       targetId: "test_component_2",
       name: name,
       params: paramsMap
@@ -214,7 +201,6 @@ describe("buildOperationFromExpressionNodeWithoutTarget()", () => {
       paramsKeyword
     ]
 
-    const TestTargetModule = class {}
     const context = {targetModule: TestTargetModule, targetId: "test_id"}
 
     const result = Runtime.buildOperationFromExpressionNodeWithoutTarget(specElems, context)
@@ -232,7 +218,6 @@ describe("buildOperationFromExpressionNodeWithoutTarget()", () => {
 
 describe("buildOperationFromTextNode()", () => {
   it("builds operation from a text node spec", () => {
-    const TestTargetModule = class {}
     const context = {targetModule: TestTargetModule}
     const textNode = Type.textNode("test")
 
@@ -269,12 +254,6 @@ describe("getInstance()", () => {
 
 describe("getModuleByComponentId()", () => {
   it("returns the class of the component with the given ID", () => {
-    const window = mockWindow()
-    const runtime = Runtime.getInstance(window)
-
-    const TestComponentModule1 = class {}
-    const TestComponentModule2 = class {}
-
     runtime.componentModules = {
       component1: TestComponentModule1,
       component2: TestComponentModule2
