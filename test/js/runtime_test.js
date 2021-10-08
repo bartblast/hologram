@@ -420,6 +420,38 @@ describe("getStateFromActionResult()", () => {
   })
 })
 
+describe("getTargetFromActionResult()", () => {
+  it("returns null if the action result is a boxed map", () => {
+    const actionResult = Type.map({})
+    const target = Runtime.getTargetFromActionResult(actionResult)
+
+    assert.isNull(target)
+  })
+
+  it("fetches the target from an action result that is a boxed tuple and contains target", () => {
+    const actionResult = Type.tuple([
+      Type.map({}),
+      Type.atom("test_target"),
+      Type.atom("test_command")
+    ])
+
+    const target = Runtime.getTargetFromActionResult(actionResult)
+    const expected = Type.atom("test_target")
+
+    assert.deepStrictEqual(target, expected)
+  })
+
+  it("returns null if the action result is a boxed tuple that doesn't contain target", () => {
+    const actionResult = Type.tuple([
+      Type.map({}),
+    ])
+
+    const target = Runtime.getCommandNameFromActionResult(actionResult)
+
+    assert.isNull(target)
+  })
+})
+
 describe("hasOperationTarget()", () => {
   it("returns true if the first 2 spec elems are bounded atoms", () => {
     const specElems = [Type.atom("a"), Type.atom("b")]

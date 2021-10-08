@@ -149,6 +149,22 @@ export default class Runtime {
     }
   }
 
+  static getTargetFromActionResult(actionResult) {
+    if (Type.isMap(actionResult)) {
+      return null
+
+    } else { // tuple
+      const actionResultElems = actionResult.data
+
+      if (actionResultElems.length >= 3 && Type.isAtom(actionResultElems[2])) {
+        return actionResultElems[1]        
+
+      } else {
+        return null
+      }
+    }
+  }
+
   static hasOperationTarget(specElems) {
     return specElems.length >= 2 && Type.isAtom(specElems[0]) && Type.isAtom(specElems[1])
   }
