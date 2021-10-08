@@ -8,17 +8,17 @@ import Type from "./type"
 import Utils from "./utils"
 
 export default class Runtime {
-  buildOperationSpecFromExpression(expressionNode, context) {
-    const specElems = expressionNode.callback(context.bindings).data
+  buildOperationFromExpressionNode(node, context) {
+    const specElems = node.callback(context.bindings).data
 
     if (Runtime.hasOperationTarget(specElems)) {
-      return this.buildOperationSpecFromExpressionWithTarget(specElems, context)
+      return this.buildOperationFromExpressionNodeWithTarget(specElems, context)
     } else {
-      return Runtime.buildOperationSpecFromExpressionWithoutTarget(specElems, context)
+      return Runtime.buildOperationFromExpressionNodeWithoutTarget(specElems, context)
     }
   }
 
-  buildOperationSpecFromExpressionWithTarget(specElems, context) {
+  buildOperationFromExpressionNodeWithTarget(specElems, context) {
     let targetModule, targetId;
     const target = specElems[0].value
 
@@ -47,7 +47,7 @@ export default class Runtime {
     }
   }
 
-  static buildOperationSpecFromExpressionWithoutTarget(specElems, context) {
+  static buildOperationFromExpressionNodeWithoutTarget(specElems, context) {
     return {
       targetModule: context.targetModule,
       targetId: context.targetId,
@@ -56,7 +56,7 @@ export default class Runtime {
     }
   }
 
-  static buildOperationSpecFromTextNode(textNode, context) {
+  static buildOperationFromTextNode(textNode, context) {
     return {
       targetModule: context.targetModule,
       targetId: null,
@@ -99,30 +99,12 @@ export default class Runtime {
 
 
 
-  static evaluateOperationSpec(spec, context) {
-    // const node = spec.value[0];
-    // let name, params, target
-
-    // switch (node.type) {
-    //   case "expression":
-    //     return Runtime.evaluateTextNodeOperationSpecevaluateExpressionOperationSpec(node)
-
-    //   case "text":
-    //     return Runtime.buildOperationSpecFromTextNode(node)
-
-    //   default:
-    //     throw...
-    // }
-
-    // if (node.type === "text") {
+  
 
 
-    // } else {
 
-    // }
 
-    // return [target, name, params]
-  }
+
   
   executeAction2(actionTarget, actionName, actionParams, fullState, scopeState, context) {
     let state, targetModule;

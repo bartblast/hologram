@@ -4,7 +4,7 @@ import { assert, fixtureOperationParamsKeyword, fixtureOperationParamsMap, fixtu
 import Runtime from "../../assets/js/hologram/runtime";
 import Type from "../../assets/js/hologram/type";
 
-describe("buildOperationSpecFromExpression()", () => {
+describe("buildOperationFromExpressionNode()", () => {
   let context, runtime, TestPageModule, TestTargetModule;
 
   beforeEach(() => {
@@ -24,7 +24,7 @@ describe("buildOperationSpecFromExpression()", () => {
     }
   })
 
-  it("builds operation spec from an expression node with target specified", () => {
+  it("builds operation from an expression node spec with target specified", () => {
     const specTuple = Type.tuple([
       Type.atom("page"),
       Type.atom("test_action"),
@@ -33,7 +33,7 @@ describe("buildOperationSpecFromExpression()", () => {
 
     const expressionNode = fixtureOperationSpecExpressionNode(specTuple)
 
-    const result = runtime.buildOperationSpecFromExpression(expressionNode, context)
+    const result = runtime.buildOperationFromExpressionNode(expressionNode, context)
 
     const expected = {
       targetModule: TestPageModule,
@@ -45,7 +45,7 @@ describe("buildOperationSpecFromExpression()", () => {
     assert.deepStrictEqual(result, expected)
   })
 
-  it("builds operation spec from an expression node without target specified", () => {
+  it("builds operation from an expression node spec without target specified", () => {
     const specTuple = Type.tuple([
       Type.atom("test_action"),
       fixtureOperationParamsKeyword()
@@ -53,7 +53,7 @@ describe("buildOperationSpecFromExpression()", () => {
 
     const expressionNode = fixtureOperationSpecExpressionNode(specTuple)
 
-    const result = runtime.buildOperationSpecFromExpression(expressionNode, context)
+    const result = runtime.buildOperationFromExpressionNode(expressionNode, context)
 
     const expected = {
       targetModule: TestTargetModule,
@@ -66,7 +66,7 @@ describe("buildOperationSpecFromExpression()", () => {
   })
 })
 
-describe("buildOperationSpecFromExpressionWithTarget()", () => {
+describe("buildOperationFromExpressionNodeWithTarget()", () => {
   let name, paramsMap, paramsKeyword, runtime, TestComponent2Module;
 
   beforeEach(() => {
@@ -86,7 +86,7 @@ describe("buildOperationSpecFromExpressionWithTarget()", () => {
     }
   })
 
-  it("builds layout operation spec if the first spec elem is equal to :layout boxed atom", () => {
+  it("builds layout target operation if the first spec elem is equal to :layout boxed atom", () => {
     const target = Type.atom("layout")
 
     const specElems = [
@@ -98,7 +98,7 @@ describe("buildOperationSpecFromExpressionWithTarget()", () => {
     const TestLayoutModule = class {}
     const context = {layoutModule: TestLayoutModule}
 
-    const result = runtime.buildOperationSpecFromExpressionWithTarget(specElems, context)
+    const result = runtime.buildOperationFromExpressionNodeWithTarget(specElems, context)
 
     const expected = {
       targetModule: TestLayoutModule,
@@ -110,7 +110,7 @@ describe("buildOperationSpecFromExpressionWithTarget()", () => {
     assert.deepStrictEqual(result, expected)
   })
 
-  it("builds page operation spec if the first spec elem is equal to :page boxed atom", () => {
+  it("builds page target operation if the first spec elem is equal to :page boxed atom", () => {
     const target = Type.atom("page")
 
     const specElems = [
@@ -122,7 +122,7 @@ describe("buildOperationSpecFromExpressionWithTarget()", () => {
     const TestPageModule = class {}
     const context = {pageModule: TestPageModule}
 
-    const result = runtime.buildOperationSpecFromExpressionWithTarget(specElems, context)
+    const result = runtime.buildOperationFromExpressionNodeWithTarget(specElems, context)
 
     const expected = {
       targetModule: TestPageModule,
@@ -134,7 +134,7 @@ describe("buildOperationSpecFromExpressionWithTarget()", () => {
     assert.deepStrictEqual(result, expected)
   })
 
-  it("builds component operation spec if the first spec elem is different than :page or :layout boxed atom", () => {
+  it("builds component target operation if the first spec elem is different than :page or :layout boxed atom", () => {
     const target = Type.atom("test_component_2")
 
     const specElems = [
@@ -143,7 +143,7 @@ describe("buildOperationSpecFromExpressionWithTarget()", () => {
       paramsKeyword
     ]
 
-    const result = runtime.buildOperationSpecFromExpressionWithTarget(specElems, {})
+    const result = runtime.buildOperationFromExpressionNodeWithTarget(specElems, {})
 
     const expected = {
       targetModule: TestComponent2Module,
@@ -156,8 +156,8 @@ describe("buildOperationSpecFromExpressionWithTarget()", () => {
   })
 })
 
-describe("buildOperationSpecFromExpressionWithoutTarget()", () => {
-  it("builds operation spec from an expression without target specified", () => {
+describe("buildOperationFromExpressionNodeWithoutTarget()", () => {
+  it("builds operation from an expression node spec without target specified", () => {
     const name = Type.atom("test")
     const paramsKeyword = fixtureOperationParamsKeyword()
 
@@ -169,7 +169,7 @@ describe("buildOperationSpecFromExpressionWithoutTarget()", () => {
     const TestTargetModule = class {}
     const context = {targetModule: TestTargetModule, targetId: "test_id"}
 
-    const result = Runtime.buildOperationSpecFromExpressionWithoutTarget(specElems, context)
+    const result = Runtime.buildOperationFromExpressionNodeWithoutTarget(specElems, context)
 
     const expected = {
       targetModule: TestTargetModule,
@@ -182,8 +182,8 @@ describe("buildOperationSpecFromExpressionWithoutTarget()", () => {
   })
 })
 
-describe("buildOperationSpecFromTextNode()", () => {
-  it("builds operation spec from a text node", () => {
+describe("buildOperationFromTextNode()", () => {
+  it("builds operation from a text node spec", () => {
     const TestTargetModule = class {}
     const context = {targetModule: TestTargetModule}
     const textNode = Type.textNode("test")
@@ -195,7 +195,7 @@ describe("buildOperationSpecFromTextNode()", () => {
       params: Type.map({})
     }
 
-    const result = Runtime.buildOperationSpecFromTextNode(textNode, context)
+    const result = Runtime.buildOperationFromTextNode(textNode, context)
 
     assert.deepStrictEqual(result, expected)
   })
