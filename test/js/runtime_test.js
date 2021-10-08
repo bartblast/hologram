@@ -234,6 +234,101 @@ describe("buildOperationFromTextNode()", () => {
   })
 })
 
+describe("executeAction()", () => {
+  let actionSpec, context;
+
+  beforeEach(() => {
+    const actionSpecTuple = Type.tuple([
+      Type.atom("test_action"),
+      fixtureOperationParamsKeyword()
+    ])
+
+    actionSpec = {
+      value: [fixtureOperationSpecExpressionNode(actionSpecTuple)]
+    }
+
+    const stateElems = {}
+    stateElems[Type.atomKey("x")] = Type.integer(9)
+
+    context = {
+      bindings: Type.map({}),
+      layoutModule: TestLayoutModule,
+      pageModule: TestPageModule,
+      targetId: "test_target_id",
+      state: Type.map(stateElems)
+    }
+  })
+
+  it("executes action which returns new state only", () => {
+    const TargetModuleMock = class {
+      static action(_name, _params, state) {
+        return state
+      }
+    }
+    context.targetModule = TargetModuleMock
+
+    const result = runtime.executeAction(actionSpec, context)
+
+    const expected = {
+      newState: context.state,
+      commandName: null,
+      commandParams: null
+    }
+
+    assert.deepStrictEqual(result, expected)
+  })
+
+  it("executes action which returns new state and command name", () => {
+    const TargetModuleMock = class {
+      static action(_name, _params, state) {
+        return Type.tuple([state, Type.atom("test_command")])
+      }
+    }
+    context.targetModule = TargetModuleMock
+
+    const result = runtime.executeAction(actionSpec, context)
+
+    const expected = {
+      newState: context.state,
+      commandName: Type.atom("test_command"),
+      commandParams: Type.list([])
+    }
+
+    assert.deepStrictEqual(result, expected)
+  })
+
+  it("executes action which returns new state, command name and command params", () => {
+    const TargetModuleMock = class {
+      static action(_name, _params, state) {
+        const commandParams = Type.list[
+          Type.tuple([
+            Type.atom("a"),
+            Type.integer(1)
+          ])
+        ]
+
+        return Type.tuple([state, Type.atom("test_command"), commandParams])
+      }
+    }
+    context.targetModule = TargetModuleMock
+
+    const result = runtime.executeAction(actionSpec, context)
+
+    const expected = {
+      newState: context.state,
+      commandName: Type.atom("test_command"),
+      commandParams: Type.list[
+        Type.tuple([
+          Type.atom("a"),
+          Type.integer(1)
+        ])
+      ]
+    }
+
+    assert.deepStrictEqual(result, expected)
+  })
+})
+
 describe("getInstance()", () => {
   it("creates a new Runtime object if it doesn't exist yet", () => {
     const window = mockWindow()

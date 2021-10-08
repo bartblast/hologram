@@ -76,6 +76,39 @@ export default class Runtime {
     }
   }
 
+  executeAction(actionSpec, context) {
+    const operation = this.buildOperation(actionSpec, context)
+    const actionResult = operation.targetModule.action(operation.name, operation.params, context.state)
+
+    let newState;
+    let commandName = null
+    let commandParams = null
+
+    if (Type.isTuple(actionResult)) {
+      const actionResultElems = actionResult.data
+      newState = actionResultElems[0]
+
+      if (actionResultElems.length > 1) {
+        commandName = actionResultElems[1]
+      }
+
+      if (actionResultElems.length > 2) {
+        commandParams = actionResultElems[2]
+      } else if (actionResultElems.length > 1) {
+        commandParams = Type.list([])
+      }
+
+    } else {
+      newState = actionResult
+    }
+
+    return {
+      newState: newState,
+      commandName: commandName,
+      commandParams: commandParams
+    }
+  }
+
   static getInstance(window) {
     if (!window.__hologramRuntime__) {
       window.__hologramRuntime__ = new Runtime(window)
@@ -115,46 +148,6 @@ export default class Runtime {
 
 
 
-
-  
-  executeAction2(actionTarget, actionName, actionParams, fullState, scopeState, context) {
-    let state, targetModule;
-    let isPageTarget = actionTarget.type == "atom" && actionTarget.value == "page"
-
-    if (isPageTarget) {
-      targetModule = context.pageModule
-      state = fullState
-    } else {
-      targetModule = context.scopeModule
-      state = scopeState
-    }
-
-    const actionResult = targetModule.action(actionName, actionParams, state)
-
-    if (actionResult.type == "tuple") {
-      this.state = actionResult.data[0]
-
-      let commandName = {type: "atom", value: actionResult.data[1].value}
-
-      let commandParams = {type: "map", data: {}}
-      if (actionResult.data[2]) {
-        commandParams = actionResult.data[2]
-      }
-
-      this.client.pushCommand(targetModule, commandName, commandParams, this.handleCommandResponse)
-
-    } else {
-      if (isPageTarget) {
-        this.state = actionResult
-      } else {
-        // TODO: handle non-page targets
-      }
-    }
-
-    this.dom.render(context.pageModule)
-  }
-
-
   constructor(window) {
     this.client = new Client()
     this.client.connect()
@@ -185,17 +178,52 @@ export default class Runtime {
   }  
 
   // TODO: refactor & test
-  handleClickEvent(onClickSpec, fullState, scopeState, context, event) {
+  // DEFER: build event struct and pass to handleEvent
+  handleClickEvent(onClickSpec, context, event) {
     event.preventDefault()
+    this.handleEvent(onClickSpec, context)
+  }
 
-    if (onClickSpec.modifiers.includes("command")) {
-      return this.handleEventCommand(onClickSpec, fullState, scopeState, context)
+  handleEvent(eventHandlerSpec, context) {
+    if (eventHandlerSpec.modifiers.includes("command")) {
+      this.processCommand(eventHandlerSpec, context)
 
     } else {
-      return this.handleEventAction(onClickSpec, fullState, scopeState, context)
+      this.processAction(eventHandlerSpec, context)
     }
   }
 
+  processCommand() {
+    // this.pushCommand(eventHandlerSpec, context)
+    this.client.pushCommand(context.pageModule, commandName, commandParams, this.handleCommandResponse)
+  }
+
+  processAction() {
+    const actionResult = this.executeAction(eventHandlerSpec, context)
+
+    if (actionResult.type == "tuple") {
+      this.state = actionResult.data[0]
+
+      let commandName = {type: "atom", value: actionResult.data[1].value}
+
+      let commandParams = {type: "map", data: {}}
+      if (actionResult.data[2]) {
+        commandParams = actionResult.data[2]
+      }
+
+      this.client.pushCommand(targetModule, commandName, commandParams, this.handleCommandResponse)
+
+    } else {
+      if (isPageTarget) {
+        this.state = actionResult
+      } else {
+        // TODO: handle non-page targets
+      }
+    }
+
+    this.dom.render(context.pageModule)
+  }
+ 
   // Covered by E2E tests.
   handleCommandResponse(response) {
     response = Utils.eval(response)
@@ -211,20 +239,6 @@ export default class Runtime {
     }
   }
 
-  handleEventAction(eventSpec, fullState, scopeState, context) {
-    let actionName, actionParams, actionTarget;
-    [actionTarget, actionName, actionParams] = Runtime.evaluateActionOrCommandSpec(eventSpec, scopeState)
-
-    this.executeAction2(actionTarget, actionName, actionParams, fullState, scopeState, context)
-  }
-
-  handleEventCommand(eventSpec, fullState, scopeState, context) {
-    let commandName, commandParams, commandTarget;
-    [commandTarget, commandName, commandParams] = Runtime.evaluateActionOrCommandSpec(eventSpec, scopeState)
-
-    this.client.pushCommand(context.pageModule, commandName, commandParams, this.handleCommandResponse)
-  }
-
   // TODO: refactor & test
   handleRedirect(params) {
     const html = params.data["~atom[html]"].value
@@ -232,20 +246,6 @@ export default class Runtime {
 
     const url = params.data["~atom[url]"].value
     this.updateURL(url)
-  }
-
-  // TODO: refactor & test
-  handleSubmitEvent(onSubmitSpec, fullState, scopeState, context, event) {
-    event.preventDefault()
-
-    let formData = new FormData(event.target)
-    let params = {type: 'map', data: {}}
-
-    for (var el of formData.entries()) {
-      params.data[`~string[${el[0]}]`] = {type: "string", value: el[1]}
-    }
-
-    this.executeAction2(onSubmitSpec.value, params, fullState, scopeState, context)
   }
 
   static interpolate(value) {
