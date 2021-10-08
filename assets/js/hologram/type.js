@@ -56,6 +56,10 @@ export default class Type {
     return !Type.isFalsy(boxedValue)
   }
 
+  static isTuple(boxedValue) {
+    return boxedValue.type === "tuple"
+  }
+
   static keywordToMap(keyword) {
     const result = keyword.data.reduce((acc, elem) => {
       const key = Type.serializedKey(elem.data[0])

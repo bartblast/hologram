@@ -231,6 +231,22 @@ describe("isTruthy()", () => {
   })
 })
 
+describe("isTuple()", () => {
+  it("returns true for boxed tuple value", () => {
+    const arg = Type.tuple([])
+    const result = Type.isTuple(arg)
+
+    assert.isTrue(result)
+  })
+
+  it("returns false for values other than boxed tuple value", () => {
+    const arg = Type.boolean(false)
+    const result = Type.isTuple(arg)
+    
+    assert.isFalse(result)
+  })
+})
+
 describe("keywordToMap()", () => {
   it("converts empty boxed keyword list to boxed map", () => {
     const keyword = Type.list([])
