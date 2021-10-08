@@ -360,6 +360,22 @@ describe("getModuleByComponentId()", () => {
   })
 })
 
+describe("getStateFromActionResult()", () => {
+  it("fetches the state from an action result that is a boxed map", () => {
+    const actionResult = Type.map({})
+    const state = Runtime.getStateFromActionResult(actionResult)
+
+    assert.equal(state, actionResult)
+  })
+
+  it("fetches the state from an action result that is a boxed tuple", () => {
+    const actionResult = Type.tuple([Type.map({}), Type.atom("test_command")])
+    const state = Runtime.getStateFromActionResult(actionResult)
+
+    assert.deepStrictEqual(state, Type.map({}))
+  })
+})
+
 describe("hasOperationTarget()", () => {
   it("returns true if the first 2 spec elems are bounded atoms", () => {
     const specElems = [Type.atom("a"), Type.atom("b")]

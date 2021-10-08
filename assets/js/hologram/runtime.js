@@ -121,6 +121,14 @@ export default class Runtime {
     return this.componentModules[componentId]
   }
 
+  static getStateFromActionResult(actionResult) {
+    if (Type.isMap(actionResult)) {
+      return actionResult
+    } else { // tuple
+      return actionResult.data[0]
+    }
+  }
+
   static hasOperationTarget(specElems) {
     return specElems.length >= 2 && Type.isAtom(specElems[0]) && Type.isAtom(specElems[1])
   }
