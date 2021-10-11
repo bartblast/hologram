@@ -10,7 +10,7 @@ export default class Event {
 
     const eventData = this.buildEventData(event)
     const klass = operationSpec.modifiers.includes("command") ? Command : Action
-    
+
     return (
       klass
         .build(operationSpec, eventData, context, runtime.componentRegistry)
