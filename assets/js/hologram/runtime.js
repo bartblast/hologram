@@ -21,21 +21,10 @@ export default class Runtime {
   }
   
   buildOperationFromExpressionNode(node, context) {
-    const specElems = node.callback(context.bindings).data
-
     if (Runtime.hasOperationTarget(specElems)) {
       return Operation.buildFromExpressionNodeSpecWithTarget(node, context, this.componentRegistry)
     } else {
-      return Runtime.buildOperationFromExpressionNodeWithoutTarget(specElems, context)
-    }
-  }
-
-  static buildOperationFromExpressionNodeWithoutTarget(specElems, context) {
-    return {
-      targetModule: context.targetModule,
-      targetId: context.targetId,
-      name: specElems[0],
-      params: Type.keywordToMap(specElems[1])
+      return Operation.buildFromExpressionNodeSpecWithoutTarget(node, context)
     }
   }
 

@@ -32,7 +32,15 @@ export default class Operation {
         break;
     }
 
-    return new Operation(targetModule, targetId, specElems[1], Type.keywordToMap(specElems[2]))
+    const params = Type.keywordToMap(specElems[2])
+    return new Operation(targetModule, targetId, specElems[1], params)
+  }
+
+  static buildFromExpressionNodeSpecWithoutTarget(expressionNode, context) {
+    const specElems = expressionNode.callback(context.bindings).data
+    const params = Type.keywordToMap(specElems[1])
+
+    return new Operation(context.targetModule, context.targetId, specElems[0], params)
   }
 
   static buildFromTextNodeSpec(textNode, context) {

@@ -67,6 +67,28 @@ describe("buildFromExpressionNodeSpecWithTarget()", () => {
   })
 })
 
+
+describe("buildFromExpressionNodeSpecWithoutTarget()", () => {
+  it("builds operation from an expression node spec without target specified", () => {
+    const name = Type.atom("test")
+    const paramsKeyword = fixtureOperationParamsKeyword()
+
+    const specElems = [
+      name,
+      paramsKeyword
+    ]
+
+    const expressionNodeSpec = fixtureOperationSpecExpressionNode(specElems)
+    const context = {targetModule: TestTargetModule, targetId: "test_id"}
+
+    const result = Operation.buildFromExpressionNodeSpecWithoutTarget(expressionNodeSpec, context)
+    const expected = new Operation(TestTargetModule, "test_id", name, fixtureOperationParamsMap())
+
+    assert.isTrue(result instanceof Operation)
+    assert.deepStrictEqual(result, expected)
+  })
+})
+
 describe("buildFromTextNodeSpec()", () => {
   it("builds operation from a text node spec", () => {
     const context = {targetModule: TestTargetModule}

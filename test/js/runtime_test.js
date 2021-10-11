@@ -107,31 +107,6 @@ describe("buildOperationFromExpressionNode()", () => {
   })
 })
 
-describe("buildOperationFromExpressionNodeWithoutTarget()", () => {
-  it("builds operation from an expression node spec without target specified", () => {
-    const name = Type.atom("test")
-    const paramsKeyword = fixtureOperationParamsKeyword()
-
-    const specElems = [
-      name,
-      paramsKeyword
-    ]
-
-    const context = {targetModule: TestTargetModule, targetId: "test_id"}
-
-    const result = Runtime.buildOperationFromExpressionNodeWithoutTarget(specElems, context)
-
-    const expected = {
-      targetModule: TestTargetModule,
-      targetId: "test_id",
-      name: name,
-      params: fixtureOperationParamsMap()
-    }
-
-    assert.deepStrictEqual(result, expected)
-  })
-})
-
 describe("executeAction()", () => {
   let actionSpec, context;
 
