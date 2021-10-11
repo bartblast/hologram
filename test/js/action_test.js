@@ -1,0 +1,25 @@
+"use strict";
+
+import { assert, mockWindow } from "./support/commons";
+import Action from "../../assets/js/hologram/action"
+import Runtime from "../../assets/js/hologram/runtime"
+import Type from "../../assets/js/hologram/type"
+
+describe("Operation class extension", () => {
+  it("extends Operation class", () => {
+    const operationSpec = {
+      value: [Type.textNode("test")]
+    }
+
+    const TestTargetModule = class {}
+    const context = {targetModule: TestTargetModule}
+
+    const window = mockWindow()
+    const runtime = new Runtime(window)
+
+    const result = Action.build(operationSpec, context, runtime)
+    console.debug(result)
+
+    assert.isTrue(result instanceof Action)
+  })
+})

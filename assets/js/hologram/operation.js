@@ -14,10 +14,10 @@ export default class Operation {
     const node = operationSpec.value[0];
 
     if (node.type === "expression") {
-      return Operation.buildFromExpressionNodeSpec(node, context, runtime.componentRegistry)
+      return this.buildFromExpressionNodeSpec(node, context, runtime.componentRegistry)
 
     } else { // node.type === "text"
-      return Operation.buildFromTextNodeSpec(node, context)
+      return this.buildFromTextNodeSpec(node, context)
     }
   }
 
@@ -25,9 +25,9 @@ export default class Operation {
     const operationSpecElems = expressionNode.callback(context.bindings).data.data
 
     if (Operation.hasTarget(operationSpecElems)) {
-      return Operation.buildFromExpressionNodeSpecWithTarget(operationSpecElems, context, componentRegistry)
+      return this.buildFromExpressionNodeSpecWithTarget(operationSpecElems, context, componentRegistry)
     } else {
-      return Operation.buildFromExpressionNodeSpecWithoutTarget(operationSpecElems, context)
+      return this.buildFromExpressionNodeSpecWithoutTarget(operationSpecElems, context)
     }
   }
 
