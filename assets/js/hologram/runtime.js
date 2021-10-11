@@ -19,9 +19,11 @@ export default class Runtime {
       return Operation.buildFromTextNodeSpec(node, context)
     }
   }
-  
-  buildOperationFromExpressionNode(node, context) {
-    if (Runtime.hasOperationTarget(specElems)) {
+
+  static buildFromExpressionNodeSpec(node, context) {
+    const specElems = expressionNode.callback(context.bindings).data
+
+    if (Operation.hasOperationTarget(specElems)) {
       return Operation.buildFromExpressionNodeSpecWithTarget(node, context, this.componentRegistry)
     } else {
       return Operation.buildFromExpressionNodeSpecWithoutTarget(node, context)
@@ -130,10 +132,6 @@ export default class Runtime {
         return null
       }
     }
-  }
-
-  static hasOperationTarget(specElems) {
-    return specElems.length >= 2 && Type.isAtom(specElems[0]) && Type.isAtom(specElems[1])
   }
 
 

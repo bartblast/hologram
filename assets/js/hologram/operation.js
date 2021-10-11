@@ -10,8 +10,7 @@ export default class Operation {
     this.params = params
   }
 
-  static buildFromExpressionNodeSpecWithTarget(expressionNode, context, componentRegistry) {
-    const specElems = expressionNode.callback(context.bindings).data
+  static buildFromExpressionNodeSpecWithTarget(specElems, context, componentRegistry) {
     const target = specElems[0].value
     let targetModule, targetId;
 
@@ -36,10 +35,8 @@ export default class Operation {
     return new Operation(targetModule, targetId, specElems[1], params)
   }
 
-  static buildFromExpressionNodeSpecWithoutTarget(expressionNode, context) {
-    const specElems = expressionNode.callback(context.bindings).data
+  static buildFromExpressionNodeSpecWithoutTarget(specElems, context) {
     const params = Type.keywordToMap(specElems[1])
-
     return new Operation(context.targetModule, context.targetId, specElems[0], params)
   }
 
@@ -50,5 +47,9 @@ export default class Operation {
     const params = Type.map({})
     
     return new Operation(targetModule, targetId, name, params)
+  }
+
+  static hasSpecTarget(specElems) {
+    return specElems.length >= 2 && Type.isAtom(specElems[0]) && Type.isAtom(specElems[1])
   }
 }

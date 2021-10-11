@@ -358,36 +358,6 @@ describe("getTargetFromActionResult()", () => {
   })
 })
 
-describe("hasOperationTarget()", () => {
-  it("returns true if the first 2 spec elems are bounded atoms", () => {
-    const specElems = [Type.atom("a"), Type.atom("b")]
-    const result = Runtime.hasOperationTarget(specElems)
-
-    assert.isTrue(result)
-  })
-
-  it("returns false if there is only 1 spec elem", () => {
-    const specElems = [Type.atom("a")]
-    const result = Runtime.hasOperationTarget(specElems)
-
-    assert.isFalse(result)
-  })
-
-  it("returns false if the first spec elem is not a bounded atom", () => {
-    const specElems = [Type.integer(1), Type.atom("b")]
-    const result = Runtime.hasOperationTarget(specElems)
-
-    assert.isFalse(result)
-  })
-
-  it("returns false if the second spec elem is not a bounded atom", () => {
-    const specElems = [Type.atom("a"), Type.integer(2)]
-    const result = Runtime.hasOperationTarget(specElems)
-
-    assert.isFalse(result)
-  })
-})
-
 
 
 
