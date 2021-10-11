@@ -8,6 +8,11 @@ export default class Action extends Operation {
     super(targetModule, targetId, name, params, eventData, state)
   }
 
+  // Tested implicitely in E2E tests.
+  execute() {
+    return this.targetModule.action(this.name, this.params, this.state)
+  }
+
   static getCommandNameFromActionResult(actionResult) {
     if (Type.isMap(actionResult)) {
       return null
