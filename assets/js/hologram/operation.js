@@ -9,7 +9,7 @@ export default class Operation {
     this.name = name
     this.params = params
   }
-
+  
   static build(operationSpec, context, runtime) {
     const node = operationSpec.value[0];
 
@@ -22,17 +22,19 @@ export default class Operation {
   }
 
   static buildFromExpressionNodeSpec(expressionNode, context, componentRegistry) {
-    const specElems = expressionNode.callback(context.bindings).data.data
+    const operationSpecElems = expressionNode.callback(context.bindings).data.data
 
-    if (Operation.hasTarget(specElems)) {
-      return Operation.buildFromExpressionNodeSpecWithTarget(specElems, context, componentRegistry)
+    if (Operation.hasTarget(operationSpecElems)) {
+      return Operation.buildFromExpressionNodeSpecWithTarget(operationSpecElems, context, componentRegistry)
     } else {
-      return Operation.buildFromExpressionNodeSpecWithoutTarget(specElems, context)
+      return Operation.buildFromExpressionNodeSpecWithoutTarget(operationSpecElems, context)
     }
   }
 
-  static buildFromExpressionNodeSpecWithTarget(specElems, context, componentRegistry) {
-    const target = specElems[0].value
+  static buildFromExpressionNodeSpecWithTarget(operationSpecElems, context, componentRegistry) {
+    const target = operationSpecElems[0].value
+    const name = operationSpecElems[1]
+    const params = Type.keywordToMap(operationSpecElems[2])
     let targetModule, targetId;
 
     switch (target) {
@@ -52,13 +54,14 @@ export default class Operation {
         break;
     }
 
-    const params = Type.keywordToMap(specElems[2])
-    return new Operation(targetModule, targetId, specElems[1], params)
+    return new this(targetModule, targetId, name, params)
   }
 
-  static buildFromExpressionNodeSpecWithoutTarget(specElems, context) {
-    const params = Type.keywordToMap(specElems[1])
-    return new Operation(context.targetModule, context.targetId, specElems[0], params)
+  static buildFromExpressionNodeSpecWithoutTarget(operationSpecElems, context) {
+    const name = operationSpecElems[0]
+    const params = Type.keywordToMap(operationSpecElems[1])
+
+    return new this(context.targetModule, context.targetId, name, params)
   }
 
   static buildFromTextNodeSpec(textNode, context) {
@@ -67,10 +70,10 @@ export default class Operation {
     const name = Type.atom(textNode.content)
     const params = Type.map({})
     
-    return new Operation(targetModule, targetId, name, params)
+    return new this(targetModule, targetId, name, params)
   }
 
-  static hasTarget(specElems) {
-    return specElems.length >= 2 && Type.isAtom(specElems[0]) && Type.isAtom(specElems[1])
+  static hasTarget(operationSpecElems) {
+    return operationSpecElems.length >= 2 && Type.isAtom(operationSpecElems[0]) && Type.isAtom(operationSpecElems[1])
   }
 }

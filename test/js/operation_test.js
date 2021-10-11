@@ -31,13 +31,13 @@ describe("build()", () => {
   })
 
   it("builds operation from spec which contains expression node", () => {
-    const specTuple = Type.tuple([
+    const operationSpecTuple = Type.tuple([
       Type.atom("test_action"),
       fixtureOperationParamsKeyword()
     ])
 
     const operationSpec = {
-      value: [fixtureOperationSpecExpressionNode(specTuple)]
+      value: [fixtureOperationSpecExpressionNode(operationSpecTuple)]
     }
 
     const result = Operation.build(operationSpec, context, runtime)
@@ -70,13 +70,13 @@ describe("buildFromExpressionNodeSpec()", () => {
   })
 
   it("builds operation from an expression node spec with target specified", () => {
-    const specTuple = Type.tuple([
+    const operationSpecTuple = Type.tuple([
       Type.atom("page"),
       Type.atom("test_action"),
       fixtureOperationParamsKeyword()
     ])
 
-    const expressionNode = fixtureOperationSpecExpressionNode(specTuple)
+    const expressionNode = fixtureOperationSpecExpressionNode(operationSpecTuple)
 
     const result = Operation.buildFromExpressionNodeSpec(expressionNode, context)
 
@@ -91,12 +91,12 @@ describe("buildFromExpressionNodeSpec()", () => {
   })
 
   it("builds operation from an expression node spec without target specified", () => {
-    const specTuple = Type.tuple([
+    const operationSpecTuple = Type.tuple([
       Type.atom("test_action"),
       fixtureOperationParamsKeyword()
     ])
 
-    const expressionNode = fixtureOperationSpecExpressionNode(specTuple)
+    const expressionNode = fixtureOperationSpecExpressionNode(operationSpecTuple)
 
     const result = Operation.buildFromExpressionNodeSpec(expressionNode, context)
 
@@ -132,9 +132,9 @@ describe("buildFromExpressionNodeSpecWithTarget()", () => {
 
   it("builds layout target operation if the first spec elem is equal to :layout boxed atom", () => {
     const target = Type.atom("layout")
-    const specElems = [target, name, paramsKeyword]
+    const operationSpecElems = [target, name, paramsKeyword]
 
-    const result = Operation.buildFromExpressionNodeSpecWithTarget(specElems, context, componentRegistry)
+    const result = Operation.buildFromExpressionNodeSpecWithTarget(operationSpecElems, context, componentRegistry)
     const expected = new Operation(TestLayoutModule, null, name, paramsMap)
 
     assert.isTrue(result instanceof Operation)
@@ -143,9 +143,9 @@ describe("buildFromExpressionNodeSpecWithTarget()", () => {
 
   it("builds page target operation if the first spec elem is equal to :page boxed atom", () => {
     const target = Type.atom("page")
-    const specElems = [target, name, paramsKeyword]
+    const operationSpecElems = [target, name, paramsKeyword]
 
-    const result = Operation.buildFromExpressionNodeSpecWithTarget(specElems, context, componentRegistry)
+    const result = Operation.buildFromExpressionNodeSpecWithTarget(operationSpecElems, context, componentRegistry)
     const expected = new Operation(TestPageModule, null, name, paramsMap)
 
     assert.isTrue(result instanceof Operation)
@@ -154,9 +154,9 @@ describe("buildFromExpressionNodeSpecWithTarget()", () => {
 
   it("builds component target operation if the first spec elem is different than :page or :layout boxed atom", () => {
     const target = Type.atom("test_component_2")
-    const specElems = [target, name, paramsKeyword]
+    const operationSpecElems = [target, name, paramsKeyword]
 
-    const result = Operation.buildFromExpressionNodeSpecWithTarget(specElems, context, componentRegistry)
+    const result = Operation.buildFromExpressionNodeSpecWithTarget(operationSpecElems, context, componentRegistry)
     const expected = new Operation(TestComponentModule2, "test_component_2", name, paramsMap)
 
     assert.isTrue(result instanceof Operation)
@@ -168,15 +168,10 @@ describe("buildFromExpressionNodeSpecWithoutTarget()", () => {
   it("builds operation from an expression node spec without target specified", () => {
     const name = Type.atom("test")
     const paramsKeyword = fixtureOperationParamsKeyword()
-
-    const specElems = [
-      name,
-      paramsKeyword
-    ]
-
+    const operationSpecElems = [name, paramsKeyword]
     const context = {targetModule: TestTargetModule, targetId: "test_id"}
 
-    const result = Operation.buildFromExpressionNodeSpecWithoutTarget(specElems, context)
+    const result = Operation.buildFromExpressionNodeSpecWithoutTarget(operationSpecElems, context)
     const expected = new Operation(TestTargetModule, "test_id", name, fixtureOperationParamsMap())
 
     assert.isTrue(result instanceof Operation)
@@ -199,30 +194,49 @@ describe("buildFromTextNodeSpec()", () => {
 
 describe("hasTarget()", () => {
   it("returns true if the first 2 spec elems are bounded atoms", () => {
-    const specElems = [Type.atom("a"), Type.atom("b")]
-    const result = Operation.hasTarget(specElems)
+    const operationSpecElems = [Type.atom("a"), Type.atom("b")]
+    const result = Operation.hasTarget(operationSpecElems)
 
     assert.isTrue(result)
   })
 
   it("returns false if there is only 1 spec elem", () => {
-    const specElems = [Type.atom("a")]
-    const result = Operation.hasTarget(specElems)
+    const operationSpecElems = [Type.atom("a")]
+    const result = Operation.hasTarget(operationSpecElems)
 
     assert.isFalse(result)
   })
 
   it("returns false if the first spec elem is not a bounded atom", () => {
-    const specElems = [Type.integer(1), Type.atom("b")]
-    const result = Operation.hasTarget(specElems)
+    const operationSpecElems = [Type.integer(1), Type.atom("b")]
+    const result = Operation.hasTarget(operationSpecElems)
 
     assert.isFalse(result)
   })
 
   it("returns false if the second spec elem is not a bounded atom", () => {
-    const specElems = [Type.atom("a"), Type.integer(2)]
-    const result = Operation.hasTarget(specElems)
+    const operationSpecElems = [Type.atom("a"), Type.integer(2)]
+    const result = Operation.hasTarget(operationSpecElems)
 
     assert.isFalse(result)
   })
 })
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
