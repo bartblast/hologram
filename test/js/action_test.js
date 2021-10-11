@@ -13,11 +13,12 @@ describe("Operation class extension", () => {
 
     const TestTargetModule = class {}
     const context = {targetModule: TestTargetModule}
+    const eventData = "test_event_data"
 
     const window = mockWindow()
     const runtime = new Runtime(window)
 
-    const result = Action.build(operationSpec, context, runtime)
+    const result = Action.build(operationSpec, eventData, context, runtime)
 
     assert.isTrue(result instanceof Action)
   })

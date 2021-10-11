@@ -12,6 +12,8 @@ const TestTargetModule = class {}
 const TestComponentModule1 = class {}
 const TestComponentModule2 = class {}
 
+const eventData = "test_event_data"
+
 describe("build()", () => {
   let context, expected, runtime;
 
@@ -40,7 +42,7 @@ describe("build()", () => {
       value: [fixtureOperationSpecExpressionNode(operationSpecTuple)]
     }
 
-    const result = Operation.build(operationSpec, context, runtime)
+    const result = Operation.build(operationSpec, eventData, context, runtime)
     
     assert.deepStrictEqual(result.name, expected)
   })
@@ -50,7 +52,7 @@ describe("build()", () => {
       value: [Type.textNode("test_action")]
     }
 
-    const result = Operation.build(operationSpec, context, runtime)
+    const result = Operation.build(operationSpec, eventData, context, runtime)
     
     assert.deepStrictEqual(result.name, expected)
   })
@@ -78,13 +80,14 @@ describe("buildFromExpressionNodeSpec()", () => {
 
     const expressionNode = fixtureOperationSpecExpressionNode(operationSpecTuple)
 
-    const result = Operation.buildFromExpressionNodeSpec(expressionNode, context)
+    const result = Operation.buildFromExpressionNodeSpec(expressionNode, eventData, context)
 
     const expected = {
       targetModule: TestPageModule,
       targetId: null,
       name: Type.atom("test_action"),
-      params: fixtureOperationParamsMap()
+      params: fixtureOperationParamsMap(),
+      eventData: eventData
     }
 
     assert.deepStrictEqual(result, expected)
@@ -98,13 +101,14 @@ describe("buildFromExpressionNodeSpec()", () => {
 
     const expressionNode = fixtureOperationSpecExpressionNode(operationSpecTuple)
 
-    const result = Operation.buildFromExpressionNodeSpec(expressionNode, context)
+    const result = Operation.buildFromExpressionNodeSpec(expressionNode, eventData, context)
 
     const expected = {
       targetModule: TestTargetModule,
       targetId: "test_target_id",
       name: Type.atom("test_action"),
-      params: fixtureOperationParamsMap()
+      params: fixtureOperationParamsMap(),
+      eventData: eventData
     }
 
     assert.deepStrictEqual(result, expected)
@@ -134,8 +138,8 @@ describe("buildFromExpressionNodeSpecWithTarget()", () => {
     const target = Type.atom("layout")
     const operationSpecElems = [target, name, paramsKeyword]
 
-    const result = Operation.buildFromExpressionNodeSpecWithTarget(operationSpecElems, context, componentRegistry)
-    const expected = new Operation(TestLayoutModule, null, name, paramsMap)
+    const result = Operation.buildFromExpressionNodeSpecWithTarget(operationSpecElems, eventData, context, componentRegistry)
+    const expected = new Operation(TestLayoutModule, null, name, paramsMap, eventData)
 
     assert.isTrue(result instanceof Operation)
     assert.deepStrictEqual(result, expected)
@@ -145,8 +149,8 @@ describe("buildFromExpressionNodeSpecWithTarget()", () => {
     const target = Type.atom("page")
     const operationSpecElems = [target, name, paramsKeyword]
 
-    const result = Operation.buildFromExpressionNodeSpecWithTarget(operationSpecElems, context, componentRegistry)
-    const expected = new Operation(TestPageModule, null, name, paramsMap)
+    const result = Operation.buildFromExpressionNodeSpecWithTarget(operationSpecElems, eventData, context, componentRegistry)
+    const expected = new Operation(TestPageModule, null, name, paramsMap, eventData)
 
     assert.isTrue(result instanceof Operation)
     assert.deepStrictEqual(result, expected)
@@ -156,8 +160,8 @@ describe("buildFromExpressionNodeSpecWithTarget()", () => {
     const target = Type.atom("test_component_2")
     const operationSpecElems = [target, name, paramsKeyword]
 
-    const result = Operation.buildFromExpressionNodeSpecWithTarget(operationSpecElems, context, componentRegistry)
-    const expected = new Operation(TestComponentModule2, "test_component_2", name, paramsMap)
+    const result = Operation.buildFromExpressionNodeSpecWithTarget(operationSpecElems, eventData, context, componentRegistry)
+    const expected = new Operation(TestComponentModule2, "test_component_2", name, paramsMap, eventData)
 
     assert.isTrue(result instanceof Operation)
     assert.deepStrictEqual(result, expected)
@@ -171,8 +175,8 @@ describe("buildFromExpressionNodeSpecWithoutTarget()", () => {
     const operationSpecElems = [name, paramsKeyword]
     const context = {targetModule: TestTargetModule, targetId: "test_id"}
 
-    const result = Operation.buildFromExpressionNodeSpecWithoutTarget(operationSpecElems, context)
-    const expected = new Operation(TestTargetModule, "test_id", name, fixtureOperationParamsMap())
+    const result = Operation.buildFromExpressionNodeSpecWithoutTarget(operationSpecElems, eventData, context)
+    const expected = new Operation(TestTargetModule, "test_id", name, fixtureOperationParamsMap(), eventData)
 
     assert.isTrue(result instanceof Operation)
     assert.deepStrictEqual(result, expected)
@@ -184,8 +188,8 @@ describe("buildFromTextNodeSpec()", () => {
     const context = {targetModule: TestTargetModule}
     const textNode = Type.textNode("test")
 
-    const result = Operation.buildFromTextNodeSpec(textNode, context)
-    const expected = new Operation(TestTargetModule, null, Type.atom("test"), Type.map({}))
+    const result = Operation.buildFromTextNodeSpec(textNode, eventData, context)
+    const expected = new Operation(TestTargetModule, null, Type.atom("test"), Type.map({}), eventData)
 
     assert.isTrue(result instanceof Operation)
     assert.deepStrictEqual(result, expected)
