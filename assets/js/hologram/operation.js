@@ -11,11 +11,11 @@ export default class Operation {
     this.eventData = eventData
   }
   
-  static build(operationSpec, eventData, context, runtime) {
+  static build(operationSpec, eventData, context, componentRegistry) {
     const node = operationSpec.value[0];
 
     if (node.type === "expression") {
-      return this.buildFromExpressionNodeSpec(node, eventData, context, runtime.componentRegistry)
+      return this.buildFromExpressionNodeSpec(node, eventData, context, componentRegistry)
 
     } else { // node.type === "text"
       return this.buildFromTextNodeSpec(node, eventData, context)

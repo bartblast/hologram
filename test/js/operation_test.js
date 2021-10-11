@@ -12,15 +12,21 @@ const TestTargetModule = class {}
 const TestComponentModule1 = class {}
 const TestComponentModule2 = class {}
 
+const window = mockWindow()
+const runtime = new Runtime(window)
+
+const componentRegistry = {
+  test_component_1: TestComponentModule1,
+  test_component_2: TestComponentModule2
+}
+runtime.componentRegistry = componentRegistry
+
 const eventData = "test_event_data"
 
 describe("build()", () => {
-  let context, expected, runtime;
+  let context, expected;
 
   beforeEach(() => {
-    const window = mockWindow()
-    runtime = new Runtime(window)
-
     context = {
       bindings: Type.map({}),
       layoutModule: TestLayoutModule,
@@ -42,7 +48,7 @@ describe("build()", () => {
       value: [fixtureOperationSpecExpressionNode(operationSpecTuple)]
     }
 
-    const result = Operation.build(operationSpec, eventData, context, runtime)
+    const result = Operation.build(operationSpec, eventData, context, componentRegistry)
     
     assert.deepStrictEqual(result.name, expected)
   })
@@ -52,7 +58,7 @@ describe("build()", () => {
       value: [Type.textNode("test_action")]
     }
 
-    const result = Operation.build(operationSpec, eventData, context, runtime)
+    const result = Operation.build(operationSpec, eventData, context, componentRegistry)
     
     assert.deepStrictEqual(result.name, expected)
   })
@@ -116,7 +122,7 @@ describe("buildFromExpressionNodeSpec()", () => {
 })
 
 describe("buildFromExpressionNodeSpecWithTarget()", () => {
-  let componentRegistry, context, name, paramsKeyword, paramsMap;
+  let context, name, paramsKeyword, paramsMap;
 
   beforeEach(() => {
     name = Type.atom("test")
@@ -126,11 +132,6 @@ describe("buildFromExpressionNodeSpecWithTarget()", () => {
     context = {
       layoutModule: TestLayoutModule,
       pageModule: TestPageModule
-    }
-
-    componentRegistry = {
-      test_component_1: TestComponentModule1,
-      test_component_2: TestComponentModule2
     }
   })
 
