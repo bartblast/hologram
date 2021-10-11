@@ -1,48 +1,68 @@
 "use strict";
 
+import Action from "./action"
 import Client from "./client"
+import Command from "./command"
 import DOM from "./dom"
-import Operation from "./operation"
 import ScriptsReloader from "./scripts_reloader"
 import Store from "./store";
-import Type from "./type"
 import Utils from "./utils"
 
 export default class Runtime {
+  // Tested implicitely in E2E tests.
+  executeOperation(operationSpec, eventData, context) {
+    const klass = operationSpec.modifiers.includes("command") ? Command : Action
+
+    return (
+      klass
+        .build(operationSpec, eventData, context, runtime.componentRegistry)
+        .execute(runtime)
+    )
+  }
+  
+
+
+
+
+
+
+
+
+
   // ALREADY REFACTORED AND TESTED START
 
-  executeAction(actionSpec, context) {
-    const operation = Operation.build(actionSpec, context, this)
-    const actionResult = operation.targetModule.action(operation.name, operation.params, context.state)
+  // executeAction(actionSpec, context) {
+  //   const operation = Operation.build(actionSpec, context, this)
+  //   const actionResult = operation.targetModule.action(operation.name, operation.params, context.state)
 
-    let newState;
-    let commandName = null
-    let commandParams = null
+  //   let newState;
+  //   let commandName = null
+  //   let commandParams = null
 
-    if (Type.isTuple(actionResult)) {
-      const actionResultElems = actionResult.data
-      newState = actionResultElems[0]
+  //   if (Type.isTuple(actionResult)) {
+  //     const actionResultElems = actionResult.data
+  //     newState = actionResultElems[0]
 
-      if (actionResultElems.length > 1) {
-        commandName = actionResultElems[1]
-      }
+  //     if (actionResultElems.length > 1) {
+  //       commandName = actionResultElems[1]
+  //     }
 
-      if (actionResultElems.length > 2) {
-        commandParams = actionResultElems[2]
-      } else if (actionResultElems.length > 1) {
-        commandParams = Type.list([])
-      }
+  //     if (actionResultElems.length > 2) {
+  //       commandParams = actionResultElems[2]
+  //     } else if (actionResultElems.length > 1) {
+  //       commandParams = Type.list([])
+  //     }
 
-    } else {
-      newState = actionResult
-    }
+  //   } else {
+  //     newState = actionResult
+  //   }
 
-    return {
-      newState: newState,
-      commandName: commandName,
-      commandParams: commandParams
-    }
-  }
+  //   return {
+  //     newState: newState,
+  //     commandName: commandName,
+  //     commandParams: commandParams
+  //   }
+  // }
 
   static getInstance(window) {
     if (!window.__hologramRuntime__) {
