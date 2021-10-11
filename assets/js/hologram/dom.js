@@ -3,6 +3,7 @@
 import {attributesModule, eventListenersModule, h, init, toVNode} from "snabbdom";
 const patch = init([attributesModule, eventListenersModule]);
 
+import ClickEvent from "./events/click_event"
 import Runtime from "./runtime"
 import Utils from "./utils"
 
@@ -107,12 +108,13 @@ export default class DOM {
     const eventHandlers = {}
 
     if (node.attrs.on_click) {
-      eventHandlers.click = this.runtime.handleClickEvent.bind(this.runtime, node.attrs.on_click, fullState, scopeState, context)
+      eventHandlers.click = (event) => { ClickEvent.handle(event, node.attrs.on_click, context, this.runtime) }
     }
 
-    if (node.attrs.on_submit) {
-      eventHandlers.submit = this.runtime.handleSubmitEvent.bind(this.runtime, node.attrs.on_submit, fullState, scopeState, context)
-    }
+    // TODO: implement
+    // if (node.attrs.on_submit) {
+    //   eventHandlers.submit = this.runtime.handleSubmitEvent.bind(this.runtime, node.attrs.on_submit, fullState, scopeState, context)
+    // }
 
     return eventHandlers
   }
