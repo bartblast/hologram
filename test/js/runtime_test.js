@@ -52,61 +52,6 @@ describe("buildOperation()", () => {
   })
 })
 
-describe("buildOperationFromExpressionNode()", () => {
-  let context;
-
-  beforeEach(() => {
-    context = {
-      bindings: Type.map({}),
-      layoutModule: TestLayoutModule,
-      pageModule: TestPageModule,
-      targetModule: TestTargetModule,
-      targetId: "test_target_id"
-    }
-  })
-
-  it("builds operation from an expression node spec with target specified", () => {
-    const specTuple = Type.tuple([
-      Type.atom("page"),
-      Type.atom("test_action"),
-      fixtureOperationParamsKeyword()
-    ])
-
-    const expressionNode = fixtureOperationSpecExpressionNode(specTuple)
-
-    const result = runtime.buildOperationFromExpressionNode(expressionNode, context)
-
-    const expected = {
-      targetModule: TestPageModule,
-      targetId: null,
-      name: Type.atom("test_action"),
-      params: fixtureOperationParamsMap()
-    }
-
-    assert.deepStrictEqual(result, expected)
-  })
-
-  it("builds operation from an expression node spec without target specified", () => {
-    const specTuple = Type.tuple([
-      Type.atom("test_action"),
-      fixtureOperationParamsKeyword()
-    ])
-
-    const expressionNode = fixtureOperationSpecExpressionNode(specTuple)
-
-    const result = runtime.buildOperationFromExpressionNode(expressionNode, context)
-
-    const expected = {
-      targetModule: TestTargetModule,
-      targetId: "test_target_id",
-      name: Type.atom("test_action"),
-      params: fixtureOperationParamsMap()
-    }
-
-    assert.deepStrictEqual(result, expected)
-  })
-})
-
 describe("executeAction()", () => {
   let actionSpec, context;
 

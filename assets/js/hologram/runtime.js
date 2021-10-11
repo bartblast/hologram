@@ -13,20 +13,10 @@ export default class Runtime {
     const node = eventHandlerSpec.value[0];
 
     if (node.type === "expression") {
-      return this.buildOperationFromExpressionNode(node, context)
+      return Operation.buildFromExpressionNodeSpec(node, context, this.componentRegistry)
 
     } else { // node.type === "text"
       return Operation.buildFromTextNodeSpec(node, context)
-    }
-  }
-
-  static buildFromExpressionNodeSpec(node, context) {
-    const specElems = expressionNode.callback(context.bindings).data
-
-    if (Operation.hasOperationTarget(specElems)) {
-      return Operation.buildFromExpressionNodeSpecWithTarget(node, context, this.componentRegistry)
-    } else {
-      return Operation.buildFromExpressionNodeSpecWithoutTarget(node, context)
     }
   }
 

@@ -11,6 +11,61 @@ const TestTargetModule = class {}
 const TestComponentModule1 = class {}
 const TestComponentModule2 = class {}
 
+describe("buildFromExpressionNodeSpec()", () => {
+  let context;
+
+  beforeEach(() => {
+    context = {
+      bindings: Type.map({}),
+      layoutModule: TestLayoutModule,
+      pageModule: TestPageModule,
+      targetModule: TestTargetModule,
+      targetId: "test_target_id"
+    }
+  })
+
+  it("builds operation from an expression node spec with target specified", () => {
+    const specTuple = Type.tuple([
+      Type.atom("page"),
+      Type.atom("test_action"),
+      fixtureOperationParamsKeyword()
+    ])
+
+    const expressionNode = fixtureOperationSpecExpressionNode(specTuple)
+
+    const result = Operation.buildFromExpressionNodeSpec(expressionNode, context)
+
+    const expected = {
+      targetModule: TestPageModule,
+      targetId: null,
+      name: Type.atom("test_action"),
+      params: fixtureOperationParamsMap()
+    }
+
+    assert.deepStrictEqual(result, expected)
+  })
+
+  it("builds operation from an expression node spec without target specified", () => {
+    const specTuple = Type.tuple([
+      Type.atom("test_action"),
+      fixtureOperationParamsKeyword()
+    ])
+
+    const expressionNode = fixtureOperationSpecExpressionNode(specTuple)
+
+    const result = Operation.buildFromExpressionNodeSpec(expressionNode, context)
+
+    const expected = {
+      targetModule: TestTargetModule,
+      targetId: "test_target_id",
+      name: Type.atom("test_action"),
+      params: fixtureOperationParamsMap()
+    }
+
+    assert.deepStrictEqual(result, expected)
+  })
+})
+
 describe("buildFromExpressionNodeSpecWithTarget()", () => {
   let componentRegistry, context, name, paramsKeyword, paramsMap;
 

@@ -10,6 +10,16 @@ export default class Operation {
     this.params = params
   }
 
+  static buildFromExpressionNodeSpec(expressionNode, context, componentRegistry) {
+    const specElems = expressionNode.callback(context.bindings).data.data
+
+    if (Operation.hasSpecTarget(specElems)) {
+      return Operation.buildFromExpressionNodeSpecWithTarget(specElems, context, componentRegistry)
+    } else {
+      return Operation.buildFromExpressionNodeSpecWithoutTarget(specElems, context)
+    }
+  }
+
   static buildFromExpressionNodeSpecWithTarget(specElems, context, componentRegistry) {
     const target = specElems[0].value
     let targetModule, targetId;
