@@ -1,8 +1,9 @@
 "use strict";
 
-import { assert, fixtureOperationParamsKeyword, fixtureOperationParamsMap, fixtureOperationSpecExpressionNode } from "./support/commons";
+import { assert, fixtureOperationParamsKeyword, fixtureOperationParamsMap, fixtureOperationSpecExpressionNode, mockWindow } from "./support/commons";
 import Operation from "../../assets/js/hologram/operation"
 import Type from "../../assets/js/hologram/type"
+import Runtime from "../../assets/js/hologram/runtime";
 
 const TestLayoutModule = class {}
 const TestPageModule = class {}
@@ -10,6 +11,50 @@ const TestTargetModule = class {}
 
 const TestComponentModule1 = class {}
 const TestComponentModule2 = class {}
+
+describe("build()", () => {
+  let context, expected, runtime;
+
+  beforeEach(() => {
+    const window = mockWindow()
+    runtime = new Runtime(window)
+
+    context = {
+      bindings: Type.map({}),
+      layoutModule: TestLayoutModule,
+      pageModule: TestPageModule,
+      targetModule: TestTargetModule,
+      targetId: "test_target_id"
+    }
+
+    expected = Type.atom("test_action")
+  })
+
+  it("builds operation from spec which contains expression node", () => {
+    const specTuple = Type.tuple([
+      Type.atom("test_action"),
+      fixtureOperationParamsKeyword()
+    ])
+
+    const operationSpec = {
+      value: [fixtureOperationSpecExpressionNode(specTuple)]
+    }
+
+    const result = Operation.build(operationSpec, context, runtime)
+    
+    assert.deepStrictEqual(result.name, expected)
+  })
+
+  it("builds operation from spec which contains text node", () => {
+    const operationSpec = {
+      value: [Type.textNode("test_action")]
+    }
+
+    const result = Operation.build(operationSpec, context, runtime)
+    
+    assert.deepStrictEqual(result.name, expected)
+  })
+})
 
 describe("buildFromExpressionNodeSpec()", () => {
   let context;
@@ -152,31 +197,31 @@ describe("buildFromTextNodeSpec()", () => {
   })
 })
 
-describe("hasSpecTarget()", () => {
+describe("hasTarget()", () => {
   it("returns true if the first 2 spec elems are bounded atoms", () => {
     const specElems = [Type.atom("a"), Type.atom("b")]
-    const result = Operation.hasSpecTarget(specElems)
+    const result = Operation.hasTarget(specElems)
 
     assert.isTrue(result)
   })
 
   it("returns false if there is only 1 spec elem", () => {
     const specElems = [Type.atom("a")]
-    const result = Operation.hasSpecTarget(specElems)
+    const result = Operation.hasTarget(specElems)
 
     assert.isFalse(result)
   })
 
   it("returns false if the first spec elem is not a bounded atom", () => {
     const specElems = [Type.integer(1), Type.atom("b")]
-    const result = Operation.hasSpecTarget(specElems)
+    const result = Operation.hasTarget(specElems)
 
     assert.isFalse(result)
   })
 
   it("returns false if the second spec elem is not a bounded atom", () => {
     const specElems = [Type.atom("a"), Type.integer(2)]
-    const result = Operation.hasSpecTarget(specElems)
+    const result = Operation.hasTarget(specElems)
 
     assert.isFalse(result)
   })

@@ -10,10 +10,21 @@ export default class Operation {
     this.params = params
   }
 
+  static build(operationSpec, context, runtime) {
+    const node = operationSpec.value[0];
+
+    if (node.type === "expression") {
+      return Operation.buildFromExpressionNodeSpec(node, context, runtime.componentRegistry)
+
+    } else { // node.type === "text"
+      return Operation.buildFromTextNodeSpec(node, context)
+    }
+  }
+
   static buildFromExpressionNodeSpec(expressionNode, context, componentRegistry) {
     const specElems = expressionNode.callback(context.bindings).data.data
 
-    if (Operation.hasSpecTarget(specElems)) {
+    if (Operation.hasTarget(specElems)) {
       return Operation.buildFromExpressionNodeSpecWithTarget(specElems, context, componentRegistry)
     } else {
       return Operation.buildFromExpressionNodeSpecWithoutTarget(specElems, context)
@@ -59,7 +70,7 @@ export default class Operation {
     return new Operation(targetModule, targetId, name, params)
   }
 
-  static hasSpecTarget(specElems) {
+  static hasTarget(specElems) {
     return specElems.length >= 2 && Type.isAtom(specElems[0]) && Type.isAtom(specElems[1])
   }
 }

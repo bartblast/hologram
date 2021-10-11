@@ -9,19 +9,10 @@ import Type from "./type"
 import Utils from "./utils"
 
 export default class Runtime {
-  buildOperation(eventHandlerSpec, context) {
-    const node = eventHandlerSpec.value[0];
-
-    if (node.type === "expression") {
-      return Operation.buildFromExpressionNodeSpec(node, context, this.componentRegistry)
-
-    } else { // node.type === "text"
-      return Operation.buildFromTextNodeSpec(node, context)
-    }
-  }
+  // ALREADY REFACTORED AND TESTED START
 
   executeAction(actionSpec, context) {
-    const operation = this.buildOperation(actionSpec, context)
+    const operation = Operation.build(actionSpec, context, this)
     const actionResult = operation.targetModule.action(operation.name, operation.params, context.state)
 
     let newState;
@@ -124,28 +115,7 @@ export default class Runtime {
     }
   }
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-  
-
-
-
+    // ALREADY REFACTORED AND TESTED END
 
   constructor(window) {
     this.client = new Client()
@@ -176,23 +146,7 @@ export default class Runtime {
 
     return Utils.eval(name.replace(/\./g, ""))
   }  
-
-  // TODO: refactor & test
-  // DEFER: build event struct and pass to handleEvent
-  handleClickEvent(onClickSpec, context, event) {
-    event.preventDefault()
-    this.handleEvent(onClickSpec, context)
-  }
-
-  handleEvent(eventHandlerSpec, context) {
-    if (eventHandlerSpec.modifiers.includes("command")) {
-      this.processCommand(eventHandlerSpec, context)
-
-    } else {
-      this.processAction(eventHandlerSpec, context)
-    }
-  }
-
+  
   processCommand() {
     // this.pushCommand(eventHandlerSpec, context)
     this.client.pushCommand(context.pageModule, commandName, commandParams, this.handleCommandResponse)
