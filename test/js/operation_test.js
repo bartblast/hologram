@@ -22,22 +22,19 @@ const componentRegistry = {
 runtime.componentRegistry = componentRegistry
 
 const eventData = "test_event_data"
+const state = Type.map({})
+const targetId = "test_target_id"
+
+const context = {
+  bindings: Type.map({}),
+  layoutModule: TestLayoutModule,
+  pageModule: TestPageModule,
+  targetModule: TestTargetModule,
+  targetId: targetId,
+  state: state
+}
 
 describe("build()", () => {
-  let context, expected;
-
-  beforeEach(() => {
-    context = {
-      bindings: Type.map({}),
-      layoutModule: TestLayoutModule,
-      pageModule: TestPageModule,
-      targetModule: TestTargetModule,
-      targetId: "test_target_id"
-    }
-
-    expected = Type.atom("test_action")
-  })
-
   it("builds operation from spec which contains expression node", () => {
     const operationSpecTuple = Type.tuple([
       Type.atom("test_action"),
@@ -49,6 +46,7 @@ describe("build()", () => {
     }
 
     const result = Operation.build(operationSpec, eventData, context, componentRegistry)
+    const expected = Type.atom("test_action")
     
     assert.deepStrictEqual(result.name, expected)
   })
@@ -59,24 +57,13 @@ describe("build()", () => {
     }
 
     const result = Operation.build(operationSpec, eventData, context, componentRegistry)
+    const expected = Type.atom("test_action")
     
     assert.deepStrictEqual(result.name, expected)
   })
 })
 
 describe("buildFromExpressionNodeSpec()", () => {
-  let context;
-
-  beforeEach(() => {
-    context = {
-      bindings: Type.map({}),
-      layoutModule: TestLayoutModule,
-      pageModule: TestPageModule,
-      targetModule: TestTargetModule,
-      targetId: "test_target_id"
-    }
-  })
-
   it("builds operation from an expression node spec with target specified", () => {
     const operationSpecTuple = Type.tuple([
       Type.atom("page"),
@@ -93,7 +80,8 @@ describe("buildFromExpressionNodeSpec()", () => {
       targetId: null,
       name: Type.atom("test_action"),
       params: fixtureOperationParamsMap(),
-      eventData: eventData
+      eventData: eventData,
+      state: state
     }
 
     assert.deepStrictEqual(result, expected)
@@ -114,7 +102,8 @@ describe("buildFromExpressionNodeSpec()", () => {
       targetId: "test_target_id",
       name: Type.atom("test_action"),
       params: fixtureOperationParamsMap(),
-      eventData: eventData
+      eventData: eventData,
+      state: state
     }
 
     assert.deepStrictEqual(result, expected)
@@ -122,17 +111,12 @@ describe("buildFromExpressionNodeSpec()", () => {
 })
 
 describe("buildFromExpressionNodeSpecWithTarget()", () => {
-  let context, name, paramsKeyword, paramsMap;
+  let name, paramsKeyword, paramsMap;
 
   beforeEach(() => {
     name = Type.atom("test")
     paramsKeyword = fixtureOperationParamsKeyword()
     paramsMap = fixtureOperationParamsMap()
-
-    context = {
-      layoutModule: TestLayoutModule,
-      pageModule: TestPageModule
-    }
   })
 
   it("builds layout target operation if the first spec elem is equal to :layout boxed atom", () => {
@@ -140,7 +124,7 @@ describe("buildFromExpressionNodeSpecWithTarget()", () => {
     const operationSpecElems = [target, name, paramsKeyword]
 
     const result = Operation.buildFromExpressionNodeSpecWithTarget(operationSpecElems, eventData, context, componentRegistry)
-    const expected = new Operation(TestLayoutModule, null, name, paramsMap, eventData)
+    const expected = new Operation(TestLayoutModule, null, name, paramsMap, eventData, state)
 
     assert.isTrue(result instanceof Operation)
     assert.deepStrictEqual(result, expected)
@@ -151,7 +135,7 @@ describe("buildFromExpressionNodeSpecWithTarget()", () => {
     const operationSpecElems = [target, name, paramsKeyword]
 
     const result = Operation.buildFromExpressionNodeSpecWithTarget(operationSpecElems, eventData, context, componentRegistry)
-    const expected = new Operation(TestPageModule, null, name, paramsMap, eventData)
+    const expected = new Operation(TestPageModule, null, name, paramsMap, eventData, state)
 
     assert.isTrue(result instanceof Operation)
     assert.deepStrictEqual(result, expected)
@@ -162,7 +146,7 @@ describe("buildFromExpressionNodeSpecWithTarget()", () => {
     const operationSpecElems = [target, name, paramsKeyword]
 
     const result = Operation.buildFromExpressionNodeSpecWithTarget(operationSpecElems, eventData, context, componentRegistry)
-    const expected = new Operation(TestComponentModule2, "test_component_2", name, paramsMap, eventData)
+    const expected = new Operation(TestComponentModule2, "test_component_2", name, paramsMap, eventData, state)
 
     assert.isTrue(result instanceof Operation)
     assert.deepStrictEqual(result, expected)
@@ -174,10 +158,9 @@ describe("buildFromExpressionNodeSpecWithoutTarget()", () => {
     const name = Type.atom("test")
     const paramsKeyword = fixtureOperationParamsKeyword()
     const operationSpecElems = [name, paramsKeyword]
-    const context = {targetModule: TestTargetModule, targetId: "test_id"}
 
     const result = Operation.buildFromExpressionNodeSpecWithoutTarget(operationSpecElems, eventData, context)
-    const expected = new Operation(TestTargetModule, "test_id", name, fixtureOperationParamsMap(), eventData)
+    const expected = new Operation(TestTargetModule, targetId, name, fixtureOperationParamsMap(), eventData, state)
 
     assert.isTrue(result instanceof Operation)
     assert.deepStrictEqual(result, expected)
@@ -186,11 +169,10 @@ describe("buildFromExpressionNodeSpecWithoutTarget()", () => {
 
 describe("buildFromTextNodeSpec()", () => {
   it("builds operation from a text node spec", () => {
-    const context = {targetModule: TestTargetModule}
     const textNode = Type.textNode("test")
 
     const result = Operation.buildFromTextNodeSpec(textNode, eventData, context)
-    const expected = new Operation(TestTargetModule, null, Type.atom("test"), Type.map({}), eventData)
+    const expected = new Operation(TestTargetModule, null, Type.atom("test"), Type.map({}), eventData, state)
 
     assert.isTrue(result instanceof Operation)
     assert.deepStrictEqual(result, expected)

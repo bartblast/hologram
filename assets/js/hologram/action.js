@@ -4,8 +4,8 @@ import Operation from "./operation";
 import Type from "./type";
 
 export default class Action extends Operation {
-  constructor(targetModule, targetId, name, params, eventData) {
-    super(targetModule, targetId, name, params, eventData)
+  constructor(targetModule, targetId, name, params, eventData, state) {
+    super(targetModule, targetId, name, params, eventData, state)
   }
 
   static getCommandNameFromActionResult(actionResult) {

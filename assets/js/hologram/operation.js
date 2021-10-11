@@ -3,12 +3,13 @@
 import Type from "./type"
 
 export default class Operation {
-  constructor(targetModule, targetId, name, params, eventData) {
+  constructor(targetModule, targetId, name, params, eventData, state) {
     this.targetModule = targetModule
     this.targetId = targetId
     this.name = name
     this.params = params
     this.eventData = eventData
+    this.state = state
   }
   
   static build(operationSpec, eventData, context, componentRegistry) {
@@ -55,14 +56,14 @@ export default class Operation {
         break;
     }
 
-    return new this(targetModule, targetId, name, params, eventData)
+    return new this(targetModule, targetId, name, params, eventData, context.state)
   }
 
   static buildFromExpressionNodeSpecWithoutTarget(operationSpecElems, eventData, context) {
     const name = operationSpecElems[0]
     const params = Type.keywordToMap(operationSpecElems[1])
 
-    return new this(context.targetModule, context.targetId, name, params, eventData)
+    return new this(context.targetModule, context.targetId, name, params, eventData, context.state)
   }
 
   static buildFromTextNodeSpec(textNode, eventData, context) {
@@ -71,7 +72,7 @@ export default class Operation {
     const name = Type.atom(textNode.content)
     const params = Type.map({})
     
-    return new this(targetModule, targetId, name, params, eventData)
+    return new this(targetModule, targetId, name, params, eventData, context.state)
   }
 
   static hasTarget(operationSpecElems) {
