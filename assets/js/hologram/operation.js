@@ -13,7 +13,7 @@ export default class Operation {
     }
   }
 
-  static getOperationSpecType(operationSpec) {
+  static getSpecType(operationSpec) {
     const node = operationSpec.value[0];
 
     if (node.type === "expression") {

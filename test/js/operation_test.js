@@ -29,13 +29,13 @@ describe("buildMethod()", () => {
   })
 })
 
-describe("getOperationSpecType()", () => {
+describe("getSpecType()", () => {
   it("returns expression enum value if the operation spec value is an expression node", () => {
     const operationSpec = {
       value: [Type.expressionNode(null)]
     }
 
-    const result = Operation.getOperationSpecType(operationSpec)
+    const result = Operation.getSpecType(operationSpec)
     const expected = Enums.OPERATION_SPEC_TYPE.expression
 
     assert.equal(result, expected)
@@ -46,7 +46,7 @@ describe("getOperationSpecType()", () => {
       value: [Type.textNode("test")]
     }
 
-    const result = Operation.getOperationSpecType(operationSpec)
+    const result = Operation.getSpecType(operationSpec)
     const expected = Enums.OPERATION_SPEC_TYPE.text
 
     assert.equal(result, expected)
