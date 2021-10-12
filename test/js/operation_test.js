@@ -32,7 +32,7 @@ describe("buildTarget()", () => {
   const bindings = Type.map({})
   const source = "test_source"
 
-  it("returns the 'source' arg if the operation spec is of text type", () => {
+  it("returns the source arg if the operation spec doesn't contain target value", () => {
     const operationSpec = {
       value: [Type.textNode("test")]
     }
@@ -42,8 +42,8 @@ describe("buildTarget()", () => {
     assert.equal(result, source)
   })
 
-  it("returns layout enum value if the operation spec value is equal to 'layout' boxed atom", () => {
-    const callback = (_$bindings) => { return Type.tuple([Type.atom("layout")]) }
+  it("returns layout enum value if the operation spec target value is equal to 'layout' boxed atom", () => {
+    const callback = (_$bindings) => { return Type.tuple([Type.atom("layout"), Type.atom("test_action")]) }
 
     const operationSpec = {
       value: [Type.expressionNode(callback)]
@@ -55,8 +55,8 @@ describe("buildTarget()", () => {
     assert.equal(result, expected)
   })
 
-  it("returns page enum value if the operation spec value is equal to 'page' boxed atom", () => {
-    const callback = (_$bindings) => { return Type.tuple([Type.atom("page")]) }
+  it("returns page enum value if the operation spec target value is equal to 'page' boxed atom", () => {
+    const callback = (_$bindings) => { return Type.tuple([Type.atom("page"), Type.atom("test_action")]) }
 
     const operationSpec = {
       value: [Type.expressionNode(callback)]
@@ -64,6 +64,19 @@ describe("buildTarget()", () => {
 
     const result = Operation.buildTarget(operationSpec, source, bindings)
     const expected = Operation.TARGET.page
+
+    assert.equal(result, expected)
+  })
+
+  it("returns unboxed target value if the operation spec contains boxed target value", () => {
+    const callback = (_$bindings) => { return Type.tuple([Type.atom("test_target"), Type.atom("test_action")]) }
+
+    const operationSpec = {
+      value: [Type.expressionNode(callback)]
+    }
+
+    const result = Operation.buildTarget(operationSpec, source, bindings)
+    const expected = "test_target"
 
     assert.equal(result, expected)
   })
@@ -90,5 +103,59 @@ describe("getSpecType()", () => {
     const expected = Operation.SPEC_TYPE.text
 
     assert.equal(result, expected)
+  })
+})
+
+describe("getTargetValue()", () => {
+  const bindings = Type.map({})
+
+  it("returns null if the operation spec is of text type", () => {
+    const operationSpec = {
+      value: [Type.textNode("test")]
+    }
+
+    const result = Operation.getTargetValue(operationSpec, bindings)
+
+    assert.isNull(result)
+  })
+
+  it("returns null if the operation spec has only one elem", () => {
+    const callback = (_$bindings) => { return Type.tuple([Type.atom("layout")]) }
+
+    const operationSpec = {
+      value: [Type.expressionNode(callback)]
+    }
+
+    const result = Operation.getTargetValue(operationSpec, bindings)
+
+    assert.isNull(result)
+  })
+
+  it("returns null if the second operation spec elem is not a boxed atom", () => {
+    const callback = (_$bindings) => {
+      return Type.tuple([Type.atom("layout"), Type.integer(1)]) 
+    }
+
+    const operationSpec = {
+      value: [Type.expressionNode(callback)]
+    }
+
+    const result = Operation.getTargetValue(operationSpec, bindings)
+
+    assert.isNull(result)
+  })
+
+  it("returns unboxed target value if the operation spec contains it", () => {
+    const callback = (_$bindings) => {
+      return Type.tuple([Type.atom("test_target"), Type.atom("test_action")]) 
+    }
+
+    const operationSpec = {
+      value: [Type.expressionNode(callback)]
+    }
+
+    const result = Operation.getTargetValue(operationSpec, bindings)
+
+    assert.equal(result, "test_target")
   })
 })

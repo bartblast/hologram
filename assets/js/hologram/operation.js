@@ -1,5 +1,6 @@
 "use strict";
 
+import Type from "./type";
 import Utils from "./utils";
 
 export default class Operation {
@@ -33,17 +34,12 @@ export default class Operation {
   }
 
   static buildTarget(operationSpec, source, bindings) {
-    if (Operation.getSpecType(operationSpec) === Operation.SPEC_TYPE.text) {
-      return source
-    }
-
-    const targetSpecValue = operationSpec
-      .value[0]
-      .callback(bindings)
-      .data[0]
-      .value
+    const targetSpecValue = Operation.getTargetValue(operationSpec, bindings)
 
     switch (targetSpecValue) {
+      case null:
+        return source
+        
       case "layout":
         return Operation.TARGET.layout
 
@@ -63,6 +59,20 @@ export default class Operation {
     } else {
       return Operation.SPEC_TYPE.text
     }
+  }
+
+  static getTargetValue(operationSpec, bindings) {
+    if (Operation.getSpecType(operationSpec) === Operation.SPEC_TYPE.text) {
+      return null
+    }
+
+    const specElems = operationSpec.value[0].callback(bindings).data
+
+    if (specElems.length === 1 || !Type.isAtom(specElems[1])) {
+      return null
+    }
+
+    return specElems[0].value
   }
 
 

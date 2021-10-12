@@ -180,7 +180,7 @@ describe("buildFromTextNodeSpec()", () => {
 })
 
 describe("hasTarget()", () => {
-  it("returns true if the first 2 spec elems are bounded atoms", () => {
+  it("returns true if the first 2 spec elems are boxed atoms", () => {
     const operationSpecElems = [Type.atom("a"), Type.atom("b")]
     const result = Operation.hasTarget(operationSpecElems)
 
@@ -194,14 +194,14 @@ describe("hasTarget()", () => {
     assert.isFalse(result)
   })
 
-  it("returns false if the first spec elem is not a bounded atom", () => {
+  it("returns false if the first spec elem is not a boxed atom", () => {
     const operationSpecElems = [Type.integer(1), Type.atom("b")]
     const result = Operation.hasTarget(operationSpecElems)
 
     assert.isFalse(result)
   })
 
-  it("returns false if the second spec elem is not a bounded atom", () => {
+  it("returns false if the second spec elem is not a boxed atom", () => {
     const operationSpecElems = [Type.atom("a"), Type.integer(2)]
     const result = Operation.hasTarget(operationSpecElems)
 
