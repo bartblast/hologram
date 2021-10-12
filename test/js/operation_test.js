@@ -37,7 +37,7 @@ describe("buildTarget()", () => {
       value: [Type.textNode("test")]
     }
 
-    const result = Operation.buildTarget(operationSpec, bindings, source)
+    const result = Operation.buildTarget(operationSpec, source, bindings)
 
     assert.equal(result, source)
   })
@@ -49,7 +49,7 @@ describe("buildTarget()", () => {
       value: [Type.expressionNode(callback)]
     }
 
-    const result = Operation.buildTarget(operationSpec, bindings, source)
+    const result = Operation.buildTarget(operationSpec, source, bindings)
     const expected = Operation.TARGET.layout
 
     assert.equal(result, expected)
@@ -62,7 +62,7 @@ describe("buildTarget()", () => {
       value: [Type.expressionNode(callback)]
     }
 
-    const result = Operation.buildTarget(operationSpec, bindings, source)
+    const result = Operation.buildTarget(operationSpec, source, bindings)
     const expected = Operation.TARGET.page
 
     assert.equal(result, expected)

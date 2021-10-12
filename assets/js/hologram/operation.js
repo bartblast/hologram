@@ -32,7 +32,7 @@ export default class Operation {
     }
   }
 
-  static buildTarget(operationSpec, bindings, source) {
+  static buildTarget(operationSpec, source, bindings) {
     if (Operation.getSpecType(operationSpec) === Operation.SPEC_TYPE.text) {
       return source
     }
@@ -87,7 +87,7 @@ export default class Operation {
     this.params = params
   }
 
-  static build(operationSpec, eventData) {
+  static build(operationSpec, source, bindings, eventData) {
     const method = Operation.buildMethod(operationSpec)
     const target = Operation.buildTarget(operationSpec, source)
     const name = Operation.buildName()
