@@ -1,7 +1,6 @@
 "use strict";
 
 import { assert } from "./support/commons";
-import Enums from "../../assets/js/hologram/enums"
 import Operation from "../../assets/js/hologram/operation"
 import Type from "../../assets/js/hologram/type"
 
@@ -12,7 +11,7 @@ describe("buildMethod()", () => {
     }
 
     const result = Operation.buildMethod(operationSpec)
-    const expected = Enums.OPERATION_METHOD.command
+    const expected = Operation.METHOD.command
 
     assert.equal(result, expected)
   })
@@ -23,7 +22,7 @@ describe("buildMethod()", () => {
     }
 
     const result = Operation.buildMethod(operationSpec)
-    const expected = Enums.OPERATION_METHOD.action
+    const expected = Operation.METHOD.action
 
     assert.equal(result, expected)
   })
@@ -36,7 +35,7 @@ describe("getSpecType()", () => {
     }
 
     const result = Operation.getSpecType(operationSpec)
-    const expected = Enums.OPERATION_SPEC_TYPE.expression
+    const expected = Operation.SPEC_TYPE.expression
 
     assert.equal(result, expected)
   })
@@ -47,7 +46,7 @@ describe("getSpecType()", () => {
     }
 
     const result = Operation.getSpecType(operationSpec)
-    const expected = Enums.OPERATION_SPEC_TYPE.text
+    const expected = Operation.SPEC_TYPE.text
 
     assert.equal(result, expected)
   })

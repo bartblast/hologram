@@ -1,15 +1,27 @@
 "use strict";
 
-import Enums from "./enums"
-import Target from "./target"
 import Utils from "./utils";
 
 export default class Operation {
+  static get METHOD() {
+    return {
+      action: 0,
+      command: 1
+    }
+  }
+
+  static get SPEC_TYPE() {
+    return {
+      text: 0,
+      expression: 1
+    }
+  }
+
   static buildMethod(operationSpec) {
     if (operationSpec.modifiers.includes("command")) {
-      return Enums.OPERATION_METHOD.command
+      return Operation.METHOD.command
     } else {
-      return Enums.OPERATION_METHOD.action
+      return Operation.METHOD.action
     }
   }
 
@@ -17,9 +29,9 @@ export default class Operation {
     const node = operationSpec.value[0];
 
     if (node.type === "expression") {
-      return Enums.OPERATION_SPEC_TYPE.expression
+      return Operation.SPEC_TYPE.expression
     } else {
-      return Enums.OPERATION_SPEC_TYPE.text
+      return Operation.SPEC_TYPE.text
     }
   }
 
