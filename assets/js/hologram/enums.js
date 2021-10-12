@@ -5,4 +5,11 @@ export default class Enums {
       command: 1
     }
   }
+
+  static get OPERATION_SPEC_TYPE() {
+    return {
+      text: 0,
+      expression: 1
+    }
+  }
 }
