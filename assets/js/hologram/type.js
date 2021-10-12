@@ -36,7 +36,6 @@ export default class Type {
     return Type.isFalse(boxedValue) || Type.isNil(boxedValue)
   }
 
-
   static isMap(boxedValue) {
     return boxedValue.type === "map"
   }
