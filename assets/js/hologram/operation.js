@@ -12,8 +12,15 @@ export default class Operation {
 
   static get SPEC_TYPE() {
     return {
-      text: 0,
-      expression: 1
+      expression: 1,
+      text: 0
+    }
+  }
+
+  static get TARGET() {
+    return {
+      layout: "__LAYOUT__",
+      page: "__PAGE__"
     }
   }
 
@@ -22,6 +29,29 @@ export default class Operation {
       return Operation.METHOD.command
     } else {
       return Operation.METHOD.action
+    }
+  }
+
+  static buildTarget(operationSpec, bindings, source) {
+    if (Operation.getSpecType(operationSpec) === Operation.SPEC_TYPE.text) {
+      return source
+    }
+
+    const targetSpecValue = operationSpec
+      .value[0]
+      .callback(bindings)
+      .data[0]
+      .value
+
+    switch (targetSpecValue) {
+      case "layout":
+        return Operation.TARGET.layout
+
+      case "page":
+        return Operation.TARGET.page
+
+      default:
+        return targetSpecValue;
     }
   }
 
@@ -48,28 +78,7 @@ export default class Operation {
 
 
 
-  static buildTarget(operationSpec, source) {
-
-    const targetSpec = operationSpecElems[0].value
-
-
-    switch (targetSpec) {
-      case "layout":
-        targetModule = context.layoutModule
-        targetId = null
-        break;
-
-      case "page":
-        targetModule = context.pageModule
-        targetId = null
-        break;
-
-      default:
-        targetModule = componentRegistry[target];
-        targetId = target
-        break;
-    }
-  }
+  
 
   construct(method, target, name, params) {
     this.method = method

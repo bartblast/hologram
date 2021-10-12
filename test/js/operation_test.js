@@ -28,6 +28,47 @@ describe("buildMethod()", () => {
   })
 })
 
+describe("buildTarget()", () => {
+  const bindings = Type.map({})
+  const source = "test_source"
+
+  it("returns the 'source' arg if the operation spec is of text type", () => {
+    const operationSpec = {
+      value: [Type.textNode("test")]
+    }
+
+    const result = Operation.buildTarget(operationSpec, bindings, source)
+
+    assert.equal(result, source)
+  })
+
+  it("returns layout enum value if the operation spec value is equal to 'layout' boxed atom", () => {
+    const callback = (_$bindings) => { return Type.tuple([Type.atom("layout")]) }
+
+    const operationSpec = {
+      value: [Type.expressionNode(callback)]
+    }
+
+    const result = Operation.buildTarget(operationSpec, bindings, source)
+    const expected = Operation.TARGET.layout
+
+    assert.equal(result, expected)
+  })
+
+  it("returns page enum value if the operation spec value is equal to 'page' boxed atom", () => {
+    const callback = (_$bindings) => { return Type.tuple([Type.atom("page")]) }
+
+    const operationSpec = {
+      value: [Type.expressionNode(callback)]
+    }
+
+    const result = Operation.buildTarget(operationSpec, bindings, source)
+    const expected = Operation.TARGET.page
+
+    assert.equal(result, expected)
+  })
+})
+
 describe("getSpecType()", () => {
   it("returns expression enum value if the operation spec value is an expression node", () => {
     const operationSpec = {

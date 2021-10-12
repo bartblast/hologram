@@ -104,11 +104,11 @@ export default class DOM {
 
   // TODO: refactor & test
   // DEFER: research whether this creates a new handler on each render (how to optimize it?)
-  buildVNodeEventHandlers(node, fullState, scopeState, context) {
+  buildVNodeEventHandlers(node, source, bindings) {
     const eventHandlers = {}
 
     if (node.attrs.on_click) {
-      eventHandlers.click = (event) => { Runtime.handleEvent(event, ClickEvent, context.source, node.attrs.on_click) }
+      eventHandlers.click = (event) => { Runtime.handleEvent(event, ClickEvent, source, node.attrs.on_click) }
     }
 
     // TODO: implement
