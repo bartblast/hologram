@@ -1,8 +1,6 @@
 "use strict";
 
-import Event from "../event"
-
-export default class ClickEvent extends Event {
+export default class ClickEvent {
   // TODO: implement & test
   static buildEventData(_event) {
     return {}
