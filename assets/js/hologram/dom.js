@@ -108,7 +108,7 @@ export default class DOM {
     const eventHandlers = {}
 
     if (node.attrs.on_click) {
-      eventHandlers.click = (event) => { ClickEvent.handle(event, node.attrs.on_click, context, this.runtime) }
+      eventHandlers.click = (event) => { Event.handle(event, ClickEvent, context.source, node.attrs.on_click) }
     }
 
     // TODO: implement
