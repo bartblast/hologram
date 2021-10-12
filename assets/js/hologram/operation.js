@@ -33,13 +33,28 @@ export default class Operation {
     }
   }
 
+  static buildName(operationSpec, bindings) {
+    if (Operation.getSpecType(operationSpec) === Operation.SPEC_TYPE.text) {
+      const value = operationSpec.value[0].content
+      return Type.atom(value)
+    }
+
+    const specElems = operationSpec.value[0].callback(bindings).data
+
+    if (specElems.length === 1 || !Type.isAtom(specElems[1])) {
+      return specElems[0]
+    } else {
+      return specElems[1]
+    }
+  }
+
   static buildTarget(operationSpec, source, bindings) {
     const targetSpecValue = Operation.getTargetValue(operationSpec, bindings)
 
     switch (targetSpecValue) {
       case null:
         return source
-        
+
       case "layout":
         return Operation.TARGET.layout
 
@@ -100,7 +115,7 @@ export default class Operation {
   static build(operationSpec, source, bindings, eventData) {
     const method = Operation.buildMethod(operationSpec)
     const target = Operation.buildTarget(operationSpec, source)
-    const name = Operation.buildName()
+    const name = Operation.buildName(operationSpec, bindings)
     const params = Operation.buildParams(eventData)
     
     const operation = new Operation(method, source, target, name, params)

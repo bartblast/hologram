@@ -4,6 +4,9 @@ import { assert } from "./support/commons";
 import Operation from "../../assets/js/hologram/operation"
 import Type from "../../assets/js/hologram/type"
 
+const bindings = Type.map({})
+const source = "test_source"
+
 describe("buildMethod()", () => {
   it("returns command enum value if the modifiers in operation spec include 'command'", () => {
     const operationSpec = {
@@ -28,13 +31,60 @@ describe("buildMethod()", () => {
   })
 })
 
-describe("buildTarget()", () => {
-  const bindings = Type.map({})
-  const source = "test_source"
+describe("buildName()", () => {
+  const expected = Type.atom("test_action")
 
+  it("returns the boxed name when the operation spec is of text type", () => {
+    const operationSpec = {
+      value: [Type.textNode("test_action")]
+    }
+
+    const result = Operation.buildName(operationSpec, bindings)
+
+    assert.deepStrictEqual(result, expected)
+  })
+
+  it("returns the first operation spec elem if the operation spec is of expression type and has only one elem", () => {
+    const callback = (_$bindings) => { return Type.tuple([Type.atom("test_action")]) }
+
+    const operationSpec = {
+      value: [Type.expressionNode(callback)]
+    }
+
+    const result = Operation.buildName(operationSpec, bindings)
+
+    assert.deepStrictEqual(result, expected)
+  })
+
+  it("returns the first operation spec elem if the operation spec is of expression type and the second elem is not of boxed atom type", () => {
+    const callback = (_$bindings) => { return Type.tuple([Type.atom("test_action"), Type.integer(1)]) }
+
+    const operationSpec = {
+      value: [Type.expressionNode(callback)]
+    }
+
+    const result = Operation.buildName(operationSpec, bindings)
+
+    assert.deepStrictEqual(result, expected)
+  })
+
+  it("returns the boxed name when the operation spec has at least two elems and the second one is of boxed atom type", () => {
+    const callback = (_$bindings) => { return Type.tuple([Type.atom("layout"), Type.atom("test_action")]) }
+
+    const operationSpec = {
+      value: [Type.expressionNode(callback)]
+    }
+
+    const result = Operation.buildName(operationSpec, bindings)
+
+    assert.deepStrictEqual(result, expected)
+  })
+})
+
+describe("buildTarget()", () => {
   it("returns the source arg if the operation spec doesn't contain target value", () => {
     const operationSpec = {
-      value: [Type.textNode("test")]
+      value: [Type.textNode("test_action")]
     }
 
     const result = Operation.buildTarget(operationSpec, source, bindings)
@@ -96,7 +146,7 @@ describe("getSpecType()", () => {
 
   it("returns text enum value if the operation spec value is a text node", () => {
     const operationSpec = {
-      value: [Type.textNode("test")]
+      value: [Type.textNode("test_action")]
     }
 
     const result = Operation.getSpecType(operationSpec)
@@ -107,11 +157,9 @@ describe("getSpecType()", () => {
 })
 
 describe("getTargetValue()", () => {
-  const bindings = Type.map({})
-
   it("returns null if the operation spec is of text type", () => {
     const operationSpec = {
-      value: [Type.textNode("test")]
+      value: [Type.textNode("test_action")]
     }
 
     const result = Operation.getTargetValue(operationSpec, bindings)
