@@ -66,6 +66,15 @@ export default class Operation {
     }
   }
 
+  static getSpecElems(operationSpec, bindings) {
+    if (Operation.getSpecType(operationSpec) === Operation.SPEC_TYPE.text) {
+      const value = operationSpec.value[0].content
+      return [Type.atom(value)]
+    } else { // expression
+      return operationSpec.value[0].callback(bindings).data
+    }
+  }
+
   static getSpecType(operationSpec) {
     const node = operationSpec.value[0];
 
@@ -113,6 +122,8 @@ export default class Operation {
   }
 
   static build(operationSpec, source, bindings, eventData) {
+    specElems = Operation.getSpecElems(operationSpec, bindings)
+
     const method = Operation.buildMethod(operationSpec)
     const target = Operation.buildTarget(operationSpec, source)
     const name = Operation.buildName(operationSpec, bindings)
