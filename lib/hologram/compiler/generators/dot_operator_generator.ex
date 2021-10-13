@@ -4,7 +4,7 @@ defmodule Hologram.Compiler.DotOperatorGenerator do
   def generate(left, right, %Context{} = context, %Opts{} = opts) do
     left = Generator.generate(left, context, opts)
     right = Generator.generate(right, context, opts)
-    class_name = Helpers.class_name(Kernel)
+    class_name = Helpers.class_name(Kernel.SpecialForms)
 
     "#{class_name}.$dot(#{left}, #{right})"
   end

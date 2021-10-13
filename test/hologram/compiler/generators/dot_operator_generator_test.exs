@@ -9,7 +9,7 @@ defmodule Hologram.Compiler.DotOperatorGeneratorTest do
     right = %AtomType{value: :a}
 
     result = DotOperatorGenerator.generate(left, right, %Context{}, %Opts{})
-    expected = "Elixir_Kernel.$dot(x, { type: 'atom', value: 'a' })"
+    expected = "Elixir_Kernel_SpecialForms.$dot(x, { type: 'atom', value: 'a' })"
 
     assert result == expected
   end

@@ -80,31 +80,6 @@ describe("apply()", () => {
   })
 })
 
-describe("$dot()", () => {
-  let key, map, val, result;
-
-  beforeEach(() => {
-    val = Type.integer(2)
-
-    let elems = {}
-    elems[Type.atomKey("a")] = Type.integer(1)
-    elems[Type.atomKey("b")] = val
-
-    map =  Type.map(elems)
-    key = Type.atom("b")
-    
-    result = Kernel.$dot(map, key)
-  })
-
-  it("fetches boxed map value by boxed key", () => {
-    assert.deepStrictEqual(result, val) 
-  })
-
-  it("returns frozen object", () => {
-    assertFrozen(result)
-  })
-})
-
 describe("$equal_to()", () => {
   // boolean == boolean
   it("returns boxed true for a boxed boolean equal to another boxed boolean", () => {

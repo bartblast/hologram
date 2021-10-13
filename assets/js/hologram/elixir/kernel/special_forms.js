@@ -4,6 +4,10 @@ import HologramNotImplementedError from "../../errors";
 import Type from "../../type"
 
 export default class SpecialForms {
+  static $dot(boxedMap, boxedKey) {
+    return boxedMap.data[Type.serializedKey(boxedKey)]
+  }
+  
   static $type(value, type) {
     if (Type.isString(value) && type === "binary") {
       return value

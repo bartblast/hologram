@@ -151,7 +151,7 @@ defmodule Hologram.Compiler.GeneratorTest do
       }
 
       result = Generator.generate(ir, %Context{}, %Opts{})
-      expected = "Elixir_Kernel.$dot(x, { type: 'atom', value: 'a' })"
+      expected = "Elixir_Kernel_SpecialForms.$dot(x, { type: 'atom', value: 'a' })"
 
       assert result == expected
     end
