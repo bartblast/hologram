@@ -1,6 +1,6 @@
 "use strict";
 
-import { assert } from "../support/commons"
+import { assert, assertBoxedFalse, assertBoxedTrue } from "../support/commons"
 
 import Enum from "../../../assets/js/hologram/elixir/enum";
 import HologramNotImplementedError from "../../../assets/js/hologram/errors";
@@ -17,17 +17,26 @@ describe("member$question()", () => {
   it("returns boxed true boolean value if the list contains the element", () => {
     const elem = Type.integer(2)
     const result = Enum.member$question(list, elem)
-    const expected = Type.boolean(true)
 
-    assert.deepStrictEqual(result, expected)
+    assertBoxedTrue(result)
   })
 
   it("returns boxed false boolean value if the list doesn't contain the element", () => {
     const elem = Type.integer(3)
     const result = Enum.member$question(list, elem)
-    const expected = Type.boolean(false)
 
-    assert.deepStrictEqual(result, expected)
+    assertBoxedFalse(result)
+  })
+
+  it("uses strictly equal to operator", () => {
+    const elems = [Type.float(1.0), Type.float(2.0), Type.float(3.0)]
+    const list = Type.list(elems)
+
+    const result1 = Enum.member$question(list, Type.integer(2))
+    assertBoxedFalse(result1)
+
+    const result2 = Enum.member$question(list, Type.float(2.000))
+    assertBoxedTrue(result2)
   })
 
   it("throws an error for not implemented enumerable types", () => {
