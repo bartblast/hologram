@@ -41,10 +41,10 @@ export default class Operation {
     }
   }
 
-  static buildTarget(operationSpec, source, bindings) {
-    const targetSpecValue = Operation.getTargetValue(operationSpec, bindings)
+  static buildTarget(specElems, source) {
+    const targetValue = Operation.getTargetValue(specElems)
 
-    switch (targetSpecValue) {
+    switch (targetValue) {
       case null:
         return source
 
@@ -55,7 +55,7 @@ export default class Operation {
         return Operation.TARGET.page
 
       default:
-        return targetSpecValue;
+        return targetValue;
     }
   }
 
@@ -78,13 +78,7 @@ export default class Operation {
     }
   }
 
-  static getTargetValue(operationSpec, bindings) {
-    if (Operation.getSpecType(operationSpec) === Operation.SPEC_TYPE.text) {
-      return null
-    }
-
-    const specElems = operationSpec.value[0].callback(bindings).data
-
+  static getTargetValue(specElems) {
     if (specElems.length === 1 || !Type.isAtom(specElems[1])) {
       return null
     }
@@ -118,7 +112,7 @@ export default class Operation {
     specElems = Operation.getSpecElems(operationSpec, bindings)
 
     const method = Operation.buildMethod(operationSpec)
-    const target = Operation.buildTarget(operationSpec, source)
+    const target = Operation.buildTarget(specElems, source)
     const name = Operation.buildName(specElems)
     const params = Operation.buildParams(eventData)
     
