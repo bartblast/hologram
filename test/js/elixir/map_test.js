@@ -5,35 +5,37 @@ import Map from "../../../assets/js/hologram/elixir/map";
 import Type from "../../../assets/js/hologram/type";
 
 describe("put()", () => {
-  let elems, key, map, result, value;
+  let map1, map2, result;
 
   beforeEach(() => {
-    elems = {}
-    elems[Type.atomKey("a")] = Type.integer(1)
-    elems[Type.atomKey("b")] = Type.integer(2)
-    map = Type.map(elems)
-    
-    key = Type.atom("c")
-    value = Type.integer(3)
+    let elems1 = {}
+    elems1[Type.atomKey("a")] = Type.integer(1)
+    elems1[Type.atomKey("b")] = Type.integer(2)
+    map1 = Type.map(elems1)
 
-    result = Map.put(map, key, value)
+    let elems2 = {}
+    elems2[Type.atomKey("a")] = Type.integer(1)
+    elems2[Type.atomKey("b")] = Type.integer(2)
+    elems2[Type.atomKey("c")] = Type.integer(3)
+    map2 = Type.map(elems2)
+
+    result = Map.put(map1, Type.atom("c"), Type.integer(3))
   })
 
-  it("adds the key-value pair to the map", () => {
-    elems = {}
-    elems[Type.atomKey("a")] = Type.integer(1)
-    elems[Type.atomKey("b")] = Type.integer(2)
-    elems[Type.atomKey("c")] = Type.integer(3)
-    const expected = Type.map(elems)
+  it("adds the key-value pair to the map when the map doesn't contain the given key yet", () => {
+    assert.deepStrictEqual(result, map2) 
+  })
 
-    assert.deepStrictEqual(result, expected) 
+  it("adds the key-value pair to the map when the map already contains the given key", () => {
+    const result = Map.put(map2, Type.atom("c"), Type.integer(3))
+    assert.deepStrictEqual(result, map2) 
   })
 
   it("clones the orignal map object", () => {
-    assert.notEqual(result, map)
+    assert.notEqual(result, map1)
   })
 
-  it("returns frozen object", () => {    
+  it("returns frozen object", () => { 
     assertFrozen(result)
   })
 })
