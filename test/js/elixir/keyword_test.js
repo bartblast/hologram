@@ -1,42 +1,46 @@
 "use strict";
 
-import { assert, assertBoxedFalse, assertBoxedTrue } from "../support/commons"
+import { assert, assertBoxedFalse, assertBoxedTrue, assertFrozen } from "../support/commons"
 import Keyword from "../../../assets/js/hologram/elixir/keyword";
 import Type from "../../../assets/js/hologram/type";
 
 describe("delete()", () => {
   const key = Type.atom("a")
 
-  const expected = Type.list([
+  const keywords1 = Type.list([
+    Type.tuple([key, Type.integer(1)]),
+    Type.tuple([Type.atom("b"), Type.integer(2)])
+  ])
+
+  const keywords2 = Type.list([
     Type.tuple([Type.atom("b"), Type.integer(2)])
   ])
 
   it("deletes the entry in the keyword list for specific a key when there is one matching entry", () => {
-    const keywords = Type.list([
-      Type.tuple([key, Type.integer(1)]),
-      Type.tuple([Type.atom("b"), Type.integer(2)])
-    ])
-
-    const result = Keyword.delete(keywords, key)
-
-    assert.deepStrictEqual(result, expected)
+    const result = Keyword.delete(keywords1, key)
+    assert.deepStrictEqual(result, keywords2)
   })
 
   it("deletes the entries in the keyword list for specific a key when there are multiple matching entries", () => {
-    const keywords = Type.list([
+    const keywords1 = Type.list([
       Type.tuple([key, Type.integer(1)]),
       Type.tuple([Type.atom("b"), Type.integer(2)]),
       Type.tuple([key, Type.integer(3)])
     ])
 
-    const result = Keyword.delete(keywords, key)
+    const result = Keyword.delete(keywords1, key)
 
-    assert.deepStrictEqual(result, expected)
+    assert.deepStrictEqual(result, keywords2)
   })
 
   it("returns the keyword list unchanged if there are no entries matching the given key", () => {
-    const result = Keyword.delete(expected, key)
-    assert.deepStrictEqual(result, expected)
+    const result = Keyword.delete(keywords2, key)
+    assert.deepStrictEqual(result, keywords2)
+  })
+
+  it("returns frozen object", () => {
+    const result = Keyword.delete(keywords1, key)
+    assertFrozen(result)
   })
 })
 
