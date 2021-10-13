@@ -75,6 +75,7 @@
 | Exception          | :x:                |     
 | Float              | :x:                |     
 | Integer            | :x:                |     
+| IO Data            | :x:                |     
 | List               | :x:                |     
 | Map                | :x:                |     
 | Nil                | :x:                |    
