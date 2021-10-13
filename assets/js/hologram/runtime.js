@@ -1,23 +1,31 @@
 "use strict";
 
-import Action from "./action"
 import Client from "./client"
-import Command from "./command"
 import DOM from "./dom"
+import Operation from "./operation"
 import ScriptsReloader from "./scripts_reloader"
 import Store from "./store";
 import Utils from "./utils"
 
 export default class Runtime {
   // Tested implicitely in E2E tests.
-  static handleEvent(event, implementation, source, operationSpec) {
+  executeOperation(operation) {
+    if (operation.method === Operation.METHOD.action) {
+      Runtime.executeAction(operation)
+    } else {
+      Runtime.executeCommand(operation)
+    }
+  }
+
+  // Tested implicitely in E2E tests.
+  static handleEvent(event, eventImplementation, source, bindings, operationSpec) {
     event.preventDefault()
 
-    const eventData = implementation.buildEventData(event)
-    Runtime.executeOperation(operationSpec, source, eventData)
-  }
-  
+    const eventData = eventImplementation.buildEventData(event)
+    const operation = Operation.build(operationSpec, source, bindings, eventData)
 
+    Runtime.executeOperation(operation)
+  }
 
 
 
@@ -31,15 +39,6 @@ export default class Runtime {
 
 
   // ALREADY REFACTORED AND TESTED START
-
-    // Tested implicitely in E2E tests.
-    executeOperation(operationSpec, eventData, context) {
-      const klass = operationSpec.modifiers.includes("command") ? Command : Action
-      const operation = klass.build(operationSpec, eventData, context, runtime.componentRegistry)
-      const result = operation.execute(runtime)
-  
-      klass.handleResult(result, runtime)
-    }
 
   static getInstance(window) {
     if (!window.__hologramRuntime__) {
