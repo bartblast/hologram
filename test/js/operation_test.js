@@ -44,37 +44,24 @@ describe("buildMethod()", () => {
 describe("buildName()", () => {
   const expected = Type.atom("test_action")
 
-  it("returns the boxed name when the operation spec is of text type", () => {
-    const result = Operation.buildName(textOperationSpec, bindings)
-    assert.deepStrictEqual(result, expected)
-  })
-
-  it("returns the first operation spec elem if the operation spec is of expression type and has only one elem", () => {
-    const callback = (_$bindings) => { return Type.tuple([Type.atom("test_action")]) }
-
-    const operationSpec = {
-      value: [Type.expressionNode(callback)]
-    }
-
-    const result = Operation.buildName(operationSpec, bindings)
+  it("returns the first spec elem if the operation spec has only one elem", () => {
+    const specElems = [Type.atom("test_action")]
+    const result = Operation.buildName(specElems)
 
     assert.deepStrictEqual(result, expected)
   })
 
-  it("returns the first operation spec elem if the operation spec is of expression type and the second elem is not of boxed atom type", () => {
-    const callback = (_$bindings) => { return Type.tuple([Type.atom("test_action"), Type.integer(1)]) }
-
-    const operationSpec = {
-      value: [Type.expressionNode(callback)]
-    }
-
-    const result = Operation.buildName(operationSpec, bindings)
+  it("returns the first spec elem if the second operation spec elem is not of boxed atom type", () => {
+    const specElems = [Type.atom("test_action"), Type.integer(1)]
+    const result = Operation.buildName(specElems)
 
     assert.deepStrictEqual(result, expected)
   })
 
-  it("returns the boxed name when the operation spec has at least two elems and the second one is of boxed atom type", () => {
-    const result = Operation.buildName(expressionOperationSpec, bindings)
+  it("returns the second spec elem if the operation spec has at least two elems and the second one is of boxed atom type", () => {
+    const specElems = [Type.atom("layout"), Type.atom("test_action")]
+    const result = Operation.buildName(specElems)
+    
     assert.deepStrictEqual(result, expected)
   })
 })
