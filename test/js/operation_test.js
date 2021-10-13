@@ -1,6 +1,6 @@
 "use strict";
 
-import { assert } from "./support/commons";
+import { assert, assertFrozen } from "./support/commons";
 import Operation from "../../assets/js/hologram/operation"
 import Type from "../../assets/js/hologram/type"
 
@@ -63,28 +63,50 @@ describe("buildName()", () => {
 describe("buildParams()", () => {
   const params = Type.list([
     Type.tuple([Type.atom("a"), Type.integer(1)]),
+    Type.tuple([Type.atom("b"), Type.integer(2)]),
+  ])
+
+  const eventDataElems = {}
+  eventDataElems[Type.atomKey("x")] = Type.integer(1)
+  const eventData = Type.map(eventDataElems)
+
+  const expected = Type.list([
+    Type.tuple([Type.atom("event"), eventData]),
+    Type.tuple([Type.atom("a"), Type.integer(1)]),
     Type.tuple([Type.atom("b"), Type.integer(2)])
   ])
 
   it("returns the third spec elem if the operation spec has three elems", () => {
     const specElems = [Type.atom("test_target"), Type.atom("test_action"), params]
-    const result = Operation.buildParams(specElems)
+    const result = Operation.buildParams(specElems, eventData)
 
-    assert.deepStrictEqual(result, params)
+    assert.deepStrictEqual(result, expected)
   })
 
   it("returns the second spec elem if the operation spec has two elems and the second one is of boxed list type", () => {
     const specElems = [Type.atom("test_action"), params]
-    const result = Operation.buildParams(specElems)
+    const result = Operation.buildParams(specElems, eventData)
 
-    assert.deepStrictEqual(result, params)
+    assert.deepStrictEqual(result, expected)
   })
 
-  it("returns an empty boxed list if the operation spec doesn't contain params", () => {
+  it("returns a boxed keyword list with 'event' key only if the operation spec doesn't contain params", () => {
     const specElems = [Type.atom("test_target"), Type.atom("test_action")]
-    const result = Operation.buildParams(specElems)
 
-    assert.deepStrictEqual(result, Type.list([]))
+    const result = Operation.buildParams(specElems, eventData)
+    
+    const expected = Type.list([
+      Type.tuple([Type.atom("event"), eventData])
+    ])
+
+    assert.deepStrictEqual(result, expected)
+  })
+
+  it("returns frozen object", () => {
+    const specElems = [Type.atom("test_action")]
+    const result = Operation.buildParams(specElems, eventData)
+
+    assertFrozen(result)
   })
 })
 

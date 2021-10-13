@@ -1,5 +1,6 @@
 "use strict";
 
+import Keyword from "./elixir/keyword"
 import Type from "./type";
 import Utils from "./utils";
 
@@ -41,16 +42,20 @@ export default class Operation {
     }
   }
 
-  static buildParams(specElems) {
+  static buildParams(specElems, eventData) {
+    let params;
+
     if (specElems.length === 3) {
-      return specElems[2]
-      
+      params = specElems[2]
+
     } else if (specElems.length === 2 && Type.isList(specElems[1])) {
-      return specElems[1]
+      params = specElems[1]
 
     } else {
-      return Type.list([])
+      params = Type.list([])
     }
+
+    return Keyword.put(params, Type.atom("event"), eventData)
   }
 
   static buildTarget(specElems, source) {
