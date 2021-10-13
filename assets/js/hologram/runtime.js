@@ -8,8 +8,16 @@ import Store from "./store";
 import Utils from "./utils"
 
 export default class Runtime {
+  static getInstance() {
+    if (!globalThis.__hologramRuntime__) {
+      globalThis.__hologramRuntime__ = new Runtime()
+    }
+
+    return globalThis.__hologramRuntime__
+  }
+
   // Tested implicitely in E2E tests.
-  executeOperation(operation) {
+  static executeOperation(operation) {
     if (operation.method === Operation.METHOD.action) {
       Runtime.executeAction(operation)
     } else {
@@ -38,29 +46,18 @@ export default class Runtime {
 
 
 
-  // ALREADY REFACTORED AND TESTED START
 
-  static getInstance(window) {
-    if (!window.__hologramRuntime__) {
-      window.__hologramRuntime__ = new Runtime(window)
-    }
-
-    return window.__hologramRuntime__
-  }
-
-  // ALREADY REFACTORED AND TESTED END
-
-  constructor(window) {
+  constructor() {
     this.client = new Client()
     this.client.connect()
 
     this.componentRegistry = {}
-    this.document = window.document
+    this.document = globalThis.window.document
     this.dom = new DOM(this, window)
     this.pageModule = null
     this.state = null
     this.store = new Store()
-    this.window = window
+    this.window = globalThis.window
 
     this.loadPageOnPopStateEvents()
   }
