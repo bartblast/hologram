@@ -8,8 +8,18 @@ const bindings = Type.map({})
 const source = "test_source"
 
 const textOperationSpec = {
+  modifiers: [],
   value: [Type.textNode("test_action")]
 }
+
+describe("build()", () => {
+  it("returns a frozen Operation object", () => {
+    const result = Operation.build(textOperationSpec, source, bindings, Type.map({}))
+
+    assert.isTrue(result instanceof Operation)
+    assertFrozen(result)
+  })
+})
 
 describe("buildMethod()", () => {
   it("returns command enum value if the modifiers in operation spec include 'command'", () => {
@@ -180,7 +190,7 @@ describe("getSpecElems()", () => {
     }
 
     const result = Operation.getSpecElems(operationSpec, bindings)
-    
+
     assertFrozen(result)
   })
 })

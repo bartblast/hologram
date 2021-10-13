@@ -26,6 +26,25 @@ export default class Operation {
     }
   }
 
+  construct(method, target, name, params) {
+    this.method = method
+    this.target = target
+    this.name = name
+    this.params = params
+  }
+
+  static build(operationSpec, source, bindings, eventData) {
+    const specElems = Operation.getSpecElems(operationSpec, bindings)
+
+    const method = Operation.buildMethod(operationSpec)
+    const target = Operation.buildTarget(specElems, source)
+    const name = Operation.buildName(specElems)
+    const params = Operation.buildParams(specElems, eventData)
+    
+    const operation = new Operation(method, target, name, params)
+    return Utils.freeze(operation)
+  }
+
   static buildMethod(operationSpec) {
     if (operationSpec.modifiers.includes("command")) {
       return Operation.METHOD.command
@@ -105,39 +124,5 @@ export default class Operation {
     }
 
     return specElems[0].value
-  }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-  
-
-  construct(method, target, name, params) {
-    this.method = method
-    this.target = target
-    this.name = name
-    this.params = params
-  }
-
-  static build(operationSpec, source, bindings, eventData) {
-    specElems = Operation.getSpecElems(operationSpec, bindings)
-
-    const method = Operation.buildMethod(operationSpec)
-    const target = Operation.buildTarget(specElems, source)
-    const name = Operation.buildName(specElems)
-    const params = Operation.buildParams(eventData)
-    
-    const operation = new Operation(method, source, target, name, params)
-    return Utils.freeze(operation)
   }
 }
