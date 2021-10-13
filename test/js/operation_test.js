@@ -58,6 +58,13 @@ describe("buildName()", () => {
 
     assert.deepStrictEqual(result, expected)
   })
+
+  it("returns frozen object", () => {
+    const specElems = [Type.atom("test_action")]
+    const result = Operation.buildName(specElems)
+
+    assertFrozen(result)
+  })
 })
 
 describe("buildParams()", () => {
@@ -165,6 +172,16 @@ describe("getSpecElems()", () => {
     const expected = [Type.atom("layout"), Type.atom("test_action")]
 
     assert.deepStrictEqual(result, expected)
+  })
+
+  it("returns frozen object", () => {
+    const operationSpec = {
+      value: [Type.textNode("test_action")]
+    }
+
+    const result = Operation.getSpecElems(operationSpec, bindings)
+    
+    assertFrozen(result)
   })
 })
 

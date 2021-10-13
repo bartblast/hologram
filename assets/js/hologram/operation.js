@@ -77,12 +77,16 @@ export default class Operation {
   }
 
   static getSpecElems(operationSpec, bindings) {
+    let elems;
+
     if (Operation.getSpecType(operationSpec) === Operation.SPEC_TYPE.text) {
       const value = operationSpec.value[0].content
-      return [Type.atom(value)]
+      elems = [Type.atom(value)]
     } else { // expression
-      return operationSpec.value[0].callback(bindings).data
+      elems = operationSpec.value[0].callback(bindings).data
     }
+
+    return Utils.freeze(elems)
   }
 
   static getSpecType(operationSpec) {
