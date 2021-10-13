@@ -22,4 +22,12 @@ export default class Keyword {
       return Type.boolean(false)
     }
   }
+
+  static put(keywords, key, value) {
+    const keywordsWithKeyDeleted = Keyword.delete(keywords, key)
+    const newElems = Utils.clone(keywordsWithKeyDeleted.data)
+    newElems.unshift(Type.tuple([key, value]))
+
+    return Type.list(newElems)
+  }
 }
