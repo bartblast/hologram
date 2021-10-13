@@ -130,6 +130,22 @@ describe("isFalsy()", () => {
   })
 })
 
+describe("isList()", () => {
+  it("returns true for boxed list value", () => {
+    const arg = Type.list([])
+    const result = Type.isList(arg)
+
+    assert.isTrue(result)
+  })
+
+  it("returns false for values other than boxed list value", () => {
+    const arg = Type.boolean(false)
+    const result = Type.isList(arg)
+    
+    assert.isFalse(result)
+  })
+})
+
 describe("isMap()", () => {
   it("returns true for boxed map value", () => {
     const arg = Type.map({})
