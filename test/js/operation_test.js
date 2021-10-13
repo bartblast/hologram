@@ -60,6 +60,34 @@ describe("buildName()", () => {
   })
 })
 
+describe("buildParams()", () => {
+  const params = Type.list([
+    Type.tuple([Type.atom("a"), Type.integer(1)]),
+    Type.tuple([Type.atom("b"), Type.integer(2)])
+  ])
+
+  it("returns the third spec elem if the operation spec has three elems", () => {
+    const specElems = [Type.atom("test_target"), Type.atom("test_action"), params]
+    const result = Operation.buildParams(specElems)
+
+    assert.deepStrictEqual(result, params)
+  })
+
+  it("returns the second spec elem if the operation spec has two elems and the second one is of boxed list type", () => {
+    const specElems = [Type.atom("test_action"), params]
+    const result = Operation.buildParams(specElems)
+
+    assert.deepStrictEqual(result, params)
+  })
+
+  it("returns an empty boxed list if the operation spec doesn't contain params", () => {
+    const specElems = [Type.atom("test_target"), Type.atom("test_action")]
+    const result = Operation.buildParams(specElems)
+
+    assert.deepStrictEqual(result, Type.list([]))
+  })
+})
+
 describe("buildTarget()", () => {
   it("returns the source arg if the operation spec doesn't contain target value", () => {
     const specElems = [Type.textNode("test_action")]

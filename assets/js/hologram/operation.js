@@ -41,6 +41,18 @@ export default class Operation {
     }
   }
 
+  static buildParams(specElems) {
+    if (specElems.length === 3) {
+      return specElems[2]
+      
+    } else if (specElems.length === 2 && Type.isList(specElems[1])) {
+      return specElems[1]
+
+    } else {
+      return Type.list([])
+    }
+  }
+
   static buildTarget(specElems, source) {
     const targetValue = Operation.getTargetValue(specElems)
 
