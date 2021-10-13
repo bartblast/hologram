@@ -70,7 +70,7 @@ describe("has_key$question()", () => {
 })
 
 describe("put()", () => {
-  it("inserts the given key-value pair at the beginning of keywords list", () => {
+  it("inserts the given key-value pair at the beginning of the keyword list", () => {
     const keywords = Type.list([
       Type.tuple([Type.atom("a"), Type.integer(1)])
     ])
