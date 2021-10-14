@@ -1,5 +1,7 @@
 "use strict";
 
+import Client from "./client"
+import DOM from "./dom"
 import Runtime from "./runtime"
 import Store from "./store"
 import Type from "./type"
@@ -14,7 +16,7 @@ export default class Action {
     let actionResult = componentClass.action(operation.name, operation.params, componentState)
     actionResult = Utils.freeze(actionResult)
 
-    handleResult(actionResult)
+    handleResult(actionResult, operation.target)
 
     return actionResult
   }
@@ -38,7 +40,7 @@ export default class Action {
     }
   }
 
-  static getCommandParamsFromActionResult(actionResult) {
+  static getParamsFromActionResult(actionResult) {
     if (Type.isMap(actionResult)) {
       return null
 
@@ -57,7 +59,16 @@ export default class Action {
     }
   }
 
-  static getCommandTargetFromActionResult(actionResult) {
+  static getStateFromActionResult(actionResult) {
+    if (Type.isMap(actionResult)) {
+      return actionResult
+
+    } else { // tuple
+      return actionResult.data[0]
+    }
+  }
+
+  static getTargetFromActionResult(actionResult) {
     if (Type.isMap(actionResult)) {
       return null
 
@@ -73,15 +84,22 @@ export default class Action {
     }
   }
 
-  static getStateFromActionResult(actionResult) {
-    if (Type.isMap(actionResult)) {
-      return actionResult
+  // Covered implicitely in E2E tests.
+  static handleResult(actionResult, actionTarget) {
+    const newState = Action.getStateFromActionResult(actionResult)
+    const commandName = Action.getCommandNameFromActionResult(actionResult)
 
-    } else { // tuple
-      return actionResult.data[0]
-    }
+    Store.setComponentState(actionTarget, newState)
+    DOM.render()
+    
+    if (commandName) {
+      const commandTargetId = Action.getTargetFromActionResult(actionResult)
+      const commandTargetClass = Runtime.getComponentClass(commandTargetId)
+      const commandTargetModule = Type.module(commandTargetClass.name)
+
+      const params = Action.getParamsFromActionResult(actionResult)
+
+      Client.pushCommand(commandTargetModule, commandName, params, Runtime.handleCommandResponse)
+    } 
   }
-
-  // TODO: implement & test
-  static handleResult(actionResult) {}
 }
