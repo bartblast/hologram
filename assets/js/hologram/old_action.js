@@ -32,22 +32,6 @@ export default class Action extends Operation {
     }
   }
 
-  static getCommandTargetFromActionResult(actionResult) {
-    if (Type.isMap(actionResult)) {
-      return null
-
-    } else { // tuple
-      const actionResultElems = actionResult.data
-
-      if (actionResultElems.length >= 3 && Type.isAtom(actionResultElems[2])) {
-        return actionResultElems[1]        
-
-      } else {
-        return null
-      }
-    }
-  }
-
   static handleResult(result, runtime) {
     const newState = Action.getStateFromActionResult(result)
     const commandName = Action.getCommandNameFromActionResult(result)

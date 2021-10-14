@@ -69,35 +69,3 @@ describe("getCommandParamsFromActionResult()", () => {
     assert.isNull(commandParams)
   })
 })
-
-describe("getCommandTargetFromActionResult()", () => {
-  it("returns null if the action result is a boxed map", () => {
-    const actionResult = Type.map({})
-    const target = Action.getCommandTargetFromActionResult(actionResult)
-
-    assert.isNull(target)
-  })
-
-  it("fetches the target from an action result that is a boxed tuple that contains target", () => {
-    const actionResult = Type.tuple([
-      Type.map({}),
-      Type.atom("test_target"),
-      Type.atom("test_command")
-    ])
-
-    const target = Action.getCommandTargetFromActionResult(actionResult)
-    const expected = Type.atom("test_target")
-
-    assert.deepStrictEqual(target, expected)
-  })
-
-  it("returns null if the action result is a boxed tuple that doesn't contain target", () => {
-    const actionResult = Type.tuple([
-      Type.map({}),
-    ])
-
-    const target = Action.getCommandTargetFromActionResult(actionResult)
-
-    assert.isNull(target)
-  })
-})
