@@ -6,4 +6,8 @@ export default class Store {
   static getComponentState(componentId) {
     return Store.componentStateRegistry[componentId]
   }
+
+  static setComponentState(componentId, state) {
+    Store.componentStateRegistry[componentId] = state
+  }
 }
