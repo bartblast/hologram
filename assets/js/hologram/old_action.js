@@ -67,15 +67,6 @@ export default class Action extends Operation {
     }
   }
 
-  static getStateFromActionResult(actionResult) {
-    if (Type.isMap(actionResult)) {
-      return actionResult
-
-    } else { // tuple
-      return actionResult.data[0]
-    }
-  }
-
   static handleResult(result, runtime) {
     const newState = Action.getStateFromActionResult(result)
     const commandName = Action.getCommandNameFromActionResult(result)
