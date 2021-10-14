@@ -2,6 +2,24 @@
 import { assert, mockWindow } from "./support/commons";
 import Runtime from "../../assets/js/hologram/runtime";
 
+describe("getComponentClass()", () => {
+  it("returns component class given component ID", () => {
+    const TestClass1 = class{}
+    const TestClass2 = class{}
+    const TestClass3 = class{}
+
+    Runtime.componentClassRegistry = {
+      component_1: TestClass1,
+      component_2: TestClass2,
+      component_3: TestClass3
+    }
+
+    const result = Runtime.getComponentClass("component_2")
+    
+    assert.equal(result, TestClass2)
+  })
+})
+
 describe("getInstance()", () => {
   globalThis.window = mockWindow()
   

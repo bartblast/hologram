@@ -25,6 +25,10 @@ export default class Runtime {
     }
   }
 
+  static getComponentClass(target) {
+    return Runtime.componentClassRegistry[target]
+  }
+
   // Tested implicitely in E2E tests.
   static handleEvent(event, eventImplementation, source, bindings, operationSpec) {
     event.preventDefault()
@@ -51,13 +55,14 @@ export default class Runtime {
     this.client = new Client()
     this.client.connect()
 
-    this.componentRegistry = {}
     this.document = globalThis.window.document
     this.dom = new DOM(this, window)
     this.pageModule = null
     this.state = null
     this.store = new Store()
     this.window = globalThis.window
+
+    Runtime.componentClassRegistry = {}
 
     this.loadPageOnPopStateEvents()
   }
