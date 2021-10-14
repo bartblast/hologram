@@ -24,50 +24,6 @@ describe("Operation class extension", () => {
   })
 })
 
-describe("getCommandNameFromActionResult()", () => {
-  it("returns null if the action result is a boxed map", () => {
-    const actionResult = Type.map({})
-    const commandName = Action.getCommandNameFromActionResult(actionResult)
-
-    assert.isNull(commandName)
-  })
-
-  it("fetches the command name from an action result that is a boxed tuple that contains target", () => {
-    const actionResult = Type.tuple([
-      Type.map({}),
-      Type.atom("test_target"),
-      Type.atom("test_command")
-    ])
-
-    const commandName = Action.getCommandNameFromActionResult(actionResult)
-    const expected = Type.atom("test_command")
-
-    assert.deepStrictEqual(commandName, expected)
-  })
-
-  it("fetches the command name from an action result that is a boxed tuple that doesn't contain target", () => {
-    const actionResult = Type.tuple([
-      Type.map({}),
-      Type.atom("test_command")
-    ])
-
-    const commandName = Action.getCommandNameFromActionResult(actionResult)
-    const expected = Type.atom("test_command")
-
-    assert.deepStrictEqual(commandName, expected)
-  })
-
-  it("returns null if the action result is a boxed tuple that doesn't contain command name", () => {
-    const actionResult = Type.tuple([
-      Type.map({}),
-    ])
-
-    const commandName = Action.getCommandNameFromActionResult(actionResult)
-
-    assert.isNull(commandName)
-  })
-})
-
 describe("getCommandParamsFromActionResult()", () => {
   it("returns null if the action result is a boxed map", () => {
     const actionResult = Type.map({})

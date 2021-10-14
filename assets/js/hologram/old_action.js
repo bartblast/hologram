@@ -13,25 +13,6 @@ export default class Action extends Operation {
     return this.targetModule.action(this.name, this.params, this.state)
   }
 
-  static getCommandNameFromActionResult(actionResult) {
-    if (Type.isMap(actionResult)) {
-      return null
-
-    } else { // tuple
-      const actionResultElems = actionResult.data
- 
-      if (actionResultElems.length >= 3 && Type.isAtom(actionResultElems[2])) {
-        return actionResultElems[2]
-
-      } else if (actionResultElems.length >= 2) {
-        return actionResultElems[1]
-
-      } else {
-        return null
-      }
-    }
-  }
-
   static getCommandParamsFromActionResult(actionResult) {
     if (Type.isMap(actionResult)) {
       return null
