@@ -1,7 +1,8 @@
 "use strict";
 
-import Client from "./client"
+import Command from "./command"
 import DOM from "./dom"
+import Operation from "./operation"
 import Runtime from "./runtime"
 import Store from "./store"
 import Type from "./type"
@@ -16,7 +17,7 @@ export default class Action {
     let actionResult = componentClass.action(operation.name, operation.params, componentState)
     actionResult = Utils.freeze(actionResult)
 
-    handleResult(actionResult, operation.target)
+    Action.handleResult(actionResult, operation.target)
 
     return actionResult
   }
@@ -91,15 +92,13 @@ export default class Action {
 
     Store.setComponentState(actionTarget, newState)
     DOM.render()
-    
+
     if (commandName) {
-      const commandTargetId = Action.getTargetFromActionResult(actionResult)
-      const commandTargetClass = Runtime.getComponentClass(commandTargetId)
-      const commandTargetModule = Type.module(commandTargetClass.name)
-
-      const params = Action.getParamsFromActionResult(actionResult)
-
-      Client.pushCommand(commandTargetModule, commandName, params, Runtime.handleCommandResponse)
+      const commandTarget = Action.getTargetFromActionResult(actionResult)
+      const commandParams = Action.getParamsFromActionResult(actionResult)
+      
+      const operation = new Operation(Operation.METHOD.command, commandTarget, commandName, commandParams)
+      Command.execute(operation)
     } 
   }
 }
