@@ -1,7 +1,9 @@
 "use strict";
 
 export default class Store {
-  constructor() {
-    this.pageState = null
+  static componentStateRegistry = {}
+
+  static getComponentState(componentId) {
+    return Store.componentStateRegistry[componentId]
   }
 }
