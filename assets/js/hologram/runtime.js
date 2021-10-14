@@ -25,8 +25,8 @@ export default class Runtime {
     }
   }
 
-  static getComponentClass(target) {
-    return Runtime.componentClassRegistry[target]
+  static getComponentClass(componentId) {
+    return Runtime.componentClassRegistry[componentId]
   }
 
   // Tested implicitely in E2E tests.
