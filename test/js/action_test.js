@@ -1,6 +1,6 @@
 "use strict";
 
-import { assert } from "./support/commons";
+import { assert, fixtureOperationParamsKeyword } from "./support/commons";
 import Action from "../../assets/js/hologram/action"
 import Type from "../../assets/js/hologram/type"
 
@@ -45,6 +45,52 @@ describe("getCommandNameFromActionResult()", () => {
     const commandName = Action.getCommandNameFromActionResult(actionResult)
 
     assert.isNull(commandName)
+  })
+})
+
+describe("getCommandParamsFromActionResult()", () => {
+  const paramsKeyword = fixtureOperationParamsKeyword()
+
+  it("returns null if the action result is a boxed map", () => {
+    const actionResult = Type.map({})
+    const commandParams = Action.getCommandParamsFromActionResult(actionResult)
+
+    assert.isNull(commandParams)
+  })
+
+  it("fetches the command params from an action result that is a boxed tuple that contains target", () => {
+    const actionResult = Type.tuple([
+      Type.map({}),
+      Type.atom("test_target"),
+      Type.atom("test_command"),
+      paramsKeyword
+    ])
+
+    const commandParams = Action.getCommandParamsFromActionResult(actionResult)
+
+    assert.deepStrictEqual(commandParams, paramsKeyword)
+  })
+
+  it("fetches the command params from an action result that is a boxed tuple that doesn't contain target", () => {
+    const actionResult = Type.tuple([
+      Type.map({}),
+      Type.atom("test_command"),
+      paramsKeyword
+    ])
+
+    const commandParams = Action.getCommandParamsFromActionResult(actionResult)
+
+    assert.deepStrictEqual(commandParams, paramsKeyword)
+  })
+
+  it("returns null if the action result is a boxed tuple that doesn't contain command params", () => {
+    const actionResult = Type.tuple([
+      Type.map({}),
+    ])
+
+    const commandParams = Action.getCommandParamsFromActionResult(actionResult)
+
+    assert.isNull(commandParams)
   })
 })
 

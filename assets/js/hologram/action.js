@@ -38,6 +38,25 @@ export default class Action {
     }
   }
 
+  static getCommandParamsFromActionResult(actionResult) {
+    if (Type.isMap(actionResult)) {
+      return null
+
+    } else { // tuple
+      const actionResultElems = actionResult.data
+ 
+      if (actionResultElems.length >= 4) {
+        return actionResultElems[3]
+
+      } else if (actionResultElems.length >= 3) {
+        return actionResultElems[2]
+
+      } else {
+        return null
+      }
+    }
+  }
+
   static getCommandTargetFromActionResult(actionResult) {
     if (Type.isMap(actionResult)) {
       return null
