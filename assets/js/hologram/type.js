@@ -12,6 +12,10 @@ export default class Type {
     return `~atom[${key}]`
   }
 
+  static binary(elems) {
+    return Utils.freeze({type: "binary", data: elems})
+  }
+
   static boolean(value) {
     return Utils.freeze({type: "boolean", value: value})
   }

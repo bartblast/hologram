@@ -26,6 +26,24 @@ describe("atomKey()", () => {
   })
 })
 
+describe("binary()", () => {
+  let elems, result;
+
+  beforeEach(() => {
+    elems = [Type.string("abc"), Type.string("xyz")]
+    result = Type.binary(elems)
+  })
+
+  it("returns boxed binary value", () => {
+    const expected = {type: "binary", data: elems}
+    assert.deepStrictEqual(result, expected)
+  })
+
+  it("returns frozen object", () => {
+    assertFrozen(result)
+  })
+})
+
 describe("boolean()", () => {
   it("returns boxed boolean value", () => {
     const expected = {type: "boolean", value: true}
