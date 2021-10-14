@@ -9,7 +9,7 @@ import Type from "./type"
 import Utils from "./utils"
 
 export default class Action {
-  // TODO: test
+  // Covered implicitely in E2E tests.
   static execute(operation) {
     const componentClass = Runtime.getComponentClass(operation.target)
     const componentState = Store.getComponentState(operation.target)
@@ -18,8 +18,6 @@ export default class Action {
     actionResult = Utils.freeze(actionResult)
 
     Action.handleResult(actionResult, operation.target)
-
-    return actionResult
   }
 
   static getCommandNameFromActionResult(actionResult) {
@@ -96,7 +94,7 @@ export default class Action {
     if (commandName) {
       const commandTarget = Action.getTargetFromActionResult(actionResult)
       const commandParams = Action.getParamsFromActionResult(actionResult)
-      
+
       const operation = new Operation(Operation.METHOD.command, commandTarget, commandName, commandParams)
       Command.execute(operation)
     } 
