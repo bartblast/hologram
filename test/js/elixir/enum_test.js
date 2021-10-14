@@ -3,7 +3,7 @@
 import { assert, assertBoxedFalse, assertBoxedTrue } from "../support/commons"
 
 import Enum from "../../../assets/js/hologram/elixir/enum";
-import HologramNotImplementedError from "../../../assets/js/hologram/errors";
+import { HologramNotImplementedError } from "../../../assets/js/hologram/errors";
 import Type from "../../../assets/js/hologram/type";
 
 describe("member$question()", () => {

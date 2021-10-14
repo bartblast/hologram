@@ -3,7 +3,7 @@
 // see: https://www.blazemeter.com/blog/the-correct-way-to-import-lodash-libraries-a-benchmark
 import isEqual from "lodash/isEqual";
 
-import HologramNotImplementedError from "../errors";
+import { HologramNotImplementedError } from "../errors";
 import Type from "../type";
 
 export default class Enum {

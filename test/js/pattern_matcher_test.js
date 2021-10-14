@@ -1,7 +1,7 @@
 "use strict";
 
 import { assert } from "./support/commons";
-import HologramNotImplementedError from "../../assets/js/hologram/errors";
+import { HologramNotImplementedError } from "../../assets/js/hologram/errors";
 import PatternMatcher from "../../assets/js/hologram/pattern_matcher"
 import Type from "../../assets/js/hologram/type"
 

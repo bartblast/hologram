@@ -1,6 +1,6 @@
 "use strict";
 
-import HologramNotImplementedError from "./errors";
+import { HologramNotImplementedError } from "./errors";
 
 export default class PatternMatcher {
   static isFunctionArgsPatternMatched(params, args) {

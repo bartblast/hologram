@@ -1,6 +1,6 @@
 "use strict";
 
-import HologramNotImplementedError from "../errors";
+import { HologramNotImplementedError } from "../errors";
 import Runtime from "../runtime"
 import Type from "../type"
 import Utils from "../utils"

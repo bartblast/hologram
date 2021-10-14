@@ -1,9 +1,8 @@
 "use strict";
 
 import { assert, assertFrozen } from "./support/commons";
-import HologramNotImplementedError from "../../assets/js/hologram/errors";
+import { HologramNotImplementedError } from "../../assets/js/hologram/errors";
 import Type from "../../assets/js/hologram/type";
-import { before } from "lodash";
 
 describe("atom()", () => {
   it("returns boxed atom value", () => {

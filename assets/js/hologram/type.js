@@ -1,6 +1,6 @@
 "use strict";
 
-import HologramNotImplementedError from "./errors";
+import { HologramNotImplementedError } from "./errors";
 import Utils from "./utils"
 
 export default class Type {

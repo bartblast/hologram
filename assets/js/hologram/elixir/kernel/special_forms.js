@@ -1,6 +1,6 @@
 "use strict";
 
-import HologramNotImplementedError from "../../errors";
+import { HologramNotImplementedError } from "../../errors";
 import Type from "../../type"
 
 export default class SpecialForms {

@@ -1,7 +1,7 @@
 "use strict";
 
 import { assert, assertBoxedFalse, assertBoxedTrue, assertFrozen } from "../support/commons"
-import HologramNotImplementedError from "../../../assets/js/hologram/errors";
+import { HologramNotImplementedError } from "../../../assets/js/hologram/errors";
 import Kernel from "../../../assets/js/hologram/elixir/kernel";
 import Type from "../../../assets/js/hologram/type";
 
