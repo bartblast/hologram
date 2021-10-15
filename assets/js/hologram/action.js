@@ -95,7 +95,7 @@ export default class Action {
       const commandTarget = Action.getTargetFromActionResult(actionResult)
       const commandParams = Action.getParamsFromActionResult(actionResult)
 
-      const operation = new Operation(Operation.METHOD.command, commandTarget, commandName, commandParams)
+      const operation = new Operation(commandTarget, commandName, commandParams)
       Command.execute(operation)
     } 
   }

@@ -26,7 +26,7 @@ export default class Operation {
     }
   }
 
-  construct(method, target, name, params) {
+  construct(target, name, params, method = null) {
     this.method = method
     this.target = target
     this.name = name
@@ -41,7 +41,7 @@ export default class Operation {
     const name = Operation.buildName(specElems)
     const params = Operation.buildParams(specElems, eventData)
     
-    const operation = new Operation(method, target, name, params)
+    const operation = new Operation(target, name, params, method)
     return Utils.freeze(operation)
   }
 

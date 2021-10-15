@@ -31,7 +31,7 @@ export default class Command {
       Runtime.redirect(params)
 
     } else {
-      const operation = new Operation(Operation.METHOD.action, target, actionName, params)
+      const operation = new Operation(target, actionName, params)
       Action.execute(operation)
     }
   }
