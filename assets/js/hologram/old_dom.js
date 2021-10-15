@@ -50,10 +50,6 @@ export default class DOM {
 
         let componentState = DOM.buildComponentState(node.props, scopeState)
         return this.buildVNode(module.template(), fullState, componentState, context)
-
-      case "expression":
-        const evaluatedExpression = node.callback(scopeState).data[0]
-        return [Runtime.interpolate(evaluatedExpression)]
     } 
   }
 

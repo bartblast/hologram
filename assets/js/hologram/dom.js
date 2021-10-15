@@ -24,7 +24,12 @@ export default class DOM {
     return [h(node.tag, {attrs: attrs, on: eventHandlers}, children)]
   }
 
-  static buildTextVNode(node) {
+  static buildTextVNodeFromExpression(node, bindings) {
+    const evaluatedNode = DOM.evaluateNode(node, bindings)
+    return [DOM.interpolate(evaluatedNode)]
+  }
+
+  static buildTextVNodeFromTextNode(node) {
     return [node.content]
   }
 
@@ -38,8 +43,11 @@ export default class DOM {
       case "element":
         return DOM.buildElementVNode(node, source, bindings, slots)
 
+      case "expression":
+        return DOM.buildTextVNodeFromExpression(node)
+
       case "text":
-        return DOM.buildTextVNode(node)
+        return DOM.buildTextVNodeFromTextNode(node)
     }
   }
 

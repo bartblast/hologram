@@ -82,6 +82,17 @@ describe("buildTextVNode()", () => {
   })
 })
 
+describe("buildTextVNodeFromExpression()", () => {
+  it("evaluates expression node and interpolates the result to a text vnode", () => {
+    const node = Type.expressionNode(callback)
+
+    const result = DOM.buildTextVNodeFromExpression(node, bindings)
+    const expected = ["1"]
+
+    assert.deepStrictEqual(result, expected)
+  })
+})
+
 describe("buildVNodeAttrs()", () => {
   it("builds vnode attributes", () => {
     const node = {
