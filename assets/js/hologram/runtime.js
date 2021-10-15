@@ -1,6 +1,8 @@
 "use strict";
 
+import Action from "./action";
 import Client from "./client"
+import Command from "./command"
 import DOM from "./dom"
 import Operation from "./operation"
 import ScriptsReloader from "./scripts_reloader"
@@ -19,9 +21,9 @@ export default class Runtime {
   // Tested implicitely in E2E tests.
   static executeOperation(operation) {
     if (operation.method === Operation.METHOD.action) {
-      Runtime.executeAction(operation)
+      Action.execute(operation)
     } else {
-      Runtime.executeCommand(operation)
+      Command.execute(operation)
     }
   }
 
@@ -86,68 +88,14 @@ export default class Runtime {
     // this.pushCommand(eventHandlerSpec, context)
     this.client.pushCommand(context.pageModule, commandName, commandParams, this.handleCommandResponse)
   }
-
-  processAction() {
-    const actionResult = this.executeAction(eventHandlerSpec, context)
-
-    if (actionResult.type == "tuple") {
-      this.state = actionResult.data[0]
-
-      let commandName = {type: "atom", value: actionResult.data[1].value}
-
-      let commandParams = {type: "map", data: {}}
-      if (actionResult.data[2]) {
-        commandParams = actionResult.data[2]
-      }
-
-      
-
-    } else {
-      if (isPageTarget) {
-        this.state = actionResult
-      } else {
-        // TODO: handle non-page targets
-      }
-    }
-
-    this.dom.render(context.pageModule)
-  }
  
-  // Covered by E2E tests.
-  handleCommandResponse(response) {
-    response = Utils.eval(response)
-    const action = response.data[0]
-    const params = response.data[1]
-
-    if (action.value == "__redirect__") {
-      this.handleRedirect(params)
-
-    } else {
-      const targetModule = this.getModule(response.data[2].className)
-      this.executeAction2(targetModule, action, params, this.state)
-    }
-  }
-
   // TODO: refactor & test
-  handleRedirect(params) {
+  redirect(params) {
     const html = params.data["~atom[html]"].value
     this.loadPage(html)
 
     const url = params.data["~atom[url]"].value
     this.updateURL(url)
-  }
-
-  static interpolate(value) {
-    switch (value.type) {
-      case "binary":
-        return value.data.map((elem) => elem.value).join("")
-
-      case "integer":
-        return `${value.value}`
-        
-      case "string":
-        return `${value.value}`
-    }
   }
 
   // TODO: refactor & test
