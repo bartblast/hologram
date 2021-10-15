@@ -40,6 +40,10 @@ export default class Type {
     return boxedValue.type === "atom"
   }
 
+  static isExpressionNode(node) {
+    return node.type === "expression"
+  }
+
   static isFalse(boxedValue) {
     return boxedValue.type === "boolean" && boxedValue.value === false
   }

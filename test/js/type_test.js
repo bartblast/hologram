@@ -114,6 +114,22 @@ describe("isAtom()", () => {
   })
 })
 
+describe("isExpressionNode()", () => {
+  it("returns true if the arg is an expression node", () => {
+    const arg = Type.expressionNode("test_callback")
+    const result = Type.isExpressionNode(arg)
+
+    assert.isTrue(result)
+  })
+
+  it("returns false if the arg is not an expression node", () => {
+    const arg = Type.textNode("test_content")
+    const result = Type.isExpressionNode(arg)
+    
+    assert.isFalse(result)
+  })
+})
+
 describe("isFalse()", () => {
   it("returns true for boxed false value", () => {
     const arg = Type.boolean(false)
