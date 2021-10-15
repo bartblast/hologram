@@ -36,13 +36,6 @@ export default class DOM {
   }
 
   buildVNode(node, fullState, scopeState, context) {
-    if (Array.isArray(node)) {
-      return node.reduce((acc, n) => {
-        acc.push(...this.buildVNode(n, fullState, scopeState, context))
-        return acc
-      }, [])
-    }
-
     switch (node.type) {
       case "component":
         let module = Runtime.getModule(node.module)
@@ -57,21 +50,6 @@ export default class DOM {
 
         let componentState = DOM.buildComponentState(node.props, scopeState)
         return this.buildVNode(module.template(), fullState, componentState, context)
-
-      case "element":
-        if (node.tag == "slot") {
-          return this.buildVNode(context.slots.default, fullState, scopeState, context)
-        }
-
-        let children = node.children.reduce((acc, child) => {
-          acc.push(...this.buildVNode(child, fullState, scopeState, context))
-          return acc
-        }, [])
-
-        let event_handlers = this.buildVNodeEventHandlers(node, fullState, scopeState, context)
-        let attrs = DOM.buildVNodeAttrs(node, scopeState)
-
-        return [h(node.tag, {attrs: attrs, on: event_handlers}, children)]
 
       case "expression":
         const evaluatedExpression = node.callback(scopeState).data[0]

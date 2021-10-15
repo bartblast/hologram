@@ -6,19 +6,38 @@ import Utils from "./utils";
 
 import ClickEvent from "./events/click_event";
 
-import {attributesModule, eventListenersModule, h, init, toVNode} from "snabbdom";
+import { attributesModule, eventListenersModule, h, init, toVNode } from "snabbdom";
 const patch = init([attributesModule, eventListenersModule]);
 
 export default class DOM {
   static PRUNED_ATTRS = ["on_click"]
+
+  static buildElementVNode(node, source, bindings, slots) {
+    if (node.tag === "slot") {
+      return DOM.buildVNodeList(slots.default, source, bindings, slots)
+    }
+
+    let attrs = DOM.buildVNodeAttrs(node, bindings)
+    let eventHandlers = DOM.buildVNodeEventHandlers(node, source, bindings)
+    let children = DOM.buildVNodeList(node.children, source, bindings, slots)
+
+    return [h(node.tag, {attrs: attrs, on: eventHandlers}, children)]
+  }
 
   static buildTextVNode(node) {
     return [node.content]
   }
 
   // TODO: finish & test
-  static buildVNode(node) {
+  static buildVNode(node, source, bindings, slots) {
+    if (Array.isArray(node)) {
+      return DOM.buildVNodeList(node, source, bindings, slots)
+    }
+
     switch (node.type) {
+      case "element":
+        return DOM.buildElementVNode(node, source, bindings, slots)
+
       case "text":
         return DOM.buildTextVNode(node)
     }
@@ -42,6 +61,13 @@ export default class DOM {
     }
 
     return eventHandlers
+  }
+
+  static buildVNodeList(nodes, source, bindings, slots) {
+    return nodes.reduce((acc, node) => {
+      acc.push(...DOM.buildVNode(node, source, bindings, slots))
+      return acc
+    }, [])
   }
 
   static evaluateAttr(nodes, bindings) {

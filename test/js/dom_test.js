@@ -3,6 +3,7 @@
 import { assert, assertFrozen } from "./support/commons";
 import DOM from "../../assets/js/hologram/dom";
 import { HologramNotImplementedError } from "../../assets/js/hologram/errors"
+import Operation from "../../assets/js/hologram/operation";
 import SpecialForms from "../../assets/js/hologram/elixir/kernel/special_forms";
 import Type from "../../assets/js/hologram/type";
 
@@ -12,6 +13,65 @@ elems[Type.atomKey("a")] = Type.integer(1)
 const bindings = Type.map(elems)
 const key = Type.atom("a")
 const callback = ($bindings) => { return Type.tuple([SpecialForms.$dot($bindings, key)])}
+
+describe("buildElementVNode()", () => {
+  const source = Operation.TARGET.page
+
+  it("builds tag element vnode", () => {
+    const attrs = {
+      abc: {
+        value: [Type.textNode("valueAbc")],
+        modifiers: []
+      },
+      on_click: "test_on_click_spec"
+    }
+
+    const children = [Type.textNode("childTextNode")]
+    const node = Type.elementNode("div", attrs, children)
+
+    const result = DOM.buildElementVNode(node, source, bindings, {})
+    const clickHandler = result[0].data.on.click
+
+    const expected = [{
+      sel: "div",
+      data: {
+        attrs: {
+          abc: "valueAbc"
+        },
+        on: {
+          click: clickHandler
+        } 
+      },
+      children: [{
+        children: undefined,
+        data: undefined,
+        elm: undefined,
+        key: undefined,
+        sel: undefined,
+        text: "childTextNode"
+      }],
+      text: undefined,
+      elm: undefined,
+      key: undefined
+    }]
+
+    assert.isFunction(clickHandler)
+    assert.deepStrictEqual(result, expected)
+  })
+
+  it("builds slot vnodes", () => {
+    const node = Type.elementNode("slot", {}, [])
+
+    const slots = {
+      default: [Type.textNode("test_text_node")]
+    }
+
+    const result = DOM.buildElementVNode(node, source, bindings, slots)
+    const expected = ["test_text_node"]
+
+    assert.deepStrictEqual(result, expected)
+  })
+})
 
 describe("buildTextVNode()", () => {
   it("builds text vnode", () => {
@@ -66,6 +126,17 @@ describe("buildVNodeEventHandlers()", () => {
     const result = DOM.buildVNodeEventHandlers(elementNode)
 
     assert.isFunction(result.click)
+  })
+})
+
+describe("buildVNodeList()", () => {
+  it("builds a list of vnodes", () => {
+    const nodes = [Type.textNode("node1"), Type.textNode("node2")]
+
+    const result = DOM.buildVNodeList(nodes, Operation.TARGET.page, bindings, {})
+    const expected = ["node1", "node2"]
+
+    assert.deepStrictEqual(result, expected)
   })
 })
 
