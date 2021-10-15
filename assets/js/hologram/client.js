@@ -1,25 +1,14 @@
 "use strict";
 
 import { Socket } from "phoenix";
-import Type from "./type"
 
 export default class Client {
-  constructor() {
-    this.channel = null
-    this.isConnected = false
-    this.socket = null
-  }
+  static channel = null
+  static isConnected = false
+  static socket = null
 
-  static buildCommandPayload(targetModule, boxedName, boxedParams) {
-    return {
-      target_module: Type.module(targetModule.name),
-      name: boxedName,
-      params: boxedParams,
-    }
-  }
-
-  // Tested implicitely in E2E tests.
-  async connect() {
+  // Covered implicitely in E2E tests.
+  static async connect() {
     const socket = new Socket("/hologram");
     socket.connect();
 
@@ -28,27 +17,23 @@ export default class Client {
     channel
       .join()
       .receive("ok", (_) => {
-        this.isConnected = true
+        Client.isConnected = true
       });
 
-    this.socket = socket
-    this.channel = channel
+    Client.socket = socket
+    Client.channel = channel
   }
 
-  // Tested implicitely in E2E tests.
-  async pushCommand(targetModule, boxedName, boxedParams, callback) {
-    const payload = Client.buildCommandPayload(targetModule, boxedName, boxedParams)
-
-    this.channel
-      .push("command", payload)
+  // Covered implicitely in E2E tests.
+  static async pushMessage(event, payload, callback) {
+    Client.channel
+      .push(event, payload)
       .receive("ok", callback)
       .receive("error", (_response) => {
-        console.log("Command error")
-        console.debug(arguments)
+        console.log(`Client.pushMessage(): command error, arguments = ${JSON.stringify(arguments)}`)
       })
       .receive("timeout", (_response) => {
-        console.log("Command timeout")
-        console.debug(arguments)
+        console.log(`Client.pushMessage(): command timeout, arguments = ${JSON.stringify(arguments)}`)
       });
   }
 }
