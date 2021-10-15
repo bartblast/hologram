@@ -188,42 +188,42 @@ describe("evaluateNode()", () => {
 })
 
 describe("interpolate()", () => {
-  it("interpolates boxed atom value", () => {
+  it("converts boxed atom value to JS string", () => {
     const value = Type.atom("abc")
     const result = DOM.interpolate(value)
 
     assert.equal(result, "abc")
   })
 
-  it("interpolates boxed boolean value", () => {
+  it("converts boxed boolean value to JS string", () => {
     const value = Type.boolean(true)
     const result = DOM.interpolate(value)
 
     assert.equal(result, "true")
   })
 
-  it("interpolates boxed integer value", () => {
+  it("converts boxed integer value to JS string", () => {
     const value = Type.integer(1)
     const result = DOM.interpolate(value)
 
     assert.equal(result, "1")
   })
 
-  it("interpolates boxed string value", () => {
+  it("converts boxed string value to JS string", () => {
     const value = Type.string("abc")
     const result = DOM.interpolate(value)
 
     assert.equal(result, "abc")
   })
 
-  it("interpolates boxed binary value", () => {
+  it("converts boxed binary value to JS string", () => {
     const value = Type.binary([Type.string("abc"), Type.string("xyz")])
     const result = DOM.interpolate(value)
 
     assert.equal(result, "abcxyz")
   })
 
-  it("interpolates boxed nil value", () => {
+  it("converts boxed nil value to JS string", () => {
     const value = Type.nil()
     const result = DOM.interpolate(value)
 
