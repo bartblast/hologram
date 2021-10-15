@@ -73,10 +73,10 @@ describe("buildElementVNode()", () => {
   })
 })
 
-describe("buildTextVNode()", () => {
-  it("builds text vnode", () => {
+describe("buildTextVNodeFromTextNode()", () => {
+  it("builds text vnode from text node", () => {
     const textNode = Type.textNode("test")
-    const result = DOM.buildTextVNode(textNode)
+    const result = DOM.buildTextVNodeFromTextNode(textNode)
 
     assert.deepStrictEqual(result, ["test"])
   })
