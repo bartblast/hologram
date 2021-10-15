@@ -57,6 +57,19 @@ describe("boolean()", () => {
   })
 })
 
+describe("elementNode()", () => {
+  const result = Type.elementNode("div", "test_attrs", "test_children")
+
+  it("builds an element node", () => {
+    const expected = {type: "element", tag: "div", attrs: "test_attrs", children: "test_children"}
+    assert.deepStrictEqual(result, expected)
+  })
+
+  it("returns frozen object", () => {
+    assertFrozen(result)
+  })
+})
+
 describe("float()", () => {
   it("returns boxed float value", () => {
     const expected = {type: "float", value: 1.0}

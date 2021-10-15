@@ -20,6 +20,10 @@ export default class Type {
     return Utils.freeze({type: "boolean", value: value})
   }
 
+  static elementNode(tag, attrs, children) {
+    return Utils.freeze({type: "element", tag: tag, attrs: attrs, children: children})
+  }
+
   static expressionNode(callback) {
     return Utils.freeze({type: "expression", callback: callback})
   }
