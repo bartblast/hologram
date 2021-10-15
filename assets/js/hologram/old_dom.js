@@ -79,16 +79,6 @@ export default class DOM {
     } 
   }
 
-  static buildVNodeAttrs(node, scopeState) {
-    return Object.keys(node.attrs).reduce((acc, key) => {
-      if (!DOM.PRUNED_ATTRS.includes(key)) {
-        let value = node.attrs[key].value
-        acc[key] = DOM.evaluateAttributeValue(value, scopeState)         
-      }
-      return acc
-    }, {})
-  }
-
   // TODO: already refactored; test
   getHTML() {
     const doctype = new XMLSerializer().serializeToString(this.document.doctype)

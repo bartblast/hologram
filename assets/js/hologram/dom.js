@@ -24,6 +24,16 @@ export default class DOM {
     }
   }
 
+  static buildVNodeAttrs(node, bindings) {
+    return Object.keys(node.attrs).reduce((acc, key) => {
+      if (!DOM.PRUNED_ATTRS.includes(key)) {
+        let valueNodes = node.attrs[key].value
+        acc[key] = DOM.evaluateAttr(valueNodes, bindings)         
+      }
+      return acc
+    }, {})
+  }
+
   static buildVNodeEventHandlers(node, source, bindings) {
     const eventHandlers = {}
 

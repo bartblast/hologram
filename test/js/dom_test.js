@@ -6,6 +6,13 @@ import { HologramNotImplementedError } from "../../assets/js/hologram/errors"
 import SpecialForms from "../../assets/js/hologram/elixir/kernel/special_forms";
 import Type from "../../assets/js/hologram/type";
 
+const elems = {}
+elems[Type.atomKey("a")] = Type.integer(1)
+
+const bindings = Type.map(elems)
+const key = Type.atom("a")
+const callback = ($bindings) => { return Type.tuple([SpecialForms.$dot($bindings, key)])}
+
 describe("buildTextVNode()", () => {
   it("builds text vnode", () => {
     const textNode = Type.textNode("test")
@@ -15,8 +22,45 @@ describe("buildTextVNode()", () => {
   })
 })
 
+describe("buildVNodeAttrs()", () => {
+  it("builds vnode attributes", () => {
+    const node = {
+      attrs: {
+        abc: {
+          value: [Type.textNode("valueAbc")],
+          modifiers: [] 
+        },
+        xyz: {
+          value: [Type.expressionNode(callback)],
+          modifiers: []
+        }
+      }
+    }
+
+    const result = DOM.buildVNodeAttrs(node, bindings)
+    const expected = {abc: "valueAbc", xyz: "1"}
+
+    assert.deepStrictEqual(result, expected)
+  })
+
+  it("doesn't include on:(event) attributes", () => {
+    const node = {
+      attrs: {
+        on_click: {
+          value: [Type.textNode("valueOnClick")],
+          modifiers: [] 
+        }
+      }
+    }
+
+    const result = DOM.buildVNodeAttrs(node, bindings)
+
+    assert.deepStrictEqual(result, {})
+  })
+})
+
 describe("buildVNodeEventHandlers()", () => {
-  it("builds click event handler", () => {
+  it("builds vnode click event handler", () => {
     const attrs = {on_click: "test_on_click_spec"}
     const elementNode = Type.elementNode("div", attrs, [])
     const result = DOM.buildVNodeEventHandlers(elementNode)
@@ -27,13 +71,6 @@ describe("buildVNodeEventHandlers()", () => {
 
 describe("evaluateAttr()", () => {
   it("evaluates attribute value to a string", () => {
-    const elems = {}
-    elems[Type.atomKey("a")] = Type.integer(1)
-
-    const bindings = Type.map(elems)
-    const key = Type.atom("a")
-    const callback = ($bindings) => { return Type.tuple([SpecialForms.$dot($bindings, key)])}
-
     const nodes = [
       Type.textNode("abc"),
       Type.expressionNode(callback)
@@ -46,14 +83,7 @@ describe("evaluateAttr()", () => {
 })
 
 describe("evaluateNode()", () => {
-  it("evaluates expression node", () => {
-    const elems = {}
-    elems[Type.atomKey("a")] = Type.integer(1)
-
-    const bindings = Type.map(elems)
-    const key = Type.atom("a")
-    const callback = ($bindings) => { return Type.tuple([SpecialForms.$dot($bindings, key)])}
-
+  it("evaluates expression node to a boxed value", () => {
     const expressionNode = Type.expressionNode(callback)
 
     const result = DOM.evaluateNode(expressionNode, bindings)
@@ -63,7 +93,7 @@ describe("evaluateNode()", () => {
     assertFrozen(result)
   })
 
-  it("evaluates text node", () => {
+  it("evaluates text node to a boxed value", () => {
     const bindings = Type.map({})
     const textNode = Type.textNode("test_content")
 
