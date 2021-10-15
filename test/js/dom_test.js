@@ -6,6 +6,7 @@ import { HologramNotImplementedError } from "../../assets/js/hologram/errors"
 import Operation from "../../assets/js/hologram/operation";
 import SpecialForms from "../../assets/js/hologram/elixir/kernel/special_forms";
 import Type from "../../assets/js/hologram/type";
+import Store from "../../assets/js/hologram/store";
 
 const elems = {}
 elems[Type.atomKey("a")] = Type.integer(1)
@@ -13,6 +14,109 @@ elems[Type.atomKey("a")] = Type.integer(1)
 const bindings = Type.map(elems)
 const key = Type.atom("a")
 const callback = ($bindings) => { return Type.tuple([SpecialForms.$dot($bindings, key)])}
+
+describe("aggregateComponentBindings()", () => {
+  it("aggregates component bindings", () => {
+    const outerBindingsElems = {}
+    outerBindingsElems[Type.atomKey("context")] = Type.string("text_context_value")
+    outerBindingsElems[Type.atomKey("a")] = Type.integer(1)
+    outerBindingsElems[Type.atomKey("x")] = Type.string("x_value")
+    const outerBindings = Type.map(outerBindingsElems)
+
+    const stateElems = {}
+    stateElems[Type.atomKey("k")] = Type.string("value_2")
+    stateElems[Type.atomKey("y")] = Type.string("y_value")
+    const state = Type.map(stateElems)
+    Store.setComponentState("test_id", state)
+
+    const props = {
+      id: [Type.textNode("test_id")],
+      k: [Type.textNode("value_1")],
+      b: [Type.expressionNode(callback)]
+    }
+
+    const componentNode = Type.componentNode("test_class_name", props, [])
+
+    const result = DOM.aggregateComponentBindings(componentNode, outerBindings)
+
+    const expectedElems = {}
+    expectedElems[Type.atomKey("context")] = Type.string("text_context_value")
+    expectedElems[Type.atomKey("id")] = Type.string("test_id")
+    expectedElems[Type.atomKey("k")] = Type.string("value_2")
+    expectedElems[Type.atomKey("b")] = Type.integer(1)
+    expectedElems[Type.atomKey("y")] = Type.string("y_value")
+    const expected = Type.map(expectedElems)
+
+    assert.deepStrictEqual(result, expected)
+  })
+})
+
+describe("aggregateComponentContextBindings()", () => {
+  it("aggregates component context bindings", () => {
+    const outerBindingsElems = {}
+    outerBindingsElems[Type.atomKey("xyz")] = Type.integer(9)
+    outerBindingsElems[Type.atomKey("context")] = Type.string("text_context_value")
+    const outerBindings = Type.map(outerBindingsElems)
+
+    const result = DOM.aggregateComponentContextBindings(outerBindings)
+
+    const expectedElems = {}
+    expectedElems[Type.atomKey("context")] = Type.string("text_context_value")
+    const expected = Type.map(expectedElems)
+
+    assert.deepStrictEqual(result, expected)
+    assertFrozen(result)
+  })
+})
+
+describe("aggregateComponentPropsBindings()", () => {
+  it("aggregates component props bindings", () => {
+    const props = {
+      id: [Type.textNode("test_id")],
+      value: [Type.expressionNode(callback)]
+    }
+
+    const componentNode = Type.componentNode("test_class_name", props, [])
+
+    const result = DOM.aggregateComponentPropsBindings(componentNode, bindings)
+
+    const elems = {}
+    elems[Type.atomKey("id")] = Type.string("test_id")
+    elems[Type.atomKey("value")] = Type.integer(1)
+    const expected = Type.map(elems)
+
+    assert.deepStrictEqual(result, expected)
+    assertFrozen(result)
+  })
+})
+
+describe("aggregateComponentStateBindings()", () => {
+  it("returns state bindings of a stateful component", () => {
+    const elems = {}
+    elems[Type.atomKey("x")] = Type.integer(9)
+    const state = Type.map(elems)
+
+    Store.setComponentState("test_id", state)
+
+    const props = {
+      id: [Type.textNode("test_id")]
+    }
+
+    const node = Type.componentNode("test_class_name", props, [])
+    const result = DOM.aggregateComponentStateBindings(node, bindings)
+
+    assert.deepStrictEqual(result, state)
+    assertFrozen(result)
+  })
+
+  it("returns empty JS object if the component is stateless", () => {
+    const node = Type.componentNode("test_class_name", {}, [])
+    const result = DOM.aggregateComponentStateBindings(node, bindings)
+
+    assert.deepStrictEqual(result, {})
+    assertFrozen(result)
+  })
+})
 
 describe("buildElementVNode()", () => {
   const source = Operation.TARGET.page
@@ -207,6 +311,22 @@ describe("evaluateProp()", () => {
     const expected = Type.string("test_text_node1")
 
     assert.deepStrictEqual(result, expected)
+  })
+})
+
+describe("getComponentId()", () => {
+  it("returns component id prop as JS string", () => {
+    const props = {
+      id: [
+        Type.textNode("test"),
+        Type.expressionNode(callback)
+      ]
+    }
+
+    const node = Type.componentNode("test_class_name", props, [])
+    const result = DOM.getComponentId(node, bindings)
+
+    assert.equal(result, "test1")
   })
 })
 

@@ -18,13 +18,6 @@ export default class DOM {
     this.window = window
   }
 
-  static buildComponentState(props, state) {
-    return Object.keys(props).reduce((acc, key) => {
-      acc.data[`~atom[${key}]`] = DOM.evaluateProp(props[key], state)
-      return acc
-    }, {type: "map", data: {"~atom[context]": state.data["~atom[context]"]}})
-  }
-
   buildVNode(node, fullState, scopeState, context) {
     switch (node.type) {
       case "component":

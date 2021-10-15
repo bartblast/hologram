@@ -2,6 +2,7 @@
 
 import { HologramNotImplementedError } from "./errors";
 import Runtime from "./runtime";
+import Store from "./store";
 import Utils from "./utils";
 
 import ClickEvent from "./events/click_event";
@@ -13,14 +14,51 @@ const patch = init([attributesModule, eventListenersModule]);
 export default class DOM {
   static PRUNED_ATTRS = ["on_click"]
 
+  static aggregateComponentBindings(node, outerBindings) {
+    const contextBindings = DOM.aggregateComponentContextBindings(outerBindings)
+    const propsBindings = DOM.aggregateComponentPropsBindings(node, outerBindings)
+    const stateBindings = DOM.aggregateComponentStateBindings(node, outerBindings)
+
+    const elems = Object.assign({}, contextBindings.data, propsBindings.data, stateBindings.data)
+    return Type.map(elems)
+  }
+
+  static aggregateComponentContextBindings(outerBindings) {
+    const key = Type.atomKey("context")
+
+    let elems = {}
+    elems[key] = outerBindings.data[key]
+
+    return Type.map(elems)
+  }
+
+  static aggregateComponentPropsBindings(node, outerBindings) {
+    const elems = Object.keys(node.props).reduce((acc, key) => {
+      acc[Type.atomKey(key)] = DOM.evaluateProp(node.props[key], outerBindings)
+      return acc
+    }, {})
+
+    return Type.map(elems)
+  }
+
+  static aggregateComponentStateBindings(node, outerBindings) {
+    if (DOM.isStatefulComponent(node)) {
+      const componentId = DOM.getComponentId(node, outerBindings)
+      return Store.getComponentState(componentId)
+
+    } else {
+      return Utils.freeze({})
+    }
+  }
+
   static buildElementVNode(node, source, bindings, slots) {
     if (node.tag === "slot") {
       return DOM.buildVNodeList(slots.default, source, bindings, slots)
     }
 
-    let attrs = DOM.buildVNodeAttrs(node, bindings)
-    let eventHandlers = DOM.buildVNodeEventHandlers(node, source, bindings)
-    let children = DOM.buildVNodeList(node.children, source, bindings, slots)
+    const attrs = DOM.buildVNodeAttrs(node, bindings)
+    const eventHandlers = DOM.buildVNodeEventHandlers(node, source, bindings)
+    const children = DOM.buildVNodeList(node.children, source, bindings, slots)
 
     return [h(node.tag, {attrs: attrs, on: eventHandlers}, children)]
   }
@@ -107,6 +145,11 @@ export default class DOM {
 
       return Type.string(concatenatedStr)
     }
+  }
+
+  static getComponentId(node, bindings) {
+    const boxedId = DOM.evaluateProp(node.props.id, bindings)
+    return DOM.interpolate(boxedId)
   }
 
   static interpolate(value) {
