@@ -57,6 +57,19 @@ describe("boolean()", () => {
   })
 })
 
+describe("componentNode()", () => {
+  const result = Type.componentNode("test_class_name", "test_props", "test_children")
+
+  it("builds a component node", () => {
+    const expected = {type: "component", module: "test_class_name", props: "test_props", children: "test_children"}
+    assert.deepStrictEqual(result, expected)
+  })
+
+  it("returns frozen object", () => {
+    assertFrozen(result)
+  })
+})
+
 describe("elementNode()", () => {
   const result = Type.elementNode("div", "test_attrs", "test_children")
 

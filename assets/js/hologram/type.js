@@ -20,6 +20,10 @@ export default class Type {
     return Utils.freeze({type: "boolean", value: value})
   }
 
+  static componentNode(className, props, children) {
+    return Utils.freeze({type: "component", module: className, props: props, children: children})
+  }
+
   static elementNode(tag, attrs, children) {
     return Utils.freeze({type: "element", tag: tag, attrs: attrs, children: children})
   }
