@@ -1,6 +1,6 @@
 "use strict";
 
-import { assert, assertFrozen } from "./support/commons";
+import { assert, assertFrozen, assertNotFrozen } from "./support/commons";
 import { HologramNotImplementedError } from "../../assets/js/hologram/errors";
 import Type from "../../assets/js/hologram/type";
 
@@ -423,8 +423,13 @@ describe("map()", () => {
     assert.deepStrictEqual(result, expected)
   })
 
-  it("returns frozen object", () => {
+  it("returns immutable object by default", () => {
     assertFrozen(result)
+  })
+
+  it("returns mutable object if immutable arg is set to false", () => {
+    result = Type.map(elems, false)
+    assertNotFrozen(result)
   })
 })
 
