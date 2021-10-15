@@ -1,8 +1,9 @@
 "use strict";
 
-import { assert } from "./support/commons";
+import { assert, assertFrozen } from "./support/commons";
 import DOM from "../../assets/js/hologram/dom";
 import { HologramNotImplementedError } from "../../assets/js/hologram/errors"
+import SpecialForms from "../../assets/js/hologram/elixir/kernel/special_forms";
 import Type from "../../assets/js/hologram/type";
 
 describe("buildTextVNode()", () => {
@@ -21,6 +22,36 @@ describe("buildVNodeEventHandlers()", () => {
     const result = DOM.buildVNodeEventHandlers(elementNode)
 
     assert.isFunction(result.click)
+  })
+})
+
+describe("evaluateNode()", () => {
+  it("evaluates expression node", () => {
+    const elems = {}
+    elems[Type.atomKey("a")] = Type.integer(1)
+
+    const bindings = Type.map(elems)
+    const key = Type.atom("a")
+    const callback = ($bindings) => { return Type.tuple([SpecialForms.$dot($bindings, key)])}
+
+    const expressionNode = Type.expressionNode(callback)
+
+    const result = DOM.evaluateNode(expressionNode, bindings)
+    const expected = Type.integer(1)
+
+    assert.deepStrictEqual(result, expected)
+    assertFrozen(result)
+  })
+
+  it("evaluates text node", () => {
+    const bindings = Type.map({})
+    const textNode = Type.textNode("test_content")
+
+    const result = DOM.evaluateNode(textNode, bindings)
+    const expected = Type.string("test_content")
+
+    assert.deepStrictEqual(result, expected)
+    assertFrozen(result)
   })
 })
 

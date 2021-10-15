@@ -25,16 +25,6 @@ export default class DOM {
     }, {type: "map", data: {"~atom[context]": state.data["~atom[context]"]}})
   }
 
-  static evaluateNode(node, state) {
-    switch (node.type) {
-      case "text":
-        return {type: "string", value: node.content}
-
-      case "expression":
-        return node.callback(state).data[0]
-    }
-  }
-
   static evaluateProp(nodes, state) {
     if (nodes.length == 1) {
       return DOM.evaluateNode(nodes[0], state)
@@ -103,16 +93,6 @@ export default class DOM {
     return value.reduce((acc, part) => {
       return acc + DOM.evaluateAttributeValuePart(part, scopeState)
     }, "")
-  }
-
-  static evaluateAttributeValuePart(value, scopeState) {
-    if (value.type == "expression") {
-      const result = value.callback(scopeState).data[0]
-      return Runtime.interpolate(result)
-
-    } else {
-      return value.content
-    }
   }
 
   // TODO: already refactored; test

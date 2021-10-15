@@ -2,6 +2,7 @@
 
 import { HologramNotImplementedError } from "./errors";
 import Runtime from "./runtime";
+import Utils from "./utils";
 
 import ClickEvent from "./events/click_event";
 
@@ -31,6 +32,16 @@ export default class DOM {
     }
 
     return eventHandlers
+  }
+
+  static evaluateNode(node, bindings) {
+    switch (node.type) {
+      case "expression":
+        return Utils.freeze(node.callback(bindings).data[0])
+
+      case "text":
+        return Utils.freeze({type: "string", value: node.content})
+    }
   }
 
   static interpolate(value) {
