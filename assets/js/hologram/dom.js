@@ -34,6 +34,12 @@ export default class DOM {
     return eventHandlers
   }
 
+  static evaluateAttr(nodes, bindings) {
+    return nodes.reduce((acc, node) => {
+      return acc + DOM.interpolate(DOM.evaluateNode(node, bindings))
+    }, "")
+  }
+
   static evaluateNode(node, bindings) {
     switch (node.type) {
       case "expression":

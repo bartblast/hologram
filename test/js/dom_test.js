@@ -25,6 +25,26 @@ describe("buildVNodeEventHandlers()", () => {
   })
 })
 
+describe("evaluateAttr()", () => {
+  it("evaluates attribute value to a string", () => {
+    const elems = {}
+    elems[Type.atomKey("a")] = Type.integer(1)
+
+    const bindings = Type.map(elems)
+    const key = Type.atom("a")
+    const callback = ($bindings) => { return Type.tuple([SpecialForms.$dot($bindings, key)])}
+
+    const nodes = [
+      Type.textNode("abc"),
+      Type.expressionNode(callback)
+    ]
+
+    const result = DOM.evaluateAttr(nodes, bindings)
+
+    assert.equal(result, "abc1")
+  })
+})
+
 describe("evaluateNode()", () => {
   it("evaluates expression node", () => {
     const elems = {}

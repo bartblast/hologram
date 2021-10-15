@@ -89,12 +89,6 @@ export default class DOM {
     }, {})
   }
 
-  static evaluateAttributeValue(value, scopeState) {
-    return value.reduce((acc, part) => {
-      return acc + DOM.evaluateAttributeValuePart(part, scopeState)
-    }, "")
-  }
-
   // TODO: already refactored; test
   getHTML() {
     const doctype = new XMLSerializer().serializeToString(this.document.doctype)
