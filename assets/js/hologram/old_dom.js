@@ -25,16 +25,6 @@ export default class DOM {
     }, {type: "map", data: {"~atom[context]": state.data["~atom[context]"]}})
   }
 
-  static evaluateProp(nodes, state) {
-    if (nodes.length == 1) {
-      return DOM.evaluateNode(nodes[0], state)
-    } else {
-      return nodes.reduce((acc, node) => {
-        return acc + Runtime.interpolate(DOM.evaluateNode(node, state))
-      }, "")
-    }
-  }
-
   buildVNode(node, fullState, scopeState, context) {
     switch (node.type) {
       case "component":

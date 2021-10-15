@@ -187,6 +187,29 @@ describe("evaluateNode()", () => {
   })
 })
 
+describe("evaluateProp()", () => {
+  it("evaluates the prop value to a boxed string when the value is composed of one value node only", () => {
+    const nodes = [Type.textNode("test_text_node")]
+
+    const result = DOM.evaluateProp(nodes, bindings)
+    const expected = Type.string("test_text_node")
+
+    assert.deepStrictEqual(result, expected)
+  })
+
+  it("evaluates the prop value to a boxed string when the value is composed of multiple value nodes", () => {
+    const nodes = [
+      Type.textNode("test_text_node"),
+      Type.expressionNode(callback)
+    ]
+
+    const result = DOM.evaluateProp(nodes, bindings)
+    const expected = Type.string("test_text_node1")
+
+    assert.deepStrictEqual(result, expected)
+  })
+})
+
 describe("interpolate()", () => {
   it("converts boxed atom value to JS string", () => {
     const value = Type.atom("abc")

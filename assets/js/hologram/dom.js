@@ -7,6 +7,7 @@ import Utils from "./utils";
 import ClickEvent from "./events/click_event";
 
 import { attributesModule, eventListenersModule, h, init, toVNode } from "snabbdom";
+import Type from "./type";
 const patch = init([attributesModule, eventListenersModule]);
 
 export default class DOM {
@@ -91,6 +92,20 @@ export default class DOM {
 
       case "text":
         return Utils.freeze({type: "string", value: node.content})
+    }
+  }
+
+  static evaluateProp(nodes, bindings) {
+    if (nodes.length == 1) {
+      return DOM.evaluateNode(nodes[0], bindings)
+
+    } else {
+      const concatenatedStr = nodes.reduce((acc, node) => {
+        const nodeStr = DOM.interpolate(DOM.evaluateNode(node, bindings))
+        return acc + nodeStr
+      }, "")
+
+      return Type.string(concatenatedStr)
     }
   }
 
