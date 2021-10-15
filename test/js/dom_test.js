@@ -237,3 +237,29 @@ describe("interpolate()", () => {
     assert.throw(() => { DOM.interpolate(value) }, HologramNotImplementedError, expectedMessage);
   })
 })
+
+describe("isStatefulComponent()", () => {
+  const TestComponent = class {}
+
+  it("returns true if the given component has 'id' prop", () => {
+    const props = {
+      id: [Type.textNode("test_id")]
+    }
+    
+    const node = Type.componentNode(TestComponent, props, [])
+    const result = DOM.isStatefulComponent(node)
+
+    assert.isTrue(result)
+  })
+
+  it("returns false if the given component doesn't have 'id' prop", () => {
+    const props = {
+      test_prop: [Type.textNode("test_value")]
+    }
+
+    const node = Type.componentNode(TestComponent, props, [])
+    const result = DOM.isStatefulComponent(node)
+
+    assert.isFalse(result)
+  })
+})

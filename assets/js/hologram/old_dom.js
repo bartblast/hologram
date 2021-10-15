@@ -40,7 +40,7 @@ export default class DOM {
       case "component":
         let module = Runtime.getClassByClassName(node.module)
 
-        if (DOM.hasActionHandlers(module)) {
+        if (DOM.isStatefulComponent(node)) {
           context = Object.assign({}, context)
           context.scopeModule = module
         }
@@ -58,11 +58,6 @@ export default class DOM {
     const doctype = new XMLSerializer().serializeToString(this.document.doctype)
     const outerHTML = this.document.documentElement.outerHTML
     return doctype + outerHTML;
-  }
-
-  // TODO: already refactored; test
-  static hasActionHandlers(module) {
-    return module.hasOwnProperty("action")
   }
 
   // TODO: refactor & test

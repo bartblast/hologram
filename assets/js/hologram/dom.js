@@ -113,4 +113,8 @@ export default class DOM {
         throw new HologramNotImplementedError(message)
     }
   }
+
+  static isStatefulComponent(node) {
+    return node.props.hasOwnProperty("id")
+  }
 }
