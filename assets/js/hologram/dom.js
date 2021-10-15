@@ -1,12 +1,19 @@
 "use strict";
 
 import { HologramNotImplementedError } from "./errors";
+import Runtime from "./runtime";
+
+import ClickEvent from "./events/click_event";
 
 import {attributesModule, eventListenersModule, h, init, toVNode} from "snabbdom";
 const patch = init([attributesModule, eventListenersModule]);
 
 export default class DOM {
   static PRUNED_ATTRS = ["on_click"]
+
+  static buildTextVNode(node) {
+    return [node.content]
+  }
 
   // TODO: finish & test
   static buildVNode(node) {
@@ -16,8 +23,14 @@ export default class DOM {
     }
   }
 
-  static buildTextVNode(node) {
-    return [node.content]
+  static buildVNodeEventHandlers(node, source, bindings) {
+    const eventHandlers = {}
+
+    if (node.attrs.on_click) {
+      eventHandlers.click = (event) => { Runtime.handleEvent(event, ClickEvent, source, bindings, node.attrs.on_click) }
+    }
+
+    return eventHandlers
   }
 
   static interpolate(value) {

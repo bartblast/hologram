@@ -14,6 +14,16 @@ describe("buildTextVNode()", () => {
   })
 })
 
+describe("buildVNodeEventHandlers()", () => {
+  it("builds click event handler", () => {
+    const attrs = {on_click: "test_on_click_spec"}
+    const elementNode = Type.elementNode("div", attrs, [])
+    const result = DOM.buildVNodeEventHandlers(elementNode)
+
+    assert.isFunction(result.click)
+  })
+})
+
 describe("interpolate()", () => {
   it("interpolates boxed atom value", () => {
     const value = Type.atom("abc")

@@ -99,23 +99,6 @@ export default class DOM {
     }, {})
   }
 
-  // TODO: refactor & test
-  // DEFER: research whether this creates a new handler on each render (how to optimize it?)
-  buildVNodeEventHandlers(node, source, bindings) {
-    const eventHandlers = {}
-
-    if (node.attrs.on_click) {
-      eventHandlers.click = (event) => { Runtime.handleEvent(event, ClickEvent, source, bindings, node.attrs.on_click) }
-    }
-
-    // TODO: implement
-    // if (node.attrs.on_submit) {
-    //   eventHandlers.submit = this.runtime.handleSubmitEvent.bind(this.runtime, node.attrs.on_submit, fullState, scopeState, context)
-    // }
-
-    return eventHandlers
-  }
-
   static evaluateAttributeValue(value, scopeState) {
     return value.reduce((acc, part) => {
       return acc + DOM.evaluateAttributeValuePart(part, scopeState)
