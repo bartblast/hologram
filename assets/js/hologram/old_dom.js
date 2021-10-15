@@ -38,7 +38,7 @@ export default class DOM {
   buildVNode(node, fullState, scopeState, context) {
     switch (node.type) {
       case "component":
-        let module = Runtime.getModule(node.module)
+        let module = Runtime.getClassByClassName(node.module)
 
         if (DOM.hasActionHandlers(module)) {
           context = Object.assign({}, context)
@@ -73,7 +73,7 @@ export default class DOM {
 
     const pageTemplate = pageModule.template()
     const layoutClassName = pageModule.layout().className
-    const layoutTemplate = Runtime.getModule(layoutClassName).template()
+    const layoutTemplate = Runtime.getClassByClassName(layoutClassName).template()
 
     const context = {scopeModule: pageModule, pageModule: pageModule, slots: {default: pageTemplate}}
 

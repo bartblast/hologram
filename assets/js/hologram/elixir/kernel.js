@@ -14,7 +14,7 @@ export default class Kernel {
 
   static apply() {
     if (arguments.length === 3) {
-      const module = Runtime.getModule(arguments[0].className)
+      const module = Runtime.getClassByClassName(arguments[0].className)
       const functionName = arguments[1].value
       const args = arguments[2].data
 

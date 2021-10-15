@@ -3,6 +3,17 @@
 import { assert, mockWindow } from "./support/commons";
 import Runtime from "../../assets/js/hologram/runtime";
 
+describe("getClassByClassName()", () => {
+  it("returns class object given a class name", () => {
+    const TestClass_Abc_Xyz = class {}
+    globalThis.TestClass_Abc_Xyz = TestClass_Abc_Xyz
+    
+    const result = Runtime.getClassByClassName("TestClass_Abc_Xyz")
+
+    assert.equal(result, TestClass_Abc_Xyz)
+  })
+})
+
 describe("getComponentClass()", () => {
   it("returns component class given component ID", () => {
     const TestClass1 = class{}

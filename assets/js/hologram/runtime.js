@@ -27,6 +27,10 @@ export default class Runtime {
     }
   }
 
+  static getClassByClassName(className) {
+    return Utils.eval(className)
+  }  
+
   static getComponentClass(componentId) {
     return Runtime.componentClassRegistry[componentId]
   }
@@ -68,21 +72,6 @@ export default class Runtime {
 
     this.loadPageOnPopStateEvents()
   }
-  
-  
-
-  // TODO: refactor & test
-  static getModule(module) {
-    let name;
-
-    if (module.type == "module") {
-      name = module.className
-    } else {
-      name = module
-    }
-
-    return Utils.eval(name.replace(/\./g, ""))
-  }  
   
   processCommand() {
     // this.pushCommand(eventHandlerSpec, context)
