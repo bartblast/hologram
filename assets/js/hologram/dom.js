@@ -29,7 +29,7 @@ export default class DOM {
   }
 
   // TODO: finish & test
-  static buildVNode(node, source, bindings, slots) {
+  static buildVDOM(node, source, bindings, slots) {
     if (Array.isArray(node)) {
       return DOM.buildVNodeList(node, source, bindings, slots)
     }
@@ -65,7 +65,7 @@ export default class DOM {
 
   static buildVNodeList(nodes, source, bindings, slots) {
     return nodes.reduce((acc, node) => {
-      acc.push(...DOM.buildVNode(node, source, bindings, slots))
+      acc.push(...DOM.buildVDOM(node, source, bindings, slots))
       return acc
     }, [])
   }
