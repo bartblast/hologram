@@ -11,10 +11,10 @@ import Utils from "./utils"
 export default class Action {
   // Covered implicitely in E2E tests.
   static execute(operation) {
-    const componentClass = Runtime.getComponentClass(operation.target)
-    const componentState = Store.getComponentState(operation.target)
+    const targetClass = Runtime.getComponentClass(operation.target)
+    const targetState = Store.getComponentState(operation.target)
 
-    let actionResult = componentClass.action(operation.name, operation.params, componentState)
+    let actionResult = targetClass.action(operation.name, operation.params, targetState)
     actionResult = Utils.freeze(actionResult)
 
     Action.handleResult(actionResult, operation.target)
