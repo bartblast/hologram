@@ -25,12 +25,6 @@ defmodule Hologram.Compiler.GeneratorTest do
   }
 
   describe "types" do
-    test "atom" do
-      ir = %AtomType{value: :test}
-      result = Generator.generate(ir, %Context{}, %Opts{})
-      assert result == "{ type: 'atom', value: 'test' }"
-    end
-
     test "binary" do
       ir = %BinaryType{
         parts: [

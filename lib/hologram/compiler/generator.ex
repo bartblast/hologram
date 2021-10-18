@@ -16,7 +16,6 @@ defmodule Hologram.Compiler.Generator do
   }
 
   alias Hologram.Compiler.IR.{
-    AtomType,
     BinaryType,
     BooleanType,
     DotOperator,
@@ -36,10 +35,6 @@ defmodule Hologram.Compiler.Generator do
   def generate(ir, context, opts)
 
   # TYPES
-
-  def generate(%AtomType{value: value}, _, _) do
-    Hologram.Compiler.Encoder.Commons.encode_primitive_type(:atom, "'#{value}'")
-  end
 
   def generate(%BinaryType{parts: parts}, %Context{} = context, %Opts{} = opts) do
     BinaryTypeEncoder.encode(parts, context, opts)
