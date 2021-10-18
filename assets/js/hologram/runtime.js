@@ -5,21 +5,16 @@ import Client from "./client"
 import Command from "./command"
 import Operation from "./operation"
 import ScriptsReloader from "./scripts_reloader"
-import Store from "./store";
 import Utils from "./utils"
 import VDOM from "./vdom"
 
 export default class Runtime {
+  static componentClassRegistry = {}
+  static document = null
+  static isInitiated = false
   static layoutClass = null
   static pageClass = null
-
-  static getInstance() {
-    if (!globalThis.__hologramRuntime__) {
-      globalThis.__hologramRuntime__ = new Runtime()
-    }
-
-    return globalThis.__hologramRuntime__
-  }
+  static window = null
 
   // Tested implicitely in E2E tests.
   static executeOperation(operation) {
@@ -46,7 +41,7 @@ export default class Runtime {
     return Runtime.pageClass.template()
   }
 
-  // Tested implicitely in E2E tests.
+  // Covered implicitely in E2E tests.
   static handleEvent(event, eventImplementation, source, bindings, operationSpec) {
     event.preventDefault()
 
@@ -56,9 +51,17 @@ export default class Runtime {
     Runtime.executeOperation(operation)
   }
 
+  // Covered implicitely in E2E tests.
+  static init(window) {
+    Client.connect()
 
+    Runtime.document = window.document
+    Runtime.window = window
 
+    Runtime.loadPageOnPopStateEvents()
 
+    Runtime.isInitiated = true
+  }
 
 
 
@@ -70,21 +73,7 @@ export default class Runtime {
   */
 
 
-  constructor() {
-    this.client = new Client()
-    this.client.connect()
 
-    this.document = globalThis.window.document
-    this.dom = new VDOM(this, window)
-    this.pageModule = null
-    this.state = null
-    this.store = new Store()
-    this.window = globalThis.window
-
-    Runtime.componentClassRegistry = {}
-
-    this.loadPageOnPopStateEvents()
-  }
   
   processCommand() {
     // this.pushCommand(eventHandlerSpec, context)
@@ -110,7 +99,7 @@ export default class Runtime {
   }
 
   // TODO: refactor & test
-  loadPageOnPopStateEvents() {
+  static loadPageOnPopStateEvents() {
     this.window.addEventListener("popstate", event => {
       this.loadPage(event.state)
     })
