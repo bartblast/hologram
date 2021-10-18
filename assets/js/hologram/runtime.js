@@ -10,6 +10,8 @@ import Utils from "./utils"
 import VDOM from "./vdom"
 
 export default class Runtime {
+  static pageClass = null
+
   static getInstance() {
     if (!globalThis.__hologramRuntime__) {
       globalThis.__hologramRuntime__ = new Runtime()
@@ -35,6 +37,10 @@ export default class Runtime {
     return Runtime.componentClassRegistry[componentId]
   }
 
+  static getPageTemplate() {
+    return Runtime.pageClass.template()
+  }
+
   // Tested implicitely in E2E tests.
   static handleEvent(event, eventImplementation, source, bindings, operationSpec) {
     event.preventDefault()
@@ -44,9 +50,6 @@ export default class Runtime {
 
     Runtime.executeOperation(operation)
   }
-
-
-
 
 
 

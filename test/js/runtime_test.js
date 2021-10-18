@@ -49,3 +49,17 @@ describe("getInstance()", () => {
     assert.equal(runtime2, runtime1)
   })
 })
+
+describe("getPageTemplate()", () => {
+  it.only("returns the template of the current page", () => {
+    Runtime.pageClass = class {
+      static template() {
+        return "test_template"
+      }
+    }
+
+    const result = Runtime.getPageTemplate()
+
+    assert.equal(result, "test_template")
+  })
+})
