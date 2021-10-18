@@ -25,22 +25,6 @@ defmodule Hologram.Compiler.GeneratorTest do
   }
 
   describe "types" do
-    test "binary" do
-      ir = %BinaryType{
-        parts: [
-          %StringType{value: "abc"},
-          %StringType{value: "xyz"}
-        ]
-      }
-
-      result = Generator.generate(ir, %Context{}, %Opts{})
-
-      expected =
-        "{ type: 'binary', data: [ { type: 'string', value: 'abc' }, { type: 'string', value: 'xyz' } ] }"
-
-      assert result == expected
-    end
-
     test "boolean" do
       ir = %BooleanType{value: true}
       result = Generator.generate(ir, %Context{}, %Opts{})

@@ -1,12 +1,18 @@
 defmodule Hologram.Compiler.BinaryTypeEncoderTest do
   use Hologram.Test.UnitCase, async: true
 
-  alias Hologram.Compiler.{BinaryTypeEncoder, Context, Opts}
-  alias Hologram.Compiler.IR.StringType
+  alias Hologram.Compiler.{Context, Encoder, Opts}
+  alias Hologram.Compiler.IR.{BinaryType, StringType}
 
   test "encode/3" do
-    parts = [%StringType{value: "abc"}, %StringType{value: "xyz"}]
-    result = BinaryTypeEncoder.encode(parts, %Context{}, %Opts{})
+    ir = %BinaryType{
+      parts: [
+        %StringType{value: "abc"},
+        %StringType{value: "xyz"}
+      ]
+    }
+
+    result = Encoder.encode(ir, %Context{}, %Opts{})
 
     expected =
       "{ type: 'binary', data: [ { type: 'string', value: 'abc' }, { type: 'string', value: 'xyz' } ] }"
