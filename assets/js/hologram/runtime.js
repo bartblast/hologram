@@ -63,6 +63,15 @@ export default class Runtime {
     Runtime.isInitiated = true
   }
 
+  // Covered implicitely in E2E tests.
+  static loadPageOnPopStateEvents() {
+    Runtime.window.addEventListener("popstate", event => {
+      Runtime.loadPage(event.state)
+    })
+  }
+
+
+
 
 
 
@@ -96,13 +105,6 @@ export default class Runtime {
 
     VDOM.reset()
     ScriptsReloader.reload(this.document)
-  }
-
-  // TODO: refactor & test
-  static loadPageOnPopStateEvents() {
-    this.window.addEventListener("popstate", event => {
-      this.loadPage(event.state)
-    })
   }
 
   // TODO: refactor & test
