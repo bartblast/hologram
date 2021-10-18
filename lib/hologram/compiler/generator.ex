@@ -42,11 +42,7 @@ defmodule Hologram.Compiler.Generator do
   def generate(%BooleanType{value: value}, _, _) do
     Hologram.Compiler.Encoder.Commons.encode_primitive_type(:boolean, "#{value}")
   end
-
-  def generate(%IntegerType{value: value}, _, _) do
-    Hologram.Compiler.Encoder.Commons.encode_primitive_type(:integer, "#{value}")
-  end
-
+  
   def generate(%ListType{data: data}, %Context{} = context, %Opts{} = opts) do
     ListTypeGenerator.generate(data, context, opts)
   end

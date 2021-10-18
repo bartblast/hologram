@@ -47,12 +47,6 @@ defmodule Hologram.Compiler.GeneratorTest do
       assert result == "{ type: 'boolean', value: true }"
     end
 
-    test "integer" do
-      ir = %IntegerType{value: 123}
-      result = Generator.generate(ir, %Context{}, %Opts{})
-      assert result == "{ type: 'integer', value: 123 }"
-    end
-
     test "list" do
       ir = %ListType{data: [%IntegerType{value: 123}]}
       result = Generator.generate(ir, %Context{}, %Opts{})
