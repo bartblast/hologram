@@ -203,6 +203,7 @@ export default class VDOM {
     return node.props.hasOwnProperty("id")
   }
 
+  // Covered implicitely in E2E tests.
   render() {
     if (!VDOM.virtualDocument) {
       VDOM.virtualDocument = toVNode(Runtime.document.documentElement)
