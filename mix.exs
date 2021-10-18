@@ -5,7 +5,7 @@ defmodule Hologram.MixProject do
     [
       "format.all": [
         "format",
-        "cmd npx prettier --write 'assets/**/*.js' 'test/javascript/**/*.js' '**/*.json'"
+        "cmd npx prettier --write 'assets/**/*.js' 'test/js/**/*.js' '**/*.json'"
       ],
       test: ["test --exclude e2e"],
       "test.all": [&test_js/1, "test --include e2e"],
