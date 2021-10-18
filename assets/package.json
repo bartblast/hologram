@@ -6,6 +6,7 @@
     "mocha": "^8.3.2",
     "mochapack": "^2.0.6",
     "phoenix": "^1.5.13",
+    "prettier": "^2.2.1",
     "sinon": "^11.1.0",
     "snabbdom": "^3.1.0",
     "webpack": "^5.41.1",

@@ -3,6 +3,10 @@ defmodule Hologram.MixProject do
 
   defp aliases do
     [
+      "format.all": [
+        "format",
+        "cmd npx prettier --write 'assets/**/*.js' 'test/javascript/**/*.js' '**/*.json'"
+      ],
       test: ["test --exclude e2e"],
       "test.all": [&test_js/1, "test --include e2e"],
       "test.e2e": ["test --only e2e"],
