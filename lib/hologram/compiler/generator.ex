@@ -51,10 +51,6 @@ defmodule Hologram.Compiler.Generator do
     StructTypeGenerator.generate(module, data, context, opts)
   end
 
-  def generate(%TupleType{data: data}, %Context{} = context, %Opts{} = opts) do
-    TupleTypeGenerator.generate(data, context, opts)
-  end
-
   # OPERATORS
 
   def generate(%DotOperator{left: left, right: right}, %Context{} = context, %Opts{} = opts) do
