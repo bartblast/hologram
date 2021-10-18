@@ -80,14 +80,6 @@ export default class Runtime {
   const layoutClassName = Runtime.pageClass.layout().className
   return Runtime.getClassByClassName(layoutClassName).template()
   */
-
-
-
-  
-  processCommand() {
-    // this.pushCommand(eventHandlerSpec, context)
-    this.client.pushCommand(context.pageModule, commandName, commandParams, this.handleCommandResponse)
-  }
  
   // TODO: refactor & test
   redirect(params) {
