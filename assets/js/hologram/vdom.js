@@ -73,7 +73,7 @@ export default class VDOM {
   }
 
   // TODO: finish & test
-  static buildVDOM(node, source, bindings, slots) {
+  static build(node, source, bindings, slots) {
     if (Array.isArray(node)) {
       return VDOM.buildVNodeList(node, source, bindings, slots)
     }
