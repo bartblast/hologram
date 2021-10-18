@@ -29,7 +29,6 @@ defmodule Hologram.Compiler.Generator do
     StructType,
     TupleType,
     TypeOperator,
-    Variable
   }
 
   def generate(ir, context, opts)
@@ -100,14 +99,6 @@ defmodule Hologram.Compiler.Generator do
         %Opts{} = opts
       ) do
     FunctionCallGenerator.generate(module, function, params, context, opts)
-  end
-
-  def generate(%Variable{}, _, %Opts{placeholder: true}) do
-    "{ type: 'placeholder' }"
-  end
-
-  def generate(%Variable{name: name}, _, _) do
-    "#{name}"
   end
 
   # TODO: use Encoder protocol instead all of these generate/3 functions and remove this module

@@ -231,23 +231,5 @@ defmodule Hologram.Compiler.GeneratorTest do
 
       assert result == expected
     end
-
-    test "variable, placeholder" do
-      ir = %Variable{name: :test}
-
-      result = Generator.generate(ir, %Context{}, %Opts{placeholder: true})
-      expected = "{ type: 'placeholder' }"
-
-      assert result == expected
-    end
-
-    test "variable, not placeholder" do
-      ir = %Variable{name: :test}
-
-      result = Generator.generate(ir, %Context{}, %Opts{})
-      expected = "test"
-
-      assert result == expected
-    end
   end
 end
