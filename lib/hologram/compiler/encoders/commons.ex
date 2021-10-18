@@ -1,6 +1,14 @@
 defmodule Hologram.Compiler.Encoder.Commons do
-  alias Hologram.Compiler.{Generator, MapKeyGenerator}
+  use Hologram.Commons.Encoder
+
+  alias Hologram.Compiler.{Context, Encoder, Generator, MapKeyGenerator, Opts}
   alias Hologram.Compiler.IR.{AccessOperator, Variable}
+
+  def encode_as_array(data, %Context{} = context, %Opts{} = opts) do
+    Enum.map(data, &Encoder.encode(&1, context, opts))
+    |> Enum.join(", ")
+    |> wrap_with_array()
+  end
 
   defp encode_expression(expr, idx, expr_count, context, opts) do
     return = if idx == expr_count - 1, do: "return ", else: ""

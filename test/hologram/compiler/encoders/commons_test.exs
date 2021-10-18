@@ -5,6 +5,23 @@ defmodule Hologram.Compiler.Encoder.CommonsTest do
   alias Hologram.Compiler.Encoder.Commons
   alias Hologram.Compiler.IR.IntegerType
 
+  describe "encode_as_array/3" do
+    test "empty list encoding" do
+      data = []
+      result = Commons.encode_as_array(data, %Context{}, %Opts{})
+
+      assert result == "[]"
+    end
+
+    test "non-empty list encoding" do
+      data = [%IntegerType{value: 1}, %IntegerType{value: 2}]
+      result = Commons.encode_as_array(data, %Context{}, %Opts{})
+      expected = "[ { type: 'integer', value: 1 }, { type: 'integer', value: 2 } ]"
+
+      assert result == expected
+    end
+  end
+
   describe "encode_expression/4" do
     test "single expression" do
       body = [%IntegerType{value: 1}]
