@@ -214,8 +214,8 @@ export default class VDOM {
     const source = Operation.TARGET.layout
     const bindings = Store.getComponentState(source)
 
-    const newVirtualDocument = Runtime.build(layoutTemplate, source, bindings, slots)[0]
-    patch(Runtime.virtualDocument, newVirtualDocument)
-    Runtime.virtualDocument = newVirtualDocument
+    const newVirtualDocument = VDOM.build(layoutTemplate, source, bindings, slots)[0]
+    patch(VDOM.virtualDocument, newVirtualDocument)
+    VDOM.virtualDocument = newVirtualDocument
   }
 }
