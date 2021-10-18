@@ -35,14 +35,6 @@ defmodule Hologram.Compiler.Generator do
 
   # TYPES
 
-  def generate(%BinaryType{parts: parts}, %Context{} = context, %Opts{} = opts) do
-    BinaryTypeEncoder.encode(parts, context, opts)
-  end
-
-  def generate(%BooleanType{value: value}, _, _) do
-    Hologram.Compiler.Encoder.Commons.encode_primitive_type(:boolean, "#{value}")
-  end
-  
   def generate(%ListType{data: data}, %Context{} = context, %Opts{} = opts) do
     ListTypeGenerator.generate(data, context, opts)
   end
