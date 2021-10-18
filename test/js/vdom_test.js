@@ -1,6 +1,6 @@
 "use strict";
 
-import { assert, assertFrozen, mockWindow, stubXMLSerializer } from "./support/commons";
+import { assert, assertFrozen } from "./support/commons";
 import { HologramNotImplementedError } from "../../assets/js/hologram/errors"
 import Operation from "../../assets/js/hologram/operation";
 import SpecialForms from "../../assets/js/hologram/elixir/kernel/special_forms";

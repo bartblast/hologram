@@ -1,6 +1,7 @@
 "use strict";
 
 import { HologramNotImplementedError } from "./errors";
+import Operation from "./operation";
 import Runtime from "./runtime";
 import Store from "./store";
 import Utils from "./utils";
@@ -13,6 +14,8 @@ const patch = init([attributesModule, eventListenersModule]);
 
 export default class VDOM {
   static PRUNED_ATTRS = ["on_click"]
+
+  static virtualDocument = null
 
   static aggregateComponentBindings(node, outerBindings) {
     const contextBindings = VDOM.aggregateComponentContextBindings(outerBindings)
@@ -198,5 +201,20 @@ export default class VDOM {
 
   static isStatefulComponent(node) {
     return node.props.hasOwnProperty("id")
+  }
+
+  render() {
+    if (!VDOM.virtualDocument) {
+      VDOM.virtualDocument = toVNode(Runtime.document.documentElement)
+    }
+
+    const layoutTemplate = Runtime.getLayoutTemplate()
+    const slots = {default: Runtime.getPageTemplate()}
+    const source = Operation.TARGET.layout
+    const bindings = Store.getComponentState(source)
+
+    const newVirtualDocument = Runtime.build(layoutTemplate, source, bindings, slots)[0]
+    patch(Runtime.virtualDocument, newVirtualDocument)
+    Runtime.virtualDocument = newVirtualDocument
   }
 }
