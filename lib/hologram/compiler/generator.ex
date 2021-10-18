@@ -2,7 +2,6 @@ defmodule Hologram.Compiler.Generator do
   alias Hologram.Compiler.{Context, Encoder, Helpers, Opts}
 
   alias Hologram.Compiler.{
-    AdditionOperatorGenerator,
     BinaryTypeEncoder,
     DotOperatorGenerator,
     FunctionCallGenerator,
@@ -10,7 +9,6 @@ defmodule Hologram.Compiler.Generator do
     MapTypeGenerator,
     ModuleDefinitionGenerator,
     ModuleAttributeOperatorGenerator,
-    PrimitiveTypeGenerator,
     SigilHGenerator,
     StructTypeGenerator,
     TupleTypeGenerator,
@@ -18,7 +16,6 @@ defmodule Hologram.Compiler.Generator do
   }
 
   alias Hologram.Compiler.IR.{
-    AdditionOperator,
     AtomType,
     BinaryType,
     BooleanType,
@@ -41,7 +38,7 @@ defmodule Hologram.Compiler.Generator do
   # TYPES
 
   def generate(%AtomType{value: value}, _, _) do
-    PrimitiveTypeGenerator.generate(:atom, "'#{value}'")
+    Hologram.Compiler.Encoder.Commons.encode_primitive_type(:atom, "'#{value}'")
   end
 
   def generate(%BinaryType{parts: parts}, %Context{} = context, %Opts{} = opts) do
@@ -49,11 +46,11 @@ defmodule Hologram.Compiler.Generator do
   end
 
   def generate(%BooleanType{value: value}, _, _) do
-    PrimitiveTypeGenerator.generate(:boolean, "#{value}")
+    Hologram.Compiler.Encoder.Commons.encode_primitive_type(:boolean, "#{value}")
   end
 
   def generate(%IntegerType{value: value}, _, _) do
-    PrimitiveTypeGenerator.generate(:integer, "#{value}")
+    Hologram.Compiler.Encoder.Commons.encode_primitive_type(:integer, "#{value}")
   end
 
   def generate(%ListType{data: data}, %Context{} = context, %Opts{} = opts) do
@@ -77,10 +74,6 @@ defmodule Hologram.Compiler.Generator do
   end
 
   # OPERATORS
-
-  def generate(%AdditionOperator{left: left, right: right}, %Context{} = context, %Opts{} = opts) do
-    AdditionOperatorGenerator.generate(left, right, context, opts)
-  end
 
   def generate(%DotOperator{left: left, right: right}, %Context{} = context, %Opts{} = opts) do
     DotOperatorGenerator.generate(left, right, context, opts)

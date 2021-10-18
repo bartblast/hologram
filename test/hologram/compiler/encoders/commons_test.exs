@@ -50,6 +50,11 @@ defmodule Hologram.Compiler.Encoder.CommonsTest do
     end
   end
 
+  test "encode_primitive_type/2" do
+    result = Commons.encode_primitive_type(:atom, "'test'")
+    assert result == "{ type: 'atom', value: 'test' }"
+  end
+
   describe "encode_vars/3" do
     test "single binding / variable" do
       code = "fn x -> 1 end"
