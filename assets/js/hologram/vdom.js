@@ -169,6 +169,13 @@ export default class VDOM {
     return VDOM.interpolate(boxedId)
   }
 
+  // DEFER: test
+  static getDocumentHTML(document) {
+    const doctype = new XMLSerializer().serializeToString(document.doctype)
+    const outerHTML = document.documentElement.outerHTML
+    return doctype + outerHTML;
+  }
+
   static interpolate(value) {
     switch (value.type) {
       case "atom":

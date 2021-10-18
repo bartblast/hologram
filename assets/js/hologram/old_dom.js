@@ -1,14 +1,3 @@
-"use strict";
-
-import {attributesModule, eventListenersModule, h, init, toVNode} from "snabbdom";
-const patch = init([attributesModule, eventListenersModule]);
-
-import ClickEvent from "./events/click_event"
-import Runtime from "./runtime"
-import Utils from "./utils"
-
-export default class VDOM {
-  static PRUNED_ATTRS = ["on_click"]
 
   // TODO: refactor & test
   constructor(runtime, window) {
@@ -16,13 +5,6 @@ export default class VDOM {
     this.oldVNode = null
     this.runtime = runtime
     this.window = window
-  }
-
-  // TODO: already refactored; test
-  getHTML() {
-    const doctype = new XMLSerializer().serializeToString(this.document.doctype)
-    const outerHTML = this.document.documentElement.outerHTML
-    return doctype + outerHTML;
   }
 
   // TODO: refactor & test
@@ -46,4 +28,3 @@ export default class VDOM {
   reset() {
     this.oldVNode = null
   }
-}
