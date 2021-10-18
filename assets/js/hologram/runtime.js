@@ -10,6 +10,7 @@ import Utils from "./utils"
 import VDOM from "./vdom"
 
 export default class Runtime {
+  static layoutClass = null
   static pageClass = null
 
   static getInstance() {
@@ -37,6 +38,10 @@ export default class Runtime {
     return Runtime.componentClassRegistry[componentId]
   }
 
+  static getLayoutTemplate() {
+    return Runtime.layoutClass.template()
+  }
+
   static getPageTemplate() {
     return Runtime.pageClass.template()
   }
@@ -58,6 +63,11 @@ export default class Runtime {
 
 
 
+  /* 
+  set layoutClass in mountPage
+  const layoutClassName = Runtime.pageClass.layout().className
+  return Runtime.getClassByClassName(layoutClassName).template()
+  */
 
 
   constructor() {

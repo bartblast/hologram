@@ -50,8 +50,22 @@ describe("getInstance()", () => {
   })
 })
 
+describe("getLayoutTemplate()", () => {
+  it("returns the template of the current page's layout", () => {
+    Runtime.layoutClass = class {
+      static template() {
+        return "test_template"
+      }
+    }
+
+    const result = Runtime.getLayoutTemplate()
+
+    assert.equal(result, "test_template")
+  })
+})
+
 describe("getPageTemplate()", () => {
-  it.only("returns the template of the current page", () => {
+  it("returns the template of the current page", () => {
     Runtime.pageClass = class {
       static template() {
         return "test_template"
