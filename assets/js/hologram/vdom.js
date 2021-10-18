@@ -72,7 +72,7 @@ export default class VDOM {
     return [node.content]
   }
 
-  // TODO: finish & test
+  // Covered implicitely in E2E tests.
   static build(node, source, bindings, slots) {
     if (Array.isArray(node)) {
       return VDOM.buildVNodeList(node, source, bindings, slots)
