@@ -105,7 +105,7 @@ export default class Runtime {
     // TODO: copy html node attributes (because only the inner HTML is updated)
     this.document.documentElement.innerHTML = html
 
-    this.dom.reset()
+    VDOM.reset()
     ScriptsReloader.reload(this.document)
   }
 

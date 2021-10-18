@@ -456,3 +456,12 @@ describe("isStatefulComponent()", () => {
     assert.isFalse(result)
   })
 })
+
+describe("reset()", () => {
+  it("sets the virtualDocument field to null", () => {
+    VDOM.virtualDocument = "test_virtual_document"
+    VDOM.reset()
+    
+    assert.isNull(VDOM.virtualDocument)
+  })
+})

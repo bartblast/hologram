@@ -204,7 +204,7 @@ export default class VDOM {
   }
 
   // Covered implicitely in E2E tests.
-  render() {
+  static render() {
     if (!VDOM.virtualDocument) {
       VDOM.virtualDocument = toVNode(Runtime.document.documentElement)
     }
@@ -217,5 +217,9 @@ export default class VDOM {
     const newVirtualDocument = VDOM.build(layoutTemplate, source, bindings, slots)[0]
     patch(VDOM.virtualDocument, newVirtualDocument)
     VDOM.virtualDocument = newVirtualDocument
+  }
+
+  static reset() {
+    VDOM.virtualDocument = null
   }
 }
