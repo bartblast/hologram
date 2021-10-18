@@ -79,15 +79,32 @@ export default class VDOM {
     }
 
     switch (node.type) {
+      case "component":
+        return VDOM.buildComponentVNodes(node, source, bindings)
+
       case "element":
         return VDOM.buildElementVNode(node, source, bindings, slots)
 
       case "expression":
-        return VDOM.buildTextVNodeFromExpression(node)
+        return VDOM.buildTextVNodeFromExpression(node, bindings)
 
       case "text":
         return VDOM.buildTextVNodeFromTextNode(node)
     }
+  }
+
+  static buildComponentVNodes(node, source, outerBindings) {
+    if (VDOM.isStatefulComponent(node)) {
+      source = VDOM.getComponentId(node, outerBindings)
+    }
+
+    const childrenCopy = Utils.clone(node.children)
+    const slots = { default: Utils.freeze(childrenCopy) }
+
+    let klass = Runtime.getClassByClassName(node.module)
+    const bindings = VDOM.aggregateComponentBindings(node, outerBindings)
+
+    return VDOM.build(klass.template(), source, bindings, slots)
   }
 
   static buildVNodeAttrs(node, bindings) {
@@ -112,7 +129,7 @@ export default class VDOM {
 
   static buildVNodeList(nodes, source, bindings, slots) {
     return nodes.reduce((acc, node) => {
-      acc.push(...VDOM.buildVDOM(node, source, bindings, slots))
+      acc.push(...VDOM.build(node, source, bindings, slots))
       return acc
     }, [])
   }

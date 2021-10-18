@@ -6,7 +6,7 @@ import Operation from "../../assets/js/hologram/operation";
 import SpecialForms from "../../assets/js/hologram/elixir/kernel/special_forms";
 import Type from "../../assets/js/hologram/type";
 import Store from "../../assets/js/hologram/store";
-import VDOM from "../../assets/js/hologram/dom";
+import VDOM from "../../assets/js/hologram/vdom";
 
 const elems = {}
 elems[Type.atomKey("a")] = Type.integer(1)
@@ -116,6 +116,55 @@ describe("aggregateComponentStateBindings()", () => {
 
     assert.deepStrictEqual(result, {})
     assertFrozen(result)
+  })
+})
+
+describe("buildComponentVNodes()", () => {
+  it("builds stateless component's vnodes", () => {
+    const TestStatelessComponent = class {
+      static template() {
+        return [
+          Type.textNode("text_node_1"),
+          Type.elementNode("slot", {}, []),
+          Type.textNode("text_node_2")
+        ]
+      }
+    }
+    globalThis.TestStatelessComponent = TestStatelessComponent
+
+    const children = [Type.textNode("text_node_3")]
+    const node = Type.componentNode("TestStatelessComponent", {}, children)
+
+    const result = VDOM.buildComponentVNodes(node, "test_source", Type.map({})) 
+    const expected = ["text_node_1", "text_node_3", "text_node_2"]
+
+    assert.deepStrictEqual(result, expected)
+  })
+
+  it("builds stateful component's vnodes", () => {
+    const TestStatefulComponent = class {
+      static template() {
+        return [
+          Type.textNode("text_node_1"),
+          Type.elementNode("slot", {}, []),
+          Type.textNode("text_node_2")
+        ]
+      }
+    }
+    globalThis.TestStatefulComponent = TestStatefulComponent
+
+    const props = {id: [Type.textNode("test_component_id")]}
+    const children = [Type.expressionNode(callback)]
+    const node = Type.componentNode("TestStatefulComponent", props, children)
+
+    const elems = {}
+    elems[Type.atomKey("a")] = Type.integer(99)
+    Store.setComponentState("test_component_id", Type.map(elems))
+
+    const result = VDOM.buildComponentVNodes(node, "test_source", Type.map({})) 
+    const expected = ["text_node_1", "99", "text_node_2"]
+
+    assert.deepStrictEqual(result, expected)
   })
 })
 

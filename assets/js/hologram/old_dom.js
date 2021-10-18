@@ -18,24 +18,6 @@ export default class VDOM {
     this.window = window
   }
 
-  buildVNode(node, fullState, scopeState, context) {
-    switch (node.type) {
-      case "component":
-        let module = Runtime.getClassByClassName(node.module)
-
-        if (VDOM.isStatefulComponent(node)) {
-          context = Object.assign({}, context)
-          context.scopeModule = module
-        }
-
-        context = Utils.clone(context)
-        context.slots = { default: node.children }
-
-        let componentState = VDOM.buildComponentState(node.props, scopeState)
-        return this.buildVNode(module.template(), fullState, componentState, context)
-    } 
-  }
-
   // TODO: already refactored; test
   getHTML() {
     const doctype = new XMLSerializer().serializeToString(this.document.doctype)
