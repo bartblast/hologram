@@ -1,12 +1,12 @@
 "use strict";
 
 import { assert, assertFrozen } from "./support/commons";
-import DOM from "../../assets/js/hologram/dom";
 import { HologramNotImplementedError } from "../../assets/js/hologram/errors"
 import Operation from "../../assets/js/hologram/operation";
 import SpecialForms from "../../assets/js/hologram/elixir/kernel/special_forms";
 import Type from "../../assets/js/hologram/type";
 import Store from "../../assets/js/hologram/store";
+import VDOM from "../../assets/js/hologram/dom";
 
 const elems = {}
 elems[Type.atomKey("a")] = Type.integer(1)
@@ -37,7 +37,7 @@ describe("aggregateComponentBindings()", () => {
 
     const componentNode = Type.componentNode("test_class_name", props, [])
 
-    const result = DOM.aggregateComponentBindings(componentNode, outerBindings)
+    const result = VDOM.aggregateComponentBindings(componentNode, outerBindings)
 
     const expectedElems = {}
     expectedElems[Type.atomKey("context")] = Type.string("text_context_value")
@@ -59,7 +59,7 @@ describe("aggregateComponentContextBindings()", () => {
     outerBindingsElems[Type.atomKey("context")] = Type.string("text_context_value")
     const outerBindings = Type.map(outerBindingsElems)
 
-    const result = DOM.aggregateComponentContextBindings(outerBindings)
+    const result = VDOM.aggregateComponentContextBindings(outerBindings)
 
     const expectedElems = {}
     expectedElems[Type.atomKey("context")] = Type.string("text_context_value")
@@ -79,7 +79,7 @@ describe("aggregateComponentPropsBindings()", () => {
 
     const componentNode = Type.componentNode("test_class_name", props, [])
 
-    const result = DOM.aggregateComponentPropsBindings(componentNode, bindings)
+    const result = VDOM.aggregateComponentPropsBindings(componentNode, bindings)
 
     const elems = {}
     elems[Type.atomKey("id")] = Type.string("test_id")
@@ -104,7 +104,7 @@ describe("aggregateComponentStateBindings()", () => {
     }
 
     const node = Type.componentNode("test_class_name", props, [])
-    const result = DOM.aggregateComponentStateBindings(node, bindings)
+    const result = VDOM.aggregateComponentStateBindings(node, bindings)
 
     assert.deepStrictEqual(result, state)
     assertFrozen(result)
@@ -112,7 +112,7 @@ describe("aggregateComponentStateBindings()", () => {
 
   it("returns empty JS object if the component is stateless", () => {
     const node = Type.componentNode("test_class_name", {}, [])
-    const result = DOM.aggregateComponentStateBindings(node, bindings)
+    const result = VDOM.aggregateComponentStateBindings(node, bindings)
 
     assert.deepStrictEqual(result, {})
     assertFrozen(result)
@@ -134,7 +134,7 @@ describe("buildElementVNode()", () => {
     const children = [Type.textNode("childTextNode")]
     const node = Type.elementNode("div", attrs, children)
 
-    const result = DOM.buildElementVNode(node, source, bindings, {})
+    const result = VDOM.buildElementVNode(node, source, bindings, {})
     const clickHandler = result[0].data.on.click
 
     const expected = [{
@@ -171,7 +171,7 @@ describe("buildElementVNode()", () => {
       default: [Type.textNode("test_text_node")]
     }
 
-    const result = DOM.buildElementVNode(node, source, bindings, slots)
+    const result = VDOM.buildElementVNode(node, source, bindings, slots)
     const expected = ["test_text_node"]
 
     assert.deepStrictEqual(result, expected)
@@ -181,7 +181,7 @@ describe("buildElementVNode()", () => {
 describe("buildTextVNodeFromTextNode()", () => {
   it("builds text vnode from text node", () => {
     const textNode = Type.textNode("test")
-    const result = DOM.buildTextVNodeFromTextNode(textNode)
+    const result = VDOM.buildTextVNodeFromTextNode(textNode)
 
     assert.deepStrictEqual(result, ["test"])
   })
@@ -191,7 +191,7 @@ describe("buildTextVNodeFromExpression()", () => {
   it("evaluates expression node and interpolates the result to a text vnode", () => {
     const node = Type.expressionNode(callback)
 
-    const result = DOM.buildTextVNodeFromExpression(node, bindings)
+    const result = VDOM.buildTextVNodeFromExpression(node, bindings)
     const expected = ["1"]
 
     assert.deepStrictEqual(result, expected)
@@ -213,7 +213,7 @@ describe("buildVNodeAttrs()", () => {
       }
     }
 
-    const result = DOM.buildVNodeAttrs(node, bindings)
+    const result = VDOM.buildVNodeAttrs(node, bindings)
     const expected = {abc: "valueAbc", xyz: "1"}
 
     assert.deepStrictEqual(result, expected)
@@ -229,7 +229,7 @@ describe("buildVNodeAttrs()", () => {
       }
     }
 
-    const result = DOM.buildVNodeAttrs(node, bindings)
+    const result = VDOM.buildVNodeAttrs(node, bindings)
 
     assert.deepStrictEqual(result, {})
   })
@@ -239,7 +239,7 @@ describe("buildVNodeEventHandlers()", () => {
   it("builds vnode click event handler", () => {
     const attrs = {on_click: "test_on_click_spec"}
     const elementNode = Type.elementNode("div", attrs, [])
-    const result = DOM.buildVNodeEventHandlers(elementNode)
+    const result = VDOM.buildVNodeEventHandlers(elementNode)
 
     assert.isFunction(result.click)
   })
@@ -249,7 +249,7 @@ describe("buildVNodeList()", () => {
   it("builds a list of vnodes", () => {
     const nodes = [Type.textNode("node1"), Type.textNode("node2")]
 
-    const result = DOM.buildVNodeList(nodes, Operation.TARGET.page, bindings, {})
+    const result = VDOM.buildVNodeList(nodes, Operation.TARGET.page, bindings, {})
     const expected = ["node1", "node2"]
 
     assert.deepStrictEqual(result, expected)
@@ -263,7 +263,7 @@ describe("evaluateAttr()", () => {
       Type.expressionNode(callback)
     ]
 
-    const result = DOM.evaluateAttr(nodes, bindings)
+    const result = VDOM.evaluateAttr(nodes, bindings)
 
     assert.equal(result, "abc1")
   })
@@ -273,7 +273,7 @@ describe("evaluateNode()", () => {
   it("evaluates expression node to a boxed value", () => {
     const expressionNode = Type.expressionNode(callback)
 
-    const result = DOM.evaluateNode(expressionNode, bindings)
+    const result = VDOM.evaluateNode(expressionNode, bindings)
     const expected = Type.integer(1)
 
     assert.deepStrictEqual(result, expected)
@@ -284,7 +284,7 @@ describe("evaluateNode()", () => {
     const bindings = Type.map({})
     const textNode = Type.textNode("test_content")
 
-    const result = DOM.evaluateNode(textNode, bindings)
+    const result = VDOM.evaluateNode(textNode, bindings)
     const expected = Type.string("test_content")
 
     assert.deepStrictEqual(result, expected)
@@ -296,7 +296,7 @@ describe("evaluateProp()", () => {
   it("evaluates the prop value to a boxed string when the value is composed of one value node only", () => {
     const nodes = [Type.textNode("test_text_node")]
 
-    const result = DOM.evaluateProp(nodes, bindings)
+    const result = VDOM.evaluateProp(nodes, bindings)
     const expected = Type.string("test_text_node")
 
     assert.deepStrictEqual(result, expected)
@@ -308,7 +308,7 @@ describe("evaluateProp()", () => {
       Type.expressionNode(callback)
     ]
 
-    const result = DOM.evaluateProp(nodes, bindings)
+    const result = VDOM.evaluateProp(nodes, bindings)
     const expected = Type.string("test_text_node1")
 
     assert.deepStrictEqual(result, expected)
@@ -325,7 +325,7 @@ describe("getComponentId()", () => {
     }
 
     const node = Type.componentNode("test_class_name", props, [])
-    const result = DOM.getComponentId(node, bindings)
+    const result = VDOM.getComponentId(node, bindings)
 
     assert.equal(result, "test1")
   })
@@ -334,51 +334,51 @@ describe("getComponentId()", () => {
 describe("interpolate()", () => {
   it("converts boxed atom value to JS string", () => {
     const value = Type.atom("abc")
-    const result = DOM.interpolate(value)
+    const result = VDOM.interpolate(value)
 
     assert.equal(result, "abc")
   })
 
   it("converts boxed boolean value to JS string", () => {
     const value = Type.boolean(true)
-    const result = DOM.interpolate(value)
+    const result = VDOM.interpolate(value)
 
     assert.equal(result, "true")
   })
 
   it("converts boxed integer value to JS string", () => {
     const value = Type.integer(1)
-    const result = DOM.interpolate(value)
+    const result = VDOM.interpolate(value)
 
     assert.equal(result, "1")
   })
 
   it("converts boxed string value to JS string", () => {
     const value = Type.string("abc")
-    const result = DOM.interpolate(value)
+    const result = VDOM.interpolate(value)
 
     assert.equal(result, "abc")
   })
 
   it("converts boxed binary value to JS string", () => {
     const value = Type.binary([Type.string("abc"), Type.string("xyz")])
-    const result = DOM.interpolate(value)
+    const result = VDOM.interpolate(value)
 
     assert.equal(result, "abcxyz")
   })
 
   it("converts boxed nil value to JS string", () => {
     const value = Type.nil()
-    const result = DOM.interpolate(value)
+    const result = VDOM.interpolate(value)
 
     assert.equal(result, "")
   })
 
   it("throws an error for not implemented types", () => {
     const value = {type: "not implemented", value: "test"}
-    const expectedMessage = 'DOM.interpolate(): value = {"type":"not implemented","value":"test"}'
+    const expectedMessage = 'VDOM.interpolate(): value = {"type":"not implemented","value":"test"}'
 
-    assert.throw(() => { DOM.interpolate(value) }, HologramNotImplementedError, expectedMessage);
+    assert.throw(() => { VDOM.interpolate(value) }, HologramNotImplementedError, expectedMessage);
   })
 })
 
@@ -391,7 +391,7 @@ describe("isStatefulComponent()", () => {
     }
     
     const node = Type.componentNode(TestComponent, props, [])
-    const result = DOM.isStatefulComponent(node)
+    const result = VDOM.isStatefulComponent(node)
 
     assert.isTrue(result)
   })
@@ -402,7 +402,7 @@ describe("isStatefulComponent()", () => {
     }
 
     const node = Type.componentNode(TestComponent, props, [])
-    const result = DOM.isStatefulComponent(node)
+    const result = VDOM.isStatefulComponent(node)
 
     assert.isFalse(result)
   })

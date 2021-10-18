@@ -11,13 +11,13 @@ import { attributesModule, eventListenersModule, h, init, toVNode } from "snabbd
 import Type from "./type";
 const patch = init([attributesModule, eventListenersModule]);
 
-export default class DOM {
+export default class VDOM {
   static PRUNED_ATTRS = ["on_click"]
 
   static aggregateComponentBindings(node, outerBindings) {
-    const contextBindings = DOM.aggregateComponentContextBindings(outerBindings)
-    const propsBindings = DOM.aggregateComponentPropsBindings(node, outerBindings)
-    const stateBindings = DOM.aggregateComponentStateBindings(node, outerBindings)
+    const contextBindings = VDOM.aggregateComponentContextBindings(outerBindings)
+    const propsBindings = VDOM.aggregateComponentPropsBindings(node, outerBindings)
+    const stateBindings = VDOM.aggregateComponentStateBindings(node, outerBindings)
 
     const elems = Object.assign({}, contextBindings.data, propsBindings.data, stateBindings.data)
     return Type.map(elems)
@@ -34,7 +34,7 @@ export default class DOM {
 
   static aggregateComponentPropsBindings(node, outerBindings) {
     const elems = Object.keys(node.props).reduce((acc, key) => {
-      acc[Type.atomKey(key)] = DOM.evaluateProp(node.props[key], outerBindings)
+      acc[Type.atomKey(key)] = VDOM.evaluateProp(node.props[key], outerBindings)
       return acc
     }, {})
 
@@ -42,8 +42,8 @@ export default class DOM {
   }
 
   static aggregateComponentStateBindings(node, outerBindings) {
-    if (DOM.isStatefulComponent(node)) {
-      const componentId = DOM.getComponentId(node, outerBindings)
+    if (VDOM.isStatefulComponent(node)) {
+      const componentId = VDOM.getComponentId(node, outerBindings)
       return Store.getComponentState(componentId)
 
     } else {
@@ -53,19 +53,19 @@ export default class DOM {
 
   static buildElementVNode(node, source, bindings, slots) {
     if (node.tag === "slot") {
-      return DOM.buildVNodeList(slots.default, source, bindings, slots)
+      return VDOM.buildVNodeList(slots.default, source, bindings, slots)
     }
 
-    const attrs = DOM.buildVNodeAttrs(node, bindings)
-    const eventHandlers = DOM.buildVNodeEventHandlers(node, source, bindings)
-    const children = DOM.buildVNodeList(node.children, source, bindings, slots)
+    const attrs = VDOM.buildVNodeAttrs(node, bindings)
+    const eventHandlers = VDOM.buildVNodeEventHandlers(node, source, bindings)
+    const children = VDOM.buildVNodeList(node.children, source, bindings, slots)
 
     return [h(node.tag, {attrs: attrs, on: eventHandlers}, children)]
   }
 
   static buildTextVNodeFromExpression(node, bindings) {
-    const evaluatedNode = DOM.evaluateNode(node, bindings)
-    return [DOM.interpolate(evaluatedNode)]
+    const evaluatedNode = VDOM.evaluateNode(node, bindings)
+    return [VDOM.interpolate(evaluatedNode)]
   }
 
   static buildTextVNodeFromTextNode(node) {
@@ -75,26 +75,26 @@ export default class DOM {
   // TODO: finish & test
   static buildVDOM(node, source, bindings, slots) {
     if (Array.isArray(node)) {
-      return DOM.buildVNodeList(node, source, bindings, slots)
+      return VDOM.buildVNodeList(node, source, bindings, slots)
     }
 
     switch (node.type) {
       case "element":
-        return DOM.buildElementVNode(node, source, bindings, slots)
+        return VDOM.buildElementVNode(node, source, bindings, slots)
 
       case "expression":
-        return DOM.buildTextVNodeFromExpression(node)
+        return VDOM.buildTextVNodeFromExpression(node)
 
       case "text":
-        return DOM.buildTextVNodeFromTextNode(node)
+        return VDOM.buildTextVNodeFromTextNode(node)
     }
   }
 
   static buildVNodeAttrs(node, bindings) {
     return Object.keys(node.attrs).reduce((acc, key) => {
-      if (!DOM.PRUNED_ATTRS.includes(key)) {
+      if (!VDOM.PRUNED_ATTRS.includes(key)) {
         let valueNodes = node.attrs[key].value
-        acc[key] = DOM.evaluateAttr(valueNodes, bindings)         
+        acc[key] = VDOM.evaluateAttr(valueNodes, bindings)         
       }
       return acc
     }, {})
@@ -112,14 +112,14 @@ export default class DOM {
 
   static buildVNodeList(nodes, source, bindings, slots) {
     return nodes.reduce((acc, node) => {
-      acc.push(...DOM.buildVDOM(node, source, bindings, slots))
+      acc.push(...VDOM.buildVDOM(node, source, bindings, slots))
       return acc
     }, [])
   }
 
   static evaluateAttr(nodes, bindings) {
     return nodes.reduce((acc, node) => {
-      return acc + DOM.interpolate(DOM.evaluateNode(node, bindings))
+      return acc + VDOM.interpolate(VDOM.evaluateNode(node, bindings))
     }, "")
   }
 
@@ -135,11 +135,11 @@ export default class DOM {
 
   static evaluateProp(nodes, bindings) {
     if (nodes.length == 1) {
-      return DOM.evaluateNode(nodes[0], bindings)
+      return VDOM.evaluateNode(nodes[0], bindings)
 
     } else {
       const concatenatedStr = nodes.reduce((acc, node) => {
-        const nodeStr = DOM.interpolate(DOM.evaluateNode(node, bindings))
+        const nodeStr = VDOM.interpolate(VDOM.evaluateNode(node, bindings))
         return acc + nodeStr
       }, "")
 
@@ -148,8 +148,8 @@ export default class DOM {
   }
 
   static getComponentId(node, bindings) {
-    const boxedId = DOM.evaluateProp(node.props.id, bindings)
-    return DOM.interpolate(boxedId)
+    const boxedId = VDOM.evaluateProp(node.props.id, bindings)
+    return VDOM.interpolate(boxedId)
   }
 
   static interpolate(value) {
@@ -167,7 +167,7 @@ export default class DOM {
         return ""
 
       default:
-        const message = `DOM.interpolate(): value = ${JSON.stringify(value)}`
+        const message = `VDOM.interpolate(): value = ${JSON.stringify(value)}`
         throw new HologramNotImplementedError(message)
     }
   }

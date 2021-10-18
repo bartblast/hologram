@@ -1,12 +1,12 @@
 "use strict";
 
 import Command from "./command"
-import DOM from "./dom"
 import Operation from "./operation"
 import Runtime from "./runtime"
 import Store from "./store"
 import Type from "./type"
 import Utils from "./utils"
+import VDOM from "./vdom"
 
 export default class Action {
   // Covered implicitely in E2E tests.
@@ -89,7 +89,7 @@ export default class Action {
     const commandName = Action.getCommandNameFromActionResult(actionResult)
 
     Store.setComponentState(actionTarget, newState)
-    DOM.render()
+    VDOM.render()
 
     if (commandName) {
       const commandTarget = Action.getTargetFromActionResult(actionResult)

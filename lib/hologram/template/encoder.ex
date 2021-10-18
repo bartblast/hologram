@@ -3,7 +3,7 @@ defprotocol Hologram.Template.Encoder do
 
   @doc """
   Given document tree template, generates virtual DOM template JS representation,
-  which can be used by the frontend runtime to re-render the DOM.
+  which can be used by the frontend runtime to re-render the VDOM.
 
   ## Examples
       iex> encode(%ElementNode{tag: "div", children: [%TextNode{content: "test}]})

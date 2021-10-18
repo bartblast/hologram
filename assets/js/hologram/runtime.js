@@ -3,11 +3,11 @@
 import Action from "./action";
 import Client from "./client"
 import Command from "./command"
-import DOM from "./dom"
 import Operation from "./operation"
 import ScriptsReloader from "./scripts_reloader"
 import Store from "./store";
 import Utils from "./utils"
+import VDOM from "./vdom"
 
 export default class Runtime {
   static getInstance() {
@@ -62,7 +62,7 @@ export default class Runtime {
     this.client.connect()
 
     this.document = globalThis.window.document
-    this.dom = new DOM(this, window)
+    this.dom = new VDOM(this, window)
     this.pageModule = null
     this.state = null
     this.store = new Store()

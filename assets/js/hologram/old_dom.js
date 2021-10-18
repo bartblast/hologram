@@ -7,7 +7,7 @@ import ClickEvent from "./events/click_event"
 import Runtime from "./runtime"
 import Utils from "./utils"
 
-export default class DOM {
+export default class VDOM {
   static PRUNED_ATTRS = ["on_click"]
 
   // TODO: refactor & test
@@ -23,7 +23,7 @@ export default class DOM {
       case "component":
         let module = Runtime.getClassByClassName(node.module)
 
-        if (DOM.isStatefulComponent(node)) {
+        if (VDOM.isStatefulComponent(node)) {
           context = Object.assign({}, context)
           context.scopeModule = module
         }
@@ -31,7 +31,7 @@ export default class DOM {
         context = Utils.clone(context)
         context.slots = { default: node.children }
 
-        let componentState = DOM.buildComponentState(node.props, scopeState)
+        let componentState = VDOM.buildComponentState(node.props, scopeState)
         return this.buildVNode(module.template(), fullState, componentState, context)
     } 
   }
