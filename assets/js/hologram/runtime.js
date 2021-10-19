@@ -107,7 +107,10 @@ export default class Runtime {
     Store.setComponentState(Operation.TARGET.page, state)
   }
 
-
+  // Covered implicitely in E2E tests.
+  static updateURL(url) {
+    Runtime.window.history.pushState(null, null, url)
+  }
 
 
 
@@ -122,9 +125,4 @@ export default class Runtime {
     this.updateURL(url)
   }
 
-
-  // TODO: refactor & test
-  updateURL(url) {
-    this.window.history.pushState(null, null, url)
-  }
 }
