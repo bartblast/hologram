@@ -72,39 +72,4 @@ defmodule Hologram.Compiler.GeneratorTest do
       assert result == expected
     end
   end
-
-  describe "other" do
-    test "sigil_H" do
-      ir = %FunctionCall{
-        function: :sigil_H,
-        module: Hologram.Runtime.Commons,
-        params: [
-          %BinaryType{
-            parts: [
-              %StringType{value: "test"}
-            ]
-          },
-          %ListType{data: []}
-        ]
-      }
-
-      result = Generator.generate(ir, %Context{}, %Opts{})
-      expected = "[ { type: 'text', content: 'test' } ]"
-
-      assert result == expected
-    end
-
-    test "function call" do
-      ir = %FunctionCall{
-        function: :abc,
-        module: Test,
-        params: [%IntegerType{value: 1}]
-      }
-
-      result = Generator.generate(ir, %Context{}, %Opts{})
-      expected = "Elixir_Test.abc({ type: 'integer', value: 1 })"
-
-      assert result == expected
-    end
-  end
 end
