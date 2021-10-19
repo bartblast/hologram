@@ -1,7 +1,7 @@
 defmodule Hologram.Compiler.Encoder.Commons do
   use Hologram.Commons.Encoder
 
-  alias Hologram.Compiler.{Context, Encoder, Generator, MapKeyGenerator, Opts}
+  alias Hologram.Compiler.{Context, Encoder, Generator, MapKeyEncoder, Opts}
   alias Hologram.Compiler.IR.{AccessOperator, Variable}
 
   def encode_as_array(data, %Context{} = context, %Opts{} = opts) do
@@ -45,7 +45,7 @@ defmodule Hologram.Compiler.Encoder.Commons do
         acc <>
           case type do
             %AccessOperator{key: key} ->
-              ".data['#{MapKeyGenerator.generate(key, context)}']"
+              ".data['#{MapKeyEncoder.encode(key, context, %Opts{})}']"
 
             %Variable{} ->
               ""
