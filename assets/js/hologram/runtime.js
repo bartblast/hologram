@@ -23,7 +23,7 @@ export default class Runtime {
     return Runtime.getClassByClassName(layoutClassName)
   }
 
-  // Tested implicitely in E2E tests.
+  // Covered implicitely in E2E tests.
   static executeOperation(operation) {
     if (operation.method === Operation.METHOD.action) {
       Action.execute(operation)
@@ -71,6 +71,15 @@ export default class Runtime {
   }
 
   // Covered implicitely in E2E tests.
+  loadPage(html) {
+    // DEFER: copy html node attributes (because only the inner HTML is updated)
+    Runtime.document.documentElement.innerHTML = html
+
+    VDOM.reset()
+    ScriptsReloader.reload(Runtime.document)
+  }
+
+  // Covered implicitely in E2E tests.
   static loadPageOnPopStateEvents() {
     Runtime.window.addEventListener("popstate", event => {
       Runtime.loadPage(event.state)
@@ -113,14 +122,6 @@ export default class Runtime {
     this.updateURL(url)
   }
 
-  // TODO: refactor & test
-  loadPage(html) {
-    // TODO: copy html node attributes (because only the inner HTML is updated)
-    this.document.documentElement.innerHTML = html
-
-    VDOM.reset()
-    ScriptsReloader.reload(this.document)
-  }
 
   // TODO: refactor & test
   updateURL(url) {
