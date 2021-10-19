@@ -25,15 +25,6 @@ defmodule Hologram.Compiler.GeneratorTest do
   }
 
   describe "types" do
-    test "map" do
-      ir = %MapType{data: [{%AtomType{value: :a}, %IntegerType{value: 1}}]}
-
-      result = Generator.generate(ir, %Context{}, %Opts{})
-      expected = "{ type: 'map', data: { '~atom[a]': { type: 'integer', value: 1 } } }"
-
-      assert result == expected
-    end
-
     test "module" do
       ir = %ModuleType{module: Abc.Bcd}
 
@@ -57,14 +48,6 @@ defmodule Hologram.Compiler.GeneratorTest do
       assert result == expected
     end
 
-    test "tuple" do
-      ir = %TupleType{data: []}
-
-      result = Generator.generate(ir, %Context{}, %Opts{})
-      expected = "{ type: 'tuple', data: [] }"
-
-      assert result == expected
-    end
 
     test "nested" do
       ir = %ListType{
@@ -90,20 +73,6 @@ defmodule Hologram.Compiler.GeneratorTest do
   end
 
   describe "operators" do
-    test "addition" do
-      ir = %AdditionOperator{
-        left: %IntegerType{value: 1},
-        right: %IntegerType{value: 2}
-      }
-
-      result = Generator.generate(ir, %Context{}, %Opts{})
-
-      expected =
-        "Elixir_Kernel.$add({ type: 'integer', value: 1 }, { type: 'integer', value: 2 })"
-
-      assert result == expected
-    end
-
     test "dot" do
       ir = %DotOperator{
         left: %Variable{name: :x},

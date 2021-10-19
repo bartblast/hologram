@@ -2,46 +2,28 @@ defmodule Hologram.Compiler.Generator do
   alias Hologram.Compiler.{Context, Encoder, Helpers, Opts}
 
   alias Hologram.Compiler.{
-    BinaryTypeEncoder,
     DotOperatorGenerator,
     FunctionCallGenerator,
-    ListTypeGenerator,
-    MapTypeGenerator,
     ModuleDefinitionGenerator,
     ModuleAttributeOperatorGenerator,
     SigilHGenerator,
     StructTypeGenerator,
-    TupleTypeGenerator,
     TypeOperatorEncoder
   }
 
   alias Hologram.Compiler.IR.{
-    BinaryType,
-    BooleanType,
     DotOperator,
     FunctionCall,
-    IntegerType,
-    ListType,
-    MapType,
     ModuleAttributeOperator,
     ModuleDefinition,
     ModuleType,
     StructType,
-    TupleType,
     TypeOperator,
   }
 
   def generate(ir, context, opts)
 
   # TYPES
-
-  def generate(%ListType{data: data}, %Context{} = context, %Opts{} = opts) do
-    ListTypeGenerator.generate(data, context, opts)
-  end
-
-  def generate(%MapType{data: data}, %Context{} = context, %Opts{} = opts) do
-    MapTypeGenerator.generate(data, context, opts)
-  end
 
   def generate(%ModuleType{module: module}, _, _) do
     "{ type: 'module', className: '#{Helpers.class_name(module)}' }"
