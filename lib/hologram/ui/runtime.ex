@@ -6,7 +6,7 @@ defmodule Hologram.UI.Runtime do
     <script src="/hologram/runtime.js"></script>
     <script src="{@context.__src__}"></script>
     <script>
-      Hologram.run(window, {@context.__class__}, "{@context.__state__}")
+      Hologram.run({@context.__class__}, "{@context.__state__}")
     </script>
     """
   end
