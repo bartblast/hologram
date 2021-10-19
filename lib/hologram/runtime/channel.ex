@@ -8,39 +8,39 @@ defmodule Hologram.Runtime.Channel do
     {:ok, socket}
   end
 
-  def handle_in("command", %{"target_module" => target_module} = payload, socket) do
-    target_module = Decoder.decode(target_module)
+  def handle_in("command", %{"target" => target} = payload, socket) do
+    target = Decoder.decode(target)
 
     response =
-      execute_command(target_module, payload)
-      |> build_response(target_module)
+      execute_command(target, payload)
+      |> build_response(target)
       |> Serializer.serialize()
 
     {:reply, {:ok, response}, socket}
   end
 
-  defp build_response({action, params}, target_module) do
-    {action, Enum.into(params, %{}), target_module}
+  defp build_response({action, params}, target) do
+    {target, action, Enum.into(params, %{})}
   end
 
-  defp build_response(action, target_module) do
-    {action, %{}, target_module}
+  defp build_response(action, target) do
+    {target, action, %{}}
   end
 
-  defp execute_command(target_module, %{"name" => name, "params" => params}) do
-    name = Decoder.decode(name)
+  defp execute_command(target, %{"command" => command, "params" => params}) do
+    command = Decoder.decode(command)
 
     params =
       Decoder.decode(params)
       |> Enum.into(%{})
 
-    if name == :__redirect__ do
+    if command == :__redirect__ do
       html = Renderer.render(params.page, %{})
       # DEFER: inject params
       url = params.page.route()
       {:__redirect__, html: html, url: url}
     else
-      apply(target_module, :command, [name, params])
+      apply(target, :command, [command, params])
     end
   end
 end

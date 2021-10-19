@@ -14,8 +14,8 @@ export default class Command {
     const targetModule = Type.module(targetClass.name)
 
     const payload = {
-      target_module: targetModule,
-      name: operation.name,
+      target: targetModule,
+      command: operation.name,
       params: operation.params,
     }
 
