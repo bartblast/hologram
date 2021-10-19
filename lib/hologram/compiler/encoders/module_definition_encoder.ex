@@ -3,7 +3,7 @@ alias Hologram.Compiler.IR.{ModuleDefinition, NotSupportedExpression}
 
 defimpl Encoder, for: ModuleDefinition do
 
-  def encode(%ModuleDefinition{module: module, attributes: attrs} = ir, %Context{} = context, %Opts{} = opts) do
+  def encode(%ModuleDefinition{module: module, attributes: attrs} = ir, %Context{}, %Opts{} = opts) do
     class_name = Helpers.class_name(module)
     context = struct(Context, Map.from_struct(ir))
 
