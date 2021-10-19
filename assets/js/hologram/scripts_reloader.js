@@ -4,7 +4,7 @@
 
 import Utils from "./utils"
 
-// DEFER: already refactored; test
+// DEFER: test (already refactored)
 export default class ScriptsReloader {
   // https://html.spec.whatwg.org/multipage/scripting.html
   static EXECUTABLE_TYPES = [
