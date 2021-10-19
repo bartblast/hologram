@@ -1,7 +1,28 @@
 "use strict";
 
-import { assert } from "./support/commons";
+import { assert, assertFrozen } from "./support/commons";
+import Operation from "../../assets/js/hologram/operation";
 import Runtime from "../../assets/js/hologram/runtime";
+import Store from "../../assets/js/hologram/store";
+import Type from "../../assets/js/hologram/type";
+
+describe("determineLayoutClass()", () => {
+  it("returns layout class given page class", () => {
+    const TestLayoutClass = class {}
+    globalThis.TestLayoutClass = TestLayoutClass
+
+
+    const TestPageClass = class {
+      static layout() {
+        return Type.module("TestLayoutClass")
+      }
+    }
+
+    const result = Runtime.determineLayoutClass(TestPageClass)
+
+    assert.equal(result, TestLayoutClass)
+  })
+})
 
 describe("getClassByClassName()", () => {
   it("returns class object given a class name", () => {
@@ -57,5 +78,36 @@ describe("getPageTemplate()", () => {
     const result = Runtime.getPageTemplate()
 
     assert.equal(result, "test_template")
+  })
+})
+
+describe("setPageState()", () => {
+  let pageState, serializedState;
+
+  beforeEach(() => {
+    let stateData = {}
+    stateData[Type.atomKey("x")] = Type.integer(123)
+    stateData[Type.atomKey("context")] = Type.map({}, false)
+    const state = Type.map(stateData, false)
+    serializedState = JSON.stringify(state)
+
+    Runtime.setPageState(serializedState)
+    pageState = Store.getComponentState(Operation.TARGET.page)
+  })
+
+  it("saves correct page state to the store", () => {
+    const expectedContextData = {}
+    expectedContextData[Type.atomKey("__state__")] = Type.string(serializedState)
+
+    const expectedPageStateData = {}
+    expectedPageStateData[Type.atomKey("x")] = Type.integer(123)
+    expectedPageStateData[Type.atomKey("context")] = Type.map(expectedContextData)
+    const expectedPageState = Type.map(expectedPageStateData)
+
+    assert.deepStrictEqual(pageState, expectedPageState)
+  })
+
+  it("saves frozen page state to the store", () => {
+    assertFrozen(pageState)
   })
 })

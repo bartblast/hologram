@@ -5,6 +5,8 @@ import Client from "./client"
 import Command from "./command"
 import Operation from "./operation"
 import ScriptsReloader from "./scripts_reloader"
+import Store from "./store";
+import Type from "./type";
 import Utils from "./utils"
 import VDOM from "./vdom"
 
@@ -15,6 +17,11 @@ export default class Runtime {
   static layoutClass = null
   static pageClass = null
   static window = null
+
+  static determineLayoutClass(pageClass) {
+    const layoutClassName = pageClass.layout().className
+    return Runtime.getClassByClassName(layoutClassName)
+  }
 
   // Tested implicitely in E2E tests.
   static executeOperation(operation) {
@@ -70,16 +77,32 @@ export default class Runtime {
     })
   }
 
+  // Covered implicitely in E2E tests.
+  static mountPage(pageClass, serializedState) {
+    Runtime.pageClass = pageClass
+    Runtime.layoutClass = Runtime.determineLayoutClass(pageClass)
+
+    Runtime.setPageState(serializedState)
+    VDOM.render()
+
+    const html = VDOM.getDocumentHTML(Runtime.document)
+    // DEFER: consider - there are limitations for state object size, e.g. 2 MB for Firefox
+    Runtime.window.history.replaceState(html, null)
+  }
+
+  static setPageState(serializedState) {
+    let state = Utils.eval(serializedState, false)
+    state.data[Type.atomKey("context")].data[Type.atomKey("__state__")] = Type.string(serializedState)
+    Utils.freeze(state)
+
+    Store.setComponentState(Operation.TARGET.page, state)
+  }
 
 
 
 
 
-  /* 
-  set layoutClass in mountPage
-  const layoutClassName = Runtime.pageClass.layout().className
-  return Runtime.getClassByClassName(layoutClassName).template()
-  */
+
  
   // TODO: refactor & test
   redirect(params) {
@@ -97,20 +120,6 @@ export default class Runtime {
 
     VDOM.reset()
     ScriptsReloader.reload(this.document)
-  }
-
-  // TODO: refactor & test
-  mountPage(pageModule, serializedState) {
-    this.state = Utils.eval(serializedState, false)
-    this.state.data["~atom[context]"].data['~atom[__state__]'] = {type: "string", value: serializedState}
-    Utils.freeze(this.state)
-
-    this.pageModule = pageModule
-    this.dom.render(this.pageModule)
-
-    const html = this.dom.getHTML()
-    // DEFER: consider - there are limitations for state object size, e.g. 2 MB for Firefox
-    this.window.history.replaceState(html, null)
   }
 
   // TODO: refactor & test
