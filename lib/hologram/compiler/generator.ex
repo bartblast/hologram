@@ -1,5 +1,5 @@
 defmodule Hologram.Compiler.Generator do
-  alias Hologram.Compiler.{Context, Encoder, Helpers, Opts}
+  alias Hologram.Compiler.{Context, Encoder, Opts}
 
   alias Hologram.Compiler.{
     DotOperatorGenerator,
@@ -16,7 +16,6 @@ defmodule Hologram.Compiler.Generator do
     FunctionCall,
     ModuleAttributeOperator,
     ModuleDefinition,
-    ModuleType,
     StructType,
     TypeOperator,
   }
@@ -24,10 +23,6 @@ defmodule Hologram.Compiler.Generator do
   def generate(ir, context, opts)
 
   # TYPES
-
-  def generate(%ModuleType{module: module}, _, _) do
-    "{ type: 'module', className: '#{Helpers.class_name(module)}' }"
-  end
 
   def generate(%StructType{module: module, data: data}, %Context{} = context, %Opts{} = opts) do
     StructTypeGenerator.generate(module, data, context, opts)

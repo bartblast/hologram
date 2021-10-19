@@ -25,15 +25,6 @@ defmodule Hologram.Compiler.GeneratorTest do
   }
 
   describe "types" do
-    test "module" do
-      ir = %ModuleType{module: Abc.Bcd}
-
-      result = Generator.generate(ir, %Context{}, %Opts{})
-      expected = "{ type: 'module', className: 'Elixir_Abc_Bcd' }"
-
-      assert result == expected
-    end
-
     test "struct" do
       ir = %StructType{
         data: [{%AtomType{value: :a}, %IntegerType{value: 1}}],
