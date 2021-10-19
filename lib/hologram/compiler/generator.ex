@@ -28,10 +28,6 @@ defmodule Hologram.Compiler.Generator do
 
   # OPERATORS
 
-  def generate(%DotOperator{left: left, right: right}, %Context{} = context, %Opts{} = opts) do
-    DotOperatorGenerator.generate(left, right, context, opts)
-  end
-
   def generate(%ModuleAttributeOperator{name: name}, %Context{} = context, %Opts{} = opts) do
     ModuleAttributeOperatorGenerator.generate(name, context, opts)
   end

@@ -64,18 +64,6 @@ defmodule Hologram.Compiler.GeneratorTest do
   end
 
   describe "operators" do
-    test "dot" do
-      ir = %DotOperator{
-        left: %Variable{name: :x},
-        right: %AtomType{value: :a}
-      }
-
-      result = Generator.generate(ir, %Context{}, %Opts{})
-      expected = "Elixir_Kernel_SpecialForms.$dot(x, { type: 'atom', value: 'a' })"
-
-      assert result == expected
-    end
-
     test "module attribute" do
       ir = %ModuleAttributeOperator{name: :x}
       context = %Context{module: Hologram.Compiler.GeneratorTest}
@@ -84,10 +72,6 @@ defmodule Hologram.Compiler.GeneratorTest do
       expected = "Elixir_Hologram_Compiler_GeneratorTest.$x"
 
       assert result == expected
-    end
-
-    test "type" do
-
     end
   end
 
