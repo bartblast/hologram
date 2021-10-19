@@ -48,18 +48,6 @@ defmodule Hologram.Compiler.GeneratorTest do
     end
   end
 
-  describe "operators" do
-    test "module attribute" do
-      ir = %ModuleAttributeOperator{name: :x}
-      context = %Context{module: Hologram.Compiler.GeneratorTest}
-
-      result = Generator.generate(ir, context, %Opts{})
-      expected = "Elixir_Hologram_Compiler_GeneratorTest.$x"
-
-      assert result == expected
-    end
-  end
-
   describe "definitions" do
     test "module" do
       ir = %ModuleDefinition{
