@@ -2,12 +2,7 @@ defmodule Hologram.Compiler.MapKeyGeneratorTest do
   use Hologram.Test.UnitCase, async: true
 
   alias Hologram.Compiler.{Context, MapKeyGenerator}
-  alias Hologram.Compiler.IR.{AtomType, BooleanType, IntegerType, StringType}
-
-  test "boolean" do
-    result = MapKeyGenerator.generate(%BooleanType{value: true}, %Context{})
-    assert result == "~boolean[true]"
-  end
+  alias Hologram.Compiler.IR.{IntegerType, StringType}
 
   test "integer" do
     result = MapKeyGenerator.generate(%IntegerType{value: 123}, %Context{})
