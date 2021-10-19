@@ -102,7 +102,7 @@ export default class Runtime {
   // Covered implicitely in E2E tests.
   static redirect(params) {
     const html = params.data[Type.atomKey("html")].value
-    this.loadPage(html)
+    Runtime.loadPage(html)
 
     const url = params.data[Type.atomKey("url")].value
     Runtime.updateURL(url)
