@@ -87,15 +87,7 @@ defmodule Hologram.Compiler.GeneratorTest do
     end
 
     test "type" do
-      ir = %TypeOperator{
-        left: %IntegerType{value: 1},
-        right: :binary
-      }
 
-      result = Generator.generate(ir, %Context{}, %Opts{})
-      expected = "Elixir_Kernel_SpecialForms.$type({ type: 'integer', value: 1 }, 'binary')"
-
-      assert result == expected
     end
   end
 
