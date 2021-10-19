@@ -99,6 +99,15 @@ export default class Runtime {
     Runtime.window.history.replaceState(html, null)
   }
 
+  // Covered implicitely in E2E tests.
+  static redirect(params) {
+    const html = params.data[Type.atomKey("html")].value
+    this.loadPage(html)
+
+    const url = params.data[Type.atomKey("url")].value
+    Runtime.updateURL(url)
+  }
+
   static setPageState(serializedState) {
     let state = Utils.eval(serializedState, false)
     state.data[Type.atomKey("context")].data[Type.atomKey("__state__")] = Type.string(serializedState)
@@ -111,18 +120,4 @@ export default class Runtime {
   static updateURL(url) {
     Runtime.window.history.pushState(null, null, url)
   }
-
-
-
-
- 
-  // TODO: refactor & test
-  redirect(params) {
-    const html = params.data["~atom[html]"].value
-    this.loadPage(html)
-
-    const url = params.data["~atom[url]"].value
-    this.updateURL(url)
-  }
-
 }
