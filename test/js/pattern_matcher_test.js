@@ -32,7 +32,7 @@ describe("isFunctionArgsPatternMatched()", () => {
 })
 
 describe("isPatternMatched()", () => {
-  it("returns true if the boxed type of left-hand-side is placeholder", () => {
+  it("returns true if the boxed type of the left-hand side is placeholder", () => {
     const left = Type.placeholder()
     const right = Type.integer(1)
     const result = PatternMatcher.isPatternMatched(left, right)
@@ -40,7 +40,7 @@ describe("isPatternMatched()", () => {
     assert.isTrue(result)
   })
 
-  it("returns false if the boxed type of left-hand-side is different than boxed type of right-hand-side", () => {
+  it("returns false if the boxed type of the left-hand side is different than the boxed type of the right-hand side", () => {
     const left = Type.float(1.0)
     const right = Type.integer(1)
     const result = PatternMatcher.isPatternMatched(left, right)
@@ -48,7 +48,7 @@ describe("isPatternMatched()", () => {
     assert.isFalse(result)
   })
 
-  it("returns true if atom boxed type left-hand-side is equal to atom boxed type right hand side", () => {
+  it("returns true if atom boxed type left-hand side is equal to atom boxed type right-hand side", () => {
     const left = Type.atom("a")
     const right = Type.atom("a")
     const result = PatternMatcher.isPatternMatched(left, right)
@@ -56,7 +56,7 @@ describe("isPatternMatched()", () => {
     assert.isTrue(result)
   })
 
-  it("returns false if atom boxed type left-hand-side is not equal to atom boxed type right hand side", () => {
+  it("returns false if atom boxed type left-hand side is not equal to atom boxed type right-hand side", () => {
     const left = Type.atom("a")
     const right = Type.atom("b")
     const result = PatternMatcher.isPatternMatched(left, right)

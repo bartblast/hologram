@@ -4,7 +4,7 @@ import { HologramNotImplementedError } from "./errors";
 
 export default class PatternMatcher {
   static isFunctionArgsPatternMatched(params, args) {
-    if (args.length != params.length) {
+    if (args.length !== params.length) {
       return false;
     }
 
@@ -25,7 +25,7 @@ export default class PatternMatcher {
       return true;
     }
 
-    if (lType != rType) {
+    if (lType !== rType) {
       return false;
     }
 
