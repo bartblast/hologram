@@ -13,7 +13,7 @@ import SpecialForms from "./hologram/elixir/kernel/special_forms";
 import String from "./hologram/elixir/string";
 
 export default class Hologram {
-  // Tested implicitely in E2E tests.
+  // Covered implicitely in E2E tests.
   static onReady(document, callback) {
     if (
       document.readyState === "interactive" ||
