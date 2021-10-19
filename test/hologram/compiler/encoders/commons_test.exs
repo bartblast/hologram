@@ -3,7 +3,7 @@ defmodule Hologram.Compiler.Encoder.CommonsTest do
 
   alias Hologram.Compiler.{Context, Opts}
   alias Hologram.Compiler.Encoder.Commons
-  alias Hologram.Compiler.IR.IntegerType
+  alias Hologram.Compiler.IR.{AtomType, IntegerType}
 
   describe "encode_as_array/3" do
     test "empty list encoding" do
@@ -64,6 +64,31 @@ defmodule Hologram.Compiler.Encoder.CommonsTest do
     test "exclamation mark" do
       result = Commons.encode_function_name("test!")
       assert result == "test$bang"
+    end
+  end
+
+  describe "encode_map_data/3" do
+    test "empty data" do
+      data = []
+
+      result = Commons.encode_map_data(data, %Context{}, %Opts{})
+      expected = "{}"
+
+      assert result == expected
+    end
+
+    test "non-empty data" do
+      data = [
+        {%AtomType{value: :a}, %IntegerType{value: 1}},
+        {%AtomType{value: :b}, %IntegerType{value: 2}}
+      ]
+
+      result = Commons.encode_map_data(data, %Context{}, %Opts{})
+
+      expected =
+        "{ '~atom[a]': { type: 'integer', value: 1 }, '~atom[b]': { type: 'integer', value: 2 } }"
+
+      assert result == expected
     end
   end
 

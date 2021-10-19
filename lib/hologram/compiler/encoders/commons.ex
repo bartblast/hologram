@@ -29,6 +29,14 @@ defmodule Hologram.Compiler.Encoder.Commons do
     |> String.replace("!", "$bang")
   end
 
+  def encode_map_data(data, %Context{} = context, %Opts{} = opts) do
+    Enum.map(data, fn {k, v} ->
+      "'#{MapKeyEncoder.encode(k, context, opts)}': #{Generator.generate(v, context, opts)}"
+    end)
+    |> Enum.join(", ")
+    |> wrap_with_object()
+  end
+
   def encode_primitive_key(type, value) do
     "~#{type}[#{value}]"
   end
