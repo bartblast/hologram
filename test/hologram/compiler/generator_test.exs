@@ -25,21 +25,6 @@ defmodule Hologram.Compiler.GeneratorTest do
   }
 
   describe "types" do
-    test "struct" do
-      ir = %StructType{
-        data: [{%AtomType{value: :a}, %IntegerType{value: 1}}],
-        module: Abc.Bcd
-      }
-
-      result = Generator.generate(ir, %Context{}, %Opts{})
-
-      expected =
-        "{ type: 'struct', module: 'Elixir_Abc_Bcd', data: { '~atom[a]': { type: 'integer', value: 1 } } }"
-
-      assert result == expected
-    end
-
-
     test "nested" do
       ir = %ListType{
         data: [

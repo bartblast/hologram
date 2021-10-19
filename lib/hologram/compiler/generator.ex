@@ -20,12 +20,6 @@ defmodule Hologram.Compiler.Generator do
 
   def generate(ir, context, opts)
 
-  # TYPES
-
-  def generate(%StructType{module: module, data: data}, %Context{} = context, %Opts{} = opts) do
-    StructTypeGenerator.generate(module, data, context, opts)
-  end
-
   # OPERATORS
 
   def generate(%ModuleAttributeOperator{name: name}, %Context{} = context, %Opts{} = opts) do
