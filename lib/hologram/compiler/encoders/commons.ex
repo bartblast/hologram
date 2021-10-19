@@ -29,6 +29,10 @@ defmodule Hologram.Compiler.Encoder.Commons do
     |> String.replace("!", "$bang")
   end
 
+  def encode_primitive_key(type, value) do
+    "~#{type}[#{value}]"
+  end
+
   def encode_primitive_type(type, value) do
     "{ type: '#{type}', value: #{value} }"
   end

@@ -67,6 +67,11 @@ defmodule Hologram.Compiler.Encoder.CommonsTest do
     end
   end
 
+  test "encode_primitive_key/2" do
+    result = Commons.encode_primitive_key(:atom, :test)
+    assert result == "~atom[test]"
+  end
+
   test "encode_primitive_type/2" do
     result = Commons.encode_primitive_type(:atom, "'test'")
     assert result == "{ type: 'atom', value: 'test' }"
