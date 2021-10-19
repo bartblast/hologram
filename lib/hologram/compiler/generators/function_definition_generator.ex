@@ -2,7 +2,8 @@ defmodule Hologram.Compiler.FunctionDefinitionGenerator do
   import Hologram.Commons.Encoder
   import Hologram.Compiler.Encoder.Commons
 
-  alias Hologram.Compiler.{Context, Formatter, Generator, Opts}
+  alias Hologram.Compiler.{Context, Formatter, Opts}
+  alias Hologram.Compiler.Encoder, as: CompilerEncoder
 
   def generate(name, variants, %Context{} = context, %Opts{} = opts) do
     body = generate_body(variants, context, opts)
@@ -47,7 +48,7 @@ defmodule Hologram.Compiler.FunctionDefinitionGenerator do
   end
 
   defp generate_params(variant, context) do
-    Enum.map(variant.params, &Generator.generate(&1, context, %Opts{placeholder: true}))
+    Enum.map(variant.params, &CompilerEncoder.encode(&1, context, %Opts{placeholder: true}))
     |> Enum.join(", ")
     |> wrap_with_array()
   end

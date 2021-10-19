@@ -12,7 +12,7 @@ defmodule Hologram.Compiler.Encoder.Commons do
 
   defp encode_expression(expr, idx, expr_count, context, opts) do
     return = if idx == expr_count - 1, do: "return ", else: ""
-    "#{return}#{Generator.generate(expr, context, opts)};"
+    "#{return}#{Encoder.encode(expr, context, opts)};"
   end
 
   def encode_expressions(body, context, opts, separator) do

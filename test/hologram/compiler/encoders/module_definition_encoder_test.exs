@@ -1,7 +1,7 @@
-defmodule Hologram.Compiler.ModuleDefinitionGeneratorTest do
+defmodule Hologram.Compiler.ModuleDefinitionEncoderTest do
   use Hologram.Test.UnitCase, async: true
 
-  alias Hologram.Compiler.{ModuleDefinitionGenerator, Opts}
+  alias Hologram.Compiler.{Context, Encoder, Opts}
 
   alias Hologram.Compiler.IR.{
     AtomType,
@@ -21,6 +21,7 @@ defmodule Hologram.Compiler.ModuleDefinitionGeneratorTest do
   describe "attributes" do
     test "single attribute" do
       ir = %ModuleDefinition{
+        module: @module,
         attributes: [
           %ModuleAttributeDefinition{
             name: :abc,
@@ -29,7 +30,7 @@ defmodule Hologram.Compiler.ModuleDefinitionGeneratorTest do
         ]
       }
 
-      result = ModuleDefinitionGenerator.generate(ir, @module, %Opts{})
+      result = Encoder.encode(ir, %Context{}, %Opts{})
 
       expected = """
       window.Elixir_Abc_Bcd = class Elixir_Abc_Bcd {
@@ -43,6 +44,7 @@ defmodule Hologram.Compiler.ModuleDefinitionGeneratorTest do
 
     test "multiple attributes" do
       ir = %ModuleDefinition{
+        module: @module,
         attributes: [
           %ModuleAttributeDefinition{
             name: :abc,
@@ -55,7 +57,7 @@ defmodule Hologram.Compiler.ModuleDefinitionGeneratorTest do
         ]
       }
 
-      result = ModuleDefinitionGenerator.generate(ir, @module, %Opts{})
+      result = Encoder.encode(ir, %Context{}, %Opts{})
 
       expected = """
       window.Elixir_Abc_Bcd = class Elixir_Abc_Bcd {
@@ -70,10 +72,11 @@ defmodule Hologram.Compiler.ModuleDefinitionGeneratorTest do
 
     test "behaviour callback spec" do
       ir = %ModuleDefinition{
+        module: @module,
         attributes: [%NotSupportedExpression{type: :behaviour_callback_spec}]
       }
 
-      result = ModuleDefinitionGenerator.generate(ir, @module, %Opts{})
+      result = Encoder.encode(ir, %Context{}, %Opts{})
       expected = "window.Elixir_Abc_Bcd = class Elixir_Abc_Bcd {\n}\n"
 
       assert result == expected
@@ -83,6 +86,7 @@ defmodule Hologram.Compiler.ModuleDefinitionGeneratorTest do
   describe "functions" do
     test "single function with single variant" do
       ir = %ModuleDefinition{
+        module: @module,
         functions: [
           %FunctionDefinition{
             bindings: [
@@ -96,11 +100,10 @@ defmodule Hologram.Compiler.ModuleDefinitionGeneratorTest do
               %Variable{name: :a}
             ]
           }
-        ],
-        module: @module
+        ]
       }
 
-      result = ModuleDefinitionGenerator.generate(ir, @module, %Opts{})
+      result = Encoder.encode(ir, %Context{}, %Opts{})
 
       expected = """
       window.Elixir_Abc_Bcd = class Elixir_Abc_Bcd {
@@ -123,6 +126,7 @@ defmodule Hologram.Compiler.ModuleDefinitionGeneratorTest do
 
     test "single function with multiple variants" do
       ir = %ModuleDefinition{
+        module: @module,
         functions: [
           %FunctionDefinition{
             bindings: [
@@ -150,11 +154,10 @@ defmodule Hologram.Compiler.ModuleDefinitionGeneratorTest do
               %Variable{name: :b}
             ]
           }
-        ],
-        module: @module
+        ]
       }
 
-      result = ModuleDefinitionGenerator.generate(ir, @module, %Opts{})
+      result = Encoder.encode(ir, %Context{}, %Opts{})
 
       expected = """
       window.Elixir_Abc_Bcd = class Elixir_Abc_Bcd {
@@ -182,6 +185,7 @@ defmodule Hologram.Compiler.ModuleDefinitionGeneratorTest do
 
     test "multiple functions with single variant" do
       ir = %ModuleDefinition{
+        module: @module,
         functions: [
           %FunctionDefinition{
             bindings: [
@@ -207,11 +211,10 @@ defmodule Hologram.Compiler.ModuleDefinitionGeneratorTest do
               %Variable{name: :a}
             ]
           }
-        ],
-        module: @module
+        ]
       }
 
-      result = ModuleDefinitionGenerator.generate(ir, @module, %Opts{})
+      result = Encoder.encode(ir, %Context{}, %Opts{})
 
       expected = """
       window.Elixir_Abc_Bcd = class Elixir_Abc_Bcd {
@@ -245,6 +248,7 @@ defmodule Hologram.Compiler.ModuleDefinitionGeneratorTest do
 
     test "multiple functions with multiple variants" do
       ir = %ModuleDefinition{
+        module: @module,
         functions: [
           %FunctionDefinition{
             bindings: [
@@ -284,11 +288,10 @@ defmodule Hologram.Compiler.ModuleDefinitionGeneratorTest do
               %Variable{name: :a}
             ]
           }
-        ],
-        module: @module
+        ]
       }
 
-      result = ModuleDefinitionGenerator.generate(ir, @module, %Opts{})
+      result = Encoder.encode(ir, %Context{}, %Opts{})
 
       expected = """
       window.Elixir_Abc_Bcd = class Elixir_Abc_Bcd {
@@ -327,6 +330,7 @@ defmodule Hologram.Compiler.ModuleDefinitionGeneratorTest do
 
     test "has preceding attributes section" do
       ir = %ModuleDefinition{
+        module: @module,
         attributes: [
           %ModuleAttributeDefinition{
             name: :abc,
@@ -349,7 +353,7 @@ defmodule Hologram.Compiler.ModuleDefinitionGeneratorTest do
         ]
       }
 
-      result = ModuleDefinitionGenerator.generate(ir, @module, %Opts{})
+      result = Encoder.encode(ir, %Context{}, %Opts{})
 
       expected = """
       window.Elixir_Abc_Bcd = class Elixir_Abc_Bcd {
