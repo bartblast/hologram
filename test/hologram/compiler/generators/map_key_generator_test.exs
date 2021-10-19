@@ -4,11 +4,6 @@ defmodule Hologram.Compiler.MapKeyGeneratorTest do
   alias Hologram.Compiler.{Context, MapKeyGenerator}
   alias Hologram.Compiler.IR.{AtomType, BooleanType, IntegerType, StringType}
 
-  test "atom" do
-    result = MapKeyGenerator.generate(%AtomType{value: :test}, %Context{})
-    assert result == "~atom[test]"
-  end
-
   test "boolean" do
     result = MapKeyGenerator.generate(%BooleanType{value: true}, %Context{})
     assert result == "~boolean[true]"
