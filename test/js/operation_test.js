@@ -16,6 +16,9 @@ const textOperationSpec = {
 
 describe("build()", () => {
   it("returns a frozen Operation object", () => {
+    const TestComponentClass = class {}
+    Runtime.registerComponentClass(source, TestComponentClass)
+
     const result = Operation.build(textOperationSpec, source, bindings, Type.map({}))
 
     assert.isTrue(result instanceof Operation)
