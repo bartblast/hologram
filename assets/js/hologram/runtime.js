@@ -77,7 +77,7 @@ export default class Runtime {
   }
 
   // Covered implicitely in E2E tests.
-  loadPage(html) {
+  static loadPage(html) {
     // DEFER: copy html node attributes (because only the inner HTML is updated)
     Runtime.document.documentElement.innerHTML = html
 
