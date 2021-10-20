@@ -19,18 +19,19 @@ export default class Command {
   // Covered implicitely in E2E tests.
   static execute(operation) {
     const payload = Command.buildMessagePayload(operation)
-    Client.pushMessage("command", payload, Command.handleResult)
+    const callback = (commandResult) => Command.handleResult(commandResult, operation.target.id)
+    Client.pushMessage("command", payload, callback)
   }
 
   // Covered implicitely in E2E tests.
-  static handleResult(commandResult) {
+  static handleResult(commandResult, sourceId) {
     const {data: [target, actionName, params]} = Utils.eval(commandResult)
 
     if (actionName.value === "__redirect__") {
       Runtime.redirect(params)
 
     } else {
-      const operation = new Operation(target, actionName, params)
+      const operation = new Operation(sourceId, target, actionName, params)
       Action.execute(operation)
     }
   }
