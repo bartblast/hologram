@@ -24,8 +24,8 @@ export default class Command {
 
   // Covered implicitely in E2E tests.
   static handleResult(commandResult) {
-    let actionName, params, target;
-    [target, actionName, params] = Utils.eval(commandResult)
+    console.debug(commandResult)
+    const {data: [actionName, params, target]} = Utils.eval(commandResult)
 
     if (actionName.value === "__redirect__") {
       Runtime.redirect(params)
