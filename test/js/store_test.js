@@ -15,6 +15,20 @@ Store.componentStateRegistry = {
   component_3: TestClass3
 }
 
+describe("getComponentState()", () => {
+  it("returns component state given component ID", () => {
+    const result = Store.getComponentState("component_2")
+    assert.equal(result, TestClass2)
+  })
+})
+
+describe("getPageState()", () => {
+  Store.componentStateRegistry[Operation.TARGET.page] = "test_page_state"
+  const result = Store.getPageState()
+
+  assert.equal(result, "test_page_state")
+})
+
 describe("hydrate()", () => {
   let pageState, serializedState;
 
@@ -44,20 +58,6 @@ describe("hydrate()", () => {
   it("saves frozen page state to the store", () => {
     assertFrozen(pageState)
   })
-})
-
-describe("getComponentState()", () => {
-  it("returns component state given component ID", () => {
-    const result = Store.getComponentState("component_2")
-    assert.equal(result, TestClass2)
-  })
-})
-
-describe("getPageState()", () => {
-  Store.componentStateRegistry[Operation.TARGET.page] = "test_page_state"
-  const result = Store.getPageState()
-  
-  assert.equal(result, "test_page_state")
 })
 
 describe("setComponentState()", () => {
