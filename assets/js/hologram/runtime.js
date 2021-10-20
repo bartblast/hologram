@@ -14,7 +14,6 @@ export default class Runtime {
   static componentClassRegistry = {}
   static document = null
   static isInitiated = false
-  static layoutClass = null
   static window = null
 
   static determineLayoutClass(pageClass) {
@@ -44,7 +43,7 @@ export default class Runtime {
   }
 
   static getLayoutTemplate() {
-    return Runtime.layoutClass.template()
+    return Runtime.getLayoutClass().template()
   }
 
   static getPageClass() {

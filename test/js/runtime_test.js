@@ -67,11 +67,12 @@ describe("getLayoutClass()", () => {
 
 describe("getLayoutTemplate()", () => {
   it("returns the template of the current page's layout", () => {
-    Runtime.layoutClass = class {
+    const TestLayoutClass = class {
       static template() {
         return "test_template"
       }
     }
+    Runtime.registerLayoutClass(TestLayoutClass)
 
     const result = Runtime.getLayoutTemplate()
 
