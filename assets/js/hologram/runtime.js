@@ -91,7 +91,7 @@ export default class Runtime {
     Runtime.pageClass = pageClass
     Runtime.layoutClass = Runtime.determineLayoutClass(pageClass)
 
-    Runtime.setPageState(serializedState)
+    Store.hydrate(serializedState)
     VDOM.render()
 
     const html = VDOM.getDocumentHTML(Runtime.document)
@@ -106,14 +106,6 @@ export default class Runtime {
 
     const url = params.data[Type.atomKey("url")].value
     Runtime.updateURL(url)
-  }
-
-  static setPageState(serializedState) {
-    let state = Utils.eval(serializedState, false)
-    state.data[Type.atomKey("context")].data[Type.atomKey("__state__")] = Type.string(serializedState)
-    Utils.freeze(state)
-
-    Store.setComponentState(Operation.TARGET.page, state)
   }
 
   // Covered implicitely in E2E tests.
