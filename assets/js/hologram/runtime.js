@@ -112,6 +112,10 @@ export default class Runtime {
     Runtime.updateURL(url)
   }
 
+  static registerComponentClass(componentId, klass) {
+    Runtime.componentClassRegistry[componentId] = klass
+  }
+
   // Covered implicitely in E2E tests.
   static updateURL(url) {
     Runtime.window.history.pushState(null, null, url)

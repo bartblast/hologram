@@ -89,3 +89,12 @@ describe("getPageTemplate()", () => {
     assert.equal(result, "test_template")
   })
 })
+
+describe("registerComponentClass()", () => {
+  it("registers the class of the given component", () => {
+    const TestComponentClass = class {}
+    Runtime.registerComponentClass("testComponentId", TestComponentClass)
+
+    assert.equal(Runtime.componentClassRegistry["testComponentId"], TestComponentClass)
+  })
+})
