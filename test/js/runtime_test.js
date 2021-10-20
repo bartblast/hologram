@@ -91,11 +91,12 @@ describe("getPageClass()", () => {
 
 describe("getPageTemplate()", () => {
   it("returns the template of the current page", () => {
-    Runtime.pageClass = class {
+    const TestPageClass = class {
       static template() {
         return "test_template"
       }
     }
+    Runtime.registerPageClass(TestPageClass)
 
     const result = Runtime.getPageTemplate()
 

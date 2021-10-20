@@ -15,7 +15,6 @@ export default class Runtime {
   static document = null
   static isInitiated = false
   static layoutClass = null
-  static pageClass = null
   static window = null
 
   static determineLayoutClass(pageClass) {
@@ -53,7 +52,7 @@ export default class Runtime {
   }
 
   static getPageTemplate() {
-    return Runtime.pageClass.template()
+    return Runtime.getPageClass().template()
   }
 
   // Covered implicitely in E2E tests.
@@ -96,13 +95,16 @@ export default class Runtime {
 
   // Covered implicitely in E2E tests.
   static mountPage(pageClass, serializedState) {
-    Runtime.pageClass = pageClass
-    Runtime.layoutClass = Runtime.determineLayoutClass(pageClass)
+    Runtime.registerPageClass(pageClass)
+
+    const layoutClass = Runtime.determineLayoutClass(pageClass)
+    Runtime.registerLayoutClass(layoutClass)
 
     Store.hydrate(serializedState)
     VDOM.render()
 
     const html = VDOM.getDocumentHTML(Runtime.document)
+
     // DEFER: consider - there are limitations for state object size, e.g. 2 MB for Firefox
     Runtime.window.history.replaceState(html, null)
   }
