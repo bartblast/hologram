@@ -26,7 +26,7 @@ export default class Operation {
     }
   }
 
-  construct(target, name, params, method = null) {
+  constructor(target, name, params, method = null) {
     this.method = method
     this.target = target
     this.name = name
