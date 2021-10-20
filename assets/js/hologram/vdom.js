@@ -58,7 +58,9 @@ export default class VDOM {
     if (node.tag === "slot") {
       if (source === Operation.TARGET.layout) {
         source = Operation.TARGET.page
+        bindings = Store.getPageState()
       }
+      
       return VDOM.buildVNodeList(slots.default, source, bindings, slots)
     }
 
