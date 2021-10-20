@@ -1,4 +1,4 @@
-defmodule Hologram.Compiler.AtomTypeEncoderTest do
+defmodule Hologram.Compiler.ModuleAttributeOperatorEncoderTest do
   use Hologram.Test.UnitCase, async: true
 
   alias Hologram.Compiler.{Context, Encoder, Opts}
@@ -8,10 +8,10 @@ defmodule Hologram.Compiler.AtomTypeEncoderTest do
 
   describe "encode/3" do
     test "when doesn't have template opt" do
-      context = %Context{module: Hologram.Compiler.ModuleAttributeOperatorGeneratorTest}
+      context = %Context{module: Hologram.Compiler.ModuleAttributeOperatorTest}
 
       result = Encoder.encode(@ir, context, %Opts{})
-      expected = "Elixir_Hologram_Compiler_ModuleAttributeOperatorGeneratorTest.$xyz"
+      expected = "Elixir_Hologram_Compiler_ModuleAttributeOperatorEncoderTest.$xyz"
 
       assert result == expected
     end

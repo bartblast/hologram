@@ -1,7 +1,7 @@
 defmodule Hologram.Compiler.Encoder.Commons do
   use Hologram.Commons.Encoder
 
-  alias Hologram.Compiler.{Context, Encoder, Generator, MapKeyEncoder, Opts}
+  alias Hologram.Compiler.{Context, Encoder, MapKeyEncoder, Opts}
   alias Hologram.Compiler.IR.{AccessOperator, Variable}
 
   defmacro __using__(_) do
@@ -38,7 +38,7 @@ defmodule Hologram.Compiler.Encoder.Commons do
 
   def encode_map_data(data, %Context{} = context, %Opts{} = opts) do
     Enum.map(data, fn {k, v} ->
-      "'#{MapKeyEncoder.encode(k, context, opts)}': #{Generator.generate(v, context, opts)}"
+      "'#{MapKeyEncoder.encode(k, context, opts)}': #{Encoder.encode(v, context, opts)}"
     end)
     |> Enum.join(", ")
     |> wrap_with_object()

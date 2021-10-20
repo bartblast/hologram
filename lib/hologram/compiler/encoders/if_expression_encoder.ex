@@ -1,4 +1,4 @@
-alias Hologram.Compiler.{Context, Encoder, Generator, Opts}
+alias Hologram.Compiler.{Context, Encoder, Opts}
 alias Hologram.Compiler.IR.{AnonymousFunctionType, IfExpression}
 
 defimpl Encoder, for: IfExpression do
@@ -16,6 +16,6 @@ defimpl Encoder, for: IfExpression do
 
   defp encode_anonymous_function(body, context, opts) do
     %AnonymousFunctionType{body: body}
-    |> Generator.generate(context, opts)
+    |> Encoder.encode(context, opts)
   end
 end

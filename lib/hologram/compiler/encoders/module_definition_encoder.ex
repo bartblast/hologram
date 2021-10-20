@@ -1,4 +1,4 @@
-alias Hologram.Compiler.{Context, Encoder, Formatter, FunctionDefinitionGenerator, Helpers, Opts}
+alias Hologram.Compiler.{Context, Encoder, Formatter, Helpers, Opts}
 alias Hologram.Compiler.IR.{FunctionDefinitionVariants, ModuleDefinition, NotSupportedExpression}
 
 defimpl Encoder, for: ModuleDefinition do

@@ -7,7 +7,7 @@ defmodule Hologram.Template.ComponentEncoderTest do
 
   describe "encode/1" do
     test "component doesn't have any props" do
-      module = Hologram.Test.Fixtures.Template.ComponentGenerator.Module1
+      module = Hologram.Test.Fixtures.Template.ComponentEncoder.Module1
 
       children = [
         %TextNode{content: "test_content"},
@@ -18,7 +18,7 @@ defmodule Hologram.Template.ComponentEncoderTest do
         %Component{module: module, children: children, props: %{}}
         |> Encoder.encode()
 
-      encoded_module = "Elixir_Hologram_Test_Fixtures_Template_ComponentGenerator_Module1"
+      encoded_module = "Elixir_Hologram_Test_Fixtures_Template_ComponenEncoder_Module1"
 
       encoded_children =
         "[ { type: 'text', content: 'test_content' }, { type: 'expression', callback: ($state) => { return { type: 'tuple', data: [ { type: 'integer', value: 1 } ] } } } ]"
@@ -30,7 +30,7 @@ defmodule Hologram.Template.ComponentEncoderTest do
     end
 
     test "component has single prop" do
-      module = Hologram.Test.Fixtures.Template.ComponentGenerator.Module1
+      module = Hologram.Test.Fixtures.Template.ComponentEncoder.Module1
 
       props = %{
         prop_1: [%TextNode{content: "value_1"}]
@@ -40,7 +40,7 @@ defmodule Hologram.Template.ComponentEncoderTest do
         %Component{module: module, children: [], props: props}
         |> Encoder.encode()
 
-      encoded_module = "Elixir_Hologram_Test_Fixtures_Template_ComponentGenerator_Module1"
+      encoded_module = "Elixir_Hologram_Test_Fixtures_Template_ComponentEncoder_Module1"
       encoded_props = "{ 'prop_1': [ { type: 'text', content: 'value_1' } ] }"
 
       expected =
@@ -50,7 +50,7 @@ defmodule Hologram.Template.ComponentEncoderTest do
     end
 
     test "component has multiple props" do
-      module = Hologram.Test.Fixtures.Template.ComponentGenerator.Module1
+      module = Hologram.Test.Fixtures.Template.ComponentEncoder.Module1
 
       props = %{
         prop_1: [%TextNode{content: "value_1"}],
@@ -61,7 +61,7 @@ defmodule Hologram.Template.ComponentEncoderTest do
         %Component{module: module, children: [], props: props}
         |> Encoder.encode()
 
-      encoded_module = "Elixir_Hologram_Test_Fixtures_Template_ComponentGenerator_Module1"
+      encoded_module = "Elixir_Hologram_Test_Fixtures_Template_ComponentEncoder_Module1"
       encoded_prop_1 = "'prop_1': [ { type: 'text', content: 'value_1' } ]"
       encoded_prop_2 = "'prop_2': [ { type: 'text', content: 'value_2' } ]"
       encoded_props = "{ #{encoded_prop_1}, #{encoded_prop_2} }"
