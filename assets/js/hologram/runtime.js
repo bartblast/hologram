@@ -44,6 +44,10 @@ export default class Runtime {
     return Runtime.layoutClass.template()
   }
 
+  static getPageClass() {
+    return Runtime.getComponentClass(Operation.TARGET.page)
+  }
+
   static getPageTemplate() {
     return Runtime.pageClass.template()
   }

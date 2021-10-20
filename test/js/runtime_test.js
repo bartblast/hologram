@@ -1,6 +1,7 @@
 "use strict";
 
 import { assert } from "./support/commons";
+import Operation from "../../assets/js/hologram/operation";
 import Runtime from "../../assets/js/hologram/runtime";
 import Type from "../../assets/js/hologram/type";
 
@@ -62,6 +63,16 @@ describe("getLayoutTemplate()", () => {
     const result = Runtime.getLayoutTemplate()
 
     assert.equal(result, "test_template")
+  })
+})
+
+describe("getPageClass()", () => {
+  it("returns the class of the current page", () => {
+    const TestPageClass = class {}
+    Runtime.componentClassRegistry[Operation.TARGET.page] = TestPageClass
+    const result = Runtime.getPageClass()
+
+    assert.equal(result, TestPageClass)
   })
 })
 
