@@ -2,8 +2,8 @@
 
 import Command from "./command"
 import Operation from "./operation"
-import Runtime from "./runtime"
 import Store from "./store"
+import Target from "./target";
 import Type from "./type"
 import Utils from "./utils"
 import VDOM from "./vdom"
@@ -11,8 +11,7 @@ import VDOM from "./vdom"
 export default class Action {
   // Covered implicitely in E2E tests.
   static execute(operation) {
-    const targetClass = Runtime.getComponentClass(operation.target)
-    const targetState = Store.getComponentState(operation.target)
+    const targetState = Store.getComponentState(operation.target.id)
 
     let actionResult = targetClass.action(operation.name, operation.params, targetState)
     actionResult = Utils.freeze(actionResult)
@@ -27,10 +26,16 @@ export default class Action {
     } else { // tuple
       const actionResultElems = actionResult.data
  
-      if (actionResultElems.length >= 3 && Type.isAtom(actionResultElems[2])) {
+      if (actionResultElems.length === 4) {
         return actionResultElems[2]
 
-      } else if (actionResultElems.length >= 2) {
+      } else if (actionResultElems.length === 3 && Type.isAtom(actionResultElems[2])) {
+        return actionResultElems[2]
+                
+      } else if (actionResultElems.length === 3 && !Type.isAtom(actionResultElems[2])) {
+        return actionResultElems[1]
+
+      } else if (actionResultElems.length === 2) {
         return actionResultElems[1]
 
       } else {
@@ -46,10 +51,10 @@ export default class Action {
     } else { // tuple
       const actionResultElems = actionResult.data
  
-      if (actionResultElems.length >= 4) {
+      if (actionResultElems.length === 4) {
         return actionResultElems[3]
 
-      } else if (actionResultElems.length >= 3) {
+      } else if (actionResultElems.length === 3 && Type.isList(actionResultElems[2])) {
         return actionResultElems[2]
 
       } else {
@@ -67,15 +72,18 @@ export default class Action {
     }
   }
 
-  static getTargetFromActionResult(actionResult) {
+  static getTargetIdFromActionResult(actionResult) {
     if (Type.isMap(actionResult)) {
       return null
 
     } else { // tuple
       const actionResultElems = actionResult.data
 
-      if (actionResultElems.length >= 3 && Type.isAtom(actionResultElems[2])) {
-        return actionResultElems[1]        
+      if (actionResultElems.length === 4) {
+        return actionResultElems[1]
+
+      } else if (actionResultElems.length === 3 && Type.isAtom(actionResultElems[2])) {
+        return actionResultElems[1]
 
       } else {
         return null
@@ -92,11 +100,21 @@ export default class Action {
     VDOM.render()
 
     if (commandName) {
-      const commandTarget = Action.getTargetFromActionResult(actionResult)
+      const commandTarget = Action.resolveCommandTarget(actionResult, actionTarget)
       const commandParams = Action.getParamsFromActionResult(actionResult)
 
-      const operation = new Operation(commandTarget, commandName, commandParams)
+      const operation = new Operation(actionTarget.id, commandTarget, commandName, commandParams)
       Command.execute(operation)
     } 
+  }
+
+  static resolveCommandTarget(actionResult, actionTarget) {
+    let commandTargetId = Action.getTargetIdFromActionResult(actionResult)
+
+    if (!commandTargetId) {
+      commandTargetId = actionTarget.id
+    }
+
+    return new Target(commandTargetId)
   }
 }

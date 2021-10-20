@@ -2,39 +2,69 @@
 
 import { assert, fixtureOperationParamsKeyword } from "./support/commons";
 import Action from "../../assets/js/hologram/action"
+import Runtime from "../../assets/js/hologram/runtime"
+import Target from "../../assets/js/hologram/target"
 import Type from "../../assets/js/hologram/type"
+
+const state = Type.map({})
+const targetId = Type.atom("test_target_id")
+const commandName = Type.atom("test_command")
+const params = Type.list([])
 
 describe("getCommandNameFromActionResult()", () => {
   it("returns null if the action result is a boxed map", () => {
     const actionResult = Type.map({})
-    const commandName = Action.getCommandNameFromActionResult(actionResult)
+    const result = Action.getCommandNameFromActionResult(actionResult)
 
-    assert.isNull(commandName)
+    assert.isNull(result)
   })
 
-  it("fetches the command name from an action result that is a boxed tuple that contains target", () => {
+  it("fetches the command name from an action result that is a 4-element boxed tuple", () => {
     const actionResult = Type.tuple([
-      Type.map({}),
-      Type.atom("test_target"),
-      Type.atom("test_command")
+      state,
+      targetId,
+      commandName,
+      params
     ])
 
-    const commandName = Action.getCommandNameFromActionResult(actionResult)
-    const expected = Type.atom("test_command")
+    const result = Action.getCommandNameFromActionResult(actionResult)
 
-    assert.deepStrictEqual(commandName, expected)
+    assert.deepStrictEqual(result, commandName)
   })
 
-  it("fetches the command name from an action result that is a boxed tuple that doesn't contain target", () => {
+  it("fetches the command name from an action result that is a 3-element boxed tuple that contains target", () => {
     const actionResult = Type.tuple([
-      Type.map({}),
-      Type.atom("test_command")
+      state,
+      targetId,
+      commandName
     ])
 
-    const commandName = Action.getCommandNameFromActionResult(actionResult)
-    const expected = Type.atom("test_command")
+    const result = Action.getCommandNameFromActionResult(actionResult)
 
-    assert.deepStrictEqual(commandName, expected)
+    assert.deepStrictEqual(result, commandName)
+  })
+
+  it("fetches the command name from an action result that is a 3-element boxed tuple that doesn't contain target", () => {
+    const actionResult = Type.tuple([
+      state,
+      commandName,
+      params
+    ])
+
+    const result = Action.getCommandNameFromActionResult(actionResult)
+
+    assert.deepStrictEqual(result, commandName)
+  })
+
+  it("fetches the command name from an action result that is a 2-element boxed tuple", () => {
+    const actionResult = Type.tuple([
+      state,
+      commandName
+    ])
+
+    const result = Action.getCommandNameFromActionResult(actionResult)
+
+    assert.deepStrictEqual(result, commandName)
   })
 
   it("returns null if the action result is a boxed tuple that doesn't contain command name", () => {
@@ -42,9 +72,9 @@ describe("getCommandNameFromActionResult()", () => {
       Type.map({}),
     ])
 
-    const commandName = Action.getCommandNameFromActionResult(actionResult)
+    const result = Action.getCommandNameFromActionResult(actionResult)
 
-    assert.isNull(commandName)
+    assert.isNull(result)
   })
 })
 
@@ -53,91 +83,172 @@ describe("getParamsFromActionResult()", () => {
 
   it("returns null if the action result is a boxed map", () => {
     const actionResult = Type.map({})
-    const commandParams = Action.getParamsFromActionResult(actionResult)
+    const result = Action.getParamsFromActionResult(actionResult)
 
-    assert.isNull(commandParams)
+    assert.isNull(result)
   })
 
-  it("fetches the command params from an action result that is a boxed tuple that contains target", () => {
+  it("fetches the command params from an action result that is a 4-element boxed tuple", () => {
     const actionResult = Type.tuple([
-      Type.map({}),
-      Type.atom("test_target"),
-      Type.atom("test_command"),
+      state,
+      targetId,
+      commandName,
       paramsKeyword
     ])
 
-    const commandParams = Action.getParamsFromActionResult(actionResult)
+    const result = Action.getParamsFromActionResult(actionResult)
 
-    assert.deepStrictEqual(commandParams, paramsKeyword)
+    assert.deepStrictEqual(result, paramsKeyword)
   })
 
-  it("fetches the command params from an action result that is a boxed tuple that doesn't contain target", () => {
+  it("fetches the command params from an action result that is a 3-element boxed tuple that doesn't contain target", () => {
     const actionResult = Type.tuple([
-      Type.map({}),
-      Type.atom("test_command"),
+      state,
+      commandName,
       paramsKeyword
     ])
 
-    const commandParams = Action.getParamsFromActionResult(actionResult)
+    const result = Action.getParamsFromActionResult(actionResult)
 
-    assert.deepStrictEqual(commandParams, paramsKeyword)
+    assert.deepStrictEqual(result, paramsKeyword)
   })
 
-  it("returns null if the action result is a boxed tuple that doesn't contain command params", () => {
+  it("returns null if the  action result is a 3-element boxed tuple that contains target", () => {
     const actionResult = Type.tuple([
-      Type.map({}),
+      state,
+      targetId,
+      commandName
     ])
 
-    const commandParams = Action.getParamsFromActionResult(actionResult)
+    const result = Action.getParamsFromActionResult(actionResult)
 
-    assert.isNull(commandParams)
+    assert.isNull(result)
+  })
+
+  it("returns null if the action result is a 2-element boxed tuple", () => {
+    const actionResult = Type.tuple([
+      state,
+      commandName
+    ])
+
+    const result = Action.getParamsFromActionResult(actionResult)
+
+    assert.isNull(result)
+  })
+
+  it("returns null if the action result is a 1-element boxed tuple", () => {
+    const actionResult = Type.tuple([state])
+    const result = Action.getParamsFromActionResult(actionResult)
+
+    assert.isNull(result)
   })
 })
 
 describe("getStateFromActionResult()", () => {
   it("fetches the state from an action result that is a boxed map", () => {
     const actionResult = Type.map({})
-    const state = Action.getStateFromActionResult(actionResult)
+    const result = Action.getStateFromActionResult(actionResult)
 
-    assert.equal(state, actionResult)
+    assert.equal(result, actionResult)
   })
 
   it("fetches the state from an action result that is a boxed tuple", () => {
-    const actionResult = Type.tuple([Type.map({}), Type.atom("test_command")])
-    const state = Action.getStateFromActionResult(actionResult)
+    const actionResult = Type.tuple([
+      state,
+      commandName
+    ])
 
-    assert.deepStrictEqual(state, Type.map({}))
+    const result = Action.getStateFromActionResult(actionResult)
+
+    assert.deepStrictEqual(result, state)
   })
 })
 
-describe("getTargetFromActionResult()", () => {
+describe("getTargetIdFromActionResult()", () => {
   it("returns null if the action result is a boxed map", () => {
     const actionResult = Type.map({})
-    const target = Action.getTargetFromActionResult(actionResult)
+    const result = Action.getTargetIdFromActionResult(actionResult)
 
-    assert.isNull(target)
+    assert.isNull(result)
   })
 
-  it("fetches the target from an action result that is a boxed tuple that contains target", () => {
+  it("fetches the target id from an action result that is a 4-element boxed tuple", () => {
     const actionResult = Type.tuple([
-      Type.map({}),
-      Type.atom("test_target"),
-      Type.atom("test_command")
+      state,
+      targetId,
+      commandName,
+      params
     ])
 
-    const target = Action.getTargetFromActionResult(actionResult)
-    const expected = Type.atom("test_target")
+    const result = Action.getTargetIdFromActionResult(actionResult)
 
-    assert.deepStrictEqual(target, expected)
+    assert.deepStrictEqual(result, targetId)
   })
 
-  it("returns null if the action result is a boxed tuple that doesn't contain target", () => {
+  it("fetches the target id from an action result that is a 3-element boxed tuple that contains target id", () => {
     const actionResult = Type.tuple([
-      Type.map({}),
+      state,
+      targetId,
+      commandName
     ])
 
-    const target = Action.getTargetFromActionResult(actionResult)
+    const result = Action.getTargetIdFromActionResult(actionResult)
 
-    assert.isNull(target)
+    assert.deepStrictEqual(result, targetId)
+  })
+
+  it("returns null if the action result is a 2-element boxed tuple", () => {
+    const actionResult = Type.tuple([
+      state,
+      commandName
+    ])
+
+    const result = Action.getTargetIdFromActionResult(actionResult)
+
+    assert.isNull(result)
+  })
+
+  it("returns null if the action result is a 1-element boxed tuple", () => {
+    const actionResult = Type.tuple([state])
+    const result = Action.getTargetIdFromActionResult(actionResult)
+
+    assert.isNull(result)
+  })
+})
+
+describe("resolveCommandTarget()", () => {
+  it("creates Target object when command target is present in action result", () => {
+    const commandTargetId = Type.atom("test_command_target_id")
+
+    const actionResult = Type.tuple([
+      state,
+      commandTargetId,
+      commandName
+    ])
+
+    const TestComponentClass1 = class {}
+    Runtime.registerComponentClass(targetId, TestComponentClass1)
+    const actionTarget = new Target(targetId)
+
+    const TestComponentClass2 = class {}
+    Runtime.registerComponentClass(commandTargetId, TestComponentClass2)
+
+    const result = Action.resolveCommandTarget(actionResult, actionTarget)
+    
+    assert.isTrue(result instanceof Target)
+    assert.equal(result.id, commandTargetId)
+  })
+
+  it("creates Target object when command target is not present in action result", () => {
+    const actionResult = Type.tuple([state])
+
+    const TestComponentClass = class {}
+    Runtime.registerComponentClass(targetId, TestComponentClass)
+    const actionTarget = new Target(targetId)
+
+    const result = Action.resolveCommandTarget(actionResult, actionTarget)
+    
+    assert.isTrue(result instanceof Target)
+    assert.equal(result.id, targetId)
   })
 })
