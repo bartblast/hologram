@@ -20,6 +20,10 @@ export default class Store {
     return Store.componentStateRegistry[componentId]
   }
 
+  static getPageState() {
+    return Store.getComponentState(Operation.TARGET.page)
+  }
+
   static setComponentState(componentId, state) {
     Store.componentStateRegistry[componentId] = state
   }

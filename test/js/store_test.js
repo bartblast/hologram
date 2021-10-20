@@ -53,6 +53,13 @@ describe("getComponentState()", () => {
   })
 })
 
+describe("getPageState()", () => {
+  Store.componentStateRegistry[Operation.TARGET.page] = "test_page_state"
+  const result = Store.getPageState()
+  
+  assert.equal(result, "test_page_state")
+})
+
 describe("setComponentState()", () => {
   it("saves component state given component ID", () => {
     Store.setComponentState("component_2", 123)
