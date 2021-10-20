@@ -81,11 +81,11 @@ describe("getCommandNameFromActionResult()", () => {
 describe("getParamsFromActionResult()", () => {
   const paramsKeyword = fixtureOperationParamsKeyword()
 
-  it("returns null if the action result is a boxed map", () => {
+  it("returns empty keyword list if the action result is a boxed map", () => {
     const actionResult = Type.map({})
     const result = Action.getParamsFromActionResult(actionResult)
 
-    assert.isNull(result)
+    assert.deepStrictEqual(result, Type.list([]))
   })
 
   it("fetches the command params from an action result that is a 4-element boxed tuple", () => {
@@ -113,7 +113,7 @@ describe("getParamsFromActionResult()", () => {
     assert.deepStrictEqual(result, paramsKeyword)
   })
 
-  it("returns null if the  action result is a 3-element boxed tuple that contains target", () => {
+  it("returns empty keyword list if the  action result is a 3-element boxed tuple that contains target", () => {
     const actionResult = Type.tuple([
       state,
       targetId,
@@ -122,10 +122,10 @@ describe("getParamsFromActionResult()", () => {
 
     const result = Action.getParamsFromActionResult(actionResult)
 
-    assert.isNull(result)
+    assert.deepStrictEqual(result, Type.list([]))
   })
 
-  it("returns null if the action result is a 2-element boxed tuple", () => {
+  it("returns empty keyword list if the action result is a 2-element boxed tuple", () => {
     const actionResult = Type.tuple([
       state,
       commandName
@@ -133,14 +133,14 @@ describe("getParamsFromActionResult()", () => {
 
     const result = Action.getParamsFromActionResult(actionResult)
 
-    assert.isNull(result)
+    assert.deepStrictEqual(result, Type.list([]))
   })
 
-  it("returns null if the action result is a 1-element boxed tuple", () => {
+  it("returns empty keyword list if the action result is a 1-element boxed tuple", () => {
     const actionResult = Type.tuple([state])
     const result = Action.getParamsFromActionResult(actionResult)
 
-    assert.isNull(result)
+    assert.deepStrictEqual(result, Type.list([]))
   })
 })
 
