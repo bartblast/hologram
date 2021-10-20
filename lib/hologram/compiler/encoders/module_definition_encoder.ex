@@ -1,8 +1,7 @@
 alias Hologram.Compiler.{Context, Encoder, Formatter, FunctionDefinitionGenerator, Helpers, Opts}
-alias Hologram.Compiler.IR.{ModuleDefinition, NotSupportedExpression}
+alias Hologram.Compiler.IR.{FunctionDefinitionVariants, ModuleDefinition, NotSupportedExpression}
 
 defimpl Encoder, for: ModuleDefinition do
-
   def encode(%ModuleDefinition{module: module, attributes: attrs} = ir, %Context{}, %Opts{} = opts) do
     class_name = Helpers.class_name(module)
     context = struct(Context, Map.from_struct(ir))
@@ -15,7 +14,10 @@ defimpl Encoder, for: ModuleDefinition do
 
     functions =
       aggregate_functions(ir)
-      |> Enum.map(fn {k, v} -> FunctionDefinitionGenerator.generate(k, v, context, opts) end)
+      |> Enum.map(fn {name, variants} ->
+        %FunctionDefinitionVariants{name: name, variants: variants}
+        |> Encoder.encode(context, opts)
+      end)
       |> Enum.join("\n")
 
     "window.#{class_name} = class #{class_name} {"

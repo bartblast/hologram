@@ -1,12 +1,11 @@
-defmodule Hologram.Compiler.FunctionDefinitionGenerator do
-  import Hologram.Commons.Encoder
-  import Hologram.Compiler.Encoder.Commons
+alias Hologram.Compiler.{Context, Encoder, Formatter, Opts}
+alias Hologram.Compiler.IR.FunctionDefinitionVariants
 
-  alias Hologram.Compiler.{Context, Formatter, Opts}
-  alias Hologram.Compiler.Encoder, as: CompilerEncoder
+defimpl Encoder, for: FunctionDefinitionVariants do
+  use Hologram.Compiler.Encoder.Commons
 
-  def generate(name, variants, %Context{} = context, %Opts{} = opts) do
-    body = generate_body(variants, context, opts)
+  def encode(%{name: name, variants: variants}, %Context{} = context, %Opts{} = opts) do
+    body = encode_function_body(variants, context, opts)
     name = encode_function_name(name)
 
     "static #{name}() {#{body}"
@@ -14,14 +13,14 @@ defmodule Hologram.Compiler.FunctionDefinitionGenerator do
     |> Formatter.append_line_break()
   end
 
-  defp generate_body(variants, context, opts) do
-    invalid_case = generate_body_invalid_case()
+  defp encode_function_body(variants, context, opts) do
+    invalid_case = encode_function_body_invalid_case()
 
-    generate_body_valid_cases(variants, context, opts)
+    encode_function_body_valid_cases(variants, context, opts)
     |> Formatter.maybe_append_new_line(invalid_case)
   end
 
-  defp generate_body_invalid_case do
+  defp encode_function_body_invalid_case do
     """
     else {
     console.debug(arguments)
@@ -30,10 +29,10 @@ defmodule Hologram.Compiler.FunctionDefinitionGenerator do
     """
   end
 
-  defp generate_body_valid_cases(variants, context, opts) do
+  defp encode_function_body_valid_cases(variants, context, opts) do
     Enum.reduce(variants, "", fn variant, acc ->
       statement = if acc == "", do: "if", else: "else if"
-      params = generate_params(variant, context)
+      params = encode_function_params(variant, context)
       vars = encode_vars(variant.bindings, context, "\n")
       body = encode_expressions(variant.body, context, opts, "\n")
 
@@ -47,8 +46,8 @@ defmodule Hologram.Compiler.FunctionDefinitionGenerator do
     end)
   end
 
-  defp generate_params(variant, context) do
-    Enum.map(variant.params, &CompilerEncoder.encode(&1, context, %Opts{placeholder: true}))
+  defp encode_function_params(variant, context) do
+    Enum.map(variant.params, &Encoder.encode(&1, context, %Opts{placeholder: true}))
     |> Enum.join(", ")
     |> wrap_with_array()
   end

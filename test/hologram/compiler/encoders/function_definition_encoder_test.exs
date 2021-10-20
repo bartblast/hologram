@@ -1,13 +1,18 @@
-defmodule Hologram.Compiler.FunctionDefinitionGeneratorTest do
+defmodule Hologram.Compiler.FunctionDefinitionEncoderTest do
   use Hologram.Test.UnitCase, async: true
-  alias Hologram.Compiler.{Context, FunctionDefinitionGenerator, Opts}
+
+  alias Hologram.Compiler.{Context, Encoder, Opts}
+  alias Hologram.Compiler.IR.FunctionDefinitionVariants
 
   test "no vars / single expression / single variant" do
     code = "def test, do: 1"
-    ir = ir(code)
-    variants = [ir]
 
-    result = FunctionDefinitionGenerator.generate(ir.name, variants, %Context{}, %Opts{})
+    ir = %FunctionDefinitionVariants{
+      name: :test,
+      variants: [ir(code)]
+    }
+
+    result = Encoder.encode(ir, %Context{}, %Opts{})
 
     expected = """
     static test() {
@@ -26,10 +31,13 @@ defmodule Hologram.Compiler.FunctionDefinitionGeneratorTest do
 
   test "single var" do
     code = "def test(x), do: 1"
-    ir = ir(code)
-    variants = [ir]
 
-    result = FunctionDefinitionGenerator.generate(ir.name, variants, %Context{}, %Opts{})
+    ir = %FunctionDefinitionVariants{
+      name: :test,
+      variants: [ir(code)]
+    }
+
+    result = Encoder.encode(ir, %Context{}, %Opts{})
 
     expected = """
     static test() {
@@ -49,10 +57,13 @@ defmodule Hologram.Compiler.FunctionDefinitionGeneratorTest do
 
   test "multiple vars" do
     code = "def test(x, y), do: 1"
-    ir = ir(code)
-    variants = [ir]
 
-    result = FunctionDefinitionGenerator.generate(ir.name, variants, %Context{}, %Opts{})
+    ir = %FunctionDefinitionVariants{
+      name: :test,
+      variants: [ir(code)]
+    }
+
+    result = Encoder.encode(ir, %Context{}, %Opts{})
 
     expected = """
     static test() {
@@ -79,10 +90,12 @@ defmodule Hologram.Compiler.FunctionDefinitionGeneratorTest do
     end
     """
 
-    ir = ir(code)
-    variants = [ir]
+    ir = %FunctionDefinitionVariants{
+      name: :test,
+      variants: [ir(code)]
+    }
 
-    result = FunctionDefinitionGenerator.generate(ir.name, variants, %Context{}, %Opts{})
+    result = Encoder.encode(ir, %Context{}, %Opts{})
 
     expected = """
     static test() {
@@ -101,18 +114,15 @@ defmodule Hologram.Compiler.FunctionDefinitionGeneratorTest do
   end
 
   test "multiple variants" do
-    code = """
-    defmodule Hologram.Test.Fixtures.PlaceholderModule do
-      def test(1), do: 1
-      def test(2), do: 2
-    end
-    """
+    code_1 = "def test(1), do: 1"
+    code_2 = "def test(2), do: 2"
 
-    ir = ir(code)
-    name = :test
-    variants = Enum.filter(ir.functions, &(&1.name == name))
+    ir = %FunctionDefinitionVariants{
+      name: :test,
+      variants: [ir(code_1), ir(code_2)]
+    }
 
-    result = FunctionDefinitionGenerator.generate(name, variants, %Context{}, %Opts{})
+    result = Encoder.encode(ir, %Context{}, %Opts{})
 
     expected = """
     static test() {
@@ -134,10 +144,13 @@ defmodule Hologram.Compiler.FunctionDefinitionGeneratorTest do
 
   test "name" do
     code = "def test?, do: 1"
-    ir = ir(code)
-    variants = [ir]
 
-    result = FunctionDefinitionGenerator.generate(ir.name, variants, %Context{}, %Opts{})
+    ir = %FunctionDefinitionVariants{
+      name: :test?,
+      variants: [ir(code)]
+    }
+
+    result = Encoder.encode(ir, %Context{}, %Opts{})
 
     expected = """
     static test$question() {

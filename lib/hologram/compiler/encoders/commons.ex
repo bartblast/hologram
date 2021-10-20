@@ -4,6 +4,13 @@ defmodule Hologram.Compiler.Encoder.Commons do
   alias Hologram.Compiler.{Context, Encoder, Generator, MapKeyEncoder, Opts}
   alias Hologram.Compiler.IR.{AccessOperator, Variable}
 
+  defmacro __using__(_) do
+    quote do
+      use Hologram.Commons.Encoder
+      import Hologram.Compiler.Encoder.Commons
+    end
+  end
+
   def encode_as_array(data, %Context{} = context, %Opts{} = opts) do
     Enum.map(data, &Encoder.encode(&1, context, opts))
     |> Enum.join(", ")
