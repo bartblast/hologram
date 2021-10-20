@@ -5,6 +5,7 @@ import Operation from "../../assets/js/hologram/operation";
 import Runtime from "../../assets/js/hologram/runtime";
 import Type from "../../assets/js/hologram/type";
 
+const layoutTarget = Operation.TARGET.layout
 const pageTarget = Operation.TARGET.page
 
 describe("determineLayoutClass()", () => {
@@ -98,6 +99,15 @@ describe("registerComponentClass()", () => {
     Runtime.registerComponentClass("testComponentId", TestComponentClass)
 
     assert.equal(Runtime.componentClassRegistry["testComponentId"], TestComponentClass)
+  })
+})
+
+describe("registerLayoutClass()", () => {
+  it("registers the given class as layout class", () => {
+    const TestLayoutClass = class {}
+    Runtime.registerLayoutClass(TestLayoutClass)
+
+    assert.equal(Runtime.componentClassRegistry[layoutTarget], TestLayoutClass)
   })
 })
 

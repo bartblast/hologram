@@ -116,6 +116,10 @@ export default class Runtime {
     Runtime.componentClassRegistry[componentId] = klass
   }
 
+  static registerLayoutClass(klass) {
+    Runtime.registerComponentClass(Operation.TARGET.layout, klass)
+  }
+
   static registerPageClass(klass) {
     Runtime.registerComponentClass(Operation.TARGET.page, klass)
   }
