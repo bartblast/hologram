@@ -55,6 +55,16 @@ describe("getComponentClass()", () => {
   })
 })
 
+describe("getLayoutClass()", () => {
+  it("returns the class of the current layout", () => {
+    const TestLayoutClass = class {}
+    Runtime.componentClassRegistry[layoutTarget] = TestLayoutClass
+    const result = Runtime.getLayoutClass()
+
+    assert.equal(result, TestLayoutClass)
+  })
+})
+
 describe("getLayoutTemplate()", () => {
   it("returns the template of the current page's layout", () => {
     Runtime.layoutClass = class {

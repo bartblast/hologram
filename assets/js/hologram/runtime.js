@@ -40,6 +40,10 @@ export default class Runtime {
     return Runtime.componentClassRegistry[componentId]
   }
 
+  static getLayoutClass() {
+    return Runtime.getComponentClass(Operation.TARGET.layout)
+  }
+
   static getLayoutTemplate() {
     return Runtime.layoutClass.template()
   }
