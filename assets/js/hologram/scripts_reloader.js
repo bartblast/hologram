@@ -45,7 +45,7 @@ export default class ScriptsReloader {
     }
 
     if (ScriptsReloader.isInlineScript(reloadedScript)) {
-      Utils.eval(reloadedScript.textContent)
+      Utils.eval(reloadedScript.textContent, false)
       callback()
     } else {
       script.parentNode.insertBefore(reloadedScript, script)
