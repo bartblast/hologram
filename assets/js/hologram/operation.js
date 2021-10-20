@@ -1,6 +1,7 @@
 "use strict";
 
 import Keyword from "./elixir/keyword"
+import Target from "./target";
 import Type from "./type";
 import Utils from "./utils";
 
@@ -27,19 +28,19 @@ export default class Operation {
   }
 
   constructor(target, name, params, method = null) {
-    this.method = method
     this.target = target
     this.name = name
     this.params = params
+    this.method = method
   }
 
   static build(operationSpec, source, bindings, eventData) {
     const specElems = Operation.getSpecElems(operationSpec, bindings)
 
-    const method = Operation.buildMethod(operationSpec)
-    const target = Operation.buildTarget(specElems, source)
+    const target = Operation.resolveTarget(specElems, source)
     const name = Operation.buildName(specElems)
     const params = Operation.buildParams(specElems, eventData)
+    const method = Operation.buildMethod(operationSpec)
     
     const operation = new Operation(target, name, params, method)
     return Utils.freeze(operation)
@@ -78,24 +79,6 @@ export default class Operation {
     return Type.keywordToMap(params)
   }
 
-  static buildTarget(specElems, source) {
-    const targetValue = Operation.getTargetValue(specElems)
-
-    switch (targetValue) {
-      case null:
-        return source
-
-      case "layout":
-        return Operation.TARGET.layout
-
-      case "page":
-        return Operation.TARGET.page
-
-      default:
-        return targetValue;
-    }
-  }
-
   static getSpecElems(operationSpec, bindings) {
     let elems;
 
@@ -119,11 +102,29 @@ export default class Operation {
     }
   }
 
-  static getTargetValue(specElems) {
+  static getTargetSpecValue(specElems) {
     if (specElems.length === 1 || !Type.isAtom(specElems[1])) {
       return null
     }
 
     return specElems[0].value
+  }
+
+  static resolveTarget(specElems, source) {
+    const targetSpecValue = Operation.getTargetSpecValue(specElems)
+
+    switch (targetSpecValue) {
+      case null:
+        return new Target(source)
+
+      case "layout":
+        return new Target(Operation.TARGET.layout)
+
+      case "page":
+        return new Target(Operation.TARGET.page)
+
+      default:
+        return new Target(targetSpecValue);
+    }
   }
 }

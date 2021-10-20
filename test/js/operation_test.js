@@ -2,7 +2,9 @@
 
 import { assert, assertFrozen } from "./support/commons";
 import Operation from "../../assets/js/hologram/operation"
+import Target from "../../assets/js/hologram/target"
 import Type from "../../assets/js/hologram/type"
+import Runtime from "../../assets/js/hologram/runtime";
 
 const bindings = Type.map({})
 const source = "test_source"
@@ -127,42 +129,6 @@ describe("buildParams()", () => {
   })
 })
 
-describe("buildTarget()", () => {
-  it("returns the source arg if the operation spec doesn't contain target value", () => {
-    const specElems = [Type.textNode("test_action")]
-    const result = Operation.buildTarget(specElems, source)
-
-    assert.equal(result, source)
-  })
-
-  it("returns layout enum value if the operation spec target value is equal to 'layout' boxed atom", () => {
-    const specElems = [Type.atom("layout"), Type.atom("test_action")]
-
-    const result = Operation.buildTarget(specElems, source)
-    const expected = Operation.TARGET.layout
-
-    assert.equal(result, expected)
-  })
-
-  it("returns page enum value if the operation spec target value is equal to 'page' boxed atom", () => {
-    const specElems = [Type.atom("page"), Type.atom("test_action")]
-
-    const result = Operation.buildTarget(specElems, source)
-    const expected = Operation.TARGET.page
-
-    assert.equal(result, expected)
-  })
-
-  it("returns unboxed target value if the operation spec contains a boxed target value", () => {
-    const specElems = [Type.atom("test_target"), Type.atom("test_action")]
-
-    const result = Operation.buildTarget(specElems, source)
-    const expected = "test_target"
-
-    assert.equal(result, expected)
-  })
-})
-
 describe("getSpecElems()", () => {
   it("returns operation spec elems when the operation spec is of text type", () => {
     const result = Operation.getSpecElems(textOperationSpec, bindings)
@@ -215,25 +181,77 @@ describe("getSpecType()", () => {
   })
 })
 
-describe("getTargetValue()", () => {
+describe("getTargetSpecValue()", () => {
   it("returns null if the operation spec has only one elem", () => {
     const specElems = [Type.atom("layout")]
-    const result = Operation.getTargetValue(specElems)
+    const result = Operation.getTargetSpecValue(specElems)
 
     assert.isNull(result)
   })
 
   it("returns null if the second operation spec elem is not a boxed atom", () => {
     const specElems = [Type.atom("layout"), Type.integer(1)]
-    const result = Operation.getTargetValue(specElems)
+    const result = Operation.getTargetSpecValue(specElems)
 
     assert.isNull(result)
   })
 
   it("returns unboxed target value if the operation spec contains a boxed atom target value", () => {
     const specElems = [Type.atom("test_target"), Type.atom("test_action")]
-    const result = Operation.getTargetValue(specElems)
+    const result = Operation.getTargetSpecValue(specElems)
 
     assert.equal(result, "test_target")
+  })
+})
+
+describe("resolveTarget()", () => {
+  it("returns a Target object with id equal to the source arg if the operation spec doesn't contain target value", () => {
+    const TestComponentClass = class {}
+    Runtime.registerComponentClass(source, TestComponentClass)
+
+    const specElems = [Type.textNode("test_action")]
+    const result = Operation.resolveTarget(specElems, source)
+
+    assert.isTrue(result instanceof Target)
+    assert.equal(result.id, source)
+  })
+
+  it("returns a Target object with id equal to the layout enum value if the operation spec target value is equal to 'layout' boxed atom", () => {
+    const TestLayoutClass = class {}
+    Runtime.registerLayoutClass(TestLayoutClass)
+
+    const specElems = [Type.atom("layout"), Type.atom("test_action")]
+
+    const result = Operation.resolveTarget(specElems, source)
+    const expected = Operation.TARGET.layout
+
+    assert.isTrue(result instanceof Target)
+    assert.equal(result.id, expected)
+  })
+
+  it("returns a Target object with id equal to the page enum value if the operation spec target value is equal to 'page' boxed atom", () => {
+    const TestPageClass = class {}
+    Runtime.registerPageClass(TestPageClass)
+
+    const specElems = [Type.atom("page"), Type.atom("test_action")]
+
+    const result = Operation.resolveTarget(specElems, source)
+    const expected = Operation.TARGET.page
+
+    assert.isTrue(result instanceof Target)
+    assert.equal(result.id, expected)
+  })
+
+  it("returns a Target object with id equal to the unboxed target value if the operation spec contains a boxed target value", () => {
+    const targetId = "test_target"
+    const TestComponentClass = class {}
+    Runtime.registerComponentClass(targetId, TestComponentClass)
+
+    const specElems = [Type.atom(targetId), Type.atom("test_action")]
+
+    const result = Operation.resolveTarget(specElems, source)
+
+    assert.isTrue(result instanceof Target)
+    assert.equal(result.id, targetId)
   })
 })
