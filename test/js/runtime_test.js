@@ -1,6 +1,6 @@
 "use strict";
 
-import { assert } from "./support/commons";
+import { assert, assertNotFrozen } from "./support/commons";
 import Operation from "../../assets/js/hologram/operation";
 import Runtime from "../../assets/js/hologram/runtime";
 import Type from "../../assets/js/hologram/type";
@@ -27,13 +27,16 @@ describe("determineLayoutClass()", () => {
 })
 
 describe("getClassByClassName()", () => {
-  it("returns class object given a class name", () => {
-    const TestClass_Abc_Xyz = class {}
-    globalThis.TestClass_Abc_Xyz = TestClass_Abc_Xyz
-    
-    const result = Runtime.getClassByClassName("TestClass_Abc_Xyz")
+  const TestClass_Abc_Xyz = class {}
+  globalThis.TestClass_Abc_Xyz = TestClass_Abc_Xyz
+  const result = Runtime.getClassByClassName("TestClass_Abc_Xyz")
 
+  it("returns class object given a class name", () => {
     assert.equal(result, TestClass_Abc_Xyz)
+  })
+
+  it("doesn't freeze returned class", () => {
+    assertNotFrozen(result)
   })
 })
 

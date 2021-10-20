@@ -31,7 +31,7 @@ export default class Runtime {
   }
 
   static getClassByClassName(className) {
-    return Utils.eval(className)
+    return Utils.eval(className, false)
   }  
 
   static getComponentClass(componentId) {
