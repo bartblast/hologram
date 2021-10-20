@@ -4,13 +4,15 @@ import Action from "./action";
 import Client from "./client";
 import Operation from "./operation";
 import Runtime from "./runtime";
+import Target from "./target";
+import Type from "./type";
 import Utils from "./utils";
 
 export default class Command {
   static buildMessagePayload(operation) {
     return {
       target_module: operation.target.module,
-      source_id: operation.sourceId,
+      source_id: Type.atom(operation.sourceId),
       command: operation.name,
       params: operation.params,
     }
@@ -25,12 +27,13 @@ export default class Command {
 
   // Covered implicitely in E2E tests.
   static handleResult(commandResult, sourceId) {
-    const {data: [target, actionName, params]} = Utils.eval(commandResult)
+    const {data: [targetId, actionName, params]} = Utils.eval(commandResult)
 
     if (actionName.value === "__redirect__") {
       Runtime.redirect(params)
 
     } else {
+      const target = new Target(targetId.value)
       const operation = new Operation(sourceId, target, actionName, params)
       Action.execute(operation)
     }

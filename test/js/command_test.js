@@ -14,7 +14,7 @@ describe("buildMessagePayload()", () => {
     Runtime.registerComponentClass(targetId, TestComponentClass)
     const target = new Target(targetId)
 
-    const sourceId = Type.atom("test_source_id")
+    const sourceId = "test_source_id"
     const commandName = Type.atom("test_command_name")
     const params = Type.list([])
 
@@ -23,7 +23,7 @@ describe("buildMessagePayload()", () => {
 
     const expected = {
       target_module: Type.module("TestComponentClass"),
-      source_id: sourceId,
+      source_id: Type.atom(sourceId),
       command: commandName,
       params: params,
     }
