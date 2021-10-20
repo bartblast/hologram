@@ -225,6 +225,9 @@ describe("buildElementVNode()", () => {
 
     assert.deepStrictEqual(result, expected)
   })
+
+  // Covered implicitely in E2E tests.
+  // it("changes the source to page if the current source is layout and the current tag is a slot")
 })
 
 describe("buildTextVNodeFromTextNode()", () => {

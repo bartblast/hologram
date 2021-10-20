@@ -56,6 +56,9 @@ export default class VDOM {
 
   static buildElementVNode(node, source, bindings, slots) {
     if (node.tag === "slot") {
+      if (source === Operation.TARGET.layout) {
+        source = Operation.TARGET.page
+      }
       return VDOM.buildVNodeList(slots.default, source, bindings, slots)
     }
 
