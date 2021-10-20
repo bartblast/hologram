@@ -8,26 +8,27 @@ defmodule Hologram.Runtime.Channel do
     {:ok, socket}
   end
 
-  def handle_in("command", %{"target" => target} = payload, socket) do
-    target = Decoder.decode(target)
+  def handle_in("command", %{"target_module" => target_module, "target_id" => target_id} = payload, socket) do
+    target_module = Decoder.decode(target_module)
+    target_id = Decoder.decode(target_id)
 
     response =
-      execute_command(target, payload)
-      |> build_response(target)
+      execute_command(target_module, payload)
+      |> build_response(target_id)
       |> Serializer.serialize()
 
     {:reply, {:ok, response}, socket}
   end
 
-  defp build_response({action, params}, target) do
-    {target, action, Enum.into(params, %{})}
+  defp build_response({action, params}, target_id) do
+    {target_id, action, Enum.into(params, %{})}
   end
 
-  defp build_response(action, target) do
-    {target, action, %{}}
+  defp build_response(action, target_id) do
+    {target_id, action, %{}}
   end
 
-  defp execute_command(target, %{"command" => command, "params" => params}) do
+  defp execute_command(target_module, %{"command" => command, "params" => params}) do
     command = Decoder.decode(command)
 
     params =
@@ -40,7 +41,7 @@ defmodule Hologram.Runtime.Channel do
       url = params.page.route()
       {:__redirect__, html: html, url: url}
     else
-      apply(target, :command, [command, params])
+      apply(target_module, :command, [command, params])
     end
   end
 end

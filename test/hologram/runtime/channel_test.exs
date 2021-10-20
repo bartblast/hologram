@@ -11,11 +11,8 @@ defmodule Hologram.Runtime.ChannelTest do
   @class_name_4 "Elixir_Hologram_Test_Fixtures_Runtime_Channel_Module4"
   @class_name_5 "Elixir_Hologram_Test_Fixtures_Runtime_Channel_Module5"
 
-  @module_1 Hologram.Test.Fixtures.Runtime.Channel.Module1
-  @module_2 Hologram.Test.Fixtures.Runtime.Channel.Module2
-  @module_3 Hologram.Test.Fixtures.Runtime.Channel.Module3
-  @module_4 Hologram.Test.Fixtures.Runtime.Channel.Module4
   @module_5 Hologram.Test.Fixtures.Runtime.Channel.Module5
+  @target_id %{"type" => "string", "value" => "test_target_id"}
 
   setup_all do
     on_exit(&compile_pages/0)
@@ -30,13 +27,14 @@ defmodule Hologram.Runtime.ChannelTest do
   end
 
   test "command without params that returns action without params", %{socket: socket} do
-    target = %{
+    target_module = %{
       "type" => "module",
       "className" => @class_name_1
     }
 
     message = %{
-      target: target,
+      target_module: target_module,
+      target_id: @target_id,
       command: %{"type" => "atom", "value" => "test_command"},
       params: %{"type" => "list", data: []}
     }
@@ -44,20 +42,21 @@ defmodule Hologram.Runtime.ChannelTest do
     ref = push(socket, "command", message)
 
     expected_response =
-      {@module_1, :test_action, %{}}
+      {"test_target_id", :test_action, %{}}
       |> Serializer.serialize()
 
     assert_reply ref, :ok, ^expected_response
   end
 
   test "command without params that returns action with params", %{socket: socket} do
-    target = %{
+    target_module = %{
       "type" => "module",
       "className" => @class_name_3
     }
 
     message = %{
-      target: target,
+      target_module: target_module,
+      target_id: @target_id,
       command: %{"type" => "atom", "value" => "test_command"},
       params: %{"type" => "list", data: []}
     }
@@ -65,20 +64,21 @@ defmodule Hologram.Runtime.ChannelTest do
     ref = push(socket, "command", message)
 
     expected_response =
-      {@module_3, :test_action, %{a: 1, b: 2}}
+      {"test_target_id", :test_action, %{a: 1, b: 2}}
       |> Serializer.serialize()
 
     assert_reply ref, :ok, ^expected_response
   end
 
   test "command with params that returns action without params", %{socket: socket} do
-    target = %{
+    target_module = %{
       "type" => "module",
       "className" => @class_name_4
     }
 
     message = %{
-      target: target,
+      target_module: target_module,
+      target_id: @target_id,
       command: %{"type" => "atom", "value" => "test_command"},
       params: %{
         "type" => "list",
@@ -104,20 +104,21 @@ defmodule Hologram.Runtime.ChannelTest do
     ref = push(socket, "command", message)
 
     expected_response =
-      {@module_4, :test_action_1, %{}}
+      {"test_target_id", :test_action_1, %{}}
       |> Serializer.serialize()
 
     assert_reply ref, :ok, ^expected_response
   end
 
   test "command with params that returns action with params", %{socket: socket} do
-    target = %{
+    target_module = %{
       "type" => "module",
       "className" => @class_name_2
     }
 
     message = %{
-      target: target,
+      target_module: target_module,
+      target_id: @target_id,
       command: %{"type" => "atom", "value" => "test_command"},
       params: %{
         "type" => "list",
@@ -143,7 +144,7 @@ defmodule Hologram.Runtime.ChannelTest do
     ref = push(socket, "command", message)
 
     expected_response =
-      {@module_2, :test_action, %{a: 10, b: 20}}
+      {"test_target_id", :test_action, %{a: 10, b: 20}}
       |> Serializer.serialize()
 
     assert_reply ref, :ok, ^expected_response
@@ -152,13 +153,14 @@ defmodule Hologram.Runtime.ChannelTest do
   test "__redirect__ command", %{socket: socket} do
     compile_pages("test/fixtures/runtime/channel")
 
-    target = %{
+    target_module = %{
       "type" => "module",
       "className" => @class_name_5
     }
 
     message = %{
-      target: target,
+      target_module: target_module,
+      target_id: @target_id,
       command: %{"type" => "atom", "value" => "__redirect__"},
       params: %{
         "type" => "list",
@@ -177,7 +179,7 @@ defmodule Hologram.Runtime.ChannelTest do
     html = Renderer.render(@module_5, %{})
 
     expected_response =
-      {@module_5, :__redirect__, %{html: html, url: "/test-route"}}
+      {"test_target_id", :__redirect__, %{html: html, url: "/test-route"}}
       |> Serializer.serialize()
 
     ref = push(socket, "command", message)
