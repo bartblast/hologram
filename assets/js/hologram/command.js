@@ -4,27 +4,27 @@ import Action from "./action";
 import Client from "./client";
 import Operation from "./operation";
 import Runtime from "./runtime";
-import Type from "./type";
 import Utils from "./utils";
 
 export default class Command {
-  // Covered implicitely in E2E tests.
-  static execute(operation) {
-    const targetClass = Runtime.getComponentClass(operation.target)
-    const targetModule = Type.module(targetClass.name)
-
-    const payload = {
-      target: targetModule,
+  static buildMessagePayload(operation) {
+    return {
+      target_module: operation.target.module,
+      source_id: operation.sourceId,
       command: operation.name,
       params: operation.params,
     }
+  }
 
+  // Covered implicitely in E2E tests.
+  static execute(operation) {
+    const payload = Command.buildMessagePayload(operation)
     Client.pushMessage("command", payload, Command.handleResult)
   }
 
   // Covered implicitely in E2E tests.
   static handleResult(commandResult) {
-    const {data: [actionName, params, target]} = Utils.eval(commandResult)
+    const {data: [target, actionName, params]} = Utils.eval(commandResult)
 
     if (actionName.value === "__redirect__") {
       Runtime.redirect(params)
