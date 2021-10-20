@@ -13,7 +13,7 @@ export default class Action {
   static execute(operation) {
     const targetState = Store.getComponentState(operation.target.id)
 
-    let actionResult = targetClass.action(operation.name, operation.params, targetState)
+    let actionResult = operation.target.class.action(operation.name, operation.params, targetState)
     actionResult = Utils.freeze(actionResult)
 
     Action.handleResult(actionResult, operation.target)
@@ -96,7 +96,7 @@ export default class Action {
     const newState = Action.getStateFromActionResult(actionResult)
     const commandName = Action.getCommandNameFromActionResult(actionResult)
 
-    Store.setComponentState(actionTarget, newState)
+    Store.setComponentState(actionTarget.id, newState)
     VDOM.render()
 
     if (commandName) {
