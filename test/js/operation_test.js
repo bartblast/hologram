@@ -83,15 +83,15 @@ describe("buildParams()", () => {
     Type.tuple([Type.atom("b"), Type.integer(2)]),
   ])
 
-  const eventDataElems = {}
+  let eventDataElems = {}
   eventDataElems[Type.atomKey("x")] = Type.integer(1)
   const eventData = Type.map(eventDataElems)
 
-  const expected = Type.list([
-    Type.tuple([Type.atom("event"), eventData]),
-    Type.tuple([Type.atom("a"), Type.integer(1)]),
-    Type.tuple([Type.atom("b"), Type.integer(2)])
-  ])
+  let expectedData = {}
+  expectedData[Type.atomKey("event")] = eventData
+  expectedData[Type.atomKey("a")] = Type.integer(1)
+  expectedData[Type.atomKey("b")] = Type.integer(2)
+  const expected = Type.map(expectedData)
 
   it("returns the third spec elem if the operation spec has three elems", () => {
     const specElems = [Type.atom("test_target"), Type.atom("test_action"), params]
@@ -112,9 +112,9 @@ describe("buildParams()", () => {
 
     const result = Operation.buildParams(specElems, eventData)
     
-    const expected = Type.list([
-      Type.tuple([Type.atom("event"), eventData])
-    ])
+    let expectedData = {}
+    expectedData[Type.atomKey("event")] = eventData
+    const expected = Type.map(expectedData)
 
     assert.deepStrictEqual(result, expected)
   })

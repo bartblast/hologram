@@ -74,7 +74,8 @@ export default class Operation {
       params = Type.list([])
     }
 
-    return Keyword.put(params, Type.atom("event"), eventData)
+    params = Keyword.put(params, Type.atom("event"), eventData)
+    return Type.keywordToMap(params)
   }
 
   static buildTarget(specElems, source) {
