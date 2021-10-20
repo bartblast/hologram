@@ -14,9 +14,10 @@ const textOperationSpec = {
   value: [Type.textNode("test_action")]
 }
 
+const TestComponentClass = class {}
+
 describe("build()", () => {
   it("returns a frozen Operation object", () => {
-    const TestComponentClass = class {}
     Runtime.registerComponentClass(source, TestComponentClass)
 
     const result = Operation.build(textOperationSpec, source, bindings, Type.map({}))
@@ -209,7 +210,6 @@ describe("getTargetSpecValue()", () => {
 
 describe("resolveTarget()", () => {
   it("returns a Target object with id equal to the source arg if the operation spec doesn't contain target value", () => {
-    const TestComponentClass = class {}
     Runtime.registerComponentClass(source, TestComponentClass)
 
     const specElems = [Type.textNode("test_action")]
@@ -247,7 +247,6 @@ describe("resolveTarget()", () => {
 
   it("returns a Target object with id equal to the unboxed target value if the operation spec contains a boxed target value", () => {
     const targetId = "test_target"
-    const TestComponentClass = class {}
     Runtime.registerComponentClass(targetId, TestComponentClass)
 
     const specElems = [Type.atom(targetId), Type.atom("test_action")]
