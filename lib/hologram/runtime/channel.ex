@@ -8,24 +8,32 @@ defmodule Hologram.Runtime.Channel do
     {:ok, socket}
   end
 
-  def handle_in("command", %{"target_module" => target_module, "target_id" => target_id} = payload, socket) do
+  def handle_in("command", %{"target_module" => target_module, "source_id" => source_id} = payload, socket) do
     target_module = Decoder.decode(target_module)
-    target_id = Decoder.decode(target_id)
+    source_id = Decoder.decode(source_id)
 
     response =
       execute_command(target_module, payload)
-      |> build_response(target_id)
+      |> build_response(source_id)
       |> Serializer.serialize()
 
     {:reply, {:ok, response}, socket}
   end
 
-  defp build_response({action, params}, target_id) do
+  defp build_response({target_id, action, params}, _) do
     {target_id, action, Enum.into(params, %{})}
   end
 
-  defp build_response(action, target_id) do
+  defp build_response({target_id, action}, _) when is_atom(action) do
     {target_id, action, %{}}
+  end
+
+  defp build_response({action, params}, source_id) do
+    {source_id, action, Enum.into(params, %{})}
+  end
+
+  defp build_response(action, source_id) do
+    {source_id, action, %{}}
   end
 
   defp execute_command(target_module, %{"command" => command, "params" => params}) do
