@@ -8,7 +8,7 @@ defmodule Hologram.Compiler.ModuleAttributeOperatorEncoderTest do
 
   describe "encode/3" do
     test "when doesn't have template opt" do
-      context = %Context{module: Hologram.Compiler.ModuleAttributeOperatorTest}
+      context = %Context{module: Hologram.Compiler.ModuleAttributeOperatorEncoderTest}
 
       result = Encoder.encode(@ir, context, %Opts{})
       expected = "Elixir_Hologram_Compiler_ModuleAttributeOperatorEncoderTest.$xyz"
