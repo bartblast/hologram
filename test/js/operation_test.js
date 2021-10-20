@@ -7,7 +7,7 @@ import Type from "../../assets/js/hologram/type"
 import Runtime from "../../assets/js/hologram/runtime";
 
 const bindings = Type.map({})
-const source = "test_source"
+const sourceId = "test_source_id"
 
 const textOperationSpec = {
   modifiers: [],
@@ -18,9 +18,9 @@ const TestComponentClass = class {}
 
 describe("build()", () => {
   it("returns a frozen Operation object", () => {
-    Runtime.registerComponentClass(source, TestComponentClass)
+    Runtime.registerComponentClass(sourceId, TestComponentClass)
 
-    const result = Operation.build(textOperationSpec, source, bindings, Type.map({}))
+    const result = Operation.build(textOperationSpec, sourceId, bindings, Type.map({}))
 
     assert.isTrue(result instanceof Operation)
     assertFrozen(result)
@@ -209,14 +209,14 @@ describe("getTargetSpecValue()", () => {
 })
 
 describe("resolveTarget()", () => {
-  it("returns a Target object with id equal to the source arg if the operation spec doesn't contain target value", () => {
-    Runtime.registerComponentClass(source, TestComponentClass)
+  it("returns a Target object with id equal to the sourceId arg if the operation spec doesn't contain target value", () => {
+    Runtime.registerComponentClass(sourceId, TestComponentClass)
 
     const specElems = [Type.textNode("test_action")]
-    const result = Operation.resolveTarget(specElems, source)
+    const result = Operation.resolveTarget(specElems, sourceId)
 
     assert.isTrue(result instanceof Target)
-    assert.equal(result.id, source)
+    assert.equal(result.id, sourceId)
   })
 
   it("returns a Target object with id equal to the layout enum value if the operation spec target value is equal to 'layout' boxed atom", () => {
@@ -225,7 +225,7 @@ describe("resolveTarget()", () => {
 
     const specElems = [Type.atom("layout"), Type.atom("test_action")]
 
-    const result = Operation.resolveTarget(specElems, source)
+    const result = Operation.resolveTarget(specElems, sourceId)
     const expected = Operation.TARGET.layout
 
     assert.isTrue(result instanceof Target)
@@ -238,7 +238,7 @@ describe("resolveTarget()", () => {
 
     const specElems = [Type.atom("page"), Type.atom("test_action")]
 
-    const result = Operation.resolveTarget(specElems, source)
+    const result = Operation.resolveTarget(specElems, sourceId)
     const expected = Operation.TARGET.page
 
     assert.isTrue(result instanceof Target)
@@ -246,12 +246,12 @@ describe("resolveTarget()", () => {
   })
 
   it("returns a Target object with id equal to the unboxed target value if the operation spec contains a boxed target value", () => {
-    const targetId = "test_target"
+    const targetId = "test_target_id"
     Runtime.registerComponentClass(targetId, TestComponentClass)
 
     const specElems = [Type.atom(targetId), Type.atom("test_action")]
 
-    const result = Operation.resolveTarget(specElems, source)
+    const result = Operation.resolveTarget(specElems, sourceId)
 
     assert.isTrue(result instanceof Target)
     assert.equal(result.id, targetId)

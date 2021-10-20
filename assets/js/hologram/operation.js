@@ -27,22 +27,23 @@ export default class Operation {
     }
   }
 
-  constructor(target, name, params, method = null) {
+  constructor(sourceId, target, name, params, method = null) {
+    this.sourceId = sourceId
     this.target = target
     this.name = name
     this.params = params
     this.method = method
   }
 
-  static build(operationSpec, source, bindings, eventData) {
+  static build(operationSpec, sourceId, bindings, eventData) {
     const specElems = Operation.getSpecElems(operationSpec, bindings)
 
-    const target = Operation.resolveTarget(specElems, source)
+    const target = Operation.resolveTarget(specElems, sourceId)
     const name = Operation.buildName(specElems)
     const params = Operation.buildParams(specElems, eventData)
     const method = Operation.buildMethod(operationSpec)
     
-    const operation = new Operation(target, name, params, method)
+    const operation = new Operation(sourceId, target, name, params, method)
     return Utils.freeze(operation)
   }
 
@@ -110,12 +111,12 @@ export default class Operation {
     return specElems[0].value
   }
 
-  static resolveTarget(specElems, source) {
+  static resolveTarget(specElems, sourceId) {
     const targetSpecValue = Operation.getTargetSpecValue(specElems)
 
     switch (targetSpecValue) {
       case null:
-        return new Target(source)
+        return new Target(sourceId)
 
       case "layout":
         return new Target(Operation.TARGET.layout)
