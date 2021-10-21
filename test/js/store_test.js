@@ -8,20 +8,12 @@ import Store from "../../assets/js/hologram/store";
 import Type from "../../assets/js/hologram/type";
 import Runtime from "../../assets/js/hologram/runtime";
 
-const TestClass1 = class{}
-const TestClass2 = class{}
-const TestClass3 = class{}
-
-Store.componentStateRegistry = {
-  component_1: TestClass1,
-  component_2: TestClass2,
-  component_3: TestClass3
-}
-
 describe("getComponentState()", () => {
-  it("returns component state given component ID", () => {
-    const result = Store.getComponentState("component_2")
-    assert.equal(result, TestClass2)
+  it("returns component state by component ID", () => {
+    Store.setComponentState("test_id", "test_state")
+    const result = Store.getComponentState("test_id")
+
+    assert.equal(result, "test_state")
   })
 
   it("returns null if there is no state for the given component ID", () => {
