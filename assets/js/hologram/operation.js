@@ -22,8 +22,8 @@ export default class Operation {
 
   static get TARGET() {
     return {
-      layout: "__LAYOUT__",
-      page: "__PAGE__"
+      layout: "layout",
+      page: "page"
     }
   }
 
