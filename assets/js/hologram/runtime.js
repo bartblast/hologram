@@ -35,7 +35,8 @@ export default class Runtime {
   }  
 
   static getComponentClass(componentId) {
-    return Runtime.componentClassRegistry[componentId]
+    const klass = Runtime.componentClassRegistry[componentId]
+    return klass ? klass : null
   }
 
   static getLayoutClass() {

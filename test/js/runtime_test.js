@@ -41,7 +41,7 @@ describe("getClassByClassName()", () => {
 })
 
 describe("getComponentClass()", () => {
-  it("returns component class given component ID", () => {
+  it("returns component class by the given component ID", () => {
     const TestClass1 = class{}
     const TestClass2 = class{}
     const TestClass3 = class{}
@@ -55,6 +55,11 @@ describe("getComponentClass()", () => {
     const result = Runtime.getComponentClass("component_2")
     
     assert.equal(result, TestClass2)
+  })
+
+  it("returns null if the given component ID is not registered", () => {
+    const result = Runtime.getComponentClass("not_registered")
+    assert.isNull(result)
   })
 })
 
