@@ -1,9 +1,12 @@
 "use strict";
 
-import { assert, assertFrozen } from "./support/commons";
+import { assert, assertFrozen, cleanup } from "./support/commons";
+beforeEach(() => cleanup())
+
 import Operation from "../../assets/js/hologram/operation";
 import Store from "../../assets/js/hologram/store";
 import Type from "../../assets/js/hologram/type";
+import Runtime from "../../assets/js/hologram/runtime";
 
 const TestClass1 = class{}
 const TestClass2 = class{}
@@ -62,6 +65,42 @@ describe("hydrate()", () => {
 
   it("saves frozen page state to the store", () => {
     assertFrozen(pageState)
+  })
+})
+
+describe("resolveComponentState()", () => {
+  const TestComponentClass = class {
+    static init() {
+      return "init_result"
+    }
+  }
+
+  const componentId = "test_id"
+
+  it("returns state bindings of a stateful component", () => {
+    const elems = {}
+    elems[Type.atomKey("x")] = Type.integer(9)
+    const state = Type.map(elems)
+
+    Store.setComponentState(componentId, state)
+
+    const result = Store.resolveComponentState(componentId)
+
+    assert.deepStrictEqual(result, state)
+  })
+
+  it("inits the state of a stateful component if it hasn't been initiated yet", () => {
+    Runtime.registerComponentClass(componentId, TestComponentClass)
+
+    Store.resolveComponentState(componentId)
+    const state = Store.getComponentState(componentId)
+
+    assert.equal(state, "init_result")
+  })
+
+  it("returns empty boxed map if the given componentId is null", () => {
+    const result = Store.resolveComponentState(null)
+    assert.deepStrictEqual(result, Type.map({}))
   })
 })
 

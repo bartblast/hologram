@@ -1,6 +1,7 @@
 "use strict";
 
 import Operation from "./operation"
+import Runtime from "./runtime"
 import Type from "./type"
 import Utils from "./utils"
 
@@ -23,6 +24,22 @@ export default class Store {
 
   static getPageState() {
     return Store.getComponentState(Operation.TARGET.page)
+  }
+
+  static resolveComponentState(componentId) {
+    if (componentId) {
+      let state = Store.getComponentState(componentId)
+
+      if (!state) {
+        state = Runtime.getComponentClass(componentId).init()
+        Store.setComponentState(componentId, state)
+      }
+
+      return state
+
+    } else {
+      return Type.map({})
+    }
   }
 
   static setComponentState(componentId, state) {
