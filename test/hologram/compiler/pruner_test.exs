@@ -48,6 +48,12 @@ defmodule Hologram.Compiler.PrunerTest do
       assert function_preserved?(module_24, module_25, :init, 0)
     end
 
+    test "component actions" do
+      module_24 = Hologram.Test.Fixtures.Compiler.Pruner.Module24
+      module_25 = Hologram.Test.Fixtures.Compiler.Pruner.Module25
+      assert function_preserved?(module_24, module_25, :action, 3)
+    end
+
     test "template of component used in page template" do
       module_3 = Hologram.Test.Fixtures.Compiler.Pruner.Module3
       assert function_preserved?(module_3, @module_4, :template, 0)

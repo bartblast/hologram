@@ -147,6 +147,7 @@ defmodule Hologram.Compiler.Pruner do
        ) do
     acc =
       traverse_function_defs(acc, module_defs_map, {module, :init})
+      |> traverse_function_defs(module_defs_map, {module, :action})
       |> traverse_template(module_defs_map, module, pruned_module)
 
     acc =
