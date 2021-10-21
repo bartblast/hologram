@@ -1,5 +1,7 @@
 "use strict";
 
+import Runtime from "../../../assets/js/hologram/runtime";
+import Store from "../../../assets/js/hologram/store";
 import Type from "../../../assets/js/hologram/type";
 import Utils from "../../../assets/js/hologram/utils";
 
@@ -23,6 +25,11 @@ export function assertFrozen(obj) {
 
 export function assertNotFrozen(obj) {
   assert.isFalse(Object.isFrozen(obj));
+}
+
+export function cleanup() {
+  Runtime.componentClassRegistry = {}
+  Store.componentStateRegistry = {}
 }
 
 export function debug(obj) {
