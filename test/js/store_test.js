@@ -20,6 +20,11 @@ describe("getComponentState()", () => {
     const result = Store.getComponentState("component_2")
     assert.equal(result, TestClass2)
   })
+
+  it("returns null if there is no state for the given component ID", () => {
+    const result = Store.getComponentState("no_state")
+    assert.isNull(result)
+  })
 })
 
 describe("getPageState()", () => {

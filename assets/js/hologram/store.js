@@ -17,7 +17,8 @@ export default class Store {
   }
 
   static getComponentState(componentId) {
-    return Store.componentStateRegistry[componentId]
+    const state = Store.componentStateRegistry[componentId]
+    return state ? state : null
   }
 
   static getPageState() {
