@@ -17,10 +17,10 @@ export default class VDOM {
 
   static virtualDocument = null
 
-  static aggregateComponentBindings(node, outerBindings) {
+  static aggregateComponentBindings(componentId, node, outerBindings) {
     const contextBindings = VDOM.aggregateComponentContextBindings(outerBindings)
     const propsBindings = VDOM.aggregateComponentPropsBindings(node, outerBindings)
-    const stateBindings = VDOM.aggregateComponentStateBindings(node, outerBindings)
+    const stateBindings = Store.resolveComponentState(componentId)
 
     const elems = Object.assign({}, contextBindings.data, propsBindings.data, stateBindings.data)
     return Type.map(elems)
@@ -42,16 +42,6 @@ export default class VDOM {
     }, {})
 
     return Type.map(elems)
-  }
-
-  static aggregateComponentStateBindings(node, outerBindings) {
-    if (VDOM.isStatefulComponent(node)) {
-      const componentId = VDOM.getComponentId(node, outerBindings)
-      return Store.getComponentState(componentId)
-
-    } else {
-      return Utils.freeze({})
-    }
   }
 
   static buildElementVNode(node, source, bindings, slots) {
@@ -102,17 +92,19 @@ export default class VDOM {
   }
 
   static buildComponentVNodes(node, source, outerBindings) {
-    if (VDOM.isStatefulComponent(node)) {
-      source = VDOM.getComponentId(node, outerBindings)
+    const componentId = VDOM.getComponentId(node, outerBindings)
+    const componentClass = Runtime.resolveComponentClass(node, componentId)
+
+    if (componentId) {
+      source = componentId
     }
+
+    const bindings = VDOM.aggregateComponentBindings(componentId, node, outerBindings)
 
     const childrenCopy = Utils.clone(node.children)
     const slots = { default: Utils.freeze(childrenCopy) }
 
-    let klass = Runtime.getClassByClassName(node.module)
-    const bindings = VDOM.aggregateComponentBindings(node, outerBindings)
-
-    return VDOM.build(klass.template(), source, bindings, slots)
+    return VDOM.build(componentClass.template(), source, bindings, slots)
   }
 
   static buildVNodeAttrs(node, bindings) {
@@ -173,8 +165,13 @@ export default class VDOM {
   }
 
   static getComponentId(node, bindings) {
-    const boxedId = VDOM.evaluateProp(node.props.id, bindings)
-    return VDOM.interpolate(boxedId)
+    if (VDOM.isStatefulComponent(node)) {
+      const boxedId = VDOM.evaluateProp(node.props.id, bindings)
+      return VDOM.interpolate(boxedId)
+
+    } else {
+      return null
+    }
   }
 
   // DEFER: test

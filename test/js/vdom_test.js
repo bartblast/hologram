@@ -1,6 +1,8 @@
 "use strict";
 
-import { assert, assertFrozen } from "./support/commons";
+import { assert, assertFrozen, cleanup } from "./support/commons";
+beforeEach(() => cleanup())
+
 import { HologramNotImplementedError } from "../../assets/js/hologram/errors"
 import Operation from "../../assets/js/hologram/operation";
 import SpecialForms from "../../assets/js/hologram/elixir/kernel/special_forms";
@@ -37,7 +39,7 @@ describe("aggregateComponentBindings()", () => {
 
     const componentNode = Type.componentNode("test_class_name", props, [])
 
-    const result = VDOM.aggregateComponentBindings(componentNode, outerBindings)
+    const result = VDOM.aggregateComponentBindings("test_id", componentNode, outerBindings)
 
     const expectedElems = {}
     expectedElems[Type.atomKey("context")] = Type.string("text_context_value")
@@ -87,34 +89,6 @@ describe("aggregateComponentPropsBindings()", () => {
     const expected = Type.map(elems)
 
     assert.deepStrictEqual(result, expected)
-    assertFrozen(result)
-  })
-})
-
-describe("aggregateComponentStateBindings()", () => {
-  it("returns state bindings of a stateful component", () => {
-    const elems = {}
-    elems[Type.atomKey("x")] = Type.integer(9)
-    const state = Type.map(elems)
-
-    Store.setComponentState("test_id", state)
-
-    const props = {
-      id: [Type.textNode("test_id")]
-    }
-
-    const node = Type.componentNode("test_class_name", props, [])
-    const result = VDOM.aggregateComponentStateBindings(node, bindings)
-
-    assert.deepStrictEqual(result, state)
-    assertFrozen(result)
-  })
-
-  it("returns empty JS object if the component is stateless", () => {
-    const node = Type.componentNode("test_class_name", {}, [])
-    const result = VDOM.aggregateComponentStateBindings(node, bindings)
-
-    assert.deepStrictEqual(result, {})
     assertFrozen(result)
   })
 })
@@ -369,7 +343,7 @@ describe("evaluateProp()", () => {
 })
 
 describe("getComponentId()", () => {
-  it("returns component id prop as JS string", () => {
+  it("returns component ID prop as JS string if the component is stateful", () => {
     const props = {
       id: [
         Type.textNode("test"),
@@ -381,6 +355,13 @@ describe("getComponentId()", () => {
     const result = VDOM.getComponentId(node, bindings)
 
     assert.equal(result, "test1")
+  })
+
+  it("returns null if the component is stateless", () => {
+    const node = Type.componentNode("test_class_name", {}, [])
+    const result = VDOM.getComponentId(node, bindings)
+
+    assert.isNull(result)
   })
 })
 
