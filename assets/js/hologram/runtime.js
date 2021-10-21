@@ -130,6 +130,22 @@ export default class Runtime {
     Runtime.registerComponentClass(Operation.TARGET.page, klass)
   }
 
+  static resolveComponentClass(node, componentId) {
+    if (componentId) {
+      let klass = Runtime.getComponentClass(componentId)
+
+      if (!klass) {
+        klass = Runtime.getClassByClassName(node.module)
+        Runtime.registerComponentClass(componentId, klass)
+      }
+
+      return klass
+
+    } else {
+      return Runtime.getClassByClassName(node.module)
+    }
+  }
+
   // Covered implicitely in E2E tests.
   static updateURL(url) {
     Runtime.window.history.pushState(null, null, url)

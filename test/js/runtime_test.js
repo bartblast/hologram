@@ -1,6 +1,8 @@
 "use strict";
 
-import { assert, assertNotFrozen } from "./support/commons";
+import { assert, assertNotFrozen, cleanup } from "./support/commons";
+beforeEach(() => cleanup())
+
 import Operation from "../../assets/js/hologram/operation";
 import Runtime from "../../assets/js/hologram/runtime";
 import Type from "../../assets/js/hologram/type";
@@ -137,5 +139,32 @@ describe("registerPageClass()", () => {
     Runtime.registerPageClass(TestPageClass)
 
     assert.equal(Runtime.componentClassRegistry[pageTarget], TestPageClass)
+  })
+})
+
+describe("resolveComponentClass()", () => {
+  const TestComponentClass = class TestComponentClass {}
+  const node = Type.componentNode(TestComponentClass, {}, [])
+
+  it("returns the already registered class of a stateful component", () => {
+    Runtime.registerComponentClass("test_id", TestComponentClass)
+    const result = Runtime.resolveComponentClass(node, "test_id")
+
+    assert.equal(result, TestComponentClass)
+  })
+
+  it("returns the not registered yet class of a stateful component and registers it", () => {
+    assert.isNull(Runtime.getComponentClass("test_id"))
+
+    const result = Runtime.resolveComponentClass(node, "test_id")
+    assert.equal(result.name, "TestComponentClass")
+
+    const registeredClassName = Runtime.componentClassRegistry["test_id"].name
+    assert.equal(registeredClassName, "TestComponentClass")
+  })
+
+  it("returns the class of a stateless component", () => {
+    const result = Runtime.resolveComponentClass(node, null)
+    assert.equal(result.name, "TestComponentClass")
   })
 })
