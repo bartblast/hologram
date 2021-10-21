@@ -32,7 +32,7 @@ defmodule Hologram.MixProject do
       Mix.compilers()
     else
       compilers = [:phoenix] ++ Mix.compilers()
-      if Mix.env() == :test, do: compilers, else: compilers ++ [:hologram]
+      compilers ++ [:hologram]
     end
   end
 
