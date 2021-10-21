@@ -145,7 +145,9 @@ defmodule Hologram.Compiler.Pruner do
          %Component{module: module, props: props, children: children},
          pruned_module
        ) do
-    acc = traverse_template(acc, module_defs_map, module, pruned_module)
+    acc =
+      traverse_function_defs(acc, module_defs_map, {module, :init})
+      |> traverse_template(module_defs_map, module, pruned_module)
 
     acc =
       Enum.reduce(props, acc, fn {_, value}, acc ->

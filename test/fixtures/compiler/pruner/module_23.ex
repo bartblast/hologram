@@ -8,6 +8,6 @@ defmodule Hologram.Test.Fixtures.Compiler.Pruner.Module23 do
   end
 
   def action(:test_23, _, _) do
-    IO.inspect(Module20.fun_1())
+    to_string(Module20.fun_1())
   end
 end
