@@ -5,7 +5,10 @@ import {
   assertBoxedFalse,
   assertBoxedTrue,
   assertFrozen,
+  cleanup
 } from "../support/commons";
+beforeEach(() => cleanup())
+
 import { HologramNotImplementedError } from "../../../assets/js/hologram/errors";
 import Kernel from "../../../assets/js/hologram/elixir/kernel";
 import Type from "../../../assets/js/hologram/type";

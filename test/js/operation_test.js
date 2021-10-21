@@ -1,6 +1,8 @@
 "use strict";
 
-import { assert, assertFrozen } from "./support/commons";
+import { assert, assertFrozen, cleanup } from "./support/commons";
+beforeEach(() => cleanup())
+
 import Operation from "../../assets/js/hologram/operation"
 import Target from "../../assets/js/hologram/target"
 import Type from "../../assets/js/hologram/type"

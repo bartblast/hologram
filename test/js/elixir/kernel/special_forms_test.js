@@ -1,6 +1,8 @@
 "use strict";
 
-import { assert, assertFrozen } from "../../support/commons"
+import { assert, assertFrozen, cleanup } from "../../support/commons"
+beforeEach(() => cleanup())
+
 import { HologramNotImplementedError } from "../../../../assets/js/hologram/errors";
 import SpecialForms from "../../../../assets/js/hologram/elixir/kernel/special_forms"
 import Type from "../../../../assets/js/hologram/type";

@@ -5,7 +5,10 @@ import {
   assertBoxedFalse,
   assertBoxedTrue,
   assertFrozen,
+  cleanup
 } from "../support/commons";
+beforeEach(() => cleanup())
+
 import Keyword from "../../../assets/js/hologram/elixir/keyword";
 import Type from "../../../assets/js/hologram/type";
 

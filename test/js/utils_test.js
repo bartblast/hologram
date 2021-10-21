@@ -1,6 +1,8 @@
 "use strict";
 
-import { assert, assertFrozen, assertNotFrozen } from "./support/commons";
+import { assert, assertFrozen, assertNotFrozen, cleanup } from "./support/commons";
+beforeEach(() => cleanup())
+
 import Utils from "../../assets/js/hologram/utils";
 
 describe("clone()", () => {

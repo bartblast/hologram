@@ -1,6 +1,8 @@
 "use strict";
 
-import { assert, assertFrozen } from "../support/commons";
+import { assert, assertFrozen, cleanup } from "../support/commons";
+beforeEach(() => cleanup())
+
 import Map from "../../../assets/js/hologram/elixir/map";
 import Type from "../../../assets/js/hologram/type";
 

@@ -1,6 +1,8 @@
 "use strict";
 
-import { assert, sinon } from "../support/commons";
+import { assert, cleanup, sinon } from "../support/commons";
+beforeEach(() => cleanup())
+
 import IO from "../../../assets/js/hologram/elixir/io";
 import Type from "../../../assets/js/hologram/type";
 
