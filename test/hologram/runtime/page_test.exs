@@ -53,8 +53,4 @@ defmodule Hologram.PageTest do
             [{:route, [counter: _, context: Hologram.Page], Hologram.Page}, [do: "/test-path"]]} =
              ast
   end
-
-  test "update/3" do
-    assert Page.update(%{a: 1}, :b, 2) == %{a: 1, b: 2}
-  end
 end
