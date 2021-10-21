@@ -5,7 +5,7 @@ defmodule Hologram.Page do
     quote do
       require Hologram.Page
       import Hologram.Page
-      import Hologram.Runtime.Commons, only: [sigil_H: 2]
+      import Hologram.Runtime.Commons, only: [sigil_H: 2, update: 3]
 
       def layout do
         if Keyword.has_key?(__MODULE__.__info__(:functions), :page_layout) do
@@ -31,9 +31,5 @@ defmodule Hologram.Page do
         unquote(path)
       end
     end
-  end
-
-  def update(state, key, value) do
-    Map.put(state, key, value)
   end
 end
