@@ -229,28 +229,28 @@ describe("resolveCommandTarget()", () => {
     ])
 
     const TestComponentClass1 = class {}
-    Runtime.registerComponentClass(targetId, TestComponentClass1)
-    const actionTarget = new Target(targetId)
+    Runtime.registerComponentClass(targetId.value, TestComponentClass1)
+    const actionTarget = new Target(targetId.value)
 
     const TestComponentClass2 = class {}
-    Runtime.registerComponentClass(commandTargetId, TestComponentClass2)
+    Runtime.registerComponentClass(commandTargetId.value, TestComponentClass2)
 
     const result = Action.resolveCommandTarget(actionResult, actionTarget)
     
     assert.isTrue(result instanceof Target)
-    assert.equal(result.id, commandTargetId)
+    assert.equal(result.id, commandTargetId.value)
   })
 
   it("creates Target object when command target is not present in action result", () => {
     const actionResult = Type.tuple([state])
 
     const TestComponentClass = class {}
-    Runtime.registerComponentClass(targetId, TestComponentClass)
-    const actionTarget = new Target(targetId)
+    Runtime.registerComponentClass(targetId.value, TestComponentClass)
+    const actionTarget = new Target(targetId.value)
 
     const result = Action.resolveCommandTarget(actionResult, actionTarget)
     
     assert.isTrue(result instanceof Target)
-    assert.equal(result.id, targetId)
+    assert.equal(result.id, targetId.value)
   })
 })
