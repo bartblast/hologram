@@ -6,6 +6,28 @@ beforeEach(() => cleanup())
 import Map from "../../../assets/js/hologram/elixir/map";
 import Type from "../../../assets/js/hologram/type";
 
+describe("get()", () => {
+  let elems = {};
+  elems[Type.atomKey("a")] = Type.integer(1);
+  elems[Type.atomKey("b")] = Type.integer(2);
+  const map = Type.map(elems);
+
+  it("gets the value for a specific key in map if the given key exists in the given map", () => {
+    const result = Map.get(map, Type.atom("b"))
+    assert.deepStrictEqual(result, Type.integer(2))
+  })
+
+  it("returns boxed nil by default if the given key doesn't exist in the given map", () => {
+    const result = Map.get(map, Type.atom("c"))
+    assert.deepStrictEqual(result, Type.nil())
+  })
+
+  it("it returns the default_value arg if the given key doesn't exist in the given map and the default_value param is specified", () => {
+    const result = Map.get(map, Type.atom("c"), Type.integer(9))
+    assert.deepStrictEqual(result, Type.integer(9))
+  })
+})
+
 describe("has_key$question()", () => {
   let elems = {};
   elems[Type.atomKey("a")] = Type.integer(1);
