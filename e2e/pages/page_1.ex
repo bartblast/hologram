@@ -1,96 +1,109 @@
 defmodule Hologram.E2E.Page1 do
   use Hologram.Page
+  alias Hologram.E2E.Component3, warn: false
 
   route "/e2e/page-1"
 
   def state do
     %{
-      text: ""
+      text: "",
+      value: :p1,
+      x: 0
     }
   end
 
   def template do
     ~H"""
-    <h1>Page 1</h1>
-    <button id="page-1-action-1-button" on_click="action_1">Action 1</button>
-    <button id="page-1-action-2-button" on_click={:action_2, a: 5, b: 6}>Action 2</button>
-    <button id="page-1-command-3-button" on_click.command="command_3">Command 3</button>
-    <button id="page-1-command-4-button" on_click.command="command_4">Command 4</button>
-    <button id="page-1-command-5-button" on_click.command="command_5">Command 5</button>
-    <button id="page-1-command-6-button" on_click.command={:command_6, a: 1, b: 2}>Command 6</button>
-    <button id="page-1-action-7-button" on_click="action_7">Action 7</button>
-    <button id="page-1-action-8-button" on_click="action_8">Action 8</button>
-    <button id="page-1-forward-button">Forward</button>
-    <div id="text">{@text}</div>
-    <a id="page-2-link" href={Hologram.E2E.Page2.route()} on_click.command={:__redirect__, page: Hologram.E2E.Page2}>Page 2</a>
-    <script>
-      document.getElementById("page-1-forward-button")
-        .addEventListener("click", () => &lcub; history.forward() &rcub;)
-    </script>
+    <h1>Page 1</h1><br />
+
+    <button id="page-1-button-1" on_click="action_1">Action 1</button>
+    <button id="page-1-button-2" on_click={:action_2}>Action 2</button>
+    <button id="page-1-button-3" on_click={:action_3, a: 5, b: 6}>Action 3</button>
+    <button id="page-1-button-4" on_click={:component_3_id, :component_3_action_1}>Component 3 Action 1</button>
+    <button id="page-1-button-5" on_click={:component_3_id, :component_3_action_2, a: 5, b: 6}>Component 3 Action 2</button>
+    <button id="page-1-button-6" on_click="action_4">Action 4</button>
+    <button id="page-1-button-7" on_click="action_5">Action 5</button>
+    <button id="page-1-button-8" on_click="action_6">Action 6</button>
+    <button id="page-1-button-9" on_click="action_7">Action 7</button>
+    <button id="page-1-button-10" on_click="action_8">Action 8</button>
+    <button id="page-1-button-11" on_click="action_9">Action 9</button>
+    <button id="page-1-button-12" on_click="action_10">Action 10</button>
+    <button id="page-1-button-13" on_click={:component_3_id, :component_3_action_3}>Component 3 Action 3</button>
+    <button id="page-1-button-14" on_click={:page, :action_11}>Action 11</button>
+    <button id="page-1-button-15" on_click={:layout, :default_layout_action_1}>Default Layout Action 1</button>
+    <br />
+
+    <div id="text-page-1">{@text}</div><br />
+
+    <Component3 id="component_3_id" /><br />
     """
   end
 
   def action(:action_1, _params, state) do
-    update(state, :text, "text updated by action_1")
+    update(state, :text, "text updated by action_1, state.value = #{state.value}")
   end
 
-  def action(:action_2, params, state) do
-    update(state, :text, "text updated by action_2_#{params.a}_#{params.b}")
+  def action(:action_2, _params, state) do
+    update(state, :text, "text updated by action_2, state.value = #{state.value}")
   end
 
-  def action(:action_3a, _params, state) do
-    update(state, :text, "text updated by action_3a")
+  def action(:action_3, params, state) do
+    update(state, :text, "text updated by action_3, params.a = #{params.a}, params.b = #{params.b}, state.value = #{state.value}")
   end
 
-  def action(:action_4a, params, state) do
-    update(state, :text, "text updated by action_4a_#{params.a}_#{params.b}")
+  def action(:action_4, _params, state) do
+    {update(state, :text, "text updated by action_4, state.value = #{state.value}")}
   end
 
-  def action(:action_5a, _params, state) do
-    update(state, :text, "text updated by action_5a")
+  def action(:action_5, _params, state) do
+    {state, :command_1}
   end
 
-  def action(:action_6a_1_2, _params, state) do
-    update(state, :text, "text updated by action_6a_1_2")
+  def action(:action_5_b, _params, state) do
+    update(state, :text, "text updated by action_5_b triggered by command_1, state.value = #{state.value}")
+  end
+
+  def action(:action_6, _params, state) do
+    {state, :command_2, a: 1, b: 2}
+  end
+
+  def action(:action_6_b, params, state) do
+    update(state, :text, "text updated by action_6_b triggered by command_2, params.a = #{params.a}, params.b = #{params.b}, state.value = #{state.value}")
   end
 
   def action(:action_7, _params, state) do
-    {state, :command_7}
+    {state, :component_3_id, :component_3_command_1}
   end
 
-  def action(:action_7a, _params, state) do
-    update(state, :text, "text updated by action_7a")
+  def action(:action_7_b, _params, state) do
+    update(state, :text, "text updated by action_7_b triggered by component_3_command_1, state.value = #{state.value}")
   end
 
   def action(:action_8, _params, state) do
-    {state, :command_8, a: 5, b: 6}
+    {state, :component_3_id, :component_3_command_2, a: 1, b: 2}
   end
 
-  def action(:action_8a_5_6, _params, state) do
-    update(state, :text, "text updated by action_8a_5_6")
+  def action(:action_8_b, params, state) do
+    update(state, :text, "text updated by action_8_b triggered by component_3_command_2, params.a = #{params.a}, params.b = #{params.b}, state.value = #{state.value}")
   end
 
-  def command(:command_3, _params) do
-    :action_3a
+  def action(:action_9, _params, state) do
+    update(state, :text, "text updated by action_9, state.value = #{state.value}")
   end
 
-  def command(:command_4, _params) do
-    {:action_4a, a: 5, b: 6}
+  def action(:action_10, _params, state) do
+    update(state, :text, "text updated by action_10, state.value = #{state.value}")
   end
 
-  def command(:command_5, _params) do
-    :action_5a
+  def action(:action_11, _params, state) do
+    update(state, :text, "text updated by action_11, state.value = #{state.value}")
   end
 
-  def command(:command_6, params) do
-    :"action_6a_#{params.a}_#{params.b}"
+  def command(:command_1, _params) do
+    :action_5_b
   end
 
-  def command(:command_7, _params) do
-    :action_7a
-  end
-
-  def command(:command_8, params) do
-    :"action_8a_#{params.a}_#{params.b}"
+  def command(:command_2, params) do
+    {:action_6_b, a: params.a * 10, b: params.b * 10}
   end
 end
