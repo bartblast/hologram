@@ -1,8 +1,9 @@
-defmodule Hologram.Features.DocumentTest do
+defmodule Hologram.Features.ComponentsTest do
   use Hologram.Test.E2ECase, async: false
 
   @moduletag :e2e
 
+  # TODO: refactor
   # feature "component with nested slots", %{session: session} do
   #   session
   #   |> visit("/e2e/page-3")
