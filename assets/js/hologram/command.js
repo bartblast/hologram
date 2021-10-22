@@ -12,7 +12,7 @@ export default class Command {
   static buildMessagePayload(operation) {
     return {
       target_module: operation.target.module,
-      source_id: Type.atom(operation.sourceId),
+      target_id: Type.atom(operation.target.id),
       command: operation.name,
       params: operation.params,
     }

@@ -13,7 +13,7 @@ defmodule Hologram.Runtime.ChannelTest do
   @class_name_7 "Elixir_Hologram_Test_Fixtures_Runtime_Channel_Module7"
 
   @module_5 Hologram.Test.Fixtures.Runtime.Channel.Module5
-  @source_id %{"type" => "atom", "value" => "test_source_id"}
+  @target_id %{"type" => "atom", "value" => "test_target_id_value"}
 
   setup_all do
     on_exit(&compile_pages/0)
@@ -27,10 +27,10 @@ defmodule Hologram.Runtime.ChannelTest do
     {:ok, socket: socket}
   end
 
-  defp build_message(target_module, source_id) do
+  defp build_message(target_module, target_id) do
     %{
       target_module: target_module,
-      source_id: source_id,
+      target_id: target_id,
       command: %{"type" => "atom", "value" => "test_command"},
       params: %{"type" => "list", data: []}
     }
@@ -42,7 +42,7 @@ defmodule Hologram.Runtime.ChannelTest do
       "className" => @class_name_6
     }
 
-    message = build_message(target_module, @source_id)
+    message = build_message(target_module, @target_id)
     ref = push(socket, "command", message)
 
     expected_response =
@@ -58,7 +58,7 @@ defmodule Hologram.Runtime.ChannelTest do
       "className" => @class_name_7
     }
 
-    message = build_message(target_module, @source_id)
+    message = build_message(target_module, @target_id)
     ref = push(socket, "command", message)
 
     expected_response =
@@ -74,11 +74,11 @@ defmodule Hologram.Runtime.ChannelTest do
       "className" => @class_name_3
     }
 
-    message = build_message(target_module, @source_id)
+    message = build_message(target_module, @target_id)
     ref = push(socket, "command", message)
 
     expected_response =
-      {:test_source_id, :test_action, %{a: 1, b: 2}}
+      {:test_target_id_value, :test_action, %{a: 1, b: 2}}
       |> Serializer.serialize()
 
     assert_reply ref, :ok, ^expected_response
@@ -90,11 +90,11 @@ defmodule Hologram.Runtime.ChannelTest do
       "className" => @class_name_1
     }
 
-    message = build_message(target_module, @source_id)
+    message = build_message(target_module, @target_id)
     ref = push(socket, "command", message)
 
     expected_response =
-      {:test_source_id, :test_action, %{}}
+      {:test_target_id_value, :test_action, %{}}
       |> Serializer.serialize()
 
     assert_reply ref, :ok, ^expected_response
@@ -108,7 +108,7 @@ defmodule Hologram.Runtime.ChannelTest do
 
     message = %{
       target_module: target_module,
-      source_id: @source_id,
+      target_id: @target_id,
       command: %{"type" => "atom", "value" => "test_command"},
       params: %{
         "type" => "list",
@@ -134,7 +134,7 @@ defmodule Hologram.Runtime.ChannelTest do
     ref = push(socket, "command", message)
 
     expected_response =
-      {:test_source_id, :test_action_1, %{}}
+      {:test_target_id_value, :test_action_1, %{}}
       |> Serializer.serialize()
 
     assert_reply ref, :ok, ^expected_response
@@ -150,7 +150,7 @@ defmodule Hologram.Runtime.ChannelTest do
 
     message = %{
       target_module: target_module,
-      source_id: @source_id,
+      target_id: @target_id,
       command: %{"type" => "atom", "value" => "__redirect__"},
       params: %{
         "type" => "list",
@@ -169,7 +169,7 @@ defmodule Hologram.Runtime.ChannelTest do
     html = Renderer.render(@module_5, %{})
 
     expected_response =
-      {:test_source_id, :__redirect__, %{html: html, url: "/test-route"}}
+      {:test_target_id_value, :__redirect__, %{html: html, url: "/test-route"}}
       |> Serializer.serialize()
 
     ref = push(socket, "command", message)

@@ -11,7 +11,7 @@ import Type from "../../assets/js/hologram/type"
 
 describe("buildMessagePayload()", () => {
   it("builds command message payload", () => {
-    const targetId = Type.atom("test_target_id")
+    const targetId = "test_target_id"
     const TestComponentClass = class {}
     Runtime.registerComponentClass(targetId, TestComponentClass)
     const target = new Target(targetId)
@@ -25,7 +25,7 @@ describe("buildMessagePayload()", () => {
 
     const expected = {
       target_module: Type.module("TestComponentClass"),
-      source_id: Type.atom(sourceId),
+      target_id: Type.atom(targetId),
       command: commandName,
       params: params,
     }
