@@ -5,21 +5,41 @@ import Runtime from "./runtime"
 import Type from "./type"
 import Utils from "./utils"
 
+import Map from "./elixir/map"
+
 export default class Store {
   static componentStateRegistry = {}
 
   static hydrate(serializedState) {
-    let state = Utils.eval(serializedState, false)
-    state.data[Type.atomKey("context")].data[Type.atomKey("__state__")] = Type.string(serializedState)
-    Utils.freeze(state)
+    const state = Utils.eval(serializedState)
+    
+    // DEFER: use Kernel.put_in/3 here
+    let context = Map.get(state, Type.atom("context"))
+    context = Map.put(context, Type.atom("__state__"), Type.string(serializedState))
 
-    Store.setComponentState(Operation.TARGET.page, state)
+    Store.hydrateLayout(context)
+    Store.hydratePage(state, context)
+  }
+
+  static hydrateLayout(context) {
+    let state = Runtime.getLayoutClass().init()
+    state = Map.put(state, Type.atom("context"), context)
+
     Store.setComponentState(Operation.TARGET.layout, state)
+  }
+
+  static hydratePage(state, context) {
+    state = Map.put(state, Type.atom("context"), context)
+    Store.setComponentState(Operation.TARGET.page, state)
   }
 
   static getComponentState(componentId) {
     const state = Store.componentStateRegistry[componentId]
     return state ? state : null
+  }
+
+  static getLayoutState() {
+    return Store.getComponentState(Operation.TARGET.layout)
   }
 
   static getPageState() {
