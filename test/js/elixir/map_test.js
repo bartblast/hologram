@@ -1,10 +1,27 @@
 "use strict";
 
-import { assert, assertFrozen, cleanup } from "../support/commons";
+import { assert, assertBoxedFalse, assertBoxedTrue, assertFrozen, cleanup } from "../support/commons";
 beforeEach(() => cleanup())
 
 import Map from "../../../assets/js/hologram/elixir/map";
 import Type from "../../../assets/js/hologram/type";
+
+describe("has_key$question()", () => {
+  let elems = {};
+  elems[Type.atomKey("a")] = Type.integer(1);
+  elems[Type.atomKey("b")] = Type.integer(2);
+  const map = Type.map(elems);
+
+  it("returns boxed true if the given key exists in the given map", () => {
+    const result = Map.has_key$question(map, Type.atom("b"))
+    assertBoxedTrue(result)
+  })
+
+  it("returns boxed false if the given key doesn't exist in the given map", () => {
+    const result = Map.has_key$question(map, Type.atom("c"))
+    assertBoxedFalse(result)
+  })
+})
 
 describe("put()", () => {
   let map1, map2, result;
