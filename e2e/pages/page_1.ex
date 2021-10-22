@@ -31,6 +31,8 @@ defmodule Hologram.E2E.Page1 do
     <button id="page-1-button-13" on_click={:component_3_id, :component_3_action_3}>Component 3 Action 3</button>
     <button id="page-1-button-14" on_click={:page, :action_11}>Action 11</button>
     <button id="page-1-button-15" on_click={:layout, :default_layout_action_1}>Default Layout Action 1</button>
+    <button id="page-1-button-16" on_click="action_12">Action 12</button>
+    <button id="page-1-button-17" on_click="action_13">Action 13</button>
     <br />
 
     <div id="text-page-1">{@text}</div><br />
@@ -99,11 +101,27 @@ defmodule Hologram.E2E.Page1 do
     update(state, :text, "text updated by action_11, state.value = #{state.value}")
   end
 
+  def action(:action_12, _params, state) do
+    update(state, :text, "text updated by action_12, state.value = #{state.value}")
+  end
+
+  def action(:action_13, _params, state) do
+    {state, :command_3}
+  end
+
+  def action(:action_13_b, _params, state) do
+    update(state, :text, "text updated by action_13_b, state.value = #{state.value}")
+  end
+
   def command(:command_1, _params) do
     :action_5_b
   end
 
   def command(:command_2, params) do
     {:action_6_b, a: params.a * 10, b: params.b * 10}
+  end
+
+  def command(:command_3, _params) do
+    :action_13_b
   end
 end

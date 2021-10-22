@@ -113,4 +113,20 @@ defmodule Hologram.Features.ActionsTest do
       |> assert_has(css("#text-default-layout", text: "text updated by default_layout_action_1, state.value = dl"))
     end
   end
+
+  describe "action trigger" do
+    feature "action triggered by event", %{session: session} do
+      session
+      |> visit("/e2e/page-1")
+      |> click(css("#page-1-button-16"))
+      |> assert_has(css("#text-page-1", text: "text updated by action_12, state.value = p1"))
+    end
+
+    feature "action trigerred by command", %{session: session} do
+      session
+      |> visit("/e2e/page-1")
+      |> click(css("#page-1-button-17"))
+      |> assert_has(css("#text-page-1", text: "text updated by action_13_b, state.value = p1"))
+    end
+  end
 end
