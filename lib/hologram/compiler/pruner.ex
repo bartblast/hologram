@@ -23,7 +23,8 @@ defmodule Hologram.Compiler.Pruner do
 
   defp find_used_functions(module_defs_map, traversed_module, pruned_module, acc \\ MapSet.new()) do
     acc =
-      traverse_function_defs(acc, module_defs_map, {traversed_module, :action})
+      traverse_function_defs(acc, module_defs_map, {traversed_module, :init})
+      |> traverse_function_defs(module_defs_map, {traversed_module, :action})
       |> traverse_template(module_defs_map, traversed_module, pruned_module)
 
     if entry_page?(module_defs_map, traversed_module, pruned_module) do

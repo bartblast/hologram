@@ -9,8 +9,10 @@ defmodule Hologram.Compiler.PrunerTest do
   @module_8 Hologram.Test.Fixtures.Compiler.Pruner.Module8
   @module_16 Hologram.Test.Fixtures.Compiler.Pruner.Module16
   @module_20 Hologram.Test.Fixtures.Compiler.Pruner.Module20
+  @module_26 Hologram.Test.Fixtures.Compiler.Pruner.Module26
+  @module_27 Hologram.Test.Fixtures.Compiler.Pruner.Module27
 
-  describe "kept functions" do
+  describe "preserved functions" do
     def function_preserved?(compiled_module, tested_module, function_name, function_arity) do
       module_defs_map = Compiler.compile(compiled_module)
 
@@ -35,6 +37,14 @@ defmodule Hologram.Compiler.PrunerTest do
     test "page template" do
       module_2 = Hologram.Test.Fixtures.Compiler.Pruner.Module2
       assert function_preserved?(module_2, module_2, :template, 0)
+    end
+
+    test "layout init" do
+      assert function_preserved?(@module_26, @module_27, :init, 0)
+    end
+
+    test "layout actions" do
+      assert function_preserved?(@module_26, @module_27, :action, 3)
     end
 
     test "layout template" do
