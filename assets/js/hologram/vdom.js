@@ -214,7 +214,7 @@ export default class VDOM {
     const layoutTemplate = Runtime.getLayoutTemplate()
     const slots = {default: Runtime.getPageTemplate()}
     const source = Operation.TARGET.layout
-    const bindings = Store.getComponentState(source)
+    const bindings = Store.getLayoutState()
 
     const newVirtualDocument = VDOM.build(layoutTemplate, source, bindings, slots)[0]
     patch(VDOM.virtualDocument, newVirtualDocument)
