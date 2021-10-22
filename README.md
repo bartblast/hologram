@@ -9,7 +9,7 @@
 | Feature     | Status             |
 | ----------- |:------------------:|
 | Actions     | :white_check_mark: |
-| Commands    | :construction:     |
+| Commands    | :white_check_mark: |
 | Routing     | :x:                |
 | Session     | :x:                |
 
