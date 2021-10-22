@@ -28,4 +28,12 @@ defmodule Hologram.E2E.DefaultLayout do
   def action(:default_layout_action_1, _params, state) do
     {update(state, :text, "text updated by default_layout_action_1, state.value = #{state.value}")}
   end
+
+  def action(:default_layout_action_2_b, _params, state) do
+    {update(state, :text, "text updated by default_layout_action_2_b, state.value = #{state.value}")}
+  end
+
+  def command(:default_layout_command_1, _params) do
+    :default_layout_action_2_b
+  end
 end

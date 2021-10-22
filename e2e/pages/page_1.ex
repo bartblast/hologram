@@ -30,7 +30,7 @@ defmodule Hologram.E2E.Page1 do
     <button id="page-1-button-12" on_click="action_10">Action 10</button>
     <button id="page-1-button-13" on_click={:component_3_id, :component_3_action_3}>Component 3 Action 3</button>
     <button id="page-1-button-14" on_click={:page, :action_11}>Action 11</button>
-    <button id="page-1-button-15" on_click={:layout, :default_layout_action_1}>Default Layout Action 1</button>
+    <button id="page-1-button-15" on_click={:layout, :default_layout_action_1}>Layout Action 1</button>
     <button id="page-1-button-16" on_click="action_12">Action 12</button>
     <button id="page-1-button-17" on_click="action_13">Action 13</button>
     <br />
