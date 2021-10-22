@@ -6,7 +6,7 @@ import Utils from "../utils"
 export default class Map {
   static get(map, key, default_value = Type.nil()) {
     if (Map.has_key$question(map, key).value) {
-      return map.data[Type.serializedKey(key)]
+      return map.data[Type.encodedKey(key)]
       
     } else {
       return default_value
@@ -14,7 +14,7 @@ export default class Map {
   }
 
   static has_key$question(map, key) {
-    if (map.data.hasOwnProperty(Type.serializedKey(key))) {
+    if (map.data.hasOwnProperty(Type.encodedKey(key))) {
       return Type.boolean(true)
 
     } else {
@@ -24,7 +24,7 @@ export default class Map {
 
   static put(map, key, value) {
     let newMap = Utils.clone(map)
-    newMap.data[Type.serializedKey(key)] = value
+    newMap.data[Type.encodedKey(key)] = value
 
     return Utils.freeze(newMap);
   }

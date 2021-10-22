@@ -85,6 +85,29 @@ describe("elementNode()", () => {
   })
 })
 
+describe("encodedKey()", () => {
+  it("serializes boxed atom value for use as a boxed map key", () => {
+    const arg = Type.atom("test")
+    const result = Type.encodedKey(arg)
+
+    assert.match(result, /atom/)
+  })
+
+  it("serializes boxed string value for use as a boxed map key", () => {
+    const arg = Type.string("test")
+    const result = Type.encodedKey(arg)
+
+    assert.match(result, /string/)
+  })
+
+  it("throws an error for not implemented types", () => {
+    const arg = {type: "not implemented", value: "test"}
+    const expectedMessage = 'Type.encodedKey(): boxedValue = {"type":"not implemented","value":"test"}'
+    
+    assert.throw(() => { Type.encodedKey(arg) }, HologramNotImplementedError, expectedMessage);
+  })
+})
+
 describe("float()", () => {
   it("returns boxed float value", () => {
     const expected = {type: "float", value: 1.0}
@@ -475,29 +498,6 @@ describe("placeholder()", () => {
   it("returns frozen object", () => {
     const result = Type.placeholder()
     assertFrozen(result)
-  })
-})
-
-describe("serializedKey()", () => {
-  it("serializes boxed atom value for use as a boxed map key", () => {
-    const arg = Type.atom("test")
-    const result = Type.serializedKey(arg)
-
-    assert.match(result, /atom/)
-  })
-
-  it("serializes boxed string value for use as a boxed map key", () => {
-    const arg = Type.string("test")
-    const result = Type.serializedKey(arg)
-
-    assert.match(result, /string/)
-  })
-
-  it("throws an error for not implemented types", () => {
-    const arg = {type: "not implemented", value: "test"}
-    const expectedMessage = 'Type.serializedKey(): boxedValue = {"type":"not implemented","value":"test"}'
-    
-    assert.throw(() => { Type.serializedKey(arg) }, HologramNotImplementedError, expectedMessage);
   })
 })
 

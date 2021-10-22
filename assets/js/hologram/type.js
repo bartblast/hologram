@@ -28,6 +28,20 @@ export default class Type {
     return Utils.freeze({type: "element", tag: tag, attrs: attrs, children: children})
   }
 
+  static encodedKey(boxedValue) {
+    switch (boxedValue.type) {
+      case "atom":
+        return Type.atomKey(boxedValue.value)
+
+      case "string":
+        return Type.stringKey(boxedValue.value)
+        
+      default:
+        const message = `Type.encodedKey(): boxedValue = ${JSON.stringify(boxedValue)}`
+        throw new HologramNotImplementedError(message)
+    }
+  }
+
   static expressionNode(callback) {
     return Utils.freeze({type: "expression", callback: callback})
   }
@@ -90,7 +104,7 @@ export default class Type {
 
   static keywordToMap(keyword) {
     const result = keyword.data.reduce((acc, elem) => {
-      const key = Type.serializedKey(elem.data[0])
+      const key = Type.encodedKey(elem.data[0])
       acc.data[key] = elem.data[1]
       return acc
     }, {type: "map", data: {}})
@@ -117,20 +131,6 @@ export default class Type {
 
   static placeholder() {
     return Utils.freeze({type: "placeholder"})
-  }
-
-  static serializedKey(boxedValue) {
-    switch (boxedValue.type) {
-      case "atom":
-        return Type.atomKey(boxedValue.value)
-
-      case "string":
-        return Type.stringKey(boxedValue.value)
-        
-      default:
-        const message = `Type.serializedKey(): boxedValue = ${JSON.stringify(boxedValue)}`
-        throw new HologramNotImplementedError(message)
-    }
   }
 
   static string(value) {
