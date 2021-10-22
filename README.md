@@ -2,6 +2,10 @@
 
 ## Roadmap
 
+:white_check_mark: == DONE
+:construction: == IN PROGRESS (functional, but not finished)
+:x: == PLANNED
+
 ### Runtime
 
 #### Core
@@ -20,7 +24,7 @@
 | Components      | :x:                |
 | Interpolation   | :x:                |
 | Layouts         | :x:                |
-| Navigation      | :x:                |
+| Navigation      | :construction:     |
 | Pages           | :x:                |
 | Templates       | :x:                |
 | Two-Way Binding | :x:                |
