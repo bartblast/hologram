@@ -1,0 +1,34 @@
+defmodule Hologram.E2E.Page5 do
+  use Hologram.Page
+
+  route "/e2e/page-5"
+
+  def state do
+    %{
+      text: ""
+    }
+  end
+
+  def template do
+    ~H"""
+    <h1>Page 5</h1>
+
+    <button id="page-5-update-text-button" on_click="update_text">Update text</button>
+    <button id="page-5-forward-button">Forward</button>
+    <br />
+
+    <div id="page-5-text">{@text}</div><br />
+
+    <a id="page-2-link" href={Hologram.E2E.Page2.route()} on_click.command={:__redirect__, page: Hologram.E2E.Page2}>Page 2</a><br />
+
+    <script>
+      document.getElementById("page-5-forward-button")
+        .addEventListener("click", () => &lcub; history.forward() &rcub;)
+    </script>
+    """
+  end
+
+  def action(:update_text, _params, state) do
+    update(state, :text, "text updated by page 5 update button")
+  end
+end
