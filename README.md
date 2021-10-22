@@ -2,8 +2,12 @@
 
 ## Roadmap
 
-:white_check_mark:&nbsp;&nbsp;==&nbsp;&nbsp;DONE\
-:construction:&nbsp;&nbsp;==&nbsp;&nbsp;IN PROGRESS (functional, but not finished)\
+:white_check_mark:&nbsp;&nbsp;==&nbsp;&nbsp;DONE
+
+\
+:construction:&nbsp;&nbsp;==&nbsp;&nbsp;IN PROGRESS (functional, but not finished)
+
+\
 :x:&nbsp;&nbsp;==&nbsp;&nbsp;PLANNED
 
 ### Runtime
