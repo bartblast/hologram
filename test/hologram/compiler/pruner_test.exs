@@ -12,22 +12,22 @@ defmodule Hologram.Compiler.PrunerTest do
   @module_26 Hologram.Test.Fixtures.Compiler.Pruner.Module26
   @module_27 Hologram.Test.Fixtures.Compiler.Pruner.Module27
 
-  describe "preserved functions" do
-    def function_preserved?(compiled_module, tested_module, function_name, function_arity) do
-      module_defs_map = Compiler.compile(compiled_module)
+  def function_preserved?(compiled_module, tested_module, function_name, function_arity) do
+    module_defs_map = Compiler.compile(compiled_module)
 
-      result = Pruner.prune(module_defs_map, compiled_module)
+    result = Pruner.prune(module_defs_map, compiled_module)
 
-      if result[tested_module] do
-        result[tested_module].functions
-        |> Enum.any?(fn %{arity: arity, name: name} ->
-          arity == function_arity && name == function_name
-        end)
-      else
-        false
-      end
+    if result[tested_module] do
+      result[tested_module].functions
+      |> Enum.any?(fn %{arity: arity, name: name} ->
+        arity == function_arity && name == function_name
+      end)
+    else
+      false
     end
+  end
 
+  describe "preserved page functions" do
     test "page actions" do
       module_1 = Hologram.Test.Fixtures.Compiler.Pruner.Module1
       assert function_preserved?(module_1, module_1, :action, 3)
@@ -39,6 +39,22 @@ defmodule Hologram.Compiler.PrunerTest do
       assert function_preserved?(module_2, module_2, :template, 0)
     end
 
+    test "functions used by page actions" do
+      module_7 = Hologram.Test.Fixtures.Compiler.Pruner.Module7
+      assert function_preserved?(module_7, @module_8, :test_8, 0)
+    end
+
+    test "functions used by fuctions used by page actions" do
+      module_10 = Hologram.Test.Fixtures.Compiler.Pruner.Module10
+      assert function_preserved?(module_10, @module_8, :test_8, 0)
+    end
+
+    test "layout function of an entry page module" do
+      assert function_preserved?(@module_20, @module_20, :layout, 0)
+    end
+  end
+
+  describe "preserved layout functions" do
     test "layout init" do
       assert function_preserved?(@module_26, @module_27, :init, 0)
     end
@@ -52,6 +68,7 @@ defmodule Hologram.Compiler.PrunerTest do
       assert function_preserved?(module_2, @default_layout, :template, 0)
     end
 
+  describe "preserved component function" do
     test "component init" do
       module_24 = Hologram.Test.Fixtures.Compiler.Pruner.Module24
       module_25 = Hologram.Test.Fixtures.Compiler.Pruner.Module25
@@ -74,16 +91,6 @@ defmodule Hologram.Compiler.PrunerTest do
       assert function_preserved?(module_5, @module_4, :template, 0)
     end
 
-    test "functions used by page actions" do
-      module_7 = Hologram.Test.Fixtures.Compiler.Pruner.Module7
-      assert function_preserved?(module_7, @module_8, :test_8, 0)
-    end
-
-    test "functions used by fuctions used by page actions" do
-      module_10 = Hologram.Test.Fixtures.Compiler.Pruner.Module10
-      assert function_preserved?(module_10, @module_8, :test_8, 0)
-    end
-
     test "functions used in component props" do
       module_11 = Hologram.Test.Fixtures.Compiler.Pruner.Module11
       assert function_preserved?(module_11, @module_8, :test_8, 0)
@@ -104,10 +111,6 @@ defmodule Hologram.Compiler.PrunerTest do
       assert function_preserved?(module_14, @module_8, :test_8, 0)
     end
 
-    test "layout function of the pruned page module" do
-      assert function_preserved?(@module_20, @module_20, :layout, 0)
-    end
-
     test "functions used inside if expression" do
       module_22 = Hologram.Test.Fixtures.Compiler.Pruner.Module22
       assert function_preserved?(module_22, @module_20, :fun_1, 0)
@@ -122,7 +125,7 @@ defmodule Hologram.Compiler.PrunerTest do
   end
 
   describe "pruned functions" do
-    test "layout function of a page module other than the pruned one" do
+    test "layout function of a page module other than the entry one" do
       module_21 = Hologram.Test.Fixtures.Compiler.Pruner.Module21
       refute function_preserved?(module_21, @module_20, :layout, 0)
     end
