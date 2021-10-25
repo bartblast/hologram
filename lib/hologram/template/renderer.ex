@@ -1,3 +1,3 @@
 defprotocol Hologram.Template.Renderer do
-  def render(document, state, slots \\ nil)
+  def render(vdom, bindings, slots \\ nil)
 end
