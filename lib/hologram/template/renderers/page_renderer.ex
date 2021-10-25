@@ -4,15 +4,15 @@ alias Hologram.Utils
 
 defimpl Renderer, for: Atom do
   def render(module, _params, slots) do
-    state = init_state(module)
+    bindings = aggregate_state(module)
     layout = module.layout()
 
     Builder.build(module, layout)
-    |> Renderer.render(state, slots)
+    |> Renderer.render(bindings, slots)
     |> Utils.prepend("<!DOCTYPE html>\n")
   end
 
-  defp init_state(module) do
+  defp aggregate_state(module) do
     class_name = Helpers.class_name(module)
     digest = Reflection.get_page_digest(module)
 
