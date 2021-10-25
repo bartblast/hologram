@@ -1,5 +1,5 @@
 defprotocol Hologram.Template.Evaluator do
   @fallback_to_any true
 
-  def evaluate(ir, state)
+  def evaluate(ir, bindings)
 end
