@@ -1,4 +1,4 @@
-defmodule Hologram.Test.Fixtures.Template.ComponentRenderer.Module1 do
+defmodule Hologram.Test.Fixtures.Template.BindingsAggregator.Module4 do
   use Hologram.Component
 
   def init do
@@ -7,7 +7,6 @@ defmodule Hologram.Test.Fixtures.Template.ComponentRenderer.Module1 do
 
   def template do
     ~H"""
-    <span>test</span>
     """
   end
 end
