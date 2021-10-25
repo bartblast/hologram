@@ -1,8 +1,6 @@
 defmodule Hologram.Compiler.NormalizerTest do
   use Hologram.Test.UnitCase, async: true
-
-  alias Hologram.Compiler.Normalizer
-  alias Hologram.Compiler.Parser
+  alias Hologram.Compiler.{Normalizer, Parser}
 
   test "do expression with non-nested block" do
     code = """

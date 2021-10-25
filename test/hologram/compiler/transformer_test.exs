@@ -1,6 +1,8 @@
 defmodule Hologram.Compiler.TransformerTest do
   use Hologram.Test.UnitCase, async: true
 
+  alias Hologram.Compiler.{Context, Transformer}
+
   alias Hologram.Compiler.IR.{
     AdditionOperator,
     Alias,
@@ -35,8 +37,6 @@ defmodule Hologram.Compiler.TransformerTest do
     UseDirective,
     Variable
   }
-
-  alias Hologram.Compiler.{Context, Transformer}
 
   describe "types" do
     test "anonymous function" do

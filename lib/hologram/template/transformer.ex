@@ -1,6 +1,5 @@
 defmodule Hologram.Template.Transformer do
   alias Hologram.Compiler.IR.Alias
-  alias Hologram.Compiler.IR.Alias
   alias Hologram.Template.{ComponentTransformer, ElementNodeTransformer, EmbeddedExpressionParser}
   alias Hologram.Typespecs, as: T
 

@@ -1,6 +1,6 @@
 defmodule Hologram.Compiler do
-  alias Hologram.Compiler.IR.{FunctionCall, FunctionDefinition, ModuleDefinition, TupleType}
   alias Hologram.Compiler.{Helpers, Reflection}
+  alias Hologram.Compiler.IR.{FunctionCall, FunctionDefinition, ModuleDefinition, TupleType}
   alias Hologram.Template
   alias Hologram.Template.Document.{Component, ElementNode, Expression}
   alias Hologram.Typespecs, as: T

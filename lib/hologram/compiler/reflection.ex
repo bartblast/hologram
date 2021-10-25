@@ -1,6 +1,6 @@
 defmodule Hologram.Compiler.Reflection do
-  alias Hologram.Compiler.IR.ModuleDefinition
   alias Hologram.Compiler.{Context, Helpers, Normalizer, Parser, Transformer}
+  alias Hologram.Compiler.IR.ModuleDefinition
   alias Hologram.Utils
 
   def app_path(config \\ get_config()) do

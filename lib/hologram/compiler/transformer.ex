@@ -1,14 +1,5 @@
 defmodule Hologram.Compiler.Transformer do
-  alias Hologram.Compiler.IR.{
-    AtomType,
-    BooleanType,
-    IntegerType,
-    ModuleAttributeOperator,
-    ModuleMacro,
-    NilType,
-    StringType,
-    Variable
-  }
+  alias Hologram.Compiler.{Context, Reflection}
 
   alias Hologram.Compiler.{
     AdditionOperatorTransformer,
@@ -38,7 +29,16 @@ defmodule Hologram.Compiler.Transformer do
     UseDirectiveTransformer
   }
 
-  alias Hologram.Compiler.{Context, Reflection}
+  alias Hologram.Compiler.IR.{
+    AtomType,
+    BooleanType,
+    IntegerType,
+    ModuleAttributeOperator,
+    ModuleMacro,
+    NilType,
+    StringType,
+    Variable
+  }
 
   # TYPES
 

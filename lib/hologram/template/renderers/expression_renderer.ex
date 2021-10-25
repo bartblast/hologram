@@ -1,5 +1,5 @@
-alias Hologram.Template.Document.Expression
 alias Hologram.Template.{Evaluator, Renderer}
+alias Hologram.Template.Document.Expression
 
 defimpl Renderer, for: Expression do
   def render(%{ir: ir}, bindings, _) do
