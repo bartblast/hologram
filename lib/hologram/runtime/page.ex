@@ -8,8 +8,8 @@ defmodule Hologram.Page do
       import Hologram.Runtime.Commons, only: [sigil_H: 2, update: 3]
 
       def layout do
-        if Keyword.has_key?(__MODULE__.__info__(:functions), :page_layout) do
-          apply(__MODULE__, :page_layout, [])
+        if Keyword.has_key?(__MODULE__.__info__(:functions), :custom_layout) do
+          apply(__MODULE__, :custom_layout, [])
         else
           unquote(@default_layout)
         end
@@ -19,7 +19,7 @@ defmodule Hologram.Page do
 
   defmacro layout(module) do
     quote do
-      def page_layout do
+      def custom_layout do
         unquote(module)
       end
     end

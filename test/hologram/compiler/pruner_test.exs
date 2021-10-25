@@ -52,6 +52,11 @@ defmodule Hologram.Compiler.PrunerTest do
     test "layout function of an entry page module" do
       assert function_preserved?(@module_20, @module_20, :layout, 0)
     end
+
+    test "custom_layout function of an entry page module" do
+      module_28 = Hologram.Test.Fixtures.Compiler.Pruner.Module28
+      assert function_preserved?(module_28, module_28, :custom_layout, 0)
+    end
   end
 
   describe "preserved layout functions" do
@@ -67,6 +72,7 @@ defmodule Hologram.Compiler.PrunerTest do
       module_2 = Hologram.Test.Fixtures.Compiler.Pruner.Module2
       assert function_preserved?(module_2, @default_layout, :template, 0)
     end
+  end
 
   describe "preserved component function" do
     test "component init" do
@@ -128,6 +134,12 @@ defmodule Hologram.Compiler.PrunerTest do
     test "layout function of a page module other than the entry one" do
       module_21 = Hologram.Test.Fixtures.Compiler.Pruner.Module21
       refute function_preserved?(module_21, @module_20, :layout, 0)
+    end
+
+    test "custom_layout function of a page module other than the entry one" do
+      module_30 = Hologram.Test.Fixtures.Compiler.Pruner.Module30
+      module_32 = Hologram.Test.Fixtures.Compiler.Pruner.Module32
+      refute function_preserved?(module_30, module_32, :custom_layout, 0)
     end
 
     test "not used functions" do

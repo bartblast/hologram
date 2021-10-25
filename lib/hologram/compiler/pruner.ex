@@ -29,6 +29,7 @@ defmodule Hologram.Compiler.Pruner do
 
     if entry_page?(module_defs_map, traversed_module, pruned_module) do
       traverse_function_defs(acc, module_defs_map, {traversed_module, :layout})
+      |> traverse_function_defs(module_defs_map, {traversed_module, :custom_layout})
     else
       acc
     end
