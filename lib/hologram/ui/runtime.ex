@@ -1,6 +1,10 @@
 defmodule Hologram.UI.Runtime do
   use Hologram.Component
 
+  def init do
+    %{}
+  end
+
   def template do
     ~H"""
     <script src="/hologram/runtime.js"></script>
