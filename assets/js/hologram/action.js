@@ -109,7 +109,7 @@ export default class Action {
   }
 
   static resolveCommandTarget(actionResult, actionTarget) {
-    let boxedCommandTargetId = Action.getTargetIdFromActionResult(actionResult)
+    const boxedCommandTargetId = Action.getTargetIdFromActionResult(actionResult)
     let commandTargetId;
 
     if (!boxedCommandTargetId) {

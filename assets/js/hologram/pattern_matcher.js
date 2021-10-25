@@ -18,8 +18,8 @@ export default class PatternMatcher {
   }
 
   static isPatternMatched(left, right) {
-    let lType = left.type;
-    let rType = right.type;
+    const lType = left.type;
+    const rType = right.type;
 
     if (lType === "placeholder") {
       return true;
