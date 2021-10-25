@@ -4,7 +4,7 @@ alias Hologram.Utils
 
 defimpl Renderer, for: Atom do
   def render(module, _params, slots) do
-    bindings = aggregate_state(module)
+    bindings = aggregate_bindings(module)
     layout = module.layout()
 
     Builder.build(module, layout)
@@ -12,12 +12,12 @@ defimpl Renderer, for: Atom do
     |> Utils.prepend("<!DOCTYPE html>\n")
   end
 
-  defp aggregate_state(module) do
+  defp aggregate_bindings(module) do
     class_name = Helpers.class_name(module)
     digest = Reflection.get_page_digest(module)
 
     # DEFER: pass page params to state function
-    state =
+    bindings =
       module.state()
       |> Map.put(:context, %{
         __class__: class_name,
@@ -25,8 +25,8 @@ defimpl Renderer, for: Atom do
         __src__: "/hologram/page-#{digest}.js"
       })
 
-    serialized_state = Serializer.serialize(state)
-    context = Map.put(state.context, :__state__, serialized_state)
-    Map.put(state, :context, context)
+    serialized_state = Serializer.serialize(bindings)
+    context = Map.put(bindings.context, :__state__, serialized_state)
+    Map.put(bindings, :context, context)
   end
 end
