@@ -1,8 +1,8 @@
 alias Hologram.Template.Renderer
 
 defimpl Renderer, for: List do
-  def render(nodes, state, slots) do
-    Enum.map(nodes, &Renderer.render(&1, state, slots))
+  def render(nodes, bindings, slots) do
+    Enum.map(nodes, &Renderer.render(&1, bindings, slots))
     |> Enum.join("")
   end
 end
