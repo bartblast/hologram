@@ -12,9 +12,9 @@ defmodule Hologram.Template.ExpressionRendererTest do
       }
     }
 
-    state = %{a: 123}
+    bindings = %{a: 123}
 
-    result = Renderer.render(expression, state)
+    result = Renderer.render(expression, bindings)
     expected = "123"
 
     assert result == expected
