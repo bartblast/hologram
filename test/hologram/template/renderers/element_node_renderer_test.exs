@@ -4,7 +4,7 @@ defmodule Hologram.Template.ElementNodeRendererTest do
   alias Hologram.Template.Document.{ElementNode, TextNode}
   alias Hologram.Template.Renderer
 
-  @state %{}
+  @bindings %{}
 
   test "non-slot" do
     attrs = %{
@@ -19,7 +19,7 @@ defmodule Hologram.Template.ElementNodeRendererTest do
     ]
 
     element_node = %ElementNode{attrs: attrs, children: children, tag: "div"}
-    result = Renderer.render(element_node, @state)
+    result = Renderer.render(element_node, @bindings)
 
     expected =
       "<div attr_1=\"test_attr_value_1\" attr_2=\"test_attr_value_2\">test_text<span></span></div>"
@@ -35,7 +35,7 @@ defmodule Hologram.Template.ElementNodeRendererTest do
 
     slot_node = %ElementNode{attrs: %{}, children: [], tag: "slot"}
 
-    result = Renderer.render(slot_node, @state, default: children)
+    result = Renderer.render(slot_node, @bindings, default: children)
     expected = "test_text<span></span>"
 
     assert result == expected
