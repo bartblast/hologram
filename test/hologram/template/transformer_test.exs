@@ -3,7 +3,7 @@ defmodule Hologram.Template.TransformerTest do
 
   alias Hologram.Compiler.IR.{IntegerType, TupleType}
   alias Hologram.Template.{Parser, Transformer}
-  alias Hologram.Template.Document.{Component, ElementNode, Expression, TextNode}
+  alias Hologram.Template.VDOM.{Component, ElementNode, Expression, TextNode}
 
   @aliases []
 

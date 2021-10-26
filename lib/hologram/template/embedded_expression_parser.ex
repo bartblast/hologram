@@ -3,7 +3,7 @@ defmodule Hologram.Template.EmbeddedExpressionParser do
 
   alias Hologram.Compiler.{Context, Transformer}
   alias Hologram.Compiler.Parser, as: CompilerParser
-  alias Hologram.Template.Document.{Expression, TextNode}
+  alias Hologram.Template.VDOM.{Expression, TextNode}
 
   @doc """
   Splits a string which may contain embedded expressions into a list of expression nodes and text nodes.

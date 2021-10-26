@@ -4,7 +4,7 @@ defmodule Hologram.Template.BindingsAggregatorTest do
   alias Hologram.Compiler.IR.{AdditionOperator, IntegerType, ModuleAttributeOperator, TupleType}
   alias Hologram.Compiler.Reflection
   alias Hologram.Template.BindingsAggregator
-  alias Hologram.Template.Document.{Component, Expression, TextNode}
+  alias Hologram.Template.VDOM.{Component, Expression, TextNode}
 
   test "layout component" do
     module_2 = Hologram.Test.Fixtures.Template.BindingsAggregator.Module2

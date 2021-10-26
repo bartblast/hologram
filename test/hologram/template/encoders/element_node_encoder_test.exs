@@ -2,7 +2,7 @@ defmodule Hologram.Template.ElementNodeEncoderTest do
   use Hologram.Test.UnitCase, async: true
 
   alias Hologram.Compiler.IR.{StringType, TupleType}
-  alias Hologram.Template.Document.{ElementNode, Expression, TextNode}
+  alias Hologram.Template.VDOM.{ElementNode, Expression, TextNode}
   alias Hologram.Template.Encoder
 
   test "not attrs, no children" do

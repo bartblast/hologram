@@ -1,6 +1,6 @@
 alias Hologram.Compiler.{Context, Opts}
 alias Hologram.Compiler.Encoder, as: CompilerEncoder
-alias Hologram.Template.Document.Expression
+alias Hologram.Template.VDOM.Expression
 alias Hologram.Template.Encoder
 
 defimpl Encoder, for: Expression do

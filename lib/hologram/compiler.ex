@@ -2,7 +2,7 @@ defmodule Hologram.Compiler do
   alias Hologram.Compiler.{Helpers, Reflection}
   alias Hologram.Compiler.IR.{FunctionCall, FunctionDefinition, ModuleDefinition, ModuleType, TupleType}
   alias Hologram.Template
-  alias Hologram.Template.Document.{Component, ElementNode, Expression}
+  alias Hologram.Template.VDOM.{Component, ElementNode, Expression}
   alias Hologram.Typespecs, as: T
 
   @doc """
@@ -40,8 +40,8 @@ defmodule Hologram.Compiler do
           acc
         end
 
-      document = Template.Builder.build(module)
-      traverse_template(acc, document)
+      vdom = Template.Builder.build(module)
+      traverse_template(acc, vdom)
     else
       acc
     end

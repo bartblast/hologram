@@ -2,7 +2,7 @@ defmodule Hologram.Compiler.Pruner do
   alias Hologram.Compiler.{Helpers, Reflection}
   alias Hologram.Compiler.IR.{FunctionCall, FunctionDefinition, IfExpression, ModuleType, TupleType}
   alias Hologram.Template
-  alias Hologram.Template.Document.{Component, ElementNode, Expression}
+  alias Hologram.Template.VDOM.{Component, ElementNode, Expression}
   alias Hologram.Typespecs, as: T
 
   @doc """
@@ -169,8 +169,8 @@ defmodule Hologram.Compiler.Pruner do
           acc
         end
 
-      document = Template.Builder.build(traversed_module)
-      traverse_template(acc, module_defs_map, document, pruned_module)
+      vdom = Template.Builder.build(traversed_module)
+      traverse_template(acc, module_defs_map, vdom, pruned_module)
     else
       acc
     end

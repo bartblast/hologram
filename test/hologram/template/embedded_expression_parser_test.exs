@@ -2,7 +2,7 @@ defmodule Hologram.Template.EmbeddedExpressionParserTest do
   use Hologram.Test.UnitCase, async: true
 
   alias Hologram.Compiler.IR.{ModuleAttributeOperator, TupleType}
-  alias Hologram.Template.Document.{Expression, TextNode}
+  alias Hologram.Template.VDOM.{Expression, TextNode}
   alias Hologram.Template.EmbeddedExpressionParser
 
   test "text" do

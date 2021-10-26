@@ -1,8 +1,8 @@
 defmodule Hologram.Typespecs do
   alias Hologram.Compiler.IR.ModuleDefinition
-  alias Hologram.Template.Document.{Component, ElementNode, Expression, TextNode}
+  alias Hologram.Template.VDOM.{Component, ElementNode, Expression, TextNode}
 
-  @type document_node :: %Component{} | %ElementNode{} | %Expression{} | %TextNode{}
+  @type vdom_node :: %Component{} | %ElementNode{} | %Expression{} | %TextNode{}
 
   @type function_name :: atom()
 

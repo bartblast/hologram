@@ -1,6 +1,6 @@
 defmodule Hologram.Template.ComponentTransformer do
   alias Hologram.Compiler.{Helpers, Reflection, Resolver}
-  alias Hologram.Template.Document.Component
+  alias Hologram.Template.VDOM.Component
   alias Hologram.Template.EmbeddedExpressionParser
 
   def transform(module_name, props, children, aliases) do

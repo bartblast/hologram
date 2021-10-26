@@ -1,4 +1,4 @@
-alias Hologram.Template.Document.ElementNode
+alias Hologram.Template.VDOM.ElementNode
 alias Hologram.Template.Encoder
 
 defimpl Encoder, for: ElementNode do

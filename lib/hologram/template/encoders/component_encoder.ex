@@ -1,5 +1,5 @@
 alias Hologram.Compiler.Helpers
-alias Hologram.Template.Document.Component
+alias Hologram.Template.VDOM.Component
 alias Hologram.Template.Encoder
 
 defimpl Encoder, for: Component do

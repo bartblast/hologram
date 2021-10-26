@@ -1,5 +1,5 @@
 alias Hologram.Template.{Evaluator, Renderer}
-alias Hologram.Template.Document.ElementNode
+alias Hologram.Template.VDOM.ElementNode
 
 defimpl Renderer, for: ElementNode do
   @pruned_attrs [:on_click]

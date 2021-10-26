@@ -1,4 +1,4 @@
-alias Hologram.Template.Document.Expression
+alias Hologram.Template.VDOM.Expression
 alias Hologram.Template.Evaluator
 
 defimpl Evaluator, for: Expression do

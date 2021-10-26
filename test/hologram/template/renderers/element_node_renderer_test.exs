@@ -1,7 +1,7 @@
 defmodule Hologram.Template.ElementNodeRendererTest do
   use Hologram.Test.UnitCase, async: true
 
-  alias Hologram.Template.Document.{ElementNode, TextNode}
+  alias Hologram.Template.VDOM.{ElementNode, TextNode}
   alias Hologram.Template.Renderer
 
   @bindings %{}

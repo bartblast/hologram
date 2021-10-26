@@ -1,5 +1,5 @@
 alias Hologram.Compiler.Helpers
-alias Hologram.Template.Document.{Component, Expression}
+alias Hologram.Template.VDOM.{Component, Expression}
 alias Hologram.Template.Evaluator
 
 defmodule Hologram.Template.BindingsAggregator do

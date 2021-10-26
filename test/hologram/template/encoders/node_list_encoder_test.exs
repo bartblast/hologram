@@ -1,7 +1,7 @@
 defmodule Hologram.Template.NodeListEncoderTest do
   use Hologram.Test.UnitCase, async: true
 
-  alias Hologram.Template.Document.TextNode
+  alias Hologram.Template.VDOM.TextNode
   alias Hologram.Template.Encoder
 
   describe "encode/1" do

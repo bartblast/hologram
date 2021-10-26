@@ -3,7 +3,7 @@ defmodule Hologram.Template.ComponentRendererTest do
 
   alias Hologram.Compiler.IR.{IntegerType, ModuleAttributeOperator, TupleType}
   alias Hologram.Compiler.Reflection
-  alias Hologram.Template.Document.{Component, ElementNode, Expression, TextNode}
+  alias Hologram.Template.VDOM.{Component, ElementNode, Expression, TextNode}
   alias Hologram.Template.Renderer
 
   @module_4 Hologram.Test.Fixtures.Template.ComponentRenderer.Module4

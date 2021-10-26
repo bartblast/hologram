@@ -2,7 +2,7 @@ defmodule Hologram.Template.ElementNodeTransformerTest do
   use Hologram.Test.UnitCase, async: true
 
   alias Hologram.Compiler.IR.{ModuleAttributeOperator, TupleType}
-  alias Hologram.Template.Document.{ElementNode, Expression, TextNode}
+  alias Hologram.Template.VDOM.{ElementNode, Expression, TextNode}
   alias Hologram.Template.ElementNodeTransformer
 
   test "attr without modifiers" do

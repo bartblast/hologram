@@ -1,4 +1,4 @@
-defmodule Hologram.Template.Document do
+defmodule Hologram.Template.VDOM do
   defmodule Component do
     defstruct module: nil, module_def: nil, props: %{}, children: []
   end

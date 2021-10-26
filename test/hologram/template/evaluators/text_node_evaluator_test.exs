@@ -1,7 +1,7 @@
 defmodule Hologram.Template.TextNodeEvaluatorTest do
   use Hologram.Test.UnitCase, async: true
 
-  alias Hologram.Template.Document.TextNode
+  alias Hologram.Template.VDOM.TextNode
   alias Hologram.Template.Evaluator
 
   test "evaluate/2" do

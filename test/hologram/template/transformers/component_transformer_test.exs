@@ -3,7 +3,7 @@ defmodule Hologram.Template.ComponentTransformerTest do
 
   alias Hologram.Compiler.IR.{AliasDirective, ModuleDefinition}
   alias Hologram.Template.ComponentTransformer
-  alias Hologram.Template.Document.{Component, Expression, TextNode}
+  alias Hologram.Template.VDOM.{Component, Expression, TextNode}
 
   @aliases []
   @attrs []

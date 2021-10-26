@@ -4,7 +4,7 @@ defmodule Hologram.Template.Builder do
   alias Hologram.Typespecs, as: T
 
   @doc """
-  Returns module's document tree template.
+  Returns module's VDOM template.
 
   ## Examples
       iex> build(MyApp.Homepage)
@@ -13,7 +13,7 @@ defmodule Hologram.Template.Builder do
         %TextNode{content: "Footer content"}
       ]
   """
-  @spec build(module()) :: list(T.document_node())
+  @spec build(module()) :: list(T.vdom_node())
 
   def build(module, layout \\ nil) do
     aliases =

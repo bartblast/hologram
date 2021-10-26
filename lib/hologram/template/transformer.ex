@@ -4,7 +4,7 @@ defmodule Hologram.Template.Transformer do
   alias Hologram.Typespecs, as: T
 
   @doc """
-  Transforms parsed markup into a document tree template.
+  Transforms parsed markup into a VDOM template.
 
   ## Examples
       iex> transform([{"div", [{"class", "{1}"}, {"id", "some-id"}], ["some-text-{2}"]}])
@@ -30,7 +30,7 @@ defmodule Hologram.Template.Transformer do
         }
       ]
   """
-  @spec transform(Saxy.SimpleForm.t(), list(%AliasDirective{})) :: list(T.document_node())
+  @spec transform(Saxy.SimpleForm.t(), list(%AliasDirective{})) :: list(T.vdom_node())
 
   def transform(nodes, aliases) do
     Enum.reduce(nodes, [], &(&2 ++ transform_node(&1, aliases)))

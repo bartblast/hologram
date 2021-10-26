@@ -2,7 +2,7 @@ defmodule Hologram.Template.ExpressionRendererTest do
   use Hologram.Test.UnitCase, async: true
 
   alias Hologram.Compiler.IR.{ModuleAttributeOperator, TupleType}
-  alias Hologram.Template.Document.Expression
+  alias Hologram.Template.VDOM.Expression
   alias Hologram.Template.Renderer
 
   test "render/2" do

@@ -2,7 +2,7 @@ defmodule Hologram.Template.ExpressionEvaluatorTest do
   use Hologram.Test.UnitCase, async: true
 
   alias Hologram.Compiler.IR.{IntegerType, TupleType}
-  alias Hologram.Template.Document.Expression
+  alias Hologram.Template.VDOM.Expression
   alias Hologram.Template.Evaluator
 
   test "evaluate/2" do

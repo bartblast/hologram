@@ -1,5 +1,5 @@
 defmodule Hologram.Template.ElementNodeTransformer do
-  alias Hologram.Template.Document.ElementNode
+  alias Hologram.Template.VDOM.ElementNode
   alias Hologram.Template.EmbeddedExpressionParser
 
   def transform(tag, children, attrs) do

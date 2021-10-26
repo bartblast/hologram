@@ -2,7 +2,7 @@ defmodule Hologram.Template.ComponentEncoderTest do
   use Hologram.Test.UnitCase, async: true
 
   alias Hologram.Compiler.IR.{IntegerType, TupleType}
-  alias Hologram.Template.Document.{Component, Expression, TextNode}
+  alias Hologram.Template.VDOM.{Component, Expression, TextNode}
   alias Hologram.Template.Encoder
 
   describe "encode/1" do
