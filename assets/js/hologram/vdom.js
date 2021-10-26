@@ -4,12 +4,12 @@ import { HologramNotImplementedError } from "./errors";
 import Operation from "./operation";
 import Runtime from "./runtime";
 import Store from "./store";
+import Type from "./type";
 import Utils from "./utils";
 
 import ClickEvent from "./events/click_event";
 
 import { attributesModule, eventListenersModule, h, init, toVNode } from "snabbdom";
-import Type from "./type";
 const patch = init([attributesModule, eventListenersModule]);
 
 export default class VDOM {
@@ -41,6 +41,14 @@ export default class VDOM {
       return acc
     }, {})
 
+    return Type.map(elems)
+  }
+
+  static aggregateLayoutBindings() {
+    const propsBindings = Store.getPageState()
+    const stateBindings = Store.getLayoutState()
+
+    const elems = Object.assign({}, propsBindings.data, stateBindings.data)
     return Type.map(elems)
   }
 
@@ -110,7 +118,7 @@ export default class VDOM {
   static buildVNodeAttrs(node, bindings) {
     return Object.keys(node.attrs).reduce((acc, key) => {
       if (!VDOM.PRUNED_ATTRS.includes(key)) {
-        let valueNodes = node.attrs[key].value
+        const valueNodes = node.attrs[key].value
         acc[key] = VDOM.evaluateAttr(valueNodes, bindings)         
       }
       return acc
@@ -214,7 +222,7 @@ export default class VDOM {
     const layoutTemplate = Runtime.getLayoutTemplate()
     const slots = {default: Runtime.getPageTemplate()}
     const source = Operation.TARGET.layout
-    const bindings = Store.getLayoutState()
+    const bindings = VDOM.aggregateLayoutBindings()
 
     const newVirtualDocument = VDOM.build(layoutTemplate, source, bindings, slots)[0]
     patch(VDOM.virtualDocument, newVirtualDocument)

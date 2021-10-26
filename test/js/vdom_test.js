@@ -93,6 +93,33 @@ describe("aggregateComponentPropsBindings()", () => {
   })
 })
 
+describe("aggregateLayoutBindings()", () => {
+  it("aggregates layout bindings", () => {
+    let pageStateElems = {}
+    pageStateElems[Type.atomKey("a")] = Type.integer(1)
+    pageStateElems[Type.atomKey("b")] = Type.integer(2)
+    const pageState = Type.map(pageStateElems)
+
+    let layoutStateElems = {}
+    layoutStateElems[Type.atomKey("b")] = Type.integer(3)
+    layoutStateElems[Type.atomKey("c")] = Type.integer(4)
+    const layoutState = Type.map(layoutStateElems)
+
+    Store.setComponentState(Operation.TARGET.page, pageState)
+    Store.setComponentState(Operation.TARGET.layout, layoutState)
+
+    const result = VDOM.aggregateLayoutBindings()
+
+    const expectedElems = {}
+    expectedElems[Type.atomKey("a")] = Type.integer(1)
+    expectedElems[Type.atomKey("b")] = Type.integer(3)
+    expectedElems[Type.atomKey("c")] = Type.integer(4)
+    const expected = Type.map(expectedElems)
+
+    assert.deepStrictEqual(result, expected)
+  })
+})
+
 describe("buildComponentVNodes()", () => {
   it("builds stateless component's vnodes", () => {
     const TestStatelessComponent = class {
