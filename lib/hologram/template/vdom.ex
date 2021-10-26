@@ -4,7 +4,7 @@ defmodule Hologram.Template.VDOM do
   end
 
   defmodule ElementNode do
-    defstruct tag: nil, attrs: nil, children: []
+    defstruct tag: nil, attrs: %{}, children: []
   end
 
   defmodule Expression do
