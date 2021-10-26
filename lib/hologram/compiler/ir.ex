@@ -2,7 +2,7 @@ defmodule Hologram.Compiler.IR do
   # TYPES
 
   defmodule AnonymousFunctionType do
-    defstruct arity: nil, params: [], bindings: [], body: nil
+    defstruct arity: nil, params: [], bindings: [], body: []
   end
 
   defmodule AtomType do
@@ -10,7 +10,7 @@ defmodule Hologram.Compiler.IR do
   end
 
   defmodule BinaryType do
-    defstruct parts: nil
+    defstruct parts: []
   end
 
   defmodule BooleanType do
@@ -22,11 +22,11 @@ defmodule Hologram.Compiler.IR do
   end
 
   defmodule ListType do
-    defstruct data: nil
+    defstruct data: []
   end
 
   defmodule MapType do
-    defstruct data: nil
+    defstruct data: []
   end
 
   defmodule ModuleType do
@@ -42,11 +42,11 @@ defmodule Hologram.Compiler.IR do
   end
 
   defmodule StructType do
-    defstruct module: nil, data: nil
+    defstruct module: nil, data: []
   end
 
   defmodule TupleType do
-    defstruct data: nil
+    defstruct data: []
   end
 
   # OPERATORS
@@ -68,7 +68,7 @@ defmodule Hologram.Compiler.IR do
   end
 
   defmodule MatchOperator do
-    defstruct bindings: nil, left: nil, right: nil
+    defstruct bindings: [], left: nil, right: nil
   end
 
   defmodule ModuleAttributeOperator do
@@ -82,7 +82,7 @@ defmodule Hologram.Compiler.IR do
   # DEFINITIONS
 
   defmodule FunctionDefinition do
-    defstruct name: nil, arity: nil, params: nil, bindings: nil, body: nil
+    defstruct name: nil, arity: nil, params: [], bindings: [], body: []
   end
 
   defmodule FunctionDefinitionVariants do
@@ -90,7 +90,7 @@ defmodule Hologram.Compiler.IR do
   end
 
   defmodule MacroDefinition do
-    defstruct module: nil, name: nil, arity: nil, params: [], bindings: [], body: nil
+    defstruct module: nil, name: nil, arity: nil, params: [], bindings: [], body: []
   end
 
   defmodule ModuleDefinition do
@@ -135,7 +135,7 @@ defmodule Hologram.Compiler.IR do
   # OTHER
 
   defmodule FunctionCall do
-    defstruct module: nil, function: nil, params: nil
+    defstruct module: nil, function: nil, params: []
   end
 
   defmodule Quote do
