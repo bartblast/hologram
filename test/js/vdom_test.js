@@ -117,6 +117,7 @@ describe("aggregateLayoutBindings()", () => {
     const expected = Type.map(expectedElems)
 
     assert.deepStrictEqual(result, expected)
+    assertFrozen(result)
   })
 })
 
