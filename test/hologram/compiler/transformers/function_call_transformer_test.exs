@@ -2,7 +2,7 @@ defmodule Hologram.Compiler.FunctionCallTransformerTest do
   use Hologram.Test.UnitCase, async: true
 
   alias Hologram.Compiler.{Context, FunctionCallTransformer}
-  alias Hologram.Compiler.IR.{AtomType, FunctionCall, IntegerType, ModuleAttributeOperator, NotSupportedExpression, Variable}
+  alias Hologram.Compiler.IR.{AtomType, FunctionCall, IntegerType, ListType, ModuleAttributeOperator, NotSupportedExpression, Variable}
 
   test "function without args called on module" do
     code = "Hologram.Compiler.FunctionCallTransformerTest.test()"
@@ -121,10 +121,12 @@ defmodule Hologram.Compiler.FunctionCallTransformerTest do
       params: [
         %ModuleAttributeOperator{name: :test},
         %AtomType{value: :abc},
-        [
-          %IntegerType{value: 1},
-          %IntegerType{value: 2}
-        ]
+        %ListType{
+          data: [
+            %IntegerType{value: 1},
+            %IntegerType{value: 2}
+          ]
+        }
       ]
     }
 

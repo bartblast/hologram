@@ -1,6 +1,6 @@
 defmodule Hologram.Compiler.FunctionCallTransformer do
   alias Hologram.Compiler.{Context, Helpers, Resolver, Transformer}
-  alias Hologram.Compiler.IR.{FunctionCall, NotSupportedExpression}
+  alias Hologram.Compiler.IR.{FunctionCall, ListType, NotSupportedExpression}
 
   def transform(
         {{:., _, [{:__aliases__, _, module_segs}, function]}, _, params},
@@ -29,7 +29,7 @@ defmodule Hologram.Compiler.FunctionCallTransformer do
       params: [
         Transformer.transform(module_expr, context),
         Transformer.transform(function, context),
-        build_params(params, context)
+        %ListType{data: build_params(params, context)}
       ]
     }
   end
