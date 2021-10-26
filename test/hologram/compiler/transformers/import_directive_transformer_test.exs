@@ -1,8 +1,8 @@
-defmodule Hologram.Compiler.ImportTransformerTest do
+defmodule Hologram.Compiler.ImportDirectiveTransformerTest do
   use Hologram.Test.UnitCase, async: true
 
-  alias Hologram.Compiler.ImportTransformer
-  alias Hologram.Compiler.IR.Import
+  alias Hologram.Compiler.ImportDirectiveTransformer
+  alias Hologram.Compiler.IR.ImportDirective
 
   @expected_module Hologram.Test.Fixtures.Compiler.Transformer.Module1
 
@@ -10,8 +10,8 @@ defmodule Hologram.Compiler.ImportTransformerTest do
     code = "import Hologram.Test.Fixtures.Compiler.Transformer.Module1"
     {:import, _, ast} = ast(code)
 
-    result = ImportTransformer.transform(ast)
-    expected = %Import{module: @expected_module, only: []}
+    result = ImportDirectiveTransformer.transform(ast)
+    expected = %ImportDirective{module: @expected_module, only: []}
 
     assert result == expected
   end
@@ -20,8 +20,8 @@ defmodule Hologram.Compiler.ImportTransformerTest do
     code = "import Hologram.Test.Fixtures.Compiler.Transformer.Module1, only: [abc: 2]"
     {:import, _, ast} = ast(code)
 
-    result = ImportTransformer.transform(ast)
-    expected = %Import{module: @expected_module, only: [abc: 2]}
+    result = ImportDirectiveTransformer.transform(ast)
+    expected = %ImportDirective{module: @expected_module, only: [abc: 2]}
 
     assert result == expected
   end
@@ -30,8 +30,8 @@ defmodule Hologram.Compiler.ImportTransformerTest do
     code = "import Hologram.Test.Fixtures.Compiler.Transformer.Module1, warn: false"
     {:import, _, ast} = ast(code)
 
-    result = ImportTransformer.transform(ast)
-    expected = %Import{module: @expected_module, only: []}
+    result = ImportDirectiveTransformer.transform(ast)
+    expected = %ImportDirective{module: @expected_module, only: []}
 
     assert result == expected
   end

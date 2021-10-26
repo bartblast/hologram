@@ -1,13 +1,13 @@
 defmodule Hologram.Compiler.ResolverTest do
   use Hologram.Test.UnitCase, async: true
 
-  alias Hologram.Compiler.IR.{AliasDirective, Import}
+  alias Hologram.Compiler.IR.{AliasDirective, ImportDirective}
   alias Hologram.Compiler.Resolver
 
   describe "resolve/5" do
     test "imported module" do
       imported_module = Hologram.Test.Fixtures.Compiler.Resolver.Module1
-      imports = [%Import{module: imported_module}]
+      imports = [%ImportDirective{module: imported_module}]
 
       result = Resolver.resolve([], :test, 2, imports, [], Hologram.Compiler.ResolverTest)
       assert result == imported_module

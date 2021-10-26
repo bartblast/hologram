@@ -6,7 +6,7 @@ defmodule Hologram.Compiler.ModuleDefinitionTransformerTest do
     AliasDirective,
     AtomType,
     FunctionDefinition,
-    Import,
+    ImportDirective,
     IntegerType,
     ListType,
     MacroDefinition,
@@ -49,7 +49,7 @@ defmodule Hologram.Compiler.ModuleDefinitionTransformerTest do
     assert %ModuleDefinition{} = result = ModuleDefinitionTransformer.transform(ast)
 
     expected = [
-      %Import{
+      %ImportDirective{
         module: @module_1,
         only: []
       }
@@ -141,8 +141,8 @@ defmodule Hologram.Compiler.ModuleDefinitionTransformerTest do
     assert %ModuleDefinition{} = result = ModuleDefinitionTransformer.transform(ast)
 
     expected = [
-      %Import{module: @module_1, only: []},
-      %Import{module: @module_2, only: []}
+      %ImportDirective{module: @module_1, only: []},
+      %ImportDirective{module: @module_2, only: []}
     ]
 
     assert result.imports == expected

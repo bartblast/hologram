@@ -15,7 +15,7 @@ defmodule Hologram.Compiler.TransformerTest do
     FunctionDefinition,
     FunctionCall,
     IfExpression,
-    Import,
+    ImportDirective,
     IntegerType,
     ListType,
     MacroDefinition,
@@ -262,7 +262,7 @@ defmodule Hologram.Compiler.TransformerTest do
       code = "import Hologram.Test.Fixtures.Compiler.Transformer.Module1"
       ast = ast(code)
 
-      assert %Import{} = Transformer.transform(ast, %Context{})
+      assert %ImportDirective{} = Transformer.transform(ast, %Context{})
     end
 
     test "require" do

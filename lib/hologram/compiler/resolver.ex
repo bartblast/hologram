@@ -1,6 +1,6 @@
 defmodule Hologram.Compiler.Resolver do
   alias Hologram.Compiler.Helpers
-  alias Hologram.Compiler.IR.{AliasDirective, Import}
+  alias Hologram.Compiler.IR.{AliasDirective, ImportDirective}
   alias Hologram.Compiler.Typespecs, as: T
 
   @doc """
@@ -21,7 +21,7 @@ defmodule Hologram.Compiler.Resolver do
   Determines the module based on the given module segments, called function, imports, aliases and the calling module.
 
   ## Examples
-      iex> imports = [%Import{module: Enum}]
+      iex> imports = [%ImportDirective{module: Enum}]
       iex> resolve([], :put, 3, imports, [], Hologram.Compiler.Resolver)
       Enum
   """
@@ -29,7 +29,7 @@ defmodule Hologram.Compiler.Resolver do
           T.module_segments(),
           T.function_name(),
           integer(),
-          list(%Import{}),
+          list(%ImportDirective{}),
           list(%AliasDirective{}),
           module()
         ) :: module()

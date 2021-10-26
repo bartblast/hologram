@@ -11,7 +11,7 @@ defmodule Hologram.Compiler.Transformer do
     FunctionDefinitionTransformer,
     FunctionCallTransformer,
     IfExpressionTransformer,
-    ImportTransformer,
+    ImportDirectiveTransformer,
     ListTypeTransformer,
     MacroDefinitionTransformer,
     MapTypeTransformer,
@@ -153,7 +153,7 @@ defmodule Hologram.Compiler.Transformer do
   end
 
   def transform({:import, _, ast}, _) do
-    ImportTransformer.transform(ast)
+    ImportDirectiveTransformer.transform(ast)
   end
 
   def transform({:require, _, ast}, _) do

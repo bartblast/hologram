@@ -114,7 +114,7 @@ defmodule Hologram.Compiler.IR do
     defstruct module: nil, as: nil
   end
 
-  defmodule Import do
+  defmodule ImportDirective do
     defstruct module: nil, only: nil
   end
 
