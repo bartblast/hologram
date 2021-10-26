@@ -42,6 +42,7 @@ export default class Type {
     }
   }
 
+  // DEFER: test
   static expressionNode(callback) {
     return Utils.freeze({type: "expression", callback: callback})
   }
