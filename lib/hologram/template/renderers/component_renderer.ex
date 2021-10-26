@@ -1,5 +1,5 @@
-alias Hologram.Template.Document.Component
 alias Hologram.Template.{BindingsAggregator, Builder, Renderer}
+alias Hologram.Template.Document.Component
 
 defimpl Renderer, for: Component do
   def render(component, outer_bindings, _) do
