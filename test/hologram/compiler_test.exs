@@ -7,7 +7,7 @@ defmodule Hologram.CompilerTest do
   @module_8 Hologram.Test.Fixtures.Compiler.Module8
   @module_11 Hologram.Test.Fixtures.Compiler.Module11
 
-  test "includes the given module" do
+  test "includes the compiled module" do
     result = Compiler.compile(@module_2)
     assert Map.has_key?(result, @module_2)
   end
@@ -27,11 +27,20 @@ defmodule Hologram.CompilerTest do
     assert Map.has_key?(result, module_6)
   end
 
-  test "includes modules used by the given module's functions" do
+  test "includes modules that are called by the compiled module's functions" do
     module_9 = Hologram.Test.Fixtures.Compiler.Module9
     result = Compiler.compile(@module_8)
 
     assert Map.has_key?(result, module_9)
+  end
+
+  test "includes modules which are used but not called in the compiled module's functions" do
+    module_19 = Hologram.Test.Fixtures.Compiler.Module19
+    module_20 = Hologram.Test.Fixtures.Compiler.Module20
+
+    result = Compiler.compile(module_19)
+
+    assert Map.has_key?(result, module_20)
   end
 
   test "handles circular dependency" do

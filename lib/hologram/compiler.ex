@@ -1,6 +1,6 @@
 defmodule Hologram.Compiler do
   alias Hologram.Compiler.{Helpers, Reflection}
-  alias Hologram.Compiler.IR.{FunctionCall, FunctionDefinition, ModuleDefinition, TupleType}
+  alias Hologram.Compiler.IR.{FunctionCall, FunctionDefinition, ModuleDefinition, ModuleType, TupleType}
   alias Hologram.Template
   alias Hologram.Template.Document.{Component, ElementNode, Expression}
   alias Hologram.Typespecs, as: T
@@ -60,11 +60,15 @@ defmodule Hologram.Compiler do
     end
   end
 
+  defp traverse_function_defs(acc, %FunctionCall{module: module}) do
+    maybe_include_module(acc, module)
+  end
+
   defp traverse_function_defs(acc, %FunctionDefinition{body: body}) do
     Enum.reduce(body, acc, &traverse_function_defs(&2, &1))
   end
 
-  defp traverse_function_defs(acc, %FunctionCall{module: module}) do
+  defp traverse_function_defs(acc, %ModuleType{module: module}) do
     maybe_include_module(acc, module)
   end
 
