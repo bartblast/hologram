@@ -31,7 +31,8 @@ defmodule Hologram.MixProject do
     if is_dep?() do
       Mix.compilers()
     else
-      [:phoenix] ++ Mix.compilers() ++ [:hologram]
+      compilers = [:phoenix] ++ Mix.compilers()
+      if Mix.env() == :test, do: compilers, else: compilers ++ [:hologram]
     end
   end
 
