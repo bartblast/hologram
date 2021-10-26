@@ -34,7 +34,7 @@ defmodule Hologram.Compiler.Transformer do
     BooleanType,
     IntegerType,
     ModuleAttributeOperator,
-    ModuleMacro,
+    ModulePseudoVariable,
     NilType,
     StringType,
     Variable
@@ -186,7 +186,7 @@ defmodule Hologram.Compiler.Transformer do
 
   # this needs to be defined before variable case
   def transform({:__MODULE__, _, _}, _) do
-    %ModuleMacro{}
+    %ModulePseudoVariable{}
   end
 
   def transform({name, _, nil}, _) when is_atom(name) do

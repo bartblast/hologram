@@ -142,7 +142,7 @@ defmodule Hologram.Compiler.IR do
     defstruct body: []
   end
 
-  defmodule ModuleMacro do
+  defmodule ModulePseudoVariable do
     defstruct []
   end
 

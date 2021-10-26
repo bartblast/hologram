@@ -24,7 +24,7 @@ defmodule Hologram.Compiler.TransformerTest do
     ModuleDefinition,
     ModuleAttributeDefinition,
     ModuleAttributeOperator,
-    ModuleMacro,
+    ModulePseudoVariable,
     ModuleType,
     NilType,
     Quote,
@@ -338,7 +338,7 @@ defmodule Hologram.Compiler.TransformerTest do
       ast = ast(code)
 
       result = Transformer.transform(ast, %Context{})
-      assert result == %ModuleMacro{}
+      assert result == %ModulePseudoVariable{}
     end
   end
 end
