@@ -6,7 +6,7 @@ defmodule Mix.Tasks.Compile.Hologram do
 
   @root_path Reflection.root_path()
 
-  def run(_) do
+  def run(opts) do
     output_path =
       if is_dep?() do
         "#{@root_path}/../../priv/static/hologram"
@@ -20,7 +20,7 @@ defmodule Mix.Tasks.Compile.Hologram do
     build_runtime()
 
     # DEFER: parallelize
-    Reflection.list_pages()
+    Reflection.list_pages(opts)
     |> Enum.map(&build_page(&1, output_path))
     |> build_manifest(output_path)
 
