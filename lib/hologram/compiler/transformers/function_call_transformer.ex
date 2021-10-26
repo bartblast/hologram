@@ -18,8 +18,20 @@ defmodule Hologram.Compiler.FunctionCallTransformer do
     |> build_function_call(function, params, context)
   end
 
-  def transform({{:., _, [_, _]}, _, _} = ast, _) do
+  def transform({{:., _, [erlang_module, _]}, _, _} = ast, _) when is_atom(erlang_module) do
     %NotSupportedExpression{ast: ast, type: :erlang_function_call}
+  end
+
+  def transform({{:., _, [module_expr, function]}, _, params}, %Context{} = context) do
+    %FunctionCall{
+      module: Kernel,
+      function: :apply,
+      params: [
+        Transformer.transform(module_expr, context),
+        Transformer.transform(function, context),
+        build_params(params, context)
+      ]
+    }
   end
 
   def transform({function, _, params}, %Context{} = context) do

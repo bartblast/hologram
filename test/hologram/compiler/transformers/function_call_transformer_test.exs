@@ -2,7 +2,7 @@ defmodule Hologram.Compiler.FunctionCallTransformerTest do
   use Hologram.Test.UnitCase, async: true
 
   alias Hologram.Compiler.{Context, FunctionCallTransformer}
-  alias Hologram.Compiler.IR.{FunctionCall, IntegerType, NotSupportedExpression, Variable}
+  alias Hologram.Compiler.IR.{AtomType, FunctionCall, IntegerType, ModuleAttributeOperator, NotSupportedExpression, Variable}
 
   test "function without args called on module" do
     code = "Hologram.Compiler.FunctionCallTransformerTest.test()"
@@ -105,6 +105,28 @@ defmodule Hologram.Compiler.FunctionCallTransformerTest do
 
     result = FunctionCallTransformer.transform(ast, %Context{})
     expected = %NotSupportedExpression{ast: ast, type: :erlang_function_call}
+
+    assert result == expected
+  end
+
+  test "function called on expression" do
+    code = "@test.abc(1, 2)"
+    ast = ast(code)
+
+    result = FunctionCallTransformer.transform(ast, %Context{})
+
+    expected = %FunctionCall{
+      function: :apply,
+      module: Kernel,
+      params: [
+        %ModuleAttributeOperator{name: :test},
+        %AtomType{value: :abc},
+        [
+          %IntegerType{value: 1},
+          %IntegerType{value: 2}
+        ]
+      ]
+    }
 
     assert result == expected
   end
