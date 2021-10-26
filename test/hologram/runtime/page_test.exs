@@ -34,7 +34,7 @@ defmodule Hologram.PageTest do
              :def,
              [context: Hologram.Page, import: Kernel],
              [
-               {:page_layout, [counter: _, context: Hologram.Page], Hologram.Page},
+               {:custom_layout, [counter: _, context: Hologram.Page], Hologram.Page},
                [do: {:__aliases__, [counter: _, alias: false], [:Hologram, :PageTest]}]
              ]
            } = ast
