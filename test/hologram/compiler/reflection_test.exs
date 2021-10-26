@@ -103,8 +103,8 @@ defmodule Hologram.Compiler.ReflectionTest do
 
     test "custom" do
       expected = "/test/path"
-      config = [pages_path: expected]
-      result = Reflection.pages_path(config)
+      opts = [pages_path: expected]
+      result = Reflection.pages_path(opts)
 
       assert result == expected
     end

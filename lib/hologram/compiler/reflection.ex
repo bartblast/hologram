@@ -38,8 +38,8 @@ defmodule Hologram.Compiler.Reflection do
   end
 
   # TODO: refactor & test
-  def list_pages(config \\ get_config()) do
-    glob = "#{pages_path(config)}/**/*.ex"
+  def list_pages(opts \\ get_config()) do
+    glob = "#{pages_path(opts)}/**/*.ex"
     regex = ~r/defmodule\s+([\w\.]+)\s+do\s+/
 
     Path.wildcard(glob)
@@ -88,8 +88,8 @@ defmodule Hologram.Compiler.Reflection do
     get_config()[:otp_app]
   end
 
-  def pages_path(config \\ get_config()) do
-    case Keyword.get(config, :pages_path) do
+  def pages_path(opts \\ get_config()) do
+    case Keyword.get(opts, :pages_path) do
       nil -> "#{app_path()}/pages"
       pages_path -> pages_path
     end
