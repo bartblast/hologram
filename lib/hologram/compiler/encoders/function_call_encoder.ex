@@ -22,19 +22,21 @@ defimpl Encoder, for: FunctionCall do
   def encode(%{module: module, function: function, params: params}, %Context{} = context, %Opts{} = opts) do
     class_name = Helpers.class_name(module)
     function = encode_function_name(function)
-
-    params =
-      Enum.map(params, fn param ->
-        case param do
-          %Variable{name: name} ->
-            name
-
-          _ ->
-            Encoder.encode(param, context, opts)
-        end
-      end)
-      |> Enum.join(", ")
+    params = encode_params(params, context, opts)
 
     "#{class_name}.#{function}(#{params})"
+  end
+
+  defp encode_params(params, context, opts) do
+    Enum.map(params, fn param ->
+      case param do
+        %Variable{name: name} ->
+          name
+
+        _ ->
+          Encoder.encode(param, context, opts)
+      end
+    end)
+    |> Enum.join(", ")
   end
 end
