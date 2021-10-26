@@ -2,7 +2,7 @@ defmodule Hologram.Compiler.ModuleTypeTransformerTest do
   use Hologram.Test.UnitCase, async: true
 
   alias Hologram.Compiler.{Context, ModuleTypeTransformer}
-  alias Hologram.Compiler.IR.{Alias, ModuleType}
+  alias Hologram.Compiler.IR.{AliasDirective, ModuleType}
 
   test "non-aliased module segments" do
     code = "Abc.Bcd"
@@ -15,7 +15,7 @@ defmodule Hologram.Compiler.ModuleTypeTransformerTest do
   end
 
   test "aliased module segments" do
-    aliases = [%Alias{module: Abc.Bcd, as: [:Bcd]}]
+    aliases = [%AliasDirective{module: Abc.Bcd, as: [:Bcd]}]
     context = %Context{aliases: aliases}
 
     code = "Bcd"

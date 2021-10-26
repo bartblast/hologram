@@ -3,7 +3,7 @@ defmodule Hologram.Compiler.Transformer do
 
   alias Hologram.Compiler.{
     AdditionOperatorTransformer,
-    AliasTransformer,
+    AliasDirectiveTransformer,
     AnonymousFunctionTypeTransformer,
     BinaryTypeTransformer,
     DotOperatorTransformer,
@@ -149,7 +149,7 @@ defmodule Hologram.Compiler.Transformer do
   # DIRECTIVES
 
   def transform({:alias, _, ast}, _) do
-    AliasTransformer.transform(ast)
+    AliasDirectiveTransformer.transform(ast)
   end
 
   def transform({:import, _, ast}, _) do

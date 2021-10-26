@@ -2,7 +2,7 @@ defmodule Hologram.Compiler.StructTypeTransformerTest do
   use Hologram.Test.UnitCase, async: true
 
   alias Hologram.Compiler.{Context, StructTypeTransformer}
-  alias Hologram.Compiler.IR.{Alias, AtomType, IntegerType, StructType}
+  alias Hologram.Compiler.IR.{AliasDirective, AtomType, IntegerType, StructType}
 
   test "not aliased" do
     code = "%Hologram.Test.Fixtures.Compiler.StructTypeTransformer.Module1{a: 1}"
@@ -26,7 +26,7 @@ defmodule Hologram.Compiler.StructTypeTransformerTest do
 
     context = %Context{
       aliases: [
-        %Alias{module: Hologram.Test.Fixtures.Compiler.StructTypeTransformer.Module2, as: [:Abc]}
+        %AliasDirective{module: Hologram.Test.Fixtures.Compiler.StructTypeTransformer.Module2, as: [:Abc]}
       ]
     }
 

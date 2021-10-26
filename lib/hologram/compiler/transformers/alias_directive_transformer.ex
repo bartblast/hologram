@@ -1,6 +1,6 @@
-defmodule Hologram.Compiler.AliasTransformer do
+defmodule Hologram.Compiler.AliasDirectiveTransformer do
   alias Hologram.Compiler.Helpers
-  alias Hologram.Compiler.IR.Alias
+  alias Hologram.Compiler.IR.AliasDirective
 
   def transform([{{:., _, [{:__aliases__, _, module_segs}, :{}]}, _, aliases}, _]) do
     transform_multi_alias(module_segs, aliases)
@@ -12,7 +12,7 @@ defmodule Hologram.Compiler.AliasTransformer do
 
   def transform([{_, _, module_segs}]) do
     module = Helpers.module(module_segs)
-    %Alias{module: module, as: [List.last(module_segs)]}
+    %AliasDirective{module: module, as: [List.last(module_segs)]}
   end
 
   def transform([{_, _, module_segs}, opts]) do
@@ -25,13 +25,13 @@ defmodule Hologram.Compiler.AliasTransformer do
         [List.last(module_segs)]
       end
 
-    %Alias{module: module, as: as}
+    %AliasDirective{module: module, as: as}
   end
 
   defp transform_multi_alias(module_segs, aliases) do
     Enum.map(aliases, fn {:__aliases__, _, as} ->
       module = Helpers.module(module_segs ++ as)
-      %Alias{module: module, as: as}
+      %AliasDirective{module: module, as: as}
     end)
   end
 end

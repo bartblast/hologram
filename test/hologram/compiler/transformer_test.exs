@@ -5,7 +5,7 @@ defmodule Hologram.Compiler.TransformerTest do
 
   alias Hologram.Compiler.IR.{
     AdditionOperator,
-    Alias,
+    AliasDirective,
     AnonymousFunctionType,
     AtomType,
     BinaryType,
@@ -255,7 +255,7 @@ defmodule Hologram.Compiler.TransformerTest do
       code = "alias Hologram.Test.Fixtures.Compiler.Transformer.Module1"
       ast = ast(code)
 
-      assert %Alias{} = Transformer.transform(ast, %Context{})
+      assert %AliasDirective{} = Transformer.transform(ast, %Context{})
     end
 
     test "import" do

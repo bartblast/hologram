@@ -1,5 +1,5 @@
 defmodule Hologram.Template.Transformer do
-  alias Hologram.Compiler.IR.Alias
+  alias Hologram.Compiler.IR.AliasDirective
   alias Hologram.Template.{ComponentTransformer, ElementNodeTransformer, EmbeddedExpressionParser}
   alias Hologram.Typespecs, as: T
 
@@ -30,7 +30,7 @@ defmodule Hologram.Template.Transformer do
         }
       ]
   """
-  @spec transform(Saxy.SimpleForm.t(), list(%Alias{})) :: list(T.document_node())
+  @spec transform(Saxy.SimpleForm.t(), list(%AliasDirective{})) :: list(T.document_node())
 
   def transform(nodes, aliases) do
     Enum.reduce(nodes, [], &(&2 ++ transform_node(&1, aliases)))

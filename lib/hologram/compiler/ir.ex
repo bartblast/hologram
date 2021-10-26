@@ -110,7 +110,7 @@ defmodule Hologram.Compiler.IR do
 
   # DIRECTIVES
 
-  defmodule Alias do
+  defmodule AliasDirective do
     defstruct module: nil, as: nil
   end
 

@@ -1,7 +1,7 @@
 defmodule Hologram.Template.ComponentTransformerTest do
   use Hologram.Test.UnitCase, async: true
 
-  alias Hologram.Compiler.IR.{Alias, ModuleDefinition}
+  alias Hologram.Compiler.IR.{AliasDirective, ModuleDefinition}
   alias Hologram.Template.ComponentTransformer
   alias Hologram.Template.Document.{Component, Expression, TextNode}
 
@@ -28,7 +28,7 @@ defmodule Hologram.Template.ComponentTransformerTest do
 
   test "aliased component" do
     module_name = "Bcd"
-    aliases = [%Alias{module: @module, as: [:Bcd]}]
+    aliases = [%AliasDirective{module: @module, as: [:Bcd]}]
 
     result = ComponentTransformer.transform(module_name, @attrs, @children, aliases)
 

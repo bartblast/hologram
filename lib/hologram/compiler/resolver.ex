@@ -1,17 +1,17 @@
 defmodule Hologram.Compiler.Resolver do
   alias Hologram.Compiler.Helpers
-  alias Hologram.Compiler.IR.{Alias, Import}
+  alias Hologram.Compiler.IR.{AliasDirective, Import}
   alias Hologram.Compiler.Typespecs, as: T
 
   @doc """
   Determines the module based on the given module segments and aliases.
 
   ## Examples
-      iex> aliases = [%Alias{module: Abc.Bcd, as: [:Bcd]}]
+      iex> aliases = [%AliasDirective{module: Abc.Bcd, as: [:Bcd]}]
       iex> resolve([:Bcd], aliases)
       Abc.Bcd
   """
-  @spec resolve(T.module_segments(), list(%Alias{})) :: module()
+  @spec resolve(T.module_segments(), list(%AliasDirective{})) :: module()
 
   def resolve(module_segs, aliases) do
     resolve(module_segs, nil, nil, [], aliases, nil)
@@ -30,7 +30,7 @@ defmodule Hologram.Compiler.Resolver do
           T.function_name(),
           integer(),
           list(%Import{}),
-          list(%Alias{}),
+          list(%AliasDirective{}),
           module()
         ) :: module()
 

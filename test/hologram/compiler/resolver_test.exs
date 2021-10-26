@@ -1,7 +1,7 @@
 defmodule Hologram.Compiler.ResolverTest do
   use Hologram.Test.UnitCase, async: true
 
-  alias Hologram.Compiler.IR.{Alias, Import}
+  alias Hologram.Compiler.IR.{AliasDirective, Import}
   alias Hologram.Compiler.Resolver
 
   describe "resolve/5" do
@@ -29,7 +29,7 @@ defmodule Hologram.Compiler.ResolverTest do
 
     test "aliased module" do
       aliased_module = Hologram.Test.Fixtures.Compiler.Resolver.Module1
-      aliases = [%Alias{module: aliased_module, as: [:Module1]}]
+      aliases = [%AliasDirective{module: aliased_module, as: [:Module1]}]
       calling_module = Hologram.Compiler.ResolverTest
 
       result = Resolver.resolve([:Module1], :test, 2, [], aliases, calling_module)
@@ -48,7 +48,7 @@ defmodule Hologram.Compiler.ResolverTest do
 
   test "resolve/2" do
     aliased_module = Hologram.Test.Fixtures.Compiler.Resolver.Module1
-    aliases = [%Alias{module: aliased_module, as: [:Module1]}]
+    aliases = [%AliasDirective{module: aliased_module, as: [:Module1]}]
 
     result = Resolver.resolve([:Module1], aliases)
     assert result == aliased_module

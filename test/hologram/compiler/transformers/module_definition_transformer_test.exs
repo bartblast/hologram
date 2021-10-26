@@ -3,7 +3,7 @@ defmodule Hologram.Compiler.ModuleDefinitionTransformerTest do
 
   alias Hologram.Compiler.IR.{
     AdditionOperator,
-    Alias,
+    AliasDirective,
     AtomType,
     FunctionDefinition,
     Import,
@@ -179,8 +179,8 @@ defmodule Hologram.Compiler.ModuleDefinitionTransformerTest do
     assert %ModuleDefinition{} = result = ModuleDefinitionTransformer.transform(ast)
 
     expected = [
-      %Alias{module: @module_1, as: [:Module1]},
-      %Alias{module: @module_2, as: [:Module2]}
+      %AliasDirective{module: @module_1, as: [:Module1]},
+      %AliasDirective{module: @module_2, as: [:Module2]}
     ]
 
     assert result.aliases == expected
@@ -197,8 +197,8 @@ defmodule Hologram.Compiler.ModuleDefinitionTransformerTest do
     assert %ModuleDefinition{} = result = ModuleDefinitionTransformer.transform(ast)
 
     expected = [
-      %Alias{module: @module_1, as: [:Module1]},
-      %Alias{module: @module_2, as: [:Module2]}
+      %AliasDirective{module: @module_1, as: [:Module1]},
+      %AliasDirective{module: @module_2, as: [:Module2]}
     ]
 
     assert result.aliases == expected
