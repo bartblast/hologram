@@ -13,6 +13,7 @@ defmodule Hologram.Template.PageRendererTest do
 
     module = Hologram.Test.Fixtures.Template.PageRenderer.Module1
     digest = Reflection.get_page_digest(module)
+    assert digest =~ uuid_hex_regex()
 
     result = Renderer.render(module, %{})
 
@@ -20,7 +21,6 @@ defmodule Hologram.Template.PageRendererTest do
     <!DOCTYPE html>
     <html>
       <head>
-        <title>Hologram E2E</title>
         <script src="/hologram/runtime.js"></script>
     <script src="/hologram/page-#{digest}.js"></script>
     <script>
@@ -28,8 +28,8 @@ defmodule Hologram.Template.PageRendererTest do
     </script>
       </head>
       <body>
-        default layout:
-        <div>test template 123</div>
+        layout template 987
+        page template 123
       </body>
     </html>\
     """
