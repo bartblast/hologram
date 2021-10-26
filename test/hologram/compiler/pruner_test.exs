@@ -14,7 +14,6 @@ defmodule Hologram.Compiler.PrunerTest do
 
   def function_preserved?(compiled_module, tested_module, function_name, function_arity) do
     module_defs_map = Compiler.compile(compiled_module)
-
     result = Pruner.prune(module_defs_map, compiled_module)
 
     if result[tested_module] do
@@ -37,6 +36,17 @@ defmodule Hologram.Compiler.PrunerTest do
     test "page template" do
       module_2 = Hologram.Test.Fixtures.Compiler.Pruner.Module2
       assert function_preserved?(module_2, module_2, :template, 0)
+    end
+
+    test "page route in entry page" do
+      module_33 = Hologram.Test.Fixtures.Compiler.Pruner.Module33
+      assert function_preserved?(module_33, module_33, :route, 0)
+    end
+
+    test "page route in non-entry page" do
+      module_33 = Hologram.Test.Fixtures.Compiler.Pruner.Module33
+      module_34 = Hologram.Test.Fixtures.Compiler.Pruner.Module34
+      assert function_preserved?(module_33, module_34, :route, 0)
     end
 
     test "functions used by page actions" do

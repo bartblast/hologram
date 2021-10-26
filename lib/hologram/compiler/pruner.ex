@@ -1,6 +1,6 @@
 defmodule Hologram.Compiler.Pruner do
   alias Hologram.Compiler.{Helpers, Reflection}
-  alias Hologram.Compiler.IR.{FunctionCall, FunctionDefinition, IfExpression, TupleType}
+  alias Hologram.Compiler.IR.{FunctionCall, FunctionDefinition, IfExpression, ModuleType, TupleType}
   alias Hologram.Template
   alias Hologram.Template.Document.{Component, ElementNode, Expression}
   alias Hologram.Typespecs, as: T
@@ -22,14 +22,34 @@ defmodule Hologram.Compiler.Pruner do
   end
 
   defp find_used_functions(module_defs_map, traversed_module, pruned_module, acc \\ MapSet.new()) do
-    acc =
-      traverse_function_defs(acc, module_defs_map, {traversed_module, :init})
-      |> traverse_function_defs(module_defs_map, {traversed_module, :action})
-      |> traverse_template(module_defs_map, traversed_module, pruned_module)
+    module_type = module_type(traversed_module, module_defs_map)
 
-    if entry_page?(module_defs_map, traversed_module, pruned_module) do
-      traverse_function_defs(acc, module_defs_map, {traversed_module, :layout})
-      |> traverse_function_defs(module_defs_map, {traversed_module, :custom_layout})
+    functions =
+      case module_type do
+        :component ->
+          [:action, :init]
+
+        :page ->
+          if entry_page?(module_defs_map, traversed_module, pruned_module) do
+            [:action, :custom_layout, :layout, :route]
+          else
+            [:action, :route]
+          end
+
+        :layout ->
+          [:action, :init]
+
+        true ->
+          []
+      end
+
+    acc =
+      Enum.reduce(functions, acc, fn fun, acc ->
+        traverse_function_defs(acc, module_defs_map, {traversed_module, fun})
+      end)
+
+    unless module_type == :plain do
+      traverse_template(acc, module_defs_map, traversed_module, pruned_module)
     else
       acc
     end
@@ -55,6 +75,17 @@ defmodule Hologram.Compiler.Pruner do
         acc
       end
     end)
+  end
+
+  defp module_type(module, module_defs_map) do
+    module_def = module_defs_map[module]
+
+    cond do
+      Helpers.is_component?(module_def) -> :component
+      Helpers.is_page?(module_def) -> :page
+      Helpers.is_layout?(module_def) -> :layout
+      true -> :plain
+    end
   end
 
   defp prune_unused_functions(used_functions, module_defs_map) do
@@ -109,6 +140,14 @@ defmodule Hologram.Compiler.Pruner do
     traverse_function_defs(acc, module_defs_map, condition)
     |> traverse_function_defs(module_defs_map, do_clause)
     |> traverse_function_defs(module_defs_map, else_clause)
+  end
+
+  defp traverse_function_defs(acc, module_defs_map, %ModuleType{module: module}) do
+    if Helpers.is_page?(module_defs_map[module]) do
+      traverse_function_defs(acc, module_defs_map, {module, :route})
+    else
+      acc
+    end
   end
 
   # DEFER: traverse nested code blocks
