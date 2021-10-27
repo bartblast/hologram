@@ -174,12 +174,8 @@ defmodule Hologram.Compiler.HelpersTest do
 
       result = Helpers.aggregate_function_def_variants(function_defs)
 
-      expected = [
-        %FunctionDefinitionVariants{
-          name: :test,
-          variants: function_defs
-        }
-      ]
+      expected =
+        %{test: %FunctionDefinitionVariants{name: :test, variants: function_defs}}
 
       assert result == expected
     end
@@ -216,12 +212,7 @@ defmodule Hologram.Compiler.HelpersTest do
       function_defs = [function_def_1, function_def_2]
       result = Helpers.aggregate_function_def_variants(function_defs)
 
-      expected = [
-        %FunctionDefinitionVariants{
-          name: :test,
-          variants: function_defs
-        }
-      ]
+      expected = %{test: %FunctionDefinitionVariants{name: :test, variants: function_defs}}
 
       assert result == expected
     end
@@ -256,16 +247,10 @@ defmodule Hologram.Compiler.HelpersTest do
       function_defs = [function_def_1, function_def_2]
       result = Helpers.aggregate_function_def_variants(function_defs)
 
-      expected = [
-        %FunctionDefinitionVariants{
-          name: :test_1,
-          variants: [function_def_1]
-        },
-        %FunctionDefinitionVariants{
-          name: :test_2,
-          variants: [function_def_2]
-        }
-      ]
+      expected = %{
+        test_1: %FunctionDefinitionVariants{name: :test_1, variants: [function_def_1]},
+        test_2: %FunctionDefinitionVariants{name: :test_2, variants: [function_def_2]}
+      }
 
       assert result == expected
     end
@@ -315,16 +300,10 @@ defmodule Hologram.Compiler.HelpersTest do
       function_defs = [function_def_1, function_def_2, function_def_3]
       result = Helpers.aggregate_function_def_variants(function_defs)
 
-      expected = [
-        %FunctionDefinitionVariants{
-          name: :test_1,
-          variants: [function_def_1, function_def_2]
-        },
-        %FunctionDefinitionVariants{
-          name: :test_2,
-          variants: [function_def_3]
-        }
-      ]
+      expected = %{
+        test_1: %FunctionDefinitionVariants{name: :test_1, variants: [function_def_1, function_def_2]},
+        test_2: %FunctionDefinitionVariants{name: :test_2, variants: [function_def_3]}
+      }
 
       assert result == expected
     end

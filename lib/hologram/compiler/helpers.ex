@@ -24,8 +24,9 @@ defmodule Hologram.Compiler.Helpers do
       end
     end)
     |> Enum.map(fn {name, variants} ->
-      %FunctionDefinitionVariants{name: name, variants: variants}
+      {name, %FunctionDefinitionVariants{name: name, variants: variants}}
     end)
+    |> Enum.into(%{})
   end
 
   def ast(code) do

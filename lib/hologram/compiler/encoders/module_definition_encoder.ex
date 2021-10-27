@@ -14,6 +14,7 @@ defimpl Encoder, for: ModuleDefinition do
 
     functions =
       Helpers.aggregate_function_def_variants(function_defs)
+      |> Map.values()
       |> Enum.map(&Encoder.encode(&1, context, opts))
       |> Enum.join("\n")
 
