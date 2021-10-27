@@ -49,9 +49,12 @@ defmodule Hologram.Compiler.ModuleDefinitionTransformer do
       attributes: attributes
     }
 
+    defs = aggregate_expressions(:def, exprs, context)
+    defps = aggregate_expressions(:defp, exprs, context)
+
     functions =
-      aggregate_expressions(:def, exprs, context)
-      |> inject_module_info_callback()
+      defs ++ defps
+      |> inject_module_info_callback(context)
 
     fields =
       Map.from_struct(context)
@@ -66,14 +69,14 @@ defmodule Hologram.Compiler.ModuleDefinitionTransformer do
     exprs
   end
 
-  defp inject_module_info_callback(functions) do
+  defp inject_module_info_callback(functions, context) do
     name_arity_pairs =
       Enum.map(functions, &"#{&1.name}: #{&1.arity}")
       |> Enum.uniq()
 
     ir =
       "def __info__(:functions), do: [#{Enum.join(name_arity_pairs, ", ")}]"
-      |> Helpers.ir()
+      |> Helpers.ir(context)
 
     [ir | functions]
   end

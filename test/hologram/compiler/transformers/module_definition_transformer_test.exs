@@ -229,7 +229,7 @@ defmodule Hologram.Compiler.ModuleDefinitionTransformerTest do
     assert result.attributes == expected
   end
 
-  test "functions" do
+  test "public functions" do
     code = """
     defmodule Hologram.Test.Fixtures.Compiler.ModuleDefinitionTransformer.Module1 do
       def test_1 do
@@ -249,16 +249,61 @@ defmodule Hologram.Compiler.ModuleDefinitionTransformerTest do
       arity: 0,
       bindings: [],
       body: [%IntegerType{value: 1}],
+      module: Hologram.Test.Fixtures.Compiler.ModuleDefinitionTransformer.Module1,
       name: :test_1,
-      params: []
+      params: [],
+      visibility: :public
     }
 
     expected_2 = %FunctionDefinition{
       arity: 0,
       bindings: [],
       body: [%IntegerType{value: 2}],
+      module: Hologram.Test.Fixtures.Compiler.ModuleDefinitionTransformer.Module1,
       name: :test_2,
-      params: []
+      params: [],
+      visibility: :public
+    }
+
+    assert Enum.count(result.functions) == 3
+    assert Enum.member?(result.functions, expected_1)
+    assert Enum.member?(result.functions, expected_2)
+  end
+
+  test "functions" do
+    code = """
+    defmodule Hologram.Test.Fixtures.Compiler.ModuleDefinitionTransformer.Module1 do
+      defp test_1 do
+        1
+      end
+
+      defp test_2 do
+        2
+      end
+    end
+    """
+
+    ast = ast(code)
+    assert %ModuleDefinition{} = result = ModuleDefinitionTransformer.transform(ast)
+
+    expected_1 = %FunctionDefinition{
+      arity: 0,
+      bindings: [],
+      body: [%IntegerType{value: 1}],
+      module: Hologram.Test.Fixtures.Compiler.ModuleDefinitionTransformer.Module1,
+      name: :test_1,
+      params: [],
+      visibility: :private
+    }
+
+    expected_2 = %FunctionDefinition{
+      arity: 0,
+      bindings: [],
+      body: [%IntegerType{value: 2}],
+      module: Hologram.Test.Fixtures.Compiler.ModuleDefinitionTransformer.Module1,
+      name: :test_2,
+      params: [],
+      visibility: :private
     }
 
     assert Enum.count(result.functions) == 3
