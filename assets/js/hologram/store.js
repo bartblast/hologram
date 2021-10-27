@@ -1,7 +1,7 @@
 "use strict";
 
-import Operation from "./operation"
 import Runtime from "./runtime"
+import Target from "./target"
 import Type from "./type"
 import Utils from "./utils"
 
@@ -25,12 +25,12 @@ export default class Store {
     let state = Runtime.getLayoutClass().init()
     state = Map.put(state, Type.atom("context"), context)
 
-    Store.setComponentState(Operation.TARGET.layout, state)
+    Store.setComponentState(Target.TYPE.layout, state)
   }
 
   static hydratePage(state, context) {
     state = Map.put(state, Type.atom("context"), context)
-    Store.setComponentState(Operation.TARGET.page, state)
+    Store.setComponentState(Target.TYPE.page, state)
   }
 
   static getComponentState(componentId) {
@@ -39,11 +39,11 @@ export default class Store {
   }
 
   static getLayoutState() {
-    return Store.getComponentState(Operation.TARGET.layout)
+    return Store.getComponentState(Target.TYPE.layout)
   }
 
   static getPageState() {
-    return Store.getComponentState(Operation.TARGET.page)
+    return Store.getComponentState(Target.TYPE.page)
   }
 
   static resolveComponentState(componentId) {

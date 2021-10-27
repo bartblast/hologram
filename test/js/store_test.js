@@ -3,8 +3,8 @@
 import { assert, assertFrozen, cleanup } from "./support/commons";
 beforeEach(() => cleanup())
 
-import Operation from "../../assets/js/hologram/operation";
 import Store from "../../assets/js/hologram/store";
+import Target from "../../assets/js/hologram/target";
 import Type from "../../assets/js/hologram/type";
 import Runtime from "../../assets/js/hologram/runtime";
 
@@ -25,14 +25,14 @@ describe("getComponentState()", () => {
 })
 
 describe("getLayoutState()", () => {
-  Store.componentStateRegistry[Operation.TARGET.layout] = "test_layout_state"
+  Store.componentStateRegistry[Target.TYPE.layout] = "test_layout_state"
   const result = Store.getLayoutState()
 
   assert.equal(result, "test_layout_state")
 })
 
 describe("getPageState()", () => {
-  Store.componentStateRegistry[Operation.TARGET.page] = "test_page_state"
+  Store.componentStateRegistry[Target.TYPE.page] = "test_page_state"
   const result = Store.getPageState()
 
   assert.equal(result, "test_page_state")
@@ -109,7 +109,7 @@ describe("hydrateLayout()", () => {
     context = Type.string("test_context")
     Store.hydrateLayout(context)
 
-    state = Store.getComponentState(Operation.TARGET.layout)
+    state = Store.getComponentState(Target.TYPE.layout)
   })
 
   it("initiates layout state and saves it to the store", () => {
@@ -139,7 +139,7 @@ describe("hydratePage()", () => {
 
     Store.hydratePage(initialState, context)
 
-    state = Store.getComponentState(Operation.TARGET.page)
+    state = Store.getComponentState(Target.TYPE.page)
   })
 
   it("saves the page state to the store", () => {

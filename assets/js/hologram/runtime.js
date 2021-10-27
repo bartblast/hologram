@@ -6,6 +6,7 @@ import Command from "./command"
 import Operation from "./operation"
 import ScriptsReloader from "./scripts_reloader"
 import Store from "./store";
+import Target from "./target";
 import Type from "./type";
 import Utils from "./utils"
 import VDOM from "./vdom"
@@ -40,7 +41,7 @@ export default class Runtime {
   }
 
   static getLayoutClass() {
-    return Runtime.getComponentClass(Operation.TARGET.layout)
+    return Runtime.getComponentClass(Target.TYPE.layout)
   }
 
   static getLayoutTemplate() {
@@ -48,7 +49,7 @@ export default class Runtime {
   }
 
   static getPageClass() {
-    return Runtime.getComponentClass(Operation.TARGET.page)
+    return Runtime.getComponentClass(Target.TYPE.page)
   }
 
   static getPageTemplate() {
@@ -123,11 +124,11 @@ export default class Runtime {
   }
 
   static registerLayoutClass(klass) {
-    Runtime.registerComponentClass(Operation.TARGET.layout, klass)
+    Runtime.registerComponentClass(Target.TYPE.layout, klass)
   }
 
   static registerPageClass(klass) {
-    Runtime.registerComponentClass(Operation.TARGET.page, klass)
+    Runtime.registerComponentClass(Target.TYPE.page, klass)
   }
 
   static resolveComponentClass(node, componentId) {

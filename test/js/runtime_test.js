@@ -3,12 +3,12 @@
 import { assert, assertNotFrozen, cleanup } from "./support/commons";
 beforeEach(() => cleanup())
 
-import Operation from "../../assets/js/hologram/operation";
 import Runtime from "../../assets/js/hologram/runtime";
+import Target from "../../assets/js/hologram/target";
 import Type from "../../assets/js/hologram/type";
 
-const layoutTarget = Operation.TARGET.layout
-const pageTarget = Operation.TARGET.page
+const layoutTarget = Target.TYPE.layout
+const pageTarget = Target.TYPE.page
 
 describe("determineLayoutClass()", () => {
   it("returns layout class given page class", () => {

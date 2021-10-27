@@ -1,9 +1,9 @@
 "use strict";
 
 import { HologramNotImplementedError } from "./errors";
-import Operation from "./operation";
 import Runtime from "./runtime";
 import Store from "./store";
+import Target from "./target";
 import Type from "./type";
 import Utils from "./utils";
 
@@ -54,8 +54,8 @@ export default class VDOM {
 
   static buildElementVNode(node, source, bindings, slots) {
     if (node.tag === "slot") {
-      if (source === Operation.TARGET.layout) {
-        source = Operation.TARGET.page
+      if (source === Target.TYPE.layout) {
+        source = Target.TYPE.page
         bindings = Store.getPageState()
       }
       
@@ -221,7 +221,7 @@ export default class VDOM {
 
     const layoutTemplate = Runtime.getLayoutTemplate()
     const slots = {default: Runtime.getPageTemplate()}
-    const source = Operation.TARGET.layout
+    const source = Target.TYPE.layout
     const bindings = VDOM.aggregateLayoutBindings()
 
     const newVirtualDocument = VDOM.build(layoutTemplate, source, bindings, slots)[0]

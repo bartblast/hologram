@@ -4,8 +4,8 @@ import { assert, assertFrozen, cleanup } from "./support/commons";
 beforeEach(() => cleanup())
 
 import { HologramNotImplementedError } from "../../assets/js/hologram/errors"
-import Operation from "../../assets/js/hologram/operation";
 import SpecialForms from "../../assets/js/hologram/elixir/kernel/special_forms";
+import Target from "../../assets/js/hologram/target";
 import Type from "../../assets/js/hologram/type";
 import Store from "../../assets/js/hologram/store";
 import VDOM from "../../assets/js/hologram/vdom";
@@ -105,8 +105,8 @@ describe("aggregateLayoutBindings()", () => {
     layoutStateElems[Type.atomKey("c")] = Type.integer(4)
     const layoutState = Type.map(layoutStateElems)
 
-    Store.setComponentState(Operation.TARGET.page, pageState)
-    Store.setComponentState(Operation.TARGET.layout, layoutState)
+    Store.setComponentState(Target.TYPE.page, pageState)
+    Store.setComponentState(Target.TYPE.layout, layoutState)
 
     const result = VDOM.aggregateLayoutBindings()
 
@@ -171,7 +171,7 @@ describe("buildComponentVNodes()", () => {
 })
 
 describe("buildElementVNode()", () => {
-  const source = Operation.TARGET.page
+  const source = Target.TYPE.page
 
   it("builds tag element vnode", () => {
     const attrs = {
@@ -304,7 +304,7 @@ describe("buildVNodeList()", () => {
   it("builds a list of vnodes", () => {
     const nodes = [Type.textNode("node1"), Type.textNode("node2")]
 
-    const result = VDOM.buildVNodeList(nodes, Operation.TARGET.page, bindings, {})
+    const result = VDOM.buildVNodeList(nodes, Target.TYPE.page, bindings, {})
     const expected = ["node1", "node2"]
 
     assert.deepStrictEqual(result, expected)

@@ -20,13 +20,6 @@ export default class Operation {
     }
   }
 
-  static get TARGET() {
-    return {
-      layout: "layout",
-      page: "page"
-    }
-  }
-
   constructor(sourceId, target, name, params, method = null) {
     this.sourceId = sourceId
     this.target = target
@@ -119,10 +112,10 @@ export default class Operation {
         return new Target(sourceId)
 
       case "layout":
-        return new Target(Operation.TARGET.layout)
+        return new Target(Target.TYPE.layout)
 
       case "page":
-        return new Target(Operation.TARGET.page)
+        return new Target(Target.TYPE.page)
 
       default:
         return new Target(targetSpecValue);

@@ -228,7 +228,7 @@ describe("resolveTarget()", () => {
     const specElems = [Type.atom("layout"), Type.atom("test_action")]
 
     const result = Operation.resolveTarget(specElems, sourceId)
-    const expected = Operation.TARGET.layout
+    const expected = Target.TYPE.layout
 
     assert.isTrue(result instanceof Target)
     assert.equal(result.id, expected)
@@ -241,7 +241,7 @@ describe("resolveTarget()", () => {
     const specElems = [Type.atom("page"), Type.atom("test_action")]
 
     const result = Operation.resolveTarget(specElems, sourceId)
-    const expected = Operation.TARGET.page
+    const expected = Target.TYPE.page
 
     assert.isTrue(result instanceof Target)
     assert.equal(result.id, expected)
