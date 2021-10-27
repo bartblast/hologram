@@ -1,6 +1,6 @@
 defmodule Hologram.Compiler.Helpers do
   alias Hologram.Compiler.{Binder, Context, Normalizer, Parser, Transformer}
-  alias Hologram.Compiler.IR.ModuleDefinition
+  alias Hologram.Compiler.IR.{FunctionDefinitionVariants, ModuleDefinition}
   alias Hologram.Typespecs, as: T
 
   def aggregate_bindings(params) do
@@ -13,6 +13,19 @@ defmodule Hologram.Compiler.Helpers do
       end)
     end)
     |> Enum.sort()
+  end
+
+  def aggregate_function_def_variants(function_defs) do
+    Enum.reduce(function_defs, %{}, fn fd, acc ->
+      if Map.has_key?(acc, fd.name) do
+        Map.put(acc, fd.name, acc[fd.name] ++ [fd])
+      else
+        Map.put(acc, fd.name, [fd])
+      end
+    end)
+    |> Enum.map(fn {name, variants} ->
+      %FunctionDefinitionVariants{name: name, variants: variants}
+    end)
   end
 
   def ast(code) do

@@ -7,6 +7,7 @@ defmodule Hologram.Compiler.HelpersTest do
     AccessOperator,
     AtomType,
     FunctionDefinition,
+    FunctionDefinitionVariants,
     IntegerType,
     ModuleDefinition,
     UseDirective,
@@ -148,6 +149,181 @@ defmodule Hologram.Compiler.HelpersTest do
            [
              %Variable{name: :y}
            ]}
+      ]
+
+      assert result == expected
+    end
+  end
+
+  describe "aggregate_function_def_variants/1" do
+    test "single function with single variant" do
+      function_defs = [
+        %FunctionDefinition{
+          bindings: [
+            a: {0, [%Variable{name: :a}]}
+          ],
+          body: [
+            %IntegerType{value: 1}
+          ],
+          name: :test,
+          params: [
+            %Variable{name: :a}
+          ]
+        }
+      ]
+
+      result = Helpers.aggregate_function_def_variants(function_defs)
+
+      expected = [
+        %FunctionDefinitionVariants{
+          name: :test,
+          variants: function_defs
+        }
+      ]
+
+      assert result == expected
+    end
+
+    test "single function with multiple variants" do
+      function_def_1 = %FunctionDefinition{
+        bindings: [
+          a: {0, [%Variable{name: :a}]}
+        ],
+        body: [
+          %IntegerType{value: 1}
+        ],
+        name: :test,
+        params: [
+          %Variable{name: :a}
+        ]
+      }
+
+      function_def_2 = %FunctionDefinition{
+        bindings: [
+          a: {0, [%Variable{name: :a}]},
+          b: {1, [%Variable{name: :b}]}
+        ],
+        body: [
+          %IntegerType{value: 2}
+        ],
+        name: :test,
+        params: [
+          %Variable{name: :a},
+          %Variable{name: :b}
+        ]
+      }
+
+      function_defs = [function_def_1, function_def_2]
+      result = Helpers.aggregate_function_def_variants(function_defs)
+
+      expected = [
+        %FunctionDefinitionVariants{
+          name: :test,
+          variants: function_defs
+        }
+      ]
+
+      assert result == expected
+    end
+
+    test "multiple functions with single variant" do
+      function_def_1 = %FunctionDefinition{
+        bindings: [
+          a: {0, [%Variable{name: :a}]}
+        ],
+        body: [
+          %IntegerType{value: 1}
+        ],
+        name: :test_1,
+        params: [
+          %Variable{name: :a}
+        ]
+      }
+
+      function_def_2 = %FunctionDefinition{
+        bindings: [
+          a: {0, [%Variable{name: :a}]}
+        ],
+        body: [
+          %IntegerType{value: 2}
+        ],
+        name: :test_2,
+        params: [
+          %Variable{name: :a}
+        ]
+      }
+
+      function_defs = [function_def_1, function_def_2]
+      result = Helpers.aggregate_function_def_variants(function_defs)
+
+      expected = [
+        %FunctionDefinitionVariants{
+          name: :test_1,
+          variants: [function_def_1]
+        },
+        %FunctionDefinitionVariants{
+          name: :test_2,
+          variants: [function_def_2]
+        }
+      ]
+
+      assert result == expected
+    end
+
+    test "multiple functions with multiple variants" do
+      function_def_1 = %FunctionDefinition{
+        bindings: [
+          a: {0, [%Variable{name: :a}]}
+        ],
+        body: [
+          %IntegerType{value: 1}
+        ],
+        name: :test_1,
+        params: [
+          %Variable{name: :a}
+        ]
+      }
+
+      function_def_2 = %FunctionDefinition{
+        bindings: [
+          a: {0, [%Variable{name: :a}]},
+          b: {1, [%Variable{name: :b}]}
+        ],
+        body: [
+          %IntegerType{value: 2}
+        ],
+        name: :test_1,
+        params: [
+          %Variable{name: :a},
+          %Variable{name: :b}
+        ]
+      }
+
+      function_def_3 = %FunctionDefinition{
+        bindings: [
+          a: {0, [%Variable{name: :a}]}
+        ],
+        body: [
+          %IntegerType{value: 3}
+        ],
+        name: :test_2,
+        params: [
+          %Variable{name: :a}
+        ]
+      }
+
+      function_defs = [function_def_1, function_def_2, function_def_3]
+      result = Helpers.aggregate_function_def_variants(function_defs)
+
+      expected = [
+        %FunctionDefinitionVariants{
+          name: :test_1,
+          variants: [function_def_1, function_def_2]
+        },
+        %FunctionDefinitionVariants{
+          name: :test_2,
+          variants: [function_def_3]
+        }
       ]
 
       assert result == expected
