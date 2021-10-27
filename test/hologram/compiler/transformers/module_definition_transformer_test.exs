@@ -78,8 +78,10 @@ defmodule Hologram.Compiler.ModuleDefinitionTransformerTest do
           right: %Variable{name: :b}
         }
       ],
+      module: Hologram.Test.Fixtures.Compiler.ModuleDefinitionTransformer.Module3,
       name: :test_function,
-      params: [%Variable{name: :b}]
+      params: [%Variable{name: :b}],
+      visibility: :public
     }
 
     assert Enum.member?(result.functions, expected)
@@ -103,8 +105,10 @@ defmodule Hologram.Compiler.ModuleDefinitionTransformerTest do
       body: [
         %ModuleType{module: Abc.Bcd}
       ],
+      module: Abc.Bcd,
       name: :test,
-      params: []
+      params: [],
+      visibility: :public
     }
 
     assert Enum.member?(result.functions, expected)
@@ -270,7 +274,7 @@ defmodule Hologram.Compiler.ModuleDefinitionTransformerTest do
     assert Enum.member?(result.functions, expected_2)
   end
 
-  test "functions" do
+  test "private functions" do
     code = """
     defmodule Hologram.Test.Fixtures.Compiler.ModuleDefinitionTransformer.Module1 do
       defp test_1 do
@@ -344,8 +348,10 @@ defmodule Hologram.Compiler.ModuleDefinitionTransformerTest do
           ]
         }
       ],
+      module: Hologram.Test.Fixtures.PlaceholderModule,
       name: :__info__,
-      params: [%AtomType{value: :functions}]
+      params: [%AtomType{value: :functions}],
+      visibility: :public
     }
 
     assert Enum.member?(result.functions, expected)
