@@ -13,14 +13,28 @@ defmodule Hologram.Compiler.ResolverTest do
       assert result == imported_module
     end
 
-    test "calling module" do
+    test "calling module public function" do
       calling_module = Hologram.Test.Fixtures.Compiler.Resolver.Module1
 
       result = Resolver.resolve([], :test, 2, [], [], calling_module)
       assert result == calling_module
     end
 
-    test "Kernel" do
+    test "calling module private function" do
+      calling_module = Hologram.Test.Fixtures.Compiler.Resolver.Module2
+
+      result = Resolver.resolve([], :test, 2, [], [], calling_module)
+      assert result == calling_module
+    end
+
+    test "Kernel function" do
+      calling_module = Hologram.Compiler.ResolverTest
+      result = Resolver.resolve([], :max, 2, [], [], calling_module)
+
+      assert result == Kernel
+    end
+
+    test "Kernel macro" do
       calling_module = Hologram.Compiler.ResolverTest
       result = Resolver.resolve([], :to_string, 1, [], [], calling_module)
 

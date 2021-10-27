@@ -37,11 +37,10 @@ defmodule Hologram.Compiler.Resolver do
   def resolve([], function, arity, imports, _aliases, calling_module) do
     imported_module = resolve_to_imported_module(function, arity, imports)
 
-    if imported_module do
-      imported_module
-    else
-      calling_module = resolve_to_calling_module(calling_module, function, arity)
-      if calling_module, do: calling_module, else: Kernel
+    cond do
+      imported_module -> imported_module
+      resolve_to_kernel_module(function, arity) -> Kernel
+      true -> calling_module
     end
   end
 
@@ -55,8 +54,12 @@ defmodule Hologram.Compiler.Resolver do
     if resolved, do: resolved.module, else: nil
   end
 
-  defp resolve_to_calling_module(module, function, arity) do
-    if function_exported?(module, function, arity), do: module, else: nil
+  defp resolve_to_kernel_module(function, arity) do
+    if function_exported?(Kernel, function, arity) || macro_exported?(Kernel, function, arity) do
+      Kernel
+    else
+      nil
+    end
   end
 
   # TODO: take into account "only" and "except" import opts
