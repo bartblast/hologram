@@ -43,6 +43,7 @@ defmodule Hologram.MixProject do
       {:file_system, "~> 0.2"},
       {:floki, ">= 0.30.0", only: :test},
       {:jason, "~> 1.2"},
+      {:libgraph, "~> 0.13.3"},
       {:phoenix, "~> 1.6.0-rc.0", override: true},
       {:phoenix_html, "~> 3.0"},
       {:plug_cowboy, "~> 2.5"},
