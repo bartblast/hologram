@@ -134,6 +134,10 @@ defmodule Hologram.Compiler.Transformer do
     FunctionDefinitionTransformer.transform(ast, context)
   end
 
+  def transform({:defp, _, _} = ast, %Context{} = context) do
+    FunctionDefinitionTransformer.transform(ast, context)
+  end
+
   def transform({:defmacro, _, _} = ast, %Context{} = context) do
     MacroDefinitionTransformer.transform(ast, context)
   end

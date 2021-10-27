@@ -214,8 +214,15 @@ defmodule Hologram.Compiler.TransformerTest do
   end
 
   describe "definitions" do
-    test "function" do
+    test "public function" do
       code = "def test, do: :ok"
+      ast = ast(code)
+
+      assert %FunctionDefinition{} = Transformer.transform(ast, %Context{})
+    end
+
+    test "private function" do
+      code = "defp test, do: :ok"
       ast = ast(code)
 
       assert %FunctionDefinition{} = Transformer.transform(ast, %Context{})
