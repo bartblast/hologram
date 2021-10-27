@@ -136,14 +136,14 @@ export default class Runtime {
       let klass = Runtime.getComponentClass(componentId)
 
       if (!klass) {
-        klass = Runtime.getClassByClassName(node.module)
+        klass = Runtime.getClassByClassName(node.className)
         Runtime.registerComponentClass(componentId, klass)
       }
 
       return klass
 
     } else {
-      return Runtime.getClassByClassName(node.module)
+      return Runtime.getClassByClassName(node.className)
     }
   }
 

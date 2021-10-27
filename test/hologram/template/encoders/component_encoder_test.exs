@@ -24,7 +24,7 @@ defmodule Hologram.Template.ComponentEncoderTest do
         "[ { type: 'text', content: 'test_content' }, { type: 'expression', callback: ($state) => { return { type: 'tuple', data: [ { type: 'integer', value: 1 } ] } } } ]"
 
       expected =
-        "{ type: 'component', module: '#{encoded_module}', children: #{encoded_children}, props: {} }"
+        "{ type: 'component', className: '#{encoded_module}', children: #{encoded_children}, props: {} }"
 
       assert result == expected
     end
@@ -44,7 +44,7 @@ defmodule Hologram.Template.ComponentEncoderTest do
       encoded_props = "{ 'prop_1': [ { type: 'text', content: 'value_1' } ] }"
 
       expected =
-        "{ type: 'component', module: '#{encoded_module}', children: [], props: #{encoded_props} }"
+        "{ type: 'component', className: '#{encoded_module}', children: [], props: #{encoded_props} }"
 
       assert result == expected
     end
@@ -67,7 +67,7 @@ defmodule Hologram.Template.ComponentEncoderTest do
       encoded_props = "{ #{encoded_prop_1}, #{encoded_prop_2} }"
 
       expected =
-        "{ type: 'component', module: '#{encoded_module}', children: [], props: #{encoded_props} }"
+        "{ type: 'component', className: '#{encoded_module}', children: [], props: #{encoded_props} }"
 
       assert result == expected
     end

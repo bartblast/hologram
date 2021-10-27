@@ -10,7 +10,7 @@ defimpl Encoder, for: Component do
     encoded_children = Encoder.encode(children)
     encoded_props = encode_props(props)
 
-    "{ type: 'component', module: '#{class_name}', children: #{encoded_children}, props: #{encoded_props} }"
+    "{ type: 'component', className: '#{class_name}', children: #{encoded_children}, props: #{encoded_props} }"
   end
 
   defp encode_prop(name, value) do
