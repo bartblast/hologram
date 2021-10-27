@@ -33,6 +33,11 @@ defmodule Hologram.Compiler.Reflection do
     |> Map.get("#{module}")
   end
 
+  def has_function?(module, function, arity) do
+    module_definition(module).functions
+    |> Enum.any?(&(&1.name == function && &1.arity == arity))
+  end
+
   def has_template?(module) do
     function_exported?(module, :template, 0)
   end

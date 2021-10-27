@@ -6,6 +6,7 @@ defmodule Hologram.Compiler.ReflectionTest do
 
   @module_1 Hologram.Test.Fixtures.Compiler.Reflection.Module1
   @module_2 Hologram.Test.Fixtures.Compiler.Reflection.Module2
+  @module_4 Hologram.Test.Fixtures.Compiler.Reflection.Module4
   @module_segs_1 [:Hologram, :Test, :Fixtures, :Compiler, :Reflection, :Module1]
 
   setup_all do
@@ -33,6 +34,16 @@ defmodule Hologram.Compiler.ReflectionTest do
     compile_pages()
     result = Reflection.get_page_digest(Elixir.Hologram.E2E.Page1)
     assert result =~ uuid_hex_regex()
+  end
+
+  describe "has_function?/3" do
+    test "returns true if the module has a function with the arity" do
+      assert Reflection.has_function?(@module_4, :test_fun, 2)
+    end
+
+    test "returns false if the module doesn't have a function with the arity" do
+      refute Reflection.has_function?(@module_4, :test_fun, 3)
+    end
   end
 
   describe "has_template?/1" do
