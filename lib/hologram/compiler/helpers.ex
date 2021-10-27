@@ -58,9 +58,9 @@ defmodule Hologram.Compiler.Helpers do
     |> Enum.map(fn {_, module_def} -> module_def end)
   end
 
-  def ir(code) do
+  def ir(code, context \\ %Context{}) do
     ast(code)
-    |> Transformer.transform(%Context{})
+    |> Transformer.transform(context)
   end
 
   @doc """
