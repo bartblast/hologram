@@ -100,8 +100,8 @@ defmodule Hologram.Compiler.Reflection do
     end
   end
 
-  def root_path(config \\ get_config()) do
-    case Keyword.get(config, :root_path) do
+  def root_path(opts \\ get_config()) do
+    case Keyword.get(opts, :root_path) do
       nil -> File.cwd!()
       root_path -> root_path
     end
