@@ -2,12 +2,12 @@ defmodule Hologram.Compiler.ImportDirectiveTransformer do
   alias Hologram.Compiler.Helpers
   alias Hologram.Compiler.IR.ImportDirective
 
-  def transform([{:__aliases__, _, module_segs}, opts]) do
+  def transform({:import, _, [{:__aliases__, _, module_segs}, opts]}) do
     only = if opts[:only], do: opts[:only], else: []
     build_import(module_segs, only)
   end
 
-  def transform([{:__aliases__, _, module_segs}]) do
+  def transform({:import, _,[{:__aliases__, _, module_segs}]}) do
     build_import(module_segs, [])
   end
 

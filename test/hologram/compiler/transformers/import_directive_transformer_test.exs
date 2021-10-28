@@ -8,7 +8,7 @@ defmodule Hologram.Compiler.ImportDirectiveTransformerTest do
 
   test "without 'only' clause" do
     code = "import Hologram.Test.Fixtures.Compiler.Transformer.Module1"
-    {:import, _, ast} = ast(code)
+    ast = ast(code)
 
     result = ImportDirectiveTransformer.transform(ast)
     expected = %ImportDirective{module: @expected_module, only: []}
@@ -18,7 +18,7 @@ defmodule Hologram.Compiler.ImportDirectiveTransformerTest do
 
   test "with 'only' clause" do
     code = "import Hologram.Test.Fixtures.Compiler.Transformer.Module1, only: [abc: 2]"
-    {:import, _, ast} = ast(code)
+    ast = ast(code)
 
     result = ImportDirectiveTransformer.transform(ast)
     expected = %ImportDirective{module: @expected_module, only: [abc: 2]}
@@ -28,7 +28,7 @@ defmodule Hologram.Compiler.ImportDirectiveTransformerTest do
 
   test "ignores other opts" do
     code = "import Hologram.Test.Fixtures.Compiler.Transformer.Module1, warn: false"
-    {:import, _, ast} = ast(code)
+    ast = ast(code)
 
     result = ImportDirectiveTransformer.transform(ast)
     expected = %ImportDirective{module: @expected_module, only: []}
