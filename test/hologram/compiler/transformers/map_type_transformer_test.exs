@@ -8,7 +8,7 @@ defmodule Hologram.Compiler.MapTypeTransformerTest do
 
   test "transform/2" do
     code = "%{a: 1, b: 2}"
-    {:%{}, _, ast} = ast(code)
+    ast = ast(code)
 
     result = MapTypeTransformer.transform(ast, @context)
 

@@ -70,7 +70,7 @@ defmodule Hologram.Compiler.Transformer do
     ListTypeTransformer.transform(ast, context)
   end
 
-  def transform({:%{}, _, ast}, %Context{} = context) do
+  def transform({:%{}, _, _} = ast, %Context{} = context) do
     MapTypeTransformer.transform(ast, context)
   end
 
