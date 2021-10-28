@@ -7,7 +7,7 @@ defmodule Hologram.Compiler.FunctionDefinitionTraverserTest do
   alias Hologram.Test.Fixtures.PlaceholderModule1
   alias Hologram.Test.Fixtures.PlaceholderModule2
 
-  @initial_acc {%{}, Graph.new()}
+  @acc {%{}, Graph.new()}
 
   test "traverse/3" do
     ir = %FunctionDefinition{
@@ -23,7 +23,7 @@ defmodule Hologram.Compiler.FunctionDefinitionTraverserTest do
       ]
     }
 
-    {map, graph} = Traverser.traverse(ir, @initial_acc)
+    {map, graph} = Traverser.traverse(ir, @acc)
 
     assert Map.keys(map) == [PlaceholderModule2]
     assert %ModuleDefinition{} = map[PlaceholderModule2]

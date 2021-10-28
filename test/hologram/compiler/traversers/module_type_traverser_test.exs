@@ -6,11 +6,11 @@ defmodule Hologram.Compiler.ModuleTypeTraverserTest do
   alias Hologram.Compiler.Traverser.Commons
   alias Hologram.Test.Fixtures.PlaceholderModule1
 
-  @initial_acc {%{}, Graph.new()}
+  @acc {%{}, Graph.new()}
 
   test "entry module" do
     ir = %ModuleType{module: PlaceholderModule1}
-    {map, graph} = Traverser.traverse(ir, @initial_acc)
+    {map, graph} = Traverser.traverse(ir, @acc)
 
     assert Map.keys(map) == [PlaceholderModule1]
     assert %ModuleDefinition{} = map[PlaceholderModule1]
@@ -22,7 +22,7 @@ defmodule Hologram.Compiler.ModuleTypeTraverserTest do
   test "non-entry module" do
     ir = %ModuleType{module: PlaceholderModule1}
     from_vertex = {PlaceholderModule1, :test_fun_1a}
-    {map, graph} = Traverser.traverse(ir, @initial_acc, from_vertex)
+    {map, graph} = Traverser.traverse(ir, @acc, from_vertex)
 
     assert Map.keys(map) == [PlaceholderModule1]
     assert %ModuleDefinition{} = map[PlaceholderModule1]
