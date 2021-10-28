@@ -6,9 +6,9 @@ defmodule Hologram.Compiler.DotOperatorTransformerTest do
 
   test "transform/3" do
     code = "a.b"
-    {{:., _, [left, right]}, _, []} = ast(code)
+    ast = ast(code)
 
-    result = DotOperatorTransformer.transform(left, right, %Context{})
+    result = DotOperatorTransformer.transform(ast, %Context{})
 
     expected = %DotOperator{
       left: %Variable{name: :a},

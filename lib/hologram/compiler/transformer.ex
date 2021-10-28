@@ -104,8 +104,8 @@ defmodule Hologram.Compiler.Transformer do
     AdditionOperatorTransformer.transform(ast, context)
   end
 
-  def transform({{:., _, [left, right]}, [no_parens: true, line: _], []}, %Context{} = context) do
-    DotOperatorTransformer.transform(left, right, context)
+  def transform({{:., _, _}, [no_parens: true, line: _], _} = ast, %Context{} = context) do
+    DotOperatorTransformer.transform(ast, context)
   end
 
   def transform({:==, _, _} = ast, %Context{} = context) do
