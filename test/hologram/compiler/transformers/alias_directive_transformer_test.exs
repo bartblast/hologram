@@ -9,7 +9,7 @@ defmodule Hologram.Compiler.AliasDirectiveTransformerTest do
 
   test "default 'as' option" do
     code = "alias Hologram.Test.Fixtures.Compiler.AliasDirectiveTransformer.Module1"
-    {:alias, _, ast} = ast(code)
+    ast = ast(code)
 
     result = AliasDirectiveTransformer.transform(ast)
     expected = %AliasDirective{module: @module_1, as: [:Module1]}
@@ -19,7 +19,7 @@ defmodule Hologram.Compiler.AliasDirectiveTransformerTest do
 
   test "one-part 'as' option" do
     code = "alias Hologram.Test.Fixtures.Compiler.AliasDirectiveTransformer.Module1, as: Xyz"
-    {:alias, _, ast} = ast(code)
+    ast = ast(code)
 
     result = AliasDirectiveTransformer.transform(ast)
     expected = %AliasDirective{module: @module_1, as: [:Xyz]}
@@ -29,7 +29,7 @@ defmodule Hologram.Compiler.AliasDirectiveTransformerTest do
 
   test "multiple-part 'as' option" do
     code = "alias Hologram.Test.Fixtures.Compiler.AliasDirectiveTransformer.Module1, as: Xyz.Kmn"
-    {:alias, _, ast} = ast(code)
+    ast = ast(code)
 
     result = AliasDirectiveTransformer.transform(ast)
     expected = %AliasDirective{module: @module_1, as: [:Xyz, :Kmn]}
@@ -39,7 +39,7 @@ defmodule Hologram.Compiler.AliasDirectiveTransformerTest do
 
   test "'warn' option" do
     code = "alias Hologram.Test.Fixtures.Compiler.AliasDirectiveTransformer.Module1, warn: false"
-    {:alias, _, ast} = ast(code)
+    ast = ast(code)
 
     result = AliasDirectiveTransformer.transform(ast)
     expected = %AliasDirective{module: @module_1, as: [:Module1]}
@@ -49,7 +49,7 @@ defmodule Hologram.Compiler.AliasDirectiveTransformerTest do
 
   test "'as' option + 'warn' option" do
     code = "alias Hologram.Test.Fixtures.Compiler.AliasDirectiveTransformer.Module1, as: Xyz, warn: false"
-    {:alias, _, ast} = ast(code)
+    ast = ast(code)
 
     result = AliasDirectiveTransformer.transform(ast)
     expected = %AliasDirective{module: @module_1, as: [:Xyz]}
@@ -59,7 +59,7 @@ defmodule Hologram.Compiler.AliasDirectiveTransformerTest do
 
   test "multi-alias without options" do
     code = "alias Hologram.Test.Fixtures.Compiler.AliasDirectiveTransformer.{Module1, Module2}"
-    {:alias, _, ast} = ast(code)
+    ast = ast(code)
 
     result = AliasDirectiveTransformer.transform(ast)
 
@@ -75,7 +75,7 @@ defmodule Hologram.Compiler.AliasDirectiveTransformerTest do
     code =
       "alias Hologram.Test.Fixtures.Compiler.AliasDirectiveTransformer.{Module1, Module2}, warn: false"
 
-    {:alias, _, ast} = ast(code)
+    ast = ast(code)
 
     result = AliasDirectiveTransformer.transform(ast)
 

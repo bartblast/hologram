@@ -2,20 +2,20 @@ defmodule Hologram.Compiler.AliasDirectiveTransformer do
   alias Hologram.Compiler.Helpers
   alias Hologram.Compiler.IR.AliasDirective
 
-  def transform([{{:., _, [{:__aliases__, _, module_segs}, :{}]}, _, aliases}, _]) do
+  def transform({:alias, _, [{{_, _, [{_, _, module_segs}, _]}, _, aliases}, _]}) do
     transform_multi_alias(module_segs, aliases)
   end
 
-  def transform([{{:., _, [{:__aliases__, _, module_segs}, :{}]}, _, aliases}]) do
+  def transform({:alias, _, [{{_, _, [{_, _, module_segs}, _]}, _, aliases}]}) do
     transform_multi_alias(module_segs, aliases)
   end
 
-  def transform([{_, _, module_segs}]) do
+  def transform({:alias, _, [{_, _, module_segs}]}) do
     module = Helpers.module(module_segs)
     %AliasDirective{module: module, as: [List.last(module_segs)]}
   end
 
-  def transform([{_, _, module_segs}, opts]) do
+  def transform({:alias, _, [{_, _, module_segs}, opts]}) do
     module = Helpers.module(module_segs)
 
     as =
