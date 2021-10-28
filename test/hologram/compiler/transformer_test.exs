@@ -325,6 +325,14 @@ defmodule Hologram.Compiler.TransformerTest do
       assert %Unquote{} = Transformer.transform(ast, %Context{})
     end
 
+    test "__MODULE__ macro" do
+      code = "__MODULE__"
+      ast = ast(code)
+
+      result = Transformer.transform(ast, %Context{})
+      assert result == %ModulePseudoVariable{}
+    end
+
     test "variable, last AST tuple elem is nil" do
       code = "a"
       ast = ast(code)
@@ -338,14 +346,6 @@ defmodule Hologram.Compiler.TransformerTest do
 
       result = Transformer.transform(ast, %Context{})
       assert result == %Variable{name: :a}
-    end
-
-    test "__MODULE__ macro" do
-      code = "__MODULE__"
-      ast = ast(code)
-
-      result = Transformer.transform(ast, %Context{})
-      assert result == %ModulePseudoVariable{}
     end
   end
 end
