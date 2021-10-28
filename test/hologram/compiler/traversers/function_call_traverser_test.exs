@@ -16,7 +16,7 @@ defmodule Hologram.Compiler.FunctionCallTraverserTest do
     function: :test_fun_2a
   }
 
-  def assert_valid_map_and_graph(map, graph) do
+  defp test_result({map, graph}) do
     assert Map.keys(map) == [PlaceholderModule2]
     assert %ModuleDefinition{} = map[PlaceholderModule2]
 
@@ -29,15 +29,15 @@ defmodule Hologram.Compiler.FunctionCallTraverserTest do
   end
 
   test "called function that doesn't have a vertex in the call graph yet" do
-    {map, graph} = Traverser.traverse(@ir, @acc, @from_vertex)
-    assert_valid_map_and_graph(map, graph)
+    Traverser.traverse(@ir, @acc, @from_vertex)
+    |> test_result()
   end
 
   test "called function that already has a vertex in the call graph" do
     {map, graph} = @acc
     graph = Graph.add_vertex(graph, @to_vertex)
-    {map, graph} = Traverser.traverse(@ir, {map, graph}, @from_vertex)
 
-    assert_valid_map_and_graph(map, graph)
+    Traverser.traverse(@ir, {map, graph}, @from_vertex)
+    |> test_result()
   end
 end
