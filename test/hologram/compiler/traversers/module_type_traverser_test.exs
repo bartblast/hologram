@@ -4,37 +4,36 @@ defmodule Hologram.Compiler.ModuleTypeTraverserTest do
   alias Hologram.Compiler.IR.{ModuleDefinition, ModuleType}
   alias Hologram.Compiler.Traverser
   alias Hologram.Compiler.Traverser.Commons
+  alias Hologram.Test.Fixtures.PlaceholderModule1
 
   @initial_acc {%{}, Graph.new()}
 
   describe "traverse/3" do
     test "entry module" do
-      module = Hologram.Test.Fixtures.ModuleTypeTraverser.Module1
-      ir = %ModuleType{module: module}
+      ir = %ModuleType{module: PlaceholderModule1}
       {map, graph} = Traverser.traverse(ir, @initial_acc)
 
-      assert Map.keys(map) == [module]
-      assert %ModuleDefinition{} = map[module]
+      assert Map.keys(map) == [PlaceholderModule1]
+      assert %ModuleDefinition{} = map[PlaceholderModule1]
 
       assert graph.vertices == %{}
       assert graph.edges == %{}
     end
 
     test "non-entry module" do
-      module = Hologram.Test.Fixtures.ModuleTypeTraverser.Module1
-      ir = %ModuleType{module: module}
-      from_vertex = {Hologram.Test.Fixtures.PlaceholderModule1, :test_fun}
+      ir = %ModuleType{module: PlaceholderModule1}
+      from_vertex = {PlaceholderModule1, :test_fun_1a}
       {map, graph} = Traverser.traverse(ir, @initial_acc, from_vertex)
 
-      assert Map.keys(map) == [module]
-      assert %ModuleDefinition{} = map[module]
+      assert Map.keys(map) == [PlaceholderModule1]
+      assert %ModuleDefinition{} = map[PlaceholderModule1]
 
       assert Graph.num_vertices(graph) == 2
       assert Graph.has_vertex?(graph, from_vertex)
-      assert Graph.has_vertex?(graph, module)
+      assert Graph.has_vertex?(graph, PlaceholderModule1)
 
       assert Graph.num_edges(graph) == 1
-      assert Commons.has_edge?(graph, from_vertex, module)
+      assert Commons.has_edge?(graph, from_vertex, PlaceholderModule1)
     end
   end
 end
