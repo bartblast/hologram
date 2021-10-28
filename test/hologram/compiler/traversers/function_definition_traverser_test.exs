@@ -5,7 +5,7 @@ defmodule Hologram.Compiler.FunctionDefinitionTraverserTest do
   alias Hologram.Compiler.Traverser
   alias Hologram.Compiler.Traverser.Commons
   alias Hologram.Test.Fixtures.FunctionDefinitionTraverser.Module1
-  alias Hologram.Test.Fixtures.PlaceholderModule
+  alias Hologram.Test.Fixtures.PlaceholderModule1
 
   @initial_acc {%{}, Graph.new()}
 

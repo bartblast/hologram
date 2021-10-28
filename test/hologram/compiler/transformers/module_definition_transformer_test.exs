@@ -116,7 +116,7 @@ defmodule Hologram.Compiler.ModuleDefinitionTransformerTest do
 
   test "uses" do
     code = """
-    defmodule Hologram.Test.Fixtures.PlaceholderModule do
+    defmodule Hologram.Test.Fixtures.PlaceholderModule1 do
       use Hologram.Test.Fixtures.Compiler.ModuleDefinitionTransformer.Module2
       use Hologram.Test.Fixtures.Compiler.ModuleDefinitionTransformer.Module4
     end
@@ -317,7 +317,7 @@ defmodule Hologram.Compiler.ModuleDefinitionTransformerTest do
 
   test "__info__/1 module callback injection" do
     code = """
-    defmodule Hologram.Test.Fixtures.PlaceholderModule do
+    defmodule Hologram.Test.Fixtures.PlaceholderModule1 do
       def test_1, do: 1
       def test_2(9), do: 9
       def test_2(8), do: 8
@@ -348,7 +348,7 @@ defmodule Hologram.Compiler.ModuleDefinitionTransformerTest do
           ]
         }
       ],
-      module: Hologram.Test.Fixtures.PlaceholderModule,
+      module: Hologram.Test.Fixtures.PlaceholderModule1,
       name: :__info__,
       params: [%AtomType{value: :functions}],
       visibility: :public

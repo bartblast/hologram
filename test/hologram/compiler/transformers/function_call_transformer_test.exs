@@ -83,13 +83,13 @@ defmodule Hologram.Compiler.FunctionCallTransformerTest do
   test "function call on __MODULE__ macro result" do
     code = "__MODULE__.test(1, 2)"
     ast = ast(code)
-    context = %Context{module: Hologram.Test.Fixtures.PlaceholderModule}
+    context = %Context{module: Hologram.Test.Fixtures.PlaceholderModule1}
 
     result = FunctionCallTransformer.transform(ast, context)
 
     expected = %FunctionCall{
       function: :test,
-      module: Hologram.Test.Fixtures.PlaceholderModule,
+      module: Hologram.Test.Fixtures.PlaceholderModule1,
       params: [
         %IntegerType{value: 1},
         %IntegerType{value: 2}

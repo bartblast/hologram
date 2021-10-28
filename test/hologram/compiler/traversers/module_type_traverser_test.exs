@@ -23,7 +23,7 @@ defmodule Hologram.Compiler.ModuleTypeTraverserTest do
     test "non-entry module" do
       module = Hologram.Test.Fixtures.ModuleTypeTraverser.Module1
       ir = %ModuleType{module: module}
-      from_vertex = {Hologram.Test.Fixtures.PlaceholderModule, :test_fun}
+      from_vertex = {Hologram.Test.Fixtures.PlaceholderModule1, :test_fun}
       {map, graph} = Traverser.traverse(ir, @initial_acc, from_vertex)
 
       assert Map.keys(map) == [module]
