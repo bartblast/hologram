@@ -54,8 +54,8 @@ defmodule Hologram.Compiler.Transformer do
     end
   end
 
-  def transform({:<<>>, _, parts}, %Context{} = context) do
-    BinaryTypeTransformer.transform(parts, context)
+  def transform({:<<>>, _, _} = ast, %Context{} = context) do
+    BinaryTypeTransformer.transform(ast, context)
   end
 
   def transform(ast, _) when is_boolean(ast) do

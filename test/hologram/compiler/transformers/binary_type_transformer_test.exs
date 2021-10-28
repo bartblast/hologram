@@ -6,9 +6,9 @@ defmodule Hologram.Compiler.BinaryTypeTransformerTest do
 
   test "empty binary" do
     code = "<<>>"
-    {:<<>>, _, parts} = ast(code)
+    ast = ast(code)
 
-    result = BinaryTypeTransformer.transform(parts, %Context{})
+    result = BinaryTypeTransformer.transform(ast, %Context{})
     expected = %BinaryType{parts: []}
 
     assert result == expected
@@ -16,9 +16,9 @@ defmodule Hologram.Compiler.BinaryTypeTransformerTest do
 
   test "non-empty binary" do
     code = "<<1, 2>>"
-    {:<<>>, _, parts} = ast(code)
+    ast = ast(code)
 
-    result = BinaryTypeTransformer.transform(parts, %Context{})
+    result = BinaryTypeTransformer.transform(ast, %Context{})
 
     expected = %BinaryType{
       parts: [
