@@ -14,9 +14,9 @@ defmodule Hologram.Compiler.MatchOperatorTransformerTest do
 
   test "variable" do
     code = "x = 1"
-    {:=, _, [left, right]} = ast(code)
+    ast = ast(code)
 
-    result = MatchOperatorTransformer.transform(left, right, %Context{})
+    result = MatchOperatorTransformer.transform(ast, %Context{})
 
     expected = %MatchOperator{
       bindings: [[%Variable{name: :x}]],
@@ -30,9 +30,9 @@ defmodule Hologram.Compiler.MatchOperatorTransformerTest do
   describe "map" do
     test "not nested" do
       code = "%{a: x, b: y} = %{a: 1, b: 2}"
-      {:=, _, [left, right]} = ast(code)
+      ast = ast(code)
 
-      result = MatchOperatorTransformer.transform(left, right, %Context{})
+      result = MatchOperatorTransformer.transform(ast, %Context{})
 
       expected = %MatchOperator{
         bindings: [
@@ -66,9 +66,9 @@ defmodule Hologram.Compiler.MatchOperatorTransformerTest do
       code =
         "%{a: 1, b: %{p: x, r: 4}, c: 3, d: %{m: 0, n: y}} = %{a: 1, b: %{p: 9, r: 4}, c: 3, d: %{m: 0, n: 8}}"
 
-      {:=, _, [left, right]} = ast(code)
+      ast = ast(code)
 
-      result = MatchOperatorTransformer.transform(left, right, %Context{})
+      result = MatchOperatorTransformer.transform(ast, %Context{})
 
       expected = %MatchOperator{
         bindings: [

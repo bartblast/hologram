@@ -112,8 +112,8 @@ defmodule Hologram.Compiler.Transformer do
     EqualToOperatorTransformer.transform(ast, context)
   end
 
-  def transform({:=, _, [left, right]}, %Context{} = context) do
-    MatchOperatorTransformer.transform(left, right, context)
+  def transform({:=, _, _} = ast, %Context{} = context) do
+    MatchOperatorTransformer.transform(ast, context)
   end
 
   def transform({:@, _, [{name, _, ast}]}, _) when not is_list(ast) do

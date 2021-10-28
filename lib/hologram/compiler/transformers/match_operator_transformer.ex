@@ -2,7 +2,7 @@ defmodule Hologram.Compiler.MatchOperatorTransformer do
   alias Hologram.Compiler.{Binder, Context, Transformer}
   alias Hologram.Compiler.IR.MatchOperator
 
-  def transform(left, right, %Context{} = context) do
+  def transform({:=, _, [left, right]}, %Context{} = context) do
     left = Transformer.transform(left, context)
 
     %MatchOperator{
