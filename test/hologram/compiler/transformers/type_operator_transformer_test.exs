@@ -6,7 +6,7 @@ defmodule Hologram.Compiler.TypeOperatorTransformerTest do
 
   test "transform/2" do
     code = "str::binary"
-    {:"::", _, ast} = ast(code)
+    ast = ast(code)
 
     result = TypeOperatorTransformer.transform(ast, %Context{})
 

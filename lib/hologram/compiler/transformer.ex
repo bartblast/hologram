@@ -124,7 +124,7 @@ defmodule Hologram.Compiler.Transformer do
     PipeOperatorTransformer.transform(ast, context)
   end
 
-  def transform({:"::", _, ast}, %Context{} = context) do
+  def transform({:"::", _, _} = ast, %Context{} = context) do
     TypeOperatorTransformer.transform(ast, context)
   end
 
