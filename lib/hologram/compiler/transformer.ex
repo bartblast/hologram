@@ -152,7 +152,7 @@ defmodule Hologram.Compiler.Transformer do
 
   # DIRECTIVES
 
-  def transform({:alias, _, ast}, _) do
+  def transform({:alias, _, _} = ast, _) do
     AliasDirectiveTransformer.transform(ast)
   end
 
