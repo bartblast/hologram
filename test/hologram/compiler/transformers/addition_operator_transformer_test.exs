@@ -6,9 +6,9 @@ defmodule Hologram.Compiler.AdditionOperatorTransformerTest do
 
   test "transform/3" do
     code = "a + 2"
-    {:+, _, [left, right]} = ast(code)
+    ast = ast(code)
 
-    result = AdditionOperatorTransformer.transform(left, right, %Context{})
+    result = AdditionOperatorTransformer.transform(ast, %Context{})
 
     expected = %AdditionOperator{
       left: %Variable{name: :a},
