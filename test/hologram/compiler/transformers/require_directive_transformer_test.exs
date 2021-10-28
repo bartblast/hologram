@@ -6,7 +6,7 @@ defmodule Hologram.Compiler.RequireDirectiveTransformerTest do
 
   test "transform/1" do
     code = "require Hologram.Test.Fixtures.Compiler.Transformer.Module1"
-    {:require, _, ast} = ast(code)
+    ast = ast(code)
 
     result = RequireDirectiveTransformer.transform(ast)
     expected = %RequireDirective{module: Hologram.Test.Fixtures.Compiler.Transformer.Module1}

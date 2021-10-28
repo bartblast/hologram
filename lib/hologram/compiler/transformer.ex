@@ -160,7 +160,7 @@ defmodule Hologram.Compiler.Transformer do
     ImportDirectiveTransformer.transform(ast)
   end
 
-  def transform({:require, _, ast}, _) do
+  def transform({:require, _, _} = ast, _) do
     RequireDirectiveTransformer.transform(ast)
   end
 
