@@ -6,19 +6,38 @@ defmodule Hologram.Compiler.TupleTypeTransformerTest do
 
   @context %Context{module: Abc}
 
-  test "transform/2" do
-    code = "{1, 2}"
-    ast = ast(code)
+  describe "transform/2" do
+    test "2-element tuple" do
+      code = "{1, 2}"
+      ast = ast(code)
 
-    result = TupleTypeTransformer.transform(ast, @context)
+      result = TupleTypeTransformer.transform(ast, @context)
 
-    expected = %TupleType{
-      data: [
-        %IntegerType{value: 1},
-        %IntegerType{value: 2}
-      ]
-    }
+      expected = %TupleType{
+        data: [
+          %IntegerType{value: 1},
+          %IntegerType{value: 2}
+        ]
+      }
 
-    assert result == expected
+      assert result == expected
+    end
+
+    test "non-2-element tuple" do
+      code = "{1, 2, 3}"
+      ast = ast(code)
+
+      result = TupleTypeTransformer.transform(ast, @context)
+
+      expected = %TupleType{
+        data: [
+          %IntegerType{value: 1},
+          %IntegerType{value: 2},
+          %IntegerType{value: 3}
+        ]
+      }
+
+      assert result == expected
+    end
   end
 end

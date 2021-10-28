@@ -90,7 +90,7 @@ defmodule Hologram.Compiler.Transformer do
     StructTypeTransformer.transform(ast, context)
   end
 
-  def transform({:{}, _, ast}, %Context{} = context) do
+  def transform({:{}, _, _} = ast, %Context{} = context) do
     TupleTypeTransformer.transform(ast, context)
   end
 
