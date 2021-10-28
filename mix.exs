@@ -45,7 +45,6 @@ defmodule Hologram.MixProject do
       {:jason, "~> 1.2"},
       {:libgraph, "~> 0.13.3"},
       {:phoenix, "~> 1.6.0-rc.0", override: true},
-      {:phoenix_html, "~> 3.0"},
       {:plug_cowboy, "~> 2.5"},
       {:saxy, "~> 1.4"},
       {:wallaby, "~> 0.29", only: :test, runtime: false}
