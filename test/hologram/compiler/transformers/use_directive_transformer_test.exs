@@ -5,9 +5,10 @@ defmodule Hologram.Compiler.UseDirectiveTransformerTest do
   alias Hologram.Compiler.UseDirectiveTransformer
 
   test "transform/1" do
-    module_segs = [:Hologram, :Compiler, :UseDirectiveTransformerTest]
+    code = "use Hologram.Compiler.UseDirectiveTransformerTest"
+    ast = ast(code)
 
-    result = UseDirectiveTransformer.transform(module_segs)
+    result = UseDirectiveTransformer.transform(ast)
     expected = %UseDirective{module: Hologram.Compiler.UseDirectiveTransformerTest}
 
     assert result == expected

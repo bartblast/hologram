@@ -164,8 +164,8 @@ defmodule Hologram.Compiler.Transformer do
     RequireDirectiveTransformer.transform(ast)
   end
 
-  def transform({:use, _, [{:__aliases__, _, module_segs}]}, _) do
-    UseDirectiveTransformer.transform(module_segs)
+  def transform({:use, _, _} = ast, _) do
+    UseDirectiveTransformer.transform(ast)
   end
 
   # CONTROL FLOW
