@@ -1,4 +1,4 @@
-# DEFER: test
+# DEFER: refactor & test
 
 defmodule Mix.Tasks.Compile.Hologram do
   use Mix.Task.Compiler
