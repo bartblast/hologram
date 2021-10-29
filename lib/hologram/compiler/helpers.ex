@@ -160,10 +160,6 @@ defmodule Hologram.Compiler.Helpers do
     |> Enum.map(&String.to_atom/1)
   end
 
-  def source_code(module) do
-
-  end
-
   def transform_params(params, context) do
     if(params, do: params, else: [])
     |> Enum.map(&Transformer.transform(&1, context))
