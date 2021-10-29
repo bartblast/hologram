@@ -40,4 +40,24 @@ defmodule Hologram.Compiler.Aggregators.ModuleTypeTest do
     assert %ModuleDefinition{} = result[Module1]
     assert %ModuleDefinition{} = result[Module2]
   end
+
+  test "page default layout is added" do
+    page = Hologram.Test.Fixtures.Compiler.Aggregators.ModuleType.Module3
+    layout = Hologram.E2E.DefaultLayout
+
+    ir = %ModuleType{module: page}
+    result = Aggregator.aggregate(ir, %{})
+
+    assert %ModuleDefinition{} = result[layout]
+  end
+
+  test "page custom layout is added" do
+    page = Hologram.Test.Fixtures.Compiler.Aggregators.ModuleType.Module4
+    layout = Hologram.Test.Fixtures.Compiler.Aggregators.ModuleType.Module5
+
+    ir = %ModuleType{module: page}
+    result = Aggregator.aggregate(ir, %{})
+
+    assert %ModuleDefinition{} = result[layout]
+  end
 end
