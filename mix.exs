@@ -1,8 +1,6 @@
 defmodule Hologram.MixProject do
   use Mix.Project
 
-  @dep? is_dep?()
-
   defp aliases do
     [
       "format.all": [
@@ -17,7 +15,7 @@ defmodule Hologram.MixProject do
   end
 
   def application do
-    if @dep? do
+    if is_dep?() do
       [
         extra_applications: [:logger]
       ]
@@ -30,14 +28,14 @@ defmodule Hologram.MixProject do
   end
 
   def compilers do
-    case {@dep?, Mix.env()} do
-      true, _ ->
+    case {is_dep?(), Mix.env()} do
+      {true, _} ->
         Mix.compilers()
 
-      false, :test ->
+      {false, :test} ->
         [:phoenix] ++ Mix.compilers()
 
-      false, _ ->
+      {false, _} ->
         [:phoenix] ++ Mix.compilers() ++ [:hologram]
     end
   end
@@ -58,14 +56,14 @@ defmodule Hologram.MixProject do
   end
 
   defp elixirc_paths do
-    case {@dep?, Mix.env()} do
-      true, _ ->
+    case {is_dep?(), Mix.env()} do
+      {true, _} ->
         ["lib"]
 
-      false, :test ->
+      {false, :test} ->
         ["e2e", "lib", "test/fixtures", "test/support"]
 
-      false, _ ->
+      {false, _} ->
         ["e2e", "lib"]
 
     end
