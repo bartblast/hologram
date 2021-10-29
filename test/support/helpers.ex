@@ -16,7 +16,4 @@ defmodule Hologram.Test.Helpers do
     edges = Graph.edges(graph, from_vertex, to_vertex)
     Enum.count(edges) == 1
   end
-
-  defdelegate uuid_hex_regex, to: Utils
-  defdelegate uuid_regex, to: Utils
 end
