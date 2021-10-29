@@ -67,11 +67,6 @@ defmodule Hologram.Compiler.Helpers do
     |> Enum.map(fn {_, module_def} -> module_def end)
   end
 
-  def ir(code, context \\ %Context{}) do
-    Reflection.ast(code)
-    |> Transformer.transform(context)
-  end
-
   @doc """
   Returns true if the given module is a component,
   i.e. it contains a use directive for the Hologram.Component module.

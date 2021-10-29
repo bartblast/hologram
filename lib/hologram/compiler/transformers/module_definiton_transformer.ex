@@ -1,5 +1,5 @@
 defmodule Hologram.Compiler.ModuleDefinitionTransformer do
-  alias Hologram.Compiler.{Context, Expander, Helpers, Transformer}
+  alias Hologram.Compiler.{Context, Expander, Helpers, Reflection, Transformer}
   alias Hologram.Compiler.IR.ModuleDefinition
 
   def transform(ast) do
@@ -76,7 +76,7 @@ defmodule Hologram.Compiler.ModuleDefinitionTransformer do
 
     ir =
       "def __info__(:functions), do: [#{Enum.join(name_arity_pairs, ", ")}]"
-      |> Helpers.ir(context)
+      |> Reflection.ir(context)
 
     [ir | functions]
   end

@@ -1,8 +1,8 @@
 defmodule Hologram.Compiler.ReflectionTest do
   use Hologram.Test.UnitCase, async: false
 
-  alias Hologram.Compiler.IR.{MacroDefinition, ModuleDefinition, UseDirective}
-  alias Hologram.Compiler.Reflection
+  alias Hologram.Compiler.{Context, Reflection}
+  alias Hologram.Compiler.IR.{FunctionDefinition, MacroDefinition, ModuleDefinition, UseDirective}
 
   @module_1 Hologram.Test.Fixtures.Compiler.Reflection.Module1
   @module_2 Hologram.Test.Fixtures.Compiler.Reflection.Module2
@@ -81,6 +81,14 @@ defmodule Hologram.Compiler.ReflectionTest do
       module = Hologram.Compiler.ReflectionTest
       refute Reflection.has_template?(module)
     end
+  end
+
+  test "ir/1" do
+    code = "def fun, do: 1"
+    context = %Context{module: Abc.Bcd}
+    result = Reflection.ir(code, context)
+
+    assert %FunctionDefinition{module: Abc.Bcd} = result
   end
 
   test "macro_definition/3" do

@@ -385,13 +385,6 @@ defmodule Hologram.Compiler.HelpersTest do
     assert result == expected
   end
 
-  test "ir/1" do
-    code = "def fun, do: 1"
-    context = %Context{module: Abc.Bcd}
-
-    assert %FunctionDefinition{module: Abc.Bcd} = Helpers.ir(code, context)
-  end
-
   describe "is_component?/1" do
     test "true" do
       module_definition = %ModuleDefinition{

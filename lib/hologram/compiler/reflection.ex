@@ -47,6 +47,11 @@ defmodule Hologram.Compiler.Reflection do
     function_exported?(module, :template, 0)
   end
 
+  def ir(code, context \\ %Context{}) do
+    ast(code)
+    |> Transformer.transform(context)
+  end
+
   # TODO: refactor & test
   def list_pages(opts \\ get_config()) do
     glob = "#{pages_path(opts)}/**/*.ex"
