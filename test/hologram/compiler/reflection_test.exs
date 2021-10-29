@@ -30,6 +30,31 @@ defmodule Hologram.Compiler.ReflectionTest do
     end
   end
 
+  describe "ast/1" do
+    @expected {:defmodule, [line: 1],
+               [
+                 {:__aliases__, [line: 1], @module_segs_1},
+                 [do: {:__block__, [], []}]
+               ]}
+
+    test "atom arg (module)" do
+      result = Reflection.ast(@module_1)
+      assert result == @expected
+    end
+
+    test "binary arg (code)" do
+      code = "defmodule Hologram.Test.Fixtures.Compiler.Reflection.Module1 do\nend\n"
+      result = Reflection.ast(code)
+
+      assert result == @expected
+    end
+
+    test "list arg (module segments)" do
+      result = Reflection.ast(@module_segs_1)
+      assert result == @expected
+    end
+  end
+
   test "get_page_digest/1" do
     compile_pages()
     result = Reflection.get_page_digest(Elixir.Hologram.E2E.Page1)
@@ -74,24 +99,6 @@ defmodule Hologram.Compiler.ReflectionTest do
 
     test "is Erlang module" do
       refute Reflection.module?(:c)
-    end
-  end
-
-  describe "module_ast/1" do
-    @expected {:defmodule, [line: 1],
-               [
-                 {:__aliases__, [line: 1], @module_segs_1},
-                 [do: {:__block__, [], []}]
-               ]}
-
-    test "module segments arg" do
-      result = Reflection.ast(@module_segs_1)
-      assert result == @expected
-    end
-
-    test "module arg" do
-      result = Reflection.ast(@module_1)
-      assert result == @expected
     end
   end
 

@@ -1,5 +1,5 @@
 defmodule Hologram.Compiler.Helpers do
-  alias Hologram.Compiler.{Binder, Context, Normalizer, Parser, Transformer}
+  alias Hologram.Compiler.{Binder, Context, Normalizer, Parser, Reflection, Transformer}
   alias Hologram.Compiler.IR.{FunctionDefinitionVariants, ModuleDefinition}
   alias Hologram.Typespecs, as: T
 
@@ -27,11 +27,6 @@ defmodule Hologram.Compiler.Helpers do
       {name, %FunctionDefinitionVariants{name: name, variants: variants}}
     end)
     |> Enum.into(%{})
-  end
-
-  def ast(code) do
-    Parser.parse!(code)
-    |> Normalizer.normalize()
   end
 
   @doc """
@@ -73,7 +68,7 @@ defmodule Hologram.Compiler.Helpers do
   end
 
   def ir(code, context \\ %Context{}) do
-    ast(code)
+    Reflection.ast(code)
     |> Transformer.transform(context)
   end
 
@@ -163,6 +158,10 @@ defmodule Hologram.Compiler.Helpers do
   def module_segments(module) do
     Module.split(module)
     |> Enum.map(&String.to_atom/1)
+  end
+
+  def source_code(module) do
+
   end
 
   def transform_params(params, context) do

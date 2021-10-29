@@ -309,15 +309,6 @@ defmodule Hologram.Compiler.HelpersTest do
     end
   end
 
-  test "ast/1" do
-    code = "def fun, do: 1"
-
-    result = Helpers.ast(code)
-    expected = {:def, [line: 1], [{:fun, [line: 1], nil}, [do: {:__block__, [], [1]}]]}
-
-    assert result == expected
-  end
-
   test "class_name/1" do
     assert Helpers.class_name(Abc.Bcd) == "Elixir_Abc_Bcd"
   end

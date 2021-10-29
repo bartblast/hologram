@@ -10,15 +10,20 @@ defmodule Hologram.Compiler.Reflection do
     end
   end
 
-  def ast(module_segs) when is_list(module_segs) do
-    Helpers.module(module_segs)
-    |> ast()
-  end
-
-  def ast(module) do
+  def ast(module) when is_atom(module) do
     source_path(module)
     |> Parser.parse_file!()
     |> Normalizer.normalize()
+  end
+
+  def ast(code) when is_binary(code) do
+    Parser.parse!(code)
+    |> Normalizer.normalize()
+  end
+
+  def ast(module_segs) when is_list(module_segs) do
+    Helpers.module(module_segs)
+    |> ast()
   end
 
   defp get_config do
