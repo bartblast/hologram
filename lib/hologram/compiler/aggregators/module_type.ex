@@ -1,9 +1,9 @@
-alias Hologram.Compiler.Aggregator
+alias Hologram.Compiler.{Aggregator, Reflection}
 alias Hologram.Compiler.IR.ModuleType
 
 # TODO: test
 defimpl Aggregator, for: ModuleType do
-  def traverse(%{module: module}, module_defs) do
+  def aggregate(%{module: module}, module_defs) do
     case maybe_add_module_def(module_defs, module) do
       ^module_defs ->
         module_defs
