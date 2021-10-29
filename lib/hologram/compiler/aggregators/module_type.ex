@@ -1,10 +1,9 @@
 alias Hologram.Compiler.{Aggregator, Reflection}
 alias Hologram.Compiler.IR.ModuleType
 
-# TODO: test
 defimpl Aggregator, for: ModuleType do
   def aggregate(%{module: module}, module_defs) do
-    case maybe_add_module_def(module_defs, module) do
+    case maybe_add(module_defs, module) do
       ^module_defs ->
         module_defs
 
@@ -14,7 +13,7 @@ defimpl Aggregator, for: ModuleType do
     end
   end
 
-  defp maybe_add_module_def(module_defs, module) do
+  defp maybe_add(module_defs, module) do
     unless module_defs[module] || Reflection.standard_lib?(module) do
       module_def = Reflection.module_definition(module)
       Map.put(module_defs, module, module_def)
