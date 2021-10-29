@@ -1,6 +1,8 @@
 defmodule Hologram.MixProject do
   use Mix.Project
 
+  @dep? is_dep?()
+
   defp aliases do
     [
       "format.all": [
@@ -15,7 +17,7 @@ defmodule Hologram.MixProject do
   end
 
   def application do
-    if is_dep?() do
+    if @dep? do
       [
         extra_applications: [:logger]
       ]
@@ -28,11 +30,15 @@ defmodule Hologram.MixProject do
   end
 
   def compilers do
-    if is_dep?() do
-      Mix.compilers()
-    else
-      compilers = [:phoenix] ++ Mix.compilers()
-      if Mix.env() == :test, do: compilers, else: compilers ++ [:hologram]
+    case {@dep?, Mix.env()} do
+      true, _ ->
+        Mix.compilers()
+
+      false, :test ->
+        [:phoenix] ++ Mix.compilers()
+
+      false, _ ->
+        [:phoenix] ++ Mix.compilers() ++ [:hologram]
     end
   end
 
@@ -51,19 +57,17 @@ defmodule Hologram.MixProject do
     ]
   end
 
-  defp elixirc_paths(:test) do
-    if is_dep?() do
-      ["lib"]
-    else
-      ["e2e", "lib", "test/fixtures", "test/support"]
-    end
-  end
+  defp elixirc_paths do
+    case {@dep?, Mix.env()} do
+      true, _ ->
+        ["lib"]
 
-  defp elixirc_paths(_) do
-    if is_dep?() do
-      ["lib"]
-    else
-      ["e2e", "lib"]
+      false, :test ->
+        ["e2e", "lib", "test/fixtures", "test/support"]
+
+      false, _ ->
+        ["e2e", "lib"]
+
     end
   end
 
@@ -98,7 +102,7 @@ defmodule Hologram.MixProject do
       deps: deps(),
       description: "Work in progress...",
       elixir: "~> 1.12",
-      elixirc_paths: elixirc_paths(Mix.env()),
+      elixirc_paths: elixirc_paths(),
       package: package(),
       preferred_cli_env: preferred_cli_env(),
       start_permanent: Mix.env() == :prod,
