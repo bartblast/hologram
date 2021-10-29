@@ -162,6 +162,15 @@ defmodule Hologram.Compiler.ReflectionTest do
     assert result == expected
   end
 
+  test "source_code/1" do
+    module = Hologram.Test.Fixtures.Compiler.Reflection.Module5
+
+    result = Reflection.source_code(module)
+    expected = "defmodule Hologram.Test.Fixtures.Compiler.Reflection.Module5 do\nend\n"
+
+    assert result == expected
+  end
+
   test "source_path/1" do
     result = Reflection.source_path(Hologram.Compiler.ReflectionTest)
     expected = __ENV__.file

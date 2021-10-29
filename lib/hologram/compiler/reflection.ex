@@ -128,6 +128,10 @@ defmodule Hologram.Compiler.Reflection do
     router_module() |> source_path()
   end
 
+  def source_code(module) do
+    source_path(module) |> File.read!()
+  end
+
   @doc """
   Returns the file path of the given module's source code.
 
