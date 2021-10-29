@@ -9,7 +9,7 @@ defimpl Aggregator, for: ModuleType do
 
       new_module_defs ->
         new_module_defs[module].functions
-        |> Enum.reduce(new_module_defs, &Aggregator.aggregate/2)
+        |> Aggregator.aggregate(new_module_defs)
     end
   end
 
