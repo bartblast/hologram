@@ -140,17 +140,17 @@ defmodule Hologram.Compiler.Helpers do
   Returns the corresponding module segments (without the "Elixir" segment at the beginning).
 
   ## Examples
-      iex> Helpers.module_segments(Abc.Bcd)
+      iex> Helpers.module_name_segments(Abc.Bcd)
       [:Abc, :Bcd]
   """
-  @spec module_segments(module() | String.T) :: T.module_segments()
+  @spec module_name_segments(module() | String.T) :: T.module_name_segments()
 
-  def module_segments(module_name) when is_binary(module_name) do
+  def module_name_segments(module_name) when is_binary(module_name) do
     Module.split("Elixir.#{module_name}")
     |> Enum.map(&String.to_atom/1)
   end
 
-  def module_segments(module) do
+  def module_name_segments(module) do
     Module.split(module)
     |> Enum.map(&String.to_atom/1)
   end

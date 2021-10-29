@@ -452,13 +452,13 @@ defmodule Hologram.Compiler.HelpersTest do
     assert Helpers.module_name(Abc.Bcd) == "Abc.Bcd"
   end
 
-  describe "module_segments/1" do
+  describe "module_name_segments/1" do
     test "module" do
-      assert Helpers.module_segments(Abc.Bcd) == [:Abc, :Bcd]
+      assert Helpers.module_name_segments(Abc.Bcd) == [:Abc, :Bcd]
     end
 
     test "string" do
-      assert Helpers.module_segments("Abc.Bcd") == [:Abc, :Bcd]
+      assert Helpers.module_name_segments("Abc.Bcd") == [:Abc, :Bcd]
     end
   end
 

@@ -14,7 +14,7 @@ defmodule Hologram.Compiler.FunctionCallTransformer do
   end
 
   def transform({{:., _, [{:__MODULE__, _, _}, function]}, _, params}, %Context{} = context) do
-    Helpers.module_segments(context.module)
+    Helpers.module_name_segments(context.module)
     |> build_function_call(function, params, context)
   end
 

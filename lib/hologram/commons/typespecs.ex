@@ -19,5 +19,5 @@ defmodule Hologram.Typespecs do
   @typedoc """
   e.g. [:Hologram, :Typespecs]
   """
-  @type module_segments :: list(atom())
+  @type module_name_segments :: list(atom())
 end

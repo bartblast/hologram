@@ -11,7 +11,7 @@ defmodule Hologram.Compiler.Resolver do
       iex> resolve([:Bcd], aliases)
       Abc.Bcd
   """
-  @spec resolve(T.module_segments(), list(%AliasDirective{})) :: module()
+  @spec resolve(T.module_name_segments(), list(%AliasDirective{})) :: module()
 
   def resolve(module_segs, aliases) do
     resolve(module_segs, nil, nil, [], aliases, nil)
@@ -26,7 +26,7 @@ defmodule Hologram.Compiler.Resolver do
       Enum
   """
   @spec resolve(
-          T.module_segments(),
+          T.module_name_segments(),
           T.function_name(),
           integer(),
           list(%ImportDirective{}),
