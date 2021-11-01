@@ -33,10 +33,10 @@ defmodule Hologram.MixProject do
         Mix.compilers()
 
       {false, :test} ->
-        [:phoenix] ++ Mix.compilers()
+        Mix.compilers()
 
       {false, _} ->
-        [:phoenix] ++ Mix.compilers() ++ [:hologram]
+        Mix.compilers() ++ [:hologram]
     end
   end
 
