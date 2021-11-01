@@ -40,6 +40,7 @@ defmodule Mix.Tasks.Compile.Hologram do
 
   defp build_page(page, output_path) do
     js = Builder.build(page)
+    output = "\"use strict\";\n\n" <> js
 
     digest =
       :crypto.hash(:md5, js)
@@ -47,7 +48,7 @@ defmodule Mix.Tasks.Compile.Hologram do
       |> String.downcase()
 
     "#{output_path}/page-#{digest}.js"
-    |> File.write!(js)
+    |> File.write!(output)
 
     {page, digest}
   end
