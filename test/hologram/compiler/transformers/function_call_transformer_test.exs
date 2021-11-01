@@ -36,12 +36,12 @@ defmodule Hologram.Compiler.FunctionCallTransformerTest do
   end
 
   test "function without params called without module" do
-    code = "test()"
+    code = "make_ref()"
     ast = ast(code)
 
     expected = %FunctionCall{
       module: Kernel,
-      function: :test,
+      function: :make_ref,
       args: []
     }
 
@@ -50,12 +50,12 @@ defmodule Hologram.Compiler.FunctionCallTransformerTest do
   end
 
   test "function with params called without module" do
-    code = "test(1, 2)"
+    code = "max(1, 2)"
     ast = ast(code)
 
     expected = %FunctionCall{
       module: Kernel,
-      function: :test,
+      function: :max,
       args: [
         %IntegerType{value: 1},
         %IntegerType{value: 2}
