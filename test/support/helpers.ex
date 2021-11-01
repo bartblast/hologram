@@ -1,6 +1,5 @@
 defmodule Hologram.Test.Helpers do
   alias Hologram.Compiler.Reflection
-  alias Hologram.Utils
   alias Mix.Tasks.Compile.Hologram, as: Task
 
   @default_pages_path Reflection.pages_path()
