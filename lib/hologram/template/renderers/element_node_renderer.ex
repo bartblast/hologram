@@ -4,6 +4,9 @@ alias Hologram.Template.VDOM.ElementNode
 defimpl Renderer, for: ElementNode do
   @pruned_attrs [:on_click]
 
+  # see: https://html.spec.whatwg.org/multipage/syntax.html#void-elements
+  @void_elems ~w(area base br col embed hr img input link meta param source track wbr)
+
   def render(%{tag: "slot"}, bindings, slots) do
     Renderer.render(slots[:default], bindings, nil)
   end
@@ -12,7 +15,11 @@ defimpl Renderer, for: ElementNode do
     attrs_html = render_attrs(attrs, bindings)
     children_html = render_children(children, bindings, slots)
 
-    "<#{tag}#{attrs_html}>#{children_html}</#{tag}>"
+    if Enum.member?(@void_elems, tag) do
+      "<#{tag}#{attrs_html} />"
+    else
+      "<#{tag}#{attrs_html}>#{children_html}</#{tag}>"
+    end
   end
 
   defp render_attrs(attrs, bindings) do

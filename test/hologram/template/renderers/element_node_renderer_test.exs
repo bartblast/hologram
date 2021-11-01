@@ -1,42 +1,124 @@
 defmodule Hologram.Template.ElementNodeRendererTest do
   use Hologram.Test.UnitCase, async: true
 
-  alias Hologram.Template.VDOM.{ElementNode, TextNode}
+  alias Hologram.Compiler.IR.{ModuleAttributeOperator, TupleType}
+  alias Hologram.Template.VDOM.{ElementNode, Expression, TextNode}
   alias Hologram.Template.Renderer
 
-  @bindings %{}
-
-  test "non-slot" do
-    attrs = %{
-      attr_1: %{value: "test_attr_value_1", modifiers: []},
-      on_click: %{value: "test_on_click", modifiers: []},
-      attr_2: %{value: "test_attr_value_2", modifiers: []}
+  @attrs %{
+    attr_2: %{
+      value: [
+        %TextNode{content: "test_text_2"}
+      ],
+      modifiers: []
+    },
+    attr_1: %{
+      value: [
+        %Expression{
+          ir: %TupleType{
+            data: [
+              %ModuleAttributeOperator{name: :a}
+            ]
+          }
+        }
+      ],
+      modifiers: []
     }
+  }
 
-    children = [
-      %TextNode{content: "test_text"},
-      %ElementNode{attrs: %{}, children: [], tag: "span"}
-    ]
+  @bindings %{a: 123}
 
-    element_node = %ElementNode{attrs: attrs, children: children, tag: "div"}
+  @children [
+    %TextNode{content: "abc"},
+    %Expression{
+      ir: %TupleType{
+        data: [
+          %ModuleAttributeOperator{name: :a}
+        ]
+      }
+    },
+    %TextNode{content: "xyz"}
+  ]
+
+  test "non-void element without attributes or children" do
+    element_node = %ElementNode{attrs: %{}, children: [], tag: "div"}
     result = Renderer.render(element_node, @bindings)
 
-    expected =
-      "<div attr_1=\"test_attr_value_1\" attr_2=\"test_attr_value_2\">test_text<span></span></div>"
+    assert result == "<div></div>"
+  end
+
+  test "non-void element with attributes" do
+    element_node = %ElementNode{attrs: @attrs, children: [], tag: "div"}
+
+    result = Renderer.render(element_node, @bindings)
+    expected = "<div attr_1=\"123\" attr_2=\"test_text_2\"></div>"
 
     assert result == expected
   end
 
-  test "slot" do
-    children = [
-      %TextNode{content: "test_text"},
-      %ElementNode{attrs: %{}, children: [], tag: "span"}
-    ]
+  test "non-void element with children" do
+    element_node = %ElementNode{attrs: %{}, children: @children, tag: "div"}
 
-    slot_node = %ElementNode{attrs: %{}, children: [], tag: "slot"}
+    result = Renderer.render(element_node, @bindings)
+    expected = "<div>abc123xyz</div>"
 
-    result = Renderer.render(slot_node, @bindings, default: children)
-    expected = "test_text<span></span>"
+    assert result == expected
+  end
+
+  test "non-void element with children and attributes" do
+    element_node = %ElementNode{attrs: @attrs, children: @children, tag: "div"}
+
+    result = Renderer.render(element_node, @bindings)
+    expected = "<div attr_1=\"123\" attr_2=\"test_text_2\">abc123xyz</div>"
+
+    assert result == expected
+  end
+
+  test "void element without attributes" do
+    element_node = %ElementNode{attrs: %{}, children: [], tag: "input"}
+    result = Renderer.render(element_node, @bindings)
+
+    assert result == "<input />"
+  end
+
+  test "void element with attributes" do
+    element_node = %ElementNode{attrs: @attrs, children: [], tag: "input"}
+
+    result = Renderer.render(element_node, @bindings)
+    expected = "<input attr_1=\"123\" attr_2=\"test_text_2\" />"
+
+    assert result == expected
+  end
+
+  test "slot tag" do
+    element_node = %ElementNode{attrs: %{}, children: @children, tag: "slot"}
+
+    result = Renderer.render(element_node, @bindings, default: @children)
+    expected = "abc123xyz"
+
+    assert result == expected
+  end
+
+  test "pruned attrs" do
+    attrs = %{
+      non_pruned_attr: %{
+        value: [
+          %TextNode{content: "test_non_pruned_attr_content"}
+        ],
+        modifiers: []
+      },
+      on_click: %{
+        value: [
+          %TextNode{content: "test_pruned_attr_content"}
+        ],
+        modifiers: []
+      }
+    }
+
+    element_node = %ElementNode{attrs: attrs, children: [], tag: "input"}
+
+    result = Renderer.render(element_node, @bindings)
+    expected = "<input non_pruned_attr=\"test_non_pruned_attr_content\" />"
 
     assert result == expected
   end
