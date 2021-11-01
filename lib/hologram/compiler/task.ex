@@ -43,7 +43,7 @@ defmodule Mix.Tasks.Compile.Hologram do
     output = "\"use strict\";\n\n" <> js
 
     digest =
-      :crypto.hash(:md5, js)
+      :crypto.hash(:md5, output)
       |> Base.encode16()
       |> String.downcase()
 
