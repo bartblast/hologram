@@ -135,7 +135,7 @@ defmodule Hologram.Compiler.IR do
   # OTHER
 
   defmodule FunctionCall do
-    defstruct module: nil, function: nil, params: []
+    defstruct module: nil, function: nil, args: []
   end
 
   defmodule Quote do

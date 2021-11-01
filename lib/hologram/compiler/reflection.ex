@@ -65,9 +65,9 @@ defmodule Hologram.Compiler.Reflection do
     end)
   end
 
-  # DEFER: instead of matching the macro on arity, pattern match the params as well
-  def macro_definition(module, name, params) do
-    arity = Enum.count(params)
+  # DEFER: instead of matching the macro on arity, pattern match the args as well
+  def macro_definition(module, name, args) do
+    arity = Enum.count(args)
 
     module_definition(module).macros
     |> Enum.filter(&(&1.name == name && &1.arity == arity))

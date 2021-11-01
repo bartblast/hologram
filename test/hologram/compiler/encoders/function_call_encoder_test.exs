@@ -7,14 +7,14 @@ defmodule Hologram.Compiler.FunctionCallEncoderTest do
   @ir %FunctionCall{
     function: :abc,
     module: Test,
-    params: []
+    args: []
   }
 
   test "sigilH" do
     ir = %FunctionCall{
       function: :sigil_H,
       module: Hologram.Runtime.Commons,
-      params: [
+      args: [
         %BinaryType{
           parts: [
             %StringType{value: "\n<div>Hello World {@counter}</div>\n"}
@@ -31,9 +31,9 @@ defmodule Hologram.Compiler.FunctionCallEncoderTest do
     assert result == expected
   end
 
-  test "single param" do
-    params = [%IntegerType{value: 1}]
-    ir = %{@ir | params: params}
+  test "single arg" do
+    args = [%IntegerType{value: 1}]
+    ir = %{@ir | args: args}
 
     result = Encoder.encode(ir, %Context{}, %Opts{})
     expected = "Elixir_Test.abc({ type: 'integer', value: 1 })"
@@ -41,9 +41,9 @@ defmodule Hologram.Compiler.FunctionCallEncoderTest do
     assert result == expected
   end
 
-  test "multiple params" do
-    params = [%IntegerType{value: 1}, %IntegerType{value: 2}]
-    ir = %{@ir | params: params}
+  test "multiple args" do
+    args = [%IntegerType{value: 1}, %IntegerType{value: 2}]
+    ir = %{@ir | args: args}
 
     result = Encoder.encode(ir, %Context{}, %Opts{})
     expected = "Elixir_Test.abc({ type: 'integer', value: 1 }, { type: 'integer', value: 2 })"
@@ -51,9 +51,9 @@ defmodule Hologram.Compiler.FunctionCallEncoderTest do
     assert result == expected
   end
 
-  test "variable param" do
-    params = [%Variable{name: :x}]
-    ir = %{@ir | params: params}
+  test "variable arg" do
+    args = [%Variable{name: :x}]
+    ir = %{@ir | args: args}
 
     result = Encoder.encode(ir, %Context{}, %Opts{})
     expected = "Elixir_Test.abc(x)"
@@ -61,9 +61,9 @@ defmodule Hologram.Compiler.FunctionCallEncoderTest do
     assert result == expected
   end
 
-  test "non-variable param" do
-    params = [%IntegerType{value: 1}]
-    ir = %{@ir | params: params}
+  test "non-variable arg" do
+    args = [%IntegerType{value: 1}]
+    ir = %{@ir | args: args}
 
     result = Encoder.encode(ir, %Context{}, %Opts{})
     expected = "Elixir_Test.abc({ type: 'integer', value: 1 })"

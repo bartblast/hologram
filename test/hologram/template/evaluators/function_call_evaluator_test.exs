@@ -5,7 +5,7 @@ defmodule Hologram.Template.FunctionCallEvaluatorTest do
   alias Hologram.Template.Evaluator
 
   test "evaluate/2" do
-    params = [
+    args = [
       %ListType{
         data: [
           %IntegerType{value: 1},
@@ -14,7 +14,7 @@ defmodule Hologram.Template.FunctionCallEvaluatorTest do
       }
     ]
 
-    ir = %FunctionCall{module: Kernel, function: :hd, params: params}
+    ir = %FunctionCall{module: Kernel, function: :hd, args: args}
 
     result = Evaluator.evaluate(ir, %{})
     expected = 1

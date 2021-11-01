@@ -8,7 +8,7 @@ defimpl Encoder, for: FunctionCall do
 
   def encode(%{function: :sigil_H} = ir, %Context{} = context, _) do
     ir
-    |> Map.get(:params)
+    |> Map.get(:args)
     |> hd()
     |> Map.get(:parts)
     |> hd()
@@ -19,22 +19,22 @@ defimpl Encoder, for: FunctionCall do
     |> TemplateEncoder.encode()
   end
 
-  def encode(%{module: module, function: function, params: params}, %Context{} = context, %Opts{} = opts) do
+  def encode(%{module: module, function: function, args: args}, %Context{} = context, %Opts{} = opts) do
     class_name = Helpers.class_name(module)
     function = encode_function_name(function)
-    params = encode_params(params, context, opts)
+    args = encode_args(args, context, opts)
 
-    "#{class_name}.#{function}(#{params})"
+    "#{class_name}.#{function}(#{args})"
   end
 
-  defp encode_params(params, context, opts) do
-    Enum.map(params, fn param ->
-      case param do
+  defp encode_args(args, context, opts) do
+    Enum.map(args, fn arg ->
+      case arg do
         %Variable{name: name} ->
           name
 
         _ ->
-          Encoder.encode(param, context, opts)
+          Encoder.encode(arg, context, opts)
       end
     end)
     |> Enum.join(", ")

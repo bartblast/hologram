@@ -2,13 +2,13 @@ defmodule Hologram.Compiler.Expander do
   alias Hologram.Compiler.{Helpers, Normalizer, Reflection}
   alias Hologram.Compiler.IR.{MacroDefinition, RequireDirective}
 
-  def expand_macro(%MacroDefinition{module: module, name: name}, params) do
-    expand_macro(module, name, params)
+  def expand_macro(%MacroDefinition{module: module, name: name}, args) do
+    expand_macro(module, name, args)
   end
 
-  def expand_macro(module, name, params) do
+  def expand_macro(module, name, args) do
     expanded =
-      apply(module, :"MACRO-#{name}", [__ENV__] ++ params)
+      apply(module, :"MACRO-#{name}", [__ENV__] ++ args)
       |> Normalizer.normalize()
 
     case expanded do
@@ -24,12 +24,12 @@ defmodule Hologram.Compiler.Expander do
     expand_with_fun(ast, &expand_macros_in_expression(&1, requires))
   end
 
-  defp expand_macros_in_expression({name, _, params} = expr, requires) do
-    params = unless params, do: [], else: params
-    macro_def = find_macro_definition(name, params, requires)
+  defp expand_macros_in_expression({name, _, args} = expr, requires) do
+    args = unless args, do: [], else: args
+    macro_def = find_macro_definition(name, args, requires)
 
     if macro_def do
-      expand_macro(macro_def, params)
+      expand_macro(macro_def, args)
     else
       expr
     end
@@ -93,14 +93,14 @@ defmodule Hologram.Compiler.Expander do
     {:defmodule, line, [aliases, [do: {:__block__, [], expanded}]]}
   end
 
-  defp find_macro_definition(name, params, requires) do
+  defp find_macro_definition(name, args, requires) do
     require_directive =
       Enum.find(requires, fn %RequireDirective{module: module} ->
-        macro_exported?(module, name, Enum.count(params))
+        macro_exported?(module, name, Enum.count(args))
       end)
 
     if require_directive do
-      Reflection.macro_definition(require_directive.module, name, params)
+      Reflection.macro_definition(require_directive.module, name, args)
     else
       nil
     end

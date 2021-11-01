@@ -134,7 +134,7 @@ defmodule Hologram.Compiler.PrunerTest do
       assert function_preserved?(module_22, @module_20, :fun_3, 0)
     end
 
-    test "functions used in function call params" do
+    test "functions used in function call args" do
       module_23 = Hologram.Test.Fixtures.Compiler.Pruner.Module23
       assert function_preserved?(module_23, @module_20, :fun_1, 0)
     end

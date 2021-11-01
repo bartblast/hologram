@@ -4,28 +4,28 @@ defmodule Hologram.Compiler.FunctionCallTransformerTest do
   alias Hologram.Compiler.{Context, FunctionCallTransformer}
   alias Hologram.Compiler.IR.{AtomType, FunctionCall, IntegerType, ListType, ModuleAttributeOperator, NotSupportedExpression, Variable}
 
-  test "function without args called on module" do
+  test "function without params called on module" do
     code = "Hologram.Compiler.FunctionCallTransformerTest.test()"
     ast = ast(code)
 
     expected = %FunctionCall{
       module: Hologram.Compiler.FunctionCallTransformerTest,
       function: :test,
-      params: []
+      args: []
     }
 
     result = FunctionCallTransformer.transform(ast, %Context{})
     assert result == expected
   end
 
-  test "function with args called on module" do
+  test "function with params called on module" do
     code = "Hologram.Compiler.FunctionCallTransformerTest.test(1, 2)"
     ast = ast(code)
 
     expected = %FunctionCall{
       module: Hologram.Compiler.FunctionCallTransformerTest,
       function: :test,
-      params: [
+      args: [
         %IntegerType{value: 1},
         %IntegerType{value: 2}
       ]
@@ -35,28 +35,28 @@ defmodule Hologram.Compiler.FunctionCallTransformerTest do
     assert result == expected
   end
 
-  test "function without args called without module" do
+  test "function without params called without module" do
     code = "test()"
     ast = ast(code)
 
     expected = %FunctionCall{
       module: Kernel,
       function: :test,
-      params: []
+      args: []
     }
 
     result = FunctionCallTransformer.transform(ast, %Context{})
     assert result == expected
   end
 
-  test "function with args called without module" do
+  test "function with params called without module" do
     code = "test(1, 2)"
     ast = ast(code)
 
     expected = %FunctionCall{
       module: Kernel,
       function: :test,
-      params: [
+      args: [
         %IntegerType{value: 1},
         %IntegerType{value: 2}
       ]
@@ -73,7 +73,7 @@ defmodule Hologram.Compiler.FunctionCallTransformerTest do
     expected = %FunctionCall{
       module: Kernel,
       function: :to_string,
-      params: [%Variable{name: :test}]
+      args: [%Variable{name: :test}]
     }
 
     result = FunctionCallTransformer.transform(ast, %Context{})
@@ -90,7 +90,7 @@ defmodule Hologram.Compiler.FunctionCallTransformerTest do
     expected = %FunctionCall{
       function: :test,
       module: Hologram.Test.Fixtures.PlaceholderModule1,
-      params: [
+      args: [
         %IntegerType{value: 1},
         %IntegerType{value: 2}
       ]
@@ -118,7 +118,7 @@ defmodule Hologram.Compiler.FunctionCallTransformerTest do
     expected = %FunctionCall{
       function: :apply,
       module: Kernel,
-      params: [
+      args: [
         %ModuleAttributeOperator{name: :test},
         %AtomType{value: :abc},
         %ListType{

@@ -13,7 +13,7 @@ defmodule Hologram.Compiler.PipeOperatorTransformerTest do
     expected = %FunctionCall{
       function: :div,
       module: Kernel,
-      params: [
+      args: [
         %IntegerType{value: 100},
         %IntegerType{value: 2}
       ]
@@ -31,11 +31,11 @@ defmodule Hologram.Compiler.PipeOperatorTransformerTest do
     expected = %FunctionCall{
       function: :div,
       module: Kernel,
-      params: [
+      args: [
         %FunctionCall{
           function: :div,
           module: Kernel,
-          params: [
+          args: [
             %IntegerType{value: 100},
             %IntegerType{value: 2}
           ]
