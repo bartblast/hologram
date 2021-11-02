@@ -3,7 +3,7 @@ defmodule Hologram.Test.Fixtures.Template.PageRenderer.Module1 do
 
   layout Hologram.Test.Fixtures.Template.PageRenderer.Module2
 
-  def state do
+  def init do
     %{
       a: 123
     }

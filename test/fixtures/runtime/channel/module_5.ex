@@ -3,7 +3,7 @@ defmodule Hologram.Test.Fixtures.Runtime.Channel.Module5 do
 
   route("/test-route")
 
-  def state do
+  def init do
     %{}
   end
 

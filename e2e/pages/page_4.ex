@@ -4,7 +4,7 @@ defmodule Hologram.E2E.Page4 do
 
   route "/e2e/page-4"
 
-  def state do
+  def init do
     %{
       text: "",
       value: :p4,

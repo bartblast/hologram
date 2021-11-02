@@ -16,9 +16,9 @@ defimpl Renderer, for: Atom do
     class_name = Helpers.class_name(module)
     digest = Reflection.get_page_digest(module)
 
-    # DEFER: pass page params to state function
+    # DEFER: pass page params to init function
     bindings =
-      module.state()
+      module.init()
       |> Map.put(:context, %{
         __class__: class_name,
         # TODO: use __digest__ interpolation instead of __page_src__

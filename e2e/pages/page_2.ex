@@ -3,7 +3,7 @@ defmodule Hologram.E2E.Page2 do
 
   route "/e2e/page-2"
 
-  def state do
+  def init do
     %{
       text: ""
     }
