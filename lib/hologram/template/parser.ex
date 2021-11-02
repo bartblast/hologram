@@ -1,6 +1,7 @@
 defmodule Hologram.Template.Parser do
   use Hologram.Commons.Parser
 
+  @impl Hologram.Commons.Parser
   def parse(markup) do
     result =
       remove_doctype(markup)

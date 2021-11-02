@@ -8,6 +8,7 @@ defmodule Hologram.Template.EmbeddedExpressionParser do
   @doc """
   Splits a string which may contain embedded expressions into a list of expression nodes and text nodes.
   """
+  @impl Hologram.Commons.Parser
   def parse(str) do
     nodes =
       ~r/([^\{]*)(\{[^\}]*\})([^\{]*)/
