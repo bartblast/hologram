@@ -18,7 +18,7 @@ describe("buildMessagePayload()", () => {
 
     const sourceId = "test_source_id"
     const commandName = Type.atom("test_command_name")
-    const params = Type.list([])
+    const params = Type.list()
 
     const operation = new Operation(sourceId, target, commandName, params)
     const result = Command.buildMessagePayload(operation)

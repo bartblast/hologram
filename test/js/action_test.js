@@ -11,7 +11,7 @@ import Type from "../../assets/js/hologram/type"
 const state = Type.map({})
 const targetId = Type.atom("test_target_id")
 const commandName = Type.atom("test_command")
-const params = Type.list([])
+const params = Type.list()
 
 describe("getCommandNameFromActionResult()", () => {
   it("returns null if the action result is a boxed map", () => {
@@ -87,7 +87,7 @@ describe("getParamsFromActionResult()", () => {
     const actionResult = Type.map({})
     const result = Action.getParamsFromActionResult(actionResult)
 
-    assert.deepStrictEqual(result, Type.list([]))
+    assert.deepStrictEqual(result, Type.list())
   })
 
   it("fetches the command params from an action result that is a 4-element boxed tuple", () => {
@@ -124,7 +124,7 @@ describe("getParamsFromActionResult()", () => {
 
     const result = Action.getParamsFromActionResult(actionResult)
 
-    assert.deepStrictEqual(result, Type.list([]))
+    assert.deepStrictEqual(result, Type.list())
   })
 
   it("returns empty keyword list if the action result is a 2-element boxed tuple", () => {
@@ -135,14 +135,14 @@ describe("getParamsFromActionResult()", () => {
 
     const result = Action.getParamsFromActionResult(actionResult)
 
-    assert.deepStrictEqual(result, Type.list([]))
+    assert.deepStrictEqual(result, Type.list())
   })
 
   it("returns empty keyword list if the action result is a 1-element boxed tuple", () => {
     const actionResult = Type.tuple([state])
     const result = Action.getParamsFromActionResult(actionResult)
 
-    assert.deepStrictEqual(result, Type.list([]))
+    assert.deepStrictEqual(result, Type.list())
   })
 })
 

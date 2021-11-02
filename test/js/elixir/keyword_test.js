@@ -123,7 +123,7 @@ describe("put()", () => {
   });
 
   it("returns frozen object", () => {
-    const result = Keyword.put(Type.list([]), Type.atom("a"), Type.integer(1));
+    const result = Keyword.put(Type.list(), Type.atom("a"), Type.integer(1));
     assertFrozen(result);
   });
 });

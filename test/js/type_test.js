@@ -216,7 +216,7 @@ describe("isFalsy()", () => {
 
 describe("isList()", () => {
   it("returns true for boxed list value", () => {
-    const arg = Type.list([])
+    const arg = Type.list()
     const result = Type.isList(arg)
 
     assert.isTrue(result)
@@ -365,7 +365,7 @@ describe("isTuple()", () => {
 
 describe("keywordToMap()", () => {
   it("converts empty boxed keyword list to boxed map", () => {
-    const keyword = Type.list([])
+    const keyword = Type.list()
     const result = Type.keywordToMap(keyword)
     const expected = Type.map({})
     
@@ -408,7 +408,7 @@ describe("keywordToMap()", () => {
   })
 
   it("returns frozen object", () => {
-    const arg = Type.list([])
+    const arg = Type.list()
     const result = Type.keywordToMap(arg)
 
     assertFrozen(result)

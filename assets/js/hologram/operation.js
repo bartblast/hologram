@@ -66,7 +66,7 @@ export default class Operation {
       params = specElems[1]
 
     } else {
-      params = Type.list([])
+      params = Type.list()
     }
 
     params = Keyword.put(params, Type.atom("event"), eventData)

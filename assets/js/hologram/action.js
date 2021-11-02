@@ -46,7 +46,7 @@ export default class Action {
 
   static getParamsFromActionResult(actionResult) {
     if (Type.isMap(actionResult)) {
-      return Type.list([])
+      return Type.list()
 
     } else { // tuple
       const actionResultElems = actionResult.data
@@ -58,7 +58,7 @@ export default class Action {
         return actionResultElems[2]
 
       } else {
-        return Type.list([])
+        return Type.list()
       }
     }
   }

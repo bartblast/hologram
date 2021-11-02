@@ -113,7 +113,7 @@ export default class Type {
     return Utils.freeze(result)
   }
 
-  static list(elems) {
+  static list(elems = []) {
     return Utils.freeze({type: "list", data: elems})
   }
 
