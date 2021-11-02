@@ -137,7 +137,7 @@ describe("buildComponentVNodes()", () => {
     const children = [Type.textNode("text_node_3")]
     const node = Type.componentNode("TestStatelessComponent", {}, children)
 
-    const result = VDOM.buildComponentVNodes(node, "test_source", Type.map({})) 
+    const result = VDOM.buildComponentVNodes(node, "test_sourceId", Type.map({})) 
     const expected = ["text_node_1", "text_node_3", "text_node_2"]
 
     assert.deepStrictEqual(result, expected)
@@ -163,7 +163,7 @@ describe("buildComponentVNodes()", () => {
     elems[Type.atomKey("a")] = Type.integer(99)
     Store.setComponentState("test_component_id", Type.map(elems))
 
-    const result = VDOM.buildComponentVNodes(node, "test_source", Type.map({})) 
+    const result = VDOM.buildComponentVNodes(node, "test_sourceId", Type.map({})) 
     const expected = ["text_node_1", "99", "text_node_2"]
 
     assert.deepStrictEqual(result, expected)
@@ -171,7 +171,7 @@ describe("buildComponentVNodes()", () => {
 })
 
 describe("buildElementVNode()", () => {
-  const source = Target.TYPE.page
+  const sourceId = Target.TYPE.page
 
   it("builds tag element vnode", () => {
     const attrs = {
@@ -185,7 +185,7 @@ describe("buildElementVNode()", () => {
     const children = [Type.textNode("childTextNode")]
     const node = Type.elementNode("div", attrs, children)
 
-    const result = VDOM.buildElementVNode(node, source, bindings, {})
+    const result = VDOM.buildElementVNode(node, sourceId, bindings, {})
     const clickHandler = result[0].data.on.click
 
     const expected = [{
@@ -222,15 +222,15 @@ describe("buildElementVNode()", () => {
       default: [Type.textNode("test_text_node")]
     }
 
-    const result = VDOM.buildElementVNode(node, source, bindings, slots)
+    const result = VDOM.buildElementVNode(node, sourceId, bindings, slots)
     const expected = ["test_text_node"]
 
     assert.deepStrictEqual(result, expected)
   })
 
   // Covered implicitely in E2E tests.
-  // it("changes the source to page if the current source is layout and the current tag is a slot")
-  // it("loads page bindings if the current source is layout and the current tag is a slot")
+  // it("changes the sourceId to page if the current sourceId is layout and the current tag is a slot")
+  // it("loads page bindings if the current sourceId is layout and the current tag is a slot")
 })
 
 describe("buildTextVNodeFromTextNode()", () => {

@@ -52,19 +52,19 @@ export default class VDOM {
     return Type.map(elems)
   }
 
-  static buildElementVNode(node, source, bindings, slots) {
+  static buildElementVNode(node, sourceId, bindings, slots) {
     if (node.tag === "slot") {
-      if (source === Target.TYPE.layout) {
-        source = Target.TYPE.page
+      if (sourceId === Target.TYPE.layout) {
+        sourceId = Target.TYPE.page
         bindings = Store.getPageState()
       }
       
-      return VDOM.buildVNodeList(slots.default, source, bindings, slots)
+      return VDOM.buildVNodeList(slots.default, sourceId, bindings, slots)
     }
 
     const attrs = VDOM.buildVNodeAttrs(node, bindings)
-    const eventHandlers = VDOM.buildVNodeEventHandlers(node, source, bindings)
-    const children = VDOM.buildVNodeList(node.children, source, bindings, slots)
+    const eventHandlers = VDOM.buildVNodeEventHandlers(node, sourceId, bindings)
+    const children = VDOM.buildVNodeList(node.children, sourceId, bindings, slots)
 
     return [h(node.tag, {attrs: attrs, on: eventHandlers}, children)]
   }
@@ -79,17 +79,17 @@ export default class VDOM {
   }
 
   // Covered implicitely in E2E tests.
-  static build(node, source, bindings, slots) {
+  static build(node, sourceId, bindings, slots) {
     if (Array.isArray(node)) {
-      return VDOM.buildVNodeList(node, source, bindings, slots)
+      return VDOM.buildVNodeList(node, sourceId, bindings, slots)
     }
 
     switch (node.type) {
       case "component":
-        return VDOM.buildComponentVNodes(node, source, bindings)
+        return VDOM.buildComponentVNodes(node, sourceId, bindings)
 
       case "element":
-        return VDOM.buildElementVNode(node, source, bindings, slots)
+        return VDOM.buildElementVNode(node, sourceId, bindings, slots)
 
       case "expression":
         return VDOM.buildTextVNodeFromExpression(node, bindings)
@@ -99,12 +99,12 @@ export default class VDOM {
     }
   }
 
-  static buildComponentVNodes(node, source, outerBindings) {
+  static buildComponentVNodes(node, sourceId, outerBindings) {
     const componentId = VDOM.getComponentId(node, outerBindings)
     const componentClass = Runtime.resolveComponentClass(node, componentId)
 
     if (componentId) {
-      source = componentId
+      sourceId = componentId
     }
 
     const bindings = VDOM.aggregateComponentBindings(componentId, node, outerBindings)
@@ -112,7 +112,7 @@ export default class VDOM {
     const childrenCopy = Utils.clone(node.children)
     const slots = { default: Utils.freeze(childrenCopy) }
 
-    return VDOM.build(componentClass.template(), source, bindings, slots)
+    return VDOM.build(componentClass.template(), sourceId, bindings, slots)
   }
 
   static buildVNodeAttrs(node, bindings) {
@@ -125,19 +125,19 @@ export default class VDOM {
     }, {})
   }
 
-  static buildVNodeEventHandlers(node, source, bindings) {
+  static buildVNodeEventHandlers(node, sourceId, bindings) {
     const eventHandlers = {}
 
     if (node.attrs.on_click) {
-      eventHandlers.click = (event) => { Runtime.handleEvent(event, ClickEvent, source, bindings, node.attrs.on_click) }
+      eventHandlers.click = (event) => { Runtime.handleEvent(event, ClickEvent, sourceId, bindings, node.attrs.on_click) }
     }
 
     return eventHandlers
   }
 
-  static buildVNodeList(nodes, source, bindings, slots) {
+  static buildVNodeList(nodes, sourceId, bindings, slots) {
     return nodes.reduce((acc, node) => {
-      acc.push(...VDOM.build(node, source, bindings, slots))
+      acc.push(...VDOM.build(node, sourceId, bindings, slots))
       return acc
     }, [])
   }
@@ -221,10 +221,10 @@ export default class VDOM {
 
     const layoutTemplate = Runtime.getLayoutTemplate()
     const slots = {default: Runtime.getPageTemplate()}
-    const source = Target.TYPE.layout
+    const sourceId = Target.TYPE.layout
     const bindings = VDOM.aggregateLayoutBindings()
 
-    const newVirtualDocument = VDOM.build(layoutTemplate, source, bindings, slots)[0]
+    const newVirtualDocument = VDOM.build(layoutTemplate, sourceId, bindings, slots)[0]
     patch(VDOM.virtualDocument, newVirtualDocument)
     VDOM.virtualDocument = newVirtualDocument
   }
