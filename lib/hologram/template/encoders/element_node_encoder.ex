@@ -2,7 +2,7 @@ alias Hologram.Template.VDOM.ElementNode
 alias Hologram.Template.Encoder
 
 defimpl Encoder, for: ElementNode do
-  import Hologram.Commons.Encoder
+  use Hologram.Commons.Encoder
 
   def encode(%{tag: tag, attrs: attrs, children: children}) do
     encoded_attrs = encode_attrs(attrs)

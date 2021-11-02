@@ -2,7 +2,7 @@ alias Hologram.Compiler.{Context, Helpers, JSEncoder, Opts}
 alias Hologram.Compiler.IR.StructType
 
 defimpl JSEncoder, for: StructType do
-  import Hologram.Compiler.Encoder.Commons
+  use Hologram.Commons.Encoder
 
   def encode(%{module: module, data: data}, %Context{} = context, %Opts{} = opts) do
     class_name = Helpers.class_name(module)

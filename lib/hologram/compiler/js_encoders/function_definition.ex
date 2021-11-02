@@ -2,7 +2,7 @@ alias Hologram.Compiler.{Context, Formatter, JSEncoder, Opts}
 alias Hologram.Compiler.IR.FunctionDefinitionVariants
 
 defimpl JSEncoder, for: FunctionDefinitionVariants do
-  use Hologram.Compiler.Encoder.Commons
+  use Hologram.Commons.Encoder
 
   def encode(%{name: name, variants: variants}, %Context{} = context, %Opts{} = opts) do
     body = encode_function_body(variants, context, opts)

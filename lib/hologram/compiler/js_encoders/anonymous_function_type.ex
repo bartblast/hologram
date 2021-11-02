@@ -2,7 +2,7 @@ alias Hologram.Compiler.{Context, Formatter, JSEncoder, Opts}
 alias Hologram.Compiler.IR.AnonymousFunctionType
 
 defimpl JSEncoder, for: AnonymousFunctionType do
-  import Hologram.Compiler.Encoder.Commons
+  use Hologram.Commons.Encoder
 
   def encode(%{bindings: bindings, body: body}, %Context{} = context, %Opts{} = opts) do
     vars = encode_vars(bindings, context, " ")

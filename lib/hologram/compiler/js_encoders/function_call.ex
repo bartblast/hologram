@@ -4,7 +4,7 @@ alias Hologram.Template.{Parser, Transformer}
 alias Hologram.Template.Encoder, as: TemplateEncoder
 
 defimpl JSEncoder, for: FunctionCall do
-  import Hologram.Compiler.Encoder.Commons
+  use Hologram.Commons.Encoder
 
   def encode(%{function: :sigil_H} = ir, %Context{} = context, _) do
     ir

@@ -3,7 +3,7 @@ alias Hologram.Template.VDOM.Component
 alias Hologram.Template.Encoder
 
 defimpl Encoder, for: Component do
-  import Hologram.Commons.Encoder
+  use Hologram.Commons.Encoder
 
   def encode(%{module: module, children: children, props: props}) do
     class_name = Helpers.class_name(module)

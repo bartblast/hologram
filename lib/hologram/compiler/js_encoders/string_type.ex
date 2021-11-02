@@ -2,7 +2,7 @@ alias Hologram.Compiler.IR.StringType
 alias Hologram.Compiler.JSEncoder
 
 defimpl JSEncoder, for: StringType do
-  import Hologram.Compiler.Encoder.Commons
+  use Hologram.Commons.Encoder
 
   def encode(%{value: value}, _, _) do
     value =
