@@ -349,7 +349,7 @@ describe("isTruthy()", () => {
 
 describe("isTuple()", () => {
   it("returns true for boxed tuple value", () => {
-    const arg = Type.tuple([])
+    const arg = Type.tuple()
     const result = Type.isTuple(arg)
 
     assert.isTrue(result)

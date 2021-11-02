@@ -146,7 +146,7 @@ export default class Type {
     return Utils.freeze({type: "text", content: content})
   }
 
-  static tuple(elems) {
+  static tuple(elems = []) {
     return Utils.freeze({type: "tuple", data: elems})
   }
 }
