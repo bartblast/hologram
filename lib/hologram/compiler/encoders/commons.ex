@@ -1,7 +1,7 @@
 defmodule Hologram.Compiler.Encoder.Commons do
   use Hologram.Commons.Encoder
 
-  alias Hologram.Compiler.{Context, Encoder, MapKeyEncoder, Opts}
+  alias Hologram.Compiler.{Context, JSEncoder, MapKeyEncoder, Opts}
   alias Hologram.Compiler.IR.{AccessOperator, Variable}
 
   defmacro __using__(_) do
@@ -12,14 +12,14 @@ defmodule Hologram.Compiler.Encoder.Commons do
   end
 
   def encode_as_array(data, %Context{} = context, %Opts{} = opts) do
-    Enum.map(data, &Encoder.encode(&1, context, opts))
+    Enum.map(data, &JSEncoder.encode(&1, context, opts))
     |> Enum.join(", ")
     |> wrap_with_array()
   end
 
   defp encode_expression(expr, idx, expr_count, context, opts) do
     return = if idx == expr_count - 1, do: "return ", else: ""
-    "#{return}#{Encoder.encode(expr, context, opts)};"
+    "#{return}#{JSEncoder.encode(expr, context, opts)};"
   end
 
   def encode_expressions(body, context, opts, separator) do
@@ -38,7 +38,7 @@ defmodule Hologram.Compiler.Encoder.Commons do
 
   def encode_map_data(data, %Context{} = context, %Opts{} = opts) do
     Enum.map(data, fn {k, v} ->
-      "'#{MapKeyEncoder.encode(k, context, opts)}': #{Encoder.encode(v, context, opts)}"
+      "'#{MapKeyEncoder.encode(k, context, opts)}': #{JSEncoder.encode(v, context, opts)}"
     end)
     |> Enum.join(", ")
     |> wrap_with_object()
