@@ -21,7 +21,7 @@ defmodule Hologram.Template.ComponentEncoderTest do
       encoded_module = "Elixir_Hologram_Test_Fixtures_Template_ComponentEncoder_Module1"
 
       encoded_children =
-        "[ { type: 'text', content: 'test_content' }, { type: 'expression', callback: ($state) => { return { type: 'tuple', data: [ { type: 'integer', value: 1 } ] } } } ]"
+        "[ { type: 'text', content: 'test_content' }, { type: 'expression', callback: ($bindings) => { return { type: 'tuple', data: [ { type: 'integer', value: 1 } ] } } } ]"
 
       expected =
         "{ type: 'component', className: '#{encoded_module}', children: #{encoded_children}, props: {} }"

@@ -8,6 +8,6 @@ defimpl Encoder, for: Expression do
     # DEFER: pass actual %Context{} struct received from compiler
     callback_return = JSEncoder.encode(ir, %Context{}, %Opts{template: true})
 
-    "{ type: 'expression', callback: ($state) => { return #{callback_return} } }"
+    "{ type: 'expression', callback: ($bindings) => { return #{callback_return} } }"
   end
 end

@@ -20,7 +20,7 @@ defmodule Hologram.Compiler.JSEncoder.ModuleAttributeOperatorTest do
       opts = %Opts{template: true}
 
       result = JSEncoder.encode(@ir, %Context{}, opts)
-      expected = "$state.data['~atom[xyz]']"
+      expected = "$bindings.data['~atom[xyz]']"
 
       assert result == expected
     end

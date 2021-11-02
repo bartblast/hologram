@@ -105,7 +105,7 @@ defmodule Hologram.Template.ElementNodeEncoderTest do
       |> Encoder.encode()
 
     callback =
-      "($state) => { return { type: 'tuple', data: [ { type: 'string', value: 'abc' } ] } }"
+      "($bindings) => { return { type: 'tuple', data: [ { type: 'string', value: 'abc' } ] } }"
 
     expected =
       "{ type: 'element', tag: 'div', attrs: { 'on_click': { value: [ { type: 'expression', callback: #{callback} } ], modifiers: [] } }, children: [] }"

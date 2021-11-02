@@ -25,7 +25,7 @@ defmodule Hologram.Compiler.JSEncoder.FunctionCallTest do
     }
 
     expected =
-      "[ { type: 'element', tag: 'div', attrs: {}, children: [ { type: 'text', content: 'Hello World ' }, { type: 'expression', callback: ($state) => { return { type: 'tuple', data: [ $state.data['~atom[counter]'] ] } } } ] } ]"
+      "[ { type: 'element', tag: 'div', attrs: {}, children: [ { type: 'text', content: 'Hello World ' }, { type: 'expression', callback: ($bindings) => { return { type: 'tuple', data: [ $bindings.data['~atom[counter]'] ] } } } ] } ]"
 
     result = JSEncoder.encode(ir, %Context{}, %Opts{})
     assert result == expected

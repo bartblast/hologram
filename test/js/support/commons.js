@@ -51,7 +51,7 @@ export function fixtureOperationParamsMap() {
 }
 
 export function fixtureOperationSpecExpressionNode(specElems) {
-  const callback = (_$state) => {
+  const callback = (_$bindings) => {
     return Type.tuple(specElems);
   };
   const expressionNodeSpec = { type: "expression", callback: callback };

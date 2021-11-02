@@ -15,7 +15,7 @@ defmodule Hologram.Template.ExpressionEncoderTest do
     result = Encoder.encode(expression)
 
     expected =
-      "{ type: 'expression', callback: ($state) => { return { type: 'tuple', data: [ { type: 'atom', value: 'x' } ] } } }"
+      "{ type: 'expression', callback: ($bindings) => { return { type: 'tuple', data: [ { type: 'atom', value: 'x' } ] } } }"
 
     assert result == expected
   end
