@@ -8,7 +8,7 @@ import Target from "../../assets/js/hologram/target"
 import Type from "../../assets/js/hologram/type"
 import Runtime from "../../assets/js/hologram/runtime";
 
-const bindings = Type.map({})
+const bindings = Type.map()
 const sourceId = "test_source_id"
 
 const textOperationSpec = {
@@ -22,7 +22,7 @@ describe("build()", () => {
   it("returns a frozen Operation object", () => {
     Runtime.registerComponentClass(sourceId, TestComponentClass)
 
-    const result = Operation.build(textOperationSpec, sourceId, bindings, Type.map({}))
+    const result = Operation.build(textOperationSpec, sourceId, bindings, Type.map())
 
     assert.isTrue(result instanceof Operation)
     assertFrozen(result)

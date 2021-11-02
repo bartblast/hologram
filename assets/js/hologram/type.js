@@ -117,7 +117,7 @@ export default class Type {
     return Utils.freeze({type: "list", data: elems})
   }
 
-  static map(elems, immutable = true) {
+  static map(elems = {}, immutable = true) {
     const result = {type: "map", data: elems}
     return immutable ? Utils.freeze(result) : result
   }

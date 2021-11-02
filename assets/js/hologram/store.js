@@ -58,7 +58,7 @@ export default class Store {
       return state
 
     } else {
-      return Type.map({})
+      return Type.map()
     }
   }
 

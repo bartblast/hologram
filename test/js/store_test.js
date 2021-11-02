@@ -56,7 +56,7 @@ describe("hydrate()", () => {
 
     let stateElems = {}
     stateElems[Type.atomKey("x")] = Type.integer(123)
-    stateElems[Type.atomKey("context")] = Type.map({})
+    stateElems[Type.atomKey("context")] = Type.map()
     const state = Type.map(stateElems)
     serializedState = JSON.stringify(state)
 
@@ -189,7 +189,7 @@ describe("resolveComponentState()", () => {
 
   it("returns empty boxed map if the given componentId is null", () => {
     const result = Store.resolveComponentState(null)
-    assert.deepStrictEqual(result, Type.map({}))
+    assert.deepStrictEqual(result, Type.map())
   })
 })
 

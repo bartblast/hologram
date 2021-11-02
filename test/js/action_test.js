@@ -8,14 +8,14 @@ import Runtime from "../../assets/js/hologram/runtime"
 import Target from "../../assets/js/hologram/target"
 import Type from "../../assets/js/hologram/type"
 
-const state = Type.map({})
+const state = Type.map()
 const targetId = Type.atom("test_target_id")
 const commandName = Type.atom("test_command")
 const params = Type.list()
 
 describe("getCommandNameFromActionResult()", () => {
   it("returns null if the action result is a boxed map", () => {
-    const actionResult = Type.map({})
+    const actionResult = Type.map()
     const result = Action.getCommandNameFromActionResult(actionResult)
 
     assert.isNull(result)
@@ -71,7 +71,7 @@ describe("getCommandNameFromActionResult()", () => {
 
   it("returns null if the action result is a boxed tuple that doesn't contain command name", () => {
     const actionResult = Type.tuple([
-      Type.map({}),
+      Type.map(),
     ])
 
     const result = Action.getCommandNameFromActionResult(actionResult)
@@ -84,7 +84,7 @@ describe("getParamsFromActionResult()", () => {
   const paramsKeyword = fixtureOperationParamsKeyword()
 
   it("returns empty keyword list if the action result is a boxed map", () => {
-    const actionResult = Type.map({})
+    const actionResult = Type.map()
     const result = Action.getParamsFromActionResult(actionResult)
 
     assert.deepStrictEqual(result, Type.list())
@@ -148,7 +148,7 @@ describe("getParamsFromActionResult()", () => {
 
 describe("getStateFromActionResult()", () => {
   it("fetches the state from an action result that is a boxed map", () => {
-    const actionResult = Type.map({})
+    const actionResult = Type.map()
     const result = Action.getStateFromActionResult(actionResult)
 
     assert.equal(result, actionResult)
@@ -168,7 +168,7 @@ describe("getStateFromActionResult()", () => {
 
 describe("getTargetIdFromActionResult()", () => {
   it("returns null if the action result is a boxed map", () => {
-    const actionResult = Type.map({})
+    const actionResult = Type.map()
     const result = Action.getTargetIdFromActionResult(actionResult)
 
     assert.isNull(result)

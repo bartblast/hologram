@@ -232,7 +232,7 @@ describe("isList()", () => {
 
 describe("isMap()", () => {
   it("returns true for boxed map value", () => {
-    const arg = Type.map({})
+    const arg = Type.map()
     const result = Type.isMap(arg)
 
     assert.isTrue(result)
@@ -367,7 +367,7 @@ describe("keywordToMap()", () => {
   it("converts empty boxed keyword list to boxed map", () => {
     const keyword = Type.list()
     const result = Type.keywordToMap(keyword)
-    const expected = Type.map({})
+    const expected = Type.map()
     
     assert.deepStrictEqual(result, expected) 
   })

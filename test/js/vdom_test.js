@@ -137,7 +137,7 @@ describe("buildComponentVNodes()", () => {
     const children = [Type.textNode("text_node_3")]
     const node = Type.componentNode("TestStatelessComponent", {}, children)
 
-    const result = VDOM.buildComponentVNodes(node, "test_sourceId", Type.map({})) 
+    const result = VDOM.buildComponentVNodes(node, "test_sourceId", Type.map()) 
     const expected = ["text_node_1", "text_node_3", "text_node_2"]
 
     assert.deepStrictEqual(result, expected)
@@ -163,7 +163,7 @@ describe("buildComponentVNodes()", () => {
     elems[Type.atomKey("a")] = Type.integer(99)
     Store.setComponentState("test_component_id", Type.map(elems))
 
-    const result = VDOM.buildComponentVNodes(node, "test_sourceId", Type.map({})) 
+    const result = VDOM.buildComponentVNodes(node, "test_sourceId", Type.map()) 
     const expected = ["text_node_1", "99", "text_node_2"]
 
     assert.deepStrictEqual(result, expected)
@@ -336,7 +336,7 @@ describe("evaluateNode()", () => {
   })
 
   it("evaluates text node to a boxed value", () => {
-    const bindings = Type.map({})
+    const bindings = Type.map()
     const textNode = Type.textNode("test_content")
 
     const result = VDOM.evaluateNode(textNode, bindings)
