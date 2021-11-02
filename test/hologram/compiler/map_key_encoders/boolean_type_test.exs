@@ -1,4 +1,4 @@
-defmodule Hologram.Compiler.BooleanKeyEncoderTest do
+defmodule Hologram.Compiler.MapKeyEncoder.BooleanTypeTest do
   use Hologram.Test.UnitCase, async: true
 
   alias Hologram.Compiler.{Context, MapKeyEncoder, Opts}

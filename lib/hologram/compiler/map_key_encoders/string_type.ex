@@ -1,10 +1,10 @@
+alias Hologram.Compiler.IR.StringType
 alias Hologram.Compiler.MapKeyEncoder
-alias Hologram.Compiler.IR.IntegerType
 
-defimpl MapKeyEncoder, for: IntegerType do
+defimpl MapKeyEncoder, for: StringType do
   import Hologram.Compiler.Encoder.Commons
 
   def encode(%{value: value}, _, _) do
-    encode_primitive_key(:integer, value)
+    encode_primitive_key(:string, value)
   end
 end

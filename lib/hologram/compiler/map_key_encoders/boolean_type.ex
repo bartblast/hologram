@@ -1,10 +1,10 @@
+alias Hologram.Compiler.IR.BooleanType
 alias Hologram.Compiler.MapKeyEncoder
-alias Hologram.Compiler.IR.StringType
 
-defimpl MapKeyEncoder, for: StringType do
+defimpl MapKeyEncoder, for: BooleanType do
   import Hologram.Compiler.Encoder.Commons
 
   def encode(%{value: value}, _, _) do
-    encode_primitive_key(:string, value)
+    encode_primitive_key(:boolean, value)
   end
 end

@@ -1,14 +1,14 @@
-defmodule Hologram.Compiler.AtomKeyEncoderTest do
+defmodule Hologram.Compiler.MapKeyEncoder.IntegerTypeTest do
   use Hologram.Test.UnitCase, async: true
 
   alias Hologram.Compiler.{Context, MapKeyEncoder, Opts}
-  alias Hologram.Compiler.IR.AtomType
+  alias Hologram.Compiler.IR.IntegerType
 
   test "encode/3" do
-    ir = %AtomType{value: :test}
+    ir = %IntegerType{value: 123}
 
     result = MapKeyEncoder.encode(ir, %Context{}, %Opts{})
-    expected = "~atom[test]"
+    expected = "~integer[123]"
 
     assert result == expected
   end
