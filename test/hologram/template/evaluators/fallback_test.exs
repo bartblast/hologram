@@ -1,4 +1,4 @@
-defmodule Hologram.Template.FallbackEvaluatorTest do
+defmodule Hologram.Template.Evaluator.FallbackTest do
   use Hologram.Test.UnitCase, async: true
   alias Hologram.Template.Evaluator
 

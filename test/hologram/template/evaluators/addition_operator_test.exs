@@ -1,4 +1,4 @@
-defmodule Hologram.Template.AdditionOperatorEvaluatorTest do
+defmodule Hologram.Template.Evaluator.AdditionOperatorTest do
   use Hologram.Test.UnitCase, async: true
 
   alias Hologram.Compiler.IR.{AdditionOperator, IntegerType}

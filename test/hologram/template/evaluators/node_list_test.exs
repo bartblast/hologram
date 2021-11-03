@@ -1,9 +1,9 @@
-defmodule Hologram.Template.NodeListEvaluatorTest do
+defmodule Hologram.Template.Evaluator.NodeListTest do
   use Hologram.Test.UnitCase, async: true
 
   alias Hologram.Compiler.IR.{IntegerType, TupleType}
-  alias Hologram.Template.VDOM.{Expression, TextNode}
   alias Hologram.Template.Evaluator
+  alias Hologram.Template.VDOM.{Expression, TextNode}
 
   describe "evaluate/2" do
     test "no nodes" do

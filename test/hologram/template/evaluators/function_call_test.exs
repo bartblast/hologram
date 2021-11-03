@@ -1,4 +1,4 @@
-defmodule Hologram.Template.FunctionCallEvaluatorTest do
+defmodule Hologram.Template.Evaluator.FunctionCallTest do
   use Hologram.Test.UnitCase, async: true
 
   alias Hologram.Compiler.IR.{FunctionCall, IntegerType, ListType}

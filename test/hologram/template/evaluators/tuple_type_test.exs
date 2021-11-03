@@ -1,11 +1,11 @@
-defmodule Hologram.Template.ListTypeEvaluatorTest do
+defmodule Hologram.Template.Evaluator.TupleTypeTest do
   use Hologram.Test.UnitCase, async: true
 
-  alias Hologram.Compiler.IR.{IntegerType, ListType}
+  alias Hologram.Compiler.IR.{IntegerType, TupleType}
   alias Hologram.Template.Evaluator
 
   test "evaluate/2" do
-    ir = %ListType{
+    ir = %TupleType{
       data: [
         %IntegerType{value: 1},
         %IntegerType{value: 2}
@@ -13,7 +13,7 @@ defmodule Hologram.Template.ListTypeEvaluatorTest do
     }
 
     result = Evaluator.evaluate(ir, %{})
-    expected = [1, 2]
+    expected = {1, 2}
 
     assert result == expected
   end

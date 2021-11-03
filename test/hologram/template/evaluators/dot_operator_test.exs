@@ -1,4 +1,4 @@
-defmodule Hologram.Template.DotOperatorEvaluatorTest do
+defmodule Hologram.Template.Evaluator.DotOperatorTest do
   use Hologram.Test.UnitCase, async: true
 
   alias Hologram.Compiler.IR.{AtomType, DotOperator, IntegerType, MapType}
