@@ -1,8 +1,8 @@
-defmodule Hologram.Template.TextNodeEncoderTest do
+defmodule Hologram.Template.Encoder.TextNodeTest do
   use Hologram.Test.UnitCase, async: true
 
-  alias Hologram.Template.VDOM.TextNode
   alias Hologram.Template.Encoder
+  alias Hologram.Template.VDOM.TextNode
 
   test "encode/1" do
     text_node = %TextNode{content: "a'b\nc'd\ne&lcub;f&rcub;ga'b\nc'd\ne&lcub;f&rcub;g"}

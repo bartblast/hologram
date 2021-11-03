@@ -1,8 +1,8 @@
-defmodule Hologram.Template.NodeListEncoderTest do
+defmodule Hologram.Template.Encoder.NodeListTest do
   use Hologram.Test.UnitCase, async: true
 
-  alias Hologram.Template.VDOM.TextNode
   alias Hologram.Template.Encoder
+  alias Hologram.Template.VDOM.TextNode
 
   describe "encode/1" do
     test "non-empty" do

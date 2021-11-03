@@ -1,4 +1,4 @@
-defmodule Hologram.Template.ExpressionEncoderTest do
+defmodule Hologram.Template.Encoder.ExpressionTest do
   use Hologram.Test.UnitCase, async: true
 
   alias Hologram.Compiler.IR.{AtomType, TupleType}

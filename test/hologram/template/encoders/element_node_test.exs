@@ -1,4 +1,4 @@
-defmodule Hologram.Template.ElementNodeEncoderTest do
+defmodule Hologram.Template.Encoder.ElementNodeTest do
   use Hologram.Test.UnitCase, async: true
 
   alias Hologram.Compiler.IR.{StringType, TupleType}
