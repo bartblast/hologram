@@ -1,10 +1,9 @@
-alias Hologram.Compiler.Helpers
-alias Hologram.Template.VDOM.{Component, Expression}
 alias Hologram.Template.Evaluator
+alias Hologram.Template.VDOM.{Component, Expression}
 
 defmodule Hologram.Template.BindingsAggregator do
   def aggregate(%Component{} = component, outer_bindings) do
-    if Helpers.is_layout?(component.module_def) do
+    if component.module_def.layout? do
       outer_bindings
     else
       evaluate_props(component.props, outer_bindings)

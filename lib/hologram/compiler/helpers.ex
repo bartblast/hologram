@@ -56,14 +56,14 @@ defmodule Hologram.Compiler.Helpers do
   @spec get_components(T.module_definitions_map()) :: list(%ModuleDefinition{})
   def get_components(module_defs_map) do
     module_defs_map
-    |> Enum.filter(fn {_, module_def} -> is_component?(module_def) end)
+    |> Enum.filter(fn {_, module_def} -> module_def.component? end)
     |> Enum.map(fn {_, module_def} -> module_def end)
   end
 
   @spec get_pages(T.module_definitions_map()) :: list(%ModuleDefinition{})
   def get_pages(module_defs_map) do
     module_defs_map
-    |> Enum.filter(fn {_, module_def} -> is_page?(module_def) end)
+    |> Enum.filter(fn {_, module_def} -> module_def.page? end)
     |> Enum.map(fn {_, module_def} -> module_def end)
   end
 
