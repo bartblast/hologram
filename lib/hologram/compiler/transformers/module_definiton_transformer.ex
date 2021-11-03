@@ -39,6 +39,7 @@ defmodule Hologram.Compiler.ModuleDefinitionTransformer do
     aliases = aggregate_expressions(:alias, exprs, %Context{})
     attributes = aggregate_expressions(:@, exprs, %Context{})
     macros = aggregate_expressions(:defmacro, exprs, %Context{module: module})
+    module_type_fields = determine_module_type_fields(uses)
 
     context = %Context{
       module: module,
@@ -60,6 +61,7 @@ defmodule Hologram.Compiler.ModuleDefinitionTransformer do
       Map.from_struct(context)
       |> Map.put(:functions, functions)
       |> Map.put(:macros, macros)
+      |> Map.merge(module_type_fields)
 
     struct(ModuleDefinition, fields)
   end
@@ -79,5 +81,29 @@ defmodule Hologram.Compiler.ModuleDefinitionTransformer do
       |> Reflection.ir(context)
 
     [ir | functions]
+  end
+
+  defp determine_module_type_fields(uses) do
+    fields = %{
+      component?: false,
+      layout?: false,
+      page?: false,
+      templatable?: false
+    }
+
+    cond do
+      Enum.any?(uses, &(&1.module == Hologram.Component)) ->
+        Map.merge(fields, %{component?: true, templatable?: true})
+
+      Enum.any?(uses, &(&1.module == Hologram.Layout)) ->
+        Map.merge(fields, %{layout?: true, templatable?: true})
+
+
+      Enum.any?(uses, &(&1.module == Hologram.Page)) ->
+        Map.merge(fields, %{page?: true, templatable?: true})
+
+      true ->
+        fields
+    end
   end
 end

@@ -394,4 +394,67 @@ defmodule Hologram.Compiler.ModuleDefinitionTransformerTest do
 
     assert result.macros == expected
   end
+
+  test "component module" do
+    code = """
+    defmodule Hologram.Test.Fixtures.Compiler.ModuleDefinitionTransformer.Module1 do
+      use Hologram.Component
+    end
+    """
+
+    ast = ast(code)
+    assert %ModuleDefinition{} = result = ModuleDefinitionTransformer.transform(ast)
+
+    assert result.component?
+    refute result.layout?
+    refute result.page?
+    assert result.templatable?
+  end
+
+  test "layout module" do
+    code = """
+    defmodule Hologram.Test.Fixtures.Compiler.ModuleDefinitionTransformer.Module1 do
+      use Hologram.Layout
+    end
+    """
+
+    ast = ast(code)
+    assert %ModuleDefinition{} = result = ModuleDefinitionTransformer.transform(ast)
+
+    refute result.component?
+    assert result.layout?
+    refute result.page?
+    assert result.templatable?
+  end
+
+  test "page module" do
+    code = """
+    defmodule Hologram.Test.Fixtures.Compiler.ModuleDefinitionTransformer.Module1 do
+      use Hologram.Page
+    end
+    """
+
+    ast = ast(code)
+    assert %ModuleDefinition{} = result = ModuleDefinitionTransformer.transform(ast)
+
+    refute result.component?
+    refute result.layout?
+    assert result.page?
+    assert result.templatable?
+  end
+
+  test "regular module" do
+    code = """
+    defmodule Hologram.Test.Fixtures.Compiler.ModuleDefinitionTransformer.Module1 do
+    end
+    """
+
+    ast = ast(code)
+    assert %ModuleDefinition{} = result = ModuleDefinitionTransformer.transform(ast)
+
+    refute result.component?
+    refute result.layout?
+    refute result.page?
+    refute result.templatable?
+  end
 end

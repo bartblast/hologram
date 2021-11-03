@@ -101,7 +101,11 @@ defmodule Hologram.Compiler.IR do
               aliases: [],
               attributes: [],
               functions: [],
-              macros: []
+              macros: [],
+              component?: nil,
+              layout?: nil,
+              page?: nil,
+              templatable?: nil
   end
 
   defmodule ModuleAttributeDefinition do
