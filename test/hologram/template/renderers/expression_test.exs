@@ -1,4 +1,4 @@
-defmodule Hologram.Template.ExpressionRendererTest do
+defmodule Hologram.Template.Renderer.ExpressionTest do
   use Hologram.Test.UnitCase, async: true
 
   alias Hologram.Compiler.IR.{ModuleAttributeOperator, TupleType}

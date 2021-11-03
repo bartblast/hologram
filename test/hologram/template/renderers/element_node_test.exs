@@ -1,9 +1,9 @@
-defmodule Hologram.Template.ElementNodeRendererTest do
+defmodule Hologram.Template.Renderer.ElementNodeTest do
   use Hologram.Test.UnitCase, async: true
 
   alias Hologram.Compiler.IR.{ModuleAttributeOperator, TupleType}
-  alias Hologram.Template.VDOM.{ElementNode, Expression, TextNode}
   alias Hologram.Template.Renderer
+  alias Hologram.Template.VDOM.{ElementNode, Expression, TextNode}
 
   @attrs %{
     attr_2: %{

@@ -1,8 +1,8 @@
-defmodule Hologram.Template.TextNodeRendererTest do
+defmodule Hologram.Template.Renderer.TextNodeTest do
   use Hologram.Test.UnitCase, async: true
 
-  alias Hologram.Template.VDOM.TextNode
   alias Hologram.Template.Renderer
+  alias Hologram.Template.VDOM.TextNode
 
   test "render/2" do
     content = "a&lcub;b&rcub;ca&lcub;b&rcub;c"
