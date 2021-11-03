@@ -170,7 +170,7 @@ defmodule Hologram.Compiler.Helpers do
   """
   @spec uses_module?(%ModuleDefinition{}, module()) :: boolean()
 
-  def uses_module?(user_module, used_module) do
-    Enum.any?(user_module.uses, &(&1.module == used_module))
+  def uses_module?(user_module_def, used_module) do
+    Enum.any?(user_module_def.uses, &(&1.module == used_module))
   end
 end
