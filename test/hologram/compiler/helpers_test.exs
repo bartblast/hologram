@@ -174,8 +174,7 @@ defmodule Hologram.Compiler.HelpersTest do
 
       result = Helpers.aggregate_function_def_variants(function_defs)
 
-      expected =
-        %{test: %FunctionDefinitionVariants{name: :test, variants: function_defs}}
+      expected = %{test: %FunctionDefinitionVariants{name: :test, variants: function_defs}}
 
       assert result == expected
     end
@@ -301,7 +300,10 @@ defmodule Hologram.Compiler.HelpersTest do
       result = Helpers.aggregate_function_def_variants(function_defs)
 
       expected = %{
-        test_1: %FunctionDefinitionVariants{name: :test_1, variants: [function_def_1, function_def_2]},
+        test_1: %FunctionDefinitionVariants{
+          name: :test_1,
+          variants: [function_def_1, function_def_2]
+        },
         test_2: %FunctionDefinitionVariants{name: :test_2, variants: [function_def_3]}
       }
 

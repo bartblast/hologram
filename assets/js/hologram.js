@@ -30,11 +30,11 @@ export default class Hologram {
 
   // Covered implicitely in E2E tests.
   static run(pageClass, serializedState) {
-    const window = globalThis.window
+    const window = globalThis.window;
 
     Hologram.onReady(window.document, () => {
       if (!Runtime.isInitiated) {
-        Runtime.init(window)
+        Runtime.init(window);
       }
 
       Runtime.mountPage(pageClass, serializedState);

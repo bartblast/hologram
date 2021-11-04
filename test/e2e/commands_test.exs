@@ -11,7 +11,9 @@ defmodule Hologram.Features.CommandsTest do
       |> assert_has(css("#text-page-4", text: "text updated by action_1_b, state.value = p4"))
     end
 
-    feature "command spec without target and params specified as 1-element tuple", %{session: session} do
+    feature "command spec without target and params specified as 1-element tuple", %{
+      session: session
+    } do
       session
       |> visit("/e2e/page-4")
       |> click(css("#page-4-button-2"))
@@ -22,21 +24,32 @@ defmodule Hologram.Features.CommandsTest do
       session
       |> visit("/e2e/page-4")
       |> click(css("#page-4-button-3"))
-      |> assert_has(css("#text-page-4", text: "text updated by action_3_b, params.a = 50, params.b = 60, state.value = p4"))
+      |> assert_has(
+        css("#text-page-4",
+          text: "text updated by action_3_b, params.a = 50, params.b = 60, state.value = p4"
+        )
+      )
     end
 
     feature "command spec with target ID", %{session: session} do
       session
       |> visit("/e2e/page-4")
       |> click(css("#page-4-button-4"))
-      |> assert_has(css("#text-component-4", text: "text updated by component_4_action_1_b, state.value = c4"))
+      |> assert_has(
+        css("#text-component-4", text: "text updated by component_4_action_1_b, state.value = c4")
+      )
     end
 
     feature "command spec with targetID and params", %{session: session} do
       session
       |> visit("/e2e/page-4")
       |> click(css("#page-4-button-5"))
-      |> assert_has(css("#text-component-4", text: "text updated by component_4_action_2_b, params.a = 50, params.b = 60, state.value = c4"))
+      |> assert_has(
+        css("#text-component-4",
+          text:
+            "text updated by component_4_action_2_b, params.a = 50, params.b = 60, state.value = c4"
+        )
+      )
     end
   end
 
@@ -59,21 +72,32 @@ defmodule Hologram.Features.CommandsTest do
       session
       |> visit("/e2e/page-4")
       |> click(css("#page-4-button-8"))
-      |> assert_has(css("#text-page-4", text: "text updated by action_6_b, params.a = 50, params.b = 60, state.value = p4"))
+      |> assert_has(
+        css("#text-page-4",
+          text: "text updated by action_6_b, params.a = 50, params.b = 60, state.value = p4"
+        )
+      )
     end
 
     feature "command returning target ID and action", %{session: session} do
       session
       |> visit("/e2e/page-4")
       |> click(css("#page-4-button-9"))
-      |> assert_has(css("#text-component-4", text: "text updated by component_4_action_3_b, state.value = c4"))
+      |> assert_has(
+        css("#text-component-4", text: "text updated by component_4_action_3_b, state.value = c4")
+      )
     end
 
     feature "command returning target ID, action and params", %{session: session} do
       session
       |> visit("/e2e/page-4")
       |> click(css("#page-4-button-10"))
-      |> assert_has(css("#text-component-4", text: "text updated by component_4_action_4_b, params.a = 50, params.b = 60, state.value = c4"))
+      |> assert_has(
+        css("#text-component-4",
+          text:
+            "text updated by component_4_action_4_b, params.a = 50, params.b = 60, state.value = c4"
+        )
+      )
     end
   end
 
@@ -89,7 +113,9 @@ defmodule Hologram.Features.CommandsTest do
       session
       |> visit("/e2e/page-4")
       |> click(css("#page-4-button-12"))
-      |> assert_has(css("#text-component-4", text: "text updated by component_4_action_5_b, state.value = c4"))
+      |> assert_has(
+        css("#text-component-4", text: "text updated by component_4_action_5_b, state.value = c4")
+      )
     end
 
     feature "page target", %{session: session} do
@@ -103,7 +129,11 @@ defmodule Hologram.Features.CommandsTest do
       session
       |> visit("/e2e/page-4")
       |> click(css("#page-4-button-13"))
-      |> assert_has(css("#text-default-layout", text: "text updated by default_layout_action_2_b, state.value = dl"))
+      |> assert_has(
+        css("#text-default-layout",
+          text: "text updated by default_layout_action_2_b, state.value = dl"
+        )
+      )
     end
   end
 

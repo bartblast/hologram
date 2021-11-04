@@ -26,7 +26,10 @@ defmodule Hologram.Compiler.StructTypeTransformerTest do
 
     context = %Context{
       aliases: [
-        %AliasDirective{module: Hologram.Test.Fixtures.Compiler.StructTypeTransformer.Module2, as: [:Abc]}
+        %AliasDirective{
+          module: Hologram.Test.Fixtures.Compiler.StructTypeTransformer.Module2,
+          as: [:Abc]
+        }
       ]
     }
 

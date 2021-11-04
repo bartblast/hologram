@@ -5,9 +5,9 @@ import {
   assertBoxedFalse,
   assertBoxedTrue,
   assertFrozen,
-  cleanup
+  cleanup,
 } from "../support/commons";
-beforeEach(() => cleanup())
+beforeEach(() => cleanup());
 
 import Keyword from "../../../assets/js/hologram/elixir/keyword";
 import Type from "../../../assets/js/hologram/type";

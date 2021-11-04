@@ -62,7 +62,7 @@ defmodule Hologram.Template.BindingsAggregatorTest do
               data: [%IntegerType{value: 4}]
             }
           }
-        ],
+        ]
       }
     }
 
@@ -101,7 +101,7 @@ defmodule Hologram.Template.BindingsAggregatorTest do
               ]
             }
           }
-        ],
+        ]
       }
     }
 
@@ -153,7 +153,7 @@ defmodule Hologram.Template.BindingsAggregatorTest do
             }
           },
           %TextNode{content: "test_text_content"}
-        ],
+        ]
       }
     }
 

@@ -1,7 +1,12 @@
 "use strict";
 
-import { assert, assertBoxedFalse, assertBoxedTrue, cleanup } from "../support/commons";
-beforeEach(() => cleanup())
+import {
+  assert,
+  assertBoxedFalse,
+  assertBoxedTrue,
+  cleanup,
+} from "../support/commons";
+beforeEach(() => cleanup());
 
 import Enum from "../../../assets/js/hologram/elixir/enum";
 import { HologramNotImplementedError } from "../../../assets/js/hologram/errors";

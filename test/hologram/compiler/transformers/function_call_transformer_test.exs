@@ -2,7 +2,16 @@ defmodule Hologram.Compiler.FunctionCallTransformerTest do
   use Hologram.Test.UnitCase, async: true
 
   alias Hologram.Compiler.{Context, FunctionCallTransformer}
-  alias Hologram.Compiler.IR.{AtomType, FunctionCall, IntegerType, ListType, ModuleAttributeOperator, NotSupportedExpression, Variable}
+
+  alias Hologram.Compiler.IR.{
+    AtomType,
+    FunctionCall,
+    IntegerType,
+    ListType,
+    ModuleAttributeOperator,
+    NotSupportedExpression,
+    Variable
+  }
 
   test "function without params called on module" do
     code = "Hologram.Compiler.FunctionCallTransformerTest.test()"

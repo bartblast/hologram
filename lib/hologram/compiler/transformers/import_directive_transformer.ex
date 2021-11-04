@@ -7,7 +7,7 @@ defmodule Hologram.Compiler.ImportDirectiveTransformer do
     build_import(module_segs, only)
   end
 
-  def transform({:import, _,[{:__aliases__, _, module_segs}]}) do
+  def transform({:import, _, [{:__aliases__, _, module_segs}]}) do
     build_import(module_segs, [])
   end
 

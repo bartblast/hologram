@@ -1,7 +1,13 @@
 "use strict";
 
-import { assert, assertBoxedFalse, assertBoxedTrue, assertFrozen, cleanup } from "../support/commons";
-beforeEach(() => cleanup())
+import {
+  assert,
+  assertBoxedFalse,
+  assertBoxedTrue,
+  assertFrozen,
+  cleanup,
+} from "../support/commons";
+beforeEach(() => cleanup());
 
 import Map from "../../../assets/js/hologram/elixir/map";
 import Type from "../../../assets/js/hologram/type";
@@ -13,20 +19,20 @@ describe("get()", () => {
   const map = Type.map(elems);
 
   it("gets the value for a specific key in map if the given key exists in the given map", () => {
-    const result = Map.get(map, Type.atom("b"))
-    assert.deepStrictEqual(result, Type.integer(2))
-  })
+    const result = Map.get(map, Type.atom("b"));
+    assert.deepStrictEqual(result, Type.integer(2));
+  });
 
   it("returns boxed nil by default if the given key doesn't exist in the given map", () => {
-    const result = Map.get(map, Type.atom("c"))
-    assert.deepStrictEqual(result, Type.nil())
-  })
+    const result = Map.get(map, Type.atom("c"));
+    assert.deepStrictEqual(result, Type.nil());
+  });
 
   it("it returns the default_value arg if the given key doesn't exist in the given map and the default_value param is specified", () => {
-    const result = Map.get(map, Type.atom("c"), Type.integer(9))
-    assert.deepStrictEqual(result, Type.integer(9))
-  })
-})
+    const result = Map.get(map, Type.atom("c"), Type.integer(9));
+    assert.deepStrictEqual(result, Type.integer(9));
+  });
+});
 
 describe("has_key$question()", () => {
   let elems = {};
@@ -35,15 +41,15 @@ describe("has_key$question()", () => {
   const map = Type.map(elems);
 
   it("returns boxed true if the given key exists in the given map", () => {
-    const result = Map.has_key$question(map, Type.atom("b"))
-    assertBoxedTrue(result)
-  })
+    const result = Map.has_key$question(map, Type.atom("b"));
+    assertBoxedTrue(result);
+  });
 
   it("returns boxed false if the given key doesn't exist in the given map", () => {
-    const result = Map.has_key$question(map, Type.atom("c"))
-    assertBoxedFalse(result)
-  })
-})
+    const result = Map.has_key$question(map, Type.atom("c"));
+    assertBoxedFalse(result);
+  });
+});
 
 describe("put()", () => {
   let map1, map2, result;

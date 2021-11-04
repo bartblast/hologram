@@ -50,7 +50,11 @@ defmodule Hologram.E2E.Page1 do
   end
 
   def action(:action_3, params, state) do
-    update(state, :text, "text updated by action_3, params.a = #{params.a}, params.b = #{params.b}, state.value = #{state.value}")
+    update(
+      state,
+      :text,
+      "text updated by action_3, params.a = #{params.a}, params.b = #{params.b}, state.value = #{state.value}"
+    )
   end
 
   def action(:action_4, _params, state) do
@@ -62,7 +66,11 @@ defmodule Hologram.E2E.Page1 do
   end
 
   def action(:action_5_b, _params, state) do
-    update(state, :text, "text updated by action_5_b triggered by command_1, state.value = #{state.value}")
+    update(
+      state,
+      :text,
+      "text updated by action_5_b triggered by command_1, state.value = #{state.value}"
+    )
   end
 
   def action(:action_6, _params, state) do
@@ -70,7 +78,11 @@ defmodule Hologram.E2E.Page1 do
   end
 
   def action(:action_6_b, params, state) do
-    update(state, :text, "text updated by action_6_b triggered by command_2, params.a = #{params.a}, params.b = #{params.b}, state.value = #{state.value}")
+    update(
+      state,
+      :text,
+      "text updated by action_6_b triggered by command_2, params.a = #{params.a}, params.b = #{params.b}, state.value = #{state.value}"
+    )
   end
 
   def action(:action_7, _params, state) do
@@ -78,7 +90,11 @@ defmodule Hologram.E2E.Page1 do
   end
 
   def action(:action_7_b, _params, state) do
-    update(state, :text, "text updated by action_7_b triggered by component_3_command_1, state.value = #{state.value}")
+    update(
+      state,
+      :text,
+      "text updated by action_7_b triggered by component_3_command_1, state.value = #{state.value}"
+    )
   end
 
   def action(:action_8, _params, state) do
@@ -86,7 +102,11 @@ defmodule Hologram.E2E.Page1 do
   end
 
   def action(:action_8_b, params, state) do
-    update(state, :text, "text updated by action_8_b triggered by component_3_command_2, params.a = #{params.a}, params.b = #{params.b}, state.value = #{state.value}")
+    update(
+      state,
+      :text,
+      "text updated by action_8_b triggered by component_3_command_2, params.a = #{params.a}, params.b = #{params.b}, state.value = #{state.value}"
+    )
   end
 
   def action(:action_9, _params, state) do

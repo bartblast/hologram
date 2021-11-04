@@ -2,7 +2,11 @@ alias Hologram.Compiler.{Context, Formatter, Helpers, JSEncoder, Opts}
 alias Hologram.Compiler.IR.{ModuleDefinition, NotSupportedExpression}
 
 defimpl JSEncoder, for: ModuleDefinition do
-  def encode(%{module: module, attributes: attrs, functions: function_defs} = ir, %Context{}, %Opts{} = opts) do
+  def encode(
+        %{module: module, attributes: attrs, functions: function_defs} = ir,
+        %Context{},
+        %Opts{} = opts
+      ) do
     class_name = Helpers.class_name(module)
     context = struct(Context, Map.from_struct(ir))
 

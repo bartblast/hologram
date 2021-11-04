@@ -48,7 +48,9 @@ defmodule Hologram.Compiler.AliasDirectiveTransformerTest do
   end
 
   test "'as' option + 'warn' option" do
-    code = "alias Hologram.Test.Fixtures.Compiler.AliasDirectiveTransformer.Module1, as: Xyz, warn: false"
+    code =
+      "alias Hologram.Test.Fixtures.Compiler.AliasDirectiveTransformer.Module1, as: Xyz, warn: false"
+
     ast = ast(code)
 
     result = AliasDirectiveTransformer.transform(ast)

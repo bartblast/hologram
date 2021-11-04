@@ -65,7 +65,6 @@ defmodule Hologram.MixProject do
 
       {false, _} ->
         ["e2e", "lib"]
-
     end
   end
 

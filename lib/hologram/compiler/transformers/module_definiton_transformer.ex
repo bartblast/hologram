@@ -54,7 +54,7 @@ defmodule Hologram.Compiler.ModuleDefinitionTransformer do
     defps = aggregate_expressions(:defp, exprs, context)
 
     functions =
-      defs ++ defps
+      (defs ++ defps)
       |> inject_module_info_callback(context)
 
     fields =
@@ -97,7 +97,6 @@ defmodule Hologram.Compiler.ModuleDefinitionTransformer do
 
       Enum.any?(uses, &(&1.module == Hologram.Layout)) ->
         Map.merge(fields, %{layout?: true, templatable?: true})
-
 
       Enum.any?(uses, &(&1.module == Hologram.Page)) ->
         Map.merge(fields, %{page?: true, templatable?: true})

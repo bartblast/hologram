@@ -28,8 +28,8 @@ export function assertNotFrozen(obj) {
 }
 
 export function cleanup() {
-  Runtime.componentClassRegistry = {}
-  Store.componentStateRegistry = {}
+  Runtime.componentClassRegistry = {};
+  Store.componentStateRegistry = {};
 }
 
 export function debug(obj) {

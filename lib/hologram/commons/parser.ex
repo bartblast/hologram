@@ -1,5 +1,5 @@
 defmodule Hologram.Commons.Parser do
-  @callback parse(String.t) ::  {:ok, term} | {:error, term}
+  @callback parse(String.t()) :: {:ok, term} | {:error, term}
 
   defmacro __using__(_) do
     quote do

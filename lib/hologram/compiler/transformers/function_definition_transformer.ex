@@ -2,7 +2,10 @@ defmodule Hologram.Compiler.FunctionDefinitionTransformer do
   alias Hologram.Compiler.{Context, Helpers, Transformer}
   alias Hologram.Compiler.IR.FunctionDefinition
 
-  def transform({def_type, _, [{name, _, params}, [do: {:__block__, _, body}]]}, %Context{} = context)
+  def transform(
+        {def_type, _, [{name, _, params}, [do: {:__block__, _, body}]]},
+        %Context{} = context
+      )
       when is_list(params) do
     build_function_definition(name, params, body, def_type, context)
   end
@@ -18,6 +21,14 @@ defmodule Hologram.Compiler.FunctionDefinitionTransformer do
     body = Enum.map(body, &Transformer.transform(&1, context))
     visibility = if def_type == :def, do: :public, else: :private
 
-    %FunctionDefinition{module: module, name: name, arity: arity, params: params, bindings: bindings, body: body, visibility: visibility}
+    %FunctionDefinition{
+      module: module,
+      name: name,
+      arity: arity,
+      params: params,
+      bindings: bindings,
+      body: body,
+      visibility: visibility
+    }
   end
 end

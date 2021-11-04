@@ -13,7 +13,9 @@ defmodule Hologram.Compiler.JSEncoder.ListTypeTest do
     }
 
     result = JSEncoder.encode(ir, %Context{}, %Opts{})
-    expected = "{ type: 'list', data: [ { type: 'integer', value: 1 }, { type: 'integer', value: 2 } ] }"
+
+    expected =
+      "{ type: 'list', data: [ { type: 'integer', value: 1 }, { type: 'integer', value: 2 } ] }"
 
     assert result == expected
   end

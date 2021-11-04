@@ -11,7 +11,9 @@ defmodule Hologram.Features.ActionsTest do
       |> assert_has(css("#text-page-1", text: "text updated by action_1, state.value = p1"))
     end
 
-    feature "action spec without target and params specified as 1-element tuple", %{session: session} do
+    feature "action spec without target and params specified as 1-element tuple", %{
+      session: session
+    } do
       session
       |> visit("/e2e/page-1")
       |> click(css("#page-1-button-2"))
@@ -22,21 +24,32 @@ defmodule Hologram.Features.ActionsTest do
       session
       |> visit("/e2e/page-1")
       |> click(css("#page-1-button-3"))
-      |> assert_has(css("#text-page-1", text: "text updated by action_3, params.a = 5, params.b = 6, state.value = p1"))
+      |> assert_has(
+        css("#text-page-1",
+          text: "text updated by action_3, params.a = 5, params.b = 6, state.value = p1"
+        )
+      )
     end
 
     feature "action spec with target ID", %{session: session} do
       session
       |> visit("/e2e/page-1")
       |> click(css("#page-1-button-4"))
-      |> assert_has(css("#text-component-3", text: "text updated by component_3_action_1, state.value = c3"))
+      |> assert_has(
+        css("#text-component-3", text: "text updated by component_3_action_1, state.value = c3")
+      )
     end
 
     feature "action spec with targetID and params", %{session: session} do
       session
       |> visit("/e2e/page-1")
       |> click(css("#page-1-button-5"))
-      |> assert_has(css("#text-component-3", text: "text updated by component_3_action_2, params.a = 5, params.b = 6, state.value = c3"))
+      |> assert_has(
+        css("#text-component-3",
+          text:
+            "text updated by component_3_action_2, params.a = 5, params.b = 6, state.value = c3"
+        )
+      )
     end
   end
 
@@ -59,28 +72,46 @@ defmodule Hologram.Features.ActionsTest do
       session
       |> visit("/e2e/page-1")
       |> click(css("#page-1-button-7"))
-      |> assert_has(css("#text-page-1", text: "text updated by action_5_b triggered by command_1, state.value = p1"))
+      |> assert_has(
+        css("#text-page-1",
+          text: "text updated by action_5_b triggered by command_1, state.value = p1"
+        )
+      )
     end
 
     feature "action returning state, command and params", %{session: session} do
       session
       |> visit("/e2e/page-1")
       |> click(css("#page-1-button-8"))
-      |> assert_has(css("#text-page-1", text: "text updated by action_6_b triggered by command_2, params.a = 10, params.b = 20, state.value = p1"))
+      |> assert_has(
+        css("#text-page-1",
+          text:
+            "text updated by action_6_b triggered by command_2, params.a = 10, params.b = 20, state.value = p1"
+        )
+      )
     end
 
     feature "action returning state, target ID and command", %{session: session} do
       session
       |> visit("/e2e/page-1")
       |> click(css("#page-1-button-9"))
-      |> assert_has(css("#text-page-1", text: "text updated by action_7_b triggered by component_3_command_1, state.value = p1"))
+      |> assert_has(
+        css("#text-page-1",
+          text: "text updated by action_7_b triggered by component_3_command_1, state.value = p1"
+        )
+      )
     end
 
     feature "action returning state, target ID, command and params", %{session: session} do
       session
       |> visit("/e2e/page-1")
       |> click(css("#page-1-button-10"))
-      |> assert_has(css("#text-page-1", text: "text updated by action_8_b triggered by component_3_command_2, params.a = 10, params.b = 20, state.value = p1"))
+      |> assert_has(
+        css("#text-page-1",
+          text:
+            "text updated by action_8_b triggered by component_3_command_2, params.a = 10, params.b = 20, state.value = p1"
+        )
+      )
     end
   end
 
@@ -96,7 +127,9 @@ defmodule Hologram.Features.ActionsTest do
       session
       |> visit("/e2e/page-1")
       |> click(css("#page-1-button-4"))
-      |> assert_has(css("#text-component-3", text: "text updated by component_3_action_1, state.value = c3"))
+      |> assert_has(
+        css("#text-component-3", text: "text updated by component_3_action_1, state.value = c3")
+      )
     end
 
     feature "page target", %{session: session} do
@@ -110,7 +143,11 @@ defmodule Hologram.Features.ActionsTest do
       session
       |> visit("/e2e/page-1")
       |> click(css("#page-1-button-15"))
-      |> assert_has(css("#text-default-layout", text: "text updated by default_layout_action_1, state.value = dl"))
+      |> assert_has(
+        css("#text-default-layout",
+          text: "text updated by default_layout_action_1, state.value = dl"
+        )
+      )
     end
   end
 

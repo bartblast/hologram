@@ -8,7 +8,11 @@ defmodule Hologram.Runtime.Channel do
     {:ok, socket}
   end
 
-  def handle_in("command", %{"target_module" => target_module, "target_id" => target_id} = payload, socket) do
+  def handle_in(
+        "command",
+        %{"target_module" => target_module, "target_id" => target_id} = payload,
+        socket
+      ) do
     target_module = Decoder.decode(target_module)
     target_id = Decoder.decode(target_id)
 

@@ -19,7 +19,11 @@ defimpl JSEncoder, for: FunctionCall do
     |> TemplateEncoder.encode()
   end
 
-  def encode(%{module: module, function: function, args: args}, %Context{} = context, %Opts{} = opts) do
+  def encode(
+        %{module: module, function: function, args: args},
+        %Context{} = context,
+        %Opts{} = opts
+      ) do
     class_name = Helpers.class_name(module)
     function = encode_function_name(function)
     args = encode_args(args, context, opts)

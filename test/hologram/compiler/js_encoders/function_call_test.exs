@@ -2,7 +2,15 @@ defmodule Hologram.Compiler.JSEncoder.FunctionCallTest do
   use Hologram.Test.UnitCase, async: true
 
   alias Hologram.Compiler.{Context, JSEncoder, Opts}
-  alias Hologram.Compiler.IR.{BinaryType, FunctionCall, IntegerType, ListType, StringType, Variable}
+
+  alias Hologram.Compiler.IR.{
+    BinaryType,
+    FunctionCall,
+    IntegerType,
+    ListType,
+    StringType,
+    Variable
+  }
 
   @ir %FunctionCall{
     function: :abc,
