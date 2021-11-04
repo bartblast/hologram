@@ -56,10 +56,10 @@ defmodule Hologram.Compiler.Pruner do
         traverse_function_defs(acc, module_defs_map, {traversed_module, fun})
       end)
 
-    unless module_type == :plain do
-      traverse_template(acc, module_defs_map, traversed_module, pruned_module)
-    else
+    if module_type == :plain do
       acc
+    else
+      traverse_template(acc, module_defs_map, traversed_module, pruned_module)
     end
   end
 
@@ -113,13 +113,13 @@ defmodule Hologram.Compiler.Pruner do
 
   # DEFER: match function arity
   defp traverse_function_defs(acc, module_defs_map, {module, function}) do
-    unless MapSet.member?(acc, {module, function}) do
+    if MapSet.member?(acc, {module, function}) do
+      acc
+    else
       acc = MapSet.put(acc, {module, function})
 
       get_function_defs(module_defs_map, module, function)
       |> Enum.reduce(acc, &traverse_function_defs(&2, module_defs_map, &1))
-    else
-      acc
     end
   end
 
@@ -165,7 +165,9 @@ defmodule Hologram.Compiler.Pruner do
        when is_atom(traversed_module) do
     spec = {traversed_module, :template}
 
-    unless MapSet.member?(acc, spec) || !Reflection.has_template?(traversed_module) do
+    if MapSet.member?(acc, spec) || !Reflection.has_template?(traversed_module) do
+      acc
+    else
       acc =
         MapSet.put(acc, spec)
         |> traverse_function_defs(module_defs_map, spec)
@@ -179,8 +181,6 @@ defmodule Hologram.Compiler.Pruner do
 
       vdom = Template.Builder.build(traversed_module)
       traverse_template(acc, module_defs_map, vdom, pruned_module)
-    else
-      acc
     end
   end
 

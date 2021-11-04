@@ -25,7 +25,7 @@ defmodule Hologram.Compiler.Expander do
   end
 
   defp expand_macros_in_expression({name, _, args} = expr, requires) do
-    args = unless args, do: [], else: args
+    args = if args, do: args, else: []
     macro_def = find_macro_definition(name, args, requires)
 
     if macro_def do

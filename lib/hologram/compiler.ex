@@ -61,10 +61,10 @@ defmodule Hologram.Compiler do
   end
 
   defp maybe_include_module(acc, module) do
-    unless acc[module] || Reflection.standard_lib?(module) do
-      compile(module, acc)
-    else
+    if acc[module] || Reflection.standard_lib?(module) do
       acc
+    else
+      compile(module, acc)
     end
   end
 

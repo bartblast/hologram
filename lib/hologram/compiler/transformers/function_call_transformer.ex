@@ -56,7 +56,7 @@ defmodule Hologram.Compiler.FunctionCallTransformer do
   end
 
   defp build_args(args, context) do
-    args = unless is_list(args), do: [], else: args
+    args = if is_list(args), do: args, else: []
     Enum.map(args, &Transformer.transform(&1, context))
   end
 end

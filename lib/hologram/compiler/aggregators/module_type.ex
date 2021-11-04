@@ -14,11 +14,11 @@ defimpl Aggregator, for: ModuleType do
   end
 
   defp maybe_put_module(module_defs, module) do
-    unless module_defs[module] || Reflection.standard_lib?(module) do
+    if module_defs[module] || Reflection.standard_lib?(module) do
+      module_defs
+    else
       module_def = Reflection.module_definition(module)
       Map.put(module_defs, module, module_def)
-    else
-      module_defs
     end
   end
 end
