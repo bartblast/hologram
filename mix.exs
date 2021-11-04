@@ -69,7 +69,7 @@ defmodule Hologram.MixProject do
     end
   end
 
-  defp is_dep? do
+  def is_dep? do
     __MODULE__.module_info()[:compile][:source]
     |> to_string()
     |> String.ends_with?("/deps/hologram/mix.exs")

@@ -2,13 +2,15 @@
 
 defmodule Mix.Tasks.Compile.Hologram do
   use Mix.Task.Compiler
+
   alias Hologram.Compiler.{Builder, Reflection}
+  alias Hologram.MixProject
 
   @root_path Reflection.root_path()
 
   def run(opts) do
     output_path =
-      if is_dep?() do
+      if MixProject.is_dep?() do
         "#{@root_path}/../../priv/static/hologram"
       else
         "#{@root_path}/priv/static/hologram"
@@ -55,7 +57,7 @@ defmodule Mix.Tasks.Compile.Hologram do
 
   defp build_runtime do
     assets_path =
-      if is_dep?() do
+      if MixProject.is_dep?() do
         "deps/hologram/assets"
       else
         "assets"
@@ -63,12 +65,6 @@ defmodule Mix.Tasks.Compile.Hologram do
 
     System.cmd("npm", ["install"], cd: assets_path)
     Mix.Task.run("esbuild", ["hologram", "--log-level=warning"])
-  end
-
-  defp is_dep? do
-    __MODULE__.module_info()[:compile][:source]
-    |> to_string()
-    |> String.ends_with?("/deps/hologram/lib/hologram/compiler/task.ex")
   end
 
   # Routes are defined in page modules and the router aggregates the routes dynamically by reflection.
