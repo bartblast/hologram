@@ -2,7 +2,7 @@ defmodule Hologram.CompilerTest do
   use Hologram.Test.UnitCase, async: true
   alias Hologram.Compiler
 
-  @default_layout Application.get_env(:hologram, :default_layout)
+  @default_layout Application.fetch_env!(:hologram, :default_layout)
   @module_2 Hologram.Test.Fixtures.Compiler.Module2
   @module_8 Hologram.Test.Fixtures.Compiler.Module8
   @module_11 Hologram.Test.Fixtures.Compiler.Module11

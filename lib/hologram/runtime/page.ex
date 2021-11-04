@@ -1,5 +1,5 @@
 defmodule Hologram.Page do
-  @default_layout Application.get_env(:hologram, :default_layout)
+  @default_layout Application.fetch_env!(:hologram, :default_layout)
 
   defmacro __using__(_) do
     quote do

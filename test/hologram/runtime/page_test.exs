@@ -3,7 +3,7 @@ defmodule Hologram.PageTest do
   require Hologram.Page
   alias Hologram.Page
 
-  @default_layout Application.get_env(:hologram, :default_layout)
+  @default_layout Application.fetch_env!(:hologram, :default_layout)
 
   describe "layout/0" do
     test "default layout" do
