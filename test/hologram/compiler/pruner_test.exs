@@ -4,7 +4,7 @@ defmodule Hologram.Compiler.PrunerTest do
   alias Hologram.Compiler
   alias Hologram.Compiler.Pruner
 
-  @default_layout Application.fetch_env!(:hologram, :default_layout)
+  @default_layout Application.compile_env!(:hologram, :default_layout)
   @module_4 Hologram.Test.Fixtures.Compiler.Pruner.Module4
   @module_8 Hologram.Test.Fixtures.Compiler.Pruner.Module8
   @module_16 Hologram.Test.Fixtures.Compiler.Pruner.Module16
