@@ -5,14 +5,13 @@ defmodule Hologram.Compiler.Helpers do
 
   def aggregate_bindings(params) do
     Enum.with_index(params)
-    |> Enum.reduce([], fn {param, idx}, acc ->
-      Binder.bind(param)
-      |> Enum.reduce(acc, fn binding, acc ->
-        name = List.last(binding).name
-        if Keyword.has_key?(acc, name), do: acc, else: Keyword.put(acc, name, {idx, binding})
-      end)
-    end)
+    |> Enum.reduce([], &aggregate_bindings_from_param/2)
     |> Enum.sort()
+  end
+  
+  defp aggregate_bindings_from_param({param, idx}, acc) do
+    Binder.bind(param)
+    |> Enum.reduce(acc, &maybe_add_binding(&1, &2, idx))
   end
 
   def aggregate_function_def_variants(function_defs) do
@@ -105,6 +104,16 @@ defmodule Hologram.Compiler.Helpers do
 
   def is_page?(module_definition) do
     uses_module?(module_definition, Hologram.Page)
+  end
+
+  defp maybe_add_binding(binding, acc, idx) do
+    name = List.last(binding).name
+
+    if Keyword.has_key?(acc, name) do
+      acc
+    else
+      Keyword.put(acc, name, {idx, binding})
+    end
   end
 
   @doc """
