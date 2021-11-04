@@ -63,3 +63,43 @@ describe("freeze()", () => {
     assertFrozen(obj.a.b.c)
   })
 })
+
+describe("isEqual()", () => {
+  it("returns true if left arg is deep equal to right arg", () => {
+    const left = {
+      a: 1,
+      b: {
+        c: 3
+      }
+    }
+
+    const right = {
+      a: 1,
+      b: {
+        c: 3
+      }
+    }
+
+    const result = Utils.isEqual(left, right)
+    assert.isTrue(result)
+  })
+
+  it("returns false if left arg is not deep equal to right arg", () => {
+    const left = {
+      a: 1,
+      b: {
+        c: 3
+      }
+    }
+
+    const right = {
+      a: 1,
+      b: {
+        c: 4
+      }
+    }
+
+    const result = Utils.isEqual(left, right)
+    assert.isFalse(result)
+  })
+})
