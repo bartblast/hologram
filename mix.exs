@@ -42,8 +42,12 @@ defmodule Hologram.MixProject do
 
   defp deps do
     [
+      {:credo, "~> 1.5.6", only: :dev, runtime: false},
+      {:dialyxir, "~> 1.1.0", only: :dev, runtime: false},
       {:ecto_sql, "~> 3.6"},
       {:esbuild, "~> 0.2", runtime: Mix.env() == :dev},
+      {:ex_check, "~> 0.14.0", only: :dev, runtime: false},
+      {:ex_doc, "~> 0.25.5", only: :dev, runtime: false},
       {:file_system, "~> 0.2"},
       {:floki, ">= 0.30.0", only: :test},
       {:jason, "~> 1.2"},
