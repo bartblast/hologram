@@ -179,6 +179,7 @@
 | Cond          | :x:                |
 | Else (If)     | :x:                |
 | Else (Rescue) | :x:                |
+| Guards        | :x:                |
 | If            | :x:                |
 | Raise         | :x:                |
 | Rescue        | :x:                |
@@ -227,6 +228,7 @@
 
 | Feature                        | Status             |
 | ------------------------------ |:------------------:|
+| Behaviours                     | :x:                |
 | Codepoints                     | :x:                |
 | Custom Sigils                  | :x:                |
 | Default Arguments              | :x:                |
@@ -235,6 +237,7 @@
 | Module Attribute Accumulation  | :x:                |
 | Module \_\_info\_\_/1 callback | :x:                |
 | Module Nesting                 | :x:                |
+| Protocols                      | :x:                |
 
 #### Not on Roadmap
 * Types: PID, Port, Reference
