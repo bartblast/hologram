@@ -8,7 +8,7 @@ defmodule Hologram.UI.Runtime do
   def template do
     ~H"""
     <script src="/hologram/runtime.js"></script>
-    <script src="{@context.__src__}"></script>
+    <script src="/hologram/page-{@context.__digest__}.js"></script>
     <script>
       Hologram.run({@context.__class__}, "{@context.__state__}")
     </script>

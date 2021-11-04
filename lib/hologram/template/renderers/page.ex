@@ -21,8 +21,7 @@ defimpl Renderer, for: Atom do
       module.init()
       |> Map.put(:context, %{
         __class__: class_name,
-        # TODO: use __digest__ interpolation instead of __page_src__
-        __src__: "/hologram/page-#{digest}.js"
+        __digest__: digest
       })
 
     serialized_state = Serializer.serialize(bindings)
