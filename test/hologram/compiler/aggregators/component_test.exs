@@ -34,7 +34,7 @@ defmodule Hologram.Compiler.Aggregators.ComponentTest do
     assert %ModuleDefinition{} = result[Module3]
   end
 
-  test "aggregate from children" do
+  test "aggregation from children" do
     ir = %Component{
       module: Module2,
       props: %{},
