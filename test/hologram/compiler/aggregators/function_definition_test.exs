@@ -3,8 +3,7 @@ defmodule Hologram.Compiler.Aggregators.FunctionDefinitionTest do
 
   alias Hologram.Compiler.Aggregator
   alias Hologram.Compiler.IR.{FunctionDefinition, ModuleDefinition, ModuleType}
-  alias Hologram.Test.Fixtures.PlaceholderModule1
-  alias Hologram.Test.Fixtures.PlaceholderModule2
+  alias Hologram.Test.Fixtures.{PlaceholderModule1, PlaceholderModule2}
 
   test "aggregate/2" do
     ir = %FunctionDefinition{

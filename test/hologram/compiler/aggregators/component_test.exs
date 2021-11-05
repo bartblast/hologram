@@ -4,9 +4,7 @@ defmodule Hologram.Compiler.Aggregators.ComponentTest do
   alias Hologram.Compiler.Aggregator
   alias Hologram.Compiler.IR.{ModuleDefinition, ModuleType}
   alias Hologram.Template.VDOM.Component
-  alias Hologram.Test.Fixtures.Compiler.Aggregators.Component.Module1
-  alias Hologram.Test.Fixtures.Compiler.Aggregators.Component.Module2
-  alias Hologram.Test.Fixtures.Compiler.Aggregators.Component.Module3
+  alias Hologram.Test.Fixtures.Compiler.Aggregators.Component.{Module1, Module2, Module3}
 
   test "aggregation from module body" do
     ir = %Component{module: Module1, props: %{}, children: []}

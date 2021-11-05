@@ -3,8 +3,7 @@ defmodule Hologram.Compiler.Aggregators.TupleTypeTest do
 
   alias Hologram.Compiler.Aggregator
   alias Hologram.Compiler.IR.{ModuleDefinition, ModuleType, TupleType}
-  alias Hologram.Test.Fixtures.PlaceholderModule1
-  alias Hologram.Test.Fixtures.PlaceholderModule2
+  alias Hologram.Test.Fixtures.{PlaceholderModule1, PlaceholderModule2}
 
   test "aggregate/2" do
     ir = %TupleType{

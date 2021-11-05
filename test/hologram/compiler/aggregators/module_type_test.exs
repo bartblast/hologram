@@ -4,10 +4,7 @@ defmodule Hologram.Compiler.Aggregators.ModuleTypeTest do
   alias Hologram.Compiler.Aggregator
   alias Hologram.Compiler.IR.{ModuleDefinition, ModuleType}
   alias Hologram.Runtime.Commons
-  alias Hologram.Test.Fixtures.Compiler.Aggregators.ModuleType.Module1
-  alias Hologram.Test.Fixtures.Compiler.Aggregators.ModuleType.Module2
-  alias Hologram.Test.Fixtures.Compiler.Aggregators.ModuleType.Module6
-  alias Hologram.Test.Fixtures.Compiler.Aggregators.ModuleType.Module7
+  alias Hologram.Test.Fixtures.Compiler.Aggregators.ModuleType.{Module1, Module2, Module6, Module7}
   alias Hologram.Test.Fixtures.PlaceholderModule1
 
   test "non standard lib module that isn't in the accumulator yet is added" do
