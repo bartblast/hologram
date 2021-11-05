@@ -3,13 +3,12 @@ alias Hologram.Compiler.IR.ModuleDefinition
 
 defimpl CallGraph, for: ModuleDefinition do
   def build(%{module: module, functions: functions}, call_graph, module_defs, _) do
-    call_graph =
-      if module_defs[module].page? do
-        Graph.add_edge(call_graph, module, module.layout())
-      else
-        Graph.add_vertex(call_graph, module)
-      end
+    case Graph.add_vertex(call_graph, module) do
+      ^call_graph ->
+        call_graph
 
-    CallGraph.build(functions, call_graph, module_defs, module)
+      new_call_graph ->
+        CallGraph.build(functions, new_call_graph, module_defs, module)
+    end
   end
 end
