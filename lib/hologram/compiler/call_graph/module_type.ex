@@ -2,8 +2,8 @@ alias Hologram.Compiler.CallGraph
 alias Hologram.Compiler.IR.ModuleType
 
 defimpl CallGraph, for: ModuleType do
-  def build(%{module: module}, call_graph, _, from_vertex) do
-    to_vertex = module
-    Graph.add_edge(call_graph, from_vertex, to_vertex)
+  def build(%{module: module}, call_graph, module_defs, from_vertex) do
+    CallGraph.build(module_defs[module], call_graph, module_defs)
+    |> Graph.add_edge(from_vertex, module)
   end
 end
