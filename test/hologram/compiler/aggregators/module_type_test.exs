@@ -3,8 +3,11 @@ defmodule Hologram.Compiler.Aggregators.ModuleTypeTest do
 
   alias Hologram.Compiler.Aggregator
   alias Hologram.Compiler.IR.{ModuleDefinition, ModuleType}
+  alias Hologram.Runtime.Commons
   alias Hologram.Test.Fixtures.Compiler.Aggregators.ModuleType.Module1
   alias Hologram.Test.Fixtures.Compiler.Aggregators.ModuleType.Module2
+  alias Hologram.Test.Fixtures.Compiler.Aggregators.ModuleType.Module6
+  alias Hologram.Test.Fixtures.Compiler.Aggregators.ModuleType.Module7
   alias Hologram.Test.Fixtures.PlaceholderModule1
 
   test "non standard lib module that isn't in the accumulator yet is added" do
@@ -59,5 +62,16 @@ defmodule Hologram.Compiler.Aggregators.ModuleTypeTest do
     result = Aggregator.aggregate(ir, %{})
 
     assert %ModuleDefinition{} = result[layout]
+  end
+
+  test "aggregation from templetable module's template" do
+    ir = %ModuleType{module: Module6}
+    result = Aggregator.aggregate(ir, %{})
+
+    # Hologram.Runtime.Commons module is added because templates use Hologram.Runtime.Commons.sigil_h/2
+    assert Map.keys(result) == [Commons, Module6, Module7]
+    assert %ModuleDefinition{} = result[Commons]
+    assert %ModuleDefinition{} = result[Module6]
+    assert %ModuleDefinition{} = result[Module7]
   end
 end
