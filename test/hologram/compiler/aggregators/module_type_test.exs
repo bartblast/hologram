@@ -68,7 +68,7 @@ defmodule Hologram.Compiler.Aggregators.ModuleTypeTest do
     ir = %ModuleType{module: Module6}
     result = Aggregator.aggregate(ir, %{})
 
-    # Hologram.Runtime.Commons module is added because templates use Hologram.Runtime.Commons.sigil_h/2
+    # Hologram.Runtime.Commons module is added because templates use Hologram.Runtime.Commons.sigil_H/2
     assert Map.keys(result) == [Commons, Module6, Module7]
     assert %ModuleDefinition{} = result[Commons]
     assert %ModuleDefinition{} = result[Module6]
