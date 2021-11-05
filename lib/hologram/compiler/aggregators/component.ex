@@ -4,7 +4,8 @@ alias Hologram.Template.VDOM.Component
 
 defimpl Aggregator, for: Component do
   def aggregate(%{module: module, props: props, children: children}, module_defs) do
-    aggregate_from_module(module_defs, module)
+    module_defs
+    |> aggregate_from_module(module)
     |> aggregate_from_props(props)
     |> aggregate_from_children(children)
   end
