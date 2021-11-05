@@ -3,9 +3,7 @@ defmodule Hologram.Compiler.CallGraph.FunctionDefinitionTest do
 
   alias Hologram.Compiler.CallGraph
   alias Hologram.Compiler.IR.{FunctionDefinition, ModuleType}
-  alias Hologram.Test.Fixtures.PlaceholderModule1
-  alias Hologram.Test.Fixtures.PlaceholderModule2
-  alias Hologram.Test.Fixtures.PlaceholderModule3
+  alias Hologram.Test.Fixtures.{PlaceholderModule1, PlaceholderModule2, PlaceholderModule3}
 
   test "build/4" do
     ir = %FunctionDefinition{
