@@ -67,10 +67,6 @@ defmodule Hologram.Compiler.CallGraph.ModuleDefinitionTest do
     result = CallGraph.build(module_def_1, call_graph, module_defs)
 
     assert Graph.num_vertices(result) == 3
-    assert Graph.has_vertex?(result, PlaceholderModule1)
-    assert Graph.has_vertex?(result, PlaceholderModule2)
-    assert Graph.has_vertex?(result, {PlaceholderModule1, :test_fun})
-
     assert Graph.num_edges(result) == 2
     has_edge?(call_graph, PlaceholderModule1, {PlaceholderModule1, :test_fun})
     has_edge?(call_graph, {PlaceholderModule1, :test_fun}, PlaceholderModule2)
