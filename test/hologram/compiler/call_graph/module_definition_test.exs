@@ -5,20 +5,15 @@ defmodule Hologram.Compiler.CallGraph.ModuleDefinitionTest do
   alias Hologram.Compiler.IR.{FunctionDefinition, ModuleDefinition, ModuleType}
   alias Hologram.E2E.DefaultLayout
   alias Hologram.Test.Fixtures.{PlaceholderModule1, PlaceholderModule2}
-  alias Hologram.Test.Fixtures.Compiler.CallGraph.ModuleDefinition.{Module1, Module2, Module3}
+  alias Hologram.Test.Fixtures.Compiler.CallGraph.ModuleDefinition.{Module1, Module2, Module3, Module4, Module5}
 
   test "module that isn't in the call graph yet" do
-    ir = %ModuleDefinition{
-      module: PlaceholderModule1,
-      functions: []
-    }
-
+    module_def = Reflection.module_definition(PlaceholderModule1)
+    module_defs = %{PlaceholderModule1 => module_def}
     call_graph = Graph.new()
 
-    result = CallGraph.build(ir, call_graph, %{})
+    result = CallGraph.build(module_def, call_graph, module_defs)
 
-    assert Graph.num_vertices(result) == 1
-    assert Graph.num_edges(result) == 0
     assert Graph.has_vertex?(result, PlaceholderModule1)
   end
 
@@ -70,5 +65,19 @@ defmodule Hologram.Compiler.CallGraph.ModuleDefinitionTest do
     assert Graph.num_edges(result) == 2
     has_edge?(call_graph, PlaceholderModule1, {PlaceholderModule1, :test_fun})
     has_edge?(call_graph, {PlaceholderModule1, :test_fun}, PlaceholderModule2)
+  end
+
+  test "template traversing" do
+    module_defs = %{
+      Module4 => Reflection.module_definition(Module4),
+      Module5 => Reflection.module_definition(Module5),
+    }
+
+    call_graph = Graph.new()
+
+    result = CallGraph.build(module_defs[Module4], call_graph, module_defs)
+
+    assert Graph.has_vertex?(result, Module5)
+    assert has_edge?(result, {Module4, :template}, Module5)
   end
 end
