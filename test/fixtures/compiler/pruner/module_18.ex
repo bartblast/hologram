@@ -1,16 +1,10 @@
 defmodule Hologram.Test.Fixtures.Compiler.Pruner.Module18 do
   use Hologram.Page
-
-  def action(:test_18) do
-    Hologram.Test.Fixtures.Compiler.Pruner.Module19.test_19()
-  end
+  alias Hologram.Test.Fixtures.Compiler.Pruner.Module19, warn: false
 
   def template do
     ~H"""
+    <Module19 />
     """
-  end
-
-  def test_18 do
-    18
   end
 end

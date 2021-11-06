@@ -1,9 +1,10 @@
 defmodule Hologram.Test.Fixtures.Compiler.Pruner.Module16 do
-  def test_16a do
-    :test_16a
-  end
+  use Hologram.Page
 
-  def test_16b do
-    :test_16b
+  layout Hologram.Test.Fixtures.Compiler.Pruner.Module17
+
+  def template do
+    ~H"""
+    """
   end
 end

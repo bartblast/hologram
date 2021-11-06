@@ -1,11 +1,16 @@
 defmodule Hologram.Test.Fixtures.Compiler.Pruner.Module5 do
-  use Hologram.Page
+  use Hologram.Component
 
   def template do
     ~H"""
-      <Hologram.Test.Fixtures.Compiler.Pruner.Module6>
-        <Hologram.Test.Fixtures.Compiler.Pruner.Module4 />
-      </Hologram.Test.Fixtures.Compiler.Pruner.Module6>
     """
+  end
+
+  def action(:test_5a, _params, _state) do
+    :ok
+  end
+
+  def action(:test_5b, _a, _b, _c) do
+    :ok
   end
 end

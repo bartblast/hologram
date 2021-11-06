@@ -1,9 +1,10 @@
 defmodule Hologram.Test.Fixtures.Compiler.Pruner.Module11 do
   use Hologram.Page
+  alias Hologram.Test.Fixtures.Compiler.Pruner.Module12, warn: false
 
   def template do
     ~H"""
-      <Hologram.Test.Fixtures.Compiler.Pruner.Module4 test_prop={Hologram.Test.Fixtures.Compiler.Pruner.Module8.test_8()} />
+      <Module12 />
     """
   end
 end

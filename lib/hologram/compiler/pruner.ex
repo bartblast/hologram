@@ -1,237 +1,142 @@
+alias Hologram.Compiler.CallGraph
+
 defmodule Hologram.Compiler.Pruner do
-  alias Hologram.Compiler.{Helpers, Reflection}
-
-  alias Hologram.Compiler.IR.{
-    FunctionCall,
-    FunctionDefinition,
-    IfExpression,
-    ModuleType,
-    TupleType
-  }
-
-  alias Hologram.Template
-  alias Hologram.Template.VDOM.{Component, ElementNode, Expression}
-  alias Hologram.Typespecs, as: T
-
-  @doc """
-  Prunes unused modules and functions.
-  """
-  @spec prune(T.module_definitions_map(), module()) :: T.module_definitions_map()
-
-  def prune(module_defs_map, module) do
-    find_used_functions(module_defs_map, module, module)
-    |> prune_unused_functions(module_defs_map)
-    |> prune_unused_modules()
+  def prune(module_defs, page_module) do
+    build_call_graph(module_defs, page_module)
+    |> find_reachable_code(module_defs, page_module)
+    |> remove_redundant_funs(module_defs)
+    |> remove_redundant_modules()
   end
 
-  defp entry_page?(module_defs_map, traversed_module, pruned_module) do
-    traversed_module_def = module_defs_map[traversed_module]
-    Helpers.is_page?(traversed_module_def) && traversed_module == pruned_module
+  defp build_call_graph(module_defs, page_module) do
+    module_defs[page_module]
+    |> CallGraph.build(Graph.new(), module_defs)
   end
 
-  defp find_used_functions(module_defs_map, traversed_module, pruned_module, acc \\ MapSet.new()) do
-    module_type = module_type(traversed_module, module_defs_map)
+  defp find_reachable_code(call_graph, module_defs, page_module) do
+    layout_module = page_module.layout()
+    component_modules = find_component_modules(module_defs)
 
-    functions =
-      case module_type do
-        :component ->
-          [:action, :init]
+    []
+    |> include_code_reachable_from_page_actions(call_graph, page_module)
+    |> include_code_reachable_from_page_template(call_graph, page_module)
+    |> include_code_reachable_from_page_layout_fun(call_graph, page_module)
+    |> include_code_reachable_from_page_custom_layout_fun(call_graph, page_module)
+    |> include_code_reachable_from_layout_init_fun(call_graph, layout_module)
+    |> include_code_reachable_from_layout_actions(call_graph, layout_module)
+    |> include_code_reachable_from_layout_template(call_graph, layout_module)
+    |> include_code_reachable_from_component_actions(call_graph, component_modules)
+    |> include_code_reachable_from_component_templates(call_graph, component_modules)
+    |> include_page_routes(module_defs)
+    |> Enum.uniq()
+  end
 
-        :page ->
-          if entry_page?(module_defs_map, traversed_module, pruned_module) do
-            [:action, :custom_layout, :layout, :route]
-          else
-            [:action, :route]
-          end
+  defp fetch_module_from_call_graph_vertex(vertex) do
+    case vertex do
+      {module, _} ->
+        module
 
-        :layout ->
-          [:action, :init]
-
-        true ->
-          []
-      end
-
-    acc =
-      Enum.reduce(functions, acc, fn fun, acc ->
-        traverse_function_defs(acc, module_defs_map, {traversed_module, fun})
-      end)
-
-    if module_type == :plain do
-      acc
-    else
-      traverse_template(acc, module_defs_map, traversed_module, pruned_module)
+      module ->
+        module
     end
   end
 
-  defp get_function_defs(module_defs_map, module, function) do
-    if module_defs_map[module] do
-      module_defs_map[module].functions
-      |> Enum.filter(&(&1.name == function))
-    else
-      []
-    end
+  defp find_component_modules(module_defs) do
+    Enum.filter(module_defs, fn {_, module_def} -> module_def.component? end)
+    |> Enum.map(fn {module, _} -> module end)
   end
 
-  defp get_module_used_functions(module_def, used_functions) do
-    Enum.reduce(module_def.functions, [], fn function_def, acc ->
-      # The function call may use default parameter values,
-      # so we include all functions matching the name (regardless of their arity).
-      # DEFER: include only functions with matching arity
-      if {module_def.module, function_def.name} in used_functions do
-        acc ++ [function_def]
+  defp include_code_reachable_from_component_actions(acc, call_graph, component_modules) do
+    Enum.reduce(component_modules, acc, fn module, acc ->
+      Graph.reachable(call_graph, [{module, :action}])
+      |> maybe_include_reachable_code(acc)
+    end)
+  end
+
+  defp include_code_reachable_from_component_templates(acc, call_graph, component_modules) do
+    Enum.reduce(component_modules, acc, fn module, acc ->
+      Graph.reachable(call_graph, [{module, :template}])
+      |> maybe_include_reachable_code(acc)
+    end)
+  end
+
+  defp include_code_reachable_from_layout_actions(acc, call_graph, layout_module) do
+    Graph.reachable(call_graph, [{layout_module, :action}])
+    |> maybe_include_reachable_code(acc)
+  end
+
+  defp include_code_reachable_from_layout_init_fun(acc, call_graph, layout_module) do
+    Graph.reachable(call_graph, [{layout_module, :init}])
+    |> maybe_include_reachable_code(acc)
+  end
+
+  defp include_code_reachable_from_layout_template(acc, call_graph, layout_module) do
+    Graph.reachable(call_graph, [{layout_module, :template}])
+    |> maybe_include_reachable_code(acc)
+  end
+
+  defp include_code_reachable_from_page_actions(acc, call_graph, page_module) do
+    Graph.reachable(call_graph, [{page_module, :action}])
+    |> maybe_include_reachable_code(acc)
+  end
+
+  defp include_code_reachable_from_page_custom_layout_fun(acc, call_graph, page_module) do
+    Graph.reachable(call_graph, [{page_module, :custom_layout}])
+    |> maybe_include_reachable_code(acc)
+  end
+
+  defp include_code_reachable_from_page_layout_fun(acc, call_graph, page_module) do
+    Graph.reachable(call_graph, [{page_module, :layout}])
+    |> maybe_include_reachable_code(acc)
+  end
+
+  defp include_code_reachable_from_page_template(acc, call_graph, page_module) do
+    Graph.reachable(call_graph, [{page_module, :template}])
+    |> maybe_include_reachable_code(acc)
+  end
+
+  defp include_page_routes(acc, module_defs) do
+    Enum.reduce(acc, acc, fn el, acc ->
+      module = fetch_module_from_call_graph_vertex(el)
+      if module_defs[module].page? do
+        acc ++ [{module, :route}]
       else
         acc
       end
     end)
   end
 
-  defp module_type(module, module_defs_map) do
-    module_def = module_defs_map[module]
+  defp maybe_include_reachable_code(reachable_code, acc) do
+    case reachable_code do
+      [nil] ->
+        acc
 
-    cond do
-      Helpers.is_component?(module_def) -> :component
-      Helpers.is_page?(module_def) -> :page
-      Helpers.is_layout?(module_def) -> :layout
-      true -> :plain
+      reachable_code ->
+        acc ++ reachable_code
     end
   end
 
-  defp prune_unused_functions(used_functions, module_defs_map) do
-    Enum.map(module_defs_map, fn {module, module_def} ->
-      functions = get_module_used_functions(module_def, used_functions)
-      {module, %{module_def | functions: functions}}
+  defp remove_module_redundant_funs(%{functions: funs, module: module} = module_def, reachable_code_hash_table) do
+    funs = Enum.filter(funs, &(reachable_code_hash_table[{module, &1.name}]))
+    %{module_def | functions: funs}
+  end
+
+  defp remove_redundant_funs(reachable_code, module_defs) do
+    reachable_code_hash_table =
+      reachable_code
+      |> Enum.map(&{&1, true})
+      |> Enum.into(%{})
+
+    Enum.map(module_defs, fn {module, module_def} ->
+      {module, remove_module_redundant_funs(module_def, reachable_code_hash_table)}
     end)
     |> Enum.into(%{})
   end
 
-  defp prune_unused_modules(module_defs_map) do
-    Enum.filter(module_defs_map, fn {_, module_def} ->
+  defp remove_redundant_modules(module_defs) do
+    Enum.filter(module_defs, fn {_, module_def} ->
       Enum.any?(module_def.functions)
     end)
     |> Enum.into(%{})
   end
-
-  # DEFER: match function arity
-  defp traverse_function_defs(acc, module_defs_map, {module, function}) do
-    if MapSet.member?(acc, {module, function}) do
-      acc
-    else
-      acc = MapSet.put(acc, {module, function})
-
-      get_function_defs(module_defs_map, module, function)
-      |> Enum.reduce(acc, &traverse_function_defs(&2, module_defs_map, &1))
-    end
-  end
-
-  defp traverse_function_defs(acc, module_defs_map, exprs) when is_list(exprs) do
-    Enum.reduce(exprs, acc, &traverse_function_defs(&2, module_defs_map, &1))
-  end
-
-  defp traverse_function_defs(acc, module_defs_map, %FunctionCall{
-         module: module,
-         function: function,
-         args: args
-       }) do
-    Enum.reduce(args, acc, &traverse_function_defs(&2, module_defs_map, &1))
-    |> traverse_function_defs(module_defs_map, {module, function})
-  end
-
-  defp traverse_function_defs(acc, module_defs_map, %FunctionDefinition{body: body}) do
-    traverse_function_defs(acc, module_defs_map, body)
-  end
-
-  defp traverse_function_defs(acc, module_defs_map, %IfExpression{
-         condition: condition,
-         do: do_clause,
-         else: else_clause
-       }) do
-    traverse_function_defs(acc, module_defs_map, condition)
-    |> traverse_function_defs(module_defs_map, do_clause)
-    |> traverse_function_defs(module_defs_map, else_clause)
-  end
-
-  defp traverse_function_defs(acc, module_defs_map, %ModuleType{module: module}) do
-    if Helpers.is_page?(module_defs_map[module]) do
-      traverse_function_defs(acc, module_defs_map, {module, :route})
-    else
-      acc
-    end
-  end
-
-  # DEFER: traverse nested code blocks
-  defp traverse_function_defs(acc, _, _), do: acc
-
-  defp traverse_template(acc, module_defs_map, traversed_module, pruned_module)
-       when is_atom(traversed_module) do
-    spec = {traversed_module, :template}
-
-    if MapSet.member?(acc, spec) || !Reflection.has_template?(traversed_module) do
-      acc
-    else
-      acc =
-        MapSet.put(acc, spec)
-        |> traverse_function_defs(module_defs_map, spec)
-
-      acc =
-        if entry_page?(module_defs_map, traversed_module, pruned_module) do
-          find_used_functions(module_defs_map, traversed_module.layout(), pruned_module, acc)
-        else
-          acc
-        end
-
-      vdom = Template.Builder.build(traversed_module)
-      traverse_template(acc, module_defs_map, vdom, pruned_module)
-    end
-  end
-
-  defp traverse_template(acc, module_defs_map, nodes, pruned_module) when is_list(nodes) do
-    Enum.reduce(nodes, acc, &traverse_template(&2, module_defs_map, &1, pruned_module))
-  end
-
-  defp traverse_template(
-         acc,
-         module_defs_map,
-         %Component{module: module, props: props, children: children},
-         pruned_module
-       ) do
-    acc =
-      traverse_function_defs(acc, module_defs_map, {module, :init})
-      |> traverse_function_defs(module_defs_map, {module, :action})
-      |> traverse_template(module_defs_map, module, pruned_module)
-
-    acc =
-      Enum.reduce(props, acc, fn {_, value}, acc ->
-        traverse_template(acc, module_defs_map, value, pruned_module)
-      end)
-
-    Enum.reduce(children, acc, &traverse_template(&2, module_defs_map, &1, pruned_module))
-  end
-
-  defp traverse_template(
-         acc,
-         module_defs_map,
-         %ElementNode{attrs: attrs, children: children},
-         pruned_module
-       ) do
-    acc =
-      Enum.reduce(attrs, acc, fn {_, %{value: value}}, acc ->
-        traverse_template(acc, module_defs_map, value, pruned_module)
-      end)
-
-    Enum.reduce(children, acc, &traverse_template(&2, module_defs_map, &1, pruned_module))
-  end
-
-  defp traverse_template(acc, module_defs_map, %Expression{ir: ir}, pruned_module) do
-    traverse_template(acc, module_defs_map, ir, pruned_module)
-  end
-
-  defp traverse_template(acc, module_defs_map, %FunctionCall{} = function_call, _) do
-    traverse_function_defs(acc, module_defs_map, function_call)
-  end
-
-  defp traverse_template(acc, module_defs_map, %TupleType{data: data}, pruned_module) do
-    Enum.reduce(data, acc, &traverse_template(&2, module_defs_map, &1, pruned_module))
-  end
-
-  defp traverse_template(acc, _, _, _), do: acc
 end

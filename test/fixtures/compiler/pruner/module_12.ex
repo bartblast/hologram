@@ -1,9 +1,13 @@
 defmodule Hologram.Test.Fixtures.Compiler.Pruner.Module12 do
-  use Hologram.Page
+  use Hologram.Component
+  alias Hologram.Test.Fixtures.Compiler.Pruner.Module13
 
   def template do
     ~H"""
-      <div test_attr={Hologram.Test.Fixtures.Compiler.Pruner.Module8.test_8()}></div>
     """
+  end
+
+  def action(:test_12a, _params, _state) do
+    Module13.test_fun_13a()
   end
 end
