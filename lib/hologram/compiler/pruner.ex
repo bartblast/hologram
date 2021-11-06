@@ -16,6 +16,7 @@ defmodule Hologram.Compiler.Pruner do
   defp find_reachable_code(call_graph, module_defs, page_module) do
     layout_module = page_module.layout()
     component_modules = find_component_modules(module_defs)
+    page_modules = find_page_modules(module_defs)
 
     []
     |> include_code_reachable_from_page_actions(call_graph, page_module)
@@ -27,22 +28,17 @@ defmodule Hologram.Compiler.Pruner do
     |> include_code_reachable_from_layout_template(call_graph, layout_module)
     |> include_code_reachable_from_component_actions(call_graph, component_modules)
     |> include_code_reachable_from_component_templates(call_graph, component_modules)
-    |> include_page_routes(module_defs)
+    |> include_page_routes(page_modules)
     |> Enum.uniq()
-  end
-
-  defp fetch_module_from_call_graph_vertex(vertex) do
-    case vertex do
-      {module, _} ->
-        module
-
-      module ->
-        module
-    end
   end
 
   defp find_component_modules(module_defs) do
     Enum.filter(module_defs, fn {_, module_def} -> module_def.component? end)
+    |> Enum.map(fn {module, _} -> module end)
+  end
+
+  defp find_page_modules(module_defs) do
+    Enum.filter(module_defs, fn {_, module_def} -> module_def.page? end)
     |> Enum.map(fn {module, _} -> module end)
   end
 
@@ -95,14 +91,9 @@ defmodule Hologram.Compiler.Pruner do
     |> maybe_include_reachable_code(acc)
   end
 
-  defp include_page_routes(acc, module_defs) do
-    Enum.reduce(acc, acc, fn el, acc ->
-      module = fetch_module_from_call_graph_vertex(el)
-      if module_defs[module].page? do
-        acc ++ [{module, :route}]
-      else
-        acc
-      end
+  defp include_page_routes(acc, page_modules) do
+    Enum.reduce(page_modules, acc, fn module, acc ->
+      acc ++ [{module, :route}]
     end)
   end
 
