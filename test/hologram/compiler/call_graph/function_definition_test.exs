@@ -5,7 +5,7 @@ defmodule Hologram.Compiler.CallGraph.FunctionDefinitionTest do
   alias Hologram.Compiler.IR.{FunctionDefinition, ModuleType}
   alias Hologram.Test.Fixtures.{PlaceholderModule1, PlaceholderModule2, PlaceholderModule3}
 
-  test "function definition with calls" do
+  test "function definition with call graph edges" do
     ir = %FunctionDefinition{
       module: PlaceholderModule1,
       name: :test_fun,
@@ -26,7 +26,7 @@ defmodule Hologram.Compiler.CallGraph.FunctionDefinitionTest do
     assert Graph.num_vertices(result) == 3
   end
 
-  test "function definition without calls" do
+  test "function definition without call graph edges" do
     ir = %FunctionDefinition{
       module: PlaceholderModule1,
       name: :test_fun,
