@@ -15,7 +15,7 @@ defimpl JSEncoder, for: FunctionCall do
     |> Map.get(:value)
     |> String.trim()
     |> Parser.parse!()
-    |> Transformer.transform(context.aliases)
+    |> Transformer.transform(context)
     |> TemplateEncoder.encode()
   end
 
