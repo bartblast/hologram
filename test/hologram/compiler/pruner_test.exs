@@ -88,6 +88,12 @@ defmodule Hologram.Compiler.PrunerTest do
       module_39 = Hologram.Test.Fixtures.Compiler.Pruner.Module39
       assert function_kept?(module_38, module_39, :init, 0)
     end
+
+    test "functions reachable from layout init" do
+      module_40 = Hologram.Test.Fixtures.Compiler.Pruner.Module40
+      module_42 = Hologram.Test.Fixtures.Compiler.Pruner.Module42
+      assert function_kept?(module_40, module_42, :test_fun_42a, 0)
+    end
   end
 
   describe "kept component functions" do
