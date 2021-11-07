@@ -26,6 +26,7 @@ defmodule Hologram.Compiler.Pruner do
     |> include_code_reachable_from_layout_init_fun(call_graph, layout_module)
     |> include_code_reachable_from_layout_actions(call_graph, layout_module)
     |> include_code_reachable_from_layout_template(call_graph, layout_module)
+    |> include_code_reachable_from_component_init_fun(call_graph, component_modules)
     |> include_code_reachable_from_component_actions(call_graph, component_modules)
     |> include_code_reachable_from_component_templates(call_graph, component_modules)
     |> include_page_routes(page_modules)
@@ -45,6 +46,13 @@ defmodule Hologram.Compiler.Pruner do
   defp include_code_reachable_from_component_actions(acc, call_graph, component_modules) do
     Enum.reduce(component_modules, acc, fn module, acc ->
       Graph.reachable(call_graph, [{module, :action}])
+      |> maybe_include_reachable_code(acc)
+    end)
+  end
+
+  defp include_code_reachable_from_component_init_fun(acc, call_graph, component_modules) do
+    Enum.reduce(component_modules, acc, fn module, acc ->
+      Graph.reachable(call_graph, [{module, :init}])
       |> maybe_include_reachable_code(acc)
     end)
   end
