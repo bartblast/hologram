@@ -176,9 +176,22 @@ defmodule Hologram.Compiler.PrunerTest do
     end
   end
 
-  test "unused functions are pruned" do
+  test "unreachable functions are pruned" do
     module_57 = Hologram.Test.Fixtures.Compiler.Pruner.Module57
     module_58 = Hologram.Test.Fixtures.Compiler.Pruner.Module58
     refute function_kept?(module_57, module_58, :test_fun_58a, 0)
+  end
+
+  test "modules with unreachable-only functions are pruned" do
+    module_59 = Hologram.Test.Fixtures.Compiler.Pruner.Module59
+    module_60 = Hologram.Test.Fixtures.Compiler.Pruner.Module60
+
+    module_defs =
+      %ModuleType{module: module_59}
+      |> Aggregator.aggregate()
+
+    result = Pruner.prune(module_defs, module_59)
+
+    refute Map.has_key?(result, module_60)
   end
 end
