@@ -54,6 +54,11 @@ defmodule Hologram.Compiler.PrunerTest do
       module_48 = Hologram.Test.Fixtures.Compiler.Pruner.Module48
       assert function_kept?(module_48, module_48, :layout, 0)
     end
+
+    test "entry page custom_layout function" do
+      module_51 = Hologram.Test.Fixtures.Compiler.Pruner.Module51
+      assert function_kept?(module_51, module_51, :custom_layout, 0)
+    end
   end
 
   describe "pruned page functions" do
@@ -61,6 +66,12 @@ defmodule Hologram.Compiler.PrunerTest do
       module_49 = Hologram.Test.Fixtures.Compiler.Pruner.Module49
       module_50 = Hologram.Test.Fixtures.Compiler.Pruner.Module50
       refute function_kept?(module_49, module_50, :layout, 0)
+    end
+
+    test "non-entry page custom_layout function" do
+      module_52 = Hologram.Test.Fixtures.Compiler.Pruner.Module52
+      module_53 = Hologram.Test.Fixtures.Compiler.Pruner.Module53
+      refute function_kept?(module_52, module_53, :custom_layout, 0)
     end
   end
 
