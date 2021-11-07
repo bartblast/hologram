@@ -70,6 +70,11 @@ defmodule Hologram.Compiler.PrunerTest do
       module_56 = Hologram.Test.Fixtures.Compiler.Pruner.Module56
       assert function_kept?(module_55, module_56, :route, 0)
     end
+
+    test "entry page __info__ function" do
+      module_64 = Hologram.Test.Fixtures.Compiler.Pruner.Module64
+      assert function_kept?(module_64, module_64, :__info__, 1)
+    end
   end
 
   describe "pruned page functions" do
@@ -83,6 +88,12 @@ defmodule Hologram.Compiler.PrunerTest do
       module_52 = Hologram.Test.Fixtures.Compiler.Pruner.Module52
       module_53 = Hologram.Test.Fixtures.Compiler.Pruner.Module53
       refute function_kept?(module_52, module_53, :custom_layout, 0)
+    end
+
+    test "non-entry page __info__ function" do
+      module_65 = Hologram.Test.Fixtures.Compiler.Pruner.Module65
+      module_66 = Hologram.Test.Fixtures.Compiler.Pruner.Module66
+      refute function_kept?(module_65, module_66, :__info__, 1)
     end
   end
 

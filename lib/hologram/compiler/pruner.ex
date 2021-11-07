@@ -23,6 +23,7 @@ defmodule Hologram.Compiler.Pruner do
     |> include_code_reachable_from_page_template(call_graph, page_module)
     |> include_code_reachable_from_page_layout_fun(call_graph, page_module)
     |> include_code_reachable_from_page_custom_layout_fun(call_graph, page_module)
+    |> include_code_reachable_from_page_info_fun(call_graph, page_module)
     |> include_code_reachable_from_layout_init_fun(call_graph, layout_module)
     |> include_code_reachable_from_layout_actions(call_graph, layout_module)
     |> include_code_reachable_from_layout_template(call_graph, layout_module)
@@ -86,6 +87,11 @@ defmodule Hologram.Compiler.Pruner do
 
   defp include_code_reachable_from_page_custom_layout_fun(acc, call_graph, page_module) do
     Graph.reachable(call_graph, [{page_module, :custom_layout}])
+    |> maybe_include_reachable_code(acc)
+  end
+
+  defp include_code_reachable_from_page_info_fun(acc, call_graph, page_module) do
+    Graph.reachable(call_graph, [{page_module, :__info__}])
     |> maybe_include_reachable_code(acc)
   end
 
