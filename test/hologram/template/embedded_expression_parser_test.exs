@@ -1,20 +1,23 @@
 defmodule Hologram.Template.EmbeddedExpressionParserTest do
   use Hologram.Test.UnitCase, async: true
 
-  alias Hologram.Compiler.IR.{ModuleAttributeOperator, TupleType}
+  alias Hologram.Compiler.Context
+  alias Hologram.Compiler.IR.{AliasDirective, FunctionCall, ModuleAttributeOperator, TupleType}
   alias Hologram.Template.VDOM.{Expression, TextNode}
   alias Hologram.Template.EmbeddedExpressionParser
 
+  @context %Context{}
+
   test "text" do
     str = "test"
-    result = EmbeddedExpressionParser.parse(str)
+    result = EmbeddedExpressionParser.parse(str, @context)
 
     assert result == [%TextNode{content: str}]
   end
 
   test "expression" do
     str = "{@abc}"
-    result = EmbeddedExpressionParser.parse(str)
+    result = EmbeddedExpressionParser.parse(str, @context)
 
     expected = [
       %Expression{
@@ -29,7 +32,7 @@ defmodule Hologram.Template.EmbeddedExpressionParserTest do
 
   test "text, expression" do
     str = "bcd{@abc}"
-    result = EmbeddedExpressionParser.parse(str)
+    result = EmbeddedExpressionParser.parse(str, @context)
 
     expected = [
       %TextNode{content: "bcd"},
@@ -45,7 +48,7 @@ defmodule Hologram.Template.EmbeddedExpressionParserTest do
 
   test "expression, text" do
     str = "{@abc}bcd"
-    result = EmbeddedExpressionParser.parse(str)
+    result = EmbeddedExpressionParser.parse(str, @context)
 
     expected = [
       %Expression{
@@ -61,7 +64,7 @@ defmodule Hologram.Template.EmbeddedExpressionParserTest do
 
   test "expression, expression" do
     str = "{@abc}{@bcd}"
-    result = EmbeddedExpressionParser.parse(str)
+    result = EmbeddedExpressionParser.parse(str, @context)
 
     expected = [
       %Expression{
@@ -81,7 +84,7 @@ defmodule Hologram.Template.EmbeddedExpressionParserTest do
 
   test "text, expression, text" do
     str = "cde{@abc}bcd"
-    result = EmbeddedExpressionParser.parse(str)
+    result = EmbeddedExpressionParser.parse(str, @context)
 
     expected = [
       %TextNode{content: "cde"},
@@ -98,7 +101,7 @@ defmodule Hologram.Template.EmbeddedExpressionParserTest do
 
   test "expression, text, expression" do
     str = "{@abc}bcd{@cde}"
-    result = EmbeddedExpressionParser.parse(str)
+    result = EmbeddedExpressionParser.parse(str, @context)
 
     expected = [
       %Expression{
@@ -119,7 +122,7 @@ defmodule Hologram.Template.EmbeddedExpressionParserTest do
 
   test "text, expression, text, expression" do
     str = "cde{@abc}bcd{@def}"
-    result = EmbeddedExpressionParser.parse(str)
+    result = EmbeddedExpressionParser.parse(str, @context)
 
     expected = [
       %TextNode{content: "cde"},
@@ -141,7 +144,7 @@ defmodule Hologram.Template.EmbeddedExpressionParserTest do
 
   test "expression, text, expression, text" do
     str = "{@abc}bcd{@cde}def"
-    result = EmbeddedExpressionParser.parse(str)
+    result = EmbeddedExpressionParser.parse(str, @context)
 
     expected = [
       %Expression{
@@ -156,6 +159,34 @@ defmodule Hologram.Template.EmbeddedExpressionParserTest do
         }
       },
       %TextNode{content: "def"}
+    ]
+
+    assert result == expected
+  end
+
+  test "context passing" do
+    context = %Context{
+      aliases: [
+        %AliasDirective{
+          module: Abc.Bcd.Module1,
+          as: [:Module1]
+        }
+      ]
+    }
+
+    str = "{Module1.test_fun()}"
+    result = EmbeddedExpressionParser.parse(str, context)
+
+    expected = [
+      %Expression{
+        ir: %TupleType{
+          data: [%FunctionCall{
+            module: Abc.Bcd.Module1,
+            function: :test_fun,
+            args: []
+          }]
+        }
+      }
     ]
 
     assert result == expected

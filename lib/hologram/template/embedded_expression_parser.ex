@@ -1,6 +1,4 @@
 defmodule Hologram.Template.EmbeddedExpressionParser do
-  use Hologram.Commons.Parser
-
   alias Hologram.Compiler.{Context, Transformer}
   alias Hologram.Compiler.Parser, as: CompilerParser
   alias Hologram.Template.VDOM.{Expression, TextNode}
@@ -8,15 +6,14 @@ defmodule Hologram.Template.EmbeddedExpressionParser do
   @doc """
   Splits a string which may contain embedded expressions into a list of expression nodes and text nodes.
   """
-  @impl Hologram.Commons.Parser
-  def parse(str) do
+  def parse(str, %Context{} = context) do
     nodes =
       ~r/([^\{]*)(\{[^\}]*\})([^\{]*)/
       |> Regex.scan(str)
       |> Enum.reduce([], fn [_, left, expr, right], acc ->
         acc
         |> maybe_include_text_node(left)
-        |> maybe_include_expression(expr)
+        |> maybe_include_expression(expr, context)
         |> maybe_include_text_node(right)
       end)
 
@@ -32,15 +29,14 @@ defmodule Hologram.Template.EmbeddedExpressionParser do
     end
   end
 
-  defp get_ir(code) do
+  defp get_ir(code, context) do
     CompilerParser.parse!(code)
-    # DEFER: pass actual %Context{} struct received from compiler
-    |> Transformer.transform(%Context{})
+    |> Transformer.transform(context)
   end
 
-  defp maybe_include_expression(acc, code) do
+  defp maybe_include_expression(acc, code, context) do
     if String.length(code) > 0 do
-      acc ++ [%Expression{ir: get_ir(code)}]
+      acc ++ [%Expression{ir: get_ir(code, context)}]
     else
       acc
     end
