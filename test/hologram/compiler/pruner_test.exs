@@ -82,6 +82,12 @@ defmodule Hologram.Compiler.PrunerTest do
       module_34 = Hologram.Test.Fixtures.Compiler.Pruner.Module34
       assert function_kept?(module_32, module_34, :template, 0)
     end
+
+    test "layout init" do
+      module_38 = Hologram.Test.Fixtures.Compiler.Pruner.Module38
+      module_39 = Hologram.Test.Fixtures.Compiler.Pruner.Module39
+      assert function_kept?(module_38, module_39, :init, 0)
+    end
   end
 
   describe "kept component functions" do
