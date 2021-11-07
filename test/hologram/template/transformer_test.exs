@@ -1,18 +1,19 @@
 defmodule Hologram.Template.TransformerTest do
   use Hologram.Test.UnitCase, async: true
 
+  alias Hologram.Compiler.Context
   alias Hologram.Compiler.IR.{IntegerType, TupleType}
   alias Hologram.Template.{Parser, Transformer}
   alias Hologram.Template.VDOM.{Component, ElementNode, Expression, TextNode}
 
-  @aliases []
+  @context %Context{}
 
   test "list of nodes" do
     html = "<div></div><span></span>"
 
     result =
       Parser.parse!(html)
-      |> Transformer.transform(@aliases)
+      |> Transformer.transform(@context)
 
     expected = [
       %ElementNode{
@@ -35,7 +36,7 @@ defmodule Hologram.Template.TransformerTest do
 
     result =
       Parser.parse!(html)
-      |> Transformer.transform(@aliases)
+      |> Transformer.transform(@context)
 
     assert [%Component{}] = result
   end
@@ -45,7 +46,7 @@ defmodule Hologram.Template.TransformerTest do
 
     result =
       Parser.parse!(html)
-      |> Transformer.transform(@aliases)
+      |> Transformer.transform(@context)
 
     assert [%ElementNode{children: [%ElementNode{}]}] = result
   end
@@ -55,7 +56,7 @@ defmodule Hologram.Template.TransformerTest do
 
     result =
       Parser.parse!(html)
-      |> Transformer.transform(@aliases)
+      |> Transformer.transform(@context)
 
     expected = [%TextNode{content: "test_text"}]
 
@@ -67,7 +68,7 @@ defmodule Hologram.Template.TransformerTest do
 
     result =
       Parser.parse!(html)
-      |> Transformer.transform(@aliases)
+      |> Transformer.transform(@context)
 
     expected = [
       %TextNode{content: "a"},

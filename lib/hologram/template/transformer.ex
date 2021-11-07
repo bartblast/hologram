@@ -1,7 +1,6 @@
 defmodule Hologram.Template.Transformer do
-  alias Hologram.Compiler.IR.AliasDirective
+  alias Hologram.Compiler.Context
   alias Hologram.Template.{ComponentTransformer, ElementNodeTransformer, EmbeddedExpressionParser}
-  alias Hologram.Typespecs, as: T
 
   @doc """
   Transforms parsed markup into a VDOM template.
@@ -30,29 +29,28 @@ defmodule Hologram.Template.Transformer do
         }
       ]
   """
-  @spec transform(Saxy.SimpleForm.t(), list(%AliasDirective{})) :: list(T.vdom_node())
 
-  def transform(nodes, aliases) do
-    Enum.reduce(nodes, [], &(&2 ++ transform_node(&1, aliases)))
+  def transform(nodes, %Context{} = context) do
+    Enum.reduce(nodes, [], &(&2 ++ transform_node(&1, context)))
   end
 
-  defp transform_node(node, _) when is_binary(node) do
-    EmbeddedExpressionParser.parse(node)
+  defp transform_node(node, context) when is_binary(node) do
+    EmbeddedExpressionParser.parse(node, context)
   end
 
-  defp transform_node({type, attrs, children}, aliases) do
-    children = Enum.reduce(children, [], &(&2 ++ transform_node(&1, aliases)))
+  defp transform_node({type, attrs, children}, context) do
+    children = Enum.reduce(children, [], &(&2 ++ transform_node(&1, context)))
 
-    case determine_node_type(type, aliases) do
+    case determine_node_type(type) do
       :component ->
-        [ComponentTransformer.transform(type, attrs, children, aliases)]
+        [ComponentTransformer.transform(type, attrs, children, context)]
 
       :element ->
         [ElementNodeTransformer.transform(type, children, attrs)]
     end
   end
 
-  defp determine_node_type(type, _) do
+  defp determine_node_type(type) do
     first_char = String.at(type, 0)
     downcased_first_char = String.downcase(first_char)
 
