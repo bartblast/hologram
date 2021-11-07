@@ -37,6 +37,12 @@ defmodule Hologram.Compiler.PrunerTest do
       module_15 = Hologram.Test.Fixtures.Compiler.Pruner.Module15
       assert function_kept?(module_15, module_15, :template, 0)
     end
+
+    test "functions reachable from page template" do
+      module_20 = Hologram.Test.Fixtures.Compiler.Pruner.Module20
+      module_22 = Hologram.Test.Fixtures.Compiler.Pruner.Module22
+      assert function_kept?(module_20, module_22, :test_22a, 0)
+    end
   end
 
   describe "kept layout functions" do
