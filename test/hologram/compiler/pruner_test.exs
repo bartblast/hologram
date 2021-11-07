@@ -175,4 +175,10 @@ defmodule Hologram.Compiler.PrunerTest do
       assert function_kept?(module_45, module_47, :test_fun_47a, 0)
     end
   end
+
+  test "unused functions are pruned" do
+    module_57 = Hologram.Test.Fixtures.Compiler.Pruner.Module57
+    module_58 = Hologram.Test.Fixtures.Compiler.Pruner.Module58
+    refute function_kept?(module_57, module_58, :test_fun_58a, 0)
+  end
 end
