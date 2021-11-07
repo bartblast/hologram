@@ -194,4 +194,13 @@ defmodule Hologram.Compiler.PrunerTest do
 
     refute Map.has_key?(result, module_60)
   end
+
+  test "circular dependencies are handled correctly" do
+    module_61 = Hologram.Test.Fixtures.Compiler.Pruner.Module61
+    module_62 = Hologram.Test.Fixtures.Compiler.Pruner.Module62
+    module_63 = Hologram.Test.Fixtures.Compiler.Pruner.Module63
+
+    assert function_kept?(module_61, module_62, :test_fun_62a, 0)
+    assert function_kept?(module_61, module_63, :test_fun_63a, 0)
+  end
 end
