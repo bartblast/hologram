@@ -46,7 +46,7 @@ defmodule Hologram.Template.Transformer do
         [ComponentTransformer.transform(type, attrs, children, context)]
 
       :element ->
-        [ElementNodeTransformer.transform(type, children, attrs)]
+        [ElementNodeTransformer.transform(type, children, attrs, context)]
     end
   end
 
