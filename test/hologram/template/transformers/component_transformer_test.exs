@@ -1,18 +1,19 @@
 defmodule Hologram.Template.ComponentTransformerTest do
   use Hologram.Test.UnitCase, async: true
 
+  alias Hologram.Compiler.Context
   alias Hologram.Compiler.IR.{AliasDirective, ModuleDefinition}
   alias Hologram.Template.ComponentTransformer
   alias Hologram.Template.VDOM.{Component, Expression, TextNode}
 
-  @aliases []
   @attrs []
   @children :children_stub
+  @context %Context{}
   @module Hologram.Test.Fixtures.PlaceholderComponent
   @module_name "Hologram.Test.Fixtures.PlaceholderComponent"
 
   test "non-aliased component" do
-    result = ComponentTransformer.transform(@module_name, @attrs, @children, @aliases)
+    result = ComponentTransformer.transform(@module_name, @attrs, @children, @context)
 
     assert %ModuleDefinition{} = result.module_def
 
@@ -28,9 +29,12 @@ defmodule Hologram.Template.ComponentTransformerTest do
 
   test "aliased component" do
     module_name = "Bcd"
-    aliases = [%AliasDirective{module: @module, as: [:Bcd]}]
 
-    result = ComponentTransformer.transform(module_name, @attrs, @children, aliases)
+    context = %Context{
+      aliases: [%AliasDirective{module: @module, as: [:Bcd]}]
+    }
+
+    result = ComponentTransformer.transform(module_name, @attrs, @children, context)
 
     assert %ModuleDefinition{} = result.module_def
 
@@ -47,7 +51,7 @@ defmodule Hologram.Template.ComponentTransformerTest do
   test "props" do
     props = [{"attr_1", "text"}, {"attr_2", "abc{@k}xyz"}]
 
-    result = ComponentTransformer.transform(@module_name, props, @children, @aliases)
+    result = ComponentTransformer.transform(@module_name, props, @children, @context)
 
     assert %ModuleDefinition{} = result.module_def
 
