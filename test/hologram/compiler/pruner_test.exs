@@ -109,5 +109,11 @@ defmodule Hologram.Compiler.PrunerTest do
       module_28 = Hologram.Test.Fixtures.Compiler.Pruner.Module28
       assert function_kept?(module_26, module_28, :test_28a, 0)
     end
+
+    test "components reachable from component template" do
+      module_35 = Hologram.Test.Fixtures.Compiler.Pruner.Module35
+      module_37 = Hologram.Test.Fixtures.Compiler.Pruner.Module37
+      assert function_kept?(module_35, module_37, :template, 0)
+    end
   end
 end
