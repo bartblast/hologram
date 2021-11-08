@@ -1,5 +1,5 @@
 defmodule Hologram.Compiler.Resolver do
-  alias Hologram.Compiler.Helpers
+  alias Hologram.Compiler.{Helpers, Reflection}
   alias Hologram.Compiler.IR.{AliasDirective, ImportDirective}
   alias Hologram.Compiler.Typespecs, as: T
 
@@ -55,7 +55,7 @@ defmodule Hologram.Compiler.Resolver do
   end
 
   defp resolve_to_kernel_module(function, arity) do
-    if function_exported?(Kernel, function, arity) || macro_exported?(Kernel, function, arity) do
+    if Reflection.has_function?(Kernel, function, arity) || Reflection.has_macro?(Kernel, function, arity) do
       Kernel
     else
       nil
@@ -64,7 +64,7 @@ defmodule Hologram.Compiler.Resolver do
 
   # TODO: take into account "only" and "except" import opts
   defp resolve_to_imported_module(function, arity, imports) do
-    resolved = Enum.find(imports, &function_exported?(&1.module, function, arity))
+    resolved = Enum.find(imports, &Reflection.has_function?(&1.module, function, arity))
 
     if resolved, do: resolved.module, else: nil
   end

@@ -96,7 +96,7 @@ defmodule Hologram.Compiler.Expander do
   defp find_macro_definition(name, args, requires) do
     require_directive =
       Enum.find(requires, fn %RequireDirective{module: module} ->
-        macro_exported?(module, name, Enum.count(args))
+        Reflection.has_macro?(module, name, Enum.count(args))
       end)
 
     if require_directive do
