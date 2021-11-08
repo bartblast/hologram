@@ -38,9 +38,12 @@ defmodule Hologram.Compiler.Reflection do
     |> Map.get("#{module}")
   end
 
+  # Kernel.function_exported?/3 does not load the module in case it is not loaded
+  # (in such cases it would return false even when the module has the given export).
   def has_function?(module, function, arity) do
-    module_definition(module).functions
-    |> Enum.any?(&(&1.name == function && &1.arity == arity))
+    module.module_info(:exports)
+    |> Keyword.get_values(function)
+    |> Enum.member?(arity)
   end
 
   def has_template?(module) do
