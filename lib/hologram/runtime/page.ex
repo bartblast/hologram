@@ -4,8 +4,11 @@ defmodule Hologram.Page do
   defmacro __using__(_) do
     quote do
       require Hologram.Page
+
       import Hologram.Page
       import Hologram.Runtime.Commons, only: [sigil_H: 2, update: 3]
+
+      alias Hologram.UI.Link
 
       def layout do
         if Keyword.has_key?(__MODULE__.__info__(:functions), :custom_layout) do

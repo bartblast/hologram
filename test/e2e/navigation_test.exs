@@ -3,7 +3,7 @@ defmodule Hologram.Features.NavigationTest do
 
   @moduletag :e2e
 
-  feature "link", %{session: session} do
+  feature "anchor", %{session: session} do
     session
     |> visit("/e2e/page-5")
     |> click(css("#page-2-link"))
