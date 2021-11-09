@@ -1,5 +1,4 @@
 alias Hologram.Compiler.Aggregator
-alias Hologram.Compiler.IR.ModuleType
 alias Hologram.Template.VDOM.Component
 
 defimpl Aggregator, for: Component do
