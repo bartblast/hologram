@@ -8,7 +8,7 @@ defmodule Hologram.Compiler.Helpers do
     |> Enum.reduce([], &aggregate_bindings_from_param/2)
     |> Enum.sort()
   end
-  
+
   defp aggregate_bindings_from_param({param, idx}, acc) do
     Binder.bind(param)
     |> Enum.reduce(acc, &maybe_add_binding(&1, &2, idx))
@@ -64,46 +64,6 @@ defmodule Hologram.Compiler.Helpers do
     module_defs_map
     |> Enum.filter(fn {_, module_def} -> module_def.page? end)
     |> Enum.map(fn {_, module_def} -> module_def end)
-  end
-
-  @doc """
-  Returns true if the given module is a component,
-  i.e. it contains a use directive for the Hologram.Component module.
-
-  ## Examples
-      iex> module_definition = %ModuleDefinition{
-      iex>   module: TestModule,
-      iex>   uses: [%UseDirective{module: Hologram.Component}]
-      iex> }
-      iex> is_component?(module_definition)
-      true
-  """
-  @spec is_component?(%ModuleDefinition{}) :: boolean()
-
-  def is_component?(module_definition) do
-    uses_module?(module_definition, Hologram.Component)
-  end
-
-  def is_layout?(module_def) do
-    uses_module?(module_def, Hologram.Layout)
-  end
-
-  @doc """
-  Returns true if the given module is a page,
-  i.e. it contains a use directive for the Hologram.Page module.
-
-  ## Examples
-      iex> module_definition = %ModuleDefinition{
-      iex>   module: TestModule,
-      iex>   uses: [%UseDirective{module: Hologram.Page}]
-      iex> }
-      iex> is_page?(module_definition)
-      true
-  """
-  @spec is_page?(%ModuleDefinition{}) :: boolean()
-
-  def is_page?(module_definition) do
-    uses_module?(module_definition, Hologram.Page)
   end
 
   defp maybe_add_binding(binding, acc, idx) do

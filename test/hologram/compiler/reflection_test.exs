@@ -239,26 +239,4 @@ defmodule Hologram.Compiler.ReflectionTest do
       refute Reflection.standard_lib?(Phoenix)
     end
   end
-
-  describe "templatable/1" do
-    test "component" do
-      module_def = %ModuleDefinition{uses: [%UseDirective{module: Hologram.Component}]}
-      assert Reflection.templatable?(module_def)
-    end
-
-    test "page" do
-      module_def = %ModuleDefinition{uses: [%UseDirective{module: Hologram.Page}]}
-      assert Reflection.templatable?(module_def)
-    end
-
-    test "layout" do
-      module_def = %ModuleDefinition{uses: [%UseDirective{module: Hologram.Layout}]}
-      assert Reflection.templatable?(module_def)
-    end
-
-    test "other modules" do
-      module_def = %ModuleDefinition{uses: []}
-      refute Reflection.templatable?(module_def)
-    end
-  end
 end

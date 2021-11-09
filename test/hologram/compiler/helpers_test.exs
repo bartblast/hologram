@@ -387,63 +387,6 @@ defmodule Hologram.Compiler.HelpersTest do
     assert result == expected
   end
 
-  describe "is_component?/1" do
-    test "true" do
-      module_definition = %ModuleDefinition{
-        uses: [
-          %UseDirective{
-            module: Hologram.Component
-          }
-        ]
-      }
-
-      assert Helpers.is_component?(module_definition)
-    end
-
-    test "false" do
-      module_definition = %ModuleDefinition{uses: []}
-      refute Helpers.is_component?(module_definition)
-    end
-  end
-
-  describe "is_layout?/1" do
-    test "true" do
-      module_def = %ModuleDefinition{
-        uses: [
-          %UseDirective{
-            module: Hologram.Layout
-          }
-        ]
-      }
-
-      assert Helpers.is_layout?(module_def)
-    end
-
-    test "false" do
-      module_def = %ModuleDefinition{uses: []}
-      refute Helpers.is_layout?(module_def)
-    end
-  end
-
-  describe "is_page?/1" do
-    test "true" do
-      module_definition = %ModuleDefinition{
-        uses: [
-          %UseDirective{
-            module: Hologram.Page
-          }
-        ]
-      }
-
-      assert Helpers.is_page?(module_definition)
-    end
-
-    test "false" do
-      module_definition = %ModuleDefinition{uses: []}
-      refute Helpers.is_page?(module_definition)
-    end
-  end
-
   test "module/1" do
     result = Helpers.module([:Hologram, :Compiler, :HelpersTest])
     expected = Elixir.Hologram.Compiler.HelpersTest

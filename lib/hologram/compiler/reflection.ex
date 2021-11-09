@@ -180,10 +180,4 @@ defmodule Hologram.Compiler.Reflection do
       !String.starts_with?(source_path, "#{root_path}/test/") &&
       !String.starts_with?(source_path, "#{root_path}/deps/")
   end
-
-  def templatable?(module_def) do
-    Helpers.is_component?(module_def) ||
-      Helpers.is_page?(module_def) ||
-      Helpers.is_layout?(module_def)
-  end
 end
