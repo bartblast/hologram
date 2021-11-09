@@ -1,13 +1,16 @@
 defmodule Hologram.Compiler.Builder do
-  alias Hologram.Compiler
-  alias Hologram.Compiler.{Context, JSEncoder, Opts, Pruner}
+  alias Hologram.Compiler.{Aggregator, Context, JSEncoder, Opts, Pruner}
 
   def build(module) do
-    Compiler.compile(module)
+    module
+    |> Aggregator.aggregate()
     |> Pruner.prune(module)
-    |> Enum.reduce("", fn {_, ir}, acc ->
-      # TODO: pass actual %Context{} struct received from compiler
-      acc <> "\n" <> JSEncoder.encode(ir, %Context{}, %Opts{})
+    |> encode_module_defs()
+  end
+
+  defp encode_module_defs(module_defs) do
+    Enum.reduce(module_defs, "", fn {_, module_def}, acc ->
+      acc <> "\n" <> JSEncoder.encode(module_def, %Context{}, %Opts{})
     end)
   end
 end
