@@ -5,11 +5,7 @@ defmodule Hologram.Compiler.PrunerTest do
   alias Hologram.Compiler.IR.ModuleType
 
   def function_kept?(page_module, tested_module, function, arity) do
-    module_defs =
-      %ModuleType{module: page_module}
-      |> Aggregator.aggregate()
-
-
+    module_defs = Aggregator.aggregate(page_module)
     result = Pruner.prune(module_defs, page_module)
 
     if result[tested_module] do
@@ -197,10 +193,7 @@ defmodule Hologram.Compiler.PrunerTest do
     module_59 = Hologram.Test.Fixtures.Compiler.Pruner.Module59
     module_60 = Hologram.Test.Fixtures.Compiler.Pruner.Module60
 
-    module_defs =
-      %ModuleType{module: module_59}
-      |> Aggregator.aggregate()
-
+    module_defs = Aggregator.aggregate(module_59)
     result = Pruner.prune(module_defs, module_59)
 
     refute Map.has_key?(result, module_60)

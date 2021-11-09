@@ -15,8 +15,7 @@ defimpl Aggregator, for: Component do
   end
 
   defp aggregate_from_module(module_defs, module) do
-    %ModuleType{module: module}
-    |> Aggregator.aggregate(module_defs)
+    Aggregator.aggregate(module, module_defs)
   end
 
   defp aggregate_from_props(module_defs, props) do
