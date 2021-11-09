@@ -102,6 +102,20 @@ defmodule Hologram.Compiler.ReflectionTest do
     assert %FunctionDefinition{module: Abc.Bcd} = result
   end
 
+  describe "is_module?/1" do
+    test "atom which is a module" do
+      assert Reflection.is_module?(Kernel)
+    end
+
+    test "atom which is not a module" do
+      refute Reflection.is_module?(:abc)
+    end
+
+    test "non-atom" do
+      refute Reflection.is_module?(123)
+    end
+  end
+
   test "macro_definition/3" do
     result = Reflection.macro_definition(@module_2, :test_macro, [1, 2])
     assert %MacroDefinition{arity: 2, name: :test_macro} = result

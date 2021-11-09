@@ -61,6 +61,11 @@ defmodule Hologram.Compiler.Reflection do
     |> Transformer.transform(context)
   end
 
+  def is_module?(term) do
+    str = to_string(term)
+    is_atom(term) && String.starts_with?(str, "Elixir.")
+  end
+
   # TODO: refactor & test
   def list_pages(opts \\ get_config()) do
     glob = "#{pages_path(opts)}/**/*.ex"
