@@ -47,7 +47,7 @@
 | Resize       | :x:                |
 | Scroll       | :x:                |
 | Select       | :x:                |
-| Submit       | :x:                |
+| Submit       | :white_check_mark: |
 | Tap          | :x:                |
 | Target       | :x:                |
 | Touch Cancel | :x:                |

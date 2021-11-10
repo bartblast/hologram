@@ -8,6 +8,7 @@ import Type from "./type";
 import Utils from "./utils";
 
 import ClickEvent from "./events/click_event";
+import SubmitEvent from "./events/submit_event";
 
 import { attributesModule, eventListenersModule, h, init, toVNode } from "snabbdom";
 const patch = init([attributesModule, eventListenersModule]);
@@ -130,6 +131,10 @@ export default class VDOM {
 
     if (node.attrs.on_click) {
       eventHandlers.click = (event) => { Runtime.handleEvent(event, ClickEvent, sourceId, bindings, node.attrs.on_click) }
+    }
+
+    if (node.attrs.on_submit) {
+      eventHandlers.submit = (event) => { Runtime.handleEvent(event, SubmitEvent, sourceId, bindings, node.attrs.on_submit) }
     }
 
     return eventHandlers

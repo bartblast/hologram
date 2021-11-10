@@ -298,6 +298,14 @@ describe("buildVNodeEventHandlers()", () => {
 
     assert.isFunction(result.click)
   })
+
+  it("builds vnode submit event handler", () => {
+    const attrs = {on_submit: "test_on_submit_spec"}
+    const elementNode = Type.elementNode("form", attrs, [])
+    const result = VDOM.buildVNodeEventHandlers(elementNode)
+
+    assert.isFunction(result.submit)
+  })
 })
 
 describe("buildVNodeList()", () => {
