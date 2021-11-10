@@ -15,5 +15,8 @@
   "scripts": {
     "test": "mochapack --mode development --webpack-config webpack.config.test.js \"../test/js/**/*.js\" --color",
     "test-file": "mochapack --mode development --webpack-config webpack.config.test.js --color"
+  },
+  "dependencies": {
+    "morphdom": "^2.6.1"
   }
 }

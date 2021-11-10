@@ -48,8 +48,10 @@ export default class ScriptsReloader {
       Utils.eval(reloadedScript.textContent, false)
       callback()
     } else {
-      script.parentNode.insertBefore(reloadedScript, script)
-      script.parentNode.removeChild(script)
+      if (script.parentNode) {
+        script.parentNode.insertBefore(reloadedScript, script)
+        script.parentNode.removeChild(script)
+      }
     }
   }
 

@@ -11,6 +11,8 @@ import Type from "./type";
 import Utils from "./utils"
 import VDOM from "./vdom"
 
+const morphdom = require("morphdom");
+
 export default class Runtime {
   static componentClassRegistry = {}
   static document = null
@@ -81,7 +83,12 @@ export default class Runtime {
   // Covered implicitely in E2E tests.
   static loadPage(html) {
     // DEFER: copy html node attributes (because only the inner HTML is updated)
-    Runtime.document.documentElement.innerHTML = html
+
+    var el = Runtime.document.createElement("html")
+    el.innerHTML = html
+
+    morphdom(Runtime.document.head, el.querySelector("head"))
+    morphdom(Runtime.document.body, el.querySelector("body"))
 
     VDOM.reset()
     ScriptsReloader.reload(Runtime.document)
