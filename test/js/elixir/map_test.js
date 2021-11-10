@@ -51,6 +51,29 @@ describe("has_key$question()", () => {
   });
 });
 
+describe("keys()", () => {
+  it("returns keys of a non-empty map", () => {
+    let map = Type.map()
+    map = Map.put(map, Type.atom("a"), Type.integer(1))
+    map = Map.put(map, Type.atom("b"), Type.integer(2))
+
+    const result = Map.keys(map)
+    const expected = Type.list([Type.atom("a"), Type.atom("b")])
+
+    assert.deepStrictEqual(result, expected)
+  })
+
+  it("returns keys of an empty map", () => {
+    const result = Map.keys(Type.map())
+    assert.deepStrictEqual(result, Type.list())
+  })
+
+  it("returns frozen object", () => {
+    const result = Map.keys(Type.map())
+    assertFrozen(result);
+  });
+})
+
 describe("put()", () => {
   let map1, map2, result;
 

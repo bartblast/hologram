@@ -22,6 +22,15 @@ export default class Map {
     }
   }
 
+  static keys(map) {
+    const keysData = Object.keys(map.data).reduce((acc, key) => {
+      acc.push(Type.decodeKey(key))
+      return acc
+    }, [])
+
+    return Type.list(keysData)
+  }
+
   static put(map, key, value) {
     let newMap = Utils.clone(map)
     newMap.data[Type.encodedKey(key)] = value
