@@ -24,6 +24,25 @@ export default class Type {
     return Utils.freeze({type: "component", module: className, props: props, children: children})
   }
 
+  static decodeKey(key) {
+    const regex = /^~([a-z]+)\[(.*)\]$/
+    const matches = regex.exec(key)
+    const type = matches[1]
+    const value = matches[2]
+
+    switch (type) {
+      case "atom":
+        return Type.atom(value)
+
+      case "string":
+        return Type.string(value)
+
+      default:
+        const message = `Type.decodeKey(): key = ${JSON.stringify(key)}`
+        throw new HologramNotImplementedError(message)        
+    }
+  }
+
   static elementNode(tag, attrs, children) {
     return Utils.freeze({type: "element", tag: tag, attrs: attrs, children: children})
   }

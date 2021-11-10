@@ -72,6 +72,36 @@ describe("componentNode()", () => {
   })
 })
 
+describe("decodeKey()", () => {
+  it("decodes encoded atom key", () => {
+    const boxedValue = Type.atom("test")
+    const encodedKey = Type.encodedKey(boxedValue)
+
+    const result = Type.decodeKey(encodedKey)
+    assert.deepStrictEqual(result, boxedValue)
+  })
+
+  it("decodes encoded string key", () => {
+    const boxedValue = Type.string("test")
+    const encodedKey = Type.encodedKey(boxedValue)
+
+    const result = Type.decodeKey(encodedKey)
+    assert.deepStrictEqual(result, boxedValue)
+  })
+
+  it("throws an error for not implemented types", () => {
+    const arg = "~invalid[123]"
+    const expectedMessage = 'Type.decodeKey(): key = "~invalid[123]"'
+    
+    assert.throw(() => { Type.decodeKey(arg) }, HologramNotImplementedError, expectedMessage);
+  })
+
+  it("returns frozen object", () => {
+    const result = Type.decodeKey(Type.atomKey("test"))
+    assertFrozen(result)
+  })
+})
+
 describe("elementNode()", () => {
   const result = Type.elementNode("div", "test_attrs", "test_children")
 
