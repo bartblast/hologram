@@ -4,12 +4,14 @@ import {
   assert,
   assertBoxedFalse,
   assertBoxedTrue,
+  assertFrozen,
   cleanup,
 } from "../support/commons";
 beforeEach(() => cleanup());
 
 import Enum from "../../../assets/js/hologram/elixir/enum";
 import { HologramNotImplementedError } from "../../../assets/js/hologram/errors";
+import Map from "../../../assets/js/hologram/elixir/map";
 import Type from "../../../assets/js/hologram/type";
 
 describe("member$question()", () => {
@@ -60,3 +62,35 @@ describe("member$question()", () => {
     );
   });
 });
+
+describe("to_list()", () => {
+  it("returns the given arg if it is a boxed list", () => {
+    const list = Type.list([Type.atom("a"), Type.integer(2)])
+    const result = Enum.to_list(list)
+
+    assert.deepStrictEqual(result, list)
+    assertFrozen(result)
+  })
+
+  it("converts a boxed map to a boxed list", () => {
+    let map = Type.map()
+    map = Map.put(map, Type.atom("a"), Type.integer(1))
+    map = Map.put(map, Type.atom("b"), Type.integer(2))
+
+    const result = Enum.to_list(map)
+
+    const expected = Type.list([
+      Type.tuple([Type.atom("a"), Type.integer(1)]),
+      Type.tuple([Type.atom("b"), Type.integer(2)])
+    ])
+
+    assert.deepStrictEqual(result, expected)
+    assertFrozen(result)
+  })
+
+  it("throws an error for not implemented enumerable types", () => {
+    const enumerable = { type: "not implemented", value: "test" };
+    const expectedMessage = 'Enum.to_list(): enumerable = {"type":"not implemented","value":"test"}';
+    assert.throw(() => { Enum.to_list(enumerable) }, HologramNotImplementedError, expectedMessage);
+  });
+})
