@@ -6,6 +6,13 @@ import Type from "../type";
 import Utils from "../utils";
 
 export default class Enum {
+  static concat(left, right) {
+    const leftList = Enum.to_list(left)
+    const rightList = Enum.to_list(right)
+
+    return Type.list(leftList.data.concat(rightList.data))
+  }
+
   static member$question(enumerable, elem) {
     switch (enumerable.type) {
       case "list":

@@ -14,6 +14,28 @@ import { HologramNotImplementedError } from "../../../assets/js/hologram/errors"
 import Map from "../../../assets/js/hologram/elixir/map";
 import Type from "../../../assets/js/hologram/type";
 
+describe("concat()", () => {
+  it("concatanates 2 enumerables to a boxed list", () => {
+    let map = Type.map()
+    map = Map.put(map, Type.atom("a"), Type.integer(1))
+    map = Map.put(map, Type.atom("b"), Type.integer(2))
+
+    const list = Type.list([Type.atom("c"), Type.integer(3)])
+
+    const result = Enum.concat(map, list)
+
+    const expected = Type.list([
+      Type.tuple([Type.atom("a"), Type.integer(1)]),
+      Type.tuple([Type.atom("b"), Type.integer(2)]),
+      Type.atom("c"),
+      Type.integer(3)
+    ])
+
+    assert.deepStrictEqual(result, expected)
+    assertFrozen(result)
+  })
+})
+
 describe("member$question()", () => {
   let list;
 
