@@ -142,6 +142,10 @@ export default class Type {
     return `~string[${key}]`
   }
 
+  static struct(className, elems = {}) {
+    return Utils.freeze({type: "struct", className: className, data: elems})
+  }
+
   static textNode(content) {
     return Utils.freeze({type: "text", content: content})
   }

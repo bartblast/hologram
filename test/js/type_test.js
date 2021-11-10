@@ -522,6 +522,26 @@ describe("stringKey()", () => {
   })
 })
 
+describe("struct()", () => {
+  let elems, result;
+
+  beforeEach(() => {
+    elems = {}
+    elems[Type.atomKey("a")] = Type.integer(1)
+    elems[Type.atomKey("b")] = Type.integer(2)
+    result = Type.struct("TestClass", elems)
+  })
+
+  it("returns boxed map value", () => {
+    const expected = {type: "struct", className: "TestClass", data: elems}
+    assert.deepStrictEqual(result, expected)
+  })
+
+  it("returns immutable object", () => {
+    assertFrozen(result)
+  })
+})
+
 describe("textNode()", () => {
   it("builds a text node", () => {
     const expected = {type: "text", content: "test"}
