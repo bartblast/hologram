@@ -47,9 +47,7 @@ defmodule Hologram.Compiler.FunctionCallTransformer do
         module_segs,
         function,
         arity,
-        context.imports,
-        context.aliases,
-        context.module
+        context
       )
 
     %FunctionCall{module: module, function: function, args: args}

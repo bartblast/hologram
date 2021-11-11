@@ -3,7 +3,7 @@ defmodule Hologram.Compiler.ModuleTypeTransformer do
   alias Hologram.Compiler.IR.ModuleType
 
   def transform({:__aliases__, _, module_segs}, %Context{} = context) do
-    module = Resolver.resolve(module_segs, context.aliases)
+    module = Resolver.resolve(module_segs, context)
     %ModuleType{module: module}
   end
 

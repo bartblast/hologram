@@ -1,51 +1,50 @@
 defmodule Hologram.Compiler.Resolver do
-  alias Hologram.Compiler.{Helpers, Reflection}
-  alias Hologram.Compiler.IR.{AliasDirective, ImportDirective}
+  alias Hologram.Compiler.{Context, Helpers, Reflection}
   alias Hologram.Compiler.Typespecs, as: T
 
   @doc """
-  Determines the module based on the given module segments and aliases.
+  Resolves to a fully qualified module.
 
   ## Examples
       iex> aliases = [%AliasDirective{module: Abc.Bcd, as: [:Bcd]}]
-      iex> resolve([:Bcd], aliases)
+      iex> context = %Context{aliases: aliases}
+      iex> resolve([:Bcd], context)
       Abc.Bcd
   """
-  @spec resolve(T.module_name_segments(), list(%AliasDirective{})) :: module()
+  @spec resolve(T.module_name_segments(), %Context{}) :: module()
 
-  def resolve(module_segs, aliases) do
-    resolve(module_segs, nil, nil, [], aliases, nil)
+  def resolve(module_segs, %Context{} = context) do
+    resolve(module_segs, nil, nil, context)
   end
 
   @doc """
-  Determines the module based on the given module segments, called function, imports, aliases and the calling module.
+  Resolves to a fully qualified module.
 
   ## Examples
       iex> imports = [%ImportDirective{module: Enum}]
-      iex> resolve([], :put, 3, imports, [], Hologram.Compiler.Resolver)
+      iex> context = %Context{imports: imports}
+      iex> resolve([], :put, 3, context)
       Enum
   """
   @spec resolve(
           T.module_name_segments(),
           T.function_name(),
           integer(),
-          list(%ImportDirective{}),
-          list(%AliasDirective{}),
-          module()
+          %Context{}
         ) :: module()
 
-  def resolve([], function, arity, imports, _aliases, calling_module) do
-    imported_module = resolve_to_imported_module(function, arity, imports)
+  def resolve([], function, arity, %Context{} = context) do
+    imported_module = resolve_to_imported_module(function, arity, context.imports)
 
     cond do
       imported_module -> imported_module
       resolve_to_kernel_module(function, arity) -> Kernel
-      true -> calling_module
+      true -> context.module
     end
   end
 
-  def resolve(module_segs, _function, _arity, _imports, aliases, _calling_module) do
-    aliased_module = resolve_to_aliased_module(module_segs, aliases)
+  def resolve(module_segs, _function, _arity, %Context{} = context) do
+    aliased_module = resolve_to_aliased_module(module_segs, context.aliases)
     if aliased_module, do: aliased_module, else: Helpers.module(module_segs)
   end
 
