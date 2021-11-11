@@ -238,6 +238,7 @@
 | Module \_\_info\_\_/1 callback | :x:                |
 | Module Nesting                 | :x:                |
 | Protocols                      | :x:                |
+| Variable rebinding             | :x:                |
 
 #### Not on Roadmap
 * Types: PID, Port, Reference
