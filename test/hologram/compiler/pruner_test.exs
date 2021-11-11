@@ -1,8 +1,6 @@
 defmodule Hologram.Compiler.PrunerTest do
   use Hologram.Test.UnitCase, async: true
-
   alias Hologram.Compiler.{Aggregator, Pruner}
-  alias Hologram.Compiler.IR.ModuleType
 
   def function_kept?(page_module, tested_module, function, arity) do
     module_defs = Aggregator.aggregate(page_module)

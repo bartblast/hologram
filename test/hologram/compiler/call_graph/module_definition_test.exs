@@ -3,9 +3,8 @@ defmodule Hologram.Compiler.CallGraph.ModuleDefinitionTest do
 
   alias Hologram.Compiler.{CallGraph, Reflection}
   alias Hologram.Compiler.IR.{FunctionDefinition, ModuleDefinition, ModuleType}
-  alias Hologram.E2E.DefaultLayout
   alias Hologram.Test.Fixtures.{PlaceholderModule1, PlaceholderModule2}
-  alias Hologram.Test.Fixtures.Compiler.CallGraph.ModuleDefinition.{Module1, Module2, Module3, Module4, Module5}
+  alias Hologram.Test.Fixtures.Compiler.CallGraph.ModuleDefinition.{Module4, Module5}
 
   test "module that isn't in the call graph yet" do
     module_def = Reflection.module_definition(PlaceholderModule1)

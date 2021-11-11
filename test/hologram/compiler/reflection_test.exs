@@ -2,7 +2,7 @@ defmodule Hologram.Compiler.ReflectionTest do
   use Hologram.Test.UnitCase, async: false
 
   alias Hologram.Compiler.{Context, Reflection}
-  alias Hologram.Compiler.IR.{FunctionDefinition, MacroDefinition, ModuleDefinition, UseDirective}
+  alias Hologram.Compiler.IR.{FunctionDefinition, MacroDefinition, ModuleDefinition}
 
   @module_1 Hologram.Test.Fixtures.Compiler.Reflection.Module1
   @module_2 Hologram.Test.Fixtures.Compiler.Reflection.Module2

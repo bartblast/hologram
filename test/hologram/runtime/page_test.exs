@@ -1,7 +1,6 @@
 defmodule Hologram.PageTest do
   use Hologram.Test.UnitCase, async: true
   require Hologram.Page
-  alias Hologram.Page
 
   @default_layout Application.compile_env!(:hologram, :default_layout)
 
