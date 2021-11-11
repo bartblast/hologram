@@ -16,7 +16,7 @@ defmodule Hologram.Compiler.JSEncoder.MatchOperatorTest do
     }
 
     result = JSEncoder.encode(ir, %Context{}, %Opts{})
-    expected = "\nconst x = { type: 'integer', value: 1 }\n"
+    expected = "const x = { type: 'integer', value: 1 }"
 
     assert result == expected
   end
@@ -61,7 +61,7 @@ defmodule Hologram.Compiler.JSEncoder.MatchOperatorTest do
     }
 
     result = JSEncoder.encode(ir, %Context{}, %Opts{})
-    expected = "\nconst x = Elixir_Kernel_SpecialForms.$dot(Elixir_Kernel_SpecialForms.$dot({ type: 'map', data: { '~atom[a]': { type: 'integer', value: 1 }, '~atom[b]': { type: 'map', data: { '~atom[p]': { type: 'integer', value: 9 } } }, '~atom[c]': { type: 'integer', value: 3 } } }, { type: 'atom', value: 'b' }), { type: 'atom', value: 'p' })\n"
+    expected = "const x = Elixir_Kernel_SpecialForms.$dot(Elixir_Kernel_SpecialForms.$dot({ type: 'map', data: { '~atom[a]': { type: 'integer', value: 1 }, '~atom[b]': { type: 'map', data: { '~atom[p]': { type: 'integer', value: 9 } } }, '~atom[c]': { type: 'integer', value: 3 } } }, { type: 'atom', value: 'b' }), { type: 'atom', value: 'p' })"
 
     assert result == expected
   end
@@ -95,9 +95,8 @@ defmodule Hologram.Compiler.JSEncoder.MatchOperatorTest do
     result = JSEncoder.encode(ir, %Context{}, %Opts{})
 
     expected = """
-
-    const x = Elixir_Kernel_SpecialForms.$dot({ type: 'map', data: { '~atom[a]': { type: 'integer', value: 1 }, '~atom[b]': { type: 'integer', value: 2 } } }, { type: 'atom', value: 'a' })
-    const y = Elixir_Kernel_SpecialForms.$dot({ type: 'map', data: { '~atom[a]': { type: 'integer', value: 1 }, '~atom[b]': { type: 'integer', value: 2 } } }, { type: 'atom', value: 'b' })
+    const x = Elixir_Kernel_SpecialForms.$dot({ type: 'map', data: { '~atom[a]': { type: 'integer', value: 1 }, '~atom[b]': { type: 'integer', value: 2 } } }, { type: 'atom', value: 'a' });
+    const y = Elixir_Kernel_SpecialForms.$dot({ type: 'map', data: { '~atom[a]': { type: 'integer', value: 1 }, '~atom[b]': { type: 'integer', value: 2 } } }, { type: 'atom', value: 'b' })\
     """
 
     assert result == expected

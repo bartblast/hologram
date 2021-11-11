@@ -1,13 +1,12 @@
-alias Hologram.Compiler.{Context, Formatter, JSEncoder, Opts}
+alias Hologram.Compiler.{Context, JSEncoder, Opts}
 alias Hologram.Compiler.IR.{DotOperator, MapAccess, MatchOperator}
 
 defimpl JSEncoder, for: MatchOperator do
   def encode(%{bindings: bindings, right: right}, %Context{} = context, %Opts{} = opts) do
-    Enum.reduce(bindings, "", fn binding, acc ->
-      binding_js = encode_binding(binding, right, context, opts)
-      Formatter.maybe_append_new_line(acc, binding_js)
+    Enum.map(bindings, fn binding ->
+      encode_binding(binding, right, context, opts)
     end)
-    |> Formatter.append_line_break()
+    |> Enum.join(";\n")
   end
 
   def convert_ir(path, value) when is_list(path) do
