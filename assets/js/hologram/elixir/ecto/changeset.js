@@ -90,7 +90,10 @@ export default class Changeset {
       }
     })
 
-    return Map.put(changeset, Type.atom("errors"), errors)
+    changeset = Map.put(changeset, Type.atom("errors"), errors)
+    const isValid = Type.boolean(errors.data.length === 0)
+
+    return Map.put(changeset, Type.atom("valid?"), isValid)
   }
 
   static _appendRequiredError(errors, key) {

@@ -1,6 +1,6 @@
 "use strict";
 
-import { assert, assertBoxedFalse, cleanup } from "../../support/commons"
+import { assert, assertBoxedFalse, assertBoxedTrue, cleanup } from "../../support/commons"
 beforeEach(() => cleanup());
 
 import Changeset from "../../../../assets/js/hologram/elixir/ecto/changeset";
@@ -117,9 +117,11 @@ describe("validate_required()", () => {
     const fields = Type.list([Type.atom("a"), Type.atom("b")])
     changeset = Changeset.validate_required(changeset, fields)
 
-    const errors = Map.get(changeset, Type.atom("errors"))
+    const errorsField = Map.get(changeset, Type.atom("errors"))
+    const validField = Map.get(changeset, Type.atom("valid?"))
 
-    assert.deepStrictEqual(errors, Type.list())
+    assert.deepStrictEqual(errorsField, Type.list())
+    assertBoxedTrue(validField)
   })
 
   it("adds required error if a required field is not in params", () => {
@@ -130,7 +132,8 @@ describe("validate_required()", () => {
     const fields = Type.list([Type.atom("a"), Type.atom("b")])
     changeset = Changeset.validate_required(changeset, fields)
 
-    const errors = Map.get(changeset, Type.atom("errors"))
+    const errorsField = Map.get(changeset, Type.atom("errors"))
+    const validField = Map.get(changeset, Type.atom("valid?"))
 
     const expected = Type.list([
       Type.tuple([
@@ -144,7 +147,8 @@ describe("validate_required()", () => {
       ]),
     ])
 
-    assert.deepStrictEqual(errors, expected)
+    assert.deepStrictEqual(errorsField, expected)
+    assertBoxedFalse(validField)
   })
 
   it("adds required error if a required field is a blank string", () => {
@@ -156,7 +160,8 @@ describe("validate_required()", () => {
     const fields = Type.list([Type.atom("a"), Type.atom("b")])
     changeset = Changeset.validate_required(changeset, fields)
 
-    const errors = Map.get(changeset, Type.atom("errors"))
+    const errorsField = Map.get(changeset, Type.atom("errors"))
+    const validField = Map.get(changeset, Type.atom("valid?"))
 
     const expected = Type.list([
       Type.tuple([
@@ -170,7 +175,8 @@ describe("validate_required()", () => {
       ]),
     ])
 
-    assert.deepStrictEqual(errors, expected)
+    assert.deepStrictEqual(errorsField, expected)
+    assertBoxedFalse(validField)
   })
 
   it("handles multiple required errors", () => {
@@ -180,7 +186,8 @@ describe("validate_required()", () => {
     const fields = Type.list([Type.atom("a"), Type.atom("b")])
     changeset = Changeset.validate_required(changeset, fields)
 
-    const errors = Map.get(changeset, Type.atom("errors"))
+    const errorsField = Map.get(changeset, Type.atom("errors"))
+    const validField = Map.get(changeset, Type.atom("valid?"))
 
     const expected = Type.list([
       Type.tuple([
@@ -203,6 +210,7 @@ describe("validate_required()", () => {
       ]),
     ])
 
-    assert.deepStrictEqual(errors, expected)
+    assert.deepStrictEqual(errorsField, expected)
+    assertBoxedFalse(validField)
   })
 })
