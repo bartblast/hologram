@@ -4,13 +4,14 @@ import PatternMatcher from "./hologram/pattern_matcher";
 import Runtime from "./hologram/runtime";
 
 // Elixir standard library
-import Enum from "./hologram/elixir/enum";
-import IO from "./hologram/elixir/io";
-import Kernel from "./hologram/elixir/kernel";
-import Keyword from "./hologram/elixir/keyword";
-import Map from "./hologram/elixir/map";
-import SpecialForms from "./hologram/elixir/kernel/special_forms";
-import String from "./hologram/elixir/string";
+import Elixir_Ecto_Changeset from "./hologram/elixir/ecto/changeset";
+import Elixir_Enum from "./hologram/elixir/enum";
+import Elixir_IO from "./hologram/elixir/io";
+import Elixir_Kernel from "./hologram/elixir/kernel";
+import Elixir_Keyword from "./hologram/elixir/keyword";
+import Elixir_Map from "./hologram/elixir/map";
+import Elixir_Kernel_SpecialForms from "./hologram/elixir/kernel/special_forms";
+import Elixir_String from "./hologram/elixir/string";
 
 export default class Hologram {
   // Covered implicitely in E2E tests.
@@ -48,12 +49,13 @@ export default class Hologram {
   }
 }
 
-window.Elixir_Enum = Enum;
-window.Elixir_IO = IO;
-window.Elixir_Kernel = Kernel;
-window.Elixir_Kernel_SpecialForms = SpecialForms;
-window.Elixir_Keyword = Keyword;
-window.Elixir_Map = Map;
-window.Elixir_String = String;
+window.Elixir_Ecto_Changeset = Elixir_Ecto_Changeset;
+window.Elixir_Enum = Elixir_Enum;
+window.Elixir_IO = Elixir_IO;
+window.Elixir_Kernel = Elixir_Kernel;
+window.Elixir_Kernel_SpecialForms = Elixir_Kernel_SpecialForms;
+window.Elixir_Keyword = Elixir_Keyword;
+window.Elixir_Map = Elixir_Map;
+window.Elixir_String = Elixir_String;
 
 window.Hologram = Hologram;
