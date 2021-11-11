@@ -228,7 +228,7 @@ defmodule Hologram.Compiler.ReflectionTest do
     end
 
     test "lib module" do
-      refute Reflection.standard_lib?(Hologram.Compiler)
+      refute Reflection.standard_lib?(Hologram.Compiler.Transformer)
     end
 
     test "test module" do

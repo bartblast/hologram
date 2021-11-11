@@ -334,6 +334,7 @@ defmodule Hologram.Compiler.HelpersTest do
   test "get_components/1" do
     module_def_1 = %ModuleDefinition{
       module: Bcd.Cde,
+      component?: true,
       uses: [
         %UseDirective{module: Hologram.Component}
       ]
@@ -341,6 +342,7 @@ defmodule Hologram.Compiler.HelpersTest do
 
     module_def_2 = %ModuleDefinition{
       module: Def.Efg,
+      component?: true,
       uses: [
         %UseDirective{module: Hologram.Component}
       ]
@@ -362,6 +364,7 @@ defmodule Hologram.Compiler.HelpersTest do
   test "get_pages/1" do
     module_def_1 = %ModuleDefinition{
       module: Bcd.Cde,
+      page?: true,
       uses: [
         %UseDirective{module: Hologram.Page}
       ]
@@ -369,6 +372,7 @@ defmodule Hologram.Compiler.HelpersTest do
 
     module_def_2 = %ModuleDefinition{
       module: Def.Efg,
+      page?: true,
       uses: [
         %UseDirective{module: Hologram.Page}
       ]
