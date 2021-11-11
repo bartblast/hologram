@@ -21,7 +21,7 @@ export default class Type {
   }
 
   static componentNode(className, props, children) {
-    return Utils.freeze({type: "component", module: className, props: props, children: children})
+    return Utils.freeze({type: "component", className: className, props: props, children: children})
   }
 
   static decodeKey(key) {

@@ -63,7 +63,7 @@ describe("componentNode()", () => {
   const result = Type.componentNode("test_class_name", "test_props", "test_children")
 
   it("builds a component node", () => {
-    const expected = {type: "component", module: "test_class_name", props: "test_props", children: "test_children"}
+    const expected = {type: "component", className: "test_class_name", props: "test_props", children: "test_children"}
     assert.deepStrictEqual(result, expected)
   })
 
