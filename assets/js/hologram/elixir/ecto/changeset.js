@@ -77,4 +77,32 @@ export default class Changeset {
 
     return Map.put(changeset, Type.atom("valid?"), value)
   }
+
+  // DEFER: handle atom fields param (at the moment only list fields param is handled)
+  static validate_required(changeset, fields) {
+    let errors = Map.get(changeset, Type.atom("errors"))
+    const changes = Map.get(changeset, Type.atom("changes"))
+
+    fields.data.forEach(key => {
+      const boxedVal = Map.get(changes, key)
+      if (boxedVal.type === "nil" || (boxedVal.type === "string" && boxedVal.value === "")) {
+        errors = Changeset._appendRequiredError(errors, key)
+      }
+    })
+
+    return Map.put(changeset, Type.atom("errors"), errors)
+  }
+
+  static _appendRequiredError(errors, key) {
+    const errorInfo = Type.tuple([
+      Type.string("can't be blank"),
+      Type.list([
+        Type.tuple([Type.atom("validation"), Type.atom("required")]),
+      ])
+    ])
+
+    const error = Type.tuple([key, errorInfo])
+
+    return Enum.concat(errors, Type.list([error]))
+  }
 }

@@ -91,3 +91,118 @@ describe("cast()", () => {
     assertBoxedFalse(validField)
   })
 })
+
+describe("validate_required()", () => {
+  let data, permitted, types;
+
+  beforeEach(() => {
+    data = Type.map()
+
+    types = Type.map()
+    types = Map.put(types, Type.atom("a"), Type.atom("string"))
+    types = Map.put(types, Type.atom("b"), Type.atom("integer"))
+
+    permitted = Type.list([
+      Type.atom("a"),
+      Type.atom("b"),
+    ])
+  })
+
+  it("doesn't add any errors if all required fields are present", () => {
+    let params = Type.map()
+    params = Map.put(params, Type.atom("a"), Type.string("test"))
+    params = Map.put(params, Type.atom("b"), Type.integer(123))
+
+    let changeset = Changeset.cast(Type.tuple([data, types]), params, permitted)
+    const fields = Type.list([Type.atom("a"), Type.atom("b")])
+    changeset = Changeset.validate_required(changeset, fields)
+
+    const errors = Map.get(changeset, Type.atom("errors"))
+
+    assert.deepStrictEqual(errors, Type.list())
+  })
+
+  it("adds required error if a required field is not in params", () => {
+    let params = Type.map()
+    params = Map.put(params, Type.atom("b"), Type.integer(123))
+
+    let changeset = Changeset.cast(Type.tuple([data, types]), params, permitted)
+    const fields = Type.list([Type.atom("a"), Type.atom("b")])
+    changeset = Changeset.validate_required(changeset, fields)
+
+    const errors = Map.get(changeset, Type.atom("errors"))
+
+    const expected = Type.list([
+      Type.tuple([
+        Type.atom("a"),
+        Type.tuple([
+          Type.string("can't be blank"),
+          Type.list([
+            Type.tuple([Type.atom("validation"), Type.atom("required")])
+          ])
+        ])
+      ]),
+    ])
+
+    assert.deepStrictEqual(errors, expected)
+  })
+
+  it("adds required error if a required field is a blank string", () => {
+    let params = Type.map()
+    params = Map.put(params, Type.atom("a"), Type.string(""))
+    params = Map.put(params, Type.atom("b"), Type.integer(123))
+
+    let changeset = Changeset.cast(Type.tuple([data, types]), params, permitted)
+    const fields = Type.list([Type.atom("a"), Type.atom("b")])
+    changeset = Changeset.validate_required(changeset, fields)
+
+    const errors = Map.get(changeset, Type.atom("errors"))
+
+    const expected = Type.list([
+      Type.tuple([
+        Type.atom("a"),
+        Type.tuple([
+          Type.string("can't be blank"),
+          Type.list([
+            Type.tuple([Type.atom("validation"), Type.atom("required")])
+          ])
+        ])
+      ]),
+    ])
+
+    assert.deepStrictEqual(errors, expected)
+  })
+
+  it("handles multiple required errors", () => {
+    let params = Type.map()
+
+    let changeset = Changeset.cast(Type.tuple([data, types]), params, permitted)
+    const fields = Type.list([Type.atom("a"), Type.atom("b")])
+    changeset = Changeset.validate_required(changeset, fields)
+
+    const errors = Map.get(changeset, Type.atom("errors"))
+
+    const expected = Type.list([
+      Type.tuple([
+        Type.atom("a"),
+        Type.tuple([
+          Type.string("can't be blank"),
+          Type.list([
+            Type.tuple([Type.atom("validation"), Type.atom("required")])
+          ])
+        ])
+      ]),
+      Type.tuple([
+        Type.atom("b"),
+        Type.tuple([
+          Type.string("can't be blank"),
+          Type.list([
+            Type.tuple([Type.atom("validation"), Type.atom("required")])
+          ])
+        ])
+      ]),
+    ])
+
+    assert.deepStrictEqual(errors, expected)
+  })
+})
