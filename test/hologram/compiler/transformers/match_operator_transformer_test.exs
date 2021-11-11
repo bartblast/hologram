@@ -4,9 +4,9 @@ defmodule Hologram.Compiler.MatchOperatorTransformerTest do
   alias Hologram.Compiler.{Context, MatchOperatorTransformer}
 
   alias Hologram.Compiler.IR.{
-    AccessOperator,
     AtomType,
     IntegerType,
+    MapAccess,
     MapType,
     MatchOperator,
     Variable
@@ -36,8 +36,8 @@ defmodule Hologram.Compiler.MatchOperatorTransformerTest do
 
       expected = %MatchOperator{
         bindings: [
-          x: [%AccessOperator{key: %AtomType{value: :a}}],
-          y: [%AccessOperator{key: %AtomType{value: :b}}]
+          x: [%MapAccess{key: %AtomType{value: :a}}],
+          y: [%MapAccess{key: %AtomType{value: :b}}]
         ],
         left: %MapType{
           data: [
@@ -67,12 +67,12 @@ defmodule Hologram.Compiler.MatchOperatorTransformerTest do
       expected = %MatchOperator{
         bindings: [
           x: [
-            %AccessOperator{key: %AtomType{value: :b}},
-            %AccessOperator{key: %AtomType{value: :p}},
+            %MapAccess{key: %AtomType{value: :b}},
+            %MapAccess{key: %AtomType{value: :p}},
           ],
           y: [
-            %AccessOperator{key: %AtomType{value: :d}},
-            %AccessOperator{key: %AtomType{value: :n}},
+            %MapAccess{key: %AtomType{value: :d}},
+            %MapAccess{key: %AtomType{value: :n}},
           ]
         ],
         left: %MapType{

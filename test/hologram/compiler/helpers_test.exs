@@ -4,11 +4,11 @@ defmodule Hologram.Compiler.HelpersTest do
   alias Hologram.Compiler.{Context, Helpers}
 
   alias Hologram.Compiler.IR.{
-    AccessOperator,
     AtomType,
     FunctionDefinition,
     FunctionDefinitionVariants,
     IntegerType,
+    MapAccess,
     ModuleDefinition,
     UseDirective,
     Variable
@@ -38,7 +38,7 @@ defmodule Hologram.Compiler.HelpersTest do
         x:
           {1,
            [
-             %AccessOperator{
+             %MapAccess{
                key: %AtomType{value: :a}
              },
              %Variable{name: :x}
@@ -60,7 +60,7 @@ defmodule Hologram.Compiler.HelpersTest do
         x:
           {1,
            [
-             %AccessOperator{
+             %MapAccess{
                key: %AtomType{value: :a}
              },
              %Variable{name: :x}
@@ -68,7 +68,7 @@ defmodule Hologram.Compiler.HelpersTest do
         y:
           {1,
            [
-             %AccessOperator{
+             %MapAccess{
                key: %AtomType{value: :b}
              },
              %Variable{name: :y}
@@ -96,7 +96,7 @@ defmodule Hologram.Compiler.HelpersTest do
         k:
           {1,
            [
-             %AccessOperator{
+             %MapAccess{
                key: %AtomType{value: :a}
              },
              %Variable{name: :k}
@@ -104,7 +104,7 @@ defmodule Hologram.Compiler.HelpersTest do
         m:
           {1,
            [
-             %AccessOperator{
+             %MapAccess{
                key: %AtomType{value: :b}
              },
              %Variable{name: :m}
@@ -112,7 +112,7 @@ defmodule Hologram.Compiler.HelpersTest do
         s:
           {3,
            [
-             %AccessOperator{
+             %MapAccess{
                key: %AtomType{value: :c}
              },
              %Variable{name: :s}
@@ -120,7 +120,7 @@ defmodule Hologram.Compiler.HelpersTest do
         t:
           {3,
            [
-             %AccessOperator{
+             %MapAccess{
                key: %AtomType{value: :d}
              },
              %Variable{name: :t}

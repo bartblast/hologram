@@ -1,6 +1,6 @@
 defmodule Hologram.Commons.Encoder do
   alias Hologram.Compiler.{Context, JSEncoder, MapKeyEncoder, Opts}
-  alias Hologram.Compiler.IR.{AccessOperator, Variable}
+  alias Hologram.Compiler.IR.{MapAccess, Variable}
 
   defmacro __using__(_) do
     quote do
@@ -56,7 +56,7 @@ defmodule Hologram.Commons.Encoder do
       Enum.reduce(path, acc, fn type, acc ->
         acc <>
           case type do
-            %AccessOperator{key: key} ->
+            %MapAccess{key: key} ->
               ".data['#{MapKeyEncoder.encode(key, context, %Opts{})}']"
 
             %Variable{} ->

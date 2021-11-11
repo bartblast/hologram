@@ -2,7 +2,7 @@ defmodule Hologram.Compiler.FunctionDefinitionTransformerTest do
   use Hologram.Test.UnitCase, async: true
 
   alias Hologram.Compiler.{Context, FunctionDefinitionTransformer}
-  alias Hologram.Compiler.IR.{AccessOperator, AtomType, FunctionDefinition, IntegerType, Variable}
+  alias Hologram.Compiler.IR.{AtomType, FunctionDefinition, IntegerType, MapAccess, Variable}
 
   @code """
   def test(1, 2) do
@@ -67,7 +67,7 @@ defmodule Hologram.Compiler.FunctionDefinitionTransformerTest do
         x:
           {1,
            [
-             %AccessOperator{
+             %MapAccess{
                key: %AtomType{value: :a}
              },
              %Variable{name: :x}
@@ -75,7 +75,7 @@ defmodule Hologram.Compiler.FunctionDefinitionTransformerTest do
         y:
           {1,
            [
-             %AccessOperator{
+             %MapAccess{
                key: %AtomType{value: :b}
              },
              %Variable{name: :y}

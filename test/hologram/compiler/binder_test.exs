@@ -2,7 +2,7 @@ defmodule Hologram.Compiler.BinderTest do
   use Hologram.Test.UnitCase, async: true
 
   alias Hologram.Compiler.Binder
-  alias Hologram.Compiler.IR.{AccessOperator, AtomType, IntegerType, MapType, Variable}
+  alias Hologram.Compiler.IR.{AtomType, IntegerType, MapAccess, MapType, Variable}
 
   describe "map" do
     test "non-nested map without vars" do
@@ -28,7 +28,7 @@ defmodule Hologram.Compiler.BinderTest do
 
       expected = [
         [
-          %AccessOperator{
+          %MapAccess{
             key: %AtomType{value: :b}
           },
           %Variable{name: :x}
@@ -51,13 +51,13 @@ defmodule Hologram.Compiler.BinderTest do
 
       expected = [
         [
-          %AccessOperator{
+          %MapAccess{
             key: %AtomType{value: :a}
           },
           %Variable{name: :x}
         ],
         [
-          %AccessOperator{
+          %MapAccess{
             key: %AtomType{value: :c}
           },
           %Variable{name: :y}
@@ -102,10 +102,10 @@ defmodule Hologram.Compiler.BinderTest do
 
       expected = [
         [
-          %AccessOperator{
+          %MapAccess{
             key: %AtomType{value: :b}
           },
-          %AccessOperator{
+          %MapAccess{
             key: %AtomType{value: :c}
           },
           %Variable{name: :x}
@@ -134,16 +134,16 @@ defmodule Hologram.Compiler.BinderTest do
 
       expected = [
         [
-          %AccessOperator{
+          %MapAccess{
             key: %AtomType{value: :b}
           },
           %Variable{name: :x}
         ],
         [
-          %AccessOperator{
+          %MapAccess{
             key: %AtomType{value: :c}
           },
-          %AccessOperator{
+          %MapAccess{
             key: %AtomType{value: :d}
           },
           %Variable{name: :y}

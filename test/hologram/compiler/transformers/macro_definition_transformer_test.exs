@@ -2,7 +2,7 @@ defmodule Hologram.Compiler.MacroDefinitionTransformerTest do
   use Hologram.Test.UnitCase, async: true
 
   alias Hologram.Compiler.{Context, MacroDefinitionTransformer}
-  alias Hologram.Compiler.IR.{AccessOperator, AtomType, IntegerType, MacroDefinition, Variable}
+  alias Hologram.Compiler.IR.{AtomType, IntegerType, MacroDefinition, MapAccess, Variable}
 
   @context %Context{module: Abc}
 
@@ -52,7 +52,7 @@ defmodule Hologram.Compiler.MacroDefinitionTransformerTest do
         x:
           {1,
            [
-             %AccessOperator{
+             %MapAccess{
                key: %AtomType{value: :a}
              },
              %Variable{name: :x}
@@ -60,7 +60,7 @@ defmodule Hologram.Compiler.MacroDefinitionTransformerTest do
         y:
           {1,
            [
-             %AccessOperator{
+             %MapAccess{
                key: %AtomType{value: :b}
              },
              %Variable{name: :y}

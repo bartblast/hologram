@@ -51,10 +51,6 @@ defmodule Hologram.Compiler.IR do
 
   # OPERATORS
 
-  defmodule AccessOperator do
-    defstruct key: nil
-  end
-
   defmodule AdditionOperator do
     defstruct left: nil, right: nil
   end
@@ -140,6 +136,12 @@ defmodule Hologram.Compiler.IR do
 
   defmodule IfExpression do
     defstruct condition: nil, do: nil, else: nil
+  end
+
+  # ACCESS
+
+  defmodule MapAccess do
+    defstruct key: nil
   end
 
   # OTHER
