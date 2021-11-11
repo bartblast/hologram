@@ -68,14 +68,11 @@ defmodule Hologram.Compiler.Reflection do
 
   # TODO: refactor & test
   def list_pages(opts \\ get_config()) do
-    glob = "#{pages_path(opts)}/**/*.ex"
-    regex = ~r/defmodule\s+([\w\.]+)\s+do\s+/
-
-    Path.wildcard(glob)
-    |> Enum.map(fn filepath ->
-      code = File.read!(filepath)
-      [_, module] = Regex.run(regex, code)
-      String.to_atom("Elixir.#{module}")
+    "#{pages_path(opts)}/**/*.ex"
+    |> Path.wildcard()
+    |> Enum.reduce([], fn filepath, acc ->
+      ir = File.read!(filepath) |> ir()
+      if ir.page?, do: acc ++ [ir.module], else: acc
     end)
   end
 
