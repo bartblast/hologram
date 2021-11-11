@@ -19,7 +19,7 @@ defmodule Hologram.Compiler.MatchOperatorTransformerTest do
     result = MatchOperatorTransformer.transform(ast, %Context{})
 
     expected = %MatchOperator{
-      bindings: [[%Variable{name: :x}]],
+      bindings: [x: []],
       left: %Variable{name: :x},
       right: %IntegerType{value: 1}
     }
@@ -36,14 +36,8 @@ defmodule Hologram.Compiler.MatchOperatorTransformerTest do
 
       expected = %MatchOperator{
         bindings: [
-          [
-            %AccessOperator{key: %AtomType{value: :a}},
-            %Variable{name: :x}
-          ],
-          [
-            %AccessOperator{key: %AtomType{value: :b}},
-            %Variable{name: :y}
-          ]
+          x: [%AccessOperator{key: %AtomType{value: :a}}],
+          y: [%AccessOperator{key: %AtomType{value: :b}}]
         ],
         left: %MapType{
           data: [
@@ -72,15 +66,13 @@ defmodule Hologram.Compiler.MatchOperatorTransformerTest do
 
       expected = %MatchOperator{
         bindings: [
-          [
+          x: [
             %AccessOperator{key: %AtomType{value: :b}},
             %AccessOperator{key: %AtomType{value: :p}},
-            %Variable{name: :x}
           ],
-          [
+          y: [
             %AccessOperator{key: %AtomType{value: :d}},
             %AccessOperator{key: %AtomType{value: :n}},
-            %Variable{name: :y}
           ]
         ],
         left: %MapType{
