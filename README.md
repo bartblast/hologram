@@ -21,15 +21,16 @@
 
 #### Template Engine
 
-| Feature         | Status             |
-| --------------- |:------------------:|
-| Components      | :x:                |
-| Interpolation   | :x:                |
-| Layouts         | :x:                |
-| Navigation      | :construction:     |
-| Pages           | :x:                |
-| Templates       | :x:                |
-| Two-Way Binding | :x:                |
+| Feature         | Status             | Todos                                                           |
+| --------------- |:------------------:|:----------------------------------------------------------------:
+| Components      | :x:                |                                                                 |
+| If Directive    | :construction:     | component nodes if directive                                    |
+| Interpolation   | :x:                |                                                                 |
+| Layouts         | :x:                |                                                                 |
+| Navigation      | :construction:     |                                                                 |
+| Pages           | :x:                |                                                                 |
+| Templates       | :x:                |                                                                 |
+| Two-Way Binding | :x:                |                                                                 |
 
 #### Events
 
