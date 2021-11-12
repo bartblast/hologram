@@ -14,7 +14,7 @@ import { attributesModule, eventListenersModule, h, init, toVNode } from "snabbd
 const patch = init([attributesModule, eventListenersModule]);
 
 export default class VDOM {
-  static PRUNED_ATTRS = ["on_click"]
+  static PRUNED_ATTRS = ["if", "on_click", "on_submit"]
 
   static virtualDocument = null
 
@@ -63,11 +63,15 @@ export default class VDOM {
       return VDOM.buildVNodeList(slots.default, sourceId, bindings, slots)
     }
 
-    const attrs = VDOM.buildVNodeAttrs(node, bindings)
-    const eventHandlers = VDOM.buildVNodeEventHandlers(node, sourceId, bindings)
-    const children = VDOM.buildVNodeList(node.children, sourceId, bindings, slots)
+    if (VDOM.shouldRenderElementVNode(node, bindings)) {
+      const attrs = VDOM.buildVNodeAttrs(node, bindings)
+      const eventHandlers = VDOM.buildVNodeEventHandlers(node, sourceId, bindings)
+      const children = VDOM.buildVNodeList(node.children, sourceId, bindings, slots)
+      return [h(node.tag, {attrs: attrs, on: eventHandlers}, children)]
 
-    return [h(node.tag, {attrs: attrs, on: eventHandlers}, children)]
+    } else {
+      return []
+    }
   }
 
   static buildTextVNodeFromExpression(node, bindings) {
@@ -236,5 +240,15 @@ export default class VDOM {
 
   static reset() {
     VDOM.virtualDocument = null
+  }
+
+  static shouldRenderElementVNode(node, bindings) {
+    if (node.attrs.if) {
+      const ifAttrValue = VDOM.evaluateNode(node.attrs.if.value[0], bindings)
+      return Type.isTruthy(ifAttrValue)
+
+    } else {
+      return true
+    }
   }
 }

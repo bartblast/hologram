@@ -1,6 +1,6 @@
 "use strict";
 
-import { assert, assertFrozen, cleanup } from "./support/commons";
+import { assert, assertBoxedTrue, assertFrozen, cleanup } from "./support/commons";
 beforeEach(() => cleanup())
 
 import { HologramNotImplementedError } from "../../assets/js/hologram/errors"
@@ -226,6 +226,23 @@ describe("buildElementVNode()", () => {
     const expected = ["test_text_node"]
 
     assert.deepStrictEqual(result, expected)
+  })
+
+  it("handles the 'if' directive", () => {
+    const attrs = {
+      if: {
+        modifiers: [],
+        value: [Type.expressionNode(() => {
+          return Type.tuple([Type.nil()])
+        })]
+      }
+    }
+
+    const node = Type.elementNode("div", attrs)
+    const bindings = Type.map()
+    const result = VDOM.buildElementVNode(node, "test-source-id", bindings, {})
+
+    assert.deepStrictEqual(result, [])
   })
 
   // Covered implicitely in E2E tests.
@@ -484,5 +501,49 @@ describe("reset()", () => {
     VDOM.reset()
     
     assert.isNull(VDOM.virtualDocument)
+  })
+})
+
+describe("shouldRenderElementVNode()", () => {
+  it("returns true when element vnode doesn't have 'if' attribute", () => {
+    const node = Type.elementNode("div")
+    const bindings = Type.map()
+    const result = VDOM.shouldRenderElementVNode(node, bindings)
+
+    assert.isTrue(result)
+  })
+
+  it("returns true when element vnode has 'if' attribute which evaluates to a truthy value", () => {
+    const attrs = {
+      if: {
+        modifiers: [],
+        value: [Type.expressionNode(() => {
+          return Type.tuple([Type.integer(123)])
+        })]
+      }
+    }
+
+    const node = Type.elementNode("div", attrs)
+    const bindings = Type.map()
+    const result = VDOM.shouldRenderElementVNode(node, bindings)
+
+    assert.isTrue(result)
+  })
+
+  it("returns false when element vnode has 'if' attribute which evaluates to a falsy value", () => {
+    const attrs = {
+      if: {
+        modifiers: [],
+        value: [Type.expressionNode(() => {
+          return Type.tuple([Type.nil()])
+        })]
+      }
+    }
+
+    const node = Type.elementNode("div", attrs)
+    const bindings = Type.map()
+    const result = VDOM.shouldRenderElementVNode(node, bindings)
+
+    assert.isFalse(result)
   })
 })
