@@ -43,7 +43,7 @@ export default class Type {
     }
   }
 
-  static elementNode(tag, attrs, children) {
+  static elementNode(tag, attrs = {}, children = []) {
     return Utils.freeze({type: "element", tag: tag, attrs: attrs, children: children})
   }
 
