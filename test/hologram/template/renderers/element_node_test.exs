@@ -1,7 +1,7 @@
 defmodule Hologram.Template.Renderer.ElementNodeTest do
   use Hologram.Test.UnitCase, async: true
 
-  alias Hologram.Compiler.IR.{ModuleAttributeOperator, TupleType}
+  alias Hologram.Compiler.IR.{IntegerType, ModuleAttributeOperator, NilType, TupleType}
   alias Hologram.Template.Renderer
   alias Hologram.Template.VDOM.{ElementNode, Expression, TextNode}
 
@@ -121,5 +121,45 @@ defmodule Hologram.Template.Renderer.ElementNodeTest do
     expected = "<input non_pruned_attr=\"test_non_pruned_attr_content\" />"
 
     assert result == expected
+  end
+
+  test "if attribute which evaluates to a truthy value" do
+    attrs = %{
+      if: %{
+        value: [
+          %Expression{
+            ir: %TupleType{
+              data: [%IntegerType{value: 123}]
+            }
+          }
+        ],
+        modifiers: []
+      }
+    }
+
+    element_node = %ElementNode{attrs: attrs, children: [], tag: "div"}
+    result = Renderer.render(element_node, @bindings)
+
+    assert result == "<div></div>"
+  end
+
+  test "if attribute which evaluates to a falsy value" do
+    attrs = %{
+      if: %{
+        value: [
+          %Expression{
+            ir: %TupleType{
+              data: [%NilType{}]
+            }
+          }
+        ],
+        modifiers: []
+      }
+    }
+
+    element_node = %ElementNode{attrs: attrs, children: [], tag: "div"}
+    result = Renderer.render(element_node, @bindings)
+
+    assert result == ""
   end
 end
