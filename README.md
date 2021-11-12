@@ -13,7 +13,7 @@
 #### Core
 
 | Feature     | Status             |
-| ----------- |:------------------:|
+| :---------- | :----------------: |
 | Actions     | :white_check_mark: |
 | Commands    | :white_check_mark: |
 | Routing     | :x:                |
@@ -22,7 +22,7 @@
 #### Template Engine
 
 | Feature         | Status             | Comments                                                        |
-| --------------- |:------------------:|:----------------------------------------------------------------|
+| :-------------- | :----------------: | :-------------------------------------------------------------- |
 | Components      | :x:                |                                                                 |
 | If Directive    | :construction:     | works for element nodes, todo: component nodes                  |
 | Interpolation   | :x:                |                                                                 |
@@ -35,7 +35,7 @@
 #### Events
 
 | Event        | Status             | Comments                                                        |
-| ------------ |:------------------:|:----------------------------------------------------------------|
+| :----------- | :----------------: | :-------------------------------------------------------------- |
 | Blur         | :x:                |                                                                 |
 | Change       | :construction:     | works for form tags, todo: input, select, textarea tags         |
 | Click        | :white_check_mark: |                                                                 |
@@ -59,7 +59,7 @@
 #### Tools
 
 | Tool           | Status             |
-| -------------- |:------------------:|
+| :------------- | :----------------: |
 | Authentication | :x:                |
 | Authorization  | :x:                |
 | Caching        | :x:                |
@@ -72,7 +72,7 @@
 #### Types
 
 | Type               | Status             |
-| ------------------ |:------------------:|
+| :----------------- | :----------------: |
 | Anonymous Function | :x:                |
 | Atom               | :x:                |
 | Binary             | :x:                |
@@ -97,7 +97,7 @@
 ##### Overridable General Operators
 
 | Operator | Status             |
-| -------- |:------------------:|
+| :------- | :----------------: |
 | unary +  | :x:                |
 | unary -  | :x:                |
 | +        | :x:                |
@@ -123,7 +123,7 @@
 ##### Non-Overridable General Operators
 
 | Operator | Status             |
-| -------- |:------------------:|
+| :------- | :----------------: |
 | ^        | :x:                |
 | .        | :x:                |
 | =        | :x:                |
@@ -133,7 +133,7 @@
 ##### Comparison Operators
 
 | Operator | Status             |
-| -------- |:------------------:|
+| :------- | :----------------: |
 | ==       | :x:                |
 | ===      | :x:                |
 | !=       | :x:                |
@@ -146,7 +146,7 @@
 ##### Bitwise Module Operators
 
 | Operator | Status             |
-| -------- |:------------------:|
+| :------- | :----------------: |
 | &&&      | :x:                |
 | ^^^      | :x:                |  
 | <<<      | :x:                |  
@@ -157,7 +157,7 @@
 #### Pattern Matching
 
 | Type          | Status             |
-| ------------- |:------------------:|
+| :------------ | :----------------: |
 | Binary        | :x:                |
 | Bitstring     | :x:                |
 | Case          | :x:                |
@@ -172,7 +172,7 @@
 #### Control Flow
 
 | Structure     | Status             |
-| ------------- |:------------------:|
+| :------------ | :----------------: |
 | After         | :x:                |
 | Case          | :x:                |
 | Catch         | :x:                |
@@ -191,7 +191,7 @@
 #### Definitions
 
 | Structure        | Status             |
-| ---------------- |:------------------:|
+| :--------------- | :----------------: |
 | Exception        | :x:                |
 | Function         | :x:                |
 | Macro            | :x:                |
@@ -201,7 +201,7 @@
 #### Directives
 
 | Directive        | Status             |
-| ---------------- |:------------------:|
+| :--------------- | :----------------: |
 | Alias            | :x:                |
 | Import           | :x:                |
 | Multi-Alias      | :x:                |
@@ -211,7 +211,7 @@
 #### Sigils
 
 | Sigil | Status             |
-| ----- |:------------------:|
+| :---- | :----------------: |
 | ~c    | :x:                |
 | ~C    | :x:                |
 | ~D    | :x:                |
@@ -228,7 +228,7 @@
 #### Other
 
 | Feature                        | Status             |
-| ------------------------------ |:------------------:|
+| :----------------------------- | :----------------: |
 | Behaviours                     | :x:                |
 | Codepoints                     | :x:                |
 | Custom Sigils                  | :x:                |
