@@ -22,9 +22,9 @@
 #### Template Engine
 
 | Feature         | Status             | Comments                                                        |
-| --------------- |:------------------:|:----------------------------------------------------------------:
+| --------------- |:------------------:|:----------------------------------------------------------------|
 | Components      | :x:                |                                                                 |
-| If Directive    | :construction:     | works for element nodes, todo: component nodes directive        |
+| If Directive    | :construction:     | works for element nodes, todo: component nodes                  |
 | Interpolation   | :x:                |                                                                 |
 | Layouts         | :x:                |                                                                 |
 | Navigation      | :construction:     |                                                                 |
@@ -34,27 +34,27 @@
 
 #### Events
 
-| Event        | Status             |
-| ------------ |:------------------:|
-| Blur         | :x:                |
-| Change       | :x:                |
-| Click        | :white_check_mark: |
-| Focus        | :x:                |
-| Key Down     | :x:                |
-| Key Press    | :x:                |
-| Key Up       | :x:                |
-| Mouse Move   | :x:                |
-| Params       | :x:                |
-| Resize       | :x:                |
-| Scroll       | :x:                |
-| Select       | :x:                |
-| Submit       | :white_check_mark: |
-| Tap          | :x:                |
-| Target       | :x:                |
-| Touch Cancel | :x:                |
-| Touch End    | :x:                |
-| Touch Move   | :x:                |
-| Touch Start  | :x:                |
+| Event        | Status             | Comments                                                        |
+| ------------ |:------------------:|:----------------------------------------------------------------|
+| Blur         | :x:                |                                                                 |
+| Change       | :construction:     | works for form tags, todo: input, select, textarea tags         |
+| Click        | :white_check_mark: |                                                                 |
+| Focus        | :x:                |                                                                 |
+| Key Down     | :x:                |                                                                 |
+| Key Press    | :x:                |                                                                 |
+| Key Up       | :x:                |                                                                 |
+| Mouse Move   | :x:                |                                                                 |
+| Params       | :x:                |                                                                 |
+| Resize       | :x:                |                                                                 |
+| Scroll       | :x:                |                                                                 |
+| Select       | :x:                |                                                                 |
+| Submit       | :white_check_mark: |                                                                 |
+| Tap          | :x:                |                                                                 |
+| Target       | :x:                |                                                                 |
+| Touch Cancel | :x:                |                                                                 |
+| Touch End    | :x:                |                                                                 |
+| Touch Move   | :x:                |                                                                 |
+| Touch Start  | :x:                |                                                                 |
 
 #### Tools
 

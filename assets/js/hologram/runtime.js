@@ -59,10 +59,10 @@ export default class Runtime {
   }
 
   // Covered implicitely in E2E tests.
-  static handleEvent(event, eventImplementation, sourceId, bindings, operationSpec) {
+  static handleEvent(event, eventImplementation, sourceId, bindings, operationSpec, tag) {
     event.preventDefault()
 
-    const eventData = eventImplementation.buildEventData(event)
+    const eventData = eventImplementation.buildEventData(event, tag)
     const operation = Operation.build(operationSpec, sourceId, bindings, eventData)
 
     Runtime.executeOperation(operation)

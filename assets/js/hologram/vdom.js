@@ -7,6 +7,7 @@ import Target from "./target";
 import Type from "./type";
 import Utils from "./utils";
 
+import ChangeEvent from "./events/change_event";
 import ClickEvent from "./events/click_event";
 import SubmitEvent from "./events/submit_event";
 
@@ -133,12 +134,16 @@ export default class VDOM {
   static buildVNodeEventHandlers(node, sourceId, bindings) {
     const eventHandlers = {}
 
+    if (node.attrs.on_change) {
+      eventHandlers.change = (event) => { Runtime.handleEvent(event, ChangeEvent, sourceId, bindings, node.attrs.on_change, node.tag) }
+    }
+
     if (node.attrs.on_click) {
-      eventHandlers.click = (event) => { Runtime.handleEvent(event, ClickEvent, sourceId, bindings, node.attrs.on_click) }
+      eventHandlers.click = (event) => { Runtime.handleEvent(event, ClickEvent, sourceId, bindings, node.attrs.on_click, node.tag) }
     }
 
     if (node.attrs.on_submit) {
-      eventHandlers.submit = (event) => { Runtime.handleEvent(event, SubmitEvent, sourceId, bindings, node.attrs.on_submit) }
+      eventHandlers.submit = (event) => { Runtime.handleEvent(event, SubmitEvent, sourceId, bindings, node.attrs.on_submit, node.tag) }
     }
 
     return eventHandlers

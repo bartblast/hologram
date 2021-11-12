@@ -5,7 +5,7 @@ import Type from "../type"
 
 export default class SubmitEvent {
   // TODO: test
-  static buildEventData(event) {
+  static buildEventData(event, _tag) {
     const formData = new FormData(event.target)
     let params = Type.map()
 

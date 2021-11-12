@@ -308,6 +308,14 @@ describe("buildVNodeAttrs()", () => {
 })
 
 describe("buildVNodeEventHandlers()", () => {
+  it("builds vnode change event handler", () => {
+    const attrs = {on_change: "test_on_change_spec"}
+    const elementNode = Type.elementNode("form", attrs, [])
+    const result = VDOM.buildVNodeEventHandlers(elementNode)
+
+    assert.isFunction(result.change)
+  })
+
   it("builds vnode click event handler", () => {
     const attrs = {on_click: "test_on_click_spec"}
     const elementNode = Type.elementNode("div", attrs, [])
