@@ -1,9 +1,9 @@
 alias Hologram.Template.Evaluator
 
 defimpl Evaluator, for: List do
-  def evaluate(nodes, state) do
+  def evaluate(nodes, bindings) do
     Enum.reduce(nodes, "", fn node, acc ->
-      result = Evaluator.evaluate(node, state)
+      result = Evaluator.evaluate(node, bindings)
       acc <> to_string(result)
     end)
   end
