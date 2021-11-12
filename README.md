@@ -21,10 +21,10 @@
 
 #### Template Engine
 
-| Feature         | Status             | Todos                                                           |
+| Feature         | Status             | Comments                                                        |
 | --------------- |:------------------:|:----------------------------------------------------------------:
 | Components      | :x:                |                                                                 |
-| If Directive    | :construction:     | component nodes if directive                                    |
+| If Directive    | :construction:     | works for element nodes, todo: component nodesdirective         |
 | Interpolation   | :x:                |                                                                 |
 | Layouts         | :x:                |                                                                 |
 | Navigation      | :construction:     |                                                                 |
