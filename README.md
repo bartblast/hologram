@@ -24,7 +24,7 @@
 | Feature         | Status             | Comments                                                        |
 | --------------- |:------------------:|:----------------------------------------------------------------:
 | Components      | :x:                |                                                                 |
-| If Directive    | :construction:     | works for element nodes, todo: component nodesdirective         |
+| If Directive    | :construction:     | works for element nodes, todo: component nodes directive        |
 | Interpolation   | :x:                |                                                                 |
 | Layouts         | :x:                |                                                                 |
 | Navigation      | :construction:     |                                                                 |
