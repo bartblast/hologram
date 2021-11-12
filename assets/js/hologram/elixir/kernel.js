@@ -1,6 +1,7 @@
 "use strict";
 
 import { HologramNotImplementedError } from "../errors";
+import Map from "../elixir/map"
 import Runtime from "../runtime"
 import Type from "../type"
 import Utils from "../utils"
@@ -65,6 +66,21 @@ export default class Kernel {
     }
 
     return Utils.freeze(result)
+  }
+
+  // DEFER: implement other types (works for maps only)
+  static put_in(data, keys, value) {
+    const key = keys.data[0]
+
+    if (keys.data.length > 1) {
+      const subtree = Map.get(data, key)
+      const subtreeKeys = Type.list(keys.data.slice(1))
+      const newSubtree = Kernel.put_in(subtree, subtreeKeys, value)
+      return Map.put(data, key, newSubtree)
+
+    } else {
+      return Map.put(data, key, value)
+    }
   }
 
   static to_string(boxedValue) {

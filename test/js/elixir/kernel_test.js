@@ -11,6 +11,7 @@ beforeEach(() => cleanup());
 
 import { HologramNotImplementedError } from "../../../assets/js/hologram/errors";
 import Kernel from "../../../assets/js/hologram/elixir/kernel";
+import Map from "../../../assets/js/hologram/elixir/map";
 import Type from "../../../assets/js/hologram/type";
 
 describe("$add()", () => {
@@ -283,6 +284,40 @@ describe("if()", () => {
     assertFrozen(result);
   });
 });
+
+describe("put_in()", () => {
+  it("puts value nested 1 level deep", () => {
+    let data = Type.map()
+    data = Map.put(data, Type.atom("test_key"), Type.string("abc"))
+
+    const keys = Type.list([Type.atom("test_key")])
+    const result = Kernel.put_in(data, keys, Type.string("xyz"))
+
+    let expected = Type.map()
+    expected = Map.put(expected, Type.atom("test_key"), Type.string("xyz"))
+
+    assert.deepStrictEqual(result, expected)
+  })
+
+  it("puts value nested more than 1 level deep", () => {
+    let level2Data = Type.map()
+    level2Data = Map.put(level2Data, Type.atom("test_key_2"), Type.string("abc"))
+
+    let level1Data = Type.map()
+    level1Data = Map.put(level1Data, Type.atom("test_key_1"), level2Data)
+
+    const keys = Type.list([Type.atom("test_key_1"), Type.atom("test_key_2")])
+    const result = Kernel.put_in(level1Data, keys, Type.string("xyz"))
+
+    let expectedLevel2Data = Type.map()
+    expectedLevel2Data = Map.put(expectedLevel2Data, Type.atom("test_key_2"), Type.string("xyz"))
+
+    let expectedLevel1Data = Type.map()
+    expectedLevel1Data = Map.put(expectedLevel1Data, Type.atom("test_key_1"), expectedLevel2Data)
+
+    assert.deepStrictEqual(result, expectedLevel1Data)
+  })
+})
 
 describe("to_string()", () => {
   let result, val;
