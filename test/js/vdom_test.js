@@ -1,6 +1,6 @@
 "use strict";
 
-import { assert, assertBoxedTrue, assertFrozen, cleanup } from "./support/commons";
+import { assert, assertFrozen, cleanup } from "./support/commons";
 beforeEach(() => cleanup())
 
 import { HologramNotImplementedError } from "../../assets/js/hologram/errors"
