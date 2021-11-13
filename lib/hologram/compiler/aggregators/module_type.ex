@@ -3,6 +3,8 @@ alias Hologram.Compiler.IR.ModuleType
 alias Hologram.Template.Builder
 
 defimpl Aggregator, for: ModuleType do
+  @ignored_modules [Ecto.Changeset]
+
   def aggregate(%{module: module}, module_defs) do
     case maybe_put_module(module_defs, module) do
       ^module_defs ->
@@ -25,7 +27,7 @@ defimpl Aggregator, for: ModuleType do
   end
 
   defp maybe_put_module(module_defs, module) do
-    if module_defs[module] || Reflection.standard_lib?(module) do
+    if module_defs[module] || Reflection.standard_lib?(module) || module in @ignored_modules do
       module_defs
     else
       module_def = Reflection.module_definition(module)
