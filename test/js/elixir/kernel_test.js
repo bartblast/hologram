@@ -96,6 +96,24 @@ describe("apply()", () => {
   });
 });
 
+describe("$booleanAnd()", () => {
+  it("returns the second arg if the first one is truthy", () => {
+    const left = Type.integer(1)
+    const right = Type.integer(2)
+    const result = Kernel.$booleanAnd(left, right)
+
+    assert.deepStrictEqual(result, right)
+  })
+
+  it("returns the first arg if it is falsy", () => {
+    const left = Type.nil()
+    const right = Type.integer(2)
+    const result = Kernel.$booleanAnd(left, right)
+
+    assert.deepStrictEqual(result, left)
+  })
+})
+
 describe("$equal_to()", () => {
   // boolean == boolean
   it("returns boxed true for a boxed boolean equal to another boxed boolean", () => {

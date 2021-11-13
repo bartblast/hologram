@@ -27,6 +27,14 @@ export default class Kernel {
     }
   }
 
+  static $booleanAnd(left, right) {
+    if (Type.isTruthy(left)) {
+      return right
+    } else {
+      return left
+    }
+  }
+
   static _areBoxedNumbersEqual(boxedNumber1, boxedNumber2) {
     if (Type.isNumber(boxedNumber1) && Type.isNumber(boxedNumber2)) {
       return boxedNumber1.value == boxedNumber2.value
