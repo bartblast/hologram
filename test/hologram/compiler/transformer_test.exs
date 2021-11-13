@@ -9,6 +9,7 @@ defmodule Hologram.Compiler.TransformerTest do
     AnonymousFunctionType,
     AtomType,
     BinaryType,
+    BooleanAndOperator,
     BooleanType,
     DotOperator,
     EqualToOperator,
@@ -167,6 +168,13 @@ defmodule Hologram.Compiler.TransformerTest do
       ast = ast(code)
 
       assert %AdditionOperator{} = Transformer.transform(ast, %Context{})
+    end
+
+    test "boolean and" do
+      code = "true && false"
+      ast = ast(code)
+
+      assert %BooleanAndOperator{} = Transformer.transform(ast, %Context{})
     end
 
     test "dot" do

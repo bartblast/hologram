@@ -55,6 +55,10 @@ defmodule Hologram.Compiler.IR do
     defstruct left: nil, right: nil
   end
 
+  defmodule BooleanAndOperator do
+    defstruct left: nil, right: nil
+  end
+
   defmodule DotOperator do
     defstruct left: nil, right: nil
   end

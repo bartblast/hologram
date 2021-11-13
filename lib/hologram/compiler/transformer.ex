@@ -6,6 +6,7 @@ defmodule Hologram.Compiler.Transformer do
     AliasDirectiveTransformer,
     AnonymousFunctionTypeTransformer,
     BinaryTypeTransformer,
+    BooleanAndOperatorTransformer,
     DotOperatorTransformer,
     EqualToOperatorTransformer,
     FunctionDefinitionTransformer,
@@ -102,6 +103,10 @@ defmodule Hologram.Compiler.Transformer do
 
   def transform({:+, _, _} = ast, %Context{} = context) do
     AdditionOperatorTransformer.transform(ast, context)
+  end
+
+  def transform({:&&, _, _} = ast, %Context{} = context) do
+    BooleanAndOperatorTransformer.transform(ast, context)
   end
 
   def transform({{:., _, _}, [no_parens: true, line: _], _} = ast, %Context{} = context) do
