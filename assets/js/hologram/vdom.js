@@ -7,6 +7,7 @@ import Target from "./target";
 import Type from "./type";
 import Utils from "./utils";
 
+import BlurEvent from "./events/blur_event";
 import ChangeEvent from "./events/change_event";
 import ClickEvent from "./events/click_event";
 import SubmitEvent from "./events/submit_event";
@@ -133,6 +134,10 @@ export default class VDOM {
 
   static buildVNodeEventHandlers(node, sourceId, bindings) {
     const eventHandlers = {}
+
+    if (node.attrs.on_blur) {
+      eventHandlers.blur = (event) => { Runtime.handleEvent(event, BlurEvent, sourceId, bindings, node.attrs.on_blur, node.tag) }
+    }
 
     if (node.attrs.on_change) {
       eventHandlers.change = (event) => { Runtime.handleEvent(event, ChangeEvent, sourceId, bindings, node.attrs.on_change, node.tag) }
