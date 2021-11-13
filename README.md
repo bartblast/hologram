@@ -4,9 +4,9 @@
 
 :white_check_mark:&nbsp;&nbsp;==&nbsp;&nbsp;DONE
 
-:construction:&nbsp;&nbsp;==&nbsp;&nbsp;IN PROGRESS (functional, but not finished)
+:construction:&nbsp;&nbsp;==&nbsp;&nbsp;IN PROGRESS (partially done, some features work)
 
-:x:&nbsp;&nbsp;==&nbsp;&nbsp;PLANNED
+:x:&nbsp;&nbsp;==&nbsp;&nbsp;TODO
 
 ### Runtime
 
@@ -24,7 +24,7 @@
 | Feature         | Status             | Comments                                                        |
 | :-------------- | :----------------: | :-------------------------------------------------------------- |
 | Components      | :x:                |                                                                 |
-| If Directive    | :construction:     | works for element nodes, todo: component nodes                  |
+| If Directive    | :construction:     | done: element nodes, todo: component nodes                      |
 | Interpolation   | :x:                |                                                                 |
 | Layouts         | :x:                |                                                                 |
 | Navigation      | :construction:     |                                                                 |
@@ -37,8 +37,8 @@
 | Event        | Status             | Comments                                                        |
 | :----------- | :----------------: | :-------------------------------------------------------------- |
 | Blur         | :x:                |                                                                 |
-| Change       | :construction:     | works for form tags, todo: input, select, textarea tags         |
-| Click        | :white_check_mark: |                                                                 |
+| Change       | :construction:     | done: form tags, todo: input, select, textarea tags             |
+| Click        | :construction:     | done: event handling, todo: event metadata                      |
 | Focus        | :x:                |                                                                 |
 | Key Down     | :x:                |                                                                 |
 | Key Press    | :x:                |                                                                 |
