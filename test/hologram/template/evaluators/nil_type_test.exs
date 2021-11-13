@@ -1,4 +1,4 @@
-defmodule Hologram.Template.Evaluator.AtomTypeTest do
+defmodule Hologram.Template.Evaluator.NilTypeTest do
   use Hologram.Test.UnitCase, async: true
 
   alias Hologram.Compiler.IR.NilType
