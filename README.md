@@ -36,7 +36,7 @@
 
 | Event        | Status             | Comments                                                        |
 | :----------- | :----------------: | :-------------------------------------------------------------- |
-| Blur         | :x:                |                                                                 |
+| Blur         | :white_check_mark: |                                                                 |
 | Change       | :construction:     | done: form tags, todo: input, select, textarea tags             |
 | Click        | :construction:     | done: event handling, todo: event metadata                      |
 | Focus        | :x:                |                                                                 |

@@ -3,6 +3,14 @@ defmodule Hologram.Features.EventsTest do
 
   @moduletag :e2e
 
+  feature "blur event", %{session: session} do
+    session
+    |> visit("/e2e/page-11")
+    |> click(css("#input"))
+    |> click(css("#text"))
+    |> assert_has(css("#text", text: "Field has been blurred"))
+  end
+
   feature "change event", %{session: session} do
     session
     |> visit("/e2e/page-10")
