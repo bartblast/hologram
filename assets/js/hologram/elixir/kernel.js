@@ -27,7 +27,7 @@ export default class Kernel {
     }
   }
 
-  static $booleanAnd(left, right) {
+  static $boolean_and(left, right) {
     if (Type.isTruthy(left)) {
       return right
     } else {

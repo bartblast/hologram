@@ -96,11 +96,11 @@ describe("apply()", () => {
   });
 });
 
-describe("$booleanAnd()", () => {
+describe("$boolean_and()", () => {
   it("returns the second arg if the first one is truthy", () => {
     const left = Type.integer(1)
     const right = Type.integer(2)
-    const result = Kernel.$booleanAnd(left, right)
+    const result = Kernel.$boolean_and(left, right)
 
     assert.deepStrictEqual(result, right)
   })
@@ -108,7 +108,7 @@ describe("$booleanAnd()", () => {
   it("returns the first arg if it is falsy", () => {
     const left = Type.nil()
     const right = Type.integer(2)
-    const result = Kernel.$booleanAnd(left, right)
+    const result = Kernel.$boolean_and(left, right)
 
     assert.deepStrictEqual(result, left)
   })
