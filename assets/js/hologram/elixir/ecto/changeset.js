@@ -13,8 +13,7 @@ export default class Changeset {
     }
   }
 
-  // DEFER: handle opts param
-  static _appendAcceptanceError(errors, field, _opts = Type.list()) {
+  static _appendAcceptanceError(errors, field) {
     const errorInfo = Type.tuple([
       Type.string("must be accepted"),
       Type.list([
@@ -92,7 +91,8 @@ export default class Changeset {
     return Map.put(changeset, Type.atom("valid?"), value)
   }
 
-  static validate_acceptance(changeset, field) {
+  // DEFER: handle opts param
+  static validate_acceptance(changeset, field, _opts = Type.list()) {
     let errors = Map.get(changeset, Type.atom("errors"))
     const changes = Map.get(changeset, Type.atom("changes"))
 
