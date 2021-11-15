@@ -13,6 +13,20 @@ export default class Changeset {
     }
   }
 
+  // DEFER: handle opts param
+  static _appendAcceptanceError(errors, field, _opts = Type.list()) {
+    const errorInfo = Type.tuple([
+      Type.string("must be accepted"),
+      Type.list([
+        Type.tuple([Type.atom("validation"), Type.atom("acceptance")]),
+      ])
+    ])
+
+    const error = Type.tuple([field, errorInfo])
+
+    return Enum.concat(errors, Type.list([error]))
+  }
+
   static _appendCastError(errors, key, type) {
     const errorInfo = Type.tuple([
       Type.string("is invalid"),
@@ -76,6 +90,21 @@ export default class Changeset {
     const value = Type.boolean(errors.data.length === 0)
 
     return Map.put(changeset, Type.atom("valid?"), value)
+  }
+
+  static validate_acceptance(changeset, field) {
+    let errors = Map.get(changeset, Type.atom("errors"))
+    const changes = Map.get(changeset, Type.atom("changes"))
+
+    const boxedVal = Map.get(changes, field)
+    if (boxedVal.type !== "boolean" || boxedVal.value !== true) {
+      errors = Changeset._appendAcceptanceError(errors, field)
+    }
+
+    changeset = Map.put(changeset, Type.atom("errors"), errors)
+    const isValid = Type.boolean(errors.data.length === 0)
+
+    return Map.put(changeset, Type.atom("valid?"), isValid)
   }
 
   // DEFER: handle atom fields param (at the moment only list fields param is handled)

@@ -92,6 +92,61 @@ describe("cast()", () => {
   })
 })
 
+describe("validate_acceptance()", () => {
+  let data, permitted, types;
+
+  beforeEach(() => {
+    data = Type.map()
+
+    types = Type.map()
+    types = Map.put(types, Type.atom("a"), Type.atom("boolean"))
+
+    permitted = Type.list([
+      Type.atom("a"),
+    ])
+  })
+
+  it("doesn't add acceptance error if the field is accepted", () => {
+    let params = Type.map()
+    params = Map.put(params, Type.atom("a"), Type.boolean(true))
+
+    let changeset = Changeset.cast(Type.tuple([data, types]), params, permitted)
+    changeset = Changeset.validate_acceptance(changeset, Type.atom("a"))
+
+    const errorsField = Map.get(changeset, Type.atom("errors"))
+    const validField = Map.get(changeset, Type.atom("valid?"))
+
+    assert.deepStrictEqual(errorsField, Type.list())
+    assertBoxedTrue(validField)
+  })
+
+  it("adds acceptance error if the field is not accepted", () => {
+    let params = Type.map()
+    params = Map.put(params, Type.atom("a"), Type.boolean(false))
+
+    let changeset = Changeset.cast(Type.tuple([data, types]), params, permitted)
+    changeset = Changeset.validate_acceptance(changeset, Type.atom("a"))
+
+    const errorsField = Map.get(changeset, Type.atom("errors"))
+    const validField = Map.get(changeset, Type.atom("valid?"))
+
+    const expected = Type.list([
+      Type.tuple([
+        Type.atom("a"),
+        Type.tuple([
+          Type.string("must be accepted"),
+          Type.list([
+            Type.tuple([Type.atom("validation"), Type.atom("acceptance")])
+          ])
+        ])
+      ]),
+    ])
+
+    assert.deepStrictEqual(errorsField, expected)
+    assertBoxedFalse(validField)
+  })
+})
+
 describe("validate_required()", () => {
   let data, permitted, types;
 
