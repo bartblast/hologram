@@ -15,7 +15,7 @@ defmodule Hologram.Compiler.AnonymousFunctionTypeTransformer do
   end
 
   # DEFER: implement
-  def transform(ast, %Context{} = context) do
+  def transform(ast, %Context{}) do
     %NotSupportedExpression{ast: ast, type: :anonymous_function_type}
   end
 end
