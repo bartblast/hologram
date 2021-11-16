@@ -37,4 +37,15 @@ export default class Map {
 
     return Utils.freeze(newMap);
   }
+
+  static to_list(map) {
+    const data = Object.keys(map.data).reduce((acc, encodedKey) => {
+      const key = Type.decodeKey(encodedKey)
+      const value = map.data[encodedKey]
+      acc.push(Type.tuple([key, value]))
+      return acc
+    }, [])
+
+    return Type.list(data)
+  }
 }

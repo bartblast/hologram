@@ -109,3 +109,31 @@ describe("put()", () => {
     assertFrozen(result);
   });
 });
+
+describe("to_list()", () => {
+  it("converts empty boxed map to empty boxed list", () => {
+    const map = Type.map()
+
+    const result = Map.to_list(map)
+    const expected = Type.list()
+
+    assert.deepStrictEqual(result, expected)
+  })
+
+  it("converts non-empty boxed map to boxed list consisting of {key, value} tuples", () => {
+    let map = Type.map()
+    map = Map.put(map, Type.atom("a"), Type.integer(1))
+    map = Map.put(map, Type.string("b"), Type.float(2.0))
+
+    const result = Map.to_list(map)
+
+    const expectedData = [
+      Type.tuple([Type.atom("a"), Type.integer(1)]),
+      Type.tuple([Type.string("b"), Type.float(2.0)]),
+    ]
+
+    const expected = Type.list(expectedData)
+
+    assert.deepStrictEqual(result, expected)
+  })
+})
