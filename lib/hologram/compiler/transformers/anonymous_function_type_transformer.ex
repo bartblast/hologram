@@ -1,6 +1,6 @@
 defmodule Hologram.Compiler.AnonymousFunctionTypeTransformer do
   alias Hologram.Compiler.{Context, Helpers, Transformer}
-  alias Hologram.Compiler.IR.AnonymousFunctionType
+  alias Hologram.Compiler.IR.{AnonymousFunctionType, NotSupportedExpression}
 
   def transform({:fn, _, [{:->, _, [params, ast]}]}, %Context{} = context) do
     params = Helpers.transform_params(params, context)
@@ -12,5 +12,10 @@ defmodule Hologram.Compiler.AnonymousFunctionTypeTransformer do
       |> Enum.map(&Transformer.transform(&1, context))
 
     %AnonymousFunctionType{arity: arity, params: params, bindings: bindings, body: body}
+  end
+
+  # DEFER: implement
+  def transform(ast, %Context{} = context) do
+    %NotSupportedExpression{ast: ast, type: :anonymous_function_type}
   end
 end
