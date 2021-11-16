@@ -11,7 +11,12 @@ defmodule Hologram.Commons.Parser do
             ast
 
           _ ->
-            raise "Invalid code\n-----\n#{str}\n-----"
+            raise """
+            Invalid code
+            -----
+            #{str}
+            -----
+            """
         end
       end
 
