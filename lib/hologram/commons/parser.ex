@@ -12,7 +12,7 @@ defmodule Hologram.Commons.Parser do
 
           _ ->
             raise """
-            Invalid code
+            Invalid code:
             -----
             #{str}
             -----
