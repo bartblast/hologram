@@ -5,13 +5,19 @@ defmodule Hologram.Compiler.DecoderTest do
   test "atom" do
     input = %{"type" => "atom", "value" => "test"}
     result = Decoder.decode(input)
-    assert is_atom(result)
+    assert result === :test
+  end
+
+  test "boolean" do
+    input = %{"type" => "boolean", "value" => true}
+    result = Decoder.decode(input)
+    assert result === true
   end
 
   test "integer" do
     input = %{"type" => "integer", "value" => 1}
     result = Decoder.decode(input)
-    assert is_integer(result)
+    assert result === 1
   end
 
   test "list" do
@@ -51,7 +57,7 @@ defmodule Hologram.Compiler.DecoderTest do
   test "string" do
     input = %{"type" => "string", "value" => "test"}
     result = Decoder.decode(input)
-    assert is_binary(result)
+    assert result === "test"
   end
 
   test "tuple" do

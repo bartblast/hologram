@@ -5,6 +5,10 @@ defmodule Hologram.Compiler.Decoder do
     String.to_atom(value)
   end
 
+  def decode(%{"type" => "boolean", "value" => value}) do
+    value
+  end
+
   def decode(%{"type" => "integer", "value" => value}) do
     value
   end
