@@ -133,7 +133,7 @@ defmodule Hologram.Compiler.IR do
   end
 
   defmodule UseDirective do
-    defstruct module: nil
+    defstruct module: nil, opts: []
   end
 
   # CONTROL FLOW
