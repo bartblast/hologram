@@ -1,5 +1,6 @@
 locals_without_parens = [
   # Hologram.Page
+  layout: 1,
   route: 1
 ]
 
