@@ -3,6 +3,8 @@ defmodule Hologram.Test.Fixtures.Compiler.Pruner.Module32 do
 
   layout Hologram.Test.Fixtures.Compiler.Pruner.Module33
 
+  route "/test-route-32"
+
   def template do
     ~H"""
     """

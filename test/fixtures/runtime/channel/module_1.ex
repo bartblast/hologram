@@ -1,6 +1,8 @@
 defmodule Hologram.Test.Fixtures.Runtime.Channel.Module1 do
   use Hologram.Page
 
+  route "/test-route-1"
+
   def init do
     %{}
   end

@@ -1,6 +1,8 @@
 defmodule Hologram.Test.Fixtures.Compiler.Pruner.Module1 do
   use Hologram.Page
 
+  route "/test-route-1"
+
   def template do
     ~H"""
     """
