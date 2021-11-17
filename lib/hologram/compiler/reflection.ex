@@ -64,13 +64,28 @@ defmodule Hologram.Compiler.Reflection do
     is_atom(term) && String.starts_with?(str, "Elixir.")
   end
 
-  # TODO: refactor & test
-  def list_pages(opts \\ get_config()) do
-    "#{pages_path(opts)}/**/*.ex"
-    |> Path.wildcard()
-    |> Enum.reduce([], fn filepath, acc ->
-      ir = File.read!(filepath) |> ir()
-      if ir.page?, do: acc ++ [ir.module], else: acc
+  def list_pages(opts \\ []) do
+    app = @config[:otp_app]
+    :ok = Application.ensure_loaded(app)
+
+    pages_path = pages_path(opts)
+
+    Keyword.fetch!(Application.spec(app), :modules)
+    |> Enum.reduce([], fn module, acc ->
+      case Code.ensure_loaded(module) do
+        {:module, _} ->
+          funs = module.module_info(:exports)
+
+          in_pages_path? = String.starts_with?(source_path(module), pages_path)
+          if Keyword.get(funs, :is_page?) && module.is_page?() && in_pages_path? do
+            acc ++ [module]
+          else
+            acc
+          end
+
+        _ ->
+          acc
+      end
     end)
   end
 

@@ -116,6 +116,17 @@ defmodule Hologram.Compiler.ReflectionTest do
     end
   end
 
+  test "list_pages/1" do
+    num_pages =
+      "#{Reflection.pages_path()}/*"
+      |> Path.wildcard()
+      |> Enum.count()
+
+    result = Reflection.list_pages()
+
+    assert Enum.count(result) == num_pages
+  end
+
   test "macro_definition/3" do
     result = Reflection.macro_definition(@module_2, :test_macro, [1, 2])
     assert %MacroDefinition{arity: 2, name: :test_macro} = result
