@@ -3,8 +3,10 @@ defmodule Hologram.Compiler.Reflection do
   alias Hologram.Compiler.IR.ModuleDefinition
   alias Hologram.Utils
 
-  def app_path(config \\ get_config()) do
-    case Keyword.get(config, :app_path) do
+  @config Application.get_all_env(:hologram)
+
+  def app_path(opts \\ @config) do
+    case Keyword.get(opts, :app_path) do
       nil -> "#{root_path()}/app"
       app_path -> app_path
     end
@@ -24,10 +26,6 @@ defmodule Hologram.Compiler.Reflection do
   def ast(module_segs) when is_list(module_segs) do
     Helpers.module(module_segs)
     |> ast()
-  end
-
-  defp get_config do
-    Application.get_all_env(:hologram)
   end
 
   # DEFER: optimize, e.g. load the manifest in config
@@ -111,25 +109,31 @@ defmodule Hologram.Compiler.Reflection do
   end
 
   def otp_app do
-    get_config()[:otp_app]
+    @config[:otp_app]
   end
 
-  def pages_path(opts \\ get_config()) do
-    case Keyword.get(opts, :pages_path) do
-      nil -> "#{app_path()}/pages"
-      pages_path -> pages_path
+  def pages_path(opts \\ []) do
+    cond do
+      Keyword.has_key?(opts, :pages_path) ->
+        opts[:pages_path]
+
+      pages_path = Application.get_env(:hologram, :pages_path) ->
+        pages_path
+
+      true ->
+        "#{app_path()}/pages"
     end
   end
 
-  def root_path(opts \\ get_config()) do
+  def root_path(opts \\ @config) do
     case Keyword.get(opts, :root_path) do
       nil -> File.cwd!()
       root_path -> root_path
     end
   end
 
-  def router_module(config \\ get_config()) do
-    case Keyword.get(config, :router_module) do
+  def router_module(opts \\ @config) do
+    case Keyword.get(opts, :router_module) do
       nil ->
         app_web_namespace =
           otp_app()

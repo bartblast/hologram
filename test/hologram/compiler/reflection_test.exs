@@ -146,18 +146,33 @@ defmodule Hologram.Compiler.ReflectionTest do
 
   describe "pages_path/1" do
     test "default" do
-      result = Reflection.pages_path([])
+      result = Reflection.pages_path()
       expected = "#{File.cwd!()}/e2e/pages"
 
       assert result == expected
     end
 
-    test "custom" do
-      expected = "/test/path"
-      opts = [pages_path: expected]
-      result = Reflection.pages_path(opts)
+    test "opts" do
+      config_pages_path = "/test/config/pages/path"
+      Application.put_env(:hologram, :pages_path, config_pages_path)
 
-      assert result == expected
+      opts_pages_path = "/test/opts/pages/path"
+      opts = [pages_path: opts_pages_path]
+
+      result = Reflection.pages_path(opts)
+      assert result == opts_pages_path
+
+      Application.delete_env(:hologram, :pages_path)
+    end
+
+    test "config" do
+      config_pages_path = "/test/config/pages/path"
+      Application.put_env(:hologram, :pages_path, config_pages_path)
+
+      result = Reflection.pages_path()
+      assert result == config_pages_path
+
+      Application.delete_env(:hologram, :pages_path)
     end
   end
 
