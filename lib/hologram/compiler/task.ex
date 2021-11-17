@@ -6,15 +6,11 @@ defmodule Mix.Tasks.Compile.Hologram do
   alias Hologram.Compiler.{Builder, Reflection}
   alias Hologram.MixProject
 
+  @config Application.get_all_env(:hologram)
   @root_path Reflection.root_path()
 
-  def run(opts) do
-    output_path =
-      if MixProject.is_dep?() do
-        "#{@root_path}/../../priv/static/hologram"
-      else
-        "#{@root_path}/priv/static/hologram"
-      end
+  def run(opts \\ []) do
+    output_path = resolve_output_path()
 
     File.mkdir_p!(output_path)
     remove_old_files(output_path)
@@ -83,5 +79,13 @@ defmodule Mix.Tasks.Compile.Hologram do
     "#{output_path}/*"
     |> Path.wildcard()
     |> Enum.each(&File.rm!/1)
+  end
+
+  defp resolve_output_path do
+    if MixProject.is_dep?() do
+      "#{@root_path}/../../priv/static/hologram"
+    else
+      "#{@root_path}/priv/static/hologram"
+    end
   end
 end
