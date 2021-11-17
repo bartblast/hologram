@@ -4,17 +4,22 @@ defmodule Hologram.PageTest do
 
   @default_layout Application.compile_env!(:hologram, :default_layout)
 
+  test "is_page?/0" do
+    module = Hologram.Test.Fixtures.Runtime.Page.Module1
+    assert module.is_page?()
+  end
+
   describe "layout/0" do
     test "default layout" do
-      page_module = Hologram.Test.Fixtures.Runtime.Page.Module1
-      result = page_module.layout()
+      module = Hologram.Test.Fixtures.Runtime.Page.Module1
+      result = module.layout()
 
       assert result == @default_layout
     end
 
     test "non-default layout" do
-      page_module = Hologram.Test.Fixtures.Runtime.Page.Module2
-      result = page_module.layout()
+      module = Hologram.Test.Fixtures.Runtime.Page.Module2
+      result = module.layout()
 
       assert result == :test_layout
     end

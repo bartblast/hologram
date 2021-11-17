@@ -10,6 +10,8 @@ defmodule Hologram.Page do
 
       alias Hologram.UI.Link
 
+      def is_page?, do: true
+
       def layout do
         if Keyword.has_key?(__MODULE__.__info__(:functions), :custom_layout) do
           apply(__MODULE__, :custom_layout, [])
