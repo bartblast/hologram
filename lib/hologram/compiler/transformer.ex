@@ -39,6 +39,7 @@ defmodule Hologram.Compiler.Transformer do
     NilType,
     ProtocolDefinition,
     StringType,
+    Typespec,
     Variable
   }
 
@@ -122,6 +123,10 @@ defmodule Hologram.Compiler.Transformer do
     MatchOperatorTransformer.transform(ast, context)
   end
 
+  def transform({:@, _, [{:spec, _, [{:"::", _, _}]}]}, _) do
+    %Typespec{}
+  end
+
   def transform({:@, _, [{name, _, ast}]}, _) when not is_list(ast) do
     %ModuleAttributeOperator{name: name}
   end
@@ -153,7 +158,7 @@ defmodule Hologram.Compiler.Transformer do
   end
 
   # DEFER: implement
-  def transform({:defprotocol, _, _} = ast, _) do
+  def transform({:defprotocol, _, _}, _) do
     %ProtocolDefinition{}
   end
 

@@ -35,6 +35,7 @@ defmodule Hologram.Compiler.TransformerTest do
     StructType,
     TupleType,
     TypeOperator,
+    Typespec,
     Unquote,
     UseDirective,
     Variable
@@ -337,6 +338,13 @@ defmodule Hologram.Compiler.TransformerTest do
       ast = ast(code)
 
       assert %Quote{} = Transformer.transform(ast, %Context{})
+    end
+
+    test "typespec" do
+      code = "@spec test_fun(atom()) :: list(integer())"
+      ast = ast(code)
+
+      assert %Typespec{} = Transformer.transform(ast, %Context{})
     end
 
     test "unquote" do

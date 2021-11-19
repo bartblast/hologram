@@ -122,7 +122,7 @@ defmodule Hologram.Compiler.IR do
   defmodule ProtocolDefinition do
     defstruct []
   end
-  
+
   # DIRECTIVES
 
   defmodule AliasDirective do
@@ -169,6 +169,10 @@ defmodule Hologram.Compiler.IR do
 
   defmodule Unquote do
     defstruct expression: nil
+  end
+
+  defmodule Typespec do
+    defstruct []
   end
 
   defmodule Variable do
