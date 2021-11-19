@@ -39,6 +39,13 @@ defmodule Hologram.Compiler.Aggregators.ModuleTypeTest do
     assert result == %{}
   end
 
+  test "module that belongs to a namespace that is in the @ignored_namespaces is ignored" do
+    ir = %ModuleType{module: Hologram.Commons.Encoder}
+    result = Aggregator.aggregate(ir, %{})
+
+    assert result == %{}
+  end
+
   test "module functions are traversed" do
     ir = %ModuleType{module: Module1}
     result = Aggregator.aggregate(ir, %{})
