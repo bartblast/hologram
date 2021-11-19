@@ -1,6 +1,6 @@
 defmodule Hologram.Compiler.ModuleDefinitionTransformer do
   alias Hologram.Compiler.{Context, Expander, Helpers, Reflection, Transformer}
-  alias Hologram.Compiler.IR.ModuleDefinition
+  alias Hologram.Compiler.IR.{FunctionHead, ModuleDefinition}
 
   def transform(ast) do
     exprs = fetch_module_body(ast)
@@ -55,6 +55,7 @@ defmodule Hologram.Compiler.ModuleDefinitionTransformer do
 
     functions =
       (defs ++ defps)
+      |> Enum.reject(&(&1.__struct__ == FunctionHead))
       |> inject_module_info_callback(context)
 
     fields =

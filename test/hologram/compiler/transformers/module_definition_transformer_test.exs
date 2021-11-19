@@ -315,6 +315,29 @@ defmodule Hologram.Compiler.ModuleDefinitionTransformerTest do
     assert Enum.member?(result.functions, expected_2)
   end
 
+  test "function heads" do
+    code = """
+    defmodule Hologram.Test.Fixtures.Compiler.ModuleDefinitionTransformer.Module1 do
+      def test_1(a)
+
+      def test_1(a) do
+        1
+      end
+
+      defp test_2(b)
+
+      defp test_2(b) do
+        2
+      end
+    end
+    """
+
+    ast = ast(code)
+    assert %ModuleDefinition{} = result = ModuleDefinitionTransformer.transform(ast)
+
+    assert Enum.count(result.functions) == 3
+  end
+
   test "__info__/1 module callback injection" do
     code = """
     defmodule Hologram.Test.Fixtures.PlaceholderModule1 do
