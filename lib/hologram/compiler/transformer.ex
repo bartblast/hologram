@@ -37,6 +37,7 @@ defmodule Hologram.Compiler.Transformer do
     ModuleAttributeOperator,
     ModulePseudoVariable,
     NilType,
+    ProtocolDefinition,
     StringType,
     Variable
   }
@@ -151,6 +152,11 @@ defmodule Hologram.Compiler.Transformer do
     ModuleDefinitionTransformer.transform(ast)
   end
 
+  # DEFER: implement
+  def transform({:defprotocol, _, _} = ast, _) do
+    %ProtocolDefinition{}
+  end
+
   def transform({:@, _, [{_, _, exprs}]} = ast, %Context{} = context) when is_list(exprs) do
     ModuleAttributeDefinitionTransformer.transform(ast, context)
   end
@@ -172,7 +178,7 @@ defmodule Hologram.Compiler.Transformer do
   def transform({:use, _, _} = ast, _) do
     UseDirectiveTransformer.transform(ast)
   end
-  
+
   # CONTROL FLOW
 
   def transform({:if, _, _} = ast, %Context{} = context) do

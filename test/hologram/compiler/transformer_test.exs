@@ -28,6 +28,7 @@ defmodule Hologram.Compiler.TransformerTest do
     ModulePseudoVariable,
     ModuleType,
     NilType,
+    ProtocolDefinition,
     Quote,
     RequireDirective,
     StringType,
@@ -262,6 +263,18 @@ defmodule Hologram.Compiler.TransformerTest do
       ast = ast(code)
 
       assert %ModuleAttributeDefinition{} = Transformer.transform(ast, %Context{})
+    end
+
+    test "protocol" do
+      code = """
+      defprotocol Hologram.Test.Fixtures.PlaceholderModule1 do
+        def test_fun(a, b)
+      end
+      """
+
+      ast = ast(code)
+
+      assert %ProtocolDefinition{} = Transformer.transform(ast, %Context{})
     end
   end
 
