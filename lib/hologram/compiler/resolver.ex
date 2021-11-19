@@ -1,6 +1,6 @@
 defmodule Hologram.Compiler.Resolver do
   alias Hologram.Compiler.{Context, Helpers, Reflection}
-  alias Hologram.Compiler.Typespecs, as: T
+  alias Hologram.Typespecs, as: T
 
   @doc """
   Resolves to a fully qualified module.
