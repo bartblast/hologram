@@ -1,6 +1,6 @@
 defmodule Hologram.Compiler.FunctionDefinitionTransformer do
   alias Hologram.Compiler.{Context, Helpers, Transformer}
-  alias Hologram.Compiler.IR.FunctionDefinition
+  alias Hologram.Compiler.IR.{FunctionDefinition, FunctionHead}
 
   def transform(
         {def_type, _, [{name, _, params}, [do: {:__block__, _, body}]]},
@@ -12,6 +12,11 @@ defmodule Hologram.Compiler.FunctionDefinitionTransformer do
 
   def transform({def_type, _, [{name, _, _}, [do: {:__block__, _, body}]]}, %Context{} = context) do
     build_function_definition(name, [], body, def_type, context)
+  end
+
+  # DEFER: implement
+  def transform(_, %Context{}) do
+    %FunctionHead{}
   end
 
   defp build_function_definition(name, params, body, def_type, %{module: module} = context) do
