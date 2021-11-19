@@ -95,6 +95,11 @@ defmodule Hologram.Compiler.IR do
     defstruct name: nil, variants: []
   end
 
+  # DEFER: implement
+  defmodule FunctionHead do
+    defstruct []
+  end
+
   defmodule MacroDefinition do
     defstruct module: nil, name: nil, arity: nil, params: [], bindings: [], body: []
   end
