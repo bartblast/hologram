@@ -59,9 +59,17 @@ defmodule Hologram.Compiler.Reflection do
     |> Transformer.transform(context)
   end
 
-  def is_module?(term) do
+  def is_alias?(term) do
     str = to_string(term)
     is_atom(term) && String.starts_with?(str, "Elixir.")
+  end
+
+  def is_module?(term) do
+    is_alias?(term) && !is_protocol?(term)
+  end
+
+  def is_protocol?(term) do
+    is_alias?(term) && Keyword.has_key?(term.module_info(:exports), :__protocol__)
   end
 
   def list_pages(opts \\ []) do

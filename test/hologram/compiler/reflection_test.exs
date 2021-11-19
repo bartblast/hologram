@@ -102,17 +102,57 @@ defmodule Hologram.Compiler.ReflectionTest do
     assert %FunctionDefinition{module: Abc.Bcd} = result
   end
 
+  describe "is_alias?/1" do
+    test "atom which is a module alias" do
+      assert Reflection.is_alias?(Kernel)
+    end
+
+    test "atom which is a protocol alias" do
+      assert Reflection.is_alias?(Enumerable)
+    end
+
+    test "atom which is not an alias" do
+      refute Reflection.is_alias?(:abc)
+    end
+
+    test "non-atom" do
+      refute Reflection.is_alias?(123)
+    end
+  end
+
   describe "is_module?/1" do
-    test "atom which is a module" do
+    test "atom which is a module alias" do
       assert Reflection.is_module?(Kernel)
     end
 
-    test "atom which is not a module" do
+    test "atom which is a protocol alias" do
+      refute Reflection.is_module?(Enumerable)
+    end
+
+    test "atom which is not an alias" do
       refute Reflection.is_module?(:abc)
     end
 
     test "non-atom" do
       refute Reflection.is_module?(123)
+    end
+  end
+
+  describe "is_protocol?/1" do
+    test "atom which is a module alias" do
+      refute Reflection.is_protocol?(Kernel)
+    end
+
+    test "atom which is a protocol alias" do
+      assert Reflection.is_protocol?(Enumerable)
+    end
+
+    test "atom which is not an alias" do
+      refute Reflection.is_protocol?(:abc)
+    end
+
+    test "non-atom" do
+      refute Reflection.is_protocol?(123)
     end
   end
 
