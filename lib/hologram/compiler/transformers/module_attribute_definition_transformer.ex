@@ -8,10 +8,11 @@ defmodule Hologram.Compiler.ModuleAttributeDefinitionTransformer do
 
   def transform({:@, _, [{name, _, [ast]}]}, %Context{} = context) do
     {value, _} = Code.eval_quoted(ast)
+    value_ast = Macro.escape(value)
 
     %ModuleAttributeDefinition{
       name: name,
-      value: Transformer.transform(value, context)
+      value: Transformer.transform(value_ast, context)
     }
   end
 end
