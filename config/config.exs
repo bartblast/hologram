@@ -5,6 +5,11 @@ config :hologram,
   otp_app: :hologram,
   app_path: "#{File.cwd!()}/e2e",
   default_layout: Hologram.E2E.DefaultLayout,
+  ignored_namespaces: [
+    Hologram.Commons,
+    Hologram.Compiler,
+    Hologram.Template
+  ],
   router_module: Hologram.E2E.Web.Router
 
 config :hologram, Hologram.E2E.Web.Endpoint,
