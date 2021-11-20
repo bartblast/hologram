@@ -193,10 +193,13 @@
 | Structure        | Status             |
 | :--------------- | :----------------: |
 | Exception        | :x:                |
-| Function         | :x:                |
+| Function Head    | :x:                |
 | Macro            | :x:                |
 | Module           | :x:                |
 | Module Attribute | :x:                |
+| Private Function | :x:                |
+| Public Function  | :x:                |
+
 
 #### Directives
 
