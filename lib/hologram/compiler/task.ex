@@ -6,7 +6,6 @@ defmodule Mix.Tasks.Compile.Hologram do
   alias Hologram.Compiler.{Builder, Reflection}
   alias Hologram.MixProject
 
-  @config Application.get_all_env(:hologram)
   @root_path Reflection.root_path()
 
   def run(opts \\ []) do
@@ -17,11 +16,12 @@ defmodule Mix.Tasks.Compile.Hologram do
 
     build_runtime()
 
-    # DEFER: parallelize
-    Reflection.list_pages(opts)
-    |> Enum.map(&build_page(&1, output_path))
-    |> build_manifest(output_path)
+    digests =
+      Reflection.list_pages(opts)
+      |> Enum.map(&(Task.async(fn -> build_page(&1, output_path) end)))
+      |> Enum.map(&(Task.await(&1)))
 
+    build_manifest(digests, output_path)
     reload_routes()
 
     :ok
