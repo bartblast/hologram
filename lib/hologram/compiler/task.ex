@@ -19,7 +19,7 @@ defmodule Mix.Tasks.Compile.Hologram do
     digests =
       Reflection.list_pages(opts)
       |> Enum.map(&(Task.async(fn -> build_page(&1, output_path) end)))
-      |> Enum.map(&(Task.await(&1)))
+      |> Enum.map(&(Task.await(&1, :infinity)))
 
     build_manifest(digests, output_path)
     reload_routes()
