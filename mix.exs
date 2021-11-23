@@ -28,10 +28,15 @@ defmodule Hologram.MixProject do
   end
 
   def compilers do
-    if is_dep?() do
-      Mix.compilers()
-    else
-      Mix.compilers() ++ [:hologram]
+    case {is_dep?(), Mix.env()} do
+      {true, _} ->
+        Mix.compilers()
+
+      {false, :test} ->
+        Mix.compilers()
+
+      {false, _} ->
+        Mix.compilers() ++ [:hologram]
     end
   end
 
