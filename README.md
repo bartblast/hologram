@@ -78,7 +78,6 @@
 | Binary             | :x:                |
 | Bitstring          | :x:                |     
 | Boolean            | :x:                |     
-| Charlist           | :x:                |     
 | Exception          | :x:                |     
 | Float              | :x:                |     
 | Integer            | :x:                |     
@@ -161,7 +160,6 @@
 | Binary        | :x:                |
 | Bitstring     | :x:                |
 | Case          | :x:                |
-| Charlist      | :x:                |
 | Comprehension | :x:                |
 | List          | :x:                |
 | Map           | :x:                |       
