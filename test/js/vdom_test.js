@@ -3,7 +3,6 @@
 import { assert, assertFrozen, cleanup } from "./support/commons";
 beforeEach(() => cleanup())
 
-import { HologramNotImplementedError } from "../../assets/js/hologram/errors"
 import SpecialForms from "../../assets/js/hologram/elixir/kernel/special_forms";
 import Target from "../../assets/js/hologram/target";
 import Type from "../../assets/js/hologram/type";
@@ -427,53 +426,11 @@ describe("getComponentId()", () => {
 })
 
 describe("interpolate()", () => {
-  it("converts boxed atom value to JS string", () => {
+  it("converts a boxed value to JS string", () => {
     const value = Type.atom("abc")
     const result = VDOM.interpolate(value)
 
     assert.equal(result, "abc")
-  })
-
-  it("converts boxed boolean value to JS string", () => {
-    const value = Type.boolean(true)
-    const result = VDOM.interpolate(value)
-
-    assert.equal(result, "true")
-  })
-
-  it("converts boxed integer value to JS string", () => {
-    const value = Type.integer(1)
-    const result = VDOM.interpolate(value)
-
-    assert.equal(result, "1")
-  })
-
-  it("converts boxed string value to JS string", () => {
-    const value = Type.string("abc")
-    const result = VDOM.interpolate(value)
-
-    assert.equal(result, "abc")
-  })
-
-  it("converts boxed binary value to JS string", () => {
-    const value = Type.binary([Type.string("abc"), Type.string("xyz")])
-    const result = VDOM.interpolate(value)
-
-    assert.equal(result, "abcxyz")
-  })
-
-  it("converts boxed nil value to JS string", () => {
-    const value = Type.nil()
-    const result = VDOM.interpolate(value)
-
-    assert.equal(result, "")
-  })
-
-  it("throws an error for not implemented types", () => {
-    const value = {type: "not implemented", value: "test"}
-    const expectedMessage = 'VDOM.interpolate(): value = {"type":"not implemented","value":"test"}'
-
-    assert.throw(() => { VDOM.interpolate(value) }, HologramNotImplementedError, expectedMessage);
   })
 })
 

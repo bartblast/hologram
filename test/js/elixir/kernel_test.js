@@ -338,19 +338,62 @@ describe("put_in()", () => {
 })
 
 describe("to_string()", () => {
-  let result, val;
+  it("converts boxed atom to boxed string", () => {
+    const value = Type.atom("abc")
 
-  beforeEach(() => {
-    val = Type.integer(1);
-    result = Kernel.to_string(val);
-  });
+    const result = Kernel.to_string(value)
+    const expected = Type.string("abc")
 
-  it("converts boxed value to boxed string type value", () => {
-    const expected = Type.string("1");
-    assert.deepStrictEqual(result, expected);
-  });
+    assert.deepStrictEqual(result, expected)
+  })
 
-  it("returns frozen object", () => {
-    assertFrozen(result);
-  });
-});
+  it("converts boxed boolean to boxed string", () => {
+    const value = Type.boolean(true)
+
+    const result = Kernel.to_string(value)
+    const expected = Type.string("true")
+
+    assert.deepStrictEqual(result, expected)
+  })
+
+  it("converts boxed integer to boxed string", () => {
+    const value = Type.integer(1)
+
+    const result = Kernel.to_string(value)
+    const expected = Type.string("1")
+
+    assert.deepStrictEqual(result, expected)
+  })
+
+  it("returns the given arg if it is a boxed string", () => {
+    const value = Type.string("abc")
+    const result = Kernel.to_string(value)
+
+    assert.deepStrictEqual(result, value)
+  })
+
+  it("converts boxed binary to boxed string", () => {
+    const value = Type.binary([Type.string("abc"), Type.string("xyz")])
+
+    const result = Kernel.to_string(value)
+    const expected = Type.string("abcxyz")
+
+    assert.deepStrictEqual(result, expected)
+  })
+
+  it("converts boxed nil to boxed string", () => {
+    const value = Type.nil()
+
+    const result = Kernel.to_string(value)
+    const expected = Type.string("")
+
+    assert.deepStrictEqual(result, expected)
+  })
+
+  it("throws an error for not implemented types", () => {
+    const value = {type: "not implemented", value: "test"}
+    const expectedMessage = 'Kernel.to_string(): boxedValue = {"type":"not implemented","value":"test"}'
+
+    assert.throw(() => { Kernel.to_string(value) }, HologramNotImplementedError, expectedMessage);
+  })
+})

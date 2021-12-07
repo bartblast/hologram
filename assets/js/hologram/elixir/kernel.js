@@ -92,7 +92,28 @@ export default class Kernel {
   }
 
   static to_string(boxedValue) {
-    const value = `${boxedValue.value.toString()}`
-    return Type.string(value)
+    switch (boxedValue.type) {
+      case "atom":
+      case "boolean":
+      case "integer":
+        return Type.string(`${boxedValue.value}`)
+
+      case "binary":
+        const str = boxedValue.data
+          .map(elem => Kernel.to_string(elem).value)
+          .join("")
+
+        return Type.string(str)
+
+      case "nil":
+        return Type.string("")
+
+      case "string":
+        return boxedValue
+
+      default:
+        const message = `Kernel.to_string(): boxedValue = ${JSON.stringify(boxedValue)}`
+        throw new HologramNotImplementedError(message)
+    }
   }
 }

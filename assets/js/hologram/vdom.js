@@ -1,6 +1,7 @@
 "use strict";
 
-import { HologramNotImplementedError } from "./errors";
+import Kernel from "./elixir/kernel";
+
 import Runtime from "./runtime";
 import Store from "./store";
 import Target from "./target";
@@ -208,24 +209,8 @@ export default class VDOM {
     return doctype + outerHTML;
   }
 
-  static interpolate(value) {
-    switch (value.type) {
-      case "atom":
-      case "boolean":
-      case "integer":
-      case "string":
-        return `${value.value}`
-
-      case "binary":
-        return value.data.map((elem) => elem.value).join("")
-
-      case "nil":
-        return ""
-
-      default:
-        const message = `VDOM.interpolate(): value = ${JSON.stringify(value)}`
-        throw new HologramNotImplementedError(message)
-    }
+  static interpolate(boxedValue) {
+    return Kernel.to_string(boxedValue).value
   }
 
   static isStatefulComponent(node) {
