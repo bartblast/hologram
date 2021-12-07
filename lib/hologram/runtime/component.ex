@@ -3,7 +3,8 @@ defmodule Hologram.Component do
     quote do
       import Hologram.Component
       import Hologram.Runtime.Commons, only: [sigil_H: 2, update: 3]
-      
+
+      alias Hologram.Runtime.JS
       alias Hologram.UI.Link
     end
   end

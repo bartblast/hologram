@@ -8,6 +8,7 @@ defmodule Hologram.Page do
       import Hologram.Page
       import Hologram.Runtime.Commons, only: [sigil_H: 2, update: 3]
 
+      alias Hologram.Runtime.JS
       alias Hologram.UI.Link
 
       def is_page?, do: true
