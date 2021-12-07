@@ -45,7 +45,7 @@ export default class ScriptsReloader {
     }
 
     if (ScriptsReloader.isInlineScript(reloadedScript)) {
-      Utils.eval(reloadedScript.textContent, false)
+      Utils.exec(reloadedScript.textContent)
       callback()
     } else {
       if (script.parentNode) {
