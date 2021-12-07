@@ -3,7 +3,7 @@ defmodule Hologram.Runtime.JS do
   @moduledoc """
   JS interop.
 
-  Backend implementation is only a dummy, the actual implementation is only on frontend.
+  Backend implementation is just a dummy, the actual implementation is on frontend only.
   """
 
   def exec(_code), do: nil
