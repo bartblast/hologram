@@ -3,7 +3,7 @@
 import PatternMatcher from "./hologram/pattern_matcher";
 import Runtime from "./hologram/runtime";
 
-// Elixir standard library
+// transpiled Elixir standard library
 import Elixir_Ecto_Changeset from "./hologram/elixir/ecto/changeset";
 import Elixir_Enum from "./hologram/elixir/enum";
 import Elixir_IO from "./hologram/elixir/io";
@@ -12,6 +12,9 @@ import Elixir_Keyword from "./hologram/elixir/keyword";
 import Elixir_Map from "./hologram/elixir/map";
 import Elixir_Kernel_SpecialForms from "./hologram/elixir/kernel/special_forms";
 import Elixir_String from "./hologram/elixir/string";
+
+// transpiled Hologram runtime
+import Elixir_Hologram_Runtime_JS from "./hologram/elixir/hologram/runtime/js"
 
 export default class Hologram {
   // Covered implicitely in E2E tests.
@@ -49,6 +52,7 @@ export default class Hologram {
   }
 }
 
+// transpiled Elixir standard library
 window.Elixir_Ecto_Changeset = Elixir_Ecto_Changeset;
 window.Elixir_Enum = Elixir_Enum;
 window.Elixir_IO = Elixir_IO;
@@ -57,5 +61,8 @@ window.Elixir_Kernel_SpecialForms = Elixir_Kernel_SpecialForms;
 window.Elixir_Keyword = Elixir_Keyword;
 window.Elixir_Map = Elixir_Map;
 window.Elixir_String = Elixir_String;
+
+// transpiled Hologram runtime
+window.Elixir_Hologram_Runtime_JS = Elixir_Hologram_Runtime_JS
 
 window.Hologram = Hologram;
