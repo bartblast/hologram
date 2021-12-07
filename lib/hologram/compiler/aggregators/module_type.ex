@@ -3,7 +3,7 @@ alias Hologram.Compiler.IR.ModuleType
 alias Hologram.Template.Builder
 
 defimpl Aggregator, for: ModuleType do
-  @ignored_modules [Ecto.Changeset] ++ Application.get_env(:hologram, :ignored_modules, [])
+  @ignored_modules [Ecto.Changeset, Hologram.Runtime.JS] ++ Application.get_env(:hologram, :ignored_modules, [])
   @ignored_namespaces Application.get_env(:hologram, :ignored_namespaces, [])
 
   def aggregate(%{module: module}, module_defs) do
