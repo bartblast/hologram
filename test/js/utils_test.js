@@ -23,6 +23,20 @@ describe("clone()", () => {
   })
 })
 
+describe("exec()", () => {
+  it("executes given JS code", () => {
+    const TestClass = class {
+      static testField = null
+    }
+
+    globalThis.TestClass = TestClass
+
+    Utils.exec("TestClass.testField = 'testValue'")
+
+    assert.equal(TestClass.testField, "testValue")
+  })
+})
+
 describe("eval()", () => {
   let result;
 

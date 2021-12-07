@@ -14,6 +14,10 @@ export default class Utils {
     return immutable ? Utils.freeze(result) : result
   }
 
+  static exec(code) {
+    (new Function(`${code};`)());
+  }
+
   // based on deepFreeze() from: https://developer.mozilla.org/pl/docs/Web/JavaScript/Reference/Global_Objects/Object/freeze
   static freeze(obj) {
     const props = Object.getOwnPropertyNames(obj);
