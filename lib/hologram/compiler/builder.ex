@@ -1,9 +1,10 @@
 defmodule Hologram.Compiler.Builder do
-  alias Hologram.Compiler.{Aggregator, Context, JSEncoder, Opts, Pruner}
+  alias Hologram.Compiler.{Context, IRAggregator, IRStore, JSEncoder, Opts, Pruner}
 
   def build(module) do
-    module
-    |> Aggregator.aggregate()
+    IRAggregator.aggregate(module)
+
+    IRStore.get_all()
     |> Pruner.prune(module)
     |> encode_module_defs()
   end

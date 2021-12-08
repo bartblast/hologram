@@ -20,6 +20,11 @@ defmodule Hologram.Compiler.IRStore do
     end
   end
 
+  def get_all do
+    :ets.tab2list(@table_name)
+    |> Enum.into(%{})
+  end
+
   def put(key, value) do
     :ets.insert(@table_name, {key, value})
   end

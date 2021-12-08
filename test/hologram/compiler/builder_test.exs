@@ -1,6 +1,11 @@
 defmodule Hologram.Compiler.BuilderTest do
   use Hologram.Test.UnitCase, async: true
-  alias Hologram.Compiler.Builder
+  alias Hologram.Compiler.{Builder, IRStore}
+
+  setup do
+    IRStore.create()
+    :ok
+  end
 
   test "build/1" do
     result = Builder.build(Hologram.Test.Fixtures.Compiler.Builder.Module1)
