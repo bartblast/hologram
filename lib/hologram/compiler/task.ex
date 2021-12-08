@@ -2,6 +2,7 @@
 
 defmodule Mix.Tasks.Compile.Hologram do
   use Mix.Task.Compiler
+  require Logger
 
   alias Hologram.Compiler.{Builder, IRStore, Reflection}
   alias Hologram.{MixProject, Utils}
@@ -9,6 +10,10 @@ defmodule Mix.Tasks.Compile.Hologram do
   @root_path Reflection.root_path()
 
   def run(opts \\ []) do
+    logger_config = Application.fetch_env!(:logger, :console)
+    Logger.configure_backend(:console, logger_config)
+    Logger.debug("Hologram compiler started")
+
     IRStore.create()
 
     output_path = resolve_output_path()
@@ -27,6 +32,8 @@ defmodule Mix.Tasks.Compile.Hologram do
     reload_routes()
 
     IRStore.destroy()
+
+    Logger.debug("Hologram compiler finished")
 
     :ok
   end

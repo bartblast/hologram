@@ -1,12 +1,26 @@
 defmodule Hologram.Compiler.Builder do
   alias Hologram.Compiler.{Context, IRAggregator, IRStore, JSEncoder, Opts, Pruner}
+  require Logger
 
   def build(module) do
-    IRAggregator.aggregate(module)
+    logger_config = Application.fetch_env!(:logger, :console)
+    Logger.configure_backend(:console, logger_config)
 
-    IRStore.get_all()
-    |> Pruner.prune(module)
-    |> encode_module_defs()
+    Logger.debug("Started IRAggregator.aggregate/1 for #{module}")
+    IRAggregator.aggregate(module)
+    Logger.debug("Finished IRAggregator.aggregate/1 for #{module}")
+
+    module_defs = IRStore.get_all()
+
+    Logger.debug("Started Pruner.prune/2 for #{module}")
+    pruned_module_defs = Pruner.prune(module_defs, module)
+    Logger.debug("Finished Pruner.prune/2 for #{module}")
+
+    Logger.debug("Started encode_module_defs/1 for #{module}")
+    result = encode_module_defs(pruned_module_defs)
+    Logger.debug("Finished encode_module_defs/1 for #{module}")
+
+    result
   end
 
   defp encode_module_defs(module_defs) do
