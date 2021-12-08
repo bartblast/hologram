@@ -3,12 +3,14 @@
 defmodule Mix.Tasks.Compile.Hologram do
   use Mix.Task.Compiler
 
-  alias Hologram.Compiler.{Builder, Reflection}
+  alias Hologram.Compiler.{Builder, IRStore, Reflection}
   alias Hologram.{MixProject, Utils}
 
   @root_path Reflection.root_path()
 
   def run(opts \\ []) do
+    IRStore.create()
+
     output_path = resolve_output_path()
 
     File.mkdir_p!(output_path)
@@ -23,6 +25,8 @@ defmodule Mix.Tasks.Compile.Hologram do
 
     build_manifest(digests, output_path)
     reload_routes()
+
+    IRStore.destroy()
 
     :ok
   end
