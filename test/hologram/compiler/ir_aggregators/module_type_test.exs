@@ -1,8 +1,8 @@
 defmodule Hologram.Compiler.IRAggregators.ModuleTypeTest do
   use Hologram.Test.UnitCase, async: true
 
-  alias Hologram.Compiler.IR.{ModuleDefinition, ModuleType}
   alias Hologram.Compiler.{IRAggregator, IRStore}
+  alias Hologram.Compiler.IR.{ModuleDefinition, ModuleType}
   alias Hologram.Runtime.Commons
   # alias Hologram.Test.Fixtures.Compiler.Aggregators.ModuleType.{Module1, Module2, Module6, Module7}
   alias Hologram.Test.Fixtures.PlaceholderModule1

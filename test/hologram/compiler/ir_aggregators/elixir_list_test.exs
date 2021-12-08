@@ -1,8 +1,8 @@
 defmodule Hologram.Compiler.IRAggregators.ElixirListTest do
   use Hologram.Test.UnitCase, async: true
 
-  alias Hologram.Compiler.IR.{ModuleDefinition, ModuleType}
   alias Hologram.Compiler.{IRAggregator, IRStore}
+  alias Hologram.Compiler.IR.{ModuleDefinition, ModuleType}
   alias Hologram.Test.Fixtures.{PlaceholderModule1, PlaceholderModule2}
 
   setup do
