@@ -3,8 +3,12 @@
 defmodule Hologram.Compiler.IRStore do
   @table_name :hologram_ir_store
 
-  def init do
+  def create do
     :ets.new(@table_name, [:public, :named_table])
+  end
+
+  def destroy do
+    :ets.delete(@table_name)
   end
 
   def get(key) do
