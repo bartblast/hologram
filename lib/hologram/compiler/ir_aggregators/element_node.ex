@@ -1,5 +1,5 @@
-alias Hologram.Template.VDOM.ElementNode
 alias Hologram.Compiler.IRAggregator
+alias Hologram.Template.VDOM.ElementNode
 
 defimpl IRAggregator, for: ElementNode do
   def aggregate(%{attrs: attrs, children: children}) do
