@@ -1,6 +1,7 @@
 # TODO: test
 
 require Logger
+
 alias Hologram.Compiler.Aggregator
 alias Hologram.Compiler.IR.NotSupportedExpression
 
