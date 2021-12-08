@@ -57,34 +57,34 @@ defmodule Hologram.Compiler.IRAggregators.ModuleTypeTest do
     assert %ModuleDefinition{} = IRStore.get(Module2)
   end
 
-  # test "page default layout is added" do
-  #   page = Hologram.Test.Fixtures.Compiler.Aggregators.ModuleType.Module3
-  #   layout = Hologram.E2E.DefaultLayout
+  test "page default layout is added" do
+    page = Hologram.Test.Fixtures.Compiler.Aggregators.ModuleType.Module3
+    layout = Hologram.E2E.DefaultLayout
+    ir = %ModuleType{module: page}
 
-  #   ir = %ModuleType{module: page}
-  #   result = Aggregator.aggregate(ir, %{})
+    IRAggregator.aggregate(ir)
 
-  #   assert %ModuleDefinition{} = result[layout]
-  # end
+    assert %ModuleDefinition{} = IRStore.get(layout)
+  end
 
-  # test "page custom layout is added" do
-  #   page = Hologram.Test.Fixtures.Compiler.Aggregators.ModuleType.Module4
-  #   layout = Hologram.Test.Fixtures.Compiler.Aggregators.ModuleType.Module5
+  test "page custom layout is added" do
+    page = Hologram.Test.Fixtures.Compiler.Aggregators.ModuleType.Module4
+    layout = Hologram.Test.Fixtures.Compiler.Aggregators.ModuleType.Module5
+    ir = %ModuleType{module: page}
 
-  #   ir = %ModuleType{module: page}
-  #   result = Aggregator.aggregate(ir, %{})
+    IRAggregator.aggregate(ir)
 
-  #   assert %ModuleDefinition{} = result[layout]
-  # end
+    assert %ModuleDefinition{} = IRStore.get(layout)
+  end
 
-  # test "aggregation from templetable module's template" do
-  #   ir = %ModuleType{module: Module6}
-  #   result = Aggregator.aggregate(ir, %{})
+  test "aggregation from templetable module's template" do
+    ir = %ModuleType{module: Module6}
 
-  #   # Hologram.Runtime.Commons module is added because templates use Hologram.Runtime.Commons.sigil_H/2
-  #   assert Map.keys(result) == [Commons, Module6, Module7]
-  #   assert %ModuleDefinition{} = result[Commons]
-  #   assert %ModuleDefinition{} = result[Module6]
-  #   assert %ModuleDefinition{} = result[Module7]
-  # end
+    IRAggregator.aggregate(ir)
+
+    # Hologram.Runtime.Commons module is added because templates use Hologram.Runtime.Commons.sigil_H/2
+    assert %ModuleDefinition{} = IRStore.get(Commons)
+    assert %ModuleDefinition{} = IRStore.get(Module6)
+    assert %ModuleDefinition{} = IRStore.get(Module7)
+  end
 end
