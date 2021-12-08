@@ -4,6 +4,7 @@ alias Hologram.Compiler.{IRAggregator, IRStore}
 defimpl IRAggregator, for: ModuleType do
   alias Hologram.Compiler.Reflection
   alias Hologram.Template.Builder, as: TemplateBuilder
+  alias Hologram.Utils
 
   @ignored_modules [Ecto.Changeset, Hologram.Runtime.JS] ++ Application.get_env(:hologram, :ignored_modules, [])
   @ignored_namespaces Application.get_env(:hologram, :ignored_namespaces, [])
@@ -12,7 +13,7 @@ defimpl IRAggregator, for: ModuleType do
     if module_def = maybe_put_module(module) do
       aggregate_from_function_defs(module_def.functions)
       |> maybe_aggregate_from_template(module_def)
-      |> Enum.map(&(Task.await(&1, :infinity)))
+      |> Utils.await_tasks()
     end
   end
 

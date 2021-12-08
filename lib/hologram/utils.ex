@@ -17,6 +17,11 @@ defmodule Hologram.Utils do
 
   def atomize_keys(data), do: data
 
+  # DEFER: test
+  def await_tasks(tasks) do
+    Enum.map(tasks, &(Task.await(&1, :infinity)))
+  end
+
   def prepend(str, prefix), do: prefix <> str
 
   def uuid do

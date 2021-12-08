@@ -4,7 +4,7 @@ defmodule Mix.Tasks.Compile.Hologram do
   use Mix.Task.Compiler
 
   alias Hologram.Compiler.{Builder, Reflection}
-  alias Hologram.MixProject
+  alias Hologram.{MixProject, Utils}
 
   @root_path Reflection.root_path()
 
@@ -19,7 +19,7 @@ defmodule Mix.Tasks.Compile.Hologram do
     digests =
       Reflection.list_pages(opts)
       |> Enum.map(&(Task.async(fn -> build_page(&1, output_path) end)))
-      |> Enum.map(&(Task.await(&1, :infinity)))
+      |> Utils.await_tasks()
 
     build_manifest(digests, output_path)
     reload_routes()
