@@ -1,5 +1,6 @@
 # TODO: test
 
+require Logger
 alias Hologram.Compiler.Aggregator
 alias Hologram.Compiler.IR.NotSupportedExpression
 
@@ -8,9 +9,8 @@ defimpl Aggregator, for: NotSupportedExpression do
     """
     Not supported expression (compiler ignored it):
     #{inspect(ir)}
-    -----
     """
-    |> IO.puts()
+    |> Logger.debug()
 
     module_defs
   end
