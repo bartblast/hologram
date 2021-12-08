@@ -4,7 +4,7 @@ defmodule Hologram.Compiler.IRAggregators.ModuleTypeTest do
   alias Hologram.Compiler.{IRAggregator, IRStore}
   alias Hologram.Compiler.IR.{ModuleDefinition, ModuleType}
   alias Hologram.Runtime.Commons
-  # alias Hologram.Test.Fixtures.Compiler.Aggregators.ModuleType.{Module1, Module2, Module6, Module7}
+  alias Hologram.Test.Fixtures.Compiler.Aggregators.ModuleType.{Module1, Module2, Module6, Module7}
   alias Hologram.Test.Fixtures.PlaceholderModule1
 
   setup do
@@ -49,16 +49,13 @@ defmodule Hologram.Compiler.IRAggregators.ModuleTypeTest do
     assert IRStore.get(Hologram.Commons.Encoder) == nil
   end
 
-  # TODO: refactor other tests
+  test "module functions are traversed" do
+    ir = %ModuleType{module: Module1}
+    IRAggregator.aggregate(ir)
 
-  # test "module functions are traversed" do
-  #   ir = %ModuleType{module: Module1}
-  #   result = Aggregator.aggregate(ir, %{})
-
-  #   assert Map.keys(result) == [Module1, Module2]
-  #   assert %ModuleDefinition{} = result[Module1]
-  #   assert %ModuleDefinition{} = result[Module2]
-  # end
+    assert %ModuleDefinition{} = IRStore.get(Module1)
+    assert %ModuleDefinition{} = IRStore.get(Module2)
+  end
 
   # test "page default layout is added" do
   #   page = Hologram.Test.Fixtures.Compiler.Aggregators.ModuleType.Module3
