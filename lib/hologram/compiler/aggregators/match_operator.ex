@@ -1,10 +1,10 @@
 # TODO: test
 
+alias Hologram.Compiler.Aggregator
 alias Hologram.Compiler.IR.MatchOperator
-alias Hologram.Compiler.IRAggregator
 
-defimpl IRAggregator, for: MatchOperator do
-  def aggregate(%{right: right}) do
-    IRAggregator.aggregate(right)
+defimpl Aggregator, for: MatchOperator do
+  def aggregate(%{right: right}, module_defs) do
+    Aggregator.aggregate(right, module_defs)
   end
 end
