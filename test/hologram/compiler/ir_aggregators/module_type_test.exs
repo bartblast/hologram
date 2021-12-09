@@ -35,7 +35,7 @@ defmodule Hologram.Compiler.IRAggregators.ModuleTypeTest do
     assert IRStore.get(PlaceholderModule1) == nil
   end
 
-  test "module that is in the @ignored_modules blacklist is ignored" do
+  test "handles ignored modules" do
     ir = %ModuleType{module: Ecto.Changeset}
     IRAggregator.aggregate(ir)
 

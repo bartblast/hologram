@@ -3,9 +3,6 @@ alias Hologram.Compiler.IR.ModuleType
 alias Hologram.Template.Builder
 
 defimpl Aggregator, for: ModuleType do
-  @ignored_modules [Ecto.Changeset, Hologram.Runtime.JS] ++ Application.get_env(:hologram, :ignored_modules, [])
-  @ignored_namespaces Application.get_env(:hologram, :ignored_namespaces, [])
-
   def aggregate(%{module: module}, module_defs) do
     case maybe_put_module(module_defs, module) do
       ^module_defs ->
@@ -27,19 +24,8 @@ defimpl Aggregator, for: ModuleType do
     end
   end
 
-  defp is_ignored?(module) do
-    if module in @ignored_modules do
-      true
-    else
-      module_name = to_string(module)
-      Enum.any?(@ignored_namespaces, fn namespace ->
-        String.starts_with?(module_name, to_string(namespace) <> ".")
-      end)
-    end
-  end
-
   defp maybe_put_module(module_defs, module) do
-    if module_defs[module] || Reflection.standard_lib?(module) || is_ignored?(module) do
+    if module_defs[module] || Reflection.standard_lib?(module) || Reflection.is_ignored_module?(module) do
       module_defs
     else
       module_def = Reflection.module_definition(module)

@@ -4,6 +4,8 @@ defmodule Hologram.Compiler.Reflection do
   alias Hologram.Utils
 
   @config Application.get_all_env(:hologram)
+  @ignored_modules [Ecto.Changeset, Hologram.Runtime.JS] ++ Application.get_env(:hologram, :ignored_modules, [])
+  @ignored_namespaces Application.get_env(:hologram, :ignored_namespaces, [])
 
   def app_path(opts \\ @config) do
     case Keyword.get(opts, :app_path) do
@@ -62,6 +64,17 @@ defmodule Hologram.Compiler.Reflection do
   def is_alias?(term) do
     str = to_string(term)
     is_atom(term) && String.starts_with?(str, "Elixir.")
+  end
+
+  def is_ignored_module?(module) do
+    if module in @ignored_modules do
+      true
+    else
+      module_name = to_string(module)
+      Enum.any?(@ignored_namespaces, fn namespace ->
+        String.starts_with?(module_name, to_string(namespace) <> ".")
+      end)
+    end
   end
 
   def is_module?(term) do

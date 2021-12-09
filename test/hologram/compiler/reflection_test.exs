@@ -120,6 +120,23 @@ defmodule Hologram.Compiler.ReflectionTest do
     end
   end
 
+  describe "is_ignored_module?/1" do
+    test "module belonging to hardcoded list of ignored modules" do
+      assert Reflection.is_ignored_module?(Ecto.Changeset)
+    end
+
+    # DEFER: implement
+    # test "module specified to be ignored in config"
+
+    test "module belonging to ignored namespace" do
+      assert Reflection.is_ignored_module?(Hologram.Compiler.Reflection)
+    end
+
+    test "not ignored module" do
+      refute Reflection.is_ignored_module?(Hologram.Runtime.Page)
+    end
+  end
+
   describe "is_module?/1" do
     test "atom which is a module alias" do
       assert Reflection.is_module?(Kernel)
