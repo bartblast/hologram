@@ -4,7 +4,7 @@ defmodule Hologram.Compiler.ModuleDefAggregators.ModuleTypeTest do
   alias Hologram.Compiler.{ModuleDefAggregator, ModuleDefStore}
   alias Hologram.Compiler.IR.{ModuleDefinition, ModuleType}
   alias Hologram.Runtime.Commons
-  alias Hologram.Test.Fixtures.Compiler.Aggregators.ModuleType.{Module1, Module2, Module6, Module7}
+  alias Hologram.Test.Fixtures.Compiler.ModuleDefAggregators.ModuleType.{Module1, Module2, Module6, Module7}
   alias Hologram.Test.Fixtures.PlaceholderModule1
 
   setup do
@@ -58,7 +58,7 @@ defmodule Hologram.Compiler.ModuleDefAggregators.ModuleTypeTest do
   end
 
   test "page default layout is added" do
-    page = Hologram.Test.Fixtures.Compiler.Aggregators.ModuleType.Module3
+    page = Hologram.Test.Fixtures.Compiler.ModuleDefAggregators.ModuleType.Module3
     layout = Hologram.E2E.DefaultLayout
     ir = %ModuleType{module: page}
 
@@ -68,8 +68,8 @@ defmodule Hologram.Compiler.ModuleDefAggregators.ModuleTypeTest do
   end
 
   test "page custom layout is added" do
-    page = Hologram.Test.Fixtures.Compiler.Aggregators.ModuleType.Module4
-    layout = Hologram.Test.Fixtures.Compiler.Aggregators.ModuleType.Module5
+    page = Hologram.Test.Fixtures.Compiler.ModuleDefAggregators.ModuleType.Module4
+    layout = Hologram.Test.Fixtures.Compiler.ModuleDefAggregators.ModuleType.Module5
     ir = %ModuleType{module: page}
 
     ModuleDefAggregator.aggregate(ir)

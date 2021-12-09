@@ -3,7 +3,7 @@ defmodule Hologram.Compiler.ModuleDefAggregators.FunctionCallTest do
 
   alias Hologram.Compiler.{ModuleDefAggregator, ModuleDefStore}
   alias Hologram.Compiler.IR.{FunctionCall, ModuleDefinition, ModuleType}
-  alias Hologram.Test.Fixtures.Compiler.Aggregators.FunctionCall.{Module1, Module2}
+  alias Hologram.Test.Fixtures.Compiler.ModuleDefAggregators.FunctionCall.{Module1, Module2}
 
   setup do
     ModuleDefStore.create()
