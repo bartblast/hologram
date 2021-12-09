@@ -98,6 +98,10 @@ defmodule Hologram.Compiler.Reflection do
     end
   end
 
+  def layouts_path(opts \\ []) do
+    resolve_path(opts, :layouts_path, :layouts)
+  end
+
   def list_modules(app) do
     Keyword.fetch!(Application.spec(app), :modules)
     |> Enum.reduce([], fn module, acc ->
