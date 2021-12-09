@@ -1,9 +1,9 @@
 defmodule Hologram.Compiler.BuilderTest do
   use Hologram.Test.UnitCase, async: true
-  alias Hologram.Compiler.{Builder, IRStore}
+  alias Hologram.Compiler.{Builder, ModuleDefinitionStore}
 
   setup do
-    IRStore.create()
+    ModuleDefinitionStore.create()
     :ok
   end
 

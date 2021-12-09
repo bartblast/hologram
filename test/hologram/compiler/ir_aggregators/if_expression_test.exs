@@ -1,12 +1,12 @@
 defmodule Hologram.Compiler.IRAggregators.IfExpressionTest do
   use Hologram.Test.UnitCase, async: true
 
-  alias Hologram.Compiler.{IRAggregator, IRStore}
+  alias Hologram.Compiler.{IRAggregator, ModuleDefinitionStore}
   alias Hologram.Compiler.IR.{ModuleDefinition, ModuleType, IfExpression, NilType}
   alias Hologram.Test.Fixtures.PlaceholderModule1
 
   setup do
-    IRStore.create()
+    ModuleDefinitionStore.create()
     :ok
   end
 
@@ -19,7 +19,7 @@ defmodule Hologram.Compiler.IRAggregators.IfExpressionTest do
 
     IRAggregator.aggregate(ir)
 
-    assert %ModuleDefinition{} = IRStore.get(PlaceholderModule1)
+    assert %ModuleDefinition{} = ModuleDefinitionStore.get(PlaceholderModule1)
   end
 
   test "do clause is traversed" do
@@ -31,7 +31,7 @@ defmodule Hologram.Compiler.IRAggregators.IfExpressionTest do
 
     IRAggregator.aggregate(ir)
 
-    assert %ModuleDefinition{} = IRStore.get(PlaceholderModule1)
+    assert %ModuleDefinition{} = ModuleDefinitionStore.get(PlaceholderModule1)
   end
 
   test "else clause is traversed" do
@@ -43,6 +43,6 @@ defmodule Hologram.Compiler.IRAggregators.IfExpressionTest do
 
     IRAggregator.aggregate(ir)
 
-    assert %ModuleDefinition{} = IRStore.get(PlaceholderModule1)
+    assert %ModuleDefinition{} = ModuleDefinitionStore.get(PlaceholderModule1)
   end
 end
