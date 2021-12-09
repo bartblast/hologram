@@ -36,3 +36,7 @@ config :phoenix, :json_library, Jason
 # Import environment specific config. This must remain at the bottom
 # of this file so it overrides the configuration defined above.
 import_config "#{config_env()}.exs"
+
+Application.ensure_all_started(:logger)
+logger_config = Application.fetch_env!(:logger, :console)
+Logger.configure_backend(:console, logger_config)

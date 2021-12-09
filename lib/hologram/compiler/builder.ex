@@ -3,9 +3,6 @@ defmodule Hologram.Compiler.Builder do
   require Logger
 
   def build(module) do
-    logger_config = Application.fetch_env!(:logger, :console)
-    Logger.configure_backend(:console, logger_config)
-
     Logger.debug("Started IRAggregator.aggregate/1 for #{module}")
     IRAggregator.aggregate(module)
     Logger.debug("Finished IRAggregator.aggregate/1 for #{module}")

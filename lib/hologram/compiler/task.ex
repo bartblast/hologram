@@ -10,8 +10,6 @@ defmodule Mix.Tasks.Compile.Hologram do
   @root_path Reflection.root_path()
 
   def run(opts \\ []) do
-    logger_config = Application.fetch_env!(:logger, :console)
-    Logger.configure_backend(:console, logger_config)
     Logger.debug("Hologram compiler started")
 
     IRStore.create()

@@ -8,9 +8,7 @@ config :hologram, Hologram.E2E.Web.Endpoint,
   watchers: [
     esbuild: {Esbuild, :install_and_run, [:hologram, ~w(--sourcemap=inline --watch)]}
   ]
-
-config :logger, :console, format: "[$level] $message\n"
-
+  
 config :phoenix, :stacktrace_depth, 20
 
 config :phoenix, :plug_init_mode, :runtime
