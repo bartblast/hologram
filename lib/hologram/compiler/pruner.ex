@@ -9,8 +9,7 @@ defmodule Hologram.Compiler.Pruner do
   end
 
   defp build_call_graph(module_defs, page_module) do
-    module_defs[page_module]
-    |> CallGraphBuilder.build(Graph.new(), module_defs)
+    CallGraphBuilder.build(module_defs[page_module], module_defs)
   end
 
   defp find_reachable_code(call_graph, module_defs, page_module) do
