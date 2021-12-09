@@ -19,7 +19,7 @@ defmodule Mix.Tasks.Compile.Hologram do
     File.mkdir_p!(output_path)
     remove_old_files(output_path)
 
-    build_runtime()
+    runtime_build_task = build_runtime()
 
     digests =
       Reflection.list_pages(opts)
@@ -28,6 +28,8 @@ defmodule Mix.Tasks.Compile.Hologram do
 
     build_manifest(digests, output_path)
     reload_routes()
+
+    Task.await(runtime_build_task, timeout: :infinity)
 
     ModuleDefStore.destroy()
 
@@ -61,15 +63,17 @@ defmodule Mix.Tasks.Compile.Hologram do
   end
 
   defp build_runtime do
-    assets_path =
-      if MixProject.is_dep?() do
-        "deps/hologram/assets"
-      else
-        "assets"
-      end
+    Task.async(fn ->
+      assets_path =
+        if MixProject.is_dep?() do
+          "deps/hologram/assets"
+        else
+          "assets"
+        end
 
-    System.cmd("npm", ["install"], cd: assets_path)
-    Mix.Task.run("esbuild", ["hologram", "--log-level=warning"])
+      System.cmd("npm", ["install"], cd: assets_path)
+      Mix.Task.run("esbuild", ["hologram", "--log-level=warning"])
+    end)
   end
 
   # Routes are defined in page modules and the router aggregates the routes dynamically by reflection.
