@@ -30,6 +30,10 @@ defmodule Hologram.Compiler.Reflection do
     |> ast()
   end
 
+  def components_path(opts \\ []) do
+    resolve_path(opts, :components_path, :components)
+  end
+
   # DEFER: optimize, e.g. load the manifest in config
   def get_page_digest(module) do
     "#{root_path()}/priv/static/hologram/manifest.json"
@@ -180,7 +184,7 @@ defmodule Hologram.Compiler.Reflection do
         "#{app_path()}/#{dir}"
     end
   end
-  
+
   def root_path(opts \\ @config) do
     case Keyword.get(opts, :root_path) do
       nil -> File.cwd!()
