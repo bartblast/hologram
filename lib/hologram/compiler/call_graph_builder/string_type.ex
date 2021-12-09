@@ -4,5 +4,5 @@ alias Hologram.Compiler.CallGraphBuilder
 alias Hologram.Compiler.IR.StringType
 
 defimpl CallGraphBuilder, for: StringType do
-  def build(_, call_graph, _, _), do: call_graph
+  def build(_, _, _), do: nil
 end
