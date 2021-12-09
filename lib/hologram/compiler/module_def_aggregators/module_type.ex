@@ -7,7 +7,7 @@ defimpl ModuleDefAggregator, for: ModuleType do
   alias Hologram.Utils
 
   def aggregate(%{module: module}) do
-    if module_def = maybe_put_module(module) do
+    if module_def = maybe_get_module_def(module) do
       aggregate_from_function_defs(module_def.functions)
       |> maybe_aggregate_from_template(module_def)
       |> Utils.await_tasks()
@@ -32,13 +32,11 @@ defimpl ModuleDefAggregator, for: ModuleType do
     end
   end
 
-  defp maybe_put_module(module) do
-    if ModuleDefStore.get(module) || Reflection.is_ignored_module?(module) || Reflection.standard_lib?(module) do
+  defp maybe_get_module_def(module) do
+    if Reflection.is_ignored_module?(module) || Reflection.standard_lib?(module) do
       nil
     else
-      module_def = Reflection.module_definition(module)
-      ModuleDefStore.put(module, module_def)
-      module_def
+      ModuleDefStore.get_if_not_exists(module)
     end
   end
 end

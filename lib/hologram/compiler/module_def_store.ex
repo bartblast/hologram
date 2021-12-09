@@ -1,43 +1,20 @@
 # TODO: refactor & test
 
 defmodule Hologram.Compiler.ModuleDefStore do
-  require Logger
+  use GenServer
 
   alias Hologram.Compiler.IR.ModuleDefinition
   alias Hologram.Compiler.Reflection
-  alias Hologram.Utils
 
-  @table_name :hologram_ir_store
+  @table_name :hologram_module_def_store
 
   def create do
     :ets.new(@table_name, [:public, :named_table])
-  end
-
-  def warmup do
-    Logger.debug("IR store warmup started")
-
-    app = Application.get_all_env(:hologram)[:otp_app]
-    :ok = Application.ensure_loaded(app)
-
-    Reflection.list_modules(app)
-    |> Enum.map(fn module ->
-      Task.async(fn ->
-        if !Reflection.is_ignored_module?(module) do
-          try do
-            module_def = %ModuleDefinition{} = Reflection.module_definition(module)
-            put(module_def.module, module_def)
-          rescue
-            _ -> nil
-          end
-        end
-      end)
-    end)
-    |> Utils.await_tasks()
-
-    Logger.debug("IR store warmup finished")
+    start_link()
   end
 
   def destroy do
+    Process.whereis(__MODULE__) |> Process.exit(:normal)
     :ets.delete(@table_name)
   end
 
@@ -45,6 +22,7 @@ defmodule Hologram.Compiler.ModuleDefStore do
     case :ets.lookup(@table_name, key) do
       [] ->
         nil
+
       [{^key, value}] ->
         value
     end
@@ -55,7 +33,32 @@ defmodule Hologram.Compiler.ModuleDefStore do
     |> Enum.into(%{})
   end
 
-  def put(key, value) do
-    :ets.insert(@table_name, {key, value})
+  def get_if_not_exists(module) do
+    GenServer.call(__MODULE__, {:get_if_not_exists, module})
+  end
+
+  def init(_) do
+    {:ok, %{}}
+  end
+
+  def handle_call({:get_if_not_exists, module}, _, state) do
+    result =
+      if get(module) do
+        nil
+      else
+        module_def = %ModuleDefinition{} = Reflection.module_definition(module)
+        put(module, module_def)
+        module_def
+      end
+
+    {:reply, result, state}
+  end
+
+  def put(module, module_def) do
+    :ets.insert(@table_name, {module, module_def})
+  end
+
+  def start_link do
+    GenServer.start_link(__MODULE__, [], name: __MODULE__)
   end
 end

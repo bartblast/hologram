@@ -13,7 +13,6 @@ defmodule Mix.Tasks.Compile.Hologram do
     Logger.debug("Hologram compiler started")
 
     ModuleDefStore.create()
-    ModuleDefStore.warmup()
 
     output_path = resolve_output_path()
 
