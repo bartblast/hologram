@@ -156,6 +156,18 @@ defmodule Hologram.Compiler.ReflectionTest do
     end
   end
 
+  describe "list_modules/1" do
+    test "includes app modules" do
+      result = Reflection.list_modules(:hologram)
+      assert Hologram.Compiler.Reflection in result
+    end
+
+    test "doesn't include standard lib modules" do
+      result = Reflection.list_modules(:hologram)
+      refute Kernel in result
+    end
+  end
+
   test "list_pages/1" do
     num_pages =
       "#{Reflection.pages_path()}/*"

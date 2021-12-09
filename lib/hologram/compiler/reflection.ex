@@ -72,6 +72,18 @@ defmodule Hologram.Compiler.Reflection do
     is_alias?(term) && Keyword.has_key?(term.module_info(:exports), :__protocol__)
   end
 
+  def list_modules(app) do
+    Keyword.fetch!(Application.spec(app), :modules)
+    |> Enum.reduce([], fn module, acc ->
+      case Code.ensure_loaded(module) do
+        {:module, _} ->
+          acc ++ [module]
+        _ ->
+          acc
+      end
+    end)
+  end
+
   def list_pages(opts \\ []) do
     app = @config[:otp_app]
     :ok = Application.ensure_loaded(app)
