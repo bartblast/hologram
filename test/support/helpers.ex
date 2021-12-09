@@ -10,9 +10,4 @@ defmodule Hologram.Test.Helpers do
   def compile_pages(pages_path \\ @default_pages_path) do
     Task.run(pages_path: pages_path)
   end
-
-  def has_edge?(graph, from_vertex, to_vertex) do
-    edges = Graph.edges(graph, from_vertex, to_vertex)
-    Enum.count(edges) == 1
-  end
 end

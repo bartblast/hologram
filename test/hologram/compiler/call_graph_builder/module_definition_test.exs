@@ -1,19 +1,23 @@
 defmodule Hologram.Compiler.CallGraphBuilder.ModuleDefinitionTest do
-  use Hologram.Test.UnitCase, async: true
+  use Hologram.Test.UnitCase, async: false
 
-  alias Hologram.Compiler.{CallGraphBuilder, Reflection}
+  alias Hologram.Compiler.{CallGraph, CallGraphBuilder, Reflection}
   alias Hologram.Compiler.IR.{FunctionDefinition, ModuleDefinition, ModuleType}
   alias Hologram.Test.Fixtures.{PlaceholderModule1, PlaceholderModule2}
   alias Hologram.Test.Fixtures.Compiler.CallGraphBuilder.ModuleDefinition.{Module4, Module5}
 
+  setup do
+    CallGraph.create()
+    :ok
+  end
+
   test "module that isn't in the call graph yet" do
     module_def = Reflection.module_definition(PlaceholderModule1)
     module_defs = %{PlaceholderModule1 => module_def}
-    call_graph = Graph.new()
 
-    result = CallGraphBuilder.build(module_def, call_graph, module_defs)
+    CallGraphBuilder.build(module_def, module_defs)
 
-    assert Graph.has_vertex?(result, PlaceholderModule1)
+    assert CallGraph.has_vertex?(PlaceholderModule1)
   end
 
   test "module that is already in the call graph" do
@@ -22,15 +26,13 @@ defmodule Hologram.Compiler.CallGraphBuilder.ModuleDefinitionTest do
       functions: []
     }
 
-    call_graph =
-      Graph.new()
-      |> Graph.add_vertex(PlaceholderModule1)
+    CallGraph.add_vertex(PlaceholderModule1)
+    result = CallGraphBuilder.build(ir, %{})
 
-    result = CallGraphBuilder.build(ir, call_graph, %{})
+    assert CallGraph.num_vertices() == 1
+    assert CallGraph.num_edges() == 0
 
-    assert Graph.num_vertices(result) == 1
-    assert Graph.num_edges(result) == 0
-    assert Graph.has_vertex?(result, PlaceholderModule1)
+    assert CallGraph.has_vertex?(PlaceholderModule1)
   end
 
   test "functions traversing" do
@@ -56,13 +58,12 @@ defmodule Hologram.Compiler.CallGraphBuilder.ModuleDefinitionTest do
       PlaceholderModule2 => module_def_2
     }
 
-    call_graph = Graph.new()
+    CallGraphBuilder.build(module_def_1, module_defs)
 
-    result = CallGraphBuilder.build(module_def_1, call_graph, module_defs)
+    assert CallGraph.num_vertices() == 3
+    assert CallGraph.num_edges() == 1
 
-    assert Graph.num_vertices(result) == 3
-    assert Graph.num_edges(result) == 1
-    has_edge?(call_graph, {PlaceholderModule1, :test_fun}, PlaceholderModule2)
+    assert CallGraph.has_edge?({PlaceholderModule1, :test_fun}, PlaceholderModule2)
   end
 
   test "template traversing" do
@@ -71,11 +72,9 @@ defmodule Hologram.Compiler.CallGraphBuilder.ModuleDefinitionTest do
       Module5 => Reflection.module_definition(Module5),
     }
 
-    call_graph = Graph.new()
+    CallGraphBuilder.build(module_defs[Module4], module_defs)
 
-    result = CallGraphBuilder.build(module_defs[Module4], call_graph, module_defs)
-
-    assert Graph.has_vertex?(result, Module5)
-    assert has_edge?(result, {Module4, :template}, Module5)
+    assert CallGraph.has_vertex?(Module5)
+    assert CallGraph.has_edge?({Module4, :template}, Module5)
   end
 end

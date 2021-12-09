@@ -1,9 +1,14 @@
 defmodule Hologram.Compiler.CallGraphBuilder.IfExpressionTest do
-  use Hologram.Test.UnitCase, async: true
+  use Hologram.Test.UnitCase, async: false
 
-  alias Hologram.Compiler.CallGraphBuilder
+  alias Hologram.Compiler.{CallGraph, CallGraphBuilder}
   alias Hologram.Compiler.IR.{ModuleType, IfExpression, NilType}
   alias Hologram.Test.Fixtures.{PlaceholderModule1, PlaceholderModule2}
+
+  setup do
+    CallGraph.create()
+    :ok
+  end
 
   test "condition is traversed" do
     ir = %IfExpression{
@@ -12,12 +17,13 @@ defmodule Hologram.Compiler.CallGraphBuilder.IfExpressionTest do
       else: %NilType{}
     }
 
-    call_graph = Graph.new()
-    result = CallGraphBuilder.build(ir, call_graph, %{}, PlaceholderModule1)
+    from_vertex = PlaceholderModule1
+    CallGraphBuilder.build(ir, %{}, from_vertex)
 
-    assert Graph.num_vertices(result) == 2
-    assert Graph.num_edges(result) == 1
-    has_edge?(call_graph, PlaceholderModule1, PlaceholderModule2)
+    assert CallGraph.num_vertices() == 2
+    assert CallGraph.num_edges() == 1
+
+    assert CallGraph.has_edge?(PlaceholderModule1, PlaceholderModule2)
   end
 
   test "do clause is traversed" do
@@ -27,12 +33,13 @@ defmodule Hologram.Compiler.CallGraphBuilder.IfExpressionTest do
       else: %NilType{}
     }
 
-    call_graph = Graph.new()
-    result = CallGraphBuilder.build(ir, call_graph, %{}, PlaceholderModule1)
+    from_vertex = PlaceholderModule1
+    CallGraphBuilder.build(ir, %{}, from_vertex)
 
-    assert Graph.num_vertices(result) == 2
-    assert Graph.num_edges(result) == 1
-    has_edge?(call_graph, PlaceholderModule1, PlaceholderModule2)
+    assert CallGraph.num_vertices() == 2
+    assert CallGraph.num_edges() == 1
+
+    assert CallGraph.has_edge?(PlaceholderModule1, PlaceholderModule2)
   end
 
   test "else clause is traversed" do
@@ -42,11 +49,12 @@ defmodule Hologram.Compiler.CallGraphBuilder.IfExpressionTest do
       else: %ModuleType{module: PlaceholderModule2}
     }
 
-    call_graph = Graph.new()
-    result = CallGraphBuilder.build(ir, call_graph, %{}, PlaceholderModule1)
+    from_vertex = PlaceholderModule1
+    CallGraphBuilder.build(ir, %{}, from_vertex)
 
-    assert Graph.num_vertices(result) == 2
-    assert Graph.num_edges(result) == 1
-    has_edge?(call_graph, PlaceholderModule1, PlaceholderModule2)
+    assert CallGraph.num_vertices() == 2
+    assert CallGraph.num_edges() == 1
+
+    assert CallGraph.has_edge?(PlaceholderModule1, PlaceholderModule2)
   end
 end

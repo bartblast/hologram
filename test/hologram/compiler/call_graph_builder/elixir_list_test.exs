@@ -1,9 +1,14 @@
 defmodule Hologram.Compiler.CallGraphBuilder.ElixirListTest do
-  use Hologram.Test.UnitCase, async: true
+  use Hologram.Test.UnitCase, async: false
 
-  alias Hologram.Compiler.CallGraphBuilder
+  alias Hologram.Compiler.{CallGraph, CallGraphBuilder}
   alias Hologram.Compiler.IR.ModuleType
   alias Hologram.Test.Fixtures.{PlaceholderModule1, PlaceholderModule2, PlaceholderModule3}
+
+  setup do
+    CallGraph.create()
+    :ok
+  end
 
   test "build/4" do
     ir = [
@@ -11,14 +16,13 @@ defmodule Hologram.Compiler.CallGraphBuilder.ElixirListTest do
       %ModuleType{module: PlaceholderModule3}
     ]
 
-    call_graph = Graph.new()
     from_vertex = PlaceholderModule1
+    CallGraphBuilder.build(ir, %{}, from_vertex)
 
-    result = CallGraphBuilder.build(ir, call_graph, %{}, from_vertex)
+    assert CallGraph.num_vertices() == 3
+    assert CallGraph.num_edges() == 2
 
-    assert Graph.num_vertices(result) == 3
-    assert Graph.num_edges(result) == 2
-    assert has_edge?(result, PlaceholderModule1, PlaceholderModule2)
-    assert has_edge?(result, PlaceholderModule1, PlaceholderModule3)
+    assert CallGraph.has_edge?(PlaceholderModule1, PlaceholderModule2)
+    assert CallGraph.has_edge?(PlaceholderModule1, PlaceholderModule3)
   end
 end

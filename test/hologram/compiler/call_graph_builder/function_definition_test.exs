@@ -1,9 +1,14 @@
 defmodule Hologram.Compiler.CallGraphBuilder.FunctionDefinitionTest do
-  use Hologram.Test.UnitCase, async: true
+  use Hologram.Test.UnitCase, async: false
 
-  alias Hologram.Compiler.CallGraphBuilder
+  alias Hologram.Compiler.{CallGraph, CallGraphBuilder}
   alias Hologram.Compiler.IR.{FunctionDefinition, ModuleType}
   alias Hologram.Test.Fixtures.{PlaceholderModule1, PlaceholderModule2, PlaceholderModule3}
+
+  setup do
+    CallGraph.create()
+    :ok
+  end
 
   test "function definition with call graph edges" do
     ir = %FunctionDefinition{
@@ -15,15 +20,15 @@ defmodule Hologram.Compiler.CallGraphBuilder.FunctionDefinitionTest do
       ]
     }
 
-    call_graph = Graph.new()
     from_vertex = PlaceholderModule1
+    CallGraphBuilder.build(ir, %{}, from_vertex)
 
-    result = CallGraphBuilder.build(ir, call_graph, %{}, from_vertex)
+    assert CallGraph.num_vertices() == 3
+    assert CallGraph.num_edges() == 2
 
-    assert Graph.num_edges(result) == 2
-    assert has_edge?(result, {PlaceholderModule1, :test_fun}, PlaceholderModule2)
-    assert has_edge?(result, {PlaceholderModule1, :test_fun}, PlaceholderModule3)
-    assert Graph.num_vertices(result) == 3
+    assert CallGraph.has_edge?({PlaceholderModule1, :test_fun}, PlaceholderModule2)
+    assert CallGraph.has_edge?({PlaceholderModule1, :test_fun}, PlaceholderModule3)
+
   end
 
   test "function definition without call graph edges" do
@@ -33,13 +38,12 @@ defmodule Hologram.Compiler.CallGraphBuilder.FunctionDefinitionTest do
       body: []
     }
 
-    call_graph = Graph.new()
     from_vertex = PlaceholderModule1
+    CallGraphBuilder.build(ir, %{}, from_vertex)
 
-    result = CallGraphBuilder.build(ir, call_graph, %{}, from_vertex)
+    assert CallGraph.num_vertices() == 1
+    assert CallGraph.num_edges() == 0
 
-    assert Graph.num_edges(result) == 0
-    assert Graph.num_vertices(result) == 1
-    assert Graph.has_vertex?(result, {PlaceholderModule1, :test_fun})
+    assert CallGraph.has_vertex?({PlaceholderModule1, :test_fun})
   end
 end
