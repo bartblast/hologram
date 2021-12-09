@@ -1,4 +1,4 @@
-alias Hologram.Compiler.CallGraph
+alias Hologram.Compiler.CallGraphBuilder
 
 defmodule Hologram.Compiler.Pruner do
   def prune(module_defs, page_module) do
@@ -10,7 +10,7 @@ defmodule Hologram.Compiler.Pruner do
 
   defp build_call_graph(module_defs, page_module) do
     module_defs[page_module]
-    |> CallGraph.build(Graph.new(), module_defs)
+    |> CallGraphBuilder.build(Graph.new(), module_defs)
   end
 
   defp find_reachable_code(call_graph, module_defs, page_module) do
