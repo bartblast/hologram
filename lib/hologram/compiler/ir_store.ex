@@ -5,6 +5,7 @@ defmodule Hologram.Compiler.IRStore do
 
   alias Hologram.Compiler.IR.ModuleDefinition
   alias Hologram.Compiler.Reflection
+  alias Hologram.Utils
 
   @table_name :hologram_ir_store
 
@@ -19,19 +20,19 @@ defmodule Hologram.Compiler.IRStore do
     :ok = Application.ensure_loaded(app)
 
     Reflection.list_modules(app)
-    |> Enum.reduce([], fn module, acc ->
-      if Reflection.is_ignored_module?(module) do
-        acc
-      else
-        try do
-          module_def = %ModuleDefinition{} = Reflection.module_definition(module)
-          [module_def | acc]
-        rescue
-          _ -> acc
+    |> Enum.map(fn module ->
+      Task.async(fn ->
+        if !Reflection.is_ignored_module?(module) do
+          try do
+            module_def = %ModuleDefinition{} = Reflection.module_definition(module)
+            put(module_def.module, module_def)
+          rescue
+            _ -> nil
+          end
         end
-      end
+      end)
     end)
-    |> Enum.each(&put(&1.module, &1))
+    |> Utils.await_tasks()
 
     Logger.debug("IR store warmup finished")
   end
