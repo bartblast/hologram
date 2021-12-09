@@ -1,7 +1,9 @@
-# TODO: test
+# TODO: refactor & test
 
 defmodule Hologram.Compiler.IRStore do
   require Logger
+
+  alias Hologram.Compiler.IR.ModuleDefinition
   alias Hologram.Compiler.Reflection
 
   @table_name :hologram_ir_store
@@ -22,7 +24,8 @@ defmodule Hologram.Compiler.IRStore do
         acc
       else
         try do
-          [Reflection.module_definition(module) | acc]
+          module_def = %ModuleDefinition{} = Reflection.module_definition(module)
+          [module_def | acc]
         rescue
           _ -> acc
         end
