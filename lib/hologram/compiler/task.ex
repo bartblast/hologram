@@ -4,7 +4,7 @@ defmodule Mix.Tasks.Compile.Hologram do
   use Mix.Task.Compiler
   require Logger
 
-  alias Hologram.Compiler.{Builder, ModuleDefStore, Reflection}
+  alias Hologram.Compiler.{Builder, CallGraph, ModuleDefStore, Reflection}
   alias Hologram.{MixProject, Utils}
 
   @root_path Reflection.root_path()
@@ -13,6 +13,7 @@ defmodule Mix.Tasks.Compile.Hologram do
     Logger.debug("Hologram compiler started")
 
     ModuleDefStore.create()
+    CallGraph.create()
 
     output_path = resolve_output_path()
 
@@ -31,6 +32,7 @@ defmodule Mix.Tasks.Compile.Hologram do
 
     Task.await(runtime_build_task, :infinity)
 
+    CallGraph.destroy()
     ModuleDefStore.destroy()
 
     Logger.debug("Hologram compiler finished")
