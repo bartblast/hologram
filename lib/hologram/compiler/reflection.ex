@@ -105,11 +105,9 @@ defmodule Hologram.Compiler.Reflection do
     end)
   end
 
-  def list_pages(opts \\ []) do
+  defp list_modules_of_type(type, path) do
     app = @config[:otp_app]
     :ok = Application.ensure_loaded(app)
-
-    pages_path = pages_path(opts)
 
     Keyword.fetch!(Application.spec(app), :modules)
     |> Enum.reduce([], fn module, acc ->
@@ -117,8 +115,10 @@ defmodule Hologram.Compiler.Reflection do
         {:module, _} ->
           funs = module.module_info(:exports)
 
-          in_pages_path? = String.starts_with?(source_path(module), pages_path)
-          if Keyword.get(funs, :is_page?) && module.is_page?() && in_pages_path? do
+          in_path? = String.starts_with?(source_path(module), path)
+          type_check_function = :"is_#{type}?"
+
+          if Keyword.get(funs, type_check_function) && apply(module, type_check_function, []) && in_path? do
             acc ++ [module]
           else
             acc
@@ -128,6 +128,11 @@ defmodule Hologram.Compiler.Reflection do
           acc
       end
     end)
+  end
+
+  def list_pages(opts \\ []) do
+    pages_path = pages_path(opts)
+    list_modules_of_type(:page, pages_path)
   end
 
   # DEFER: instead of matching the macro on arity, pattern match the args as well
