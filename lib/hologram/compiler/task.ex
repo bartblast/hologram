@@ -29,7 +29,7 @@ defmodule Mix.Tasks.Compile.Hologram do
     build_manifest(digests, output_path)
     reload_routes()
 
-    Task.await(runtime_build_task, timeout: :infinity)
+    Task.await(runtime_build_task, :infinity)
 
     ModuleDefStore.destroy()
 
