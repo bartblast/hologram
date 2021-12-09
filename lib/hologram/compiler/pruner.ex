@@ -1,4 +1,4 @@
-alias Hologram.Compiler.CallGraphBuilder
+alias Hologram.Compiler.{CallGraph, CallGraphBuilder}
 
 defmodule Hologram.Compiler.Pruner do
   def prune(module_defs, page_module) do
@@ -45,62 +45,62 @@ defmodule Hologram.Compiler.Pruner do
 
   defp include_code_reachable_from_component_actions(acc, call_graph, component_modules) do
     Enum.reduce(component_modules, acc, fn module, acc ->
-      Graph.reachable(call_graph, [{module, :action}])
+      CallGraph.reachable([{module, :action}])
       |> maybe_include_reachable_code(acc)
     end)
   end
 
   defp include_code_reachable_from_component_init_fun(acc, call_graph, component_modules) do
     Enum.reduce(component_modules, acc, fn module, acc ->
-      Graph.reachable(call_graph, [{module, :init}])
+      CallGraph.reachable([{module, :init}])
       |> maybe_include_reachable_code(acc)
     end)
   end
 
   defp include_code_reachable_from_component_templates(acc, call_graph, component_modules) do
     Enum.reduce(component_modules, acc, fn module, acc ->
-      Graph.reachable(call_graph, [{module, :template}])
+      CallGraph.reachable([{module, :template}])
       |> maybe_include_reachable_code(acc)
     end)
   end
 
   defp include_code_reachable_from_layout_actions(acc, call_graph, layout_module) do
-    Graph.reachable(call_graph, [{layout_module, :action}])
+    CallGraph.reachable([{layout_module, :action}])
     |> maybe_include_reachable_code(acc)
   end
 
   defp include_code_reachable_from_layout_init_fun(acc, call_graph, layout_module) do
-    Graph.reachable(call_graph, [{layout_module, :init}])
+    CallGraph.reachable([{layout_module, :init}])
     |> maybe_include_reachable_code(acc)
   end
 
   defp include_code_reachable_from_layout_template(acc, call_graph, layout_module) do
-    Graph.reachable(call_graph, [{layout_module, :template}])
+    CallGraph.reachable([{layout_module, :template}])
     |> maybe_include_reachable_code(acc)
   end
 
   defp include_code_reachable_from_page_actions(acc, call_graph, page_module) do
-    Graph.reachable(call_graph, [{page_module, :action}])
+    CallGraph.reachable([{page_module, :action}])
     |> maybe_include_reachable_code(acc)
   end
 
   defp include_code_reachable_from_page_custom_layout_fun(acc, call_graph, page_module) do
-    Graph.reachable(call_graph, [{page_module, :custom_layout}])
+    CallGraph.reachable([{page_module, :custom_layout}])
     |> maybe_include_reachable_code(acc)
   end
 
   defp include_code_reachable_from_page_info_fun(acc, call_graph, page_module) do
-    Graph.reachable(call_graph, [{page_module, :__info__}])
+    CallGraph.reachable([{page_module, :__info__}])
     |> maybe_include_reachable_code(acc)
   end
 
   defp include_code_reachable_from_page_layout_fun(acc, call_graph, page_module) do
-    Graph.reachable(call_graph, [{page_module, :layout}])
+    CallGraph.reachable([{page_module, :layout}])
     |> maybe_include_reachable_code(acc)
   end
 
   defp include_code_reachable_from_page_template(acc, call_graph, page_module) do
-    Graph.reachable(call_graph, [{page_module, :template}])
+    CallGraph.reachable([{page_module, :template}])
     |> maybe_include_reachable_code(acc)
   end
 

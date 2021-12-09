@@ -40,6 +40,10 @@ defmodule Hologram.Compiler.CallGraph do
     Agent.get(__MODULE__, &Graph.num_vertices/1)
   end
 
+  def reachable(vertices) do
+    Agent.get(__MODULE__, &Graph.reachable(&1, vertices))
+  end
+
   def start_link(_) do
     Agent.start_link(fn -> Graph.new() end, name: __MODULE__)
   end
