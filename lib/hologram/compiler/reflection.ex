@@ -85,19 +85,6 @@ defmodule Hologram.Compiler.Reflection do
     is_alias?(term) && Keyword.has_key?(term.module_info(:exports), :__protocol__)
   end
 
-  defp resolve_path(opts, key, dir) do
-    cond do
-      Keyword.has_key?(opts, key) ->
-        opts[key]
-
-      path = Application.get_env(:hologram, key) ->
-        path
-
-      true ->
-        "#{app_path()}/#{dir}"
-    end
-  end
-
   def layouts_path(opts \\ []) do
     resolve_path(opts, :layouts_path, :layouts)
   end
@@ -181,6 +168,19 @@ defmodule Hologram.Compiler.Reflection do
     resolve_path(opts, :pages_path, :pages)
   end
 
+  defp resolve_path(opts, key, dir) do
+    cond do
+      Keyword.has_key?(opts, key) ->
+        opts[key]
+
+      path = Application.get_env(:hologram, key) ->
+        path
+
+      true ->
+        "#{app_path()}/#{dir}"
+    end
+  end
+  
   def root_path(opts \\ @config) do
     case Keyword.get(opts, :root_path) do
       nil -> File.cwd!()
