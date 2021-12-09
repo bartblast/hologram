@@ -1,7 +1,7 @@
-defmodule Hologram.Compiler.IRAggregators.ModuleTypeTest do
+defmodule Hologram.Compiler.ModuleDefAggregators.ModuleTypeTest do
   use Hologram.Test.UnitCase, async: true
 
-  alias Hologram.Compiler.{IRAggregator, ModuleDefStore}
+  alias Hologram.Compiler.{ModuleDefAggregator, ModuleDefStore}
   alias Hologram.Compiler.IR.{ModuleDefinition, ModuleType}
   alias Hologram.Runtime.Commons
   alias Hologram.Test.Fixtures.Compiler.Aggregators.ModuleType.{Module1, Module2, Module6, Module7}
@@ -14,7 +14,7 @@ defmodule Hologram.Compiler.IRAggregators.ModuleTypeTest do
 
   test "non standard lib module that isn't in the IR store yet is added" do
     ir = %ModuleType{module: PlaceholderModule1}
-    IRAggregator.aggregate(ir)
+    ModuleDefAggregator.aggregate(ir)
 
     assert %ModuleDefinition{} = ModuleDefStore.get(PlaceholderModule1)
   end
@@ -22,36 +22,36 @@ defmodule Hologram.Compiler.IRAggregators.ModuleTypeTest do
   test "module that is in the IR store already is ignored" do
     ir = %ModuleType{module: PlaceholderModule1}
 
-    IRAggregator.aggregate(ir)
-    IRAggregator.aggregate(ir)
+    ModuleDefAggregator.aggregate(ir)
+    ModuleDefAggregator.aggregate(ir)
 
     assert %ModuleDefinition{} = ModuleDefStore.get(PlaceholderModule1)
   end
 
   test "standard lib module is ignored" do
     ir = %ModuleType{module: Kernel}
-    IRAggregator.aggregate(ir)
+    ModuleDefAggregator.aggregate(ir)
 
     assert ModuleDefStore.get(PlaceholderModule1) == nil
   end
 
   test "handles ignored modules" do
     ir = %ModuleType{module: Ecto.Changeset}
-    IRAggregator.aggregate(ir)
+    ModuleDefAggregator.aggregate(ir)
 
     assert ModuleDefStore.get(Ecto.Changeset) == nil
   end
 
   test "module that belongs to a namespace that is in the @ignored_namespaces is ignored" do
     ir = %ModuleType{module: Hologram.Commons.Encoder}
-    IRAggregator.aggregate(ir)
+    ModuleDefAggregator.aggregate(ir)
 
     assert ModuleDefStore.get(Hologram.Commons.Encoder) == nil
   end
 
   test "module functions are traversed" do
     ir = %ModuleType{module: Module1}
-    IRAggregator.aggregate(ir)
+    ModuleDefAggregator.aggregate(ir)
 
     assert %ModuleDefinition{} = ModuleDefStore.get(Module1)
     assert %ModuleDefinition{} = ModuleDefStore.get(Module2)
@@ -62,7 +62,7 @@ defmodule Hologram.Compiler.IRAggregators.ModuleTypeTest do
     layout = Hologram.E2E.DefaultLayout
     ir = %ModuleType{module: page}
 
-    IRAggregator.aggregate(ir)
+    ModuleDefAggregator.aggregate(ir)
 
     assert %ModuleDefinition{} = ModuleDefStore.get(layout)
   end
@@ -72,7 +72,7 @@ defmodule Hologram.Compiler.IRAggregators.ModuleTypeTest do
     layout = Hologram.Test.Fixtures.Compiler.Aggregators.ModuleType.Module5
     ir = %ModuleType{module: page}
 
-    IRAggregator.aggregate(ir)
+    ModuleDefAggregator.aggregate(ir)
 
     assert %ModuleDefinition{} = ModuleDefStore.get(layout)
   end
@@ -80,7 +80,7 @@ defmodule Hologram.Compiler.IRAggregators.ModuleTypeTest do
   test "aggregation from templetable module's template" do
     ir = %ModuleType{module: Module6}
 
-    IRAggregator.aggregate(ir)
+    ModuleDefAggregator.aggregate(ir)
 
     # Hologram.Runtime.Commons module is added because templates use Hologram.Runtime.Commons.sigil_H/2
     assert %ModuleDefinition{} = ModuleDefStore.get(Commons)

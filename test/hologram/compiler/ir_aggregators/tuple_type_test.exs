@@ -1,7 +1,7 @@
-defmodule Hologram.Compiler.IRAggregators.TupleTypeTest do
+defmodule Hologram.Compiler.ModuleDefAggregators.TupleTypeTest do
   use Hologram.Test.UnitCase, async: true
 
-  alias Hologram.Compiler.{IRAggregator, ModuleDefStore}
+  alias Hologram.Compiler.{ModuleDefAggregator, ModuleDefStore}
   alias Hologram.Compiler.IR.{ModuleDefinition, ModuleType, TupleType}
   alias Hologram.Test.Fixtures.{PlaceholderModule1, PlaceholderModule2}
 
@@ -18,7 +18,7 @@ defmodule Hologram.Compiler.IRAggregators.TupleTypeTest do
       ]
     }
 
-    IRAggregator.aggregate(ir)
+    ModuleDefAggregator.aggregate(ir)
 
     assert %ModuleDefinition{} = ModuleDefStore.get(PlaceholderModule1)
     assert %ModuleDefinition{} = ModuleDefStore.get(PlaceholderModule2)

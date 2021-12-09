@@ -1,7 +1,7 @@
-defmodule Hologram.Compiler.IRAggregators.ElixirMapTest do
+defmodule Hologram.Compiler.ModuleDefAggregators.ElixirMapTest do
   use Hologram.Test.UnitCase, async: true
 
-  alias Hologram.Compiler.{IRAggregator, ModuleDefStore}
+  alias Hologram.Compiler.{ModuleDefAggregator, ModuleDefStore}
   alias Hologram.Compiler.IR.{ModuleDefinition, ModuleType}
   alias Hologram.Test.Fixtures.{PlaceholderModule1, PlaceholderModule2}
 
@@ -16,7 +16,7 @@ defmodule Hologram.Compiler.IRAggregators.ElixirMapTest do
       %ModuleType{module: PlaceholderModule1} => %ModuleType{module: PlaceholderModule2}
     }
 
-    IRAggregator.aggregate(ir)
+    ModuleDefAggregator.aggregate(ir)
 
     assert %ModuleDefinition{} = ModuleDefStore.get(PlaceholderModule1)
     assert %ModuleDefinition{} = ModuleDefStore.get(PlaceholderModule2)

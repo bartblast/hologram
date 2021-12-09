@@ -1,7 +1,7 @@
-defmodule Hologram.Compiler.IRAggregators.IfExpressionTest do
+defmodule Hologram.Compiler.ModuleDefAggregators.IfExpressionTest do
   use Hologram.Test.UnitCase, async: true
 
-  alias Hologram.Compiler.{IRAggregator, ModuleDefStore}
+  alias Hologram.Compiler.{ModuleDefAggregator, ModuleDefStore}
   alias Hologram.Compiler.IR.{ModuleDefinition, ModuleType, IfExpression, NilType}
   alias Hologram.Test.Fixtures.PlaceholderModule1
 
@@ -17,7 +17,7 @@ defmodule Hologram.Compiler.IRAggregators.IfExpressionTest do
       else: %NilType{}
     }
 
-    IRAggregator.aggregate(ir)
+    ModuleDefAggregator.aggregate(ir)
 
     assert %ModuleDefinition{} = ModuleDefStore.get(PlaceholderModule1)
   end
@@ -29,7 +29,7 @@ defmodule Hologram.Compiler.IRAggregators.IfExpressionTest do
       else: %NilType{}
     }
 
-    IRAggregator.aggregate(ir)
+    ModuleDefAggregator.aggregate(ir)
 
     assert %ModuleDefinition{} = ModuleDefStore.get(PlaceholderModule1)
   end
@@ -41,7 +41,7 @@ defmodule Hologram.Compiler.IRAggregators.IfExpressionTest do
       else: %ModuleType{module: PlaceholderModule1}
     }
 
-    IRAggregator.aggregate(ir)
+    ModuleDefAggregator.aggregate(ir)
 
     assert %ModuleDefinition{} = ModuleDefStore.get(PlaceholderModule1)
   end

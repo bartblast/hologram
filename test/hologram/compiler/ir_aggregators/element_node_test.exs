@@ -1,7 +1,7 @@
 defmodule Hologram.Compiler.Aggregators.ElementNodeTest do
   use Hologram.Test.UnitCase, async: true
 
-  alias Hologram.Compiler.{IRAggregator, ModuleDefStore}
+  alias Hologram.Compiler.{ModuleDefAggregator, ModuleDefStore}
   alias Hologram.Compiler.IR.{ModuleDefinition, ModuleType}
   alias Hologram.Template.VDOM.ElementNode
   alias Hologram.Test.Fixtures.Compiler.Aggregators.ElementNode.{Module1, Module2, Module3}
@@ -31,7 +31,7 @@ defmodule Hologram.Compiler.Aggregators.ElementNodeTest do
       children: []
     }
 
-    IRAggregator.aggregate(ir)
+    ModuleDefAggregator.aggregate(ir)
 
     assert %ModuleDefinition{} = ModuleDefStore.get(Module1)
     assert %ModuleDefinition{} = ModuleDefStore.get(Module2)
@@ -47,7 +47,7 @@ defmodule Hologram.Compiler.Aggregators.ElementNodeTest do
       ]
     }
 
-    IRAggregator.aggregate(ir)
+    ModuleDefAggregator.aggregate(ir)
 
     assert %ModuleDefinition{} = ModuleDefStore.get(Module1)
     assert %ModuleDefinition{} = ModuleDefStore.get(Module2)

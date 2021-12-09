@@ -1,7 +1,7 @@
-defmodule Hologram.Compiler.IRAggregators.FunctionDefinitionTest do
+defmodule Hologram.Compiler.ModuleDefAggregators.FunctionDefinitionTest do
   use Hologram.Test.UnitCase, async: true
 
-  alias Hologram.Compiler.{IRAggregator, ModuleDefStore}
+  alias Hologram.Compiler.{ModuleDefAggregator, ModuleDefStore}
   alias Hologram.Compiler.IR.{FunctionDefinition, ModuleDefinition, ModuleType}
   alias Hologram.Test.Fixtures.{PlaceholderModule1, PlaceholderModule2}
 
@@ -18,7 +18,7 @@ defmodule Hologram.Compiler.IRAggregators.FunctionDefinitionTest do
       ]
     }
 
-    IRAggregator.aggregate(ir)
+    ModuleDefAggregator.aggregate(ir)
 
     assert %ModuleDefinition{} = ModuleDefStore.get(PlaceholderModule1)
     assert %ModuleDefinition{} = ModuleDefStore.get(PlaceholderModule2)
