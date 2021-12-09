@@ -1,13 +1,13 @@
 defmodule Hologram.Compiler.IRAggregators.ComponentTest do
   use Hologram.Test.UnitCase, async: true
 
-  alias Hologram.Compiler.{IRAggregator, ModuleDefinitionStore}
+  alias Hologram.Compiler.{IRAggregator, ModuleDefStore}
   alias Hologram.Compiler.IR.{ModuleDefinition, ModuleType}
   alias Hologram.Template.VDOM.Component
   alias Hologram.Test.Fixtures.Compiler.Aggregators.Component.{Module1, Module2, Module3}
 
   setup do
-    ModuleDefinitionStore.create()
+    ModuleDefStore.create()
     :ok
   end
 
@@ -16,8 +16,8 @@ defmodule Hologram.Compiler.IRAggregators.ComponentTest do
 
     IRAggregator.aggregate(ir)
 
-    assert %ModuleDefinition{} = ModuleDefinitionStore.get(Module1)
-    assert %ModuleDefinition{} = ModuleDefinitionStore.get(Module2)
+    assert %ModuleDefinition{} = ModuleDefStore.get(Module1)
+    assert %ModuleDefinition{} = ModuleDefStore.get(Module2)
   end
 
   test "aggregation from props" do
@@ -31,8 +31,8 @@ defmodule Hologram.Compiler.IRAggregators.ComponentTest do
 
     IRAggregator.aggregate(ir)
 
-    assert %ModuleDefinition{} = ModuleDefinitionStore.get(Module2)
-    assert %ModuleDefinition{} = ModuleDefinitionStore.get(Module3)
+    assert %ModuleDefinition{} = ModuleDefStore.get(Module2)
+    assert %ModuleDefinition{} = ModuleDefStore.get(Module3)
   end
 
   test "aggregation from children" do
@@ -44,7 +44,7 @@ defmodule Hologram.Compiler.IRAggregators.ComponentTest do
 
     IRAggregator.aggregate(ir)
 
-    assert %ModuleDefinition{} = ModuleDefinitionStore.get(Module2)
-    assert %ModuleDefinition{} = ModuleDefinitionStore.get(Module3)
+    assert %ModuleDefinition{} = ModuleDefStore.get(Module2)
+    assert %ModuleDefinition{} = ModuleDefStore.get(Module3)
   end
 end

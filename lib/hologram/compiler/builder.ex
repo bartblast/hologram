@@ -1,5 +1,5 @@
 defmodule Hologram.Compiler.Builder do
-  alias Hologram.Compiler.{Context, IRAggregator, ModuleDefinitionStore, JSEncoder, Opts, Pruner}
+  alias Hologram.Compiler.{Context, IRAggregator, ModuleDefStore, JSEncoder, Opts, Pruner}
   require Logger
 
   def build(module) do
@@ -7,7 +7,7 @@ defmodule Hologram.Compiler.Builder do
     IRAggregator.aggregate(module)
     Logger.debug("Finished IRAggregator.aggregate/1 for #{module}")
 
-    module_defs = ModuleDefinitionStore.get_all()
+    module_defs = ModuleDefStore.get_all()
 
     Logger.debug("Started Pruner.prune/2 for #{module}")
     pruned_module_defs = Pruner.prune(module_defs, module)

@@ -1,12 +1,12 @@
 defmodule Hologram.Compiler.IRAggregators.FunctionCallTest do
   use Hologram.Test.UnitCase, async: true
 
-  alias Hologram.Compiler.{IRAggregator, ModuleDefinitionStore}
+  alias Hologram.Compiler.{IRAggregator, ModuleDefStore}
   alias Hologram.Compiler.IR.{FunctionCall, ModuleDefinition, ModuleType}
   alias Hologram.Test.Fixtures.Compiler.Aggregators.FunctionCall.{Module1, Module2}
 
   setup do
-    ModuleDefinitionStore.create()
+    ModuleDefStore.create()
     :ok
   end
 
@@ -18,7 +18,7 @@ defmodule Hologram.Compiler.IRAggregators.FunctionCallTest do
 
     IRAggregator.aggregate(ir)
 
-    assert %ModuleDefinition{} = ModuleDefinitionStore.get(Module2)
+    assert %ModuleDefinition{} = ModuleDefStore.get(Module2)
   end
 
   test "aggregates args" do
@@ -32,7 +32,7 @@ defmodule Hologram.Compiler.IRAggregators.FunctionCallTest do
 
     IRAggregator.aggregate(ir)
 
-    assert %ModuleDefinition{} = ModuleDefinitionStore.get(Module1)
-    assert %ModuleDefinition{} = ModuleDefinitionStore.get(Module2)
+    assert %ModuleDefinition{} = ModuleDefStore.get(Module1)
+    assert %ModuleDefinition{} = ModuleDefStore.get(Module2)
   end
 end

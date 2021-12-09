@@ -1,6 +1,6 @@
 # TODO: refactor & test
 
-defmodule Hologram.Compiler.ModuleDefinitionStore do
+defmodule Hologram.Compiler.ModuleDefStore do
   require Logger
 
   alias Hologram.Compiler.IR.ModuleDefinition

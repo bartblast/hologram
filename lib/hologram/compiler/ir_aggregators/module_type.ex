@@ -1,5 +1,5 @@
 alias Hologram.Compiler.IR.ModuleType
-alias Hologram.Compiler.{IRAggregator, ModuleDefinitionStore}
+alias Hologram.Compiler.{IRAggregator, ModuleDefStore}
 
 defimpl IRAggregator, for: ModuleType do
   alias Hologram.Compiler.Reflection
@@ -33,11 +33,11 @@ defimpl IRAggregator, for: ModuleType do
   end
 
   defp maybe_put_module(module) do
-    if ModuleDefinitionStore.get(module) || Reflection.is_ignored_module?(module) || Reflection.standard_lib?(module) do
+    if ModuleDefStore.get(module) || Reflection.is_ignored_module?(module) || Reflection.standard_lib?(module) do
       nil
     else
       module_def = Reflection.module_definition(module)
-      ModuleDefinitionStore.put(module, module_def)
+      ModuleDefStore.put(module, module_def)
       module_def
     end
   end

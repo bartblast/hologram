@@ -1,13 +1,13 @@
 defmodule Hologram.Compiler.IRAggregators.ExpressionTest do
   use Hologram.Test.UnitCase, async: true
 
-  alias Hologram.Compiler.{IRAggregator, ModuleDefinitionStore}
+  alias Hologram.Compiler.{IRAggregator, ModuleDefStore}
   alias Hologram.Compiler.IR.{ModuleDefinition, ModuleType, TupleType}
   alias Hologram.Template.VDOM.Expression
   alias Hologram.Test.Fixtures.{PlaceholderModule1, PlaceholderModule2}
 
   setup do
-    ModuleDefinitionStore.create()
+    ModuleDefStore.create()
     :ok
   end
 
@@ -24,7 +24,7 @@ defmodule Hologram.Compiler.IRAggregators.ExpressionTest do
 
     IRAggregator.aggregate(ir)
 
-    assert %ModuleDefinition{} = ModuleDefinitionStore.get(PlaceholderModule1)
-    assert %ModuleDefinition{} = ModuleDefinitionStore.get(PlaceholderModule2)
+    assert %ModuleDefinition{} = ModuleDefStore.get(PlaceholderModule1)
+    assert %ModuleDefinition{} = ModuleDefStore.get(PlaceholderModule2)
   end
 end
