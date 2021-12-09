@@ -85,6 +85,19 @@ defmodule Hologram.Compiler.Reflection do
     is_alias?(term) && Keyword.has_key?(term.module_info(:exports), :__protocol__)
   end
 
+  defp resolve_path(opts, key, dir) do
+    cond do
+      Keyword.has_key?(opts, key) ->
+        opts[key]
+
+      path = Application.get_env(:hologram, key) ->
+        path
+
+      true ->
+        "#{app_path()}/#{dir}"
+    end
+  end
+
   def list_modules(app) do
     Keyword.fetch!(Application.spec(app), :modules)
     |> Enum.reduce([], fn module, acc ->
@@ -161,16 +174,7 @@ defmodule Hologram.Compiler.Reflection do
   end
 
   def pages_path(opts \\ []) do
-    cond do
-      Keyword.has_key?(opts, :pages_path) ->
-        opts[:pages_path]
-
-      pages_path = Application.get_env(:hologram, :pages_path) ->
-        pages_path
-
-      true ->
-        "#{app_path()}/pages"
-    end
+    resolve_path(opts, :pages_path, :pages)
   end
 
   def root_path(opts \\ @config) do
