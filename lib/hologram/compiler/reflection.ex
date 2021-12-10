@@ -1,7 +1,7 @@
 defmodule Hologram.Compiler.Reflection do
   alias Hologram.Compiler.{Context, Helpers, Normalizer, Parser, Transformer}
   alias Hologram.Compiler.IR.ModuleDefinition
-  alias Hologram.{MixProject, Utils}
+  alias Hologram.Utils
 
   @config Application.get_all_env(:hologram)
   @env Application.fetch_env!(:hologram, :env)
@@ -33,11 +33,7 @@ defmodule Hologram.Compiler.Reflection do
 
   # DEFER: test
   def build_path do
-    if MixProject.is_dep?() do
-      "#{root_path()}/../../_build/#{@env}/hologram"
-    else
-      "#{root_path()}/_build/#{@env}/hologram"
-    end
+    "#{root_path()}/_build/#{@env}/hologram"
   end
 
   def components_path(opts \\ []) do
