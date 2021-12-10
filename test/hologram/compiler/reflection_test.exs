@@ -236,7 +236,18 @@ defmodule Hologram.Compiler.ReflectionTest do
       Application.delete_env(:hologram, :layouts_path)
     end
   end
-  
+
+  test "list_components/1" do
+    num_components =
+      "#{Reflection.components_path()}/*"
+      |> Path.wildcard()
+      |> Enum.count()
+
+    result = Reflection.list_components()
+
+    assert Enum.count(result) == num_components
+  end
+
   describe "list_modules/1" do
     test "includes app modules" do
       result = Reflection.list_modules(:hologram)
