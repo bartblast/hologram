@@ -5,7 +5,7 @@ defmodule Mix.Tasks.Compile.Hologram do
   require Logger
 
   alias Hologram.{MixProject, Utils}
-  alias Hologram.Compiler.{Builder, CallGraph, CallGraphBuilder, ModuleDefAggregator, ModuleDefStore, Reflection}
+  alias Hologram.Compiler.{Builder, CallGraph, CallGraphBuilder, ModuleDefAggregator, ModuleDefStore, Reflection, TemplateStore}
   alias Hologram.Template.Builder, as: TemplateBuilder
 
   @root_path Reflection.root_path()
@@ -29,6 +29,7 @@ defmodule Mix.Tasks.Compile.Hologram do
 
     templates = build_templates(pages ++ components ++ layouts)
     dump_template_store(templates)
+    TemplateStore.populate(templates)
 
     module_defs = aggregate_module_defs(pages)
     call_graph = build_call_graph(pages, module_defs, templates)

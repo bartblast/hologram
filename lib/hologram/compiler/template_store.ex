@@ -9,11 +9,8 @@ defmodule Hologram.Compiler.TemplateStore do
   @table_name :hologram_template_store
 
   def init(_) do
-    if :ets.whereis(@table_name) == :undefined do
-      :ets.new(@table_name, [:public, :named_table])
-    end
-
-    populate_table()
+    maybe_create_table()
+    maybe_populate_table_from_dump()
 
     {:ok, nil}
   end
@@ -27,11 +24,25 @@ defmodule Hologram.Compiler.TemplateStore do
     {:reply, vdom, nil}
   end
 
-  defp populate_table do
-    Reflection.template_store_dump_path()
-    |> File.read!()
-    |> Utils.deserialize()
-    |> Enum.each(fn {module, vdom} ->
+  defp maybe_create_table do
+    if :ets.whereis(@table_name) == :undefined do
+      :ets.new(@table_name, [:public, :named_table])
+    end
+  end
+
+  def maybe_populate_table_from_dump do
+    path = Reflection.template_store_dump_path()
+
+    if File.exists?(path) do
+      path
+      |> File.read!()
+      |> Utils.deserialize()
+      |> populate()
+    end
+  end
+
+  def populate(templates) do
+    Enum.each(templates, fn {module, vdom} ->
       :ets.insert(@table_name, {module, vdom})
     end)
   end
