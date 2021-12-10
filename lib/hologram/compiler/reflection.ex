@@ -267,6 +267,7 @@ defmodule Hologram.Compiler.Reflection do
       !String.starts_with?(source_path, "#{root_path}/deps/")
   end
 
+  # DEFER: test
   def template_store_dump_path do
     "#{build_path()}/template_store.bin"
   end
