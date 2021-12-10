@@ -1,4 +1,4 @@
-defmodule Hologram.PageTest do
+defmodule Hologram.Runtime.PageTest do
   use Hologram.Test.UnitCase, async: true
   require Hologram.Page
 

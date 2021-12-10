@@ -1,4 +1,4 @@
-defmodule Hologram.RouterTest do
+defmodule Hologram.Runtime.RouterTest do
   use Hologram.Test.UnitCase, async: true
   require Hologram.Router
 
