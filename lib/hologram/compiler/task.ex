@@ -30,7 +30,7 @@ defmodule Mix.Tasks.Compile.Hologram do
 
     templates = build_templates(pages ++ components ++ layouts)
     module_defs = aggregate_module_defs(pages)
-    call_graph = build_call_graph(pages, module_defs)
+    call_graph = build_call_graph(pages, module_defs, templates)
 
     digests = build_pages(pages, output_path, module_defs, call_graph)
     build_manifest(digests, output_path)
@@ -55,9 +55,9 @@ defmodule Mix.Tasks.Compile.Hologram do
     ModuleDefStore.get_all()
   end
 
-  defp build_call_graph(pages, module_defs) do
+  defp build_call_graph(pages, module_defs, templates) do
     pages
-    |> Utils.map_async(&CallGraphBuilder.build(&1, module_defs))
+    |> Utils.map_async(&CallGraphBuilder.build(&1, module_defs, templates, nil))
     |> Utils.await_tasks()
 
     CallGraph.get()
@@ -74,8 +74,9 @@ defmodule Mix.Tasks.Compile.Hologram do
 
   defp build_templates(modules) do
     modules
-    |> Utils.map_async(&TemplateBuilder.build/1)
+    |> Utils.map_async(&{&1, TemplateBuilder.build(&1)})
     |> Utils.await_tasks()
+    |> Enum.into(%{})
   end
 
   defp build_page(page, output_path, module_defs, call_graph) do

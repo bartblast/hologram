@@ -5,6 +5,9 @@ defmodule Hologram.Compiler.CallGraphBuilder.ElixirListTest do
   alias Hologram.Compiler.IR.ModuleType
   alias Hologram.Test.Fixtures.{PlaceholderModule1, PlaceholderModule2, PlaceholderModule3}
 
+  @module_defs %{}
+  @templates %{}
+
   setup do
     CallGraph.create()
     :ok
@@ -17,7 +20,7 @@ defmodule Hologram.Compiler.CallGraphBuilder.ElixirListTest do
     ]
 
     from_vertex = PlaceholderModule1
-    CallGraphBuilder.build(ir, %{}, from_vertex)
+    CallGraphBuilder.build(ir, @module_defs, @templates, from_vertex)
 
     assert CallGraph.num_vertices() == 3
     assert CallGraph.num_edges() == 2

@@ -6,6 +6,9 @@ defmodule Hologram.Compiler.CallGraphBuilder.ModuleDefinitionTest do
   alias Hologram.Test.Fixtures.{PlaceholderModule1, PlaceholderModule2}
   alias Hologram.Test.Fixtures.Compiler.CallGraphBuilder.ModuleDefinition.{Module4, Module5}
 
+  @from_vertex nil
+  @templates %{}
+
   setup do
     CallGraph.create()
     :ok
@@ -15,7 +18,7 @@ defmodule Hologram.Compiler.CallGraphBuilder.ModuleDefinitionTest do
     module_def = Reflection.module_definition(PlaceholderModule1)
     module_defs = %{PlaceholderModule1 => module_def}
 
-    CallGraphBuilder.build(module_def, module_defs)
+    CallGraphBuilder.build(module_def, module_defs, @templates, @from_vertex)
 
     assert CallGraph.has_vertex?(PlaceholderModule1)
   end
@@ -27,7 +30,9 @@ defmodule Hologram.Compiler.CallGraphBuilder.ModuleDefinitionTest do
     }
 
     CallGraph.add_vertex(PlaceholderModule1)
-    result = CallGraphBuilder.build(ir, %{})
+    module_defs = %{}
+
+    CallGraphBuilder.build(ir, module_defs, @templates, @from_vertex)
 
     assert CallGraph.num_vertices() == 1
     assert CallGraph.num_edges() == 0
@@ -58,7 +63,7 @@ defmodule Hologram.Compiler.CallGraphBuilder.ModuleDefinitionTest do
       PlaceholderModule2 => module_def_2
     }
 
-    CallGraphBuilder.build(module_def_1, module_defs)
+    CallGraphBuilder.build(module_def_1, module_defs, @templates, @from_vertex)
 
     assert CallGraph.num_vertices() == 3
     assert CallGraph.num_edges() == 1
@@ -67,12 +72,15 @@ defmodule Hologram.Compiler.CallGraphBuilder.ModuleDefinitionTest do
   end
 
   test "template traversing" do
+    path = "#{File.cwd!()}/test/fixtures/compiler/call_graph_builder/module_definition"
+    templates = build_templates_by_path(path)
+
     module_defs = %{
       Module4 => Reflection.module_definition(Module4),
       Module5 => Reflection.module_definition(Module5),
     }
 
-    CallGraphBuilder.build(module_defs[Module4], module_defs)
+    CallGraphBuilder.build(module_defs[Module4], module_defs, templates, @from_vertex)
 
     assert CallGraph.has_vertex?(Module5)
     assert CallGraph.has_edge?({Module4, :template}, Module5)

@@ -13,8 +13,10 @@ defmodule Hologram.Compiler.BuilderTest do
 
     ModuleDefAggregator.aggregate(module)
     module_defs = ModuleDefStore.get_all()
+    templates = %{}
+    from_vertex = nil
 
-    CallGraphBuilder.build(module, module_defs)
+    CallGraphBuilder.build(module, module_defs, templates, from_vertex)
     call_graph = CallGraph.get()
 
     result = Builder.build(module, module_defs, call_graph)

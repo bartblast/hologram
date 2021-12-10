@@ -2,4 +2,9 @@ defmodule Hologram.Test.Fixtures.Compiler.CallGraphBuilder.ModuleDefinition.Modu
   use Hologram.Page
 
   route "/test-route-3"
+
+  def template do
+    ~H"""
+    """
+  end
 end

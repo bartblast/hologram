@@ -5,6 +5,9 @@ defmodule Hologram.Compiler.CallGraphBuilder.IfExpressionTest do
   alias Hologram.Compiler.IR.{ModuleType, IfExpression, NilType}
   alias Hologram.Test.Fixtures.{PlaceholderModule1, PlaceholderModule2}
 
+  @module_defs %{}
+  @templates %{}
+
   setup do
     CallGraph.create()
     :ok
@@ -18,7 +21,7 @@ defmodule Hologram.Compiler.CallGraphBuilder.IfExpressionTest do
     }
 
     from_vertex = PlaceholderModule1
-    CallGraphBuilder.build(ir, %{}, from_vertex)
+    CallGraphBuilder.build(ir, @module_defs, @templates, from_vertex)
 
     assert CallGraph.num_vertices() == 2
     assert CallGraph.num_edges() == 1
@@ -34,7 +37,7 @@ defmodule Hologram.Compiler.CallGraphBuilder.IfExpressionTest do
     }
 
     from_vertex = PlaceholderModule1
-    CallGraphBuilder.build(ir, %{}, from_vertex)
+    CallGraphBuilder.build(ir, @module_defs, @templates, from_vertex)
 
     assert CallGraph.num_vertices() == 2
     assert CallGraph.num_edges() == 1
@@ -50,7 +53,7 @@ defmodule Hologram.Compiler.CallGraphBuilder.IfExpressionTest do
     }
 
     from_vertex = PlaceholderModule1
-    CallGraphBuilder.build(ir, %{}, from_vertex)
+    CallGraphBuilder.build(ir, @module_defs, @templates, from_vertex)
 
     assert CallGraph.num_vertices() == 2
     assert CallGraph.num_edges() == 1

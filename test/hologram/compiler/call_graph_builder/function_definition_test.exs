@@ -5,6 +5,9 @@ defmodule Hologram.Compiler.CallGraphBuilder.FunctionDefinitionTest do
   alias Hologram.Compiler.IR.{FunctionDefinition, ModuleType}
   alias Hologram.Test.Fixtures.{PlaceholderModule1, PlaceholderModule2, PlaceholderModule3}
 
+  @module_defs %{}
+  @templates %{}
+
   setup do
     CallGraph.create()
     :ok
@@ -21,7 +24,7 @@ defmodule Hologram.Compiler.CallGraphBuilder.FunctionDefinitionTest do
     }
 
     from_vertex = PlaceholderModule1
-    CallGraphBuilder.build(ir, %{}, from_vertex)
+    CallGraphBuilder.build(ir, @module_defs, @templates, from_vertex)
 
     assert CallGraph.num_vertices() == 3
     assert CallGraph.num_edges() == 2
@@ -39,7 +42,7 @@ defmodule Hologram.Compiler.CallGraphBuilder.FunctionDefinitionTest do
     }
 
     from_vertex = PlaceholderModule1
-    CallGraphBuilder.build(ir, %{}, from_vertex)
+    CallGraphBuilder.build(ir, @module_defs, @templates, from_vertex)
 
     assert CallGraph.num_vertices() == 1
     assert CallGraph.num_edges() == 0

@@ -14,6 +14,8 @@ defmodule Hologram.Compiler.CallGraphBuilder.FunctionCallTest do
     PlaceholderModule4 => Reflection.module_definition(PlaceholderModule4)
   }
 
+  @templates %{}
+
   setup do
     CallGraph.create()
     :ok
@@ -21,14 +23,14 @@ defmodule Hologram.Compiler.CallGraphBuilder.FunctionCallTest do
 
   test "non-standard lib module" do
     ir = %FunctionCall{module: PlaceholderModule2, function: :test_fun_2a}
-    CallGraphBuilder.build(ir, @module_defs, @from_vertex)
+    CallGraphBuilder.build(ir, @module_defs, @templates, @from_vertex)
 
     assert CallGraph.has_edge?(@from_vertex, {PlaceholderModule2, :test_fun_2a})
   end
 
   test "standard lib module" do
     ir = %FunctionCall{module: Kernel, function: :get_in}
-    CallGraphBuilder.build(ir, @module_defs, @from_vertex)
+    CallGraphBuilder.build(ir, @module_defs, @templates, @from_vertex)
 
     assert CallGraph.num_vertices() == 0
   end
@@ -40,7 +42,7 @@ defmodule Hologram.Compiler.CallGraphBuilder.FunctionCallTest do
     ]
 
     ir = %FunctionCall{module: PlaceholderModule1, function: :test_fun_1a, args: args}
-    CallGraphBuilder.build(ir, @module_defs, @from_vertex)
+    CallGraphBuilder.build(ir, @module_defs, @templates, @from_vertex)
 
     assert CallGraph.has_edge?(@from_vertex, {PlaceholderModule2, :test_fun_2a})
     assert CallGraph.has_edge?(@from_vertex, {PlaceholderModule3, :test_fun_3a})
