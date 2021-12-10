@@ -8,6 +8,7 @@ defmodule Mix.Tasks.Compile.Hologram do
   alias Hologram.Compiler.{Builder, CallGraph, CallGraphBuilder, ModuleDefAggregator, ModuleDefStore, Reflection, TemplateStore}
   alias Hologram.Template.Builder, as: TemplateBuilder
 
+  @env Application.fetch_env!(:hologram, :env)
   @root_path Reflection.root_path()
 
   def run(opts \\ []) do
@@ -29,6 +30,8 @@ defmodule Mix.Tasks.Compile.Hologram do
     layouts = Reflection.list_layouts(opts)
 
     templates = build_templates(pages ++ components ++ layouts)
+    dump_templates_to_file(templates)
+
     module_defs = aggregate_module_defs(pages)
     call_graph = build_call_graph(pages, module_defs, templates)
 
@@ -114,6 +117,16 @@ defmodule Mix.Tasks.Compile.Hologram do
     end)
   end
 
+  defp dump_templates_to_file(templates) do
+    build_path = resolve_build_path()
+    File.mkdir_p!(build_path)
+    
+    data = Utils.serialize(templates)
+
+    "#{build_path}/templates.bin"
+    |> File.write!(data)
+  end
+
   # Routes are defined in page modules and the router aggregates the routes dynamically by reflection.
   # So everytime a route is updated in a page module, we need to explicitely recompile the router module, so that
   # it rebuilds the list of routes.
@@ -130,6 +143,14 @@ defmodule Mix.Tasks.Compile.Hologram do
     "#{output_path}/*"
     |> Path.wildcard()
     |> Enum.each(&File.rm!/1)
+  end
+
+  defp resolve_build_path do
+    if MixProject.is_dep?() do
+      "#{@root_path}/../../_build/#{@env}/hologram"
+    else
+      "#{@root_path}/_build/#{@env}/hologram"
+    end
   end
 
   defp resolve_output_path do
