@@ -4,8 +4,9 @@ defmodule Mix.Tasks.Compile.Hologram do
   use Mix.Task.Compiler
   require Logger
 
-  alias Hologram.Compiler.{Builder, CallGraph, CallGraphBuilder, ModuleDefAggregator, ModuleDefStore, Reflection, TemplateStore}
   alias Hologram.{MixProject, Utils}
+  alias Hologram.Compiler.{Builder, CallGraph, CallGraphBuilder, ModuleDefAggregator, ModuleDefStore, Reflection, TemplateStore}
+  alias Hologram.Template.Builder, as: TemplateBuilder
 
   @root_path Reflection.root_path()
 
@@ -24,6 +25,10 @@ defmodule Mix.Tasks.Compile.Hologram do
     CallGraph.create()
 
     pages = Reflection.list_pages(opts)
+    components = Reflection.list_components(opts)
+    layouts = Reflection.list_layouts(opts)
+
+    templates = build_templates(pages ++ components ++ layouts)
     module_defs = aggregate_module_defs(pages)
     call_graph = build_call_graph(pages, module_defs)
 
@@ -65,6 +70,12 @@ defmodule Mix.Tasks.Compile.Hologram do
 
     "#{output_path}/manifest.json"
     |> File.write!(json)
+  end
+
+  defp build_templates(modules) do
+    modules
+    |> Utils.map_async(&TemplateBuilder.build/1)
+    |> Utils.await_tasks()
   end
 
   defp build_page(page, output_path, module_defs, call_graph) do

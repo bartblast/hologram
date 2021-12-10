@@ -16,6 +16,7 @@ defmodule Hologram.Template.Builder do
   @spec build(module()) :: list(T.vdom_node())
 
   def build(module) do
+    # DEFER: consider - use module def store, see: https://github.com/segmetric/hologram/issues/7
     module_def = Reflection.module_definition(module)
 
     context = %Context{
