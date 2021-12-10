@@ -56,6 +56,38 @@ defmodule Hologram.Compiler.ReflectionTest do
     end
   end
 
+  describe "components_path/1" do
+    test "default" do
+      result = Reflection.components_path()
+      expected = "#{File.cwd!()}/e2e/components"
+
+      assert result == expected
+    end
+
+    test "opts" do
+      config_components_path = "/test/config/components/path"
+      Application.put_env(:hologram, :components_path, config_components_path)
+
+      opts_components_path = "/test/opts/components/path"
+      opts = [components_path: opts_components_path]
+
+      result = Reflection.components_path(opts)
+      assert result == opts_components_path
+
+      Application.delete_env(:hologram, :components_path)
+    end
+
+    test "config" do
+      config_components_path = "/test/config/components/path"
+      Application.put_env(:hologram, :components_path, config_components_path)
+
+      result = Reflection.components_path()
+      assert result == config_components_path
+
+      Application.delete_env(:hologram, :components_path)
+    end
+  end
+
   describe "layouts_path/1" do
     test "default" do
       result = Reflection.layouts_path()
@@ -202,38 +234,6 @@ defmodule Hologram.Compiler.ReflectionTest do
 
     test "non-atom" do
       refute Reflection.is_protocol?(123)
-    end
-  end
-
-  describe "components_path/1" do
-    test "default" do
-      result = Reflection.components_path()
-      expected = "#{File.cwd!()}/e2e/components"
-
-      assert result == expected
-    end
-
-    test "opts" do
-      config_components_path = "/test/config/components/path"
-      Application.put_env(:hologram, :components_path, config_components_path)
-
-      opts_components_path = "/test/opts/components/path"
-      opts = [components_path: opts_components_path]
-
-      result = Reflection.components_path(opts)
-      assert result == opts_components_path
-
-      Application.delete_env(:hologram, :components_path)
-    end
-
-    test "config" do
-      config_components_path = "/test/config/components/path"
-      Application.put_env(:hologram, :components_path, config_components_path)
-
-      result = Reflection.components_path()
-      assert result == config_components_path
-
-      Application.delete_env(:hologram, :components_path)
     end
   end
 
