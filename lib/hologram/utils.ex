@@ -31,6 +31,10 @@ defmodule Hologram.Utils do
 
   def prepend(str, prefix), do: prefix <> str
 
+  def serialize(data) do
+    :erlang.term_to_binary(data, compressed: 9)
+  end
+
   def uuid do
     Ecto.UUID.generate()
   end
