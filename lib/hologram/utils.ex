@@ -22,6 +22,13 @@ defmodule Hologram.Utils do
     Enum.map(tasks, &(Task.await(&1, :infinity)))
   end
 
+  # DEFER: test
+  def map_async(enumerable, callback) do
+    Enum.map(enumerable, fn elem ->
+      Task.async(fn -> callback.(elem) end)
+    end)
+  end
+
   def prepend(str, prefix), do: prefix <> str
 
   def uuid do
