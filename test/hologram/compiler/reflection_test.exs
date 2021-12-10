@@ -248,6 +248,17 @@ defmodule Hologram.Compiler.ReflectionTest do
     assert Enum.count(result) == num_components
   end
 
+  test "list_layouts/1" do
+    num_layouts =
+      "#{Reflection.layouts_path()}/*"
+      |> Path.wildcard()
+      |> Enum.count()
+
+    result = Reflection.list_layouts()
+
+    assert Enum.count(result) == num_layouts
+  end
+
   describe "list_modules/1" do
     test "includes app modules" do
       result = Reflection.list_modules(:hologram)
