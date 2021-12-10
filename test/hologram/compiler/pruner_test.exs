@@ -1,7 +1,6 @@
 defmodule Hologram.Compiler.PrunerTest do
   use Hologram.Test.UnitCase, async: false
-  alias Hologram.Compiler.{CallGraph, CallGraphBuilder, ModuleDefAggregator, ModuleDefStore, Pruner, Reflection}
-  alias Hologram.Template.Builder, as: TemplateBuilder
+  alias Hologram.Compiler.{CallGraph, CallGraphBuilder, ModuleDefAggregator, ModuleDefStore, Pruner}
 
   @from_vertex nil
 
@@ -26,19 +25,7 @@ defmodule Hologram.Compiler.PrunerTest do
 
   setup_all do
     path = "#{File.cwd!()}/test/fixtures/compiler/pruner"
-
-    pages = Reflection.list_pages(pages_path: path)
-    components = Reflection.list_components(components_path: path)
-    layouts = Reflection.list_layouts(layouts_path: path)
-
-    # DEFER: consider - this code is very similar to Mix.Tasks.Compile.Hologram.build_templates/1
-    templates =
-      pages ++ components ++ layouts
-      |> Utils.map_async(&{&1, TemplateBuilder.build(&1)})
-      |> Utils.await_tasks()
-      |> Enum.into(%{})
-
-    [templates: templates]
+    [templates: build_templates_by_path(path)]
   end
 
   setup do
