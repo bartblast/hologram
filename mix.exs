@@ -17,6 +17,7 @@ defmodule Hologram.MixProject do
   def application do
     if is_dep?() do
       [
+        mod: {Hologram.Runtime.Application, []},
         extra_applications: [:logger]
       ]
     else
