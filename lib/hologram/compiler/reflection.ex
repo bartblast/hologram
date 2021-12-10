@@ -1,9 +1,10 @@
 defmodule Hologram.Compiler.Reflection do
   alias Hologram.Compiler.{Context, Helpers, Normalizer, Parser, Transformer}
   alias Hologram.Compiler.IR.ModuleDefinition
-  alias Hologram.Utils
+  alias Hologram.{MixProject, Utils}
 
   @config Application.get_all_env(:hologram)
+  @env Application.fetch_env!(:hologram, :env)
   @ignored_modules [Ecto.Changeset, Hologram.Runtime.JS] ++ Application.get_env(:hologram, :ignored_modules, [])
   @ignored_namespaces Application.get_env(:hologram, :ignored_namespaces, [])
 
@@ -28,6 +29,15 @@ defmodule Hologram.Compiler.Reflection do
   def ast(module_segs) when is_list(module_segs) do
     Helpers.module(module_segs)
     |> ast()
+  end
+
+  # DEFER: test
+  def build_path do
+    if MixProject.is_dep?() do
+      "#{root_path()}/../../_build/#{@env}/hologram"
+    else
+      "#{root_path()}/_build/#{@env}/hologram"
+    end
   end
 
   def components_path(opts \\ []) do
@@ -255,5 +265,9 @@ defmodule Hologram.Compiler.Reflection do
       !String.starts_with?(source_path, "#{root_path}/lib/") &&
       !String.starts_with?(source_path, "#{root_path}/test/") &&
       !String.starts_with?(source_path, "#{root_path}/deps/")
+  end
+
+  def template_store_dump_path do
+    "#{build_path()}/template_store.bin"
   end
 end
