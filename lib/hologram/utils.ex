@@ -22,6 +22,10 @@ defmodule Hologram.Utils do
     Enum.map(tasks, &(Task.await(&1, :infinity)))
   end
 
+  def deserialize(data) do
+    :erlang.binary_to_term(data)
+  end
+
   # DEFER: test
   def map_async(enumerable, callback) do
     Enum.map(enumerable, fn elem ->

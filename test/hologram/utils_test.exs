@@ -37,6 +37,22 @@ defmodule Hologram.UtilsTest do
     end
   end
 
+  test "deserialize/1" do
+    data = %{
+      key_2: 2,
+      key_1: {1, 3},
+      key_3: %{
+        b: 22,
+        a: 11
+      }
+    }
+
+    serialized = :erlang.term_to_binary(data, compressed: 9)
+    result = Utils.deserialize(serialized)
+
+    assert result == data
+  end
+
   test "prepend/2" do
     assert Utils.prepend("string", "prefix") == "prefixstring"
   end
