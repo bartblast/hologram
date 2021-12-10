@@ -7,7 +7,8 @@ defmodule Hologram.E2E.Application do
   def start(_type, _args) do
     children = [
       {Phoenix.PubSub, name: Hologram.E2E.PubSub},
-      Hologram.E2E.Web.Endpoint
+      Hologram.E2E.Web.Endpoint,
+      Hologram.Compiler.TemplateStore
     ]
 
     children =
