@@ -6,6 +6,8 @@ defmodule Hologram.Component do
 
       alias Hologram.Runtime.JS
       alias Hologram.UI.Link
+
+      def is_component?, do: true
     end
   end
 end
