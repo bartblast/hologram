@@ -6,6 +6,8 @@ defmodule Hologram.Layout do
 
       alias Hologram.Runtime.JS
       alias Hologram.UI.Link
+
+      def is_layout?, do: true
     end
   end
 end
