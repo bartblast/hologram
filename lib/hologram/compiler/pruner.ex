@@ -1,19 +1,11 @@
-alias Hologram.Compiler.{CallGraph, CallGraphBuilder}
-
 defmodule Hologram.Compiler.Pruner do
-  def prune(module_defs, page_module) do
-    build_call_graph(module_defs, page_module)
-    |> find_reachable_code(module_defs, page_module)
+  def prune(page_module, module_defs, call_graph) do
+    find_reachable_code(page_module, module_defs, call_graph)
     |> remove_redundant_funs(module_defs)
     |> remove_redundant_modules()
   end
 
-  defp build_call_graph(module_defs, page_module) do
-    CallGraphBuilder.build(module_defs[page_module], module_defs)
-    CallGraph.get()
-  end
-
-  defp find_reachable_code(call_graph, module_defs, page_module) do
+  defp find_reachable_code(page_module, module_defs, call_graph) do
     layout_module = page_module.layout()
     component_modules = find_component_modules(module_defs)
     page_modules = find_page_modules(module_defs)

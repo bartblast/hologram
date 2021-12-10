@@ -1,10 +1,17 @@
 defmodule Hologram.Compiler.PrunerTest do
-  use Hologram.Test.UnitCase, async: true
-  alias Hologram.Compiler.{Aggregator, Pruner}
+  use Hologram.Test.UnitCase, async: false
+  alias Hologram.Compiler.{CallGraph, CallGraphBuilder, ModuleDefAggregator, ModuleDefStore, Pruner}
 
   def function_kept?(page_module, tested_module, function, arity) do
-    module_defs = Aggregator.aggregate(page_module)
-    result = Pruner.prune(module_defs, page_module)
+    ModuleDefAggregator.aggregate(page_module)
+    ModuleDefAggregator.aggregate(tested_module)
+    module_defs = ModuleDefStore.get_all()
+
+    CallGraphBuilder.build(page_module, module_defs)
+    CallGraphBuilder.build(tested_module, module_defs)
+    call_graph = CallGraph.get()
+
+    result = Pruner.prune(page_module, module_defs, call_graph)
 
     if result[tested_module] do
       result[tested_module].functions
@@ -12,6 +19,12 @@ defmodule Hologram.Compiler.PrunerTest do
     else
       false
     end
+  end
+
+  setup do
+    ModuleDefStore.create()
+    CallGraph.create()
+    :ok
   end
 
   describe "kept page functions" do
@@ -191,8 +204,13 @@ defmodule Hologram.Compiler.PrunerTest do
     module_59 = Hologram.Test.Fixtures.Compiler.Pruner.Module59
     module_60 = Hologram.Test.Fixtures.Compiler.Pruner.Module60
 
-    module_defs = Aggregator.aggregate(module_59)
-    result = Pruner.prune(module_defs, module_59)
+    ModuleDefAggregator.aggregate(module_59)
+    module_defs = ModuleDefStore.get_all()
+
+    CallGraphBuilder.build(module_59, module_defs)
+    call_graph = CallGraph.get()
+
+    result = Pruner.prune(module_59, module_defs, call_graph)
 
     refute Map.has_key?(result, module_60)
   end
