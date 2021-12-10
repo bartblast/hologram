@@ -5,10 +5,9 @@ defmodule Mix.Tasks.Compile.Hologram do
   require Logger
 
   alias Hologram.{MixProject, Utils}
-  alias Hologram.Compiler.{Builder, CallGraph, CallGraphBuilder, ModuleDefAggregator, ModuleDefStore, Reflection, TemplateStore}
+  alias Hologram.Compiler.{Builder, CallGraph, CallGraphBuilder, ModuleDefAggregator, ModuleDefStore, Reflection}
   alias Hologram.Template.Builder, as: TemplateBuilder
 
-  @env Application.fetch_env!(:hologram, :env)
   @root_path Reflection.root_path()
 
   def run(opts \\ []) do
@@ -21,7 +20,6 @@ defmodule Mix.Tasks.Compile.Hologram do
 
     runtime_build_task = build_runtime()
 
-    TemplateStore.create()
     ModuleDefStore.create()
     CallGraph.create()
 
@@ -30,7 +28,7 @@ defmodule Mix.Tasks.Compile.Hologram do
     layouts = Reflection.list_layouts(opts)
 
     templates = build_templates(pages ++ components ++ layouts)
-    dump_templates_to_file(templates)
+    dump_template_store(templates)
 
     module_defs = aggregate_module_defs(pages)
     call_graph = build_call_graph(pages, module_defs, templates)
@@ -43,7 +41,6 @@ defmodule Mix.Tasks.Compile.Hologram do
 
     CallGraph.destroy()
     ModuleDefStore.destroy()
-    TemplateStore.destroy()
 
     Logger.debug("Hologram compiler finished")
 
@@ -117,13 +114,13 @@ defmodule Mix.Tasks.Compile.Hologram do
     end)
   end
 
-  defp dump_templates_to_file(templates) do
-    build_path = resolve_build_path()
+  defp dump_template_store(templates) do
+    build_path = Reflection.build_path()
     File.mkdir_p!(build_path)
-    
+
     data = Utils.serialize(templates)
 
-    "#{build_path}/templates.bin"
+    Reflection.template_store_dump_path()
     |> File.write!(data)
   end
 
@@ -143,14 +140,6 @@ defmodule Mix.Tasks.Compile.Hologram do
     "#{output_path}/*"
     |> Path.wildcard()
     |> Enum.each(&File.rm!/1)
-  end
-
-  defp resolve_build_path do
-    if MixProject.is_dep?() do
-      "#{@root_path}/../../_build/#{@env}/hologram"
-    else
-      "#{@root_path}/_build/#{@env}/hologram"
-    end
   end
 
   defp resolve_output_path do
