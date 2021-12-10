@@ -1,5 +1,5 @@
 defmodule Hologram.Template.Builder do
-  alias Hologram.Compiler.{Context, Helpers, Reflection}
+  alias Hologram.Compiler.{Context, Reflection}
   alias Hologram.Template.{Parser, Transformer}
   alias Hologram.Typespecs, as: T
 
@@ -15,7 +15,7 @@ defmodule Hologram.Template.Builder do
   """
   @spec build(module()) :: list(T.vdom_node())
 
-  def build(module, layout \\ nil) do
+  def build(module) do
     module_def = Reflection.module_definition(module)
 
     context = %Context{
@@ -23,15 +23,8 @@ defmodule Hologram.Template.Builder do
       imports: module_def.imports
     }
 
-    build_template(module, layout)
+    module.template()
     |> Parser.parse!()
     |> Transformer.transform(context)
-  end
-
-  defp build_template(module, nil), do: module.template()
-
-  defp build_template(module, layout) do
-    layout_name = Helpers.module_name(layout)
-    "<#{layout_name}>#{module.template()}</#{layout_name}>"
   end
 end
