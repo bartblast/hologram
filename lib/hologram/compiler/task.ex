@@ -4,16 +4,13 @@ defmodule Mix.Tasks.Compile.Hologram do
   use Mix.Task.Compiler
   require Logger
 
-  alias Hologram.Compiler.{Builder, CallGraph, ModuleDefStore, Reflection}
+  alias Hologram.Compiler.{Builder, CallGraph, CallGraphBuilder, ModuleDefAggregator, ModuleDefStore, Reflection}
   alias Hologram.{MixProject, Utils}
 
   @root_path Reflection.root_path()
 
   def run(opts \\ []) do
     Logger.debug("Hologram compiler started")
-
-    ModuleDefStore.create()
-    CallGraph.create()
 
     output_path = resolve_output_path()
 
@@ -22,11 +19,14 @@ defmodule Mix.Tasks.Compile.Hologram do
 
     runtime_build_task = build_runtime()
 
-    digests =
-      Reflection.list_pages(opts)
-      |> Enum.map(&(Task.async(fn -> build_page(&1, output_path) end)))
-      |> Utils.await_tasks()
+    ModuleDefStore.create()
+    CallGraph.create()
 
+    pages = Reflection.list_pages(opts)
+    module_defs = aggregate_module_defs(pages)
+    call_graph = build_call_graph(pages, module_defs)
+
+    digests = build_pages(pages, output_path, module_defs, call_graph)
     build_manifest(digests, output_path)
     reload_routes()
 
@@ -40,6 +40,22 @@ defmodule Mix.Tasks.Compile.Hologram do
     :ok
   end
 
+  defp aggregate_module_defs(pages) do
+    pages
+    |> Utils.map_async(&ModuleDefAggregator.aggregate/1)
+    |> Utils.await_tasks()
+
+    ModuleDefStore.get_all()
+  end
+
+  defp build_call_graph(pages, module_defs) do
+    pages
+    |> Utils.map_async(&CallGraphBuilder.build(&1, module_defs))
+    |> Utils.await_tasks()
+
+    CallGraph.get()
+  end
+
   defp build_manifest(digests, output_path) do
     json =
       Enum.into(digests, %{})
@@ -49,8 +65,8 @@ defmodule Mix.Tasks.Compile.Hologram do
     |> File.write!(json)
   end
 
-  defp build_page(page, output_path) do
-    js = Builder.build(page)
+  defp build_page(page, output_path, module_defs, call_graph) do
+    js = Builder.build(page, module_defs, call_graph)
     output = "\"use strict\";\n\n" <> js
 
     digest =
@@ -62,6 +78,12 @@ defmodule Mix.Tasks.Compile.Hologram do
     |> File.write!(output)
 
     {page, digest}
+  end
+
+  defp build_pages(pages, output_path, module_defs, call_graph) do
+    pages
+    |> Utils.map_async(&build_page(&1, output_path, module_defs, call_graph))
+    |> Utils.await_tasks()
   end
 
   defp build_runtime do
