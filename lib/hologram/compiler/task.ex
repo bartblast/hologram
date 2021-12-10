@@ -29,6 +29,7 @@ defmodule Mix.Tasks.Compile.Hologram do
 
     templates = build_templates(pages ++ components ++ layouts)
     dump_template_store(templates)
+    TemplateStore.maybe_create_table()
     TemplateStore.populate(templates)
 
     module_defs = aggregate_module_defs(pages)

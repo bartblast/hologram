@@ -24,7 +24,7 @@ defmodule Hologram.Compiler.TemplateStore do
     {:reply, vdom, nil}
   end
 
-  defp maybe_create_table do
+  def maybe_create_table do
     if :ets.whereis(@table_name) == :undefined do
       :ets.new(@table_name, [:public, :named_table])
     end
