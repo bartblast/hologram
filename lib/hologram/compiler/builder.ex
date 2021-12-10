@@ -1,16 +1,10 @@
 defmodule Hologram.Compiler.Builder do
-  alias Hologram.Compiler.{Context, ModuleDefAggregator, ModuleDefStore, JSEncoder, Opts, Pruner}
+  alias Hologram.Compiler.{Context, ModuleDefStore, JSEncoder, Opts, Pruner}
   require Logger
 
-  def build(module) do
-    Logger.debug("Started ModuleDefAggregator.aggregate/1 for #{module}")
-    ModuleDefAggregator.aggregate(module)
-    Logger.debug("Finished ModuleDefAggregator.aggregate/1 for #{module}")
-
-    module_defs = ModuleDefStore.get_all()
-
+  def build(module, module_defs, call_graph) do
     Logger.debug("Started Pruner.prune/2 for #{module}")
-    pruned_module_defs = Pruner.prune(module_defs, module)
+    pruned_module_defs = Pruner.prune(module, module_defs, call_graph)
     Logger.debug("Finished Pruner.prune/2 for #{module}")
 
     Logger.debug("Started encode_module_defs/1 for #{module}")
