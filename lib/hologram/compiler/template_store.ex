@@ -4,6 +4,7 @@ defmodule Hologram.Compiler.TemplateStore do
   use GenServer
 
   alias Hologram.Compiler.Reflection
+  alias Hologram.Template.Builder
   alias Hologram.Utils
 
   @env Application.fetch_env!(:hologram, :env)
@@ -30,7 +31,9 @@ defmodule Hologram.Compiler.TemplateStore do
   end
 
   def populate_table(:test) do
-    populate_table_from_map
+    Reflection.list_templatables()
+    |> Builder.build_all()
+    |> populate_table_from_map()
   end
 
   def populate_table_from_dump do
