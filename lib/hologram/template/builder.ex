@@ -28,4 +28,12 @@ defmodule Hologram.Template.Builder do
     |> Parser.parse!()
     |> Transformer.transform(context)
   end
+
+  # DEFER: test
+  def build_all(modules) do
+    modules
+    |> Utils.map_async(&{&1, build(&1)})
+    |> Utils.await_tasks()
+    |> Enum.into(%{})
+  end
 end
