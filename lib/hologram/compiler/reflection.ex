@@ -161,6 +161,11 @@ defmodule Hologram.Compiler.Reflection do
     list_modules_of_type(:page, pages_path)
   end
 
+  # DEFER: test
+  def list_templatables(opts \\ []) do
+    list_pages(opts) ++ list_components(opts) ++ list_layouts(opts)
+  end
+
   # DEFER: instead of matching the macro on arity, pattern match the args as well
   def macro_definition(module, name, args) do
     arity = Enum.count(args)
