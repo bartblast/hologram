@@ -420,4 +420,11 @@ defmodule Hologram.Compiler.ReflectionTest do
       refute Reflection.standard_lib?(Phoenix)
     end
   end
+
+  test "ui_components_path/0" do
+    result = Reflection.ui_components_path()
+    expected = "#{File.cwd!()}/lib/hologram/ui"
+
+    assert result == expected
+  end
 end

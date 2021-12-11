@@ -267,4 +267,9 @@ defmodule Hologram.Compiler.Reflection do
   def template_store_dump_path do
     "#{build_path()}/template_store.bin"
   end
+
+  def ui_components_path do
+    source_path(Hologram.UI.Runtime)
+    |> String.replace_suffix("/runtime.ex", "")
+  end
 end
