@@ -2,6 +2,7 @@ defmodule Hologram.Template.Builder do
   alias Hologram.Compiler.{Context, Reflection}
   alias Hologram.Template.{Parser, Transformer}
   alias Hologram.Typespecs, as: T
+  alias Hologram.Utils
 
   @doc """
   Returns module's VDOM template.
