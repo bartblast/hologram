@@ -126,6 +126,13 @@ defmodule Hologram.Compiler.ReflectionTest do
     end
   end
 
+  test "hologram_ui_components_path/0" do
+    result = Reflection.hologram_ui_components_path()
+    expected = "#{File.cwd!()}/lib/hologram/ui"
+
+    assert result == expected
+  end
+
   test "ir/1" do
     code = "def fun, do: 1"
     context = %Context{module: Abc.Bcd}
@@ -238,14 +245,21 @@ defmodule Hologram.Compiler.ReflectionTest do
   end
 
   test "list_components/1" do
-    num_components =
+    num_app_components =
       "#{Reflection.components_path()}/*"
+      |> Path.wildcard()
+      |> Enum.count()
+
+    num_hologram_ui_components =
+      "#{Reflection.hologram_ui_components_path()}/*"
       |> Path.wildcard()
       |> Enum.count()
 
     result = Reflection.list_components()
 
-    assert Enum.count(result) == num_components
+    assert Enum.count(result) == num_app_components + num_hologram_ui_components
+    assert Hologram.E2E.Component1 in result
+    assert Hologram.UI.Runtime in result
   end
 
   test "list_layouts/1" do
@@ -419,12 +433,5 @@ defmodule Hologram.Compiler.ReflectionTest do
     test "deps module" do
       refute Reflection.standard_lib?(Phoenix)
     end
-  end
-
-  test "ui_components_path/0" do
-    result = Reflection.ui_components_path()
-    expected = "#{File.cwd!()}/lib/hologram/ui"
-
-    assert result == expected
   end
 end

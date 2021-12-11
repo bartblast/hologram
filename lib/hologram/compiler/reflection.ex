@@ -66,6 +66,11 @@ defmodule Hologram.Compiler.Reflection do
     has_function?(module, :template, 0)
   end
 
+  def hologram_ui_components_path do
+    source_path(Hologram.UI.Runtime)
+    |> String.replace_suffix("/runtime.ex", "")
+  end
+
   def ir(code, context \\ %Context{}) do
     ast(code)
     |> Transformer.transform(context)
@@ -100,8 +105,13 @@ defmodule Hologram.Compiler.Reflection do
   end
 
   def list_components(opts \\ []) do
-    components_path = components_path(opts)
-    list_modules_of_type(:component, components_path)
+    app_components_path = components_path(opts)
+    app_components = list_modules_of_type(:component, app_components_path)
+
+    hologram_ui_components_path = hologram_ui_components_path()
+    hologram_ui_components = list_modules_of_type(:component, hologram_ui_components_path)
+
+    app_components ++ hologram_ui_components
   end
 
   def list_layouts(opts \\ []) do
@@ -266,10 +276,5 @@ defmodule Hologram.Compiler.Reflection do
   # DEFER: test
   def template_store_dump_path do
     "#{build_path()}/template_store.bin"
-  end
-
-  def ui_components_path do
-    source_path(Hologram.UI.Runtime)
-    |> String.replace_suffix("/runtime.ex", "")
   end
 end
