@@ -109,7 +109,7 @@ defmodule Hologram.Compiler.Reflection do
     app_components = list_modules_of_type(:component, app_components_path)
 
     hologram_ui_components_path = hologram_ui_components_path()
-    hologram_ui_components = list_modules_of_type(:component, hologram_ui_components_path)
+    hologram_ui_components = list_modules_of_type(:component, hologram_ui_components_path, :hologram)
 
     app_components ++ hologram_ui_components
   end
@@ -131,8 +131,7 @@ defmodule Hologram.Compiler.Reflection do
     end)
   end
 
-  defp list_modules_of_type(type, path) do
-    app = @config[:otp_app]
+  defp list_modules_of_type(type, path, app \\ @config[:otp_app]) do
     :ok = Application.ensure_loaded(app)
 
     Keyword.fetch!(Application.spec(app), :modules)
