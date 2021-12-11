@@ -23,13 +23,11 @@ defmodule Mix.Tasks.Compile.Hologram do
     ModuleDefStore.create()
     CallGraph.create()
 
-    pages = Reflection.list_pages(opts)
-    components = Reflection.list_components(opts)
-    layouts = Reflection.list_layouts(opts)
-
-    templates = build_templates(pages ++ components ++ layouts)
+    templatables = Reflection.list_templatables(opts)
+    templates = TemplateBuilder.build_all(templatables)
     dump_template_store(templates)
 
+    pages = Reflection.list_pages(opts)
     module_defs = aggregate_module_defs(pages)
     call_graph = build_call_graph(pages, module_defs, templates)
 
@@ -70,13 +68,6 @@ defmodule Mix.Tasks.Compile.Hologram do
 
     "#{output_path}/manifest.json"
     |> File.write!(json)
-  end
-
-  defp build_templates(modules) do
-    modules
-    |> Utils.map_async(&{&1, TemplateBuilder.build(&1)})
-    |> Utils.await_tasks()
-    |> Enum.into(%{})
   end
 
   defp build_page(page, output_path, module_defs, call_graph) do
