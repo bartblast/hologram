@@ -6,11 +6,12 @@ defmodule Hologram.Compiler.TemplateStore do
   alias Hologram.Compiler.Reflection
   alias Hologram.Utils
 
+  @env Application.fetch_env!(:hologram, :env)
   @table_name :hologram_template_store
 
   def init(_) do
     create_table()
-    populate_table_from_dump()
+    populate_table(@env)
 
     {:ok, nil}
   end
@@ -26,6 +27,10 @@ defmodule Hologram.Compiler.TemplateStore do
   def handle_call({:get, module}, _, _) do
     [{^module, vdom}] = :ets.lookup(@table_name, module)
     {:reply, vdom, nil}
+  end
+
+  def populate_table(:test) do
+    populate_table_from_map
   end
 
   def populate_table_from_dump do
