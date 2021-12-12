@@ -55,9 +55,13 @@ export default class ScriptsReloader {
     }
   }
 
-  static isExecutableScript(script) {
+  static isExecutable(script) {
     const type = script.getAttribute('type')
     return !type || ScriptsReloader.EXECUTABLE_TYPES.includes(type)
+  }
+
+  static isReloadable(script) {
+    return script.getAttribute('hologram-policy') !== "no-reload"
   }
 
   static isInlineScript(script) {
@@ -68,7 +72,9 @@ export default class ScriptsReloader {
     let taskQueue = []
 
     Array.from(document.querySelectorAll('script'))
-      .filter(script => ScriptsReloader.isExecutableScript(script))
+      .filter((script) => {
+        return ScriptsReloader.isExecutable(script) && ScriptsReloader.isReloadable(script)
+      })
       .forEach(script => {
         taskQueue.push(callback => {
           ScriptsReloader.insertScript(document, script, callback)
