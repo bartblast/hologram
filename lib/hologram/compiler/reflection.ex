@@ -1,7 +1,8 @@
 defmodule Hologram.Compiler.Reflection do
   alias Hologram.Compiler.{Context, Helpers, Normalizer, Parser, Transformer}
   alias Hologram.Compiler.IR.ModuleDefinition
-  alias Hologram.Utils
+  alias Hologram.{MixProject, Utils}
+  alias Mix.Project
 
   @config Application.get_all_env(:hologram)
   @env Application.fetch_env!(:hologram, :env)
@@ -12,6 +13,15 @@ defmodule Hologram.Compiler.Reflection do
     case Keyword.get(opts, :app_path) do
       nil -> "#{root_path()}/app"
       app_path -> app_path
+    end
+  end
+
+  # DEFER: test
+  def assets_path(opts \\ @config) do
+    if MixProject.is_dep?() do
+      Project.deps_path() <> "/hologram/assets"
+    else
+      root_path(opts) <> "/assets"
     end
   end
 

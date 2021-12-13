@@ -1,5 +1,6 @@
 defmodule Hologram.MixProject do
   use Mix.Project
+  alias Mix.Project
 
   defp aliases do
     [
@@ -74,9 +75,11 @@ defmodule Hologram.MixProject do
   end
 
   def is_dep? do
+    deps_path = Project.deps_path()
+
     __MODULE__.module_info()[:compile][:source]
     |> to_string()
-    |> String.ends_with?("/deps/hologram/mix.exs")
+    |> String.starts_with?(deps_path)
   end
 
   def package do
