@@ -1,6 +1,5 @@
 defmodule Hologram.MixProject do
   use Mix.Project
-  alias Mix.Project
 
   defp aliases do
     [
