@@ -75,11 +75,9 @@ defmodule Hologram.MixProject do
   end
 
   def is_dep? do
-    deps_path = Project.deps_path()
-
     __MODULE__.module_info()[:compile][:source]
     |> to_string()
-    |> String.starts_with?(deps_path)
+    |> String.ends_with?("/deps/hologram/mix.exs")
   end
 
   def package do

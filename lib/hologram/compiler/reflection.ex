@@ -19,7 +19,7 @@ defmodule Hologram.Compiler.Reflection do
   # DEFER: test
   def assets_path(opts \\ @config) do
     if MixProject.is_dep?() do
-      Project.deps_path() <> "/hologram/assets"
+      root_path(opts) <> "/deps/hologram/assets"
     else
       root_path(opts) <> "/assets"
     end
