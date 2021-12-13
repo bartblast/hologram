@@ -103,7 +103,7 @@ defmodule Hologram.MixProject do
       compilers: compilers(),
       deps: deps(),
       description: "Work in progress...",
-      elixir: "~> 1.12",
+      elixir: "~> 1.13.0",
       elixirc_paths: elixirc_paths(),
       package: package(),
       preferred_cli_env: preferred_cli_env(),
