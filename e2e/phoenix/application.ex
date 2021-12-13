@@ -3,6 +3,8 @@ defmodule Hologram.E2E.Application do
 
   use Application
 
+  @env Application.fetch_env!(:hologram, :env)
+
   @impl true
   def start(_type, _args) do
     children = [
@@ -12,7 +14,7 @@ defmodule Hologram.E2E.Application do
     ]
 
     children =
-      if Mix.env() == :dev do
+      if @env == :dev do
         children ++ [Hologram.Runtime.Watcher]
       else
         children
