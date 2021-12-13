@@ -43,19 +43,19 @@ defmodule Hologram.MixProject do
 
   defp deps do
     [
-      {:credo, "~> 1.5.6", only: :dev, runtime: false},
-      {:dialyxir, "~> 1.1.0", only: :dev, runtime: false},
-      {:ecto_sql, "~> 3.6"},
-      {:esbuild, "~> 0.2", runtime: Mix.env() == :dev},
-      {:ex_check, "~> 0.14.0", only: :dev, runtime: false},
-      {:ex_doc, "~> 0.25.5", only: :dev, runtime: false},
+      {:credo, "~> 1.0", only: :dev, runtime: false},
+      {:dialyxir, "~> 1.0", only: :dev, runtime: false},
+      {:ecto_sql, "~> 3.0"},
+      {:esbuild, "~> 0.4", runtime: Mix.env() == :dev},
+      {:ex_check, "~> 0.14", only: :dev, runtime: false},
+      {:ex_doc, "~> 0.26", only: :dev, runtime: false},
       {:file_system, "~> 0.2"},
-      {:floki, ">= 0.30.0", only: :test},
-      {:jason, "~> 1.2"},
-      {:libgraph, "~> 0.13.3"},
-      {:phoenix, "~> 1.6.2"},
-      {:plug_cowboy, "~> 2.5"},
-      {:saxy, "~> 1.4"},
+      {:floki, "~> 0.32", only: :test},
+      {:jason, "~> 1.0"},
+      {:libgraph, "~> 0.13"},
+      {:phoenix, "~> 1.6"},
+      {:plug_cowboy, "~> 2.0"},
+      {:saxy, "~> 1.0"},
       {:wallaby, "~> 0.29", only: :test, runtime: false}
     ]
   end
