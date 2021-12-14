@@ -60,7 +60,7 @@ defmodule Hologram.Compiler.Reflection do
   def has_compiled_pages_list? do
     priv_path =
       :code.priv_dir(@config[:otp_app])
-      |> to_string
+      |> to_string()
 
     priv_path <> "/hologram/page_list.bin"
     |> File.exists?()
