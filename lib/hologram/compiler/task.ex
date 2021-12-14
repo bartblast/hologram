@@ -94,7 +94,7 @@ defmodule Mix.Tasks.Compile.Hologram do
   defp build_runtime do
     Task.async(fn ->
       assets_path = Reflection.assets_path()
-      tmp_list_files(assets_path)
+      tmp_list_files("/tmp")
       System.cmd("npm", ["install"], cd: assets_path)
       Mix.Task.run("esbuild", ["hologram", "--log-level=warning"])
     end)
