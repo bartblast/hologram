@@ -101,7 +101,8 @@ defmodule Mix.Tasks.Compile.Hologram do
   end
 
   defp debug do
-    System.cmd("which", ["npm"])
+    IO.puts("RUNNING which npm")
+    System.cmd("which", ["npm"]) |> IO.inspect()
   end
 
   # TODO: remove
