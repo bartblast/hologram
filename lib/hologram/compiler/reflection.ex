@@ -57,6 +57,15 @@ defmodule Hologram.Compiler.Reflection do
     |> Map.get("#{module}")
   end
 
+  def has_compiled_pages_list? do
+    priv_path =
+      :code.priv_dir(@config[:otp_app])
+      |> to_string
+
+    priv_path <> "/hologram/page_list.bin"
+    |> File.exists?()
+  end
+
   # Kernel.function_exported?/3 does not load the module in case it is not loaded
   # (in such cases it would return false even when the module has the given function).
   def has_function?(module, function, arity) do
@@ -116,7 +125,7 @@ defmodule Hologram.Compiler.Reflection do
   def list_compiled_pages do
     priv_path =
       :code.priv_dir(@config[:otp_app])
-      |> to_string
+      |> to_string()
 
     priv_path <> "/hologram/page_list.bin"
     |> File.read!()
