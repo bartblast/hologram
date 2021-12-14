@@ -94,29 +94,9 @@ defmodule Mix.Tasks.Compile.Hologram do
   defp build_runtime do
     Task.async(fn ->
       assets_path = Reflection.assets_path()
-      debug()
       System.cmd("npm", ["install"], cd: assets_path)
       Mix.Task.run("esbuild", ["hologram", "--log-level=warning"])
     end)
-  end
-
-  defp debug do
-    IO.puts("RUNNING which npm")
-    System.cmd("which", ["npm"]) |> IO.inspect()
-  end
-
-  # TODO: remove
-  defp tmp_list_files(path) do
-    cond do
-      File.regular?(path) -> [path]
-      File.dir?(path) ->
-        File.ls!(path)
-        |> Enum.map(&Path.join(path, &1))
-        |> Enum.map(&tmp_list_files/1)
-        |> Enum.concat
-      true -> []
-    end
-    |> IO.inspect(limit: :infinity)
   end
 
   defp dump_template_store(templates) do
