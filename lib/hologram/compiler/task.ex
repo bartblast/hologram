@@ -18,6 +18,8 @@ defmodule Mix.Tasks.Compile.Hologram do
     File.mkdir_p!(output_path)
     remove_old_files(output_path)
 
+    runtime_build_task = build_runtime()
+
     ModuleDefStore.create()
     CallGraph.create()
 
@@ -32,6 +34,8 @@ defmodule Mix.Tasks.Compile.Hologram do
     digests = build_pages(pages, output_path, module_defs, call_graph)
     build_manifest(digests, output_path)
     reload_routes()
+
+    Task.await(runtime_build_task, :infinity)
 
     CallGraph.destroy()
     ModuleDefStore.destroy()
@@ -85,6 +89,14 @@ defmodule Mix.Tasks.Compile.Hologram do
     pages
     |> Utils.map_async(&build_page(&1, output_path, module_defs, call_graph))
     |> Utils.await_tasks()
+  end
+
+  defp build_runtime do
+    Task.async(fn ->
+      assets_path = Reflection.assets_path()
+      System.cmd("npm", ["install"], cd: assets_path)
+      Mix.Task.run("esbuild", ["hologram", "--log-level=warning"])
+    end)
   end
 
   defp dump_template_store(templates) do
