@@ -8,7 +8,6 @@ defmodule Mix.Tasks.Compile.Hologram do
   alias Hologram.Compiler.{Builder, CallGraph, CallGraphBuilder, ModuleDefAggregator, ModuleDefStore, Reflection}
   alias Hologram.Template.Builder, as: TemplateBuilder
 
-  @otp_app Application.fetch_env!(:hologram, :otp_app)
   @root_path Reflection.root_path()
 
   def run(opts \\ []) do

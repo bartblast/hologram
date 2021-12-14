@@ -12,11 +12,11 @@ defmodule Hologram.Router do
     app = Application.get_all_env(:hologram)[:otp_app]
     Application.ensure_loaded(app) == :ok
   end
-  
+
   # TODO: test
   defmacro hologram_routes do
     if app_loaded?() do
-      for page <- Reflection.list_pages() do
+      for page <- Reflection.list_compiled_pages() do
         quote do
           get unquote(page.route()), Hologram.Runtime.Controller, :index,
             private: %{hologram_page: unquote(page)}

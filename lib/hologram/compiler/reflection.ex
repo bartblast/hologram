@@ -2,7 +2,6 @@ defmodule Hologram.Compiler.Reflection do
   alias Hologram.Compiler.{Context, Helpers, Normalizer, Parser, Transformer}
   alias Hologram.Compiler.IR.ModuleDefinition
   alias Hologram.{MixProject, Utils}
-  alias Mix.Project
 
   @config Application.get_all_env(:hologram)
   @env Application.fetch_env!(:hologram, :env)
@@ -112,6 +111,16 @@ defmodule Hologram.Compiler.Reflection do
 
   def layouts_path(opts \\ []) do
     resolve_path(opts, :layouts_path, :layouts)
+  end
+
+  def list_compiled_pages do
+    priv_path =
+      :code.priv_dir(@config[:otp_app])
+      |> to_string
+
+    priv_path <> "/hologram/page_list.bin"
+    |> File.read!()
+    |> Utils.deserialize()
   end
 
   def list_components(opts \\ []) do
