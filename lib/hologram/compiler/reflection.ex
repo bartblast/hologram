@@ -217,6 +217,11 @@ defmodule Hologram.Compiler.Reflection do
     resolve_path(opts, :pages_path, :pages)
   end
 
+  # DEFER: test
+  def priv_path(opts \\ []) do
+    "#{root_path(opts)}/priv"
+  end
+
   defp resolve_path(opts, key, dir) do
     cond do
       Keyword.has_key?(opts, key) ->

@@ -8,6 +8,7 @@ defmodule Mix.Tasks.Compile.Hologram do
   alias Hologram.Compiler.{Builder, CallGraph, CallGraphBuilder, ModuleDefAggregator, ModuleDefStore, Reflection}
   alias Hologram.Template.Builder, as: TemplateBuilder
 
+  @otp_app Application.fetch_env!(:hologram, :otp_app)
   @root_path Reflection.root_path()
 
   def run(opts \\ []) do
@@ -28,6 +29,8 @@ defmodule Mix.Tasks.Compile.Hologram do
     dump_template_store(templates)
 
     pages = Reflection.list_pages(opts)
+    dump_page_list(pages)
+
     module_defs = aggregate_module_defs(pages)
     call_graph = build_call_graph(pages, module_defs, templates)
 
@@ -97,6 +100,16 @@ defmodule Mix.Tasks.Compile.Hologram do
       System.cmd("npm", ["install"], cd: assets_path)
       Mix.Task.run("esbuild", ["hologram", "--log-level=warning"])
     end)
+  end
+
+  defp dump_page_list(pages) do
+    priv_path = Reflection.priv_path() <> "/hologram"
+    File.mkdir_p!(priv_path)
+
+    data = Utils.serialize(pages)
+
+    priv_path <> "/page_list.bin"
+    |> File.write!(data)
   end
 
   defp dump_template_store(templates) do
