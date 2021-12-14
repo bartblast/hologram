@@ -11,9 +11,6 @@ defmodule Mix.Tasks.Compile.Hologram do
   @root_path Reflection.root_path()
 
   def run(opts \\ []) do
-    Reflection.otp_app()
-    |> Application.ensure_started()
-
     Logger.debug("Hologram compiler started")
 
     output_path = resolve_output_path()
