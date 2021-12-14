@@ -34,7 +34,7 @@ defmodule Hologram.Compiler.ModuleDefStore do
   end
 
   def get_if_not_exists(module) do
-    GenServer.call(__MODULE__, {:get_if_not_exists, module})
+    GenServer.call(__MODULE__, {:get_if_not_exists, module}, :infinity)
   end
 
   def init(_) do
