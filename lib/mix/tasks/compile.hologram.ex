@@ -29,9 +29,11 @@ defmodule Mix.Tasks.Compile.Hologram do
     Logger.debug("Hologram compiler started")
 
     output_path = resolve_output_path()
-
     File.mkdir_p!(output_path)
     remove_old_files(output_path)
+
+    Reflection.root_priv_path()
+    |> File.mkdir_p!()
 
     ModuleDefStore.create()
     CallGraph.create()
@@ -113,9 +115,6 @@ defmodule Mix.Tasks.Compile.Hologram do
   end
 
   defp dump_page_list(pages) do
-    Reflection.root_priv_path()
-    |> File.mkdir_p!()
-
     data = Utils.serialize(pages)
 
     Reflection.root_page_list_path()
@@ -123,12 +122,9 @@ defmodule Mix.Tasks.Compile.Hologram do
   end
 
   defp dump_template_store(templates) do
-    build_path = Reflection.build_path()
-    File.mkdir_p!(build_path)
-
     data = Utils.serialize(templates)
 
-    Reflection.template_store_dump_path()
+    Reflection.root_template_store_path()
     |> File.write!(data)
   end
 

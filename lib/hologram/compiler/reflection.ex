@@ -293,6 +293,10 @@ defmodule Hologram.Compiler.Reflection do
     root_priv_path(opts) <> "/source_digest.bin"
   end
 
+  def root_template_store_path(opts \\ []) do
+    root_priv_path(opts) <> "/template_store.bin"
+  end
+
   def router_module(opts \\ @config) do
     case Keyword.get(opts, :router_module) do
       nil ->
@@ -342,10 +346,5 @@ defmodule Hologram.Compiler.Reflection do
       !String.starts_with?(source_path, "#{root_path}/lib/") &&
       !String.starts_with?(source_path, "#{root_path}/test/") &&
       !String.starts_with?(source_path, "#{root_path}/deps/")
-  end
-
-  # DEFER: test
-  def template_store_dump_path do
-    "#{build_path()}/template_store.bin"
   end
 end
