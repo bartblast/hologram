@@ -1,5 +1,5 @@
 # DEFER: test
-defmodule Hologram.Compiler.Digester do
+defmodule Hologram.Compiler.SourceDigester do
   def digest(paths) do
     data =
       Enum.reduce(paths, [], &(&2 ++ list_files(&1)))
@@ -7,7 +7,6 @@ defmodule Hologram.Compiler.Digester do
       |> :erlang.term_to_binary()
 
     :crypto.hash(:md5, data)
-    |> Ecto.UUID.cast!()
   end
 
   defp list_files(path) do
