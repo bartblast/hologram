@@ -10,7 +10,7 @@ defmodule Hologram.Compiler.Reflection do
 
   def app_path(opts \\ @config) do
     case Keyword.get(opts, :app_path) do
-      nil -> "#{root_path()}/app"
+      nil -> root_path(opts) <> "/app"
       app_path -> app_path
     end
   end
@@ -120,6 +120,11 @@ defmodule Hologram.Compiler.Reflection do
   end
 
   # DEFER: test
+  def lib_path(opts \\ []) do
+    root_path(opts) <> "/lib"
+  end
+
+  # DEFER: test
   def list_release_pages do
     release_page_list_path()
     |> File.read!()
@@ -194,6 +199,16 @@ defmodule Hologram.Compiler.Reflection do
     module_definition(module).macros
     |> Enum.filter(&(&1.name == name && &1.arity == arity))
     |> hd()
+  end
+
+  # DEFER: test
+  def mix_lock_path(opts \\ []) do
+    root_path(opts) <> "/mix.lock"
+  end
+
+  # DEFER: test
+  def mix_path(opts \\ []) do
+    root_path(opts) <> "/mix.exs"
   end
 
   def module?(arg) do
