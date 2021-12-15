@@ -10,7 +10,7 @@ defmodule Hologram.Compiler.Digester do
     |> Ecto.UUID.cast!()
   end
 
-  def list_files(path) do
+  defp list_files(path) do
     cond do
       File.regular?(path) -> [path]
 
