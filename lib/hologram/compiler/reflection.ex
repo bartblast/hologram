@@ -57,12 +57,8 @@ defmodule Hologram.Compiler.Reflection do
     |> Map.get("#{module}")
   end
 
-  def has_compiled_pages_list? do
-    priv_path =
-      :code.priv_dir(@config[:otp_app])
-      |> to_string()
-
-    priv_path <> "/hologram/page_list.bin"
+  def has_release_page_list? do
+    release_page_list_path()
     |> File.exists?()
   end
 
@@ -122,12 +118,8 @@ defmodule Hologram.Compiler.Reflection do
     resolve_path(opts, :layouts_path, :layouts)
   end
 
-  def list_compiled_pages do
-    priv_path =
-      :code.priv_dir(@config[:otp_app])
-      |> to_string()
-
-    priv_path <> "/hologram/page_list.bin"
+  def list_release_pages do
+    release_page_list_path()
     |> File.read!()
     |> Utils.deserialize()
   end
@@ -235,9 +227,17 @@ defmodule Hologram.Compiler.Reflection do
     resolve_path(opts, :pages_path, :pages)
   end
 
+  def release_page_list_path do
+    release_priv_path() <> "/page_list.bin"
+  end
+
   # DEFER: test
-  def priv_path(opts \\ []) do
-    "#{root_path(opts)}/priv"
+  def release_priv_path do
+    priv_path =
+      :code.priv_dir(@config[:otp_app])
+      |> to_string()
+
+    priv_path <> "/hologram"
   end
 
   defp resolve_path(opts, key, dir) do
@@ -253,11 +253,20 @@ defmodule Hologram.Compiler.Reflection do
     end
   end
 
+  def root_page_list_path() do
+    root_priv_path() <> "/page_list.bin"
+  end
+
   def root_path(opts \\ @config) do
     case Keyword.get(opts, :root_path) do
       nil -> File.cwd!()
       root_path -> root_path
     end
+  end
+
+  # DEFER: test
+  def root_priv_path(opts \\ []) do
+    root_path(opts) <> "/priv/hologram"
   end
 
   def router_module(opts \\ @config) do

@@ -35,7 +35,7 @@ defmodule Mix.Tasks.Compile.Hologram do
 
     digests = build_pages(pages, output_path, module_defs, call_graph)
     build_manifest(digests, output_path)
-    reload_routes()
+    copy_router()
 
     Task.await(runtime_build_task, :infinity)
 
@@ -101,13 +101,23 @@ defmodule Mix.Tasks.Compile.Hologram do
     end)
   end
 
+  defp copy_router do
+    source_path =
+      Reflection.router_module()
+      |> Reflection.source_path()
+
+    target_path = Reflection.root_priv_path() <> "/router.ex"
+
+    File.cp!(source_path, target_path)
+  end
+
   defp dump_page_list(pages) do
-    priv_path = Reflection.priv_path() <> "/hologram"
-    File.mkdir_p!(priv_path)
+    Reflection.root_priv_path()
+    |> File.mkdir_p!()
 
     data = Utils.serialize(pages)
 
-    priv_path <> "/page_list.bin"
+    Reflection.root_page_list_path()
     |> File.write!(data)
   end
 
@@ -119,18 +129,6 @@ defmodule Mix.Tasks.Compile.Hologram do
 
     Reflection.template_store_dump_path()
     |> File.write!(data)
-  end
-
-  # Routes are defined in page modules and the router aggregates the routes dynamically by reflection.
-  # So everytime a route is updated in a page module, we need to explicitely recompile the router module, so that
-  # it rebuilds the list of routes.
-  defp reload_routes do
-    router_path = Reflection.router_path()
-
-    opts = Code.compiler_options()
-    Code.compiler_options(ignore_module_conflict: true)
-    Code.compile_file(router_path)
-    Code.compiler_options(ignore_module_conflict: opts.ignore_module_conflict)
   end
 
   defp remove_old_files(output_path) do
