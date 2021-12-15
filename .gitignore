@@ -25,7 +25,8 @@ hologram-*.tar
 # Ignore assets that are produced by build tools.
 /priv/static/assets/
 
-# Hologram built scripts.
+# Hologram build.
+/priv/hologram/
 /priv/static/hologram/
 
 # In case you use Node.js/npm, you want to ignore these.
