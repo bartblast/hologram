@@ -3,6 +3,7 @@ defmodule Hologram.MixProject do
 
   defp aliases do
     [
+      "assets.build": ["cmd cd assets && npm install", "esbuild hologram --minify"],
       "format.all": [
         "format",
         "cmd npx prettier --write 'assets/**/*.js' 'test/js/**/*.js' '**/*.json'"
