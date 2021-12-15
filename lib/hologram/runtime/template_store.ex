@@ -1,6 +1,6 @@
 # TODO: refactor & test
 
-defmodule Hologram.Compiler.TemplateStore do
+defmodule Hologram.Runtime.TemplateStore do
   use GenServer
 
   alias Hologram.Compiler.Reflection
@@ -9,6 +9,10 @@ defmodule Hologram.Compiler.TemplateStore do
 
   @env Application.fetch_env!(:hologram, :env)
   @table_name :hologram_template_store
+
+  def start_link(_) do
+    GenServer.start_link(__MODULE__, [], name: __MODULE__)
+  end
 
   def init(_) do
     create_table()
@@ -47,9 +51,5 @@ defmodule Hologram.Compiler.TemplateStore do
     Enum.each(templates, fn {module, vdom} ->
       :ets.insert(@table_name, {module, vdom})
     end)
-  end
-
-  def start_link(_) do
-    GenServer.start_link(__MODULE__, [], name: __MODULE__)
   end
 end

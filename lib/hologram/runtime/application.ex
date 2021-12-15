@@ -8,7 +8,7 @@ defmodule Hologram.Runtime.Application do
   @impl true
   def start(_type, _args) do
     children = [
-      Hologram.Compiler.TemplateStore
+      Hologram.Runtime.TemplateStore
     ]
 
     children =

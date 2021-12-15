@@ -1,4 +1,5 @@
-alias Hologram.Compiler.{Helpers, Reflection, Serializer, TemplateStore}
+alias Hologram.Compiler.{Helpers, Reflection, Serializer}
+alias Hologram.Runtime.TemplateStore
 alias Hologram.Template.Renderer
 alias Hologram.Utils
 

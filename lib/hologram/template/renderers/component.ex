@@ -1,4 +1,4 @@
-alias Hologram.Compiler.TemplateStore
+alias Hologram.Runtime.TemplateStore
 alias Hologram.Template.{BindingsAggregator, Renderer}
 alias Hologram.Template.VDOM.Component
 
