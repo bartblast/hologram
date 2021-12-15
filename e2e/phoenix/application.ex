@@ -7,6 +7,8 @@ defmodule Hologram.E2E.Application do
 
   @impl true
   def start(_type, _args) do
+    Hologram.Router.reload_routes()
+    
     children = [
       {Phoenix.PubSub, name: Hologram.E2E.PubSub},
       Hologram.E2E.Web.Endpoint,
