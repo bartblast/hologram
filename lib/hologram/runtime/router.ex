@@ -23,7 +23,7 @@ defmodule Hologram.Router do
   # So everytime a route is updated in a page module, we need to explicitely recompile the router module, so that
   # it rebuilds the list of routes.
   def reload_routes() do
-    router_path = Reflection.router_path()
+    router_path = Reflection.release_router_path()
 
     opts = Code.compiler_options()
     Code.compiler_options(ignore_module_conflict: true)

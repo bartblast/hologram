@@ -390,13 +390,6 @@ defmodule Hologram.Compiler.ReflectionTest do
     end
   end
 
-  test "router_path/0" do
-    result = Reflection.router_path()
-    expected = "#{File.cwd!()}/e2e/phoenix/web/router.ex"
-
-    assert result == expected
-  end
-
   test "source_code/1" do
     module = Hologram.Test.Fixtures.Compiler.Reflection.Module5
 

@@ -290,8 +290,9 @@ defmodule Hologram.Compiler.Reflection do
     end
   end
 
-  def router_path do
-    router_module() |> source_path()
+  # DEFER: test
+  def release_router_path do
+    release_priv_path() <> "/router.ex"
   end
 
   def source_code(module) do
