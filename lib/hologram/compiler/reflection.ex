@@ -290,7 +290,7 @@ defmodule Hologram.Compiler.Reflection do
 
   # DEFER: test
   def root_source_digest_path(opts \\ []) do
-    root_priv_path(opts) <> "/digest.bin"
+    root_priv_path(opts) <> "/source_digest.bin"
   end
 
   def router_module(opts \\ @config) do
