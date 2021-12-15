@@ -258,6 +258,11 @@ defmodule Hologram.Compiler.Reflection do
     priv_path <> "/hologram"
   end
 
+  # DEFER: test
+  def release_template_store_path do
+    release_priv_path() <> "/template_store.bin"
+  end
+
   defp resolve_path(opts, key, dir) do
     cond do
       Keyword.has_key?(opts, key) ->

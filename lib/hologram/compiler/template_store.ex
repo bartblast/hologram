@@ -41,7 +41,7 @@ defmodule Hologram.Compiler.TemplateStore do
   end
 
   def populate_table_from_dump do
-    Reflection.template_store_dump_path()
+    Reflection.release_template_store_path()
     |> File.read!()
     |> Utils.deserialize()
     |> populate_table_from_map()
