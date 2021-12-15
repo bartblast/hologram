@@ -109,7 +109,6 @@ defmodule Mix.Tasks.Compile.Hologram do
   defp dump_page_digest_store(page_digests) do
     data =
       page_digests
-      |> Enum.into(%{})
       |> Utils.serialize()
 
     Reflection.root_page_digest_store_path()

@@ -39,10 +39,10 @@ defmodule Hologram.Runtime.PageDigestStore do
     Reflection.release_page_digest_store_path()
     |> File.read!()
     |> Utils.deserialize()
-    |> populate_table_from_map()
+    |> populate_table_from_list()
   end
 
-  defp populate_table_from_map(page_digests) do
+  defp populate_table_from_list(page_digests) do
     Enum.each(page_digests, fn {module, digest} ->
       :ets.insert(@table_name, {module, digest})
     end)
