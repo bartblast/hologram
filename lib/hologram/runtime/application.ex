@@ -2,18 +2,20 @@ defmodule Hologram.Runtime.Application do
   @moduledoc false
 
   use Application
+  alias Hologram.Runtime.{PageDigestStore, TemplateStore, Watcher}
 
   @env Application.fetch_env!(:hologram, :env)
 
   @impl true
   def start(_type, _args) do
     children = [
-      Hologram.Runtime.TemplateStore
+      PageDigestStore,
+      TemplateStore
     ]
 
     children =
       if @env == :dev do
-        children ++ [Hologram.Runtime.Watcher]
+        children ++ [Watcher]
       else
         children
       end

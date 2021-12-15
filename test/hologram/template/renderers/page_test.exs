@@ -1,7 +1,7 @@
 defmodule Hologram.Template.Renderer.PageTest do
   use Hologram.Test.UnitCase, async: false
 
-  alias Hologram.Compiler.Reflection
+  alias Hologram.Runtime.PageDigestStore
   alias Hologram.Template.Renderer
 
   setup_all do
@@ -14,7 +14,7 @@ defmodule Hologram.Template.Renderer.PageTest do
     |> compile_pages()
 
     module = Hologram.Test.Fixtures.Template.PageRenderer.Module1
-    digest = Reflection.get_page_digest(module)
+    digest = PageDigestStore.get(module)
     assert digest =~ uuid_hex_regex()
 
     result = Renderer.render(module, %{})

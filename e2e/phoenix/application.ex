@@ -3,6 +3,9 @@ defmodule Hologram.E2E.Application do
 
   use Application
 
+  alias Hologram.E2E.Web.Endpoint
+  alias Hologram.Runtime.{PageDigestStore, TemplateStore, Watcher}
+
   @env Application.fetch_env!(:hologram, :env)
 
   @impl true
@@ -11,13 +14,14 @@ defmodule Hologram.E2E.Application do
 
     children = [
       {Phoenix.PubSub, name: Hologram.E2E.PubSub},
-      Hologram.E2E.Web.Endpoint,
-      Hologram.Runtime.TemplateStore
+      Endpoint,
+      PageDigestStore,
+      TemplateStore
     ]
 
     children =
       if @env == :dev do
-        children ++ [Hologram.Runtime.Watcher]
+        children ++ [Watcher]
       else
         children
       end
@@ -30,7 +34,7 @@ defmodule Hologram.E2E.Application do
   # whenever the application is updated.
   @impl true
   def config_change(changed, _new, removed) do
-    Hologram.E2E.Web.Endpoint.config_change(changed, removed)
+    Endpoint.config_change(changed, removed)
     :ok
   end
 end

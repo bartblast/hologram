@@ -1,5 +1,5 @@
 alias Hologram.Compiler.{Helpers, Reflection, Serializer}
-alias Hologram.Runtime.TemplateStore
+alias Hologram.Runtime.{PageDigestStore, TemplateStore}
 alias Hologram.Template.Renderer
 alias Hologram.Utils
 
@@ -16,7 +16,7 @@ defimpl Renderer, for: Atom do
 
   defp aggregate_bindings(page_module, layout_module) do
     class_name = Helpers.class_name(page_module)
-    digest = Reflection.get_page_digest(page_module)
+    digest = PageDigestStore.get(page_module)
 
     # DEFER: pass page params to init function
     bindings =

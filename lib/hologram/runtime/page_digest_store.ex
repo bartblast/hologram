@@ -1,14 +1,13 @@
 # TODO: refactor & test
 
-defmodule Hologram.Runtime.TemplateStore do
+defmodule Hologram.Runtime.PageDigestStore do
   use GenServer
 
   alias Hologram.Compiler.Reflection
-  alias Hologram.Template.Builder
   alias Hologram.Utils
 
   @env Application.fetch_env!(:hologram, :env)
-  @table_name :hologram_template_store
+  @table_name :hologram_page_digest_store
 
   def start_link(_) do
     GenServer.start_link(__MODULE__, [], name: __MODULE__)
@@ -26,30 +25,26 @@ defmodule Hologram.Runtime.TemplateStore do
   end
 
   def get(module) do
-    [{^module, vdom}] = :ets.lookup(@table_name, module)
-    vdom
+    [{^module, digest}] = :ets.lookup(@table_name, module)
+    digest
   end
 
-  def populate_table(:test) do
-    Reflection.list_templatables()
-    |> Builder.build_all()
-    |> populate_table_from_map()
-  end
+  def populate_table(:test), do: nil
 
   def populate_table(_) do
     populate_table_from_file()
   end
 
   def populate_table_from_file do
-    Reflection.release_template_store_path()
+    Reflection.release_page_digest_store_path()
     |> File.read!()
     |> Utils.deserialize()
     |> populate_table_from_map()
   end
 
-  defp populate_table_from_map(templates) do
-    Enum.each(templates, fn {module, vdom} ->
-      :ets.insert(@table_name, {module, vdom})
+  defp populate_table_from_map(page_digests) do
+    Enum.each(page_digests, fn {module, digest} ->
+      :ets.insert(@table_name, {module, digest})
     end)
   end
 end

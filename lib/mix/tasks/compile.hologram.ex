@@ -48,8 +48,9 @@ defmodule Mix.Tasks.Compile.Hologram do
     module_defs = aggregate_module_defs(pages)
     call_graph = build_call_graph(pages, module_defs, templates)
 
-    digests = build_pages(pages, output_path, module_defs, call_graph)
-    build_manifest(digests, output_path)
+    build_pages(pages, output_path, module_defs, call_graph)
+    |> dump_page_digest_store()
+
     copy_router()
 
     CallGraph.destroy()
@@ -72,15 +73,6 @@ defmodule Mix.Tasks.Compile.Hologram do
     |> Utils.await_tasks()
 
     CallGraph.get()
-  end
-
-  defp build_manifest(digests, output_path) do
-    json =
-      Enum.into(digests, %{})
-      |> Jason.encode!()
-
-    "#{output_path}/manifest.json"
-    |> File.write!(json)
   end
 
   defp build_page(page, output_path, module_defs, call_graph) do
@@ -112,6 +104,16 @@ defmodule Mix.Tasks.Compile.Hologram do
     target_path = Reflection.root_priv_path() <> "/router.ex"
 
     File.cp!(source_path, target_path)
+  end
+
+  defp dump_page_digest_store(page_digests) do
+    data =
+      page_digests
+      |> Enum.into(%{})
+      |> Utils.serialize()
+
+    Reflection.root_page_digest_store_path()
+    |> File.write!(data)
   end
 
   defp dump_page_list(pages) do

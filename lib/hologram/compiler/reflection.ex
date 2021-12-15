@@ -49,14 +49,6 @@ defmodule Hologram.Compiler.Reflection do
     resolve_path(opts, :components_path, :components)
   end
 
-  # DEFER: optimize, e.g. load the manifest in config
-  def get_page_digest(module) do
-    "#{root_path()}/priv/static/hologram/manifest.json"
-    |> File.read!()
-    |> Jason.decode!()
-    |> Map.get("#{module}")
-  end
-
   # DEFER: test
   def has_release_page_list? do
     release_page_list_path()
@@ -245,6 +237,11 @@ defmodule Hologram.Compiler.Reflection do
   end
 
   # DEFER: test
+  def release_page_digest_store_path do
+    release_priv_path() <> "/page_digest_store.bin"
+  end
+
+  # DEFER: test
   def release_page_list_path do
     release_priv_path() <> "/page_list.bin"
   end
@@ -277,6 +274,11 @@ defmodule Hologram.Compiler.Reflection do
   end
 
   # DEFER: test
+  def root_page_digest_store_path(opts \\ []) do
+    root_priv_path(opts) <> "/page_digest_store.bin"
+  end
+
+  # DEFER: test
   def root_page_list_path() do
     root_priv_path() <> "/page_list.bin"
   end
@@ -298,6 +300,7 @@ defmodule Hologram.Compiler.Reflection do
     root_priv_path(opts) <> "/source_digest.bin"
   end
 
+  # DEFER: test
   def root_template_store_path(opts \\ []) do
     root_priv_path(opts) <> "/template_store.bin"
   end

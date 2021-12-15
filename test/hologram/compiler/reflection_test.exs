@@ -88,12 +88,6 @@ defmodule Hologram.Compiler.ReflectionTest do
     end
   end
 
-  test "get_page_digest/1" do
-    compile_pages()
-    result = Reflection.get_page_digest(Elixir.Hologram.E2E.Page1)
-    assert result =~ uuid_hex_regex()
-  end
-
   describe "has_function?/3" do
     test "returns true if the module has a function with the given name and arity" do
       assert Reflection.has_function?(@module_4, :test_fun, 2)
