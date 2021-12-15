@@ -22,12 +22,8 @@ defmodule Hologram.Compiler.TemplateStore do
   end
 
   def get(module) do
-    GenServer.call(__MODULE__, {:get, module})
-  end
-
-  def handle_call({:get, module}, _, _) do
     [{^module, vdom}] = :ets.lookup(@table_name, module)
-    {:reply, vdom, nil}
+    vdom
   end
 
   def populate_table(:test) do
