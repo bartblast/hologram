@@ -14,11 +14,7 @@ defmodule Hologram.Runtime.ChannelTest do
 
   @module_5 Hologram.Test.Fixtures.Runtime.Channel.Module5
   @target_id %{"type" => "atom", "value" => "test_target_id_value"}
-
-  setup_all do
-    on_exit(&compile_pages/0)
-  end
-
+  
   setup do
     {:ok, _, socket} =
       socket(Socket)

@@ -4,11 +4,6 @@ defmodule Hologram.Template.Renderer.PageTest do
   alias Hologram.Runtime.PageDigestStore
   alias Hologram.Template.Renderer
 
-  setup_all do
-    on_exit(&compile_pages/0)
-    :ok
-  end
-
   test "render/2" do
     "#{File.cwd!()}/test/fixtures/template/renderers/page_renderer"
     |> compile_pages()

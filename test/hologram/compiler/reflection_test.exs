@@ -10,10 +10,6 @@ defmodule Hologram.Compiler.ReflectionTest do
   @module_6 Hologram.Test.Fixtures.Compiler.Reflection.Module6
   @module_segs_1 [:Hologram, :Test, :Fixtures, :Compiler, :Reflection, :Module1]
 
-  setup_all do
-    on_exit(&compile_pages/0)
-  end
-
   describe "app_path/1" do
     test "default" do
       result = Reflection.app_path([])
