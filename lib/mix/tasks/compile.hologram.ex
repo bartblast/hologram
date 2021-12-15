@@ -5,12 +5,27 @@ defmodule Mix.Tasks.Compile.Hologram do
   require Logger
 
   alias Hologram.{MixProject, Utils}
-  alias Hologram.Compiler.{Builder, CallGraph, CallGraphBuilder, ModuleDefAggregator, ModuleDefStore, Reflection}
+  alias Hologram.Compiler.{Builder, CallGraph, CallGraphBuilder, ModuleDefAggregator, ModuleDefStore, Reflection, SourceDigester}
   alias Hologram.Template.Builder, as: TemplateBuilder
 
   @root_path Reflection.root_path()
 
   def run(opts \\ []) do
+    if has_source?() do
+      source_digest =
+        list_compile_paths(opts)
+        |> SourceDigester.digest()
+
+      if !has_source_digest?() || has_source_changes?(source_digest) do
+        compile(opts)
+        save_source_digest(source_digest)
+      end
+    end
+
+    :ok
+  end
+
+  defp compile(opts) do
     Logger.debug("Hologram compiler started")
 
     output_path = resolve_output_path()
@@ -43,8 +58,6 @@ defmodule Mix.Tasks.Compile.Hologram do
     ModuleDefStore.destroy()
 
     Logger.debug("Hologram compiler finished")
-
-    :ok
   end
 
   defp aggregate_module_defs(pages) do
@@ -131,6 +144,33 @@ defmodule Mix.Tasks.Compile.Hologram do
     |> File.write!(data)
   end
 
+  defp has_source? do
+    Reflection.mix_path()
+    |> File.exists?()
+  end
+
+  defp has_source_changes?(new_source_digest) do
+    old_source_digest =
+      Reflection.root_source_digest_path()
+      |> File.read!()
+
+    new_source_digest != old_source_digest
+  end
+
+  defp has_source_digest? do
+    Reflection.root_source_digest_path()
+    |> File.exists?()
+  end
+
+  defp list_compile_paths(opts) do
+    [
+      Reflection.app_path(opts),
+      Reflection.lib_path(opts),
+      Reflection.mix_path(opts),
+      Reflection.mix_lock_path(opts)
+    ]
+  end
+
   defp remove_old_files(output_path) do
     "#{output_path}/*"
     |> Path.wildcard()
@@ -143,5 +183,10 @@ defmodule Mix.Tasks.Compile.Hologram do
     else
       "#{@root_path}/priv/static/hologram"
     end
+  end
+
+  defp save_source_digest(source_digest) do
+    Reflection.root_source_digest_path()
+    |> File.write!(source_digest)
   end
 end

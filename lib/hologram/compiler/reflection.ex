@@ -288,6 +288,11 @@ defmodule Hologram.Compiler.Reflection do
     root_path(opts) <> "/priv/hologram"
   end
 
+  # DEFER: test
+  def root_source_digest_path(opts \\ []) do
+    root_priv_path(opts) <> "/digest.bin"
+  end
+
   def router_module(opts \\ @config) do
     case Keyword.get(opts, :router_module) do
       nil ->
