@@ -57,6 +57,7 @@ defmodule Hologram.Compiler.Reflection do
     |> Map.get("#{module}")
   end
 
+  # DEFER: test
   def has_release_page_list? do
     release_page_list_path()
     |> File.exists?()
@@ -118,6 +119,7 @@ defmodule Hologram.Compiler.Reflection do
     resolve_path(opts, :layouts_path, :layouts)
   end
 
+  # DEFER: test
   def list_release_pages do
     release_page_list_path()
     |> File.read!()
@@ -227,6 +229,7 @@ defmodule Hologram.Compiler.Reflection do
     resolve_path(opts, :pages_path, :pages)
   end
 
+  # DEFER: test
   def release_page_list_path do
     release_priv_path() <> "/page_list.bin"
   end
@@ -253,6 +256,7 @@ defmodule Hologram.Compiler.Reflection do
     end
   end
 
+  # DEFER: test
   def root_page_list_path() do
     root_priv_path() <> "/page_list.bin"
   end
