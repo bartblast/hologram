@@ -11,9 +11,11 @@ defmodule Hologram.Router do
   defmacro hologram_routes do
     if Reflection.has_release_page_list?() do
       for page <- Reflection.list_release_pages() do
-        quote do
-          get unquote(page.route()), Hologram.Runtime.Controller, :index,
-            private: %{hologram_page: unquote(page)}
+        if function_exported?(page, :route, 0) do
+          quote do
+            get unquote(page.route()), Hologram.Runtime.Controller, :index,
+              private: %{hologram_page: unquote(page)}
+          end
         end
       end
     end
