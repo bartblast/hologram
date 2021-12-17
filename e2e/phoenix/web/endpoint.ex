@@ -34,5 +34,5 @@ defmodule Hologram.E2E.Web.Endpoint do
   plug Plug.MethodOverride
   plug Plug.Head
   plug Plug.Session, @session_options
-  plug Hologram.E2E.Web.Router
+  plug Hologram.Runtime.RouterPlug
 end

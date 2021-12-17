@@ -23,7 +23,6 @@ defmodule Hologram.E2E.Web do
   defp view_helpers do
     quote do
       import Phoenix.View
-      alias Hologram.E2E.Web.Router.Helpers, as: Routes
     end
   end
 
