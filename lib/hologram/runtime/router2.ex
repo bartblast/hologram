@@ -14,7 +14,7 @@ defmodule Hologram.Router2 do
     end
   end
 
-  def build_function_params(route_segments) do
+  defp build_function_params(route_segments) do
     tuple_elems =
       Enum.map(route_segments, fn
         {:param, name} -> name
