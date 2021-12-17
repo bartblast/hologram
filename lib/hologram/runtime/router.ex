@@ -1,4 +1,5 @@
 defmodule Hologram.Router do
+  require Logger
   alias Hologram.Compiler.Reflection
 
   defmacro __using__(_) do
@@ -9,6 +10,8 @@ defmodule Hologram.Router do
 
   # TODO: test
   defmacro hologram_routes do
+    Logger.debug("Reloading routes")
+
     if Reflection.has_release_page_list?() do
       for page <- Reflection.list_release_pages() do
         if function_exported?(page, :route, 0) do
@@ -25,11 +28,7 @@ defmodule Hologram.Router do
   # So everytime a route is updated in a page module, we need to explicitely recompile the router module, so that
   # it rebuilds the list of routes.
   def reload_routes() do
-    router_path = Reflection.release_router_path()
-
-    opts = Code.compiler_options()
-    Code.compiler_options(ignore_module_conflict: true)
-    Code.compile_file(router_path)
-    Code.compiler_options(ignore_module_conflict: opts.ignore_module_conflict)
+    [Reflection.release_router_path()]
+    |> Kernel.ParallelCompiler.compile()
   end
 end
