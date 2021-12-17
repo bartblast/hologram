@@ -346,23 +346,6 @@ defmodule Hologram.Compiler.ReflectionTest do
     end
   end
 
-  describe "router_module/1" do
-    test "default" do
-      result = Reflection.router_module([])
-      expected = HologramWeb.Router
-
-      assert result == expected
-    end
-
-    test "custom" do
-      expected = Abc.Bcd
-      config = [router_module: expected]
-      result = Reflection.router_module(config)
-
-      assert result == expected
-    end
-  end
-
   test "source_code/1" do
     module = Hologram.Test.Fixtures.Compiler.Reflection.Module5
 

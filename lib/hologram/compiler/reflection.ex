@@ -301,23 +301,6 @@ defmodule Hologram.Compiler.Reflection do
     root_priv_path(opts) <> "/template_store.bin"
   end
 
-  def router_module(opts \\ @config) do
-    case Keyword.get(opts, :router_module) do
-      nil ->
-        app_web_namespace =
-          otp_app()
-          |> to_string()
-          |> Utils.append("_web")
-          |> Macro.camelize()
-          |> String.to_atom()
-
-        Helpers.module([app_web_namespace, :Router])
-
-      router_module ->
-        router_module
-    end
-  end
-
   # DEFER: test
   def release_router_path do
     release_priv_path() <> "/router.ex"

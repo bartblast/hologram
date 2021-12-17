@@ -10,8 +10,7 @@ config :hologram,
     Hologram.Commons,
     Hologram.Compiler,
     Hologram.Template
-  ],
-  router_module: Hologram.E2E.Web.Router
+  ]
 
 config :hologram, Hologram.E2E.Web.Endpoint,
   url: [host: "localhost"],

@@ -51,8 +51,6 @@ defmodule Mix.Tasks.Compile.Hologram do
     build_pages(pages, output_path, module_defs, call_graph)
     |> dump_page_digest_store()
 
-    copy_router()
-
     CallGraph.destroy()
     ModuleDefStore.destroy()
 
@@ -94,16 +92,6 @@ defmodule Mix.Tasks.Compile.Hologram do
     pages
     |> Utils.map_async(&build_page(&1, output_path, module_defs, call_graph))
     |> Utils.await_tasks()
-  end
-
-  defp copy_router do
-    source_path =
-      Reflection.router_module()
-      |> Reflection.source_path()
-
-    target_path = Reflection.root_priv_path() <> "/router.ex"
-
-    File.cp!(source_path, target_path)
   end
 
   defp dump_page_digest_store(page_digests) do
