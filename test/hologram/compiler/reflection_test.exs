@@ -10,23 +10,6 @@ defmodule Hologram.Compiler.ReflectionTest do
   @module_6 Hologram.Test.Fixtures.Compiler.Reflection.Module6
   @module_segs_1 [:Hologram, :Test, :Fixtures, :Compiler, :Reflection, :Module1]
 
-  describe "app_path/1" do
-    test "default" do
-      result = Reflection.app_path([])
-      expected = "#{File.cwd!()}/app"
-
-      assert result == expected
-    end
-
-    test "custom" do
-      expected = "/test/path"
-      config = [app_path: expected]
-      result = Reflection.app_path(config)
-
-      assert result == expected
-    end
-  end
-
   describe "ast/1" do
     @expected {:defmodule, [line: 1],
                [

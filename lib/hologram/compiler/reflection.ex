@@ -4,14 +4,15 @@ defmodule Hologram.Compiler.Reflection do
   alias Hologram.{MixProject, Utils}
 
   @config Application.get_all_env(:hologram)
-  @env Application.fetch_env!(:hologram, :env)
   @ignored_modules [Ecto.Changeset, Hologram.Runtime.JS] ++ Application.get_env(:hologram, :ignored_modules, [])
   @ignored_namespaces Application.get_env(:hologram, :ignored_namespaces, [])
 
-  def app_path(opts \\ @config) do
-    case Keyword.get(opts, :app_path) do
-      nil -> root_path(opts) <> "/app"
-      app_path -> app_path
+  # DEFER: test
+  def app_path(opts \\ []) do
+    case {Keyword.get(opts, :app_path), @config[:app_path]} do
+      {nil, nil} -> root_path(opts) <> "/app"
+      {nil, config_app_path} -> config_app_path
+      {opt_app_path, _} -> opt_app_path
     end
   end
 
