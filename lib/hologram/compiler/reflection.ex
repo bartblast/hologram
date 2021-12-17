@@ -40,11 +40,6 @@ defmodule Hologram.Compiler.Reflection do
     |> ast()
   end
 
-  # DEFER: test
-  def build_path do
-    "#{root_path()}/_build/#{@env}/hologram"
-  end
-
   def components_path(opts \\ []) do
     resolve_path(opts, :components_path, :components)
   end
