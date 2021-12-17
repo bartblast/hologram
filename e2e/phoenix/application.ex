@@ -4,7 +4,7 @@ defmodule Hologram.E2E.Application do
   use Application
 
   alias Hologram.E2E.Web.Endpoint
-  alias Hologram.Runtime.{PageDigestStore, TemplateStore, Watcher}
+  alias Hologram.Runtime.{PageDigestStore, RouterBuilder, TemplateStore, Watcher}
 
   @env Application.fetch_env!(:hologram, :env)
 
@@ -16,6 +16,7 @@ defmodule Hologram.E2E.Application do
       {Phoenix.PubSub, name: Hologram.E2E.PubSub},
       Endpoint,
       PageDigestStore,
+      RouterBuilder,
       TemplateStore
     ]
 

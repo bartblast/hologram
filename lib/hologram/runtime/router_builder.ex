@@ -1,10 +1,18 @@
 # DEFER: test
 
 defmodule Hologram.Runtime.RouterBuilder do
+  use GenServer
+
   alias Hologram.Compiler.Reflection
+  alias Hologram.Runtime.RouterPlug
+
+  def start_link(_) do
+    GenServer.start_link(__MODULE__, [], name: __MODULE__)
+  end
 
   def init(_) do
     create_matcher_module()
+    {:ok, nil}
   end
 
   defp add_route_segment_info(route_segment) do
@@ -67,8 +75,7 @@ defmodule Hologram.Runtime.RouterBuilder do
 
   defp get_route_segments(page) do
     page.route()
-    |> String.split("/")
-    |> List.delete_at(0)
+    |> RouterPlug.get_path_segments()
     |> Enum.map(&add_route_segment_info/1)
   end
 end

@@ -2,7 +2,7 @@ defmodule Hologram.Runtime.Application do
   @moduledoc false
 
   use Application
-  alias Hologram.Runtime.{PageDigestStore, TemplateStore, Watcher}
+  alias Hologram.Runtime.{PageDigestStore, RouterBuilder, TemplateStore, Watcher}
 
   @env Application.fetch_env!(:hologram, :env)
 
@@ -10,6 +10,7 @@ defmodule Hologram.Runtime.Application do
   def start(_type, _args) do
     children = [
       PageDigestStore,
+      RouterBuilder,
       TemplateStore
     ]
 
