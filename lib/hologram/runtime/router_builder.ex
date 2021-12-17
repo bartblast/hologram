@@ -1,6 +1,6 @@
 # DEFER: test
 
-defmodule Hologram.Router2 do
+defmodule Hologram.Runtime.RouterBuilder do
   alias Hologram.Compiler.Reflection
 
   def init(_) do
@@ -62,7 +62,7 @@ defmodule Hologram.Router2 do
 
     ast = Reflection.ast(module_body)
 
-    Module.create(Hologram.Router.Matcher, ast, Macro.Env.location(__ENV__))
+    Module.create(Hologram.Runtime.RouterMatcher, ast, Macro.Env.location(__ENV__))
   end
 
   defp get_route_segments(page) do
