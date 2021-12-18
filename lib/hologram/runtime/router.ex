@@ -1,6 +1,6 @@
 # DEFER: test
 
-defmodule Hologram.Runtime.RouterPlug do
+defmodule Hologram.Router do
   alias Hologram.Template.Renderer
   alias Phoenix.Controller
   alias Plug.Conn
