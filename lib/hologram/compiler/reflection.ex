@@ -234,26 +234,28 @@ defmodule Hologram.Compiler.Reflection do
 
   # DEFER: test
   def release_page_digest_store_path do
-    release_priv_path() <> "/page_digest_store.bin"
+    release_priv_path() <> "/hologram/page_digest_store.bin"
   end
 
   # DEFER: test
   def release_page_list_path do
-    release_priv_path() <> "/page_list.bin"
+    release_priv_path() <> "/hologram/page_list.bin"
   end
 
   # DEFER: test
   def release_priv_path do
-    priv_path =
-      :code.priv_dir(@config[:otp_app])
-      |> to_string()
+    :code.priv_dir(@config[:otp_app])
+    |> to_string()
+  end
 
-    priv_path <> "/hologram"
+  # DEFER: test
+  def release_static_path do
+    release_priv_path() <> "/static"
   end
 
   # DEFER: test
   def release_template_store_path do
-    release_priv_path() <> "/template_store.bin"
+    release_priv_path() <> "/hologram/template_store.bin"
   end
 
   defp resolve_path(opts, key, dir) do
@@ -300,12 +302,7 @@ defmodule Hologram.Compiler.Reflection do
   def root_template_store_path(opts \\ []) do
     root_priv_path(opts) <> "/template_store.bin"
   end
-
-  # DEFER: test
-  def release_router_path do
-    release_priv_path() <> "/router.ex"
-  end
-
+  
   def source_code(module) do
     source_path(module) |> File.read!()
   end
