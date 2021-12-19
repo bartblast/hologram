@@ -30,7 +30,6 @@ defmodule Mix.Tasks.Compile.Hologram do
 
     output_path = resolve_output_path()
     File.mkdir_p!(output_path)
-    remove_old_files(output_path)
 
     Reflection.root_priv_path()
     |> File.mkdir_p!()
@@ -153,12 +152,6 @@ defmodule Mix.Tasks.Compile.Hologram do
     ]
 
     if opts[:pages_path], do: paths ++ opts[:pages_path], else: paths
-  end
-
-  defp remove_old_files(output_path) do
-    "#{output_path}/*"
-    |> Path.wildcard()
-    |> Enum.each(&File.rm!/1)
   end
 
   defp resolve_output_path do
