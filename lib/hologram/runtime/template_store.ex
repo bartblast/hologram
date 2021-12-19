@@ -21,7 +21,7 @@ defmodule Hologram.Runtime.TemplateStore do
     {:ok, nil}
   end
 
-  def create_table do
+  defp create_table do
     :ets.new(@table_name, [:public, :named_table])
   end
 
@@ -30,17 +30,17 @@ defmodule Hologram.Runtime.TemplateStore do
     vdom
   end
 
-  def populate_table(:test) do
+  defp populate_table(:test) do
     Reflection.list_templatables()
     |> Builder.build_all()
     |> populate_table_from_map()
   end
 
-  def populate_table(_) do
+  defp populate_table(_) do
     populate_table_from_file()
   end
 
-  def populate_table_from_file do
+  defp populate_table_from_file do
     Reflection.release_template_store_path()
     |> File.read!()
     |> Utils.deserialize()

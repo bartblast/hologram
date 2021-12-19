@@ -20,7 +20,7 @@ defmodule Hologram.Runtime.PageDigestStore do
     {:ok, nil}
   end
 
-  def create_table do
+  defp create_table do
     :ets.new(@table_name, [:public, :named_table])
   end
 
@@ -29,13 +29,13 @@ defmodule Hologram.Runtime.PageDigestStore do
     digest
   end
 
-  def populate_table(:test), do: nil
+  defp populate_table(:test), do: nil
 
-  def populate_table(_) do
+  defp populate_table(_) do
     populate_table_from_file()
   end
 
-  def populate_table_from_file do
+  defp populate_table_from_file do
     Reflection.release_page_digest_store_path()
     |> File.read!()
     |> Utils.deserialize()
