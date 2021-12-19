@@ -5,7 +5,7 @@ defmodule Mix.Tasks.Compile.Hologram do
   require Logger
 
   alias Hologram.{MixProject, Utils}
-  alias Hologram.Compiler.{Builder, CallGraph, CallGraphBuilder, ModuleDefAggregator, ModuleDefStore, Reflection, SourceDigester}
+  alias Hologram.Compiler.{Builder, CallGraph, CallGraphBuilder, ModuleDefAggregator, ModuleDefStore, Reflection}
   alias Hologram.Template.Builder, as: TemplateBuilder
 
   @root_path Reflection.root_path()
@@ -13,8 +13,8 @@ defmodule Mix.Tasks.Compile.Hologram do
   def run(opts \\ []) do
     if has_source?() do
       source_digest =
-        list_compile_paths(opts)
-        |> SourceDigester.digest()
+        list_source_files(opts)
+        |> digest_files()
 
       if !has_source_digest?() || has_source_changes?(source_digest) do
         compile(opts)
@@ -94,6 +94,15 @@ defmodule Mix.Tasks.Compile.Hologram do
     |> Utils.await_tasks()
   end
 
+  defp digest_files(paths) do
+    data =
+      Enum.reduce(paths, [], &(&2 ++ Utils.list_files_recursively(&1)))
+      |> Enum.reduce(%{}, &Map.put(&2, &1, File.read!(&1)))
+      |> :erlang.term_to_binary()
+
+    :crypto.hash(:md5, data)
+  end
+
   defp dump_page_digest_store(page_digests) do
     data =
       page_digests
@@ -135,7 +144,7 @@ defmodule Mix.Tasks.Compile.Hologram do
     |> File.exists?()
   end
 
-  defp list_compile_paths(opts) do
+  defp list_source_files(opts) do
     paths = [
       Reflection.app_path(opts),
       Reflection.lib_path(opts),
