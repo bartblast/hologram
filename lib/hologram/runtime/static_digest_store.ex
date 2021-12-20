@@ -1,3 +1,5 @@
+# TODO: test
+
 defmodule Hologram.Runtime.StaticDigestStore do
   use GenServer
 
@@ -24,15 +26,15 @@ defmodule Hologram.Runtime.StaticDigestStore do
   end
 
   defp find_digests do
-    regex = ~r/^(.+)\-([0-9a-f]{32})(.+)$/
-    page_path_prefix = Reflection.release_priv_path() <> "/static/hologram/page"
+    static_path = Reflection.release_priv_path() <> "/static"
+    regex = ~r/^#{Regex.escape(static_path)}(.+)\-([0-9a-f]{32})(.+)$/
 
     Reflection.release_static_path()
     |> Utils.list_files_recursively()
     |> Stream.map(&Regex.run(regex, &1))
     |> Stream.filter(&(&1))
     |> Stream.map(&List.to_tuple/1)
-    |> Stream.reject(fn {_, prefix, _, _} -> prefix == page_path_prefix end)
+    |> Stream.reject(fn {_, prefix, _, _} -> prefix == "/hologram/page" end)
     |> Stream.map(fn {_, prefix, digest, suffix} ->
       {String.to_atom(prefix <> suffix), digest}
     end)

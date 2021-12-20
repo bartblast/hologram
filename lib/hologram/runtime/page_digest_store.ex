@@ -1,4 +1,4 @@
-# TODO: refactor & test
+# TODO: test
 
 defmodule Hologram.Runtime.PageDigestStore do
   use GenServer
