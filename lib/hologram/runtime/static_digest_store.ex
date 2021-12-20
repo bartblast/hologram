@@ -1,4 +1,4 @@
-# TODO: test
+# DEFER: test
 
 defmodule Hologram.Runtime.StaticDigestStore do
   use GenServer
@@ -36,9 +36,14 @@ defmodule Hologram.Runtime.StaticDigestStore do
     |> Stream.map(&List.to_tuple/1)
     |> Stream.reject(fn {_, prefix, _, _} -> prefix == "/hologram/page" end)
     |> Stream.map(fn {_, prefix, digest, suffix} ->
-      {String.to_atom(prefix <> suffix), digest}
+      {String.to_atom(prefix <> suffix), prefix <> "-" <> digest <> suffix}
     end)
     |> Enum.to_list()
+  end
+
+  def get(file_path) do
+    [{^file_path, digest}] = :ets.lookup(@table_name, file_path)
+    digest
   end
 
   defp populate_table_from_list(static_digests) do
