@@ -4,7 +4,10 @@ defmodule Hologram.Compiler.Reflection do
   alias Hologram.{MixProject, Utils}
 
   @config Application.get_all_env(:hologram)
-  @ignored_modules [Ecto.Changeset, Hologram.Runtime.JS] ++ Application.get_env(:hologram, :ignored_modules, [])
+
+  @ignored_modules [Ecto.Changeset, Hologram.Router, Hologram.Runtime.JS]
+    ++ Application.get_env(:hologram, :ignored_modules, [])
+
   @ignored_namespaces Application.get_env(:hologram, :ignored_namespaces, [])
 
   # DEFER: test
@@ -302,7 +305,7 @@ defmodule Hologram.Compiler.Reflection do
   def root_template_store_path(opts \\ []) do
     root_priv_path(opts) <> "/template_store.bin"
   end
-  
+
   def source_code(module) do
     source_path(module) |> File.read!()
   end
