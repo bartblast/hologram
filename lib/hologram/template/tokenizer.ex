@@ -52,7 +52,7 @@ defmodule Hologram.Template.Tokenizer do
   end
 
   def tokenize(rest) do
-    excluded_chars = "\s<>/=\""
+    excluded_chars = "\s<>/=\"'{}"
     regex = ~r/\A([^#{Regex.escape(excluded_chars)}]+)(.*)\z/msu
     [_, string, rest] = Regex.run(regex, rest)
     [{:string, string} | tokenize(rest)]
