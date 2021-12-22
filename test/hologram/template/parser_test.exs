@@ -8,7 +8,7 @@ defmodule Hologram.Template.ParserTest do
     end
   end
 
-  describe "template end" do
+  describe "template end handling" do
     test "text" do
       markup = "abc"
 
@@ -56,6 +56,42 @@ defmodule Hologram.Template.ParserTest do
     test "unfinished end tag" do
       markup = "<div></div"
       assert_syntax_error(markup, "Unfinished tag")
+    end
+  end
+
+  describe "whitespace handling" do
+    test "whitespace inside text" do
+      markup = "abc \n\r\txyz"
+
+      result = Parser.parse(markup)
+      expected = ["abc \n\r\txyz"]
+
+      assert result == expected
+    end
+
+    test "whitespace after start tag bracket" do
+      markup = "< div>"
+      error = "Whitespace is not allowed between \"<\" and tag name"
+
+      assert_syntax_error(markup, error)
+    end
+
+    test "whitespace inside start tag" do
+      markup = "<div ></div>"
+
+      result = Parser.parse(markup)
+      expected = [{"div", [], []}]
+
+      assert result == expected
+    end
+
+    test "whitespace after attribute key" do
+      markup = "<div class ></div>"
+
+      result = Parser.parse(markup)
+      expected = [{"div", [{"class", "class"}], []}]
+
+      assert result == expected
     end
   end
 end
