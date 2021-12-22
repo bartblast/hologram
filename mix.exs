@@ -51,7 +51,7 @@ defmodule Hologram.MixProject do
       {:ex_check, "~> 0.14", only: :dev, runtime: false},
       {:ex_doc, "~> 0.26", only: :dev, runtime: false},
       {:file_system, "~> 0.2"},
-      {:floki, "~> 0.32", only: :test},
+      {:floki, "~> 0.32", only: [:dev, :test]},
       {:jason, "~> 1.0"},
       {:libgraph, "~> 0.13"},
       {:phoenix, "~> 1.6"},
