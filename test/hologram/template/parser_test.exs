@@ -1,100 +1,69 @@
 defmodule Hologram.Template.ParserTest do
   use Hologram.Test.UnitCase, async: true
-  alias Hologram.Template.Parser
+  alias Hologram.Template.{Parser, SyntaxError}
 
-  test "single node" do
-    markup = "<div></div>"
-
-    result = Parser.parse(markup)
-    expected = {:ok, [{"div", [], []}]}
-
-    assert result == expected
+  defp assert_syntax_error(markup, message) do
+    assert_raise SyntaxError, message, fn ->
+      Parser.parse(markup)
+    end
   end
 
-  test "multiple nodes" do
-    markup = "<div></div><span></span>"
-
-    result = Parser.parse(markup)
-    expected = {:ok, [{"div", [], []}, {"span", [], []}]}
-
-    assert result == expected
+  defp assert_unfinished_attr_error(markup) do
+    assert_syntax_error(markup, "Unfinished attribute")
   end
 
-  test "attrs" do
-    markup = "<div class=\"value_class\" id=\"value_id\"></div>"
-
-    result = Parser.parse(markup)
-    expected = {:ok, [{"div", [{"class", "value_class"}, {"id", "value_id"}], []}]}
-
-    assert result == expected
+  defp assert_unfinished_tag_error(markup) do
+    assert_syntax_error(markup, "Unfinished tag")
   end
 
-  test "children" do
-    markup = "<div><span></span><h1></h1></div>"
+  describe "template end" do
+    test "text" do
+      markup = "abc"
 
-    result = Parser.parse(markup)
-    expected = {:ok, [{"div", [], [{"span", [], []}, {"h1", [], []}]}]}
+      result = Parser.parse(markup)
+      expected = ["abc"]
 
-    assert result == expected
-  end
+      assert result == expected
+    end
 
-  test "interpolation quotes fixing" do
-    markup = """
-    <div class=\"test_class_1\" abc={@abc} id=\"test_id_1\" bcd={@bcd}>
-      <span class=\"test_class_2\" cde={@cde} id=\"test_id_2\" def={@def}></span>
-    </div>
-    """
+    test "start tag bracket" do
+      markup = "abc<"
+      assert_unfinished_tag_error(markup)
+    end
 
-    result = Parser.parse(markup)
+    test "start tag" do
+      markup = "<div"
+      assert_unfinished_tag_error(markup)
+    end
 
-    expected =
-      {:ok,
-       [
-         {"div",
-          [
-            {"class", "test_class_1"},
-            {"abc", "{@abc}"},
-            {"id", "test_id_1"},
-            {"bcd", "{@bcd}"}
-          ],
-          [
-            "\n  ",
-            {"span",
-             [
-               {"class", "test_class_2"},
-               {"cde", "{@cde}"},
-               {"id", "test_id_2"},
-               {"def", "{@def}"}
-             ], []},
-            "\n"
-          ]}
-       ]}
+    test "attribute key" do
+      markup = "<div class"
+      assert_unfinished_attr_error(markup)
+    end
 
-    assert result == expected
-  end
+    test "attribute assignment" do
+      markup = "<div class="
+      assert_unfinished_attr_error(markup)
+    end
 
-  test "invalid html" do
-    markup = "<div"
-    result = Parser.parse(markup)
+    test "attribute value double quoted" do
+      markup = "<div class=\""
+      assert_unfinished_attr_error(markup)
+    end
 
-    expected =
-      {:error,
-       %Saxy.ParseError{
-         binary: "<root><div</root>",
-         position: 10,
-         reason: {:token, :name_start_char}
-       }}
+    test "attribute value in braces" do
+      markup = "<div class={"
+      assert_unfinished_attr_error(markup)
+    end
 
-    assert result == expected
-  end
+    test "end tag bracket" do
+      markup = "<div></"
+      assert_unfinished_tag_error(markup)
+    end
 
-  test "removes doctype and trims leading and trailing white chars" do
-    markup = """
-    \n\t <!DoCtYpE html test_1 test_2> \t\n
-    content \t\n
-    """
-
-    result = Parser.parse(markup)
-    assert result == {:ok, ["content"]}
+    test "end tag" do
+      markup = "<div></div"
+      assert_unfinished_tag_error(markup)
+    end
   end
 end
