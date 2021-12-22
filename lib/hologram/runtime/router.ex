@@ -1,6 +1,7 @@
 # DEFER: test
 
 defmodule Hologram.Router do
+  alias Hologram.Runtime.StaticDigestStore
   alias Hologram.Template.Renderer
   alias Phoenix.Controller
   alias Plug.Conn
@@ -30,5 +31,17 @@ defmodule Hologram.Router do
     path
     |> String.split("/")
     |> List.delete_at(0)
+  end
+
+  # DEFER: test
+  def static_path(file_path) do
+    file_path_with_digest = StaticDigestStore.get(file_path)
+    env = Application.fetch_env!(:hologram, :env)
+
+    if file_path_with_digest do
+      file_path_with_digest
+    else
+      file_path
+    end
   end
 end
