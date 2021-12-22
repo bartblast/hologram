@@ -7,12 +7,12 @@ defmodule Hologram.Template.Tokenizer do
     [{:whitespace, " "} | tokenize(rest)]
   end
 
-  def tokenize("\r" <> rest) do
-    [{:whitespace, "\r"} | tokenize(rest)]
-  end
-
   def tokenize("\n" <> rest) do
     [{:whitespace, "\n"} | tokenize(rest)]
+  end
+
+  def tokenize("\r" <> rest) do
+    [{:whitespace, "\r"} | tokenize(rest)]
   end
 
   def tokenize("\t" <> rest) do
