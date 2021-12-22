@@ -46,16 +46,6 @@ defmodule Hologram.Template.Parser do
     raise SyntaxError, message: message, context: context, rest: rest, status: status, token: token
   end
 
-  defp raise_unfinished_attr_error(context, status) do
-    "Unfinished attribute"
-    |> raise_error(context, [], status, nil)
-  end
-
-  defp raise_unfinished_tag_error(context, status) do
-    "Unfinished tag"
-    |> raise_error(context, [], status, nil)
-  end
-
   defp remove_empty_text_nodes(nodes) when is_list(nodes) do
     nodes
     |> Enum.reject(&(&1 == ""))
@@ -92,36 +82,8 @@ defmodule Hologram.Template.Parser do
     flush_tokens_to_text_node(context, acc) |> elem(1)
   end
 
-  defp merge_tokens([], :start_tag_bracket, context, _acc) do
-    raise_unfinished_tag_error(context, :start_tag_bracket)
-  end
-
-  defp merge_tokens([], :start_tag, context, _acc) do
-    raise_unfinished_tag_error(context, :start_tag)
-  end
-
-  defp merge_tokens([], :attr_key, context, _acc) do
-    raise_unfinished_attr_error(context, :attr_key)
-  end
-
-  defp merge_tokens([], :attr_assignment, context, _acc) do
-    raise_unfinished_attr_error(context, :attr_assignment)
-  end
-
-  defp merge_tokens([], :attr_value_double_quoted, context, _acc) do
-    raise_unfinished_attr_error(context, :attr_value_double_quoted)
-  end
-
-  defp merge_tokens([], :attr_value_in_braces, context, _acc) do
-    raise_unfinished_attr_error(context, :attr_value_in_braces)
-  end
-
-  defp merge_tokens([], :end_tag_bracket, context, _acc) do
-    raise_unfinished_tag_error(context, :end_tag_bracket)
-  end
-
-  defp merge_tokens([], :end_tag, context, _acc) do
-    raise_unfinished_tag_error(context, :end_tag)
+  defp merge_tokens([], status, context, _acc) do
+    raise_error("Unfinished tag", context, [], status, nil)
   end
 
   # WHITESPACE
