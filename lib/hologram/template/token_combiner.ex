@@ -12,12 +12,7 @@ defmodule Hologram.Template.TokenCombiner do
 
   def combine([], :text_tag, context, tags) do
     {tokens, _} = flush_tokens(context)
-
-    if Enum.any?(tokens) do
-      tags ++ [{:text_tag, TokenHTMLEncoder.encode(tokens)}]
-    else
-      tags
-    end
+    maybe_append_tag(tags, tokens, &{:text_tag, TokenHTMLEncoder.encode(&1)})
   end
 
   def combine([], _, context, _) do
@@ -72,16 +67,8 @@ defmodule Hologram.Template.TokenCombiner do
 
   def combine([{:symbol, :"</"} = token | rest], :text_tag, context, tags) do
     {tokens, context} = flush_tokens(context)
-
-    tags =
-      if Enum.any?(tokens) do
-        tags ++ [{:text_tag, TokenHTMLEncoder.encode(tokens)}]
-      else
-        tags
-      end
-
+    tags = maybe_append_tag(tags, tokens, &{:text_tag, TokenHTMLEncoder.encode(&1)})
     context = accumulate_prev_token(context, token)
-
     combine(rest, :end_tag_bracket, context, tags)
   end
 
@@ -101,6 +88,14 @@ defmodule Hologram.Template.TokenCombiner do
     tokens = context.tokens
     context = %{context | tokens: []}
     {tokens, context}
+  end
+
+  def maybe_append_tag(tags, tokens, build_tag) do
+    if Enum.any?(tokens) do
+      tags ++ [build_tag.(tokens)]
+    else
+      tags
+    end
   end
 
   defp raise_error(token, rest, %{prev_tokens: prev_tokens}) do
@@ -208,18 +203,11 @@ defmodule Hologram.Template.TokenCombiner do
     combine(rest, :attr_value_in_braces, context, acc)
   end
 
-  def combine([{:symbol, :<} = token | rest], :text_tag, context, acc) do
-    acc =
-      if Enum.any?(context.tokens) do
-        acc ++ [{:text_tag, TokenHTMLEncoder.encode(context.tokens)}]
-      else
-        acc
-      end
-
+  def combine([{:symbol, :<} = token | rest], :text_tag, context, tags) do
+    tags = maybe_append_tag(tags, context.tokens, &{:text_tag, TokenHTMLEncoder.encode(&1)})
     context = %{context | tokens: []}
     |> accumulate_prev_token(token)
-
-    combine(rest, :start_tag_bracket, context, acc)
+    combine(rest, :start_tag_bracket, context, tags)
   end
 
   def combine([{:symbol, :<} = token | rest], status, context, acc) do
