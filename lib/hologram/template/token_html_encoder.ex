@@ -1,12 +1,14 @@
 # Covered in Hologram.Template.Parser integration tests
 
 defmodule Hologram.Template.TokenHTMLEncoder do
-  def encode(tokens) when is_list(tokens) do
-    Enum.map(tokens, &encode/1)
+  def encode(arg, escape \\ true)
+
+  def encode(tokens, escape) when is_list(tokens) do
+    Enum.map(tokens, &(encode(&1, escape)))
     |> Enum.join("")
   end
 
-  def encode({:start_tag, {tag, attrs}}) do
+  def encode({:start_tag, {tag, attrs}}, _) do
     attrs =
       Enum.map(attrs, fn {key, value} ->
         if value do
@@ -19,17 +21,17 @@ defmodule Hologram.Template.TokenHTMLEncoder do
     "<#{tag} #{attrs}>"
   end
 
-  def encode({:end_tag, tag}), do: "</#{tag}>"
+  def encode({:end_tag, tag}, _), do: "</#{tag}>"
 
-  def encode({:text, str}), do: str
+  def encode({:text_tag, str}, _), do: str
 
-  def encode({:symbol, :"\""}), do: "~Hologram.Template.TokenCombiner[:double_quote]"
+  def encode({:symbol, :"\""}, true), do: "~Hologram.Template.TokenCombiner[:double_quote]"
 
-  def encode({:symbol, symbol}), do: to_string(symbol)
+  def encode({:symbol, symbol}, _), do: to_string(symbol)
 
-  def encode({:string, str}), do: str
+  def encode({:string, str}, _), do: str
 
-  def encode({:whitespace, char}), do: char
+  def encode({:whitespace, char}, _), do: char
 
-  def encode(nil), do: ""
+  def encode(nil, _), do: ""
 end

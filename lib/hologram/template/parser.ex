@@ -15,7 +15,7 @@ defmodule Hologram.Template.Parser do
     }
 
     Tokenizer.tokenize(markup)
-    |> TokenCombiner.combine(:text, context, [])
+    |> TokenCombiner.combine(:text_tag, context, [])
     |> Enum.map(&TokenHTMLEncoder.encode/1)
     |> Enum.join("")
     |> Floki.parse_document!()

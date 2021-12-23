@@ -3,13 +3,15 @@ defmodule Hologram.Template.ParserTest do
   alias Hologram.Template.{Parser, SyntaxError}
 
   defp assert_syntax_error(markup, message) do
+    message = "\n#{message}" |> String.replace_trailing("\n", "")
+
     assert_raise SyntaxError, message, fn ->
       Parser.parse(markup)
     end
   end
 
   describe "template end handling" do
-    test "text" do
+    test "text tag" do
       markup = "abc"
 
       result = Parser.parse(markup)
@@ -20,45 +22,117 @@ defmodule Hologram.Template.ParserTest do
 
     test "start tag bracket" do
       markup = "abc<"
-      assert_syntax_error(markup, "Unfinished tag")
+
+      message = """
+      abc<
+          ^
+      """
+
+      assert_syntax_error(markup, message)
     end
 
     test "unfinished start tag" do
       markup = "<div"
-      assert_syntax_error(markup, "Unfinished tag")
+
+      message = """
+      <div
+          ^
+      """
+
+      assert_syntax_error(markup, message)
     end
 
     test "attribute key" do
       markup = "<div class"
-      assert_syntax_error(markup, "Unfinished tag")
+
+      message = """
+      <div class
+                ^
+      """
+
+      assert_syntax_error(markup, message)
     end
 
     test "attribute assignment" do
       markup = "<div class="
-      assert_syntax_error(markup, "Unfinished tag")
+
+      message = """
+      <div class=
+                 ^
+      """
+
+      assert_syntax_error(markup, message)
     end
 
     test "attribute value double quoted" do
       markup = "<div class=\""
-      assert_syntax_error(markup, "Unfinished tag")
+
+      message = """
+      <div class="
+                  ^
+      """
+
+      assert_syntax_error(markup, message)
     end
 
     test "attribute value in braces" do
       markup = "<div class={"
-      assert_syntax_error(markup, "Unfinished tag")
+
+      message = """
+      <div class={
+                  ^
+      """
+
+      assert_syntax_error(markup, message)
     end
 
     test "end tag bracket" do
       markup = "<div></"
-      assert_syntax_error(markup, "Unfinished tag")
+
+      message = """
+      <div></
+             ^
+      """
+
+      assert_syntax_error(markup, message)
     end
 
     test "unfinished end tag" do
       markup = "<div></div"
-      assert_syntax_error(markup, "Unfinished tag")
+
+      message = """
+      <div></div
+                ^
+      """
+
+      assert_syntax_error(markup, message)
     end
   end
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  
   describe "whitespace handling" do
     test "whitespace inside text" do
       markup = "abc \n\r\txyz"
