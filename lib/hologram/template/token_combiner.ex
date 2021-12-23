@@ -22,11 +22,7 @@ defmodule Hologram.Template.TokenCombiner do
   # WHITESPACE
 
   def combine([{:whitespace, _} = token | rest], :text_tag, context, tags) do
-    context =
-      context
-      |> append_token(token)
-      |> accumulate_prev_token(token)
-
+    context = handle_token(token, context)
     combine(rest, :text_tag, context, tags)
   end
 
@@ -45,18 +41,12 @@ defmodule Hologram.Template.TokenCombiner do
   end
 
   def combine([{:whitespace, _} = token | rest], :attr_value_double_quoted, context, tags) do
-    context =
-      append_token(context, token)
-      |> accumulate_prev_token(token)
-
+    context = handle_token(token, context)
     combine(rest, :attr_value_double_quoted, context, tags)
   end
 
   def combine([{:whitespace, _} = token | rest], :attr_value_in_braces, context, tags) do
-    context =
-      append_token(context, token)
-      |> accumulate_prev_token(token)
-
+    context = handle_token(token, context)
     combine(rest, :attr_value_in_braces, context, tags)
   end
 
@@ -90,7 +80,13 @@ defmodule Hologram.Template.TokenCombiner do
     {tokens, context}
   end
 
-  def maybe_append_tag(tags, tokens, build_tag) do
+  defp handle_token(token, context) do
+    context
+    |> append_token(token)
+    |> accumulate_prev_token(token)
+  end
+
+  defp maybe_append_tag(tags, tokens, build_tag) do
     if Enum.any?(tokens) do
       tags ++ [build_tag.(tokens)]
     else
