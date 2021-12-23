@@ -166,7 +166,7 @@ defmodule Hologram.Template.TokenCombiner do
   end
 
   defp init_attr(context) do
-    %{context | double_quote_opened?: false, num_open_braces: 0}
+    %{context | double_quote_opened?: false, num_open_braces: 0, tokens: []}
   end
 
   defp init_tag(context, tag) do
