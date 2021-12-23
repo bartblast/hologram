@@ -22,7 +22,7 @@ defmodule Hologram.Template.TokenCombiner do
   # WHITESPACE
 
   def combine([{:whitespace, _} = token | rest], :text_tag, context, tags) do
-    context = handle_token(token, context)
+    context = handle_token(context, token)
     combine(rest, :text_tag, context, tags)
   end
 
@@ -41,12 +41,12 @@ defmodule Hologram.Template.TokenCombiner do
   end
 
   def combine([{:whitespace, _} = token | rest], :attr_value_double_quoted, context, tags) do
-    context = handle_token(token, context)
+    context = handle_token(context, token)
     combine(rest, :attr_value_double_quoted, context, tags)
   end
 
   def combine([{:whitespace, _} = token | rest], :attr_value_in_braces, context, tags) do
-    context = handle_token(token, context)
+    context = handle_token(context, token)
     combine(rest, :attr_value_in_braces, context, tags)
   end
 
@@ -56,7 +56,7 @@ defmodule Hologram.Template.TokenCombiner do
   end
 
   def combine([{:string, _} = token | rest], :text_tag, context, tags) do
-    handle_token(token, context)
+    context = handle_token(context, token)
     combine(rest, :text_tag, context, tags)
   end
 
@@ -78,12 +78,12 @@ defmodule Hologram.Template.TokenCombiner do
   end
 
   def combine([{:string, _} = token | rest], :attr_value_double_quoted, context, acc) do
-    context = handle_token(token, context)
+    context = handle_token(context, token)
     combine(rest, :attr_value_double_quoted, context, acc)
   end
 
   def combine([{:string, _} = token | rest], :attr_value_in_braces, context, acc) do
-    context = handle_token(token, context)
+    context = handle_token(context, token)
     combine(rest, :attr_value_in_braces, context, acc)
   end
 
@@ -121,7 +121,7 @@ defmodule Hologram.Template.TokenCombiner do
     {tokens, context}
   end
 
-  defp handle_token(token, context) do
+  defp handle_token(context, token) do
     context
     |> append_token(token)
     |> accumulate_prev_token(token)
