@@ -55,137 +55,14 @@ defmodule Hologram.Template.ParserTest do
     assert result == expected
   end
 
-  describe "syntax error detecting" do
-    test "error message" do
-      markup = "1234567890123456789012345< 1234567890123456789012345"
+  test "syntax error message" do
+    markup = "1234567890123456789012345< 1234567890123456789012345"
 
-      message = """
-      7890123456789012345< 12345678901234567890
-                          ^
-      """
+    message = """
+    7890123456789012345< 12345678901234567890
+                        ^
+    """
 
-      assert_syntax_error(markup, message)
-    end
-
-    test "template ending with start tag bracket" do
-      markup = "abc<"
-
-      message = """
-      abc<
-          ^
-      """
-
-      assert_syntax_error(markup, message)
-    end
-
-    test "template ending with unfinished start tag" do
-      markup = "<div"
-
-      message = """
-      <div
-          ^
-      """
-
-      assert_syntax_error(markup, message)
-    end
-
-    test "template ending with attribute key" do
-      markup = "<div class"
-
-      message = """
-      <div class
-                ^
-      """
-
-      assert_syntax_error(markup, message)
-    end
-
-    test "template ending with attribute assignment" do
-      markup = "<div class="
-
-      message = """
-      <div class=
-                 ^
-      """
-
-      assert_syntax_error(markup, message)
-    end
-
-    test "template ending with attribute value double quoted" do
-      markup = "<div class=\""
-
-      message = """
-      <div class="
-                  ^
-      """
-
-      assert_syntax_error(markup, message)
-    end
-
-    test "template ending with attribute value in braces" do
-      markup = "<div class={"
-
-      message = """
-      <div class={
-                  ^
-      """
-
-      assert_syntax_error(markup, message)
-    end
-
-    test "template ending with end tag bracket" do
-      markup = "<div></"
-
-      message = """
-      <div></
-             ^
-      """
-
-      assert_syntax_error(markup, message)
-    end
-
-    test "template ending with unfinished end tag" do
-      markup = "<div></div"
-
-      message = """
-      <div></div
-                ^
-      """
-
-      assert_syntax_error(markup, message)
-    end
-
-    test "whitespace after start tag bracket" do
-      markup = "< div>"
-
-      message = """
-      < div>
-       ^
-      """
-
-      assert_syntax_error(markup, message)
-    end
-
-    test "whitespace after attribute assignment" do
-      markup = "<div class= ></div>"
-
-      message = """
-      <div class= ></div>
-                 ^
-      """
-
-      assert_syntax_error(markup, message)
-    end
-
-    test "whitespace after end tag bracket" do
-      markup = "</ div>"
-
-      message = """
-      </ div>
-        ^
-      """
-
-      assert_syntax_error(markup, message)
-    end
+    assert_syntax_error(markup, message)
   end
 end
