@@ -70,10 +70,6 @@ defmodule Hologram.Template.TokenCombiner do
     combine(rest, :end_tag, context, tags)
   end
 
-  def combine([{:whitespace, _} = token | rest], _, context, _) do
-    raise_error(token, rest, context)
-  end
-
   def combine([{:symbol, :"</"} = token | rest], :text_tag, context, tags) do
     {tokens, context} = flush_tokens(context)
 
@@ -309,5 +305,11 @@ defmodule Hologram.Template.TokenCombiner do
     |> accumulate_prev_token(token)
 
     combine(rest, :start_tag, context, acc)
+  end
+
+  # DEFAULT
+
+  def combine([token | rest], _, context, _) do
+    raise_error(token, rest, context)
   end
 end
