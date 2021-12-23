@@ -10,6 +10,51 @@ defmodule Hologram.Template.ParserTest do
     end
   end
 
+  test "text node" do
+    markup = "abc"
+
+    result = Parser.parse(markup)
+    expected = ["abc"]
+
+    assert result == expected
+  end
+
+  test "single element node" do
+    markup = "<div></div>"
+
+    result = Parser.parse(markup)
+    expected = [{"div", [], []}]
+
+    assert result == expected
+  end
+
+  test "multiple non-nested element nodes" do
+    markup = "<div></div><span></span>"
+
+    result = Parser.parse(markup)
+    expected = [{"div", [], []}, {"span", [], []}]
+
+    assert result == expected
+  end
+
+  test "multiple nested element nodes" do
+    markup = "<div><span></span></div>"
+
+    result = Parser.parse(markup)
+    expected = [{"div", [], [{"span", [], []}]}]
+
+    assert result == expected
+  end
+
+  test "multiple nested element and text nodes" do
+    markup = "<div><span>abc</span></div>"
+
+    result = Parser.parse(markup)
+    expected = [{"div", [], [{"span", [], ["abc"]}]}]
+
+    assert result == expected
+  end
+
   describe "syntax error detecting" do
     test "error message" do
       markup = "1234567890123456789012345< 1234567890123456789012345"
