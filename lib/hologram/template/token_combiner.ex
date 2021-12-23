@@ -61,19 +61,12 @@ defmodule Hologram.Template.TokenCombiner do
   end
 
   def combine([{:string, str} = token | rest], :start_tag_bracket, context, tags) do
-    context =
-      context
-      |> init_tag(str)
-      |> accumulate_prev_token(token)
-
+    context = context |> init_tag(str) |> accumulate_prev_token(token)
     combine(rest, :start_tag, context, tags)
   end
 
   def combine([{:string, str} = token | rest], :start_tag, context, tags) do
-    context =
-      %{context | attr_key: str}
-      |> accumulate_prev_token(token)
-
+    context = %{context | attr_key: str} |> accumulate_prev_token(token)
     combine(rest, :attr_key, context, tags)
   end
 
@@ -88,29 +81,21 @@ defmodule Hologram.Template.TokenCombiner do
   end
 
   def combine([{:string, str} = token | rest], :end_tag_bracket, context, acc) do
-    context =
-      context
-      |> init_tag(str)
-      |> accumulate_prev_token(token)
-
+    context = context |> init_tag(str) |> accumulate_prev_token(token)
     combine(rest, :end_tag, context, acc)
   end
 
   def combine([{:symbol, :"</"} = token | rest], :text_tag, context, tags) do
     {tokens, context} = flush_tokens(context)
-    tags = maybe_append_tag(tags, tokens, &{:text_tag, TokenHTMLEncoder.encode(&1)})
+    build = &{:text_tag, TokenHTMLEncoder.encode(&1)}
+    tags = maybe_append_tag(tags, tokens, build)
     context = accumulate_prev_token(context, token)
     combine(rest, :end_tag_bracket, context, tags)
   end
 
   def combine([{:symbol, :"/>"} = token | rest], :start_tag, context, tags) do
     tags = tags ++ [{:start_tag, {context.tag, context.attrs}}]
-
-    context =
-      context
-      |> reset_tokens()
-      |> accumulate_prev_token(token)
-
+    context = context |> reset_tokens() |> accumulate_prev_token(token)
     combine(rest, :text_tag, context, tags)
   end
 
