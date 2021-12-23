@@ -103,6 +103,17 @@ defmodule Hologram.Template.TokenCombiner do
     combine(rest, :end_tag_bracket, context, tags)
   end
 
+  def combine([{:symbol, :"/>"} = token | rest], :start_tag, context, tags) do
+    tags = tags ++ [{:start_tag, {context.tag, context.attrs}}]
+
+    context =
+      context
+      |> reset_tokens()
+      |> accumulate_prev_token(token)
+
+    combine(rest, :text_tag, context, tags)
+  end
+
   defp append_attr(context, key, value) do
     %{context | attrs: context.attrs ++ [{key, value}]}
   end
@@ -117,7 +128,7 @@ defmodule Hologram.Template.TokenCombiner do
 
   defp flush_tokens(context) do
     tokens = context.tokens
-    context = %{context | tokens: []}
+    context = reset_tokens(context)
     {tokens, context}
   end
 
@@ -166,6 +177,10 @@ defmodule Hologram.Template.TokenCombiner do
     """
 
     raise SyntaxError, message: message
+  end
+
+  defp reset_tokens(context) do
+    %{context | tokens: []}
   end
 
 
@@ -224,14 +239,7 @@ defmodule Hologram.Template.TokenCombiner do
     combine(rest, :text_tag, context, acc)
   end
 
-  def combine([{:symbol, :"/>"} = token | rest], :start_tag, context, acc) do
-    acc = acc ++ [{:start_tag, {context.tag, context.attrs}}]
 
-    context = %{context | tokens: []}
-    |> accumulate_prev_token(token)
-
-    combine(rest, :text_tag, context, acc)
-  end
 
   def combine([{:symbol, :>} = token| rest], :end_tag, context, acc) do
     acc = acc ++ [{:end_tag, context.tag}]
