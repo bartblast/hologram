@@ -195,10 +195,10 @@ defmodule Hologram.Template.TokenCombiner do
     prev_fragment_len = String.length(prev_fragment)
     indent = String.duplicate(" ", prev_fragment_len)
 
-    current_fragment = TokenHTMLEncoder.encode(token)
+    current_fragment = TokenHTMLEncoder.encode(token, false)
 
     next_fragment =
-      TokenHTMLEncoder.encode(rest)
+      TokenHTMLEncoder.encode(rest, false)
       |> String.slice(0, 20)
 
     message = """
