@@ -1,6 +1,6 @@
 defmodule Hologram.Template.Parser do
   use Hologram.Commons.Parser
-  alias Hologram.Template.{TokenCombiner, Tokenizer}
+  alias Hologram.Template.{TokenCombiner, TokenHTMLEncoder, Tokenizer}
 
   @impl Hologram.Commons.Parser
   def parse(markup) do
@@ -8,6 +8,7 @@ defmodule Hologram.Template.Parser do
       attrs: [],
       attr_key: nil,
       double_quote_opened?: 0,
+      prev_tokens: [],
       tag: nil,
       tokens: [],
       num_open_braces: 0
@@ -15,7 +16,7 @@ defmodule Hologram.Template.Parser do
 
     Tokenizer.tokenize(markup)
     |> TokenCombiner.combine(:text, context, [])
-    |> Enum.map(&to_html/1)
+    |> Enum.map(&TokenHTMLEncoder.encode/1)
     |> Enum.join("")
     |> Floki.parse_document!()
     |> remove_empty_text_nodes()
@@ -32,25 +33,4 @@ defmodule Hologram.Template.Parser do
   end
 
   defp remove_empty_text_nodes(text), do: text
-
-  defp to_html({:start_tag, {tag, attrs}}) do
-    attrs =
-      Enum.map(attrs, fn {key, value} ->
-        if value do
-          key <> "=\"" <> value <> "\""
-        else
-          key <> "=\"\""
-        end
-      end)
-
-    "<#{tag} #{attrs}>"
-  end
-
-  defp to_html({:end_tag, tag}) do
-    "</#{tag}>"
-  end
-
-  defp to_html({:text, str}) do
-    str
-  end
 end

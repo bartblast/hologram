@@ -89,9 +89,14 @@ defmodule Hologram.Template.ParserTest do
       markup = "<div class ></div>"
 
       result = Parser.parse(markup)
-      expected = [{"div", [{"class", "class"}], []}]
+      expected = [{"div", [{"class", ""}], []}]
 
       assert result == expected
+    end
+
+    test "whitespace after attribute assignment" do
+      markup = "<div class=></div>"
+      assert_syntax_error(markup, "Unfinished tag")
     end
   end
 end
