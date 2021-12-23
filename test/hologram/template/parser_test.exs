@@ -10,6 +10,17 @@ defmodule Hologram.Template.ParserTest do
     end
   end
 
+  test "error message" do
+    markup = "1234567890123456789012345< 1234567890123456789012345"
+
+    message = """
+    7890123456789012345< 12345678901234567890
+                        ^
+    """
+
+    assert_syntax_error(markup, message)
+  end
+
   describe "template end handling" do
     test "text tag" do
       markup = "abc"
@@ -132,7 +143,7 @@ defmodule Hologram.Template.ParserTest do
 
 
 
-  
+
   describe "whitespace handling" do
     test "whitespace inside text" do
       markup = "abc \n\r\txyz"
