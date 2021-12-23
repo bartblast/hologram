@@ -14,6 +14,7 @@ defmodule Hologram.Template.TokenHTMLEncoder do
         if value do
           key <> "=\"" <> value <> "\""
         else
+          # DEFER: implement boolean attributes, see: https://github.com/segmetric/hologram/issues/15
           key <> "=\"\""
         end
       end)
