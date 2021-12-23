@@ -55,6 +55,47 @@ defmodule Hologram.Template.TokenCombiner do
     combine(rest, :end_tag, context, tags)
   end
 
+  def combine([{:string, _} = token | rest], :text_tag, context, tags) do
+    handle_token(token, context)
+    combine(rest, :text_tag, context, tags)
+  end
+
+  def combine([{:string, str} = token | rest], :start_tag_bracket, context, tags) do
+    context =
+      context
+      |> init_tag(str)
+      |> accumulate_prev_token(token)
+
+    combine(rest, :start_tag, context, tags)
+  end
+
+  def combine([{:string, str} = token | rest], :start_tag, context, tags) do
+    context =
+      %{context | attr_key: str}
+      |> accumulate_prev_token(token)
+
+    combine(rest, :attr_key, context, tags)
+  end
+
+  def combine([{:string, _} = token | rest], :attr_value_double_quoted, context, acc) do
+    context = handle_token(token, context)
+    combine(rest, :attr_value_double_quoted, context, acc)
+  end
+
+  def combine([{:string, _} = token | rest], :attr_value_in_braces, context, acc) do
+    context = handle_token(token, context)
+    combine(rest, :attr_value_in_braces, context, acc)
+  end
+
+  def combine([{:string, str} = token | rest], :end_tag_bracket, context, acc) do
+    context =
+      context
+      |> init_tag(str)
+      |> accumulate_prev_token(token)
+
+    combine(rest, :end_tag, context, acc)
+  end
+
   def combine([{:symbol, :"</"} = token | rest], :text_tag, context, tags) do
     {tokens, context} = flush_tokens(context)
     tags = maybe_append_tag(tags, tokens, &{:text_tag, TokenHTMLEncoder.encode(&1)})
@@ -84,6 +125,10 @@ defmodule Hologram.Template.TokenCombiner do
     context
     |> append_token(token)
     |> accumulate_prev_token(token)
+  end
+
+  defp init_tag(context, tag) do
+    %{context | tag: tag, attrs: []}
   end
 
   defp maybe_append_tag(tags, tokens, build_tag) do
@@ -154,50 +199,7 @@ defmodule Hologram.Template.TokenCombiner do
 
 
 
-  def combine([{:string, _} = token | rest], :text_tag, context, acc) do
-    context = append_token(context, token)
-    |> accumulate_prev_token(token)
 
-    combine(rest, :text_tag, context, acc)
-  end
-
-  def combine([{:string, str} = token | rest], :start_tag_bracket, context, acc) do
-    context =
-      %{context | tag: str, attrs: []}
-      |> accumulate_prev_token(token)
-
-    combine(rest, :start_tag, context, acc)
-  end
-
-  def combine([{:string, str} = token | rest], :start_tag, context, acc) do
-    context =
-      %{context | attr_key: str}
-      |> accumulate_prev_token(token)
-
-    combine(rest, :attr_key, context, acc)
-  end
-
-  def combine([{:string, str} = token | rest], :end_tag_bracket, context, acc) do
-    context = %{context | tag: str}
-    |> accumulate_prev_token(token)
-
-    combine(rest, :end_tag, context, acc)
-  end
-
-  def combine([{:string, _} = token | rest], :attr_value_double_quoted, context, acc) do
-    context =
-      %{context | tokens: context.tokens ++ [token]}
-      |> accumulate_prev_token(token)
-
-    combine(rest, :attr_value_double_quoted, context, acc)
-  end
-
-  def combine([{:string, _} = token | rest], :attr_value_in_braces, context, acc) do
-    context = %{context | tokens: context.tokens ++ [token]}
-    |> accumulate_prev_token(token)
-
-    combine(rest, :attr_value_in_braces, context, acc)
-  end
 
   def combine([{:symbol, :<} = token | rest], :text_tag, context, tags) do
     tags = maybe_append_tag(tags, context.tokens, &{:text_tag, TokenHTMLEncoder.encode(&1)})
