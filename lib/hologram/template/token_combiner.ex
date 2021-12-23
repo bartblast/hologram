@@ -8,8 +8,6 @@ defmodule Hologram.Template.TokenCombiner do
   # :attr_value_double_quoted, :attr_value_in_braces, :end_tag_bracket, :end_tag
   def combine(tokens, status, context, tags)
 
-  # TEMPLATE END
-
   def combine([], :text_tag, context, tags) do
     {tokens, _} = flush_tokens(context)
     maybe_append_tag(tags, tokens, &{:text_tag, TokenHTMLEncoder.encode(&1)})
@@ -18,8 +16,6 @@ defmodule Hologram.Template.TokenCombiner do
   def combine([], _, context, _) do
     raise_error(nil, [], context)
   end
-
-  # WHITESPACE
 
   def combine([{:whitespace, _} = token | rest], :text_tag, context, tags) do
     context = handle_token(context, token)
@@ -70,19 +66,19 @@ defmodule Hologram.Template.TokenCombiner do
     combine(rest, :attr_key, context, tags)
   end
 
-  def combine([{:string, _} = token | rest], :attr_value_double_quoted, context, acc) do
+  def combine([{:string, _} = token | rest], :attr_value_double_quoted, context, tags) do
     context = handle_token(context, token)
-    combine(rest, :attr_value_double_quoted, context, acc)
+    combine(rest, :attr_value_double_quoted, context, tags)
   end
 
-  def combine([{:string, _} = token | rest], :attr_value_in_braces, context, acc) do
+  def combine([{:string, _} = token | rest], :attr_value_in_braces, context, tags) do
     context = handle_token(context, token)
-    combine(rest, :attr_value_in_braces, context, acc)
+    combine(rest, :attr_value_in_braces, context, tags)
   end
 
-  def combine([{:string, str} = token | rest], :end_tag_bracket, context, acc) do
+  def combine([{:string, str} = token | rest], :end_tag_bracket, context, tags) do
     context = context |> init_tag(str) |> accumulate_prev_token(token)
-    combine(rest, :end_tag, context, acc)
+    combine(rest, :end_tag, context, tags)
   end
 
   def combine([{:symbol, :"</"} = token | rest], :text_tag, context, tags) do
@@ -170,6 +166,10 @@ defmodule Hologram.Template.TokenCombiner do
     combine(rest, :start_tag, context, tags)
   end
 
+  def combine([token | rest], _, context, _) do
+    raise_error(token, rest, context)
+  end
+
   defp append_attr(context, key, value) do
     %{context | attrs: context.attrs ++ [{key, value}]}
   end
@@ -249,54 +249,5 @@ defmodule Hologram.Template.TokenCombiner do
 
   defp reset_tokens(context) do
     %{context | tokens: []}
-  end
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-  # DEFAULT
-
-  def combine([token | rest], _, context, _) do
-    raise_error(token, rest, context)
   end
 end
