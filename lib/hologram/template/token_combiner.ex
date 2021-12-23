@@ -94,7 +94,7 @@ defmodule Hologram.Template.TokenCombiner do
   end
 
   def combine([{:symbol, :"/>"} = token | rest], :start_tag, context, tags) do
-    tags = tags ++ [{:start_tag, {context.tag, context.attrs}}]
+    tags = append_start_tag(tags, context)
     context = context |> reset_tokens() |> accumulate_prev_token(token)
     combine(rest, :text_tag, context, tags)
   end
@@ -111,8 +111,28 @@ defmodule Hologram.Template.TokenCombiner do
     combine(rest, status, context, tags)
   end
 
+  def combine([{:symbol, :>} = token | rest], :start_tag, context, tags) do
+    tags = append_start_tag(tags, context)
+    context = context |> reset_tokens() |> accumulate_prev_token(token)
+    combine(rest, :text_tag, context, tags)
+  end
+
+  def combine([{:symbol, :>} = token| rest], :end_tag, context, tags) do
+    tags = append_end_tag(tags, context)
+    context = accumulate_prev_token(context, token)
+    combine(rest, :text_tag, context, tags)
+  end
+
   defp append_attr(context, key, value) do
     %{context | attrs: context.attrs ++ [{key, value}]}
+  end
+
+  def append_end_tag(tags, context) do
+    tags ++ [{:end_tag, context.tag}]
+  end
+
+  def append_start_tag(tags, context) do
+    tags ++ [{:start_tag, {context.tag, context.attrs}}]
   end
 
   defp append_token(context, token) do
@@ -215,22 +235,7 @@ defmodule Hologram.Template.TokenCombiner do
 
 
 
-  def combine([{:symbol, :>} = token | rest], :start_tag, context, acc) do
-    acc = acc ++ [{:start_tag, {context.tag, context.attrs}}]
 
-    context = %{context | tokens: []}
-    |> accumulate_prev_token(token)
-
-    combine(rest, :text_tag, context, acc)
-  end
-
-
-
-  def combine([{:symbol, :>} = token| rest], :end_tag, context, acc) do
-    acc = acc ++ [{:end_tag, context.tag}]
-    context= accumulate_prev_token(context, token)
-    combine(rest, :text_tag, context, acc)
-  end
 
   def combine([{:symbol, :=} = token | rest], :attr_key, context, acc) do
     context = %{context |
