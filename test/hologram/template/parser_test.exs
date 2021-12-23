@@ -120,32 +120,8 @@ defmodule Hologram.Template.ParserTest do
     end
   end
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
   describe "whitespace handling" do
-    test "whitespace inside text" do
+    test "whitespace inside text tag" do
       markup = "abc \n\r\txyz"
 
       result = Parser.parse(markup)
@@ -156,9 +132,13 @@ defmodule Hologram.Template.ParserTest do
 
     test "whitespace after start tag bracket" do
       markup = "< div>"
-      error = "Whitespace is not allowed between \"<\" and tag name"
 
-      assert_syntax_error(markup, error)
+      message = """
+      < div>
+       ^
+      """
+
+      assert_syntax_error(markup, message)
     end
 
     test "whitespace inside start tag" do
@@ -180,8 +160,52 @@ defmodule Hologram.Template.ParserTest do
     end
 
     test "whitespace after attribute assignment" do
-      markup = "<div class=></div>"
-      assert_syntax_error(markup, "Unfinished tag")
+      markup = "<div class= ></div>"
+
+      message = """
+      <div class= ></div>
+                 ^
+      """
+
+      assert_syntax_error(markup, message)
+    end
+
+    test "whitespace inside double quoted attribute value" do
+      markup = "<div class=\" \n\r\t\"></div>"
+
+      result = Parser.parse(markup)
+      expected = [{"div", [{"class", " \n\r\t"}], []}]
+
+      assert result == expected
+    end
+
+    test "whitespace inside attribute value in braces" do
+      markup = "<div class={ \n\r\t\}></div>"
+
+      result = Parser.parse(markup)
+      expected = [{"div", [{"class", "{ \n\r\t}"}], []}]
+
+      assert result == expected
+    end
+
+    test "whitespace after end tag bracket" do
+      markup = "</ div>"
+
+      message = """
+      </ div>
+        ^
+      """
+
+      assert_syntax_error(markup, message)
+    end
+
+    test "whitespace inside end tag" do
+      markup = "<div></div >"
+
+      result = Parser.parse(markup)
+      expected = [{"div", [], []}]
+
+      assert result == expected
     end
   end
 end

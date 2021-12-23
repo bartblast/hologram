@@ -11,7 +11,7 @@ defmodule Hologram.Template.TokenCombiner do
   # TEMPLATE END
 
   def combine([], :text_tag, context, tags) do
-    {tokens, context} = flush_tokens(context)
+    {tokens, _} = flush_tokens(context)
 
     if Enum.any?(tokens) do
       tags ++ [{:text_tag, TokenHTMLEncoder.encode(tokens)}]
@@ -22,6 +22,76 @@ defmodule Hologram.Template.TokenCombiner do
 
   def combine([], _, context, _) do
     raise_error(nil, [], context)
+  end
+
+  # WHITESPACE
+
+  def combine([{:whitespace, _} = token | rest], :text_tag, context, tags) do
+    context =
+      context
+      |> append_token(token)
+      |> accumulate_prev_token(token)
+
+    combine(rest, :text_tag, context, tags)
+  end
+
+  def combine([{:whitespace, _} = token| rest], :start_tag_bracket, context, _) do
+    raise_error(token, rest, context)
+  end
+
+  def combine([{:whitespace, _} = token | rest], :start_tag, context, tags) do
+    context = accumulate_prev_token(context, token)
+    combine(rest, :start_tag, context, tags)
+  end
+
+  def combine([{:whitespace, _} = token | rest], :attr_key, context, tags) do
+    context =
+      context
+      |> append_attr(context.attr_key, nil)
+      |> accumulate_prev_token(token)
+
+    combine(rest, :start_tag, context, tags)
+  end
+
+  def combine([{:whitespace, _} = token | rest], :attr_assignment, context, _) do
+    raise_error(token, rest, context)
+  end
+
+  def combine([{:whitespace, _} = token | rest], :attr_value_double_quoted, context, tags) do
+    context =
+      append_token(context, token)
+      |> accumulate_prev_token(token)
+
+    combine(rest, :attr_value_double_quoted, context, tags)
+  end
+
+  def combine([{:whitespace, _} = token | rest], :attr_value_in_braces, context, tags) do
+    context =
+      append_token(context, token)
+      |> accumulate_prev_token(token)
+
+    combine(rest, :attr_value_in_braces, context, tags)
+  end
+
+  def combine([{:whitespace, _} = token | rest], :end_tag_bracket, context, _) do
+    raise_error(token, rest, context)
+  end
+
+  def combine([{:whitespace, _} = token | rest], :end_tag, context, tags) do
+    context = accumulate_prev_token(context, token)
+    combine(rest, :end_tag, context, tags)
+  end
+
+  defp append_attr(context, key, value) do
+    %{context | attrs: context.attrs ++ [{key, value}]}
+  end
+
+  defp append_token(context, token) do
+    %{context | tokens: context.tokens ++ [token]}
+  end
+
+  defp accumulate_prev_token(context, token) do
+    %{context | prev_tokens: context.prev_tokens ++ [token]}
   end
 
   defp flush_tokens(context) do
@@ -79,57 +149,16 @@ defmodule Hologram.Template.TokenCombiner do
 
 
 
-  # WHITESPACE
 
-  def combine([{:whitespace, _} = token | rest], :text_tag, context, acc) do
-    context =
-      context
-      |> append_token(token)
-      |> accumulate_prev_token(token)
 
-    combine(rest, :text_tag, context, acc)
-  end
 
-  def combine([{:whitespace, char} | rest], :start_tag_bracket, context, _acc) do
-    "Whitespace is not allowed between \"<\" and tag name"
-    raise_error({:whitespace, char}, rest, context)
-    # |> raise_error(context, rest, :start_tag_bracket, {:whitespace, char})
-  end
 
-  def combine([{:whitespace, _} = token | rest], :start_tag, context, acc) do
-    context = accumulate_prev_token(context, token)
-    combine(rest, :start_tag, context, acc)
-  end
 
-  def combine([{:whitespace, _} = token | rest], :attr_key, context, acc) do
-    context =
-      context
-      |> append_attr(context.attr_key, nil)
-      |> accumulate_prev_token(token)
 
-    combine(rest, :start_tag, context, acc)
-  end
 
-  def combine([{:whitespace, char} | rest], :attr_assignment, context, _acc) do
-    message = "Attribute value is missing: tag = #{context.tag}, attribute key = #{context.attr_key}"
-    raise SyntaxError, message: message, context: context, rest: rest, status: :attr_assignment, token: {:whitespace, char}
-  end
 
-  def combine([{:whitespace, _} = token | rest], :attr_value_double_quoted, context, acc) do
-    context =
-      append_token(context, token)
-      |> accumulate_prev_token(token)
 
-    combine(rest, :attr_value_double_quoted, context, acc)
-  end
 
-  def combine([{:whitespace, _} = token | rest], :attr_value_in_braces, context, acc) do
-    context =
-      append_token(context, token)
-      |> accumulate_prev_token(token)
-
-    combine(rest, :attr_value_in_braces, context, acc)
-  end
 
   def combine([{:string, _} = token | rest], :text_tag, context, acc) do
     context = append_token(context, token)
@@ -233,15 +262,15 @@ defmodule Hologram.Template.TokenCombiner do
     }
     |> accumulate_prev_token(token)
 
-    combine(rest, :attr_key, context, acc)
+    combine(rest, :attr_assignment, context, acc)
   end
 
-  def combine([{:symbol, :"\""} = token | rest], :attr_key, context, acc) do
+  def combine([{:symbol, :"\""} = token | rest], :attr_assignment, context, acc) do
     context = accumulate_prev_token(context, token)
     combine(rest, :attr_value_double_quoted, context, acc)
   end
 
-  def combine([{:symbol, :"{"} = token | rest], :attr_key, context, acc) do
+  def combine([{:symbol, :"{"} = token | rest], :attr_assignment, context, acc) do
     context = accumulate_prev_token(context, token)
     combine(rest, :attr_value_in_braces, context, acc)
   end
@@ -278,17 +307,5 @@ defmodule Hologram.Template.TokenCombiner do
     |> accumulate_prev_token(token)
 
     combine(rest, :start_tag, context, acc)
-  end
-
-  defp append_attr(context, key, value) do
-    %{context | attrs: context.attrs ++ [{key, value}]}
-  end
-
-  defp append_token(context, token) do
-    %{context | tokens: context.tokens ++ [token]}
-  end
-
-  defp accumulate_prev_token(context, token) do
-    %{context | prev_tokens: context.prev_tokens ++ [token]}
   end
 end
