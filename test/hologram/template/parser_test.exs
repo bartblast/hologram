@@ -10,28 +10,19 @@ defmodule Hologram.Template.ParserTest do
     end
   end
 
-  test "error message" do
-    markup = "1234567890123456789012345< 1234567890123456789012345"
+  describe "syntax error detecting" do
+    test "error message" do
+      markup = "1234567890123456789012345< 1234567890123456789012345"
 
-    message = """
-    7890123456789012345< 12345678901234567890
-                        ^
-    """
+      message = """
+      7890123456789012345< 12345678901234567890
+                          ^
+      """
 
-    assert_syntax_error(markup, message)
-  end
-
-  describe "template end handling" do
-    test "text tag" do
-      markup = "abc"
-
-      result = Parser.parse(markup)
-      expected = ["abc"]
-
-      assert result == expected
+      assert_syntax_error(markup, message)
     end
 
-    test "start tag bracket" do
+    test "template ending with start tag bracket" do
       markup = "abc<"
 
       message = """
@@ -42,7 +33,7 @@ defmodule Hologram.Template.ParserTest do
       assert_syntax_error(markup, message)
     end
 
-    test "unfinished start tag" do
+    test "template ending with unfinished start tag" do
       markup = "<div"
 
       message = """
@@ -53,7 +44,7 @@ defmodule Hologram.Template.ParserTest do
       assert_syntax_error(markup, message)
     end
 
-    test "attribute key" do
+    test "template ending with attribute key" do
       markup = "<div class"
 
       message = """
@@ -64,7 +55,7 @@ defmodule Hologram.Template.ParserTest do
       assert_syntax_error(markup, message)
     end
 
-    test "attribute assignment" do
+    test "template ending with attribute assignment" do
       markup = "<div class="
 
       message = """
@@ -75,7 +66,7 @@ defmodule Hologram.Template.ParserTest do
       assert_syntax_error(markup, message)
     end
 
-    test "attribute value double quoted" do
+    test "template ending with attribute value double quoted" do
       markup = "<div class=\""
 
       message = """
@@ -86,7 +77,7 @@ defmodule Hologram.Template.ParserTest do
       assert_syntax_error(markup, message)
     end
 
-    test "attribute value in braces" do
+    test "template ending with attribute value in braces" do
       markup = "<div class={"
 
       message = """
@@ -97,7 +88,7 @@ defmodule Hologram.Template.ParserTest do
       assert_syntax_error(markup, message)
     end
 
-    test "end tag bracket" do
+    test "template ending with end tag bracket" do
       markup = "<div></"
 
       message = """
@@ -108,7 +99,7 @@ defmodule Hologram.Template.ParserTest do
       assert_syntax_error(markup, message)
     end
 
-    test "unfinished end tag" do
+    test "template ending with unfinished end tag" do
       markup = "<div></div"
 
       message = """
@@ -117,17 +108,6 @@ defmodule Hologram.Template.ParserTest do
       """
 
       assert_syntax_error(markup, message)
-    end
-  end
-
-  describe "whitespace handling" do
-    test "whitespace inside text tag" do
-      markup = "abc \n\r\txyz"
-
-      result = Parser.parse(markup)
-      expected = ["abc \n\r\txyz"]
-
-      assert result == expected
     end
 
     test "whitespace after start tag bracket" do
@@ -141,24 +121,6 @@ defmodule Hologram.Template.ParserTest do
       assert_syntax_error(markup, message)
     end
 
-    test "whitespace inside start tag" do
-      markup = "<div ></div>"
-
-      result = Parser.parse(markup)
-      expected = [{"div", [], []}]
-
-      assert result == expected
-    end
-
-    test "whitespace after attribute key" do
-      markup = "<div class ></div>"
-
-      result = Parser.parse(markup)
-      expected = [{"div", [{"class", ""}], []}]
-
-      assert result == expected
-    end
-
     test "whitespace after attribute assignment" do
       markup = "<div class= ></div>"
 
@@ -170,24 +132,6 @@ defmodule Hologram.Template.ParserTest do
       assert_syntax_error(markup, message)
     end
 
-    test "whitespace inside double quoted attribute value" do
-      markup = "<div class=\" \n\r\t\"></div>"
-
-      result = Parser.parse(markup)
-      expected = [{"div", [{"class", " \n\r\t"}], []}]
-
-      assert result == expected
-    end
-
-    test "whitespace inside attribute value in braces" do
-      markup = "<div class={ \n\r\t\}></div>"
-
-      result = Parser.parse(markup)
-      expected = [{"div", [{"class", "{ \n\r\t}"}], []}]
-
-      assert result == expected
-    end
-
     test "whitespace after end tag bracket" do
       markup = "</ div>"
 
@@ -197,15 +141,6 @@ defmodule Hologram.Template.ParserTest do
       """
 
       assert_syntax_error(markup, message)
-    end
-
-    test "whitespace inside end tag" do
-      markup = "<div></div >"
-
-      result = Parser.parse(markup)
-      expected = [{"div", [], []}]
-
-      assert result == expected
     end
   end
 end
