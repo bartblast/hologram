@@ -35,10 +35,6 @@ defmodule Hologram.Template.TokenCombiner do
     combine(rest, :text_tag, context, tags)
   end
 
-  def combine([{:whitespace, _} = token| rest], :start_tag_bracket, context, _) do
-    raise_error(token, rest, context)
-  end
-
   def combine([{:whitespace, _} = token | rest], :start_tag, context, tags) do
     context = accumulate_prev_token(context, token)
     combine(rest, :start_tag, context, tags)
@@ -51,10 +47,6 @@ defmodule Hologram.Template.TokenCombiner do
       |> accumulate_prev_token(token)
 
     combine(rest, :start_tag, context, tags)
-  end
-
-  def combine([{:whitespace, _} = token | rest], :attr_assignment, context, _) do
-    raise_error(token, rest, context)
   end
 
   def combine([{:whitespace, _} = token | rest], :attr_value_double_quoted, context, tags) do
@@ -73,13 +65,13 @@ defmodule Hologram.Template.TokenCombiner do
     combine(rest, :attr_value_in_braces, context, tags)
   end
 
-  def combine([{:whitespace, _} = token | rest], :end_tag_bracket, context, _) do
-    raise_error(token, rest, context)
-  end
-
   def combine([{:whitespace, _} = token | rest], :end_tag, context, tags) do
     context = accumulate_prev_token(context, token)
     combine(rest, :end_tag, context, tags)
+  end
+
+  def combine([{:whitespace, _} = token | rest], _, context, _) do
+    raise_error(token, rest, context)
   end
 
   def combine([{:symbol, :"</"} = token | rest], :text_tag, context, tags) do
