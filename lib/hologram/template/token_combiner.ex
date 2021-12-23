@@ -154,6 +154,22 @@ defmodule Hologram.Template.TokenCombiner do
     combine(rest, :attr_value_in_braces, context, tags)
   end
 
+  def combine([{:symbol, :"{"} = token | rest], :attr_assignment, context, tags) do
+    context = accumulate_prev_token(context, token)
+    combine(rest, :attr_value_in_braces, context, tags)
+  end
+
+  def combine([{:symbol, :"}"} = token | rest], :attr_value_in_braces, context, tags) do
+    attr_value = "{" <> TokenHTMLEncoder.encode(context.tokens) <> "}"
+
+    context =
+      context
+      |> append_attr(context.attr_key, attr_value)
+      |> accumulate_prev_token(token)
+
+    combine(rest, :start_tag, context, tags)
+  end
+
   defp append_attr(context, key, value) do
     %{context | attrs: context.attrs ++ [{key, value}]}
   end
@@ -274,20 +290,9 @@ defmodule Hologram.Template.TokenCombiner do
 
 
 
-  def combine([{:symbol, :"{"} = token | rest], :attr_assignment, context, acc) do
-    context = accumulate_prev_token(context, token)
-    combine(rest, :attr_value_in_braces, context, acc)
-  end
 
-  def combine([{:symbol, :"}"} = token | rest], :attr_value_in_braces, context, acc) do
-    attr_value = "{" <> TokenHTMLEncoder.encode(context.tokens) <> "}"
-    attr = {context.attr_key, attr_value}
 
-    context = %{context | attrs: context.attrs ++ [attr]}
-    |> accumulate_prev_token(token)
 
-    combine(rest, :start_tag, context, acc)
-  end
 
   # DEFAULT
 
