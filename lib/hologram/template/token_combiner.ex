@@ -82,6 +82,21 @@ defmodule Hologram.Template.TokenCombiner do
     combine(rest, :end_tag, context, tags)
   end
 
+  def combine([{:symbol, :"</"} = token | rest], :text_tag, context, tags) do
+    {tokens, context} = flush_tokens(context)
+
+    tags =
+      if Enum.any?(tokens) do
+        tags ++ [{:text_tag, TokenHTMLEncoder.encode(tokens)}]
+      else
+        tags
+      end
+
+    context = accumulate_prev_token(context, token)
+
+    combine(rest, :end_tag_bracket, context, tags)
+  end
+
   defp append_attr(context, key, value) do
     %{context | attrs: context.attrs ++ [{key, value}]}
   end
@@ -242,11 +257,6 @@ defmodule Hologram.Template.TokenCombiner do
     |> accumulate_prev_token(token)
 
     combine(rest, :text_tag, context, acc)
-  end
-
-  def combine([{:symbol, :"</"} = token | rest], :text_tag, context, acc) do
-    context = accumulate_prev_token(context, token)
-    combine(rest, :end_tag_bracket, context, acc)
   end
 
   def combine([{:symbol, :>} = token| rest], :end_tag, context, acc) do
