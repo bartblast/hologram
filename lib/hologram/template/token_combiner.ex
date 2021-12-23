@@ -190,6 +190,13 @@ defmodule Hologram.Template.TokenCombiner do
     %{context | prev_tokens: context.prev_tokens ++ [token]}
   end
 
+  defp escape_non_printable_chars(str) do
+    str
+    |> String.replace("\n", "\\n")
+    |> String.replace("\r", "\\r")
+    |> String.replace("\t", "\\t")
+  end
+
   defp flush_tokens(context) do
     tokens = context.tokens
     context = reset_tokens(context)
@@ -228,15 +235,19 @@ defmodule Hologram.Template.TokenCombiner do
       else
         prev_tokens_str
       end
+      |> escape_non_printable_chars()
 
     prev_fragment_len = String.length(prev_fragment)
     indent = String.duplicate(" ", prev_fragment_len)
 
-    current_fragment = TokenHTMLEncoder.encode(token, false)
+    current_fragment =
+      TokenHTMLEncoder.encode(token, false)
+      |> escape_non_printable_chars()
 
     next_fragment =
       TokenHTMLEncoder.encode(rest, false)
       |> String.slice(0, 20)
+      |> escape_non_printable_chars()
 
     message = """
 
