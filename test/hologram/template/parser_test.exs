@@ -142,4 +142,13 @@ defmodule Hologram.Template.ParserTest do
 
     assert_syntax_error(markup, message)
   end
+
+  test "removes doctype" do
+    markup = "<!DoCtYpE html test_1 test_2>content"
+
+    result = Parser.parse(markup)
+    expected = ["content"]
+
+    assert result == expected
+  end
 end

@@ -14,12 +14,19 @@ defmodule Hologram.Template.Parser do
       num_open_braces: 0
     }
 
-    Tokenizer.tokenize(markup)
+    markup
+    |> remove_doctype()
+    |> Tokenizer.tokenize()
     |> TokenCombiner.combine(:text_tag, context, [])
     |> Enum.map(&TokenHTMLEncoder.encode/1)
     |> Enum.join("")
     |> Floki.parse_document!()
     |> remove_empty_text_nodes()
+  end
+
+  defp remove_doctype(markup) do
+    regex = ~r/^\s*<!DOCTYPE[^>]*>\s*/i
+    String.replace(markup, regex, "")
   end
 
   defp remove_empty_text_nodes(nodes) when is_list(nodes) do
