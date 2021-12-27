@@ -1,6 +1,6 @@
 defmodule Hologram.Template.ParserTest do
   use Hologram.Test.UnitCase, async: true
-  alias Hologram.Template.{Parser, SyntaxError}
+  alias Hologram.Template.{Parser, SyntaxError, TokenHTMLEncoder}
 
   defp assert_syntax_error(markup, message) do
     message = "\n#{message}" |> String.replace_trailing("\n", "")
@@ -122,12 +122,19 @@ defmodule Hologram.Template.ParserTest do
   test "special characters in attribute in braces" do
     attr_value = "abc \n \r \t </ /> < > / = ' \""
     markup = "<div class={#{attr_value}}></div>"
+    result = Parser.parse(markup)
 
-    escaped_double_quote = "~Hologram.Template.TokenCombiner[:double_quote]"
-    expected_attr_value = "{" <> String.replace(attr_value, "\"", escaped_double_quote) <> "}"
+    expected_attr_value = "{" <> attr_value <> "}"
+    expected = [{"div", [{"class", expected_attr_value}], []}]
+
+    assert result == expected
+  end
+
+  test "special characters inside text node" do
+    markup = "abc \n \r \t / = ' \" { }"
 
     result = Parser.parse(markup)
-    expected = [{"div", [{"class", expected_attr_value}], []}]
+    expected = [markup]
 
     assert result == expected
   end

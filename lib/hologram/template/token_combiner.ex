@@ -18,8 +18,7 @@ defmodule Hologram.Template.TokenCombiner do
   end
 
   def combine([{:whitespace, _} = token | rest], :text_tag, context, tags) do
-    context = handle_token(context, token)
-    combine(rest, :text_tag, context, tags)
+    combine_text_tag(context, token, rest, tags)
   end
 
   def combine([{:whitespace, _} = token | rest], :start_tag, context, tags) do
@@ -42,8 +41,7 @@ defmodule Hologram.Template.TokenCombiner do
   end
 
   def combine([{:string, _} = token | rest], :text_tag, context, tags) do
-    context = handle_token(context, token)
-    combine(rest, :text_tag, context, tags)
+    combine_text_tag(context, token, rest, tags)
   end
 
   def combine([{:string, str} = token | rest], :start_tag_bracket, context, tags) do
@@ -94,9 +92,21 @@ defmodule Hologram.Template.TokenCombiner do
     combine(rest, :text_tag, context, tags)
   end
 
+  def combine([{:symbol, :/} = token | rest], :text_tag, context, tags) do
+    combine_text_tag(context, token, rest, tags)
+  end
+
+  def combine([{:symbol, :=} = token | rest], :text_tag, context, tags) do
+    combine_text_tag(context, token, rest, tags)
+  end
+
   def combine([{:symbol, :=} = token | rest], :attr_key, context, tags) do
     context = context |> init_attr() |> accumulate_prev_token(token)
     combine(rest, :attr_assignment, context, tags)
+  end
+
+  def combine([{:symbol, :"\""} = token | rest], :text_tag, context, tags) do
+    combine_text_tag(context, token, rest, tags)
   end
 
   def combine([{:symbol, :"\""} = token | rest], :attr_assignment, context, tags) do
@@ -115,9 +125,21 @@ defmodule Hologram.Template.TokenCombiner do
     combine(rest, :attr_value_in_braces, context, tags)
   end
 
+  def combine([{:symbol, :"'"} = token | rest], :text_tag, context, tags) do
+    combine_text_tag(context, token, rest, tags)
+  end
+
+  def combine([{:symbol, :"{"} = token | rest], :text_tag, context, tags) do
+    combine_text_tag(context, token, rest, tags)
+  end
+
   def combine([{:symbol, :"{"} = token | rest], :attr_assignment, context, tags) do
     context = accumulate_prev_token(context, token)
     combine(rest, :attr_value_in_braces, context, tags)
+  end
+
+  def combine([{:symbol, :"}"} = token | rest], :text_tag, context, tags) do
+    combine_text_tag(context, token, rest, tags)
   end
 
   def combine([{:symbol, :"}"} = token | rest], :attr_value_in_braces, context, tags) do
@@ -160,6 +182,11 @@ defmodule Hologram.Template.TokenCombiner do
     %{context | prev_tokens: context.prev_tokens ++ [token]}
   end
 
+  defp combine_text_tag(context, token, rest, tags) do
+    context = handle_token(context, token)
+    combine(rest, :text_tag, context, tags)
+  end
+
   defp escape_non_printable_chars(str) do
     str
     |> String.replace("\n", "\\n")
@@ -200,7 +227,7 @@ defmodule Hologram.Template.TokenCombiner do
   end
 
   defp raise_error(token, rest, %{prev_tokens: prev_tokens}) do
-    prev_tokens_str = TokenHTMLEncoder.encode(prev_tokens, false)
+    prev_tokens_str = TokenHTMLEncoder.encode(prev_tokens)
     prev_tokens_len = String.length(prev_tokens_str)
 
     prev_fragment =
@@ -215,11 +242,11 @@ defmodule Hologram.Template.TokenCombiner do
     indent = String.duplicate(" ", prev_fragment_len)
 
     current_fragment =
-      TokenHTMLEncoder.encode(token, false)
+      TokenHTMLEncoder.encode(token)
       |> escape_non_printable_chars()
 
     next_fragment =
-      TokenHTMLEncoder.encode(rest, false)
+      TokenHTMLEncoder.encode(rest)
       |> String.slice(0, 20)
       |> escape_non_printable_chars()
 
