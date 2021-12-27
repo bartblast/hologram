@@ -1,9 +1,7 @@
 defmodule Hologram.Template.Parser do
-  use Hologram.Commons.Parser
   alias Hologram.Template.{TokenCombiner, TokenHTMLEncoder, Tokenizer}
 
-  @impl Hologram.Commons.Parser
-  def parse(markup) do
+  def parse!(markup) do
     context = %{
       attrs: [],
       attr_key: nil,
