@@ -55,6 +55,83 @@ defmodule Hologram.Template.ParserTest do
     assert result == expected
   end
 
+  test "single attribute in double quotes" do
+    markup = "<div class=\"abc\"></div>"
+
+    result = Parser.parse(markup)
+    expected = [{"div", [{"class", "abc"}], []}]
+
+    assert result == expected
+  end
+
+  test "multiple attributes in double quotes" do
+    markup = "<div class=\"abc\" id=\"xyz\"></div>"
+
+    result = Parser.parse(markup)
+    expected = [{"div", [{"class", "abc"}, {"id", "xyz"}], []}]
+
+    assert result == expected
+  end
+
+  test "single attribute in braces" do
+    markup = "<div class={abc}></div>"
+
+    result = Parser.parse(markup)
+    expected = [{"div", [{"class", "{abc}"}], []}]
+
+    assert result == expected
+  end
+
+  test "multiple attributes in braces" do
+    markup = "<div class={abc} id={xyz}></div>"
+
+    result = Parser.parse(markup)
+    expected = [{"div", [{"class", "{abc}"}, {"id", "{xyz}"}], []}]
+
+    assert result == expected
+  end
+
+  test "attribute in double quotes followed by attribute in braces" do
+    markup = "<div class=\"abc\" id={xyz}></div>"
+
+    result = Parser.parse(markup)
+    expected = [{"div", [{"class", "abc"}, {"id", "{xyz}"}], []}]
+
+    assert result == expected
+  end
+
+  test "attribute in braces followed by attribute in double quotes" do
+    markup = "<div class={abc} id=\"xyz\"></div>"
+
+    result = Parser.parse(markup)
+    expected = [{"div", [{"class", "{abc}"}, {"id", "xyz"}], []}]
+
+    assert result == expected
+  end
+
+  test "special characters in attribute in double quotes" do
+    attr_value = "abc \n \r \t </ /> < > / = ' { }"
+    markup = "<div class=\"#{attr_value}\"></div>"
+
+    result = Parser.parse(markup)
+    expected = [{"div", [{"class", attr_value}], []}]
+
+    assert result == expected
+  end
+
+  test "special characters in attribute in braces" do
+    attr_value = "abc \n \r \t </ /> < > / = ' \""
+    markup = "<div class={#{attr_value}}></div>"
+
+    escaped_double_quote = "~Hologram.Template.TokenCombiner[:double_quote]"
+    expected_attr_value = "{" <> String.replace(attr_value, "\"", escaped_double_quote) <> "}"
+
+    result = Parser.parse(markup)
+    expected = [{"div", [{"class", expected_attr_value}], []}]
+
+    assert result == expected
+  end
+
   test "syntax error message" do
     markup = "1234567890123456789012345< 1234567890123456789012345"
 
