@@ -16,6 +16,7 @@ defmodule Hologram.Template.Parser do
 
     markup
     |> remove_doctype()
+    |> String.trim()
     |> Tokenizer.tokenize()
     |> TokenCombiner.combine(:text_tag, context, [])
     |> Enum.map(&TokenHTMLEncoder.encode/1)

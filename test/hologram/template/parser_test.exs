@@ -151,4 +151,13 @@ defmodule Hologram.Template.ParserTest do
 
     assert result == expected
   end
+
+  test "trims leading and trailing whitespaces" do
+    markup = "\n\t content \t\n"
+
+    result = Parser.parse(markup)
+    expected = ["content"]
+
+    assert result == expected
+  end
 end
