@@ -56,7 +56,6 @@ defmodule Hologram.MixProject do
       {:libgraph, "~> 0.13"},
       {:phoenix, "~> 1.6"},
       {:plug_cowboy, "~> 2.0"},
-      {:saxy, "~> 1.0"},
       {:wallaby, "~> 0.29", only: :test, runtime: false}
     ]
   end
