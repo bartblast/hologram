@@ -23,6 +23,7 @@ defmodule Hologram.Template.Parser do
     |> Enum.join("")
     |> Floki.parse_document!()
     |> remove_empty_text_nodes()
+    |> unescape_double_quotes()
   end
 
   defp remove_doctype(markup) do
@@ -41,4 +42,22 @@ defmodule Hologram.Template.Parser do
   end
 
   defp remove_empty_text_nodes(text), do: text
+
+  defp unescape_double_quotes(nodes) when is_list(nodes) do
+    Enum.map(nodes, &unescape_double_quotes/1)
+  end
+
+  defp unescape_double_quotes({tag, attrs, children}) do
+    escaped_double_quote = TokenHTMLEncoder.escaped_double_quote()
+
+    attrs =
+      Enum.map(attrs, fn {key, value} ->
+        value = String.replace(value, escaped_double_quote, "\"")
+        {key, value}
+      end)
+
+    {tag, attrs, unescape_double_quotes(children)}
+  end
+
+  defp unescape_double_quotes(text), do: text
 end

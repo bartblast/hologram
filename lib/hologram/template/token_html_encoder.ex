@@ -36,4 +36,6 @@ defmodule Hologram.Template.TokenHTMLEncoder do
   def encode({:whitespace, char}), do: char
 
   def encode(nil), do: ""
+
+  def escaped_double_quote, do: @escaped_double_quote
 end
