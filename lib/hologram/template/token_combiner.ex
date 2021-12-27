@@ -136,12 +136,7 @@ defmodule Hologram.Template.TokenCombiner do
     combine(rest, :attr_value_in_braces, context, tags)
   end
 
-  def combine([token | rest], s, context, t) do
-    IO.inspect(token)
-    IO.inspect(rest)
-    IO.inspect(s)
-    IO.inspect(context)
-    IO.inspect(t)
+  def combine([token | rest], _, context, _) do
     raise_error(token, rest, context)
   end
 
