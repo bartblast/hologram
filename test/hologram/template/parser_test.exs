@@ -1,6 +1,6 @@
 defmodule Hologram.Template.ParserTest do
   use Hologram.Test.UnitCase, async: true
-  alias Hologram.Template.{Parser, SyntaxError, TokenHTMLEncoder}
+  alias Hologram.Template.{Parser, SyntaxError}
 
   defp assert_syntax_error(markup, message) do
     message = "\n#{message}" |> String.replace_trailing("\n", "")
@@ -8,6 +8,10 @@ defmodule Hologram.Template.ParserTest do
     assert_raise SyntaxError, message, fn ->
       Parser.parse!(markup)
     end
+  end
+
+  defp attr_val_expr(value) do
+    "~Hologram.Template.AttributeValueExpression[#{value}]"
   end
 
   test "text node" do
@@ -55,7 +59,7 @@ defmodule Hologram.Template.ParserTest do
     assert result == expected
   end
 
-  test "single attribute in double quotes" do
+  test "single attribute with literal value" do
     markup = "<div class=\"abc\"></div>"
 
     result = Parser.parse!(markup)
@@ -64,7 +68,7 @@ defmodule Hologram.Template.ParserTest do
     assert result == expected
   end
 
-  test "multiple attributes in double quotes" do
+  test "multiple attributes with literal value" do
     markup = "<div class=\"abc\" id=\"xyz\"></div>"
 
     result = Parser.parse!(markup)
@@ -73,44 +77,44 @@ defmodule Hologram.Template.ParserTest do
     assert result == expected
   end
 
-  test "single attribute in braces" do
+  test "single attribute with expression value" do
     markup = "<div class={abc}></div>"
 
     result = Parser.parse!(markup)
-    expected = [{"div", [{"class", "{abc}"}], []}]
+    expected = [{"div", [{"class", attr_val_expr("abc")}], []}]
 
     assert result == expected
   end
 
-  test "multiple attributes in braces" do
+  test "multiple attributes with expression value" do
     markup = "<div class={abc} id={xyz}></div>"
 
     result = Parser.parse!(markup)
-    expected = [{"div", [{"class", "{abc}"}, {"id", "{xyz}"}], []}]
+    expected = [{"div", [{"class", attr_val_expr("abc")}, {"id", attr_val_expr("xyz")}], []}]
 
     assert result == expected
   end
 
-  test "attribute in double quotes followed by attribute in braces" do
+  test "attribute with literal value followed by attribute with expression value" do
     markup = "<div class=\"abc\" id={xyz}></div>"
 
     result = Parser.parse!(markup)
-    expected = [{"div", [{"class", "abc"}, {"id", "{xyz}"}], []}]
+    expected = [{"div", [{"class", "abc"}, {"id", attr_val_expr("xyz")}], []}]
 
     assert result == expected
   end
 
-  test "attribute in braces followed by attribute in double quotes" do
+  test "attribute with expression value followed by attribute with literal value" do
     markup = "<div class={abc} id=\"xyz\"></div>"
 
     result = Parser.parse!(markup)
-    expected = [{"div", [{"class", "{abc}"}, {"id", "xyz"}], []}]
+    expected = [{"div", [{"class", attr_val_expr("abc")}, {"id", "xyz"}], []}]
 
     assert result == expected
   end
 
-  test "special characters in attribute in double quotes" do
-    attr_value = "abc \n \r \t </ /> < > / = ' { }"
+  test "special characters in attribute with literal value" do
+    attr_value = "abc \n \r \t </ /> < > / = { }"
     markup = "<div class=\"#{attr_value}\"></div>"
 
     result = Parser.parse!(markup)
@@ -119,19 +123,18 @@ defmodule Hologram.Template.ParserTest do
     assert result == expected
   end
 
-  test "special characters in attribute in braces" do
-    attr_value = "abc \n \r \t </ /> < > / = ' \""
+  test "special characters in attribute with expression value" do
+    attr_value = "abc \n \r \t </ /> < > / = \" { }"
     markup = "<div class={#{attr_value}}></div>"
-    result = Parser.parse!(markup)
 
-    expected_attr_value = "{" <> attr_value <> "}"
-    expected = [{"div", [{"class", expected_attr_value}], []}]
+    result = Parser.parse!(markup)
+    expected = [{"div", [{"class", attr_val_expr(attr_value)}], []}]
 
     assert result == expected
   end
 
   test "special characters inside text node" do
-    markup = "abc \n \r \t / = ' \" { }"
+    markup = "abc \n \r \t / = \" { }"
 
     result = Parser.parse!(markup)
     expected = [markup]

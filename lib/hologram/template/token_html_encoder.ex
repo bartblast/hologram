@@ -1,8 +1,6 @@
 # Covered in Hologram.Template.Parser integration tests
 
 defmodule Hologram.Template.TokenHTMLEncoder do
-  @escaped_double_quote "~Hologram.Template.Parser[:double_quote]"
-
   def encode(arg)
 
   def encode(tokens) when is_list(tokens) do
@@ -10,22 +8,28 @@ defmodule Hologram.Template.TokenHTMLEncoder do
     |> Enum.join("")
   end
 
-  def encode({:start_tag, {tag, attrs}}) do
+  def encode({:start_tag, {tag_name, attrs}}) do
     attrs =
-      Enum.map(attrs, fn {key, value} ->
-        if value do
-          value = String.replace(value, "\"", @escaped_double_quote)
-          key <> "=\"" <> value <> "\""
-        else
-          # DEFER: implement boolean attributes, see: https://github.com/segmetric/hologram/issues/15
-          key <> "=\"\""
+      Enum.map(attrs, fn {type, key, value} ->
+        case type do
+          :boolean ->
+            # DEFER: implement boolean attributes, see: https://github.com/segmetric/hologram/issues/15
+            "#{key}=\"\""
+
+          :expression ->
+            "#{key}='~Hologram.Template.AttributeValueExpression[#{value}]'"
+
+          :literal ->
+            "#{key}=\"#{value}\""
+
         end
       end)
+      |> Enum.join(" ")
 
-    "<#{tag} #{attrs}>"
+    "<#{tag_name} #{attrs}>"
   end
 
-  def encode({:end_tag, tag}), do: "</#{tag}>"
+  def encode({:end_tag, tag_name}), do: "</#{tag_name}>"
 
   def encode({:text_tag, str}), do: str
 
@@ -36,6 +40,4 @@ defmodule Hologram.Template.TokenHTMLEncoder do
   def encode({:whitespace, char}), do: char
 
   def encode(nil), do: ""
-
-  def escaped_double_quote, do: @escaped_double_quote
 end
