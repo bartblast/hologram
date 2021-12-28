@@ -133,8 +133,8 @@ defmodule Hologram.Template.ParserTest do
     assert result == expected
   end
 
-  test "special characters inside text node" do
-    markup = "abc \n \r \t / = \" { }"
+  test "special characters in text node" do
+    markup = "abc \n \r \t < > / = \" { }"
 
     result = Parser.parse!(markup)
     expected = [markup]
@@ -143,10 +143,10 @@ defmodule Hologram.Template.ParserTest do
   end
 
   test "syntax error message" do
-    markup = "1234567890123456789012345< 1234567890123456789012345"
+    markup = "<div class=\"test\" abcdefghij= 1234567890123456789012345"
 
     message = """
-    7890123456789012345< 12345678901234567890
+    s="test" abcdefghij= 12345678901234567890
                         ^
     """
 

@@ -72,10 +72,18 @@ defmodule Hologram.Template.TokenCombiner do
     combine(rest, :text_tag, context, tags)
   end
 
-  def combine([{:symbol, :<} = token | rest], :text_tag, context, tags) do
+  def combine([{:symbol, :<} = token | [{:string, _} | _] = rest], :text_tag, context, tags) do
     tags = maybe_add_text_tag(tags, context.token_buffer)
     context = context |> reset_token_buffer() |> add_prev_token(token)
     combine(rest, :start_tag_bracket, context, tags)
+  end
+
+  def combine([{:symbol, :<} = token | rest], :text_tag, context, tags) do
+    combine_text_tag(context, token, rest, tags)
+  end
+
+  def combine([{:symbol, :>} = token | rest], :text_tag, context, tags) do
+    combine_text_tag(context, token, rest, tags)
   end
 
   def combine([{:symbol, :>} = token | rest], :start_tag, context, tags) do
