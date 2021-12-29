@@ -10,51 +10,98 @@ defmodule Hologram.Template.ParserTest do
     end
   end
 
-  defp attr_val_expr(value) do
-    "~Hologram.Template.AttributeValueExpression[#{value}]"
-  end
-
   test "text node" do
     markup = "abc"
 
     result = Parser.parse!(markup)
-    expected = ["abc"]
+    expected = [{:text, "abc"}]
 
     assert result == expected
   end
 
-  test "single element node" do
+  test "regular element node" do
     markup = "<div></div>"
 
     result = Parser.parse!(markup)
-    expected = [{"div", [], []}]
+    expected = [{:element, "div", [], []}]
 
     assert result == expected
   end
 
-  test "multiple non-nested element nodes" do
-    markup = "<div></div><span></span>"
+  test "regular component node" do
+    markup = "<Abc.Bcd></Abc.Bcd>"
 
     result = Parser.parse!(markup)
-    expected = [{"div", [], []}, {"span", [], []}]
+    expected = [{:component, "Abc.Bcd", [], []}]
 
     assert result == expected
   end
 
-  test "multiple nested element nodes" do
-    markup = "<div><span></span></div>"
+  test "closed void element node" do
+    markup = "<br />"
 
     result = Parser.parse!(markup)
-    expected = [{"div", [], [{"span", [], []}]}]
+    expected = [{:element, "br", [], []}]
 
     assert result == expected
   end
 
-  test "multiple nested element and text nodes" do
-    markup = "<div><span>abc</span></div>"
+  test "closed void component node" do
+    markup = "<Abc.Bcd />"
 
     result = Parser.parse!(markup)
-    expected = [{"div", [], [{"span", [], ["abc"]}]}]
+    expected = [{:component, "Abc.Bcd", [], []}]
+
+    assert result == expected
+  end
+
+  test "unclosed void element node" do
+    markup = "<br>"
+
+    result = Parser.parse!(markup)
+    expected = [{:element, "br", [], []}]
+
+    assert result == expected
+  end
+
+  test "unclosed non-void element node" do
+    markup = "<div>"
+
+    assert_raise SyntaxError, "div tag is unclosed", fn ->
+      Parser.parse!(markup)
+    end
+  end
+
+  test "unclosed component node" do
+    markup = "<Abc.Bcd>"
+
+    assert_raise SyntaxError, "Abc.Bcd tag is unclosed", fn ->
+      Parser.parse!(markup)
+    end
+  end
+
+  test "multiple nodes" do
+    markup = "<div></div>abc<Abc.Bcd />"
+
+    result = Parser.parse!(markup)
+    expected = [{:element, "div", [], []}, {:text, "abc"}, {:component, "Abc.Bcd", [], []}]
+
+    assert result == expected
+  end
+
+  test "nested nodes" do
+    markup = "<div><span><Abc.Bcd>abc</Abc.Bcd></span></div>"
+    result = Parser.parse!(markup)
+
+    expected = [
+      {:element, "div", [], [
+        {:element, "span", [], [
+          {:component, "Abc.Bcd", [], [
+            {:text, "abc"}
+          ]}
+        ]}
+      ]}
+    ]
 
     assert result == expected
   end
@@ -63,16 +110,19 @@ defmodule Hologram.Template.ParserTest do
     markup = "<div class=\"abc\"></div>"
 
     result = Parser.parse!(markup)
-    expected = [{"div", [{"class", "abc"}], []}]
+    expected = [{:element, "div", [{:literal, "class", "abc"}], []}]
 
     assert result == expected
   end
 
   test "multiple attributes with literal value" do
     markup = "<div class=\"abc\" id=\"xyz\"></div>"
-
     result = Parser.parse!(markup)
-    expected = [{"div", [{"class", "abc"}, {"id", "xyz"}], []}]
+
+    expected = [{:element, "div", [
+      {:literal, "class", "abc"},
+      {:literal, "id", "xyz"}
+    ], []}]
 
     assert result == expected
   end
@@ -81,34 +131,43 @@ defmodule Hologram.Template.ParserTest do
     markup = "<div class={abc}></div>"
 
     result = Parser.parse!(markup)
-    expected = [{"div", [{"class", attr_val_expr("abc")}], []}]
+    expected = [{:element, "div", [{:expression, "class", "abc"}], []}]
 
     assert result == expected
   end
 
   test "multiple attributes with expression value" do
     markup = "<div class={abc} id={xyz}></div>"
-
     result = Parser.parse!(markup)
-    expected = [{"div", [{"class", attr_val_expr("abc")}, {"id", attr_val_expr("xyz")}], []}]
+
+    expected = [{:element, "div", [
+      {:expression, "class", "abc"},
+      {:expression, "id", "xyz"}
+    ], []}]
 
     assert result == expected
   end
 
   test "attribute with literal value followed by attribute with expression value" do
     markup = "<div class=\"abc\" id={xyz}></div>"
-
     result = Parser.parse!(markup)
-    expected = [{"div", [{"class", "abc"}, {"id", attr_val_expr("xyz")}], []}]
+
+    expected = [{:element, "div", [
+      {:literal, "class", "abc"},
+      {:expression, "id", "xyz"}
+    ], []}]
 
     assert result == expected
   end
 
   test "attribute with expression value followed by attribute with literal value" do
     markup = "<div class={abc} id=\"xyz\"></div>"
-
     result = Parser.parse!(markup)
-    expected = [{"div", [{"class", attr_val_expr("abc")}, {"id", "xyz"}], []}]
+
+    expected = [{:element, "div", [
+      {:expression, "class", "abc"},
+      {:literal, "id", "xyz"}
+    ], []}]
 
     assert result == expected
   end
@@ -118,7 +177,7 @@ defmodule Hologram.Template.ParserTest do
     markup = "<div class=\"#{attr_value}\"></div>"
 
     result = Parser.parse!(markup)
-    expected = [{"div", [{"class", attr_value}], []}]
+    expected = [{:element, "div", [{:literal, "class", attr_value}], []}]
 
     assert result == expected
   end
@@ -128,7 +187,7 @@ defmodule Hologram.Template.ParserTest do
     markup = "<div class={#{attr_value}}></div>"
 
     result = Parser.parse!(markup)
-    expected = [{"div", [{"class", attr_val_expr(attr_value)}], []}]
+    expected = [{:element, "div", [{:expression, "class", attr_value}], []}]
 
     assert result == expected
   end
@@ -137,7 +196,7 @@ defmodule Hologram.Template.ParserTest do
     markup = "abc \n \r \t < > / = \" { }"
 
     result = Parser.parse!(markup)
-    expected = [markup]
+    expected = [{:text, markup}]
 
     assert result == expected
   end
@@ -157,7 +216,7 @@ defmodule Hologram.Template.ParserTest do
     markup = "<!DoCtYpE html test_1 test_2>content"
 
     result = Parser.parse!(markup)
-    expected = ["content"]
+    expected = [{:text, "content"}]
 
     assert result == expected
   end
@@ -166,7 +225,7 @@ defmodule Hologram.Template.ParserTest do
     markup = "\n\t content \t\n"
 
     result = Parser.parse!(markup)
-    expected = ["content"]
+    expected = [{:text, "content"}]
 
     assert result == expected
   end
