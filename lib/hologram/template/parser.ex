@@ -1,5 +1,5 @@
 defmodule Hologram.Template.Parser do
-  alias Hologram.Template.{DOMTreeBuilder, TokenCombiner, Tokenizer}
+  alias Hologram.Template.{DOMTreeBuilder, TagAssembler, Tokenizer}
 
   def parse!(markup) do
     context = %{
@@ -17,7 +17,7 @@ defmodule Hologram.Template.Parser do
     |> remove_comments()
     |> String.trim()
     |> Tokenizer.tokenize()
-    |> TokenCombiner.combine(:text_tag, context, [])
+    |> TagAssembler.assemble(:text_tag, context, [])
     |> DOMTreeBuilder.build()
   end
 
