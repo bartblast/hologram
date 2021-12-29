@@ -5,9 +5,9 @@ defmodule Hologram.Template.TokenCombiner do
 
   # see: https://html.spec.whatwg.org/multipage/syntax.html#void-elements
   @void_elems [
-    "area", "base", "br", "col", "embed", "hr", "img",
-    "input", "link", "meta", "param", "source", "track", "wbr"
-  ]
+    "area", "base", "br", "col", "embed", "hr", "img", "input",
+    "link", "meta", "param", "source", "track", "wbr"
+  ] ++ ["slot"]
 
   # status is one of:
   # :text_tag, :start_tag_bracket, :start_tag, :attr_key, :attr_assignment,
