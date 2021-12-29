@@ -175,6 +175,14 @@ defmodule Hologram.Template.TokenCombiner do
     |> combine_attr_value(token, rest, tags, :attr_value_expression)
   end
 
+  def combine([{:symbol, :"\\{"} = token | rest], :text_tag, context, tags) do
+    combine_text_tag(context, token, rest, tags)
+  end
+
+  def combine([{:symbol, :"\\}"} = token | rest], :text_tag, context, tags) do
+    combine_text_tag(context, token, rest, tags)
+  end
+
   def combine([token | rest], :attr_value_literal, context, tags) do
     combine_attr_value(context, token, rest, tags, :attr_value_literal)
   end

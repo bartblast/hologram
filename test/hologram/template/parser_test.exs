@@ -231,16 +231,16 @@ defmodule Hologram.Template.ParserTest do
     assert result == expected
   end
 
-  test "handles JS code" do
+  test "handles escaped JS code" do
     js_code = """
-    function isPositiveNumber(param) {
-      if (param > 0) {
+    function isPositiveNumber(param) \\{
+      if (param > 0) \\{
         return true;
-      }
-      if (param <= 0) {
+      \\}
+      if (param <= 0) \\{
         return false;
-      }
-    }
+      \\}
+    \\}
     """
 
     markup = "<script>#{js_code}</script>"
