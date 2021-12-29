@@ -1,19 +1,19 @@
 defmodule Hologram.Template.Transformer do
   alias Hologram.Compiler.Context
-  alias Hologram.Template.{ComponentTransformer, ElementNodeTransformer, EmbeddedExpressionParser, Helpers}
+  alias Hologram.Template.{ComponentTransformer, ElementNodeTransformer, EmbeddedExpressionParser}
 
   def transform(nodes, %Context{} = context) when is_list(nodes) do
     Enum.reduce(nodes, [], &(&2 ++ transform(&1, context)))
   end
 
-  def transform(node, context) when is_binary(node) do
-    EmbeddedExpressionParser.parse(node, context)
+  def transform({:text, str}, context) do
+    EmbeddedExpressionParser.parse(str, context)
   end
 
-  def transform({tag_name, attrs, children}, context) do
+  def transform({type, tag_name, attrs, children}, context) do
     children = Enum.reduce(children, [], &(&2 ++ transform(&1, context)))
 
-    case Helpers.tag_type(tag_name) do
+    case type do
       :component ->
         [ComponentTransformer.transform(tag_name, attrs, children, context)]
 
