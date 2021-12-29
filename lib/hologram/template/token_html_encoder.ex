@@ -8,31 +8,6 @@ defmodule Hologram.Template.TokenHTMLEncoder do
     |> Enum.join("")
   end
 
-  def encode({:start_tag, {tag_name, attrs}}) do
-    attrs =
-      Enum.map(attrs, fn {type, key, value} ->
-        case type do
-          :boolean ->
-            # DEFER: implement boolean attributes, see: https://github.com/segmetric/hologram/issues/15
-            "#{key}=\"\""
-
-          :expression ->
-            "#{key}='~Hologram.Template.AttributeValueExpression[#{value}]'"
-
-          :literal ->
-            "#{key}=\"#{value}\""
-
-        end
-      end)
-      |> Enum.join(" ")
-
-    "<#{tag_name} #{attrs}>"
-  end
-
-  def encode({:end_tag, tag_name}), do: "</#{tag_name}>"
-
-  def encode({:text_tag, str}), do: str
-
   def encode({:symbol, symbol}), do: to_string(symbol)
 
   def encode({:string, str}), do: str
