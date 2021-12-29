@@ -42,7 +42,8 @@ defmodule Hologram.Runtime.StaticDigestStore do
   end
 
   def get(file_path) do
-    [{^file_path, digest}] = :ets.lookup(@table_name, file_path)
+    key = String.to_atom(file_path)
+    [{^key, digest}] = :ets.lookup(@table_name, key)
     digest
   end
 
