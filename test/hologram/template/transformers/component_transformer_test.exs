@@ -2,7 +2,7 @@ defmodule Hologram.Template.ComponentTransformerTest do
   use Hologram.Test.UnitCase, async: true
 
   alias Hologram.Compiler.Context
-  alias Hologram.Compiler.IR.{AliasDirective, ModuleDefinition}
+  alias Hologram.Compiler.IR.{AdditionOperator, AliasDirective, IntegerType, ModuleAttributeOperator, ModuleDefinition, TupleType}
   alias Hologram.Template.ComponentTransformer
   alias Hologram.Template.VDOM.{Component, Expression, TextNode}
 
@@ -49,7 +49,11 @@ defmodule Hologram.Template.ComponentTransformerTest do
   end
 
   test "props" do
-    props = [{"attr_1", "text"}, {"attr_2", "abc{@k}xyz"}]
+    props = [
+      {:literal, "attr_1", "text"},
+      {:expression, "attr_2", "1 + 2"},
+      {:literal, "attr_3", "abc{@k}xyz"}
+    ]
 
     result = ComponentTransformer.transform(@module_name, props, @children, @context)
 
@@ -62,10 +66,22 @@ defmodule Hologram.Template.ComponentTransformerTest do
       props: %{
         attr_1: [%TextNode{content: "text"}],
         attr_2: [
+          %Expression{
+            ir: %TupleType{
+              data: [
+                %AdditionOperator{
+                  left: %IntegerType{value: 1},
+                  right: %IntegerType{value: 2}
+                }
+              ]
+            }
+          }
+        ],
+        attr_3: [
           %TextNode{content: "abc"},
           %Expression{
-            ir: %Hologram.Compiler.IR.TupleType{
-              data: [%Hologram.Compiler.IR.ModuleAttributeOperator{name: :k}]
+            ir: %TupleType{
+              data: [%ModuleAttributeOperator{name: :k}]
             }
           },
           %TextNode{content: "xyz"}
