@@ -221,6 +221,16 @@ defmodule Hologram.Template.ParserTest do
     assert result == expected
   end
 
+  test "removes comments" do
+    special_chars = "abc \n \r \t < > / = \" { } ! -"
+    markup = "aaa<!-- #{special_chars} -->bbb<!-- #{special_chars} -->ccc"
+
+    result = Parser.parse!(markup)
+    expected = [{:text, "aaabbbccc"}]
+
+    assert result == expected
+  end
+
   test "trims leading and trailing whitespaces" do
     markup = "\n\t content \t\n"
 

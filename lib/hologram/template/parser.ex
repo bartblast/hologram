@@ -14,10 +14,15 @@ defmodule Hologram.Template.Parser do
 
     markup
     |> remove_doctype()
+    |> remove_comments()
     |> String.trim()
     |> Tokenizer.tokenize()
     |> TokenCombiner.combine(:text_tag, context, [])
     |> DOMTreeBuilder.build()
+  end
+
+  defp remove_comments(markup) do
+    Regex.replace(~r/<!\-\-.*\-\->/sU, markup, "")
   end
 
   defp remove_doctype(markup) do
