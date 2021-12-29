@@ -9,12 +9,15 @@ defmodule Hologram.Template.ElementNodeTransformer do
   end
 
   defp transform_attrs(attrs, context) do
-    Enum.map(attrs, fn {key, value} ->
+    Enum.map(attrs, fn {type, key, value} ->
       [name | modifiers] = String.split(key, ".")
 
       name = String.to_atom(name)
       modifiers = Enum.map(modifiers, &String.to_atom/1)
-      value = EmbeddedExpressionParser.parse(value, context)
+
+      value =
+        (if type == :expression, do: "{#{value}}", else: value)
+        |> EmbeddedExpressionParser.parse(context)
 
       {name, %{value: value, modifiers: modifiers}}
     end)

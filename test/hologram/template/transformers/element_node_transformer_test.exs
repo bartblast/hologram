@@ -2,29 +2,24 @@ defmodule Hologram.Template.ElementNodeTransformerTest do
   use Hologram.Test.UnitCase, async: true
 
   alias Hologram.Compiler.Context
-  alias Hologram.Compiler.IR.{ModuleAttributeOperator, TupleType}
+  alias Hologram.Compiler.IR.{AdditionOperator, IntegerType, ModuleAttributeOperator, TupleType}
   alias Hologram.Template.VDOM.{ElementNode, Expression, TextNode}
   alias Hologram.Template.ElementNodeTransformer
 
+  @children :children_placeholder
   @context %Context{}
+  @tag_name "div"
 
   test "attr without modifiers" do
-    tag = "div"
-    children = [:child_stub_1, :child_stub_2]
-    attrs = [{"attr_1", "value_1"}, {"attr_2", "value_2"}]
-
-    result = ElementNodeTransformer.transform(tag, children, attrs, @context)
+    attrs = [{:literal, "test_key", "test_value"}]
+    result = ElementNodeTransformer.transform(@tag_name, @children, attrs, @context)
 
     expected = %ElementNode{
-      tag: tag,
-      children: children,
+      tag: @tag_name,
+      children: @children,
       attrs: %{
-        attr_1: %{
-          value: [%TextNode{content: "value_1"}],
-          modifiers: []
-        },
-        attr_2: %{
-          value: [%TextNode{content: "value_2"}],
+        test_key: %{
+          value: [%TextNode{content: "test_value"}],
           modifiers: []
         }
       }
@@ -34,23 +29,16 @@ defmodule Hologram.Template.ElementNodeTransformerTest do
   end
 
   test "attr with modifier" do
-    tag = "div"
-    children = [:child_stub_1, :child_stub_2]
-    attrs = [{"attr_1.modifier_1", "value_1"}, {"attr_2.modifier_2.modifier_3", "value_2"}]
-
-    result = ElementNodeTransformer.transform(tag, children, attrs, @context)
+    attrs = [{:literal, "test_key.modifier_1.modifier_2", "test_value"}]
+    result = ElementNodeTransformer.transform(@tag_name, @children, attrs, @context)
 
     expected = %ElementNode{
-      tag: tag,
-      children: children,
+      tag: @tag_name,
+      children: @children,
       attrs: %{
-        attr_1: %{
-          value: [%TextNode{content: "value_1"}],
-          modifiers: [:modifier_1]
-        },
-        attr_2: %{
-          value: [%TextNode{content: "value_2"}],
-          modifiers: [:modifier_2, :modifier_3]
+        test_key: %{
+          value: [%TextNode{content: "test_value"}],
+          modifiers: [:modifier_1, :modifier_2]
         }
       }
     }
@@ -58,22 +46,15 @@ defmodule Hologram.Template.ElementNodeTransformerTest do
     assert result == expected
   end
 
-  test "attr with embedded expression" do
-    tag = "div"
-    children = [:child_stub_1, :child_stub_2]
-    attrs = [{"attr_1", "value_1"}, {"attr_2", "abc{@k}xyz"}]
-
-    result = ElementNodeTransformer.transform(tag, children, attrs, @context)
+  test "literal attr value with embedded expression" do
+    attrs = [{:literal, "test_key", "abc{@k}xyz"}]
+    result = ElementNodeTransformer.transform(@tag_name, @children, attrs, @context)
 
     expected = %ElementNode{
-      tag: tag,
-      children: children,
+      tag: @tag_name,
+      children: @children,
       attrs: %{
-        attr_1: %{
-          value: [%TextNode{content: "value_1"}],
-          modifiers: []
-        },
-        attr_2: %{
+        test_key: %{
           value: [
             %TextNode{content: "abc"},
             %Expression{
@@ -84,6 +65,35 @@ defmodule Hologram.Template.ElementNodeTransformerTest do
               }
             },
             %TextNode{content: "xyz"}
+          ],
+          modifiers: []
+        }
+      }
+    }
+
+    assert result == expected
+  end
+
+  test "expression attr value" do
+    attrs = [{:expression, "test_key", "1 + 2"}]
+    result = ElementNodeTransformer.transform(@tag_name, @children, attrs, @context)
+
+    expected = %ElementNode{
+      tag: @tag_name,
+      children: @children,
+      attrs: %{
+        test_key: %{
+          value: [
+            %Expression{
+              ir: %TupleType{
+                data: [
+                  %AdditionOperator{
+                    left: %IntegerType{value: 1},
+                    right: %IntegerType{value: 2}
+                  }
+                ]
+              }
+            }
           ],
           modifiers: []
         }
