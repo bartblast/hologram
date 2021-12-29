@@ -231,6 +231,26 @@ defmodule Hologram.Template.ParserTest do
     assert result == expected
   end
 
+  test "handles JS code" do
+    js_code = """
+    function isPositiveNumber(param) {
+      if (param > 0) {
+        return true;
+      }
+      if (param <= 0) {
+        return false;
+      }
+    }
+    """
+
+    markup = "<script>#{js_code}</script>"
+
+    result = Parser.parse!(markup)
+    expected = [{:element, "script", [], [{:text, js_code}]}]
+
+    assert result == expected
+  end
+
   test "trims leading and trailing whitespaces" do
     markup = "\n\t content \t\n"
 
