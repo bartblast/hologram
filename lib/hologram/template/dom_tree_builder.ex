@@ -7,6 +7,11 @@ defmodule Hologram.Template.DOMTreeBuilder do
 
   def build([], acc), do: acc
 
+  def build([{:self_closing_tag, {tag_name, attrs}} | rest], acc) do
+    type = Helpers.tag_type(tag_name)
+    build(rest, acc ++ [{type, tag_name, attrs, []}])
+  end
+  
   def build([{:start_tag, {tag_name, attrs}} | _] = tags, acc) do
     subtree_tags = get_subtree_tags(tags)
     remaining_tags = Enum.drop(tags, Enum.count(subtree_tags))
@@ -25,11 +30,6 @@ defmodule Hologram.Template.DOMTreeBuilder do
 
   def build([{:text_tag, str} | rest], acc) do
     build(rest, acc ++ [{:text, str}])
-  end
-
-  def build([{:void_tag, {tag_name, attrs}} | rest], acc) do
-    type = Helpers.tag_type(tag_name)
-    build(rest, acc ++ [{type, tag_name, attrs, []}])
   end
 
   defp get_subtree_tags([{:start_tag, {tag_name, _}} = start_tag | rest]) do

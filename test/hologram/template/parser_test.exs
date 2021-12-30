@@ -46,6 +46,24 @@ defmodule Hologram.Template.ParserTest do
     assert result == expected
   end
 
+  test "closed svg element node" do
+    markup = "<path />"
+
+    result = Parser.parse!(markup)
+    expected = [{:element, "path", [], []}]
+
+    assert result == expected
+  end
+
+  test "closed slot element node" do
+    markup = "<slot />"
+
+    result = Parser.parse!(markup)
+    expected = [{:element, "slot", [], []}]
+
+    assert result == expected
+  end
+
   test "closed void component node" do
     markup = "<Abc.Bcd />"
 
@@ -60,6 +78,24 @@ defmodule Hologram.Template.ParserTest do
 
     result = Parser.parse!(markup)
     expected = [{:element, "br", [], []}]
+
+    assert result == expected
+  end
+
+  test "unclosed svg element node" do
+    markup = "<path>"
+
+    result = Parser.parse!(markup)
+    expected = [{:element, "path", [], []}]
+
+    assert result == expected
+  end
+
+  test "unclosed slot element node" do
+    markup = "<slot>"
+
+    result = Parser.parse!(markup)
+    expected = [{:element, "slot", [], []}]
 
     assert result == expected
   end

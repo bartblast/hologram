@@ -3,11 +3,15 @@
 defmodule Hologram.Template.TagAssembler do
   alias Hologram.Template.{Helpers, SyntaxError, TokenHTMLEncoder}
 
+  # see: https://developer.mozilla.org/en-US/docs/Web/SVG/Element
+  # #DEFER: add the rest of SVG elems, see: https://github.com/segmetric/hologram/issues/21
+  @svg_tags ["path", "rect"]
+
   # see: https://html.spec.whatwg.org/multipage/syntax.html#void-elements
-  @void_elems [
+  @void_tags [
     "area", "base", "br", "col", "embed", "hr", "img", "input",
     "link", "meta", "param", "source", "track", "wbr"
-  ] ++ ["slot"]
+  ]
 
   # status is one of:
   # :text_tag, :start_tag_bracket, :start_tag, :attr_key, :attr_assignment,
@@ -76,8 +80,8 @@ defmodule Hologram.Template.TagAssembler do
     type = Helpers.tag_type(context.tag_name)
 
     tags =
-      if type == :component || is_void_elem?(context.tag_name) do
-        add_void_tag(tags, context)
+      if type == :component || is_self_closing_tag?(context.tag_name) do
+        add_self_closing_tag(tags, context)
       else
         add_start_tag(tags, context)
       end
@@ -101,8 +105,8 @@ defmodule Hologram.Template.TagAssembler do
 
   def assemble([{:symbol, :">"} = token | rest], :start_tag, context, tags) do
     tags =
-      if is_void_elem?(context.tag_name) do
-        add_void_tag(tags, context)
+      if is_self_closing_tag?(context.tag_name) do
+        add_self_closing_tag(tags, context)
       else
         add_start_tag(tags, context)
       end
@@ -211,8 +215,8 @@ defmodule Hologram.Template.TagAssembler do
     tags ++ [{:start_tag, {context.tag_name, context.attrs}}]
   end
 
-  defp add_void_tag(tags, context) do
-    tags ++ [{:void_tag, {context.tag_name, context.attrs}}]
+  defp add_self_closing_tag(tags, context) do
+    tags ++ [{:self_closing_tag, {context.tag_name, context.attrs}}]
   end
 
   defp assemble_attr_value(context, token, rest, tags, status) do
@@ -266,8 +270,16 @@ defmodule Hologram.Template.TagAssembler do
     %{context | num_open_braces: context.num_open_braces + 1}
   end
 
-  defp is_void_elem?(tag_name) do
-    tag_name in @void_elems
+  defp is_self_closing_tag?(tag_name) do
+    is_void_tag?(tag_name) || is_svg_tag?(tag_name) || tag_name == "slot"
+  end
+
+  defp is_svg_tag?(tag_name) do
+    tag_name in @svg_tags
+  end
+
+  defp is_void_tag?(tag_name) do
+    tag_name in @void_tags
   end
 
   defp maybe_add_text_tag(tags, tokens) do
