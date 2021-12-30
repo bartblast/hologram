@@ -6,7 +6,6 @@ defmodule Mix.Tasks.Compile.Hologram do
 
   alias Hologram.{MixProject, Utils}
   alias Hologram.Compiler.{Builder, CallGraph, CallGraphBuilder, ModuleDefAggregator, ModuleDefStore, Reflection}
-  alias Hologram.Runtime.StaticDigestStore
   alias Hologram.Template.Builder, as: TemplateBuilder
   @root_path Reflection.root_path()
 
@@ -19,7 +18,6 @@ defmodule Mix.Tasks.Compile.Hologram do
       if !has_source_digest?() || has_source_changes?(source_digest) do
         compile(opts)
         save_source_digest(source_digest)
-        create_static_manifest()
       end
     end
 
@@ -92,18 +90,6 @@ defmodule Mix.Tasks.Compile.Hologram do
     pages
     |> Utils.map_async(&build_page(&1, output_path, module_defs, call_graph))
     |> Utils.await_tasks()
-  end
-
-  defp create_static_manifest() do
-    digests =
-      StaticDigestStore.find_digests()
-      |> Enum.into(%{})
-      |> Jason.encode!()
-
-    content = "window.__hologramStaticManifest__ = #{digests}"
-
-    Reflection.release_static_path() <> "/hologram/manifest.js"
-    |> File.write!(content)
   end
 
   defp digest_files(paths) do

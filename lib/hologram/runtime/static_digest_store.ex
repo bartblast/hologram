@@ -13,19 +13,32 @@ defmodule Hologram.Runtime.StaticDigestStore do
   end
 
   def init(_) do
-    create_table()
+    digests = find_digests()
 
-    find_digests()
-    |> populate_table()
+    create_table()
+    populate_table(digests)
+    create_manifest_file(digests)
 
     {:ok, nil}
+  end
+
+  defp create_manifest_file(digests) do
+    json =
+      digests
+      |> Enum.into(%{})
+      |> Jason.encode!()
+
+    content = "window.__hologramStaticManifest__ = #{json}"
+
+    Reflection.release_static_path() <> "/hologram/manifest.js"
+    |> File.write!(content)
   end
 
   defp create_table do
     :ets.new(@table_name, [:public, :named_table])
   end
 
-  def find_digests do
+  defp find_digests do
     static_path = Reflection.release_priv_path() <> "/static"
     regex = ~r/^#{Regex.escape(static_path)}(.+)\-([0-9a-f]{32})(.+)$/
 
