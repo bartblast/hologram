@@ -6,7 +6,6 @@ defmodule Hologram.Runtime.PageDigestStore do
   alias Hologram.Compiler.Reflection
   alias Hologram.Utils
 
-  @env Application.fetch_env!(:hologram, :env)
   @table_name :hologram_page_digest_store
 
   def start_link(_) do
@@ -15,7 +14,7 @@ defmodule Hologram.Runtime.PageDigestStore do
 
   def init(_) do
     create_table()
-    populate_table(@env)
+    maybe_populate_table()
 
     {:ok, nil}
   end
@@ -29,21 +28,19 @@ defmodule Hologram.Runtime.PageDigestStore do
     digest
   end
 
-  defp populate_table(:test), do: nil
+  defp maybe_populate_table do
+    file_exists? =
+      Reflection.release_page_digest_store_path()
+      |> File.exists?()
 
-  defp populate_table(_) do
-    populate_table_from_file()
+    if file_exists?, do: populate_table()
   end
 
-  defp populate_table_from_file do
+  def populate_table do
     Reflection.release_page_digest_store_path()
     |> File.read!()
     |> Utils.deserialize()
-    |> populate_table_from_list()
-  end
-
-  defp populate_table_from_list(page_digests) do
-    Enum.each(page_digests, fn {module, digest} ->
+    |> Enum.each(fn {module, digest} ->
       :ets.insert(@table_name, {module, digest})
     end)
   end

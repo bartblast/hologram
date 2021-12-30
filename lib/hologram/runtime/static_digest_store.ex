@@ -16,7 +16,7 @@ defmodule Hologram.Runtime.StaticDigestStore do
     create_table()
 
     find_digests()
-    |> populate_table_from_list()
+    |> populate_table()
 
     {:ok, nil}
   end
@@ -43,11 +43,17 @@ defmodule Hologram.Runtime.StaticDigestStore do
 
   def get(file_path) do
     key = String.to_atom(file_path)
-    [{^key, digest}] = :ets.lookup(@table_name, key)
-    digest
+
+    case :ets.lookup(@table_name, key) do
+      [{^key, digest}] ->
+        digest
+        
+      _ ->
+        file_path
+    end
   end
 
-  defp populate_table_from_list(static_digests) do
+  defp populate_table(static_digests) do
     Enum.each(static_digests, fn {file_path, digest} ->
       :ets.insert(@table_name, {file_path, digest})
     end)
