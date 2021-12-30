@@ -35,10 +35,6 @@ defmodule Hologram.Router do
 
   # DEFER: test
   def static_path(file_path) do
-    if Application.fetch_env!(:hologram, :env) != :dev do
-      StaticDigestStore.get(file_path)
-    else
-      file_path
-    end
+    StaticDigestStore.get(file_path)
   end
 end
