@@ -2,6 +2,7 @@ defmodule Hologram.Runtime.ChannelTest do
   use Hologram.Test.ChannelCase, async: false
 
   alias Hologram.Compiler.Serializer
+  alias Hologram.Runtime
   alias Hologram.Runtime.{Channel, Socket}
   alias Hologram.Template.Renderer
 
@@ -140,6 +141,8 @@ defmodule Hologram.Runtime.ChannelTest do
     "#{File.cwd!()}/test/fixtures/runtime/channel"
     |> compile_pages()
 
+    Runtime.reload()
+
     target_module = %{
       "type" => "module",
       "className" => @class_name_5
@@ -166,7 +169,7 @@ defmodule Hologram.Runtime.ChannelTest do
     html = Renderer.render(@module_5, %{})
 
     expected_response =
-      {:test_target_id_value, :__redirect__, %{html: html, url: "/test-route"}}
+      {:test_target_id_value, :__redirect__, %{html: html, url: "/test-route-5"}}
       |> Serializer.serialize()
 
     ref = push(socket, "command", message)
