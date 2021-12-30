@@ -1,12 +1,15 @@
 defmodule Hologram.Template.Renderer.PageTest do
   use Hologram.Test.UnitCase, async: false
 
+  alias Hologram.Runtime
   alias Hologram.Runtime.PageDigestStore
   alias Hologram.Template.Renderer
 
   test "render/2" do
     "#{File.cwd!()}/test/fixtures/template/renderers/page_renderer"
     |> compile_pages()
+
+    Runtime.reload()
 
     module = Hologram.Test.Fixtures.Template.PageRenderer.Module1
     digest = PageDigestStore.get(module)
