@@ -5,7 +5,7 @@ defmodule Hologram.Template.Encoder.TextNodeTest do
   alias Hologram.Template.VDOM.TextNode
 
   test "encode/1" do
-    text_node = %TextNode{content: "a'b\nc'd\ne&lcub;f&rcub;ga'b\nc'd\ne&lcub;f&rcub;g"}
+    text_node = %TextNode{content: "a'b\nc'd\ne\\{f&rcub;ga'b\nc'd\ne\\}f&rcub;g"}
     expected_encoded_content = "a\\'b\\nc\\'d\\ne{f}ga\\'b\\nc\\'d\\ne{f}g"
 
     result = Encoder.encode(text_node)

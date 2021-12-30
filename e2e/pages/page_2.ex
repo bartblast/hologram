@@ -21,7 +21,7 @@ defmodule Hologram.E2E.Page2 do
 
     <script>
       document.getElementById("page-2-back-button")
-        .addEventListener("click", () => &lcub; history.back() &rcub;)
+        .addEventListener("click", () => \{ history.back() \})
     </script>
     """
   end

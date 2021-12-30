@@ -7,8 +7,8 @@ defimpl Encoder, for: TextNode do
       content
       |> String.replace("\n", "\\n")
       |> String.replace("'", "\\'")
-      |> String.replace("&lcub;", "{")
-      |> String.replace("&rcub;", "}")
+      |> String.replace("\\{", "{")
+      |> String.replace("\\}", "}")
 
     "{ type: 'text', content: '#{content}' }"
   end

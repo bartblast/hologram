@@ -23,7 +23,7 @@ defmodule Hologram.E2E.Page5 do
 
     <script>
       document.getElementById("page-5-forward-button")
-        .addEventListener("click", () => &lcub; history.forward() &rcub;)
+        .addEventListener("click", () => \{ history.forward() \})
     </script>
     """
   end
