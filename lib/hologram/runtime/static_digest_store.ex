@@ -25,7 +25,7 @@ defmodule Hologram.Runtime.StaticDigestStore do
     :ets.new(@table_name, [:public, :named_table])
   end
 
-  defp find_digests do
+  def find_digests do
     static_path = Reflection.release_priv_path() <> "/static"
     regex = ~r/^#{Regex.escape(static_path)}(.+)\-([0-9a-f]{32})(.+)$/
 
@@ -47,7 +47,7 @@ defmodule Hologram.Runtime.StaticDigestStore do
     case :ets.lookup(@table_name, key) do
       [{^key, digest}] ->
         digest
-        
+
       _ ->
         file_path
     end
