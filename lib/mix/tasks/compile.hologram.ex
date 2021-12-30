@@ -151,7 +151,7 @@ defmodule Mix.Tasks.Compile.Hologram do
       Reflection.mix_lock_path(opts)
     ]
 
-    if opts[:pages_path], do: paths ++ opts[:pages_path], else: paths
+    if opts[:pages_path], do: paths ++ [opts[:pages_path]], else: paths
   end
 
   defp resolve_output_path do
