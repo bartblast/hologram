@@ -14,7 +14,7 @@ defmodule Hologram.Runtime.ChannelTest do
 
   @module_5 Hologram.Test.Fixtures.Runtime.Channel.Module5
   @target_id %{"type" => "atom", "value" => "test_target_id_value"}
-  
+
   setup do
     {:ok, _, socket} =
       socket(Socket)
@@ -137,7 +137,8 @@ defmodule Hologram.Runtime.ChannelTest do
   end
 
   test "command returning __redirect__ action", %{socket: socket} do
-    compile_pages("test/fixtures/runtime/channel")
+    "#{File.cwd!()}/test/fixtures/runtime/channel"
+    |> compile_pages()
 
     target_module = %{
       "type" => "module",
