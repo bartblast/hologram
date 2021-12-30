@@ -8,21 +8,20 @@ defmodule Hologram.Runtime.Application do
 
   @impl true
   def start(_type, _args) do
-    children = [
+    opts = [strategy: :one_for_one, name: Hologram.Runtime.Supervisor]
+    Supervisor.start_link(children(@env), opts)
+  end
+
+  defp children(:dev) do
+    children(:prod) ++ [Watcher]
+  end
+
+  defp children(_) do
+    [
       PageDigestStore,
       StaticDigestStore,
       RouterBuilder,
       TemplateStore
     ]
-
-    children =
-      if @env == :dev do
-        children ++ [Watcher]
-      else
-        children
-      end
-
-    opts = [strategy: :one_for_one, name: Hologram.Runtime.Supervisor]
-    Supervisor.start_link(children, opts)
   end
 end
