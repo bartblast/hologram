@@ -17,6 +17,7 @@ export default class Runtime {
   static componentClassRegistry = {}
   static document = null
   static isInitiated = false
+  static staticDigestStore = null
   static window = null
 
   static determineLayoutClass(pageClass) {
@@ -74,6 +75,8 @@ export default class Runtime {
 
     Runtime.document = window.document
     Runtime.window = window
+
+    Runtime.staticDigestStore = window.__hologramStaticDigestStore__
 
     Runtime.loadPageOnPopStateEvents()
 

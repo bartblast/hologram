@@ -28,7 +28,7 @@ defmodule Hologram.Runtime.StaticDigestStore do
       |> Enum.into(%{})
       |> Jason.encode!()
 
-    content = "window.__hologramStaticManifest__ = #{json}"
+    content = "window.__hologramStaticDigestStore__ = #{json}"
 
     Reflection.release_static_path() <> "/hologram/manifest.js"
     |> File.write!(content)

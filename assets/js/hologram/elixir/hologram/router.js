@@ -1,8 +1,12 @@
 "use strict";
 
+import Runtime from "../../runtime";
+import Type from "../../type";
+
 export default class Router {
-  // TODO: implement
-  static static_path(file_path) {
-    return file_path
+  // DEFER: test
+  static static_path(filePath) {
+    const pathWithDigest = Runtime.staticDigestStore[filePath.value]
+    return pathWithDigest ? Type.string(pathWithDigest) : filePath
   }
 }
