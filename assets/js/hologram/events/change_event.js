@@ -26,4 +26,9 @@ export default class ChangeEvent {
 
     return params
   }
+
+  // DEFER: test
+  static shouldHandleEvent(event) {
+    return true
+  }
 }

@@ -8,4 +8,14 @@ export default class ClickEvent {
   static buildEventData(_event, _tag) {
     return Utils.freeze(Type.map())
   }
+
+  // DEFER: test
+  // see: https://stackoverflow.com/a/20087506/13040586
+  static shouldHandleEvent(event) {
+    if (event.ctrlKey || event.metaKey || event.shiftKey || event.button === 1) {
+      return false
+    }
+    
+    return true
+  }
 }
