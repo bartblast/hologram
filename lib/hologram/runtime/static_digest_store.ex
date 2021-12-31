@@ -6,6 +6,7 @@ defmodule Hologram.Runtime.StaticDigestStore do
   alias Hologram.Compiler.Reflection
   alias Hologram.Utils
 
+  @manifest_key :__manifest__
   @table_name :hologram_static_digest_store
 
   def start_link(_) do
@@ -17,21 +18,19 @@ defmodule Hologram.Runtime.StaticDigestStore do
 
     create_table()
     populate_table(digests)
-    create_manifest_file(digests)
+    put_manifest(digests)
 
     {:ok, nil}
   end
 
-  defp create_manifest_file(digests) do
+  defp put_manifest(digests) do
     json =
       digests
       |> Enum.into(%{})
       |> Jason.encode!()
 
     content = "window.__hologramStaticDigestStore__ = #{json}"
-
-    Reflection.release_static_path() <> "/hologram/manifest.js"
-    |> File.write!(content)
+    :ets.insert(@table_name, {@manifest_key, content})
   end
 
   defp create_table do
@@ -64,6 +63,11 @@ defmodule Hologram.Runtime.StaticDigestStore do
       _ ->
         file_path
     end
+  end
+
+  def get_manifest do
+    [{_, content}] = :ets.lookup(@table_name, @manifest_key)
+    content
   end
 
   defp populate_table(static_digests) do

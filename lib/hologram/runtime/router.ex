@@ -10,6 +10,16 @@ defmodule Hologram.Router do
     opts
   end
 
+  def call(%Conn{request_path: "/hologram/manifest.js"} = conn, _opts) do
+    body = StaticDigestStore.get_manifest()
+
+    conn
+    |> Conn.put_resp_header("cache-control", "no-store")
+    |> Conn.put_resp_header("content-type", "text/javascript")
+    |> Conn.send_resp(200, body)
+    |> Conn.halt()
+  end
+
   def call(%Conn{request_path: request_path} = conn, _opts) do
     arg =
       get_path_segments(request_path)
