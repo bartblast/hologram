@@ -2,7 +2,7 @@ alias Hologram.Template.{Evaluator, Renderer}
 alias Hologram.Template.VDOM.ElementNode
 
 defimpl Renderer, for: ElementNode do
-  @pruned_attrs [:if, :on_blur, :on_change, :on_click, :on_pointer_down, :on_submit]
+  @pruned_attrs [:if, :on_blur, :on_change, :on_click, :on_pointer_down, :on_pointer_up, :on_submit]
 
   # see: https://html.spec.whatwg.org/multipage/syntax.html#void-elements
   @void_elems ~w(area base br col embed hr img input link meta param source track wbr)

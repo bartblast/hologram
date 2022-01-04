@@ -37,6 +37,17 @@ defmodule Hologram.Features.EventsTest do
     |> assert_has(css("#text", text: "Event count: 2"))
   end
 
+  feature "pointer up event", %{session: session} do
+    js = "document.getElementById('target').dispatchEvent(new Event('pointerup'))"
+
+    session
+    |> visit("/e2e/page-13")
+    |> click(css("#target"))
+    |> assert_has(css("#text", text: "Event count: 1"))
+    |> execute_script(js)
+    |> assert_has(css("#text", text: "Event count: 2"))
+  end
+
   feature "submit event", %{session: session} do
     session
     |> visit("/e2e/page-8")
