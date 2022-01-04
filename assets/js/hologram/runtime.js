@@ -94,7 +94,8 @@ export default class Runtime {
 
     requestAnimationFrame(() => {
       morphdom(Runtime.document.head, el.querySelector("head"))
-      morphdom(Runtime.document.body, el.querySelector("body"))
+      // morphdom(Runtime.document.body, el.querySelector("body"))
+      Runtime.document.body = el.querySelector("body")
 
       VDOM.reset()
       ScriptsReloader.reload(Runtime.document)
