@@ -8,6 +8,7 @@ defmodule Hologram.MixProject do
         "format",
         "cmd npx prettier --write 'assets/**/*.js' 'test/js/**/*.js' '**/*.json'"
       ],
+      "holo.run": ["assets.build", "phx.digest.clean --all", "phx.digest", "phx.server"],
       test: ["test --exclude e2e"],
       "test.all": [&test_js/1, "test --include e2e"],
       "test.e2e": ["test --only e2e"],
