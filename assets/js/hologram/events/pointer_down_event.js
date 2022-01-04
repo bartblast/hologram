@@ -1,12 +1,12 @@
 "use strict";
 
+import Map from "../elixir/map"
 import Type from "../type"
-import Utils from "../utils"
 
 export default class PointerDownEvent {
-  // TODO: implement & test (return boxed map)
-  static buildEventData(_event, _tag) {
-    return Utils.freeze(Type.map())
+  // DEFER: finish & test
+  static buildEventData(event, _tag) {
+    return Map.put(Type.map(), Type.atom("pointer_type"), Type.atom(event.pointerType))
   }
 
   // DEFER: test
