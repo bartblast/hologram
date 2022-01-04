@@ -92,11 +92,13 @@ export default class Runtime {
     var el = Runtime.document.createElement("html")
     el.innerHTML = html
 
-    morphdom(Runtime.document.head, el.querySelector("head"))
-    morphdom(Runtime.document.body, el.querySelector("body"))
+    requestAnimationFrame(() => {
+      morphdom(Runtime.document.head, el.querySelector("head"))
+      morphdom(Runtime.document.body, el.querySelector("body"))
 
-    VDOM.reset()
-    ScriptsReloader.reload(Runtime.document)
+      VDOM.reset()
+      ScriptsReloader.reload(Runtime.document)
+    })
   }
 
   // Covered implicitely in E2E tests.
