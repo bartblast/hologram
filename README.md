@@ -45,7 +45,7 @@
 | Key Up       | :x:                |                                                                 |
 | Mouse Move   | :x:                |                                                                 |
 | Params       | :x:                |                                                                 |
-| Pointer Down | :x:                |                                                                 |
+| Pointer Down | :construction:     | done: event handling, todo: event metadata                      |
 | Pointer Up   | :x:                |                                                                 |
 | Resize       | :x:                |                                                                 |
 | Scroll       | :x:                |                                                                 |

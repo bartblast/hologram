@@ -28,6 +28,13 @@ defmodule Hologram.Features.EventsTest do
     |> assert_has(css("#page-2-text", text: "text updated by page 2 update button"))
   end
 
+  feature "pointer down event", %{session: session} do
+    session
+    |> visit("/e2e/page-12")
+    |> click(css("#trigger"))
+    |> assert_has(css("#text", text: "Handled pointer down event"))
+  end
+
   feature "submit event", %{session: session} do
     session
     |> visit("/e2e/page-8")
