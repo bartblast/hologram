@@ -11,7 +11,7 @@ import Utils from "./utils";
 import BlurEvent from "./events/blur_event";
 import ChangeEvent from "./events/change_event";
 import ClickEvent from "./events/click_event";
-import PointerEvent from "./events/pointer_down_event";
+import PointerDownEvent from "./events/pointer_down_event";
 import SubmitEvent from "./events/submit_event";
 
 import { attributesModule, eventListenersModule, h, init, toVNode } from "snabbdom";
