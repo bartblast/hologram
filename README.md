@@ -45,6 +45,8 @@
 | Key Up       | :x:                |                                                                 |
 | Mouse Move   | :x:                |                                                                 |
 | Params       | :x:                |                                                                 |
+| Pointer Down | :x:                |                                                                 |
+| Pointer Up   | :x:                |                                                                 |
 | Resize       | :x:                |                                                                 |
 | Scroll       | :x:                |                                                                 |
 | Select       | :x:                |                                                                 |

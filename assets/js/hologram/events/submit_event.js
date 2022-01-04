@@ -17,7 +17,7 @@ export default class SubmitEvent {
   }
 
   // DEFER: test
-  static shouldHandleEvent(event) {
+  static shouldHandleEvent(_event) {
     return true
   } 
 }
