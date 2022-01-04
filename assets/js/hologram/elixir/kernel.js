@@ -46,19 +46,15 @@ export default class Kernel {
   static $equal_to(boxedVal1, boxedVal2) {
     let value;
 
-    switch (boxedVal1.type) {
-      case "boolean": 
-        value = boxedVal2.type === "boolean" && boxedVal1.value === boxedVal2.value
-        break;
-        
+    switch (boxedVal1.type) {        
       case "float":
       case "integer":
         value = Kernel._areBoxedNumbersEqual(boxedVal1, boxedVal2)
         break;
 
       default:
-        const message = `Kernel.$equal_to(): boxedVal1 = ${JSON.stringify(boxedVal1)}`
-        throw new HologramNotImplementedError(message)
+        value = boxedVal2.type === boxedVal1.type && boxedVal1.value === boxedVal2.value
+        break;
     }
 
     return Type.boolean(value)

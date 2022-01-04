@@ -115,8 +115,8 @@ describe("$boolean_and()", () => {
 })
 
 describe("$equal_to()", () => {
-  // boolean == boolean
-  it("returns boxed true for a boxed boolean equal to another boxed boolean", () => {
+  // non-number == non-number
+  it("returns boxed true for a boxed non-number equal to another boxed non-number", () => {
     const value1 = Type.boolean(true);
     const value2 = Type.boolean(true);
     const result = Kernel.$equal_to(value1, value2);
@@ -124,19 +124,10 @@ describe("$equal_to()", () => {
     assertBoxedTrue(result);
   });
 
-  // boolean != boolean
-  it("returns boxed false for a boxed boolean not equal to another boxed boolean", () => {
+  // non-number != non-number
+  it("returns boxed false for a boxed non-number not equal to another boxed non-number", () => {
     const value1 = Type.boolean(true);
-    const value2 = Type.boolean(false);
-    const result = Kernel.$equal_to(value1, value2);
-
-    assertBoxedFalse(result);
-  });
-
-  // boolean != non-boolean
-  it("returns boxed false when a boxed boolean is compared to a boxed value of different type", () => {
-    const value1 = Type.boolean(true);
-    const value2 = Type.string("true");
+    const value2 = Type.string("abc");
     const result = Kernel.$equal_to(value1, value2);
 
     assertBoxedFalse(result);
@@ -230,20 +221,6 @@ describe("$equal_to()", () => {
     const result = Kernel.$equal_to(value1, value2);
 
     assertBoxedFalse(result);
-  });
-
-  it("throws an error for not implemented types", () => {
-    const val = { type: "not implemented", value: "test" };
-    const expectedMessage =
-      'Kernel.$equal_to(): boxedVal1 = {"type":"not implemented","value":"test"}';
-
-    assert.throw(
-      () => {
-        Kernel.$equal_to(val, val);
-      },
-      HologramNotImplementedError,
-      expectedMessage
-    );
   });
 
   it("returns frozen object", () => {
