@@ -4,7 +4,7 @@ defmodule Hologram.Template.TagAssembler do
   alias Hologram.Template.{Helpers, SyntaxError, TokenHTMLEncoder}
 
   # see: https://developer.mozilla.org/en-US/docs/Web/SVG/Element
-  # #DEFER: add the rest of SVG elems, see: https://github.com/segmetric/hologram/issues/21
+  # DEFER: add the rest of SVG elems, see: https://github.com/segmetric/hologram/issues/21
   @svg_tags ["path", "rect"]
 
   # see: https://html.spec.whatwg.org/multipage/syntax.html#void-elements
