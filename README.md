@@ -34,29 +34,30 @@
 
 #### Events
 
-| Event        | Status             | Comments                                                        |
-| :----------- | :----------------: | :-------------------------------------------------------------- |
-| Blur         | :white_check_mark: |                                                                 |
-| Change       | :construction:     | done: form tags, todo: input, select, textarea tags             |
-| Click        | :construction:     | done: event handling, todo: event metadata                      |
-| Focus        | :x:                |                                                                 |
-| Key Down     | :x:                |                                                                 |
-| Key Press    | :x:                |                                                                 |
-| Key Up       | :x:                |                                                                 |
-| Mouse Move   | :x:                |                                                                 |
-| Params       | :x:                |                                                                 |
-| Pointer Down | :construction:     | done: event handling, todo: event metadata                      |
-| Pointer Up   | :construction:     | done: event handling, todo: event metadata                      |
-| Resize       | :x:                |                                                                 |
-| Scroll       | :x:                |                                                                 |
-| Select       | :x:                |                                                                 |
-| Submit       | :white_check_mark: |                                                                 |
-| Tap          | :x:                |                                                                 |
-| Target       | :x:                |                                                                 |
-| Touch Cancel | :x:                |                                                                 |
-| Touch End    | :x:                |                                                                 |
-| Touch Move   | :x:                |                                                                 |
-| Touch Start  | :x:                |                                                                 |
+| Event          | Status             | Comments                                                        |
+| :------------- | :----------------: | :-------------------------------------------------------------- |
+| Blur           | :white_check_mark: |                                                                 |
+| Change         | :construction:     | done: form tags, todo: input, select, textarea tags             |
+| Click          | :construction:     | done: event handling, todo: event metadata                      |
+| Focus          | :x:                |                                                                 |
+| Key Down       | :x:                |                                                                 |
+| Key Press      | :x:                |                                                                 |
+| Key Up         | :x:                |                                                                 |
+| Mouse Move     | :x:                |                                                                 |
+| Params         | :x:                |                                                                 |
+| Pointer Down   | :construction:     | done: event handling, todo: event metadata                      |
+| Pointer Up     | :construction:     | done: event handling, todo: event metadata                      |
+| Resize         | :x:                |                                                                 |
+| Scroll         | :x:                |                                                                 |
+| Select         | :x:                |                                                                 |
+| Submit         | :white_check_mark: |                                                                 |
+| Tap            | :x:                |                                                                 |
+| Target         | :x:                |                                                                 |
+| Touch Cancel   | :x:                |                                                                 |
+| Touch End      | :x:                |                                                                 |
+| Touch Move     | :x:                |                                                                 |
+| Touch Start    | :x:                |                                                                 |
+| Transition End | :white_check_mark: |                                                                 |
 
 #### Tools
 

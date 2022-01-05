@@ -2,7 +2,8 @@
 
 import Type from "../type"
 
-export default class BlurEvent {
+export default class TransitionEndEvent {
+  // DEFER: test
   static buildEventData(_event, _tag) {
     return Type.map()
   }

@@ -14,12 +14,22 @@ import ClickEvent from "./events/click_event";
 import PointerDownEvent from "./events/pointer_down_event";
 import PointerUpEvent from "./events/pointer_up_event";
 import SubmitEvent from "./events/submit_event";
+import TransitionEndEvent from "./events/transition_end_event";
 
 import { attributesModule, eventListenersModule, h, init, toVNode } from "snabbdom";
 const patch = init([attributesModule, eventListenersModule]);
 
 export default class VDOM {
-  static PRUNED_ATTRS = ["if", "on_blur", "on_change", "on_click", "on_pointer_down", "on_pointer_up", "on_submit"]
+  static PRUNED_ATTRS = [
+    "if", 
+    "on_blur", 
+    "on_change", 
+    "on_click", 
+    "on_pointer_down", 
+    "on_pointer_up", 
+    "on_submit", 
+    "on_transition_end"
+  ]
 
   static virtualDocument = null
 
@@ -160,6 +170,10 @@ export default class VDOM {
 
     if (node.attrs.on_submit) {
       eventHandlers.submit = (event) => { Runtime.handleEvent(event, SubmitEvent, sourceId, bindings, node.attrs.on_submit, node.tag) }
+    }
+
+    if (node.attrs.on_transition_end) {
+      eventHandlers.transitionend = (event) => { Runtime.handleEvent(event, TransitionEndEvent, sourceId, bindings, node.attrs.on_transition_end, node.tag) }
     }
 
     return eventHandlers
