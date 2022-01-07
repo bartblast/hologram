@@ -209,7 +209,7 @@ export default class VDOM {
     for (const node of nodes) {
       if (node.type === "text" && mergedNodes.length > 0) {
         const prevNode = mergedNodes[mergedNodes.length - 1]
-        
+
         if (prevNode.type === "text") {
           const mergedNode = Type.textNode(prevNode.content + node.content)
           mergedNodes[mergedNodes.length - 1] = mergedNode
@@ -290,7 +290,6 @@ export default class VDOM {
     const bindings = VDOM.aggregateLayoutBindings()
 
     const newVirtualDocument = VDOM.build(layoutTemplate, sourceId, bindings, slots)[0]
-    console.dir(newVirtualDocument)
     patch(VDOM.virtualDocument, newVirtualDocument)
     VDOM.virtualDocument = newVirtualDocument
   }
