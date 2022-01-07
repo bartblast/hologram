@@ -27,10 +27,8 @@ defmodule Hologram.Template.EmbeddedExpressionParser do
     maybe_add_text_node(acc)
   end
 
-  defp assemble_nodes([], :expression, acc, _) do
-    IO.inspect(acc)
-    raise "dupa"
-  end
+  # DEFER: implement this case (raise an error)
+  # defp assemble_nodes([], :expression, acc, _)
 
   defp assemble_nodes([{:symbol, :"{"} = token | rest], :text, acc, context) do
     acc =
