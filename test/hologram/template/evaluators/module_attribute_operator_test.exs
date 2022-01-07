@@ -6,9 +6,9 @@ defmodule Hologram.Template.Evaluator.ModuleAttributeOperatorTest do
 
   test "evaluate/2" do
     ir = %ModuleAttributeOperator{name: :a}
-    state = %{a: 123}
+    bindings = %{a: 123}
 
-    result = Evaluator.evaluate(ir, state)
+    result = Evaluator.evaluate(ir, bindings)
     expected = 123
 
     assert result == expected
