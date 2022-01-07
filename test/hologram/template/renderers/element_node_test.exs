@@ -1,7 +1,7 @@
 defmodule Hologram.Template.Renderer.ElementNodeTest do
   use Hologram.Test.UnitCase, async: true
 
-  alias Hologram.Compiler.IR.{IntegerType, ModuleAttributeOperator, NilType, TupleType}
+  alias Hologram.Compiler.IR.{BooleanType, IntegerType, ModuleAttributeOperator, NilType, TupleType}
   alias Hologram.Template.Renderer
   alias Hologram.Template.VDOM.{ElementNode, Expression, TextNode}
 
@@ -163,10 +163,50 @@ defmodule Hologram.Template.Renderer.ElementNodeTest do
     assert result == ""
   end
 
-  test "boolean attr" do
+  test "boolean attribute" do
     attrs = %{
       test_attr: %{
         value: nil,
+        modifiers: []
+      }
+    }
+
+    element_node = %ElementNode{attrs: attrs, children: [], tag: "div"}
+    result = Renderer.render(element_node, @bindings)
+
+    assert result == "<div test_attr></div>"
+  end
+
+  test "expression attribute which evaluates to false" do
+    attrs = %{
+      test_attr: %{
+        value: [
+          %Expression{
+            ir: %TupleType{
+              data: [%BooleanType{value: false}]
+            }
+          }
+        ],
+        modifiers: []
+      }
+    }
+
+    element_node = %ElementNode{attrs: attrs, children: [], tag: "div"}
+    result = Renderer.render(element_node, @bindings)
+
+    assert result == "<div></div>"
+  end
+
+  test "expression attribute which evaluates to nil" do
+    attrs = %{
+      test_attr: %{
+        value: [
+          %Expression{
+            ir: %TupleType{
+              data: [%NilType{}]
+            }
+          }
+        ],
         modifiers: []
       }
     }

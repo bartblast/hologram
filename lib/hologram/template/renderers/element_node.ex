@@ -1,7 +1,9 @@
 alias Hologram.Template.{Evaluator, Renderer}
-alias Hologram.Template.VDOM.ElementNode
+alias Hologram.Template.VDOM.{ElementNode, Expression}
 
 defimpl Renderer, for: ElementNode do
+  alias Hologram.Compiler.IR.TupleType
+
   @pruned_attrs [
     :if,
     :on_blur,
@@ -28,16 +30,33 @@ defimpl Renderer, for: ElementNode do
     end
   end
 
+  defp render_attr(%{value: nil}, key, _bindings) do
+    " #{key}"
+  end
+
+  defp render_attr(%{value: [%Expression{ir: %TupleType{data: [expr]}}]}, key, bindings) do
+    value = Evaluator.evaluate(expr, bindings)
+
+    case value do
+      nil ->
+        " #{key}"
+
+      false ->
+        ""
+
+      value ->
+        " #{key}=\"#{value}\""
+    end
+  end
+
+  defp render_attr(%{value: value}, key, bindings) do
+    value = Evaluator.evaluate(value, bindings)
+    " #{key}=\"#{value}\""
+  end
+
   defp render_attrs(attrs, bindings) do
     Enum.reject(attrs, fn {key, _} -> key in @pruned_attrs end)
-    |> Enum.map(fn {key, spec} ->
-      if spec.value do
-        value = Evaluator.evaluate(spec.value, bindings)
-        " #{key}=\"#{value}\""
-      else
-        " #{key}"
-      end
-    end)
+    |> Enum.map(fn {key, spec} -> render_attr(spec, key, bindings) end)
     |> Enum.join("")
   end
 
