@@ -31,8 +31,12 @@ defimpl Renderer, for: ElementNode do
   defp render_attrs(attrs, bindings) do
     Enum.reject(attrs, fn {key, _} -> key in @pruned_attrs end)
     |> Enum.map(fn {key, spec} ->
-      value = Evaluator.evaluate(spec.value, bindings)
-      " #{key}=\"#{value}\""
+      if spec.value do
+        value = Evaluator.evaluate(spec.value, bindings)
+        " #{key}=\"#{value}\""
+      else
+        " #{key}"
+      end
     end)
     |> Enum.join("")
   end

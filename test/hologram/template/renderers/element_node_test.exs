@@ -123,7 +123,7 @@ defmodule Hologram.Template.Renderer.ElementNodeTest do
     assert result == expected
   end
 
-  test "if attribute which evaluates to a truthy value" do
+  test "'if' attribute which evaluates to a truthy value" do
     attrs = %{
       if: %{
         value: [
@@ -143,7 +143,7 @@ defmodule Hologram.Template.Renderer.ElementNodeTest do
     assert result == "<div></div>"
   end
 
-  test "if attribute which evaluates to a falsy value" do
+  test "'if' attribute which evaluates to a falsy value" do
     attrs = %{
       if: %{
         value: [
@@ -161,5 +161,19 @@ defmodule Hologram.Template.Renderer.ElementNodeTest do
     result = Renderer.render(element_node, @bindings)
 
     assert result == ""
+  end
+
+  test "boolean attr" do
+    attrs = %{
+      test_attr: %{
+        value: nil,
+        modifiers: []
+      }
+    }
+
+    element_node = %ElementNode{attrs: attrs, children: [], tag: "div"}
+    result = Renderer.render(element_node, @bindings)
+
+    assert result == "<div test_attr></div>"
   end
 end
