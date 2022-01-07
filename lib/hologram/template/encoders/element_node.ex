@@ -12,7 +12,7 @@ defimpl Encoder, for: ElementNode do
   end
 
   defp encode_attr(name, %{value: value, modifiers: modifiers}) do
-    value = Encoder.encode(value)
+    value = if value, do: Encoder.encode(value), else: "null"
     modifiers = encode_modifiers(modifiers)
     "'#{name}': { value: #{value}, modifiers: #{modifiers} }"
   end

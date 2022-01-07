@@ -113,6 +113,23 @@ defmodule Hologram.Template.Encoder.ElementNodeTest do
     assert result == expected
   end
 
+  test "boolean attr" do
+    attrs = %{
+      attr_1: %{value: nil, modifiers: []},
+    }
+
+    result =
+      %ElementNode{tag: "div", attrs: attrs, children: []}
+      |> Encoder.encode()
+
+    attr_1 = "{ value: null, modifiers: [] }"
+
+    expected =
+      "{ type: 'element', tag: 'div', attrs: { 'attr_1': #{attr_1} }, children: [] }"
+
+    assert result == expected
+  end
+
   test "multiple nodes in attr" do
     attrs = %{
       test_key: %{
