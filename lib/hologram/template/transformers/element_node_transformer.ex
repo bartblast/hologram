@@ -16,8 +16,16 @@ defmodule Hologram.Template.ElementNodeTransformer do
       modifiers = Enum.map(modifiers, &String.to_atom/1)
 
       value =
-        (if type == :expression, do: "{#{value}}", else: value)
-        |> EmbeddedExpressionParser.parse(context)
+        case type do
+          :boolean ->
+            nil
+
+          :expression ->
+            "{#{value}}" |> EmbeddedExpressionParser.parse(context)
+
+          :literal ->
+            EmbeddedExpressionParser.parse(value, context)
+        end
 
       {name, %{value: value, modifiers: modifiers}}
     end)
