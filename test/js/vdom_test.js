@@ -381,11 +381,20 @@ describe("buildVNodeEventHandlers()", () => {
 })
 
 describe("buildVNodeList()", () => {
-  it("builds a list of vnodes", () => {
-    const nodes = [Type.textNode("node1"), Type.textNode("node2")]
+  it("converts expression nodes into text nodes", () => {
+    const nodes = [Type.expressionNode(callback)]
 
     const result = VDOM.buildVNodeList(nodes, Target.TYPE.page, bindings, {})
-    const expected = ["node1", "node2"]
+    const expected = ["1"]
+
+    assert.deepStrictEqual(result, expected)
+  })
+
+  it("merges consecutive text nodes", () => {
+    const nodes = [Type.textNode("abc"), Type.expressionNode(callback), Type.textNode("xyz")]
+
+    const result = VDOM.buildVNodeList(nodes, Target.TYPE.page, bindings, {})
+    const expected = ["abc1xyz"]
 
     assert.deepStrictEqual(result, expected)
   })

@@ -180,10 +180,47 @@ export default class VDOM {
   }
 
   static buildVNodeList(nodes, sourceId, bindings, slots) {
+    nodes = VDOM._convertExpressionNodesToTextNodes(nodes, bindings)
+    nodes = VDOM._mergeConsecutiveTextNodes(nodes)
+
     return nodes.reduce((acc, node) => {
       acc.push(...VDOM.build(node, sourceId, bindings, slots))
       return acc
     }, [])
+  }
+
+  // DEFER: test
+  static _convertExpressionNodesToTextNodes(nodes, bindings) {
+    return nodes.map((node) => {
+      if (node.type === "expression") {
+        const evaluatedNode = VDOM.evaluateNode(node, bindings)
+        const content = VDOM.interpolate(evaluatedNode)
+        return Type.textNode(content)
+      } else {
+        return node
+      }
+    })
+  }
+
+  // DEFER: test
+  static _mergeConsecutiveTextNodes(nodes) {
+    const mergedNodes = []
+
+    for (const node of nodes) {
+      if (node.type === "text" && mergedNodes.length > 0) {
+        const prevNode = mergedNodes[mergedNodes.length - 1]
+        
+        if (prevNode.type === "text") {
+          const mergedNode = Type.textNode(prevNode.content + node.content)
+          mergedNodes[mergedNodes.length - 1] = mergedNode
+          continue;
+        }
+      }
+
+      mergedNodes.push(node)
+    }
+
+    return mergedNodes
   }
 
   static evaluateAttr(nodes, bindings) {
@@ -253,6 +290,7 @@ export default class VDOM {
     const bindings = VDOM.aggregateLayoutBindings()
 
     const newVirtualDocument = VDOM.build(layoutTemplate, sourceId, bindings, slots)[0]
+    console.dir(newVirtualDocument)
     patch(VDOM.virtualDocument, newVirtualDocument)
     VDOM.virtualDocument = newVirtualDocument
   }
