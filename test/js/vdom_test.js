@@ -270,14 +270,26 @@ describe("buildTextVNodeFromExpression()", () => {
 })
 
 describe("buildVNodeAttrs()", () => {
-  it("builds vnode attributes", () => {
+  it("builds literal attribute", () => {
     const node = {
       attrs: {
         abc: {
           value: [Type.textNode("valueAbc")],
           modifiers: [] 
         },
-        xyz: {
+      }
+    }
+
+    const result = VDOM.buildVNodeAttrs(node, bindings)
+    const expected = {abc: "valueAbc"}
+
+    assert.deepStrictEqual(result, expected)
+  })
+
+  it("builds expression attribute", () => {
+    const node = {
+      attrs: {
+        abc: {
           value: [Type.expressionNode(callback)],
           modifiers: []
         }
@@ -285,7 +297,43 @@ describe("buildVNodeAttrs()", () => {
     }
 
     const result = VDOM.buildVNodeAttrs(node, bindings)
-    const expected = {abc: "valueAbc", xyz: "1"}
+    const expected = {abc: "1"}
+
+    assert.deepStrictEqual(result, expected)
+  })
+
+  it("builds boolean attribute", () => {
+    const node = {
+      attrs: {
+        abc: {
+          value: null,
+          modifiers: []
+        }
+      }
+    }
+
+    const result = VDOM.buildVNodeAttrs(node, bindings)
+    const expected = {abc: true}
+
+    assert.deepStrictEqual(result, expected)
+  })
+
+  it("builds multiple attributes", () => {
+    const node = {
+      attrs: {
+        abc: {
+          value: [Type.textNode("valueAbc")],
+          modifiers: [] 
+        },
+        xyz: {
+          value: [Type.textNode("valueXyz")],
+          modifiers: [] 
+        },
+      }
+    }
+
+    const result = VDOM.buildVNodeAttrs(node, bindings)
+    const expected = {abc: "valueAbc", xyz: "valueXyz"}
 
     assert.deepStrictEqual(result, expected)
   })

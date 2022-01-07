@@ -139,7 +139,7 @@ export default class VDOM {
     return Object.keys(node.attrs).reduce((acc, key) => {
       if (!VDOM.PRUNED_ATTRS.includes(key)) {
         const valueNodes = node.attrs[key].value
-        acc[key] = VDOM.evaluateAttr(valueNodes, bindings)         
+        acc[key] = valueNodes ? VDOM.evaluateAttr(valueNodes, bindings) : true
       }
       return acc
     }, {})
