@@ -46,7 +46,7 @@ defmodule Hologram.Template.ElementNodeTransformerTest do
     assert result == expected
   end
 
-  test "boolean attrs value" do
+  test "boolean attr value" do
     attrs = [{:boolean, "test_key", nil}]
     result = ElementNodeTransformer.transform(@tag_name, @children, attrs, @context)
 
