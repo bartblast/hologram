@@ -18,6 +18,6 @@ defmodule Hologram.Compiler.IfExpressionTransformer do
     do_body = Enum.map(do_body, &Transformer.transform(&1, context))
     else_body = Enum.map(else_body, &Transformer.transform(&1, context))
 
-    %IfExpression{condition: condition, do: do_body, else: else_body, ast: ast, context: context}
+    %IfExpression{condition: condition, do: do_body, else: else_body, ast: ast}
   end
 end
