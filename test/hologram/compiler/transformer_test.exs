@@ -4,6 +4,7 @@ defmodule Hologram.Compiler.TransformerTest do
   alias Hologram.Compiler.{Context, Transformer}
 
   alias Hologram.Compiler.IR.{
+    AccessOperator,
     AdditionOperator,
     AliasDirective,
     AnonymousFunctionType,
@@ -165,6 +166,14 @@ defmodule Hologram.Compiler.TransformerTest do
   end
 
   describe "operators" do
+    test "access" do
+      code = "a[:b]"
+      ast = ast(code)
+
+      result = Transformer.transform(ast, %Context{})
+      assert result == %AccessOperator{data: :a, key: :b}
+    end
+
     test "addition" do
       code = "1 + 2"
       ast = ast(code)

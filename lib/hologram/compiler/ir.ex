@@ -51,6 +51,10 @@ defmodule Hologram.Compiler.IR do
 
   # OPERATORS
 
+  defmodule AccessOperator do
+    defstruct data: nil, key: nil
+  end
+
   defmodule AdditionOperator do
     defstruct left: nil, right: nil
   end

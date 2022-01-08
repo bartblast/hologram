@@ -31,6 +31,7 @@ defmodule Hologram.Compiler.Transformer do
   }
 
   alias Hologram.Compiler.IR.{
+    AccessOperator,
     AtomType,
     BooleanType,
     IntegerType,
@@ -102,6 +103,10 @@ defmodule Hologram.Compiler.Transformer do
   end
 
   # OPERATORS
+
+  def transform({{:., _, [Access, :get]}, _, [{data, _, _}, key]}, %Context{}) do
+    %AccessOperator{data: data, key: key}
+  end
 
   def transform({:+, _, _} = ast, %Context{} = context) do
     AdditionOperatorTransformer.transform(ast, context)
