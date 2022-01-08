@@ -4,23 +4,20 @@ defmodule Hologram.Template.Evaluator.ModuleAttributeOperatorTest do
   alias Hologram.Compiler.IR.ModuleAttributeOperator
   alias Hologram.Template.Evaluator
 
+  @bindings %{a: 123}
+
   test "existing binding" do
     ir = %ModuleAttributeOperator{name: :a}
-    bindings = %{a: 123}
+    result = Evaluator.evaluate(ir, @bindings)
 
-    result = Evaluator.evaluate(ir, bindings)
-    expected = 123
-
-    assert result == expected
+    assert result == 123
   end
 
   test "non-existing binding" do
     ir = %ModuleAttributeOperator{name: :b}
-    bindings = %{a: 123}
 
-    result = Evaluator.evaluate(ir, bindings)
-    expected = nil
-
-    assert result == expected
+    assert_raise KeyError, "key :b not found in %{a: 123}", fn ->
+      Evaluator.evaluate(ir, @bindings)
+    end
   end
 end
