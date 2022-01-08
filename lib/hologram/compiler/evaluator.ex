@@ -2,7 +2,7 @@ defmodule Hologram.Compiler.Evaluator do
   def evaluate(ast, bindings) do
     bindings =
       Enum.map(bindings, fn {key, value} ->
-        {:"__hologram_#{key}__", value}
+        {:"hologram_#{key}__", value}
       end)
 
     replace_module_attributes(ast)
@@ -11,12 +11,17 @@ defmodule Hologram.Compiler.Evaluator do
   end
 
   defp replace_module_attributes({:@, metadata, [{name, _, _}]}) do
-    {:"__hologram_#{name}__", metadata, nil}
+    {:"hologram_#{name}__", metadata, nil}
   end
 
-  defp replace_module_attributes({atom, metadata, args}) do
-    args = Enum.map(args, &replace_module_attributes/1)
-    {atom, metadata, args}
+  defp replace_module_attributes(ast) when is_list(ast) do
+    Enum.map(ast, &replace_module_attributes/1)
+  end
+
+  defp replace_module_attributes(ast) when is_tuple(ast) do
+    Tuple.to_list(ast)
+    |> Enum.map(&replace_module_attributes/1)
+    |> List.to_tuple()
   end
 
   defp replace_module_attributes(ast), do: ast
