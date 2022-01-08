@@ -318,6 +318,42 @@ describe("buildVNodeAttrs()", () => {
     assert.deepStrictEqual(result, expected)
   })
 
+  it("builds expression attribute which evaluates to nil", () => {
+    const callback = ($) => { return Type.tuple([Type.nil()]) }
+
+    const node = {
+      attrs: {
+        abc: {
+          value: [Type.expressionNode(callback)],
+          modifiers: []
+        }
+      }
+    }
+
+    const result = VDOM.buildVNodeAttrs(node, bindings)
+    const expected = {abc: true}
+
+    assert.deepStrictEqual(result, expected)
+  })
+
+  it("doesn't build expression attribute which evaluates to false", () => {
+    const callback = ($) => { return Type.tuple([Type.boolean(false)]) }
+
+    const node = {
+      attrs: {
+        abc: {
+          value: [Type.expressionNode(callback)],
+          modifiers: []
+        }
+      }
+    }
+
+    const result = VDOM.buildVNodeAttrs(node, bindings)
+    const expected = {}
+
+    assert.deepStrictEqual(result, expected)
+  })
+
   it("builds multiple attributes", () => {
     const node = {
       attrs: {
@@ -400,16 +436,17 @@ describe("buildVNodeList()", () => {
   })
 })
 
-describe("evaluateAttr()", () => {
-  it("evaluates attribute value to a string", () => {
+describe("evaluateAttrParts()", () => {
+  it("evaluates attribute parts", () => {
     const nodes = [
       Type.textNode("abc"),
       Type.expressionNode(callback)
     ]
 
-    const result = VDOM.evaluateAttr(nodes, bindings)
+    const result = VDOM.evaluateAttrParts(nodes, bindings)
+    const expected = [Type.string("abc"), Type.integer(1)]
 
-    assert.equal(result, "abc1")
+    assert.deepStrictEqual(result, expected)
   })
 })
 

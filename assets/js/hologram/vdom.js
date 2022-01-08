@@ -139,7 +139,19 @@ export default class VDOM {
     return Object.keys(node.attrs).reduce((acc, key) => {
       if (!VDOM.PRUNED_ATTRS.includes(key)) {
         const valueNodes = node.attrs[key].value
-        acc[key] = valueNodes ? VDOM.evaluateAttr(valueNodes, bindings) : true
+
+        if (valueNodes) {
+          const value = VDOM.evaluateAttrParts(valueNodes, bindings)
+
+          if (Type.isNil(value[0])) {
+            acc[key] = true
+          } else if (!Type.isFalse(value[0])) {
+            acc[key] = VDOM.evaluateAttrToString(value)
+          }
+
+        } else {
+          acc[key] = true
+        }
       }
       return acc
     }, {})
@@ -223,10 +235,13 @@ export default class VDOM {
     return mergedNodes
   }
 
-  static evaluateAttr(nodes, bindings) {
-    return nodes.reduce((acc, node) => {
-      return acc + VDOM.interpolate(VDOM.evaluateNode(node, bindings))
-    }, "")
+  static evaluateAttrParts(nodes, bindings) {
+    return nodes.map(node => VDOM.evaluateNode(node, bindings))
+  }
+
+  // DEFER: use bindings & test
+  static evaluateAttrToString(nodes, _bindings) {
+    return nodes.map(node => VDOM.interpolate(node)).join()
   }
 
   static evaluateNode(node, bindings) {
