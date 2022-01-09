@@ -170,8 +170,7 @@ defmodule Hologram.Compiler.TransformerTest do
       code = "a[:b]"
       ast = ast(code)
 
-      result = Transformer.transform(ast, %Context{})
-      assert result == %AccessOperator{data: :a, key: :b}
+      assert %AccessOperator{} = Transformer.transform(ast, %Context{})
     end
 
     test "addition" do
