@@ -240,9 +240,9 @@ export default class VDOM {
     return nodes.map(node => VDOM.evaluateNode(node, bindings))
   }
 
-  // DEFER: use bindings & test
+  // DEFER: use bindings
   static evaluateAttrToString(nodes, _bindings) {
-    return nodes.map(node => VDOM.interpolate(node)).join()
+    return nodes.map(node => VDOM.interpolate(node)).join("")
   }
 
   static evaluateNode(node, bindings) {

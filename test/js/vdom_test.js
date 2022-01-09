@@ -499,6 +499,20 @@ describe("evaluateProp()", () => {
   })
 })
 
+describe("evaluateAttrToString()", () => {
+  it.only("interpolates and joins parts of attribute value", () => {
+    const nodes = [
+      Type.string("abc"),
+      Type.integer(1),
+      Type.string("xyz")
+    ]
+
+    const result = VDOM.evaluateAttrToString(nodes, bindings)
+
+    assert.deepStrictEqual(result, "abc1xyz")
+  })
+})
+
 describe("getComponentId()", () => {
   it("returns component ID prop as JS string if the component is stateful", () => {
     const props = {
