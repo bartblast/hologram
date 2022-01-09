@@ -1,9 +1,9 @@
 defmodule Hologram.Compiler.Evaluator do
   def evaluate(ast, bindings) do
     bindings =
-      Enum.map(bindings, fn {key, value} ->
-        {:"hologram_#{key}__", value}
-      end)
+      bindings
+      |> Map.put(:bindings, bindings)
+      |> Enum.map(fn {key, value} -> {:"hologram_#{key}__", value} end)
 
     replace_module_attributes(ast)
     |> Code.eval_quoted(bindings)

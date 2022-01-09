@@ -5,11 +5,11 @@ defmodule Hologram.Compiler.EvaluatorTest do
   @bindings %{a: 1, b: 2, c: 3}
 
   test "evaluates addition expression" do
-    code = "1 + @a + @b"
+    code = "1 + @a + @c"
     ast = ast(code)
     result = Evaluator.evaluate(ast, @bindings)
 
-    assert result == 4
+    assert result == 5
   end
 
   test "evaluated if expression" do
@@ -18,5 +18,13 @@ defmodule Hologram.Compiler.EvaluatorTest do
     result = Evaluator.evaluate(ast, @bindings)
 
     assert result == 2
+  end
+
+  test "injects bindings key into bindings" do
+    code = "1 + @bindings.c"
+    ast = ast(code)
+    result = Evaluator.evaluate(ast, @bindings)
+
+    assert result == 4
   end
 end

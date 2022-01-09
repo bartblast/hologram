@@ -471,6 +471,9 @@ describe("evaluateNode()", () => {
     assert.deepStrictEqual(result, expected)
     assertFrozen(result)
   })
+
+  // DEFER: test
+  // it("injects bindings key to bindings", () => {})
 })
 
 describe("evaluateProp()", () => {

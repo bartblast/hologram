@@ -1,6 +1,7 @@
 "use strict";
 
 import Kernel from "./elixir/kernel";
+import Map from "./elixir/map";
 
 import Runtime from "./runtime";
 import Store from "./store";
@@ -245,6 +246,8 @@ export default class VDOM {
   }
 
   static evaluateNode(node, bindings) {
+    bindings = Map.put(bindings, Type.atom("bindings"), bindings)
+
     switch (node.type) {
       case "expression":
         return Utils.freeze(node.callback(bindings).data[0])
