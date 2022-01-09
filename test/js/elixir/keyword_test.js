@@ -50,6 +50,30 @@ describe("delete()", () => {
   });
 });
 
+describe("get()", () => {
+  const keywordElems = [
+    Type.tuple([Type.atom("a"), Type.integer(1)]),
+    Type.tuple([Type.atom("b"), Type.integer(2)])
+  ]
+
+  const keywords = Type.list(keywordElems)
+
+  it("gets the value for a specific key in keyword list if the given key exists in the given keyword list", () => {
+    const result = Keyword.get(keywords, Type.atom("b"));
+    assert.deepStrictEqual(result, Type.integer(2));
+  });
+
+  it("returns boxed nil by default if the given key doesn't exist in the given keyword list", () => {
+    const result = Keyword.get(keywords, Type.atom("c"));
+    assert.deepStrictEqual(result, Type.nil());
+  });
+
+  it("it returns the default_value arg if the given key doesn't exist in the given keyword list and the default_value param is specified", () => {
+    const result = Keyword.get(keywords, Type.atom("c"), Type.integer(9));
+    assert.deepStrictEqual(result, Type.integer(9));
+  });
+});
+
 describe("has_key$question()", () => {
   let keywords;
 
