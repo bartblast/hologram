@@ -5,6 +5,7 @@ import Runtime from "./hologram/runtime";
 
 // transpiled Elixir standard library
 
+import Elixir_Access from "./hologram/elixir/access";
 import Elixir_Ecto_Changeset from "./hologram/elixir/ecto/changeset";
 import Elixir_Enum from "./hologram/elixir/enum";
 import Elixir_IO from "./hologram/elixir/io";
@@ -14,6 +15,7 @@ import Elixir_Map from "./hologram/elixir/map";
 import Elixir_Kernel_SpecialForms from "./hologram/elixir/kernel/special_forms";
 import Elixir_String from "./hologram/elixir/string";
 
+window.Elixir_Access = Elixir_Access;
 window.Elixir_Ecto_Changeset = Elixir_Ecto_Changeset;
 window.Elixir_Enum = Elixir_Enum;
 window.Elixir_IO = Elixir_IO;
