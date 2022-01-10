@@ -500,7 +500,7 @@ describe("evaluateProp()", () => {
 })
 
 describe("evaluateAttrToString()", () => {
-  it.only("interpolates and joins parts of attribute value", () => {
+  it("interpolates and joins parts of attribute value", () => {
     const nodes = [
       Type.string("abc"),
       Type.integer(1),
