@@ -260,7 +260,7 @@ defmodule Hologram.Compiler.ReflectionTest do
 
   test "list_pages/1" do
     num_pages =
-      "#{Reflection.pages_path()}/*"
+      "#{Reflection.app_path()}/pages/*"
       |> Path.wildcard()
       |> Enum.count()
 
@@ -295,38 +295,6 @@ defmodule Hologram.Compiler.ReflectionTest do
 
   test "otp_app/0" do
     assert Reflection.otp_app() == :hologram
-  end
-
-  describe "pages_path/1" do
-    test "default" do
-      result = Reflection.pages_path()
-      expected = "#{File.cwd!()}/e2e/pages"
-
-      assert result == expected
-    end
-
-    test "opts" do
-      config_pages_path = "/test/config/pages/path"
-      Application.put_env(:hologram, :pages_path, config_pages_path)
-
-      opts_pages_path = "/test/opts/pages/path"
-      opts = [pages_path: opts_pages_path]
-
-      result = Reflection.pages_path(opts)
-      assert result == opts_pages_path
-
-      Application.delete_env(:hologram, :pages_path)
-    end
-
-    test "config" do
-      config_pages_path = "/test/config/pages/path"
-      Application.put_env(:hologram, :pages_path, config_pages_path)
-
-      result = Reflection.pages_path()
-      assert result == config_pages_path
-
-      Application.delete_env(:hologram, :pages_path)
-    end
   end
 
   describe "root_path/0" do

@@ -231,10 +231,6 @@ defmodule Hologram.Compiler.Reflection do
     @config[:otp_app]
   end
 
-  def pages_path(opts \\ []) do
-    resolve_path(opts, :pages_path, :pages)
-  end
-
   # DEFER: test
   def release_page_digest_store_path do
     release_priv_path() <> "/hologram/page_digest_store.bin"
