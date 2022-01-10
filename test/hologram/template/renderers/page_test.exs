@@ -21,12 +21,15 @@ defmodule Hologram.Template.Renderer.PageTest do
     <!DOCTYPE html>
     <html>
       <head>
-        <script src="/hologram/manifest.js"></script>
-    <script src="/hologram/runtime.js"></script>
-    <script src="/hologram/page-b3c30aef343636aa19c36185d7589ed4.js"></script>
-    <script>
-      Hologram.run(Elixir_Hologram_Test_Fixtures_Template_PageRenderer_Module1, "{ type: 'map', data: { '~atom[a]': { type: 'integer', value: 123 }, '~atom[b]': { type: 'integer', value: 987 }, '~atom[context]': { type: 'map', data: { '~atom[__class__]': { type: 'string', value: 'Elixir_Hologram_Test_Fixtures_Template_PageRenderer_Module1' }, '~atom[__digest__]': { type: 'string', value: '#{digest}' } } } } }")
+        <script>
+      window.hologramArgs = {
+        class: "Elixir_Hologram_Test_Fixtures_Template_PageRenderer_Module1",
+        state: "{ type: 'map', data: { '~atom[a]': { type: 'integer', value: 123 }, '~atom[b]': { type: 'integer', value: 987 }, '~atom[context]': { type: 'map', data: { '~atom[__class__]': { type: 'string', value: 'Elixir_Hologram_Test_Fixtures_Template_PageRenderer_Module1' }, '~atom[__digest__]': { type: 'string', value: '#{digest}' } } } } }"
+      }
     </script>
+    <script src="/hologram/manifest.js"></script>
+    <script src="/hologram/runtime.js"></script>
+    <script src="/hologram/page-#{digest}.js"></script>
       </head>
       <body>
         layout template 987
