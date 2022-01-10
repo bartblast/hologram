@@ -35,38 +35,6 @@ defmodule Hologram.Compiler.ReflectionTest do
     end
   end
 
-  describe "components_path/1" do
-    test "default" do
-      result = Reflection.components_path()
-      expected = "#{File.cwd!()}/e2e/components"
-
-      assert result == expected
-    end
-
-    test "opts" do
-      config_components_path = "/test/config/components/path"
-      Application.put_env(:hologram, :components_path, config_components_path)
-
-      opts_components_path = "/test/opts/components/path"
-      opts = [components_path: opts_components_path]
-
-      result = Reflection.components_path(opts)
-      assert result == opts_components_path
-
-      Application.delete_env(:hologram, :components_path)
-    end
-
-    test "config" do
-      config_components_path = "/test/config/components/path"
-      Application.put_env(:hologram, :components_path, config_components_path)
-
-      result = Reflection.components_path()
-      assert result == config_components_path
-
-      Application.delete_env(:hologram, :components_path)
-    end
-  end
-
   describe "has_function?/3" do
     test "returns true if the module has a function with the given name and arity" do
       assert Reflection.has_function?(@module_4, :test_fun, 2)

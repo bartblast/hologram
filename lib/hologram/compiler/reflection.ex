@@ -44,10 +44,6 @@ defmodule Hologram.Compiler.Reflection do
     |> ast()
   end
 
-  def components_path(opts \\ []) do
-    resolve_path(opts, :components_path, :components)
-  end
-
   # DEFER: test
   def has_release_page_list? do
     release_page_list_path()
