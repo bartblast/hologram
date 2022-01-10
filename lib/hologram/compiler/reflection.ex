@@ -106,10 +106,6 @@ defmodule Hologram.Compiler.Reflection do
     is_alias?(term) && Keyword.has_key?(term.module_info(:exports), :__protocol__)
   end
 
-  def layouts_path(opts \\ []) do
-    resolve_path(opts, :layouts_path, :layouts)
-  end
-
   # DEFER: test
   def lib_path(opts \\ []) do
     root_path(opts) <> "/lib"

@@ -185,38 +185,6 @@ defmodule Hologram.Compiler.ReflectionTest do
     end
   end
 
-  describe "layouts_path/1" do
-    test "default" do
-      result = Reflection.layouts_path()
-      expected = "#{File.cwd!()}/e2e/layouts"
-
-      assert result == expected
-    end
-
-    test "opts" do
-      config_layouts_path = "/test/config/layouts/path"
-      Application.put_env(:hologram, :layouts_path, config_layouts_path)
-
-      opts_layouts_path = "/test/opts/layouts/path"
-      opts = [layouts_path: opts_layouts_path]
-
-      result = Reflection.layouts_path(opts)
-      assert result == opts_layouts_path
-
-      Application.delete_env(:hologram, :layouts_path)
-    end
-
-    test "config" do
-      config_layouts_path = "/test/config/layouts/path"
-      Application.put_env(:hologram, :layouts_path, config_layouts_path)
-
-      result = Reflection.layouts_path()
-      assert result == config_layouts_path
-
-      Application.delete_env(:hologram, :layouts_path)
-    end
-  end
-
   test "list_components/1" do
     num_app_components =
       "#{Reflection.components_path()}/*"
