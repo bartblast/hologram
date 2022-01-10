@@ -14,9 +14,10 @@ defmodule Hologram.Template.Evaluator.VariableTest do
   end
 
   test "raises error if binding doesn't exist" do
+    ir = %Variable{name: :c}
+    
     assert_raise KeyError, "key :c not found in: %{a: 1, b: 2}", fn ->
-      ir = %Variable{name: :c}
-      result = Evaluator.evaluate(ir, @bindings)
+      Evaluator.evaluate(ir, @bindings)
     end
   end
 end
