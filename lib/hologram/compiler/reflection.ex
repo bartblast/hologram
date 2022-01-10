@@ -174,8 +174,8 @@ defmodule Hologram.Compiler.Reflection do
   end
 
   def list_pages(opts \\ []) do
-    pages_path = pages_path(opts)
-    list_modules_of_type(:page, pages_path)
+    app_path = app_path(opts)
+    list_modules_of_type(:page, app_path)
   end
 
   # DEFER: test
