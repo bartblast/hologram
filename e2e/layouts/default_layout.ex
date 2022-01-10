@@ -4,6 +4,7 @@ defmodule Hologram.E2E.DefaultLayout do
   def init do
     %{
       text: "",
+      value: :dl
     }
   end
 
