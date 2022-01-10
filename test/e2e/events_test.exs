@@ -29,15 +29,19 @@ defmodule Hologram.Features.EventsTest do
   end
 
   feature "pointer down event", %{session: session} do
+    # for some reason Wallaby doesn't generate pointerdown event on touch down
+    js = "document.getElementById('target').dispatchEvent(new Event('pointerdown'))"
+
     session
     |> visit("/e2e/page-12")
     |> click(css("#target"))
     |> assert_has(css("#text", text: "Event count: 1"))
-    |> touch_down(css("#target"))
+    |> execute_script(js)
     |> assert_has(css("#text", text: "Event count: 2"))
   end
 
   feature "pointer up event", %{session: session} do
+    # for some reason Wallaby doesn't generate pointerup event on touch down
     js = "document.getElementById('target').dispatchEvent(new Event('pointerup'))"
 
     session
