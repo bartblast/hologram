@@ -73,7 +73,7 @@ defmodule Hologram.Compiler.CallGraphBuilder.ModuleDefinitionTest do
 
   test "template traversing" do
     path = "#{File.cwd!()}/test/fixtures/compiler/call_graph_builder/module_definition"
-    templates = build_templates_by_path(path)
+    templates = build_templates(path)
 
     module_defs = %{
       Module4 => Reflection.module_definition(Module4),
