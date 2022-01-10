@@ -119,7 +119,7 @@ defmodule Hologram.Compiler.Reflection do
   end
 
   def list_components(opts \\ []) do
-    app_components_path = components_path(opts)
+    app_components_path = app_path(opts)
     app_components = list_modules_of_type(:component, app_components_path)
 
     hologram_ui_components_path = hologram_ui_components_path()

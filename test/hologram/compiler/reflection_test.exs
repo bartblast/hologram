@@ -187,7 +187,7 @@ defmodule Hologram.Compiler.ReflectionTest do
 
   test "list_components/1" do
     num_app_components =
-      "#{Reflection.components_path()}/*"
+      "#{Reflection.app_path()}/components/*"
       |> Path.wildcard()
       |> Enum.count()
 
