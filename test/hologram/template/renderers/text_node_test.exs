@@ -5,7 +5,7 @@ defmodule Hologram.Template.Renderer.TextNodeTest do
   alias Hologram.Template.VDOM.TextNode
 
   test "render/2" do
-    content = "a\\{b&rcub;ca\\}b&rcub;c"
+    content = "a\\{b\\}ca\\{b\\}c"
     text_node = %TextNode{content: content}
 
     result = Renderer.render(text_node, %{})
