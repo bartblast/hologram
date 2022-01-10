@@ -143,14 +143,12 @@ defmodule Mix.Tasks.Compile.Hologram do
   end
 
   defp list_source_files(opts) do
-    paths = [
+    [
       Reflection.app_path(opts),
       Reflection.lib_path(opts),
       Reflection.mix_path(opts),
       Reflection.mix_lock_path(opts)
     ]
-
-    if opts[:pages_path], do: paths ++ [opts[:pages_path]], else: paths
   end
 
   defp resolve_output_path do
