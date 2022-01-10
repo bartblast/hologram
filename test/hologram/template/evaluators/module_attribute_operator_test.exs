@@ -16,7 +16,7 @@ defmodule Hologram.Template.Evaluator.ModuleAttributeOperatorTest do
   test "non-existing binding" do
     ir = %ModuleAttributeOperator{name: :b}
 
-    assert_raise KeyError, "key :b not found in %{a: 123}", fn ->
+    assert_raise KeyError, "key :b not found in: %{a: 123}", fn ->
       Evaluator.evaluate(ir, @bindings)
     end
   end
