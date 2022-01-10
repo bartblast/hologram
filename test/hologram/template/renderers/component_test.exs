@@ -5,9 +5,19 @@ defmodule Hologram.Template.Renderer.ComponentTest do
   alias Hologram.Compiler.Reflection
   alias Hologram.Template.VDOM.{Component, ElementNode, Expression, TextNode}
   alias Hologram.Template.Renderer
+  alias Hologram.Runtime
 
   @module_4 Hologram.Test.Fixtures.Template.ComponentRenderer.Module4
   @module_5 Hologram.Test.Fixtures.Template.ComponentRenderer.Module5
+
+  setup do
+    "#{File.cwd!()}/test/fixtures/template/renderers/component_renderer"
+    |> compile_templatables()
+
+    Runtime.reload()
+
+    :ok
+  end
 
   test "html only in template" do
     module_1 = Hologram.Test.Fixtures.Template.ComponentRenderer.Module1
