@@ -87,6 +87,10 @@ export default class Runtime {
 
   // Covered implicitely in E2E tests.
   static loadPage(html) {
+    window.hologramRuntimeScriptLoaded = false
+    window.hologramPageScriptLoaded = false
+    window.hologramPageMounted = false
+
     // DEFER: copy html node attributes (because only the inner HTML is updated)
 
     var el = Runtime.document.createElement("html")
@@ -109,7 +113,8 @@ export default class Runtime {
   }
 
   // Covered implicitely in E2E tests.
-  static mountPage(pageClass, serializedState) {
+  static mountPage(pageClassName, serializedState) {
+    const pageClass = Runtime.getClassByClassName(pageClassName)
     Runtime.registerPageClass(pageClass)
 
     const layoutClass = Runtime.determineLayoutClass(pageClass)

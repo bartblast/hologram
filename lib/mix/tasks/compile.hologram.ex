@@ -73,7 +73,19 @@ defmodule Mix.Tasks.Compile.Hologram do
 
   defp build_page(page, output_path, module_defs, call_graph) do
     js = Builder.build(page, module_defs, call_graph)
-    output = "\"use strict\";\n\n" <> js
+
+    output = """
+    "use strict";
+
+    #{js}
+
+    window.hologramPageScriptLoaded = true;
+
+    if (window.hologramRuntimeScriptLoaded && window.hologramPageScriptLoaded && !window.hologramPageMounted) {
+      window.hologramPageMounted = true
+      Hologram.run(window.hologramArgs.class, window.hologramArgs.state)
+    }
+    """
 
     digest =
       :crypto.hash(:md5, output)
