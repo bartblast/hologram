@@ -14,7 +14,7 @@ defmodule Hologram.Test.Helpers do
   # When compile_templatables/1 test helper is used, the router is recompiled with the pages found in the given app_path.
   # After the tests, the router needs to be recompiled with the default app_path.
   # Also, in such case the tests need to be non-async.
-  def compile_pages(app_path \\ @default_app_path) do
+  def compile_templatables(app_path \\ @default_app_path) do
     Task.run(app_path: app_path)
   end
 end

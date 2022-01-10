@@ -139,7 +139,7 @@ defmodule Hologram.Runtime.ChannelTest do
 
   test "command returning __redirect__ action", %{socket: socket} do
     "#{File.cwd!()}/test/fixtures/runtime/channel"
-    |> compile_pages()
+    |> compile_templatables()
 
     Runtime.reload()
 

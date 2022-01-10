@@ -7,7 +7,7 @@ defmodule Hologram.Template.Renderer.PageTest do
 
   test "render/2" do
     "#{File.cwd!()}/test/fixtures/template/renderers/page_renderer"
-    |> compile_pages()
+    |> compile_templatables()
 
     Runtime.reload()
 
