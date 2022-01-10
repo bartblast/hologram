@@ -12,7 +12,7 @@ defmodule Hologram.E2E.Component4 do
     ~H"""
     <div id="text-component-4">{@text}</div><br />
 
-    <button id="component-4-button-1" on_click.command={:page, :command_10}>Page 4 Command 10</button>
+    <button id="component-4-button-1" on:click.command={:page, :command_10}>Page 4 Command 10</button>
     """
   end
 

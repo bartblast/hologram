@@ -107,7 +107,7 @@ defmodule Hologram.Template.Renderer.ElementNodeTest do
         ],
         modifiers: []
       },
-      on_click: %{
+      "on:click": %{
         value: [
           %TextNode{content: "test_pruned_attr_content"}
         ],

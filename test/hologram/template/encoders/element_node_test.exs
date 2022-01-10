@@ -73,7 +73,7 @@ defmodule Hologram.Template.Encoder.ElementNodeTest do
 
   test "doesn't remove any attrs" do
     attrs = %{
-      on_click: %{
+      "on:click": %{
         value: [%TextNode{content: "test"}],
         modifiers: []
       }
@@ -84,7 +84,7 @@ defmodule Hologram.Template.Encoder.ElementNodeTest do
       |> Encoder.encode()
 
     on_click = "{ value: [ { type: 'text', content: 'test' } ], modifiers: [] }"
-    expected = "{ type: 'element', tag: 'div', attrs: { 'on_click': #{on_click} }, children: [] }"
+    expected = "{ type: 'element', tag: 'div', attrs: { 'on:click': #{on_click} }, children: [] }"
 
     assert result == expected
   end
@@ -98,7 +98,7 @@ defmodule Hologram.Template.Encoder.ElementNodeTest do
       }
     ]
 
-    attrs = %{on_click: %{value: nodes, modifiers: []}}
+    attrs = %{"on:click": %{value: nodes, modifiers: []}}
 
     result =
       %ElementNode{tag: "div", attrs: attrs, children: []}
@@ -108,7 +108,7 @@ defmodule Hologram.Template.Encoder.ElementNodeTest do
       "($bindings) => { return { type: 'tuple', data: [ { type: 'string', value: 'abc' } ] } }"
 
     expected =
-      "{ type: 'element', tag: 'div', attrs: { 'on_click': { value: [ { type: 'expression', callback: #{callback} } ], modifiers: [] } }, children: [] }"
+      "{ type: 'element', tag: 'div', attrs: { 'on:click': { value: [ { type: 'expression', callback: #{callback} } ], modifiers: [] } }, children: [] }"
 
     assert result == expected
   end

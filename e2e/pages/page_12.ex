@@ -11,7 +11,7 @@ defmodule Hologram.E2E.Page12 do
 
   def template do
     ~H"""
-    <button id="target" on_pointer_down="increment_count">Target</button>
+    <button id="target" on:pointer_down="increment_count">Target</button>
     <div id="text">Event count: {@count}</div>
     """
   end

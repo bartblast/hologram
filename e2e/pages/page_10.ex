@@ -13,7 +13,7 @@ defmodule Hologram.E2E.Page10 do
   def template do
     ~H"""
     <h1>Page 10</h1>
-    <form on_change="change">
+    <form on:change="change">
       <input id="input-1" type="text" name="field_1" />
       <input id="input-2" type="text" name="field_2" />
     </form>

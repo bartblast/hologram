@@ -13,7 +13,7 @@ defmodule Hologram.E2E.Page8 do
   def template do
     ~H"""
     <h1>Page 8</h1>
-    <form on_submit="submit">
+    <form on:submit="submit">
       <input id="input-1" type="text" name="field_1" />
       <input id="input-2" type="text" name="field_2" />
       <button id="submit-button">Submit</button>

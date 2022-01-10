@@ -13,7 +13,7 @@ defmodule Hologram.E2E.Page11 do
     ~H"""
     <h1>Page 11</h1>
     <form>
-      <input id="input" type="text" name="field" on_blur="update" />
+      <input id="input" type="text" name="field" on:blur="update" />
     </form>
     <div id="text">{@text}</div>
     """

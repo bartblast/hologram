@@ -13,7 +13,7 @@ defmodule Hologram.E2E.Page2 do
     ~H"""
     <h1>Page 2</h1>
 
-    <button id="page-2-update-text-button" on_click="update_text">Update text</button>
+    <button id="page-2-update-text-button" on:click="update_text">Update text</button>
     <button id="page-2-back-button">Back</button>
     <br />
 

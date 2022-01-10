@@ -178,7 +178,7 @@ describe("buildElementVNode()", () => {
         value: [Type.textNode("valueAbc")],
         modifiers: []
       },
-      on_click: "test_on_click_spec"
+      "on:click": "test_on_click_spec"
     }
 
     const children = [Type.textNode("childTextNode")]
@@ -377,7 +377,7 @@ describe("buildVNodeAttrs()", () => {
   it("doesn't include on:(event) attributes", () => {
     const node = {
       attrs: {
-        on_click: {
+        "on:click": {
           value: [Type.textNode("valueOnClick")],
           modifiers: [] 
         }
@@ -392,7 +392,7 @@ describe("buildVNodeAttrs()", () => {
 
 describe("buildVNodeEventHandlers()", () => {
   it("builds vnode change event handler", () => {
-    const attrs = {on_change: "test_on_change_spec"}
+    const attrs = {"on:change": "test_on_change_spec"}
     const elementNode = Type.elementNode("form", attrs, [])
     const result = VDOM.buildVNodeEventHandlers(elementNode)
 
@@ -400,7 +400,7 @@ describe("buildVNodeEventHandlers()", () => {
   })
 
   it("builds vnode click event handler", () => {
-    const attrs = {on_click: "test_on_click_spec"}
+    const attrs = {"on:click": "test_on_click_spec"}
     const elementNode = Type.elementNode("div", attrs, [])
     const result = VDOM.buildVNodeEventHandlers(elementNode)
 
@@ -408,7 +408,7 @@ describe("buildVNodeEventHandlers()", () => {
   })
 
   it("builds vnode submit event handler", () => {
-    const attrs = {on_submit: "test_on_submit_spec"}
+    const attrs = {"on:submit": "test_on_submit_spec"}
     const elementNode = Type.elementNode("form", attrs, [])
     const result = VDOM.buildVNodeEventHandlers(elementNode)
 

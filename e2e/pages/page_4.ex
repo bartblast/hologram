@@ -16,21 +16,21 @@ defmodule Hologram.E2E.Page4 do
     ~H"""
     <h1>Page 4</h1><br />
 
-    <button id="page-4-button-1" on_click.command="command_1">Command 1</button>
-    <button id="page-4-button-2" on_click.command={:command_2}>Command 2</button>
-    <button id="page-4-button-3" on_click.command={:command_3, a: 5, b: 6}>Command 3</button>
-    <button id="page-4-button-4" on_click.command={:component_4_id, :component_4_command_1}>Component 4 Command 1</button>
-    <button id="page-4-button-5" on_click.command={:component_4_id, :component_4_command_2, a: 5, b: 6}>Component 4 Command 2</button>
-    <button id="page-4-button-6" on_click.command="command_4">Command 4</button>
-    <button id="page-4-button-7" on_click.command={:command_5}>Command 5</button>
-    <button id="page-4-button-8" on_click.command={:command_6, a: 5, b: 6}>Command 6</button>
-    <button id="page-4-button-9" on_click.command="command_7">Command 7</button>
-    <button id="page-4-button-10" on_click.command={:command_8, a: 5, b: 6}>Command 8</button>
-    <button id="page-4-button-11" on_click.command="command_9">Command 9</button>
-    <button id="page-4-button-12" on_click.command={:component_4_id, :component_4_command_3}>Component 4 Command 3</button>
-    <button id="page-4-button-13" on_click.command={:layout, :default_layout_command_1}>Layout 4 Command 1</button>
-    <button id="page-4-button-14" on_click.command="command_11">Command 11</button>
-    <button id="page-4-button-15" on_click="action_12">Action 12</button>
+    <button id="page-4-button-1" on:click.command="command_1">Command 1</button>
+    <button id="page-4-button-2" on:click.command={:command_2}>Command 2</button>
+    <button id="page-4-button-3" on:click.command={:command_3, a: 5, b: 6}>Command 3</button>
+    <button id="page-4-button-4" on:click.command={:component_4_id, :component_4_command_1}>Component 4 Command 1</button>
+    <button id="page-4-button-5" on:click.command={:component_4_id, :component_4_command_2, a: 5, b: 6}>Component 4 Command 2</button>
+    <button id="page-4-button-6" on:click.command="command_4">Command 4</button>
+    <button id="page-4-button-7" on:click.command={:command_5}>Command 5</button>
+    <button id="page-4-button-8" on:click.command={:command_6, a: 5, b: 6}>Command 6</button>
+    <button id="page-4-button-9" on:click.command="command_7">Command 7</button>
+    <button id="page-4-button-10" on:click.command={:command_8, a: 5, b: 6}>Command 8</button>
+    <button id="page-4-button-11" on:click.command="command_9">Command 9</button>
+    <button id="page-4-button-12" on:click.command={:component_4_id, :component_4_command_3}>Component 4 Command 3</button>
+    <button id="page-4-button-13" on:click.command={:layout, :default_layout_command_1}>Layout 4 Command 1</button>
+    <button id="page-4-button-14" on:click.command="command_11">Command 11</button>
+    <button id="page-4-button-15" on:click="action_12">Action 12</button>
     <br />
 
     <div id="text-page-4">{@text}</div><br />

@@ -22,7 +22,7 @@ defmodule Hologram.E2E.Page3 do
           in component 2 slot: {@c}
         </Component2>
       </Component1>
-      <button id="update-button" on_click="update_c">Update</button>
+      <button id="update-button" on:click="update_c">Update</button>
     </div>
     """
   end

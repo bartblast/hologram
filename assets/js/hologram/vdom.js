@@ -23,13 +23,13 @@ const patch = init([attributesModule, eventListenersModule]);
 export default class VDOM {
   static PRUNED_ATTRS = [
     "if", 
-    "on_blur", 
-    "on_change", 
-    "on_click", 
-    "on_pointer_down", 
-    "on_pointer_up", 
-    "on_submit", 
-    "on_transition_end"
+    "on:blur", 
+    "on:change", 
+    "on:click", 
+    "on:pointer_down", 
+    "on:pointer_up", 
+    "on:submit", 
+    "on:transition_end"
   ]
 
   static virtualDocument = null
@@ -161,32 +161,32 @@ export default class VDOM {
   static buildVNodeEventHandlers(node, sourceId, bindings) {
     const eventHandlers = {}
 
-    if (node.attrs.on_blur) {
-      eventHandlers.blur = (event) => { Runtime.handleEvent(event, BlurEvent, sourceId, bindings, node.attrs.on_blur, node.tag) }
+    if (node.attrs["on:blur"]) {
+      eventHandlers.blur = (event) => { Runtime.handleEvent(event, BlurEvent, sourceId, bindings, node.attrs["on:blur"], node.tag) }
     }
 
-    if (node.attrs.on_change) {
-      eventHandlers.change = (event) => { Runtime.handleEvent(event, ChangeEvent, sourceId, bindings, node.attrs.on_change, node.tag) }
+    if (node.attrs["on:change"]) {
+      eventHandlers.change = (event) => { Runtime.handleEvent(event, ChangeEvent, sourceId, bindings, node.attrs["on:change"], node.tag) }
     }
 
-    if (node.attrs.on_click) {
-      eventHandlers.click = (event) => { Runtime.handleEvent(event, ClickEvent, sourceId, bindings, node.attrs.on_click, node.tag) }
+    if (node.attrs["on:click"]) {
+      eventHandlers.click = (event) => { Runtime.handleEvent(event, ClickEvent, sourceId, bindings, node.attrs["on:click"], node.tag) }
     }
 
-    if (node.attrs.on_pointer_down) {
-      eventHandlers.pointerdown = (event) => { Runtime.handleEvent(event, PointerDownEvent, sourceId, bindings, node.attrs.on_pointer_down, node.tag) }
+    if (node.attrs["on:pointer_down"]) {
+      eventHandlers.pointerdown = (event) => { Runtime.handleEvent(event, PointerDownEvent, sourceId, bindings, node.attrs["on:pointer_down"], node.tag) }
     }
 
-    if (node.attrs.on_pointer_up) {
-      eventHandlers.pointerup = (event) => { Runtime.handleEvent(event, PointerUpEvent, sourceId, bindings, node.attrs.on_pointer_up, node.tag) }
+    if (node.attrs["on:pointer_up"]) {
+      eventHandlers.pointerup = (event) => { Runtime.handleEvent(event, PointerUpEvent, sourceId, bindings, node.attrs["on:pointer_up"], node.tag) }
     }
 
-    if (node.attrs.on_submit) {
-      eventHandlers.submit = (event) => { Runtime.handleEvent(event, SubmitEvent, sourceId, bindings, node.attrs.on_submit, node.tag) }
+    if (node.attrs["on:submit"]) {
+      eventHandlers.submit = (event) => { Runtime.handleEvent(event, SubmitEvent, sourceId, bindings, node.attrs["on:submit"], node.tag) }
     }
 
-    if (node.attrs.on_transition_end) {
-      eventHandlers.transitionend = (event) => { Runtime.handleEvent(event, TransitionEndEvent, sourceId, bindings, node.attrs.on_transition_end, node.tag) }
+    if (node.attrs["on:transition_end"]) {
+      eventHandlers.transitionend = (event) => { Runtime.handleEvent(event, TransitionEndEvent, sourceId, bindings, node.attrs["on:transition_end"], node.tag) }
     }
 
     return eventHandlers

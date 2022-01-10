@@ -6,13 +6,13 @@ defimpl Renderer, for: ElementNode do
 
   @pruned_attrs [
     :if,
-    :on_blur,
-    :on_change,
-    :on_click,
-    :on_pointer_down,
-    :on_pointer_up,
-    :on_submit,
-    :on_transition_end
+    :"on:blur",
+    :"on:change",
+    :"on:click",
+    :"on:pointer_down",
+    :"on:pointer_up",
+    :"on:submit",
+    :"on:transition_end"
   ]
 
   # see: https://html.spec.whatwg.org/multipage/syntax.html#void-elements
