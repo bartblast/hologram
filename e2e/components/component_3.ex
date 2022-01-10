@@ -15,11 +15,11 @@ defmodule Hologram.E2E.Component3 do
   end
 
   def action(:component_3_action_1, _params, state) do
-    update(state, :text, "text updated by component_3_action_1, state.value = #{state.value}")
+    put(state, :text, "text updated by component_3_action_1, state.value = #{state.value}")
   end
 
   def action(:component_3_action_2, params, state) do
-    update(
+    put(
       state,
       :text,
       "text updated by component_3_action_2, params.a = #{params.a}, params.b = #{params.b}, state.value = #{state.value}"
@@ -27,7 +27,7 @@ defmodule Hologram.E2E.Component3 do
   end
 
   def action(:component_3_action_3, _params, state) do
-    update(state, :text, "text updated by component_3_action_3, state.value = #{state.value}")
+    put(state, :text, "text updated by component_3_action_3, state.value = #{state.value}")
   end
 
   def command(:component_3_command_1, _params) do

@@ -24,7 +24,7 @@ defmodule Hologram.E2E.Page8 do
   end
 
   def action(:submit, params, state) do
-    update(state, :field_1, params.event.field_1)
-    |> update(:field_2, params.event.field_2)
+    put(state, :field_1, params.event.field_1)
+    |> put(:field_2, params.event.field_2)
   end
 end

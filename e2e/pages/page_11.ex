@@ -20,6 +20,6 @@ defmodule Hologram.E2E.Page11 do
   end
 
   def action(:update, _params, state) do
-    update(state, :text, "Field has been blurred")
+    put(state, :text, "Field has been blurred")
   end
 end

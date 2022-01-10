@@ -27,6 +27,6 @@ defmodule Hologram.E2E.Page2 do
   end
 
   def action(:update_text, _params, state) do
-    update(state, :text, "text updated by page 2 update button")
+    put(state, :text, "text updated by page 2 update button")
   end
 end

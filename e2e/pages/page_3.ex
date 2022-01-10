@@ -28,6 +28,6 @@ defmodule Hologram.E2E.Page3 do
   end
 
   def action(:update_c, _params, state) do
-    update(state, :c, "xyz")
+    put(state, :c, "xyz")
   end
 end

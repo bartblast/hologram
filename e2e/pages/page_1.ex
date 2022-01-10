@@ -42,15 +42,15 @@ defmodule Hologram.E2E.Page1 do
   end
 
   def action(:action_1, _params, state) do
-    update(state, :text, "text updated by action_1, state.value = #{state.value}")
+    put(state, :text, "text updated by action_1, state.value = #{state.value}")
   end
 
   def action(:action_2, _params, state) do
-    update(state, :text, "text updated by action_2, state.value = #{state.value}")
+    put(state, :text, "text updated by action_2, state.value = #{state.value}")
   end
 
   def action(:action_3, params, state) do
-    update(
+    put(
       state,
       :text,
       "text updated by action_3, params.a = #{params.a}, params.b = #{params.b}, state.value = #{state.value}"
@@ -58,7 +58,7 @@ defmodule Hologram.E2E.Page1 do
   end
 
   def action(:action_4, _params, state) do
-    {update(state, :text, "text updated by action_4, state.value = #{state.value}")}
+    {put(state, :text, "text updated by action_4, state.value = #{state.value}")}
   end
 
   def action(:action_5, _params, state) do
@@ -66,7 +66,7 @@ defmodule Hologram.E2E.Page1 do
   end
 
   def action(:action_5_b, _params, state) do
-    update(
+    put(
       state,
       :text,
       "text updated by action_5_b triggered by command_1, state.value = #{state.value}"
@@ -78,7 +78,7 @@ defmodule Hologram.E2E.Page1 do
   end
 
   def action(:action_6_b, params, state) do
-    update(
+    put(
       state,
       :text,
       "text updated by action_6_b triggered by command_2, params.a = #{params.a}, params.b = #{params.b}, state.value = #{state.value}"
@@ -90,7 +90,7 @@ defmodule Hologram.E2E.Page1 do
   end
 
   def action(:action_7_b, _params, state) do
-    update(
+    put(
       state,
       :text,
       "text updated by action_7_b triggered by component_3_command_1, state.value = #{state.value}"
@@ -102,7 +102,7 @@ defmodule Hologram.E2E.Page1 do
   end
 
   def action(:action_8_b, params, state) do
-    update(
+    put(
       state,
       :text,
       "text updated by action_8_b triggered by component_3_command_2, params.a = #{params.a}, params.b = #{params.b}, state.value = #{state.value}"
@@ -110,19 +110,19 @@ defmodule Hologram.E2E.Page1 do
   end
 
   def action(:action_9, _params, state) do
-    update(state, :text, "text updated by action_9, state.value = #{state.value}")
+    put(state, :text, "text updated by action_9, state.value = #{state.value}")
   end
 
   def action(:action_10, _params, state) do
-    update(state, :text, "text updated by action_10, state.value = #{state.value}")
+    put(state, :text, "text updated by action_10, state.value = #{state.value}")
   end
 
   def action(:action_11, _params, state) do
-    update(state, :text, "text updated by action_11, state.value = #{state.value}")
+    put(state, :text, "text updated by action_11, state.value = #{state.value}")
   end
 
   def action(:action_12, _params, state) do
-    update(state, :text, "text updated by action_12, state.value = #{state.value}")
+    put(state, :text, "text updated by action_12, state.value = #{state.value}")
   end
 
   def action(:action_13, _params, state) do
@@ -130,7 +130,7 @@ defmodule Hologram.E2E.Page1 do
   end
 
   def action(:action_13_b, _params, state) do
-    update(state, :text, "text updated by action_13_b, state.value = #{state.value}")
+    put(state, :text, "text updated by action_13_b, state.value = #{state.value}")
   end
 
   def command(:command_1, _params) do

@@ -7,7 +7,8 @@ defmodule Hologram.Page do
 
       import Hologram.Page
       import Hologram.Router, only: [static_path: 1]
-      import Hologram.Runtime.Commons, only: [sigil_H: 2, update: 3]
+      import Hologram.Runtime.Commons, only: [sigil_H: 2]
+      import Map, only: [put: 3]
 
       alias Hologram.Runtime.JS
       alias Hologram.UI.Link
