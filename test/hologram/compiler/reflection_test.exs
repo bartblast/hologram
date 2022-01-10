@@ -237,7 +237,7 @@ defmodule Hologram.Compiler.ReflectionTest do
 
   test "list_layouts/1" do
     num_layouts =
-      "#{Reflection.layouts_path()}/*"
+      "#{Reflection.app_path()}/layouts/*"
       |> Path.wildcard()
       |> Enum.count()
 

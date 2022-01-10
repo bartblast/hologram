@@ -133,8 +133,8 @@ defmodule Hologram.Compiler.Reflection do
   end
 
   def list_layouts(opts \\ []) do
-    layouts_path = layouts_path(opts)
-    list_modules_of_type(:layout, layouts_path)
+    app_path = app_path(opts)
+    list_modules_of_type(:layout, app_path)
   end
 
   def list_modules(app) do
