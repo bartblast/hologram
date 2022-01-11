@@ -92,13 +92,15 @@ export default class Runtime {
     window.hologramPageMounted = false
 
     // DEFER: copy html node attributes (because only the inner HTML is updated)
-
     var el = Runtime.document.createElement("html")
     el.innerHTML = html
 
     requestAnimationFrame(() => {
       morphdom(Runtime.document.head, el.querySelector("head"))
       Runtime.document.body = el.querySelector("body")
+
+      // DEFER: test
+      Runtime.window.scrollTo(0, 0)
 
       VDOM.reset()
       ScriptsReloader.reload(Runtime.document)
