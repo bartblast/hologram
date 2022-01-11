@@ -5,7 +5,7 @@ config :hologram,
   otp_app: :hologram,
   app_path: "#{File.cwd!()}/e2e",
   default_layout: Hologram.E2E.DefaultLayout,
-  env: Mix.env(),
+  env: config_env(),
   ignored_namespaces: [
     Hologram.Commons,
     Hologram.Compiler,
