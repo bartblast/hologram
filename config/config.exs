@@ -15,7 +15,7 @@ config :hologram, Hologram.E2E.Web.Endpoint,
   pubsub_server: Hologram.E2E.PubSub,
   render_errors: [view: Hologram.E2E.Web.ErrorView, accepts: ~w(html json), layout: false],
   secret_key_base: "/t99BcKoIa8IKka6K9dhpfoRHHYP0fK/FXFNdWO5Wlt+h1wlFeBODgIi8U4XACBE",
-  url: [host: "localhost"],
+  url: [host: "localhost"]
 
 
 config :esbuild,
