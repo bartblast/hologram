@@ -1,4 +1,3 @@
-
 defmodule Hologram.Runtime.JS do
   @moduledoc """
   JS interop.

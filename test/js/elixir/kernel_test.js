@@ -98,21 +98,21 @@ describe("apply()", () => {
 
 describe("$boolean_and()", () => {
   it("returns the second arg if the first one is truthy", () => {
-    const left = Type.integer(1)
-    const right = Type.integer(2)
-    const result = Kernel.$boolean_and(left, right)
+    const left = Type.integer(1);
+    const right = Type.integer(2);
+    const result = Kernel.$boolean_and(left, right);
 
-    assert.deepStrictEqual(result, right)
-  })
+    assert.deepStrictEqual(result, right);
+  });
 
   it("returns the first arg if it is falsy", () => {
-    const left = Type.nil()
-    const right = Type.integer(2)
-    const result = Kernel.$boolean_and(left, right)
+    const left = Type.nil();
+    const right = Type.integer(2);
+    const result = Kernel.$boolean_and(left, right);
 
-    assert.deepStrictEqual(result, left)
-  })
-})
+    assert.deepStrictEqual(result, left);
+  });
+});
 
 describe("$equal_to()", () => {
   // non-number == non-number
@@ -282,95 +282,114 @@ describe("if()", () => {
 
 describe("put_in()", () => {
   it("puts value nested 1 level deep", () => {
-    let data = Type.map()
-    data = Map.put(data, Type.atom("test_key"), Type.string("abc"))
+    let data = Type.map();
+    data = Map.put(data, Type.atom("test_key"), Type.string("abc"));
 
-    const keys = Type.list([Type.atom("test_key")])
-    const result = Kernel.put_in(data, keys, Type.string("xyz"))
+    const keys = Type.list([Type.atom("test_key")]);
+    const result = Kernel.put_in(data, keys, Type.string("xyz"));
 
-    let expected = Type.map()
-    expected = Map.put(expected, Type.atom("test_key"), Type.string("xyz"))
+    let expected = Type.map();
+    expected = Map.put(expected, Type.atom("test_key"), Type.string("xyz"));
 
-    assert.deepStrictEqual(result, expected)
-  })
+    assert.deepStrictEqual(result, expected);
+  });
 
   it("puts value nested more than 1 level deep", () => {
-    let level2Data = Type.map()
-    level2Data = Map.put(level2Data, Type.atom("test_key_2"), Type.string("abc"))
+    let level2Data = Type.map();
+    level2Data = Map.put(
+      level2Data,
+      Type.atom("test_key_2"),
+      Type.string("abc")
+    );
 
-    let level1Data = Type.map()
-    level1Data = Map.put(level1Data, Type.atom("test_key_1"), level2Data)
+    let level1Data = Type.map();
+    level1Data = Map.put(level1Data, Type.atom("test_key_1"), level2Data);
 
-    const keys = Type.list([Type.atom("test_key_1"), Type.atom("test_key_2")])
-    const result = Kernel.put_in(level1Data, keys, Type.string("xyz"))
+    const keys = Type.list([Type.atom("test_key_1"), Type.atom("test_key_2")]);
+    const result = Kernel.put_in(level1Data, keys, Type.string("xyz"));
 
-    let expectedLevel2Data = Type.map()
-    expectedLevel2Data = Map.put(expectedLevel2Data, Type.atom("test_key_2"), Type.string("xyz"))
+    let expectedLevel2Data = Type.map();
+    expectedLevel2Data = Map.put(
+      expectedLevel2Data,
+      Type.atom("test_key_2"),
+      Type.string("xyz")
+    );
 
-    let expectedLevel1Data = Type.map()
-    expectedLevel1Data = Map.put(expectedLevel1Data, Type.atom("test_key_1"), expectedLevel2Data)
+    let expectedLevel1Data = Type.map();
+    expectedLevel1Data = Map.put(
+      expectedLevel1Data,
+      Type.atom("test_key_1"),
+      expectedLevel2Data
+    );
 
-    assert.deepStrictEqual(result, expectedLevel1Data)
-  })
-})
+    assert.deepStrictEqual(result, expectedLevel1Data);
+  });
+});
 
 describe("to_string()", () => {
   it("converts boxed atom to boxed string", () => {
-    const value = Type.atom("abc")
+    const value = Type.atom("abc");
 
-    const result = Kernel.to_string(value)
-    const expected = Type.string("abc")
+    const result = Kernel.to_string(value);
+    const expected = Type.string("abc");
 
-    assert.deepStrictEqual(result, expected)
-  })
+    assert.deepStrictEqual(result, expected);
+  });
 
   it("converts boxed boolean to boxed string", () => {
-    const value = Type.boolean(true)
+    const value = Type.boolean(true);
 
-    const result = Kernel.to_string(value)
-    const expected = Type.string("true")
+    const result = Kernel.to_string(value);
+    const expected = Type.string("true");
 
-    assert.deepStrictEqual(result, expected)
-  })
+    assert.deepStrictEqual(result, expected);
+  });
 
   it("converts boxed integer to boxed string", () => {
-    const value = Type.integer(1)
+    const value = Type.integer(1);
 
-    const result = Kernel.to_string(value)
-    const expected = Type.string("1")
+    const result = Kernel.to_string(value);
+    const expected = Type.string("1");
 
-    assert.deepStrictEqual(result, expected)
-  })
+    assert.deepStrictEqual(result, expected);
+  });
 
   it("returns the given arg if it is a boxed string", () => {
-    const value = Type.string("abc")
-    const result = Kernel.to_string(value)
+    const value = Type.string("abc");
+    const result = Kernel.to_string(value);
 
-    assert.deepStrictEqual(result, value)
-  })
+    assert.deepStrictEqual(result, value);
+  });
 
   it("converts boxed binary to boxed string", () => {
-    const value = Type.binary([Type.string("abc"), Type.string("xyz")])
+    const value = Type.binary([Type.string("abc"), Type.string("xyz")]);
 
-    const result = Kernel.to_string(value)
-    const expected = Type.string("abcxyz")
+    const result = Kernel.to_string(value);
+    const expected = Type.string("abcxyz");
 
-    assert.deepStrictEqual(result, expected)
-  })
+    assert.deepStrictEqual(result, expected);
+  });
 
   it("converts boxed nil to boxed string", () => {
-    const value = Type.nil()
+    const value = Type.nil();
 
-    const result = Kernel.to_string(value)
-    const expected = Type.string("")
+    const result = Kernel.to_string(value);
+    const expected = Type.string("");
 
-    assert.deepStrictEqual(result, expected)
-  })
+    assert.deepStrictEqual(result, expected);
+  });
 
   it("throws an error for not implemented types", () => {
-    const value = {type: "not implemented", value: "test"}
-    const expectedMessage = 'Kernel.to_string(): boxedValue = {"type":"not implemented","value":"test"}'
+    const value = { type: "not implemented", value: "test" };
+    const expectedMessage =
+      'Kernel.to_string(): boxedValue = {"type":"not implemented","value":"test"}';
 
-    assert.throw(() => { Kernel.to_string(value) }, HologramNotImplementedError, expectedMessage);
-  })
-})
+    assert.throw(
+      () => {
+        Kernel.to_string(value);
+      },
+      HologramNotImplementedError,
+      expectedMessage
+    );
+  });
+});

@@ -1,6 +1,13 @@
 defmodule Hologram.Compiler.BuilderTest do
   use Hologram.Test.UnitCase, async: false
-  alias Hologram.Compiler.{Builder, CallGraph, CallGraphBuilder, ModuleDefAggregator, ModuleDefStore}
+
+  alias Hologram.Compiler.{
+    Builder,
+    CallGraph,
+    CallGraphBuilder,
+    ModuleDefAggregator,
+    ModuleDefStore
+  }
 
   setup do
     ModuleDefStore.create()

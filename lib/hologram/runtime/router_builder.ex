@@ -62,11 +62,10 @@ defmodule Hologram.Runtime.RouterBuilder do
         "#{acc}#{build_match_function_def(page)}\n"
       end)
 
-    module_body =
-      """
-      #{function_defs}
-      def match(_), do: nil
-      """
+    module_body = """
+    #{function_defs}
+    def match(_), do: nil
+    """
 
     ast = Reflection.ast(module_body)
 

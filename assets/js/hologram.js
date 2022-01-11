@@ -27,11 +27,11 @@ window.Elixir_String = Elixir_String;
 
 // transpiled Hologram runtime
 
-import Elixir_Hologram_Router from "./hologram/elixir/hologram/router"
-import Elixir_Hologram_Runtime_JS from "./hologram/elixir/hologram/runtime/js"
+import Elixir_Hologram_Router from "./hologram/elixir/hologram/router";
+import Elixir_Hologram_Runtime_JS from "./hologram/elixir/hologram/runtime/js";
 
-window.Elixir_Hologram_Router = Elixir_Hologram_Router
-window.Elixir_Hologram_Runtime_JS = Elixir_Hologram_Runtime_JS
+window.Elixir_Hologram_Router = Elixir_Hologram_Router;
+window.Elixir_Hologram_Runtime_JS = Elixir_Hologram_Runtime_JS;
 
 export default class Hologram {
   // Covered implicitely in E2E tests.
@@ -70,9 +70,13 @@ export default class Hologram {
 }
 
 window.Hologram = Hologram;
-window.hologramRuntimeScriptLoaded = true
+window.hologramRuntimeScriptLoaded = true;
 
-if (window.hologramRuntimeScriptLoaded && window.hologramPageScriptLoaded && !window.hologramPageMounted) {
-  window.hologramPageMounted = true
-  Hologram.run(window.hologramArgs.class, window.hologramArgs.state)
+if (
+  window.hologramRuntimeScriptLoaded &&
+  window.hologramPageScriptLoaded &&
+  !window.hologramPageMounted
+) {
+  window.hologramPageMounted = true;
+  Hologram.run(window.hologramArgs.class, window.hologramArgs.state);
 }

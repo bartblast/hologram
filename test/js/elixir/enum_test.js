@@ -16,25 +16,25 @@ import Type from "../../../assets/js/hologram/type";
 
 describe("concat()", () => {
   it("concatanates 2 enumerables to a boxed list", () => {
-    let map = Type.map()
-    map = Map.put(map, Type.atom("a"), Type.integer(1))
-    map = Map.put(map, Type.atom("b"), Type.integer(2))
+    let map = Type.map();
+    map = Map.put(map, Type.atom("a"), Type.integer(1));
+    map = Map.put(map, Type.atom("b"), Type.integer(2));
 
-    const list = Type.list([Type.atom("c"), Type.integer(3)])
+    const list = Type.list([Type.atom("c"), Type.integer(3)]);
 
-    const result = Enum.concat(map, list)
+    const result = Enum.concat(map, list);
 
     const expected = Type.list([
       Type.tuple([Type.atom("a"), Type.integer(1)]),
       Type.tuple([Type.atom("b"), Type.integer(2)]),
       Type.atom("c"),
-      Type.integer(3)
-    ])
+      Type.integer(3),
+    ]);
 
-    assert.deepStrictEqual(result, expected)
-    assertFrozen(result)
-  })
-})
+    assert.deepStrictEqual(result, expected);
+    assertFrozen(result);
+  });
+});
 
 describe("member$question()", () => {
   let list;
@@ -87,32 +87,39 @@ describe("member$question()", () => {
 
 describe("to_list()", () => {
   it("returns the given arg if it is a boxed list", () => {
-    const list = Type.list([Type.atom("a"), Type.integer(2)])
-    const result = Enum.to_list(list)
+    const list = Type.list([Type.atom("a"), Type.integer(2)]);
+    const result = Enum.to_list(list);
 
-    assert.deepStrictEqual(result, list)
-    assertFrozen(result)
-  })
+    assert.deepStrictEqual(result, list);
+    assertFrozen(result);
+  });
 
   it("converts a boxed map to a boxed list", () => {
-    let map = Type.map()
-    map = Map.put(map, Type.atom("a"), Type.integer(1))
-    map = Map.put(map, Type.atom("b"), Type.integer(2))
+    let map = Type.map();
+    map = Map.put(map, Type.atom("a"), Type.integer(1));
+    map = Map.put(map, Type.atom("b"), Type.integer(2));
 
-    const result = Enum.to_list(map)
+    const result = Enum.to_list(map);
 
     const expected = Type.list([
       Type.tuple([Type.atom("a"), Type.integer(1)]),
-      Type.tuple([Type.atom("b"), Type.integer(2)])
-    ])
+      Type.tuple([Type.atom("b"), Type.integer(2)]),
+    ]);
 
-    assert.deepStrictEqual(result, expected)
-    assertFrozen(result)
-  })
+    assert.deepStrictEqual(result, expected);
+    assertFrozen(result);
+  });
 
   it("throws an error for not implemented enumerable types", () => {
     const enumerable = { type: "not implemented", value: "test" };
-    const expectedMessage = 'Enum.to_list(): enumerable = {"type":"not implemented","value":"test"}';
-    assert.throw(() => { Enum.to_list(enumerable) }, HologramNotImplementedError, expectedMessage);
+    const expectedMessage =
+      'Enum.to_list(): enumerable = {"type":"not implemented","value":"test"}';
+    assert.throw(
+      () => {
+        Enum.to_list(enumerable);
+      },
+      HologramNotImplementedError,
+      expectedMessage
+    );
   });
-})
+});

@@ -53,26 +53,26 @@ describe("has_key$question()", () => {
 
 describe("keys()", () => {
   it("returns keys of a non-empty map", () => {
-    let map = Type.map()
-    map = Map.put(map, Type.atom("a"), Type.integer(1))
-    map = Map.put(map, Type.atom("b"), Type.integer(2))
+    let map = Type.map();
+    map = Map.put(map, Type.atom("a"), Type.integer(1));
+    map = Map.put(map, Type.atom("b"), Type.integer(2));
 
-    const result = Map.keys(map)
-    const expected = Type.list([Type.atom("a"), Type.atom("b")])
+    const result = Map.keys(map);
+    const expected = Type.list([Type.atom("a"), Type.atom("b")]);
 
-    assert.deepStrictEqual(result, expected)
-  })
+    assert.deepStrictEqual(result, expected);
+  });
 
   it("returns keys of an empty map", () => {
-    const result = Map.keys(Type.map())
-    assert.deepStrictEqual(result, Type.list())
-  })
+    const result = Map.keys(Type.map());
+    assert.deepStrictEqual(result, Type.list());
+  });
 
   it("returns frozen object", () => {
-    const result = Map.keys(Type.map())
+    const result = Map.keys(Type.map());
     assertFrozen(result);
   });
-})
+});
 
 describe("put()", () => {
   let map1, map2, result;
@@ -112,28 +112,28 @@ describe("put()", () => {
 
 describe("to_list()", () => {
   it("converts empty boxed map to empty boxed list", () => {
-    const map = Type.map()
+    const map = Type.map();
 
-    const result = Map.to_list(map)
-    const expected = Type.list()
+    const result = Map.to_list(map);
+    const expected = Type.list();
 
-    assert.deepStrictEqual(result, expected)
-  })
+    assert.deepStrictEqual(result, expected);
+  });
 
   it("converts non-empty boxed map to boxed list consisting of {key, value} tuples", () => {
-    let map = Type.map()
-    map = Map.put(map, Type.atom("a"), Type.integer(1))
-    map = Map.put(map, Type.string("b"), Type.float(2.0))
+    let map = Type.map();
+    map = Map.put(map, Type.atom("a"), Type.integer(1));
+    map = Map.put(map, Type.string("b"), Type.float(2.0));
 
-    const result = Map.to_list(map)
+    const result = Map.to_list(map);
 
     const expectedData = [
       Type.tuple([Type.atom("a"), Type.integer(1)]),
       Type.tuple([Type.string("b"), Type.float(2.0)]),
-    ]
+    ];
 
-    const expected = Type.list(expectedData)
+    const expected = Type.list(expectedData);
 
-    assert.deepStrictEqual(result, expected)
-  })
-})
+    assert.deepStrictEqual(result, expected);
+  });
+});

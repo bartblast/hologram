@@ -3,7 +3,13 @@ defmodule Hologram.Compiler.CallGraphBuilder.FunctionCallTest do
 
   alias Hologram.Compiler.{CallGraph, CallGraphBuilder, Reflection}
   alias Hologram.Compiler.IR.FunctionCall
-  alias Hologram.Test.Fixtures.{PlaceholderModule1, PlaceholderModule2, PlaceholderModule3, PlaceholderModule4}
+
+  alias Hologram.Test.Fixtures.{
+    PlaceholderModule1,
+    PlaceholderModule2,
+    PlaceholderModule3,
+    PlaceholderModule4
+  }
 
   @from_vertex {PlaceholderModule4, :test_fun_4a}
 

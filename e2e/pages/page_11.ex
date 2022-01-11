@@ -5,7 +5,7 @@ defmodule Hologram.E2E.Page11 do
 
   def init do
     %{
-      text: "Field has not been blurred",
+      text: "Field has not been blurred"
     }
   end
 

@@ -4,7 +4,12 @@ defmodule Hologram.Compiler.Aggregators.ElementNodeTest do
   alias Hologram.Compiler.{ModuleDefAggregator, ModuleDefStore}
   alias Hologram.Compiler.IR.{ModuleDefinition, ModuleType}
   alias Hologram.Template.VDOM.ElementNode
-  alias Hologram.Test.Fixtures.Compiler.ModuleDefAggregators.ElementNode.{Module1, Module2, Module3}
+
+  alias Hologram.Test.Fixtures.Compiler.ModuleDefAggregators.ElementNode.{
+    Module1,
+    Module2,
+    Module3
+  }
 
   setup do
     ModuleDefStore.create()

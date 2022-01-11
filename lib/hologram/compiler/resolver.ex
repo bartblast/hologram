@@ -54,7 +54,8 @@ defmodule Hologram.Compiler.Resolver do
   end
 
   defp resolve_to_kernel_module(function, arity) do
-    if Reflection.has_function?(Kernel, function, arity) || Reflection.has_macro?(Kernel, function, arity) do
+    if Reflection.has_function?(Kernel, function, arity) ||
+         Reflection.has_macro?(Kernel, function, arity) do
       Kernel
     else
       nil

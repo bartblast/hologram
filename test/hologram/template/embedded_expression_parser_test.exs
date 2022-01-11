@@ -180,11 +180,13 @@ defmodule Hologram.Template.EmbeddedExpressionParserTest do
     expected = [
       %Expression{
         ir: %TupleType{
-          data: [%FunctionCall{
-            module: Abc.Bcd.Module1,
-            function: :test_fun,
-            args: []
-          }]
+          data: [
+            %FunctionCall{
+              module: Abc.Bcd.Module1,
+              function: :test_fun,
+              args: []
+            }
+          ]
         }
       }
     ]

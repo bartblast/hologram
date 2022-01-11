@@ -9,8 +9,20 @@ defmodule Hologram.Template.TagAssembler do
 
   # see: https://html.spec.whatwg.org/multipage/syntax.html#void-elements
   @void_tags [
-    "area", "base", "br", "col", "embed", "hr", "img", "input",
-    "link", "meta", "param", "source", "track", "wbr"
+    "area",
+    "base",
+    "br",
+    "col",
+    "embed",
+    "hr",
+    "img",
+    "input",
+    "link",
+    "meta",
+    "param",
+    "source",
+    "track",
+    "wbr"
   ]
 
   # status is one of:
@@ -103,7 +115,7 @@ defmodule Hologram.Template.TagAssembler do
     assemble_text_tag(context, token, rest, tags)
   end
 
-  def assemble([{:symbol, :">"} = token | rest], :start_tag, context, tags) do
+  def assemble([{:symbol, :>} = token | rest], :start_tag, context, tags) do
     tags =
       if is_self_closing_tag?(context.tag_name) do
         add_self_closing_tag(tags, context)
@@ -114,7 +126,7 @@ defmodule Hologram.Template.TagAssembler do
     handle_start_tag_end(context, token, rest, tags)
   end
 
-  def assemble([{:symbol, :>} = token| rest], :end_tag, context, tags) do
+  def assemble([{:symbol, :>} = token | rest], :end_tag, context, tags) do
     tags = add_end_tag(tags, context)
     context = add_prev_token(context, token)
     assemble(rest, :text_tag, context, tags)
@@ -146,7 +158,7 @@ defmodule Hologram.Template.TagAssembler do
     handle_attr_value_end(context, :literal, token, rest, tags)
   end
 
-  def assemble([{:symbol, :"\""} = token| rest], :attr_value_expression, context, tags) do
+  def assemble([{:symbol, :"\""} = token | rest], :attr_value_expression, context, tags) do
     assemble_attr_value(context, token, rest, tags, :attr_value_expression)
   end
 
@@ -169,7 +181,12 @@ defmodule Hologram.Template.TagAssembler do
     assemble_text_tag(context, token, rest, tags)
   end
 
-  def assemble([{:symbol, :"}"} = token | rest], :attr_value_expression, %{num_open_braces: 0} = context, tags) do
+  def assemble(
+        [{:symbol, :"}"} = token | rest],
+        :attr_value_expression,
+        %{num_open_braces: 0} = context,
+        tags
+      ) do
     handle_attr_value_end(context, :expression, token, rest, tags)
   end
 

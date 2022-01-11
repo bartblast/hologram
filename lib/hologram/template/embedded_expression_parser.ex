@@ -46,13 +46,18 @@ defmodule Hologram.Template.EmbeddedExpressionParser do
     |> assemble_node_part(token, rest, :expression, context)
   end
 
-  defp assemble_nodes([{:symbol, :"}"} = token | rest], :expression, %{num_open_braces: 1} = acc, context) do
+  defp assemble_nodes(
+         [{:symbol, :"}"} = token | rest],
+         :expression,
+         %{num_open_braces: 1} = acc,
+         context
+       ) do
     acc =
       acc
       |> maybe_add_expression_part(context)
       |> decrement_num_open_braces()
       |> add_prev_token(token)
-      \
+
     assemble_nodes(rest, :text, acc, context)
   end
 

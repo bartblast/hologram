@@ -17,9 +17,9 @@ defmodule Hologram.Template.ComponentTransformer do
   defp transform_props(props, context) do
     Enum.map(props, fn {type, key, value} ->
       value =
-        (if type == :expression, do: "{#{value}}", else: value)
+        if(type == :expression, do: "{#{value}}", else: value)
         |> EmbeddedExpressionParser.parse(context)
-        
+
       {String.to_atom(key), value}
     end)
     |> Enum.into(%{})

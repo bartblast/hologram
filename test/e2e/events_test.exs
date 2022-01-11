@@ -16,7 +16,8 @@ defmodule Hologram.Features.EventsTest do
     |> visit("/e2e/page-10")
     |> fill_in(css("#input-1"), with: "abc")
     |> fill_in(css("#input-2"), with: "xyz")
-    |> click(css("#text-1")) # triggers change event, since #input-2 loses focus
+    # triggers change event, since #input-2 loses focus
+    |> click(css("#text-1"))
     |> assert_has(css("#text-1", text: "Field 1 value = abc"))
     |> assert_has(css("#text-2", text: "Field 2 value = xyz"))
   end

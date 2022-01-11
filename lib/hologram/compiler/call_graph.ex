@@ -20,7 +20,7 @@ defmodule Hologram.Compiler.CallGraph do
   end
 
   def get do
-    Agent.get(__MODULE__, &(&1))
+    Agent.get(__MODULE__, & &1)
   end
 
   def has_edge?(from_vertex, to_vertex) do

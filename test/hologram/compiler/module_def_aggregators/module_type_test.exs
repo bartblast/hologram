@@ -4,7 +4,14 @@ defmodule Hologram.Compiler.ModuleDefAggregators.ModuleTypeTest do
   alias Hologram.Compiler.{ModuleDefAggregator, ModuleDefStore}
   alias Hologram.Compiler.IR.{ModuleDefinition, ModuleType}
   alias Hologram.Runtime.Commons
-  alias Hologram.Test.Fixtures.Compiler.ModuleDefAggregators.ModuleType.{Module1, Module2, Module6, Module7}
+
+  alias Hologram.Test.Fixtures.Compiler.ModuleDefAggregators.ModuleType.{
+    Module1,
+    Module2,
+    Module6,
+    Module7
+  }
+
   alias Hologram.Test.Fixtures.PlaceholderModule1
 
   setup do

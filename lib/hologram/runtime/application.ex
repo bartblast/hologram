@@ -2,7 +2,14 @@ defmodule Hologram.Runtime.Application do
   @moduledoc false
 
   use Application
-  alias Hologram.Runtime.{PageDigestStore, RouterBuilder, StaticDigestStore, TemplateStore, Watcher}
+
+  alias Hologram.Runtime.{
+    PageDigestStore,
+    RouterBuilder,
+    StaticDigestStore,
+    TemplateStore,
+    Watcher
+  }
 
   @env Application.fetch_env!(:hologram, :env)
 

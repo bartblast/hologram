@@ -6,7 +6,7 @@ defmodule Hologram.E2E.Page9 do
   def init do
     %{
       condition_1: 123,
-      condition_2: nil,
+      condition_2: nil
     }
   end
 

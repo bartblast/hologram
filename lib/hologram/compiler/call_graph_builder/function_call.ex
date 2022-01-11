@@ -2,7 +2,12 @@ alias Hologram.Compiler.{CallGraph, CallGraphBuilder, Reflection}
 alias Hologram.Compiler.IR.FunctionCall
 
 defimpl CallGraphBuilder, for: FunctionCall do
-  def build(%{module: module, function: function, args: args}, module_defs, templates, from_vertex) do
+  def build(
+        %{module: module, function: function, args: args},
+        module_defs,
+        templates,
+        from_vertex
+      ) do
     CallGraphBuilder.build(args, module_defs, templates, from_vertex)
 
     unless Reflection.standard_lib?(module) do

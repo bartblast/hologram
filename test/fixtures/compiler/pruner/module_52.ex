@@ -4,7 +4,6 @@ defmodule Hologram.Test.Fixtures.Compiler.Pruner.Module52 do
 
   route "/test-route-52"
 
-
   def template do
     ~H"""
     """

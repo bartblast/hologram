@@ -19,7 +19,7 @@ defmodule Hologram.Utils do
 
   # DEFER: test
   def await_tasks(tasks) do
-    Enum.map(tasks, &(Task.await(&1, :infinity)))
+    Enum.map(tasks, &Task.await(&1, :infinity))
   end
 
   def deserialize(data) do
@@ -29,7 +29,8 @@ defmodule Hologram.Utils do
   # DEFER: test
   def list_files_recursively(path) do
     cond do
-      File.regular?(path) -> [path]
+      File.regular?(path) ->
+        [path]
 
       File.dir?(path) ->
         File.ls!(path)
@@ -37,7 +38,8 @@ defmodule Hologram.Utils do
         |> Enum.map(&list_files_recursively/1)
         |> Enum.concat()
 
-      true -> []
+      true ->
+        []
     end
   end
 

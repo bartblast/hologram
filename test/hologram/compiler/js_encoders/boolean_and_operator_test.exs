@@ -11,7 +11,9 @@ defmodule Hologram.Compiler.JSEncoder.BooleanAndOperatorTest do
     }
 
     result = JSEncoder.encode(ir, %Context{}, %Opts{})
-    expected = "Elixir_Kernel.$boolean_and({ type: 'integer', value: 1 }, { type: 'integer', value: 2 })"
+
+    expected =
+      "Elixir_Kernel.$boolean_and({ type: 'integer', value: 1 }, { type: 'integer', value: 2 })"
 
     assert result == expected
   end

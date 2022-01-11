@@ -68,11 +68,11 @@ defmodule Hologram.Compiler.MatchOperatorTransformerTest do
         bindings: [
           x: [
             %MapAccess{key: %AtomType{value: :b}},
-            %MapAccess{key: %AtomType{value: :p}},
+            %MapAccess{key: %AtomType{value: :p}}
           ],
           y: [
             %MapAccess{key: %AtomType{value: :d}},
-            %MapAccess{key: %AtomType{value: :n}},
+            %MapAccess{key: %AtomType{value: :n}}
           ]
         ],
         left: %MapType{

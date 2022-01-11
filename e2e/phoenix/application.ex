@@ -4,7 +4,14 @@ defmodule Hologram.E2E.Application do
   use Application
 
   alias Hologram.E2E.Web.Endpoint
-  alias Hologram.Runtime.{PageDigestStore, RouterBuilder, StaticDigestStore, TemplateStore, Watcher}
+
+  alias Hologram.Runtime.{
+    PageDigestStore,
+    RouterBuilder,
+    StaticDigestStore,
+    TemplateStore,
+    Watcher
+  }
 
   @env Application.fetch_env!(:hologram, :env)
 

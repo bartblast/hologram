@@ -1,7 +1,14 @@
 defmodule Hologram.Template.Renderer.ElementNodeTest do
   use Hologram.Test.UnitCase, async: true
 
-  alias Hologram.Compiler.IR.{BooleanType, IntegerType, ModuleAttributeOperator, NilType, TupleType}
+  alias Hologram.Compiler.IR.{
+    BooleanType,
+    IntegerType,
+    ModuleAttributeOperator,
+    NilType,
+    TupleType
+  }
+
   alias Hologram.Template.Renderer
   alias Hologram.Template.VDOM.{ElementNode, Expression, TextNode}
 

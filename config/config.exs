@@ -17,7 +17,6 @@ config :hologram, Hologram.E2E.Web.Endpoint,
   secret_key_base: "/t99BcKoIa8IKka6K9dhpfoRHHYP0fK/FXFNdWO5Wlt+h1wlFeBODgIi8U4XACBE",
   url: [host: "localhost"]
 
-
 config :esbuild,
   version: "0.12.18",
   hologram: [

@@ -15,7 +15,9 @@ defmodule Hologram.Compiler.JSEncoder.AccessOperatorTest do
     }
 
     result = JSEncoder.encode(ir, %Context{}, %Opts{})
-    expected = "Elixir_Access.get({ type: 'map', data: { '~atom[a]': { type: 'integer', value: 1 } } }, { type: 'atom', value: 'a' })"
+
+    expected =
+      "Elixir_Access.get({ type: 'map', data: { '~atom[a]': { type: 'integer', value: 1 } } }, { type: 'atom', value: 'a' })"
 
     assert result == expected
   end

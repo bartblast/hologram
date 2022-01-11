@@ -12,15 +12,14 @@ defmodule Hologram.Compiler.ModuleDefAggregators.ExpressionTest do
   end
 
   test "aggregate/1" do
-    ir =
-      %Expression{
-        ir: %TupleType{
-          data: [
-            %ModuleType{module: PlaceholderModule1},
-            %ModuleType{module: PlaceholderModule2}
-          ]
-        }
+    ir = %Expression{
+      ir: %TupleType{
+        data: [
+          %ModuleType{module: PlaceholderModule1},
+          %ModuleType{module: PlaceholderModule2}
+        ]
       }
+    }
 
     ModuleDefAggregator.aggregate(ir)
 

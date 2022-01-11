@@ -26,7 +26,7 @@ defmodule Hologram.Compiler.ModuleDefAggregators.FunctionCallTest do
       module: Kernel,
       args: [
         %ModuleType{module: Module1},
-        %ModuleType{module: Module2},
+        %ModuleType{module: Module2}
       ]
     }
 

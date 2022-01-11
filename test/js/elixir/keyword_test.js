@@ -53,10 +53,10 @@ describe("delete()", () => {
 describe("get()", () => {
   const keywordElems = [
     Type.tuple([Type.atom("a"), Type.integer(1)]),
-    Type.tuple([Type.atom("b"), Type.integer(2)])
-  ]
+    Type.tuple([Type.atom("b"), Type.integer(2)]),
+  ];
 
-  const keywords = Type.list(keywordElems)
+  const keywords = Type.list(keywordElems);
 
   it("gets the value for a specific key in keyword list if the given key exists in the given keyword list", () => {
     const result = Keyword.get(keywords, Type.atom("b"));

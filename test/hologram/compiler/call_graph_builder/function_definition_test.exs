@@ -31,7 +31,6 @@ defmodule Hologram.Compiler.CallGraphBuilder.FunctionDefinitionTest do
 
     assert CallGraph.has_edge?({PlaceholderModule1, :test_fun}, PlaceholderModule2)
     assert CallGraph.has_edge?({PlaceholderModule1, :test_fun}, PlaceholderModule3)
-
   end
 
   test "function definition without call graph edges" do

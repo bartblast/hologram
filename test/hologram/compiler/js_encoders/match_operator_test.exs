@@ -29,7 +29,7 @@ defmodule Hologram.Compiler.JSEncoder.MatchOperatorTest do
       bindings: [
         x: [
           %MapAccess{key: %AtomType{value: :b}},
-          %MapAccess{key: %AtomType{value: :p}},
+          %MapAccess{key: %AtomType{value: :p}}
         ]
       ],
       left: %MapType{
@@ -52,7 +52,7 @@ defmodule Hologram.Compiler.JSEncoder.MatchOperatorTest do
           {%AtomType{value: :b},
            %MapType{
              data: [
-               {%AtomType{value: :p}, %IntegerType{value: 9}},
+               {%AtomType{value: :p}, %IntegerType{value: 9}}
              ]
            }},
           {%AtomType{value: :c}, %IntegerType{value: 3}}
@@ -61,7 +61,9 @@ defmodule Hologram.Compiler.JSEncoder.MatchOperatorTest do
     }
 
     result = JSEncoder.encode(ir, %Context{}, %Opts{})
-    expected = "const x = Elixir_Kernel_SpecialForms.$dot(Elixir_Kernel_SpecialForms.$dot({ type: 'map', data: { '~atom[a]': { type: 'integer', value: 1 }, '~atom[b]': { type: 'map', data: { '~atom[p]': { type: 'integer', value: 9 } } }, '~atom[c]': { type: 'integer', value: 3 } } }, { type: 'atom', value: 'b' }), { type: 'atom', value: 'p' })"
+
+    expected =
+      "const x = Elixir_Kernel_SpecialForms.$dot(Elixir_Kernel_SpecialForms.$dot({ type: 'map', data: { '~atom[a]': { type: 'integer', value: 1 }, '~atom[b]': { type: 'map', data: { '~atom[p]': { type: 'integer', value: 9 } } }, '~atom[c]': { type: 'integer', value: 3 } } }, { type: 'atom', value: 'b' }), { type: 'atom', value: 'p' })"
 
     assert result == expected
   end
@@ -82,7 +84,7 @@ defmodule Hologram.Compiler.JSEncoder.MatchOperatorTest do
       left: %MapType{
         data: [
           {%AtomType{value: :a}, %Variable{name: :x}},
-          {%AtomType{value: :b}, %Variable{name: :y}},
+          {%AtomType{value: :b}, %Variable{name: :y}}
         ]
       },
       right: %MapType{
@@ -92,6 +94,7 @@ defmodule Hologram.Compiler.JSEncoder.MatchOperatorTest do
         ]
       }
     }
+
     result = JSEncoder.encode(ir, %Context{}, %Opts{})
 
     expected = """

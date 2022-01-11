@@ -2,7 +2,13 @@ defmodule Hologram.Compiler.ModuleAttributeDefinitionTransformerTest do
   use Hologram.Test.UnitCase, async: true
 
   alias Hologram.Compiler.{Context, ModuleAttributeDefinitionTransformer}
-  alias Hologram.Compiler.IR.{IntegerType, ModuleAttributeDefinition, NotSupportedExpression, TupleType}
+
+  alias Hologram.Compiler.IR.{
+    IntegerType,
+    ModuleAttributeDefinition,
+    NotSupportedExpression,
+    TupleType
+  }
 
   def test_fun do
     {1, 2, 3, 4}

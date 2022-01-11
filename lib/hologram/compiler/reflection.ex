@@ -5,8 +5,8 @@ defmodule Hologram.Compiler.Reflection do
 
   @config Application.get_all_env(:hologram)
 
-  @ignored_modules [Ecto.Changeset, Hologram.Router, Hologram.Runtime.JS]
-    ++ Application.get_env(:hologram, :ignored_modules, [])
+  @ignored_modules [Ecto.Changeset, Hologram.Router, Hologram.Runtime.JS] ++
+                     Application.get_env(:hologram, :ignored_modules, [])
 
   @ignored_namespaces Application.get_env(:hologram, :ignored_namespaces, [])
 
@@ -88,6 +88,7 @@ defmodule Hologram.Compiler.Reflection do
       true
     else
       module_name = to_string(module)
+
       Enum.any?(@ignored_namespaces, fn namespace ->
         String.starts_with?(module_name, to_string(namespace) <> ".")
       end)
@@ -119,7 +120,9 @@ defmodule Hologram.Compiler.Reflection do
     app_components = list_modules_of_type(:component, app_components_path)
 
     hologram_ui_components_path = hologram_ui_components_path()
-    hologram_ui_components = list_modules_of_type(:component, hologram_ui_components_path, :hologram)
+
+    hologram_ui_components =
+      list_modules_of_type(:component, hologram_ui_components_path, :hologram)
 
     app_components ++ hologram_ui_components
   end
@@ -135,6 +138,7 @@ defmodule Hologram.Compiler.Reflection do
       case Code.ensure_loaded(module) do
         {:module, _} ->
           acc ++ [module]
+
         _ ->
           acc
       end
@@ -153,7 +157,8 @@ defmodule Hologram.Compiler.Reflection do
           in_path? = String.starts_with?(source_path(module), path)
           type_check_function = :"is_#{type}?"
 
-          if Keyword.get(funs, type_check_function) && apply(module, type_check_function, []) && in_path? do
+          if Keyword.get(funs, type_check_function) && apply(module, type_check_function, []) &&
+               in_path? do
             acc ++ [module]
           else
             acc

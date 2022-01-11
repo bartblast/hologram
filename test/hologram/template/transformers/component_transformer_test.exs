@@ -2,7 +2,16 @@ defmodule Hologram.Template.ComponentTransformerTest do
   use Hologram.Test.UnitCase, async: true
 
   alias Hologram.Compiler.Context
-  alias Hologram.Compiler.IR.{AdditionOperator, AliasDirective, IntegerType, ModuleAttributeOperator, ModuleDefinition, TupleType}
+
+  alias Hologram.Compiler.IR.{
+    AdditionOperator,
+    AliasDirective,
+    IntegerType,
+    ModuleAttributeOperator,
+    ModuleDefinition,
+    TupleType
+  }
+
   alias Hologram.Template.ComponentTransformer
   alias Hologram.Template.VDOM.{Component, Expression, TextNode}
 

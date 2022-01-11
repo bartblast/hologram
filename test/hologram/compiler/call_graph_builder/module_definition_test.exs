@@ -55,7 +55,7 @@ defmodule Hologram.Compiler.CallGraphBuilder.ModuleDefinitionTest do
     }
 
     module_def_2 = %ModuleDefinition{
-     module: PlaceholderModule2
+      module: PlaceholderModule2
     }
 
     module_defs = %{
@@ -77,7 +77,7 @@ defmodule Hologram.Compiler.CallGraphBuilder.ModuleDefinitionTest do
 
     module_defs = %{
       Module4 => Reflection.module_definition(Module4),
-      Module5 => Reflection.module_definition(Module5),
+      Module5 => Reflection.module_definition(Module5)
     }
 
     CallGraphBuilder.build(module_defs[Module4], module_defs, templates, @from_vertex)

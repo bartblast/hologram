@@ -130,13 +130,16 @@ defmodule Hologram.Template.ParserTest do
     result = Parser.parse!(markup)
 
     expected = [
-      {:element, "div", [], [
-        {:element, "span", [], [
-          {:component, "Abc.Bcd", [], [
-            {:text, "abc"}
+      {:element, "div", [],
+       [
+         {:element, "span", [],
+          [
+            {:component, "Abc.Bcd", [],
+             [
+               {:text, "abc"}
+             ]}
           ]}
-        ]}
-      ]}
+       ]}
     ]
 
     assert result == expected
@@ -155,10 +158,13 @@ defmodule Hologram.Template.ParserTest do
     markup = "<div class=\"abc\" id=\"xyz\"></div>"
     result = Parser.parse!(markup)
 
-    expected = [{:element, "div", [
-      {:literal, "class", "abc"},
-      {:literal, "id", "xyz"}
-    ], []}]
+    expected = [
+      {:element, "div",
+       [
+         {:literal, "class", "abc"},
+         {:literal, "id", "xyz"}
+       ], []}
+    ]
 
     assert result == expected
   end
@@ -176,10 +182,13 @@ defmodule Hologram.Template.ParserTest do
     markup = "<div class={abc} id={xyz}></div>"
     result = Parser.parse!(markup)
 
-    expected = [{:element, "div", [
-      {:expression, "class", "abc"},
-      {:expression, "id", "xyz"}
-    ], []}]
+    expected = [
+      {:element, "div",
+       [
+         {:expression, "class", "abc"},
+         {:expression, "id", "xyz"}
+       ], []}
+    ]
 
     assert result == expected
   end
@@ -188,10 +197,13 @@ defmodule Hologram.Template.ParserTest do
     markup = "<div class=\"abc\" id={xyz}></div>"
     result = Parser.parse!(markup)
 
-    expected = [{:element, "div", [
-      {:literal, "class", "abc"},
-      {:expression, "id", "xyz"}
-    ], []}]
+    expected = [
+      {:element, "div",
+       [
+         {:literal, "class", "abc"},
+         {:expression, "id", "xyz"}
+       ], []}
+    ]
 
     assert result == expected
   end
@@ -200,10 +212,13 @@ defmodule Hologram.Template.ParserTest do
     markup = "<div class={abc} id=\"xyz\"></div>"
     result = Parser.parse!(markup)
 
-    expected = [{:element, "div", [
-      {:expression, "class", "abc"},
-      {:literal, "id", "xyz"}
-    ], []}]
+    expected = [
+      {:element, "div",
+       [
+         {:expression, "class", "abc"},
+         {:literal, "id", "xyz"}
+       ], []}
+    ]
 
     assert result == expected
   end

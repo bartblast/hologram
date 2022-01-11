@@ -113,8 +113,11 @@ defmodule Hologram.Compiler.Pruner do
     end
   end
 
-  defp remove_module_redundant_funs(%{functions: funs, module: module} = module_def, reachable_code_hash_table) do
-    funs = Enum.filter(funs, &(reachable_code_hash_table[{module, &1.name}]))
+  defp remove_module_redundant_funs(
+         %{functions: funs, module: module} = module_def,
+         reachable_code_hash_table
+       ) do
+    funs = Enum.filter(funs, &reachable_code_hash_table[{module, &1.name}])
     %{module_def | functions: funs}
   end
 

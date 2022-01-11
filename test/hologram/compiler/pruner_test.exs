@@ -1,6 +1,13 @@
 defmodule Hologram.Compiler.PrunerTest do
   use Hologram.Test.UnitCase, async: false
-  alias Hologram.Compiler.{CallGraph, CallGraphBuilder, ModuleDefAggregator, ModuleDefStore, Pruner}
+
+  alias Hologram.Compiler.{
+    CallGraph,
+    CallGraphBuilder,
+    ModuleDefAggregator,
+    ModuleDefStore,
+    Pruner
+  }
 
   @from_vertex nil
 

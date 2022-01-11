@@ -44,7 +44,7 @@ defmodule Hologram.Runtime.StaticDigestStore do
     Reflection.release_static_path()
     |> Utils.list_files_recursively()
     |> Stream.map(&Regex.run(regex, &1))
-    |> Stream.filter(&(&1))
+    |> Stream.filter(& &1)
     |> Stream.map(&List.to_tuple/1)
     |> Stream.reject(fn {_, prefix, _, _} -> prefix == "/hologram/page" end)
     |> Stream.map(fn {_, prefix, digest, suffix} ->

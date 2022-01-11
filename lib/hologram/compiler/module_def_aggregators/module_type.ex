@@ -16,16 +16,18 @@ defimpl ModuleDefAggregator, for: ModuleType do
 
   defp aggregate_from_function_defs(function_defs) do
     function_defs
-    |> Enum.map(&(Task.async(fn -> ModuleDefAggregator.aggregate(&1) end)))
+    |> Enum.map(&Task.async(fn -> ModuleDefAggregator.aggregate(&1) end))
   end
 
   defp maybe_aggregate_from_template(tasks, module_def) do
     if module_def.templatable? do
-      task = Task.async(fn ->
-         # TODO: use template store here
-        TemplateBuilder.build(module_def.module)
-        |> ModuleDefAggregator.aggregate()
-      end)
+      task =
+        Task.async(fn ->
+          # TODO: use template store here
+          TemplateBuilder.build(module_def.module)
+          |> ModuleDefAggregator.aggregate()
+        end)
+
       [task | tasks]
     else
       tasks
