@@ -249,20 +249,6 @@ defmodule Hologram.Compiler.Reflection do
     release_priv_path() <> "/hologram/template_store.bin"
   end
 
-  # DEFER: consider remove
-  defp resolve_path(opts, key, dir) do
-    cond do
-      Keyword.has_key?(opts, key) ->
-        opts[key]
-
-      path = Application.get_env(:hologram, key) ->
-        path
-
-      true ->
-        "#{app_path()}/#{dir}"
-    end
-  end
-
   # DEFER: test
   def root_page_digest_store_path(opts \\ []) do
     root_priv_path(opts) <> "/page_digest_store.bin"
