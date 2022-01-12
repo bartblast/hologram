@@ -12,24 +12,24 @@
 
 #### Core
 
-| Feature     | Status             |
-| :---------- | :----------------: |
-| Actions     | :white_check_mark: |
-| Commands    | :white_check_mark: |
-| Routing     | :x:                |
-| Session     | :x:                |
+| Feature     | Status             | Comments                                                        |
+| :---------- | :----------------: | :-------------------------------------------------------------- |
+| Actions     | :white_check_mark: |                                                                 |
+| Commands    | :white_check_mark: |                                                                 |
+| Routing     | :construction:     | done: paths without params, todo: params                        |
+| Session     | :x:                |                                                                 |
 
 #### Template Engine
 
 | Feature         | Status             | Comments                                                        |
 | :-------------- | :----------------: | :-------------------------------------------------------------- |
-| Components      | :x:                |                                                                 |
+| Components      | :construction:     | done: stateless/stateful components, todo: props DSL            |
 | If Directive    | :construction:     | done: element nodes, todo: component nodes                      |
-| Interpolation   | :x:                |                                                                 |
-| Layouts         | :x:                |                                                                 |
-| Navigation      | :construction:     |                                                                 |
-| Pages           | :x:                |                                                                 |
-| Templates       | :x:                |                                                                 |
+| Interpolation   | :white_check_mark: |                                                                 |
+| Layouts         | :white_check_mark: |                                                                 |
+| Navigation      | :white_check_mark: |                                                                 |
+| Pages           | :white_check_mark: |                                                                 |
+| Templates       | :construction:     | done: template in module, todo: template in separate file       |
 | Two-Way Binding | :x:                |                                                                 |
 
 #### Events
@@ -77,22 +77,22 @@
 | Type               | Status             |
 | :----------------- | :----------------: |
 | Anonymous Function | :x:                |
-| Atom               | :x:                |
+| Atom               | :white_check_mark: |
 | Binary             | :x:                |
 | Bitstring          | :x:                |     
-| Boolean            | :x:                |     
+| Boolean            | :white_check_mark: |     
 | Exception          | :x:                |     
-| Float              | :x:                |     
-| Integer            | :x:                |     
+| Float              | :white_check_mark: |     
+| Integer            | :white_check_mark: |     
 | IO Data            | :x:                |     
-| List               | :x:                |     
-| Map                | :x:                |     
-| Nil                | :x:                |    
+| List               | :white_check_mark: |     
+| Map                | :white_check_mark: |     
+| Nil                | :white_check_mark: |    
 | Range              | :x:                |     
 | Regex              | :x:                |     
-| String             | :x:                |     
-| Struct             | :x:                |     
-| Tuple              | :x:                |     
+| String             | :white_check_mark: |     
+| Struct             | :white_check_mark: |   
+| Tuple              | :white_check_mark: |     
 
 #### Operators
 
@@ -102,21 +102,21 @@
 | :------- | :----------------: |
 | unary +  | :x:                |
 | unary -  | :x:                |
-| +        | :x:                |
+| +        | :white_check_mark: |
 | -        | :x:                |
 | *        | :x:                |
 | /        | :x:                |
 | ++       | :x:                |
 | --       | :x:                |
 | and      | :x:                |
-| &&       | :x:                |
+| &&       | :white_check_mark: |
 | or       | :x:                |
 | \|\|     | :x:                |
 | not      | :x:                |
 | !        | :x:                |
 | in       | :x:                |
 | not in   | :x:                |
-| @        | :x:                |
+| @        | :white_check_mark: |
 | ..       | :x:                |
 | <>       | :x:                |
 | \|>      | :x:                |
@@ -127,8 +127,8 @@
 | Operator | Status             |
 | :------- | :----------------: |
 | ^        | :x:                |
-| .        | :x:                |
-| =        | :x:                |
+| .        | :white_check_mark: |
+| =        | :white_check_mark: |
 | &        | :x:                |
 | ::       | :x:                |
 
@@ -136,7 +136,7 @@
 
 | Operator | Status             |
 | :------- | :----------------: |
-| ==       | :x:                |
+| ==       | :white_check_mark: |
 | ===      | :x:                |
 | !=       | :x:                |
 | !==      | :x:                |
@@ -165,7 +165,7 @@
 | Case          | :x:                |
 | Comprehension | :x:                |
 | List          | :x:                |
-| Map           | :x:                |       
+| Map           | :white_check_mark: |      
 | Range         | :x:                |          
 | Struct        | :x:                |          
 | Tuple         | :x:                |          
@@ -179,10 +179,10 @@
 | Catch         | :x:                |
 | Comprehension | :x:                |
 | Cond          | :x:                |
-| Else (If)     | :x:                |
+| Else (If)     | :white_check_mark: |
 | Else (Rescue) | :x:                |
 | Guards        | :x:                |
-| If            | :x:                |
+| If            | :white_check_mark: |
 | Raise         | :x:                |
 | Rescue        | :x:                |
 | Throw         | :x:                |
@@ -194,23 +194,23 @@
 | Structure        | Status             |
 | :--------------- | :----------------: |
 | Exception        | :x:                |
-| Function Head    | :x:                |
+| Function Head    | :white_check_mark: |
 | Macro            | :x:                |
-| Module           | :x:                |
-| Module Attribute | :x:                |
-| Private Function | :x:                |
-| Public Function  | :x:                |
+| Module           | :white_check_mark: |
+| Module Attribute | :white_check_mark: |
+| Private Function | :white_check_mark: |
+| Public Function  | :white_check_mark: |
 
 
 #### Directives
 
 | Directive        | Status             |
 | :--------------- | :----------------: |
-| Alias            | :x:                |
-| Import           | :x:                |
+| Alias            | :white_check_mark: |
+| Import           | :white_check_mark: |
 | Multi-Alias      | :x:                |
-| Require          | :x:                |
-| Use              | :x:                |
+| Require          | :white_check_mark: |
+| Use              | :white_check_mark: |
 
 #### Sigils
 
@@ -240,7 +240,7 @@
 | Function Capturing             | :x:                |
 | Map Update Syntax              | :x:                |
 | Module Attribute Accumulation  | :x:                |
-| Module \_\_info\_\_/1 callback | :x:                |
+| Module \_\_info\_\_/1 callback | :white_check_mark: |
 | Module Nesting                 | :x:                |
 | Protocols                      | :x:                |
 | Variable rebinding             | :x:                |
