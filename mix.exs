@@ -104,13 +104,13 @@ defmodule Hologram.MixProject do
       app: :hologram,
       compilers: compilers(),
       deps: deps(),
-      description: "Work in progress...",
+      description: "Full stack isomorphic Elixir web framework that can be used on top of Phoenix.",
       elixir: "~> 1.13.0",
       elixirc_paths: elixirc_paths(),
       package: package(),
       preferred_cli_env: preferred_cli_env(),
       start_permanent: Mix.env() == :prod,
-      version: "0.0.1"
+      version: "0.1.0"
     ]
   end
 
