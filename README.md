@@ -1,5 +1,7 @@
 # Hologram
 
+Full stack isomorphic Elixir web framework.
+
 ## Roadmap
 
 :white_check_mark:&nbsp;&nbsp;==&nbsp;&nbsp;DONE
