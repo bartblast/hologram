@@ -27,6 +27,7 @@ defmodule Hologram.Compiler.Transformer do
     StructTypeTransformer,
     TypeOperatorTransformer,
     TupleTypeTransformer,
+    UnaryPositiveOperatorTransformer,
     UnquoteTransformer,
     UseDirectiveTransformer
   }
@@ -106,6 +107,10 @@ defmodule Hologram.Compiler.Transformer do
 
   def transform({{:., _, [Access, :get]}, _, _} = ast, %Context{} = context) do
     AccessOperatorTransformer.transform(ast, context)
+  end
+
+  def transform({:+, _, [_]} = ast, %Context{} = context) do
+    UnaryPositiveOperatorTransformer.transform(ast, context)
   end
 
   def transform({:+, _, _} = ast, %Context{} = context) do

@@ -37,6 +37,7 @@ defmodule Hologram.Compiler.TransformerTest do
     TupleType,
     TypeOperator,
     Typespec,
+    UnaryPositiveOperator,
     Unquote,
     UseDirective,
     Variable
@@ -228,6 +229,13 @@ defmodule Hologram.Compiler.TransformerTest do
       ast = ast(code)
 
       assert %TypeOperator{} = Transformer.transform(ast, %Context{})
+    end
+
+    test "unary positive" do
+      code = "+2"
+      ast = ast(code)
+
+      assert %UnaryPositiveOperator{} = Transformer.transform(ast, %Context{})
     end
   end
 
