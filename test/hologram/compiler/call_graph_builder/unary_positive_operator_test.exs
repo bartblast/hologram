@@ -1,9 +1,9 @@
-defmodule Hologram.Compiler.CallGraphBuilder.ElixirListTest do
+defmodule Hologram.Compiler.CallGraphBuilder.UnaryPositiveOperatorTest do
   use Hologram.Test.UnitCase, async: false
 
   alias Hologram.Compiler.{CallGraph, CallGraphBuilder}
-  alias Hologram.Compiler.IR.{ModuleType, UnaryPositiveOperator}
-  alias Hologram.Test.Fixtures.{PlaceholderModule1, PlaceholderModule2}
+  alias Hologram.Compiler.IR.{IntegerType, UnaryPositiveOperator}
+  alias Hologram.Test.Fixtures.PlaceholderModule1
 
   @module_defs %{}
   @templates %{}
@@ -14,14 +14,12 @@ defmodule Hologram.Compiler.CallGraphBuilder.ElixirListTest do
   end
 
   test "build/4" do
-    ir = %UnaryPositiveOperator{value: %ModuleType{module: PlaceholderModule2}}
+    ir = %UnaryPositiveOperator{value: %IntegerType{value: 2}}
     from_vertex = PlaceholderModule1
 
     CallGraphBuilder.build(ir, @module_defs, @templates, from_vertex)
 
-    assert CallGraph.num_vertices() == 2
-    assert CallGraph.num_edges() == 1
-
-    assert CallGraph.has_edge?(PlaceholderModule1, PlaceholderModule2)
+    assert CallGraph.num_vertices() == 0
+    assert CallGraph.num_edges() == 0
   end
 end
