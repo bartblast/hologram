@@ -41,6 +41,7 @@ Full stack isomorphic Elixir web framework.
 | Blur           | :white_check_mark: |                                                                 |
 | Change         | :construction:     | done: form tags, todo: input, select, textarea tags             |
 | Click          | :construction:     | done: event handling, todo: event metadata                      |
+| Click Away     | :x:                |                                                                 |
 | Focus          | :x:                |                                                                 |
 | Key Down       | :x:                |                                                                 |
 | Key Press      | :x:                |                                                                 |
