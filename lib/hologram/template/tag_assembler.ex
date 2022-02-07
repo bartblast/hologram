@@ -3,12 +3,8 @@
 defmodule Hologram.Template.TagAssembler do
   alias Hologram.Template.{Helpers, SyntaxError, TokenHTMLEncoder}
 
-  # see: https://developer.mozilla.org/en-US/docs/Web/SVG/Element
-  # DEFER: add the rest of SVG elems, see: https://github.com/segmetric/hologram/issues/21
-  @svg_tags ["path", "rect"]
-
   # see: https://html.spec.whatwg.org/multipage/syntax.html#void-elements
-  @void_tags [
+  @void_html_tags [
     "area",
     "base",
     "br",
@@ -24,6 +20,11 @@ defmodule Hologram.Template.TagAssembler do
     "track",
     "wbr"
   ]
+
+  # TODO: specify void SVG tags
+  # see: https://github.com/segmetric/hologram/issues/21
+  # see: https://developer.mozilla.org/en-US/docs/Web/SVG/Element
+  @void_svg_tags ["path", "rect"]
 
   # status is one of:
   # :text_tag, :start_tag_bracket, :start_tag, :attr_key, :attr_assignment,
@@ -288,15 +289,15 @@ defmodule Hologram.Template.TagAssembler do
   end
 
   defp is_self_closing_tag?(tag_name) do
-    is_void_tag?(tag_name) || is_svg_tag?(tag_name) || tag_name == "slot"
+    is_void_html_tag?(tag_name) || is_void_svg_tag?(tag_name) || tag_name == "slot"
   end
 
-  defp is_svg_tag?(tag_name) do
-    tag_name in @svg_tags
+  defp is_void_html_tag?(tag_name) do
+    tag_name in @void_html_tags
   end
 
-  defp is_void_tag?(tag_name) do
-    tag_name in @void_tags
+  defp is_void_svg_tag?(tag_name) do
+    tag_name in @void_svg_tags
   end
 
   defp maybe_add_text_tag(tags, tokens) do
