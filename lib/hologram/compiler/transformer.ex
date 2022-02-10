@@ -134,6 +134,7 @@ defmodule Hologram.Compiler.Transformer do
     MatchOperatorTransformer.transform(ast, context)
   end
 
+  # needs to be defined before module attribute operator
   def transform({:@, _, [{:spec, _, [{:"::", _, _}]}]}, _) do
     %Typespec{}
   end
