@@ -146,7 +146,7 @@ Full stack isomorphic Elixir web framework.
 | <        | :x:                |
 | >        | :x:                |
 | <=       | :x:                |
-| =>       | :x:                |
+| >=       | :x:                |
 
 ##### Bitwise Module Operators
 
