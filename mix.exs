@@ -83,7 +83,7 @@ defmodule Hologram.MixProject do
 
   def package do
     [
-      files: ["lib/hologram", "mix.exs", "README.md"],
+      files: ["lib", "mix.exs", "README.md"],
       maintainers: ["Segmetric", "Bart Blast"],
       licenses: ["MIT"],
       links: %{"GitHub" => "https://github.com/segmetric/hologram"}
