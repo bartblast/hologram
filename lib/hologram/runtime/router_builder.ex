@@ -55,7 +55,7 @@ defmodule Hologram.Runtime.RouterBuilder do
     "%{" <> map_elems <> "}"
   end
 
-  defp create_matcher_module do
+  def create_matcher_module do
     function_defs =
       Reflection.list_release_pages()
       |> Enum.reduce("", fn page, acc ->
