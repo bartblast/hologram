@@ -3,7 +3,7 @@ defmodule Hologram.Features.OperatorsTest do
 
   @moduletag :e2e
 
-  feature "subtraction operator", %{session: session} do
+  feature "subtraction", %{session: session} do
     session
     |> visit("/e2e/page-14")
     |> click(css("#button"))
