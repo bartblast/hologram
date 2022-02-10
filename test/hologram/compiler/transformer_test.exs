@@ -34,6 +34,7 @@ defmodule Hologram.Compiler.TransformerTest do
     RequireDirective,
     StringType,
     StructType,
+    SubtractionOperator,
     TupleType,
     TypeOperator,
     Typespec,
@@ -222,6 +223,13 @@ defmodule Hologram.Compiler.TransformerTest do
       ast = ast(code)
 
       assert %FunctionCall{} = Transformer.transform(ast, %Context{})
+    end
+
+    test "subtraction" do
+      code = "1 - 2"
+      ast = ast(code)
+
+      assert %SubtractionOperator{} = Transformer.transform(ast, %Context{})
     end
 
     test "type" do

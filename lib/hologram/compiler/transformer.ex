@@ -24,6 +24,7 @@ defmodule Hologram.Compiler.Transformer do
     QuoteTransformer,
     PipeOperatorTransformer,
     RequireDirectiveTransformer,
+    SubtractionOperatorTransformer,
     StructTypeTransformer,
     TypeOperatorTransformer,
     TupleTypeTransformer,
@@ -145,6 +146,10 @@ defmodule Hologram.Compiler.Transformer do
 
   def transform({:|>, _, _} = ast, %Context{} = context) do
     PipeOperatorTransformer.transform(ast, context)
+  end
+
+  def transform({:-, _, _} = ast, %Context{} = context) do
+    SubtractionOperatorTransformer.transform(ast, context)
   end
 
   def transform({:"::", _, _} = ast, %Context{} = context) do

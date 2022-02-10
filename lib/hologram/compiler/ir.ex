@@ -79,6 +79,10 @@ defmodule Hologram.Compiler.IR do
     defstruct name: nil
   end
 
+  defmodule SubtractionOperator do
+    defstruct left: nil, right: nil
+  end
+
   defmodule TypeOperator do
     defstruct left: nil, right: nil
   end
