@@ -106,7 +106,7 @@ Full stack isomorphic Elixir web framework.
 | unary +  | :x:                |
 | unary -  | :x:                |
 | +        | :white_check_mark: |
-| -        | :x:                |
+| -        | :white_check_mark: |
 | *        | :x:                |
 | /        | :x:                |
 | ++       | :x:                |
