@@ -87,6 +87,12 @@ export default class Kernel {
     }
   }
 
+  static $subtract(left, right) {
+    const type = left.type === "integer" && right.type === "integer" ? "integer" : "float"
+    const result = left.value - right.value
+    return Utils.freeze({type: type, value: result})
+  }
+
   static to_string(boxedValue) {
     switch (boxedValue.type) {
       case "atom":

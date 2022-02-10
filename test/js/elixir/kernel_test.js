@@ -326,6 +326,56 @@ describe("put_in()", () => {
   });
 });
 
+describe("$subtract()", () => {
+  it("subtracts integer and integer", () => {
+    const arg1 = Type.integer(1);
+    const arg2 = Type.integer(2);
+
+    const result = Kernel.$subtract(arg1, arg2);
+    const expected = Type.integer(-1);
+
+    assert.deepStrictEqual(result, expected);
+  });
+
+  it("subtracts integer and float", () => {
+    const arg1 = Type.integer(1);
+    const arg2 = Type.float(2.0);
+
+    const result = Kernel.$subtract(arg1, arg2);
+    const expected = Type.float(-1.0);
+
+    assert.deepStrictEqual(result, expected);
+  });
+
+  it("subtracts float and integer", () => {
+    const arg1 = Type.float(1.0);
+    const arg2 = Type.integer(2);
+
+    const result = Kernel.$subtract(arg1, arg2);
+    const expected = Type.float(-1.0);
+
+    assert.deepStrictEqual(result, expected);
+  });
+
+  it("subtracts float and float", () => {
+    const arg1 = Type.float(1.0);
+    const arg2 = Type.float(2.0);
+
+    const result = Kernel.$subtract(arg1, arg2);
+    const expected = Type.float(-1.0);
+
+    assert.deepStrictEqual(result, expected);
+  });
+
+  it("returns frozen object", () => {
+    const arg1 = Type.integer(1);
+    const arg2 = Type.integer(2);
+    const result = Kernel.$subtract(arg1, arg2);
+
+    assertFrozen(result);
+  });
+});
+
 describe("to_string()", () => {
   it("converts boxed atom to boxed string", () => {
     const value = Type.atom("abc");
