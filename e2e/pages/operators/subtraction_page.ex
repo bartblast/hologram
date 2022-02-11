@@ -1,7 +1,7 @@
-defmodule Hologram.E2E.Page14 do
+defmodule Hologram.E2E.Operators.SubtractionPage do
   use Hologram.Page
 
-  route "/e2e/page-14"
+  route "/e2e/operators/subtraction"
 
   def init do
     %{
