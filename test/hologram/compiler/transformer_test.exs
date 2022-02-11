@@ -12,6 +12,7 @@ defmodule Hologram.Compiler.TransformerTest do
     BinaryType,
     BooleanAndOperator,
     BooleanType,
+    DivisionOperator,
     DotOperator,
     EqualToOperator,
     FunctionDefinition,
@@ -188,6 +189,13 @@ defmodule Hologram.Compiler.TransformerTest do
       ast = ast(code)
 
       assert %BooleanAndOperator{} = Transformer.transform(ast, %Context{})
+    end
+
+    test "division" do
+      code = "1 / 2"
+      ast = ast(code)
+
+      assert %DivisionOperator{} = Transformer.transform(ast, %Context{})
     end
 
     test "dot" do
