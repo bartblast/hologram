@@ -28,6 +28,7 @@ defmodule Hologram.Compiler.TransformerTest do
     ModuleAttributeOperator,
     ModulePseudoVariable,
     ModuleType,
+    MultiplicationOperator,
     NilType,
     ProtocolDefinition,
     Quote,
@@ -216,6 +217,13 @@ defmodule Hologram.Compiler.TransformerTest do
 
       result = Transformer.transform(ast, %Context{})
       assert result == %ModuleAttributeOperator{name: :a}
+    end
+
+    test "multiplication" do
+      code = "1 * 2"
+      ast = ast(code)
+
+      assert %MultiplicationOperator{} = Transformer.transform(ast, %Context{})
     end
 
     test "pipe" do
