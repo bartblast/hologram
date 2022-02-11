@@ -27,6 +27,14 @@ export default class Kernel {
     }
   }
 
+  static _areBoxedNumbersEqual(boxedNumber1, boxedNumber2) {
+    if (Type.isNumber(boxedNumber1) && Type.isNumber(boxedNumber2)) {
+      return boxedNumber1.value == boxedNumber2.value
+    } else {
+      return false
+    }
+  }
+
   static $boolean_and(left, right) {
     if (Type.isTruthy(left)) {
       return right
@@ -35,12 +43,11 @@ export default class Kernel {
     }
   }
 
-  static _areBoxedNumbersEqual(boxedNumber1, boxedNumber2) {
-    if (Type.isNumber(boxedNumber1) && Type.isNumber(boxedNumber2)) {
-      return boxedNumber1.value == boxedNumber2.value
-    } else {
-      return false
-    }
+  // TODO: raise ArithmeticError if second argument is 0 or 0.0
+  // see: https://github.com/bartblast/hologram/issues/67
+  static $divide(left, right) {
+    const result = Type.float(left.value / right.value)
+    return Utils.freeze(result)
   }
 
   static $equal_to(boxedVal1, boxedVal2) {

@@ -114,6 +114,18 @@ describe("$boolean_and()", () => {
   });
 });
 
+describe("$divide()", () => {
+  it("divides 2 numbers", () => {
+    const arg1 = Type.integer(1);
+    const arg2 = Type.float(2.0);
+
+    const result = Kernel.$divide(arg1, arg2);
+    const expected = Type.float(0.5);
+
+    assert.deepStrictEqual(result, expected);
+  });
+})
+
 describe("$equal_to()", () => {
   // non-number == non-number
   it("returns boxed true for a boxed non-number equal to another boxed non-number", () => {
