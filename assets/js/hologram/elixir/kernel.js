@@ -72,6 +72,12 @@ export default class Kernel {
     return Utils.freeze(result)
   }
 
+  static $multiply(left, right) {
+    const type = left.type === "integer" && right.type === "integer" ? "integer" : "float"
+    const result = left.value * right.value
+    return Utils.freeze({type: type, value: result})
+  }
+
   // DEFER: implement other types (works for maps only)
   static put_in(data, keys, value) {
     const key = keys.data[0]
