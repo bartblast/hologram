@@ -110,6 +110,7 @@ export default class Kernel {
     switch (boxedValue.type) {
       case "atom":
       case "boolean":
+      case "float":
       case "integer":
         return Type.string(`${boxedValue.value}`)
 

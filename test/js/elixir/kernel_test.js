@@ -457,6 +457,15 @@ describe("to_string()", () => {
     assert.deepStrictEqual(result, expected);
   });
 
+  it("converts boxed float to boxed string", () => {
+    const value = Type.float(1.234);
+
+    const result = Kernel.to_string(value);
+    const expected = Type.string("1.234");
+
+    assert.deepStrictEqual(result, expected);
+  });
+
   it("converts boxed integer to boxed string", () => {
     const value = Type.integer(1);
 
