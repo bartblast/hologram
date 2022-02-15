@@ -95,6 +95,10 @@ defmodule Hologram.Compiler.IR do
     defstruct left: nil, right: nil
   end
 
+  defmodule UnaryNegativeOperator do
+    defstruct value: nil
+  end
+
   defmodule UnaryPositiveOperator do
     defstruct value: nil
   end
