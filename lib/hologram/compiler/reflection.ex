@@ -110,9 +110,15 @@ defmodule Hologram.Compiler.Reflection do
 
   # DEFER: test
   def list_release_pages do
-    release_page_list_path()
-    |> File.read!()
-    |> Utils.deserialize()
+    page_list_path = release_page_list_path()
+
+    if File.exists?(page_list_path) do
+      page_list_path
+      |> File.read!()
+      |> Utils.deserialize()
+    else
+      []
+    end
   end
 
   def list_components(opts \\ []) do
