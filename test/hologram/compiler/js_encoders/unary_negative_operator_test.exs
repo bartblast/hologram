@@ -10,7 +10,7 @@ defmodule Hologram.Compiler.JSEncoder.UnaryNegativeOperatorTest do
     }
 
     result = JSEncoder.encode(ir, %Context{}, %Opts{})
-    expected = "{ type: 'integer', value: -123 }"
+    expected = "Elixir_Kernel.$unary_negative({ type: 'integer', value: 123 })"
 
     assert result == expected
   end
