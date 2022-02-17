@@ -289,6 +289,10 @@ export default class VDOM {
   }
 
   static interpolate(boxedValue) {
+    if (Type.isList(boxedValue)) {
+      return `[${boxedValue.data.map(item => VDOM.interpolate(item)).join(", ")}]`
+    } 
+    
     return Kernel.to_string(boxedValue).value
   }
 

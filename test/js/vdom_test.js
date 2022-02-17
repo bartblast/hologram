@@ -8,6 +8,7 @@ import Target from "../../assets/js/hologram/target";
 import Type from "../../assets/js/hologram/type";
 import Store from "../../assets/js/hologram/store";
 import VDOM from "../../assets/js/hologram/vdom";
+import _ from "lodash";
 
 const elems = {}
 elems[Type.atomKey("a")] = Type.integer(1)
@@ -537,7 +538,14 @@ describe("getComponentId()", () => {
 })
 
 describe("interpolate()", () => {
-  it("converts a boxed value to JS string", () => {
+  it("converts a boxed list to JS string", () => {
+    const value = Type.list([Type.integer(1), Type.integer(2)])
+    const result = VDOM.interpolate(value)
+
+    assert.equal(result, "[1, 2]")
+  })
+
+  it("converts a non-string boxed value to JS string", () => {
     const value = Type.atom("abc")
     const result = VDOM.interpolate(value)
 
