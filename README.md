@@ -104,7 +104,7 @@ Full stack isomorphic Elixir web framework.
 | Operator | Status             |
 | :------- | :----------------: |
 | unary +  | :x:                |
-| unary -  | :x:                |
+| unary -  | :white_check_mark: |
 | +        | :white_check_mark: |
 | -        | :white_check_mark: |
 | *        | :white_check_mark: |

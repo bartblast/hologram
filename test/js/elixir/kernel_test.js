@@ -514,3 +514,14 @@ describe("to_string()", () => {
     );
   });
 });
+
+describe("$unary_negative()", () => {
+  it("negates the given value", () => {
+    const value = Type.integer(123);
+
+    const result = Kernel.$unary_negative(value);
+    const expected = Type.integer(-123);
+
+    assert.deepStrictEqual(result, expected);
+  });
+})
