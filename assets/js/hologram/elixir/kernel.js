@@ -43,6 +43,11 @@ export default class Kernel {
     }
   }
 
+  static $concatenate_lists(left, right) {
+    const result = Type.list(left.data.concat(right.data))
+    return Utils.freeze(result)
+  }
+
   // TODO: raise ArithmeticError if second argument is 0 or 0.0
   // see: https://github.com/bartblast/hologram/issues/67
   static $divide(left, right) {
