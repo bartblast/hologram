@@ -24,6 +24,13 @@ defmodule Hologram.Features.OperatorsTest do
     |> assert_has(css("#text", text: "Result = 2"))
   end
 
+  feature "list concatenation", %{session: session} do
+    session
+    |> visit("/e2e/operators/list-concatenation")
+    |> click(css("#button"))
+    |> assert_has(css("#text", text: "Result = [1, 2, 3, 4]"))
+  end
+
   feature "module attribute", %{session: session} do
     session
     |> visit("/e2e/operators/module-attribute")
