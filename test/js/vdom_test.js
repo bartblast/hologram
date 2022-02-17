@@ -8,7 +8,6 @@ import Target from "../../assets/js/hologram/target";
 import Type from "../../assets/js/hologram/type";
 import Store from "../../assets/js/hologram/store";
 import VDOM from "../../assets/js/hologram/vdom";
-import _ from "lodash";
 
 const elems = {}
 elems[Type.atomKey("a")] = Type.integer(1)
