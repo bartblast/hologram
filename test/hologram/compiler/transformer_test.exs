@@ -20,6 +20,7 @@ defmodule Hologram.Compiler.TransformerTest do
     IfExpression,
     ImportDirective,
     IntegerType,
+    ListConcatenationOperator,
     ListType,
     MacroDefinition,
     MapType,
@@ -210,6 +211,13 @@ defmodule Hologram.Compiler.TransformerTest do
       ast = ast(code)
 
       assert %EqualToOperator{} = Transformer.transform(ast, %Context{})
+    end
+
+    test "list concatenation" do
+      code = "[1, 2] ++ [3, 4]"
+      ast = ast(code)
+
+      assert %ListConcatenationOperator{} = Transformer.transform(ast, %Context{})
     end
 
     test "match" do
