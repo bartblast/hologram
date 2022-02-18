@@ -16,6 +16,7 @@ defmodule Hologram.Compiler.Transformer do
     IfExpressionTransformer,
     ImportDirectiveTransformer,
     ListConcatenationOperatorTransformer,
+    ListSubtractionOperatorTransformer,
     ListTypeTransformer,
     MacroDefinitionTransformer,
     MapTypeTransformer,
@@ -141,6 +142,10 @@ defmodule Hologram.Compiler.Transformer do
 
   def transform({:++, _, _} = ast, %Context{} = context) do
     ListConcatenationOperatorTransformer.transform(ast, context)
+  end
+
+  def transform({:--, _, _} = ast, %Context{} = context) do
+    ListSubtractionOperatorTransformer.transform(ast, context)
   end
 
   def transform({:=, _, _} = ast, %Context{} = context) do

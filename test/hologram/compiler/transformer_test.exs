@@ -21,6 +21,7 @@ defmodule Hologram.Compiler.TransformerTest do
     ImportDirective,
     IntegerType,
     ListConcatenationOperator,
+    ListSubtractionOperator,
     ListType,
     MacroDefinition,
     MapType,
@@ -219,6 +220,13 @@ defmodule Hologram.Compiler.TransformerTest do
       ast = ast(code)
 
       assert %ListConcatenationOperator{} = Transformer.transform(ast, %Context{})
+    end
+
+    test "list subtraction" do
+      code = "[1, 2] -- [3, 2]"
+      ast = ast(code)
+
+      assert %ListSubtractionOperator{} = Transformer.transform(ast, %Context{})
     end
 
     test "match" do

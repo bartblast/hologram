@@ -79,6 +79,10 @@ defmodule Hologram.Compiler.IR do
     defstruct left: nil, right: nil
   end
 
+  defmodule ListSubtractionOperator do
+    defstruct left: nil, right: nil
+  end
+
   defmodule MatchOperator do
     defstruct bindings: [], left: nil, right: nil
   end
