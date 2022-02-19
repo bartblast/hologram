@@ -4,6 +4,7 @@ import { assert, cleanup } from "./support/commons";
 beforeEach(() => cleanup())
 
 import { HologramNotImplementedError } from "../../assets/js/hologram/errors";
+import Map from "../../assets/js/hologram/elixir/map"
 import PatternMatcher from "../../assets/js/hologram/pattern_matcher"
 import Type from "../../assets/js/hologram/type"
 
@@ -65,7 +66,23 @@ describe("isPatternMatched()", () => {
 
     assert.isFalse(result)
   })
+  
+  it("returns true if integer boxed type left-hand side is equal to integer boxed type right-hand side", () => {
+    const left = Type.integer(1)
+    const right = Type.integer(1)
+    const result = PatternMatcher.isPatternMatched(left, right)
 
+    assert.isTrue(result)
+  })
+
+  it("returns false if integer boxed type left-hand side is not equal to integer boxed type right-hand side", () => {
+    const left = Type.integer(1)
+    const right = Type.integer(2)
+    const result = PatternMatcher.isPatternMatched(left, right)
+
+    assert.isFalse(result)
+  })
+  
   it("throws an error for not implemented boxed types", () => {
     const left = {type: "not implemented", value: "a"}
     const right = {type: "not implemented", value: "b"}

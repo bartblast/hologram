@@ -1,6 +1,7 @@
 "use strict";
 
 import { HologramNotImplementedError } from "./errors";
+import Map from "./elixir/map"
 
 export default class PatternMatcher {
   static isFunctionArgsPatternMatched(params, args) {
@@ -31,6 +32,7 @@ export default class PatternMatcher {
 
     switch (lType) {
       case "atom":
+      case "integer":
         return left.value === right.value;
 
       default:
