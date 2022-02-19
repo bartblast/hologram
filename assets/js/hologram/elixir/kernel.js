@@ -55,6 +55,11 @@ export default class Kernel {
     return Utils.freeze(result)
   }
 
+  // TODO: raise ArgumentError when index is negative or it is out of range
+  static elem(tuple, index) {
+    return tuple.data[index]
+  }
+
   static $equal_to(boxedVal1, boxedVal2) {
     let value;
 

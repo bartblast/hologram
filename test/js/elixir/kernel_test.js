@@ -144,6 +144,18 @@ describe("$divide()", () => {
   });
 })
 
+describe("elem()", () => {
+  it("gets the element at the zero-based index in tuple", () => {
+    const tuple = Type.tuple([Type.integer(1), Type.integer(2), Type.integer(3)])
+    const index = 1
+    
+    const result = Kernel.elem(tuple, index)
+    const expected = Type.integer(2)
+
+    assert.deepStrictEqual(result, expected);
+  })
+})
+
 describe("$equal_to()", () => {
   // non-number == non-number
   it("returns boxed true for a boxed non-number equal to another boxed non-number", () => {
