@@ -190,6 +190,10 @@ defmodule Hologram.Compiler.IR do
     defstruct key: nil
   end
 
+  defmodule TupleAccess do
+    defstruct index: nil
+  end
+
   # OTHER
 
   defmodule FunctionCall do
