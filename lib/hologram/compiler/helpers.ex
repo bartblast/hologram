@@ -1,5 +1,5 @@
 defmodule Hologram.Compiler.Helpers do
-  alias Hologram.Compiler.{Binder, Transformer}
+  alias Hologram.Compiler.{PatternBinder, Transformer}
   alias Hologram.Compiler.IR.{FunctionDefinitionVariants, ModuleDefinition}
   alias Hologram.Typespecs, as: T
 
@@ -10,7 +10,7 @@ defmodule Hologram.Compiler.Helpers do
   end
 
   defp aggregate_bindings_from_param({param, idx}, acc) do
-    Binder.bind(param)
+    PatternBinder.bind(param)
     |> Enum.reduce(acc, &maybe_add_binding(&1, &2, idx))
   end
 

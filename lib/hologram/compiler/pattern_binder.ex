@@ -1,4 +1,4 @@
-defmodule Hologram.Compiler.Binder do
+defmodule Hologram.Compiler.PatternBinder do
   alias Hologram.Compiler.IR.{MapAccess, MapType, TupleAccess, TupleType, Variable}
 
   def bind(value, path \\ [])

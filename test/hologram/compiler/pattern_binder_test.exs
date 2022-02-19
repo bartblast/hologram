@@ -1,7 +1,7 @@
-defmodule Hologram.Compiler.BinderTest do
+defmodule Hologram.Compiler.PatternBinderTest do
   use Hologram.Test.UnitCase, async: true
 
-  alias Hologram.Compiler.Binder
+  alias Hologram.Compiler.PatternBinder
   alias Hologram.Compiler.IR.{AtomType, IntegerType, MapAccess, MapType, TupleAccess, TupleType, Variable}
 
   describe "map" do
@@ -13,7 +13,7 @@ defmodule Hologram.Compiler.BinderTest do
         ]
       }
 
-      assert Binder.bind(ir) == []
+      assert PatternBinder.bind(ir) == []
     end
 
     test "non-nested map with single var" do
@@ -24,7 +24,7 @@ defmodule Hologram.Compiler.BinderTest do
         ]
       }
 
-      result = Binder.bind(ir)
+      result = PatternBinder.bind(ir)
 
       expected = [
         [
@@ -47,7 +47,7 @@ defmodule Hologram.Compiler.BinderTest do
         ]
       }
 
-      result = Binder.bind(ir)
+      result = PatternBinder.bind(ir)
 
       expected = [
         [
@@ -81,7 +81,7 @@ defmodule Hologram.Compiler.BinderTest do
         ]
       }
 
-      assert Binder.bind(ir) == []
+      assert PatternBinder.bind(ir) == []
     end
 
     test "nested map with single var" do
@@ -98,7 +98,7 @@ defmodule Hologram.Compiler.BinderTest do
         ]
       }
 
-      result = Binder.bind(ir)
+      result = PatternBinder.bind(ir)
 
       expected = [
         [
@@ -130,7 +130,7 @@ defmodule Hologram.Compiler.BinderTest do
         ]
       }
 
-      result = Binder.bind(ir)
+      result = PatternBinder.bind(ir)
 
       expected = [
         [
@@ -163,7 +163,7 @@ defmodule Hologram.Compiler.BinderTest do
         ]
       }
 
-      assert Binder.bind(ir) == []
+      assert PatternBinder.bind(ir) == []
     end
 
     test "non-nested tuple with single var" do
@@ -174,7 +174,7 @@ defmodule Hologram.Compiler.BinderTest do
         ]
       }
 
-      result = Binder.bind(ir)
+      result = PatternBinder.bind(ir)
 
       expected = [
         [
@@ -195,7 +195,7 @@ defmodule Hologram.Compiler.BinderTest do
         ]
       }
 
-      result = Binder.bind(ir)
+      result = PatternBinder.bind(ir)
 
       expected = [
         [
@@ -225,7 +225,7 @@ defmodule Hologram.Compiler.BinderTest do
         ]
       }
 
-      assert Binder.bind(ir) == []
+      assert PatternBinder.bind(ir) == []
     end
 
     test "nested tuple with single var" do
@@ -241,7 +241,7 @@ defmodule Hologram.Compiler.BinderTest do
         ]
       }
 
-      result = Binder.bind(ir)
+      result = PatternBinder.bind(ir)
 
       expected = [
         [
@@ -268,7 +268,7 @@ defmodule Hologram.Compiler.BinderTest do
         ]
       }
 
-      result = Binder.bind(ir)
+      result = PatternBinder.bind(ir)
 
       expected = [
         [
@@ -289,6 +289,6 @@ defmodule Hologram.Compiler.BinderTest do
   test "variable" do
     ir = %Variable{name: :test}
     expected = [[%Variable{name: :test}]]
-    assert Binder.bind(ir) == expected
+    assert PatternBinder.bind(ir) == expected
   end
 end
