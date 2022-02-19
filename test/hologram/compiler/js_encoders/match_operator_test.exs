@@ -2,7 +2,7 @@ defmodule Hologram.Compiler.JSEncoder.MatchOperatorTest do
   use Hologram.Test.UnitCase, async: true
 
   alias Hologram.Compiler.{Context, Opts}
-  alias Hologram.Compiler.IR.{AtomType, IntegerType, MapAccess, MapType, MatchOperator, Variable}
+  alias Hologram.Compiler.IR.{AtomType, IntegerType, MapAccess, MapType, MatchOperator, TupleAccess, TupleType, Variable}
   alias Hologram.Compiler.JSEncoder
 
   test "variable" do
@@ -64,6 +64,52 @@ defmodule Hologram.Compiler.JSEncoder.MatchOperatorTest do
 
     expected =
       "const x = Elixir_Kernel_SpecialForms.$dot(Elixir_Kernel_SpecialForms.$dot({ type: 'map', data: { '~atom[a]': { type: 'integer', value: 1 }, '~atom[b]': { type: 'map', data: { '~atom[p]': { type: 'integer', value: 9 } } }, '~atom[c]': { type: 'integer', value: 3 } } }, { type: 'atom', value: 'b' }), { type: 'atom', value: 'p' })"
+
+    assert result == expected
+  end
+
+  test "tuple" do
+    # code:
+    # "{1, {x, 3}, 4} = {1, {2, 3}, 4}
+
+    ir = %MatchOperator{
+      bindings: [
+        x: [
+          %TupleAccess{index: 1},
+          %TupleAccess{index: 0}
+        ]
+      ],
+      left: %TupleType{
+        data: [
+          %IntegerType{value: 1},
+          %TupleType{
+            data: [
+              %Variable{name: :x},
+              %IntegerType{value: 3}
+            ]
+          },
+          %IntegerType{value: 4},
+        ]
+      },
+      right: %TupleType{
+        data: [
+          %IntegerType{value: 1},
+          %TupleType{
+            data: [
+              %IntegerType{value: 2},
+              %IntegerType{value: 3}
+            ]
+          },
+          %IntegerType{value: 4},
+        ]
+      }
+    }
+
+    result = JSEncoder.encode(ir, %Context{}, %Opts{})
+    tuple_inner = "{ type: 'tuple', data: [ { type: 'integer', value: 2 }, { type: 'integer', value: 3 } ] }"
+    tuple_outer = "{ type: 'tuple', data: [ { type: 'integer', value: 1 }, #{tuple_inner}, { type: 'integer', value: 4 } ] }"
+
+    expected = "const x = Elixir_Kernel.elem(Elixir_Kernel.elem(#{tuple_outer}, { type: 'integer', value: 1 }), { type: 'integer', value: 0 })"
 
     assert result == expected
   end

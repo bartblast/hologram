@@ -1,5 +1,5 @@
 alias Hologram.Compiler.{Context, JSEncoder, Opts}
-alias Hologram.Compiler.IR.{DotOperator, MapAccess, MatchOperator}
+alias Hologram.Compiler.IR.{DotOperator, FunctionCall, IntegerType, MapAccess, MatchOperator, TupleAccess}
 
 defimpl JSEncoder, for: MatchOperator do
   def encode(%{bindings: bindings, right: right}, %Context{} = context, %Opts{} = opts) do
@@ -15,6 +15,14 @@ defimpl JSEncoder, for: MatchOperator do
 
   def convert_ir(%MapAccess{key: key}, ir) do
     %DotOperator{left: ir, right: key}
+  end
+
+  def convert_ir(%TupleAccess{index: index}, ir) do
+    %FunctionCall{
+      module: Kernel,
+      function: :elem,
+      args: [ir, %IntegerType{value: index}]
+    }
   end
 
   defp encode_binding({var, path}, right, context, opts) do
