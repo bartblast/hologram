@@ -9,15 +9,15 @@ defimpl JSEncoder, for: MatchOperator do
     |> Enum.join(";\n")
   end
 
-  def convert_ir(path, value) when is_list(path) do
+  defp convert_ir(path, value) when is_list(path) do
     Enum.reduce(path, value, &convert_ir/2)
   end
 
-  def convert_ir(%MapAccess{key: key}, ir) do
+  defp convert_ir(%MapAccess{key: key}, ir) do
     %DotOperator{left: ir, right: key}
   end
 
-  def convert_ir(%TupleAccess{index: index}, ir) do
+  defp convert_ir(%TupleAccess{index: index}, ir) do
     %FunctionCall{
       module: Kernel,
       function: :elem,
