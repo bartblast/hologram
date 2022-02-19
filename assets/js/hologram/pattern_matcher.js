@@ -35,6 +35,19 @@ export default class PatternMatcher {
       case "integer":
         return left.value === right.value;
 
+      case "map":
+        for (const key of Map.keys(left).data) {
+          if (Map.has_key$question(right, key)) {
+            if (!PatternMatcher.isPatternMatched(Map.get(left, key), Map.get(right, key))) {
+              return false
+            }
+          } else {
+            return false
+          }
+        }
+
+        return true        
+
       default:
         const message = `PatternMatcher.isPatternMatched(): left = ${JSON.stringify(left)}`
         throw new HologramNotImplementedError(message)

@@ -82,7 +82,47 @@ describe("isPatternMatched()", () => {
 
     assert.isFalse(result)
   })
-  
+
+  it("returns true if map boxed type left-hand side matches the map boxed type right-hand side", () => {
+    let left = Type.map()
+    left = Map.put(left, Type.atom("a"), Type.integer(1))
+
+    let right = Type.map()
+    right = Map.put(right, Type.atom("a"), Type.integer(1))
+    right = Map.put(right, Type.atom("b"), Type.integer(2))
+
+    const result = PatternMatcher.isPatternMatched(left, right)
+
+    assert.isTrue(result)
+  })
+
+  it("returns false if right-hand side boxed map doesn't have a key from left-hand side boxed map", () => {
+    let left = Type.map()
+    left = Map.put(left, Type.atom("a"), Type.integer(1))
+    left = Map.put(left, Type.atom("b"), Type.integer(2))
+    
+    let right = Type.map()
+    right = Map.put(right, Type.atom("a"), Type.integer(1))
+
+    const result = PatternMatcher.isPatternMatched(left, right)
+
+    assert.isFalse(result)
+  })
+
+  it("returns false if value in left-hand side boxed map doesn't match the value in right-hand side boxed map", () => {
+    let left = Type.map()
+    left = Map.put(left, Type.atom("a"), Type.integer(1))
+    left = Map.put(left, Type.atom("b"), Type.integer(2))
+    
+    let right = Type.map()
+    right = Map.put(right, Type.atom("a"), Type.integer(1))
+    right = Map.put(right, Type.atom("b"), Type.integer(3))
+
+    const result = PatternMatcher.isPatternMatched(left, right)
+
+    assert.isFalse(result)
+  })
+
   it("throws an error for not implemented boxed types", () => {
     const left = {type: "not implemented", value: "a"}
     const right = {type: "not implemented", value: "b"}
