@@ -18,6 +18,20 @@ export default class PatternMatcher {
     return true;
   }
 
+  static isMapPatternMatched(left, right) {
+    for (const key of Map.keys(left).data) {
+      if (Map.has_key$question(right, key)) {
+        if (!PatternMatcher.isPatternMatched(Map.get(left, key), Map.get(right, key))) {
+          return false
+        }
+      } else {
+        return false
+      }
+    }
+
+    return true 
+  }
+
   static isPatternMatched(left, right) {
     const lType = left.type;
     const rType = right.type;
@@ -36,17 +50,7 @@ export default class PatternMatcher {
         return left.value === right.value;
 
       case "map":
-        for (const key of Map.keys(left).data) {
-          if (Map.has_key$question(right, key)) {
-            if (!PatternMatcher.isPatternMatched(Map.get(left, key), Map.get(right, key))) {
-              return false
-            }
-          } else {
-            return false
-          }
-        }
-
-        return true        
+        return PatternMatcher.isMapPatternMatched(left, right)  
 
       default:
         const message = `PatternMatcher.isPatternMatched(): left = ${JSON.stringify(left)}`
