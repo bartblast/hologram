@@ -50,11 +50,28 @@ export default class PatternMatcher {
         return left.value === right.value;
 
       case "map":
-        return PatternMatcher.isMapPatternMatched(left, right)  
+        return PatternMatcher.isMapPatternMatched(left, right)
+
+      case "tuple":
+        return PatternMatcher.isTuplePatternMatched(left, right)
 
       default:
         const message = `PatternMatcher.isPatternMatched(): left = ${JSON.stringify(left)}`
         throw new HologramNotImplementedError(message)
     }
+  }
+
+  static isTuplePatternMatched(left, right) {
+    if (left.data.length !== right.data.length) {
+      return false;
+    }
+
+    for (let i = 0; i < left.data.length; ++i) {
+      if (!PatternMatcher.isPatternMatched(left.data[i], right.data[i])) {
+        return false
+      }
+    }
+
+    return true
   }
 }

@@ -35,7 +35,7 @@ describe("isFunctionArgsPatternMatched()", () => {
 })
 
 describe("isMapPatternMatched()", () => {
-it("returns true if map boxed type left-hand side matches the map boxed type right-hand side", () => {
+  it("returns true if map boxed type left-hand side matches the map boxed type right-hand side", () => {
     let left = Type.map()
     left = Map.put(left, Type.atom("a"), Type.integer(1))
 
@@ -131,5 +131,34 @@ describe("isPatternMatched()", () => {
     const expectedMessage = 'PatternMatcher.isPatternMatched(): left = {"type":"not implemented","value":"a"}'
 
     assert.throw(() => { PatternMatcher.isPatternMatched(left, right) }, HologramNotImplementedError, expectedMessage);
+  })
+})
+
+describe("isTuplePatternMatched()", () => {
+  it("returns true if tuple boxed type left-hand side matches the tuple boxed type right-hand side", () => {
+    const left = Type.tuple([Type.integer(1), Type.integer(2)])
+    const right = Type.tuple([Type.integer(1), Type.integer(2)])
+
+    const result = PatternMatcher.isPatternMatched(left, right)
+
+    assert.isTrue(result)
+  })
+
+  it("returns false if left-hand side tuple item count is different than right-hand side tuple item count", () => {
+    const left = Type.tuple([Type.integer(1), Type.integer(2)])
+    const right = Type.tuple([Type.integer(1), Type.integer(2), Type.integer(3)])
+
+    const result = PatternMatcher.isPatternMatched(left, right)
+
+    assert.isFalse(result)
+  })
+
+  it("returns false if left-hand side tuple doesn't match right-hand side tuple", () => {
+    const left = Type.tuple([Type.integer(1), Type.integer(2)])
+    const right = Type.tuple([Type.integer(1), Type.integer(3)])
+
+    const result = PatternMatcher.isPatternMatched(left, right)
+
+    assert.isFalse(result)
   })
 })
