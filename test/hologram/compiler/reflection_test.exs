@@ -10,6 +10,31 @@ defmodule Hologram.Compiler.ReflectionTest do
   @module_6 Hologram.Test.Fixtures.Compiler.Reflection.Module6
   @module_segs_1 [:Hologram, :Test, :Fixtures, :Compiler, :Reflection, :Module1]
 
+  describe "app_path/1" do
+    test "default" do
+      result = Reflection.app_path()
+      expected = "#{File.cwd!()}/lib"
+
+      assert result == expected
+    end
+
+    test "config" do
+      expected = "/test-config-path"
+      Application.put_env(:hologram, :app_path, expected)
+
+      assert Reflection.app_path() == expected
+
+      Application.delete_env(:hologram, :app_path)
+    end
+
+    test "opts" do
+      expected = "/test-opts-path"
+      opts = [app_path: expected]
+
+      assert Reflection.app_path(opts) == expected
+    end
+  end
+
   describe "ast/1" do
     @expected {:defmodule, [line: 1],
                [

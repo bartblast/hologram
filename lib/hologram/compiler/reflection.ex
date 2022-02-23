@@ -10,12 +10,14 @@ defmodule Hologram.Compiler.Reflection do
 
   @ignored_namespaces Application.get_env(:hologram, :ignored_namespaces, [])
 
-  # DEFER: test
   def app_path(opts \\ []) do
-    case {Keyword.get(opts, :app_path), @config[:app_path]} do
-      {nil, nil} -> root_path(opts) <> "/app"
-      {nil, config_app_path} -> config_app_path
-      {opt_app_path, _} -> opt_app_path
+    path_from_opts = Keyword.get(opts, :app_path)
+    path_from_config = Application.get_env(:hologram, :app_path)
+
+    case {path_from_opts, path_from_config} do
+      {nil, nil} -> root_path(opts) <> "/lib"
+      {nil, path_from_config} -> path_from_config
+      {path_from_opts, _} -> path_from_opts
     end
   end
 
