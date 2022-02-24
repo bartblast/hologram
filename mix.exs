@@ -3,12 +3,11 @@ defmodule Hologram.MixProject do
 
   defp aliases do
     [
-      "assets.build": ["cmd cd assets && npm install", "esbuild hologram --minify"],
+      "assets.build": ["cmd cd assets && npm install"],
       "format.all": [
         "format",
         "cmd npx prettier --write 'assets/**/*.js' 'test/js/**/*.js' '**/*.json'"
       ],
-      "holo.run": ["assets.build", "holo.assets.clean", "phx.digest", "phx.server"],
       test: ["test --exclude e2e"],
       "test.all": [&test_js/1, "test --include e2e"],
       "test.e2e": ["test --only e2e"],
@@ -17,17 +16,10 @@ defmodule Hologram.MixProject do
   end
 
   def application do
-    if is_dep?() do
-      [
-        mod: {Hologram.Runtime.Application, []},
-        extra_applications: [:logger]
-      ]
-    else
-      [
-        mod: {Hologram.E2E.Application, []},
-        extra_applications: [:logger, :runtime_tools]
-      ]
-    end
+    [
+      mod: {Hologram.Runtime.Application, []},
+      extra_applications: [:logger]
+    ]
   end
 
   def compilers do
