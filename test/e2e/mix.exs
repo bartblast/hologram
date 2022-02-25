@@ -24,6 +24,7 @@ defmodule Hologram.E2E.MixProject do
   defp deps do
     [
       {:esbuild, "~> 0.4", runtime: Mix.env() == :dev},
+      {:hologram, git: "https://github.com/bartblast/hologram.git"},
       {:jason, "~> 1.2"},
       {:phoenix, "~> 1.6"},
       {:plug_cowboy, "~> 2.5"}
