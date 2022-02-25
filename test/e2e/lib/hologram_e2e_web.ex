@@ -1,4 +1,4 @@
-defmodule Hologram.E2E.Web do
+defmodule Hologram.E2EWeb do
   def router do
     quote do
       use Phoenix.Router
@@ -11,8 +11,8 @@ defmodule Hologram.E2E.Web do
   def view do
     quote do
       use Phoenix.View,
-        root: "e2e/phoenix/web/templates",
-        namespace: Hologram.E2E.Web
+        root: "lib/hologram_e2e_web/templates",
+        namespace: Hologram.E2EWeb
 
       import Phoenix.Controller, only: [view_module: 1, view_template: 1]
 

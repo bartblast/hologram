@@ -1,5 +1,14 @@
 import Config
 
+config :hologram_e2e,
+  namespace: Hologram.E2E
+
+config :hologram_e2e, Hologram.E2EWeb.Endpoint,
+  pubsub_server: Hologram.E2E.PubSub,
+  render_errors: [view: Hologram.E2EWeb.ErrorView, accepts: ~w(json), layout: false],
+  secret_key_base: "/t99BcKoIa8IKka6K9dhpfoRHHYP0fK/FXFNdWO5Wlt+h1wlFeBODgIi8U4XACBE",
+  url: [host: "localhost"]
+
 config :hologram,
   otp_app: :hologram,
   app_path: "#{File.cwd!()}/e2e",
@@ -11,14 +20,8 @@ config :hologram,
     Hologram.Template
   ]
 
-config :hologram, Hologram.E2E.Web.Endpoint,
-  pubsub_server: Hologram.E2E.PubSub,
-  render_errors: [view: Hologram.E2E.Web.ErrorView, accepts: ~w(html json), layout: false],
-  secret_key_base: "/t99BcKoIa8IKka6K9dhpfoRHHYP0fK/FXFNdWO5Wlt+h1wlFeBODgIi8U4XACBE",
-  url: [host: "localhost"]
-
 config :esbuild,
-  version: "0.12.18",
+  version: "0.14.0",
   hologram: [
     args:
       ~w(js/hologram.js --bundle --target=es2016 --outfile=../priv/static/hologram/runtime.js),

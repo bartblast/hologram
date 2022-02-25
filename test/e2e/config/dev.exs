@@ -1,6 +1,6 @@
 import Config
 
-config :hologram, Hologram.E2E.Web.Endpoint,
+config :hologram_e2e, Hologram.E2EWeb.Endpoint,
   check_origin: false,
   code_reloader: false,
   debug_errors: true,
@@ -8,6 +8,8 @@ config :hologram, Hologram.E2E.Web.Endpoint,
   watchers: [
     esbuild: {Esbuild, :install_and_run, [:hologram, ~w(--sourcemap=inline --watch)]}
   ]
+
+config :logger, :console, format: "[$level] $message\n"
 
 config :phoenix, :stacktrace_depth, 20
 

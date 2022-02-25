@@ -7,7 +7,7 @@
 # The directory Mix downloads your dependencies sources to.
 /deps/
 
-# Where third-party dependencies like ExDoc output generated docs.
+# Where 3rd-party dependencies like ExDoc output generated docs.
 /doc/
 
 # Ignore .fetch files in case you like to edit your project deps locally.
@@ -20,15 +20,25 @@ erl_crash.dump
 *.ez
 
 # Ignore package tarball (built via "mix hex.build").
-hologram-*.tar
+hologram_e2e-*.tar
+
+# Ignore assets that are produced by build tools.
+/priv/static/assets/
+
+# Ignore digested assets cache.
+/priv/static/cache_manifest.json
+
+# In case you use Node.js/npm, you want to ignore these.
+npm-debug.log
+/assets/node_modules/
+
+# Hologram build.
+/priv/hologram/
+/priv/static/hologram/
 
 # Temporary files.
 /tmp/*
 !/tmp/.keep
 
-# Node.js and npm.
-npm-debug.log
-/assets/node_modules/
-
-# Elixir Language Server.
+# Elixir Language Server build.
 /.elixir_ls/*
