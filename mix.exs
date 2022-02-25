@@ -38,6 +38,7 @@ defmodule Hologram.MixProject do
 
   defp deps do
     [
+      {:file_system, "~> 0.2"},
       {:libgraph, "~> 0.13"},
       {:phoenix, "~> 1.6"}
     ]
