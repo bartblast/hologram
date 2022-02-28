@@ -4,8 +4,6 @@ defmodule Mix.Tasks.Compile.Hologram do
   use Mix.Task.Compiler
   require Logger
 
-  alias Hologram.{MixProject, Utils}
-
   alias Hologram.Compiler.{
     Builder,
     CallGraph,
@@ -16,7 +14,7 @@ defmodule Mix.Tasks.Compile.Hologram do
   }
 
   alias Hologram.Template.Builder, as: TemplateBuilder
-  @root_path Reflection.root_path()
+  alias Hologram.Utils
 
   def run(opts \\ []) do
     if has_source?() do
@@ -173,11 +171,7 @@ defmodule Mix.Tasks.Compile.Hologram do
   end
 
   defp resolve_output_path do
-    if MixProject.is_dep?() do
-      "#{@root_path}/../../priv/static/hologram"
-    else
-      "#{@root_path}/priv/static/hologram"
-    end
+    Reflection.root_path() <> "/../../priv/static/hologram"
   end
 
   defp save_source_digest(source_digest) do
