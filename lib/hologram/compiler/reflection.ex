@@ -23,11 +23,7 @@ defmodule Hologram.Compiler.Reflection do
 
   # DEFER: test
   def assets_path(opts \\ @config) do
-    if MixProject.is_dep?() do
-      root_path(opts) <> "/deps/hologram/assets"
-    else
-      root_path(opts) <> "/assets"
-    end
+    root_path(opts) <> "/deps/hologram/assets"
   end
 
   def ast(module) when is_atom(module) do
