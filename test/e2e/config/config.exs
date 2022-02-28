@@ -24,7 +24,7 @@ config :esbuild,
   version: "0.14.0",
   hologram: [
     args:
-      ~w(js/hologram.js --bundle --target=es2016 --outfile=../priv/static/hologram/runtime.js),
+      ~w(../deps/hologram/assets/js/hologram.js --bundle --target=es2016 --outfile=../priv/static/hologram/runtime.js),
     cd: Path.expand("../assets", __DIR__),
     env: %{"NODE_PATH" => Path.expand("../deps", __DIR__)}
   ]
