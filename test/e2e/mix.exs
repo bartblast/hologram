@@ -27,7 +27,8 @@ defmodule Hologram.E2E.MixProject do
       {:hologram, git: "https://github.com/bartblast/hologram.git"},
       {:jason, "~> 1.2"},
       {:phoenix, "~> 1.6"},
-      {:plug_cowboy, "~> 2.5"}
+      {:plug_cowboy, "~> 2.5"},
+      {:wallaby, "~> 0.29", only: :test, runtime: false}
     ]
   end
 
