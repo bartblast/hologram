@@ -1,7 +1,7 @@
 defmodule Hologram.Compiler.Reflection do
   alias Hologram.Compiler.{Context, Helpers, Normalizer, Parser, Transformer}
   alias Hologram.Compiler.IR.ModuleDefinition
-  alias Hologram.{MixProject, Utils}
+  alias Hologram.Utils
 
   @config Application.get_all_env(:hologram)
 
