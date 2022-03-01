@@ -9,10 +9,11 @@ defmodule Hologram.MixProject do
       deps: deps(),
       description: "Full stack isomorphic Elixir web framework that can be used on top of Phoenix.",
       elixir: "~> 1.0",
-      elixirc_paths: ["lib"],
+      elixirc_paths: elixirc_paths(Mix.env()),
       package: package(),
       preferred_cli_env: preferred_cli_env(),
       start_permanent: Mix.env() == :prod,
+      test_paths: ["test/unit"],
       version: "0.1.0"
     ]
   end
@@ -44,6 +45,9 @@ defmodule Hologram.MixProject do
       {:phoenix, "~> 1.6"}
     ]
   end
+
+  defp elixirc_paths(:test), do: ["lib", "test/unit"]
+  defp elixirc_paths(_), do: ["lib"]
 
   def package do
     [
