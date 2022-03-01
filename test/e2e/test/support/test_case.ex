@@ -5,8 +5,6 @@ defmodule HologramE2E.TestCase do
   using do
     quote do
       use Wallaby.Feature
-
-      import Hologram.Test.Helpers
       import Wallaby.Query
 
       setup_all do

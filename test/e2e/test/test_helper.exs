@@ -1,5 +1,5 @@
 alias Hologram.Compiler.Reflection
-alias HologramE2E.Web.Endpoint
+alias HologramE2EWeb.Endpoint
 
 ExUnit.start()
 
