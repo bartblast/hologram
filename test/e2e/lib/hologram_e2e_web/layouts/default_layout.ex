@@ -1,4 +1,4 @@
-defmodule Hologram.E2E.DefaultLayout do
+defmodule HologramE2E.DefaultLayout do
   use Hologram.Layout
 
   def init do

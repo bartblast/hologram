@@ -1,4 +1,4 @@
-defmodule Hologram.E2E.Operators.BooleanAndPage do
+defmodule HologramE2E.Operators.BooleanAndPage do
   use Hologram.Page
 
   route "/e2e/operators/boolean-and"

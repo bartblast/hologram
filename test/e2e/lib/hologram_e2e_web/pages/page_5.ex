@@ -1,4 +1,4 @@
-defmodule Hologram.E2E.Page5 do
+defmodule HologramE2E.Page5 do
   use Hologram.Page
 
   route "/e2e/page-5"
@@ -19,7 +19,7 @@ defmodule Hologram.E2E.Page5 do
 
     <div id="page-5-text">{@text}</div><br />
 
-    <a id="page-2-link" href={Hologram.E2E.Page2.route()} on:click.command={:__redirect__, page: Hologram.E2E.Page2}>Page 2</a><br />
+    <a id="page-2-link" href={HologramE2E.Page2.route()} on:click.command={:__redirect__, page: HologramE2E.Page2}>Page 2</a><br />
 
     <script>
       document.getElementById("page-5-forward-button")

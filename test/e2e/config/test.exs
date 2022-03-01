@@ -1,6 +1,6 @@
 import Config
 
-config :hologram_e2e, Hologram.E2EWeb.Endpoint,
+config :hologram_e2e, HologramE2EWeb.Endpoint,
   http: [ip: {127, 0, 0, 1}, port: 4002],
   server: true
 

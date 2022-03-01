@@ -1,4 +1,4 @@
-defmodule Hologram.E2E.MixProject do
+defmodule HologramE2E.MixProject do
   use Mix.Project
 
   def project do
@@ -16,7 +16,7 @@ defmodule Hologram.E2E.MixProject do
 
   def application do
     [
-      mod: {Hologram.E2E.Application, []},
+      mod: {HologramE2E.Application, []},
       extra_applications: [:logger, :runtime_tools]
     ]
   end

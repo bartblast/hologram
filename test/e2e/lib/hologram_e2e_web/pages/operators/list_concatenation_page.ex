@@ -1,4 +1,4 @@
-defmodule Hologram.E2E.Operators.ListConcatenationPage do
+defmodule HologramE2E.Operators.ListConcatenationPage do
   use Hologram.Page
 
   route "/e2e/operators/list-concatenation"

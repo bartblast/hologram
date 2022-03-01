@@ -1,6 +1,6 @@
 import Config
 
-config :hologram_e2e, Hologram.E2EWeb.Endpoint,
+config :hologram_e2e, HologramE2EWeb.Endpoint,
   check_origin: false,
   code_reloader: false,
   debug_errors: true,

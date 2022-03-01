@@ -1,4 +1,4 @@
-defmodule Hologram.E2E.Page7 do
+defmodule HologramE2E.Page7 do
   use Hologram.Page
 
   route "/e2e/page-7"

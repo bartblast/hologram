@@ -1,4 +1,4 @@
-defmodule Hologram.E2E.Operators.MultiplicationPage do
+defmodule HologramE2E.Operators.MultiplicationPage do
   use Hologram.Page
 
   route "/e2e/operators/multiplication"

@@ -1,6 +1,6 @@
-defmodule Hologram.E2E.Page1 do
+defmodule HologramE2E.Page1 do
   use Hologram.Page
-  alias Hologram.E2E.Component3, warn: false
+  alias HologramE2E.Component3, warn: false
 
   route "/e2e/page-1"
 

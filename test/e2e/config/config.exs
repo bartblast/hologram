@@ -1,17 +1,17 @@
 import Config
 
 config :hologram_e2e,
-  namespace: Hologram.E2E
+  namespace: HologramE2E
 
-config :hologram_e2e, Hologram.E2EWeb.Endpoint,
-  pubsub_server: Hologram.E2E.PubSub,
-  render_errors: [view: Hologram.E2EWeb.ErrorView, accepts: ~w(json), layout: false],
+config :hologram_e2e, HologramE2EWeb.Endpoint,
+  pubsub_server: HologramE2E.PubSub,
+  render_errors: [view: HologramE2EWeb.ErrorView, accepts: ~w(json), layout: false],
   secret_key_base: "/t99BcKoIa8IKka6K9dhpfoRHHYP0fK/FXFNdWO5Wlt+h1wlFeBODgIi8U4XACBE",
   url: [host: "localhost"]
 
 config :hologram,
   otp_app: :hologram_e2e,
-  default_layout: Hologram.E2E.DefaultLayout,
+  default_layout: HologramE2E.DefaultLayout,
   env: config_env(),
   ignored_namespaces: [
     Hologram.Commons,

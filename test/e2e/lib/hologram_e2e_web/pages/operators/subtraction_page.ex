@@ -1,4 +1,4 @@
-defmodule Hologram.E2E.Operators.SubtractionPage do
+defmodule HologramE2E.Operators.SubtractionPage do
   use Hologram.Page
 
   route "/e2e/operators/subtraction"

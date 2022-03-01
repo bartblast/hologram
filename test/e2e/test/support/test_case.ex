@@ -1,4 +1,4 @@
-defmodule Hologram.Test.E2ECase do
+defmodule HologramE2E.TestCase do
   use ExUnit.CaseTemplate
   alias Hologram.Runtime.{PageDigestStore, RouterBuilder, RouterMatcher, TemplateStore}
 

@@ -1,4 +1,4 @@
-defmodule Hologram.E2EWeb.Endpoint do
+defmodule HologramE2EWeb.Endpoint do
   use Phoenix.Endpoint, otp_app: :hologram_e2e
 
   @session_options [

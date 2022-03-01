@@ -1,4 +1,4 @@
-defmodule Hologram.E2E.Operators.UnaryNegativePage do
+defmodule HologramE2E.Operators.UnaryNegativePage do
   use Hologram.Page
 
   route "/e2e/operators/unary-negative"

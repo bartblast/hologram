@@ -1,4 +1,4 @@
-defmodule Hologram.E2E.Operators.DivisionPage do
+defmodule HologramE2E.Operators.DivisionPage do
   use Hologram.Page
 
   route "/e2e/operators/division"

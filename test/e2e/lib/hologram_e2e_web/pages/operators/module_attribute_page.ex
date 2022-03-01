@@ -1,4 +1,4 @@
-defmodule Hologram.E2E.Operators.ModuleAttributePage do
+defmodule HologramE2E.Operators.ModuleAttributePage do
   use Hologram.Page
 
   @test_attribute "test_value"

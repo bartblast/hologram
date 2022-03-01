@@ -1,2 +1,2 @@
-defmodule Hologram.E2E do
+defmodule HologramE2E do
 end

@@ -1,4 +1,4 @@
-defmodule Hologram.E2E.Component3 do
+defmodule HologramE2E.Component3 do
   use Hologram.Component
 
   def init do

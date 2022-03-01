@@ -1,4 +1,4 @@
-defmodule Hologram.E2E.Component1 do
+defmodule HologramE2E.Component1 do
   use Hologram.Component
 
   def template do

@@ -1,5 +1,5 @@
-defmodule Hologram.Features.TemplatesTest do
-  use Hologram.Test.E2ECase, async: false
+defmodule HologramE2E.TemplatesTest do
+  use HologramE2E.TestCase, async: false
 
   @moduletag :e2e
 
