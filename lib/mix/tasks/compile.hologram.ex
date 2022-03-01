@@ -171,7 +171,7 @@ defmodule Mix.Tasks.Compile.Hologram do
   end
 
   defp resolve_output_path do
-    Reflection.root_path() <> "/../../priv/static/hologram"
+    Reflection.root_path() <> "/priv/static/hologram"
   end
 
   defp save_source_digest(source_digest) do
