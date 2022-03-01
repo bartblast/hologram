@@ -10,8 +10,7 @@ config :hologram_e2e, Hologram.E2EWeb.Endpoint,
   url: [host: "localhost"]
 
 config :hologram,
-  otp_app: :hologram,
-  app_path: "#{File.cwd!()}/e2e",
+  otp_app: :hologram_e2e,
   default_layout: Hologram.E2E.DefaultLayout,
   env: config_env(),
   ignored_namespaces: [

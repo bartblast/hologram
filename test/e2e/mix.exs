@@ -5,7 +5,7 @@ defmodule Hologram.E2E.MixProject do
     [
       aliases: [],
       app: :hologram_e2e,
-      compilers: Mix.compilers(),
+      compilers: Mix.compilers() ++ [:hologram],
       deps: deps(),
       elixir: "~> 1.12",
       elixirc_paths: elixirc_paths(Mix.env()),
