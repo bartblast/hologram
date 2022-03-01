@@ -1,6 +1,7 @@
 import Config
 
 config :hologram,
+  otp_app: :hologram,
   default_layout: HologramE2E.DefaultLayout,
   env: config_env()
 
