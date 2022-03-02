@@ -2,7 +2,7 @@ defmodule Hologram.Compiler.UnaryPositiveOperatorTransformerTest do
   use Hologram.Test.UnitCase, async: true
 
   alias Hologram.Compiler.{Context, UnaryPositiveOperatorTransformer}
-  alias Hologram.Compiler.IR.{IntegerType, UnaryPositiveOperator, Variable}
+  alias Hologram.Compiler.IR.{IntegerType, UnaryPositiveOperator}
 
   test "transform/3" do
     code = "+2"
