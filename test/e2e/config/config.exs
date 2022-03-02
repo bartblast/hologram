@@ -12,12 +12,7 @@ config :hologram_e2e, HologramE2EWeb.Endpoint,
 config :hologram,
   otp_app: :hologram_e2e,
   default_layout: HologramE2E.DefaultLayout,
-  env: config_env(),
-  ignored_namespaces: [
-    Hologram.Commons,
-    Hologram.Compiler,
-    Hologram.Template
-  ]
+  env: config_env()
 
 config :esbuild,
   version: "0.14.0",
