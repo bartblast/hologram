@@ -13,7 +13,7 @@ defmodule Hologram.Template.Renderer.PageTest do
 
     module = Hologram.Test.Fixtures.Template.PageRenderer.Module1
     digest = PageDigestStore.get(module)
-    assert digest =~ uuid_hex_regex()
+    assert digest =~ md5_hex_regex()
 
     result = Renderer.render(module, %{})
 

@@ -55,21 +55,4 @@ defmodule Hologram.Utils do
   def serialize(data) do
     :erlang.term_to_binary(data, compressed: 9)
   end
-
-  def uuid do
-    Ecto.UUID.generate()
-  end
-
-  def uuid(:hex) do
-    uuid()
-    |> String.replace("-", "")
-  end
-
-  def uuid_hex_regex do
-    ~r/^[0-9a-f]{32}$/
-  end
-
-  def uuid_regex do
-    ~r/^[0-9a-f]{8}\-[0-9a-f]{4}\-[0-9a-f]{4}\-[0-9a-f]{4}\-[0-9a-f]{12}$/
-  end
 end

@@ -85,16 +85,4 @@ defmodule Hologram.UtilsTest do
     assert :erlang.binary_to_term(result_1) == data_1
     assert :erlang.binary_to_term(result_2) == data_2
   end
-
-  test "uuid/0" do
-    assert Utils.uuid() =~ uuid_regex()
-  end
-
-  test "uuid/1" do
-    assert Utils.uuid(:hex) =~ uuid_hex_regex()
-  end
-
-  test "uuid_regex/0" do
-    assert Ecto.UUID.generate() =~ uuid_regex()
-  end
 end

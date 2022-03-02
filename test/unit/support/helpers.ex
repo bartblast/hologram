@@ -15,4 +15,8 @@ defmodule Hologram.Test.Helpers do
   def compile_templatables(path \\ @default_app_path) do
     Mix.Tasks.Compile.Hologram.run(app_path: path)
   end
+
+  def md5_hex_regex do
+    ~r/^[0-9a-f]{32}$/
+  end
 end
