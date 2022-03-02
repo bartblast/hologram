@@ -7,6 +7,8 @@ defmodule Hologram.Test.UnitCase do
       import Hologram.Test.Helpers
 
       alias Hologram.Utils
+
+      @fixtures_path "test/unit/fixtures"
     end
   end
 end

@@ -6,7 +6,7 @@ defmodule Hologram.Template.Renderer.PageTest do
   alias Hologram.Template.Renderer
 
   test "render/2" do
-    "#{File.cwd!()}/test/fixtures/template/renderers/page_renderer"
+    "#{@fixtures_path}/template/renderers/page_renderer"
     |> compile_templatables()
 
     Runtime.reload()

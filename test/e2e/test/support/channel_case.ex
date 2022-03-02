@@ -8,6 +8,7 @@ defmodule HologramE2E.Test.ChannelCase do
       import HologramE2E.Test.Helpers
 
       @endpoint HologramE2EWeb.Endpoint
+      @fixtures_path "test/fixtures"
     end
   end
 end

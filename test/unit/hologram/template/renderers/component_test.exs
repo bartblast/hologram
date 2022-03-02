@@ -11,7 +11,7 @@ defmodule Hologram.Template.Renderer.ComponentTest do
   @module_5 Hologram.Test.Fixtures.Template.ComponentRenderer.Module5
 
   setup do
-    "#{File.cwd!()}/test/fixtures/template/renderers/component_renderer"
+    "#{@fixtures_path}/template/renderers/component_renderer"
     |> compile_templatables()
 
     Runtime.reload()

@@ -31,7 +31,7 @@ defmodule Hologram.Compiler.PrunerTest do
   end
 
   setup_all do
-    path = "#{File.cwd!()}/test/fixtures/compiler/pruner"
+    path = "#{@fixtures_path}/compiler/pruner"
     [templates: build_templates(path)]
   end
 
