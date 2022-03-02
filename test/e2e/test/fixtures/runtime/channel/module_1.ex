@@ -1,4 +1,4 @@
-defmodule Hologram.Test.Fixtures.Runtime.Channel.Module1 do
+defmodule HologramE2E.Test.Fixtures.Runtime.Channel.Module1 do
   use Hologram.Page
 
   route "/test-route-1"

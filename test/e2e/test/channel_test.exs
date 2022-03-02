@@ -1,19 +1,19 @@
-defmodule Hologram.Runtime.ChannelTest do
-  use Hologram.Test.ChannelCase, async: false
+defmodule HologramE2E.ChannelTest do
+  use HologramE2E.Test.ChannelCase, async: false
 
   alias Hologram.Compiler.Serializer
   alias Hologram.Runtime
   alias Hologram.Runtime.{Channel, Socket}
   alias Hologram.Template.Renderer
 
-  @class_name_1 "Elixir_Hologram_Test_Fixtures_Runtime_Channel_Module1"
-  @class_name_3 "Elixir_Hologram_Test_Fixtures_Runtime_Channel_Module3"
-  @class_name_4 "Elixir_Hologram_Test_Fixtures_Runtime_Channel_Module4"
-  @class_name_5 "Elixir_Hologram_Test_Fixtures_Runtime_Channel_Module5"
-  @class_name_6 "Elixir_Hologram_Test_Fixtures_Runtime_Channel_Module6"
-  @class_name_7 "Elixir_Hologram_Test_Fixtures_Runtime_Channel_Module7"
+  @class_name_1 "Elixir_HologramE2E_Test_Fixtures_Runtime_Channel_Module1"
+  @class_name_3 "Elixir_HologramE2E_Test_Fixtures_Runtime_Channel_Module3"
+  @class_name_4 "Elixir_HologramE2E_Test_Fixtures_Runtime_Channel_Module4"
+  @class_name_5 "Elixir_HologramE2E_Test_Fixtures_Runtime_Channel_Module5"
+  @class_name_6 "Elixir_HologramE2E_Test_Fixtures_Runtime_Channel_Module6"
+  @class_name_7 "Elixir_HologramE2E_Test_Fixtures_Runtime_Channel_Module7"
 
-  @module_5 Hologram.Test.Fixtures.Runtime.Channel.Module5
+  @module_5 HologramE2E.Test.Fixtures.Runtime.Channel.Module5
   @target_id %{"type" => "atom", "value" => "test_target_id_value"}
 
   setup do

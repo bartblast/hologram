@@ -1,7 +1,7 @@
-defmodule Hologram.Test.Fixtures.Runtime.Channel.Module3 do
+defmodule HologramE2E.Test.Fixtures.Runtime.Channel.Module6 do
   use Hologram.Page
 
-  route "/test-route-3"
+  route "/test-route-6"
 
   def init do
     %{}
@@ -13,6 +13,6 @@ defmodule Hologram.Test.Fixtures.Runtime.Channel.Module3 do
   end
 
   def command(:test_command, _params) do
-    {:test_action, a: 1, b: 2}
+    {:test_action_target_id, :test_action, a: 1, b: 2}
   end
 end

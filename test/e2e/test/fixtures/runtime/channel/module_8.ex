@@ -1,4 +1,4 @@
-defmodule Hologram.Test.Fixtures.Runtime.Channel.Module8 do
+defmodule HologramE2E.Test.Fixtures.Runtime.Channel.Module8 do
   use Hologram.Layout
 
   def init, do: %{}
