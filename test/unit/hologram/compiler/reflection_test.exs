@@ -4,6 +4,8 @@ defmodule Hologram.Compiler.ReflectionTest do
   alias Hologram.Compiler.{Context, Reflection}
   alias Hologram.Compiler.IR.{FunctionDefinition, MacroDefinition, ModuleDefinition}
 
+  @config_app_path Application.get_env(:hologram, :app_path)
+
   @module_1 Hologram.Test.Fixtures.Compiler.Reflection.Module1
   @module_2 Hologram.Test.Fixtures.Compiler.Reflection.Module2
   @module_4 Hologram.Test.Fixtures.Compiler.Reflection.Module4
@@ -12,10 +14,16 @@ defmodule Hologram.Compiler.ReflectionTest do
 
   describe "app_path/1" do
     test "default" do
+      Application.delete_env(:hologram, :app_path)
+
       result = Reflection.app_path()
       expected = "#{File.cwd!()}/lib"
 
       assert result == expected
+
+      if @config_app_path do
+        Application.put_env(:hologram, :app_path, @config_app_path)
+      end
     end
 
     test "config" do
@@ -24,7 +32,11 @@ defmodule Hologram.Compiler.ReflectionTest do
 
       assert Reflection.app_path() == expected
 
-      Application.delete_env(:hologram, :app_path)
+      if @config_app_path do
+        Application.put_env(:hologram, :app_path, @config_app_path)
+      else
+        Application.delete_env(:hologram, :app_path)
+      end
     end
 
     test "opts" do
@@ -192,7 +204,7 @@ defmodule Hologram.Compiler.ReflectionTest do
     result = Reflection.list_components()
 
     assert Enum.count(result) == num_app_components + num_hologram_ui_components
-    assert Hologram.E2E.Component1 in result
+    assert HologramE2E.Component1 in result
     assert Hologram.UI.Runtime in result
   end
 

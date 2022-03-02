@@ -74,7 +74,6 @@ defmodule Hologram.Compiler.CallGraphBuilder.ModuleDefinitionTest do
   test "template traversing" do
     path = "#{@fixtures_path}/compiler/call_graph_builder/module_definition"
     templates = build_templates(path)
-    IO.inspect(Map.keys(templates))
 
     module_defs = %{
       Module4 => Reflection.module_definition(Module4),

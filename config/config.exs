@@ -2,6 +2,7 @@ import Config
 
 config :hologram,
   otp_app: :hologram,
+  app_path: "#{File.cwd!()}/test/unit/fixtures/app",
   default_layout: HologramE2E.DefaultLayout,
   env: config_env(),
   ignored_namespaces: [
