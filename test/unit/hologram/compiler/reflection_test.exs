@@ -297,7 +297,7 @@ defmodule Hologram.Compiler.ReflectionTest do
     end
 
     test "app module" do
-      refute Reflection.standard_lib?(Hologram.E2E.Page1)
+      refute Reflection.standard_lib?(Hologram.Test.Fixtures.Compiler.Reflection.Module1)
     end
 
     test "lib module" do
