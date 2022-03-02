@@ -8,7 +8,7 @@ defmodule Hologram.Test.UnitCase do
 
       alias Hologram.Utils
 
-      @fixtures_path "test/unit/fixtures"
+      @fixtures_path "#{File.cwd!()}/test/unit/fixtures"
     end
   end
 end

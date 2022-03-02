@@ -7,7 +7,7 @@ defmodule HologramE2E.TestCase do
       use Wallaby.Feature
       import Wallaby.Query
 
-      @fixtures_path "test/fixtures"
+      @fixtures_path "#{File.cwd!()}/test/fixtures"
 
       setup_all do
         Mix.Tasks.Compile.Hologram.run()
