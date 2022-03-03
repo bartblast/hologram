@@ -1,5 +1,5 @@
 defmodule Hologram.Commons.Encoder do
-  alias Hologram.Compiler.{Context, JSEncoder, MapKeyEncoder, Opts}
+  alias Hologram.Compiler.{Context, Formatter, JSEncoder, MapKeyEncoder, Opts}
   alias Hologram.Compiler.IR.{MapAccess, Variable}
 
   defmacro __using__(_) do
@@ -50,21 +50,24 @@ defmodule Hologram.Commons.Encoder do
   end
 
   defp encode_var({name, {idx, path}}, context) do
-    acc = "let #{name} = arguments[#{idx}]"
+    "let #{name} = arguments[#{idx}]"
+    |> encode_var_value(path, context)
+    |> Formatter.append(";")
+  end
 
-    value =
-      Enum.reduce(path, acc, fn type, acc ->
-        acc <>
-          case type do
-            %MapAccess{key: key} ->
-              ".data['#{MapKeyEncoder.encode(key, context, %Opts{})}']"
+  def encode_var_value(acc, path, context) do
+    Enum.reduce(path, acc, fn type, acc ->
+      acc <> encode_var_value_part(type, context)
+    end)
+  end
 
-            %Variable{} ->
-              ""
-          end
-      end)
+  defp encode_var_value_part(%MapAccess{key: key}, context) do
+    encoded_key = MapKeyEncoder.encode(key, context, %Opts{})
+    ".data['#{encoded_key}']"
+  end
 
-    "#{value};"
+  defp encode_var_value_part(%Variable{}, _context) do
+    ""
   end
 
   def encode_vars(bindings, context, separator) do

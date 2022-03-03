@@ -1,4 +1,8 @@
 defmodule Hologram.Compiler.Formatter do
+  def append(output, str) do
+    output <> str
+  end
+  
   def append_line_break(output) do
     output <> "\n"
   end
