@@ -2,100 +2,104 @@ defmodule Hologram.Compiler.NormalizerTest do
   use Hologram.Test.UnitCase, async: true
   alias Hologram.Compiler.{Normalizer, Parser}
 
-  test "do expression with non-nested block" do
-    code = """
-    defmodule Test do
-      def test do
-        1
-      end
-    end
-    """
-
-    ast = Parser.parse!(code)
-
-    result = Normalizer.normalize(ast)
-
-    expected =
-      {:defmodule, [line: 1],
-       [
-         {:__aliases__, [line: 1], [:Test]},
-         [
-           do:
-             {:__block__, [],
-              [
-                {:def, [line: 2], [{:test, [line: 2], nil}, [do: {:__block__, [], [1]}]]}
-              ]}
-         ]
-       ]}
-
-    assert result == expected
-  end
-
-  test "do expression with nested block" do
-    code = """
-    defmodule Test do
-      def test do
-        nested do
-          1
+  describe "do expression" do
+    test "without nested block" do
+      code =
+        """
+        def test do
+          :ok
         end
-      end
+        """
+
+      ast = Parser.parse!(code)
+      result = Normalizer.normalize(ast)
+
+      expected =
+        {:def, [line: 1], [{:test, [line: 1], nil}, [do: {:__block__, [], [:ok]}]]}
+
+      assert result == expected
     end
-    """
 
-    ast = Parser.parse!(code)
+    test "with nested block" do
+      code =
+        """
+        def test do
+          nested do
+            1
+          end
+        end
+        """
 
-    result = Normalizer.normalize(ast)
+      ast = Parser.parse!(code)
+      result = Normalizer.normalize(ast)
 
-    expected =
-      {:defmodule, [line: 1],
-       [
-         {:__aliases__, [line: 1], [:Test]},
-         [
-           do:
-             {:__block__, [],
-              [
-                {:def, [line: 2],
-                 [
-                   {:test, [line: 2], nil},
-                   [
-                     do: {:__block__, [], [{:nested, [line: 3], [[do: {:__block__, [], [1]}]]}]}
-                   ]
-                 ]}
-              ]}
-         ]
-       ]}
+      expected =
+        {:def, [line: 1],
+          [
+            {:test, [line: 1], nil},
+            [do: {:__block__, [], [{:nested, [line: 2], [[do: {:__block__, [], [1]}]]}]}]
+          ]}
 
-    assert result == expected
+      assert result == expected
+    end
   end
 
-  test "do expression without block" do
-    code = """
-    defmodule Test do
-      alias Abc
+  describe "case expression" do
+    test "clause with single expression" do
+      code =
+        """
+        case x do
+          1 ->
+            :expr
+        end
+        """
+
+      ast = Parser.parse!(code)
+      result = Normalizer.normalize(ast)
+
+      expected =
+        {:case, [line: 1],
+          [
+            {:x, [line: 1], nil},
+            [
+              do: [
+                {:->, [line: 2], [[1], {:__block__, [], [:expr]}]},
+              ]
+            ]
+          ]}
+
+      assert result == expected
     end
-    """
 
-    ast = Parser.parse!(code)
+    test "clause with block" do
+      code =
+        """
+        case x do
+          1 ->
+            :expr_a
+            :expr_b
+        end
+        """
 
-    result = Normalizer.normalize(ast)
+      ast = Parser.parse!(code)
+      result = Normalizer.normalize(ast)
 
-    expected =
-      {:defmodule, [line: 1],
-       [
-         {:__aliases__, [line: 1], [:Test]},
-         [
-           do: {:__block__, [], [{:alias, [line: 2], [{:__aliases__, [line: 2], [:Abc]}]}]}
-         ]
-       ]}
+      expected =
+        {:case, [line: 1],
+          [
+            {:x, [line: 1], nil},
+            [do: [{:->, [line: 2], [[1], {:__block__, [], [:expr_a, :expr_b]}]}]]
+          ]}
 
-    assert result == expected
+      assert result == expected
+    end
   end
 
   test "other expression" do
     code = "1 + 2"
     ast = Parser.parse!(code)
-
     result = Normalizer.normalize(ast)
+
     assert result == ast
   end
 end
