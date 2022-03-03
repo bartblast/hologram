@@ -8,6 +8,7 @@ defmodule Hologram.Compiler.Transformer do
     AnonymousFunctionTypeTransformer,
     BinaryTypeTransformer,
     BooleanAndOperatorTransformer,
+    CaseExpressionTransformer,
     DivisionOperatorTransformer,
     DotOperatorTransformer,
     EqualToOperatorTransformer,
@@ -228,6 +229,10 @@ defmodule Hologram.Compiler.Transformer do
   end
 
   # CONTROL FLOW
+
+  def transform({:case, _, _} = ast, %Context{} = context) do
+    CaseExpressionTransformer.transform(ast, context)
+  end
 
   def transform({:if, _, _} = ast, %Context{} = context) do
     IfExpressionTransformer.transform(ast, context)

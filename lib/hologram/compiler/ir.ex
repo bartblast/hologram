@@ -180,6 +180,10 @@ defmodule Hologram.Compiler.IR do
 
   # CONTROL FLOW
 
+  defmodule CaseExpression do
+    defstruct condition: nil, clauses: []
+  end
+
   defmodule IfExpression do
     defstruct condition: nil, do: nil, else: nil, ast: nil
   end

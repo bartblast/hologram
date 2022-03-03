@@ -12,6 +12,7 @@ defmodule Hologram.Compiler.TransformerTest do
     BinaryType,
     BooleanAndOperator,
     BooleanType,
+    CaseExpression,
     DivisionOperator,
     DotOperator,
     EqualToOperator,
@@ -374,6 +375,19 @@ defmodule Hologram.Compiler.TransformerTest do
   end
 
   describe "control flow" do
+    test "case expression" do
+      code = """
+        case x do
+          %{a: a} -> :ok
+          2 -> :error
+        end
+        """
+
+      ast = ast(code)
+
+      assert %CaseExpression{} = Transformer.transform(ast, %Context{})
+    end
+
     test "if expression" do
       code = "if true, do: 1, else: 2"
       ast = ast(code)
