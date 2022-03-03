@@ -5,7 +5,7 @@ defmodule Hologram.Compiler.AnonymousFunctionTypeTransformer do
   def transform({:fn, _, [{:->, _, [params, ast]}]}, %Context{} = context) do
     params = Helpers.transform_params(params, context)
     arity = Enum.count(params)
-    bindings = Helpers.aggregate_bindings(params)
+    bindings = Helpers.aggregate_bindings_from_params(params)
 
     body =
       Helpers.fetch_block_body(ast)

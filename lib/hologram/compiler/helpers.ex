@@ -3,7 +3,16 @@ defmodule Hologram.Compiler.Helpers do
   alias Hologram.Compiler.IR.{FunctionDefinitionVariants, ModuleDefinition}
   alias Hologram.Typespecs, as: T
 
-  def aggregate_bindings(params) do
+  def aggregate_bindings_from_expression(expr) do
+    PatternBinder.bind(expr)
+    |> Enum.reduce([], fn binding, acc ->
+      name = List.last(binding).name
+      maybe_add_binding(acc, name, binding)
+    end)
+    |> Enum.sort()
+  end
+
+  def aggregate_bindings_from_params(params) do
     Enum.with_index(params)
     |> Enum.reduce([], &aggregate_bindings_from_param/2)
     |> Enum.sort()
@@ -11,7 +20,10 @@ defmodule Hologram.Compiler.Helpers do
 
   defp aggregate_bindings_from_param({param, idx}, acc) do
     PatternBinder.bind(param)
-    |> Enum.reduce(acc, &maybe_add_binding(&1, &2, idx))
+    |> Enum.reduce(acc, fn binding, acc ->
+      name = List.last(binding).name
+      maybe_add_binding(acc, name, {idx, binding})
+    end)
   end
 
   def aggregate_function_def_variants(function_defs) do
@@ -30,7 +42,6 @@ defmodule Hologram.Compiler.Helpers do
 
   @doc """
   Returns the corresponding class name which can be used in JavaScript.
-
   ## Examples
       iex> Helpers.class_name(Abc.Bcd)
       "Elixir_Abc_Bcd"
@@ -66,19 +77,16 @@ defmodule Hologram.Compiler.Helpers do
     |> Enum.map(fn {_, module_def} -> module_def end)
   end
 
-  defp maybe_add_binding(binding, acc, idx) do
-    name = List.last(binding).name
-
+  defp maybe_add_binding(acc, name, binding) do
     if Keyword.has_key?(acc, name) do
       acc
     else
-      Keyword.put(acc, name, {idx, binding})
+      Keyword.put(acc, name, binding)
     end
   end
 
   @doc """
   Returns the corresponding Elixir module.
-
   ## Examples
       iex> Helpers.module([:Abc, :Bcd])
       Elixir.Abc.Bcd
@@ -93,7 +101,6 @@ defmodule Hologram.Compiler.Helpers do
 
   @doc """
   Returns the corresponding module name (without the "Elixir" segment at the beginning).
-
   ## Examples
       iex> Helpers.module_name(Abc.Bcd)
       "Abc.Bcd"
@@ -107,7 +114,6 @@ defmodule Hologram.Compiler.Helpers do
 
   @doc """
   Returns the corresponding module segments (without the "Elixir" segment at the beginning).
-
   ## Examples
       iex> Helpers.module_name_segments(Abc.Bcd)
       [:Abc, :Bcd]
@@ -131,7 +137,6 @@ defmodule Hologram.Compiler.Helpers do
 
   @doc """
   Returns true if the first module has a "use" directive for the second module.
-
   ## Examples
       iex> user_module = %ModuleDefinition{module: Hologram.Compiler.Parser, ...}
       iex> Helpers.uses_module?(user_module, Hologram.Commons.Parser)

@@ -7,7 +7,7 @@ defmodule Hologram.Compiler.MacroDefinitionTransformer do
 
     params = Helpers.transform_params(params, context)
     arity = Enum.count(params)
-    bindings = Helpers.aggregate_bindings(params)
+    bindings = Helpers.aggregate_bindings_from_params(params)
     body = Enum.map(body, &Transformer.transform(&1, context))
 
     %MacroDefinition{

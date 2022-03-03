@@ -22,7 +22,7 @@ defmodule Hologram.Compiler.FunctionDefinitionTransformer do
   defp build_function_definition(name, params, body, def_type, %{module: module} = context) do
     params = Helpers.transform_params(params, context)
     arity = Enum.count(params)
-    bindings = Helpers.aggregate_bindings(params)
+    bindings = Helpers.aggregate_bindings_from_params(params)
     body = Enum.map(body, &Transformer.transform(&1, context))
     visibility = if def_type == :def, do: :public, else: :private
 
