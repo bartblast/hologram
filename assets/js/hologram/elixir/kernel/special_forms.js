@@ -2,8 +2,14 @@
 
 import { HologramNotImplementedError } from "../../errors";
 import Type from "../../type"
+import Utils from "../../utils"
 
 export default class SpecialForms {
+  static case(exprAnonFun) {
+    const result = exprAnonFun()
+    return Utils.freeze(result)
+  }
+
   static $dot(boxedMap, boxedKey) {
     return boxedMap.data[Type.encodedKey(boxedKey)]
   }
