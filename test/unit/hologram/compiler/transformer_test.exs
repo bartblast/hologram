@@ -377,11 +377,11 @@ defmodule Hologram.Compiler.TransformerTest do
   describe "control flow" do
     test "case expression" do
       code = """
-        case x do
-          %{a: a} -> :ok
-          2 -> :error
-        end
-        """
+      case x do
+        %{a: a} -> :ok
+        2 -> :error
+      end
+      """
 
       ast = ast(code)
 

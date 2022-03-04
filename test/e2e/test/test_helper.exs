@@ -3,7 +3,7 @@ alias HologramE2EWeb.Endpoint
 
 ExUnit.start()
 
-Reflection.release_static_path() <> "/hologram/runtime*"
+(Reflection.release_static_path() <> "/hologram/runtime*")
 |> Path.wildcard()
 |> Enum.each(&File.rm!/1)
 

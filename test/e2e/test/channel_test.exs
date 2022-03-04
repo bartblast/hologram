@@ -46,7 +46,7 @@ defmodule HologramE2E.ChannelTest do
       {:test_action_target_id, :test_action, %{a: 1, b: 2}}
       |> Serializer.serialize()
 
-    assert_reply ref, :ok, ^expected_response
+    assert_reply(ref, :ok, ^expected_response)
   end
 
   test "command returning target_id and action", %{socket: socket} do
@@ -62,7 +62,7 @@ defmodule HologramE2E.ChannelTest do
       {:test_action_target_id, :test_action, %{}}
       |> Serializer.serialize()
 
-    assert_reply ref, :ok, ^expected_response
+    assert_reply(ref, :ok, ^expected_response)
   end
 
   test "command returning action and params", %{socket: socket} do
@@ -78,7 +78,7 @@ defmodule HologramE2E.ChannelTest do
       {:test_target_id_value, :test_action, %{a: 1, b: 2}}
       |> Serializer.serialize()
 
-    assert_reply ref, :ok, ^expected_response
+    assert_reply(ref, :ok, ^expected_response)
   end
 
   test "command returning action only", %{socket: socket} do
@@ -94,7 +94,7 @@ defmodule HologramE2E.ChannelTest do
       {:test_target_id_value, :test_action, %{}}
       |> Serializer.serialize()
 
-    assert_reply ref, :ok, ^expected_response
+    assert_reply(ref, :ok, ^expected_response)
   end
 
   test "command which receives params", %{socket: socket} do
@@ -134,7 +134,7 @@ defmodule HologramE2E.ChannelTest do
       {:test_target_id_value, :test_action_1, %{}}
       |> Serializer.serialize()
 
-    assert_reply ref, :ok, ^expected_response
+    assert_reply(ref, :ok, ^expected_response)
   end
 
   test "command returning __redirect__ action", %{socket: socket} do
@@ -173,6 +173,6 @@ defmodule HologramE2E.ChannelTest do
       |> Serializer.serialize()
 
     ref = push(socket, "command", message)
-    assert_reply ref, :ok, ^expected_response
+    assert_reply(ref, :ok, ^expected_response)
   end
 end

@@ -6,7 +6,12 @@ locals_without_parens = [
 
 [
   export: [locals_without_parens: locals_without_parens],
-  inputs: ["*.{ex,exs}", "{config,lib}/**/*.{ex,exs}", "test/{js,unit}/**/*.{ex,exs}", "test/e2e/{config,lib,test}/**/*.{ex,exs}"],
+  inputs: [
+    "*.{ex,exs}",
+    "{config,lib}/**/*.{ex,exs}",
+    "test/{js,unit}/**/*.{ex,exs}",
+    "test/e2e/{config,lib,test}/**/*.{ex,exs}"
+  ],
   locals_without_parens: locals_without_parens,
   subdirectories: []
 ]

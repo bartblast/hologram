@@ -2,7 +2,16 @@ defmodule Hologram.Compiler.PatternBinderTest do
   use Hologram.Test.UnitCase, async: true
 
   alias Hologram.Compiler.PatternBinder
-  alias Hologram.Compiler.IR.{AtomType, IntegerType, MapAccess, MapType, TupleAccess, TupleType, Variable}
+
+  alias Hologram.Compiler.IR.{
+    AtomType,
+    IntegerType,
+    MapAccess,
+    MapType,
+    TupleAccess,
+    TupleType,
+    Variable
+  }
 
   describe "map" do
     test "non-nested map without vars" do
@@ -217,10 +226,10 @@ defmodule Hologram.Compiler.PatternBinderTest do
           %IntegerType{value: 1},
           %IntegerType{value: 2},
           %TupleType{
-             data: [
-               %IntegerType{value: 3},
-               %IntegerType{value: 4}
-             ]
+            data: [
+              %IntegerType{value: 3},
+              %IntegerType{value: 4}
+            ]
           }
         ]
       }
@@ -233,11 +242,11 @@ defmodule Hologram.Compiler.PatternBinderTest do
         data: [
           %IntegerType{value: 1},
           %TupleType{
-             data: [
-               %Variable{name: :x},
-               %IntegerType{value: 2}
-             ]
-           }
+            data: [
+              %Variable{name: :x},
+              %IntegerType{value: 2}
+            ]
+          }
         ]
       }
 

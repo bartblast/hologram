@@ -3,7 +3,14 @@ defmodule Hologram.Compiler.ModuleDefAggregators.CaseExpressionTest do
 
   alias Hologram.Compiler.{ModuleDefAggregator, ModuleDefStore}
   alias Hologram.Compiler.IR.{CaseExpression, IntegerType, ModuleDefinition, ModuleType}
-  alias Hologram.Test.Fixtures.{PlaceholderModule1, PlaceholderModule2, PlaceholderModule3, PlaceholderModule4, PlaceholderModule5}
+
+  alias Hologram.Test.Fixtures.{
+    PlaceholderModule1,
+    PlaceholderModule2,
+    PlaceholderModule3,
+    PlaceholderModule4,
+    PlaceholderModule5
+  }
 
   setup do
     ModuleDefStore.create()

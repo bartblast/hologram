@@ -5,12 +5,11 @@ defimpl JSEncoder, for: CaseExpression do
   import Hologram.Commons.Encoder, only: [encode_expressions: 4, encode_var_value: 3]
 
   def encode(%{condition: condition, clauses: clauses}, %Context{} = context, %Opts{} = opts) do
-    fallback_clause =
-      """
-      else {
-      throw 'No case clause matching'
-      }\
-      """
+    fallback_clause = """
+    else {
+    throw 'No case clause matching'
+    }\
+    """
 
     encode_clauses(condition, clauses, context, opts)
     |> Formatter.maybe_append_new_line(fallback_clause)

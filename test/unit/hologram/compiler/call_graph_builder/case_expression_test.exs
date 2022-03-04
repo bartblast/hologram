@@ -3,7 +3,15 @@ defmodule Hologram.Compiler.CallGraphBuilder.CaseExpressionTest do
 
   alias Hologram.Compiler.{CallGraph, CallGraphBuilder}
   alias Hologram.Compiler.IR.{CaseExpression, IntegerType, ModuleType}
-  alias Hologram.Test.Fixtures.{PlaceholderModule1, PlaceholderModule2, PlaceholderModule3, PlaceholderModule4, PlaceholderModule5, PlaceholderModule6}
+
+  alias Hologram.Test.Fixtures.{
+    PlaceholderModule1,
+    PlaceholderModule2,
+    PlaceholderModule3,
+    PlaceholderModule4,
+    PlaceholderModule5,
+    PlaceholderModule6
+  }
 
   @module_defs %{}
   @templates %{}
@@ -48,5 +56,4 @@ defmodule Hologram.Compiler.CallGraphBuilder.CaseExpressionTest do
     assert CallGraph.has_edge?(PlaceholderModule1, PlaceholderModule5)
     assert CallGraph.has_edge?(PlaceholderModule1, PlaceholderModule6)
   end
-
 end

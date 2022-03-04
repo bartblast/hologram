@@ -7,7 +7,8 @@ defmodule Hologram.MixProject do
       app: :hologram,
       compilers: Mix.compilers(),
       deps: deps(),
-      description: "Full stack isomorphic Elixir web framework that can be used on top of Phoenix.",
+      description:
+        "Full stack isomorphic Elixir web framework that can be used on top of Phoenix.",
       elixir: "~> 1.0",
       elixirc_paths: elixirc_paths(Mix.env()),
       package: package(),

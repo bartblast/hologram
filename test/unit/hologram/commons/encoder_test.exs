@@ -114,8 +114,9 @@ defmodule Hologram.Commons.EncoderTest do
     test "multiple parts" do
       path = [
         %MapAccess{key: %AtomType{value: :a}},
-        %MapAccess{key: %AtomType{value: :b}},
+        %MapAccess{key: %AtomType{value: :b}}
       ]
+
       result = Encoder.encode_var_value("test_acc", path, %Context{})
       expected = "test_acc.data['~atom[a]'].data['~atom[b]']"
 

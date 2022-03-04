@@ -6,7 +6,7 @@ defmodule Hologram.Compiler.JSEncoder.UnaryNegativeOperatorTest do
 
   test "encode/3" do
     ir = %UnaryNegativeOperator{
-      value: %IntegerType{value: 123},
+      value: %IntegerType{value: 123}
     }
 
     result = JSEncoder.encode(ir, %Context{}, %Opts{})

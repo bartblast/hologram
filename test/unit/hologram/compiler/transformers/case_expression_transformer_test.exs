@@ -6,10 +6,10 @@ defmodule Hologram.Compiler.CaseExpressionTransformerTest do
 
   test "single expression clause body" do
     code = """
-      case x do
-        1 -> :ok
-      end
-      """
+    case x do
+      1 -> :ok
+    end
+    """
 
     result =
       code
@@ -32,12 +32,12 @@ defmodule Hologram.Compiler.CaseExpressionTransformerTest do
 
   test "multiple expression clause body" do
     code = """
-      case x do
-        1 ->
-          :expr_1
-          :expr_2
-      end
-      """
+    case x do
+      1 ->
+        :expr_1
+        :expr_2
+    end
+    """
 
     result =
       code
@@ -63,10 +63,10 @@ defmodule Hologram.Compiler.CaseExpressionTransformerTest do
 
   test "clause without bindings" do
     code = """
-      case x do
-        1 -> :ok
-      end
-      """
+    case x do
+      1 -> :ok
+    end
+    """
 
     result =
       code

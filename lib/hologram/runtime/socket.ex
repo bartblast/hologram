@@ -1,7 +1,7 @@
 defmodule Hologram.Runtime.Socket do
   use Phoenix.Socket
 
-  channel "hologram", Hologram.Runtime.Channel
+  channel("hologram", Hologram.Runtime.Channel)
 
   @impl true
   def connect(_, socket, _) do

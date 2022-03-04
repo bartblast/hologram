@@ -1,5 +1,13 @@
 alias Hologram.Compiler.{Context, JSEncoder, Opts}
-alias Hologram.Compiler.IR.{DotOperator, FunctionCall, IntegerType, MapAccess, MatchOperator, TupleAccess}
+
+alias Hologram.Compiler.IR.{
+  DotOperator,
+  FunctionCall,
+  IntegerType,
+  MapAccess,
+  MatchOperator,
+  TupleAccess
+}
 
 defimpl JSEncoder, for: MatchOperator do
   def encode(%{bindings: bindings, right: right}, %Context{} = context, %Opts{} = opts) do

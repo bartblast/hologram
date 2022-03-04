@@ -7,23 +7,25 @@ defmodule HologramE2EWeb.Endpoint do
     store: :cookie
   ]
 
-  socket "/hologram", Hologram.Runtime.Socket
+  socket("/hologram", Hologram.Runtime.Socket)
 
-  plug Plug.Static,
+  plug(Plug.Static,
     at: "/",
     from: :hologram_e2e,
     gzip: false,
     only: ~w(assets fonts hologram images favicon.ico robots.txt)
+  )
 
-  plug Plug.RequestId
+  plug(Plug.RequestId)
 
-  plug Plug.Parsers,
+  plug(Plug.Parsers,
     json_decoder: Phoenix.json_library(),
     parsers: [:urlencoded, :multipart, :json],
     pass: ["*/*"]
+  )
 
-  plug Plug.MethodOverride
-  plug Plug.Head
-  plug Plug.Session, @session_options
-  plug Hologram.Router
+  plug(Plug.MethodOverride)
+  plug(Plug.Head)
+  plug(Plug.Session, @session_options)
+  plug(Hologram.Router)
 end

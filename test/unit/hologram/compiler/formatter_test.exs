@@ -6,7 +6,7 @@ defmodule Hologram.Compiler.FormatterTest do
     result = Formatter.append("part1", "part2")
     assert result == "part1part2"
   end
-  
+
   test "append_line_break/1" do
     result = Formatter.append_line_break("abc")
     assert result == "abc\n"
