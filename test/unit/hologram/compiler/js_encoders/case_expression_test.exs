@@ -18,12 +18,14 @@ defmodule Hologram.Compiler.JSEncoder.CaseExpressionTest do
     result = encode(code)
 
     expected = """
+    Elixir_Kernel_SpecialForms.case(function() { \
     if (Hologram.isCaseClausePatternMatched({ type: 'integer', value: 1 }, { type: 'placeholder' })) {
     return { type: 'atom', value: 'ok' };
     }
     else {
     throw 'No case clause matching'
-    }\
+    } \
+    })\
     """
 
     assert result == expected
@@ -40,6 +42,7 @@ defmodule Hologram.Compiler.JSEncoder.CaseExpressionTest do
     result = encode(code)
 
     expected = """
+    Elixir_Kernel_SpecialForms.case(function() { \
     if (Hologram.isCaseClausePatternMatched({ type: 'integer', value: 1 }, { type: 'placeholder' })) {
     return { type: 'atom', value: 'ok_1' };
     }
@@ -48,7 +51,8 @@ defmodule Hologram.Compiler.JSEncoder.CaseExpressionTest do
     }
     else {
     throw 'No case clause matching'
-    }\
+    } \
+    })\
     """
 
     assert result == expected
@@ -66,13 +70,15 @@ defmodule Hologram.Compiler.JSEncoder.CaseExpressionTest do
     result = encode(code)
 
     expected = """
+    Elixir_Kernel_SpecialForms.case(function() { \
     if (Hologram.isCaseClausePatternMatched({ type: 'integer', value: 1 }, { type: 'placeholder' })) {
     { type: 'atom', value: 'expr_1' };
     return { type: 'atom', value: 'expr_2' };
     }
     else {
     throw 'No case clause matching'
-    }\
+    } \
+    })\
     """
 
     assert result == expected
@@ -88,13 +94,15 @@ defmodule Hologram.Compiler.JSEncoder.CaseExpressionTest do
     result = encode(code)
 
     expected = """
+    Elixir_Kernel_SpecialForms.case(function() { \
     if (Hologram.isCaseClausePatternMatched({ type: 'map', data: { '~atom[a]': { type: 'placeholder' } } }, { type: 'placeholder' })) {
     let a = x.data['~atom[a]'];
     return { type: 'atom', value: 'ok' };
     }
     else {
     throw 'No case clause matching'
-    }\
+    } \
+    })\
     """
 
     assert result == expected
@@ -110,6 +118,7 @@ defmodule Hologram.Compiler.JSEncoder.CaseExpressionTest do
     result = encode(code)
 
     expected = """
+    Elixir_Kernel_SpecialForms.case(function() { \
     if (Hologram.isCaseClausePatternMatched({ type: 'map', data: { '~atom[a]': { type: 'placeholder' }, '~atom[b]': { type: 'placeholder' } } }, { type: 'placeholder' })) {
     let a = x.data['~atom[a]'];
     let b = x.data['~atom[b]'];
@@ -117,7 +126,8 @@ defmodule Hologram.Compiler.JSEncoder.CaseExpressionTest do
     }
     else {
     throw 'No case clause matching'
-    }\
+    } \
+    })\
     """
 
     assert result == expected

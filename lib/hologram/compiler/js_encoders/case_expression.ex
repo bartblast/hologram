@@ -11,8 +11,11 @@ defimpl JSEncoder, for: CaseExpression do
     }\
     """
 
-    encode_clauses(condition, clauses, context, opts)
-    |> Formatter.maybe_append_new_line(fallback_clause)
+    anon_fun_body =
+      encode_clauses(condition, clauses, context, opts)
+      |> Formatter.maybe_append_new_line(fallback_clause)
+
+    "Elixir_Kernel_SpecialForms.case(function() { #{anon_fun_body} })"
   end
 
   defp encode_clauses(condition, clauses, context, opts) do
