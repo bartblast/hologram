@@ -33,8 +33,9 @@ defimpl JSEncoder, for: MatchOperator do
     }
   end
 
-  defp encode_binding({var, path}, right, context, opts) do
+  defp encode_binding({name, path}, right, context, opts) do
+    let_statement = if name in context.block_bindings, do: "", else: "let "
     ir = convert_ir(path, right)
-    "const #{var} = " <> JSEncoder.encode(ir, context, opts)
+    let_statement <> "#{name} = " <> JSEncoder.encode(ir, context, opts)
   end
 end

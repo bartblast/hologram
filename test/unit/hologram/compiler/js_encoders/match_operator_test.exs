@@ -27,7 +27,7 @@ defmodule Hologram.Compiler.JSEncoder.MatchOperatorTest do
     }
 
     result = JSEncoder.encode(ir, %Context{}, %Opts{})
-    expected = "const x = { type: 'integer', value: 1 }"
+    expected = "let x = { type: 'integer', value: 1 }"
 
     assert result == expected
   end
@@ -74,7 +74,7 @@ defmodule Hologram.Compiler.JSEncoder.MatchOperatorTest do
     result = JSEncoder.encode(ir, %Context{}, %Opts{})
 
     expected =
-      "const x = Elixir_Kernel_SpecialForms.$dot(Elixir_Kernel_SpecialForms.$dot({ type: 'map', data: { '~atom[a]': { type: 'integer', value: 1 }, '~atom[b]': { type: 'map', data: { '~atom[p]': { type: 'integer', value: 9 } } }, '~atom[c]': { type: 'integer', value: 3 } } }, { type: 'atom', value: 'b' }), { type: 'atom', value: 'p' })"
+      "let x = Elixir_Kernel_SpecialForms.$dot(Elixir_Kernel_SpecialForms.$dot({ type: 'map', data: { '~atom[a]': { type: 'integer', value: 1 }, '~atom[b]': { type: 'map', data: { '~atom[p]': { type: 'integer', value: 9 } } }, '~atom[c]': { type: 'integer', value: 3 } } }, { type: 'atom', value: 'b' }), { type: 'atom', value: 'p' })"
 
     assert result == expected
   end
@@ -125,7 +125,7 @@ defmodule Hologram.Compiler.JSEncoder.MatchOperatorTest do
       "{ type: 'tuple', data: [ { type: 'integer', value: 1 }, #{tuple_inner}, { type: 'integer', value: 4 } ] }"
 
     expected =
-      "const x = Elixir_Kernel.elem(Elixir_Kernel.elem(#{tuple_outer}, { type: 'integer', value: 1 }), { type: 'integer', value: 0 })"
+      "let x = Elixir_Kernel.elem(Elixir_Kernel.elem(#{tuple_outer}, { type: 'integer', value: 1 }), { type: 'integer', value: 0 })"
 
     assert result == expected
   end
@@ -160,9 +160,42 @@ defmodule Hologram.Compiler.JSEncoder.MatchOperatorTest do
     result = JSEncoder.encode(ir, %Context{}, %Opts{})
 
     expected = """
-    const x = Elixir_Kernel_SpecialForms.$dot({ type: 'map', data: { '~atom[a]': { type: 'integer', value: 1 }, '~atom[b]': { type: 'integer', value: 2 } } }, { type: 'atom', value: 'a' });
-    const y = Elixir_Kernel_SpecialForms.$dot({ type: 'map', data: { '~atom[a]': { type: 'integer', value: 1 }, '~atom[b]': { type: 'integer', value: 2 } } }, { type: 'atom', value: 'b' })\
+    let x = Elixir_Kernel_SpecialForms.$dot({ type: 'map', data: { '~atom[a]': { type: 'integer', value: 1 }, '~atom[b]': { type: 'integer', value: 2 } } }, { type: 'atom', value: 'a' });
+    let y = Elixir_Kernel_SpecialForms.$dot({ type: 'map', data: { '~atom[a]': { type: 'integer', value: 1 }, '~atom[b]': { type: 'integer', value: 2 } } }, { type: 'atom', value: 'b' })\
     """
+
+    assert result == expected
+  end
+
+  test "binding is not yet in the block scope" do
+    # code:
+    # x = 1
+
+    ir = %MatchOperator{
+      bindings: [x: []],
+      left: %Variable{name: :x},
+      right: %IntegerType{value: 1}
+    }
+
+    result = JSEncoder.encode(ir, %Context{}, %Opts{})
+    expected = "let x = { type: 'integer', value: 1 }"
+
+    assert result == expected
+  end
+
+  test "binding is already in the block scope" do
+    # code:
+    # x = 1
+
+    ir = %MatchOperator{
+      bindings: [x: []],
+      left: %Variable{name: :x},
+      right: %IntegerType{value: 1}
+    }
+
+    context = %Context{block_bindings: [:x]}
+    result = JSEncoder.encode(ir, context, %Opts{})
+    expected = "x = { type: 'integer', value: 1 }"
 
     assert result == expected
   end
