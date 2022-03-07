@@ -8,7 +8,7 @@ defmodule Hologram.Compiler.AnonymousFunctionTypeTransformer do
     bindings = Helpers.aggregate_bindings_from_params(params)
 
     body =
-      Helpers.fetch_block_body(ast)
+      Helpers.get_block_expression(ast)
       |> Enum.map(&Transformer.transform(&1, context))
 
     %AnonymousFunctionType{arity: arity, params: params, bindings: bindings, body: body}
