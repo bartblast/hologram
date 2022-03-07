@@ -200,6 +200,10 @@ defmodule Hologram.Compiler.IR do
 
   # OTHER
 
+  defmodule Block do
+    defstruct expressions: []
+  end
+
   defmodule FunctionCall do
     defstruct module: nil, function: nil, args: []
   end
