@@ -10,6 +10,7 @@ defmodule Hologram.Compiler.TransformerTest do
     AnonymousFunctionType,
     AtomType,
     BinaryType,
+    Block,
     BooleanAndOperator,
     BooleanType,
     CaseExpression,
@@ -397,6 +398,11 @@ defmodule Hologram.Compiler.TransformerTest do
   end
 
   describe "other" do
+    test "block" do
+      ast = {:__block__, [], [1, 2]}
+      assert %Block{} = Transformer.transform(ast, %Context{})
+    end
+
     test "function called without a module" do
       code = "test(123)"
       ast = ast(code)

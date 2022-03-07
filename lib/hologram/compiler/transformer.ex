@@ -7,6 +7,7 @@ defmodule Hologram.Compiler.Transformer do
     AliasDirectiveTransformer,
     AnonymousFunctionTypeTransformer,
     BinaryTypeTransformer,
+    BlockTransformer,
     BooleanAndOperatorTransformer,
     CaseExpressionTransformer,
     DivisionOperatorTransformer,
@@ -239,6 +240,10 @@ defmodule Hologram.Compiler.Transformer do
   end
 
   # OTHER
+
+  def transform({:__block__, _, _} = ast, %Context{} = context) do
+    BlockTransformer.transform(ast, context)
+  end
 
   def transform({{:., _, _}, _, _} = ast, %Context{} = context) do
     FunctionCallTransformer.transform(ast, context)
