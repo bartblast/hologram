@@ -3,13 +3,13 @@ defmodule Hologram.Compiler.IfExpressionTransformer do
   alias Hologram.Compiler.IR.{Block, IfExpression}
 
   def transform({:if, _, [condition, [do: do_ast]]} = ast, %Context{} = context) do
-    do_exprs = Helpers.get_block_expression(do_ast)
+    do_exprs = Helpers.get_block_expressions(do_ast)
     build_if_exprs(condition, do_exprs, [nil], ast, context)
   end
 
   def transform({:if, _, [condition, [do: do_ast, else: else_ast]]} = full_ast, %Context{} = context) do
-    do_exprs = Helpers.get_block_expression(do_ast)
-    else_exprs = Helpers.get_block_expression(else_ast)
+    do_exprs = Helpers.get_block_expressions(do_ast)
+    else_exprs = Helpers.get_block_expressions(else_ast)
     build_if_exprs(condition, do_exprs, else_exprs, full_ast, context)
   end
 

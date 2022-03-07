@@ -53,7 +53,7 @@ defmodule Hologram.Compiler.Helpers do
     |> Enum.join("_")
   end
 
-  def get_block_expression(ast) do
+  def get_block_expressions(ast) do
     case ast do
       {:__block__, _, body} ->
         body
