@@ -2,6 +2,26 @@ defmodule Hologram.Compiler.NormalizerTest do
   use Hologram.Test.UnitCase, async: true
   alias Hologram.Compiler.{Normalizer, Parser}
 
+  describe "anonymous function" do
+    test "arrow syntax" do
+      code = "fn x -> x end"
+
+      ast = Parser.parse!(code)
+      result = Normalizer.normalize(ast)
+
+      expected =
+        {:fn, [line: 1],
+          [
+            {:->, [line: 1],
+              [[{:x, [line: 1], nil}], {:__block__, [], [{:x, [line: 1], nil}]}]}
+          ]}
+
+      assert result == expected
+    end
+
+    # TODO: shorthand syntax
+  end
+
   describe "case expression" do
     test "clause with single expression" do
       code = """
