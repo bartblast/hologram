@@ -158,6 +158,147 @@ defmodule Hologram.Compiler.NormalizerTest do
     end
   end
 
+  describe "if expression" do
+    test "standard notation if block with single expression without else block" do
+      code = """
+        if true do
+          1
+        end
+        """
+
+      ast = Parser.parse!(code)
+      result = Normalizer.normalize(ast)
+
+      expected =
+        {:if, [line: 1],
+          [true, [do: {:__block__, [], [1]}, else: {:__block__, [], [nil]}]]}
+
+      assert result == expected
+    end
+
+    test "standard notation if block with single expression and else block with single expression" do
+      code = """
+        if true do
+          1
+        else
+          2
+        end
+        """
+
+      ast = Parser.parse!(code)
+      result = Normalizer.normalize(ast)
+
+      expected =
+        {:if, [line: 1],
+          [true, [do: {:__block__, [], [1]}, else: {:__block__, [], [2]}]]}
+
+      assert result == expected
+    end
+
+    test "standard notation if block with single expression and else block with multiple expressions" do
+      code = """
+        if true do
+          1
+        else
+          2
+          3
+        end
+        """
+
+      ast = Parser.parse!(code)
+      result = Normalizer.normalize(ast)
+
+      expected =
+        {:if, [line: 1],
+          [true, [do: {:__block__, [], [1]}, else: {:__block__, [], [2, 3]}]]}
+
+      assert result == expected
+    end
+
+    test "standard notation if block with multiple expressions without else block" do
+      code = """
+        if true do
+          1
+          2
+        end
+        """
+
+      ast = Parser.parse!(code)
+      result = Normalizer.normalize(ast)
+
+      expected =
+        {:if, [line: 1],
+          [true, [do: {:__block__, [], [1, 2]}, else: {:__block__, [], [nil]}]]}
+
+      assert result == expected
+    end
+
+    test "standard notation if block with multiple expressions and else block with single expression" do
+      code = """
+        if true do
+          1
+          2
+        else
+          3
+        end
+        """
+
+      ast = Parser.parse!(code)
+      result = Normalizer.normalize(ast)
+
+      expected =
+        {:if, [line: 1],
+          [true, [do: {:__block__, [], [1, 2]}, else: {:__block__, [], [3]}]]}
+
+      assert result == expected
+    end
+
+    test "standard notation if block with multiple expressions and else block with multiple expressions" do
+      code = """
+        if true do
+          1
+          2
+        else
+          3
+          4
+        end
+        """
+
+      ast = Parser.parse!(code)
+      result = Normalizer.normalize(ast)
+
+      expected =
+        {:if, [line: 1],
+          [true, [do: {:__block__, [], [1, 2]}, else: {:__block__, [], [3, 4]}]]}
+
+      assert result == expected
+    end
+
+    test "shorthand notation if block without else block" do
+      code = "if true, do: 1"
+      ast = Parser.parse!(code)
+      result = Normalizer.normalize(ast)
+
+      expected =
+        {:if, [line: 1],
+          [true, [do: {:__block__, [], [1]}, else: {:__block__, [], [nil]}]]}
+
+      assert result == expected
+    end
+
+    test "shorhand notation if block with else block" do
+      code = "if true, do: 1, else: 2"
+      ast = Parser.parse!(code)
+      result = Normalizer.normalize(ast)
+
+      expected =
+        {:if, [line: 1],
+          [true, [do: {:__block__, [], [1]}, else: {:__block__, [], [2]}]]}
+
+      assert result == expected
+    end
+  end
+
   test "other types of expressions" do
     code = "1 + 2"
     ast = Parser.parse!(code)
