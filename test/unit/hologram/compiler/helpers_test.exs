@@ -340,22 +340,6 @@ defmodule Hologram.Compiler.HelpersTest do
     assert Helpers.class_name(Abc.Bcd) == "Elixir_Abc_Bcd"
   end
 
-  describe "get_block_expressions/1" do
-    test "block" do
-      ast = {:__block__, [], [1, 2]}
-      result = Helpers.get_block_expressions(ast)
-
-      assert result == [1, 2]
-    end
-
-    test "non-block" do
-      ast = 1
-      result = Helpers.get_block_expressions(ast)
-
-      assert result == [1]
-    end
-  end
-
   test "get_components/1" do
     module_def_1 = %ModuleDefinition{
       module: Bcd.Cde,
