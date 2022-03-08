@@ -3,7 +3,25 @@ defmodule Hologram.Commons.EncoderTest do
 
   alias Hologram.Commons.Encoder
   alias Hologram.Compiler.{Context, Opts}
-  alias Hologram.Compiler.IR.{AtomType, IntegerType, MapAccess, Variable}
+  alias Hologram.Compiler.IR.{AtomType, Block, IntegerType, MapAccess, Variable}
+
+  test "encode_as_anonymous_function/3" do
+    body = %Block{expressions: [
+      %IntegerType{value: 1},
+      %IntegerType{value: 2}
+    ]}
+
+    result = Encoder.encode_as_anonymous_function(body, %Context{}, %Opts{})
+
+    expected = """
+      (function() {
+      { type: 'integer', value: 1 };
+      return { type: 'integer', value: 2 };
+      })\
+      """
+
+    assert result == expected
+  end
 
   describe "encode_as_array/3" do
     test "empty list encoding" do

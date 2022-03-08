@@ -1,11 +1,16 @@
 defmodule Hologram.Commons.Encoder do
   alias Hologram.Compiler.{Context, Formatter, JSEncoder, MapKeyEncoder, Opts}
-  alias Hologram.Compiler.IR.{MapAccess, Variable}
+  alias Hologram.Compiler.IR.{AnonymousFunctionType, MapAccess, Variable}
 
   defmacro __using__(_) do
     quote do
       import Hologram.Commons.Encoder
     end
+  end
+
+  def encode_as_anonymous_function(body, context, opts) do
+    %AnonymousFunctionType{body: body}
+    |> JSEncoder.encode(context, opts)
   end
 
   def encode_as_array(data, %Context{} = context, %Opts{} = opts) do
