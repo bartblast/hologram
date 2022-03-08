@@ -5,12 +5,14 @@ defimpl JSEncoder, for: AnonymousFunctionType do
   use Hologram.Commons.Encoder
 
   def encode(%{bindings: bindings, body: body}, %Context{} = context, %Opts{} = opts) do
-    vars = encode_vars(bindings, context, " ")
-    body = encode_expressions(body, context, opts, " ")
+    vars = encode_vars(bindings, context, "\n")
+
+    context = %{context | block_bindings: context.block_bindings ++ Keyword.keys(bindings)}
+    body = JSEncoder.encode(body, context, opts)
 
     "(function() {"
-    |> Formatter.maybe_append_new_expression(vars)
-    |> Formatter.maybe_append_new_expression(body)
-    |> Formatter.maybe_append_new_expression("})")
+    |> Formatter.maybe_append_new_line(vars)
+    |> Formatter.maybe_append_new_line(body)
+    |> Formatter.maybe_append_new_line("})")
   end
 end
