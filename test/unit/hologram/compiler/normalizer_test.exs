@@ -114,7 +114,7 @@ defmodule Hologram.Compiler.NormalizerTest do
     end
   end
 
-  describe "macro call" do
+  describe "do block param" do
     test "with single expression in do block" do
       code = """
       test do
