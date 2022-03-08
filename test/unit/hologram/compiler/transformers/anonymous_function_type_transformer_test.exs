@@ -6,6 +6,7 @@ defmodule Hologram.Compiler.AnonymousFunctionTypeTransformerTest do
   alias Hologram.Compiler.IR.{
     AnonymousFunctionType,
     AtomType,
+    Block,
     IntegerType,
     MapAccess,
     Variable
@@ -70,7 +71,7 @@ defmodule Hologram.Compiler.AnonymousFunctionTypeTransformerTest do
     assert %AnonymousFunctionType{} =
              result = AnonymousFunctionTypeTransformer.transform(ast, %Context{})
 
-    assert result.body == [%IntegerType{value: 1}]
+    assert result.body == %Block{expressions: [%IntegerType{value: 1}]}
   end
 
   test "body, multiple expressions" do
@@ -86,10 +87,10 @@ defmodule Hologram.Compiler.AnonymousFunctionTypeTransformerTest do
     assert %AnonymousFunctionType{} =
              result = AnonymousFunctionTypeTransformer.transform(ast, %Context{})
 
-    expected = [
+    expected = %Block{expressions: [
       %IntegerType{value: 1},
       %IntegerType{value: 2}
-    ]
+    ]}
 
     assert result.body == expected
   end
