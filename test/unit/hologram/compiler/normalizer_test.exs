@@ -71,49 +71,6 @@ defmodule Hologram.Compiler.NormalizerTest do
     end
   end
 
-  describe "function definition" do
-    test "with single expression in do block" do
-      code = """
-      def test do
-        :ok
-      end
-      """
-
-      ast = Parser.parse!(code)
-      result = Normalizer.normalize(ast)
-
-      expected = {:def, [line: 1], [{:test, [line: 1], nil}, [do: {:__block__, [], [:ok]}]]}
-
-      assert result == expected
-    end
-
-    test "with single expression in do keyword" do
-      code = "def test, do: :ok"
-      ast = Parser.parse!(code)
-      result = Normalizer.normalize(ast)
-
-      expected = {:def, [line: 1], [{:test, [line: 1], nil}, [do: {:__block__, [], [:ok]}]]}
-
-      assert result == expected
-    end
-
-    test "with multiple expressions" do
-      code = """
-      def test do
-        1
-        2
-      end
-      """
-
-      ast = Parser.parse!(code)
-      result = Normalizer.normalize(ast)
-
-      expected = {:def, [line: 1], [{:test, [line: 1], nil}, [do: {:__block__, [], [1, 2]}]]}
-
-      assert result == expected
-    end
-  end
-
   describe "do block param" do
     test "with single expression in do block" do
       code = """
@@ -153,6 +110,49 @@ defmodule Hologram.Compiler.NormalizerTest do
       result = Normalizer.normalize(ast)
 
       expected = {:test, [line: 1], [[do: {:__block__, [], [1, 2]}]]}
+
+      assert result == expected
+    end
+  end
+
+  describe "function definition" do
+    test "with single expression in do block" do
+      code = """
+      def test do
+        :ok
+      end
+      """
+
+      ast = Parser.parse!(code)
+      result = Normalizer.normalize(ast)
+
+      expected = {:def, [line: 1], [{:test, [line: 1], nil}, [do: {:__block__, [], [:ok]}]]}
+
+      assert result == expected
+    end
+
+    test "with single expression in do keyword" do
+      code = "def test, do: :ok"
+      ast = Parser.parse!(code)
+      result = Normalizer.normalize(ast)
+
+      expected = {:def, [line: 1], [{:test, [line: 1], nil}, [do: {:__block__, [], [:ok]}]]}
+
+      assert result == expected
+    end
+
+    test "with multiple expressions" do
+      code = """
+      def test do
+        1
+        2
+      end
+      """
+
+      ast = Parser.parse!(code)
+      result = Normalizer.normalize(ast)
+
+      expected = {:def, [line: 1], [{:test, [line: 1], nil}, [do: {:__block__, [], [1, 2]}]]}
 
       assert result == expected
     end
