@@ -5,11 +5,13 @@ defmodule Hologram.Compiler.HelpersTest do
 
   alias Hologram.Compiler.IR.{
     AtomType,
+    Binding,
     FunctionDefinition,
     FunctionDefinitionVariants,
     IntegerType,
     MapAccess,
     ModuleDefinition,
+    ParamAccess,
     UseDirective,
     Variable
   }
@@ -60,14 +62,10 @@ defmodule Hologram.Compiler.HelpersTest do
       result = Helpers.aggregate_bindings_from_params(params)
 
       expected = [
-        x:
-          {1,
-           [
-             %MapAccess{
-               key: %AtomType{value: :a}
-             },
-             %Variable{name: :x}
-           ]}
+        %Binding{name: :x, access_path: [
+          %ParamAccess{index: 1},
+          %MapAccess{key: %AtomType{value: :a}}
+        ]}
       ]
 
       assert result == expected
@@ -82,22 +80,14 @@ defmodule Hologram.Compiler.HelpersTest do
       result = Helpers.aggregate_bindings_from_params(params)
 
       expected = [
-        x:
-          {1,
-           [
-             %MapAccess{
-               key: %AtomType{value: :a}
-             },
-             %Variable{name: :x}
-           ]},
-        y:
-          {1,
-           [
-             %MapAccess{
-               key: %AtomType{value: :b}
-             },
-             %Variable{name: :y}
-           ]}
+        %Binding{name: :x, access_path: [
+          %ParamAccess{index: 1},
+          %MapAccess{key: %AtomType{value: :a}}
+        ]},
+        %Binding{name: :y, access_path: [
+          %ParamAccess{index: 1},
+          %MapAccess{key: %AtomType{value: :b}}
+        ]}
       ]
 
       assert result == expected
@@ -118,38 +108,22 @@ defmodule Hologram.Compiler.HelpersTest do
       result = Helpers.aggregate_bindings_from_params(params)
 
       expected = [
-        k:
-          {1,
-           [
-             %MapAccess{
-               key: %AtomType{value: :a}
-             },
-             %Variable{name: :k}
-           ]},
-        m:
-          {1,
-           [
-             %MapAccess{
-               key: %AtomType{value: :b}
-             },
-             %Variable{name: :m}
-           ]},
-        s:
-          {3,
-           [
-             %MapAccess{
-               key: %AtomType{value: :c}
-             },
-             %Variable{name: :s}
-           ]},
-        t:
-          {3,
-           [
-             %MapAccess{
-               key: %AtomType{value: :d}
-             },
-             %Variable{name: :t}
-           ]}
+        %Binding{name: :k, access_path: [
+          %ParamAccess{index: 1},
+          %MapAccess{key: %AtomType{value: :a}}
+        ]},
+        %Binding{name: :m, access_path: [
+          %ParamAccess{index: 1},
+          %MapAccess{key: %AtomType{value: :b}}
+        ]},
+        %Binding{name: :s, access_path: [
+          %ParamAccess{index: 3},
+          %MapAccess{key: %AtomType{value: :c}}
+        ]},
+        %Binding{name: :t, access_path: [
+          %ParamAccess{index: 3},
+          %MapAccess{key: %AtomType{value: :d}}
+        ]}
       ]
 
       assert result == expected
@@ -164,16 +138,12 @@ defmodule Hologram.Compiler.HelpersTest do
       result = Helpers.aggregate_bindings_from_params(params)
 
       expected = [
-        x:
-          {1,
-           [
-             %Variable{name: :x}
-           ]},
-        y:
-          {0,
-           [
-             %Variable{name: :y}
-           ]}
+        %Binding{name: :x, access_path: [
+          %ParamAccess{index: 1}
+        ]},
+        %Binding{name: :y, access_path: [
+          %ParamAccess{index: 0}
+        ]}
       ]
 
       assert result == expected

@@ -188,10 +188,18 @@ defmodule Hologram.Compiler.IR do
     defstruct condition: nil, do: nil, else: nil, ast: nil
   end
 
-  # ACCESS
+  # BINDINGS
+
+  defmodule Binding do
+    defstruct name: nil, access_path: []
+  end
 
   defmodule MapAccess do
     defstruct key: nil
+  end
+
+  defmodule ParamAccess do
+    defstruct index: nil
   end
 
   defmodule TupleAccess do

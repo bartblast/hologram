@@ -1,6 +1,6 @@
 defmodule Hologram.Compiler.Helpers do
   alias Hologram.Compiler.{PatternBinder, Transformer}
-  alias Hologram.Compiler.IR.{FunctionDefinitionVariants, ModuleDefinition}
+  alias Hologram.Compiler.IR.{Binding, FunctionDefinitionVariants, ModuleDefinition, ParamAccess}
   alias Hologram.Typespecs, as: T
 
   def aggregate_bindings_from_expression(expr) do
@@ -16,6 +16,19 @@ defmodule Hologram.Compiler.Helpers do
     Enum.with_index(params)
     |> Enum.reduce([], &aggregate_bindings_from_param/2)
     |> Enum.sort()
+    |> Enum.map(fn {name, {index, path}} ->
+      %Binding{name: name, access_path: build_binding_access_path(path, index)}
+    end)
+  end
+
+  defp build_binding_access_path(pattern_path, param_index) do
+    access_path =
+      pattern_path
+      |> Enum.reverse()
+      |> tl()
+      |> Enum.reverse()
+
+    [%ParamAccess{index: param_index} | access_path]
   end
 
   defp aggregate_bindings_from_param({param, idx}, acc) do
