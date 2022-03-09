@@ -8,9 +8,9 @@ defmodule Hologram.Compiler.JSEncoder.AnonymousFunctionTypeTest do
     result = JSEncoder.encode(ir, %Context{}, %Opts{})
 
     expected = """
-      (function() {
+      function() {
       return { type: 'integer', value: 1 };
-      })\
+      }\
       """
 
     assert result == expected
@@ -22,10 +22,10 @@ defmodule Hologram.Compiler.JSEncoder.AnonymousFunctionTypeTest do
     result = JSEncoder.encode(ir, %Context{}, %Opts{})
 
     expected = """
-      (function() {
+      function() {
       let x = arguments[0];
       return { type: 'integer', value: 1 };
-      })\
+      }\
       """
 
     assert result == expected
@@ -37,11 +37,11 @@ defmodule Hologram.Compiler.JSEncoder.AnonymousFunctionTypeTest do
     result = JSEncoder.encode(ir, %Context{}, %Opts{})
 
     expected = """
-      (function() {
+      function() {
       let x = arguments[0];
       let y = arguments[1];
       return { type: 'integer', value: 1 };
-      })\
+      }\
       """
 
     assert result == expected
@@ -59,10 +59,10 @@ defmodule Hologram.Compiler.JSEncoder.AnonymousFunctionTypeTest do
     result = JSEncoder.encode(ir, %Context{}, %Opts{})
 
     expected = """
-      (function() {
+      function() {
       { type: 'integer', value: 1 };
       return { type: 'integer', value: 2 };
-      })\
+      }\
       """
 
     assert result == expected
@@ -80,11 +80,11 @@ defmodule Hologram.Compiler.JSEncoder.AnonymousFunctionTypeTest do
     result = JSEncoder.encode(ir, %Context{}, %Opts{})
 
     expected = """
-      (function() {
+      function() {
       let x = arguments[0];
       x = { type: 'integer', value: 2 };
       return { type: 'integer', value: 3 };
-      })\
+      }\
       """
 
     assert result == expected
