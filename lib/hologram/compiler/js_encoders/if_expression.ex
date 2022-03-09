@@ -1,21 +1,20 @@
 alias Hologram.Compiler.{Context, JSEncoder, Opts}
-alias Hologram.Compiler.IR.{AnonymousFunctionType, IfExpression}
+alias Hologram.Compiler.IR.{Block, IfExpression}
 
 defimpl JSEncoder, for: IfExpression do
+  import Hologram.Commons.Encoder, only: [encode_as_anonymous_function: 3]
+
   def encode(
-        %{condition: condition, do: do_clause, else: else_clause},
+        %{condition: condition_expr, do: do_block, else: else_block},
         %Context{} = context,
         %Opts{} = opts
       ) do
-    condition = encode_anonymous_function([condition], context, opts)
-    do_clause = encode_anonymous_function(do_clause, context, opts)
-    else_clause = encode_anonymous_function(else_clause, context, opts)
+    condition_block = %Block{expressions: [condition_expr]}
+    condition_anon_fun = encode_as_anonymous_function(condition_block, context, opts)
 
-    "Elixir_Kernel.if(#{condition}, #{do_clause}, #{else_clause})"
-  end
+    do_anon_fun = encode_as_anonymous_function(do_block, context, opts)
+    else_anon_fun = encode_as_anonymous_function(else_block, context, opts)
 
-  defp encode_anonymous_function(body, context, opts) do
-    %AnonymousFunctionType{body: body}
-    |> JSEncoder.encode(context, opts)
+    "Elixir_Kernel.if(#{condition_anon_fun}, #{do_anon_fun}, #{else_anon_fun})"
   end
 end
