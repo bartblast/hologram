@@ -33,7 +33,7 @@ defimpl JSEncoder, for: FunctionDefinitionVariants do
     Enum.reduce(variants, "", fn variant, acc ->
       statement = if acc == "", do: "if", else: "else if"
       params = encode_function_params(variant, context)
-      vars = encode_vars(variant.bindings, context, "\n")
+      vars = encode_vars(variant.bindings, context, opts)
       body = encode_expressions(variant.body, context, opts, "\n")
 
       acc
