@@ -1,6 +1,6 @@
 defmodule Hologram.Commons.Encoder do
-  alias Hologram.Compiler.{Context, Formatter, JSEncoder, MapKeyEncoder, Opts}
-  alias Hologram.Compiler.IR.{AnonymousFunctionType, MapAccess, Variable}
+  alias Hologram.Compiler.{Context, JSEncoder, Opts}
+  alias Hologram.Compiler.IR.AnonymousFunctionType
 
   defmacro __using__(_) do
     quote do
@@ -54,30 +54,10 @@ defmodule Hologram.Commons.Encoder do
     "{ type: '#{type}', value: #{value} }"
   end
 
-  defp encode_var({name, {idx, path}}, context) do
-    "let #{name} = arguments[#{idx}]"
-    |> encode_var_value(path, context)
-    |> Formatter.append(";")
-  end
-
-  def encode_var_value(acc, path, context) do
-    Enum.reduce(path, acc, fn type, acc ->
-      acc <> encode_var_value_part(type, context)
-    end)
-  end
-
-  defp encode_var_value_part(%MapAccess{key: key}, context) do
-    encoded_key = MapKeyEncoder.encode(key, context, %Opts{})
-    ".data['#{encoded_key}']"
-  end
-
-  defp encode_var_value_part(%Variable{}, _context) do
-    ""
-  end
-
-  def encode_vars(bindings, context, separator) do
-    Enum.map(bindings, &encode_var(&1, context))
-    |> Enum.join(separator)
+  def encode_vars(bindings, context, opts) do
+    bindings
+    |> Enum.map(&JSEncoder.encode(&1, context, opts))
+    |> Enum.join("\n")
   end
 
   def wrap_with_array(data) do

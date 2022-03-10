@@ -159,11 +159,16 @@ defmodule Hologram.Commons.EncoderTest do
   end
 
   test "encode_vars/3" do
-    code = "fn x, y -> 1 end"
+    code = "fn x, %{a: y} -> 1 end"
     %{bindings: bindings} = ir(code)
 
-    result = Encoder.encode_vars(bindings, %Context{}, "\n")
-    expected = "let x = arguments[0];\nlet y = arguments[1];"
+    result = Encoder.encode_vars(bindings, %Context{}, %Opts{})
+    |> IO.inspect()
+
+    expected = """
+      let x = arguments[0];
+      let y = arguments[1].data['~atom[a]'];\
+      """
 
     assert result == expected
   end
