@@ -163,7 +163,6 @@ defmodule Hologram.Commons.EncoderTest do
     %{bindings: bindings} = ir(code)
 
     result = Encoder.encode_vars(bindings, %Context{}, %Opts{})
-    |> IO.inspect()
 
     expected = """
       let x = arguments[0];
