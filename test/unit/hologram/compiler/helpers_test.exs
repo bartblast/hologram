@@ -23,20 +23,25 @@ defmodule Hologram.Compiler.HelpersTest do
       |> Transformer.transform(%Context{})
       |> Helpers.aggregate_bindings_from_expression()
 
-    expected = [
-      x: [
-        %MapAccess{
-          key: %AtomType{value: :a}
+    expected =
+      [
+        %Binding{
+          access_path: [
+            %MapAccess{
+              key: %AtomType{value: :a}
+            }
+          ],
+          name: :x
         },
-        %Variable{name: :x}
-      ],
-      y: [
-        %MapAccess{
-          key: %AtomType{value: :b}
-        },
-        %Variable{name: :y}
+        %Binding{
+          access_path: [
+            %MapAccess{
+              key: %AtomType{value: :b}
+            }
+          ],
+          name: :y
+        }
       ]
-    ]
 
     assert result == expected
   end

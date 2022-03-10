@@ -10,6 +10,9 @@ defmodule Hologram.Compiler.Helpers do
       maybe_add_binding(acc, name, binding)
     end)
     |> Enum.sort()
+    |> Enum.map(fn {name, path} ->
+      %Binding{name: name, access_path: build_binding_access_path(path)}
+    end)
   end
 
   def aggregate_bindings_from_params(params) do
@@ -17,18 +20,19 @@ defmodule Hologram.Compiler.Helpers do
     |> Enum.reduce([], &aggregate_bindings_from_param/2)
     |> Enum.sort()
     |> Enum.map(fn {name, {index, path}} ->
-      %Binding{name: name, access_path: build_binding_access_path(path, index)}
+      %Binding{name: name, access_path: build_param_binding_access_path(path, index)}
     end)
   end
 
-  defp build_binding_access_path(pattern_path, param_index) do
-    access_path =
-      pattern_path
-      |> Enum.reverse()
-      |> tl()
-      |> Enum.reverse()
+  defp build_binding_access_path(pattern_path) do
+    pattern_path
+    |> Enum.reverse()
+    |> tl()
+    |> Enum.reverse()
+  end
 
-    [%ParamAccess{index: param_index} | access_path]
+  defp build_param_binding_access_path(pattern_path, param_index) do
+    [%ParamAccess{index: param_index} | build_binding_access_path(pattern_path)]
   end
 
   defp aggregate_bindings_from_param({param, idx}, acc) do
