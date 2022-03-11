@@ -3,14 +3,14 @@
 import { HologramNotImplementedError } from "./errors";
 import Map from "./elixir/map"
 
-export default class Execution {
+export default class Interpreter {
   static isFunctionArgsPatternMatched(params, args) {
     if (args.length !== params.length) {
       return false;
     }
 
     for (let i = 0; i < args.length; ++ i) {
-      if (!Execution.isPatternMatched(params[i], args[i])) {
+      if (!Interpreter.isPatternMatched(params[i], args[i])) {
         return false;
       }
     }
@@ -21,7 +21,7 @@ export default class Execution {
   static isMapPatternMatched(left, right) {
     for (const key of Map.keys(left).data) {
       if (Map.has_key$question(right, key)) {
-        if (!Execution.isPatternMatched(Map.get(left, key), Map.get(right, key))) {
+        if (!Interpreter.isPatternMatched(Map.get(left, key), Map.get(right, key))) {
           return false
         }
       } else {
@@ -50,13 +50,13 @@ export default class Execution {
         return left.value === right.value;
 
       case "map":
-        return Execution.isMapPatternMatched(left, right)
+        return Interpreter.isMapPatternMatched(left, right)
 
       case "tuple":
-        return Execution.isTuplePatternMatched(left, right)
+        return Interpreter.isTuplePatternMatched(left, right)
 
       default:
-        const message = `Execution.isPatternMatched(): left = ${JSON.stringify(left)}`
+        const message = `Interpreter.isPatternMatched(): left = ${JSON.stringify(left)}`
         throw new HologramNotImplementedError(message)
     }
   }
@@ -67,7 +67,7 @@ export default class Execution {
     }
 
     for (let i = 0; i < left.data.length; ++i) {
-      if (!Execution.isPatternMatched(left.data[i], right.data[i])) {
+      if (!Interpreter.isPatternMatched(left.data[i], right.data[i])) {
         return false
       }
     }
