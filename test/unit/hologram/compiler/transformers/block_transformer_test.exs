@@ -2,7 +2,7 @@ defmodule Hologram.Compiler.BlockTransformerTest do
   use Hologram.Test.UnitCase, async: true
 
   alias Hologram.Compiler.{BlockTransformer, Context}
-  alias Hologram.Compiler.IR.IntegerType
+  alias Hologram.Compiler.IR.{Block, IntegerType}
 
   test "transform/2" do
     ast = {:__block__, [], [1, 2]}
