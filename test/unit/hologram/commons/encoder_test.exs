@@ -120,44 +120,6 @@ defmodule Hologram.Commons.EncoderTest do
     assert result == "{ type: 'atom', value: 'test' }"
   end
 
-  describe "encode_var_value/3" do
-    test "single part" do
-      path = [%MapAccess{key: %AtomType{value: :a}}]
-      result = Encoder.encode_var_value("test_acc", path, %Context{})
-      expected = "test_acc.data['~atom[a]']"
-
-      assert result == expected
-    end
-
-    test "multiple parts" do
-      path = [
-        %MapAccess{key: %AtomType{value: :a}},
-        %MapAccess{key: %AtomType{value: :b}}
-      ]
-
-      result = Encoder.encode_var_value("test_acc", path, %Context{})
-      expected = "test_acc.data['~atom[a]'].data['~atom[b]']"
-
-      assert result == expected
-    end
-
-    test "map access part" do
-      path = [%MapAccess{key: %AtomType{value: :a}}]
-      result = Encoder.encode_var_value("test_acc", path, %Context{})
-      expected = "test_acc.data['~atom[a]']"
-
-      assert result == expected
-    end
-
-    test "variable part" do
-      path = [%Variable{name: :test}]
-      result = Encoder.encode_var_value("test_acc", path, %Context{})
-      expected = "test_acc"
-
-      assert result == expected
-    end
-  end
-
   test "encode_vars/3" do
     code = "fn x, %{a: y} -> 1 end"
     %{bindings: bindings} = ir(code)
