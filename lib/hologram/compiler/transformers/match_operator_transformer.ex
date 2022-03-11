@@ -1,6 +1,6 @@
 defmodule Hologram.Compiler.MatchOperatorTransformer do
   alias Hologram.Compiler.{Context, PatternBinder, Transformer}
-  alias Hologram.Compiler.IR.MatchOperator
+  alias Hologram.Compiler.IR.{Binding, MatchOperator}
 
   def transform({:=, _, [left, right]}, %Context{} = context) do
     left = Transformer.transform(left, context)
@@ -9,7 +9,7 @@ defmodule Hologram.Compiler.MatchOperatorTransformer do
       PatternBinder.bind(left)
       |> Enum.map(fn path ->
         [head | tail] = Enum.reverse(path)
-        {head.name, Enum.reverse(tail)}
+        %Binding{name: head.name, access_path: Enum.reverse(tail)}
       end)
 
     %MatchOperator{
