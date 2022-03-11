@@ -18,7 +18,7 @@ defmodule Hologram.Compiler.JSEncoder.CaseExpressionTest do
     result = encode(code)
 
     expected = """
-    Elixir_Kernel_SpecialForms.case(x, function($condition) {
+    Hologram.caseExpression(x, function($condition) {
     if (Hologram.isCaseClausePatternMatched({ type: 'integer', value: 1 }, $condition)) {
     return { type: 'atom', value: 'ok' };
     }
@@ -42,7 +42,7 @@ defmodule Hologram.Compiler.JSEncoder.CaseExpressionTest do
     result = encode(code)
 
     expected = """
-    Elixir_Kernel_SpecialForms.case(x, function($condition) {
+    Hologram.caseExpression(x, function($condition) {
     if (Hologram.isCaseClausePatternMatched({ type: 'integer', value: 1 }, $condition)) {
     return { type: 'atom', value: 'ok_1' };
     }
@@ -70,7 +70,7 @@ defmodule Hologram.Compiler.JSEncoder.CaseExpressionTest do
     result = encode(code)
 
     expected = """
-    Elixir_Kernel_SpecialForms.case(x, function($condition) {
+    Hologram.caseExpression(x, function($condition) {
     if (Hologram.isCaseClausePatternMatched({ type: 'integer', value: 1 }, $condition)) {
     { type: 'atom', value: 'expr_1' };
     return { type: 'atom', value: 'expr_2' };
@@ -94,7 +94,7 @@ defmodule Hologram.Compiler.JSEncoder.CaseExpressionTest do
     result = encode(code)
 
     expected = """
-    Elixir_Kernel_SpecialForms.case(x, function($condition) {
+    Hologram.caseExpression(x, function($condition) {
     if (Hologram.isCaseClausePatternMatched({ type: 'map', data: { '~atom[a]': { type: 'placeholder' } } }, $condition)) {
     let a = $condition.data['~atom[a]'];
     return { type: 'atom', value: 'ok' };
@@ -118,7 +118,7 @@ defmodule Hologram.Compiler.JSEncoder.CaseExpressionTest do
     result = encode(code)
 
     expected = """
-    Elixir_Kernel_SpecialForms.case(x, function($condition) {
+    Hologram.caseExpression(x, function($condition) {
     if (Hologram.isCaseClausePatternMatched({ type: 'map', data: { '~atom[a]': { type: 'placeholder' }, '~atom[b]': { type: 'placeholder' } } }, $condition)) {
     let a = $condition.data['~atom[a]'];
     let b = $condition.data['~atom[b]'];

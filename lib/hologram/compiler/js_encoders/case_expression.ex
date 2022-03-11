@@ -18,7 +18,7 @@ defimpl JSEncoder, for: CaseExpression do
       |> Formatter.maybe_append_new_line(fallback_clause)
 
     """
-    Elixir_Kernel_SpecialForms.case(#{condition_value}, function($condition) {
+    Hologram.caseExpression(#{condition_value}, function($condition) {
     #{anon_fun_body}
     })\
     """
