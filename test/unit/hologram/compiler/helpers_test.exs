@@ -160,7 +160,7 @@ defmodule Hologram.Compiler.HelpersTest do
       function_defs = [
         %FunctionDefinition{
           bindings: [
-            a: {0, [%Variable{name: :a}]}
+            %Binding{name: :a, access_path: [%ParamAccess{index: 0}]}
           ],
           body: [
             %IntegerType{value: 1}
@@ -182,7 +182,7 @@ defmodule Hologram.Compiler.HelpersTest do
     test "single function with multiple variants" do
       function_def_1 = %FunctionDefinition{
         bindings: [
-          a: {0, [%Variable{name: :a}]}
+          %Binding{name: :a, access_path: [%ParamAccess{index: 0}]}
         ],
         body: [
           %IntegerType{value: 1}
@@ -195,8 +195,8 @@ defmodule Hologram.Compiler.HelpersTest do
 
       function_def_2 = %FunctionDefinition{
         bindings: [
-          a: {0, [%Variable{name: :a}]},
-          b: {1, [%Variable{name: :b}]}
+          %Binding{name: :a, access_path: [%ParamAccess{index: 0}]},
+          %Binding{name: :b, access_path: [%ParamAccess{index: 1}]}
         ],
         body: [
           %IntegerType{value: 2}
@@ -219,7 +219,7 @@ defmodule Hologram.Compiler.HelpersTest do
     test "multiple functions with single variant" do
       function_def_1 = %FunctionDefinition{
         bindings: [
-          a: {0, [%Variable{name: :a}]}
+          %Binding{name: :a, access_path: [%ParamAccess{index: 0}]}
         ],
         body: [
           %IntegerType{value: 1}
@@ -232,7 +232,7 @@ defmodule Hologram.Compiler.HelpersTest do
 
       function_def_2 = %FunctionDefinition{
         bindings: [
-          a: {0, [%Variable{name: :a}]}
+          %Binding{name: :a, access_path: [%ParamAccess{index: 0}]}
         ],
         body: [
           %IntegerType{value: 2}
@@ -257,7 +257,7 @@ defmodule Hologram.Compiler.HelpersTest do
     test "multiple functions with multiple variants" do
       function_def_1 = %FunctionDefinition{
         bindings: [
-          a: {0, [%Variable{name: :a}]}
+          %Binding{name: :a, access_path: [%ParamAccess{index: 0}]}
         ],
         body: [
           %IntegerType{value: 1}
@@ -270,8 +270,8 @@ defmodule Hologram.Compiler.HelpersTest do
 
       function_def_2 = %FunctionDefinition{
         bindings: [
-          a: {0, [%Variable{name: :a}]},
-          b: {1, [%Variable{name: :b}]}
+          %Binding{name: :a, access_path: [%ParamAccess{index: 0}]},
+          %Binding{name: :b, access_path: [%ParamAccess{index: 1}]}
         ],
         body: [
           %IntegerType{value: 2}
@@ -285,7 +285,7 @@ defmodule Hologram.Compiler.HelpersTest do
 
       function_def_3 = %FunctionDefinition{
         bindings: [
-          a: {0, [%Variable{name: :a}]}
+          %Binding{name: :a, access_path: [%ParamAccess{index: 0}]}
         ],
         body: [
           %IntegerType{value: 3}
