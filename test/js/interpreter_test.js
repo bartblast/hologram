@@ -1,12 +1,32 @@
 "use strict";
 
-import { assert, cleanup } from "./support/commons";
+import { assert, assertFrozen, cleanup } from "./support/commons";
 beforeEach(() => cleanup())
 
 import { HologramNotImplementedError } from "../../assets/js/hologram/errors";
 import Interpreter from "../../assets/js/hologram/interpreter"
 import Map from "../../assets/js/hologram/elixir/map"
 import Type from "../../assets/js/hologram/type"
+
+describe("caseExpression()", () => {
+  it("returns the result of the clauses anonymous function given", () => {
+    const clausesAnonFun = function(param) {
+      return param
+    }
+
+    const result = Interpreter.caseExpression(123, clausesAnonFun)
+    assert.equal(result, 123)
+  })
+
+  it("returns frozen object", () => {
+    const clausesAnonFun = function(param) {
+      return param
+    }
+
+    const result = Interpreter.caseExpression({}, clausesAnonFun)
+    assertFrozen(result)
+  })
+})
 
 describe("isFunctionArgsPatternMatched()", () => {
   it("returns false if number of args is different than number of params", () => {

@@ -2,8 +2,14 @@
 
 import { HologramNotImplementedError } from "./errors";
 import Map from "./elixir/map"
+import Utils from "./utils"
 
 export default class Interpreter {
+  static caseExpression(condition, clausesAnonFun) {
+    const result = clausesAnonFun(condition)
+    return Utils.freeze(result)
+  }
+
   static isFunctionArgsPatternMatched(params, args) {
     if (args.length !== params.length) {
       return false;
