@@ -2,10 +2,10 @@ defmodule Hologram.Compiler.JSEncoder.BindingTest do
   use Hologram.Test.UnitCase, async: true
 
   alias Hologram.Compiler.{Context, JSEncoder, Opts}
-  alias Hologram.Compiler.IR.{AtomType, Binding, MapAccess, ParamAccess, VariableAccess}
+  alias Hologram.Compiler.IR.{AtomType, Binding, MapAccess, ParamAccess, TupleAccess, VariableAccess}
 
   test "map access" do
-    ir = %Binding{access_path: [%MapAccess{key: %AtomType{value: :x}}], name: :abc}
+    ir = %Binding{name: :abc, access_path: [%MapAccess{key: %AtomType{value: :x}}]}
 
     result = JSEncoder.encode(ir, %Context{}, %Opts{})
     expected = "let abc = .data['~atom[x]'];"
@@ -14,7 +14,7 @@ defmodule Hologram.Compiler.JSEncoder.BindingTest do
   end
 
   test "param access" do
-    ir = %Binding{access_path: [%ParamAccess{index: 2}], name: :abc}
+    ir = %Binding{name: :abc, access_path: [%ParamAccess{index: 2}]}
 
     result = JSEncoder.encode(ir, %Context{}, %Opts{})
     expected = "let abc = arguments[2];"
@@ -22,8 +22,17 @@ defmodule Hologram.Compiler.JSEncoder.BindingTest do
     assert result == expected
   end
 
+  test "tuple access" do
+    ir = %Binding{name: :abc, access_path: [%TupleAccess{index: 2}]}
+
+    result = JSEncoder.encode(ir, %Context{}, %Opts{})
+    expected = "let abc = .data[2];"
+
+    assert result == expected
+  end
+
   test "variable access" do
-    ir = %Binding{access_path: [%VariableAccess{name: :x}], name: :abc}
+    ir = %Binding{name: :abc, access_path: [%VariableAccess{name: :x}]}
 
     result = JSEncoder.encode(ir, %Context{}, %Opts{})
     expected = "let abc = x;"
@@ -33,11 +42,11 @@ defmodule Hologram.Compiler.JSEncoder.BindingTest do
 
   test "multiple parts" do
     ir = %Binding{
+      name: :abc,
       access_path: [
         %ParamAccess{index: 2},
         %MapAccess{key: %AtomType{value: :x}}
-      ],
-      name: :abc
+      ]
     }
 
     result = JSEncoder.encode(ir, %Context{}, %Opts{})
