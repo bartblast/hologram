@@ -1,6 +1,6 @@
 "use strict";
 
-import PatternMatcher from "./hologram/pattern_matcher";
+import Execution from "./hologram/execution";
 import Runtime from "./hologram/runtime";
 
 // transpiled Elixir standard library
@@ -65,7 +65,7 @@ export default class Hologram {
   // DELEGATES
 
   static isFunctionArgsPatternMatched(params, args) {
-    return PatternMatcher.isFunctionArgsPatternMatched(params, args);
+    return Execution.isFunctionArgsPatternMatched(params, args);
   }
 }
 
