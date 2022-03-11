@@ -206,6 +206,10 @@ defmodule Hologram.Compiler.IR do
     defstruct index: nil
   end
 
+  defmodule VariableAccess do
+    defstruct name: nil
+  end
+
   # OTHER
 
   defmodule Block do

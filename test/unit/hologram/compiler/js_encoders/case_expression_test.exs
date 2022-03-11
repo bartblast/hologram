@@ -18,13 +18,13 @@ defmodule Hologram.Compiler.JSEncoder.CaseExpressionTest do
     result = encode(code)
 
     expected = """
-    Elixir_Kernel_SpecialForms.case(function() { \
-    if (Hologram.isCaseClausePatternMatched({ type: 'integer', value: 1 }, { type: 'placeholder' })) {
+    Elixir_Kernel_SpecialForms.case(x, function($condition) {
+    if (Hologram.isCaseClausePatternMatched({ type: 'integer', value: 1 }, $condition)) {
     return { type: 'atom', value: 'ok' };
     }
     else {
     throw 'No case clause matching'
-    } \
+    }
     })\
     """
 
@@ -42,16 +42,16 @@ defmodule Hologram.Compiler.JSEncoder.CaseExpressionTest do
     result = encode(code)
 
     expected = """
-    Elixir_Kernel_SpecialForms.case(function() { \
-    if (Hologram.isCaseClausePatternMatched({ type: 'integer', value: 1 }, { type: 'placeholder' })) {
+    Elixir_Kernel_SpecialForms.case(x, function($condition) {
+    if (Hologram.isCaseClausePatternMatched({ type: 'integer', value: 1 }, $condition)) {
     return { type: 'atom', value: 'ok_1' };
     }
-    else if (Hologram.isCaseClausePatternMatched({ type: 'integer', value: 2 }, { type: 'placeholder' })) {
+    else if (Hologram.isCaseClausePatternMatched({ type: 'integer', value: 2 }, $condition)) {
     return { type: 'atom', value: 'ok_2' };
     }
     else {
     throw 'No case clause matching'
-    } \
+    }
     })\
     """
 
@@ -70,14 +70,14 @@ defmodule Hologram.Compiler.JSEncoder.CaseExpressionTest do
     result = encode(code)
 
     expected = """
-    Elixir_Kernel_SpecialForms.case(function() { \
-    if (Hologram.isCaseClausePatternMatched({ type: 'integer', value: 1 }, { type: 'placeholder' })) {
+    Elixir_Kernel_SpecialForms.case(x, function($condition) {
+    if (Hologram.isCaseClausePatternMatched({ type: 'integer', value: 1 }, $condition)) {
     { type: 'atom', value: 'expr_1' };
     return { type: 'atom', value: 'expr_2' };
     }
     else {
     throw 'No case clause matching'
-    } \
+    }
     })\
     """
 
@@ -94,14 +94,14 @@ defmodule Hologram.Compiler.JSEncoder.CaseExpressionTest do
     result = encode(code)
 
     expected = """
-    Elixir_Kernel_SpecialForms.case(function() { \
-    if (Hologram.isCaseClausePatternMatched({ type: 'map', data: { '~atom[a]': { type: 'placeholder' } } }, { type: 'placeholder' })) {
-    let a = x.data['~atom[a]'];
+    Elixir_Kernel_SpecialForms.case(x, function($condition) {
+    if (Hologram.isCaseClausePatternMatched({ type: 'map', data: { '~atom[a]': { type: 'placeholder' } } }, $condition)) {
+    let a = $condition.data['~atom[a]'];
     return { type: 'atom', value: 'ok' };
     }
     else {
     throw 'No case clause matching'
-    } \
+    }
     })\
     """
 
@@ -118,15 +118,15 @@ defmodule Hologram.Compiler.JSEncoder.CaseExpressionTest do
     result = encode(code)
 
     expected = """
-    Elixir_Kernel_SpecialForms.case(function() { \
-    if (Hologram.isCaseClausePatternMatched({ type: 'map', data: { '~atom[a]': { type: 'placeholder' }, '~atom[b]': { type: 'placeholder' } } }, { type: 'placeholder' })) {
-    let a = x.data['~atom[a]'];
-    let b = x.data['~atom[b]'];
+    Elixir_Kernel_SpecialForms.case(x, function($condition) {
+    if (Hologram.isCaseClausePatternMatched({ type: 'map', data: { '~atom[a]': { type: 'placeholder' }, '~atom[b]': { type: 'placeholder' } } }, $condition)) {
+    let a = $condition.data['~atom[a]'];
+    let b = $condition.data['~atom[b]'];
     return { type: 'atom', value: 'ok' };
     }
     else {
     throw 'No case clause matching'
-    } \
+    }
     })\
     """
 

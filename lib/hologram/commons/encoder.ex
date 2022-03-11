@@ -1,5 +1,5 @@
 defmodule Hologram.Commons.Encoder do
-  alias Hologram.Compiler.{Context, JSEncoder, Opts}
+  alias Hologram.Compiler.{Context, JSEncoder, MapKeyEncoder, Opts}
   alias Hologram.Compiler.IR.AnonymousFunctionType
 
   defmacro __using__(_) do

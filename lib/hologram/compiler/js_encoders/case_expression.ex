@@ -1,8 +1,8 @@
 alias Hologram.Compiler.{Context, Formatter, JSEncoder, Opts}
-alias Hologram.Compiler.IR.CaseExpression
+alias Hologram.Compiler.IR.{CaseExpression, VariableAccess}
 
 defimpl JSEncoder, for: CaseExpression do
-  import Hologram.Commons.Encoder, only: [encode_expressions: 4, encode_var_value: 3]
+  import Hologram.Commons.Encoder, only: [encode_expressions: 4]
 
   def encode(%{condition: condition, clauses: clauses}, %Context{} = context, %Opts{} = opts) do
     fallback_clause = """
@@ -11,26 +11,29 @@ defimpl JSEncoder, for: CaseExpression do
     }\
     """
 
-    anon_fun_body =
-      encode_clauses(condition, clauses, context, opts)
-      |> Formatter.maybe_append_new_line(fallback_clause)
-
-    "Elixir_Kernel_SpecialForms.case(function() { #{anon_fun_body} })"
-  end
-
-  defp encode_clauses(condition, clauses, context, opts) do
-    condition_pattern = JSEncoder.encode(condition, context, %Opts{placeholder: true})
     condition_value = JSEncoder.encode(condition, context, %Opts{})
 
+    anon_fun_body =
+      encode_clauses(clauses, context, opts)
+      |> Formatter.maybe_append_new_line(fallback_clause)
+
+    """
+    Elixir_Kernel_SpecialForms.case(#{condition_value}, function($condition) {
+    #{anon_fun_body}
+    })\
+    """
+  end
+
+  defp encode_clauses(clauses, context, opts) do
     Enum.reduce(clauses, "", fn clause, acc ->
       statement = if acc == "", do: "if", else: "else if"
       clause_pattern = JSEncoder.encode(clause.pattern, context, %Opts{placeholder: true})
-      vars = encode_vars(clause.bindings, condition_value, context)
+      vars = encode_vars(clause.bindings, context, opts)
       body = encode_expressions(clause.body, context, opts, "\n")
 
       acc
       |> Formatter.maybe_append_new_line(
-        "#{statement} (Hologram.isCaseClausePatternMatched(#{clause_pattern}, #{condition_pattern})) {"
+        "#{statement} (Hologram.isCaseClausePatternMatched(#{clause_pattern}, $condition)) {"
       )
       |> Formatter.maybe_append_new_line(vars)
       |> Formatter.maybe_append_new_line(body)
@@ -39,14 +42,9 @@ defimpl JSEncoder, for: CaseExpression do
     |> String.trim_leading()
   end
 
-  defp encode_var({name, path}, condition, context) do
-    "let #{name} = #{condition}"
-    |> encode_var_value(path, context)
-    |> Formatter.append(";")
-  end
-
-  defp encode_vars(bindings, condition, context) do
-    Enum.map(bindings, &encode_var(&1, condition, context))
-    |> Enum.join("\n")
+  defp encode_vars(bindings, context, opts) do
+    bindings
+    |> Enum.map(&%{&1 | access_path: [%VariableAccess{name: "$condition"} | &1.access_path]})
+    |> Hologram.Commons.Encoder.encode_vars(context, opts)
   end
 end
