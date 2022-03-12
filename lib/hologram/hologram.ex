@@ -63,7 +63,7 @@ defmodule Hologram do
   * State on the client - and all of the problems that get solved by this approach (below)…
 
   * No latency issues as most of the code is run immediately on the client. This makes it possible to create rich UI or even games.
-  At the moment with LiveView you need something like fly.io 2 to make it bearable, but you still have latency and can’t guarantee
+  At the moment with LiveView you need something like fly.io to make it bearable, but you still have latency and can’t guarantee
   the response time (there is always some variance). And you still need some JS or Alpine to make it work. Until someone manages
   to create quantum internet (e.g. by taking advantage of entanglement), there are no workarounds for this problem.
   Not sure if this is even technically possible, though :wink:
