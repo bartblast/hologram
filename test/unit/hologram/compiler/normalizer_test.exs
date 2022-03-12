@@ -71,8 +71,8 @@ defmodule Hologram.Compiler.NormalizerTest do
     end
   end
 
-  describe "do block param" do
-    test "with single expression in do block" do
+  describe "do param" do
+    test "single expression in do block" do
       code = """
       test do
         :ok
@@ -87,7 +87,7 @@ defmodule Hologram.Compiler.NormalizerTest do
       assert result == expected
     end
 
-    test "with single expression in do keyword" do
+    test "single expression in do keyword" do
       code = "test do: :ok"
 
       ast = Parser.parse!(code)
@@ -98,7 +98,7 @@ defmodule Hologram.Compiler.NormalizerTest do
       assert result == expected
     end
 
-    test "with multiple expressions" do
+    test "multiple expressions" do
       code = """
       test do
         1
@@ -116,7 +116,7 @@ defmodule Hologram.Compiler.NormalizerTest do
   end
 
   describe "function definition" do
-    test "with single expression in do block" do
+    test "single expression in do block" do
       code = """
       def test do
         :ok
@@ -131,7 +131,7 @@ defmodule Hologram.Compiler.NormalizerTest do
       assert result == expected
     end
 
-    test "with single expression in do keyword" do
+    test "single expression in do keyword" do
       code = "def test, do: :ok"
       ast = Parser.parse!(code)
       result = Normalizer.normalize(ast)
@@ -141,7 +141,7 @@ defmodule Hologram.Compiler.NormalizerTest do
       assert result == expected
     end
 
-    test "with multiple expressions" do
+    test "multiple expressions" do
       code = """
       def test do
         1
