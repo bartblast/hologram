@@ -1,24 +1,26 @@
 alias Hologram.Compiler.{Context, JSEncoder, Opts}
 
 alias Hologram.Compiler.IR.{
-  DotOperator,
-  FunctionCall,
-  IntegerType,
-  MapAccess,
   MatchOperator,
-  TupleAccess
+  VariableAccess
 }
 
 defimpl JSEncoder, for: MatchOperator do
+  import Hologram.Commons.Encoder, only: [encode_vars: 3]
+
+  @var_name "window.hologramExpressionRightHandSide"
+
   def encode(%{bindings: bindings, right: right}, %Context{} = context, %Opts{} = opts) do
-    Enum.map(bindings, fn binding ->
-      encode_binding(binding, right, context, opts)
-    end)
-    |> Enum.join(";\n")
+    right = JSEncoder.encode(right, context, opts)
+    bindings = Enum.map(bindings, &prepend_variable_access/1)
+
+    """
+    #{@var_name} = #{right};
+    #{encode_vars(bindings, context, opts)}\
+    """
   end
 
-  defp encode_binding({name, path}, right, context, opts) do
-  #   let_statement = if name in context.block_bindings, do: "", else: "let "
-  #   let_statement <> "#{name} = " <> JSEncoder.encode(ir, context, opts)
+  defp prepend_variable_access(binding) do
+    %{binding | access_path: [%VariableAccess{name: @var_name} | binding.access_path]}
   end
 end
