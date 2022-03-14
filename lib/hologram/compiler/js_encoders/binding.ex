@@ -3,8 +3,11 @@ alias Hologram.Compiler.IR.{Binding, MapAccess, ParamAccess, TupleAccess, Variab
 
 defimpl JSEncoder, for: Binding do
   def encode(%{access_path: access_path, name: name}, %Context{} = context, %Opts{} = opts) do
+    statement = if name in context.block_bindings, do: "", else: "let "
+    initial_acc = "#{statement}#{name} = "
+
     access_path
-    |> Enum.reduce("let #{name} = ", fn part, acc ->
+    |> Enum.reduce(initial_acc, fn part, acc ->
       acc <> encode_part(part, context, opts)
     end)
     |> Kernel.<>(";")

@@ -54,4 +54,24 @@ defmodule Hologram.Compiler.JSEncoder.BindingTest do
 
     assert result == expected
   end
+
+  test "binding isn't in the block scope yet" do
+    ir = %Binding{name: :abc, access_path: [%VariableAccess{name: :x}]}
+
+    result = JSEncoder.encode(ir, %Context{}, %Opts{})
+    expected = "let abc = x;"
+
+    assert result == expected
+  end
+
+  test "binding is already in the block scope" do
+    ir = %Binding{name: :abc, access_path: [%VariableAccess{name: :x}]}
+
+    context = %Context{block_bindings: [:abc]}
+    result = JSEncoder.encode(ir, context, %Opts{})
+
+    expected = "abc = x;"
+
+    assert result == expected
+  end
 end
