@@ -1,8 +1,10 @@
 defmodule Hologram.Compiler.JSEncoder.BlockTest do
   use Hologram.Test.UnitCase, async: true
 
-  alias Hologram.Compiler.{Context, JSEncoder, Opts}
+  alias Hologram.Compiler.{Config, Context, JSEncoder, Opts}
   alias Hologram.Compiler.IR.{AtomType, Block, IntegerType, MatchOperator, Variable}
+
+  @rhsExprVar Config.rightHandSideExpressionVar()
 
   test "single expression" do
     ir = %Block{expressions: [%AtomType{value: :a}]}
@@ -52,10 +54,10 @@ defmodule Hologram.Compiler.JSEncoder.BlockTest do
     result = JSEncoder.encode(ir, %Context{}, %Opts{})
 
     expected = """
-    window.hologramExpressionRightHandSide = { type: 'integer', value: 1 };
-    let x = window.hologramExpressionRightHandSide;
-    window.hologramExpressionRightHandSide = { type: 'integer', value: 2 };
-    x = window.hologramExpressionRightHandSide;
+    #{@rhsExprVar} = { type: 'integer', value: 1 };
+    let x = #{@rhsExprVar};
+    #{@rhsExprVar} = { type: 'integer', value: 2 };
+    x = #{@rhsExprVar};
     return { type: 'integer', value: 3 };\
     """
 
@@ -76,9 +78,9 @@ defmodule Hologram.Compiler.JSEncoder.BlockTest do
 
     expected = """
     { type: 'atom', value: 'a' };
-    window.hologramExpressionRightHandSide = { type: 'integer', value: 1 };
-    let x = window.hologramExpressionRightHandSide;
-    return window.hologramExpressionRightHandSide;\
+    #{@rhsExprVar} = { type: 'integer', value: 1 };
+    let x = #{@rhsExprVar};
+    return #{@rhsExprVar};\
     """
 
     assert result == expected

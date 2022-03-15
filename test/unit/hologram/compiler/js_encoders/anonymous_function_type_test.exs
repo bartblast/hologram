@@ -1,6 +1,6 @@
 defmodule Hologram.Compiler.JSEncoder.AnonymousFunctionTypeTest do
   use Hologram.Test.UnitCase, async: true
-  alias Hologram.Compiler.{Context, JSEncoder, Opts}
+  alias Hologram.Compiler.{Config, Context, JSEncoder, Opts}
 
   test "no vars / single expression" do
     code = "fn -> 1 end"
@@ -79,10 +79,13 @@ defmodule Hologram.Compiler.JSEncoder.AnonymousFunctionTypeTest do
     ir = ir(code)
     result = JSEncoder.encode(ir, %Context{}, %Opts{})
 
+    rhsExprVar = Config.rightHandSideExpressionVar()
+
     expected = """
       function() {
       let x = arguments[0];
-      x = { type: 'integer', value: 2 };
+      #{rhsExprVar} = { type: 'integer', value: 2 };
+      x = #{rhsExprVar};
       return { type: 'integer', value: 3 };
       }\
       """

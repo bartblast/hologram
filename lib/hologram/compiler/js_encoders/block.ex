@@ -1,4 +1,4 @@
-alias Hologram.Compiler.{Context, JSEncoder, Opts}
+alias Hologram.Compiler.{Config, Context, JSEncoder, Opts}
 alias Hologram.Compiler.IR.{Block, MatchOperator}
 
 defimpl JSEncoder, for: Block do
@@ -18,7 +18,7 @@ defimpl JSEncoder, for: Block do
     output = JSEncoder.encode(expr, context, opts)
 
     if idx == expr_count - 1 do
-      output <> "\nreturn window.hologramExpressionRightHandSide;"
+      output <> "\nreturn #{Config.rightHandSideExpressionVar()};"
     else
       output
     end

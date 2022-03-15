@@ -1,7 +1,7 @@
 defmodule Hologram.Compiler.JSEncoder.MatchOperatorTest do
   use Hologram.Test.UnitCase, async: true
 
-  alias Hologram.Compiler.{Context, Opts}
+  alias Hologram.Compiler.{Config, Context, Opts}
 
   alias Hologram.Compiler.IR.{
     AtomType,
@@ -15,6 +15,8 @@ defmodule Hologram.Compiler.JSEncoder.MatchOperatorTest do
   }
 
   alias Hologram.Compiler.JSEncoder
+
+  @rhsExprVar Config.rightHandSideExpressionVar()
 
   test "encode/3" do
     # code:
@@ -52,9 +54,9 @@ defmodule Hologram.Compiler.JSEncoder.MatchOperatorTest do
     result = JSEncoder.encode(ir, %Context{}, %Opts{})
 
     expected = """
-    window.hologramExpressionRightHandSide = { type: 'map', data: { '~atom[a]': { type: 'integer', value: 1 }, '~atom[b]': { type: 'integer', value: 2 } } };
-    let x = window.hologramExpressionRightHandSide.data['~atom[a]'];
-    let y = window.hologramExpressionRightHandSide.data['~atom[b]'];\
+    #{@rhsExprVar} = { type: 'map', data: { '~atom[a]': { type: 'integer', value: 1 }, '~atom[b]': { type: 'integer', value: 2 } } };
+    let x = #{@rhsExprVar}.data['~atom[a]'];
+    let y = #{@rhsExprVar}.data['~atom[b]'];\
     """
 
     assert result == expected
