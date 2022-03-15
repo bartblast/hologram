@@ -10,7 +10,6 @@ defmodule Hologram.Compiler.JSEncoder.MatchOperatorTest do
     MapAccess,
     MapType,
     MatchOperator,
-    TupleType,
     Variable
   }
 
