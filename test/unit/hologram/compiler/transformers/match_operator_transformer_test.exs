@@ -126,5 +126,6 @@ defmodule Hologram.Compiler.MatchOperatorTransformerTest do
       assert result == expected
     end
   end
+  
   # TODO: test other types
 end

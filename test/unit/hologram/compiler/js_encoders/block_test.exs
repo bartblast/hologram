@@ -13,7 +13,7 @@ defmodule Hologram.Compiler.JSEncoder.BlockTest do
     assert result == expected
   end
 
-  test "multiple expressions" do
+  test "multiple expressions / block ending with expression other than match operator" do
     ir = %Block{expressions: [
       %AtomType{value: :a},
       %AtomType{value: :b}
@@ -37,12 +37,12 @@ defmodule Hologram.Compiler.JSEncoder.BlockTest do
 
     ir = %Block{expressions: [
       %MatchOperator{
-        bindings: [x: []],
+        bindings: [%Hologram.Compiler.IR.Binding{name: :x, access_path: []}],
         left: %Variable{name: :x},
         right: %IntegerType{value: 1}
       },
       %MatchOperator{
-        bindings: [x: []],
+        bindings: [%Hologram.Compiler.IR.Binding{name: :x, access_path: []}],
         left: %Variable{name: :x},
         right: %IntegerType{value: 2}
       },
@@ -52,9 +52,33 @@ defmodule Hologram.Compiler.JSEncoder.BlockTest do
     result = JSEncoder.encode(ir, %Context{}, %Opts{})
 
     expected = """
-    let x = { type: 'integer', value: 1 };
-    x = { type: 'integer', value: 2 };
+    window.hologramExpressionRightHandSide = { type: 'integer', value: 1 };
+    let x = window.hologramExpressionRightHandSide;
+    window.hologramExpressionRightHandSide = { type: 'integer', value: 2 };
+    x = window.hologramExpressionRightHandSide;
     return { type: 'integer', value: 3 };\
+    """
+
+    assert result == expected
+  end
+
+  test "block ending with match operator expression" do
+    ir = %Block{expressions: [
+      %AtomType{value: :a},
+      %MatchOperator{
+        bindings: [%Hologram.Compiler.IR.Binding{name: :x, access_path: []}],
+        left: %Variable{name: :x},
+        right: %IntegerType{value: 1}
+      },
+    ]}
+
+    result = JSEncoder.encode(ir, %Context{}, %Opts{})
+
+    expected = """
+    { type: 'atom', value: 'a' };
+    window.hologramExpressionRightHandSide = { type: 'integer', value: 1 };
+    let x = window.hologramExpressionRightHandSide;
+    return window.hologramExpressionRightHandSide;\
     """
 
     assert result == expected
