@@ -2,7 +2,7 @@ defmodule Hologram.Compiler.IfExpressionTransformerTest do
   use Hologram.Test.UnitCase, async: true
 
   alias Hologram.Compiler.{Context, IfExpressionTransformer}
-  alias Hologram.Compiler.IR.{Block, BooleanType, IfExpression, IntegerType, NilType}
+  alias Hologram.Compiler.IR.{Block, BooleanType, IfExpression, IntegerType}
 
   test "transform/2" do
     code = """

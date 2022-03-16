@@ -3,7 +3,7 @@ defmodule Hologram.Commons.EncoderTest do
 
   alias Hologram.Commons.Encoder
   alias Hologram.Compiler.{Context, Opts}
-  alias Hologram.Compiler.IR.{AtomType, Block, IntegerType, MapAccess, Variable}
+  alias Hologram.Compiler.IR.{AtomType, Block, IntegerType}
 
   test "encode_as_anonymous_function/3" do
     body = %Block{expressions: [
