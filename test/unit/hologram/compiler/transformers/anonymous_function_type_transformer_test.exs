@@ -6,9 +6,11 @@ defmodule Hologram.Compiler.AnonymousFunctionTypeTransformerTest do
   alias Hologram.Compiler.IR.{
     AnonymousFunctionType,
     AtomType,
+    Binding,
     Block,
     IntegerType,
     MapAccess,
+    ParamAccess,
     Variable
   }
 
@@ -43,22 +45,20 @@ defmodule Hologram.Compiler.AnonymousFunctionTypeTransformerTest do
              result = AnonymousFunctionTypeTransformer.transform(ast, %Context{})
 
     expected = [
-      x:
-        {1,
-         [
-           %MapAccess{
-             key: %AtomType{value: :a}
-           },
-           %Variable{name: :x}
-         ]},
-      y:
-        {1,
-         [
-           %MapAccess{
-             key: %AtomType{value: :b}
-           },
-           %Variable{name: :y}
-         ]}
+      %Binding{
+        name: :x,
+        access_path: [
+          %ParamAccess{index: 1},
+          %MapAccess{key: %AtomType{value: :a}},
+        ]
+      },
+      %Binding{
+        name: :y,
+        access_path: [
+          %ParamAccess{index: 1},
+          %MapAccess{key: %AtomType{value: :b}},
+        ]
+      }
     ]
 
     assert result.bindings == expected
