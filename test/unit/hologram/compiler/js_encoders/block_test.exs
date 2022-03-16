@@ -2,7 +2,7 @@ defmodule Hologram.Compiler.JSEncoder.BlockTest do
   use Hologram.Test.UnitCase, async: true
 
   alias Hologram.Compiler.{Config, Context, JSEncoder, Opts}
-  alias Hologram.Compiler.IR.{AtomType, Block, IntegerType, MatchOperator, Variable}
+  alias Hologram.Compiler.IR.{AtomType, Block, IntegerType, MatchOperator, Variable, VariableAccess}
 
   @rhsExprVar Config.rightHandSideExpressionVar()
 
@@ -39,12 +39,20 @@ defmodule Hologram.Compiler.JSEncoder.BlockTest do
 
     ir = %Block{expressions: [
       %MatchOperator{
-        bindings: [%Hologram.Compiler.IR.Binding{name: :x, access_path: []}],
+        bindings: [
+          %Hologram.Compiler.IR.Binding{name: :x, access_path: [
+            %VariableAccess{name: @rhsExprVar}
+          ]}
+        ],
         left: %Variable{name: :x},
         right: %IntegerType{value: 1}
       },
       %MatchOperator{
-        bindings: [%Hologram.Compiler.IR.Binding{name: :x, access_path: []}],
+        bindings: [
+          %Hologram.Compiler.IR.Binding{name: :x, access_path: [
+            %VariableAccess{name: @rhsExprVar}
+          ]}
+        ],
         left: %Variable{name: :x},
         right: %IntegerType{value: 2}
       },
@@ -68,7 +76,11 @@ defmodule Hologram.Compiler.JSEncoder.BlockTest do
     ir = %Block{expressions: [
       %AtomType{value: :a},
       %MatchOperator{
-        bindings: [%Hologram.Compiler.IR.Binding{name: :x, access_path: []}],
+        bindings: [
+          %Hologram.Compiler.IR.Binding{name: :x, access_path: [
+            %VariableAccess{name: @rhsExprVar}
+          ]}
+        ],
         left: %Variable{name: :x},
         right: %IntegerType{value: 1}
       },
