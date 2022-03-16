@@ -1,5 +1,5 @@
 alias Hologram.Compiler.{Context, JSEncoder, MapKeyEncoder, Opts}
-alias Hologram.Compiler.IR.{Binding, MapAccess, ParamAccess, TupleAccess, VariableAccess}
+alias Hologram.Compiler.IR.{Binding, MapAccess, MatchAccess, ParamAccess, TupleAccess, VariableAccess}
 
 defimpl JSEncoder, for: Binding do
   def encode(%{access_path: access_path, name: name}, %Context{} = context, %Opts{} = opts) do
@@ -16,6 +16,10 @@ defimpl JSEncoder, for: Binding do
   defp encode_part(%MapAccess{key: key}, context, opts) do
     encoded_key = MapKeyEncoder.encode(key, context, opts)
     ".data['#{encoded_key}']"
+  end
+
+  defp encode_part(%MatchAccess{}, _context, _opts) do
+    "window.$hologramMatchAccess"
   end
 
   defp encode_part(%ParamAccess{index: index}, _context, _opts) do

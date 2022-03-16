@@ -2,13 +2,22 @@ defmodule Hologram.Compiler.JSEncoder.BindingTest do
   use Hologram.Test.UnitCase, async: true
 
   alias Hologram.Compiler.{Context, JSEncoder, Opts}
-  alias Hologram.Compiler.IR.{AtomType, Binding, MapAccess, ParamAccess, TupleAccess, VariableAccess}
+  alias Hologram.Compiler.IR.{AtomType, Binding, MapAccess, MatchAccess, ParamAccess, TupleAccess, VariableAccess}
 
   test "map access" do
     ir = %Binding{name: :abc, access_path: [%MapAccess{key: %AtomType{value: :x}}]}
 
     result = JSEncoder.encode(ir, %Context{}, %Opts{})
     expected = "let abc = .data['~atom[x]'];"
+
+    assert result == expected
+  end
+
+  test "match access" do
+    ir = %Binding{name: :abc, access_path: [%MatchAccess{}]}
+
+    result = JSEncoder.encode(ir, %Context{}, %Opts{})
+    expected = "let abc = window.$hologramMatchAccess;"
 
     assert result == expected
   end
