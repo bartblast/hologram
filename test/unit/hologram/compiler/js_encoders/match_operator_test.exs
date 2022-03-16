@@ -1,7 +1,7 @@
 defmodule Hologram.Compiler.JSEncoder.MatchOperatorTest do
   use Hologram.Test.UnitCase, async: true
 
-  alias Hologram.Compiler.{Config, Context, Opts}
+  alias Hologram.Compiler.{Context, Opts}
 
   alias Hologram.Compiler.IR.{
     AtomType,
@@ -9,14 +9,12 @@ defmodule Hologram.Compiler.JSEncoder.MatchOperatorTest do
     IntegerType,
     MapAccess,
     MapType,
+    MatchAccess,
     MatchOperator,
     Variable,
-    VariableAccess
   }
 
   alias Hologram.Compiler.JSEncoder
-
-  @rhsExprVar Config.rightHandSideExpressionVar()
 
   test "encode/3" do
     # code:
@@ -27,14 +25,14 @@ defmodule Hologram.Compiler.JSEncoder.MatchOperatorTest do
         %Binding{
           name: :x,
           access_path: [
-            %VariableAccess{name: @rhsExprVar},
+            %MatchAccess{},
             %MapAccess{key: %AtomType{value: :a}}
           ]
         },
         %Binding{
           name: :y,
           access_path: [
-            %VariableAccess{name: @rhsExprVar},
+            %MatchAccess{},
             %MapAccess{key: %AtomType{value: :b}}
           ]
         }
@@ -56,9 +54,9 @@ defmodule Hologram.Compiler.JSEncoder.MatchOperatorTest do
     result = JSEncoder.encode(ir, %Context{}, %Opts{})
 
     expected = """
-    #{@rhsExprVar} = { type: 'map', data: { '~atom[a]': { type: 'integer', value: 1 }, '~atom[b]': { type: 'integer', value: 2 } } };
-    let x = #{@rhsExprVar}.data['~atom[a]'];
-    let y = #{@rhsExprVar}.data['~atom[b]'];\
+    window.$hologramMatchAccess = { type: 'map', data: { '~atom[a]': { type: 'integer', value: 1 }, '~atom[b]': { type: 'integer', value: 2 } } };
+    let x = window.$hologramMatchAccess.data['~atom[a]'];
+    let y = window.$hologramMatchAccess.data['~atom[b]'];\
     """
 
     assert result == expected
