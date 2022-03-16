@@ -5,10 +5,12 @@ defmodule Hologram.Compiler.FunctionDefinitionTransformerTest do
 
   alias Hologram.Compiler.IR.{
     AtomType,
+    Binding,
     FunctionDefinition,
     FunctionHead,
     IntegerType,
     MapAccess,
+    ParamAccess,
     Variable
   }
 
@@ -68,22 +70,20 @@ defmodule Hologram.Compiler.FunctionDefinitionTransformerTest do
     assert %FunctionDefinition{} = result = FunctionDefinitionTransformer.transform(ast, @context)
 
     expected = [
-      x:
-        {1,
-         [
-           %MapAccess{
-             key: %AtomType{value: :a}
-           },
-           %Variable{name: :x}
-         ]},
-      y:
-        {1,
-         [
-           %MapAccess{
-             key: %AtomType{value: :b}
-           },
-           %Variable{name: :y}
-         ]}
+      %Binding{
+        name: :x,
+        access_path: [
+          %ParamAccess{index: 1},
+          %MapAccess{key: %AtomType{value: :a}},
+        ]
+      },
+      %Binding{
+        name: :y,
+        access_path: [
+          %ParamAccess{index: 1},
+          %MapAccess{key: %AtomType{value: :b}},
+        ]
+      }
     ]
 
     assert result.bindings == expected
