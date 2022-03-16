@@ -1,9 +1,5 @@
 alias Hologram.Compiler.{Config, Context, JSEncoder, Opts}
-
-alias Hologram.Compiler.IR.{
-  MatchOperator,
-  VariableAccess
-}
+alias Hologram.Compiler.IR.MatchOperator
 
 defimpl JSEncoder, for: MatchOperator do
   import Hologram.Commons.Encoder, only: [encode_vars: 3]
