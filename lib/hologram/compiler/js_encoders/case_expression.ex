@@ -1,8 +1,8 @@
 alias Hologram.Compiler.{Context, Formatter, JSEncoder, Opts}
-alias Hologram.Compiler.IR.{CaseExpression, VariableAccess}
+alias Hologram.Compiler.IR.CaseExpression
 
 defimpl JSEncoder, for: CaseExpression do
-  import Hologram.Commons.Encoder, only: [encode_expressions: 4]
+  import Hologram.Commons.Encoder, only: [encode_expressions: 4, encode_vars: 3]
 
   def encode(%{condition: condition, clauses: clauses}, %Context{} = context, %Opts{} = opts) do
     fallback_clause = """
@@ -40,11 +40,5 @@ defimpl JSEncoder, for: CaseExpression do
       |> Formatter.maybe_append_new_line("}")
     end)
     |> String.trim_leading()
-  end
-
-  defp encode_vars(bindings, context, opts) do
-    bindings
-    |> Enum.map(&%{&1 | access_path: [%VariableAccess{name: "$condition"} | &1.access_path]})
-    |> Hologram.Commons.Encoder.encode_vars(context, opts)
   end
 end
