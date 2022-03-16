@@ -198,6 +198,10 @@ defmodule Hologram.Compiler.IR do
     defstruct key: nil
   end
 
+  defmodule MatchAccess do
+    defstruct []
+  end
+  
   defmodule ParamAccess do
     defstruct index: nil
   end
