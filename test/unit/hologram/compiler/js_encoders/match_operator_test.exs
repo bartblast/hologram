@@ -10,7 +10,8 @@ defmodule Hologram.Compiler.JSEncoder.MatchOperatorTest do
     MapAccess,
     MapType,
     MatchOperator,
-    Variable
+    Variable,
+    VariableAccess
   }
 
   alias Hologram.Compiler.JSEncoder
@@ -19,19 +20,21 @@ defmodule Hologram.Compiler.JSEncoder.MatchOperatorTest do
 
   test "encode/3" do
     # code:
-    # "%{a: x, b: y} = %{a: 1, b: 2}"
+    # %{a: x, b: y} = %{a: 1, b: 2}
 
     ir = %MatchOperator{
       bindings: [
         %Binding{
           name: :x,
           access_path: [
+            %VariableAccess{name: @rhsExprVar},
             %MapAccess{key: %AtomType{value: :a}}
           ]
         },
         %Binding{
           name: :y,
           access_path: [
+            %VariableAccess{name: @rhsExprVar},
             %MapAccess{key: %AtomType{value: :b}}
           ]
         }
