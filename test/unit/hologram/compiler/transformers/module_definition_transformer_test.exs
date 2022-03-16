@@ -5,6 +5,7 @@ defmodule Hologram.Compiler.ModuleDefinitionTransformerTest do
     AdditionOperator,
     AliasDirective,
     AtomType,
+    Binding,
     FunctionDefinition,
     ImportDirective,
     IntegerType,
@@ -13,6 +14,7 @@ defmodule Hologram.Compiler.ModuleDefinitionTransformerTest do
     ModuleDefinition,
     ModuleAttributeDefinition,
     ModuleType,
+    ParamAccess,
     Quote,
     RequireDirective,
     TupleType,
@@ -71,7 +73,9 @@ defmodule Hologram.Compiler.ModuleDefinitionTransformerTest do
 
     expected = %FunctionDefinition{
       arity: 1,
-      bindings: [b: {0, [%Variable{name: :b}]}],
+      bindings: [
+        %Binding{name: :b, access_path: [%ParamAccess{index: 0}]}
+      ],
       body: [
         %AdditionOperator{
           left: %IntegerType{value: 123},
