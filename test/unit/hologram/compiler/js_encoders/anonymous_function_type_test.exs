@@ -79,13 +79,11 @@ defmodule Hologram.Compiler.JSEncoder.AnonymousFunctionTypeTest do
     ir = ir(code)
     result = JSEncoder.encode(ir, %Context{}, %Opts{})
 
-    rhsExprVar = Config.rightHandSideExpressionVar()
-
     expected = """
       function() {
       let x = arguments[0];
-      #{rhsExprVar} = { type: 'integer', value: 2 };
-      x = #{rhsExprVar};
+      window.$hologramMatchAccess = { type: 'integer', value: 2 };
+      x = window.$hologramMatchAccess;
       return { type: 'integer', value: 3 };
       }\
       """
