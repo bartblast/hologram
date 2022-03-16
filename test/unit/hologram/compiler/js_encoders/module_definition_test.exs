@@ -5,11 +5,13 @@ defmodule Hologram.Compiler.JSEncoder.ModuleDefinitionTest do
 
   alias Hologram.Compiler.IR.{
     AtomType,
+    Binding,
     FunctionDefinition,
     IntegerType,
     ModuleAttributeDefinition,
     ModuleDefinition,
     NotSupportedExpression,
+    ParamAccess,
     Variable
   }
 
@@ -85,13 +87,24 @@ defmodule Hologram.Compiler.JSEncoder.ModuleDefinitionTest do
 
   describe "functions" do
     test "not preceded by attributes section" do
+      # code:
+      # 
+      # defmodule Abc.Bcd do
+      #   def test(a) do
+      #     1
+      #   end
+      # end
+
       ir = %ModuleDefinition{
         module: @module,
         attributes: [],
         functions: [
           %FunctionDefinition{
             bindings: [
-              a: {0, [%Variable{name: :a}]}
+              %Binding{
+                name: :a,
+                access_path: [%ParamAccess{index: 0}]
+              }
             ],
             body: [
               %IntegerType{value: 1}
@@ -126,6 +139,16 @@ defmodule Hologram.Compiler.JSEncoder.ModuleDefinitionTest do
     end
 
     test "preceded by attributes section" do
+      # code:
+      #
+      # defmodule Abc.Bcd do
+      #   @abc 123
+      #
+      #   def test(a) do
+      #     1
+      #   end
+      # end
+
       ir = %ModuleDefinition{
         module: @module,
         attributes: [
@@ -137,7 +160,10 @@ defmodule Hologram.Compiler.JSEncoder.ModuleDefinitionTest do
         functions: [
           %FunctionDefinition{
             bindings: [
-              a: {0, [%Variable{name: :a}]}
+              %Binding{
+                name: :a,
+                access_path: [%ParamAccess{index: 0}]
+              }
             ],
             body: [
               %IntegerType{value: 1}
