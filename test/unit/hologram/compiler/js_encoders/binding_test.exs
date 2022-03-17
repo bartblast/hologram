@@ -2,9 +2,19 @@ defmodule Hologram.Compiler.JSEncoder.BindingTest do
   use Hologram.Test.UnitCase, async: true
 
   alias Hologram.Compiler.{Config, Context, JSEncoder, Opts}
-  alias Hologram.Compiler.IR.{AtomType, Binding, MapAccess, MatchAccess, ParamAccess, TupleAccess}
+  alias Hologram.Compiler.IR.{AtomType, Binding, CaseConditionAccess, MapAccess, MatchAccess, ParamAccess, TupleAccess}
 
+  @case_condition_js Config.case_condition_js()
   @match_access_js Config.match_access_js()
+
+  test "case condition access" do
+    ir = %Binding{name: :abc, access_path: [%CaseConditionAccess{}]}
+
+    result = JSEncoder.encode(ir, %Context{}, %Opts{})
+    expected = "let abc = #{@case_condition_js};"
+
+    assert result == expected
+  end
 
   test "map access" do
     ir = %Binding{name: :abc, access_path: [%MapAccess{key: %AtomType{value: :x}}]}
