@@ -1,8 +1,6 @@
 defmodule Hologram.Compiler.CaseExpressionTransformer do
-  alias Hologram.Compiler.{Config, Context, Helpers, Transformer}
-  alias Hologram.Compiler.IR.{CaseExpression, VariableAccess}
-
-  @caseConditionExprVar Config.caseConditionExpressionVar()
+  alias Hologram.Compiler.{Context, Helpers, Transformer}
+  alias Hologram.Compiler.IR.{CaseConditionAccess, CaseExpression}
 
   def transform({:case, _, [condition, [do: clauses]]}, %Context{} = context) do
     %CaseExpression{
@@ -27,6 +25,6 @@ defmodule Hologram.Compiler.CaseExpressionTransformer do
   end
 
   defp prepend_variable_access(binding) do
-    %{binding | access_path: [%VariableAccess{name: @caseConditionExprVar} | binding.access_path]}
+    %{binding | access_path: [%CaseConditionAccess{} | binding.access_path]}
   end
 end

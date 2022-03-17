@@ -194,6 +194,10 @@ defmodule Hologram.Compiler.IR do
     defstruct name: nil, access_path: []
   end
 
+  defmodule CaseConditionAccess do
+    defstruct []
+  end
+
   defmodule MapAccess do
     defstruct key: nil
   end

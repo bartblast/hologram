@@ -1,10 +1,8 @@
 defmodule Hologram.Compiler.CaseExpressionTransformerTest do
   use Hologram.Test.UnitCase, async: true
 
-  alias Hologram.Compiler.{CaseExpressionTransformer, Config, Context}
-  alias Hologram.Compiler.IR.{AtomType, Binding, CaseExpression, IntegerType, MapAccess, MapType, Variable, VariableAccess}
-
-  @caseConditionExprVar Config.caseConditionExpressionVar()
+  alias Hologram.Compiler.{CaseExpressionTransformer, Context}
+  alias Hologram.Compiler.IR.{AtomType, Binding, CaseConditionAccess, CaseExpression, IntegerType, MapAccess, MapType, Variable}
 
   test "single expression clause body" do
     code = """
@@ -108,7 +106,7 @@ defmodule Hologram.Compiler.CaseExpressionTransformerTest do
             %Binding{
               name: :a,
               access_path: [
-                %VariableAccess{name: @caseConditionExprVar},
+                %CaseConditionAccess{},
                 %MapAccess{key: %AtomType{value: :a}}
               ]
             }

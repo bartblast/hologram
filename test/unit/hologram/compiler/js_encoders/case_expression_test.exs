@@ -1,6 +1,6 @@
 defmodule Hologram.Compiler.JSEncoder.CaseExpressionTest do
   use Hologram.Test.UnitCase, async: true
-  alias Hologram.Compiler.{Context, JSEncoder, Opts}
+  alias Hologram.Compiler.{Config, Context, JSEncoder, Opts}
 
   @case_condition_js Config.case_condition_js()
 
