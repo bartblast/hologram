@@ -18,7 +18,7 @@ defimpl JSEncoder, for: Block do
     output = JSEncoder.encode(expr, context, opts)
 
     if idx == expr_count - 1 do
-      output <> "\nreturn #{Config.rightHandSideExpressionVar()};"
+      output <> "\nreturn #{Config.matchAccessJS()};"
     else
       output
     end

@@ -201,7 +201,7 @@ defmodule Hologram.Compiler.IR do
   defmodule MatchAccess do
     defstruct []
   end
-  
+
   defmodule ParamAccess do
     defstruct index: nil
   end

@@ -1,10 +1,8 @@
 defmodule Hologram.Compiler.JSEncoder.BlockTest do
   use Hologram.Test.UnitCase, async: true
 
-  alias Hologram.Compiler.{Config, Context, JSEncoder, Opts}
-  alias Hologram.Compiler.IR.{AtomType, Block, IntegerType, MatchOperator, Variable, VariableAccess}
-
-  @rhsExprVar Config.rightHandSideExpressionVar()
+  alias Hologram.Compiler.{Context, JSEncoder, Opts}
+  alias Hologram.Compiler.IR.{AtomType, Binding, Block, IntegerType, MatchAccess, MatchOperator, Variable}
 
   test "single expression" do
     ir = %Block{expressions: [%AtomType{value: :a}]}
@@ -40,18 +38,14 @@ defmodule Hologram.Compiler.JSEncoder.BlockTest do
     ir = %Block{expressions: [
       %MatchOperator{
         bindings: [
-          %Hologram.Compiler.IR.Binding{name: :x, access_path: [
-            %VariableAccess{name: @rhsExprVar}
-          ]}
+          %Binding{name: :x, access_path: [%MatchAccess{}]}
         ],
         left: %Variable{name: :x},
         right: %IntegerType{value: 1}
       },
       %MatchOperator{
         bindings: [
-          %Hologram.Compiler.IR.Binding{name: :x, access_path: [
-            %VariableAccess{name: @rhsExprVar}
-          ]}
+          %Binding{name: :x, access_path: [%MatchAccess{}]}
         ],
         left: %Variable{name: :x},
         right: %IntegerType{value: 2}
@@ -62,10 +56,10 @@ defmodule Hologram.Compiler.JSEncoder.BlockTest do
     result = JSEncoder.encode(ir, %Context{}, %Opts{})
 
     expected = """
-    #{@rhsExprVar} = { type: 'integer', value: 1 };
-    let x = #{@rhsExprVar};
-    #{@rhsExprVar} = { type: 'integer', value: 2 };
-    x = #{@rhsExprVar};
+    window.$hologramMatchAccess = { type: 'integer', value: 1 };
+    let x = window.$hologramMatchAccess;
+    window.$hologramMatchAccess = { type: 'integer', value: 2 };
+    x = window.$hologramMatchAccess;
     return { type: 'integer', value: 3 };\
     """
 
@@ -77,9 +71,7 @@ defmodule Hologram.Compiler.JSEncoder.BlockTest do
       %AtomType{value: :a},
       %MatchOperator{
         bindings: [
-          %Hologram.Compiler.IR.Binding{name: :x, access_path: [
-            %VariableAccess{name: @rhsExprVar}
-          ]}
+          %Binding{name: :x, access_path: [%MatchAccess{}]}
         ],
         left: %Variable{name: :x},
         right: %IntegerType{value: 1}
@@ -90,9 +82,9 @@ defmodule Hologram.Compiler.JSEncoder.BlockTest do
 
     expected = """
     { type: 'atom', value: 'a' };
-    #{@rhsExprVar} = { type: 'integer', value: 1 };
-    let x = #{@rhsExprVar};
-    return #{@rhsExprVar};\
+    window.$hologramMatchAccess = { type: 'integer', value: 1 };
+    let x = window.$hologramMatchAccess;
+    return window.$hologramMatchAccess;\
     """
 
     assert result == expected
