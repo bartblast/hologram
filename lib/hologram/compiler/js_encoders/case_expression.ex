@@ -1,8 +1,10 @@
-alias Hologram.Compiler.{Context, Formatter, JSEncoder, Opts}
+alias Hologram.Compiler.{Config, Context, Formatter, JSEncoder, Opts}
 alias Hologram.Compiler.IR.CaseExpression
 
 defimpl JSEncoder, for: CaseExpression do
   import Hologram.Commons.Encoder, only: [encode_expressions: 4, encode_vars: 3]
+
+  @case_condition_js Config.case_condition_js()
 
   def encode(%{condition: condition, clauses: clauses}, %Context{} = context, %Opts{} = opts) do
     fallback_clause = """
@@ -18,7 +20,7 @@ defimpl JSEncoder, for: CaseExpression do
       |> Formatter.maybe_append_new_line(fallback_clause)
 
     """
-    Hologram.caseExpression(#{condition_value}, function($condition) {
+    Hologram.caseExpression(#{condition_value}, function(#{@case_condition_js}) {
     #{anon_fun_body}
     })\
     """
@@ -33,7 +35,7 @@ defimpl JSEncoder, for: CaseExpression do
 
       acc
       |> Formatter.maybe_append_new_line(
-        "#{statement} (Hologram.isCaseClausePatternMatched(#{clause_pattern}, $condition)) {"
+        "#{statement} (Hologram.isCaseClausePatternMatched(#{clause_pattern}, #{@case_condition_js})) {"
       )
       |> Formatter.maybe_append_new_line(vars)
       |> Formatter.maybe_append_new_line(body)

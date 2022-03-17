@@ -2,6 +2,8 @@ defmodule Hologram.Compiler.JSEncoder.CaseExpressionTest do
   use Hologram.Test.UnitCase, async: true
   alias Hologram.Compiler.{Context, JSEncoder, Opts}
 
+  @case_condition_js Config.case_condition_js()
+
   defp encode(code) do
     code
     |> ir()
@@ -18,8 +20,8 @@ defmodule Hologram.Compiler.JSEncoder.CaseExpressionTest do
     result = encode(code)
 
     expected = """
-    Hologram.caseExpression(x, function($condition) {
-    if (Hologram.isCaseClausePatternMatched({ type: 'integer', value: 1 }, $condition)) {
+    Hologram.caseExpression(x, function(#{@case_condition_js}) {
+    if (Hologram.isCaseClausePatternMatched({ type: 'integer', value: 1 }, #{@case_condition_js})) {
     return { type: 'atom', value: 'ok' };
     }
     else {
@@ -42,11 +44,11 @@ defmodule Hologram.Compiler.JSEncoder.CaseExpressionTest do
     result = encode(code)
 
     expected = """
-    Hologram.caseExpression(x, function($condition) {
-    if (Hologram.isCaseClausePatternMatched({ type: 'integer', value: 1 }, $condition)) {
+    Hologram.caseExpression(x, function(#{@case_condition_js}) {
+    if (Hologram.isCaseClausePatternMatched({ type: 'integer', value: 1 }, #{@case_condition_js})) {
     return { type: 'atom', value: 'ok_1' };
     }
-    else if (Hologram.isCaseClausePatternMatched({ type: 'integer', value: 2 }, $condition)) {
+    else if (Hologram.isCaseClausePatternMatched({ type: 'integer', value: 2 }, #{@case_condition_js})) {
     return { type: 'atom', value: 'ok_2' };
     }
     else {
@@ -70,8 +72,8 @@ defmodule Hologram.Compiler.JSEncoder.CaseExpressionTest do
     result = encode(code)
 
     expected = """
-    Hologram.caseExpression(x, function($condition) {
-    if (Hologram.isCaseClausePatternMatched({ type: 'integer', value: 1 }, $condition)) {
+    Hologram.caseExpression(x, function(#{@case_condition_js}) {
+    if (Hologram.isCaseClausePatternMatched({ type: 'integer', value: 1 }, #{@case_condition_js})) {
     { type: 'atom', value: 'expr_1' };
     return { type: 'atom', value: 'expr_2' };
     }
@@ -94,9 +96,9 @@ defmodule Hologram.Compiler.JSEncoder.CaseExpressionTest do
     result = encode(code)
 
     expected = """
-    Hologram.caseExpression(x, function($condition) {
-    if (Hologram.isCaseClausePatternMatched({ type: 'map', data: { '~atom[a]': { type: 'placeholder' } } }, $condition)) {
-    let a = $condition.data['~atom[a]'];
+    Hologram.caseExpression(x, function(#{@case_condition_js}) {
+    if (Hologram.isCaseClausePatternMatched({ type: 'map', data: { '~atom[a]': { type: 'placeholder' } } }, #{@case_condition_js})) {
+    let a = #{@case_condition_js}.data['~atom[a]'];
     return { type: 'atom', value: 'ok' };
     }
     else {
@@ -118,10 +120,10 @@ defmodule Hologram.Compiler.JSEncoder.CaseExpressionTest do
     result = encode(code)
 
     expected = """
-    Hologram.caseExpression(x, function($condition) {
-    if (Hologram.isCaseClausePatternMatched({ type: 'map', data: { '~atom[a]': { type: 'placeholder' }, '~atom[b]': { type: 'placeholder' } } }, $condition)) {
-    let a = $condition.data['~atom[a]'];
-    let b = $condition.data['~atom[b]'];
+    Hologram.caseExpression(x, function(#{@case_condition_js}) {
+    if (Hologram.isCaseClausePatternMatched({ type: 'map', data: { '~atom[a]': { type: 'placeholder' }, '~atom[b]': { type: 'placeholder' } } }, #{@case_condition_js})) {
+    let a = #{@case_condition_js}.data['~atom[a]'];
+    let b = #{@case_condition_js}.data['~atom[b]'];
     return { type: 'atom', value: 'ok' };
     }
     else {
