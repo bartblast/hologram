@@ -1,7 +1,7 @@
 defmodule Hologram.Compiler.MatchOperatorTransformerTest do
   use Hologram.Test.UnitCase, async: true
 
-  alias Hologram.Compiler.{Config, Context, MatchOperatorTransformer}
+  alias Hologram.Compiler.{Context, MatchOperatorTransformer}
 
   alias Hologram.Compiler.IR.{
     AtomType,

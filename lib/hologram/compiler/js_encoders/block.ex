@@ -18,7 +18,7 @@ defimpl JSEncoder, for: Block do
     output = JSEncoder.encode(expr, context, opts)
 
     if idx == expr_count - 1 do
-      output <> "\nreturn #{Config.matchAccessJS()};"
+      output <> "\nreturn #{Config.match_access_js()};"
     else
       output
     end

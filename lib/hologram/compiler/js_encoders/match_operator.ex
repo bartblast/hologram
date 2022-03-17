@@ -1,4 +1,4 @@
-alias Hologram.Compiler.{Context, JSEncoder, Opts}
+alias Hologram.Compiler.{Config, Context, JSEncoder, Opts}
 alias Hologram.Compiler.IR.MatchOperator
 
 defimpl JSEncoder, for: MatchOperator do
@@ -8,7 +8,7 @@ defimpl JSEncoder, for: MatchOperator do
     right = JSEncoder.encode(right, context, opts)
 
     """
-    window.$hologramMatchAccess = #{right};
+    #{Config.match_access_js()} = #{right};
     #{encode_vars(bindings, context, opts)}\
     """
   end

@@ -1,8 +1,10 @@
 defmodule Hologram.Compiler.JSEncoder.BlockTest do
   use Hologram.Test.UnitCase, async: true
 
-  alias Hologram.Compiler.{Context, JSEncoder, Opts}
+  alias Hologram.Compiler.{Config, Context, JSEncoder, Opts}
   alias Hologram.Compiler.IR.{AtomType, Binding, Block, IntegerType, MatchAccess, MatchOperator, Variable}
+
+  @match_access_js Config.match_access_js()
 
   test "single expression" do
     ir = %Block{expressions: [%AtomType{value: :a}]}
@@ -56,10 +58,10 @@ defmodule Hologram.Compiler.JSEncoder.BlockTest do
     result = JSEncoder.encode(ir, %Context{}, %Opts{})
 
     expected = """
-    window.$hologramMatchAccess = { type: 'integer', value: 1 };
-    let x = window.$hologramMatchAccess;
-    window.$hologramMatchAccess = { type: 'integer', value: 2 };
-    x = window.$hologramMatchAccess;
+    #{@match_access_js} = { type: 'integer', value: 1 };
+    let x = #{@match_access_js};
+    #{@match_access_js} = { type: 'integer', value: 2 };
+    x = #{@match_access_js};
     return { type: 'integer', value: 3 };\
     """
 
@@ -82,9 +84,9 @@ defmodule Hologram.Compiler.JSEncoder.BlockTest do
 
     expected = """
     { type: 'atom', value: 'a' };
-    window.$hologramMatchAccess = { type: 'integer', value: 1 };
-    let x = window.$hologramMatchAccess;
-    return window.$hologramMatchAccess;\
+    #{@match_access_js} = { type: 'integer', value: 1 };
+    let x = #{@match_access_js};
+    return #{@match_access_js};\
     """
 
     assert result == expected

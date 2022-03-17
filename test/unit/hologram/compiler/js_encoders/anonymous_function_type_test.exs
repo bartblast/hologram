@@ -79,11 +79,13 @@ defmodule Hologram.Compiler.JSEncoder.AnonymousFunctionTypeTest do
     ir = ir(code)
     result = JSEncoder.encode(ir, %Context{}, %Opts{})
 
+    match_access_js = Config.match_access_js()
+
     expected = """
       function() {
       let x = arguments[0];
-      window.$hologramMatchAccess = { type: 'integer', value: 2 };
-      x = window.$hologramMatchAccess;
+      #{match_access_js} = { type: 'integer', value: 2 };
+      x = #{match_access_js};
       return { type: 'integer', value: 3 };
       }\
       """

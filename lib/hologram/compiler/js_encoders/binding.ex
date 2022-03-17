@@ -1,4 +1,4 @@
-alias Hologram.Compiler.{Context, JSEncoder, MapKeyEncoder, Opts}
+alias Hologram.Compiler.{Config, Context, JSEncoder, MapKeyEncoder, Opts}
 alias Hologram.Compiler.IR.{Binding, MapAccess, MatchAccess, ParamAccess, TupleAccess, VariableAccess}
 
 defimpl JSEncoder, for: Binding do
@@ -19,7 +19,7 @@ defimpl JSEncoder, for: Binding do
   end
 
   defp encode_part(%MatchAccess{}, _context, _opts) do
-    "window.$hologramMatchAccess"
+    Config.match_access_js()
   end
 
   defp encode_part(%ParamAccess{index: index}, _context, _opts) do

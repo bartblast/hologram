@@ -1,7 +1,7 @@
 defmodule Hologram.Compiler.JSEncoder.MatchOperatorTest do
   use Hologram.Test.UnitCase, async: true
 
-  alias Hologram.Compiler.{Context, Opts}
+  alias Hologram.Compiler.{Config, Context, Opts}
 
   alias Hologram.Compiler.IR.{
     AtomType,
@@ -53,10 +53,12 @@ defmodule Hologram.Compiler.JSEncoder.MatchOperatorTest do
 
     result = JSEncoder.encode(ir, %Context{}, %Opts{})
 
+    match_access_js = Config.match_access_js()
+
     expected = """
-    window.$hologramMatchAccess = { type: 'map', data: { '~atom[a]': { type: 'integer', value: 1 }, '~atom[b]': { type: 'integer', value: 2 } } };
-    let x = window.$hologramMatchAccess.data['~atom[a]'];
-    let y = window.$hologramMatchAccess.data['~atom[b]'];\
+    #{match_access_js} = { type: 'map', data: { '~atom[a]': { type: 'integer', value: 1 }, '~atom[b]': { type: 'integer', value: 2 } } };
+    let x = #{match_access_js}.data['~atom[a]'];
+    let y = #{match_access_js}.data['~atom[b]'];\
     """
 
     assert result == expected

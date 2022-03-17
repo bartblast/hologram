@@ -1,7 +1,7 @@
 defmodule Hologram.Compiler.JSEncoder.BindingTest do
   use Hologram.Test.UnitCase, async: true
 
-  alias Hologram.Compiler.{Context, JSEncoder, Opts}
+  alias Hologram.Compiler.{Config, Context, JSEncoder, Opts}
   alias Hologram.Compiler.IR.{AtomType, Binding, MapAccess, MatchAccess, ParamAccess, TupleAccess, VariableAccess}
 
   test "map access" do
@@ -17,7 +17,7 @@ defmodule Hologram.Compiler.JSEncoder.BindingTest do
     ir = %Binding{name: :abc, access_path: [%MatchAccess{}]}
 
     result = JSEncoder.encode(ir, %Context{}, %Opts{})
-    expected = "let abc = window.$hologramMatchAccess;"
+    expected = "let abc = #{Config.match_access_js()};"
 
     assert result == expected
   end
