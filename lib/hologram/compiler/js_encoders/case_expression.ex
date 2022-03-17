@@ -35,7 +35,7 @@ defimpl JSEncoder, for: CaseExpression do
 
       acc
       |> Formatter.maybe_append_new_line(
-        "#{statement} (Hologram.isCaseClausePatternMatched(#{clause_pattern}, #{@case_condition_js})) {"
+        "#{statement} (Hologram.isPatternMatched(#{clause_pattern}, #{@case_condition_js})) {"
       )
       |> Formatter.maybe_append_new_line(vars)
       |> Formatter.maybe_append_new_line(body)
