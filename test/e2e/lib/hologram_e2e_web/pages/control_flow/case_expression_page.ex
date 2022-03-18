@@ -18,12 +18,13 @@ defmodule HologramE2E.ControlFlow.CaseExpressionPage do
   end
 
   def action(:calculate, _params, state) do
-    result = case state.condition do
-       1 ->
-        11
-      2 ->
-        22
-    end
+    result =
+      case state.condition do
+        1 ->
+          11
+        2 ->
+          22
+      end
 
     Map.put(state, :result, result)
   end
