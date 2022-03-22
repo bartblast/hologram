@@ -9,4 +9,12 @@ defmodule Hologram.Test.Fixtures.Compiler.Pruner.Module2 do
     ~H"""
     """
   end
+
+  def action(:test_2a, _params, _state) do
+    :ok
+  end
+
+  def action(:test_2b, _a, _b, _c) do
+    :ok
+  end
 end
