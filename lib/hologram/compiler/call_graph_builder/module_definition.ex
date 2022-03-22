@@ -12,6 +12,7 @@ defimpl CallGraphBuilder, for: ModuleDefinition do
 
   defp build_from_template(module, module_defs, templates) do
     if module_defs[module].templatable? do
+      CallGraph.add_edge(module, {module, :template})
       templates[module]
       |> CallGraphBuilder.build(module_defs, templates, {module, :template})
     end

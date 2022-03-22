@@ -83,6 +83,7 @@ defmodule Hologram.Compiler.CallGraphBuilder.ModuleDefinitionTest do
     CallGraphBuilder.build(module_defs[Module4], module_defs, templates, @from_vertex)
 
     assert CallGraph.has_vertex?(Module5)
+    assert CallGraph.has_edge?(Module4, {Module4, :template})
     assert CallGraph.has_edge?({Module4, :template}, Module5)
   end
 end
