@@ -6,21 +6,12 @@ defmodule Hologram.Compiler.PrunerTest do
     CallGraphBuilder,
     ModuleDefAggregator,
     ModuleDefStore,
-    Pruner
+    Pruner,
+    Reflection
   }
 
-  @from_vertex nil
-
-  defp function_kept?(page_module, tested_module, function, arity, templates) do
-    ModuleDefAggregator.aggregate(page_module)
-    ModuleDefAggregator.aggregate(tested_module)
-    module_defs = ModuleDefStore.get_all()
-
-    CallGraphBuilder.build(page_module, module_defs, templates, @from_vertex)
-    CallGraphBuilder.build(tested_module, module_defs, templates, @from_vertex)
-    call_graph = CallGraph.get()
-
-    result = Pruner.prune(page_module, module_defs, call_graph)
+  defp function_kept?(pruned_module, tested_module, function, arity, context) do
+    result = Pruner.prune(pruned_module, context.module_defs, context.call_graph)
 
     if result[tested_module] do
       result[tested_module].functions
@@ -30,211 +21,262 @@ defmodule Hologram.Compiler.PrunerTest do
     end
   end
 
-  setup_all do
-    path = "#{@fixtures_path}/compiler/pruner"
-    [templates: build_templates(path)]
+  defp module_kept?(pruned_module, tested_module, context) do
+    Pruner.prune(pruned_module, context.module_defs, context.call_graph)
+    |> Map.has_key?(tested_module)
   end
 
-  setup do
+  setup_all do
     ModuleDefStore.create()
     CallGraph.create()
-    :ok
+
+    app_path = "#{@fixtures_path}/compiler/pruner"
+    opts = [app_path: app_path]
+
+    modules = Reflection.list_templatables(opts)
+    templates = build_templates(app_path)
+
+    Enum.each(modules, &ModuleDefAggregator.aggregate/1)
+    module_defs = ModuleDefStore.get_all()
+
+    from_vertex = nil
+    Enum.each(modules, &CallGraphBuilder.build(&1, module_defs, templates, from_vertex))
+    call_graph = CallGraph.get()
+
+    [
+      call_graph: call_graph,
+      module_defs: module_defs,
+      templates: templates
+    ]
   end
 
   describe "kept page functions" do
-    test "page actions", %{templates: templates} do
-      module_1 = Hologram.Test.Fixtures.Compiler.Pruner.Module1
-      assert function_kept?(module_1, module_1, :action, 3, templates)
-      assert function_kept?(module_1, module_1, :action, 4, templates)
+    test "page actions", context do
+      pruned_module = Hologram.Test.Fixtures.Compiler.Pruner.Module1
+      tested_module = pruned_module
+
+      assert function_kept?(pruned_module, tested_module, :action, 3, context)
+      assert function_kept?(pruned_module, tested_module, :action, 4, context)
     end
 
-    test "functions reachable from page actions", %{templates: templates} do
-      module_6 = Hologram.Test.Fixtures.Compiler.Pruner.Module6
-      module_14 = Hologram.Test.Fixtures.Compiler.Pruner.Module14
-      assert function_kept?(module_6, module_14, :test_fun_14a, 0, templates)
+    test "functions reachable from page actions", context do
+      pruned_module = Hologram.Test.Fixtures.Compiler.Pruner.Module6
+      tested_module = Hologram.Test.Fixtures.Compiler.Pruner.Module14
+
+      assert function_kept?(pruned_module, tested_module, :test_fun_14a, 0, context)
     end
 
-    test "page template", %{templates: templates} do
-      module_15 = Hologram.Test.Fixtures.Compiler.Pruner.Module15
-      assert function_kept?(module_15, module_15, :template, 0, templates)
+    test "page template", context do
+      pruned_module = Hologram.Test.Fixtures.Compiler.Pruner.Module15
+      tested_module = pruned_module
+
+      assert function_kept?(pruned_module, tested_module, :template, 0, context)
     end
 
-    test "functions reachable from page template", %{templates: templates} do
-      module_20 = Hologram.Test.Fixtures.Compiler.Pruner.Module20
-      module_22 = Hologram.Test.Fixtures.Compiler.Pruner.Module22
-      assert function_kept?(module_20, module_22, :test_22a, 0, templates)
+    test "functions reachable from page template", context do
+      pruned_module = Hologram.Test.Fixtures.Compiler.Pruner.Module20
+      tested_module = Hologram.Test.Fixtures.Compiler.Pruner.Module22
+
+      assert function_kept?(pruned_module, tested_module, :test_22a, 0, context)
     end
 
-    test "components reachable from page template", %{templates: templates} do
-      module_29 = Hologram.Test.Fixtures.Compiler.Pruner.Module29
-      module_31 = Hologram.Test.Fixtures.Compiler.Pruner.Module31
-      assert function_kept?(module_29, module_31, :template, 0, templates)
+    test "components reachable from page template", context do
+      pruned_module = Hologram.Test.Fixtures.Compiler.Pruner.Module29
+      tested_module = Hologram.Test.Fixtures.Compiler.Pruner.Module31
+
+      assert function_kept?(pruned_module, tested_module, :template, 0, context)
     end
 
-    test "entry page layout function", %{templates: templates} do
-      module_48 = Hologram.Test.Fixtures.Compiler.Pruner.Module48
-      assert function_kept?(module_48, module_48, :layout, 0, templates)
+    test "entry page layout function", context do
+      pruned_module = Hologram.Test.Fixtures.Compiler.Pruner.Module48
+      tested_module = pruned_module
+
+      assert function_kept?(pruned_module, tested_module, :layout, 0, context)
     end
 
-    test "entry page custom_layout function", %{templates: templates} do
-      module_51 = Hologram.Test.Fixtures.Compiler.Pruner.Module51
-      assert function_kept?(module_51, module_51, :custom_layout, 0, templates)
+    test "entry page custom_layout function", context do
+      pruned_module = Hologram.Test.Fixtures.Compiler.Pruner.Module51
+      tested_module = pruned_module
+
+      assert function_kept?(pruned_module, tested_module, :custom_layout, 0, context)
     end
 
-    test "entry page route", %{templates: templates} do
-      module_54 = Hologram.Test.Fixtures.Compiler.Pruner.Module54
-      assert function_kept?(module_54, module_54, :route, 0, templates)
+    test "entry page route", context do
+      pruned_module = Hologram.Test.Fixtures.Compiler.Pruner.Module54
+      tested_module = pruned_module
+
+      assert function_kept?(pruned_module, tested_module, :route, 0, context)
     end
 
-    test "non-entry page route", %{templates: templates} do
-      module_55 = Hologram.Test.Fixtures.Compiler.Pruner.Module55
-      module_56 = Hologram.Test.Fixtures.Compiler.Pruner.Module56
-      assert function_kept?(module_55, module_56, :route, 0, templates)
+    test "non-entry page route", context do
+      pruned_module = Hologram.Test.Fixtures.Compiler.Pruner.Module55
+      tested_module = Hologram.Test.Fixtures.Compiler.Pruner.Module56
+
+      assert function_kept?(pruned_module, tested_module, :route, 0, context)
     end
 
-    test "entry page __info__ function", %{templates: templates} do
-      module_64 = Hologram.Test.Fixtures.Compiler.Pruner.Module64
-      assert function_kept?(module_64, module_64, :__info__, 1, templates)
-    end
-  end
+    test "entry page __info__ function", context do
+      pruned_module = Hologram.Test.Fixtures.Compiler.Pruner.Module64
+      tested_module = pruned_module
 
-  describe "pruned page functions" do
-    test "non-entry page layout function", %{templates: templates} do
-      module_49 = Hologram.Test.Fixtures.Compiler.Pruner.Module49
-      module_50 = Hologram.Test.Fixtures.Compiler.Pruner.Module50
-      refute function_kept?(module_49, module_50, :layout, 0, templates)
-    end
-
-    test "non-entry page custom_layout function", %{templates: templates} do
-      module_52 = Hologram.Test.Fixtures.Compiler.Pruner.Module52
-      module_53 = Hologram.Test.Fixtures.Compiler.Pruner.Module53
-      refute function_kept?(module_52, module_53, :custom_layout, 0, templates)
-    end
-
-    test "non-entry page __info__ function", %{templates: templates} do
-      module_65 = Hologram.Test.Fixtures.Compiler.Pruner.Module65
-      module_66 = Hologram.Test.Fixtures.Compiler.Pruner.Module66
-      refute function_kept?(module_65, module_66, :__info__, 1, templates)
+      assert function_kept?(pruned_module, tested_module, :__info__, 1, context)
     end
   end
 
   describe "kept layout functions" do
-    test "layout actions", %{templates: templates} do
-      module_2 = Hologram.Test.Fixtures.Compiler.Pruner.Module2
-      module_3 = Hologram.Test.Fixtures.Compiler.Pruner.Module3
-      assert function_kept?(module_2, module_3, :action, 3, templates)
-      assert function_kept?(module_2, module_3, :action, 4, templates)
+    test "layout actions", context do
+      pruned_module = Hologram.Test.Fixtures.Compiler.Pruner.Module2
+      tested_module = Hologram.Test.Fixtures.Compiler.Pruner.Module3
+
+      assert function_kept?(pruned_module, tested_module, :action, 3, context)
+      assert function_kept?(pruned_module, tested_module, :action, 4, context)
     end
 
-    test "functions reachable from layout actions", %{templates: templates} do
-      module_8 = Hologram.Test.Fixtures.Compiler.Pruner.Module8
-      module_10 = Hologram.Test.Fixtures.Compiler.Pruner.Module10
-      assert function_kept?(module_8, module_10, :test_fun_10a, 0, templates)
+    test "functions reachable from layout actions", context do
+      pruned_module = Hologram.Test.Fixtures.Compiler.Pruner.Module8
+      tested_module = Hologram.Test.Fixtures.Compiler.Pruner.Module10
+
+      assert function_kept?(pruned_module, tested_module, :test_fun_10a, 0, context)
     end
 
-    test "layout template", %{templates: templates} do
-      module_16 = Hologram.Test.Fixtures.Compiler.Pruner.Module16
-      module_17 = Hologram.Test.Fixtures.Compiler.Pruner.Module17
-      assert function_kept?(module_16, module_17, :template, 0, templates)
+    test "layout template", context do
+      pruned_module = Hologram.Test.Fixtures.Compiler.Pruner.Module16
+      tested_module = Hologram.Test.Fixtures.Compiler.Pruner.Module17
+
+      assert function_kept?(pruned_module, tested_module, :template, 0, context)
     end
 
-    test "functions reachable from layout template", %{templates: templates} do
-      module_23 = Hologram.Test.Fixtures.Compiler.Pruner.Module23
-      module_25 = Hologram.Test.Fixtures.Compiler.Pruner.Module25
-      assert function_kept?(module_23, module_25, :test_25a, 0, templates)
+    test "functions reachable from layout template", context do
+      pruned_module = Hologram.Test.Fixtures.Compiler.Pruner.Module23
+      tested_module = Hologram.Test.Fixtures.Compiler.Pruner.Module25
+
+      assert function_kept?(pruned_module, tested_module, :test_25a, 0, context)
     end
 
-    test "components reachable from layout template", %{templates: templates} do
-      module_32 = Hologram.Test.Fixtures.Compiler.Pruner.Module32
-      module_34 = Hologram.Test.Fixtures.Compiler.Pruner.Module34
-      assert function_kept?(module_32, module_34, :template, 0, templates)
+    test "components reachable from layout template", context do
+      pruned_module = Hologram.Test.Fixtures.Compiler.Pruner.Module32
+      tested_module = Hologram.Test.Fixtures.Compiler.Pruner.Module34
+
+      assert function_kept?(pruned_module, tested_module, :template, 0, context)
     end
 
-    test "layout init", %{templates: templates} do
-      module_38 = Hologram.Test.Fixtures.Compiler.Pruner.Module38
-      module_39 = Hologram.Test.Fixtures.Compiler.Pruner.Module39
-      assert function_kept?(module_38, module_39, :init, 0, templates)
+    test "layout init", context do
+      pruned_module = Hologram.Test.Fixtures.Compiler.Pruner.Module38
+      tested_module = Hologram.Test.Fixtures.Compiler.Pruner.Module39
+
+      assert function_kept?(pruned_module, tested_module, :init, 0, context)
     end
 
-    test "functions reachable from layout init", %{templates: templates} do
-      module_40 = Hologram.Test.Fixtures.Compiler.Pruner.Module40
-      module_42 = Hologram.Test.Fixtures.Compiler.Pruner.Module42
-      assert function_kept?(module_40, module_42, :test_fun_42a, 0, templates)
+    test "functions reachable from layout init", context do
+      pruned_module = Hologram.Test.Fixtures.Compiler.Pruner.Module40
+      tested_module = Hologram.Test.Fixtures.Compiler.Pruner.Module42
+
+      assert function_kept?(pruned_module, tested_module, :test_fun_42a, 0, context)
     end
   end
 
   describe "kept component functions" do
-    test "component actions", %{templates: templates} do
-      module_4 = Hologram.Test.Fixtures.Compiler.Pruner.Module4
-      module_5 = Hologram.Test.Fixtures.Compiler.Pruner.Module5
-      assert function_kept?(module_4, module_5, :action, 3, templates)
-      assert function_kept?(module_4, module_5, :action, 4, templates)
+    test "component actions", context do
+      pruned_module = Hologram.Test.Fixtures.Compiler.Pruner.Module4
+      tested_module = Hologram.Test.Fixtures.Compiler.Pruner.Module5
+
+      assert function_kept?(pruned_module, tested_module, :action, 3, context)
+      assert function_kept?(pruned_module, tested_module, :action, 4, context)
     end
 
-    test "functions reachable from component actions", %{templates: templates} do
-      module_11 = Hologram.Test.Fixtures.Compiler.Pruner.Module11
-      module_13 = Hologram.Test.Fixtures.Compiler.Pruner.Module13
-      assert function_kept?(module_11, module_13, :test_fun_13a, 0, templates)
+    test "functions reachable from component actions", context do
+      pruned_module = Hologram.Test.Fixtures.Compiler.Pruner.Module11
+      tested_module = Hologram.Test.Fixtures.Compiler.Pruner.Module13
+
+      assert function_kept?(pruned_module, tested_module, :test_fun_13a, 0, context)
     end
 
-    test "component template", %{templates: templates} do
-      module_18 = Hologram.Test.Fixtures.Compiler.Pruner.Module18
-      module_19 = Hologram.Test.Fixtures.Compiler.Pruner.Module19
-      assert function_kept?(module_18, module_19, :template, 0, templates)
+    test "component template", context do
+      pruned_module = Hologram.Test.Fixtures.Compiler.Pruner.Module18
+      tested_module = Hologram.Test.Fixtures.Compiler.Pruner.Module19
+
+      assert function_kept?(pruned_module, tested_module, :template, 0, context)
     end
 
-    test "functions reachable from component template", %{templates: templates} do
-      module_26 = Hologram.Test.Fixtures.Compiler.Pruner.Module26
-      module_28 = Hologram.Test.Fixtures.Compiler.Pruner.Module28
-      assert function_kept?(module_26, module_28, :test_28a, 0, templates)
+    test "functions reachable from component template", context do
+      pruned_module = Hologram.Test.Fixtures.Compiler.Pruner.Module26
+      tested_module = Hologram.Test.Fixtures.Compiler.Pruner.Module28
+
+      assert function_kept?(pruned_module, tested_module, :test_28a, 0, context)
     end
 
-    test "components reachable from component template", %{templates: templates} do
-      module_35 = Hologram.Test.Fixtures.Compiler.Pruner.Module35
-      module_37 = Hologram.Test.Fixtures.Compiler.Pruner.Module37
-      assert function_kept?(module_35, module_37, :template, 0, templates)
+    test "components reachable from component template", context do
+      pruned_module = Hologram.Test.Fixtures.Compiler.Pruner.Module35
+      tested_module = Hologram.Test.Fixtures.Compiler.Pruner.Module37
+
+      assert function_kept?(pruned_module, tested_module, :template, 0, context)
     end
 
-    test "component init", %{templates: templates} do
-      module_43 = Hologram.Test.Fixtures.Compiler.Pruner.Module43
-      module_44 = Hologram.Test.Fixtures.Compiler.Pruner.Module44
-      assert function_kept?(module_43, module_44, :init, 0, templates)
+    test "component init", context do
+      pruned_module = Hologram.Test.Fixtures.Compiler.Pruner.Module43
+      tested_module = Hologram.Test.Fixtures.Compiler.Pruner.Module44
+
+      assert function_kept?(pruned_module, tested_module, :init, 0, context)
     end
 
-    test "functions reachable from component init", %{templates: templates} do
-      module_45 = Hologram.Test.Fixtures.Compiler.Pruner.Module45
-      module_47 = Hologram.Test.Fixtures.Compiler.Pruner.Module47
-      assert function_kept?(module_45, module_47, :test_fun_47a, 0, templates)
+    test "functions reachable from component init", context do
+      pruned_module = Hologram.Test.Fixtures.Compiler.Pruner.Module45
+      tested_module = Hologram.Test.Fixtures.Compiler.Pruner.Module47
+
+      assert function_kept?(pruned_module, tested_module, :test_fun_47a, 0, context)
     end
   end
 
-  test "unreachable functions are pruned", %{templates: templates} do
-    module_57 = Hologram.Test.Fixtures.Compiler.Pruner.Module57
-    module_58 = Hologram.Test.Fixtures.Compiler.Pruner.Module58
-    refute function_kept?(module_57, module_58, :test_fun_58a, 0, templates)
+  describe "pruned code" do
+    test "non-entry page layout function", context do
+      pruned_module = Hologram.Test.Fixtures.Compiler.Pruner.Module49
+      tested_module = Hologram.Test.Fixtures.Compiler.Pruner.Module50
+
+      refute function_kept?(pruned_module, tested_module, :layout, 0, context)
+    end
+
+    test "non-entry page custom_layout function", context do
+      pruned_module = Hologram.Test.Fixtures.Compiler.Pruner.Module52
+      tested_module = Hologram.Test.Fixtures.Compiler.Pruner.Module53
+
+      refute function_kept?(pruned_module, tested_module, :custom_layout, 0, context)
+    end
+
+    test "non-entry page __info__ function", context do
+      pruned_module = Hologram.Test.Fixtures.Compiler.Pruner.Module65
+      tested_module = Hologram.Test.Fixtures.Compiler.Pruner.Module66
+
+      refute function_kept?(pruned_module, tested_module, :__info__, 1, context)
+    end
+
+    test "unreachable pages", context do
+      pruned_module = Hologram.Test.Fixtures.Compiler.Pruner.Module1
+      tested_module = Hologram.Test.Fixtures.Compiler.Pruner.Module2
+
+      refute module_kept?(pruned_module, tested_module, context)
+    end
+
+    test "unreachable functions", context do
+      pruned_module = Hologram.Test.Fixtures.Compiler.Pruner.Module57
+      tested_module = Hologram.Test.Fixtures.Compiler.Pruner.Module58
+
+      refute function_kept?(pruned_module, tested_module, :test_fun_58a, 0, context)
+    end
+
+    test "modules with unreachable-only functions", context do
+      pruned_module = Hologram.Test.Fixtures.Compiler.Pruner.Module59
+      tested_module = Hologram.Test.Fixtures.Compiler.Pruner.Module60
+
+      refute module_kept?(pruned_module, tested_module, context)
+    end
   end
 
-  test "modules with unreachable-only functions are pruned", %{templates: templates} do
-    module_59 = Hologram.Test.Fixtures.Compiler.Pruner.Module59
-    module_60 = Hologram.Test.Fixtures.Compiler.Pruner.Module60
-
-    ModuleDefAggregator.aggregate(module_59)
-    module_defs = ModuleDefStore.get_all()
-
-    CallGraphBuilder.build(module_59, module_defs, templates, @from_vertex)
-    call_graph = CallGraph.get()
-
-    result = Pruner.prune(module_59, module_defs, call_graph)
-
-    refute Map.has_key?(result, module_60)
-  end
-
-  test "circular dependencies are handled correctly", %{templates: templates} do
+  test "circular dependencies are handled correctly", context do
     module_61 = Hologram.Test.Fixtures.Compiler.Pruner.Module61
     module_62 = Hologram.Test.Fixtures.Compiler.Pruner.Module62
     module_63 = Hologram.Test.Fixtures.Compiler.Pruner.Module63
 
-    assert function_kept?(module_61, module_62, :test_fun_62a, 0, templates)
-    assert function_kept?(module_61, module_63, :test_fun_63a, 0, templates)
+    assert function_kept?(module_61, module_62, :test_fun_62a, 0, context)
+    assert function_kept?(module_61, module_63, :test_fun_63a, 0, context)
   end
 end
