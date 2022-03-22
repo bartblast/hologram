@@ -10,7 +10,7 @@ defmodule Hologram.Compiler.Pruner do
     component_modules = find_component_modules(module_defs)
     page_modules = find_page_modules(module_defs)
 
-    []
+    {[], []}
     |> include_code_reachable_from_page_actions(call_graph, page_module)
     |> include_code_reachable_from_page_template(call_graph, page_module)
     |> include_code_reachable_from_page_layout_fun(call_graph, page_module)
@@ -23,94 +23,110 @@ defmodule Hologram.Compiler.Pruner do
     |> include_code_reachable_from_component_actions(call_graph, component_modules)
     |> include_code_reachable_from_component_templates(call_graph, component_modules)
     |> include_page_routes(page_modules)
+    |> elem(1)
     |> Enum.uniq()
   end
 
   defp find_component_modules(module_defs) do
     Enum.filter(module_defs, fn {_, module_def} -> module_def.component? end)
     |> Enum.map(fn {module, _} -> module end)
+    |> MapSet.new()
   end
 
   defp find_page_modules(module_defs) do
     Enum.filter(module_defs, fn {_, module_def} -> module_def.page? end)
     |> Enum.map(fn {module, _} -> module end)
+    |> MapSet.new()
   end
 
-  defp include_code_reachable_from_component_actions(acc, call_graph, component_modules) do
-    Enum.reduce(component_modules, acc, fn module, acc ->
+  defp include_code_reachable_from_component_actions({modules, _} = acc, call_graph, component_modules) do
+    modules
+    |> Enum.filter(&MapSet.member?(component_modules, &1))
+    |> Enum.reduce(acc, fn module, acc ->
       Graph.reachable(call_graph, [{module, :action}])
-      |> maybe_include_reachable_code(acc)
+      |> include_reachable_code(acc)
     end)
   end
 
-  defp include_code_reachable_from_component_init_fun(acc, call_graph, component_modules) do
-    Enum.reduce(component_modules, acc, fn module, acc ->
+  defp include_code_reachable_from_component_init_fun({modules, _} = acc, call_graph, component_modules) do
+    modules
+    |> Enum.filter(&MapSet.member?(component_modules, &1))
+    |> Enum.reduce(acc, fn module, acc ->
       Graph.reachable(call_graph, [{module, :init}])
-      |> maybe_include_reachable_code(acc)
+      |> include_reachable_code(acc)
     end)
   end
 
-  defp include_code_reachable_from_component_templates(acc, call_graph, component_modules) do
-    Enum.reduce(component_modules, acc, fn module, acc ->
+  defp include_code_reachable_from_component_templates({modules, _} = acc, call_graph, component_modules) do
+    modules
+    |> Enum.filter(&MapSet.member?(component_modules, &1))
+    |> Enum.reduce(acc, fn module, acc ->
       Graph.reachable(call_graph, [{module, :template}])
-      |> maybe_include_reachable_code(acc)
+      |> include_reachable_code(acc)
     end)
   end
 
   defp include_code_reachable_from_layout_actions(acc, call_graph, layout_module) do
     Graph.reachable(call_graph, [{layout_module, :action}])
-    |> maybe_include_reachable_code(acc)
+    |> include_reachable_code(acc)
   end
 
   defp include_code_reachable_from_layout_init_fun(acc, call_graph, layout_module) do
     Graph.reachable(call_graph, [{layout_module, :init}])
-    |> maybe_include_reachable_code(acc)
+    |> include_reachable_code(acc)
   end
 
   defp include_code_reachable_from_layout_template(acc, call_graph, layout_module) do
     Graph.reachable(call_graph, [{layout_module, :template}])
-    |> maybe_include_reachable_code(acc)
+    |> include_reachable_code(acc)
   end
 
   defp include_code_reachable_from_page_actions(acc, call_graph, page_module) do
     Graph.reachable(call_graph, [{page_module, :action}])
-    |> maybe_include_reachable_code(acc)
+    |> include_reachable_code(acc)
   end
 
   defp include_code_reachable_from_page_custom_layout_fun(acc, call_graph, page_module) do
     Graph.reachable(call_graph, [{page_module, :custom_layout}])
-    |> maybe_include_reachable_code(acc)
+    |> include_reachable_code(acc)
   end
 
   defp include_code_reachable_from_page_info_fun(acc, call_graph, page_module) do
     Graph.reachable(call_graph, [{page_module, :__info__}])
-    |> maybe_include_reachable_code(acc)
+    |> include_reachable_code(acc)
   end
 
   defp include_code_reachable_from_page_layout_fun(acc, call_graph, page_module) do
     Graph.reachable(call_graph, [{page_module, :layout}])
-    |> maybe_include_reachable_code(acc)
+    |> include_reachable_code(acc)
   end
 
   defp include_code_reachable_from_page_template(acc, call_graph, page_module) do
     Graph.reachable(call_graph, [{page_module, :template}])
-    |> maybe_include_reachable_code(acc)
+    |> include_reachable_code(acc)
   end
 
-  defp include_page_routes(acc, page_modules) do
-    Enum.reduce(page_modules, acc, fn module, acc ->
-      acc ++ [{module, :route}]
+  defp include_page_routes({modules, _} = acc, page_modules) do
+    modules
+    |> Enum.filter(&MapSet.member?(page_modules, &1))
+    |> Enum.reduce(acc, fn module, {modules, functions} ->
+      {modules, functions ++ [{module, :route}]}
     end)
   end
 
-  defp maybe_include_reachable_code(reachable_code, acc) do
-    case reachable_code do
-      [nil] ->
-        acc
+  defp include_reachable_code(reachable_code, acc) do
+    Enum.reduce(reachable_code, acc, fn vertex, {modules, functions} ->
+      case vertex do
+        nil ->
+          {modules, functions}
 
-      reachable_code ->
-        acc ++ reachable_code
-    end
+        {module, function} ->
+          {modules, functions ++ [{module, function}]}
+
+        module ->
+          {modules ++ [module], functions}
+        end
+    end)
   end
 
   defp remove_module_redundant_funs(
