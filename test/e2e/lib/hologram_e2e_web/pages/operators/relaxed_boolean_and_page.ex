@@ -1,7 +1,7 @@
-defmodule HologramE2E.Operators.BooleanAndPage do
+defmodule HologramE2E.Operators.RelaxedBooleanAndPage do
   use Hologram.Page
 
-  route "/e2e/operators/boolean-and"
+  route "/e2e/operators/relaxed-boolean-and"
 
   def init do
     %{

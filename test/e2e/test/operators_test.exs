@@ -10,13 +10,6 @@ defmodule HologramE2E.OperatorsTest do
     |> assert_has(css("#text", text: "Result = 3"))
   end
 
-  feature "boolean and", %{session: session} do
-    session
-    |> visit("/e2e/operators/boolean-and")
-    |> click(css("#button"))
-    |> assert_has(css("#text", text: "Result = true"))
-  end
-
   feature "division", %{session: session} do
     session
     |> visit("/e2e/operators/division")
@@ -43,6 +36,13 @@ defmodule HologramE2E.OperatorsTest do
     |> visit("/e2e/operators/multiplication")
     |> click(css("#button"))
     |> assert_has(css("#text", text: "Result = 6"))
+  end
+
+  feature "relaxed boolean and", %{session: session} do
+    session
+    |> visit("/e2e/operators/relaxed-boolean-and")
+    |> click(css("#button"))
+    |> assert_has(css("#text", text: "Result = true"))
   end
 
   feature "subtraction", %{session: session} do

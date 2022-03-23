@@ -8,7 +8,6 @@ defmodule Hologram.Compiler.Transformer do
     AnonymousFunctionTypeTransformer,
     BinaryTypeTransformer,
     BlockTransformer,
-    BooleanAndOperatorTransformer,
     CaseExpressionTransformer,
     DivisionOperatorTransformer,
     DotOperatorTransformer,
@@ -29,6 +28,7 @@ defmodule Hologram.Compiler.Transformer do
     MultiplicationOperatorTransformer,
     QuoteTransformer,
     PipeOperatorTransformer,
+    RelaxedBooleanAndOperatorTransformer,
     RequireDirectiveTransformer,
     StrictBooleanAndOperatorTransformer,
     StructTypeTransformer,
@@ -127,10 +127,6 @@ defmodule Hologram.Compiler.Transformer do
     AdditionOperatorTransformer.transform(ast, context)
   end
 
-  def transform({:&&, _, _} = ast, %Context{} = context) do
-    BooleanAndOperatorTransformer.transform(ast, context)
-  end
-
   def transform({:/, _, _} = ast, %Context{} = context) do
     DivisionOperatorTransformer.transform(ast, context)
   end
@@ -170,6 +166,10 @@ defmodule Hologram.Compiler.Transformer do
 
   def transform({:|>, _, _} = ast, %Context{} = context) do
     PipeOperatorTransformer.transform(ast, context)
+  end
+
+  def transform({:&&, _, _} = ast, %Context{} = context) do
+    RelaxedBooleanAndOperatorTransformer.transform(ast, context)
   end
 
   def transform({:and, _, _} = ast, %Context{} = context) do

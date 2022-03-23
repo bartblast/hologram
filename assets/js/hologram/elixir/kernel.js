@@ -35,14 +35,6 @@ export default class Kernel {
     }
   }
 
-  static $boolean_and(left, right) {
-    if (Type.isTruthy(left)) {
-      return right
-    } else {
-      return left
-    }
-  }
-
   static $concatenate_lists(left, right) {
     const result = Type.list(left.data.concat(right.data))
     return Utils.freeze(result)
@@ -107,6 +99,14 @@ export default class Kernel {
 
     } else {
       return Map.put(data, key, value)
+    }
+  }
+
+  static $relaxed_boolean_and(left, right) {
+    if (Type.isTruthy(left)) {
+      return right
+    } else {
+      return left
     }
   }
 

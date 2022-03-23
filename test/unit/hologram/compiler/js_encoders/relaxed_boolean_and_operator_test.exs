@@ -1,11 +1,11 @@
-defmodule Hologram.Compiler.JSEncoder.BooleanAndOperatorTest do
+defmodule Hologram.Compiler.JSEncoder.RelaxedBooleanAndOperatorTest do
   use Hologram.Test.UnitCase, async: true
 
   alias Hologram.Compiler.{Context, JSEncoder, Opts}
-  alias Hologram.Compiler.IR.{BooleanAndOperator, IntegerType}
+  alias Hologram.Compiler.IR.{IntegerType, RelaxedBooleanAndOperator}
 
   test "encode/3" do
-    ir = %BooleanAndOperator{
+    ir = %RelaxedBooleanAndOperator{
       left: %IntegerType{value: 1},
       right: %IntegerType{value: 2}
     }
@@ -13,7 +13,7 @@ defmodule Hologram.Compiler.JSEncoder.BooleanAndOperatorTest do
     result = JSEncoder.encode(ir, %Context{}, %Opts{})
 
     expected =
-      "Elixir_Kernel.$boolean_and({ type: 'integer', value: 1 }, { type: 'integer', value: 2 })"
+      "Elixir_Kernel.$relaxed_boolean_and({ type: 'integer', value: 1 }, { type: 'integer', value: 2 })"
 
     assert result == expected
   end

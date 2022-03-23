@@ -96,24 +96,6 @@ describe("apply()", () => {
   });
 });
 
-describe("$boolean_and()", () => {
-  it("returns the second arg if the first one is truthy", () => {
-    const left = Type.integer(1);
-    const right = Type.integer(2);
-    const result = Kernel.$boolean_and(left, right);
-
-    assert.deepStrictEqual(result, right);
-  });
-
-  it("returns the first arg if it is falsy", () => {
-    const left = Type.nil();
-    const right = Type.integer(2);
-    const result = Kernel.$boolean_and(left, right);
-
-    assert.deepStrictEqual(result, left);
-  });
-});
-
 describe("$concatenate_lists()", () => {
   it("concatenates 2 lists", () => {
     const arg1 = Type.list([Type.integer(1), Type.integer(2)]);
@@ -415,6 +397,24 @@ describe("put_in()", () => {
     );
 
     assert.deepStrictEqual(result, expectedLevel1Data);
+  });
+});
+
+describe("$relaxed_boolean_and()", () => {
+  it("returns the second arg if the first one is truthy", () => {
+    const left = Type.integer(1);
+    const right = Type.integer(2);
+    const result = Kernel.$relaxed_boolean_and(left, right);
+
+    assert.deepStrictEqual(result, right);
+  });
+
+  it("returns the first arg if it is falsy", () => {
+    const left = Type.nil();
+    const right = Type.integer(2);
+    const result = Kernel.$relaxed_boolean_and(left, right);
+
+    assert.deepStrictEqual(result, left);
   });
 });
 

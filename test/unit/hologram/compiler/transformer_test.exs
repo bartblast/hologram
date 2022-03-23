@@ -11,7 +11,6 @@ defmodule Hologram.Compiler.TransformerTest do
     AtomType,
     BinaryType,
     Block,
-    BooleanAndOperator,
     BooleanType,
     CaseExpression,
     DivisionOperator,
@@ -37,6 +36,7 @@ defmodule Hologram.Compiler.TransformerTest do
     NilType,
     ProtocolDefinition,
     Quote,
+    RelaxedBooleanAndOperator,
     RequireDirective,
     StrictBooleanAndOperator,
     StringType,
@@ -190,13 +190,6 @@ defmodule Hologram.Compiler.TransformerTest do
       assert %AdditionOperator{} = Transformer.transform(ast, %Context{})
     end
 
-    test "boolean and" do
-      code = "true && false"
-      ast = ast(code)
-
-      assert %BooleanAndOperator{} = Transformer.transform(ast, %Context{})
-    end
-
     test "division" do
       code = "1 / 2"
       ast = ast(code)
@@ -259,6 +252,13 @@ defmodule Hologram.Compiler.TransformerTest do
       ast = ast(code)
 
       assert %FunctionCall{} = Transformer.transform(ast, %Context{})
+    end
+
+    test "relaxed boolean and" do
+      code = "true && false"
+      ast = ast(code)
+
+      assert %RelaxedBooleanAndOperator{} = Transformer.transform(ast, %Context{})
     end
 
     test "strict boolean and" do

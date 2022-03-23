@@ -59,10 +59,6 @@ defmodule Hologram.Compiler.IR do
     defstruct left: nil, right: nil
   end
 
-  defmodule BooleanAndOperator do
-    defstruct left: nil, right: nil
-  end
-
   defmodule DivisionOperator do
     defstruct left: nil, right: nil
   end
@@ -92,6 +88,10 @@ defmodule Hologram.Compiler.IR do
   end
 
   defmodule MultiplicationOperator do
+    defstruct left: nil, right: nil
+  end
+
+  defmodule RelaxedBooleanAndOperator do
     defstruct left: nil, right: nil
   end
 
