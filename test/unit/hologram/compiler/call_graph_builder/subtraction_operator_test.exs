@@ -33,7 +33,6 @@ defmodule Hologram.Compiler.CallGraphBuilder.SubtractionOperatorTest do
 
     CallGraphBuilder.build(ir, @module_defs, @templates, from_vertex)
 
-    assert CallGraph.num_edges() == 2
     assert CallGraph.has_edge?(PlaceholderModule1, {PlaceholderModule2, :test_fun_2a})
     assert CallGraph.has_edge?(PlaceholderModule1, {PlaceholderModule3, :test_fun_3a})
   end
