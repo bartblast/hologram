@@ -27,8 +27,8 @@ defmodule Hologram.Compiler.PrunerTest do
   end
 
   setup_all do
-    ModuleDefStore.create()
-    CallGraph.create()
+    ModuleDefStore.restart()
+    CallGraph.restart()
 
     app_path = "#{@fixtures_path}/compiler/pruner"
     opts = [app_path: app_path]

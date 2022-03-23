@@ -54,8 +54,17 @@ defmodule Hologram.Compiler.ModuleDefStore do
     {:reply, result, state}
   end
 
+  def is_running? do
+    Process.whereis(__MODULE__) != nil
+  end
+
   def put(module, module_def) do
     :ets.insert(@table_name, {module, module_def})
+  end
+
+  def restart do
+    if is_running?(), do: destroy()
+    create()
   end
 
   def start_link do

@@ -36,6 +36,10 @@ defmodule Hologram.Compiler.CallGraph do
     Agent.get(__MODULE__, &Graph.has_vertex?(&1, vertex))
   end
 
+  def is_running? do
+    Process.whereis(__MODULE__) != nil
+  end
+
   def num_edges do
     Agent.get(__MODULE__, &Graph.num_edges/1)
   end
@@ -46,6 +50,11 @@ defmodule Hologram.Compiler.CallGraph do
 
   def reachable(vertices) do
     Agent.get(__MODULE__, &Graph.reachable(&1, vertices))
+  end
+
+  def restart do
+    if is_running?(), do: destroy()
+    create()
   end
 
   def start_link(_) do

@@ -17,7 +17,7 @@ defmodule Hologram.Compiler.CallGraphBuilder.CaseExpressionTest do
   @templates %{}
 
   setup do
-    CallGraph.create()
+    CallGraph.restart()
     :ok
   end
 

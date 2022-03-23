@@ -10,8 +10,9 @@ defmodule Hologram.Compiler.BuilderTest do
   }
 
   setup do
-    ModuleDefStore.create()
-    CallGraph.create()
+    ModuleDefStore.restart()
+    CallGraph.restart()
+
     :ok
   end
 

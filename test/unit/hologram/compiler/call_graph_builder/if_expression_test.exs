@@ -9,7 +9,7 @@ defmodule Hologram.Compiler.CallGraphBuilder.IfExpressionTest do
   @templates %{}
 
   setup do
-    CallGraph.create()
+    CallGraph.restart()
     :ok
   end
 
