@@ -38,7 +38,7 @@ defmodule Hologram.Compiler.CallGraphBuilder.FunctionCallTest do
     ir = %FunctionCall{module: Kernel, function: :get_in}
     CallGraphBuilder.build(ir, @module_defs, @templates, @from_vertex)
 
-    assert CallGraph.num_vertices() == 0
+    refute CallGraph.has_edge?(@from_vertex, {Kernel, :get_in})
   end
 
   test "args recursion" do
