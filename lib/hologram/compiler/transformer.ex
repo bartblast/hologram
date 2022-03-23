@@ -30,8 +30,9 @@ defmodule Hologram.Compiler.Transformer do
     QuoteTransformer,
     PipeOperatorTransformer,
     RequireDirectiveTransformer,
-    SubtractionOperatorTransformer,
+    StrictBooleanAndOperatorTransformer,
     StructTypeTransformer,
+    SubtractionOperatorTransformer,
     TypeOperatorTransformer,
     TupleTypeTransformer,
     UnaryNegativeOperatorTransformer,
@@ -169,6 +170,10 @@ defmodule Hologram.Compiler.Transformer do
 
   def transform({:|>, _, _} = ast, %Context{} = context) do
     PipeOperatorTransformer.transform(ast, context)
+  end
+
+  def transform({:and, _, _} = ast, %Context{} = context) do
+    StrictBooleanAndOperatorTransformer.transform(ast, context)
   end
 
   # needs to be defined before binary subtraction operator

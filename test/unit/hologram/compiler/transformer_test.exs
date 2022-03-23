@@ -38,6 +38,7 @@ defmodule Hologram.Compiler.TransformerTest do
     ProtocolDefinition,
     Quote,
     RequireDirective,
+    StrictBooleanAndOperator,
     StringType,
     StructType,
     SubtractionOperator,
@@ -258,6 +259,13 @@ defmodule Hologram.Compiler.TransformerTest do
       ast = ast(code)
 
       assert %FunctionCall{} = Transformer.transform(ast, %Context{})
+    end
+
+    test "strict boolean and" do
+      code = "true and false"
+      ast = ast(code)
+
+      assert %StrictBooleanAndOperator{} = Transformer.transform(ast, %Context{})
     end
 
     test "subtraction" do
