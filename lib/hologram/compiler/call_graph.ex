@@ -19,6 +19,10 @@ defmodule Hologram.Compiler.CallGraph do
     Process.whereis(__MODULE__) |> Process.exit(:normal)
   end
 
+  def edges(vertex) do
+    Agent.get(__MODULE__, &Graph.edges(&1, vertex))
+  end
+
   def get do
     Agent.get(__MODULE__, & &1)
   end

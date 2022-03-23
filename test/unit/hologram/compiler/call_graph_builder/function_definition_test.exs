@@ -26,9 +26,7 @@ defmodule Hologram.Compiler.CallGraphBuilder.FunctionDefinitionTest do
     from_vertex = PlaceholderModule1
     CallGraphBuilder.build(ir, @module_defs, @templates, from_vertex)
 
-    assert CallGraph.num_vertices() == 3
-    assert CallGraph.num_edges() == 2
-
+    refute CallGraph.has_edge?(PlaceholderModule1, {PlaceholderModule1, :test_fun})
     assert CallGraph.has_edge?({PlaceholderModule1, :test_fun}, PlaceholderModule2)
     assert CallGraph.has_edge?({PlaceholderModule1, :test_fun}, PlaceholderModule3)
   end
@@ -43,9 +41,7 @@ defmodule Hologram.Compiler.CallGraphBuilder.FunctionDefinitionTest do
     from_vertex = PlaceholderModule1
     CallGraphBuilder.build(ir, @module_defs, @templates, from_vertex)
 
-    assert CallGraph.num_vertices() == 1
-    assert CallGraph.num_edges() == 0
-
-    assert CallGraph.has_vertex?({PlaceholderModule1, :test_fun})
+    refute CallGraph.has_edge?(PlaceholderModule1, {PlaceholderModule1, :test_fun})
+    assert CallGraph.edges([{PlaceholderModule1, :test_fun}]) == []
   end
 end
