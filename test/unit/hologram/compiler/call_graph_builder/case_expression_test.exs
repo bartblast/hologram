@@ -47,9 +47,6 @@ defmodule Hologram.Compiler.CallGraphBuilder.CaseExpressionTest do
     from_vertex = PlaceholderModule1
     CallGraphBuilder.build(ir, @module_defs, @templates, from_vertex)
 
-    assert CallGraph.num_vertices() == 6
-    assert CallGraph.num_edges() == 5
-
     assert CallGraph.has_edge?(PlaceholderModule1, PlaceholderModule2)
     assert CallGraph.has_edge?(PlaceholderModule1, PlaceholderModule3)
     assert CallGraph.has_edge?(PlaceholderModule1, PlaceholderModule4)
