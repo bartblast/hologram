@@ -37,6 +37,7 @@ defmodule Hologram.Compiler.TransformerTest do
     ProtocolDefinition,
     Quote,
     RelaxedBooleanAndOperator,
+    RelaxedBooleanOrOperator,
     RequireDirective,
     StrictBooleanAndOperator,
     StringType,
@@ -259,6 +260,13 @@ defmodule Hologram.Compiler.TransformerTest do
       ast = ast(code)
 
       assert %RelaxedBooleanAndOperator{} = Transformer.transform(ast, %Context{})
+    end
+
+    test "relaxed boolean or" do
+      code = "true || false"
+      ast = ast(code)
+
+      assert %RelaxedBooleanOrOperator{} = Transformer.transform(ast, %Context{})
     end
 
     test "strict boolean and" do
