@@ -264,8 +264,9 @@ without its shortcomings related to scalability, efficiency, etc.
 | :------------ | :----------------: |
 | Binary        | :x:                |
 | Bitstring     | :x:                |
-| Case          | :x:                |
+| Case          | :white_check_mark: |
 | Comprehension | :x:                |
+| If            | :x:                |
 | List          | :x:                |
 | Map           | :white_check_mark: |      
 | Range         | :x:                |          
@@ -277,7 +278,7 @@ without its shortcomings related to scalability, efficiency, etc.
 | Structure     | Status             |
 | :------------ | :----------------: |
 | After         | :x:                |
-| Case          | :x:                |
+| Case          | :white_check_mark: |
 | Catch         | :x:                |
 | Comprehension | :x:                |
 | Cond          | :x:                |
