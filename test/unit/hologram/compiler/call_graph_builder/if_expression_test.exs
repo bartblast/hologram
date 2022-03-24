@@ -23,9 +23,6 @@ defmodule Hologram.Compiler.CallGraphBuilder.IfExpressionTest do
     from_vertex = PlaceholderModule1
     CallGraphBuilder.build(ir, @module_defs, @templates, from_vertex)
 
-    assert CallGraph.num_vertices() == 2
-    assert CallGraph.num_edges() == 1
-
     assert CallGraph.has_edge?(PlaceholderModule1, PlaceholderModule2)
   end
 
@@ -39,9 +36,6 @@ defmodule Hologram.Compiler.CallGraphBuilder.IfExpressionTest do
     from_vertex = PlaceholderModule1
     CallGraphBuilder.build(ir, @module_defs, @templates, from_vertex)
 
-    assert CallGraph.num_vertices() == 2
-    assert CallGraph.num_edges() == 1
-
     assert CallGraph.has_edge?(PlaceholderModule1, PlaceholderModule2)
   end
 
@@ -54,9 +48,6 @@ defmodule Hologram.Compiler.CallGraphBuilder.IfExpressionTest do
 
     from_vertex = PlaceholderModule1
     CallGraphBuilder.build(ir, @module_defs, @templates, from_vertex)
-
-    assert CallGraph.num_vertices() == 2
-    assert CallGraph.num_edges() == 1
 
     assert CallGraph.has_edge?(PlaceholderModule1, PlaceholderModule2)
   end
