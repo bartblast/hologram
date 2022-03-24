@@ -1,12 +1,12 @@
-defmodule HologramE2E.Operators.ListSubtractionPage do
+defmodule HologramE2E.Operators.RelaxedBooleanOrPage do
   use Hologram.Page
 
-  route "/e2e/operators/list-subtraction"
+  route "/e2e/operators/relaxed-boolean-or"
 
   def init do
     %{
-      left: [1, 2, 3, 1, 2, 3, 1],
-      right: [1, 3, 3, 4],
+      left: nil,
+      right: 2,
       result: 0
     }
   end
@@ -19,6 +19,6 @@ defmodule HologramE2E.Operators.ListSubtractionPage do
   end
 
   def action(:calculate, _params, state) do
-    Map.put(state, :result, state.left -- state.right)
+    Map.put(state, :result, state.left || state.right)
   end
 end
