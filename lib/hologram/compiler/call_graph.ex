@@ -12,7 +12,7 @@ defmodule Hologram.Compiler.CallGraph do
   end
 
   def create do
-    start_link(nil)
+    Agent.start_link(fn -> Graph.new() end, name: __MODULE__)
   end
 
   def destroy do
@@ -56,12 +56,11 @@ defmodule Hologram.Compiler.CallGraph do
     Agent.get(__MODULE__, &Graph.reachable(&1, vertices))
   end
 
-  def restart do
-    if is_running?(), do: destroy()
-    create()
-  end
-
-  def start_link(_) do
-    Agent.start_link(fn -> Graph.new() end, name: __MODULE__)
+  def reset do
+    if is_running?() do
+      Agent.update(__MODULE__, fn _ -> Graph.new() end)
+    else
+      create()
+    end
   end
 end

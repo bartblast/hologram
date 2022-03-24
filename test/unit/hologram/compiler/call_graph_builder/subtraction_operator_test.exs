@@ -19,7 +19,7 @@ defmodule Hologram.Compiler.CallGraphBuilder.SubtractionOperatorTest do
   @templates %{}
 
   setup do
-    CallGraph.restart()
+    CallGraph.reset()
     :ok
   end
 

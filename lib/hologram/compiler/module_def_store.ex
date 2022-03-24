@@ -10,12 +10,11 @@ defmodule Hologram.Compiler.ModuleDefStore do
 
   def create do
     :ets.new(@table_name, [:public, :named_table])
-    start_link()
+    GenServer.start_link(__MODULE__, [], name: __MODULE__)
   end
 
   def destroy do
     Process.whereis(__MODULE__) |> Process.exit(:normal)
-    :ets.delete(@table_name)
   end
 
   def get(key) do
@@ -62,12 +61,15 @@ defmodule Hologram.Compiler.ModuleDefStore do
     :ets.insert(@table_name, {module, module_def})
   end
 
-  def restart do
-    if is_running?(), do: destroy()
-    create()
+  def reset do
+    if is_running?() && table_created?() do
+      :ets.delete_all_objects(@table_name)
+    else
+      create()
+    end
   end
 
-  def start_link do
-    GenServer.start_link(__MODULE__, [], name: __MODULE__)
+  defp table_created? do
+    :ets.info(@table_name) != :undefined
   end
 end
