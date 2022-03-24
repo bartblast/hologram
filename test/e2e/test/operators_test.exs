@@ -58,4 +58,11 @@ defmodule HologramE2E.OperatorsTest do
     |> click(css("#button"))
     |> assert_has(css("#text", text: "Result = -123"))
   end
+
+  feature "unary positive", %{session: session} do
+    session
+    |> visit("/e2e/operators/unary-positive")
+    |> click(css("#button"))
+    |> assert_has(css("#text", text: "Result = 123"))
+  end
 end
