@@ -15,6 +15,7 @@ defmodule Hologram.Compiler.ModuleDefStore do
 
   def destroy do
     Process.whereis(__MODULE__) |> Process.exit(:normal)
+    :ets.delete(@table_name)
   end
 
   def get(key) do
