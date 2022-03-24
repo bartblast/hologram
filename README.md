@@ -202,7 +202,7 @@ without its shortcomings related to scalability, efficiency, etc.
 
 | Operator | Status             |
 | :------- | :----------------: |
-| unary +  | :x:                |
+| unary +  | :white_check_mark: |
 | unary -  | :white_check_mark: |
 | +        | :white_check_mark: |
 | -        | :white_check_mark: |
