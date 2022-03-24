@@ -418,6 +418,24 @@ describe("$relaxed_boolean_and()", () => {
   });
 });
 
+describe("$relaxed_boolean_and()", () => {
+  it("returns the first arg if it is truthy", () => {
+    const left = Type.integer(1);
+    const right = Type.integer(2);
+    const result = Kernel.$relaxed_boolean_or(left, right);
+
+    assert.deepStrictEqual(result, left);
+  });
+
+  it("returns the second arg if the first is falsy", () => {
+    const left = Type.nil();
+    const right = Type.integer(2);
+    const result = Kernel.$relaxed_boolean_or(left, right);
+
+    assert.deepStrictEqual(result, right);
+  });
+});
+
 describe("$subtract()", () => {
   it("subtracts integer and integer", () => {
     const arg1 = Type.integer(1);
