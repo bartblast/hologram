@@ -213,7 +213,7 @@ without its shortcomings related to scalability, efficiency, etc.
 | and      | :x:                |
 | &&       | :white_check_mark: |
 | or       | :x:                |
-| \|\|     | :x:                |
+| \|\|     | :white_check_mark: |
 | not      | :x:                |
 | !        | :x:                |
 | in       | :x:                |
