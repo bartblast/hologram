@@ -19,6 +19,11 @@ defmodule Hologram.Runtime.TemplateStore do
     {:ok, nil}
   end
 
+  def create do
+    :ets.new(@table_name, [:public, :named_table])
+    start_link(nil)
+  end
+
   defp create_table do
     :ets.new(@table_name, [:public, :named_table])
   end
@@ -26,6 +31,15 @@ defmodule Hologram.Runtime.TemplateStore do
   def get(module) do
     [{^module, vdom}] = :ets.lookup(@table_name, module)
     vdom
+  end
+
+  def get_all do
+    :ets.tab2list(@table_name)
+    |> Enum.into(%{})
+  end
+  
+  def is_running? do
+    Process.whereis(__MODULE__) != nil
   end
 
   defp maybe_populate_table do
@@ -43,5 +57,21 @@ defmodule Hologram.Runtime.TemplateStore do
     |> Enum.each(fn {module, vdom} ->
       :ets.insert(@table_name, {module, vdom})
     end)
+  end
+
+  def put(module, template) do
+    :ets.insert(@table_name, {module, template})
+  end
+
+  def reset do
+    if is_running?() && table_created?() do
+      :ets.delete_all_objects(@table_name)
+    else
+      create()
+    end
+  end
+
+  defp table_created? do
+    :ets.info(@table_name) != :undefined
   end
 end
