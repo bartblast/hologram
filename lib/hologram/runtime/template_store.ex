@@ -1,3 +1,4 @@
+# TODO: create Hologram.Commons.Store behaviour and use it in ModuleDefStore, PageDigestStore, StaticDigestStore, TemplateStore
 # TODO: refactor & test
 
 defmodule Hologram.Runtime.TemplateStore do
@@ -19,6 +20,10 @@ defmodule Hologram.Runtime.TemplateStore do
     {:ok, nil}
   end
 
+  def clean_table do
+    :ets.delete_all_objects(@table_name)
+  end
+
   def create do
     :ets.new(@table_name, [:public, :named_table])
     start_link(nil)
@@ -37,7 +42,7 @@ defmodule Hologram.Runtime.TemplateStore do
     :ets.tab2list(@table_name)
     |> Enum.into(%{})
   end
-  
+
   def is_running? do
     Process.whereis(__MODULE__) != nil
   end
@@ -65,7 +70,7 @@ defmodule Hologram.Runtime.TemplateStore do
 
   def reset do
     if is_running?() && table_created?() do
-      :ets.delete_all_objects(@table_name)
+      clean_table()
     else
       create()
     end

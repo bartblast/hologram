@@ -1,4 +1,5 @@
-# TODO: test
+# TODO: create Hologram.Commons.Store behaviour and use it in ModuleDefStore, PageDigestStore, StaticDigestStore, TemplateStore
+# TODO: refactor & test
 
 defmodule Hologram.Runtime.PageDigestStore do
   use GenServer
@@ -17,6 +18,10 @@ defmodule Hologram.Runtime.PageDigestStore do
     maybe_populate_table()
 
     {:ok, nil}
+  end
+
+  def clean_table do
+    :ets.delete_all_objects(@table_name)
   end
 
   defp create_table do

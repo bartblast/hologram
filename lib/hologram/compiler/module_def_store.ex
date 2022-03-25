@@ -1,3 +1,4 @@
+# TODO: create Hologram.Commons.Store behaviour and use it in ModuleDefStore, PageDigestStore, StaticDigestStore, TemplateStore
 # TODO: refactor & test
 
 defmodule Hologram.Compiler.ModuleDefStore do
