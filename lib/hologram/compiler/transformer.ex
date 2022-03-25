@@ -29,6 +29,7 @@ defmodule Hologram.Compiler.Transformer do
     QuoteTransformer,
     PipeOperatorTransformer,
     RelaxedBooleanAndOperatorTransformer,
+    RelaxedBooleanNotOperatorTransformer,
     RelaxedBooleanOrOperatorTransformer,
     RequireDirectiveTransformer,
     StrictBooleanAndOperatorTransformer,
@@ -171,6 +172,10 @@ defmodule Hologram.Compiler.Transformer do
 
   def transform({:&&, _, _} = ast, %Context{} = context) do
     RelaxedBooleanAndOperatorTransformer.transform(ast, context)
+  end
+
+  def transform({:__block__, _, [{:!, _, _}]} = ast, %Context{} = context) do
+    RelaxedBooleanNotOperatorTransformer.transform(ast, context)
   end
 
   def transform({:||, _, _} = ast, %Context{} = context) do
