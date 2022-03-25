@@ -5,12 +5,19 @@ defmodule Hologram.Template.Renderer.PageTest do
   alias Hologram.Runtime.PageDigestStore
   alias Hologram.Template.Renderer
 
-  test "render/2" do
-    "#{@fixtures_path}/template/renderers/page_renderer"
-    |> compile_templatables()
+  setup do
+    [
+      app_path: "#{@fixtures_path}/template/renderers/page_renderer",
+      templatables: [HologramE2E.DefaultLayout]
+    ]
+    |> compile()
 
     Runtime.reload()
 
+    :ok
+  end
+
+  test "render/2" do
     module = Hologram.Test.Fixtures.Template.PageRenderer.Module1
     digest = PageDigestStore.get(module)
     assert digest =~ md5_hex_regex()

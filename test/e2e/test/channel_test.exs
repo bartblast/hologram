@@ -138,8 +138,8 @@ defmodule HologramE2E.ChannelTest do
   end
 
   test "command returning __redirect__ action", %{socket: socket} do
-    "#{@fixtures_path}/runtime/channel"
-    |> compile_templatables()
+    [app_path: "#{@fixtures_path}/runtime/channel"]
+    |> compile()
 
     Runtime.reload()
 

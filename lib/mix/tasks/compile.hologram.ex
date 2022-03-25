@@ -44,6 +44,7 @@ defmodule Mix.Tasks.Compile.Hologram do
     CallGraph.create()
 
     templatables = Reflection.list_templatables(opts)
+    templatables = if opts[:templatables], do: templatables ++ opts[:templatables], else: templatables
     templates = TemplateBuilder.build_all(templatables)
     dump_template_store(templates)
 
