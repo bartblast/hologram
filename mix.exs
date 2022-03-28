@@ -32,10 +32,14 @@ defmodule Hologram.MixProject do
   end
 
   def application do
-    [
-      mod: {Hologram.Runtime.Application, []},
-      extra_applications: [:logger]
-    ]
+    if is_dep?() do
+      [
+        mod: {Hologram.Runtime.Application, []},
+        extra_applications: [:logger]
+      ]
+    else
+      []
+    end
   end
 
   defp deps do
@@ -49,6 +53,12 @@ defmodule Hologram.MixProject do
 
   defp elixirc_paths(:test), do: ["lib", "test/unit/fixtures", "test/unit/support"]
   defp elixirc_paths(_), do: ["lib"]
+
+  def is_dep? do
+    __MODULE__.module_info()[:compile][:source]
+    |> to_string()
+    |> String.ends_with?("/deps/hologram/mix.exs")
+  end
 
   def package do
     [
