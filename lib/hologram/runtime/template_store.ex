@@ -4,8 +4,13 @@ defmodule Hologram.Runtime.TemplateStore do
   @dump_path Hologram.Compiler.Reflection.release_template_store_path()
 
   @impl true
-  def dump_path, do: @dump_path
-
+  def populate_table do
+    @dump_path
+    |> File.read!()
+    |> Utils.deserialize()
+    |> Enum.each(fn {key, value} -> put(key, value) end)
+  end
+  
   @impl true
   def table_name, do: :hologram_template_store
 end
