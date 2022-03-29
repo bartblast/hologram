@@ -11,17 +11,6 @@ defmodule Hologram.Commons.MemoryStoreTest do
     end
   end
 
-  setup_all do
-    file_content = Utils.serialize(@store_content)
-    dump_path = MemoryStore.dump_path()
-
-    unless File.exists?(dump_path) do
-      File.write!(dump_path, file_content)
-    end
-
-    :ok
-  end
-
   setup do
     maybe_delete_table()
     on_exit(&maybe_delete_table/0)

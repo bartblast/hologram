@@ -23,6 +23,8 @@ defmodule Hologram.Commons.MemoryStore do
         {:ok, nil}
       end
 
+      def populate_table, do: nil
+
       @impl true
       def terminate(_reason, _state) do
         delete_table()
@@ -55,13 +57,6 @@ defmodule Hologram.Commons.MemoryStore do
         if !table_created?(), do: create_table()
       end
 
-      defp populate_table do
-        dump_path()
-        |> File.read!()
-        |> Utils.deserialize()
-        |> Enum.each(fn {key, value} -> put(key, value) end)
-      end
-
       def put(key, value) do
         table_name() |> :ets.insert({key, value})
       end
@@ -73,9 +68,11 @@ defmodule Hologram.Commons.MemoryStore do
       defp truncate_table do
         table_name() |> :ets.delete_all_objects()
       end
+
+      defoverridable populate_table: 0
     end
   end
 
-  @callback dump_path :: String.t
+  @callback populate_table() :: any()
   @callback table_name() :: atom()
 end
