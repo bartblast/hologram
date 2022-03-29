@@ -41,7 +41,7 @@ defmodule Hologram.Commons.MemoryStore do
           [{^key, value}]->
             value
           _ ->
-            raise "There is no '#{key}' key in #{table_name} ETS table."
+            raise "There is no '#{key}' key in #{table_name()} ETS table."
         end
       end
 
