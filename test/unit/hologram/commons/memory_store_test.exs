@@ -1,5 +1,5 @@
 defmodule Hologram.Commons.MemoryStoreTest do
-  use Hologram.Test.UnitCase, async: true
+  use Hologram.Test.UnitCase, async: false
   alias Hologram.Test.Fixtures.Commons.MemoryStore
 
   @store_content %{key_1: :value_1, key_2: :value_2}
