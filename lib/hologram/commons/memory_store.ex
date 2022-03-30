@@ -2,6 +2,7 @@ defmodule Hologram.Commons.MemoryStore do
   defmacro __using__(_opts) do
     quote do
       use GenServer
+      alias Hologram.Utils
 
       @behaviour Hologram.Commons.MemoryStore
 
@@ -63,6 +64,13 @@ defmodule Hologram.Commons.MemoryStore do
 
       defp maybe_create_table do
         if !table_created?(), do: create_table()
+      end
+
+      defp populate_table_from_file(file_path) do
+        file_path
+        |> File.read!()
+        |> Utils.deserialize()
+        |> Enum.each(fn {key, value} -> put(key, value) end)
       end
 
       def put(key, value) do
