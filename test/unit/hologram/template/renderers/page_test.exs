@@ -19,7 +19,7 @@ defmodule Hologram.Template.Renderer.PageTest do
 
   test "render/2" do
     module = Hologram.Test.Fixtures.Template.PageRenderer.Module1
-    digest = PageDigestStore.get(module)
+    digest = PageDigestStore.get!(module)
     assert digest =~ md5_hex_regex()
 
     result = Renderer.render(module, %{})

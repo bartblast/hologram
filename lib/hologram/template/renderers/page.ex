@@ -16,7 +16,7 @@ defimpl Renderer, for: Atom do
 
   defp aggregate_bindings(page_module, layout_module) do
     class_name = Helpers.class_name(page_module)
-    digest = PageDigestStore.get(page_module)
+    digest = PageDigestStore.get!(page_module)
 
     # DEFER: pass page params to init function
     bindings =
