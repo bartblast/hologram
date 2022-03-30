@@ -47,6 +47,15 @@ defmodule Hologram.Commons.MemoryStore do
         end
       end
 
+      def get!(key) do
+        case get(key) do
+          {:ok, value} ->
+            value
+          :error ->
+            raise KeyError, message: "key #{inspect(key)} not found"
+        end
+      end
+
       def get_all do
         table_name()
         |> :ets.tab2list()

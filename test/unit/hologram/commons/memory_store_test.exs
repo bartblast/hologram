@@ -5,16 +5,15 @@ defmodule Hologram.Commons.MemoryStoreTest do
   @store_content %{key_1: :value_1, key_2: :value_2}
   @table_name MemoryStore.table_name()
 
-  defp maybe_delete_table do
-    if :ets.info(@table_name) != :undefined do
-      :ets.delete(@table_name)
+  defp wait_for_test_cleanup do
+    if Process.whereis(MemoryStore) || :ets.info(@table_name) != :undefined do
+      :timer.sleep(1)
+      wait_for_test_cleanup()
     end
   end
 
   setup do
-    maybe_delete_table()
-    on_exit(&maybe_delete_table/0)
-
+    wait_for_test_cleanup()
     :ok
   end
 
@@ -59,6 +58,21 @@ defmodule Hologram.Commons.MemoryStoreTest do
     test "key doesn't exist" do
       MemoryStore.run()
       assert MemoryStore.get(:key_invalid) == :error
+    end
+  end
+
+  describe "get!/1" do
+    test "key exists" do
+      MemoryStore.run()
+      assert MemoryStore.get!(:key_1) == :value_1
+    end
+
+    test "key doesn't exist" do
+      MemoryStore.run()
+
+      assert_raise KeyError, "key :key_invalid not found", fn ->
+        MemoryStore.get!(:key_invalid)
+      end
     end
   end
 
