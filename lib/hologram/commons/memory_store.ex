@@ -41,9 +41,9 @@ defmodule Hologram.Commons.MemoryStore do
       def get(key) do
         case :ets.lookup(table_name(), key) do
           [{^key, value}]->
-            value
+            {:ok, value}
           _ ->
-            raise "There is no '#{key}' key in #{table_name()} ETS table."
+            :error
         end
       end
 

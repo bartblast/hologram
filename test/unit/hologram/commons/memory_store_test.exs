@@ -53,16 +53,12 @@ defmodule Hologram.Commons.MemoryStoreTest do
   describe "get/1" do
     test "key exists" do
       MemoryStore.run()
-      assert MemoryStore.get(:key_1) == :value_1
+      assert MemoryStore.get(:key_1) == {:ok, :value_1}
     end
 
     test "key doesn't exist" do
       MemoryStore.run()
-      expected_msg = "There is no 'key_invalid' key in test_fixture_memory_store ETS table."
-
-      assert_raise RuntimeError, expected_msg, fn ->
-        MemoryStore.get(:key_invalid)
-      end
+      assert MemoryStore.get(:key_invalid) == :error
     end
   end
 
@@ -75,7 +71,7 @@ defmodule Hologram.Commons.MemoryStoreTest do
     MemoryStore.run()
     MemoryStore.put(:key_3, :value_3)
 
-    assert MemoryStore.get(:key_3) == :value_3
+    assert MemoryStore.get(:key_3) == {:ok, :value_3}
   end
 
   test "terminate/2" do
