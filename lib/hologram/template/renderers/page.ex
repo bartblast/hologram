@@ -7,8 +7,8 @@ defimpl Renderer, for: Atom do
   def render(page_module, _params, _slots) do
     layout_module = page_module.layout()
     bindings = aggregate_bindings(page_module, layout_module)
-    page_template = TemplateStore.get(page_module)
-    layout_template = TemplateStore.get(layout_module)
+    page_template = TemplateStore.get!(page_module)
+    layout_template = TemplateStore.get!(layout_module)
 
     Renderer.render(layout_template, bindings, default: page_template)
     |> Utils.prepend("<!DOCTYPE html>\n")
