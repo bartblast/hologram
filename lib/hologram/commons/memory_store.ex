@@ -2,7 +2,6 @@ defmodule Hologram.Commons.MemoryStore do
   defmacro __using__(_opts) do
     quote do
       use GenServer
-      alias Hologram.Utils
 
       @behaviour Hologram.Commons.MemoryStore
 

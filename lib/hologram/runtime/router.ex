@@ -45,6 +45,11 @@ defmodule Hologram.Router do
 
   # DEFER: test
   def static_path(file_path) do
-    StaticDigestStore.get(file_path)
+    case StaticDigestStore.get(file_path) do
+      {:ok, file_path} ->
+        file_path
+      :error ->
+        file_path
+    end
   end
 end
