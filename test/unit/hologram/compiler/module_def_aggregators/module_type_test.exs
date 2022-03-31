@@ -8,8 +8,6 @@ defmodule Hologram.Compiler.ModuleDefAggregators.ModuleTypeTest do
   alias Hologram.Test.Fixtures.Compiler.ModuleDefAggregators.ModuleType.{
     Module1,
     Module2,
-    Module3,
-    Module4,
     Module6,
     Module7
   }
@@ -17,11 +15,14 @@ defmodule Hologram.Compiler.ModuleDefAggregators.ModuleTypeTest do
   alias Hologram.Test.Fixtures.PlaceholderModule1
 
   setup do
-    ModuleDefStore.create()
-    TemplateStore.reset()
+    [
+      app_path: @fixtures_path <> "/compiler/module_def_aggregators/module_type",
+      templatables: [HologramE2E.DefaultLayout]
+    ]
+    |> compile()
 
-    [Module3, Module4, Module6, Module7, HologramE2E.DefaultLayout]
-    |> seed_template_store()
+    ModuleDefStore.run()
+    TemplateStore.run()
 
     :ok
   end
@@ -46,21 +47,21 @@ defmodule Hologram.Compiler.ModuleDefAggregators.ModuleTypeTest do
     ir = %ModuleType{module: Kernel}
     ModuleDefAggregator.aggregate(ir)
 
-    assert ModuleDefStore.get!(PlaceholderModule1) == nil
+    assert ModuleDefStore.get(PlaceholderModule1) == :error
   end
 
   test "handles ignored modules" do
     ir = %ModuleType{module: Ecto.Changeset}
     ModuleDefAggregator.aggregate(ir)
 
-    assert ModuleDefStore.get!(Ecto.Changeset) == nil
+    assert ModuleDefStore.get(Ecto.Changeset) == :error
   end
 
   test "module that belongs to a namespace that is in the @ignored_namespaces is ignored" do
     ir = %ModuleType{module: Hologram.Commons.Encoder}
     ModuleDefAggregator.aggregate(ir)
 
-    assert ModuleDefStore.get!(Hologram.Commons.Encoder) == nil
+    assert ModuleDefStore.get(Hologram.Commons.Encoder) == :error
   end
 
   test "module functions are traversed" do
