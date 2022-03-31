@@ -13,6 +13,8 @@ defmodule Mix.Tasks.Compile.Hologram do
     Reflection
   }
 
+  alias Hologram.Runtime.TemplateStore
+
   alias Hologram.Template.Builder, as: TemplateBuilder
   alias Hologram.Utils
 
@@ -22,7 +24,7 @@ defmodule Mix.Tasks.Compile.Hologram do
         list_source_files(opts)
         |> digest_files()
 
-      if !has_source_digest?() || has_source_changes?(source_digest) do
+      if !has_source_digest?() || has_source_changes?(source_digest) || opts[:force] do
         compile(opts)
         save_source_digest(source_digest)
       end
@@ -40,13 +42,14 @@ defmodule Mix.Tasks.Compile.Hologram do
     Reflection.root_priv_path()
     |> File.mkdir_p!()
 
-    ModuleDefStore.create()
-    CallGraph.create()
+    ModuleDefStore.run()
+    CallGraph.run()
 
     templatables = Reflection.list_templatables(opts)
     templatables = if opts[:templatables], do: templatables ++ opts[:templatables], else: templatables
     templates = TemplateBuilder.build_all(templatables)
     dump_template_store(templates)
+    TemplateStore.run()
 
     pages = Reflection.list_pages(opts)
     dump_page_list(pages)
@@ -57,8 +60,9 @@ defmodule Mix.Tasks.Compile.Hologram do
     build_pages(pages, output_path, module_defs, call_graph)
     |> dump_page_digest_store()
 
-    CallGraph.destroy()
-    ModuleDefStore.destroy()
+    TemplateStore.stop()
+    CallGraph.stop()
+    ModuleDefStore.stop()
 
     Logger.debug("Hologram compiler finished")
   end
