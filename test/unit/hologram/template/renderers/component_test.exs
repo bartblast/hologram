@@ -14,7 +14,7 @@ defmodule Hologram.Template.Renderer.ComponentTest do
     [app_path: "#{@fixtures_path}/template/renderers/component_renderer"]
     |> compile()
 
-    Runtime.reload()
+    Runtime.run()
 
     :ok
   end
