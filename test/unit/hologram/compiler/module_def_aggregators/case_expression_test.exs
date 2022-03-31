@@ -42,10 +42,10 @@ defmodule Hologram.Compiler.ModuleDefAggregators.CaseExpressionTest do
 
     ModuleDefAggregator.aggregate(ir)
 
-    assert %ModuleDefinition{} = ModuleDefStore.get(PlaceholderModule1)
-    assert %ModuleDefinition{} = ModuleDefStore.get(PlaceholderModule2)
-    assert %ModuleDefinition{} = ModuleDefStore.get(PlaceholderModule3)
-    assert %ModuleDefinition{} = ModuleDefStore.get(PlaceholderModule4)
-    assert %ModuleDefinition{} = ModuleDefStore.get(PlaceholderModule5)
+    assert %ModuleDefinition{} = ModuleDefStore.get!(PlaceholderModule1)
+    assert %ModuleDefinition{} = ModuleDefStore.get!(PlaceholderModule2)
+    assert %ModuleDefinition{} = ModuleDefStore.get!(PlaceholderModule3)
+    assert %ModuleDefinition{} = ModuleDefStore.get!(PlaceholderModule4)
+    assert %ModuleDefinition{} = ModuleDefStore.get!(PlaceholderModule5)
   end
 end

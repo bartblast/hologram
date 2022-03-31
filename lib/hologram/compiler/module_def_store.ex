@@ -1,77 +1,27 @@
-# TODO: create Hologram.Commons.Store behaviour and use it in ModuleDefStore, PageDigestStore, StaticDigestStore, TemplateStore
-# TODO: refactor & test
-
 defmodule Hologram.Compiler.ModuleDefStore do
-  use GenServer
+  use Hologram.Commons.MemoryStore
 
   alias Hologram.Compiler.IR.ModuleDefinition
   alias Hologram.Compiler.Reflection
 
-  @table_name :hologram_module_def_store
-
-  def create do
-    :ets.new(@table_name, [:public, :named_table])
-    GenServer.start_link(__MODULE__, [], name: __MODULE__)
-  end
-
-  def destroy do
-    Process.whereis(__MODULE__) |> Process.exit(:normal)
-    :ets.delete(@table_name)
-  end
-
-  def get(key) do
-    case :ets.lookup(@table_name, key) do
-      [] ->
-        nil
-
-      [{^key, value}] ->
-        value
-    end
-  end
-
-  def get_all do
-    :ets.tab2list(@table_name)
-    |> Enum.into(%{})
-  end
+  @impl true
+  def table_name, do: :hologram_module_def_store
 
   def get_if_not_exists(module) do
     GenServer.call(__MODULE__, {:get_if_not_exists, module}, :infinity)
   end
 
-  def init(_) do
-    {:ok, %{}}
-  end
-
   def handle_call({:get_if_not_exists, module}, _, state) do
     result =
-      if get(module) do
-        nil
-      else
-        module_def = %ModuleDefinition{} = Reflection.module_definition(module)
-        put(module, module_def)
-        module_def
+      case get(module) do
+        {:ok, _} ->
+          nil
+        :error ->
+          module_def = %ModuleDefinition{} = Reflection.module_definition(module)
+          put(module, module_def)
+          module_def
       end
 
     {:reply, result, state}
-  end
-
-  def is_running? do
-    Process.whereis(__MODULE__) != nil
-  end
-
-  def put(module, module_def) do
-    :ets.insert(@table_name, {module, module_def})
-  end
-
-  def reset do
-    if is_running?() && table_created?() do
-      :ets.delete_all_objects(@table_name)
-    else
-      create()
-    end
-  end
-
-  defp table_created? do
-    :ets.info(@table_name) != :undefined
   end
 end

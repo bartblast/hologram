@@ -18,7 +18,7 @@ defmodule Hologram.Compiler.ModuleDefAggregators.FunctionCallTest do
 
     ModuleDefAggregator.aggregate(ir)
 
-    assert %ModuleDefinition{} = ModuleDefStore.get(Module2)
+    assert %ModuleDefinition{} = ModuleDefStore.get!(Module2)
   end
 
   test "aggregates args" do
@@ -32,7 +32,7 @@ defmodule Hologram.Compiler.ModuleDefAggregators.FunctionCallTest do
 
     ModuleDefAggregator.aggregate(ir)
 
-    assert %ModuleDefinition{} = ModuleDefStore.get(Module1)
-    assert %ModuleDefinition{} = ModuleDefStore.get(Module2)
+    assert %ModuleDefinition{} = ModuleDefStore.get!(Module1)
+    assert %ModuleDefinition{} = ModuleDefStore.get!(Module2)
   end
 end

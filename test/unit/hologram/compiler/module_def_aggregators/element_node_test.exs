@@ -38,9 +38,9 @@ defmodule Hologram.Compiler.Aggregators.ElementNodeTest do
 
     ModuleDefAggregator.aggregate(ir)
 
-    assert %ModuleDefinition{} = ModuleDefStore.get(Module1)
-    assert %ModuleDefinition{} = ModuleDefStore.get(Module2)
-    assert %ModuleDefinition{} = ModuleDefStore.get(Module3)
+    assert %ModuleDefinition{} = ModuleDefStore.get!(Module1)
+    assert %ModuleDefinition{} = ModuleDefStore.get!(Module2)
+    assert %ModuleDefinition{} = ModuleDefStore.get!(Module3)
   end
 
   test "aggregation from children" do
@@ -54,7 +54,7 @@ defmodule Hologram.Compiler.Aggregators.ElementNodeTest do
 
     ModuleDefAggregator.aggregate(ir)
 
-    assert %ModuleDefinition{} = ModuleDefStore.get(Module1)
-    assert %ModuleDefinition{} = ModuleDefStore.get(Module2)
+    assert %ModuleDefinition{} = ModuleDefStore.get!(Module1)
+    assert %ModuleDefinition{} = ModuleDefStore.get!(Module2)
   end
 end

@@ -20,7 +20,7 @@ defmodule Hologram.Compiler.ModuleDefAggregators.FunctionDefinitionTest do
 
     ModuleDefAggregator.aggregate(ir)
 
-    assert %ModuleDefinition{} = ModuleDefStore.get(PlaceholderModule1)
-    assert %ModuleDefinition{} = ModuleDefStore.get(PlaceholderModule2)
+    assert %ModuleDefinition{} = ModuleDefStore.get!(PlaceholderModule1)
+    assert %ModuleDefinition{} = ModuleDefStore.get!(PlaceholderModule2)
   end
 end

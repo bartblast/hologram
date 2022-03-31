@@ -19,7 +19,7 @@ defmodule Hologram.Compiler.ModuleDefAggregators.IfExpressionTest do
 
     ModuleDefAggregator.aggregate(ir)
 
-    assert %ModuleDefinition{} = ModuleDefStore.get(PlaceholderModule1)
+    assert %ModuleDefinition{} = ModuleDefStore.get!(PlaceholderModule1)
   end
 
   test "do clause is traversed" do
@@ -31,7 +31,7 @@ defmodule Hologram.Compiler.ModuleDefAggregators.IfExpressionTest do
 
     ModuleDefAggregator.aggregate(ir)
 
-    assert %ModuleDefinition{} = ModuleDefStore.get(PlaceholderModule1)
+    assert %ModuleDefinition{} = ModuleDefStore.get!(PlaceholderModule1)
   end
 
   test "else clause is traversed" do
@@ -43,6 +43,6 @@ defmodule Hologram.Compiler.ModuleDefAggregators.IfExpressionTest do
 
     ModuleDefAggregator.aggregate(ir)
 
-    assert %ModuleDefinition{} = ModuleDefStore.get(PlaceholderModule1)
+    assert %ModuleDefinition{} = ModuleDefStore.get!(PlaceholderModule1)
   end
 end
