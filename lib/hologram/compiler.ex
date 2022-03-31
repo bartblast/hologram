@@ -42,6 +42,13 @@ defmodule Hologram.Compiler do
     TemplateStore.stop()
     CallGraph.stop()
     ModuleDefStore.stop()
+
+    %{
+      call_graph: call_graph,
+      module_defs: module_defs,
+      pages: pages,
+      templatables: templatables
+    }
   end
 
   defp aggregate_module_defs(pages) do
