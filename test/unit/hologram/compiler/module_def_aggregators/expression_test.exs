@@ -7,7 +7,7 @@ defmodule Hologram.Compiler.ModuleDefAggregators.ExpressionTest do
   alias Hologram.Test.Fixtures.{PlaceholderModule1, PlaceholderModule2}
 
   setup do
-    ModuleDefStore.create()
+    ModuleDefStore.run()
     :ok
   end
 

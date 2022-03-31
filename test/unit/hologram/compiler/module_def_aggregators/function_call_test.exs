@@ -6,7 +6,7 @@ defmodule Hologram.Compiler.ModuleDefAggregators.FunctionCallTest do
   alias Hologram.Test.Fixtures.Compiler.ModuleDefAggregators.FunctionCall.{Module1, Module2}
 
   setup do
-    ModuleDefStore.create()
+    ModuleDefStore.run()
     :ok
   end
 

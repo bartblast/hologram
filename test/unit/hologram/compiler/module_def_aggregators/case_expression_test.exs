@@ -13,7 +13,7 @@ defmodule Hologram.Compiler.ModuleDefAggregators.CaseExpressionTest do
   }
 
   setup do
-    ModuleDefStore.create()
+    ModuleDefStore.run()
     :ok
   end
 

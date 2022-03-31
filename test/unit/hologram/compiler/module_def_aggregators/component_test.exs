@@ -7,7 +7,7 @@ defmodule Hologram.Compiler.ModuleDefAggregators.ComponentTest do
   alias Hologram.Test.Fixtures.Compiler.ModuleDefAggregators.Component.{Module1, Module2, Module3}
 
   setup do
-    ModuleDefStore.create()
+    ModuleDefStore.run()
     :ok
   end
 
