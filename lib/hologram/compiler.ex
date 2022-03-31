@@ -47,7 +47,8 @@ defmodule Hologram.Compiler do
       call_graph: call_graph,
       module_defs: module_defs,
       pages: pages,
-      templatables: templatables
+      templatables: templatables,
+      templates: templates
     }
   end
 

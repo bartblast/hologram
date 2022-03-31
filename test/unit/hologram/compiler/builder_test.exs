@@ -5,29 +5,27 @@ defmodule Hologram.Compiler.BuilderTest do
     Builder,
     CallGraph,
     CallGraphBuilder,
-    ModuleDefAggregator,
-    ModuleDefStore
   }
 
-  setup do
-    ModuleDefStore.reset()
-    CallGraph.reset()
+  @module Hologram.Test.Fixtures.Compiler.Builder.Module1
 
-    :ok
+  setup do
+    opts = [
+      app_path: @fixtures_path <> "/compiler/builder",
+      templatables: [HologramE2E.DefaultLayout]
+    ]
+
+    compile(opts)
   end
 
-  test "build/1" do
-    module = Hologram.Test.Fixtures.Compiler.Builder.Module1
-
-    ModuleDefAggregator.aggregate(module)
-    module_defs = ModuleDefStore.get_all()
-    templates = %{}
+  test "build/1", %{module_defs: module_defs, templates: templates} do
     from_vertex = nil
 
-    CallGraphBuilder.build(module, module_defs, templates, from_vertex)
+    CallGraph.run()
+    CallGraphBuilder.build(@module, module_defs, templates, from_vertex)
     call_graph = CallGraph.get()
 
-    result = Builder.build(module, module_defs, call_graph)
+    result = Builder.build(@module, module_defs, call_graph)
 
     assert result =~ ~r/class Elixir_Hologram_Test_Fixtures_Compiler_Builder_Module1/
     assert result =~ ~r/class Elixir_Hologram_Test_Fixtures_Compiler_Builder_Module3/
