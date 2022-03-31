@@ -9,7 +9,7 @@ defmodule Hologram.Compiler.CallGraphBuilder.BlockTest do
   @templates %{}
 
   setup do
-    CallGraph.reset()
+    CallGraph.run()
     :ok
   end
 
