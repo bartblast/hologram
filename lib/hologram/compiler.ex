@@ -7,10 +7,10 @@ defmodule Hologram.Compiler do
     CallGraphBuilder,
     ModuleDefAggregator,
     ModuleDefStore,
-    Reflection,
-    TemplateStore
+    Reflection
   }
 
+  alias Hologram.Runtime.TemplateStore
   alias Hologram.Template.Builder, as: TemplateBuilder
   alias Hologram.Utils
 
