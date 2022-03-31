@@ -88,9 +88,9 @@ defmodule Hologram.Commons.MemoryStoreTest do
     assert MemoryStore.get(:key_3) == {:ok, :value_3}
   end
 
-  test "terminate/2" do
-    {:ok, pid} = MemoryStore.run()
-    GenServer.stop(pid)
+  test "stop/0 (and terminate/2 implicitely)" do
+    MemoryStore.run()
+    MemoryStore.stop()
 
     refute Process.whereis(MemoryStore)
     assert MemoryStore.table_name() |> :ets.info() == :undefined

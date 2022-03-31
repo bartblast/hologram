@@ -9,7 +9,7 @@ defmodule Hologram.Compiler.ModuleDefStoreTest do
     :ok
   end
 
-  describe "get_if_not_exists/1" do
+  describe "get_if_not_exists/1 (and handle_call/3 :get_if_not_exists implicitely)" do
     test "module is not in store yet" do
       assert %ModuleDefinition{module: ModuleDefStoreTest} = ModuleDefStore.get_if_not_exists(ModuleDefStoreTest)
     end

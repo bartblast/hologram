@@ -77,6 +77,10 @@ defmodule Hologram.Commons.MemoryStore do
         table_name() |> :ets.insert({key, value})
       end
 
+      def stop do
+        GenServer.stop(__MODULE__)
+      end
+
       defp table_created? do
         table_name() |> :ets.info() != :undefined
       end
