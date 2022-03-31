@@ -14,8 +14,6 @@ defmodule Hologram.Compiler do
   alias Hologram.Utils
 
   def compile(opts) do
-    Logger.debug("Hologram compiler started")
-
     output_path = resolve_output_path()
     File.mkdir_p!(output_path)
 
@@ -43,8 +41,6 @@ defmodule Hologram.Compiler do
     TemplateStore.stop()
     CallGraph.stop()
     ModuleDefStore.stop()
-
-    Logger.debug("Hologram compiler finished")
   end
 
   defp aggregate_module_defs(pages) do
@@ -104,7 +100,7 @@ defmodule Hologram.Compiler do
     Reflection.root_page_digest_store_path()
     |> File.write!(data)
   end
-  
+
   defp dump_page_list(pages) do
     data = Utils.serialize(pages)
 

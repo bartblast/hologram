@@ -9,6 +9,8 @@ defmodule Mix.Tasks.Compile.Hologram do
   alias Hologram.Utils
 
   def run(opts \\ []) do
+    Logger.debug("Hologram compiler started")
+
     if has_source?() do
       source_digest =
         list_source_files(opts)
@@ -19,6 +21,8 @@ defmodule Mix.Tasks.Compile.Hologram do
         save_source_digest(source_digest)
       end
     end
+
+    Logger.debug("Hologram compiler finished")
 
     :ok
   end
