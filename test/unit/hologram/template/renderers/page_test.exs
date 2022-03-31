@@ -12,7 +12,7 @@ defmodule Hologram.Template.Renderer.PageTest do
     ]
     |> compile()
 
-    Runtime.reload()
+    Runtime.run()
 
     :ok
   end
