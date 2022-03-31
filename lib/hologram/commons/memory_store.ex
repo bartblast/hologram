@@ -77,6 +77,11 @@ defmodule Hologram.Commons.MemoryStore do
         table_name() |> :ets.insert({key, value})
       end
 
+      def reload do
+        stop()
+        run()
+      end
+
       def stop do
         GenServer.stop(__MODULE__)
       end
