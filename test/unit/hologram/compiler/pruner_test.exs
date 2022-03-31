@@ -1,14 +1,6 @@
 defmodule Hologram.Compiler.PrunerTest do
   use Hologram.Test.UnitCase, async: false
-
-  alias Hologram.Compiler.{
-    CallGraph,
-    CallGraphBuilder,
-    ModuleDefAggregator,
-    ModuleDefStore,
-    Pruner,
-    Reflection
-  }
+  alias Hologram.Compiler.Pruner
 
   defp function_kept?(pruned_module, tested_module, function, arity, context) do
     result = Pruner.prune(pruned_module, context.module_defs, context.call_graph)
@@ -27,27 +19,12 @@ defmodule Hologram.Compiler.PrunerTest do
   end
 
   setup_all do
-    ModuleDefStore.reset()
-    CallGraph.reset()
-
-    app_path = "#{@fixtures_path}/compiler/pruner"
-    opts = [app_path: app_path]
-
-    modules = Reflection.list_templatables(opts)
-    templates = build_templates(app_path)
-
-    Enum.each(modules, &ModuleDefAggregator.aggregate/1)
-    module_defs = ModuleDefStore.get_all()
-
-    from_vertex = nil
-    Enum.each(modules, &CallGraphBuilder.build(&1, module_defs, templates, from_vertex))
-    call_graph = CallGraph.get()
-
-    [
-      call_graph: call_graph,
-      module_defs: module_defs,
-      templates: templates
+    opts = [
+      app_path: @fixtures_path <> "/compiler/pruner",
+      templatables: [HologramE2E.DefaultLayout]
     ]
+
+    compile(opts)
   end
 
   describe "kept page functions" do
