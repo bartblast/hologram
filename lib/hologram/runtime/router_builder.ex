@@ -15,6 +15,19 @@ defmodule Hologram.Runtime.RouterBuilder do
     {:ok, nil}
   end
 
+  def rebuild do
+    stop()
+    run()
+  end
+
+  def run do
+    start_link(nil)
+  end
+
+  def stop do
+    GenServer.stop(__MODULE__)
+  end
+
   defp add_route_segment_info(route_segment) do
     case route_segment do
       ":" <> name -> {:param, name}
