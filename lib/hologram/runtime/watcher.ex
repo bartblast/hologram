@@ -6,14 +6,13 @@ defmodule Hologram.Runtime.Watcher do
   alias Hologram.Compiler.Reflection
   alias Hologram.Runtime
 
-  @root_path Reflection.root_path()
-
   def start_link(args) do
     GenServer.start_link(__MODULE__, args)
   end
 
   def init(_) do
-    {:ok, pid} = FileSystem.start_link(dirs: dirs())
+    app_path = Reflection.app_path()
+    {:ok, pid} = FileSystem.start_link(dirs: [app_path])
     FileSystem.subscribe(pid)
 
     {:ok, pid}
@@ -24,14 +23,10 @@ defmodule Hologram.Runtime.Watcher do
   end
 
   def handle_info({:file_event, _, _}, state) do
+    Runtime.stop()
     Mix.Tasks.Compile.Hologram.run([])
-    Runtime.reload()
-    
-    {:noreply, state}
-  end
+    Runtime.run()
 
-  defp dirs do
-    ["/config", "/lib"]
-    |> Enum.map(&(@root_path <> &1))
+    {:noreply, state}
   end
 end
