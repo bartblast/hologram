@@ -66,14 +66,19 @@ defmodule Hologram.Compiler.CallGraphBuilder.ModuleDefinitionTest do
   end
 
   test "template traversing" do
-    path = "#{@fixtures_path}/compiler/call_graph_builder/module_definition"
-    templates = build_templates(path)
+    opts = [
+      app_path: "#{@fixtures_path}/compiler/call_graph_builder/module_definition",
+      templatables: [HologramE2E.DefaultLayout]
+    ]
+
+    %{templates: templates} = compile(opts)
 
     module_defs = %{
       Module4 => Reflection.module_definition(Module4),
       Module5 => Reflection.module_definition(Module5)
     }
 
+    CallGraph.run()
     CallGraphBuilder.build(module_defs[Module4], module_defs, templates, @from_vertex)
 
     assert CallGraph.has_vertex?(Module5)
