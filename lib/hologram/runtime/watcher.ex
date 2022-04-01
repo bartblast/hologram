@@ -23,9 +23,10 @@ defmodule Hologram.Runtime.Watcher do
   end
 
   def handle_info({:file_event, _, _}, state) do
-    Runtime.stop()
-    Mix.Tasks.Compile.Hologram.run([])
-    Runtime.run()
+    # TODO: implement runtime reload
+    # Runtime.stop()
+    # Mix.Tasks.Compile.Hologram.run([])
+    # Runtime.run()
 
     {:noreply, state}
   end
