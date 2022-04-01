@@ -2,7 +2,9 @@
 
 defmodule Hologram.Runtime.Watcher do
   use GenServer
+
   alias Hologram.Compiler.Reflection
+  alias Hologram.Runtime
 
   @root_path Reflection.root_path()
 
@@ -23,6 +25,8 @@ defmodule Hologram.Runtime.Watcher do
 
   def handle_info({:file_event, _, _}, state) do
     Mix.Tasks.Compile.Hologram.run([])
+    Runtime.reload()
+    
     {:noreply, state}
   end
 
