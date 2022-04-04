@@ -14,14 +14,14 @@ defmodule Hologram.Compiler.JSEncoder.IfExpressionTest do
     result = JSEncoder.encode(ir, %Context{}, %Opts{})
 
     expected = """
-      Elixir_Kernel.if(function() {
-      return { type: 'boolean', value: true };
-      }, function() {
-      return { type: 'integer', value: 1 };
-      }, function() {
-      return { type: 'integer', value: 2 };
-      })\
-      """
+    Elixir_Kernel.if(function() {
+    return { type: 'boolean', value: true };
+    }, function() {
+    return { type: 'integer', value: 1 };
+    }, function() {
+    return { type: 'integer', value: 2 };
+    })\
+    """
 
     assert result == expected
   end

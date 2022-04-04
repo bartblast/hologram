@@ -22,6 +22,7 @@ defmodule HologramE2E.ControlFlow.CaseExpressionPage do
       case state.condition do
         1 ->
           11
+
         2 ->
           22
       end

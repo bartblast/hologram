@@ -2,7 +2,16 @@ defmodule Hologram.Compiler.JSEncoder.BindingTest do
   use Hologram.Test.UnitCase, async: true
 
   alias Hologram.Compiler.{Config, Context, JSEncoder, Opts}
-  alias Hologram.Compiler.IR.{AtomType, Binding, CaseConditionAccess, MapAccess, MatchAccess, ParamAccess, TupleAccess}
+
+  alias Hologram.Compiler.IR.{
+    AtomType,
+    Binding,
+    CaseConditionAccess,
+    MapAccess,
+    MatchAccess,
+    ParamAccess,
+    TupleAccess
+  }
 
   @case_condition_js Config.case_condition_js()
   @match_access_js Config.match_access_js()

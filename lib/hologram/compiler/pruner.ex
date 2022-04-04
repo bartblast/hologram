@@ -39,7 +39,11 @@ defmodule Hologram.Compiler.Pruner do
     |> MapSet.new()
   end
 
-  defp include_code_reachable_from_component_actions({modules, _} = acc, call_graph, component_modules) do
+  defp include_code_reachable_from_component_actions(
+         {modules, _} = acc,
+         call_graph,
+         component_modules
+       ) do
     modules
     |> Enum.filter(&MapSet.member?(component_modules, &1))
     |> Enum.reduce(acc, fn module, acc ->
@@ -48,7 +52,11 @@ defmodule Hologram.Compiler.Pruner do
     end)
   end
 
-  defp include_code_reachable_from_component_init_fun({modules, _} = acc, call_graph, component_modules) do
+  defp include_code_reachable_from_component_init_fun(
+         {modules, _} = acc,
+         call_graph,
+         component_modules
+       ) do
     modules
     |> Enum.filter(&MapSet.member?(component_modules, &1))
     |> Enum.reduce(acc, fn module, acc ->
@@ -57,7 +65,11 @@ defmodule Hologram.Compiler.Pruner do
     end)
   end
 
-  defp include_code_reachable_from_component_templates({modules, _} = acc, call_graph, component_modules) do
+  defp include_code_reachable_from_component_templates(
+         {modules, _} = acc,
+         call_graph,
+         component_modules
+       ) do
     modules
     |> Enum.filter(&MapSet.member?(component_modules, &1))
     |> Enum.reduce(acc, fn module, acc ->
@@ -125,7 +137,7 @@ defmodule Hologram.Compiler.Pruner do
 
         module ->
           {modules ++ [module], functions}
-        end
+      end
     end)
   end
 

@@ -14,10 +14,12 @@ defmodule Hologram.Compiler.CallGraphBuilder.BlockTest do
   end
 
   test "build/4" do
-    ir = %Block{expressions: [
-      %ModuleType{module: PlaceholderModule2},
-      %ModuleType{module: PlaceholderModule3}
-    ]}
+    ir = %Block{
+      expressions: [
+        %ModuleType{module: PlaceholderModule2},
+        %ModuleType{module: PlaceholderModule3}
+      ]
+    }
 
     from_vertex = PlaceholderModule1
     CallGraphBuilder.build(ir, @module_defs, @templates, from_vertex)

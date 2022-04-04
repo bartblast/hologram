@@ -11,7 +11,7 @@ defmodule Hologram.Compiler.RelaxedBooleanNotOperatorTransformerTest do
     result = RelaxedBooleanNotOperatorTransformer.transform(ast, %Context{})
 
     expected = %RelaxedBooleanNotOperator{
-      value: %BooleanType{value: false},
+      value: %BooleanType{value: false}
     }
 
     assert result == expected

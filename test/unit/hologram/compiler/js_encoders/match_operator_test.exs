@@ -11,7 +11,7 @@ defmodule Hologram.Compiler.JSEncoder.MatchOperatorTest do
     MapType,
     MatchAccess,
     MatchOperator,
-    Variable,
+    Variable
   }
 
   alias Hologram.Compiler.JSEncoder

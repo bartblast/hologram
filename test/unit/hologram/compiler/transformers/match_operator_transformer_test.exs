@@ -11,7 +11,7 @@ defmodule Hologram.Compiler.MatchOperatorTransformerTest do
     MapType,
     MatchAccess,
     MatchOperator,
-    Variable,
+    Variable
   }
 
   test "variable" do
@@ -38,8 +38,11 @@ defmodule Hologram.Compiler.MatchOperatorTransformerTest do
 
       expected = %MatchOperator{
         bindings: [
-          %Binding{name: :x, access_path: [%MatchAccess{}, %MapAccess{key: %AtomType{value: :a}}]},
-          %Binding{name: :y, access_path: [%MatchAccess{}, %MapAccess{key: %AtomType{value: :b}}]},
+          %Binding{
+            name: :x,
+            access_path: [%MatchAccess{}, %MapAccess{key: %AtomType{value: :a}}]
+          },
+          %Binding{name: :y, access_path: [%MatchAccess{}, %MapAccess{key: %AtomType{value: :b}}]}
         ],
         left: %MapType{
           data: [
@@ -68,16 +71,22 @@ defmodule Hologram.Compiler.MatchOperatorTransformerTest do
 
       expected = %MatchOperator{
         bindings: [
-          %Binding{name: :x, access_path: [
-            %MatchAccess{},
-            %MapAccess{key: %AtomType{value: :b}},
-            %MapAccess{key: %AtomType{value: :p}}
-          ]},
-          %Binding{name: :y, access_path: [
-            %MatchAccess{},
-            %MapAccess{key: %AtomType{value: :d}},
-            %MapAccess{key: %AtomType{value: :n}}
-          ]}
+          %Binding{
+            name: :x,
+            access_path: [
+              %MatchAccess{},
+              %MapAccess{key: %AtomType{value: :b}},
+              %MapAccess{key: %AtomType{value: :p}}
+            ]
+          },
+          %Binding{
+            name: :y,
+            access_path: [
+              %MatchAccess{},
+              %MapAccess{key: %AtomType{value: :d}},
+              %MapAccess{key: %AtomType{value: :n}}
+            ]
+          }
         ],
         left: %MapType{
           data: [

@@ -4,7 +4,7 @@ defmodule Hologram.Compiler.BuilderTest do
   alias Hologram.Compiler.{
     Builder,
     CallGraph,
-    CallGraphBuilder,
+    CallGraphBuilder
   }
 
   @module Hologram.Test.Fixtures.Compiler.Builder.Module1

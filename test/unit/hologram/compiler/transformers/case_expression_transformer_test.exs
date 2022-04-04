@@ -2,7 +2,17 @@ defmodule Hologram.Compiler.CaseExpressionTransformerTest do
   use Hologram.Test.UnitCase, async: true
 
   alias Hologram.Compiler.{CaseExpressionTransformer, Context}
-  alias Hologram.Compiler.IR.{AtomType, Binding, CaseConditionAccess, CaseExpression, IntegerType, MapAccess, MapType, Variable}
+
+  alias Hologram.Compiler.IR.{
+    AtomType,
+    Binding,
+    CaseConditionAccess,
+    CaseExpression,
+    IntegerType,
+    MapAccess,
+    MapType,
+    Variable
+  }
 
   test "single expression clause body" do
     code = """

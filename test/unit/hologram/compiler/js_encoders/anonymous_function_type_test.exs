@@ -8,10 +8,10 @@ defmodule Hologram.Compiler.JSEncoder.AnonymousFunctionTypeTest do
     result = JSEncoder.encode(ir, %Context{}, %Opts{})
 
     expected = """
-      function() {
-      return { type: 'integer', value: 1 };
-      }\
-      """
+    function() {
+    return { type: 'integer', value: 1 };
+    }\
+    """
 
     assert result == expected
   end
@@ -22,11 +22,11 @@ defmodule Hologram.Compiler.JSEncoder.AnonymousFunctionTypeTest do
     result = JSEncoder.encode(ir, %Context{}, %Opts{})
 
     expected = """
-      function() {
-      let x = arguments[0];
-      return { type: 'integer', value: 1 };
-      }\
-      """
+    function() {
+    let x = arguments[0];
+    return { type: 'integer', value: 1 };
+    }\
+    """
 
     assert result == expected
   end
@@ -37,12 +37,12 @@ defmodule Hologram.Compiler.JSEncoder.AnonymousFunctionTypeTest do
     result = JSEncoder.encode(ir, %Context{}, %Opts{})
 
     expected = """
-      function() {
-      let x = arguments[0];
-      let y = arguments[1];
-      return { type: 'integer', value: 1 };
-      }\
-      """
+    function() {
+    let x = arguments[0];
+    let y = arguments[1];
+    return { type: 'integer', value: 1 };
+    }\
+    """
 
     assert result == expected
   end
@@ -59,22 +59,22 @@ defmodule Hologram.Compiler.JSEncoder.AnonymousFunctionTypeTest do
     result = JSEncoder.encode(ir, %Context{}, %Opts{})
 
     expected = """
-      function() {
-      { type: 'integer', value: 1 };
-      return { type: 'integer', value: 2 };
-      }\
-      """
+    function() {
+    { type: 'integer', value: 1 };
+    return { type: 'integer', value: 2 };
+    }\
+    """
 
     assert result == expected
   end
 
   test "bindings from args are taken into account in block scope" do
     code = """
-      fn x ->
-        x = 2
-        3
-      end
-      """
+    fn x ->
+      x = 2
+      3
+    end
+    """
 
     ir = ir(code)
     result = JSEncoder.encode(ir, %Context{}, %Opts{})
@@ -82,13 +82,13 @@ defmodule Hologram.Compiler.JSEncoder.AnonymousFunctionTypeTest do
     match_access_js = Config.match_access_js()
 
     expected = """
-      function() {
-      let x = arguments[0];
-      #{match_access_js} = { type: 'integer', value: 2 };
-      x = #{match_access_js};
-      return { type: 'integer', value: 3 };
-      }\
-      """
+    function() {
+    let x = arguments[0];
+    #{match_access_js} = { type: 'integer', value: 2 };
+    x = #{match_access_js};
+    return { type: 'integer', value: 3 };
+    }\
+    """
 
     assert result == expected
   end

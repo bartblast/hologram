@@ -6,19 +6,21 @@ defmodule Hologram.Commons.EncoderTest do
   alias Hologram.Compiler.IR.{AtomType, Block, IntegerType}
 
   test "encode_as_anonymous_function/3" do
-    body = %Block{expressions: [
-      %IntegerType{value: 1},
-      %IntegerType{value: 2}
-    ]}
+    body = %Block{
+      expressions: [
+        %IntegerType{value: 1},
+        %IntegerType{value: 2}
+      ]
+    }
 
     result = Encoder.encode_as_anonymous_function(body, %Context{}, %Opts{})
 
     expected = """
-      function() {
-      { type: 'integer', value: 1 };
-      return { type: 'integer', value: 2 };
-      }\
-      """
+    function() {
+    { type: 'integer', value: 1 };
+    return { type: 'integer', value: 2 };
+    }\
+    """
 
     assert result == expected
   end
@@ -127,9 +129,9 @@ defmodule Hologram.Commons.EncoderTest do
     result = Encoder.encode_vars(bindings, %Context{}, %Opts{})
 
     expected = """
-      let x = arguments[0];
-      let y = arguments[1].data['~atom[a]'];\
-      """
+    let x = arguments[0];
+    let y = arguments[1].data['~atom[a]'];\
+    """
 
     assert result == expected
   end

@@ -2,7 +2,16 @@ defmodule Hologram.Compiler.JSEncoder.BlockTest do
   use Hologram.Test.UnitCase, async: true
 
   alias Hologram.Compiler.{Config, Context, JSEncoder, Opts}
-  alias Hologram.Compiler.IR.{AtomType, Binding, Block, IntegerType, MatchAccess, MatchOperator, Variable}
+
+  alias Hologram.Compiler.IR.{
+    AtomType,
+    Binding,
+    Block,
+    IntegerType,
+    MatchAccess,
+    MatchOperator,
+    Variable
+  }
 
   @match_access_js Config.match_access_js()
 
@@ -16,10 +25,12 @@ defmodule Hologram.Compiler.JSEncoder.BlockTest do
   end
 
   test "multiple expressions / block ending with expression other than match operator" do
-    ir = %Block{expressions: [
-      %AtomType{value: :a},
-      %AtomType{value: :b}
-    ]}
+    ir = %Block{
+      expressions: [
+        %AtomType{value: :a},
+        %AtomType{value: :b}
+      ]
+    }
 
     result = JSEncoder.encode(ir, %Context{}, %Opts{})
 
@@ -37,23 +48,25 @@ defmodule Hologram.Compiler.JSEncoder.BlockTest do
     # x = 2
     # 3
 
-    ir = %Block{expressions: [
-      %MatchOperator{
-        bindings: [
-          %Binding{name: :x, access_path: [%MatchAccess{}]}
-        ],
-        left: %Variable{name: :x},
-        right: %IntegerType{value: 1}
-      },
-      %MatchOperator{
-        bindings: [
-          %Binding{name: :x, access_path: [%MatchAccess{}]}
-        ],
-        left: %Variable{name: :x},
-        right: %IntegerType{value: 2}
-      },
-      %IntegerType{value: 3}
-    ]}
+    ir = %Block{
+      expressions: [
+        %MatchOperator{
+          bindings: [
+            %Binding{name: :x, access_path: [%MatchAccess{}]}
+          ],
+          left: %Variable{name: :x},
+          right: %IntegerType{value: 1}
+        },
+        %MatchOperator{
+          bindings: [
+            %Binding{name: :x, access_path: [%MatchAccess{}]}
+          ],
+          left: %Variable{name: :x},
+          right: %IntegerType{value: 2}
+        },
+        %IntegerType{value: 3}
+      ]
+    }
 
     result = JSEncoder.encode(ir, %Context{}, %Opts{})
 
@@ -69,16 +82,18 @@ defmodule Hologram.Compiler.JSEncoder.BlockTest do
   end
 
   test "block ending with match operator expression" do
-    ir = %Block{expressions: [
-      %AtomType{value: :a},
-      %MatchOperator{
-        bindings: [
-          %Binding{name: :x, access_path: [%MatchAccess{}]}
-        ],
-        left: %Variable{name: :x},
-        right: %IntegerType{value: 1}
-      },
-    ]}
+    ir = %Block{
+      expressions: [
+        %AtomType{value: :a},
+        %MatchOperator{
+          bindings: [
+            %Binding{name: :x, access_path: [%MatchAccess{}]}
+          ],
+          left: %Variable{name: :x},
+          right: %IntegerType{value: 1}
+        }
+      ]
+    }
 
     result = JSEncoder.encode(ir, %Context{}, %Opts{})
 

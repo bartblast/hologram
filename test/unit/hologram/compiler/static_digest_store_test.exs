@@ -25,22 +25,38 @@ defmodule Hologram.Runtime.StaticDigestStoreTest do
     File.mkdir_p!(dir_2_path)
     File.mkdir_p!(dir_3_path)
 
-    [file_1_path, file_2_path, file_3_path, file_4_path, file_5_path, file_6_path, file_7_path, file_8_path, file_9_path]
+    [
+      file_1_path,
+      file_2_path,
+      file_3_path,
+      file_4_path,
+      file_5_path,
+      file_6_path,
+      file_7_path,
+      file_8_path,
+      file_9_path
+    ]
     |> Enum.each(&File.write!(&1, ""))
 
     expected_store_content_without_manifest = %{
-      "/test_dir_1/test_dir_2/test_file_1.css": "/test_dir_1/test_dir_2/test_file_1-11111111111111111111111111111111.css",
-      "/test_dir_1/test_dir_2/test_file_2.css": "/test_dir_1/test_dir_2/test_file_2-22222222222222222222222222222222.css",
-      "/test_dir_1/test_dir_2/page.js": "/test_dir_1/test_dir_2/page-33333333333333333333333333333333.js",
-      "/test_dir_3/test_file_4.css": "/test_dir_3/test_file_4-44444444444444444444444444444444.css",
-      "/test_dir_3/test_file_5.css": "/test_dir_3/test_file_5-55555555555555555555555555555555.css",
+      "/test_dir_1/test_dir_2/test_file_1.css":
+        "/test_dir_1/test_dir_2/test_file_1-11111111111111111111111111111111.css",
+      "/test_dir_1/test_dir_2/test_file_2.css":
+        "/test_dir_1/test_dir_2/test_file_2-22222222222222222222222222222222.css",
+      "/test_dir_1/test_dir_2/page.js":
+        "/test_dir_1/test_dir_2/page-33333333333333333333333333333333.js",
+      "/test_dir_3/test_file_4.css":
+        "/test_dir_3/test_file_4-44444444444444444444444444444444.css",
+      "/test_dir_3/test_file_5.css":
+        "/test_dir_3/test_file_5-55555555555555555555555555555555.css",
       "/test_dir_3/page.js": "/test_dir_3/page-66666666666666666666666666666666.js",
       "/hologram/test_file_9.css": "/hologram/test_file_9-99999999999999999999999999999999.css"
     }
 
     expected_store_content =
       %{
-        __manifest__: "window.__hologramStaticDigestStore__ = #{Jason.encode!(expected_store_content_without_manifest)};"
+        __manifest__:
+          "window.__hologramStaticDigestStore__ = #{Jason.encode!(expected_store_content_without_manifest)};"
       }
       |> Map.merge(expected_store_content_without_manifest)
 

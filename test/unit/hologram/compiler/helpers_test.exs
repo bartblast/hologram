@@ -23,25 +23,24 @@ defmodule Hologram.Compiler.HelpersTest do
       |> Transformer.transform(%Context{})
       |> Helpers.aggregate_bindings_from_expression()
 
-    expected =
-      [
-        %Binding{
-          access_path: [
-            %MapAccess{
-              key: %AtomType{value: :a}
-            }
-          ],
-          name: :x
-        },
-        %Binding{
-          access_path: [
-            %MapAccess{
-              key: %AtomType{value: :b}
-            }
-          ],
-          name: :y
-        }
-      ]
+    expected = [
+      %Binding{
+        access_path: [
+          %MapAccess{
+            key: %AtomType{value: :a}
+          }
+        ],
+        name: :x
+      },
+      %Binding{
+        access_path: [
+          %MapAccess{
+            key: %AtomType{value: :b}
+          }
+        ],
+        name: :y
+      }
+    ]
 
     assert result == expected
   end
@@ -67,10 +66,13 @@ defmodule Hologram.Compiler.HelpersTest do
       result = Helpers.aggregate_bindings_from_params(params)
 
       expected = [
-        %Binding{name: :x, access_path: [
-          %ParamAccess{index: 1},
-          %MapAccess{key: %AtomType{value: :a}}
-        ]}
+        %Binding{
+          name: :x,
+          access_path: [
+            %ParamAccess{index: 1},
+            %MapAccess{key: %AtomType{value: :a}}
+          ]
+        }
       ]
 
       assert result == expected
@@ -85,14 +87,20 @@ defmodule Hologram.Compiler.HelpersTest do
       result = Helpers.aggregate_bindings_from_params(params)
 
       expected = [
-        %Binding{name: :x, access_path: [
-          %ParamAccess{index: 1},
-          %MapAccess{key: %AtomType{value: :a}}
-        ]},
-        %Binding{name: :y, access_path: [
-          %ParamAccess{index: 1},
-          %MapAccess{key: %AtomType{value: :b}}
-        ]}
+        %Binding{
+          name: :x,
+          access_path: [
+            %ParamAccess{index: 1},
+            %MapAccess{key: %AtomType{value: :a}}
+          ]
+        },
+        %Binding{
+          name: :y,
+          access_path: [
+            %ParamAccess{index: 1},
+            %MapAccess{key: %AtomType{value: :b}}
+          ]
+        }
       ]
 
       assert result == expected
@@ -113,22 +121,34 @@ defmodule Hologram.Compiler.HelpersTest do
       result = Helpers.aggregate_bindings_from_params(params)
 
       expected = [
-        %Binding{name: :k, access_path: [
-          %ParamAccess{index: 1},
-          %MapAccess{key: %AtomType{value: :a}}
-        ]},
-        %Binding{name: :m, access_path: [
-          %ParamAccess{index: 1},
-          %MapAccess{key: %AtomType{value: :b}}
-        ]},
-        %Binding{name: :s, access_path: [
-          %ParamAccess{index: 3},
-          %MapAccess{key: %AtomType{value: :c}}
-        ]},
-        %Binding{name: :t, access_path: [
-          %ParamAccess{index: 3},
-          %MapAccess{key: %AtomType{value: :d}}
-        ]}
+        %Binding{
+          name: :k,
+          access_path: [
+            %ParamAccess{index: 1},
+            %MapAccess{key: %AtomType{value: :a}}
+          ]
+        },
+        %Binding{
+          name: :m,
+          access_path: [
+            %ParamAccess{index: 1},
+            %MapAccess{key: %AtomType{value: :b}}
+          ]
+        },
+        %Binding{
+          name: :s,
+          access_path: [
+            %ParamAccess{index: 3},
+            %MapAccess{key: %AtomType{value: :c}}
+          ]
+        },
+        %Binding{
+          name: :t,
+          access_path: [
+            %ParamAccess{index: 3},
+            %MapAccess{key: %AtomType{value: :d}}
+          ]
+        }
       ]
 
       assert result == expected
@@ -143,12 +163,18 @@ defmodule Hologram.Compiler.HelpersTest do
       result = Helpers.aggregate_bindings_from_params(params)
 
       expected = [
-        %Binding{name: :x, access_path: [
-          %ParamAccess{index: 1}
-        ]},
-        %Binding{name: :y, access_path: [
-          %ParamAccess{index: 0}
-        ]}
+        %Binding{
+          name: :x,
+          access_path: [
+            %ParamAccess{index: 1}
+          ]
+        },
+        %Binding{
+          name: :y,
+          access_path: [
+            %ParamAccess{index: 0}
+          ]
+        }
       ]
 
       assert result == expected

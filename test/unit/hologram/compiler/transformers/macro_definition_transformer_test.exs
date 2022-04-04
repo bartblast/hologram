@@ -2,7 +2,16 @@ defmodule Hologram.Compiler.MacroDefinitionTransformerTest do
   use Hologram.Test.UnitCase, async: true
 
   alias Hologram.Compiler.{Context, MacroDefinitionTransformer}
-  alias Hologram.Compiler.IR.{AtomType, Binding, IntegerType, MacroDefinition, MapAccess, ParamAccess, Variable}
+
+  alias Hologram.Compiler.IR.{
+    AtomType,
+    Binding,
+    IntegerType,
+    MacroDefinition,
+    MapAccess,
+    ParamAccess,
+    Variable
+  }
 
   @context %Context{module: Abc}
 
@@ -49,14 +58,20 @@ defmodule Hologram.Compiler.MacroDefinitionTransformerTest do
       assert %MacroDefinition{} = result = MacroDefinitionTransformer.transform(ast, @context)
 
       expected = [
-        %Binding{name: :x, access_path: [
-          %ParamAccess{index: 1},
-          %MapAccess{key: %AtomType{value: :a}}
-        ]},
-        %Binding{name: :y, access_path: [
-          %ParamAccess{index: 1},
-          %MapAccess{key: %AtomType{value: :b}}
-        ]},
+        %Binding{
+          name: :x,
+          access_path: [
+            %ParamAccess{index: 1},
+            %MapAccess{key: %AtomType{value: :a}}
+          ]
+        },
+        %Binding{
+          name: :y,
+          access_path: [
+            %ParamAccess{index: 1},
+            %MapAccess{key: %AtomType{value: :b}}
+          ]
+        }
       ]
 
       assert result.bindings == expected

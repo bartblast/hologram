@@ -16,6 +16,7 @@ defmodule Hologram.Compiler.ModuleDefStore do
       case get(module) do
         {:ok, _} ->
           nil
+
         :error ->
           module_def = %ModuleDefinition{} = Reflection.module_definition(module)
           put(module, module_def)

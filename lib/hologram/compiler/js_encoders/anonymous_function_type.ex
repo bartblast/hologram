@@ -7,7 +7,7 @@ defimpl JSEncoder, for: AnonymousFunctionType do
   def encode(%{bindings: bindings, body: body}, %Context{} = context, %Opts{} = opts) do
     vars = encode_vars(bindings, context, opts)
 
-    vars_bindings = Enum.map(bindings, &(&1.name))
+    vars_bindings = Enum.map(bindings, & &1.name)
     context = %{context | block_bindings: context.block_bindings ++ vars_bindings}
     body = JSEncoder.encode(body, context, opts)
 

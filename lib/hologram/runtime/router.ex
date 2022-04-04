@@ -48,6 +48,7 @@ defmodule Hologram.Router do
     case StaticDigestStore.get(file_path) do
       {:ok, file_path} ->
         file_path
+
       :error ->
         file_path
     end

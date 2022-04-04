@@ -40,8 +40,9 @@ defmodule Hologram.Commons.MemoryStore do
 
       def get(key) do
         case :ets.lookup(table_name(), key) do
-          [{^key, value}]->
+          [{^key, value}] ->
             {:ok, value}
+
           _ ->
             :error
         end
@@ -51,6 +52,7 @@ defmodule Hologram.Commons.MemoryStore do
         case get(key) do
           {:ok, value} ->
             value
+
           :error ->
             raise KeyError, message: "key #{inspect(key)} not found"
         end

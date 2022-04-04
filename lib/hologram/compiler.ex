@@ -25,7 +25,10 @@ defmodule Hologram.Compiler do
     CallGraph.run()
 
     templatables = Reflection.list_templatables(opts)
-    templatables = if opts[:templatables], do: templatables ++ opts[:templatables], else: templatables
+
+    templatables =
+      if opts[:templatables], do: templatables ++ opts[:templatables], else: templatables
+
     templates = TemplateBuilder.build_all(templatables)
     dump_template_store(templates)
     TemplateStore.run()

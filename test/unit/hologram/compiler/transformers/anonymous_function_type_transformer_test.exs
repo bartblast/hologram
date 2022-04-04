@@ -49,14 +49,14 @@ defmodule Hologram.Compiler.AnonymousFunctionTypeTransformerTest do
         name: :x,
         access_path: [
           %ParamAccess{index: 1},
-          %MapAccess{key: %AtomType{value: :a}},
+          %MapAccess{key: %AtomType{value: :a}}
         ]
       },
       %Binding{
         name: :y,
         access_path: [
           %ParamAccess{index: 1},
-          %MapAccess{key: %AtomType{value: :b}},
+          %MapAccess{key: %AtomType{value: :b}}
         ]
       }
     ]
@@ -87,10 +87,12 @@ defmodule Hologram.Compiler.AnonymousFunctionTypeTransformerTest do
     assert %AnonymousFunctionType{} =
              result = AnonymousFunctionTypeTransformer.transform(ast, %Context{})
 
-    expected = %Block{expressions: [
-      %IntegerType{value: 1},
-      %IntegerType{value: 2}
-    ]}
+    expected = %Block{
+      expressions: [
+        %IntegerType{value: 1},
+        %IntegerType{value: 2}
+      ]
+    }
 
     assert result.body == expected
   end

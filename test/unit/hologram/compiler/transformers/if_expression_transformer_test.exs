@@ -20,14 +20,18 @@ defmodule Hologram.Compiler.IfExpressionTransformerTest do
 
     expected = %IfExpression{
       condition: %BooleanType{value: true},
-      do: %Block{expressions: [
-        %IntegerType{value: 1},
-        %IntegerType{value: 2}
-      ]},
-      else: %Block{expressions: [
-        %IntegerType{value: 3},
-        %IntegerType{value: 4}
-      ]},
+      do: %Block{
+        expressions: [
+          %IntegerType{value: 1},
+          %IntegerType{value: 2}
+        ]
+      },
+      else: %Block{
+        expressions: [
+          %IntegerType{value: 3},
+          %IntegerType{value: 4}
+        ]
+      },
       ast: ast
     }
 

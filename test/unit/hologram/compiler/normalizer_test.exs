@@ -11,10 +11,9 @@ defmodule Hologram.Compiler.NormalizerTest do
 
       expected =
         {:fn, [line: 1],
-          [
-            {:->, [line: 1],
-              [[{:x, [line: 1], nil}], {:__block__, [], [{:x, [line: 1], nil}]}]}
-          ]}
+         [
+           {:->, [line: 1], [[{:x, [line: 1], nil}], {:__block__, [], [{:x, [line: 1], nil}]}]}
+         ]}
 
       assert result == expected
     end
@@ -161,115 +160,109 @@ defmodule Hologram.Compiler.NormalizerTest do
   describe "if expression" do
     test "standard notation if block with single expression without else block" do
       code = """
-        if true do
-          1
-        end
-        """
+      if true do
+        1
+      end
+      """
 
       ast = Parser.parse!(code)
       result = Normalizer.normalize(ast)
 
       expected =
-        {:if, [line: 1],
-          [true, [do: {:__block__, [], [1]}, else: {:__block__, [], [nil]}]]}
+        {:if, [line: 1], [true, [do: {:__block__, [], [1]}, else: {:__block__, [], [nil]}]]}
 
       assert result == expected
     end
 
     test "standard notation if block with single expression and else block with single expression" do
       code = """
-        if true do
-          1
-        else
-          2
-        end
-        """
+      if true do
+        1
+      else
+        2
+      end
+      """
 
       ast = Parser.parse!(code)
       result = Normalizer.normalize(ast)
 
       expected =
-        {:if, [line: 1],
-          [true, [do: {:__block__, [], [1]}, else: {:__block__, [], [2]}]]}
+        {:if, [line: 1], [true, [do: {:__block__, [], [1]}, else: {:__block__, [], [2]}]]}
 
       assert result == expected
     end
 
     test "standard notation if block with single expression and else block with multiple expressions" do
       code = """
-        if true do
-          1
-        else
-          2
-          3
-        end
-        """
+      if true do
+        1
+      else
+        2
+        3
+      end
+      """
 
       ast = Parser.parse!(code)
       result = Normalizer.normalize(ast)
 
       expected =
-        {:if, [line: 1],
-          [true, [do: {:__block__, [], [1]}, else: {:__block__, [], [2, 3]}]]}
+        {:if, [line: 1], [true, [do: {:__block__, [], [1]}, else: {:__block__, [], [2, 3]}]]}
 
       assert result == expected
     end
 
     test "standard notation if block with multiple expressions without else block" do
       code = """
-        if true do
-          1
-          2
-        end
-        """
+      if true do
+        1
+        2
+      end
+      """
 
       ast = Parser.parse!(code)
       result = Normalizer.normalize(ast)
 
       expected =
-        {:if, [line: 1],
-          [true, [do: {:__block__, [], [1, 2]}, else: {:__block__, [], [nil]}]]}
+        {:if, [line: 1], [true, [do: {:__block__, [], [1, 2]}, else: {:__block__, [], [nil]}]]}
 
       assert result == expected
     end
 
     test "standard notation if block with multiple expressions and else block with single expression" do
       code = """
-        if true do
-          1
-          2
-        else
-          3
-        end
-        """
+      if true do
+        1
+        2
+      else
+        3
+      end
+      """
 
       ast = Parser.parse!(code)
       result = Normalizer.normalize(ast)
 
       expected =
-        {:if, [line: 1],
-          [true, [do: {:__block__, [], [1, 2]}, else: {:__block__, [], [3]}]]}
+        {:if, [line: 1], [true, [do: {:__block__, [], [1, 2]}, else: {:__block__, [], [3]}]]}
 
       assert result == expected
     end
 
     test "standard notation if block with multiple expressions and else block with multiple expressions" do
       code = """
-        if true do
-          1
-          2
-        else
-          3
-          4
-        end
-        """
+      if true do
+        1
+        2
+      else
+        3
+        4
+      end
+      """
 
       ast = Parser.parse!(code)
       result = Normalizer.normalize(ast)
 
       expected =
-        {:if, [line: 1],
-          [true, [do: {:__block__, [], [1, 2]}, else: {:__block__, [], [3, 4]}]]}
+        {:if, [line: 1], [true, [do: {:__block__, [], [1, 2]}, else: {:__block__, [], [3, 4]}]]}
 
       assert result == expected
     end
@@ -280,8 +273,7 @@ defmodule Hologram.Compiler.NormalizerTest do
       result = Normalizer.normalize(ast)
 
       expected =
-        {:if, [line: 1],
-          [true, [do: {:__block__, [], [1]}, else: {:__block__, [], [nil]}]]}
+        {:if, [line: 1], [true, [do: {:__block__, [], [1]}, else: {:__block__, [], [nil]}]]}
 
       assert result == expected
     end
@@ -292,8 +284,7 @@ defmodule Hologram.Compiler.NormalizerTest do
       result = Normalizer.normalize(ast)
 
       expected =
-        {:if, [line: 1],
-          [true, [do: {:__block__, [], [1]}, else: {:__block__, [], [2]}]]}
+        {:if, [line: 1], [true, [do: {:__block__, [], [1]}, else: {:__block__, [], [2]}]]}
 
       assert result == expected
     end
