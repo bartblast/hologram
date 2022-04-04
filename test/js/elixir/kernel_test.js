@@ -107,12 +107,12 @@ describe("$concatenate_lists()", () => {
       Type.integer(1),
       Type.integer(2),
       Type.integer(3),
-      Type.integer(4)
-    ])
+      Type.integer(4),
+    ]);
 
     assert.deepStrictEqual(result, expected);
   });
-})
+});
 
 describe("$divide()", () => {
   it("divides 2 numbers", () => {
@@ -124,19 +124,23 @@ describe("$divide()", () => {
 
     assert.deepStrictEqual(result, expected);
   });
-})
+});
 
 describe("elem()", () => {
   it("gets the element at the zero-based index in tuple", () => {
-    const tuple = Type.tuple([Type.integer(1), Type.integer(2), Type.integer(3)])
-    const index = 1
-    
-    const result = Kernel.elem(tuple, index)
-    const expected = Type.integer(2)
+    const tuple = Type.tuple([
+      Type.integer(1),
+      Type.integer(2),
+      Type.integer(3),
+    ]);
+    const index = 1;
+
+    const result = Kernel.elem(tuple, index);
+    const expected = Type.integer(2);
 
     assert.deepStrictEqual(result, expected);
-  })
-})
+  });
+});
 
 describe("$equal_to()", () => {
   // non-number == non-number
@@ -488,12 +492,12 @@ describe("$subtract()", () => {
 
 describe("$subtract_lists()", () => {
   it("returns the left list if there are no matching elems in the right list", () => {
-    const left = Type.list([Type.integer(1), Type.integer(2)])
-    const right = Type.list([Type.integer(3), Type.integer(4)])
+    const left = Type.list([Type.integer(1), Type.integer(2)]);
+    const right = Type.list([Type.integer(3), Type.integer(4)]);
     const result = Kernel.$subtract_lists(left, right);
 
     assert.deepStrictEqual(result, left);
-  })
+  });
 
   it("removes the first occurrence of an element on the left list for each element on the right", () => {
     const left = Type.list([
@@ -503,15 +507,15 @@ describe("$subtract_lists()", () => {
       Type.integer(1),
       Type.integer(2),
       Type.integer(3),
-      Type.integer(1)
-    ])
+      Type.integer(1),
+    ]);
 
     const right = Type.list([
       Type.integer(1),
       Type.integer(3),
       Type.integer(3),
-      Type.integer(4)
-    ])
+      Type.integer(4),
+    ]);
 
     const result = Kernel.$subtract_lists(left, right);
 
@@ -519,20 +523,20 @@ describe("$subtract_lists()", () => {
       Type.integer(2),
       Type.integer(1),
       Type.integer(2),
-      Type.integer(1)
-    ])
+      Type.integer(1),
+    ]);
 
     assert.deepStrictEqual(result, expected);
-  })
+  });
 
   it("returns frozen object", () => {
-    const left = Type.list([Type.integer(1)])
-    const right = Type.list([Type.integer(2)])
+    const left = Type.list([Type.integer(1)]);
+    const right = Type.list([Type.integer(2)]);
     const result = Kernel.$subtract_lists(left, right);
 
     assertFrozen(result);
   });
-})
+});
 
 describe("to_string()", () => {
   it("converts boxed atom to boxed string", () => {
@@ -620,4 +624,4 @@ describe("$unary_negative()", () => {
 
     assert.deepStrictEqual(result, expected);
   });
-})
+});

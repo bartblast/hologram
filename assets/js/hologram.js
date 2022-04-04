@@ -73,7 +73,7 @@ export default class Hologram {
   }
 
   static isPatternMatched(left, right) {
-    return Interpreter.isPatternMatched(left, right)
+    return Interpreter.isPatternMatched(left, right);
   }
 }
 

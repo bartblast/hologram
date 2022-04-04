@@ -67,7 +67,7 @@ export function mockWindow() {
   return new JSDOM().window;
 }
 
-global.Event = mockWindow().Event
+global.Event = mockWindow().Event;
 
 global.ModuleStub1 = class ModuleStub1 {
   static test(arg1, arg2) {
