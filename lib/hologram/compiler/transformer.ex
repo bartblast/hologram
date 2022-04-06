@@ -178,6 +178,10 @@ defmodule Hologram.Compiler.Transformer do
     RelaxedBooleanNotOperatorTransformer.transform(ast, context)
   end
 
+  def transform({:!, _, _} = ast, %Context{} = context) do
+    RelaxedBooleanNotOperatorTransformer.transform(ast, context)
+  end
+
   def transform({:||, _, _} = ast, %Context{} = context) do
     RelaxedBooleanOrOperatorTransformer.transform(ast, context)
   end
