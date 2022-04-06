@@ -270,7 +270,7 @@ defmodule Hologram.Compiler.TransformerTest do
       assert %RelaxedBooleanNotOperator{} = Transformer.transform(ast, %Context{})
     end
 
-    test "relaxed boolean not, nonblock AST" do
+    test "relaxed boolean not, non-block AST" do
       code = "true && !false"
       ast = ast(code)
 

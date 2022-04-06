@@ -215,7 +215,7 @@ without its shortcomings related to scalability, efficiency, etc.
 | or       | :x:                |
 | \|\|     | :white_check_mark: |
 | not      | :x:                |
-| !        | :x:                |
+| !        | :white_check_mark: |
 | in       | :x:                |
 | not in   | :x:                |
 | @        | :white_check_mark: |
