@@ -31,6 +31,13 @@ defmodule HologramE2E.OperatorsTest do
     |> assert_has(css("#text", text: "Result = [2, 1, 2, 1]"))
   end
 
+  feature "membership", %{session: session} do
+    session
+    |> visit("/e2e/operators/membership")
+    |> click(css("#button"))
+    |> assert_has(css("#text", text: "Result = true"))
+  end
+
   feature "module attribute", %{session: session} do
     session
     |> visit("/e2e/operators/module-attribute")
