@@ -27,6 +27,7 @@ defmodule Hologram.Compiler.TransformerTest do
     MacroDefinition,
     MapType,
     MatchOperator,
+    MembershipOperator,
     ModuleDefinition,
     ModuleAttributeDefinition,
     ModuleAttributeOperator,
@@ -232,6 +233,13 @@ defmodule Hologram.Compiler.TransformerTest do
       ast = ast(code)
 
       assert %MatchOperator{} = Transformer.transform(ast, %Context{})
+    end
+
+    test "membership" do
+      code = "1 in [1, 2]"
+      ast = ast(code)
+
+      assert %MembershipOperator{} = Transformer.transform(ast, %Context{})
     end
 
     test "module attribute" do

@@ -22,6 +22,7 @@ defmodule Hologram.Compiler.Transformer do
     MacroDefinitionTransformer,
     MapTypeTransformer,
     MatchOperatorTransformer,
+    MembershipOperatorTransformer,
     ModuleAttributeDefinitionTransformer,
     ModuleDefinitionTransformer,
     ModuleTypeTransformer,
@@ -151,6 +152,10 @@ defmodule Hologram.Compiler.Transformer do
 
   def transform({:=, _, _} = ast, %Context{} = context) do
     MatchOperatorTransformer.transform(ast, context)
+  end
+
+  def transform({:in, _, _} = ast, %Context{} = context) do
+    MembershipOperatorTransformer.transform(ast, context)
   end
 
   # needs to be defined before module attribute operator
