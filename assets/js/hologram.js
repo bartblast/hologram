@@ -34,6 +34,8 @@ window.Elixir_Hologram_Router = Elixir_Hologram_Router;
 window.Elixir_Hologram_Runtime_JS = Elixir_Hologram_Runtime_JS;
 
 export default class Hologram {
+  static Interpreter = Interpreter;
+
   // Covered implicitely in E2E tests.
   static onReady(document, callback) {
     if (
