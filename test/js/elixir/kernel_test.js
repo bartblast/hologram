@@ -46,24 +46,6 @@ describe("apply()", () => {
   });
 });
 
-describe("$concatenate_lists()", () => {
-  it("concatenates 2 lists", () => {
-    const arg1 = Type.list([Type.integer(1), Type.integer(2)]);
-    const arg2 = Type.list([Type.integer(3), Type.integer(4)]);
-
-    const result = Kernel.$concatenate_lists(arg1, arg2);
-
-    const expected = Type.list([
-      Type.integer(1),
-      Type.integer(2),
-      Type.integer(3),
-      Type.integer(4),
-    ]);
-
-    assert.deepStrictEqual(result, expected);
-  });
-});
-
 describe("$divide()", () => {
   it("divides 2 numbers", () => {
     const arg1 = Type.integer(1);

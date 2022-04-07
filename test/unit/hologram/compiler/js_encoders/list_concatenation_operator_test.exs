@@ -28,7 +28,7 @@ defmodule Hologram.Compiler.JSEncoder.ListConcatenationOperatorTest do
     right =
       "{ type: 'list', data: [ { type: 'integer', value: 3 }, { type: 'integer', value: 4 } ] }"
 
-    expected = "Elixir_Kernel.$concatenate_lists(#{left}, #{right})"
+    expected = "Hologram.Interpreter.$list_concatenation_operator(#{left}, #{right})"
 
     assert result == expected
   end

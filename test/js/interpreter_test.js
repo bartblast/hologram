@@ -58,6 +58,24 @@ describe("$addition_operator()", () => {
   });
 });
 
+describe("$list_concatenation_operator()", () => {
+  it("concatenates 2 lists", () => {
+    const left = Type.list([Type.integer(1), Type.integer(2)]);
+    const right = Type.list([Type.integer(3), Type.integer(4)]);
+
+    const result = Interpreter.$list_concatenation_operator(left, right);
+
+    const expected = Type.list([
+      Type.integer(1),
+      Type.integer(2),
+      Type.integer(3),
+      Type.integer(4),
+    ]);
+
+    assert.deepStrictEqual(result, expected);
+  });
+});
+
 describe("$membership_operator()", () => {
   it("calls Enum.$member()", () => {
     const left = Type.integer(1)

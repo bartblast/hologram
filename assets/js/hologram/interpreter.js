@@ -3,6 +3,7 @@
 import { HologramNotImplementedError } from "./errors";
 import Enum from "./elixir/enum"
 import Map from "./elixir/map"
+import Type from "./type"
 import Utils from "./utils"
 
 export default class Interpreter {
@@ -10,6 +11,11 @@ export default class Interpreter {
     const type = left.type === "integer" && right.type === "integer" ? "integer" : "float"
     const result = left.value + right.value
     return Utils.freeze({type: type, value: result})
+  }
+
+  static $list_concatenation_operator(left, right) {
+    const result = Type.list(left.data.concat(right.data))
+    return Utils.freeze(result)
   }
 
   static $membership_operator(left, right) {
