@@ -1,12 +1,22 @@
 "use strict";
 
-import { assert, assertFrozen, cleanup } from "./support/commons";
+import { assert, assertBoxedTrue, assertFrozen, cleanup } from "./support/commons";
 beforeEach(() => cleanup())
 
 import { HologramNotImplementedError } from "../../assets/js/hologram/errors";
 import Interpreter from "../../assets/js/hologram/interpreter"
 import Map from "../../assets/js/hologram/elixir/map"
 import Type from "../../assets/js/hologram/type"
+
+describe("$membership_operator()", () => {
+  it("calls Enum.$member()", () => {
+    const left = Type.integer(1)
+    const right = Type.list([Type.integer(1), Type.integer(2)])
+    const result = Interpreter.$membership_operator(left, right)
+
+    assertBoxedTrue(result)
+  })
+})
 
 describe("caseExpression()", () => {
   it("returns the result of the clauses anonymous function given", () => {

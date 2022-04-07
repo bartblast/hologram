@@ -1,10 +1,15 @@
 "use strict";
 
 import { HologramNotImplementedError } from "./errors";
+import Enum from "./elixir/enum"
 import Map from "./elixir/map"
 import Utils from "./utils"
 
 export default class Interpreter {
+  static $membership_operator(left, right) {
+    return Enum.member$question(right, left)
+  }
+
   static caseExpression(condition, clausesAnonFun) {
     const result = clausesAnonFun(condition)
     return Utils.freeze(result)
