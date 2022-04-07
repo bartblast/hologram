@@ -7,12 +7,6 @@ import Type from "../type"
 import Utils from "../utils"
 
 export default class Kernel {
-  static $add(boxedNumber1, boxedNumber2) {
-    const type = boxedNumber1.type === "integer" && boxedNumber2.type === "integer" ? "integer" : "float"
-    const result = boxedNumber1.value + boxedNumber2.value
-    return Utils.freeze({type: type, value: result})
-  }
-
   static apply() {
     if (arguments.length === 3) {
       const module = Runtime.getClassByClassName(arguments[0].className)

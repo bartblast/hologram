@@ -6,6 +6,12 @@ import Map from "./elixir/map"
 import Utils from "./utils"
 
 export default class Interpreter {
+  static $addition_operator(left, right) {
+    const type = left.type === "integer" && right.type === "integer" ? "integer" : "float"
+    const result = left.value + right.value
+    return Utils.freeze({type: type, value: result})
+  }
+
   static $membership_operator(left, right) {
     return Enum.member$question(right, left)
   }

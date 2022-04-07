@@ -14,56 +14,6 @@ import Kernel from "../../../assets/js/hologram/elixir/kernel";
 import Map from "../../../assets/js/hologram/elixir/map";
 import Type from "../../../assets/js/hologram/type";
 
-describe("$add()", () => {
-  it("adds integer and integer", () => {
-    const arg1 = Type.integer(1);
-    const arg2 = Type.integer(2);
-
-    const result = Kernel.$add(arg1, arg2);
-    const expected = Type.integer(3);
-
-    assert.deepStrictEqual(result, expected);
-  });
-
-  it("adds integer and float", () => {
-    const arg1 = Type.integer(1);
-    const arg2 = Type.float(2.0);
-
-    const result = Kernel.$add(arg1, arg2);
-    const expected = Type.float(3.0);
-
-    assert.deepStrictEqual(result, expected);
-  });
-
-  it("adds float and integer", () => {
-    const arg1 = Type.float(1.0);
-    const arg2 = Type.integer(2);
-
-    const result = Kernel.$add(arg1, arg2);
-    const expected = Type.float(3.0);
-
-    assert.deepStrictEqual(result, expected);
-  });
-
-  it("adds float and float", () => {
-    const arg1 = Type.float(1.0);
-    const arg2 = Type.float(2.0);
-
-    const result = Kernel.$add(arg1, arg2);
-    const expected = Type.float(3.0);
-
-    assert.deepStrictEqual(result, expected);
-  });
-
-  it("returns frozen object", () => {
-    const arg1 = Type.integer(1);
-    const arg2 = Type.integer(2);
-    const result = Kernel.$add(arg1, arg2);
-
-    assertFrozen(result);
-  });
-});
-
 describe("apply()", () => {
   let functionName, module;
 

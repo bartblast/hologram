@@ -11,7 +11,7 @@ defmodule Hologram.Compiler.JSEncoder.AdditionOperatorTest do
     }
 
     result = JSEncoder.encode(ir, %Context{}, %Opts{})
-    expected = "Elixir_Kernel.$add(x, { type: 'atom', value: 'a' })"
+    expected = "Hologram.Interpreter.$addition_operator(x, { type: 'atom', value: 'a' })"
 
     assert result == expected
   end
