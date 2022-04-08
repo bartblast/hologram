@@ -29,13 +29,6 @@ export default class Kernel {
     }
   }
 
-  // TODO: raise ArithmeticError if second argument is 0 or 0.0
-  // see: https://github.com/bartblast/hologram/issues/67
-  static $divide(left, right) {
-    const result = Type.float(left.value / right.value)
-    return Utils.freeze(result)
-  }
-
   // TODO: raise ArgumentError when index is negative or it is out of range
   static elem(tuple, index) {
     return tuple.data[index]

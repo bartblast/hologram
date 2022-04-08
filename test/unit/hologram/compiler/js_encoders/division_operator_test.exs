@@ -11,7 +11,7 @@ defmodule Hologram.Compiler.JSEncoder.DivisionOperatorTest do
     }
 
     result = JSEncoder.encode(ir, %Context{}, %Opts{})
-    expected = "Elixir_Kernel.$divide(x, { type: 'atom', value: 'a' })"
+    expected = "Hologram.Interpreter.$division_operator(x, { type: 'atom', value: 'a' })"
 
     assert result == expected
   end

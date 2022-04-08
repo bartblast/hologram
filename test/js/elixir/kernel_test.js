@@ -46,18 +46,6 @@ describe("apply()", () => {
   });
 });
 
-describe("$divide()", () => {
-  it("divides 2 numbers", () => {
-    const arg1 = Type.integer(1);
-    const arg2 = Type.float(2.0);
-
-    const result = Kernel.$divide(arg1, arg2);
-    const expected = Type.float(0.5);
-
-    assert.deepStrictEqual(result, expected);
-  });
-});
-
 describe("elem()", () => {
   it("gets the element at the zero-based index in tuple", () => {
     const tuple = Type.tuple([

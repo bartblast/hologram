@@ -58,6 +58,18 @@ describe("$addition_operator()", () => {
   });
 });
 
+describe("$division_operator()", () => {
+  it("divides 2 numbers", () => {
+    const left = Type.integer(1);
+    const right = Type.float(2.0);
+
+    const result = Interpreter.$division_operator(left, right);
+    const expected = Type.float(0.5);
+
+    assert.deepStrictEqual(result, expected);
+  });
+});
+
 describe("$list_concatenation_operator()", () => {
   it("concatenates 2 lists", () => {
     const left = Type.list([Type.integer(1), Type.integer(2)]);

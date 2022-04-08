@@ -13,6 +13,13 @@ export default class Interpreter {
     return Utils.freeze({type: type, value: result})
   }
 
+  // TODO: raise ArithmeticError if second argument is 0 or 0.0
+  // see: https://github.com/bartblast/hologram/issues/67
+  static $division_operator(left, right) {
+    const result = Type.float(left.value / right.value)
+    return Utils.freeze(result)
+  }
+
   static $list_concatenation_operator(left, right) {
     const result = Type.list(left.data.concat(right.data))
     return Utils.freeze(result)
