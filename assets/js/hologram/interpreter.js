@@ -20,6 +20,10 @@ export default class Interpreter {
     return Utils.freeze(result)
   }
 
+  static $dot_operator(left, right) {
+    return left.data[Type.encodedKey(right)]
+  }
+
   static $list_concatenation_operator(left, right) {
     const result = Type.list(left.data.concat(right.data))
     return Utils.freeze(result)

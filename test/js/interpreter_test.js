@@ -70,6 +70,31 @@ describe("$division_operator()", () => {
   });
 });
 
+describe("$dot_operator()", () => {
+  let left, right, value, result;
+
+  beforeEach(() => {
+    value = Type.integer(2)
+
+    let elems = {}
+    elems[Type.atomKey("a")] = Type.integer(1)
+    elems[Type.atomKey("b")] = value
+
+    left =  Type.map(elems)
+    right = Type.atom("b")
+    
+    result = Interpreter.$dot_operator(left, right)
+  })
+
+  it("fetches boxed map value by boxed key", () => {
+    assert.deepStrictEqual(result, value) 
+  })
+
+  it("returns frozen object", () => {
+    assertFrozen(result)
+  })
+})
+
 describe("$list_concatenation_operator()", () => {
   it("concatenates 2 lists", () => {
     const left = Type.list([Type.integer(1), Type.integer(2)]);

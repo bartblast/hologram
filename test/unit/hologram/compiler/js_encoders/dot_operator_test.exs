@@ -11,7 +11,7 @@ defmodule Hologram.Compiler.JSEncoder.DotOperatorTest do
     }
 
     result = JSEncoder.encode(ir, %Context{}, %Opts{})
-    expected = "Elixir_Kernel_SpecialForms.$dot(x, { type: 'atom', value: 'a' })"
+    expected = "Hologram.Interpreter.$dot_operator(x, { type: 'atom', value: 'a' })"
 
     assert result == expected
   end
