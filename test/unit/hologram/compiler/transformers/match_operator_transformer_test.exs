@@ -14,23 +14,7 @@ defmodule Hologram.Compiler.MatchOperatorTransformerTest do
     Variable
   }
 
-  test "variable" do
-    code = "x = 1"
-    ast = ast(code)
-
-    result = MatchOperatorTransformer.transform(ast, %Context{})
-
-    expected = %MatchOperator{
-      bindings: [%Binding{name: :x, access_path: [%MatchAccess{}]}],
-      left: %Variable{name: :x},
-      right: %IntegerType{value: 1}
-    }
-
-    assert result == expected
-  end
-
   describe "map" do
-    test "not nested" do
       code = "%{a: x, b: y} = %{a: 1, b: 2}"
       ast = ast(code)
 
@@ -134,6 +118,21 @@ defmodule Hologram.Compiler.MatchOperatorTransformerTest do
 
       assert result == expected
     end
+  end
+
+  test "variable" do
+    code = "x = 1"
+    ast = ast(code)
+
+    result = MatchOperatorTransformer.transform(ast, %Context{})
+
+    expected = %MatchOperator{
+      bindings: [%Binding{name: :x, access_path: [%MatchAccess{}]}],
+      left: %Variable{name: :x},
+      right: %IntegerType{value: 1}
+    }
+
+    assert result == expected
   end
 
   # TODO: test other types
