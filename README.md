@@ -272,7 +272,7 @@ without its shortcomings related to scalability, efficiency, etc.
 | Map           | :white_check_mark: |      
 | Range         | :x:                |          
 | Struct        | :x:                |          
-| Tuple         | :x:                |          
+| Tuple         | :white_check_mark: |        
 
 #### Control Flow
 
