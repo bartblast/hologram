@@ -266,6 +266,7 @@ without its shortcomings related to scalability, efficiency, etc.
 | Bitstring     | :x:                |
 | Case          | :white_check_mark: |
 | Comprehension | :x:                |
+| Function Call | :white_check_mark: |
 | If            | :x:                |
 | List          | :x:                |
 | Map           | :white_check_mark: |      
