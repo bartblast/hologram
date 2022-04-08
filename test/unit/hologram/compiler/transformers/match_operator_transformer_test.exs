@@ -15,6 +15,7 @@ defmodule Hologram.Compiler.MatchOperatorTransformerTest do
   }
 
   describe "map" do
+    test "not nested" do
       code = "%{a: x, b: y} = %{a: 1, b: 2}"
       ast = ast(code)
 
