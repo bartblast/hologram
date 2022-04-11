@@ -13,6 +13,7 @@ defmodule Hologram.Compiler.TransformerTest do
     Block,
     BooleanType,
     CaseExpression,
+    ConsOperator,
     DivisionOperator,
     DotOperator,
     EqualToOperator,
@@ -191,6 +192,13 @@ defmodule Hologram.Compiler.TransformerTest do
       ast = ast(code)
 
       assert %AdditionOperator{} = Transformer.transform(ast, %Context{})
+    end
+
+    test "cons" do
+      code = "[h | t]"
+      ast = ast(code)
+
+      assert %ListType{data: %ConsOperator{}} = Transformer.transform(ast, %Context{})
     end
 
     test "division" do
