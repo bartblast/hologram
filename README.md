@@ -223,6 +223,7 @@ without its shortcomings related to scalability, efficiency, etc.
 | <>       | :x:                |
 | \|>      | :x:                |
 | =~       | :x:                |
+| \|       | :x:                |
 
 ##### Non-Overridable General Operators
 
