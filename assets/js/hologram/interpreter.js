@@ -24,6 +24,23 @@ export default class Interpreter {
     return left.data[Type.encodedKey(right)]
   }
 
+  static $equal_to_operator(left, right) {
+    let value;
+
+    switch (left.type) {        
+      case "float":
+      case "integer":
+        value = Interpreter._areNumbersEqual(left, right)
+        break;
+
+      default:
+        value = left.type === right.type && left.value === right.value
+        break;
+    }
+
+    return Type.boolean(value)
+  }
+
   static $list_concatenation_operator(left, right) {
     const result = Type.list(left.data.concat(right.data))
     return Utils.freeze(result)
@@ -107,5 +124,13 @@ export default class Interpreter {
     }
 
     return true
+  }
+
+  static _areNumbersEqual(num1, num2) {
+    if (Type.isNumber(num1) && Type.isNumber(num2)) {
+      return num1.value == num2.value
+    } else {
+      return false
+    }
   }
 }

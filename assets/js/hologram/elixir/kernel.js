@@ -21,34 +21,9 @@ export default class Kernel {
     }
   }
 
-  static _areBoxedNumbersEqual(boxedNumber1, boxedNumber2) {
-    if (Type.isNumber(boxedNumber1) && Type.isNumber(boxedNumber2)) {
-      return boxedNumber1.value == boxedNumber2.value
-    } else {
-      return false
-    }
-  }
-
   // TODO: raise ArgumentError when index is negative or it is out of range
   static elem(tuple, index) {
     return tuple.data[index]
-  }
-
-  static $equal_to(boxedVal1, boxedVal2) {
-    let value;
-
-    switch (boxedVal1.type) {        
-      case "float":
-      case "integer":
-        value = Kernel._areBoxedNumbersEqual(boxedVal1, boxedVal2)
-        break;
-
-      default:
-        value = boxedVal2.type === boxedVal1.type && boxedVal1.value === boxedVal2.value
-        break;
-    }
-
-    return Type.boolean(value)
   }
 
   static if(condition, doClause, elseClause) {

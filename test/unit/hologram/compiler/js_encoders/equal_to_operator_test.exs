@@ -13,7 +13,7 @@ defmodule Hologram.Compiler.JSEncoder.EqualToOperatorTest do
     result = JSEncoder.encode(ir, %Context{}, %Opts{})
 
     expected =
-      "Elixir_Kernel.$equal_to({ type: 'integer', value: 1 }, { type: 'integer', value: 2 })"
+      "Hologram.Interpreter.$equal_to_operator({ type: 'integer', value: 1 }, { type: 'integer', value: 2 })"
 
     assert result == expected
   end
