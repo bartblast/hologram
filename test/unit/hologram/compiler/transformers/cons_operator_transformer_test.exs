@@ -10,9 +10,9 @@ defmodule Hologram.Compiler.ConsOperatorTransformerTest do
 
     result = ConsOperatorTransformer.transform(ast, %Context{})
 
-    expected =%ConsOperator{
+    expected = %ConsOperator{
       head: %Variable{name: :h},
-      tail: %Variable{name: :t},
+      tail: %Variable{name: :t}
     }
 
     assert result == expected

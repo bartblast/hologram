@@ -1,4 +1,3 @@
-
 defmodule HologramE2E.PatternMatching.TuplePage do
   use Hologram.Page
 
@@ -37,8 +36,10 @@ defmodule HologramE2E.PatternMatching.TuplePage do
       case state.case_condition_value do
         123 ->
           :not_matched
+
         {a, b} ->
           a + b
+
         _ ->
           :default_match
       end

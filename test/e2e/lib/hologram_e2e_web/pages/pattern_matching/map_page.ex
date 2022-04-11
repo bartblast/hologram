@@ -36,8 +36,10 @@ defmodule HologramE2E.PatternMatching.MapPage do
       case state.case_condition_value do
         123 ->
           :not_matched
+
         %{a: a, b: b} ->
           a + b
+
         _ ->
           :default_match
       end

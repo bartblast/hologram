@@ -6,13 +6,12 @@ defmodule Hologram.Compiler.JSEncoder.RelaxedBooleanNotOperatorTest do
 
   test "encode/3" do
     ir = %RelaxedBooleanNotOperator{
-      value: %BooleanType{value: false},
+      value: %BooleanType{value: false}
     }
 
     result = JSEncoder.encode(ir, %Context{}, %Opts{})
 
-    expected =
-      "Elixir_Kernel.$relaxed_boolean_not({ type: 'boolean', value: false })"
+    expected = "Elixir_Kernel.$relaxed_boolean_not({ type: 'boolean', value: false })"
 
     assert result == expected
   end

@@ -12,10 +12,12 @@ defmodule Hologram.Compiler.MembershipOperatorTransformerTest do
 
     expected = %MembershipOperator{
       left: %IntegerType{value: 1},
-      right: %ListType{data: [
-        %IntegerType{value: 1},
-        %IntegerType{value: 2}
-      ]}
+      right: %ListType{
+        data: [
+          %IntegerType{value: 1},
+          %IntegerType{value: 2}
+        ]
+      }
     }
 
     assert result == expected
