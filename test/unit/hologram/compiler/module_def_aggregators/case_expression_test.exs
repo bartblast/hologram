@@ -1,4 +1,4 @@
-defmodule Hologram.Compiler.ModuleDefAggregators.CaseExpressionTest do
+defmodule Hologram.Compiler.ModuleDefAggregator.CaseExpressionTest do
   use Hologram.Test.UnitCase, async: false
 
   alias Hologram.Compiler.{ModuleDefAggregator, ModuleDefStore}

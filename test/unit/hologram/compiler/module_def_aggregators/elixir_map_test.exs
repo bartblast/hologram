@@ -1,4 +1,4 @@
-defmodule Hologram.Compiler.ModuleDefAggregators.ElixirMapTest do
+defmodule Hologram.Compiler.ModuleDefAggregator.ElixirMapTest do
   use Hologram.Test.UnitCase, async: false
 
   alias Hologram.Compiler.{ModuleDefAggregator, ModuleDefStore}
