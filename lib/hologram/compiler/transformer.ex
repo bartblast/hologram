@@ -9,6 +9,7 @@ defmodule Hologram.Compiler.Transformer do
     BinaryTypeTransformer,
     BlockTransformer,
     CaseExpressionTransformer,
+    ConsOperatorTransformer,
     DivisionOperatorTransformer,
     DotOperatorTransformer,
     EqualToOperatorTransformer,
@@ -70,6 +71,10 @@ defmodule Hologram.Compiler.Transformer do
 
   def transform({:+, _, _} = ast, %Context{} = context) do
     AdditionOperatorTransformer.transform(ast, context)
+  end
+
+  def transform([{:|, _, _}] = ast, %Context{} = context) do
+    ConsOperatorTransformer.transform(ast, context)
   end
 
   def transform({:/, _, _} = ast, %Context{} = context) do

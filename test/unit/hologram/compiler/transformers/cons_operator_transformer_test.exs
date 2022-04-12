@@ -1,11 +1,11 @@
 defmodule Hologram.Compiler.ConsOperatorTransformerTest do
   use Hologram.Test.UnitCase, async: true
 
-  alias Hologram.Compiler.{Context, ConsOperatorTransformer}
+  alias Hologram.Compiler.{ConsOperatorTransformer, Context}
   alias Hologram.Compiler.IR.{ConsOperator, Variable}
 
-  test "transform/3" do
-    code = "h | t"
+  test "transform/2" do
+    code = "[h | t]"
     ast = ast(code)
 
     result = ConsOperatorTransformer.transform(ast, %Context{})

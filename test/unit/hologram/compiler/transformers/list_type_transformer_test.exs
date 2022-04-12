@@ -6,7 +6,7 @@ defmodule Hologram.Compiler.ListTypeTransformerTest do
 
   @context %Context{module: Abc}
 
-  test "regular list" do
+  test "transform/2" do
     code = "[1, 2]"
     ast = ast(code)
 
@@ -17,22 +17,6 @@ defmodule Hologram.Compiler.ListTypeTransformerTest do
         %IntegerType{value: 1},
         %IntegerType{value: 2}
       ]
-    }
-
-    assert result == expected
-  end
-
-  test "cons operator" do
-    code = "[h | t]"
-    ast = ast(code)
-
-    result = ListTypeTransformer.transform(ast, @context)
-
-    expected = %ListType{
-      data: %ConsOperator{
-        head: %Variable{name: :h},
-        tail: %Variable{name: :t}
-      }
     }
 
     assert result == expected

@@ -75,7 +75,7 @@ defmodule Hologram.Compiler.TransformerTest do
       code = "[h | t]"
       ast = ast(code)
 
-      assert %ListType{data: %ConsOperator{}} = Transformer.transform(ast, %Context{})
+      assert %ConsOperator{} = Transformer.transform(ast, %Context{})
     end
 
     test "division" do
@@ -213,7 +213,7 @@ defmodule Hologram.Compiler.TransformerTest do
       assert %UnaryPositiveOperator{} = Transformer.transform(ast, %Context{})
     end
   end
-  
+
   describe "types" do
     test "anonymous function" do
       code = "fn -> 1 end"
