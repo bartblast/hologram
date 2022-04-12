@@ -11,7 +11,7 @@ defmodule Hologram.Compiler.JSEncoder.MultiplicationOperatorTest do
     }
 
     result = JSEncoder.encode(ir, %Context{}, %Opts{})
-    expected = "Elixir_Kernel.$multiply(x, { type: 'atom', value: 'a' })"
+    expected = "Hologram.Interpreter.$multiplication_operator(x, { type: 'atom', value: 'a' })"
 
     assert result == expected
   end

@@ -240,6 +240,56 @@ describe("$membership_operator()", () => {
   })
 })
 
+describe("$multiplication_operator()", () => {
+  it("multiplies integer and integer", () => {
+    const left = Type.integer(2);
+    const right = Type.integer(3);
+
+    const result = Interpreter.$multiplication_operator(left, right);
+    const expected = Type.integer(6);
+
+    assert.deepStrictEqual(result, expected);
+  });
+
+  it("multiplies integer and float", () => {
+    const left = Type.integer(2);
+    const right = Type.float(3.0);
+
+    const result = Interpreter.$multiplication_operator(left, right);
+    const expected = Type.float(6.0);
+
+    assert.deepStrictEqual(result, expected);
+  });
+
+  it("multiplies float and integer", () => {
+    const left = Type.float(2.0);
+    const right = Type.integer(3);
+
+    const result = Interpreter.$multiplication_operator(left, right);
+    const expected = Type.float(6.0);
+
+    assert.deepStrictEqual(result, expected);
+  });
+
+  it("multiplies float and float", () => {
+    const left = Type.float(2.0);
+    const right = Type.float(3.0);
+
+    const result = Interpreter.$multiplication_operator(left, right);
+    const expected = Type.float(6.0);
+
+    assert.deepStrictEqual(result, expected);
+  });
+
+  it("returns frozen object", () => {
+    const left = Type.integer(1);
+    const right = Type.integer(2);
+    const result = Interpreter.$multiplication_operator(left, right);
+
+    assertFrozen(result);
+  });
+});
+
 describe("caseExpression()", () => {
   it("returns the result of the clauses anonymous function given", () => {
     const clausesAnonFun = function(param) {

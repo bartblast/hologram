@@ -111,56 +111,6 @@ describe("if()", () => {
   });
 });
 
-describe("$multiply()", () => {
-  it("multiplies integer and integer", () => {
-    const arg1 = Type.integer(2);
-    const arg2 = Type.integer(3);
-
-    const result = Kernel.$multiply(arg1, arg2);
-    const expected = Type.integer(6);
-
-    assert.deepStrictEqual(result, expected);
-  });
-
-  it("multiplies integer and float", () => {
-    const arg1 = Type.integer(2);
-    const arg2 = Type.float(3.0);
-
-    const result = Kernel.$multiply(arg1, arg2);
-    const expected = Type.float(6.0);
-
-    assert.deepStrictEqual(result, expected);
-  });
-
-  it("multiplies float and integer", () => {
-    const arg1 = Type.float(2.0);
-    const arg2 = Type.integer(3);
-
-    const result = Kernel.$multiply(arg1, arg2);
-    const expected = Type.float(6.0);
-
-    assert.deepStrictEqual(result, expected);
-  });
-
-  it("multiplies float and float", () => {
-    const arg1 = Type.float(2.0);
-    const arg2 = Type.float(3.0);
-
-    const result = Kernel.$multiply(arg1, arg2);
-    const expected = Type.float(6.0);
-
-    assert.deepStrictEqual(result, expected);
-  });
-
-  it("returns frozen object", () => {
-    const arg1 = Type.integer(1);
-    const arg2 = Type.integer(2);
-    const result = Kernel.$multiply(arg1, arg2);
-
-    assertFrozen(result);
-  });
-});
-
 describe("put_in()", () => {
   it("puts value nested 1 level deep", () => {
     let data = Type.map();
