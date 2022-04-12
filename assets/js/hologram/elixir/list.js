@@ -5,7 +5,6 @@ import Type from "../type";
 
 export default class List {
   static insert_at(list, index, value) {
-
     if (index === -1) {
       index = list.data.length
     } else if (index < 0) {
