@@ -1,10 +1,10 @@
 defmodule Hologram.Compiler.Helpers do
-  alias Hologram.Compiler.{Bindings, Transformer}
+  alias Hologram.Compiler.{PatternDeconstructor, Transformer}
   alias Hologram.Compiler.IR.{Binding, FunctionDefinitionVariants, ModuleDefinition, ParamAccess}
   alias Hologram.Typespecs, as: T
 
   def aggregate_bindings_from_expression(expr) do
-    Bindings.find(expr)
+    PatternDeconstructor.deconstruct(expr)
     |> Enum.reduce([], fn binding, acc ->
       name = List.last(binding).name
       maybe_add_binding(acc, name, binding)
@@ -36,7 +36,7 @@ defmodule Hologram.Compiler.Helpers do
   end
 
   defp aggregate_bindings_from_param({param, idx}, acc) do
-    Bindings.find(param)
+    PatternDeconstructor.deconstruct(param)
     |> Enum.reduce(acc, fn binding, acc ->
       name = List.last(binding).name
       maybe_add_binding(acc, name, {idx, binding})
