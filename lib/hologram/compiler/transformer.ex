@@ -57,64 +57,6 @@ defmodule Hologram.Compiler.Transformer do
     Variable
   }
 
-  # TYPES
-
-  def transform({:fn, _, _} = ast, %Context{} = context) do
-    AnonymousFunctionTypeTransformer.transform(ast, context)
-  end
-
-  def transform(ast, %Context{} = context) when is_atom(ast) and ast not in [nil, false, true] do
-    if Reflection.module?(ast) do
-      ModuleTypeTransformer.transform(ast, context)
-    else
-      %AtomType{value: ast}
-    end
-  end
-
-  def transform({:<<>>, _, _} = ast, %Context{} = context) do
-    BinaryTypeTransformer.transform(ast, context)
-  end
-
-  def transform(ast, _) when is_boolean(ast) do
-    %BooleanType{value: ast}
-  end
-
-  def transform(ast, _) when is_integer(ast) do
-    %IntegerType{value: ast}
-  end
-
-  def transform(ast, %Context{} = context) when is_list(ast) do
-    ListTypeTransformer.transform(ast, context)
-  end
-
-  def transform({:%{}, _, _} = ast, %Context{} = context) do
-    MapTypeTransformer.transform(ast, context)
-  end
-
-  def transform({:__aliases__, _, _} = ast, %Context{} = context) do
-    ModuleTypeTransformer.transform(ast, context)
-  end
-
-  def transform(nil, _) do
-    %NilType{}
-  end
-
-  def transform(ast, _) when is_binary(ast) do
-    %StringType{value: ast}
-  end
-
-  def transform({:%, _, _} = ast, %Context{} = context) do
-    StructTypeTransformer.transform(ast, context)
-  end
-
-  def transform({:{}, _, _} = ast, %Context{} = context) do
-    TupleTypeTransformer.transform(ast, context)
-  end
-
-  def transform({_, _} = ast, %Context{} = context) do
-    TupleTypeTransformer.transform(ast, context)
-  end
-
   # OPERATORS
 
   def transform({{:., _, [Access, :get]}, _, _} = ast, %Context{} = context) do
@@ -206,6 +148,64 @@ defmodule Hologram.Compiler.Transformer do
 
   def transform({:"::", _, _} = ast, %Context{} = context) do
     TypeOperatorTransformer.transform(ast, context)
+  end
+
+  # TYPES
+
+  def transform({:fn, _, _} = ast, %Context{} = context) do
+    AnonymousFunctionTypeTransformer.transform(ast, context)
+  end
+
+  def transform(ast, %Context{} = context) when is_atom(ast) and ast not in [nil, false, true] do
+    if Reflection.module?(ast) do
+      ModuleTypeTransformer.transform(ast, context)
+    else
+      %AtomType{value: ast}
+    end
+  end
+
+  def transform({:<<>>, _, _} = ast, %Context{} = context) do
+    BinaryTypeTransformer.transform(ast, context)
+  end
+
+  def transform(ast, _) when is_boolean(ast) do
+    %BooleanType{value: ast}
+  end
+
+  def transform(ast, _) when is_integer(ast) do
+    %IntegerType{value: ast}
+  end
+
+  def transform(ast, %Context{} = context) when is_list(ast) do
+    ListTypeTransformer.transform(ast, context)
+  end
+
+  def transform({:%{}, _, _} = ast, %Context{} = context) do
+    MapTypeTransformer.transform(ast, context)
+  end
+
+  def transform({:__aliases__, _, _} = ast, %Context{} = context) do
+    ModuleTypeTransformer.transform(ast, context)
+  end
+
+  def transform(nil, _) do
+    %NilType{}
+  end
+
+  def transform(ast, _) when is_binary(ast) do
+    %StringType{value: ast}
+  end
+
+  def transform({:%, _, _} = ast, %Context{} = context) do
+    StructTypeTransformer.transform(ast, context)
+  end
+
+  def transform({:{}, _, _} = ast, %Context{} = context) do
+    TupleTypeTransformer.transform(ast, context)
+  end
+
+  def transform({_, _} = ast, %Context{} = context) do
+    TupleTypeTransformer.transform(ast, context)
   end
 
   # DEFINITIONS

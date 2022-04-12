@@ -56,129 +56,6 @@ defmodule Hologram.Compiler.TransformerTest do
     Variable
   }
 
-  describe "types" do
-    test "anonymous function" do
-      code = "fn -> 1 end"
-      ast = ast(code)
-
-      assert %AnonymousFunctionType{} = Transformer.transform(ast, %Context{})
-    end
-
-    test "atom" do
-      code = ":test"
-      ast = ast(code)
-
-      result = Transformer.transform(ast, %Context{})
-      assert result == %AtomType{value: :test}
-    end
-
-    test "binary" do
-      code = "<<1, 2>>"
-      ast = ast(code)
-
-      assert %BinaryType{} = Transformer.transform(ast, %Context{})
-    end
-
-    test "boolean" do
-      code = "true"
-      ast = ast(code)
-
-      result = Transformer.transform(ast, %Context{})
-      assert result == %BooleanType{value: true}
-    end
-
-    test "integer" do
-      code = "1"
-      ast = ast(code)
-
-      result = Transformer.transform(ast, %Context{})
-      assert result == %IntegerType{value: 1}
-    end
-
-    test "list" do
-      code = "[1, 2]"
-      ast = ast(code)
-
-      assert %ListType{} = Transformer.transform(ast, %Context{})
-    end
-
-    test "map" do
-      code = "%{a: 1, b: 2}"
-      ast = ast(code)
-
-      assert %MapType{} = Transformer.transform(ast, %Context{})
-    end
-
-    test "module from module segments" do
-      code = "Hologram.Compiler.TransformerTest"
-      ast = ast(code)
-
-      assert %ModuleType{} = Transformer.transform(ast, %Context{})
-    end
-
-    test "module from atom" do
-      module = Hologram.Compiler.TransformerTest
-      assert %ModuleType{} = Transformer.transform(module, %Context{})
-    end
-
-    test "nil" do
-      code = "nil"
-      ast = ast(code)
-
-      assert %NilType{} = Transformer.transform(ast, %Context{})
-    end
-
-    test "string" do
-      code = "\"test\""
-      ast = ast(code)
-
-      result = Transformer.transform(ast, %Context{})
-      assert result == %StringType{value: "test"}
-    end
-
-    test "struct" do
-      code = "%Hologram.Test.Fixtures.Compiler.Transformer.Module2{a: 1}"
-      ast = ast(code)
-
-      assert %StructType{} = Transformer.transform(ast, %Context{})
-    end
-
-    test "tuple, 2 elements" do
-      code = "{1, 2}"
-      ast = ast(code)
-
-      assert %TupleType{} = Transformer.transform(ast, %Context{})
-    end
-
-    test "tuple, non-2 elements" do
-      code = "{1, 2, 3}"
-      ast = ast(code)
-
-      assert %TupleType{} = Transformer.transform(ast, %Context{})
-    end
-
-    test "nested" do
-      code = "[1, {2, 3, 4}]"
-      ast = ast(code)
-      result = Transformer.transform(ast, %Context{})
-
-      expected = %ListType{
-        data: [
-          %IntegerType{value: 1},
-          %TupleType{
-            data: [
-              %IntegerType{value: 2},
-              %IntegerType{value: 3},
-              %IntegerType{value: 4}
-            ]
-          }
-        ]
-      }
-
-      assert result == expected
-    end
-  end
-
   describe "operators" do
     test "access" do
       code = "a[:b]"
@@ -334,6 +211,129 @@ defmodule Hologram.Compiler.TransformerTest do
       ast = ast(code)
 
       assert %UnaryPositiveOperator{} = Transformer.transform(ast, %Context{})
+    end
+  end
+  
+  describe "types" do
+    test "anonymous function" do
+      code = "fn -> 1 end"
+      ast = ast(code)
+
+      assert %AnonymousFunctionType{} = Transformer.transform(ast, %Context{})
+    end
+
+    test "atom" do
+      code = ":test"
+      ast = ast(code)
+
+      result = Transformer.transform(ast, %Context{})
+      assert result == %AtomType{value: :test}
+    end
+
+    test "binary" do
+      code = "<<1, 2>>"
+      ast = ast(code)
+
+      assert %BinaryType{} = Transformer.transform(ast, %Context{})
+    end
+
+    test "boolean" do
+      code = "true"
+      ast = ast(code)
+
+      result = Transformer.transform(ast, %Context{})
+      assert result == %BooleanType{value: true}
+    end
+
+    test "integer" do
+      code = "1"
+      ast = ast(code)
+
+      result = Transformer.transform(ast, %Context{})
+      assert result == %IntegerType{value: 1}
+    end
+
+    test "list" do
+      code = "[1, 2]"
+      ast = ast(code)
+
+      assert %ListType{} = Transformer.transform(ast, %Context{})
+    end
+
+    test "map" do
+      code = "%{a: 1, b: 2}"
+      ast = ast(code)
+
+      assert %MapType{} = Transformer.transform(ast, %Context{})
+    end
+
+    test "module from module segments" do
+      code = "Hologram.Compiler.TransformerTest"
+      ast = ast(code)
+
+      assert %ModuleType{} = Transformer.transform(ast, %Context{})
+    end
+
+    test "module from atom" do
+      module = Hologram.Compiler.TransformerTest
+      assert %ModuleType{} = Transformer.transform(module, %Context{})
+    end
+
+    test "nil" do
+      code = "nil"
+      ast = ast(code)
+
+      assert %NilType{} = Transformer.transform(ast, %Context{})
+    end
+
+    test "string" do
+      code = "\"test\""
+      ast = ast(code)
+
+      result = Transformer.transform(ast, %Context{})
+      assert result == %StringType{value: "test"}
+    end
+
+    test "struct" do
+      code = "%Hologram.Test.Fixtures.Compiler.Transformer.Module2{a: 1}"
+      ast = ast(code)
+
+      assert %StructType{} = Transformer.transform(ast, %Context{})
+    end
+
+    test "tuple, 2 elements" do
+      code = "{1, 2}"
+      ast = ast(code)
+
+      assert %TupleType{} = Transformer.transform(ast, %Context{})
+    end
+
+    test "tuple, non-2 elements" do
+      code = "{1, 2, 3}"
+      ast = ast(code)
+
+      assert %TupleType{} = Transformer.transform(ast, %Context{})
+    end
+
+    test "nested" do
+      code = "[1, {2, 3, 4}]"
+      ast = ast(code)
+      result = Transformer.transform(ast, %Context{})
+
+      expected = %ListType{
+        data: [
+          %IntegerType{value: 1},
+          %TupleType{
+            data: [
+              %IntegerType{value: 2},
+              %IntegerType{value: 3},
+              %IntegerType{value: 4}
+            ]
+          }
+        ]
+      }
+
+      assert result == expected
     end
   end
 
