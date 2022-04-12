@@ -2,6 +2,7 @@
 
 import { HologramNotImplementedError } from "./errors";
 import Enum from "./elixir/enum"
+import List from "./elixir/list";
 import Map from "./elixir/map"
 import Type from "./type"
 import Utils from "./utils"
@@ -11,6 +12,10 @@ export default class Interpreter {
     const type = left.type === "integer" && right.type === "integer" ? "integer" : "float"
     const result = left.value + right.value
     return Utils.freeze({type: type, value: result})
+  }
+
+  static $cons_operator(head, tail) {
+    return List.insert_at(tail, 0, head)
   }
 
   // TODO: raise ArithmeticError if second argument is 0 or 0.0

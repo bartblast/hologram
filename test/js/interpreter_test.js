@@ -58,6 +58,18 @@ describe("$addition_operator()", () => {
   });
 });
 
+describe("$cons_operator()", () => {
+  it("creates a list from a head and a tail", () => {
+    const head = Type.integer(1)
+    const tail = Type.list([Type.integer(2), Type.integer(3)])
+
+    const result = Interpreter.$cons_operator(head, tail)
+    const expected = Type.list([Type.integer(1), Type.integer(2), Type.integer(3)])
+
+    assert.deepStrictEqual(result, expected);
+  })
+})
+
 describe("$division_operator()", () => {
   it("divides 2 numbers", () => {
     const left = Type.integer(1);

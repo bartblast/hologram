@@ -13,6 +13,7 @@ export default class List {
 
     const elems = Utils.clone(list.data)
     elems.splice(index, 0, value)
+    
     return Type.list(elems)
   }
 }
