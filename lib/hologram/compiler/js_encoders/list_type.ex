@@ -1,5 +1,5 @@
 alias Hologram.Compiler.{Context, JSEncoder, Opts}
-alias Hologram.Compiler.IR.ListType
+alias Hologram.Compiler.IR.{ConsOperator, ListType}
 
 defimpl JSEncoder, for: ListType do
   use Hologram.Commons.Encoder

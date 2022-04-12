@@ -2,7 +2,7 @@ defmodule Hologram.Compiler.ListTypeTransformerTest do
   use Hologram.Test.UnitCase, async: true
 
   alias Hologram.Compiler.{Context, ListTypeTransformer}
-  alias Hologram.Compiler.IR.{ConsOperator, IntegerType, ListType, Variable}
+  alias Hologram.Compiler.IR.{IntegerType, ListType}
 
   @context %Context{module: Abc}
 
