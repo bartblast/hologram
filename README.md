@@ -223,7 +223,6 @@ without its shortcomings related to scalability, efficiency, etc.
 | <>       | :x:                |
 | \|>      | :x:                |
 | =~       | :x:                |
-| \|       | :x:                |
 
 ##### Non-Overridable General Operators
 
@@ -234,6 +233,7 @@ without its shortcomings related to scalability, efficiency, etc.
 | =        | :white_check_mark: |
 | &        | :x:                |
 | ::       | :x:                |
+| [ \| ]   | :white_check_mark: |
 
 ##### Comparison Operators
 
@@ -256,7 +256,7 @@ without its shortcomings related to scalability, efficiency, etc.
 | ^^^      | :x:                |  
 | <<<      | :x:                |  
 | >>>      | :x:                |  
-| \|\|\|   | :x:                |  
+| \|\|\|   | :x:                |
 | ~~~      | :x:                |
 
 #### Pattern Matching
@@ -267,6 +267,7 @@ without its shortcomings related to scalability, efficiency, etc.
 | Bitstring     | :x:                |
 | Case          | :white_check_mark: |
 | Comprehension | :x:                |
+| Cons Operator | :x:                |
 | Function Call | :white_check_mark: |
 | If            | :x:                |
 | List          | :x:                |
