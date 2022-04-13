@@ -270,7 +270,7 @@ without its shortcomings related to scalability, efficiency, etc.
 | Cons Operator | :x:                |
 | Function Call | :white_check_mark: |
 | If            | :x:                |
-| List          | :x:                |
+| List          | :white_check_mark: |
 | Map           | :white_check_mark: |      
 | Range         | :x:                |          
 | Struct        | :x:                |          

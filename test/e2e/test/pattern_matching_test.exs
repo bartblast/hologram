@@ -3,6 +3,29 @@ defmodule HologramE2E.PatternMatchingTest do
 
   @moduletag :e2e
 
+  describe "list" do
+    feature "match expression", %{session: session} do
+      session
+      |> visit("/e2e/pattern-matching/list")
+      |> click(css("#button_match_expression"))
+      |> assert_has(css("#text", text: "Result = 3"))
+    end
+
+    feature "function call", %{session: session} do
+      session
+      |> visit("/e2e/pattern-matching/list")
+      |> click(css("#button_function_call"))
+      |> assert_has(css("#text", text: "Result = 5"))
+    end
+
+    feature "case condition", %{session: session} do
+      session
+      |> visit("/e2e/pattern-matching/list")
+      |> click(css("#button_case_condition"))
+      |> assert_has(css("#text", text: "Result = 7"))
+    end
+  end
+
   describe "map" do
     feature "match expression", %{session: session} do
       session
