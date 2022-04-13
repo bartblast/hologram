@@ -8,6 +8,7 @@ defmodule Hologram.Compiler.JSEncoder.BindingTest do
     Binding,
     CaseConditionAccess,
     ListIndexAccess,
+    ListTailAccess,
     MapAccess,
     MatchAccess,
     ParamAccess,
@@ -31,6 +32,15 @@ defmodule Hologram.Compiler.JSEncoder.BindingTest do
 
     result = JSEncoder.encode(ir, %Context{}, %Opts{})
     expected = "let abc = .data[2];"
+
+    assert result == expected
+  end
+
+  test "list tail access" do
+    ir = %Binding{name: :abc, access_path: [%ParamAccess{index: 0}, %ListTailAccess{}]}
+
+    result = JSEncoder.encode(ir, %Context{}, %Opts{})
+    expected = "let abc = Elixir_Kernel.tl(arguments[0]);"
 
     assert result == expected
   end

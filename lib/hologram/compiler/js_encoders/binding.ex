@@ -4,6 +4,7 @@ alias Hologram.Compiler.IR.{
   Binding,
   CaseConditionAccess,
   ListIndexAccess,
+  ListTailAccess,
   MapAccess,
   MatchAccess,
   ParamAccess,
@@ -23,6 +24,10 @@ defimpl JSEncoder, for: Binding do
 
   defp encode_part(%ListIndexAccess{index: index}, acc, _context, _opts) do
     acc <> ".data[#{index}]"
+  end
+
+  defp encode_part(%ListTailAccess{}, acc, _context, _opts) do
+    "Elixir_Kernel.tl(#{acc})"
   end
 
   defp encode_part(%MapAccess{key: key}, acc, context, opts) do
