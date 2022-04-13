@@ -36,6 +36,16 @@ describe("concat()", () => {
   });
 });
 
+describe("count()", () => {
+  it("returns the size of the enumerable", () => {
+    const enumerable = Type.list([Type.integer(1), Type.integer(2), Type.integer(3)])
+    const result = Enum.count(enumerable)
+    const expected = Type.integer(3)
+
+    assert.deepStrictEqual(result, expected)
+  })
+})
+
 describe("member$question()", () => {
   let list;
 

@@ -13,6 +13,11 @@ export default class Enum {
     return Type.list(leftList.data.concat(rightList.data))
   }
 
+  // TODO: support Enum.count/2 and any data type that supports Enumerable protocol
+  static count(enumerable) {
+    return Type.integer(enumerable.data.length)
+  }
+
   static member$question(enumerable, elem) {
     switch (enumerable.type) {
       case "list":
