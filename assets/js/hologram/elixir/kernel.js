@@ -104,6 +104,11 @@ export default class Kernel {
     return Type.list(resultElems)
   }
 
+  // TODO: raise ArgumentError if the list is empty.
+  static tl(list) {
+    return Type.list(list.data.slice(1))
+  }
+
   static to_string(boxedValue) {
     switch (boxedValue.type) {
       case "atom":

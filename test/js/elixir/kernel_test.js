@@ -321,6 +321,16 @@ describe("$subtract_lists()", () => {
   });
 });
 
+describe("tl()", () => {
+  it("returns the tail of the list", () => {
+    const list = Type.list([Type.integer(1), Type.integer(2), Type.integer(3)])
+    const result = Kernel.tl(list)
+    const expected = Type.list([Type.integer(2), Type.integer(3)])
+
+    assert.deepStrictEqual(result, expected);
+  })
+})
+
 describe("to_string()", () => {
   it("converts boxed atom to boxed string", () => {
     const value = Type.atom("abc");
