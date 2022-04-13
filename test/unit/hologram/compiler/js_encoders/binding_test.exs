@@ -28,10 +28,10 @@ defmodule Hologram.Compiler.JSEncoder.BindingTest do
   end
 
   test "list index access" do
-    ir = %Binding{name: :abc, access_path: [%ListIndexAccess{index: 2}]}
+    ir = %Binding{name: :abc, access_path: [%ParamAccess{index: 0}, %ListIndexAccess{index: 2}]}
 
     result = JSEncoder.encode(ir, %Context{}, %Opts{})
-    expected = "let abc = .data[2];"
+    expected = "let abc = arguments[0].data[2];"
 
     assert result == expected
   end
@@ -46,10 +46,10 @@ defmodule Hologram.Compiler.JSEncoder.BindingTest do
   end
 
   test "map access" do
-    ir = %Binding{name: :abc, access_path: [%MapAccess{key: %AtomType{value: :x}}]}
+    ir = %Binding{name: :abc, access_path: [%ParamAccess{index: 0}, %MapAccess{key: %AtomType{value: :x}}]}
 
     result = JSEncoder.encode(ir, %Context{}, %Opts{})
-    expected = "let abc = .data['~atom[x]'];"
+    expected = "let abc = arguments[0].data['~atom[x]'];"
 
     assert result == expected
   end
@@ -73,10 +73,10 @@ defmodule Hologram.Compiler.JSEncoder.BindingTest do
   end
 
   test "tuple access" do
-    ir = %Binding{name: :abc, access_path: [%TupleAccess{index: 2}]}
+    ir = %Binding{name: :abc, access_path: [%ParamAccess{index: 0}, %TupleAccess{index: 2}]}
 
     result = JSEncoder.encode(ir, %Context{}, %Opts{})
-    expected = "let abc = .data[2];"
+    expected = "let abc = arguments[0].data[2];"
 
     assert result == expected
   end
