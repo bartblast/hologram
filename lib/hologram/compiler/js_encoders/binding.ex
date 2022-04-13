@@ -12,38 +12,33 @@ alias Hologram.Compiler.IR.{
 
 defimpl JSEncoder, for: Binding do
   def encode(%{access_path: access_path, name: name}, %Context{} = context, %Opts{} = opts) do
+    encoded_parts = Enum.reduce(access_path, "", &encode_part(&1, &2, context, opts))
     statement = if name in context.block_bindings, do: "", else: "let "
-    initial_acc = "#{statement}#{name} = "
-
-    access_path
-    |> Enum.reduce(initial_acc, fn part, acc ->
-      acc <> encode_part(part, context, opts)
-    end)
-    |> Kernel.<>(";")
+    "#{statement}#{name} = #{encoded_parts};"
   end
 
-  defp encode_part(%CaseConditionAccess{}, _context, _opts) do
-    Config.case_condition_js()
+  defp encode_part(%CaseConditionAccess{}, acc, _context, _opts) do
+    acc <> Config.case_condition_js()
   end
 
-  defp encode_part(%ListIndexAccess{index: index}, _context, _opts) do
-    ".data[#{index}]"
+  defp encode_part(%ListIndexAccess{index: index}, acc, _context, _opts) do
+    acc <> ".data[#{index}]"
   end
 
-  defp encode_part(%MapAccess{key: key}, context, opts) do
+  defp encode_part(%MapAccess{key: key}, acc, context, opts) do
     encoded_key = MapKeyEncoder.encode(key, context, opts)
-    ".data['#{encoded_key}']"
+    acc <> ".data['#{encoded_key}']"
   end
 
-  defp encode_part(%MatchAccess{}, _context, _opts) do
-    Config.match_access_js()
+  defp encode_part(%MatchAccess{}, acc, _context, _opts) do
+    acc <> Config.match_access_js()
   end
 
-  defp encode_part(%ParamAccess{index: index}, _context, _opts) do
-    "arguments[#{index}]"
+  defp encode_part(%ParamAccess{index: index}, acc, _context, _opts) do
+    acc <> "arguments[#{index}]"
   end
 
-  defp encode_part(%TupleAccess{index: index}, _context, _opts) do
-    ".data[#{index}]"
+  defp encode_part(%TupleAccess{index: index}, acc, _context, _opts) do
+    acc <> ".data[#{index}]"
   end
 end
