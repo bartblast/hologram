@@ -448,12 +448,39 @@ describe("isPatternMatched()", () => {
   })
 })
 
-describe("isTuplePatternMatched()", () => {
+describe("isEnumPatternMatched()", () => {
+  it("returns true if list boxed type left-hand side matches the list boxed type right-hand side", () => {
+    const left = Type.list([Type.integer(1), Type.integer(2)])
+    const right = Type.list([Type.integer(1), Type.integer(2)])
+
+    const result = Interpreter.isEnumPatternMatched(left, right)
+
+    assert.isTrue(result)
+  })
+
+  it("returns false if left-hand side list item count is different than right-hand side list item count", () => {
+    const left = Type.list([Type.integer(1), Type.integer(2)])
+    const right = Type.list([Type.integer(1), Type.integer(2), Type.integer(3)])
+
+    const result = Interpreter.isEnumPatternMatched(left, right)
+
+    assert.isFalse(result)
+  })
+
+  it("returns false if left-hand side list doesn't match right-hand side list", () => {
+    const left = Type.list([Type.integer(1), Type.integer(2)])
+    const right = Type.list([Type.integer(1), Type.integer(3)])
+
+    const result = Interpreter.isEnumPatternMatched(left, right)
+
+    assert.isFalse(result)
+  })
+
   it("returns true if tuple boxed type left-hand side matches the tuple boxed type right-hand side", () => {
     const left = Type.tuple([Type.integer(1), Type.integer(2)])
     const right = Type.tuple([Type.integer(1), Type.integer(2)])
 
-    const result = Interpreter.isPatternMatched(left, right)
+    const result = Interpreter.isEnumPatternMatched(left, right)
 
     assert.isTrue(result)
   })
@@ -462,7 +489,7 @@ describe("isTuplePatternMatched()", () => {
     const left = Type.tuple([Type.integer(1), Type.integer(2)])
     const right = Type.tuple([Type.integer(1), Type.integer(2), Type.integer(3)])
 
-    const result = Interpreter.isPatternMatched(left, right)
+    const result = Interpreter.isEnumPatternMatched(left, right)
 
     assert.isFalse(result)
   })
@@ -471,7 +498,7 @@ describe("isTuplePatternMatched()", () => {
     const left = Type.tuple([Type.integer(1), Type.integer(2)])
     const right = Type.tuple([Type.integer(1), Type.integer(3)])
 
-    const result = Interpreter.isPatternMatched(left, right)
+    const result = Interpreter.isEnumPatternMatched(left, right)
 
     assert.isFalse(result)
   })

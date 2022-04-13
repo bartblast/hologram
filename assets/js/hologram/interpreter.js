@@ -66,6 +66,20 @@ export default class Interpreter {
     return Utils.freeze(result)
   }
 
+  static isEnumPatternMatched(left, right) {
+    if (left.data.length !== right.data.length) {
+      return false;
+    }
+
+    for (let i = 0; i < left.data.length; ++i) {
+      if (!Interpreter.isPatternMatched(left.data[i], right.data[i])) {
+        return false
+      }
+    }
+
+    return true
+  }
+
   static isFunctionArgsPatternMatched(params, args) {
     if (args.length !== params.length) {
       return false;
@@ -111,30 +125,17 @@ export default class Interpreter {
       case "integer":
         return left.value === right.value;
 
+      case "list":
+      case "tuple":
+        return Interpreter.isEnumPatternMatched(left, right)        
+
       case "map":
         return Interpreter.isMapPatternMatched(left, right)
-
-      case "tuple":
-        return Interpreter.isTuplePatternMatched(left, right)
 
       default:
         const message = `Interpreter.isPatternMatched(): left = ${JSON.stringify(left)}`
         throw new HologramNotImplementedError(message)
     }
-  }
-
-  static isTuplePatternMatched(left, right) {
-    if (left.data.length !== right.data.length) {
-      return false;
-    }
-
-    for (let i = 0; i < left.data.length; ++i) {
-      if (!Interpreter.isPatternMatched(left.data[i], right.data[i])) {
-        return false
-      }
-    }
-
-    return true
   }
 
   static _areNumbersEqual(num1, num2) {
