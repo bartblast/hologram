@@ -218,6 +218,14 @@ defmodule Hologram.Compiler.IR do
     defstruct []
   end
 
+  defmodule ListIndexAccess do
+    defstruct index: nil
+  end
+
+  defmodule ListTailAccess do
+    defstruct []
+  end
+
   defmodule MapAccess do
     defstruct key: nil
   end
