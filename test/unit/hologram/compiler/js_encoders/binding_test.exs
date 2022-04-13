@@ -7,6 +7,7 @@ defmodule Hologram.Compiler.JSEncoder.BindingTest do
     AtomType,
     Binding,
     CaseConditionAccess,
+    ListIndexAccess,
     MapAccess,
     MatchAccess,
     ParamAccess,
@@ -21,6 +22,15 @@ defmodule Hologram.Compiler.JSEncoder.BindingTest do
 
     result = JSEncoder.encode(ir, %Context{}, %Opts{})
     expected = "let abc = #{@case_condition_js};"
+
+    assert result == expected
+  end
+
+  test "list index access" do
+    ir = %Binding{name: :abc, access_path: [%ListIndexAccess{index: 2}]}
+
+    result = JSEncoder.encode(ir, %Context{}, %Opts{})
+    expected = "let abc = .data[2];"
 
     assert result == expected
   end

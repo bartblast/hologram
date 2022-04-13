@@ -3,6 +3,7 @@ alias Hologram.Compiler.{Config, Context, JSEncoder, MapKeyEncoder, Opts}
 alias Hologram.Compiler.IR.{
   Binding,
   CaseConditionAccess,
+  ListIndexAccess,
   MapAccess,
   MatchAccess,
   ParamAccess,
@@ -23,6 +24,10 @@ defimpl JSEncoder, for: Binding do
 
   defp encode_part(%CaseConditionAccess{}, _context, _opts) do
     Config.case_condition_js()
+  end
+
+  defp encode_part(%ListIndexAccess{index: index}, _context, _opts) do
+    ".data[#{index}]"
   end
 
   defp encode_part(%MapAccess{key: key}, context, opts) do
