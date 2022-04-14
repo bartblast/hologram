@@ -36,6 +36,7 @@ defmodule Hologram.Compiler.TransformerTest do
     ModuleType,
     MultiplicationOperator,
     NilType,
+    NotEqualToOperator,
     ProtocolDefinition,
     Quote,
     RelaxedBooleanAndOperator,
@@ -140,6 +141,13 @@ defmodule Hologram.Compiler.TransformerTest do
       ast = ast(code)
 
       assert %MultiplicationOperator{} = Transformer.transform(ast, %Context{})
+    end
+
+    test "not equal to" do
+      code = "1 != 2"
+      ast = ast(code)
+
+      assert %NotEqualToOperator{} = Transformer.transform(ast, %Context{})
     end
 
     test "pipe" do

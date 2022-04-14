@@ -28,6 +28,7 @@ defmodule Hologram.Compiler.Transformer do
     ModuleDefinitionTransformer,
     ModuleTypeTransformer,
     MultiplicationOperatorTransformer,
+    NotEqualToOperatorTransformer,
     QuoteTransformer,
     PipeOperatorTransformer,
     RelaxedBooleanAndOperatorTransformer,
@@ -116,6 +117,10 @@ defmodule Hologram.Compiler.Transformer do
 
   def transform({:*, _, _} = ast, %Context{} = context) do
     MultiplicationOperatorTransformer.transform(ast, context)
+  end
+
+  def transform({:!=, _, _} = ast, %Context{} = context) do
+    NotEqualToOperatorTransformer.transform(ast, context)
   end
 
   def transform({:|>, _, _} = ast, %Context{} = context) do
