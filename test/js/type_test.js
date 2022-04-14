@@ -72,6 +72,26 @@ describe("componentNode()", () => {
   })
 })
 
+describe("consOperatorPattern()", () => {
+  let head, tail, result;
+
+  beforeEach(() => {
+    head = Type.integer(1)
+    tail = Type.list([Type.integer(2), Type.integer(3)])
+    
+    result = Type.consOperatorPattern(head, tail)
+  })
+
+  it("returns boxed cons_operator_pattern value", () => {
+    const expected = {type: "cons_operator_pattern", head: head, tail: tail}
+    assert.deepStrictEqual(result, expected)
+  })
+
+  it("returns frozen object", () => {
+    assertFrozen(result)
+  })
+})
+
 describe("decodeKey()", () => {
   it("decodes encoded atom key", () => {
     const boxedValue = Type.atom("test")
