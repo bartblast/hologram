@@ -224,6 +224,79 @@ describe("$equal_to_operator()", () => {
   });
 });
 
+describe("isConsOperatorPatternMatched()", () => {
+  let head, tail, left;
+
+  beforeEach(() => {
+    head = Type.integer(1)
+    tail = Type.list([Type.integer(2), Type.integer(3)])
+    left = Type.consOperatorPattern(head, tail)
+  })
+
+  it("returns false if the right arg is not a boxed list", () => {
+    const right = Type.integer(4)
+    const result = Interpreter.isConsOperatorPatternMatched(left, right)
+
+    assert.isFalse(result)
+  })
+
+  it("returns false if the right arg is an empty boxed list", () => {
+    const right = Type.list([])
+    const result = Interpreter.isConsOperatorPatternMatched(left, right)
+
+    assert.isFalse(result)
+  })
+
+  it("returns false if heads don't match by value", () => {
+    const right = Type.list([Type.integer(4), Type.integer(2), Type.integer(3)])
+    const result = Interpreter.isConsOperatorPatternMatched(left, right)
+
+    assert.isFalse(result)
+  })
+
+  it("returns false if tails don't match by value", () => {
+    const right = Type.list([head, Type.integer(4), Type.integer(3)])
+    const result = Interpreter.isConsOperatorPatternMatched(left, right)
+
+    assert.isFalse(result)
+  })
+
+  it("returns true if heads and tails match by value", () => {
+    const right = Type.list([head, Type.integer(2), Type.integer(3)])
+    const result = Interpreter.isConsOperatorPatternMatched(left, right)
+
+    assert.isTrue(result)
+  })
+
+  it("returns true if heads and tails match by variable pattern", () => {
+    left = Type.consOperatorPattern(Type.placeholder(), Type.placeholder())
+
+    const right = Type.list([head, Type.integer(2), Type.integer(3)])
+    const result = Interpreter.isConsOperatorPatternMatched(left, right)
+
+    assert.isTrue(result)
+  })
+
+  it("returns true if heads match by value and tails match by variable pattern", () => {
+    left = Type.consOperatorPattern(head, Type.placeholder())
+
+    const right = Type.list([head, Type.integer(2), Type.integer(3)])
+    const result = Interpreter.isConsOperatorPatternMatched(left, right)
+
+    assert.isTrue(result)
+  })
+
+  it("returns true if heads match by variable pattern and tails match by value", () => {
+    tail = Type.list([Type.integer(2), Type.integer(3)])
+    left = Type.consOperatorPattern(Type.placeholder(), tail)
+
+    const right = Type.list([head, Type.integer(2), Type.integer(3)])
+    const result = Interpreter.isConsOperatorPatternMatched(left, right)
+
+    assert.isTrue(result)
+  })
+})
+
 describe("$list_concatenation_operator()", () => {
   it("concatenates 2 lists", () => {
     const left = Type.list([Type.integer(1), Type.integer(2)]);
@@ -394,6 +467,14 @@ describe("isPatternMatched()", () => {
   it("returns true if the boxed type of the left-hand side is placeholder", () => {
     const left = Type.placeholder()
     const right = Type.integer(1)
+    const result = Interpreter.isPatternMatched(left, right)
+
+    assert.isTrue(result)
+  })
+
+  it("matches by cons operator pattern", () => {
+    const left = Type.consOperatorPattern(Type.placeholder(), Type.placeholder())
+    const right = Type.list([Type.integer(1), Type.integer(2)])
     const result = Interpreter.isPatternMatched(left, right)
 
     assert.isTrue(result)

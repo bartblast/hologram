@@ -2,6 +2,7 @@
 
 import { HologramNotImplementedError } from "./errors";
 import Enum from "./elixir/enum"
+import Kernel from "./elixir/kernel"
 import List from "./elixir/list";
 import Map from "./elixir/map"
 import Type from "./type"
@@ -66,6 +67,26 @@ export default class Interpreter {
     return Utils.freeze(result)
   }
 
+  static isConsOperatorPatternMatched(left, right) {
+    if (right.type !== 'list') {
+      return false
+    }
+
+    if (right.data.length === 0) {
+      return false
+    }
+
+    if (!Interpreter.isPatternMatched(left.head, Kernel.hd(right))) {
+      return false
+    }
+
+    if (!Interpreter.isPatternMatched(left.tail, Kernel.tl(right))) {
+      return false
+    }
+
+    return true
+  }
+
   static isEnumPatternMatched(left, right) {
     if (left.data.length !== right.data.length) {
       return false;
@@ -114,6 +135,10 @@ export default class Interpreter {
 
     if (lType === "placeholder") {
       return true;
+    }
+
+    if (lType === 'cons_operator_pattern') {
+      return Interpreter.isConsOperatorPatternMatched(left, right)
     }
 
     if (lType !== rType) {
