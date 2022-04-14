@@ -62,6 +62,11 @@ export default class Interpreter {
     return Utils.freeze({type: type, value: result})
   }
 
+  static $not_equal_to_operator(left, right) {
+    const isEqualTo = Interpreter.$equal_to_operator(left, right)
+    return Type.boolean(!isEqualTo.value)
+  }
+
   static $relaxed_boolean_and_operator(left, right) {
     if (Type.isTruthy(left)) {
       return right

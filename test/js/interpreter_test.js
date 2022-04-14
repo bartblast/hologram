@@ -375,6 +375,24 @@ describe("$multiplication_operator()", () => {
   });
 });
 
+describe("$not_equal_to_operator()", () => {
+  it("returns boxed true if both args are not equal", () => {
+    const left = Type.boolean(true);
+    const right = Type.boolean(false);
+    const result = Interpreter.$not_equal_to_operator(left, right);
+
+    assertBoxedTrue(result);
+  });
+
+  it("returns boxed false if both args are equal", () => {
+    const left = Type.boolean(true);
+    const right = Type.boolean(true);
+    const result = Interpreter.$not_equal_to_operator(left, right);
+
+    assertBoxedFalse(result);
+  });
+})
+
 describe("$relaxed_boolean_and_operator()", () => {
   it("returns the second arg if the first one is truthy", () => {
     const left = Type.integer(1);
