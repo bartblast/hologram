@@ -267,7 +267,7 @@ without its shortcomings related to scalability, efficiency, etc.
 | Bitstring     | :x:                |
 | Case          | :white_check_mark: |
 | Comprehension | :x:                |
-| Cons Operator | :x:                |
+| Cons Operator | :white_check_mark: |
 | Function Call | :white_check_mark: |
 | If            | :x:                |
 | List          | :white_check_mark: |
