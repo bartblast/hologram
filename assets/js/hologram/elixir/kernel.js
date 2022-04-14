@@ -26,6 +26,11 @@ export default class Kernel {
     return tuple.data[index]
   }
 
+  // TODO: raise ArgumentError if the list is empty.
+  static hd(list) {
+    return list.data[0]
+  }
+
   static if(condition, doClause, elseClause) {
     let result;
 

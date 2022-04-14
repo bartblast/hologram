@@ -62,6 +62,16 @@ describe("elem()", () => {
   });
 });
 
+describe("hd()", () => {
+  it("returns the head of the list", () => {
+    const list = Type.list([Type.integer(1), Type.integer(2), Type.integer(3)])
+    const result = Kernel.hd(list)
+    const expected = Type.integer(1)
+
+    assert.deepStrictEqual(result, expected);
+  })
+})
+
 describe("if()", () => {
   it("returns doClause result if condition is truthy", () => {
     const expected = Type.integer(1);
