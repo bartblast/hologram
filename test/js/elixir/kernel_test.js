@@ -167,24 +167,6 @@ describe("put_in()", () => {
   });
 });
 
-describe("$relaxed_boolean_and()", () => {
-  it("returns the second arg if the first one is truthy", () => {
-    const left = Type.integer(1);
-    const right = Type.integer(2);
-    const result = Kernel.$relaxed_boolean_and(left, right);
-
-    assert.deepStrictEqual(result, right);
-  });
-
-  it("returns the first arg if it is falsy", () => {
-    const left = Type.nil();
-    const right = Type.integer(2);
-    const result = Kernel.$relaxed_boolean_and(left, right);
-
-    assert.deepStrictEqual(result, left);
-  });
-});
-
 describe("$relaxed_boolean_not()", () => {
   it("returns boxed true if the arg is boxed false", () => {
     const value = Type.boolean(false)

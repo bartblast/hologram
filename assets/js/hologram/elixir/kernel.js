@@ -58,14 +58,6 @@ export default class Kernel {
     }
   }
 
-  static $relaxed_boolean_and(left, right) {
-    if (Type.isTruthy(left)) {
-      return right
-    } else {
-      return left
-    }
-  }
-
   static $relaxed_boolean_not(value) {
     if (Type.isFalsy(value)) {
       return Type.boolean(true)

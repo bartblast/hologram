@@ -62,6 +62,14 @@ export default class Interpreter {
     return Utils.freeze({type: type, value: result})
   }
 
+  static $relaxed_boolean_and_operator(left, right) {
+    if (Type.isTruthy(left)) {
+      return right
+    } else {
+      return left
+    }
+  }
+
   static caseExpression(condition, clausesAnonFun) {
     const result = clausesAnonFun(condition)
     return Utils.freeze(result)

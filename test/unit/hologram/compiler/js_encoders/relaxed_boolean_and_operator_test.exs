@@ -13,7 +13,7 @@ defmodule Hologram.Compiler.JSEncoder.RelaxedBooleanAndOperatorTest do
     result = JSEncoder.encode(ir, %Context{}, %Opts{})
 
     expected =
-      "Elixir_Kernel.$relaxed_boolean_and({ type: 'integer', value: 1 }, { type: 'integer', value: 2 })"
+      "Hologram.Interpreter.$relaxed_boolean_and_operator({ type: 'integer', value: 1 }, { type: 'integer', value: 2 })"
 
     assert result == expected
   end

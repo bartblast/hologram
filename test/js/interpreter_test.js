@@ -375,6 +375,24 @@ describe("$multiplication_operator()", () => {
   });
 });
 
+describe("$relaxed_boolean_and_operator()", () => {
+  it("returns the second arg if the first one is truthy", () => {
+    const left = Type.integer(1);
+    const right = Type.integer(2);
+    const result = Interpreter.$relaxed_boolean_and_operator(left, right);
+
+    assert.deepStrictEqual(result, right);
+  });
+
+  it("returns the first arg if it is falsy", () => {
+    const left = Type.nil();
+    const right = Type.integer(2);
+    const result = Interpreter.$relaxed_boolean_and_operator(left, right);
+
+    assert.deepStrictEqual(result, left);
+  });
+});
+
 describe("caseExpression()", () => {
   it("returns the result of the clauses anonymous function given", () => {
     const clausesAnonFun = function(param) {
