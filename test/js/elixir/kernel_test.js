@@ -167,36 +167,6 @@ describe("put_in()", () => {
   });
 });
 
-describe("$relaxed_boolean_not()", () => {
-  it("returns boxed true if the arg is boxed false", () => {
-    const value = Type.boolean(false)
-    const result = Kernel.$relaxed_boolean_not(value);
-
-    assertBoxedTrue(result)
-  })
-
-  it("returns boxed true if the arg is boxed nil", () => {
-    const value = Type.nil()
-    const result = Kernel.$relaxed_boolean_not(value);
-
-    assertBoxedTrue(result)
-  })
-
-  it("returns boxed false if the arg is boxed true", () => {
-    const value = Type.boolean(true)
-    const result = Kernel.$relaxed_boolean_not(value);
-
-    assertBoxedFalse(result)
-  })
-
-  it("returns boxed false if the arg is of other data type", () => {
-    const value = Type.integer(1)
-    const result = Kernel.$relaxed_boolean_not(value);
-
-    assertBoxedFalse(result)
-  })
-})
-
 describe("$relaxed_boolean_or()", () => {
   it("returns the first arg if it is truthy", () => {
     const left = Type.integer(1);

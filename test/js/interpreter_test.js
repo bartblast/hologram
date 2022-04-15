@@ -411,6 +411,36 @@ describe("$relaxed_boolean_and_operator()", () => {
   });
 });
 
+describe("$relaxed_boolean_not_operator()", () => {
+  it("returns boxed true if the arg is boxed false", () => {
+    const value = Type.boolean(false)
+    const result = Interpreter.$relaxed_boolean_not_operator(value);
+
+    assertBoxedTrue(result)
+  })
+
+  it("returns boxed true if the arg is boxed nil", () => {
+    const value = Type.nil()
+    const result = Interpreter.$relaxed_boolean_not_operator(value);
+
+    assertBoxedTrue(result)
+  })
+
+  it("returns boxed false if the arg is boxed true", () => {
+    const value = Type.boolean(true)
+    const result = Interpreter.$relaxed_boolean_not_operator(value);
+
+    assertBoxedFalse(result)
+  })
+
+  it("returns boxed false if the arg is of other data type", () => {
+    const value = Type.integer(1)
+    const result = Interpreter.$relaxed_boolean_not_operator(value);
+
+    assertBoxedFalse(result)
+  })
+})
+
 describe("caseExpression()", () => {
   it("returns the result of the clauses anonymous function given", () => {
     const clausesAnonFun = function(param) {

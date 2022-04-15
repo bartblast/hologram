@@ -11,7 +11,7 @@ defmodule Hologram.Compiler.JSEncoder.RelaxedBooleanNotOperatorTest do
 
     result = JSEncoder.encode(ir, %Context{}, %Opts{})
 
-    expected = "Elixir_Kernel.$relaxed_boolean_not({ type: 'boolean', value: false })"
+    expected = "Hologram.Interpreter.$relaxed_boolean_not_operator({ type: 'boolean', value: false })"
 
     assert result == expected
   end

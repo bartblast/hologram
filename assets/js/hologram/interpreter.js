@@ -75,6 +75,14 @@ export default class Interpreter {
     }
   }
 
+  static $relaxed_boolean_not_operator(value) {
+    if (Type.isFalsy(value)) {
+      return Type.boolean(true)
+    } else {
+      return Type.boolean(false)
+    }
+  }
+
   static caseExpression(condition, clausesAnonFun) {
     const result = clausesAnonFun(condition)
     return Utils.freeze(result)
