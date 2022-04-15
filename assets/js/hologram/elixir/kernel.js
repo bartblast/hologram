@@ -58,14 +58,6 @@ export default class Kernel {
     }
   }
 
-  static $relaxed_boolean_or(left, right) {
-    if (Type.isTruthy(left)) {
-      return left
-    } else {
-      return right
-    }
-  }
-
   static $subtract(left, right) {
     const type = left.type === "integer" && right.type === "integer" ? "integer" : "float"
     const result = left.value - right.value

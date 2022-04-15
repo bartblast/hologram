@@ -441,6 +441,24 @@ describe("$relaxed_boolean_not_operator()", () => {
   })
 })
 
+describe("$relaxed_boolean_or()", () => {
+  it("returns the first arg if it is truthy", () => {
+    const left = Type.integer(1);
+    const right = Type.integer(2);
+    const result = Interpreter.$relaxed_boolean_or_operator(left, right);
+
+    assert.deepStrictEqual(result, left);
+  });
+
+  it("returns the second arg if the first is falsy", () => {
+    const left = Type.nil();
+    const right = Type.integer(2);
+    const result = Interpreter.$relaxed_boolean_or_operator(left, right);
+
+    assert.deepStrictEqual(result, right);
+  });
+});
+
 describe("caseExpression()", () => {
   it("returns the result of the clauses anonymous function given", () => {
     const clausesAnonFun = function(param) {

@@ -83,6 +83,14 @@ export default class Interpreter {
     }
   }
 
+  static $relaxed_boolean_or_operator(left, right) {
+    if (Type.isTruthy(left)) {
+      return left
+    } else {
+      return right
+    }
+  }
+
   static caseExpression(condition, clausesAnonFun) {
     const result = clausesAnonFun(condition)
     return Utils.freeze(result)
