@@ -13,6 +13,7 @@ defmodule Hologram.Compiler.Transformer do
     DivisionOperatorTransformer,
     DotOperatorTransformer,
     EqualToOperatorTransformer,
+    ForExpressionTransformer,
     FunctionDefinitionTransformer,
     FunctionCallTransformer,
     IfExpressionTransformer,
@@ -267,6 +268,10 @@ defmodule Hologram.Compiler.Transformer do
 
   def transform({:case, _, _} = ast, %Context{} = context) do
     CaseExpressionTransformer.transform(ast, context)
+  end
+
+  def transform({:for, _, _} = ast, %Context{} = context) do
+    ForExpressionTransformer.transform(ast, context)
   end
 
   def transform({:if, _, _} = ast, %Context{} = context) do

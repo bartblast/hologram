@@ -445,6 +445,13 @@ defmodule Hologram.Compiler.TransformerTest do
       assert %CaseExpression{} = Transformer.transform(ast, %Context{})
     end
 
+    test "for expression" do
+      code = "for n <- [1, 2], do: n * n"
+      ast = ast(code)
+
+      assert %FunctionCall{module: Enum, function: :reduce} = Transformer.transform(ast, %Context{})
+    end
+
     test "if expression" do
       code = "if true, do: 1, else: 2"
       ast = ast(code)
