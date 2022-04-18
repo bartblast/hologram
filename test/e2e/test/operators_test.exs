@@ -1,8 +1,6 @@
 defmodule HologramE2E.OperatorsTest do
   use HologramE2E.TestCase, async: false
 
-  @moduletag :e2e
-
   feature "addition", %{session: session} do
     session
     |> visit("/e2e/operators/addition")

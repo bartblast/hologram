@@ -1,8 +1,6 @@
 defmodule HologramE2E.UITest do
   use HologramE2E.TestCase, async: false
 
-  @moduletag :e2e
-
   describe "link" do
     feature "redirects to another page", %{session: session} do
       session

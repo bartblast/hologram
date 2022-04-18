@@ -3,8 +3,6 @@ defmodule HologramE2E.Runtime.ActionsTest do
 
   @page_path "/e2e/runtime/actions"
 
-  @moduletag :e2e
-
   describe "action spec" do
     feature "action spec without target and params specified as text", %{session: session} do
       session

@@ -1,8 +1,6 @@
 defmodule HologramE2E.TemplatesTest do
   use HologramE2E.TestCase, async: false
 
-  @moduletag :e2e
-
   describe "if directive" do
     feature "element node", %{session: session} do
       session

@@ -1,8 +1,6 @@
 defmodule HologramE2E.EventsTest do
   use HologramE2E.TestCase, async: false
 
-  @moduletag :e2e
-
   feature "blur event", %{session: session} do
     session
     |> visit("/e2e/page-11")

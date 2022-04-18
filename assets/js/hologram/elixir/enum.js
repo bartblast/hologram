@@ -32,7 +32,7 @@ export default class Enum {
         throw new HologramNotImplementedError(message)
     }
   }
-
+  
   static to_list(enumerable) {
     switch (enumerable.type) {
       case "list":

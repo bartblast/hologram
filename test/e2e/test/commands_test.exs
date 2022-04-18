@@ -1,8 +1,6 @@
 defmodule HologramE2E.CommandsTest do
   use HologramE2E.TestCase, async: false
 
-  @moduletag :e2e
-
   describe "command spec" do
     feature "command spec without target and params specified as text", %{session: session} do
       session

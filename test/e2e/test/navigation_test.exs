@@ -1,8 +1,6 @@
 defmodule HologramE2E.NavigationTest do
   use HologramE2E.TestCase, async: false
 
-  @moduletag :e2e
-
   feature "anchor", %{session: session} do
     session
     |> visit("/e2e/page-5")

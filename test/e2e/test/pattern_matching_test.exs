@@ -1,8 +1,6 @@
 defmodule HologramE2E.PatternMatchingTest do
   use HologramE2E.TestCase, async: false
 
-  @moduletag :e2e
-
   describe "cons operator" do
     feature "match expression", %{session: session} do
       session

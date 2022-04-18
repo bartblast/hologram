@@ -1,8 +1,6 @@
 defmodule HologramE2E.ComponentsTest do
   use HologramE2E.TestCase, async: false
 
-  @moduletag :e2e
-
   # TODO: refactor
   # feature "component with nested slots", %{session: session} do
   #   session
