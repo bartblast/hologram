@@ -5,24 +5,39 @@ defmodule Hologram.Commons.EncoderTest do
   alias Hologram.Compiler.{Context, Opts}
   alias Hologram.Compiler.IR.{AtomType, Block, IntegerType}
 
-  test "encode_as_anonymous_function/3" do
-    body = %Block{
-      expressions: [
-        %IntegerType{value: 1},
-        %IntegerType{value: 2}
-      ]
-    }
+  describe "encode_as_anonymous_function/3" do
+    test "block" do
+      body = %Block{
+        expressions: [
+          %IntegerType{value: 1},
+          %IntegerType{value: 2}
+        ]
+      }
 
-    result = Encoder.encode_as_anonymous_function(body, %Context{}, %Opts{})
+      result = Encoder.encode_as_anonymous_function(body, %Context{}, %Opts{})
 
-    expected = """
-    () => {
-    { type: 'integer', value: 1 };
-    return { type: 'integer', value: 2 };
-    }\
-    """
+      expected = """
+      () => {
+      { type: 'integer', value: 1 };
+      return { type: 'integer', value: 2 };
+      }\
+      """
 
-    assert result == expected
+      assert result == expected
+    end
+
+    test "single expression" do
+      expr = %IntegerType{value: 1}
+      result = Encoder.encode_as_anonymous_function(expr, %Context{}, %Opts{})
+
+      expected = """
+      () => {
+      return { type: 'integer', value: 1 };
+      }\
+      """
+
+      assert result == expected
+    end
   end
 
   describe "encode_as_array/3" do

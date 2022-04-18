@@ -16,6 +16,11 @@ defmodule Hologram.Commons.Encoder do
     """
   end
 
+  def encode_as_anonymous_function(expr, context, opts) do
+    %Block{expressions: [expr]}
+    |> encode_as_anonymous_function(context, opts)
+  end
+
   def encode_as_array(data, %Context{} = context, %Opts{} = opts) do
     Enum.map(data, &JSEncoder.encode(&1, context, opts))
     |> Enum.join(", ")
