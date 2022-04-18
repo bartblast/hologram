@@ -91,6 +91,12 @@ export default class Interpreter {
     }
   }
 
+  static $subtraction_operator(left, right) {
+    const type = left.type === "integer" && right.type === "integer" ? "integer" : "float"
+    const result = left.value - right.value
+    return Utils.freeze({type: type, value: result})
+  }
+
   static caseExpression(condition, clausesAnonFun) {
     const result = clausesAnonFun(condition)
     return Utils.freeze(result)

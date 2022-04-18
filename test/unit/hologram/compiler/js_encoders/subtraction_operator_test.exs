@@ -2,7 +2,7 @@ defmodule Hologram.Compiler.JSEncoder.SubtractionOperatorTest do
   use Hologram.Test.UnitCase, async: true
 
   alias Hologram.Compiler.{Context, JSEncoder, Opts}
-  alias Hologram.Compiler.IR.{SubtractionOperator, AtomType, Variable}
+  alias Hologram.Compiler.IR.{AtomType, SubtractionOperator, Variable}
 
   test "encode/3" do
     ir = %SubtractionOperator{
@@ -11,7 +11,7 @@ defmodule Hologram.Compiler.JSEncoder.SubtractionOperatorTest do
     }
 
     result = JSEncoder.encode(ir, %Context{}, %Opts{})
-    expected = "Elixir_Kernel.$subtract(x, { type: 'atom', value: 'a' })"
+    expected = "Hologram.Interpreter.$subtraction_operator(x, { type: 'atom', value: 'a' })"
 
     assert result == expected
   end

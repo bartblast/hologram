@@ -58,12 +58,6 @@ export default class Kernel {
     }
   }
 
-  static $subtract(left, right) {
-    const type = left.type === "integer" && right.type === "integer" ? "integer" : "float"
-    const result = left.value - right.value
-    return Utils.freeze({type: type, value: result})
-  }
-
   static $subtract_lists(left, right) {
     const rightElems = Utils.clone(right.data)
     const resultElems = []

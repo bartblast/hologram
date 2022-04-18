@@ -167,56 +167,6 @@ describe("put_in()", () => {
   });
 });
 
-describe("$subtract()", () => {
-  it("subtracts integer and integer", () => {
-    const arg1 = Type.integer(1);
-    const arg2 = Type.integer(2);
-
-    const result = Kernel.$subtract(arg1, arg2);
-    const expected = Type.integer(-1);
-
-    assert.deepStrictEqual(result, expected);
-  });
-
-  it("subtracts integer and float", () => {
-    const arg1 = Type.integer(1);
-    const arg2 = Type.float(2.0);
-
-    const result = Kernel.$subtract(arg1, arg2);
-    const expected = Type.float(-1.0);
-
-    assert.deepStrictEqual(result, expected);
-  });
-
-  it("subtracts float and integer", () => {
-    const arg1 = Type.float(1.0);
-    const arg2 = Type.integer(2);
-
-    const result = Kernel.$subtract(arg1, arg2);
-    const expected = Type.float(-1.0);
-
-    assert.deepStrictEqual(result, expected);
-  });
-
-  it("subtracts float and float", () => {
-    const arg1 = Type.float(1.0);
-    const arg2 = Type.float(2.0);
-
-    const result = Kernel.$subtract(arg1, arg2);
-    const expected = Type.float(-1.0);
-
-    assert.deepStrictEqual(result, expected);
-  });
-
-  it("returns frozen object", () => {
-    const arg1 = Type.integer(1);
-    const arg2 = Type.integer(2);
-    const result = Kernel.$subtract(arg1, arg2);
-
-    assertFrozen(result);
-  });
-});
-
 describe("$subtract_lists()", () => {
   it("returns the left list if there are no matching elems in the right list", () => {
     const left = Type.list([Type.integer(1), Type.integer(2)]);

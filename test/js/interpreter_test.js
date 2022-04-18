@@ -459,6 +459,56 @@ describe("$relaxed_boolean_or()", () => {
   });
 });
 
+describe("$subtraction_operator()", () => {
+  it("subtracts integer and integer", () => {
+    const left = Type.integer(1);
+    const right = Type.integer(2);
+
+    const result = Interpreter.$subtraction_operator(left, right);
+    const expected = Type.integer(-1);
+
+    assert.deepStrictEqual(result, expected);
+  });
+
+  it("subtracts integer and float", () => {
+    const left = Type.integer(1);
+    const right = Type.float(2.0);
+
+    const result = Interpreter.$subtraction_operator(left, right);
+    const expected = Type.float(-1.0);
+
+    assert.deepStrictEqual(result, expected);
+  });
+
+  it("subtracts float and integer", () => {
+    const left = Type.float(1.0);
+    const right = Type.integer(2);
+
+    const result = Interpreter.$subtraction_operator(left, right);
+    const expected = Type.float(-1.0);
+
+    assert.deepStrictEqual(result, expected);
+  });
+
+  it("subtracts float and float", () => {
+    const left = Type.float(1.0);
+    const right = Type.float(2.0);
+
+    const result = Interpreter.$subtraction_operator(left, right);
+    const expected = Type.float(-1.0);
+
+    assert.deepStrictEqual(result, expected);
+  });
+
+  it("returns frozen object", () => {
+    const left = Type.integer(1);
+    const right = Type.integer(2);
+    const result = Interpreter.$subtraction_operator(left, right);
+
+    assertFrozen(result);
+  });
+});
+
 describe("caseExpression()", () => {
   it("returns the result of the clauses anonymous function given", () => {
     const clausesAnonFun = function(param) {
