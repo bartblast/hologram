@@ -20,7 +20,7 @@ defmodule Hologram.Compiler.JSEncoder.CaseExpressionTest do
     result = encode(code)
 
     expected = """
-    Hologram.caseExpression(x, function(#{@case_condition_js}) {
+    Hologram.caseExpression(x, (#{@case_condition_js}) => {
     if (Hologram.isPatternMatched({ type: 'integer', value: 1 }, #{@case_condition_js})) {
     return { type: 'atom', value: 'ok' };
     }
@@ -44,7 +44,7 @@ defmodule Hologram.Compiler.JSEncoder.CaseExpressionTest do
     result = encode(code)
 
     expected = """
-    Hologram.caseExpression(x, function(#{@case_condition_js}) {
+    Hologram.caseExpression(x, (#{@case_condition_js}) => {
     if (Hologram.isPatternMatched({ type: 'integer', value: 1 }, #{@case_condition_js})) {
     return { type: 'atom', value: 'ok_1' };
     }
@@ -72,7 +72,7 @@ defmodule Hologram.Compiler.JSEncoder.CaseExpressionTest do
     result = encode(code)
 
     expected = """
-    Hologram.caseExpression(x, function(#{@case_condition_js}) {
+    Hologram.caseExpression(x, (#{@case_condition_js}) => {
     if (Hologram.isPatternMatched({ type: 'integer', value: 1 }, #{@case_condition_js})) {
     { type: 'atom', value: 'expr_1' };
     return { type: 'atom', value: 'expr_2' };
@@ -96,7 +96,7 @@ defmodule Hologram.Compiler.JSEncoder.CaseExpressionTest do
     result = encode(code)
 
     expected = """
-    Hologram.caseExpression(x, function(#{@case_condition_js}) {
+    Hologram.caseExpression(x, (#{@case_condition_js}) => {
     if (Hologram.isPatternMatched({ type: 'map', data: { '~atom[a]': { type: 'placeholder' } } }, #{@case_condition_js})) {
     let a = #{@case_condition_js}.data['~atom[a]'];
     return { type: 'atom', value: 'ok' };
@@ -120,7 +120,7 @@ defmodule Hologram.Compiler.JSEncoder.CaseExpressionTest do
     result = encode(code)
 
     expected = """
-    Hologram.caseExpression(x, function(#{@case_condition_js}) {
+    Hologram.caseExpression(x, (#{@case_condition_js}) => {
     if (Hologram.isPatternMatched({ type: 'map', data: { '~atom[a]': { type: 'placeholder' }, '~atom[b]': { type: 'placeholder' } } }, #{@case_condition_js})) {
     let a = #{@case_condition_js}.data['~atom[a]'];
     let b = #{@case_condition_js}.data['~atom[b]'];

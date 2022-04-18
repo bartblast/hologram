@@ -20,7 +20,7 @@ defimpl JSEncoder, for: CaseExpression do
       |> Formatter.maybe_append_new_line(fallback_clause)
 
     """
-    Hologram.caseExpression(#{condition_value}, function(#{@case_condition_js}) {
+    Hologram.caseExpression(#{condition_value}, (#{@case_condition_js}) => {
     #{anon_fun_body}
     })\
     """

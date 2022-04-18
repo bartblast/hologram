@@ -511,7 +511,7 @@ describe("$subtraction_operator()", () => {
 
 describe("caseExpression()", () => {
   it("returns the result of the clauses anonymous function given", () => {
-    const clausesAnonFun = function(param) {
+    const clausesAnonFun = (param) => {
       return param
     }
 
@@ -520,7 +520,7 @@ describe("caseExpression()", () => {
   })
 
   it("returns frozen object", () => {
-    const clausesAnonFun = function(param) {
+    const clausesAnonFun = (param) => {
       return param
     }
 

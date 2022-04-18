@@ -75,15 +75,18 @@ describe("hd()", () => {
 describe("if()", () => {
   it("returns doClause result if condition is truthy", () => {
     const expected = Type.integer(1);
-    const condition = function () {
+
+    const condition = Type.anonymousFunction(() => {
       return Type.boolean(true);
-    };
-    const doClause = function () {
+    });
+
+    const doClause = Type.anonymousFunction(function () {
       return expected;
-    };
-    const elseClause = function () {
+    })
+    ;
+    const elseClause = Type.anonymousFunction(function () {
       return Type.integer(2);
-    };
+    });
 
     const result = Kernel.if(condition, doClause, elseClause);
     assert.equal(result, expected);

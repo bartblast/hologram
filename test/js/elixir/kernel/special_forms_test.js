@@ -10,12 +10,12 @@ import Type from "../../../../assets/js/hologram/type";
 describe("case()", () => {
   it("evaulates the given anonymous function", () => {
     const expected = Type.integer(1);
-    const result = SpecialForms.case(function() { return expected });
+    const result = SpecialForms.case(() => { return expected });
     assert.equal(result, expected);
   });
 
   it("returns frozen object", () => {
-    const result = SpecialForms.case(function() { return {test: "test"}});
+    const result = SpecialForms.case(() => { return {test: "test"}});
     assertFrozen(result)
   })
 })
