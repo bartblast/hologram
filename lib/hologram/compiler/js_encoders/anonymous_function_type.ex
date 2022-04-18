@@ -11,9 +11,10 @@ defimpl JSEncoder, for: AnonymousFunctionType do
     context = %{context | block_bindings: context.block_bindings ++ vars_bindings}
     body = JSEncoder.encode(body, context, opts)
 
-    "function() {"
+    "{ type: 'anonymous_function', callback: function() {"
     |> Formatter.maybe_append_new_line(vars)
     |> Formatter.maybe_append_new_line(body)
+    |> Formatter.maybe_append_new_line("}")
     |> Formatter.maybe_append_new_line("}")
   end
 end

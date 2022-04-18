@@ -8,8 +8,9 @@ defmodule Hologram.Compiler.JSEncoder.AnonymousFunctionTypeTest do
     result = JSEncoder.encode(ir, %Context{}, %Opts{})
 
     expected = """
-    function() {
+    { type: 'anonymous_function', callback: function() {
     return { type: 'integer', value: 1 };
+    }
     }\
     """
 
@@ -22,9 +23,10 @@ defmodule Hologram.Compiler.JSEncoder.AnonymousFunctionTypeTest do
     result = JSEncoder.encode(ir, %Context{}, %Opts{})
 
     expected = """
-    function() {
+    { type: 'anonymous_function', callback: function() {
     let x = arguments[0];
     return { type: 'integer', value: 1 };
+    }
     }\
     """
 
@@ -37,10 +39,11 @@ defmodule Hologram.Compiler.JSEncoder.AnonymousFunctionTypeTest do
     result = JSEncoder.encode(ir, %Context{}, %Opts{})
 
     expected = """
-    function() {
+    { type: 'anonymous_function', callback: function() {
     let x = arguments[0];
     let y = arguments[1];
     return { type: 'integer', value: 1 };
+    }
     }\
     """
 
@@ -59,9 +62,10 @@ defmodule Hologram.Compiler.JSEncoder.AnonymousFunctionTypeTest do
     result = JSEncoder.encode(ir, %Context{}, %Opts{})
 
     expected = """
-    function() {
+    { type: 'anonymous_function', callback: function() {
     { type: 'integer', value: 1 };
     return { type: 'integer', value: 2 };
+    }
     }\
     """
 
@@ -82,11 +86,12 @@ defmodule Hologram.Compiler.JSEncoder.AnonymousFunctionTypeTest do
     match_access_js = Config.match_access_js()
 
     expected = """
-    function() {
+    { type: 'anonymous_function', callback: function() {
     let x = arguments[0];
     #{match_access_js} = { type: 'integer', value: 2 };
     x = #{match_access_js};
     return { type: 'integer', value: 3 };
+    }
     }\
     """
 
