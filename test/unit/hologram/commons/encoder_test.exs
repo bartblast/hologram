@@ -16,7 +16,7 @@ defmodule Hologram.Commons.EncoderTest do
     result = Encoder.encode_as_anonymous_function(body, %Context{}, %Opts{})
 
     expected = """
-    function() {
+    () => {
     { type: 'integer', value: 1 };
     return { type: 'integer', value: 2 };
     }\
