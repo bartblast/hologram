@@ -1,9 +1,15 @@
 "use strict";
 
+// TODO: test
+
 import { HologramNotImplementedError } from "./errors";
 import Utils from "./utils"
 
 export default class Type {
+  static anonymousFunction(callback) {
+    return Utils.freeze({type: "anonymous_function", callback: callback})
+  }
+
   static atom(value) {
     return Utils.freeze({type: "atom", value: value})
   }
@@ -76,6 +82,10 @@ export default class Type {
 
   static integer(value) {
     return Utils.freeze({type: "integer", value: value})
+  }
+
+  static isAnonymousFunction(boxedValue) {
+    return boxedValue.type === "anonymous_function"
   }
 
   static isAtom(boxedValue) {

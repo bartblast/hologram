@@ -121,6 +121,22 @@ describe("if()", () => {
   });
 });
 
+describe("is_function()", () => {
+  it("returns boxed true if the term is of boxed anonymous function type", () => {
+    const term = Type.anonymousFunction(() => { return Type.integer(1) })
+    const result = Kernel.is_function(term)
+
+    assertBoxedTrue(result)
+  })
+
+  it("returns boxed false if the term is not of boxed anonymous function type", () => {
+    const term = Type.integer(1)
+    const result = Kernel.is_function(term)
+
+    assertBoxedFalse(result)
+  })
+})
+
 describe("put_in()", () => {
   it("puts value nested 1 level deep", () => {
     let data = Type.map();

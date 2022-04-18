@@ -43,6 +43,10 @@ export default class Kernel {
     return Utils.freeze(result)
   }
 
+  static is_function(term) {
+    return Type.isAnonymousFunction(term) ? Type.boolean(true) : Type.boolean(false)
+  }
+
   // DEFER: implement other types (works for maps only)
   static put_in(data, keys, value) {
     const key = keys.data[0]
