@@ -278,22 +278,24 @@ without its shortcomings related to scalability, efficiency, etc.
 
 #### Control Flow
 
-| Structure     | Status             |
-| :------------ | :----------------: |
-| After         | :x:                |
-| Case          | :white_check_mark: |
-| Catch         | :x:                |
-| Comprehension | :x:                |
-| Cond          | :x:                |
-| Else (If)     | :white_check_mark: |
-| Else (Rescue) | :x:                |
-| Guards        | :x:                |
-| If            | :white_check_mark: |
-| Raise         | :x:                |
-| Rescue        | :x:                |
-| Throw         | :x:                |
-| Unless        | :x:                |
-| With          | :x:                |
+| Structure               | Status             |
+| :---------------------- | :----------------: |
+| After                   | :x:                |
+| Anonymous Function Call | :x:                |
+| Case                    | :white_check_mark: |
+| Catch                   | :x:                |
+| Comprehension           | :x:                |
+| Cond                    | :x:                |
+| Else (If)               | :white_check_mark: |
+| Else (Rescue)           | :x:                |
+| Guards                  | :x:                |
+| If                      | :white_check_mark: |
+| Module Function Call    | :x:                |
+| Raise                   | :x:                |
+| Rescue                  | :x:                |
+| Throw                   | :x:                |
+| Unless                  | :x:                |
+| With                    | :x:                |
 
 #### Definitions
 
