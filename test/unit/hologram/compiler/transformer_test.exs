@@ -452,20 +452,6 @@ defmodule Hologram.Compiler.TransformerTest do
       assert %FunctionCall{module: Enum, function: :reduce} = Transformer.transform(ast, %Context{})
     end
 
-    test "if expression" do
-      code = "if true, do: 1, else: 2"
-      ast = ast(code)
-
-      assert %IfExpression{} = Transformer.transform(ast, %Context{})
-    end
-  end
-
-  describe "other" do
-    test "block" do
-      ast = {:__block__, [], [1, 2]}
-      assert %Block{} = Transformer.transform(ast, %Context{})
-    end
-
     test "function called without a module" do
       code = "test(123)"
       ast = ast(code)
@@ -478,6 +464,20 @@ defmodule Hologram.Compiler.TransformerTest do
       ast = ast(code)
 
       assert %FunctionCall{} = Transformer.transform(ast, %Context{})
+    end
+
+    test "if expression" do
+      code = "if true, do: 1, else: 2"
+      ast = ast(code)
+
+      assert %IfExpression{} = Transformer.transform(ast, %Context{})
+    end
+  end
+
+  describe "other" do
+    test "block" do
+      ast = {:__block__, [], [1, 2]}
+      assert %Block{} = Transformer.transform(ast, %Context{})
     end
 
     test "quote" do

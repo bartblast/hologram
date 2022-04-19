@@ -274,6 +274,10 @@ defmodule Hologram.Compiler.Transformer do
     ForExpressionTransformer.transform(ast, context)
   end
 
+  def transform({{:., _, _}, _, _} = ast, %Context{} = context) do
+    FunctionCallTransformer.transform(ast, context)
+  end
+
   def transform({:if, _, _} = ast, %Context{} = context) do
     IfExpressionTransformer.transform(ast, context)
   end
@@ -282,10 +286,6 @@ defmodule Hologram.Compiler.Transformer do
 
   def transform({:__block__, _, _} = ast, %Context{} = context) do
     BlockTransformer.transform(ast, context)
-  end
-
-  def transform({{:., _, _}, _, _} = ast, %Context{} = context) do
-    FunctionCallTransformer.transform(ast, context)
   end
 
   def transform({:quote, _, _} = ast, %Context{} = context) do
