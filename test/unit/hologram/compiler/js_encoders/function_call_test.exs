@@ -8,14 +8,7 @@ defmodule Hologram.Compiler.JSEncoder.FunctionCallTest do
     FunctionCall,
     IntegerType,
     ListType,
-    StringType,
-    Variable
-  }
-
-  @ir %FunctionCall{
-    function: :abc,
-    module: Test,
-    args: []
+    StringType
   }
 
   test "sigilH" do
@@ -39,51 +32,28 @@ defmodule Hologram.Compiler.JSEncoder.FunctionCallTest do
     assert result == expected
   end
 
-  test "single arg" do
-    args = [%IntegerType{value: 1}]
-    ir = %{@ir | args: args}
+  test "function name" do
+    ir = %FunctionCall{
+      function: :abc?,
+      module: Test,
+      args: []
+    }
 
     result = JSEncoder.encode(ir, %Context{}, %Opts{})
-    expected = "Elixir_Test.abc({ type: 'integer', value: 1 })"
+    expected = "Elixir_Test.abc$question()"
 
     assert result == expected
   end
 
-  test "multiple args" do
-    args = [%IntegerType{value: 1}, %IntegerType{value: 2}]
-    ir = %{@ir | args: args}
+  test "args" do
+    ir = %FunctionCall{
+      function: :abc,
+      module: Test,
+      args: [%IntegerType{value: 1}, %IntegerType{value: 2}]
+    }
 
     result = JSEncoder.encode(ir, %Context{}, %Opts{})
     expected = "Elixir_Test.abc({ type: 'integer', value: 1 }, { type: 'integer', value: 2 })"
-
-    assert result == expected
-  end
-
-  test "variable arg" do
-    args = [%Variable{name: :x}]
-    ir = %{@ir | args: args}
-
-    result = JSEncoder.encode(ir, %Context{}, %Opts{})
-    expected = "Elixir_Test.abc(x)"
-
-    assert result == expected
-  end
-
-  test "non-variable arg" do
-    args = [%IntegerType{value: 1}]
-    ir = %{@ir | args: args}
-
-    result = JSEncoder.encode(ir, %Context{}, %Opts{})
-    expected = "Elixir_Test.abc({ type: 'integer', value: 1 })"
-
-    assert result == expected
-  end
-
-  test "function name" do
-    ir = %{@ir | function: :test?}
-
-    result = JSEncoder.encode(ir, %Context{}, %Opts{})
-    expected = "Elixir_Test.test$question()"
 
     assert result == expected
   end
