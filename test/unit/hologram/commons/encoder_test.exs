@@ -3,7 +3,33 @@ defmodule Hologram.Commons.EncoderTest do
 
   alias Hologram.Commons.Encoder
   alias Hologram.Compiler.{Context, Opts}
-  alias Hologram.Compiler.IR.{AtomType, Block, IntegerType}
+  alias Hologram.Compiler.IR.{AtomType, Block, IntegerType, Variable}
+
+  describe "encode_args/3" do
+    test "non-variable arg" do
+      args = [%IntegerType{value: 1}]
+      result = Encoder.encode_args(args, %Context{}, %Opts{})
+      expected = "{ type: 'integer', value: 1 }"
+
+      assert result == expected
+    end
+
+    test "variable arg" do
+      args = [%Variable{name: :test}]
+      result = Encoder.encode_args(args, %Context{}, %Opts{})
+      expected = "test"
+
+      assert result == expected
+    end
+
+    test "multiple args" do
+      args = [%IntegerType{value: 1}, %IntegerType{value: 2}]
+      result = Encoder.encode_args(args, %Context{}, %Opts{})
+      expected = "{ type: 'integer', value: 1 }, { type: 'integer', value: 2 }"
+
+      assert result == expected
+    end
+  end
 
   describe "encode_as_anonymous_function/3" do
     test "block" do

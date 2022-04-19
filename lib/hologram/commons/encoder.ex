@@ -1,11 +1,25 @@
 defmodule Hologram.Commons.Encoder do
   alias Hologram.Compiler.{Context, JSEncoder, MapKeyEncoder, Opts}
   alias Hologram.Compiler.IR.Block
+  alias Hologram.Compiler.IR.Variable
 
   defmacro __using__(_) do
     quote do
       import Hologram.Commons.Encoder
     end
+  end
+
+  def encode_args(args, context, opts) do
+    Enum.map(args, fn arg ->
+      case arg do
+        %Variable{name: name} ->
+          name
+
+        _ ->
+          JSEncoder.encode(arg, context, opts)
+      end
+    end)
+    |> Enum.join(", ")
   end
 
   def encode_as_anonymous_function(%Block{} = block, context, opts) do

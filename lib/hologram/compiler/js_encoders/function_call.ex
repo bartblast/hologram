@@ -1,5 +1,5 @@
 alias Hologram.Compiler.{Context, Helpers, JSEncoder, Opts}
-alias Hologram.Compiler.IR.{FunctionCall, Variable}
+alias Hologram.Compiler.IR.FunctionCall
 alias Hologram.Template.{Parser, Transformer}
 alias Hologram.Template.Encoder, as: TemplateEncoder
 
@@ -29,18 +29,5 @@ defimpl JSEncoder, for: FunctionCall do
     args = encode_args(args, context, opts)
 
     "#{class_name}.#{function}(#{args})"
-  end
-
-  defp encode_args(args, context, opts) do
-    Enum.map(args, fn arg ->
-      case arg do
-        %Variable{name: name} ->
-          name
-
-        _ ->
-          JSEncoder.encode(arg, context, opts)
-      end
-    end)
-    |> Enum.join(", ")
   end
 end
