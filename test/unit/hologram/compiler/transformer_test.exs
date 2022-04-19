@@ -7,6 +7,7 @@ defmodule Hologram.Compiler.TransformerTest do
     AccessOperator,
     AdditionOperator,
     AliasDirective,
+    AnonymousFunctionCall,
     AnonymousFunctionType,
     AtomType,
     BinaryType,
@@ -432,6 +433,13 @@ defmodule Hologram.Compiler.TransformerTest do
   end
 
   describe "control flow" do
+    test "anonymous function call" do
+      code = "test.(123)"
+      ast = ast(code)
+
+      assert %AnonymousFunctionCall{} = Transformer.transform(ast, %Context{})
+    end
+
     test "case expression" do
       code = """
       case x do

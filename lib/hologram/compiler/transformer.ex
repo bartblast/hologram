@@ -5,6 +5,7 @@ defmodule Hologram.Compiler.Transformer do
     AccessOperatorTransformer,
     AdditionOperatorTransformer,
     AliasDirectiveTransformer,
+    AnonymousFunctionCallTransformer,
     AnonymousFunctionTypeTransformer,
     BinaryTypeTransformer,
     BlockTransformer,
@@ -66,7 +67,7 @@ defmodule Hologram.Compiler.Transformer do
     AccessOperatorTransformer.transform(ast, context)
   end
 
-  # needs to be defined before binary addition operator
+  # must be defined before binary addition operator
   def transform({:+, _, [_]} = ast, %Context{} = context) do
     UnaryPositiveOperatorTransformer.transform(ast, context)
   end
@@ -107,7 +108,7 @@ defmodule Hologram.Compiler.Transformer do
     MembershipOperatorTransformer.transform(ast, context)
   end
 
-  # needs to be defined before module attribute operator
+  # must be defined before module attribute operator
   def transform({:@, _, [{:spec, _, [{:"::", _, _}]}]}, _) do
     %Typespec{}
   end
@@ -148,7 +149,7 @@ defmodule Hologram.Compiler.Transformer do
     StrictBooleanAndOperatorTransformer.transform(ast, context)
   end
 
-  # needs to be defined before binary subtraction operator
+  # must be defined before binary subtraction operator
   def transform({:-, _, [_]} = ast, %Context{} = context) do
     UnaryNegativeOperatorTransformer.transform(ast, context)
   end
@@ -266,6 +267,11 @@ defmodule Hologram.Compiler.Transformer do
 
   # CONTROL FLOW
 
+  # must be defined before module function call case
+  def transform({{:., _, [{_, _, nil}]}, [line: _], _} = ast, %Context{} = context) do
+    AnonymousFunctionCallTransformer.transform(ast, context)
+  end
+
   def transform({:case, _, _} = ast, %Context{} = context) do
     CaseExpressionTransformer.transform(ast, context)
   end
@@ -296,7 +302,7 @@ defmodule Hologram.Compiler.Transformer do
     UnquoteTransformer.transform(ast, context)
   end
 
-  # needs to be defined before variable case
+  # must be defined before variable case
   def transform({:__MODULE__, _, _}, _) do
     %ModulePseudoVariable{}
   end
@@ -309,7 +315,7 @@ defmodule Hologram.Compiler.Transformer do
     %Variable{name: name}
   end
 
-  # needs to be defined after variable case
+  # must be defined after variable case
   def transform({function, _, _} = ast, %Context{} = context) when is_atom(function) do
     FunctionCallTransformer.transform(ast, context)
   end
