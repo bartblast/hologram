@@ -10,6 +10,6 @@ defimpl JSEncoder, for: AnonymousFunctionCall do
     var = encode_identifier(name)
     args = encode_args(args, context, opts)
 
-    "#{var}(#{args})"
+    "#{var}.callback(#{args})"
   end
 end

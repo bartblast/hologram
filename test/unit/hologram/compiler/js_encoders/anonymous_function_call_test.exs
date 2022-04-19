@@ -14,7 +14,7 @@ defmodule Hologram.Compiler.JSEncoder.AnonymousFunctionCallTest do
     }
 
     result = JSEncoder.encode(ir, %Context{}, %Opts{})
-    expected = "abc$question()"
+    expected = "abc$question.callback()"
 
     assert result == expected
   end
@@ -26,7 +26,7 @@ defmodule Hologram.Compiler.JSEncoder.AnonymousFunctionCallTest do
     }
 
     result = JSEncoder.encode(ir, %Context{}, %Opts{})
-    expected = "abc({ type: 'integer', value: 1 }, { type: 'integer', value: 2 })"
+    expected = "abc.callback({ type: 'integer', value: 1 }, { type: 'integer', value: 2 })"
 
     assert result == expected
   end
