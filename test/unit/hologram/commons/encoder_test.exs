@@ -80,24 +80,24 @@ defmodule Hologram.Commons.EncoderTest do
     end
   end
 
-  describe "encode_function_name/1" do
+  describe "encode_identifier/1" do
     test "string" do
-      result = Encoder.encode_function_name("test")
+      result = Encoder.encode_identifier("test")
       assert result == "test"
     end
 
     test "atom" do
-      result = Encoder.encode_function_name(:test)
+      result = Encoder.encode_identifier(:test)
       assert result == "test"
     end
 
     test "question mark" do
-      result = Encoder.encode_function_name("test?")
+      result = Encoder.encode_identifier("test?")
       assert result == "test$question"
     end
 
     test "exclamation mark" do
-      result = Encoder.encode_function_name("test!")
+      result = Encoder.encode_identifier("test!")
       assert result == "test$bang"
     end
   end

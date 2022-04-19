@@ -25,7 +25,7 @@ defimpl JSEncoder, for: FunctionCall do
         %Opts{} = opts
       ) do
     class_name = Helpers.class_name(module)
-    function = encode_function_name(function)
+    function = encode_identifier(function)
     args = encode_args(args, context, opts)
 
     "#{class_name}.#{function}(#{args})"

@@ -40,8 +40,8 @@ defmodule Hologram.Commons.Encoder do
     |> Enum.join(separator)
   end
 
-  def encode_function_name(function_name) do
-    to_string(function_name)
+  def encode_identifier(name) do
+    to_string(name)
     |> String.replace("?", "$question")
     |> String.replace("!", "$bang")
   end

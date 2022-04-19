@@ -6,7 +6,7 @@ defimpl JSEncoder, for: FunctionDefinitionVariants do
 
   def encode(%{name: name, variants: variants}, %Context{} = context, %Opts{} = opts) do
     body = encode_function_body(variants, context, opts)
-    name = encode_function_name(name)
+    name = encode_identifier(name)
 
     "static #{name}() {#{body}"
     |> Formatter.maybe_append_new_line("}")
