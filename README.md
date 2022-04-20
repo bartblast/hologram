@@ -282,7 +282,7 @@ without its shortcomings related to scalability, efficiency, etc.
 | Structure               | Status             | Comments                                                        |
 | :---------------------- | :----------------: | :-------------------------------------------------------------- |
 | After                   | :x:                |                                                                 |
-| Anonymous Function Call | :contruction:      | done: regular syntax, todo: shorthand syntax (capture operator) |
+| Anonymous Function Call | :construction:     | done: regular syntax, todo: shorthand syntax (capture operator) |
 | Case                    | :white_check_mark: |                                                                 |
 | Catch                   | :x:                |                                                                 |
 | Comprehension           | :x:                |                                                                 |
