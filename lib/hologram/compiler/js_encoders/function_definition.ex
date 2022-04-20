@@ -34,7 +34,7 @@ defimpl JSEncoder, for: FunctionDefinitionVariants do
       statement = if acc == "", do: "if", else: "else if"
       params = encode_function_params(variant, context)
       vars = encode_vars(variant.bindings, context, opts)
-      body = encode_expressions(variant.body, context, opts, "\n")
+      body = JSEncoder.encode(variant.body, context, opts)
 
       acc
       |> Formatter.maybe_append_new_line(
