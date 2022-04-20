@@ -2,7 +2,7 @@ defmodule Hologram.Compiler.IR do
   # TYPES
 
   defmodule AnonymousFunctionType do
-    defstruct arity: nil, params: [], bindings: [], body: []
+    defstruct arity: nil, params: [], bindings: [], body: nil
   end
 
   defmodule AtomType do
@@ -143,7 +143,7 @@ defmodule Hologram.Compiler.IR do
               arity: nil,
               params: [],
               bindings: [],
-              body: [],
+              body: nil,
               visibility: nil
   end
 
@@ -157,7 +157,7 @@ defmodule Hologram.Compiler.IR do
   end
 
   defmodule MacroDefinition do
-    defstruct module: nil, name: nil, arity: nil, params: [], bindings: [], body: []
+    defstruct module: nil, name: nil, arity: nil, params: [], bindings: [], body: nil
   end
 
   defmodule ModuleDefinition do
@@ -261,7 +261,7 @@ defmodule Hologram.Compiler.IR do
   end
 
   defmodule Quote do
-    defstruct body: []
+    defstruct body: nil
   end
 
   defmodule ModulePseudoVariable do

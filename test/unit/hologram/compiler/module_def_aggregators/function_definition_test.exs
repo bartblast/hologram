@@ -2,7 +2,7 @@ defmodule Hologram.Compiler.ModuleDefAggregator.FunctionDefinitionTest do
   use Hologram.Test.UnitCase, async: false
 
   alias Hologram.Compiler.{ModuleDefAggregator, ModuleDefStore}
-  alias Hologram.Compiler.IR.{FunctionDefinition, ModuleDefinition, ModuleType}
+  alias Hologram.Compiler.IR.{Block, FunctionDefinition, ModuleDefinition, ModuleType}
   alias Hologram.Test.Fixtures.{PlaceholderModule1, PlaceholderModule2}
 
   setup do
@@ -12,10 +12,10 @@ defmodule Hologram.Compiler.ModuleDefAggregator.FunctionDefinitionTest do
 
   test "aggregate/1" do
     ir = %FunctionDefinition{
-      body: [
+      body: %Block{expressions: [
         %ModuleType{module: PlaceholderModule1},
         %ModuleType{module: PlaceholderModule2}
-      ]
+      ]}
     }
 
     ModuleDefAggregator.aggregate(ir)

@@ -2,7 +2,7 @@ defmodule Hologram.Compiler.CallGraphBuilder.FunctionDefinitionTest do
   use Hologram.Test.UnitCase, async: false
 
   alias Hologram.Compiler.{CallGraph, CallGraphBuilder}
-  alias Hologram.Compiler.IR.{FunctionDefinition, ModuleType}
+  alias Hologram.Compiler.IR.{Block, FunctionDefinition, ModuleType}
   alias Hologram.Test.Fixtures.{PlaceholderModule1, PlaceholderModule2, PlaceholderModule3}
 
   @module_defs %{}
@@ -17,10 +17,10 @@ defmodule Hologram.Compiler.CallGraphBuilder.FunctionDefinitionTest do
     ir = %FunctionDefinition{
       module: PlaceholderModule1,
       name: :test_fun,
-      body: [
+      body: %Block{expressions: [
         %ModuleType{module: PlaceholderModule2},
         %ModuleType{module: PlaceholderModule3}
-      ]
+      ]}
     }
 
     from_vertex = PlaceholderModule1
@@ -35,7 +35,7 @@ defmodule Hologram.Compiler.CallGraphBuilder.FunctionDefinitionTest do
     ir = %FunctionDefinition{
       module: PlaceholderModule1,
       name: :test_fun,
-      body: []
+      body: %Block{expressions: []}
     }
 
     from_vertex = PlaceholderModule1

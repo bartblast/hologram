@@ -2,7 +2,7 @@ defmodule Hologram.Compiler.CallGraphBuilder.CaseExpressionTest do
   use Hologram.Test.UnitCase, async: false
 
   alias Hologram.Compiler.{CallGraph, CallGraphBuilder}
-  alias Hologram.Compiler.IR.{CaseExpression, IntegerType, ModuleType}
+  alias Hologram.Compiler.IR.{Block, CaseExpression, IntegerType, ModuleType}
 
   alias Hologram.Test.Fixtures.{
     PlaceholderModule1,
@@ -26,18 +26,18 @@ defmodule Hologram.Compiler.CallGraphBuilder.CaseExpressionTest do
       clauses: [
         %{
           bindings: [],
-          body: [
+          body: %Block{expressions: [
             %ModuleType{module: PlaceholderModule3},
             %ModuleType{module: PlaceholderModule4}
-          ],
+          ]},
           pattern: %IntegerType{value: 1}
         },
         %{
           bindings: [],
-          body: [
+          body: %Block{expressions: [
             %ModuleType{module: PlaceholderModule5},
             %ModuleType{module: PlaceholderModule6}
-          ],
+          ]},
           pattern: %IntegerType{value: 2}
         }
       ],

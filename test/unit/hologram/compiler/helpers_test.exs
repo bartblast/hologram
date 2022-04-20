@@ -6,6 +6,7 @@ defmodule Hologram.Compiler.HelpersTest do
   alias Hologram.Compiler.IR.{
     AtomType,
     Binding,
+    Block,
     FunctionDefinition,
     FunctionDefinitionVariants,
     IntegerType,
@@ -188,9 +189,9 @@ defmodule Hologram.Compiler.HelpersTest do
           bindings: [
             %Binding{name: :a, access_path: [%ParamAccess{index: 0}]}
           ],
-          body: [
+          body: %Block{expressions: [
             %IntegerType{value: 1}
-          ],
+          ]},
           name: :test,
           params: [
             %Variable{name: :a}
@@ -210,9 +211,9 @@ defmodule Hologram.Compiler.HelpersTest do
         bindings: [
           %Binding{name: :a, access_path: [%ParamAccess{index: 0}]}
         ],
-        body: [
+        body: %Block{expressions: [
           %IntegerType{value: 1}
-        ],
+        ]},
         name: :test,
         params: [
           %Variable{name: :a}
@@ -224,9 +225,9 @@ defmodule Hologram.Compiler.HelpersTest do
           %Binding{name: :a, access_path: [%ParamAccess{index: 0}]},
           %Binding{name: :b, access_path: [%ParamAccess{index: 1}]}
         ],
-        body: [
+        body: %Block{expressions: [
           %IntegerType{value: 2}
-        ],
+        ]},
         name: :test,
         params: [
           %Variable{name: :a},
@@ -247,9 +248,9 @@ defmodule Hologram.Compiler.HelpersTest do
         bindings: [
           %Binding{name: :a, access_path: [%ParamAccess{index: 0}]}
         ],
-        body: [
+        body: %Block{expressions: [
           %IntegerType{value: 1}
-        ],
+        ]},
         name: :test_1,
         params: [
           %Variable{name: :a}
@@ -260,9 +261,9 @@ defmodule Hologram.Compiler.HelpersTest do
         bindings: [
           %Binding{name: :a, access_path: [%ParamAccess{index: 0}]}
         ],
-        body: [
+        body: %Block{expressions: [
           %IntegerType{value: 2}
-        ],
+        ]},
         name: :test_2,
         params: [
           %Variable{name: :a}
@@ -285,9 +286,9 @@ defmodule Hologram.Compiler.HelpersTest do
         bindings: [
           %Binding{name: :a, access_path: [%ParamAccess{index: 0}]}
         ],
-        body: [
+        body: %Block{expressions: [
           %IntegerType{value: 1}
-        ],
+        ]},
         name: :test_1,
         params: [
           %Variable{name: :a}
@@ -299,9 +300,9 @@ defmodule Hologram.Compiler.HelpersTest do
           %Binding{name: :a, access_path: [%ParamAccess{index: 0}]},
           %Binding{name: :b, access_path: [%ParamAccess{index: 1}]}
         ],
-        body: [
+        body: %Block{expressions: [
           %IntegerType{value: 2}
-        ],
+        ]},
         name: :test_1,
         params: [
           %Variable{name: :a},
@@ -313,9 +314,9 @@ defmodule Hologram.Compiler.HelpersTest do
         bindings: [
           %Binding{name: :a, access_path: [%ParamAccess{index: 0}]}
         ],
-        body: [
+        body: %Block{expressions: [
           %IntegerType{value: 3}
-        ],
+        ]},
         name: :test_2,
         params: [
           %Variable{name: :a}
