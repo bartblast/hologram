@@ -6,6 +6,7 @@ defmodule Hologram.Compiler.FunctionDefinitionTransformerTest do
   alias Hologram.Compiler.IR.{
     AtomType,
     Binding,
+    Block,
     FunctionDefinition,
     FunctionHead,
     IntegerType,
@@ -100,7 +101,11 @@ defmodule Hologram.Compiler.FunctionDefinitionTransformerTest do
 
     assert %FunctionDefinition{} = result = FunctionDefinitionTransformer.transform(ast, @context)
 
-    assert result.body == [%IntegerType{value: 1}]
+    expected = %Block{expressions: [
+      %IntegerType{value: 1}
+    ]}
+
+    assert result.body == expected
   end
 
   test "body, multiple expressions" do
@@ -115,10 +120,10 @@ defmodule Hologram.Compiler.FunctionDefinitionTransformerTest do
 
     assert %FunctionDefinition{} = result = FunctionDefinitionTransformer.transform(ast, @context)
 
-    expected = [
+    expected = %Block{expressions: [
       %IntegerType{value: 1},
       %IntegerType{value: 2}
-    ]
+    ]}
 
     assert result.body == expected
   end
