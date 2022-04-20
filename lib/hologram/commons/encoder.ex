@@ -41,19 +41,6 @@ defmodule Hologram.Commons.Encoder do
     |> wrap_with_array()
   end
 
-  defp encode_expression(expr, idx, expr_count, context, opts) do
-    return = if idx == expr_count - 1, do: "return ", else: ""
-    "#{return}#{JSEncoder.encode(expr, context, opts)};"
-  end
-
-  def encode_expressions(body, context, opts, separator) do
-    expr_count = Enum.count(body)
-
-    Enum.with_index(body)
-    |> Enum.map(fn {expr, idx} -> encode_expression(expr, idx, expr_count, context, opts) end)
-    |> Enum.join(separator)
-  end
-
   def encode_identifier(name) do
     to_string(name)
     |> String.replace("?", "$question")

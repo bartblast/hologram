@@ -83,29 +83,6 @@ defmodule Hologram.Commons.EncoderTest do
     end
   end
 
-  describe "encode_expression/4" do
-    test "single expression" do
-      body = [%IntegerType{value: 1}]
-
-      result = Encoder.encode_expressions(body, %Context{}, %Opts{}, "\n")
-      expected = "return { type: 'integer', value: 1 };"
-
-      assert result == expected
-    end
-
-    test "multiple expressions" do
-      body = [
-        %IntegerType{value: 1},
-        %IntegerType{value: 2}
-      ]
-
-      result = Encoder.encode_expressions(body, %Context{}, %Opts{}, "\n")
-      expected = "{ type: 'integer', value: 1 };\nreturn { type: 'integer', value: 2 };"
-
-      assert result == expected
-    end
-  end
-
   describe "encode_identifier/1" do
     test "string" do
       result = Encoder.encode_identifier("test")
