@@ -15,6 +15,19 @@ export default class Interpreter {
     return Utils.freeze({type: type, value: result})
   }
 
+  static _areNumbersEqual(num1, num2) {
+    if (Type.isNumber(num1) && Type.isNumber(num2)) {
+      return num1.value == num2.value
+    } else {
+      return false
+    }
+  }
+
+  static caseExpression(condition, clausesAnonFun) {
+    const result = clausesAnonFun(condition)
+    return Utils.freeze(result)
+  }
+
   static $cons_operator(head, tail) {
     return List.insert_at(tail, 0, head)
   }
@@ -56,61 +69,6 @@ export default class Interpreter {
       result = elseClause()
     }
 
-    return Utils.freeze(result)
-  }
-
-  static $list_concatenation_operator(left, right) {
-    const result = Type.list(left.data.concat(right.data))
-    return Utils.freeze(result)
-  }
-
-  static $membership_operator(left, right) {
-    return Enum.member$question(right, left)
-  }
-
-  static $multiplication_operator(left, right) {
-    const type = left.type === "integer" && right.type === "integer" ? "integer" : "float"
-    const result = left.value * right.value
-    return Utils.freeze({type: type, value: result})
-  }
-
-  static $not_equal_to_operator(left, right) {
-    const isEqualTo = Interpreter.$equal_to_operator(left, right)
-    return Type.boolean(!isEqualTo.value)
-  }
-
-  static $relaxed_boolean_and_operator(left, right) {
-    if (Type.isTruthy(left)) {
-      return right
-    } else {
-      return left
-    }
-  }
-
-  static $relaxed_boolean_not_operator(value) {
-    if (Type.isFalsy(value)) {
-      return Type.boolean(true)
-    } else {
-      return Type.boolean(false)
-    }
-  }
-
-  static $relaxed_boolean_or_operator(left, right) {
-    if (Type.isTruthy(left)) {
-      return left
-    } else {
-      return right
-    }
-  }
-
-  static $subtraction_operator(left, right) {
-    const type = left.type === "integer" && right.type === "integer" ? "integer" : "float"
-    const result = left.value - right.value
-    return Utils.freeze({type: type, value: result})
-  }
-
-  static caseExpression(condition, clausesAnonFun) {
-    const result = clausesAnonFun(condition)
     return Utils.freeze(result)
   }
 
@@ -210,11 +168,53 @@ export default class Interpreter {
     }
   }
 
-  static _areNumbersEqual(num1, num2) {
-    if (Type.isNumber(num1) && Type.isNumber(num2)) {
-      return num1.value == num2.value
+  static $list_concatenation_operator(left, right) {
+    const result = Type.list(left.data.concat(right.data))
+    return Utils.freeze(result)
+  }
+
+  static $membership_operator(left, right) {
+    return Enum.member$question(right, left)
+  }
+
+  static $multiplication_operator(left, right) {
+    const type = left.type === "integer" && right.type === "integer" ? "integer" : "float"
+    const result = left.value * right.value
+    return Utils.freeze({type: type, value: result})
+  }
+
+  static $not_equal_to_operator(left, right) {
+    const isEqualTo = Interpreter.$equal_to_operator(left, right)
+    return Type.boolean(!isEqualTo.value)
+  }
+
+  static $relaxed_boolean_and_operator(left, right) {
+    if (Type.isTruthy(left)) {
+      return right
     } else {
-      return false
+      return left
     }
+  }
+
+  static $relaxed_boolean_not_operator(value) {
+    if (Type.isFalsy(value)) {
+      return Type.boolean(true)
+    } else {
+      return Type.boolean(false)
+    }
+  }
+
+  static $relaxed_boolean_or_operator(left, right) {
+    if (Type.isTruthy(left)) {
+      return left
+    } else {
+      return right
+    }
+  }
+
+  static $subtraction_operator(left, right) {
+    const type = left.type === "integer" && right.type === "integer" ? "integer" : "float"
+    const result = left.value - right.value
+    return Utils.freeze({type: type, value: result})
   }
 }
