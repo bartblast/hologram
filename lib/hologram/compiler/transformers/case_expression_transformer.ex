@@ -9,9 +9,9 @@ defmodule Hologram.Compiler.CaseExpressionTransformer do
     }
   end
 
-  defp build_clause({:->, _, [[pattern], {:__block__, [], body}]}, context) do
+  defp build_clause({:->, _, [[pattern], body]}, context) do
     pattern = Transformer.transform(pattern, context)
-    body = Enum.map(body, &Transformer.transform(&1, context))
+    body = Transformer.transform(body, context)
 
     bindings =
       Helpers.aggregate_bindings_from_expression(pattern)
