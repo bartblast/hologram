@@ -3,12 +3,12 @@ defmodule Hologram.Compiler.MacroDefinitionTransformer do
   alias Hologram.Compiler.IR.MacroDefinition
 
   def transform(ast, %Context{} = context) do
-    {:defmacro, _, [{name, _, params}, [do: {:__block__, _, body}]]} = ast
+    {:defmacro, _, [{name, _, params}, [do: body]]} = ast
 
     params = Helpers.transform_params(params, context)
     arity = Enum.count(params)
     bindings = Helpers.aggregate_bindings_from_params(params)
-    body = Enum.map(body, &Transformer.transform(&1, context))
+    body = Transformer.transform(body, context)
 
     %MacroDefinition{
       module: context.module,

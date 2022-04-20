@@ -6,6 +6,7 @@ defmodule Hologram.Compiler.MacroDefinitionTransformerTest do
   alias Hologram.Compiler.IR.{
     AtomType,
     Binding,
+    Block,
     IntegerType,
     MacroDefinition,
     MapAccess,
@@ -87,7 +88,12 @@ defmodule Hologram.Compiler.MacroDefinitionTransformerTest do
       ast = ast(code)
 
       assert %MacroDefinition{} = result = MacroDefinitionTransformer.transform(ast, @context)
-      assert result.body == [%IntegerType{value: 1}]
+
+      expected = %Block{expressions: [
+        %IntegerType{value: 1}
+      ]}
+
+      assert result.body == expected
     end
 
     test "body, multiple expressions" do
@@ -101,7 +107,13 @@ defmodule Hologram.Compiler.MacroDefinitionTransformerTest do
       ast = ast(code)
 
       assert %MacroDefinition{} = result = MacroDefinitionTransformer.transform(ast, @context)
-      assert result.body == [%IntegerType{value: 1}, %IntegerType{value: 2}]
+
+      expected = %Block{expressions: [
+        %IntegerType{value: 1},
+        %IntegerType{value: 2}
+      ]}
+
+      assert result.body == expected
     end
   end
 end
