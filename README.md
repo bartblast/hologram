@@ -261,20 +261,21 @@ without its shortcomings related to scalability, efficiency, etc.
 
 #### Pattern Matching
 
-| Type          | Status             |
-| :------------ | :----------------: |
-| Binary        | :x:                |
-| Bitstring     | :x:                |
-| Case          | :white_check_mark: |
-| Comprehension | :x:                |
-| Cons Operator | :white_check_mark: |
-| Function Call | :white_check_mark: |
-| If            | :x:                |
-| List          | :white_check_mark: |
-| Map           | :white_check_mark: |      
-| Range         | :x:                |          
-| Struct        | :x:                |          
-| Tuple         | :white_check_mark: |        
+| Type               | Status             |
+| :----------------- | :----------------: |
+| Anonymous Function | :x:                |
+| Binary             | :x:                |
+| Bitstring          | :x:                |
+| Case               | :white_check_mark: |
+| Comprehension      | :x:                |
+| Cons Operator      | :white_check_mark: |
+| Module Function    | :white_check_mark: |
+| If                 | :x:                |
+| List               | :white_check_mark: |
+| Map                | :white_check_mark: |      
+| Range              | :x:                |          
+| Struct             | :x:                |          
+| Tuple              | :white_check_mark: |        
 
 #### Control Flow
 
