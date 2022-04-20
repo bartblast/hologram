@@ -47,6 +47,18 @@ export default class Interpreter {
     return Type.boolean(value)
   }
 
+  static $if_expression(condition, doClause, elseClause) {
+    let result;
+
+    if (Type.isTruthy(condition())) {
+      result = doClause()
+    } else {
+      result = elseClause()
+    }
+
+    return Utils.freeze(result)
+  }
+
   static $list_concatenation_operator(left, right) {
     const result = Type.list(left.data.concat(right.data))
     return Utils.freeze(result)

@@ -15,6 +15,6 @@ defimpl JSEncoder, for: IfExpression do
     do_anon_fun = encode_as_anonymous_function(do_block, context, opts)
     else_anon_fun = encode_as_anonymous_function(else_block, context, opts)
 
-    "Elixir_Kernel.if(#{condition_anon_fun}, #{do_anon_fun}, #{else_anon_fun})"
+    "Hologram.Interpreter.$if_expression(#{condition_anon_fun}, #{do_anon_fun}, #{else_anon_fun})"
   end
 end

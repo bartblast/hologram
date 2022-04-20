@@ -72,58 +72,6 @@ describe("hd()", () => {
   })
 })
 
-describe("if()", () => {
-  it("returns doClause result if condition is truthy", () => {
-    const expected = Type.integer(1);
-
-    const condition = Type.anonymousFunction(() => {
-      return Type.boolean(true);
-    });
-
-    const doClause = Type.anonymousFunction(function () {
-      return expected;
-    })
-    ;
-    const elseClause = Type.anonymousFunction(function () {
-      return Type.integer(2);
-    });
-
-    const result = Kernel.if(condition, doClause, elseClause);
-    assert.equal(result, expected);
-  });
-
-  it("returns elseClause result if condition is not truthy", () => {
-    const expected = Type.integer(2);
-    const condition = function () {
-      return Type.boolean(false);
-    };
-    const doClause = function () {
-      return Type.integer(1);
-    };
-    const elseClause = function () {
-      return expected;
-    };
-
-    const result = Kernel.if(condition, doClause, elseClause);
-    assert.equal(result, expected);
-  });
-
-  it("returns frozen object", () => {
-    const condition = function () {
-      return Type.boolean(true);
-    };
-    const doClause = function () {
-      return Type.integer(1);
-    };
-    const elseClause = function () {
-      return Type.integer(2);
-    };
-
-    const result = Kernel.if(condition, doClause, elseClause);
-    assertFrozen(result);
-  });
-});
-
 describe("is_function()", () => {
   it("returns boxed true if the term is of boxed anonymous function type", () => {
     const term = Type.anonymousFunction(() => { return Type.integer(1) })

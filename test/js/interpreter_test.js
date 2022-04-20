@@ -529,6 +529,58 @@ describe("caseExpression()", () => {
   })
 })
 
+describe("$if_expression()", () => {
+  it("returns doClause result if condition is truthy", () => {
+    const expected = Type.integer(1);
+
+    const condition = () => {
+      return Type.boolean(true);
+    };
+
+    const doClause = () => {
+      return expected;
+    };
+
+    const elseClause = () => {
+      return Type.integer(2);
+    };
+
+    const result = Interpreter.$if_expression(condition, doClause, elseClause);
+    assert.equal(result, expected);
+  });
+
+  it("returns elseClause result if condition is not truthy", () => {
+    const expected = Type.integer(2);
+    const condition = () => {
+      return Type.boolean(false);
+    };
+    const doClause = () => {
+      return Type.integer(1);
+    };
+    const elseClause = () => {
+      return expected;
+    };
+
+    const result = Interpreter.$if_expression(condition, doClause, elseClause);
+    assert.equal(result, expected);
+  });
+
+  it("returns frozen object", () => {
+    const condition = () => {
+      return Type.boolean(true);
+    };
+    const doClause = () => {
+      return Type.integer(1);
+    };
+    const elseClause = () => {
+      return Type.integer(2);
+    };
+
+    const result = Interpreter.$if_expression(condition, doClause, elseClause);
+    assertFrozen(result);
+  });
+});
+
 describe("isFunctionArgsPatternMatched()", () => {
   it("returns false if number of args is different than number of params", () => {
     const params = [Type.placeholder(), Type.placeholder()]

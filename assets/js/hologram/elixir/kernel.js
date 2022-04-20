@@ -31,18 +31,6 @@ export default class Kernel {
     return list.data[0]
   }
 
-  static if(condition, doClause, elseClause) {
-    let result;
-
-    if (Type.isTruthy(condition())) {
-      result = doClause()
-    } else {
-      result = elseClause()
-    }
-
-    return Utils.freeze(result)
-  }
-
   static is_function(term) {
     return Type.isAnonymousFunction(term) ? Type.boolean(true) : Type.boolean(false)
   }

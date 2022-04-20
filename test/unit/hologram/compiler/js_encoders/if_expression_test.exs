@@ -14,7 +14,7 @@ defmodule Hologram.Compiler.JSEncoder.IfExpressionTest do
     result = JSEncoder.encode(ir, %Context{}, %Opts{})
 
     expected = """
-    Elixir_Kernel.if(() => {
+    Hologram.Interpreter.$if_expression(() => {
     return { type: 'boolean', value: true };
     }, () => {
     return { type: 'integer', value: 1 };
