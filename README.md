@@ -176,25 +176,25 @@ without its shortcomings related to scalability, efficiency, etc.
 
 #### Types
 
-| Type               | Status             |
-| :----------------- | :----------------: |
-| Anonymous Function | :x:                |
-| Atom               | :white_check_mark: |
-| Binary             | :x:                |
-| Bitstring          | :x:                |     
-| Boolean            | :white_check_mark: |     
-| Exception          | :x:                |     
-| Float              | :white_check_mark: |     
-| Integer            | :white_check_mark: |     
-| IO Data            | :x:                |     
-| List               | :white_check_mark: |     
-| Map                | :white_check_mark: |     
-| Nil                | :white_check_mark: |    
-| Range              | :x:                |     
-| Regex              | :x:                |     
-| String             | :white_check_mark: |     
-| Struct             | :white_check_mark: |   
-| Tuple              | :white_check_mark: |     
+| Type               | Status             | Comments                                                        |
+| :----------------- | :----------------: | :-------------------------------------------------------------- |
+| Anonymous Function | :construction:     | done: regular syntax, todo: shorthand syntax (capture operator) |
+| Atom               | :white_check_mark: |                                                                 |
+| Binary             | :x:                |                                                                 |
+| Bitstring          | :x:                |                                                                 |     
+| Boolean            | :white_check_mark: |                                                                 |     
+| Exception          | :x:                |                                                                 |     
+| Float              | :white_check_mark: |                                                                 |     
+| Integer            | :white_check_mark: |                                                                 |     
+| IO Data            | :x:                |                                                                 |     
+| List               | :white_check_mark: |                                                                 |     
+| Map                | :white_check_mark: |                                                                 |     
+| Nil                | :white_check_mark: |                                                                 |    
+| Range              | :x:                |                                                                 |     
+| Regex              | :x:                |                                                                 |     
+| String             | :white_check_mark: |                                                                 |     
+| Struct             | :white_check_mark: |                                                                 |   
+| Tuple              | :white_check_mark: |                                                                 |     
 
 #### Operators
 
@@ -279,24 +279,24 @@ without its shortcomings related to scalability, efficiency, etc.
 
 #### Control Flow
 
-| Structure               | Status             |
-| :---------------------- | :----------------: |
-| After                   | :x:                |
-| Anonymous Function Call | :x:                |
-| Case                    | :white_check_mark: |
-| Catch                   | :x:                |
-| Comprehension           | :x:                |
-| Cond                    | :x:                |
-| Else (If)               | :white_check_mark: |
-| Else (Rescue)           | :x:                |
-| Guards                  | :x:                |
-| If                      | :white_check_mark: |
-| Module Function Call    | :x:                |
-| Raise                   | :x:                |
-| Rescue                  | :x:                |
-| Throw                   | :x:                |
-| Unless                  | :x:                |
-| With                    | :x:                |
+| Structure               | Status             | Comments                                                        |
+| :---------------------- | :----------------: | :-------------------------------------------------------------- |
+| After                   | :x:                |                                                                 |
+| Anonymous Function Call | :contruction:      | done: regular syntax, todo: shorthand syntax (capture operator) |
+| Case                    | :white_check_mark: |                                                                 |
+| Catch                   | :x:                |                                                                 |
+| Comprehension           | :x:                |                                                                 |
+| Cond                    | :x:                |                                                                 |
+| Else (If)               | :white_check_mark: |                                                                 |
+| Else (Rescue)           | :x:                |                                                                 |
+| Guards                  | :x:                |                                                                 |
+| If                      | :white_check_mark: |                                                                 |
+| Module Function Call    | :x:                |                                                                 |
+| Raise                   | :x:                |                                                                 |
+| Rescue                  | :x:                |                                                                 |
+| Throw                   | :x:                |                                                                 |
+| Unless                  | :x:                |                                                                 |
+| With                    | :x:                |                                                                 |
 
 #### Definitions
 
