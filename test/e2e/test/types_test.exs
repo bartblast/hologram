@@ -9,8 +9,7 @@ defmodule HologramE2E.TypesTest do
       |> assert_has(css("#text", text: "Result = true"))
     end
 
-    feature "shorthand syntax" do
-
-    end
+    # TODO: implement
+    # feature "shorthand syntax"
   end
 end
