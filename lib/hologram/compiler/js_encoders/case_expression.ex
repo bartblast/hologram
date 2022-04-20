@@ -2,7 +2,7 @@ alias Hologram.Compiler.{Config, Context, Formatter, JSEncoder, Opts}
 alias Hologram.Compiler.IR.CaseExpression
 
 defimpl JSEncoder, for: CaseExpression do
-  import Hologram.Commons.Encoder, only: [encode_expressions: 4, encode_vars: 3]
+  import Hologram.Commons.Encoder, only: [encode_vars: 3]
 
   @case_condition_js Config.case_condition_js()
 
@@ -31,7 +31,7 @@ defimpl JSEncoder, for: CaseExpression do
       statement = if acc == "", do: "if", else: "else if"
       clause_pattern = JSEncoder.encode(clause.pattern, context, %Opts{placeholder: true})
       vars = encode_vars(clause.bindings, context, opts)
-      body = encode_expressions(clause.body, context, opts, "\n")
+      body = JSEncoder.encode(clause.body, context, opts)
 
       acc
       |> Formatter.maybe_append_new_line(
