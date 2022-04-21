@@ -102,8 +102,4 @@ export default class Kernel {
         throw new HologramNotImplementedError(message)
     }
   }
-
-  static $unary_negative(boxedValue) {
-    return Utils.freeze({type: boxedValue.type, value: -boxedValue.value})
-  }
 }

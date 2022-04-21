@@ -770,3 +770,14 @@ describe("$subtraction_operator()", () => {
     assertFrozen(result);
   });
 });
+
+describe("$unary_negative()", () => {
+  it("negates the given value", () => {
+    const value = Type.integer(123);
+
+    const result = Interpreter.$unary_negative_operator(value);
+    const expected = Type.integer(-123);
+
+    assert.deepStrictEqual(result, expected);
+  });
+});

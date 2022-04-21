@@ -217,4 +217,8 @@ export default class Interpreter {
     const result = left.value - right.value
     return Utils.freeze({type: type, value: result})
   }
+
+  static $unary_negative_operator(boxedValue) {
+    return Utils.freeze({type: boxedValue.type, value: -boxedValue.value})
+  }
 }
