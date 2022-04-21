@@ -21,11 +21,18 @@ defmodule HologramE2E.ControlFlowTest do
   end
 
   describe "for expression" do
-    test "non-nested for", %{session: session} do
+    test "single generator", %{session: session} do
       session
       |> visit("/e2e/control-flow/for-expression")
-      |> click(css("#button_non_nested"))
+      |> click(css("#button_single_generator"))
       |> assert_has(css("#text", text: "Result = [1, 4, 9]"))
+    end
+
+    test "multiple generators", %{session: session} do
+      session
+      |> visit("/e2e/control-flow/for-expression")
+      |> click(css("#button_multiple_generators"))
+      |> assert_has(css("#text", text: "Result = [3, 4, 6, 8]"))
     end
   end
 end
