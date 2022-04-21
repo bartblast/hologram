@@ -267,7 +267,7 @@ without its shortcomings related to scalability, efficiency, etc.
 | Binary             | :x:                |
 | Bitstring          | :x:                |
 | Case               | :white_check_mark: |
-| Comprehension      | :x:                |
+| Comprehension      | :white_check_mark: |
 | Cons Operator      | :white_check_mark: |
 | Module Function    | :white_check_mark: |
 | If                 | :x:                |

@@ -41,5 +41,12 @@ defmodule HologramE2E.ControlFlowTest do
       |> click(css("#button_nested"))
       |> assert_has(css("#text", text: "Result = [[1, 9, 16], [2, 9, 16]]"))
     end
+
+    test "pattern matching", %{session: session} do
+      session
+      |> visit("/e2e/control-flow/for-expression")
+      |> click(css("#button_pattern_matching"))
+      |> assert_has(css("#text", text: "Result = [2, 12]"))
+    end
   end
 end

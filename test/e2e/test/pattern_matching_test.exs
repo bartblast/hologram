@@ -92,4 +92,6 @@ defmodule HologramE2E.PatternMatchingTest do
       |> assert_has(css("#text", text: "Result = 7"))
     end
   end
+
+  # feature "for expression": tested in test/e2e/test/control_flow_test.exs
 end

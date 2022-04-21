@@ -20,6 +20,9 @@ defmodule HologramE2E.ControlFlow.ForExpressionPage do
     <button id="button_nested" on:click="test_nested">
       Test nested for expressions
     </button>
+    <button id="button_pattern_matching" on:click="test_pattern_matching">
+      Test pattern matching
+    </button>
     <div id="text">Result = {@result}</div>
     """
   end
@@ -36,6 +39,11 @@ defmodule HologramE2E.ControlFlow.ForExpressionPage do
 
   def action(:test_nested, _params, state) do
     result = for n <- [1, 2], do: [n] ++ for n <- [3, 4], do: n * n
+    Map.put(state, :result, result)
+  end
+
+  def action(:test_pattern_matching, _params, state) do
+    result = for {n, m} <- [{1, 2}, {3, 4}], do: n * m
     Map.put(state, :result, result)
   end
 end
