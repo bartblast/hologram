@@ -32,6 +32,11 @@ export default class Enum {
         throw new HologramNotImplementedError(message)
     }
   }
+
+  static reduce(enumerable, initialAcc, fun) {
+    const reducer = (acc, elem) => fun.callback(elem, acc)
+    return enumerable.data.reduce(reducer, initialAcc);
+  }
   
   static to_list(enumerable) {
     switch (enumerable.type) {
