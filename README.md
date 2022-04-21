@@ -285,7 +285,7 @@ without its shortcomings related to scalability, efficiency, etc.
 | Anonymous Function Call | :construction:     | done: regular syntax, todo: shorthand syntax (capture operator) |
 | Case                    | :white_check_mark: |                                                                 |
 | Catch                   | :x:                |                                                                 |
-| Comprehension           | :x:                |                                                                 |
+| Comprehension           | :construction:     | done: generator, todo: filter, into                             |
 | Cond                    | :x:                |                                                                 |
 | Else (If)               | :white_check_mark: |                                                                 |
 | Else (Rescue)           | :x:                |                                                                 |
