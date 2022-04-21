@@ -17,6 +17,9 @@ defmodule HologramE2E.ControlFlow.ForExpressionPage do
     <button id="button_multiple_generators" on:click="test_multiple_generators">
       Test for expression with multiple generators
     </button>
+    <button id="button_nested" on:click="test_nested">
+      Test nested for expressions
+    </button>
     <div id="text">Result = {@result}</div>
     """
   end
@@ -28,6 +31,11 @@ defmodule HologramE2E.ControlFlow.ForExpressionPage do
 
   def action(:test_multiple_generators, _params, state) do
     result = for n <- [1, 2], m <- [3, 4], do: n * m
+    Map.put(state, :result, result)
+  end
+
+  def action(:test_nested, _params, state) do
+    result = for n <- [1, 2], do: [n] ++ for n <- [3, 4], do: n * n
     Map.put(state, :result, result)
   end
 end

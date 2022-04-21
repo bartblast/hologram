@@ -34,5 +34,12 @@ defmodule HologramE2E.ControlFlowTest do
       |> click(css("#button_multiple_generators"))
       |> assert_has(css("#text", text: "Result = [3, 4, 6, 8]"))
     end
+
+    test "nested", %{session: session} do
+      session
+      |> visit("/e2e/control-flow/for-expression")
+      |> click(css("#button_nested"))
+      |> assert_has(css("#text", text: "Result = [[1, 9, 16], [2, 9, 16]]"))
+    end
   end
 end
