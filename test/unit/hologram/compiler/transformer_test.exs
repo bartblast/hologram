@@ -23,6 +23,7 @@ defmodule Hologram.Compiler.TransformerTest do
     IfExpression,
     ImportDirective,
     IntegerType,
+    LessThanOperator,
     ListConcatenationOperator,
     ListSubtractionOperator,
     ListType,
@@ -99,6 +100,13 @@ defmodule Hologram.Compiler.TransformerTest do
       ast = ast(code)
 
       assert %EqualToOperator{} = Transformer.transform(ast, %Context{})
+    end
+
+    test "less than" do
+      code = "1 < 2"
+      ast = ast(code)
+
+      assert %LessThanOperator{} = Transformer.transform(ast, %Context{})
     end
 
     test "list concatenation" do
