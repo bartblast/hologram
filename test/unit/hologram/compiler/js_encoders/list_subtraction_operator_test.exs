@@ -28,7 +28,7 @@ defmodule Hologram.Compiler.JSEncoder.ListSubtractionOperatorTest do
     right =
       "{ type: 'list', data: [ { type: 'integer', value: 2 }, { type: 'integer', value: 3 } ] }"
 
-    expected = "Elixir_Kernel.$subtract_lists(#{left}, #{right})"
+    expected = "Hologram.Interpreter.$list_subtraction_operator(#{left}, #{right})"
 
     assert result == expected
   end

@@ -577,6 +577,54 @@ describe("$list_concatenation_operator()", () => {
   });
 });
 
+describe("$list_subtraction_operator()", () => {
+  it("returns the left list if there are no matching elems in the right list", () => {
+    const left = Type.list([Type.integer(1), Type.integer(2)]);
+    const right = Type.list([Type.integer(3), Type.integer(4)]);
+    const result = Interpreter.$list_subtraction_operator(left, right);
+
+    assert.deepStrictEqual(result, left);
+  });
+
+  it("removes the first occurrence of an element on the left list for each element on the right", () => {
+    const left = Type.list([
+      Type.integer(1),
+      Type.integer(2),
+      Type.integer(3),
+      Type.integer(1),
+      Type.integer(2),
+      Type.integer(3),
+      Type.integer(1),
+    ]);
+
+    const right = Type.list([
+      Type.integer(1),
+      Type.integer(3),
+      Type.integer(3),
+      Type.integer(4),
+    ]);
+
+    const result = Interpreter.$list_subtraction_operator(left, right);
+
+    const expected = Type.list([
+      Type.integer(2),
+      Type.integer(1),
+      Type.integer(2),
+      Type.integer(1),
+    ]);
+
+    assert.deepStrictEqual(result, expected);
+  });
+
+  it("returns frozen object", () => {
+    const left = Type.list([Type.integer(1)]);
+    const right = Type.list([Type.integer(2)]);
+    const result = Interpreter.$list_subtraction_operator(left, right);
+
+    assertFrozen(result);
+  });
+});
+
 describe("$membership_operator()", () => {
   it("calls Enum.$member()", () => {
     const left = Type.integer(1)
