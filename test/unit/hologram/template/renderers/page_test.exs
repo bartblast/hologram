@@ -1,6 +1,7 @@
 defmodule Hologram.Template.Renderer.PageTest do
   use Hologram.Test.UnitCase, async: false
 
+  alias Hologram.Conn
   alias Hologram.Runtime
   alias Hologram.Runtime.PageDigestStore
   alias Hologram.Template.Renderer
@@ -17,12 +18,18 @@ defmodule Hologram.Template.Renderer.PageTest do
     :ok
   end
 
-  test "render/2" do
+  test "render/4" do
     module = Hologram.Test.Fixtures.Template.PageRenderer.Module1
+
+    conn = %Conn{
+      params: %{c: 567},
+      session: %{d: 345}
+    }
+
     digest = PageDigestStore.get!(module)
     assert digest =~ md5_hex_regex()
 
-    result = Renderer.render(module, %{})
+    result = Renderer.render(module, conn, %{})
 
     expected = """
     <!DOCTYPE html>
@@ -31,7 +38,7 @@ defmodule Hologram.Template.Renderer.PageTest do
         <script>
       window.hologramArgs = {
         class: "Elixir_Hologram_Test_Fixtures_Template_PageRenderer_Module1",
-        state: "{ type: 'map', data: { '~atom[a]': { type: 'integer', value: 123 }, '~atom[b]': { type: 'integer', value: 987 }, '~atom[context]': { type: 'map', data: { '~atom[__class__]': { type: 'string', value: 'Elixir_Hologram_Test_Fixtures_Template_PageRenderer_Module1' }, '~atom[__digest__]': { type: 'string', value: '#{digest}' } } } } }"
+        state: "{ type: 'map', data: { '~atom[a]': { type: 'integer', value: 123 }, '~atom[b]': { type: 'integer', value: 987 }, '~atom[c]': { type: 'integer', value: 567 }, '~atom[context]': { type: 'map', data: { '~atom[__class__]': { type: 'string', value: 'Elixir_Hologram_Test_Fixtures_Template_PageRenderer_Module1' }, '~atom[__digest__]': { type: 'string', value: '#{digest}' } } }, '~atom[d]': { type: 'integer', value: 345 } } }"
       }
     </script>
     <script src="/hologram/manifest.js"></script>
@@ -40,7 +47,7 @@ defmodule Hologram.Template.Renderer.PageTest do
       </head>
       <body>
         layout template 987
-        page template 123
+        page template assign 123, page template param 567, page template conn session 345
       </body>
     </html>\
     """

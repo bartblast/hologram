@@ -5,15 +5,17 @@ defmodule Hologram.Test.Fixtures.Template.PageRenderer.Module1 do
 
   route "/test-route-1"
 
-  def init do
+  def init(params, conn) do
     %{
-      a: 123
+      a: 123,
+      c: params.c,
+      d: conn.session.d
     }
   end
 
   def template do
     ~H"""
-    page template {@a}
+    page template assign {@a}, page template param {@c}, page template conn session {@d}
     """
   end
 end

@@ -3,10 +3,10 @@ alias Hologram.Template.{BindingsAggregator, Renderer}
 alias Hologram.Template.VDOM.Component
 
 defimpl Renderer, for: Component do
-  def render(component, outer_bindings, _) do
+  def render(component, conn, outer_bindings, _) do
     bindings = BindingsAggregator.aggregate(component, outer_bindings)
 
     TemplateStore.get!(component.module)
-    |> Renderer.render(bindings, default: component.children)
+    |> Renderer.render(conn, bindings, default: component.children)
   end
 end
