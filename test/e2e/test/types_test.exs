@@ -12,4 +12,20 @@ defmodule HologramE2E.TypesTest do
     # TODO: implement
     # feature "shorthand syntax"
   end
+
+  describe "float" do
+    feature "encoding", %{session: session} do
+      session
+      |> visit("/e2e/types/float")
+      |> click(css("#button_test_encoding"))
+      |> assert_has(css("#text_encoding_result", text: "Result encoding = 1.23"))
+    end
+
+    feature "decoding", %{session: session} do
+      session
+      |> visit("/e2e/types/float")
+      |> click(css("#button_test_decoding"))
+      |> assert_has(css("#text_decoding_result", text: "Result decoding = 12.34"))
+    end
+  end
 end
