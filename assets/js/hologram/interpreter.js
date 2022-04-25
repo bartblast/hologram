@@ -168,6 +168,21 @@ export default class Interpreter {
     }
   }
 
+  // TODO: take into account other types (for now it works for integers and floats only)
+  static $less_than_operator(left, right) {
+    if (!Type.isNumber(left)) {
+      const message = `Interpreter.$less_than_operator(): left = ${JSON.stringify(left)}`
+      throw new HologramNotImplementedError(message)
+    }
+
+    if (!Type.isNumber(right)) {
+      const message = `Interpreter.$less_than_operator(): right = ${JSON.stringify(right)}`
+      throw new HologramNotImplementedError(message)
+    }
+
+    return Type.boolean(left.value < right.value)
+  }
+
   static $list_concatenation_operator(left, right) {
     const result = Type.list(left.data.concat(right.data))
     return Utils.freeze(result)

@@ -559,6 +559,132 @@ describe("isPatternMatched()", () => {
   })
 })
 
+describe("$less_than_operator", () => {
+  // integer < integer
+  it("returns boxed true if left boxed integer is smaller than right boxed integer", () => {
+    const left = Type.integer(1)
+    const right = Type.integer(2)
+    const result = Interpreter.$less_than_operator(left, right)
+
+    assertBoxedTrue(result)
+  })
+
+  // integer == integer
+  it("returns boxed false if left boxed integer is equal to right boxed integer", () => {
+    const left = Type.integer(1)
+    const right = Type.integer(1)
+    const result = Interpreter.$less_than_operator(left, right)
+
+    assertBoxedFalse(result)
+  })
+
+  // integer > integer
+  it("returns boxed false if left boxed integer is greater than right boxed integer", () => {
+    const left = Type.integer(2)
+    const right = Type.integer(1)
+    const result = Interpreter.$less_than_operator(left, right)
+
+    assertBoxedFalse(result)
+  })
+
+  // float < float
+  it("returns boxed true if left boxed float is smaller than right boxed float", () => {
+    const left = Type.float(1.0)
+    const right = Type.float(2.0)
+    const result = Interpreter.$less_than_operator(left, right)
+
+    assertBoxedTrue(result)
+  })
+
+  // float == float
+  it("returns boxed false if left boxed float is equal to right bloxed float", () => {
+    const left = Type.float(1.0)
+    const right = Type.float(1.0)
+    const result = Interpreter.$less_than_operator(left, right)
+
+    assertBoxedFalse(result)
+  })
+
+  // float > float
+  it("returns boxed false if left boxed float is greater than right boxed float", () => {
+    const left = Type.float(2.0)
+    const right = Type.float(1.0)
+    const result = Interpreter.$less_than_operator(left, right)
+
+    assertBoxedFalse(result)
+  })
+
+  // integer < float
+  it("returns boxed true if left boxed integer is smaller than right boxed float", () => {
+    const left = Type.integer(1)
+    const right = Type.float(2.0)
+    const result = Interpreter.$less_than_operator(left, right)
+
+    assertBoxedTrue(result)
+  })
+
+  // integer == float
+  it("returns boxed false if left boxed integer is equal to right boxed float", () => {
+    const left = Type.integer(1)
+    const right = Type.float(1.0)
+    const result = Interpreter.$less_than_operator(left, right)
+
+    assertBoxedFalse(result)
+  })
+
+  // integer > float
+  it("returns boxed false if left boxed integer is greater than right boxed float", () => {
+    const left = Type.integer(2)
+    const right = Type.float(1.0)
+    const result = Interpreter.$less_than_operator(left, right)
+
+    assertBoxedFalse(result)
+  })
+
+  // float < integer
+  it("returns boxed true if left boxed float is smaller than right boxed integer", () => {
+    const left = Type.float(1.0)
+    const right = Type.integer(2)
+    const result = Interpreter.$less_than_operator(left, right)
+
+    assertBoxedTrue(result)
+  })
+
+  // float == integer
+  it("returns boxed false if left boxed float is equal to right bloxed integer", () => {
+    const left = Type.float(1.0)
+    const right = Type.integer(1)
+    const result = Interpreter.$less_than_operator(left, right)
+
+    assertBoxedFalse(result)
+  })
+
+  // float > integer
+  it("returns boxed false if left boxed float is greater than right boxed integer", () => {
+    const left = Type.float(2.0)
+    const right = Type.integer(1)
+    const result = Interpreter.$less_than_operator(left, right)
+
+    assertBoxedFalse(result)
+  })
+
+  it("throws an error if left arg is not a number", () => {
+    const left = Type.atom("a")
+    const right = Type.integer(2)
+    const expectedMessage = 'Interpreter.$less_than_operator(): left = {"type":"atom","value":"a"}'
+
+    assert.throw(() => { Interpreter.$less_than_operator(left, right) }, HologramNotImplementedError, expectedMessage);
+  })
+
+  it("throws an error if right arg is not a number", () => {
+    const left = Type.integer(1)
+    const right = Type.atom("b")
+    const expectedMessage = 'Interpreter.$less_than_operator(): right = {"type":"atom","value":"b"}'
+
+    assert.throw(() => { Interpreter.$less_than_operator(left, right) }, HologramNotImplementedError, expectedMessage);
+  })
+})
+
 describe("$list_concatenation_operator()", () => {
   it("concatenates 2 lists", () => {
     const left = Type.list([Type.integer(1), Type.integer(2)]);
