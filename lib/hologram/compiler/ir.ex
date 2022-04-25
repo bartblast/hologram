@@ -17,6 +17,10 @@ defmodule Hologram.Compiler.IR do
     defstruct value: nil
   end
 
+  defmodule FloatType do
+    defstruct value: nil
+  end
+
   defmodule IntegerType do
     defstruct value: nil
   end

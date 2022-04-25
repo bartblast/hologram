@@ -52,6 +52,7 @@ defmodule Hologram.Compiler.Transformer do
   alias Hologram.Compiler.IR.{
     AtomType,
     BooleanType,
+    FloatType,
     IntegerType,
     ModuleAttributeOperator,
     ModulePseudoVariable,
@@ -187,6 +188,10 @@ defmodule Hologram.Compiler.Transformer do
 
   def transform(ast, _) when is_boolean(ast) do
     %BooleanType{value: ast}
+  end
+
+  def transform(ast, _) when is_float(ast) do
+    %FloatType{value: ast}
   end
 
   def transform(ast, _) when is_integer(ast) do

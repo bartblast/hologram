@@ -18,6 +18,7 @@ defmodule Hologram.Compiler.TransformerTest do
     DivisionOperator,
     DotOperator,
     EqualToOperator,
+    FloatType,
     FunctionDefinition,
     FunctionCall,
     IfExpression,
@@ -260,6 +261,14 @@ defmodule Hologram.Compiler.TransformerTest do
 
       result = Transformer.transform(ast, %Context{})
       assert result == %BooleanType{value: true}
+    end
+
+    test "float" do
+      code = "1.0"
+      ast = ast(code)
+
+      result = Transformer.transform(ast, %Context{})
+      assert result == %FloatType{value: 1.0}
     end
 
     test "integer" do
