@@ -9,6 +9,10 @@ defmodule Hologram.Compiler.Decoder do
     value
   end
 
+  def decode(%{"type" => "float", "value" => value}) do
+    value
+  end
+
   def decode(%{"type" => "integer", "value" => value}) do
     value
   end

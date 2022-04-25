@@ -14,6 +14,12 @@ defmodule Hologram.Compiler.DecoderTest do
     assert result === true
   end
 
+  test "float" do
+    input = %{"type" => "float", "value" => 1.23}
+    result = Decoder.decode(input)
+    assert result === 1.23
+  end
+
   test "integer" do
     input = %{"type" => "integer", "value" => 1}
     result = Decoder.decode(input)
