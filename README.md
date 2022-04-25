@@ -243,7 +243,7 @@ without its shortcomings related to scalability, efficiency, etc.
 | ===      | :x:                |
 | !=       | :white_check_mark: |
 | !==      | :x:                |
-| <        | :x:                |
+| <        | :white_check_mark: |
 | >        | :x:                |
 | <=       | :x:                |
 | >=       | :x:                |
