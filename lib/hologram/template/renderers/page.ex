@@ -18,7 +18,6 @@ defimpl Renderer, for: Atom do
     class_name = Helpers.class_name(page_module)
     digest = PageDigestStore.get!(page_module)
 
-    # DEFER: pass page params to init function
     bindings =
       layout_module.init()
       |> Map.merge(page_module.init(conn.params, conn))
