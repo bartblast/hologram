@@ -1,9 +1,10 @@
 defmodule Hologram.Test.Fixtures.Template.PageRenderer.Module2 do
   use Hologram.Layout
 
-  def init do
+  def init(conn) do
     %{
-      b: 987
+      b: 987,
+      e: conn.session.e
     }
   end
 
@@ -15,7 +16,7 @@ defmodule Hologram.Test.Fixtures.Template.PageRenderer.Module2 do
         <Hologram.UI.Runtime />
       </head>
       <body>
-        layout template {@b}
+        layout template assign {@b}, layout template conn session {@e}
         <slot />
       </body>
     </html>

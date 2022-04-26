@@ -19,7 +19,7 @@ defimpl Renderer, for: Atom do
     digest = PageDigestStore.get!(page_module)
 
     bindings =
-      layout_module.init()
+      layout_module.init(conn)
       |> Map.merge(page_module.init(conn.params, conn))
       |> Map.put(:context, %{
         __class__: class_name,

@@ -20,16 +20,22 @@ defmodule Hologram.Template.Renderer.PageTest do
 
   test "render/4" do
     module = Hologram.Test.Fixtures.Template.PageRenderer.Module1
+    bindings = %{}
 
     conn = %Conn{
-      params: %{c: 567},
-      session: %{d: 345}
+      params: %{
+        c: 567
+      },
+      session: %{
+        d: 345,
+        e: 678
+      }
     }
+
+    result = Renderer.render(module, conn, bindings)
 
     digest = PageDigestStore.get!(module)
     assert digest =~ md5_hex_regex()
-
-    result = Renderer.render(module, conn, %{})
 
     expected = """
     <!DOCTYPE html>
@@ -38,7 +44,7 @@ defmodule Hologram.Template.Renderer.PageTest do
         <script>
       window.hologramArgs = {
         class: "Elixir_Hologram_Test_Fixtures_Template_PageRenderer_Module1",
-        state: "{ type: 'map', data: { '~atom[a]': { type: 'integer', value: 123 }, '~atom[b]': { type: 'integer', value: 987 }, '~atom[c]': { type: 'integer', value: 567 }, '~atom[context]': { type: 'map', data: { '~atom[__class__]': { type: 'string', value: 'Elixir_Hologram_Test_Fixtures_Template_PageRenderer_Module1' }, '~atom[__digest__]': { type: 'string', value: '#{digest}' } } }, '~atom[d]': { type: 'integer', value: 345 } } }"
+        state: "{ type: 'map', data: { '~atom[a]': { type: 'integer', value: 123 }, '~atom[b]': { type: 'integer', value: 987 }, '~atom[c]': { type: 'integer', value: 567 }, '~atom[context]': { type: 'map', data: { '~atom[__class__]': { type: 'string', value: 'Elixir_Hologram_Test_Fixtures_Template_PageRenderer_Module1' }, '~atom[__digest__]': { type: 'string', value: '#{digest}' } } }, '~atom[d]': { type: 'integer', value: 345 }, '~atom[e]': { type: 'integer', value: 678 } } }"
       }
     </script>
     <script src="/hologram/manifest.js"></script>
@@ -46,7 +52,7 @@ defmodule Hologram.Template.Renderer.PageTest do
     <script src="/hologram/page-#{digest}.js"></script>
       </head>
       <body>
-        layout template 987
+        layout template assign 987, layout template conn session 678
         page template assign 123, page template param 567, page template conn session 345
       </body>
     </html>\
