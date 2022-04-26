@@ -5,17 +5,18 @@ defmodule Hologram.Template.Renderer.ExpressionTest do
   alias Hologram.Template.VDOM.Expression
   alias Hologram.Template.Renderer
 
-  test "render/2" do
+  test "render/4" do
     expression = %Expression{
       ir: %TupleType{
         data: [%ModuleAttributeOperator{name: :a}]
       }
     }
 
+    conn = %Hologram.Conn{}
     bindings = %{a: 123}
 
-    result = Renderer.render(expression, bindings)
-    expected = "123"
+    result = Renderer.render(expression, conn, bindings)
+    expected = {"123", %{}}
 
     assert result == expected
   end
