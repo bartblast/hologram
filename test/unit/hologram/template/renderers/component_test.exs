@@ -18,6 +18,7 @@ defmodule Hologram.Template.Renderer.ComponentTest do
   alias Hologram.Test.Fixtures.Template.ComponentRenderer.Module3
   alias Hologram.Test.Fixtures.Template.ComponentRenderer.Module4
   alias Hologram.Test.Fixtures.Template.ComponentRenderer.Module5
+  alias Hologram.Test.Fixtures.Template.ComponentRenderer.Module6
 
   @bindings %{test_outer_binding: 123}
   @conn %Conn{}
@@ -103,6 +104,9 @@ defmodule Hologram.Template.Renderer.ComponentTest do
       component = %Component{
         module: Module2,
         props: %{
+          id: [
+            %TextNode{content: "component_2"},
+          ],
           test_prop: [
             %TextNode{content: "test_prop_value"},
           ]
@@ -110,7 +114,7 @@ defmodule Hologram.Template.Renderer.ComponentTest do
       }
 
       result = Renderer.render(component, @conn, @bindings)
-      expected = {"1.test_prop_value", %{test_state: 1}}
+      expected = {"1.test_prop_value", %{component_2: %{test_state: 1}}}
 
       assert result == expected
     end
@@ -119,6 +123,9 @@ defmodule Hologram.Template.Renderer.ComponentTest do
       component = %Component{
         module: Module2,
         props: %{
+          id: [
+            %TextNode{content: "component_2"},
+          ],
           test_state: [
             %TextNode{content: "try_to_override_test_state"}
           ],
@@ -129,7 +136,7 @@ defmodule Hologram.Template.Renderer.ComponentTest do
       }
 
       result = Renderer.render(component, @conn, @bindings)
-      expected = {"1.test_prop_value", %{test_state: 1}}
+      expected = {"1.test_prop_value", %{component_2: %{test_state: 1}}}
 
       assert result == expected
     end
@@ -140,6 +147,9 @@ defmodule Hologram.Template.Renderer.ComponentTest do
       component = %Component{
         module: Module3,
         props: %{
+          id: [
+            %TextNode{content: "component_3"},
+          ],
           test_prop: [
             %TextNode{content: "test_prop_value"},
           ]
@@ -147,7 +157,7 @@ defmodule Hologram.Template.Renderer.ComponentTest do
       }
 
       result = Renderer.render(component, @conn, @bindings)
-      expected = {"abc.test_prop_value.xyz", %{test_state: "test_prop_value"}}
+      expected = {"abc.test_prop_value.xyz", %{component_3: %{test_state: "test_prop_value"}}}
 
       assert result == expected
     end
@@ -156,6 +166,9 @@ defmodule Hologram.Template.Renderer.ComponentTest do
       component = %Component{
         module: Module4,
         props: %{
+          id: [
+            %TextNode{content: "component_3"},
+          ],
           test_prop: [
             %TextNode{content: "test_prop_value"},
           ]
@@ -172,8 +185,37 @@ defmodule Hologram.Template.Renderer.ComponentTest do
 
       expected = {
         "test_prop_value.test_session_value",
-        %{test_state_1: "test_prop_value", test_state_2: "test_session_value"}
+        %{
+          component_3: %{
+            test_state_1: "test_prop_value",
+            test_state_2: "test_session_value"
+          }
+        }
       }
+
+      assert result == expected
+    end
+
+    test "nested state" do
+      component = %Component{
+        module: Module6,
+        props: %{
+          id: [
+            %TextNode{content: "parent_component"},
+          ],
+        }
+      }
+
+      result = Renderer.render(component, @conn, @bindings)
+
+      expected_html = "parent_head.child.parent_tail"
+
+      expected_state = %{
+        child_component: %{child_component_state_key: "child_component_state_value"},
+        parent_component: %{parent_component_state_key: "parent_component_state_value"}
+      }
+
+      expected = {expected_html, expected_state}
 
       assert result == expected
     end

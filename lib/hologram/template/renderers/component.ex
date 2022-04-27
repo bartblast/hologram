@@ -15,8 +15,15 @@ defimpl Renderer, for: Component do
       TemplateStore.get!(component.module)
       |> Renderer.render(conn, bindings, slots)
 
-    {html, Map.merge(nested_initial_state, initial_state)}
+    state = aggregate_state(nested_initial_state, initial_state, props)
+    {html, state}
   end
+
+  defp aggregate_state(nested_initial_state, initial_state, %{id: id}) do
+    Map.put(nested_initial_state, String.to_atom(id), initial_state)
+  end
+
+  defp aggregate_state(nested_initial_state, _, _), do: nested_initial_state
 
   defp evaluate_props(props, outer_bindings) do
     Enum.map(props, fn {key, value} ->
@@ -36,11 +43,13 @@ defimpl Renderer, for: Component do
     end)
   end
 
-  defp initialize_state(module, props, conn) do
+  defp initialize_state(module, %{id: _} = props, conn) do
     if function_exported?(module, :init, 2) do
       module.init(props, conn)
     else
       module.init(props)
     end
   end
+
+  defp initialize_state(_, _, _), do: %{}
 end
