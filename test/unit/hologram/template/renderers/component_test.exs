@@ -1,14 +1,26 @@
 defmodule Hologram.Template.Renderer.ComponentTest do
   use Hologram.Test.UnitCase, async: true
 
-  alias Hologram.Compiler.IR.{IntegerType, ModuleAttributeOperator, TupleType}
+  alias Hologram.Compiler.IR.AdditionOperator
+  alias Hologram.Compiler.IR.IntegerType
+  alias Hologram.Compiler.IR.ModuleAttributeOperator
+  alias Hologram.Compiler.IR.TupleType
   alias Hologram.Compiler.Reflection
-  alias Hologram.Template.VDOM.{Component, ElementNode, Expression, TextNode}
-  alias Hologram.Template.Renderer
+  alias Hologram.Conn
   alias Hologram.Runtime
+  alias Hologram.Template.Renderer
+  alias Hologram.Template.VDOM.Component
+  alias Hologram.Template.VDOM.ElementNode
+  alias Hologram.Template.VDOM.Expression
+  alias Hologram.Template.VDOM.TextNode
+  alias Hologram.Test.Fixtures.Template.ComponentRenderer.Module1
+  alias Hologram.Test.Fixtures.Template.ComponentRenderer.Module2
+  alias Hologram.Test.Fixtures.Template.ComponentRenderer.Module3
+  alias Hologram.Test.Fixtures.Template.ComponentRenderer.Module4
+  alias Hologram.Test.Fixtures.Template.ComponentRenderer.Module5
 
-  @module_4 Hologram.Test.Fixtures.Template.ComponentRenderer.Module4
-  @module_5 Hologram.Test.Fixtures.Template.ComponentRenderer.Module5
+  @bindings %{test_outer_binding: 123}
+  @conn %Conn{}
 
   setup do
     [app_path: "#{@fixtures_path}/template/renderers/component_renderer"]
@@ -19,142 +31,175 @@ defmodule Hologram.Template.Renderer.ComponentTest do
     :ok
   end
 
-  test "html only in template" do
-    module_1 = Hologram.Test.Fixtures.Template.ComponentRenderer.Module1
-    module_def = Reflection.module_definition(module_1)
-    bindings = %{context: nil}
-    component = %Component{module: module_1, module_def: module_def}
-
-    result = Renderer.render(component, bindings)
-    expected = "<span>test</span>"
-
-    assert result == expected
-  end
-
-  test "html and nested un-aliased component in template" do
-    module_2 = Hologram.Test.Fixtures.Template.ComponentRenderer.Module2
-    module_def = Reflection.module_definition(module_2)
-    bindings = %{context: nil}
-    component = %Component{module: module_2, module_def: module_def}
-
-    result = Renderer.render(component, bindings)
-    expected = "<div><span>test</span></div>"
-
-    assert result == expected
-  end
-
-  test "html and nested aliased component in template" do
-    module_3 = Hologram.Test.Fixtures.Template.ComponentRenderer.Module3
-    module_def = Reflection.module_definition(module_3)
-    bindings = %{context: nil}
-    component = %Component{module: module_3, module_def: module_def}
-
-    result = Renderer.render(component, bindings)
-    expected = "<div><span>test</span></div>"
-
-    assert result == expected
-  end
-
-  test "non-nested slot" do
-    bindings = %{a: 123, context: nil}
-
-    expression = %Expression{
-      ir: %TupleType{
-        data: [%ModuleAttributeOperator{name: :a}]
+  describe "props" do
+    test "text prop" do
+      component = %Component{
+        module: Module1,
+        props: %{
+          test_prop: [%TextNode{content: "test_prop_value"}]
+        }
       }
-    }
 
-    children = [
-      %TextNode{content: "test_text"},
-      expression,
-      %ElementNode{attrs: %{}, children: [], tag: "h1"}
-    ]
+      result = Renderer.render(component, @conn, @bindings)
+      expected = {"abc.test_prop_value.xyz", %{}}
 
-    props = %{
-      a: [
+      assert result == expected
+    end
+
+    test "expression prop" do
+      component = %Component{
+        module: Module1,
+        props: %{
+          test_prop: [
+            %Expression{
+              ir: %TupleType{
+                data: [
+                  %AdditionOperator{
+                    left: %IntegerType{value: 10},
+                    right: %ModuleAttributeOperator{name: :test_outer_binding}
+                  }
+                ]
+              }
+            }
+          ]
+        }
+      }
+
+      result = Renderer.render(component, @conn, @bindings)
+      expected = {"abc.133.xyz", %{}}
+
+      assert result == expected
+    end
+
+    test "multiple parts prop" do
+      component = %Component{
+        module: Module1,
+        props: %{
+          test_prop: [
+            %TextNode{content: "test_prop_value"},
+            %Expression{
+              ir: %TupleType{
+                data: [
+                  %AdditionOperator{
+                    left: %IntegerType{value: 10},
+                    right: %ModuleAttributeOperator{name: :test_outer_binding}
+                  }
+                ]
+              }
+            }
+          ]
+        }
+      }
+
+      result = Renderer.render(component, @conn, @bindings)
+      expected = {"abc.test_prop_value133.xyz", %{}}
+
+      assert result == expected
+    end
+  end
+
+  describe "bindings" do
+    test "bindings are combined from props and initial state" do
+      component = %Component{
+        module: Module2,
+        props: %{
+          test_prop: [
+            %TextNode{content: "test_prop_value"},
+          ]
+        }
+      }
+
+      result = Renderer.render(component, @conn, @bindings)
+      expected = {"1.test_prop_value", %{test_state: 1}}
+
+      assert result == expected
+    end
+
+    test "initial state has precendence over props in bindings" do
+      component = %Component{
+        module: Module2,
+        props: %{
+          test_state: [
+            %TextNode{content: "try_to_override_test_state"}
+          ],
+          test_prop: [
+            %TextNode{content: "test_prop_value"},
+          ]
+        }
+      }
+
+      result = Renderer.render(component, @conn, @bindings)
+      expected = {"1.test_prop_value", %{test_state: 1}}
+
+      assert result == expected
+    end
+  end
+
+  describe "state initialization" do
+    test "init/1" do
+      component = %Component{
+        module: Module3,
+        props: %{
+          test_prop: [
+            %TextNode{content: "test_prop_value"},
+          ]
+        }
+      }
+
+      result = Renderer.render(component, @conn, @bindings)
+      expected = {"abc.test_prop_value.xyz", %{test_state: "test_prop_value"}}
+
+      assert result == expected
+    end
+
+    test "init/2" do
+      component = %Component{
+        module: Module4,
+        props: %{
+          test_prop: [
+            %TextNode{content: "test_prop_value"},
+          ]
+        }
+      }
+
+      conn = %Conn{
+        session: %{
+          test_session_key: "test_session_value"
+        }
+      }
+
+      result = Renderer.render(component, conn, @bindings)
+
+      expected = {
+        "test_prop_value.test_session_value",
+        %{test_state_1: "test_prop_value", test_state_2: "test_session_value"}
+      }
+
+      assert result == expected
+    end
+  end
+
+  test "default slot" do
+    component = %Component{
+      module: Module5,
+      children: [
+        %TextNode{content: "abc."},
         %Expression{
           ir: %TupleType{
-            data: [%IntegerType{value: 123}]
+            data: [
+              %AdditionOperator{
+                left: %IntegerType{value: 10},
+                right: %ModuleAttributeOperator{name: :test_outer_binding}
+              }
+            ]
           }
-        }
+        },
+        %TextNode{content: ".xyz"},
       ]
     }
 
-    module_def = Reflection.module_definition(@module_4)
-
-    component = %Component{
-      module: @module_4,
-      module_def: module_def,
-      children: children,
-      props: props
-    }
-
-    result = Renderer.render(component, bindings)
-    expected = "<div>div node</div>\ntest_text123<h1></h1>\n<span>span node</span>"
-
-    assert result == expected
-  end
-
-  test "nested slot" do
-    bindings = %{a: 1, b: 2, context: nil}
-
-    expression_1 = %Expression{
-      ir: %TupleType{
-        data: [%ModuleAttributeOperator{name: :a}]
-      }
-    }
-
-    expression_2 = %Expression{
-      ir: %TupleType{
-        data: [%ModuleAttributeOperator{name: :b}]
-      }
-    }
-
-    module_def_5 = Reflection.module_definition(@module_5)
-
-    a_value = [
-      %Expression{
-        ir: %TupleType{
-          data: [%IntegerType{value: 1}]
-        }
-      }
-    ]
-
-    b_value = [
-      %Expression{
-        ir: %TupleType{
-          data: [%IntegerType{value: 2}]
-        }
-      }
-    ]
-
-    component_2 = %Component{
-      module: @module_5,
-      module_def: module_def_5,
-      children: [
-        %TextNode{content: "text_node_2"},
-        expression_2
-      ],
-      props: %{b: b_value}
-    }
-
-    module_def_4 = Reflection.module_definition(@module_4)
-
-    component_1 = %Component{
-      module: @module_4,
-      module_def: module_def_4,
-      children: [
-        %TextNode{content: "text_node_1"},
-        expression_1,
-        component_2
-      ],
-      props: %{a: a_value}
-    }
-
-    result = Renderer.render(component_1, bindings)
-
-    expected =
-      "<div>div node</div>\ntext_node_11<h1>h1 node</h1>\ntext_node_22\n<p>p node</p>\n<span>span node</span>"
+    result = Renderer.render(component, @conn, @bindings)
+    expected = {"<span>abc.133.xyz</span>", %{}}
 
     assert result == expected
   end

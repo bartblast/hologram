@@ -1,13 +1,13 @@
 defmodule Hologram.Test.Fixtures.Template.ComponentRenderer.Module1 do
   use Hologram.Component
 
-  def init do
+  def init(_props) do
     %{}
   end
 
   def template do
     ~H"""
-    <span>test</span>
+    abc.{@test_prop}.xyz
     """
   end
 end

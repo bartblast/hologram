@@ -1,14 +1,15 @@
 defmodule Hologram.Test.Fixtures.Template.ComponentRenderer.Module3 do
   use Hologram.Component
-  alias Hologram.Test.Fixtures.Template.ComponentRenderer.Module1, warn: false
 
-  def init do
-    %{}
+  def init(props) do
+    %{
+      test_state: props.test_prop
+    }
   end
 
   def template do
     ~H"""
-    <div><Module1 /></div>
+    abc.{@test_state}.xyz
     """
   end
 end
