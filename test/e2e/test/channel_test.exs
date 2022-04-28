@@ -2,6 +2,7 @@ defmodule HologramE2E.ChannelTest do
   use HologramE2E.Test.ChannelCase, async: false
 
   alias Hologram.Compiler.Serializer
+  alias Hologram.Conn
   alias Hologram.Runtime
   alias Hologram.Runtime.{Channel, Socket}
   alias Hologram.Template.Renderer
@@ -166,7 +167,7 @@ defmodule HologramE2E.ChannelTest do
       }
     }
 
-    html = Renderer.render(@module_5, %{})
+    html = Renderer.render(@module_5, %Conn{}, %{})
 
     expected_response =
       {:test_target_id_value, :__redirect__, %{html: html, url: "/test-route-5"}}

@@ -2,6 +2,7 @@ defmodule Hologram.Runtime.Channel do
   use Phoenix.Channel
 
   alias Hologram.Compiler.{Decoder, Serializer}
+  alias Hologram.Conn
   alias Hologram.Template.Renderer
 
   def join("hologram", _, socket) do
@@ -48,7 +49,7 @@ defmodule Hologram.Runtime.Channel do
       |> Enum.into(%{})
 
     if command == :__redirect__ do
-      html = Renderer.render(params.page, %{})
+      html = Renderer.render(params.page, %Conn{}, %{})
       # DEFER: inject params
       url = params.page.route()
       {:__redirect__, html: html, url: url}
