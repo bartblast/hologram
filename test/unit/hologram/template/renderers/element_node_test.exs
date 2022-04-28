@@ -1,16 +1,19 @@
 defmodule Hologram.Template.Renderer.ElementNodeTest do
   use Hologram.Test.UnitCase, async: true
 
-  alias Hologram.Compiler.IR.{
-    BooleanType,
-    IntegerType,
-    ModuleAttributeOperator,
-    NilType,
-    TupleType
-  }
-
+  alias Hologram.Compiler.IR.BooleanType
+  alias Hologram.Compiler.IR.IntegerType
+  alias Hologram.Compiler.IR.ModuleAttributeOperator
+  alias Hologram.Compiler.IR.NilType
+  alias Hologram.Compiler.IR.TupleType
+  alias Hologram.Runtime
   alias Hologram.Template.Renderer
-  alias Hologram.Template.VDOM.{ElementNode, Expression, TextNode}
+  alias Hologram.Template.VDOM.Component
+  alias Hologram.Template.VDOM.ElementNode
+  alias Hologram.Template.VDOM.Expression
+  alias Hologram.Template.VDOM.TextNode
+  alias Hologram.Test.Fixtures.Template.ElementNodeRenderer.Module1
+  alias Hologram.Test.Fixtures.Template.ElementNodeRenderer.Module2
 
   @attrs %{
     attr_2: %{
@@ -47,18 +50,22 @@ defmodule Hologram.Template.Renderer.ElementNodeTest do
     %TextNode{content: "xyz"}
   ]
 
+  @conn %Hologram.Conn{}
+
   test "non-void element without attributes or children" do
     element_node = %ElementNode{attrs: %{}, children: [], tag: "div"}
-    result = Renderer.render(element_node, @bindings)
 
-    assert result == "<div></div>"
+    result = Renderer.render(element_node, @conn, @bindings)
+    expected = {"<div></div>", %{}}
+
+    assert result == expected
   end
 
   test "non-void element with attributes" do
     element_node = %ElementNode{attrs: @attrs, children: [], tag: "div"}
 
-    result = Renderer.render(element_node, @bindings)
-    expected = "<div attr_1=\"123\" attr_2=\"test_text_2\"></div>"
+    result = Renderer.render(element_node, @conn, @bindings)
+    expected = {"<div attr_1=\"123\" attr_2=\"test_text_2\"></div>", %{}}
 
     assert result == expected
   end
@@ -66,8 +73,8 @@ defmodule Hologram.Template.Renderer.ElementNodeTest do
   test "non-void element with children" do
     element_node = %ElementNode{attrs: %{}, children: @children, tag: "div"}
 
-    result = Renderer.render(element_node, @bindings)
-    expected = "<div>abc123xyz</div>"
+    result = Renderer.render(element_node, @conn, @bindings)
+    expected = {"<div>abc123xyz</div>", %{}}
 
     assert result == expected
   end
@@ -75,33 +82,26 @@ defmodule Hologram.Template.Renderer.ElementNodeTest do
   test "non-void element with children and attributes" do
     element_node = %ElementNode{attrs: @attrs, children: @children, tag: "div"}
 
-    result = Renderer.render(element_node, @bindings)
-    expected = "<div attr_1=\"123\" attr_2=\"test_text_2\">abc123xyz</div>"
+    result = Renderer.render(element_node, @conn, @bindings)
+    expected = {"<div attr_1=\"123\" attr_2=\"test_text_2\">abc123xyz</div>", %{}}
 
     assert result == expected
   end
 
   test "void element without attributes" do
     element_node = %ElementNode{attrs: %{}, children: [], tag: "input"}
-    result = Renderer.render(element_node, @bindings)
 
-    assert result == "<input />"
+    result = Renderer.render(element_node, @conn, @bindings)
+    expected = {"<input />", %{}}
+
+    assert result == expected
   end
 
   test "void element with attributes" do
     element_node = %ElementNode{attrs: @attrs, children: [], tag: "input"}
 
-    result = Renderer.render(element_node, @bindings)
-    expected = "<input attr_1=\"123\" attr_2=\"test_text_2\" />"
-
-    assert result == expected
-  end
-
-  test "slot tag" do
-    element_node = %ElementNode{attrs: %{}, children: @children, tag: "slot"}
-
-    result = Renderer.render(element_node, @bindings, default: @children)
-    expected = "abc123xyz"
+    result = Renderer.render(element_node, @conn, @bindings)
+    expected = {"<input attr_1=\"123\" attr_2=\"test_text_2\" />", %{}}
 
     assert result == expected
   end
@@ -124,8 +124,8 @@ defmodule Hologram.Template.Renderer.ElementNodeTest do
 
     element_node = %ElementNode{attrs: attrs, children: [], tag: "input"}
 
-    result = Renderer.render(element_node, @bindings)
-    expected = "<input non_pruned_attr=\"test_non_pruned_attr_content\" />"
+    result = Renderer.render(element_node, @conn, @bindings)
+    expected = {"<input non_pruned_attr=\"test_non_pruned_attr_content\" />", %{}}
 
     assert result == expected
   end
@@ -145,9 +145,11 @@ defmodule Hologram.Template.Renderer.ElementNodeTest do
     }
 
     element_node = %ElementNode{attrs: attrs, children: [], tag: "div"}
-    result = Renderer.render(element_node, @bindings)
 
-    assert result == "<div></div>"
+    result = Renderer.render(element_node, @conn, @bindings)
+    expected = {"<div></div>", %{}}
+
+    assert result == expected
   end
 
   test "'if' attribute which evaluates to a falsy value" do
@@ -165,9 +167,11 @@ defmodule Hologram.Template.Renderer.ElementNodeTest do
     }
 
     element_node = %ElementNode{attrs: attrs, children: [], tag: "div"}
-    result = Renderer.render(element_node, @bindings)
 
-    assert result == ""
+    result = Renderer.render(element_node, @conn, @bindings)
+    expected = {"", %{}}
+
+    assert result == expected
   end
 
   test "boolean attribute" do
@@ -179,9 +183,11 @@ defmodule Hologram.Template.Renderer.ElementNodeTest do
     }
 
     element_node = %ElementNode{attrs: attrs, children: [], tag: "div"}
-    result = Renderer.render(element_node, @bindings)
 
-    assert result == "<div test_attr></div>"
+    result = Renderer.render(element_node, @conn, @bindings)
+    expected = {"<div test_attr></div>", %{}}
+
+    assert result == expected
   end
 
   test "expression attribute which evaluates to false" do
@@ -199,9 +205,11 @@ defmodule Hologram.Template.Renderer.ElementNodeTest do
     }
 
     element_node = %ElementNode{attrs: attrs, children: [], tag: "div"}
-    result = Renderer.render(element_node, @bindings)
 
-    assert result == "<div></div>"
+    result = Renderer.render(element_node, @conn, @bindings)
+    expected = {"<div></div>", %{}}
+
+    assert result == expected
   end
 
   test "expression attribute which evaluates to nil" do
@@ -219,8 +227,68 @@ defmodule Hologram.Template.Renderer.ElementNodeTest do
     }
 
     element_node = %ElementNode{attrs: attrs, children: [], tag: "div"}
-    result = Renderer.render(element_node, @bindings)
 
-    assert result == "<div test_attr></div>"
+    result = Renderer.render(element_node, @conn, @bindings)
+    expected = {"<div test_attr></div>", %{}}
+
+    assert result == expected
+  end
+
+  test "default slot" do
+    element_node = %ElementNode{attrs: %{}, children: @children, tag: "slot"}
+
+    slot_bindings = %{a: 987}
+    slots = {slot_bindings, default: @children}
+
+    result = Renderer.render(element_node, @conn, @bindings, slots)
+    expected = {"abc987xyz", %{}}
+
+    assert result == expected
+  end
+
+  test "nested components state" do
+    [app_path: "#{@fixtures_path}/template/renderers/element_node_renderer"]
+    |> compile()
+
+    Runtime.run()
+
+    component_1 = %Component{
+      module: Module1,
+      props: %{
+        id: [
+          %TextNode{content: "component_1_id"},
+        ]
+      }
+    }
+
+    component_2 = %Component{
+      module: Module2,
+      props: %{
+        id: [
+          %TextNode{content: "component_2_id"},
+        ]
+      }
+    }
+
+    children = [
+      %TextNode{content: "abc"},
+      component_1,
+      %TextNode{content: "xyz"},
+      component_2
+    ]
+
+    element_node = %ElementNode{attrs: %{}, children: children, tag: "div"}
+
+    result = Renderer.render(element_node, @conn, @bindings)
+
+    expected_initial_state = %{
+      component_1_id: %{component_1_state_key: "component_1_state_value"},
+      component_2_id: %{component_2_state_key: "component_2_state_value"},
+    }
+
+    expected_html = "<div>abc(in component 1)xyz(in component 2)</div>"
+    expected = {expected_html, expected_initial_state}
+
+    assert result == expected
   end
 end

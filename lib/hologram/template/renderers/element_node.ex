@@ -18,13 +18,13 @@ defimpl Renderer, for: ElementNode do
   # see: https://html.spec.whatwg.org/multipage/syntax.html#void-elements
   @void_elems ~w(area base br col embed hr img input link meta param source track wbr)
 
-  def render(%{tag: "slot"}, conn, bindings, slots) do
-    Renderer.render(slots[:default], conn, bindings, nil)
+  def render(%{tag: "slot"}, conn, _, {slot_bindings, default: default_slot}) do
+    Renderer.render(default_slot, conn, slot_bindings, nil)
   end
 
   def render(%{attrs: attrs} = node, conn, bindings, slots) do
     if Map.has_key?(attrs, :if) && !Evaluator.evaluate(hd(attrs.if.value), bindings) do
-      ""
+      {"", %{}}
     else
       render_element(node, conn, bindings, slots)
     end
@@ -61,18 +61,23 @@ defimpl Renderer, for: ElementNode do
   end
 
   defp render_children(children, conn, bindings, slots) do
-    Enum.map(children, fn child -> Renderer.render(child, conn, bindings, slots) end)
-    |> Enum.join("")
+    Enum.reduce(children, {"", %{}}, fn child, {html, initial_state} ->
+      {child_html, child_initial_state} = Renderer.render(child, conn, bindings, slots)
+      {html <> child_html, Map.merge(initial_state, child_initial_state)}
+    end)
   end
 
   defp render_element(%{attrs: attrs, children: children, tag: tag}, conn, bindings, slots) do
     attrs_html = render_attrs(attrs, bindings)
-    children_html = render_children(children, conn, bindings, slots)
+    {children_html, children_initial_state} = render_children(children, conn, bindings, slots)
 
-    if Enum.member?(@void_elems, tag) do
-      "<#{tag}#{attrs_html} />"
-    else
-      "<#{tag}#{attrs_html}>#{children_html}</#{tag}>"
-    end
+    html =
+      if Enum.member?(@void_elems, tag) do
+        "<#{tag}#{attrs_html} />"
+      else
+        "<#{tag}#{attrs_html}>#{children_html}</#{tag}>"
+      end
+
+    {html, children_initial_state}
   end
 end
