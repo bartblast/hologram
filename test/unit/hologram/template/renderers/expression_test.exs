@@ -2,6 +2,7 @@ defmodule Hologram.Template.Renderer.ExpressionTest do
   use Hologram.Test.UnitCase, async: true
 
   alias Hologram.Compiler.IR.{ModuleAttributeOperator, TupleType}
+  alias Hologram.Conn
   alias Hologram.Template.VDOM.Expression
   alias Hologram.Template.Renderer
 
@@ -12,10 +13,9 @@ defmodule Hologram.Template.Renderer.ExpressionTest do
       }
     }
 
-    conn = %Hologram.Conn{}
     bindings = %{a: 123}
 
-    result = Renderer.render(expression, conn, bindings)
+    result = Renderer.render(expression, %Conn{}, bindings)
     expected = {"123", %{}}
 
     assert result == expected
