@@ -4,13 +4,12 @@ defmodule Hologram.Router do
   alias Hologram.Runtime.StaticDigestStore
   alias Hologram.Template.Renderer
   alias Phoenix.Controller
-  alias Plug.Conn
 
   def init(opts) do
     opts
   end
 
-  def call(%Conn{request_path: "/hologram/manifest.js"} = conn, _opts) do
+  def call(%Plug.Conn{request_path: "/hologram/manifest.js"} = conn, _opts) do
     body = StaticDigestStore.get_manifest()
 
     conn
@@ -20,7 +19,7 @@ defmodule Hologram.Router do
     |> Conn.halt()
   end
 
-  def call(%Conn{request_path: request_path} = conn, _opts) do
+  def call(%Plug.Conn{request_path: request_path} = phx_conn, _opts) do
     arg =
       get_path_segments(request_path)
       |> List.to_tuple()
@@ -30,10 +29,12 @@ defmodule Hologram.Router do
 
     if match_result do
       {page, params} = match_result
-      output = Renderer.render(page, params)
-      Controller.html(conn, output)
+      holo_conn = %Hologram.Conn{params: params}
+      bindings = %{}
+      output = Renderer.render(page, holo_conn, bindings)
+      Controller.html(phx_conn, output)
     else
-      conn
+      phx_conn
     end
   end
 
