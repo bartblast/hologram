@@ -9,13 +9,14 @@ defmodule Hologram.UI.Runtime do
     ~H"""
     <script>
       window.hologramArgs = \{
-        class: "{@context.__class__}",
-        state: "{@context.__state__}"
+        class: "{@__context__.__class__}",
+        context: {@__context__.__serialized_context__}
+        state: ###SERIALIZED_STATE###
       \}
     </script>
     <script src="/hologram/manifest.js"></script>
     <script src={static_path("/hologram/runtime.js")}></script>
-    <script src="/hologram/page-{@context.__digest__}.js"></script>
+    <script src="/hologram/page-{@__context__.__digest__}.js"></script>
     """
   end
 end

@@ -1,7 +1,10 @@
 defmodule Hologram.Test.Fixtures.Template.PageRenderer.Module1 do
   use Hologram.Page
 
-  layout Hologram.Test.Fixtures.Template.PageRenderer.Module2
+  alias Hologram.Test.Fixtures.Template.PageRenderer.Module2
+  alias Hologram.Test.Fixtures.Template.PageRenderer.Module3, warn: false
+
+  layout Module2
 
   route "/test-route-1"
 
@@ -16,6 +19,7 @@ defmodule Hologram.Test.Fixtures.Template.PageRenderer.Module1 do
   def template do
     ~H"""
     page template assign {@a}, page template param {@c}, page template conn session {@d}
+    <Module3 id="component_3_id" />
     """
   end
 end
