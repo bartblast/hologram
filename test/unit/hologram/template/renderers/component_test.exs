@@ -19,8 +19,9 @@ defmodule Hologram.Template.Renderer.ComponentTest do
   alias Hologram.Test.Fixtures.Template.ComponentRenderer.Module4
   alias Hologram.Test.Fixtures.Template.ComponentRenderer.Module5
   alias Hologram.Test.Fixtures.Template.ComponentRenderer.Module6
+  alias Hologram.Test.Fixtures.Template.ComponentRenderer.Module8
 
-  @bindings %{test_outer_binding: 123}
+  @bindings %{__context__: %{}, test_outer_binding: 123}
   @conn %Conn{}
 
   setup do
@@ -242,6 +243,32 @@ defmodule Hologram.Template.Renderer.ComponentTest do
 
     result = Renderer.render(component, @conn, @bindings)
     expected = {"<span>abc.133.xyz</span>", %{}}
+
+    assert result == expected
+  end
+
+  test "context passing" do
+    component = %Component{
+      module: Module8,
+      props: %{
+        id: [
+          %TextNode{content: "component_8_id"},
+        ],
+      }
+    }
+
+    context = %{test_context_key: "test_context_value"}
+    bindings = Map.put(@bindings, :__context__, context)
+
+    result = Renderer.render(component, @conn, bindings)
+
+    expected_initial_state = %{
+      component_8_id: %{component_8_state_key: "component_8_state_value"},
+      component_9_id: %{component_9_state_key: "component_9_state_value"}
+    }
+
+    expected_html = "abc(in component 9: test_context_value)xyz"
+    expected = {expected_html, expected_initial_state}
 
     assert result == expected
   end

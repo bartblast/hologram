@@ -8,8 +8,8 @@ defimpl Renderer, for: Component do
   def render(component, conn, outer_bindings, _) do
     props = evaluate_props(component.props, outer_bindings)
     initial_state = initialize_state(component.module, props, conn)
-    bindings = Map.merge(props, initial_state)
     slots = {outer_bindings, default: component.children}
+    bindings = aggregate_bindings(props, initial_state, outer_bindings)
 
     {html, nested_initial_state} =
       TemplateStore.get!(component.module)
@@ -17,6 +17,12 @@ defimpl Renderer, for: Component do
 
     state = aggregate_state(nested_initial_state, initial_state, props)
     {html, state}
+  end
+
+  defp aggregate_bindings(props, initial_state, outer_bindings) do
+    props
+    |> Map.merge(initial_state)
+    |> Map.put(:__context__, outer_bindings.__context__)
   end
 
   defp aggregate_state(nested_initial_state, initial_state, %{id: id}) do
