@@ -1,5 +1,5 @@
 defmodule Hologram.Template.Renderer.NodeListTest do
-  use Hologram.Test.UnitCase, async: true
+  use Hologram.Test.UnitCase, async: false
 
   alias Hologram.Conn
   alias Hologram.Runtime

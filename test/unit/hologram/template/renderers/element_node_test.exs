@@ -1,5 +1,5 @@
 defmodule Hologram.Template.Renderer.ElementNodeTest do
-  use Hologram.Test.UnitCase, async: true
+  use Hologram.Test.UnitCase, async: false
 
   alias Hologram.Compiler.IR.BooleanType
   alias Hologram.Compiler.IR.IntegerType
