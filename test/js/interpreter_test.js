@@ -58,13 +58,13 @@ describe("$addition_operator()", () => {
   });
 });
 
-describe("caseExpression()", () => {
+describe("$case_expression()", () => {
   it("returns the result of the clauses anonymous function given", () => {
     const clausesAnonFun = (param) => {
       return param
     }
 
-    const result = Interpreter.caseExpression(123, clausesAnonFun)
+    const result = Interpreter.$case_expression(123, clausesAnonFun)
     assert.equal(result, 123)
   })
 
@@ -73,7 +73,7 @@ describe("caseExpression()", () => {
       return param
     }
 
-    const result = Interpreter.caseExpression({}, clausesAnonFun)
+    const result = Interpreter.$case_expression({}, clausesAnonFun)
     assertFrozen(result)
   })
 })

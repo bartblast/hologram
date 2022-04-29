@@ -23,7 +23,7 @@ export default class Interpreter {
     }
   }
 
-  static caseExpression(condition, clausesAnonFun) {
+  static $case_expression(condition, clausesAnonFun) {
     const result = clausesAnonFun(condition)
     return Utils.freeze(result)
   }

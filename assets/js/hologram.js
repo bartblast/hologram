@@ -64,10 +64,6 @@ export default class Hologram {
 
   // DELEGATES
 
-  static caseExpression(condition, clausesAnonFun) {
-    return Interpreter.caseExpression(condition, clausesAnonFun);
-  }
-
   static isFunctionArgsPatternMatched(params, args) {
     return Interpreter.isFunctionArgsPatternMatched(params, args);
   }

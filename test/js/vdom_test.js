@@ -3,7 +3,7 @@
 import { assert, assertFrozen, cleanup } from "./support/commons";
 beforeEach(() => cleanup())
 
-import SpecialForms from "../../assets/js/hologram/elixir/kernel/special_forms";
+import Interpreter from "../../assets/js/hologram/interpreter";
 import Target from "../../assets/js/hologram/target";
 import Type from "../../assets/js/hologram/type";
 import Store from "../../assets/js/hologram/store";
@@ -14,7 +14,7 @@ elems[Type.atomKey("a")] = Type.integer(1)
 
 const bindings = Type.map(elems)
 const key = Type.atom("a")
-const callback = ($bindings) => { return Type.tuple([SpecialForms.$dot($bindings, key)])}
+const callback = ($bindings) => { return Type.tuple([Interpreter.$dot_operator($bindings, key)])}
 
 describe("aggregateComponentBindings()", () => {
   it("aggregates component bindings", () => {
