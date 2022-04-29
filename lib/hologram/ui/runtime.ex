@@ -10,7 +10,7 @@ defmodule Hologram.UI.Runtime do
     <script>
       window.hologramArgs = \{
         class: "{@__context__.__class__}",
-        context: {@__context__.__serialized_context__}
+        context: {@__context__.__serialized_context__},
         state: ###SERIALIZED_STATE###
       \}
     </script>
