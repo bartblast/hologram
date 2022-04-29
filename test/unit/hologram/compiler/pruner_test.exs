@@ -137,14 +137,14 @@ defmodule Hologram.Compiler.PrunerTest do
       assert function_kept?(pruned_module, tested_module, :template, 0, context)
     end
 
-    test "layout init", context do
+    test "layout init/1", context do
       pruned_module = Hologram.Test.Fixtures.Compiler.Pruner.Module38
       tested_module = Hologram.Test.Fixtures.Compiler.Pruner.Module39
 
-      assert function_kept?(pruned_module, tested_module, :init, 0, context)
+      assert function_kept?(pruned_module, tested_module, :init, 1, context)
     end
 
-    test "functions reachable from layout init", context do
+    test "functions reachable from layout init/1", context do
       pruned_module = Hologram.Test.Fixtures.Compiler.Pruner.Module40
       tested_module = Hologram.Test.Fixtures.Compiler.Pruner.Module42
 
@@ -189,14 +189,14 @@ defmodule Hologram.Compiler.PrunerTest do
       assert function_kept?(pruned_module, tested_module, :template, 0, context)
     end
 
-    test "component init", context do
+    test "component init/1", context do
       pruned_module = Hologram.Test.Fixtures.Compiler.Pruner.Module43
       tested_module = Hologram.Test.Fixtures.Compiler.Pruner.Module44
 
-      assert function_kept?(pruned_module, tested_module, :init, 0, context)
+      assert function_kept?(pruned_module, tested_module, :init, 1, context)
     end
 
-    test "functions reachable from component init", context do
+    test "functions reachable from component init/1", context do
       pruned_module = Hologram.Test.Fixtures.Compiler.Pruner.Module45
       tested_module = Hologram.Test.Fixtures.Compiler.Pruner.Module47
 
