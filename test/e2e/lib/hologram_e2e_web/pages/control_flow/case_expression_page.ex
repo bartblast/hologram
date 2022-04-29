@@ -3,7 +3,7 @@ defmodule HologramE2E.ControlFlow.CaseExpressionPage do
 
   route "/e2e/control-flow/case-expression"
 
-  def init do
+  def init(_params, _conn) do
     %{
       condition: 2,
       result: 0

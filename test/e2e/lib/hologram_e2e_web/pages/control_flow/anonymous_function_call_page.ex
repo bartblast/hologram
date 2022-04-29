@@ -3,7 +3,7 @@ defmodule HologramE2E.ControlFlow.AnonymousFunctionCallPage do
 
   route "/e2e/control-flow/anonymous-function-call"
 
-  def init do
+  def init(_params, _conn) do
     %{
       result: 0
     }

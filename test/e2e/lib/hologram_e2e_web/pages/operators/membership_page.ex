@@ -3,7 +3,7 @@ defmodule HologramE2E.Operators.MembershipPage do
 
   route "/e2e/operators/membership"
 
-  def init do
+  def init(_params, _conn) do
     %{
       left: 1,
       right: [1, 2],

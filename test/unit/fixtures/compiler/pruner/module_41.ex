@@ -2,7 +2,7 @@ defmodule Hologram.Test.Fixtures.Compiler.Pruner.Module41 do
   use Hologram.Layout
   alias Hologram.Test.Fixtures.Compiler.Pruner.Module42
 
-  def init do
+  def init(_conn) do
     Module42.test_fun_42a()
   end
 

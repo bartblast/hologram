@@ -3,7 +3,7 @@ defmodule HologramE2E.PatternMatching.MapPage do
 
   route "/e2e/pattern-matching/map"
 
-  def init do
+  def init(_params, _conn) do
     %{
       case_condition_value: %{a: 3, b: 4},
       function_call_value: %{a: 2, b: 3},

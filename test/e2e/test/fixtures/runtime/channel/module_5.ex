@@ -4,7 +4,7 @@ defmodule HologramE2E.Test.Fixtures.Runtime.Channel.Module5 do
   route "/test-route-5"
   layout HologramE2E.Test.Fixtures.Runtime.Channel.Module8
 
-  def init do
+  def init(_params, _conn) do
     %{}
   end
 

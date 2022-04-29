@@ -1,7 +1,7 @@
 defmodule HologramE2E.DefaultLayout do
   use Hologram.Layout
 
-  def init do
+  def init(_conn) do
     %{
       text: "",
       value: :dl

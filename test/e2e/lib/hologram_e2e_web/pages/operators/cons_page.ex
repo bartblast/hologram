@@ -3,7 +3,7 @@ defmodule HologramE2E.Operators.ConsPage do
 
   route "/e2e/operators/cons"
 
-  def init do
+  def init(_params, _conn) do
     %{
       head: 1,
       tail: [2, 3],

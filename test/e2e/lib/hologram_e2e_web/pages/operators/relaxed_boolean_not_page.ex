@@ -3,7 +3,7 @@ defmodule HologramE2E.Operators.RelaxedBooleanNotPage do
 
   route "/e2e/operators/relaxed-boolean-not"
 
-  def init do
+  def init(_params, _conn) do
     %{
       value: false,
       result: 0

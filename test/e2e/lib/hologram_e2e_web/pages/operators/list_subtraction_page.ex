@@ -3,7 +3,7 @@ defmodule HologramE2E.Operators.ListSubtractionPage do
 
   route "/e2e/operators/list-subtraction"
 
-  def init do
+  def init(_params, _conn) do
     %{
       left: [1, 2, 3, 1, 2, 3, 1],
       right: [1, 3, 3, 4],

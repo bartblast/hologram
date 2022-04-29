@@ -3,7 +3,7 @@ defmodule HologramE2E.Operators.ListConcatenationPage do
 
   route "/e2e/operators/list-concatenation"
 
-  def init do
+  def init(_params, _conn) do
     %{
       left: [1, 2],
       right: [3, 4],

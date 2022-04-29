@@ -3,7 +3,7 @@ defmodule HologramE2E.Operators.RelaxedBooleanAndPage do
 
   route "/e2e/operators/relaxed-boolean-and"
 
-  def init do
+  def init(_params, _conn) do
     %{
       left: 1,
       right: true,

@@ -3,7 +3,7 @@ defmodule HologramE2E.Operators.MultiplicationPage do
 
   route "/e2e/operators/multiplication"
 
-  def init do
+  def init(_params, _conn) do
     %{
       left: 2,
       right: 3,

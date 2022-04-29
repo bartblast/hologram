@@ -3,7 +3,7 @@ defmodule HologramE2E.Operators.EqualToPage do
 
   route "/e2e/operators/equal-to"
 
-  def init do
+  def init(_params, _conn) do
     %{
       left: 2,
       right: 2,

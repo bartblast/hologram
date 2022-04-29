@@ -3,7 +3,7 @@ defmodule HologramE2E.Types.AnonymousFunctionPage do
 
   route "/e2e/types/anonymous-function"
 
-  def init do
+  def init(_params, _conn) do
     %{
       result: 0
     }

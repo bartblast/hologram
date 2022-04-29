@@ -3,7 +3,7 @@ defmodule HologramE2E.PatternMatching.ConsOperatorPage do
 
   route "/e2e/pattern-matching/cons-operator"
 
-  def init do
+  def init(_params, _conn) do
     %{
       case_condition_value: [3 | [4, 5]],
       function_call_value: [2 | [3, 4]],

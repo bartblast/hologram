@@ -3,7 +3,7 @@ defmodule HologramE2E.Page11 do
 
   route "/e2e/page-11"
 
-  def init do
+  def init(_params, _conn) do
     %{
       text: "Field has not been blurred"
     }

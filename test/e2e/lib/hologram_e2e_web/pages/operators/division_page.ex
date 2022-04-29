@@ -3,7 +3,7 @@ defmodule HologramE2E.Operators.DivisionPage do
 
   route "/e2e/operators/division"
 
-  def init do
+  def init(_params, _conn) do
     %{
       left: 10,
       right: 5,

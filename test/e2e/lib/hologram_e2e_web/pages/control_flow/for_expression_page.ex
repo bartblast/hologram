@@ -3,7 +3,7 @@ defmodule HologramE2E.ControlFlow.ForExpressionPage do
 
   route "/e2e/control-flow/for-expression"
 
-  def init do
+  def init(_params, _conn) do
     %{
       result: 0
     }

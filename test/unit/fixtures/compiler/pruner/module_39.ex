@@ -1,7 +1,7 @@
 defmodule Hologram.Test.Fixtures.Compiler.Pruner.Module39 do
   use Hologram.Layout
 
-  def init do
+  def init(_conn) do
     %{}
   end
 

@@ -3,7 +3,7 @@ defmodule HologramE2E.Page8 do
 
   route "/e2e/page-8"
 
-  def init do
+  def init(_params, _conn) do
     %{
       field_1: "",
       field_2: ""

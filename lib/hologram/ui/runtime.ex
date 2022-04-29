@@ -1,7 +1,7 @@
 defmodule Hologram.UI.Runtime do
   use Hologram.Component
 
-  def init do
+  def init(_props) do
     %{}
   end
 

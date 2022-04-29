@@ -4,7 +4,7 @@ defmodule HologramE2E.Runtime.ActionsPage do
 
   route "/e2e/runtime/actions"
 
-  def init do
+  def init(_params, _conn) do
     %{
       text: "",
       value: :p1,

@@ -5,7 +5,7 @@ defmodule HologramE2E.Operators.ModuleAttributePage do
 
   route "/e2e/operators/module-attribute"
 
-  def init do
+  def init(_params, _conn) do
     %{
       result: 0
     }

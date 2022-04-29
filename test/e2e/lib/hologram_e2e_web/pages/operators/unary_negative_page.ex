@@ -3,7 +3,7 @@ defmodule HologramE2E.Operators.UnaryNegativePage do
 
   route "/e2e/operators/unary-negative"
 
-  def init do
+  def init(_params, _conn) do
     %{
       value: 123,
       result: 0

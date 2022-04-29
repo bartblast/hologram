@@ -1,7 +1,7 @@
 defmodule Hologram.Test.Fixtures.Compiler.Pruner.Module44 do
   use Hologram.Component
 
-  def init do
+  def init(_props) do
     %{}
   end
 

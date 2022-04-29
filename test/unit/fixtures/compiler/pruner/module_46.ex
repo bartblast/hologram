@@ -2,7 +2,7 @@ defmodule Hologram.Test.Fixtures.Compiler.Pruner.Module46 do
   use Hologram.Component
   alias Hologram.Test.Fixtures.Compiler.Pruner.Module47
 
-  def init do
+  def init(_props) do
     Module47.test_fun_47a()
     %{}
   end

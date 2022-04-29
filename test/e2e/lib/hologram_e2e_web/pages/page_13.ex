@@ -3,7 +3,7 @@ defmodule HologramE2E.Page13 do
 
   route "/e2e/page-13"
 
-  def init do
+  def init(_params, _conn) do
     %{
       count: 0
     }

@@ -3,7 +3,7 @@ defmodule HologramE2E.Types.FloatPage do
 
   route "/e2e/types/float"
 
-  def init do
+  def init(_params, _conn) do
     %{
       result_encoding: 0,
       result_decoding: 0

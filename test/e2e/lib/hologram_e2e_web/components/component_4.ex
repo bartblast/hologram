@@ -1,7 +1,7 @@
 defmodule HologramE2E.Component4 do
   use Hologram.Component
 
-  def init do
+  def init(_props) do
     %{
       text: "",
       value: :c4

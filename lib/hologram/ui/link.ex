@@ -1,7 +1,7 @@
 defmodule Hologram.UI.Link do
   use Hologram.Component
 
-  def init do
+  def init(_props) do
     %{}
   end
 

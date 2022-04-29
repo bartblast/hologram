@@ -15,7 +15,7 @@ defmodule Hologram.Commons.MemoryStore do
       end
 
       @impl true
-      def init(_state) do
+      (_state) do
         maybe_create_table()
         truncate_table()
         populate_table()

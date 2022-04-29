@@ -31,7 +31,7 @@ defmodule MyPage do
 
   route "/my-page-path"
 
-  def init do
+  def init(_params, _conn) do
     %{
       count: 0
     }

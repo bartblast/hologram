@@ -3,7 +3,7 @@ defmodule HologramE2E.Operators.AdditionPage do
 
   route "/e2e/operators/addition"
 
-  def init do
+  def init(_params, _conn) do
     %{
       left: 1,
       right: 2,

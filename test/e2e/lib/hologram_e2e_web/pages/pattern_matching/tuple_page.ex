@@ -3,7 +3,7 @@ defmodule HologramE2E.PatternMatching.TuplePage do
 
   route "/e2e/pattern-matching/tuple"
 
-  def init do
+  def init(_params, _conn) do
     %{
       case_condition_value: {3, 4},
       function_call_value: {2, 3},
