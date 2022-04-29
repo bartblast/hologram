@@ -44,7 +44,7 @@ defmodule Hologram.Template.Renderer.PageTest do
         <script>
       window.hologramArgs = {
         class: "Elixir_Hologram_Test_Fixtures_Template_PageRenderer_Module1",
-        context: { type: 'map', data: { '~atom[__class__]': { type: 'string', value: 'Elixir_Hologram_Test_Fixtures_Template_PageRenderer_Module1' }, '~atom[__digest__]': { type: 'string', value: '#{digest}' } } },
+        digest: "#{digest}",
         state: { type: 'map', data: { '~atom[component_3_id]': { type: 'map', data: { '~atom[component_3_state_key]': { type: 'string', value: 'component_3_state_value' } } }, '~atom[layout]': { type: 'map', data: { '~atom[b]': { type: 'integer', value: 987 }, '~atom[e]': { type: 'integer', value: 678 } } }, '~atom[page]': { type: 'map', data: { '~atom[a]': { type: 'integer', value: 123 }, '~atom[c]': { type: 'integer', value: 567 }, '~atom[d]': { type: 'integer', value: 345 } } } } }
       }
     </script>

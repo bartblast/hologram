@@ -1,9 +1,10 @@
 alias Hologram.Compiler.{Helpers, Serializer}
 alias Hologram.Runtime.{PageDigestStore, TemplateStore}
 alias Hologram.Template.Renderer
-alias Hologram.Utils
 
 defimpl Renderer, for: Atom do
+  @state_placeholder "###STATE###"
+
   def render(page_module, conn, _bindings, _slots) do
     context = init_context(page_module)
 
@@ -24,25 +25,23 @@ defimpl Renderer, for: Atom do
       |> Map.put(:layout, layout_state)
       |> Map.put(:page, page_state)
 
+    pattern = "state: #{@state_placeholder}"
     serialized_state = Serializer.serialize(initial_state)
+    replacement = "state: #{serialized_state}"
 
     """
     <!DOCTYPE html>
     #{html}\
     """
-    |> String.replace("###SERIALIZED_STATE###", serialized_state)
+    |> String.replace(pattern, replacement)
   end
 
   defp init_context(page_module) do
-    context =
-      %{
-        __class__: Helpers.class_name(page_module),
-        __digest__: PageDigestStore.get!(page_module)
-      }
-
-    serialized_context = Serializer.serialize(context)
-
-    Map.put(context, :__serialized_context__, serialized_context)
+    %{
+      __class__: Helpers.class_name(page_module),
+      __digest__: PageDigestStore.get!(page_module),
+      __state__: @state_placeholder
+    }
   end
 
   defp put_context(bindings, context) do

@@ -10,8 +10,8 @@ defmodule Hologram.UI.Runtime do
     <script>
       window.hologramArgs = \{
         class: "{@__context__.__class__}",
-        context: {@__context__.__serialized_context__},
-        state: ###SERIALIZED_STATE###
+        digest: "{@__context__.__digest__}",
+        state: {@__context__.__state__}
       \}
     </script>
     <script src="/hologram/manifest.js"></script>
