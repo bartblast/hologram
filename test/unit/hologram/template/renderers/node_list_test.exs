@@ -44,7 +44,7 @@ defmodule Hologram.Template.Renderer.NodeListTest do
       component_2
     ]
 
-    bindings = %{}
+    bindings = %{__context__: %{}}
     result = Renderer.render(nodes, %Conn{}, bindings)
 
     expected_initial_state = %{
