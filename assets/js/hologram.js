@@ -12,7 +12,6 @@ import Elixir_IO from "./hologram/elixir/io";
 import Elixir_Kernel from "./hologram/elixir/kernel";
 import Elixir_Keyword from "./hologram/elixir/keyword";
 import Elixir_Map from "./hologram/elixir/map";
-import Elixir_Kernel_SpecialForms from "./hologram/elixir/kernel/special_forms";
 import Elixir_String from "./hologram/elixir/string";
 
 window.Elixir_Access = Elixir_Access;
@@ -20,7 +19,6 @@ window.Elixir_Ecto_Changeset = Elixir_Ecto_Changeset;
 window.Elixir_Enum = Elixir_Enum;
 window.Elixir_IO = Elixir_IO;
 window.Elixir_Kernel = Elixir_Kernel;
-window.Elixir_Kernel_SpecialForms = Elixir_Kernel_SpecialForms;
 window.Elixir_Keyword = Elixir_Keyword;
 window.Elixir_Map = Elixir_Map;
 window.Elixir_String = Elixir_String;

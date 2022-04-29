@@ -254,6 +254,15 @@ export default class Interpreter {
     return Utils.freeze({type: type, value: result})
   }
 
+  static $type_operator(value, type) {
+    if (Type.isString(value) && type === "binary") {
+      return value
+    } else {
+      const message = `Interpreter.$type_operator(): value = ${JSON.stringify(value)}, type = ${JSON.stringify(type)}`
+      throw new HologramNotImplementedError(message)
+    }
+  }
+
   static $unary_negative_operator(boxedValue) {
     return Utils.freeze({type: boxedValue.type, value: -boxedValue.value})
   }

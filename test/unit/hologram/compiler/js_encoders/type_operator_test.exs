@@ -11,7 +11,7 @@ defmodule Hologram.Compiler.JSEncoder.TypeOperatorTest do
     }
 
     result = JSEncoder.encode(ir, %Context{}, %Opts{})
-    expected = "Elixir_Kernel_SpecialForms.$type({ type: 'integer', value: 1 }, 'binary')"
+    expected = "Hologram.Interpreter.$type_operator({ type: 'integer', value: 1 }, 'binary')"
 
     assert result == expected
   end

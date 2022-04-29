@@ -945,6 +945,22 @@ describe("$subtraction_operator()", () => {
   });
 });
 
+describe("$type_operator", () => {
+  it("returns the value given in the first arg if it is of boxed string type and if the type arg is binary", () => {
+    const value = Type.string("test")
+    const result = Interpreter.$type_operator(value, "binary")
+
+    assert.equal(result, value)
+  })
+
+  it("throws an error for not implemented cases", () => {
+    const value = Type.string("test")
+    const expectedMessage = 'Interpreter.$type_operator(): value = {"type":"string","value":"test"}, type = "not implemented"'
+
+    assert.throw(() => { Interpreter.$type_operator(value, "not implemented") }, HologramNotImplementedError, expectedMessage);
+  })
+})
+
 describe("$unary_negative()", () => {
   it("negates the given value", () => {
     const value = Type.integer(123);
