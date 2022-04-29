@@ -36,7 +36,10 @@ defmodule Hologram.Template.Renderer.ElementNodeTest do
     }
   }
 
-  @bindings %{a: 123}
+  @bindings %{
+    __context__: %{},
+    a: 123
+  }
 
   @children [
     %TextNode{content: "abc"},
