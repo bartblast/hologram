@@ -5,12 +5,10 @@ defmodule Hologram.Template.Renderer.ComponentTest do
   alias Hologram.Compiler.IR.IntegerType
   alias Hologram.Compiler.IR.ModuleAttributeOperator
   alias Hologram.Compiler.IR.TupleType
-  alias Hologram.Compiler.Reflection
   alias Hologram.Conn
   alias Hologram.Runtime
   alias Hologram.Template.Renderer
   alias Hologram.Template.VDOM.Component
-  alias Hologram.Template.VDOM.ElementNode
   alias Hologram.Template.VDOM.Expression
   alias Hologram.Template.VDOM.TextNode
   alias Hologram.Test.Fixtures.Template.ComponentRenderer.Module1
