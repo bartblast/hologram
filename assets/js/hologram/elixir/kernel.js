@@ -4,7 +4,6 @@ import { HologramNotImplementedError } from "../errors";
 import Map from "../elixir/map"
 import Runtime from "../runtime"
 import Type from "../type"
-import Utils from "../utils"
 
 export default class Kernel {
   static apply() {
