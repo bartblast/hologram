@@ -16,7 +16,7 @@ defmodule Hologram.Compiler.JSEncoder.FunctionDefinitionTest do
 
     expected = """
     static test() {
-    if (Hologram.isFunctionArgsPatternMatched([], arguments)) {
+    if (Hologram.Interpreter.isFunctionArgsPatternMatched([], arguments)) {
     return { type: 'integer', value: 1 };
     }
     else {
@@ -41,7 +41,7 @@ defmodule Hologram.Compiler.JSEncoder.FunctionDefinitionTest do
 
     expected = """
     static test() {
-    if (Hologram.isFunctionArgsPatternMatched([ { type: 'placeholder' } ], arguments)) {
+    if (Hologram.Interpreter.isFunctionArgsPatternMatched([ { type: 'placeholder' } ], arguments)) {
     let x = arguments[0];
     return { type: 'integer', value: 1 };
     }
@@ -67,7 +67,7 @@ defmodule Hologram.Compiler.JSEncoder.FunctionDefinitionTest do
 
     expected = """
     static test() {
-    if (Hologram.isFunctionArgsPatternMatched([ { type: 'placeholder' }, { type: 'placeholder' } ], arguments)) {
+    if (Hologram.Interpreter.isFunctionArgsPatternMatched([ { type: 'placeholder' }, { type: 'placeholder' } ], arguments)) {
     let x = arguments[0];
     let y = arguments[1];
     return { type: 'integer', value: 1 };
@@ -99,7 +99,7 @@ defmodule Hologram.Compiler.JSEncoder.FunctionDefinitionTest do
 
     expected = """
     static test() {
-    if (Hologram.isFunctionArgsPatternMatched([], arguments)) {
+    if (Hologram.Interpreter.isFunctionArgsPatternMatched([], arguments)) {
     { type: 'integer', value: 1 };
     return { type: 'integer', value: 2 };
     }
@@ -126,10 +126,10 @@ defmodule Hologram.Compiler.JSEncoder.FunctionDefinitionTest do
 
     expected = """
     static test() {
-    if (Hologram.isFunctionArgsPatternMatched([ { type: 'integer', value: 1 } ], arguments)) {
+    if (Hologram.Interpreter.isFunctionArgsPatternMatched([ { type: 'integer', value: 1 } ], arguments)) {
     return { type: 'integer', value: 1 };
     }
-    else if (Hologram.isFunctionArgsPatternMatched([ { type: 'integer', value: 2 } ], arguments)) {
+    else if (Hologram.Interpreter.isFunctionArgsPatternMatched([ { type: 'integer', value: 2 } ], arguments)) {
     return { type: 'integer', value: 2 };
     }
     else {
@@ -154,7 +154,7 @@ defmodule Hologram.Compiler.JSEncoder.FunctionDefinitionTest do
 
     expected = """
     static test$question() {
-    if (Hologram.isFunctionArgsPatternMatched([], arguments)) {
+    if (Hologram.Interpreter.isFunctionArgsPatternMatched([], arguments)) {
     return { type: 'integer', value: 1 };
     }
     else {

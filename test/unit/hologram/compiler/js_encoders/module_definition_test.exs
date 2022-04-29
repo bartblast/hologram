@@ -124,7 +124,7 @@ defmodule Hologram.Compiler.JSEncoder.ModuleDefinitionTest do
       window.Elixir_Abc_Bcd = class Elixir_Abc_Bcd {
 
       static test() {
-      if (Hologram.isFunctionArgsPatternMatched([ { type: 'placeholder' } ], arguments)) {
+      if (Hologram.Interpreter.isFunctionArgsPatternMatched([ { type: 'placeholder' } ], arguments)) {
       let a = arguments[0];
       return { type: 'integer', value: 1 };
       }
@@ -185,7 +185,7 @@ defmodule Hologram.Compiler.JSEncoder.ModuleDefinitionTest do
       static $abc = { type: 'integer', value: 123 };
 
       static test() {
-      if (Hologram.isFunctionArgsPatternMatched([ { type: 'placeholder' } ], arguments)) {
+      if (Hologram.Interpreter.isFunctionArgsPatternMatched([ { type: 'placeholder' } ], arguments)) {
       let a = arguments[0];
       return { type: 'integer', value: 1 };
       }

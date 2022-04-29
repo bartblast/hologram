@@ -61,16 +61,6 @@ export default class Hologram {
       Runtime.mountPage(pageClassName, serializedState);
     });
   }
-
-  // DELEGATES
-
-  static isFunctionArgsPatternMatched(params, args) {
-    return Interpreter.isFunctionArgsPatternMatched(params, args);
-  }
-
-  static isPatternMatched(left, right) {
-    return Interpreter.isPatternMatched(left, right);
-  }
 }
 
 window.Hologram = Hologram;

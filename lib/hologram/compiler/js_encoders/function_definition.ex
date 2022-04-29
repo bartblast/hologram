@@ -38,7 +38,7 @@ defimpl JSEncoder, for: FunctionDefinitionVariants do
 
       acc
       |> Formatter.maybe_append_new_line(
-        "#{statement} (Hologram.isFunctionArgsPatternMatched(#{params}, arguments)) {"
+        "#{statement} (Hologram.Interpreter.isFunctionArgsPatternMatched(#{params}, arguments)) {"
       )
       |> Formatter.maybe_append_new_line(vars)
       |> Formatter.maybe_append_new_line(body)
