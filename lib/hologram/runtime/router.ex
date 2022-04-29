@@ -9,14 +9,14 @@ defmodule Hologram.Router do
     opts
   end
 
-  def call(%Plug.Conn{request_path: "/hologram/manifest.js"} = conn, _opts) do
+  def call(%Plug.Conn{request_path: "/hologram/manifest.js"} = phx_conn, _opts) do
     body = StaticDigestStore.get_manifest()
 
-    conn
-    |> Conn.put_resp_header("cache-control", "no-store")
-    |> Conn.put_resp_header("content-type", "text/javascript")
-    |> Conn.send_resp(200, body)
-    |> Conn.halt()
+    phx_conn
+    |> Plug.Conn.put_resp_header("cache-control", "no-store")
+    |> Plug.Conn.put_resp_header("content-type", "text/javascript")
+    |> Plug.Conn.send_resp(200, body)
+    |> Plug.Conn.halt()
   end
 
   def call(%Plug.Conn{request_path: request_path} = phx_conn, _opts) do
