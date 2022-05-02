@@ -98,7 +98,7 @@ defmodule Hologram.Compiler.Reflection do
   end
 
   def is_protocol?(term) do
-    is_alias?(term) && Keyword.has_key?(term.module_info(:exports), :__protocol__)
+    is_alias?(term) && function_exported?(term, :module_info, 1) && Keyword.has_key?(term.module_info(:exports), :__protocol__)
   end
 
   # DEFER: test

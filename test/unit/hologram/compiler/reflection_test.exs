@@ -181,6 +181,10 @@ defmodule Hologram.Compiler.ReflectionTest do
       assert Reflection.is_protocol?(Enumerable)
     end
 
+    test "atom which is not a module or protocol alias" do
+      refute Reflection.is_protocol?(Abc.Bcd)
+    end
+
     test "atom which is not an alias" do
       refute Reflection.is_protocol?(:abc)
     end
