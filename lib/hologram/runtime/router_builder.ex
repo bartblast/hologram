@@ -85,8 +85,8 @@ defmodule Hologram.Runtime.RouterBuilder do
     ast = Reflection.ast(module_body)
 
     if Hologram.Compiler.Reflection.is_module?(@generated_module) do
-      :code.delete(@generated_module)
       :code.purge(@generated_module)
+      :code.delete(@generated_module)
     end
 
     Module.create(@generated_module, ast, Macro.Env.location(__ENV__))
