@@ -44,7 +44,7 @@ export default class VDOM {
   }
 
   static aggregateComponentContextBindings(outerBindings) {
-    const key = Type.atomKey("context")
+    const key = Type.atomKey("__context__")
 
     let elems = {}
     elems[key] = outerBindings.data[key]
