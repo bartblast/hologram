@@ -81,9 +81,10 @@ defmodule Hologram.Compiler do
 
     window.hologramPageScriptLoaded = true;
 
+    // CAUTION: related code is in assets/js/hologram.js
     if (window.hologramRuntimeScriptLoaded && window.hologramPageScriptLoaded && !window.hologramPageMounted) {
       window.hologramPageMounted = true
-      Hologram.run(window.hologramArgs.class, window.hologramArgs.state)
+      Hologram.run(window.hologramArgs)
     }
     """
 
