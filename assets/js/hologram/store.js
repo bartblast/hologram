@@ -52,12 +52,12 @@ export default class Store {
     Store.setComponentState(Target.TYPE.page, pageState)
   }
 
-  static resolveComponentState(componentId) {
+  static resolveComponentState(componentId, props) {
     if (componentId) {
       let state = Store.getComponentState(componentId)
 
       if (!state) {
-        state = Runtime.getComponentClass(componentId).init()
+        state = Runtime.getComponentClass(componentId).init(props)
         Store.setComponentState(componentId, state)
       }
 

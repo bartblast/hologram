@@ -154,33 +154,46 @@ describe("hydratePage()", () => {
 })
 
 describe("resolveComponentState()", () => {
-  const TestComponentClass = class {
-    static init() {
-      return "init_result"
-    }
-  }
-
   const componentId = "test_id"
 
   it("returns state bindings of a stateful component", () => {
-    const elems = {}
-    elems[Type.atomKey("x")] = Type.integer(9)
-    const state = Type.map(elems)
+    const stateElems = {}
+    stateElems[Type.atomKey("x")] = Type.integer(9)
+    const state = Type.map(stateElems)
 
     Store.setComponentState(componentId, state)
 
-    const result = Store.resolveComponentState(componentId)
+    const props = Type.map()
+    const result = Store.resolveComponentState(componentId, props)
 
     assert.deepStrictEqual(result, state)
   })
 
   it("inits the state of a stateful component if it hasn't been initiated yet", () => {
+    const TestComponentClass = class {
+      static init(props) {
+        const stateElems = {}
+        stateElems[Type.atomKey("state_key_1")] = Type.string("state_value_1")
+        stateElems[Type.atomKey("state_key_2")] = Map.get(props, Type.atom("prop_key_1"))
+        return Type.map(stateElems)
+      }
+    }
+
     Runtime.registerComponentClass(componentId, TestComponentClass)
 
-    Store.resolveComponentState(componentId)
+    const propElems = {}
+    propElems[Type.atomKey("prop_key_1")] = Type.string("prop_value_1")
+    const props = Type.map(propElems)
+
+    Store.resolveComponentState(componentId, props)
     const state = Store.getComponentState(componentId)
 
-    assert.equal(state, "init_result")
+    const expectedStateElems = {}
+    expectedStateElems[Type.atomKey("state_key_1")] = Type.string("state_value_1")
+    expectedStateElems[Type.atomKey("state_key_2")] = Type.string("prop_value_1")
+    const expectedState = Type.map(expectedStateElems)
+
+    assert.deepStrictEqual(state, expectedState)
   })
 
   it("returns empty boxed map if the given componentId is null", () => {

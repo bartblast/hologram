@@ -37,7 +37,7 @@ export default class VDOM {
   static aggregateComponentBindings(componentId, node, outerBindings) {
     const contextBindings = VDOM.aggregateComponentContextBindings(outerBindings)
     const propsBindings = VDOM.aggregateComponentPropsBindings(node, outerBindings)
-    const stateBindings = Store.resolveComponentState(componentId)
+    const stateBindings = Store.resolveComponentState(componentId, propsBindings)
 
     const elems = Object.assign({}, contextBindings.data, propsBindings.data, stateBindings.data)
     return Type.map(elems)
