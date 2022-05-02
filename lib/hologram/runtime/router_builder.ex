@@ -6,6 +6,8 @@ defmodule Hologram.Runtime.RouterBuilder do
   alias Hologram.Compiler.Reflection
   alias Hologram.Router
 
+  @generated_module Hologram.Runtime.RouterMatcher
+
   def start_link(_) do
     GenServer.start_link(__MODULE__, [], name: __MODULE__)
   end
@@ -82,7 +84,12 @@ defmodule Hologram.Runtime.RouterBuilder do
 
     ast = Reflection.ast(module_body)
 
-    Module.create(Hologram.Runtime.RouterMatcher, ast, Macro.Env.location(__ENV__))
+    if Hologram.Compiler.Reflection.is_module?(@generated_module) do
+      :code.delete(@generated_module)
+      :code.purge(@generated_module)
+    end
+
+    Module.create(@generated_module, ast, Macro.Env.location(__ENV__))
   end
 
   defp get_route_segments(page) do
