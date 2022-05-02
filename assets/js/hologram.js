@@ -50,7 +50,7 @@ export default class Hologram {
   }
 
   // Covered implicitely in E2E tests.
-  static run(pageClassName, serializedState) {
+  static run(args) {
     const window = globalThis.window;
 
     Hologram.onReady(window.document, () => {
@@ -58,7 +58,7 @@ export default class Hologram {
         Runtime.init(window);
       }
 
-      Runtime.mountPage(pageClassName, serializedState);
+      Runtime.mountPage(args.class, args.digest, args.state);
     });
   }
 }
@@ -72,5 +72,5 @@ if (
   !window.hologramPageMounted
 ) {
   window.hologramPageMounted = true;
-  Hologram.run(window.hologramArgs.class, window.hologramArgs.state);
+  Hologram.run(window.hologramArgs);
 }

@@ -115,14 +115,14 @@ export default class Runtime {
   }
 
   // Covered implicitely in E2E tests.
-  static mountPage(pageClassName, serializedState) {
+  static mountPage(pageClassName, digest, state) {
     const pageClass = Runtime.getClassByClassName(pageClassName)
     Runtime.registerPageClass(pageClass)
 
     const layoutClass = Runtime.determineLayoutClass(pageClass)
     Runtime.registerLayoutClass(layoutClass)
 
-    Store.hydrate(serializedState)
+    Store.hydrate(pageClassName, digest, state)
     VDOM.render()
 
     const html = VDOM.getDocumentHTML(Runtime.document)

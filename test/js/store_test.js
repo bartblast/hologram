@@ -1,6 +1,6 @@
 "use strict";
 
-import { assert, assertFrozen, cleanup } from "./support/commons";
+import { assert, assertBoxedTrue, assertFrozen, cleanup } from "./support/commons";
 beforeEach(() => cleanup())
 
 import Store from "../../assets/js/hologram/store";
@@ -9,6 +9,25 @@ import Type from "../../assets/js/hologram/type";
 import Runtime from "../../assets/js/hologram/runtime";
 
 import Map from "../../assets/js/hologram/elixir/map"
+
+describe("buildContext()", () => {
+  it("builds context", () => {
+    const pageClassName = "test_page_class_name"
+    const digest = "test_digest"
+    const result = Store.buildContext(pageClassName, digest)
+
+    const expected = {
+      type: "map",
+      data: {
+        "~atom[__class__]": { type: "string", value: "test_page_class_name" },
+        "~atom[__digest__]": { type: "string", value: "test_digest" },
+        "~atom[__state__]": { type: "placeholder" }
+      }
+    }
+
+    assert.deepStrictEqual(result, expected)
+  })
+})
 
 describe("getComponentState()", () => {
   it("returns component state by component ID", () => {
@@ -39,121 +58,98 @@ describe("getPageState()", () => {
 })
 
 describe("hydrate()", () => {
-  let serializedState;
-
   beforeEach(() => {
-    let layoutInitialStateElems = {}
-    layoutInitialStateElems[Type.atomKey("x")] = Type.integer(987)
-    const layoutInitialState = Type.map(layoutInitialStateElems)
-
-    const TestLayoutClass = class {
-      static init() {
-        return layoutInitialState
-      }
-    }
-
-    Runtime.registerLayoutClass(TestLayoutClass)
+    const pageClassName = "test_page_class_name"
+    const digest = "test_digest"
 
     let stateElems = {}
-    stateElems[Type.atomKey("x")] = Type.integer(123)
-    stateElems[Type.atomKey("context")] = Type.map()
+    stateElems[Type.atomKey("layout")] = Type.map()
+    stateElems[Type.atomKey("page")] = Type.map()
     const state = Type.map(stateElems)
-    serializedState = JSON.stringify(state)
 
-    Store.hydrate(serializedState)
+    Store.hydrate(pageClassName, digest, state)
   })
 
   it("hydrates layout state", () => {
-    const state = Store.getLayoutState()
-    const xValue = Map.get(state, Type.atom("x"))
-    assert.deepStrictEqual(xValue, Type.integer(987))
+    const layoutState = Store.getComponentState(Target.TYPE.layout)
+    const isMap = Type.isMap(layoutState)
+    const hasContextKey = Map.has_key$question(layoutState, Type.atom("__context__"))
+
+    assert.isTrue(isMap)
+    assertBoxedTrue(hasContextKey)
   })
 
   it("hydrates page state", () => {
-    const state = Store.getPageState()
-    const xValue = Map.get(state, Type.atom("x"))
-    assert.deepStrictEqual(xValue, Type.integer(123))
-  })
+    const pageState = Store.getComponentState(Target.TYPE.page)
+    const isMap = Type.isMap(pageState)
+    const hasContextKey = Map.has_key$question(pageState, Type.atom("__context__"))
 
-  it("adds __state__ field to layout context", () => {
-    const state = Store.getLayoutState()
-    const context = Map.get(state, Type.atom("context"))
-    const serializedStateValue = Map.get(context, Type.atom("__state__"))
-    assert.deepStrictEqual(serializedStateValue, Type.string(serializedState))
-  })
-
-  it("adds __state__ field to page context", () => {
-    const state = Store.getPageState()
-    const context = Map.get(state, Type.atom("context"))
-    const serializedStateValue = Map.get(context, Type.atom("__state__"))
-    assert.deepStrictEqual(serializedStateValue, Type.string(serializedState))
+    assert.isTrue(isMap)
+    assertBoxedTrue(hasContextKey)
   })
 })
 
 describe("hydrateLayout()", () => {
-  let context, state;
+  let layoutState;
 
   beforeEach(() => {
-    let elems = {}
-    elems[Type.atomKey("x")] = Type.integer(9)
-    const testInitialState = Type.map(elems)
+    const layoutStateElems = {}
+    layoutStateElems[Type.atomKey("a")] = Type.integer(1)
 
-    const TestLayoutClass = class {
-      static init() {
-        return testInitialState
-      }
-    }
+    const stateElems = {}
+    stateElems[Type.atomKey("layout")] = Type.map(layoutStateElems)
+    const state = Type.map(stateElems)
 
-    Runtime.registerLayoutClass(TestLayoutClass)
+    const context = Type.string("test_context")
+    Store.hydrateLayout(state, context)
 
-    context = Type.string("test_context")
-    Store.hydrateLayout(context)
-
-    state = Store.getComponentState(Target.TYPE.layout)
+    layoutState = Store.getComponentState(Target.TYPE.layout)
   })
 
-  it("initiates layout state and saves it to the store", () => {
-    const xValue = Map.get(state, Type.atom("x"))
-    assert.deepStrictEqual(xValue, Type.integer(9))
+  it("hydrates layout state and saves it to the store", () => {
+    const stateValue = Map.get(layoutState, Type.atom("a"))
+    assert.deepStrictEqual(stateValue, Type.integer(1))
   })
 
   it("adds context data to the layout state", () => {
-    const contextValue = Map.get(state, Type.atom("context"))
+    const contextValue = Map.get(layoutState, Type.atom("__context__"))
     assert.deepStrictEqual(contextValue, Type.string("test_context"))
   })
 
   it("makes the layout state immutable", () => {
-    assertFrozen(state)
+    assertFrozen(layoutState)
   })
 })
 
 describe("hydratePage()", () => {
-  let context, state;
+  let pageState;
 
   beforeEach(() => {
-    let elems = {}
-    elems[Type.atomKey("x")] = Type.integer(9)
-    const initialState = Type.map(elems)
+    const pageStateElems = {}
+    pageStateElems[Type.atomKey("a")] = Type.integer(1)
 
-    context = Type.string("test_context")
+    const stateElems = {}
+    stateElems[Type.atomKey("page")] = Type.map(pageStateElems)
+    const state = Type.map(stateElems)
 
-    Store.hydratePage(initialState, context)
+    const context = Type.string("test_context")
+    Store.hydratePage(state, context)
 
-    state = Store.getComponentState(Target.TYPE.page)
+    pageState = Store.getComponentState(Target.TYPE.page)
   })
 
-  it("saves the page state to the store", () => {
-    const xValue = Map.get(state, Type.atom("x"))
-    assert.deepStrictEqual(xValue, Type.integer(9))
+  it("hydrates page state and saves it to the store", () => {
+    const stateValue = Map.get(pageState, Type.atom("a"))
+    assert.deepStrictEqual(stateValue, Type.integer(1))
   })
 
   it("adds context data to the page state", () => {
-    const contextValue = Map.get(state, Type.atom("context"))
+    const contextValue = Map.get(pageState, Type.atom("__context__"))
     assert.deepStrictEqual(contextValue, Type.string("test_context"))
   })
 
   it("makes the page state immutable", () => {
-    assertFrozen(state)
+    assertFrozen(pageState)
   })
 })
 

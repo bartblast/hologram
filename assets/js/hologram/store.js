@@ -3,34 +3,19 @@
 import Runtime from "./runtime"
 import Target from "./target"
 import Type from "./type"
-import Utils from "./utils"
 
 import Map from "./elixir/map"
 
 export default class Store {
   static componentStateRegistry = {}
 
-  static hydrate(serializedState) {
-    const state = Utils.eval(serializedState)
-    
-    // DEFER: use Kernel.put_in/3 here
-    let context = Map.get(state, Type.atom("context"))
-    context = Map.put(context, Type.atom("__state__"), Type.string(serializedState))
+  static buildContext(pageClassName, digest) {
+    let context = Type.map();
+    context = Map.put(context, Type.atom("__class__"), Type.string(pageClassName));
+    context = Map.put(context, Type.atom("__digest__"), Type.string(digest));
+    context = Map.put(context, Type.atom("__state__"), Type.placeholder())
 
-    Store.hydrateLayout(context)
-    Store.hydratePage(state, context)
-  }
-
-  static hydrateLayout(context) {
-    let state = Runtime.getLayoutClass().init()
-    state = Map.put(state, Type.atom("context"), context)
-
-    Store.setComponentState(Target.TYPE.layout, state)
-  }
-
-  static hydratePage(state, context) {
-    state = Map.put(state, Type.atom("context"), context)
-    Store.setComponentState(Target.TYPE.page, state)
+    return context
   }
 
   static getComponentState(componentId) {
@@ -44,6 +29,27 @@ export default class Store {
 
   static getPageState() {
     return Store.getComponentState(Target.TYPE.page)
+  }
+
+  static hydrate(pageClassName, digest, state) {    
+    const context = Store.buildContext(pageClassName, digest)
+    
+    Store.hydrateLayout(state, context)
+    Store.hydratePage(state, context)
+  }
+
+  static hydrateLayout(state, context) {
+    let layoutState = Map.get(state, Type.atom("layout"))
+    layoutState = Map.put(layoutState, Type.atom("__context__"), context)
+
+    Store.setComponentState(Target.TYPE.layout, layoutState)
+  }
+
+  static hydratePage(state, context) {
+    let pageState = Map.get(state, Type.atom("page"))
+    pageState = Map.put(pageState, Type.atom("__context__"), context)
+
+    Store.setComponentState(Target.TYPE.page, pageState)
   }
 
   static resolveComponentState(componentId) {
