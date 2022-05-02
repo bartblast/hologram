@@ -21,7 +21,7 @@ describe("buildContext()", () => {
       data: {
         "~atom[__class__]": { type: "string", value: "test_page_class_name" },
         "~atom[__digest__]": { type: "string", value: "test_digest" },
-        "~atom[__state__]": { type: "placeholder" }
+        "~atom[__state__]": { type: "map", data: {} }
       }
     }
 
