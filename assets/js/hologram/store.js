@@ -13,7 +13,7 @@ export default class Store {
     let context = Type.map();
     context = Map.put(context, Type.atom("__class__"), Type.string(pageClassName));
     context = Map.put(context, Type.atom("__digest__"), Type.string(digest));
-    context = Map.put(context, Type.atom("__state__"), Type.string("placeholder"));
+    context = Map.put(context, Type.atom("__state__"), Type.string("'placeholder'"));
 
     return context
   }
