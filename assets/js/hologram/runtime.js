@@ -86,10 +86,11 @@ export default class Runtime {
   }
 
   // Covered implicitely in E2E tests.
-  static loadPage(html) {
+  static loadPage(html, storeSnapshot) {
     window.hologramRuntimeScriptLoaded = false
     window.hologramPageScriptLoaded = false
     window.hologramPageMounted = false
+    Runtime.window.hologramStoreSnapshot = storeSnapshot
 
     // DEFER: copy html node attributes (because only the inner HTML is updated)
     var el = Runtime.document.createElement("html")
@@ -110,7 +111,7 @@ export default class Runtime {
   // Covered implicitely in E2E tests.
   static loadPageOnPopStateEvents() {
     Runtime.window.addEventListener("popstate", event => {
-      Runtime.loadPage(event.state)
+      Runtime.loadPage(event.state.html, event.state.storeSnapshot)
     })
   }
 
@@ -128,13 +129,18 @@ export default class Runtime {
     const html = VDOM.getDocumentHTML(Runtime.document)
 
     // DEFER: consider - there are limitations for state object size, e.g. 2 MB for Firefox
-    Runtime.window.history.replaceState(html, null)
+    const historyState = {
+      html: html,
+      storeSnapshot: state
+    }
+
+    Runtime.window.history.replaceState(historyState, null)
   }
 
   // Covered implicitely in E2E tests.
   static redirect(params) {
     const html = params.data[Type.atomKey("html")].value
-    Runtime.loadPage(html)
+    Runtime.loadPage(html, null)
 
     const url = params.data[Type.atomKey("url")].value
     Runtime.updateURL(url)
