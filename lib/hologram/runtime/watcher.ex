@@ -4,7 +4,8 @@ defmodule Hologram.Runtime.Watcher do
   use GenServer
 
   alias Hologram.Compiler.Reflection
-  alias Hologram.Runtime
+  # TODO: implement runtime reload
+  # alias Hologram.Runtime
 
   def start_link(args) do
     GenServer.start_link(__MODULE__, args)
