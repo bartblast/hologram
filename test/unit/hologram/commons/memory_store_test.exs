@@ -11,13 +11,8 @@ defmodule Hologram.Commons.MemoryStoreTest do
     File.write!(@dump_path, bin_content)
   end
 
-  defp running? do
-    pid = Process.whereis(MemoryStore)
-    if pid, do: Process.alive?(pid), else: false
-  end
-
   defp wait_for_test_cleanup do
-    if running?() || :ets.info(@table_name) != :undefined do
+    if MemoryStore.running?() || :ets.info(@table_name) != :undefined do
       :timer.sleep(1)
       wait_for_test_cleanup()
     end
@@ -111,11 +106,22 @@ defmodule Hologram.Commons.MemoryStoreTest do
     assert MemoryStore.get_all() == changed_store_content
   end
 
+  describe "running?/0" do
+    test "is running" do
+      MemoryStore.run()
+      assert MemoryStore.running?()
+    end
+
+    test "is not running" do
+      refute MemoryStore.running?()
+    end
+  end
+
   test "stop/0 (and terminate/2 implicitely)" do
     MemoryStore.run()
     MemoryStore.stop()
 
-    refute running?()
+    refute MemoryStore.running?()
     assert MemoryStore.table_name() |> :ets.info() == :undefined
   end
 end

@@ -84,6 +84,11 @@ defmodule Hologram.Commons.MemoryStore do
         run()
       end
 
+      def running? do
+        pid = Process.whereis(__MODULE__)
+        if pid, do: Process.alive?(pid), else: false
+      end
+
       def stop do
         GenServer.stop(__MODULE__)
       end
