@@ -89,6 +89,20 @@ defmodule Hologram.Commons.MemoryStoreTest do
     assert MemoryStore.get_all() == @store_content
   end
 
+  describe "maybe_stop/0" do
+    test "is running" do
+      MemoryStore.run()
+      MemoryStore.maybe_stop()
+
+      refute MemoryStore.running?()
+    end
+
+    test "is not running" do
+      MemoryStore.maybe_stop()
+      refute MemoryStore.running?()
+    end
+  end
+
   test "put/2" do
     MemoryStore.run()
     MemoryStore.put(:key_3, :value_3)

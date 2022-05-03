@@ -68,6 +68,10 @@ defmodule Hologram.Commons.MemoryStore do
         if !table_created?(), do: create_table()
       end
 
+      def maybe_stop do
+        if running?(), do: stop()
+      end
+
       defp populate_table_from_file(file_path) do
         file_path
         |> File.read!()
