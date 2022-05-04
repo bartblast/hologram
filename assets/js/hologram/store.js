@@ -36,6 +36,16 @@ export default class Store {
     
     Store.hydrateLayout(state, context)
     Store.hydratePage(state, context)
+    Store.hydrateComponents(state)
+  }
+
+  static hydrateComponents(state) {
+    Map.keys(state).data.forEach(key => {
+      if (key.value !== Target.TYPE.page && key.value !== Target.TYPE.layout) {
+        const componentState = Map.get(state, key)
+        Store.setComponentState(key, componentState)
+      }
+    })
   }
 
   static hydrateLayout(state, context) {
