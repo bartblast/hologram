@@ -17,7 +17,7 @@ defmodule Hologram.Compiler.ModuleDefAggregator.ModuleTypeTest do
   setup do
     [
       app_path: @fixtures_path <> "/compiler/module_def_aggregators/module_type",
-      templatables: [HologramE2E.DefaultLayout]
+      templatables: [Hologram.Test.Fixtures.App.DefaultLayout]
     ]
     |> compile()
 
