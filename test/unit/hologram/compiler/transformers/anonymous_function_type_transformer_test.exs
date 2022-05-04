@@ -10,6 +10,7 @@ defmodule Hologram.Compiler.AnonymousFunctionTypeTransformerTest do
     Block,
     IntegerType,
     MapAccess,
+    NotSupportedExpression,
     ParamAccess,
     Variable
   }
@@ -95,5 +96,21 @@ defmodule Hologram.Compiler.AnonymousFunctionTypeTransformerTest do
     }
 
     assert result.body == expected
+  end
+
+  # TODO: implement anonymous functions with multiple clauses
+  test "multiple clauses" do
+    code = """
+    fn
+      1 -> :a
+      2 -> :b
+    end
+    """
+
+    ast = ast(code)
+    result = AnonymousFunctionTypeTransformer.transform(ast, %Context{})
+    expected = %NotSupportedExpression{ast: ast, type: :multi_clause_anonymous_function_type}
+
+    assert result ==  expected
   end
 end
