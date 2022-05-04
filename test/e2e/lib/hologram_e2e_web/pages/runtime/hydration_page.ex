@@ -2,6 +2,7 @@ defmodule HologramE2E.Runtime.HydrationPage do
   use Hologram.Page
 
   route "/e2e/runtime/hydration"
+  layout HologramE2E.HydrationLayout
 
   def init(_params, _conn) do
     %{
@@ -11,8 +12,8 @@ defmodule HologramE2E.Runtime.HydrationPage do
 
   def template do
     ~H"""
-    <button id="button" on:click="increment">Increment</button>
-    <div id="text">count = {@count}</div>
+    <button id="page-button" on:click="increment">Increment</button>
+    <div id="page-text">page count = {@count}</div>
     """
   end
 
