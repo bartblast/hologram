@@ -1,4 +1,4 @@
-defmodule HologramE2E.DefaultLayout do
+defmodule Hologram.Test.Fixtures.App.DefaultLayout do
   use Hologram.Layout
 
   def init(_conn) do

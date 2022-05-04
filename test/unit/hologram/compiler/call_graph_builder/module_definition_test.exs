@@ -68,7 +68,7 @@ defmodule Hologram.Compiler.CallGraphBuilder.ModuleDefinitionTest do
   test "template traversing" do
     opts = [
       app_path: "#{@fixtures_path}/compiler/call_graph_builder/module_definition",
-      templatables: [HologramE2E.DefaultLayout]
+      templatables: [Hologram.Test.Fixtures.App.DefaultLayout]
     ]
 
     %{templates: templates} = compile(opts)

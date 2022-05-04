@@ -21,7 +21,7 @@ defmodule Hologram.Compiler.PrunerTest do
   setup_all do
     opts = [
       app_path: @fixtures_path <> "/compiler/pruner",
-      templatables: [HologramE2E.DefaultLayout]
+      templatables: [Hologram.Test.Fixtures.App.DefaultLayout]
     ]
 
     compile(opts)

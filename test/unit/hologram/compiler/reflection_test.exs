@@ -208,7 +208,7 @@ defmodule Hologram.Compiler.ReflectionTest do
     result = Reflection.list_components()
 
     assert Enum.count(result) == num_app_components + num_hologram_ui_components
-    assert HologramE2E.Component1 in result
+    assert Hologram.Test.Fixtures.App.Component1 in result
     assert Hologram.UI.Runtime in result
   end
 

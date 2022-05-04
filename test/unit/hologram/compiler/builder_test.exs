@@ -12,7 +12,7 @@ defmodule Hologram.Compiler.BuilderTest do
   setup do
     opts = [
       app_path: @fixtures_path <> "/compiler/builder",
-      templatables: [HologramE2E.DefaultLayout]
+      templatables: [Hologram.Test.Fixtures.App.DefaultLayout]
     ]
 
     compile(opts)

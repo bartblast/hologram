@@ -74,7 +74,7 @@ defmodule Hologram.Compiler.ModuleDefAggregator.ModuleTypeTest do
 
   test "page default layout is added" do
     page = Hologram.Test.Fixtures.Compiler.ModuleDefAggregators.ModuleType.Module3
-    layout = HologramE2E.DefaultLayout
+    layout = Hologram.Test.Fixtures.App.DefaultLayout
     ir = %ModuleType{module: page}
 
     ModuleDefAggregator.aggregate(ir)

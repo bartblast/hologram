@@ -9,7 +9,7 @@ defmodule Hologram.Template.Renderer.PageTest do
   setup do
     [
       app_path: "#{@fixtures_path}/template/renderers/page_renderer",
-      templatables: [HologramE2E.DefaultLayout]
+      templatables: [Hologram.Test.Fixtures.App.DefaultLayout]
     ]
     |> compile()
 
