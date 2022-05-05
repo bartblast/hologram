@@ -16,11 +16,4 @@ defmodule Hologram.Runtime do
     TemplateStore.run()
     RouterBuilder.run()
   end
-
-  def stop do
-    PageDigestStore.stop()
-    StaticDigestStore.stop()
-    TemplateStore.stop()
-    RouterBuilder.stop()
-  end
 end
