@@ -1,6 +1,6 @@
 "use strict";
 
-import { assert, assertBoxedTrue, assertFrozen, cleanup } from "./support/commons";
+import { assert, assertBoxedNil, assertBoxedTrue, assertFrozen, cleanup } from "./support/commons";
 beforeEach(() => cleanup())
 
 import Store from "../../assets/js/hologram/store";
@@ -63,8 +63,10 @@ describe("hydrate()", () => {
     const digest = "test_digest"
 
     let stateElems = {}
+    stateElems[Type.atomKey("component_1")] = Type.map()
     stateElems[Type.atomKey("layout")] = Type.map()
     stateElems[Type.atomKey("page")] = Type.map()
+    stateElems[Type.atomKey("component_2")] = Type.map()
     const state = Type.map(stateElems)
 
     Store.hydrate(pageClassName, digest, state)
@@ -86,6 +88,64 @@ describe("hydrate()", () => {
 
     assert.isTrue(isMap)
     assertBoxedTrue(hasContextKey)
+  })
+
+  it("hydrates components state", () => {
+    const component1State = Store.getComponentState("component_1")
+    const isMap1 = Type.isMap(component1State)
+    assert.isTrue(isMap1)
+
+    const component2State = Store.getComponentState("component_2")
+    const isMap2 = Type.isMap(component2State)
+    assert.isTrue(isMap2)
+  })
+})
+
+describe("hydrateComponents()", () => {
+  let component1State, component2State;
+
+  beforeEach(() => {
+    const pageClassName = "test_page_class_name"
+    const digest = "test_digest"
+
+    const component1StateElems = {}
+    component1StateElems[Type.atomKey("a")] = Type.integer(1)
+
+    const component2StateElems = {}
+    component2StateElems[Type.atomKey("b")] = Type.integer(2)
+
+    let stateElems = {}
+    stateElems[Type.atomKey("component_1")] = Type.map(component1StateElems)
+    stateElems[Type.atomKey("layout")] = Type.map()
+    stateElems[Type.atomKey("page")] = Type.map()
+    stateElems[Type.atomKey("component_2")] = Type.map(component2StateElems)
+    const state = Type.map(stateElems)
+
+    Store.hydrate(pageClassName, digest, state)
+
+    component1State = Store.getComponentState("component_1")
+    component2State = Store.getComponentState("component_2")
+  })
+
+  it("hydrates components state and saves it to the store", () => {
+    const component1StateValue = Map.get(component1State, Type.atom("a"))
+    assert.deepStrictEqual(component1StateValue, Type.integer(1))
+
+    const component2StateValue = Map.get(component2State, Type.atom("b"))
+    assert.deepStrictEqual(component2StateValue, Type.integer(2))
+  })
+
+  it("doesn't add context data to the components state", () => {
+    const context1Value = Map.get(component1State, Type.atom("__context__"))
+    assertBoxedNil(context1Value)
+
+    const context2Value = Map.get(component2State, Type.atom("__context__"))
+    assertBoxedNil(context2Value)
+  })
+
+  it("makes the components' state immutable", () => {
+    assertFrozen(component1State)
+    assertFrozen(component2State)
   })
 })
 

@@ -43,7 +43,7 @@ export default class Store {
     Map.keys(state).data.forEach(key => {
       if (key.value !== Target.TYPE.page && key.value !== Target.TYPE.layout) {
         const componentState = Map.get(state, key)
-        Store.setComponentState(key, componentState)
+        Store.setComponentState(key.value, componentState)
       }
     })
   }
