@@ -175,7 +175,7 @@ defmodule Hologram.Compiler.Transformer do
   end
 
   def transform(ast, %Context{} = context) when is_atom(ast) and ast not in [nil, false, true] do
-    if Reflection.module?(ast) do
+    if Reflection.is_module?(ast) do
       ModuleTypeTransformer.transform(ast, context)
     else
       %AtomType{value: ast}

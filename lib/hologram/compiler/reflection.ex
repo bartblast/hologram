@@ -96,11 +96,31 @@ defmodule Hologram.Compiler.Reflection do
   end
 
   def is_module?(term) do
-    is_alias?(term) && !is_protocol?(term)
+    if is_alias?(term) do
+      case Code.ensure_loaded(term) do
+        {:module, _} ->
+          !is_protocol?(term)
+
+        _ ->
+          false
+      end
+    else
+      false
+    end
   end
 
   def is_protocol?(term) do
-    is_alias?(term) && function_exported?(term, :module_info, 1) && Keyword.has_key?(term.module_info(:exports), :__protocol__)
+    if is_alias?(term) do
+      case Code.ensure_loaded(term) do
+        {:module, _} ->
+          Keyword.has_key?(term.module_info(:exports), :__protocol__)
+
+        _ ->
+          false
+      end
+    else
+      false
+    end
   end
 
   # DEFER: test
@@ -203,17 +223,6 @@ defmodule Hologram.Compiler.Reflection do
   # DEFER: test
   def mix_path(opts \\ []) do
     root_path(opts) <> "/mix.exs"
-  end
-
-  def module?(arg) do
-    if Code.ensure_loaded?(arg) do
-      to_string(arg)
-      |> String.split(".")
-      |> hd()
-      |> Kernel.==("Elixir")
-    else
-      false
-    end
   end
 
   @doc """

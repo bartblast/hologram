@@ -251,20 +251,6 @@ defmodule Hologram.Compiler.ReflectionTest do
     assert %MacroDefinition{arity: 2, name: :test_macro} = result
   end
 
-  describe "module?/1" do
-    test "is module" do
-      assert Reflection.module?(Hologram.Compiler.ReflectionTest)
-    end
-
-    test "is atom" do
-      refute Reflection.module?(:test)
-    end
-
-    test "is Erlang module" do
-      refute Reflection.module?(:c)
-    end
-  end
-
   test "module_definition/1" do
     result = Reflection.module_definition(@module_1)
     assert %ModuleDefinition{module: @module_1} = result
