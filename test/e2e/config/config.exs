@@ -12,7 +12,7 @@ config :hologram_e2e, HologramE2EWeb.Endpoint,
 config :hologram,
   otp_app: :hologram_e2e,
   default_layout: HologramE2E.DefaultLayout,
-  endpoint: HologramE2E.Endpoint,
+  endpoint: HologramE2EWeb.Endpoint,
   env: config_env()
 
 config :esbuild,
