@@ -17,9 +17,7 @@ defmodule Hologram.Commons.MemoryStore do
       @impl true
       def init(_state) do
         maybe_create_table()
-        truncate_table()
-        populate_table()
-
+        reload()
         {:ok, nil}
       end
 
@@ -84,8 +82,8 @@ defmodule Hologram.Commons.MemoryStore do
       end
 
       def reload do
-        stop()
-        run()
+        truncate_table()
+        populate_table()
       end
 
       def running? do
