@@ -4,8 +4,7 @@ defmodule Hologram.Runtime.Watcher do
   use GenServer
 
   alias Hologram.Compiler.Reflection
-  # TODO: implement runtime reload
-  # alias Hologram.Runtime
+  alias Hologram.Runtime
 
   def start_link(args) do
     GenServer.start_link(__MODULE__, args)
@@ -24,10 +23,8 @@ defmodule Hologram.Runtime.Watcher do
   end
 
   def handle_info({:file_event, _, _}, state) do
-    # TODO: implement runtime reload
-    # Runtime.stop()
-    # Mix.Tasks.Compile.Hologram.run([])
-    # Runtime.run()
+    Mix.Tasks.Compile.Hologram.run([])
+    Runtime.reload()
 
     {:noreply, state}
   end
