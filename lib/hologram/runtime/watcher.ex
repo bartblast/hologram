@@ -1,4 +1,5 @@
 # DEFER: refactor & test
+# DEFER: consider separating reloading related code to CodeReload module
 
 defmodule Hologram.Runtime.Watcher do
   use GenServer
