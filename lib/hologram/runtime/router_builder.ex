@@ -13,13 +13,12 @@ defmodule Hologram.Runtime.RouterBuilder do
   end
 
   def init(_) do
-    create_matcher_module()
+    rebuild()
     {:ok, nil}
   end
 
   def rebuild do
-    stop()
-    run()
+    create_matcher_module()
   end
 
   def run do
