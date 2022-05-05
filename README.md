@@ -163,14 +163,14 @@ without its shortcomings related to scalability, efficiency, etc.
 
 #### Tools
 
-| Tool           | Status             |
-| :------------- | :----------------: |
-| Authentication | :x:                |
-| Authorization  | :x:                |
-| Caching        | :x:                |
-| Code Reload    | :x:                |
-| Localization   | :x:                |
-| Time Travel    | :x:                |
+| Tool           | Status             | Comments                                                        |
+| :------------- | :----------------: | :-------------------------------------------------------------- |
+| Authentication | :x:                |                                                                 |
+| Authorization  | :x:                |                                                                 |
+| Caching        | :x:                |                                                                 |
+| Code Reload    | :construction:     | done: recompiling, reloading, todo: incremental compilation     |
+| Localization   | :x:                |                                                                 |
+| Time Travel    | :x:                |                                                                 |
 
 ### Elixir Syntax
 
