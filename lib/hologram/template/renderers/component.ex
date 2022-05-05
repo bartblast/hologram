@@ -1,3 +1,4 @@
+alias Hologram.Compiler.Reflection
 alias Hologram.Runtime.TemplateStore
 alias Hologram.Template.Evaluator
 alias Hologram.Template.Renderer
@@ -50,7 +51,7 @@ defimpl Renderer, for: Component do
   end
 
   defp initialize_state(module, %{id: _} = props, conn) do
-    if function_exported?(module, :init, 2) do
+    if Reflection.has_function?(module, :init, 2) do
       module.init(props, conn)
     else
       module.init(props)
