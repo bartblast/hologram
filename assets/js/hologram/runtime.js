@@ -73,7 +73,7 @@ export default class Runtime {
 
   // Covered implicitely in E2E tests.
   static init(window) {
-    Client.connect()
+    Client.connect(window)
 
     Runtime.document = window.document
     Runtime.window = window

@@ -8,7 +8,7 @@ export default class Client {
   static socket = null
 
   // Covered implicitely in E2E tests.
-  static async connect() {
+  static async connect(window) {
     const socket = new Socket("/hologram");
     socket.connect();
 
@@ -19,6 +19,9 @@ export default class Client {
       .receive("ok", (_) => {
         Client.isConnected = true
       });
+
+    // TODO: test
+    channel.on("reload", (_payload) => window.document.location.reload())
 
     Client.socket = socket
     Client.channel = channel
