@@ -1,5 +1,6 @@
 defmodule HologramE2E.Runtime.HydrationPage do
   use Hologram.Page
+  alias HologramE2E.Component5, warn: false
 
   route "/e2e/runtime/hydration"
   layout HologramE2E.HydrationLayout
@@ -12,8 +13,9 @@ defmodule HologramE2E.Runtime.HydrationPage do
 
   def template do
     ~H"""
-    <button id="page-button" on:click="increment">Increment</button>
+    <button id="page-button" on:click="increment">Increment in page</button>
     <div id="page-text">page count = {@count}</div>
+    <Component5 id="component_5" initial_count={300} />
     """
   end
 

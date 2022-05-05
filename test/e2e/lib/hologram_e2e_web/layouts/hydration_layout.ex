@@ -16,7 +16,7 @@ defmodule HologramE2E.HydrationLayout do
         <Hologram.UI.Runtime />
       </head>
       <body>
-        <button id="layout-button" on:click="increment">Increment</button>
+        <button id="layout-button" on:click="increment">Increment in layout</button>
         <div id="layout-text">layout count = {@count}</div>
         <slot />
       </body>
