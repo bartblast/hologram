@@ -7,8 +7,6 @@ defmodule Hologram.Runtime.Watcher do
   alias Hologram.Compiler.Reflection
   alias Hologram.Runtime
 
-  @endpoint Application.fetch_env!(:hologram, :endpoint)
-
   def start_link(args) do
     GenServer.start_link(__MODULE__, args)
   end
@@ -28,8 +26,12 @@ defmodule Hologram.Runtime.Watcher do
   def handle_info({:file_event, _, _}, state) do
     Mix.Tasks.Compile.Hologram.run([])
     Runtime.reload()
-    @endpoint.broadcast!("hologram", "reload", %{})
+    endpoint().broadcast!("hologram", "reload", %{})
 
     {:noreply, state}
+  end
+
+  defp endpoint do
+    Application.fetch_env!(:hologram, :endpoint)
   end
 end
