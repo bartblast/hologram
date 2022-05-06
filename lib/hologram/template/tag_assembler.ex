@@ -36,50 +36,12 @@ defmodule Hologram.Template.TagAssembler do
     maybe_add_text_tag(tags, tokens)
   end
 
-  def assemble([], _, context, _) do
-    raise_error(nil, [], context)
-  end
-
   def assemble([{:whitespace, _} = token | rest], :text_tag, context, tags) do
     assemble_text_tag(context, token, rest, tags)
   end
 
-  def assemble([{:whitespace, _} = token | rest], :start_tag, context, tags) do
-    context = add_prev_token(context, token)
-    assemble(rest, :start_tag, context, tags)
-  end
-
-  def assemble([{:whitespace, _} = token | rest], :attr_key, context, tags) do
-    context =
-      context
-      |> add_attr(:boolean, context.attr_key, nil)
-      |> add_prev_token(token)
-
-    assemble(rest, :start_tag, context, tags)
-  end
-
-  def assemble([{:whitespace, _} = token | rest], :end_tag, context, tags) do
-    context = add_prev_token(context, token)
-    assemble(rest, :end_tag, context, tags)
-  end
-
   def assemble([{:string, _} = token | rest], :text_tag, context, tags) do
     assemble_text_tag(context, token, rest, tags)
-  end
-
-  def assemble([{:string, str} = token | rest], :start_tag_bracket, context, tags) do
-    context = context |> reset_tag(str) |> add_prev_token(token)
-    assemble(rest, :start_tag, context, tags)
-  end
-
-  def assemble([{:string, str} = token | rest], :start_tag, context, tags) do
-    context = context |> put_attr_key(str) |> add_prev_token(token)
-    assemble(rest, :attr_key, context, tags)
-  end
-
-  def assemble([{:string, str} = token | rest], :end_tag_bracket, context, tags) do
-    context = context |> reset_tag(str) |> add_prev_token(token)
-    assemble(rest, :end_tag, context, tags)
   end
 
   def assemble([{:symbol, :"</"} = token | rest], :text_tag, context, tags) do
@@ -87,19 +49,6 @@ defmodule Hologram.Template.TagAssembler do
     tags = maybe_add_text_tag(tags, tokens)
     context = add_prev_token(context, token)
     assemble(rest, :end_tag_bracket, context, tags)
-  end
-
-  def assemble([{:symbol, :"/>"} = token | rest], :start_tag, context, tags) do
-    type = Helpers.tag_type(context.tag_name)
-
-    tags =
-      if type == :component || is_self_closing_tag?(context.tag_name) do
-        add_self_closing_tag(tags, context)
-      else
-        add_start_tag(tags, context)
-      end
-
-    handle_start_tag_end(context, token, rest, tags)
   end
 
   def assemble([{:symbol, :<} = token | [{:string, _} | _] = rest], :text_tag, context, tags) do
@@ -116,6 +65,64 @@ defmodule Hologram.Template.TagAssembler do
     assemble_text_tag(context, token, rest, tags)
   end
 
+  def assemble([{:symbol, :/} = token | rest], :text_tag, context, tags) do
+    assemble_text_tag(context, token, rest, tags)
+  end
+
+  def assemble([{:symbol, :=} = token | rest], :text_tag, context, tags) do
+    assemble_text_tag(context, token, rest, tags)
+  end
+
+  def assemble([{:symbol, :"\""} = token | rest], :text_tag, context, tags) do
+    assemble_text_tag(context, token, rest, tags)
+  end
+
+  # TODO: redundant?
+  def assemble([{:symbol, :"\\{"} = token | rest], :text_tag, context, tags) do
+    assemble_text_tag(context, token, rest, tags)
+  end
+
+  def assemble([{:symbol, :"{"} = token | rest], :text_tag, context, tags) do
+    assemble_text_tag(context, token, rest, tags)
+  end
+
+  # TODO: redundant?
+  def assemble([{:symbol, :"\\}"} = token | rest], :text_tag, context, tags) do
+    assemble_text_tag(context, token, rest, tags)
+  end
+
+  def assemble([{:symbol, :"}"} = token | rest], :text_tag, context, tags) do
+    assemble_text_tag(context, token, rest, tags)
+  end
+
+  def assemble([{:string, str} = token | rest], :start_tag_bracket, context, tags) do
+    context = context |> reset_tag(str) |> add_prev_token(token)
+    assemble(rest, :start_tag, context, tags)
+  end
+
+  def assemble([{:whitespace, _} = token | rest], :start_tag, context, tags) do
+    context = add_prev_token(context, token)
+    assemble(rest, :start_tag, context, tags)
+  end
+
+  def assemble([{:string, str} = token | rest], :start_tag, context, tags) do
+    context = context |> put_attr_key(str) |> add_prev_token(token)
+    assemble(rest, :attr_key, context, tags)
+  end
+
+  def assemble([{:symbol, :"/>"} = token | rest], :start_tag, context, tags) do
+    type = Helpers.tag_type(context.tag_name)
+
+    tags =
+      if type == :component || is_self_closing_tag?(context.tag_name) do
+        add_self_closing_tag(tags, context)
+      else
+        add_start_tag(tags, context)
+      end
+
+    handle_start_tag_end(context, token, rest, tags)
+  end
+
   def assemble([{:symbol, :>} = token | rest], :start_tag, context, tags) do
     tags =
       if is_self_closing_tag?(context.tag_name) do
@@ -127,18 +134,13 @@ defmodule Hologram.Template.TagAssembler do
     handle_start_tag_end(context, token, rest, tags)
   end
 
-  def assemble([{:symbol, :>} = token | rest], :end_tag, context, tags) do
-    tags = add_end_tag(tags, context)
-    context = add_prev_token(context, token)
-    assemble(rest, :text_tag, context, tags)
-  end
+  def assemble([{:whitespace, _} = token | rest], :attr_key, context, tags) do
+    context =
+      context
+      |> add_attr(:boolean, context.attr_key, nil)
+      |> add_prev_token(token)
 
-  def assemble([{:symbol, :/} = token | rest], :text_tag, context, tags) do
-    assemble_text_tag(context, token, rest, tags)
-  end
-
-  def assemble([{:symbol, :=} = token | rest], :text_tag, context, tags) do
-    assemble_text_tag(context, token, rest, tags)
+    assemble(rest, :start_tag, context, tags)
   end
 
   def assemble([{:symbol, :=} = token | rest], :attr_key, context, tags) do
@@ -146,30 +148,26 @@ defmodule Hologram.Template.TagAssembler do
     assemble(rest, :attr_assignment, context, tags)
   end
 
-  def assemble([{:symbol, :"\""} = token | rest], :text_tag, context, tags) do
-    assemble_text_tag(context, token, rest, tags)
-  end
-
   def assemble([{:symbol, :"\""} = token | rest], :attr_assignment, context, tags) do
     context = add_prev_token(context, token)
     assemble(rest, :attr_value_literal, context, tags)
+  end
+
+  def assemble([{:symbol, :"{"} = token | rest], :attr_assignment, context, tags) do
+    context = add_prev_token(context, token)
+    assemble(rest, :attr_value_expression, context, tags)
   end
 
   def assemble([{:symbol, :"\""} = token | rest], :attr_value_literal, context, tags) do
     handle_attr_value_end(context, :literal, token, rest, tags)
   end
 
+  def assemble([token | rest], :attr_value_literal, context, tags) do
+    assemble_attr_value(context, token, rest, tags, :attr_value_literal)
+  end
+
   def assemble([{:symbol, :"\""} = token | rest], :attr_value_expression, context, tags) do
     assemble_attr_value(context, token, rest, tags, :attr_value_expression)
-  end
-
-  def assemble([{:symbol, :"{"} = token | rest], :text_tag, context, tags) do
-    assemble_text_tag(context, token, rest, tags)
-  end
-
-  def assemble([{:symbol, :"{"} = token | rest], :attr_assignment, context, tags) do
-    context = add_prev_token(context, token)
-    assemble(rest, :attr_value_expression, context, tags)
   end
 
   def assemble([{:symbol, :"{"} = token | rest], :attr_value_expression, context, tags) do
@@ -178,16 +176,12 @@ defmodule Hologram.Template.TagAssembler do
     |> assemble_attr_value(token, rest, tags, :attr_value_expression)
   end
 
-  def assemble([{:symbol, :"}"} = token | rest], :text_tag, context, tags) do
-    assemble_text_tag(context, token, rest, tags)
-  end
-
   def assemble(
-        [{:symbol, :"}"} = token | rest],
-        :attr_value_expression,
-        %{num_open_braces: 0} = context,
-        tags
-      ) do
+    [{:symbol, :"}"} = token | rest],
+    :attr_value_expression,
+    %{num_open_braces: 0} = context,
+    tags
+  ) do
     handle_attr_value_end(context, :expression, token, rest, tags)
   end
 
@@ -197,24 +191,32 @@ defmodule Hologram.Template.TagAssembler do
     |> assemble_attr_value(token, rest, tags, :attr_value_expression)
   end
 
-  def assemble([{:symbol, :"\\{"} = token | rest], :text_tag, context, tags) do
-    assemble_text_tag(context, token, rest, tags)
-  end
-
-  def assemble([{:symbol, :"\\}"} = token | rest], :text_tag, context, tags) do
-    assemble_text_tag(context, token, rest, tags)
-  end
-
-  def assemble([token | rest], :attr_value_literal, context, tags) do
-    assemble_attr_value(context, token, rest, tags, :attr_value_literal)
-  end
-
   def assemble([token | rest], :attr_value_expression, context, tags) do
     assemble_attr_value(context, token, rest, tags, :attr_value_expression)
   end
 
+  def assemble([{:string, str} = token | rest], :end_tag_bracket, context, tags) do
+    context = context |> reset_tag(str) |> add_prev_token(token)
+    assemble(rest, :end_tag, context, tags)
+  end
+
+  def assemble([{:whitespace, _} = token | rest], :end_tag, context, tags) do
+    context = add_prev_token(context, token)
+    assemble(rest, :end_tag, context, tags)
+  end
+
+  def assemble([{:symbol, :>} = token | rest], :end_tag, context, tags) do
+    tags = add_end_tag(tags, context)
+    context = add_prev_token(context, token)
+    assemble(rest, :text_tag, context, tags)
+  end
+
   def assemble([token | rest], _, context, _) do
     raise_error(token, rest, context)
+  end
+
+  def assemble([], _, context, _) do
+    raise_error(nil, [], context)
   end
 
   defp add_attr(context, type, key, value) do
