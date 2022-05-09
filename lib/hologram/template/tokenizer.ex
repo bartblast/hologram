@@ -1,5 +1,3 @@
-# DEFER: test
-
 defmodule Hologram.Template.Tokenizer do
   def tokenize(""), do: []
 
@@ -62,14 +60,18 @@ defmodule Hologram.Template.Tokenizer do
   def tokenize("\\}" <> rest) do
     [{:symbol, :"\\}"} | tokenize(rest)]
   end
-  
+
   def tokenize("}" <> rest) do
     [{:symbol, :"}"} | tokenize(rest)]
   end
 
+  def tokenize("\\" <> rest) do
+    [{:symbol, :"\\"} | tokenize(rest)]
+  end
+
   def tokenize(rest) do
-    excluded_chars = "\s<>/=\"{}" |> Regex.escape()
-    regex = ~r/\A([^#{excluded_chars}]+)(.*)\z/msu
+    excluded_chars = " \n\r\t<>/=\"{}\\" |> Regex.escape()
+    regex = ~r/\A([^#{excluded_chars}]+)(.*)\z/s
     [_, string, rest] = Regex.run(regex, rest)
     [{:string, string} | tokenize(rest)]
   end
