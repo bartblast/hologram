@@ -148,10 +148,28 @@ defmodule Hologram.Template.ParserTest do
   test "single attribute with literal value" do
     markup = "<div class=\"abc\"></div>"
 
-    result = Parser.parse!(markup)
-    expected = [{:element, "div", [{:literal, "class", "abc"}], []}]
+    context = %{
+      attrs: [],
+      attr_key: nil,
+      double_quote_open?: 0,
+      num_open_braces: 0,
+      prev_tokens: [],
+      tag_name: nil,
+      token_buffer: []
+    }
+    
+    markup
+    |> Hologram.Template.Parser.remove_doctype()
+    |> Hologram.Template.Parser.remove_comments()
+    |> String.trim()
+    |> Hologram.Template.Tokenizer.tokenize()
+    |> Hologram.Template.TagAssembler.assemble(:text_tag, context, [])
+    |> IO.inspect()
 
-    assert result == expected
+    # result = Parser.parse!(markup)
+    # expected = [{:element, "div", [{:literal, "class", "abc"}], []}]
+
+    # assert result == expected
   end
 
   test "multiple attributes with literal value" do

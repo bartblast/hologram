@@ -10,6 +10,7 @@ defmodule Hologram.Template.EmbeddedExpressionParser do
   def parse(str, %Context{} = context) do
     acc = %{
       nodes: [],
+      double_quote_open?: false,
       num_open_braces: 0,
       prev_tokens: [],
       token_buffer: []

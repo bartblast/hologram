@@ -1,7 +1,15 @@
-# Covered in Hologram.Template.Parser integration tests
-
 defmodule Hologram.Template.TagAssembler do
   alias Hologram.Template.{Helpers, SyntaxError, TokenHTMLEncoder}
+
+  @initial_context %{
+    attrs: [],
+    attr_key: nil,
+    double_quote_open?: 0,
+    num_open_braces: 0,
+    prev_tokens: [],
+    tag_name: nil,
+    token_buffer: []
+  }
 
   # see: https://html.spec.whatwg.org/multipage/syntax.html#void-elements
   @void_html_tags [
@@ -29,17 +37,20 @@ defmodule Hologram.Template.TagAssembler do
   # status is one of:
   # :text_tag, :start_tag_bracket, :start_tag, :attr_key, :attr_assignment,
   # :attr_value_literal, :attr_value_expression, :end_tag_bracket, :end_tag
-  def assemble(tokens, status, context, tags)
+  def assemble(tokens, status \\ :text_tag, context \\ @initial_context, tags \\ [])
 
+  # TESTED
   def assemble([], :text_tag, context, tags) do
     {tokens, _} = flush_token_buffer(context)
     maybe_add_text_tag(tags, tokens)
   end
 
+  # TESTED
   def assemble([{:whitespace, _} = token | rest], :text_tag, context, tags) do
     assemble_text_tag(context, token, rest, tags)
   end
 
+  # TESTED
   def assemble([{:string, _} = token | rest], :text_tag, context, tags) do
     assemble_text_tag(context, token, rest, tags)
   end
@@ -57,43 +68,47 @@ defmodule Hologram.Template.TagAssembler do
     assemble(rest, :start_tag_bracket, context, tags)
   end
 
-  def assemble([{:symbol, :<} = token | rest], :text_tag, context, tags) do
-    assemble_text_tag(context, token, rest, tags)
+  def assemble([{:symbol, :<} = token | rest], :text_tag, context, _tags) do
+    raise_error(token, rest, context)
   end
 
-  def assemble([{:symbol, :>} = token | rest], :text_tag, context, tags) do
-    assemble_text_tag(context, token, rest, tags)
+  def assemble([{:symbol, :>} = token | rest], :text_tag, context, _tags) do
+    raise_error(token, rest, context)
   end
 
+  # TESTED
   def assemble([{:symbol, :/} = token | rest], :text_tag, context, tags) do
     assemble_text_tag(context, token, rest, tags)
   end
 
+  # TESTED
   def assemble([{:symbol, :=} = token | rest], :text_tag, context, tags) do
     assemble_text_tag(context, token, rest, tags)
   end
 
+  # TESTED
   def assemble([{:symbol, :"\""} = token | rest], :text_tag, context, tags) do
     assemble_text_tag(context, token, rest, tags)
   end
 
-  # TODO: redundant?
-  def assemble([{:symbol, :"\\{"} = token | rest], :text_tag, context, tags) do
-    assemble_text_tag(context, token, rest, tags)
+  # TESTED
+  def assemble([{:symbol, :"\\{"} | rest], :text_tag, context, tags) do
+    assemble_text_tag(context, {:symbol, :"{"}, rest, tags)
   end
 
   def assemble([{:symbol, :"{"} = token | rest], :text_tag, context, tags) do
-    assemble_text_tag(context, token, rest, tags)
+    context = add_prev_token(context, token)
+    assemble(rest, :expression, context, tags)
   end
 
-  # TODO: redundant?
-  def assemble([{:symbol, :"\\}"} = token | rest], :text_tag, context, tags) do
-    assemble_text_tag(context, token, rest, tags)
+  # TESTED
+  def assemble([{:symbol, :"\\}"} | rest], :text_tag, context, tags) do
+    assemble_text_tag(context, {:symbol, :"}"}, rest, tags)
   end
 
-  def assemble([{:symbol, :"}"} = token | rest], :text_tag, context, tags) do
-    assemble_text_tag(context, token, rest, tags)
-  end
+  # def assemble([{:symbol, :"}"} = token | rest], :text_tag, context, tags) do
+  #   assemble_text_tag(context, token, rest, tags)
+  # end
 
   def assemble([{:string, str} = token | rest], :start_tag_bracket, context, tags) do
     context = context |> reset_tag(str) |> add_prev_token(token)
@@ -148,6 +163,13 @@ defmodule Hologram.Template.TagAssembler do
     assemble(rest, :attr_assignment, context, tags)
   end
 
+
+
+
+
+
+
+  
   def assemble([{:symbol, :"\""} = token | rest], :attr_assignment, context, tags) do
     context = add_prev_token(context, token)
     assemble(rest, :attr_value_literal, context, tags)
@@ -162,30 +184,37 @@ defmodule Hologram.Template.TagAssembler do
     handle_attr_value_end(context, :literal, token, rest, tags)
   end
 
+  def assemble([{:symbol, :"{"} = token | rest], :attr_value_literal, context, tags) do
+    assemble_attr_value(context, token, rest, tags, :attr_value_interpolation)
+  end
+
   def assemble([token | rest], :attr_value_literal, context, tags) do
     assemble_attr_value(context, token, rest, tags, :attr_value_literal)
   end
 
-  def assemble([{:symbol, :"\""} = token | rest], :attr_value_expression, context, tags) do
-    assemble_attr_value(context, token, rest, tags, :attr_value_expression)
+  def assemble([{:symbol, :"\""} = token | rest], :attr_value_expression, %{double_quote_open?: false} = context, tags) do
+    context
+    |> open_double_quote()
+    |> assemble_attr_value(token, rest, tags, :attr_value_expression)
   end
 
-  def assemble([{:symbol, :"{"} = token | rest], :attr_value_expression, context, tags) do
+  def assemble([{:symbol, :"\""} = token | rest], :attr_value_expression, %{double_quote_open?: true} = context, tags) do
+    context
+    |> close_double_quote()
+    |> assemble_attr_value(token, rest, tags, :attr_value_expression)
+  end
+
+  def assemble([{:symbol, :"{"} = token | rest], :attr_value_expression, %{double_quote_open?: false} = context, tags) do
     context
     |> increment_num_open_braces()
     |> assemble_attr_value(token, rest, tags, :attr_value_expression)
   end
 
-  def assemble(
-    [{:symbol, :"}"} = token | rest],
-    :attr_value_expression,
-    %{num_open_braces: 0} = context,
-    tags
-  ) do
+  def assemble([{:symbol, :"}"} = token | rest], :attr_value_expression, %{double_quote_open?: false, num_open_braces: 0} = context, tags) do
     handle_attr_value_end(context, :expression, token, rest, tags)
   end
 
-  def assemble([{:symbol, :"}"} = token | rest], :attr_value_expression, context, tags) do
+  def assemble([{:symbol, :"}"} = token | rest], :attr_value_expression, %{double_quote_open?: false} = context, tags) do
     context
     |> decrement_num_open_braces()
     |> assemble_attr_value(token, rest, tags, :attr_value_expression)
@@ -193,6 +222,38 @@ defmodule Hologram.Template.TagAssembler do
 
   def assemble([token | rest], :attr_value_expression, context, tags) do
     assemble_attr_value(context, token, rest, tags, :attr_value_expression)
+  end
+
+  def assemble([{:symbol, :"\""} = token | rest], :attr_value_interpolation, %{double_quote_open?: false} = context, tags) do
+    context
+    |> open_double_quote()
+    |> assemble_attr_value(token, rest, tags, :attr_value_interpolation)
+  end
+
+  def assemble([{:symbol, :"\""} = token | rest], :attr_value_interpolation, %{double_quote_open?: true} = context, tags) do
+    context
+    |> close_double_quote()
+    |> assemble_attr_value(token, rest, tags, :attr_value_interpolation)
+  end
+
+  def assemble([{:symbol, :"{"} = token | rest], :attr_value_interpolation, %{double_quote_open?: false} = context, tags) do
+    context
+    |> increment_num_open_braces()
+    |> assemble_attr_value(token, rest, tags, :attr_value_interpolation)
+  end
+
+  def assemble([{:symbol, :"}"} = token | rest], :attr_value_interpolation, %{double_quote_open?: false, num_open_braces: 0} = context, tags) do
+    assemble_attr_value(context, token, rest, tags, :attr_value_literal)
+  end
+
+  def assemble([{:symbol, :"}"} = token | rest], :attr_value_interpolation, %{double_quote_open?: false} = context, tags) do
+    context
+    |> decrement_num_open_braces()
+    |> assemble_attr_value(token, rest, tags, :attr_value_interpolation)
+  end
+
+  def assemble([token | rest], :attr_value_interpolation, context, tags) do
+    assemble_attr_value(context, token, rest, tags, :attr_value_interpolation)
   end
 
   def assemble([{:string, str} = token | rest], :end_tag_bracket, context, tags) do
@@ -253,6 +314,10 @@ defmodule Hologram.Template.TagAssembler do
     %{context | token_buffer: context.token_buffer ++ [token]}
   end
 
+  defp close_double_quote(context) do
+    %{context | double_quote_open?: false}
+  end
+
   defp decrement_num_open_braces(context) do
     %{context | num_open_braces: context.num_open_braces - 1}
   end
@@ -271,12 +336,11 @@ defmodule Hologram.Template.TagAssembler do
   end
 
   defp handle_attr_value_end(context, type, token, rest, tags) do
-    attr_value = TokenHTMLEncoder.encode(context.token_buffer)
-
     context =
       context
-      |> add_attr(type, context.attr_key, attr_value)
+      |> buffer_token(token)
       |> add_prev_token(token)
+      |> add_attr(type, context.attr_key, context.token_buffer)
 
     assemble(rest, :start_tag, context, tags)
   end
@@ -308,6 +372,10 @@ defmodule Hologram.Template.TagAssembler do
     else
       tags
     end
+  end
+
+  defp open_double_quote(context) do
+    %{context | double_quote_open?: true}
   end
 
   defp put_attr_key(context, key) do
@@ -348,7 +416,7 @@ defmodule Hologram.Template.TagAssembler do
   end
 
   defp reset_attr_value(context) do
-    %{context | double_quote_opened?: false, num_open_braces: 0, token_buffer: []}
+    %{context | double_quote_open?: false, num_open_braces: 0, token_buffer: []}
   end
 
   defp reset_tag(context, tag_name) do

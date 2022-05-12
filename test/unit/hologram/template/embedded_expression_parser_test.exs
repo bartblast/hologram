@@ -194,7 +194,7 @@ defmodule Hologram.Template.EmbeddedExpressionParserTest do
     assert result == expected
   end
 
-  test "handles JS code" do
+  test "JS code" do
     str = """
     function isPositiveNumber(param) \\{
       if (param > 0) \\{
@@ -210,5 +210,24 @@ defmodule Hologram.Template.EmbeddedExpressionParserTest do
     expected = [%TextNode{content: str}]
 
     assert result == expected
+  end
+
+  test "expression containing string" do
+    # str = "{if @selected_item == 2 do \"border-indigo-500\" else \"border-gray-200\" end}"
+
+    markup = """
+    <div class="dupajasia{if true do "abc" else "bcd" end}"></div>
+    """
+
+    result = EmbeddedExpressionParser.parse(markup, @context)
+    IO.inspect(result)
+
+    # result = Hologram.Template.Parser.parse!(markup)
+    # IO.inspect(result)
+
+    # Hologram.Template.Tokenizer.tokenize(markup)
+    # |> IO.inspect()
+
+
   end
 end
