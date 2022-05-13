@@ -103,6 +103,20 @@ defmodule Hologram.Commons.MemoryStoreTest do
     end
   end
 
+  test "put/1" do
+    MemoryStore.run()
+
+    items = [
+      {:key_3, :value_3},
+      {:key_4, :value_4}
+    ]
+
+    MemoryStore.put(items)
+
+    assert MemoryStore.get(:key_3) == {:ok, :value_3}
+    assert MemoryStore.get(:key_4) == {:ok, :value_4}
+  end
+
   test "put/2" do
     MemoryStore.run()
     MemoryStore.put(:key_3, :value_3)

@@ -77,6 +77,10 @@ defmodule Hologram.Commons.MemoryStore do
         |> Enum.each(fn {key, value} -> put(key, value) end)
       end
 
+      def put(items) do
+        table_name() |> :ets.insert(items)
+      end
+      
       def put(key, value) do
         table_name() |> :ets.insert({key, value})
       end
