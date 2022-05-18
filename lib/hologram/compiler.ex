@@ -1,6 +1,8 @@
 # TODO: refactor & test
 
 defmodule Hologram.Compiler do
+  require Logger
+
   alias Hologram.Compiler.{
     Builder,
     CallGraph,
@@ -106,6 +108,8 @@ defmodule Hologram.Compiler do
   end
 
   defp dump_page_digest_store(page_digests) do
+    Logger.debug("Hologram: page digest store dump path = #{Reflection.root_page_digest_store_path()}")
+
     data =
       page_digests
       |> Utils.serialize()
@@ -122,6 +126,8 @@ defmodule Hologram.Compiler do
   end
 
   defp dump_template_store(templates) do
+    Logger.debug("Hologram: template store dump path = #{Reflection.root_template_store_path()}")
+    
     data = Utils.serialize(templates)
 
     Reflection.root_template_store_path()
