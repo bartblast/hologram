@@ -17,9 +17,11 @@ defmodule Hologram.Compiler do
   alias Hologram.Utils
 
   def compile(opts) do
+    Logger.debug("Hologram: compile output path = #{resolve_output_path()}")
     output_path = resolve_output_path()
     File.mkdir_p!(output_path)
 
+    Logger.debug("Hologram: compile priv path = #{Reflection.root_priv_path()}")
     Reflection.root_priv_path()
     |> File.mkdir_p!()
 
@@ -127,7 +129,7 @@ defmodule Hologram.Compiler do
 
   defp dump_template_store(templates) do
     Logger.debug("Hologram: template store dump path = #{Reflection.root_template_store_path()}")
-    
+
     data = Utils.serialize(templates)
 
     Reflection.root_template_store_path()
