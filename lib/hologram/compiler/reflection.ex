@@ -179,12 +179,9 @@ defmodule Hologram.Compiler.Reflection do
       case Code.ensure_loaded(module) do
         {:module, _} ->
           funs = module.module_info(:exports)
-
-          in_path? = String.starts_with?(source_path(module), path)
           type_check_function = :"is_#{type}?"
 
-          if Keyword.get(funs, type_check_function) && apply(module, type_check_function, []) &&
-               in_path? do
+          if Keyword.get(funs, type_check_function) && apply(module, type_check_function, []) do
             acc ++ [module]
           else
             acc
