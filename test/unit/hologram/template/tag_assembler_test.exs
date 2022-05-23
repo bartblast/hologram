@@ -11,11 +11,11 @@ defmodule Hologram.Template.TagAssemblerTest do
   end
 
   describe "text node" do
-    test "string" do
-      markup = "abc"
+    test "empty" do
+      markup = ""
 
       result = assemble(markup)
-      expected = [text_tag: "abc"]
+      expected = []
 
       assert result == expected
     end
@@ -24,16 +24,43 @@ defmodule Hologram.Template.TagAssemblerTest do
       markup = " \n\r\t"
 
       result = assemble(markup)
-      expected = [text_tag: " \n\r\t"]
+      expected = [text_tag: markup]
+
+      assert result == expected
+    end
+
+    test "string, ASCI alphabet lowercase" do
+      markup = "abcdefghijklmnopqrstuvwxyz"
+
+      result = assemble(markup)
+      expected = [text_tag: markup]
+
+      assert result == expected
+    end
+
+    test "string, ASCI alphabet uppercase" do
+      markup = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+
+      result = assemble(markup)
+      expected = [text_tag: markup]
+
+      assert result == expected
+    end
+
+    test "string, UTF-8 chars" do
+      markup = "ąćęłńóśźżĄĆĘŁŃÓŚŹŻ"
+
+      result = assemble(markup)
+      expected = [text_tag: markup]
 
       assert result == expected
     end
 
     test "symbols" do
-      markup = "/=\""
+      markup = "!@#$%^&*()-_=+[];:'\"\\|,./?`~"
 
       result = assemble(markup)
-      expected = [text_tag: "/=\""]
+      expected = [text_tag: markup]
 
       assert result == expected
     end
@@ -57,215 +84,385 @@ defmodule Hologram.Template.TagAssemblerTest do
     end
   end
 
-  describe "element node" do
-    test "start tag" do
-      markup = "<div>"
+  describe "text node interpolation" do
+    test "empty" do
+      markup = "abc{}xyz"
 
       result = assemble(markup)
-      expected = [start_tag: {"div", []}]
+      expected = [text_tag: "abc", expression: "{}", text_tag: "xyz"]
 
       assert result == expected
     end
 
-    test "end tag" do
-      markup = "</div>"
+    test "whitespaces" do
+      markup = "abc{ \n\r\t}xyz"
 
       result = assemble(markup)
-      expected = [end_tag: "div"]
+      expected = [text_tag: "abc", expression: "{ \n\r\t}", text_tag: "xyz"]
 
       assert result == expected
     end
 
-    test "start & end tag" do
-      markup = "<div></div>"
+    test "string, ASCI alphabet lowercase" do
+      markup = "abc{abcdefghijklmnopqrstuvwxyz}xyz"
 
       result = assemble(markup)
-      expected = [start_tag: {"div", []}, end_tag: "div"]
-
-      assert result == expected
-    end
-  end
-
-  describe "component node" do
-    test "start tag" do
-      markup = "<Abc.Bcd>"
-
-      result = assemble(markup)
-      expected = [start_tag: {"Abc.Bcd", []}]
+      expected = [text_tag: "abc", expression: "{abcdefghijklmnopqrstuvwxyz}", text_tag: "xyz"]
 
       assert result == expected
     end
 
-    test "end tag" do
-      markup = "</Abc.Bcd>"
+    test "string, ASCI alphabet uppercase" do
+      markup = "abc{ABCDEFGHIJKLMNOPQRSTUVWXYZ}xyz"
 
       result = assemble(markup)
-      expected = [end_tag: "Abc.Bcd"]
+      expected = [text_tag: "abc", expression: "{ABCDEFGHIJKLMNOPQRSTUVWXYZ}", text_tag: "xyz"]
 
       assert result == expected
     end
 
-    test "start & end tag" do
-      markup = "<Abc.Bcd></Abc.Bcd>"
+    test "string, UTF-8 chars" do
+      markup = "abc{ąćęłńóśźżĄĆĘŁŃÓŚŹŻ}xyz"
 
       result = assemble(markup)
-      expected = [start_tag: {"Abc.Bcd", []}, end_tag: "Abc.Bcd"]
-
-      assert result == expected
-    end
-  end
-
-  describe "closed void node" do
-    test "non-svg element" do
-      markup = "<br />"
-
-      result = assemble(markup)
-      expected = [self_closing_tag: {"br", []}]
+      expected = [text_tag: "abc", expression: "{ąćęłńóśźżĄĆĘŁŃÓŚŹŻ}", text_tag: "xyz"]
 
       assert result == expected
     end
 
-    test "svg element" do
-      markup = "<path />"
+    test "symbols" do
+      markup = "abc{!@#$%^&*()-_=+[];:'\\\"\\|,./?`~}xyz"
 
       result = assemble(markup)
-      expected = [self_closing_tag: {"path", []}]
+      expected = [text_tag: "abc", expression: "{!@#$%^&*()-_=+[];:'\\\"\\|,./?`~}", text_tag: "xyz"]
 
       assert result == expected
     end
 
-    test "slot element" do
-      markup = "<slot />"
+    test "single group of curly brackets" do
+      markup = "abc{{123}}xyz"
 
       result = assemble(markup)
-      expected = [self_closing_tag: {"slot", []}]
+      expected = [text_tag: "abc", expression: "{{123}}", text_tag: "xyz"]
 
       assert result == expected
     end
 
-    test "component" do
-      markup = "<Abc.Bcd />"
+    test "multiple groups of curly brackets" do
+      markup = "abc{{1},{2}}xyz"
 
       result = assemble(markup)
-      expected = [self_closing_tag: {"Abc.Bcd", []}]
-
-      assert result == expected
-    end
-  end
-
-  describe "unclosed void node" do
-    test "non-svg element" do
-      markup = "<br>"
-
-      result = assemble(markup)
-      expected = [self_closing_tag: {"br", []}]
+      expected = [text_tag: "abc", expression: "{{1},{2}}", text_tag: "xyz"]
 
       assert result == expected
     end
 
-    test "svg element" do
-      markup = "<path>"
+    test "opening curly bracket escaping" do
+      markup = "abc{{\"\\{123\"}}xyz"
 
       result = assemble(markup)
-      expected = [self_closing_tag: {"path", []}]
+      expected = [text_tag: "abc", expression: "{{\"\\{123\"}}", text_tag: "xyz"]
 
       assert result == expected
     end
 
-    test "slot element" do
-      markup = "<slot>"
+    test "closing curly bracket escaping" do
+      markup = "abc{{\"123\\}\"}}xyz"
 
       result = assemble(markup)
-      expected = [self_closing_tag: {"slot", []}]
-
-      assert result == expected
-    end
-  end
-
-  describe "attribute" do
-    test "literal value" do
-      markup = "<div id=\"test\">"
-
-      result = assemble(markup)
-      expected = [start_tag: {"div", [{:literal, "id", [string: "test"]}]}]
+      expected = [text_tag: "abc", expression: "{{\"123\\}\"}}", text_tag: "xyz"]
 
       assert result == expected
     end
 
-    test "expression value" do
-      markup = "<div id={@test}>"
+    test "single group of double quotes" do
+      markup = "abc{{\"123\"}}xyz"
 
       result = assemble(markup)
-      expected = [start_tag: {"div", [{:expression, "id", [string: "@test"]}]}]
+      expected = [text_tag: "abc", expression: "{{\"123\"}}", text_tag: "xyz"]
 
       assert result == expected
     end
 
-    test "literal value with interpolation without string prefix or suffix" do
-      markup = "<div id=\"{@test}\">"
+    test "multiple groups of double quotes" do
+      markup = "abc{{\"1\",\"2\"}}xyz"
 
       result = assemble(markup)
-
-      expected = [
-        start_tag: {"div",
-         [{:literal, "id", [symbol: :"{", string: "@test", symbol: :"}"]}]}
-      ]
+      expected = [text_tag: "abc", expression: "{{\"1\",\"2\"}}", text_tag: "xyz"]
 
       assert result == expected
     end
 
-    test "literal value with interpolation with string prefix" do
-      markup = "<div id=\"abc{@test}\">"
+    test "double quote escaping" do
+      markup = "abc{{1\\\"2}}xyz"
 
       result = assemble(markup)
-
-      expected = [
-        start_tag: {"div",
-         [
-           {:literal, "id",
-            [string: "abc", symbol: :"{", string: "@test", symbol: :"}"]}
-         ]}
-      ]
+      expected = [text_tag: "abc", expression: "{{1\\\"2}}", text_tag: "xyz"]
 
       assert result == expected
     end
 
-    test "literal value with interpolation with string suffix" do
-      markup = "<div id=\"{@test}abc\">"
+    test "opening curly bracket inside double quoted string" do
+      markup = "abc{{\"1\\{2\"}}xyz"
 
       result = assemble(markup)
-
-      expected = [
-        start_tag: {"div",
-         [
-           {:literal, "id",
-            [symbol: :"{", string: "@test", symbol: :"}", string: "abc"]}
-         ]}
-      ]
+      expected = [text_tag: "abc", expression: "{{\"1\\{2\"}}", text_tag: "xyz"]
 
       assert result == expected
     end
 
-    test "literal value with interpolation with string prefix and suffix" do
-      markup = "<div id=\"abc{@test}xyz\">"
+    test "closing curly bracket inside double quoted string" do
+      markup = "abc{{\"1\\}2\"}}xyz"
 
       result = assemble(markup)
-
-      expected = [
-        start_tag: {"div",
-         [
-           {:literal, "id",
-            [
-              string: "abc",
-              symbol: :"{",
-              string: "@test",
-              symbol: :"}",
-              string: "xyz"
-            ]}
-         ]}
-      ]
+      expected = [text_tag: "abc", expression: "{{\"1\\}2\"}}", text_tag: "xyz"]
 
       assert result == expected
     end
   end
 end
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+#   describe "element node" do
+#     test "start tag" do
+#       markup = "<div>"
+
+#       result = assemble(markup)
+#       expected = [start_tag: {"div", []}]
+
+#       assert result == expected
+#     end
+
+#     test "end tag" do
+#       markup = "</div>"
+
+#       result = assemble(markup)
+#       expected = [end_tag: "div"]
+
+#       assert result == expected
+#     end
+
+#     test "start & end tag" do
+#       markup = "<div></div>"
+
+#       result = assemble(markup)
+#       expected = [start_tag: {"div", []}, end_tag: "div"]
+
+#       assert result == expected
+#     end
+#   end
+
+#   describe "component node" do
+#     test "start tag" do
+#       markup = "<Abc.Bcd>"
+
+#       result = assemble(markup)
+#       expected = [start_tag: {"Abc.Bcd", []}]
+
+#       assert result == expected
+#     end
+
+#     test "end tag" do
+#       markup = "</Abc.Bcd>"
+
+#       result = assemble(markup)
+#       expected = [end_tag: "Abc.Bcd"]
+
+#       assert result == expected
+#     end
+
+#     test "start & end tag" do
+#       markup = "<Abc.Bcd></Abc.Bcd>"
+
+#       result = assemble(markup)
+#       expected = [start_tag: {"Abc.Bcd", []}, end_tag: "Abc.Bcd"]
+
+#       assert result == expected
+#     end
+#   end
+
+#   describe "closed void node" do
+#     test "non-svg element" do
+#       markup = "<br />"
+
+#       result = assemble(markup)
+#       expected = [self_closing_tag: {"br", []}]
+
+#       assert result == expected
+#     end
+
+#     test "svg element" do
+#       markup = "<path />"
+
+#       result = assemble(markup)
+#       expected = [self_closing_tag: {"path", []}]
+
+#       assert result == expected
+#     end
+
+#     test "slot element" do
+#       markup = "<slot />"
+
+#       result = assemble(markup)
+#       expected = [self_closing_tag: {"slot", []}]
+
+#       assert result == expected
+#     end
+
+#     test "component" do
+#       markup = "<Abc.Bcd />"
+
+#       result = assemble(markup)
+#       expected = [self_closing_tag: {"Abc.Bcd", []}]
+
+#       assert result == expected
+#     end
+#   end
+
+#   describe "unclosed void node" do
+#     test "non-svg element" do
+#       markup = "<br>"
+
+#       result = assemble(markup)
+#       expected = [self_closing_tag: {"br", []}]
+
+#       assert result == expected
+#     end
+
+#     test "svg element" do
+#       markup = "<path>"
+
+#       result = assemble(markup)
+#       expected = [self_closing_tag: {"path", []}]
+
+#       assert result == expected
+#     end
+
+#     test "slot element" do
+#       markup = "<slot>"
+
+#       result = assemble(markup)
+#       expected = [self_closing_tag: {"slot", []}]
+
+#       assert result == expected
+#     end
+#   end
+
+#   describe "attribute" do
+#     test "literal value" do
+#       markup = "<div id=\"test\">"
+
+#       result = assemble(markup)
+#       expected = [start_tag: {"div", [{:literal, "id", [string: "test"]}]}]
+
+#       assert result == expected
+#     end
+
+#     test "expression value" do
+#       markup = "<div id={@test}>"
+
+#       result = assemble(markup)
+#       expected = [start_tag: {"div", [{:expression, "id", [string: "@test"]}]}]
+
+#       assert result == expected
+#     end
+
+#     test "literal value with interpolation without string prefix or suffix" do
+#       markup = "<div id=\"{@test}\">"
+
+#       result = assemble(markup)
+
+#       expected = [
+#         start_tag: {"div",
+#          [{:literal, "id", [symbol: :"{", string: "@test", symbol: :"}"]}]}
+#       ]
+
+#       assert result == expected
+#     end
+
+#     test "literal value with interpolation with string prefix" do
+#       markup = "<div id=\"abc{@test}\">"
+
+#       result = assemble(markup)
+
+#       expected = [
+#         start_tag: {"div",
+#          [
+#            {:literal, "id",
+#             [string: "abc", symbol: :"{", string: "@test", symbol: :"}"]}
+#          ]}
+#       ]
+
+#       assert result == expected
+#     end
+
+#     test "literal value with interpolation with string suffix" do
+#       markup = "<div id=\"{@test}abc\">"
+
+#       result = assemble(markup)
+
+#       expected = [
+#         start_tag: {"div",
+#          [
+#            {:literal, "id",
+#             [symbol: :"{", string: "@test", symbol: :"}", string: "abc"]}
+#          ]}
+#       ]
+
+#       assert result == expected
+#     end
+
+#     test "literal value with interpolation with string prefix and suffix" do
+#       markup = "<div id=\"abc{@test}xyz\">"
+
+#       result = assemble(markup)
+
+#       expected = [
+#         start_tag: {"div",
+#          [
+#            {:literal, "id",
+#             [
+#               string: "abc",
+#               symbol: :"{",
+#               string: "@test",
+#               symbol: :"}",
+#               string: "xyz"
+#             ]}
+#          ]}
+#       ]
+
+#       assert result == expected
+#     end
+#   end
+# end
