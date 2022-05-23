@@ -1,6 +1,6 @@
 defmodule Hologram.Compiler.Reflection do
   require Logger
-  
+
   alias Hologram.Compiler.{Context, Helpers, Normalizer, Parser, Transformer}
   alias Hologram.Compiler.IR.ModuleDefinition
   alias Hologram.Utils
@@ -175,9 +175,11 @@ defmodule Hologram.Compiler.Reflection do
 
   defp list_modules_of_type(type, path, app \\ @config[:otp_app]) do
     :ok = Application.ensure_loaded(app)
+    modules = Keyword.fetch!(Application.spec(app), :modules)
 
-    Keyword.fetch!(Application.spec(app), :modules)
-    |> Enum.reduce([], fn module, acc ->
+    Logger.debug("Application modules: #{inspect(modules)}")
+
+    Enum.reduce(modules, [], fn module, acc ->
       case Code.ensure_loaded(module) do
         {:module, _} ->
           funs = module.module_info(:exports)
