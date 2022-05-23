@@ -33,11 +33,14 @@ defmodule Hologram.Compiler do
     templatables =
       if opts[:templatables], do: templatables ++ opts[:templatables], else: templatables
 
+    Logger.debug("Hologram: found templatables: #{inspect(templatables)}")
+
     templates = TemplateBuilder.build_all(templatables)
     dump_template_store(templates)
     TemplateStore.run()
 
     pages = Reflection.list_pages(opts)
+    Logger.debug("Hologram: found pages: #{inspect(pages)}")
     dump_page_list(pages)
 
     module_defs = aggregate_module_defs(pages)
