@@ -1,4 +1,6 @@
 defmodule Hologram.Compiler.Reflection do
+  require Logger
+  
   alias Hologram.Compiler.{Context, Helpers, Normalizer, Parser, Transformer}
   alias Hologram.Compiler.IR.ModuleDefinition
   alias Hologram.Utils
@@ -188,6 +190,7 @@ defmodule Hologram.Compiler.Reflection do
           end
 
         _ ->
+          Logger.debug("Module not loaded: #{module}")
           acc
       end
     end)
