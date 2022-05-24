@@ -86,6 +86,31 @@ defmodule Hologram.Template.TagAssembler do
     assemble_text_tag(context, {:symbol, :"}"}, rest, tags)
   end
 
+  # TODO: test
+  def assemble([{:symbol, :"</"} = token | rest], :text_tag, context, tags) do
+    {tokens, context} = flush_token_buffer(context)
+    tags = maybe_add_text_tag(tags, tokens)
+    context = add_prev_token(context, token)
+    assemble(rest, :end_tag_bracket, context, tags)
+  end
+
+  # TODO: test
+  def assemble([{:symbol, :<} = token | [{:string, _} | _] = rest], :text_tag, context, tags) do
+    tags = maybe_add_text_tag(tags, context.token_buffer)
+    context = context |> reset_token_buffer() |> add_prev_token(token)
+    assemble(rest, :start_tag_bracket, context, tags)
+  end
+
+  # TODO: test
+  def assemble([{:symbol, :<} = token | rest], :text_tag, context, _tags) do
+    raise_error(token, rest, context, :text_tag)
+  end
+
+  # TODO: test
+  def assemble([{:symbol, :>} = token | rest], :text_tag, context, _tags) do
+    raise_error(token, rest, context, :text_tag)
+  end
+
   def assemble([{:symbol, :"\""} = token | rest], :text_tag_interpolation, %{double_quote_open?: false} = context, tags) do
     context
     |> open_double_quote()
@@ -151,11 +176,28 @@ defmodule Hologram.Template.TagAssembler do
   # TODO: test
   defp error_reason(token, context, type)
 
+  # TODO: test
+  defp error_reason({:symbol, :<}, _, :text_tag) do
+    """
+    Unescaped '<' character inside text node.
+    To escape use HTML entity: '&lt;'\
+    """
+  end
+
+  # TODO: test
   defp error_reason(nil, %{double_quote_open?: true}, :text_tag_interpolation) do
     "Unexpected end of markup because of unclosed double quote inside text interpolation."
   end
 
-  defp error_reason(_, _, _), do:  "Unknown reason."
+  # TODO: test
+  defp error_reason(token, context, type) do
+    """
+    Unknown reason.
+    token = #{inspect(token)}
+    context = #{inspect(context)}
+    type = #{inspect(type)}\
+    """
+  end
 
   defp flush_token_buffer(context) do
     tokens = context.token_buffer
@@ -245,30 +287,9 @@ defmodule Hologram.Template.TagAssembler do
 
 
 
-  def assemble([{:symbol, :"</"} = token | rest], :text_tag, context, tags) do
-    {tokens, context} = flush_token_buffer(context)
-    tags = maybe_add_text_tag(tags, tokens)
-    context = add_prev_token(context, token)
-    assemble(rest, :end_tag_bracket, context, tags)
-  end
 
-  def assemble([{:symbol, :<} = token | [{:string, _} | _] = rest], :text_tag, context, tags) do
-    tags = maybe_add_text_tag(tags, context.token_buffer)
-    context = context |> reset_token_buffer() |> add_prev_token(token)
-    assemble(rest, :start_tag_bracket, context, tags)
-  end
 
-  def assemble([{:symbol, :<} = token | rest], :text_tag, context, _tags) do
-    raise_error(token, rest, context, :text_tag)
-  end
 
-  def assemble([{:symbol, :>} = token | rest], :text_tag, context, _tags) do
-    raise_error(token, rest, context, :text_tag)
-  end
-
-  # def assemble([{:symbol, :"}"} = token | rest], :text_tag, context, tags) do
-  #   assemble_text_tag(context, token, rest, tags)
-  # end
 
   def assemble([{:string, str} = token | rest], :start_tag_bracket, context, tags) do
     context = context |> reset_tag(str) |> add_prev_token(token)
@@ -520,7 +541,9 @@ defmodule Hologram.Template.TagAssembler do
 
     message = """
 
+
     #{reason}
+
     #{prev_fragment}#{current_fragment}#{next_fragment}
     #{indent}^
     """
