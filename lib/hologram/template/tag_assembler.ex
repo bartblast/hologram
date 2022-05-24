@@ -109,6 +109,50 @@ defmodule Hologram.Template.TagAssembler do
     raise_error(token, rest, context, :text_tag)
   end
 
+  # TODO: test
+  def assemble([{:whitespace, _} = token | rest], :start_tag, context, tags) do
+    context = add_prev_token(context, token)
+    assemble(rest, :start_tag, context, tags)
+  end
+
+  # TODO: test
+  def assemble([{:string, str} = token | rest], :start_tag, context, tags) do
+    context = context |> put_attr_key(str) |> add_prev_token(token)
+    assemble(rest, :attr_key, context, tags)
+  end
+
+  # TODO: test
+  def assemble([{:symbol, :"/>"} = token | rest], :start_tag, context, tags) do
+    type = Helpers.tag_type(context.tag_name)
+
+    tags =
+      if type == :component || is_self_closing_tag?(context.tag_name) do
+        add_self_closing_tag(tags, context)
+      else
+        add_start_tag(tags, context)
+      end
+
+    handle_start_tag_end(context, token, rest, tags)
+  end
+
+  # TODO: test
+  def assemble([{:symbol, :>} = token | rest], :start_tag, context, tags) do
+    tags =
+      if is_self_closing_tag?(context.tag_name) do
+        add_self_closing_tag(tags, context)
+      else
+        add_start_tag(tags, context)
+      end
+
+    handle_start_tag_end(context, token, rest, tags)
+  end
+
+  # TODO: test
+  def assemble([{:string, str} = token | rest], :start_tag_bracket, context, tags) do
+    context = context |> reset_tag(str) |> add_prev_token(token)
+    assemble(rest, :start_tag, context, tags)
+  end
+
   def assemble([{:symbol, :"\""} = token | rest], :text_tag_interpolation, %{double_quote_open?: false} = context, tags) do
     context
     |> open_double_quote()
@@ -295,44 +339,7 @@ defmodule Hologram.Template.TagAssembler do
 
 
 
-  def assemble([{:string, str} = token | rest], :start_tag_bracket, context, tags) do
-    context = context |> reset_tag(str) |> add_prev_token(token)
-    assemble(rest, :start_tag, context, tags)
-  end
 
-  def assemble([{:whitespace, _} = token | rest], :start_tag, context, tags) do
-    context = add_prev_token(context, token)
-    assemble(rest, :start_tag, context, tags)
-  end
-
-  def assemble([{:string, str} = token | rest], :start_tag, context, tags) do
-    context = context |> put_attr_key(str) |> add_prev_token(token)
-    assemble(rest, :attr_key, context, tags)
-  end
-
-  def assemble([{:symbol, :"/>"} = token | rest], :start_tag, context, tags) do
-    type = Helpers.tag_type(context.tag_name)
-
-    tags =
-      if type == :component || is_self_closing_tag?(context.tag_name) do
-        add_self_closing_tag(tags, context)
-      else
-        add_start_tag(tags, context)
-      end
-
-    handle_start_tag_end(context, token, rest, tags)
-  end
-
-  def assemble([{:symbol, :>} = token | rest], :start_tag, context, tags) do
-    tags =
-      if is_self_closing_tag?(context.tag_name) do
-        add_self_closing_tag(tags, context)
-      else
-        add_start_tag(tags, context)
-      end
-
-    handle_start_tag_end(context, token, rest, tags)
-  end
 
   def assemble([{:whitespace, _} = token | rest], :attr_key, context, tags) do
     context =
