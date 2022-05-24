@@ -101,12 +101,10 @@ defmodule Hologram.Template.TagAssembler do
     assemble(rest, :start_tag_bracket, context, tags)
   end
 
-  # TODO: test
   def assemble([{:symbol, :<} = token | rest], :text_tag, context, _tags) do
     raise_error(token, rest, context, :text_tag)
   end
 
-  # TODO: test
   def assemble([{:symbol, :>} = token | rest], :text_tag, context, _tags) do
     raise_error(token, rest, context, :text_tag)
   end
@@ -176,11 +174,17 @@ defmodule Hologram.Template.TagAssembler do
   # TODO: test
   defp error_reason(token, context, type)
 
-  # TODO: test
   defp error_reason({:symbol, :<}, _, :text_tag) do
     """
     Unescaped '<' character inside text node.
     To escape use HTML entity: '&lt;'\
+    """
+  end
+
+  defp error_reason({:symbol, :>}, _, :text_tag) do
+    """
+    Unescaped '>' character inside text node.
+    To escape use HTML entity: '&gt;'\
     """
   end
 

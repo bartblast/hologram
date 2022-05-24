@@ -223,16 +223,34 @@ defmodule Hologram.Template.TagAssemblerTest do
   end
 
   describe "template syntax errors" do
-    test "left angle bracket in text node" do
+    test "unescaped '<' character inside text node" do
       markup = "abc < xyz"
 
       expected_msg = """
 
-      
+
       Unescaped '<' character inside text node.
       To escape use HTML entity: '&lt;'
 
       abc < xyz
+          ^
+      """
+
+      assert_raise SyntaxError, expected_msg, fn ->
+        assemble(markup)
+      end
+    end
+
+    test "unescaped '>' character inside text node" do
+      markup = "abc > xyz"
+
+      expected_msg = """
+
+
+      Unescaped '>' character inside text node.
+      To escape use HTML entity: '&gt;'
+
+      abc > xyz
           ^
       """
 
