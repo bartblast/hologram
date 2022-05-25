@@ -65,13 +65,35 @@ defmodule Hologram.Runtime.StaticDigestStoreTest do
     ]
   end
 
-  test "populate_table/0", %{expected_store_content: expected_store_content} do
-    StaticDigestStore.run()
-    assert StaticDigestStore.get_all() == expected_store_content
+  describe "get/1" do
+    test "binary file_path" do
+      StaticDigestStore.run()
+
+      file_path = "/test_dir_1/test_dir_2/test_file_1.css"
+      result = StaticDigestStore.get(file_path)
+      expected = {:ok, "/test_dir_1/test_dir_2/test_file_1-11111111111111111111111111111111.css"}
+
+      assert result == expected
+    end
+
+    test "atom file_path" do
+      StaticDigestStore.run()
+
+      file_path = :"/test_dir_1/test_dir_2/test_file_1.css"
+      result = StaticDigestStore.get(file_path)
+      expected = {:ok, "/test_dir_1/test_dir_2/test_file_1-11111111111111111111111111111111.css"}
+
+      assert result == expected
+    end
   end
 
   test "get_manifest/0", %{expected_store_content: expected_store_content} do
     StaticDigestStore.run()
     assert StaticDigestStore.get_manifest() == expected_store_content.__manifest__
+  end
+
+  test "populate_table/0", %{expected_store_content: expected_store_content} do
+    StaticDigestStore.run()
+    assert StaticDigestStore.get_all() == expected_store_content
   end
 end
