@@ -1,4 +1,4 @@
-defmodule Hologram.Test.Fixtures.Commons.MemoryStore do
+defmodule Hologram.Test.Fixtures.Commons.MemoryStore.Module1 do
   use Hologram.Commons.MemoryStore
 
   @dump_path "#{File.cwd!()}/tmp/test_fixture_memory_store.bin"
