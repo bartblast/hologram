@@ -80,7 +80,7 @@ defmodule Hologram.Commons.MemoryStore do
       def put(items) do
         table_name() |> :ets.insert(items)
       end
-      
+
       def put(key, value) do
         table_name() |> :ets.insert({key, value})
       end
@@ -107,10 +107,12 @@ defmodule Hologram.Commons.MemoryStore do
         table_name() |> :ets.delete_all_objects()
       end
 
+      defoverridable get: 1
       defoverridable populate_table: 0
     end
   end
 
+  @callback get(atom() | binary()) :: any()
   @callback populate_table() :: any()
   @callback table_name() :: atom()
 end

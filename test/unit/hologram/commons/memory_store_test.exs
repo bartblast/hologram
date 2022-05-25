@@ -1,6 +1,8 @@
-defmodule Hologram.Commons.Module1Test do
+defmodule Hologram.Commons.MemoryStore.Module1Test do
   use Hologram.Test.UnitCase, async: false
+
   alias Hologram.Test.Fixtures.Commons.MemoryStore.Module1
+  alias Hologram.Test.Fixtures.Commons.MemoryStore.Module2
 
   @dump_path Module1.dump_path()
   @store_content %{key_1: :value_1, key_2: :value_2}
@@ -57,7 +59,7 @@ defmodule Hologram.Commons.Module1Test do
     end
   end
 
-  describe "get/1" do
+  describe "get/1, default implementation" do
     test "key exists" do
       Module1.run()
       assert Module1.get(:key_1) == {:ok, :value_1}
@@ -67,6 +69,11 @@ defmodule Hologram.Commons.Module1Test do
       Module1.run()
       assert Module1.get(:key_invalid) == :error
     end
+  end
+
+  test "get/1, overriding implementation" do
+    Module2.run()
+    assert Module2.get(:key_1) == {:ok, "result_for_key_1"}
   end
 
   describe "get!/1" do
