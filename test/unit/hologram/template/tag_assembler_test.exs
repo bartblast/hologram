@@ -222,6 +222,109 @@ defmodule Hologram.Template.TagAssemblerTest do
     end
   end
 
+  describe "element node" do
+    test "start tag" do
+      markup = "<div>"
+
+      result = assemble(markup)
+      expected = [start_tag: {"div", []}]
+
+      assert result == expected
+    end
+
+    test "end tag" do
+      markup = "</div>"
+
+      result = assemble(markup)
+      expected = [end_tag: "div"]
+
+      assert result == expected
+    end
+
+    test "self-closed non-svg tag" do
+      markup = "<br />"
+
+      result = assemble(markup)
+      expected = [self_closing_tag: {"br", []}]
+
+      assert result == expected
+    end
+
+    test "self-closed svg tag" do
+      markup = "<path />"
+
+      result = assemble(markup)
+      expected = [self_closing_tag: {"path", []}]
+
+      assert result == expected
+    end
+
+    test "self-closed slot tag" do
+      markup = "<slot />"
+
+      result = assemble(markup)
+      expected = [self_closing_tag: {"slot", []}]
+
+      assert result == expected
+    end
+
+    test "non self-closed non-svg tag" do
+      markup = "<br>"
+
+      result = assemble(markup)
+      expected = [self_closing_tag: {"br", []}]
+
+      assert result == expected
+    end
+
+    test "not self-closed svg tag" do
+      markup = "<path>"
+
+      result = assemble(markup)
+      expected = [self_closing_tag: {"path", []}]
+
+      assert result == expected
+    end
+
+    test "not self-closed slot tag" do
+      markup = "<slot>"
+
+      result = assemble(markup)
+      expected = [self_closing_tag: {"slot", []}]
+
+      assert result == expected
+    end
+  end
+
+  describe "component node" do
+    test "start tag" do
+      markup = "<Abc.Bcd>"
+
+      result = assemble(markup)
+      expected = [start_tag: {"Abc.Bcd", []}]
+
+      assert result == expected
+    end
+
+    test "end tag" do
+      markup = "</Abc.Bcd>"
+
+      result = assemble(markup)
+      expected = [end_tag: "Abc.Bcd"]
+
+      assert result == expected
+    end
+
+    test "self-closed tag" do
+      markup = "<Abc.Bcd />"
+
+      result = assemble(markup)
+      expected = [self_closing_tag: {"Abc.Bcd", []}]
+
+      assert result == expected
+    end
+  end
+
   describe "template syntax errors" do
     test "unescaped '<' character inside text node" do
       markup = "abc < xyz"
@@ -293,130 +396,11 @@ end
 
 
 
-#   describe "element node" do
-#     test "start tag" do
-#       markup = "<div>"
 
-#       result = assemble(markup)
-#       expected = [start_tag: {"div", []}]
 
-#       assert result == expected
-#     end
 
-#     test "end tag" do
-#       markup = "</div>"
 
-#       result = assemble(markup)
-#       expected = [end_tag: "div"]
 
-#       assert result == expected
-#     end
-
-#     test "start & end tag" do
-#       markup = "<div></div>"
-
-#       result = assemble(markup)
-#       expected = [start_tag: {"div", []}, end_tag: "div"]
-
-#       assert result == expected
-#     end
-#   end
-
-#   describe "component node" do
-#     test "start tag" do
-#       markup = "<Abc.Bcd>"
-
-#       result = assemble(markup)
-#       expected = [start_tag: {"Abc.Bcd", []}]
-
-#       assert result == expected
-#     end
-
-#     test "end tag" do
-#       markup = "</Abc.Bcd>"
-
-#       result = assemble(markup)
-#       expected = [end_tag: "Abc.Bcd"]
-
-#       assert result == expected
-#     end
-
-#     test "start & end tag" do
-#       markup = "<Abc.Bcd></Abc.Bcd>"
-
-#       result = assemble(markup)
-#       expected = [start_tag: {"Abc.Bcd", []}, end_tag: "Abc.Bcd"]
-
-#       assert result == expected
-#     end
-#   end
-
-#   describe "closed void node" do
-#     test "non-svg element" do
-#       markup = "<br />"
-
-#       result = assemble(markup)
-#       expected = [self_closing_tag: {"br", []}]
-
-#       assert result == expected
-#     end
-
-#     test "svg element" do
-#       markup = "<path />"
-
-#       result = assemble(markup)
-#       expected = [self_closing_tag: {"path", []}]
-
-#       assert result == expected
-#     end
-
-#     test "slot element" do
-#       markup = "<slot />"
-
-#       result = assemble(markup)
-#       expected = [self_closing_tag: {"slot", []}]
-
-#       assert result == expected
-#     end
-
-#     test "component" do
-#       markup = "<Abc.Bcd />"
-
-#       result = assemble(markup)
-#       expected = [self_closing_tag: {"Abc.Bcd", []}]
-
-#       assert result == expected
-#     end
-#   end
-
-#   describe "unclosed void node" do
-#     test "non-svg element" do
-#       markup = "<br>"
-
-#       result = assemble(markup)
-#       expected = [self_closing_tag: {"br", []}]
-
-#       assert result == expected
-#     end
-
-#     test "svg element" do
-#       markup = "<path>"
-
-#       result = assemble(markup)
-#       expected = [self_closing_tag: {"path", []}]
-
-#       assert result == expected
-#     end
-
-#     test "slot element" do
-#       markup = "<slot>"
-
-#       result = assemble(markup)
-#       expected = [self_closing_tag: {"slot", []}]
-
-#       assert result == expected
-#     end
-#   end
 
 #   describe "attribute" do
 #     test "literal value" do
