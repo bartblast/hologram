@@ -107,6 +107,38 @@ defmodule Hologram.Template.TagAssembler do
     raise_error(token, rest, context, :text_tag)
   end
 
+  def assemble([{:symbol, :"\""} = token | rest], :text_tag_interpolation, %{double_quote_open?: false} = context, tags) do
+    context
+    |> open_double_quote()
+    |> assemble_text_tag_interpolation(token, rest, tags)
+  end
+
+  def assemble([{:symbol, :"\""} = token | rest], :text_tag_interpolation, %{double_quote_open?: true} = context, tags) do
+    context
+    |> close_double_quote()
+    |> assemble_text_tag_interpolation(token, rest, tags)
+  end
+
+  def assemble([{:symbol, :"{"} = token | rest], :text_tag_interpolation, %{double_quote_open?: false} = context, tags) do
+    context
+    |> increment_num_open_braces()
+    |> assemble_text_tag_interpolation(token, rest, tags)
+  end
+
+  def assemble([{:symbol, :"}"} = token | rest], :text_tag_interpolation, %{double_quote_open?: false, num_open_braces: 0} = context, tags) do
+    handle_text_tag_interpolation_end(context, token, rest, tags)
+  end
+
+  def assemble([{:symbol, :"}"} = token | rest], :text_tag_interpolation, %{double_quote_open?: false} = context, tags) do
+    context
+    |> decrement_num_open_braces()
+    |> assemble_text_tag_interpolation(token, rest, tags)
+  end
+
+  def assemble([token | rest], :text_tag_interpolation, context, tags) do
+    assemble_text_tag_interpolation(context, token, rest, tags)
+  end
+
   # TODO: test
   def assemble([{:whitespace, _} = token | rest], :start_tag, context, tags) do
     context = add_prev_token(context, token)
@@ -164,37 +196,6 @@ defmodule Hologram.Template.TagAssembler do
     assemble(rest, :attr_assignment, context, tags)
   end
 
-  def assemble([{:symbol, :"\""} = token | rest], :text_tag_interpolation, %{double_quote_open?: false} = context, tags) do
-    context
-    |> open_double_quote()
-    |> assemble_text_tag_interpolation(token, rest, tags)
-  end
-
-  def assemble([{:symbol, :"\""} = token | rest], :text_tag_interpolation, %{double_quote_open?: true} = context, tags) do
-    context
-    |> close_double_quote()
-    |> assemble_text_tag_interpolation(token, rest, tags)
-  end
-
-  def assemble([{:symbol, :"{"} = token | rest], :text_tag_interpolation, %{double_quote_open?: false} = context, tags) do
-    context
-    |> increment_num_open_braces()
-    |> assemble_text_tag_interpolation(token, rest, tags)
-  end
-
-  def assemble([{:symbol, :"}"} = token | rest], :text_tag_interpolation, %{double_quote_open?: false, num_open_braces: 0} = context, tags) do
-    handle_text_tag_interpolation_end(context, token, rest, tags)
-  end
-
-  def assemble([{:symbol, :"}"} = token | rest], :text_tag_interpolation, %{double_quote_open?: false} = context, tags) do
-    context
-    |> decrement_num_open_braces()
-    |> assemble_text_tag_interpolation(token, rest, tags)
-  end
-
-  def assemble([token | rest], :text_tag_interpolation, context, tags) do
-    assemble_text_tag_interpolation(context, token, rest, tags)
-  end
 
   defp add_attribute(context, type, key, value) do
     %{context | attrs: context.attrs ++ [{type, key, value}]}
