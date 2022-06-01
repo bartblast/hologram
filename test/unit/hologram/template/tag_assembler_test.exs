@@ -85,7 +85,7 @@ defmodule Hologram.Template.TagAssemblerTest do
     end
   end
 
-  describe "text node interpolation" do
+  describe "expression in text node" do
     test "empty" do
       markup = "abc{}xyz"
 
