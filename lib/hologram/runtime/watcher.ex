@@ -23,7 +23,10 @@ defmodule Hologram.Runtime.Watcher do
     {:noreply, state}
   end
 
-  def handle_info({:file_event, _, _}, state) do
+  def handle_info({:file_event, _, {file_path, _}}, state) do
+    # Make sure the compile task has the new version in memory immediately
+    IEx.Helpers.c(file_path)
+
     Mix.Tasks.Compile.Hologram.run([])
     Runtime.reload()
     endpoint().broadcast!("hologram", "reload", %{})

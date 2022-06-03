@@ -1,4 +1,5 @@
 defmodule Hologram.Runtime.TemplateStore do
+  require Logger
   use Hologram.Commons.MemoryStore
   require Logger
   alias Hologram.Compiler.Reflection

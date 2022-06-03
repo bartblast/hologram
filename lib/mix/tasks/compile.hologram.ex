@@ -16,7 +16,15 @@ defmodule Mix.Tasks.Compile.Hologram do
         list_source_files(opts)
         |> digest_files()
 
+      Logger.debug("Hologram: has source digest = #{has_source_digest?()}")
+
       if !has_source_digest?() || has_source_changes?(source_digest) || opts[:force] do
+        if has_source_digest?() do
+          Logger.debug("Hologram: has source changes = #{has_source_changes?(source_digest)}")
+        end
+        
+        Logger.debug("Hologram: compiling...")
+
         Compiler.compile(opts)
         save_source_digest(source_digest)
       end

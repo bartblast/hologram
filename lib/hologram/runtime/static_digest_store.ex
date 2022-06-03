@@ -7,6 +7,16 @@ defmodule Hologram.Runtime.StaticDigestStore do
   @manifest_key :__manifest__
 
   @impl true
+  def get(file_path) when is_binary(file_path) do
+    super(String.to_atom(file_path))
+  end
+
+  @impl true
+  def get(file_path) when is_atom(file_path) do
+    super(file_path)
+  end
+
+  @impl true
   def populate_table() do
     digests = find_digests()
 

@@ -17,9 +17,11 @@ defmodule Hologram.Compiler do
   alias Hologram.Utils
 
   def compile(opts) do
+    Logger.debug("Hologram: compile output path = #{resolve_output_path()}")
     output_path = resolve_output_path()
     File.mkdir_p!(output_path)
 
+    Logger.debug("Hologram: compile priv path = #{Reflection.root_priv_path()}")
     Reflection.root_priv_path()
     |> File.mkdir_p!()
 
