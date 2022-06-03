@@ -22,9 +22,8 @@ defmodule Mix.Tasks.Compile.Hologram do
         if has_source_digest?() do
           Logger.debug("Hologram: has source changes = #{has_source_changes?(source_digest)}")
         end
-        
-        Logger.debug("Hologram: compiling...")
 
+        Logger.debug("Hologram: compiling...")
         Compiler.compile(opts)
         save_source_digest(source_digest)
       end

@@ -17,11 +17,11 @@ defmodule Hologram.Compiler do
   alias Hologram.Utils
 
   def compile(opts) do
-    Logger.debug("Hologram: compile output path = #{resolve_output_path()}")
+    log_paths()
+
     output_path = resolve_output_path()
     File.mkdir_p!(output_path)
 
-    Logger.debug("Hologram: compile priv path = #{Reflection.root_priv_path()}")
     Reflection.root_priv_path()
     |> File.mkdir_p!()
 
@@ -112,9 +112,16 @@ defmodule Hologram.Compiler do
     |> Utils.await_tasks()
   end
 
-  defp dump_page_digest_store(page_digests) do
+  defp log_paths do
+    Logger.debug("Hologram: compile priv path = #{Reflection.root_priv_path()}")
+    Logger.debug("Hologram: compile output path = #{resolve_output_path()}")
     Logger.debug("Hologram: page digest store dump path = #{Reflection.root_page_digest_store_path()}")
+    Logger.debug("Hologram: template store dump path = #{Reflection.root_template_store_path()}")
+    Logger.debug("Hologram: template store load path = #{Reflection.release_template_store_path()}")
 
+  end
+
+  defp dump_page_digest_store(page_digests) do
     data =
       page_digests
       |> Utils.serialize()
@@ -131,8 +138,6 @@ defmodule Hologram.Compiler do
   end
 
   defp dump_template_store(templates) do
-    Logger.debug("Hologram: template store dump path = #{Reflection.root_template_store_path()}")
-
     data = Utils.serialize(templates)
 
     Reflection.root_template_store_path()

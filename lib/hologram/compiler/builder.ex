@@ -1,6 +1,5 @@
 defmodule Hologram.Compiler.Builder do
   alias Hologram.Compiler.{Context, JSEncoder, Opts, Pruner}
-  require Logger
 
   def build(module, module_defs, call_graph) do
     Pruner.prune(module, module_defs, call_graph)
