@@ -85,283 +85,299 @@ defmodule Hologram.Template.TagAssemblerTest do
     end
   end
 
-  describe "expression in text node" do
-    test "empty" do
-      markup = "abc{}xyz"
+  # TODO: already refactored
+  # describe "expression in text node" do
+  #   test "empty" do
+  #     markup = "abc{}xyz"
 
-      result = assemble(markup)
-      expected = [text_tag: "abc", expression: "{}", text_tag: "xyz"]
+  #     result = assemble(markup)
+  #     expected = [text_tag: "abc", expression: "{}", text_tag: "xyz"]
 
-      assert result == expected
-    end
+  #     assert result == expected
+  #   end
 
-    test "whitespaces" do
-      markup = "abc{ \n\r\t}xyz"
+  #   test "whitespaces" do
+  #     markup = "abc{ \n\r\t}xyz"
 
-      result = assemble(markup)
-      expected = [text_tag: "abc", expression: "{ \n\r\t}", text_tag: "xyz"]
+  #     result = assemble(markup)
+  #     expected = [text_tag: "abc", expression: "{ \n\r\t}", text_tag: "xyz"]
 
-      assert result == expected
-    end
+  #     assert result == expected
+  #   end
 
-    test "string, ASCI alphabet lowercase" do
-      markup = "abc{abcdefghijklmnopqrstuvwxyz}xyz"
+  #   test "string, ASCI alphabet lowercase" do
+  #     markup = "abc{abcdefghijklmnopqrstuvwxyz}xyz"
 
-      result = assemble(markup)
-      expected = [text_tag: "abc", expression: "{abcdefghijklmnopqrstuvwxyz}", text_tag: "xyz"]
+  #     result = assemble(markup)
+  #     expected = [text_tag: "abc", expression: "{abcdefghijklmnopqrstuvwxyz}", text_tag: "xyz"]
 
-      assert result == expected
-    end
+  #     assert result == expected
+  #   end
 
-    test "string, ASCI alphabet uppercase" do
-      markup = "abc{ABCDEFGHIJKLMNOPQRSTUVWXYZ}xyz"
+  #   test "string, ASCI alphabet uppercase" do
+  #     markup = "abc{ABCDEFGHIJKLMNOPQRSTUVWXYZ}xyz"
 
-      result = assemble(markup)
-      expected = [text_tag: "abc", expression: "{ABCDEFGHIJKLMNOPQRSTUVWXYZ}", text_tag: "xyz"]
+  #     result = assemble(markup)
+  #     expected = [text_tag: "abc", expression: "{ABCDEFGHIJKLMNOPQRSTUVWXYZ}", text_tag: "xyz"]
 
-      assert result == expected
-    end
+  #     assert result == expected
+  #   end
 
-    test "string, UTF-8 chars" do
-      markup = "abc{ąćęłńóśźżĄĆĘŁŃÓŚŹŻ}xyz"
+  #   test "string, UTF-8 chars" do
+  #     markup = "abc{ąćęłńóśźżĄĆĘŁŃÓŚŹŻ}xyz"
 
-      result = assemble(markup)
-      expected = [text_tag: "abc", expression: "{ąćęłńóśźżĄĆĘŁŃÓŚŹŻ}", text_tag: "xyz"]
+  #     result = assemble(markup)
+  #     expected = [text_tag: "abc", expression: "{ąćęłńóśźżĄĆĘŁŃÓŚŹŻ}", text_tag: "xyz"]
 
-      assert result == expected
-    end
+  #     assert result == expected
+  #   end
 
-    test "symbols" do
-      markup = "abc{!@#$%^&*()-_=+[];:'\\\"\\|,./?`~}xyz"
+  #   test "symbols" do
+  #     markup = "abc{!@#$%^&*()-_=+[];:'\\\"\\|,./?`~}xyz"
 
-      result = assemble(markup)
-      expected = [text_tag: "abc", expression: "{!@#$%^&*()-_=+[];:'\\\"\\|,./?`~}", text_tag: "xyz"]
+  #     result = assemble(markup)
+  #     expected = [text_tag: "abc", expression: "{!@#$%^&*()-_=+[];:'\\\"\\|,./?`~}", text_tag: "xyz"]
 
-      assert result == expected
-    end
+  #     assert result == expected
+  #   end
 
-    test "single group of curly brackets" do
-      markup = "abc{{123}}xyz"
+  #   test "single group of curly brackets" do
+  #     markup = "abc{{123}}xyz"
 
-      result = assemble(markup)
-      expected = [text_tag: "abc", expression: "{{123}}", text_tag: "xyz"]
+  #     result = assemble(markup)
+  #     expected = [text_tag: "abc", expression: "{{123}}", text_tag: "xyz"]
 
-      assert result == expected
-    end
+  #     assert result == expected
+  #   end
 
-    test "multiple groups of curly brackets" do
-      markup = "abc{{1},{2}}xyz"
+  #   test "multiple groups of curly brackets" do
+  #     markup = "abc{{1},{2}}xyz"
 
-      result = assemble(markup)
-      expected = [text_tag: "abc", expression: "{{1},{2}}", text_tag: "xyz"]
+  #     result = assemble(markup)
+  #     expected = [text_tag: "abc", expression: "{{1},{2}}", text_tag: "xyz"]
 
-      assert result == expected
-    end
+  #     assert result == expected
+  #   end
 
-    test "opening curly bracket escaping" do
-      markup = "abc{{\"\\{123\"}}xyz"
+  #   test "opening curly bracket escaping" do
+  #     markup = "abc{{\"\\{123\"}}xyz"
 
-      result = assemble(markup)
-      expected = [text_tag: "abc", expression: "{{\"\\{123\"}}", text_tag: "xyz"]
+  #     result = assemble(markup)
+  #     expected = [text_tag: "abc", expression: "{{\"\\{123\"}}", text_tag: "xyz"]
 
-      assert result == expected
-    end
+  #     assert result == expected
+  #   end
 
-    test "closing curly bracket escaping" do
-      markup = "abc{{\"123\\}\"}}xyz"
+  #   test "closing curly bracket escaping" do
+  #     markup = "abc{{\"123\\}\"}}xyz"
 
-      result = assemble(markup)
-      expected = [text_tag: "abc", expression: "{{\"123\\}\"}}", text_tag: "xyz"]
+  #     result = assemble(markup)
+  #     expected = [text_tag: "abc", expression: "{{\"123\\}\"}}", text_tag: "xyz"]
 
-      assert result == expected
-    end
+  #     assert result == expected
+  #   end
 
-    test "single group of double quotes" do
-      markup = "abc{{\"123\"}}xyz"
+  #   test "single group of double quotes" do
+  #     markup = "abc{{\"123\"}}xyz"
 
-      result = assemble(markup)
-      expected = [text_tag: "abc", expression: "{{\"123\"}}", text_tag: "xyz"]
+  #     result = assemble(markup)
+  #     expected = [text_tag: "abc", expression: "{{\"123\"}}", text_tag: "xyz"]
 
-      assert result == expected
-    end
+  #     assert result == expected
+  #   end
 
-    test "multiple groups of double quotes" do
-      markup = "abc{{\"1\",\"2\"}}xyz"
+  #   test "multiple groups of double quotes" do
+  #     markup = "abc{{\"1\",\"2\"}}xyz"
 
-      result = assemble(markup)
-      expected = [text_tag: "abc", expression: "{{\"1\",\"2\"}}", text_tag: "xyz"]
+  #     result = assemble(markup)
+  #     expected = [text_tag: "abc", expression: "{{\"1\",\"2\"}}", text_tag: "xyz"]
 
-      assert result == expected
-    end
+  #     assert result == expected
+  #   end
 
-    test "double quote escaping" do
-      markup = "abc{{1\\\"2}}xyz"
+  #   test "double quote escaping" do
+  #     markup = "abc{{1\\\"2}}xyz"
 
-      result = assemble(markup)
-      expected = [text_tag: "abc", expression: "{{1\\\"2}}", text_tag: "xyz"]
+  #     result = assemble(markup)
+  #     expected = [text_tag: "abc", expression: "{{1\\\"2}}", text_tag: "xyz"]
 
-      assert result == expected
-    end
+  #     assert result == expected
+  #   end
 
-    test "opening curly bracket inside double quoted string" do
-      markup = "abc{{\"1\\{2\"}}xyz"
+  #   test "opening curly bracket inside double quoted string" do
+  #     markup = "abc{{\"1\\{2\"}}xyz"
 
-      result = assemble(markup)
-      expected = [text_tag: "abc", expression: "{{\"1\\{2\"}}", text_tag: "xyz"]
+  #     result = assemble(markup)
+  #     expected = [text_tag: "abc", expression: "{{\"1\\{2\"}}", text_tag: "xyz"]
 
-      assert result == expected
-    end
+  #     assert result == expected
+  #   end
 
-    test "closing curly bracket inside double quoted string" do
-      markup = "abc{{\"1\\}2\"}}xyz"
+  #   test "closing curly bracket inside double quoted string" do
+  #     markup = "abc{{\"1\\}2\"}}xyz"
 
-      result = assemble(markup)
-      expected = [text_tag: "abc", expression: "{{\"1\\}2\"}}", text_tag: "xyz"]
+  #     result = assemble(markup)
+  #     expected = [text_tag: "abc", expression: "{{\"1\\}2\"}}", text_tag: "xyz"]
 
-      assert result == expected
-    end
-  end
+  #     assert result == expected
+  #   end
+  # end
 
-  describe "element node" do
-    test "start tag" do
-      markup = "<div>"
+  # TODO: already refactored
+  # describe "element node" do
+  #   test "start tag" do
+  #     markup = "<div>"
 
-      result = assemble(markup)
-      expected = [start_tag: {"div", []}]
+  #     result = assemble(markup)
+  #     expected = [start_tag: {"div", []}]
 
-      assert result == expected
-    end
+  #     assert result == expected
+  #   end
 
-    test "end tag" do
-      markup = "</div>"
+  #   test "end tag" do
+  #     markup = "</div>"
 
-      result = assemble(markup)
-      expected = [end_tag: "div"]
+  #     result = assemble(markup)
+  #     expected = [end_tag: "div"]
 
-      assert result == expected
-    end
+  #     assert result == expected
+  #   end
 
-    test "self-closed non-svg tag" do
-      markup = "<br />"
+  #   test "self-closed non-svg tag" do
+  #     markup = "<br />"
 
-      result = assemble(markup)
-      expected = [self_closing_tag: {"br", []}]
+  #     result = assemble(markup)
+  #     expected = [self_closing_tag: {"br", []}]
 
-      assert result == expected
-    end
+  #     assert result == expected
+  #   end
 
-    test "self-closed svg tag" do
-      markup = "<path />"
+  #   test "self-closed svg tag" do
+  #     markup = "<path />"
 
-      result = assemble(markup)
-      expected = [self_closing_tag: {"path", []}]
+  #     result = assemble(markup)
+  #     expected = [self_closing_tag: {"path", []}]
 
-      assert result == expected
-    end
+  #     assert result == expected
+  #   end
 
-    test "self-closed slot tag" do
-      markup = "<slot />"
+  #   test "self-closed slot tag" do
+  #     markup = "<slot />"
 
-      result = assemble(markup)
-      expected = [self_closing_tag: {"slot", []}]
+  #     result = assemble(markup)
+  #     expected = [self_closing_tag: {"slot", []}]
 
-      assert result == expected
-    end
+  #     assert result == expected
+  #   end
 
-    test "non self-closed non-svg tag" do
-      markup = "<br>"
+  #   test "non self-closed non-svg tag" do
+  #     markup = "<br>"
 
-      result = assemble(markup)
-      expected = [self_closing_tag: {"br", []}]
+  #     result = assemble(markup)
+  #     expected = [self_closing_tag: {"br", []}]
 
-      assert result == expected
-    end
+  #     assert result == expected
+  #   end
 
-    test "not self-closed svg tag" do
-      markup = "<path>"
+  #   test "not self-closed svg tag" do
+  #     markup = "<path>"
 
-      result = assemble(markup)
-      expected = [self_closing_tag: {"path", []}]
+  #     result = assemble(markup)
+  #     expected = [self_closing_tag: {"path", []}]
 
-      assert result == expected
-    end
+  #     assert result == expected
+  #   end
 
-    test "not self-closed slot tag" do
-      markup = "<slot>"
+  #   test "not self-closed slot tag" do
+  #     markup = "<slot>"
 
-      result = assemble(markup)
-      expected = [self_closing_tag: {"slot", []}]
+  #     result = assemble(markup)
+  #     expected = [self_closing_tag: {"slot", []}]
 
-      assert result == expected
-    end
-  end
+  #     assert result == expected
+  #   end
+  # end
 
-  describe "component node" do
-    test "start tag" do
-      markup = "<Abc.Bcd>"
+  # TODO: already refactored
+  # describe "component node" do
+  #   test "start tag" do
+  #     markup = "<Abc.Bcd>"
 
-      result = assemble(markup)
-      expected = [start_tag: {"Abc.Bcd", []}]
+  #     result = assemble(markup)
+  #     expected = [start_tag: {"Abc.Bcd", []}]
 
-      assert result == expected
-    end
+  #     assert result == expected
+  #   end
 
-    test "end tag" do
-      markup = "</Abc.Bcd>"
+  #   test "end tag" do
+  #     markup = "</Abc.Bcd>"
 
-      result = assemble(markup)
-      expected = [end_tag: "Abc.Bcd"]
+  #     result = assemble(markup)
+  #     expected = [end_tag: "Abc.Bcd"]
 
-      assert result == expected
-    end
+  #     assert result == expected
+  #   end
 
-    test "self-closed tag" do
-      markup = "<Abc.Bcd />"
+  #   test "self-closed tag" do
+  #     markup = "<Abc.Bcd />"
 
-      result = assemble(markup)
-      expected = [self_closing_tag: {"Abc.Bcd", []}]
+  #     result = assemble(markup)
+  #     expected = [self_closing_tag: {"Abc.Bcd", []}]
 
-      assert result == expected
-    end
-  end
+  #     assert result == expected
+  #   end
+  # end
 
-  describe "template syntax errors" do
-    test "unescaped '<' character inside text node" do
-      markup = "abc < xyz"
+  # TODO: refactor?
+  # describe "attribute" do
+  #   test "literal value" do
+  #     markup = "<div id=\"test\">"
 
-      expected_msg = """
+  #     result = assemble(markup)
+  #     expected = [start_tag: {"div", [{"id", [literal: "test"]}]}]
 
+  #     assert result == expected
+  #   end
+  # end
 
-      Unescaped '<' character inside text node.
-      To escape use HTML entity: '&lt;'
+  # TODO: already refactored
+  # describe "template syntax errors" do
+  #   test "unescaped '<' character inside text node" do
+  #     markup = "abc < xyz"
 
-      abc < xyz
-          ^
-      """
+  #     expected_msg = """
 
-      assert_raise SyntaxError, expected_msg, fn ->
-        assemble(markup)
-      end
-    end
 
-    test "unescaped '>' character inside text node" do
-      markup = "abc > xyz"
+  #     Unescaped '<' character inside text node.
+  #     To escape use HTML entity: '&lt;'
 
-      expected_msg = """
+  #     abc < xyz
+  #         ^
+  #     """
 
+  #     assert_raise SyntaxError, expected_msg, fn ->
+  #       assemble(markup)
+  #     end
+  #   end
 
-      Unescaped '>' character inside text node.
-      To escape use HTML entity: '&gt;'
+  #   test "unescaped '>' character inside text node" do
+  #     markup = "abc > xyz"
 
-      abc > xyz
-          ^
-      """
+  #     expected_msg = """
 
-      assert_raise SyntaxError, expected_msg, fn ->
-        assemble(markup)
-      end
-    end
-  end
+
+  #     Unescaped '>' character inside text node.
+  #     To escape use HTML entity: '&gt;'
+
+  #     abc > xyz
+  #         ^
+  #     """
+
+  #     assert_raise SyntaxError, expected_msg, fn ->
+  #       assemble(markup)
+  #     end
+  #   end
+  # end
 end
 
 
@@ -402,15 +418,17 @@ end
 
 
 
+
+
+
+
+
+
+
+# TODO: overhaul
+
 #   describe "attribute" do
-#     test "literal value" do
-#       markup = "<div id=\"test\">"
 
-#       result = assemble(markup)
-#       expected = [start_tag: {"div", [{:literal, "id", [string: "test"]}]}]
-
-#       assert result == expected
-#     end
 
 #     test "expression value" do
 #       markup = "<div id={@test}>"
