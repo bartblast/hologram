@@ -112,7 +112,11 @@ defmodule Hologram.Template.TagAssembler do
   end
 
   def assemble(context, :text_tag, [{:symbol, :<} = token | rest]) do
-    raise_error(token, rest, context, :text_tag)
+    raise_error(context, :text_tag, token, rest)
+  end
+
+  def assemble(context, :text_tag, [{:symbol, :>} = token | rest]) do
+    raise_error(context, :text_tag, token, rest)
   end
 
   defp add_processed_token(%{processed_tokens: processed_tokens} = context, token) do
@@ -168,6 +172,14 @@ defmodule Hologram.Template.TagAssembler do
     """
   end
 
+  # TODO: test
+  defp escape_non_printable_chars(str) do
+    str
+    |> String.replace("\n", "\\n")
+    |> String.replace("\r", "\\r")
+    |> String.replace("\t", "\\t")
+  end
+
   defp maybe_add_text_tag(%{token_buffer: token_buffer, processed_tags: processed_tags} = context) do
     if Enum.any?(token_buffer) do
       new_processed_tags = processed_tags ++ [{:text_tag, TokenHTMLEncoder.encode(token_buffer)}]
@@ -175,6 +187,44 @@ defmodule Hologram.Template.TagAssembler do
     else
       context
     end
+  end
+
+  defp raise_error(%{processed_tokens: processed_tokens} = context, type, token, rest) do
+    processed_tokens_str = TokenHTMLEncoder.encode(processed_tokens)
+    processed_tokens_len = String.length(processed_tokens_str)
+
+    prev_fragment =
+      if processed_tokens_len > 20 do
+        String.slice(processed_tokens_str, -20..-1)
+      else
+        processed_tokens_str
+      end
+      |> escape_non_printable_chars()
+
+    prev_fragment_len = String.length(prev_fragment)
+    indent = String.duplicate(" ", prev_fragment_len)
+
+    current_fragment =
+      TokenHTMLEncoder.encode(token)
+      |> escape_non_printable_chars()
+
+    next_fragment =
+      TokenHTMLEncoder.encode(rest)
+      |> String.slice(0, 20)
+      |> escape_non_printable_chars()
+
+    reason = error_reason(context, type, token)
+
+    message = """
+
+
+    #{reason}
+
+    #{prev_fragment}#{current_fragment}#{next_fragment}
+    #{indent}^
+    """
+
+    raise SyntaxError, message: message
   end
 
   defp reset_double_quotes(context) do
@@ -206,12 +256,6 @@ defmodule Hologram.Template.TagAssembler do
 
 
   # ALREADY REFACTORED
-
-
-
-  # def assemble([{:symbol, :>} = token | rest], :text_tag, context, _tags) do
-  #   raise_error(token, rest, context, :text_tag)
-  # end
 
   # def assemble([{:symbol, :"\""} = token | rest], :expression, %{double_quote_open?: false} = context, tags) do
   #   context
@@ -562,64 +606,18 @@ defmodule Hologram.Template.TagAssembler do
   # end
 
   # def assemble([token | rest], type, context, _) do
-  #   raise_error(token, rest, context, type)
+  #   raise_error(context, type, token, rest)
   # end
 
   # def assemble([], type, context, _) do
-  #   raise_error(nil, [], context, type)
+  #   raise_error(context, type, nil, [])
   # end
 
   # defp add_end_tag(tags, context) do
   #   tags ++ [{:end_tag, context.tag_name}]
   # end
 
-  defp escape_non_printable_chars(str) do
-    str
-    |> String.replace("\n", "\\n")
-    |> String.replace("\r", "\\r")
-    |> String.replace("\t", "\\t")
-  end
-
   # defp put_attr_key(context, key) do
   #   %{context | attr_key: key}
   # end
-
-  # move context to beginning
-  defp raise_error(token, rest, %{prev_tokens: prev_tokens} = context, type) do
-    prev_tokens_str = TokenHTMLEncoder.encode(prev_tokens)
-    prev_tokens_len = String.length(prev_tokens_str)
-
-    prev_fragment =
-      if prev_tokens_len > 20 do
-        String.slice(prev_tokens_str, -20..-1)
-      else
-        prev_tokens_str
-      end
-      |> escape_non_printable_chars()
-
-    prev_fragment_len = String.length(prev_fragment)
-    indent = String.duplicate(" ", prev_fragment_len)
-
-    current_fragment =
-      TokenHTMLEncoder.encode(token)
-      |> escape_non_printable_chars()
-
-    next_fragment =
-      TokenHTMLEncoder.encode(rest)
-      |> String.slice(0, 20)
-      |> escape_non_printable_chars()
-
-    reason = error_reason(context, type, token)
-
-    message = """
-
-
-    #{reason}
-
-    #{prev_fragment}#{current_fragment}#{next_fragment}
-    #{indent}^
-    """
-
-    raise SyntaxError, message: message
-  end
 end

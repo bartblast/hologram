@@ -340,44 +340,61 @@ defmodule Hologram.Template.TagAssemblerTest do
   #   end
   # end
 
-  # TODO: already refactored
-  # describe "template syntax errors" do
-  #   test "unescaped '<' character inside text node" do
-  #     markup = "abc < xyz"
+  describe "template syntax errors" do
+    test "unescaped '<' character inside text node" do
+      markup = "abc < xyz"
 
-  #     expected_msg = """
-
-
-  #     Unescaped '<' character inside text node.
-  #     To escape use HTML entity: '&lt;'
-
-  #     abc < xyz
-  #         ^
-  #     """
-
-  #     assert_raise SyntaxError, expected_msg, fn ->
-  #       assemble(markup)
-  #     end
-  #   end
-
-  #   test "unescaped '>' character inside text node" do
-  #     markup = "abc > xyz"
-
-  #     expected_msg = """
+      expected_msg = """
 
 
-  #     Unescaped '>' character inside text node.
-  #     To escape use HTML entity: '&gt;'
+      Unescaped '<' character inside text node.
+      To escape use HTML entity: '&lt;'
 
-  #     abc > xyz
-  #         ^
-  #     """
+      abc < xyz
+          ^
+      """
 
-  #     assert_raise SyntaxError, expected_msg, fn ->
-  #       assemble(markup)
-  #     end
-  #   end
-  # end
+      assert_raise SyntaxError, expected_msg, fn ->
+        assemble(markup)
+      end
+    end
+
+    test "unescaped '>' character inside text node" do
+      markup = "abc > xyz"
+
+      expected_msg = """
+
+
+      Unescaped '>' character inside text node.
+      To escape use HTML entity: '&gt;'
+
+      abc > xyz
+          ^
+      """
+
+      assert_raise SyntaxError, expected_msg, fn ->
+        assemble(markup)
+      end
+    end
+
+    test "previous fragment trimming in error message" do
+      markup = "012345678901234567890123456789 > xyz"
+
+      expected_msg = """
+
+
+      Unescaped '>' character inside text node.
+      To escape use HTML entity: '&gt;'
+
+      1234567890123456789 > xyz
+                          ^
+      """
+
+      assert_raise SyntaxError, expected_msg, fn ->
+        assemble(markup)
+      end
+    end
+  end
 end
 
 
