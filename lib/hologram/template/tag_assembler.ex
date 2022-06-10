@@ -162,19 +162,6 @@ defmodule Hologram.Template.TagAssembler do
     |> handle_start_tag_end(token, rest)
   end
 
-  @initial_context %{
-    attrs: [],
-    attr_key: nil,
-    attr_value: [],
-    double_quote_open?: 0,
-    num_open_braces: 0,
-    prev_status: nil,
-    processed_tags: [],
-    processed_tokens: [],
-    tag_name: nil,
-    token_buffer: []
-  }
-
   def assemble(%{double_quote_open?: false} = context, :expression, [{:symbol, :"\""} = token | rest]) do
     context
     |> open_double_quote()
