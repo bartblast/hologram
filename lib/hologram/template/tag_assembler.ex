@@ -143,23 +143,11 @@ defmodule Hologram.Template.TagAssembler do
   end
 
   def assemble(context, :start_tag, [{:symbol, :"/>"} = token | rest]) do
-    type = Helpers.tag_type(context.tag_name)
-
-    if type == :component || is_self_closing_tag?(context.tag_name) do
-      add_self_closing_tag(context)
-    else
-      add_start_tag(context)
-    end
-    |> handle_start_tag_end(token, rest)
+    handle_start_tag_end(context, token, rest)
   end
 
   def assemble(context, :start_tag, [{:symbol, :>} = token | rest]) do
-    if is_self_closing_tag?(context.tag_name) do
-      add_self_closing_tag(context)
-    else
-      add_start_tag(context)
-    end
-    |> handle_start_tag_end(token, rest)
+    handle_start_tag_end(context, token, rest)
   end
 
   def assemble(context, :end_tag_name, [{:string, tag_name} = token | rest]) do
@@ -218,6 +206,19 @@ defmodule Hologram.Template.TagAssembler do
 
   def assemble(context, :expression, [token | rest]) do
     assemble_expression(context, token, rest)
+  end
+
+  def assemble(context, :attr_key, [{:whitespace, _} = token | rest]) do
+    context
+    |> flush_attribute()
+    |> add_processed_token(token)
+    |> assemble(:start_tag, rest)
+  end
+
+  def assemble(context, :attr_key, [{:symbol, :>} = token | rest]) do
+    context
+    |> flush_attribute()
+    |> handle_start_tag_end(token, rest)
   end
 
   defp add_end_tag(context) do
@@ -309,8 +310,19 @@ defmodule Hologram.Template.TagAssembler do
     |> String.replace("\t", "\\t")
   end
 
+  defp flush_attribute(context) do
+    new_attr = {context.attr_key, context.attr_value}
+    %{context | attr_key: nil, attr_value: [], attrs: context.attrs ++ [new_attr]}
+  end
+
   defp handle_start_tag_end(context, token, rest) do
-    context
+    type = Helpers.tag_type(context.tag_name)
+
+    if type == :component || is_self_closing_tag?(context.tag_name) do
+      add_self_closing_tag(context)
+    else
+      add_start_tag(context)
+    end
     |> reset_token_buffer()
     |> add_processed_token(token)
     |> assemble(:text_tag, rest)
@@ -439,16 +451,6 @@ defmodule Hologram.Template.TagAssembler do
   # ALREADY REFACTORED
 
   # # TODO: test
-  # def assemble([{:whitespace, _} = token | rest], :attr_key, context, tags) do
-  #   context =
-  #     context
-  #     |> add_prev_token(token)
-  #     |> commit_attribute()
-
-  #   assemble(rest, :start_tag, context, tags)
-  # end
-
-  # # TODO: test
   # def assemble([{:symbol, :=} = token | rest], :attr_key, context, tags) do
   #   context = context |> reset_attr_value() |> add_prev_token(token)
   #   assemble(rest, :attr_assignment, context, tags)
@@ -467,14 +469,6 @@ defmodule Hologram.Template.TagAssembler do
 
   # defp add_attr_value_part(context, part) do
   #   %{context | attr_value: context.attr_value ++ [part]}
-  # end
-
-  # defp add_prev_token(context, token) do
-  #   %{context | prev_tokens: context.prev_tokens ++ [token]}
-  # end
-
-  # defp commit_attribute(context) do
-  #   %{context | attrs: context.attrs ++ [{context.attr_key, context.attr_value}]}
   # end
 
   # # TODO: test

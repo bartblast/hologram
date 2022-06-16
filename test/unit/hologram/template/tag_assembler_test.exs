@@ -335,17 +335,25 @@ defmodule Hologram.Template.TagAssemblerTest do
   #   end
   # end
 
-  # TODO: refactor?
-  # describe "attribute" do
-  #   test "literal value" do
-  #     markup = "<div id=\"test\">"
+  describe "attribute" do
+    test "boolean attribute followed by whitespace" do
+      markup = "<div my_attr >"
 
-  #     result = assemble(markup)
-  #     expected = [start_tag: {"div", [{"id", [literal: "test"]}]}]
+      result = assemble(markup)
+      expected = [start_tag: {"div", [{"my_attr", []}]}]
 
-  #     assert result == expected
-  #   end
-  # end
+      assert result == expected
+    end
+
+    test "boolean attribute followed by start tag closing" do
+      markup = "<div my_attr>"
+
+      result = assemble(markup)
+      expected = [start_tag: {"div", [{"my_attr", []}]}]
+
+      assert result == expected
+    end
+  end
 
   describe "template syntax errors" do
     test "unescaped '<' character inside text node" do
@@ -452,7 +460,14 @@ end
 # TODO: overhaul
 
 #   describe "attribute" do
+  #   test "literal value" do
+  #     markup = "<div id=\"test\">"
 
+  #     result = assemble(markup)
+  #     expected = [start_tag: {"div", [{"id", [literal: "test"]}]}]
+
+  #     assert result == expected
+  #   end
 
 #     test "expression value" do
 #       markup = "<div id={@test}>"
