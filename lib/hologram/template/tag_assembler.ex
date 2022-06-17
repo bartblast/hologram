@@ -7,7 +7,7 @@ defmodule Hologram.Template.TagAssembler do
     attrs: [],
     attr_key: nil,
     attr_value: [],
-    double_quote_open?: 0,
+    double_quote_open?: false,
     num_open_braces: 0,
     prev_status: nil,
     processed_tags: [],
@@ -137,6 +137,7 @@ defmodule Hologram.Template.TagAssembler do
   # TODO: test
   def assemble(context, :start_tag, [{:string, str} = token | rest]) do
     context
+    |> reset_attribute()
     |> set_attr_key(str)
     |> add_processed_token(token)
     |> assemble(:attr_key, rest)
@@ -219,6 +220,13 @@ defmodule Hologram.Template.TagAssembler do
     context
     |> flush_attribute()
     |> handle_start_tag_end(token, rest)
+  end
+
+  # TODO: test
+  def assemble(context, :attr_key, [{:symbol, :=} = token | rest]) do
+    context
+    |> add_processed_token(token)
+    |> assemble(:attr_assignment, rest)
   end
 
   defp add_end_tag(context) do
@@ -395,6 +403,11 @@ defmodule Hologram.Template.TagAssembler do
     raise SyntaxError, message: message
   end
 
+  defp reset_attribute(context) do
+    %{context | attr_key: nil, attr_value: [], double_quote_open?: false, num_open_braces: 0}
+    |> reset_token_buffer()
+  end
+
   defp reset_attrs(context) do
     %{context | attrs: []}
   end
@@ -451,12 +464,6 @@ defmodule Hologram.Template.TagAssembler do
   # ALREADY REFACTORED
 
   # # TODO: test
-  # def assemble([{:symbol, :=} = token | rest], :attr_key, context, tags) do
-  #   context = context |> reset_attr_value() |> add_prev_token(token)
-  #   assemble(rest, :attr_assignment, context, tags)
-  # end
-
-  # # TODO: test
   # def assemble([{:symbol, :"\""} = token | rest], :attr_assignment, context, tags) do
   #   context = add_prev_token(context, token)
   #   assemble(rest, :attr_value_literal, context, tags)
@@ -489,11 +496,6 @@ defmodule Hologram.Template.TagAssembler do
   #     |> commit_attribute()
 
   #   assemble(rest, :start_tag, context, tags)
-  # end
-
-  # defp reset_attr_value(context) do
-  #   %{context | attr_value: [], double_quote_opened?: false, num_open_braces: 0}
-  #   |> reset_token_buffer()
   # end
 
   # defp reset_expression(context) do
