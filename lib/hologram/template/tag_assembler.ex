@@ -137,9 +137,12 @@ defmodule Hologram.Template.TagAssembler do
   # TODO: test
   def assemble(context, :start_tag, [{:string, str} = token | rest]) do
     context
-    |> reset_attribute()
     |> set_attr_key(str)
+    |> reset_attr_value()
+    |> reset_double_quotes()
+    |> reset_braces()
     |> add_processed_token(token)
+    |> reset_token_buffer()
     |> assemble(:attr_key, rest)
   end
 
@@ -403,9 +406,8 @@ defmodule Hologram.Template.TagAssembler do
     raise SyntaxError, message: message
   end
 
-  defp reset_attribute(context) do
-    %{context | attr_key: nil, attr_value: [], double_quote_open?: false, num_open_braces: 0}
-    |> reset_token_buffer()
+  defp reset_attr_value(context) do
+    %{context | attr_value: []}
   end
 
   defp reset_attrs(context) do
