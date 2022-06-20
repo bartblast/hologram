@@ -8,8 +8,8 @@ defmodule Hologram.Template.TagAssembler do
     attr_key: nil,
     attr_value: [],
     double_quote_open?: false,
+    node_type: :text_node,
     num_open_braces: 0,
-    prev_status: nil,
     processed_tags: [],
     processed_tokens: [],
     tag_name: nil,
@@ -85,7 +85,6 @@ defmodule Hologram.Template.TagAssembler do
     |> reset_double_quotes()
     |> reset_braces()
     |> reset_token_buffer()
-    |> set_prev_status(:text)
     |> assemble_expression(token, rest)
   end
 
@@ -96,7 +95,6 @@ defmodule Hologram.Template.TagAssembler do
   def assemble(context, :text, [{:symbol, :"</"} = token | rest]) do
     context
     |> maybe_add_text()
-    |> set_prev_status(:text)
     |> reset_token_buffer()
     |> add_processed_token(token)
     |> assemble(:end_tag_name, rest)
@@ -105,9 +103,9 @@ defmodule Hologram.Template.TagAssembler do
   def assemble(context, :text, [{:symbol, :<} = token | [{:string, _} | _] = rest]) do
     context
     |> maybe_add_text()
-    |> set_prev_status(:text)
     |> reset_token_buffer()
     |> add_processed_token(token)
+    |> set_node_type(:element_node)
     |> assemble(:start_tag_name, rest)
   end
 
@@ -171,6 +169,7 @@ defmodule Hologram.Template.TagAssembler do
     context
     |> add_end_tag()
     |> add_processed_token(token)
+    |> set_node_type(:text_node)
     |> assemble(:text, rest)
   end
 
@@ -192,9 +191,8 @@ defmodule Hologram.Template.TagAssembler do
     |> assemble_expression(token, rest)
   end
 
-  def assemble(%{double_quote_open?: false, num_open_braces: 0, prev_status: :text} = context, :expression, [{:symbol, :"}"} = token | rest]) do
+  def assemble(%{double_quote_open?: false, num_open_braces: 0, node_type: :text_node} = context, :expression, [{:symbol, :"}"} = token | rest]) do
     context
-    |> set_prev_status(:expression)
     |> buffer_token(token)
     |> add_processed_token(token)
     |> add_expression_tag()
@@ -430,8 +428,8 @@ defmodule Hologram.Template.TagAssembler do
     %{context | attr_key: key}
   end
 
-  defp set_prev_status(context, status) do
-    %{context | prev_status: status}
+  defp set_node_type(context, type) do
+    %{context | node_type: type}
   end
 
   defp set_tag_name(context, tag_name) do
