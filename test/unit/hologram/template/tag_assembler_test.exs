@@ -25,7 +25,7 @@ defmodule Hologram.Template.TagAssemblerTest do
       markup = " \n\r\t"
 
       result = assemble(markup)
-      expected = [text_tag: markup]
+      expected = [text: markup]
 
       assert result == expected
     end
@@ -34,7 +34,7 @@ defmodule Hologram.Template.TagAssemblerTest do
       markup = "abcdefghijklmnopqrstuvwxyz"
 
       result = assemble(markup)
-      expected = [text_tag: markup]
+      expected = [text: markup]
 
       assert result == expected
     end
@@ -43,7 +43,7 @@ defmodule Hologram.Template.TagAssemblerTest do
       markup = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
 
       result = assemble(markup)
-      expected = [text_tag: markup]
+      expected = [text: markup]
 
       assert result == expected
     end
@@ -52,7 +52,7 @@ defmodule Hologram.Template.TagAssemblerTest do
       markup = "ąćęłńóśźżĄĆĘŁŃÓŚŹŻ"
 
       result = assemble(markup)
-      expected = [text_tag: markup]
+      expected = [text: markup]
 
       assert result == expected
     end
@@ -61,7 +61,7 @@ defmodule Hologram.Template.TagAssemblerTest do
       markup = "!@#$%^&*()-_=+[];:'\"\\|,./?`~"
 
       result = assemble(markup)
-      expected = [text_tag: markup]
+      expected = [text: markup]
 
       assert result == expected
     end
@@ -70,7 +70,7 @@ defmodule Hologram.Template.TagAssemblerTest do
       markup = "\\{"
 
       result = assemble(markup)
-      expected = [text_tag: "{"]
+      expected = [text: "{"]
 
       assert result == expected
     end
@@ -79,7 +79,7 @@ defmodule Hologram.Template.TagAssemblerTest do
       markup = "\\}"
 
       result = assemble(markup)
-      expected = [text_tag: "}"]
+      expected = [text: "}"]
 
       assert result == expected
     end
@@ -90,7 +90,7 @@ defmodule Hologram.Template.TagAssemblerTest do
       markup = "abc{}xyz"
 
       result = assemble(markup)
-      expected = [text_tag: "abc", expression: "{}", text_tag: "xyz"]
+      expected = [text: "abc", expression: "{}", text: "xyz"]
 
       assert result == expected
     end
@@ -99,7 +99,7 @@ defmodule Hologram.Template.TagAssemblerTest do
       markup = "abc{ \n\r\t}xyz"
 
       result = assemble(markup)
-      expected = [text_tag: "abc", expression: "{ \n\r\t}", text_tag: "xyz"]
+      expected = [text: "abc", expression: "{ \n\r\t}", text: "xyz"]
 
       assert result == expected
     end
@@ -108,7 +108,7 @@ defmodule Hologram.Template.TagAssemblerTest do
       markup = "abc{abcdefghijklmnopqrstuvwxyz}xyz"
 
       result = assemble(markup)
-      expected = [text_tag: "abc", expression: "{abcdefghijklmnopqrstuvwxyz}", text_tag: "xyz"]
+      expected = [text: "abc", expression: "{abcdefghijklmnopqrstuvwxyz}", text: "xyz"]
 
       assert result == expected
     end
@@ -117,7 +117,7 @@ defmodule Hologram.Template.TagAssemblerTest do
       markup = "abc{ABCDEFGHIJKLMNOPQRSTUVWXYZ}xyz"
 
       result = assemble(markup)
-      expected = [text_tag: "abc", expression: "{ABCDEFGHIJKLMNOPQRSTUVWXYZ}", text_tag: "xyz"]
+      expected = [text: "abc", expression: "{ABCDEFGHIJKLMNOPQRSTUVWXYZ}", text: "xyz"]
 
       assert result == expected
     end
@@ -126,7 +126,7 @@ defmodule Hologram.Template.TagAssemblerTest do
       markup = "abc{ąćęłńóśźżĄĆĘŁŃÓŚŹŻ}xyz"
 
       result = assemble(markup)
-      expected = [text_tag: "abc", expression: "{ąćęłńóśźżĄĆĘŁŃÓŚŹŻ}", text_tag: "xyz"]
+      expected = [text: "abc", expression: "{ąćęłńóśźżĄĆĘŁŃÓŚŹŻ}", text: "xyz"]
 
       assert result == expected
     end
@@ -135,7 +135,7 @@ defmodule Hologram.Template.TagAssemblerTest do
       markup = "abc{!@#$%^&*()-_=+[];:'\\\"\\|,./?`~}xyz"
 
       result = assemble(markup)
-      expected = [text_tag: "abc", expression: "{!@#$%^&*()-_=+[];:'\\\"\\|,./?`~}", text_tag: "xyz"]
+      expected = [text: "abc", expression: "{!@#$%^&*()-_=+[];:'\\\"\\|,./?`~}", text: "xyz"]
 
       assert result == expected
     end
@@ -144,7 +144,7 @@ defmodule Hologram.Template.TagAssemblerTest do
       markup = "abc{{123}}xyz"
 
       result = assemble(markup)
-      expected = [text_tag: "abc", expression: "{{123}}", text_tag: "xyz"]
+      expected = [text: "abc", expression: "{{123}}", text: "xyz"]
 
       assert result == expected
     end
@@ -153,7 +153,7 @@ defmodule Hologram.Template.TagAssemblerTest do
       markup = "abc{{1},{2}}xyz"
 
       result = assemble(markup)
-      expected = [text_tag: "abc", expression: "{{1},{2}}", text_tag: "xyz"]
+      expected = [text: "abc", expression: "{{1},{2}}", text: "xyz"]
 
       assert result == expected
     end
@@ -162,7 +162,7 @@ defmodule Hologram.Template.TagAssemblerTest do
       markup = "abc{{\"\\{123\"}}xyz"
 
       result = assemble(markup)
-      expected = [text_tag: "abc", expression: "{{\"\\{123\"}}", text_tag: "xyz"]
+      expected = [text: "abc", expression: "{{\"\\{123\"}}", text: "xyz"]
 
       assert result == expected
     end
@@ -171,7 +171,7 @@ defmodule Hologram.Template.TagAssemblerTest do
       markup = "abc{{\"123\\}\"}}xyz"
 
       result = assemble(markup)
-      expected = [text_tag: "abc", expression: "{{\"123\\}\"}}", text_tag: "xyz"]
+      expected = [text: "abc", expression: "{{\"123\\}\"}}", text: "xyz"]
 
       assert result == expected
     end
@@ -180,7 +180,7 @@ defmodule Hologram.Template.TagAssemblerTest do
       markup = "abc{{\"123\"}}xyz"
 
       result = assemble(markup)
-      expected = [text_tag: "abc", expression: "{{\"123\"}}", text_tag: "xyz"]
+      expected = [text: "abc", expression: "{{\"123\"}}", text: "xyz"]
 
       assert result == expected
     end
@@ -189,7 +189,7 @@ defmodule Hologram.Template.TagAssemblerTest do
       markup = "abc{{\"1\",\"2\"}}xyz"
 
       result = assemble(markup)
-      expected = [text_tag: "abc", expression: "{{\"1\",\"2\"}}", text_tag: "xyz"]
+      expected = [text: "abc", expression: "{{\"1\",\"2\"}}", text: "xyz"]
 
       assert result == expected
     end
@@ -198,7 +198,7 @@ defmodule Hologram.Template.TagAssemblerTest do
       markup = "abc{{1\\\"2}}xyz"
 
       result = assemble(markup)
-      expected = [text_tag: "abc", expression: "{{1\\\"2}}", text_tag: "xyz"]
+      expected = [text: "abc", expression: "{{1\\\"2}}", text: "xyz"]
 
       assert result == expected
     end
@@ -207,7 +207,7 @@ defmodule Hologram.Template.TagAssemblerTest do
       markup = "abc{{\"1\\{2\"}}xyz"
 
       result = assemble(markup)
-      expected = [text_tag: "abc", expression: "{{\"1\\{2\"}}", text_tag: "xyz"]
+      expected = [text: "abc", expression: "{{\"1\\{2\"}}", text: "xyz"]
 
       assert result == expected
     end
@@ -216,7 +216,7 @@ defmodule Hologram.Template.TagAssemblerTest do
       markup = "abc{{\"1\\}2\"}}xyz"
 
       result = assemble(markup)
-      expected = [text_tag: "abc", expression: "{{\"1\\}2\"}}", text_tag: "xyz"]
+      expected = [text: "abc", expression: "{{\"1\\}2\"}}", text: "xyz"]
 
       assert result == expected
     end

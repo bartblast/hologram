@@ -40,83 +40,83 @@ defmodule Hologram.Template.TagAssembler do
   @void_svg_tags ["path", "rect"]
 
   # status is one of:
-  # text_tag, start_tag_name, start_tag, end_tag_name, end_tag, expression
+  # text, start_tag_name, start_tag, end_tag_name, end_tag, expression
   # attr_key, attr_assignment, attr_value_literal
-  def assemble(context \\ @initial_context, status \\ :text_tag, tokens)
+  def assemble(context \\ @initial_context, status \\ :text, tokens)
 
-  def assemble(context, :text_tag, []) do
+  def assemble(context, :text, []) do
     context
-    |> maybe_add_text_tag()
+    |> maybe_add_text()
     |> reset_token_buffer()
     |> Map.get(:processed_tags)
   end
 
-  def assemble(context, :text_tag, [{:whitespace, _} = token | rest]) do
-    assemble_text_tag(context, token, rest)
+  def assemble(context, :text, [{:whitespace, _} = token | rest]) do
+    assemble_text(context, token, rest)
   end
 
-  def assemble(context, :text_tag, [{:string, _} = token | rest]) do
-    assemble_text_tag(context, token, rest)
+  def assemble(context, :text, [{:string, _} = token | rest]) do
+    assemble_text(context, token, rest)
   end
 
-  def assemble(context, :text_tag, [{:symbol, :=} = token | rest]) do
-    assemble_text_tag(context, token, rest)
+  def assemble(context, :text, [{:symbol, :=} = token | rest]) do
+    assemble_text(context, token, rest)
   end
 
-  def assemble(context, :text_tag, [{:symbol, :"\""} = token | rest]) do
-    assemble_text_tag(context, token, rest)
+  def assemble(context, :text, [{:symbol, :"\""} = token | rest]) do
+    assemble_text(context, token, rest)
   end
 
-  def assemble(context, :text_tag, [{:symbol, :"\\"} = token | rest]) do
-    assemble_text_tag(context, token, rest)
+  def assemble(context, :text, [{:symbol, :"\\"} = token | rest]) do
+    assemble_text(context, token, rest)
   end
 
-  def assemble(context, :text_tag, [{:symbol, :/} = token | rest]) do
-    assemble_text_tag(context, token, rest)
+  def assemble(context, :text, [{:symbol, :/} = token | rest]) do
+    assemble_text(context, token, rest)
   end
 
-  def assemble(context, :text_tag, [{:symbol, :"\\{"} | rest]) do
-    assemble_text_tag(context, {:symbol, :"{"}, rest)
+  def assemble(context, :text, [{:symbol, :"\\{"} | rest]) do
+    assemble_text(context, {:symbol, :"{"}, rest)
   end
 
-  def assemble(context, :text_tag, [{:symbol, :"{"} = token | rest]) do
+  def assemble(context, :text, [{:symbol, :"{"} = token | rest]) do
     context
-    |> maybe_add_text_tag()
+    |> maybe_add_text()
     |> reset_double_quotes()
     |> reset_braces()
     |> reset_token_buffer()
-    |> set_prev_status(:text_tag)
+    |> set_prev_status(:text)
     |> assemble_expression(token, rest)
   end
 
-  def assemble(context, :text_tag, [{:symbol, :"\\}"} | rest]) do
-    assemble_text_tag(context, {:symbol, :"}"}, rest)
+  def assemble(context, :text, [{:symbol, :"\\}"} | rest]) do
+    assemble_text(context, {:symbol, :"}"}, rest)
   end
 
-  def assemble(context, :text_tag, [{:symbol, :"</"} = token | rest]) do
+  def assemble(context, :text, [{:symbol, :"</"} = token | rest]) do
     context
-    |> maybe_add_text_tag()
-    |> set_prev_status(:text_tag)
+    |> maybe_add_text()
+    |> set_prev_status(:text)
     |> reset_token_buffer()
     |> add_processed_token(token)
     |> assemble(:end_tag_name, rest)
   end
 
-  def assemble(context, :text_tag, [{:symbol, :<} = token | [{:string, _} | _] = rest]) do
+  def assemble(context, :text, [{:symbol, :<} = token | [{:string, _} | _] = rest]) do
     context
-    |> maybe_add_text_tag()
-    |> set_prev_status(:text_tag)
+    |> maybe_add_text()
+    |> set_prev_status(:text)
     |> reset_token_buffer()
     |> add_processed_token(token)
     |> assemble(:start_tag_name, rest)
   end
 
-  def assemble(context, :text_tag, [{:symbol, :<} = token | rest]) do
-    raise_error(context, :text_tag, token, rest)
+  def assemble(context, :text, [{:symbol, :<} = token | rest]) do
+    raise_error(context, :text, token, rest)
   end
 
-  def assemble(context, :text_tag, [{:symbol, :>} = token | rest]) do
-    raise_error(context, :text_tag, token, rest)
+  def assemble(context, :text, [{:symbol, :>} = token | rest]) do
+    raise_error(context, :text, token, rest)
   end
 
   def assemble(context, :start_tag_name, [{:string, tag_name} = token | rest]) do
@@ -171,7 +171,7 @@ defmodule Hologram.Template.TagAssembler do
     context
     |> add_end_tag()
     |> add_processed_token(token)
-    |> assemble(:text_tag, rest)
+    |> assemble(:text, rest)
   end
 
   def assemble(%{double_quote_open?: false} = context, :expression, [{:symbol, :"\""} = token | rest]) do
@@ -192,14 +192,14 @@ defmodule Hologram.Template.TagAssembler do
     |> assemble_expression(token, rest)
   end
 
-  def assemble(%{double_quote_open?: false, num_open_braces: 0, prev_status: :text_tag} = context, :expression, [{:symbol, :"}"} = token | rest]) do
+  def assemble(%{double_quote_open?: false, num_open_braces: 0, prev_status: :text} = context, :expression, [{:symbol, :"}"} = token | rest]) do
     context
     |> set_prev_status(:expression)
     |> buffer_token(token)
     |> add_processed_token(token)
     |> add_expression_tag()
     |> reset_token_buffer()
-    |> assemble(:text_tag, rest)
+    |> assemble(:text, rest)
   end
 
   def assemble(%{double_quote_open?: false} = context, :expression, [{:symbol, :"}"} = token | rest]) do
@@ -263,11 +263,11 @@ defmodule Hologram.Template.TagAssembler do
     |> assemble(:expression, rest)
   end
 
-  defp assemble_text_tag(context, token, rest) do
+  defp assemble_text(context, token, rest) do
     context
     |> buffer_token(token)
     |> add_processed_token(token)
-    |> assemble(:text_tag, rest)
+    |> assemble(:text, rest)
   end
 
   defp buffer_token(%{token_buffer: token_buffer} = context, token) do
@@ -284,14 +284,14 @@ defmodule Hologram.Template.TagAssembler do
 
   defp error_reason(context, type, token)
 
-  defp error_reason( _, :text_tag, {:symbol, :<}) do
+  defp error_reason( _, :text, {:symbol, :<}) do
     """
     Unescaped '<' character inside text node.
     To escape use HTML entity: '&lt;'\
     """
   end
 
-  defp error_reason( _, :text_tag, {:symbol, :>}) do
+  defp error_reason( _, :text, {:symbol, :>}) do
     """
     Unescaped '>' character inside text node.
     To escape use HTML entity: '&gt;'\
@@ -299,7 +299,7 @@ defmodule Hologram.Template.TagAssembler do
   end
 
   # # TODO: test
-  defp error_reason(%{double_quote_open?: true}, :text_tag_interpolation, nil) do
+  defp error_reason(%{double_quote_open?: true}, :text_interpolation, nil) do
     "Unexpected end of markup because of unclosed double quote inside text interpolation."
   end
 
@@ -336,7 +336,7 @@ defmodule Hologram.Template.TagAssembler do
     end
     |> reset_token_buffer()
     |> add_processed_token(token)
-    |> assemble(:text_tag, rest)
+    |> assemble(:text, rest)
   end
 
   defp increment_num_open_braces(context) do
@@ -355,9 +355,9 @@ defmodule Hologram.Template.TagAssembler do
     tag_name in @void_svg_tags
   end
 
-  defp maybe_add_text_tag(%{token_buffer: token_buffer, processed_tags: processed_tags} = context) do
+  defp maybe_add_text(%{token_buffer: token_buffer, processed_tags: processed_tags} = context) do
     if Enum.any?(token_buffer) do
-      new_processed_tags = processed_tags ++ [{:text_tag, TokenHTMLEncoder.encode(token_buffer)}]
+      new_processed_tags = processed_tags ++ [{:text, TokenHTMLEncoder.encode(token_buffer)}]
       %{context | processed_tags: new_processed_tags}
     else
       context
