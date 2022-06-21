@@ -353,6 +353,15 @@ defmodule Hologram.Template.TagAssemblerTest do
 
       assert result == expected
     end
+
+    test "literal attribute value" do
+      markup = "<div id=\"test\">"
+
+      result = assemble(markup)
+      expected = [start_tag: {"div", [{"id", [literal: "test"]}]}]
+
+      assert result == expected
+    end
   end
 
   describe "template syntax errors" do
@@ -460,14 +469,7 @@ end
 # TODO: overhaul
 
 #   describe "attribute" do
-  #   test "literal value" do
-  #     markup = "<div id=\"test\">"
 
-  #     result = assemble(markup)
-  #     expected = [start_tag: {"div", [{"id", [literal: "test"]}]}]
-
-  #     assert result == expected
-  #   end
 
 #     test "expression value" do
 #       markup = "<div id={@test}>"
