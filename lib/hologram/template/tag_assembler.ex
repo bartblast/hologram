@@ -64,7 +64,7 @@ defmodule Hologram.Template.TagAssembler do
   end
 
   # TODO: test
-  def assemble(%{node_type: :attribute_node} = context, :text, [{:symbol, :"\""} = token | rest]) do
+  def assemble(%{node_type: :attribute_value_literal} = context, :text, [{:symbol, :"\""} = token | rest]) do
     handle_attr_value_end(context, :literal, token, rest)
   end
 
@@ -205,6 +205,11 @@ defmodule Hologram.Template.TagAssembler do
     |> assemble(:text, rest)
   end
 
+  # TODO: test
+  def assemble(%{double_quote_open?: false, num_open_braces: 0, node_type: :attribute_value_expression} = context, :expression, [{:symbol, :"}"} = token | rest]) do
+    handle_attr_value_end(context, :expression, token, rest)
+  end
+
   def assemble(%{double_quote_open?: false} = context, :expression, [{:symbol, :"}"} = token | rest]) do
     context
     |> decrement_num_open_braces()
@@ -239,11 +244,20 @@ defmodule Hologram.Template.TagAssembler do
   def assemble(context, :attr_assignment, [{:symbol, :"\""} = token | rest]) do
     context
     |> add_processed_token(token)
-    |> set_node_type(:attribute_node)
+    |> set_node_type(:attribute_value_text)
     |> assemble(:text, rest)
   end
 
-  defp add_attr_value_part(context, part) do
+  # TODO: test
+  def assemble(context, :attr_assignment, [{:symbol, :"{"} = token | rest]) do
+    context
+    |> add_processed_token(token)
+    |> set_node_type(:attribute_value_expression)
+    |> assemble(:expression, rest)
+  end
+
+  defp add_attr_value_part(context, type) do
+    part = {type, TokenHTMLEncoder.encode(context.token_buffer)}
     %{context | attr_value: context.attr_value ++ [part]}
   end
 
@@ -341,12 +355,9 @@ defmodule Hologram.Template.TagAssembler do
     %{context | attr_key: nil, attr_value: [], attrs: context.attrs ++ [new_attr]}
   end
 
-  # # TODO: test
   defp handle_attr_value_end(context, part_type, token, rest) do
-    part = {part_type, TokenHTMLEncoder.encode(context.token_buffer)}
-
     context
-    |> add_attr_value_part(part)
+    |> add_attr_value_part(part_type)
     |> flush_attribute()
     |> set_node_type(:element_node)
     |> add_processed_token(token)
@@ -479,54 +490,14 @@ defmodule Hologram.Template.TagAssembler do
 
   # TO REFACTOR
 
-  # def assemble([{:symbol, :"}"} = token | rest], :expression, %{double_quote_open?: false, num_open_braces: 0, prev_status: :attribute_value_litera} = context, tags) do
-
-  # TODO: test
-  # def assemble([{:symbol, :"{"} = token | rest], :attr_assignment, context, tags) do
-  #   context = add_prev_token(context, token)
-  #   assemble(rest, :attr_value_expression, context, tags)
-  # end
-
   # defp assemble_attr_value(context, token, rest, tags, status) do
   #   context = context |> buffer_token(token) |> add_prev_token(token)
   #   assemble(rest, status, context, tags)
   # end
 
-  # def assemble([{:symbol, :"{"} = token | rest], :attr_value_literal, context, tags) do
-  #   assemble_attr_value(context, token, rest, tags, :attr_value_interpolation)
-  # end
-
-  # def assemble([token | rest], :attr_value_literal, context, tags) do
-  #   assemble_attr_value(context, token, rest, tags, :attr_value_literal)
-  # end
-
-  # def assemble([{:symbol, :"\""} = token | rest], :attr_value_expression, %{double_quote_open?: false} = context, tags) do
-  #   context
-  #   |> open_double_quote()
-  #   |> assemble_attr_value(token, rest, tags, :attr_value_expression)
-  # end
-
-  # def assemble([{:symbol, :"\""} = token | rest], :attr_value_expression, %{double_quote_open?: true} = context, tags) do
-  #   context
-  #   |> close_double_quote()
-  #   |> assemble_attr_value(token, rest, tags, :attr_value_expression)
-  # end
-
-  # def assemble([{:symbol, :"{"} = token | rest], :attr_value_expression, %{double_quote_open?: false} = context, tags) do
-  #   context
-  #   |> increment_num_open_braces()
-  #   |> assemble_attr_value(token, rest, tags, :attr_value_expression)
-  # end
-
   # def assemble([{:symbol, :"}"} = token | rest], :attr_value_expression, %{double_quote_open?: false, num_open_braces: 0} = context, tags) do
   #   # (add token to buffer)
   #   handle_attr_value_end(context, :expression, token, rest, tags)
-  # end
-
-  # def assemble([{:symbol, :"}"} = token | rest], :attr_value_expression, %{double_quote_open?: false} = context, tags) do
-  #   context
-  #   |> decrement_num_open_braces()
-  #   |> assemble_attr_value(token, rest, tags, :attr_value_expression)
   # end
 
   # def assemble([token | rest], :attr_value_expression, context, tags) do
