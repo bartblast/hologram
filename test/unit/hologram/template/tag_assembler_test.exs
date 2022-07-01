@@ -376,6 +376,10 @@ defmodule Hologram.Template.TagAssemblerTest do
 
       abc < xyz
           ^
+
+      status = :text
+
+      context = %{attr_key: nil, attr_value: [], attrs: [], double_quote_open?: false, node_type: :text_node, num_open_braces: 0, processed_tags: [], processed_tokens: [string: \"abc\", whitespace: \" \"], tag_name: nil, token_buffer: [string: \"abc\", whitespace: \" \"]}
       """
 
       assert_raise SyntaxError, expected_msg, fn ->
@@ -394,6 +398,10 @@ defmodule Hologram.Template.TagAssemblerTest do
 
       abc > xyz
           ^
+
+      status = :text
+
+      context = %{attr_key: nil, attr_value: [], attrs: [], double_quote_open?: false, node_type: :text_node, num_open_braces: 0, processed_tags: [], processed_tokens: [string: \"abc\", whitespace: \" \"], tag_name: nil, token_buffer: [string: \"abc\", whitespace: \" \"]}
       """
 
       assert_raise SyntaxError, expected_msg, fn ->
@@ -412,6 +420,10 @@ defmodule Hologram.Template.TagAssemblerTest do
 
       1234567890123456789 > xyz
                           ^
+
+      status = :text
+
+      context = %{attr_key: nil, attr_value: [], attrs: [], double_quote_open?: false, node_type: :text_node, num_open_braces: 0, processed_tags: [], processed_tokens: [string: \"012345678901234567890123456789\", whitespace: \" \"], tag_name: nil, token_buffer: [string: \"012345678901234567890123456789\", whitespace: \" \"]}
       """
 
       assert_raise SyntaxError, expected_msg, fn ->
