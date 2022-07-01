@@ -490,52 +490,6 @@ defmodule Hologram.Template.TagAssembler do
 
   # TO REFACTOR
 
-  # defp assemble_attr_value(context, token, rest, tags, status) do
-  #   context = context |> buffer_token(token) |> add_prev_token(token)
-  #   assemble(rest, status, context, tags)
-  # end
-
-  # def assemble([{:symbol, :"}"} = token | rest], :attr_value_expression, %{double_quote_open?: false, num_open_braces: 0} = context, tags) do
-  #   # (add token to buffer)
-  #   handle_attr_value_end(context, :expression, token, rest, tags)
-  # end
-
-  # def assemble([token | rest], :attr_value_expression, context, tags) do
-  #   assemble_attr_value(context, token, rest, tags, :attr_value_expression)
-  # end
-
-  # def assemble([{:symbol, :"\""} = token | rest], :attr_value_interpolation, %{double_quote_open?: false} = context, tags) do
-  #   context
-  #   |> open_double_quote()
-  #   |> assemble_attr_value(token, rest, tags, :attr_value_interpolation)
-  # end
-
-  # def assemble([{:symbol, :"\""} = token | rest], :attr_value_interpolation, %{double_quote_open?: true} = context, tags) do
-  #   context
-  #   |> close_double_quote()
-  #   |> assemble_attr_value(token, rest, tags, :attr_value_interpolation)
-  # end
-
-  # def assemble([{:symbol, :"{"} = token | rest], :attr_value_interpolation, %{double_quote_open?: false} = context, tags) do
-  #   context
-  #   |> increment_num_open_braces()
-  #   |> assemble_attr_value(token, rest, tags, :attr_value_interpolation)
-  # end
-
-  # def assemble([{:symbol, :"}"} = token | rest], :attr_value_interpolation, %{double_quote_open?: false, num_open_braces: 0} = context, tags) do
-  #   assemble_attr_value(context, token, rest, tags, :attr_value_text)
-  # end
-
-  # def assemble([{:symbol, :"}"} = token | rest], :attr_value_interpolation, %{double_quote_open?: false} = context, tags) do
-  #   context
-  #   |> decrement_num_open_braces()
-  #   |> assemble_attr_value(token, rest, tags, :attr_value_interpolation)
-  # end
-
-  # def assemble([token | rest], :attr_value_interpolation, context, tags) do
-  #   assemble_attr_value(context, token, rest, tags, :attr_value_interpolation)
-  # end
-
   # def assemble([token | rest], type, context, _) do
   #   raise_error(context, type, token, rest)
   # end
