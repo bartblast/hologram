@@ -371,6 +371,17 @@ defmodule Hologram.Template.TagAssemblerTest do
 
       assert result == expected
     end
+
+    test "double quoted expression attribute value (without string prefix or suffix)" do
+      markup = "<div id=\"{@test}\">"
+      result = assemble(markup)
+
+      expected = [
+        start_tag: {"div", [{"id", [literal: "", expression: "{@test}", literal: ""]}]}
+      ]
+
+      assert result == expected
+    end
   end
 
   describe "template syntax errors" do
@@ -490,19 +501,6 @@ end
 # TODO: overhaul
 
 #   describe "attribute" do
-
-#     test "literal value with interpolation without string prefix or suffix" do
-#       markup = "<div id=\"{@test}\">"
-
-#       result = assemble(markup)
-
-#       expected = [
-#         start_tag: {"div",
-#          [{:literal, "id", [symbol: :"{", string: "@test", symbol: :"}"]}]}
-#       ]
-
-#       assert result == expected
-#     end
 
 #     test "literal value with interpolation with string prefix" do
 #       markup = "<div id=\"abc{@test}\">"
