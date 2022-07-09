@@ -231,6 +231,13 @@ defmodule Hologram.Template.TagAssembler do
     |> assemble(:text, rest)
   end
 
+  # TODO: test
+  assemble(%{double_quote_open?: false} = context, :expression, [{:symbol, :"}"} = token | rest])  do
+    context
+    |> decrement_num_open_braces()
+    |> assemble_expression(token, rest)
+  end
+
   assemble(context, :expression, [token | rest]) do
     assemble_expression(context, token, rest)
   end
