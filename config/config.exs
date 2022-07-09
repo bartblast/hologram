@@ -3,6 +3,7 @@ import Config
 config :hologram,
   otp_app: :hologram,
   app_path: "#{File.cwd!()}/test/unit/fixtures/app",
+  debug: false,
   default_layout: Hologram.Test.Fixtures.App.DefaultLayout,
   env: config_env(),
   ignored_namespaces: [
