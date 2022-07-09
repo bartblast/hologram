@@ -1,4 +1,7 @@
 defmodule Hologram.Template.TagAssembler do
+  require Hologram.Template.Macros
+  import Hologram.Template.Macros
+
   alias Hologram.Template.Helpers
   alias Hologram.Template.SyntaxError
   alias Hologram.Template.TokenHTMLEncoder
@@ -44,47 +47,47 @@ defmodule Hologram.Template.TagAssembler do
   # attr_key, attr_assignment, attr_value_literal
   def assemble(context \\ @initial_context, status \\ :text, tokens)
 
-  def assemble(context, :text, []) do
+  assemble(context, :text, []) do
     context
     |> maybe_add_text()
     |> reset_token_buffer()
     |> Map.get(:processed_tags)
   end
 
-  def assemble(context, :text, [{:whitespace, _} = token | rest]) do
+  assemble(context, :text, [{:whitespace, _} = token | rest]) do
     assemble_text(context, token, rest)
   end
 
-  def assemble(context, :text, [{:string, _} = token | rest]) do
+  assemble(context, :text, [{:string, _} = token | rest]) do
     assemble_text(context, token, rest)
   end
 
-  def assemble(context, :text, [{:symbol, :=} = token | rest]) do
+  assemble(context, :text, [{:symbol, :=} = token | rest]) do
     assemble_text(context, token, rest)
   end
 
   # TODO: test
-  def assemble(%{node_type: :attribute_value_text} = context, :text, [{:symbol, :"\""} = token | rest]) do
+  assemble(%{node_type: :attribute_value_text} = context, :text, [{:symbol, :"\""} = token | rest]) do
     handle_attr_value_end(context, :literal, token, rest)
   end
 
-  def assemble(context, :text, [{:symbol, :"\""} = token | rest]) do
+  assemble(context, :text, [{:symbol, :"\""} = token | rest]) do
     assemble_text(context, token, rest)
   end
 
-  def assemble(context, :text, [{:symbol, :"\\"} = token | rest]) do
+  assemble(context, :text, [{:symbol, :"\\"} = token | rest]) do
     assemble_text(context, token, rest)
   end
 
-  def assemble(context, :text, [{:symbol, :/} = token | rest]) do
+  assemble(context, :text, [{:symbol, :/} = token | rest]) do
     assemble_text(context, token, rest)
   end
 
-  def assemble(context, :text, [{:symbol, :"\\{"} | rest]) do
+  assemble(context, :text, [{:symbol, :"\\{"} | rest]) do
     assemble_text(context, {:symbol, :"{"}, rest)
   end
 
-  def assemble(%{node_type: :attribute_value_text} = context, :text, [{:symbol, :"{"} = token | rest]) do
+  assemble(%{node_type: :attribute_value_text} = context, :text, [{:symbol, :"{"} = token | rest]) do
     context
     |> add_attr_value_part(:literal)
     |> reset_double_quotes()
@@ -93,7 +96,7 @@ defmodule Hologram.Template.TagAssembler do
     |> assemble_expression(token, rest)
   end
 
-  def assemble(context, :text, [{:symbol, :"{"} = token | rest]) do
+  assemble(context, :text, [{:symbol, :"{"} = token | rest]) do
     context
     |> maybe_add_text()
     |> reset_double_quotes()
@@ -102,11 +105,11 @@ defmodule Hologram.Template.TagAssembler do
     |> assemble_expression(token, rest)
   end
 
-  def assemble(context, :text, [{:symbol, :"\\}"} | rest]) do
+  assemble(context, :text, [{:symbol, :"\\}"} | rest]) do
     assemble_text(context, {:symbol, :"}"}, rest)
   end
 
-  def assemble(context, :text, [{:symbol, :"</"} = token | rest]) do
+  assemble(context, :text, [{:symbol, :"</"} = token | rest]) do
     context
     |> maybe_add_text()
     |> reset_token_buffer()
@@ -114,7 +117,7 @@ defmodule Hologram.Template.TagAssembler do
     |> assemble(:end_tag_name, rest)
   end
 
-  def assemble(context, :text, [{:symbol, :<} = token | [{:string, _} | _] = rest]) do
+  assemble(context, :text, [{:symbol, :<} = token | [{:string, _} | _] = rest]) do
     context
     |> maybe_add_text()
     |> reset_token_buffer()
@@ -123,15 +126,15 @@ defmodule Hologram.Template.TagAssembler do
     |> assemble(:start_tag_name, rest)
   end
 
-  def assemble(context, :text, [{:symbol, :<} = token | rest]) do
+  assemble(context, :text, [{:symbol, :<} = token | rest]) do
     raise_error(context, :text, token, rest)
   end
 
-  def assemble(context, :text, [{:symbol, :>} = token | rest]) do
+  assemble(context, :text, [{:symbol, :>} = token | rest]) do
     raise_error(context, :text, token, rest)
   end
 
-  def assemble(context, :start_tag_name, [{:string, tag_name} = token | rest]) do
+  assemble(context, :start_tag_name, [{:string, tag_name} = token | rest]) do
     context
     |> reset_attrs()
     |> set_tag_name(tag_name)
@@ -140,14 +143,14 @@ defmodule Hologram.Template.TagAssembler do
   end
 
   # # TODO: test
-  def assemble(context, :start_tag, [{:whitespace, _} = token | rest]) do
+  assemble(context, :start_tag, [{:whitespace, _} = token | rest]) do
     context
     |> add_processed_token(token)
     |> assemble(:start_tag, rest)
   end
 
   # TODO: test
-  def assemble(context, :start_tag, [{:string, str} = token | rest]) do
+  assemble(context, :start_tag, [{:string, str} = token | rest]) do
     context
     |> set_attr_key(str)
     |> reset_attr_value()
@@ -158,28 +161,28 @@ defmodule Hologram.Template.TagAssembler do
     |> assemble(:attr_key, rest)
   end
 
-  def assemble(context, :start_tag, [{:symbol, :"/>"} = token | rest]) do
+  assemble(context, :start_tag, [{:symbol, :"/>"} = token | rest]) do
     handle_start_tag_end(context, token, rest)
   end
 
-  def assemble(context, :start_tag, [{:symbol, :>} = token | rest]) do
+  assemble(context, :start_tag, [{:symbol, :>} = token | rest]) do
     handle_start_tag_end(context, token, rest)
   end
 
-  def assemble(context, :end_tag_name, [{:string, tag_name} = token | rest]) do
+  assemble(context, :end_tag_name, [{:string, tag_name} = token | rest]) do
     context
     |> set_tag_name(tag_name)
     |> add_processed_token(token)
     |> assemble(:end_tag, rest)
   end
 
-  def assemble(context, :end_tag, [{:whitespace, _} = token | rest]) do
+  assemble(context, :end_tag, [{:whitespace, _} = token | rest]) do
     context
     |> add_processed_token(token)
     |> assemble(:end_tag, rest)
   end
 
-  def assemble(context, :end_tag, [{:symbol, :>} = token | rest]) do
+  assemble(context, :end_tag, [{:symbol, :>} = token | rest]) do
     context
     |> add_end_tag()
     |> add_processed_token(token)
@@ -187,25 +190,25 @@ defmodule Hologram.Template.TagAssembler do
     |> assemble(:text, rest)
   end
 
-  def assemble(%{double_quote_open?: false} = context, :expression, [{:symbol, :"\""} = token | rest]) do
+  assemble(%{double_quote_open?: false} = context, :expression, [{:symbol, :"\""} = token | rest]) do
     context
     |> open_double_quote()
     |> assemble_expression(token, rest)
   end
 
-  def assemble(%{double_quote_open?: true} = context, :expression, [{:symbol, :"\""} = token | rest]) do
+  assemble(%{double_quote_open?: true} = context, :expression, [{:symbol, :"\""} = token | rest]) do
     context
     |> close_double_quote()
     |> assemble_expression(token, rest)
   end
 
-  def assemble(%{double_quote_open?: false} = context, :expression, [{:symbol, :"{"} = token | rest]) do
+  assemble(%{double_quote_open?: false} = context, :expression, [{:symbol, :"{"} = token | rest]) do
     context
     |> increment_num_open_braces()
     |> assemble_expression(token, rest)
   end
 
-  def assemble(%{double_quote_open?: false, num_open_braces: 0, node_type: :text_node} = context, :expression, [{:symbol, :"}"} = token | rest]) do
+  assemble(%{double_quote_open?: false, num_open_braces: 0, node_type: :text_node} = context, :expression, [{:symbol, :"}"} = token | rest]) do
     context
     |> buffer_token(token)
     |> add_processed_token(token)
@@ -215,11 +218,11 @@ defmodule Hologram.Template.TagAssembler do
   end
 
   # TODO: test
-  def assemble(%{double_quote_open?: false, num_open_braces: 0, node_type: :attribute_value_expression} = context, :expression, [{:symbol, :"}"} = token | rest]) do
+  assemble(%{double_quote_open?: false, num_open_braces: 0, node_type: :attribute_value_expression} = context, :expression, [{:symbol, :"}"} = token | rest]) do
     handle_attr_value_end(context, :expression, token, rest)
   end
 
-  def assemble(%{double_quote_open?: false, num_open_braces: 0, node_type: :attribute_value_text} = context, :expression, [{:symbol, :"}"} = token | rest]) do
+  assemble(%{double_quote_open?: false, num_open_braces: 0, node_type: :attribute_value_text} = context, :expression, [{:symbol, :"}"} = token | rest]) do
     context
     |> buffer_token(token)
     |> add_processed_token(token)
@@ -228,32 +231,32 @@ defmodule Hologram.Template.TagAssembler do
     |> assemble(:text, rest)
   end
 
-  def assemble(context, :expression, [token | rest]) do
+  assemble(context, :expression, [token | rest]) do
     assemble_expression(context, token, rest)
   end
 
-  def assemble(context, :attr_key, [{:whitespace, _} = token | rest]) do
+  assemble(context, :attr_key, [{:whitespace, _} = token | rest]) do
     context
     |> flush_attribute()
     |> add_processed_token(token)
     |> assemble(:start_tag, rest)
   end
 
-  def assemble(context, :attr_key, [{:symbol, :>} = token | rest]) do
+  assemble(context, :attr_key, [{:symbol, :>} = token | rest]) do
     context
     |> flush_attribute()
     |> handle_start_tag_end(token, rest)
   end
 
   # TODO: test
-  def assemble(context, :attr_key, [{:symbol, :=} = token | rest]) do
+  assemble(context, :attr_key, [{:symbol, :=} = token | rest]) do
     context
     |> add_processed_token(token)
     |> assemble(:attr_assignment, rest)
   end
 
   # TODO: test
-  def assemble(context, :attr_assignment, [{:symbol, :"\""} = token | rest]) do
+  assemble(context, :attr_assignment, [{:symbol, :"\""} = token | rest]) do
     context
     |> add_processed_token(token)
     |> set_node_type(:attribute_value_text)
@@ -261,7 +264,7 @@ defmodule Hologram.Template.TagAssembler do
   end
 
   # TODO: test
-  def assemble(context, :attr_assignment, [{:symbol, :"{"} = token | rest]) do
+  assemble(context, :attr_assignment, [{:symbol, :"{"} = token | rest]) do
     context
     |> add_processed_token(token)
     |> set_node_type(:attribute_value_expression)
