@@ -278,6 +278,16 @@ defmodule Hologram.Template.TagAssembler do
     |> assemble(:expression, rest)
   end
 
+  # TODO: test
+  assemble(context, type, [token | rest]) do
+    raise_error(context, type, token, rest)
+  end
+
+  # TODO: test
+  assemble(context, type, []) do
+    raise_error(context, type, nil, [])
+  end
+
   defp add_attr_value_part(context, type) do
     part = {type, TokenHTMLEncoder.encode(context.token_buffer)}
     %{context | attr_value: context.attr_value ++ [part]}
@@ -501,22 +511,4 @@ defmodule Hologram.Template.TagAssembler do
   defp set_tag_name(context, tag_name) do
     %{context | tag_name: tag_name}
   end
-
-
-
-
-
-
-
-
-
-  # TO REFACTOR
-
-  # def assemble([token | rest], type, context, _) do
-  #   raise_error(context, type, token, rest)
-  # end
-
-  # def assemble([], type, context, _) do
-  #   raise_error(context, type, nil, [])
-  # end
 end
