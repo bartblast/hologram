@@ -162,11 +162,11 @@ defmodule Hologram.Template.TagAssembler do
   end
 
   assemble(context, :start_tag, [{:symbol, :"/>"} = token | rest]) do
-    handle_start_tag_end(context, token, rest)
+    handle_start_tag_end(context, token, rest, true)
   end
 
   assemble(context, :start_tag, [{:symbol, :>} = token | rest]) do
-    handle_start_tag_end(context, token, rest)
+    handle_start_tag_end(context, token, rest, false)
   end
 
   assemble(context, :end_tag_name, [{:string, tag_name} = token | rest]) do
@@ -252,7 +252,7 @@ defmodule Hologram.Template.TagAssembler do
   assemble(context, :attr_key, [{:symbol, :>} = token | rest]) do
     context
     |> flush_attribute()
-    |> handle_start_tag_end(token, rest)
+    |> handle_start_tag_end(token, rest, false)
   end
 
   # TODO: test
@@ -396,14 +396,18 @@ defmodule Hologram.Template.TagAssembler do
     |> assemble(:start_tag, rest)
   end
 
-  defp handle_start_tag_end(context, token, rest) do
+  defp handle_start_tag_end(context, token, rest, self_closing?) do
     type = Helpers.tag_type(context.tag_name)
 
-    if type == :component || is_self_closing_tag?(context.tag_name) do
-      add_self_closing_tag(context)
-    else
-      add_start_tag(context)
-    end
+    add_tag_fun =
+      if (type == :component && self_closing?) || is_self_closing_tag?(context.tag_name) do
+        &add_self_closing_tag/1
+      else
+        &add_start_tag/1
+      end
+
+    context
+    |> add_tag_fun.()
     |> reset_token_buffer()
     |> add_processed_token(token)
     |> assemble(:text, rest)

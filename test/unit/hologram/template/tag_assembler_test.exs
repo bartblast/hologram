@@ -305,35 +305,34 @@ defmodule Hologram.Template.TagAssemblerTest do
     end
   end
 
-  # TODO: already refactored
-  # describe "component node" do
-  #   test "start tag" do
-  #     markup = "<Abc.Bcd>"
+  describe "component node" do
+    test "start tag" do
+      markup = "<Abc.Bcd>"
 
-  #     result = assemble(markup)
-  #     expected = [start_tag: {"Abc.Bcd", []}]
+      result = assemble(markup)
+      expected = [start_tag: {"Abc.Bcd", []}]
 
-  #     assert result == expected
-  #   end
+      assert result == expected
+    end
 
-  #   test "end tag" do
-  #     markup = "</Abc.Bcd>"
+    test "end tag" do
+      markup = "</Abc.Bcd>"
 
-  #     result = assemble(markup)
-  #     expected = [end_tag: "Abc.Bcd"]
+      result = assemble(markup)
+      expected = [end_tag: "Abc.Bcd"]
 
-  #     assert result == expected
-  #   end
+      assert result == expected
+    end
 
-  #   test "self-closed tag" do
-  #     markup = "<Abc.Bcd />"
+    test "self-closed tag" do
+      markup = "<Abc.Bcd />"
 
-  #     result = assemble(markup)
-  #     expected = [self_closing_tag: {"Abc.Bcd", []}]
+      result = assemble(markup)
+      expected = [self_closing_tag: {"Abc.Bcd", []}]
 
-  #     assert result == expected
-  #   end
-  # end
+      assert result == expected
+    end
+  end
 
   describe "attribute" do
     test "boolean attribute followed by whitespace" do
