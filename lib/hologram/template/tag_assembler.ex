@@ -147,7 +147,6 @@ defmodule Hologram.Template.TagAssembler do
     |> assemble(:start_tag, rest)
   end
 
-  # TODO: test
   assemble(context, :start_tag, [{:string, str} = token | rest]) do
     context
     |> set_attr_key(str)
@@ -215,7 +214,6 @@ defmodule Hologram.Template.TagAssembler do
     |> assemble(:text, rest)
   end
 
-  # TODO: test
   assemble(%{double_quote_open?: false, num_open_braces: 0, node_type: :attribute_value_expression} = context, :expression, [{:symbol, :"}"} = token | rest]) do
     handle_attr_value_end(context, :expression, token, rest)
   end

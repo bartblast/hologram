@@ -390,6 +390,42 @@ defmodule Hologram.Template.TagAssemblerTest do
 
       assert result == expected
     end
+
+    test "double quoted expression attribute value with string prefix" do
+      markup = "<div id=\"abc{@test}\">"
+      result = assemble(markup)
+
+      expected = [
+        start_tag: {"div",
+         [{"id", [literal: "abc", expression: "{@test}", literal: ""]}]}
+      ]
+
+      assert result == expected
+    end
+
+    test "double quoted expression attribute value with string suffix" do
+      markup = "<div id=\"{@test}abc\">"
+      result = assemble(markup)
+
+      expected = [
+        start_tag: {"div",
+         [{"id", [literal: "", expression: "{@test}", literal: "abc"]}]}
+      ]
+
+      assert result == expected
+    end
+
+    test "double quoted expression attribute value with string prefix and suffix" do
+      markup = "<div id=\"abc{@test}xyz\">"
+      result = assemble(markup)
+
+      expected = [
+        start_tag: {"div",
+         [{"id", [literal: "abc", expression: "{@test}", literal: "xyz"]}]}
+      ]
+
+      assert result == expected
+    end
   end
 
   describe "template syntax errors" do
@@ -460,108 +496,3 @@ defmodule Hologram.Template.TagAssemblerTest do
     end
   end
 end
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-  # TODO: test (e.g. boolean attr, after attribute with value)
-
-
-# TODO: overhaul
-
-#   describe "attribute" do
-
-#     test "literal value with interpolation with string prefix" do
-#       markup = "<div id=\"abc{@test}\">"
-
-#       result = assemble(markup)
-
-#       expected = [
-#         start_tag: {"div",
-#          [
-#            {:literal, "id",
-#             [string: "abc", symbol: :"{", string: "@test", symbol: :"}"]}
-#          ]}
-#       ]
-
-#       assert result == expected
-#     end
-
-#     test "literal value with interpolation with string suffix" do
-#       markup = "<div id=\"{@test}abc\">"
-
-#       result = assemble(markup)
-
-#       expected = [
-#         start_tag: {"div",
-#          [
-#            {:literal, "id",
-#             [symbol: :"{", string: "@test", symbol: :"}", string: "abc"]}
-#          ]}
-#       ]
-
-#       assert result == expected
-#     end
-
-#     test "literal value with interpolation with string prefix and suffix" do
-#       markup = "<div id=\"abc{@test}xyz\">"
-
-#       result = assemble(markup)
-
-#       expected = [
-#         start_tag: {"div",
-#          [
-#            {:literal, "id",
-#             [
-#               string: "abc",
-#               symbol: :"{",
-#               string: "@test",
-#               symbol: :"}",
-#               string: "xyz"
-#             ]}
-#          ]}
-#       ]
-
-#       assert result == expected
-#     end
-#   end
-# end
