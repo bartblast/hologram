@@ -66,7 +66,6 @@ defmodule Hologram.Template.TagAssembler do
     assemble_text(context, token, rest)
   end
 
-  # TODO: test
   assemble(%{node_type: :attribute_value_text} = context, :text, [{:symbol, :"\""} = token | rest]) do
     handle_attr_value_end(context, :literal, token, rest)
   end
@@ -142,7 +141,6 @@ defmodule Hologram.Template.TagAssembler do
     |> assemble(:start_tag, rest)
   end
 
-  # # TODO: test
   assemble(context, :start_tag, [{:whitespace, _} = token | rest]) do
     context
     |> add_processed_token(token)

@@ -232,6 +232,15 @@ defmodule Hologram.Template.TagAssemblerTest do
       assert result == expected
     end
 
+    test "start tag with whitespace after tag name" do
+      markup = "<div \n\r\t>"
+
+      result = assemble(markup)
+      expected = [start_tag: {"div", []}]
+
+      assert result == expected
+    end
+
     test "end tag" do
       markup = "</div>"
 
