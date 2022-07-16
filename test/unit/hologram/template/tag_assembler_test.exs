@@ -222,6 +222,216 @@ defmodule Hologram.Template.TagAssemblerTest do
     end
   end
 
+  describe "expression in attribute value" do
+    test "empty" do
+      markup = "<div id=\"abc{}xyz\">"
+      result = assemble(markup)
+
+      expected = [
+        start_tag: {"div",
+         [{"id", [literal: "abc", expression: "{}", literal: "xyz"]}]}
+      ]
+
+      assert result == expected
+    end
+
+    test "whitespaces" do
+      markup = "<div id=\"abc{ \n\r\t}xyz\">"
+      result = assemble(markup)
+
+      expected = [
+        start_tag: {"div",
+         [{"id", [literal: "abc", expression: "{ \n\r\t}", literal: "xyz"]}]}
+      ]
+
+      assert result == expected
+    end
+
+    test "string, ASCI alphabet lowercase" do
+      markup = "<div id=\"abc{abcdefghijklmnopqrstuvwxyz}xyz\">"
+      result = assemble(markup)
+
+      expected = [
+        start_tag: {"div",
+         [
+           {"id",
+            [
+              literal: "abc",
+              expression: "{abcdefghijklmnopqrstuvwxyz}",
+              literal: "xyz"
+            ]}
+         ]}
+      ]
+
+      assert result == expected
+    end
+
+    test "string, ASCI alphabet uppercase" do
+      markup = "<div id=\"abc{ABCDEFGHIJKLMNOPQRSTUVWXYZ}xyz\">"
+      result = assemble(markup)
+
+      expected = [
+        start_tag: {"div",
+         [
+           {"id",
+            [
+              literal: "abc",
+              expression: "{ABCDEFGHIJKLMNOPQRSTUVWXYZ}",
+              literal: "xyz"
+            ]}
+         ]}
+      ]
+
+      assert result == expected
+    end
+
+    test "string, UTF-8 chars" do
+      markup = "<div id=\"abc{ąćęłńóśźżĄĆĘŁŃÓŚŹŻ}xyz\">"
+      result = assemble(markup)
+
+      expected = [
+        start_tag: {"div",
+         [
+           {"id",
+            [
+              literal: "abc",
+              expression: "{ąćęłńóśźżĄĆĘŁŃÓŚŹŻ}",
+              literal: "xyz"
+            ]}
+         ]}
+      ]
+
+      assert result == expected
+    end
+
+    test "symbols" do
+      markup = "<div id=\"abc{!@#$%^&*()-_=+[];:'\\\"\\|,./?`~}xyz\">"
+      result = assemble(markup)
+
+      expected = [
+        start_tag: {"div",
+         [
+           {"id",
+            [
+              literal: "abc",
+              expression: "{!@#$%^&*()-_=+[];:'\\\"\\|,./?`~}",
+              literal: "xyz"
+            ]}
+         ]}
+      ]
+
+      assert result == expected
+    end
+
+    test "single group of curly brackets" do
+      markup = "<div id=\"abc{{123}}xyz\">"
+      result = assemble(markup)
+
+      expected = [
+        start_tag: {"div",
+         [{"id", [literal: "abc", expression: "{{123}}", literal: "xyz"]}]}
+      ]
+
+      assert result == expected
+    end
+
+    test "multiple groups of curly brackets" do
+      markup = "<div id=\"abc{{1},{2}}xyz\">"
+      result = assemble(markup)
+
+      expected = [
+        start_tag: {"div",
+         [{"id", [literal: "abc", expression: "{{1},{2}}", literal: "xyz"]}]}
+      ]
+
+      assert result == expected
+    end
+
+    test "opening curly bracket escaping" do
+      markup = "<div id=\"abc{{\"\\{123\"}}xyz\">"
+      result = assemble(markup)
+
+      expected = [
+        start_tag: {"div",
+         [{"id", [literal: "abc", expression: "{{\"\\{123\"}}", literal: "xyz"]}]}
+      ]
+
+      assert result == expected
+    end
+
+    test "closing curly bracket escaping" do
+      markup = "<div id=\"abc{{\"123\\}\"}}xyz\">"
+      result = assemble(markup)
+
+      expected = [
+        start_tag: {"div",
+         [{"id", [literal: "abc", expression: "{{\"123\\}\"}}", literal: "xyz"]}]}
+      ]
+
+      assert result == expected
+    end
+
+    test "single group of double quotes" do
+      markup = "<div id=\"abc{{\"123\"}}xyz\">"
+      result = assemble(markup)
+
+      expected = [
+        start_tag: {"div",
+         [{"id", [literal: "abc", expression: "{{\"123\"}}", literal: "xyz"]}]}
+      ]
+
+      assert result == expected
+    end
+
+    test "multiple groups of double quotes" do
+      markup = "<div id=\"abc{{\"1\",\"2\"}}xyz\">"
+      result = assemble(markup)
+
+      expected = [
+        start_tag: {"div",
+         [{"id", [literal: "abc", expression: "{{\"1\",\"2\"}}", literal: "xyz"]}]}
+      ]
+
+      assert result == expected
+    end
+
+    test "double quote escaping" do
+      markup = "<div id=\"abc{{1\\\"2}}xyz\">"
+      result = assemble(markup)
+
+      expected = [
+        start_tag: {"div",
+         [{"id", [literal: "abc", expression: "{{1\\\"2}}", literal: "xyz"]}]}
+      ]
+
+      assert result == expected
+    end
+
+    test "opening curly bracket inside double quoted string" do
+      markup = "<div id=\"abc{{\"1\\{2\"}}xyz\">"
+      result = assemble(markup)
+
+      expected = [
+        start_tag: {"div",
+         [{"id", [literal: "abc", expression: "{{\"1\\{2\"}}", literal: "xyz"]}]}
+      ]
+
+      assert result == expected
+    end
+
+    test "closing curly bracket inside double quoted string" do
+      markup = "<div id=\"abc{{\"1\\}2\"}}xyz\">"
+      result = assemble(markup)
+
+      expected = [
+        start_tag: {"div",
+         [{"id", [literal: "abc", expression: "{{\"1\\}2\"}}", literal: "xyz"]}]}
+      ]
+
+      assert result == expected
+    end
+  end
+
   describe "element node" do
     test "start tag" do
       markup = "<div>"

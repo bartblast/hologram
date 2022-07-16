@@ -227,7 +227,6 @@ defmodule Hologram.Template.TagAssembler do
     |> assemble(:text, rest)
   end
 
-  # TODO: test
   assemble(%{double_quote_open?: false} = context, :expression, [{:symbol, :"}"} = token | rest])  do
     context
     |> decrement_num_open_braces()
@@ -251,14 +250,12 @@ defmodule Hologram.Template.TagAssembler do
     |> handle_start_tag_end(token, rest, false)
   end
 
-  # TODO: test
   assemble(context, :attr_key, [{:symbol, :=} = token | rest]) do
     context
     |> add_processed_token(token)
     |> assemble(:attr_assignment, rest)
   end
 
-  # TODO: test
   assemble(context, :attr_assignment, [{:symbol, :"\""} = token | rest]) do
     context
     |> add_processed_token(token)
@@ -266,7 +263,6 @@ defmodule Hologram.Template.TagAssembler do
     |> assemble(:text, rest)
   end
 
-  # TODO: test
   assemble(context, :attr_assignment, [{:symbol, :"{"} = token | rest]) do
     context
     |> add_processed_token(token)
