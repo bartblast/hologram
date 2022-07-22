@@ -653,6 +653,8 @@ defmodule Hologram.Template.TagAssemblerTest do
 
       status = :text
 
+      token = {:symbol, :<}
+
       context = %{attr_key: nil, attr_value: [], attrs: [], double_quote_open?: false, node_type: :text_node, num_open_braces: 0, processed_tags: [], processed_tokens: [string: \"abc\", whitespace: \" \"], tag_name: nil, token_buffer: [string: \"abc\", whitespace: \" \"]}
       """
 
@@ -674,6 +676,8 @@ defmodule Hologram.Template.TagAssemblerTest do
           ^
 
       status = :text
+
+      token = {:symbol, :>}
 
       context = %{attr_key: nil, attr_value: [], attrs: [], double_quote_open?: false, node_type: :text_node, num_open_braces: 0, processed_tags: [], processed_tokens: [string: \"abc\", whitespace: \" \"], tag_name: nil, token_buffer: [string: \"abc\", whitespace: \" \"]}
       """
@@ -697,6 +701,8 @@ defmodule Hologram.Template.TagAssemblerTest do
 
       status = :text
 
+      token = {:symbol, :>}
+
       context = %{attr_key: nil, attr_value: [], attrs: [], double_quote_open?: false, node_type: :text_node, num_open_braces: 0, processed_tags: [], processed_tokens: [string: \"012345678901234567890123456789\", whitespace: \" \"], tag_name: nil, token_buffer: [string: \"012345678901234567890123456789\", whitespace: \" \"]}
       """
 
@@ -713,7 +719,7 @@ defmodule Hologram.Template.TagAssemblerTest do
 
       Unclosed start tag.
 
-      <div 
+      <div\s
            ^
 
       status = :start_tag
