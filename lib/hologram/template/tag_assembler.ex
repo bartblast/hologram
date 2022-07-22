@@ -270,12 +270,12 @@ defmodule Hologram.Template.TagAssembler do
     |> assemble(:expression, rest)
   end
 
-  # TODO: test
-  assemble(context, type, [token | rest]) do
-    raise_error(context, type, token, rest)
-  end
+  # # TODO: test
+  # assemble(context, type, [token | rest]) do
+  #   raise_error(context, type, token, rest)
+  # end
 
-  # TODO: test
+  # # TODO: test
   assemble(context, type, []) do
     raise_error(context, type, nil, [])
   end
@@ -351,19 +351,12 @@ defmodule Hologram.Template.TagAssembler do
     """
   end
 
-  # # TODO: test
-  defp error_reason(%{double_quote_open?: true}, :text_interpolation, nil) do
-    "Unexpected end of markup because of unclosed double quote inside text interpolation."
+  defp error_reason(_, :start_tag, nil) do
+    "Unclosed start tag."
   end
 
-  # # TODO: test
-  defp error_reason(context, type, token) do
-    """
-    Unknown reason.
-    token = #{inspect(token)}
-    context = #{inspect(context)}
-    type = #{inspect(type)}\
-    """
+  defp error_reason(_, _, _) do
+    "Unknown reason."
   end
 
   # TODO: test
@@ -469,6 +462,8 @@ defmodule Hologram.Template.TagAssembler do
     #{indent}^
 
     status = #{inspect(status)}
+
+    token = #{inspect(token)}
 
     context = #{inspect(context)}
     """

@@ -704,5 +704,28 @@ defmodule Hologram.Template.TagAssemblerTest do
         assemble(markup)
       end
     end
+
+    test "unexpected end of markup" do
+      markup = "<div "
+
+      expected_msg = """
+
+
+      Unclosed start tag.
+
+      <div 
+           ^
+
+      status = :start_tag
+
+      token = nil
+
+      context = %{attr_key: nil, attr_value: [], attrs: [], double_quote_open?: false, node_type: :element_node, num_open_braces: 0, processed_tags: [], processed_tokens: [symbol: :<, string: \"div\", whitespace: \" \"], tag_name: \"div\", token_buffer: []}
+      """
+
+      assert_raise SyntaxError, expected_msg, fn ->
+        assemble(markup)
+      end
+    end
   end
 end
