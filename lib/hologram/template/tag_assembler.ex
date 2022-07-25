@@ -270,12 +270,10 @@ defmodule Hologram.Template.TagAssembler do
     |> assemble(:expression, rest)
   end
 
-  # # TODO: test
-  # assemble(context, type, [token | rest]) do
-  #   raise_error(context, type, token, rest)
-  # end
+  assemble(context, type, [token | rest]) do
+    raise_error(context, type, token, rest)
+  end
 
-  # # TODO: test
   assemble(context, type, []) do
     raise_error(context, type, nil, [])
   end
@@ -353,6 +351,10 @@ defmodule Hologram.Template.TagAssembler do
 
   defp error_reason(_, :start_tag, nil) do
     "Unclosed start tag."
+  end
+
+  defp error_reason(_, :start_tag, {:symbol, :=}) do
+    "Missing attribute name."
   end
 
   defp error_reason(_, _, _) do

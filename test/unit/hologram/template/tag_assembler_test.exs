@@ -711,7 +711,7 @@ defmodule Hologram.Template.TagAssemblerTest do
       end
     end
 
-    test "unexpected end of markup" do
+    test "unclosed start tag" do
       markup = "<div "
 
       expected_msg = """
@@ -725,6 +725,29 @@ defmodule Hologram.Template.TagAssemblerTest do
       status = :start_tag
 
       token = nil
+
+      context = %{attr_key: nil, attr_value: [], attrs: [], double_quote_open?: false, node_type: :element_node, num_open_braces: 0, processed_tags: [], processed_tokens: [symbol: :<, string: \"div\", whitespace: \" \"], tag_name: \"div\", token_buffer: []}
+      """
+
+      assert_raise SyntaxError, expected_msg, fn ->
+        assemble(markup)
+      end
+    end
+
+    test "missing attribute name" do
+      markup = "<div =\"abc\">"
+
+      expected_msg = """
+
+
+      Missing attribute name.
+
+      <div ="abc">
+           ^
+
+      status = :start_tag
+
+      token = {:symbol, :=}
 
       context = %{attr_key: nil, attr_value: [], attrs: [], double_quote_open?: false, node_type: :element_node, num_open_braces: 0, processed_tags: [], processed_tokens: [symbol: :<, string: \"div\", whitespace: \" \"], tag_name: \"div\", token_buffer: []}
       """
