@@ -1,4 +1,4 @@
-# Covered in Hologram.Template.Parser integration tests
+# TODO: test
 
 defmodule Hologram.Template.TokenHTMLEncoder do
   def encode(arg)

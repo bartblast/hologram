@@ -1,5 +1,3 @@
-# Covered in Hologram.Template.Parser integration tests
-
 defmodule Hologram.Template.DOMTreeBuilder do
   alias Hologram.Template.{Helpers, SyntaxError}
 
@@ -28,7 +26,7 @@ defmodule Hologram.Template.DOMTreeBuilder do
     build(remaining_tags, acc ++ [subtree])
   end
 
-  def build([{:text_tag, str} | rest], acc) do
+  def build([{:text, str} | rest], acc) do
     build(rest, acc ++ [{:text, str}])
   end
 
