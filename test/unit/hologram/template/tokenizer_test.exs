@@ -11,6 +11,40 @@ defmodule Hologram.Template.TokenizerTest do
     assert result == expected
   end
 
+  test "raw directive start" do
+    str = "{#}abc{#raw}xyz"
+
+    result = Tokenizer.tokenize(str)
+
+    expected = [
+      symbol: :"{",
+      string: "#",
+      symbol: :"}",
+      string: "abc",
+      directive: :raw_start,
+      string: "xyz"
+    ]
+
+    assert result == expected
+  end
+
+  test "raw directive end" do
+    str = "{#}abc{/raw}xyz"
+
+    result = Tokenizer.tokenize(str)
+
+    expected = [
+      symbol: :"{",
+      string: "#",
+      symbol: :"}",
+      string: "abc",
+      directive: :raw_end,
+      string: "xyz"
+    ]
+
+    assert result == expected
+  end
+
   test "whitespaces" do
     str = " \n\r\t \n\r\t"
     result = Tokenizer.tokenize(str)
