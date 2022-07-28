@@ -729,7 +729,7 @@ defmodule Hologram.Template.TagAssemblerTest do
 
       token = {:symbol, :<}
 
-      context = %{attr_key: nil, attr_value: [], attrs: [], double_quote_open?: false, node_type: :text_node, num_open_braces: 0, processed_tags: [], processed_tokens: [string: \"abc\", whitespace: \" \"], tag_name: nil, token_buffer: [string: \"abc\", whitespace: \" \"]}
+      context = %{attr_key: nil, attr_value: [], attrs: [], double_quote_open?: false, node_type: :text_node, num_open_braces: 0, processed_tags: [], processed_tokens: [string: \"abc\", whitespace: \" \"], raw?: false, tag_name: nil, token_buffer: [string: \"abc\", whitespace: \" \"]}
       """
 
       assert_raise SyntaxError, expected_msg, fn ->
@@ -753,7 +753,7 @@ defmodule Hologram.Template.TagAssemblerTest do
 
       token = {:symbol, :>}
 
-      context = %{attr_key: nil, attr_value: [], attrs: [], double_quote_open?: false, node_type: :text_node, num_open_braces: 0, processed_tags: [], processed_tokens: [string: \"abc\", whitespace: \" \"], tag_name: nil, token_buffer: [string: \"abc\", whitespace: \" \"]}
+      context = %{attr_key: nil, attr_value: [], attrs: [], double_quote_open?: false, node_type: :text_node, num_open_braces: 0, processed_tags: [], processed_tokens: [string: \"abc\", whitespace: \" \"], raw?: false, tag_name: nil, token_buffer: [string: \"abc\", whitespace: \" \"]}
       """
 
       assert_raise SyntaxError, expected_msg, fn ->
@@ -777,7 +777,7 @@ defmodule Hologram.Template.TagAssemblerTest do
 
       token = {:symbol, :>}
 
-      context = %{attr_key: nil, attr_value: [], attrs: [], double_quote_open?: false, node_type: :text_node, num_open_braces: 0, processed_tags: [], processed_tokens: [string: \"012345678901234567890123456789\", whitespace: \" \"], tag_name: nil, token_buffer: [string: \"012345678901234567890123456789\", whitespace: \" \"]}
+      context = %{attr_key: nil, attr_value: [], attrs: [], double_quote_open?: false, node_type: :text_node, num_open_braces: 0, processed_tags: [], processed_tokens: [string: \"012345678901234567890123456789\", whitespace: \" \"], raw?: false, tag_name: nil, token_buffer: [string: \"012345678901234567890123456789\", whitespace: \" \"]}
       """
 
       assert_raise SyntaxError, expected_msg, fn ->
@@ -800,7 +800,7 @@ defmodule Hologram.Template.TagAssemblerTest do
 
       token = nil
 
-      context = %{attr_key: nil, attr_value: [], attrs: [], double_quote_open?: false, node_type: :element_node, num_open_braces: 0, processed_tags: [], processed_tokens: [symbol: :<, string: \"div\", whitespace: \" \"], tag_name: \"div\", token_buffer: []}
+      context = %{attr_key: nil, attr_value: [], attrs: [], double_quote_open?: false, node_type: :element_node, num_open_braces: 0, processed_tags: [], processed_tokens: [symbol: :<, string: \"div\", whitespace: \" \"], raw?: false, tag_name: \"div\", token_buffer: []}
       """
 
       assert_raise SyntaxError, expected_msg, fn ->
@@ -823,7 +823,7 @@ defmodule Hologram.Template.TagAssemblerTest do
 
       token = {:symbol, :=}
 
-      context = %{attr_key: nil, attr_value: [], attrs: [], double_quote_open?: false, node_type: :element_node, num_open_braces: 0, processed_tags: [], processed_tokens: [symbol: :<, string: \"div\", whitespace: \" \"], tag_name: \"div\", token_buffer: []}
+      context = %{attr_key: nil, attr_value: [], attrs: [], double_quote_open?: false, node_type: :element_node, num_open_braces: 0, processed_tags: [], processed_tokens: [symbol: :<, string: \"div\", whitespace: \" \"], raw?: false, tag_name: \"div\", token_buffer: []}
       """
 
       assert_raise SyntaxError, expected_msg, fn ->
