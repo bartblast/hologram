@@ -638,6 +638,80 @@ defmodule Hologram.Template.TagAssemblerTest do
     end
   end
 
+  describe "raw directive" do
+    test "empty" do
+      markup = "aaa{#raw}{/raw}bbb"
+
+      result = assemble(markup)
+      expected = [text: "aaabbb"]
+
+      assert result == expected
+    end
+
+    test "text with interpolation" do
+      markup = "aaa{#raw}bbb{@test}ccc{/raw}ddd"
+
+      result = assemble(markup)
+      expected = [text: "aaabbb{@test}cccddd"]
+
+      assert result == expected
+    end
+
+    test "element node with double quoted expression attribute value" do
+      markup = "aaa{#raw}<div id=\"bbb{@test}ccc\"></div>{/raw}ddd"
+      result = assemble(markup)
+
+      expected = [
+        text: "aaa",
+        start_tag: {"div", [{"id", [literal: "bbb{@test}ccc"]}]},
+        end_tag: "div",
+        text: "ddd"
+      ]
+
+      assert result == expected
+    end
+
+    test "element node with expression attribute value" do
+      markup = "aaa{#raw}<div id={@test}></div>{/raw}"
+      result = assemble(markup)
+
+      expected = [
+        text: "aaa",
+        start_tag: {"div", [{"id", [expression: "@test"]}]},
+        end_tag: "div"
+      ]
+
+      assert result == expected
+    end
+
+    test "component node with double quoted expression prop value" do
+      markup = "aaa{#raw}<Abc.Bcd xyz=\"bbb{@test}ccc\"></Abc.Bcd>{/raw}ddd"
+      result = assemble(markup)
+
+      expected = [
+        text: "aaa",
+        start_tag: {"Abc.Bcd", [{"xyz", [literal: "bbb{@test}ccc"]}]},
+        end_tag: "Abc.Bcd",
+        text: "ddd"
+      ]
+
+      assert result == expected
+    end
+
+    test "component node with expression prop value" do
+      markup = "aaa{#raw}<Abc.Bcd xyz={@test}></Abc.Bcd>{/raw}"
+      result = assemble(markup)
+
+      expected = [
+        text: "aaa",
+        start_tag: {"Abc.Bcd", [{"xyz", [expression: "@test"]}]},
+        end_tag: "Abc.Bcd"
+      ]
+
+      assert result == expected
+    end
+  end
+
   describe "template syntax errors" do
     test "unescaped '<' character inside text node" do
       markup = "abc < xyz"

@@ -15,6 +15,7 @@ defmodule Hologram.Template.TagAssembler do
     num_open_braces: 0,
     processed_tags: [],
     processed_tokens: [],
+    raw?: false,
     tag_name: nil,
     token_buffer: []
   }
@@ -54,6 +55,20 @@ defmodule Hologram.Template.TagAssembler do
     |> Map.get(:processed_tags)
   end
 
+  assemble(context, :text, [{:directive, :raw_start} = token | rest]) do
+    context
+    |> enable_raw_markup()
+    |> add_processed_token(token)
+    |> assemble(:text, rest)
+  end
+
+  assemble(context, :text, [{:directive, :raw_end} = token | rest]) do
+    context
+    |> disable_raw_markup()
+    |> add_processed_token(token)
+    |> assemble(:text, rest)
+  end
+
   assemble(context, :text, [{:whitespace, _} = token | rest]) do
     assemble_text(context, token, rest)
   end
@@ -86,6 +101,10 @@ defmodule Hologram.Template.TagAssembler do
     assemble_text(context, {:symbol, :"{"}, rest)
   end
 
+  assemble(%{raw?: true} = context, :text, [{:symbol, :"{"} | rest]) do
+    assemble_text(context, {:symbol, :"{"}, rest)
+  end
+
   assemble(%{node_type: :attribute_value_text} = context, :text, [{:symbol, :"{"} = token | rest]) do
     context
     |> add_attr_value_part(:literal)
@@ -105,6 +124,10 @@ defmodule Hologram.Template.TagAssembler do
   end
 
   assemble(context, :text, [{:symbol, :"\\}"} | rest]) do
+    assemble_text(context, {:symbol, :"}"}, rest)
+  end
+
+  assemble(%{raw?: true} = context, :text, [{:symbol, :"}"} | rest]) do
     assemble_text(context, {:symbol, :"}"}, rest)
   end
 
@@ -331,6 +354,14 @@ defmodule Hologram.Template.TagAssembler do
 
   defp decrement_num_open_braces(context) do
     %{context | num_open_braces: context.num_open_braces - 1}
+  end
+
+  defp disable_raw_markup(context) do
+    %{context | raw?: false}
+  end
+
+  defp enable_raw_markup(context) do
+    %{context | raw?: true}
   end
 
   defp error_reason(context, status, token)

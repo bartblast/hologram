@@ -8,9 +8,12 @@ defmodule Hologram.Template.TokenHTMLEncoder do
     |> Enum.join("")
   end
 
-  def encode({:symbol, symbol}), do: to_string(symbol)
+  def encode({:directive, :raw_start}), do: ""
+  def encode({:directive, :raw_end}), do: ""
 
   def encode({:string, str}), do: str
+
+  def encode({:symbol, symbol}), do: to_string(symbol)
 
   def encode({:whitespace, char}), do: char
 
