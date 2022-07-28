@@ -1,8 +1,22 @@
 defmodule Hologram.Template.ParserTest do
   use Hologram.Test.UnitCase, async: true
-  alias Hologram.Template.{Parser, SyntaxError}
-  
-  test "removes doctype" do
+
+  alias Hologram.Template.Parser
+  alias Hologram.Template.SyntaxError
+
+  test "parse template into a DOM tree" do
+    markup = "<div><span id=\"test\">abc</span></div>"
+    result = Parser.parse!(markup)
+
+    expected = [
+      {:element, "div", [],
+       [{:element, "span", [{"id", [literal: "test"]}], [text: "abc"]}]}
+    ]
+
+    assert result == expected
+  end
+
+  test "remove doctype" do
     markup = "<!DoCtYpE html test_1 test_2>content"
 
     result = Parser.parse!(markup)
@@ -11,7 +25,7 @@ defmodule Hologram.Template.ParserTest do
     assert result == expected
   end
 
-  test "removes comments" do
+  test "remove comments" do
     special_chars = "abc \n \r \t < > / = \" { } ! -"
     markup = "aaa<!-- #{special_chars} -->bbb<!-- #{special_chars} -->ccc"
 
@@ -21,27 +35,7 @@ defmodule Hologram.Template.ParserTest do
     assert result == expected
   end
 
-  test "handles escaped JS code" do
-    js_code = """
-    function isPositiveNumber(param) \\{
-      if (param > 0) \\{
-        return true;
-      \\}
-      if (param <= 0) \\{
-        return false;
-      \\}
-    \\}
-    """
-
-    markup = "<script>#{js_code}</script>"
-
-    result = Parser.parse!(markup)
-    expected = [{:element, "script", [], [{:text, js_code}]}]
-
-    assert result == expected
-  end
-
-  test "trims leading and trailing whitespaces" do
+  test "trim leading and trailing whitespaces" do
     markup = "\n\t content \t\n"
 
     result = Parser.parse!(markup)

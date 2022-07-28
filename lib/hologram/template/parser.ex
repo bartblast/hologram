@@ -1,5 +1,7 @@
 defmodule Hologram.Template.Parser do
-  alias Hologram.Template.{DOMTreeBuilder, TagAssembler, Tokenizer}
+  alias Hologram.Template.DOMTreeBuilder
+  alias Hologram.Template.TagAssembler
+  alias Hologram.Template.Tokenizer
 
   def parse!(markup) do
     markup
