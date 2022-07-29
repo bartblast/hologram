@@ -288,6 +288,7 @@ defmodule Hologram.Template.TagAssembler do
 
   assemble(context, :attr_assignment, [{:symbol, :"{"} = token | rest]) do
     context
+    |> buffer_token(token)
     |> add_processed_token(token)
     |> set_node_type(:attribute_value_expression)
     |> assemble(:expression, rest)
@@ -406,6 +407,13 @@ defmodule Hologram.Template.TagAssembler do
   end
 
   defp handle_attr_value_end(context, part_type, token, rest) do
+    context =
+      if part_type == :expression do
+        buffer_token(context, token)
+      else
+        context
+      end
+
     context
     |> add_attr_value_part(part_type)
     |> flush_attribute()
