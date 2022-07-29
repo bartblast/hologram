@@ -101,9 +101,11 @@ defmodule Hologram.Compiler.FunctionDefinitionTransformerTest do
 
     assert %FunctionDefinition{} = result = FunctionDefinitionTransformer.transform(ast, @context)
 
-    expected = %Block{expressions: [
-      %IntegerType{value: 1}
-    ]}
+    expected = %Block{
+      expressions: [
+        %IntegerType{value: 1}
+      ]
+    }
 
     assert result.body == expected
   end
@@ -120,10 +122,12 @@ defmodule Hologram.Compiler.FunctionDefinitionTransformerTest do
 
     assert %FunctionDefinition{} = result = FunctionDefinitionTransformer.transform(ast, @context)
 
-    expected = %Block{expressions: [
-      %IntegerType{value: 1},
-      %IntegerType{value: 2}
-    ]}
+    expected = %Block{
+      expressions: [
+        %IntegerType{value: 1},
+        %IntegerType{value: 2}
+      ]
+    }
 
     assert result.body == expected
   end

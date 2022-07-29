@@ -12,10 +12,12 @@ defmodule Hologram.Compiler.ModuleDefAggregator.FunctionDefinitionTest do
 
   test "aggregate/1" do
     ir = %FunctionDefinition{
-      body: %Block{expressions: [
-        %ModuleType{module: PlaceholderModule1},
-        %ModuleType{module: PlaceholderModule2}
-      ]}
+      body: %Block{
+        expressions: [
+          %ModuleType{module: PlaceholderModule1},
+          %ModuleType{module: PlaceholderModule2}
+        ]
+      }
     }
 
     ModuleDefAggregator.aggregate(ir)

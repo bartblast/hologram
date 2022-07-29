@@ -22,8 +22,12 @@ defmodule HologramE2E.Runtime.HydrationTest do
   feature "server initialized stateful component state hydration", %{session: session} do
     session
     |> visit(@page_path)
-    |> assert_has(css("#server-initialized-component-text", text: "server-initialized component count = 300"))
+    |> assert_has(
+      css("#server-initialized-component-text", text: "server-initialized component count = 300")
+    )
     |> click(css("#server-initialized-component-button"))
-    |> assert_has(css("#server-initialized-component-text", text: "server-initialized component count = 301"))
+    |> assert_has(
+      css("#server-initialized-component-text", text: "server-initialized component count = 301")
+    )
   end
 end

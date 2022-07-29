@@ -38,7 +38,7 @@ defmodule HologramE2E.ControlFlow.ForExpressionPage do
   end
 
   def action(:test_nested, _params, state) do
-    result = for n <- [1, 2], do: [n] ++ for n <- [3, 4], do: n * n
+    result = for n <- [1, 2], do: [n] ++ for(n <- [3, 4], do: n * n)
     Map.put(state, :result, result)
   end
 

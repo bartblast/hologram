@@ -138,9 +138,16 @@ defmodule Hologram.Compiler do
   defp log_paths do
     Logger.debug("Hologram: compile priv path = #{Reflection.root_priv_path()}")
     Logger.debug("Hologram: compile output path = #{resolve_output_path()}")
-    Logger.debug("Hologram: page digest store dump path = #{Reflection.root_page_digest_store_path()}")
+
+    Logger.debug(
+      "Hologram: page digest store dump path = #{Reflection.root_page_digest_store_path()}"
+    )
+
     Logger.debug("Hologram: template store dump path = #{Reflection.root_template_store_path()}")
-    Logger.debug("Hologram: template store load path = #{Reflection.release_template_store_path()}")
+
+    Logger.debug(
+      "Hologram: template store load path = #{Reflection.release_template_store_path()}"
+    )
   end
 
   defp resolve_output_path do

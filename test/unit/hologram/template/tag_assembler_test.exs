@@ -228,8 +228,7 @@ defmodule Hologram.Template.TagAssemblerTest do
       result = assemble(markup)
 
       expected = [
-        start_tag: {"div",
-         [{"id", [literal: "abc", expression: "{}", literal: "xyz"]}]}
+        start_tag: {"div", [{"id", [literal: "abc", expression: "{}", literal: "xyz"]}]}
       ]
 
       assert result == expected
@@ -240,8 +239,7 @@ defmodule Hologram.Template.TagAssemblerTest do
       result = assemble(markup)
 
       expected = [
-        start_tag: {"div",
-         [{"id", [literal: "abc", expression: "{ \n\r\t}", literal: "xyz"]}]}
+        start_tag: {"div", [{"id", [literal: "abc", expression: "{ \n\r\t}", literal: "xyz"]}]}
       ]
 
       assert result == expected
@@ -252,15 +250,16 @@ defmodule Hologram.Template.TagAssemblerTest do
       result = assemble(markup)
 
       expected = [
-        start_tag: {"div",
-         [
-           {"id",
-            [
-              literal: "abc",
-              expression: "{abcdefghijklmnopqrstuvwxyz}",
-              literal: "xyz"
-            ]}
-         ]}
+        start_tag:
+          {"div",
+           [
+             {"id",
+              [
+                literal: "abc",
+                expression: "{abcdefghijklmnopqrstuvwxyz}",
+                literal: "xyz"
+              ]}
+           ]}
       ]
 
       assert result == expected
@@ -271,15 +270,16 @@ defmodule Hologram.Template.TagAssemblerTest do
       result = assemble(markup)
 
       expected = [
-        start_tag: {"div",
-         [
-           {"id",
-            [
-              literal: "abc",
-              expression: "{ABCDEFGHIJKLMNOPQRSTUVWXYZ}",
-              literal: "xyz"
-            ]}
-         ]}
+        start_tag:
+          {"div",
+           [
+             {"id",
+              [
+                literal: "abc",
+                expression: "{ABCDEFGHIJKLMNOPQRSTUVWXYZ}",
+                literal: "xyz"
+              ]}
+           ]}
       ]
 
       assert result == expected
@@ -290,15 +290,16 @@ defmodule Hologram.Template.TagAssemblerTest do
       result = assemble(markup)
 
       expected = [
-        start_tag: {"div",
-         [
-           {"id",
-            [
-              literal: "abc",
-              expression: "{ąćęłńóśźżĄĆĘŁŃÓŚŹŻ}",
-              literal: "xyz"
-            ]}
-         ]}
+        start_tag:
+          {"div",
+           [
+             {"id",
+              [
+                literal: "abc",
+                expression: "{ąćęłńóśźżĄĆĘŁŃÓŚŹŻ}",
+                literal: "xyz"
+              ]}
+           ]}
       ]
 
       assert result == expected
@@ -309,15 +310,16 @@ defmodule Hologram.Template.TagAssemblerTest do
       result = assemble(markup)
 
       expected = [
-        start_tag: {"div",
-         [
-           {"id",
-            [
-              literal: "abc",
-              expression: "{!@#$%^&*()-_=+[];:'\\\"\\|,./?`~}",
-              literal: "xyz"
-            ]}
-         ]}
+        start_tag:
+          {"div",
+           [
+             {"id",
+              [
+                literal: "abc",
+                expression: "{!@#$%^&*()-_=+[];:'\\\"\\|,./?`~}",
+                literal: "xyz"
+              ]}
+           ]}
       ]
 
       assert result == expected
@@ -328,8 +330,7 @@ defmodule Hologram.Template.TagAssemblerTest do
       result = assemble(markup)
 
       expected = [
-        start_tag: {"div",
-         [{"id", [literal: "abc", expression: "{{123}}", literal: "xyz"]}]}
+        start_tag: {"div", [{"id", [literal: "abc", expression: "{{123}}", literal: "xyz"]}]}
       ]
 
       assert result == expected
@@ -340,8 +341,7 @@ defmodule Hologram.Template.TagAssemblerTest do
       result = assemble(markup)
 
       expected = [
-        start_tag: {"div",
-         [{"id", [literal: "abc", expression: "{{1},{2}}", literal: "xyz"]}]}
+        start_tag: {"div", [{"id", [literal: "abc", expression: "{{1},{2}}", literal: "xyz"]}]}
       ]
 
       assert result == expected
@@ -352,8 +352,8 @@ defmodule Hologram.Template.TagAssemblerTest do
       result = assemble(markup)
 
       expected = [
-        start_tag: {"div",
-         [{"id", [literal: "abc", expression: "{{\"\\{123\"}}", literal: "xyz"]}]}
+        start_tag:
+          {"div", [{"id", [literal: "abc", expression: "{{\"\\{123\"}}", literal: "xyz"]}]}
       ]
 
       assert result == expected
@@ -364,8 +364,8 @@ defmodule Hologram.Template.TagAssemblerTest do
       result = assemble(markup)
 
       expected = [
-        start_tag: {"div",
-         [{"id", [literal: "abc", expression: "{{\"123\\}\"}}", literal: "xyz"]}]}
+        start_tag:
+          {"div", [{"id", [literal: "abc", expression: "{{\"123\\}\"}}", literal: "xyz"]}]}
       ]
 
       assert result == expected
@@ -376,8 +376,7 @@ defmodule Hologram.Template.TagAssemblerTest do
       result = assemble(markup)
 
       expected = [
-        start_tag: {"div",
-         [{"id", [literal: "abc", expression: "{{\"123\"}}", literal: "xyz"]}]}
+        start_tag: {"div", [{"id", [literal: "abc", expression: "{{\"123\"}}", literal: "xyz"]}]}
       ]
 
       assert result == expected
@@ -388,8 +387,8 @@ defmodule Hologram.Template.TagAssemblerTest do
       result = assemble(markup)
 
       expected = [
-        start_tag: {"div",
-         [{"id", [literal: "abc", expression: "{{\"1\",\"2\"}}", literal: "xyz"]}]}
+        start_tag:
+          {"div", [{"id", [literal: "abc", expression: "{{\"1\",\"2\"}}", literal: "xyz"]}]}
       ]
 
       assert result == expected
@@ -400,8 +399,7 @@ defmodule Hologram.Template.TagAssemblerTest do
       result = assemble(markup)
 
       expected = [
-        start_tag: {"div",
-         [{"id", [literal: "abc", expression: "{{1\\\"2}}", literal: "xyz"]}]}
+        start_tag: {"div", [{"id", [literal: "abc", expression: "{{1\\\"2}}", literal: "xyz"]}]}
       ]
 
       assert result == expected
@@ -412,8 +410,8 @@ defmodule Hologram.Template.TagAssemblerTest do
       result = assemble(markup)
 
       expected = [
-        start_tag: {"div",
-         [{"id", [literal: "abc", expression: "{{\"1\\{2\"}}", literal: "xyz"]}]}
+        start_tag:
+          {"div", [{"id", [literal: "abc", expression: "{{\"1\\{2\"}}", literal: "xyz"]}]}
       ]
 
       assert result == expected
@@ -424,8 +422,8 @@ defmodule Hologram.Template.TagAssemblerTest do
       result = assemble(markup)
 
       expected = [
-        start_tag: {"div",
-         [{"id", [literal: "abc", expression: "{{\"1\\}2\"}}", literal: "xyz"]}]}
+        start_tag:
+          {"div", [{"id", [literal: "abc", expression: "{{\"1\\}2\"}}", literal: "xyz"]}]}
       ]
 
       assert result == expected
@@ -606,8 +604,7 @@ defmodule Hologram.Template.TagAssemblerTest do
       result = assemble(markup)
 
       expected = [
-        start_tag: {"div",
-         [{"id", [literal: "abc", expression: "{@test}", literal: ""]}]}
+        start_tag: {"div", [{"id", [literal: "abc", expression: "{@test}", literal: ""]}]}
       ]
 
       assert result == expected
@@ -618,8 +615,7 @@ defmodule Hologram.Template.TagAssemblerTest do
       result = assemble(markup)
 
       expected = [
-        start_tag: {"div",
-         [{"id", [literal: "", expression: "{@test}", literal: "abc"]}]}
+        start_tag: {"div", [{"id", [literal: "", expression: "{@test}", literal: "abc"]}]}
       ]
 
       assert result == expected
@@ -630,8 +626,7 @@ defmodule Hologram.Template.TagAssemblerTest do
       result = assemble(markup)
 
       expected = [
-        start_tag: {"div",
-         [{"id", [literal: "abc", expression: "{@test}", literal: "xyz"]}]}
+        start_tag: {"div", [{"id", [literal: "abc", expression: "{@test}", literal: "xyz"]}]}
       ]
 
       assert result == expected

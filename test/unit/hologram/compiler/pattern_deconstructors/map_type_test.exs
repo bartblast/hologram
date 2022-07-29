@@ -75,12 +75,12 @@ defmodule Hologram.Compiler.PatternDeconstructor.MapTypeTest do
       data: [
         {%AtomType{value: :a}, %IntegerType{value: 1}},
         {%AtomType{value: :b},
-          %MapType{
-            data: [
-              {%AtomType{value: :c}, %IntegerType{value: 3}},
-              {%AtomType{value: :d}, %IntegerType{value: 4}}
-            ]
-          }}
+         %MapType{
+           data: [
+             {%AtomType{value: :c}, %IntegerType{value: 3}},
+             {%AtomType{value: :d}, %IntegerType{value: 4}}
+           ]
+         }}
       ]
     }
 
@@ -92,12 +92,12 @@ defmodule Hologram.Compiler.PatternDeconstructor.MapTypeTest do
       data: [
         {%AtomType{value: :a}, %IntegerType{value: 1}},
         {%AtomType{value: :b},
-          %MapType{
-            data: [
-              {%AtomType{value: :c}, %Variable{name: :x}},
-              {%AtomType{value: :d}, %IntegerType{value: 4}}
-            ]
-          }}
+         %MapType{
+           data: [
+             {%AtomType{value: :c}, %Variable{name: :x}},
+             {%AtomType{value: :d}, %IntegerType{value: 4}}
+           ]
+         }}
       ]
     }
 
@@ -124,12 +124,12 @@ defmodule Hologram.Compiler.PatternDeconstructor.MapTypeTest do
         {%AtomType{value: :a}, %IntegerType{value: 1}},
         {%AtomType{value: :b}, %Variable{name: :x}},
         {%AtomType{value: :c},
-          %MapType{
-            data: [
-              {%AtomType{value: :d}, %Variable{name: :y}},
-              {%AtomType{value: :e}, %IntegerType{value: 4}}
-            ]
-          }}
+         %MapType{
+           data: [
+             {%AtomType{value: :d}, %Variable{name: :y}},
+             {%AtomType{value: :e}, %IntegerType{value: 4}}
+           ]
+         }}
       ]
     }
 

@@ -17,10 +17,12 @@ defmodule Hologram.Compiler.QuoteTransformerTest do
     result = QuoteTransformer.transform(ast, %Context{})
 
     expected = %Quote{
-      body: %Block{expressions: [
-        %IntegerType{value: 1},
-        %IntegerType{value: 2}
-      ]}
+      body: %Block{
+        expressions: [
+          %IntegerType{value: 1},
+          %IntegerType{value: 2}
+        ]
+      }
     }
 
     assert result == expected

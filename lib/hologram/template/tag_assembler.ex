@@ -89,7 +89,7 @@ defmodule Hologram.Template.TagAssembler do
     assemble_text(context, token, rest)
   end
 
-  assemble(context, :text, [{:symbol, :"\\"} = token | rest]) do
+  assemble(context, :text, [{:symbol, :\\} = token | rest]) do
     assemble_text(context, token, rest)
   end
 
@@ -228,7 +228,11 @@ defmodule Hologram.Template.TagAssembler do
     |> assemble_expression(token, rest)
   end
 
-  assemble(%{double_quote_open?: false, num_open_braces: 0, node_type: :text_node} = context, :expression, [{:symbol, :"}"} = token | rest]) do
+  assemble(
+    %{double_quote_open?: false, num_open_braces: 0, node_type: :text_node} = context,
+    :expression,
+    [{:symbol, :"}"} = token | rest]
+  ) do
     context
     |> buffer_token(token)
     |> add_processed_token(token)
@@ -237,11 +241,20 @@ defmodule Hologram.Template.TagAssembler do
     |> assemble(:text, rest)
   end
 
-  assemble(%{double_quote_open?: false, num_open_braces: 0, node_type: :attribute_value_expression} = context, :expression, [{:symbol, :"}"} = token | rest]) do
+  assemble(
+    %{double_quote_open?: false, num_open_braces: 0, node_type: :attribute_value_expression} =
+      context,
+    :expression,
+    [{:symbol, :"}"} = token | rest]
+  ) do
     handle_attr_value_end(context, :expression, token, rest)
   end
 
-  assemble(%{double_quote_open?: false, num_open_braces: 0, node_type: :attribute_value_text} = context, :expression, [{:symbol, :"}"} = token | rest]) do
+  assemble(
+    %{double_quote_open?: false, num_open_braces: 0, node_type: :attribute_value_text} = context,
+    :expression,
+    [{:symbol, :"}"} = token | rest]
+  ) do
     context
     |> buffer_token(token)
     |> add_processed_token(token)
@@ -250,7 +263,7 @@ defmodule Hologram.Template.TagAssembler do
     |> assemble(:text, rest)
   end
 
-  assemble(%{double_quote_open?: false} = context, :expression, [{:symbol, :"}"} = token | rest])  do
+  assemble(%{double_quote_open?: false} = context, :expression, [{:symbol, :"}"} = token | rest]) do
     context
     |> decrement_num_open_braces()
     |> assemble_expression(token, rest)
@@ -367,14 +380,14 @@ defmodule Hologram.Template.TagAssembler do
 
   defp error_reason(context, status, token)
 
-  defp error_reason( _, :text, {:symbol, :<}) do
+  defp error_reason(_, :text, {:symbol, :<}) do
     """
     Unescaped '<' character inside text node.
     To escape use HTML entity: '&lt;'\
     """
   end
 
-  defp error_reason( _, :text, {:symbol, :>}) do
+  defp error_reason(_, :text, {:symbol, :>}) do
     """
     Unescaped '>' character inside text node.
     To escape use HTML entity: '&gt;'\

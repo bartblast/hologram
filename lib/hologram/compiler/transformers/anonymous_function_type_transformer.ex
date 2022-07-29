@@ -12,5 +12,9 @@ defmodule Hologram.Compiler.AnonymousFunctionTypeTransformer do
   end
 
   # TODO: implement anonymous functions with multiple clauses
-  def transform(ast, _), do: %Hologram.Compiler.IR.NotSupportedExpression{ast: ast, type: :multi_clause_anonymous_function_type}
+  def transform(ast, _),
+    do: %Hologram.Compiler.IR.NotSupportedExpression{
+      ast: ast,
+      type: :multi_clause_anonymous_function_type
+    }
 end

@@ -227,7 +227,5 @@ defmodule Hologram.Template.EmbeddedExpressionParserTest do
 
     # Hologram.Template.Tokenizer.tokenize(markup)
     # |> IO.inspect()
-
-
   end
 end

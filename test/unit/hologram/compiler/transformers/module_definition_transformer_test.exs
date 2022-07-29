@@ -77,12 +77,14 @@ defmodule Hologram.Compiler.ModuleDefinitionTransformerTest do
       bindings: [
         %Binding{name: :b, access_path: [%ParamAccess{index: 0}]}
       ],
-      body: %Block{expressions: [
-        %AdditionOperator{
-          left: %IntegerType{value: 123},
-          right: %Variable{name: :b}
-        }
-      ]},
+      body: %Block{
+        expressions: [
+          %AdditionOperator{
+            left: %IntegerType{value: 123},
+            right: %Variable{name: :b}
+          }
+        ]
+      },
       module: Hologram.Test.Fixtures.Compiler.ModuleDefinitionTransformer.Module3,
       name: :test_function,
       params: [%Variable{name: :b}],
@@ -107,9 +109,11 @@ defmodule Hologram.Compiler.ModuleDefinitionTransformerTest do
     expected = %FunctionDefinition{
       arity: 0,
       bindings: [],
-      body: %Block{expressions: [
-        %ModuleType{module: Abc.Bcd}
-      ]},
+      body: %Block{
+        expressions: [
+          %ModuleType{module: Abc.Bcd}
+        ]
+      },
       module: Abc.Bcd,
       name: :test,
       params: [],
@@ -257,9 +261,11 @@ defmodule Hologram.Compiler.ModuleDefinitionTransformerTest do
     expected_1 = %FunctionDefinition{
       arity: 0,
       bindings: [],
-      body: %Block{expressions: [
-        %IntegerType{value: 1}
-      ]},
+      body: %Block{
+        expressions: [
+          %IntegerType{value: 1}
+        ]
+      },
       module: Hologram.Test.Fixtures.Compiler.ModuleDefinitionTransformer.Module1,
       name: :test_1,
       params: [],
@@ -269,9 +275,11 @@ defmodule Hologram.Compiler.ModuleDefinitionTransformerTest do
     expected_2 = %FunctionDefinition{
       arity: 0,
       bindings: [],
-      body: %Block{expressions: [
-        %IntegerType{value: 2}
-      ]},
+      body: %Block{
+        expressions: [
+          %IntegerType{value: 2}
+        ]
+      },
       module: Hologram.Test.Fixtures.Compiler.ModuleDefinitionTransformer.Module1,
       name: :test_2,
       params: [],
@@ -302,9 +310,11 @@ defmodule Hologram.Compiler.ModuleDefinitionTransformerTest do
     expected_1 = %FunctionDefinition{
       arity: 0,
       bindings: [],
-      body: %Block{expressions: [
-        %IntegerType{value: 1}
-      ]},
+      body: %Block{
+        expressions: [
+          %IntegerType{value: 1}
+        ]
+      },
       module: Hologram.Test.Fixtures.Compiler.ModuleDefinitionTransformer.Module1,
       name: :test_1,
       params: [],
@@ -314,9 +324,11 @@ defmodule Hologram.Compiler.ModuleDefinitionTransformerTest do
     expected_2 = %FunctionDefinition{
       arity: 0,
       bindings: [],
-      body: %Block{expressions: [
-        %IntegerType{value: 2}
-      ]},
+      body: %Block{
+        expressions: [
+          %IntegerType{value: 2}
+        ]
+      },
       module: Hologram.Test.Fixtures.Compiler.ModuleDefinitionTransformer.Module1,
       name: :test_2,
       params: [],
@@ -366,24 +378,26 @@ defmodule Hologram.Compiler.ModuleDefinitionTransformerTest do
     expected = %FunctionDefinition{
       arity: 1,
       bindings: [],
-      body: %Block{expressions: [
-        %ListType{
-          data: [
-            %TupleType{
-              data: [
-                %AtomType{value: :test_1},
-                %IntegerType{value: 0}
-              ]
-            },
-            %TupleType{
-              data: [
-                %AtomType{value: :test_2},
-                %IntegerType{value: 1}
-              ]
-            }
-          ]
-        }
-      ]},
+      body: %Block{
+        expressions: [
+          %ListType{
+            data: [
+              %TupleType{
+                data: [
+                  %AtomType{value: :test_1},
+                  %IntegerType{value: 0}
+                ]
+              },
+              %TupleType{
+                data: [
+                  %AtomType{value: :test_2},
+                  %IntegerType{value: 1}
+                ]
+              }
+            ]
+          }
+        ]
+      },
       module: Hologram.Test.Fixtures.PlaceholderModule1,
       name: :__info__,
       params: [%AtomType{value: :functions}],
@@ -418,21 +432,33 @@ defmodule Hologram.Compiler.ModuleDefinitionTransformerTest do
         module: @module_1,
         name: :test_1,
         arity: 0,
-        body: %Block{expressions: [
-          %Quote{body: %Block{expressions: [
-            %IntegerType{value: 1}
-          ]}}
-        ]}
+        body: %Block{
+          expressions: [
+            %Quote{
+              body: %Block{
+                expressions: [
+                  %IntegerType{value: 1}
+                ]
+              }
+            }
+          ]
+        }
       },
       %MacroDefinition{
         module: @module_1,
         name: :test_2,
         arity: 0,
-        body: %Block{expressions: [
-          %Quote{body: %Block{expressions: [
-            %IntegerType{value: 2}
-          ]}}
-        ]}
+        body: %Block{
+          expressions: [
+            %Quote{
+              body: %Block{
+                expressions: [
+                  %IntegerType{value: 2}
+                ]
+              }
+            }
+          ]
+        }
       }
     ]
 

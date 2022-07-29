@@ -26,18 +26,22 @@ defmodule Hologram.Compiler.CallGraphBuilder.CaseExpressionTest do
       clauses: [
         %{
           bindings: [],
-          body: %Block{expressions: [
-            %ModuleType{module: PlaceholderModule3},
-            %ModuleType{module: PlaceholderModule4}
-          ]},
+          body: %Block{
+            expressions: [
+              %ModuleType{module: PlaceholderModule3},
+              %ModuleType{module: PlaceholderModule4}
+            ]
+          },
           pattern: %IntegerType{value: 1}
         },
         %{
           bindings: [],
-          body: %Block{expressions: [
-            %ModuleType{module: PlaceholderModule5},
-            %ModuleType{module: PlaceholderModule6}
-          ]},
+          body: %Block{
+            expressions: [
+              %ModuleType{module: PlaceholderModule5},
+              %ModuleType{module: PlaceholderModule6}
+            ]
+          },
           pattern: %IntegerType{value: 2}
         }
       ],

@@ -46,7 +46,10 @@ defmodule Hologram.Compiler.JSEncoder.BindingTest do
   end
 
   test "map access" do
-    ir = %Binding{name: :abc, access_path: [%ParamAccess{index: 0}, %MapAccess{key: %AtomType{value: :x}}]}
+    ir = %Binding{
+      name: :abc,
+      access_path: [%ParamAccess{index: 0}, %MapAccess{key: %AtomType{value: :x}}]
+    }
 
     result = JSEncoder.encode(ir, %Context{}, %Opts{})
     expected = "let abc = arguments[0].data['~atom[x]'];"

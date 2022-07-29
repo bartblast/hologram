@@ -9,8 +9,7 @@ defmodule Hologram.Template.ParserTest do
     result = Parser.parse!(markup)
 
     expected = [
-      {:element, "div", [],
-       [{:element, "span", [{"id", [literal: "test"]}], [text: "abc"]}]}
+      {:element, "div", [], [{:element, "span", [{"id", [literal: "test"]}], [text: "abc"]}]}
     ]
 
     assert result == expected

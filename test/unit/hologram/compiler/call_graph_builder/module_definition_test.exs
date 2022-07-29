@@ -44,9 +44,11 @@ defmodule Hologram.Compiler.CallGraphBuilder.ModuleDefinitionTest do
         %FunctionDefinition{
           module: PlaceholderModule1,
           name: :test_fun,
-          body: %Block{expressions: [
-            %ModuleType{module: PlaceholderModule2}
-          ]}
+          body: %Block{
+            expressions: [
+              %ModuleType{module: PlaceholderModule2}
+            ]
+          }
         }
       ]
     }

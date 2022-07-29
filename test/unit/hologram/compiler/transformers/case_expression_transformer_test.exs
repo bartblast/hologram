@@ -31,9 +31,11 @@ defmodule Hologram.Compiler.CaseExpressionTransformerTest do
       clauses: [
         %{
           bindings: [],
-          body: %Block{expressions: [
-            %AtomType{value: :ok}
-          ]},
+          body: %Block{
+            expressions: [
+              %AtomType{value: :ok}
+            ]
+          },
           pattern: %IntegerType{value: 1}
         }
       ],
@@ -61,10 +63,12 @@ defmodule Hologram.Compiler.CaseExpressionTransformerTest do
       clauses: [
         %{
           bindings: [],
-          body: %Block{expressions: [
-            %AtomType{value: :expr_1},
-            %AtomType{value: :expr_2}
-          ]},
+          body: %Block{
+            expressions: [
+              %AtomType{value: :expr_1},
+              %AtomType{value: :expr_2}
+            ]
+          },
           pattern: %IntegerType{value: 1}
         }
       ],
@@ -90,9 +94,11 @@ defmodule Hologram.Compiler.CaseExpressionTransformerTest do
       clauses: [
         %{
           bindings: [],
-          body: %Block{expressions: [
-            %AtomType{value: :ok}
-          ]},
+          body: %Block{
+            expressions: [
+              %AtomType{value: :ok}
+            ]
+          },
           pattern: %IntegerType{value: 1}
         }
       ],
@@ -126,9 +132,11 @@ defmodule Hologram.Compiler.CaseExpressionTransformerTest do
               ]
             }
           ],
-          body: %Block{expressions: [
-            %AtomType{value: :ok}
-          ]},
+          body: %Block{
+            expressions: [
+              %AtomType{value: :ok}
+            ]
+          },
           pattern: %MapType{
             data: [
               {%AtomType{value: :a}, %Variable{name: :a}}

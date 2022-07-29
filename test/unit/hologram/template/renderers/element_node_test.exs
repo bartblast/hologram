@@ -259,7 +259,7 @@ defmodule Hologram.Template.Renderer.ElementNodeTest do
       module: Module1,
       props: %{
         id: [
-          %TextNode{content: "component_1_id"},
+          %TextNode{content: "component_1_id"}
         ]
       }
     }
@@ -268,7 +268,7 @@ defmodule Hologram.Template.Renderer.ElementNodeTest do
       module: Module2,
       props: %{
         id: [
-          %TextNode{content: "component_2_id"},
+          %TextNode{content: "component_2_id"}
         ]
       }
     }
@@ -286,7 +286,7 @@ defmodule Hologram.Template.Renderer.ElementNodeTest do
 
     expected_initial_state = %{
       component_1_id: %{component_1_state_key: "component_1_state_value"},
-      component_2_id: %{component_2_state_key: "component_2_state_value"},
+      component_2_id: %{component_2_state_key: "component_2_state_value"}
     }
 
     expected_html = "<div>abc(in component 1)xyz(in component 2)</div>"

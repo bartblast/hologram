@@ -17,10 +17,12 @@ defmodule Hologram.Compiler.CallGraphBuilder.FunctionDefinitionTest do
     ir = %FunctionDefinition{
       module: PlaceholderModule1,
       name: :test_fun,
-      body: %Block{expressions: [
-        %ModuleType{module: PlaceholderModule2},
-        %ModuleType{module: PlaceholderModule3}
-      ]}
+      body: %Block{
+        expressions: [
+          %ModuleType{module: PlaceholderModule2},
+          %ModuleType{module: PlaceholderModule3}
+        ]
+      }
     }
 
     from_vertex = PlaceholderModule1

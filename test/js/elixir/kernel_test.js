@@ -64,29 +64,31 @@ describe("elem()", () => {
 
 describe("hd()", () => {
   it("returns the head of the list", () => {
-    const list = Type.list([Type.integer(1), Type.integer(2), Type.integer(3)])
-    const result = Kernel.hd(list)
-    const expected = Type.integer(1)
+    const list = Type.list([Type.integer(1), Type.integer(2), Type.integer(3)]);
+    const result = Kernel.hd(list);
+    const expected = Type.integer(1);
 
     assert.deepStrictEqual(result, expected);
-  })
-})
+  });
+});
 
 describe("is_function()", () => {
   it("returns boxed true if the term is of boxed anonymous function type", () => {
-    const term = Type.anonymousFunction(() => { return Type.integer(1) })
-    const result = Kernel.is_function(term)
+    const term = Type.anonymousFunction(() => {
+      return Type.integer(1);
+    });
+    const result = Kernel.is_function(term);
 
-    assertBoxedTrue(result)
-  })
+    assertBoxedTrue(result);
+  });
 
   it("returns boxed false if the term is not of boxed anonymous function type", () => {
-    const term = Type.integer(1)
-    const result = Kernel.is_function(term)
+    const term = Type.integer(1);
+    const result = Kernel.is_function(term);
 
-    assertBoxedFalse(result)
-  })
-})
+    assertBoxedFalse(result);
+  });
+});
 
 describe("put_in()", () => {
   it("puts value nested 1 level deep", () => {
@@ -136,13 +138,13 @@ describe("put_in()", () => {
 
 describe("tl()", () => {
   it("returns the tail of the list", () => {
-    const list = Type.list([Type.integer(1), Type.integer(2), Type.integer(3)])
-    const result = Kernel.tl(list)
-    const expected = Type.list([Type.integer(2), Type.integer(3)])
+    const list = Type.list([Type.integer(1), Type.integer(2), Type.integer(3)]);
+    const result = Kernel.tl(list);
+    const expected = Type.list([Type.integer(2), Type.integer(3)]);
 
     assert.deepStrictEqual(result, expected);
-  })
-})
+  });
+});
 
 describe("to_string()", () => {
   it("converts boxed atom to boxed string", () => {

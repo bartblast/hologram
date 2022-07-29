@@ -1,3 +1,3 @@
 defmodule Hologram.Conn do
-  defstruct [params: %{}, session: %{}]
+  defstruct params: %{}, session: %{}
 end

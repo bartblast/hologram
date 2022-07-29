@@ -111,6 +111,6 @@ defmodule Hologram.Compiler.AnonymousFunctionTypeTransformerTest do
     result = AnonymousFunctionTypeTransformer.transform(ast, %Context{})
     expected = %NotSupportedExpression{ast: ast, type: :multi_clause_anonymous_function_type}
 
-    assert result ==  expected
+    assert result == expected
   end
 end

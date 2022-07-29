@@ -58,9 +58,9 @@ export default class Hologram {
         Runtime.init(window);
       }
 
-      const args = window.hologramArgs
-      const storeSnapshot = window.hologramStoreSnapshot
-      const state = storeSnapshot ? storeSnapshot : args.state
+      const args = window.hologramArgs;
+      const storeSnapshot = window.hologramStoreSnapshot;
+      const state = storeSnapshot ? storeSnapshot : args.state;
 
       Runtime.mountPage(args.class, args.digest, state);
     });

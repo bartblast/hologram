@@ -107,9 +107,11 @@ defmodule Hologram.Compiler.JSEncoder.ModuleDefinitionTest do
                 access_path: [%ParamAccess{index: 0}]
               }
             ],
-            body: %Block{expressions: [
-              %IntegerType{value: 1}
-            ]},
+            body: %Block{
+              expressions: [
+                %IntegerType{value: 1}
+              ]
+            },
             name: :test,
             params: [
               %Variable{name: :a}
@@ -166,9 +168,11 @@ defmodule Hologram.Compiler.JSEncoder.ModuleDefinitionTest do
                 access_path: [%ParamAccess{index: 0}]
               }
             ],
-            body: %Block{expressions: [
-              %IntegerType{value: 1}
-            ]},
+            body: %Block{
+              expressions: [
+                %IntegerType{value: 1}
+              ]
+            },
             name: :test,
             params: [
               %Variable{name: :a}

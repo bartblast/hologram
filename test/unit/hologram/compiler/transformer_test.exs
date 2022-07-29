@@ -474,7 +474,8 @@ defmodule Hologram.Compiler.TransformerTest do
       code = "for n <- [1, 2], do: n * n"
       ast = ast(code)
 
-      assert %FunctionCall{module: Enum, function: :reduce} = Transformer.transform(ast, %Context{})
+      assert %FunctionCall{module: Enum, function: :reduce} =
+               Transformer.transform(ast, %Context{})
     end
 
     test "function called without a module" do

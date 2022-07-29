@@ -22,18 +22,22 @@ defmodule Hologram.Compiler.ModuleDefAggregator.CaseExpressionTest do
       clauses: [
         %{
           bindings: [],
-          body: %Block{expressions: [
-            %ModuleType{module: PlaceholderModule2},
-            %ModuleType{module: PlaceholderModule3}
-          ]},
+          body: %Block{
+            expressions: [
+              %ModuleType{module: PlaceholderModule2},
+              %ModuleType{module: PlaceholderModule3}
+            ]
+          },
           pattern: %IntegerType{value: 1}
         },
         %{
           bindings: [],
-          body: %Block{expressions: [
-            %ModuleType{module: PlaceholderModule4},
-            %ModuleType{module: PlaceholderModule5}
-          ]},
+          body: %Block{
+            expressions: [
+              %ModuleType{module: PlaceholderModule4},
+              %ModuleType{module: PlaceholderModule5}
+            ]
+          },
           pattern: %IntegerType{value: 2}
         }
       ],

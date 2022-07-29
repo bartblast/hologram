@@ -98,7 +98,7 @@ defmodule Hologram.Template.TokenizerTest do
     expected = [
       symbol: :"\\{",
       symbol: :"{",
-      symbol: :"\\",
+      symbol: :\\,
       symbol: :"\\}",
       symbol: :"}"
     ]
@@ -111,10 +111,10 @@ defmodule Hologram.Template.TokenizerTest do
     result = Tokenizer.tokenize(str)
 
     expected = [
-      symbol: :"\\",
+      symbol: :\\,
       symbol: :=,
       symbol: :/,
-      symbol: :"\\",
+      symbol: :\\,
       symbol: :=,
       symbol: :/
     ]
@@ -150,7 +150,7 @@ defmodule Hologram.Template.TokenizerTest do
       string: "klm",
       symbol: :"}",
       string: "lmn",
-      symbol: :"\\",
+      symbol: :\\,
       string: "mno"
     ]
 

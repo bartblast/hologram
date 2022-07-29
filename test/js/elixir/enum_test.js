@@ -39,13 +39,17 @@ describe("concat()", () => {
 
 describe("count()", () => {
   it("returns the size of the enumerable", () => {
-    const enumerable = Type.list([Type.integer(1), Type.integer(2), Type.integer(3)])
-    const result = Enum.count(enumerable)
-    const expected = Type.integer(3)
+    const enumerable = Type.list([
+      Type.integer(1),
+      Type.integer(2),
+      Type.integer(3),
+    ]);
+    const result = Enum.count(enumerable);
+    const expected = Type.integer(3);
 
-    assert.deepStrictEqual(result, expected)
-  })
-})
+    assert.deepStrictEqual(result, expected);
+  });
+});
 
 describe("member$question()", () => {
   let list;
@@ -98,19 +102,26 @@ describe("member$question()", () => {
 
 describe("reduce()", () => {
   it("invokes fun for each element in the enumerable with the accumulator", () => {
-    const enumerable = Type.list([Type.integer(1), Type.integer(2), Type.integer(3)])
-    const acc = Type.integer(10)
+    const enumerable = Type.list([
+      Type.integer(1),
+      Type.integer(2),
+      Type.integer(3),
+    ]);
+    const acc = Type.integer(10);
 
-    const fun = Type.anonymousFunction(function(elem, acc) {
-      return Interpreter.$addition_operator(acc, Interpreter.$multiplication_operator(elem, elem))
-    })
+    const fun = Type.anonymousFunction(function (elem, acc) {
+      return Interpreter.$addition_operator(
+        acc,
+        Interpreter.$multiplication_operator(elem, elem)
+      );
+    });
 
-    const result = Enum.reduce(enumerable, acc, fun)
-    const expected = Type.integer(24)
+    const result = Enum.reduce(enumerable, acc, fun);
+    const expected = Type.integer(24);
 
-    assert.deepStrictEqual(result, expected)
-  })
-})
+    assert.deepStrictEqual(result, expected);
+  });
+});
 
 describe("to_list()", () => {
   it("returns the given arg if it is a boxed list", () => {

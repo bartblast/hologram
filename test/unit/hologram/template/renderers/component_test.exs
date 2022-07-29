@@ -104,10 +104,10 @@ defmodule Hologram.Template.Renderer.ComponentTest do
         module: Module2,
         props: %{
           id: [
-            %TextNode{content: "component_2"},
+            %TextNode{content: "component_2"}
           ],
           test_prop: [
-            %TextNode{content: "test_prop_value"},
+            %TextNode{content: "test_prop_value"}
           ]
         }
       }
@@ -123,13 +123,13 @@ defmodule Hologram.Template.Renderer.ComponentTest do
         module: Module2,
         props: %{
           id: [
-            %TextNode{content: "component_2"},
+            %TextNode{content: "component_2"}
           ],
           test_state: [
             %TextNode{content: "try_to_override_test_state"}
           ],
           test_prop: [
-            %TextNode{content: "test_prop_value"},
+            %TextNode{content: "test_prop_value"}
           ]
         }
       }
@@ -147,10 +147,10 @@ defmodule Hologram.Template.Renderer.ComponentTest do
         module: Module3,
         props: %{
           id: [
-            %TextNode{content: "component_3"},
+            %TextNode{content: "component_3"}
           ],
           test_prop: [
-            %TextNode{content: "test_prop_value"},
+            %TextNode{content: "test_prop_value"}
           ]
         }
       }
@@ -166,10 +166,10 @@ defmodule Hologram.Template.Renderer.ComponentTest do
         module: Module4,
         props: %{
           id: [
-            %TextNode{content: "component_3"},
+            %TextNode{content: "component_3"}
           ],
           test_prop: [
-            %TextNode{content: "test_prop_value"},
+            %TextNode{content: "test_prop_value"}
           ]
         }
       }
@@ -200,8 +200,8 @@ defmodule Hologram.Template.Renderer.ComponentTest do
         module: Module6,
         props: %{
           id: [
-            %TextNode{content: "parent_component"},
-          ],
+            %TextNode{content: "parent_component"}
+          ]
         }
       }
 
@@ -235,7 +235,7 @@ defmodule Hologram.Template.Renderer.ComponentTest do
             ]
           }
         },
-        %TextNode{content: ".xyz"},
+        %TextNode{content: ".xyz"}
       ]
     }
 
@@ -250,8 +250,8 @@ defmodule Hologram.Template.Renderer.ComponentTest do
       module: Module8,
       props: %{
         id: [
-          %TextNode{content: "component_8_id"},
-        ],
+          %TextNode{content: "component_8_id"}
+        ]
       }
     }
 
