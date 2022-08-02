@@ -13,6 +13,14 @@ defmodule Hologram.Template.DOMTreeBuilderTest do
     assert result == expected
   end
 
+  test "expression node" do
+    tags = [expression: "{@test}"]
+    result = DOMTreeBuilder.build(tags)
+    expected = [expression: "{@test}"]
+
+    assert result == expected
+  end
+
   test "element node" do
     tags = [start_tag: {"div", []}, end_tag: "div"]
 

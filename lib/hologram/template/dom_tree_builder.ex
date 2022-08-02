@@ -5,6 +5,10 @@ defmodule Hologram.Template.DOMTreeBuilder do
 
   def build([], acc), do: acc
 
+  def build([{:expression, str} | rest], acc) do
+    build(rest, acc ++ [{:expression, str}])
+  end
+
   def build([{:self_closing_tag, {tag_name, attrs}} | rest], acc) do
     type = Helpers.tag_type(tag_name)
     build(rest, acc ++ [{type, tag_name, attrs, []}])
