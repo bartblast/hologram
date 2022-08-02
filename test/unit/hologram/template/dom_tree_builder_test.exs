@@ -15,6 +15,7 @@ defmodule Hologram.Template.DOMTreeBuilderTest do
 
   test "expression node" do
     tags = [expression: "{@test}"]
+    
     result = DOMTreeBuilder.build(tags)
     expected = [expression: "{@test}"]
 
