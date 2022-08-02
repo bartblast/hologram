@@ -1,7 +1,10 @@
 defmodule Hologram.Template.ComponentTransformer do
-  alias Hologram.Compiler.{Context, Helpers, Reflection, Resolver}
+  alias Hologram.Compiler.Context
+  alias Hologram.Compiler.Helpers
+  alias Hologram.Compiler.Reflection
+  alias Hologram.Compiler.Resolver
+  alias Hologram.Template.Commons
   alias Hologram.Template.VDOM.Component
-  alias Hologram.Template.EmbeddedExpressionParser
 
   def transform(module_name, props, children, %Context{} = context) do
     module =
@@ -9,19 +12,8 @@ defmodule Hologram.Template.ComponentTransformer do
       |> Resolver.resolve(context)
 
     module_def = Reflection.module_definition(module)
-    props = transform_props(props, context)
+    props = Commons.transform_attr_value(props, context)
 
     %Component{module: module, module_def: module_def, props: props, children: children}
-  end
-
-  defp transform_props(props, context) do
-    Enum.map(props, fn {type, key, value} ->
-      value =
-        if(type == :expression, do: "{#{value}}", else: value)
-        |> EmbeddedExpressionParser.parse(context)
-
-      {String.to_atom(key), value}
-    end)
-    |> Enum.into(%{})
   end
 end
