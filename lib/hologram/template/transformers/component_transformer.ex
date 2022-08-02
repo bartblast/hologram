@@ -12,8 +12,17 @@ defmodule Hologram.Template.ComponentTransformer do
       |> Resolver.resolve(context)
 
     module_def = Reflection.module_definition(module)
-    props = Commons.transform_attr_value(props, context)
+    props = transform_props(props, context)
 
     %Component{module: module, module_def: module_def, props: props, children: children}
+  end
+
+  defp transform_props(props, context) do
+    Enum.map(props, fn {key, value} ->
+      name = String.to_atom(key)
+      value = Commons.transform_attr_value(value, context)
+      {name, value}
+    end)
+    |> Enum.into(%{})
   end
 end

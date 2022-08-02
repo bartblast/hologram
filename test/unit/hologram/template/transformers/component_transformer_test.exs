@@ -2,27 +2,24 @@ defmodule Hologram.Template.ComponentTransformerTest do
   use Hologram.Test.UnitCase, async: true
 
   alias Hologram.Compiler.Context
-
-  alias Hologram.Compiler.IR.{
-    AdditionOperator,
-    AliasDirective,
-    IntegerType,
-    ModuleAttributeOperator,
-    ModuleDefinition,
-    TupleType
-  }
-
+  alias Hologram.Compiler.IR.AdditionOperator
+  alias Hologram.Compiler.IR.AliasDirective
+  alias Hologram.Compiler.IR.IntegerType
+  alias Hologram.Compiler.IR.ModuleDefinition
+  alias Hologram.Compiler.IR.TupleType
   alias Hologram.Template.ComponentTransformer
-  alias Hologram.Template.VDOM.{Component, Expression, TextNode}
+  alias Hologram.Template.VDOM.Component
+  alias Hologram.Template.VDOM.Expression
+  alias Hologram.Template.VDOM.TextNode
 
-  @attrs []
   @children :children_stub
   @context %Context{}
   @module Hologram.Test.Fixtures.PlaceholderComponent
   @module_name "Hologram.Test.Fixtures.PlaceholderComponent"
+  @props []
 
   test "non-aliased component" do
-    result = ComponentTransformer.transform(@module_name, @attrs, @children, @context)
+    result = ComponentTransformer.transform(@module_name, @props, @children, @context)
 
     assert %ModuleDefinition{} = result.module_def
 
@@ -43,7 +40,7 @@ defmodule Hologram.Template.ComponentTransformerTest do
       aliases: [%AliasDirective{module: @module, as: [:Bcd]}]
     }
 
-    result = ComponentTransformer.transform(module_name, @attrs, @children, context)
+    result = ComponentTransformer.transform(module_name, @props, @children, context)
 
     assert %ModuleDefinition{} = result.module_def
 
@@ -59,9 +56,8 @@ defmodule Hologram.Template.ComponentTransformerTest do
 
   test "props" do
     props = [
-      {:literal, "attr_1", "text"},
-      {:expression, "attr_2", "1 + 2"},
-      {:literal, "attr_3", "abc{@k}xyz"}
+      {"attr_1", [literal: "test"]},
+      {"attr_2", [expression: "{1 + 2}"]},
     ]
 
     result = ComponentTransformer.transform(@module_name, props, @children, @context)
@@ -73,7 +69,7 @@ defmodule Hologram.Template.ComponentTransformerTest do
       module: @module,
       module_def: result.module_def,
       props: %{
-        attr_1: [%TextNode{content: "text"}],
+        attr_1: [%TextNode{content: "test"}],
         attr_2: [
           %Expression{
             ir: %TupleType{
@@ -85,15 +81,6 @@ defmodule Hologram.Template.ComponentTransformerTest do
               ]
             }
           }
-        ],
-        attr_3: [
-          %TextNode{content: "abc"},
-          %Expression{
-            ir: %TupleType{
-              data: [%ModuleAttributeOperator{name: :k}]
-            }
-          },
-          %TextNode{content: "xyz"}
         ]
       }
     }
