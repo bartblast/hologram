@@ -13,6 +13,8 @@ defmodule Hologram.Template.TokenHTMLEncoder do
 
   def encode({:string, str}), do: str
 
+  def encode({:symbol, :\\}), do: "\\"
+
   def encode({:symbol, symbol}), do: to_string(symbol)
 
   def encode({:whitespace, char}), do: char
