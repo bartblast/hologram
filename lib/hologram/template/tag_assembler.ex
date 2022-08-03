@@ -448,6 +448,7 @@ defmodule Hologram.Template.TagAssembler do
     context
     |> add_tag_fun.()
     |> reset_token_buffer()
+    |> set_node_type(:text_node)
     |> add_processed_token(token)
     |> assemble(:text, rest)
   end
