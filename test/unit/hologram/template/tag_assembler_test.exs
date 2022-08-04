@@ -652,7 +652,7 @@ defmodule Hologram.Template.TagAssemblerTest do
       assert result == expected
     end
 
-    test "text with interpolation" do
+    test "text with expression" do
       markup = "aaa{#raw}bbb{@test}ccc{/raw}ddd"
 
       result = assemble(markup)
@@ -661,59 +661,90 @@ defmodule Hologram.Template.TagAssemblerTest do
       assert result == expected
     end
 
-    test "element node with double quoted expression attribute value" do
-      markup = "aaa{#raw}<div id=\"bbb{@test}ccc\"></div>{/raw}ddd"
-      result = assemble(markup)
+    test "text with '=' char" do
+      markup = "aaa{#raw}bbb = ccc{/raw}ddd"
 
-      expected = [
-        text: "aaa",
-        start_tag: {"div", [{"id", [literal: "bbb{@test}ccc"]}]},
-        end_tag: "div",
-        text: "ddd"
-      ]
+      result = assemble(markup)
+      expected = [text: "aaabbb = cccddd"]
 
       assert result == expected
     end
 
-    test "element node with expression attribute value" do
-      markup = "aaa{#raw}<div id={@test}></div>{/raw}"
-      result = assemble(markup)
+    test "text with '\"' char" do
+      markup = "aaa{#raw}bbb \" ccc{/raw}ddd"
 
-      expected = [
-        text: "aaa",
-        start_tag: {"div", [{"id", [expression: "{@test}"]}]},
-        end_tag: "div"
-      ]
+      result = assemble(markup)
+      expected = [text: "aaabbb \" cccddd"]
 
       assert result == expected
     end
 
-    test "component node with double quoted expression prop value" do
-      markup = "aaa{#raw}<Abc.Bcd xyz=\"bbb{@test}ccc\"></Abc.Bcd>{/raw}ddd"
-      result = assemble(markup)
+    # TODO: test
+    # test "element node with double quoted expression attribute value" do
+    #   markup = "aaa{#raw}<div id=\"bbb{@test}ccc\"></div>{/raw}ddd"
+    #   result = assemble(markup)
 
-      expected = [
-        text: "aaa",
-        start_tag: {"Abc.Bcd", [{"xyz", [literal: "bbb{@test}ccc"]}]},
-        end_tag: "Abc.Bcd",
-        text: "ddd"
-      ]
+    #   expected = [
+    #     text: "aaa",
+    #     start_tag: {"div", [{"id", [literal: "bbb{@test}ccc"]}]},
+    #     end_tag: "div",
+    #     text: "ddd"
+    #   ]
 
-      assert result == expected
-    end
+    #   assert result == expected
+    # end
 
-    test "component node with expression prop value" do
-      markup = "aaa{#raw}<Abc.Bcd xyz={@test}></Abc.Bcd>{/raw}"
-      result = assemble(markup)
+    # test "element node with expression attribute value" do
+    #   markup = "aaa{#raw}<div id={@test}></div>{/raw}"
+    #   result = assemble(markup)
 
-      expected = [
-        text: "aaa",
-        start_tag: {"Abc.Bcd", [{"xyz", [expression: "{@test}"]}]},
-        end_tag: "Abc.Bcd"
-      ]
+    #   expected = [
+    #     text: "aaa",
+    #     start_tag: {"div", [{"id", [expression: "{@test}"]}]},
+    #     end_tag: "div"
+    #   ]
 
-      assert result == expected
-    end
+    #   assert result == expected
+    # end
+
+    # test "component node with double quoted expression prop value" do
+    #   markup = "aaa{#raw}<Abc.Bcd xyz=\"bbb{@test}ccc\"></Abc.Bcd>{/raw}ddd"
+    #   result = assemble(markup)
+
+    #   expected = [
+    #     text: "aaa",
+    #     start_tag: {"Abc.Bcd", [{"xyz", [literal: "bbb{@test}ccc"]}]},
+    #     end_tag: "Abc.Bcd",
+    #     text: "ddd"
+    #   ]
+
+    #   assert result == expected
+    # end
+
+    # test "component node with expression prop value" do
+    #   markup = "aaa{#raw}<Abc.Bcd xyz={@test}></Abc.Bcd>{/raw}"
+    #   result = assemble(markup)
+
+    #   expected = [
+    #     text: "aaa",
+    #     start_tag: {"Abc.Bcd", [{"xyz", [expression: "{@test}"]}]},
+    #     end_tag: "Abc.Bcd"
+    #   ]
+
+    #   assert result == expected
+    # end
+
+    # test "script with special symbols" do
+    #   markup = """
+    #   <script>
+    #     {#raw}
+    #       document.getElementById("test_elem").addEventListener("click", () => { history.forward() })
+    #     {/raw}
+    #   </script>
+    #   """
+
+    #   result = assemble(markup)
+    # end
   end
 
   describe "template syntax errors" do

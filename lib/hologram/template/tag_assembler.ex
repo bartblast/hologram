@@ -16,6 +16,7 @@ defmodule Hologram.Template.TagAssembler do
     processed_tags: [],
     processed_tokens: [],
     raw?: false,
+    script?: false,
     tag_name: nil,
     token_buffer: []
   }
@@ -131,12 +132,22 @@ defmodule Hologram.Template.TagAssembler do
     assemble_text(context, {:symbol, :"}"}, rest)
   end
 
+  # TODO: test
+  assemble(%{script?: true} = context, :text, [{:symbol, :"</"} | rest]) do
+    assemble_text(context, {:symbol, :"</"}, rest)
+  end
+
   assemble(context, :text, [{:symbol, :"</"} = token | rest]) do
     context
     |> maybe_add_text()
     |> reset_token_buffer()
     |> add_processed_token(token)
     |> assemble(:end_tag_name, rest)
+  end
+
+  # TODO: test
+  assemble(%{script?: true} = context, :text, [{:symbol, :"<"} | rest]) do
+    assemble_text(context, {:symbol, :"<"}, rest)
   end
 
   assemble(context, :text, [{:symbol, :<} = token | [{:string, _} | _] = rest]) do
@@ -152,14 +163,21 @@ defmodule Hologram.Template.TagAssembler do
     raise_error(context, :text, token, rest)
   end
 
+  # TODO: test
+  assemble(%{script?: true} = context, :text, [{:symbol, :>} | rest]) do
+    assemble_text(context, {:symbol, :>}, rest)
+  end
+
   assemble(context, :text, [{:symbol, :>} = token | rest]) do
     raise_error(context, :text, token, rest)
   end
 
+  # TODO: test
   assemble(context, :start_tag_name, [{:string, tag_name} = token | rest]) do
     context
     |> reset_attrs()
     |> set_tag_name(tag_name)
+    |> maybe_enable_script_markup(tag_name)
     |> add_processed_token(token)
     |> assemble(:start_tag, rest)
   end
@@ -189,9 +207,11 @@ defmodule Hologram.Template.TagAssembler do
     handle_start_tag_end(context, token, rest, false)
   end
 
+  # TODO: test
   assemble(context, :end_tag_name, [{:string, tag_name} = token | rest]) do
     context
     |> set_tag_name(tag_name)
+    |> maybe_disable_script_markup(tag_name)
     |> add_processed_token(token)
     |> assemble(:end_tag, rest)
   end
@@ -374,8 +394,16 @@ defmodule Hologram.Template.TagAssembler do
     %{context | raw?: false}
   end
 
+  defp disable_script_markup(context) do
+    %{context | script?: false}
+  end
+
   defp enable_raw_markup(context) do
     %{context | raw?: true}
+  end
+
+  defp enable_script_markup(context) do
+    %{context | script?: true}
   end
 
   defp error_reason(context, status, token)
@@ -477,6 +505,18 @@ defmodule Hologram.Template.TagAssembler do
       context
     end
   end
+
+  defp maybe_disable_script_markup(context, "script") do
+    disable_script_markup(context)
+  end
+
+  defp maybe_disable_script_markup(context, _), do: context
+
+  defp maybe_enable_script_markup(context, "script") do
+    enable_script_markup(context)
+  end
+
+  defp maybe_enable_script_markup(context, _), do: context
 
   defp open_double_quote(context) do
     %{context | double_quote_open?: true}
