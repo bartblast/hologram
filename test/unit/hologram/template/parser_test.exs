@@ -1,8 +1,6 @@
 defmodule Hologram.Template.ParserTest do
   use Hologram.Test.UnitCase, async: true
-
   alias Hologram.Template.Parser
-  alias Hologram.Template.SyntaxError
 
   test "parse template into a DOM tree" do
     markup = "<div><span id=\"test\">abc</span></div>"
