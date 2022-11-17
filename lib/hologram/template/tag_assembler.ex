@@ -5,6 +5,7 @@ defmodule Hologram.Template.TagAssembler do
 
   @initial_context %{
     processed_tags: [],
+    processed_tokens: [],
     token_buffer: []
   }
 
@@ -15,6 +16,25 @@ defmodule Hologram.Template.TagAssembler do
     |> maybe_add_text_tag()
     |> reset_token_buffer()
     |> Map.get(:processed_tags)
+  end
+
+  assemble(context, :text, [{:whitespace, _} = token | rest]) do
+    assemble_text(context, token, rest)
+  end
+
+  defp add_processed_token(%{processed_tokens: processed_tokens} = context, token) do
+    %{context | processed_tokens: processed_tokens ++ [token]}
+  end
+
+  defp assemble_text(context, token, rest) do
+    context
+    |> buffer_token(token)
+    |> add_processed_token(token)
+    |> assemble(:text, rest)
+  end
+
+  defp buffer_token(%{token_buffer: token_buffer} = context, token) do
+    %{context | token_buffer: token_buffer ++ [token]}
   end
 
   defp maybe_add_text_tag(%{token_buffer: token_buffer, processed_tags: processed_tags} = context) do
@@ -48,7 +68,6 @@ defmodule Hologram.Template.TagAssembler do
   #   double_quote_open?: false,
   #   node_type: :text_node,
   #   num_open_braces: 0,
-  #   processed_tokens: [],
   #   raw?: false,
   #   script?: false,
   #   tag_name: nil,
@@ -89,10 +108,6 @@ defmodule Hologram.Template.TagAssembler do
   #   |> disable_raw_markup()
   #   |> add_processed_token(token)
   #   |> assemble(:text, rest)
-  # end
-
-  # assemble(context, :text, [{:whitespace, _} = token | rest]) do
-  #   assemble_text(context, token, rest)
   # end
 
   # assemble(context, :text, [{:string, _} = token | rest]) do
@@ -371,10 +386,6 @@ defmodule Hologram.Template.TagAssembler do
   #   %{context | processed_tags: new_processed_tags}
   # end
 
-  # defp add_processed_token(%{processed_tokens: processed_tokens} = context, token) do
-  #   %{context | processed_tokens: processed_tokens ++ [token]}
-  # end
-
   # defp add_self_closing_tag(context) do
   #   new_tag = {:self_closing_tag, {context.tag_name, context.attrs}}
   #   %{context | processed_tags: context.processed_tags ++ [new_tag]}
@@ -390,17 +401,6 @@ defmodule Hologram.Template.TagAssembler do
   #   |> buffer_token(token)
   #   |> add_processed_token(token)
   #   |> assemble(:expression, rest)
-  # end
-
-  # defp assemble_text(context, token, rest) do
-  #   context
-  #   |> buffer_token(token)
-  #   |> add_processed_token(token)
-  #   |> assemble(:text, rest)
-  # end
-
-  # defp buffer_token(%{token_buffer: token_buffer} = context, token) do
-  #   %{context | token_buffer: token_buffer ++ [token]}
   # end
 
   # defp close_double_quote(context) do
