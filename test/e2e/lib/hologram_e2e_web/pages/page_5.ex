@@ -22,8 +22,10 @@ defmodule HologramE2E.Page5 do
     <a id="page-2-link" href={HologramE2E.Page2.route()} on:click.command={:__redirect__, page: HologramE2E.Page2}>Page 2</a><br />
 
     <script>
-      document.getElementById("page-5-forward-button")
-        .addEventListener("click", () => \{ history.forward() \})
+      {#raw}
+        document.getElementById("page-5-forward-button")
+          .addEventListener("click", () => { history.forward() })
+      {/raw}
     </script>
     """
   end
