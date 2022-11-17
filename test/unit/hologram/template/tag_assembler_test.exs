@@ -55,6 +55,15 @@ defmodule Hologram.Template.TagAssemblerTest do
 
       assert result == expected
     end
+
+    test "symbols" do
+      markup = "!@#$%^&*()-_=+[];:'\"\\|,./?`~"
+
+      result = assemble(markup)
+      expected = [text: markup]
+
+      assert result == expected
+    end
   end
 
 
@@ -76,16 +85,6 @@ defmodule Hologram.Template.TagAssemblerTest do
 
 
   # describe "text node" do
-
-  #   test "symbols" do
-  #     markup = "!@#$%^&*()-_=+[];:'\"\\|,./?`~"
-
-  #     result = assemble(markup)
-  #     expected = [text: markup]
-
-  #     assert result == expected
-  #   end
-
   #   test "opening curly bracket escaping" do
   #     markup = "\\{"
 

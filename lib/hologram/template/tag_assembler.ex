@@ -26,6 +26,101 @@ defmodule Hologram.Template.TagAssembler do
     assemble_text(context, token, rest)
   end
 
+  assemble(context, :text, [{:symbol, :=} = token | rest]) do
+    assemble_text(context, token, rest)
+  end
+
+  # TODO
+  # assemble(%{node_type: :attribute_value_text} = context, :text, [{:symbol, :"\""} = token | rest]) do
+  #   handle_attr_value_end(context, :literal, token, rest)
+  # end
+
+  assemble(context, :text, [{:symbol, :"\""} = token | rest]) do
+    assemble_text(context, token, rest)
+  end
+
+  assemble(context, :text, [{:symbol, :\\} = token | rest]) do
+    assemble_text(context, token, rest)
+  end
+
+  assemble(context, :text, [{:symbol, :/} = token | rest]) do
+    assemble_text(context, token, rest)
+  end
+
+  # assemble(context, :text, [{:symbol, :"\\{"} | rest]) do
+  #   assemble_text(context, {:symbol, :"{"}, rest)
+  # end
+
+  # assemble(%{raw?: true} = context, :text, [{:symbol, :"{"} | rest]) do
+  #   assemble_text(context, {:symbol, :"{"}, rest)
+  # end
+
+  # assemble(%{node_type: :attribute_value_text} = context, :text, [{:symbol, :"{"} = token | rest]) do
+  #   context
+  #   |> add_attr_value_part(:literal)
+  #   |> reset_double_quotes()
+  #   |> reset_braces()
+  #   |> reset_token_buffer()
+  #   |> assemble_expression(token, rest)
+  # end
+
+  # assemble(context, :text, [{:symbol, :"{"} = token | rest]) do
+  #   context
+  #   |> maybe_add_text_tag()
+  #   |> reset_double_quotes()
+  #   |> reset_braces()
+  #   |> reset_token_buffer()
+  #   |> assemble_expression(token, rest)
+  # end
+
+  # assemble(context, :text, [{:symbol, :"\\}"} | rest]) do
+  #   assemble_text(context, {:symbol, :"}"}, rest)
+  # end
+
+  # assemble(%{raw?: true} = context, :text, [{:symbol, :"}"} | rest]) do
+  #   assemble_text(context, {:symbol, :"}"}, rest)
+  # end
+
+  # # TODO: test
+  # assemble(%{script?: true} = context, :text, [{:symbol, :"</"} | rest]) do
+  #   assemble_text(context, {:symbol, :"</"}, rest)
+  # end
+
+  # assemble(context, :text, [{:symbol, :"</"} = token | rest]) do
+  #   context
+  #   |> maybe_add_text_tag()
+  #   |> reset_token_buffer()
+  #   |> add_processed_token(token)
+  #   |> assemble(:end_tag_name, rest)
+  # end
+
+  # # TODO: test
+  # assemble(%{script?: true} = context, :text, [{:symbol, :"<"} | rest]) do
+  #   assemble_text(context, {:symbol, :"<"}, rest)
+  # end
+
+  # assemble(context, :text, [{:symbol, :<} = token | [{:string, _} | _] = rest]) do
+  #   context
+  #   |> maybe_add_text_tag()
+  #   |> reset_token_buffer()
+  #   |> add_processed_token(token)
+  #   |> set_node_type(:element_node)
+  #   |> assemble(:start_tag_name, rest)
+  # end
+
+  # assemble(context, :text, [{:symbol, :<} = token | rest]) do
+  #   raise_error(context, :text, token, rest)
+  # end
+
+  # # TODO: test
+  # assemble(%{script?: true} = context, :text, [{:symbol, :>} | rest]) do
+  #   assemble_text(context, {:symbol, :>}, rest)
+  # end
+
+  # assemble(context, :text, [{:symbol, :>} = token | rest]) do
+  #   raise_error(context, :text, token, rest)
+  # end
+
   defp add_processed_token(%{processed_tokens: processed_tokens} = context, token) do
     %{context | processed_tokens: processed_tokens ++ [token]}
   end
@@ -112,100 +207,6 @@ defmodule Hologram.Template.TagAssembler do
   #   |> disable_raw_markup()
   #   |> add_processed_token(token)
   #   |> assemble(:text, rest)
-  # end
-
-  # assemble(context, :text, [{:symbol, :=} = token | rest]) do
-  #   assemble_text(context, token, rest)
-  # end
-
-  # assemble(%{node_type: :attribute_value_text} = context, :text, [{:symbol, :"\""} = token | rest]) do
-  #   handle_attr_value_end(context, :literal, token, rest)
-  # end
-
-  # assemble(context, :text, [{:symbol, :"\""} = token | rest]) do
-  #   assemble_text(context, token, rest)
-  # end
-
-  # assemble(context, :text, [{:symbol, :\\} = token | rest]) do
-  #   assemble_text(context, token, rest)
-  # end
-
-  # assemble(context, :text, [{:symbol, :/} = token | rest]) do
-  #   assemble_text(context, token, rest)
-  # end
-
-  # assemble(context, :text, [{:symbol, :"\\{"} | rest]) do
-  #   assemble_text(context, {:symbol, :"{"}, rest)
-  # end
-
-  # assemble(%{raw?: true} = context, :text, [{:symbol, :"{"} | rest]) do
-  #   assemble_text(context, {:symbol, :"{"}, rest)
-  # end
-
-  # assemble(%{node_type: :attribute_value_text} = context, :text, [{:symbol, :"{"} = token | rest]) do
-  #   context
-  #   |> add_attr_value_part(:literal)
-  #   |> reset_double_quotes()
-  #   |> reset_braces()
-  #   |> reset_token_buffer()
-  #   |> assemble_expression(token, rest)
-  # end
-
-  # assemble(context, :text, [{:symbol, :"{"} = token | rest]) do
-  #   context
-  #   |> maybe_add_text_tag()
-  #   |> reset_double_quotes()
-  #   |> reset_braces()
-  #   |> reset_token_buffer()
-  #   |> assemble_expression(token, rest)
-  # end
-
-  # assemble(context, :text, [{:symbol, :"\\}"} | rest]) do
-  #   assemble_text(context, {:symbol, :"}"}, rest)
-  # end
-
-  # assemble(%{raw?: true} = context, :text, [{:symbol, :"}"} | rest]) do
-  #   assemble_text(context, {:symbol, :"}"}, rest)
-  # end
-
-  # # TODO: test
-  # assemble(%{script?: true} = context, :text, [{:symbol, :"</"} | rest]) do
-  #   assemble_text(context, {:symbol, :"</"}, rest)
-  # end
-
-  # assemble(context, :text, [{:symbol, :"</"} = token | rest]) do
-  #   context
-  #   |> maybe_add_text_tag()
-  #   |> reset_token_buffer()
-  #   |> add_processed_token(token)
-  #   |> assemble(:end_tag_name, rest)
-  # end
-
-  # # TODO: test
-  # assemble(%{script?: true} = context, :text, [{:symbol, :"<"} | rest]) do
-  #   assemble_text(context, {:symbol, :"<"}, rest)
-  # end
-
-  # assemble(context, :text, [{:symbol, :<} = token | [{:string, _} | _] = rest]) do
-  #   context
-  #   |> maybe_add_text_tag()
-  #   |> reset_token_buffer()
-  #   |> add_processed_token(token)
-  #   |> set_node_type(:element_node)
-  #   |> assemble(:start_tag_name, rest)
-  # end
-
-  # assemble(context, :text, [{:symbol, :<} = token | rest]) do
-  #   raise_error(context, :text, token, rest)
-  # end
-
-  # # TODO: test
-  # assemble(%{script?: true} = context, :text, [{:symbol, :>} | rest]) do
-  #   assemble_text(context, {:symbol, :>}, rest)
-  # end
-
-  # assemble(context, :text, [{:symbol, :>} = token | rest]) do
-  #   raise_error(context, :text, token, rest)
   # end
 
   # # TODO: test
