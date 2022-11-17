@@ -1,7 +1,6 @@
 defmodule Hologram.Template.TagAssembler do
   require Hologram.Template.Macros
   import Hologram.Template.Macros
-  alias Hologram.Template.TokenHTMLEncoder
 
   @initial_context %{
     processed_tags: [],
@@ -135,9 +134,14 @@ defmodule Hologram.Template.TagAssembler do
     %{context | token_buffer: token_buffer ++ [token]}
   end
 
+  defp join_tokens(tokens) do
+    Enum.map(tokens, fn {_, str} -> str end)
+    |> Enum.join("")
+  end
+
   defp maybe_add_text_tag(%{token_buffer: token_buffer, processed_tags: processed_tags} = context) do
     if Enum.any?(token_buffer) do
-      new_processed_tags = processed_tags ++ [{:text, TokenHTMLEncoder.encode(token_buffer)}]
+      new_processed_tags = processed_tags ++ [{:text, join_tokens(token_buffer)}]
       %{context | processed_tags: new_processed_tags}
     else
       context
