@@ -26,24 +26,23 @@ defmodule Hologram.Template.TagAssembler do
     assemble_text(context, token, rest)
   end
 
-  assemble(context, :text, [{:symbol, :=} = token | rest]) do
+  assemble(context, :text, [{:symbol, "="} = token | rest]) do
     assemble_text(context, token, rest)
   end
 
-  # TODO
   # assemble(%{node_type: :attribute_value_text} = context, :text, [{:symbol, :"\""} = token | rest]) do
   #   handle_attr_value_end(context, :literal, token, rest)
   # end
 
-  assemble(context, :text, [{:symbol, :"\""} = token | rest]) do
+  assemble(context, :text, [{:symbol, "\""} = token | rest]) do
     assemble_text(context, token, rest)
   end
 
-  assemble(context, :text, [{:symbol, :\\} = token | rest]) do
+  assemble(context, :text, [{:symbol, "\\"} = token | rest]) do
     assemble_text(context, token, rest)
   end
 
-  assemble(context, :text, [{:symbol, :/} = token | rest]) do
+  assemble(context, :text, [{:symbol, "/"} = token | rest]) do
     assemble_text(context, token, rest)
   end
 

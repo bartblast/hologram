@@ -18,63 +18,63 @@ defmodule Hologram.Template.Tokenizer do
   end
 
   def tokenize("</" <> rest) do
-    [{:symbol, :"</"} | tokenize(rest)]
+    [{:symbol, "</"} | tokenize(rest)]
   end
 
   def tokenize("/>" <> rest) do
-    [{:symbol, :"/>"} | tokenize(rest)]
+    [{:symbol, "/>"} | tokenize(rest)]
   end
 
   def tokenize("<" <> rest) do
-    [{:symbol, :<} | tokenize(rest)]
+    [{:symbol, "<"} | tokenize(rest)]
   end
 
   def tokenize(">" <> rest) do
-    [{:symbol, :>} | tokenize(rest)]
+    [{:symbol, ">"} | tokenize(rest)]
   end
 
   def tokenize("/" <> rest) do
-    [{:symbol, :/} | tokenize(rest)]
+    [{:symbol, "/"} | tokenize(rest)]
   end
 
   def tokenize("=" <> rest) do
-    [{:symbol, :=} | tokenize(rest)]
+    [{:symbol, "="} | tokenize(rest)]
   end
 
   def tokenize("\\\"" <> rest) do
-    [{:symbol, :"\\\""} | tokenize(rest)]
+    [{:symbol, "\\\""} | tokenize(rest)]
   end
 
   def tokenize("\"" <> rest) do
-    [{:symbol, :"\""} | tokenize(rest)]
+    [{:symbol, "\""} | tokenize(rest)]
   end
 
   def tokenize("\\{" <> rest) do
-    [{:symbol, :"\\{"} | tokenize(rest)]
+    [{:symbol, "\\{"} | tokenize(rest)]
   end
 
   def tokenize("{#" <> rest) do
-    [{:symbol, :"{#"} | tokenize(rest)]
+    [{:symbol, "{#"} | tokenize(rest)]
   end
 
   def tokenize("{/" <> rest) do
-    [{:symbol, :"{/"} | tokenize(rest)]
+    [{:symbol, "{/"} | tokenize(rest)]
   end
 
   def tokenize("{" <> rest) do
-    [{:symbol, :"{"} | tokenize(rest)]
+    [{:symbol, "{"} | tokenize(rest)]
   end
 
   def tokenize("\\}" <> rest) do
-    [{:symbol, :"\\}"} | tokenize(rest)]
+    [{:symbol, "\\}"} | tokenize(rest)]
   end
 
   def tokenize("}" <> rest) do
-    [{:symbol, :"}"} | tokenize(rest)]
+    [{:symbol, "}"} | tokenize(rest)]
   end
 
   def tokenize("\\" <> rest) do
-    [{:symbol, :\\} | tokenize(rest)]
+    [{:symbol, "\\"} | tokenize(rest)]
   end
 
   def tokenize(rest) do

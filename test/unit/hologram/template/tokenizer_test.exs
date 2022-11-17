@@ -18,9 +18,9 @@ defmodule Hologram.Template.TokenizerTest do
 
     expected = [
       string: "abc",
-      symbol: :"{#",
+      symbol: "{#",
       string: "block",
-      symbol: :"}",
+      symbol: "}",
       string: "xyz"
     ]
 
@@ -34,9 +34,9 @@ defmodule Hologram.Template.TokenizerTest do
 
     expected = [
       string: "abc",
-      symbol: :"{/",
+      symbol: "{/",
       string: "block",
-      symbol: :"}",
+      symbol: "}",
       string: "xyz"
     ]
 
@@ -66,11 +66,11 @@ defmodule Hologram.Template.TokenizerTest do
     result = Tokenizer.tokenize(str)
 
     expected = [
-      symbol: :<,
-      symbol: :"</",
-      symbol: :/,
-      symbol: :"/>",
-      symbol: :>
+      symbol: "<",
+      symbol: "</",
+      symbol: "/",
+      symbol: "/>",
+      symbol: ">"
     ]
 
     assert result == expected
@@ -81,9 +81,9 @@ defmodule Hologram.Template.TokenizerTest do
     result = Tokenizer.tokenize(str)
 
     expected = [
-      symbol: :"\"",
-      symbol: :"\\\"",
-      symbol: :"\""
+      symbol: "\"",
+      symbol: "\\\"",
+      symbol: "\""
     ]
 
     assert result == expected
@@ -94,11 +94,11 @@ defmodule Hologram.Template.TokenizerTest do
     result = Tokenizer.tokenize(str)
 
     expected = [
-      symbol: :"\\{",
-      symbol: :"{",
-      symbol: :\\,
-      symbol: :"\\}",
-      symbol: :"}"
+      symbol: "\\{",
+      symbol: "{",
+      symbol: "\\",
+      symbol: "\\}",
+      symbol: "}"
     ]
 
     assert result == expected
@@ -109,12 +109,12 @@ defmodule Hologram.Template.TokenizerTest do
     result = Tokenizer.tokenize(str)
 
     expected = [
-      symbol: :\\,
-      symbol: :=,
-      symbol: :/,
-      symbol: :\\,
-      symbol: :=,
-      symbol: :/
+      symbol: "\\",
+      symbol: "=",
+      symbol: "/",
+      symbol: "\\",
+      symbol: "=",
+      symbol: "/"
     ]
 
     assert result == expected
@@ -134,21 +134,21 @@ defmodule Hologram.Template.TokenizerTest do
       string: "def",
       whitespace: "\t",
       string: "efg",
-      symbol: :<,
+      symbol: "<",
       string: "fgh",
-      symbol: :>,
+      symbol: ">",
       string: "ghi",
-      symbol: :/,
+      symbol: "/",
       string: "hij",
-      symbol: :=,
+      symbol: "=",
       string: "ijk",
-      symbol: :"\"",
+      symbol: "\"",
       string: "jkl",
-      symbol: :"{",
+      symbol: "{",
       string: "klm",
-      symbol: :"}",
+      symbol: "}",
       string: "lmn",
-      symbol: :\\,
+      symbol: "\\",
       string: "mno"
     ]
 
