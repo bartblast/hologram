@@ -28,6 +28,33 @@ defmodule Hologram.Template.TagAssemblerTest do
 
       assert result == expected
     end
+
+    test "string, ASCI alphabet lowercase" do
+      markup = "abcdefghijklmnopqrstuvwxyz"
+
+      result = assemble(markup)
+      expected = [text: markup]
+
+      assert result == expected
+    end
+
+    test "string, ASCI alphabet uppercase" do
+      markup = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+
+      result = assemble(markup)
+      expected = [text: markup]
+
+      assert result == expected
+    end
+
+    test "string, UTF-8 chars" do
+      markup = "ąćęłńóśźżĄĆĘŁŃÓŚŹŻ"
+
+      result = assemble(markup)
+      expected = [text: markup]
+
+      assert result == expected
+    end
   end
 
 
@@ -49,34 +76,6 @@ defmodule Hologram.Template.TagAssemblerTest do
 
 
   # describe "text node" do
-
-
-  #   test "string, ASCI alphabet lowercase" do
-  #     markup = "abcdefghijklmnopqrstuvwxyz"
-
-  #     result = assemble(markup)
-  #     expected = [text: markup]
-
-  #     assert result == expected
-  #   end
-
-  #   test "string, ASCI alphabet uppercase" do
-  #     markup = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
-
-  #     result = assemble(markup)
-  #     expected = [text: markup]
-
-  #     assert result == expected
-  #   end
-
-  #   test "string, UTF-8 chars" do
-  #     markup = "ąćęłńóśźżĄĆĘŁŃÓŚŹŻ"
-
-  #     result = assemble(markup)
-  #     expected = [text: markup]
-
-  #     assert result == expected
-  #   end
 
   #   test "symbols" do
   #     markup = "!@#$%^&*()-_=+[];:'\"\\|,./?`~"

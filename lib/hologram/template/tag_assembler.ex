@@ -22,6 +22,10 @@ defmodule Hologram.Template.TagAssembler do
     assemble_text(context, token, rest)
   end
 
+  assemble(context, :text, [{:string, _} = token | rest]) do
+    assemble_text(context, token, rest)
+  end
+
   defp add_processed_token(%{processed_tokens: processed_tokens} = context, token) do
     %{context | processed_tokens: processed_tokens ++ [token]}
   end
@@ -108,10 +112,6 @@ defmodule Hologram.Template.TagAssembler do
   #   |> disable_raw_markup()
   #   |> add_processed_token(token)
   #   |> assemble(:text, rest)
-  # end
-
-  # assemble(context, :text, [{:string, _} = token | rest]) do
-  #   assemble_text(context, token, rest)
   # end
 
   # assemble(context, :text, [{:symbol, :=} = token | rest]) do
