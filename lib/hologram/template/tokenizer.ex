@@ -1,14 +1,6 @@
 defmodule Hologram.Template.Tokenizer do
   def tokenize(""), do: []
 
-  def tokenize("{#raw}" <> rest) do
-    [{:directive, :raw_start} | tokenize(rest)]
-  end
-
-  def tokenize("{/raw}" <> rest) do
-    [{:directive, :raw_end} | tokenize(rest)]
-  end
-
   def tokenize(" " <> rest) do
     [{:whitespace, " "} | tokenize(rest)]
   end
@@ -59,6 +51,14 @@ defmodule Hologram.Template.Tokenizer do
 
   def tokenize("\\{" <> rest) do
     [{:symbol, :"\\{"} | tokenize(rest)]
+  end
+
+  def tokenize("{#" <> rest) do
+    [{:symbol, :"{#"} | tokenize(rest)]
+  end
+
+  def tokenize("{/" <> rest) do
+    [{:symbol, :"{/"} | tokenize(rest)]
   end
 
   def tokenize("{" <> rest) do

@@ -11,34 +11,32 @@ defmodule Hologram.Template.TokenizerTest do
     assert result == expected
   end
 
-  test "raw directive start" do
-    str = "{#}abc{#raw}xyz"
+  test "block start" do
+    str = "abc{#block}xyz"
 
     result = Tokenizer.tokenize(str)
 
     expected = [
-      symbol: :"{",
-      string: "#",
-      symbol: :"}",
       string: "abc",
-      directive: :raw_start,
+      symbol: :"{#",
+      string: "block",
+      symbol: :"}",
       string: "xyz"
     ]
 
     assert result == expected
   end
 
-  test "raw directive end" do
-    str = "{#}abc{/raw}xyz"
+  test "block end" do
+    str = "abc{/block}xyz"
 
     result = Tokenizer.tokenize(str)
 
     expected = [
-      symbol: :"{",
-      string: "#",
-      symbol: :"}",
       string: "abc",
-      directive: :raw_end,
+      symbol: :"{/",
+      string: "block",
+      symbol: :"}",
       string: "xyz"
     ]
 
