@@ -642,7 +642,7 @@ defmodule Hologram.Template.TagAssemblerTest do
     end
   end
 
-  describe "raw directive" do
+  describe "text node nested in raw directive" do
     test "empty" do
       markup = "aaa{#raw}{/raw}bbb"
 
@@ -746,6 +746,27 @@ defmodule Hologram.Template.TagAssemblerTest do
     #   result = assemble(markup)
     # end
   end
+
+  # TODO: cleanup
+  # test "JS script" do
+  #   markup = """
+  #   <script>
+  #   {#raw}
+  #   "absdfsd </dupa jaisa"
+  #     if (abc > 0 || xyz < 10) {
+  #       () => { test("param") }.()
+
+  #     }
+  #   {/raw}
+  #   </script>
+  #   """
+
+  #   result = assemble(markup)
+  #   IO.inspect(result)
+  #   # expected = [text: "aaabbb"]
+
+  #   # assert result == expected
+  # end
 
   describe "template syntax errors" do
     test "unescaped '<' character inside text node" do
