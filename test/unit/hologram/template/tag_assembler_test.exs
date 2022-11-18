@@ -65,6 +65,15 @@ defmodule Hologram.Template.TagAssemblerTest do
       assert result == expected
     end
 
+    test "opening curly bracket escaping" do
+      markup = "abc\\{xyz"
+
+      result = assemble(markup)
+      expected = [text: "abc{xyz"]
+
+      assert result == expected
+    end
+
     test "text ended by start tag" do
       markup = "abc<div>"
 
@@ -346,15 +355,6 @@ defmodule Hologram.Template.TagAssemblerTest do
 
 
   # describe "text node" do
-  #   test "opening curly bracket escaping" do
-  #     markup = "\\{"
-
-  #     result = assemble(markup)
-  #     expected = [text: "{"]
-
-  #     assert result == expected
-  #   end
-
   #   test "closing curly bracket escaping" do
   #     markup = "\\}"
 
