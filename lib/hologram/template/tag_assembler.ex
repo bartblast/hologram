@@ -1,8 +1,11 @@
 defmodule Hologram.Template.TagAssembler do
   require Hologram.Template.Macros
   import Hologram.Template.Macros
+  alias Hologram.Template.Helpers
 
   @initial_context %{
+    attr_name: nil,
+    attr_value: [],
     attrs: [],
     processed_tags: [],
     processed_tokens: [],
@@ -131,8 +134,64 @@ defmodule Hologram.Template.TagAssembler do
     |> assemble(:start_tag, rest)
   end
 
+  # TODO: test
+  assemble(context, :start_tag, [{:whitespace, _} = token | rest]) do
+    context
+    |> add_processed_token(token)
+    |> assemble(:start_tag, rest)
+  end
+
+  # TODO: test
+  assemble(context, :start_tag, [{:string, str} = token | rest]) do
+    context
+    |> set_attr_name(str)
+    |> reset_attr_value()
+    # |> reset_double_quotes()
+    # |> reset_braces()
+    |> add_processed_token(token)
+    |> reset_token_buffer()
+    |> assemble(:attr_name, rest)
+  end
+
+  # TODO: test
+  assemble(context, :attr_name, [{:whitespace, _} = token | rest]) do
+    context
+    |> add_attr()
+    |> add_processed_token(token)
+    |> assemble(:start_tag, rest)
+  end
+
+  # TODO: test
+  assemble(context, :attr_name, [{:symbol, :>} = token | rest]) do
+    context
+    |> add_attr()
+    |> handle_start_tag_end(token, rest, false)
+  end
+
+  # TODO: test
+  assemble(context, :attr_name, [{:symbol, :=} = token | rest]) do
+    context
+    |> add_processed_token(token)
+    |> assemble(:attr_assignment, rest)
+  end
+
+  defp add_attr(context) do
+    new_attr = {context.attr_key, context.attr_value}
+    %{context | attr_key: nil, attr_value: [], attrs: context.attrs ++ [new_attr]}
+  end
+
   defp add_processed_token(%{processed_tokens: processed_tokens} = context, token) do
     %{context | processed_tokens: processed_tokens ++ [token]}
+  end
+
+  defp add_self_closing_tag(context) do
+    new_tag = {:self_closing_tag, {context.tag_name, context.attrs}}
+    %{context | processed_tags: context.processed_tags ++ [new_tag]}
+  end
+
+  defp add_start_tag(context) do
+    new_tag = {:start_tag, {context.tag_name, context.attrs}}
+    %{context | processed_tags: context.processed_tags ++ [new_tag]}
   end
 
   defp assemble_text(context, token, rest) do
@@ -144,6 +203,23 @@ defmodule Hologram.Template.TagAssembler do
 
   defp buffer_token(%{token_buffer: token_buffer} = context, token) do
     %{context | token_buffer: token_buffer ++ [token]}
+  end
+
+  defp handle_start_tag_end(context, token, rest, self_closing?) do
+    type = Helpers.tag_type(context.tag_name)
+
+    add_tag_fun =
+      if (type == :component && self_closing?) || Helpers.void_element?(context.tag_name) do
+        &add_self_closing_tag/1
+      else
+        &add_start_tag/1
+      end
+
+    context
+    |> add_tag_fun.()
+    |> reset_token_buffer()
+    |> add_processed_token(token)
+    |> assemble(:text, rest)
   end
 
   defp join_tokens(tokens) do
@@ -166,12 +242,20 @@ defmodule Hologram.Template.TagAssembler do
 
   defp maybe_enable_script_mode(context, _), do: context
 
+  defp reset_attr_value(context) do
+    %{context | attr_value: []}
+  end
+
   defp reset_attrs(context) do
     %{context | attrs: []}
   end
 
   defp reset_token_buffer(context) do
     %{context | token_buffer: []}
+  end
+
+  defp set_attr_name(context, name) do
+    %{context | attr_name: name}
   end
 
   defp set_tag_name(context, tag_name) do
@@ -185,40 +269,14 @@ defmodule Hologram.Template.TagAssembler do
 
 
 
-  # alias Hologram.Template.Helpers
   # alias Hologram.Template.SyntaxError
 
   # @initial_context %{
-  #   attr_key: nil,
-  #   attr_value: [],
   #   double_quote_open?: false,
   #   num_open_braces: 0,
   #   raw?: false,
   #   script?: false,
   # }
-
-  # # see: https://html.spec.whatwg.org/multipage/syntax.html#void-elements
-  # @void_html_tags [
-  #   "area",
-  #   "base",
-  #   "br",
-  #   "col",
-  #   "embed",
-  #   "hr",
-  #   "img",
-  #   "input",
-  #   "link",
-  #   "meta",
-  #   "param",
-  #   "source",
-  #   "track",
-  #   "wbr"
-  # ]
-
-  # # TODO: specify void SVG tags
-  # # see: https://github.com/segmetric/hologram/issues/21
-  # # see: https://developer.mozilla.org/en-US/docs/Web/SVG/Element
-  # @void_svg_tags ["path", "rect"]
 
   # assemble(context, :text, [{:directive, :raw_start} = token | rest]) do
   #   context
@@ -232,23 +290,6 @@ defmodule Hologram.Template.TagAssembler do
   #   |> disable_raw_markup()
   #   |> add_processed_token(token)
   #   |> assemble(:text, rest)
-  # end
-
-  # assemble(context, :start_tag, [{:whitespace, _} = token | rest]) do
-  #   context
-  #   |> add_processed_token(token)
-  #   |> assemble(:start_tag, rest)
-  # end
-
-  # assemble(context, :start_tag, [{:string, str} = token | rest]) do
-  #   context
-  #   |> set_attr_key(str)
-  #   |> reset_attr_value()
-  #   |> reset_double_quotes()
-  #   |> reset_braces()
-  #   |> add_processed_token(token)
-  #   |> reset_token_buffer()
-  #   |> assemble(:attr_key, rest)
   # end
 
   # assemble(context, :start_tag, [{:symbol, :"/>"} = token | rest]) do
@@ -345,25 +386,6 @@ defmodule Hologram.Template.TagAssembler do
   #   assemble_expression(context, token, rest)
   # end
 
-  # assemble(context, :attr_key, [{:whitespace, _} = token | rest]) do
-  #   context
-  #   |> flush_attribute()
-  #   |> add_processed_token(token)
-  #   |> assemble(:start_tag, rest)
-  # end
-
-  # assemble(context, :attr_key, [{:symbol, :>} = token | rest]) do
-  #   context
-  #   |> flush_attribute()
-  #   |> handle_start_tag_end(token, rest, false)
-  # end
-
-  # assemble(context, :attr_key, [{:symbol, :=} = token | rest]) do
-  #   context
-  #   |> add_processed_token(token)
-  #   |> assemble(:attr_assignment, rest)
-  # end
-
   # assemble(context, :attr_assignment, [{:symbol, :"\""} = token | rest]) do
   #   context
   #   |> add_processed_token(token)
@@ -400,16 +422,6 @@ defmodule Hologram.Template.TagAssembler do
   # defp add_expression_tag(%{token_buffer: token_buffer, processed_tags: processed_tags} = context) do
   #   new_processed_tags = processed_tags ++ [{:expression, TokenHTMLEncoder.encode(token_buffer)}]
   #   %{context | processed_tags: new_processed_tags}
-  # end
-
-  # defp add_self_closing_tag(context) do
-  #   new_tag = {:self_closing_tag, {context.tag_name, context.attrs}}
-  #   %{context | processed_tags: context.processed_tags ++ [new_tag]}
-  # end
-
-  # defp add_start_tag(context) do
-  #   new_tag = {:start_tag, {context.tag_name, context.attrs}}
-  #   %{context | processed_tags: context.processed_tags ++ [new_tag]}
   # end
 
   # defp assemble_expression(context, token, rest) do
@@ -475,11 +487,6 @@ defmodule Hologram.Template.TagAssembler do
   #   |> String.replace("\t", "\\t")
   # end
 
-  # defp flush_attribute(context) do
-  #   new_attr = {context.attr_key, context.attr_value}
-  #   %{context | attr_key: nil, attr_value: [], attrs: context.attrs ++ [new_attr]}
-  # end
-
   # defp handle_attr_value_end(context, part_type, token, rest) do
   #   context =
   #     if part_type == :expression do
@@ -496,38 +503,8 @@ defmodule Hologram.Template.TagAssembler do
   #   |> assemble(:start_tag, rest)
   # end
 
-  # defp handle_start_tag_end(context, token, rest, self_closing?) do
-  #   type = Helpers.tag_type(context.tag_name)
-
-  #   add_tag_fun =
-  #     if (type == :component && self_closing?) || is_self_closing_tag?(context.tag_name) do
-  #       &add_self_closing_tag/1
-  #     else
-  #       &add_start_tag/1
-  #     end
-
-  #   context
-  #   |> add_tag_fun.()
-  #   |> reset_token_buffer()
-  #   |> set_node_type(:text_node)
-  #   |> add_processed_token(token)
-  #   |> assemble(:text, rest)
-  # end
-
   # defp increment_num_open_braces(context) do
   #   %{context | num_open_braces: context.num_open_braces + 1}
-  # end
-
-  # defp is_self_closing_tag?(tag_name) do
-  #   is_void_html_tag?(tag_name) || is_void_svg_tag?(tag_name) || tag_name == "slot"
-  # end
-
-  # defp is_void_html_tag?(tag_name) do
-  #   tag_name in @void_html_tags
-  # end
-
-  # defp is_void_svg_tag?(tag_name) do
-  #   tag_name in @void_svg_tags
   # end
 
   # defp maybe_disable_script_markup(context, "script") do
@@ -584,20 +561,12 @@ defmodule Hologram.Template.TagAssembler do
   #   raise SyntaxError, message: message
   # end
 
-  # defp reset_attr_value(context) do
-  #   %{context | attr_value: []}
-  # end
-
   # defp reset_braces(context) do
   #   %{context | num_open_braces: 0}
   # end
 
   # defp reset_double_quotes(context) do
   #   %{context | double_quote_open?: false}
-  # end
-
-  # defp set_attr_key(context, key) do
-  #   %{context | attr_key: key}
   # end
 
   # defp set_node_type(context, type) do
