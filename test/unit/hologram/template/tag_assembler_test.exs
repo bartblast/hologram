@@ -10,7 +10,7 @@ defmodule Hologram.Template.TagAssemblerTest do
     |> TagAssembler.assemble()
   end
 
-  describe "text tag" do
+  describe "text node" do
     test "empty" do
       markup = ""
 

@@ -3,8 +3,10 @@ defmodule Hologram.Template.TagAssembler do
   import Hologram.Template.Macros
 
   @initial_context %{
+    attrs: [],
     processed_tags: [],
     processed_tokens: [],
+    tag_name: nil,
     token_buffer: []
   }
 
@@ -97,14 +99,14 @@ defmodule Hologram.Template.TagAssembler do
   #   assemble_text(context, {:symbol, :"<"}, rest)
   # end
 
-  # assemble(context, :text, [{:symbol, :<} = token | [{:string, _} | _] = rest]) do
-  #   context
-  #   |> maybe_add_text_tag()
-  #   |> reset_token_buffer()
-  #   |> add_processed_token(token)
-  #   |> set_node_type(:element_node)
-  #   |> assemble(:start_tag_name, rest)
-  # end
+  # TODO: test
+  assemble(context, :text, [{:symbol, "<"} = token | [{:string, _} | _] = rest]) do
+    context
+    |> maybe_add_text_tag()
+    |> reset_token_buffer()
+    |> add_processed_token(token)
+    |> assemble(:start_tag_name, rest)
+  end
 
   # assemble(context, :text, [{:symbol, :<} = token | rest]) do
   #   raise_error(context, :text, token, rest)
@@ -118,6 +120,16 @@ defmodule Hologram.Template.TagAssembler do
   # assemble(context, :text, [{:symbol, :>} = token | rest]) do
   #   raise_error(context, :text, token, rest)
   # end
+
+  # TODO: test
+  assemble(context, :start_tag_name, [{:string, tag_name} = token | rest]) do
+    context
+    |> reset_attrs()
+    |> set_tag_name(tag_name)
+    |> maybe_enable_script_mode(tag_name)
+    |> add_processed_token(token)
+    |> assemble(:start_tag, rest)
+  end
 
   defp add_processed_token(%{processed_tokens: processed_tokens} = context, token) do
     %{context | processed_tokens: processed_tokens ++ [token]}
@@ -148,10 +160,23 @@ defmodule Hologram.Template.TagAssembler do
     end
   end
 
+  defp maybe_enable_script_mode(context, "script") do
+    %{context | script?: true}
+  end
+
+  defp maybe_enable_script_mode(context, _), do: context
+
+  defp reset_attrs(context) do
+    %{context | attrs: []}
+  end
+
   defp reset_token_buffer(context) do
     %{context | token_buffer: []}
   end
 
+  defp set_tag_name(context, tag_name) do
+    %{context | tag_name: tag_name}
+  end
 
 
 
@@ -164,15 +189,12 @@ defmodule Hologram.Template.TagAssembler do
   # alias Hologram.Template.SyntaxError
 
   # @initial_context %{
-  #   attrs: [],
   #   attr_key: nil,
   #   attr_value: [],
   #   double_quote_open?: false,
-  #   node_type: :text_node,
   #   num_open_braces: 0,
   #   raw?: false,
   #   script?: false,
-  #   tag_name: nil,
   # }
 
   # # see: https://html.spec.whatwg.org/multipage/syntax.html#void-elements
@@ -210,16 +232,6 @@ defmodule Hologram.Template.TagAssembler do
   #   |> disable_raw_markup()
   #   |> add_processed_token(token)
   #   |> assemble(:text, rest)
-  # end
-
-  # # TODO: test
-  # assemble(context, :start_tag_name, [{:string, tag_name} = token | rest]) do
-  #   context
-  #   |> reset_attrs()
-  #   |> set_tag_name(tag_name)
-  #   |> maybe_enable_script_markup(tag_name)
-  #   |> add_processed_token(token)
-  #   |> assemble(:start_tag, rest)
   # end
 
   # assemble(context, :start_tag, [{:whitespace, _} = token | rest]) do
@@ -427,10 +439,6 @@ defmodule Hologram.Template.TagAssembler do
   #   %{context | raw?: true}
   # end
 
-  # defp enable_script_markup(context) do
-  #   %{context | script?: true}
-  # end
-
   # defp error_reason(context, status, token)
 
   # defp error_reason(_, :text, {:symbol, :<}) do
@@ -528,12 +536,6 @@ defmodule Hologram.Template.TagAssembler do
 
   # defp maybe_disable_script_markup(context, _), do: context
 
-  # defp maybe_enable_script_markup(context, "script") do
-  #   enable_script_markup(context)
-  # end
-
-  # defp maybe_enable_script_markup(context, _), do: context
-
   # defp open_double_quote(context) do
   #   %{context | double_quote_open?: true}
   # end
@@ -586,10 +588,6 @@ defmodule Hologram.Template.TagAssembler do
   #   %{context | attr_value: []}
   # end
 
-  # defp reset_attrs(context) do
-  #   %{context | attrs: []}
-  # end
-
   # defp reset_braces(context) do
   #   %{context | num_open_braces: 0}
   # end
@@ -604,9 +602,5 @@ defmodule Hologram.Template.TagAssembler do
 
   # defp set_node_type(context, type) do
   #   %{context | node_type: type}
-  # end
-
-  # defp set_tag_name(context, tag_name) do
-  #   %{context | tag_name: tag_name}
   # end
 end
