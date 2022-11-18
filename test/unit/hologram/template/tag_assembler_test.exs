@@ -214,6 +214,134 @@ defmodule Hologram.Template.TagAssemblerTest do
     end
   end
 
+  describe "expression in text node" do
+    test "empty" do
+      markup = "abc{}xyz"
+
+      result = assemble(markup)
+      expected = [text: "abc", expression: "", text: "xyz"]
+
+      assert result == expected
+    end
+
+    test "whitespaces" do
+      markup = "abc{ \n\r\t}xyz"
+
+      result = assemble(markup)
+      expected = [text: "abc", expression: " \n\r\t", text: "xyz"]
+
+      assert result == expected
+    end
+
+    test "string, ASCI alphabet lowercase" do
+      markup = "abc{abcdefghijklmnopqrstuvwxyz}xyz"
+
+      result = assemble(markup)
+      expected = [text: "abc", expression: "abcdefghijklmnopqrstuvwxyz", text: "xyz"]
+
+      assert result == expected
+    end
+
+    test "string, ASCI alphabet uppercase" do
+      markup = "abc{ABCDEFGHIJKLMNOPQRSTUVWXYZ}xyz"
+
+      result = assemble(markup)
+      expected = [text: "abc", expression: "ABCDEFGHIJKLMNOPQRSTUVWXYZ", text: "xyz"]
+
+      assert result == expected
+    end
+
+    test "string, UTF-8 chars" do
+      markup = "abc{ąćęłńóśźżĄĆĘŁŃÓŚŹŻ}xyz"
+
+      result = assemble(markup)
+      expected = [text: "abc", expression: "ąćęłńóśźżĄĆĘŁŃÓŚŹŻ", text: "xyz"]
+
+      assert result == expected
+    end
+
+    test "symbols" do
+      markup = "abc{!@#$%^&*()-_=+[];:'\\\"\\|,./?`~}xyz"
+
+      result = assemble(markup)
+      expected = [text: "abc", expression: "!@#$%^&*()-_=+[];:'\\\"\\|,./?`~", text: "xyz"]
+
+      assert result == expected
+    end
+
+    test "single group of curly brackets" do
+      markup = "abc{{123}}xyz"
+
+      result = assemble(markup)
+      expected = [text: "abc", expression: "{123}", text: "xyz"]
+
+      assert result == expected
+    end
+
+    test "multiple groups of curly brackets" do
+      markup = "abc{{{1},{2}}}xyz"
+
+      result = assemble(markup)
+      expected = [text: "abc", expression: "{{1},{2}}", text: "xyz"]
+
+      assert result == expected
+    end
+
+    test "single group of double quotes" do
+      markup = "abc{\"123\"}xyz"
+
+      result = assemble(markup)
+      expected = [text: "abc", expression: "\"123\"", text: "xyz"]
+
+      assert result == expected
+    end
+
+    test "multiple groups of double quotes" do
+      markup = "abc{[\"1\",\"2\"]}xyz"
+
+      result = assemble(markup)
+      expected = [text: "abc", expression: "[\"1\",\"2\"]", text: "xyz"]
+
+      assert result == expected
+    end
+
+    test "opening curly bracket inside double quoted string" do
+      markup = "abc{{\"1{2\"}}xyz"
+
+      result = assemble(markup)
+      expected = [text: "abc", expression: "{\"1{2\"}", text: "xyz"]
+
+      assert result == expected
+    end
+
+    test "closing curly bracket inside double quoted string" do
+      markup = "abc{{\"1}2\"}}xyz"
+
+      result = assemble(markup)
+      expected = [text: "abc", expression: "{\"1}2\"}", text: "xyz"]
+
+      assert result == expected
+    end
+
+    test "double quote escaping" do
+      markup = "abc{\"1\\\"2\"}xyz"
+
+      result = assemble(markup)
+      expected = [text: "abc", expression: "\"1\\\"2\"", text: "xyz"]
+
+      assert result == expected
+    end
+
+  #   test "expression in text node nested in element node" do
+  #     markup = "<script>{@abc}</script>"
+
+  #     result = assemble(markup)
+  #     expected = [start_tag: {"script", []}, expression: "{@abc}", end_tag: "script"]
+
+  #     assert result == expected
+  #   end
+  end
+
   # alias Hologram.Template.SyntaxError
 
 
@@ -232,152 +360,6 @@ defmodule Hologram.Template.TagAssemblerTest do
 
   #     result = assemble(markup)
   #     expected = [text: "}"]
-
-  #     assert result == expected
-  #   end
-  # end
-
-  # describe "expression in text node" do
-  #   test "empty" do
-  #     markup = "abc{}xyz"
-
-  #     result = assemble(markup)
-  #     expected = [text: "abc", expression: "{}", text: "xyz"]
-
-  #     assert result == expected
-  #   end
-
-  #   test "whitespaces" do
-  #     markup = "abc{ \n\r\t}xyz"
-
-  #     result = assemble(markup)
-  #     expected = [text: "abc", expression: "{ \n\r\t}", text: "xyz"]
-
-  #     assert result == expected
-  #   end
-
-  #   test "string, ASCI alphabet lowercase" do
-  #     markup = "abc{abcdefghijklmnopqrstuvwxyz}xyz"
-
-  #     result = assemble(markup)
-  #     expected = [text: "abc", expression: "{abcdefghijklmnopqrstuvwxyz}", text: "xyz"]
-
-  #     assert result == expected
-  #   end
-
-  #   test "string, ASCI alphabet uppercase" do
-  #     markup = "abc{ABCDEFGHIJKLMNOPQRSTUVWXYZ}xyz"
-
-  #     result = assemble(markup)
-  #     expected = [text: "abc", expression: "{ABCDEFGHIJKLMNOPQRSTUVWXYZ}", text: "xyz"]
-
-  #     assert result == expected
-  #   end
-
-  #   test "string, UTF-8 chars" do
-  #     markup = "abc{ąćęłńóśźżĄĆĘŁŃÓŚŹŻ}xyz"
-
-  #     result = assemble(markup)
-  #     expected = [text: "abc", expression: "{ąćęłńóśźżĄĆĘŁŃÓŚŹŻ}", text: "xyz"]
-
-  #     assert result == expected
-  #   end
-
-  #   test "symbols" do
-  #     markup = "abc{!@#$%^&*()-_=+[];:'\\\"\\|,./?`~}xyz"
-
-  #     result = assemble(markup)
-  #     expected = [text: "abc", expression: "{!@#$%^&*()-_=+[];:'\\\"\\|,./?`~}", text: "xyz"]
-
-  #     assert result == expected
-  #   end
-
-  #   test "single group of curly brackets" do
-  #     markup = "abc{{123}}xyz"
-
-  #     result = assemble(markup)
-  #     expected = [text: "abc", expression: "{{123}}", text: "xyz"]
-
-  #     assert result == expected
-  #   end
-
-  #   test "multiple groups of curly brackets" do
-  #     markup = "abc{{1},{2}}xyz"
-
-  #     result = assemble(markup)
-  #     expected = [text: "abc", expression: "{{1},{2}}", text: "xyz"]
-
-  #     assert result == expected
-  #   end
-
-  #   test "opening curly bracket escaping" do
-  #     markup = "abc{{\"\\{123\"}}xyz"
-
-  #     result = assemble(markup)
-  #     expected = [text: "abc", expression: "{{\"\\{123\"}}", text: "xyz"]
-
-  #     assert result == expected
-  #   end
-
-  #   test "closing curly bracket escaping" do
-  #     markup = "abc{{\"123\\}\"}}xyz"
-
-  #     result = assemble(markup)
-  #     expected = [text: "abc", expression: "{{\"123\\}\"}}", text: "xyz"]
-
-  #     assert result == expected
-  #   end
-
-  #   test "single group of double quotes" do
-  #     markup = "abc{{\"123\"}}xyz"
-
-  #     result = assemble(markup)
-  #     expected = [text: "abc", expression: "{{\"123\"}}", text: "xyz"]
-
-  #     assert result == expected
-  #   end
-
-  #   test "multiple groups of double quotes" do
-  #     markup = "abc{{\"1\",\"2\"}}xyz"
-
-  #     result = assemble(markup)
-  #     expected = [text: "abc", expression: "{{\"1\",\"2\"}}", text: "xyz"]
-
-  #     assert result == expected
-  #   end
-
-  #   test "double quote escaping" do
-  #     markup = "abc{{1\\\"2}}xyz"
-
-  #     result = assemble(markup)
-  #     expected = [text: "abc", expression: "{{1\\\"2}}", text: "xyz"]
-
-  #     assert result == expected
-  #   end
-
-  #   test "opening curly bracket inside double quoted string" do
-  #     markup = "abc{{\"1\\{2\"}}xyz"
-
-  #     result = assemble(markup)
-  #     expected = [text: "abc", expression: "{{\"1\\{2\"}}", text: "xyz"]
-
-  #     assert result == expected
-  #   end
-
-  #   test "closing curly bracket inside double quoted string" do
-  #     markup = "abc{{\"1\\}2\"}}xyz"
-
-  #     result = assemble(markup)
-  #     expected = [text: "abc", expression: "{{\"1\\}2\"}}", text: "xyz"]
-
-  #     assert result == expected
-  #   end
-
-  #   test "expression in text node nested in element node" do
-  #     markup = "<script>{@abc}</script>"
-
-  #     result = assemble(markup)
-  #     expected = [start_tag: {"script", []}, expression: "{@abc}", end_tag: "script"]
 
   #     assert result == expected
   #   end
