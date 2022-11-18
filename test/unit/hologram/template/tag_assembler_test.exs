@@ -10,7 +10,7 @@ defmodule Hologram.Template.TagAssemblerTest do
     |> TagAssembler.assemble()
   end
 
-  describe "text node" do
+  describe "text" do
     test "empty" do
       markup = ""
 
@@ -66,20 +66,108 @@ defmodule Hologram.Template.TagAssemblerTest do
     end
   end
 
+  describe "start tag" do
+    test "non-void HTML element" do
+      markup = "<div>"
 
+      result = assemble(markup)
+      expected = [start_tag: {"div", []}]
 
+      assert result == expected
+    end
 
+    test "non-void SVG element" do
+      markup = "<g>"
 
+      result = assemble(markup)
+      expected = [start_tag: {"g", []}]
 
+      assert result == expected
+    end
 
+    test "void HTML element, unclosed" do
+      markup = "<br>"
 
+      result = assemble(markup)
+      expected = [self_closing_tag: {"br", []}]
 
+      assert result == expected
+    end
 
+    test "void HTML element, self-closed" do
+      markup = "<br />"
 
+      result = assemble(markup)
+      expected = [self_closing_tag: {"br", []}]
 
+      assert result == expected
+    end
 
+    test "void SVG element, unclosed" do
+      markup = "<path>"
 
+      result = assemble(markup)
+      expected = [self_closing_tag: {"path", []}]
 
+      assert result == expected
+    end
+
+    test "void SVG element, self-closed" do
+      markup = "<path />"
+
+      result = assemble(markup)
+      expected = [self_closing_tag: {"path", []}]
+
+      assert result == expected
+    end
+
+    test "slot element, unclosed" do
+      markup = "<slot>"
+
+      result = assemble(markup)
+      expected = [self_closing_tag: {"slot", []}]
+
+      assert result == expected
+    end
+
+    test "slot element, self-closed" do
+      markup = "<slot />"
+
+      result = assemble(markup)
+      expected = [self_closing_tag: {"slot", []}]
+
+      assert result == expected
+    end
+
+    test "whitespace after tag name" do
+      markup = "<div \n\r\t>"
+
+      result = assemble(markup)
+      expected = [start_tag: {"div", []}]
+
+      assert result == expected
+    end
+  end
+
+  # describe "element node" do
+    # test "end tag" do
+    #   markup = "</div>"
+
+    #   result = assemble(markup)
+    #   expected = [end_tag: "div"]
+
+    #   assert result == expected
+    # end
+
+    # test "end tag with whitespace after tag name" do
+    #   markup = "</div \n\r\t>"
+
+    #   result = assemble(markup)
+    #   expected = [end_tag: "div"]
+
+    #   assert result == expected
+    # end
+  # end
 
   # alias Hologram.Template.SyntaxError
 
@@ -453,98 +541,6 @@ defmodule Hologram.Template.TagAssemblerTest do
   #       start_tag:
   #         {"div", [{"id", [literal: "abc", expression: "{{\"1\\}2\"}}", literal: "xyz"]}]}
   #     ]
-
-  #     assert result == expected
-  #   end
-  # end
-
-  # describe "element node" do
-  #   test "start tag" do
-  #     markup = "<div>"
-
-  #     result = assemble(markup)
-  #     expected = [start_tag: {"div", []}]
-
-  #     assert result == expected
-  #   end
-
-  #   test "start tag with whitespace after tag name" do
-  #     markup = "<div \n\r\t>"
-
-  #     result = assemble(markup)
-  #     expected = [start_tag: {"div", []}]
-
-  #     assert result == expected
-  #   end
-
-  #   test "end tag" do
-  #     markup = "</div>"
-
-  #     result = assemble(markup)
-  #     expected = [end_tag: "div"]
-
-  #     assert result == expected
-  #   end
-
-  #   test "end tag with whitespace after tag name" do
-  #     markup = "</div \n\r\t>"
-
-  #     result = assemble(markup)
-  #     expected = [end_tag: "div"]
-
-  #     assert result == expected
-  #   end
-
-  #   test "self-closed non-svg tag" do
-  #     markup = "<br />"
-
-  #     result = assemble(markup)
-  #     expected = [self_closing_tag: {"br", []}]
-
-  #     assert result == expected
-  #   end
-
-  #   test "self-closed svg tag" do
-  #     markup = "<path />"
-
-  #     result = assemble(markup)
-  #     expected = [self_closing_tag: {"path", []}]
-
-  #     assert result == expected
-  #   end
-
-  #   test "self-closed slot tag" do
-  #     markup = "<slot />"
-
-  #     result = assemble(markup)
-  #     expected = [self_closing_tag: {"slot", []}]
-
-  #     assert result == expected
-  #   end
-
-  #   test "non self-closed non-svg tag" do
-  #     markup = "<br>"
-
-  #     result = assemble(markup)
-  #     expected = [self_closing_tag: {"br", []}]
-
-  #     assert result == expected
-  #   end
-
-  #   test "not self-closed svg tag" do
-  #     markup = "<path>"
-
-  #     result = assemble(markup)
-  #     expected = [self_closing_tag: {"path", []}]
-
-  #     assert result == expected
-  #   end
-
-  #   test "not self-closed slot tag" do
-  #     markup = "<slot>"
-
-  #     result = assemble(markup)
-  #     expected = [self_closing_tag: {"slot", []}]
 
   #     assert result == expected
   #   end

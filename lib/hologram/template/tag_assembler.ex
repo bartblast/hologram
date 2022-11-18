@@ -154,12 +154,12 @@ defmodule Hologram.Template.TagAssembler do
   end
 
   # TODO: test
-  assemble(context, :start_tag, [{:symbol, :"/>"} = token | rest]) do
+  assemble(context, :start_tag, [{:symbol, "/>"} = token | rest]) do
     handle_start_tag_end(context, token, rest, true)
   end
 
   # TODO: test
-  assemble(context, :start_tag, [{:symbol, :>} = token | rest]) do
+  assemble(context, :start_tag, [{:symbol, ">"} = token | rest]) do
     handle_start_tag_end(context, token, rest, false)
   end
 
@@ -172,14 +172,14 @@ defmodule Hologram.Template.TagAssembler do
   end
 
   # TODO: test
-  assemble(context, :attr_name, [{:symbol, :>} = token | rest]) do
+  assemble(context, :attr_name, [{:symbol, ">"} = token | rest]) do
     context
     |> add_attr()
     |> handle_start_tag_end(token, rest, false)
   end
 
   # TODO: test
-  assemble(context, :attr_name, [{:symbol, :=} = token | rest]) do
+  assemble(context, :attr_name, [{:symbol, "="} = token | rest]) do
     context
     |> add_processed_token(token)
     |> assemble(:attr_assignment, rest)
