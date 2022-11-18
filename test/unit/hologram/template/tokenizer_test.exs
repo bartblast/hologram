@@ -21,16 +21,14 @@ defmodule Hologram.Template.TokenizerTest do
   end
 
   test "non-raw block start" do
-    str = "abc{#block}xyz"
+    str = "{#block}"
 
     result = Tokenizer.tokenize(str)
 
     expected = [
-      string: "abc",
       symbol: "{#",
       string: "block",
       symbol: "}",
-      string: "xyz"
     ]
 
     assert result == expected
@@ -46,16 +44,14 @@ defmodule Hologram.Template.TokenizerTest do
   end
 
   test "non-raw block end" do
-    str = "abc{/block}xyz"
+    str = "{/block}"
 
     result = Tokenizer.tokenize(str)
 
     expected = [
-      string: "abc",
       symbol: "{/",
       string: "block",
-      symbol: "}",
-      string: "xyz"
+      symbol: "}"
     ]
 
     assert result == expected
