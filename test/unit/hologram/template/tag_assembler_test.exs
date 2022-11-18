@@ -73,6 +73,15 @@ defmodule Hologram.Template.TagAssemblerTest do
 
       assert result == expected
     end
+
+    test "text ended by end tag" do
+      markup = "abc</div>"
+
+      result = assemble(markup)
+      expected = [text: "abc", end_tag: "div"]
+
+      assert result == expected
+    end
   end
 
   describe "start tag" do
@@ -176,25 +185,34 @@ defmodule Hologram.Template.TagAssemblerTest do
     end
   end
 
-  # describe "element node" do
-    # test "end tag" do
-    #   markup = "</div>"
+  describe "end tag" do
+    test "element" do
+      markup = "</div>"
 
-    #   result = assemble(markup)
-    #   expected = [end_tag: "div"]
+      result = assemble(markup)
+      expected = [end_tag: "div"]
 
-    #   assert result == expected
-    # end
+      assert result == expected
+    end
 
-    # test "end tag with whitespace after tag name" do
-    #   markup = "</div \n\r\t>"
+    test "component" do
+      markup = "</Abc.Bcd>"
 
-    #   result = assemble(markup)
-    #   expected = [end_tag: "div"]
+      result = assemble(markup)
+      expected = [end_tag: "Abc.Bcd"]
 
-    #   assert result == expected
-    # end
-  # end
+      assert result == expected
+    end
+
+    test "whitespace after tag name" do
+      markup = "</div \n\r\t>"
+
+      result = assemble(markup)
+      expected = [end_tag: "div"]
+
+      assert result == expected
+    end
+  end
 
   # alias Hologram.Template.SyntaxError
 
@@ -568,17 +586,6 @@ defmodule Hologram.Template.TagAssemblerTest do
   #       start_tag:
   #         {"div", [{"id", [literal: "abc", expression: "{{\"1\\}2\"}}", literal: "xyz"]}]}
   #     ]
-
-  #     assert result == expected
-  #   end
-  # end
-
-  # describe "component node" do
-  #   test "end tag" do
-  #     markup = "</Abc.Bcd>"
-
-  #     result = assemble(markup)
-  #     expected = [end_tag: "Abc.Bcd"]
 
   #     assert result == expected
   #   end

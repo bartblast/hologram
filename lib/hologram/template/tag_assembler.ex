@@ -89,13 +89,13 @@ defmodule Hologram.Template.TagAssembler do
   #   assemble_text(context, {:symbol, :"</"}, rest)
   # end
 
-  # assemble(context, :text, [{:symbol, :"</"} = token | rest]) do
-  #   context
-  #   |> maybe_add_text_tag()
-  #   |> reset_token_buffer()
-  #   |> add_processed_token(token)
-  #   |> assemble(:end_tag_name, rest)
-  # end
+  assemble(context, :text, [{:symbol, "</"} = token | rest]) do
+    context
+    |> maybe_add_text_tag()
+    |> reset_token_buffer()
+    |> add_processed_token(token)
+    |> assemble(:end_tag_name, rest)
+  end
 
   # # TODO: test
   # assemble(%{script?: true} = context, :text, [{:symbol, :"<"} | rest]) do
@@ -160,6 +160,28 @@ defmodule Hologram.Template.TagAssembler do
   end
 
   # TODO: test
+  assemble(context, :end_tag_name, [{:string, tag_name} = token | rest]) do
+    context
+    |> set_tag_name(tag_name)
+    |> maybe_disable_script_mode(tag_name)
+    |> add_processed_token(token)
+    |> assemble(:end_tag, rest)
+  end
+
+  assemble(context, :end_tag, [{:whitespace, _} = token | rest]) do
+    context
+    |> add_processed_token(token)
+    |> assemble(:end_tag, rest)
+  end
+
+  assemble(context, :end_tag, [{:symbol, ">"} = token | rest]) do
+    context
+    |> add_end_tag()
+    |> add_processed_token(token)
+    |> assemble(:text, rest)
+  end
+
+  # TODO: test
   assemble(context, :attr_name, [{:whitespace, _} = token | rest]) do
     context
     |> add_attr()
@@ -184,6 +206,11 @@ defmodule Hologram.Template.TagAssembler do
   defp add_attr(context) do
     new_attr = {context.attr_key, context.attr_value}
     %{context | attr_key: nil, attr_value: [], attrs: context.attrs ++ [new_attr]}
+  end
+
+  defp add_end_tag(context) do
+    new_tag = {:end_tag, context.tag_name}
+    %{context | processed_tags: context.processed_tags ++ [new_tag]}
   end
 
   defp add_processed_token(%{processed_tokens: processed_tokens} = context, token) do
@@ -242,6 +269,12 @@ defmodule Hologram.Template.TagAssembler do
     end
   end
 
+  defp maybe_disable_script_mode(context, "script") do
+    %{context | script?: false}
+  end
+
+  defp maybe_disable_script_mode(context, _), do: context
+
   defp maybe_enable_script_mode(context, "script") do
     %{context | script?: true}
   end
@@ -295,29 +328,6 @@ defmodule Hologram.Template.TagAssembler do
   #   context
   #   |> disable_raw_markup()
   #   |> add_processed_token(token)
-  #   |> assemble(:text, rest)
-  # end
-
-  # # TODO: test
-  # assemble(context, :end_tag_name, [{:string, tag_name} = token | rest]) do
-  #   context
-  #   |> set_tag_name(tag_name)
-  #   |> maybe_disable_script_markup(tag_name)
-  #   |> add_processed_token(token)
-  #   |> assemble(:end_tag, rest)
-  # end
-
-  # assemble(context, :end_tag, [{:whitespace, _} = token | rest]) do
-  #   context
-  #   |> add_processed_token(token)
-  #   |> assemble(:end_tag, rest)
-  # end
-
-  # assemble(context, :end_tag, [{:symbol, :>} = token | rest]) do
-  #   context
-  #   |> add_end_tag()
-  #   |> add_processed_token(token)
-  #   |> set_node_type(:text_node)
   #   |> assemble(:text, rest)
   # end
 
@@ -412,11 +422,6 @@ defmodule Hologram.Template.TagAssembler do
   #   %{context | attr_value: context.attr_value ++ [part]}
   # end
 
-  # defp add_end_tag(context) do
-  #   new_tag = {:end_tag, context.tag_name}
-  #   %{context | processed_tags: context.processed_tags ++ [new_tag]}
-  # end
-
   # defp add_expression_tag(%{token_buffer: token_buffer, processed_tags: processed_tags} = context) do
   #   new_processed_tags = processed_tags ++ [{:expression, TokenHTMLEncoder.encode(token_buffer)}]
   #   %{context | processed_tags: new_processed_tags}
@@ -504,12 +509,6 @@ defmodule Hologram.Template.TagAssembler do
   # defp increment_num_open_braces(context) do
   #   %{context | num_open_braces: context.num_open_braces + 1}
   # end
-
-  # defp maybe_disable_script_markup(context, "script") do
-  #   disable_script_markup(context)
-  # end
-
-  # defp maybe_disable_script_markup(context, _), do: context
 
   # defp open_double_quote(context) do
   #   %{context | double_quote_open?: true}
