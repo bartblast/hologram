@@ -297,6 +297,26 @@ defmodule Hologram.Template.TagAssemblerTest do
     end
   end
 
+  describe "block end" do
+    test "isolated" do
+      markup = "{/raw}"
+
+      result = assemble(markup)
+      expected = [block_end: "raw"]
+
+      assert result == expected
+    end
+
+    test "inside text" do
+      markup = "abc{/raw}xyz"
+
+      result = assemble(markup)
+      expected = [text: "abc", block_end: "raw", text: "xyz"]
+
+      assert result == expected
+    end
+  end
+
   describe "expression inside text" do
     test "empty" do
       markup = "abc{}xyz"

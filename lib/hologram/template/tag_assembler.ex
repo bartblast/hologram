@@ -66,6 +66,13 @@ defmodule Hologram.Template.TagAssembler do
     |> assemble(:block_start, rest)
   end
 
+  assemble(context, :text, [{:symbol, "{/"} = token | rest]) do
+    context
+    |> maybe_add_text_tag()
+    |> add_processed_token(token)
+    |> assemble(:block_end, rest)
+  end
+
   # assemble(%{raw?: true} = context, :text, [{:symbol, :"{"} | rest]) do
   #   assemble_text(context, {:symbol, :"{"}, rest)
   # end
@@ -226,6 +233,22 @@ defmodule Hologram.Template.TagAssembler do
     |> assemble(:expression, rest)
   end
 
+  assemble(context, :block_end, [{:string, block_name} = token | rest]) do
+    context
+    |> set_block_name(block_name)
+    |> add_processed_token(token)
+    |> reset_token_buffer()
+    |> assemble(:block_end, rest)
+  end
+
+  assemble(context, :block_end, [{:symbol, "}"} = token | rest]) do
+    context
+    |> add_block_end()
+    |> add_processed_token(token)
+    |> reset_token_buffer()
+    |> assemble(:text, rest)
+  end
+
   assemble(%{double_quote_open?: false} = context, :expression, [{:symbol, "\""} = token | rest]) do
     context
     |> open_double_quote()
@@ -290,6 +313,11 @@ defmodule Hologram.Template.TagAssembler do
       |> String.trim()
 
     new_tag = {:block_start, {context.block_name, expression}}
+    %{context | processed_tags: context.processed_tags ++ [new_tag]}
+  end
+
+  defp add_block_end(context) do
+    new_tag = {:block_end, context.block_name}
     %{context | processed_tags: context.processed_tags ++ [new_tag]}
   end
 
