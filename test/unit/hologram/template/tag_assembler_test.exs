@@ -64,6 +64,15 @@ defmodule Hologram.Template.TagAssemblerTest do
 
       assert result == expected
     end
+
+    test "text ended by start tag" do
+      markup = "abc<div>"
+
+      result = assemble(markup)
+      expected = [text: "abc", start_tag: {"div", []}]
+
+      assert result == expected
+    end
   end
 
   describe "start tag" do
@@ -135,6 +144,24 @@ defmodule Hologram.Template.TagAssemblerTest do
 
       result = assemble(markup)
       expected = [self_closing_tag: {"slot", []}]
+
+      assert result == expected
+    end
+
+    test "component, unclosed" do
+      markup = "<Abc.Bcd>"
+
+      result = assemble(markup)
+      expected = [start_tag: {"Abc.Bcd", []}]
+
+      assert result == expected
+    end
+
+    test "component, self-closed" do
+      markup = "<Abc.Bcd />"
+
+      result = assemble(markup)
+      expected = [self_closing_tag: {"Abc.Bcd", []}]
 
       assert result == expected
     end
@@ -547,29 +574,11 @@ defmodule Hologram.Template.TagAssemblerTest do
   # end
 
   # describe "component node" do
-  #   test "start tag" do
-  #     markup = "<Abc.Bcd>"
-
-  #     result = assemble(markup)
-  #     expected = [start_tag: {"Abc.Bcd", []}]
-
-  #     assert result == expected
-  #   end
-
   #   test "end tag" do
   #     markup = "</Abc.Bcd>"
 
   #     result = assemble(markup)
   #     expected = [end_tag: "Abc.Bcd"]
-
-  #     assert result == expected
-  #   end
-
-  #   test "self-closed tag" do
-  #     markup = "<Abc.Bcd />"
-
-  #     result = assemble(markup)
-  #     expected = [self_closing_tag: {"Abc.Bcd", []}]
 
   #     assert result == expected
   #   end
