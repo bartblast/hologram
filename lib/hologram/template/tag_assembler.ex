@@ -154,6 +154,16 @@ defmodule Hologram.Template.TagAssembler do
   end
 
   # TODO: test
+  assemble(context, :start_tag, [{:symbol, :"/>"} = token | rest]) do
+    handle_start_tag_end(context, token, rest, true)
+  end
+
+  # TODO: test
+  assemble(context, :start_tag, [{:symbol, :>} = token | rest]) do
+    handle_start_tag_end(context, token, rest, false)
+  end
+
+  # TODO: test
   assemble(context, :attr_name, [{:whitespace, _} = token | rest]) do
     context
     |> add_attr()
@@ -290,14 +300,6 @@ defmodule Hologram.Template.TagAssembler do
   #   |> disable_raw_markup()
   #   |> add_processed_token(token)
   #   |> assemble(:text, rest)
-  # end
-
-  # assemble(context, :start_tag, [{:symbol, :"/>"} = token | rest]) do
-  #   handle_start_tag_end(context, token, rest, true)
-  # end
-
-  # assemble(context, :start_tag, [{:symbol, :>} = token | rest]) do
-  #   handle_start_tag_end(context, token, rest, false)
   # end
 
   # # TODO: test
