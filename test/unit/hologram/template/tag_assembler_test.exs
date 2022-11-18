@@ -232,6 +232,44 @@ defmodule Hologram.Template.TagAssemblerTest do
     end
   end
 
+  describe "block start" do
+    test "without expression" do
+      markup = "{#raw}"
+
+      result = assemble(markup)
+      expected = [block_start: {"raw", ""}]
+
+      assert result == expected
+    end
+
+    test "with whitespace expression" do
+      markup = "{#raw \n\r\t}"
+
+      result = assemble(markup)
+      expected = [block_start: {"raw", ""}]
+
+      assert result == expected
+    end
+
+    test "with non-whitespace expression" do
+      markup = "{#if abc == {1, 2}}"
+
+      result = assemble(markup)
+      expected = [block_start: {"if", "abc == {1, 2}"}]
+
+      assert result == expected
+    end
+
+    test "inside text" do
+      markup = "abc{#raw}xyz"
+
+      result = assemble(markup)
+      expected = [text: "abc", block_start: {"raw", ""}, text: "xyz"]
+
+      assert result == expected
+    end
+  end
+
   describe "expression in text node" do
     test "empty" do
       markup = "abc{}xyz"

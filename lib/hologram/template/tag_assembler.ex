@@ -7,6 +7,8 @@ defmodule Hologram.Template.TagAssembler do
     attr_name: nil,
     attr_value: [],
     attrs: [],
+    block_expression: nil,
+    block_name: nil,
     double_quote_open?: false,
     num_open_braces: 0,
     prev_status: nil,
@@ -57,9 +59,12 @@ defmodule Hologram.Template.TagAssembler do
     assemble_text(context, {:symbol, "{"}, rest)
   end
 
-  # assemble(context, :text, [{:symbol, "{#"} | rest]) do
-
-  # end
+  assemble(context, :text, [{:symbol, "{#"} = token | rest]) do
+    context
+    |> maybe_add_text_tag()
+    |> add_processed_token(token)
+    |> assemble(:block_start, rest)
+  end
 
   # assemble(%{raw?: true} = context, :text, [{:symbol, :"{"} | rest]) do
   #   assemble_text(context, {:symbol, :"{"}, rest)
@@ -212,6 +217,15 @@ defmodule Hologram.Template.TagAssembler do
     |> assemble(:attr_assignment, rest)
   end
 
+  assemble(context, :block_start, [{:string, block_name} = token | rest]) do
+    context
+    |> set_block_name(block_name)
+    |> add_processed_token(token)
+    |> reset_token_buffer()
+    |> set_prev_status(:block_start)
+    |> assemble(:expression, rest)
+  end
+
   assemble(%{double_quote_open?: false} = context, :expression, [{:symbol, "\""} = token | rest]) do
     context
     |> open_double_quote()
@@ -242,6 +256,18 @@ defmodule Hologram.Template.TagAssembler do
     |> assemble(:text, rest)
   end
 
+  assemble(
+    %{double_quote_open?: false, num_open_braces: 0, prev_status: :block_start} = context,
+    :expression,
+    [{:symbol, "}"} = token | rest]
+  ) do
+    context
+    |> add_block_start()
+    |> add_processed_token(token)
+    |> reset_token_buffer()
+    |> assemble(:text, rest)
+  end
+
   assemble(%{double_quote_open?: false} = context, :expression, [{:symbol, "}"} = token | rest]) do
     context
     |> decrement_num_open_braces()
@@ -255,6 +281,16 @@ defmodule Hologram.Template.TagAssembler do
   defp add_attr(context) do
     new_attr = {context.attr_key, context.attr_value}
     %{context | attr_key: nil, attr_value: [], attrs: context.attrs ++ [new_attr]}
+  end
+
+  defp add_block_start(context) do
+    expression =
+      context.token_buffer
+      |> join_tokens()
+      |> String.trim()
+
+    new_tag = {:block_start, {context.block_name, expression}}
+    %{context | processed_tags: context.processed_tags ++ [new_tag]}
   end
 
   defp add_end_tag(context) do
@@ -382,12 +418,16 @@ defmodule Hologram.Template.TagAssembler do
     %{context | attr_name: name}
   end
 
+  defp set_block_name(context, name) do
+    %{context | block_name: name}
+  end
+
   defp set_prev_status(context, status) do
     %{context | prev_status: status}
   end
 
-  defp set_tag_name(context, tag_name) do
-    %{context | tag_name: tag_name}
+  defp set_tag_name(context, name) do
+    %{context | tag_name: name}
   end
 
 
