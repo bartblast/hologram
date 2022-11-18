@@ -83,7 +83,7 @@ defmodule Hologram.Template.TagAssemblerTest do
       assert result == expected
     end
 
-    test "text ended by start tag" do
+    test "ended by start tag" do
       markup = "abc<div>"
 
       result = assemble(markup)
@@ -92,11 +92,20 @@ defmodule Hologram.Template.TagAssemblerTest do
       assert result == expected
     end
 
-    test "text ended by end tag" do
+    test "ended by end tag" do
       markup = "abc</div>"
 
       result = assemble(markup)
       expected = [text: "abc", end_tag: "div"]
+
+      assert result == expected
+    end
+
+    test "ended by block start" do
+      markup = "abc{#raw}"
+
+      result = assemble(markup)
+      expected = [text: "abc", block_start: {"raw", ""}]
 
       assert result == expected
     end
@@ -201,6 +210,15 @@ defmodule Hologram.Template.TagAssemblerTest do
 
       assert result == expected
     end
+
+    test "inside text" do
+      markup = "abc<div>xyz"
+
+      result = assemble(markup)
+      expected = [text: "abc", start_tag: {"div", []}, text: "xyz"]
+
+      assert result == expected
+    end
   end
 
   describe "end tag" do
@@ -227,6 +245,15 @@ defmodule Hologram.Template.TagAssemblerTest do
 
       result = assemble(markup)
       expected = [end_tag: "div"]
+
+      assert result == expected
+    end
+
+    test "inside text" do
+      markup = "abc</div>xyz"
+
+      result = assemble(markup)
+      expected = [text: "abc", end_tag: "div", text: "xyz"]
 
       assert result == expected
     end
@@ -270,7 +297,7 @@ defmodule Hologram.Template.TagAssemblerTest do
     end
   end
 
-  describe "expression in text node" do
+  describe "expression inside text" do
     test "empty" do
       markup = "abc{}xyz"
 
