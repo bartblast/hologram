@@ -251,7 +251,6 @@ defmodule Hologram.Template.TagAssembler do
     |> assemble(:attr_assignment, rest)
   end
 
-  # TODO: test
   assemble(context, :attr_assignment, [{:symbol, "\""} = token | rest]) do
     context
     |> add_processed_token(token)
