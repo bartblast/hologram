@@ -125,14 +125,13 @@ without its shortcomings related to scalability, efficiency, etc.
 | Feature         | Status             | Comments                                                        |
 | :-------------- | :----------------: | :-------------------------------------------------------------- |
 | Components      | :construction:     | done: stateless/stateful components, todo: props DSL            |
-| If Directive    | :construction:     | done: element nodes, todo: component nodes                      |
+| If Block        | :construction:     | done: element nodes, todo: component nodes                      |
 | Interpolation   | :white_check_mark: |                                                                 |
 | Layouts         | :white_check_mark: |                                                                 |
 | Navigation      | :white_check_mark: |                                                                 |
 | Pages           | :white_check_mark: |                                                                 |
-| Raw Directive   | :x:                |                                                                 |
+| Raw Block       | :x:                |                                                                 |
 | Templates       | :construction:     | done: template in module, todo: template in separate file       |
-| Two-Way Binding | :x:                |                                                                 |
 
 #### Events
 
@@ -354,6 +353,9 @@ without its shortcomings related to scalability, efficiency, etc.
 | Module Nesting                 | :x:                |
 | Protocols                      | :x:                |
 | Variable rebinding             | :x:                |
+
+#### Someday/Maybe
+* Two-Way Binding (template engine)
 
 #### Not on Roadmap
 * Types: PID, Port, Reference
