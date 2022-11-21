@@ -102,10 +102,10 @@ defmodule Hologram.Template.TagAssemblerTest do
     end
 
     test "ended by block start" do
-      markup = "abc{#raw}"
+      markup = "abc{#xyz}"
 
       result = assemble(markup)
-      expected = [text: "abc", block_start: {"raw", ""}]
+      expected = [text: "abc", block_start: {"xyz", ""}]
 
       assert result == expected
     end
@@ -259,21 +259,68 @@ defmodule Hologram.Template.TagAssemblerTest do
     end
   end
 
-  describe "block start" do
-    test "without expression" do
+  describe "raw block" do
+    test "block start" do
       markup = "{#raw}"
 
       result = assemble(markup)
-      expected = [block_start: {"raw", ""}]
+      expected = []
+
+      assert result == expected
+    end
+
+    test "block end" do
+      markup = "{#raw}{/raw}"
+
+      result = assemble(markup)
+      expected = []
+
+      assert result == expected
+    end
+
+    test "expression" do
+      markup = "{#raw}{1 + 2}{/raw}"
+
+      result = assemble(markup)
+      expected = [text: "{1 + 2}"]
+
+      assert result == expected
+    end
+
+    test "inside text" do
+      markup = "abc{#raw}{/raw}xyz"
+
+      result = assemble(markup)
+      expected = [text: "abcxyz"]
+
+      assert result == expected
+    end
+
+    test "nested template block" do
+      markup = "{#raw}{#abc}{/abc}{/raw}"
+
+      result = assemble(markup)
+      expected = [text: "{#abc}{/abc}"]
+
+      assert result == expected
+    end
+  end
+
+  describe "block start" do
+    test "without expression" do
+      markup = "{#abc}"
+
+      result = assemble(markup)
+      expected = [block_start: {"abc", ""}]
 
       assert result == expected
     end
 
     test "with whitespace expression" do
-      markup = "{#raw \n\r\t}"
+      markup = "{#abc \n\r\t}"
 
       result = assemble(markup)
-      expected = [block_start: {"raw", ""}]
+      expected = [block_start: {"abc", ""}]
 
       assert result == expected
     end
@@ -288,10 +335,10 @@ defmodule Hologram.Template.TagAssemblerTest do
     end
 
     test "inside text" do
-      markup = "abc{#raw}xyz"
+      markup = "abc{#kmn}xyz"
 
       result = assemble(markup)
-      expected = [text: "abc", block_start: {"raw", ""}, text: "xyz"]
+      expected = [text: "abc", block_start: {"kmn", ""}, text: "xyz"]
 
       assert result == expected
     end
@@ -299,19 +346,19 @@ defmodule Hologram.Template.TagAssemblerTest do
 
   describe "block end" do
     test "isolated" do
-      markup = "{/raw}"
+      markup = "{/abc}"
 
       result = assemble(markup)
-      expected = [block_end: "raw"]
+      expected = [block_end: "abc"]
 
       assert result == expected
     end
 
     test "inside text" do
-      markup = "abc{/raw}xyz"
+      markup = "abc{/kmn}xyz"
 
       result = assemble(markup)
-      expected = [text: "abc", block_end: "raw", text: "xyz"]
+      expected = [text: "abc", block_end: "kmn", text: "xyz"]
 
       assert result == expected
     end

@@ -14,6 +14,7 @@ defmodule Hologram.Template.TagAssembler do
     prev_status: nil,
     processed_tags: [],
     processed_tokens: [],
+    raw?: false,
     tag_name: nil,
     token_buffer: []
   }
@@ -59,11 +60,33 @@ defmodule Hologram.Template.TagAssembler do
     assemble_text(context, {:symbol, "{"}, rest)
   end
 
+  assemble(%{raw?: false} = context, :text, [{:symbol, "{#raw}"} = token | rest]) do
+    context
+    |> add_processed_token(token)
+    |> enable_raw_mode()
+    |> assemble(:text, rest)
+  end
+
+  assemble(%{raw?: true} = context, :text, [{:symbol, "{#"} = token | rest]) do
+    assemble_text(context, {:symbol, "{#"}, rest)
+  end
+
   assemble(context, :text, [{:symbol, "{#"} = token | rest]) do
     context
     |> maybe_add_text_tag()
     |> add_processed_token(token)
     |> assemble(:block_start, rest)
+  end
+
+  assemble(%{raw?: true} = context, :text, [{:symbol, "{/raw}"} = token | rest]) do
+    context
+    |> add_processed_token(token)
+    |> disable_raw_mode()
+    |> assemble(:text, rest)
+  end
+
+  assemble(%{raw?: true} = context, :text, [{:symbol, "{/"} = token | rest]) do
+    assemble_text(context, {:symbol, "{/"}, rest)
   end
 
   assemble(context, :text, [{:symbol, "{/"} = token | rest]) do
@@ -73,9 +96,9 @@ defmodule Hologram.Template.TagAssembler do
     |> assemble(:block_end, rest)
   end
 
-  # assemble(%{raw?: true} = context, :text, [{:symbol, :"{"} | rest]) do
-  #   assemble_text(context, {:symbol, :"{"}, rest)
-  # end
+  assemble(%{raw?: true} = context, :text, [{:symbol, "{"} | rest]) do
+    assemble_text(context, {:symbol, "{"}, rest)
+  end
 
   # assemble(%{node_type: :attribute_value_text} = context, :text, [{:symbol, :"{"} = token | rest]) do
   #   context
@@ -101,9 +124,9 @@ defmodule Hologram.Template.TagAssembler do
     assemble_text(context, {:symbol, "}"}, rest)
   end
 
-  # assemble(%{raw?: true} = context, :text, [{:symbol, :"}"} | rest]) do
-  #   assemble_text(context, {:symbol, :"}"}, rest)
-  # end
+  assemble(%{raw?: true} = context, :text, [{:symbol, "}"} | rest]) do
+    assemble_text(context, {:symbol, "}"}, rest)
+  end
 
   # # TODO: test
   # assemble(%{script?: true} = context, :text, [{:symbol, :"</"} | rest]) do
@@ -224,6 +247,7 @@ defmodule Hologram.Template.TagAssembler do
     |> assemble(:attr_assignment, rest)
   end
 
+  # TODO: test
   assemble(context, :block_start, [{:string, block_name} = token | rest]) do
     context
     |> set_block_name(block_name)
@@ -233,6 +257,7 @@ defmodule Hologram.Template.TagAssembler do
     |> assemble(:expression, rest)
   end
 
+  # TODO: test
   assemble(context, :block_end, [{:string, block_name} = token | rest]) do
     context
     |> set_block_name(block_name)
@@ -241,6 +266,7 @@ defmodule Hologram.Template.TagAssembler do
     |> assemble(:block_end, rest)
   end
 
+  # TODO: test
   assemble(context, :block_end, [{:symbol, "}"} = token | rest]) do
     context
     |> add_block_end()
@@ -279,6 +305,7 @@ defmodule Hologram.Template.TagAssembler do
     |> assemble(:text, rest)
   end
 
+  # TODO: test
   assemble(
     %{double_quote_open?: false, num_open_braces: 0, prev_status: :block_start} = context,
     :expression,
@@ -369,6 +396,14 @@ defmodule Hologram.Template.TagAssembler do
 
   defp decrement_num_open_braces(context) do
     %{context | num_open_braces: context.num_open_braces - 1}
+  end
+
+  defp disable_raw_mode(context) do
+    %{context | raw?: false}
+  end
+
+  defp enable_raw_mode(context) do
+    %{context | raw?: true}
   end
 
   defp handle_start_tag_end(context, token, rest, self_closing?) do
@@ -468,7 +503,6 @@ defmodule Hologram.Template.TagAssembler do
   # alias Hologram.Template.SyntaxError
 
   # @initial_context %{
-  #   raw?: false,
   #   script?: false,
   # }
 
@@ -547,18 +581,6 @@ defmodule Hologram.Template.TagAssembler do
   # defp add_attr_value_part(context, type) do
   #   part = {type, TokenHTMLEncoder.encode(context.token_buffer)}
   #   %{context | attr_value: context.attr_value ++ [part]}
-  # end
-
-  # defp disable_raw_markup(context) do
-  #   %{context | raw?: false}
-  # end
-
-  # defp disable_script_markup(context) do
-  #   %{context | script?: false}
-  # end
-
-  # defp enable_raw_markup(context) do
-  #   %{context | raw?: true}
   # end
 
   # defp error_reason(context, status, token)
