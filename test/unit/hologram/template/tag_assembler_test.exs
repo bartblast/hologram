@@ -259,6 +259,17 @@ defmodule Hologram.Template.TagAssemblerTest do
     end
   end
 
+  describe "attribute" do
+    test "text attribute value" do
+      markup = "<div id=\"test\">"
+
+      result = assemble(markup)
+      expected = [start_tag: {"div", [{"id", [text: "test"]}]}]
+
+      assert result == expected
+    end
+  end
+
   describe "raw block" do
     test "block start" do
       markup = "{#raw}"
@@ -717,15 +728,6 @@ defmodule Hologram.Template.TagAssemblerTest do
 
   #     result = assemble(markup)
   #     expected = [start_tag: {"div", [{"my_attr", []}]}]
-
-  #     assert result == expected
-  #   end
-
-  #   test "literal attribute value" do
-  #     markup = "<div id=\"test\">"
-
-  #     result = assemble(markup)
-  #     expected = [start_tag: {"div", [{"id", [literal: "test"]}]}]
 
   #     assert result == expected
   #   end
