@@ -202,8 +202,6 @@ defmodule Hologram.Template.TagAssembler do
     context
     |> set_attr_name(str)
     |> reset_attr_value()
-    # |> reset_double_quotes()
-    # |> reset_braces()
     |> add_processed_token(token)
     |> reset_token_buffer()
     |> set_prev_status(:start_tag)
@@ -571,54 +569,11 @@ defmodule Hologram.Template.TagAssembler do
     %{context | tag_name: name}
   end
 
-
-
-
-
-
-
-
   # alias Hologram.Template.SyntaxError
 
   # @initial_context %{
   #   script?: false,
   # }
-
-  # assemble(context, :text, [{:directive, :raw_start} = token | rest]) do
-  #   context
-  #   |> enable_raw_markup()
-  #   |> add_processed_token(token)
-  #   |> assemble(:text, rest)
-  # end
-
-  # assemble(context, :text, [{:directive, :raw_end} = token | rest]) do
-  #   context
-  #   |> disable_raw_markup()
-  #   |> add_processed_token(token)
-  #   |> assemble(:text, rest)
-  # end
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-  # assemble(
-  #   %{double_quote_open?: false, num_open_curly_brackets: 0, node_type: :attribute_value_expression} =
-  #     context,
-  #   :expression,
-  #   [{:symbol, :"}"} = token | rest]
-  # ) do
-  #   handle_attr_value_end(context, :expression, token, rest)
-  # end
 
   # assemble(context, type, [token | rest]) do
   #   raise_error(context, type, token, rest)
@@ -664,22 +619,6 @@ defmodule Hologram.Template.TagAssembler do
   #   |> String.replace("\t", "\\t")
   # end
 
-  # defp handle_attr_value_end(context, part_type, token, rest) do
-  #   context =
-  #     if part_type == :expression do
-  #       buffer_token(context, token)
-  #     else
-  #       context
-  #     end
-
-  #   context
-  #   |> add_attr_value_part(part_type)
-  #   |> flush_attribute()
-  #   |> set_node_type(:element_node)
-  #   |> add_processed_token(token)
-  #   |> assemble(:start_tag, rest)
-  # end
-
   # defp raise_error(%{processed_tokens: processed_tokens} = context, status, token, rest) do
   #   processed_tokens_str = TokenHTMLEncoder.encode(processed_tokens)
   #   processed_tokens_len = String.length(processed_tokens_str)
@@ -722,9 +661,5 @@ defmodule Hologram.Template.TagAssembler do
   #   """
 
   #   raise SyntaxError, message: message
-  # end
-
-  # defp set_node_type(context, type) do
-  #   %{context | node_type: type}
   # end
 end
