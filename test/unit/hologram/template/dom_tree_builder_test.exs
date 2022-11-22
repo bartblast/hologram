@@ -15,7 +15,7 @@ defmodule Hologram.Template.DOMTreeBuilderTest do
 
   test "expression node" do
     tags = [expression: "{@test}"]
-    
+
     result = DOMTreeBuilder.build(tags)
     expected = [expression: "{@test}"]
 
@@ -138,7 +138,8 @@ defmodule Hologram.Template.DOMTreeBuilderTest do
     result = DOMTreeBuilder.build(tags)
 
     expected = [
-      {:component, "Abc.Bcd", [{"id", [literal: "abc", expression: "{@test}", literal: "xyz"]}], []}
+      {:component, "Abc.Bcd", [{"id", [literal: "abc", expression: "{@test}", literal: "xyz"]}],
+       []}
     ]
 
     assert result == expected

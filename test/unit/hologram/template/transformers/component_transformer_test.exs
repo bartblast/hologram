@@ -57,7 +57,7 @@ defmodule Hologram.Template.ComponentTransformerTest do
   test "props" do
     props = [
       {"attr_1", [literal: "test"]},
-      {"attr_2", [expression: "{1 + 2}"]},
+      {"attr_2", [expression: "{1 + 2}"]}
     ]
 
     result = ComponentTransformer.transform(@module_name, props, @children, @context)

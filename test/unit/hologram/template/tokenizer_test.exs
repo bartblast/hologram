@@ -28,7 +28,7 @@ defmodule Hologram.Template.TokenizerTest do
     expected = [
       symbol: "{#",
       string: "block",
-      symbol: "}",
+      symbol: "}"
     ]
 
     assert result == expected

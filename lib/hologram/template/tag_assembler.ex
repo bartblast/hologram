@@ -344,7 +344,12 @@ defmodule Hologram.Template.TagAssembler do
   end
 
   assemble(
-    %{double_quote_open?: false, node_type: :attribute, num_open_curly_brackets: 0, prev_status: :text} = context,
+    %{
+      double_quote_open?: false,
+      node_type: :attribute,
+      num_open_curly_brackets: 0,
+      prev_status: :text
+    } = context,
     :expression,
     [{:symbol, "}"} = token | rest]
   ) do
@@ -358,7 +363,12 @@ defmodule Hologram.Template.TagAssembler do
   end
 
   assemble(
-    %{double_quote_open?: false, node_type: :attribute, num_open_curly_brackets: 0, prev_status: :attr_assignment} = context,
+    %{
+      double_quote_open?: false,
+      node_type: :attribute,
+      num_open_curly_brackets: 0,
+      prev_status: :attr_assignment
+    } = context,
     :expression,
     [{:symbol, "}"} = token | rest]
   ) do
@@ -646,7 +656,6 @@ defmodule Hologram.Template.TagAssembler do
   #   reason = error_reason(context, status, token)
 
   #   message = """
-
 
   #   #{reason}
 

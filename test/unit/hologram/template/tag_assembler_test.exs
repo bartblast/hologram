@@ -288,7 +288,7 @@ defmodule Hologram.Template.TagAssemblerTest do
     end
   end
 
-describe "expression" do
+  describe "expression" do
     test "empty" do
       markup = "{}"
 
@@ -648,18 +648,17 @@ describe "expression" do
       assert result == expected
     end
 
-  #   test "expression in text node nested in element node" do
-  #     markup = "<script>{@abc}</script>"
+    #   test "expression in text node nested in element node" do
+    #     markup = "<script>{@abc}</script>"
 
-  #     result = assemble(markup)
-  #     expected = [start_tag: {"script", []}, expression: "{@abc}", end_tag: "script"]
+    #     result = assemble(markup)
+    #     expected = [start_tag: {"script", []}, expression: "{@abc}", end_tag: "script"]
 
-  #     assert result == expected
-  #   end
+    #     assert result == expected
+    #   end
   end
 
   # alias Hologram.Template.SyntaxError
-
 
   # describe "attribute" do
   #   test "boolean attribute followed by whitespace" do
@@ -866,7 +865,6 @@ describe "expression" do
 
   #     expected_msg = """
 
-
   #     Unescaped '<' character inside text node.
   #     To escape use HTML entity: '&lt;'
 
@@ -889,7 +887,6 @@ describe "expression" do
   #     markup = "abc > xyz"
 
   #     expected_msg = """
-
 
   #     Unescaped '>' character inside text node.
   #     To escape use HTML entity: '&gt;'
@@ -914,7 +911,6 @@ describe "expression" do
 
   #     expected_msg = """
 
-
   #     Unescaped '>' character inside text node.
   #     To escape use HTML entity: '&gt;'
 
@@ -938,7 +934,6 @@ describe "expression" do
 
   #     expected_msg = """
 
-
   #     Unclosed start tag.
 
   #     <div\s
@@ -960,7 +955,6 @@ describe "expression" do
   #     markup = "<div =\"abc\">"
 
   #     expected_msg = """
-
 
   #     Missing attribute name.
 
