@@ -121,8 +121,7 @@ defmodule Hologram.Template.TagAssembler do
     |> reset_double_quotes()
     |> reset_braces()
     |> reset_token_buffer()
-    |> add_processed_token(token)
-    |> assemble(:expression, rest)
+    |> assemble_expression(token, rest)
   end
 
   assemble(context, :text, [{:symbol, "\\}"} | rest]) do
@@ -267,6 +266,7 @@ defmodule Hologram.Template.TagAssembler do
     |> set_block_name(block_name)
     |> add_processed_token(token)
     |> reset_token_buffer()
+    |> buffer_token({:symbol, "{"})
     |> assemble(:expression, rest)
   end
 
@@ -312,6 +312,7 @@ defmodule Hologram.Template.TagAssembler do
     [{:symbol, "}"} = token | rest]
   ) do
     context
+    |> buffer_token(token)
     |> add_expression_tag()
     |> add_processed_token(token)
     |> reset_token_buffer()
@@ -325,6 +326,7 @@ defmodule Hologram.Template.TagAssembler do
     [{:symbol, "}"} = token | rest]
   ) do
     context
+    |> buffer_token(token)
     |> add_block_start()
     |> add_processed_token(token)
     |> reset_token_buffer()
@@ -348,11 +350,7 @@ defmodule Hologram.Template.TagAssembler do
   end
 
   defp add_block_start(context) do
-    expression =
-      context.token_buffer
-      |> join_tokens()
-      |> String.trim()
-
+    expression = join_tokens(context.token_buffer)
     new_tag = {:block_start, {context.block_name, expression}}
     %{context | processed_tags: context.processed_tags ++ [new_tag]}
   end
