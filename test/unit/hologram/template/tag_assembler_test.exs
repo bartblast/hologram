@@ -273,7 +273,13 @@ defmodule Hologram.Template.TagAssemblerTest do
       markup = "<span></span><button></button>"
 
       result = assemble(markup)
-      expected = [start_tag: {"span", []}, end_tag: "span", start_tag: {"button", []}, end_tag: "button"]
+
+      expected = [
+        start_tag: {"span", []},
+        end_tag: "span",
+        start_tag: {"button", []},
+        end_tag: "button"
+      ]
 
       assert result == expected
     end
@@ -307,7 +313,13 @@ defmodule Hologram.Template.TagAssemblerTest do
       markup = "<Abc.Bcd></Abc.Bcd><Efg.Fgh></Efg.Fgh>"
 
       result = assemble(markup)
-      expected = [start_tag: {"Abc.Bcd", []}, end_tag: "Abc.Bcd", start_tag: {"Efg.Fgh", []}, end_tag: "Efg.Fgh"]
+
+      expected = [
+        start_tag: {"Abc.Bcd", []},
+        end_tag: "Abc.Bcd",
+        start_tag: {"Efg.Fgh", []},
+        end_tag: "Efg.Fgh"
+      ]
 
       assert result == expected
     end
@@ -404,7 +416,10 @@ defmodule Hologram.Template.TagAssemblerTest do
       markup = "<div attr_1=\"value_1\" attr_2=\"value_2\">"
 
       result = assemble(markup)
-      expected = [start_tag: {"div", [{"attr_1", [text: "value_1"]}, {"attr_2", [text: "value_2"]}]}]
+
+      expected = [
+        start_tag: {"div", [{"attr_1", [text: "value_1"]}, {"attr_2", [text: "value_2"]}]}
+      ]
 
       assert result == expected
     end
