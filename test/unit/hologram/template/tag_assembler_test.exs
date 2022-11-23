@@ -278,6 +278,33 @@ defmodule Hologram.Template.TagAssemblerTest do
       assert result == expected
     end
 
+    test "expression in double quotes" do
+      markup = "<div id=\"{1 + 2}\">"
+
+      result = assemble(markup)
+      expected = [start_tag: {"div", [{"id", [text: "", expression: "{1 + 2}", text: ""]}]}]
+
+      assert result == expected
+    end
+
+    test "text, expression" do
+      markup = "<div id=\"abc{1 + 2}\">"
+
+      result = assemble(markup)
+      expected = [start_tag: {"div", [{"id", [text: "abc", expression: "{1 + 2}", text: ""]}]}]
+
+      assert result == expected
+    end
+
+    test "expression, text" do
+      markup = "<div id=\"{1 + 2}abc\">"
+
+      result = assemble(markup)
+      expected = [start_tag: {"div", [{"id", [text: "", expression: "{1 + 2}", text: "abc"]}]}]
+
+      assert result == expected
+    end
+
     test "text, expression, text" do
       markup = "<div id=\"abc{1 + 2}xyz\">"
 
@@ -679,62 +706,6 @@ defmodule Hologram.Template.TagAssemblerTest do
   end
 
   # alias Hologram.Template.SyntaxError
-
-  # describe "attribute" do
-
-  #   test "expression attribute value" do
-  #     markup = "<div id={@test}>"
-
-  #     result = assemble(markup)
-  #     expected = [start_tag: {"div", [{"id", [expression: "{@test}"]}]}]
-
-  #     assert result == expected
-  #   end
-
-  #   test "double quoted expression attribute value (without string prefix or suffix)" do
-  #     markup = "<div id=\"{@test}\">"
-  #     result = assemble(markup)
-
-  #     expected = [
-  #       start_tag: {"div", [{"id", [literal: "", expression: "{@test}", literal: ""]}]}
-  #     ]
-
-  #     assert result == expected
-  #   end
-
-  #   test "double quoted expression attribute value with string prefix" do
-  #     markup = "<div id=\"abc{@test}\">"
-  #     result = assemble(markup)
-
-  #     expected = [
-  #       start_tag: {"div", [{"id", [literal: "abc", expression: "{@test}", literal: ""]}]}
-  #     ]
-
-  #     assert result == expected
-  #   end
-
-  #   test "double quoted expression attribute value with string suffix" do
-  #     markup = "<div id=\"{@test}abc\">"
-  #     result = assemble(markup)
-
-  #     expected = [
-  #       start_tag: {"div", [{"id", [literal: "", expression: "{@test}", literal: "abc"]}]}
-  #     ]
-
-  #     assert result == expected
-  #   end
-
-  #   test "double quoted expression attribute value with string prefix and suffix" do
-  #     markup = "<div id=\"abc{@test}xyz\">"
-  #     result = assemble(markup)
-
-  #     expected = [
-  #       start_tag: {"div", [{"id", [literal: "abc", expression: "{@test}", literal: "xyz"]}]}
-  #     ]
-
-  #     assert result == expected
-  #   end
-  # end
 
   # describe "text node nested in raw directive" do
   #   test "empty" do
