@@ -214,7 +214,6 @@ defmodule Hologram.Template.TagAssembler do
     handle_start_tag_end(context, token, rest, false)
   end
 
-  # TODO: test
   assemble(context, :end_tag_name, [{:string, tag_name} = token | rest]) do
     context
     |> set_tag_name(tag_name)
@@ -239,7 +238,6 @@ defmodule Hologram.Template.TagAssembler do
     |> assemble(:text, rest)
   end
 
-  # TODO: test
   assemble(context, :attr_name, [{:whitespace, _} = token | rest]) do
     context
     |> flush_attr()
@@ -248,14 +246,12 @@ defmodule Hologram.Template.TagAssembler do
     |> assemble(:start_tag, rest)
   end
 
-  # TODO: test
   assemble(context, :attr_name, [{:symbol, ">"} = token | rest]) do
     context
     |> flush_attr()
     |> handle_start_tag_end(token, rest, false)
   end
 
-  # TODO: test
   assemble(context, :attr_name, [{:symbol, "="} = token | rest]) do
     context
     |> add_processed_token(token)
@@ -279,7 +275,6 @@ defmodule Hologram.Template.TagAssembler do
     |> assemble(:expression, rest)
   end
 
-  # TODO: test
   assemble(context, :block_start, [{:string, block_name} = token | rest]) do
     context
     |> set_block_name(block_name)
@@ -290,7 +285,6 @@ defmodule Hologram.Template.TagAssembler do
     |> assemble(:expression, rest)
   end
 
-  # TODO: test
   assemble(context, :block_end, [{:string, block_name} = token | rest]) do
     context
     |> set_block_name(block_name)
@@ -299,7 +293,6 @@ defmodule Hologram.Template.TagAssembler do
     |> assemble(:block_end, rest)
   end
 
-  # TODO: test
   assemble(context, :block_end, [{:symbol, "}"} = token | rest]) do
     context
     |> add_block_end()
@@ -379,7 +372,6 @@ defmodule Hologram.Template.TagAssembler do
     |> assemble(:start_tag, rest)
   end
 
-  # TODO: test
   assemble(
     %{double_quote_open?: false, node_type: :block, num_open_curly_brackets: 0} = context,
     :expression,

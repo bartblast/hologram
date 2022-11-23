@@ -648,6 +648,15 @@ defmodule Hologram.Template.TagAssemblerTest do
 
       assert result == expected
     end
+
+    test "inside element" do
+      markup = "<div>{#abc}</div>"
+
+      result = assemble(markup)
+      expected = [start_tag: {"div", []}, block_start: {"abc", "{}"}, end_tag: "div"]
+
+      assert result == expected
+    end
   end
 
   describe "block end" do
@@ -665,6 +674,45 @@ defmodule Hologram.Template.TagAssemblerTest do
 
       result = assemble(markup)
       expected = [text: "abc", block_end: "kmn", text: "xyz"]
+
+      assert result == expected
+    end
+  end
+
+  describe "block" do
+    test "single" do
+      markup = "{#abc}{/abc}"
+
+      result = assemble(markup)
+      expected = [block_start: {"abc", "{}"}, block_end: "abc"]
+
+      assert result == expected
+    end
+
+    test "multiple, siblings" do
+      markup = "{#abc}{/abc}{#xyz}{/xyz}"
+      result = assemble(markup)
+
+      expected = [
+        block_start: {"abc", "{}"},
+        block_end: "abc",
+        block_start: {"xyz", "{}"},
+        block_end: "xyz"
+      ]
+
+      assert result == expected
+    end
+
+    test "multiple, nested" do
+      markup = "{#abc}{#xyz}{/xyz}{/abc}"
+      result = assemble(markup)
+
+      expected = [
+        block_start: {"abc", "{}"},
+        block_start: {"xyz", "{}"},
+        block_end: "xyz",
+        block_end: "abc"
+      ]
 
       assert result == expected
     end
