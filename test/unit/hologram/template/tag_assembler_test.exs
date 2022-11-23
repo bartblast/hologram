@@ -259,6 +259,74 @@ defmodule Hologram.Template.TagAssemblerTest do
     end
   end
 
+  describe "element" do
+    test "single" do
+      markup = "<div></div>"
+
+      result = assemble(markup)
+      expected = [start_tag: {"div", []}, end_tag: "div"]
+
+      assert result == expected
+    end
+
+    test "multiple, siblings" do
+      markup = "<span></span><button></button>"
+
+      result = assemble(markup)
+      expected = [start_tag: {"span", []}, end_tag: "span", start_tag: {"button", []}, end_tag: "button"]
+
+      assert result == expected
+    end
+
+    test "multiple, nested" do
+      markup = "<div><span></span></div>"
+      result = assemble(markup)
+
+      expected = [
+        start_tag: {"div", []},
+        start_tag: {"span", []},
+        end_tag: "span",
+        end_tag: "div"
+      ]
+
+      assert result == expected
+    end
+  end
+
+  describe "component" do
+    test "single" do
+      markup = "<Abc.Bcd></Abc.Bcd>"
+
+      result = assemble(markup)
+      expected = [start_tag: {"Abc.Bcd", []}, end_tag: "Abc.Bcd"]
+
+      assert result == expected
+    end
+
+    test "multiple, siblings" do
+      markup = "<Abc.Bcd></Abc.Bcd><Efg.Fgh></Efg.Fgh>"
+
+      result = assemble(markup)
+      expected = [start_tag: {"Abc.Bcd", []}, end_tag: "Abc.Bcd", start_tag: {"Efg.Fgh", []}, end_tag: "Efg.Fgh"]
+
+      assert result == expected
+    end
+
+    test "multiple, nested" do
+      markup = "<Abc.Bcd><Efg.Fgh></Efg.Fgh></Abc.Bcd>"
+      result = assemble(markup)
+
+      expected = [
+        start_tag: {"Abc.Bcd", []},
+        start_tag: {"Efg.Fgh", []},
+        end_tag: "Efg.Fgh",
+        end_tag: "Abc.Bcd"
+      ]
+
+      assert result == expected
+    end
+  end
+
   describe "attribute" do
     test "text" do
       markup = "<div id=\"test\">"

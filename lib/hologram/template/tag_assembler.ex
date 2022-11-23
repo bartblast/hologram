@@ -180,7 +180,6 @@ defmodule Hologram.Template.TagAssembler do
   #   raise_error(context, :text, token, rest)
   # end
 
-  # TODO: test
   assemble(context, :start_tag_name, [{:string, tag_name} = token | rest]) do
     context
     |> reset_attrs()
@@ -197,7 +196,6 @@ defmodule Hologram.Template.TagAssembler do
     |> assemble(:start_tag, rest)
   end
 
-  # TODO: test
   assemble(context, :start_tag, [{:string, str} = token | rest]) do
     context
     |> set_attr_name(str)
