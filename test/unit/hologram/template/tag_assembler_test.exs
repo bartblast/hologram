@@ -259,7 +259,7 @@ defmodule Hologram.Template.TagAssemblerTest do
     end
   end
 
-  describe "attribute value" do
+  describe "attribute" do
     test "text" do
       markup = "<div id=\"test\">"
 
@@ -313,10 +313,8 @@ defmodule Hologram.Template.TagAssemblerTest do
 
       assert result == expected
     end
-  end
 
-  describe "boolean attribute" do
-    test "followed by whitespace" do
+    test "boolean attribute followed by whitespace" do
       markup = "<div my_attr >"
 
       result = assemble(markup)
@@ -325,7 +323,7 @@ defmodule Hologram.Template.TagAssemblerTest do
       assert result == expected
     end
 
-    test "followed by start tag closing" do
+    test "boolean attribute followed by start tag closing" do
       markup = "<div my_attr>"
 
       result = assemble(markup)
