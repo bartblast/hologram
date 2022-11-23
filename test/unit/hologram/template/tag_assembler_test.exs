@@ -288,6 +288,26 @@ defmodule Hologram.Template.TagAssemblerTest do
     end
   end
 
+  describe "boolean attribute" do
+    test "followed by whitespace" do
+      markup = "<div my_attr >"
+
+      result = assemble(markup)
+      expected = [start_tag: {"div", [{"my_attr", []}]}]
+
+      assert result == expected
+    end
+
+    test "followed by start tag closing" do
+      markup = "<div my_attr>"
+
+      result = assemble(markup)
+      expected = [start_tag: {"div", [{"my_attr", []}]}]
+
+      assert result == expected
+    end
+  end
+
   describe "expression" do
     test "empty" do
       markup = "{}"
@@ -661,23 +681,6 @@ defmodule Hologram.Template.TagAssemblerTest do
   # alias Hologram.Template.SyntaxError
 
   # describe "attribute" do
-  #   test "boolean attribute followed by whitespace" do
-  #     markup = "<div my_attr >"
-
-  #     result = assemble(markup)
-  #     expected = [start_tag: {"div", [{"my_attr", []}]}]
-
-  #     assert result == expected
-  #   end
-
-  #   test "boolean attribute followed by start tag closing" do
-  #     markup = "<div my_attr>"
-
-  #     result = assemble(markup)
-  #     expected = [start_tag: {"div", [{"my_attr", []}]}]
-
-  #     assert result == expected
-  #   end
 
   #   test "expression attribute value" do
   #     markup = "<div id={@test}>"
