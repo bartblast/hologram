@@ -271,7 +271,6 @@ defmodule Hologram.Template.TagAssemblerTest do
 
     test "multiple, siblings" do
       markup = "<span></span><button></button>"
-
       result = assemble(markup)
 
       expected = [
@@ -311,7 +310,6 @@ defmodule Hologram.Template.TagAssemblerTest do
 
     test "multiple, siblings" do
       markup = "<Abc.Bcd></Abc.Bcd><Efg.Fgh></Efg.Fgh>"
-
       result = assemble(markup)
 
       expected = [
