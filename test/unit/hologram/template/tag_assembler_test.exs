@@ -331,6 +331,15 @@ defmodule Hologram.Template.TagAssemblerTest do
 
       assert result == expected
     end
+
+    test "multiple attributes" do
+      markup = "<div attr_1=\"value_1\" attr_2=\"value_2\">"
+
+      result = assemble(markup)
+      expected = [start_tag: {"div", [{"attr_1", [text: "value_1"]}, {"attr_2", [text: "value_2"]}]}]
+
+      assert result == expected
+    end
   end
 
   describe "expression" do
