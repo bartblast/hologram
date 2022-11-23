@@ -468,6 +468,15 @@ defmodule Hologram.Template.TagAssemblerTest do
 
       assert result == expected
     end
+
+    test "inside element" do
+      markup = "<div>{@abc}</div>"
+
+      result = assemble(markup)
+      expected = [start_tag: {"div", []}, expression: "{@abc}", end_tag: "div"]
+
+      assert result == expected
+    end
   end
 
   describe "raw block" do
@@ -692,15 +701,6 @@ defmodule Hologram.Template.TagAssemblerTest do
 
       assert result == expected
     end
-
-    #   test "expression in text node nested in element node" do
-    #     markup = "<script>{@abc}</script>"
-
-    #     result = assemble(markup)
-    #     expected = [start_tag: {"script", []}, expression: "{@abc}", end_tag: "script"]
-
-    #     assert result == expected
-    #   end
   end
 
   # alias Hologram.Template.SyntaxError
