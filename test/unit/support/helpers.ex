@@ -1,32 +1,12 @@
 defmodule Hologram.Test.Helpers do
-  require Logger
-
   alias Hologram.Compiler
-  alias Hologram.Compiler.Reflection
 
   def compile(opts \\ []) do
-    result =
-      Keyword.put(opts, :force, true)
-      |> Compiler.compile()
-
-    # FIXME: for some reason using File.cp!/3 truncates the source file
-    copy_template_store_dump_to_release_path()
-
-    result
+    Keyword.put(opts, :force, true)
+    |> Compiler.compile()
   end
 
   def md5_hex_regex do
     ~r/^[0-9a-f]{32}$/
-  end
-
-  defp copy_template_store_dump_to_release_path do
-    dump_path = Reflection.root_template_store_path()
-    release_path = Reflection.release_template_store_path()
-
-    data = File.read!(dump_path)
-    File.write!(release_path, data)
-
-    Logger.debug("copied template store dump from #{dump_path} to #{release_path}")
-    Logger.debug(File.stat!(release_path) |> inspect())
   end
 end
