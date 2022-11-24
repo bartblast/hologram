@@ -75,7 +75,7 @@ defmodule Hologram.Template.TagAssembler do
   end
 
   assemble(%{raw?: true} = context, :text, [{:symbol, "{#"} = token | rest]) do
-    assemble_text(context, {:symbol, "{#"}, rest)
+    assemble_text(context, token, rest)
   end
 
   assemble(context, :text, [{:symbol, "{#"} = token | rest]) do
@@ -95,7 +95,7 @@ defmodule Hologram.Template.TagAssembler do
   end
 
   assemble(%{raw?: true} = context, :text, [{:symbol, "{/"} = token | rest]) do
-    assemble_text(context, {:symbol, "{/"}, rest)
+    assemble_text(context, token, rest)
   end
 
   assemble(context, :text, [{:symbol, "{/"} = token | rest]) do
