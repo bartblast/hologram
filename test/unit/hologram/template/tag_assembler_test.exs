@@ -799,7 +799,7 @@ defmodule Hologram.Template.TagAssemblerTest do
 
   #   #   expected = [
   #   #     text: "aaa",
-  #   #     start_tag: {"div", [{"id", [literal: "bbb{@test}ccc"]}]},
+  #   #     start_tag: {"div", [{"id", [text: "bbb{@test}ccc"]}]},
   #   #     end_tag: "div",
   #   #     text: "ddd"
   #   #   ]
@@ -826,7 +826,7 @@ defmodule Hologram.Template.TagAssemblerTest do
 
   #   #   expected = [
   #   #     text: "aaa",
-  #   #     start_tag: {"Abc.Bcd", [{"xyz", [literal: "bbb{@test}ccc"]}]},
+  #   #     start_tag: {"Abc.Bcd", [{"xyz", [text: "bbb{@test}ccc"]}]},
   #   #     end_tag: "Abc.Bcd",
   #   #     text: "ddd"
   #   #   ]

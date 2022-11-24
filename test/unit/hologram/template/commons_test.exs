@@ -9,11 +9,11 @@ defmodule Hologram.Template.CommonsTest do
   alias Hologram.Template.VDOM.TextNode
 
   describe "transform_attr_value/2" do
-    test "literal attribute value part" do
-      value = [literal: "test_literal"]
+    test "text attribute value part" do
+      value = [text: "test_text"]
 
       result = Commons.transform_attr_value(value, %Context{})
-      expected = [%TextNode{content: "test_literal"}]
+      expected = [%TextNode{content: "test_text"}]
 
       assert result == expected
     end
@@ -39,7 +39,7 @@ defmodule Hologram.Template.CommonsTest do
     end
 
     test "multiple attribute value parts" do
-      value = [literal: "abc", expression: "{@test}", literal: "xyz"]
+      value = [text: "abc", expression: "{@test}", text: "xyz"]
       result = Commons.transform_attr_value(value, %Context{})
 
       expected = [

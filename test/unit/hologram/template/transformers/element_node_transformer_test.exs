@@ -11,7 +11,7 @@ defmodule Hologram.Template.ElementNodeTransformerTest do
   @tag_name "div"
 
   test "attribute without modifiers" do
-    attrs = [{"test_key", [literal: "test_value"]}]
+    attrs = [{"test_key", [text: "test_value"]}]
     result = ElementNodeTransformer.transform(@tag_name, @children, attrs, @context)
 
     expected = %ElementNode{
@@ -29,7 +29,7 @@ defmodule Hologram.Template.ElementNodeTransformerTest do
   end
 
   test "attribute with modifier" do
-    attrs = [{"test_key.modifier_1.modifier_2", [literal: "test_value"]}]
+    attrs = [{"test_key.modifier_1.modifier_2", [text: "test_value"]}]
     result = ElementNodeTransformer.transform(@tag_name, @children, attrs, @context)
 
     expected = %ElementNode{

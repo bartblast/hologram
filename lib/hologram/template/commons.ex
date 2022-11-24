@@ -9,7 +9,7 @@ defmodule Hologram.Template.Commons do
         :expression ->
           %Expression{ir: Reflection.ir(str, context)}
 
-        :literal ->
+        :text ->
           %TextNode{content: str}
       end
     end)

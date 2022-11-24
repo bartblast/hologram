@@ -116,14 +116,14 @@ defmodule Hologram.Template.DOMTreeBuilderTest do
 
   test "element node attributes" do
     tags = [
-      start_tag: {"div", [{"id", [literal: "abc", expression: "{@test}", literal: "xyz"]}]},
+      start_tag: {"div", [{"id", [text: "abc", expression: "{@test}", text: "xyz"]}]},
       end_tag: "div"
     ]
 
     result = DOMTreeBuilder.build(tags)
 
     expected = [
-      {:element, "div", [{"id", [literal: "abc", expression: "{@test}", literal: "xyz"]}], []}
+      {:element, "div", [{"id", [text: "abc", expression: "{@test}", text: "xyz"]}], []}
     ]
 
     assert result == expected
@@ -131,15 +131,14 @@ defmodule Hologram.Template.DOMTreeBuilderTest do
 
   test "component node props" do
     tags = [
-      start_tag: {"Abc.Bcd", [{"id", [literal: "abc", expression: "{@test}", literal: "xyz"]}]},
+      start_tag: {"Abc.Bcd", [{"id", [text: "abc", expression: "{@test}", text: "xyz"]}]},
       end_tag: "Abc.Bcd"
     ]
 
     result = DOMTreeBuilder.build(tags)
 
     expected = [
-      {:component, "Abc.Bcd", [{"id", [literal: "abc", expression: "{@test}", literal: "xyz"]}],
-       []}
+      {:component, "Abc.Bcd", [{"id", [text: "abc", expression: "{@test}", text: "xyz"]}], []}
     ]
 
     assert result == expected

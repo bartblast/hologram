@@ -270,7 +270,7 @@ describe("buildTextVNodeFromExpression()", () => {
 })
 
 describe("buildVNodeAttrs()", () => {
-  it("builds literal attribute", () => {
+  it("builds text attribute", () => {
     const node = {
       attrs: {
         abc: {
