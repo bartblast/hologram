@@ -731,6 +731,28 @@ defmodule Hologram.Template.TagAssemblerTest do
     end
   end
 
+  describe "script" do
+    test "symbol '<' outside of double quoted string" do
+      markup = "<script>1 < 2</script>"
+
+      result = assemble(markup)
+      expected = [start_tag: {"script", []}, text: "1 < 2", end_tag: "script"]
+
+      assert result == expected
+    end
+
+    test "symbol '</' inside double quoted string" do
+      markup = "<script>\"abc</xyz\"</script>"
+
+      result = assemble(markup)
+      expected = [start_tag: {"script", []}, text: "\"abc</xyz\"", end_tag: "script"]
+
+      assert result == expected
+    end
+  end
+
+  # TODO: cleanup
+
   # alias Hologram.Template.SyntaxError
 
   # describe "text node nested in raw directive" do

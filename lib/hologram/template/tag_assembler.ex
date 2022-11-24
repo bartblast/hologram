@@ -16,6 +16,7 @@ defmodule Hologram.Template.TagAssembler do
     processed_tags: [],
     processed_tokens: [],
     raw?: false,
+    script?: false,
     tag_name: nil,
     token_buffer: []
   }
@@ -49,6 +50,18 @@ defmodule Hologram.Template.TagAssembler do
     |> set_prev_status(:text)
     |> set_node_type(:tag)
     |> assemble(:start_tag, rest)
+  end
+
+  assemble(%{double_quote_open?: false, script?: true} = context, :text, [{:symbol, "\""} = token | rest]) do
+    context
+    |> open_double_quote()
+    |> assemble_text(token, rest)
+  end
+
+  assemble(%{double_quote_open?: true, script?: true} = context, :text, [{:symbol, "\""} = token | rest]) do
+    context
+    |> close_double_quote()
+    |> assemble_text(token, rest)
   end
 
   assemble(context, :text, [{:symbol, "\""} = token | rest]) do
@@ -138,10 +151,9 @@ defmodule Hologram.Template.TagAssembler do
     assemble_text(context, {:symbol, "}"}, rest)
   end
 
-  # # TODO: test
-  # assemble(%{script?: true} = context, :text, [{:symbol, :"</"} | rest]) do
-  #   assemble_text(context, {:symbol, :"</"}, rest)
-  # end
+  assemble(%{double_quote_open?: true, script?: true} = context, :text, [{:symbol, "</"} = token | rest]) do
+    assemble_text(context, token, rest)
+  end
 
   assemble(context, :text, [{:symbol, "</"} = token | rest]) do
     context
@@ -152,10 +164,9 @@ defmodule Hologram.Template.TagAssembler do
     |> assemble(:end_tag_name, rest)
   end
 
-  # # TODO: test
-  # assemble(%{script?: true} = context, :text, [{:symbol, :"<"} | rest]) do
-  #   assemble_text(context, {:symbol, :"<"}, rest)
-  # end
+  assemble(%{script?: true} = context, :text, [{:symbol, "<"} = token | rest]) do
+    assemble_text(context, token, rest)
+  end
 
   assemble(context, :text, [{:symbol, "<"} = token | [{:string, _} | _] = rest]) do
     context
@@ -521,6 +532,7 @@ defmodule Hologram.Template.TagAssembler do
 
   defp maybe_enable_script_mode(context, "script") do
     %{context | script?: true}
+    |> reset_double_quotes()
   end
 
   defp maybe_enable_script_mode(context, _), do: context
@@ -569,11 +581,9 @@ defmodule Hologram.Template.TagAssembler do
     %{context | tag_name: name}
   end
 
-  # alias Hologram.Template.SyntaxError
+  # TODO: cleanup
 
-  # @initial_context %{
-  #   script?: false,
-  # }
+  # alias Hologram.Template.SyntaxError
 
   # assemble(context, type, [token | rest]) do
   #   raise_error(context, type, token, rest)
