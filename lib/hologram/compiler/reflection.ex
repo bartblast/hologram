@@ -295,6 +295,7 @@ defmodule Hologram.Compiler.Reflection do
     root_priv_path(opts) <> "/source_digest.bin"
   end
 
+  # TODO: test
   def root_static_path(opts \\ []) do
     root_priv_path(opts) <> "/static"
   end
