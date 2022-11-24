@@ -42,23 +42,14 @@ defmodule Hologram.Compiler do
     pages = Reflection.list_pages(opts)
     Logger.debug("Hologram: found pages: #{inspect(pages)}")
     dump_page_list(pages)
-    Logger.debug("Hologram: pages dumped")
 
-    Logger.debug("Hologram: aggregating module defs...")
     module_defs = aggregate_module_defs(pages)
-    Logger.debug("Hologram: module defs aggregated")
-
     call_graph = build_call_graph(pages, module_defs, templates)
-    Logger.debug("Hologram: call graph built")
 
     build_pages(pages, output_path, module_defs, call_graph)
     |> dump_page_digest_store()
 
-    Logger.debug("Hologram: page digest store dumped")
-
     TemplateStore.stop()
-    Logger.debug("Hologram: template store stopped")
-
     CallGraph.stop()
     ModuleDefStore.stop()
 

@@ -1,6 +1,5 @@
 defmodule Hologram.Template.Renderer.PageTest do
   use Hologram.Test.UnitCase, async: false
-  require Logger
 
   alias Hologram.Compiler.Reflection
   alias Hologram.Conn
@@ -9,8 +8,6 @@ defmodule Hologram.Template.Renderer.PageTest do
   alias Hologram.Template.Renderer
 
   setup do
-    Logger.debug("started setup")
-
     [
       app_path: "#{@fixtures_path}/template/renderers/page_renderer",
       templatables: [Hologram.Test.Fixtures.App.DefaultLayout]
@@ -27,8 +24,6 @@ defmodule Hologram.Template.Renderer.PageTest do
   end
 
   test "render/4" do
-    Logger.debug("started test")
-
     module = Hologram.Test.Fixtures.Template.PageRenderer.Module1
     bindings = %{}
 
