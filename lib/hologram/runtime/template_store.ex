@@ -5,6 +5,8 @@ defmodule Hologram.Runtime.TemplateStore do
 
   @impl true
   def populate_table do
+    Logger.debug("Hologram: populating template store table...")
+
     result =
       Reflection.release_template_store_path()
       |> populate_table_from_file()
