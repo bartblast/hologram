@@ -17,8 +17,8 @@ defmodule Hologram.Runtime.StaticDigestStore do
   end
 
   @impl true
-  def populate_table(_opts) do
-    digests = find_digests()
+  def populate_table(opts) do
+    digests = find_digests(opts)
 
     Enum.each(digests, fn {file_path, digest} ->
       put(file_path, digest)
@@ -30,8 +30,8 @@ defmodule Hologram.Runtime.StaticDigestStore do
   @impl true
   def table_name, do: :hologram_static_digest_store
 
-  defp find_digests do
-    static_path = Reflection.release_static_path()
+  defp find_digests(opts) do
+    static_path = opts[:path] || Reflection.release_static_path()
     regex = ~r/^#{Regex.escape(static_path)}(.+)\-([0-9a-f]{32})(.+)$/
 
     static_path

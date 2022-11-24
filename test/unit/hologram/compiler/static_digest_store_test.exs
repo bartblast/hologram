@@ -4,8 +4,10 @@ defmodule Hologram.Runtime.StaticDigestStoreTest do
   alias Hologram.Compiler.Reflection
   alias Hologram.Runtime.StaticDigestStore
 
+  @static_path Reflection.root_static_path()
+
   setup do
-    static_path = Reflection.release_static_path()
+    static_path = Reflection.root_static_path()
 
     dir_2_path = static_path <> "/test_dir_1/test_dir_2"
     file_1_path = dir_2_path <> "/test_file_1-11111111111111111111111111111111.css"
@@ -24,6 +26,7 @@ defmodule Hologram.Runtime.StaticDigestStoreTest do
 
     File.mkdir_p!(dir_2_path)
     File.mkdir_p!(dir_3_path)
+    File.mkdir_p!(dir_4_path)
 
     [
       file_1_path,
@@ -67,7 +70,7 @@ defmodule Hologram.Runtime.StaticDigestStoreTest do
 
   describe "get/1" do
     test "binary file_path" do
-      StaticDigestStore.run()
+      StaticDigestStore.run(path: @static_path)
 
       file_path = "/test_dir_1/test_dir_2/test_file_1.css"
       result = StaticDigestStore.get(file_path)
@@ -77,7 +80,7 @@ defmodule Hologram.Runtime.StaticDigestStoreTest do
     end
 
     test "atom file_path" do
-      StaticDigestStore.run()
+      StaticDigestStore.run(path: @static_path)
 
       file_path = :"/test_dir_1/test_dir_2/test_file_1.css"
       result = StaticDigestStore.get(file_path)
@@ -88,13 +91,13 @@ defmodule Hologram.Runtime.StaticDigestStoreTest do
   end
 
   test "get_manifest/0", %{expected_store_content: expected_store_content} do
-    StaticDigestStore.run()
+    StaticDigestStore.run(path: @static_path)
     assert StaticDigestStore.get_manifest() == expected_store_content.__manifest__
   end
 
   # TODO: test explicitely
   test "populate_table/1", %{expected_store_content: expected_store_content} do
-    StaticDigestStore.run()
+    StaticDigestStore.run(path: @static_path)
     assert StaticDigestStore.get_all() == expected_store_content
   end
 end
