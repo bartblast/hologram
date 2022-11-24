@@ -7,7 +7,7 @@ defmodule Hologram.Test.Fixtures.Commons.MemoryStore.Module1 do
   def table_name, do: :test_fixture_memory_store_1
 
   @impl true
-  def populate_table do
+  def populate_table(_opts \\ []) do
     populate_table_from_file(@dump_path)
   end
 

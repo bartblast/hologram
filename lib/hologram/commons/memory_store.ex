@@ -6,22 +6,22 @@ defmodule Hologram.Commons.MemoryStore do
 
       @behaviour Hologram.Commons.MemoryStore
 
-      def run do
-        start_link(nil)
+      def run(opts \\ []) do
+        start_link(opts)
       end
 
-      def start_link(_opts) do
-        GenServer.start_link(__MODULE__, [], name: __MODULE__)
+      def start_link(opts) do
+        GenServer.start_link(__MODULE__, opts, name: __MODULE__)
       end
 
       @impl true
-      def init(_state) do
+      def init(opts) do
         maybe_create_table()
-        reload()
+        reload(opts)
         {:ok, nil}
       end
 
-      def populate_table, do: nil
+      def populate_table(_opts), do: nil
 
       @impl true
       def terminate(_reason, _state) do
@@ -85,9 +85,9 @@ defmodule Hologram.Commons.MemoryStore do
         table_name() |> :ets.insert({key, value})
       end
 
-      def reload do
+      def reload(opts \\ []) do
         truncate_table()
-        populate_table()
+        populate_table(opts)
       end
 
       def running? do
@@ -108,11 +108,11 @@ defmodule Hologram.Commons.MemoryStore do
       end
 
       defoverridable get: 1
-      defoverridable populate_table: 0
+      defoverridable populate_table: 1
     end
   end
 
   @callback get(atom() | binary()) :: any()
-  @callback populate_table() :: any()
+  @callback populate_table(keyword()) :: any()
   @callback table_name() :: atom()
 end

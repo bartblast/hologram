@@ -27,7 +27,7 @@ defmodule Hologram.Commons.MemoryStore.Module1Test do
     :ok
   end
 
-  describe "run/0" do
+  describe "run/1" do
     test "process name is registered" do
       {:ok, pid} = Module1.run()
       assert Process.whereis(Module1) == pid
@@ -131,7 +131,7 @@ defmodule Hologram.Commons.MemoryStore.Module1Test do
     assert Module1.get(:key_3) == {:ok, :value_3}
   end
 
-  test "reload/0" do
+  test "reload/1" do
     Module1.run()
 
     changed_store_content = %{changed_key: :changed_value}
