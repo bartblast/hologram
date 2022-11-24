@@ -83,4 +83,4 @@ jobs:
 
     # Step: Execute the tests.
     - name: Run tests
-      run: mix test test/unit/hologram/template/renderers/page_test.exs:21
+      run: mix test test/unit/hologram/template/renderers/page_test.exs
