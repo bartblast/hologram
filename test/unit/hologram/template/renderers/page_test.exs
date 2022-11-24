@@ -1,5 +1,6 @@
 defmodule Hologram.Template.Renderer.PageTest do
   use Hologram.Test.UnitCase, async: false
+  require Logger
 
   alias Hologram.Conn
   alias Hologram.Runtime
@@ -19,6 +20,8 @@ defmodule Hologram.Template.Renderer.PageTest do
   end
 
   test "render/4" do
+    Logger.debug("started test")
+
     module = Hologram.Test.Fixtures.Template.PageRenderer.Module1
     bindings = %{}
 
