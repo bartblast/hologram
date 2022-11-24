@@ -14,7 +14,7 @@ defmodule Hologram.Compiler.AccessOperatorTransformerTest do
     assert result == expected
   end
 
-  test "data is literal" do
+  test "data is explicit value" do
     code = "%{a: 1, b: 2}[:b]"
     ast = ast(code)
 
