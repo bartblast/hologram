@@ -3,7 +3,6 @@ defmodule Hologram.Runtime.ChannelTest do
 
   alias Hologram.Compiler.Serializer
   alias Hologram.Conn
-  alias Hologram.Runtime
   alias Hologram.Runtime.Channel
   alias Hologram.Template.Renderer
 
@@ -147,7 +146,7 @@ defmodule Hologram.Runtime.ChannelTest do
     ]
     |> compile()
 
-    Runtime.run()
+    run_runtime()
 
     target_module = %{
       "type" => "module",

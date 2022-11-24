@@ -6,7 +6,6 @@ defmodule Hologram.Template.Renderer.ComponentTest do
   alias Hologram.Compiler.IR.ModuleAttributeOperator
   alias Hologram.Compiler.IR.TupleType
   alias Hologram.Conn
-  alias Hologram.Runtime
   alias Hologram.Template.Renderer
   alias Hologram.Template.VDOM.Component
   alias Hologram.Template.VDOM.Expression
@@ -26,7 +25,7 @@ defmodule Hologram.Template.Renderer.ComponentTest do
     [app_path: "#{@fixtures_path}/template/renderers/component_renderer"]
     |> compile()
 
-    Runtime.run()
+    run_runtime()
 
     :ok
   end

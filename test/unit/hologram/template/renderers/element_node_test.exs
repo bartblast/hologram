@@ -6,7 +6,6 @@ defmodule Hologram.Template.Renderer.ElementNodeTest do
   alias Hologram.Compiler.IR.ModuleAttributeOperator
   alias Hologram.Compiler.IR.NilType
   alias Hologram.Compiler.IR.TupleType
-  alias Hologram.Runtime
   alias Hologram.Template.Renderer
   alias Hologram.Template.VDOM.Component
   alias Hologram.Template.VDOM.ElementNode
@@ -253,7 +252,7 @@ defmodule Hologram.Template.Renderer.ElementNodeTest do
     [app_path: "#{@fixtures_path}/template/renderers/element_node_renderer"]
     |> compile()
 
-    Runtime.run()
+    run_runtime()
 
     component_1 = %Component{
       module: Module1,

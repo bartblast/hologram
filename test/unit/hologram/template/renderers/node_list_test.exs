@@ -2,7 +2,6 @@ defmodule Hologram.Template.Renderer.NodeListTest do
   use Hologram.Test.UnitCase, async: false
 
   alias Hologram.Conn
-  alias Hologram.Runtime
   alias Hologram.Template.Renderer
   alias Hologram.Template.VDOM.Component
   alias Hologram.Template.VDOM.TextNode
@@ -13,7 +12,7 @@ defmodule Hologram.Template.Renderer.NodeListTest do
     [app_path: "#{@fixtures_path}/template/renderers/node_list_renderer"]
     |> compile()
 
-    Runtime.run()
+    run_runtime()
 
     :ok
   end
