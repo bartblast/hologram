@@ -1,9 +1,7 @@
 defmodule Hologram.Template.Renderer.PageTest do
   use Hologram.Test.UnitCase, async: false
 
-  alias Hologram.Compiler.Reflection
   alias Hologram.Conn
-  alias Hologram.Runtime
   alias Hologram.Runtime.PageDigestStore
   alias Hologram.Template.Renderer
 
@@ -14,11 +12,7 @@ defmodule Hologram.Template.Renderer.PageTest do
     ]
     |> compile()
 
-    [
-      page_digest_store_path: Reflection.root_page_digest_store_path(),
-      template_store_path: Reflection.root_template_store_path()
-    ]
-    |> Runtime.run()
+    run_runtime()
 
     :ok
   end
