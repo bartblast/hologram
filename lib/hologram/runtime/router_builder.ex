@@ -32,7 +32,7 @@ defmodule Hologram.Runtime.RouterBuilder do
   defp add_route_segment_info(route_segment) do
     case route_segment do
       ":" <> name -> {:param, name}
-      name -> {:literal, name}
+      name -> {:text, name}
     end
   end
 
@@ -40,7 +40,7 @@ defmodule Hologram.Runtime.RouterBuilder do
     tuple_elems =
       Enum.map(route_segments, fn
         {:param, name} -> name
-        {:literal, name} -> ~s("#{name}")
+        {:text, name} -> ~s("#{name}")
       end)
       |> Enum.join(", ")
 
@@ -62,7 +62,7 @@ defmodule Hologram.Runtime.RouterBuilder do
   defp build_page_params(route_segments) do
     map_elems =
       route_segments
-      |> Enum.reject(fn {type, _} -> type == :literal end)
+      |> Enum.reject(fn {type, _} -> type == :text end)
       |> Enum.map(fn {_, name} -> "#{name}: #{name}" end)
       |> Enum.join(", ")
 
