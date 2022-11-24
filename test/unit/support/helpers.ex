@@ -1,4 +1,6 @@
 defmodule Hologram.Test.Helpers do
+  require Logger
+
   alias Hologram.Compiler
   alias Hologram.Compiler.Reflection
 
@@ -24,9 +26,7 @@ defmodule Hologram.Test.Helpers do
     data = File.read!(dump_path)
     File.write!(release_path, data)
 
-    IO.puts("copied template store dump from #{dump_path} to #{release_path}")
-
-    File.stat!(release_path)
-    |> IO.inspect()
+    Logger.debug("copied template store dump from #{dump_path} to #{release_path}")
+    Logger.debug(File.stat!(release_path) |> inspect())
   end
 end
