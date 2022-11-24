@@ -1,11 +1,17 @@
 defmodule Hologram.Runtime.TemplateStore do
   use Hologram.Commons.MemoryStore
+  require Logger
   alias Hologram.Compiler.Reflection
 
   @impl true
   def populate_table do
-    Reflection.release_template_store_path()
-    |> populate_table_from_file()
+    result =
+      Reflection.release_template_store_path()
+      |> populate_table_from_file()
+
+    Logger.debug("Hologram: template store table populated from file")
+
+    result
   end
 
   @impl true
