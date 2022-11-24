@@ -11,7 +11,7 @@ defmodule Hologram.Runtime.TemplateStoreTest do
     Path.dirname(dump_path) |> File.mkdir_p!()
     File.write!(dump_path, Utils.serialize(store_content))
 
-    TemplateStore.run()
+    TemplateStore.run(path: Reflection.root_template_store_path())
 
     assert TemplateStore.get_all() == store_content
   end

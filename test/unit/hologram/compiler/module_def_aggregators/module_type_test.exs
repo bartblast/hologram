@@ -1,7 +1,7 @@
 defmodule Hologram.Compiler.ModuleDefAggregator.ModuleTypeTest do
   use Hologram.Test.UnitCase, async: false
 
-  alias Hologram.Compiler.{ModuleDefAggregator, ModuleDefStore}
+  alias Hologram.Compiler.{ModuleDefAggregator, ModuleDefStore, Reflection}
   alias Hologram.Compiler.IR.{ModuleDefinition, ModuleType}
   alias Hologram.Runtime.{Commons, TemplateStore}
 
@@ -22,7 +22,7 @@ defmodule Hologram.Compiler.ModuleDefAggregator.ModuleTypeTest do
     |> compile()
 
     ModuleDefStore.run()
-    TemplateStore.run()
+    TemplateStore.run(path: Reflection.root_template_store_path())
 
     :ok
   end
