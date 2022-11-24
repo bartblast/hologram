@@ -44,6 +44,7 @@ defmodule Hologram.Compiler do
     dump_page_list(pages)
     Logger.debug("Hologram: pages dumped")
 
+    Logger.debug("Hologram: aggregating module defs...")
     module_defs = aggregate_module_defs(pages)
     Logger.debug("Hologram: module defs aggregated")
 
