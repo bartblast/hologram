@@ -5,17 +5,8 @@ defmodule Hologram.Runtime.TemplateStore do
 
   @impl true
   def populate_table(opts \\ []) do
-    Logger.debug("Hologram: populating template store table...")
-
-    file_path = opts[:file_path] || Reflection.release_template_store_path()
-
-    result =
-      file_path
-      |> populate_table_from_file()
-
-    Logger.debug("Hologram: template store table populated from file")
-
-    result
+    (opts[:path] || Reflection.release_template_store_path())
+    |> populate_table_from_file()
   end
 
   @impl true

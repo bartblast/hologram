@@ -37,7 +37,7 @@ defmodule Hologram.Compiler do
 
     templates = TemplateBuilder.build_all(templatables)
     dump_template_store(templates)
-    TemplateStore.run(file_path: Reflection.root_template_store_path())
+    TemplateStore.run(path: Reflection.root_template_store_path())
 
     pages = Reflection.list_pages(opts)
     Logger.debug("Hologram: found pages: #{inspect(pages)}")

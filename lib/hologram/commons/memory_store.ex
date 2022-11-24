@@ -70,8 +70,8 @@ defmodule Hologram.Commons.MemoryStore do
         if running?(), do: stop()
       end
 
-      defp populate_table_from_file(file_path) do
-        file_path
+      defp populate_table_from_file(path) do
+        path
         |> File.read!()
         |> Utils.deserialize()
         |> Enum.each(fn {key, value} -> put(key, value) end)

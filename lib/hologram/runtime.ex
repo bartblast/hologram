@@ -18,9 +18,9 @@ defmodule Hologram.Runtime do
 
   # TODO: test
   def run(opts \\ []) do
-    PageDigestStore.run(file_path: opts[:page_digest_store_file_path])
+    PageDigestStore.run(path: opts[:page_digest_store_path])
     StaticDigestStore.run()
-    TemplateStore.run(file_path: opts[:template_store_file_path])
+    TemplateStore.run(path: opts[:template_store_path])
     RouterBuilder.run()
   end
 end

@@ -18,8 +18,8 @@ defmodule Hologram.Template.Renderer.PageTest do
     |> compile()
 
     [
-      page_digest_store_file_path: Reflection.root_page_digest_store_path(),
-      template_store_file_path: Reflection.root_template_store_path()
+      page_digest_store_path: Reflection.root_page_digest_store_path(),
+      template_store_path: Reflection.root_template_store_path()
     ]
     |> Runtime.run()
 
