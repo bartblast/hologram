@@ -1,7 +1,11 @@
 defmodule Hologram.Template.Macros do
   defmacro assemble(context, status, tokens, do: body) do
     quote do
-      def assemble(unquote(context) = evaluated_context, unquote(status) = evaluated_status, unquote(tokens) = evaluated_tokens) do
+      def assemble(
+            unquote(context) = evaluated_context,
+            unquote(status) = evaluated_status,
+            unquote(tokens) = evaluated_tokens
+          ) do
         if Application.get_env(:hologram, :debug) do
           IO.puts("\n........................................\n")
           IO.puts("context")
