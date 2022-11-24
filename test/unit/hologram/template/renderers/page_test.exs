@@ -8,6 +8,8 @@ defmodule Hologram.Template.Renderer.PageTest do
   alias Hologram.Template.Renderer
 
   setup do
+    Logger.debug("started setup")
+
     [
       app_path: "#{@fixtures_path}/template/renderers/page_renderer",
       templatables: [Hologram.Test.Fixtures.App.DefaultLayout]
