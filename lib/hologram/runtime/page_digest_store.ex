@@ -3,8 +3,8 @@ defmodule Hologram.Runtime.PageDigestStore do
   alias Hologram.Compiler.Reflection
 
   @impl true
-  def populate_table(_opts \\ []) do
-    Reflection.release_page_digest_store_path()
+  def populate_table(opts \\ []) do
+    (opts[:path] || Reflection.release_page_digest_store_path())
     |> populate_table_from_file()
   end
 
