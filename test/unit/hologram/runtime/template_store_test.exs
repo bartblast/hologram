@@ -4,7 +4,7 @@ defmodule Hologram.Runtime.TemplateStoreTest do
   alias Hologram.Compiler.Reflection
   alias Hologram.Runtime.TemplateStore
 
-  # TODO: test implicitely
+  # TODO: test explicitely
   test "populate_table/1" do
     dump_path = Reflection.release_template_store_path()
     store_content = %{key_1: :value_1, key_2: :value_2}
