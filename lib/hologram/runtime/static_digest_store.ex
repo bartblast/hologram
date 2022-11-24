@@ -17,7 +17,7 @@ defmodule Hologram.Runtime.StaticDigestStore do
   end
 
   @impl true
-  def populate_table() do
+  def populate_table(_opts) do
     digests = find_digests()
 
     Enum.each(digests, fn {file_path, digest} ->

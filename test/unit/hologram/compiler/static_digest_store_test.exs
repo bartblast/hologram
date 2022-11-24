@@ -92,7 +92,7 @@ defmodule Hologram.Runtime.StaticDigestStoreTest do
     assert StaticDigestStore.get_manifest() == expected_store_content.__manifest__
   end
 
-  test "populate_table/0", %{expected_store_content: expected_store_content} do
+  test "populate_table/1", %{expected_store_content: expected_store_content} do
     StaticDigestStore.run()
     assert StaticDigestStore.get_all() == expected_store_content
   end
