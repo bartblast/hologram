@@ -23,5 +23,10 @@ defmodule Hologram.Test.Helpers do
 
     data = File.read!(dump_path)
     File.write!(release_path, data)
+
+    IO.puts("copied template store dump from #{dump_path} to #{release_path}")
+
+    File.stat!(release_path)
+    |> IO.inspect()
   end
 end
