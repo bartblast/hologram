@@ -4,7 +4,7 @@ defmodule Hologram.Runtime.PageDigestStoreTest do
   alias Hologram.Compiler.Reflection
   alias Hologram.Runtime.PageDigestStore
 
-  test "populate_table/0" do
+  test "populate_table/1" do
     dump_path = Reflection.release_page_digest_store_path()
     store_content = %{key_1: :value_1, key_2: :value_2}
     Path.dirname(dump_path) |> File.mkdir_p!()
