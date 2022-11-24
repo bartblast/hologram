@@ -4,14 +4,15 @@ defmodule Hologram.Runtime.TemplateStoreTest do
   alias Hologram.Compiler.Reflection
   alias Hologram.Runtime.TemplateStore
 
+  @path Reflection.root_template_store_path()
+
   # TODO: test explicitely
   test "populate_table/1" do
-    dump_path = Reflection.release_template_store_path()
     store_content = %{key_1: :value_1, key_2: :value_2}
-    Path.dirname(dump_path) |> File.mkdir_p!()
-    File.write!(dump_path, Utils.serialize(store_content))
+    @path |> Path.dirname() |> File.mkdir_p!()
+    File.write!(@path, Utils.serialize(store_content))
 
-    TemplateStore.run(path: Reflection.root_template_store_path())
+    TemplateStore.run(path: @path)
 
     assert TemplateStore.get_all() == store_content
   end
