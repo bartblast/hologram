@@ -52,13 +52,17 @@ defmodule Hologram.Template.TagAssembler do
     |> assemble(:start_tag, rest)
   end
 
-  assemble(%{double_quote_open?: false, script?: true} = context, :text, [{:symbol, "\""} = token | rest]) do
+  assemble(%{double_quote_open?: false, script?: true} = context, :text, [
+    {:symbol, "\""} = token | rest
+  ]) do
     context
     |> open_double_quote()
     |> assemble_text(token, rest)
   end
 
-  assemble(%{double_quote_open?: true, script?: true} = context, :text, [{:symbol, "\""} = token | rest]) do
+  assemble(%{double_quote_open?: true, script?: true} = context, :text, [
+    {:symbol, "\""} = token | rest
+  ]) do
     context
     |> close_double_quote()
     |> assemble_text(token, rest)
@@ -151,7 +155,9 @@ defmodule Hologram.Template.TagAssembler do
     assemble_text(context, {:symbol, "}"}, rest)
   end
 
-  assemble(%{double_quote_open?: true, script?: true} = context, :text, [{:symbol, "</"} = token | rest]) do
+  assemble(%{double_quote_open?: true, script?: true} = context, :text, [
+    {:symbol, "</"} = token | rest
+  ]) do
     assemble_text(context, token, rest)
   end
 
