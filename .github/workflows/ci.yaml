@@ -48,7 +48,19 @@ jobs:
         path: deps
         key: ${{ runner.os }}-mix-${{ env.cache-name }}-${{ hashFiles('mix.lock') }}
         restore-keys: |
-          ${{ runner.os }}-mix-${{ env.cache-name }}-       
+          ${{ runner.os }}-mix-${{ env.cache-name }}-     
+
+    # Step: Define how to cache E2E app deps. Restores existing cache if present.
+    - name: Cache E2E app deps
+      id: cache-e2e-app-deps
+      uses: actions/cache@v3
+      env:
+        cache-name: cache-elixir-e2e-app-deps
+      with:
+        path: test/e2e/deps
+        key: ${{ runner.os }}-mix-${{ env.cache-name }}-${{ hashFiles('test/e2e/mix.lock') }}
+        restore-keys: |
+          ${{ runner.os }}-mix-${{ env.cache-name }}-             
 
     # Step: Define how to cache the lib `_build` directory. After the first run,
     # this speeds up tests runs a lot. This includes not re-compiling our
