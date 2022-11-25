@@ -184,13 +184,12 @@ defmodule Hologram.Template.TagAssembler do
     |> assemble(:start_tag_name, rest)
   end
 
+  assemble(%{script?: true} = context, :text, [token | rest]) do
+    assemble_text(context, token, rest)
+  end
+
   # assemble(context, :text, [{:symbol, :<} = token | rest]) do
   #   raise_error(context, :text, token, rest)
-  # end
-
-  # # TODO: test
-  # assemble(%{script?: true} = context, :text, [{:symbol, :>} | rest]) do
-  #   assemble_text(context, {:symbol, :>}, rest)
   # end
 
   # assemble(context, :text, [{:symbol, :>} = token | rest]) do
