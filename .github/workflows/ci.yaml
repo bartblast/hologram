@@ -68,26 +68,33 @@ jobs:
     # Step: Download lib dependencies. If unchanged, uses
     # the cached version.
     - name: Install lib dependencies
-      run: mix deps.get
+      run: mix deps.get      
 
-    # Step: Download E2E app dependencies.
-    - name: Install E2E app dependencies
-      run: cd test/e2e && mix deps.get        
-
-    # Step: Compile the project treating any warnings as errors.
-    # Customize this step if a different behavior is desired.
-    - name: Compiles without warnings
+    # Step: Compile the lib treating any warnings as errors.
+    - name: Compiles lib without warnings
       run: mix compile --warnings-as-errors
 
-    # Step: Check that the checked in code has already been formatted.
+    # Step: Check that the checked in lib code has already been formatted.
     # This step fails if something was found unformatted.
-    # Customize this step as desired.
-    - name: Check Formatting
+    - name: Check lib formatting
       run: mix format --check-formatted
 
     # Step: Execute the unit tests.
     - name: Run unit tests
       run: mix test
+
+    # Step: Download E2E app dependencies.
+    - name: Install E2E app dependencies
+      run: cd test/e2e && mix deps.get        
+
+    # Step: Compile the E2E app treating any warnings as errors.
+    - name: Compiles E2E app without warnings
+      run: cd test/e2e && mix compile --warnings-as-errors
+
+    # Step: Check that the checked in E2E app code has already been formatted.
+    # This step fails if something was found unformatted.
+    - name: Check E2E app formatting
+      run: cd test/e2e && mix format --check-formatted
 
     # Step: Execute the E2E tests.
     - name: Run E2E tests
