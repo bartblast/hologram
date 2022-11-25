@@ -68,7 +68,9 @@ jobs:
     # Step: Download project dependencies. If unchanged, uses
     # the cached version.
     - name: Install dependencies
-      run: mix deps.get
+      run: |
+        mix deps.get
+        cd test/e2e && mix deps.get
 
     # Step: Compile the project treating any warnings as errors.
     # Customize this step if a different behavior is desired.
