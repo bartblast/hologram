@@ -4,7 +4,7 @@ defmodule HologramE2E.TestCase do
 
   using do
     quote do
-      use Wallaby.Feature
+      use HologramE2E.OverridenWallabyFeature
 
       import HologramE2E.Test.Helpers
       import Wallaby.Query

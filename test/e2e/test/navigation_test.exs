@@ -16,7 +16,7 @@ defmodule HologramE2E.NavigationTest do
 
   feature "anchor", %{session: session} do
     session
-    |> visit(Page5.route())
+    |> visit(Page5)
     |> click(@page_2_link)
     |> assert_page(Page2)
     |> assert_has(@page_2_title)
@@ -26,7 +26,7 @@ defmodule HologramE2E.NavigationTest do
 
   feature "back button", %{session: session} do
     session
-    |> visit(Page5.route())
+    |> visit(Page5)
     |> click(@page_2_link)
     |> assert_page(Page2)
     |> click(@page_2_back_button)
@@ -38,7 +38,7 @@ defmodule HologramE2E.NavigationTest do
 
   feature "forward button", %{session: session} do
     session
-    |> visit(Page5.route())
+    |> visit(Page5)
     |> click(@page_2_link)
     |> assert_page(Page2)
     |> click(@page_2_back_button)
