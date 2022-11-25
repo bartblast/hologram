@@ -81,6 +81,10 @@ jobs:
     - name: Check Formatting
       run: mix format --check-formatted
 
-    # Step: Execute the tests.
-    - name: Run tests
+    # Step: Execute the unit tests.
+    - name: Run unit tests
       run: mix test
+
+    # Step: Execute the E2E tests.
+    - name: Run E2E tests
+      run: cd test/e2e && mix test
