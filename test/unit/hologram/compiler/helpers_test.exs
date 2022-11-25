@@ -418,10 +418,18 @@ defmodule Hologram.Compiler.HelpersTest do
     assert result == expected
   end
 
-  test "module/1" do
-    result = Helpers.module([:Hologram, :Compiler, :HelpersTest])
-    expected = Elixir.Hologram.Compiler.HelpersTest
-    assert result == expected
+  describe "module/1" do
+    test "existing atom" do
+      result = Helpers.module([:Hologram, :Compiler, :HelpersTest])
+      expected = Elixir.Hologram.Compiler.HelpersTest
+      assert result == expected
+    end
+
+    test "not existing atom" do
+      result = Helpers.module([:Hologram, :Compiler, :NotExisting])
+      expected = Elixir.Hologram.Compiler.NotExisting
+      assert result == expected
+    end
   end
 
   test "module_name/1" do

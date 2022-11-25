@@ -103,7 +103,7 @@ defmodule Hologram.Compiler.Helpers do
   def module(module_segs) do
     [:"Elixir" | module_segs]
     |> Enum.join(".")
-    |> String.to_existing_atom()
+    |> String.to_atom()
   end
 
   @doc """
