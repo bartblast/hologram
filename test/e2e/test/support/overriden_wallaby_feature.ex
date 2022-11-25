@@ -1,11 +1,11 @@
 defmodule HologramE2E.OverridenWallabyFeature do
-  alias HologramE2E.OverridenWallabyFeature
   alias Wallaby.Feature.Utils
 
   defmacro __using__(_) do
     quote do
       ExUnit.Case.register_attribute(__MODULE__, :sessions)
 
+      alias HologramE2E.OverridenWallabyFeature
       alias Wallaby.Browser
       alias Wallaby.Element
       alias Wallaby.Query
