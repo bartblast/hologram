@@ -1,9 +1,16 @@
 defmodule HologramE2E.EventsTest do
   use HologramE2E.TestCase, async: false
 
+  alias HologramE2E.Page2
+  alias HologramE2E.Page8
+  alias HologramE2E.Page10
+  alias HologramE2E.Page11
+  alias HologramE2E.Page12
+  alias HologramE2E.Page13
+
   feature "blur event", %{session: session} do
     session
-    |> visit("/e2e/page-11")
+    |> visit(Page11)
     |> click(css("#input"))
     |> click(css("#text"))
     |> assert_has(css("#text", text: "Field has been blurred"))
@@ -11,7 +18,7 @@ defmodule HologramE2E.EventsTest do
 
   feature "change event", %{session: session} do
     session
-    |> visit("/e2e/page-10")
+    |> visit(Page10)
     |> fill_in(css("#input-1"), with: "abc")
     |> fill_in(css("#input-2"), with: "xyz")
     # triggers change event, since #input-2 loses focus
@@ -22,7 +29,7 @@ defmodule HologramE2E.EventsTest do
 
   feature "click event", %{session: session} do
     session
-    |> visit("/e2e/page-2")
+    |> visit(Page2)
     |> click(css("#page-2-update-text-button"))
     |> assert_has(css("#page-2-text", text: "text updated by page 2 update button"))
   end
@@ -32,7 +39,7 @@ defmodule HologramE2E.EventsTest do
     js = "document.getElementById('target').dispatchEvent(new Event('pointerdown'))"
 
     session
-    |> visit("/e2e/page-12")
+    |> visit(Page12)
     |> click(css("#target"))
     |> assert_has(css("#text", text: "Event count: 1"))
     |> execute_script(js)
@@ -44,7 +51,7 @@ defmodule HologramE2E.EventsTest do
     js = "document.getElementById('target').dispatchEvent(new Event('pointerup'))"
 
     session
-    |> visit("/e2e/page-13")
+    |> visit(Page13)
     |> click(css("#target"))
     |> assert_has(css("#text", text: "Event count: 1"))
     |> execute_script(js)
@@ -53,7 +60,7 @@ defmodule HologramE2E.EventsTest do
 
   feature "submit event", %{session: session} do
     session
-    |> visit("/e2e/page-8")
+    |> visit(Page8)
     |> fill_in(css("#input-1"), with: "abc")
     |> fill_in(css("#input-2"), with: "xyz")
     |> click(css("#submit-button"))

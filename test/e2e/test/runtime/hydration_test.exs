@@ -1,11 +1,10 @@
 defmodule HologramE2E.Runtime.HydrationTest do
   use HologramE2E.TestCase, async: false
-
-  @page_path "/e2e/runtime/hydration"
+  alias HologramE2E.Runtime.HydrationPage
 
   feature "page state hydration", %{session: session} do
     session
-    |> visit(@page_path)
+    |> visit(HydrationPage)
     |> assert_has(css("#page-text", text: "page count = 100"))
     |> click(css("#page-button"))
     |> assert_has(css("#page-text", text: "page count = 101"))
@@ -13,7 +12,7 @@ defmodule HologramE2E.Runtime.HydrationTest do
 
   feature "layout state hydration", %{session: session} do
     session
-    |> visit(@page_path)
+    |> visit(HydrationPage)
     |> assert_has(css("#layout-text", text: "layout count = 200"))
     |> click(css("#layout-button"))
     |> assert_has(css("#layout-text", text: "layout count = 201"))
@@ -21,7 +20,7 @@ defmodule HologramE2E.Runtime.HydrationTest do
 
   feature "server initialized stateful component state hydration", %{session: session} do
     session
-    |> visit(@page_path)
+    |> visit(HydrationPage)
     |> assert_has(
       css("#server-initialized-component-text", text: "server-initialized component count = 300")
     )
