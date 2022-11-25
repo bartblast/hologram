@@ -65,12 +65,14 @@ jobs:
           ${{ runner.os }}-mix-${{ env.cache-name }}-
           ${{ runner.os }}-mix-
 
-    # Step: Download project dependencies. If unchanged, uses
+    # Step: Download lib dependencies. If unchanged, uses
     # the cached version.
-    - name: Install dependencies
-      run: |
-        mix deps.get
-        cd test/e2e && mix deps.get
+    - name: Install lib dependencies
+      run: mix deps.get
+
+    # Step: Download E2E app dependencies.
+    - name: Install E2E app dependencies
+      run: cd test/e2e && mix deps.get        
 
     # Step: Compile the project treating any warnings as errors.
     # Customize this step if a different behavior is desired.
