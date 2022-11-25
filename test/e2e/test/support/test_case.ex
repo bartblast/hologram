@@ -5,6 +5,8 @@ defmodule HologramE2E.TestCase do
   using do
     quote do
       use Wallaby.Feature
+
+      import HologramE2E.Test.Helpers
       import Wallaby.Query
 
       @fixtures_path "#{File.cwd!()}/test/fixtures"
