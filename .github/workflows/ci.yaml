@@ -38,19 +38,17 @@ jobs:
     - name: Checkout code
       uses: actions/checkout@v3
 
-    # Step: Define how to cache deps. Restores existing cache if present.
-    # - name: Cache lib deps
-    #   id: cache-lib-deps
-    #   uses: actions/cache@v3
-    #   env:
-    #     cache-name: cache-elixir-deps
-    #   with:
-    #     path: |
-    #       deps
-    #       test/e2e/deps
-    #     key: ${{ runner.os }}-mix-${{ env.cache-name }}-${{ hashFiles('**/mix.lock') }}
-    #     restore-keys: |
-    #       ${{ runner.os }}-mix-${{ env.cache-name }}-       
+    # Step: Define how to cache lib deps. Restores existing cache if present.
+    - name: Cache lib deps
+      id: cache-lib-deps
+      uses: actions/cache@v3
+      env:
+        cache-name: cache-elixir-lib-deps
+      with:
+        path: deps
+        key: ${{ runner.os }}-mix-${{ env.cache-name }}-${{ hashFiles('**/mix.lock') }}
+        restore-keys: |
+          ${{ runner.os }}-mix-${{ env.cache-name }}-       
 
     # Step: Define how to cache the `_build` directory. After the first run,
     # this speeds up tests runs a lot. This includes not re-compiling our
