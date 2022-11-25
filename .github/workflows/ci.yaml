@@ -50,8 +50,8 @@ jobs:
         restore-keys: |
           ${{ runner.os }}-mix-${{ env.cache-name }}-     
 
-    # Step: Define how to cache E2E app deps. Restores existing cache if present.
-    - name: Cache E2E app deps
+    # Step: Define how to cache test app deps. Restores existing cache if present.
+    - name: Cache test app deps
       id: cache-e2e-app-deps
       uses: actions/cache@v3
       env:
@@ -77,10 +77,10 @@ jobs:
           ${{ runner.os }}-mix-${{ env.cache-name }}-
           ${{ runner.os }}-mix-
 
-    # Step: Define how to cache the E2E app `_build` directory. After the first run,
+    # Step: Define how to cache the test app `_build` directory. After the first run,
     # this speeds up tests runs a lot. This includes not re-compiling our
     # project's downloaded deps every run.
-    - name: Cache E2E app build
+    - name: Cache test app build
       id: cache-e2e-app-build
       uses: actions/cache@v3
       env:
@@ -98,29 +98,29 @@ jobs:
       run: mix deps.get      
 
     # Step: Compile the lib treating any warnings as errors.
-    - name: Compiles lib without warnings
+    - name: Check lib compiles without warnings
       run: mix compile --warnings-as-errors
 
-    # Step: Check that the checked in lib code has already been formatted.
+    # Step: Check that the lib code has already been formatted.
     # This step fails if something was found unformatted.
-    - name: Check lib formatting
+    - name: Check lib code formatted
       run: mix format --check-formatted
 
     # Step: Execute the unit tests.
     - name: Run unit tests
       run: mix test
 
-    # Step: Download E2E app dependencies.
-    - name: Install E2E app dependencies
+    # Step: Download test app dependencies.
+    - name: Install test app dependencies
       run: cd test/e2e && mix deps.get        
 
-    # Step: Compile the E2E app treating any warnings as errors.
-    - name: Compiles E2E app without warnings
+    # Step: Compile the test app treating any warnings as errors.
+    - name: Check test app compiles without warnings
       run: cd test/e2e && mix compile --warnings-as-errors
 
-    # Step: Check that the checked in E2E app code has already been formatted.
+    # Step: Check that the test app code has already been formatted.
     # This step fails if something was found unformatted.
-    - name: Check E2E app formatting
+    - name: Check test app code formatted
       run: cd test/e2e && mix format --check-formatted
 
     # Step: Execute the E2E tests.
