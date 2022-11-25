@@ -9,8 +9,8 @@ defmodule HologramE2E.UITest do
       session
       |> visit(Page6)
       |> click(css("#test-id"))
-      |> assert_page(Page7)
       |> assert_has(css("h1", text: "Page 7"))
+      |> assert_page(Page7)
     end
 
     # DEFER: test @id and @class optional props
