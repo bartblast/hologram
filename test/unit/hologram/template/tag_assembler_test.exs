@@ -732,7 +732,7 @@ defmodule Hologram.Template.TagAssemblerTest do
   end
 
   describe "script" do
-    test "symbol '<' outside of double quoted string" do
+    test "symbol '<' not inside double quoted string" do
       markup = "<script>1 < 2</script>"
 
       result = assemble(markup)
@@ -741,11 +741,29 @@ defmodule Hologram.Template.TagAssemblerTest do
       assert result == expected
     end
 
-    test "symbol '>' outside of double quoted string" do
+    test "symbol '<' inside double quoted string" do
+      markup = "<script>\"1 < 2\"</script>"
+
+      result = assemble(markup)
+      expected = [start_tag: {"script", []}, text: "\"1 < 2\"", end_tag: "script"]
+
+      assert result == expected
+    end
+
+    test "symbol '>' not inside double quoted string" do
       markup = "<script>1 > 2</script>"
 
       result = assemble(markup)
       expected = [start_tag: {"script", []}, text: "1 > 2", end_tag: "script"]
+
+      assert result == expected
+    end
+
+    test "symbol '>' inside double quoted string" do
+      markup = "<script>\"1 > 2\"</script>"
+
+      result = assemble(markup)
+      expected = [start_tag: {"script", []}, text: "\"1 > 2\"", end_tag: "script"]
 
       assert result == expected
     end
