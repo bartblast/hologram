@@ -126,7 +126,3 @@ jobs:
     # Step: Execute the E2E tests.
     - name: Run E2E tests
       run: cd test/e2e && mix test
-
-# debug 1
-# debug 2
-# debug 3
