@@ -4,6 +4,7 @@ defmodule Hologram.Compiler.FunctionCallTransformerTest do
   alias Hologram.Compiler.{Context, FunctionCallTransformer}
 
   alias Hologram.Compiler.IR.{
+    AliasDirective,
     AtomType,
     FunctionCall,
     IntegerType,
@@ -13,12 +14,13 @@ defmodule Hologram.Compiler.FunctionCallTransformerTest do
     Variable
   }
 
-  test "function without params called on module" do
+  test "function without params called on non-aliased module" do
     code = "Hologram.Compiler.FunctionCallTransformerTest.test()"
     ast = ast(code)
 
     expected = %FunctionCall{
       module: Hologram.Compiler.FunctionCallTransformerTest,
+      module_alias: Hologram.Compiler.FunctionCallTransformerTest,
       function: :test,
       args: []
     }
@@ -27,12 +29,13 @@ defmodule Hologram.Compiler.FunctionCallTransformerTest do
     assert result == expected
   end
 
-  test "function with params called on module" do
+  test "function with params called on non-aliased module" do
     code = "Hologram.Compiler.FunctionCallTransformerTest.test(1, 2)"
     ast = ast(code)
 
     expected = %FunctionCall{
       module: Hologram.Compiler.FunctionCallTransformerTest,
+      module_alias: Hologram.Compiler.FunctionCallTransformerTest,
       function: :test,
       args: [
         %IntegerType{value: 1},
@@ -50,6 +53,7 @@ defmodule Hologram.Compiler.FunctionCallTransformerTest do
 
     expected = %FunctionCall{
       module: Kernel,
+      module_alias: nil,
       function: :make_ref,
       args: []
     }
@@ -64,6 +68,7 @@ defmodule Hologram.Compiler.FunctionCallTransformerTest do
 
     expected = %FunctionCall{
       module: Kernel,
+      module_alias: nil,
       function: :max,
       args: [
         %IntegerType{value: 1},
@@ -75,18 +80,92 @@ defmodule Hologram.Compiler.FunctionCallTransformerTest do
     assert result == expected
   end
 
-  test "string interpolation" do
-    code = ~S("#{test}")
-    {_, _, [{_, _, [ast, _]}]} = ast(code)
+  test "function without params called on aliased module" do
+    code = "Xyz.test()"
+    ast = ast(code)
+    aliases = [%AliasDirective{module: Abc.Bcd, as: [:Xyz]}]
+    context = %Context{aliases: aliases}
+
+    result = FunctionCallTransformer.transform(ast, context)
 
     expected = %FunctionCall{
-      module: Kernel,
-      function: :to_string,
-      args: [%Variable{name: :test}]
+      module: Abc.Bcd,
+      module_alias: Xyz,
+      function: :test,
+      args: []
     }
 
-    result = FunctionCallTransformer.transform(ast, %Context{})
     assert result == expected
+  end
+
+  test "function with params called on aliased module" do
+    code = "Xyz.test(1, 2)"
+    ast = ast(code)
+    aliases = [%AliasDirective{module: Abc.Bcd, as: [:Xyz]}]
+    context = %Context{aliases: aliases}
+
+    result = FunctionCallTransformer.transform(ast, context)
+
+    expected = %FunctionCall{
+      module: Abc.Bcd,
+      module_alias: Xyz,
+      function: :test,
+      args: [
+        %IntegerType{value: 1},
+        %IntegerType{value: 2}
+      ]
+    }
+
+    assert result == expected
+  end
+
+  describe "Kernel.to_string/1" do
+    test "called without module" do
+      code = "to_string(test)"
+      ast = ast(code)
+
+      result = FunctionCallTransformer.transform(ast, %Context{})
+
+      expected = %FunctionCall{
+        module: Kernel,
+        module_alias: nil,
+        function: :to_string,
+        args: [%Variable{name: :test}]
+      }
+
+      assert result == expected
+    end
+
+    test "called with module" do
+      code = "Kernel.to_string(test)"
+      ast = ast(code)
+
+      result = FunctionCallTransformer.transform(ast, %Context{})
+
+      expected = %FunctionCall{
+        module: Kernel,
+        module_alias: Kernel,
+        function: :to_string,
+        args: [%Variable{name: :test}]
+      }
+
+      assert result == expected
+    end
+
+    test "string interpolation" do
+      code = ~S("#{test}")
+      {_, _, [{_, _, [ast, _]}]} = ast(code)
+
+      expected = %FunctionCall{
+        module: Kernel,
+        module_alias: nil,
+        function: :to_string,
+        args: [%Variable{name: :test}]
+      }
+
+      result = FunctionCallTransformer.transform(ast, %Context{})
+      assert result == expected
+    end
   end
 
   test "function call on __MODULE__ macro result" do
@@ -99,6 +178,7 @@ defmodule Hologram.Compiler.FunctionCallTransformerTest do
     expected = %FunctionCall{
       function: :test,
       module: Hologram.Test.Fixtures.PlaceholderModule1,
+      module_alias: Hologram.Test.Fixtures.PlaceholderModule1,
       args: [
         %IntegerType{value: 1},
         %IntegerType{value: 2}
@@ -127,6 +207,7 @@ defmodule Hologram.Compiler.FunctionCallTransformerTest do
     expected = %FunctionCall{
       function: :apply,
       module: Kernel,
+      module_alias: nil,
       args: [
         %ModuleAttributeOperator{name: :test},
         %AtomType{value: :abc},

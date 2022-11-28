@@ -221,7 +221,7 @@ defmodule Hologram.Compiler.IR do
   end
 
   defmodule FunctionCall do
-    defstruct module: nil, function: nil, args: []
+    defstruct module: nil, module_alias: nil, function: nil, args: []
   end
 
   defmodule IfExpression do

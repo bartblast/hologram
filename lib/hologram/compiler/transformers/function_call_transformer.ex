@@ -10,7 +10,7 @@ defmodule Hologram.Compiler.FunctionCallTransformer do
   end
 
   def transform({{:., _, [Kernel, :to_string]}, _, args}, %Context{} = context) do
-    build_function_call([:Kernel], :to_string, args, context)
+    build_function_call([], :to_string, args, context)
   end
 
   def transform({{:., _, [{:__MODULE__, _, _}, function]}, _, args}, %Context{} = context) do
@@ -50,7 +50,9 @@ defmodule Hologram.Compiler.FunctionCallTransformer do
         context
       )
 
-    %FunctionCall{module: module, function: function, args: args}
+    module_alias = Helpers.module(module_segs)
+
+    %FunctionCall{module: module, module_alias: module_alias, function: function, args: args}
   end
 
   defp build_args(args, context) do
