@@ -100,6 +100,8 @@ defmodule Hologram.Compiler.Helpers do
   """
   @spec module(T.module_name_segments()) :: module()
 
+  def module([]), do: nil
+
   def module(module_segs) do
     [:"Elixir" | module_segs]
     |> Enum.join(".")

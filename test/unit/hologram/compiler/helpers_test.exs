@@ -430,6 +430,10 @@ defmodule Hologram.Compiler.HelpersTest do
       expected = Elixir.Hologram.Compiler.NotExisting
       assert result == expected
     end
+
+    test "no module segments" do
+      refute Helpers.module([])
+    end
   end
 
   test "module_name/1" do
