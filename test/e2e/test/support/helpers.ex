@@ -1,6 +1,8 @@
 defmodule HologramE2E.Test.Helpers do
-  require Wallaby.Browser
   import ExUnit.Assertions, only: [assert: 1]
+  import Wallaby.Browser
+
+  require Wallaby.Browser
 
   alias Hologram.Compiler
   alias Wallaby.Browser
