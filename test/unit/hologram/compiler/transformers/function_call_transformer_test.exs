@@ -14,109 +14,115 @@ defmodule Hologram.Compiler.FunctionCallTransformerTest do
     Variable
   }
 
-  test "function without params called on non-aliased module" do
-    code = "Hologram.Compiler.FunctionCallTransformerTest.test()"
-    ast = ast(code)
+  describe "non-aliased module" do
+    test "function without params" do
+      code = "Hologram.Compiler.FunctionCallTransformerTest.test()"
+      ast = ast(code)
 
-    expected = %FunctionCall{
-      module: Hologram.Compiler.FunctionCallTransformerTest,
-      module_alias: Hologram.Compiler.FunctionCallTransformerTest,
-      function: :test,
-      args: []
-    }
+      expected = %FunctionCall{
+        module: Hologram.Compiler.FunctionCallTransformerTest,
+        module_alias: Hologram.Compiler.FunctionCallTransformerTest,
+        function: :test,
+        args: []
+      }
 
-    result = FunctionCallTransformer.transform(ast, %Context{})
-    assert result == expected
+      result = FunctionCallTransformer.transform(ast, %Context{})
+      assert result == expected
+    end
+
+    test "function with params" do
+      code = "Hologram.Compiler.FunctionCallTransformerTest.test(1, 2)"
+      ast = ast(code)
+
+      expected = %FunctionCall{
+        module: Hologram.Compiler.FunctionCallTransformerTest,
+        module_alias: Hologram.Compiler.FunctionCallTransformerTest,
+        function: :test,
+        args: [
+          %IntegerType{value: 1},
+          %IntegerType{value: 2}
+        ]
+      }
+
+      result = FunctionCallTransformer.transform(ast, %Context{})
+      assert result == expected
+    end
   end
 
-  test "function with params called on non-aliased module" do
-    code = "Hologram.Compiler.FunctionCallTransformerTest.test(1, 2)"
-    ast = ast(code)
+  describe "aliased module" do
+    test "function without params" do
+      code = "Xyz.test()"
+      ast = ast(code)
+      aliases = [%AliasDirective{module: Abc.Bcd, as: [:Xyz]}]
+      context = %Context{aliases: aliases}
 
-    expected = %FunctionCall{
-      module: Hologram.Compiler.FunctionCallTransformerTest,
-      module_alias: Hologram.Compiler.FunctionCallTransformerTest,
-      function: :test,
-      args: [
-        %IntegerType{value: 1},
-        %IntegerType{value: 2}
-      ]
-    }
+      result = FunctionCallTransformer.transform(ast, context)
 
-    result = FunctionCallTransformer.transform(ast, %Context{})
-    assert result == expected
+      expected = %FunctionCall{
+        module: Abc.Bcd,
+        module_alias: Xyz,
+        function: :test,
+        args: []
+      }
+
+      assert result == expected
+    end
+
+    test "function with params" do
+      code = "Xyz.test(1, 2)"
+      ast = ast(code)
+      aliases = [%AliasDirective{module: Abc.Bcd, as: [:Xyz]}]
+      context = %Context{aliases: aliases}
+
+      result = FunctionCallTransformer.transform(ast, context)
+
+      expected = %FunctionCall{
+        module: Abc.Bcd,
+        module_alias: Xyz,
+        function: :test,
+        args: [
+          %IntegerType{value: 1},
+          %IntegerType{value: 2}
+        ]
+      }
+
+      assert result == expected
+    end
   end
 
-  test "function without params called without module" do
-    code = "make_ref()"
-    ast = ast(code)
+  describe "no module" do
+    test "function without params" do
+      code = "make_ref()"
+      ast = ast(code)
 
-    expected = %FunctionCall{
-      module: Kernel,
-      module_alias: nil,
-      function: :make_ref,
-      args: []
-    }
+      expected = %FunctionCall{
+        module: Kernel,
+        module_alias: nil,
+        function: :make_ref,
+        args: []
+      }
 
-    result = FunctionCallTransformer.transform(ast, %Context{})
-    assert result == expected
-  end
+      result = FunctionCallTransformer.transform(ast, %Context{})
+      assert result == expected
+    end
 
-  test "function with params called without module" do
-    code = "max(1, 2)"
-    ast = ast(code)
+    test "function with params" do
+      code = "max(1, 2)"
+      ast = ast(code)
 
-    expected = %FunctionCall{
-      module: Kernel,
-      module_alias: nil,
-      function: :max,
-      args: [
-        %IntegerType{value: 1},
-        %IntegerType{value: 2}
-      ]
-    }
+      expected = %FunctionCall{
+        module: Kernel,
+        module_alias: nil,
+        function: :max,
+        args: [
+          %IntegerType{value: 1},
+          %IntegerType{value: 2}
+        ]
+      }
 
-    result = FunctionCallTransformer.transform(ast, %Context{})
-    assert result == expected
-  end
-
-  test "function without params called on aliased module" do
-    code = "Xyz.test()"
-    ast = ast(code)
-    aliases = [%AliasDirective{module: Abc.Bcd, as: [:Xyz]}]
-    context = %Context{aliases: aliases}
-
-    result = FunctionCallTransformer.transform(ast, context)
-
-    expected = %FunctionCall{
-      module: Abc.Bcd,
-      module_alias: Xyz,
-      function: :test,
-      args: []
-    }
-
-    assert result == expected
-  end
-
-  test "function with params called on aliased module" do
-    code = "Xyz.test(1, 2)"
-    ast = ast(code)
-    aliases = [%AliasDirective{module: Abc.Bcd, as: [:Xyz]}]
-    context = %Context{aliases: aliases}
-
-    result = FunctionCallTransformer.transform(ast, context)
-
-    expected = %FunctionCall{
-      module: Abc.Bcd,
-      module_alias: Xyz,
-      function: :test,
-      args: [
-        %IntegerType{value: 1},
-        %IntegerType{value: 2}
-      ]
-    }
-
-    assert result == expected
+      result = FunctionCallTransformer.transform(ast, %Context{})
+      assert result == expected
+    end
   end
 
   describe "Kernel.to_string/1" do
