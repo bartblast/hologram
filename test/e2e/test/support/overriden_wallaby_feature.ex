@@ -13,7 +13,7 @@ defmodule HologramE2E.OverridenWallabyFeature do
       # Kernel.tap/2 was introduced in 1.12 and conflicts with Browser.tap/2
       import Kernel, except: [tap: 2]
 
-      import Wallaby.Browser, except: [visit: 2]
+      import Wallaby.Browser, except: [click: 2, visit: 2]
       import Wallaby.Feature
 
       setup context do
