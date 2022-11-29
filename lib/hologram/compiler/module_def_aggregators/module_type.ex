@@ -3,7 +3,6 @@ alias Hologram.Compiler.{ModuleDefAggregator, ModuleDefStore}
 
 defimpl ModuleDefAggregator, for: ModuleType do
   alias Hologram.Compiler.Reflection
-  alias Hologram.Runtime.TemplateStore
   alias Hologram.Utils
 
   def aggregate(%{module: module}) do
@@ -23,7 +22,7 @@ defimpl ModuleDefAggregator, for: ModuleType do
     if module_def.templatable? do
       task =
         Task.async(fn ->
-          TemplateStore.get!(module_def.module)
+          module_def.module.template()
           |> ModuleDefAggregator.aggregate()
         end)
 

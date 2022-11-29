@@ -1,5 +1,4 @@
 alias Hologram.Compiler.Reflection
-alias Hologram.Runtime.TemplateStore
 alias Hologram.Template.Evaluator
 alias Hologram.Template.Renderer
 alias Hologram.Template.VDOM.Component
@@ -13,7 +12,7 @@ defimpl Renderer, for: Component do
     bindings = aggregate_bindings(props, initial_state, outer_bindings)
 
     {html, nested_initial_state} =
-      TemplateStore.get!(component.module)
+      component.module.template()
       |> Renderer.render(conn, bindings, slots)
 
     state = aggregate_state(nested_initial_state, initial_state, props)

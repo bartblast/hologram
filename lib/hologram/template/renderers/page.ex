@@ -1,5 +1,5 @@
 alias Hologram.Compiler.{Helpers, Serializer}
-alias Hologram.Runtime.{PageDigestStore, TemplateStore}
+alias Hologram.Runtime.PageDigestStore
 alias Hologram.Template.Renderer
 
 defimpl Renderer, for: Atom do
@@ -9,11 +9,11 @@ defimpl Renderer, for: Atom do
     context = init_context(page_module)
 
     layout_module = page_module.layout()
-    layout_template = TemplateStore.get!(layout_module)
+    layout_template = layout_module.template()
     layout_state = layout_module.init(conn)
     layout_bindings = layout_state |> put_context(context)
 
-    page_template = TemplateStore.get!(page_module)
+    page_template = page_module.template()
     page_state = page_module.init(conn.params, conn)
     page_bindings = page_state |> put_context(context)
     slots = {page_bindings, default: page_template}

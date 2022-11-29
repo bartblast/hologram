@@ -7,7 +7,6 @@ defmodule Hologram.Runtime.Application do
     PageDigestStore,
     RouterBuilder,
     StaticDigestStore,
-    TemplateStore,
     Watcher
   }
 
@@ -27,8 +26,7 @@ defmodule Hologram.Runtime.Application do
     [
       PageDigestStore,
       StaticDigestStore,
-      RouterBuilder,
-      TemplateStore
+      RouterBuilder
     ]
   end
 end

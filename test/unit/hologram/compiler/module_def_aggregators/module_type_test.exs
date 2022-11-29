@@ -3,7 +3,7 @@ defmodule Hologram.Compiler.ModuleDefAggregator.ModuleTypeTest do
 
   alias Hologram.Compiler.{ModuleDefAggregator, ModuleDefStore, Reflection}
   alias Hologram.Compiler.IR.{ModuleDefinition, ModuleType}
-  alias Hologram.Runtime.{Commons, TemplateStore}
+  alias Hologram.Runtime.Commons
 
   alias Hologram.Test.Fixtures.Compiler.ModuleDefAggregators.ModuleType.{
     Module1,
@@ -22,7 +22,6 @@ defmodule Hologram.Compiler.ModuleDefAggregator.ModuleTypeTest do
     |> compile()
 
     ModuleDefStore.run()
-    TemplateStore.run(path: Reflection.root_template_store_path())
 
     :ok
   end

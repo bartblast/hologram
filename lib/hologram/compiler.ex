@@ -12,7 +12,6 @@ defmodule Hologram.Compiler do
     Reflection
   }
 
-  alias Hologram.Runtime.TemplateStore
   alias Hologram.Template.Builder, as: TemplateBuilder
   alias Hologram.Utils
 
@@ -36,8 +35,6 @@ defmodule Hologram.Compiler do
     Logger.debug("Hologram: found templatables: #{inspect(templatables)}")
 
     templates = TemplateBuilder.build_all(templatables)
-    dump_template_store(templates)
-    TemplateStore.run(path: Reflection.root_template_store_path())
 
     pages = Reflection.list_pages(opts)
     Logger.debug("Hologram: found pages: #{inspect(pages)}")
@@ -49,7 +46,6 @@ defmodule Hologram.Compiler do
     build_pages(pages, output_path, module_defs, call_graph)
     |> dump_page_digest_store()
 
-    TemplateStore.stop()
     CallGraph.stop()
     ModuleDefStore.stop()
 
@@ -128,25 +124,12 @@ defmodule Hologram.Compiler do
     |> File.write!(data)
   end
 
-  defp dump_template_store(templates) do
-    data = Utils.serialize(templates)
-
-    Reflection.root_template_store_path()
-    |> File.write!(data)
-  end
-
   defp log_paths do
     Logger.debug("Hologram: compile priv path = #{Reflection.root_priv_path()}")
     Logger.debug("Hologram: compile output path = #{resolve_output_path()}")
 
     Logger.debug(
       "Hologram: page digest store dump path = #{Reflection.root_page_digest_store_path()}"
-    )
-
-    Logger.debug("Hologram: template store dump path = #{Reflection.root_template_store_path()}")
-
-    Logger.debug(
-      "Hologram: template store load path = #{Reflection.release_template_store_path()}"
     )
   end
 

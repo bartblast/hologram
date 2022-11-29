@@ -264,11 +264,6 @@ defmodule Hologram.Compiler.Reflection do
   end
 
   # DEFER: test
-  def release_template_store_path do
-    release_priv_path() <> "/hologram/template_store.bin"
-  end
-
-  # DEFER: test
   def root_page_digest_store_path(opts \\ []) do
     root_priv_path(opts) <> "/page_digest_store.bin"
   end
@@ -298,11 +293,6 @@ defmodule Hologram.Compiler.Reflection do
   # TODO: test
   def root_static_path(opts \\ []) do
     root_priv_path(opts) <> "/static"
-  end
-
-  # DEFER: test
-  def root_template_store_path(opts \\ []) do
-    root_priv_path(opts) <> "/template_store.bin"
   end
 
   def source_code(module) do
