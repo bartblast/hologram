@@ -1,23 +1,8 @@
 alias Hologram.Compiler.{Context, Helpers, JSEncoder, Opts}
 alias Hologram.Compiler.IR.FunctionCall
-alias Hologram.Template.{Parser, Transformer}
-alias Hologram.Template.Encoder, as: TemplateEncoder
 
 defimpl JSEncoder, for: FunctionCall do
   use Hologram.Commons.Encoder
-
-  def encode(%{function: :sigil_H} = ir, %Context{} = context, _) do
-    ir
-    |> Map.get(:args)
-    |> hd()
-    |> Map.get(:parts)
-    |> hd()
-    |> Map.get(:value)
-    |> String.trim()
-    |> Parser.parse!()
-    |> Transformer.transform(context)
-    |> TemplateEncoder.encode()
-  end
 
   def encode(
         %{module: module, function: function, args: args},

@@ -11,27 +11,6 @@ defmodule Hologram.Compiler.JSEncoder.FunctionCallTest do
     StringType
   }
 
-  test "sigilH" do
-    ir = %FunctionCall{
-      function: :sigil_H,
-      module: Hologram.Runtime.Commons,
-      args: [
-        %BinaryType{
-          parts: [
-            %StringType{value: "\n<div>Hello World {@counter}</div>\n"}
-          ]
-        },
-        %ListType{data: []}
-      ]
-    }
-
-    expected =
-      "[ { type: 'element', tag: 'div', attrs: {}, children: [ { type: 'text', content: 'Hello World ' }, { type: 'expression', callback: ($bindings) => { return { type: 'tuple', data: [ $bindings.data['~atom[counter]'] ] } } } ] } ]"
-
-    result = JSEncoder.encode(ir, %Context{}, %Opts{})
-    assert result == expected
-  end
-
   test "function name" do
     ir = %FunctionCall{
       function: :abc?,

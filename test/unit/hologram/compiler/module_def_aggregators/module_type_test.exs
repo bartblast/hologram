@@ -1,9 +1,8 @@
 defmodule Hologram.Compiler.ModuleDefAggregator.ModuleTypeTest do
   use Hologram.Test.UnitCase, async: false
 
-  alias Hologram.Compiler.{ModuleDefAggregator, ModuleDefStore, Reflection}
+  alias Hologram.Compiler.{ModuleDefAggregator, ModuleDefStore}
   alias Hologram.Compiler.IR.{ModuleDefinition, ModuleType}
-  alias Hologram.Runtime.Commons
 
   alias Hologram.Test.Fixtures.Compiler.ModuleDefAggregators.ModuleType.{
     Module1,
@@ -96,8 +95,6 @@ defmodule Hologram.Compiler.ModuleDefAggregator.ModuleTypeTest do
 
     ModuleDefAggregator.aggregate(ir)
 
-    # Hologram.Runtime.Commons module is added because templates use Hologram.Runtime.Commons.sigil_H/2
-    assert %ModuleDefinition{} = ModuleDefStore.get!(Commons)
     assert %ModuleDefinition{} = ModuleDefStore.get!(Module6)
     assert %ModuleDefinition{} = ModuleDefStore.get!(Module7)
   end
