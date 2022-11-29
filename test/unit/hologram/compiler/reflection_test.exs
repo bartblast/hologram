@@ -3,6 +3,10 @@ defmodule Hologram.Compiler.ReflectionTest do
 
   alias Hologram.Compiler.{Context, Reflection}
   alias Hologram.Compiler.IR.{FunctionDefinition, MacroDefinition, ModuleDefinition}
+  alias Hologram.Template.VDOM.ElementNode
+  alias Hologram.Template.VDOM.TextNode
+  alias Hologram.Test.Fixtures.Compiler.Reflection.Module7
+  alias Hologram.Test.Fixtures.Compiler.Reflection.Module8
 
   @config_app_path Application.get_env(:hologram, :app_path)
 
@@ -244,6 +248,32 @@ defmodule Hologram.Compiler.ReflectionTest do
     result = Reflection.list_pages()
 
     assert Enum.count(result) == num_pages
+  end
+
+  test "list_templates/1" do
+    templatables = [Module7, Module8]
+    result = Reflection.list_templates(templatables)
+
+    expected = [
+      {Module7,
+       [
+         %ElementNode{
+           attrs: %{},
+           children: [%TextNode{content: "template 7"}],
+           tag: "div"
+         }
+       ]},
+      {Module8,
+       [
+         %ElementNode{
+           attrs: %{},
+           children: [%TextNode{content: "template 8"}],
+           tag: "div"
+         }
+       ]}
+    ]
+
+    assert result == expected
   end
 
   test "macro_definition/3" do
