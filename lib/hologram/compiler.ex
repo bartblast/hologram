@@ -12,7 +12,6 @@ defmodule Hologram.Compiler do
     Reflection
   }
 
-  alias Hologram.Template.Builder, as: TemplateBuilder
   alias Hologram.Utils
 
   def compile(opts) do
@@ -34,7 +33,7 @@ defmodule Hologram.Compiler do
 
     Logger.debug("Hologram: found templatables: #{inspect(templatables)}")
 
-    templates = TemplateBuilder.build_all(templatables)
+    templates = Reflection.list_templates(templatables)
 
     pages = Reflection.list_pages(opts)
     Logger.debug("Hologram: found pages: #{inspect(pages)}")

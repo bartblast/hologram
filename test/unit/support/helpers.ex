@@ -15,8 +15,7 @@ defmodule Hologram.Test.Helpers do
   def run_runtime do
     [
       page_digest_store_path: Reflection.root_page_digest_store_path(),
-      static_digest_store_path: Reflection.root_static_path(),
-      template_store_path: Reflection.root_template_store_path()
+      static_digest_store_path: Reflection.root_static_path()
     ]
     |> Runtime.run()
   end
