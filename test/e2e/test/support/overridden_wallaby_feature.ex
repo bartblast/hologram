@@ -1,11 +1,11 @@
-defmodule HologramE2E.OverridenWallabyFeature do
+defmodule HologramE2E.OverriddenWallabyFeature do
   alias Wallaby.Feature.Utils
 
   defmacro __using__(_) do
     quote do
       ExUnit.Case.register_attribute(__MODULE__, :sessions)
 
-      alias HologramE2E.OverridenWallabyFeature
+      alias HologramE2E.OverriddenWallabyFeature
       alias Wallaby.Browser
       alias Wallaby.Element
       alias Wallaby.Query
@@ -17,7 +17,7 @@ defmodule HologramE2E.OverridenWallabyFeature do
       import Wallaby.Feature
 
       setup context do
-        OverridenWallabyFeature.setup_feature(context)
+        OverriddenWallabyFeature.setup_feature(context)
       end
     end
   end
