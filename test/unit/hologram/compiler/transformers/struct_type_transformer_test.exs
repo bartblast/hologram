@@ -1,45 +1,25 @@
 defmodule Hologram.Compiler.StructTypeTransformerTest do
   use Hologram.Test.UnitCase, async: true
 
-  alias Hologram.Compiler.{Context, StructTypeTransformer}
-  alias Hologram.Compiler.IR.{AliasDirective, AtomType, IntegerType, StructType}
+  alias Hologram.Compiler.Context
+  alias Hologram.Compiler.IR.AtomType
+  alias Hologram.Compiler.IR.IntegerType
+  alias Hologram.Compiler.IR.StructType
+  alias Hologram.Compiler.StructTypeTransformer
 
-  test "not aliased" do
-    code = "%Hologram.Test.Fixtures.Compiler.StructTypeTransformer.Module1{a: 1}"
+  test "transform/3" do
+    code = "%Abc.Bcd{x: 1, y: 2}"
     ast = ast(code)
 
     result = StructTypeTransformer.transform(ast, %Context{})
 
     expected = %StructType{
+      alias_segs: [:Abc, :Bcd],
       data: [
-        {%AtomType{value: :a}, %IntegerType{value: 1}}
+        {%AtomType{value: :x}, %IntegerType{value: 1}},
+        {%AtomType{value: :y}, %IntegerType{value: 2}}
       ],
-      module: Hologram.Test.Fixtures.Compiler.StructTypeTransformer.Module1
-    }
-
-    assert result == expected
-  end
-
-  test "aliased" do
-    code = "%Abc{b: 2}"
-    ast = ast(code)
-
-    context = %Context{
-      aliases: [
-        %AliasDirective{
-          module: Hologram.Test.Fixtures.Compiler.StructTypeTransformer.Module2,
-          as: [:Abc]
-        }
-      ]
-    }
-
-    result = StructTypeTransformer.transform(ast, context)
-
-    expected = %StructType{
-      data: [
-        {%AtomType{value: :b}, %IntegerType{value: 2}}
-      ],
-      module: Hologram.Test.Fixtures.Compiler.StructTypeTransformer.Module2
+      module: nil
     }
 
     assert result == expected
