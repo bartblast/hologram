@@ -207,7 +207,7 @@ defmodule Hologram.Compiler.IR do
   end
 
   defmodule UseDirective do
-    defstruct module: nil, opts: []
+    defstruct alias_segs: nil, module: nil, opts: []
   end
 
   # CONTROL FLOW
