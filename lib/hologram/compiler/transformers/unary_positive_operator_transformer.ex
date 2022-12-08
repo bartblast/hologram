@@ -1,6 +1,7 @@
 defmodule Hologram.Compiler.UnaryPositiveOperatorTransformer do
-  alias Hologram.Compiler.{Context, Transformer}
+  alias Hologram.Compiler.Context
   alias Hologram.Compiler.IR.UnaryPositiveOperator
+  alias Hologram.Compiler.Transformer
 
   def transform({:+, _, [value]}, %Context{} = context) do
     %UnaryPositiveOperator{
