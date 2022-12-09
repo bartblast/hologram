@@ -203,7 +203,7 @@ defmodule Hologram.Compiler.IR do
   end
 
   defmodule RequireDirective do
-    defstruct module: nil
+    defstruct alias_segs: nil, module: nil
   end
 
   defmodule UseDirective do

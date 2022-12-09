@@ -5,11 +5,11 @@ defmodule Hologram.Compiler.RequireDirectiveTransformerTest do
   alias Hologram.Compiler.RequireDirectiveTransformer
 
   test "transform/1" do
-    code = "require Hologram.Test.Fixtures.Compiler.Transformer.Module1"
+    code = "require Abc.Bcd"
     ast = ast(code)
 
     result = RequireDirectiveTransformer.transform(ast)
-    expected = %RequireDirective{module: Hologram.Test.Fixtures.Compiler.Transformer.Module1}
+    expected = %RequireDirective{alias_segs: [:Abc, :Bcd], module: nil}
 
     assert result == expected
   end
