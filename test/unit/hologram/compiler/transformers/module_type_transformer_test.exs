@@ -2,34 +2,21 @@ defmodule Hologram.Compiler.ModuleTypeTransformerTest do
   use Hologram.Test.UnitCase, async: true
 
   alias Hologram.Compiler.{Context, ModuleTypeTransformer}
-  alias Hologram.Compiler.IR.{AliasDirective, ModuleType}
+  alias Hologram.Compiler.IR.ModuleType
 
-  test "non-aliased module segments" do
+  test "alias segments" do
     code = "Abc.Bcd"
     ast = ast(code)
 
     result = ModuleTypeTransformer.transform(ast, %Context{})
-    expected = %ModuleType{module: Abc.Bcd}
+    expected = %ModuleType{alias_segs: [:Abc, :Bcd], module: nil}
 
     assert result == expected
   end
 
-  test "aliased module segments" do
-    aliases = [%AliasDirective{module: Abc.Bcd, as: [:Bcd]}]
-    context = %Context{aliases: aliases}
-
-    code = "Bcd"
-    ast = ast(code)
-
-    result = ModuleTypeTransformer.transform(ast, context)
-    expected = %ModuleType{module: Abc.Bcd}
-
-    assert result == expected
-  end
-
-  test "module atom" do
+  test "alias atom" do
     result = ModuleTypeTransformer.transform(Abc.Bcd, %Context{})
-    expected = %ModuleType{module: Abc.Bcd}
+    expected = %ModuleType{alias_segs: [:Abc, :Bcd], module: nil}
 
     assert result == expected
   end

@@ -121,6 +121,7 @@ defmodule Hologram.Compiler.Helpers do
     |> Enum.join(".")
   end
 
+  # TODO: consider - rename to alias_segments
   @doc """
   Returns the corresponding module segments (without the "Elixir" segment at the beginning).
   ## Examples

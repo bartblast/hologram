@@ -34,7 +34,7 @@ defmodule Hologram.Compiler.IR do
   end
 
   defmodule ModuleType do
-    defstruct module: nil
+    defstruct alias_segs: nil, module: nil
   end
 
   defmodule NilType do
