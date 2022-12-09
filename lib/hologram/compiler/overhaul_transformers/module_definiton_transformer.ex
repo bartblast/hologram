@@ -10,7 +10,9 @@ defmodule Hologram.Compiler.ModuleDefinitionTransformer do
     exprs = fetch_module_body(ast)
     requires = aggregate_expressions(:require, exprs, %Context{})
 
-    Expander.expand_macros(ast, requires)
+    # TODO: enable
+    # Expander.expand_macros(ast, requires)
+    ast
     |> Expander.expand_module_pseudo_variable()
     |> build_module(uses, requires)
   end
