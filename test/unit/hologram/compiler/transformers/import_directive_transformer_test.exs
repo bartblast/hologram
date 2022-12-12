@@ -4,34 +4,32 @@ defmodule Hologram.Compiler.ImportDirectiveTransformerTest do
   alias Hologram.Compiler.ImportDirectiveTransformer
   alias Hologram.Compiler.IR.ImportDirective
 
-  @expected_module Hologram.Test.Fixtures.Compiler.Transformer.Module1
-
   test "without 'only' clause" do
-    code = "import Hologram.Test.Fixtures.Compiler.Transformer.Module1"
+    code = "import Abc.Bcd"
     ast = ast(code)
 
     result = ImportDirectiveTransformer.transform(ast)
-    expected = %ImportDirective{module: @expected_module, only: []}
+    expected = %ImportDirective{alias_segs: [:Abc, :Bcd], module: nil, only: []}
 
     assert result == expected
   end
 
   test "with 'only' clause" do
-    code = "import Hologram.Test.Fixtures.Compiler.Transformer.Module1, only: [abc: 2]"
+    code = "import Abc.Bcd, only: [xyz: 2]"
     ast = ast(code)
 
     result = ImportDirectiveTransformer.transform(ast)
-    expected = %ImportDirective{module: @expected_module, only: [abc: 2]}
+    expected = %ImportDirective{alias_segs: [:Abc, :Bcd], module: nil, only: [xyz: 2]}
 
     assert result == expected
   end
 
   test "ignores other opts" do
-    code = "import Hologram.Test.Fixtures.Compiler.Transformer.Module1, warn: false"
+    code = "import Abc.Bcd, other_opt: false"
     ast = ast(code)
 
     result = ImportDirectiveTransformer.transform(ast)
-    expected = %ImportDirective{module: @expected_module, only: []}
+    expected = %ImportDirective{alias_segs: [:Abc, :Bcd], module: nil, only: []}
 
     assert result == expected
   end
