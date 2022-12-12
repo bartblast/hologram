@@ -42,13 +42,14 @@ defmodule Hologram.Compiler.FunctionCallTransformer do
     args = build_args(args, context)
     arity = Enum.count(args)
 
-    module =
-      Resolver.resolve(
-        module_segs,
-        function,
-        arity,
-        context
-      )
+    # TODO: uncomment
+    module = nil
+    # Resolver.resolve(
+    #   module_segs,
+    #   function,
+    #   arity,
+    #   context
+    # )
 
     module_alias = Helpers.module(module_segs)
 
