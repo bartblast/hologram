@@ -85,4 +85,9 @@ defmodule Hologram.UtilsTest do
     assert :erlang.binary_to_term(result_1) == data_1
     assert :erlang.binary_to_term(result_2) == data_2
   end
+
+  test "string_prepend/1" do
+    result = Utils.string_prepend("abc", "xyz")
+    assert result == "xyzabc"
+  end
 end

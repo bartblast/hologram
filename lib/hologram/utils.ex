@@ -55,4 +55,8 @@ defmodule Hologram.Utils do
   def serialize(data) do
     :erlang.term_to_binary(data, compressed: 9)
   end
+
+  def string_prepend(str, prepended) do
+    prepended <> str
+  end
 end
