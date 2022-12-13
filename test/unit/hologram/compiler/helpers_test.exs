@@ -358,6 +358,11 @@ defmodule Hologram.Compiler.HelpersTest do
     assert Helpers.class_name(Abc.Bcd) == "Elixir_Abc_Bcd"
   end
 
+  test "erlang_module/1" do
+    result = Helpers.erlang_module(:io_lib)
+    assert result == :"Erlang.IoLib"
+  end
+
   test "get_components/1" do
     module_def_1 = %ModuleDefinition{
       module: Bcd.Cde,

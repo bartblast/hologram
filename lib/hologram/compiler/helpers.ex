@@ -2,6 +2,7 @@ defmodule Hologram.Compiler.Helpers do
   alias Hologram.Compiler.{PatternDeconstructor, Transformer}
   alias Hologram.Compiler.IR.{Binding, FunctionDefinitionVariants, ModuleDefinition, ParamAccess}
   alias Hologram.Typespecs, as: T
+  alias Hologram.Utils
 
   def aggregate_bindings_from_expression(expr) do
     PatternDeconstructor.deconstruct(expr)
@@ -68,6 +69,16 @@ defmodule Hologram.Compiler.Helpers do
   def class_name(module) do
     [:"Elixir" | Module.split(module)]
     |> Enum.join("_")
+  end
+
+  def erlang_module(atom) do
+    atom
+    |> to_string()
+    |> String.split("_")
+    |> Enum.map(&String.capitalize/1)
+    |> Enum.join()
+    |> Utils.string_prepend("Erlang.")
+    |> String.to_atom()
   end
 
   @spec get_components(T.module_definitions_map()) :: list(%ModuleDefinition{})
