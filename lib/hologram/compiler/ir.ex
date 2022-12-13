@@ -216,12 +216,16 @@ defmodule Hologram.Compiler.IR do
     defstruct name: nil, args: []
   end
 
+  defmodule Call do
+    defstruct alias_segs: nil, module: nil, module_expression: nil, name: nil, args: []
+  end
+
   defmodule CaseExpression do
     defstruct condition: nil, clauses: []
   end
 
   defmodule FunctionCall do
-    defstruct module: nil, module_alias: nil, function: nil, args: []
+    defstruct module: nil, function: nil, args: []
   end
 
   defmodule IfExpression do
