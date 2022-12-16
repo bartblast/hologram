@@ -2,10 +2,8 @@ defmodule Hologram.Compiler.Transformer do
   alias Hologram.Compiler.{Context, Reflection}
 
   alias Hologram.Compiler.{
-    AccessOperatorTransformer,
     AdditionOperatorTransformer,
     AliasDirectiveTransformer,
-    AnonymousFunctionCallTransformer,
     AnonymousFunctionTypeTransformer,
     BinaryTypeTransformer,
     BlockTransformer,
@@ -16,7 +14,6 @@ defmodule Hologram.Compiler.Transformer do
     EqualToOperatorTransformer,
     ForExpressionTransformer,
     FunctionDefinitionTransformer,
-    FunctionCallTransformer,
     IfExpressionTransformer,
     ImportDirectiveTransformer,
     LessThanOperatorTransformer,
@@ -59,15 +56,11 @@ defmodule Hologram.Compiler.Transformer do
     NilType,
     ProtocolDefinition,
     StringType,
-    Typespec,
-    Variable
+    Symbol,
+    Typespec
   }
 
   # OPERATORS
-
-  def transform({{:., _, [Access, :get]}, _, _} = ast, %Context{} = context) do
-    AccessOperatorTransformer.transform(ast, context)
-  end
 
   # must be defined before binary addition operator
   def transform({:+, _, [_]} = ast, %Context{} = context) do
@@ -86,7 +79,7 @@ defmodule Hologram.Compiler.Transformer do
     DivisionOperatorTransformer.transform(ast, context)
   end
 
-  def transform({{:., _, _}, [no_parens: true, line: _], _} = ast, %Context{} = context) do
+  def transform({{:., _, _}, _, _} = ast, %Context{} = context) do
     DotOperatorTransformer.transform(ast, context)
   end
 
@@ -277,21 +270,12 @@ defmodule Hologram.Compiler.Transformer do
 
   # CONTROL FLOW
 
-  # must be defined before module function call case
-  def transform({{:., _, [{_, _, nil}]}, [line: _], _} = ast, %Context{} = context) do
-    AnonymousFunctionCallTransformer.transform(ast, context)
-  end
-
   def transform({:case, _, _} = ast, %Context{} = context) do
     CaseExpressionTransformer.transform(ast, context)
   end
 
   def transform({:for, _, _} = ast, %Context{} = context) do
     ForExpressionTransformer.transform(ast, context)
-  end
-
-  def transform({{:., _, _}, _, _} = ast, %Context{} = context) do
-    FunctionCallTransformer.transform(ast, context)
   end
 
   def transform({:if, _, _} = ast, %Context{} = context) do
@@ -317,16 +301,7 @@ defmodule Hologram.Compiler.Transformer do
     %ModulePseudoVariable{}
   end
 
-  def transform({name, _, nil}, _) when is_atom(name) do
-    %Variable{name: name}
-  end
-
-  def transform({name, _, module}, _) when is_atom(name) and is_atom(module) do
-    %Variable{name: name}
-  end
-
-  # must be defined after variable case
-  def transform({function, _, _} = ast, %Context{} = context) when is_atom(function) do
-    FunctionCallTransformer.transform(ast, context)
+  def transform({name, _, _}, _) when is_atom(name) do
+    %Symbol{name: name}
   end
 end

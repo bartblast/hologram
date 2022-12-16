@@ -272,20 +272,24 @@ defmodule Hologram.Compiler.IR do
     defstruct expressions: []
   end
 
+  defmodule ModulePseudoVariable do
+    defstruct []
+  end
+
   defmodule Quote do
     defstruct body: nil
   end
 
-  defmodule ModulePseudoVariable do
+  defmodule Symbol do
+    defstruct name: nil
+  end
+
+  defmodule Typespec do
     defstruct []
   end
 
   defmodule Unquote do
     defstruct expression: nil
-  end
-
-  defmodule Typespec do
-    defstruct []
   end
 
   defmodule Variable do

@@ -13,6 +13,7 @@ defmodule Hologram.Compiler.TransformerTest do
     BinaryType,
     Block,
     BooleanType,
+    Call,
     CaseExpression,
     ConsOperator,
     DivisionOperator,
@@ -50,14 +51,14 @@ defmodule Hologram.Compiler.TransformerTest do
     StringType,
     StructType,
     SubtractionOperator,
+    Symbol,
     TupleType,
     TypeOperator,
     Typespec,
     UnaryNegativeOperator,
     UnaryPositiveOperator,
     Unquote,
-    UseDirective,
-    Variable
+    UseDirective
   }
 
   describe "operators" do
@@ -451,10 +452,23 @@ defmodule Hologram.Compiler.TransformerTest do
 
   describe "control flow" do
     test "anonymous function call" do
-      code = "test.(123)"
+      code = "test.(1, 2)"
+      ast = ast(code)
+      assert %AnonymousFunctionCall{} = Transformer.transform(ast, %Context{})
+    end
+
+    test "call without module" do
+      code = "test(123)"
       ast = ast(code)
 
-      assert %AnonymousFunctionCall{} = Transformer.transform(ast, %Context{})
+      assert %Call{} = Transformer.transform(ast, %Context{})
+    end
+
+    test "call with module" do
+      code = "Hologram.Compiler.TransformerTest.test(123)"
+      ast = ast(code)
+
+      assert %Call{} = Transformer.transform(ast, %Context{})
     end
 
     test "case expression" do
@@ -478,20 +492,6 @@ defmodule Hologram.Compiler.TransformerTest do
                Transformer.transform(ast, %Context{})
     end
 
-    test "function called without a module" do
-      code = "test(123)"
-      ast = ast(code)
-
-      assert %FunctionCall{} = Transformer.transform(ast, %Context{})
-    end
-
-    test "function called on module" do
-      code = "Hologram.Compiler.TransformerTest.test(123)"
-      ast = ast(code)
-
-      assert %FunctionCall{} = Transformer.transform(ast, %Context{})
-    end
-
     test "if expression" do
       code = "if true, do: 1, else: 2"
       ast = ast(code)
@@ -506,11 +506,27 @@ defmodule Hologram.Compiler.TransformerTest do
       assert %Block{} = Transformer.transform(ast, %Context{})
     end
 
+    test "__MODULE__ macro" do
+      code = "__MODULE__"
+      ast = ast(code)
+
+      result = Transformer.transform(ast, %Context{})
+      assert result == %ModulePseudoVariable{}
+    end
+
     test "quote" do
       code = "quote do 1 end"
       ast = ast(code)
 
       assert %Quote{} = Transformer.transform(ast, %Context{})
+    end
+
+    test "symbol" do
+      code = "a"
+      ast = ast(code)
+
+      result = Transformer.transform(ast, %Context{})
+      assert result == %Symbol{name: :a}
     end
 
     test "typespec" do
@@ -525,29 +541,6 @@ defmodule Hologram.Compiler.TransformerTest do
       ast = ast(code)
 
       assert %Unquote{} = Transformer.transform(ast, %Context{})
-    end
-
-    test "__MODULE__ macro" do
-      code = "__MODULE__"
-      ast = ast(code)
-
-      result = Transformer.transform(ast, %Context{})
-      assert result == %ModulePseudoVariable{}
-    end
-
-    test "variable, last AST tuple elem is nil" do
-      code = "a"
-      ast = ast(code)
-
-      result = Transformer.transform(ast, %Context{})
-      assert result == %Variable{name: :a}
-    end
-
-    test "variable, last AST tuple elem is module" do
-      ast = {:a, [line: 1], Hologram.Compiler.TransformerTest}
-
-      result = Transformer.transform(ast, %Context{})
-      assert result == %Variable{name: :a}
     end
   end
 end
