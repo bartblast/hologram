@@ -11,10 +11,10 @@ defmodule Hologram.Compiler.Resolver do
       iex> resolve([:Bcd], context)
       Abc.Bcd
   """
-  @spec resolve(T.module_name_segments(), %Context{}) :: module()
+  @spec resolve(T.alias_segments(), %Context{}) :: module()
 
-  def resolve(module_segs, %Context{} = context) do
-    resolve(module_segs, nil, nil, context)
+  def resolve(alias_segs, %Context{} = context) do
+    resolve(alias_segs, nil, nil, context)
   end
 
   @doc """
@@ -27,7 +27,7 @@ defmodule Hologram.Compiler.Resolver do
       Enum
   """
   @spec resolve(
-          T.module_name_segments(),
+          T.alias_segments(),
           T.function_name(),
           integer(),
           %Context{}

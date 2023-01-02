@@ -25,6 +25,24 @@ defmodule Hologram.Compiler.Helpers do
     end)
   end
 
+  @doc """
+  Returns the corresponding alias segments (without the "Elixir" segment at the beginning).
+  ## Examples
+      iex> Helpers.alias_segments(Abc.Bcd)
+      [:Abc, :Bcd]
+  """
+  @spec alias_segments(module() | String.T) :: T.alias_segments()
+
+  def alias_segments(module_name) when is_binary(module_name) do
+    Module.split("Elixir.#{module_name}")
+    |> Enum.map(&String.to_atom/1)
+  end
+
+  def alias_segments(module) do
+    Module.split(module)
+    |> Enum.map(&String.to_atom/1)
+  end
+
   defp build_binding_access_path(pattern_path) do
     pattern_path
     |> Enum.reverse()
@@ -109,7 +127,7 @@ defmodule Hologram.Compiler.Helpers do
       iex> Helpers.module([:Abc, :Bcd])
       Elixir.Abc.Bcd
   """
-  @spec module(T.module_name_segments()) :: module()
+  @spec module(T.alias_segments()) :: module()
 
   def module([]), do: nil
 
@@ -130,25 +148,6 @@ defmodule Hologram.Compiler.Helpers do
   def module_name(module) do
     Module.split(module)
     |> Enum.join(".")
-  end
-
-  # TODO: consider - rename to alias_segments
-  @doc """
-  Returns the corresponding module segments (without the "Elixir" segment at the beginning).
-  ## Examples
-      iex> Helpers.module_name_segments(Abc.Bcd)
-      [:Abc, :Bcd]
-  """
-  @spec module_name_segments(module() | String.T) :: T.module_name_segments()
-
-  def module_name_segments(module_name) when is_binary(module_name) do
-    Module.split("Elixir.#{module_name}")
-    |> Enum.map(&String.to_atom/1)
-  end
-
-  def module_name_segments(module) do
-    Module.split(module)
-    |> Enum.map(&String.to_atom/1)
   end
 
   def transform_params(params, context) do

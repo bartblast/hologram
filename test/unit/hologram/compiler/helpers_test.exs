@@ -354,6 +354,16 @@ defmodule Hologram.Compiler.HelpersTest do
     end
   end
 
+  describe "alias_segments/1" do
+    test "alias" do
+      assert Helpers.alias_segments(Abc.Bcd) == [:Abc, :Bcd]
+    end
+
+    test "string" do
+      assert Helpers.alias_segments("Abc.Bcd") == [:Abc, :Bcd]
+    end
+  end
+
   test "class_name/1" do
     assert Helpers.class_name(Abc.Bcd) == "Elixir_Abc_Bcd"
   end
@@ -443,16 +453,6 @@ defmodule Hologram.Compiler.HelpersTest do
 
   test "module_name/1" do
     assert Helpers.module_name(Abc.Bcd) == "Abc.Bcd"
-  end
-
-  describe "module_name_segments/1" do
-    test "module" do
-      assert Helpers.module_name_segments(Abc.Bcd) == [:Abc, :Bcd]
-    end
-
-    test "string" do
-      assert Helpers.module_name_segments("Abc.Bcd") == [:Abc, :Bcd]
-    end
   end
 
   describe "transform_params/2" do

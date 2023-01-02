@@ -8,7 +8,7 @@ defmodule Hologram.Template.ComponentTransformer do
 
   def transform(module_name, props, children, %Context{} = context) do
     module =
-      Helpers.module_name_segments(module_name)
+      Helpers.alias_segments(module_name)
       |> Resolver.resolve(context)
 
     module_def = Reflection.module_definition(module)

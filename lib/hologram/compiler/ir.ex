@@ -268,6 +268,10 @@ defmodule Hologram.Compiler.IR do
 
   # OTHER
 
+  defmodule Alias do
+    defstruct segments: nil
+  end
+
   defmodule Block do
     defstruct expressions: []
   end
