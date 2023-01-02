@@ -5,9 +5,9 @@ defmodule Hologram.Compiler.DotOperatorTransformerTest do
   alias Hologram.Compiler.DotOperatorTransformer
   alias Hologram.Compiler.IR.AccessOperator
   alias Hologram.Compiler.IR.AnonymousFunctionCall
-  # alias Hologram.Compiler.IR.AtomType
-  # alias Hologram.Compiler.IR.DotOperator
-  # alias Hologram.Compiler.IR.Variable
+  alias Hologram.Compiler.IR.AtomType
+  alias Hologram.Compiler.IR.DotOperator
+  alias Hologram.Compiler.IR.Symbol
 
   test "access operator" do
     code = "a[:b]"
@@ -21,6 +21,19 @@ defmodule Hologram.Compiler.DotOperatorTransformerTest do
     ast = ast(code)
 
     assert %AnonymousFunctionCall{} = DotOperatorTransformer.transform(ast, %Context{})
+  end
+
+  test "dot operator on symbol, without parenthesis" do
+    code = "a.b"
+    ast = ast(code)
+    result = DotOperatorTransformer.transform(ast, %Context{})
+
+    expected = %DotOperator{
+      left: %Symbol{name: :a},
+      right: %AtomType{value: :b}
+    }
+
+    assert result == expected
   end
 
   # test "test" do
