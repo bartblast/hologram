@@ -1,6 +1,8 @@
 defmodule Hologram.Compiler.Transformer do
   alias Hologram.Compiler.{Context, Reflection}
 
+  alias Hologram.Compiler.AliasTransformer
+
   alias Hologram.Compiler.{
     AdditionOperatorTransformer,
     AliasDirectiveTransformer,
@@ -26,7 +28,6 @@ defmodule Hologram.Compiler.Transformer do
     MembershipOperatorTransformer,
     ModuleAttributeDefinitionTransformer,
     ModuleDefinitionTransformer,
-    ModuleTypeTransformer,
     MultiplicationOperatorTransformer,
     NotEqualToOperatorTransformer,
     QuoteTransformer,
@@ -45,6 +46,8 @@ defmodule Hologram.Compiler.Transformer do
     UnquoteTransformer,
     UseDirectiveTransformer
   }
+
+  alias Hologram.Compiler.IR.Alias
 
   alias Hologram.Compiler.IR.{
     AtomType,
@@ -168,8 +171,8 @@ defmodule Hologram.Compiler.Transformer do
   end
 
   def transform(ast, %Context{} = context) when is_atom(ast) and ast not in [nil, false, true] do
-    if Reflection.is_module?(ast) do
-      ModuleTypeTransformer.transform(ast, context)
+    if Reflection.is_alias?(ast) do
+      AliasTransformer.transform(ast, context)
     else
       %AtomType{value: ast}
     end
@@ -197,10 +200,6 @@ defmodule Hologram.Compiler.Transformer do
 
   def transform({:%{}, _, _} = ast, %Context{} = context) do
     MapTypeTransformer.transform(ast, context)
-  end
-
-  def transform({:__aliases__, _, _} = ast, %Context{} = context) do
-    ModuleTypeTransformer.transform(ast, context)
   end
 
   def transform(nil, _) do
@@ -283,6 +282,10 @@ defmodule Hologram.Compiler.Transformer do
   end
 
   # OTHER
+
+  def transform({:__aliases__, _, segments}, %Context{}) do
+    %Alias{segments: segments}
+  end
 
   def transform({:__block__, _, _} = ast, %Context{} = context) do
     BlockTransformer.transform(ast, context)

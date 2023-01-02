@@ -3,6 +3,8 @@ defmodule Hologram.Compiler.TransformerTest do
 
   alias Hologram.Compiler.{Context, Transformer}
 
+  alias Hologram.Compiler.IR.Alias
+
   alias Hologram.Compiler.IR.{
     AccessOperator,
     AdditionOperator,
@@ -37,7 +39,6 @@ defmodule Hologram.Compiler.TransformerTest do
     ModuleAttributeDefinition,
     ModuleAttributeOperator,
     ModulePseudoVariable,
-    ModuleType,
     MultiplicationOperator,
     NilType,
     NotEqualToOperator,
@@ -294,18 +295,6 @@ defmodule Hologram.Compiler.TransformerTest do
       assert %MapType{} = Transformer.transform(ast, %Context{})
     end
 
-    test "module from module segments" do
-      code = "Hologram.Compiler.TransformerTest"
-      ast = ast(code)
-
-      assert %ModuleType{} = Transformer.transform(ast, %Context{})
-    end
-
-    test "module from atom" do
-      module = Hologram.Compiler.TransformerTest
-      assert %ModuleType{} = Transformer.transform(module, %Context{})
-    end
-
     test "nil" do
       code = "nil"
       ast = ast(code)
@@ -501,6 +490,16 @@ defmodule Hologram.Compiler.TransformerTest do
   end
 
   describe "other" do
+    test "alias from aliases tuple" do
+      ast = {:__aliases__, [line: 1], [:Abc, :Bcd]}
+      assert %Alias{} = Transformer.transform(ast, %Context{})
+    end
+
+    test "alias from atom" do
+      ast = Abc.Bcd
+      assert %Alias{} = Transformer.transform(ast, %Context{})
+    end
+
     test "block" do
       ast = {:__block__, [], [1, 2]}
       assert %Block{} = Transformer.transform(ast, %Context{})
