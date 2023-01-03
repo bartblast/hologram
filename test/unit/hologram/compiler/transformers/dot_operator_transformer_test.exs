@@ -4,13 +4,16 @@ defmodule Hologram.Compiler.DotOperatorTransformerTest do
   alias Hologram.Compiler.Context
   alias Hologram.Compiler.DotOperatorTransformer
   alias Hologram.Compiler.IR.AccessOperator
+  alias Hologram.Compiler.IR.Alias
   alias Hologram.Compiler.IR.AnonymousFunctionCall
   alias Hologram.Compiler.IR.AtomType
+  alias Hologram.Compiler.IR.Call
   alias Hologram.Compiler.IR.DotOperator
+  alias Hologram.Compiler.IR.ModuleAttributeOperator
   alias Hologram.Compiler.IR.Symbol
 
   test "access operator" do
-    code = "a[:b]"
+    code = "a[:x]"
     ast = ast(code)
 
     assert %AccessOperator{} = DotOperatorTransformer.transform(ast, %Context{})
@@ -23,36 +26,69 @@ defmodule Hologram.Compiler.DotOperatorTransformerTest do
     assert %AnonymousFunctionCall{} = DotOperatorTransformer.transform(ast, %Context{})
   end
 
-  test "dot operator on symbol, without parenthesis" do
-    code = "a.b"
-    ast = ast(code)
-    result = DotOperatorTransformer.transform(ast, %Context{})
+  describe "dot operator on symbol" do
+    test "without parenthesis" do
+      code = "a.x"
+      ast = ast(code)
+      result = DotOperatorTransformer.transform(ast, %Context{})
 
-    expected = %DotOperator{
-      left: %Symbol{name: :a},
-      right: %AtomType{value: :b}
-    }
+      expected = %DotOperator{
+        left: %Symbol{name: :a},
+        right: %AtomType{value: :x}
+      }
 
-    assert result == expected
+      assert result == expected
+    end
+
+    test "with parenthesis" do
+      code = "a.x(1, 2)"
+      ast = ast(code)
+
+      assert %Call{} = DotOperatorTransformer.transform(ast, %Context{})
+    end
   end
 
-  # test "test" do
-  #   code = "my_fun()"
-  #   ast = ast(code)
-  #   IO.inspect(ast)
-  # end
+  describe "dot operator on module" do
+    test "without parenthesis" do
+      code = "Abc.x"
+      ast = ast(code)
+      result = DotOperatorTransformer.transform(ast, %Context{})
 
-  # test "transform/3" do
-  #   code = "a.b"
-  #   ast = ast(code)
+      expected = %DotOperator{
+        left: %Alias{segments: [:Abc]},
+        right: %AtomType{value: :x}
+      }
 
-  #   result = DotOperatorTransformer.transform(ast, %Context{})
+      assert result == expected
+    end
 
-  #   expected = %DotOperator{
-  #     left: %Variable{name: :a},
-  #     right: %AtomType{value: :b}
-  #   }
+    test "with parenthesis" do
+      code = "Abc.x(1, 2)"
+      ast = ast(code)
 
-  #   assert result == expected
-  # end
+      assert %Call{} = DotOperatorTransformer.transform(ast, %Context{})
+    end
+  end
+
+  describe "dot operator on module attribute" do
+    test "without parenthesis" do
+      code = "@abc.x"
+      ast = ast(code)
+      result = DotOperatorTransformer.transform(ast, %Context{})
+
+      expected = %DotOperator{
+        left: %ModuleAttributeOperator{name: :abc},
+        right: %AtomType{value: :x}
+      }
+
+      assert result == expected
+    end
+
+    test "with parenthesis" do
+      code = "@abc.x(1, 2)"
+      ast = ast(code)
+
+      assert %Call{} = DotOperatorTransformer.transform(ast, %Context{})
+    end
+  end
 end
