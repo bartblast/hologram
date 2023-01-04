@@ -25,7 +25,7 @@ jobs:
       # and running the workflow steps.
       matrix:
         otp: ['25.2']
-        elixir: ['1.13.3']
+        elixir: ['1.14.2']
     steps:
     # Step: Setup Elixir + Erlang image as the base.
     - name: Set up Elixir
