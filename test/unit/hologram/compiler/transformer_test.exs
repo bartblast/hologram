@@ -166,7 +166,7 @@ defmodule Hologram.Compiler.TransformerTest do
       code = "100 |> div(2)"
       ast = ast(code)
 
-      assert %FunctionCall{} = Transformer.transform(ast, %Context{})
+      assert %Call{} = Transformer.transform(ast, %Context{})
     end
 
     test "relaxed boolean and" do
@@ -446,15 +446,15 @@ defmodule Hologram.Compiler.TransformerTest do
       assert %AnonymousFunctionCall{} = Transformer.transform(ast, %Context{})
     end
 
-    test "call without module" do
+    test "simple call" do
       code = "test(123)"
       ast = ast(code)
 
       assert %Call{} = Transformer.transform(ast, %Context{})
     end
 
-    test "call with module" do
-      code = "Hologram.Compiler.TransformerTest.test(123)"
+    test "call on alias" do
+      code = "Abc.test(123)"
       ast = ast(code)
 
       assert %Call{} = Transformer.transform(ast, %Context{})

@@ -9,6 +9,7 @@ defmodule Hologram.Compiler.Transformer do
     AnonymousFunctionTypeTransformer,
     BinaryTypeTransformer,
     BlockTransformer,
+    CallTransformer,
     CaseExpressionTransformer,
     ConsOperatorTransformer,
     DivisionOperatorTransformer,
@@ -299,9 +300,13 @@ defmodule Hologram.Compiler.Transformer do
     UnquoteTransformer.transform(ast, context)
   end
 
-  # must be defined before variable case
   def transform({:__MODULE__, _, _}, _) do
     %ModulePseudoVariable{}
+  end
+
+  def transform({name, _, args} = ast, %Context{} = context)
+      when is_atom(name) and is_list(args) do
+    CallTransformer.transform(ast, context)
   end
 
   def transform({name, _, _}, _) when is_atom(name) do

@@ -3,39 +3,38 @@ defmodule Hologram.Compiler.CallTransformerTest do
 
   alias Hologram.Compiler.CallTransformer
   alias Hologram.Compiler.Context
+  alias Hologram.Compiler.IR.AdditionOperator
+  alias Hologram.Compiler.IR.Alias
+  alias Hologram.Compiler.IR.AtomType
   alias Hologram.Compiler.IR.Call
   alias Hologram.Compiler.IR.IntegerType
   alias Hologram.Compiler.IR.ModuleAttributeOperator
   alias Hologram.Compiler.IR.ModulePseudoVariable
-  alias Hologram.Compiler.IR.Variable
+  alias Hologram.Compiler.IR.Symbol
 
-  describe "non-aliased call" do
-    test "without params" do
+  describe "simple call" do
+    test "without arguments" do
       code = "my_fun()"
       ast = ast(code)
       result = CallTransformer.transform(ast, %Context{})
 
       expected = %Call{
-        alias_segs: [],
         module: nil,
-        module_expression: nil,
-        name: :my_fun,
+        function: :my_fun,
         args: []
       }
 
       assert result == expected
     end
 
-    test "with params" do
+    test "with arguments" do
       code = "my_fun(1, 2)"
       ast = ast(code)
       result = CallTransformer.transform(ast, %Context{})
 
       expected = %Call{
-        alias_segs: [],
         module: nil,
-        module_expression: nil,
-        name: :my_fun,
+        function: :my_fun,
         args: [
           %IntegerType{value: 1},
           %IntegerType{value: 2}
@@ -46,17 +45,48 @@ defmodule Hologram.Compiler.CallTransformerTest do
     end
   end
 
-  describe "aliased call" do
-    test "without params" do
-      code = "Abc.Bcd.my_fun()"
+  describe "call on alias" do
+    test "without arguments" do
+      code = "Abc.my_fun()"
       ast = ast(code)
       result = CallTransformer.transform(ast, %Context{})
 
       expected = %Call{
-        alias_segs: [:Abc, :Bcd],
-        module: nil,
-        module_expression: nil,
-        name: :my_fun,
+        module: %Alias{segments: [:Abc]},
+        function: :my_fun,
+        args: []
+      }
+
+      assert result == expected
+    end
+
+    test "with arguments" do
+      code = "Abc.my_fun(1, 2)"
+      ast = ast(code)
+      result = CallTransformer.transform(ast, %Context{})
+
+      expected = %Call{
+        module: %Alias{segments: [:Abc]},
+        function: :my_fun,
+        args: [
+          %IntegerType{value: 1},
+          %IntegerType{value: 2}
+        ]
+      }
+
+      assert result == expected
+    end
+  end
+
+  describe "call on module attribute" do
+    test "without params" do
+      code = "@my_attr.my_fun()"
+      ast = ast(code)
+      result = CallTransformer.transform(ast, %Context{})
+
+      expected = %Call{
+        module: %ModuleAttributeOperator{name: :my_attr},
+        function: :my_fun,
         args: []
       }
 
@@ -64,15 +94,13 @@ defmodule Hologram.Compiler.CallTransformerTest do
     end
 
     test "with params" do
-      code = "Abc.Bcd.my_fun(1, 2)"
+      code = "@my_attr.my_fun(1, 2)"
       ast = ast(code)
       result = CallTransformer.transform(ast, %Context{})
 
       expected = %Call{
-        alias_segs: [:Abc, :Bcd],
-        module: nil,
-        module_expression: nil,
-        name: :my_fun,
+        module: %ModuleAttributeOperator{name: :my_attr},
+        function: :my_fun,
         args: [
           %IntegerType{value: 1},
           %IntegerType{value: 2}
@@ -85,15 +113,16 @@ defmodule Hologram.Compiler.CallTransformerTest do
 
   describe "call on expression" do
     test "without params" do
-      code = "@my_expr.my_fun()"
+      code = "(3 + 4).my_fun()"
       ast = ast(code)
       result = CallTransformer.transform(ast, %Context{})
 
       expected = %Call{
-        alias_segs: nil,
-        module: nil,
-        module_expression: %ModuleAttributeOperator{name: :my_expr},
-        name: :my_fun,
+        module: %AdditionOperator{
+          left: %IntegerType{value: 3},
+          right: %IntegerType{value: 4}
+        },
+        function: :my_fun,
         args: []
       }
 
@@ -101,15 +130,16 @@ defmodule Hologram.Compiler.CallTransformerTest do
     end
 
     test "with params" do
-      code = "@my_expr.my_fun(1, 2)"
+      code = "(3 + 4).my_fun(1, 2)"
       ast = ast(code)
       result = CallTransformer.transform(ast, %Context{})
 
       expected = %Call{
-        alias_segs: nil,
-        module: nil,
-        module_expression: %ModuleAttributeOperator{name: :my_expr},
-        name: :my_fun,
+        module: %AdditionOperator{
+          left: %IntegerType{value: 3},
+          right: %IntegerType{value: 4}
+        },
+        function: :my_fun,
         args: [
           %IntegerType{value: 1},
           %IntegerType{value: 2}
@@ -120,17 +150,15 @@ defmodule Hologram.Compiler.CallTransformerTest do
     end
   end
 
-  describe "call on __MODULE__ pseudo variable" do
+  describe "call on __MODULE__ pseudo-variable" do
     test "without params" do
       code = "__MODULE__.my_fun()"
       ast = ast(code)
       result = CallTransformer.transform(ast, %Context{})
 
       expected = %Call{
-        alias_segs: nil,
-        module: nil,
-        module_expression: %ModulePseudoVariable{},
-        name: :my_fun,
+        module: %ModulePseudoVariable{},
+        function: :my_fun,
         args: []
       }
 
@@ -143,10 +171,8 @@ defmodule Hologram.Compiler.CallTransformerTest do
       result = CallTransformer.transform(ast, %Context{})
 
       expected = %Call{
-        alias_segs: nil,
-        module: nil,
-        module_expression: %ModulePseudoVariable{},
-        name: :my_fun,
+        module: %ModulePseudoVariable{},
+        function: :my_fun,
         args: [
           %IntegerType{value: 1},
           %IntegerType{value: 2}
@@ -164,10 +190,8 @@ defmodule Hologram.Compiler.CallTransformerTest do
       result = CallTransformer.transform(ast, %Context{})
 
       expected = %Call{
-        alias_segs: nil,
-        module: :"Erlang.MyModule",
-        module_expression: nil,
-        name: :my_fun,
+        module: %AtomType{value: :my_module},
+        function: :my_fun,
         args: []
       }
 
@@ -180,11 +204,12 @@ defmodule Hologram.Compiler.CallTransformerTest do
       result = CallTransformer.transform(ast, %Context{})
 
       expected = %Call{
-        alias_segs: nil,
-        module: :"Erlang.MyModule",
-        module_expression: nil,
-        name: :my_fun,
-        args: [%IntegerType{value: 1}, %IntegerType{value: 2}]
+        module: %AtomType{value: :my_module},
+        function: :my_fun,
+        args: [
+          %IntegerType{value: 1},
+          %IntegerType{value: 2}
+        ]
       }
 
       assert result == expected
@@ -197,11 +222,9 @@ defmodule Hologram.Compiler.CallTransformerTest do
     result = CallTransformer.transform(ast, %Context{})
 
     expected = %Call{
-      alias_segs: nil,
-      module: Kernel,
-      module_expression: nil,
-      name: :to_string,
-      args: [%Variable{name: :test}]
+      module: %Alias{segments: [:Kernel]},
+      function: :to_string,
+      args: [%Symbol{name: :test}]
     }
 
     assert result == expected

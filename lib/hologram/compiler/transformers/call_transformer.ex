@@ -1,38 +1,14 @@
 defmodule Hologram.Compiler.CallTransformer do
   alias Hologram.Compiler.Context
-  alias Hologram.Compiler.Helpers
   alias Hologram.Compiler.IR.Call
   alias Hologram.Compiler.Transformer
 
-  def transform(
-        {{:., _, [{:__aliases__, _, alias_segs}, name]}, _, args},
-        %Context{} = context
-      ) do
-    build_call(name, args, context, alias_segs: alias_segs)
+  def transform({{:., _, [module, function]}, _, args}, %Context{} = context) do
+    build_call(module, function, args, context)
   end
 
-  def transform({{:., _, [Kernel, :to_string]}, _, args}, %Context{} = context) do
-    build_call(:to_string, args, context, module: Kernel)
-  end
-
-  def transform(
-        {{:., _, [{:__MODULE__, _, _} = module_expression, name]}, _, args},
-        %Context{} = context
-      ) do
-    build_call(name, args, context, module_expression: module_expression)
-  end
-
-  def transform({{:., _, [atom, name]}, _, args}, %Context{} = context) when is_atom(atom) do
-    module = Helpers.erlang_module(atom)
-    build_call(name, args, context, module: module)
-  end
-
-  def transform({{:., _, [module_expression, name]}, _, args}, %Context{} = context) do
-    build_call(name, args, context, module_expression: module_expression)
-  end
-
-  def transform({name, _, args}, %Context{} = context) do
-    build_call(name, args, context, alias_segs: [])
+  def transform({function, _, args}, %Context{} = context) do
+    build_call(nil, function, args, context)
   end
 
   defp build_args(args, context) do
@@ -40,21 +16,19 @@ defmodule Hologram.Compiler.CallTransformer do
     Enum.map(args, &Transformer.transform(&1, context))
   end
 
-  defp build_call(name, args, %Context{} = context, opts) do
-    args = build_args(args, context)
-
-    module_expression =
-      if opts[:module_expression] do
-        Transformer.transform(opts[:module_expression], context)
+  defp build_call(module, function, args, %Context{} = context) do
+    module =
+      if module do
+        Transformer.transform(module, context)
       else
         nil
       end
 
+    args = build_args(args, context)
+
     %Call{
-      alias_segs: opts[:alias_segs],
-      module: opts[:module],
-      module_expression: module_expression,
-      name: name,
+      module: module,
+      function: function,
       args: args
     }
   end
