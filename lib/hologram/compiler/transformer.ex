@@ -237,11 +237,11 @@ defmodule Hologram.Compiler.Transformer do
     MacroDefinitionTransformer.transform(ast, context)
   end
 
-  def transform({:defmodule, _, _} = ast, _) do
-    ModuleDefinitionTransformer.transform(ast)
+  def transform({:defmodule, _, _} = ast, %Context{} = context) do
+    ModuleDefinitionTransformer.transform(ast, context)
   end
 
-  # DEFER: implement
+  # TODO: implement
   def transform({:defprotocol, _, _}, _) do
     %ProtocolDefinition{}
   end
