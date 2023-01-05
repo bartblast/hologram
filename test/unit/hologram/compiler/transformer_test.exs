@@ -23,7 +23,6 @@ defmodule Hologram.Compiler.TransformerTest do
     EqualToOperator,
     FloatType,
     FunctionDefinition,
-    FunctionCall,
     IfExpression,
     ImportDirective,
     IntegerType,
@@ -477,7 +476,7 @@ defmodule Hologram.Compiler.TransformerTest do
       code = "for n <- [1, 2], do: n * n"
       ast = ast(code)
 
-      assert %FunctionCall{module: Enum, function: :reduce} =
+      assert %Call{module: %Alias{segments: [:Enum]}, function: :reduce} =
                Transformer.transform(ast, %Context{})
     end
 
