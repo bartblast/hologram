@@ -5,7 +5,7 @@ defmodule Hologram.Compiler.PatternDeconstructor.MapTypeTest do
   alias Hologram.Compiler.IR.IntegerType
   alias Hologram.Compiler.IR.MapAccess
   alias Hologram.Compiler.IR.MapType
-  alias Hologram.Compiler.IR.Variable
+  alias Hologram.Compiler.IR.Symbol
   alias Hologram.Compiler.PatternDeconstructor
 
   test "non-nested map without vars" do
@@ -23,7 +23,7 @@ defmodule Hologram.Compiler.PatternDeconstructor.MapTypeTest do
     ir = %MapType{
       data: [
         {%AtomType{value: :a}, %IntegerType{value: 1}},
-        {%AtomType{value: :b}, %Variable{name: :x}}
+        {%AtomType{value: :b}, %Symbol{name: :x}}
       ]
     }
 
@@ -34,7 +34,7 @@ defmodule Hologram.Compiler.PatternDeconstructor.MapTypeTest do
         %MapAccess{
           key: %AtomType{value: :b}
         },
-        %Variable{name: :x}
+        %Symbol{name: :x}
       ]
     ]
 
@@ -44,9 +44,9 @@ defmodule Hologram.Compiler.PatternDeconstructor.MapTypeTest do
   test "non-nested map with multiple vars" do
     ir = %MapType{
       data: [
-        {%AtomType{value: :a}, %Variable{name: :x}},
+        {%AtomType{value: :a}, %Symbol{name: :x}},
         {%AtomType{value: :b}, %IntegerType{value: 2}},
-        {%AtomType{value: :c}, %Variable{name: :y}}
+        {%AtomType{value: :c}, %Symbol{name: :y}}
       ]
     }
 
@@ -57,13 +57,13 @@ defmodule Hologram.Compiler.PatternDeconstructor.MapTypeTest do
         %MapAccess{
           key: %AtomType{value: :a}
         },
-        %Variable{name: :x}
+        %Symbol{name: :x}
       ],
       [
         %MapAccess{
           key: %AtomType{value: :c}
         },
-        %Variable{name: :y}
+        %Symbol{name: :y}
       ]
     ]
 
@@ -94,7 +94,7 @@ defmodule Hologram.Compiler.PatternDeconstructor.MapTypeTest do
         {%AtomType{value: :b},
          %MapType{
            data: [
-             {%AtomType{value: :c}, %Variable{name: :x}},
+             {%AtomType{value: :c}, %Symbol{name: :x}},
              {%AtomType{value: :d}, %IntegerType{value: 4}}
            ]
          }}
@@ -111,7 +111,7 @@ defmodule Hologram.Compiler.PatternDeconstructor.MapTypeTest do
         %MapAccess{
           key: %AtomType{value: :c}
         },
-        %Variable{name: :x}
+        %Symbol{name: :x}
       ]
     ]
 
@@ -122,11 +122,11 @@ defmodule Hologram.Compiler.PatternDeconstructor.MapTypeTest do
     ir = %MapType{
       data: [
         {%AtomType{value: :a}, %IntegerType{value: 1}},
-        {%AtomType{value: :b}, %Variable{name: :x}},
+        {%AtomType{value: :b}, %Symbol{name: :x}},
         {%AtomType{value: :c},
          %MapType{
            data: [
-             {%AtomType{value: :d}, %Variable{name: :y}},
+             {%AtomType{value: :d}, %Symbol{name: :y}},
              {%AtomType{value: :e}, %IntegerType{value: 4}}
            ]
          }}
@@ -140,7 +140,7 @@ defmodule Hologram.Compiler.PatternDeconstructor.MapTypeTest do
         %MapAccess{
           key: %AtomType{value: :b}
         },
-        %Variable{name: :x}
+        %Symbol{name: :x}
       ],
       [
         %MapAccess{
@@ -149,7 +149,7 @@ defmodule Hologram.Compiler.PatternDeconstructor.MapTypeTest do
         %MapAccess{
           key: %AtomType{value: :d}
         },
-        %Variable{name: :y}
+        %Symbol{name: :y}
       ]
     ]
 

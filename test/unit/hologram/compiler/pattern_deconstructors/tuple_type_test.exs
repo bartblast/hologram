@@ -2,9 +2,9 @@ defmodule Hologram.Compiler.PatternDeconstructor.TupleTypeTest do
   use Hologram.Test.UnitCase, async: false
 
   alias Hologram.Compiler.IR.IntegerType
+  alias Hologram.Compiler.IR.Symbol
   alias Hologram.Compiler.IR.TupleAccess
   alias Hologram.Compiler.IR.TupleType
-  alias Hologram.Compiler.IR.Variable
   alias Hologram.Compiler.PatternDeconstructor
 
   test "non-nested tuple without vars" do
@@ -22,7 +22,7 @@ defmodule Hologram.Compiler.PatternDeconstructor.TupleTypeTest do
     ir = %TupleType{
       data: [
         %IntegerType{value: 1},
-        %Variable{name: :x}
+        %Symbol{name: :x}
       ]
     }
 
@@ -31,7 +31,7 @@ defmodule Hologram.Compiler.PatternDeconstructor.TupleTypeTest do
     expected = [
       [
         %TupleAccess{index: 1},
-        %Variable{name: :x}
+        %Symbol{name: :x}
       ]
     ]
 
@@ -41,9 +41,9 @@ defmodule Hologram.Compiler.PatternDeconstructor.TupleTypeTest do
   test "non-nested tuple with multiple vars" do
     ir = %TupleType{
       data: [
-        %Variable{name: :x},
+        %Symbol{name: :x},
         %IntegerType{value: 2},
-        %Variable{name: :y}
+        %Symbol{name: :y}
       ]
     }
 
@@ -52,11 +52,11 @@ defmodule Hologram.Compiler.PatternDeconstructor.TupleTypeTest do
     expected = [
       [
         %TupleAccess{index: 0},
-        %Variable{name: :x}
+        %Symbol{name: :x}
       ],
       [
         %TupleAccess{index: 2},
-        %Variable{name: :y}
+        %Symbol{name: :y}
       ]
     ]
 
@@ -86,7 +86,7 @@ defmodule Hologram.Compiler.PatternDeconstructor.TupleTypeTest do
         %IntegerType{value: 1},
         %TupleType{
           data: [
-            %Variable{name: :x},
+            %Symbol{name: :x},
             %IntegerType{value: 2}
           ]
         }
@@ -99,7 +99,7 @@ defmodule Hologram.Compiler.PatternDeconstructor.TupleTypeTest do
       [
         %TupleAccess{index: 1},
         %TupleAccess{index: 0},
-        %Variable{name: :x}
+        %Symbol{name: :x}
       ]
     ]
 
@@ -110,10 +110,10 @@ defmodule Hologram.Compiler.PatternDeconstructor.TupleTypeTest do
     ir = %TupleType{
       data: [
         %IntegerType{value: 1},
-        %Variable{name: :x},
+        %Symbol{name: :x},
         %TupleType{
           data: [
-            %Variable{name: :y},
+            %Symbol{name: :y},
             %IntegerType{value: 2}
           ]
         }
@@ -125,12 +125,12 @@ defmodule Hologram.Compiler.PatternDeconstructor.TupleTypeTest do
     expected = [
       [
         %TupleAccess{index: 1},
-        %Variable{name: :x}
+        %Symbol{name: :x}
       ],
       [
         %TupleAccess{index: 2},
         %TupleAccess{index: 0},
-        %Variable{name: :y}
+        %Symbol{name: :y}
       ]
     ]
 

@@ -6,7 +6,7 @@ defmodule Hologram.Compiler.PatternDeconstructor.ConsOperatorTest do
   alias Hologram.Compiler.IR.ListIndexAccess
   alias Hologram.Compiler.IR.ListTailAccess
   alias Hologram.Compiler.IR.ListType
-  alias Hologram.Compiler.IR.Variable
+  alias Hologram.Compiler.IR.Symbol
   alias Hologram.Compiler.PatternDeconstructor
 
   test "non-nested cons operator without vars" do
@@ -29,7 +29,7 @@ defmodule Hologram.Compiler.PatternDeconstructor.ConsOperatorTest do
     # [x | [1, 2]]
 
     ir = %ConsOperator{
-      head: %Variable{name: :x},
+      head: %Symbol{name: :x},
       tail: %ListType{
         data: [
           %IntegerType{value: 1},
@@ -43,7 +43,7 @@ defmodule Hologram.Compiler.PatternDeconstructor.ConsOperatorTest do
     expected = [
       [
         %ListIndexAccess{index: 0},
-        %Variable{name: :x}
+        %Symbol{name: :x}
       ]
     ]
 
@@ -55,7 +55,7 @@ defmodule Hologram.Compiler.PatternDeconstructor.ConsOperatorTest do
 
     ir = %ConsOperator{
       head: %IntegerType{value: 1},
-      tail: %Variable{name: :x}
+      tail: %Symbol{name: :x}
     }
 
     result = PatternDeconstructor.deconstruct(ir)
@@ -63,7 +63,7 @@ defmodule Hologram.Compiler.PatternDeconstructor.ConsOperatorTest do
     expected = [
       [
         %ListTailAccess{},
-        %Variable{name: :x}
+        %Symbol{name: :x}
       ]
     ]
 
@@ -74,8 +74,8 @@ defmodule Hologram.Compiler.PatternDeconstructor.ConsOperatorTest do
     # [x | y]
 
     ir = %ConsOperator{
-      head: %Variable{name: :x},
-      tail: %Variable{name: :y}
+      head: %Symbol{name: :x},
+      tail: %Symbol{name: :y}
     }
 
     result = PatternDeconstructor.deconstruct(ir)
@@ -83,11 +83,11 @@ defmodule Hologram.Compiler.PatternDeconstructor.ConsOperatorTest do
     expected = [
       [
         %ListIndexAccess{index: 0},
-        %Variable{name: :x}
+        %Symbol{name: :x}
       ],
       [
         %ListTailAccess{},
-        %Variable{name: :y}
+        %Symbol{name: :y}
       ]
     ]
 
@@ -117,9 +117,9 @@ defmodule Hologram.Compiler.PatternDeconstructor.ConsOperatorTest do
     # [x | [y | [3, 4]]]
 
     ir = %ConsOperator{
-      head: %Variable{name: :x},
+      head: %Symbol{name: :x},
       tail: %ConsOperator{
-        head: %Variable{name: :y},
+        head: %Symbol{name: :y},
         tail: %ListType{
           data: [
             %IntegerType{value: 3},
@@ -134,12 +134,12 @@ defmodule Hologram.Compiler.PatternDeconstructor.ConsOperatorTest do
     expected = [
       [
         %ListIndexAccess{index: 0},
-        %Variable{name: :x}
+        %Symbol{name: :x}
       ],
       [
         %ListTailAccess{},
         %ListIndexAccess{index: 0},
-        %Variable{name: :y}
+        %Symbol{name: :y}
       ]
     ]
 
@@ -155,8 +155,8 @@ defmodule Hologram.Compiler.PatternDeconstructor.ConsOperatorTest do
         head: %IntegerType{value: 2},
         tail: %ListType{
           data: [
-            %Variable{name: :x},
-            %Variable{name: :y}
+            %Symbol{name: :x},
+            %Symbol{name: :y}
           ]
         }
       }
@@ -169,13 +169,13 @@ defmodule Hologram.Compiler.PatternDeconstructor.ConsOperatorTest do
         %ListTailAccess{},
         %ListTailAccess{},
         %ListIndexAccess{index: 0},
-        %Variable{name: :x}
+        %Symbol{name: :x}
       ],
       [
         %ListTailAccess{},
         %ListTailAccess{},
         %ListIndexAccess{index: 1},
-        %Variable{name: :y}
+        %Symbol{name: :y}
       ]
     ]
 

@@ -4,7 +4,7 @@ defmodule Hologram.Compiler.PatternDeconstructor.ListTypeTest do
   alias Hologram.Compiler.IR.IntegerType
   alias Hologram.Compiler.IR.ListIndexAccess
   alias Hologram.Compiler.IR.ListType
-  alias Hologram.Compiler.IR.Variable
+  alias Hologram.Compiler.IR.Symbol
   alias Hologram.Compiler.PatternDeconstructor
 
   test "non-nested list without vars" do
@@ -22,7 +22,7 @@ defmodule Hologram.Compiler.PatternDeconstructor.ListTypeTest do
     ir = %ListType{
       data: [
         %IntegerType{value: 1},
-        %Variable{name: :x}
+        %Symbol{name: :x}
       ]
     }
 
@@ -31,7 +31,7 @@ defmodule Hologram.Compiler.PatternDeconstructor.ListTypeTest do
     expected = [
       [
         %ListIndexAccess{index: 1},
-        %Variable{name: :x}
+        %Symbol{name: :x}
       ]
     ]
 
@@ -41,9 +41,9 @@ defmodule Hologram.Compiler.PatternDeconstructor.ListTypeTest do
   test "non-nested list with multiple vars" do
     ir = %ListType{
       data: [
-        %Variable{name: :x},
+        %Symbol{name: :x},
         %IntegerType{value: 2},
-        %Variable{name: :y}
+        %Symbol{name: :y}
       ]
     }
 
@@ -52,11 +52,11 @@ defmodule Hologram.Compiler.PatternDeconstructor.ListTypeTest do
     expected = [
       [
         %ListIndexAccess{index: 0},
-        %Variable{name: :x}
+        %Symbol{name: :x}
       ],
       [
         %ListIndexAccess{index: 2},
-        %Variable{name: :y}
+        %Symbol{name: :y}
       ]
     ]
 
@@ -86,7 +86,7 @@ defmodule Hologram.Compiler.PatternDeconstructor.ListTypeTest do
         %IntegerType{value: 1},
         %ListType{
           data: [
-            %Variable{name: :x},
+            %Symbol{name: :x},
             %IntegerType{value: 2}
           ]
         }
@@ -99,7 +99,7 @@ defmodule Hologram.Compiler.PatternDeconstructor.ListTypeTest do
       [
         %ListIndexAccess{index: 1},
         %ListIndexAccess{index: 0},
-        %Variable{name: :x}
+        %Symbol{name: :x}
       ]
     ]
 
@@ -110,10 +110,10 @@ defmodule Hologram.Compiler.PatternDeconstructor.ListTypeTest do
     ir = %ListType{
       data: [
         %IntegerType{value: 1},
-        %Variable{name: :x},
+        %Symbol{name: :x},
         %ListType{
           data: [
-            %Variable{name: :y},
+            %Symbol{name: :y},
             %IntegerType{value: 2}
           ]
         }
@@ -125,12 +125,12 @@ defmodule Hologram.Compiler.PatternDeconstructor.ListTypeTest do
     expected = [
       [
         %ListIndexAccess{index: 1},
-        %Variable{name: :x}
+        %Symbol{name: :x}
       ],
       [
         %ListIndexAccess{index: 2},
         %ListIndexAccess{index: 0},
-        %Variable{name: :y}
+        %Symbol{name: :y}
       ]
     ]
 
