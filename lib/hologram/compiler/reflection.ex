@@ -6,9 +6,9 @@ defmodule Hologram.Compiler.Reflection do
   @config Application.get_all_env(:hologram)
 
   @ignored_modules [Ecto.Changeset, Hologram.Router, Hologram.Runtime.JS] ++
-                     Application.get_env(:hologram, :ignored_modules, [])
+                     Application.compile_env(:hologram, :ignored_modules, [])
 
-  @ignored_namespaces Application.get_env(:hologram, :ignored_namespaces, [])
+  @ignored_namespaces Application.compile_env(:hologram, :ignored_namespaces, [])
 
   def app_path(opts \\ []) do
     path_from_opts = Keyword.get(opts, :app_path)
