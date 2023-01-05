@@ -15,7 +15,7 @@ defmodule Hologram.Compiler.CaseExpressionTransformer do
 
     bindings =
       Helpers.aggregate_bindings_from_expression(pattern)
-      |> Enum.map(&prepend_variable_access/1)
+      |> Enum.map(&prepend_symbol_access/1)
 
     %{
       pattern: pattern,
@@ -24,7 +24,7 @@ defmodule Hologram.Compiler.CaseExpressionTransformer do
     }
   end
 
-  defp prepend_variable_access(binding) do
+  defp prepend_symbol_access(binding) do
     %{binding | access_path: [%CaseConditionAccess{} | binding.access_path]}
   end
 end
