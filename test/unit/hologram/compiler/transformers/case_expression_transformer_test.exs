@@ -12,7 +12,7 @@ defmodule Hologram.Compiler.CaseExpressionTransformerTest do
     IntegerType,
     MapAccess,
     MapType,
-    Variable
+    Symbol
   }
 
   test "single expression clause body" do
@@ -39,7 +39,7 @@ defmodule Hologram.Compiler.CaseExpressionTransformerTest do
           pattern: %IntegerType{value: 1}
         }
       ],
-      condition: %Variable{name: :x}
+      condition: %Symbol{name: :x}
     }
 
     assert result == expected
@@ -72,7 +72,7 @@ defmodule Hologram.Compiler.CaseExpressionTransformerTest do
           pattern: %IntegerType{value: 1}
         }
       ],
-      condition: %Variable{name: :x}
+      condition: %Symbol{name: :x}
     }
 
     assert result == expected
@@ -102,7 +102,7 @@ defmodule Hologram.Compiler.CaseExpressionTransformerTest do
           pattern: %IntegerType{value: 1}
         }
       ],
-      condition: %Variable{name: :x}
+      condition: %Symbol{name: :x}
     }
 
     assert result == expected
@@ -139,12 +139,12 @@ defmodule Hologram.Compiler.CaseExpressionTransformerTest do
           },
           pattern: %MapType{
             data: [
-              {%AtomType{value: :a}, %Variable{name: :a}}
+              {%AtomType{value: :a}, %Symbol{name: :a}}
             ]
           }
         }
       ],
-      condition: %Variable{name: :x}
+      condition: %Symbol{name: :x}
     }
 
     assert result == expected
