@@ -53,21 +53,61 @@ defmodule Hologram.UtilsTest do
     assert result == data
   end
 
-  test "list_files_recursively/1" do
-    result = Utils.list_files_recursively("test/unit/fixtures/utils/list_files_recursively")
+  describe "list_files_recursively/1" do
+    test "single path" do
+      result = Utils.list_files_recursively("test/unit/fixtures/utils/list_files_recursively")
 
-    expected = [
-      "test/unit/fixtures/utils/list_files_recursively/dir_1/dir_3/file_5.txt",
-      "test/unit/fixtures/utils/list_files_recursively/dir_1/dir_3/file_6.txt",
-      "test/unit/fixtures/utils/list_files_recursively/dir_1/file_3.txt",
-      "test/unit/fixtures/utils/list_files_recursively/dir_1/file_4.txt",
-      "test/unit/fixtures/utils/list_files_recursively/dir_2/file_7.txt",
-      "test/unit/fixtures/utils/list_files_recursively/dir_2/file_8.txt",
-      "test/unit/fixtures/utils/list_files_recursively/file_1.text",
-      "test/unit/fixtures/utils/list_files_recursively/file_2.text"
-    ]
+      expected = [
+        "test/unit/fixtures/utils/list_files_recursively/dir_1/dir_3/file_5.txt",
+        "test/unit/fixtures/utils/list_files_recursively/dir_1/dir_3/file_6.txt",
+        "test/unit/fixtures/utils/list_files_recursively/dir_1/file_3.txt",
+        "test/unit/fixtures/utils/list_files_recursively/dir_1/file_4.txt",
+        "test/unit/fixtures/utils/list_files_recursively/dir_2/file_7.txt",
+        "test/unit/fixtures/utils/list_files_recursively/dir_2/file_8.txt",
+        "test/unit/fixtures/utils/list_files_recursively/file_1.text",
+        "test/unit/fixtures/utils/list_files_recursively/file_2.text"
+      ]
 
-    assert result == expected
+      assert result == expected
+    end
+
+    test "multiple paths" do
+      paths = [
+        "test/unit/fixtures/utils/list_files_recursively/dir_1",
+        "test/unit/fixtures/utils/list_files_recursively/dir_2"
+      ]
+
+      result = Utils.list_files_recursively(paths)
+
+      expected = [
+        "test/unit/fixtures/utils/list_files_recursively/dir_1/dir_3/file_5.txt",
+        "test/unit/fixtures/utils/list_files_recursively/dir_1/dir_3/file_6.txt",
+        "test/unit/fixtures/utils/list_files_recursively/dir_1/file_3.txt",
+        "test/unit/fixtures/utils/list_files_recursively/dir_1/file_4.txt",
+        "test/unit/fixtures/utils/list_files_recursively/dir_2/file_7.txt",
+        "test/unit/fixtures/utils/list_files_recursively/dir_2/file_8.txt"
+      ]
+
+      assert result == expected
+    end
+
+    test "removes duplicates" do
+      paths = [
+        "test/unit/fixtures/utils/list_files_recursively/dir_1",
+        "test/unit/fixtures/utils/list_files_recursively/dir_1/dir_3"
+      ]
+
+      result = Utils.list_files_recursively(paths)
+
+      expected = [
+        "test/unit/fixtures/utils/list_files_recursively/dir_1/dir_3/file_5.txt",
+        "test/unit/fixtures/utils/list_files_recursively/dir_1/dir_3/file_6.txt",
+        "test/unit/fixtures/utils/list_files_recursively/dir_1/file_3.txt",
+        "test/unit/fixtures/utils/list_files_recursively/dir_1/file_4.txt"
+      ]
+
+      assert result == expected
+    end
   end
 
   test "prepend/2" do
