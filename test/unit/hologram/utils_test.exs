@@ -53,6 +53,23 @@ defmodule Hologram.UtilsTest do
     assert result == data
   end
 
+  test "list_files_recursively/1" do
+    result = Utils.list_files_recursively("test/unit/fixtures/utils/list_files_recursively")
+
+    expected = [
+      "test/unit/fixtures/utils/list_files_recursively/dir_1/dir_3/file_5.txt",
+      "test/unit/fixtures/utils/list_files_recursively/dir_1/dir_3/file_6.txt",
+      "test/unit/fixtures/utils/list_files_recursively/dir_1/file_3.txt",
+      "test/unit/fixtures/utils/list_files_recursively/dir_1/file_4.txt",
+      "test/unit/fixtures/utils/list_files_recursively/dir_2/file_7.txt",
+      "test/unit/fixtures/utils/list_files_recursively/dir_2/file_8.txt",
+      "test/unit/fixtures/utils/list_files_recursively/file_1.text",
+      "test/unit/fixtures/utils/list_files_recursively/file_2.text"
+    ]
+
+    assert result == expected
+  end
+
   test "prepend/2" do
     assert Utils.prepend("string", "prefix") == "prefixstring"
   end

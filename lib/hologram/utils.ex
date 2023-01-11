@@ -26,7 +26,6 @@ defmodule Hologram.Utils do
     :erlang.binary_to_term(data)
   end
 
-  # DEFER: test
   def list_files_recursively(path) do
     cond do
       File.regular?(path) ->
@@ -37,9 +36,7 @@ defmodule Hologram.Utils do
         |> Enum.map(&Path.join(path, &1))
         |> Enum.map(&list_files_recursively/1)
         |> Enum.concat()
-
-      true ->
-        []
+        |> Enum.sort()
     end
   end
 
