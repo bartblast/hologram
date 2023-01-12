@@ -62,6 +62,8 @@ defmodule Hologram.Commons.MemoryStore do
         |> Enum.into(%{})
       end
 
+      def lock(key), do: put(key, :lock)
+
       defp maybe_create_table do
         if !table_created?(), do: create_table()
       end
