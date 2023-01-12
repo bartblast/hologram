@@ -96,6 +96,19 @@ defmodule Hologram.Commons.MemoryStore.Module1Test do
     assert Module1.get_all() == @store_content
   end
 
+  describe "has?/1" do
+    test "true" do
+      Module1.run()
+      Module1.put(:key_3, 123)
+      assert Module1.has?(:key_3)
+    end
+
+    test "false" do
+      Module1.run()
+      refute Module1.has?(:key_3)
+    end
+  end
+
   test "lock/1" do
     Module1.run()
     Module1.lock(:key_3)
