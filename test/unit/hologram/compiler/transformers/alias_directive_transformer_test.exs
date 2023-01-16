@@ -9,7 +9,7 @@ defmodule Hologram.Compiler.AliasDirectiveTransformerTest do
     ast = ast(code)
 
     result = AliasDirectiveTransformer.transform(ast)
-    expected = %AliasDirective{alias_segs: [:A, :B], as: [:B]}
+    expected = %AliasDirective{alias_segs: [:A, :B], as: :B}
 
     assert result == expected
   end
@@ -19,7 +19,7 @@ defmodule Hologram.Compiler.AliasDirectiveTransformerTest do
     ast = ast(code)
 
     result = AliasDirectiveTransformer.transform(ast)
-    expected = %AliasDirective{alias_segs: [:A, :B], as: [:C]}
+    expected = %AliasDirective{alias_segs: [:A, :B], as: :C}
 
     assert result == expected
   end
@@ -29,7 +29,7 @@ defmodule Hologram.Compiler.AliasDirectiveTransformerTest do
     ast = ast(code)
 
     result = AliasDirectiveTransformer.transform(ast)
-    expected = %AliasDirective{alias_segs: [:A, :B], as: [:B]}
+    expected = %AliasDirective{alias_segs: [:A, :B], as: :B}
 
     assert result == expected
   end
@@ -40,7 +40,7 @@ defmodule Hologram.Compiler.AliasDirectiveTransformerTest do
     ast = ast(code)
 
     result = AliasDirectiveTransformer.transform(ast)
-    expected = %AliasDirective{alias_segs: [:A, :B], as: [:C]}
+    expected = %AliasDirective{alias_segs: [:A, :B], as: :C}
 
     assert result == expected
   end
@@ -52,8 +52,8 @@ defmodule Hologram.Compiler.AliasDirectiveTransformerTest do
     result = AliasDirectiveTransformer.transform(ast)
 
     expected = [
-      %AliasDirective{alias_segs: [:A, :B, :C], as: [:C]},
-      %AliasDirective{alias_segs: [:A, :B, :D], as: [:D]}
+      %AliasDirective{alias_segs: [:A, :B, :C], as: :C},
+      %AliasDirective{alias_segs: [:A, :B, :D], as: :D}
     ]
 
     assert result == expected
@@ -67,8 +67,8 @@ defmodule Hologram.Compiler.AliasDirectiveTransformerTest do
     result = AliasDirectiveTransformer.transform(ast)
 
     expected = [
-      %AliasDirective{alias_segs: [:A, :B, :C], as: [:C]},
-      %AliasDirective{alias_segs: [:A, :B, :D], as: [:D]}
+      %AliasDirective{alias_segs: [:A, :B, :C], as: :C},
+      %AliasDirective{alias_segs: [:A, :B, :D], as: :D}
     ]
 
     assert result == expected

@@ -10,23 +10,23 @@ defmodule Hologram.Compiler.AliasDirectiveTransformer do
   end
 
   def transform({:alias, _, [{_, _, alias_segs}]}) do
-    %AliasDirective{alias_segs: alias_segs, as: [List.last(alias_segs)]}
+    %AliasDirective{alias_segs: alias_segs, as: List.last(alias_segs)}
   end
 
   def transform({:alias, _, [{_, _, alias_segs}, opts]}) do
     as =
       if Keyword.has_key?(opts, :as) do
-        elem(opts[:as], 2)
+        opts[:as] |> elem(2) |> hd()
       else
-        [List.last(alias_segs)]
+        List.last(alias_segs)
       end
 
     %AliasDirective{alias_segs: alias_segs, as: as}
   end
 
   defp transform_multi_alias(alias_segs, aliases) do
-    Enum.map(aliases, fn {:__aliases__, _, as} ->
-      %AliasDirective{alias_segs: alias_segs ++ as, as: as}
+    Enum.map(aliases, fn {:__aliases__, _, [as]} ->
+      %AliasDirective{alias_segs: alias_segs ++ [as], as: as}
     end)
   end
 end
