@@ -4,86 +4,71 @@ defmodule Hologram.Compiler.AliasDirectiveTransformerTest do
   alias Hologram.Compiler.AliasDirectiveTransformer
   alias Hologram.Compiler.IR.AliasDirective
 
-  @module_1 Hologram.Test.Fixtures.Compiler.AliasDirectiveTransformer.Module1
-  @module_2 Hologram.Test.Fixtures.Compiler.AliasDirectiveTransformer.Module2
-
   test "default 'as' option" do
-    code = "alias Hologram.Test.Fixtures.Compiler.AliasDirectiveTransformer.Module1"
+    code = "alias A.B"
     ast = ast(code)
 
     result = AliasDirectiveTransformer.transform(ast)
-    expected = %AliasDirective{module: @module_1, as: [:Module1]}
+    expected = %AliasDirective{alias_segs: [:A, :B], as: [:B]}
 
     assert result == expected
   end
 
-  test "one-part 'as' option" do
-    code = "alias Hologram.Test.Fixtures.Compiler.AliasDirectiveTransformer.Module1, as: Xyz"
+  test "custom 'as' option" do
+    code = "alias A.B, as: C"
     ast = ast(code)
 
     result = AliasDirectiveTransformer.transform(ast)
-    expected = %AliasDirective{module: @module_1, as: [:Xyz]}
-
-    assert result == expected
-  end
-
-  test "multiple-part 'as' option" do
-    code = "alias Hologram.Test.Fixtures.Compiler.AliasDirectiveTransformer.Module1, as: Xyz.Kmn"
-    ast = ast(code)
-
-    result = AliasDirectiveTransformer.transform(ast)
-    expected = %AliasDirective{module: @module_1, as: [:Xyz, :Kmn]}
+    expected = %AliasDirective{alias_segs: [:A, :B], as: [:C]}
 
     assert result == expected
   end
 
   test "'warn' option" do
-    code = "alias Hologram.Test.Fixtures.Compiler.AliasDirectiveTransformer.Module1, warn: false"
+    code = "alias A.B, warn: false"
     ast = ast(code)
 
     result = AliasDirectiveTransformer.transform(ast)
-    expected = %AliasDirective{module: @module_1, as: [:Module1]}
+    expected = %AliasDirective{alias_segs: [:A, :B], as: [:B]}
 
     assert result == expected
   end
 
   test "'as' option + 'warn' option" do
-    code =
-      "alias Hologram.Test.Fixtures.Compiler.AliasDirectiveTransformer.Module1, as: Xyz, warn: false"
+    code = "alias A.B, as: C, warn: false"
 
     ast = ast(code)
 
     result = AliasDirectiveTransformer.transform(ast)
-    expected = %AliasDirective{module: @module_1, as: [:Xyz]}
+    expected = %AliasDirective{alias_segs: [:A, :B], as: [:C]}
 
     assert result == expected
   end
 
   test "multi-alias without options" do
-    code = "alias Hologram.Test.Fixtures.Compiler.AliasDirectiveTransformer.{Module1, Module2}"
+    code = "alias A.B.{C, D}"
     ast = ast(code)
 
     result = AliasDirectiveTransformer.transform(ast)
 
     expected = [
-      %AliasDirective{module: @module_1, as: [:Module1]},
-      %AliasDirective{module: @module_2, as: [:Module2]}
+      %AliasDirective{alias_segs: [:A, :B, :C], as: [:C]},
+      %AliasDirective{alias_segs: [:A, :B, :D], as: [:D]}
     ]
 
     assert result == expected
   end
 
   test "multi-alias with options" do
-    code =
-      "alias Hologram.Test.Fixtures.Compiler.AliasDirectiveTransformer.{Module1, Module2}, warn: false"
+    code = "alias A.B.{C, D}, warn: false"
 
     ast = ast(code)
 
     result = AliasDirectiveTransformer.transform(ast)
 
     expected = [
-      %AliasDirective{module: @module_1, as: [:Module1]},
-      %AliasDirective{module: @module_2, as: [:Module2]}
+      %AliasDirective{alias_segs: [:A, :B, :C], as: [:C]},
+      %AliasDirective{alias_segs: [:A, :B, :D], as: [:D]}
     ]
 
     assert result == expected
