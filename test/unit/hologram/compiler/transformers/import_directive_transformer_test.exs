@@ -4,32 +4,52 @@ defmodule Hologram.Compiler.ImportDirectiveTransformerTest do
   alias Hologram.Compiler.ImportDirectiveTransformer
   alias Hologram.Compiler.IR.ImportDirective
 
-  test "without 'only' clause" do
+  test "without opts" do
     code = "import Abc.Bcd"
     ast = ast(code)
 
     result = ImportDirectiveTransformer.transform(ast)
-    expected = %ImportDirective{alias_segs: [:Abc, :Bcd], module: nil, only: []}
+    expected = %ImportDirective{alias_segs: [:Abc, :Bcd], only: [], except: []}
 
     assert result == expected
   end
 
-  test "with 'only' clause" do
+  test "with 'only' opt" do
     code = "import Abc.Bcd, only: [xyz: 2]"
     ast = ast(code)
 
     result = ImportDirectiveTransformer.transform(ast)
-    expected = %ImportDirective{alias_segs: [:Abc, :Bcd], module: nil, only: [xyz: 2]}
+    expected = %ImportDirective{alias_segs: [:Abc, :Bcd], only: [xyz: 2], except: []}
 
     assert result == expected
   end
 
-  test "ignores other opts" do
+  test "with 'except' opt" do
+    code = "import Abc.Bcd, except: [xyz: 2]"
+    ast = ast(code)
+
+    result = ImportDirectiveTransformer.transform(ast)
+    expected = %ImportDirective{alias_segs: [:Abc, :Bcd], only: [], except: [xyz: 2]}
+
+    assert result == expected
+  end
+
+  test "with both 'only' and 'except' opts" do
+    code = "import Abc.Bcd, only: [abc: 1], except: [xyz: 2]"
+    ast = ast(code)
+
+    result = ImportDirectiveTransformer.transform(ast)
+    expected = %ImportDirective{alias_segs: [:Abc, :Bcd], only: [abc: 1], except: [xyz: 2]}
+
+    assert result == expected
+  end
+
+  test "with invalid opt" do
     code = "import Abc.Bcd, other_opt: false"
     ast = ast(code)
 
     result = ImportDirectiveTransformer.transform(ast)
-    expected = %ImportDirective{alias_segs: [:Abc, :Bcd], module: nil, only: []}
+    expected = %ImportDirective{alias_segs: [:Abc, :Bcd], only: [], except: []}
 
     assert result == expected
   end
