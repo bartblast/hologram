@@ -37,6 +37,10 @@ defmodule Hologram.Compiler.Expander do
     {%Block{expressions: expanded_exprs}, context}
   end
 
+  def expand(ir, %Context{} = context) do
+    {ir, context}
+  end
+
   defp expand_alias_segs([head | tail] = alias_segs, defined_aliases) do
     if defined_aliases[head] do
       defined_aliases[head] ++ tail
