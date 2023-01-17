@@ -20,4 +20,23 @@ defmodule Hologram.Compiler.ContextTest do
 
     assert result == expected
   end
+
+  test "put_macros/3" do
+    context = %Context{
+      macros: %{macro_1: %{1 => Module1, 2 => Module2}, macro_2: %{3 => Module3, 4 => Module4}}
+    }
+
+    added_macros = [macro_1: 1, macro_1: 3, macro_3: 5]
+    result = Context.put_macros(context, Module5, added_macros)
+
+    expected = %Context{
+      macros: %{
+        macro_1: %{1 => Module5, 2 => Module2, 3 => Module5},
+        macro_2: %{3 => Module3, 4 => Module4},
+        macro_3: %{5 => Module5}
+      }
+    }
+
+    assert result == expected
+  end
 end
