@@ -131,8 +131,8 @@ defmodule Hologram.Compiler.Helpers do
 
   def module([]), do: nil
 
-  def module(module_segs) do
-    [:"Elixir" | module_segs]
+  def module(alias_segs) do
+    [:"Elixir" | alias_segs]
     |> Enum.join(".")
     |> String.to_atom()
   end
