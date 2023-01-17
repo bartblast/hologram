@@ -184,7 +184,7 @@ defmodule Hologram.Compiler.IR do
   # DIRECTIVES
 
   defmodule AliasDirective do
-    defstruct module: nil, as: nil
+    defstruct alias_segs: nil, as: nil
   end
 
   defmodule ImportDirective do
@@ -263,6 +263,10 @@ defmodule Hologram.Compiler.IR do
 
   defmodule Block do
     defstruct expressions: []
+  end
+
+  defmodule IgnoredExpression do
+    defstruct []
   end
 
   defmodule ModulePseudoVariable do
