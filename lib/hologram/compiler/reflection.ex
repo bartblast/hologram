@@ -42,6 +42,10 @@ defmodule Hologram.Compiler.Reflection do
     |> ast()
   end
 
+  def functions(module) do
+    module.__info__(:functions)
+  end
+
   # DEFER: test
   def has_release_page_list? do
     release_page_list_path()

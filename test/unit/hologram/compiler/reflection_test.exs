@@ -76,6 +76,13 @@ defmodule Hologram.Compiler.ReflectionTest do
     end
   end
 
+  test "functions/1" do
+    result = Reflection.functions(Kernel)
+
+    assert {:apply, 2} in result
+    refute {:def, 2} in result
+  end
+
   describe "has_function?/3" do
     test "returns true if the module has a function with the given name and arity" do
       assert Reflection.has_function?(@module_4, :test_fun, 2)
