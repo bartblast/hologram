@@ -281,6 +281,13 @@ defmodule Hologram.Compiler.ReflectionTest do
     assert %MacroDefinition{arity: 2, name: :test_macro} = result
   end
 
+  test "macros/1" do
+    result = Reflection.macros(Kernel)
+
+    assert {:def, 2} in result
+    refute {:apply, 2} in result
+  end
+
   test "module_definition/1" do
     result = Reflection.module_definition(@module_1)
     assert %ModuleDefinition{module: @module_1} = result

@@ -218,6 +218,10 @@ defmodule Hologram.Compiler.Reflection do
     |> hd()
   end
 
+  def macros(module) do
+    module.__info__(:macros)
+  end
+
   # DEFER: test
   def mix_lock_path(opts \\ []) do
     root_path(opts) <> "/mix.lock"
