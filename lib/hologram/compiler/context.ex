@@ -3,7 +3,7 @@ defmodule Hologram.Compiler.Context do
             uses: [],
             imports: [],
             requires: [],
-            aliases: [],
+            aliases: %{},
             attributes: [],
             block_bindings: []
 end
