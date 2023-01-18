@@ -44,6 +44,7 @@ defmodule Hologram.MixProject do
 
   defp deps do
     [
+      {:deep_merge, "~> 1.0"},
       {:file_system, "~> 0.2"},
       {:jason, "~> 1.0"},
       {:libgraph, "~> 0.13"},
