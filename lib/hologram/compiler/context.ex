@@ -8,6 +8,7 @@ defmodule Hologram.Compiler.Context do
             block_bindings: [],
             functions: %{},
             macros: %{},
+            module_attributes: %{},
             variables: MapSet.new()
 
   def put_functions(%__MODULE__{functions: defined_functions} = context, module, functions) do

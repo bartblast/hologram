@@ -1,9 +1,11 @@
-defmodule Hologram.Compiler.Evaluator do
-  def evaluate(ast, bindings) do
+defmodule Hologram.Compiler.ModuleAttributeEvaluator do
+  alias Hologram.Compiler.Context
+
+  def evaluate(ast, %Context{module_attributes: module_attributes}) do
     bindings =
-      bindings
-      |> Map.put(:bindings, bindings)
-      |> Enum.map(fn {key, value} -> {:"hologram_#{key}__", value} end)
+      Enum.map(module_attributes, fn {key, value} ->
+        {:"hologram_module_attribute_#{key}__", value}
+      end)
 
     replace_module_attributes(ast)
     |> Code.eval_quoted(bindings)
@@ -11,7 +13,7 @@ defmodule Hologram.Compiler.Evaluator do
   end
 
   defp replace_module_attributes({:@, metadata, [{name, _, _}]}) do
-    {:"hologram_#{name}__", metadata, nil}
+    {:"hologram_module_attribute_#{name}__", metadata, nil}
   end
 
   defp replace_module_attributes(ast) when is_list(ast) do
