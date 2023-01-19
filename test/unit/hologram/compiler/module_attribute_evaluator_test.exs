@@ -6,7 +6,7 @@ defmodule Hologram.Compiler.ModuleAttributeEvaluatorTest do
 
   @context %Context{module_attributes: %{a: 1, b: 2, c: 3}}
 
-  test "expression which doesn't use other module_attributes" do
+  test "expression which doesn't use other module attributes" do
     code = "5 + 6"
     ast = ast(code)
     result = ModuleAttributeEvaluator.evaluate(ast, @context)
@@ -21,20 +21,4 @@ defmodule Hologram.Compiler.ModuleAttributeEvaluatorTest do
 
     assert result == 4
   end
-
-  # test "evaluated if expression" do
-  #   code = "if @a, do: @b, else: @c"
-  #   ast = ast(code)
-  #   result = Evaluator.evaluate(ast, @bindings)
-
-  #   assert result == 2
-  # end
-
-  # test "injects bindings key into bindings" do
-  #   code = "1 + @bindings.c"
-  #   ast = ast(code)
-  #   result = Evaluator.evaluate(ast, @bindings)
-
-  #   assert result == 4
-  # end
 end
