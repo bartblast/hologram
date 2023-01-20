@@ -1,9 +1,10 @@
 defmodule Hologram.Compiler.ModuleAttributeEvaluator do
   alias Hologram.Compiler.Context
+  alias Hologram.Compiler.IR.ModuleAttributeDefinition
 
   def evaluate(ast, %Context{module_attributes: module_attributes}) do
     bindings =
-      Enum.map(module_attributes, fn {key, value} ->
+      Enum.map(module_attributes, fn {key, %ModuleAttributeDefinition{value: value}} ->
         {:"hologram_module_attribute_#{key}__", value}
       end)
 

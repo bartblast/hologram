@@ -2,9 +2,16 @@ defmodule Hologram.Compiler.ModuleAttributeEvaluatorTest do
   use Hologram.Test.UnitCase, async: true
 
   alias Hologram.Compiler.Context
+  alias Hologram.Compiler.IR.ModuleAttributeDefinition
   alias Hologram.Compiler.ModuleAttributeEvaluator
 
-  @context %Context{module_attributes: %{a: 1, b: 2, c: 3}}
+  @context %Context{
+    module_attributes: %{
+      a: %ModuleAttributeDefinition{value: 1},
+      b: %ModuleAttributeDefinition{value: 2},
+      c: %ModuleAttributeDefinition{value: 3}
+    }
+  }
 
   test "expression which doesn't use module attributes" do
     code = "5 + 6"
