@@ -11,14 +11,18 @@ defmodule Hologram.Compiler.Context do
             module_attributes: %{},
             variables: MapSet.new()
 
-  def put_functions(%__MODULE__{functions: defined_functions} = context, module, functions) do
+  def put_functions(%{functions: defined_functions} = context, module, functions) do
     added_functions = aggregate_merged_exports(module, functions)
     %{context | functions: DeepMerge.deep_merge(defined_functions, added_functions)}
   end
 
-  def put_macros(%__MODULE__{macros: defined_macros} = context, module, macros) do
+  def put_macros(%{macros: defined_macros} = context, module, macros) do
     added_macros = aggregate_merged_exports(module, macros)
     %{context | macros: DeepMerge.deep_merge(defined_macros, added_macros)}
+  end
+
+  def put_module_attribute(%{module_attributes: module_attributes} = context, name, value) do
+    %{context | module_attributes: Map.put(module_attributes, name, value)}
   end
 
   defp aggregate_merged_exports(module, exports) do
