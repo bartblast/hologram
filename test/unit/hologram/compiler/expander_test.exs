@@ -3,8 +3,12 @@ defmodule Hologram.Compiler.ExpanderTest do
 
   alias Hologram.Compiler.Context
   alias Hologram.Compiler.Expander
+  alias Hologram.Compiler.IR.AtomType
   alias Hologram.Compiler.IR.Block
   alias Hologram.Compiler.IR.IgnoredExpression
+  alias Hologram.Compiler.IR.IntegerType
+  alias Hologram.Compiler.IR.MapType
+  alias Hologram.Compiler.IR.ModuleAttributeDefinition
   alias Hologram.Compiler.IR.ModuleType
   alias Hologram.Test.Fixtures.Compiler.Expander.Module1
 
@@ -303,13 +307,59 @@ defmodule Hologram.Compiler.ExpanderTest do
   end
 
   test "module attribute definition" do
-    context = %Context{module_attributes: %{a: 1, c: 3}}
-    code = "@b 10 + @a"
+    context = %Context{
+      module_attributes: %{
+        a: %ModuleAttributeDefinition{
+          name: :a,
+          value: %{x: 10},
+          value_ir: %MapType{
+            data: [
+              {%AtomType{value: :x}, %IntegerType{value: 10}}
+            ]
+          }
+        },
+        c: %ModuleAttributeDefinition{
+          name: :c,
+          value: 3,
+          value_ir: %IntegerType{value: 3}
+        }
+      }
+    }
+
+    code = "@b Map.put(@a, :y, @c)"
     ir = ir(code)
-
     result = Expander.expand(ir, context)
-    expected = {%IgnoredExpression{}, %Context{module_attributes: %{a: 1, b: 11, c: 3}}}
 
-    assert result == expected
+    assert {
+             %IgnoredExpression{},
+             %Context{
+               module_attributes: %{
+                 a: %ModuleAttributeDefinition{
+                   name: :a,
+                   value: %{x: 10},
+                   value_ir: %MapType{
+                     data: [
+                       {%AtomType{value: :x}, %IntegerType{value: 10}}
+                     ]
+                   }
+                 },
+                 b: %ModuleAttributeDefinition{
+                   name: :b,
+                   value: %{x: 10, y: 3},
+                   value_ir: %MapType{
+                     data: [
+                       {%AtomType{value: :x}, %IntegerType{value: 10}},
+                       {%AtomType{value: :y}, %IntegerType{value: 3}}
+                     ]
+                   }
+                 },
+                 c: %ModuleAttributeDefinition{
+                   name: :c,
+                   value: 3,
+                   value_ir: %IntegerType{value: 3}
+                 }
+               }
+             }
+           } = result
   end
 end
