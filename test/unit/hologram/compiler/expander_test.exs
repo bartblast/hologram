@@ -301,4 +301,15 @@ defmodule Hologram.Compiler.ExpanderTest do
       assert context.macros == %{sigil_c: %{2 => Module1}}
     end
   end
+
+  test "module attribute definition" do
+    context = %Context{module_attributes: %{a: 1, c: 3}}
+    code = "@b 10 + @a"
+    ir = ir(code)
+
+    result = Expander.expand(ir, context)
+    expected = {%IgnoredExpression{}, %Context{module_attributes: %{a: 1, b: 11, c: 3}}}
+
+    assert result == expected
+  end
 end
