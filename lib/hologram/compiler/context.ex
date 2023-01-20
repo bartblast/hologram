@@ -21,8 +21,12 @@ defmodule Hologram.Compiler.Context do
     %{context | macros: DeepMerge.deep_merge(defined_macros, added_macros)}
   end
 
-  def put_module_attribute(%{module_attributes: module_attributes} = context, name, value) do
-    %{context | module_attributes: Map.put(module_attributes, name, value)}
+  def put_module_attribute(
+        %{module_attributes: module_attributes} = context,
+        name,
+        module_attr_def
+      ) do
+    %{context | module_attributes: Map.put(module_attributes, name, module_attr_def)}
   end
 
   defp aggregate_merged_exports(module, exports) do

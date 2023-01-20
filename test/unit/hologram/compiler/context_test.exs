@@ -41,9 +41,11 @@ defmodule Hologram.Compiler.ContextTest do
   end
 
   test "put_module_attribute/3" do
-    context = %Context{module_attributes: %{a: 1, c: 3}}
-    result = Context.put_module_attribute(context, :b, 2)
+    context = %Context{module_attributes: %{a: :module_def_a, c: :module_def_c}}
+    result = Context.put_module_attribute(context, :b, :module_def_b)
 
-    assert result == %Context{module_attributes: %{a: 1, b: 2, c: 3}}
+    assert result == %Context{
+             module_attributes: %{a: :module_def_a, b: :module_def_b, c: :module_def_c}
+           }
   end
 end
