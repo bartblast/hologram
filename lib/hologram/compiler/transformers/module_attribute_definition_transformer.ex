@@ -1,15 +1,16 @@
 defmodule Hologram.Compiler.ModuleAttributeDefinitionTransformer do
   alias Hologram.Compiler.Context
-  alias Hologram.Compiler.IR.{ModuleAttributeDefinition, NotSupportedExpression}
+  alias Hologram.Compiler.IR
+  alias Hologram.Compiler.Transformer
 
   def transform({:@, _, [{:callback, _, _}]} = ast, %Context{}) do
-    %NotSupportedExpression{ast: ast, type: :behaviour_callback_spec}
+    %IR.NotSupportedExpression{type: :behaviour_callback_spec, ast: ast}
   end
 
-  def transform({:@, _, [{name, _, [ast]}]}, %Context{}) do
-    %ModuleAttributeDefinition{
+  def transform({:@, _, [{name, _, [ast]}]}, %Context{} = context) do
+    %IR.ModuleAttributeDefinition{
       name: name,
-      ast: ast
+      value_ir: Transformer.transform(ast, context)
     }
   end
 end

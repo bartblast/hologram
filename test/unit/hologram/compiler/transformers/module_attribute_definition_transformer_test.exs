@@ -2,8 +2,7 @@ defmodule Hologram.Compiler.ModuleAttributeDefinitionTransformerTest do
   use Hologram.Test.UnitCase, async: true
 
   alias Hologram.Compiler.Context
-  alias Hologram.Compiler.IR.ModuleAttributeDefinition
-  alias Hologram.Compiler.IR.NotSupportedExpression
+  alias Hologram.Compiler.IR
   alias Hologram.Compiler.ModuleAttributeDefinitionTransformer
 
   test "regular value" do
@@ -11,9 +10,12 @@ defmodule Hologram.Compiler.ModuleAttributeDefinitionTransformerTest do
     ast = ast(code)
     result = ModuleAttributeDefinitionTransformer.transform(ast, %Context{})
 
-    expected = %ModuleAttributeDefinition{
+    expected = %IR.ModuleAttributeDefinition{
       name: :abc,
-      ast: {:+, [line: 1], [1, 2]}
+      value_ir: %IR.AdditionOperator{
+        left: %IR.IntegerType{value: 1},
+        right: %IR.IntegerType{value: 2}
+      }
     }
 
     assert result == expected
@@ -31,7 +33,7 @@ defmodule Hologram.Compiler.ModuleAttributeDefinitionTransformerTest do
           [{:"::", [line: 1], [{:some_fun, [line: 1], nil}, {:any, [line: 1], []}]}]}
        ]}
 
-    expected = %NotSupportedExpression{type: :behaviour_callback_spec, ast: expected_ast}
+    expected = %IR.NotSupportedExpression{type: :behaviour_callback_spec, ast: expected_ast}
 
     assert result == expected
   end
