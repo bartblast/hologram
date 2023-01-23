@@ -9,6 +9,7 @@ defmodule Hologram.Compiler.ExpanderTest do
   alias Hologram.Compiler.IR.IntegerType
   alias Hologram.Compiler.IR.MapType
   alias Hologram.Compiler.IR.ModuleAttributeDefinition
+  alias Hologram.Compiler.IR.ModuleAttributeOperator
   alias Hologram.Compiler.IR.ModuleType
   alias Hologram.Test.Fixtures.Compiler.Expander.Module1
 
@@ -361,5 +362,28 @@ defmodule Hologram.Compiler.ExpanderTest do
                }
              }
            } = result
+  end
+
+  test "module attribute operator" do
+    ir = %ModuleAttributeOperator{name: :b}
+
+    context = %Context{
+      module_attributes: %{
+        a: %ModuleAttributeDefinition{
+          name: :a,
+          value: 1,
+          value_ir: %IntegerType{value: 1}
+        },
+        b: %ModuleAttributeDefinition{
+          name: :b,
+          value: 2,
+          value_ir: %IntegerType{value: 2}
+        }
+      }
+    }
+
+    result = Expander.expand(ir, context)
+
+    assert {%IntegerType{value: 2}, %Context{}} = result
   end
 end
