@@ -3,14 +3,6 @@ defmodule Hologram.Compiler.Expander do
   alias Hologram.Compiler.Evaluator
   alias Hologram.Compiler.Helpers
   alias Hologram.Compiler.IR
-  alias Hologram.Compiler.IR.Alias
-  alias Hologram.Compiler.IR.AliasDirective
-  alias Hologram.Compiler.IR.Block
-  alias Hologram.Compiler.IR.IgnoredExpression
-  alias Hologram.Compiler.IR.ImportDirective
-  alias Hologram.Compiler.IR.ModuleAttributeDefinition
-  alias Hologram.Compiler.IR.ModuleAttributeOperator
-  alias Hologram.Compiler.IR.ModuleType
   alias Hologram.Compiler.Reflection
   alias Hologram.Compiler.Transformer
 
@@ -23,36 +15,36 @@ defmodule Hologram.Compiler.Expander do
     {%IR.AdditionOperator{left: left, right: right}, context}
   end
 
-  def expand(%Alias{segments: segments}, %Context{aliases: defined_aliases} = context) do
+  def expand(%IR.Alias{segments: segments}, %Context{aliases: defined_aliases} = context) do
     expanded_alias_segs = expand_alias_segs(segments, defined_aliases)
     module = Helpers.module(expanded_alias_segs)
 
-    {%ModuleType{module: module, segments: expanded_alias_segs}, context}
+    {%IR.ModuleType{module: module, segments: expanded_alias_segs}, context}
   end
 
   def expand(
-        %AliasDirective{alias_segs: alias_segs, as: as},
+        %IR.AliasDirective{alias_segs: alias_segs, as: as},
         %Context{aliases: defined_aliases} = context
       ) do
     expanded_alias_segs = expand_alias_segs(alias_segs, defined_aliases)
     new_defined_aliases = Map.put(defined_aliases, as, expanded_alias_segs)
     new_context = %{context | aliases: new_defined_aliases}
 
-    {%IgnoredExpression{}, new_context}
+    {%IR.IgnoredExpression{}, new_context}
   end
 
-  def expand(%Block{expressions: exprs}, %Context{} = context) do
+  def expand(%IR.Block{expressions: exprs}, %Context{} = context) do
     {expanded_exprs, _new_context} =
       Enum.reduce(exprs, {[], context}, fn expr, {expanded_exprs, new_context} ->
         {expanded_expr, new_context} = expand(expr, new_context)
         {expanded_exprs ++ [expanded_expr], new_context}
       end)
 
-    {%Block{expressions: expanded_exprs}, context}
+    {%IR.Block{expressions: expanded_exprs}, context}
   end
 
   def expand(
-        %ImportDirective{alias_segs: alias_segs, only: only, except: except},
+        %IR.ImportDirective{alias_segs: alias_segs, only: only, except: except},
         %Context{aliases: defined_aliases} = context
       ) do
     expanded_alias_segs = expand_alias_segs(alias_segs, defined_aliases)
@@ -66,11 +58,11 @@ defmodule Hologram.Compiler.Expander do
       |> Context.put_functions(module, functions)
       |> Context.put_macros(module, macros)
 
-    {%IgnoredExpression{}, new_context}
+    {%IR.IgnoredExpression{}, new_context}
   end
 
   def expand(
-        %ModuleAttributeDefinition{name: name, expression: expr},
+        %IR.ModuleAttributeDefinition{name: name, expression: expr},
         %Context{} = context
       ) do
     {expanded_ir, _context} = expand(expr, context)
@@ -83,11 +75,11 @@ defmodule Hologram.Compiler.Expander do
 
     new_context = Context.put_module_attribute(context, name, value)
 
-    {%IgnoredExpression{}, new_context}
+    {%IR.IgnoredExpression{}, new_context}
   end
 
   def expand(
-        %ModuleAttributeOperator{name: name},
+        %IR.ModuleAttributeOperator{name: name},
         %Context{module_attributes: module_attributes} = context
       ) do
     {module_attributes[name], context}
