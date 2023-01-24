@@ -24,9 +24,9 @@ defmodule Hologram.Compiler.Context do
   def put_module_attribute(
         %{module_attributes: module_attributes} = context,
         name,
-        module_attr_def
+        value
       ) do
-    %{context | module_attributes: Map.put(module_attributes, name, module_attr_def)}
+    %{context | module_attributes: Map.put(module_attributes, name, value)}
   end
 
   defp aggregate_merged_exports(module, exports) do
