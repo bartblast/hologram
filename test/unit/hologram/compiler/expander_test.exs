@@ -307,28 +307,47 @@ defmodule Hologram.Compiler.ExpanderTest do
     end
   end
 
-  test "module attribute definition" do
-    context = %Context{
+  describe "module attribute definition" do
+    @context %Context{
       module_attributes: %{
         a: %IntegerType{value: 1},
         c: %IntegerType{value: 3}
       }
     }
 
-    code = "@b 123 + @c"
-    ir = ir(code)
-    result = Expander.expand(ir, context)
+    test "expression which doesn't use module attributes" do
+      code = "@b 5 + 6"
+      ir = ir(code)
+      result = Expander.expand(ir, @context)
 
-    assert {
-             %IgnoredExpression{},
-             %Context{
-               module_attributes: %{
-                 a: %IntegerType{value: 1},
-                 b: %IntegerType{value: 126},
-                 c: %IntegerType{value: 3}
+      assert {
+               %IgnoredExpression{},
+               %Context{
+                 module_attributes: %{
+                   a: %IntegerType{value: 1},
+                   b: %IntegerType{value: 11},
+                   c: %IntegerType{value: 3}
+                 }
                }
-             }
-           } = result
+             } = result
+    end
+
+    test "expression which uses module attributes" do
+      code = "@b @a + @c"
+      ir = ir(code)
+      result = Expander.expand(ir, @context)
+
+      assert {
+               %IgnoredExpression{},
+               %Context{
+                 module_attributes: %{
+                   a: %IntegerType{value: 1},
+                   b: %IntegerType{value: 4},
+                   c: %IntegerType{value: 3}
+                 }
+               }
+             } = result
+    end
   end
 
   test "module attribute operator" do
