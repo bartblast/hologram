@@ -11,7 +11,7 @@ defmodule Hologram do
 
   The Hologram concept is that your web app is composed from the basic Hologram blocks of Layouts, Pages and Components.
 
-  Hologram builds a call graph from the content of your Pages (which must follow some basic conventions) and determines what code is to used on the client and what code is to be used on the server. Hologram then transpiles the code to be used on the client to JavaScript.
+  Hologram builds a call graph from the content of your Pages (which must follow some basic conventions) and determines what code is to be used on the client and what code is to be used on the server. Hologram then transpiles the code to be used on the client to JavaScript.
 
   Because the state is kept on the client, the programming model is simpler and thanks to stateless or stateful components the app is easily scalable.
 
