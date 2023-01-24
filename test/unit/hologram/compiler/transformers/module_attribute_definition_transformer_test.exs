@@ -12,7 +12,7 @@ defmodule Hologram.Compiler.ModuleAttributeDefinitionTransformerTest do
 
     expected = %IR.ModuleAttributeDefinition{
       name: :abc,
-      value_ir: %IR.AdditionOperator{
+      expression: %IR.AdditionOperator{
         left: %IR.IntegerType{value: 1},
         right: %IR.IntegerType{value: 2}
       }

@@ -173,7 +173,7 @@ defmodule Hologram.Compiler.IR do
   end
 
   defmodule ModuleAttributeDefinition do
-    defstruct name: nil, ast: nil, value: nil, value_ir: nil
+    defstruct name: nil, expression: nil
   end
 
   # DEFER: implement

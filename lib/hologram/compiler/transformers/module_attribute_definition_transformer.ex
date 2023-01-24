@@ -10,7 +10,7 @@ defmodule Hologram.Compiler.ModuleAttributeDefinitionTransformer do
   def transform({:@, _, [{name, _, [ast]}]}, %Context{} = context) do
     %IR.ModuleAttributeDefinition{
       name: name,
-      value_ir: Transformer.transform(ast, context)
+      expression: Transformer.transform(ast, context)
     }
   end
 end
