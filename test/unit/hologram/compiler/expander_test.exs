@@ -310,24 +310,12 @@ defmodule Hologram.Compiler.ExpanderTest do
   test "module attribute definition" do
     context = %Context{
       module_attributes: %{
-        a: %ModuleAttributeDefinition{
-          name: :a,
-          value: %{x: 10},
-          value_ir: %MapType{
-            data: [
-              {%AtomType{value: :x}, %IntegerType{value: 10}}
-            ]
-          }
-        },
-        c: %ModuleAttributeDefinition{
-          name: :c,
-          value: 3,
-          value_ir: %IntegerType{value: 3}
-        }
+        a: %IntegerType{value: 1},
+        c: %IntegerType{value: 3}
       }
     }
 
-    code = "@b Map.put(@a, :y, @c)"
+    code = "@b 123 + @c"
     ir = ir(code)
     result = Expander.expand(ir, context)
 
@@ -335,30 +323,9 @@ defmodule Hologram.Compiler.ExpanderTest do
              %IgnoredExpression{},
              %Context{
                module_attributes: %{
-                 a: %ModuleAttributeDefinition{
-                   name: :a,
-                   value: %{x: 10},
-                   value_ir: %MapType{
-                     data: [
-                       {%AtomType{value: :x}, %IntegerType{value: 10}}
-                     ]
-                   }
-                 },
-                 b: %ModuleAttributeDefinition{
-                   name: :b,
-                   value: %{x: 10, y: 3},
-                   value_ir: %MapType{
-                     data: [
-                       {%AtomType{value: :x}, %IntegerType{value: 10}},
-                       {%AtomType{value: :y}, %IntegerType{value: 3}}
-                     ]
-                   }
-                 },
-                 c: %ModuleAttributeDefinition{
-                   name: :c,
-                   value: 3,
-                   value_ir: %IntegerType{value: 3}
-                 }
+                 a: %IntegerType{value: 1},
+                 b: %IntegerType{value: 126},
+                 c: %IntegerType{value: 3}
                }
              }
            } = result
@@ -369,16 +336,8 @@ defmodule Hologram.Compiler.ExpanderTest do
 
     context = %Context{
       module_attributes: %{
-        a: %ModuleAttributeDefinition{
-          name: :a,
-          value: 1,
-          value_ir: %IntegerType{value: 1}
-        },
-        b: %ModuleAttributeDefinition{
-          name: :b,
-          value: 2,
-          value_ir: %IntegerType{value: 2}
-        }
+        a: %IntegerType{value: 1},
+        b: %IntegerType{value: 2}
       }
     }
 

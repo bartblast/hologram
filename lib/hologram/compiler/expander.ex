@@ -1,5 +1,6 @@
 defmodule Hologram.Compiler.Expander do
   alias Hologram.Compiler.Context
+  alias Hologram.Compiler.Evaluator
   alias Hologram.Compiler.Helpers
   alias Hologram.Compiler.IR.Alias
   alias Hologram.Compiler.IR.AliasDirective
@@ -9,7 +10,6 @@ defmodule Hologram.Compiler.Expander do
   alias Hologram.Compiler.IR.ModuleAttributeDefinition
   alias Hologram.Compiler.IR.ModuleAttributeOperator
   alias Hologram.Compiler.IR.ModuleType
-  alias Hologram.Compiler.ModuleAttributeEvaluator
   alias Hologram.Compiler.Reflection
   alias Hologram.Compiler.Transformer
 
@@ -62,18 +62,18 @@ defmodule Hologram.Compiler.Expander do
   end
 
   def expand(
-        %ModuleAttributeDefinition{name: name, ast: ast} = module_attribute_def,
+        %ModuleAttributeDefinition{name: name, expression: expr},
         %Context{} = context
       ) do
-    value = ModuleAttributeEvaluator.evaluate(ast, context)
+    {expanded_ir, _context} = expand(expr, context)
 
-    value_ir =
-      value
+    value =
+      expanded_ir
+      |> Evaluator.evaluate()
       |> Macro.escape()
       |> Transformer.transform(context)
 
-    module_attr_def = %{module_attribute_def | value: value, value_ir: value_ir}
-    new_context = Context.put_module_attribute(context, name, module_attr_def)
+    new_context = Context.put_module_attribute(context, name, value)
 
     {%IgnoredExpression{}, new_context}
   end
@@ -82,7 +82,7 @@ defmodule Hologram.Compiler.Expander do
         %ModuleAttributeOperator{name: name},
         %Context{module_attributes: module_attributes} = context
       ) do
-    {module_attributes[name].value_ir, context}
+    {module_attributes[name], context}
   end
 
   def expand(ir, %Context{} = context) do
