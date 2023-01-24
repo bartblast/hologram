@@ -322,6 +322,13 @@ defmodule Hologram.Compiler.ExpanderTest do
   #   end
   # end
 
+  test "integer type" do
+    ir = %IR.IntegerType{value: 123}
+    result = Expander.expand(ir, @context)
+
+    assert result == {ir, @context}
+  end
+
   # describe "module attribute definition" do
   #   test "expression which doesn't use module attributes" do
   #     code = "@b 5 + 6"
