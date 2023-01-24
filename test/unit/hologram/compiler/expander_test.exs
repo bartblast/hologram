@@ -39,7 +39,7 @@ defmodule Hologram.Compiler.ExpanderTest do
   test "alias" do
     code = "A"
     ir = ir(code)
-    result = Expander.expand(ir)
+    result = Expander.expand(ir, @context)
 
     assert {%ModuleType{module: A, segments: [:A]}, _context} = result
   end
@@ -52,7 +52,7 @@ defmodule Hologram.Compiler.ExpanderTest do
       """
 
       ir = ir(code)
-      result = Expander.expand(ir)
+      result = Expander.expand(ir, @context)
 
       assert {
                %Block{
@@ -73,7 +73,7 @@ defmodule Hologram.Compiler.ExpanderTest do
       """
 
       ir = ir(code)
-      result = Expander.expand(ir)
+      result = Expander.expand(ir, @context)
 
       assert {
                %Block{
@@ -95,7 +95,7 @@ defmodule Hologram.Compiler.ExpanderTest do
       """
 
       ir = ir(code)
-      result = Expander.expand(ir)
+      result = Expander.expand(ir, @context)
 
       assert {
                %Block{
@@ -117,7 +117,7 @@ defmodule Hologram.Compiler.ExpanderTest do
     """
 
     ir = ir(code)
-    result = Expander.expand(ir)
+    result = Expander.expand(ir, @context)
 
     assert {
              %Block{
@@ -135,7 +135,7 @@ defmodule Hologram.Compiler.ExpanderTest do
       code = "import Hologram.Test.Fixtures.Compiler.Expander.Module1"
 
       ir = ir(code)
-      result = Expander.expand(ir)
+      result = Expander.expand(ir, @context)
 
       assert {%IgnoredExpression{}, %Context{} = context} = result
 
@@ -169,7 +169,7 @@ defmodule Hologram.Compiler.ExpanderTest do
         "import Hologram.Test.Fixtures.Compiler.Expander.Module1, only: [fun_2: 1, macro_3: 2]"
 
       ir = ir(code)
-      result = Expander.expand(ir)
+      result = Expander.expand(ir, @context)
 
       assert {%IgnoredExpression{}, %Context{} = context} = result
       assert context.functions == %{fun_2: %{1 => Module1}}
@@ -181,7 +181,7 @@ defmodule Hologram.Compiler.ExpanderTest do
         "import Hologram.Test.Fixtures.Compiler.Expander.Module1, except: [fun_2: 1, macro_3: 2]"
 
       ir = ir(code)
-      result = Expander.expand(ir)
+      result = Expander.expand(ir, @context)
 
       assert {%IgnoredExpression{}, %Context{} = context} = result
 
@@ -212,7 +212,7 @@ defmodule Hologram.Compiler.ExpanderTest do
       code = "import Hologram.Test.Fixtures.Compiler.Expander.Module1, only: :functions"
 
       ir = ir(code)
-      result = Expander.expand(ir)
+      result = Expander.expand(ir, @context)
 
       assert {%IgnoredExpression{}, %Context{} = context} = result
 
@@ -236,7 +236,7 @@ defmodule Hologram.Compiler.ExpanderTest do
         "import Hologram.Test.Fixtures.Compiler.Expander.Module1, only: :functions, except: [fun_1: 0, fun_3: 2]"
 
       ir = ir(code)
-      result = Expander.expand(ir)
+      result = Expander.expand(ir, @context)
 
       assert {%IgnoredExpression{}, %Context{} = context} = result
 
@@ -257,7 +257,7 @@ defmodule Hologram.Compiler.ExpanderTest do
       code = "import Hologram.Test.Fixtures.Compiler.Expander.Module1, only: :macros"
 
       ir = ir(code)
-      result = Expander.expand(ir)
+      result = Expander.expand(ir, @context)
 
       assert {%IgnoredExpression{}, %Context{} = context} = result
 
@@ -281,7 +281,7 @@ defmodule Hologram.Compiler.ExpanderTest do
         "import Hologram.Test.Fixtures.Compiler.Expander.Module1, only: :macros, except: [macro_1: 0, macro_3: 2]"
 
       ir = ir(code)
-      result = Expander.expand(ir)
+      result = Expander.expand(ir, @context)
 
       assert {%IgnoredExpression{}, %Context{} = context} = result
 
@@ -302,7 +302,7 @@ defmodule Hologram.Compiler.ExpanderTest do
       code = "import Hologram.Test.Fixtures.Compiler.Expander.Module1, only: :sigils"
 
       ir = ir(code)
-      result = Expander.expand(ir)
+      result = Expander.expand(ir, @context)
 
       assert {%IgnoredExpression{}, %Context{} = context} = result
 
@@ -322,7 +322,7 @@ defmodule Hologram.Compiler.ExpanderTest do
         "import Hologram.Test.Fixtures.Compiler.Expander.Module1, only: :sigils, except: [sigil_b: 2, sigil_d: 2]"
 
       ir = ir(code)
-      result = Expander.expand(ir)
+      result = Expander.expand(ir, @context)
 
       assert {%IgnoredExpression{}, %Context{} = context} = result
       assert context.functions == %{sigil_a: %{2 => Module1}}

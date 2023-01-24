@@ -14,7 +14,7 @@ defmodule Hologram.Compiler.Expander do
   alias Hologram.Compiler.Reflection
   alias Hologram.Compiler.Transformer
 
-  def expand(ir, context \\ %Context{})
+  def expand(ir, context)
 
   def expand(%IR.AdditionOperator{left: left, right: right}, %Context{} = context) do
     left = expand(left, context)
