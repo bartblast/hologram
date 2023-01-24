@@ -364,7 +364,7 @@ defmodule Hologram.Compiler.ExpanderTest do
     context = %Context{
       module_attributes: %{
         a: %IR.IntegerType{value: 1},
-        b: %IR.AnonymousFunctionTypeIntegerType{value: 2}
+        b: %IR.IntegerType{value: 2}
       }
     }
 
