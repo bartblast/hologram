@@ -2,6 +2,7 @@ defmodule Hologram.Compiler.Expander do
   alias Hologram.Compiler.Context
   alias Hologram.Compiler.Evaluator
   alias Hologram.Compiler.Helpers
+  alias Hologram.Compiler.IR
   alias Hologram.Compiler.IR.Alias
   alias Hologram.Compiler.IR.AliasDirective
   alias Hologram.Compiler.IR.Block
@@ -14,6 +15,13 @@ defmodule Hologram.Compiler.Expander do
   alias Hologram.Compiler.Transformer
 
   def expand(ir, context \\ %Context{})
+
+  def expand(%IR.AdditionOperator{left: left, right: right}, %Context{} = context) do
+    left = expand(left, context)
+    right = expand(right, context)
+
+    {%IR.AdditionOperator{left: left, right: right}, context}
+  end
 
   def expand(%Alias{segments: segments}, %Context{aliases: defined_aliases} = context) do
     expanded_alias_segs = expand_alias_segs(segments, defined_aliases)
