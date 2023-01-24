@@ -365,18 +365,10 @@ defmodule Hologram.Compiler.ExpanderTest do
   #   end
   # end
 
-  # test "module attribute operator" do
-  #   ir = %IR.ModuleAttributeOperator{name: :b}
+  test "module attribute operator" do
+    ir = %IR.ModuleAttributeOperator{name: :c}
+    result = Expander.expand(ir, @context)
 
-  #   context = %Context{
-  #     module_attributes: %{
-  #       a: %IR.IntegerType{value: 1},
-  #       b: %IR.IntegerType{value: 2}
-  #     }
-  #   }
-
-  #   result = Expander.expand(ir, context)
-
-  #   assert {%IR.IntegerType{value: 2}, %Context{}} = result
-  # end
+    assert result == {%IR.IntegerType{value: 3}, @context}
+  end
 end
