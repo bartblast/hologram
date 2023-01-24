@@ -13,25 +13,26 @@ defmodule Hologram.Compiler.ExpanderTest do
   alias Hologram.Compiler.IR.ModuleType
   alias Hologram.Test.Fixtures.Compiler.Expander.Module1
 
+  @context %Context{
+    module_attributes: %{
+      a: %IR.IntegerType{value: 1},
+      c: %IR.IntegerType{value: 3}
+    }
+  }
+
   test "addition operator" do
     ir = %IR.AdditionOperator{
       left: %IR.ModuleAttributeOperator{name: :a},
       right: %IR.ModuleAttributeOperator{name: :c}
     }
 
-    context = %Context{
-      module_attributes: %{
-        a: %IR.IntegerType{value: 1},
-        c: %IR.IntegerType{value: 3}
-      }
-    }
+    result = Expander.expand(ir, @context)
 
-    result = Expander.expand(ir, context)
-
-    assert result == %IR.AdditionOperator{
-             left: %IR.IntegerType{value: 1},
-             right: %IR.IntegerType{value: 3}
-           }
+    assert result ==
+             {%IR.AdditionOperator{
+                left: %IR.IntegerType{value: 1},
+                right: %IR.IntegerType{value: 3}
+              }, @context}
   end
 
   test "alias" do
@@ -329,13 +330,6 @@ defmodule Hologram.Compiler.ExpanderTest do
   end
 
   describe "module attribute definition" do
-    @context %Context{
-      module_attributes: %{
-        a: %IntegerType{value: 1},
-        c: %IntegerType{value: 3}
-      }
-    }
-
     test "expression which doesn't use module attributes" do
       code = "@b 5 + 6"
       ir = ir(code)
