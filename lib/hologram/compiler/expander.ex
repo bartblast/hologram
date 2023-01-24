@@ -9,8 +9,8 @@ defmodule Hologram.Compiler.Expander do
   def expand(ir, context)
 
   def expand(%IR.AdditionOperator{left: left, right: right}, %Context{} = context) do
-    left = expand(left, context)
-    right = expand(right, context)
+    {left, _context} = expand(left, context)
+    {right, _context} = expand(right, context)
 
     {%IR.AdditionOperator{left: left, right: right}, context}
   end

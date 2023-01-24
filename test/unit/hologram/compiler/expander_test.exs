@@ -13,20 +13,20 @@ defmodule Hologram.Compiler.ExpanderTest do
     }
   }
 
-  # test "addition operator" do
-  #   ir = %IR.AdditionOperator{
-  #     left: %IR.ModuleAttributeOperator{name: :a},
-  #     right: %IR.ModuleAttributeOperator{name: :c}
-  #   }
+  test "addition operator" do
+    ir = %IR.AdditionOperator{
+      left: %IR.ModuleAttributeOperator{name: :a},
+      right: %IR.ModuleAttributeOperator{name: :c}
+    }
 
-  #   result = Expander.expand(ir, @context)
+    result = Expander.expand(ir, @context)
 
-  #   assert result ==
-  #            {%IR.AdditionOperator{
-  #               left: %IR.IntegerType{value: 1},
-  #               right: %IR.IntegerType{value: 3}
-  #             }, @context}
-  # end
+    assert result ==
+             {%IR.AdditionOperator{
+                left: %IR.IntegerType{value: 1},
+                right: %IR.IntegerType{value: 3}
+              }, @context}
+  end
 
   # test "alias" do
   #   code = "A"
