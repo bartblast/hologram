@@ -1,138 +1,44 @@
-# TODO: refactor & test
-
 defmodule Hologram.Compiler do
-  require Logger
-
-  alias Hologram.Compiler.{
-    Builder,
-    CallGraph,
-    CallGraphBuilder,
-    ModuleDefAggregator,
-    ModuleDefStore,
-    Reflection
-  }
-
+  alias Hologram.Compiler.Reflection
+  alias Hologram.Compiler.SourceFileStore
   alias Hologram.Utils
 
   def compile(opts) do
-    log_paths()
-
-    output_path = resolve_output_path()
-    File.mkdir_p!(output_path)
-
-    Reflection.root_priv_path()
-    |> File.mkdir_p!()
-
-    ModuleDefStore.run()
-    CallGraph.run()
-
     templatables = Reflection.list_templatables(opts)
 
     templatables =
       if opts[:templatables], do: templatables ++ opts[:templatables], else: templatables
 
-    Logger.debug("Hologram: found templatables: #{inspect(templatables)}")
-
-    templates = Reflection.list_templates(templatables)
-
-    pages = Reflection.list_pages(opts)
-    Logger.debug("Hologram: found pages: #{inspect(pages)}")
-    dump_page_list(pages)
-
-    module_defs = aggregate_module_defs(pages)
-    call_graph = build_call_graph(pages, module_defs, templates)
-
-    build_pages(pages, output_path, module_defs, call_graph)
-    |> dump_page_digest_store()
-
-    CallGraph.stop()
-    ModuleDefStore.stop()
-
-    %{
-      call_graph: call_graph,
-      module_defs: module_defs,
-      pages: pages,
-      templatables: templatables,
-      templates: templates
-    }
+    SourceFileStore.run()
+    transform_source_files(templatables)
   end
 
-  defp aggregate_module_defs(pages) do
-    pages
-    |> Utils.map_async(&ModuleDefAggregator.aggregate/1)
-    |> Utils.await_tasks()
+  defp maybe_transform_source_file(module) do
+    source_path = Reflection.source_path(module)
 
-    ModuleDefStore.get_all()
+    unless SourceFileStore.has?(source_path) do
+      SourceFileStore.lock(source_path)
+
+      ir =
+        source_path
+        |> File.read!()
+        |> Reflection.ir()
+        |> Expander.expand()
+
+      # {ir, source_files} = Expander.expand(ir)
+      # TODO: transformer the new source files async
+
+      SourceFileStore.put(source_path, ir)
+    end
   end
 
-  defp build_call_graph(pages, module_defs, templates) do
-    pages
-    |> Utils.map_async(&CallGraphBuilder.build(&1, module_defs, templates, nil))
-    |> Utils.await_tasks()
-
-    CallGraph.get()
-  end
-
-  defp build_page(page, output_path, module_defs, call_graph) do
-    js = Builder.build(page, module_defs, call_graph)
-
-    output = """
-    "use strict";
-
-    #{js}
-
-    window.hologramPageScriptLoaded = true;
-
-    // CAUTION: related code is in assets/js/hologram.js
-    if (window.hologramRuntimeScriptLoaded && window.hologramPageScriptLoaded && !window.hologramPageMounted) {
-      window.hologramPageMounted = true
-      Hologram.run(window.hologramArgs)
-    }
-    """
-
-    digest =
-      :crypto.hash(:md5, output)
-      |> Base.encode16()
-      |> String.downcase()
-
-    "#{output_path}/page-#{digest}.js"
-    |> File.write!(output)
-
-    {page, digest}
-  end
-
-  defp build_pages(pages, output_path, module_defs, call_graph) do
-    pages
-    |> Utils.map_async(&build_page(&1, output_path, module_defs, call_graph))
+  defp transform_source_files(modules) do
+    modules
+    |> Utils.map_async(&maybe_transform_source_file/1)
     |> Utils.await_tasks()
   end
 
-  defp dump_page_digest_store(page_digests) do
-    data =
-      page_digests
-      |> Utils.serialize()
-
-    Reflection.root_page_digest_store_path()
-    |> File.write!(data)
-  end
-
-  defp dump_page_list(pages) do
-    data = Utils.serialize(pages)
-
-    Reflection.root_page_list_path()
-    |> File.write!(data)
-  end
-
-  defp log_paths do
-    Logger.debug("Hologram: compile priv path = #{Reflection.root_priv_path()}")
-    Logger.debug("Hologram: compile output path = #{resolve_output_path()}")
-
-    Logger.debug(
-      "Hologram: page digest store dump path = #{Reflection.root_page_digest_store_path()}"
-    )
-  end
-
-  defp resolve_output_path do
-    Reflection.root_path() <> "/priv/static/hologram"
+  defp traverse(ir, _context \\ %{}) do
+    ir
   end
 end
