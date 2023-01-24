@@ -3,6 +3,7 @@ defmodule Hologram.Compiler.ExpanderTest do
 
   alias Hologram.Compiler.Context
   alias Hologram.Compiler.Expander
+  alias Hologram.Compiler.IR
   alias Hologram.Compiler.IR.AtomType
   alias Hologram.Compiler.IR.Block
   alias Hologram.Compiler.IR.IgnoredExpression
