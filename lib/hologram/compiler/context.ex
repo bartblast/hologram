@@ -1,13 +1,9 @@
 defmodule Hologram.Compiler.Context do
-  defstruct module: nil,
-            uses: [],
-            imports: [],
-            requires: [],
-            aliases: %{},
-            attributes: [],
+  defstruct aliases: %{},
             block_bindings: [],
             functions: %{},
             macros: %{},
+            module: nil,
             module_attributes: %{},
             variables: MapSet.new()
 
