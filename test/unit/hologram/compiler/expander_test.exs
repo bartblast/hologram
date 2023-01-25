@@ -7,6 +7,7 @@ defmodule Hologram.Compiler.ExpanderTest do
   alias Hologram.Test.Fixtures.Compiler.Expander.Module1
 
   @context %Context{
+    aliases: %{[:Seg1] => [:Seg2, :Seg3]},
     module_attributes: %{
       a: %IR.IntegerType{value: 1},
       c: %IR.IntegerType{value: 3}
@@ -28,13 +29,25 @@ defmodule Hologram.Compiler.ExpanderTest do
               }, @context}
   end
 
-  # test "alias" do
-  #   code = "A"
-  #   ir = ir(code)
-  #   result = Expander.expand(ir, @context)
+  describe "alias" do
+    test "has mapping" do
+      ir = %IR.Alias{segments: [:Seg1]}
 
-  #   assert {%IR.ModuleType{module: A, segments: [:A]}, _context} = result
-  # end
+      result = Expander.expand(ir, @context)
+      expected = {%IR.ModuleType{module: Seg2.Seg3, segments: [:Seg2, :Seg3]}, @context}
+
+      assert expected = result
+    end
+
+    test "doesn't have mapping" do
+      ir = %IR.Alias{segments: [:Seg4, :Seg5]}
+
+      result = Expander.expand(ir, @context)
+      expected = {%IR.ModuleType{module: Seg4.Seg5, segments: [:Seg4, :Seg5]}, @context}
+
+      assert expected = result
+    end
+  end
 
   # describe "alias directive" do
   #   test "single alias directive" do
