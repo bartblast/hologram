@@ -43,7 +43,7 @@ defmodule Hologram.Compiler.ExpanderTest do
       result = Expander.expand(ir, @context)
       expected = {%IR.ModuleType{module: Seg2.Seg3, segments: [:Seg2, :Seg3]}, @context}
 
-      assert expected = result
+      assert expected == result
     end
 
     test "doesn't have mapping" do
@@ -52,7 +52,7 @@ defmodule Hologram.Compiler.ExpanderTest do
       result = Expander.expand(ir, @context)
       expected = {%IR.ModuleType{module: Seg4.Seg5, segments: [:Seg4, :Seg5]}, @context}
 
-      assert expected = result
+      assert expected == result
     end
   end
 
@@ -332,8 +332,6 @@ defmodule Hologram.Compiler.ExpanderTest do
 
   describe "module attribute definition" do
     test "expression which doesn't use module attributes" do
-      code = "@b 5 + 6"
-
       ir = %IR.ModuleAttributeDefinition{
         name: :b,
         expression: %IR.AdditionOperator{
