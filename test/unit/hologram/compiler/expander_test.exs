@@ -21,7 +21,7 @@ defmodule Hologram.Compiler.ExpanderTest do
     assert result == {ir, @context}
   end
 
-  test "addition operator" do
+  test "basic binary operator" do
     ir = %IR.AdditionOperator{
       left: %IR.ModuleAttributeOperator{name: :a},
       right: %IR.ModuleAttributeOperator{name: :c}

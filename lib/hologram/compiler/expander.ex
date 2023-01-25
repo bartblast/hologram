@@ -12,11 +12,11 @@ defmodule Hologram.Compiler.Expander do
     {ir, context}
   end
 
-  def expand(%IR.AdditionOperator{left: left, right: right}, %Context{} = context) do
+  def expand(%{kind: :basic_binary_operator, left: left, right: right} = ir, %Context{} = context) do
     {left, _context} = expand(left, context)
     {right, _context} = expand(right, context)
 
-    {%IR.AdditionOperator{left: left, right: right}, context}
+    {%{ir | left: left, right: right}, context}
   end
 
   def expand(%IR.Alias{segments: segments}, %Context{aliases: defined_aliases} = context) do

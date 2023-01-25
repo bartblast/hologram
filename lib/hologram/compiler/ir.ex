@@ -60,7 +60,7 @@ defmodule Hologram.Compiler.IR do
   end
 
   defmodule AdditionOperator do
-    defstruct left: nil, right: nil
+    defstruct left: nil, right: nil, kind: :basic_binary_operator
   end
 
   defmodule ConsOperator do
@@ -68,27 +68,27 @@ defmodule Hologram.Compiler.IR do
   end
 
   defmodule DivisionOperator do
-    defstruct left: nil, right: nil
+    defstruct left: nil, right: nil, kind: :basic_binary_operator
   end
 
   defmodule DotOperator do
-    defstruct left: nil, right: nil
+    defstruct left: nil, right: nil, kind: :basic_binary_operator
   end
 
   defmodule EqualToOperator do
-    defstruct left: nil, right: nil
+    defstruct left: nil, right: nil, kind: :basic_binary_operator
   end
 
   defmodule LessThanOperator do
-    defstruct left: nil, right: nil
+    defstruct left: nil, right: nil, kind: :basic_binary_operator
   end
 
   defmodule ListConcatenationOperator do
-    defstruct left: nil, right: nil
+    defstruct left: nil, right: nil, kind: :basic_binary_operator
   end
 
   defmodule ListSubtractionOperator do
-    defstruct left: nil, right: nil
+    defstruct left: nil, right: nil, kind: :basic_binary_operator
   end
 
   defmodule MatchOperator do
@@ -96,7 +96,7 @@ defmodule Hologram.Compiler.IR do
   end
 
   defmodule MembershipOperator do
-    defstruct left: nil, right: nil
+    defstruct left: nil, right: nil, kind: :basic_binary_operator
   end
 
   defmodule ModuleAttributeOperator do
@@ -104,15 +104,15 @@ defmodule Hologram.Compiler.IR do
   end
 
   defmodule MultiplicationOperator do
-    defstruct left: nil, right: nil
+    defstruct left: nil, right: nil, kind: :basic_binary_operator
   end
 
   defmodule NotEqualToOperator do
-    defstruct left: nil, right: nil
+    defstruct left: nil, right: nil, kind: :basic_binary_operator
   end
 
   defmodule RelaxedBooleanAndOperator do
-    defstruct left: nil, right: nil
+    defstruct left: nil, right: nil, kind: :basic_binary_operator
   end
 
   defmodule RelaxedBooleanNotOperator do
@@ -120,19 +120,19 @@ defmodule Hologram.Compiler.IR do
   end
 
   defmodule RelaxedBooleanOrOperator do
-    defstruct left: nil, right: nil
+    defstruct left: nil, right: nil, kind: :basic_binary_operator
   end
 
   defmodule StrictBooleanAndOperator do
-    defstruct left: nil, right: nil
+    defstruct left: nil, right: nil, kind: :basic_binary_operator
   end
 
   defmodule SubtractionOperator do
-    defstruct left: nil, right: nil
+    defstruct left: nil, right: nil, kind: :basic_binary_operator
   end
 
   defmodule TypeOperator do
-    defstruct left: nil, right: nil
+    defstruct left: nil, right: nil, kind: :basic_binary_operator
   end
 
   defmodule UnaryNegativeOperator do
