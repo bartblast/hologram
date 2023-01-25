@@ -89,6 +89,27 @@ defmodule Hologram.Compiler.Expander do
     {module_attributes[name], context}
   end
 
+  def expand(
+        %IR.ModuleDefinition{} = ir,
+        %Context{module: nil} = context
+      ) do
+    {module, _context} = expand(ir.module, context)
+    new_context = %{context | module: module}
+    {body, _context} = expand(ir.body, new_context)
+
+    {%{ir | module: module, body: body}, context}
+  end
+
+  def expand(%IR.ModuleDefinition{} = ir, %Context{} = context) do
+    segs = context.module.segments ++ ir.module.segments
+    module = %IR.ModuleType{module: Helpers.module(segs), segments: segs}
+
+    new_context = %{context | module: module}
+    {body, _context} = expand(ir.body, new_context)
+
+    {%{ir | module: module, body: body}, context}
+  end
+
   defp expand_alias_segs([head | tail] = alias_segs, defined_aliases) do
     if defined_aliases[head] do
       defined_aliases[head] ++ tail

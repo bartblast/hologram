@@ -384,4 +384,70 @@ defmodule Hologram.Compiler.ExpanderTest do
 
     assert result == {%IR.IntegerType{value: 3}, @context}
   end
+
+  describe "module def" do
+    test "top-level module" do
+      ir = %IR.ModuleDefinition{
+        module: %IR.Alias{segments: [:A, :B]},
+        body: %IR.Block{
+          expressions: [
+            %IR.IntegerType{value: 1}
+          ]
+        }
+      }
+
+      result = Expander.expand(ir, @context)
+
+      expected =
+        {%IR.ModuleDefinition{
+           module: %IR.ModuleType{module: A.B, segments: [:A, :B]},
+           body: %IR.Block{
+             expressions: [
+               %IR.IntegerType{value: 1}
+             ]
+           }
+         }, @context}
+
+      assert result == expected
+    end
+
+    test "nested module" do
+      ir = %IR.ModuleDefinition{
+        module: %IR.Alias{segments: [:A, :B]},
+        body: %IR.Block{
+          expressions: [
+            %IR.ModuleDefinition{
+              module: %IR.Alias{segments: [:C, :D]},
+              body: %IR.Block{
+                expressions: [
+                  %IR.IntegerType{value: 1}
+                ]
+              }
+            }
+          ]
+        }
+      }
+
+      result = Expander.expand(ir, @context)
+
+      expected =
+        {%IR.ModuleDefinition{
+           module: %IR.ModuleType{module: A.B, segments: [:A, :B]},
+           body: %IR.Block{
+             expressions: [
+               %IR.ModuleDefinition{
+                 module: %IR.ModuleType{module: A.B.C.D, segments: [:A, :B, :C, :D]},
+                 body: %IR.Block{
+                   expressions: [
+                     %IR.IntegerType{value: 1}
+                   ]
+                 }
+               }
+             ]
+           }
+         }, @context}
+
+      assert result == expected
+    end
+  end
 end
