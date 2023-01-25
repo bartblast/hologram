@@ -7,7 +7,7 @@ defmodule Hologram.Compiler.ExpanderTest do
   alias Hologram.Test.Fixtures.Compiler.Expander.Module1
 
   @context %Context{
-    aliases: %{[:Seg1] => [:Seg2, :Seg3]},
+    aliases: %{:Seg1 => [:Seg2, :Seg3]},
     module_attributes: %{
       a: %IR.IntegerType{value: 1},
       c: %IR.IntegerType{value: 3}
