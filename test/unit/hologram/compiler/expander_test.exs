@@ -1,7 +1,6 @@
 defmodule Hologram.Compiler.ExpanderTest do
   use Hologram.Test.UnitCase, async: true
 
-  alias Hologram.Compiler.IR.IgnoredExpression
   alias Hologram.Compiler.Context
   alias Hologram.Compiler.Expander
   alias Hologram.Compiler.IR
@@ -331,41 +330,55 @@ defmodule Hologram.Compiler.ExpanderTest do
     end
   end
 
-  # describe "module attribute definition" do
-  #   test "expression which doesn't use module attributes" do
-  #     code = "@b 5 + 6"
-  #     ir = ir(code)
-  #     result = Expander.expand(ir, @context)
+  describe "module attribute definition" do
+    test "expression which doesn't use module attributes" do
+      code = "@b 5 + 6"
 
-  #     assert {
-  #              %IR.IgnoredExpression{},
-  #              %Context{
-  #                module_attributes: %{
-  #                  a: %IR.IntegerType{value: 1},
-  #                  b: %IR.IntegerType{value: 11},
-  #                  c: %IR.IntegerType{value: 3}
-  #                }
-  #              }
-  #            } = result
-  #   end
+      ir = %IR.ModuleAttributeDefinition{
+        name: :b,
+        expression: %IR.AdditionOperator{
+          left: %IR.IntegerType{value: 5},
+          right: %IR.IntegerType{value: 6}
+        }
+      }
 
-  #   test "expression which uses module attributes" do
-  #     code = "@b @a + @c"
-  #     ir = ir(code)
-  #     result = Expander.expand(ir, @context)
+      result = Expander.expand(ir, @context)
 
-  #     assert {
-  #              %IR.IgnoredExpression{},
-  #              %Context{
-  #                module_attributes: %{
-  #                  a: %IR.IntegerType{value: 1},
-  #                  b: %IR.IntegerType{value: 4},
-  #                  c: %IR.IntegerType{value: 3}
-  #                }
-  #              }
-  #            } = result
-  #   end
-  # end
+      assert {
+               %IR.IgnoredExpression{},
+               %Context{
+                 module_attributes: %{
+                   a: %IR.IntegerType{value: 1},
+                   b: %IR.IntegerType{value: 11},
+                   c: %IR.IntegerType{value: 3}
+                 }
+               }
+             } = result
+    end
+
+    test "expression which uses module attributes" do
+      ir = %IR.ModuleAttributeDefinition{
+        name: :b,
+        expression: %IR.AdditionOperator{
+          left: %IR.ModuleAttributeOperator{name: :a},
+          right: %IR.ModuleAttributeOperator{name: :c}
+        }
+      }
+
+      result = Expander.expand(ir, @context)
+
+      assert {
+               %IR.IgnoredExpression{},
+               %Context{
+                 module_attributes: %{
+                   a: %IR.IntegerType{value: 1},
+                   b: %IR.IntegerType{value: 4},
+                   c: %IR.IntegerType{value: 3}
+                 }
+               }
+             } = result
+    end
+  end
 
   test "module attribute operator" do
     ir = %IR.ModuleAttributeOperator{name: :c}
