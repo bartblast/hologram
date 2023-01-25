@@ -1,6 +1,7 @@
 defmodule Hologram.Compiler.ExpanderTest do
   use Hologram.Test.UnitCase, async: true
 
+  alias Hologram.Compiler.IR.IgnoredExpression
   alias Hologram.Compiler.Context
   alias Hologram.Compiler.Expander
   alias Hologram.Compiler.IR
@@ -56,71 +57,43 @@ defmodule Hologram.Compiler.ExpanderTest do
     end
   end
 
-  # describe "alias directive" do
-  #   test "single alias directive" do
-  #     code = """
-  #     alias A.B, as: C
-  #     C
-  #     """
+  describe "alias directive" do
+    test "which doesn't use any other alias" do
+      ir = %IR.AliasDirective{alias_segs: [:A, :B], as: :C}
+      result = Expander.expand(ir, @context)
 
-  #     ir = ir(code)
-  #     result = Expander.expand(ir, @context)
+      expected_aliases = Map.put(@context.aliases, :C, [:A, :B])
+      expected = {%IR.IgnoredExpression{}, %{@context | aliases: expected_aliases}}
 
-  #     assert {
-  #              %IR.Block{
-  #                expressions: [
-  #                  %IR.IgnoredExpression{},
-  #                  %IR.ModuleType{module: A.B, segments: [:A, :B]}
-  #                ]
-  #              },
-  #              _context
-  #            } = result
-  #   end
+      assert result == expected
+    end
 
-  #   test "alias directive that uses an alias defined before it" do
-  #     code = """
-  #     alias A.B, as: C
-  #     alias C.D, as: E
-  #     E
-  #     """
+    test "which uses an alias defined before it" do
+      aliases = Map.put(@context.aliases, :C, [:A, :B])
+      context = %{@context | aliases: aliases}
 
-  #     ir = ir(code)
-  #     result = Expander.expand(ir, @context)
+      ir = %IR.AliasDirective{alias_segs: [:C, :D], as: :E}
+      result = Expander.expand(ir, context)
 
-  #     assert {
-  #              %IR.Block{
-  #                expressions: [
-  #                  %IR.IgnoredExpression{},
-  #                  %IR.IgnoredExpression{},
-  #                  %IR.ModuleType{module: A.B.D, segments: [:A, :B, :D]}
-  #                ]
-  #              },
-  #              _context
-  #            } = result
-  #   end
+      expected_aliases = Map.put(context.aliases, :E, [:A, :B, :D])
+      expected = {%IR.IgnoredExpression{}, %{context | aliases: expected_aliases}}
 
-  #   test "alias directive that uses an alias defined after it" do
-  #     code = """
-  #     alias C.D, as: E
-  #     alias A.B, as: C
-  #     E
-  #     """
+      assert result == expected
+    end
 
-  #     ir = ir(code)
-  #     result = Expander.expand(ir, @context)
+    test "which uses an alias defined after it" do
+      aliases = Map.put(@context.aliases, :E, [:C, :D])
+      context = %{@context | aliases: aliases}
 
-  #     assert {
-  #              %IR.Block{
-  #                expressions: [
-  #                  %IR.IgnoredExpression{},
-  #                  %IR.IgnoredExpression{},
-  #                  %IR.ModuleType{module: C.D, segments: [:C, :D]}
-  #                ]
-  #              },
-  #              _context
-  #            } = result
-  #   end
-  # end
+      ir = %IR.AliasDirective{alias_segs: [:A, :B], as: :C}
+      result = Expander.expand(ir, context)
+
+      expected_aliases = Map.put(context.aliases, :C, [:A, :B])
+      expected = {%IR.IgnoredExpression{}, %{context | aliases: expected_aliases}}
+
+      assert result == expected
+    end
+  end
 
   test "block" do
     ir = %IR.Block{
