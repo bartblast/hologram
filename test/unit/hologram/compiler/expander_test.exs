@@ -122,25 +122,26 @@ defmodule Hologram.Compiler.ExpanderTest do
   #   end
   # end
 
-  # test "block" do
-  #   code = """
-  #   A
-  #   B
-  #   """
+  test "block" do
+    ir = %IR.Block{
+      expressions: [
+        %IR.Alias{segments: [:A]},
+        %IR.Alias{segments: [:B]}
+      ]
+    }
 
-  #   ir = ir(code)
-  #   result = Expander.expand(ir, @context)
+    result = Expander.expand(ir, @context)
 
-  #   assert {
-  #            %IR.Block{
-  #              expressions: [
-  #                %IR.ModuleType{module: A, segments: [:A]},
-  #                %IR.ModuleType{module: B, segments: [:B]}
-  #              ]
-  #            },
-  #            _context
-  #          } = result
-  # end
+    assert {
+             %IR.Block{
+               expressions: [
+                 %IR.ModuleType{module: A, segments: [:A]},
+                 %IR.ModuleType{module: B, segments: [:B]}
+               ]
+             },
+             _context
+           } = result
+  end
 
   # describe "import directive" do
   #   test "no opts" do
