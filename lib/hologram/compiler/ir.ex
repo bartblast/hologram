@@ -6,7 +6,7 @@ defmodule Hologram.Compiler.IR do
   end
 
   defmodule AtomType do
-    defstruct value: nil
+    defstruct value: nil, kind: :basic_data_type
   end
 
   defmodule BinaryType do
@@ -14,15 +14,15 @@ defmodule Hologram.Compiler.IR do
   end
 
   defmodule BooleanType do
-    defstruct value: nil
+    defstruct value: nil, kind: :basic_data_type
   end
 
   defmodule FloatType do
-    defstruct value: nil
+    defstruct value: nil, kind: :basic_data_type
   end
 
   defmodule IntegerType do
-    defstruct value: nil
+    defstruct value: nil, kind: :basic_data_type
   end
 
   defmodule ListType do
@@ -42,7 +42,7 @@ defmodule Hologram.Compiler.IR do
   end
 
   defmodule StringType do
-    defstruct value: nil
+    defstruct value: nil, kind: :basic_data_type
   end
 
   defmodule StructType do

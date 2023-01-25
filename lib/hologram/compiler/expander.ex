@@ -8,6 +8,10 @@ defmodule Hologram.Compiler.Expander do
 
   def expand(ir, context)
 
+  def expand(%{kind: :basic_data_type} = ir, %Context{} = context) do
+    {ir, context}
+  end
+
   def expand(%IR.AdditionOperator{left: left, right: right}, %Context{} = context) do
     {left, _context} = expand(left, context)
     {right, _context} = expand(right, context)

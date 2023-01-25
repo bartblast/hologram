@@ -14,6 +14,13 @@ defmodule Hologram.Compiler.ExpanderTest do
     }
   }
 
+  test "basic data type" do
+    ir = %IR.IntegerType{value: 123}
+    result = Expander.expand(ir, @context)
+
+    assert result == {ir, @context}
+  end
+
   test "addition operator" do
     ir = %IR.AdditionOperator{
       left: %IR.ModuleAttributeOperator{name: :a},
@@ -334,13 +341,6 @@ defmodule Hologram.Compiler.ExpanderTest do
   #     assert context.macros == %{sigil_c: %{2 => Module1}}
   #   end
   # end
-
-  test "integer type" do
-    ir = %IR.IntegerType{value: 123}
-    result = Expander.expand(ir, @context)
-
-    assert result == {ir, @context}
-  end
 
   # describe "module attribute definition" do
   #   test "expression which doesn't use module attributes" do
