@@ -116,205 +116,220 @@ defmodule Hologram.Compiler.ExpanderTest do
            } = result
   end
 
-  # describe "import directive" do
-  #   test "no opts" do
-  #     code = "import Hologram.Test.Fixtures.Compiler.Expander.Module1"
+  describe "import directive" do
+    test "no opts" do
+      ir = %IR.ImportDirective{
+        alias_segs: [:Hologram, :Test, :Fixtures, :Compiler, :Expander, :Module1],
+        only: [],
+        except: []
+      }
 
-  #     ir = ir(code)
-  #     result = Expander.expand(ir, @context)
+      result = Expander.expand(ir, @context)
+      assert {%IR.IgnoredExpression{}, %Context{} = context} = result
 
-  #     assert {%IR.IgnoredExpression{}, %Context{} = context} = result
+      assert context.functions == %{
+               fun_1: %{
+                 0 => Module1,
+                 1 => Module1,
+                 2 => Module1
+               },
+               fun_2: %{1 => Module1},
+               fun_3: %{2 => Module1},
+               sigil_a: %{2 => Module1},
+               sigil_b: %{2 => Module1}
+             }
 
-  #     assert context.functions == %{
-  #              fun_1: %{
-  #                0 => Module1,
-  #                1 => Module1,
-  #                2 => Module1
-  #              },
-  #              fun_2: %{1 => Module1},
-  #              fun_3: %{2 => Module1},
-  #              sigil_a: %{2 => Module1},
-  #              sigil_b: %{2 => Module1}
-  #            }
+      assert context.macros == %{
+               macro_1: %{
+                 0 => Module1,
+                 1 => Module1,
+                 2 => Module1
+               },
+               macro_2: %{1 => Module1},
+               macro_3: %{2 => Module1},
+               sigil_c: %{2 => Module1},
+               sigil_d: %{2 => Module1}
+             }
+    end
 
-  #     assert context.macros == %{
-  #              macro_1: %{
-  #                0 => Module1,
-  #                1 => Module1,
-  #                2 => Module1
-  #              },
-  #              macro_2: %{1 => Module1},
-  #              macro_3: %{2 => Module1},
-  #              sigil_c: %{2 => Module1},
-  #              sigil_d: %{2 => Module1}
-  #            }
-  #   end
+    test "'only' opt" do
+      ir = %IR.ImportDirective{
+        alias_segs: [:Hologram, :Test, :Fixtures, :Compiler, :Expander, :Module1],
+        only: [fun_2: 1, macro_3: 2],
+        except: []
+      }
 
-  #   test "'only' opt" do
-  #     code =
-  #       "import Hologram.Test.Fixtures.Compiler.Expander.Module1, only: [fun_2: 1, macro_3: 2]"
+      result = Expander.expand(ir, @context)
+      assert {%IR.IgnoredExpression{}, %Context{} = context} = result
 
-  #     ir = ir(code)
-  #     result = Expander.expand(ir, @context)
+      assert context.functions == %{fun_2: %{1 => Module1}}
+      assert context.macros == %{macro_3: %{2 => Module1}}
+    end
 
-  #     assert {%IR.IgnoredExpression{}, %Context{} = context} = result
-  #     assert context.functions == %{fun_2: %{1 => Module1}}
-  #     assert context.macros == %{macro_3: %{2 => Module1}}
-  #   end
+    test "'except' opt" do
+      ir = %IR.ImportDirective{
+        alias_segs: [:Hologram, :Test, :Fixtures, :Compiler, :Expander, :Module1],
+        only: [],
+        except: [fun_2: 1, macro_3: 2]
+      }
 
-  #   test "'except' opt" do
-  #     code =
-  #       "import Hologram.Test.Fixtures.Compiler.Expander.Module1, except: [fun_2: 1, macro_3: 2]"
+      result = Expander.expand(ir, @context)
+      assert {%IR.IgnoredExpression{}, %Context{} = context} = result
 
-  #     ir = ir(code)
-  #     result = Expander.expand(ir, @context)
+      assert context.functions == %{
+               fun_1: %{
+                 0 => Module1,
+                 1 => Module1,
+                 2 => Module1
+               },
+               fun_3: %{2 => Module1},
+               sigil_a: %{2 => Module1},
+               sigil_b: %{2 => Module1}
+             }
 
-  #     assert {%IR.IgnoredExpression{}, %Context{} = context} = result
+      assert context.macros == %{
+               macro_1: %{
+                 0 => Module1,
+                 1 => Module1,
+                 2 => Module1
+               },
+               macro_2: %{1 => Module1},
+               sigil_c: %{2 => Module1},
+               sigil_d: %{2 => Module1}
+             }
+    end
 
-  #     assert context.functions == %{
-  #              fun_1: %{
-  #                0 => Module1,
-  #                1 => Module1,
-  #                2 => Module1
-  #              },
-  #              fun_3: %{2 => Module1},
-  #              sigil_a: %{2 => Module1},
-  #              sigil_b: %{2 => Module1}
-  #            }
+    test "only functions without 'except' opt" do
+      ir = %IR.ImportDirective{
+        alias_segs: [:Hologram, :Test, :Fixtures, :Compiler, :Expander, :Module1],
+        only: :functions,
+        except: []
+      }
 
-  #     assert context.macros == %{
-  #              macro_1: %{
-  #                0 => Module1,
-  #                1 => Module1,
-  #                2 => Module1
-  #              },
-  #              macro_2: %{1 => Module1},
-  #              sigil_c: %{2 => Module1},
-  #              sigil_d: %{2 => Module1}
-  #            }
-  #   end
+      result = Expander.expand(ir, @context)
+      assert {%IR.IgnoredExpression{}, %Context{} = context} = result
 
-  #   test "only functions without 'except' opt" do
-  #     code = "import Hologram.Test.Fixtures.Compiler.Expander.Module1, only: :functions"
+      assert context.functions == %{
+               fun_1: %{
+                 0 => Module1,
+                 1 => Module1,
+                 2 => Module1
+               },
+               fun_2: %{1 => Module1},
+               fun_3: %{2 => Module1},
+               sigil_a: %{2 => Module1},
+               sigil_b: %{2 => Module1}
+             }
 
-  #     ir = ir(code)
-  #     result = Expander.expand(ir, @context)
+      assert context.macros == %{}
+    end
 
-  #     assert {%IR.IgnoredExpression{}, %Context{} = context} = result
+    test "only functions with 'except' opt" do
+      ir = %IR.ImportDirective{
+        alias_segs: [:Hologram, :Test, :Fixtures, :Compiler, :Expander, :Module1],
+        only: :functions,
+        except: [fun_1: 0, fun_3: 2]
+      }
 
-  #     assert context.functions == %{
-  #              fun_1: %{
-  #                0 => Module1,
-  #                1 => Module1,
-  #                2 => Module1
-  #              },
-  #              fun_2: %{1 => Module1},
-  #              fun_3: %{2 => Module1},
-  #              sigil_a: %{2 => Module1},
-  #              sigil_b: %{2 => Module1}
-  #            }
+      result = Expander.expand(ir, @context)
+      assert {%IR.IgnoredExpression{}, %Context{} = context} = result
 
-  #     assert context.macros == %{}
-  #   end
+      assert context.functions == %{
+               fun_1: %{
+                 1 => Module1,
+                 2 => Module1
+               },
+               fun_2: %{1 => Module1},
+               sigil_a: %{2 => Module1},
+               sigil_b: %{2 => Module1}
+             }
 
-  #   test "only functions with 'except' opt" do
-  #     code =
-  #       "import Hologram.Test.Fixtures.Compiler.Expander.Module1, only: :functions, except: [fun_1: 0, fun_3: 2]"
+      assert context.macros == %{}
+    end
 
-  #     ir = ir(code)
-  #     result = Expander.expand(ir, @context)
+    test "only macros without 'except' opt" do
+      ir = %IR.ImportDirective{
+        alias_segs: [:Hologram, :Test, :Fixtures, :Compiler, :Expander, :Module1],
+        only: :macros,
+        except: []
+      }
 
-  #     assert {%IR.IgnoredExpression{}, %Context{} = context} = result
+      result = Expander.expand(ir, @context)
+      assert {%IR.IgnoredExpression{}, %Context{} = context} = result
 
-  #     assert context.functions == %{
-  #              fun_1: %{
-  #                1 => Module1,
-  #                2 => Module1
-  #              },
-  #              fun_2: %{1 => Module1},
-  #              sigil_a: %{2 => Module1},
-  #              sigil_b: %{2 => Module1}
-  #            }
+      assert context.functions == %{}
 
-  #     assert context.macros == %{}
-  #   end
+      assert context.macros == %{
+               macro_1: %{
+                 0 => Module1,
+                 1 => Module1,
+                 2 => Module1
+               },
+               macro_2: %{1 => Module1},
+               macro_3: %{2 => Module1},
+               sigil_c: %{2 => Module1},
+               sigil_d: %{2 => Module1}
+             }
+    end
 
-  #   test "only macros without 'except' opt" do
-  #     code = "import Hologram.Test.Fixtures.Compiler.Expander.Module1, only: :macros"
+    test "only macros with 'except' opt" do
+      ir = %IR.ImportDirective{
+        alias_segs: [:Hologram, :Test, :Fixtures, :Compiler, :Expander, :Module1],
+        only: :macros,
+        except: [macro_1: 0, macro_3: 2]
+      }
 
-  #     ir = ir(code)
-  #     result = Expander.expand(ir, @context)
+      result = Expander.expand(ir, @context)
+      assert {%IR.IgnoredExpression{}, %Context{} = context} = result
 
-  #     assert {%IR.IgnoredExpression{}, %Context{} = context} = result
+      assert context.functions == %{}
 
-  #     assert context.functions == %{}
+      assert context.macros == %{
+               macro_1: %{
+                 1 => Module1,
+                 2 => Module1
+               },
+               macro_2: %{1 => Module1},
+               sigil_c: %{2 => Module1},
+               sigil_d: %{2 => Module1}
+             }
+    end
 
-  #     assert context.macros == %{
-  #              macro_1: %{
-  #                0 => Module1,
-  #                1 => Module1,
-  #                2 => Module1
-  #              },
-  #              macro_2: %{1 => Module1},
-  #              macro_3: %{2 => Module1},
-  #              sigil_c: %{2 => Module1},
-  #              sigil_d: %{2 => Module1}
-  #            }
-  #   end
+    test "only sigils without 'except' opts" do
+      ir = %IR.ImportDirective{
+        alias_segs: [:Hologram, :Test, :Fixtures, :Compiler, :Expander, :Module1],
+        only: :sigils,
+        except: []
+      }
 
-  #   test "only macros with 'except' opt" do
-  #     code =
-  #       "import Hologram.Test.Fixtures.Compiler.Expander.Module1, only: :macros, except: [macro_1: 0, macro_3: 2]"
+      result = Expander.expand(ir, @context)
+      assert {%IR.IgnoredExpression{}, %Context{} = context} = result
 
-  #     ir = ir(code)
-  #     result = Expander.expand(ir, @context)
+      assert context.functions == %{
+               sigil_a: %{2 => Module1},
+               sigil_b: %{2 => Module1}
+             }
 
-  #     assert {%IR.IgnoredExpression{}, %Context{} = context} = result
+      assert context.macros == %{
+               sigil_c: %{2 => Module1},
+               sigil_d: %{2 => Module1}
+             }
+    end
 
-  #     assert context.functions == %{}
+    test "only sigils with 'except' opts" do
+      ir = %IR.ImportDirective{
+        alias_segs: [:Hologram, :Test, :Fixtures, :Compiler, :Expander, :Module1],
+        only: :sigils,
+        except: [sigil_b: 2, sigil_d: 2]
+      }
 
-  #     assert context.macros == %{
-  #              macro_1: %{
-  #                1 => Module1,
-  #                2 => Module1
-  #              },
-  #              macro_2: %{1 => Module1},
-  #              sigil_c: %{2 => Module1},
-  #              sigil_d: %{2 => Module1}
-  #            }
-  #   end
+      result = Expander.expand(ir, @context)
+      assert {%IR.IgnoredExpression{}, %Context{} = context} = result
 
-  #   test "only sigils without 'except' opts" do
-  #     code = "import Hologram.Test.Fixtures.Compiler.Expander.Module1, only: :sigils"
-
-  #     ir = ir(code)
-  #     result = Expander.expand(ir, @context)
-
-  #     assert {%IR.IgnoredExpression{}, %Context{} = context} = result
-
-  #     assert context.functions == %{
-  #              sigil_a: %{2 => Module1},
-  #              sigil_b: %{2 => Module1}
-  #            }
-
-  #     assert context.macros == %{
-  #              sigil_c: %{2 => Module1},
-  #              sigil_d: %{2 => Module1}
-  #            }
-  #   end
-
-  #   test "only sigils with 'except' opts" do
-  #     code =
-  #       "import Hologram.Test.Fixtures.Compiler.Expander.Module1, only: :sigils, except: [sigil_b: 2, sigil_d: 2]"
-
-  #     ir = ir(code)
-  #     result = Expander.expand(ir, @context)
-
-  #     assert {%IR.IgnoredExpression{}, %Context{} = context} = result
-  #     assert context.functions == %{sigil_a: %{2 => Module1}}
-  #     assert context.macros == %{sigil_c: %{2 => Module1}}
-  #   end
-  # end
+      assert context.functions == %{sigil_a: %{2 => Module1}}
+      assert context.macros == %{sigil_c: %{2 => Module1}}
+    end
+  end
 
   # describe "module attribute definition" do
   #   test "expression which doesn't use module attributes" do
