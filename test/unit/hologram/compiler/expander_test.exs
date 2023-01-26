@@ -36,6 +36,13 @@ defmodule Hologram.Compiler.ExpanderTest do
               }, @context}
   end
 
+  test "bindings meta" do
+    ir = %IR.MatchAccess{}
+    result = Expander.expand(ir, @context)
+
+    assert result == {ir, @context}
+  end
+
   describe "alias" do
     test "has mapping" do
       ir = %IR.Alias{segments: [:Seg1]}

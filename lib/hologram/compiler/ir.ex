@@ -224,35 +224,35 @@ defmodule Hologram.Compiler.IR do
   # BINDINGS
 
   defmodule Binding do
-    defstruct name: nil, access_path: []
+    defstruct name: nil, access_path: [], kind: :bindings_meta
   end
 
   defmodule CaseConditionAccess do
-    defstruct []
+    defstruct kind: :bindings_meta
   end
 
   defmodule ListIndexAccess do
-    defstruct index: nil
+    defstruct index: nil, kind: :bindings_meta
   end
 
   defmodule ListTailAccess do
-    defstruct []
+    defstruct kind: :bindings_meta
   end
 
   defmodule MapAccess do
-    defstruct key: nil
+    defstruct key: nil, kind: :bindings_meta
   end
 
   defmodule MatchAccess do
-    defstruct []
+    defstruct kind: :bindings_meta
   end
 
   defmodule ParamAccess do
-    defstruct index: nil
+    defstruct index: nil, kind: :bindings_meta
   end
 
   defmodule TupleAccess do
-    defstruct index: nil
+    defstruct index: nil, kind: :bindings_meta
   end
 
   # OTHER

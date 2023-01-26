@@ -19,6 +19,10 @@ defmodule Hologram.Compiler.Expander do
     {%{ir | left: left, right: right}, context}
   end
 
+  def expand(%{kind: :bindings_meta} = ir, %Context{} = context) do
+    {ir, context}
+  end
+
   def expand(%IR.Alias{segments: segments}, %Context{aliases: defined_aliases} = context) do
     expanded_alias_segs = expand_alias_segs(segments, defined_aliases)
     module = Helpers.module(expanded_alias_segs)
