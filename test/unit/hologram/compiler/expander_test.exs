@@ -36,8 +36,8 @@ defmodule Hologram.Compiler.ExpanderTest do
               }, @context}
   end
 
-  test "bindings meta" do
-    ir = %IR.MatchAccess{}
+  test "binding index access" do
+    ir = %IR.ListIndexAccess{index: 0}
     result = Expander.expand(ir, @context)
 
     assert result == {ir, @context}

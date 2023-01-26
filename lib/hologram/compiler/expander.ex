@@ -19,7 +19,7 @@ defmodule Hologram.Compiler.Expander do
     {%{ir | left: left, right: right}, context}
   end
 
-  def expand(%{kind: :bindings_meta} = ir, %Context{} = context) do
+  def expand(%{kind: :binding_index_access} = ir, %Context{} = context) do
     {ir, context}
   end
 
