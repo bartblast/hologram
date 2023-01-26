@@ -367,6 +367,13 @@ defmodule Hologram.Compiler.ExpanderTest do
     assert result == expected
   end
 
+  test "match access" do
+    ir = %IR.MatchAccess{}
+    result = Expander.expand(ir, @context)
+
+    assert result == {ir, @context}
+  end
+
   describe "module attribute definition" do
     test "expression which doesn't use module attributes" do
       ir = %IR.ModuleAttributeDefinition{

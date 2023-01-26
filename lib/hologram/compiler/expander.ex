@@ -85,6 +85,10 @@ defmodule Hologram.Compiler.Expander do
     {%IR.MapType{data: new_data}, context}
   end
 
+  def expand(%IR.MatchAccess{} = ir, %Context{} = context) do
+    {ir, context}
+  end
+
   def expand(
         %IR.ModuleAttributeDefinition{name: name, expression: expr},
         %Context{} = context
