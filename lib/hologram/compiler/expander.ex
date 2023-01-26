@@ -69,6 +69,11 @@ defmodule Hologram.Compiler.Expander do
     {%IR.IgnoredExpression{}, new_context}
   end
 
+  def expand(%IR.MapAccess{key: key} = ir, %Context{} = context) do
+    {new_key, _context} = expand(key, context)
+    {%{ir | key: new_key}, context}
+  end
+
   def expand(%IR.MapType{data: data}, %Context{} = context) do
     new_data =
       Enum.map(data, fn {key, value} ->

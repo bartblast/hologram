@@ -337,6 +337,15 @@ defmodule Hologram.Compiler.ExpanderTest do
     end
   end
 
+  test "map access" do
+    ir = %IR.MapAccess{key: %IR.Alias{segments: [:A, :B]}}
+
+    result = Expander.expand(ir, @context)
+    expected = {%IR.MapAccess{key: %IR.ModuleType{module: A.B, segments: [:A, :B]}}, @context}
+
+    assert result == expected
+  end
+
   test "map type" do
     ir = %IR.MapType{
       data: [
