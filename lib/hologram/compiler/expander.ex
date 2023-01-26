@@ -110,6 +110,10 @@ defmodule Hologram.Compiler.Expander do
     {%{ir | module: module, body: body}, context}
   end
 
+  def expand(%IR.ModulePseudoVariable{}, %Context{module: module}) do
+    module
+  end
+
   defp expand_alias_segs([head | tail] = alias_segs, defined_aliases) do
     if defined_aliases[head] do
       defined_aliases[head] ++ tail
