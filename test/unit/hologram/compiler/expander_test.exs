@@ -1,7 +1,6 @@
 defmodule Hologram.Compiler.ExpanderTest do
   use Hologram.Test.UnitCase, async: true
 
-  alias Hologram.Compiler.IR.MapAccess
   alias Hologram.Compiler.Context
   alias Hologram.Compiler.Expander
   alias Hologram.Compiler.IR
