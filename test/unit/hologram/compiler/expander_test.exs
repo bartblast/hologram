@@ -1,6 +1,7 @@
 defmodule Hologram.Compiler.ExpanderTest do
   use Hologram.Test.UnitCase, async: true
 
+  alias Hologram.Compiler.IR.MapAccess
   alias Hologram.Compiler.Context
   alias Hologram.Compiler.Expander
   alias Hologram.Compiler.IR
@@ -99,6 +100,28 @@ defmodule Hologram.Compiler.ExpanderTest do
 
       assert result == expected
     end
+  end
+
+  test "binding" do
+    ir = %IR.Binding{
+      name: :x,
+      access_path: [%IR.MatchAccess{}, %IR.MapAccess{key: %IR.Alias{segments: [:A, :B]}}]
+    }
+
+    result = Expander.expand(ir, @context)
+
+    expected =
+      {%IR.Binding{
+         name: :x,
+         access_path: [
+           %IR.MatchAccess{},
+           %IR.MapAccess{
+             key: %IR.ModuleType{module: A.B, segments: [:A, :B]}
+           }
+         ]
+       }, @context}
+
+    assert result == expected
   end
 
   test "block" do

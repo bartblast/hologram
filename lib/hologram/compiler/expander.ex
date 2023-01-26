@@ -41,6 +41,18 @@ defmodule Hologram.Compiler.Expander do
     {%IR.IgnoredExpression{}, new_context}
   end
 
+  def expand(%IR.Binding{access_path: access_path} = ir, %Context{} = context) do
+    new_access_path =
+      access_path
+      |> Enum.reduce([], fn access_path_node, acc ->
+        {new_access_path_node, _context} = expand(access_path_node, context)
+        [new_access_path_node | acc]
+      end)
+      |> Enum.reverse()
+
+    {%{ir | access_path: new_access_path}, context}
+  end
+
   def expand(%IR.Block{expressions: exprs}, %Context{} = context) do
     {expanded_exprs, _new_context} =
       Enum.reduce(exprs, {[], context}, fn expr, {expanded_exprs, new_context} ->
