@@ -337,6 +337,27 @@ defmodule Hologram.Compiler.ExpanderTest do
     end
   end
 
+  test "map type" do
+    ir = %IR.MapType{
+      data: [
+        {%IR.Alias{segments: [:A]}, %IR.Alias{segments: [:B]}},
+        {%IR.Alias{segments: [:C]}, %IR.Alias{segments: [:D]}}
+      ]
+    }
+
+    result = Expander.expand(ir, @context)
+
+    expected =
+      {%IR.MapType{
+         data: [
+           {%IR.ModuleType{module: A, segments: [:A]}, %IR.ModuleType{module: B, segments: [:B]}},
+           {%IR.ModuleType{module: C, segments: [:C]}, %IR.ModuleType{module: D, segments: [:D]}}
+         ]
+       }, @context}
+
+    assert result == expected
+  end
+
   describe "module attribute definition" do
     test "expression which doesn't use module attributes" do
       ir = %IR.ModuleAttributeDefinition{
