@@ -396,6 +396,76 @@ defmodule Hologram.Compiler.ExpanderTest do
     assert result == {ir, @context}
   end
 
+  test "match operator" do
+    ir = %IR.MatchOperator{
+      bindings: [
+        %IR.Binding{
+          name: :x,
+          access_path: [%IR.MatchAccess{}, %IR.MapAccess{key: %IR.Alias{segments: [:A]}}]
+        },
+        %IR.Binding{
+          name: :y,
+          access_path: [%IR.MatchAccess{}, %IR.MapAccess{key: %IR.Alias{segments: [:B]}}]
+        }
+      ],
+      left: %IR.MapType{
+        data: [
+          {%IR.Alias{segments: [:A]}, %IR.Variable{name: :x}},
+          {%IR.Alias{segments: [:B]}, %IR.Variable{name: :y}}
+        ]
+      },
+      right: %IR.MapType{
+        data: [
+          {%IR.Alias{segments: [:A]}, %IR.IntegerType{value: 1}},
+          {%IR.Alias{segments: [:B]}, %IR.IntegerType{value: 2}}
+        ]
+      }
+    }
+
+    context = %{@context | variables: MapSet.new([:m, :n])}
+    result = Expander.expand(ir, context)
+
+    expected_context = %{@context | variables: MapSet.new([:m, :n, :x, :y])}
+
+    expected =
+      {%IR.MatchOperator{
+         bindings: [
+           %IR.Binding{
+             name: :x,
+             access_path: [
+               %IR.MatchAccess{},
+               %IR.MapAccess{
+                 key: %IR.ModuleType{module: A, segments: [:A]}
+               }
+             ]
+           },
+           %IR.Binding{
+             name: :y,
+             access_path: [
+               %IR.MatchAccess{},
+               %IR.MapAccess{
+                 key: %IR.ModuleType{module: B, segments: [:B]}
+               }
+             ]
+           }
+         ],
+         left: %IR.MapType{
+           data: [
+             {%IR.ModuleType{module: A, segments: [:A]}, %IR.Variable{name: :x}},
+             {%IR.ModuleType{module: B, segments: [:B]}, %IR.Variable{name: :y}}
+           ]
+         },
+         right: %IR.MapType{
+           data: [
+             {%IR.ModuleType{module: A, segments: [:A]}, %IR.IntegerType{value: 1}},
+             {%IR.ModuleType{module: B, segments: [:B]}, %IR.IntegerType{value: 2}}
+           ]
+         }
+       }, expected_context}
+
+    assert result == expected
+  end
+
   describe "module attribute definition" do
     test "expression which doesn't use module attributes" do
       ir = %IR.ModuleAttributeDefinition{

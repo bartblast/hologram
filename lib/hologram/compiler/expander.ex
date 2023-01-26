@@ -102,6 +102,33 @@ defmodule Hologram.Compiler.Expander do
   end
 
   def expand(
+        %IR.MatchOperator{bindings: bindings, left: left, right: right},
+        %Context{} = context
+      ) do
+    new_bindings =
+      bindings
+      |> Enum.reduce([], fn binding, acc ->
+        {new_binding, _context} = expand(binding, context)
+        [new_binding | acc]
+      end)
+      |> Enum.reverse()
+
+    {new_left, _context} = expand(left, context)
+    {new_right, _context} = expand(right, context)
+    new_ir = %IR.MatchOperator{bindings: new_bindings, left: new_left, right: new_right}
+
+    new_variables =
+      new_bindings
+      |> Enum.map(& &1.name)
+      |> MapSet.new()
+      |> MapSet.union(context.variables)
+
+    new_context = %{context | variables: new_variables}
+
+    {new_ir, new_context}
+  end
+
+  def expand(
         %IR.ModuleAttributeDefinition{name: name, expression: expr},
         %Context{} = context
       ) do
