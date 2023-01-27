@@ -7,6 +7,11 @@ defmodule Hologram.Compiler.Context do
             module_attributes: %{},
             variables: MapSet.new()
 
+  # TODO: build env fields based on context data
+  def build_env(_context) do
+    %Macro.Env{}
+  end
+
   def is_macro?(context, module, name, arity) do
     context.macros[name][arity] == module
   end

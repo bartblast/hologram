@@ -2,6 +2,12 @@ defmodule Hologram.Compiler.ContextTest do
   use Hologram.Test.UnitCase, async: false
   alias Hologram.Compiler.Context
 
+  # TODO: build env fields based on context data
+  test "build_env/1" do
+    result = Context.build_env(%Context{})
+    assert result == %Macro.Env{}
+  end
+
   describe "is_macro?/4" do
     @context %Context{
       functions: %{
