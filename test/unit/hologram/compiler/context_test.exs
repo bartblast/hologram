@@ -48,4 +48,28 @@ defmodule Hologram.Compiler.ContextTest do
              module_attributes: %{a: :value_a, b: :value_b, c: :value_c}
            }
   end
+
+  describe "resolve_function_module/3" do
+    test "function exists" do
+      context = %Context{
+        functions: %{
+          fun_1: %{1 => Module1, 2 => Module2, 3 => Module3}
+        }
+      }
+
+      result = Context.resolve_function_module(context, :fun_1, 2)
+      assert result == Module2
+    end
+
+    test "function doesn't exist" do
+      context = %Context{
+        functions: %{
+          fun_2: %{1 => Module1, 2 => Module2, 3 => Module3}
+        }
+      }
+
+      result = Context.resolve_function_module(context, :fun_1, 2)
+      refute result
+    end
+  end
 end

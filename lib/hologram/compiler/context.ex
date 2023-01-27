@@ -25,6 +25,10 @@ defmodule Hologram.Compiler.Context do
     %{context | module_attributes: Map.put(module_attributes, name, value)}
   end
 
+  def resolve_function_module(context, name, arity) do
+    context.functions[name][arity]
+  end
+
   defp aggregate_merged_exports(module, exports) do
     Enum.reduce(exports, %{}, fn {name, arity}, acc ->
       export = %{name => %{arity => module}}
