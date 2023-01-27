@@ -593,7 +593,7 @@ defmodule Hologram.Compiler.ExpanderTest do
     context = %{@context | module: module}
     result = Expander.expand(ir, context)
 
-    assert result == module
+    assert result == {module, context}
   end
 
   test "module type" do
