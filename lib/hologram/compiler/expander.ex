@@ -82,7 +82,14 @@ defmodule Hologram.Compiler.Expander do
   # TODO: test
   def expand(%IR.Call{module: module, function: function, args: args}, %Context{} = context) do
     {module, _context} = expand(module, context)
-    {args, _context} = expand(args, context)
+
+    args =
+      Enum.reduce(args, [], fn arg, acc ->
+        {expanded_arg, _context} = expand(arg, context)
+        [expanded_arg | acc]
+      end)
+      |> Enum.reverse()
+
     arity = Enum.count(args)
 
     if Context.is_macro?(context, module, function, arity) do
