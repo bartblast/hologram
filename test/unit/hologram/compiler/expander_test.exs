@@ -163,8 +163,22 @@ defmodule Hologram.Compiler.ExpanderTest do
       assert result == expected
     end
 
-    # test "function called with alias" do
-    # end
+    test "function called with alias" do
+      args = [%IR.Alias{segments: [:A, :B]}, %IR.Alias{segments: [:C, :D]}]
+      ir = %IR.Call{module: %IR.Alias{segments: [:E, :F]}, function: :my_fun, args: args}
+      result = Expander.expand(ir, %Context{})
+
+      expected = %IR.FunctionCall{
+        module: %IR.ModuleType{module: E.F, segments: [:E, :F]},
+        function: :my_fun,
+        args: [
+          %IR.ModuleType{module: A.B, segments: [:A, :B]},
+          %IR.ModuleType{module: C.D, segments: [:C, :D]}
+        ]
+      }
+
+      assert result == expected
+    end
   end
 
   describe "import directive" do
