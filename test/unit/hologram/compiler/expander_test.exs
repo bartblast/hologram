@@ -596,6 +596,13 @@ defmodule Hologram.Compiler.ExpanderTest do
     assert result == module
   end
 
+  test "module type" do
+    ir = %IR.ModuleType{module: A.B, segments: [:A, :B]}
+    result = Expander.expand(ir, @context)
+
+    assert result == {ir, @context}
+  end
+
   test "variable" do
     ir = %IR.Variable{name: :a}
     result = Expander.expand(ir, @context)

@@ -206,6 +206,10 @@ defmodule Hologram.Compiler.Expander do
     module
   end
 
+  def expand(%IR.ModuleType{} = ir, %Context{} = context) do
+    {ir, context}
+  end
+
   def expand(%IR.Variable{} = ir, %Context{} = context) do
     {ir, context}
   end
