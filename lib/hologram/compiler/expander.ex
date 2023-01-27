@@ -3,6 +3,7 @@ defmodule Hologram.Compiler.Expander do
   alias Hologram.Compiler.Evaluator
   alias Hologram.Compiler.Helpers
   alias Hologram.Compiler.IR
+  alias Hologram.Compiler.Normalizer
   alias Hologram.Compiler.Reflection
   alias Hologram.Compiler.Transformer
 
@@ -61,6 +62,34 @@ defmodule Hologram.Compiler.Expander do
       end)
 
     {%IR.Block{expressions: expanded_exprs}, context}
+  end
+
+  # TODO: test
+  def expand(%IR.Call{module: nil, function: function, args: args}, %Context{} = context) do
+    arity = Enum.count(args)
+
+    module =
+      Context.resolve_macro_module(context, function, arity) ||
+        Context.resolve_function_module(context, function, arity)
+
+    segments = Helpers.alias_segments(module)
+    module = %IR.ModuleType{module: module, segments: segments}
+
+    %IR.Call{module: module, function: function, args: args}
+    |> expand(context)
+  end
+
+  # TODO: test
+  def expand(%IR.Call{module: module, function: function, args: args}, %Context{} = context) do
+    {module, _context} = expand(module, context)
+    {args, _context} = expand(args, context)
+    arity = Enum.count(args)
+
+    if Context.is_macro?(context, module, function, arity) do
+      expand_macro(context, module, function, args)
+    else
+      %IR.FunctionCall{module: module, function: function, args: args}
+    end
   end
 
   def expand(
@@ -187,6 +216,16 @@ defmodule Hologram.Compiler.Expander do
     else
       alias_segs
     end
+  end
+
+  defp expand_macro(context, module, function, args) do
+    env = Context.build_env(context)
+
+    module
+    |> apply(:"MACRO-#{function}", [env] ++ args)
+    |> Normalizer.normalize()
+    |> Transformer.transform(context)
+    |> expand(context)
   end
 
   defp filter_exports(type, exports, only, except)
