@@ -2,6 +2,26 @@ defmodule Hologram.Compiler.ContextTest do
   use Hologram.Test.UnitCase, async: false
   alias Hologram.Compiler.Context
 
+  describe "is_macro?/4" do
+    @context %Context{
+      functions: %{
+        test_name: %{1 => Module1, 2 => Module2, 3 => Module3}
+      },
+      macros: %{
+        test_name: %{4 => Module4, 5 => Module5, 6 => Module6}
+      }
+    }
+
+    test "yes" do
+      assert Context.is_macro?(@context, Module5, :test_name, 5)
+    end
+
+    test "no" do
+      refute Context.is_macro?(@context, Module2, :test_name, 2)
+      refute Context.is_macro?(@context, Module5, :test_name, 4)
+    end
+  end
+
   test "put_functions/3" do
     context = %Context{
       functions: %{fun_1: %{1 => Module1, 2 => Module2}, fun_2: %{3 => Module3, 4 => Module4}}

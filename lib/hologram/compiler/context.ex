@@ -7,6 +7,10 @@ defmodule Hologram.Compiler.Context do
             module_attributes: %{},
             variables: MapSet.new()
 
+  def is_macro?(context, module, name, arity) do
+    context.macros[name][arity] == module
+  end
+
   def put_functions(%{functions: defined_functions} = context, module, functions) do
     added_functions = aggregate_merged_exports(module, functions)
     %{context | functions: DeepMerge.deep_merge(defined_functions, added_functions)}
