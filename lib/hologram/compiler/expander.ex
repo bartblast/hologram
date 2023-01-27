@@ -43,14 +43,7 @@ defmodule Hologram.Compiler.Expander do
   end
 
   def expand(%IR.Binding{access_path: access_path} = ir, %Context{} = context) do
-    new_access_path =
-      access_path
-      |> Enum.reduce([], fn access_path_node, acc ->
-        {new_access_path_node, _context} = expand(access_path_node, context)
-        [new_access_path_node | acc]
-      end)
-      |> Enum.reverse()
-
+    new_access_path = expand_list(access_path, context)
     {%{ir | access_path: new_access_path}, context}
   end
 
@@ -81,21 +74,14 @@ defmodule Hologram.Compiler.Expander do
 
   # TODO: test
   def expand(%IR.Call{module: module, function: function, args: args}, %Context{} = context) do
-    {module, _context} = expand(module, context)
+    {new_module, _context} = expand(module, context)
+    new_args = expand_list(args, context)
+    arity = Enum.count(new_args)
 
-    args =
-      Enum.reduce(args, [], fn arg, acc ->
-        {expanded_arg, _context} = expand(arg, context)
-        [expanded_arg | acc]
-      end)
-      |> Enum.reverse()
-
-    arity = Enum.count(args)
-
-    if Context.is_macro?(context, module, function, arity) do
-      expand_macro(context, module, function, args)
+    if Context.is_macro?(context, new_module, function, arity) do
+      expand_macro(context, new_module, function, new_args)
     else
-      %IR.FunctionCall{module: module, function: function, args: args}
+      %IR.FunctionCall{module: new_module, function: function, args: new_args}
     end
   end
 
@@ -141,14 +127,7 @@ defmodule Hologram.Compiler.Expander do
         %IR.MatchOperator{bindings: bindings, left: left, right: right},
         %Context{} = context
       ) do
-    new_bindings =
-      bindings
-      |> Enum.reduce([], fn binding, acc ->
-        {new_binding, _context} = expand(binding, context)
-        [new_binding | acc]
-      end)
-      |> Enum.reverse()
-
+    new_bindings = expand_list(bindings, context)
     {new_left, _context} = expand(left, context)
     {new_right, _context} = expand(right, context)
     new_ir = %IR.MatchOperator{bindings: new_bindings, left: new_left, right: new_right}
@@ -227,6 +206,14 @@ defmodule Hologram.Compiler.Expander do
     else
       alias_segs
     end
+  end
+
+  defp expand_list(list, context) do
+    Enum.reduce(list, [], fn ir, acc ->
+      {new_ir, _context} = expand(ir, context)
+      [new_ir | acc]
+    end)
+    |> Enum.reverse()
   end
 
   defp expand_macro(context, module, function, args) do
