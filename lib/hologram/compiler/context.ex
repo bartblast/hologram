@@ -29,6 +29,10 @@ defmodule Hologram.Compiler.Context do
     context.functions[name][arity]
   end
 
+  def resolve_macro_module(context, name, arity) do
+    context.macros[name][arity]
+  end
+
   defp aggregate_merged_exports(module, exports) do
     Enum.reduce(exports, %{}, fn {name, arity}, acc ->
       export = %{name => %{arity => module}}

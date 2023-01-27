@@ -72,4 +72,28 @@ defmodule Hologram.Compiler.ContextTest do
       refute result
     end
   end
+
+  describe "resolve_macro_module/3" do
+    test "macro exists" do
+      context = %Context{
+        macros: %{
+          macro_1: %{1 => Module1, 2 => Module2, 3 => Module3}
+        }
+      }
+
+      result = Context.resolve_macro_module(context, :macro_1, 2)
+      assert result == Module2
+    end
+
+    test "macro doesn't exist" do
+      context = %Context{
+        macros: %{
+          macro_2: %{1 => Module1, 2 => Module2, 3 => Module3}
+        }
+      }
+
+      result = Context.resolve_macro_module(context, :macro_1, 2)
+      refute result
+    end
+  end
 end
