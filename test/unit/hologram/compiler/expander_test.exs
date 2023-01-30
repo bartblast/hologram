@@ -179,6 +179,19 @@ defmodule Hologram.Compiler.ExpanderTest do
 
       assert result == expected
     end
+
+    test "macro called without alias or args, returning 1 expression which doesn't change the context" do
+      ir = %IR.Call{module: nil, function: :macro_2, args: []}
+
+      context = %Context{
+        macros: %{macro_2: %{0 => Hologram.Test.Fixtures.Compiler.Expander.Module2}}
+      }
+
+      result = Expander.expand(ir, context)
+      expected = {%IR.IntegerType{value: 123}, context}
+
+      assert result == expected
+    end
   end
 
   describe "import directive" do
