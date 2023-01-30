@@ -245,6 +245,13 @@ defmodule Hologram.Compiler.ExpanderTest do
     assert result == {ir, %Context{}}
   end
 
+  test "ignored expression" do
+    ir = %IR.IgnoredExpression{}
+    result = Expander.expand(ir, %Context{})
+
+    assert result == {ir, %Context{}}
+  end
+
   describe "import directive" do
     test "no opts" do
       ir = %IR.ImportDirective{

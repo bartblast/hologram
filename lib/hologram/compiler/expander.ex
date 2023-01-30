@@ -87,6 +87,10 @@ defmodule Hologram.Compiler.Expander do
     {ir, context}
   end
 
+  def expand(%IR.IgnoredExpression{} = ir, %Context{} = context) do
+    {ir, context}
+  end
+
   def expand(
         %IR.ImportDirective{alias_segs: alias_segs, only: only, except: except},
         %Context{aliases: defined_aliases} = context
