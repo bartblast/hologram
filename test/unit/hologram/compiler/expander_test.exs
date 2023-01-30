@@ -231,6 +231,21 @@ defmodule Hologram.Compiler.ExpanderTest do
 
       assert result == expected
     end
+
+    test "macro which changes the context" do
+      ir = %IR.Call{module: nil, function: :macro_2c, args: []}
+
+      context = %Context{
+        macros: %{macro_2c: %{0 => Hologram.Test.Fixtures.Compiler.Expander.Module2}}
+      }
+
+      result = Expander.expand(ir, context)
+
+      expected_context = %{context | aliases: %{C: [:A, :B]}}
+      expected = {[%IR.IgnoredExpression{}], expected_context}
+
+      assert result == expected
+    end
   end
 
   test "function call" do

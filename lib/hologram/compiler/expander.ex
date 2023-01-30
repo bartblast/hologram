@@ -232,12 +232,11 @@ defmodule Hologram.Compiler.Expander do
   defp expand_macro(context, module, function, args) do
     env = Context.build_env(context)
 
-    {expanded_ir, _context} =
+    expanded_ir =
       module
       |> apply(:"MACRO-#{function}", [env] ++ args)
       |> Normalizer.normalize()
       |> Transformer.transform(context)
-      |> expand(context)
 
     case expanded_ir do
       %IR.Block{expressions: expressions} ->

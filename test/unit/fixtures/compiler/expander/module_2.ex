@@ -11,4 +11,10 @@ defmodule Hologram.Test.Fixtures.Compiler.Expander.Module2 do
       200
     end
   end
+
+  defmacro macro_2c do
+    quote do
+      alias A.B, as: C
+    end
+  end
 end
