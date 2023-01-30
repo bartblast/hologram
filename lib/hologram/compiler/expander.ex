@@ -240,7 +240,7 @@ defmodule Hologram.Compiler.Expander do
         expressions
 
       expression ->
-        expression
+        [expression]
     end
   end
 

@@ -158,14 +158,16 @@ defmodule Hologram.Compiler.ExpanderTest do
       result = Expander.expand(ir, context)
 
       expected =
-        {%IR.FunctionCall{
-           module: %IR.ModuleType{module: E.F, segments: [:E, :F]},
-           function: :my_fun,
-           args: [
-             %IR.ModuleType{module: A.B, segments: [:A, :B]},
-             %IR.ModuleType{module: C.D, segments: [:C, :D]}
-           ]
-         }, context}
+        {[
+           %IR.FunctionCall{
+             module: %IR.ModuleType{module: E.F, segments: [:E, :F]},
+             function: :my_fun,
+             args: [
+               %IR.ModuleType{module: A.B, segments: [:A, :B]},
+               %IR.ModuleType{module: C.D, segments: [:C, :D]}
+             ]
+           }
+         ], context}
 
       assert result == expected
     end
@@ -176,14 +178,16 @@ defmodule Hologram.Compiler.ExpanderTest do
       result = Expander.expand(ir, %Context{})
 
       expected =
-        {%IR.FunctionCall{
-           module: %IR.ModuleType{module: E.F, segments: [:E, :F]},
-           function: :my_fun,
-           args: [
-             %IR.ModuleType{module: A.B, segments: [:A, :B]},
-             %IR.ModuleType{module: C.D, segments: [:C, :D]}
-           ]
-         }, %Context{}}
+        {[
+           %IR.FunctionCall{
+             module: %IR.ModuleType{module: E.F, segments: [:E, :F]},
+             function: :my_fun,
+             args: [
+               %IR.ModuleType{module: A.B, segments: [:A, :B]},
+               %IR.ModuleType{module: C.D, segments: [:C, :D]}
+             ]
+           }
+         ], %Context{}}
 
       assert result == expected
     end
@@ -196,7 +200,7 @@ defmodule Hologram.Compiler.ExpanderTest do
       }
 
       result = Expander.expand(ir, context)
-      expected = {%IR.IntegerType{value: 123}, context}
+      expected = {[%IR.IntegerType{value: 123}], context}
 
       assert result == expected
     end
@@ -223,7 +227,7 @@ defmodule Hologram.Compiler.ExpanderTest do
       }
 
       result = Expander.expand(ir, context)
-      expected = {%IR.IntegerType{value: 123}, context}
+      expected = {[%IR.IntegerType{value: 123}], context}
 
       assert result == expected
     end
