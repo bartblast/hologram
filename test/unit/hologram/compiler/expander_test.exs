@@ -205,19 +205,6 @@ defmodule Hologram.Compiler.ExpanderTest do
       assert result == expected
     end
 
-    test "macro returning multiple expressions" do
-      ir = %IR.Call{module: nil, function: :macro_2b, args: []}
-
-      context = %Context{
-        macros: %{macro_2b: %{0 => Hologram.Test.Fixtures.Compiler.Expander.Module2}}
-      }
-
-      result = Expander.expand(ir, context)
-      expected = {[%IR.IntegerType{value: 100}, %IR.IntegerType{value: 200}], context}
-
-      assert result == expected
-    end
-
     test "macro called with alias" do
       segments = [:Hologram, :Test, :Fixtures, :Compiler, :Expander, :Module2]
       ir = %IR.Call{module: %IR.Alias{segments: segments}, function: :macro_2a, args: []}
@@ -228,6 +215,19 @@ defmodule Hologram.Compiler.ExpanderTest do
 
       result = Expander.expand(ir, context)
       expected = {[%IR.IntegerType{value: 123}], context}
+
+      assert result == expected
+    end
+
+    test "macro returning multiple expressions" do
+      ir = %IR.Call{module: nil, function: :macro_2b, args: []}
+
+      context = %Context{
+        macros: %{macro_2b: %{0 => Hologram.Test.Fixtures.Compiler.Expander.Module2}}
+      }
+
+      result = Expander.expand(ir, context)
+      expected = {[%IR.IntegerType{value: 100}, %IR.IntegerType{value: 200}], context}
 
       assert result == expected
     end
