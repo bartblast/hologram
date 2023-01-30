@@ -73,8 +73,8 @@ defmodule Hologram.Compiler.Expander do
   end
 
   # TODO: test
-  def expand(%IR.Call{module: module, function: function, args: args}, %Context{} = context) do
-    {new_module_ir, _context} = expand(module, context)
+  def expand(%IR.Call{module: module_ir, function: function, args: args}, %Context{} = context) do
+    {new_module_ir, _context} = expand(module_ir, context)
     new_args = expand_list(args, context)
     arity = Enum.count(new_args)
 
