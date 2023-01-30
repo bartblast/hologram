@@ -78,11 +78,14 @@ defmodule Hologram.Compiler.Expander do
     new_args = expand_list(args, context)
     arity = Enum.count(new_args)
 
-    if Context.is_macro?(context, new_module_ir.module, function, arity) do
-      expand_macro(context, new_module_ir.module, function, new_args)
-    else
-      %IR.FunctionCall{module: new_module_ir, function: function, args: new_args}
-    end
+    expanded_ir =
+      if Context.is_macro?(context, new_module_ir.module, function, arity) do
+        expand_macro(context, new_module_ir.module, function, new_args)
+      else
+        %IR.FunctionCall{module: new_module_ir, function: function, args: new_args}
+      end
+
+    {expanded_ir, context}
   end
 
   def expand(
@@ -219,11 +222,20 @@ defmodule Hologram.Compiler.Expander do
   defp expand_macro(context, module, function, args) do
     env = Context.build_env(context)
 
-    module
-    |> apply(:"MACRO-#{function}", [env] ++ args)
-    |> Normalizer.normalize()
-    |> Transformer.transform(context)
-    |> expand(context)
+    {expanded_ir, _context} =
+      module
+      |> apply(:"MACRO-#{function}", [env] ++ args)
+      |> Normalizer.normalize()
+      |> Transformer.transform(context)
+      |> expand(context)
+
+    case expanded_ir do
+      %IR.Block{expressions: expressions} ->
+        expressions
+
+      expression ->
+        expression
+    end
   end
 
   defp filter_exports(type, exports, only, except)

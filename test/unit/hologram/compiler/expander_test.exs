@@ -151,14 +151,15 @@ defmodule Hologram.Compiler.ExpanderTest do
       context = %Context{functions: %{my_fun: %{2 => E.F}}}
       result = Expander.expand(ir, context)
 
-      expected = %IR.FunctionCall{
-        module: %IR.ModuleType{module: E.F, segments: [:E, :F]},
-        function: :my_fun,
-        args: [
-          %IR.ModuleType{module: A.B, segments: [:A, :B]},
-          %IR.ModuleType{module: C.D, segments: [:C, :D]}
-        ]
-      }
+      expected =
+        {%IR.FunctionCall{
+           module: %IR.ModuleType{module: E.F, segments: [:E, :F]},
+           function: :my_fun,
+           args: [
+             %IR.ModuleType{module: A.B, segments: [:A, :B]},
+             %IR.ModuleType{module: C.D, segments: [:C, :D]}
+           ]
+         }, context}
 
       assert result == expected
     end
@@ -168,23 +169,24 @@ defmodule Hologram.Compiler.ExpanderTest do
       ir = %IR.Call{module: %IR.Alias{segments: [:E, :F]}, function: :my_fun, args: args}
       result = Expander.expand(ir, %Context{})
 
-      expected = %IR.FunctionCall{
-        module: %IR.ModuleType{module: E.F, segments: [:E, :F]},
-        function: :my_fun,
-        args: [
-          %IR.ModuleType{module: A.B, segments: [:A, :B]},
-          %IR.ModuleType{module: C.D, segments: [:C, :D]}
-        ]
-      }
+      expected =
+        {%IR.FunctionCall{
+           module: %IR.ModuleType{module: E.F, segments: [:E, :F]},
+           function: :my_fun,
+           args: [
+             %IR.ModuleType{module: A.B, segments: [:A, :B]},
+             %IR.ModuleType{module: C.D, segments: [:C, :D]}
+           ]
+         }, %Context{}}
 
       assert result == expected
     end
 
-    test "macro called without alias or args, returning 1 expression which doesn't change the context" do
-      ir = %IR.Call{module: nil, function: :macro_2, args: []}
+    test "macro called without alias or args, returning single expression which doesn't change the context" do
+      ir = %IR.Call{module: nil, function: :macro_2a, args: []}
 
       context = %Context{
-        macros: %{macro_2: %{0 => Hologram.Test.Fixtures.Compiler.Expander.Module2}}
+        macros: %{macro_2a: %{0 => Hologram.Test.Fixtures.Compiler.Expander.Module2}}
       }
 
       result = Expander.expand(ir, context)
