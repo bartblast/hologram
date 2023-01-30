@@ -48,13 +48,8 @@ defmodule Hologram.Compiler.Expander do
   end
 
   def expand(%IR.Block{expressions: exprs}, %Context{} = context) do
-    {expanded_exprs, _new_context} =
-      Enum.reduce(exprs, {[], context}, fn expr, {expanded_exprs, new_context} ->
-        {expanded_expr, new_context} = expand(expr, new_context)
-        {expanded_exprs ++ [expanded_expr], new_context}
-      end)
-
-    {%IR.Block{expressions: expanded_exprs}, context}
+    {new_exprs, _new_context} = expand_list_and_context(exprs, context)
+    {%IR.Block{expressions: new_exprs}, context}
   end
 
   # TODO: test
@@ -78,14 +73,14 @@ defmodule Hologram.Compiler.Expander do
     new_args = expand_list(args, context)
     arity = Enum.count(new_args)
 
-    expanded_ir =
+    ir_list =
       if Context.is_macro?(context, new_module_ir.module, function, arity) do
         expand_macro(context, new_module_ir.module, function, new_args)
       else
-        %IR.FunctionCall{module: new_module_ir, function: function, args: new_args}
+        [%IR.FunctionCall{module: new_module_ir, function: function, args: new_args}]
       end
 
-    {expanded_ir, context}
+    expand_list_and_context(ir_list, context)
   end
 
   def expand(
@@ -217,6 +212,13 @@ defmodule Hologram.Compiler.Expander do
       [new_ir | acc]
     end)
     |> Enum.reverse()
+  end
+
+  defp expand_list_and_context(list, context) do
+    Enum.reduce(list, {[], context}, fn expr, {exprs_acc, context_acc} ->
+      {new_expr, new_context} = expand(expr, context_acc)
+      {exprs_acc ++ [new_expr], new_context}
+    end)
   end
 
   defp expand_macro(context, module, function, args) do

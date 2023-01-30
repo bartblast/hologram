@@ -126,22 +126,28 @@ defmodule Hologram.Compiler.ExpanderTest do
   test "block" do
     ir = %IR.Block{
       expressions: [
-        %IR.Alias{segments: [:A]},
-        %IR.Alias{segments: [:B]}
+        %IR.AliasDirective{alias_segs: [:A, :B], as: :C},
+        %IR.Alias{segments: [:Z]},
+        %IR.Alias{segments: [:C]}
       ]
     }
 
-    result = Expander.expand(ir, @context)
+    context = %Context{aliases: %{Z: [:X, :Y]}}
+    result = Expander.expand(ir, context)
 
-    assert {
-             %IR.Block{
-               expressions: [
-                 %IR.ModuleType{module: A, segments: [:A]},
-                 %IR.ModuleType{module: B, segments: [:B]}
-               ]
-             },
-             _context
-           } = result
+    expected =
+      {%IR.Block{
+         expressions: [
+           %IR.IgnoredExpression{},
+           %IR.ModuleType{module: X.Y, segments: [:X, :Y]},
+           %IR.ModuleType{module: A.B, segments: [:A, :B]}
+         ]
+       },
+       %Context{
+         aliases: %{Z: [:X, :Y]}
+       }}
+
+    assert result == expected
   end
 
   describe "call" do
