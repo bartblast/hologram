@@ -83,6 +83,10 @@ defmodule Hologram.Compiler.Expander do
     expand_list_and_context(ir_list, context)
   end
 
+  def expand(%IR.FunctionCall{} = ir, %Context{} = context) do
+    {ir, context}
+  end
+
   def expand(
         %IR.ImportDirective{alias_segs: alias_segs, only: only, except: except},
         %Context{aliases: defined_aliases} = context

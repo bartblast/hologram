@@ -229,6 +229,18 @@ defmodule Hologram.Compiler.ExpanderTest do
     end
   end
 
+  test "function call" do
+    ir = %IR.FunctionCall{
+      module: A.B,
+      function: :my_fun,
+      args: [%IR.IntegerType{value: 1}, %IR.IntegerType{value: 2}]
+    }
+
+    result = Expander.expand(ir, %Context{})
+
+    assert result == {ir, %Context{}}
+  end
+
   describe "import directive" do
     test "no opts" do
       ir = %IR.ImportDirective{
