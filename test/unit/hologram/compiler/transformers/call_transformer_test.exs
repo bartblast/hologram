@@ -21,7 +21,8 @@ defmodule Hologram.Compiler.CallTransformerTest do
       expected = %Call{
         module: nil,
         function: :my_fun,
-        args: []
+        args: [],
+        args_ast: []
       }
 
       assert result == expected
@@ -38,7 +39,8 @@ defmodule Hologram.Compiler.CallTransformerTest do
         args: [
           %IntegerType{value: 1},
           %IntegerType{value: 2}
-        ]
+        ],
+        args_ast: [1, 2]
       }
 
       assert result == expected
@@ -54,7 +56,8 @@ defmodule Hologram.Compiler.CallTransformerTest do
       expected = %Call{
         module: %Alias{segments: [:Abc]},
         function: :my_fun,
-        args: []
+        args: [],
+        args_ast: []
       }
 
       assert result == expected
@@ -71,7 +74,8 @@ defmodule Hologram.Compiler.CallTransformerTest do
         args: [
           %IntegerType{value: 1},
           %IntegerType{value: 2}
-        ]
+        ],
+        args_ast: [1, 2]
       }
 
       assert result == expected
@@ -87,7 +91,8 @@ defmodule Hologram.Compiler.CallTransformerTest do
       expected = %Call{
         module: %ModuleAttributeOperator{name: :my_attr},
         function: :my_fun,
-        args: []
+        args: [],
+        args_ast: []
       }
 
       assert result == expected
@@ -104,7 +109,8 @@ defmodule Hologram.Compiler.CallTransformerTest do
         args: [
           %IntegerType{value: 1},
           %IntegerType{value: 2}
-        ]
+        ],
+        args_ast: [1, 2]
       }
 
       assert result == expected
@@ -123,7 +129,8 @@ defmodule Hologram.Compiler.CallTransformerTest do
           right: %IntegerType{value: 4}
         },
         function: :my_fun,
-        args: []
+        args: [],
+        args_ast: []
       }
 
       assert result == expected
@@ -143,7 +150,8 @@ defmodule Hologram.Compiler.CallTransformerTest do
         args: [
           %IntegerType{value: 1},
           %IntegerType{value: 2}
-        ]
+        ],
+        args_ast: [1, 2]
       }
 
       assert result == expected
@@ -159,7 +167,8 @@ defmodule Hologram.Compiler.CallTransformerTest do
       expected = %Call{
         module: %ModulePseudoVariable{},
         function: :my_fun,
-        args: []
+        args: [],
+        args_ast: []
       }
 
       assert result == expected
@@ -176,7 +185,8 @@ defmodule Hologram.Compiler.CallTransformerTest do
         args: [
           %IntegerType{value: 1},
           %IntegerType{value: 2}
-        ]
+        ],
+        args_ast: [1, 2]
       }
 
       assert result == expected
@@ -192,7 +202,8 @@ defmodule Hologram.Compiler.CallTransformerTest do
       expected = %Call{
         module: %AtomType{value: :my_module},
         function: :my_fun,
-        args: []
+        args: [],
+        args_ast: []
       }
 
       assert result == expected
@@ -209,7 +220,8 @@ defmodule Hologram.Compiler.CallTransformerTest do
         args: [
           %IntegerType{value: 1},
           %IntegerType{value: 2}
-        ]
+        ],
+        args_ast: [1, 2]
       }
 
       assert result == expected
@@ -224,7 +236,8 @@ defmodule Hologram.Compiler.CallTransformerTest do
     expected = %Call{
       module: %Alias{segments: [:Kernel]},
       function: :to_string,
-      args: [%Symbol{name: :test}]
+      args: [%Symbol{name: :test}],
+      args_ast: [{:test, [line: 1], nil}]
     }
 
     assert result == expected

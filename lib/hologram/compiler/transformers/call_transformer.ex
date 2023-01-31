@@ -11,11 +11,6 @@ defmodule Hologram.Compiler.CallTransformer do
     build_call(nil, function, args, context)
   end
 
-  defp build_args(args, context) do
-    args = if is_list(args), do: args, else: []
-    Enum.map(args, &Transformer.transform(&1, context))
-  end
-
   defp build_call(module, function, args, %Context{} = context) do
     module =
       if module do
@@ -24,12 +19,17 @@ defmodule Hologram.Compiler.CallTransformer do
         nil
       end
 
-    args = build_args(args, context)
+    args = if is_list(args), do: args, else: []
 
     %Call{
       module: module,
       function: function,
-      args: args
+      args: transform_args(args, context),
+      args_ast: args
     }
+  end
+
+  defp transform_args(args, context) do
+    Enum.map(args, &Transformer.transform(&1, context))
   end
 end
