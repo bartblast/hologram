@@ -151,9 +151,11 @@ defmodule Hologram.Compiler.ExpanderTest do
   end
 
   describe "call" do
-    test "context module function called without alias" do
+    test "current module function called without alias" do
       args = [%IR.Alias{segments: [:A, :B]}, %IR.Alias{segments: [:C, :D]}]
-      ir = %IR.Call{module: nil, function: :my_fun, args: args}
+      args_ast = [{:__aliases__, [line: 1], [:A, :B]}, {:__aliases__, [line: 1], [:C, :D]}]
+
+      ir = %IR.Call{module: nil, function: :my_fun, args: args, args_ast: args_ast}
       context = %Context{module: E.F}
       result = Expander.expand(ir, context)
 
@@ -174,7 +176,9 @@ defmodule Hologram.Compiler.ExpanderTest do
 
     test "imported function called without alias" do
       args = [%IR.Alias{segments: [:A, :B]}, %IR.Alias{segments: [:C, :D]}]
-      ir = %IR.Call{module: nil, function: :my_fun, args: args}
+      args_ast = [{:__aliases__, [line: 1], [:A, :B]}, {:__aliases__, [line: 1], [:C, :D]}]
+
+      ir = %IR.Call{module: nil, function: :my_fun, args: args, args_ast: args_ast}
       context = %Context{functions: %{my_fun: %{2 => E.F}}}
       result = Expander.expand(ir, context)
 
@@ -195,7 +199,15 @@ defmodule Hologram.Compiler.ExpanderTest do
 
     test "function called with alias" do
       args = [%IR.Alias{segments: [:A, :B]}, %IR.Alias{segments: [:C, :D]}]
-      ir = %IR.Call{module: %IR.Alias{segments: [:E, :F]}, function: :my_fun, args: args}
+      args_ast = [{:__aliases__, [line: 1], [:A, :B]}, {:__aliases__, [line: 1], [:C, :D]}]
+
+      ir = %IR.Call{
+        module: %IR.Alias{segments: [:E, :F]},
+        function: :my_fun,
+        args: args,
+        args_ast: args_ast
+      }
+
       result = Expander.expand(ir, %Context{})
 
       expected =
@@ -214,7 +226,7 @@ defmodule Hologram.Compiler.ExpanderTest do
     end
 
     test "macro called without alias or args, returning single expression which doesn't change the context" do
-      ir = %IR.Call{module: nil, function: :macro_2a, args: []}
+      ir = %IR.Call{module: nil, function: :macro_2a, args: [], args_ast: []}
 
       context = %Context{
         macros: %{macro_2a: %{0 => Hologram.Test.Fixtures.Compiler.Expander.Module2}}
@@ -228,7 +240,13 @@ defmodule Hologram.Compiler.ExpanderTest do
 
     test "macro called with alias" do
       segments = [:Hologram, :Test, :Fixtures, :Compiler, :Expander, :Module2]
-      ir = %IR.Call{module: %IR.Alias{segments: segments}, function: :macro_2a, args: []}
+
+      ir = %IR.Call{
+        module: %IR.Alias{segments: segments},
+        function: :macro_2a,
+        args: [],
+        args_ast: []
+      }
 
       context = %Context{
         macros: %{macro_2a: %{0 => Hologram.Test.Fixtures.Compiler.Expander.Module2}}
@@ -240,8 +258,40 @@ defmodule Hologram.Compiler.ExpanderTest do
       assert result == expected
     end
 
+    test "macro called with args" do
+      segments = [:Hologram, :Test, :Fixtures, :Compiler, :Expander, :Module2]
+
+      args = [%IR.Symbol{name: :x}, %IR.Symbol{name: :y}]
+      args_ast = [{:x, [line: 1], nil}, {:y, [line: 1], nil}]
+
+      ir = %IR.Call{
+        module: %IR.Alias{segments: segments},
+        function: :macro_2d,
+        args: args,
+        args_ast: args_ast
+      }
+
+      context = %Context{
+        macros: %{macro_2d: %{2 => Hologram.Test.Fixtures.Compiler.Expander.Module2}},
+        module: A.B,
+        variables: MapSet.new([:x, :y])
+      }
+
+      result = Expander.expand(ir, context)
+
+      expected =
+        {[
+           %IR.AdditionOperator{
+             left: %IR.Variable{name: :x},
+             right: %IR.Variable{name: :y}
+           }
+         ], context}
+
+      assert result == expected
+    end
+
     test "macro returning multiple expressions" do
-      ir = %IR.Call{module: nil, function: :macro_2b, args: []}
+      ir = %IR.Call{module: nil, function: :macro_2b, args: [], args_ast: []}
 
       context = %Context{
         macros: %{macro_2b: %{0 => Hologram.Test.Fixtures.Compiler.Expander.Module2}}
@@ -254,7 +304,7 @@ defmodule Hologram.Compiler.ExpanderTest do
     end
 
     test "macro which changes the context" do
-      ir = %IR.Call{module: nil, function: :macro_2c, args: []}
+      ir = %IR.Call{module: nil, function: :macro_2c, args: [], args_ast: []}
 
       context = %Context{
         macros: %{macro_2c: %{0 => Hologram.Test.Fixtures.Compiler.Expander.Module2}}

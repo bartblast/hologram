@@ -69,16 +69,16 @@ defmodule Hologram.Compiler.Expander do
   end
 
   # TODO: test
-  def expand(%IR.Call{module: module_ir, function: function, args: args}, %Context{} = context) do
-    {new_module_ir, _context} = expand(module_ir, context)
-    new_args = expand_list(args, context)
-    arity = Enum.count(new_args)
+  def expand(%IR.Call{} = ir, %Context{} = context) do
+    {%{module: module} = module_ir, _context} = expand(ir.module, context)
+    arity = Enum.count(ir.args)
 
     ir_list =
-      if Context.is_macro?(context, new_module_ir.module, function, arity) do
-        expand_macro(context, new_module_ir.module, function, new_args)
+      if Context.is_macro?(context, module, ir.function, arity) do
+        expand_macro(context, module, ir.function, ir.args_ast)
       else
-        [%IR.FunctionCall{module: new_module_ir, function: function, args: new_args}]
+        new_args = expand_list(ir.args, context)
+        [%IR.FunctionCall{module: module_ir, function: ir.function, args: new_args}]
       end
 
     expand_list_and_context(ir_list, context)
@@ -239,12 +239,12 @@ defmodule Hologram.Compiler.Expander do
     end)
   end
 
-  defp expand_macro(context, module, function, args) do
+  defp expand_macro(context, module, function, args_ast) do
     env = Context.build_env(context)
 
     expanded_ir =
       module
-      |> apply(:"MACRO-#{function}", [env] ++ args)
+      |> apply(:"MACRO-#{function}", [env | args_ast])
       |> Normalizer.normalize()
       |> Transformer.transform(context)
 

@@ -206,7 +206,7 @@ defmodule Hologram.Compiler.IR do
   end
 
   defmodule Call do
-    defstruct module: nil, function: nil, args: []
+    defstruct module: nil, function: nil, args: [], args_ast: []
   end
 
   defmodule CaseExpression do
