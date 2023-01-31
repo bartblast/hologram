@@ -151,7 +151,28 @@ defmodule Hologram.Compiler.ExpanderTest do
   end
 
   describe "call" do
-    test "function called without alias" do
+    test "context module function called without alias" do
+      args = [%IR.Alias{segments: [:A, :B]}, %IR.Alias{segments: [:C, :D]}]
+      ir = %IR.Call{module: nil, function: :my_fun, args: args}
+      context = %Context{module: E.F}
+      result = Expander.expand(ir, context)
+
+      expected =
+        {[
+           %IR.FunctionCall{
+             module: %IR.ModuleType{module: E.F, segments: [:E, :F]},
+             function: :my_fun,
+             args: [
+               %IR.ModuleType{module: A.B, segments: [:A, :B]},
+               %IR.ModuleType{module: C.D, segments: [:C, :D]}
+             ]
+           }
+         ], context}
+
+      assert result == expected
+    end
+
+    test "imported function called without alias" do
       args = [%IR.Alias{segments: [:A, :B]}, %IR.Alias{segments: [:C, :D]}]
       ir = %IR.Call{module: nil, function: :my_fun, args: args}
       context = %Context{functions: %{my_fun: %{2 => E.F}}}
