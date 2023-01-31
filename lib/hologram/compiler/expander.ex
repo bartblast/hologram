@@ -58,7 +58,8 @@ defmodule Hologram.Compiler.Expander do
 
     module =
       Context.resolve_macro_module(context, function, arity) ||
-        Context.resolve_function_module(context, function, arity)
+        Context.resolve_function_module(context, function, arity) ||
+        context.module
 
     segments = Helpers.alias_segments(module)
     module = %IR.ModuleType{module: module, segments: segments}
@@ -200,6 +201,15 @@ defmodule Hologram.Compiler.Expander do
 
   def expand(%IR.ModuleType{} = ir, %Context{} = context) do
     {ir, context}
+  end
+
+  def expand(%IR.Symbol{name: name}, %Context{} = context) do
+    if MapSet.member?(context.variables, name) do
+      {%IR.Variable{name: name}, context}
+    else
+      %IR.Call{module: nil, function: name, args: []}
+      |> expand(context)
+    end
   end
 
   def expand(%IR.Variable{} = ir, %Context{} = context) do

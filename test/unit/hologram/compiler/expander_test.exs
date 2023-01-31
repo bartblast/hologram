@@ -726,6 +726,29 @@ defmodule Hologram.Compiler.ExpanderTest do
     assert result == {ir, @context}
   end
 
+  describe "symbol" do
+    test "variable" do
+      context = %Context{variables: MapSet.new([:a])}
+      ir = %IR.Symbol{name: :a}
+
+      result = Expander.expand(ir, context)
+      expected = {%IR.Variable{name: :a}, context}
+
+      assert result == expected
+    end
+
+    test "call" do
+      context = %Context{module: A.B}
+      ir = %IR.Symbol{name: :a}
+
+      result = Expander.expand(ir, context)
+      expected_module = %IR.ModuleType{module: A.B, segments: [:A, :B]}
+      expected = {[%IR.FunctionCall{module: expected_module, function: :a, args: []}], context}
+
+      assert result == expected
+    end
+  end
+
   test "variable" do
     ir = %IR.Variable{name: :a}
     result = Expander.expand(ir, @context)
