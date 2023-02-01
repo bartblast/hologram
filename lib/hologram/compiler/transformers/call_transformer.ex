@@ -8,6 +8,11 @@ defmodule Hologram.Compiler.CallTransformer do
     build_call(module, function, args, context)
   end
 
+  def transform({symbol, [context: _, imports: _] = metadata, args}, %Context{} = context)
+      when not is_list(args) do
+    transform({symbol, metadata, []}, context)
+  end
+
   def transform({function, [context: _, imports: [{_arity, module}]], args}, %Context{} = context) do
     segments = Helpers.alias_segments(module)
     module_ir = %IR.ModuleType{module: module, segments: segments}

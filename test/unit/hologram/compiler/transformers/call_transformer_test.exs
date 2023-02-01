@@ -244,20 +244,36 @@ defmodule Hologram.Compiler.CallTransformerTest do
     assert result == expected
   end
 
-  test "contextual call (e.g. output from macro)" do
-    ast = {:test_fun, [context: A.B, imports: [{2, C.D}]], [1, 2]}
-    result = CallTransformer.transform(ast, %Context{})
+  describe "contextual call (e.g. output from macro)" do
+    test "without args" do
+      ast = {:test_fun, [context: A.B, imports: [{0, C.D}]], A.B}
+      result = CallTransformer.transform(ast, %Context{})
 
-    expected = %IR.Call{
-      module: %IR.ModuleType{module: C.D, segments: [:C, :D]},
-      function: :test_fun,
-      args: [
-        %IR.IntegerType{value: 1},
-        %IR.IntegerType{value: 2}
-      ],
-      args_ast: [1, 2]
-    }
+      expected = %IR.Call{
+        module: %IR.ModuleType{module: C.D, segments: [:C, :D]},
+        function: :test_fun,
+        args: [],
+        args_ast: []
+      }
 
-    assert result == expected
+      assert result == expected
+    end
+
+    test "with args" do
+      ast = {:test_fun, [context: A.B, imports: [{2, C.D}]], [1, 2]}
+      result = CallTransformer.transform(ast, %Context{})
+
+      expected = %IR.Call{
+        module: %IR.ModuleType{module: C.D, segments: [:C, :D]},
+        function: :test_fun,
+        args: [
+          %IR.IntegerType{value: 1},
+          %IR.IntegerType{value: 2}
+        ],
+        args_ast: [1, 2]
+      }
+
+      assert result == expected
+    end
   end
 end
