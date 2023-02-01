@@ -459,6 +459,11 @@ defmodule Hologram.Compiler.TransformerTest do
       assert %Call{} = Transformer.transform(ast, %Context{})
     end
 
+    test "contextual call" do
+      ast = {:test_fun, [context: A.B, imports: [{0, C.D}]], A.B}
+      assert %Call{} = Transformer.transform(ast, %Context{})
+    end
+
     test "case expression" do
       code = """
       case x do

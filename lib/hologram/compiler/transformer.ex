@@ -309,6 +309,10 @@ defmodule Hologram.Compiler.Transformer do
     CallTransformer.transform(ast, context)
   end
 
+  def transform({name, [context: _, imports: _], _} = ast, %Context{} = context) do
+    CallTransformer.transform(ast, context)
+  end
+
   def transform({name, _, _}, _) when is_atom(name) do
     %Symbol{name: name}
   end
