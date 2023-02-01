@@ -9,7 +9,7 @@ defmodule Hologram.Compiler.UseDirectiveTransformerTest do
     ast = ast(code)
 
     result = UseDirectiveTransformer.transform(ast)
-    expected = %UseDirective{alias_segs: [:Abc, :Bcd], module: nil, opts: []}
+    expected = %UseDirective{alias_segs: [:Abc, :Bcd], opts: []}
 
     assert result == expected
   end
@@ -21,7 +21,7 @@ defmodule Hologram.Compiler.UseDirectiveTransformerTest do
     result = UseDirectiveTransformer.transform(ast)
 
     opts = [a: 1, b: 2]
-    expected = %UseDirective{alias_segs: [:Abc, :Bcd], module: nil, opts: opts}
+    expected = %UseDirective{alias_segs: [:Abc, :Bcd], opts: opts}
 
     assert result == expected
   end
