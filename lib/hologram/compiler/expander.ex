@@ -74,7 +74,7 @@ defmodule Hologram.Compiler.Expander do
     arity = Enum.count(ir.args)
 
     ir_list =
-      if Context.is_macro?(context, module, ir.function, arity) do
+      if Reflection.has_macro?(module, ir.function, arity) do
         expand_macro(context, module, ir.function, ir.args_ast)
       else
         new_args = expand_list(ir.args, context)
@@ -235,7 +235,7 @@ defmodule Hologram.Compiler.Expander do
   defp expand_list_and_context(list, context) do
     Enum.reduce(list, {[], context}, fn expr, {exprs_acc, context_acc} ->
       {new_expr, new_context} = expand(expr, context_acc)
-      {exprs_acc ++ [new_expr], new_context}
+      {List.flatten(exprs_acc ++ [new_expr]), new_context}
     end)
   end
 
