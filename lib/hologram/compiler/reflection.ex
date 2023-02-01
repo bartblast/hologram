@@ -63,7 +63,11 @@ defmodule Hologram.Compiler.Reflection do
   # Kernel.macro_exported?/3 does not load the module in case it is not loaded
   # (in such cases it would return false even when the module has the given macro).
   def has_macro?(module, function, arity) do
-    has_function?(module, :"MACRO-#{function}", arity + 1)
+    if is_module?(module) do
+      has_function?(module, :"MACRO-#{function}", arity + 1)
+    else
+      false
+    end
   end
 
   def has_template?(module) do

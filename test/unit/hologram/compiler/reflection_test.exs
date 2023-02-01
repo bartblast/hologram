@@ -101,6 +101,10 @@ defmodule Hologram.Compiler.ReflectionTest do
     test "returns false if the module doesn't have a macro with the given name and arity" do
       refute Reflection.has_macro?(@module_6, :test_macro, 3)
     end
+
+    test "returns false if the first arg is not a module" do
+      refute Reflection.has_macro?(NotLoadedModuleFixture, :test_macro, 3)
+    end
   end
 
   describe "has_template?/1" do
