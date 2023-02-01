@@ -3,6 +3,7 @@ defmodule Hologram.Compiler.CallTransformerTest do
 
   alias Hologram.Compiler.CallTransformer
   alias Hologram.Compiler.Context
+  alias Hologram.Compiler.IR
   alias Hologram.Compiler.IR.AdditionOperator
   alias Hologram.Compiler.IR.Alias
   alias Hologram.Compiler.IR.AtomType
@@ -238,6 +239,23 @@ defmodule Hologram.Compiler.CallTransformerTest do
       function: :to_string,
       args: [%Symbol{name: :test}],
       args_ast: [{:test, [line: 1], nil}]
+    }
+
+    assert result == expected
+  end
+
+  test "contextual call (e.g. output from macro)" do
+    ast = {:test_fun, [context: A.B, imports: [{2, C.D}]], [1, 2]}
+    result = CallTransformer.transform(ast, %Context{})
+
+    expected = %IR.Call{
+      module: %IR.ModuleType{module: C.D, segments: [:C, :D]},
+      function: :test_fun,
+      args: [
+        %IR.IntegerType{value: 1},
+        %IR.IntegerType{value: 2}
+      ],
+      args_ast: [1, 2]
     }
 
     assert result == expected
