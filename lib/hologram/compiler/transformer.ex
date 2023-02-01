@@ -309,7 +309,7 @@ defmodule Hologram.Compiler.Transformer do
     CallTransformer.transform(ast, context)
   end
 
-  def transform({name, [context: _, imports: _], _} = ast, %Context{} = context) do
+  def transform({_, [context: _, imports: _], _} = ast, %Context{} = context) do
     CallTransformer.transform(ast, context)
   end
 
