@@ -331,6 +331,20 @@ defmodule Hologram.Compiler.ExpanderTest do
 
       assert result == expected
     end
+
+    test "nested macros without parenthesis" do
+      ir = %IR.Call{module: nil, function: :macro_3b, args: [], args_ast: []}
+
+      context = %Context{
+        macros: %{macro_3b: %{0 => Hologram.Test.Fixtures.Compiler.Expander.Module3}},
+        module: A.B
+      }
+
+      result = Expander.expand(ir, context)
+      expected = {[%IR.IntegerType{value: 123}], context}
+
+      assert result == expected
+    end
   end
 
   test "function call" do
