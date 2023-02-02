@@ -1,7 +1,7 @@
 defmodule Hologram.Compiler.UseDirectiveTransformerTest do
   use Hologram.Test.UnitCase, async: true
 
-  alias Hologram.Compiler.IR.UseDirective
+  alias Hologram.Compiler.IR
   alias Hologram.Compiler.UseDirectiveTransformer
 
   test "use directive without opts" do
@@ -9,7 +9,7 @@ defmodule Hologram.Compiler.UseDirectiveTransformerTest do
     ast = ast(code)
 
     result = UseDirectiveTransformer.transform(ast)
-    expected = %UseDirective{alias_segs: [:Abc, :Bcd], opts: []}
+    expected = %IR.UseDirective{alias_segs: [:Abc, :Bcd], opts: []}
 
     assert result == expected
   end
@@ -20,8 +20,8 @@ defmodule Hologram.Compiler.UseDirectiveTransformerTest do
 
     result = UseDirectiveTransformer.transform(ast)
 
-    opts = [a: 1, b: 2]
-    expected = %UseDirective{alias_segs: [:Abc, :Bcd], opts: opts}
+    expected_opts = [a: %IR.IntegerType{value: 1}, b: %IR.IntegerType{value: 2}]
+    expected = %IR.UseDirective{alias_segs: [:Abc, :Bcd], opts: expected_opts}
 
     assert result == expected
   end
