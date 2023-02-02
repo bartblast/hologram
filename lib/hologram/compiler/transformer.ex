@@ -111,11 +111,11 @@ defmodule Hologram.Compiler.Transformer do
   end
 
   # must be defined before module attribute operator
-  def transform({:@, _, [{:spec, _, [{:"::", _, _}]}]}, _) do
+  def transform({:@, _, [{:spec, _, [{:"::", _, _}]}]}) do
     %Typespec{}
   end
 
-  def transform({:@, _, [{name, _, ast}]}, _) when not is_list(ast) do
+  def transform({:@, _, [{name, _, ast}]}) when not is_list(ast) do
     %ModuleAttributeOperator{name: name}
   end
 
@@ -182,15 +182,15 @@ defmodule Hologram.Compiler.Transformer do
     BinaryTypeTransformer.transform(ast)
   end
 
-  def transform(ast, _) when is_boolean(ast) do
+  def transform(ast) when is_boolean(ast) do
     %BooleanType{value: ast}
   end
 
-  def transform(ast, _) when is_float(ast) do
+  def transform(ast) when is_float(ast) do
     %FloatType{value: ast}
   end
 
-  def transform(ast, _) when is_integer(ast) do
+  def transform(ast) when is_integer(ast) do
     %IntegerType{value: ast}
   end
 
@@ -202,11 +202,11 @@ defmodule Hologram.Compiler.Transformer do
     MapTypeTransformer.transform(ast)
   end
 
-  def transform(nil, _) do
+  def transform(nil) do
     %NilType{}
   end
 
-  def transform(ast, _) when is_binary(ast) do
+  def transform(ast) when is_binary(ast) do
     %StringType{value: ast}
   end
 
@@ -241,7 +241,7 @@ defmodule Hologram.Compiler.Transformer do
   end
 
   # TODO: implement
-  def transform({:defprotocol, _, _}, _) do
+  def transform({:defprotocol, _, _}) do
     %ProtocolDefinition{}
   end
 
@@ -251,19 +251,19 @@ defmodule Hologram.Compiler.Transformer do
 
   # DIRECTIVES
 
-  def transform({:alias, _, _} = ast, _) do
+  def transform({:alias, _, _} = ast) do
     AliasDirectiveTransformer.transform(ast)
   end
 
-  def transform({:import, _, _} = ast, _) do
+  def transform({:import, _, _} = ast) do
     ImportDirectiveTransformer.transform(ast)
   end
 
-  def transform({:require, _, _} = ast, _) do
+  def transform({:require, _, _} = ast) do
     RequireDirectiveTransformer.transform(ast)
   end
 
-  def transform({:use, _, _} = ast, _) do
+  def transform({:use, _, _} = ast) do
     UseDirectiveTransformer.transform(ast)
   end
 
@@ -299,7 +299,7 @@ defmodule Hologram.Compiler.Transformer do
     UnquoteTransformer.transform(ast)
   end
 
-  def transform({:__MODULE__, _, _}, _) do
+  def transform({:__MODULE__, _, _}) do
     %ModulePseudoVariable{}
   end
 
@@ -312,7 +312,7 @@ defmodule Hologram.Compiler.Transformer do
     CallTransformer.transform(ast)
   end
 
-  def transform({name, _, _}, _) when is_atom(name) do
+  def transform({name, _, _}) when is_atom(name) do
     %Symbol{name: name}
   end
 end
