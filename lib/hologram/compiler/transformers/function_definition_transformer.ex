@@ -1,30 +1,29 @@
 defmodule Hologram.Compiler.FunctionDefinitionTransformer do
-  alias Hologram.Compiler.{Context, Helpers, Transformer}
+  alias Hologram.Compiler.{Helpers, Transformer}
   alias Hologram.Compiler.IR.{FunctionDefinition, FunctionHead}
 
-  def transform({def_type, _, [{name, _, params}, [do: body]]}, %Context{} = context)
+  def transform({def_type, _, [{name, _, params}, [do: body]]})
       when is_list(params) do
-    build_function_definition(name, params, body, def_type, context)
+    build_function_definition(name, params, body, def_type)
   end
 
-  def transform({def_type, _, [{name, _, _}, [do: body]]}, %Context{} = context) do
-    build_function_definition(name, [], body, def_type, context)
+  def transform({def_type, _, [{name, _, _}, [do: body]]}) do
+    build_function_definition(name, [], body, def_type)
   end
 
-  # DEFER: implement
-  def transform(_, %Context{}) do
+  # TODO: implement
+  def transform(_) do
     %FunctionHead{}
   end
 
-  defp build_function_definition(name, params, body, def_type, %{module: module} = context) do
-    params = Helpers.transform_params(params, context)
+  defp build_function_definition(name, params, body, def_type) do
+    params = Helpers.transform_params(params)
     arity = Enum.count(params)
     bindings = Helpers.aggregate_bindings_from_params(params)
-    body = Transformer.transform(body, context)
+    body = Transformer.transform(body)
     visibility = if def_type == :def, do: :public, else: :private
 
     %FunctionDefinition{
-      module: module,
       name: name,
       arity: arity,
       params: params,
