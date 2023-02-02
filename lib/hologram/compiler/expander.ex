@@ -39,7 +39,7 @@ defmodule Hologram.Compiler.Expander do
     new_defined_aliases = Map.put(defined_aliases, as, expanded_alias_segs)
     new_context = %{context | aliases: new_defined_aliases}
 
-    {%IR.IgnoredExpression{}, new_context}
+    {%IR.IgnoredExpression{type: :alias_directive}, new_context}
   end
 
   def expand(%IR.Binding{access_path: access_path} = ir, %Context{} = context) do
@@ -107,7 +107,7 @@ defmodule Hologram.Compiler.Expander do
       |> Context.put_functions(module, functions)
       |> Context.put_macros(module, macros)
 
-    {%IR.IgnoredExpression{}, new_context}
+    {%IR.IgnoredExpression{type: :import_directive}, new_context}
   end
 
   def expand(%IR.MapAccess{key: key} = ir, %Context{} = context) do
@@ -164,7 +164,7 @@ defmodule Hologram.Compiler.Expander do
 
     new_context = Context.put_module_attribute(context, name, value)
 
-    {%IR.IgnoredExpression{}, new_context}
+    {%IR.IgnoredExpression{type: :module_attribute_definition}, new_context}
   end
 
   def expand(

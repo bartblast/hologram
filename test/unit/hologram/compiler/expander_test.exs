@@ -69,7 +69,9 @@ defmodule Hologram.Compiler.ExpanderTest do
       result = Expander.expand(ir, @context)
 
       expected_aliases = Map.put(@context.aliases, :C, [:A, :B])
-      expected = {%IR.IgnoredExpression{}, %{@context | aliases: expected_aliases}}
+
+      expected =
+        {%IR.IgnoredExpression{type: :alias_directive}, %{@context | aliases: expected_aliases}}
 
       assert result == expected
     end
@@ -82,7 +84,9 @@ defmodule Hologram.Compiler.ExpanderTest do
       result = Expander.expand(ir, context)
 
       expected_aliases = Map.put(context.aliases, :E, [:A, :B, :D])
-      expected = {%IR.IgnoredExpression{}, %{context | aliases: expected_aliases}}
+
+      expected =
+        {%IR.IgnoredExpression{type: :alias_directive}, %{context | aliases: expected_aliases}}
 
       assert result == expected
     end
@@ -95,7 +99,9 @@ defmodule Hologram.Compiler.ExpanderTest do
       result = Expander.expand(ir, context)
 
       expected_aliases = Map.put(context.aliases, :C, [:A, :B])
-      expected = {%IR.IgnoredExpression{}, %{context | aliases: expected_aliases}}
+
+      expected =
+        {%IR.IgnoredExpression{type: :alias_directive}, %{context | aliases: expected_aliases}}
 
       assert result == expected
     end
@@ -138,7 +144,7 @@ defmodule Hologram.Compiler.ExpanderTest do
     expected =
       {%IR.Block{
          expressions: [
-           %IR.IgnoredExpression{},
+           %IR.IgnoredExpression{type: :alias_directive},
            %IR.ModuleType{module: X.Y, segments: [:X, :Y]},
            %IR.ModuleType{module: A.B, segments: [:A, :B]}
          ]
@@ -313,7 +319,7 @@ defmodule Hologram.Compiler.ExpanderTest do
       result = Expander.expand(ir, context)
 
       expected_context = %{context | aliases: %{C: [:A, :B]}}
-      expected = {[%IR.IgnoredExpression{}], expected_context}
+      expected = {[%IR.IgnoredExpression{type: :alias_directive}], expected_context}
 
       assert result == expected
     end
@@ -380,7 +386,7 @@ defmodule Hologram.Compiler.ExpanderTest do
   end
 
   test "ignored expression" do
-    ir = %IR.IgnoredExpression{}
+    ir = %IR.IgnoredExpression{type: :alias_directive}
     result = Expander.expand(ir, %Context{})
 
     assert result == {ir, %Context{}}
@@ -395,7 +401,7 @@ defmodule Hologram.Compiler.ExpanderTest do
       }
 
       result = Expander.expand(ir, @context)
-      assert {%IR.IgnoredExpression{}, %Context{} = context} = result
+      assert {%IR.IgnoredExpression{type: :import_directive}, %Context{} = context} = result
 
       assert context.functions == %{
                fun_1: %{
@@ -430,7 +436,7 @@ defmodule Hologram.Compiler.ExpanderTest do
       }
 
       result = Expander.expand(ir, @context)
-      assert {%IR.IgnoredExpression{}, %Context{} = context} = result
+      assert {%IR.IgnoredExpression{type: :import_directive}, %Context{} = context} = result
 
       assert context.functions == %{fun_2: %{1 => Module1}}
       assert context.macros == %{macro_3: %{2 => Module1}}
@@ -444,7 +450,7 @@ defmodule Hologram.Compiler.ExpanderTest do
       }
 
       result = Expander.expand(ir, @context)
-      assert {%IR.IgnoredExpression{}, %Context{} = context} = result
+      assert {%IR.IgnoredExpression{type: :import_directive}, %Context{} = context} = result
 
       assert context.functions == %{
                fun_1: %{
@@ -477,7 +483,7 @@ defmodule Hologram.Compiler.ExpanderTest do
       }
 
       result = Expander.expand(ir, @context)
-      assert {%IR.IgnoredExpression{}, %Context{} = context} = result
+      assert {%IR.IgnoredExpression{type: :import_directive}, %Context{} = context} = result
 
       assert context.functions == %{
                fun_1: %{
@@ -502,7 +508,7 @@ defmodule Hologram.Compiler.ExpanderTest do
       }
 
       result = Expander.expand(ir, @context)
-      assert {%IR.IgnoredExpression{}, %Context{} = context} = result
+      assert {%IR.IgnoredExpression{type: :import_directive}, %Context{} = context} = result
 
       assert context.functions == %{
                fun_1: %{
@@ -525,7 +531,7 @@ defmodule Hologram.Compiler.ExpanderTest do
       }
 
       result = Expander.expand(ir, @context)
-      assert {%IR.IgnoredExpression{}, %Context{} = context} = result
+      assert {%IR.IgnoredExpression{type: :import_directive}, %Context{} = context} = result
 
       assert context.functions == %{}
 
@@ -550,7 +556,7 @@ defmodule Hologram.Compiler.ExpanderTest do
       }
 
       result = Expander.expand(ir, @context)
-      assert {%IR.IgnoredExpression{}, %Context{} = context} = result
+      assert {%IR.IgnoredExpression{type: :import_directive}, %Context{} = context} = result
 
       assert context.functions == %{}
 
@@ -573,7 +579,7 @@ defmodule Hologram.Compiler.ExpanderTest do
       }
 
       result = Expander.expand(ir, @context)
-      assert {%IR.IgnoredExpression{}, %Context{} = context} = result
+      assert {%IR.IgnoredExpression{type: :import_directive}, %Context{} = context} = result
 
       assert context.functions == %{
                sigil_a: %{2 => Module1},
@@ -594,7 +600,7 @@ defmodule Hologram.Compiler.ExpanderTest do
       }
 
       result = Expander.expand(ir, @context)
-      assert {%IR.IgnoredExpression{}, %Context{} = context} = result
+      assert {%IR.IgnoredExpression{type: :import_directive}, %Context{} = context} = result
 
       assert context.functions == %{sigil_a: %{2 => Module1}}
       assert context.macros == %{sigil_c: %{2 => Module1}}
@@ -721,7 +727,7 @@ defmodule Hologram.Compiler.ExpanderTest do
       result = Expander.expand(ir, @context)
 
       assert {
-               %IR.IgnoredExpression{},
+               %IR.IgnoredExpression{type: :module_attribute_definition},
                %Context{
                  module_attributes: %{
                    a: %IR.IntegerType{value: 1},
@@ -744,7 +750,7 @@ defmodule Hologram.Compiler.ExpanderTest do
       result = Expander.expand(ir, @context)
 
       assert {
-               %IR.IgnoredExpression{},
+               %IR.IgnoredExpression{type: :module_attribute_definition},
                %Context{
                  module_attributes: %{
                    a: %IR.IntegerType{value: 1},
