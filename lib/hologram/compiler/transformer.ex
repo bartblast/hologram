@@ -1,7 +1,6 @@
 defmodule Hologram.Compiler.Transformer do
-  alias Hologram.Compiler.{Context, Reflection}
-
   alias Hologram.Compiler.AliasTransformer
+  alias Hologram.Compiler.Reflection
 
   alias Hologram.Compiler.{
     AdditionOperatorTransformer,
@@ -67,48 +66,48 @@ defmodule Hologram.Compiler.Transformer do
   # OPERATORS
 
   # must be defined before binary addition operator
-  def transform({:+, _, [_]} = ast, %Context{} = context) do
-    UnaryPositiveOperatorTransformer.transform(ast, context)
+  def transform({:+, _, [_]} = ast) do
+    UnaryPositiveOperatorTransformer.transform(ast)
   end
 
-  def transform({:+, _, _} = ast, %Context{} = context) do
-    AdditionOperatorTransformer.transform(ast, context)
+  def transform({:+, _, _} = ast) do
+    AdditionOperatorTransformer.transform(ast)
   end
 
-  def transform([{:|, _, _}] = ast, %Context{} = context) do
-    ConsOperatorTransformer.transform(ast, context)
+  def transform([{:|, _, _}] = ast) do
+    ConsOperatorTransformer.transform(ast)
   end
 
-  def transform({:/, _, _} = ast, %Context{} = context) do
-    DivisionOperatorTransformer.transform(ast, context)
+  def transform({:/, _, _} = ast) do
+    DivisionOperatorTransformer.transform(ast)
   end
 
-  def transform({{:., _, _}, _, _} = ast, %Context{} = context) do
-    DotOperatorTransformer.transform(ast, context)
+  def transform({{:., _, _}, _, _} = ast) do
+    DotOperatorTransformer.transform(ast)
   end
 
-  def transform({:==, _, _} = ast, %Context{} = context) do
-    EqualToOperatorTransformer.transform(ast, context)
+  def transform({:==, _, _} = ast) do
+    EqualToOperatorTransformer.transform(ast)
   end
 
-  def transform({:<, _, _} = ast, %Context{} = context) do
-    LessThanOperatorTransformer.transform(ast, context)
+  def transform({:<, _, _} = ast) do
+    LessThanOperatorTransformer.transform(ast)
   end
 
-  def transform({:++, _, _} = ast, %Context{} = context) do
-    ListConcatenationOperatorTransformer.transform(ast, context)
+  def transform({:++, _, _} = ast) do
+    ListConcatenationOperatorTransformer.transform(ast)
   end
 
-  def transform({:--, _, _} = ast, %Context{} = context) do
-    ListSubtractionOperatorTransformer.transform(ast, context)
+  def transform({:--, _, _} = ast) do
+    ListSubtractionOperatorTransformer.transform(ast)
   end
 
-  def transform({:=, _, _} = ast, %Context{} = context) do
-    MatchOperatorTransformer.transform(ast, context)
+  def transform({:=, _, _} = ast) do
+    MatchOperatorTransformer.transform(ast)
   end
 
-  def transform({:in, _, _} = ast, %Context{} = context) do
-    MembershipOperatorTransformer.transform(ast, context)
+  def transform({:in, _, _} = ast) do
+    MembershipOperatorTransformer.transform(ast)
   end
 
   # must be defined before module attribute operator
@@ -120,67 +119,67 @@ defmodule Hologram.Compiler.Transformer do
     %ModuleAttributeOperator{name: name}
   end
 
-  def transform({:*, _, _} = ast, %Context{} = context) do
-    MultiplicationOperatorTransformer.transform(ast, context)
+  def transform({:*, _, _} = ast) do
+    MultiplicationOperatorTransformer.transform(ast)
   end
 
-  def transform({:!=, _, _} = ast, %Context{} = context) do
-    NotEqualToOperatorTransformer.transform(ast, context)
+  def transform({:!=, _, _} = ast) do
+    NotEqualToOperatorTransformer.transform(ast)
   end
 
-  def transform({:|>, _, _} = ast, %Context{} = context) do
-    PipeOperatorTransformer.transform(ast, context)
+  def transform({:|>, _, _} = ast) do
+    PipeOperatorTransformer.transform(ast)
   end
 
-  def transform({:&&, _, _} = ast, %Context{} = context) do
-    RelaxedBooleanAndOperatorTransformer.transform(ast, context)
+  def transform({:&&, _, _} = ast) do
+    RelaxedBooleanAndOperatorTransformer.transform(ast)
   end
 
-  def transform({:__block__, _, [{:!, _, _}]} = ast, %Context{} = context) do
-    RelaxedBooleanNotOperatorTransformer.transform(ast, context)
+  def transform({:__block__, _, [{:!, _, _}]} = ast) do
+    RelaxedBooleanNotOperatorTransformer.transform(ast)
   end
 
-  def transform({:!, _, _} = ast, %Context{} = context) do
-    RelaxedBooleanNotOperatorTransformer.transform(ast, context)
+  def transform({:!, _, _} = ast) do
+    RelaxedBooleanNotOperatorTransformer.transform(ast)
   end
 
-  def transform({:||, _, _} = ast, %Context{} = context) do
-    RelaxedBooleanOrOperatorTransformer.transform(ast, context)
+  def transform({:||, _, _} = ast) do
+    RelaxedBooleanOrOperatorTransformer.transform(ast)
   end
 
-  def transform({:and, _, _} = ast, %Context{} = context) do
-    StrictBooleanAndOperatorTransformer.transform(ast, context)
+  def transform({:and, _, _} = ast) do
+    StrictBooleanAndOperatorTransformer.transform(ast)
   end
 
   # must be defined before binary subtraction operator
-  def transform({:-, _, [_]} = ast, %Context{} = context) do
-    UnaryNegativeOperatorTransformer.transform(ast, context)
+  def transform({:-, _, [_]} = ast) do
+    UnaryNegativeOperatorTransformer.transform(ast)
   end
 
-  def transform({:-, _, _} = ast, %Context{} = context) do
-    SubtractionOperatorTransformer.transform(ast, context)
+  def transform({:-, _, _} = ast) do
+    SubtractionOperatorTransformer.transform(ast)
   end
 
-  def transform({:"::", _, _} = ast, %Context{} = context) do
-    TypeOperatorTransformer.transform(ast, context)
+  def transform({:"::", _, _} = ast) do
+    TypeOperatorTransformer.transform(ast)
   end
 
   # TYPES
 
-  def transform({:fn, _, _} = ast, %Context{} = context) do
-    AnonymousFunctionTypeTransformer.transform(ast, context)
+  def transform({:fn, _, _} = ast) do
+    AnonymousFunctionTypeTransformer.transform(ast)
   end
 
-  def transform(ast, %Context{} = context) when is_atom(ast) and ast not in [nil, false, true] do
+  def transform(ast) when is_atom(ast) and ast not in [nil, false, true] do
     if Reflection.is_alias?(ast) do
-      AliasTransformer.transform(ast, context)
+      AliasTransformer.transform(ast)
     else
       %AtomType{value: ast}
     end
   end
 
-  def transform({:<<>>, _, _} = ast, %Context{} = context) do
-    BinaryTypeTransformer.transform(ast, context)
+  def transform({:<<>>, _, _} = ast) do
+    BinaryTypeTransformer.transform(ast)
   end
 
   def transform(ast, _) when is_boolean(ast) do
@@ -195,12 +194,12 @@ defmodule Hologram.Compiler.Transformer do
     %IntegerType{value: ast}
   end
 
-  def transform(ast, %Context{} = context) when is_list(ast) do
-    ListTypeTransformer.transform(ast, context)
+  def transform(ast) when is_list(ast) do
+    ListTypeTransformer.transform(ast)
   end
 
-  def transform({:%{}, _, _} = ast, %Context{} = context) do
-    MapTypeTransformer.transform(ast, context)
+  def transform({:%{}, _, _} = ast) do
+    MapTypeTransformer.transform(ast)
   end
 
   def transform(nil, _) do
@@ -211,34 +210,34 @@ defmodule Hologram.Compiler.Transformer do
     %StringType{value: ast}
   end
 
-  def transform({:%, _, _} = ast, %Context{} = context) do
-    StructTypeTransformer.transform(ast, context)
+  def transform({:%, _, _} = ast) do
+    StructTypeTransformer.transform(ast)
   end
 
-  def transform({:{}, _, _} = ast, %Context{} = context) do
-    TupleTypeTransformer.transform(ast, context)
+  def transform({:{}, _, _} = ast) do
+    TupleTypeTransformer.transform(ast)
   end
 
-  def transform({_, _} = ast, %Context{} = context) do
-    TupleTypeTransformer.transform(ast, context)
+  def transform({_, _} = ast) do
+    TupleTypeTransformer.transform(ast)
   end
 
   # DEFINITIONS
 
-  def transform({:def, _, _} = ast, %Context{} = context) do
-    FunctionDefinitionTransformer.transform(ast, context)
+  def transform({:def, _, _} = ast) do
+    FunctionDefinitionTransformer.transform(ast)
   end
 
-  def transform({:defp, _, _} = ast, %Context{} = context) do
-    FunctionDefinitionTransformer.transform(ast, context)
+  def transform({:defp, _, _} = ast) do
+    FunctionDefinitionTransformer.transform(ast)
   end
 
-  def transform({:defmacro, _, _} = ast, %Context{} = context) do
-    MacroDefinitionTransformer.transform(ast, context)
+  def transform({:defmacro, _, _} = ast) do
+    MacroDefinitionTransformer.transform(ast)
   end
 
-  def transform({:defmodule, _, _} = ast, %Context{} = context) do
-    ModuleDefinitionTransformer.transform(ast, context)
+  def transform({:defmodule, _, _} = ast) do
+    ModuleDefinitionTransformer.transform(ast)
   end
 
   # TODO: implement
@@ -246,8 +245,8 @@ defmodule Hologram.Compiler.Transformer do
     %ProtocolDefinition{}
   end
 
-  def transform({:@, _, [{_, _, exprs}]} = ast, %Context{} = context) when is_list(exprs) do
-    ModuleAttributeDefinitionTransformer.transform(ast, context)
+  def transform({:@, _, [{_, _, exprs}]} = ast) when is_list(exprs) do
+    ModuleAttributeDefinitionTransformer.transform(ast)
   end
 
   # DIRECTIVES
@@ -270,47 +269,47 @@ defmodule Hologram.Compiler.Transformer do
 
   # CONTROL FLOW
 
-  def transform({:case, _, _} = ast, %Context{} = context) do
-    CaseExpressionTransformer.transform(ast, context)
+  def transform({:case, _, _} = ast) do
+    CaseExpressionTransformer.transform(ast)
   end
 
-  def transform({:for, _, _} = ast, %Context{} = context) do
-    ForExpressionTransformer.transform(ast, context)
+  def transform({:for, _, _} = ast) do
+    ForExpressionTransformer.transform(ast)
   end
 
-  def transform({:if, _, _} = ast, %Context{} = context) do
-    IfExpressionTransformer.transform(ast, context)
+  def transform({:if, _, _} = ast) do
+    IfExpressionTransformer.transform(ast)
   end
 
   # OTHER
 
-  def transform({:__aliases__, _, segments}, %Context{}) do
+  def transform({:__aliases__, _, segments}) do
     %Alias{segments: segments}
   end
 
-  def transform({:__block__, _, _} = ast, %Context{} = context) do
-    BlockTransformer.transform(ast, context)
+  def transform({:__block__, _, _} = ast) do
+    BlockTransformer.transform(ast)
   end
 
-  def transform({:quote, _, _} = ast, %Context{} = context) do
-    QuoteTransformer.transform(ast, context)
+  def transform({:quote, _, _} = ast) do
+    QuoteTransformer.transform(ast)
   end
 
-  def transform({:unquote, _, _} = ast, %Context{} = context) do
-    UnquoteTransformer.transform(ast, context)
+  def transform({:unquote, _, _} = ast) do
+    UnquoteTransformer.transform(ast)
   end
 
   def transform({:__MODULE__, _, _}, _) do
     %ModulePseudoVariable{}
   end
 
-  def transform({name, _, args} = ast, %Context{} = context)
+  def transform({name, _, args} = ast)
       when is_atom(name) and is_list(args) do
-    CallTransformer.transform(ast, context)
+    CallTransformer.transform(ast)
   end
 
-  def transform({_, [context: _, imports: _], _} = ast, %Context{} = context) do
-    CallTransformer.transform(ast, context)
+  def transform({_, [context: _, imports: _], _} = ast) do
+    CallTransformer.transform(ast)
   end
 
   def transform({name, _, _}, _) when is_atom(name) do
