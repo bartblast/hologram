@@ -1,40 +1,39 @@
 defmodule Hologram.Compiler.CallTransformer do
-  alias Hologram.Compiler.Context
   alias Hologram.Compiler.Helpers
   alias Hologram.Compiler.IR
   alias Hologram.Compiler.Transformer
 
-  def transform({{:., _, [module, function]}, _, args}, %Context{} = context) do
-    build_call(module, function, args, context)
+  def transform({{:., _, [module, function]}, _, args}) do
+    build_call(module, function, args)
   end
 
-  def transform({symbol, [context: _, imports: _] = metadata, args}, %Context{} = context)
+  def transform({symbol, [context: _, imports: _] = metadata, args})
       when not is_list(args) do
-    transform({symbol, metadata, []}, context)
+    transform({symbol, metadata, []})
   end
 
-  def transform({function, [context: _, imports: [{_arity, module}]], args}, %Context{} = context) do
+  def transform({function, [context: _, imports: [{_arity, module}]], args}) do
     segments = Helpers.alias_segments(module)
     module_ir = %IR.ModuleType{module: module, segments: segments}
-    build_call(module_ir, function, args, context)
+    build_call(module_ir, function, args)
   end
 
-  def transform({function, _, args}, %Context{} = context) do
-    build_call(nil, function, args, context)
+  def transform({function, _, args}) do
+    build_call(nil, function, args)
   end
 
-  defp build_call(module, function, args, %Context{} = context) do
+  defp build_call(module, function, args) do
     args = if is_list(args), do: args, else: []
 
     %IR.Call{
-      module: build_module(module, context),
+      module: build_module(module),
       function: function,
-      args: transform_args(args, context),
+      args: transform_args(args),
       args_ast: args
     }
   end
 
-  defp build_module(module, context) do
+  defp build_module(module) do
     case module do
       nil ->
         nil
@@ -43,11 +42,11 @@ defmodule Hologram.Compiler.CallTransformer do
         module
 
       module ->
-        Transformer.transform(module, context)
+        Transformer.transform(module)
     end
   end
 
-  defp transform_args(args, context) do
-    Enum.map(args, &Transformer.transform(&1, context))
+  defp transform_args(args) do
+    Enum.map(args, &Transformer.transform/1)
   end
 end

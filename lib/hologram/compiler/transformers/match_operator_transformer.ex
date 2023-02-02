@@ -1,9 +1,9 @@
 defmodule Hologram.Compiler.MatchOperatorTransformer do
-  alias Hologram.Compiler.{Context, PatternDeconstructor, Transformer}
+  alias Hologram.Compiler.{PatternDeconstructor, Transformer}
   alias Hologram.Compiler.IR.{Binding, MatchAccess, MatchOperator}
 
-  def transform({:=, _, [left, right]}, %Context{} = context) do
-    left = Transformer.transform(left, context)
+  def transform({:=, _, [left, right]}) do
+    left = Transformer.transform(left)
 
     bindings =
       PatternDeconstructor.deconstruct(left)
@@ -16,7 +16,7 @@ defmodule Hologram.Compiler.MatchOperatorTransformer do
     %MatchOperator{
       bindings: bindings,
       left: left,
-      right: Transformer.transform(right, context)
+      right: Transformer.transform(right)
     }
   end
 end

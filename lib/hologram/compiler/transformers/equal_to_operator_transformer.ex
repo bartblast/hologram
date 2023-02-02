@@ -1,11 +1,11 @@
 defmodule Hologram.Compiler.EqualToOperatorTransformer do
-  alias Hologram.Compiler.{Context, Transformer}
   alias Hologram.Compiler.IR.EqualToOperator
+  alias Hologram.Compiler.Transformer
 
-  def transform({:==, _, [left, right]}, %Context{} = context) do
+  def transform({:==, _, [left, right]}) do
     %EqualToOperator{
-      left: Transformer.transform(left, context),
-      right: Transformer.transform(right, context)
+      left: Transformer.transform(left),
+      right: Transformer.transform(right)
     }
   end
 end

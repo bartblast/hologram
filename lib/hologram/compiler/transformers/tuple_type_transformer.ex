@@ -1,18 +1,19 @@
 defmodule Hologram.Compiler.TupleTypeTransformer do
-  alias Hologram.Compiler.{Context, Transformer}
   alias Hologram.Compiler.IR.TupleType
+  alias Hologram.Compiler.Transformer
 
-  def transform({:{}, _, data}, %Context{} = context) do
-    build_tuple(data, context)
+  def transform({:{}, _, data}) do
+    build_tuple(data)
   end
 
-  def transform(data, %Context{} = context) do
-    Tuple.to_list(data)
-    |> build_tuple(context)
+  def transform(data) do
+    data
+    |> Tuple.to_list()
+    |> build_tuple()
   end
 
-  defp build_tuple(data, context) do
-    data = Enum.map(data, &Transformer.transform(&1, context))
+  defp build_tuple(data) do
+    data = Enum.map(data, &Transformer.transform/1)
     %TupleType{data: data}
   end
 end

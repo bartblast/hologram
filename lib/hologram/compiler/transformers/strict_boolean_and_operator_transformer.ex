@@ -1,11 +1,11 @@
 defmodule Hologram.Compiler.StrictBooleanAndOperatorTransformer do
-  alias Hologram.Compiler.{Context, Transformer}
   alias Hologram.Compiler.IR.StrictBooleanAndOperator
+  alias Hologram.Compiler.Transformer
 
-  def transform({:and, _, [left, right]}, %Context{} = context) do
+  def transform({:and, _, [left, right]}) do
     %StrictBooleanAndOperator{
-      left: Transformer.transform(left, context),
-      right: Transformer.transform(right, context)
+      left: Transformer.transform(left),
+      right: Transformer.transform(right)
     }
   end
 end

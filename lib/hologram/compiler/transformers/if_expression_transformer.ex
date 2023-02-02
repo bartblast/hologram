@@ -1,16 +1,13 @@
 defmodule Hologram.Compiler.IfExpressionTransformer do
-  alias Hologram.Compiler.{Context, Transformer}
   alias Hologram.Compiler.IR.IfExpression
+  alias Hologram.Compiler.Transformer
 
-  def transform(
-        {:if, _, [condition, [do: do_block, else: else_block]]} = full_ast,
-        %Context{} = context
-      ) do
+  def transform({:if, _, [condition, [do: do_block, else: else_block]]} = ast) do
     %IfExpression{
-      condition: Transformer.transform(condition, context),
-      do: Transformer.transform(do_block, context),
-      else: Transformer.transform(else_block, context),
-      ast: full_ast
+      condition: Transformer.transform(condition),
+      do: Transformer.transform(do_block),
+      else: Transformer.transform(else_block),
+      ast: ast
     }
   end
 end

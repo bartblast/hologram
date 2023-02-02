@@ -1,18 +1,18 @@
 defmodule Hologram.Compiler.RelaxedBooleanNotOperatorTransformer do
-  alias Hologram.Compiler.{Context, Transformer}
   alias Hologram.Compiler.IR.RelaxedBooleanNotOperator
+  alias Hologram.Compiler.Transformer
 
-  def transform({:__block__, _, [{:!, _, [value]}]}, %Context{} = context) do
-    build_ir(value, context)
+  def transform({:__block__, _, [{:!, _, [value]}]}) do
+    build_ir(value)
   end
 
-  def transform({:!, _, [value]}, %Context{} = context) do
-    build_ir(value, context)
+  def transform({:!, _, [value]}) do
+    build_ir(value)
   end
 
-  defp build_ir(value, context) do
+  defp build_ir(value) do
     %RelaxedBooleanNotOperator{
-      value: Transformer.transform(value, context)
+      value: Transformer.transform(value)
     }
   end
 end

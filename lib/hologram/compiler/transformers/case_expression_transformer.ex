@@ -1,17 +1,17 @@
 defmodule Hologram.Compiler.CaseExpressionTransformer do
-  alias Hologram.Compiler.{Context, Helpers, Transformer}
+  alias Hologram.Compiler.{Helpers, Transformer}
   alias Hologram.Compiler.IR.{CaseConditionAccess, CaseExpression}
 
-  def transform({:case, _, [condition, [do: clauses]]}, %Context{} = context) do
+  def transform({:case, _, [condition, [do: clauses]]}) do
     %CaseExpression{
-      condition: Transformer.transform(condition, context),
-      clauses: Enum.map(clauses, &build_clause(&1, context))
+      condition: Transformer.transform(condition),
+      clauses: Enum.map(clauses, &build_clause/1)
     }
   end
 
-  defp build_clause({:->, _, [[pattern], body]}, context) do
-    pattern = Transformer.transform(pattern, context)
-    body = Transformer.transform(body, context)
+  defp build_clause({:->, _, [[pattern], body]}) do
+    pattern = Transformer.transform(pattern)
+    body = Transformer.transform(body)
 
     bindings =
       Helpers.aggregate_bindings_from_expression(pattern)

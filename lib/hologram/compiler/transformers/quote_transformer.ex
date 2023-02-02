@@ -1,9 +1,9 @@
 defmodule Hologram.Compiler.QuoteTransformer do
-  alias Hologram.Compiler.{Context, Transformer}
   alias Hologram.Compiler.IR.Quote
+  alias Hologram.Compiler.Transformer
 
-  def transform({:quote, _, [[do: body]]}, %Context{} = context) do
-    body = Transformer.transform(body, context)
+  def transform({:quote, _, [[do: body]]}) do
+    body = Transformer.transform(body)
     %Quote{body: body}
   end
 end

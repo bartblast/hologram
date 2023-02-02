@@ -1,11 +1,11 @@
 defmodule Hologram.Compiler.RelaxedBooleanOrOperatorTransformer do
-  alias Hologram.Compiler.{Context, Transformer}
   alias Hologram.Compiler.IR.RelaxedBooleanOrOperator
+  alias Hologram.Compiler.Transformer
 
-  def transform({:||, _, [left, right]}, %Context{} = context) do
+  def transform({:||, _, [left, right]}) do
     %RelaxedBooleanOrOperator{
-      left: Transformer.transform(left, context),
-      right: Transformer.transform(right, context)
+      left: Transformer.transform(left),
+      right: Transformer.transform(right)
     }
   end
 end

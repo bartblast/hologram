@@ -1,9 +1,9 @@
 defmodule Hologram.Compiler.TypeOperatorTransformer do
-  alias Hologram.Compiler.{Context, Transformer}
   alias Hologram.Compiler.IR.TypeOperator
+  alias Hologram.Compiler.Transformer
 
-  def transform({:"::", _, [left, {right, _, _}]}, %Context{} = context) do
-    left = Transformer.transform(left, context)
+  def transform({:"::", _, [left, {right, _, _}]}) do
+    left = Transformer.transform(left)
     %TypeOperator{left: left, right: right}
   end
 end

@@ -1,13 +1,13 @@
 defmodule Hologram.Compiler.ForExpressionTransformer do
-  alias Hologram.Compiler.{Context, Reflection, Transformer}
+  alias Hologram.Compiler.{Reflection, Transformer}
 
-  def transform({:for, _, parts}, %Context{} = context) do
+  def transform({:for, _, parts}) do
     generators = find_generators(parts)
     mapper = find_mapper(parts)
 
     build_code(generators, mapper)
     |> Reflection.ast()
-    |> Transformer.transform(context)
+    |> Transformer.transform()
   end
 
   defp build_code([generator | rest_of_generators], mapper) do

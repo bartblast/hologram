@@ -1,10 +1,10 @@
 defmodule Hologram.Compiler.UnaryNegativeOperatorTransformer do
-  alias Hologram.Compiler.{Context, Transformer}
   alias Hologram.Compiler.IR.UnaryNegativeOperator
+  alias Hologram.Compiler.Transformer
 
-  def transform({:-, _, [value]}, %Context{} = context) do
+  def transform({:-, _, [value]}) do
     %UnaryNegativeOperator{
-      value: Transformer.transform(value, context)
+      value: Transformer.transform(value)
     }
   end
 end
