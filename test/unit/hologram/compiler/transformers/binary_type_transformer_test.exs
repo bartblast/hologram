@@ -1,14 +1,14 @@
 defmodule Hologram.Compiler.BinaryTypeTransformerTest do
   use Hologram.Test.UnitCase, async: true
 
-  alias Hologram.Compiler.{Context, BinaryTypeTransformer}
+  alias Hologram.Compiler.BinaryTypeTransformer
   alias Hologram.Compiler.IR.{BinaryType, IntegerType}
 
   test "empty binary" do
     code = "<<>>"
     ast = ast(code)
 
-    result = BinaryTypeTransformer.transform(ast, %Context{})
+    result = BinaryTypeTransformer.transform(ast)
     expected = %BinaryType{parts: []}
 
     assert result == expected
@@ -18,7 +18,7 @@ defmodule Hologram.Compiler.BinaryTypeTransformerTest do
     code = "<<1, 2>>"
     ast = ast(code)
 
-    result = BinaryTypeTransformer.transform(ast, %Context{})
+    result = BinaryTypeTransformer.transform(ast)
 
     expected = %BinaryType{
       parts: [

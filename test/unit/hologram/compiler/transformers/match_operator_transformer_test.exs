@@ -1,7 +1,7 @@
 defmodule Hologram.Compiler.MatchOperatorTransformerTest do
   use Hologram.Test.UnitCase, async: true
 
-  alias Hologram.Compiler.{Context, MatchOperatorTransformer}
+  alias Hologram.Compiler.MatchOperatorTransformer
 
   alias Hologram.Compiler.IR.{
     AtomType,
@@ -18,7 +18,7 @@ defmodule Hologram.Compiler.MatchOperatorTransformerTest do
     code = "%{a: x, b: y} = %{a: 1, b: 2}"
     ast = ast(code)
 
-    result = MatchOperatorTransformer.transform(ast, %Context{})
+    result = MatchOperatorTransformer.transform(ast)
 
     expected = %MatchOperator{
       bindings: [

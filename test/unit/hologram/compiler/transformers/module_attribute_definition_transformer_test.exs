@@ -1,14 +1,13 @@
 defmodule Hologram.Compiler.ModuleAttributeDefinitionTransformerTest do
   use Hologram.Test.UnitCase, async: true
 
-  alias Hologram.Compiler.Context
   alias Hologram.Compiler.IR
   alias Hologram.Compiler.ModuleAttributeDefinitionTransformer
 
   test "regular value" do
     code = "@abc 1 + 2"
     ast = ast(code)
-    result = ModuleAttributeDefinitionTransformer.transform(ast, %Context{})
+    result = ModuleAttributeDefinitionTransformer.transform(ast)
 
     expected = %IR.ModuleAttributeDefinition{
       name: :abc,
@@ -24,7 +23,7 @@ defmodule Hologram.Compiler.ModuleAttributeDefinitionTransformerTest do
   test "behaviour callback spec" do
     code = "@callback some_fun :: any()"
     ast = ast(code)
-    result = ModuleAttributeDefinitionTransformer.transform(ast, %Context{})
+    result = ModuleAttributeDefinitionTransformer.transform(ast)
 
     expected_ast =
       {:@, [line: 1],

@@ -1,7 +1,6 @@
 defmodule Hologram.Compiler.StructTypeTransformerTest do
   use Hologram.Test.UnitCase, async: true
 
-  alias Hologram.Compiler.Context
   alias Hologram.Compiler.IR.AtomType
   alias Hologram.Compiler.IR.IntegerType
   alias Hologram.Compiler.IR.StructType
@@ -11,7 +10,7 @@ defmodule Hologram.Compiler.StructTypeTransformerTest do
     code = "%Abc.Bcd{x: 1, y: 2}"
     ast = ast(code)
 
-    result = StructTypeTransformer.transform(ast, %Context{})
+    result = StructTypeTransformer.transform(ast)
 
     expected = %StructType{
       alias_segs: [:Abc, :Bcd],

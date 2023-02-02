@@ -1,8 +1,8 @@
 defmodule Hologram.Compiler.QuoteTransformerTest do
   use Hologram.Test.UnitCase, async: true
 
-  alias Hologram.Compiler.{Context, QuoteTransformer}
   alias Hologram.Compiler.IR.{Block, IntegerType, Quote}
+  alias Hologram.Compiler.QuoteTransformer
 
   test "transform/2" do
     code = """
@@ -14,7 +14,7 @@ defmodule Hologram.Compiler.QuoteTransformerTest do
 
     ast = ast(code)
 
-    result = QuoteTransformer.transform(ast, %Context{})
+    result = QuoteTransformer.transform(ast)
 
     expected = %Quote{
       body: %Block{

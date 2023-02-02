@@ -1,7 +1,7 @@
 defmodule Hologram.Compiler.AnonymousFunctionTypeTransformerTest do
   use Hologram.Test.UnitCase, async: true
 
-  alias Hologram.Compiler.{AnonymousFunctionTypeTransformer, Context}
+  alias Hologram.Compiler.AnonymousFunctionTypeTransformer
 
   alias Hologram.Compiler.IR.{
     AnonymousFunctionType,
@@ -19,16 +19,14 @@ defmodule Hologram.Compiler.AnonymousFunctionTypeTransformerTest do
     code = "fn 1, 2 -> 9 end"
     ast = ast(code)
 
-    assert %AnonymousFunctionType{arity: 2} =
-             AnonymousFunctionTypeTransformer.transform(ast, %Context{})
+    assert %AnonymousFunctionType{arity: 2} = AnonymousFunctionTypeTransformer.transform(ast)
   end
 
   test "params" do
     code = "fn a, b -> 9 end"
     ast = ast(code)
 
-    assert %AnonymousFunctionType{} =
-             result = AnonymousFunctionTypeTransformer.transform(ast, %Context{})
+    assert %AnonymousFunctionType{} = result = AnonymousFunctionTypeTransformer.transform(ast)
 
     expected = [
       %Variable{name: :a},
@@ -42,8 +40,7 @@ defmodule Hologram.Compiler.AnonymousFunctionTypeTransformerTest do
     code = "fn 1, %{a: x, b: y} -> 9 end"
     ast = ast(code)
 
-    assert %AnonymousFunctionType{} =
-             result = AnonymousFunctionTypeTransformer.transform(ast, %Context{})
+    assert %AnonymousFunctionType{} = result = AnonymousFunctionTypeTransformer.transform(ast)
 
     expected = [
       %Binding{
@@ -69,8 +66,7 @@ defmodule Hologram.Compiler.AnonymousFunctionTypeTransformerTest do
     code = "fn -> 1 end"
     ast = ast(code)
 
-    assert %AnonymousFunctionType{} =
-             result = AnonymousFunctionTypeTransformer.transform(ast, %Context{})
+    assert %AnonymousFunctionType{} = result = AnonymousFunctionTypeTransformer.transform(ast)
 
     assert result.body == %Block{expressions: [%IntegerType{value: 1}]}
   end
@@ -85,8 +81,7 @@ defmodule Hologram.Compiler.AnonymousFunctionTypeTransformerTest do
 
     ast = ast(code)
 
-    assert %AnonymousFunctionType{} =
-             result = AnonymousFunctionTypeTransformer.transform(ast, %Context{})
+    assert %AnonymousFunctionType{} = result = AnonymousFunctionTypeTransformer.transform(ast)
 
     expected = %Block{
       expressions: [
@@ -108,7 +103,7 @@ defmodule Hologram.Compiler.AnonymousFunctionTypeTransformerTest do
     """
 
     ast = ast(code)
-    result = AnonymousFunctionTypeTransformer.transform(ast, %Context{})
+    result = AnonymousFunctionTypeTransformer.transform(ast)
     expected = %NotSupportedExpression{ast: ast, type: :multi_clause_anonymous_function_type}
 
     assert result == expected

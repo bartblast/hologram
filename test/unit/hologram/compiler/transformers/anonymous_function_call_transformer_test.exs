@@ -2,14 +2,13 @@ defmodule Hologram.Compiler.AnonymousFunctionCallTransformerTest do
   use Hologram.Test.UnitCase, async: true
 
   alias Hologram.Compiler.AnonymousFunctionCallTransformer
-  alias Hologram.Compiler.Context
   alias Hologram.Compiler.IR.AnonymousFunctionCall
   alias Hologram.Compiler.IR.IntegerType
 
   test "function without params" do
     code = "test.()"
     ast = ast(code)
-    result = AnonymousFunctionCallTransformer.transform(ast, %Context{})
+    result = AnonymousFunctionCallTransformer.transform(ast)
 
     expected = %AnonymousFunctionCall{
       name: :test,
@@ -22,7 +21,7 @@ defmodule Hologram.Compiler.AnonymousFunctionCallTransformerTest do
   test "function with params" do
     code = "test.(1, 2)"
     ast = ast(code)
-    result = AnonymousFunctionCallTransformer.transform(ast, %Context{})
+    result = AnonymousFunctionCallTransformer.transform(ast)
 
     expected = %AnonymousFunctionCall{
       name: :test,

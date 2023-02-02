@@ -1,7 +1,7 @@
 defmodule Hologram.Compiler.ForExpressionTransformerTest do
   use Hologram.Test.UnitCase, async: true
 
-  alias Hologram.Compiler.{Context, ForExpressionTransformer, Transformer}
+  alias Hologram.Compiler.{ForExpressionTransformer, Transformer}
 
   test "single generator, single binding" do
     code = "for n <- [1, 2], do: n * n"
@@ -16,12 +16,12 @@ defmodule Hologram.Compiler.ForExpressionTransformerTest do
     result_ast =
       code
       |> ast()
-      |> ForExpressionTransformer.transform(%Context{})
+      |> ForExpressionTransformer.transform()
 
     expected_ast =
       expected_code
       |> ast()
-      |> Transformer.transform(%Context{})
+      |> Transformer.transform()
 
     assert result_ast == expected_ast
   end
@@ -42,12 +42,12 @@ defmodule Hologram.Compiler.ForExpressionTransformerTest do
     result_ast =
       code
       |> ast()
-      |> ForExpressionTransformer.transform(%Context{})
+      |> ForExpressionTransformer.transform()
 
     expected_ast =
       expected_code
       |> ast()
-      |> Transformer.transform(%Context{})
+      |> Transformer.transform()
 
     assert result_ast == expected_ast
   end
@@ -65,12 +65,12 @@ defmodule Hologram.Compiler.ForExpressionTransformerTest do
     result_ast =
       code
       |> ast()
-      |> ForExpressionTransformer.transform(%Context{})
+      |> ForExpressionTransformer.transform()
 
     expected_ast =
       expected_code
       |> ast()
-      |> Transformer.transform(%Context{})
+      |> Transformer.transform()
 
     assert result_ast == expected_ast
   end

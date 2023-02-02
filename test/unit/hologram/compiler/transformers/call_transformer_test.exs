@@ -2,7 +2,6 @@ defmodule Hologram.Compiler.CallTransformerTest do
   use Hologram.Test.UnitCase, async: true
 
   alias Hologram.Compiler.CallTransformer
-  alias Hologram.Compiler.Context
   alias Hologram.Compiler.IR
   alias Hologram.Compiler.IR.AdditionOperator
   alias Hologram.Compiler.IR.Alias
@@ -17,7 +16,7 @@ defmodule Hologram.Compiler.CallTransformerTest do
     test "without arguments" do
       code = "my_fun()"
       ast = ast(code)
-      result = CallTransformer.transform(ast, %Context{})
+      result = CallTransformer.transform(ast)
 
       expected = %Call{
         module: nil,
@@ -32,7 +31,7 @@ defmodule Hologram.Compiler.CallTransformerTest do
     test "with arguments" do
       code = "my_fun(1, 2)"
       ast = ast(code)
-      result = CallTransformer.transform(ast, %Context{})
+      result = CallTransformer.transform(ast)
 
       expected = %Call{
         module: nil,
@@ -52,7 +51,7 @@ defmodule Hologram.Compiler.CallTransformerTest do
     test "without arguments" do
       code = "Abc.my_fun()"
       ast = ast(code)
-      result = CallTransformer.transform(ast, %Context{})
+      result = CallTransformer.transform(ast)
 
       expected = %Call{
         module: %Alias{segments: [:Abc]},
@@ -67,7 +66,7 @@ defmodule Hologram.Compiler.CallTransformerTest do
     test "with arguments" do
       code = "Abc.my_fun(1, 2)"
       ast = ast(code)
-      result = CallTransformer.transform(ast, %Context{})
+      result = CallTransformer.transform(ast)
 
       expected = %Call{
         module: %Alias{segments: [:Abc]},
@@ -87,7 +86,7 @@ defmodule Hologram.Compiler.CallTransformerTest do
     test "without params" do
       code = "@my_attr.my_fun()"
       ast = ast(code)
-      result = CallTransformer.transform(ast, %Context{})
+      result = CallTransformer.transform(ast)
 
       expected = %Call{
         module: %ModuleAttributeOperator{name: :my_attr},
@@ -102,7 +101,7 @@ defmodule Hologram.Compiler.CallTransformerTest do
     test "with params" do
       code = "@my_attr.my_fun(1, 2)"
       ast = ast(code)
-      result = CallTransformer.transform(ast, %Context{})
+      result = CallTransformer.transform(ast)
 
       expected = %Call{
         module: %ModuleAttributeOperator{name: :my_attr},
@@ -122,7 +121,7 @@ defmodule Hologram.Compiler.CallTransformerTest do
     test "without params" do
       code = "(3 + 4).my_fun()"
       ast = ast(code)
-      result = CallTransformer.transform(ast, %Context{})
+      result = CallTransformer.transform(ast)
 
       expected = %Call{
         module: %AdditionOperator{
@@ -140,7 +139,7 @@ defmodule Hologram.Compiler.CallTransformerTest do
     test "with params" do
       code = "(3 + 4).my_fun(1, 2)"
       ast = ast(code)
-      result = CallTransformer.transform(ast, %Context{})
+      result = CallTransformer.transform(ast)
 
       expected = %Call{
         module: %AdditionOperator{
@@ -163,7 +162,7 @@ defmodule Hologram.Compiler.CallTransformerTest do
     test "without params" do
       code = "__MODULE__.my_fun()"
       ast = ast(code)
-      result = CallTransformer.transform(ast, %Context{})
+      result = CallTransformer.transform(ast)
 
       expected = %Call{
         module: %ModulePseudoVariable{},
@@ -178,7 +177,7 @@ defmodule Hologram.Compiler.CallTransformerTest do
     test "with params" do
       code = "__MODULE__.my_fun(1, 2)"
       ast = ast(code)
-      result = CallTransformer.transform(ast, %Context{})
+      result = CallTransformer.transform(ast)
 
       expected = %Call{
         module: %ModulePseudoVariable{},
@@ -198,7 +197,7 @@ defmodule Hologram.Compiler.CallTransformerTest do
     test "without params" do
       code = ":my_module.my_fun()"
       ast = ast(code)
-      result = CallTransformer.transform(ast, %Context{})
+      result = CallTransformer.transform(ast)
 
       expected = %Call{
         module: %AtomType{value: :my_module},
@@ -213,7 +212,7 @@ defmodule Hologram.Compiler.CallTransformerTest do
     test "with params" do
       code = ":my_module.my_fun(1, 2)"
       ast = ast(code)
-      result = CallTransformer.transform(ast, %Context{})
+      result = CallTransformer.transform(ast)
 
       expected = %Call{
         module: %AtomType{value: :my_module},
@@ -232,7 +231,7 @@ defmodule Hologram.Compiler.CallTransformerTest do
   test "string interpolation" do
     code = ~S("#{test}")
     {_, _, [{_, _, [ast, _]}]} = ast(code)
-    result = CallTransformer.transform(ast, %Context{})
+    result = CallTransformer.transform(ast)
 
     expected = %Call{
       module: %Alias{segments: [:Kernel]},
@@ -247,7 +246,7 @@ defmodule Hologram.Compiler.CallTransformerTest do
   describe "contextual call (e.g. output from macro)" do
     test "without args" do
       ast = {:test_fun, [context: A.B, imports: [{0, C.D}]], A.B}
-      result = CallTransformer.transform(ast, %Context{})
+      result = CallTransformer.transform(ast)
 
       expected = %IR.Call{
         module: %IR.ModuleType{module: C.D, segments: [:C, :D]},
@@ -261,7 +260,7 @@ defmodule Hologram.Compiler.CallTransformerTest do
 
     test "with args" do
       ast = {:test_fun, [context: A.B, imports: [{2, C.D}]], [1, 2]}
-      result = CallTransformer.transform(ast, %Context{})
+      result = CallTransformer.transform(ast)
 
       expected = %IR.Call{
         module: %IR.ModuleType{module: C.D, segments: [:C, :D]},

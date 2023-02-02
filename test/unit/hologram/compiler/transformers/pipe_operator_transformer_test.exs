@@ -1,14 +1,14 @@
 defmodule Hologram.Compiler.PipeOperatorTransformerTest do
   use Hologram.Test.UnitCase, async: true
 
-  alias Hologram.Compiler.{Context, PipeOperatorTransformer}
   alias Hologram.Compiler.IR.{FunctionCall, IntegerType}
+  alias Hologram.Compiler.PipeOperatorTransformer
 
   test "non-nested pipeline" do
     code = "100 |> div(2)"
     ast = ast(code)
 
-    result = PipeOperatorTransformer.transform(ast, %Context{})
+    result = PipeOperatorTransformer.transform(ast)
 
     expected = %FunctionCall{
       function: :div,
@@ -26,7 +26,7 @@ defmodule Hologram.Compiler.PipeOperatorTransformerTest do
     code = "100 |> div(2) |> div(3)"
     ast = ast(code)
 
-    result = PipeOperatorTransformer.transform(ast, %Context{})
+    result = PipeOperatorTransformer.transform(ast)
 
     expected = %FunctionCall{
       function: :div,

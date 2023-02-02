@@ -1,14 +1,14 @@
 defmodule Hologram.Compiler.ListConcatenationOperatorTransformerTest do
   use Hologram.Test.UnitCase, async: true
 
-  alias Hologram.Compiler.{Context, ListConcatenationOperatorTransformer}
+  alias Hologram.Compiler.{ListConcatenationOperatorTransformer}
   alias Hologram.Compiler.IR.{IntegerType, ListConcatenationOperator, ListType}
 
   test "transform/3" do
     code = "[1, 2] ++ [3, 4]"
     ast = ast(code)
 
-    result = ListConcatenationOperatorTransformer.transform(ast, %Context{})
+    result = ListConcatenationOperatorTransformer.transform(ast)
 
     expected = %ListConcatenationOperator{
       left: %ListType{

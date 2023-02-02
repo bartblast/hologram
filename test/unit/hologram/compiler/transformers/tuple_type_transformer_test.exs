@@ -1,17 +1,15 @@
 defmodule Hologram.Compiler.TupleTypeTransformerTest do
   use Hologram.Test.UnitCase, async: true
 
-  alias Hologram.Compiler.{Context, TupleTypeTransformer}
   alias Hologram.Compiler.IR.{IntegerType, TupleType}
-
-  @context %Context{module: Abc}
+  alias Hologram.Compiler.TupleTypeTransformer
 
   describe "transform/2" do
     test "2-element tuple" do
       code = "{1, 2}"
       ast = ast(code)
 
-      result = TupleTypeTransformer.transform(ast, @context)
+      result = TupleTypeTransformer.transform(ast)
 
       expected = %TupleType{
         data: [
@@ -27,7 +25,7 @@ defmodule Hologram.Compiler.TupleTypeTransformerTest do
       code = "{1, 2, 3}"
       ast = ast(code)
 
-      result = TupleTypeTransformer.transform(ast, @context)
+      result = TupleTypeTransformer.transform(ast)
 
       expected = %TupleType{
         data: [

@@ -1,7 +1,7 @@
 defmodule Hologram.Compiler.IfExpressionTransformerTest do
   use Hologram.Test.UnitCase, async: true
 
-  alias Hologram.Compiler.{Context, IfExpressionTransformer}
+  alias Hologram.Compiler.IfExpressionTransformer
   alias Hologram.Compiler.IR.{Block, BooleanType, IfExpression, IntegerType}
 
   test "transform/2" do
@@ -16,7 +16,7 @@ defmodule Hologram.Compiler.IfExpressionTransformerTest do
     """
 
     ast = ast(code)
-    result = IfExpressionTransformer.transform(ast, %Context{})
+    result = IfExpressionTransformer.transform(ast)
 
     expected = %IfExpression{
       condition: %BooleanType{value: true},

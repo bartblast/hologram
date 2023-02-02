@@ -1,7 +1,7 @@
 defmodule Hologram.Compiler.CaseExpressionTransformerTest do
   use Hologram.Test.UnitCase, async: true
 
-  alias Hologram.Compiler.{CaseExpressionTransformer, Context}
+  alias Hologram.Compiler.CaseExpressionTransformer
 
   alias Hologram.Compiler.IR.{
     AtomType,
@@ -25,7 +25,7 @@ defmodule Hologram.Compiler.CaseExpressionTransformerTest do
     result =
       code
       |> ast()
-      |> CaseExpressionTransformer.transform(%Context{})
+      |> CaseExpressionTransformer.transform()
 
     expected = %CaseExpression{
       clauses: [
@@ -57,7 +57,7 @@ defmodule Hologram.Compiler.CaseExpressionTransformerTest do
     result =
       code
       |> ast()
-      |> CaseExpressionTransformer.transform(%Context{})
+      |> CaseExpressionTransformer.transform()
 
     expected = %CaseExpression{
       clauses: [
@@ -88,7 +88,7 @@ defmodule Hologram.Compiler.CaseExpressionTransformerTest do
     result =
       code
       |> ast()
-      |> CaseExpressionTransformer.transform(%Context{})
+      |> CaseExpressionTransformer.transform()
 
     expected = %CaseExpression{
       clauses: [
@@ -118,7 +118,7 @@ defmodule Hologram.Compiler.CaseExpressionTransformerTest do
     result =
       code
       |> ast()
-      |> CaseExpressionTransformer.transform(%Context{})
+      |> CaseExpressionTransformer.transform()
 
     expected = %CaseExpression{
       clauses: [

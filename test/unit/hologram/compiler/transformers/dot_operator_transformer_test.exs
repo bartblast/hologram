@@ -1,7 +1,6 @@
 defmodule Hologram.Compiler.DotOperatorTransformerTest do
   use Hologram.Test.UnitCase, async: true
 
-  alias Hologram.Compiler.Context
   alias Hologram.Compiler.DotOperatorTransformer
   alias Hologram.Compiler.IR.AccessOperator
   alias Hologram.Compiler.IR.AdditionOperator
@@ -19,7 +18,7 @@ defmodule Hologram.Compiler.DotOperatorTransformerTest do
     code = "a[:x]"
     ast = ast(code)
 
-    assert %AccessOperator{} = DotOperatorTransformer.transform(ast, %Context{})
+    assert %AccessOperator{} = DotOperatorTransformer.transform(ast)
   end
 
   describe "anonymous function call" do
@@ -27,14 +26,14 @@ defmodule Hologram.Compiler.DotOperatorTransformerTest do
       code = "test.()"
       ast = ast(code)
 
-      assert %AnonymousFunctionCall{} = DotOperatorTransformer.transform(ast, %Context{})
+      assert %AnonymousFunctionCall{} = DotOperatorTransformer.transform(ast)
     end
 
     test "with arguments" do
       code = "test.(1, 2)"
       ast = ast(code)
 
-      assert %AnonymousFunctionCall{} = DotOperatorTransformer.transform(ast, %Context{})
+      assert %AnonymousFunctionCall{} = DotOperatorTransformer.transform(ast)
     end
   end
 
@@ -42,7 +41,7 @@ defmodule Hologram.Compiler.DotOperatorTransformerTest do
     test "without parenthesis" do
       code = "a.x"
       ast = ast(code)
-      result = DotOperatorTransformer.transform(ast, %Context{})
+      result = DotOperatorTransformer.transform(ast)
 
       expected = %DotOperator{
         left: %Symbol{name: :a},
@@ -56,14 +55,14 @@ defmodule Hologram.Compiler.DotOperatorTransformerTest do
       code = "a.x()"
       ast = ast(code)
 
-      assert %Call{} = DotOperatorTransformer.transform(ast, %Context{})
+      assert %Call{} = DotOperatorTransformer.transform(ast)
     end
 
     test "with parenthesis, with arguments" do
       code = "a.x(1, 2)"
       ast = ast(code)
 
-      assert %Call{} = DotOperatorTransformer.transform(ast, %Context{})
+      assert %Call{} = DotOperatorTransformer.transform(ast)
     end
   end
 
@@ -71,7 +70,7 @@ defmodule Hologram.Compiler.DotOperatorTransformerTest do
     test "without parenthesis" do
       code = "Abc.x"
       ast = ast(code)
-      result = DotOperatorTransformer.transform(ast, %Context{})
+      result = DotOperatorTransformer.transform(ast)
 
       expected = %DotOperator{
         left: %Alias{segments: [:Abc]},
@@ -85,14 +84,14 @@ defmodule Hologram.Compiler.DotOperatorTransformerTest do
       code = "Abc.x()"
       ast = ast(code)
 
-      assert %Call{} = DotOperatorTransformer.transform(ast, %Context{})
+      assert %Call{} = DotOperatorTransformer.transform(ast)
     end
 
     test "with parenthesis, with arguments" do
       code = "Abc.x(1, 2)"
       ast = ast(code)
 
-      assert %Call{} = DotOperatorTransformer.transform(ast, %Context{})
+      assert %Call{} = DotOperatorTransformer.transform(ast)
     end
   end
 
@@ -100,7 +99,7 @@ defmodule Hologram.Compiler.DotOperatorTransformerTest do
     test "without parenthesis" do
       code = "@abc.x"
       ast = ast(code)
-      result = DotOperatorTransformer.transform(ast, %Context{})
+      result = DotOperatorTransformer.transform(ast)
 
       expected = %DotOperator{
         left: %ModuleAttributeOperator{name: :abc},
@@ -114,14 +113,14 @@ defmodule Hologram.Compiler.DotOperatorTransformerTest do
       code = "@abc.x()"
       ast = ast(code)
 
-      assert %Call{} = DotOperatorTransformer.transform(ast, %Context{})
+      assert %Call{} = DotOperatorTransformer.transform(ast)
     end
 
     test "with parenthesis, with arguments" do
       code = "@abc.x(1, 2)"
       ast = ast(code)
 
-      assert %Call{} = DotOperatorTransformer.transform(ast, %Context{})
+      assert %Call{} = DotOperatorTransformer.transform(ast)
     end
   end
 
@@ -129,7 +128,7 @@ defmodule Hologram.Compiler.DotOperatorTransformerTest do
     test "without parenthesis" do
       code = "(3 + 4).x"
       ast = ast(code)
-      result = DotOperatorTransformer.transform(ast, %Context{})
+      result = DotOperatorTransformer.transform(ast)
 
       expected = %DotOperator{
         left: %AdditionOperator{
@@ -146,14 +145,14 @@ defmodule Hologram.Compiler.DotOperatorTransformerTest do
       code = "(3 + 4).x()"
       ast = ast(code)
 
-      assert %Call{} = DotOperatorTransformer.transform(ast, %Context{})
+      assert %Call{} = DotOperatorTransformer.transform(ast)
     end
 
     test "with parenthesis, with arguments" do
       code = "(3 + 4).x(1, 2)"
       ast = ast(code)
 
-      assert %Call{} = DotOperatorTransformer.transform(ast, %Context{})
+      assert %Call{} = DotOperatorTransformer.transform(ast)
     end
   end
 
@@ -161,7 +160,7 @@ defmodule Hologram.Compiler.DotOperatorTransformerTest do
     test "without parenthesis" do
       code = "__MODULE__.x"
       ast = ast(code)
-      result = DotOperatorTransformer.transform(ast, %Context{})
+      result = DotOperatorTransformer.transform(ast)
 
       expected = %DotOperator{
         left: %ModulePseudoVariable{},
@@ -175,14 +174,14 @@ defmodule Hologram.Compiler.DotOperatorTransformerTest do
       code = "__MODULE__.x()"
       ast = ast(code)
 
-      assert %Call{} = DotOperatorTransformer.transform(ast, %Context{})
+      assert %Call{} = DotOperatorTransformer.transform(ast)
     end
 
     test "with parenthesis, with arguments" do
       code = "__MODULE__.x(1, 2)"
       ast = ast(code)
 
-      assert %Call{} = DotOperatorTransformer.transform(ast, %Context{})
+      assert %Call{} = DotOperatorTransformer.transform(ast)
     end
   end
 
@@ -190,7 +189,7 @@ defmodule Hologram.Compiler.DotOperatorTransformerTest do
     test "without parenthesis" do
       code = ":my_module.x"
       ast = ast(code)
-      result = DotOperatorTransformer.transform(ast, %Context{})
+      result = DotOperatorTransformer.transform(ast)
 
       expected = %DotOperator{
         left: %AtomType{value: :my_module},
@@ -204,14 +203,14 @@ defmodule Hologram.Compiler.DotOperatorTransformerTest do
       code = ":my_module.x()"
       ast = ast(code)
 
-      assert %Call{} = DotOperatorTransformer.transform(ast, %Context{})
+      assert %Call{} = DotOperatorTransformer.transform(ast)
     end
 
     test "with parenthesis, with arguments" do
       code = ":my_module.x(1, 2)"
       ast = ast(code)
 
-      assert %Call{} = DotOperatorTransformer.transform(ast, %Context{})
+      assert %Call{} = DotOperatorTransformer.transform(ast)
     end
   end
 
@@ -219,6 +218,6 @@ defmodule Hologram.Compiler.DotOperatorTransformerTest do
     code = ~S("#{test}")
     {_, _, [{_, _, [ast, _]}]} = ast(code)
 
-    assert %Call{} = DotOperatorTransformer.transform(ast, %Context{})
+    assert %Call{} = DotOperatorTransformer.transform(ast)
   end
 end

@@ -8,7 +8,7 @@ defmodule Hologram.Compiler.ListSubtractionOperatorTransformerTest do
     code = "[1, 2] -- [3, 2]"
     ast = ast(code)
 
-    result = ListSubtractionOperatorTransformer.transform(ast, %Context{})
+    result = ListSubtractionOperatorTransformer.transform(ast)
 
     expected = %ListSubtractionOperator{
       left: %ListType{

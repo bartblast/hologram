@@ -1,16 +1,14 @@
 defmodule Hologram.Compiler.MapTypeTransformerTest do
   use Hologram.Test.UnitCase, async: true
 
-  alias Hologram.Compiler.{Context, MapTypeTransformer}
   alias Hologram.Compiler.IR.{AtomType, IntegerType, MapType}
-
-  @context %Context{module: Abc}
+  alias Hologram.Compiler.MapTypeTransformer
 
   test "transform/2" do
     code = "%{a: 1, b: 2}"
     ast = ast(code)
 
-    result = MapTypeTransformer.transform(ast, @context)
+    result = MapTypeTransformer.transform(ast)
 
     expected = %MapType{
       data: [

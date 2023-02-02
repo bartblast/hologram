@@ -1,7 +1,6 @@
 defmodule Hologram.Compiler.LessThanOperatorTransformerTest do
   use Hologram.Test.UnitCase, async: true
 
-  alias Hologram.Compiler.Context
   alias Hologram.Compiler.IR.IntegerType
   alias Hologram.Compiler.IR.LessThanOperator
   alias Hologram.Compiler.LessThanOperatorTransformer
@@ -10,7 +9,7 @@ defmodule Hologram.Compiler.LessThanOperatorTransformerTest do
     code = "1 < 2"
     ast = ast(code)
 
-    result = LessThanOperatorTransformer.transform(ast, %Context{})
+    result = LessThanOperatorTransformer.transform(ast)
 
     expected = %LessThanOperator{
       left: %IntegerType{value: 1},

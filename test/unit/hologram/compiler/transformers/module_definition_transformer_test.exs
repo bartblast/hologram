@@ -1,7 +1,6 @@
 defmodule Hologram.Compiler.ModuleDefinitionTransformerTest do
   use Hologram.Test.UnitCase, async: true
 
-  alias Hologram.Compiler.Context
   alias Hologram.Compiler.IR.Alias
   alias Hologram.Compiler.IR.Block
   alias Hologram.Compiler.IR.IntegerType
@@ -11,7 +10,7 @@ defmodule Hologram.Compiler.ModuleDefinitionTransformerTest do
   test "empty body" do
     code = "defmodule Abc.Bcd do end"
     ast = ast(code)
-    result = ModuleDefinitionTransformer.transform(ast, %Context{})
+    result = ModuleDefinitionTransformer.transform(ast)
 
     expected = %ModuleDefinition{
       module: %Alias{segments: [:Abc, :Bcd]},
@@ -29,7 +28,7 @@ defmodule Hologram.Compiler.ModuleDefinitionTransformerTest do
     """
 
     ast = ast(code)
-    result = ModuleDefinitionTransformer.transform(ast, %Context{})
+    result = ModuleDefinitionTransformer.transform(ast)
 
     expected = %ModuleDefinition{
       module: %Alias{segments: [:Abc, :Bcd]},
@@ -50,7 +49,7 @@ defmodule Hologram.Compiler.ModuleDefinitionTransformerTest do
     """
 
     ast = ast(code)
-    result = ModuleDefinitionTransformer.transform(ast, %Context{})
+    result = ModuleDefinitionTransformer.transform(ast)
 
     expected = %ModuleDefinition{
       module: %Alias{segments: [:Abc, :Bcd]},
