@@ -150,9 +150,9 @@ defmodule Hologram.Compiler.Helpers do
     |> Enum.join(".")
   end
 
-  def transform_params(params, context) do
+  def transform_params(params) do
     if(params, do: params, else: [])
-    |> Enum.map(&Transformer.transform(&1, context))
+    |> Enum.map(&Transformer.transform/1)
   end
 
   @doc """

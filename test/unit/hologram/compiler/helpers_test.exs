@@ -52,7 +52,7 @@ defmodule Hologram.Compiler.HelpersTest do
       # end
 
       params_ast = [1, 2]
-      params = Helpers.transform_params(params_ast, %Context{})
+      params = Helpers.transform_params(params_ast)
       result = Helpers.aggregate_bindings_from_params(params)
 
       assert result == []
@@ -63,7 +63,7 @@ defmodule Hologram.Compiler.HelpersTest do
       # end
 
       params_ast = [1, {:%{}, [line: 2], [a: {:x, [line: 2], nil}]}]
-      params = Helpers.transform_params(params_ast, %Context{})
+      params = Helpers.transform_params(params_ast)
       result = Helpers.aggregate_bindings_from_params(params)
 
       expected = [
@@ -84,7 +84,7 @@ defmodule Hologram.Compiler.HelpersTest do
       # end
 
       params_ast = [1, {:%{}, [line: 2], [a: {:x, [line: 2], nil}, b: {:y, [line: 2], nil}]}]
-      params = Helpers.transform_params(params_ast, %Context{})
+      params = Helpers.transform_params(params_ast)
       result = Helpers.aggregate_bindings_from_params(params)
 
       expected = [
@@ -118,7 +118,7 @@ defmodule Hologram.Compiler.HelpersTest do
         {:%{}, [line: 2], [c: {:s, [line: 2], nil}, d: {:t, [line: 2], nil}]}
       ]
 
-      params = Helpers.transform_params(params_ast, %Context{})
+      params = Helpers.transform_params(params_ast)
       result = Helpers.aggregate_bindings_from_params(params)
 
       expected = [
@@ -160,7 +160,7 @@ defmodule Hologram.Compiler.HelpersTest do
       # end
 
       params_ast = [{:y, [line: 2], nil}, {:x, [line: 2], nil}]
-      params = Helpers.transform_params(params_ast, %Context{})
+      params = Helpers.transform_params(params_ast)
       result = Helpers.aggregate_bindings_from_params(params)
 
       expected = [
@@ -455,13 +455,13 @@ defmodule Hologram.Compiler.HelpersTest do
     assert Helpers.module_name(Abc.Bcd) == "Abc.Bcd"
   end
 
-  describe "transform_params/2" do
+  describe "transform_params/1" do
     test "no params" do
       # def test do
       # end
 
       params = nil
-      result = Helpers.transform_params(params, %Context{})
+      result = Helpers.transform_params(params)
 
       assert result == []
     end
@@ -471,7 +471,7 @@ defmodule Hologram.Compiler.HelpersTest do
       # end
 
       params = [{:a, [line: 1], nil}, {:b, [line: 1], nil}]
-      result = Helpers.transform_params(params, %Context{})
+      result = Helpers.transform_params(params)
 
       expected = [
         %Variable{name: :a},
@@ -486,7 +486,7 @@ defmodule Hologram.Compiler.HelpersTest do
       # end
 
       params = [:a, 2]
-      result = Helpers.transform_params(params, %Context{})
+      result = Helpers.transform_params(params)
 
       expected = [
         %AtomType{value: :a},
