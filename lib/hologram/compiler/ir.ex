@@ -163,10 +163,6 @@ defmodule Hologram.Compiler.IR do
     defstruct []
   end
 
-  defmodule MacroDefinition do
-    defstruct module: nil, name: nil, arity: nil, params: [], bindings: [], body: nil
-  end
-
   defmodule ModuleDefinition do
     defstruct module: nil, body: nil
   end
@@ -265,7 +261,7 @@ defmodule Hologram.Compiler.IR do
   end
 
   defmodule IgnoredExpression do
-    defstruct []
+    defstruct type: nil
   end
 
   defmodule ModulePseudoVariable do

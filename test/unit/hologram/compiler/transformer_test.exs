@@ -1,6 +1,7 @@
 defmodule Hologram.Compiler.TransformerTest do
   use Hologram.Test.UnitCase, async: true
 
+  alias Hologram.Compiler.IR.IgnoredExpression
   alias Hologram.Compiler.{Context, Transformer}
 
   alias Hologram.Compiler.IR.Alias
@@ -30,7 +31,6 @@ defmodule Hologram.Compiler.TransformerTest do
     ListConcatenationOperator,
     ListSubtractionOperator,
     ListType,
-    MacroDefinition,
     MapType,
     MatchOperator,
     MembershipOperator,
@@ -378,7 +378,7 @@ defmodule Hologram.Compiler.TransformerTest do
 
       ast = ast(code)
 
-      assert %MacroDefinition{} = Transformer.transform(ast, %Context{})
+      assert %IgnoredExpression{type: :macro_definition} = Transformer.transform(ast, %Context{})
     end
 
     test "module" do

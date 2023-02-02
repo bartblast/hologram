@@ -1,5 +1,6 @@
 defmodule Hologram.Compiler.Transformer do
   alias Hologram.Compiler.AliasTransformer
+  alias Hologram.Compiler.IR
   alias Hologram.Compiler.Reflection
 
   alias Hologram.Compiler.{
@@ -22,7 +23,6 @@ defmodule Hologram.Compiler.Transformer do
     ListConcatenationOperatorTransformer,
     ListSubtractionOperatorTransformer,
     ListTypeTransformer,
-    MacroDefinitionTransformer,
     MapTypeTransformer,
     MatchOperatorTransformer,
     MembershipOperatorTransformer,
@@ -232,8 +232,8 @@ defmodule Hologram.Compiler.Transformer do
     FunctionDefinitionTransformer.transform(ast)
   end
 
-  def transform({:defmacro, _, _} = ast) do
-    MacroDefinitionTransformer.transform(ast)
+  def transform({:defmacro, _, _}) do
+    %IR.IgnoredExpression{type: :macro_definition}
   end
 
   def transform({:defmodule, _, _} = ast) do
