@@ -6,7 +6,17 @@ defmodule Hologram.Compiler.Detransformer do
   end
 
   def detransform(%IR.AdditionOperator{left: left, right: right}) do
-    {:+, [line: 0], [detransform(left), detransform(right)]}
+    left = detransform(left)
+    right = detransform(right)
+
+    {:+, [line: 0], [left, right]}
+  end
+
+  def detransform(%IR.FunctionCall{module: module, function: function, args: args}) do
+    module = detransform(module)
+    args = detransform(args)
+
+    {{:., [line: 0], [module, function]}, [line: 0], args}
   end
 
   def detransform(%IR.ModuleType{segments: segments}) do
