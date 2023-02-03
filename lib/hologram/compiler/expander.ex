@@ -160,7 +160,7 @@ defmodule Hologram.Compiler.Expander do
       expanded_ir
       |> Evaluator.evaluate()
       |> Macro.escape()
-      |> Transformer.transform(context)
+      |> Transformer.transform()
 
     new_context = Context.put_module_attribute(context, name, value)
 
@@ -246,7 +246,7 @@ defmodule Hologram.Compiler.Expander do
       module
       |> apply(:"MACRO-#{function}", [env | args_ast])
       |> Normalizer.normalize()
-      |> Transformer.transform(context)
+      |> Transformer.transform()
 
     case expanded_ir do
       %IR.Block{expressions: expressions} ->
