@@ -1,11 +1,15 @@
 defmodule Hologram.Compiler.Detransformer do
   alias Hologram.Compiler.IR
 
+  def detransform(%IR.AdditionOperator{left: left, right: right}) do
+    {:+, [line: 0], [detransform(left), detransform(right)]}
+  end
+
   def detransform(%IR.IntegerType{value: value}) do
     value
   end
 
   def detransform(%IR.Variable{name: name}) do
-    {name, [], nil}
+    {name, [line: 0], nil}
   end
 end
