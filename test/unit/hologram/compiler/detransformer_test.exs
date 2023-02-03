@@ -21,6 +21,15 @@ defmodule Hologram.Compiler.DetransformerTest do
     assert result == 123
   end
 
+  test "module type" do
+    ir = %IR.ModuleType{module: A.B, segments: [:A, :B]}
+
+    result = Detransformer.detransform(ir)
+    expected = {:__aliases__, [line: 0], [:A, :B]}
+
+    assert result == expected
+  end
+
   test "variable" do
     ir = %IR.Variable{name: :test}
     result = Detransformer.detransform(ir)

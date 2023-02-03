@@ -5,6 +5,10 @@ defmodule Hologram.Compiler.Detransformer do
     {:+, [line: 0], [detransform(left), detransform(right)]}
   end
 
+  def detransform(%IR.ModuleType{segments: segments}) do
+    {:__aliases__, [line: 0], segments}
+  end
+
   def detransform(%IR.IntegerType{value: value}) do
     value
   end
