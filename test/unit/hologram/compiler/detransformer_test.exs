@@ -4,6 +4,13 @@ defmodule Hologram.Compiler.DetransformerTest do
   alias Hologram.Compiler.Detransformer
   alias Hologram.Compiler.IR
 
+  test "(elixir) list" do
+    ir = [%IR.IntegerType{value: 1}, %IR.IntegerType{value: 2}]
+    result = Detransformer.detransform(ir)
+
+    assert result == [1, 2]
+  end
+
   test "addition operator" do
     left = %IR.IntegerType{value: 1}
     right = %IR.IntegerType{value: 2}

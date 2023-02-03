@@ -1,6 +1,10 @@
 defmodule Hologram.Compiler.Detransformer do
   alias Hologram.Compiler.IR
 
+  def detransform(list) when is_list(list) do
+    Enum.map(list, &detransform/1)
+  end
+
   def detransform(%IR.AdditionOperator{left: left, right: right}) do
     {:+, [line: 0], [detransform(left), detransform(right)]}
   end
