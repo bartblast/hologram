@@ -1,9 +1,10 @@
 defmodule Hologram.Compiler.Evaluator do
-  alias Hologram.Compiler.IR
+  alias Hologram.Compiler.Detransformer
 
-  def evaluate(%IR.AdditionOperator{left: left, right: right}) do
-    evaluate(left) + evaluate(right)
+  def evaluate(ir) do
+    ir
+    |> Detransformer.detransform()
+    |> Code.eval_quoted()
+    |> elem(0)
   end
-
-  def evaluate(%IR.IntegerType{value: value}), do: value
 end
