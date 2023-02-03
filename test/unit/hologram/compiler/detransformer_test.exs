@@ -9,4 +9,10 @@ defmodule Hologram.Compiler.DetransformerTest do
     result = Detransformer.detransform(ir)
     assert result == 123
   end
+
+  test "variable" do
+    ir = %IR.Variable{name: :test}
+    result = Detransformer.detransform(ir)
+    assert result == {:test, [], nil}
+  end
 end

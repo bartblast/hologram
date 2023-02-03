@@ -4,4 +4,8 @@ defmodule Hologram.Compiler.Detransformer do
   def detransform(%IR.IntegerType{value: value}) do
     value
   end
+
+  def detransform(%IR.Variable{name: name}) do
+    {name, [], nil}
+  end
 end
