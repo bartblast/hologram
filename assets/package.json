@@ -1,14 +1,14 @@
 {
   "devDependencies": {
     "chai": "^4",
-    "jsdom": "^20",
+    "jsdom": "^21",
     "lodash": "^4",
     "mocha": "^10",
     "mochapack": "^2",
     "morphdom": "^2",
     "phoenix": "^1.6",
     "prettier": "^2",
-    "sinon": "^14",
+    "sinon": "^15",
     "snabbdom": "^3",
     "webpack": "^5",
     "webpack-node-externals": "^3"
