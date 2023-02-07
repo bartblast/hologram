@@ -3,6 +3,8 @@ defmodule Hologram.Compiler.HelpersTest do
 
   alias Hologram.Compiler.{Context, Helpers, Transformer}
 
+  alias Hologram.Compiler.IR
+
   alias Hologram.Compiler.IR.{
     AtomType,
     Binding,
@@ -455,6 +457,21 @@ defmodule Hologram.Compiler.HelpersTest do
 
   test "module_name/1" do
     assert Helpers.module_name(Abc.Bcd) == "Abc.Bcd"
+  end
+
+  test "term_to_ir/1" do
+    result =
+      %{a: 1, b: 2}
+      |> Helpers.term_to_ir()
+
+    expected = %IR.MapType{
+      data: [
+        {%IR.AtomType{value: :a}, %IR.IntegerType{value: 1}},
+        {%IR.AtomType{value: :b}, %IR.IntegerType{value: 2}}
+      ]
+    }
+
+    assert result == expected
   end
 
   describe "transform_params/1" do
