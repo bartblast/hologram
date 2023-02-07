@@ -14,8 +14,8 @@ defmodule Hologram.Template.Transformer do
     [%TextNode{content: content}]
   end
 
-  def transform({:expression, code}, context) do
-    [%Expression{ir: Reflection.ir(code, context)}]
+  def transform({:expression, code}, _context) do
+    [%Expression{ir: Reflection.ir(code)}]
   end
 
   def transform({type, tag_name, attrs, children}, context) do

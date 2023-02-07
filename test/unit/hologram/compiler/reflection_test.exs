@@ -128,10 +128,9 @@ defmodule Hologram.Compiler.ReflectionTest do
 
   test "ir/1" do
     code = "def fun, do: 1"
-    context = %Context{module: Abc.Bcd}
-    result = Reflection.ir(code, context)
+    result = Reflection.ir(code)
 
-    assert %FunctionDefinition{module: Abc.Bcd} = result
+    assert %FunctionDefinition{name: :fun} = result
   end
 
   describe "is_alias?/1" do

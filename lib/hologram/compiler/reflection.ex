@@ -79,9 +79,10 @@ defmodule Hologram.Compiler.Reflection do
     |> String.replace_suffix("/runtime.ex", "")
   end
 
-  def ir(code, context \\ %Context{}) do
-    ast(code)
-    |> Transformer.transform(context)
+  def ir(code) do
+    code
+    |> ast()
+    |> Transformer.transform()
   end
 
   def is_alias?(term) when is_atom(term) do
