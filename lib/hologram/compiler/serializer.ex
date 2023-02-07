@@ -1,13 +1,14 @@
 defmodule Hologram.Compiler.Serializer do
-  alias Hologram.Compiler.{Context, JSEncoder, Normalizer, Opts, Transformer}
+  alias Hologram.Compiler.Helpers
+  alias Hologram.Compiler.JSEncoder
+  alias Hologram.Compiler.Opts
 
   def serialize(state) do
-    # TODO: pass actual %Context{} struct received from compiler
-    context = %Context{}
+    # TODO: fix
+    context = %Hologram.Compiler.Context{}
 
-    Macro.escape(state)
-    |> Normalizer.normalize()
-    |> Transformer.transform(context)
+    state
+    |> Helpers.term_to_ir()
     |> JSEncoder.encode(context, %Opts{})
   end
 end
