@@ -211,8 +211,11 @@ defmodule Hologram.Compiler.Transformer do
     %StringType{value: ast}
   end
 
-  def transform({:%, _, _} = ast) do
-    StructTypeTransformer.transform(ast)
+  def transform({:%, _, [alias_ast, map_ast]}) do
+    module = transform(alias_ast)
+    data = transform(map_ast).data
+
+    %IR.StructType{module: module, data: data}
   end
 
   def transform({:{}, _, _} = ast) do

@@ -47,7 +47,6 @@ defmodule Hologram.Compiler.TransformerTest do
     RequireDirective,
     StrictBooleanAndOperator,
     StringType,
-    StructType,
     SubtractionOperator,
     Symbol,
     TupleType,
@@ -308,10 +307,19 @@ defmodule Hologram.Compiler.TransformerTest do
     end
 
     test "struct" do
-      code = "%Hologram.Test.Fixtures.Compiler.Transformer.Module2{a: 1}"
+      code = "%A.B{x: 1, y: 2}"
       ast = ast(code)
+      result = Transformer.transform(ast)
 
-      assert %StructType{} = Transformer.transform(ast)
+      expected = %IR.StructType{
+        module: %IR.Alias{segments: [:A, :B]},
+        data: [
+          {%IR.AtomType{value: :x}, %IR.IntegerType{value: 1}},
+          {%IR.AtomType{value: :y}, %IR.IntegerType{value: 2}}
+        ]
+      }
+
+      assert result == expected
     end
 
     test "tuple, 2 elements" do

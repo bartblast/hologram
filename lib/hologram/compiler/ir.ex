@@ -46,7 +46,7 @@ defmodule Hologram.Compiler.IR do
   end
 
   defmodule StructType do
-    defstruct alias_segs: nil, module: nil, data: []
+    defstruct module: nil, data: []
   end
 
   defmodule TupleType do
