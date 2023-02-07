@@ -373,6 +373,14 @@ defmodule Hologram.Compiler.ExpanderTest do
     end
   end
 
+  test "env pseudo-variable" do
+    ir = %IR.EnvPseudoVariable{}
+    context = %Context{module: :module_dummy}
+    result = Expander.expand(ir, context)
+
+    assert {%Macro.Env{}, ^context} = result
+  end
+
   test "function call" do
     ir = %IR.FunctionCall{
       module: A.B,
