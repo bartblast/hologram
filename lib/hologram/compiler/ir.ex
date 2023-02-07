@@ -250,6 +250,16 @@ defmodule Hologram.Compiler.IR do
     defstruct index: nil, kind: :binding_index_access
   end
 
+  # PSEUDO-VARIABLES
+
+  defmodule EnvPseudoVariable do
+    defstruct []
+  end
+
+  defmodule ModulePseudoVariable do
+    defstruct []
+  end
+
   # OTHER
 
   defmodule Alias do
@@ -262,10 +272,6 @@ defmodule Hologram.Compiler.IR do
 
   defmodule IgnoredExpression do
     defstruct type: nil
-  end
-
-  defmodule ModulePseudoVariable do
-    defstruct []
   end
 
   defmodule Quote do

@@ -1,6 +1,7 @@
 defmodule Hologram.Compiler.TransformerTest do
   use Hologram.Test.UnitCase, async: true
 
+  alias Hologram.Compiler.IR
   alias Hologram.Compiler.IR.Alias
   alias Hologram.Compiler.Transformer
 
@@ -29,14 +30,12 @@ defmodule Hologram.Compiler.TransformerTest do
     ListConcatenationOperator,
     ListSubtractionOperator,
     ListType,
-    MacroDefinition,
     MapType,
     MatchOperator,
     MembershipOperator,
     ModuleDefinition,
     ModuleAttributeDefinition,
     ModuleAttributeOperator,
-    ModulePseudoVariable,
     MultiplicationOperator,
     NilType,
     NotEqualToOperator,
@@ -366,20 +365,6 @@ defmodule Hologram.Compiler.TransformerTest do
       assert %FunctionDefinition{} = Transformer.transform(ast)
     end
 
-    test "macro" do
-      code = """
-      defmacro test_macro(a, b) do
-        quote do
-          1
-        end
-      end
-      """
-
-      ast = ast(code)
-
-      assert %MacroDefinition{} = Transformer.transform(ast)
-    end
-
     test "module" do
       code = "defmodule Hologram.Test.Fixtures.Compiler.Transformer.Module1 do end"
       ast = ast(code)
@@ -492,6 +477,24 @@ defmodule Hologram.Compiler.TransformerTest do
     end
   end
 
+  describe "pseudo-variables" do
+    test "__ENV__" do
+      code = "__ENV__"
+      ast = ast(code)
+
+      result = Transformer.transform(ast)
+      assert result == %IR.EnvPseudoVariable{}
+    end
+
+    test "__MODULE__" do
+      code = "__MODULE__"
+      ast = ast(code)
+
+      result = Transformer.transform(ast)
+      assert result == %IR.ModulePseudoVariable{}
+    end
+  end
+
   describe "other" do
     test "alias from aliases tuple" do
       ast = {:__aliases__, [line: 1], [:Abc, :Bcd]}
@@ -506,14 +509,6 @@ defmodule Hologram.Compiler.TransformerTest do
     test "block" do
       ast = {:__block__, [], [1, 2]}
       assert %Block{} = Transformer.transform(ast)
-    end
-
-    test "__MODULE__ macro" do
-      code = "__MODULE__"
-      ast = ast(code)
-
-      result = Transformer.transform(ast)
-      assert result == %ModulePseudoVariable{}
     end
 
     test "quote" do

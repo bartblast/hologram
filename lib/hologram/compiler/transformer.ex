@@ -47,6 +47,7 @@ defmodule Hologram.Compiler.Transformer do
     UseDirectiveTransformer
   }
 
+  alias Hologram.Compiler.IR
   alias Hologram.Compiler.IR.Alias
 
   alias Hologram.Compiler.IR.{
@@ -299,8 +300,12 @@ defmodule Hologram.Compiler.Transformer do
     UnquoteTransformer.transform(ast)
   end
 
+  def transform({:__ENV__, _, _}) do
+    %IR.EnvPseudoVariable{}
+  end
+
   def transform({:__MODULE__, _, _}) do
-    %ModulePseudoVariable{}
+    %IR.ModulePseudoVariable{}
   end
 
   def transform({name, _, args} = ast)
