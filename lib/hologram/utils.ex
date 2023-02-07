@@ -26,6 +26,10 @@ defmodule Hologram.Utils do
     :erlang.binary_to_term(data)
   end
 
+  def keyword_to_map(keyword) do
+    Enum.into(keyword, %{})
+  end
+
   def list_files_recursively(paths) when is_list(paths) do
     paths
     |> Enum.map(&list_files_recursively/1)

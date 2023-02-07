@@ -53,6 +53,13 @@ defmodule Hologram.UtilsTest do
     assert result == data
   end
 
+  test "keyword_to_map/1" do
+    keyword = [a: 1, b: 2, a: 3]
+    result = Utils.keyword_to_map(keyword)
+
+    assert result == %{a: 3, b: 2}
+  end
+
   describe "list_files_recursively/1" do
     test "single path" do
       result = Utils.list_files_recursively("test/unit/fixtures/utils/list_files_recursively")
