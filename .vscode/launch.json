@@ -21,8 +21,8 @@
       "startApps": true,
       "projectDir": "${workspaceRoot}",
       "requireFiles": [
-        "test/**/test_helper.exs",
-        "test/**/*_test.exs"
+        "test/unit/**/test_helper.exs",
+        "test/unit/**/*_test.exs"
       ]
     },
     {
@@ -36,7 +36,7 @@
       "startApps": true,
       "projectDir": "${workspaceRoot}",
       "requireFiles": [
-        "test/**/test_helper.exs",
+        "test/unit/**/test_helper.exs",
         "${relativeFile}"
       ]
     },
