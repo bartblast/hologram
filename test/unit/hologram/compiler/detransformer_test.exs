@@ -32,6 +32,20 @@ defmodule Hologram.Compiler.DetransformerTest do
       assert result == expected
     end
 
+    test "map" do
+      ir = %IR.MapType{
+        data: [
+          {%IR.AtomType{value: :a}, %IR.IntegerType{value: 1}},
+          {%IR.AtomType{value: :b}, %IR.IntegerType{value: 2}}
+        ]
+      }
+
+      result = Detransformer.detransform(ir)
+      expected = {:%{}, [], [a: 1, b: 2]}
+
+      assert result == expected
+    end
+
     test "module" do
       ir = %IR.ModuleType{module: A.B, segments: [:A, :B]}
 
