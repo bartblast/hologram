@@ -378,7 +378,9 @@ defmodule Hologram.Compiler.ExpanderTest do
     context = %Context{module: :module_dummy}
     result = Expander.expand(ir, context)
 
-    assert {%Macro.Env{}, ^context} = result
+    assert {%IR.StructType{
+              module: %IR.ModuleType{module: Macro.Env}
+            }, ^context} = result
   end
 
   test "function call" do

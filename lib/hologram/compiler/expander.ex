@@ -85,7 +85,12 @@ defmodule Hologram.Compiler.Expander do
   end
 
   def expand(%IR.EnvPseudoVariable{}, %Context{} = context) do
-    {Context.build_env(context), context}
+    ir =
+      context
+      |> Context.build_env()
+      |> Helpers.term_to_ir()
+
+    {ir, context}
   end
 
   def expand(%IR.FunctionCall{} = ir, %Context{} = context) do
@@ -163,8 +168,7 @@ defmodule Hologram.Compiler.Expander do
     value =
       expanded_ir
       |> Evaluator.evaluate()
-      |> Macro.escape()
-      |> Transformer.transform()
+      |> Helpers.term_to_ir()
 
     new_context = Context.put_module_attribute(context, name, value)
 
