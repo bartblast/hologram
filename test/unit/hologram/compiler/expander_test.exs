@@ -22,7 +22,7 @@ defmodule Hologram.Compiler.ExpanderTest do
       assert result == {ir, @context}
     end
 
-    test "map type" do
+    test "map" do
       ir = %IR.MapType{
         data: [
           {%IR.Alias{segments: [:A]}, %IR.Alias{segments: [:B]}},
@@ -45,7 +45,7 @@ defmodule Hologram.Compiler.ExpanderTest do
       assert result == expected
     end
 
-    test "module type" do
+    test "module" do
       ir = %IR.ModuleType{module: A.B, segments: [:A, :B]}
       result = Expander.expand(ir, @context)
 

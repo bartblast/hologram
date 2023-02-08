@@ -18,7 +18,7 @@ defmodule Hologram.Compiler.DetransformerTest do
       assert result == 123
     end
 
-    test "list type" do
+    test "list" do
       ir = %IR.ListType{
         data: [
           %IR.AtomType{value: :a},
@@ -32,7 +32,7 @@ defmodule Hologram.Compiler.DetransformerTest do
       assert result == expected
     end
 
-    test "module type" do
+    test "module" do
       ir = %IR.ModuleType{module: A.B, segments: [:A, :B]}
 
       result = Detransformer.detransform(ir)
