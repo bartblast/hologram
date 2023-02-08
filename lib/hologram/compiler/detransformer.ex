@@ -31,6 +31,10 @@ defmodule Hologram.Compiler.Detransformer do
     {:__aliases__, [line: 0], segments}
   end
 
+  def detransform(%IR.NilType{}) do
+    nil
+  end
+
   def detransform(%IR.StructType{module: module_ir, data: data_ir}) do
     acc = [{:__struct__, module_ir.module}]
 

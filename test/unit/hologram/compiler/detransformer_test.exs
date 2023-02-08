@@ -63,6 +63,12 @@ defmodule Hologram.Compiler.DetransformerTest do
     assert result == expected
   end
 
+  test "nil type" do
+    ir = %IR.NilType{}
+    result = Detransformer.detransform(ir)
+    assert result == nil
+  end
+
   test "struct" do
     ir = %IR.StructType{
       module: %IR.ModuleType{
