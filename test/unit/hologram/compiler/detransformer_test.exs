@@ -49,6 +49,24 @@ defmodule Hologram.Compiler.DetransformerTest do
     assert result == expected
   end
 
+  test "struct" do
+    ir = %IR.StructType{
+      module: %IR.ModuleType{
+        module: Hologram.Test.Fixtures.Struct,
+        segments: [:Hologram, :Test, :Fixtures, :Struct]
+      },
+      data: [
+        {%IR.AtomType{value: :a}, %IR.IntegerType{value: 1}},
+        {%IR.AtomType{value: :b}, %IR.IntegerType{value: 2}}
+      ]
+    }
+
+    result = Detransformer.detransform(ir)
+    expected = {:%{}, [], [__struct__: Hologram.Test.Fixtures.Struct, a: 1, b: 2]}
+
+    assert result == expected
+  end
+
   test "variable" do
     ir = %IR.Variable{name: :test}
     result = Detransformer.detransform(ir)

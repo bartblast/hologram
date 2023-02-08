@@ -27,6 +27,19 @@ defmodule Hologram.Compiler.Detransformer do
     {:__aliases__, [line: 0], segments}
   end
 
+  def detransform(%IR.StructType{module: module_ir, data: data_ir}) do
+    acc = [{:__struct__, module_ir.module}]
+
+    data =
+      data_ir
+      |> Enum.reduce(acc, fn {key, value}, acc ->
+        [{key.value, detransform(value)} | acc]
+      end)
+      |> Enum.reverse()
+
+    {:%{}, [], data}
+  end
+
   def detransform(%IR.Variable{name: name}) do
     {name, [line: 0], nil}
   end
