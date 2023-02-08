@@ -1,7 +1,9 @@
 defmodule Hologram.Compiler.Transformer do
   alias Hologram.Compiler.AliasTransformer
+  alias Hologram.Compiler.Helpers
   alias Hologram.Compiler.IR
   alias Hologram.Compiler.Reflection
+  alias Hologram.Utils
 
   alias Hologram.Compiler.{
     AdditionOperatorTransformer,
@@ -23,7 +25,6 @@ defmodule Hologram.Compiler.Transformer do
     ListConcatenationOperatorTransformer,
     ListSubtractionOperatorTransformer,
     ListTypeTransformer,
-    MapTypeTransformer,
     MatchOperatorTransformer,
     MembershipOperatorTransformer,
     ModuleAttributeDefinitionTransformer,
@@ -199,8 +200,21 @@ defmodule Hologram.Compiler.Transformer do
     ListTypeTransformer.transform(ast)
   end
 
-  def transform({:%{}, _, _} = ast) do
-    MapTypeTransformer.transform(ast)
+  def transform({:%{}, _, data}) do
+    {module, new_data} = Keyword.pop(data, :__struct__)
+
+    data_ir =
+      Enum.map(new_data, fn {key, value} ->
+        {transform(key), transform(value)}
+      end)
+
+    if module do
+      segments = Helpers.alias_segments(module)
+      module_ir = %IR.ModuleType{module: module, segments: segments}
+      %IR.StructType{module: module_ir, data: data_ir}
+    else
+      %IR.MapType{data: data_ir}
+    end
   end
 
   def transform(nil) do

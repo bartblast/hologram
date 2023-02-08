@@ -4,6 +4,7 @@ defmodule Hologram.Compiler.TransformerTest do
   alias Hologram.Compiler.IR
   alias Hologram.Compiler.IR.Alias
   alias Hologram.Compiler.Transformer
+  alias Hologram.Test.Fixtures.Struct, as: StructFixture
 
   alias Hologram.Compiler.IR.{
     AccessOperator,
@@ -30,7 +31,6 @@ defmodule Hologram.Compiler.TransformerTest do
     ListConcatenationOperator,
     ListSubtractionOperator,
     ListType,
-    MapType,
     MatchOperator,
     MembershipOperator,
     ModuleDefinition,
@@ -288,7 +288,16 @@ defmodule Hologram.Compiler.TransformerTest do
       code = "%{a: 1, b: 2}"
       ast = ast(code)
 
-      assert %MapType{} = Transformer.transform(ast)
+      result = Transformer.transform(ast)
+
+      expected = %IR.MapType{
+        data: [
+          {%IR.AtomType{value: :a}, %IR.IntegerType{value: 1}},
+          {%IR.AtomType{value: :b}, %IR.IntegerType{value: 2}}
+        ]
+      }
+
+      assert result == expected
     end
 
     test "nil" do
@@ -306,7 +315,7 @@ defmodule Hologram.Compiler.TransformerTest do
       assert result == %StringType{value: "test"}
     end
 
-    test "struct" do
+    test "struct (explicit)" do
       code = "%A.B{x: 1, y: 2}"
       ast = ast(code)
       result = Transformer.transform(ast)
@@ -316,6 +325,27 @@ defmodule Hologram.Compiler.TransformerTest do
         data: [
           {%IR.AtomType{value: :x}, %IR.IntegerType{value: 1}},
           {%IR.AtomType{value: :y}, %IR.IntegerType{value: 2}}
+        ]
+      }
+
+      assert result == expected
+    end
+
+    test "struct (implicit)" do
+      ast =
+        %StructFixture{a: 1, b: 2}
+        |> Macro.escape()
+
+      result = Transformer.transform(ast)
+
+      expected = %IR.StructType{
+        module: %IR.ModuleType{
+          module: Hologram.Test.Fixtures.Struct,
+          segments: [:Hologram, :Test, :Fixtures, :Struct]
+        },
+        data: [
+          {%IR.AtomType{value: :a}, %IR.IntegerType{value: 1}},
+          {%IR.AtomType{value: :b}, %IR.IntegerType{value: 2}}
         ]
       }
 
