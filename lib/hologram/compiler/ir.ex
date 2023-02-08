@@ -1,5 +1,5 @@
 defmodule Hologram.Compiler.IR do
-  # TYPES
+  # DATA TYPES
 
   defmodule AnonymousFunctionType do
     defstruct arity: nil, params: [], bindings: [], body: nil

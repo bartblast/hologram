@@ -14,11 +14,43 @@ defmodule Hologram.Compiler.ExpanderTest do
     }
   }
 
-  test "basic data type (atom, boolean, float, integer, string)" do
-    ir = %IR.IntegerType{value: 123}
-    result = Expander.expand(ir, @context)
+  describe "data types" do
+    test "basic (atom, boolean, float, integer, string)" do
+      ir = %IR.IntegerType{value: 123}
+      result = Expander.expand(ir, @context)
 
-    assert result == {ir, @context}
+      assert result == {ir, @context}
+    end
+
+    test "map type" do
+      ir = %IR.MapType{
+        data: [
+          {%IR.Alias{segments: [:A]}, %IR.Alias{segments: [:B]}},
+          {%IR.Alias{segments: [:C]}, %IR.Alias{segments: [:D]}}
+        ]
+      }
+
+      result = Expander.expand(ir, @context)
+
+      expected =
+        {%IR.MapType{
+           data: [
+             {%IR.ModuleType{module: A, segments: [:A]},
+              %IR.ModuleType{module: B, segments: [:B]}},
+             {%IR.ModuleType{module: C, segments: [:C]},
+              %IR.ModuleType{module: D, segments: [:D]}}
+           ]
+         }, @context}
+
+      assert result == expected
+    end
+
+    test "module type" do
+      ir = %IR.ModuleType{module: A.B, segments: [:A, :B]}
+      result = Expander.expand(ir, @context)
+
+      assert result == {ir, @context}
+    end
   end
 
   test "basic binary operator" do
@@ -626,27 +658,6 @@ defmodule Hologram.Compiler.ExpanderTest do
     assert result == expected
   end
 
-  test "map type" do
-    ir = %IR.MapType{
-      data: [
-        {%IR.Alias{segments: [:A]}, %IR.Alias{segments: [:B]}},
-        {%IR.Alias{segments: [:C]}, %IR.Alias{segments: [:D]}}
-      ]
-    }
-
-    result = Expander.expand(ir, @context)
-
-    expected =
-      {%IR.MapType{
-         data: [
-           {%IR.ModuleType{module: A, segments: [:A]}, %IR.ModuleType{module: B, segments: [:B]}},
-           {%IR.ModuleType{module: C, segments: [:C]}, %IR.ModuleType{module: D, segments: [:D]}}
-         ]
-       }, @context}
-
-    assert result == expected
-  end
-
   test "match access" do
     ir = %IR.MatchAccess{}
     result = Expander.expand(ir, @context)
@@ -852,13 +863,6 @@ defmodule Hologram.Compiler.ExpanderTest do
     result = Expander.expand(ir, context)
 
     assert result == {module, context}
-  end
-
-  test "module type" do
-    ir = %IR.ModuleType{module: A.B, segments: [:A, :B]}
-    result = Expander.expand(ir, @context)
-
-    assert result == {ir, @context}
   end
 
   describe "symbol" do

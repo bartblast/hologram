@@ -58,6 +58,164 @@ defmodule Hologram.Compiler.TransformerTest do
     UseDirective
   }
 
+  describe "data types" do
+    test "anonymous function" do
+      code = "fn -> 1 end"
+      ast = ast(code)
+
+      assert %AnonymousFunctionType{} = Transformer.transform(ast)
+    end
+
+    test "atom" do
+      code = ":test"
+      ast = ast(code)
+
+      result = Transformer.transform(ast)
+      assert result == %AtomType{value: :test}
+    end
+
+    test "binary" do
+      code = "<<1, 2>>"
+      ast = ast(code)
+
+      assert %BinaryType{} = Transformer.transform(ast)
+    end
+
+    test "boolean" do
+      code = "true"
+      ast = ast(code)
+
+      result = Transformer.transform(ast)
+      assert result == %BooleanType{value: true}
+    end
+
+    test "float" do
+      code = "1.0"
+      ast = ast(code)
+
+      result = Transformer.transform(ast)
+      assert result == %FloatType{value: 1.0}
+    end
+
+    test "integer" do
+      code = "1"
+      ast = ast(code)
+
+      result = Transformer.transform(ast)
+      assert result == %IntegerType{value: 1}
+    end
+
+    test "list" do
+      code = "[1, 2]"
+      ast = ast(code)
+
+      assert %ListType{} = Transformer.transform(ast)
+    end
+
+    test "map" do
+      code = "%{a: 1, b: 2}"
+      ast = ast(code)
+
+      result = Transformer.transform(ast)
+
+      expected = %IR.MapType{
+        data: [
+          {%IR.AtomType{value: :a}, %IR.IntegerType{value: 1}},
+          {%IR.AtomType{value: :b}, %IR.IntegerType{value: 2}}
+        ]
+      }
+
+      assert result == expected
+    end
+
+    test "nil" do
+      code = "nil"
+      ast = ast(code)
+
+      assert %NilType{} = Transformer.transform(ast)
+    end
+
+    test "string" do
+      code = "\"test\""
+      ast = ast(code)
+
+      result = Transformer.transform(ast)
+      assert result == %StringType{value: "test"}
+    end
+
+    test "struct (explicit)" do
+      code = "%A.B{x: 1, y: 2}"
+      ast = ast(code)
+      result = Transformer.transform(ast)
+
+      expected = %IR.StructType{
+        module: %IR.Alias{segments: [:A, :B]},
+        data: [
+          {%IR.AtomType{value: :x}, %IR.IntegerType{value: 1}},
+          {%IR.AtomType{value: :y}, %IR.IntegerType{value: 2}}
+        ]
+      }
+
+      assert result == expected
+    end
+
+    test "struct (implicit)" do
+      ast =
+        %StructFixture{a: 1, b: 2}
+        |> Macro.escape()
+
+      result = Transformer.transform(ast)
+
+      expected = %IR.StructType{
+        module: %IR.ModuleType{
+          module: Hologram.Test.Fixtures.Struct,
+          segments: [:Hologram, :Test, :Fixtures, :Struct]
+        },
+        data: [
+          {%IR.AtomType{value: :a}, %IR.IntegerType{value: 1}},
+          {%IR.AtomType{value: :b}, %IR.IntegerType{value: 2}}
+        ]
+      }
+
+      assert result == expected
+    end
+
+    test "tuple, 2 elements" do
+      code = "{1, 2}"
+      ast = ast(code)
+
+      assert %TupleType{} = Transformer.transform(ast)
+    end
+
+    test "tuple, non-2 elements" do
+      code = "{1, 2, 3}"
+      ast = ast(code)
+
+      assert %TupleType{} = Transformer.transform(ast)
+    end
+
+    test "nested" do
+      code = "[1, {2, 3, 4}]"
+      ast = ast(code)
+      result = Transformer.transform(ast)
+
+      expected = %ListType{
+        data: [
+          %IntegerType{value: 1},
+          %TupleType{
+            data: [
+              %IntegerType{value: 2},
+              %IntegerType{value: 3},
+              %IntegerType{value: 4}
+            ]
+          }
+        ]
+      }
+
+      assert result == expected
+    end
+  end
+
   describe "operators" do
     test "access" do
       code = "a[:b]"
@@ -227,164 +385,6 @@ defmodule Hologram.Compiler.TransformerTest do
       ast = ast(code)
 
       assert %UnaryPositiveOperator{} = Transformer.transform(ast)
-    end
-  end
-
-  describe "types" do
-    test "anonymous function" do
-      code = "fn -> 1 end"
-      ast = ast(code)
-
-      assert %AnonymousFunctionType{} = Transformer.transform(ast)
-    end
-
-    test "atom" do
-      code = ":test"
-      ast = ast(code)
-
-      result = Transformer.transform(ast)
-      assert result == %AtomType{value: :test}
-    end
-
-    test "binary" do
-      code = "<<1, 2>>"
-      ast = ast(code)
-
-      assert %BinaryType{} = Transformer.transform(ast)
-    end
-
-    test "boolean" do
-      code = "true"
-      ast = ast(code)
-
-      result = Transformer.transform(ast)
-      assert result == %BooleanType{value: true}
-    end
-
-    test "float" do
-      code = "1.0"
-      ast = ast(code)
-
-      result = Transformer.transform(ast)
-      assert result == %FloatType{value: 1.0}
-    end
-
-    test "integer" do
-      code = "1"
-      ast = ast(code)
-
-      result = Transformer.transform(ast)
-      assert result == %IntegerType{value: 1}
-    end
-
-    test "list" do
-      code = "[1, 2]"
-      ast = ast(code)
-
-      assert %ListType{} = Transformer.transform(ast)
-    end
-
-    test "map" do
-      code = "%{a: 1, b: 2}"
-      ast = ast(code)
-
-      result = Transformer.transform(ast)
-
-      expected = %IR.MapType{
-        data: [
-          {%IR.AtomType{value: :a}, %IR.IntegerType{value: 1}},
-          {%IR.AtomType{value: :b}, %IR.IntegerType{value: 2}}
-        ]
-      }
-
-      assert result == expected
-    end
-
-    test "nil" do
-      code = "nil"
-      ast = ast(code)
-
-      assert %NilType{} = Transformer.transform(ast)
-    end
-
-    test "string" do
-      code = "\"test\""
-      ast = ast(code)
-
-      result = Transformer.transform(ast)
-      assert result == %StringType{value: "test"}
-    end
-
-    test "struct (explicit)" do
-      code = "%A.B{x: 1, y: 2}"
-      ast = ast(code)
-      result = Transformer.transform(ast)
-
-      expected = %IR.StructType{
-        module: %IR.Alias{segments: [:A, :B]},
-        data: [
-          {%IR.AtomType{value: :x}, %IR.IntegerType{value: 1}},
-          {%IR.AtomType{value: :y}, %IR.IntegerType{value: 2}}
-        ]
-      }
-
-      assert result == expected
-    end
-
-    test "struct (implicit)" do
-      ast =
-        %StructFixture{a: 1, b: 2}
-        |> Macro.escape()
-
-      result = Transformer.transform(ast)
-
-      expected = %IR.StructType{
-        module: %IR.ModuleType{
-          module: Hologram.Test.Fixtures.Struct,
-          segments: [:Hologram, :Test, :Fixtures, :Struct]
-        },
-        data: [
-          {%IR.AtomType{value: :a}, %IR.IntegerType{value: 1}},
-          {%IR.AtomType{value: :b}, %IR.IntegerType{value: 2}}
-        ]
-      }
-
-      assert result == expected
-    end
-
-    test "tuple, 2 elements" do
-      code = "{1, 2}"
-      ast = ast(code)
-
-      assert %TupleType{} = Transformer.transform(ast)
-    end
-
-    test "tuple, non-2 elements" do
-      code = "{1, 2, 3}"
-      ast = ast(code)
-
-      assert %TupleType{} = Transformer.transform(ast)
-    end
-
-    test "nested" do
-      code = "[1, {2, 3, 4}]"
-      ast = ast(code)
-      result = Transformer.transform(ast)
-
-      expected = %ListType{
-        data: [
-          %IntegerType{value: 1},
-          %TupleType{
-            data: [
-              %IntegerType{value: 2},
-              %IntegerType{value: 3},
-              %IntegerType{value: 4}
-            ]
-          }
-        ]
-      }
-
-      assert result == expected
     end
   end
 
