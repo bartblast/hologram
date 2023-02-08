@@ -23,6 +23,10 @@ defmodule Hologram.Compiler.Detransformer do
     {{:., [line: 0], [module, function]}, [line: 0], args}
   end
 
+  def detransform(%IR.ListType{data: data}) do
+    detransform(data)
+  end
+
   def detransform(%IR.ModuleType{segments: segments}) do
     {:__aliases__, [line: 0], segments}
   end
