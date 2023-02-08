@@ -14,7 +14,7 @@ defmodule Hologram.Compiler.ExpanderTest do
     }
   }
 
-  test "basic data type" do
+  test "basic data type (atom, boolean, float, integer, string)" do
     ir = %IR.IntegerType{value: 123}
     result = Expander.expand(ir, @context)
 

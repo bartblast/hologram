@@ -5,6 +5,10 @@ defmodule Hologram.Compiler.Detransformer do
     Enum.map(list, &detransform/1)
   end
 
+  def detransform(%{kind: :basic_data_type, value: value}) do
+    value
+  end
+
   def detransform(%IR.AdditionOperator{left: left, right: right}) do
     left = detransform(left)
     right = detransform(right)
@@ -17,10 +21,6 @@ defmodule Hologram.Compiler.Detransformer do
     args = detransform(args)
 
     {{:., [line: 0], [module, function]}, [line: 0], args}
-  end
-
-  def detransform(%IR.IntegerType{value: value}) do
-    value
   end
 
   def detransform(%IR.ModuleType{segments: segments}) do

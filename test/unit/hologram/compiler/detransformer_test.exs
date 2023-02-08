@@ -11,6 +11,12 @@ defmodule Hologram.Compiler.DetransformerTest do
     assert result == [1, 2]
   end
 
+  test "basic data type (atom, boolean, float, integer, string)" do
+    ir = %IR.IntegerType{value: 123}
+    result = Detransformer.detransform(ir)
+    assert result == 123
+  end
+
   test "addition operator" do
     left = %IR.IntegerType{value: 1}
     right = %IR.IntegerType{value: 2}
@@ -32,12 +38,6 @@ defmodule Hologram.Compiler.DetransformerTest do
       {{:., [line: 0], [{:__aliases__, [line: 0], [:A, :B]}, :my_fun]}, [line: 0], [1, 2]}
 
     assert result == expected
-  end
-
-  test "integer type" do
-    ir = %IR.IntegerType{value: 123}
-    result = Detransformer.detransform(ir)
-    assert result == 123
   end
 
   test "module type" do
