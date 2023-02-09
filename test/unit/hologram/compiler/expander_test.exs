@@ -778,6 +778,30 @@ defmodule Hologram.Compiler.ExpanderTest do
                }
              } = result
     end
+
+    test "expression is a macro call" do
+      ir = %IR.ModuleAttributeDefinition{
+        name: :a,
+        expression: %IR.Call{
+          module: nil,
+          function: :is_nil,
+          args: [
+            %IR.IntegerType{value: 999}
+          ]
+        }
+      }
+
+      result = Expander.expand(ir, Context.new())
+
+      assert {
+               %IR.IgnoredExpression{type: :module_attribute_definition},
+               %Context{
+                 module_attributes: %{
+                   a: %IR.BooleanType{value: false}
+                 }
+               }
+             } = result
+    end
   end
 
   test "module attribute operator" do

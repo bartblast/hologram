@@ -171,6 +171,8 @@ defmodule Hologram.Compiler.Expander do
     value =
       expanded_ir
       |> Evaluator.evaluate()
+      |> List.wrap()
+      |> hd()
       |> Helpers.term_to_ir()
 
     new_context = Context.put_module_attribute(context, name, value)
