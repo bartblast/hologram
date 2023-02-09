@@ -32,7 +32,10 @@ defmodule Hologram.Router do
       holo_conn = %Hologram.Conn{params: params}
       bindings = %{}
       output = Renderer.render(page, holo_conn, bindings)
-      Controller.html(phx_conn, output)
+
+      phx_conn
+      |> Controller.html(output)
+      |> Plug.Conn.halt()
     else
       phx_conn
     end
