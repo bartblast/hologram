@@ -71,7 +71,7 @@ defmodule Hologram.Compiler.ReflectionTest do
     end
 
     test "list arg (module segments)" do
-      result = Reflection.ast(@alias_1)
+      result = Reflection.ast(@alias_segs_1)
       assert result == @expected
     end
   end
