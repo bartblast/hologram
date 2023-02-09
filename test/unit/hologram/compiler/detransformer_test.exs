@@ -91,6 +91,17 @@ defmodule Hologram.Compiler.DetransformerTest do
     assert result == expected
   end
 
+  test "equal to operator" do
+    left = %IR.IntegerType{value: 1}
+    right = %IR.IntegerType{value: 2}
+    ir = %IR.EqualToOperator{left: left, right: right}
+
+    result = Detransformer.detransform(ir)
+    expected = {:==, [line: 0], [1, 2]}
+
+    assert result == expected
+  end
+
   test "function call" do
     module = %IR.ModuleType{module: A.B, segments: [:A, :B]}
     args = [%IR.IntegerType{value: 1}, %IR.IntegerType{value: 2}]

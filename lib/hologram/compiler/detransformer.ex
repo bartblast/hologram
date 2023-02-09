@@ -16,6 +16,13 @@ defmodule Hologram.Compiler.Detransformer do
     {:+, [line: 0], [left, right]}
   end
 
+  def detransform(%IR.EqualToOperator{left: left, right: right}) do
+    left = detransform(left)
+    right = detransform(right)
+
+    {:==, [line: 0], [left, right]}
+  end
+
   def detransform(%IR.FunctionCall{module: module, function: function, args: args}) do
     module = detransform(module)
     args = detransform(args)
