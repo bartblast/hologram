@@ -191,9 +191,7 @@ defmodule Hologram.Compiler.ExpanderTest do
   describe "call" do
     test "current module function called without alias" do
       args = [%IR.Alias{segments: [:A, :B]}, %IR.Alias{segments: [:C, :D]}]
-      args_ast = [{:__aliases__, [line: 1], [:A, :B]}, {:__aliases__, [line: 1], [:C, :D]}]
-
-      ir = %IR.Call{module: nil, function: :my_fun, args: args, args_ast: args_ast}
+      ir = %IR.Call{module: nil, function: :my_fun, args: args}
       context = %Context{module: E.F}
       result = Expander.expand(ir, context)
 
@@ -214,9 +212,7 @@ defmodule Hologram.Compiler.ExpanderTest do
 
     test "imported function called without alias" do
       args = [%IR.Alias{segments: [:A, :B]}, %IR.Alias{segments: [:C, :D]}]
-      args_ast = [{:__aliases__, [line: 1], [:A, :B]}, {:__aliases__, [line: 1], [:C, :D]}]
-
-      ir = %IR.Call{module: nil, function: :my_fun, args: args, args_ast: args_ast}
+      ir = %IR.Call{module: nil, function: :my_fun, args: args}
       context = %Context{functions: %{my_fun: %{2 => E.F}}}
       result = Expander.expand(ir, context)
 
@@ -237,13 +233,11 @@ defmodule Hologram.Compiler.ExpanderTest do
 
     test "function called with alias" do
       args = [%IR.Alias{segments: [:A, :B]}, %IR.Alias{segments: [:C, :D]}]
-      args_ast = [{:__aliases__, [line: 1], [:A, :B]}, {:__aliases__, [line: 1], [:C, :D]}]
 
       ir = %IR.Call{
         module: %IR.Alias{segments: [:E, :F]},
         function: :my_fun,
-        args: args,
-        args_ast: args_ast
+        args: args
       }
 
       result = Expander.expand(ir, %Context{})
@@ -264,7 +258,7 @@ defmodule Hologram.Compiler.ExpanderTest do
     end
 
     test "macro called without alias or args, returning single expression which doesn't change the context" do
-      ir = %IR.Call{module: nil, function: :macro_2a, args: [], args_ast: []}
+      ir = %IR.Call{module: nil, function: :macro_2a, args: []}
 
       context = %Context{
         macros: %{macro_2a: %{0 => Hologram.Test.Fixtures.Compiler.Expander.Module2}}
@@ -282,8 +276,7 @@ defmodule Hologram.Compiler.ExpanderTest do
       ir = %IR.Call{
         module: %IR.Alias{segments: segments},
         function: :macro_2a,
-        args: [],
-        args_ast: []
+        args: []
       }
 
       context = %Context{
@@ -298,15 +291,12 @@ defmodule Hologram.Compiler.ExpanderTest do
 
     test "macro called with args" do
       segments = [:Hologram, :Test, :Fixtures, :Compiler, :Expander, :Module2]
-
       args = [%IR.Symbol{name: :x}, %IR.Symbol{name: :y}]
-      args_ast = [{:x, [line: 1], nil}, {:y, [line: 1], nil}]
 
       ir = %IR.Call{
         module: %IR.Alias{segments: segments},
         function: :macro_2d,
-        args: args,
-        args_ast: args_ast
+        args: args
       }
 
       context = %Context{
@@ -329,7 +319,7 @@ defmodule Hologram.Compiler.ExpanderTest do
     end
 
     test "macro returning multiple expressions" do
-      ir = %IR.Call{module: nil, function: :macro_2b, args: [], args_ast: []}
+      ir = %IR.Call{module: nil, function: :macro_2b, args: []}
 
       context = %Context{
         macros: %{macro_2b: %{0 => Hologram.Test.Fixtures.Compiler.Expander.Module2}}
@@ -342,7 +332,7 @@ defmodule Hologram.Compiler.ExpanderTest do
     end
 
     test "macro which changes the context" do
-      ir = %IR.Call{module: nil, function: :macro_2c, args: [], args_ast: []}
+      ir = %IR.Call{module: nil, function: :macro_2c, args: []}
 
       context = %Context{
         macros: %{macro_2c: %{0 => Hologram.Test.Fixtures.Compiler.Expander.Module2}}
@@ -357,7 +347,7 @@ defmodule Hologram.Compiler.ExpanderTest do
     end
 
     test "nested single expression macros, with parenthesis" do
-      ir = %IR.Call{module: nil, function: :macro_3a, args: [], args_ast: []}
+      ir = %IR.Call{module: nil, function: :macro_3a, args: []}
 
       context = %Context{
         macros: %{macro_3a: %{0 => Hologram.Test.Fixtures.Compiler.Expander.Module3}},
@@ -371,7 +361,7 @@ defmodule Hologram.Compiler.ExpanderTest do
     end
 
     test "nested macros without parenthesis" do
-      ir = %IR.Call{module: nil, function: :macro_3b, args: [], args_ast: []}
+      ir = %IR.Call{module: nil, function: :macro_3b, args: []}
 
       context = %Context{
         macros: %{macro_3b: %{0 => Hologram.Test.Fixtures.Compiler.Expander.Module3}},
@@ -385,7 +375,7 @@ defmodule Hologram.Compiler.ExpanderTest do
     end
 
     test "nested multiple expressions macros" do
-      ir = %IR.Call{module: nil, function: :macro_3c, args: [], args_ast: []}
+      ir = %IR.Call{module: nil, function: :macro_3c, args: []}
 
       context = %Context{
         macros: %{macro_3c: %{0 => Hologram.Test.Fixtures.Compiler.Expander.Module3}},
@@ -736,7 +726,7 @@ defmodule Hologram.Compiler.ExpanderTest do
   end
 
   describe "module attribute definition" do
-    test "expression which doesn't use module attributes" do
+    test "expression isn't a macro call and doesn't use other module attributes" do
       ir = %IR.ModuleAttributeDefinition{
         name: :b,
         expression: %IR.AdditionOperator{
@@ -759,7 +749,7 @@ defmodule Hologram.Compiler.ExpanderTest do
              } = result
     end
 
-    test "expression which uses module attributes" do
+    test "expression uses other module attributes" do
       ir = %IR.ModuleAttributeDefinition{
         name: :b,
         expression: %IR.AdditionOperator{

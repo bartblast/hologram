@@ -28,8 +28,7 @@ defmodule Hologram.Compiler.CallTransformer do
     %IR.Call{
       module: build_module(module),
       function: function,
-      args: transform_args(args),
-      args_ast: args
+      args: transform_args(args)
     }
   end
 
