@@ -37,8 +37,8 @@ defmodule Hologram.Compiler.Reflection do
     |> Normalizer.normalize()
   end
 
-  def ast(module_segs) when is_list(module_segs) do
-    Helpers.module(module_segs)
+  def ast(alias_segs) when is_list(alias_segs) do
+    Helpers.module(alias_segs)
     |> ast()
   end
 

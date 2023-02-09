@@ -48,8 +48,8 @@ defmodule Hologram.Compiler.Resolver do
     if aliased_module, do: aliased_module, else: Helpers.module(module_segs)
   end
 
-  defp resolve_to_aliased_module(module_segs, aliases) do
-    resolved = Enum.find(aliases, &(&1.as == module_segs))
+  defp resolve_to_aliased_module(alias_segs, aliases) do
+    resolved = Enum.find(aliases, &(&1.as == alias_segs))
     if resolved, do: resolved.module, else: nil
   end
 

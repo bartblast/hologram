@@ -10,11 +10,11 @@ defmodule Hologram.Compiler.ReflectionTest do
 
   @config_app_path Application.get_env(:hologram, :app_path)
 
+  @alias_segs_1 [:Hologram, :Test, :Fixtures, :Compiler, :Reflection, :Module1]
   @module_1 Hologram.Test.Fixtures.Compiler.Reflection.Module1
   @module_2 Hologram.Test.Fixtures.Compiler.Reflection.Module2
   @module_4 Hologram.Test.Fixtures.Compiler.Reflection.Module4
   @module_6 Hologram.Test.Fixtures.Compiler.Reflection.Module6
-  @module_segs_1 [:Hologram, :Test, :Fixtures, :Compiler, :Reflection, :Module1]
 
   describe "app_path/1" do
     test "default" do
@@ -54,7 +54,7 @@ defmodule Hologram.Compiler.ReflectionTest do
   describe "ast/1" do
     @expected {:defmodule, [line: 1],
                [
-                 {:__aliases__, [line: 1], @module_segs_1},
+                 {:__aliases__, [line: 1], @alias_segs_1},
                  [do: {:__block__, [], []}]
                ]}
 
@@ -71,7 +71,7 @@ defmodule Hologram.Compiler.ReflectionTest do
     end
 
     test "list arg (module segments)" do
-      result = Reflection.ast(@module_segs_1)
+      result = Reflection.ast(@alias_1)
       assert result == @expected
     end
   end
