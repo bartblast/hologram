@@ -1,4 +1,6 @@
 defmodule Hologram.Compiler.Context do
+  alias Hologram.Compiler.Reflection
+
   defstruct aliases: %{},
             block_bindings: [],
             functions: %{},
@@ -10,6 +12,12 @@ defmodule Hologram.Compiler.Context do
   # TODO: build env fields based on context data
   def build_env(_context) do
     %Macro.Env{}
+  end
+
+  def new do
+    %__MODULE__{}
+    |> put_functions(Kernel, Reflection.functions(Kernel))
+    |> put_macros(Kernel, Reflection.macros(Kernel))
   end
 
   def put_functions(%{functions: defined_functions} = context, module, functions) do

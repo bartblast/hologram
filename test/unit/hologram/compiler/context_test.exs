@@ -8,6 +8,18 @@ defmodule Hologram.Compiler.ContextTest do
     assert result == %Macro.Env{}
   end
 
+  test "new/0" do
+    result = Context.new()
+
+    assert result.functions[:hd] == %{1 => Kernel}
+    assert result.functions[:apply] == %{2 => Kernel, 3 => Kernel}
+    assert result.functions[:**] == %{2 => Kernel}
+
+    assert result.macros[:def] == %{1 => Kernel, 2 => Kernel}
+    assert result.macros[:sigil_s] == %{2 => Kernel}
+    assert result.macros[:@] == %{1 => Kernel}
+  end
+
   test "put_functions/3" do
     context = %Context{
       functions: %{fun_1: %{1 => Module1, 2 => Module2}, fun_2: %{3 => Module3, 4 => Module4}}
