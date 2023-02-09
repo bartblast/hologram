@@ -1,7 +1,7 @@
 defmodule Hologram do
   @moduledoc ~S'''
 
-  Hologram is a full stack isomorphic Elixir web framework that can be used on top of Phoenix.
+  Hologram is a full-stack isomorphic Elixir web framework that can be used on top of Phoenix.
 
   ## Inspired by
 
@@ -9,7 +9,7 @@ defmodule Hologram do
 
   ## How it works
 
-  The Hologram concept is that your web app is composed from the basic Hologram blocks of Layouts, Pages and Components.
+  The Hologram concept is that your web app is composed of the basic Hologram blocks of Layouts, Pages and Components.
 
   Hologram builds a call graph from the content of your Pages (which must follow some basic conventions) and determines what code is to be used on the client and what code is to be used on the server. Hologram then transpiles the code to be used on the client to JavaScript.
 
@@ -18,11 +18,11 @@ defmodule Hologram do
   Code that is to be run on the client is encapsulated in “actions”, and code that is to be run on the server is encapsulated in “commands”.
   Actions can trigger commands, commands can trigger actions. Both actions and commands can be triggered directly by DOM events.
 
-  The Client communicates with the Server using websockets. There is no boilerplate code required, Hologram automatically works out what is required.
+  The Client communicates with the Server using WebSockets. There is no boilerplate code required, Hologram automatically works out what is required.
 
   ## I want to see some code!
 
-  To see how Hologram app is structured, and see some actual code, take a look at the Hologram’s test app: [hologram/test/e2e](https://github.com/bartblast/hologram/tree/master/test/e2e)
+  To see how a Hologram app is structured, and see some actual code, take a look at the Hologram’s test app: [hologram/test/e2e](https://github.com/bartblast/hologram/tree/master/test/e2e)
 
   ## Basic example
       defmodule MyPage do
@@ -68,28 +68,28 @@ defmodule Hologram do
   to create quantum internet (e.g. by taking advantage of entanglement), there are no workarounds for this problem.
   Not sure if this is even technically possible, though :wink:
 
-  * Better offline support (internet connection loss, poor signal, etc.). Since most of the code is run on the client and you only hit the server to run some command from time to time,
-  Hologram can work offline most of the time. This would also make it possible to create PWA’s or mobile apps through WebView, assuming you use something like LocalStorage.
+  * Better offline support (internet connection loss, poor signal, etc.). Since most of the code is run on the client and you only hit the server to run some commands from time to time,
+  Hologram can work offline most of the time. This would also make it possible to create PWAs or mobile apps through WebView, assuming you use something like LocalStorage.
 
-  * Less server RAM used - state is kept in the browser instead of the socket.
+  * Less server RAM is used - the state is kept in the browser instead of the socket.
 
-  * Less CPU used - most of the code is run by the browser not by the server.
+  * Less CPU used - most of the code is run by the browser, not by the server.
 
   * Less bandwidth used - only commands need to communicate with the server, no need to send diffs to rerender components.
 
-  * No state sync problems - state is kept only in one place (browser) and the websocket communication used is stateless.
+  * No state sync problems - the state is kept only in one place (browser) and the WebSockets communication used is stateless.
 
-  * No JS or Alpine.js needed except for communication with some third party scripts or widgets,
+  * No JS or Alpine.js is needed except for communication with some third-party scripts or widgets,
   but this can also be solved by creating some standardized libs for popular packages that would handle the interop.
 
-  * Very friendly to new Elixir converts or beginner devs. I want it to be very, very intuitive, so that you can focus on working on new features in your project instead
+  * Very friendly to new Elixir converts or beginner devs. I want it to be very, very intuitive so that you can focus on working on new features in your project instead
   of solving technical problems and writing boilerplate code.
 
   ## Roadmap
 
-  This is work in progress (although usable and used in production). To check what works and what is planned - take a look at the roadmap in the readme at: [Github bartblast/hologram](https://github.com/bartblast/hologram#readme)
+  This is a work in progress (although usable and used in production). To check what works and what is planned - take a look at the roadmap in the readme at [Github bartblast/hologram](https://github.com/bartblast/hologram#readme)
 
-  To meet the objective of being a very friendly developer experience, Hologram will provide out of the box such things as UI component library (CSS framework agnostic),
+  To meet the objective of being a very friendly developer experience, Hologram will provide out-of-the-box such things as UI component library (CSS framework agnostic),
   authentication, authorization, easy debugging (with time travel), caching, localization and some other features that you typically use in a web app.
 
   I believe that using Hologram’s approach, i.e. Elixir-JS transpilation, code on client and action/command architecture it will be possible to create something as productive as Rails,
@@ -97,8 +97,8 @@ defmodule Hologram do
 
   ## History / background
 
-  I tried to write this kind of framework first in Ruby, and actually managed to create a working prototype, but the performance was not satisfactory.
-  Then I tried Crystal, but it was very hard to work with its AST. Then I moved to Kotlin, but I realised that it’s better to use a dynamically typed language …
+  I tried to write this kind of framework first in Ruby and managed to create a working prototype, but the performance was not satisfactory.
+  Then I tried Crystal, but it was very hard to work with its AST. Then I moved to Kotlin, but I realized that it’s better to use a dynamically typed language …
   Then I found Elixir in 2018 and fell in love with it. I started work on Hologram in the summer of 2020.
 
   '''
