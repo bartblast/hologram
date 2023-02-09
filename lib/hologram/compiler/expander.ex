@@ -214,6 +214,10 @@ defmodule Hologram.Compiler.Expander do
     {ir, context}
   end
 
+  def expand(%IR.NilType{} = ir, %Context{} = context) do
+    {ir, context}
+  end
+
   def expand(%IR.Symbol{name: name}, %Context{} = context) do
     if MapSet.member?(context.variables, name) do
       {%IR.Variable{name: name}, context}

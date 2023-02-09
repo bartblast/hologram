@@ -51,6 +51,13 @@ defmodule Hologram.Compiler.ExpanderTest do
 
       assert result == {ir, @context}
     end
+
+    test "nil" do
+      ir = %IR.NilType{}
+      result = Expander.expand(ir, @context)
+
+      assert result == {ir, @context}
+    end
   end
 
   test "basic binary operator" do
@@ -726,7 +733,7 @@ defmodule Hologram.Compiler.ExpanderTest do
   end
 
   describe "module attribute definition" do
-    test "expression isn't a macro call and doesn't use other module attributes" do
+    test "expression doesn't use other module attributes and isn't a macro call" do
       ir = %IR.ModuleAttributeDefinition{
         name: :b,
         expression: %IR.AdditionOperator{
