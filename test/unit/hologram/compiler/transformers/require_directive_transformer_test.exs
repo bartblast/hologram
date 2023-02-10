@@ -9,7 +9,7 @@ defmodule Hologram.Compiler.RequireDirectiveTransformerTest do
     ast = ast(code)
 
     result = RequireDirectiveTransformer.transform(ast)
-    expected = %RequireDirective{alias_segs: [:Abc, :Bcd], module: nil}
+    expected = %RequireDirective{alias_segs: [:Abc, :Bcd]}
 
     assert result == expected
   end
