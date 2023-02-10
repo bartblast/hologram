@@ -16,7 +16,7 @@ defmodule Hologram.Compiler.Transformer do
   # --- DATA TYPES ---
 
   def transform({:fn, _, [{:->, _, [params, body]}]}) do
-    params = Helpers.transform_params(params)
+    params = transform_params(params)
     arity = Enum.count(params)
     bindings = Helpers.aggregate_bindings_from_params(params)
     body = transform(body)

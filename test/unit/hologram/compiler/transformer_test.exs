@@ -146,8 +146,6 @@ defmodule Hologram.Compiler.TransformerTest do
                %IR.AtomType{value: :a},
                %IR.IntegerType{value: 2}
              ]
-
-      assert result == expected
     end
   end
 end
