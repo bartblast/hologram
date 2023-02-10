@@ -1,4 +1,4 @@
-defmodule Hologram.Compiler.Transformer do
+defmodule Hologram.Compiler.OverhaulTransformer do
   alias Hologram.Compiler.AliasTransformer
   alias Hologram.Compiler.Helpers
   alias Hologram.Compiler.IR
