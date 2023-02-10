@@ -184,18 +184,6 @@ defmodule Hologram.Compiler.OverhaulTransformer do
     BinaryTypeTransformer.transform(ast)
   end
 
-  def transform(ast) when is_boolean(ast) do
-    %BooleanType{value: ast}
-  end
-
-  def transform(ast) when is_float(ast) do
-    %FloatType{value: ast}
-  end
-
-  def transform(ast) when is_integer(ast) do
-    %IntegerType{value: ast}
-  end
-
   def transform(ast) when is_list(ast) do
     ListTypeTransformer.transform(ast)
   end
@@ -215,14 +203,6 @@ defmodule Hologram.Compiler.OverhaulTransformer do
     else
       %IR.MapType{data: data_ir}
     end
-  end
-
-  def transform(nil) do
-    %NilType{}
-  end
-
-  def transform(ast) when is_binary(ast) do
-    %StringType{value: ast}
   end
 
   def transform({:%, _, [alias_ast, map_ast]}) do

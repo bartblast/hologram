@@ -81,30 +81,6 @@ defmodule Hologram.Compiler.OverhaulTransformerTest do
       assert %BinaryType{} = Transformer.transform(ast)
     end
 
-    test "boolean" do
-      code = "true"
-      ast = ast(code)
-
-      result = Transformer.transform(ast)
-      assert result == %BooleanType{value: true}
-    end
-
-    test "float" do
-      code = "1.0"
-      ast = ast(code)
-
-      result = Transformer.transform(ast)
-      assert result == %FloatType{value: 1.0}
-    end
-
-    test "integer" do
-      code = "1"
-      ast = ast(code)
-
-      result = Transformer.transform(ast)
-      assert result == %IntegerType{value: 1}
-    end
-
     test "list" do
       code = "[1, 2]"
       ast = ast(code)
@@ -126,21 +102,6 @@ defmodule Hologram.Compiler.OverhaulTransformerTest do
       }
 
       assert result == expected
-    end
-
-    test "nil" do
-      code = "nil"
-      ast = ast(code)
-
-      assert %NilType{} = Transformer.transform(ast)
-    end
-
-    test "string" do
-      code = "\"test\""
-      ast = ast(code)
-
-      result = Transformer.transform(ast)
-      assert result == %StringType{value: "test"}
     end
 
     test "struct (explicit)" do
