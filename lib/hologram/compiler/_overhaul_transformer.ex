@@ -67,10 +67,6 @@ defmodule Hologram.Compiler.OverhaulTransformer do
 
   # OPERATORS
 
-  def transform({:+, _, _} = ast) do
-    AdditionOperatorTransformer.transform(ast)
-  end
-
   def transform([{:|, _, _}] = ast) do
     ConsOperatorTransformer.transform(ast)
   end

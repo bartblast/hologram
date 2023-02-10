@@ -83,6 +83,13 @@ defmodule Hologram.Compiler.Transformer do
 
   # --- OPERATORS ---
 
+  def transform({:+, _, [left, right]}) do
+    %IR.AdditionOperator{
+      left: transform(left),
+      right: transform(right)
+    }
+  end
+
   def transform({:=, _, [left, right]}) do
     left = transform(left)
 
