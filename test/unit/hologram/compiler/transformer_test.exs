@@ -233,8 +233,8 @@ defmodule Hologram.Compiler.TransformerTest do
       params = [{:a, [line: 1], nil}, {:b, [line: 1], nil}]
 
       assert transform_params(params) == [
-               %IR.Variable{name: :a},
-               %IR.Variable{name: :b}
+               %IR.Symbol{name: :a},
+               %IR.Symbol{name: :b}
              ]
     end
 
