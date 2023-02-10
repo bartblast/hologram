@@ -128,6 +128,11 @@ defmodule Hologram.Compiler.TransformerTest do
            }
   end
 
+  test "symbol" do
+    ast = ast("a")
+    assert transform(ast) == %Symbol{name: :a}
+  end
+
   # --- HELPERS ---
 
   describe "transform_params/1" do

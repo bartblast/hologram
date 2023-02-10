@@ -35,6 +35,10 @@ defmodule Hologram.Compiler.IR do
     defstruct type: nil, ast: nil
   end
 
+  defmodule Symbol do
+    defstruct name: nil
+  end
+
   # --- OVERHAUL ---
 
   # DATA TYPES
@@ -286,10 +290,6 @@ defmodule Hologram.Compiler.IR do
 
   defmodule Quote do
     defstruct body: nil
-  end
-
-  defmodule Symbol do
-    defstruct name: nil
   end
 
   defmodule Typespec do

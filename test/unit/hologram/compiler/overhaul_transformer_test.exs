@@ -505,14 +505,6 @@ defmodule Hologram.Compiler.OverhaulTransformerTest do
       assert %Quote{} = Transformer.transform(ast)
     end
 
-    test "symbol" do
-      code = "a"
-      ast = ast(code)
-
-      result = Transformer.transform(ast)
-      assert result == %Symbol{name: :a}
-    end
-
     test "typespec" do
       code = "@spec test_fun(atom()) :: list(integer())"
       ast = ast(code)

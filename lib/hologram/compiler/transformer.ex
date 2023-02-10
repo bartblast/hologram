@@ -59,6 +59,10 @@ defmodule Hologram.Compiler.Transformer do
     %IR.Block{expressions: ir}
   end
 
+  def transform({name, _, _}) when is_atom(name) do
+    %IR.Symbol{name: name}
+  end
+
   # --- HELPERS ---
 
   def transform_params(params) do
