@@ -169,11 +169,7 @@ defmodule Hologram.Compiler.OverhaulTransformer do
   # TYPES
 
   def transform(ast) when is_atom(ast) and ast not in [nil, false, true] do
-    if Reflection.is_alias?(ast) do
-      AliasTransformer.transform(ast)
-    else
-      %AtomType{value: ast}
-    end
+    %AtomType{value: ast}
   end
 
   def transform({:<<>>, _, _} = ast) do
@@ -276,10 +272,6 @@ defmodule Hologram.Compiler.OverhaulTransformer do
   end
 
   # OTHER
-
-  def transform({:__aliases__, _, segments}) do
-    %Alias{segments: segments}
-  end
 
   def transform({:quote, _, _} = ast) do
     QuoteTransformer.transform(ast)

@@ -54,6 +54,10 @@ defmodule Hologram.Compiler.Transformer do
 
   # --- OTHER IR ---
 
+  def transform({:__aliases__, _, segments}) do
+    %IR.Alias{segments: segments}
+  end
+
   def transform({:__block__, _, ast}) do
     ir = Enum.map(ast, &transform/1)
     %IR.Block{expressions: ir}

@@ -488,16 +488,6 @@ defmodule Hologram.Compiler.OverhaulTransformerTest do
   end
 
   describe "other" do
-    test "alias from aliases tuple" do
-      ast = {:__aliases__, [line: 1], [:Abc, :Bcd]}
-      assert %Alias{} = Transformer.transform(ast)
-    end
-
-    test "alias from atom" do
-      ast = Abc.Bcd
-      assert %Alias{} = Transformer.transform(ast)
-    end
-
     test "quote" do
       code = "quote do 1 end"
       ast = ast(code)

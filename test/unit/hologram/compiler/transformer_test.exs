@@ -117,6 +117,13 @@ defmodule Hologram.Compiler.TransformerTest do
 
   # --- OTHER IR ---
 
+  test "alias" do
+    # A.B
+    ast = {:__aliases__, [line: 1], [:A, :B]}
+
+    assert transform(ast) == %IR.Alias{segments: [:A, :B]}
+  end
+
   test "block" do
     ast = {:__block__, [], [1, 2]}
 
@@ -130,7 +137,7 @@ defmodule Hologram.Compiler.TransformerTest do
 
   test "symbol" do
     ast = ast("a")
-    assert transform(ast) == %Symbol{name: :a}
+    assert transform(ast) == %IR.Symbol{name: :a}
   end
 
   # --- HELPERS ---

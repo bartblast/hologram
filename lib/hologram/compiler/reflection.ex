@@ -86,7 +86,8 @@ defmodule Hologram.Compiler.Reflection do
   end
 
   def is_alias?(term) when is_atom(term) do
-    to_string(term)
+    term
+    |> to_string()
     |> String.starts_with?("Elixir.")
   end
 
