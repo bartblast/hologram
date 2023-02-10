@@ -23,8 +23,8 @@ defmodule Hologram.Compiler.TransformerTest do
 
       assert %IR.AnonymousFunctionType{
                params: [
-                 %IR.Variable{name: :a},
-                 %IR.Variable{name: :b}
+                 %IR.Symbol{name: :a},
+                 %IR.Symbol{name: :b}
                ]
              } = transform(ast)
     end
