@@ -17,18 +17,18 @@ defmodule Hologram.Compiler.IR do
     defstruct value: nil, kind: :basic_data_type
   end
 
-  # --- OTHER IR ---
-
-  defmodule NotSupportedExpression do
-    defstruct type: nil, ast: nil
-  end
-
   defmodule NilType do
     defstruct []
   end
 
   defmodule StringType do
     defstruct value: nil, kind: :basic_data_type
+  end
+
+  # --- OTHER IR ---
+
+  defmodule NotSupportedExpression do
+    defstruct type: nil, ast: nil
   end
 
   # --- OVERHAUL ---
