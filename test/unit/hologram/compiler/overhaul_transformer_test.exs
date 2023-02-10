@@ -4,7 +4,6 @@ defmodule Hologram.Compiler.OverhaulTransformerTest do
   alias Hologram.Compiler.IR
   alias Hologram.Compiler.IR.Alias
   alias Hologram.Compiler.Transformer
-  alias Hologram.Test.Fixtures.Struct, as: StructFixture
 
   alias Hologram.Compiler.IR.{
     AccessOperator,
@@ -71,59 +70,6 @@ defmodule Hologram.Compiler.OverhaulTransformerTest do
       ast = ast(code)
 
       assert %ListType{} = Transformer.transform(ast)
-    end
-
-    test "map" do
-      code = "%{a: 1, b: 2}"
-      ast = ast(code)
-
-      result = Transformer.transform(ast)
-
-      expected = %IR.MapType{
-        data: [
-          {%IR.AtomType{value: :a}, %IR.IntegerType{value: 1}},
-          {%IR.AtomType{value: :b}, %IR.IntegerType{value: 2}}
-        ]
-      }
-
-      assert result == expected
-    end
-
-    test "struct (explicit)" do
-      code = "%A.B{x: 1, y: 2}"
-      ast = ast(code)
-      result = Transformer.transform(ast)
-
-      expected = %IR.StructType{
-        module: %IR.Alias{segments: [:A, :B]},
-        data: [
-          {%IR.AtomType{value: :x}, %IR.IntegerType{value: 1}},
-          {%IR.AtomType{value: :y}, %IR.IntegerType{value: 2}}
-        ]
-      }
-
-      assert result == expected
-    end
-
-    test "struct (implicit)" do
-      ast =
-        %StructFixture{a: 1, b: 2}
-        |> Macro.escape()
-
-      result = Transformer.transform(ast)
-
-      expected = %IR.StructType{
-        module: %IR.ModuleType{
-          module: Hologram.Test.Fixtures.Struct,
-          segments: [:Hologram, :Test, :Fixtures, :Struct]
-        },
-        data: [
-          {%IR.AtomType{value: :a}, %IR.IntegerType{value: 1}},
-          {%IR.AtomType{value: :b}, %IR.IntegerType{value: 2}}
-        ]
-      }
-
-      assert result == expected
     end
 
     test "tuple, 2 elements" do

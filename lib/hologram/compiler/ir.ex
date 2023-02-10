@@ -21,12 +21,20 @@ defmodule Hologram.Compiler.IR do
     defstruct value: nil, kind: :basic_data_type
   end
 
+  defmodule MapType do
+    defstruct data: []
+  end
+
   defmodule NilType do
     defstruct []
   end
 
   defmodule StringType do
     defstruct value: nil, kind: :basic_data_type
+  end
+
+  defmodule StructType do
+    defstruct module: nil, data: []
   end
 
   # --- OPERATORS ---
@@ -79,16 +87,8 @@ defmodule Hologram.Compiler.IR do
     defstruct data: []
   end
 
-  defmodule MapType do
-    defstruct data: []
-  end
-
   defmodule ModuleType do
     defstruct module: nil, segments: nil
-  end
-
-  defmodule StructType do
-    defstruct module: nil, data: []
   end
 
   defmodule TupleType do

@@ -134,6 +134,48 @@ defmodule Hologram.Compiler.TransformerTest do
     assert transform(ast) == %IR.IntegerType{value: 1}
   end
 
+  test "map type " do
+    # %{a: 1, b: 2}
+    ast = {:%{}, [line: 1], [a: 1, b: 2]}
+
+    assert transform(ast) == %IR.MapType{
+             data: [
+               {%IR.AtomType{value: :a}, %IR.IntegerType{value: 1}},
+               {%IR.AtomType{value: :b}, %IR.IntegerType{value: 2}}
+             ]
+           }
+  end
+
+  test "struct type (explicit)" do
+    # %A.B{x: 1, y: 2}
+    ast = {:%, [line: 1], [{:__aliases__, [line: 1], [:A, :B]}, {:%{}, [line: 1], [x: 1, y: 2]}]}
+
+    assert transform(ast) == %IR.StructType{
+             module: %IR.Alias{segments: [:A, :B]},
+             data: [
+               {%IR.AtomType{value: :x}, %IR.IntegerType{value: 1}},
+               {%IR.AtomType{value: :y}, %IR.IntegerType{value: 2}}
+             ]
+           }
+  end
+
+  test "struct type (implicit)" do
+    ast =
+      %Hologram.Test.Fixtures.Struct{a: 1, b: 2}
+      |> Macro.escape()
+
+    assert transform(ast) == %IR.StructType{
+             module: %IR.ModuleType{
+               module: Hologram.Test.Fixtures.Struct,
+               segments: [:Hologram, :Test, :Fixtures, :Struct]
+             },
+             data: [
+               {%IR.AtomType{value: :a}, %IR.IntegerType{value: 1}},
+               {%IR.AtomType{value: :b}, %IR.IntegerType{value: 2}}
+             ]
+           }
+  end
+
   test "nil type" do
     # nil
     ast = nil
@@ -159,7 +201,7 @@ defmodule Hologram.Compiler.TransformerTest do
          {:%{}, [line: 1], [a: 1, b: 2]}
        ]}
 
-    assert %IR.MatchOperator{
+    assert transform(ast) == %IR.MatchOperator{
              bindings: [
                %IR.Binding{
                  name: :x,
@@ -182,7 +224,7 @@ defmodule Hologram.Compiler.TransformerTest do
                  {%IR.AtomType{value: :b}, %IR.IntegerType{value: 2}}
                ]
              }
-           } = transform(ast)
+           }
   end
 
   # --- OTHER IR ---
