@@ -115,6 +115,19 @@ defmodule Hologram.Compiler.TransformerTest do
     assert transform(ast) == %IR.StringType{value: "test"}
   end
 
+  # --- OTHER IR ---
+
+  test "block" do
+    ast = {:__block__, [], [1, 2]}
+
+    assert transform(ast) == %IR.Block{
+             expressions: [
+               %IR.IntegerType{value: 1},
+               %IR.IntegerType{value: 2}
+             ]
+           }
+  end
+
   # --- HELPERS ---
 
   describe "transform_params/1" do

@@ -27,6 +27,10 @@ defmodule Hologram.Compiler.IR do
 
   # --- OTHER IR ---
 
+  defmodule Block do
+    defstruct expressions: []
+  end
+
   defmodule NotSupportedExpression do
     defstruct type: nil, ast: nil
   end
@@ -274,10 +278,6 @@ defmodule Hologram.Compiler.IR do
 
   defmodule Alias do
     defstruct segments: nil
-  end
-
-  defmodule Block do
-    defstruct expressions: []
   end
 
   defmodule IgnoredExpression do

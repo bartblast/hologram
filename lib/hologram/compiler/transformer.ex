@@ -52,6 +52,13 @@ defmodule Hologram.Compiler.Transformer do
     %IR.StringType{value: ast}
   end
 
+  # --- OTHER IR ---
+
+  def transform({:__block__, _, ast}) do
+    ir = Enum.map(ast, &transform/1)
+    %IR.Block{expressions: ir}
+  end
+
   # --- HELPERS ---
 
   def transform_params(params) do

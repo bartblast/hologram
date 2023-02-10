@@ -281,10 +281,6 @@ defmodule Hologram.Compiler.OverhaulTransformer do
     %Alias{segments: segments}
   end
 
-  def transform({:__block__, _, _} = ast) do
-    BlockTransformer.transform(ast)
-  end
-
   def transform({:quote, _, _} = ast) do
     QuoteTransformer.transform(ast)
   end

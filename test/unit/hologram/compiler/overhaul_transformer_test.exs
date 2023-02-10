@@ -498,11 +498,6 @@ defmodule Hologram.Compiler.OverhaulTransformerTest do
       assert %Alias{} = Transformer.transform(ast)
     end
 
-    test "block" do
-      ast = {:__block__, [], [1, 2]}
-      assert %Block{} = Transformer.transform(ast)
-    end
-
     test "quote" do
       code = "quote do 1 end"
       ast = ast(code)
