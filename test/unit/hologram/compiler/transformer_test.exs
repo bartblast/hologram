@@ -115,7 +115,7 @@ defmodule Hologram.Compiler.TransformerTest do
     assert transform(ast) == %IR.StringType{value: "test"}
   end
 
-  # --- HELPERS ---ast
+  # --- HELPERS ---
 
   describe "transform_params/1" do
     test "function definition without params" do
