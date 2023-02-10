@@ -227,6 +227,15 @@ defmodule Hologram.Compiler.TransformerTest do
            }
   end
 
+  test "unary positive operator" do
+    # +2
+    ast = {:+, [line: 1], [2]}
+
+    assert transform(ast) == %IR.UnaryPositiveOperator{
+             value: %IR.IntegerType{value: 2}
+           }
+  end
+
   # --- OTHER IR ---
 
   test "alias" do

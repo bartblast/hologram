@@ -102,6 +102,12 @@ defmodule Hologram.Compiler.Transformer do
     }
   end
 
+  def transform({:+, _, [value]}) do
+    %IR.UnaryPositiveOperator{
+      value: transform(value)
+    }
+  end
+
   # --- OTHER IR ---
 
   def transform({:__aliases__, _, segments}) do

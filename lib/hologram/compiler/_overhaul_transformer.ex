@@ -67,11 +67,6 @@ defmodule Hologram.Compiler.OverhaulTransformer do
 
   # OPERATORS
 
-  # must be defined before binary addition operator
-  def transform({:+, _, [_]} = ast) do
-    UnaryPositiveOperatorTransformer.transform(ast)
-  end
-
   def transform({:+, _, _} = ast) do
     AdditionOperatorTransformer.transform(ast)
   end

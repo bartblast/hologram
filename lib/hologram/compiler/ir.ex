@@ -43,6 +43,10 @@ defmodule Hologram.Compiler.IR do
     defstruct bindings: [], left: nil, right: nil
   end
 
+  defmodule UnaryPositiveOperator do
+    defstruct value: nil
+  end
+
   # --- BINDINGS ---
 
   defmodule Binding do
@@ -174,10 +178,6 @@ defmodule Hologram.Compiler.IR do
   end
 
   defmodule UnaryNegativeOperator do
-    defstruct value: nil
-  end
-
-  defmodule UnaryPositiveOperator do
     defstruct value: nil
   end
 
