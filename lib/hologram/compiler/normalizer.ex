@@ -1,4 +1,7 @@
 defmodule Hologram.Compiler.Normalizer do
+  alias Hologram.Compiler.Helpers
+  alias Hologram.Compiler.Reflection
+
   def normalize({:case, line, [condition, [do: clauses]]}) do
     {:case, line, [condition, [do: normalize(clauses)]]}
   end
@@ -33,6 +36,15 @@ defmodule Hologram.Compiler.Normalizer do
 
   def normalize(else: expr) do
     [else: {:__block__, [], [normalize(expr)]}]
+  end
+
+  def normalize(ast) when is_atom(ast) do
+    if Reflection.is_alias?(ast) do
+      segments = Helpers.alias_segments(ast)
+      {:__aliases__, [alias: false], segments}
+    else
+      ast
+    end
   end
 
   def normalize(ast) when is_list(ast) do

@@ -290,6 +290,16 @@ defmodule Hologram.Compiler.NormalizerTest do
     end
   end
 
+  describe "atom" do
+    test "alias" do
+      assert Normalizer.normalize(A.B) == {:__aliases__, [alias: false], [:A, :B]}
+    end
+
+    test "non-alias" do
+      assert Normalizer.normalize(:a) == :a
+    end
+  end
+
   test "other types of expressions" do
     code = "1 + 2"
     ast = Parser.parse!(code)
