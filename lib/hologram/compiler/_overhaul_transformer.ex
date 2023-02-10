@@ -168,10 +168,6 @@ defmodule Hologram.Compiler.OverhaulTransformer do
 
   # TYPES
 
-  def transform({:fn, _, _} = ast) do
-    AnonymousFunctionTypeTransformer.transform(ast)
-  end
-
   def transform(ast) when is_atom(ast) and ast not in [nil, false, true] do
     if Reflection.is_alias?(ast) do
       AliasTransformer.transform(ast)

@@ -1,4 +1,5 @@
 defmodule Hologram.Compiler.Transformer do
+  alias Hologram.Compiler.Helpers
   alias Hologram.Compiler.IR
 
   @doc """
@@ -13,6 +14,23 @@ defmodule Hologram.Compiler.Transformer do
   def transform(ast)
 
   # --- DATA TYPES ---
+
+  def transform({:fn, _, [{:->, _, [params, body]}]}) do
+    params = Helpers.transform_params(params)
+    arity = Enum.count(params)
+    bindings = Helpers.aggregate_bindings_from_params(params)
+    body = transform(body)
+
+    %IR.AnonymousFunctionType{arity: arity, params: params, bindings: bindings, body: body}
+  end
+
+  # TODO: implement anonymous functions with multiple clauses
+  def transform({:fn, _, _} = ast) do
+    %IR.NotSupportedExpression{
+      type: :multi_clause_anonymous_function_type,
+      ast: ast
+    }
+  end
 
   def transform(ast) when is_boolean(ast) do
     %IR.BooleanType{value: ast}

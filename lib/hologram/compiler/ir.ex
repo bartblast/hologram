@@ -297,6 +297,6 @@ defmodule Hologram.Compiler.IR do
   # NOT SUPPORTED
 
   defmodule NotSupportedExpression do
-    defstruct ast: nil, type: nil
+    defstruct type: nil, ast: nil
   end
 end

@@ -59,13 +59,6 @@ defmodule Hologram.Compiler.OverhaulTransformerTest do
   }
 
   describe "data types" do
-    test "anonymous function" do
-      code = "fn -> 1 end"
-      ast = ast(code)
-
-      assert %AnonymousFunctionType{} = Transformer.transform(ast)
-    end
-
     test "atom" do
       code = ":test"
       ast = ast(code)
