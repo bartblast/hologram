@@ -1,6 +1,7 @@
 defmodule Hologram.Compiler.Transformer do
   alias Hologram.Compiler.Helpers
   alias Hologram.Compiler.IR
+  alias Hologram.Compiler.PatternDeconstructor
 
   @doc """
   Transforms Elixir AST to Hologram IR.
@@ -50,6 +51,27 @@ defmodule Hologram.Compiler.Transformer do
 
   def transform(ast) when is_binary(ast) do
     %IR.StringType{value: ast}
+  end
+
+  # --- OPERATORS ---
+
+  def transform({:=, _, [left, right]}) do
+    left = transform(left)
+
+    bindings =
+      left
+      |> PatternDeconstructor.deconstruct()
+      |> Enum.map(fn path ->
+        [head | tail] = Enum.reverse(path)
+        access_path = [%IR.MatchAccess{} | Enum.reverse(tail)]
+        %IR.Binding{name: head.name, access_path: access_path}
+      end)
+
+    %IR.MatchOperator{
+      bindings: bindings,
+      left: left,
+      right: transform(right)
+    }
   end
 
   # --- OTHER IR ---

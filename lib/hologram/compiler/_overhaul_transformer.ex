@@ -104,10 +104,6 @@ defmodule Hologram.Compiler.OverhaulTransformer do
     ListSubtractionOperatorTransformer.transform(ast)
   end
 
-  def transform({:=, _, _} = ast) do
-    MatchOperatorTransformer.transform(ast)
-  end
-
   def transform({:in, _, _} = ast) do
     MembershipOperatorTransformer.transform(ast)
   end

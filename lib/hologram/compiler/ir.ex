@@ -25,6 +25,12 @@ defmodule Hologram.Compiler.IR do
     defstruct value: nil, kind: :basic_data_type
   end
 
+  # --- OPERATORS ---
+
+  defmodule MatchOperator do
+    defstruct bindings: [], left: nil, right: nil
+  end
+
   # --- OTHER IR ---
 
   defmodule Alias do
@@ -111,10 +117,6 @@ defmodule Hologram.Compiler.IR do
 
   defmodule ListSubtractionOperator do
     defstruct left: nil, right: nil, kind: :basic_binary_operator
-  end
-
-  defmodule MatchOperator do
-    defstruct bindings: [], left: nil, right: nil
   end
 
   defmodule MembershipOperator do

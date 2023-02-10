@@ -141,6 +141,43 @@ defmodule Hologram.Compiler.TransformerTest do
     assert transform(ast) == %IR.StringType{value: "test"}
   end
 
+  # --- OPERATORS ---
+
+  test "match operator" do
+    # %{a: x, b: y} = %{a: 1, b: 2}
+    ast =
+      {:=, [line: 1],
+       [
+         {:%{}, [line: 1], [a: {:x, [line: 1], nil}, b: {:y, [line: 1], nil}]},
+         {:%{}, [line: 1], [a: 1, b: 2]}
+       ]}
+
+    assert %IR.MatchOperator{
+             bindings: [
+               %IR.Binding{
+                 name: :x,
+                 access_path: [%IR.MatchAccess{}, %IR.MapAccess{key: %IR.AtomType{value: :a}}]
+               },
+               %IR.Binding{
+                 name: :y,
+                 access_path: [%IR.MatchAccess{}, %IR.MapAccess{key: %IR.AtomType{value: :b}}]
+               }
+             ],
+             left: %IR.MapType{
+               data: [
+                 {%IR.AtomType{value: :a}, %IR.Symbol{name: :x}},
+                 {%IR.AtomType{value: :b}, %IR.Symbol{name: :y}}
+               ]
+             },
+             right: %IR.MapType{
+               data: [
+                 {%IR.AtomType{value: :a}, %IR.IntegerType{value: 1}},
+                 {%IR.AtomType{value: :b}, %IR.IntegerType{value: 2}}
+               ]
+             }
+           } = transform(ast)
+  end
+
   # --- OTHER IR ---
 
   test "alias" do
