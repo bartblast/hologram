@@ -7,12 +7,19 @@ defmodule Hologram.Compiler.TransformerTest do
 
   describe "anonymous function type" do
     test "arity" do
-      ast = ast("fn 1, 2 -> 9 end")
+      # fn 1, 2 -> 9 end
+      ast = {:fn, [line: 1], [{:->, [line: 1], [[1, 2], {:__block__, [], [9]}]}]}
+
       assert %IR.AnonymousFunctionType{arity: 2} = transform(ast)
     end
 
     test "params" do
-      ast = ast("fn a, b -> 9 end")
+      # fn a, b -> 9 end
+      ast =
+        {:fn, [line: 1],
+         [
+           {:->, [line: 1], [[{:a, [line: 1], nil}, {:b, [line: 1], nil}], {:__block__, [], [9]}]}
+         ]}
 
       assert %IR.AnonymousFunctionType{
                params: [
@@ -23,7 +30,16 @@ defmodule Hologram.Compiler.TransformerTest do
     end
 
     test "bindings" do
-      ast = ast("fn 1, %{a: x, b: y} -> 9 end")
+      # fn 1, %{a: x, b: y} -> 9 end
+      ast =
+        {:fn, [line: 1],
+         [
+           {:->, [line: 1],
+            [
+              [1, {:%{}, [line: 1], [a: {:x, [line: 1], nil}, b: {:y, [line: 1], nil}]}],
+              {:__block__, [], [9]}
+            ]}
+         ]}
 
       assert %IR.AnonymousFunctionType{
                bindings: [
@@ -46,21 +62,19 @@ defmodule Hologram.Compiler.TransformerTest do
     end
 
     test "body, single expression" do
-      ast = ast("fn -> 1 end")
+      # fn -> 1 end
+      ast = {:fn, [line: 1], [{:->, [line: 1], [[], {:__block__, [], [1]}]}]}
 
       assert %IR.AnonymousFunctionType{body: %IR.Block{expressions: [%IR.IntegerType{value: 1}]}} =
                transform(ast)
     end
 
     test "body, multiple expressions" do
-      code = """
-      fn ->
-        1
-        2
-      end
-      """
-
-      ast = ast(code)
+      # fn ->
+      #   1
+      #   2
+      # end
+      ast = {:fn, [line: 1], [{:->, [line: 1], [[], {:__block__, [], [1, 2]}]}]}
 
       assert %IR.AnonymousFunctionType{
                body: %IR.Block{
@@ -74,14 +88,16 @@ defmodule Hologram.Compiler.TransformerTest do
 
     # TODO: implement anonymous functions with multiple clauses
     test "multiple clauses" do
-      code = """
-      fn
-        1 -> :a
-        2 -> :b
-      end
-      """
-
-      ast = ast(code)
+      # fn
+      #  1 -> :a
+      #  2 -> :b
+      # end
+      ast =
+        {:fn, [line: 1],
+         [
+           {:->, [line: 2], [[1], {:__block__, [], [:a]}]},
+           {:->, [line: 3], [[2], {:__block__, [], [:b]}]}
+         ]}
 
       assert transform(ast) == %IR.NotSupportedExpression{
                type: :multi_clause_anonymous_function_type,
@@ -91,27 +107,37 @@ defmodule Hologram.Compiler.TransformerTest do
   end
 
   test "boolean type" do
-    ast = ast("true")
+    # true
+    ast = true
+
     assert transform(ast) == %IR.BooleanType{value: true}
   end
 
   test "float type" do
-    ast = ast("1.0")
+    # 1.0
+    ast = 1.0
+
     assert transform(ast) == %IR.FloatType{value: 1.0}
   end
 
   test "integer type" do
-    ast = ast("1")
+    # 1
+    ast = 1
+
     assert transform(ast) == %IR.IntegerType{value: 1}
   end
 
   test "nil type" do
-    ast = ast("nil")
+    # nil
+    ast = nil
+
     assert transform(ast) == %IR.NilType{}
   end
 
   test "string type" do
-    ast = ast(~s("test"))
+    # "test"
+    ast = "test"
+
     assert transform(ast) == %IR.StringType{value: "test"}
   end
 
@@ -125,6 +151,10 @@ defmodule Hologram.Compiler.TransformerTest do
   end
 
   test "block" do
+    # do
+    #   1
+    #   2
+    # end
     ast = {:__block__, [], [1, 2]}
 
     assert transform(ast) == %IR.Block{
@@ -136,7 +166,9 @@ defmodule Hologram.Compiler.TransformerTest do
   end
 
   test "symbol" do
-    ast = ast("a")
+    # a
+    ast = {:a, [line: 1], nil}
+
     assert transform(ast) == %IR.Symbol{name: :a}
   end
 
