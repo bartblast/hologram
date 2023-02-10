@@ -1,4 +1,4 @@
-defmodule Hologram.Compiler.TransformerTest do
+defmodule Hologram.Compiler.OverhaulTransformerTest do
   use Hologram.Test.UnitCase, async: true
 
   alias Hologram.Compiler.IR
