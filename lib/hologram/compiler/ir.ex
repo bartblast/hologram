@@ -1,16 +1,8 @@
 defmodule Hologram.Compiler.IR do
-  # DATA TYPES
+  # --- DATA TYPES ---
 
   defmodule AnonymousFunctionType do
     defstruct arity: nil, params: [], bindings: [], body: nil
-  end
-
-  defmodule AtomType do
-    defstruct value: nil, kind: :basic_data_type
-  end
-
-  defmodule BinaryType do
-    defstruct parts: []
   end
 
   defmodule BooleanType do
@@ -25,6 +17,32 @@ defmodule Hologram.Compiler.IR do
     defstruct value: nil, kind: :basic_data_type
   end
 
+  # --- OTHER IR ---
+
+  defmodule NotSupportedExpression do
+    defstruct type: nil, ast: nil
+  end
+
+  defmodule NilType do
+    defstruct []
+  end
+
+  defmodule StringType do
+    defstruct value: nil, kind: :basic_data_type
+  end
+
+  # --- OVERHAUL ---
+
+  # DATA TYPES
+
+  defmodule AtomType do
+    defstruct value: nil, kind: :basic_data_type
+  end
+
+  defmodule BinaryType do
+    defstruct parts: []
+  end
+
   defmodule ListType do
     defstruct data: []
   end
@@ -35,14 +53,6 @@ defmodule Hologram.Compiler.IR do
 
   defmodule ModuleType do
     defstruct module: nil, segments: nil
-  end
-
-  defmodule NilType do
-    defstruct []
-  end
-
-  defmodule StringType do
-    defstruct value: nil, kind: :basic_data_type
   end
 
   defmodule StructType do
@@ -292,11 +302,5 @@ defmodule Hologram.Compiler.IR do
 
   defmodule Variable do
     defstruct name: nil
-  end
-
-  # NOT SUPPORTED
-
-  defmodule NotSupportedExpression do
-    defstruct type: nil, ast: nil
   end
 end
