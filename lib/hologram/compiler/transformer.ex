@@ -51,4 +51,12 @@ defmodule Hologram.Compiler.Transformer do
   def transform(ast) when is_binary(ast) do
     %IR.StringType{value: ast}
   end
+
+  # --- HELPERS ---
+
+  def transform_params(params) do
+    params
+    |> List.wrap()
+    |> Enum.map(&transform/1)
+  end
 end

@@ -114,4 +114,40 @@ defmodule Hologram.Compiler.TransformerTest do
     ast = ast(~s("test"))
     assert transform(ast) == %IR.StringType{value: "test"}
   end
+
+  # --- HELPERS ---ast
+
+  describe "transform_params/1" do
+    test "function definition without params" do
+      # def test do
+      # end
+      params = nil
+
+      assert transform_params(params) == []
+    end
+
+    test "function definition with params" do
+      # def test(a, b) do
+      # end
+      params = [{:a, [line: 1], nil}, {:b, [line: 1], nil}]
+
+      assert transform_params(params) == [
+               %IR.Variable{name: :a},
+               %IR.Variable{name: :b}
+             ]
+    end
+
+    test "function definition with explicit value pattern matching" do
+      # def test(:a, 2) do
+      # end
+      params = [:a, 2]
+
+      assert transform_params(params) == [
+               %IR.AtomType{value: :a},
+               %IR.IntegerType{value: 2}
+             ]
+
+      assert result == expected
+    end
+  end
 end

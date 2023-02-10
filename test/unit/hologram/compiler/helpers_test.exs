@@ -474,48 +474,6 @@ defmodule Hologram.Compiler.HelpersTest do
     assert result == expected
   end
 
-  describe "transform_params/1" do
-    test "no params" do
-      # def test do
-      # end
-
-      params = nil
-      result = Helpers.transform_params(params)
-
-      assert result == []
-    end
-
-    test "vars" do
-      # def test(a, b) do
-      # end
-
-      params = [{:a, [line: 1], nil}, {:b, [line: 1], nil}]
-      result = Helpers.transform_params(params)
-
-      expected = [
-        %Variable{name: :a},
-        %Variable{name: :b}
-      ]
-
-      assert result == expected
-    end
-
-    test "primitive types" do
-      # def test(:a, 2) do
-      # end
-
-      params = [:a, 2]
-      result = Helpers.transform_params(params)
-
-      expected = [
-        %AtomType{value: :a},
-        %IntegerType{value: 2}
-      ]
-
-      assert result == expected
-    end
-  end
-
   # TODO: fix
   # describe "uses_module?/2" do
   #   @used_module Hologram.Commons.Parser

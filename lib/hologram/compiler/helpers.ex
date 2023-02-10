@@ -159,11 +159,6 @@ defmodule Hologram.Compiler.Helpers do
     |> Transformer.transform()
   end
 
-  def transform_params(params) do
-    if(params, do: params, else: [])
-    |> Enum.map(&Transformer.transform/1)
-  end
-
   @doc """
   Returns true if the first module has a "use" directive for the second module.
   ## Examples
