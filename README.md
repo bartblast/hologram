@@ -361,9 +361,3 @@ without its shortcomings related to scalability, efficiency, etc.
 * Control Flow: Exit, Receive
 * Operators: Custom, Overriding
 * Other: Erlang Libraries
-
-### Work in progress
-
-#### Runtime / Core / Commands
-Done: commands triggered by an action\
-Todo: commands triggered by an event
