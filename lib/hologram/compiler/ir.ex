@@ -35,6 +35,20 @@ defmodule Hologram.Compiler.IR do
     defstruct bindings: [], left: nil, right: nil
   end
 
+  # --- BINDINGS ---
+
+  defmodule Binding do
+    defstruct name: nil, access_path: []
+  end
+
+  defmodule MapAccess do
+    defstruct key: nil
+  end
+
+  defmodule MatchAccess do
+    defstruct []
+  end
+
   # --- OTHER IR ---
 
   defmodule Alias do
@@ -242,10 +256,6 @@ defmodule Hologram.Compiler.IR do
 
   # BINDINGS
 
-  defmodule Binding do
-    defstruct name: nil, access_path: []
-  end
-
   defmodule CaseConditionAccess do
     defstruct []
   end
@@ -255,14 +265,6 @@ defmodule Hologram.Compiler.IR do
   end
 
   defmodule ListTailAccess do
-    defstruct []
-  end
-
-  defmodule MapAccess do
-    defstruct key: nil
-  end
-
-  defmodule MatchAccess do
     defstruct []
   end
 
