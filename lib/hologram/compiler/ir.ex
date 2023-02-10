@@ -5,6 +5,10 @@ defmodule Hologram.Compiler.IR do
     defstruct arity: nil, params: [], bindings: [], body: nil
   end
 
+  defmodule AtomType do
+    defstruct value: nil, kind: :basic_data_type
+  end
+
   defmodule BooleanType do
     defstruct value: nil, kind: :basic_data_type
   end
@@ -52,10 +56,6 @@ defmodule Hologram.Compiler.IR do
   # --- OVERHAUL ---
 
   # DATA TYPES
-
-  defmodule AtomType do
-    defstruct value: nil, kind: :basic_data_type
-  end
 
   defmodule BinaryType do
     defstruct parts: []

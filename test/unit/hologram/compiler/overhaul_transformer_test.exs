@@ -59,14 +59,6 @@ defmodule Hologram.Compiler.OverhaulTransformerTest do
   }
 
   describe "data types" do
-    test "atom" do
-      code = ":test"
-      ast = ast(code)
-
-      result = Transformer.transform(ast)
-      assert result == %AtomType{value: :test}
-    end
-
     test "binary" do
       code = "<<1, 2>>"
       ast = ast(code)
@@ -232,13 +224,6 @@ defmodule Hologram.Compiler.OverhaulTransformerTest do
       ast = ast(code)
 
       assert %ListSubtractionOperator{} = Transformer.transform(ast)
-    end
-
-    test "match" do
-      code = "a = 1"
-      ast = ast(code)
-
-      assert %MatchOperator{} = Transformer.transform(ast)
     end
 
     test "membership" do

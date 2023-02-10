@@ -106,6 +106,13 @@ defmodule Hologram.Compiler.TransformerTest do
     end
   end
 
+  test "atom" do
+    # :test
+    ast = :test
+
+    assert transform(ast) == %IR.AtomType{value: :test}
+  end
+
   test "boolean type" do
     # true
     ast = true

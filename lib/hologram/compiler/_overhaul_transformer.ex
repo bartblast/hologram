@@ -164,10 +164,6 @@ defmodule Hologram.Compiler.OverhaulTransformer do
 
   # TYPES
 
-  def transform(ast) when is_atom(ast) and ast not in [nil, false, true] do
-    %AtomType{value: ast}
-  end
-
   def transform({:<<>>, _, _} = ast) do
     BinaryTypeTransformer.transform(ast)
   end
