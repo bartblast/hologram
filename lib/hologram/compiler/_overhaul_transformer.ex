@@ -1,20 +1,11 @@
 defmodule Hologram.Compiler.OverhaulTransformer do
-  alias Hologram.Compiler.AliasTransformer
-  alias Hologram.Compiler.Helpers
   alias Hologram.Compiler.IR
-  alias Hologram.Compiler.Reflection
-  alias Hologram.Utils
 
   alias Hologram.Compiler.{
-    AdditionOperatorTransformer,
     AliasDirectiveTransformer,
-    AnonymousFunctionTypeTransformer,
     BinaryTypeTransformer,
-    BlockTransformer,
     CallTransformer,
     CaseExpressionTransformer,
-    ConsOperatorTransformer,
-    DivisionOperatorTransformer,
     DotOperatorTransformer,
     EqualToOperatorTransformer,
     ForExpressionTransformer,
@@ -25,7 +16,6 @@ defmodule Hologram.Compiler.OverhaulTransformer do
     ListConcatenationOperatorTransformer,
     ListSubtractionOperatorTransformer,
     ListTypeTransformer,
-    MatchOperatorTransformer,
     MembershipOperatorTransformer,
     ModuleAttributeDefinitionTransformer,
     ModuleDefinitionTransformer,
@@ -38,30 +28,19 @@ defmodule Hologram.Compiler.OverhaulTransformer do
     RelaxedBooleanOrOperatorTransformer,
     RequireDirectiveTransformer,
     StrictBooleanAndOperatorTransformer,
-    StructTypeTransformer,
     SubtractionOperatorTransformer,
     TypeOperatorTransformer,
     TupleTypeTransformer,
     UnaryNegativeOperatorTransformer,
-    UnaryPositiveOperatorTransformer,
     UnquoteTransformer,
     UseDirectiveTransformer
   }
 
   alias Hologram.Compiler.IR
-  alias Hologram.Compiler.IR.Alias
 
   alias Hologram.Compiler.IR.{
-    AtomType,
-    BooleanType,
-    FloatType,
-    IntegerType,
     ModuleAttributeOperator,
-    ModulePseudoVariable,
-    NilType,
     ProtocolDefinition,
-    StringType,
-    Symbol,
     Typespec
   }
 
