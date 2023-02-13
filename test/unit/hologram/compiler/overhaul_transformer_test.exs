@@ -7,20 +7,12 @@ defmodule Hologram.Compiler.OverhaulTransformerTest do
 
   alias Hologram.Compiler.IR.{
     AccessOperator,
-    AdditionOperator,
     AliasDirective,
     AnonymousFunctionCall,
-    AnonymousFunctionType,
-    AtomType,
     BinaryType,
-    Block,
-    BooleanType,
     Call,
     CaseExpression,
-    ConsOperator,
-    DivisionOperator,
     DotOperator,
-    FloatType,
     FunctionDefinition,
     IfExpression,
     ImportDirective,
@@ -29,13 +21,11 @@ defmodule Hologram.Compiler.OverhaulTransformerTest do
     ListConcatenationOperator,
     ListSubtractionOperator,
     ListType,
-    MatchOperator,
     MembershipOperator,
     ModuleDefinition,
     ModuleAttributeDefinition,
     ModuleAttributeOperator,
     MultiplicationOperator,
-    NilType,
     NotEqualToOperator,
     ProtocolDefinition,
     Quote,
@@ -44,14 +34,11 @@ defmodule Hologram.Compiler.OverhaulTransformerTest do
     RelaxedBooleanOrOperator,
     RequireDirective,
     StrictBooleanAndOperator,
-    StringType,
     SubtractionOperator,
-    Symbol,
     TupleType,
     TypeOperator,
     Typespec,
     UnaryNegativeOperator,
-    UnaryPositiveOperator,
     Unquote,
     UseDirective
   }
@@ -234,13 +221,6 @@ defmodule Hologram.Compiler.OverhaulTransformerTest do
       ast = ast(code)
 
       assert %UnaryNegativeOperator{} = Transformer.transform(ast)
-    end
-
-    test "unary positive" do
-      code = "+2"
-      ast = ast(code)
-
-      assert %UnaryPositiveOperator{} = Transformer.transform(ast)
     end
   end
 

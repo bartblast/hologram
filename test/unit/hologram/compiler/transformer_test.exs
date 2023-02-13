@@ -106,7 +106,7 @@ defmodule Hologram.Compiler.TransformerTest do
     end
   end
 
-  test "atom" do
+  test "atom type" do
     # :test
     ast = :test
 
