@@ -212,7 +212,7 @@ defmodule Hologram.Compiler.TransformerTest do
            }
   end
 
-  test "transform/3" do
+  test "division operator" do
     # a / 2
     ast = {:/, [line: 1], [{:a, [line: 1], nil}, 2]}
 
