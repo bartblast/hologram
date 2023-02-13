@@ -20,7 +20,6 @@ defmodule Hologram.Compiler.OverhaulTransformerTest do
     ConsOperator,
     DivisionOperator,
     DotOperator,
-    EqualToOperator,
     FloatType,
     FunctionDefinition,
     IfExpression,
@@ -121,13 +120,6 @@ defmodule Hologram.Compiler.OverhaulTransformerTest do
       ast = ast(code)
 
       assert %DotOperator{} = Transformer.transform(ast)
-    end
-
-    test "equal to" do
-      code = "1 == 2"
-      ast = ast(code)
-
-      assert %EqualToOperator{} = Transformer.transform(ast)
     end
 
     test "less than" do
