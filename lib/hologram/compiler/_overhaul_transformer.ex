@@ -67,10 +67,6 @@ defmodule Hologram.Compiler.OverhaulTransformer do
 
   # OPERATORS
 
-  def transform({:/, _, _} = ast) do
-    DivisionOperatorTransformer.transform(ast)
-  end
-
   def transform({{:., _, _}, _, _} = ast) do
     DotOperatorTransformer.transform(ast)
   end

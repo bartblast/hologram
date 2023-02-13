@@ -97,6 +97,13 @@ defmodule Hologram.Compiler.Transformer do
     }
   end
 
+  def transform({:/, _, [left, right]}) do
+    %IR.DivisionOperator{
+      left: transform(left),
+      right: transform(right)
+    }
+  end
+
   def transform({:=, _, [left, right]}) do
     left = transform(left)
 
