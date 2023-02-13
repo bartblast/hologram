@@ -17,7 +17,6 @@ defmodule Hologram.Compiler.OverhaulTransformerTest do
     IfExpression,
     ImportDirective,
     IntegerType,
-    LessThanOperator,
     ListConcatenationOperator,
     ListSubtractionOperator,
     ListType,
@@ -107,13 +106,6 @@ defmodule Hologram.Compiler.OverhaulTransformerTest do
       ast = ast(code)
 
       assert %DotOperator{} = Transformer.transform(ast)
-    end
-
-    test "less than" do
-      code = "1 < 2"
-      ast = ast(code)
-
-      assert %LessThanOperator{} = Transformer.transform(ast)
     end
 
     test "list concatenation" do

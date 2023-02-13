@@ -12,7 +12,6 @@ defmodule Hologram.Compiler.OverhaulTransformer do
     FunctionDefinitionTransformer,
     IfExpressionTransformer,
     ImportDirectiveTransformer,
-    LessThanOperatorTransformer,
     ListConcatenationOperatorTransformer,
     ListSubtractionOperatorTransformer,
     ListTypeTransformer,
@@ -48,14 +47,6 @@ defmodule Hologram.Compiler.OverhaulTransformer do
 
   def transform({{:., _, _}, _, _} = ast) do
     DotOperatorTransformer.transform(ast)
-  end
-
-  def transform({:==, _, _} = ast) do
-    EqualToOperatorTransformer.transform(ast)
-  end
-
-  def transform({:<, _, _} = ast) do
-    LessThanOperatorTransformer.transform(ast)
   end
 
   def transform({:++, _, _} = ast) do
