@@ -90,6 +90,13 @@ defmodule Hologram.Compiler.Transformer do
     }
   end
 
+  def transform([{:|, _, [head, tail]}]) do
+    %IR.ConsOperator{
+      head: transform(head),
+      tail: transform(tail)
+    }
+  end
+
   def transform({:=, _, [left, right]}) do
     left = transform(left)
 

@@ -116,13 +116,6 @@ defmodule Hologram.Compiler.OverhaulTransformerTest do
       assert %AccessOperator{} = Transformer.transform(ast)
     end
 
-    test "cons" do
-      code = "[h | t]"
-      ast = ast(code)
-
-      assert %ConsOperator{} = Transformer.transform(ast)
-    end
-
     test "division" do
       code = "1 / 2"
       ast = ast(code)

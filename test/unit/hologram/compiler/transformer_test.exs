@@ -202,6 +202,16 @@ defmodule Hologram.Compiler.TransformerTest do
            }
   end
 
+  test "cons operatoror" do
+    # [h | t]
+    ast = [{:|, [line: 1], [{:h, [line: 1], nil}, {:t, [line: 1], nil}]}]
+
+    assert transform(ast) == %IR.ConsOperator{
+             head: %IR.Symbol{name: :h},
+             tail: %IR.Symbol{name: :t}
+           }
+  end
+
   test "match operator" do
     # %{a: x, b: y} = %{a: 1, b: 2}
     ast =
