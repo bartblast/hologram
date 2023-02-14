@@ -124,6 +124,13 @@ defmodule Hologram.Compiler.Transformer do
     }
   end
 
+  def transform({:++, _, [left, right]}) do
+    %IR.ListConcatenationOperator{
+      left: transform(left),
+      right: transform(right)
+    }
+  end
+
   def transform({:=, _, [left, right]}) do
     left = transform(left)
 

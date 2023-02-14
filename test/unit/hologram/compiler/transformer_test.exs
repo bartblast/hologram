@@ -310,6 +310,26 @@ defmodule Hologram.Compiler.TransformerTest do
            }
   end
 
+  test "transform/3" do
+    # [1, 2] ++ [3, 4]
+    ast = {:++, [line: 1], [[1, 2], [3, 4]]}
+
+    assert transform(ast) == %IR.ListConcatenationOperator{
+             left: %IR.ListType{
+               data: [
+                 %IR.IntegerType{value: 1},
+                 %IR.IntegerType{value: 2}
+               ]
+             },
+             right: %IR.ListType{
+               data: [
+                 %IR.IntegerType{value: 3},
+                 %IR.IntegerType{value: 4}
+               ]
+             }
+           }
+  end
+
   test "match operator" do
     # %{a: x, b: y} = %{a: 1, b: 2}
     ast =
