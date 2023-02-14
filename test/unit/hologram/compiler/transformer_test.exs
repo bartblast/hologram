@@ -317,6 +317,43 @@ defmodule Hologram.Compiler.TransformerTest do
            }
   end
 
+  # --- CONTROL FLOW ---
+
+  describe "anonymous function call" do
+    test "without args" do
+      # test.()
+      ast = {{:., [line: 1], [{:test, [line: 1], nil}]}, [line: 1], []}
+
+      assert transform(ast) == %IR.AnonymousFunctionCall{
+               name: :test,
+               args: []
+             }
+    end
+
+    test "with single arg" do
+      # test.(1)
+      ast = {{:., [line: 1], [{:test, [line: 1], nil}]}, [line: 1], [1]}
+
+      assert transform(ast) == %IR.AnonymousFunctionCall{
+               name: :test,
+               args: [%IR.IntegerType{value: 1}]
+             }
+    end
+
+    test "with multiple args" do
+      # test.(1, 2)
+      ast = {{:., [line: 1], [{:test, [line: 1], nil}]}, [line: 1], [1, 2]}
+
+      assert transform(ast) == %IR.AnonymousFunctionCall{
+               name: :test,
+               args: [
+                 %IR.IntegerType{value: 1},
+                 %IR.IntegerType{value: 2}
+               ]
+             }
+    end
+  end
+
   # --- OTHER IR ---
 
   test "alias" do

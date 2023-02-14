@@ -7,7 +7,6 @@ defmodule Hologram.Compiler.OverhaulTransformerTest do
 
   alias Hologram.Compiler.IR.{
     AliasDirective,
-    AnonymousFunctionCall,
     BinaryType,
     Call,
     CaseExpression,
@@ -281,12 +280,6 @@ defmodule Hologram.Compiler.OverhaulTransformerTest do
   end
 
   describe "control flow" do
-    test "anonymous function call" do
-      code = "test.(1, 2)"
-      ast = ast(code)
-      assert %AnonymousFunctionCall{} = Transformer.transform(ast)
-    end
-
     test "simple call" do
       code = "test(123)"
       ast = ast(code)

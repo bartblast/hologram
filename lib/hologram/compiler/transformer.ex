@@ -150,6 +150,15 @@ defmodule Hologram.Compiler.Transformer do
     }
   end
 
+  # --- CONTROL FLOW ---
+
+  def transform({{:., _, [{name, _, nil}]}, _, args}) do
+    %IR.AnonymousFunctionCall{
+      name: name,
+      args: Enum.map(args, &transform/1)
+    }
+  end
+
   # --- OTHER IR ---
 
   def transform({:__aliases__, _, segments}) do

@@ -59,6 +59,12 @@ defmodule Hologram.Compiler.IR do
     defstruct value: nil
   end
 
+  # --- CONTROL FLOW ---
+
+  defmodule AnonymousFunctionCall do
+    defstruct name: nil, args: []
+  end
+
   # --- BINDINGS ---
 
   defmodule Binding do
@@ -233,10 +239,6 @@ defmodule Hologram.Compiler.IR do
   end
 
   # CONTROL FLOW
-
-  defmodule AnonymousFunctionCall do
-    defstruct name: nil, args: []
-  end
 
   defmodule Call do
     defstruct module: nil, function: nil, args: []

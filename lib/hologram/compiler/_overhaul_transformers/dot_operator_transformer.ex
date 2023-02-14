@@ -5,10 +5,6 @@ defmodule Hologram.Compiler.DotOperatorTransformer do
   alias Hologram.Compiler.IR.DotOperator
   alias Hologram.Compiler.Transformer
 
-  def transform({{:., _, [Access, :get]}, _, _} = ast) do
-    AccessOperatorTransformer.transform(ast)
-  end
-
   def transform({{:., _, [_]}, _, _} = ast) do
     AnonymousFunctionCallTransformer.transform(ast)
   end
