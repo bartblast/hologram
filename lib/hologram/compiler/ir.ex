@@ -39,6 +39,10 @@ defmodule Hologram.Compiler.IR do
 
   # --- OPERATORS ---
 
+  defmodule AccessOperator do
+    defstruct data: nil, key: nil
+  end
+
   defmodule AdditionOperator do
     defstruct left: nil, right: nil, kind: :basic_binary_operator
   end
@@ -118,10 +122,6 @@ defmodule Hologram.Compiler.IR do
   end
 
   # OPERATORS
-
-  defmodule AccessOperator do
-    defstruct data: nil, key: nil
-  end
 
   defmodule DotOperator do
     defstruct left: nil, right: nil, kind: :basic_binary_operator
