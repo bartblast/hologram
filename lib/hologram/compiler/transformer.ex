@@ -173,6 +173,16 @@ defmodule Hologram.Compiler.Transformer do
     %IR.StructType{module: module, data: data}
   end
 
+  def transform({:{}, _, data}) do
+    build_tuple_type(data)
+  end
+
+  def transform({_, _} = data) do
+    data
+    |> Tuple.to_list()
+    |> build_tuple_type()
+  end
+
   # --- CONTROL FLOW ---
 
   def transform({{:., _, [{name, _, nil}]}, _, args}) do
@@ -208,6 +218,11 @@ defmodule Hologram.Compiler.Transformer do
   end
 
   # --- HELPERS ---
+
+  defp build_tuple_type(data) do
+    data = Enum.map(data, &transform/1)
+    %IR.TupleType{data: data}
+  end
 
   def transform_params(params) do
     params

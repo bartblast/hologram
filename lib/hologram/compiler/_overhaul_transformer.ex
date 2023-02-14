@@ -26,7 +26,6 @@ defmodule Hologram.Compiler.OverhaulTransformer do
     StrictBooleanAndOperatorTransformer,
     SubtractionOperatorTransformer,
     TypeOperatorTransformer,
-    TupleTypeTransformer,
     UnaryNegativeOperatorTransformer,
     UnquoteTransformer,
     UseDirectiveTransformer
@@ -107,14 +106,6 @@ defmodule Hologram.Compiler.OverhaulTransformer do
 
   def transform({:<<>>, _, _} = ast) do
     BinaryTypeTransformer.transform(ast)
-  end
-
-  def transform({:{}, _, _} = ast) do
-    TupleTypeTransformer.transform(ast)
-  end
-
-  def transform({_, _} = ast) do
-    TupleTypeTransformer.transform(ast)
   end
 
   # DEFINITIONS

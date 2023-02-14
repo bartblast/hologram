@@ -44,20 +44,6 @@ defmodule Hologram.Compiler.OverhaulTransformerTest do
       assert %BinaryType{} = Transformer.transform(ast)
     end
 
-    test "tuple, 2 elements" do
-      code = "{1, 2}"
-      ast = ast(code)
-
-      assert %TupleType{} = Transformer.transform(ast)
-    end
-
-    test "tuple, non-2 elements" do
-      code = "{1, 2, 3}"
-      ast = ast(code)
-
-      assert %TupleType{} = Transformer.transform(ast)
-    end
-
     test "nested" do
       code = "[1, {2, 3, 4}]"
       ast = ast(code)
