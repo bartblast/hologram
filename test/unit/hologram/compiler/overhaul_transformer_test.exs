@@ -14,7 +14,6 @@ defmodule Hologram.Compiler.OverhaulTransformerTest do
     IfExpression,
     ImportDirective,
     IntegerType,
-    MembershipOperator,
     ModuleDefinition,
     ModuleAttributeDefinition,
     MultiplicationOperator,
@@ -66,13 +65,6 @@ defmodule Hologram.Compiler.OverhaulTransformerTest do
   end
 
   describe "operators" do
-    test "membership" do
-      code = "1 in [1, 2]"
-      ast = ast(code)
-
-      assert %MembershipOperator{} = Transformer.transform(ast)
-    end
-
     test "multiplication" do
       code = "1 * 2"
       ast = ast(code)

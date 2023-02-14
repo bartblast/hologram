@@ -98,6 +98,13 @@ defmodule Hologram.Compiler.Transformer do
     }
   end
 
+  def transform({:in, _, [left, right]}) do
+    %IR.MembershipOperator{
+      left: transform(left),
+      right: transform(right)
+    }
+  end
+
   def transform({:@, _, [{name, _, ast}]}) when not is_list(ast) and name != :spec do
     %IR.ModuleAttributeOperator{name: name}
   end

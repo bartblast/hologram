@@ -11,7 +11,6 @@ defmodule Hologram.Compiler.OverhaulTransformer do
     FunctionDefinitionTransformer,
     IfExpressionTransformer,
     ImportDirectiveTransformer,
-    MembershipOperatorTransformer,
     ModuleAttributeDefinitionTransformer,
     ModuleDefinitionTransformer,
     MultiplicationOperatorTransformer,
@@ -41,10 +40,6 @@ defmodule Hologram.Compiler.OverhaulTransformer do
 
   def transform({{:., _, _}, _, _} = ast) do
     DotOperatorTransformer.transform(ast)
-  end
-
-  def transform({:in, _, _} = ast) do
-    MembershipOperatorTransformer.transform(ast)
   end
 
   # must be defined before module attribute operator
