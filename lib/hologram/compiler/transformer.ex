@@ -116,6 +116,13 @@ defmodule Hologram.Compiler.Transformer do
     }
   end
 
+  def transform({:!=, _, [left, right]}) do
+    %IR.NotEqualToOperator{
+      left: transform(left),
+      right: transform(right)
+    }
+  end
+
   def transform({:+, _, [value]}) do
     %IR.UnaryPositiveOperator{
       value: transform(value)
