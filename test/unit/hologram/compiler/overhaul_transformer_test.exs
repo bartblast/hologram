@@ -25,7 +25,6 @@ defmodule Hologram.Compiler.OverhaulTransformerTest do
     SubtractionOperator,
     TupleType,
     TypeOperator,
-    Typespec,
     UnaryNegativeOperator,
     Unquote,
     UseDirective
@@ -240,13 +239,6 @@ defmodule Hologram.Compiler.OverhaulTransformerTest do
       ast = ast(code)
 
       assert %Quote{} = Transformer.transform(ast)
-    end
-
-    test "typespec" do
-      code = "@spec test_fun(atom()) :: list(integer())"
-      ast = ast(code)
-
-      assert %Typespec{} = Transformer.transform(ast)
     end
 
     test "unquote" do

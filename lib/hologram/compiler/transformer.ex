@@ -1,4 +1,5 @@
 defmodule Hologram.Compiler.Transformer do
+  alias Hologram.Compiler.IR.IgnoredExpression
   alias Hologram.Compiler.Helpers
   alias Hologram.Compiler.IR
   alias Hologram.Compiler.PatternDeconstructor
@@ -227,6 +228,12 @@ defmodule Hologram.Compiler.Transformer do
     data
     |> Tuple.to_list()
     |> build_tuple_type()
+  end
+
+  # --- DEFINITIONS ---
+
+  def transform({:@, _, [{:spec, _, _}]}) do
+    %IR.IgnoredExpression{type: :typespec}
   end
 
   # --- CONTROL FLOW ---

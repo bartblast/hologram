@@ -143,6 +143,10 @@ defmodule Hologram.Compiler.IR do
     defstruct expressions: []
   end
 
+  defmodule IgnoredExpression do
+    defstruct type: nil
+  end
+
   defmodule NotSupportedExpression do
     defstruct type: nil, ast: nil
   end
@@ -290,16 +294,8 @@ defmodule Hologram.Compiler.IR do
 
   # OTHER
 
-  defmodule IgnoredExpression do
-    defstruct type: nil
-  end
-
   defmodule Quote do
     defstruct body: nil
-  end
-
-  defmodule Typespec do
-    defstruct []
   end
 
   defmodule Unquote do

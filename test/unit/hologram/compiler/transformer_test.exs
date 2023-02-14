@@ -525,6 +525,26 @@ defmodule Hologram.Compiler.TransformerTest do
     end
   end
 
+  # --- DEFINITIONS ---
+
+  test "typespec" do
+    # @spec test_fun(atom()) :: list(integer())
+    ast =
+      {:@, [line: 1],
+       [
+         {:spec, [line: 1],
+          [
+            {:"::", [line: 1],
+             [
+               {:test_fun, [line: 1], [{:atom, [line: 1], []}]},
+               {:list, [line: 1], [{:integer, [line: 1], []}]}
+             ]}
+          ]}
+       ]}
+
+    assert transform(ast) == %IR.IgnoredExpression{type: :typespec}
+  end
+
   # --- CONTROL FLOW ---
 
   describe "anonymous function call" do
