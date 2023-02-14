@@ -3,6 +3,197 @@ defmodule Hologram.Compiler.TransformerTest do
   import Hologram.Compiler.Transformer
   alias Hologram.Compiler.IR
 
+  # --- OPERATORS ---
+
+  describe "access operator" do
+    test "data is a variable" do
+      # a[:b]
+      ast =
+        {{:., [line: 1], [{:__aliases__, [alias: false], [:Access]}, :get]}, [line: 1],
+         [{:a, [line: 1], nil}, :b]}
+
+      assert transform(ast) == %IR.AccessOperator{
+               data: %IR.Symbol{name: :a},
+               key: %IR.AtomType{value: :b}
+             }
+    end
+
+    test "data is an explicit value" do
+      # %{a: 1, b: 2}[:b]
+      ast =
+        {{:., [line: 1], [{:__aliases__, [alias: false], [:Access]}, :get]}, [line: 1],
+         [{:%{}, [line: 1], [a: 1, b: 2]}, :b]}
+
+      assert transform(ast) == %IR.AccessOperator{
+               data: %IR.MapType{
+                 data: [
+                   {%IR.AtomType{value: :a}, %IR.IntegerType{value: 1}},
+                   {%IR.AtomType{value: :b}, %IR.IntegerType{value: 2}}
+                 ]
+               },
+               key: %IR.AtomType{value: :b}
+             }
+    end
+  end
+
+  test "addition operator" do
+    # a + 2
+    ast = {:+, [line: 1], [{:a, [line: 1], nil}, 2]}
+
+    assert transform(ast) == %IR.AdditionOperator{
+             left: %IR.Symbol{name: :a},
+             right: %IR.IntegerType{value: 2}
+           }
+  end
+
+  test "cons operatoror" do
+    # [h | t]
+    ast = [{:|, [line: 1], [{:h, [line: 1], nil}, {:t, [line: 1], nil}]}]
+
+    assert transform(ast) == %IR.ConsOperator{
+             head: %IR.Symbol{name: :h},
+             tail: %IR.Symbol{name: :t}
+           }
+  end
+
+  test "division operator" do
+    # a / 2
+    ast = {:/, [line: 1], [{:a, [line: 1], nil}, 2]}
+
+    assert transform(ast) == %IR.DivisionOperator{
+             left: %IR.Symbol{name: :a},
+             right: %IR.IntegerType{value: 2}
+           }
+  end
+
+  describe "dot operator" do
+    test "on symbol" do
+      # a.x
+      ast = {{:., [line: 1], [{:a, [line: 1], nil}, :x]}, [no_parens: true, line: 1], []}
+
+      assert transform(ast) == %IR.DotOperator{
+               left: %IR.Symbol{name: :a},
+               right: %IR.AtomType{value: :x}
+             }
+    end
+
+    test "on module attribute" do
+      # @abc.x
+      ast =
+        {{:., [line: 1], [{:@, [line: 1], [{:abc, [line: 1], nil}]}, :x]},
+         [no_parens: true, line: 1], []}
+
+      assert transform(ast) == %IR.DotOperator{
+               left: %IR.ModuleAttributeOperator{name: :abc},
+               right: %IR.AtomType{value: :x}
+             }
+    end
+
+    test "on expression" do
+      # (3 + 4).x
+      ast = {{:., [line: 1], [{:+, [line: 1], [3, 4]}, :x]}, [no_parens: true, line: 1], []}
+
+      assert transform(ast) == %IR.DotOperator{
+               left: %IR.AdditionOperator{
+                 left: %IR.IntegerType{value: 3},
+                 right: %IR.IntegerType{value: 4}
+               },
+               right: %IR.AtomType{value: :x}
+             }
+    end
+  end
+
+  test "equal to operator" do
+    # 1 == 2
+    ast = {:==, [line: 1], [1, 2]}
+
+    assert transform(ast) == %IR.EqualToOperator{
+             left: %IR.IntegerType{value: 1},
+             right: %IR.IntegerType{value: 2}
+           }
+  end
+
+  test "less than operator" do
+    # 1 < 2
+    ast = {:<, [line: 1], [1, 2]}
+
+    assert transform(ast) == %IR.LessThanOperator{
+             left: %IR.IntegerType{value: 1},
+             right: %IR.IntegerType{value: 2}
+           }
+  end
+
+  test "list concatenation operator" do
+    # [1, 2] ++ [3, 4]
+    ast = {:++, [line: 1], [[1, 2], [3, 4]]}
+
+    assert transform(ast) == %IR.ListConcatenationOperator{
+             left: %IR.ListType{
+               data: [
+                 %IR.IntegerType{value: 1},
+                 %IR.IntegerType{value: 2}
+               ]
+             },
+             right: %IR.ListType{
+               data: [
+                 %IR.IntegerType{value: 3},
+                 %IR.IntegerType{value: 4}
+               ]
+             }
+           }
+  end
+
+  test "match operator" do
+    # %{a: x, b: y} = %{a: 1, b: 2}
+    ast =
+      {:=, [line: 1],
+       [
+         {:%{}, [line: 1], [a: {:x, [line: 1], nil}, b: {:y, [line: 1], nil}]},
+         {:%{}, [line: 1], [a: 1, b: 2]}
+       ]}
+
+    assert transform(ast) == %IR.MatchOperator{
+             bindings: [
+               %IR.Binding{
+                 name: :x,
+                 access_path: [%IR.MatchAccess{}, %IR.MapAccess{key: %IR.AtomType{value: :a}}]
+               },
+               %IR.Binding{
+                 name: :y,
+                 access_path: [%IR.MatchAccess{}, %IR.MapAccess{key: %IR.AtomType{value: :b}}]
+               }
+             ],
+             left: %IR.MapType{
+               data: [
+                 {%IR.AtomType{value: :a}, %IR.Symbol{name: :x}},
+                 {%IR.AtomType{value: :b}, %IR.Symbol{name: :y}}
+               ]
+             },
+             right: %IR.MapType{
+               data: [
+                 {%IR.AtomType{value: :a}, %IR.IntegerType{value: 1}},
+                 {%IR.AtomType{value: :b}, %IR.IntegerType{value: 2}}
+               ]
+             }
+           }
+  end
+
+  test "module attribute" do
+    # @a
+    ast = {:@, [line: 1], [{:a, [line: 1], nil}]}
+
+    assert transform(ast) == %IR.ModuleAttributeOperator{name: :a}
+  end
+
+  test "unary positive operator" do
+    # +2
+    ast = {:+, [line: 1], [2]}
+
+    assert transform(ast) == %IR.UnaryPositiveOperator{
+             value: %IR.IntegerType{value: 2}
+           }
+  end
+
   # --- DATA TYPES --
 
   describe "anonymous function type" do
@@ -200,197 +391,6 @@ defmodule Hologram.Compiler.TransformerTest do
     ast = "test"
 
     assert transform(ast) == %IR.StringType{value: "test"}
-  end
-
-  # --- OPERATORS ---
-
-  describe "access operator" do
-    test "data is a variable" do
-      # a[:b]
-      ast =
-        {{:., [line: 1], [{:__aliases__, [alias: false], [:Access]}, :get]}, [line: 1],
-         [{:a, [line: 1], nil}, :b]}
-
-      assert transform(ast) == %IR.AccessOperator{
-               data: %IR.Symbol{name: :a},
-               key: %IR.AtomType{value: :b}
-             }
-    end
-
-    test "data is an explicit value" do
-      # %{a: 1, b: 2}[:b]
-      ast =
-        {{:., [line: 1], [{:__aliases__, [alias: false], [:Access]}, :get]}, [line: 1],
-         [{:%{}, [line: 1], [a: 1, b: 2]}, :b]}
-
-      assert transform(ast) == %IR.AccessOperator{
-               data: %IR.MapType{
-                 data: [
-                   {%IR.AtomType{value: :a}, %IR.IntegerType{value: 1}},
-                   {%IR.AtomType{value: :b}, %IR.IntegerType{value: 2}}
-                 ]
-               },
-               key: %IR.AtomType{value: :b}
-             }
-    end
-  end
-
-  test "addition operator" do
-    # a + 2
-    ast = {:+, [line: 1], [{:a, [line: 1], nil}, 2]}
-
-    assert transform(ast) == %IR.AdditionOperator{
-             left: %IR.Symbol{name: :a},
-             right: %IR.IntegerType{value: 2}
-           }
-  end
-
-  test "cons operatoror" do
-    # [h | t]
-    ast = [{:|, [line: 1], [{:h, [line: 1], nil}, {:t, [line: 1], nil}]}]
-
-    assert transform(ast) == %IR.ConsOperator{
-             head: %IR.Symbol{name: :h},
-             tail: %IR.Symbol{name: :t}
-           }
-  end
-
-  test "division operator" do
-    # a / 2
-    ast = {:/, [line: 1], [{:a, [line: 1], nil}, 2]}
-
-    assert transform(ast) == %IR.DivisionOperator{
-             left: %IR.Symbol{name: :a},
-             right: %IR.IntegerType{value: 2}
-           }
-  end
-
-  describe "dot operator" do
-    test "on symbol" do
-      # a.x
-      ast = {{:., [line: 1], [{:a, [line: 1], nil}, :x]}, [no_parens: true, line: 1], []}
-
-      assert transform(ast) == %IR.DotOperator{
-               left: %IR.Symbol{name: :a},
-               right: %IR.AtomType{value: :x}
-             }
-    end
-
-    test "on module attribute" do
-      # @abc.x
-      ast =
-        {{:., [line: 1], [{:@, [line: 1], [{:abc, [line: 1], nil}]}, :x]},
-         [no_parens: true, line: 1], []}
-
-      assert transform(ast) == %IR.DotOperator{
-               left: %IR.ModuleAttributeOperator{name: :abc},
-               right: %IR.AtomType{value: :x}
-             }
-    end
-
-    test "on expression" do
-      # (3 + 4).x
-      ast = {{:., [line: 1], [{:+, [line: 1], [3, 4]}, :x]}, [no_parens: true, line: 1], []}
-
-      assert transform(ast) == %IR.DotOperator{
-               left: %IR.AdditionOperator{
-                 left: %IR.IntegerType{value: 3},
-                 right: %IR.IntegerType{value: 4}
-               },
-               right: %IR.AtomType{value: :x}
-             }
-    end
-  end
-
-  test "equal to operator" do
-    # 1 == 2
-    ast = {:==, [line: 1], [1, 2]}
-
-    assert transform(ast) == %IR.EqualToOperator{
-             left: %IR.IntegerType{value: 1},
-             right: %IR.IntegerType{value: 2}
-           }
-  end
-
-  test "less than operator" do
-    # 1 < 2
-    ast = {:<, [line: 1], [1, 2]}
-
-    assert transform(ast) == %IR.LessThanOperator{
-             left: %IR.IntegerType{value: 1},
-             right: %IR.IntegerType{value: 2}
-           }
-  end
-
-  test "list concatenation operator" do
-    # [1, 2] ++ [3, 4]
-    ast = {:++, [line: 1], [[1, 2], [3, 4]]}
-
-    assert transform(ast) == %IR.ListConcatenationOperator{
-             left: %IR.ListType{
-               data: [
-                 %IR.IntegerType{value: 1},
-                 %IR.IntegerType{value: 2}
-               ]
-             },
-             right: %IR.ListType{
-               data: [
-                 %IR.IntegerType{value: 3},
-                 %IR.IntegerType{value: 4}
-               ]
-             }
-           }
-  end
-
-  test "match operator" do
-    # %{a: x, b: y} = %{a: 1, b: 2}
-    ast =
-      {:=, [line: 1],
-       [
-         {:%{}, [line: 1], [a: {:x, [line: 1], nil}, b: {:y, [line: 1], nil}]},
-         {:%{}, [line: 1], [a: 1, b: 2]}
-       ]}
-
-    assert transform(ast) == %IR.MatchOperator{
-             bindings: [
-               %IR.Binding{
-                 name: :x,
-                 access_path: [%IR.MatchAccess{}, %IR.MapAccess{key: %IR.AtomType{value: :a}}]
-               },
-               %IR.Binding{
-                 name: :y,
-                 access_path: [%IR.MatchAccess{}, %IR.MapAccess{key: %IR.AtomType{value: :b}}]
-               }
-             ],
-             left: %IR.MapType{
-               data: [
-                 {%IR.AtomType{value: :a}, %IR.Symbol{name: :x}},
-                 {%IR.AtomType{value: :b}, %IR.Symbol{name: :y}}
-               ]
-             },
-             right: %IR.MapType{
-               data: [
-                 {%IR.AtomType{value: :a}, %IR.IntegerType{value: 1}},
-                 {%IR.AtomType{value: :b}, %IR.IntegerType{value: 2}}
-               ]
-             }
-           }
-  end
-
-  test "module attribute" do
-    # @a
-    ast = {:@, [line: 1], [{:a, [line: 1], nil}]}
-
-    assert transform(ast) == %IR.ModuleAttributeOperator{name: :a}
-  end
-
-  test "unary positive operator" do
-    # +2
-    ast = {:+, [line: 1], [2]}
-
-    assert transform(ast) == %IR.UnaryPositiveOperator{
-             value: %IR.IntegerType{value: 2}
-           }
   end
 
   # --- CONTROL FLOW ---

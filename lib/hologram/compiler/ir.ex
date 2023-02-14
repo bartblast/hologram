@@ -1,4 +1,42 @@
 defmodule Hologram.Compiler.IR do
+  # --- OPERATORS ---
+
+  defmodule AccessOperator do
+    defstruct data: nil, key: nil
+  end
+
+  defmodule AdditionOperator do
+    defstruct left: nil, right: nil, kind: :basic_binary_operator
+  end
+
+  defmodule ConsOperator do
+    defstruct head: nil, tail: nil
+  end
+
+  defmodule DivisionOperator do
+    defstruct left: nil, right: nil, kind: :basic_binary_operator
+  end
+
+  defmodule DotOperator do
+    defstruct left: nil, right: nil, kind: :basic_binary_operator
+  end
+
+  defmodule ListConcatenationOperator do
+    defstruct left: nil, right: nil, kind: :basic_binary_operator
+  end
+
+  defmodule MatchOperator do
+    defstruct bindings: [], left: nil, right: nil
+  end
+
+  defmodule ModuleAttributeOperator do
+    defstruct name: nil
+  end
+
+  defmodule UnaryPositiveOperator do
+    defstruct value: nil
+  end
+
   # --- DATA TYPES ---
 
   defmodule AnonymousFunctionType do
@@ -39,44 +77,6 @@ defmodule Hologram.Compiler.IR do
 
   defmodule StructType do
     defstruct module: nil, data: []
-  end
-
-  # --- OPERATORS ---
-
-  defmodule AccessOperator do
-    defstruct data: nil, key: nil
-  end
-
-  defmodule AdditionOperator do
-    defstruct left: nil, right: nil, kind: :basic_binary_operator
-  end
-
-  defmodule ConsOperator do
-    defstruct head: nil, tail: nil
-  end
-
-  defmodule DivisionOperator do
-    defstruct left: nil, right: nil, kind: :basic_binary_operator
-  end
-
-  defmodule DotOperator do
-    defstruct left: nil, right: nil, kind: :basic_binary_operator
-  end
-
-  defmodule ListConcatenationOperator do
-    defstruct left: nil, right: nil, kind: :basic_binary_operator
-  end
-
-  defmodule MatchOperator do
-    defstruct bindings: [], left: nil, right: nil
-  end
-
-  defmodule ModuleAttributeOperator do
-    defstruct name: nil
-  end
-
-  defmodule UnaryPositiveOperator do
-    defstruct value: nil
   end
 
   # --- CONTROL FLOW ---

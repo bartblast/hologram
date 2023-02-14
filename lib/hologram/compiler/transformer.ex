@@ -14,70 +14,6 @@ defmodule Hologram.Compiler.Transformer do
   """
   def transform(ast)
 
-  # --- DATA TYPES ---
-
-  def transform({:fn, _, [{:->, _, [params, body]}]}) do
-    params = transform_params(params)
-    arity = Enum.count(params)
-    bindings = Helpers.aggregate_bindings_from_params(params)
-    body = transform(body)
-
-    %IR.AnonymousFunctionType{arity: arity, params: params, bindings: bindings, body: body}
-  end
-
-  def transform(ast) when is_atom(ast) and ast not in [nil, false, true] do
-    %IR.AtomType{value: ast}
-  end
-
-  def transform(ast) when is_boolean(ast) do
-    %IR.BooleanType{value: ast}
-  end
-
-  def transform(ast) when is_float(ast) do
-    %IR.FloatType{value: ast}
-  end
-
-  def transform(ast) when is_integer(ast) do
-    %IR.IntegerType{value: ast}
-  end
-
-  def transform(ast) when is_list(ast) do
-    data = Enum.map(ast, &transform/1)
-    %IR.ListType{data: data}
-  end
-
-  def transform({:%{}, _, data}) do
-    {module, new_data} = Keyword.pop(data, :__struct__)
-
-    data_ir =
-      Enum.map(new_data, fn {key, value} ->
-        {transform(key), transform(value)}
-      end)
-
-    if module do
-      segments = Helpers.alias_segments(module)
-      module_ir = %IR.ModuleType{module: module, segments: segments}
-      %IR.StructType{module: module_ir, data: data_ir}
-    else
-      %IR.MapType{data: data_ir}
-    end
-  end
-
-  def transform(nil) do
-    %IR.NilType{}
-  end
-
-  def transform(ast) when is_binary(ast) do
-    %IR.StringType{value: ast}
-  end
-
-  def transform({:%, _, [alias_ast, map_ast]}) do
-    module = transform(alias_ast)
-    data = transform(map_ast).data
-
-    %IR.StructType{module: module, data: data}
-  end
-
   # --- OPERATORS ---
 
   def transform({{:., _, [{:__aliases__, [alias: false], [:Access]}, :get]}, _, [data, key]}) do
@@ -163,6 +99,70 @@ defmodule Hologram.Compiler.Transformer do
     %IR.UnaryPositiveOperator{
       value: transform(value)
     }
+  end
+
+  # --- DATA TYPES ---
+
+  def transform({:fn, _, [{:->, _, [params, body]}]}) do
+    params = transform_params(params)
+    arity = Enum.count(params)
+    bindings = Helpers.aggregate_bindings_from_params(params)
+    body = transform(body)
+
+    %IR.AnonymousFunctionType{arity: arity, params: params, bindings: bindings, body: body}
+  end
+
+  def transform(ast) when is_atom(ast) and ast not in [nil, false, true] do
+    %IR.AtomType{value: ast}
+  end
+
+  def transform(ast) when is_boolean(ast) do
+    %IR.BooleanType{value: ast}
+  end
+
+  def transform(ast) when is_float(ast) do
+    %IR.FloatType{value: ast}
+  end
+
+  def transform(ast) when is_integer(ast) do
+    %IR.IntegerType{value: ast}
+  end
+
+  def transform(ast) when is_list(ast) do
+    data = Enum.map(ast, &transform/1)
+    %IR.ListType{data: data}
+  end
+
+  def transform({:%{}, _, data}) do
+    {module, new_data} = Keyword.pop(data, :__struct__)
+
+    data_ir =
+      Enum.map(new_data, fn {key, value} ->
+        {transform(key), transform(value)}
+      end)
+
+    if module do
+      segments = Helpers.alias_segments(module)
+      module_ir = %IR.ModuleType{module: module, segments: segments}
+      %IR.StructType{module: module_ir, data: data_ir}
+    else
+      %IR.MapType{data: data_ir}
+    end
+  end
+
+  def transform(nil) do
+    %IR.NilType{}
+  end
+
+  def transform(ast) when is_binary(ast) do
+    %IR.StringType{value: ast}
+  end
+
+  def transform({:%, _, [alias_ast, map_ast]}) do
+    module = transform(alias_ast)
+    data = transform(map_ast).data
+
+    %IR.StructType{module: module, data: data}
   end
 
   # --- CONTROL FLOW ---
