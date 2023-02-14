@@ -21,6 +21,10 @@ defmodule Hologram.Compiler.IR do
     defstruct value: nil, kind: :basic_data_type
   end
 
+  defmodule ListType do
+    defstruct data: []
+  end
+
   defmodule MapType do
     defstruct data: []
   end
@@ -129,10 +133,6 @@ defmodule Hologram.Compiler.IR do
 
   defmodule BinaryType do
     defstruct parts: []
-  end
-
-  defmodule ListType do
-    defstruct data: []
   end
 
   defmodule ModuleType do

@@ -12,7 +12,6 @@ defmodule Hologram.Compiler.OverhaulTransformer do
     IfExpressionTransformer,
     ImportDirectiveTransformer,
     ListSubtractionOperatorTransformer,
-    ListTypeTransformer,
     MembershipOperatorTransformer,
     ModuleAttributeDefinitionTransformer,
     ModuleDefinitionTransformer,
@@ -108,10 +107,6 @@ defmodule Hologram.Compiler.OverhaulTransformer do
 
   def transform({:<<>>, _, _} = ast) do
     BinaryTypeTransformer.transform(ast)
-  end
-
-  def transform(ast) when is_list(ast) do
-    ListTypeTransformer.transform(ast)
   end
 
   def transform({:{}, _, _} = ast) do

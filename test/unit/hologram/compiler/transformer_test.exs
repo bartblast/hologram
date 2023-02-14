@@ -134,6 +134,18 @@ defmodule Hologram.Compiler.TransformerTest do
     assert transform(ast) == %IR.IntegerType{value: 1}
   end
 
+  test "list type" do
+    # [1, 2]
+    ast = [1, 2]
+
+    assert transform(ast) == %IR.ListType{
+             data: [
+               %IR.IntegerType{value: 1},
+               %IR.IntegerType{value: 2}
+             ]
+           }
+  end
+
   test "map type " do
     # %{a: 1, b: 2}
     ast = {:%{}, [line: 1], [a: 1, b: 2]}
@@ -310,7 +322,7 @@ defmodule Hologram.Compiler.TransformerTest do
            }
   end
 
-  test "transform/3" do
+  test "list concatenation operator" do
     # [1, 2] ++ [3, 4]
     ast = {:++, [line: 1], [[1, 2], [3, 4]]}
 

@@ -15,7 +15,6 @@ defmodule Hologram.Compiler.OverhaulTransformerTest do
     ImportDirective,
     IntegerType,
     ListSubtractionOperator,
-    ListType,
     MembershipOperator,
     ModuleDefinition,
     ModuleAttributeDefinition,
@@ -43,13 +42,6 @@ defmodule Hologram.Compiler.OverhaulTransformerTest do
       ast = ast(code)
 
       assert %BinaryType{} = Transformer.transform(ast)
-    end
-
-    test "list" do
-      code = "[1, 2]"
-      ast = ast(code)
-
-      assert %ListType{} = Transformer.transform(ast)
     end
 
     test "tuple, 2 elements" do
