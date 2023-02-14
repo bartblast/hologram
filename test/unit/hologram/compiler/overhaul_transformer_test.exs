@@ -10,7 +10,6 @@ defmodule Hologram.Compiler.OverhaulTransformerTest do
     BinaryType,
     Call,
     CaseExpression,
-    DotOperator,
     FunctionDefinition,
     IfExpression,
     ImportDirective,
@@ -92,13 +91,6 @@ defmodule Hologram.Compiler.OverhaulTransformerTest do
   end
 
   describe "operators" do
-    test "dot" do
-      code = "a.b"
-      ast = ast(code)
-
-      assert %DotOperator{} = Transformer.transform(ast)
-    end
-
     test "list concatenation" do
       code = "[1, 2] ++ [3, 4]"
       ast = ast(code)

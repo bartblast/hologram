@@ -14,43 +14,7 @@ defmodule Hologram.Compiler.DotOperatorTransformerTest do
   alias Hologram.Compiler.IR.ModulePseudoVariable
   alias Hologram.Compiler.IR.Symbol
 
-  test "access operator" do
-    code = "a[:x]"
-    ast = ast(code)
-
-    assert %AccessOperator{} = DotOperatorTransformer.transform(ast)
-  end
-
-  describe "anonymous function call" do
-    test "without arguments" do
-      code = "test.()"
-      ast = ast(code)
-
-      assert %AnonymousFunctionCall{} = DotOperatorTransformer.transform(ast)
-    end
-
-    test "with arguments" do
-      code = "test.(1, 2)"
-      ast = ast(code)
-
-      assert %AnonymousFunctionCall{} = DotOperatorTransformer.transform(ast)
-    end
-  end
-
   describe "dot operator on symbol" do
-    test "without parenthesis" do
-      code = "a.x"
-      ast = ast(code)
-      result = DotOperatorTransformer.transform(ast)
-
-      expected = %DotOperator{
-        left: %Symbol{name: :a},
-        right: %AtomType{value: :x}
-      }
-
-      assert result == expected
-    end
-
     test "with parenthesis, without arguments" do
       code = "a.x()"
       ast = ast(code)
@@ -67,19 +31,6 @@ defmodule Hologram.Compiler.DotOperatorTransformerTest do
   end
 
   describe "dot operator on alias" do
-    test "without parenthesis" do
-      code = "Abc.x"
-      ast = ast(code)
-      result = DotOperatorTransformer.transform(ast)
-
-      expected = %DotOperator{
-        left: %Alias{segments: [:Abc]},
-        right: %AtomType{value: :x}
-      }
-
-      assert result == expected
-    end
-
     test "with parenthesis, without arguments" do
       code = "Abc.x()"
       ast = ast(code)
@@ -96,19 +47,6 @@ defmodule Hologram.Compiler.DotOperatorTransformerTest do
   end
 
   describe "dot operator on module attribute" do
-    test "without parenthesis" do
-      code = "@abc.x"
-      ast = ast(code)
-      result = DotOperatorTransformer.transform(ast)
-
-      expected = %DotOperator{
-        left: %ModuleAttributeOperator{name: :abc},
-        right: %AtomType{value: :x}
-      }
-
-      assert result == expected
-    end
-
     test "with parenthesis, without arguments" do
       code = "@abc.x()"
       ast = ast(code)
@@ -125,22 +63,6 @@ defmodule Hologram.Compiler.DotOperatorTransformerTest do
   end
 
   describe "dot operator on expression" do
-    test "without parenthesis" do
-      code = "(3 + 4).x"
-      ast = ast(code)
-      result = DotOperatorTransformer.transform(ast)
-
-      expected = %DotOperator{
-        left: %AdditionOperator{
-          left: %IntegerType{value: 3},
-          right: %IntegerType{value: 4}
-        },
-        right: %AtomType{value: :x}
-      }
-
-      assert result == expected
-    end
-
     test "with parenthesis, without arguments" do
       code = "(3 + 4).x()"
       ast = ast(code)
@@ -157,19 +79,6 @@ defmodule Hologram.Compiler.DotOperatorTransformerTest do
   end
 
   describe "dot operator on __MODULE__ pseudo-variable" do
-    test "without parenthesis" do
-      code = "__MODULE__.x"
-      ast = ast(code)
-      result = DotOperatorTransformer.transform(ast)
-
-      expected = %DotOperator{
-        left: %ModulePseudoVariable{},
-        right: %AtomType{value: :x}
-      }
-
-      assert result == expected
-    end
-
     test "with parenthesis, without arguments" do
       code = "__MODULE__.x()"
       ast = ast(code)
@@ -220,4 +129,24 @@ defmodule Hologram.Compiler.DotOperatorTransformerTest do
 
     assert %Call{} = DotOperatorTransformer.transform(ast)
   end
+end
+
+test "on alias" do
+  # Abc.x
+  ast = {{:., [line: 1], [{:__aliases__, [line: 1], [:Abc]}, :x]}, [no_parens: true, line: 1], []}
+
+  assert transform(ast) == %IR.DotOperator{
+           left: %IR.Alias{segments: [:Abc]},
+           right: %IR.AtomType{value: :x}
+         }
+end
+
+test "on __MODULE__ pseudo-variable" do
+  # __MODULE__.x
+  ast = {{:., [line: 1], [{:__MODULE__, [line: 1], nil}, :x]}, [no_parens: true, line: 1], []}
+
+  assert transform(ast) == %IR.DotOperator{
+           left: %IR.ModulePseudoVariable{},
+           right: %IR.AtomType{value: :x}
+         }
 end

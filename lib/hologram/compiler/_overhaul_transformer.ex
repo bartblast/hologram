@@ -6,7 +6,6 @@ defmodule Hologram.Compiler.OverhaulTransformer do
     BinaryTypeTransformer,
     CallTransformer,
     CaseExpressionTransformer,
-    DotOperatorTransformer,
     EqualToOperatorTransformer,
     ForExpressionTransformer,
     FunctionDefinitionTransformer,

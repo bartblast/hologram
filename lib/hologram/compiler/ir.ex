@@ -55,6 +55,10 @@ defmodule Hologram.Compiler.IR do
     defstruct left: nil, right: nil, kind: :basic_binary_operator
   end
 
+  defmodule DotOperator do
+    defstruct left: nil, right: nil, kind: :basic_binary_operator
+  end
+
   defmodule MatchOperator do
     defstruct bindings: [], left: nil, right: nil
   end
@@ -122,10 +126,6 @@ defmodule Hologram.Compiler.IR do
   end
 
   # OPERATORS
-
-  defmodule DotOperator do
-    defstruct left: nil, right: nil, kind: :basic_binary_operator
-  end
 
   defmodule EqualToOperator do
     defstruct left: nil, right: nil, kind: :basic_binary_operator
