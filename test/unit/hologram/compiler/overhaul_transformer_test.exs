@@ -328,14 +328,6 @@ defmodule Hologram.Compiler.OverhaulTransformerTest do
       result = Transformer.transform(ast)
       assert result == %IR.EnvPseudoVariable{}
     end
-
-    test "__MODULE__" do
-      code = "__MODULE__"
-      ast = ast(code)
-
-      result = Transformer.transform(ast)
-      assert result == %IR.ModulePseudoVariable{}
-    end
   end
 
   describe "other" do

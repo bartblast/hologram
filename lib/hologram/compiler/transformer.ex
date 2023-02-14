@@ -166,6 +166,12 @@ defmodule Hologram.Compiler.Transformer do
     }
   end
 
+  # --- PSEUDO-VARIABLES ---
+
+  def transform({:__MODULE__, _, _}) do
+    %IR.ModulePseudoVariable{}
+  end
+
   # --- OTHER IR ---
 
   def transform({:__aliases__, _, segments}) do

@@ -87,6 +87,12 @@ defmodule Hologram.Compiler.IR do
     defstruct []
   end
 
+  # --- PSEUDO-VARIABLES ---
+
+  defmodule ModulePseudoVariable do
+    defstruct []
+  end
+
   # --- OTHER IR ---
 
   defmodule Alias do
@@ -281,10 +287,6 @@ defmodule Hologram.Compiler.IR do
   # PSEUDO-VARIABLES
 
   defmodule EnvPseudoVariable do
-    defstruct []
-  end
-
-  defmodule ModulePseudoVariable do
     defstruct []
   end
 
