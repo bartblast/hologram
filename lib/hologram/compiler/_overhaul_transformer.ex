@@ -14,7 +14,6 @@ defmodule Hologram.Compiler.OverhaulTransformer do
     ModuleAttributeDefinitionTransformer,
     ModuleDefinitionTransformer,
     QuoteTransformer,
-    RelaxedBooleanNotOperatorTransformer,
     RelaxedBooleanOrOperatorTransformer,
     RequireDirectiveTransformer,
     StrictBooleanAndOperatorTransformer,
@@ -35,14 +34,6 @@ defmodule Hologram.Compiler.OverhaulTransformer do
 
   def transform({{:., _, _}, _, _} = ast) do
     DotOperatorTransformer.transform(ast)
-  end
-
-  def transform({:__block__, _, [{:!, _, _}]} = ast) do
-    RelaxedBooleanNotOperatorTransformer.transform(ast)
-  end
-
-  def transform({:!, _, _} = ast) do
-    RelaxedBooleanNotOperatorTransformer.transform(ast)
   end
 
   def transform({:||, _, _} = ast) do

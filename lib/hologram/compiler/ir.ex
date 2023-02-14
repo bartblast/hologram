@@ -53,6 +53,10 @@ defmodule Hologram.Compiler.IR do
     defstruct left: nil, right: nil, kind: :basic_binary_operator
   end
 
+  defmodule RelaxedBooleanNotOperator do
+    defstruct value: nil
+  end
+
   defmodule UnaryPositiveOperator do
     defstruct value: nil
   end
@@ -175,10 +179,6 @@ defmodule Hologram.Compiler.IR do
 
   defmodule LessThanOperator do
     defstruct left: nil, right: nil, kind: :basic_binary_operator
-  end
-
-  defmodule RelaxedBooleanNotOperator do
-    defstruct value: nil
   end
 
   defmodule RelaxedBooleanOrOperator do

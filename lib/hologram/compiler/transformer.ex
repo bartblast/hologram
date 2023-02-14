@@ -141,6 +141,14 @@ defmodule Hologram.Compiler.Transformer do
     }
   end
 
+  def transform({:__block__, _, [{:!, _, [value]}]}) do
+    build_relaxed_boolean_not_operator_ir(value)
+  end
+
+  def transform({:!, _, [value]}) do
+    build_relaxed_boolean_not_operator_ir(value)
+  end
+
   def transform({:+, _, [value]}) do
     %IR.UnaryPositiveOperator{
       value: transform(value)
@@ -220,13 +228,13 @@ defmodule Hologram.Compiler.Transformer do
   end
 
   def transform({:{}, _, data}) do
-    build_tuple_type(data)
+    build_tuple_type_ir(data)
   end
 
   def transform({_, _} = data) do
     data
     |> Tuple.to_list()
-    |> build_tuple_type()
+    |> build_tuple_type_ir()
   end
 
   # --- DEFINITIONS ---
@@ -271,7 +279,13 @@ defmodule Hologram.Compiler.Transformer do
 
   # --- HELPERS ---
 
-  defp build_tuple_type(data) do
+  defp build_relaxed_boolean_not_operator_ir(value) do
+    %IR.RelaxedBooleanNotOperator{
+      value: transform(value)
+    }
+  end
+
+  defp build_tuple_type_ir(data) do
     data = Enum.map(data, &transform/1)
     %IR.TupleType{data: data}
   end
