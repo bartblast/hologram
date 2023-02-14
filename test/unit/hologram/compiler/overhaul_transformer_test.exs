@@ -6,7 +6,6 @@ defmodule Hologram.Compiler.OverhaulTransformerTest do
   alias Hologram.Compiler.Transformer
 
   alias Hologram.Compiler.IR.{
-    AccessOperator,
     AliasDirective,
     AnonymousFunctionCall,
     BinaryType,
@@ -94,13 +93,6 @@ defmodule Hologram.Compiler.OverhaulTransformerTest do
   end
 
   describe "operators" do
-    test "access" do
-      code = "a[:b]"
-      ast = ast(code)
-
-      assert %AccessOperator{} = Transformer.transform(ast)
-    end
-
     test "dot" do
       code = "a.b"
       ast = ast(code)

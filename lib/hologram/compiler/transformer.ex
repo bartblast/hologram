@@ -83,6 +83,13 @@ defmodule Hologram.Compiler.Transformer do
 
   # --- OPERATORS ---
 
+  def transform({{:., _, [{:__aliases__, [alias: false], [:Access]}, :get]}, _, [data, key]}) do
+    %IR.AccessOperator{
+      data: transform(data),
+      key: transform(key)
+    }
+  end
+
   def transform({:+, _, [left, right]}) do
     %IR.AdditionOperator{
       left: transform(left),
