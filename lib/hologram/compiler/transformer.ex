@@ -134,6 +134,13 @@ defmodule Hologram.Compiler.Transformer do
     |> transform()
   end
 
+  def transform({:&&, _, [left, right]}) do
+    %IR.RelaxedBooleanAndOperator{
+      left: transform(left),
+      right: transform(right)
+    }
+  end
+
   def transform({:+, _, [value]}) do
     %IR.UnaryPositiveOperator{
       value: transform(value)
