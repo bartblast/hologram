@@ -1,5 +1,4 @@
 defmodule Hologram.Compiler.Transformer do
-  alias Hologram.Compiler.IR.IgnoredExpression
   alias Hologram.Compiler.Helpers
   alias Hologram.Compiler.IR
   alias Hologram.Compiler.PatternDeconstructor
