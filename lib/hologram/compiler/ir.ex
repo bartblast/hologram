@@ -93,6 +93,10 @@ defmodule Hologram.Compiler.IR do
 
   # --- PSEUDO-VARIABLES ---
 
+  defmodule EnvPseudoVariable do
+    defstruct []
+  end
+
   defmodule ModulePseudoVariable do
     defstruct []
   end
@@ -282,12 +286,6 @@ defmodule Hologram.Compiler.IR do
 
   defmodule TupleAccess do
     defstruct index: nil, kind: :binding_index_access
-  end
-
-  # PSEUDO-VARIABLES
-
-  defmodule EnvPseudoVariable do
-    defstruct []
   end
 
   # OTHER

@@ -172,6 +172,10 @@ defmodule Hologram.Compiler.Transformer do
 
   # --- PSEUDO-VARIABLES ---
 
+  def transform({:__ENV__, _, _}) do
+    %IR.EnvPseudoVariable{}
+  end
+
   def transform({:__MODULE__, _, _}) do
     %IR.ModulePseudoVariable{}
   end

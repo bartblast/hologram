@@ -196,10 +196,6 @@ defmodule Hologram.Compiler.OverhaulTransformer do
     UnquoteTransformer.transform(ast)
   end
 
-  def transform({:__ENV__, _, _}) do
-    %IR.EnvPseudoVariable{}
-  end
-
   def transform({name, _, args} = ast)
       when is_atom(name) and is_list(args) do
     CallTransformer.transform(ast)
