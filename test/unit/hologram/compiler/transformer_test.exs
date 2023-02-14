@@ -240,6 +240,7 @@ defmodule Hologram.Compiler.TransformerTest do
            }
   end
 
+  # TODO: uncomment
   # describe "pipe operator" do
   #   test "non-nested pipeline" do
   #     # 100 |> div(2)
