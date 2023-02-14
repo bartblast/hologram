@@ -18,7 +18,6 @@ defmodule Hologram.Compiler.OverhaulTransformerTest do
     ModuleAttributeDefinition,
     ProtocolDefinition,
     Quote,
-    RelaxedBooleanOrOperator,
     RequireDirective,
     StrictBooleanAndOperator,
     SubtractionOperator,
@@ -60,13 +59,6 @@ defmodule Hologram.Compiler.OverhaulTransformerTest do
   end
 
   describe "operators" do
-    test "relaxed boolean or" do
-      code = "true || false"
-      ast = ast(code)
-
-      assert %RelaxedBooleanOrOperator{} = Transformer.transform(ast)
-    end
-
     test "strict boolean and" do
       code = "true and false"
       ast = ast(code)

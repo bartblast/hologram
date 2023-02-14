@@ -311,6 +311,16 @@ defmodule Hologram.Compiler.TransformerTest do
     end
   end
 
+  test "relaxed boolean or operator" do
+    # 1 || 2
+    ast = {:||, [line: 1], [1, 2]}
+
+    assert transform(ast) == %IR.RelaxedBooleanOrOperator{
+             left: %IR.IntegerType{value: 1},
+             right: %IR.IntegerType{value: 2}
+           }
+  end
+
   test "unary positive operator" do
     # +2
     ast = {:+, [line: 1], [2]}
