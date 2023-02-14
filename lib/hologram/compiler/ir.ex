@@ -79,6 +79,10 @@ defmodule Hologram.Compiler.IR do
     defstruct module: nil, data: []
   end
 
+  defmodule TupleType do
+    defstruct data: []
+  end
+
   # --- CONTROL FLOW ---
 
   defmodule AnonymousFunctionCall do
@@ -137,10 +141,6 @@ defmodule Hologram.Compiler.IR do
 
   defmodule ModuleType do
     defstruct module: nil, segments: nil
-  end
-
-  defmodule TupleType do
-    defstruct data: []
   end
 
   # OPERATORS
