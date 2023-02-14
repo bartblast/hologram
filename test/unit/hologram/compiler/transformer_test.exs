@@ -220,6 +220,16 @@ defmodule Hologram.Compiler.TransformerTest do
     assert transform(ast) == %IR.ModuleAttributeOperator{name: :a}
   end
 
+  test "multiplication operator" do
+    # a * 2
+    ast = {:*, [line: 1], [{:a, [line: 1], nil}, 2]}
+
+    assert transform(ast) == %IR.MultiplicationOperator{
+             left: %IR.Symbol{name: :a},
+             right: %IR.IntegerType{value: 2}
+           }
+  end
+
   test "unary positive operator" do
     # +2
     ast = {:+, [line: 1], [2]}

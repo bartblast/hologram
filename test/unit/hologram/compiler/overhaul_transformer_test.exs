@@ -16,7 +16,6 @@ defmodule Hologram.Compiler.OverhaulTransformerTest do
     IntegerType,
     ModuleDefinition,
     ModuleAttributeDefinition,
-    MultiplicationOperator,
     NotEqualToOperator,
     ProtocolDefinition,
     Quote,
@@ -65,13 +64,6 @@ defmodule Hologram.Compiler.OverhaulTransformerTest do
   end
 
   describe "operators" do
-    test "multiplication" do
-      code = "1 * 2"
-      ast = ast(code)
-
-      assert %MultiplicationOperator{} = Transformer.transform(ast)
-    end
-
     test "not equal to" do
       code = "1 != 2"
       ast = ast(code)

@@ -41,6 +41,10 @@ defmodule Hologram.Compiler.IR do
     defstruct name: nil
   end
 
+  defmodule MultiplicationOperator do
+    defstruct left: nil, right: nil, kind: :basic_binary_operator
+  end
+
   defmodule UnaryPositiveOperator do
     defstruct value: nil
   end
@@ -158,10 +162,6 @@ defmodule Hologram.Compiler.IR do
   end
 
   defmodule LessThanOperator do
-    defstruct left: nil, right: nil, kind: :basic_binary_operator
-  end
-
-  defmodule MultiplicationOperator do
     defstruct left: nil, right: nil, kind: :basic_binary_operator
   end
 

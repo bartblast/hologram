@@ -13,7 +13,6 @@ defmodule Hologram.Compiler.OverhaulTransformer do
     ImportDirectiveTransformer,
     ModuleAttributeDefinitionTransformer,
     ModuleDefinitionTransformer,
-    MultiplicationOperatorTransformer,
     NotEqualToOperatorTransformer,
     QuoteTransformer,
     PipeOperatorTransformer,
@@ -45,10 +44,6 @@ defmodule Hologram.Compiler.OverhaulTransformer do
   # must be defined before module attribute operator
   def transform({:@, _, [{:spec, _, [{:"::", _, _}]}]}) do
     %Typespec{}
-  end
-
-  def transform({:*, _, _} = ast) do
-    MultiplicationOperatorTransformer.transform(ast)
   end
 
   def transform({:!=, _, _} = ast) do
