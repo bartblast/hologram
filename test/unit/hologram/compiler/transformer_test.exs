@@ -143,6 +143,26 @@ defmodule Hologram.Compiler.TransformerTest do
            }
   end
 
+  test "list subtraction operator" do
+    # [1, 2] -- [3, 2]
+    ast = {:--, [line: 1], [[1, 2], [3, 2]]}
+
+    assert transform(ast) == %IR.ListSubtractionOperator{
+             left: %IR.ListType{
+               data: [
+                 %IR.IntegerType{value: 1},
+                 %IR.IntegerType{value: 2}
+               ]
+             },
+             right: %IR.ListType{
+               data: [
+                 %IR.IntegerType{value: 3},
+                 %IR.IntegerType{value: 2}
+               ]
+             }
+           }
+  end
+
   test "match operator" do
     # %{a: x, b: y} = %{a: 1, b: 2}
     ast =

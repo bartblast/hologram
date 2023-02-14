@@ -14,7 +14,6 @@ defmodule Hologram.Compiler.OverhaulTransformerTest do
     IfExpression,
     ImportDirective,
     IntegerType,
-    ListSubtractionOperator,
     MembershipOperator,
     ModuleDefinition,
     ModuleAttributeDefinition,
@@ -67,13 +66,6 @@ defmodule Hologram.Compiler.OverhaulTransformerTest do
   end
 
   describe "operators" do
-    test "list subtraction" do
-      code = "[1, 2] -- [3, 2]"
-      ast = ast(code)
-
-      assert %ListSubtractionOperator{} = Transformer.transform(ast)
-    end
-
     test "membership" do
       code = "1 in [1, 2]"
       ast = ast(code)
