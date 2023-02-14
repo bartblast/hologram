@@ -63,13 +63,6 @@ defmodule Hologram.Compiler.OverhaulTransformerTest do
   end
 
   describe "operators" do
-    test "pipe" do
-      code = "100 |> div(2)"
-      ast = ast(code)
-
-      assert %Call{} = Transformer.transform(ast)
-    end
-
     test "relaxed boolean and" do
       code = "true && false"
       ast = ast(code)

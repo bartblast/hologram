@@ -14,7 +14,6 @@ defmodule Hologram.Compiler.OverhaulTransformer do
     ModuleAttributeDefinitionTransformer,
     ModuleDefinitionTransformer,
     QuoteTransformer,
-    PipeOperatorTransformer,
     RelaxedBooleanAndOperatorTransformer,
     RelaxedBooleanNotOperatorTransformer,
     RelaxedBooleanOrOperatorTransformer,
@@ -43,10 +42,6 @@ defmodule Hologram.Compiler.OverhaulTransformer do
   # must be defined before module attribute operator
   def transform({:@, _, [{:spec, _, [{:"::", _, _}]}]}) do
     %Typespec{}
-  end
-
-  def transform({:|>, _, _} = ast) do
-    PipeOperatorTransformer.transform(ast)
   end
 
   def transform({:&&, _, _} = ast) do
