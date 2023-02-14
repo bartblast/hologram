@@ -151,6 +151,10 @@ defmodule Hologram.Compiler.Transformer do
     }
   end
 
+  def transform({:@, _, [{name, _, ast}]}) when not is_list(ast) and name != :spec do
+    %IR.ModuleAttributeOperator{name: name}
+  end
+
   def transform({:+, _, [value]}) do
     %IR.UnaryPositiveOperator{
       value: transform(value)

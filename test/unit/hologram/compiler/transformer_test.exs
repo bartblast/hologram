@@ -345,6 +345,13 @@ defmodule Hologram.Compiler.TransformerTest do
            }
   end
 
+  test "module attribute" do
+    # @a
+    ast = {:@, [line: 1], [{:a, [line: 1], nil}]}
+
+    assert transform(ast) == %IR.ModuleAttributeOperator{name: :a}
+  end
+
   test "unary positive operator" do
     # +2
     ast = {:+, [line: 1], [2]}

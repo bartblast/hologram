@@ -37,7 +37,6 @@ defmodule Hologram.Compiler.OverhaulTransformer do
   alias Hologram.Compiler.IR
 
   alias Hologram.Compiler.IR.{
-    ModuleAttributeOperator,
     ProtocolDefinition,
     Typespec
   }
@@ -63,10 +62,6 @@ defmodule Hologram.Compiler.OverhaulTransformer do
   # must be defined before module attribute operator
   def transform({:@, _, [{:spec, _, [{:"::", _, _}]}]}) do
     %Typespec{}
-  end
-
-  def transform({:@, _, [{name, _, ast}]}) when not is_list(ast) do
-    %ModuleAttributeOperator{name: name}
   end
 
   def transform({:*, _, _} = ast) do

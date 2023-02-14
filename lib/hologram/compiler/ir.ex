@@ -63,6 +63,10 @@ defmodule Hologram.Compiler.IR do
     defstruct bindings: [], left: nil, right: nil
   end
 
+  defmodule ModuleAttributeOperator do
+    defstruct name: nil
+  end
+
   defmodule UnaryPositiveOperator do
     defstruct value: nil
   end
@@ -151,10 +155,6 @@ defmodule Hologram.Compiler.IR do
 
   defmodule MembershipOperator do
     defstruct left: nil, right: nil, kind: :basic_binary_operator
-  end
-
-  defmodule ModuleAttributeOperator do
-    defstruct name: nil
   end
 
   defmodule MultiplicationOperator do

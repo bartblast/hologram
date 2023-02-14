@@ -20,7 +20,6 @@ defmodule Hologram.Compiler.OverhaulTransformerTest do
     MembershipOperator,
     ModuleDefinition,
     ModuleAttributeDefinition,
-    ModuleAttributeOperator,
     MultiplicationOperator,
     NotEqualToOperator,
     ProtocolDefinition,
@@ -110,14 +109,6 @@ defmodule Hologram.Compiler.OverhaulTransformerTest do
       ast = ast(code)
 
       assert %MembershipOperator{} = Transformer.transform(ast)
-    end
-
-    test "module attribute" do
-      code = "@a"
-      ast = ast(code)
-
-      result = Transformer.transform(ast)
-      assert result == %ModuleAttributeOperator{name: :a}
     end
 
     test "multiplication" do
