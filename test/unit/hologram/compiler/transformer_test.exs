@@ -240,45 +240,44 @@ defmodule Hologram.Compiler.TransformerTest do
            }
   end
 
-  # TODO: uncomment
-  # describe "pipe operator" do
-  #   test "non-nested pipeline" do
-  #     # 100 |> div(2)
-  #     ast = {:|>, [line: 1], [100, {:div, [line: 1], [2]}]}
+  describe "pipe operator" do
+    test "non-nested pipeline" do
+      # 100 |> div(2)
+      ast = {:|>, [line: 1], [100, {:div, [line: 1], [2]}]}
 
-  #     assert transform(ast) == %IR.FunctionCall{
-  #              module: Kernel,
-  #              function: :div,
-  #              args: [
-  #                %IR.IntegerType{value: 100},
-  #                %IR.IntegerType{value: 2}
-  #              ]
-  #            }
-  #   end
+      assert transform(ast) == %IR.Call{
+               module: nil,
+               function: :div,
+               args: [
+                 %IR.IntegerType{value: 100},
+                 %IR.IntegerType{value: 2}
+               ]
+             }
+    end
 
-  #   test "nested pipeline" do
-  #     # 100 |> div(2) |> div(3)
-  #     ast =
-  #       {:|>, [line: 1],
-  #        [{:|>, [line: 1], [100, {:div, [line: 1], [2]}]}, {:div, [line: 1], [3]}]}
+    test "nested pipeline" do
+      # 100 |> div(2) |> div(3)
+      ast =
+        {:|>, [line: 1],
+         [{:|>, [line: 1], [100, {:div, [line: 1], [2]}]}, {:div, [line: 1], [3]}]}
 
-  #     assert transform(ast) == %IR.FunctionCall{
-  #              module: Kernel,
-  #              function: :div,
-  #              args: [
-  #                %IR.FunctionCall{
-  #                  module: Kernel,
-  #                  function: :div,
-  #                  args: [
-  #                    %IR.IntegerType{value: 100},
-  #                    %IR.IntegerType{value: 2}
-  #                  ]
-  #                },
-  #                %IR.IntegerType{value: 3}
-  #              ]
-  #            }
-  #   end
-  # end
+      assert transform(ast) == %IR.Call{
+               module: nil,
+               function: :div,
+               args: [
+                 %IR.Call{
+                   module: nil,
+                   function: :div,
+                   args: [
+                     %IR.IntegerType{value: 100},
+                     %IR.IntegerType{value: 2}
+                   ]
+                 },
+                 %IR.IntegerType{value: 3}
+               ]
+             }
+    end
+  end
 
   test "relaxed boolean and operator" do
     # 1 && 2
