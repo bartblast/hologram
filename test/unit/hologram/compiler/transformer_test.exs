@@ -555,6 +555,22 @@ defmodule Hologram.Compiler.TransformerTest do
     end
   end
 
+  # --- PSEUDO-VARIABLES ---
+
+  test "__ENV__ pseudo-variable" do
+    # __ENV__
+    ast = {:__ENV__, [line: 1], nil}
+
+    assert transform(ast) == %IR.EnvPseudoVariable{}
+  end
+
+  test "__MODULE__ pseudo-variable" do
+    # __MODULE__
+    ast = {:__MODULE__, [line: 1], nil}
+
+    assert transform(ast) == %IR.ModulePseudoVariable{}
+  end
+
   # --- DEFINITIONS ---
 
   describe "function definition" do
@@ -701,6 +717,13 @@ defmodule Hologram.Compiler.TransformerTest do
 
   # --- CONTROL FLOW ---
 
+  test "alias" do
+    # A.B
+    ast = {:__aliases__, [line: 1], [:A, :B]}
+
+    assert transform(ast) == %IR.Alias{segments: [:A, :B]}
+  end
+
   describe "anonymous function call" do
     test "without args" do
       # test.()
@@ -734,31 +757,6 @@ defmodule Hologram.Compiler.TransformerTest do
                ]
              }
     end
-  end
-
-  # --- PSEUDO-VARIABLES ---
-
-  test "__ENV__ pseudo-variable" do
-    # __ENV__
-    ast = {:__ENV__, [line: 1], nil}
-
-    assert transform(ast) == %IR.EnvPseudoVariable{}
-  end
-
-  test "__MODULE__ pseudo-variable" do
-    # __MODULE__
-    ast = {:__MODULE__, [line: 1], nil}
-
-    assert transform(ast) == %IR.ModulePseudoVariable{}
-  end
-
-  # --- OTHER IR ---
-
-  test "alias" do
-    # A.B
-    ast = {:__aliases__, [line: 1], [:A, :B]}
-
-    assert transform(ast) == %IR.Alias{segments: [:A, :B]}
   end
 
   test "block" do

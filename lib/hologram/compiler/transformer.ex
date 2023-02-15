@@ -245,6 +245,16 @@ defmodule Hologram.Compiler.Transformer do
     |> build_tuple_type_ir()
   end
 
+  # --- PSEUDO-VARIABLES ---
+
+  def transform({:__ENV__, _, _}) do
+    %IR.EnvPseudoVariable{}
+  end
+
+  def transform({:__MODULE__, _, _}) do
+    %IR.ModulePseudoVariable{}
+  end
+
   # --- DEFINITIONS ---
 
   def transform({marker, _, [{name, _, params}, [do: body]]}) when marker in [:def, :defp] do
@@ -273,6 +283,10 @@ defmodule Hologram.Compiler.Transformer do
 
   # --- CONTROL FLOW ---
 
+  def transform({:__aliases__, _, segments}) do
+    %IR.Alias{segments: segments}
+  end
+
   def transform({{:., _, [{name, _, nil}]}, _, args}) do
     %IR.AnonymousFunctionCall{
       name: name,
@@ -280,25 +294,17 @@ defmodule Hologram.Compiler.Transformer do
     }
   end
 
-  # --- PSEUDO-VARIABLES ---
-
-  def transform({:__ENV__, _, _}) do
-    %IR.EnvPseudoVariable{}
-  end
-
-  def transform({:__MODULE__, _, _}) do
-    %IR.ModulePseudoVariable{}
-  end
-
-  # --- OTHER IR ---
-
-  def transform({:__aliases__, _, segments}) do
-    %IR.Alias{segments: segments}
-  end
-
   def transform({:__block__, _, ast}) do
     ir = Enum.map(ast, &transform/1)
     %IR.Block{expressions: ir}
+  end
+
+  def transform({{:., _, [module, function]}, _, args}) when not is_atom(module) do
+    build_call_ir(module, function, args)
+  end
+
+  def transform({function, _, args}) when is_atom(function) and is_list(args) do
+    build_call_ir(nil, function, args)
   end
 
   def transform({{:., _, [module, function]}, _, args}) when is_atom(module) do
@@ -308,14 +314,6 @@ defmodule Hologram.Compiler.Transformer do
       args: transform_params(args),
       erlang: true
     }
-  end
-
-  def transform({{:., _, [module, function]}, _, args}) do
-    build_call_ir(module, function, args)
-  end
-
-  def transform({function, _, args}) when is_atom(function) and is_list(args) do
-    build_call_ir(nil, function, args)
   end
 
   def transform({name, _, _}) when is_atom(name) do

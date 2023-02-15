@@ -111,6 +111,16 @@ defmodule Hologram.Compiler.IR do
     defstruct data: []
   end
 
+  # --- PSEUDO-VARIABLES ---
+
+  defmodule EnvPseudoVariable do
+    defstruct []
+  end
+
+  defmodule ModulePseudoVariable do
+    defstruct []
+  end
+
   # --- DEFINITIONS ---
 
   defmodule FunctionDefinition do
@@ -128,8 +138,16 @@ defmodule Hologram.Compiler.IR do
 
   # --- CONTROL FLOW ---
 
+  defmodule Alias do
+    defstruct segments: nil
+  end
+
   defmodule AnonymousFunctionCall do
     defstruct name: nil, args: []
+  end
+
+  defmodule Block do
+    defstruct expressions: []
   end
 
   defmodule Call do
@@ -138,6 +156,10 @@ defmodule Hologram.Compiler.IR do
 
   defmodule FunctionCall do
     defstruct module: nil, function: nil, args: [], erlang: false
+  end
+
+  defmodule Symbol do
+    defstruct name: nil
   end
 
   # --- BINDINGS ---
@@ -154,25 +176,7 @@ defmodule Hologram.Compiler.IR do
     defstruct []
   end
 
-  # --- PSEUDO-VARIABLES ---
-
-  defmodule EnvPseudoVariable do
-    defstruct []
-  end
-
-  defmodule ModulePseudoVariable do
-    defstruct []
-  end
-
   # --- OTHER IR ---
-
-  defmodule Alias do
-    defstruct segments: nil
-  end
-
-  defmodule Block do
-    defstruct expressions: []
-  end
 
   defmodule IgnoredExpression do
     defstruct type: nil
@@ -180,10 +184,6 @@ defmodule Hologram.Compiler.IR do
 
   defmodule NotSupportedExpression do
     defstruct type: nil, ast: nil
-  end
-
-  defmodule Symbol do
-    defstruct name: nil
   end
 
   # --- OVERHAUL ---
