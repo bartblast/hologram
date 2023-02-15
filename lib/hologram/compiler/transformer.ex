@@ -246,6 +246,23 @@ defmodule Hologram.Compiler.Transformer do
 
   # --- DEFINITIONS ---
 
+  def transform({marker, _, [{name, _, params}, [do: body]]}) when marker in [:def, :defp] do
+    params = transform_params(params)
+    arity = Enum.count(params)
+    bindings = Helpers.aggregate_bindings_from_params(params)
+    body = transform(body)
+    visibility = if marker == :def, do: :public, else: :private
+
+    %IR.FunctionDefinition{
+      name: name,
+      arity: arity,
+      params: params,
+      bindings: bindings,
+      body: body,
+      visibility: visibility
+    }
+  end
+
   def transform({:@, _, [{name, _, [ast]}]}) do
     %IR.ModuleAttributeDefinition{
       name: name,

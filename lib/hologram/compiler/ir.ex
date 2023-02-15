@@ -113,6 +113,15 @@ defmodule Hologram.Compiler.IR do
 
   # --- DEFINITIONS ---
 
+  defmodule FunctionDefinition do
+    defstruct name: nil,
+              arity: nil,
+              params: [],
+              bindings: [],
+              body: nil,
+              visibility: nil
+  end
+
   defmodule ModuleAttributeDefinition do
     defstruct name: nil, expression: nil
   end
@@ -208,15 +217,6 @@ defmodule Hologram.Compiler.IR do
   end
 
   # DEFINITIONS
-
-  defmodule FunctionDefinition do
-    defstruct name: nil,
-              arity: nil,
-              params: [],
-              bindings: [],
-              body: nil,
-              visibility: nil
-  end
 
   defmodule FunctionDefinitionVariants do
     defstruct name: nil, variants: []

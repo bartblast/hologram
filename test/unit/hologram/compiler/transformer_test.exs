@@ -558,6 +558,135 @@ defmodule Hologram.Compiler.TransformerTest do
 
   # --- DEFINITIONS ---
 
+  describe "function definition" do
+    test "name" do
+      # def my_fun(a, b) do
+      # end
+      ast =
+        {:def, [line: 1],
+         [
+           {:my_fun, [line: 1], [{:a, [line: 1], nil}, {:b, [line: 1], nil}]},
+           [do: {:__block__, [], []}]
+         ]}
+
+      assert %IR.FunctionDefinition{name: :my_fun} = transform(ast)
+    end
+
+    test "without params" do
+      # def my_fun do
+      # end
+      ast = {:def, [line: 1], [{:my_fun, [line: 1], nil}, [do: {:__block__, [], []}]]}
+
+      assert %IR.FunctionDefinition{arity: 0, params: []} = transform(ast)
+    end
+
+    test "with params" do
+      # def my_fun(a, b) do
+      # end
+      ast =
+        {:def, [line: 1],
+         [
+           {:my_fun, [line: 1], [{:a, [line: 1], nil}, {:b, [line: 1], nil}]},
+           [do: {:__block__, [], []}]
+         ]}
+
+      assert %IR.FunctionDefinition{
+               arity: 2,
+               params: [
+                 %IR.Symbol{name: :a},
+                 %IR.Symbol{name: :b}
+               ]
+             } = transform(ast)
+    end
+
+    test "bindings" do
+      # def my_fun(1, %{a: x, b: y}) do
+      # end
+      ast =
+        {:def, [line: 1],
+         [
+           {:my_fun, [line: 1],
+            [1, {:%{}, [line: 1], [a: {:x, [line: 1], nil}, b: {:y, [line: 1], nil}]}]},
+           [do: {:__block__, [], []}]
+         ]}
+
+      assert %IR.FunctionDefinition{
+               bindings: [
+                 %IR.Binding{
+                   name: :x,
+                   access_path: [
+                     %IR.ParamAccess{index: 1},
+                     %IR.MapAccess{key: %IR.AtomType{value: :a}}
+                   ]
+                 },
+                 %IR.Binding{
+                   name: :y,
+                   access_path: [
+                     %IR.ParamAccess{index: 1},
+                     %IR.MapAccess{key: %IR.AtomType{value: :b}}
+                   ]
+                 }
+               ]
+             } = transform(ast)
+    end
+
+    test "empty body" do
+      # def my_fun do
+      # end
+      ast = {:def, [line: 1], [{:my_fun, [line: 1], nil}, [do: {:__block__, [], []}]]}
+
+      assert %IR.FunctionDefinition{body: %IR.Block{expressions: []}} = transform(ast)
+    end
+
+    test "body with single expression" do
+      # def my_fun do
+      #   1
+      # end
+      ast = {:def, [line: 1], [{:my_fun, [line: 1], nil}, [do: {:__block__, [], [1]}]]}
+
+      assert %IR.FunctionDefinition{
+               body: %IR.Block{
+                 expressions: [
+                   %IR.IntegerType{value: 1}
+                 ]
+               }
+             } = transform(ast)
+    end
+
+    test "body with multiple expressions" do
+      # def my_fun do
+      #   1
+      #   2
+      # end
+      ast = {:def, [line: 1], [{:my_fun, [line: 1], nil}, [do: {:__block__, [], [1, 2]}]]}
+
+      assert %IR.FunctionDefinition{
+               body: %IR.Block{
+                 expressions: [
+                   %IR.IntegerType{value: 1},
+                   %IR.IntegerType{value: 2}
+                 ]
+               }
+             } = transform(ast)
+    end
+
+    test "public visibility" do
+      # def my_fun do
+      # end
+      ast = {:def, [line: 1], [{:my_fun, [line: 1], nil}, [do: {:__block__, [], []}]]}
+
+      assert %IR.FunctionDefinition{visibility: :public} = transform(ast)
+    end
+
+    test "private visibility" do
+      # defp my_fun do
+      # end
+      ast = {:defp, [line: 1], [{:my_fun, [line: 1], nil}, [do: {:__block__, [], []}]]}
+
+      assert %IR.FunctionDefinition{visibility: :private} = transform(ast)
+    end
+  end
+
   test "module attribute definition" do
     # @abc 1 + 2
     ast = {:@, [line: 1], [{:abc, [line: 1], [{:+, [line: 1], [1, 2]}]}]}

@@ -10,7 +10,6 @@ defmodule Hologram.Compiler.OverhaulTransformerTest do
     BinaryType,
     Call,
     CaseExpression,
-    FunctionDefinition,
     IfExpression,
     ImportDirective,
     IntegerType,
@@ -88,20 +87,6 @@ defmodule Hologram.Compiler.OverhaulTransformerTest do
   end
 
   describe "definitions" do
-    test "public function" do
-      code = "def test, do: :ok"
-      ast = ast(code)
-
-      assert %FunctionDefinition{} = Transformer.transform(ast)
-    end
-
-    test "private function" do
-      code = "defp test, do: :ok"
-      ast = ast(code)
-
-      assert %FunctionDefinition{} = Transformer.transform(ast)
-    end
-
     test "module" do
       code = "defmodule Hologram.Test.Fixtures.Compiler.Transformer.Module1 do end"
       ast = ast(code)

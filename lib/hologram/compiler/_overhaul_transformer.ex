@@ -7,7 +7,6 @@ defmodule Hologram.Compiler.OverhaulTransformer do
     CallTransformer,
     CaseExpressionTransformer,
     ForExpressionTransformer,
-    FunctionDefinitionTransformer,
     IfExpressionTransformer,
     ImportDirectiveTransformer,
     ModuleDefinitionTransformer,
@@ -57,14 +56,6 @@ defmodule Hologram.Compiler.OverhaulTransformer do
   end
 
   # DEFINITIONS
-
-  def transform({:def, _, _} = ast) do
-    FunctionDefinitionTransformer.transform(ast)
-  end
-
-  def transform({:defp, _, _} = ast) do
-    FunctionDefinitionTransformer.transform(ast)
-  end
 
   def transform({:defmacro, _, _}) do
     %IR.IgnoredExpression{type: :macro_definition}
