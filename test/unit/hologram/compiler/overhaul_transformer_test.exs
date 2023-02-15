@@ -7,7 +7,6 @@ defmodule Hologram.Compiler.OverhaulTransformerTest do
 
   alias Hologram.Compiler.IR.{
     AliasDirective,
-    BinaryType,
     Call,
     CaseExpression,
     IfExpression,
@@ -27,13 +26,6 @@ defmodule Hologram.Compiler.OverhaulTransformerTest do
   }
 
   describe "data types" do
-    test "binary" do
-      code = "<<1, 2>>"
-      ast = ast(code)
-
-      assert %BinaryType{} = Transformer.transform(ast)
-    end
-
     test "nested" do
       code = "[1, {2, 3, 4}]"
       ast = ast(code)

@@ -186,6 +186,10 @@ defmodule Hologram.Compiler.Transformer do
     %IR.AtomType{value: ast}
   end
 
+  def transform({:<<>>, _, parts}) do
+    %IR.BinaryType{parts: transform_params(parts)}
+  end
+
   def transform(ast) when is_boolean(ast) do
     %IR.BooleanType{value: ast}
   end

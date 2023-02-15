@@ -3,7 +3,6 @@ defmodule Hologram.Compiler.OverhaulTransformer do
 
   alias Hologram.Compiler.{
     AliasDirectiveTransformer,
-    BinaryTypeTransformer,
     CaseExpressionTransformer,
     ForExpressionTransformer,
     IfExpressionTransformer,
@@ -42,12 +41,6 @@ defmodule Hologram.Compiler.OverhaulTransformer do
 
   def transform({:"::", _, _} = ast) do
     TypeOperatorTransformer.transform(ast)
-  end
-
-  # TYPES
-
-  def transform({:<<>>, _, _} = ast) do
-    BinaryTypeTransformer.transform(ast)
   end
 
   # DEFINITIONS

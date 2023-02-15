@@ -439,6 +439,27 @@ defmodule Hologram.Compiler.TransformerTest do
     assert transform(ast) == %IR.AtomType{value: :test}
   end
 
+  describe "binary type" do
+    test "empty" do
+      # <<>>
+      ast = {:<<>>, [line: 1], []}
+
+      assert transform(ast) == %IR.BinaryType{parts: []}
+    end
+
+    test "non-empty" do
+      # <<1, 2>>
+      ast = {:<<>>, [line: 1], [1, 2]}
+
+      assert transform(ast) == %IR.BinaryType{
+               parts: [
+                 %IR.IntegerType{value: 1},
+                 %IR.IntegerType{value: 2}
+               ]
+             }
+    end
+  end
+
   test "boolean type" do
     # true
     ast = true
