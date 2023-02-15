@@ -12,7 +12,6 @@ defmodule Hologram.Compiler.OverhaulTransformer do
     RequireDirectiveTransformer,
     StrictBooleanAndOperatorTransformer,
     SubtractionOperatorTransformer,
-    TypeOperatorTransformer,
     UnaryNegativeOperatorTransformer,
     UnquoteTransformer,
     UseDirectiveTransformer
@@ -33,10 +32,6 @@ defmodule Hologram.Compiler.OverhaulTransformer do
 
   def transform({:-, _, _} = ast) do
     SubtractionOperatorTransformer.transform(ast)
-  end
-
-  def transform({:"::", _, _} = ast) do
-    TypeOperatorTransformer.transform(ast)
   end
 
   # DEFINITIONS

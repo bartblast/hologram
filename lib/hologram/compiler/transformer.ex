@@ -164,6 +164,13 @@ defmodule Hologram.Compiler.Transformer do
     }
   end
 
+  def transform({:"::", _, [left, {right, _, _}]}) do
+    %IR.TypeOperator{
+      left: transform(left),
+      right: right
+    }
+  end
+
   def transform({:+, _, [value]}) do
     %IR.UnaryPositiveOperator{
       value: transform(value)

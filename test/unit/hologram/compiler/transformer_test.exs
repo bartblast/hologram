@@ -330,6 +330,16 @@ defmodule Hologram.Compiler.TransformerTest do
            }
   end
 
+  test "type" do
+    # str::binary
+    ast = {:"::", [line: 1], [{:str, [line: 1], nil}, {:binary, [line: 1], nil}]}
+
+    assert transform(ast) == %IR.TypeOperator{
+             left: %IR.Symbol{name: :str},
+             right: :binary
+           }
+  end
+
   test "unary positive operator" do
     # +2
     ast = {:+, [line: 1], [2]}

@@ -55,13 +55,6 @@ defmodule Hologram.Compiler.OverhaulTransformerTest do
       assert %SubtractionOperator{} = Transformer.transform(ast)
     end
 
-    test "type" do
-      code = "str::binary"
-      ast = ast(code)
-
-      assert %TypeOperator{} = Transformer.transform(ast)
-    end
-
     test "unary negative" do
       code = "-2"
       ast = ast(code)
