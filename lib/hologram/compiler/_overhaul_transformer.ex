@@ -10,7 +10,6 @@ defmodule Hologram.Compiler.OverhaulTransformer do
     FunctionDefinitionTransformer,
     IfExpressionTransformer,
     ImportDirectiveTransformer,
-    ModuleAttributeDefinitionTransformer,
     ModuleDefinitionTransformer,
     QuoteTransformer,
     RequireDirectiveTransformer,
@@ -78,10 +77,6 @@ defmodule Hologram.Compiler.OverhaulTransformer do
   # TODO: implement
   def transform({:defprotocol, _, _}) do
     %ProtocolDefinition{}
-  end
-
-  def transform({:@, _, [{_, _, exprs}]} = ast) when is_list(exprs) do
-    ModuleAttributeDefinitionTransformer.transform(ast)
   end
 
   # DIRECTIVES

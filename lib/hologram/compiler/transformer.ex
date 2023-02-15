@@ -105,7 +105,7 @@ defmodule Hologram.Compiler.Transformer do
     }
   end
 
-  def transform({:@, _, [{name, _, ast}]}) when not is_list(ast) and name != :spec do
+  def transform({:@, _, [{name, _, nil}]}) do
     %IR.ModuleAttributeOperator{name: name}
   end
 
@@ -246,12 +246,11 @@ defmodule Hologram.Compiler.Transformer do
 
   # --- DEFINITIONS ---
 
-  def transform({:@, _, [{:callback, _, _}]}) do
-    %IR.IgnoredExpression{type: :behaviour_callback_spec}
-  end
-
-  def transform({:@, _, [{:spec, _, _}]}) do
-    %IR.IgnoredExpression{type: :typespec}
+  def transform({:@, _, [{name, _, [ast]}]}) do
+    %IR.ModuleAttributeDefinition{
+      name: name,
+      expression: transform(ast)
+    }
   end
 
   # --- CONTROL FLOW ---

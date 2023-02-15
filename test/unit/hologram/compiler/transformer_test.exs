@@ -213,7 +213,7 @@ defmodule Hologram.Compiler.TransformerTest do
            }
   end
 
-  test "module attribute" do
+  test "module attribute operator" do
     # @a
     ast = {:@, [line: 1], [{:a, [line: 1], nil}]}
 
@@ -558,34 +558,17 @@ defmodule Hologram.Compiler.TransformerTest do
 
   # --- DEFINITIONS ---
 
-  test "behaviour callback spec" do
-    # @callback my_fun :: any()
-    ast =
-      {:@, [line: 1],
-       [
-         {:callback, [line: 1],
-          [{:"::", [line: 1], [{:my_fun, [line: 1], nil}, {:any, [line: 1], []}]}]}
-       ]}
+  test "module attribute definition" do
+    # @abc 1 + 2
+    ast = {:@, [line: 1], [{:abc, [line: 1], [{:+, [line: 1], [1, 2]}]}]}
 
-    assert transform(ast) == %IR.IgnoredExpression{type: :behaviour_callback_spec}
-  end
-
-  test "typespec" do
-    # @spec my_fun(atom()) :: list(integer())
-    ast =
-      {:@, [line: 1],
-       [
-         {:spec, [line: 1],
-          [
-            {:"::", [line: 1],
-             [
-               {:my_fun, [line: 1], [{:atom, [line: 1], []}]},
-               {:list, [line: 1], [{:integer, [line: 1], []}]}
-             ]}
-          ]}
-       ]}
-
-    assert transform(ast) == %IR.IgnoredExpression{type: :typespec}
+    assert transform(ast) == %IR.ModuleAttributeDefinition{
+             name: :abc,
+             expression: %IR.AdditionOperator{
+               left: %IR.IntegerType{value: 1},
+               right: %IR.IntegerType{value: 2}
+             }
+           }
   end
 
   # --- CONTROL FLOW ---

@@ -15,7 +15,6 @@ defmodule Hologram.Compiler.OverhaulTransformerTest do
     ImportDirective,
     IntegerType,
     ModuleDefinition,
-    ModuleAttributeDefinition,
     ProtocolDefinition,
     Quote,
     RequireDirective,
@@ -108,13 +107,6 @@ defmodule Hologram.Compiler.OverhaulTransformerTest do
       ast = ast(code)
 
       assert %ModuleDefinition{} = Transformer.transform(ast)
-    end
-
-    test "module attribute" do
-      code = "@a 1"
-      ast = ast(code)
-
-      assert %ModuleAttributeDefinition{} = Transformer.transform(ast)
     end
 
     test "protocol" do

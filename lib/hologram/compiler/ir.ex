@@ -111,6 +111,12 @@ defmodule Hologram.Compiler.IR do
     defstruct data: []
   end
 
+  # --- DEFINITIONS ---
+
+  defmodule ModuleAttributeDefinition do
+    defstruct name: nil, expression: nil
+  end
+
   # --- CONTROL FLOW ---
 
   defmodule AnonymousFunctionCall do
@@ -223,10 +229,6 @@ defmodule Hologram.Compiler.IR do
 
   defmodule ModuleDefinition do
     defstruct module: nil, body: nil
-  end
-
-  defmodule ModuleAttributeDefinition do
-    defstruct name: nil, expression: nil
   end
 
   # DEFER: implement
