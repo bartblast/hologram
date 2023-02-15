@@ -246,6 +246,10 @@ defmodule Hologram.Compiler.Transformer do
 
   # --- DEFINITIONS ---
 
+  def transform({:@, _, [{:callback, _, _}]}) do
+    %IR.IgnoredExpression{type: :behaviour_callback_spec}
+  end
+
   def transform({:@, _, [{:spec, _, _}]}) do
     %IR.IgnoredExpression{type: :typespec}
   end

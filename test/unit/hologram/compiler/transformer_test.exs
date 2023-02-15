@@ -558,8 +558,20 @@ defmodule Hologram.Compiler.TransformerTest do
 
   # --- DEFINITIONS ---
 
+  test "behaviour callback spec" do
+    # @callback my_fun :: any()
+    ast =
+      {:@, [line: 1],
+       [
+         {:callback, [line: 1],
+          [{:"::", [line: 1], [{:my_fun, [line: 1], nil}, {:any, [line: 1], []}]}]}
+       ]}
+
+    assert transform(ast) == %IR.IgnoredExpression{type: :behaviour_callback_spec}
+  end
+
   test "typespec" do
-    # @spec test_fun(atom()) :: list(integer())
+    # @spec my_fun(atom()) :: list(integer())
     ast =
       {:@, [line: 1],
        [
@@ -567,7 +579,7 @@ defmodule Hologram.Compiler.TransformerTest do
           [
             {:"::", [line: 1],
              [
-               {:test_fun, [line: 1], [{:atom, [line: 1], []}]},
+               {:my_fun, [line: 1], [{:atom, [line: 1], []}]},
                {:list, [line: 1], [{:integer, [line: 1], []}]}
              ]}
           ]}
