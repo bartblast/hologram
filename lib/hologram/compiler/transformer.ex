@@ -44,7 +44,8 @@ defmodule Hologram.Compiler.Transformer do
     }
   end
 
-  def transform({{:., _, [left, right]}, [no_parens: true, line: _], []}) do
+  def transform({{:., _, [{marker, _, _} = left, right]}, [no_parens: true, line: _], []})
+      when marker not in [:__aliases__, :__MODULE__] do
     %IR.DotOperator{
       left: transform(left),
       right: transform(right)
@@ -300,11 +301,48 @@ defmodule Hologram.Compiler.Transformer do
     %IR.Block{expressions: ir}
   end
 
+  def transform({{:., _, [module, function]}, _, args}) when is_atom(module) do
+    %IR.FunctionCall{
+      module: module,
+      function: function,
+      args: transform_params(args),
+      erlang: true
+    }
+  end
+
+  def transform({{:., _, [module, function]}, _, args}) do
+    build_call_ir(module, function, args)
+  end
+
+  def transform({function, _, args}) when is_atom(function) and is_list(args) do
+    build_call_ir(nil, function, args)
+  end
+
   def transform({name, _, _}) when is_atom(name) do
     %IR.Symbol{name: name}
   end
 
   # --- HELPERS ---
+
+  defp build_call_ir(module, function, args) do
+    new_module =
+      case module do
+        nil ->
+          nil
+
+        %IR.ModuleType{} ->
+          module
+
+        module ->
+          transform(module)
+      end
+
+    %IR.Call{
+      module: new_module,
+      function: function,
+      args: transform_params(args)
+    }
+  end
 
   defp build_relaxed_boolean_not_operator_ir(value) do
     %IR.RelaxedBooleanNotOperator{

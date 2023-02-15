@@ -777,6 +777,232 @@ defmodule Hologram.Compiler.TransformerTest do
            }
   end
 
+  describe "call" do
+    test "without args" do
+      # my_fun()
+      ast = {:my_fun, [line: 1], []}
+
+      assert transform(ast) == %IR.Call{
+               module: nil,
+               function: :my_fun,
+               args: []
+             }
+    end
+
+    test "with args" do
+      # my_fun(1, 2)
+      ast = {:my_fun, [line: 1], [1, 2]}
+
+      assert transform(ast) == %IR.Call{
+               module: nil,
+               function: :my_fun,
+               args: [
+                 %IR.IntegerType{value: 1},
+                 %IR.IntegerType{value: 2}
+               ]
+             }
+    end
+
+    test "on symbol, without args" do
+      # a.x()
+      ast = {{:., [line: 1], [{:a, [line: 1], nil}, :x]}, [line: 1], []}
+
+      assert transform(ast) == %IR.Call{
+               module: %IR.Symbol{name: :a},
+               function: :x,
+               args: []
+             }
+    end
+
+    test "on symbol, with args" do
+      # a.x(1, 2)
+      ast = {{:., [line: 1], [{:a, [line: 1], nil}, :x]}, [line: 1], [1, 2]}
+
+      assert transform(ast) == %IR.Call{
+               module: %IR.Symbol{name: :a},
+               function: :x,
+               args: [
+                 %IR.IntegerType{value: 1},
+                 %IR.IntegerType{value: 2}
+               ]
+             }
+    end
+
+    test "on alias, without args, without parenthesis" do
+      # Abc.my_fun
+      ast =
+        {{:., [line: 1], [{:__aliases__, [line: 1], [:Abc]}, :my_fun]},
+         [no_parens: true, line: 1], []}
+
+      assert transform(ast) == %IR.Call{
+               module: %IR.Alias{segments: [:Abc]},
+               function: :my_fun,
+               args: []
+             }
+    end
+
+    test "on alias, without args, with parenthesis" do
+      # Abc.my_fun()
+      ast = {{:., [line: 1], [{:__aliases__, [line: 1], [:Abc]}, :my_fun]}, [line: 1], []}
+
+      assert transform(ast) == %IR.Call{
+               module: %IR.Alias{segments: [:Abc]},
+               function: :my_fun,
+               args: []
+             }
+    end
+
+    test "on alias, with args" do
+      # Abc.my_fun(1, 2)
+      ast = {{:., [line: 1], [{:__aliases__, [line: 1], [:Abc]}, :my_fun]}, [line: 1], [1, 2]}
+
+      assert transform(ast) == %IR.Call{
+               module: %IR.Alias{segments: [:Abc]},
+               function: :my_fun,
+               args: [
+                 %IR.IntegerType{value: 1},
+                 %IR.IntegerType{value: 2}
+               ]
+             }
+    end
+
+    test "on module attribute, without args" do
+      # @my_attr.my_fun()
+      ast =
+        {{:., [line: 1], [{:@, [line: 1], [{:my_attr, [line: 1], nil}]}, :my_fun]}, [line: 1], []}
+
+      assert transform(ast) == %IR.Call{
+               module: %IR.ModuleAttributeOperator{name: :my_attr},
+               function: :my_fun,
+               args: []
+             }
+    end
+
+    test "on module attribute, with args" do
+      # @my_attr.my_fun(1, 2)
+      ast =
+        {{:., [line: 1], [{:@, [line: 1], [{:my_attr, [line: 1], nil}]}, :my_fun]}, [line: 1],
+         [1, 2]}
+
+      assert transform(ast) == %IR.Call{
+               module: %IR.ModuleAttributeOperator{name: :my_attr},
+               function: :my_fun,
+               args: [
+                 %IR.IntegerType{value: 1},
+                 %IR.IntegerType{value: 2}
+               ]
+             }
+    end
+
+    test "on expression, without args" do
+      # (3 + 4).my_fun()
+      ast = {{:., [line: 1], [{:+, [line: 1], [3, 4]}, :my_fun]}, [line: 1], []}
+
+      assert transform(ast) == %IR.Call{
+               module: %IR.AdditionOperator{
+                 left: %IR.IntegerType{value: 3},
+                 right: %IR.IntegerType{value: 4}
+               },
+               function: :my_fun,
+               args: []
+             }
+    end
+
+    test "on expression, with args" do
+      # (3 + 4).my_fun(1, 2)
+      ast = {{:., [line: 1], [{:+, [line: 1], [3, 4]}, :my_fun]}, [line: 1], [1, 2]}
+
+      assert transform(ast) == %IR.Call{
+               module: %IR.AdditionOperator{
+                 left: %IR.IntegerType{value: 3},
+                 right: %IR.IntegerType{value: 4}
+               },
+               function: :my_fun,
+               args: [
+                 %IR.IntegerType{value: 1},
+                 %IR.IntegerType{value: 2}
+               ]
+             }
+    end
+
+    test "on __MODULE__ pseudo-variable, without args, without parenthesis" do
+      # __MODULE__.my_fun
+      ast =
+        {{:., [line: 1], [{:__MODULE__, [line: 1], nil}, :my_fun]}, [no_parens: true, line: 1],
+         []}
+
+      assert transform(ast) == %IR.Call{
+               module: %IR.ModulePseudoVariable{},
+               function: :my_fun,
+               args: []
+             }
+    end
+
+    test "on __MODULE__ pseudo-variable, without args, with parenthesis" do
+      # __MODULE__.my_fun()
+      ast = {{:., [line: 1], [{:__MODULE__, [line: 1], nil}, :my_fun]}, [line: 1], []}
+
+      assert transform(ast) == %IR.Call{
+               module: %IR.ModulePseudoVariable{},
+               function: :my_fun,
+               args: []
+             }
+    end
+
+    test "on __MODULE__ pseudo-variable, with args" do
+      # __MODULE__.my_fun(1, 2)
+      ast = {{:., [line: 1], [{:__MODULE__, [line: 1], nil}, :my_fun]}, [line: 1], [1, 2]}
+
+      assert transform(ast) == %IR.Call{
+               module: %IR.ModulePseudoVariable{},
+               function: :my_fun,
+               args: [
+                 %IR.IntegerType{value: 1},
+                 %IR.IntegerType{value: 2}
+               ]
+             }
+    end
+
+    test "Erlang function, without args, without parenthesis" do
+      # :my_module.my_fun
+      ast = {{:., [line: 1], [:my_module, :my_fun]}, [no_parens: true, line: 1], []}
+
+      assert transform(ast) == %IR.FunctionCall{
+               module: :my_module,
+               function: :my_fun,
+               args: [],
+               erlang: true
+             }
+    end
+
+    test "Erlang function, without args, with parenthesis" do
+      # :my_module.my_fun()
+      ast = {{:., [line: 1], [:my_module, :my_fun]}, [line: 1], []}
+
+      assert transform(ast) == %IR.FunctionCall{
+               module: :my_module,
+               function: :my_fun,
+               args: [],
+               erlang: true
+             }
+    end
+
+    test "Erlang function, with args" do
+      # :my_module.my_fun(1, 2)
+      ast = {{:., [line: 1], [:my_module, :my_fun]}, [line: 1], [1, 2]}
+
+      assert transform(ast) == %IR.FunctionCall{
+               module: :my_module,
+               function: :my_fun,
+               args: [
+                 %IR.IntegerType{value: 1},
+                 %IR.IntegerType{value: 2}
+               ],
+               erlang: true
+             }
+    end
+  end
+
   test "symbol" do
     # a
     ast = {:a, [line: 1], nil}

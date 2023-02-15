@@ -132,6 +132,14 @@ defmodule Hologram.Compiler.IR do
     defstruct name: nil, args: []
   end
 
+  defmodule Call do
+    defstruct module: nil, function: nil, args: []
+  end
+
+  defmodule FunctionCall do
+    defstruct module: nil, function: nil, args: [], erlang: false
+  end
+
   # --- BINDINGS ---
 
   defmodule Binding do
@@ -256,16 +264,8 @@ defmodule Hologram.Compiler.IR do
 
   # CONTROL FLOW
 
-  defmodule Call do
-    defstruct module: nil, function: nil, args: []
-  end
-
   defmodule CaseExpression do
     defstruct condition: nil, clauses: []
-  end
-
-  defmodule FunctionCall do
-    defstruct module: nil, function: nil, args: []
   end
 
   defmodule IfExpression do

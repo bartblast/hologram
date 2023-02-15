@@ -4,7 +4,6 @@ defmodule Hologram.Compiler.OverhaulTransformer do
   alias Hologram.Compiler.{
     AliasDirectiveTransformer,
     BinaryTypeTransformer,
-    CallTransformer,
     CaseExpressionTransformer,
     ForExpressionTransformer,
     IfExpressionTransformer,
@@ -27,10 +26,6 @@ defmodule Hologram.Compiler.OverhaulTransformer do
   }
 
   # OPERATORS
-
-  def transform({{:., _, _}, _, _} = ast) do
-    DotOperatorTransformer.transform(ast)
-  end
 
   def transform({:and, _, _} = ast) do
     StrictBooleanAndOperatorTransformer.transform(ast)
@@ -110,14 +105,5 @@ defmodule Hologram.Compiler.OverhaulTransformer do
 
   def transform({:unquote, _, _} = ast) do
     UnquoteTransformer.transform(ast)
-  end
-
-  def transform({name, _, args} = ast)
-      when is_atom(name) and is_list(args) do
-    CallTransformer.transform(ast)
-  end
-
-  def transform({_, [context: _, imports: _], _} = ast) do
-    CallTransformer.transform(ast)
   end
 end
