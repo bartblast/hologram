@@ -157,6 +157,13 @@ defmodule Hologram.Compiler.Transformer do
     }
   end
 
+  def transform({:and, _, [left, right]}) do
+    %IR.StrictBooleanAndOperator{
+      left: transform(left),
+      right: transform(right)
+    }
+  end
+
   def transform({:+, _, [value]}) do
     %IR.UnaryPositiveOperator{
       value: transform(value)

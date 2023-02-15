@@ -16,7 +16,6 @@ defmodule Hologram.Compiler.OverhaulTransformerTest do
     ProtocolDefinition,
     Quote,
     RequireDirective,
-    StrictBooleanAndOperator,
     SubtractionOperator,
     TupleType,
     TypeOperator,
@@ -49,13 +48,6 @@ defmodule Hologram.Compiler.OverhaulTransformerTest do
   end
 
   describe "operators" do
-    test "strict boolean and" do
-      code = "true and false"
-      ast = ast(code)
-
-      assert %StrictBooleanAndOperator{} = Transformer.transform(ast)
-    end
-
     test "subtraction" do
       code = "1 - 2"
       ast = ast(code)

@@ -26,10 +26,6 @@ defmodule Hologram.Compiler.OverhaulTransformer do
 
   # OPERATORS
 
-  def transform({:and, _, _} = ast) do
-    StrictBooleanAndOperatorTransformer.transform(ast)
-  end
-
   # must be defined before binary subtraction operator
   def transform({:-, _, [_]} = ast) do
     UnaryNegativeOperatorTransformer.transform(ast)

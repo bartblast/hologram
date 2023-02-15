@@ -320,6 +320,16 @@ defmodule Hologram.Compiler.TransformerTest do
            }
   end
 
+  test "strict boolean and operator" do
+    # true and false
+    ast = {:and, [line: 1], [true, false]}
+
+    assert transform(ast) == %IR.StrictBooleanAndOperator{
+             left: %IR.BooleanType{value: true},
+             right: %IR.BooleanType{value: false}
+           }
+  end
+
   test "unary positive operator" do
     # +2
     ast = {:+, [line: 1], [2]}
