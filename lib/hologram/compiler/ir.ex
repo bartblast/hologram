@@ -65,6 +65,10 @@ defmodule Hologram.Compiler.IR do
     defstruct left: nil, right: nil, kind: :basic_binary_operator
   end
 
+  defmodule SubtractionOperator do
+    defstruct left: nil, right: nil, kind: :basic_binary_operator
+  end
+
   defmodule TypeOperator do
     defstruct left: nil, right: nil, kind: :basic_binary_operator
   end
@@ -213,10 +217,6 @@ defmodule Hologram.Compiler.IR do
   end
 
   defmodule LessThanOperator do
-    defstruct left: nil, right: nil, kind: :basic_binary_operator
-  end
-
-  defmodule SubtractionOperator do
     defstruct left: nil, right: nil, kind: :basic_binary_operator
   end
 

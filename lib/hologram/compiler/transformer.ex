@@ -164,6 +164,13 @@ defmodule Hologram.Compiler.Transformer do
     }
   end
 
+  def transform({:-, _, [left, right]}) do
+    %IR.SubtractionOperator{
+      left: transform(left),
+      right: transform(right)
+    }
+  end
+
   def transform({:"::", _, [left, {right, _, _}]}) do
     %IR.TypeOperator{
       left: transform(left),

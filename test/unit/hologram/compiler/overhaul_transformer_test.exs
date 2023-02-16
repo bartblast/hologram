@@ -16,7 +16,6 @@ defmodule Hologram.Compiler.OverhaulTransformerTest do
     ProtocolDefinition,
     Quote,
     RequireDirective,
-    SubtractionOperator,
     TupleType,
     TypeOperator,
     UnaryNegativeOperator,
@@ -48,13 +47,6 @@ defmodule Hologram.Compiler.OverhaulTransformerTest do
   end
 
   describe "operators" do
-    test "subtraction" do
-      code = "1 - 2"
-      ast = ast(code)
-
-      assert %SubtractionOperator{} = Transformer.transform(ast)
-    end
-
     test "unary negative" do
       code = "-2"
       ast = ast(code)
