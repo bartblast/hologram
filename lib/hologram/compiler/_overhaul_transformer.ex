@@ -10,8 +10,6 @@ defmodule Hologram.Compiler.OverhaulTransformer do
     ModuleDefinitionTransformer,
     QuoteTransformer,
     RequireDirectiveTransformer,
-    StrictBooleanAndOperatorTransformer,
-    UnaryNegativeOperatorTransformer,
     UnquoteTransformer,
     UseDirectiveTransformer
   }
@@ -21,13 +19,6 @@ defmodule Hologram.Compiler.OverhaulTransformer do
   alias Hologram.Compiler.IR.{
     ProtocolDefinition
   }
-
-  # OPERATORS
-
-  # must be defined before binary subtraction operator
-  def transform({:-, _, [_]} = ast) do
-    UnaryNegativeOperatorTransformer.transform(ast)
-  end
 
   # DEFINITIONS
 

@@ -178,6 +178,12 @@ defmodule Hologram.Compiler.Transformer do
     }
   end
 
+  def transform({:-, _, [value]}) do
+    %IR.UnaryNegativeOperator{
+      value: transform(value)
+    }
+  end
+
   def transform({:+, _, [value]}) do
     %IR.UnaryPositiveOperator{
       value: transform(value)

@@ -18,7 +18,6 @@ defmodule Hologram.Compiler.OverhaulTransformerTest do
     RequireDirective,
     TupleType,
     TypeOperator,
-    UnaryNegativeOperator,
     Unquote,
     UseDirective
   }
@@ -43,15 +42,6 @@ defmodule Hologram.Compiler.OverhaulTransformerTest do
       }
 
       assert result == expected
-    end
-  end
-
-  describe "operators" do
-    test "unary negative" do
-      code = "-2"
-      ast = ast(code)
-
-      assert %UnaryNegativeOperator{} = Transformer.transform(ast)
     end
   end
 
