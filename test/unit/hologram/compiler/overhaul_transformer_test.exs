@@ -12,7 +12,6 @@ defmodule Hologram.Compiler.OverhaulTransformerTest do
     IfExpression,
     ImportDirective,
     IntegerType,
-    ModuleDefinition,
     ProtocolDefinition,
     Quote,
     RequireDirective,
@@ -46,13 +45,6 @@ defmodule Hologram.Compiler.OverhaulTransformerTest do
   end
 
   describe "definitions" do
-    test "module" do
-      code = "defmodule Hologram.Test.Fixtures.Compiler.Transformer.Module1 do end"
-      ast = ast(code)
-
-      assert %ModuleDefinition{} = Transformer.transform(ast)
-    end
-
     test "protocol" do
       code = """
       defprotocol Hologram.Test.Fixtures.PlaceholderModule1 do

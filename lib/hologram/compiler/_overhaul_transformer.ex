@@ -26,10 +26,6 @@ defmodule Hologram.Compiler.OverhaulTransformer do
     %IR.IgnoredExpression{type: :macro_definition}
   end
 
-  def transform({:defmodule, _, _} = ast) do
-    ModuleDefinitionTransformer.transform(ast)
-  end
-
   # TODO: implement
   def transform({:defprotocol, _, _}) do
     %ProtocolDefinition{}

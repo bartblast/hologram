@@ -156,6 +156,10 @@ defmodule Hologram.Compiler.IR do
     defstruct name: nil, expression: nil
   end
 
+  defmodule ModuleDefinition do
+    defstruct module: nil, body: nil
+  end
+
   # --- CONTROL FLOW ---
 
   defmodule Alias do
@@ -233,10 +237,6 @@ defmodule Hologram.Compiler.IR do
   # DEFER: implement
   defmodule FunctionHead do
     defstruct []
-  end
-
-  defmodule ModuleDefinition do
-    defstruct module: nil, body: nil
   end
 
   # DEFER: implement

@@ -312,6 +312,13 @@ defmodule Hologram.Compiler.Transformer do
     }
   end
 
+  def transform({:defmodule, _, [module, [do: body]]}) do
+    %IR.ModuleDefinition{
+      module: transform(module),
+      body: transform(body)
+    }
+  end
+
   # --- CONTROL FLOW ---
 
   def transform({:__aliases__, _, segments}) do
