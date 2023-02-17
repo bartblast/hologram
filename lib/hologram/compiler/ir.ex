@@ -286,10 +286,6 @@ defmodule Hologram.Compiler.IR do
 
   # OTHER
 
-  defmodule Quote do
-    defstruct body: nil
-  end
-
   defmodule Unquote do
     defstruct expression: nil
   end

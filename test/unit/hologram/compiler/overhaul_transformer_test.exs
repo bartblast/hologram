@@ -12,7 +12,6 @@ defmodule Hologram.Compiler.OverhaulTransformerTest do
     IfExpression,
     ImportDirective,
     IntegerType,
-    Quote,
     RequireDirective,
     TupleType,
     TypeOperator,
@@ -123,13 +122,6 @@ defmodule Hologram.Compiler.OverhaulTransformerTest do
   end
 
   describe "other" do
-    test "quote" do
-      code = "quote do 1 end"
-      ast = ast(code)
-
-      assert %Quote{} = Transformer.transform(ast)
-    end
-
     test "unquote" do
       code = "unquote(abc)"
       ast = ast(code)
