@@ -9,7 +9,6 @@ defmodule Hologram.Compiler.OverhaulTransformer do
     ImportDirectiveTransformer,
     ModuleDefinitionTransformer,
     RequireDirectiveTransformer,
-    UnquoteTransformer,
     UseDirectiveTransformer
   }
 
@@ -51,11 +50,5 @@ defmodule Hologram.Compiler.OverhaulTransformer do
 
   def transform({:if, _, _} = ast) do
     IfExpressionTransformer.transform(ast)
-  end
-
-  # OTHER
-
-  def transform({:unquote, _, _} = ast) do
-    UnquoteTransformer.transform(ast)
   end
 end
