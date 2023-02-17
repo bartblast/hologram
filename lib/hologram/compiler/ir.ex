@@ -234,11 +234,6 @@ defmodule Hologram.Compiler.IR do
     defstruct name: nil, variants: []
   end
 
-  # DEFER: implement
-  defmodule FunctionHead do
-    defstruct []
-  end
-
   # DIRECTIVES
 
   defmodule AliasDirective do
