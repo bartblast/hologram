@@ -12,7 +12,6 @@ defmodule Hologram.Compiler.OverhaulTransformerTest do
     IfExpression,
     ImportDirective,
     IntegerType,
-    ProtocolDefinition,
     Quote,
     RequireDirective,
     TupleType,
@@ -41,20 +40,6 @@ defmodule Hologram.Compiler.OverhaulTransformerTest do
       }
 
       assert result == expected
-    end
-  end
-
-  describe "definitions" do
-    test "protocol" do
-      code = """
-      defprotocol Hologram.Test.Fixtures.PlaceholderModule1 do
-        def test_fun(a, b)
-      end
-      """
-
-      ast = ast(code)
-
-      assert %ProtocolDefinition{} = Transformer.transform(ast)
     end
   end
 

@@ -16,19 +16,10 @@ defmodule Hologram.Compiler.OverhaulTransformer do
 
   alias Hologram.Compiler.IR
 
-  alias Hologram.Compiler.IR.{
-    ProtocolDefinition
-  }
-
   # DEFINITIONS
 
   def transform({:defmacro, _, _}) do
     %IR.IgnoredExpression{type: :macro_definition}
-  end
-
-  # TODO: implement
-  def transform({:defprotocol, _, _}) do
-    %ProtocolDefinition{}
   end
 
   # DIRECTIVES

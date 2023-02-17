@@ -239,11 +239,6 @@ defmodule Hologram.Compiler.IR do
     defstruct []
   end
 
-  # DEFER: implement
-  defmodule ProtocolDefinition do
-    defstruct []
-  end
-
   # DIRECTIVES
 
   defmodule AliasDirective do
