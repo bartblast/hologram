@@ -4,8 +4,7 @@ defmodule Hologram.Compiler.OverhaulTransformer do
   alias Hologram.Compiler.{
     CaseExpressionTransformer,
     ForExpressionTransformer,
-    IfExpressionTransformer,
-    UseDirectiveTransformer
+    IfExpressionTransformer
   }
 
   alias Hologram.Compiler.IR
@@ -14,12 +13,6 @@ defmodule Hologram.Compiler.OverhaulTransformer do
 
   def transform({:defmacro, _, _}) do
     %IR.IgnoredExpression{type: :macro_definition}
-  end
-
-  # DIRECTIVES
-
-  def transform({:use, _, _} = ast) do
-    UseDirectiveTransformer.transform(ast)
   end
 
   # CONTROL FLOW

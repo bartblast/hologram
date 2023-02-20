@@ -360,6 +360,17 @@ defmodule Hologram.Compiler.Transformer do
     %IR.IgnoredExpression{type: :require_directive}
   end
 
+  def transform({:use, _, [{_, _, alias_segs}]}) do
+    %IR.UseDirective{alias_segs: alias_segs, opts: []}
+  end
+
+  def transform({:use, _, [{_, _, alias_segs}, opts]}) do
+    %IR.UseDirective{
+      alias_segs: alias_segs,
+      opts: transform(opts)
+    }
+  end
+
   # --- CONTROL FLOW ---
 
   def transform({:__aliases__, _, segments}) do

@@ -11,8 +11,7 @@ defmodule Hologram.Compiler.OverhaulTransformerTest do
     IfExpression,
     IntegerType,
     TupleType,
-    TypeOperator,
-    UseDirective
+    TypeOperator
   }
 
   describe "data types" do
@@ -35,15 +34,6 @@ defmodule Hologram.Compiler.OverhaulTransformerTest do
       }
 
       assert result == expected
-    end
-  end
-
-  describe "directives" do
-    test "use" do
-      code = "use Hologram.Compiler.TransformerTest"
-      ast = ast(code)
-
-      assert %UseDirective{} = Transformer.transform(ast)
     end
   end
 

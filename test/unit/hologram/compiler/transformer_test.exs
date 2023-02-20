@@ -947,6 +947,40 @@ defmodule Hologram.Compiler.TransformerTest do
     assert transform(ast) == %IR.IgnoredExpression{type: :require_directive}
   end
 
+  describe "use directive" do
+    test "without opts" do
+      # use A.B
+      ast = {:use, [line: 1], [{:__aliases__, [line: 1], [:A, :B]}]}
+
+      assert transform(ast) == %IR.UseDirective{alias_segs: [:A, :B], opts: []}
+    end
+
+    test "with opts" do
+      # use A.B, a: 1, b: 2
+      ast = {:use, [line: 1], [{:__aliases__, [line: 1], [:A, :B]}, [a: 1, b: 2]]}
+
+      assert transform(ast) == %IR.UseDirective{
+               alias_segs: [:A, :B],
+               opts: %IR.ListType{
+                 data: [
+                   %IR.TupleType{
+                     data: [
+                       %IR.AtomType{value: :a},
+                       %IR.IntegerType{value: 1}
+                     ]
+                   },
+                   %IR.TupleType{
+                     data: [
+                       %IR.AtomType{value: :b},
+                       %IR.IntegerType{value: 2}
+                     ]
+                   }
+                 ]
+               }
+             }
+    end
+  end
+
   # --- CONTROL FLOW ---
 
   test "alias" do
