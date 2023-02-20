@@ -1464,6 +1464,33 @@ defmodule Hologram.Compiler.TransformerTest do
     end
   end
 
+  test "if expression" do
+    # if true do
+    #   1
+    #   2
+    # else
+    #   3
+    #   4
+    # end
+    ast = {:if, [line: 1], [true, [do: {:__block__, [], [1, 2]}, else: {:__block__, [], [3, 4]}]]}
+
+    assert transform(ast) == %IR.IfExpression{
+             condition: %IR.BooleanType{value: true},
+             do: %IR.Block{
+               expressions: [
+                 %IR.IntegerType{value: 1},
+                 %IR.IntegerType{value: 2}
+               ]
+             },
+             else: %IR.Block{
+               expressions: [
+                 %IR.IntegerType{value: 3},
+                 %IR.IntegerType{value: 4}
+               ]
+             }
+           }
+  end
+
   test "symbol" do
     # a
     ast = {:a, [line: 1], nil}

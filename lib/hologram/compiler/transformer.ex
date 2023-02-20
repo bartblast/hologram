@@ -393,11 +393,6 @@ defmodule Hologram.Compiler.Transformer do
     build_call_ir(module, function, args)
   end
 
-  def transform({function, _, args})
-      when is_atom(function) and function != :case and is_list(args) do
-    build_call_ir(nil, function, args)
-  end
-
   def transform({:case, _, [condition, [do: clauses]]}) do
     %IR.CaseExpression{
       condition: transform(condition),
@@ -412,6 +407,20 @@ defmodule Hologram.Compiler.Transformer do
       args: transform_params(args),
       erlang: true
     }
+  end
+
+  def transform({:if, _, [condition, [do: do_block, else: else_block]]}) do
+    %IR.IfExpression{
+      condition: transform(condition),
+      do: transform(do_block),
+      else: transform(else_block)
+    }
+  end
+
+  # preserve order:
+
+  def transform({function, _, args}) when is_atom(function) and is_list(args) do
+    build_call_ir(nil, function, args)
   end
 
   def transform({name, _, _}) when is_atom(name) do

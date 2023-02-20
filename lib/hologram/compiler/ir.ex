@@ -255,7 +255,7 @@ defmodule Hologram.Compiler.IR do
   # CONTROL FLOW
 
   defmodule IfExpression do
-    defstruct condition: nil, do: nil, else: nil, ast: nil
+    defstruct condition: nil, do: nil, else: nil
   end
 
   # BINDINGS

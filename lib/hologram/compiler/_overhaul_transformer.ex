@@ -2,8 +2,7 @@ defmodule Hologram.Compiler.OverhaulTransformer do
   alias Hologram.Compiler.IR
 
   alias Hologram.Compiler.{
-    ForExpressionTransformer,
-    IfExpressionTransformer
+    ForExpressionTransformer
   }
 
   alias Hologram.Compiler.IR
@@ -18,9 +17,5 @@ defmodule Hologram.Compiler.OverhaulTransformer do
 
   def transform({:for, _, _} = ast) do
     ForExpressionTransformer.transform(ast)
-  end
-
-  def transform({:if, _, _} = ast) do
-    IfExpressionTransformer.transform(ast)
   end
 end

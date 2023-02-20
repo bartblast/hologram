@@ -7,7 +7,6 @@ defmodule Hologram.Compiler.OverhaulTransformerTest do
 
   alias Hologram.Compiler.IR.{
     Call,
-    IfExpression,
     IntegerType,
     TupleType,
     TypeOperator
@@ -62,13 +61,6 @@ defmodule Hologram.Compiler.OverhaulTransformerTest do
 
       assert %Call{module: %Alias{segments: [:Enum]}, function: :reduce} =
                Transformer.transform(ast)
-    end
-
-    test "if expression" do
-      code = "if true, do: 1, else: 2"
-      ast = ast(code)
-
-      assert %IfExpression{} = Transformer.transform(ast)
     end
   end
 end
