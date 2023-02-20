@@ -166,6 +166,10 @@ defmodule Hologram.Compiler.IR do
     defstruct alias_segs: nil, as: nil
   end
 
+  defmodule ImportDirective do
+    defstruct alias_segs: nil, only: [], except: []
+  end
+
   # --- CONTROL FLOW ---
 
   defmodule Alias do
@@ -241,10 +245,6 @@ defmodule Hologram.Compiler.IR do
   end
 
   # DIRECTIVES
-
-  defmodule ImportDirective do
-    defstruct alias_segs: nil, only: [], except: []
-  end
 
   defmodule RequireDirective do
     defstruct alias_segs: nil

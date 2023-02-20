@@ -896,6 +896,50 @@ defmodule Hologram.Compiler.TransformerTest do
     end
   end
 
+  describe "import directive" do
+    test "without options" do
+      # import A.B
+      ast = {:import, [line: 1], [{:__aliases__, [line: 1], [:A, :B]}]}
+
+      assert transform(ast) == %IR.ImportDirective{alias_segs: [:A, :B], only: [], except: []}
+    end
+
+    test "with 'only' option" do
+      # import A.B, only: [xyz: 2]
+      ast = {:import, [line: 1], [{:__aliases__, [line: 1], [:A, :B]}, [only: [xyz: 2]]]}
+
+      assert transform(ast) == %IR.ImportDirective{
+               alias_segs: [:A, :B],
+               only: [xyz: 2],
+               except: []
+             }
+    end
+
+    test "with 'except' option" do
+      # import A.B, except: [xyz: 2]
+      ast = {:import, [line: 1], [{:__aliases__, [line: 1], [:A, :B]}, [except: [xyz: 2]]]}
+
+      assert transform(ast) == %IR.ImportDirective{
+               alias_segs: [:A, :B],
+               only: [],
+               except: [xyz: 2]
+             }
+    end
+
+    test "with both 'only' and 'except' options" do
+      # import A.B, only: [abc: 1], except: [xyz: 2]
+      ast =
+        {:import, [line: 1],
+         [{:__aliases__, [line: 1], [:A, :B]}, [only: [abc: 1], except: [xyz: 2]]]}
+
+      assert transform(ast) == %IR.ImportDirective{
+               alias_segs: [:A, :B],
+               only: [abc: 1],
+               except: [xyz: 2]
+             }
+    end
+  end
+
   # --- CONTROL FLOW ---
 
   test "alias" do

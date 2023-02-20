@@ -9,7 +9,6 @@ defmodule Hologram.Compiler.OverhaulTransformerTest do
     Call,
     CaseExpression,
     IfExpression,
-    ImportDirective,
     IntegerType,
     RequireDirective,
     TupleType,
@@ -41,13 +40,6 @@ defmodule Hologram.Compiler.OverhaulTransformerTest do
   end
 
   describe "directives" do
-    test "import" do
-      code = "import Hologram.Test.Fixtures.Compiler.Transformer.Module1"
-      ast = ast(code)
-
-      assert %ImportDirective{} = Transformer.transform(ast)
-    end
-
     test "require" do
       code = "require Hologram.Test.Fixtures.Compiler.Transformer.Module1"
       ast = ast(code)

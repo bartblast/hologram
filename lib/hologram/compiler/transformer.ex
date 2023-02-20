@@ -345,6 +345,17 @@ defmodule Hologram.Compiler.Transformer do
     %IR.AliasDirective{alias_segs: alias_segs, as: as}
   end
 
+  def transform({:import, _, [{:__aliases__, _, alias_segs}, opts]}) do
+    only = if opts[:only], do: opts[:only], else: []
+    except = if opts[:except], do: opts[:except], else: []
+
+    build_import_directive_ir(alias_segs, only, except)
+  end
+
+  def transform({:import, _, [{:__aliases__, _, alias_segs}]}) do
+    build_import_directive_ir(alias_segs, [], [])
+  end
+
   # --- CONTROL FLOW ---
 
   def transform({:__aliases__, _, segments}) do
@@ -410,6 +421,10 @@ defmodule Hologram.Compiler.Transformer do
     Enum.map(aliases, fn {:__aliases__, _, [as]} ->
       %IR.AliasDirective{alias_segs: alias_segs ++ [as], as: as}
     end)
+  end
+
+  defp build_import_directive_ir(alias_segs, only, except) do
+    %IR.ImportDirective{alias_segs: alias_segs, only: only, except: except}
   end
 
   defp build_relaxed_boolean_not_operator_ir(value) do
