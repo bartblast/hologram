@@ -2,12 +2,10 @@ defmodule Hologram.Compiler.OverhaulTransformer do
   alias Hologram.Compiler.IR
 
   alias Hologram.Compiler.{
-    AliasDirectiveTransformer,
     CaseExpressionTransformer,
     ForExpressionTransformer,
     IfExpressionTransformer,
     ImportDirectiveTransformer,
-    ModuleDefinitionTransformer,
     RequireDirectiveTransformer,
     UseDirectiveTransformer
   }
@@ -21,10 +19,6 @@ defmodule Hologram.Compiler.OverhaulTransformer do
   end
 
   # DIRECTIVES
-
-  def transform({:alias, _, _} = ast) do
-    AliasDirectiveTransformer.transform(ast)
-  end
 
   def transform({:import, _, _} = ast) do
     ImportDirectiveTransformer.transform(ast)

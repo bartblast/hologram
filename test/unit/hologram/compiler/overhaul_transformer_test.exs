@@ -6,7 +6,6 @@ defmodule Hologram.Compiler.OverhaulTransformerTest do
   alias Hologram.Compiler.Transformer
 
   alias Hologram.Compiler.IR.{
-    AliasDirective,
     Call,
     CaseExpression,
     IfExpression,
@@ -42,13 +41,6 @@ defmodule Hologram.Compiler.OverhaulTransformerTest do
   end
 
   describe "directives" do
-    test "alias" do
-      code = "alias Hologram.Test.Fixtures.Compiler.Transformer.Module1"
-      ast = ast(code)
-
-      assert %AliasDirective{} = Transformer.transform(ast)
-    end
-
     test "import" do
       code = "import Hologram.Test.Fixtures.Compiler.Transformer.Module1"
       ast = ast(code)

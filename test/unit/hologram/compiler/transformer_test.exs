@@ -826,6 +826,76 @@ defmodule Hologram.Compiler.TransformerTest do
     end
   end
 
+  # --- DIRECTIVES ---
+
+  describe "alias directive" do
+    test "default 'as' option" do
+      # alias A.B
+      ast = {:alias, [line: 1], [{:__aliases__, [line: 1], [:A, :B]}]}
+
+      assert transform(ast) == %IR.AliasDirective{alias_segs: [:A, :B], as: :B}
+    end
+
+    test "custom 'as' option" do
+      # alias A.B, as: C
+      ast =
+        {:alias, [line: 1],
+         [{:__aliases__, [line: 1], [:A, :B]}, [as: {:__aliases__, [line: 1], [:C]}]]}
+
+      assert transform(ast) == %IR.AliasDirective{alias_segs: [:A, :B], as: :C}
+    end
+
+    test "'warn' option" do
+      # alias A.B, warn: false
+      ast = {:alias, [line: 1], [{:__aliases__, [line: 1], [:A, :B]}, [warn: false]]}
+
+      assert transform(ast) == %IR.AliasDirective{alias_segs: [:A, :B], as: :B}
+    end
+
+    test "'as' option + 'warn' option" do
+      # alias A.B, as: C, warn: false
+      ast =
+        {:alias, [line: 1],
+         [
+           {:__aliases__, [line: 1], [:A, :B]},
+           [as: {:__aliases__, [line: 1], [:C]}, warn: false]
+         ]}
+
+      assert transform(ast) == %IR.AliasDirective{alias_segs: [:A, :B], as: :C}
+    end
+
+    test "multi-alias without options" do
+      # alias A.B.{C, D}
+      ast =
+        {:alias, [line: 1],
+         [
+           {{:., [line: 1], [{:__aliases__, [line: 1], [:A, :B]}, :{}]}, [line: 1],
+            [{:__aliases__, [line: 1], [:C]}, {:__aliases__, [line: 1], [:D]}]}
+         ]}
+
+      assert transform(ast) == [
+               %IR.AliasDirective{alias_segs: [:A, :B, :C], as: :C},
+               %IR.AliasDirective{alias_segs: [:A, :B, :D], as: :D}
+             ]
+    end
+
+    test "multi-alias with options" do
+      # alias A.B.{C, D}, warn: false
+      ast =
+        {:alias, [line: 1],
+         [
+           {{:., [line: 1], [{:__aliases__, [line: 1], [:A, :B]}, :{}]}, [line: 1],
+            [{:__aliases__, [line: 1], [:C]}, {:__aliases__, [line: 1], [:D]}]},
+           [warn: false]
+         ]}
+
+      assert transform(ast) == [
+               %IR.AliasDirective{alias_segs: [:A, :B, :C], as: :C},
+               %IR.AliasDirective{alias_segs: [:A, :B, :D], as: :D}
+             ]
+    end
+  end
+
   # --- CONTROL FLOW ---
 
   test "alias" do

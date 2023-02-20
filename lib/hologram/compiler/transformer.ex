@@ -319,6 +319,32 @@ defmodule Hologram.Compiler.Transformer do
     }
   end
 
+  # --- DIRECTIVES ---
+
+  def transform({:alias, _, [{{_, _, [{_, _, alias_segs}, _]}, _, aliases}, _]}) do
+    build_alias_directive_irs(alias_segs, aliases)
+  end
+
+  def transform({:alias, _, [{{_, _, [{_, _, alias_segs}, _]}, _, aliases}]}) do
+    build_alias_directive_irs(alias_segs, aliases)
+  end
+
+  def transform({:alias, _, [{_, _, alias_segs}]}) do
+    %IR.AliasDirective{alias_segs: alias_segs, as: List.last(alias_segs)}
+  end
+
+  def transform({:alias, _, [{_, _, alias_segs}, opts]}) do
+    as =
+      if Keyword.has_key?(opts, :as) do
+        {:__aliases__, _, [alias_seg | _]} = opts[:as]
+        alias_seg
+      else
+        List.last(alias_segs)
+      end
+
+    %IR.AliasDirective{alias_segs: alias_segs, as: as}
+  end
+
   # --- CONTROL FLOW ---
 
   def transform({:__aliases__, _, segments}) do
@@ -378,6 +404,12 @@ defmodule Hologram.Compiler.Transformer do
       function: function,
       args: transform_params(args)
     }
+  end
+
+  defp build_alias_directive_irs(alias_segs, aliases) do
+    Enum.map(aliases, fn {:__aliases__, _, [as]} ->
+      %IR.AliasDirective{alias_segs: alias_segs ++ [as], as: as}
+    end)
   end
 
   defp build_relaxed_boolean_not_operator_ir(value) do
