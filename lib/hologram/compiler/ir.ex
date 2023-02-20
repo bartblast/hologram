@@ -246,10 +246,6 @@ defmodule Hologram.Compiler.IR do
 
   # DIRECTIVES
 
-  defmodule RequireDirective do
-    defstruct alias_segs: nil
-  end
-
   defmodule UseDirective do
     defstruct alias_segs: nil, opts: []
   end

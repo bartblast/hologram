@@ -356,6 +356,10 @@ defmodule Hologram.Compiler.Transformer do
     build_import_directive_ir(alias_segs, [], [])
   end
 
+  def transform({:require, _, _}) do
+    %IR.IgnoredExpression{type: :require_directive}
+  end
+
   # --- CONTROL FLOW ---
 
   def transform({:__aliases__, _, segments}) do

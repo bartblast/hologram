@@ -10,7 +10,6 @@ defmodule Hologram.Compiler.OverhaulTransformerTest do
     CaseExpression,
     IfExpression,
     IntegerType,
-    RequireDirective,
     TupleType,
     TypeOperator,
     UseDirective
@@ -40,13 +39,6 @@ defmodule Hologram.Compiler.OverhaulTransformerTest do
   end
 
   describe "directives" do
-    test "require" do
-      code = "require Hologram.Test.Fixtures.Compiler.Transformer.Module1"
-      ast = ast(code)
-
-      assert %RequireDirective{} = Transformer.transform(ast)
-    end
-
     test "use" do
       code = "use Hologram.Compiler.TransformerTest"
       ast = ast(code)

@@ -940,6 +940,13 @@ defmodule Hologram.Compiler.TransformerTest do
     end
   end
 
+  test "require directive" do
+    # require A.B
+    ast = {:require, [line: 1], [{:__aliases__, [line: 1], [:A, :B]}]}
+
+    assert transform(ast) == %IR.IgnoredExpression{type: :require_directive}
+  end
+
   # --- CONTROL FLOW ---
 
   test "alias" do

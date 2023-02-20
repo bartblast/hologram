@@ -5,7 +5,6 @@ defmodule Hologram.Compiler.OverhaulTransformer do
     CaseExpressionTransformer,
     ForExpressionTransformer,
     IfExpressionTransformer,
-    RequireDirectiveTransformer,
     UseDirectiveTransformer
   }
 
@@ -18,10 +17,6 @@ defmodule Hologram.Compiler.OverhaulTransformer do
   end
 
   # DIRECTIVES
-
-  def transform({:require, _, _} = ast) do
-    RequireDirectiveTransformer.transform(ast)
-  end
 
   def transform({:use, _, _} = ast) do
     UseDirectiveTransformer.transform(ast)
