@@ -7,7 +7,6 @@ defmodule Hologram.Compiler.OverhaulTransformerTest do
 
   alias Hologram.Compiler.IR.{
     Call,
-    CaseExpression,
     IfExpression,
     IntegerType,
     TupleType,
@@ -55,19 +54,6 @@ defmodule Hologram.Compiler.OverhaulTransformerTest do
     test "contextual call" do
       ast = {:test_fun, [context: A.B, imports: [{0, C.D}]], A.B}
       assert %Call{} = Transformer.transform(ast)
-    end
-
-    test "case expression" do
-      code = """
-      case x do
-        %{a: a} -> :ok
-        2 -> :error
-      end
-      """
-
-      ast = ast(code)
-
-      assert %CaseExpression{} = Transformer.transform(ast)
     end
 
     test "for expression" do

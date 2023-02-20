@@ -1266,6 +1266,204 @@ defmodule Hologram.Compiler.TransformerTest do
     end
   end
 
+  describe "case expression" do
+    test "single clause with single expression body" do
+      # case x do
+      #   1 -> :ok
+      # end
+      ast =
+        {:case, [line: 1],
+         [
+           {:x, [line: 1], nil},
+           [do: [{:->, [line: 2], [[1], {:__block__, [], [:ok]}]}]]
+         ]}
+
+      assert transform(ast) == %IR.CaseExpression{
+               clauses: [
+                 %{
+                   bindings: [],
+                   body: %IR.Block{
+                     expressions: [
+                       %IR.AtomType{value: :ok}
+                     ]
+                   },
+                   pattern: %IR.IntegerType{value: 1}
+                 }
+               ],
+               condition: %IR.Symbol{name: :x}
+             }
+    end
+
+    test "single clause with multiple expression body" do
+      # case x do
+      #   1 ->
+      #     :expr_1
+      #     :expr_2
+      # end
+      ast =
+        {:case, [line: 1],
+         [
+           {:x, [line: 1], nil},
+           [do: [{:->, [line: 2], [[1], {:__block__, [], [:expr_1, :expr_2]}]}]]
+         ]}
+
+      assert transform(ast) == %IR.CaseExpression{
+               clauses: [
+                 %{
+                   bindings: [],
+                   body: %IR.Block{
+                     expressions: [
+                       %IR.AtomType{value: :expr_1},
+                       %IR.AtomType{value: :expr_2}
+                     ]
+                   },
+                   pattern: %IR.IntegerType{value: 1}
+                 }
+               ],
+               condition: %IR.Symbol{name: :x}
+             }
+    end
+
+    test "multiple clauses with single expression bodies" do
+      # case x do
+      #   1 -> :ok
+      #   2 -> :error
+      # end
+      ast =
+        {:case, [line: 1],
+         [
+           {:x, [line: 1], nil},
+           [
+             do: [
+               {:->, [line: 2], [[1], {:__block__, [], [:ok]}]},
+               {:->, [line: 3], [[2], {:__block__, [], [:error]}]}
+             ]
+           ]
+         ]}
+
+      assert transform(ast) == %IR.CaseExpression{
+               condition: %IR.Symbol{name: :x},
+               clauses: [
+                 %{
+                   bindings: [],
+                   body: %IR.Block{
+                     expressions: [
+                       %IR.AtomType{value: :ok}
+                     ]
+                   },
+                   pattern: %IR.IntegerType{value: 1}
+                 },
+                 %{
+                   bindings: [],
+                   body: %IR.Block{
+                     expressions: [
+                       %IR.AtomType{value: :error}
+                     ]
+                   },
+                   pattern: %IR.IntegerType{value: 2}
+                 }
+               ]
+             }
+    end
+
+    test "multiple clauses with multiple expression bodies" do
+      # case x do
+      #   1 ->
+      #     :expr_1
+      #     :expr_2
+      #   2 ->
+      #     :expr_3
+      #     :expr_4
+      # end
+      ast =
+        {:case, [line: 1],
+         [
+           {:x, [line: 1], nil},
+           [
+             do: [
+               {:->, [line: 2], [[1], {:__block__, [], [:expr_1, :expr_2]}]},
+               {:->, [line: 5], [[2], {:__block__, [], [:expr_3, :expr_4]}]}
+             ]
+           ]
+         ]}
+
+      assert transform(ast) == %IR.CaseExpression{
+               condition: %IR.Symbol{name: :x},
+               clauses: [
+                 %{
+                   bindings: [],
+                   body: %IR.Block{
+                     expressions: [
+                       %IR.AtomType{value: :expr_1},
+                       %IR.AtomType{value: :expr_2}
+                     ]
+                   },
+                   pattern: %IR.IntegerType{value: 1}
+                 },
+                 %{
+                   bindings: [],
+                   body: %IR.Block{
+                     expressions: [
+                       %IR.AtomType{value: :expr_3},
+                       %IR.AtomType{value: :expr_4}
+                     ]
+                   },
+                   pattern: %IR.IntegerType{value: 2}
+                 }
+               ]
+             }
+    end
+
+    test "clause with bindings" do
+      # case x do
+      #   %{a: a} -> :ok
+      # end
+      ast =
+        {:case, [line: 1],
+         [
+           {:x, [line: 1], nil},
+           [
+             do: [
+               {:->, [line: 2],
+                [
+                  [{:%{}, [line: 2], [a: {:a, [line: 2], nil}]}],
+                  {:__block__, [], [:ok]}
+                ]}
+             ]
+           ]
+         ]}
+
+      assert transform(ast) == %IR.CaseExpression{
+               condition: %IR.Symbol{name: :x},
+               clauses: [
+                 %{
+                   bindings: [
+                     %IR.Binding{
+                       name: :a,
+                       access_path: [
+                         %IR.CaseConditionAccess{},
+                         %IR.MapAccess{
+                           key: %IR.AtomType{value: :a}
+                         }
+                       ]
+                     }
+                   ],
+                   body: %IR.Block{
+                     expressions: [
+                       %IR.AtomType{value: :ok}
+                     ]
+                   },
+                   pattern: %IR.MapType{
+                     data: [
+                       {%IR.AtomType{value: :a}, %IR.Symbol{name: :a}}
+                     ]
+                   }
+                 }
+               ]
+             }
+    end
+  end
+
   test "symbol" do
     # a
     ast = {:a, [line: 1], nil}

@@ -2,7 +2,6 @@ defmodule Hologram.Compiler.OverhaulTransformer do
   alias Hologram.Compiler.IR
 
   alias Hologram.Compiler.{
-    CaseExpressionTransformer,
     ForExpressionTransformer,
     IfExpressionTransformer
   }
@@ -16,10 +15,6 @@ defmodule Hologram.Compiler.OverhaulTransformer do
   end
 
   # CONTROL FLOW
-
-  def transform({:case, _, _} = ast) do
-    CaseExpressionTransformer.transform(ast)
-  end
 
   def transform({:for, _, _} = ast) do
     ForExpressionTransformer.transform(ast)

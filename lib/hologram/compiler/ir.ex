@@ -170,6 +170,10 @@ defmodule Hologram.Compiler.IR do
     defstruct alias_segs: nil, only: [], except: []
   end
 
+  defmodule UseDirective do
+    defstruct alias_segs: nil, opts: []
+  end
+
   # --- CONTROL FLOW ---
 
   defmodule Alias do
@@ -186,6 +190,10 @@ defmodule Hologram.Compiler.IR do
 
   defmodule Call do
     defstruct module: nil, function: nil, args: []
+  end
+
+  defmodule CaseExpression do
+    defstruct condition: nil, clauses: []
   end
 
   defmodule FunctionCall do
@@ -244,17 +252,7 @@ defmodule Hologram.Compiler.IR do
     defstruct name: nil, variants: []
   end
 
-  # DIRECTIVES
-
-  defmodule UseDirective do
-    defstruct alias_segs: nil, opts: []
-  end
-
   # CONTROL FLOW
-
-  defmodule CaseExpression do
-    defstruct condition: nil, clauses: []
-  end
 
   defmodule IfExpression do
     defstruct condition: nil, do: nil, else: nil, ast: nil

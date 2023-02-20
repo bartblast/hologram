@@ -393,8 +393,16 @@ defmodule Hologram.Compiler.Transformer do
     build_call_ir(module, function, args)
   end
 
-  def transform({function, _, args}) when is_atom(function) and is_list(args) do
+  def transform({function, _, args})
+      when is_atom(function) and function != :case and is_list(args) do
     build_call_ir(nil, function, args)
+  end
+
+  def transform({:case, _, [condition, [do: clauses]]}) do
+    %IR.CaseExpression{
+      condition: transform(condition),
+      clauses: Enum.map(clauses, &build_case_clause_ir/1)
+    }
   end
 
   def transform({{:., _, [module, function]}, _, args}) when is_atom(module) do
@@ -438,6 +446,21 @@ defmodule Hologram.Compiler.Transformer do
     end)
   end
 
+  defp build_case_clause_ir({:->, _, [[pattern], body]}) do
+    pattern = transform(pattern)
+    body = transform(body)
+
+    bindings =
+      Helpers.aggregate_bindings_from_expression(pattern)
+      |> Enum.map(&prepend_case_condition_access/1)
+
+    %{
+      pattern: pattern,
+      bindings: bindings,
+      body: body
+    }
+  end
+
   defp build_import_directive_ir(alias_segs, only, except) do
     %IR.ImportDirective{alias_segs: alias_segs, only: only, except: except}
   end
@@ -451,6 +474,10 @@ defmodule Hologram.Compiler.Transformer do
   defp build_tuple_type_ir(data) do
     data = Enum.map(data, &transform/1)
     %IR.TupleType{data: data}
+  end
+
+  defp prepend_case_condition_access(binding) do
+    %{binding | access_path: [%IR.CaseConditionAccess{} | binding.access_path]}
   end
 
   def transform_params(params) do
