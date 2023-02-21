@@ -530,8 +530,8 @@ defmodule Hologram.Compiler.Transformer do
     "[#{Macro.to_string(mapper_expr)}]"
   end
 
-  def transform_list(params) do
-    params
+  def transform_list(list) do
+    list
     |> List.wrap()
     |> Enum.map(&transform/1)
   end
