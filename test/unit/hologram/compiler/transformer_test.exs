@@ -1245,6 +1245,33 @@ defmodule Hologram.Compiler.TransformerTest do
                erlang: true
              }
     end
+
+    test "string interpolation" do
+      # "#{test}"
+      ast =
+        {:<<>>, [line: 1],
+         [
+           {:"::", [line: 1],
+            [
+              {{:., [line: 1], [{:__aliases__, [alias: false], [:Kernel]}, :to_string]},
+               [line: 1], [{:test, [line: 1], nil}]},
+              {:binary, [line: 1], nil}
+            ]}
+         ]}
+
+      assert transform(ast) == %IR.BinaryType{
+               parts: [
+                 %IR.TypeOperator{
+                   left: %IR.Call{
+                     module: %IR.Alias{segments: [:Kernel]},
+                     function: :to_string,
+                     args: [%IR.Symbol{name: :test}]
+                   },
+                   right: :binary
+                 }
+               ]
+             }
+    end
   end
 
   describe "case expression" do
