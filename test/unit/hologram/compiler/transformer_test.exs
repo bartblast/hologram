@@ -1795,7 +1795,7 @@ defmodule Hologram.Compiler.TransformerTest do
       {:defmacro, [line: 1],
        [
          {:my_macro, [line: 1], nil},
-         [do: {:__block__, [], [{:quote, [line: 2], [[do: {:__block__, [], '{'}]]}]}]
+         [do: {:__block__, [], [{:quote, [line: 2], [[do: {:__block__, [], [123]}]]}]}]
        ]}
 
     assert transform(ast) == %IR.IgnoredExpression{type: :public_macro_definition}
