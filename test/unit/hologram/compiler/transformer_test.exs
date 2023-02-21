@@ -1810,13 +1810,13 @@ defmodule Hologram.Compiler.TransformerTest do
 
   # --- HELPERS ---
 
-  describe "transform_params/1" do
+  describe "transform_list/1" do
     test "function definition without params" do
       # def test do
       # end
       params = nil
 
-      assert transform_params(params) == []
+      assert transform_list(params) == []
     end
 
     test "function definition with params" do
@@ -1824,7 +1824,7 @@ defmodule Hologram.Compiler.TransformerTest do
       # end
       params = [{:a, [line: 1], nil}, {:b, [line: 1], nil}]
 
-      assert transform_params(params) == [
+      assert transform_list(params) == [
                %IR.Symbol{name: :a},
                %IR.Symbol{name: :b}
              ]
@@ -1835,7 +1835,7 @@ defmodule Hologram.Compiler.TransformerTest do
       # end
       params = [:a, 2]
 
-      assert transform_params(params) == [
+      assert transform_list(params) == [
                %IR.AtomType{value: :a},
                %IR.IntegerType{value: 2}
              ]

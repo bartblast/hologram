@@ -194,7 +194,7 @@ defmodule Hologram.Compiler.Transformer do
   # --- DATA TYPES ---
 
   def transform({:fn, _, [{:->, _, [params, body]}]}) do
-    params = transform_params(params)
+    params = transform_list(params)
     arity = Enum.count(params)
     bindings = Helpers.aggregate_bindings_from_params(params)
     body = transform(body)
@@ -215,7 +215,7 @@ defmodule Hologram.Compiler.Transformer do
   end
 
   def transform({:<<>>, _, parts}) do
-    %IR.BinaryType{parts: transform_params(parts)}
+    %IR.BinaryType{parts: transform_list(parts)}
   end
 
   def transform(ast) when is_boolean(ast) do
@@ -290,7 +290,7 @@ defmodule Hologram.Compiler.Transformer do
   # --- DEFINITIONS ---
 
   def transform({marker, _, [{name, _, params}, [do: body]]}) when marker in [:def, :defp] do
-    params = transform_params(params)
+    params = transform_list(params)
     arity = Enum.count(params)
     bindings = Helpers.aggregate_bindings_from_params(params)
     body = transform(body)
@@ -419,7 +419,7 @@ defmodule Hologram.Compiler.Transformer do
     %IR.FunctionCall{
       module: module,
       function: function,
-      args: transform_params(args),
+      args: transform_list(args),
       erlang: true
     }
   end
@@ -460,7 +460,7 @@ defmodule Hologram.Compiler.Transformer do
     %IR.Call{
       module: new_module,
       function: function,
-      args: transform_params(args)
+      args: transform_list(args)
     }
   end
 
@@ -530,7 +530,7 @@ defmodule Hologram.Compiler.Transformer do
     "[#{Macro.to_string(mapper_expr)}]"
   end
 
-  def transform_params(params) do
+  def transform_list(params) do
     params
     |> List.wrap()
     |> Enum.map(&transform/1)
