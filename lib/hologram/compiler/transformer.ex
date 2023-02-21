@@ -357,6 +357,10 @@ defmodule Hologram.Compiler.Transformer do
     build_import_directive_ir(alias_segs, [], [])
   end
 
+  def transform({:defmacro, _, _}) do
+    %IR.IgnoredExpression{type: :public_macro_definition}
+  end
+
   def transform({:require, _, _}) do
     %IR.IgnoredExpression{type: :require_directive}
   end
