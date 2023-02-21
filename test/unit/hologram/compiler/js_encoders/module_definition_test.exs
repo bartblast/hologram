@@ -3,6 +3,8 @@ defmodule Hologram.Compiler.JSEncoder.ModuleDefinitionTest do
 
   alias Hologram.Compiler.{Context, JSEncoder, Opts}
 
+  alias Hologram.Compiler.IR
+
   alias Hologram.Compiler.IR.{
     AtomType,
     Binding,
@@ -11,7 +13,6 @@ defmodule Hologram.Compiler.JSEncoder.ModuleDefinitionTest do
     IntegerType,
     ModuleAttributeDefinition,
     ModuleDefinition,
-    NotSupportedExpression,
     ParamAccess,
     Variable
   }
@@ -69,18 +70,6 @@ defmodule Hologram.Compiler.JSEncoder.ModuleDefinitionTest do
       static $bcd = { type: 'atom', value: 'bcd_value' };
       }
       """
-
-      assert result == expected
-    end
-
-    test "behaviour callback spec" do
-      ir = %ModuleDefinition{
-        module: @module,
-        attributes: [%NotSupportedExpression{type: :behaviour_callback_spec}]
-      }
-
-      result = JSEncoder.encode(ir, %Context{}, %Opts{})
-      expected = "window.Elixir_Abc_Bcd = class Elixir_Abc_Bcd {\n}\n"
 
       assert result == expected
     end

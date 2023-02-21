@@ -450,25 +450,6 @@ defmodule Hologram.Compiler.TransformerTest do
                }
              } = transform(ast)
     end
-
-    # TODO: implement anonymous functions with multiple clauses
-    test "multiple clauses" do
-      # fn
-      #  1 -> :a
-      #  2 -> :b
-      # end
-      ast =
-        {:fn, [line: 1],
-         [
-           {:->, [line: 2], [[1], {:__block__, [], [:a]}]},
-           {:->, [line: 3], [[2], {:__block__, [], [:b]}]}
-         ]}
-
-      assert transform(ast) == %IR.NotSupportedExpression{
-               type: :multi_clause_anonymous_function_type,
-               ast: ast
-             }
-    end
   end
 
   test "atom type" do

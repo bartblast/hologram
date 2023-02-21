@@ -202,14 +202,6 @@ defmodule Hologram.Compiler.Transformer do
     %IR.AnonymousFunctionType{arity: arity, params: params, bindings: bindings, body: body}
   end
 
-  # TODO: implement anonymous functions with multiple clauses
-  def transform({:fn, _, _} = ast) do
-    %IR.NotSupportedExpression{
-      type: :multi_clause_anonymous_function_type,
-      ast: ast
-    }
-  end
-
   def transform(ast) when is_atom(ast) and ast not in [nil, false, true] do
     %IR.AtomType{value: ast}
   end

@@ -1,5 +1,5 @@
 alias Hologram.Compiler.{Context, Formatter, Helpers, JSEncoder, Opts}
-alias Hologram.Compiler.IR.{ModuleDefinition, NotSupportedExpression}
+alias Hologram.Compiler.IR.{ModuleDefinition, IgnoredExpression}
 
 defimpl JSEncoder, for: ModuleDefinition do
   def encode(
@@ -12,7 +12,7 @@ defimpl JSEncoder, for: ModuleDefinition do
 
     attrs =
       attrs
-      |> Enum.reject(&match?(%NotSupportedExpression{}, &1))
+      |> Enum.reject(&match?(%IgnoredExpression{}, &1))
       |> Enum.map(&JSEncoder.encode(&1, context, opts))
       |> Enum.join("\n")
 

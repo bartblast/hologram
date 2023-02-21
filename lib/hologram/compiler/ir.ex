@@ -240,10 +240,6 @@ defmodule Hologram.Compiler.IR do
     defstruct type: nil
   end
 
-  defmodule NotSupportedExpression do
-    defstruct type: nil, ast: nil
-  end
-
   # --- OVERHAUL ---
 
   # DATA TYPES
