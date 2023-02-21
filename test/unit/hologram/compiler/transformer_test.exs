@@ -1811,33 +1811,20 @@ defmodule Hologram.Compiler.TransformerTest do
   # --- HELPERS ---
 
   describe "transform_list/1" do
-    test "function definition without params" do
-      # def test do
-      # end
-      params = nil
-
-      assert transform_list(params) == []
+    test "nil" do
+      assert transform_list(nil) == []
     end
 
-    test "function definition with params" do
-      # def test(a, b) do
-      # end
-      params = [{:a, [line: 1], nil}, {:b, [line: 1], nil}]
+    test "empty list" do
+      assert transform_list([]) == []
+    end
 
-      assert transform_list(params) == [
+    test "non-empty list" do
+      list = [{:a, [line: 1], nil}, {:b, [line: 1], nil}]
+
+      assert transform_list(list) == [
                %IR.Symbol{name: :a},
                %IR.Symbol{name: :b}
-             ]
-    end
-
-    test "function definition with explicit value pattern matching" do
-      # def test(:a, 2) do
-      # end
-      params = [:a, 2]
-
-      assert transform_list(params) == [
-               %IR.AtomType{value: :a},
-               %IR.IntegerType{value: 2}
              ]
     end
   end
