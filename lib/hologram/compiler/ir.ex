@@ -21,6 +21,14 @@ defmodule Hologram.Compiler.IR do
     defstruct left: nil, right: nil, kind: :basic_binary_operator
   end
 
+  defmodule EqualToOperator do
+    defstruct left: nil, right: nil, kind: :basic_binary_operator
+  end
+
+  defmodule LessThanOperator do
+    defstruct left: nil, right: nil, kind: :basic_binary_operator
+  end
+
   defmodule ListConcatenationOperator do
     defstruct left: nil, right: nil, kind: :basic_binary_operator
   end
@@ -200,6 +208,10 @@ defmodule Hologram.Compiler.IR do
     defstruct module: nil, function: nil, args: [], erlang: false
   end
 
+  defmodule IfExpression do
+    defstruct condition: nil, do: nil, else: nil
+  end
+
   defmodule Symbol do
     defstruct name: nil
   end
@@ -208,6 +220,10 @@ defmodule Hologram.Compiler.IR do
 
   defmodule Binding do
     defstruct name: nil, access_path: []
+  end
+
+  defmodule CaseConditionAccess do
+    defstruct []
   end
 
   defmodule MapAccess do
@@ -236,33 +252,13 @@ defmodule Hologram.Compiler.IR do
     defstruct module: nil, segments: nil
   end
 
-  # OPERATORS
-
-  defmodule EqualToOperator do
-    defstruct left: nil, right: nil, kind: :basic_binary_operator
-  end
-
-  defmodule LessThanOperator do
-    defstruct left: nil, right: nil, kind: :basic_binary_operator
-  end
-
   # DEFINITIONS
 
   defmodule FunctionDefinitionVariants do
     defstruct name: nil, variants: []
   end
 
-  # CONTROL FLOW
-
-  defmodule IfExpression do
-    defstruct condition: nil, do: nil, else: nil
-  end
-
   # BINDINGS
-
-  defmodule CaseConditionAccess do
-    defstruct []
-  end
 
   defmodule ListIndexAccess do
     defstruct index: nil, kind: :binding_index_access
