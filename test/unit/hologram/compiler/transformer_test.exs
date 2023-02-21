@@ -1807,25 +1807,4 @@ defmodule Hologram.Compiler.TransformerTest do
 
     assert transform(ast) == %IR.Symbol{name: :a}
   end
-
-  # --- HELPERS ---
-
-  describe "transform_list/1" do
-    test "nil" do
-      assert transform_list(nil) == []
-    end
-
-    test "empty list" do
-      assert transform_list([]) == []
-    end
-
-    test "non-empty list" do
-      list = [{:a, [line: 1], nil}, {:b, [line: 1], nil}]
-
-      assert transform_list(list) == [
-               %IR.Symbol{name: :a},
-               %IR.Symbol{name: :b}
-             ]
-    end
-  end
 end
