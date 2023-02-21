@@ -19,7 +19,8 @@ defmodule Hologram.Compiler.Helpers do
   end
 
   def aggregate_bindings_from_params(params) do
-    Enum.with_index(params)
+    params
+    |> Enum.with_index()
     |> Enum.reduce([], &aggregate_bindings_from_param/2)
     |> Enum.sort()
     |> Enum.map(fn {name, {index, path}} ->
