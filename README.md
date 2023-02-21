@@ -302,7 +302,7 @@ without its shortcomings related to scalability, efficiency, etc.
 | Structure        | Status             |
 | :--------------- | :----------------: |
 | Exception        | :x:                |
-| Function Head    | :white_check_mark: |
+| Function Head    | :x:                |
 | Macro            | :x:                |
 | Module           | :white_check_mark: |
 | Module Attribute | :white_check_mark: |
