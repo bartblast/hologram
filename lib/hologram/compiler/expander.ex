@@ -4,6 +4,14 @@ defmodule Hologram.Compiler.Expander do
 
   def expand(ir, context)
 
+  # --- OPERATORS ---
+
+  def expand(%IR.AdditionOperator{} = ir, %Context{} = context) do
+    expand_binary_operator(ir, context)
+  end
+
+  # --- DATA TYPES ---
+
   def expand(%IR.AtomType{} = ir, %Context{} = context) do
     {ir, context}
   end
@@ -24,6 +32,15 @@ defmodule Hologram.Compiler.Expander do
     {ir, context}
   end
 
+  # --- HELPERS ---
+
+  defp expand_binary_operator(%{left: left, right: right} = ir, context) do
+    {left, _context} = expand(left, context)
+    {right, _context} = expand(right, context)
+
+    {%{ir | left: left, right: right}, context}
+  end
+
   # alias Hologram.Compiler.Detransformer
   # alias Hologram.Compiler.Evaluator
   # alias Hologram.Compiler.Helpers
@@ -31,13 +48,6 @@ defmodule Hologram.Compiler.Expander do
   # alias Hologram.Compiler.Normalizer
   # alias Hologram.Compiler.Reflection
   # alias Hologram.Compiler.Transformer
-
-  # def expand(%{kind: :basic_binary_operator, left: left, right: right} = ir, %Context{} = context) do
-  #   {left, _context} = expand(left, context)
-  #   {right, _context} = expand(right, context)
-
-  #   {%{ir | left: left, right: right}, context}
-  # end
 
   # def expand(%{kind: :binding_index_access} = ir, %Context{} = context) do
   #   {ir, context}
@@ -231,10 +241,6 @@ defmodule Hologram.Compiler.Expander do
   # end
 
   # def expand(%IR.ModuleType{} = ir, %Context{} = context) do
-  #   {ir, context}
-  # end
-
-  # def expand(%IR.NilType{} = ir, %Context{} = context) do
   #   {ir, context}
   # end
 

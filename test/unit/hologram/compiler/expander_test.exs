@@ -5,6 +5,28 @@ defmodule Hologram.Compiler.ExpanderTest do
   alias Hologram.Compiler.Context
   alias Hologram.Compiler.IR
 
+  # --- OPERATORS ---
+
+  @binary_operator_context %Context{
+    module_attributes: %{
+      a: %IR.IntegerType{value: 1},
+      c: %IR.IntegerType{value: 3}
+    }
+  }
+
+  test "addition operator" do
+    ir = %IR.AdditionOperator{
+      left: %IR.ModuleAttributeOperator{name: :a},
+      right: %IR.ModuleAttributeOperator{name: :c}
+    }
+
+    assert expand(ir, @binary_operator_context) ==
+             {%IR.AdditionOperator{
+                left: %IR.IntegerType{value: 1},
+                right: %IR.IntegerType{value: 3}
+              }, @binary_operator_context}
+  end
+
   # --- DATA TYPES ---
 
   test "atom type" do
@@ -85,21 +107,6 @@ defmodule Hologram.Compiler.ExpanderTest do
 
   #     assert result == {ir, @context}
   #   end
-  # end
-
-  # test "basic binary operator" do
-  #   ir = %IR.AdditionOperator{
-  #     left: %IR.ModuleAttributeOperator{name: :a},
-  #     right: %IR.ModuleAttributeOperator{name: :c}
-  #   }
-
-  #   result = Expander.expand(ir, @context)
-
-  #   assert result ==
-  #            {%IR.AdditionOperator{
-  #               left: %IR.IntegerType{value: 1},
-  #               right: %IR.IntegerType{value: 3}
-  #             }, @context}
   # end
 
   # test "binding index access" do
