@@ -55,6 +55,12 @@ defmodule Hologram.Compiler.Detransformer do
     {:%{}, [], data_ast}
   end
 
+  # --- CONTROL FLOW ---
+
+  def detransform(%IR.Variable{name: name}) do
+    {name, [line: 0], nil}
+  end
+
   # --- HELPERS ---
 
   defp detransform_binary_operator(marker, left, right) do
@@ -81,9 +87,5 @@ defmodule Hologram.Compiler.Detransformer do
   #   args = detransform(args)
 
   #   {{:., [line: 0], [module, function]}, [line: 0], args}
-  # end
-
-  # def detransform(%IR.Variable{name: name}) do
-  #   {name, [line: 0], nil}
   # end
 end

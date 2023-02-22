@@ -220,6 +220,10 @@ defmodule Hologram.Compiler.IR do
     defstruct name: nil
   end
 
+  defmodule Variable do
+    defstruct name: nil
+  end
+
   # --- BINDINGS ---
 
   defmodule Binding do
@@ -268,11 +272,5 @@ defmodule Hologram.Compiler.IR do
 
   defmodule TupleAccess do
     defstruct index: nil, kind: :binding_index_access
-  end
-
-  # OTHER
-
-  defmodule Variable do
-    defstruct name: nil
   end
 end

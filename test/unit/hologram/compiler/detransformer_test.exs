@@ -87,6 +87,14 @@ defmodule Hologram.Compiler.DetransformerTest do
     assert detransform(ir) == {:%{}, [], [__struct__: Hologram.Test.Fixtures.Struct, a: 1, b: 2]}
   end
 
+  # --- CONTROL-FLOW ---
+
+  test "variable" do
+    ir = %IR.Variable{name: :test}
+
+    assert detransform(ir) == {:test, [line: 0], nil}
+  end
+
   # --- OVERHAUL ---
 
   # test "function call" do
@@ -99,11 +107,5 @@ defmodule Hologram.Compiler.DetransformerTest do
   #     {{:., [line: 0], [{:__aliases__, [line: 0], [:A, :B]}, :my_fun]}, [line: 0], [1, 2]}
 
   #   assert result == expected
-  # end
-
-  # test "variable" do
-  #   ir = %IR.Variable{name: :test}
-  #   result = Detransformer.detransform(ir)
-  #   assert result == {:test, [line: 0], nil}
   # end
 end
