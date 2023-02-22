@@ -14,10 +14,11 @@ defmodule Hologram.Compiler.Detransformer do
   # --- OPERATORS ---
 
   def detransform(%IR.AdditionOperator{left: left, right: right}) do
-    left = detransform(left)
-    right = detransform(right)
+    detransform_binary_operator(:+, left, right)
+  end
 
-    {:+, [line: 0], [left, right]}
+  def detransform(%IR.EqualToOperator{left: left, right: right}) do
+    detransform_binary_operator(:==, left, right)
   end
 
   # --- DATA TYPES ---
@@ -56,6 +57,13 @@ defmodule Hologram.Compiler.Detransformer do
 
   # --- HELPERS ---
 
+  defp detransform_binary_operator(marker, left, right) do
+    left = detransform(left)
+    right = detransform(right)
+
+    {marker, [line: 0], [left, right]}
+  end
+
   defp detransform_key_value_pairs(data) do
     Enum.map(data, fn {key, value} ->
       {detransform(key), detransform(value)}
@@ -67,13 +75,6 @@ defmodule Hologram.Compiler.Detransformer do
   end
 
   # --- OVERHAUL ---
-
-  # def detransform(%IR.EqualToOperator{left: left, right: right}) do
-  #   left = detransform(left)
-  #   right = detransform(right)
-
-  #   {:==, [line: 0], [left, right]}
-  # end
 
   # def detransform(%IR.FunctionCall{module: module, function: function, args: args}) do
   #   module = detransform(module)

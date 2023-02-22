@@ -11,6 +11,12 @@ defmodule Hologram.Compiler.DetransformerTest do
     assert detransform(ir) == {:+, [line: 0], [1, 2]}
   end
 
+  test "equal to operator" do
+    ir = %IR.EqualToOperator{left: %IR.IntegerType{value: 1}, right: %IR.IntegerType{value: 2}}
+
+    assert detransform(ir) == {:==, [line: 0], [1, 2]}
+  end
+
   # --- DATA TYPES ---
 
   test "atom type" do
@@ -82,40 +88,6 @@ defmodule Hologram.Compiler.DetransformerTest do
   end
 
   # --- OVERHAUL ---
-
-  # test "(elixir) list" do
-  #   ir = [%IR.IntegerType{value: 1}, %IR.IntegerType{value: 2}]
-  #   result = Detransformer.detransform(ir)
-
-  #   assert result == [1, 2]
-  # end
-
-  # describe "data types" do
-  #   test "list" do
-  #     ir = %IR.ListType{
-  #       data: [
-  #         %IR.AtomType{value: :a},
-  #         %IR.IntegerType{value: 1}
-  #       ]
-  #     }
-
-  #     result = Detransformer.detransform(ir)
-  #     expected = [:a, 1]
-
-  #     assert result == expected
-  #   end
-  # end
-
-  # test "equal to operator" do
-  #   left = %IR.IntegerType{value: 1}
-  #   right = %IR.IntegerType{value: 2}
-  #   ir = %IR.EqualToOperator{left: left, right: right}
-
-  #   result = Detransformer.detransform(ir)
-  #   expected = {:==, [line: 0], [1, 2]}
-
-  #   assert result == expected
-  # end
 
   # test "function call" do
   #   module = %IR.ModuleType{module: A.B, segments: [:A, :B]}
