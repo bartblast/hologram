@@ -11,6 +11,11 @@ defmodule Hologram.Compiler.Detransformer do
 
   def detransform(%IR.IntegerType{value: value}), do: value
 
+  def detransform(%IR.MapType{data: data}) do
+    data = detransform_key_value_pairs(data)
+    {:%{}, [], data}
+  end
+
   def detransform(%IR.ModuleType{segments: segments}) do
     {:__aliases__, [line: 0], segments}
   end
@@ -19,18 +24,15 @@ defmodule Hologram.Compiler.Detransformer do
     nil
   end
 
+  # --- HELPERS ---
+
+  defp detransform_key_value_pairs(data) do
+    Enum.map(data, fn {key, value} ->
+      {detransform(key), detransform(value)}
+    end)
+  end
+
   # --- OVERHAUL ---
-
-  # defp detransform_key_value_pairs(data) do
-  #   Enum.map(data, fn {key, value} ->
-  #     {detransform(key), detransform(value)}
-  #   end)
-  # end
-
-  # def detransform(%IR.MapType{data: data_ir}) do
-  #   data = detransform_key_value_pairs(data_ir)
-  #   {:%{}, [], data}
-  # end
 
   # def detransform(%IR.AdditionOperator{left: left, right: right}) do
   #   left = detransform(left)
