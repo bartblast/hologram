@@ -29,6 +29,12 @@ defmodule Hologram.Compiler.DetransformerTest do
     assert detransform(ir) == 123
   end
 
+  test "list type" do
+    ir = %IR.ListType{data: [%IR.IntegerType{value: 1}, %IR.AtomType{value: :b}]}
+
+    assert detransform(ir) == [1, :b]
+  end
+
   test "map type" do
     ir = %IR.MapType{
       data: [

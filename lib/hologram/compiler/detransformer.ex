@@ -11,6 +11,10 @@ defmodule Hologram.Compiler.Detransformer do
 
   def detransform(%IR.IntegerType{value: value}), do: value
 
+  def detransform(%IR.ListType{data: data}) do
+    detransform_list(data)
+  end
+
   def detransform(%IR.MapType{data: data}) do
     data = detransform_key_value_pairs(data)
     {:%{}, [], data}
@@ -39,6 +43,10 @@ defmodule Hologram.Compiler.Detransformer do
     end)
   end
 
+  defp detransform_list(list) do
+    Enum.map(list, &detransform/1)
+  end
+
   # --- OVERHAUL ---
 
   # def detransform(%IR.AdditionOperator{left: left, right: right}) do
@@ -46,10 +54,6 @@ defmodule Hologram.Compiler.Detransformer do
   #   right = detransform(right)
 
   #   {:+, [line: 0], [left, right]}
-  # end
-
-  # def detransform(list) when is_list(list) do
-  #   Enum.map(list, &detransform/1)
   # end
 
   # def detransform(%IR.EqualToOperator{left: left, right: right}) do
@@ -64,10 +68,6 @@ defmodule Hologram.Compiler.Detransformer do
   #   args = detransform(args)
 
   #   {{:., [line: 0], [module, function]}, [line: 0], args}
-  # end
-
-  # def detransform(%IR.ListType{data: data}) do
-  #   detransform(data)
   # end
 
   # def detransform(%IR.Variable{name: name}) do
