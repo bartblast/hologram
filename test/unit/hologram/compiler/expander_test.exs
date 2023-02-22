@@ -13,6 +13,12 @@ defmodule Hologram.Compiler.ExpanderTest do
     assert expand(ir, %Context{}) == {ir, %Context{}}
   end
 
+  test "boolean type" do
+    ir = %IR.BooleanType{value: true}
+
+    assert expand(ir, %Context{}) == {ir, %Context{}}
+  end
+
   #
   # alias Hologram.Test.Fixtures.Compiler.Expander.Module1
 
