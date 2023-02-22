@@ -35,6 +35,17 @@ defmodule Hologram.Compiler.Expander do
     {ir, context}
   end
 
+  def expand(%IR.MapType{data: data}, %Context{} = context) do
+    new_data =
+      Enum.map(data, fn {key, value} ->
+        {new_key, _context} = expand(key, context)
+        {new_value, _context} = expand(value, context)
+        {new_key, new_value}
+      end)
+
+    {%IR.MapType{data: new_data}, context}
+  end
+
   def expand(%IR.NilType{} = ir, %Context{} = context) do
     {ir, context}
   end
@@ -160,17 +171,6 @@ defmodule Hologram.Compiler.Expander do
   # def expand(%IR.MapAccess{key: key} = ir, %Context{} = context) do
   #   {new_key, _context} = expand(key, context)
   #   {%{ir | key: new_key}, context}
-  # end
-
-  # def expand(%IR.MapType{data: data}, %Context{} = context) do
-  #   new_data =
-  #     Enum.map(data, fn {key, value} ->
-  #       {new_key, _context} = expand(key, context)
-  #       {new_value, _context} = expand(value, context)
-  #       {new_key, new_value}
-  #     end)
-
-  #   {%IR.MapType{data: new_data}, context}
   # end
 
   # def expand(%IR.MatchAccess{} = ir, %Context{} = context) do

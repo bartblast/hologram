@@ -60,6 +60,23 @@ defmodule Hologram.Compiler.ExpanderTest do
     assert expand(ir, %Context{}) == {ir, %Context{}}
   end
 
+  test "map" do
+    ir = %IR.MapType{
+      data: [
+        {%IR.Alias{segments: [:A]}, %IR.Alias{segments: [:B]}},
+        {%IR.Alias{segments: [:C]}, %IR.Alias{segments: [:D]}}
+      ]
+    }
+
+    expand(ir, %Context{}) ==
+      {%IR.MapType{
+         data: [
+           {%IR.ModuleType{module: A, segments: [:A]}, %IR.ModuleType{module: B, segments: [:B]}},
+           {%IR.ModuleType{module: C, segments: [:C]}, %IR.ModuleType{module: D, segments: [:D]}}
+         ]
+       }, %Context{}}
+  end
+
   test "nil type" do
     ir = %IR.NilType{}
 
@@ -78,38 +95,8 @@ defmodule Hologram.Compiler.ExpanderTest do
   # }
 
   # describe "data types" do
-  #   test "map" do
-  #     ir = %IR.MapType{
-  #       data: [
-  #         {%IR.Alias{segments: [:A]}, %IR.Alias{segments: [:B]}},
-  #         {%IR.Alias{segments: [:C]}, %IR.Alias{segments: [:D]}}
-  #       ]
-  #     }
-
-  #     result = Expander.expand(ir, @context)
-
-  #     expected =
-  #       {%IR.MapType{
-  #          data: [
-  #            {%IR.ModuleType{module: A, segments: [:A]},
-  #             %IR.ModuleType{module: B, segments: [:B]}},
-  #            {%IR.ModuleType{module: C, segments: [:C]},
-  #             %IR.ModuleType{module: D, segments: [:D]}}
-  #          ]
-  #        }, @context}
-
-  #     assert result == expected
-  #   end
-
   #   test "module" do
   #     ir = %IR.ModuleType{module: A.B, segments: [:A, :B]}
-  #     result = Expander.expand(ir, @context)
-
-  #     assert result == {ir, @context}
-  #   end
-
-  #   test "nil" do
-  #     ir = %IR.NilType{}
   #     result = Expander.expand(ir, @context)
 
   #     assert result == {ir, @context}
