@@ -7,6 +7,8 @@ defmodule Hologram.Compiler.Detransformer do
 
   def detransform(%IR.BooleanType{value: value}), do: value
 
+  def detransform(%IR.FloatType{value: value}), do: value
+
   def detransform(%IR.IntegerType{value: value}), do: value
 
   def detransform(%IR.ModuleType{segments: segments}) do

@@ -17,6 +17,12 @@ defmodule Hologram.Compiler.DetransformerTest do
     assert detransform(ir) == true
   end
 
+  test "float type" do
+    ir = %IR.FloatType{value: 1.23}
+
+    assert detransform(ir) == 1.23
+  end
+
   test "integer type" do
     ir = %IR.IntegerType{value: 123}
 
