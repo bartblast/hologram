@@ -11,6 +11,12 @@ defmodule Hologram.Compiler.DetransformerTest do
     assert detransform(ir) == :abc
   end
 
+  test "integer type" do
+    ir = %IR.IntegerType{value: 123}
+
+    assert detransform(ir) == 123
+  end
+
   test "module type" do
     ir = %IR.ModuleType{module: A.B, segments: [:A, :B]}
 
