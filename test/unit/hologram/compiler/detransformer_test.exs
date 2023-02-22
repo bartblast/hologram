@@ -89,23 +89,18 @@ defmodule Hologram.Compiler.DetransformerTest do
 
   # --- CONTROL-FLOW ---
 
+  test "function call" do
+    module = %IR.ModuleType{module: A.B, segments: [:A, :B]}
+    args = [%IR.IntegerType{value: 1}, %IR.IntegerType{value: 2}]
+    ir = %IR.FunctionCall{module: module, function: :my_fun, args: args}
+
+    assert detransform(ir) ==
+             {{:., [line: 0], [{:__aliases__, [line: 0], [:A, :B]}, :my_fun]}, [line: 0], [1, 2]}
+  end
+
   test "variable" do
     ir = %IR.Variable{name: :test}
 
     assert detransform(ir) == {:test, [line: 0], nil}
   end
-
-  # --- OVERHAUL ---
-
-  # test "function call" do
-  #   module = %IR.ModuleType{module: A.B, segments: [:A, :B]}
-  #   args = [%IR.IntegerType{value: 1}, %IR.IntegerType{value: 2}]
-  #   ir = %IR.FunctionCall{module: module, function: :my_fun, args: args}
-  #   result = Detransformer.detransform(ir)
-
-  #   expected =
-  #     {{:., [line: 0], [{:__aliases__, [line: 0], [:A, :B]}, :my_fun]}, [line: 0], [1, 2]}
-
-  #   assert result == expected
-  # end
 end

@@ -57,6 +57,13 @@ defmodule Hologram.Compiler.Detransformer do
 
   # --- CONTROL FLOW ---
 
+  def detransform(%IR.FunctionCall{module: module, function: function, args: args}) do
+    module = detransform(module)
+    args = detransform_list(args)
+
+    {{:., [line: 0], [module, function]}, [line: 0], args}
+  end
+
   def detransform(%IR.Variable{name: name}) do
     {name, [line: 0], nil}
   end
@@ -79,13 +86,4 @@ defmodule Hologram.Compiler.Detransformer do
   defp detransform_list(list) do
     Enum.map(list, &detransform/1)
   end
-
-  # --- OVERHAUL ---
-
-  # def detransform(%IR.FunctionCall{module: module, function: function, args: args}) do
-  #   module = detransform(module)
-  #   args = detransform(args)
-
-  #   {{:., [line: 0], [module, function]}, [line: 0], args}
-  # end
 end
