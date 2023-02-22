@@ -1,5 +1,6 @@
 defmodule Hologram.Compiler.Expander do
   alias Hologram.Compiler.Context
+  alias Hologram.Compiler.Helpers
   alias Hologram.Compiler.IR
 
   def expand(ir, context)
@@ -50,7 +51,24 @@ defmodule Hologram.Compiler.Expander do
     {ir, context}
   end
 
+  # --- CONTROL FLOW ---
+
+  def expand(%IR.Alias{segments: segments}, %Context{aliases: aliases} = context) do
+    module_segs = expand_alias_segs(segments, aliases)
+    module = Helpers.module(module_segs)
+
+    {%IR.ModuleType{module: module, segments: module_segs}, context}
+  end
+
   # --- HELPERS ---
+
+  defp expand_alias_segs([head | tail] = alias_segs, aliases) do
+    if aliases[head] do
+      aliases[head] ++ tail
+    else
+      alias_segs
+    end
+  end
 
   defp expand_binary_operator(%{left: left, right: right} = ir, context) do
     {left, _context} = expand(left, context)
@@ -61,21 +79,12 @@ defmodule Hologram.Compiler.Expander do
 
   # alias Hologram.Compiler.Detransformer
   # alias Hologram.Compiler.Evaluator
-  # alias Hologram.Compiler.Helpers
-
   # alias Hologram.Compiler.Normalizer
   # alias Hologram.Compiler.Reflection
   # alias Hologram.Compiler.Transformer
 
   # def expand(%{kind: :binding_index_access} = ir, %Context{} = context) do
   #   {ir, context}
-  # end
-
-  # def expand(%IR.Alias{segments: segments}, %Context{aliases: defined_aliases} = context) do
-  #   expanded_alias_segs = expand_alias_segs(segments, defined_aliases)
-  #   module = Helpers.module(expanded_alias_segs)
-
-  #   {%IR.ModuleType{module: module, segments: expanded_alias_segs}, context}
   # end
 
   # def expand(
@@ -255,14 +264,6 @@ defmodule Hologram.Compiler.Expander do
 
   # def expand(%IR.Variable{} = ir, %Context{} = context) do
   #   {ir, context}
-  # end
-
-  # defp expand_alias_segs([head | tail] = alias_segs, defined_aliases) do
-  #   if defined_aliases[head] do
-  #     defined_aliases[head] ++ tail
-  #   else
-  #     alias_segs
-  #   end
   # end
 
   # defp expand_list(list, context) do

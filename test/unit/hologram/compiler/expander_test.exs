@@ -5,6 +5,10 @@ defmodule Hologram.Compiler.ExpanderTest do
   alias Hologram.Compiler.Context
   alias Hologram.Compiler.IR
 
+  @context_with_aliases %Context{
+    aliases: %{Seg1: [:Seg2, :Seg3]}
+  }
+
   @context_with_module_attributes %Context{
     module_attributes: %{
       a: %IR.IntegerType{value: 1},
@@ -68,19 +72,41 @@ defmodule Hologram.Compiler.ExpanderTest do
       ]
     }
 
-    expand(ir, %Context{}) ==
-      {%IR.MapType{
-         data: [
-           {%IR.ModuleType{module: A, segments: [:A]}, %IR.ModuleType{module: B, segments: [:B]}},
-           {%IR.ModuleType{module: C, segments: [:C]}, %IR.ModuleType{module: D, segments: [:D]}}
-         ]
-       }, %Context{}}
+    assert expand(ir, %Context{}) ==
+             {%IR.MapType{
+                data: [
+                  {%IR.ModuleType{module: A, segments: [:A]},
+                   %IR.ModuleType{module: B, segments: [:B]}},
+                  {%IR.ModuleType{module: C, segments: [:C]},
+                   %IR.ModuleType{module: D, segments: [:D]}}
+                ]
+              }, %Context{}}
   end
 
   test "nil type" do
     ir = %IR.NilType{}
 
     assert expand(ir, %Context{}) == {ir, %Context{}}
+  end
+
+  # --- CONTROL FLOW ---
+
+  describe "alias" do
+    test "is defined in context" do
+      ir = %IR.Alias{segments: [:Seg1]}
+
+      assert expand(ir, @context_with_aliases) ==
+               {%IR.ModuleType{module: Seg2.Seg3, segments: [:Seg2, :Seg3]},
+                @context_with_aliases}
+    end
+
+    test "is not defined in context" do
+      ir = %IR.Alias{segments: [:Seg4, :Seg5]}
+
+      assert expand(ir, @context_with_aliases) ==
+               {%IR.ModuleType{module: Seg4.Seg5, segments: [:Seg4, :Seg5]},
+                @context_with_aliases}
+    end
   end
 
   #
@@ -108,26 +134,6 @@ defmodule Hologram.Compiler.ExpanderTest do
   #   result = Expander.expand(ir, @context)
 
   #   assert result == {ir, @context}
-  # end
-
-  # describe "alias" do
-  #   test "has mapping" do
-  #     ir = %IR.Alias{segments: [:Seg1]}
-
-  #     result = Expander.expand(ir, @context)
-  #     expected = {%IR.ModuleType{module: Seg2.Seg3, segments: [:Seg2, :Seg3]}, @context}
-
-  #     assert expected == result
-  #   end
-
-  #   test "doesn't have mapping" do
-  #     ir = %IR.Alias{segments: [:Seg4, :Seg5]}
-
-  #     result = Expander.expand(ir, @context)
-  #     expected = {%IR.ModuleType{module: Seg4.Seg5, segments: [:Seg4, :Seg5]}, @context}
-
-  #     assert expected == result
-  #   end
   # end
 
   # describe "alias directive" do
