@@ -3,6 +3,8 @@ defmodule Hologram.Compiler.Detransformer do
 
   # --- DATA TYPES ---
 
+  def detransform(%IR.AtomType{value: value}), do: value
+
   def detransform(%IR.ModuleType{segments: segments}) do
     {:__aliases__, [line: 0], segments}
   end
@@ -33,10 +35,6 @@ defmodule Hologram.Compiler.Detransformer do
 
   # def detransform(list) when is_list(list) do
   #   Enum.map(list, &detransform/1)
-  # end
-
-  # def detransform(%{kind: :basic_data_type, value: value}) do
-  #   value
   # end
 
   # def detransform(%IR.EqualToOperator{left: left, right: right}) do

@@ -5,6 +5,12 @@ defmodule Hologram.Compiler.DetransformerTest do
 
   # --- DATA TYPES ---
 
+  test "atom type" do
+    ir = %IR.AtomType{value: :abc}
+
+    assert detransform(ir) == :abc
+  end
+
   test "module type" do
     ir = %IR.ModuleType{module: A.B, segments: [:A, :B]}
 
@@ -27,12 +33,6 @@ defmodule Hologram.Compiler.DetransformerTest do
   # end
 
   # describe "data types" do
-  #   test "basic (atom, boolean, float, integer, string)" do
-  #     ir = %IR.IntegerType{value: 123}
-  #     result = Detransformer.detransform(ir)
-  #     assert result == 123
-  #   end
-
   #   test "list" do
   #     ir = %IR.ListType{
   #       data: [
