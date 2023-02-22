@@ -87,7 +87,7 @@ defmodule Hologram.Compiler.DetransformerTest do
     assert detransform(ir) == {:%{}, [], [__struct__: Hologram.Test.Fixtures.Struct, a: 1, b: 2]}
   end
 
-  # --- CONTROL-FLOW ---
+  # --- CONTROL FLOW ---
 
   test "function call" do
     module = %IR.ModuleType{module: A.B, segments: [:A, :B]}
