@@ -1,6 +1,15 @@
 defmodule Hologram.Compiler.Detransformer do
   alias Hologram.Compiler.IR
 
+  # --- OPERATORS ---
+
+  def detransform(%IR.AdditionOperator{left: left, right: right}) do
+    left = detransform(left)
+    right = detransform(right)
+
+    {:+, [line: 0], [left, right]}
+  end
+
   # --- DATA TYPES ---
 
   def detransform(%IR.AtomType{value: value}), do: value
@@ -48,13 +57,6 @@ defmodule Hologram.Compiler.Detransformer do
   end
 
   # --- OVERHAUL ---
-
-  # def detransform(%IR.AdditionOperator{left: left, right: right}) do
-  #   left = detransform(left)
-  #   right = detransform(right)
-
-  #   {:+, [line: 0], [left, right]}
-  # end
 
   # def detransform(%IR.EqualToOperator{left: left, right: right}) do
   #   left = detransform(left)

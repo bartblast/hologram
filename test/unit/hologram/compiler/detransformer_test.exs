@@ -3,6 +3,14 @@ defmodule Hologram.Compiler.DetransformerTest do
   import Hologram.Compiler.Detransformer
   alias Hologram.Compiler.IR
 
+  # --- OPERATORS ---
+
+  test "addition operator" do
+    ir = %IR.AdditionOperator{left: %IR.IntegerType{value: 1}, right: %IR.IntegerType{value: 2}}
+
+    assert detransform(ir) == {:+, [line: 0], [1, 2]}
+  end
+
   # --- DATA TYPES ---
 
   test "atom type" do
@@ -96,17 +104,6 @@ defmodule Hologram.Compiler.DetransformerTest do
 
   #     assert result == expected
   #   end
-  # end
-
-  # test "addition operator" do
-  #   left = %IR.IntegerType{value: 1}
-  #   right = %IR.IntegerType{value: 2}
-  #   ir = %IR.AdditionOperator{left: left, right: right}
-
-  #   result = Detransformer.detransform(ir)
-  #   expected = {:+, [line: 0], [1, 2]}
-
-  #   assert result == expected
   # end
 
   # test "equal to operator" do
