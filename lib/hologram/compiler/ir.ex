@@ -6,7 +6,7 @@ defmodule Hologram.Compiler.IR do
   end
 
   defmodule AdditionOperator do
-    defstruct left: nil, right: nil, kind: :basic_binary_operator
+    defstruct left: nil, right: nil
   end
 
   defmodule ConsOperator do
@@ -14,27 +14,27 @@ defmodule Hologram.Compiler.IR do
   end
 
   defmodule DivisionOperator do
-    defstruct left: nil, right: nil, kind: :basic_binary_operator
+    defstruct left: nil, right: nil
   end
 
   defmodule DotOperator do
-    defstruct left: nil, right: nil, kind: :basic_binary_operator
+    defstruct left: nil, right: nil
   end
 
   defmodule EqualToOperator do
-    defstruct left: nil, right: nil, kind: :basic_binary_operator
+    defstruct left: nil, right: nil
   end
 
   defmodule LessThanOperator do
-    defstruct left: nil, right: nil, kind: :basic_binary_operator
+    defstruct left: nil, right: nil
   end
 
   defmodule ListConcatenationOperator do
-    defstruct left: nil, right: nil, kind: :basic_binary_operator
+    defstruct left: nil, right: nil
   end
 
   defmodule ListSubtractionOperator do
-    defstruct left: nil, right: nil, kind: :basic_binary_operator
+    defstruct left: nil, right: nil
   end
 
   defmodule MatchOperator do
@@ -42,7 +42,7 @@ defmodule Hologram.Compiler.IR do
   end
 
   defmodule MembershipOperator do
-    defstruct left: nil, right: nil, kind: :basic_binary_operator
+    defstruct left: nil, right: nil
   end
 
   defmodule ModuleAttributeOperator do
@@ -50,15 +50,15 @@ defmodule Hologram.Compiler.IR do
   end
 
   defmodule MultiplicationOperator do
-    defstruct left: nil, right: nil, kind: :basic_binary_operator
+    defstruct left: nil, right: nil
   end
 
   defmodule NotEqualToOperator do
-    defstruct left: nil, right: nil, kind: :basic_binary_operator
+    defstruct left: nil, right: nil
   end
 
   defmodule RelaxedBooleanAndOperator do
-    defstruct left: nil, right: nil, kind: :basic_binary_operator
+    defstruct left: nil, right: nil
   end
 
   defmodule RelaxedBooleanNotOperator do
@@ -66,19 +66,19 @@ defmodule Hologram.Compiler.IR do
   end
 
   defmodule RelaxedBooleanOrOperator do
-    defstruct left: nil, right: nil, kind: :basic_binary_operator
+    defstruct left: nil, right: nil
   end
 
   defmodule StrictBooleanAndOperator do
-    defstruct left: nil, right: nil, kind: :basic_binary_operator
+    defstruct left: nil, right: nil
   end
 
   defmodule SubtractionOperator do
-    defstruct left: nil, right: nil, kind: :basic_binary_operator
+    defstruct left: nil, right: nil
   end
 
   defmodule TypeOperator do
-    defstruct left: nil, right: nil, kind: :basic_binary_operator
+    defstruct left: nil, right: nil
   end
 
   defmodule UnaryNegativeOperator do
@@ -96,7 +96,7 @@ defmodule Hologram.Compiler.IR do
   end
 
   defmodule AtomType do
-    defstruct value: nil, kind: :basic_data_type
+    defstruct value: nil
   end
 
   defmodule BinaryType do
@@ -104,15 +104,15 @@ defmodule Hologram.Compiler.IR do
   end
 
   defmodule BooleanType do
-    defstruct value: nil, kind: :basic_data_type
+    defstruct value: nil
   end
 
   defmodule FloatType do
-    defstruct value: nil, kind: :basic_data_type
+    defstruct value: nil
   end
 
   defmodule IntegerType do
-    defstruct value: nil, kind: :basic_data_type
+    defstruct value: nil
   end
 
   defmodule ListType do
@@ -132,7 +132,7 @@ defmodule Hologram.Compiler.IR do
   end
 
   defmodule StringType do
-    defstruct value: nil, kind: :basic_data_type
+    defstruct value: nil
   end
 
   defmodule StructType do
@@ -259,7 +259,7 @@ defmodule Hologram.Compiler.IR do
   # BINDINGS
 
   defmodule ListIndexAccess do
-    defstruct index: nil, kind: :binding_index_access
+    defstruct index: nil
   end
 
   defmodule ListTailAccess do
@@ -267,10 +267,10 @@ defmodule Hologram.Compiler.IR do
   end
 
   defmodule ParamAccess do
-    defstruct index: nil, kind: :binding_index_access
+    defstruct index: nil
   end
 
   defmodule TupleAccess do
-    defstruct index: nil, kind: :binding_index_access
+    defstruct index: nil
   end
 end
