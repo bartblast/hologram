@@ -20,6 +20,10 @@ defmodule Hologram.Compiler.Expander do
     {ir, context}
   end
 
+  def expand(%IR.NilType{} = ir, %Context{} = context) do
+    {ir, context}
+  end
+
   # alias Hologram.Compiler.Detransformer
   # alias Hologram.Compiler.Evaluator
   # alias Hologram.Compiler.Helpers

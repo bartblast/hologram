@@ -31,6 +31,12 @@ defmodule Hologram.Compiler.ExpanderTest do
     assert expand(ir, %Context{}) == {ir, %Context{}}
   end
 
+  test "nil type" do
+    ir = %IR.NilType{}
+
+    assert expand(ir, %Context{}) == {ir, %Context{}}
+  end
+
   #
   # alias Hologram.Test.Fixtures.Compiler.Expander.Module1
 
