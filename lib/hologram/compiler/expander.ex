@@ -10,6 +10,13 @@ defmodule Hologram.Compiler.Expander do
     expand_binary_operator(ir, context)
   end
 
+  def expand(
+        %IR.ModuleAttributeOperator{name: name},
+        %Context{module_attributes: module_attributes} = context
+      ) do
+    {module_attributes[name], context}
+  end
+
   # --- DATA TYPES ---
 
   def expand(%IR.AtomType{} = ir, %Context{} = context) do
@@ -206,13 +213,6 @@ defmodule Hologram.Compiler.Expander do
   #   new_context = Context.put_module_attribute(context, name, value)
 
   #   {%IR.IgnoredExpression{type: :module_attribute_definition}, new_context}
-  # end
-
-  # def expand(
-  #       %IR.ModuleAttributeOperator{name: name},
-  #       %Context{module_attributes: module_attributes} = context
-  #     ) do
-  #   {module_attributes[name], context}
   # end
 
   # def expand(

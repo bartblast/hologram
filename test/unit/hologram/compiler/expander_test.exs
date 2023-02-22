@@ -5,14 +5,14 @@ defmodule Hologram.Compiler.ExpanderTest do
   alias Hologram.Compiler.Context
   alias Hologram.Compiler.IR
 
-  # --- OPERATORS ---
-
-  @binary_operator_context %Context{
+  @context_with_module_attributes %Context{
     module_attributes: %{
       a: %IR.IntegerType{value: 1},
       c: %IR.IntegerType{value: 3}
     }
   }
+
+  # --- OPERATORS ---
 
   test "addition operator" do
     ir = %IR.AdditionOperator{
@@ -20,11 +20,18 @@ defmodule Hologram.Compiler.ExpanderTest do
       right: %IR.ModuleAttributeOperator{name: :c}
     }
 
-    assert expand(ir, @binary_operator_context) ==
+    assert expand(ir, @context_with_module_attributes) ==
              {%IR.AdditionOperator{
                 left: %IR.IntegerType{value: 1},
                 right: %IR.IntegerType{value: 3}
-              }, @binary_operator_context}
+              }, @context_with_module_attributes}
+  end
+
+  test "module attribute operator" do
+    ir = %IR.ModuleAttributeOperator{name: :c}
+
+    assert expand(ir, @context_with_module_attributes) ==
+             {%IR.IntegerType{value: 3}, @context_with_module_attributes}
   end
 
   # --- DATA TYPES ---
@@ -836,13 +843,6 @@ defmodule Hologram.Compiler.ExpanderTest do
   #              }
   #            } = result
   #   end
-  # end
-
-  # test "module attribute operator" do
-  #   ir = %IR.ModuleAttributeOperator{name: :c}
-  #   result = Expander.expand(ir, @context)
-
-  #   assert result == {%IR.IntegerType{value: 3}, @context}
   # end
 
   # describe "module def" do
