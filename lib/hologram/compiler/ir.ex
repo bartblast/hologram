@@ -123,6 +123,10 @@ defmodule Hologram.Compiler.IR do
     defstruct data: []
   end
 
+  defmodule ModuleType do
+    defstruct module: nil, segments: nil
+  end
+
   defmodule NilType do
     defstruct []
   end
@@ -241,12 +245,6 @@ defmodule Hologram.Compiler.IR do
   end
 
   # --- OVERHAUL ---
-
-  # DATA TYPES
-
-  defmodule ModuleType do
-    defstruct module: nil, segments: nil
-  end
 
   # DEFINITIONS
 

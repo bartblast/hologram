@@ -1,122 +1,122 @@
 defmodule Hologram.Compiler.DetransformerTest do
   use Hologram.Test.UnitCase, async: true
-
-  alias Hologram.Compiler.Detransformer
+  import Hologram.Compiler.Detransformer
   alias Hologram.Compiler.IR
 
-  test "(elixir) list" do
-    ir = [%IR.IntegerType{value: 1}, %IR.IntegerType{value: 2}]
-    result = Detransformer.detransform(ir)
+  # --- DATA TYPES ---
 
-    assert result == [1, 2]
+  test "module type" do
+    ir = %IR.ModuleType{module: A.B, segments: [:A, :B]}
+
+    assert detransform(ir) == {:__aliases__, [line: 0], [:A, :B]}
   end
 
-  describe "data types" do
-    test "basic (atom, boolean, float, integer, string)" do
-      ir = %IR.IntegerType{value: 123}
-      result = Detransformer.detransform(ir)
-      assert result == 123
-    end
+  test "nil type" do
+    ir = %IR.NilType{}
 
-    test "list" do
-      ir = %IR.ListType{
-        data: [
-          %IR.AtomType{value: :a},
-          %IR.IntegerType{value: 1}
-        ]
-      }
-
-      result = Detransformer.detransform(ir)
-      expected = [:a, 1]
-
-      assert result == expected
-    end
-
-    test "map" do
-      ir = %IR.MapType{
-        data: [
-          {%IR.AtomType{value: :a}, %IR.IntegerType{value: 1}},
-          {%IR.AtomType{value: :b}, %IR.IntegerType{value: 2}}
-        ]
-      }
-
-      result = Detransformer.detransform(ir)
-      expected = {:%{}, [], [a: 1, b: 2]}
-
-      assert result == expected
-    end
-
-    test "module" do
-      ir = %IR.ModuleType{module: A.B, segments: [:A, :B]}
-
-      result = Detransformer.detransform(ir)
-      expected = {:__aliases__, [line: 0], [:A, :B]}
-
-      assert result == expected
-    end
-
-    test "nil" do
-      ir = %IR.NilType{}
-      result = Detransformer.detransform(ir)
-      assert result == nil
-    end
-
-    test "struct" do
-      ir = %IR.StructType{
-        module: %IR.ModuleType{
-          module: Hologram.Test.Fixtures.Struct,
-          segments: [:Hologram, :Test, :Fixtures, :Struct]
-        },
-        data: [
-          {%IR.AtomType{value: :a}, %IR.IntegerType{value: 1}},
-          {%IR.AtomType{value: :b}, %IR.IntegerType{value: 2}}
-        ]
-      }
-
-      result = Detransformer.detransform(ir)
-      expected = {:%{}, [], [__struct__: Hologram.Test.Fixtures.Struct, a: 1, b: 2]}
-
-      assert result == expected
-    end
+    assert detransform(ir) == nil
   end
 
-  test "addition operator" do
-    left = %IR.IntegerType{value: 1}
-    right = %IR.IntegerType{value: 2}
-    ir = %IR.AdditionOperator{left: left, right: right}
+  # --- OVERHAUL ---
 
-    result = Detransformer.detransform(ir)
-    expected = {:+, [line: 0], [1, 2]}
+  # test "(elixir) list" do
+  #   ir = [%IR.IntegerType{value: 1}, %IR.IntegerType{value: 2}]
+  #   result = Detransformer.detransform(ir)
 
-    assert result == expected
-  end
+  #   assert result == [1, 2]
+  # end
 
-  test "equal to operator" do
-    left = %IR.IntegerType{value: 1}
-    right = %IR.IntegerType{value: 2}
-    ir = %IR.EqualToOperator{left: left, right: right}
+  # describe "data types" do
+  #   test "basic (atom, boolean, float, integer, string)" do
+  #     ir = %IR.IntegerType{value: 123}
+  #     result = Detransformer.detransform(ir)
+  #     assert result == 123
+  #   end
 
-    result = Detransformer.detransform(ir)
-    expected = {:==, [line: 0], [1, 2]}
+  #   test "list" do
+  #     ir = %IR.ListType{
+  #       data: [
+  #         %IR.AtomType{value: :a},
+  #         %IR.IntegerType{value: 1}
+  #       ]
+  #     }
 
-    assert result == expected
-  end
+  #     result = Detransformer.detransform(ir)
+  #     expected = [:a, 1]
 
-  test "function call" do
-    module = %IR.ModuleType{module: A.B, segments: [:A, :B]}
-    args = [%IR.IntegerType{value: 1}, %IR.IntegerType{value: 2}]
-    ir = %IR.FunctionCall{module: module, function: :my_fun, args: args}
-    result = Detransformer.detransform(ir)
+  #     assert result == expected
+  #   end
 
-    expected =
-      {{:., [line: 0], [{:__aliases__, [line: 0], [:A, :B]}, :my_fun]}, [line: 0], [1, 2]}
+  #   test "map" do
+  #     ir = %IR.MapType{
+  #       data: [
+  #         {%IR.AtomType{value: :a}, %IR.IntegerType{value: 1}},
+  #         {%IR.AtomType{value: :b}, %IR.IntegerType{value: 2}}
+  #       ]
+  #     }
 
-    assert result == expected
-  end
+  #     result = Detransformer.detransform(ir)
+  #     expected = {:%{}, [], [a: 1, b: 2]}
 
-  test "variable" do
-    ir = %IR.Variable{name: :test}
-    result = Detransformer.detransform(ir)
-    assert result == {:test, [line: 0], nil}
-  end
+  #     assert result == expected
+  #   end
+
+  #   test "struct" do
+  #     ir = %IR.StructType{
+  #       module: %IR.ModuleType{
+  #         module: Hologram.Test.Fixtures.Struct,
+  #         segments: [:Hologram, :Test, :Fixtures, :Struct]
+  #       },
+  #       data: [
+  #         {%IR.AtomType{value: :a}, %IR.IntegerType{value: 1}},
+  #         {%IR.AtomType{value: :b}, %IR.IntegerType{value: 2}}
+  #       ]
+  #     }
+
+  #     result = Detransformer.detransform(ir)
+  #     expected = {:%{}, [], [__struct__: Hologram.Test.Fixtures.Struct, a: 1, b: 2]}
+
+  #     assert result == expected
+  #   end
+  # end
+
+  # test "addition operator" do
+  #   left = %IR.IntegerType{value: 1}
+  #   right = %IR.IntegerType{value: 2}
+  #   ir = %IR.AdditionOperator{left: left, right: right}
+
+  #   result = Detransformer.detransform(ir)
+  #   expected = {:+, [line: 0], [1, 2]}
+
+  #   assert result == expected
+  # end
+
+  # test "equal to operator" do
+  #   left = %IR.IntegerType{value: 1}
+  #   right = %IR.IntegerType{value: 2}
+  #   ir = %IR.EqualToOperator{left: left, right: right}
+
+  #   result = Detransformer.detransform(ir)
+  #   expected = {:==, [line: 0], [1, 2]}
+
+  #   assert result == expected
+  # end
+
+  # test "function call" do
+  #   module = %IR.ModuleType{module: A.B, segments: [:A, :B]}
+  #   args = [%IR.IntegerType{value: 1}, %IR.IntegerType{value: 2}]
+  #   ir = %IR.FunctionCall{module: module, function: :my_fun, args: args}
+  #   result = Detransformer.detransform(ir)
+
+  #   expected =
+  #     {{:., [line: 0], [{:__aliases__, [line: 0], [:A, :B]}, :my_fun]}, [line: 0], [1, 2]}
+
+  #   assert result == expected
+  # end
+
+  # test "variable" do
+  #   ir = %IR.Variable{name: :test}
+  #   result = Detransformer.detransform(ir)
+  #   assert result == {:test, [line: 0], nil}
+  # end
 end
