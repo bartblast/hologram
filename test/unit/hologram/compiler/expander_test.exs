@@ -1,9 +1,19 @@
 defmodule Hologram.Compiler.ExpanderTest do
   use Hologram.Test.UnitCase, async: true
+  import Hologram.Compiler.Expander
 
-  # alias Hologram.Compiler.Context
-  # alias Hologram.Compiler.Expander
-  # alias Hologram.Compiler.IR
+  alias Hologram.Compiler.Context
+  alias Hologram.Compiler.IR
+
+  # --- DATA TYPES ---
+
+  test "atom type" do
+    ir = %IR.AtomType{value: :abc}
+
+    assert expand(ir, %Context{}) == {ir, %Context{}}
+  end
+
+  #
   # alias Hologram.Test.Fixtures.Compiler.Expander.Module1
 
   # @context %Context{
@@ -15,13 +25,6 @@ defmodule Hologram.Compiler.ExpanderTest do
   # }
 
   # describe "data types" do
-  #   test "basic (atom, boolean, float, integer, string)" do
-  #     ir = %IR.IntegerType{value: 123}
-  #     result = Expander.expand(ir, @context)
-
-  #     assert result == {ir, @context}
-  #   end
-
   #   test "map" do
   #     ir = %IR.MapType{
   #       data: [

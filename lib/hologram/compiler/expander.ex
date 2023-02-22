@@ -1,18 +1,20 @@
 defmodule Hologram.Compiler.Expander do
-  # alias Hologram.Compiler.Context
+  alias Hologram.Compiler.Context
+  alias Hologram.Compiler.IR
+
+  def expand(ir, context)
+
+  def expand(%IR.AtomType{} = ir, %Context{} = context) do
+    {ir, context}
+  end
+
   # alias Hologram.Compiler.Detransformer
   # alias Hologram.Compiler.Evaluator
   # alias Hologram.Compiler.Helpers
-  # alias Hologram.Compiler.IR
+
   # alias Hologram.Compiler.Normalizer
   # alias Hologram.Compiler.Reflection
   # alias Hologram.Compiler.Transformer
-
-  # def expand(ir, context)
-
-  # def expand(%{kind: :basic_data_type} = ir, %Context{} = context) do
-  #   {ir, context}
-  # end
 
   # def expand(%{kind: :basic_binary_operator, left: left, right: right} = ir, %Context{} = context) do
   #   {left, _context} = expand(left, context)
