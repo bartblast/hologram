@@ -1,6 +1,16 @@
 defmodule Hologram.Compiler.Detransformer do
   alias Hologram.Compiler.IR
 
+  @doc """
+  Detransforms Hologram IR to Elixir AST.
+
+  ## Examples
+      iex> ir = %IR.AdditionOperator{left: %IR.IntegerType{value: 1}, right: %IR.IntegerType{value: 2}}
+      iex> Detransformer.detransform(ir)
+      {:+, [line: 0], [1, 2]}
+  """
+  def detransform(ir)
+
   # --- OPERATORS ---
 
   def detransform(%IR.AdditionOperator{left: left, right: right}) do
