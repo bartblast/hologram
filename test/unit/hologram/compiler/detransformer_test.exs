@@ -29,7 +29,7 @@ defmodule Hologram.Compiler.DetransformerTest do
     assert detransform(ir) == 123
   end
 
-  test "map" do
+  test "map type" do
     ir = %IR.MapType{
       data: [
         {%IR.AtomType{value: :a}, %IR.IntegerType{value: 1}},
@@ -52,6 +52,21 @@ defmodule Hologram.Compiler.DetransformerTest do
     assert detransform(ir) == nil
   end
 
+  test "struct type" do
+    ir = %IR.StructType{
+      module: %IR.ModuleType{
+        module: Hologram.Test.Fixtures.Struct,
+        segments: [:Hologram, :Test, :Fixtures, :Struct]
+      },
+      data: [
+        {%IR.AtomType{value: :a}, %IR.IntegerType{value: 1}},
+        {%IR.AtomType{value: :b}, %IR.IntegerType{value: 2}}
+      ]
+    }
+
+    assert detransform(ir) == {:%{}, [], [__struct__: Hologram.Test.Fixtures.Struct, a: 1, b: 2]}
+  end
+
   # --- OVERHAUL ---
 
   # test "(elixir) list" do
@@ -72,24 +87,6 @@ defmodule Hologram.Compiler.DetransformerTest do
 
   #     result = Detransformer.detransform(ir)
   #     expected = [:a, 1]
-
-  #     assert result == expected
-  #   end
-
-  #   test "struct" do
-  #     ir = %IR.StructType{
-  #       module: %IR.ModuleType{
-  #         module: Hologram.Test.Fixtures.Struct,
-  #         segments: [:Hologram, :Test, :Fixtures, :Struct]
-  #       },
-  #       data: [
-  #         {%IR.AtomType{value: :a}, %IR.IntegerType{value: 1}},
-  #         {%IR.AtomType{value: :b}, %IR.IntegerType{value: 2}}
-  #       ]
-  #     }
-
-  #     result = Detransformer.detransform(ir)
-  #     expected = {:%{}, [], [__struct__: Hologram.Test.Fixtures.Struct, a: 1, b: 2]}
 
   #     assert result == expected
   #   end

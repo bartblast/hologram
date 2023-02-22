@@ -24,6 +24,13 @@ defmodule Hologram.Compiler.Detransformer do
     nil
   end
 
+  def detransform(%IR.StructType{module: module_ir, data: data_ir}) do
+    module_ast = {:__struct__, module_ir.module}
+    data_ast = [module_ast | detransform_key_value_pairs(data_ir)]
+
+    {:%{}, [], data_ast}
+  end
+
   # --- HELPERS ---
 
   defp detransform_key_value_pairs(data) do
@@ -61,13 +68,6 @@ defmodule Hologram.Compiler.Detransformer do
 
   # def detransform(%IR.ListType{data: data}) do
   #   detransform(data)
-  # end
-
-  # def detransform(%IR.StructType{module: module_ir, data: data_ir}) do
-  #   struct_module = {:__struct__, module_ir.module}
-  #   data = [struct_module | detransform_key_value_pairs(data_ir)]
-
-  #   {:%{}, [], data}
   # end
 
   # def detransform(%IR.Variable{name: name}) do
