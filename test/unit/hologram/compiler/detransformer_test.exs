@@ -11,6 +11,12 @@ defmodule Hologram.Compiler.DetransformerTest do
     assert detransform(ir) == :abc
   end
 
+  test "boolean type" do
+    ir = %IR.BooleanType{value: true}
+
+    assert detransform(ir) == true
+  end
+
   test "integer type" do
     ir = %IR.IntegerType{value: 123}
 
