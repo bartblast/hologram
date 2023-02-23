@@ -51,6 +51,19 @@ defmodule Hologram.Compiler.Expander do
     {ir, context}
   end
 
+  # --- DIRECTIVES ---
+
+  def expand(
+        %IR.AliasDirective{alias_segs: alias_segs, as: as},
+        %Context{aliases: aliases} = context
+      ) do
+    expanded_alias_segs = expand_alias_segs(alias_segs, aliases)
+    new_aliases = Map.put(aliases, as, expanded_alias_segs)
+    new_context = %{context | aliases: new_aliases}
+
+    {%IR.IgnoredExpression{type: :alias_directive}, new_context}
+  end
+
   # --- CONTROL FLOW ---
 
   def expand(%IR.Alias{segments: segments}, %Context{aliases: aliases} = context) do
@@ -85,17 +98,6 @@ defmodule Hologram.Compiler.Expander do
 
   # def expand(%{kind: :binding_index_access} = ir, %Context{} = context) do
   #   {ir, context}
-  # end
-
-  # def expand(
-  #       %IR.AliasDirective{alias_segs: alias_segs, as: as},
-  #       %Context{aliases: defined_aliases} = context
-  #     ) do
-  #   expanded_alias_segs = expand_alias_segs(alias_segs, defined_aliases)
-  #   new_defined_aliases = Map.put(defined_aliases, as, expanded_alias_segs)
-  #   new_context = %{context | aliases: new_defined_aliases}
-
-  #   {%IR.IgnoredExpression{type: :alias_directive}, new_context}
   # end
 
   # def expand(%IR.Binding{access_path: access_path} = ir, %Context{} = context) do
