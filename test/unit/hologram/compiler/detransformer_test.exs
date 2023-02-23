@@ -50,7 +50,7 @@ defmodule Hologram.Compiler.DetransformerTest do
           %IR.IntegerType{value: 2}
         ]
       },
-      right: %Hologram.Compiler.IR.ListType{
+      right: %IR.ListType{
         data: [
           %IR.IntegerType{value: 3},
           %IR.IntegerType{value: 4}
@@ -59,6 +59,26 @@ defmodule Hologram.Compiler.DetransformerTest do
     }
 
     assert detransform(ir) == {:++, [line: 0], [[1, 2], [3, 4]]}
+  end
+
+  test "list subtraction operator" do
+    # [1, 2] -- [3, 4]
+    ir = %IR.ListSubtractionOperator{
+      left: %IR.ListType{
+        data: [
+          %IR.IntegerType{value: 1},
+          %IR.IntegerType{value: 2}
+        ]
+      },
+      right: %IR.ListType{
+        data: [
+          %IR.IntegerType{value: 3},
+          %IR.IntegerType{value: 4}
+        ]
+      }
+    }
+
+    assert detransform(ir) == {:--, [line: 0], [[1, 2], [3, 4]]}
   end
 
   # --- DATA TYPES ---
