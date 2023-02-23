@@ -41,6 +41,26 @@ defmodule Hologram.Compiler.DetransformerTest do
     assert detransform(ir) == {:<, [line: 0], [1, 2]}
   end
 
+  test "list concatenation operator" do
+    # [1, 2] ++ [3, 4]
+    ir = %IR.ListConcatenationOperator{
+      left: %IR.ListType{
+        data: [
+          %IR.IntegerType{value: 1},
+          %IR.IntegerType{value: 2}
+        ]
+      },
+      right: %Hologram.Compiler.IR.ListType{
+        data: [
+          %IR.IntegerType{value: 3},
+          %IR.IntegerType{value: 4}
+        ]
+      }
+    }
+
+    assert detransform(ir) == {:++, [line: 0], [[1, 2], [3, 4]]}
+  end
+
   # --- DATA TYPES ---
 
   test "atom type" do
