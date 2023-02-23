@@ -21,6 +21,13 @@ defmodule Hologram.Compiler.Detransformer do
     detransform_binary_operator(:/, left, right)
   end
 
+  def detransform(%IR.DotOperator{left: left, right: right}) do
+    left = detransform(left)
+    right = detransform(right)
+
+    {{:., [], [left, right]}, [no_parens: true], []}
+  end
+
   def detransform(%IR.EqualToOperator{left: left, right: right}) do
     detransform_binary_operator(:==, left, right)
   end

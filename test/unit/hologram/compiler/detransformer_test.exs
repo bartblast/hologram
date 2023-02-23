@@ -17,6 +17,14 @@ defmodule Hologram.Compiler.DetransformerTest do
     assert detransform(ir) == {:/, [line: 0], [1, 2]}
   end
 
+  test "dot operator" do
+    # my_map.my_key
+    ir = %IR.DotOperator{left: %IR.Variable{name: :my_map}, right: %IR.AtomType{value: :my_key}}
+
+    assert detransform(ir) ==
+             {{:., [], [{:my_map, [line: 0], nil}, :my_key]}, [no_parens: true], []}
+  end
+
   test "equal to operator" do
     ir = %IR.EqualToOperator{left: %IR.IntegerType{value: 1}, right: %IR.IntegerType{value: 2}}
 
