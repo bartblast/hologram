@@ -17,6 +17,10 @@ defmodule Hologram.Compiler.Detransformer do
     detransform_binary_operator(:+, left, right)
   end
 
+  def detransform(%IR.DivisionOperator{left: left, right: right}) do
+    detransform_binary_operator(:/, left, right)
+  end
+
   def detransform(%IR.EqualToOperator{left: left, right: right}) do
     detransform_binary_operator(:==, left, right)
   end
