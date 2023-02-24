@@ -60,7 +60,7 @@ defmodule Hologram.Compiler.Detransformer do
 
   def detransform(%IR.MapType{data: data}) do
     data = detransform_key_value_pairs(data)
-    {:%{}, [], data}
+    {:%{}, [line: 0], data}
   end
 
   def detransform(%IR.ModuleType{segments: segments}) do

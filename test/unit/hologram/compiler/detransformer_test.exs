@@ -128,7 +128,7 @@ defmodule Hologram.Compiler.DetransformerTest do
       ]
     }
 
-    assert detransform(ir) == {:%{}, [], [a: 1, b: 2]}
+    assert detransform(ir) == {:%{}, [line: 0], [a: 1, b: 2]}
   end
 
   test "module type" do
