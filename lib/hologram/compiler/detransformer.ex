@@ -25,7 +25,7 @@ defmodule Hologram.Compiler.Detransformer do
     left = detransform(left)
     right = detransform(right)
 
-    {{:., [], [left, right]}, [no_parens: true], []}
+    {{:., [line: 0], [left, right]}, [no_parens: true, line: 0], []}
   end
 
   def detransform(%IR.EqualToOperator{left: left, right: right}) do
