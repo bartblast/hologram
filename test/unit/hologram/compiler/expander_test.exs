@@ -100,6 +100,14 @@ defmodule Hologram.Compiler.ExpanderTest do
             }, ^context} = expand(ir, context)
   end
 
+  test "module pseudo-variable" do
+    ir = %IR.ModulePseudoVariable{}
+    module = %IR.ModuleType{module: A.B, segments: [:A, :B]}
+    context = %Context{module: module}
+
+    assert expand(ir, context) == {module, context}
+  end
+
   # --- DIRECTIVES ---
 
   describe "alias directive" do
@@ -888,15 +896,6 @@ defmodule Hologram.Compiler.ExpanderTest do
 
   #     assert result == expected
   #   end
-  # end
-
-  # test "module pseudo-variable" do
-  #   ir = %IR.ModulePseudoVariable{}
-  #   module = %IR.ModuleType{module: A.B, segments: [:A, :B]}
-  #   context = %{@context | module: module}
-  #   result = Expander.expand(ir, context)
-
-  #   assert result == {module, context}
   # end
 
   # describe "symbol" do

@@ -62,6 +62,10 @@ defmodule Hologram.Compiler.Expander do
     {ir, context}
   end
 
+  def expand(%IR.ModulePseudoVariable{}, %Context{module: module} = context) do
+    {module, context}
+  end
+
   # --- DIRECTIVES ---
 
   def expand(
@@ -247,10 +251,6 @@ defmodule Hologram.Compiler.Expander do
   #   {body, _context} = expand(ir.body, new_context)
 
   #   {%{ir | module: module, body: body}, context}
-  # end
-
-  # def expand(%IR.ModulePseudoVariable{}, %Context{module: module} = context) do
-  #   {module, context}
   # end
 
   # def expand(%IR.ModuleType{} = ir, %Context{} = context) do
