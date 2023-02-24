@@ -89,6 +89,17 @@ defmodule Hologram.Compiler.ExpanderTest do
     assert expand(ir, %Context{}) == {ir, %Context{}}
   end
 
+  # --- PSEUDO-VARIABLES ---
+
+  test "env pseudo-variable" do
+    ir = %IR.EnvPseudoVariable{}
+    context = %Context{module: :module_dummy}
+
+    assert {%IR.StructType{
+              module: %IR.ModuleType{module: Macro.Env}
+            }, ^context} = expand(ir, context)
+  end
+
   # --- DIRECTIVES ---
 
   describe "alias directive" do
@@ -419,16 +430,6 @@ defmodule Hologram.Compiler.ExpanderTest do
 
   #     assert result == expected
   #   end
-  # end
-
-  # test "env pseudo-variable" do
-  #   ir = %IR.EnvPseudoVariable{}
-  #   context = %Context{module: :module_dummy}
-  #   result = Expander.expand(ir, context)
-
-  #   assert {%IR.StructType{
-  #             module: %IR.ModuleType{module: Macro.Env}
-  #           }, ^context} = result
   # end
 
   # test "function call" do

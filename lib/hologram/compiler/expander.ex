@@ -51,6 +51,17 @@ defmodule Hologram.Compiler.Expander do
     {ir, context}
   end
 
+  # --- PSEUDO-VARIABLES ---
+
+  def expand(%IR.EnvPseudoVariable{}, %Context{} = context) do
+    ir =
+      context
+      |> Context.build_env()
+      |> Helpers.term_to_ir()
+
+    {ir, context}
+  end
+
   # --- DIRECTIVES ---
 
   def expand(
@@ -142,15 +153,6 @@ defmodule Hologram.Compiler.Expander do
   #     end
 
   #   expand_list_and_context(ir_list, context)
-  # end
-
-  # def expand(%IR.EnvPseudoVariable{}, %Context{} = context) do
-  #   ir =
-  #     context
-  #     |> Context.build_env()
-  #     |> Helpers.term_to_ir()
-
-  #   {ir, context}
   # end
 
   # def expand(%IR.FunctionCall{} = ir, %Context{} = context) do
