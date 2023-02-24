@@ -158,7 +158,12 @@ defmodule Hologram.Compiler.DetransformerTest do
       ]
     }
 
-    assert detransform(ir) == {:%{}, [], [__struct__: Hologram.Test.Fixtures.Struct, a: 1, b: 2]}
+    assert detransform(ir) ==
+             {:%, [line: 0],
+              [
+                {:__aliases__, [line: 0], [:Hologram, :Test, :Fixtures, :Struct]},
+                {:%{}, [line: 0], [a: 1, b: 2]}
+              ]}
   end
 
   # --- CONTROL FLOW ---

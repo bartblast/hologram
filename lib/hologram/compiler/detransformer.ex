@@ -71,11 +71,11 @@ defmodule Hologram.Compiler.Detransformer do
     nil
   end
 
-  def detransform(%IR.StructType{module: module_ir, data: data_ir}) do
-    module_ast = {:__struct__, module_ir.module}
-    data_ast = [module_ast | detransform_key_value_pairs(data_ir)]
+  def detransform(%IR.StructType{module: module, data: data}) do
+    module = detransform(module)
+    data = detransform_key_value_pairs(data)
 
-    {:%{}, [], data_ast}
+    {:%, [line: 0], [module, {:%{}, [line: 0], data}]}
   end
 
   # --- CONTROL FLOW ---
