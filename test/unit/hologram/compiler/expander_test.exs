@@ -208,6 +208,12 @@ defmodule Hologram.Compiler.ExpanderTest do
 
   # --- BINDINGS ---
 
+  test "list index access" do
+    ir = %IR.ListIndexAccess{index: 0}
+
+    expand(ir, @context_dummy) == {ir, @context_dummy}
+  end
+
   test "map access" do
     ir = %IR.MapAccess{key: :test}
 
@@ -232,13 +238,6 @@ defmodule Hologram.Compiler.ExpanderTest do
   #     c: %IR.IntegerType{value: 3}
   #   }
   # }
-
-  # test "binding index access" do
-  #   ir = %IR.ListIndexAccess{index: 0}
-  #   result = Expander.expand(ir, @context)
-
-  #   assert result == {ir, @context}
-  # end
 
   # test "binding" do
   #   ir = %IR.Binding{
