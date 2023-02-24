@@ -5,6 +5,10 @@ defmodule Hologram.Compiler.ExpanderTest do
   alias Hologram.Compiler.Context
   alias Hologram.Compiler.IR
 
+  @context_dummy %Context{
+    module: :module_dummy
+  }
+
   @context_with_aliases %Context{
     aliases: %{Seg1: [:Seg2, :Seg3]}
   }
@@ -43,25 +47,25 @@ defmodule Hologram.Compiler.ExpanderTest do
   test "atom type" do
     ir = %IR.AtomType{value: :abc}
 
-    assert expand(ir, %Context{}) == {ir, %Context{}}
+    assert expand(ir, @context_dummy) == {ir, @context_dummy}
   end
 
   test "boolean type" do
     ir = %IR.BooleanType{value: true}
 
-    assert expand(ir, %Context{}) == {ir, %Context{}}
+    assert expand(ir, @context_dummy) == {ir, @context_dummy}
   end
 
   test "float type" do
     ir = %IR.FloatType{value: 1.23}
 
-    assert expand(ir, %Context{}) == {ir, %Context{}}
+    assert expand(ir, @context_dummy) == {ir, @context_dummy}
   end
 
   test "integer type" do
     ir = %IR.IntegerType{value: 1}
 
-    assert expand(ir, %Context{}) == {ir, %Context{}}
+    assert expand(ir, @context_dummy) == {ir, @context_dummy}
   end
 
   test "map" do
@@ -72,7 +76,7 @@ defmodule Hologram.Compiler.ExpanderTest do
       ]
     }
 
-    assert expand(ir, %Context{}) ==
+    assert expand(ir, @context_dummy) ==
              {%IR.MapType{
                 data: [
                   {%IR.ModuleType{module: A, segments: [:A]},
@@ -80,24 +84,23 @@ defmodule Hologram.Compiler.ExpanderTest do
                   {%IR.ModuleType{module: C, segments: [:C]},
                    %IR.ModuleType{module: D, segments: [:D]}}
                 ]
-              }, %Context{}}
+              }, @context_dummy}
   end
 
   test "nil type" do
     ir = %IR.NilType{}
 
-    assert expand(ir, %Context{}) == {ir, %Context{}}
+    assert expand(ir, @context_dummy) == {ir, @context_dummy}
   end
 
   # --- PSEUDO-VARIABLES ---
 
   test "env pseudo-variable" do
     ir = %IR.EnvPseudoVariable{}
-    context = %Context{module: :module_dummy}
 
     assert {%IR.StructType{
               module: %IR.ModuleType{module: Macro.Env}
-            }, ^context} = expand(ir, context)
+            }, @context_dummy} = expand(ir, @context_dummy)
   end
 
   test "module pseudo-variable" do
@@ -155,6 +158,14 @@ defmodule Hologram.Compiler.ExpanderTest do
                {%IR.ModuleType{module: Seg4.Seg5, segments: [:Seg4, :Seg5]},
                 @context_with_aliases}
     end
+  end
+
+  # --- OTHER IR ---
+
+  test "ignored expression" do
+    ir = %IR.IgnoredExpression{type: :alias_directive}
+
+    assert expand(ir, @context_dummy) == {ir, @context_dummy}
   end
 
   #
@@ -447,13 +458,6 @@ defmodule Hologram.Compiler.ExpanderTest do
   #     args: [%IR.IntegerType{value: 1}, %IR.IntegerType{value: 2}]
   #   }
 
-  #   result = Expander.expand(ir, %Context{})
-
-  #   assert result == {ir, %Context{}}
-  # end
-
-  # test "ignored expression" do
-  #   ir = %IR.IgnoredExpression{type: :alias_directive}
   #   result = Expander.expand(ir, %Context{})
 
   #   assert result == {ir, %Context{}}

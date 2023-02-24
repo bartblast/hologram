@@ -88,6 +88,12 @@ defmodule Hologram.Compiler.Expander do
     {%IR.ModuleType{module: module, segments: module_segs}, context}
   end
 
+  # --- OTHER IR ---
+
+  def expand(%IR.IgnoredExpression{} = ir, %Context{} = context) do
+    {ir, context}
+  end
+
   # --- HELPERS ---
 
   defp expand_alias_segs([head | tail] = alias_segs, aliases) do
@@ -160,10 +166,6 @@ defmodule Hologram.Compiler.Expander do
   # end
 
   # def expand(%IR.FunctionCall{} = ir, %Context{} = context) do
-  #   {ir, context}
-  # end
-
-  # def expand(%IR.IgnoredExpression{} = ir, %Context{} = context) do
   #   {ir, context}
   # end
 
