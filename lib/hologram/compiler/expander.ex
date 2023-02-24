@@ -2,6 +2,7 @@ defmodule Hologram.Compiler.Expander do
   alias Hologram.Compiler.Context
   alias Hologram.Compiler.Helpers
   alias Hologram.Compiler.IR
+  alias Hologram.Compiler.Reflection
 
   def expand(ir, context)
 
@@ -83,6 +84,24 @@ defmodule Hologram.Compiler.Expander do
     {%IR.IgnoredExpression{type: :alias_directive}, new_context}
   end
 
+  def expand(
+        %IR.ImportDirective{alias_segs: alias_segs, only: only, except: except},
+        %Context{aliases: aliases} = context
+      ) do
+    expanded_alias_segs = expand_alias_segs(alias_segs, aliases)
+    module = Helpers.module(expanded_alias_segs)
+
+    functions = filter_exports(:functions, Reflection.functions(module), only, except)
+    macros = filter_exports(:macros, Reflection.macros(module), only, except)
+
+    new_context =
+      context
+      |> Context.put_functions(module, functions)
+      |> Context.put_macros(module, macros)
+
+    {%IR.IgnoredExpression{type: :import_directive}, new_context}
+  end
+
   # --- CONTROL FLOW ---
 
   def expand(%IR.Alias{segments: segments}, %Context{aliases: aliases} = context) do
@@ -152,10 +171,59 @@ defmodule Hologram.Compiler.Expander do
     end)
   end
 
+  defp filter_exports(type, exports, only, except)
+
+  defp filter_exports(:functions, exports, :functions, []) do
+    exports
+  end
+
+  defp filter_exports(:functions, exports, :functions, except) do
+    Enum.reject(exports, &(&1 in except))
+  end
+
+  defp filter_exports(:functions, _exports, :macros, _except) do
+    []
+  end
+
+  defp filter_exports(:macros, exports, :macros, []) do
+    exports
+  end
+
+  defp filter_exports(:macros, exports, :macros, except) do
+    Enum.reject(exports, &(&1 in except))
+  end
+
+  defp filter_exports(:macros, _exports, :functions, _except) do
+    []
+  end
+
+  defp filter_exports(_type, exports, :sigils, []) do
+    Enum.filter(exports, fn {name, arity} ->
+      to_string(name) =~ ~r/^sigil_[a-zA-Z]$/ && arity == 2
+    end)
+  end
+
+  defp filter_exports(_type, exports, :sigils, except) do
+    Enum.filter(exports, fn {name, arity} = export ->
+      to_string(name) =~ ~r/^sigil_[a-zA-Z]$/ && arity == 2 && export not in except
+    end)
+  end
+
+  defp filter_exports(_type, exports, [], []) do
+    exports
+  end
+
+  defp filter_exports(_type, exports, only, []) do
+    Enum.filter(exports, &(&1 in only))
+  end
+
+  defp filter_exports(_type, exports, [], except) do
+    Enum.reject(exports, &(&1 in except))
+  end
+
   # alias Hologram.Compiler.Detransformer
   # alias Hologram.Compiler.Evaluator
   # alias Hologram.Compiler.Normalizer
-  # alias Hologram.Compiler.Reflection
   # alias Hologram.Compiler.Transformer
 
   # def expand(%IR.Binding{access_path: access_path} = ir, %Context{} = context) do
@@ -195,24 +263,6 @@ defmodule Hologram.Compiler.Expander do
   #     end
 
   #   expand_list_and_context(ir_list, context)
-  # end
-
-  # def expand(
-  #       %IR.ImportDirective{alias_segs: alias_segs, only: only, except: except},
-  #       %Context{aliases: defined_aliases} = context
-  #     ) do
-  #   expanded_alias_segs = expand_alias_segs(alias_segs, defined_aliases)
-  #   module = Helpers.module(expanded_alias_segs)
-
-  #   functions = filter_exports(:functions, Reflection.functions(module), only, except)
-  #   macros = filter_exports(:macros, Reflection.macros(module), only, except)
-
-  #   new_context =
-  #     context
-  #     |> Context.put_functions(module, functions)
-  #     |> Context.put_macros(module, macros)
-
-  #   {%IR.IgnoredExpression{type: :import_directive}, new_context}
   # end
 
   # def expand(
@@ -307,55 +357,5 @@ defmodule Hologram.Compiler.Expander do
   #     expression ->
   #       [expression]
   #   end
-  # end
-
-  # defp filter_exports(type, exports, only, except)
-
-  # defp filter_exports(:functions, exports, :functions, []) do
-  #   exports
-  # end
-
-  # defp filter_exports(:functions, exports, :functions, except) do
-  #   Enum.reject(exports, &(&1 in except))
-  # end
-
-  # defp filter_exports(:functions, _exports, :macros, _except) do
-  #   []
-  # end
-
-  # defp filter_exports(:macros, exports, :macros, []) do
-  #   exports
-  # end
-
-  # defp filter_exports(:macros, exports, :macros, except) do
-  #   Enum.reject(exports, &(&1 in except))
-  # end
-
-  # defp filter_exports(:macros, _exports, :functions, _except) do
-  #   []
-  # end
-
-  # defp filter_exports(_type, exports, :sigils, []) do
-  #   Enum.filter(exports, fn {name, arity} ->
-  #     to_string(name) =~ ~r/^sigil_[a-zA-Z]$/ && arity == 2
-  #   end)
-  # end
-
-  # defp filter_exports(_type, exports, :sigils, except) do
-  #   Enum.filter(exports, fn {name, arity} = export ->
-  #     to_string(name) =~ ~r/^sigil_[a-zA-Z]$/ && arity == 2 && export not in except
-  #   end)
-  # end
-
-  # defp filter_exports(_type, exports, [], []) do
-  #   exports
-  # end
-
-  # defp filter_exports(_type, exports, only, []) do
-  #   Enum.filter(exports, &(&1 in only))
-  # end
-
-  # defp filter_exports(_type, exports, [], except) do
-  #   Enum.reject(exports, &(&1 in except))
   # end
 end
