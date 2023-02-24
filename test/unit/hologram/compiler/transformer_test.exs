@@ -340,7 +340,7 @@ defmodule Hologram.Compiler.TransformerTest do
            }
   end
 
-  test "type" do
+  test "type operator" do
     # str::binary
     ast = {:"::", [line: 1], [{:str, [line: 1], nil}, {:binary, [line: 1], nil}]}
 
