@@ -1,5 +1,6 @@
 defmodule Hologram.Compiler.Expander do
   alias Hologram.Compiler.Context
+  alias Hologram.Compiler.Evaluator
   alias Hologram.Compiler.Helpers
   alias Hologram.Compiler.IR
   alias Hologram.Compiler.Reflection
@@ -69,6 +70,26 @@ defmodule Hologram.Compiler.Expander do
 
   def expand(%IR.ModulePseudoVariable{}, %Context{module: module} = context) do
     {module, context}
+  end
+
+  # --- DEFINITIONS ---
+
+  def expand(
+        %IR.ModuleAttributeDefinition{name: name, expression: expr},
+        %Context{} = context
+      ) do
+    {expanded_ir, _context} = expand(expr, context)
+
+    value =
+      expanded_ir
+      |> Evaluator.evaluate()
+      |> List.wrap()
+      |> hd()
+      |> Helpers.term_to_ir()
+
+    new_context = Context.put_module_attribute(context, name, value)
+
+    {%IR.IgnoredExpression{type: :module_attribute_definition}, new_context}
   end
 
   # --- DIRECTIVES ---
@@ -222,7 +243,6 @@ defmodule Hologram.Compiler.Expander do
   end
 
   # alias Hologram.Compiler.Detransformer
-  # alias Hologram.Compiler.Evaluator
   # alias Hologram.Compiler.Normalizer
   # alias Hologram.Compiler.Transformer
 
@@ -283,24 +303,6 @@ defmodule Hologram.Compiler.Expander do
   #   new_context = %{context | variables: new_variables}
 
   #   {new_ir, new_context}
-  # end
-
-  # def expand(
-  #       %IR.ModuleAttributeDefinition{name: name, expression: expr},
-  #       %Context{} = context
-  #     ) do
-  #   {expanded_ir, _context} = expand(expr, context)
-
-  #   value =
-  #     expanded_ir
-  #     |> Evaluator.evaluate()
-  #     |> List.wrap()
-  #     |> hd()
-  #     |> Helpers.term_to_ir()
-
-  #   new_context = Context.put_module_attribute(context, name, value)
-
-  #   {%IR.IgnoredExpression{type: :module_attribute_definition}, new_context}
   # end
 
   # def expand(

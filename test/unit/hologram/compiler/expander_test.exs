@@ -362,6 +362,74 @@ defmodule Hologram.Compiler.ExpanderTest do
     end
   end
 
+  # --- DEFINITIONS ---
+
+  describe "module attribute definition" do
+    test "expression doesn't use other module attributes and isn't a macro call" do
+      ir = %IR.ModuleAttributeDefinition{
+        name: :b,
+        expression: %IR.AdditionOperator{
+          left: %IR.IntegerType{value: 5},
+          right: %IR.IntegerType{value: 6}
+        }
+      }
+
+      assert expand(ir, @context_with_module_attributes) == {
+               %IR.IgnoredExpression{type: :module_attribute_definition},
+               %Context{
+                 module_attributes: %{
+                   a: %IR.IntegerType{value: 1},
+                   b: %IR.IntegerType{value: 11},
+                   c: %IR.IntegerType{value: 3}
+                 }
+               }
+             }
+    end
+
+    test "expression uses other module attributes" do
+      ir = %IR.ModuleAttributeDefinition{
+        name: :b,
+        expression: %IR.AdditionOperator{
+          left: %IR.ModuleAttributeOperator{name: :a},
+          right: %IR.ModuleAttributeOperator{name: :c}
+        }
+      }
+
+      assert expand(ir, @context_with_module_attributes) == {
+               %IR.IgnoredExpression{type: :module_attribute_definition},
+               %Context{
+                 module_attributes: %{
+                   a: %IR.IntegerType{value: 1},
+                   b: %IR.IntegerType{value: 4},
+                   c: %IR.IntegerType{value: 3}
+                 }
+               }
+             }
+    end
+
+    test "expression is a macro call" do
+      ir = %IR.ModuleAttributeDefinition{
+        name: :a,
+        expression: %IR.Call{
+          module: nil,
+          function: :is_nil,
+          args: [
+            %IR.IntegerType{value: 999}
+          ]
+        }
+      }
+
+      assert expand(ir, Context.new()) == {
+               %IR.IgnoredExpression{type: :module_attribute_definition},
+               %Context{
+                 module_attributes: %{
+                   a: %IR.BooleanType{value: false}
+                 }
+               }
+             }
+    end
+  end
+
   # --- CONTROL FLOW ---
 
   describe "alias" do
@@ -756,78 +824,6 @@ defmodule Hologram.Compiler.ExpanderTest do
   #      }, expected_context}
 
   #   assert result == expected
-  # end
-
-  # describe "module attribute definition" do
-  #   test "expression doesn't use other module attributes and isn't a macro call" do
-  #     ir = %IR.ModuleAttributeDefinition{
-  #       name: :b,
-  #       expression: %IR.AdditionOperator{
-  #         left: %IR.IntegerType{value: 5},
-  #         right: %IR.IntegerType{value: 6}
-  #       }
-  #     }
-
-  #     result = Expander.expand(ir, @context)
-
-  #     assert {
-  #              %IR.IgnoredExpression{type: :module_attribute_definition},
-  #              %Context{
-  #                module_attributes: %{
-  #                  a: %IR.IntegerType{value: 1},
-  #                  b: %IR.IntegerType{value: 11},
-  #                  c: %IR.IntegerType{value: 3}
-  #                }
-  #              }
-  #            } = result
-  #   end
-
-  #   test "expression uses other module attributes" do
-  #     ir = %IR.ModuleAttributeDefinition{
-  #       name: :b,
-  #       expression: %IR.AdditionOperator{
-  #         left: %IR.ModuleAttributeOperator{name: :a},
-  #         right: %IR.ModuleAttributeOperator{name: :c}
-  #       }
-  #     }
-
-  #     result = Expander.expand(ir, @context)
-
-  #     assert {
-  #              %IR.IgnoredExpression{type: :module_attribute_definition},
-  #              %Context{
-  #                module_attributes: %{
-  #                  a: %IR.IntegerType{value: 1},
-  #                  b: %IR.IntegerType{value: 4},
-  #                  c: %IR.IntegerType{value: 3}
-  #                }
-  #              }
-  #            } = result
-  #   end
-
-  #   test "expression is a macro call" do
-  #     ir = %IR.ModuleAttributeDefinition{
-  #       name: :a,
-  #       expression: %IR.Call{
-  #         module: nil,
-  #         function: :is_nil,
-  #         args: [
-  #           %IR.IntegerType{value: 999}
-  #         ]
-  #       }
-  #     }
-
-  #     result = Expander.expand(ir, Context.new())
-
-  #     assert {
-  #              %IR.IgnoredExpression{type: :module_attribute_definition},
-  #              %Context{
-  #                module_attributes: %{
-  #                  a: %IR.BooleanType{value: false}
-  #                }
-  #              }
-  #            } = result
-  #   end
   # end
 
   # describe "module def" do
