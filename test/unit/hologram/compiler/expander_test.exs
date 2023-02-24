@@ -64,42 +64,41 @@ defmodule Hologram.Compiler.ExpanderTest do
 
     context = %Context{variables: MapSet.new([:m, :n])}
 
-    assert expand(ir, context)
-
-    {%IR.MatchOperator{
-       bindings: [
-         %IR.Binding{
-           name: :x,
-           access_path: [
-             %IR.MatchAccess{},
-             %IR.MapAccess{
-               key: %IR.ModuleType{module: A, segments: [:A]}
-             }
-           ]
-         },
-         %IR.Binding{
-           name: :y,
-           access_path: [
-             %IR.MatchAccess{},
-             %IR.MapAccess{
-               key: %IR.ModuleType{module: B, segments: [:B]}
-             }
-           ]
-         }
-       ],
-       left: %IR.MapType{
-         data: [
-           {%IR.ModuleType{module: A, segments: [:A]}, %IR.Variable{name: :x}},
-           {%IR.ModuleType{module: B, segments: [:B]}, %IR.Variable{name: :y}}
-         ]
-       },
-       right: %IR.MapType{
-         data: [
-           {%IR.ModuleType{module: A, segments: [:A]}, %IR.IntegerType{value: 1}},
-           {%IR.ModuleType{module: B, segments: [:B]}, %IR.IntegerType{value: 2}}
-         ]
-       }
-     }, %Context{variables: MapSet.new([:m, :n, :x, :y])}}
+    assert expand(ir, context) ==
+             {%IR.MatchOperator{
+                bindings: [
+                  %IR.Binding{
+                    name: :x,
+                    access_path: [
+                      %IR.MatchAccess{},
+                      %IR.MapAccess{
+                        key: %IR.ModuleType{module: A, segments: [:A]}
+                      }
+                    ]
+                  },
+                  %IR.Binding{
+                    name: :y,
+                    access_path: [
+                      %IR.MatchAccess{},
+                      %IR.MapAccess{
+                        key: %IR.ModuleType{module: B, segments: [:B]}
+                      }
+                    ]
+                  }
+                ],
+                left: %IR.MapType{
+                  data: [
+                    {%IR.ModuleType{module: A, segments: [:A]}, %IR.Variable{name: :x}},
+                    {%IR.ModuleType{module: B, segments: [:B]}, %IR.Variable{name: :y}}
+                  ]
+                },
+                right: %IR.MapType{
+                  data: [
+                    {%IR.ModuleType{module: A, segments: [:A]}, %IR.IntegerType{value: 1}},
+                    {%IR.ModuleType{module: B, segments: [:B]}, %IR.IntegerType{value: 2}}
+                  ]
+                }
+              }, %Context{variables: MapSet.new([:m, :n, :x, :y])}}
   end
 
   test "module attribute operator" do
