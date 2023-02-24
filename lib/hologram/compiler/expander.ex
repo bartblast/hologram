@@ -92,6 +92,27 @@ defmodule Hologram.Compiler.Expander do
     {%IR.IgnoredExpression{type: :module_attribute_definition}, new_context}
   end
 
+  def expand(
+        %IR.ModuleDefinition{} = ir,
+        %Context{module: nil} = context
+      ) do
+    {module, _context} = expand(ir.module, context)
+    new_context = %{context | module: module}
+    {body, _context} = expand(ir.body, new_context)
+
+    {%{ir | module: module, body: body}, context}
+  end
+
+  def expand(%IR.ModuleDefinition{} = ir, %Context{} = context) do
+    segs = context.module.segments ++ ir.module.segments
+    module = %IR.ModuleType{module: Helpers.module(segs), segments: segs}
+
+    new_context = %{context | module: module}
+    {body, _context} = expand(ir.body, new_context)
+
+    {%{ir | module: module, body: body}, context}
+  end
+
   # --- DIRECTIVES ---
 
   def expand(
@@ -303,27 +324,6 @@ defmodule Hologram.Compiler.Expander do
   #   new_context = %{context | variables: new_variables}
 
   #   {new_ir, new_context}
-  # end
-
-  # def expand(
-  #       %IR.ModuleDefinition{} = ir,
-  #       %Context{module: nil} = context
-  #     ) do
-  #   {module, _context} = expand(ir.module, context)
-  #   new_context = %{context | module: module}
-  #   {body, _context} = expand(ir.body, new_context)
-
-  #   {%{ir | module: module, body: body}, context}
-  # end
-
-  # def expand(%IR.ModuleDefinition{} = ir, %Context{} = context) do
-  #   segs = context.module.segments ++ ir.module.segments
-  #   module = %IR.ModuleType{module: Helpers.module(segs), segments: segs}
-
-  #   new_context = %{context | module: module}
-  #   {body, _context} = expand(ir.body, new_context)
-
-  #   {%{ir | module: module, body: body}, context}
   # end
 
   # def expand(%IR.Symbol{name: name}, %Context{} = context) do

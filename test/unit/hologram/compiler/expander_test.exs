@@ -430,6 +430,64 @@ defmodule Hologram.Compiler.ExpanderTest do
     end
   end
 
+  describe "module definition" do
+    test "top-level module" do
+      ir = %IR.ModuleDefinition{
+        module: %IR.Alias{segments: [:A, :B]},
+        body: %IR.Block{
+          expressions: [
+            %IR.IntegerType{value: 1}
+          ]
+        }
+      }
+
+      assert expand(ir, %Context{}) ==
+               {%IR.ModuleDefinition{
+                  module: %IR.ModuleType{module: A.B, segments: [:A, :B]},
+                  body: %IR.Block{
+                    expressions: [
+                      %IR.IntegerType{value: 1}
+                    ]
+                  }
+                }, %Context{}}
+    end
+
+    test "nested module" do
+      ir = %IR.ModuleDefinition{
+        module: %IR.Alias{segments: [:A, :B]},
+        body: %IR.Block{
+          expressions: [
+            %IR.ModuleDefinition{
+              module: %IR.Alias{segments: [:C, :D]},
+              body: %IR.Block{
+                expressions: [
+                  %IR.IntegerType{value: 1}
+                ]
+              }
+            }
+          ]
+        }
+      }
+
+      assert expand(ir, %Context{}) ==
+               {%IR.ModuleDefinition{
+                  module: %IR.ModuleType{module: A.B, segments: [:A, :B]},
+                  body: %IR.Block{
+                    expressions: [
+                      %IR.ModuleDefinition{
+                        module: %IR.ModuleType{module: A.B.C.D, segments: [:A, :B, :C, :D]},
+                        body: %IR.Block{
+                          expressions: [
+                            %IR.IntegerType{value: 1}
+                          ]
+                        }
+                      }
+                    ]
+                  }
+                }, %Context{}}
+    end
+  end
+
   # --- CONTROL FLOW ---
 
   describe "alias" do
@@ -824,72 +882,6 @@ defmodule Hologram.Compiler.ExpanderTest do
   #      }, expected_context}
 
   #   assert result == expected
-  # end
-
-  # describe "module def" do
-  #   test "top-level module" do
-  #     ir = %IR.ModuleDefinition{
-  #       module: %IR.Alias{segments: [:A, :B]},
-  #       body: %IR.Block{
-  #         expressions: [
-  #           %IR.IntegerType{value: 1}
-  #         ]
-  #       }
-  #     }
-
-  #     result = Expander.expand(ir, @context)
-
-  #     expected =
-  #       {%IR.ModuleDefinition{
-  #          module: %IR.ModuleType{module: A.B, segments: [:A, :B]},
-  #          body: %IR.Block{
-  #            expressions: [
-  #              %IR.IntegerType{value: 1}
-  #            ]
-  #          }
-  #        }, @context}
-
-  #     assert result == expected
-  #   end
-
-  #   test "nested module" do
-  #     ir = %IR.ModuleDefinition{
-  #       module: %IR.Alias{segments: [:A, :B]},
-  #       body: %IR.Block{
-  #         expressions: [
-  #           %IR.ModuleDefinition{
-  #             module: %IR.Alias{segments: [:C, :D]},
-  #             body: %IR.Block{
-  #               expressions: [
-  #                 %IR.IntegerType{value: 1}
-  #               ]
-  #             }
-  #           }
-  #         ]
-  #       }
-  #     }
-
-  #     result = Expander.expand(ir, @context)
-
-  #     expected =
-  #       {%IR.ModuleDefinition{
-  #          module: %IR.ModuleType{module: A.B, segments: [:A, :B]},
-  #          body: %IR.Block{
-  #            expressions: [
-  #              %IR.ModuleDefinition{
-  #                module: %IR.ModuleType{module: A.B.C.D, segments: [:A, :B, :C, :D]},
-  #                body: %IR.Block{
-  #                  expressions: [
-  #                    %IR.IntegerType{value: 1}
-  #                  ]
-  #                }
-  #              }
-  #            ]
-  #          }
-  #        }, @context}
-
-  #     assert result == expected
-  #   end
   # end
 
   # describe "symbol" do
