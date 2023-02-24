@@ -94,6 +94,7 @@ defmodule Hologram.Compiler.Expander do
 
   def expand(%IR.Block{expressions: exprs}, %Context{} = context) do
     {new_exprs, _new_context} = expand_list_and_context(exprs, context)
+
     {%IR.Block{expressions: new_exprs}, context}
   end
 
