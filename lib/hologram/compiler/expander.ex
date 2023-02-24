@@ -92,6 +92,10 @@ defmodule Hologram.Compiler.Expander do
     {%IR.ModuleType{module: module, segments: module_segs}, context}
   end
 
+  def expand(%IR.Variable{} = ir, %Context{} = context) do
+    {ir, context}
+  end
+
   # --- OTHER IR ---
 
   def expand(%IR.IgnoredExpression{} = ir, %Context{} = context) do
@@ -266,10 +270,6 @@ defmodule Hologram.Compiler.Expander do
   #     %IR.Call{module: nil, function: name, args: []}
   #     |> expand(context)
   #   end
-  # end
-
-  # def expand(%IR.Variable{} = ir, %Context{} = context) do
-  #   {ir, context}
   # end
 
   # defp expand_list(list, context) do

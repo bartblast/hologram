@@ -166,6 +166,12 @@ defmodule Hologram.Compiler.ExpanderTest do
     end
   end
 
+  test "variable" do
+    ir = %IR.Variable{name: :a}
+
+    assert expand(ir, @context_dummy) == {ir, @context_dummy}
+  end
+
   # --- OTHER IR ---
 
   test "ignored expression" do
@@ -920,12 +926,5 @@ defmodule Hologram.Compiler.ExpanderTest do
 
   #     assert result == expected
   #   end
-  # end
-
-  # test "variable" do
-  #   ir = %IR.Variable{name: :a}
-  #   result = Expander.expand(ir, @context)
-
-  #   assert result == {ir, @context}
   # end
 end
