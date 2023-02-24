@@ -14,6 +14,26 @@ defmodule Hologram.Compiler.Expander do
   end
 
   def expand(
+        %IR.MatchOperator{bindings: bindings, left: left, right: right},
+        %Context{} = context
+      ) do
+    new_bindings = expand_list(bindings, context)
+    {new_left, _context} = expand(left, context)
+    {new_right, _context} = expand(right, context)
+    new_ir = %IR.MatchOperator{bindings: new_bindings, left: new_left, right: new_right}
+
+    new_variables =
+      new_bindings
+      |> Enum.map(& &1.name)
+      |> MapSet.new()
+      |> MapSet.union(context.variables)
+
+    new_context = %{context | variables: new_variables}
+
+    {new_ir, new_context}
+  end
+
+  def expand(
         %IR.ModuleAttributeOperator{name: name},
         %Context{module_attributes: module_attributes} = context
       ) do
@@ -206,6 +226,14 @@ defmodule Hologram.Compiler.Expander do
     {%{ir | left: left, right: right}, context}
   end
 
+  defp expand_list(list, context) do
+    Enum.reduce(list, [], fn ir, acc ->
+      {new_ir, _context} = expand(ir, context)
+      [new_ir | acc]
+    end)
+    |> Enum.reverse()
+  end
+
   defp expand_list_and_context(list, context) do
     Enum.reduce(list, {[], context}, fn expr, {exprs_acc, context_acc} ->
       {new_expr, new_context} = expand(expr, context_acc)
@@ -306,26 +334,6 @@ defmodule Hologram.Compiler.Expander do
   #   expand_list_and_context(ir_list, context)
   # end
 
-  # def expand(
-  #       %IR.MatchOperator{bindings: bindings, left: left, right: right},
-  #       %Context{} = context
-  #     ) do
-  #   new_bindings = expand_list(bindings, context)
-  #   {new_left, _context} = expand(left, context)
-  #   {new_right, _context} = expand(right, context)
-  #   new_ir = %IR.MatchOperator{bindings: new_bindings, left: new_left, right: new_right}
-
-  #   new_variables =
-  #     new_bindings
-  #     |> Enum.map(& &1.name)
-  #     |> MapSet.new()
-  #     |> MapSet.union(context.variables)
-
-  #   new_context = %{context | variables: new_variables}
-
-  #   {new_ir, new_context}
-  # end
-
   # def expand(%IR.Symbol{name: name}, %Context{} = context) do
   #   if MapSet.member?(context.variables, name) do
   #     {%IR.Variable{name: name}, context}
@@ -333,14 +341,6 @@ defmodule Hologram.Compiler.Expander do
   #     %IR.Call{module: nil, function: name, args: []}
   #     |> expand(context)
   #   end
-  # end
-
-  # defp expand_list(list, context) do
-  #   Enum.reduce(list, [], fn ir, acc ->
-  #     {new_ir, _context} = expand(ir, context)
-  #     [new_ir | acc]
-  #   end)
-  #   |> Enum.reverse()
   # end
 
   # defp expand_macro(context, module, function, args_ast) do
