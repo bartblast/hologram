@@ -87,6 +87,12 @@ defmodule Hologram.Compiler.ExpanderTest do
               }, @context_dummy}
   end
 
+  test "module type" do
+    ir = %IR.ModuleType{module: A.B, segments: [:A, :B]}
+
+    assert expand(ir, @context_dummy) == {ir, @context_dummy}
+  end
+
   test "nil type" do
     ir = %IR.NilType{}
 
@@ -178,15 +184,6 @@ defmodule Hologram.Compiler.ExpanderTest do
   #     c: %IR.IntegerType{value: 3}
   #   }
   # }
-
-  # describe "data types" do
-  #   test "module" do
-  #     ir = %IR.ModuleType{module: A.B, segments: [:A, :B]}
-  #     result = Expander.expand(ir, @context)
-
-  #     assert result == {ir, @context}
-  #   end
-  # end
 
   # test "binding index access" do
   #   ir = %IR.ListIndexAccess{index: 0}

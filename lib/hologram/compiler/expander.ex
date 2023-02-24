@@ -47,6 +47,10 @@ defmodule Hologram.Compiler.Expander do
     {%IR.MapType{data: new_data}, context}
   end
 
+  def expand(%IR.ModuleType{} = ir, %Context{} = context) do
+    {ir, context}
+  end
+
   def expand(%IR.NilType{} = ir, %Context{} = context) do
     {ir, context}
   end
@@ -253,10 +257,6 @@ defmodule Hologram.Compiler.Expander do
   #   {body, _context} = expand(ir.body, new_context)
 
   #   {%{ir | module: module, body: body}, context}
-  # end
-
-  # def expand(%IR.ModuleType{} = ir, %Context{} = context) do
-  #   {ir, context}
   # end
 
   # def expand(%IR.Symbol{name: name}, %Context{} = context) do
