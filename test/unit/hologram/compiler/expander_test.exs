@@ -166,6 +166,30 @@ defmodule Hologram.Compiler.ExpanderTest do
     end
   end
 
+  test "block" do
+    ir = %IR.Block{
+      expressions: [
+        %IR.AliasDirective{alias_segs: [:A, :B], as: :C},
+        %IR.Alias{segments: [:Z]},
+        %IR.Alias{segments: [:C]}
+      ]
+    }
+
+    context = %Context{aliases: %{Z: [:X, :Y]}}
+
+    assert expand(ir, context) ==
+             {%IR.Block{
+                expressions: [
+                  %IR.IgnoredExpression{type: :alias_directive},
+                  %IR.ModuleType{module: X.Y, segments: [:X, :Y]},
+                  %IR.ModuleType{module: A.B, segments: [:A, :B]}
+                ]
+              },
+              %Context{
+                aliases: %{Z: [:X, :Y]}
+              }}
+  end
+
   test "variable" do
     ir = %IR.Variable{name: :a}
 
@@ -216,33 +240,6 @@ defmodule Hologram.Compiler.ExpanderTest do
   #          }
   #        ]
   #      }, @context}
-
-  #   assert result == expected
-  # end
-
-  # test "block" do
-  #   ir = %IR.Block{
-  #     expressions: [
-  #       %IR.AliasDirective{alias_segs: [:A, :B], as: :C},
-  #       %IR.Alias{segments: [:Z]},
-  #       %IR.Alias{segments: [:C]}
-  #     ]
-  #   }
-
-  #   context = %Context{aliases: %{Z: [:X, :Y]}}
-  #   result = Expander.expand(ir, context)
-
-  #   expected =
-  #     {%IR.Block{
-  #        expressions: [
-  #          %IR.IgnoredExpression{type: :alias_directive},
-  #          %IR.ModuleType{module: X.Y, segments: [:X, :Y]},
-  #          %IR.ModuleType{module: A.B, segments: [:A, :B]}
-  #        ]
-  #      },
-  #      %Context{
-  #        aliases: %{Z: [:X, :Y]}
-  #      }}
 
   #   assert result == expected
   # end

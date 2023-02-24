@@ -92,6 +92,11 @@ defmodule Hologram.Compiler.Expander do
     {%IR.ModuleType{module: module, segments: module_segs}, context}
   end
 
+  def expand(%IR.Block{expressions: exprs}, %Context{} = context) do
+    {new_exprs, _new_context} = expand_list_and_context(exprs, context)
+    {%IR.Block{expressions: new_exprs}, context}
+  end
+
   def expand(%IR.Variable{} = ir, %Context{} = context) do
     {ir, context}
   end
@@ -119,6 +124,13 @@ defmodule Hologram.Compiler.Expander do
     {%{ir | left: left, right: right}, context}
   end
 
+  defp expand_list_and_context(list, context) do
+    Enum.reduce(list, {[], context}, fn expr, {exprs_acc, context_acc} ->
+      {new_expr, new_context} = expand(expr, context_acc)
+      {List.flatten(exprs_acc ++ [new_expr]), new_context}
+    end)
+  end
+
   # alias Hologram.Compiler.Detransformer
   # alias Hologram.Compiler.Evaluator
   # alias Hologram.Compiler.Normalizer
@@ -132,11 +144,6 @@ defmodule Hologram.Compiler.Expander do
   # def expand(%IR.Binding{access_path: access_path} = ir, %Context{} = context) do
   #   new_access_path = expand_list(access_path, context)
   #   {%{ir | access_path: new_access_path}, context}
-  # end
-
-  # def expand(%IR.Block{expressions: exprs}, %Context{} = context) do
-  #   {new_exprs, _new_context} = expand_list_and_context(exprs, context)
-  #   {%IR.Block{expressions: new_exprs}, context}
   # end
 
   # # TODO: test
@@ -278,13 +285,6 @@ defmodule Hologram.Compiler.Expander do
   #     [new_ir | acc]
   #   end)
   #   |> Enum.reverse()
-  # end
-
-  # defp expand_list_and_context(list, context) do
-  #   Enum.reduce(list, {[], context}, fn expr, {exprs_acc, context_acc} ->
-  #     {new_expr, new_context} = expand(expr, context_acc)
-  #     {List.flatten(exprs_acc ++ [new_expr]), new_context}
-  #   end)
   # end
 
   # defp expand_macro(context, module, function, args_ast) do
