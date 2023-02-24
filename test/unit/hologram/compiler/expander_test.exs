@@ -206,6 +206,14 @@ defmodule Hologram.Compiler.ExpanderTest do
     assert expand(ir, @context_dummy) == {ir, @context_dummy}
   end
 
+  # --- BINDINGS ---
+
+  test "map access" do
+    ir = %IR.MapAccess{key: :test}
+
+    expand(ir, @context_dummy) == {ir, @context_dummy}
+  end
+
   # --- OTHER IR ---
 
   test "ignored expression" do

@@ -106,6 +106,12 @@ defmodule Hologram.Compiler.Expander do
     {ir, context}
   end
 
+  # --- BINDINGS ---
+
+  def expand(%IR.MapAccess{} = ir, %Context{} = context) do
+    {ir, context}
+  end
+
   # --- OTHER IR ---
 
   def expand(%IR.IgnoredExpression{} = ir, %Context{} = context) do
