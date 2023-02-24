@@ -211,13 +211,14 @@ defmodule Hologram.Compiler.ExpanderTest do
   test "list index access" do
     ir = %IR.ListIndexAccess{index: 0}
 
-    expand(ir, @context_dummy) == {ir, @context_dummy}
+    assert expand(ir, @context_dummy) == {ir, @context_dummy}
   end
 
   test "map access" do
-    ir = %IR.MapAccess{key: :test}
+    ir = %IR.MapAccess{key: %IR.Alias{segments: [:A, :B]}}
 
-    expand(ir, @context_dummy) == {ir, @context_dummy}
+    assert expand(ir, @context_dummy) ==
+             {%IR.MapAccess{key: %IR.ModuleType{module: A.B, segments: [:A, :B]}}, @context_dummy}
   end
 
   # --- OTHER IR ---
@@ -681,15 +682,6 @@ defmodule Hologram.Compiler.ExpanderTest do
   #     assert context.functions == %{sigil_a: %{2 => Module1}}
   #     assert context.macros == %{sigil_c: %{2 => Module1}}
   #   end
-  # end
-
-  # test "map access" do
-  #   ir = %IR.MapAccess{key: %IR.Alias{segments: [:A, :B]}}
-
-  #   result = Expander.expand(ir, @context)
-  #   expected = {%IR.MapAccess{key: %IR.ModuleType{module: A.B, segments: [:A, :B]}}, @context}
-
-  #   assert result == expected
   # end
 
   # test "match access" do

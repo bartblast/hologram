@@ -112,8 +112,10 @@ defmodule Hologram.Compiler.Expander do
     {ir, context}
   end
 
-  def expand(%IR.MapAccess{} = ir, %Context{} = context) do
-    {ir, context}
+  def expand(%IR.MapAccess{key: key} = ir, %Context{} = context) do
+    {new_key, _context} = expand(key, context)
+
+    {%{ir | key: new_key}, context}
   end
 
   # --- OTHER IR ---
@@ -151,10 +153,6 @@ defmodule Hologram.Compiler.Expander do
   # alias Hologram.Compiler.Normalizer
   # alias Hologram.Compiler.Reflection
   # alias Hologram.Compiler.Transformer
-
-  # def expand(%{kind: :binding_index_access} = ir, %Context{} = context) do
-  #   {ir, context}
-  # end
 
   # def expand(%IR.Binding{access_path: access_path} = ir, %Context{} = context) do
   #   new_access_path = expand_list(access_path, context)
@@ -211,11 +209,6 @@ defmodule Hologram.Compiler.Expander do
   #     |> Context.put_macros(module, macros)
 
   #   {%IR.IgnoredExpression{type: :import_directive}, new_context}
-  # end
-
-  # def expand(%IR.MapAccess{key: key} = ir, %Context{} = context) do
-  #   {new_key, _context} = expand(key, context)
-  #   {%{ir | key: new_key}, context}
   # end
 
   # def expand(%IR.MatchAccess{} = ir, %Context{} = context) do
