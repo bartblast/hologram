@@ -98,6 +98,10 @@ defmodule Hologram.Compiler.Expander do
     {%IR.Block{expressions: new_exprs}, context}
   end
 
+  def expand(%IR.FunctionCall{} = ir, %Context{} = context) do
+    {ir, context}
+  end
+
   def expand(%IR.Variable{} = ir, %Context{} = context) do
     {ir, context}
   end
@@ -179,10 +183,6 @@ defmodule Hologram.Compiler.Expander do
   #     end
 
   #   expand_list_and_context(ir_list, context)
-  # end
-
-  # def expand(%IR.FunctionCall{} = ir, %Context{} = context) do
-  #   {ir, context}
   # end
 
   # def expand(

@@ -190,6 +190,16 @@ defmodule Hologram.Compiler.ExpanderTest do
               }}
   end
 
+  test "function call" do
+    ir = %IR.FunctionCall{
+      module: A.B,
+      function: :my_fun,
+      args: [%IR.IntegerType{value: 1}, %IR.IntegerType{value: 2}]
+    }
+
+    assert expand(ir, @context_dummy) == {ir, @context_dummy}
+  end
+
   test "variable" do
     ir = %IR.Variable{name: :a}
 
@@ -449,18 +459,6 @@ defmodule Hologram.Compiler.ExpanderTest do
 
   #     assert result == expected
   #   end
-  # end
-
-  # test "function call" do
-  #   ir = %IR.FunctionCall{
-  #     module: A.B,
-  #     function: :my_fun,
-  #     args: [%IR.IntegerType{value: 1}, %IR.IntegerType{value: 2}]
-  #   }
-
-  #   result = Expander.expand(ir, %Context{})
-
-  #   assert result == {ir, %Context{}}
   # end
 
   # describe "import directive" do
