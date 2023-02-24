@@ -615,6 +615,24 @@ defmodule Hologram.Compiler.ExpanderTest do
 
   # --- BINDINGS ---
 
+  test "binding" do
+    ir = %IR.Binding{
+      name: :x,
+      access_path: [%IR.MatchAccess{}, %IR.MapAccess{key: %IR.Alias{segments: [:A, :B]}}]
+    }
+
+    assert expand(ir, @context_dummy) ==
+             {%IR.Binding{
+                name: :x,
+                access_path: [
+                  %IR.MatchAccess{},
+                  %IR.MapAccess{
+                    key: %IR.ModuleType{module: A.B, segments: [:A, :B]}
+                  }
+                ]
+              }, @context_dummy}
+  end
+
   test "list index access" do
     ir = %IR.ListIndexAccess{index: 0}
 
@@ -649,28 +667,6 @@ defmodule Hologram.Compiler.ExpanderTest do
   #     c: %IR.IntegerType{value: 3}
   #   }
   # }
-
-  # test "binding" do
-  #   ir = %IR.Binding{
-  #     name: :x,
-  #     access_path: [%IR.MatchAccess{}, %IR.MapAccess{key: %IR.Alias{segments: [:A, :B]}}]
-  #   }
-
-  #   result = Expander.expand(ir, @context)
-
-  #   expected =
-  #     {%IR.Binding{
-  #        name: :x,
-  #        access_path: [
-  #          %IR.MatchAccess{},
-  #          %IR.MapAccess{
-  #            key: %IR.ModuleType{module: A.B, segments: [:A, :B]}
-  #          }
-  #        ]
-  #      }, @context}
-
-  #   assert result == expected
-  # end
 
   # describe "call" do
   #   test "current module function called without alias" do

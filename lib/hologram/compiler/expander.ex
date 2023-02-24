@@ -189,6 +189,12 @@ defmodule Hologram.Compiler.Expander do
 
   # --- BINDINGS ---
 
+  def expand(%IR.Binding{access_path: access_path} = ir, %Context{} = context) do
+    new_access_path = expand_list(access_path, context)
+
+    {%{ir | access_path: new_access_path}, context}
+  end
+
   def expand(%IR.ListIndexAccess{} = ir, %Context{} = context) do
     {ir, context}
   end
@@ -294,11 +300,6 @@ defmodule Hologram.Compiler.Expander do
   # alias Hologram.Compiler.Detransformer
   # alias Hologram.Compiler.Normalizer
   # alias Hologram.Compiler.Transformer
-
-  # def expand(%IR.Binding{access_path: access_path} = ir, %Context{} = context) do
-  #   new_access_path = expand_list(access_path, context)
-  #   {%{ir | access_path: new_access_path}, context}
-  # end
 
   # # TODO: test
   # def expand(%IR.Call{module: nil, function: function, args: args}, %Context{} = context) do
