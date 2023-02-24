@@ -525,6 +525,20 @@ defmodule Hologram.Compiler.TransformerTest do
            }
   end
 
+  test "nil type" do
+    # nil
+    ast = nil
+
+    assert transform(ast) == %IR.NilType{}
+  end
+
+  test "string type" do
+    # "test"
+    ast = "test"
+
+    assert transform(ast) == %IR.StringType{value: "test"}
+  end
+
   test "struct type (explicit)" do
     # %A.B{x: 1, y: 2}
     ast = {:%, [line: 1], [{:__aliases__, [line: 1], [:A, :B]}, {:%{}, [line: 1], [x: 1, y: 2]}]}
@@ -553,20 +567,6 @@ defmodule Hologram.Compiler.TransformerTest do
                {%IR.AtomType{value: :b}, %IR.IntegerType{value: 2}}
              ]
            }
-  end
-
-  test "nil type" do
-    # nil
-    ast = nil
-
-    assert transform(ast) == %IR.NilType{}
-  end
-
-  test "string type" do
-    # "test"
-    ast = "test"
-
-    assert transform(ast) == %IR.StringType{value: "test"}
   end
 
   describe "tuple type" do
