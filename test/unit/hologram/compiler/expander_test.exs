@@ -221,6 +221,12 @@ defmodule Hologram.Compiler.ExpanderTest do
              {%IR.MapAccess{key: %IR.ModuleType{module: A.B, segments: [:A, :B]}}, @context_dummy}
   end
 
+  test "match access" do
+    ir = %IR.MatchAccess{}
+
+    assert expand(ir, @context_dummy) == {ir, @context_dummy}
+  end
+
   # --- OTHER IR ---
 
   test "ignored expression" do
@@ -682,13 +688,6 @@ defmodule Hologram.Compiler.ExpanderTest do
   #     assert context.functions == %{sigil_a: %{2 => Module1}}
   #     assert context.macros == %{sigil_c: %{2 => Module1}}
   #   end
-  # end
-
-  # test "match access" do
-  #   ir = %IR.MatchAccess{}
-  #   result = Expander.expand(ir, @context)
-
-  #   assert result == {ir, @context}
   # end
 
   # test "match operator" do

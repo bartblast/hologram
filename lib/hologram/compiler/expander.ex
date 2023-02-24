@@ -118,6 +118,10 @@ defmodule Hologram.Compiler.Expander do
     {%{ir | key: new_key}, context}
   end
 
+  def expand(%IR.MatchAccess{} = ir, %Context{} = context) do
+    {ir, context}
+  end
+
   # --- OTHER IR ---
 
   def expand(%IR.IgnoredExpression{} = ir, %Context{} = context) do
@@ -209,10 +213,6 @@ defmodule Hologram.Compiler.Expander do
   #     |> Context.put_macros(module, macros)
 
   #   {%IR.IgnoredExpression{type: :import_directive}, new_context}
-  # end
-
-  # def expand(%IR.MatchAccess{} = ir, %Context{} = context) do
-  #   {ir, context}
   # end
 
   # def expand(
