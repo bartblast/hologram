@@ -120,6 +120,21 @@ defmodule Hologram.Compiler.DetransformerTest do
     assert detransform(ir) == {:=, [line: 0], [{:x, [line: 0], nil}, 123]}
   end
 
+  test "membership operator" do
+    # 1 in [2, 3]
+    ir = %IR.MembershipOperator{
+      left: %IR.IntegerType{value: 1},
+      right: %IR.ListType{
+        data: [
+          %IR.IntegerType{value: 2},
+          %IR.IntegerType{value: 3}
+        ]
+      }
+    }
+
+    assert detransform(ir) == {:in, [line: 0], [1, [2, 3]]}
+  end
+
   # --- DATA TYPES ---
 
   test "atom type" do
