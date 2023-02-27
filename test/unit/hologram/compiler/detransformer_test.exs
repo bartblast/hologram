@@ -104,6 +104,22 @@ defmodule Hologram.Compiler.DetransformerTest do
     assert detransform(ir) == {:--, [line: 0], [[1, 2], [3, 4]]}
   end
 
+  test "match operator" do
+    # x = 123
+    ir = %IR.MatchOperator{
+      bindings: [
+        %IR.Binding{
+          name: :x,
+          access_path: [%Hologram.Compiler.IR.MatchAccess{}]
+        }
+      ],
+      left: %IR.Variable{name: :x},
+      right: %IR.IntegerType{value: 123}
+    }
+
+    assert detransform(ir) == {:=, [line: 0], [{:x, [line: 0], nil}, 123]}
+  end
+
   # --- DATA TYPES ---
 
   test "atom type" do
