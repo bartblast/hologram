@@ -5,6 +5,18 @@ defmodule Hologram.Compiler.DetransformerTest do
 
   # --- OPERATORS ---
 
+  test "access operator" do
+    # a[:b]
+    ir = %IR.AccessOperator{
+      data: %IR.Variable{name: :a},
+      key: %IR.AtomType{value: :b}
+    }
+
+    assert detransform(ir) ==
+             {{:., [line: 0], [{:__aliases__, [alias: false], [:Access]}, :get]}, [line: 0],
+              [{:a, [line: 0], nil}, :b]}
+  end
+
   test "addition operator" do
     # 1 + 2
     ir = %IR.AdditionOperator{left: %IR.IntegerType{value: 1}, right: %IR.IntegerType{value: 2}}

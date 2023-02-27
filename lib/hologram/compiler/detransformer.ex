@@ -13,6 +13,13 @@ defmodule Hologram.Compiler.Detransformer do
 
   # --- OPERATORS ---
 
+  def detransform(%IR.AccessOperator{data: data, key: key}) do
+    data = detransform(data)
+    key = detransform(key)
+
+    {{:., [line: 0], [{:__aliases__, [alias: false], [:Access]}, :get]}, [line: 0], [data, key]}
+  end
+
   def detransform(%IR.AdditionOperator{left: left, right: right}) do
     detransform_binary_operator(:+, left, right)
   end
