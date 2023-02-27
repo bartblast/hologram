@@ -24,6 +24,16 @@ defmodule Hologram.Compiler.DetransformerTest do
     assert detransform(ir) == {:+, [line: 0], [1, 2]}
   end
 
+  test "cons operator" do
+    # [h | t]
+    ir = %IR.ConsOperator{
+      head: %IR.Variable{name: :h},
+      tail: %IR.Variable{name: :t}
+    }
+
+    assert detransform(ir) == [{:|, [line: 0], [{:h, [line: 0], nil}, {:t, [line: 0], nil}]}]
+  end
+
   test "division operator" do
     # 1 / 2
     ir = %IR.DivisionOperator{left: %IR.IntegerType{value: 1}, right: %IR.IntegerType{value: 2}}

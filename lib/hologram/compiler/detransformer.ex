@@ -24,6 +24,10 @@ defmodule Hologram.Compiler.Detransformer do
     detransform_binary_operator(:+, left, right)
   end
 
+  def detransform(%IR.ConsOperator{head: head, tail: tail}) do
+    [detransform_binary_operator(:|, head, tail)]
+  end
+
   def detransform(%IR.DivisionOperator{left: left, right: right}) do
     detransform_binary_operator(:/, left, right)
   end
