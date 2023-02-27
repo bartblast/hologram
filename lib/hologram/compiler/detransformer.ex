@@ -63,6 +63,10 @@ defmodule Hologram.Compiler.Detransformer do
     detransform_binary_operator(:in, left, right)
   end
 
+  def detransform(%IR.ModuleAttributeOperator{name: name}) do
+    {:@, [line: 0], [{name, [line: 0], nil}]}
+  end
+
   # --- DATA TYPES ---
 
   def detransform(%IR.AtomType{value: value}), do: value
@@ -127,5 +131,9 @@ defmodule Hologram.Compiler.Detransformer do
 
   defp detransform_list(list) do
     Enum.map(list, &detransform/1)
+  end
+
+  defp detransform_unary_operator(marker, operand) do
+    {marker, [line: 0], [detransform(operand)]}
   end
 end

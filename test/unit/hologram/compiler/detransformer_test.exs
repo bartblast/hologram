@@ -135,6 +135,13 @@ defmodule Hologram.Compiler.DetransformerTest do
     assert detransform(ir) == {:in, [line: 0], [1, [2, 3]]}
   end
 
+  test "module attribute operator" do
+    # @a
+    ir = %IR.ModuleAttributeOperator{name: :a}
+
+    assert detransform(ir) == {:@, [line: 0], [{:a, [line: 0], nil}]}
+  end
+
   # --- DATA TYPES ---
 
   test "atom type" do
