@@ -111,9 +111,9 @@ defmodule Hologram.Compiler.Expander do
 
     value =
       expanded_ir
-      |> Evaluator.evaluate()
       |> List.wrap()
       |> hd()
+      |> Evaluator.evaluate()
       |> Helpers.term_to_ir()
 
     new_context = Context.put_module_attribute(context, name, value)
@@ -188,36 +188,38 @@ defmodule Hologram.Compiler.Expander do
     {%IR.Block{expressions: new_exprs}, context}
   end
 
-  # expand(%IR.Call{module: nil, function: function, args: args}, %Context{} = context) do
-  #   arity = Enum.count(args)
+  # TODO: test
+  expand(%IR.Call{module: nil, function: function, args: args}, %Context{} = context) do
+    arity = Enum.count(args)
 
-  #   module =
-  #     Context.resolve_macro_module(context, function, arity) ||
-  #       Context.resolve_function_module(context, function, arity) ||
-  #       context.module
+    module =
+      Context.resolve_macro_module(context, function, arity) ||
+        Context.resolve_function_module(context, function, arity) ||
+        context.module
 
-  #   segments = Helpers.alias_segments(module)
-  #   module = %IR.ModuleType{module: module, segments: segments}
+    segments = Helpers.alias_segments(module)
+    module = %IR.ModuleType{module: module, segments: segments}
 
-  #   %IR.Call{module: module, function: function, args: args}
-  #   |> expand(context)
-  # end
+    %IR.Call{module: module, function: function, args: args}
+    |> expand(context)
+  end
 
-  # expand(%IR.Call{module: module_ir, function: function, args: args}, %Context{} = context) do
-  #   {%{module: module} = new_module_ir, _context} = expand(module_ir, context)
-  #   new_args = expand_list(args, context)
-  #   arity = Enum.count(new_args)
+  # TODO: test
+  expand(%IR.Call{module: module_ir, function: function, args: args}, %Context{} = context) do
+    {%{module: module} = new_module_ir, _context} = expand(module_ir, context)
+    new_args = expand_list(args, context)
+    arity = Enum.count(new_args)
 
-  #   exprs =
-  #     if Reflection.has_macro?(module, function, arity) do
-  #       args_ast = Detransformer.detransform_list(new_args)
-  #       expand_macro(context, module, function, args_ast)
-  #     else
-  #       [%IR.FunctionCall{module: new_module_ir, function: function, args: new_args}]
-  #     end
+    exprs =
+      if Reflection.has_macro?(module, function, arity) do
+        args_ast = Detransformer.detransform_list(new_args)
+        expand_macro(context, module, function, args_ast)
+      else
+        [%IR.FunctionCall{module: new_module_ir, function: function, args: new_args}]
+      end
 
-  #   expand_list_and_context(exprs, context)
-  # end
+    expand_list_and_context(exprs, context)
+  end
 
   expand(%IR.FunctionCall{} = ir, %Context{} = context) do
     {ir, context}
@@ -287,23 +289,23 @@ defmodule Hologram.Compiler.Expander do
     end)
   end
 
-  # defp expand_macro(context, module, function, args_ast) do
-  #   env = Context.build_env(context)
+  defp expand_macro(context, module, function, args_ast) do
+    env = Context.build_env(context)
 
-  #   expanded_ir =
-  #     module
-  #     |> apply(:"MACRO-#{function}", [env | args_ast])
-  #     |> Normalizer.normalize()
-  #     |> Transformer.transform()
+    expanded_ir =
+      module
+      |> apply(:"MACRO-#{function}", [env | args_ast])
+      |> Normalizer.normalize()
+      |> Transformer.transform()
 
-  #   case expanded_ir do
-  #     %IR.Block{expressions: exprs} ->
-  #       exprs
+    case expanded_ir do
+      %IR.Block{expressions: exprs} ->
+        exprs
 
-  #     expr ->
-  #       [expr]
-  #   end
-  # end
+      expr ->
+        [expr]
+    end
+  end
 
   defp filter_exports(type, exports, only, except)
 

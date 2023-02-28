@@ -497,14 +497,14 @@ defmodule Hologram.Compiler.ExpanderTest do
         }
       }
 
-      assert expand(ir, Context.new()) == {
+      assert {
                %IR.IgnoredExpression{type: :module_attribute_definition},
                %Context{
                  module_attributes: %{
                    a: %IR.BooleanType{value: false}
                  }
                }
-             }
+             } = expand(ir, Context.new())
     end
   end
 
