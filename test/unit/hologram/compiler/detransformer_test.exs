@@ -244,4 +244,15 @@ defmodule Hologram.Compiler.DetransformerTest do
 
     assert detransform(ir) == {:test, [line: 0], nil}
   end
+
+  # --- PUBLIC HELPERS ---
+
+  test "detransform_list/1" do
+    list = [
+      %IR.IntegerType{value: 1},
+      %IR.IntegerType{value: 2}
+    ]
+
+    assert detransform_list(list) == [1, 2]
+  end
 end

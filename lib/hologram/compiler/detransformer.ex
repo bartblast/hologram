@@ -114,7 +114,13 @@ defmodule Hologram.Compiler.Detransformer do
     {name, [line: 0], nil}
   end
 
-  # --- HELPERS ---
+  # --- PUBLIC HELPERS ---
+
+  def detransform_list(list) do
+    Enum.map(list, &detransform/1)
+  end
+
+  # --- PRIVATE HELPERS ---
 
   defp detransform_binary_operator(marker, left, right) do
     left = detransform(left)
@@ -127,10 +133,6 @@ defmodule Hologram.Compiler.Detransformer do
     Enum.map(data, fn {key, value} ->
       {detransform(key), detransform(value)}
     end)
-  end
-
-  defp detransform_list(list) do
-    Enum.map(list, &detransform/1)
   end
 
   defp detransform_unary_operator(marker, operand) do
