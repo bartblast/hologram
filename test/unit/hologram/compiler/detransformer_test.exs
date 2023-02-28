@@ -152,6 +152,16 @@ defmodule Hologram.Compiler.DetransformerTest do
     assert detransform(ir) == {:*, [line: 0], [{:a, [line: 0], nil}, 2]}
   end
 
+  test "not equal to operator" do
+    # 1 != 2
+    ir = %IR.NotEqualToOperator{
+      left: %IR.IntegerType{value: 1},
+      right: %IR.IntegerType{value: 2}
+    }
+
+    assert detransform(ir) == {:!=, [line: 0], [1, 2]}
+  end
+
   # --- DATA TYPES ---
 
   test "atom type" do
