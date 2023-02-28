@@ -142,6 +142,16 @@ defmodule Hologram.Compiler.DetransformerTest do
     assert detransform(ir) == {:@, [line: 0], [{:a, [line: 0], nil}]}
   end
 
+  test "multiplication operator" do
+    # a * 2
+    ir = %IR.MultiplicationOperator{
+      left: %IR.Variable{name: :a},
+      right: %IR.IntegerType{value: 2}
+    }
+
+    assert detransform(ir) == {:*, [line: 0], [{:a, [line: 0], nil}, 2]}
+  end
+
   # --- DATA TYPES ---
 
   test "atom type" do
