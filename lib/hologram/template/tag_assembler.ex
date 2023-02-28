@@ -1,6 +1,5 @@
 defmodule Hologram.Template.TagAssembler do
-  require Hologram.Template.Macros
-  import Hologram.Template.Macros
+  import Hologram.Template.Macros, only: [assemble: 4]
   alias Hologram.Template.Helpers
 
   @initial_context %{

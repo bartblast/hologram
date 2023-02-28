@@ -16,7 +16,6 @@ defmodule Hologram.Template.Macros do
           IO.puts("")
           IO.puts("tokens")
           IO.inspect(evaluated_tokens)
-          IO.puts("\n........................................")
         end
 
         unquote(body)
