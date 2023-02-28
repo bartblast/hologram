@@ -36,6 +36,19 @@ defmodule Hologram.Compiler.ExpanderTest do
               }, @context_with_module_attributes}
   end
 
+  test "equal to operator" do
+    ir = %IR.EqualToOperator{
+      left: %IR.ModuleAttributeOperator{name: :a},
+      right: %IR.ModuleAttributeOperator{name: :c}
+    }
+
+    assert expand(ir, @context_with_module_attributes) ==
+             {%IR.EqualToOperator{
+                left: %IR.IntegerType{value: 1},
+                right: %IR.IntegerType{value: 3}
+              }, @context_with_module_attributes}
+  end
+
   test "match operator" do
     ir = %IR.MatchOperator{
       bindings: [

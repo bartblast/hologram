@@ -18,6 +18,10 @@ defmodule Hologram.Compiler.Expander do
     expand_binary_operator(ir, context)
   end
 
+  expand(%IR.EqualToOperator{} = ir, %Context{} = context) do
+    expand_binary_operator(ir, context)
+  end
+
   expand(
     %IR.MatchOperator{bindings: bindings, left: left, right: right},
     %Context{} = context
