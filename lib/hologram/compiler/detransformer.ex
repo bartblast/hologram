@@ -83,6 +83,10 @@ defmodule Hologram.Compiler.Detransformer do
     detransform_unary_operator(:!, value)
   end
 
+  def detransform(%IR.RelaxedBooleanOrOperator{left: left, right: right}) do
+    detransform_binary_operator(:||, left, right)
+  end
+
   # --- DATA TYPES ---
 
   def detransform(%IR.AtomType{value: value}), do: value
