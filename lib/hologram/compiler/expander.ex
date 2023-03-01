@@ -225,6 +225,15 @@ defmodule Hologram.Compiler.Expander do
     {ir, context}
   end
 
+  expand(%IR.Symbol{name: name}, %Context{} = context) do
+    if MapSet.member?(context.variables, name) do
+      {%IR.Variable{name: name}, context}
+    else
+      %IR.Call{module: nil, function: name, args: []}
+      |> expand(context)
+    end
+  end
+
   expand(%IR.Variable{} = ir, %Context{} = context) do
     {ir, context}
   end
@@ -356,13 +365,4 @@ defmodule Hologram.Compiler.Expander do
   defp filter_exports(_type, exports, [], except) do
     Enum.reject(exports, &(&1 in except))
   end
-
-  # def expand(%IR.Symbol{name: name}, %Context{} = context) do
-  #   if MapSet.member?(context.variables, name) do
-  #     {%IR.Variable{name: name}, context}
-  #   else
-  #     %IR.Call{module: nil, function: name, args: []}
-  #     |> expand(context)
-  #   end
-  # end
 end

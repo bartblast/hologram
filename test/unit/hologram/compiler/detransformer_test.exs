@@ -199,6 +199,16 @@ defmodule Hologram.Compiler.DetransformerTest do
     assert detransform(ir) == {:and, [line: 0], [true, false]}
   end
 
+  test "subtraction operator" do
+    # 2 - 1
+    ir = %IR.SubtractionOperator{
+      left: %IR.IntegerType{value: 2},
+      right: %IR.IntegerType{value: 1}
+    }
+
+    assert detransform(ir) == {:-, [line: 0], [2, 1]}
+  end
+
   # --- DATA TYPES ---
 
   test "atom type" do

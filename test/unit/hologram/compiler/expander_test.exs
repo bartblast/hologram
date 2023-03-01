@@ -7,7 +7,7 @@ defmodule Hologram.Compiler.ExpanderTest do
   alias Hologram.Test.Fixtures.Compiler.Expander.Module1
 
   @context_dummy %Context{
-    module: :module_dummy
+    variables: MapSet.new([:__context_dummy__])
   }
 
   @context_with_aliases %Context{
@@ -610,6 +610,193 @@ defmodule Hologram.Compiler.ExpanderTest do
               }}
   end
 
+  describe "call" do
+    test "current module function called without alias" do
+      args = [%IR.ModuleAttributeOperator{name: :a}, %IR.ModuleAttributeOperator{name: :c}]
+      ir = %IR.Call{module: nil, function: :my_fun, args: args}
+      context = %{@context_with_module_attributes | module: A.B}
+
+      assert expand(ir, context) ==
+               {[
+                  %IR.FunctionCall{
+                    module: %IR.ModuleType{module: A.B, segments: [:A, :B]},
+                    function: :my_fun,
+                    args: [
+                      %IR.IntegerType{value: 1},
+                      %IR.IntegerType{value: 3}
+                    ],
+                    erlang: false
+                  }
+                ], context}
+    end
+
+    test "imported function called without alias" do
+      args = [%IR.ModuleAttributeOperator{name: :a}, %IR.ModuleAttributeOperator{name: :c}]
+      ir = %IR.Call{module: nil, function: :my_fun, args: args}
+      context = %{@context_with_module_attributes | functions: %{my_fun: %{2 => A.B}}}
+
+      assert expand(ir, context) ==
+               {[
+                  %Hologram.Compiler.IR.FunctionCall{
+                    module: %IR.ModuleType{module: A.B, segments: [:A, :B]},
+                    function: :my_fun,
+                    args: [
+                      %IR.IntegerType{value: 1},
+                      %IR.IntegerType{value: 3}
+                    ],
+                    erlang: false
+                  }
+                ], context}
+    end
+
+    test "function called with alias" do
+      args = [%IR.ModuleAttributeOperator{name: :a}, %IR.ModuleAttributeOperator{name: :c}]
+
+      ir = %IR.Call{
+        module: %IR.Alias{segments: [:A, :B]},
+        function: :my_fun,
+        args: args
+      }
+
+      context = %{@context_with_module_attributes | aliases: %{A: [:C, :D]}}
+
+      assert expand(ir, context) ==
+               {[
+                  %IR.FunctionCall{
+                    module: %IR.ModuleType{
+                      module: C.D.B,
+                      segments: [:C, :D, :B]
+                    },
+                    function: :my_fun,
+                    args: [
+                      %IR.IntegerType{value: 1},
+                      %IR.IntegerType{value: 3}
+                    ],
+                    erlang: false
+                  }
+                ], context}
+    end
+
+    test "macro called without alias or args, returning single expression which doesn't change the context" do
+      ir = %IR.Call{module: nil, function: :macro_2a, args: []}
+
+      context = %Context{
+        macros: %{macro_2a: %{0 => Hologram.Test.Fixtures.Compiler.Expander.Module2}}
+      }
+
+      assert expand(ir, context) == {[%IR.IntegerType{value: 123}], context}
+    end
+
+    test "macro called with alias" do
+      alias_ir = %IR.Alias{
+        segments: [:Hologram, :Test, :Fixtures, :Compiler, :Expander, :Module2]
+      }
+
+      call_ir = %IR.Call{
+        module: alias_ir,
+        function: :macro_2a,
+        args: []
+      }
+
+      assert expand(call_ir, @context_dummy) == {[%IR.IntegerType{value: 123}], @context_dummy}
+    end
+
+    test "macro called with args" do
+      alias_ir = %IR.Alias{
+        segments: [:Hologram, :Test, :Fixtures, :Compiler, :Expander, :Module2]
+      }
+
+      args = [%IR.Symbol{name: :x}, %IR.Symbol{name: :y}]
+
+      call_ir = %IR.Call{
+        module: alias_ir,
+        function: :macro_2d,
+        args: args
+      }
+
+      context = %Context{variables: MapSet.new([:x, :y])}
+
+      assert expand(call_ir, context) ==
+               {[
+                  %IR.AdditionOperator{
+                    left: %IR.Variable{name: :x},
+                    right: %IR.Variable{name: :y}
+                  }
+                ], context}
+    end
+
+    test "macro returning multiple expressions" do
+      ir = %IR.Call{module: nil, function: :macro_2b, args: []}
+
+      context = %Context{
+        macros: %{macro_2b: %{0 => Hologram.Test.Fixtures.Compiler.Expander.Module2}}
+      }
+
+      assert expand(ir, context) ==
+               {[%IR.IntegerType{value: 100}, %IR.IntegerType{value: 200}], context}
+    end
+
+    test "macro which changes the context (adds an alias)" do
+      ir = %IR.Call{module: nil, function: :macro_2c, args: []}
+
+      context = %Context{
+        macros: %{macro_2c: %{0 => Hologram.Test.Fixtures.Compiler.Expander.Module2}}
+      }
+
+      assert expand(ir, context) ==
+               {[%IR.IgnoredExpression{type: :alias_directive}],
+                %{context | aliases: %{C: [:A, :B]}}}
+    end
+
+    #   test "nested single expression macros, with parenthesis" do
+    #     ir = %IR.Call{module: nil, function: :macro_3a, args: []}
+
+    #     context = %Context{
+    #       macros: %{macro_3a: %{0 => Hologram.Test.Fixtures.Compiler.Expander.Module3}},
+    #       module: A.B
+    #     }
+
+    #     result = Expander.expand(ir, context)
+    #     expected = {[%IR.IntegerType{value: 123}], context}
+
+    #     assert result == expected
+    #   end
+
+    #   test "nested macros without parenthesis" do
+    #     ir = %IR.Call{module: nil, function: :macro_3b, args: []}
+
+    #     context = %Context{
+    #       macros: %{macro_3b: %{0 => Hologram.Test.Fixtures.Compiler.Expander.Module3}},
+    #       module: A.B
+    #     }
+
+    #     result = Expander.expand(ir, context)
+    #     expected = {[%IR.IntegerType{value: 123}], context}
+
+    #     assert result == expected
+    #   end
+
+    #   test "nested multiple expressions macros" do
+    #     ir = %IR.Call{module: nil, function: :macro_3c, args: []}
+
+    #     context = %Context{
+    #       macros: %{macro_3c: %{0 => Hologram.Test.Fixtures.Compiler.Expander.Module3}},
+    #       module: A.B
+    #     }
+
+    #     result = Expander.expand(ir, context)
+
+    #     expected =
+    #       {[
+    #          %IR.IntegerType{value: 100},
+    #          %IR.IntegerType{value: 200},
+    #          %IR.IntegerType{value: 300}
+    #        ], context}
+
+    #     assert result == expected
+    #   end
+  end
+
   test "function call" do
     ir = %IR.FunctionCall{
       module: A.B,
@@ -618,6 +805,29 @@ defmodule Hologram.Compiler.ExpanderTest do
     }
 
     assert expand(ir, @context_dummy) == {ir, @context_dummy}
+  end
+
+  describe "symbol" do
+    test "variable" do
+      context = %Context{variables: MapSet.new([:a])}
+      ir = %IR.Symbol{name: :a}
+
+      assert expand(ir, context) == {%IR.Variable{name: :a}, context}
+    end
+
+    test "call" do
+      context = %Context{module: A.B}
+      ir = %IR.Symbol{name: :a}
+
+      assert expand(ir, context) ==
+               {[
+                  %IR.FunctionCall{
+                    module: %IR.ModuleType{module: A.B, segments: [:A, :B]},
+                    function: :a,
+                    args: []
+                  }
+                ], context}
+    end
   end
 
   test "variable" do
@@ -680,234 +890,4 @@ defmodule Hologram.Compiler.ExpanderTest do
   #     c: %IR.IntegerType{value: 3}
   #   }
   # }
-
-  # describe "call" do
-  #   test "current module function called without alias" do
-  #     args = [%IR.Alias{segments: [:A, :B]}, %IR.Alias{segments: [:C, :D]}]
-  #     ir = %IR.Call{module: nil, function: :my_fun, args: args}
-  #     context = %Context{module: E.F}
-  #     result = Expander.expand(ir, context)
-
-  #     expected =
-  #       {[
-  #          %IR.FunctionCall{
-  #            module: %IR.ModuleType{module: E.F, segments: [:E, :F]},
-  #            function: :my_fun,
-  #            args: [
-  #              %IR.ModuleType{module: A.B, segments: [:A, :B]},
-  #              %IR.ModuleType{module: C.D, segments: [:C, :D]}
-  #            ]
-  #          }
-  #        ], context}
-
-  #     assert result == expected
-  #   end
-
-  #   test "imported function called without alias" do
-  #     args = [%IR.Alias{segments: [:A, :B]}, %IR.Alias{segments: [:C, :D]}]
-  #     ir = %IR.Call{module: nil, function: :my_fun, args: args}
-  #     context = %Context{functions: %{my_fun: %{2 => E.F}}}
-  #     result = Expander.expand(ir, context)
-
-  #     expected =
-  #       {[
-  #          %IR.FunctionCall{
-  #            module: %IR.ModuleType{module: E.F, segments: [:E, :F]},
-  #            function: :my_fun,
-  #            args: [
-  #              %IR.ModuleType{module: A.B, segments: [:A, :B]},
-  #              %IR.ModuleType{module: C.D, segments: [:C, :D]}
-  #            ]
-  #          }
-  #        ], context}
-
-  #     assert result == expected
-  #   end
-
-  #   test "function called with alias" do
-  #     args = [%IR.Alias{segments: [:A, :B]}, %IR.Alias{segments: [:C, :D]}]
-
-  #     ir = %IR.Call{
-  #       module: %IR.Alias{segments: [:E, :F]},
-  #       function: :my_fun,
-  #       args: args
-  #     }
-
-  #     result = Expander.expand(ir, %Context{})
-
-  #     expected =
-  #       {[
-  #          %IR.FunctionCall{
-  #            module: %IR.ModuleType{module: E.F, segments: [:E, :F]},
-  #            function: :my_fun,
-  #            args: [
-  #              %IR.ModuleType{module: A.B, segments: [:A, :B]},
-  #              %IR.ModuleType{module: C.D, segments: [:C, :D]}
-  #            ]
-  #          }
-  #        ], %Context{}}
-
-  #     assert result == expected
-  #   end
-
-  #   test "macro called without alias or args, returning single expression which doesn't change the context" do
-  #     ir = %IR.Call{module: nil, function: :macro_2a, args: []}
-
-  #     context = %Context{
-  #       macros: %{macro_2a: %{0 => Hologram.Test.Fixtures.Compiler.Expander.Module2}}
-  #     }
-
-  #     result = Expander.expand(ir, context)
-  #     expected = {[%IR.IntegerType{value: 123}], context}
-
-  #     assert result == expected
-  #   end
-
-  #   test "macro called with alias" do
-  #     segments = [:Hologram, :Test, :Fixtures, :Compiler, :Expander, :Module2]
-
-  #     ir = %IR.Call{
-  #       module: %IR.Alias{segments: segments},
-  #       function: :macro_2a,
-  #       args: []
-  #     }
-
-  #     context = %Context{
-  #       macros: %{macro_2a: %{0 => Hologram.Test.Fixtures.Compiler.Expander.Module2}}
-  #     }
-
-  #     result = Expander.expand(ir, context)
-  #     expected = {[%IR.IntegerType{value: 123}], context}
-
-  #     assert result == expected
-  #   end
-
-  #   test "macro called with args" do
-  #     segments = [:Hologram, :Test, :Fixtures, :Compiler, :Expander, :Module2]
-  #     args = [%IR.Symbol{name: :x}, %IR.Symbol{name: :y}]
-
-  #     ir = %IR.Call{
-  #       module: %IR.Alias{segments: segments},
-  #       function: :macro_2d,
-  #       args: args
-  #     }
-
-  #     context = %Context{
-  #       macros: %{macro_2d: %{2 => Hologram.Test.Fixtures.Compiler.Expander.Module2}},
-  #       module: A.B,
-  #       variables: MapSet.new([:x, :y])
-  #     }
-
-  #     result = Expander.expand(ir, context)
-
-  #     expected =
-  #       {[
-  #          %IR.AdditionOperator{
-  #            left: %IR.Variable{name: :x},
-  #            right: %IR.Variable{name: :y}
-  #          }
-  #        ], context}
-
-  #     assert result == expected
-  #   end
-
-  #   test "macro returning multiple expressions" do
-  #     ir = %IR.Call{module: nil, function: :macro_2b, args: []}
-
-  #     context = %Context{
-  #       macros: %{macro_2b: %{0 => Hologram.Test.Fixtures.Compiler.Expander.Module2}}
-  #     }
-
-  #     result = Expander.expand(ir, context)
-  #     expected = {[%IR.IntegerType{value: 100}, %IR.IntegerType{value: 200}], context}
-
-  #     assert result == expected
-  #   end
-
-  #   test "macro which changes the context" do
-  #     ir = %IR.Call{module: nil, function: :macro_2c, args: []}
-
-  #     context = %Context{
-  #       macros: %{macro_2c: %{0 => Hologram.Test.Fixtures.Compiler.Expander.Module2}}
-  #     }
-
-  #     result = Expander.expand(ir, context)
-
-  #     expected_context = %{context | aliases: %{C: [:A, :B]}}
-  #     expected = {[%IR.IgnoredExpression{type: :alias_directive}], expected_context}
-
-  #     assert result == expected
-  #   end
-
-  #   test "nested single expression macros, with parenthesis" do
-  #     ir = %IR.Call{module: nil, function: :macro_3a, args: []}
-
-  #     context = %Context{
-  #       macros: %{macro_3a: %{0 => Hologram.Test.Fixtures.Compiler.Expander.Module3}},
-  #       module: A.B
-  #     }
-
-  #     result = Expander.expand(ir, context)
-  #     expected = {[%IR.IntegerType{value: 123}], context}
-
-  #     assert result == expected
-  #   end
-
-  #   test "nested macros without parenthesis" do
-  #     ir = %IR.Call{module: nil, function: :macro_3b, args: []}
-
-  #     context = %Context{
-  #       macros: %{macro_3b: %{0 => Hologram.Test.Fixtures.Compiler.Expander.Module3}},
-  #       module: A.B
-  #     }
-
-  #     result = Expander.expand(ir, context)
-  #     expected = {[%IR.IntegerType{value: 123}], context}
-
-  #     assert result == expected
-  #   end
-
-  #   test "nested multiple expressions macros" do
-  #     ir = %IR.Call{module: nil, function: :macro_3c, args: []}
-
-  #     context = %Context{
-  #       macros: %{macro_3c: %{0 => Hologram.Test.Fixtures.Compiler.Expander.Module3}},
-  #       module: A.B
-  #     }
-
-  #     result = Expander.expand(ir, context)
-
-  #     expected =
-  #       {[
-  #          %IR.IntegerType{value: 100},
-  #          %IR.IntegerType{value: 200},
-  #          %IR.IntegerType{value: 300}
-  #        ], context}
-
-  #     assert result == expected
-  #   end
-  # end
-
-  # describe "symbol" do
-  #   test "variable" do
-  #     context = %Context{variables: MapSet.new([:a])}
-  #     ir = %IR.Symbol{name: :a}
-
-  #     result = Expander.expand(ir, context)
-  #     expected = {%IR.Variable{name: :a}, context}
-
-  #     assert result == expected
-  #   end
-
-  #   test "call" do
-  #     context = %Context{module: A.B}
-  #     ir = %IR.Symbol{name: :a}
-
-  #     result = Expander.expand(ir, context)
-  #     expected_module = %IR.ModuleType{module: A.B, segments: [:A, :B]}
-  #     expected = {[%IR.FunctionCall{module: expected_module, function: :a, args: []}], context}
-
-  #     assert result == expected
-  #   end
-  # end
 end
