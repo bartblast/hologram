@@ -172,6 +172,13 @@ defmodule Hologram.Compiler.DetransformerTest do
     assert detransform(ir) == {:&&, [line: 0], [1, 2]}
   end
 
+  test "relaxed boolean not operator" do
+    # !false
+    ir = %IR.RelaxedBooleanNotOperator{value: %IR.BooleanType{value: false}}
+
+    assert detransform(ir) == {:!, [line: 0], [false]}
+  end
+
   # --- DATA TYPES ---
 
   test "atom type" do
