@@ -229,6 +229,15 @@ defmodule Hologram.Compiler.DetransformerTest do
     assert detransform(ir) == {:-, [line: 0], [2]}
   end
 
+  test "unary positive operator" do
+    # +2
+    ir = %IR.UnaryPositiveOperator{
+      value: %IR.IntegerType{value: 2}
+    }
+
+    assert detransform(ir) == {:+, [line: 0], [2]}
+  end
+
   # --- DATA TYPES ---
 
   test "atom type" do

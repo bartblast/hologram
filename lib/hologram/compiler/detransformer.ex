@@ -103,6 +103,10 @@ defmodule Hologram.Compiler.Detransformer do
     detransform_unary_operator(:-, value)
   end
 
+  def detransform(%IR.UnaryPositiveOperator{value: value}) do
+    detransform_unary_operator(:+, value)
+  end
+
   # --- DATA TYPES ---
 
   def detransform(%IR.AtomType{value: value}), do: value
