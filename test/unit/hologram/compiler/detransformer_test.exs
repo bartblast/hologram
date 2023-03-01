@@ -209,6 +209,17 @@ defmodule Hologram.Compiler.DetransformerTest do
     assert detransform(ir) == {:-, [line: 0], [2, 1]}
   end
 
+  test "type operator" do
+    # str::binary
+    ir = %IR.TypeOperator{
+      left: %IR.Variable{name: :str},
+      right: :binary
+    }
+
+    assert detransform(ir) ==
+             {:"::", [line: 0], [{:str, [line: 0], nil}, {:binary, [line: 0], nil}]}
+  end
+
   # --- DATA TYPES ---
 
   test "atom type" do
