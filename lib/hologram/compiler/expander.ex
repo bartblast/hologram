@@ -10,6 +10,14 @@ defmodule Hologram.Compiler.Expander do
   alias Hologram.Compiler.Reflection
   alias Hologram.Compiler.Transformer
 
+  @doc """
+  Expands aliases, macros, symbols, and pseudo-variables.
+
+  ## Examples
+      iex> ir = %IR.Call{module: nil, function: :is_nil, args: [%IR.IntegerType{value: 999}]}
+      iex> Expander.expand(ir, %Context{})
+      [%IR.EqualToOperator{left: %IR.IntegerType{value: 999}, right: %IR.NilType{}}]
+  """
   def expand(ir, context)
 
   # --- OPERATORS ---
