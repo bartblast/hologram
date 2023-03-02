@@ -143,6 +143,10 @@ defmodule Hologram.Compiler.Detransformer do
 
   # --- CONTROL FLOW ---
 
+  def detransform(%IR.Block{expressions: exprs}) do
+    {:__block__, [], detransform_list(exprs)}
+  end
+
   def detransform(%IR.FunctionCall{module: module, function: function, args: args}) do
     module = detransform(module)
     args = detransform_list(args)

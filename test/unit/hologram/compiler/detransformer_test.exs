@@ -324,6 +324,21 @@ defmodule Hologram.Compiler.DetransformerTest do
 
   # --- CONTROL FLOW ---
 
+  test "block" do
+    # do
+    #   1
+    #   2
+    # end
+    ir = %IR.Block{
+      expressions: [
+        %IR.IntegerType{value: 1},
+        %IR.IntegerType{value: 2}
+      ]
+    }
+
+    assert detransform(ir) == {:__block__, [], [1, 2]}
+  end
+
   test "function call" do
     # A.B.my_fun(1, 2)
     module = %IR.ModuleType{module: A.B, segments: [:A, :B]}
