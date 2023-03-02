@@ -1,4 +1,6 @@
 defmodule Hologram.Compiler.Transformer do
+  import Hologram.Compiler.Macros, only: [transform: 2]
+
   alias Hologram.Compiler.Helpers
   alias Hologram.Compiler.IR
   alias Hologram.Compiler.PatternDeconstructor
@@ -17,71 +19,79 @@ defmodule Hologram.Compiler.Transformer do
 
   # --- OPERATORS ---
 
-  def transform({{:., _, [{:__aliases__, [alias: false], [:Access]}, :get]}, _, [data, key]}) do
+  transform({{:., _, [{:__aliases__, [alias: false], [:Access]}, :get]}, _, [data, key]}) do
     %IR.AccessOperator{
       data: transform(data),
       key: transform(key)
     }
   end
 
-  def transform({:+, _, [left, right]}) do
+  transform({:+, _, [left, right]}) do
     %IR.AdditionOperator{
       left: transform(left),
       right: transform(right)
     }
   end
 
-  def transform([{:|, _, [head, tail]}]) do
+  transform([{:|, _, [head, tail]}]) do
     %IR.ConsOperator{
       head: transform(head),
       tail: transform(tail)
     }
   end
 
-  def transform({:/, _, [left, right]}) do
+  transform({:/, _, [left, right]}) do
     %IR.DivisionOperator{
       left: transform(left),
       right: transform(right)
     }
   end
 
-  def transform({{:., _, [{marker, _, _} = left, right]}, [no_parens: true, line: _], []})
-      when marker not in [:__aliases__, :__MODULE__] do
+  transform _({{:., _, [{marker, _, _} = left, right]}, [no_parens: true, line: _], []})
+            when marker not in [:__aliases__, :__MODULE__] do
     %IR.DotOperator{
       left: transform(left),
       right: transform(right)
     }
   end
 
-  def transform({:==, _, [left, right]}) do
+  transform _({{:., _, [{marker, _, _} = left, right]}, [no_parens: true, line: _], []})
+            when marker not in [:__aliases__, :__MODULE__] do
+    %IR.DotOperator{
+      left: transform(left),
+      right: transform(right)
+    }
+  end
+
+  transform({:==, _, [left, right]}) do
     %IR.EqualToOperator{
       left: transform(left),
       right: transform(right)
     }
   end
 
-  def transform({:<, _, [left, right]}) do
+  transform({:<, _, [left, right]}) do
     %IR.LessThanOperator{
       left: transform(left),
       right: transform(right)
     }
   end
 
-  def transform({:++, _, [left, right]}) do
+  transform({:++, _, [left, right]}) do
     %IR.ListConcatenationOperator{
       left: transform(left),
       right: transform(right)
     }
   end
 
-  def transform({:--, _, [left, right]}) do
+  transform({:--, _, [left, right]}) do
     %IR.ListSubtractionOperator{
       left: transform(left),
       right: transform(right)
     }
   end
 
-  def transform({:=, _, [left, right]}) do
+  transform({:=, _, [left, right]}) do
     left = transform(left)
 
     bindings =
@@ -100,25 +110,25 @@ defmodule Hologram.Compiler.Transformer do
     }
   end
 
-  def transform({:in, _, [left, right]}) do
+  transform({:in, _, [left, right]}) do
     %IR.MembershipOperator{
       left: transform(left),
       right: transform(right)
     }
   end
 
-  def transform({:@, _, [{name, _, nil}]}) do
+  transform({:@, _, [{name, _, nil}]}) do
     %IR.ModuleAttributeOperator{name: name}
   end
 
-  def transform({:*, _, [left, right]}) do
+  transform({:*, _, [left, right]}) do
     %IR.MultiplicationOperator{
       left: transform(left),
       right: transform(right)
     }
   end
 
-  def transform({:!=, _, [left, right]}) do
+  transform({:!=, _, [left, right]}) do
     %IR.NotEqualToOperator{
       left: transform(left),
       right: transform(right)
@@ -126,7 +136,7 @@ defmodule Hologram.Compiler.Transformer do
   end
 
   # based on: https://ianrumford.github.io/elixir/pipe/clojure/thread-first/macro/2016/07/24/writing-your-own-elixir-pipe-operator.html
-  def transform({:|>, _, _} = ast) do
+  transform({:|>, _, _} = ast) do
     [{first_ast, _index} | rest_tuples] = Macro.unpipe(ast)
 
     rest_tuples
@@ -136,56 +146,56 @@ defmodule Hologram.Compiler.Transformer do
     |> transform()
   end
 
-  def transform({:&&, _, [left, right]}) do
+  transform({:&&, _, [left, right]}) do
     %IR.RelaxedBooleanAndOperator{
       left: transform(left),
       right: transform(right)
     }
   end
 
-  def transform({:__block__, _, [{:!, _, [value]}]}) do
+  transform({:__block__, _, [{:!, _, [value]}]}) do
     build_relaxed_boolean_not_operator_ir(value)
   end
 
-  def transform({:!, _, [value]}) do
+  transform({:!, _, [value]}) do
     build_relaxed_boolean_not_operator_ir(value)
   end
 
-  def transform({:||, _, [left, right]}) do
+  transform({:||, _, [left, right]}) do
     %IR.RelaxedBooleanOrOperator{
       left: transform(left),
       right: transform(right)
     }
   end
 
-  def transform({:and, _, [left, right]}) do
+  transform({:and, _, [left, right]}) do
     %IR.StrictBooleanAndOperator{
       left: transform(left),
       right: transform(right)
     }
   end
 
-  def transform({:-, _, [left, right]}) do
+  transform({:-, _, [left, right]}) do
     %IR.SubtractionOperator{
       left: transform(left),
       right: transform(right)
     }
   end
 
-  def transform({:"::", _, [left, {right, _, _}]}) do
+  transform({:"::", _, [left, {right, _, _}]}) do
     %IR.TypeOperator{
       left: transform(left),
       right: right
     }
   end
 
-  def transform({:-, _, [value]}) do
+  transform({:-, _, [value]}) do
     %IR.UnaryNegativeOperator{
       value: transform(value)
     }
   end
 
-  def transform({:+, _, [value]}) do
+  transform({:+, _, [value]}) do
     %IR.UnaryPositiveOperator{
       value: transform(value)
     }
@@ -193,7 +203,7 @@ defmodule Hologram.Compiler.Transformer do
 
   # --- DATA TYPES ---
 
-  def transform({:fn, _, [{:->, _, [params, body]}]}) do
+  transform({:fn, _, [{:->, _, [params, body]}]}) do
     params = transform_list(params)
     arity = Enum.count(params)
     bindings = Helpers.aggregate_bindings_from_params(params)
@@ -202,32 +212,32 @@ defmodule Hologram.Compiler.Transformer do
     %IR.AnonymousFunctionType{arity: arity, params: params, bindings: bindings, body: body}
   end
 
-  def transform(ast) when is_atom(ast) and ast not in [nil, false, true] do
+  transform _(ast) when is_atom(ast) and ast not in [nil, false, true] do
     %IR.AtomType{value: ast}
   end
 
-  def transform({:<<>>, _, parts}) do
+  transform({:<<>>, _, parts}) do
     %IR.BinaryType{parts: transform_list(parts)}
   end
 
-  def transform(ast) when is_boolean(ast) do
+  transform _(ast) when is_boolean(ast) do
     %IR.BooleanType{value: ast}
   end
 
-  def transform(ast) when is_float(ast) do
+  transform _(ast) when is_float(ast) do
     %IR.FloatType{value: ast}
   end
 
-  def transform(ast) when is_integer(ast) do
+  transform _(ast) when is_integer(ast) do
     %IR.IntegerType{value: ast}
   end
 
-  def transform(ast) when is_list(ast) do
+  transform _(ast) when is_list(ast) do
     data = Enum.map(ast, &transform/1)
     %IR.ListType{data: data}
   end
 
-  def transform({:%{}, _, data}) do
+  transform({:%{}, _, data}) do
     {module, new_data} = Keyword.pop(data, :__struct__)
 
     data_ir =
@@ -244,26 +254,26 @@ defmodule Hologram.Compiler.Transformer do
     end
   end
 
-  def transform(nil) do
+  transform(nil) do
     %IR.NilType{}
   end
 
-  def transform(ast) when is_binary(ast) do
+  transform _(ast) when is_binary(ast) do
     %IR.StringType{value: ast}
   end
 
-  def transform({:%, _, [alias_ast, map_ast]}) do
+  transform({:%, _, [alias_ast, map_ast]}) do
     module = transform(alias_ast)
     data = transform(map_ast).data
 
     %IR.StructType{module: module, data: data}
   end
 
-  def transform({:{}, _, data}) do
+  transform({:{}, _, data}) do
     build_tuple_type_ir(data)
   end
 
-  def transform({_, _} = data) do
+  transform({_, _} = data) do
     data
     |> Tuple.to_list()
     |> build_tuple_type_ir()
@@ -271,17 +281,17 @@ defmodule Hologram.Compiler.Transformer do
 
   # --- PSEUDO-VARIABLES ---
 
-  def transform({:__ENV__, _, _}) do
+  transform({:__ENV__, _, _}) do
     %IR.EnvPseudoVariable{}
   end
 
-  def transform({:__MODULE__, _, _}) do
+  transform({:__MODULE__, _, _}) do
     %IR.ModulePseudoVariable{}
   end
 
   # --- DEFINITIONS ---
 
-  def transform({marker, _, [{name, _, params}, [do: body]]}) when marker in [:def, :defp] do
+  transform _({marker, _, [{name, _, params}, [do: body]]}) when marker in [:def, :defp] do
     params = transform_list(params)
     arity = Enum.count(params)
     bindings = Helpers.aggregate_bindings_from_params(params)
@@ -298,14 +308,14 @@ defmodule Hologram.Compiler.Transformer do
     }
   end
 
-  def transform({:@, _, [{name, _, [ast]}]}) do
+  transform({:@, _, [{name, _, [ast]}]}) do
     %IR.ModuleAttributeDefinition{
       name: name,
       expression: transform(ast)
     }
   end
 
-  def transform({:defmodule, _, [module, [do: body]]}) do
+  transform({:defmodule, _, [module, [do: body]]}) do
     %IR.ModuleDefinition{
       module: transform(module),
       body: transform(body)
@@ -314,19 +324,19 @@ defmodule Hologram.Compiler.Transformer do
 
   # --- DIRECTIVES ---
 
-  def transform({:alias, _, [{{_, _, [{_, _, alias_segs}, _]}, _, aliases}, _]}) do
+  transform({:alias, _, [{{_, _, [{_, _, alias_segs}, _]}, _, aliases}, _]}) do
     build_alias_directive_irs(alias_segs, aliases)
   end
 
-  def transform({:alias, _, [{{_, _, [{_, _, alias_segs}, _]}, _, aliases}]}) do
+  transform({:alias, _, [{{_, _, [{_, _, alias_segs}, _]}, _, aliases}]}) do
     build_alias_directive_irs(alias_segs, aliases)
   end
 
-  def transform({:alias, _, [{_, _, alias_segs}]}) do
+  transform({:alias, _, [{_, _, alias_segs}]}) do
     %IR.AliasDirective{alias_segs: alias_segs, as: List.last(alias_segs)}
   end
 
-  def transform({:alias, _, [{_, _, alias_segs}, opts]}) do
+  transform({:alias, _, [{_, _, alias_segs}, opts]}) do
     as =
       if Keyword.has_key?(opts, :as) do
         {:__aliases__, _, [alias_seg | _]} = opts[:as]
@@ -338,30 +348,30 @@ defmodule Hologram.Compiler.Transformer do
     %IR.AliasDirective{alias_segs: alias_segs, as: as}
   end
 
-  def transform({:import, _, [{:__aliases__, _, alias_segs}, opts]}) do
+  transform({:import, _, [{:__aliases__, _, alias_segs}, opts]}) do
     only = if opts[:only], do: opts[:only], else: []
     except = if opts[:except], do: opts[:except], else: []
 
     build_import_directive_ir(alias_segs, only, except)
   end
 
-  def transform({:import, _, [{:__aliases__, _, alias_segs}]}) do
+  transform({:import, _, [{:__aliases__, _, alias_segs}]}) do
     build_import_directive_ir(alias_segs, [], [])
   end
 
-  def transform({:defmacro, _, _}) do
+  transform({:defmacro, _, _}) do
     %IR.IgnoredExpression{type: :public_macro_definition}
   end
 
-  def transform({:require, _, _}) do
+  transform({:require, _, _}) do
     %IR.IgnoredExpression{type: :require_directive}
   end
 
-  def transform({:use, _, [{_, _, alias_segs}]}) do
+  transform({:use, _, [{_, _, alias_segs}]}) do
     %IR.UseDirective{alias_segs: alias_segs, opts: []}
   end
 
-  def transform({:use, _, [{_, _, alias_segs}, opts]}) do
+  transform({:use, _, [{_, _, alias_segs}, opts]}) do
     %IR.UseDirective{
       alias_segs: alias_segs,
       opts: transform(opts)
@@ -370,34 +380,34 @@ defmodule Hologram.Compiler.Transformer do
 
   # --- CONTROL FLOW ---
 
-  def transform({:__aliases__, _, segments}) do
+  transform({:__aliases__, _, segments}) do
     %IR.Alias{segments: segments}
   end
 
-  def transform({{:., _, [{name, _, nil}]}, _, args}) do
+  transform({{:., _, [{name, _, nil}]}, _, args}) do
     %IR.AnonymousFunctionCall{
       name: name,
       args: Enum.map(args, &transform/1)
     }
   end
 
-  def transform({:__block__, _, ast}) do
+  transform({:__block__, _, ast}) do
     ir = Enum.map(ast, &transform/1)
     %IR.Block{expressions: ir}
   end
 
-  def transform({{:., _, [module, function]}, _, args}) when not is_atom(module) do
+  transform _({{:., _, [module, function]}, _, args}) when not is_atom(module) do
     build_call_ir(module, function, args)
   end
 
-  def transform({:case, _, [condition, [do: clauses]]}) do
+  transform({:case, _, [condition, [do: clauses]]}) do
     %IR.CaseExpression{
       condition: transform(condition),
       clauses: Enum.map(clauses, &build_case_clause_ir/1)
     }
   end
 
-  def transform({:for, _, parts}) do
+  transform({:for, _, parts}) do
     generators = find_for_expression_generators(parts)
     mapper = find_for_expression_mapper(parts)
 
@@ -407,7 +417,7 @@ defmodule Hologram.Compiler.Transformer do
     |> transform()
   end
 
-  def transform({{:., _, [module, function]}, _, args}) when is_atom(module) do
+  transform _({{:., _, [module, function]}, _, args}) when is_atom(module) do
     %IR.FunctionCall{
       module: module,
       function: function,
@@ -416,7 +426,7 @@ defmodule Hologram.Compiler.Transformer do
     }
   end
 
-  def transform({:if, _, [condition, [do: do_block, else: else_block]]}) do
+  transform({:if, _, [condition, [do: do_block, else: else_block]]}) do
     %IR.IfExpression{
       condition: transform(condition),
       do: transform(do_block),
@@ -426,11 +436,11 @@ defmodule Hologram.Compiler.Transformer do
 
   # preserve order:
 
-  def transform({function, _, args}) when is_atom(function) and is_list(args) do
+  transform _({function, _, args}) when is_atom(function) and is_list(args) do
     build_call_ir(nil, function, args)
   end
 
-  def transform({name, _, _}) when is_atom(name) do
+  transform _({name, _, _}) when is_atom(name) do
     %IR.Symbol{name: name}
   end
 
