@@ -240,6 +240,32 @@ defmodule Hologram.Compiler.DetransformerTest do
 
   # --- DATA TYPES ---
 
+  test "anonymous function type" do
+    # fn a, b ->
+    #   1
+    #   2
+    # end
+    ir = %IR.AnonymousFunctionType{
+      params: [
+        %IR.Variable{name: :a},
+        %IR.Variable{name: :b}
+      ],
+      body: %IR.Block{
+        expressions: [
+          %IR.IntegerType{value: 1},
+          %IR.IntegerType{value: 2}
+        ]
+      }
+    }
+
+    assert detransform(ir) ==
+             {:fn, [line: 0],
+              [
+                {:->, [line: 0],
+                 [[{:a, [line: 0], nil}, {:b, [line: 0], nil}], {:__block__, [], [1, 2]}]}
+              ]}
+  end
+
   test "atom type" do
     # :abc
     ir = %IR.AtomType{value: :abc}

@@ -109,6 +109,13 @@ defmodule Hologram.Compiler.Detransformer do
 
   # --- DATA TYPES ---
 
+  def detransform(%IR.AnonymousFunctionType{params: params, body: body}) do
+    params = detransform_list(params)
+    body = detransform(body)
+
+    {:fn, [line: 0], [{:->, [line: 0], [params, body]}]}
+  end
+
   def detransform(%IR.AtomType{value: value}), do: value
 
   def detransform(%IR.BooleanType{value: value}), do: value
