@@ -327,6 +327,13 @@ defmodule Hologram.Compiler.DetransformerTest do
     assert detransform(ir) == nil
   end
 
+  test "string type" do
+    # "test"
+    ir = %IR.StringType{value: "test"}
+
+    assert detransform(ir) == "test"
+  end
+
   test "struct type" do
     # %Hologram.Test.Fixtures.Struct{a: 1, b: 2}
     ir = %IR.StructType{

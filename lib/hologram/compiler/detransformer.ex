@@ -141,6 +141,8 @@ defmodule Hologram.Compiler.Detransformer do
     nil
   end
 
+  def detransform(%IR.StringType{value: value}), do: value
+
   def detransform(%IR.StructType{module: module, data: data}) do
     module = detransform(module)
     data = detransform_key_value_pairs(data)
