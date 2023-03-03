@@ -436,6 +436,13 @@ defmodule Hologram.Compiler.Transformer do
 
   # preserve order:
 
+  transform _({function, [context: _, imports: [{_arity, module}]], args})
+            when is_atom(function) and is_list(args) do
+    segments = Helpers.alias_segments(module)
+    module_ir = %IR.ModuleType{module: module, segments: segments}
+    build_call_ir(module_ir, function, args)
+  end
+
   transform _({function, _, args}) when is_atom(function) and is_list(args) do
     build_call_ir(nil, function, args)
   end

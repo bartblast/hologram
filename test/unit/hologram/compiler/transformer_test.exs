@@ -1,7 +1,10 @@
 defmodule Hologram.Compiler.TransformerTest do
   use Hologram.Test.UnitCase, async: true
   import Hologram.Compiler.Transformer
+
   alias Hologram.Compiler.IR
+  alias Hologram.Test.Fixtures.Compiler.Transformer.Module1
+  alias Hologram.Test.Fixtures.Compiler.Transformer.Module2
 
   # --- OPERATORS ---
 
@@ -1272,6 +1275,20 @@ defmodule Hologram.Compiler.TransformerTest do
                    right: :binary
                  }
                ]
+             }
+    end
+
+    test "nested in macro, without args, with parenthesis" do
+      # apply(Module1, :"MACRO-macro_1a", [__ENV__])
+      ast = {:macro_2a, [context: Module1, imports: [{0, Module2}]], []}
+
+      assert transform(ast) == %IR.Call{
+               module: %IR.ModuleType{
+                 module: Module2,
+                 segments: [:Hologram, :Test, :Fixtures, :Compiler, :Transformer, :Module2]
+               },
+               function: :macro_2a,
+               args: []
              }
     end
   end
