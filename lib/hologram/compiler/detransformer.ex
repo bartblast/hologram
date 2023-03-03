@@ -150,6 +150,16 @@ defmodule Hologram.Compiler.Detransformer do
     {:%, [line: 0], [module, {:%{}, [line: 0], data}]}
   end
 
+  def detransform(%IR.TupleType{data: [_, _] = data}) do
+    data
+    |> detransform_list()
+    |> List.to_tuple()
+  end
+
+  def detransform(%IR.TupleType{data: data}) do
+    {:{}, [line: 0], detransform_list(data)}
+  end
+
   # --- CONTROL FLOW ---
 
   def detransform(%IR.Block{expressions: exprs}) do

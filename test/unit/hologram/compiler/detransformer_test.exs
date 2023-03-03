@@ -355,6 +355,33 @@ defmodule Hologram.Compiler.DetransformerTest do
               ]}
   end
 
+  describe "tuple type" do
+    test "2-element tuple" do
+      # {1, 2}
+      ir = %IR.TupleType{
+        data: [
+          %IR.IntegerType{value: 1},
+          %IR.IntegerType{value: 2}
+        ]
+      }
+
+      assert detransform(ir) == {1, 2}
+    end
+
+    test "non-2-element tuple" do
+      # {1, 2, 3}
+      ir = %IR.TupleType{
+        data: [
+          %IR.IntegerType{value: 1},
+          %IR.IntegerType{value: 2},
+          %IR.IntegerType{value: 3}
+        ]
+      }
+
+      assert detransform(ir) == {:{}, [line: 0], [1, 2, 3]}
+    end
+  end
+
   # --- CONTROL FLOW ---
 
   test "block" do
