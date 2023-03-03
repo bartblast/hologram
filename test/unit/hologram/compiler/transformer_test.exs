@@ -1291,6 +1291,20 @@ defmodule Hologram.Compiler.TransformerTest do
                args: []
              }
     end
+
+    test "nested in macro, without args, without parenthesis" do
+      # apply(Module1, :"MACRO-macro_1b", [__ENV__])
+      ast = {:macro_2a, [context: Module1, imports: [{0, Module2}]], Module1}
+
+      assert transform(ast) == %IR.Call{
+               module: %IR.ModuleType{
+                 module: Module2,
+                 segments: [:Hologram, :Test, :Fixtures, :Compiler, :Transformer, :Module2]
+               },
+               function: :macro_2a,
+               args: []
+             }
+    end
   end
 
   describe "case expression" do

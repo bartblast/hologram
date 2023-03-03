@@ -6,4 +6,10 @@ defmodule Hologram.Test.Fixtures.Compiler.Transformer.Module1 do
       macro_2a()
     end
   end
+
+  defmacro macro_1b do
+    quote do
+      macro_2a
+    end
+  end
 end
