@@ -1378,7 +1378,7 @@ defmodule Hologram.Compiler.TransformerTest do
           [
             {:__aliases__, [alias: Hologram.Test.Fixtures.Compiler.Transformer.Module2],
              [:InnerAlias]},
-            :macro_2a
+            :my_fun
           ]}, [], []}
 
       assert transform(ast) == %IR.Call{
@@ -1386,7 +1386,7 @@ defmodule Hologram.Compiler.TransformerTest do
                  module: Module2,
                  segments: [:Hologram, :Test, :Fixtures, :Compiler, :Transformer, :Module2]
                },
-               function: :macro_2a,
+               function: :my_fun,
                args: []
              }
     end
@@ -1397,7 +1397,7 @@ defmodule Hologram.Compiler.TransformerTest do
         {{:., [],
           [
             {:__aliases__, [alias: Module2], [:InnerAlias]},
-            :macro_2a
+            :my_fun
           ]}, [], [1, 2]}
 
       assert transform(ast) == %IR.Call{
@@ -1405,7 +1405,7 @@ defmodule Hologram.Compiler.TransformerTest do
                  module: Module2,
                  segments: [:Hologram, :Test, :Fixtures, :Compiler, :Transformer, :Module2]
                },
-               function: :macro_2a,
+               function: :my_fun,
                args: [
                  %IR.IntegerType{value: 1},
                  %IR.IntegerType{value: 2}
