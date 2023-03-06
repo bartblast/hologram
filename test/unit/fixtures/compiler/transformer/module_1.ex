@@ -52,7 +52,7 @@ defmodule Hologram.Test.Fixtures.Compiler.Transformer.Module1 do
 
   defmacro macro_1i do
     quote do
-      OutsideAlias.my_fun()
+      OuterAlias.my_fun()
     end
   end
 
@@ -70,7 +70,7 @@ defmodule Hologram.Test.Fixtures.Compiler.Transformer.Module1 do
 
   defmacro macro_1l do
     quote do
-      OutsideAlias.my_fun
+      OuterAlias.my_fun
     end
   end
 end

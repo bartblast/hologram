@@ -1432,26 +1432,26 @@ defmodule Hologram.Compiler.TransformerTest do
     end
 
     test "on alias defined in the calling module, without args, without parenthesis" do
-      # env = %{__ENV__ | aliases: [{OutsideAlias, A.B}]}
+      # env = %{__ENV__ | aliases: [{OuterAlias, A.B}]}
       # apply(Module1, :"MACRO-macro_1l", [env])
       ast =
-        {{:., [], [{:__aliases__, [alias: false], [:OutsideAlias]}, :my_fun]}, [no_parens: true],
+        {{:., [], [{:__aliases__, [alias: false], [:OuterAlias]}, :my_fun]}, [no_parens: true],
          []}
 
       assert transform(ast) == %IR.Call{
-               module: %IR.Alias{segments: [:OutsideAlias]},
+               module: %IR.Alias{segments: [:OuterAlias]},
                function: :my_fun,
                args: []
              }
     end
 
     test "on alias defined in the calling module, without args, with parenthesis" do
-      # env = %{__ENV__ | aliases: [{OutsideAlias, A.B}]}
+      # env = %{__ENV__ | aliases: [{OuterAlias, A.B}]}
       # apply(Module1, :"MACRO-macro_1i", [env])
-      ast = {{:., [], [{:__aliases__, [alias: false], [:OutsideAlias]}, :my_fun]}, [], []}
+      ast = {{:., [], [{:__aliases__, [alias: false], [:OuterAlias]}, :my_fun]}, [], []}
 
       assert transform(ast) == %IR.Call{
-               module: %IR.Alias{segments: [:OutsideAlias]},
+               module: %IR.Alias{segments: [:OuterAlias]},
                function: :my_fun,
                args: []
              }
