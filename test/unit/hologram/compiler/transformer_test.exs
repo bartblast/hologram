@@ -1344,6 +1344,18 @@ defmodule Hologram.Compiler.TransformerTest do
                ]
              }
     end
+
+    test "on symbol, without args" do
+      # apply(Module1, :"MACRO-macro_1f", [__ENV__])
+      ast =
+        {{:., [], [{:a, [], Hologram.Test.Fixtures.Compiler.Transformer.Module1}, :x]}, [], []}
+
+      assert transform(ast) == %IR.Call{
+               module: %IR.Symbol{name: :a},
+               function: :x,
+               args: []
+             }
+    end
   end
 
   describe "case expression" do
