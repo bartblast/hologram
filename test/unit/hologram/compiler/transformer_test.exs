@@ -1278,7 +1278,7 @@ defmodule Hologram.Compiler.TransformerTest do
              }
     end
 
-    test "nested in macro, without args, with parenthesis" do
+    test "imported macro nested in another macro, called without args, with parenthesis" do
       # apply(Module1, :"MACRO-macro_1a", [__ENV__])
       ast = {:macro_2a, [context: Module1, imports: [{0, Module2}]], []}
 
@@ -1292,7 +1292,7 @@ defmodule Hologram.Compiler.TransformerTest do
              }
     end
 
-    test "nested in macro, without args, without parenthesis" do
+    test "imported macro nested in another macro, called without args, without parenthesis" do
       # apply(Module1, :"MACRO-macro_1b", [__ENV__])
       ast = {:macro_2a, [context: Module1, imports: [{0, Module2}]], Module1}
 
