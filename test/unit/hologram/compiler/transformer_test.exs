@@ -1391,6 +1391,28 @@ defmodule Hologram.Compiler.TransformerTest do
              }
     end
 
+    test "on alias defined in macro module, with args" do
+      # apply(Module1, :"MACRO-macro_1j", [__ENV__])
+      ast =
+        {{:., [],
+          [
+            {:__aliases__, [alias: Module2], [:InnerAlias]},
+            :macro_2a
+          ]}, [], [1, 2]}
+
+      assert transform(ast) == %IR.Call{
+               module: %IR.ModuleType{
+                 module: Module2,
+                 segments: [:Hologram, :Test, :Fixtures, :Compiler, :Transformer, :Module2]
+               },
+               function: :macro_2a,
+               args: [
+                 %IR.IntegerType{value: 1},
+                 %IR.IntegerType{value: 2}
+               ]
+             }
+    end
+
     # don't test the variant without parenthesis, because the formatter adds parenthesis (and Elixir should infer this anyway)
     test "on alias defined in the calling module, without args" do
       # env = %{__ENV__ | aliases: [{OutsideAlias, A.B}]}
