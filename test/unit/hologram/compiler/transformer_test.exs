@@ -969,11 +969,23 @@ defmodule Hologram.Compiler.TransformerTest do
 
   # --- CONTROL FLOW ---
 
-  test "alias" do
-    # A.B
-    ast = {:__aliases__, [line: 1], [:A, :B]}
+  describe "alias" do
+    test "non-contextual" do
+      # A.B
+      ast = {:__aliases__, [line: 1], [:A, :B]}
 
-    assert transform(ast) == %IR.Alias{segments: [:A, :B]}
+      assert transform(ast) == %IR.Alias{segments: [:A, :B]}
+    end
+
+    test "contextual, e.g. aliased inside a macro" do
+      # {{:., [], [ast, :macro_2a]}, [], []} = apply(Module1, :"MACRO-macro_1c", [__ENV__])
+      ast = {:__aliases__, [alias: Module2], [:MyAlias]}
+
+      assert transform(ast) == %IR.ModuleType{
+               module: Module2,
+               segments: [:Hologram, :Test, :Fixtures, :Compiler, :Transformer, :Module2]
+             }
+    end
   end
 
   describe "anonymous function call" do
