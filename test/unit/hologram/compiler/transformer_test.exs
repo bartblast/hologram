@@ -1370,8 +1370,26 @@ defmodule Hologram.Compiler.TransformerTest do
              }
     end
 
-    # don't test the variant without parenthesis, because the formatter adds parenthesis (and Elixir should infer this anyway)
-    test "on alias defined in macro module, without args" do
+    test "on alias defined in macro module, without args, without parenthesis" do
+      # apply(Module1, :"MACRO-macro_1k", [__ENV__])
+      ast =
+        {{:., [],
+          [
+            {:__aliases__, [alias: Module2], [:InnerAlias]},
+            :my_fun
+          ]}, [no_parens: true], []}
+
+      assert transform(ast) == %IR.Call{
+               module: %IR.ModuleType{
+                 module: Module2,
+                 segments: [:Hologram, :Test, :Fixtures, :Compiler, :Transformer, :Module2]
+               },
+               function: :my_fun,
+               args: []
+             }
+    end
+
+    test "on alias defined in macro module, without args, with parenthesis" do
       # apply(Module1, :"MACRO-macro_1h", [__ENV__])
       ast =
         {{:., [],
@@ -1413,8 +1431,21 @@ defmodule Hologram.Compiler.TransformerTest do
              }
     end
 
-    # don't test the variant without parenthesis, because the formatter adds parenthesis (and Elixir should infer this anyway)
-    test "on alias defined in the calling module, without args" do
+    test "on alias defined in the calling module, without args, without parenthesis" do
+      # env = %{__ENV__ | aliases: [{OutsideAlias, A.B}]}
+      # apply(Module1, :"MACRO-macro_1l", [env])
+      ast =
+        {{:., [], [{:__aliases__, [alias: false], [:OutsideAlias]}, :my_fun]}, [no_parens: true],
+         []}
+
+      assert transform(ast) == %IR.Call{
+               module: %IR.Alias{segments: [:OutsideAlias]},
+               function: :my_fun,
+               args: []
+             }
+    end
+
+    test "on alias defined in the calling module, without args, with parenthesis" do
       # env = %{__ENV__ | aliases: [{OutsideAlias, A.B}]}
       # apply(Module1, :"MACRO-macro_1i", [env])
       ast = {{:., [], [{:__aliases__, [alias: false], [:OutsideAlias]}, :my_fun]}, [], []}
