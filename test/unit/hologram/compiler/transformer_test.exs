@@ -1038,7 +1038,7 @@ defmodule Hologram.Compiler.TransformerTest do
            }
   end
 
-  describe "call" do
+  describe "call, not nested in macro" do
     test "without args" do
       # my_fun()
       ast = {:my_fun, [line: 1], []}
@@ -1315,6 +1315,33 @@ defmodule Hologram.Compiler.TransformerTest do
                },
                function: :macro_2a,
                args: []
+             }
+    end
+  end
+
+  describe "call, nested in macro" do
+    test "without args" do
+      # apply(Module1, :"MACRO-macro_1d", [__ENV__])
+      ast = {:my_fun, [], []}
+
+      assert transform(ast) == %IR.Call{
+               module: nil,
+               function: :my_fun,
+               args: []
+             }
+    end
+
+    test "with args" do
+      # apply(Module1, :"MACRO-macro_1e", [__ENV__])
+      ast = {:my_fun, [], [1, 2]}
+
+      assert transform(ast) == %IR.Call{
+               module: nil,
+               function: :my_fun,
+               args: [
+                 %IR.IntegerType{value: 1},
+                 %IR.IntegerType{value: 2}
+               ]
              }
     end
   end
