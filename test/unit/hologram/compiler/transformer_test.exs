@@ -1369,6 +1369,25 @@ defmodule Hologram.Compiler.TransformerTest do
                ]
              }
     end
+
+    test "on alias defined in macro module, without args, without parenthesis" do
+      # apply(Module1, :"MACRO-macro_1h", [__ENV__])
+      ast =
+        {{:., [],
+          [
+            {:__aliases__, [alias: Module2], [:MyAlias]},
+            :macro_2a
+          ]}, [no_parens: true], []}
+
+      assert transform(ast) == %IR.Call{
+               module: %IR.ModuleType{
+                 module: Module2,
+                 segments: [:Hologram, :Test, :Fixtures, :Compiler, :Transformer, :Module2]
+               },
+               function: :macro_2a,
+               args: []
+             }
+    end
   end
 
   describe "case expression" do
