@@ -979,7 +979,7 @@ defmodule Hologram.Compiler.TransformerTest do
 
     test "contextual, e.g. aliased inside a macro" do
       # {{:., [], [ast, :macro_2a]}, [], []} = apply(Module1, :"MACRO-macro_1c", [__ENV__])
-      ast = {:__aliases__, [alias: Module2], [:MyAlias]}
+      ast = {:__aliases__, [alias: Module2], [:InnerAlias]}
 
       assert transform(ast) == %IR.ModuleType{
                module: Module2,
@@ -1375,7 +1375,8 @@ defmodule Hologram.Compiler.TransformerTest do
       ast =
         {{:., [],
           [
-            {:__aliases__, [alias: Module2], [:MyAlias]},
+            {:__aliases__, [alias: Hologram.Test.Fixtures.Compiler.Transformer.Module2],
+             [:InnerAlias]},
             :macro_2a
           ]}, [no_parens: true], []}
 
@@ -1385,6 +1386,20 @@ defmodule Hologram.Compiler.TransformerTest do
                  segments: [:Hologram, :Test, :Fixtures, :Compiler, :Transformer, :Module2]
                },
                function: :macro_2a,
+               args: []
+             }
+    end
+
+    test "on alias defined in the calling module, without args, without parenthesis" do
+      # env = %{__ENV__ | aliases: [{OutsideAlias, A.B}]}
+      # apply(Module1, :"MACRO-macro_1i", [env]) |> IO.inspect()
+      ast =
+        {{:., [], [{:__aliases__, [alias: false], [:OutsideAlias]}, :my_fun]}, [no_parens: true],
+         []}
+
+      assert transform(ast) == %IR.Call{
+               module: %IR.Alias{segments: [:OutsideAlias]},
+               function: :my_fun,
                args: []
              }
     end

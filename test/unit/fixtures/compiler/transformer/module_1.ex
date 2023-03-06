@@ -1,6 +1,6 @@
 defmodule Hologram.Test.Fixtures.Compiler.Transformer.Module1 do
   import Hologram.Test.Fixtures.Compiler.Transformer.Module2
-  alias Hologram.Test.Fixtures.Compiler.Transformer.Module2, as: MyAlias
+  alias Hologram.Test.Fixtures.Compiler.Transformer.Module2, as: InnerAlias
 
   defmacro macro_1a do
     quote do
@@ -16,7 +16,7 @@ defmodule Hologram.Test.Fixtures.Compiler.Transformer.Module1 do
 
   defmacro macro_1c do
     quote do
-      MyAlias.macro_2a()
+      InnerAlias.macro_2a()
     end
   end
 
@@ -46,7 +46,13 @@ defmodule Hologram.Test.Fixtures.Compiler.Transformer.Module1 do
 
   defmacro macro_1h do
     quote do
-      MyAlias.macro_2a()
+      InnerAlias.macro_2a()
+    end
+  end
+
+  defmacro macro_1i do
+    quote do
+      OutsideAlias.my_fun()
     end
   end
 end
