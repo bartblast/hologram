@@ -73,4 +73,16 @@ defmodule Hologram.Test.Fixtures.Compiler.Transformer.Module1 do
       OuterAlias.my_fun
     end
   end
+
+  defmacro macro_1m do
+    quote do
+      OuterAlias.my_fun(1, 2)
+    end
+  end
+
+  defmacro macro_1n do
+    quote do
+      macro_2b(1, 2)
+    end
+  end
 end

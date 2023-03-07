@@ -1039,7 +1039,7 @@ defmodule Hologram.Compiler.TransformerTest do
   end
 
   describe "call, not nested in macro" do
-    test "without args" do
+    test "direct, without args" do
       # my_fun()
       ast = {:my_fun, [line: 1], []}
 
@@ -1050,7 +1050,7 @@ defmodule Hologram.Compiler.TransformerTest do
              }
     end
 
-    test "with args" do
+    test "direct, with args" do
       # my_fun(1, 2)
       ast = {:my_fun, [line: 1], [1, 2]}
 
@@ -1289,38 +1289,10 @@ defmodule Hologram.Compiler.TransformerTest do
                ]
              }
     end
-
-    test "imported macro nested in another macro, called without args, with parenthesis" do
-      # apply(Module1, :"MACRO-macro_1a", [__ENV__])
-      ast = {:macro_2a, [context: Module1, imports: [{0, Module2}]], []}
-
-      assert transform(ast) == %IR.Call{
-               module: %IR.ModuleType{
-                 module: Module2,
-                 segments: [:Hologram, :Test, :Fixtures, :Compiler, :Transformer, :Module2]
-               },
-               function: :macro_2a,
-               args: []
-             }
-    end
-
-    test "imported macro nested in another macro, called without args, without parenthesis" do
-      # apply(Module1, :"MACRO-macro_1b", [__ENV__])
-      ast = {:macro_2a, [context: Module1, imports: [{0, Module2}]], Module1}
-
-      assert transform(ast) == %IR.Call{
-               module: %IR.ModuleType{
-                 module: Module2,
-                 segments: [:Hologram, :Test, :Fixtures, :Compiler, :Transformer, :Module2]
-               },
-               function: :macro_2a,
-               args: []
-             }
-    end
   end
 
   describe "call, nested in macro" do
-    test "without args" do
+    test "direct, without args" do
       # apply(Module1, :"MACRO-macro_1d", [__ENV__])
       ast = {:my_fun, [], []}
 
@@ -1331,7 +1303,7 @@ defmodule Hologram.Compiler.TransformerTest do
              }
     end
 
-    test "with args" do
+    test "direct, with args" do
       # apply(Module1, :"MACRO-macro_1e", [__ENV__])
       ast = {:my_fun, [], [1, 2]}
 
@@ -1454,6 +1426,66 @@ defmodule Hologram.Compiler.TransformerTest do
                module: %IR.Alias{segments: [:OuterAlias]},
                function: :my_fun,
                args: []
+             }
+    end
+
+    test "on alias defined in the calling module, with args" do
+      # env = %{__ENV__ | aliases: [{OuterAlias, A.B}]}
+      # apply(Module1, :"MACRO-macro_1m", [env])
+      ast = {{:., [], [{:__aliases__, [alias: false], [:OuterAlias]}, :my_fun]}, [], [1, 2]}
+
+      assert transform(ast) == %IR.Call{
+               module: %IR.Alias{segments: [:OuterAlias]},
+               function: :my_fun,
+               args: [
+                 %IR.IntegerType{value: 1},
+                 %IR.IntegerType{value: 2}
+               ]
+             }
+    end
+
+    test "imported macro, without args, without parenthesis" do
+      # apply(Module1, :"MACRO-macro_1b", [__ENV__])
+      ast = {:macro_2a, [context: Module1, imports: [{0, Module2}]], Module1}
+
+      assert transform(ast) == %IR.Call{
+               module: %IR.ModuleType{
+                 module: Module2,
+                 segments: [:Hologram, :Test, :Fixtures, :Compiler, :Transformer, :Module2]
+               },
+               function: :macro_2a,
+               args: []
+             }
+    end
+
+    test "imported macro, without args, with parenthesis" do
+      # apply(Module1, :"MACRO-macro_1a", [__ENV__])
+      ast = {:macro_2a, [context: Module1, imports: [{0, Module2}]], []}
+
+      assert transform(ast) == %IR.Call{
+               module: %IR.ModuleType{
+                 module: Module2,
+                 segments: [:Hologram, :Test, :Fixtures, :Compiler, :Transformer, :Module2]
+               },
+               function: :macro_2a,
+               args: []
+             }
+    end
+
+    test "imported macro, with args" do
+      # apply(Module1, :"MACRO-macro_1n", [__ENV__])
+      ast = {:macro_2b, [context: Module1, imports: [{2, Module2}]], [1, 2]}
+
+      assert transform(ast) == %IR.Call{
+               module: %IR.ModuleType{
+                 module: Module2,
+                 segments: [:Hologram, :Test, :Fixtures, :Compiler, :Transformer, :Module2]
+               },
+               function: :macro_2b,
+               args: [
+                 %IR.IntegerType{value: 1},
+                 %IR.IntegerType{value: 2}
+               ]
              }
     end
   end
