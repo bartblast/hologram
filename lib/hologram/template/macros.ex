@@ -6,6 +6,8 @@ defmodule Hologram.Template.Macros do
             unquote(status) = evaluated_status,
             unquote(tokens) = evaluated_tokens
           ) do
+        result = unquote(body)
+
         if Application.get_env(:hologram, :debug_tag_assembler) do
           IO.puts("\n........................................\n")
           IO.puts("context")
@@ -16,9 +18,12 @@ defmodule Hologram.Template.Macros do
           IO.puts("")
           IO.puts("tokens")
           IO.inspect(evaluated_tokens)
+          IO.puts("")
+          IO.puts("result")
+          IO.inspect(result)
         end
 
-        unquote(body)
+        result
       end
     end
   end

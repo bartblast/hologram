@@ -5,6 +5,8 @@ defmodule Hologram.Compiler.Macros do
             unquote(ir) = evaluated_ir,
             unquote(context) = evaluated_context
           ) do
+        result = unquote(body)
+
         if Application.get_env(:hologram, :debug_expander) do
           IO.puts("\n........................................EXPAND\n")
           IO.puts("ir")
@@ -12,9 +14,12 @@ defmodule Hologram.Compiler.Macros do
           IO.puts("")
           IO.puts("context")
           IO.inspect(evaluated_context)
+          IO.puts("")
+          IO.puts("result")
+          IO.inspect(result)
         end
 
-        unquote(body)
+        result
       end
     end
   end
@@ -22,13 +27,18 @@ defmodule Hologram.Compiler.Macros do
   defmacro transform({:when, _, [{:_, _, [ast]}, guard]}, do: body) do
     quote do
       def transform(unquote(ast) = evaluated_ast) when unquote(guard) do
+        result = unquote(body)
+
         if Application.get_env(:hologram, :debug_transformer) do
           IO.puts("\n........................................TRANSFORM\n")
           IO.puts("ast")
           IO.inspect(evaluated_ast)
+          IO.puts("")
+          IO.puts("result")
+          IO.inspect(result)
         end
 
-        unquote(body)
+        result
       end
     end
   end
@@ -36,13 +46,18 @@ defmodule Hologram.Compiler.Macros do
   defmacro transform(ast, do: body) do
     quote do
       def transform(unquote(ast) = evaluated_ast) do
+        result = unquote(body)
+
         if Application.get_env(:hologram, :debug_transformer) do
           IO.puts("\n........................................TRANSFORM\n")
           IO.puts("ast")
           IO.inspect(evaluated_ast)
+          IO.puts("")
+          IO.puts("result")
+          IO.inspect(result)
         end
 
-        unquote(body)
+        result
       end
     end
   end
