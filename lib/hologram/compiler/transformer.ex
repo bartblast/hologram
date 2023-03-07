@@ -117,7 +117,7 @@ defmodule Hologram.Compiler.Transformer do
     }
   end
 
-  transform({:@, _, [{name, _, nil}]}) do
+  transform _({:@, _, [{name, _, term}]}) when not is_list(term) do
     %IR.ModuleAttributeOperator{name: name}
   end
 
