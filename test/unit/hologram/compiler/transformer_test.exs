@@ -5,7 +5,6 @@ defmodule Hologram.Compiler.TransformerTest do
   alias Hologram.Compiler.IR
   alias Hologram.Test.Fixtures.Compiler.Transformer.Module1
   alias Hologram.Test.Fixtures.Compiler.Transformer.Module2
-  alias Hologram.Test.Fixtures.Compiler.Transformer.Module3
 
   # --- OPERATORS ---
 
@@ -226,10 +225,10 @@ defmodule Hologram.Compiler.TransformerTest do
     end
 
     test "AST returned from macro" do
-      # apply(Module3, :"MACRO-macro_3a", [__ENV__])
+      # apply(Module1, :"MACRO-macro_module_attribute_operator_1", [__ENV__])
       ast =
-        {:@, [context: Module3, imports: [{1, Kernel}]],
-         [{:my_attr, [context: Module3], Module3}]}
+        {:@, [context: Module1, imports: [{1, Kernel}]],
+         [{:my_attr, [context: Module1], Module1}]}
 
       assert transform(ast) == %IR.ModuleAttributeOperator{name: :my_attr}
     end
