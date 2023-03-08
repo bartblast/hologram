@@ -1049,8 +1049,10 @@ defmodule Hologram.Compiler.TransformerTest do
            }
   end
 
-  describe "call, not nested in macro" do
-    test "direct, without args" do
+  describe "call, AST obtained directly from source file" do
+    # direct call, without args, without parenthesis case is tested as part of the symbol tests
+
+    test "direct, without args, with parenthesis" do
       # my_fun()
       ast = {:my_fun, [line: 1], []}
 
@@ -1075,7 +1077,9 @@ defmodule Hologram.Compiler.TransformerTest do
              }
     end
 
-    test "on symbol, without args" do
+    # call on symbol, without args, without parenthesis case is tested as part of the dot operator tests
+
+    test "on symbol, without args, with parenthesis" do
       # a.x()
       ast = {{:., [line: 1], [{:a, [line: 1], nil}, :x]}, [line: 1], []}
 
@@ -1138,6 +1142,8 @@ defmodule Hologram.Compiler.TransformerTest do
              }
     end
 
+    # call on module attribute, without args, without parenthesis case is tested as part of the dot operator tests
+
     test "on module attribute, without args" do
       # @my_attr.my_fun()
       ast =
@@ -1165,6 +1171,8 @@ defmodule Hologram.Compiler.TransformerTest do
                ]
              }
     end
+
+    # call on expression, without args, without parenthesis case is tested as part of the dot operator tests
 
     test "on expression, without args" do
       # (3 + 4).my_fun()
@@ -1302,7 +1310,7 @@ defmodule Hologram.Compiler.TransformerTest do
     end
   end
 
-  describe "call, nested in macro" do
+  describe "call, AST returned from macro" do
     test "direct, without args" do
       # apply(Module1, :"MACRO-macro_1d", [__ENV__])
       ast = {:my_fun, [], []}
