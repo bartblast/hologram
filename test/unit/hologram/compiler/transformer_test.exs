@@ -1283,14 +1283,14 @@ defmodule Hologram.Compiler.TransformerTest do
     end
 
     test "string interpolation" do
-      # "#{test}"
+      # "#{my_var}"
       ast =
         {:<<>>, [line: 1],
          [
            {:"::", [line: 1],
             [
               {{:., [line: 1], [{:__aliases__, [alias: false], [:Kernel]}, :to_string]},
-               [line: 1], [{:test, [line: 1], nil}]},
+               [line: 1], [{:my_var, [line: 1], nil}]},
               {:binary, [line: 1], nil}
             ]}
          ]}
@@ -1301,7 +1301,7 @@ defmodule Hologram.Compiler.TransformerTest do
                    left: %IR.Call{
                      module: %IR.Alias{segments: [:Kernel]},
                      function: :to_string,
-                     args: [%IR.Symbol{name: :test}]
+                     args: [%IR.Symbol{name: :my_var}]
                    },
                    right: :binary
                  }
@@ -1617,6 +1617,32 @@ defmodule Hologram.Compiler.TransformerTest do
                  %IR.IntegerType{value: 2}
                ],
                erlang: true
+             }
+    end
+
+    test "string interpolation" do
+      # apply(Module1, :"MACRO-macro_call_25", [__ENV__])
+      ast =
+        {:<<>>, [],
+         [
+           {:"::", [],
+            [
+              {{:., [], [Kernel, :to_string]}, [], [{:my_var, [], Module1}]},
+              {:binary, [], Module1}
+            ]}
+         ]}
+
+      assert transform(ast) == %IR.BinaryType{
+               parts: [
+                 %IR.TypeOperator{
+                   left: %IR.Call{
+                     module: %IR.Alias{segments: [:Kernel]},
+                     function: :to_string,
+                     args: [%IR.Symbol{name: :my_var}]
+                   },
+                   right: :binary
+                 }
+               ]
              }
     end
 

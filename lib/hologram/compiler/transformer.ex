@@ -423,12 +423,24 @@ defmodule Hologram.Compiler.Transformer do
   end
 
   transform _({{:., _, [module, function]}, _, args}) when is_atom(module) do
-    %IR.FunctionCall{
-      module: module,
-      function: function,
-      args: transform_list(args),
-      erlang: true
-    }
+    args = transform_list(args)
+
+    if Reflection.is_alias?(module) do
+      segments = Helpers.alias_segments(module)
+
+      %IR.Call{
+        module: %IR.Alias{segments: segments},
+        function: function,
+        args: args
+      }
+    else
+      %IR.FunctionCall{
+        module: module,
+        function: function,
+        args: args,
+        erlang: true
+      }
+    end
   end
 
   transform({:if, _, [condition, [do: do_block, else: else_block]]}) do
