@@ -86,6 +86,18 @@ defmodule Hologram.Test.Fixtures.Compiler.Transformer.Module1 do
     end
   end
 
+  defmacro macro_call_15 do
+    quote do
+      @my_attr.my_fun()
+    end
+  end
+
+  defmacro macro_call_16 do
+    quote do
+      @my_attr.my_fun(1, 2)
+    end
+  end
+
   defmacro macro_module_attribute_operator_1 do
     quote do
       @my_attr

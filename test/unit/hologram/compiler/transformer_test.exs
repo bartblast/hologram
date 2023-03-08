@@ -1311,7 +1311,9 @@ defmodule Hologram.Compiler.TransformerTest do
   end
 
   describe "call, AST returned from macro" do
-    test "direct, without args" do
+    # direct call, without args, without parenthesis case is tested as part of the symbol tests
+
+    test "direct, without args, with parenthesis" do
       # apply(Module1, :"MACRO-macro_call_4", [__ENV__])
       ast = {:my_fun, [], []}
 
@@ -1336,7 +1338,9 @@ defmodule Hologram.Compiler.TransformerTest do
              }
     end
 
-    test "on symbol, without args" do
+    # call on symbol, without args, without parenthesis case is tested as part of the dot operator tests
+
+    test "on symbol, without args, with parenthesis" do
       # apply(Module1, :"MACRO-macro_call_6", [__ENV__])
       ast = {{:., [], [{:a, [], Module1}, :x]}, [], []}
 
@@ -1455,6 +1459,45 @@ defmodule Hologram.Compiler.TransformerTest do
 
       assert transform(ast) == %IR.Call{
                module: %IR.Alias{segments: [:OuterAlias]},
+               function: :my_fun,
+               args: [
+                 %IR.IntegerType{value: 1},
+                 %IR.IntegerType{value: 2}
+               ]
+             }
+    end
+
+    # call on module attribute, without args, without parenthesis case is tested as part of the dot operator tests
+
+    test "on module attribute, without args, with parenthesis" do
+      # apply(Module1, :"MACRO-macro_call_15", [__ENV__])
+      ast =
+        {{:., [],
+          [
+            {:@, [context: Module1, imports: [{1, Kernel}]],
+             [{:my_attr, [context: Module1], Module1}]},
+            :my_fun
+          ]}, [], []}
+
+      assert transform(ast) == %IR.Call{
+               module: %IR.ModuleAttributeOperator{name: :my_attr},
+               function: :my_fun,
+               args: []
+             }
+    end
+
+    test "on module attribute, with args" do
+      # apply(Module1, :"MACRO-macro_call_16", [__ENV__])
+      ast =
+        {{:., [],
+          [
+            {:@, [context: Module1, imports: [{1, Kernel}]],
+             [{:my_attr, [context: Module1], Module1}]},
+            :my_fun
+          ]}, [], [1, 2]}
+
+      assert transform(ast) == %IR.Call{
+               module: %IR.ModuleAttributeOperator{name: :my_attr},
                function: :my_fun,
                args: [
                  %IR.IntegerType{value: 1},
