@@ -1545,6 +1545,42 @@ defmodule Hologram.Compiler.TransformerTest do
              }
     end
 
+    test "on __MODULE__ pseudo-variable, without args, without parenthesis" do
+      # apply(Module1, :"MACRO-macro_call_19", [__ENV__])
+      ast = {{:., [], [{:__MODULE__, [], Module1}, :my_fun]}, [no_parens: true], []}
+
+      assert transform(ast) == %IR.Call{
+               module: %IR.ModulePseudoVariable{},
+               function: :my_fun,
+               args: []
+             }
+    end
+
+    test "on __MODULE__ pseudo-variable, without args, with parenthesis" do
+      # apply(Module1, :"MACRO-macro_call_20", [__ENV__])
+      ast = {{:., [], [{:__MODULE__, [], Module1}, :my_fun]}, [], []}
+
+      assert transform(ast) == %IR.Call{
+               module: %IR.ModulePseudoVariable{},
+               function: :my_fun,
+               args: []
+             }
+    end
+
+    test "on __MODULE__ pseudo-variable, with args" do
+      # apply(Module1, :"MACRO-macro_call_21", [__ENV__])
+      ast = {{:., [], [{:__MODULE__, [], Module1}, :my_fun]}, [], [1, 2]}
+
+      assert transform(ast) == %IR.Call{
+               module: %IR.ModulePseudoVariable{},
+               function: :my_fun,
+               args: [
+                 %IR.IntegerType{value: 1},
+                 %IR.IntegerType{value: 2}
+               ]
+             }
+    end
+
     test "imported macro, without args, without parenthesis" do
       # apply(Module1, :"MACRO-macro_call_2", [__ENV__])
       ast = {:macro_2a, [context: Module1, imports: [{0, Module2}]], Module1}
