@@ -989,7 +989,7 @@ defmodule Hologram.Compiler.TransformerTest do
     end
 
     test "contextual, e.g. aliased inside a macro" do
-      # {{:., [], [ast, :macro_2a]}, [], []} = apply(Module1, :"MACRO-macro_1c", [__ENV__])
+      # {{:., [], [ast, :macro_2a]}, [], []} = apply(Module1, :"MACRO-macro_call_3", [__ENV__])
       ast = {:__aliases__, [alias: Module2], [:InnerAlias]}
 
       assert transform(ast) == %IR.ModuleType{
@@ -1312,7 +1312,7 @@ defmodule Hologram.Compiler.TransformerTest do
 
   describe "call, AST returned from macro" do
     test "direct, without args" do
-      # apply(Module1, :"MACRO-macro_1d", [__ENV__])
+      # apply(Module1, :"MACRO-macro_call_4", [__ENV__])
       ast = {:my_fun, [], []}
 
       assert transform(ast) == %IR.Call{
@@ -1323,7 +1323,7 @@ defmodule Hologram.Compiler.TransformerTest do
     end
 
     test "direct, with args" do
-      # apply(Module1, :"MACRO-macro_1e", [__ENV__])
+      # apply(Module1, :"MACRO-macro_call_5", [__ENV__])
       ast = {:my_fun, [], [1, 2]}
 
       assert transform(ast) == %IR.Call{
@@ -1337,7 +1337,7 @@ defmodule Hologram.Compiler.TransformerTest do
     end
 
     test "on symbol, without args" do
-      # apply(Module1, :"MACRO-macro_1f", [__ENV__])
+      # apply(Module1, :"MACRO-macro_call_6", [__ENV__])
       ast = {{:., [], [{:a, [], Module1}, :x]}, [], []}
 
       assert transform(ast) == %IR.Call{
@@ -1348,7 +1348,7 @@ defmodule Hologram.Compiler.TransformerTest do
     end
 
     test "on symbol, with args" do
-      # apply(Module1, :"MACRO-macro_1g", [__ENV__])
+      # apply(Module1, :"MACRO-macro_call_7", [__ENV__])
       ast = {{:., [], [{:a, [], Module1}, :x]}, [], [1, 2]}
 
       assert transform(ast) == %IR.Call{
@@ -1362,7 +1362,7 @@ defmodule Hologram.Compiler.TransformerTest do
     end
 
     test "on alias defined in macro module, without args, without parenthesis" do
-      # apply(Module1, :"MACRO-macro_1k", [__ENV__])
+      # apply(Module1, :"MACRO-macro_call_11", [__ENV__])
       ast =
         {{:., [],
           [
@@ -1381,7 +1381,7 @@ defmodule Hologram.Compiler.TransformerTest do
     end
 
     test "on alias defined in macro module, without args, with parenthesis" do
-      # apply(Module1, :"MACRO-macro_1h", [__ENV__])
+      # apply(Module1, :"MACRO-macro_call_8", [__ENV__])
       ast =
         {{:., [],
           [
@@ -1401,7 +1401,7 @@ defmodule Hologram.Compiler.TransformerTest do
     end
 
     test "on alias defined in macro module, with args" do
-      # apply(Module1, :"MACRO-macro_1j", [__ENV__])
+      # apply(Module1, :"MACRO-macro_call_10", [__ENV__])
       ast =
         {{:., [],
           [
@@ -1424,7 +1424,7 @@ defmodule Hologram.Compiler.TransformerTest do
 
     test "on alias defined in the calling module, without args, without parenthesis" do
       # env = %{__ENV__ | aliases: [{OuterAlias, A.B}]}
-      # apply(Module1, :"MACRO-macro_1l", [env])
+      # apply(Module1, :"MACRO-macro_call_12", [env])
       ast =
         {{:., [], [{:__aliases__, [alias: false], [:OuterAlias]}, :my_fun]}, [no_parens: true],
          []}
@@ -1438,7 +1438,7 @@ defmodule Hologram.Compiler.TransformerTest do
 
     test "on alias defined in the calling module, without args, with parenthesis" do
       # env = %{__ENV__ | aliases: [{OuterAlias, A.B}]}
-      # apply(Module1, :"MACRO-macro_1i", [env])
+      # apply(Module1, :"MACRO-macro_call_9", [env])
       ast = {{:., [], [{:__aliases__, [alias: false], [:OuterAlias]}, :my_fun]}, [], []}
 
       assert transform(ast) == %IR.Call{
@@ -1450,7 +1450,7 @@ defmodule Hologram.Compiler.TransformerTest do
 
     test "on alias defined in the calling module, with args" do
       # env = %{__ENV__ | aliases: [{OuterAlias, A.B}]}
-      # apply(Module1, :"MACRO-macro_1m", [env])
+      # apply(Module1, :"MACRO-macro_call_13", [env])
       ast = {{:., [], [{:__aliases__, [alias: false], [:OuterAlias]}, :my_fun]}, [], [1, 2]}
 
       assert transform(ast) == %IR.Call{
@@ -1464,7 +1464,7 @@ defmodule Hologram.Compiler.TransformerTest do
     end
 
     test "imported macro, without args, without parenthesis" do
-      # apply(Module1, :"MACRO-macro_1b", [__ENV__])
+      # apply(Module1, :"MACRO-macro_call_2", [__ENV__])
       ast = {:macro_2a, [context: Module1, imports: [{0, Module2}]], Module1}
 
       assert transform(ast) == %IR.Call{
@@ -1478,7 +1478,7 @@ defmodule Hologram.Compiler.TransformerTest do
     end
 
     test "imported macro, without args, with parenthesis" do
-      # apply(Module1, :"MACRO-macro_1a", [__ENV__])
+      # apply(Module1, :"MACRO-macro_call_1", [__ENV__])
       ast = {:macro_2a, [context: Module1, imports: [{0, Module2}]], []}
 
       assert transform(ast) == %IR.Call{
@@ -1492,7 +1492,7 @@ defmodule Hologram.Compiler.TransformerTest do
     end
 
     test "imported macro, with args" do
-      # apply(Module1, :"MACRO-macro_1n", [__ENV__])
+      # apply(Module1, :"MACRO-macro_call_14", [__ENV__])
       ast = {:macro_2b, [context: Module1, imports: [{2, Module2}]], [1, 2]}
 
       assert transform(ast) == %IR.Call{
