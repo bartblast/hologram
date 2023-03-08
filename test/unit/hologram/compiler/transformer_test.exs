@@ -1506,6 +1506,45 @@ defmodule Hologram.Compiler.TransformerTest do
              }
     end
 
+    # call on expression, without args, without parenthesis case is tested as part of the dot operator tests
+
+    test "on expression, without args" do
+      # apply(Module1, :"MACRO-macro_call_17", [__ENV__])
+      ast =
+        {{:., [],
+          [{:+, [context: Module1, imports: [{1, Kernel}, {2, Kernel}]], [3, 4]}, :my_fun]}, [],
+         []}
+
+      assert transform(ast) == %IR.Call{
+               module: %IR.AdditionOperator{
+                 left: %IR.IntegerType{value: 3},
+                 right: %IR.IntegerType{value: 4}
+               },
+               function: :my_fun,
+               args: []
+             }
+    end
+
+    test "on expression, with args" do
+      # apply(Module1, :"MACRO-macro_call_18", [__ENV__])
+      ast =
+        {{:., [],
+          [{:+, [context: Module1, imports: [{1, Kernel}, {2, Kernel}]], [3, 4]}, :my_fun]}, [],
+         [1, 2]}
+
+      assert transform(ast) == %IR.Call{
+               module: %IR.AdditionOperator{
+                 left: %IR.IntegerType{value: 3},
+                 right: %IR.IntegerType{value: 4}
+               },
+               function: :my_fun,
+               args: [
+                 %IR.IntegerType{value: 1},
+                 %IR.IntegerType{value: 2}
+               ]
+             }
+    end
+
     test "imported macro, without args, without parenthesis" do
       # apply(Module1, :"MACRO-macro_call_2", [__ENV__])
       ast = {:macro_2a, [context: Module1, imports: [{0, Module2}]], Module1}
