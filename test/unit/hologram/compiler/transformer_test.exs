@@ -1581,6 +1581,45 @@ defmodule Hologram.Compiler.TransformerTest do
              }
     end
 
+    test "Erlang function, without args, without parenthesis" do
+      # apply(Module1, :"MACRO-macro_call_22", [__ENV__])
+      ast = {{:., [], [:my_module, :my_fun]}, [no_parens: true], []}
+
+      assert transform(ast) == %IR.FunctionCall{
+               module: :my_module,
+               function: :my_fun,
+               args: [],
+               erlang: true
+             }
+    end
+
+    test "Erlang function, without args, with parenthesis" do
+      # apply(Module1, :"MACRO-macro_call_23", [__ENV__])
+      ast = {{:., [], [:my_module, :my_fun]}, [], []}
+
+      assert transform(ast) == %IR.FunctionCall{
+               module: :my_module,
+               function: :my_fun,
+               args: [],
+               erlang: true
+             }
+    end
+
+    test "Erlang function, with args" do
+      # apply(Module1, :"MACRO-macro_call_24", [__ENV__])
+      ast = {{:., [], [:my_module, :my_fun]}, [], [1, 2]}
+
+      assert transform(ast) == %IR.FunctionCall{
+               module: :my_module,
+               function: :my_fun,
+               args: [
+                 %IR.IntegerType{value: 1},
+                 %IR.IntegerType{value: 2}
+               ],
+               erlang: true
+             }
+    end
+
     test "imported macro, without args, without parenthesis" do
       # apply(Module1, :"MACRO-macro_call_2", [__ENV__])
       ast = {:macro_2a, [context: Module1, imports: [{0, Module2}]], Module1}

@@ -128,6 +128,24 @@ defmodule Hologram.Test.Fixtures.Compiler.Transformer.Module1 do
     end
   end
 
+  defmacro macro_call_22 do
+    quote do
+      :my_module.my_fun
+    end
+  end
+
+  defmacro macro_call_23 do
+    quote do
+      :my_module.my_fun()
+    end
+  end
+
+  defmacro macro_call_24 do
+    quote do
+      :my_module.my_fun(1, 2)
+    end
+  end
+
   defmacro macro_module_attribute_operator_1 do
     quote do
       @my_attr
