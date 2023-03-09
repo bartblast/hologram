@@ -6,17 +6,4 @@ defmodule Hologram.Test.Fixtures.Compiler.Expander.Module3 do
       macro_2a()
     end
   end
-
-  defmacro macro_3b do
-    quote do
-      macro_2a
-    end
-  end
-
-  defmacro macro_3c do
-    quote do
-      macro_2b()
-      300
-    end
-  end
 end

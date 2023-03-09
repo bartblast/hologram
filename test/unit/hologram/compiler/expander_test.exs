@@ -677,7 +677,7 @@ defmodule Hologram.Compiler.ExpanderTest do
                 ], context}
     end
 
-    test "macro called without alias or args, returning single expression which doesn't change the context" do
+    test "imported macro called without alias or args, which returns single expression and doesn't change the context" do
       ir = %IR.Call{module: nil, function: :macro_2a, args: []}
 
       context = %Context{
@@ -736,7 +736,7 @@ defmodule Hologram.Compiler.ExpanderTest do
                {[%IR.IntegerType{value: 100}, %IR.IntegerType{value: 200}], context}
     end
 
-    test "macro which changes the context (adds an alias)" do
+    test "macro which adds an alias to the context" do
       ir = %IR.Call{module: nil, function: :macro_2c, args: []}
 
       context = %Context{
@@ -748,53 +748,16 @@ defmodule Hologram.Compiler.ExpanderTest do
                 %{context | aliases: %{C: [:A, :B]}}}
     end
 
-    #   test "nested single expression macros, with parenthesis" do
-    #     ir = %IR.Call{module: nil, function: :macro_3a, args: []}
+    test "nested macros" do
+      ir = %IR.Call{module: nil, function: :macro_3a, args: []}
 
-    #     context = %Context{
-    #       macros: %{macro_3a: %{0 => Hologram.Test.Fixtures.Compiler.Expander.Module3}},
-    #       module: A.B
-    #     }
+      context = %Context{
+        macros: %{macro_3a: %{0 => Hologram.Test.Fixtures.Compiler.Expander.Module3}},
+        module: A.B
+      }
 
-    #     result = Expander.expand(ir, context)
-    #     expected = {[%IR.IntegerType{value: 123}], context}
-
-    #     assert result == expected
-    #   end
-
-    #   test "nested macros without parenthesis" do
-    #     ir = %IR.Call{module: nil, function: :macro_3b, args: []}
-
-    #     context = %Context{
-    #       macros: %{macro_3b: %{0 => Hologram.Test.Fixtures.Compiler.Expander.Module3}},
-    #       module: A.B
-    #     }
-
-    #     result = Expander.expand(ir, context)
-    #     expected = {[%IR.IntegerType{value: 123}], context}
-
-    #     assert result == expected
-    #   end
-
-    #   test "nested multiple expressions macros" do
-    #     ir = %IR.Call{module: nil, function: :macro_3c, args: []}
-
-    #     context = %Context{
-    #       macros: %{macro_3c: %{0 => Hologram.Test.Fixtures.Compiler.Expander.Module3}},
-    #       module: A.B
-    #     }
-
-    #     result = Expander.expand(ir, context)
-
-    #     expected =
-    #       {[
-    #          %IR.IntegerType{value: 100},
-    #          %IR.IntegerType{value: 200},
-    #          %IR.IntegerType{value: 300}
-    #        ], context}
-
-    #     assert result == expected
-    #   end
+      assert expand(ir, context) == {[%IR.IntegerType{value: 123}], context}
+    end
   end
 
   test "function call" do
