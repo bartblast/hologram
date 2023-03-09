@@ -23,6 +23,21 @@ defmodule Hologram.Compiler.ExpanderTest do
 
   # --- OPERATORS ---
 
+  test "access operator" do
+    ir = %IR.AccessOperator{
+      data: %IR.Symbol{name: :x},
+      key: %IR.ModuleAttributeOperator{name: :c}
+    }
+
+    context = %{@context_with_module_attributes | variables: MapSet.new([:x])}
+
+    assert expand(ir, context) ==
+             {%IR.AccessOperator{
+                data: %IR.Variable{name: :x},
+                key: %IR.IntegerType{value: 3}
+              }, context}
+  end
+
   test "addition operator" do
     ir = %IR.AdditionOperator{
       left: %IR.ModuleAttributeOperator{name: :a},

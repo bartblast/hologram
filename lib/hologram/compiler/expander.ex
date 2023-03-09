@@ -22,6 +22,13 @@ defmodule Hologram.Compiler.Expander do
 
   # --- OPERATORS ---
 
+  expand(%IR.AccessOperator{data: data, key: key} = ir, %Context{} = context) do
+    {data, _new_context} = expand(data, context)
+    {key, _new_context} = expand(key, context)
+
+    {%{ir | data: data, key: key}, context}
+  end
+
   expand(%IR.AdditionOperator{} = ir, %Context{} = context) do
     expand_binary_operator(ir, context)
   end
