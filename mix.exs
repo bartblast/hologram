@@ -13,6 +13,9 @@ defmodule Hologram.MixProject do
     ]
   end
 
+  defp elixirc_paths(:test), do: ["lib", "test/elixir/fixtures", "test/elixir/support"]
+  defp elixirc_paths(_), do: ["lib"]
+
   def package do
     [
       files: ["lib", "mix.exs", "README.md"],
@@ -30,7 +33,9 @@ defmodule Hologram.MixProject do
         "Full stack isomorphic Elixir web framework that can be used on top of Phoenix.",
       elixir: "~> 1.0",
       package: package(),
+      elixirc_paths: elixirc_paths(Mix.env()),
       start_permanent: Mix.env() == :prod,
+      test_paths: ["test/elixir"],
       version: "0.1.0"
     ]
   end

@@ -5,9 +5,7 @@ defmodule Hologram.MixProject do
     [
       aliases: aliases(),
       compilers: Mix.compilers(),
-      elixirc_paths: elixirc_paths(Mix.env()),
-      preferred_cli_env: preferred_cli_env(),
-      test_paths: ["test/unit"]
+      preferred_cli_env: preferred_cli_env()
     ]
   end
 
@@ -43,9 +41,6 @@ defmodule Hologram.MixProject do
       {:phoenix, "~> 1.6"}
     ]
   end
-
-  defp elixirc_paths(:test), do: ["lib", "test/unit/fixtures", "test/unit/support"]
-  defp elixirc_paths(_), do: ["lib"]
 
   def is_dep? do
     __MODULE__.module_info()[:compile][:source]
