@@ -51,16 +51,17 @@ jobs:
           ${{ runner.os }}-mix-${{ env.cache-name }}-     
 
     # Step: Define how to cache test app deps. Restores existing cache if present.
-    - name: Cache test app deps
-      id: cache-e2e-app-deps
-      uses: actions/cache@v3
-      env:
-        cache-name: cache-elixir-e2e-app-deps
-      with:
-        path: test/e2e/deps
-        key: ${{ runner.os }}-mix-${{ env.cache-name }}-${{ hashFiles('test/e2e/mix.lock') }}
-        restore-keys: |
-          ${{ runner.os }}-mix-${{ env.cache-name }}-             
+    # TODO: uncomment when E2E tests are implemented
+    # - name: Cache test app deps
+    #   id: cache-e2e-app-deps
+    #   uses: actions/cache@v3
+    #   env:
+    #     cache-name: cache-elixir-e2e-app-deps
+    #   with:
+    #     path: test/e2e/deps
+    #     key: ${{ runner.os }}-mix-${{ env.cache-name }}-${{ hashFiles('test/e2e/mix.lock') }}
+    #     restore-keys: |
+    #       ${{ runner.os }}-mix-${{ env.cache-name }}-             
 
     # Step: Define how to cache the lib `_build` directory. After the first run,
     # this speeds up tests runs a lot. This includes not re-compiling our
@@ -80,17 +81,18 @@ jobs:
     # Step: Define how to cache the test app `_build` directory. After the first run,
     # this speeds up tests runs a lot. This includes not re-compiling our
     # project's downloaded deps every run.
-    - name: Cache test app build
-      id: cache-e2e-app-build
-      uses: actions/cache@v3
-      env:
-        cache-name: cache-elixir-e2e-app-build
-      with:
-        path: test/e2e/_build
-        key: ${{ runner.os }}-mix-${{ env.cache-name }}-${{ hashFiles('test/e2e/mix.lock') }}
-        restore-keys: |
-          ${{ runner.os }}-mix-${{ env.cache-name }}-
-          ${{ runner.os }}-mix-                 
+    # TODO: uncomment when E2E tests are implemented
+    # - name: Cache test app build
+    #   id: cache-e2e-app-build
+    #   uses: actions/cache@v3
+    #   env:
+    #     cache-name: cache-elixir-e2e-app-build
+    #   with:
+    #     path: test/e2e/_build
+    #     key: ${{ runner.os }}-mix-${{ env.cache-name }}-${{ hashFiles('test/e2e/mix.lock') }}
+    #     restore-keys: |
+    #       ${{ runner.os }}-mix-${{ env.cache-name }}-
+    #       ${{ runner.os }}-mix-                 
 
     # Step: Download lib dependencies. If unchanged, uses
     # the cached version.
@@ -111,18 +113,22 @@ jobs:
       run: mix test
 
     # Step: Download test app dependencies.
-    - name: Install test app dependencies
-      run: cd test/e2e && mix deps.get        
+    # TODO: uncomment when E2E tests are implemented
+    # - name: Install test app dependencies
+    #   run: cd test/e2e && mix deps.get        
 
     # Step: Compile the test app treating any warnings as errors.
-    - name: Check test app compiles without warnings
-      run: cd test/e2e && mix compile --warnings-as-errors
+    # TODO: uncomment when E2E tests are implemented
+    # - name: Check test app compiles without warnings
+    #   run: cd test/e2e && mix compile --warnings-as-errors
 
     # Step: Check that the test app code has already been formatted.
     # This step fails if something was found unformatted.
-    - name: Check test app code formatted
-      run: cd test/e2e && mix format --check-formatted
+    # TODO: uncomment when E2E tests are implemented
+    # - name: Check test app code formatted
+    #   run: cd test/e2e && mix format --check-formatted
 
     # Step: Execute the E2E tests.
-    - name: Run E2E tests
-      run: cd test/e2e && mix test
+    # TODO: uncomment when E2E tests are implemented
+    # - name: Run E2E tests
+    #   run: cd test/e2e && mix test
