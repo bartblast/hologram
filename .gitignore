@@ -24,3 +24,6 @@ hologram-*.tar
 
 # Temporary files, for example, from tests.
 /tmp/
+
+# Elixir Language Server.
+/.elixir_ls/*
