@@ -4,18 +4,10 @@ defmodule Hologram.MixProject do
   def project do
     [
       aliases: aliases(),
-      app: :hologram,
       compilers: Mix.compilers(),
-      deps: deps(),
-      description:
-        "Full stack isomorphic Elixir web framework that can be used on top of Phoenix.",
-      elixir: "~> 1.0",
       elixirc_paths: elixirc_paths(Mix.env()),
-      package: package(),
       preferred_cli_env: preferred_cli_env(),
-      start_permanent: Mix.env() == :prod,
-      test_paths: ["test/unit"],
-      version: "0.1.0"
+      test_paths: ["test/unit"]
     ]
   end
 
@@ -59,15 +51,6 @@ defmodule Hologram.MixProject do
     __MODULE__.module_info()[:compile][:source]
     |> to_string()
     |> String.ends_with?("/deps/hologram/mix.exs")
-  end
-
-  def package do
-    [
-      files: ["lib", "mix.exs", "README.md"],
-      licenses: ["MIT"],
-      links: %{"GitHub" => "https://github.com/bartblast/hologram"},
-      maintainers: ["Bart Blast"]
-    ]
   end
 
   defp preferred_cli_env do
