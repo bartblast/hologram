@@ -27,3 +27,6 @@ hologram-*.tar
 
 # Elixir Language Server.
 /.elixir_ls/*
+
+# macOS folder metadata.
+.DS_Store
