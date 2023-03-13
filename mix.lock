@@ -1,0 +1,3 @@
+%{
+  "interceptor": {:hex, :interceptor, "0.5.4", "158e019413439714306d52ff5189533b1236ab776b6f7a1ce63ace079f84867c", [:mix], [], "hexpm", "a4fa78a73199832222c4bb47c57e5b7384f7b49d43c09a57c6e731086f219f95"},
+}

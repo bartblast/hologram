@@ -5,7 +5,6 @@ config :hologram,
   app_path: "#{File.cwd!()}/test/unit/fixtures/app",
   debug_expander: false,
   debug_tag_assembler: false,
-  debug_transformer: false,
   default_layout: Hologram.Test.Fixtures.App.DefaultLayout,
   env: config_env(),
   ignored_namespaces: [

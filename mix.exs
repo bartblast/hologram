@@ -8,7 +8,9 @@ defmodule Hologram.MixProject do
   end
 
   defp deps do
-    []
+    [
+      {:interceptor, "~> 0.5", only: [:dev, :test]}
+    ]
   end
 
   def package do
