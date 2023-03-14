@@ -173,4 +173,11 @@ defmodule Hologram.Compiler.TransformerTest do
              }
     end
   end
+
+  test "symbol" do
+    # a
+    ast = {:a, [line: 1], nil}
+
+    assert transform(ast) == %IR.Symbol{name: :a}
+  end
 end

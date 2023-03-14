@@ -164,10 +164,6 @@ defmodule Hologram.Compiler.IR do
     defstruct condition: nil, do: nil, else: nil
   end
 
-  defmodule Symbol do
-    defstruct name: nil
-  end
-
   defmodule Variable do
     defstruct name: nil
   end

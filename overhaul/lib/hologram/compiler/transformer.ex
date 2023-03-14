@@ -383,10 +383,6 @@ defmodule Hologram.Compiler.Transformer do
     build_call_ir(nil, function, args)
   end
 
-  transform _({name, _, _}) when is_atom(name) do
-    %IR.Symbol{name: name}
-  end
-
   # --- HELPERS ---
 
   defp build_call_ir(module, function, args) do

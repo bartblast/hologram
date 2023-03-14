@@ -103,6 +103,12 @@ defmodule Hologram.Compiler.Transformer do
     %IR.Alias{segments: segments}
   end
 
+  # preserve order:
+
+  def transform({name, _, _}) when is_atom(name) do
+    %IR.Symbol{name: name}
+  end
+
   # --- HELPERS ---
 
   defp build_tuple_type_ir(data) do

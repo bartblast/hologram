@@ -54,4 +54,8 @@ defmodule Hologram.Compiler.IR do
   defmodule Alias do
     defstruct segments: nil
   end
+
+  defmodule Symbol do
+    defstruct name: nil
+  end
 end

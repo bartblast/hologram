@@ -2058,11 +2058,4 @@ defmodule Hologram.Compiler.TransformerTest do
 
     assert transform(ast) == %IR.IgnoredExpression{type: :public_macro_definition}
   end
-
-  test "symbol" do
-    # a
-    ast = {:a, [line: 1], nil}
-
-    assert transform(ast) == %IR.Symbol{name: :a}
-  end
 end
