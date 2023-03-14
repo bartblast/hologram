@@ -23,42 +23,4 @@ defmodule Hologram.Compiler.Macros do
       end
     end
   end
-
-  defmacro transform({:when, _, [{:_, _, [ast]}, guard]}, do: body) do
-    quote do
-      def transform(unquote(ast) = evaluated_ast) when unquote(guard) do
-        result = unquote(body)
-
-        if Application.get_env(:hologram, :debug_transformer) do
-          IO.puts("\n........................................TRANSFORM\n")
-          IO.puts("ast")
-          IO.inspect(evaluated_ast)
-          IO.puts("")
-          IO.puts("result")
-          IO.inspect(result)
-        end
-
-        result
-      end
-    end
-  end
-
-  defmacro transform(ast, do: body) do
-    quote do
-      def transform(unquote(ast) = evaluated_ast) do
-        result = unquote(body)
-
-        if Application.get_env(:hologram, :debug_transformer) do
-          IO.puts("\n........................................TRANSFORM\n")
-          IO.puts("ast")
-          IO.inspect(evaluated_ast)
-          IO.puts("")
-          IO.puts("result")
-          IO.inspect(result)
-        end
-
-        result
-      end
-    end
-  end
 end
