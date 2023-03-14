@@ -95,14 +95,6 @@ defmodule Hologram.Compiler.IR do
     defstruct arity: nil, params: [], bindings: [], body: nil
   end
 
-  defmodule MapType do
-    defstruct data: []
-  end
-
-  defmodule StructType do
-    defstruct module: nil, data: []
-  end
-
   # --- PSEUDO-VARIABLES ---
 
   defmodule EnvPseudoVariable do

@@ -25,6 +25,10 @@ defmodule Hologram.Compiler.IR do
     defstruct data: []
   end
 
+  defmodule MapType do
+    defstruct data: []
+  end
+
   defmodule ModuleType do
     defstruct module: nil, segments: nil
   end
@@ -35,6 +39,10 @@ defmodule Hologram.Compiler.IR do
 
   defmodule StringType do
     defstruct value: nil
+  end
+
+  defmodule StructType do
+    defstruct module: nil, data: []
   end
 
   defmodule TupleType do

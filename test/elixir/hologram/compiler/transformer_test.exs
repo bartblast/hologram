@@ -68,6 +68,18 @@ defmodule Hologram.Compiler.TransformerTest do
            }
   end
 
+  test "map type " do
+    # %{a: 1, b: 2}
+    ast = {:%{}, [line: 1], [a: 1, b: 2]}
+
+    assert transform(ast) == %IR.MapType{
+             data: [
+               {%IR.AtomType{value: :a}, %IR.IntegerType{value: 1}},
+               {%IR.AtomType{value: :b}, %IR.IntegerType{value: 2}}
+             ]
+           }
+  end
+
   test "nil type" do
     # nil
     ast = nil
@@ -80,6 +92,38 @@ defmodule Hologram.Compiler.TransformerTest do
     ast = "test"
 
     assert transform(ast) == %IR.StringType{value: "test"}
+  end
+
+  describe "struct type" do
+    test "explicit syntax" do
+      # %A.B{x: 1, y: 2}
+      ast =
+        {:%, [line: 1], [{:__aliases__, [line: 1], [:A, :B]}, {:%{}, [line: 1], [x: 1, y: 2]}]}
+
+      assert transform(ast) == %IR.StructType{
+               module: %IR.Alias{segments: [:A, :B]},
+               data: [
+                 {%IR.AtomType{value: :x}, %IR.IntegerType{value: 1}},
+                 {%IR.AtomType{value: :y}, %IR.IntegerType{value: 2}}
+               ]
+             }
+    end
+
+    test "implicit syntax" do
+      # %Hologram.Test.Fixtures.Struct{a: 1, b: 2} |> Macro.escape()
+      ast = {:%{}, [], [__struct__: Hologram.Test.Fixtures.Struct, a: 1, b: 2]}
+
+      assert transform(ast) == %IR.StructType{
+               module: %IR.ModuleType{
+                 module: Hologram.Test.Fixtures.Struct,
+                 segments: [:Hologram, :Test, :Fixtures, :Struct]
+               },
+               data: [
+                 {%IR.AtomType{value: :a}, %IR.IntegerType{value: 1}},
+                 {%IR.AtomType{value: :b}, %IR.IntegerType{value: 2}}
+               ]
+             }
+    end
   end
 
   describe "tuple type" do
