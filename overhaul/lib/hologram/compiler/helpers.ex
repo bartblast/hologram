@@ -28,24 +28,6 @@ defmodule Hologram.Compiler.Helpers do
     end)
   end
 
-  @doc """
-  Returns the corresponding alias segments (without the "Elixir" segment at the beginning).
-  ## Examples
-      iex> Helpers.alias_segments(Abc.Bcd)
-      [:Abc, :Bcd]
-  """
-  @spec alias_segments(module() | String.T) :: T.alias_segments()
-
-  def alias_segments(module_name) when is_binary(module_name) do
-    Module.split("Elixir.#{module_name}")
-    |> Enum.map(&String.to_atom/1)
-  end
-
-  def alias_segments(module) do
-    Module.split(module)
-    |> Enum.map(&String.to_atom/1)
-  end
-
   defp build_binding_access_path(pattern_path) do
     pattern_path
     |> Enum.reverse()
