@@ -8,6 +8,7 @@ defmodule Hologram.Compiler.Transformer do
       }
   end
 
+  alias Hologram.Compiler.Helpers
   alias Hologram.Compiler.IR
 
   @doc """
@@ -65,6 +66,17 @@ defmodule Hologram.Compiler.Transformer do
     data
     |> Tuple.to_list()
     |> build_tuple_type_ir()
+  end
+
+  # --- CONTROL FLOW ---
+
+  def transform({:__aliases__, [alias: module], _alias_segs}) when module != false do
+    module_segs = Helpers.alias_segments(module)
+    %IR.ModuleType{module: module, segments: module_segs}
+  end
+
+  def transform({:__aliases__, _, segments}) do
+    %IR.Alias{segments: segments}
   end
 
   # --- HELPERS ---

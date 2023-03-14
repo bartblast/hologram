@@ -1,7 +1,9 @@
 defmodule Hologram.Compiler.TransformerTest do
   use Hologram.Test.UnitCase, async: true
   import Hologram.Compiler.Transformer
+
   alias Hologram.Compiler.IR
+  alias Hologram.Test.Fixtures.Compiler.Transformer.Module2
 
   # --- DATA TYPES --
 
@@ -103,6 +105,27 @@ defmodule Hologram.Compiler.TransformerTest do
                  %IR.IntegerType{value: 2},
                  %IR.IntegerType{value: 3}
                ]
+             }
+    end
+  end
+
+  # --- CONTROL FLOW ---
+
+  describe "alias" do
+    test "non-contextual" do
+      # Aaa.Bbb
+      ast = {:__aliases__, [line: 1], [:Aaa, :Bbb]}
+
+      assert transform(ast) == %IR.Alias{segments: [:Aaa, :Bbb]}
+    end
+
+    test "contextual, e.g. aliased inside a macro" do
+      # {{:., [], [ast, :macro_2a]}, [], []} = apply(Module1, :"MACRO-macro_call_3", [__ENV__])
+      ast = {:__aliases__, [alias: Module2], [:InnerAlias]}
+
+      assert transform(ast) == %IR.ModuleType{
+               module: Module2,
+               segments: [:Hologram, :Test, :Fixtures, :Compiler, :Transformer, :Module2]
              }
     end
   end

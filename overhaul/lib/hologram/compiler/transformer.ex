@@ -326,15 +326,6 @@ defmodule Hologram.Compiler.Transformer do
 
   # --- CONTROL FLOW ---
 
-  transform _({:__aliases__, [alias: module], _alias_segs}) when module != false do
-    module_segs = Helpers.alias_segments(module)
-    %IR.ModuleType{module: module, segments: module_segs}
-  end
-
-  transform({:__aliases__, _, segments}) do
-    %IR.Alias{segments: segments}
-  end
-
   transform({{:., _, [{name, _, nil}]}, _, args}) do
     %IR.AnonymousFunctionCall{
       name: name,

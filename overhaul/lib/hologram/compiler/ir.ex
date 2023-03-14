@@ -99,10 +99,6 @@ defmodule Hologram.Compiler.IR do
     defstruct data: []
   end
 
-  defmodule ModuleType do
-    defstruct module: nil, segments: nil
-  end
-
   defmodule StructType do
     defstruct module: nil, data: []
   end
@@ -151,10 +147,6 @@ defmodule Hologram.Compiler.IR do
   end
 
   # --- CONTROL FLOW ---
-
-  defmodule Alias do
-    defstruct segments: nil
-  end
 
   defmodule AnonymousFunctionCall do
     defstruct name: nil, args: []

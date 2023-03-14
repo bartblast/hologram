@@ -1,7 +1,7 @@
 defmodule Hologram.Test.Fixtures.Compiler.Transformer.Module2 do
-  defmacro macro_2b(x, y) do
+  defmacro macro_2a do
     quote do
-      unquote(x) + unquote(y)
+      123
     end
   end
 end
