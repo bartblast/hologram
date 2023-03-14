@@ -2,7 +2,6 @@ defmodule Hologram.Compiler.Transformer do
   import Hologram.Compiler.Macros, only: [transform: 2]
 
   alias Hologram.Compiler.Helpers
-  alias Hologram.Compiler.IR
   alias Hologram.Compiler.PatternDeconstructor
   alias Hologram.Compiler.Reflection
 
@@ -201,31 +200,6 @@ defmodule Hologram.Compiler.Transformer do
     %IR.AnonymousFunctionType{arity: arity, params: params, bindings: bindings, body: body}
   end
 
-  transform _(ast) when is_atom(ast) and ast not in [nil, false, true] do
-    %IR.AtomType{value: ast}
-  end
-
-  transform({:<<>>, _, parts}) do
-    %IR.BinaryType{parts: transform_list(parts)}
-  end
-
-  transform _(ast) when is_boolean(ast) do
-    %IR.BooleanType{value: ast}
-  end
-
-  transform _(ast) when is_float(ast) do
-    %IR.FloatType{value: ast}
-  end
-
-  transform _(ast) when is_integer(ast) do
-    %IR.IntegerType{value: ast}
-  end
-
-  transform _(ast) when is_list(ast) do
-    data = Enum.map(ast, &transform/1)
-    %IR.ListType{data: data}
-  end
-
   transform({:%{}, _, data}) do
     {module, new_data} = Keyword.pop(data, :__struct__)
 
@@ -243,29 +217,12 @@ defmodule Hologram.Compiler.Transformer do
     end
   end
 
-  transform(nil) do
-    %IR.NilType{}
-  end
-
-  transform _(ast) when is_binary(ast) do
-    %IR.StringType{value: ast}
-  end
 
   transform({:%, _, [alias_ast, map_ast]}) do
     module = transform(alias_ast)
     data = transform(map_ast).data
 
     %IR.StructType{module: module, data: data}
-  end
-
-  transform({:{}, _, data}) do
-    build_tuple_type_ir(data)
-  end
-
-  transform({_, _} = data) do
-    data
-    |> Tuple.to_list()
-    |> build_tuple_type_ir()
   end
 
   # --- PSEUDO-VARIABLES ---
@@ -517,11 +474,6 @@ defmodule Hologram.Compiler.Transformer do
     }
   end
 
-  defp build_tuple_type_ir(data) do
-    data = Enum.map(data, &transform/1)
-    %IR.TupleType{data: data}
-  end
-
   defp find_for_expression_generators(parts) do
     Enum.filter(parts, fn part ->
       match?({:<-, _, _}, part)
@@ -550,11 +502,5 @@ defmodule Hologram.Compiler.Transformer do
   defp rewrite_for_expression_code([], mapper) do
     [do: {:__block__, _, [mapper_expr]}] = mapper
     "[#{Macro.to_string(mapper_expr)}]"
-  end
-
-  defp transform_list(list) do
-    list
-    |> List.wrap()
-    |> Enum.map(&transform/1)
   end
 end

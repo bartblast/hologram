@@ -95,30 +95,6 @@ defmodule Hologram.Compiler.IR do
     defstruct arity: nil, params: [], bindings: [], body: nil
   end
 
-  defmodule AtomType do
-    defstruct value: nil
-  end
-
-  defmodule BinaryType do
-    defstruct parts: []
-  end
-
-  defmodule BooleanType do
-    defstruct value: nil
-  end
-
-  defmodule FloatType do
-    defstruct value: nil
-  end
-
-  defmodule IntegerType do
-    defstruct value: nil
-  end
-
-  defmodule ListType do
-    defstruct data: []
-  end
-
   defmodule MapType do
     defstruct data: []
   end
@@ -127,20 +103,8 @@ defmodule Hologram.Compiler.IR do
     defstruct module: nil, segments: nil
   end
 
-  defmodule NilType do
-    defstruct []
-  end
-
-  defmodule StringType do
-    defstruct value: nil
-  end
-
   defmodule StructType do
     defstruct module: nil, data: []
-  end
-
-  defmodule TupleType do
-    defstruct data: []
   end
 
   # --- PSEUDO-VARIABLES ---
