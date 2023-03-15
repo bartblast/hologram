@@ -3,28 +3,32 @@ defmodule Hologram.Compiler.PatternMatchingTest do
   import Hologram.Compiler.PatternMatching
   alias Hologram.Compiler.IR
 
-  test "binding" do
-    ir = %IR.Symbol{name: :a}
+  describe "literal value" do
+    test "left side" do
+      ir = %IR.IntegerType{value: 1}
 
-    assert deconstruct(ir, :left) == [[binding: :a]]
+      assert deconstruct(ir, :left) == [[left_value: %IR.IntegerType{value: 1}]]
+    end
+
+    test "right side" do
+      ir = %IR.IntegerType{value: 1}
+
+      assert deconstruct(ir, :right) == [[:right_value]]
+    end
   end
 
-  test "left value" do
-    ir = %IR.IntegerType{value: 1}
+  describe "symbol" do
+    test "left side" do
+      ir = %IR.Symbol{name: :a}
 
-    assert deconstruct(ir, :left) == [[left_value: %IR.IntegerType{value: 1}]]
-  end
+      assert deconstruct(ir, :left) == [[binding: :a]]
+    end
 
-  test "right value from literal value" do
-    ir = %IR.IntegerType{value: 1}
+    test "right side" do
+      ir = %IR.Symbol{name: :a}
 
-    assert deconstruct(ir, :right) == [[:right_value]]
-  end
-
-  test "right value from variable" do
-    ir = %IR.Symbol{name: :a}
-
-    assert deconstruct(ir, :right) == [[:right_value]]
+      assert deconstruct(ir, :right) == [[:right_value]]
+    end
   end
 
   describe "list type" do
