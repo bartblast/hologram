@@ -16,6 +16,15 @@ defmodule Hologram.Compiler.PatternMatching do
     [[{:binding, name} | path]]
   end
 
+  def deconstruct(%IR.TupleType{data: data}, side, path) do
+    data
+    |> Enum.with_index()
+    |> Enum.reduce([], fn {value, index}, acc ->
+      tuple_index_path = [{:tuple_index, index} | path]
+      acc ++ deconstruct(value, side, tuple_index_path)
+    end)
+  end
+
   def deconstruct(ir, :left, path) do
     [[{:left_value, ir} | path]]
   end
