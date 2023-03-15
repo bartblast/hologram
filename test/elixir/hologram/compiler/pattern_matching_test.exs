@@ -32,48 +32,41 @@ defmodule Hologram.Compiler.PatternMatchingTest do
   end
 
   describe "list type" do
-    test "non-nested list, left side" do
-      ir = %IR.ListType{
-        data: [
-          %IR.IntegerType{value: 1},
-          %IR.Symbol{name: :a}
-        ]
-      }
+    @non_nested_list %IR.ListType{
+      data: [
+        %IR.IntegerType{value: 1},
+        %IR.Symbol{name: :a}
+      ]
+    }
 
-      assert deconstruct(ir, :left) == [
+    @nested_list %IR.ListType{
+      data: [
+        %IR.Symbol{name: :a},
+        %IR.ListType{
+          data: [
+            %IR.IntegerType{value: 1},
+            %IR.Symbol{name: :b}
+          ]
+        }
+      ]
+    }
+
+    test "non-nested list, left side" do
+      assert deconstruct(@non_nested_list, :left) == [
                [left_value: %IR.IntegerType{value: 1}, list_index: 0],
                [binding: :a, list_index: 1]
              ]
     end
 
     test "non-nested list, right side" do
-      ir = %IR.ListType{
-        data: [
-          %IR.IntegerType{value: 1},
-          %IR.Symbol{name: :a}
-        ]
-      }
-
-      assert deconstruct(ir, :right) == [
+      assert deconstruct(@non_nested_list, :right) == [
                [:right_value, {:list_index, 0}],
                [:right_value, {:list_index, 1}]
              ]
     end
 
     test "nested list, left side" do
-      ir = %IR.ListType{
-        data: [
-          %IR.Symbol{name: :a},
-          %IR.ListType{
-            data: [
-              %IR.IntegerType{value: 1},
-              %IR.Symbol{name: :b}
-            ]
-          }
-        ]
-      }
-
-      assert deconstruct(ir, :left) == [
+      assert deconstruct(@nested_list, :left) == [
                [binding: :a, list_index: 0],
                [
                  left_value: %IR.IntegerType{value: 1},
@@ -85,19 +78,7 @@ defmodule Hologram.Compiler.PatternMatchingTest do
     end
 
     test "nested list, right side" do
-      ir = %IR.ListType{
-        data: [
-          %IR.Symbol{name: :a},
-          %IR.ListType{
-            data: [
-              %IR.IntegerType{value: 1},
-              %IR.Symbol{name: :b}
-            ]
-          }
-        ]
-      }
-
-      assert deconstruct(ir, :right) == [
+      assert deconstruct(@nested_list, :right) == [
                [:right_value, {:list_index, 0}],
                [:right_value, {:list_index, 0}, {:list_index, 1}],
                [:right_value, {:list_index, 1}, {:list_index, 1}]
@@ -106,15 +87,28 @@ defmodule Hologram.Compiler.PatternMatchingTest do
   end
 
   describe "map type" do
-    test "non-nested map, left side" do
-      ir = %IR.MapType{
-        data: [
-          {%IR.AtomType{value: :a}, %IR.IntegerType{value: 1}},
-          {%IR.StringType{value: "b"}, %IR.Symbol{name: :c}}
-        ]
-      }
+    @non_nested_map %IR.MapType{
+      data: [
+        {%IR.AtomType{value: :a}, %IR.IntegerType{value: 1}},
+        {%IR.StringType{value: "b"}, %IR.Symbol{name: :c}}
+      ]
+    }
 
-      assert deconstruct(ir, :left) == [
+    @nested_map %IR.MapType{
+      data: [
+        {%IR.AtomType{value: :a}, %IR.IntegerType{value: 1}},
+        {%IR.StringType{value: "b"},
+         %IR.MapType{
+           data: [
+             {%IR.AtomType{value: :c}, %IR.IntegerType{value: 2}},
+             {%IR.StringType{value: "d"}, %IR.Symbol{name: :e}}
+           ]
+         }}
+      ]
+    }
+
+    test "non-nested map, left side" do
+      assert deconstruct(@non_nested_map, :left) == [
                [
                  left_value: %IR.IntegerType{value: 1},
                  map_key: %IR.AtomType{value: :a}
@@ -124,34 +118,14 @@ defmodule Hologram.Compiler.PatternMatchingTest do
     end
 
     test "non-nested map, right side" do
-      ir = %IR.MapType{
-        data: [
-          {%IR.AtomType{value: :a}, %IR.IntegerType{value: 1}},
-          {%IR.StringType{value: "b"}, %IR.Symbol{name: :c}}
-        ]
-      }
-
-      assert deconstruct(ir, :right) == [
+      assert deconstruct(@non_nested_map, :right) == [
                [:right_value, {:map_key, %IR.AtomType{value: :a}}],
                [:right_value, {:map_key, %IR.StringType{value: "b"}}]
              ]
     end
 
     test "nested map, left side" do
-      ir = %IR.MapType{
-        data: [
-          {%IR.AtomType{value: :a}, %IR.IntegerType{value: 1}},
-          {%IR.StringType{value: "b"},
-           %IR.MapType{
-             data: [
-               {%IR.AtomType{value: :c}, %IR.IntegerType{value: 2}},
-               {%IR.StringType{value: "d"}, %IR.Symbol{name: :e}}
-             ]
-           }}
-        ]
-      }
-
-      assert deconstruct(ir, :left) == [
+      assert deconstruct(@nested_map, :left) == [
                [
                  left_value: %IR.IntegerType{value: 1},
                  map_key: %IR.AtomType{value: :a}
@@ -170,20 +144,7 @@ defmodule Hologram.Compiler.PatternMatchingTest do
     end
 
     test "nested map, right side" do
-      ir = %IR.MapType{
-        data: [
-          {%IR.AtomType{value: :a}, %IR.IntegerType{value: 1}},
-          {%IR.StringType{value: "b"},
-           %IR.MapType{
-             data: [
-               {%IR.AtomType{value: :c}, %IR.IntegerType{value: 2}},
-               {%IR.StringType{value: "d"}, %IR.Symbol{name: :e}}
-             ]
-           }}
-        ]
-      }
-
-      assert deconstruct(ir, :right) == [
+      assert deconstruct(@nested_map, :right) == [
                [:right_value, {:map_key, %IR.AtomType{value: :a}}],
                [
                  :right_value,
@@ -200,48 +161,41 @@ defmodule Hologram.Compiler.PatternMatchingTest do
   end
 
   describe "tuple type" do
-    test "non-nested tuple, left side" do
-      ir = %IR.TupleType{
-        data: [
-          %IR.IntegerType{value: 1},
-          %IR.Symbol{name: :a}
-        ]
-      }
+    @non_nested_tuple %IR.TupleType{
+      data: [
+        %IR.IntegerType{value: 1},
+        %IR.Symbol{name: :a}
+      ]
+    }
 
-      assert deconstruct(ir, :left) == [
+    @nested_tuple %IR.TupleType{
+      data: [
+        %IR.Symbol{name: :a},
+        %IR.TupleType{
+          data: [
+            %IR.IntegerType{value: 1},
+            %IR.Symbol{name: :b}
+          ]
+        }
+      ]
+    }
+
+    test "non-nested tuple, left side" do
+      assert deconstruct(@non_nested_tuple, :left) == [
                [left_value: %IR.IntegerType{value: 1}, tuple_index: 0],
                [binding: :a, tuple_index: 1]
              ]
     end
 
     test "non-nested tuple, right side" do
-      ir = %IR.TupleType{
-        data: [
-          %IR.IntegerType{value: 1},
-          %IR.Symbol{name: :a}
-        ]
-      }
-
-      assert deconstruct(ir, :right) == [
+      assert deconstruct(@non_nested_tuple, :right) == [
                [:right_value, {:tuple_index, 0}],
                [:right_value, {:tuple_index, 1}]
              ]
     end
 
     test "nested tuple, left side" do
-      ir = %IR.TupleType{
-        data: [
-          %IR.Symbol{name: :a},
-          %IR.TupleType{
-            data: [
-              %IR.IntegerType{value: 1},
-              %IR.Symbol{name: :b}
-            ]
-          }
-        ]
-      }
-
-      assert deconstruct(ir, :left) == [
+      assert deconstruct(@nested_tuple, :left) == [
                [binding: :a, tuple_index: 0],
                [
                  left_value: %IR.IntegerType{value: 1},
@@ -253,19 +207,7 @@ defmodule Hologram.Compiler.PatternMatchingTest do
     end
 
     test "nested tuple, right side" do
-      ir = %IR.TupleType{
-        data: [
-          %IR.Symbol{name: :a},
-          %IR.TupleType{
-            data: [
-              %IR.IntegerType{value: 1},
-              %IR.Symbol{name: :b}
-            ]
-          }
-        ]
-      }
-
-      assert deconstruct(ir, :right) == [
+      assert deconstruct(@nested_tuple, :right) == [
                [:right_value, {:tuple_index, 0}],
                [:right_value, {:tuple_index, 0}, {:tuple_index, 1}],
                [:right_value, {:tuple_index, 1}, {:tuple_index, 1}]
