@@ -23,6 +23,15 @@ defmodule Hologram.Compiler.Transformer do
   @intercept true
   def transform(ast)
 
+  # --- OPERATORS ---
+
+  def transform([{:|, _, [head, tail]}]) do
+    %IR.ConsOperator{
+      head: transform(head),
+      tail: transform(tail)
+    }
+  end
+
   # --- DATA TYPES ---
 
   def transform(ast) when is_atom(ast) and ast not in [nil, false, true] do

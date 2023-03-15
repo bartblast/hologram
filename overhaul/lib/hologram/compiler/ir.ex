@@ -9,10 +9,6 @@ defmodule Hologram.Compiler.IR do
     defstruct left: nil, right: nil
   end
 
-  defmodule ConsOperator do
-    defstruct head: nil, tail: nil
-  end
-
   defmodule DivisionOperator do
     defstruct left: nil, right: nil
   end
@@ -38,7 +34,7 @@ defmodule Hologram.Compiler.IR do
   end
 
   defmodule MatchOperator do
-    defstruct bindings: [], left: nil, right: nil
+    defstruct left: nil, right: nil
   end
 
   defmodule MembershipOperator do

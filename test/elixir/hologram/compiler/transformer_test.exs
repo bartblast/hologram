@@ -5,6 +5,18 @@ defmodule Hologram.Compiler.TransformerTest do
   alias Hologram.Compiler.IR
   alias Hologram.Test.Fixtures.Compiler.Transformer.Module2
 
+  # --- OPERATORS ---
+
+  test "cons operatoror" do
+    # [h | t]
+    ast = [{:|, [line: 1], [{:h, [line: 1], nil}, {:t, [line: 1], nil}]}]
+
+    assert transform(ast) == %IR.ConsOperator{
+             head: %IR.Symbol{name: :h},
+             tail: %IR.Symbol{name: :t}
+           }
+  end
+
   # --- DATA TYPES --
 
   test "atom type" do

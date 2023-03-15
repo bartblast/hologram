@@ -1,4 +1,10 @@
 defmodule Hologram.Compiler.IR do
+  # --- OPERATORS ---
+
+  defmodule ConsOperator do
+    defstruct head: nil, tail: nil
+  end
+
   # --- DATA TYPES ---
 
   defmodule AtomType do

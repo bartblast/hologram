@@ -21,13 +21,6 @@ defmodule Hologram.Compiler.Transformer do
     }
   end
 
-  transform([{:|, _, [head, tail]}]) do
-    %IR.ConsOperator{
-      head: transform(head),
-      tail: transform(tail)
-    }
-  end
-
   transform({:/, _, [left, right]}) do
     %IR.DivisionOperator{
       left: transform(left),
