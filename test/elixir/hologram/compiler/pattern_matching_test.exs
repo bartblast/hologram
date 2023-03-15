@@ -31,6 +31,115 @@ defmodule Hologram.Compiler.PatternMatchingTest do
     end
   end
 
+  describe "cons operator" do
+    # [a | [1, 2]]
+    @ir_1 %IR.ConsOperator{
+      head: %IR.Symbol{name: :a},
+      tail: %IR.ListType{
+        data: [
+          %IR.IntegerType{value: 1},
+          %IR.IntegerType{value: 2}
+        ]
+      }
+    }
+
+    # [1 | [2, a]]
+    @ir_2 %IR.ConsOperator{
+      head: %IR.IntegerType{value: 1},
+      tail: %IR.ListType{
+        data: [
+          %IR.IntegerType{value: 2},
+          %IR.Symbol{name: :a}
+        ]
+      }
+    }
+
+    # [1 | [2 | [3, a]]]
+    @ir_3 %IR.ConsOperator{
+      head: %IR.IntegerType{value: 1},
+      tail: %IR.ConsOperator{
+        head: %IR.IntegerType{value: 2},
+        tail: %IR.ListType{
+          data: [
+            %IR.IntegerType{value: 3},
+            %IR.Symbol{name: :a}
+          ]
+        }
+      }
+    }
+
+    test "non-nested cons operator with symbol in head, left side" do
+      assert deconstruct(@ir_1, :left) == [
+               [binding: :a, list_index: 0],
+               [
+                 {:left_value, %IR.IntegerType{value: 1}},
+                 {:list_index, 0},
+                 :list_tail
+               ],
+               [
+                 {:left_value, %IR.IntegerType{value: 2}},
+                 {:list_index, 1},
+                 :list_tail
+               ]
+             ]
+    end
+
+    test "non-nested cons operator with symbol in head, right side" do
+      assert deconstruct(@ir_1, :right) == [
+               [:right_value, {:list_index, 0}],
+               [:right_value, {:list_index, 0}, :list_tail],
+               [:right_value, {:list_index, 1}, :list_tail]
+             ]
+    end
+
+    test "non-nested cons operator with symbol in tail, left side" do
+      assert deconstruct(@ir_2, :left) == [
+               [left_value: %IR.IntegerType{value: 1}, list_index: 0],
+               [
+                 {:left_value, %IR.IntegerType{value: 2}},
+                 {:list_index, 0},
+                 :list_tail
+               ],
+               [{:binding, :a}, {:list_index, 1}, :list_tail]
+             ]
+    end
+
+    test "non-nested cons operator with symbol in tail, right side" do
+      assert deconstruct(@ir_2, :right) == [
+               [:right_value, {:list_index, 0}],
+               [:right_value, {:list_index, 0}, :list_tail],
+               [:right_value, {:list_index, 1}, :list_tail]
+             ]
+    end
+
+    test "nested cons operator, left side" do
+      assert deconstruct(@ir_3, :left) == [
+               [left_value: %IR.IntegerType{value: 1}, list_index: 0],
+               [
+                 {:left_value, %IR.IntegerType{value: 2}},
+                 {:list_index, 0},
+                 :list_tail
+               ],
+               [
+                 {:left_value, %IR.IntegerType{value: 3}},
+                 {:list_index, 0},
+                 :list_tail,
+                 :list_tail
+               ],
+               [{:binding, :a}, {:list_index, 1}, :list_tail, :list_tail]
+             ]
+    end
+
+    test "nested cons operator, right side" do
+      assert deconstruct(@ir_3, :right) == [
+               [:right_value, {:list_index, 0}],
+               [:right_value, {:list_index, 0}, :list_tail],
+               [:right_value, {:list_index, 0}, :list_tail, :list_tail],
+               [:right_value, {:list_index, 1}, :list_tail, :list_tail]
+             ]
+    end
+  end
+
   describe "list type" do
     @non_nested_list %IR.ListType{
       data: [

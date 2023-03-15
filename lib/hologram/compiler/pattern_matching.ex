@@ -3,6 +3,16 @@ defmodule Hologram.Compiler.PatternMatching do
 
   def deconstruct(ir, side \\ nil, path \\ [])
 
+  def deconstruct(%IR.ConsOperator{head: head, tail: tail}, side, path) do
+    head_path = [{:list_index, 0} | path]
+    paths_nested_in_head = deconstruct(head, side, head_path)
+
+    tail_path = [:list_tail | path]
+    paths_nested_in_tail = deconstruct(tail, side, tail_path)
+
+    paths_nested_in_head ++ paths_nested_in_tail
+  end
+
   def deconstruct(%IR.ListType{data: data}, side, path) do
     data
     |> Enum.with_index()
