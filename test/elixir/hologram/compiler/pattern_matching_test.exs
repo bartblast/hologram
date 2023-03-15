@@ -26,4 +26,78 @@ defmodule Hologram.Compiler.PatternMatchingTest do
 
     assert deconstruct(ir, :right) == [[:right_value]]
   end
+
+  describe "list type" do
+    test "non-nested list, left side" do
+      ir = %IR.ListType{
+        data: [
+          %IR.IntegerType{value: 1},
+          %IR.Symbol{name: :a}
+        ]
+      }
+
+      assert deconstruct(ir, :left) == [
+               [left_value: %IR.IntegerType{value: 1}, list_index: 0],
+               [binding: :a, list_index: 1]
+             ]
+    end
+
+    test "non-nested list, right side" do
+      ir = %IR.ListType{
+        data: [
+          %IR.IntegerType{value: 1},
+          %IR.Symbol{name: :a}
+        ]
+      }
+
+      assert deconstruct(ir, :right) == [
+               [:right_value, {:list_index, 0}],
+               [:right_value, {:list_index, 1}]
+             ]
+    end
+
+    test "nested list, left side" do
+      ir = %IR.ListType{
+        data: [
+          %IR.Symbol{name: :a},
+          %IR.ListType{
+            data: [
+              %IR.IntegerType{value: 1},
+              %IR.Symbol{name: :b}
+            ]
+          }
+        ]
+      }
+
+      assert deconstruct(ir, :left) == [
+               [binding: :a, list_index: 0],
+               [
+                 left_value: %IR.IntegerType{value: 1},
+                 list_index: 0,
+                 list_index: 1
+               ],
+               [binding: :b, list_index: 1, list_index: 1]
+             ]
+    end
+
+    test "nested list, right side" do
+      ir = %IR.ListType{
+        data: [
+          %IR.Symbol{name: :a},
+          %IR.ListType{
+            data: [
+              %IR.IntegerType{value: 1},
+              %IR.Symbol{name: :b}
+            ]
+          }
+        ]
+      }
+
+      assert deconstruct(ir, :right) == [
+               [:right_value, {:list_index, 0}],
+               [:right_value, {:list_index, 0}, {:list_index, 1}],
+               [:right_value, {:list_index, 1}, {:list_index, 1}]
+             ]
+    end
+  end
 end
