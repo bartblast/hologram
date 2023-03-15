@@ -5,12 +5,14 @@ defmodule Hologram.Compiler.PatternMatchingTest do
 
   describe "literal value" do
     test "left side" do
+      # 1
       ir = %IR.IntegerType{value: 1}
 
       assert deconstruct(ir, :left) == [[left_value: %IR.IntegerType{value: 1}]]
     end
 
     test "right side" do
+      # 1
       ir = %IR.IntegerType{value: 1}
 
       assert deconstruct(ir, :right) == [[:right_value]]
@@ -19,12 +21,14 @@ defmodule Hologram.Compiler.PatternMatchingTest do
 
   describe "symbol" do
     test "left side" do
+      # a
       ir = %IR.Symbol{name: :a}
 
       assert deconstruct(ir, :left) == [[binding: :a]]
     end
 
     test "right side" do
+      # a
       ir = %IR.Symbol{name: :a}
 
       assert deconstruct(ir, :right) == [[:right_value]]
@@ -141,6 +145,7 @@ defmodule Hologram.Compiler.PatternMatchingTest do
   end
 
   describe "list type" do
+    # [1, a]
     @non_nested_list %IR.ListType{
       data: [
         %IR.IntegerType{value: 1},
@@ -148,6 +153,7 @@ defmodule Hologram.Compiler.PatternMatchingTest do
       ]
     }
 
+    # [a, [1, b]]
     @nested_list %IR.ListType{
       data: [
         %IR.Symbol{name: :a},
@@ -196,6 +202,7 @@ defmodule Hologram.Compiler.PatternMatchingTest do
   end
 
   describe "map type" do
+    # %{:a => 1, "b" => c}
     @non_nested_map %IR.MapType{
       data: [
         {%IR.AtomType{value: :a}, %IR.IntegerType{value: 1}},
@@ -203,6 +210,7 @@ defmodule Hologram.Compiler.PatternMatchingTest do
       ]
     }
 
+    # %{:a => 1, "b" => %{:c => 2, "d" => e}}
     @nested_map %IR.MapType{
       data: [
         {%IR.AtomType{value: :a}, %IR.IntegerType{value: 1}},
@@ -270,6 +278,7 @@ defmodule Hologram.Compiler.PatternMatchingTest do
   end
 
   describe "tuple type" do
+    # {1, a}
     @non_nested_tuple %IR.TupleType{
       data: [
         %IR.IntegerType{value: 1},
@@ -277,6 +286,7 @@ defmodule Hologram.Compiler.PatternMatchingTest do
       ]
     }
 
+    # {a, {1, b}}
     @nested_tuple %IR.TupleType{
       data: [
         %IR.Symbol{name: :a},
