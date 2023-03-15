@@ -12,6 +12,13 @@ defmodule Hologram.Compiler.PatternMatching do
     end)
   end
 
+  def deconstruct(%IR.MapType{data: data}, side, path) do
+    Enum.reduce(data, [], fn {key, value}, acc ->
+      map_key_path = [{:map_key, key} | path]
+      acc ++ deconstruct(value, side, map_key_path)
+    end)
+  end
+
   def deconstruct(%IR.Symbol{name: name}, :left, path) do
     [[{:binding, name} | path]]
   end

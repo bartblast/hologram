@@ -105,6 +105,100 @@ defmodule Hologram.Compiler.PatternMatchingTest do
     end
   end
 
+  describe "map type" do
+    test "non-nested map, left side" do
+      ir = %IR.MapType{
+        data: [
+          {%IR.AtomType{value: :a}, %IR.IntegerType{value: 1}},
+          {%IR.StringType{value: "b"}, %IR.Symbol{name: :c}}
+        ]
+      }
+
+      assert deconstruct(ir, :left) == [
+               [
+                 left_value: %IR.IntegerType{value: 1},
+                 map_key: %IR.AtomType{value: :a}
+               ],
+               [binding: :c, map_key: %IR.StringType{value: "b"}]
+             ]
+    end
+
+    test "non-nested map, right side" do
+      ir = %IR.MapType{
+        data: [
+          {%IR.AtomType{value: :a}, %IR.IntegerType{value: 1}},
+          {%IR.StringType{value: "b"}, %IR.Symbol{name: :c}}
+        ]
+      }
+
+      assert deconstruct(ir, :right) == [
+               [:right_value, {:map_key, %IR.AtomType{value: :a}}],
+               [:right_value, {:map_key, %IR.StringType{value: "b"}}]
+             ]
+    end
+
+    test "nested map, left side" do
+      ir = %IR.MapType{
+        data: [
+          {%IR.AtomType{value: :a}, %IR.IntegerType{value: 1}},
+          {%IR.StringType{value: "b"},
+           %IR.MapType{
+             data: [
+               {%IR.AtomType{value: :c}, %IR.IntegerType{value: 2}},
+               {%IR.StringType{value: "d"}, %IR.Symbol{name: :e}}
+             ]
+           }}
+        ]
+      }
+
+      assert deconstruct(ir, :left) == [
+               [
+                 left_value: %IR.IntegerType{value: 1},
+                 map_key: %IR.AtomType{value: :a}
+               ],
+               [
+                 left_value: %IR.IntegerType{value: 2},
+                 map_key: %IR.AtomType{value: :c},
+                 map_key: %IR.StringType{value: "b"}
+               ],
+               [
+                 binding: :e,
+                 map_key: %IR.StringType{value: "d"},
+                 map_key: %IR.StringType{value: "b"}
+               ]
+             ]
+    end
+
+    test "nested map, right side" do
+      ir = %IR.MapType{
+        data: [
+          {%IR.AtomType{value: :a}, %IR.IntegerType{value: 1}},
+          {%IR.StringType{value: "b"},
+           %IR.MapType{
+             data: [
+               {%IR.AtomType{value: :c}, %IR.IntegerType{value: 2}},
+               {%IR.StringType{value: "d"}, %IR.Symbol{name: :e}}
+             ]
+           }}
+        ]
+      }
+
+      assert deconstruct(ir, :right) == [
+               [:right_value, {:map_key, %IR.AtomType{value: :a}}],
+               [
+                 :right_value,
+                 {:map_key, %IR.AtomType{value: :c}},
+                 {:map_key, %IR.StringType{value: "b"}}
+               ],
+               [
+                 :right_value,
+                 {:map_key, %IR.StringType{value: "d"}},
+                 {:map_key, %IR.StringType{value: "b"}}
+               ]
+             ]
+    end
+  end
+
   describe "tuple type" do
     test "non-nested tuple, left side" do
       ir = %IR.TupleType{
