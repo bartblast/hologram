@@ -133,24 +133,6 @@ defmodule Hologram.Compiler.ReflectionTest do
     assert %FunctionDefinition{name: :fun} = result
   end
 
-  describe "is_alias?/1" do
-    test "atom which is a module alias" do
-      assert Reflection.is_alias?(Kernel)
-    end
-
-    test "atom which is a protocol alias" do
-      assert Reflection.is_alias?(Enumerable)
-    end
-
-    test "atom which is not an alias" do
-      refute Reflection.is_alias?(:abc)
-    end
-
-    test "non-atom" do
-      refute Reflection.is_alias?(123)
-    end
-  end
-
   describe "is_ignored_module?/1" do
     test "module belonging to hardcoded list of ignored modules" do
       assert Reflection.is_ignored_module?(Ecto.Changeset)

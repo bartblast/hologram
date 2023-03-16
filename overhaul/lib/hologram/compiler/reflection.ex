@@ -85,14 +85,6 @@ defmodule Hologram.Compiler.Reflection do
     |> Transformer.transform()
   end
 
-  def is_alias?(term) when is_atom(term) do
-    term
-    |> to_string()
-    |> String.starts_with?("Elixir.")
-  end
-
-  def is_alias?(_), do: false
-
   def is_ignored_module?(module) do
     if module in @ignored_modules do
       true
