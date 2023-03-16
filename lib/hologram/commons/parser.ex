@@ -7,8 +7,8 @@ defmodule Hologram.Commons.Parser do
 
       def parse!(str) do
         case parse(str) do
-          {:ok, ast} ->
-            ast
+          {:ok, result} ->
+            result
 
           _ ->
             raise """
@@ -20,14 +20,14 @@ defmodule Hologram.Commons.Parser do
         end
       end
 
-      def parse_file(filepath) do
-        filepath
+      def parse_file(file_path) do
+        file_path
         |> File.read!()
         |> parse()
       end
 
-      def parse_file!(filepath) do
-        filepath
+      def parse_file!(file_path) do
+        file_path
         |> File.read!()
         |> parse!()
       end
