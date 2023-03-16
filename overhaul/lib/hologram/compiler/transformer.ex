@@ -72,25 +72,6 @@ defmodule Hologram.Compiler.Transformer do
     }
   end
 
-  transform({:=, _, [left, right]}) do
-    left = transform(left)
-
-    bindings =
-      left
-      |> PatternDeconstructor.deconstruct()
-      |> Enum.map(fn path ->
-        [head | tail] = Enum.reverse(path)
-        access_path = [%IR.MatchAccess{} | Enum.reverse(tail)]
-        %IR.Binding{name: head.name, access_path: access_path}
-      end)
-
-    %IR.MatchOperator{
-      bindings: bindings,
-      left: left,
-      right: transform(right)
-    }
-  end
-
   transform({:in, _, [left, right]}) do
     %IR.MembershipOperator{
       left: transform(left),

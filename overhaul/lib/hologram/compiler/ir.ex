@@ -33,10 +33,6 @@ defmodule Hologram.Compiler.IR do
     defstruct left: nil, right: nil
   end
 
-  defmodule MatchOperator do
-    defstruct left: nil, right: nil
-  end
-
   defmodule MembershipOperator do
     defstruct left: nil, right: nil
   end

@@ -32,6 +32,13 @@ defmodule Hologram.Compiler.Transformer do
     }
   end
 
+  def transform({:=, _, [left, right]}) do
+    %IR.MatchOperator{
+      left: transform(left),
+      right: transform(right)
+    }
+  end
+
   # --- DATA TYPES ---
 
   def transform(ast) when is_atom(ast) and ast not in [nil, false, true] do

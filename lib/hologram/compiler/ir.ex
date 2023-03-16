@@ -5,6 +5,10 @@ defmodule Hologram.Compiler.IR do
     defstruct head: nil, tail: nil
   end
 
+  defmodule MatchOperator do
+    defstruct left: nil, right: nil
+  end
+
   # --- DATA TYPES ---
 
   defmodule AtomType do
