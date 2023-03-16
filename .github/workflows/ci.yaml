@@ -108,6 +108,10 @@ jobs:
     - name: Check lib code formatted
       run: mix format --check-formatted
 
+    # Step: Check whether doc and spec coverage are above thresholds (with Doctor).
+    - name: Check doc and spec coverage
+      run: mix doctor
+
     # Step: Execute the unit tests.
     - name: Run unit tests
       run: mix test
