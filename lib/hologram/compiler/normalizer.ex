@@ -6,6 +6,7 @@ defmodule Hologram.Compiler.Normalizer do
   Normalizes Elixir AST.
 
   ## Examples
+
       iex> ast = Hologram.Compiler.Parser.parse!("if true, do: 987")
       {:if, [line: 1], [true, [do: 987]]}
       iex> Normalizer.normalize(ast)

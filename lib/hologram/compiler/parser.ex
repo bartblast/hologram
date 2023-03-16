@@ -5,6 +5,7 @@ defmodule Hologram.Compiler.Parser do
   Parses Elixir code into Elixir AST.
 
   ## Examples
+
       iex> Parser.parse("1 + 2)
       {:ok, {:+, [line: 1], [1, 2]}}
   """

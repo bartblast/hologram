@@ -3,8 +3,10 @@ defmodule Hologram.Compiler.Helpers do
   Returns alias segments list (without the "Elixir" segment at the beginning).
 
   ## Examples
+
       iex> Helpers.alias_segments("Aaa.Bbb")
       [:Aaa, :Bbb]
+      
       iex> Helpers.alias_segments(Aaa.Bbb)
       [:Aaa, :Bbb]
   """

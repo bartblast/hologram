@@ -3,8 +3,10 @@ defmodule Hologram.Compiler.Reflection do
   Determines whether the given term is an alias.
 
   ## Examples
+
       iex> Reflection.is_alias?(Calendar.ISO)
       true
+      
       iex> Reflection.is_alias?(:abc)
       false
   """
