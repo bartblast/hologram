@@ -2,6 +2,17 @@ defmodule Hologram.Compiler.Normalizer do
   alias Hologram.Compiler.Helpers
   alias Hologram.Compiler.Reflection
 
+  @doc """
+  Normalizes Elixir AST.
+
+  ## Examples
+      iex> ast = Hologram.Compiler.Parser.parse!("if true, do: 987")
+      {:if, [line: 1], [true, [do: 987]]}
+      iex> Normalizer.normalize(ast)
+      {:if, [line: 1], [true, [do: {:__block__, [], [987]}, else: {:__block__, [], [nil]}]]}
+  """
+  def normalize(ast)
+
   def normalize({:case, line, [condition, [do: clauses]]}) do
     {:case, line, [condition, [do: normalize(clauses)]]}
   end
