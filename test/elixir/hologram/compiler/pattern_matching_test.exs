@@ -1,7 +1,14 @@
 defmodule Hologram.Compiler.PatternMatchingTest do
-  use Hologram.Test.UnitCase, async: true
+  use Hologram.Test.BasicCase, async: true
   import Hologram.Compiler.PatternMatching
   alias Hologram.Compiler.IR
+
+  # describe "match operator" do
+  #   test "root" do
+  #     code = "{1, a} = {b, 2}"
+  #     Hologram.Compiler.Reflection.ir(code) |> IO.inspect()
+  #   end
+  # end
 
   describe "literal value" do
     test "left side" do

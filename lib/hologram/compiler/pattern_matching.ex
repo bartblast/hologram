@@ -1,6 +1,7 @@
 defmodule Hologram.Compiler.PatternMatching do
   alias Hologram.Compiler.IR
 
+  # TODO: add @doc
   def deconstruct(ir, side \\ nil, path \\ [])
 
   def deconstruct(%IR.ConsOperator{head: head, tail: tail}, side, path) do
@@ -27,6 +28,13 @@ defmodule Hologram.Compiler.PatternMatching do
       map_key_path = [{:map_key, key} | path]
       acc ++ deconstruct(value, side, map_key_path)
     end)
+  end
+
+  def deconstruct(%IR.MatchOperator{left: left_ir, right: right_ir}, nil, []) do
+    left_paths = deconstruct(left_ir, :left, [])
+    right_paths = deconstruct(right_ir, :right, [])
+
+    left_paths ++ right_paths
   end
 
   def deconstruct(%IR.Symbol{name: name}, :left, path) do

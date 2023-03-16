@@ -9,6 +9,7 @@ defmodule Hologram.MixProject do
 
   defp deps do
     [
+      {:doctor, "~> 0.21", only: [:dev, :test]},
       {:interceptor, "~> 0.5", only: [:dev, :test]}
     ]
   end
