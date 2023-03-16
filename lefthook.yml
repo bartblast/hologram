@@ -1,5 +1,5 @@
 pre-commit:
   parallel: true
   commands:
-      ensure_elixir_formatted:
+      check_code_formatted:
         run: mix format --check-formatted
