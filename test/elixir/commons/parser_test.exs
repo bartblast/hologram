@@ -1,5 +1,5 @@
 defmodule Hologram.Commons.ParserTest do
-  use Hologram.Test.UnitCase, async: true
+  use Hologram.Test.BasicCase, async: true
   alias Hologram.Test.Fixtures.Commons.Parser.Implementation
 
   @error_message "Invalid code:\n-----\ninvalid_code\n-----\n"

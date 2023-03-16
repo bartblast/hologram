@@ -1,5 +1,5 @@
 defmodule Hologram.Compiler.HelpersTest do
-  use Hologram.Test.UnitCase, async: true
+  use Hologram.Test.BasicCase, async: true
   alias Hologram.Compiler.Helpers
 
   describe "alias_segments/1" do

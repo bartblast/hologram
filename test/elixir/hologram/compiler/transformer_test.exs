@@ -1,5 +1,5 @@
 defmodule Hologram.Compiler.TransformerTest do
-  use Hologram.Test.UnitCase, async: true
+  use Hologram.Test.BasicCase, async: true
   import Hologram.Compiler.Transformer
 
   alias Hologram.Compiler.IR

@@ -1,5 +1,5 @@
 defmodule Hologram.Compiler.ReflectionTest do
-  use Hologram.Test.UnitCase, async: true
+  use Hologram.Test.BasicCase, async: true
   alias Hologram.Compiler.Reflection
 
   describe "is_alias?/1" do

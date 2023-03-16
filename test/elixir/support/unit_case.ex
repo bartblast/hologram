@@ -1,4 +1,4 @@
-defmodule Hologram.Test.UnitCase do
+defmodule Hologram.Test.BasicCase do
   use ExUnit.CaseTemplate
 
   using do
