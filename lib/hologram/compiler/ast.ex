@@ -2,6 +2,17 @@ defmodule Hologram.Compiler.AST do
   alias Hologram.Compiler.Normalizer
   alias Hologram.Compiler.Parser
 
+  @type t ::
+          {atom, list, list}
+          | {any, any}
+          | module
+          | atom
+          | binary
+          | boolean
+          | float
+          | integer
+          | list
+
   @doc """
   Given Elixir source code returns its Elixir AST.
 
