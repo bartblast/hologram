@@ -1,4 +1,7 @@
 defmodule Hologram.Compiler.IR do
+  alias Hologram.Compiler.AST
+  alias Hologram.Compiler.Transformer
+
   # --- OPERATORS ---
 
   defmodule AdditionOperator do
@@ -71,5 +74,21 @@ defmodule Hologram.Compiler.IR do
 
   defmodule Symbol do
     defstruct name: nil
+  end
+
+  # --- API ---
+
+  @doc """
+  Given Elixir source code returns its Hologram IR.
+
+  ## Examples
+
+      iex> IR.for_code("1 + 2")
+      %IR.AdditionOperator{left: %IR.IntegerType{value: 1}, right: %IR.IntegerType{value: 2}}
+  """
+  def for_code(code) do
+    code
+    |> AST.for_code()
+    |> Transformer.transform()
   end
 end

@@ -119,13 +119,6 @@ defmodule Hologram.Compiler.ReflectionTest do
     assert result == expected
   end
 
-  test "ir/1" do
-    code = "def fun, do: 1"
-    result = Reflection.ir(code)
-
-    assert %FunctionDefinition{name: :fun} = result
-  end
-
   describe "is_ignored_module?/1" do
     test "module belonging to hardcoded list of ignored modules" do
       assert Reflection.is_ignored_module?(Ecto.Changeset)

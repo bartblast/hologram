@@ -79,12 +79,6 @@ defmodule Hologram.Compiler.Reflection do
     |> String.replace_suffix("/runtime.ex", "")
   end
 
-  def ir(code) do
-    code
-    |> ast()
-    |> Transformer.transform()
-  end
-
   def is_ignored_module?(module) do
     if module in @ignored_modules do
       true
