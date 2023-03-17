@@ -4,7 +4,7 @@ defmodule Hologram.Compiler.IR do
   alias Hologram.Compiler.IR
   alias Hologram.Compiler.Transformer
 
-  @type t ::
+  @type data_type_ir ::
           IR.AtomType.t()
           | IR.BinaryType.t()
           | IR.BooleanType.t()
@@ -18,6 +18,10 @@ defmodule Hologram.Compiler.IR do
           | IR.StructType.t()
           | IR.TupleType.t()
 
+  @type operator_ir :: IR.AdditionOperator.t() | IR.ConsOperator.t()
+
+  @type t :: data_type_ir | operator_ir
+
   # --- OPERATORS ---
 
   defmodule AdditionOperator do
@@ -28,6 +32,8 @@ defmodule Hologram.Compiler.IR do
 
   defmodule ConsOperator do
     defstruct head: nil, tail: nil
+
+    @type t :: %__MODULE__{head: IR.t(), tail: IR.t()}
   end
 
   defmodule MatchOperator do
