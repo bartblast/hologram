@@ -1,4 +1,4 @@
 %Doctor.Config{
-  ignore_paths: ["test"],
+  ignore_paths: [~r(^test/*)],
   min_overall_moduledoc_coverage: 0
 }
