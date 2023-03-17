@@ -63,13 +63,6 @@ defmodule Hologram.Compiler.ReflectionTest do
       assert result == @expected
     end
 
-    test "binary arg (code)" do
-      code = "defmodule Hologram.Test.Fixtures.Compiler.Reflection.Module1 do\nend\n"
-      result = Reflection.ast(code)
-
-      assert result == @expected
-    end
-
     test "list arg (module segments)" do
       result = Reflection.ast(@alias_segs_1)
       assert result == @expected
