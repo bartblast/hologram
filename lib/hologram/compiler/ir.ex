@@ -20,6 +20,8 @@ defmodule Hologram.Compiler.IR do
 
   defmodule AtomType do
     defstruct value: nil
+
+    @type t :: %__MODULE__{value: atom}
   end
 
   defmodule BinaryType do
