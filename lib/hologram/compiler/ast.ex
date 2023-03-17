@@ -3,14 +3,14 @@ defmodule Hologram.Compiler.AST do
   alias Hologram.Compiler.Parser
 
   @doc """
-  Converts Elixir code into Elixir AST.
+  Given Elixir source code returns its Elixir AST.
 
   ## Examples
 
-      iex> AST.from_code("1 + 2")
+      iex> AST.for_code("1 + 2")
       {:+, [line: 1], [1, 2]}
   """
-  def from_code(code) do
+  def for_code(code) do
     Parser.parse!(code)
     |> Normalizer.normalize()
   end
