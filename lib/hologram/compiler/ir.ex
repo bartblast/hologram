@@ -120,10 +120,14 @@ defmodule Hologram.Compiler.IR do
 
   defmodule Alias do
     defstruct segments: nil
+
+    @type t :: %__MODULE__{segments: T.alias_segments()}
   end
 
   defmodule Symbol do
     defstruct name: nil
+
+    @type t :: %__MODULE__{name: atom}
   end
 
   # --- API ---
