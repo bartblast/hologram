@@ -6,10 +6,11 @@ defmodule Hologram.Compiler.Reflection do
 
       iex> Reflection.is_alias?(Calendar.ISO)
       true
-      
+
       iex> Reflection.is_alias?(:abc)
       false
   """
+  @spec is_alias?(any) :: boolean
   def is_alias?(term)
 
   def is_alias?(term) when is_atom(term) do
