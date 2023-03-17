@@ -1,4 +1,5 @@
 defmodule Hologram.Compiler.AST do
+  alias Hologram.Compiler.AST
   alias Hologram.Compiler.Normalizer
   alias Hologram.Compiler.Parser
 
@@ -21,6 +22,7 @@ defmodule Hologram.Compiler.AST do
       iex> AST.for_code("1 + 2")
       {:+, [line: 1], [1, 2]}
   """
+  @spec for_code(binary) :: AST.t()
   def for_code(code) do
     Parser.parse!(code)
     |> Normalizer.normalize()
