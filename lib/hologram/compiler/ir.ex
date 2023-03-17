@@ -70,7 +70,7 @@ defmodule Hologram.Compiler.IR do
   end
 
   defmodule MapType do
-    defstruct data: []
+    defstruct data: nil
 
     @type t :: %__MODULE__{data: list(tuple)}
   end
@@ -94,13 +94,13 @@ defmodule Hologram.Compiler.IR do
   end
 
   defmodule StructType do
-    defstruct module: nil, data: []
+    defstruct module: nil, data: nil
 
     @type t :: %__MODULE__{module: module, data: list(tuple)}
   end
 
   defmodule TupleType do
-    defstruct data: []
+    defstruct data: nil
 
     @type t :: %__MODULE__{data: tuple}
   end
