@@ -15,9 +15,4 @@ defmodule Hologram.Typespecs do
   e.g. %{Hologram.Typespecs => %ModuleDefinition{}}
   """
   @type module_definitions_map :: %{module() => %ModuleDefinition{}}
-
-  @typedoc """
-  e.g. [:Hologram, :Typespecs]
-  """
-  @type alias_segments :: list(atom())
 end
