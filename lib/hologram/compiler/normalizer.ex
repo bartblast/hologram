@@ -1,4 +1,5 @@
 defmodule Hologram.Compiler.Normalizer do
+  alias Hologram.Compiler.AST
   alias Hologram.Compiler.Helpers
   alias Hologram.Compiler.Reflection
 
@@ -12,6 +13,7 @@ defmodule Hologram.Compiler.Normalizer do
       iex> Normalizer.normalize(ast)
       {:if, [line: 1], [true, [do: {:__block__, [], [987]}, else: {:__block__, [], [nil]}]]}
   """
+  @spec normalize(AST.t()) :: AST.t()
   def normalize(ast)
 
   def normalize({:case, line, [condition, [do: clauses]]}) do
