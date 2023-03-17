@@ -18,7 +18,7 @@ defmodule Hologram.Compiler.IR do
           | IR.StructType.t()
           | IR.TupleType.t()
 
-  @type operator_ir :: IR.AdditionOperator.t() | IR.ConsOperator.t()
+  @type operator_ir :: IR.AdditionOperator.t() | IR.ConsOperator.t() | IR.MatchOperator.t()
 
   @type t :: data_type_ir | operator_ir
 
@@ -38,6 +38,8 @@ defmodule Hologram.Compiler.IR do
 
   defmodule MatchOperator do
     defstruct left: nil, right: nil
+
+    @type t :: %__MODULE__{left: IR.t(), right: IR.t()}
   end
 
   # --- DATA TYPES ---
