@@ -1,7 +1,7 @@
 defmodule Hologram.Compiler.PatternMatching do
   alias Hologram.Compiler.IR
 
-  # TODO: add @doc
+  # TODO: add @doc and typespec and remove this module from .doctor.exs ignore_modules list.
   def deconstruct(ir, side \\ nil, path \\ [])
 
   def deconstruct(%IR.ConsOperator{head: head, tail: tail}, side, path) do
