@@ -53,7 +53,7 @@ defmodule Hologram.Compiler.IR do
   defmodule BinaryType do
     defstruct parts: nil
 
-    @type t :: %__MODULE__{parts: list}
+    @type t :: %__MODULE__{parts: list(IR.t())}
   end
 
   defmodule BooleanType do
@@ -77,13 +77,13 @@ defmodule Hologram.Compiler.IR do
   defmodule ListType do
     defstruct data: nil
 
-    @type t :: %__MODULE__{data: list}
+    @type t :: %__MODULE__{data: list(IR.t())}
   end
 
   defmodule MapType do
     defstruct data: nil
 
-    @type t :: %__MODULE__{data: list(tuple)}
+    @type t :: %__MODULE__{data: list({IR.t(), IR.t()})}
   end
 
   defmodule ModuleType do
@@ -107,13 +107,13 @@ defmodule Hologram.Compiler.IR do
   defmodule StructType do
     defstruct module: nil, data: nil
 
-    @type t :: %__MODULE__{module: module, data: list(tuple)}
+    @type t :: %__MODULE__{module: module, data: list({IR.t(), IR.t()})}
   end
 
   defmodule TupleType do
     defstruct data: nil
 
-    @type t :: %__MODULE__{data: tuple}
+    @type t :: %__MODULE__{data: list(IR.t())}
   end
 
   # --- CONTROL FLOW ---
