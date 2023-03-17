@@ -1,6 +1,10 @@
 defmodule Hologram.Compiler.IR do
   # --- OPERATORS ---
 
+  defmodule AdditionOperator do
+    defstruct left: nil, right: nil
+  end
+
   defmodule ConsOperator do
     defstruct head: nil, tail: nil
   end

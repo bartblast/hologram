@@ -14,13 +14,6 @@ defmodule Hologram.Compiler.Transformer do
     }
   end
 
-  transform({:+, _, [left, right]}) do
-    %IR.AdditionOperator{
-      left: transform(left),
-      right: transform(right)
-    }
-  end
-
   transform({:/, _, [left, right]}) do
     %IR.DivisionOperator{
       left: transform(left),

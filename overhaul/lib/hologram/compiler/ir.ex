@@ -5,10 +5,6 @@ defmodule Hologram.Compiler.IR do
     defstruct data: nil, key: nil
   end
 
-  defmodule AdditionOperator do
-    defstruct left: nil, right: nil
-  end
-
   defmodule DivisionOperator do
     defstruct left: nil, right: nil
   end

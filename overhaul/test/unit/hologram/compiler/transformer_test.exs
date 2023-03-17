@@ -36,16 +36,6 @@ defmodule Hologram.Compiler.TransformerTest do
     end
   end
 
-  test "addition operator" do
-    # a + 2
-    ast = {:+, [line: 1], [{:a, [line: 1], nil}, 2]}
-
-    assert transform(ast) == %IR.AdditionOperator{
-             left: %IR.Symbol{name: :a},
-             right: %IR.IntegerType{value: 2}
-           }
-  end
-
   test "division operator" do
     # a / 2
     ast = {:/, [line: 1], [{:a, [line: 1], nil}, 2]}
