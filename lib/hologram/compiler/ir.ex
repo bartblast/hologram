@@ -1,26 +1,29 @@
 defmodule Hologram.Compiler.IR do
   alias Hologram.Commons.Types, as: T
   alias Hologram.Compiler.AST
+  alias Hologram.Compiler.IR
   alias Hologram.Compiler.Transformer
 
-  @type non_expanded_ir ::
-          __MODULE__.AtomType.t()
-          | __MODULE__.BinaryType.t()
-          | __MODULE__.BooleanType.t()
-          | __MODULE__.FloatType.t()
-          | __MODULE__.IntegerType.t()
-          | __MODULE__.ListType.t()
-          | __MODULE__.MapType.t()
-          | __MODULE__.ModuleType.t()
-          | __MODULE__.NilType.t()
-          | __MODULE__.StringType.t()
-          | __MODULE__.StructType.t()
-          | __MODULE__.TupleType.t()
+  @type t ::
+          IR.AtomType.t()
+          | IR.BinaryType.t()
+          | IR.BooleanType.t()
+          | IR.FloatType.t()
+          | IR.IntegerType.t()
+          | IR.ListType.t()
+          | IR.MapType.t()
+          | IR.ModuleType.t()
+          | IR.NilType.t()
+          | IR.StringType.t()
+          | IR.StructType.t()
+          | IR.TupleType.t()
 
   # --- OPERATORS ---
 
   defmodule AdditionOperator do
     defstruct left: nil, right: nil
+
+    @type t :: %__MODULE__{left: IR.t(), right: IR.t()}
   end
 
   defmodule ConsOperator do
