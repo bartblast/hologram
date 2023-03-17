@@ -8,6 +8,7 @@ defmodule Hologram.Compiler.Transformer do
       }
   end
 
+  alias Hologram.Compiler.AST
   alias Hologram.Compiler.Helpers
   alias Hologram.Compiler.IR
 
@@ -22,6 +23,7 @@ defmodule Hologram.Compiler.Transformer do
       %IR.AdditionOperator{left: %IR.IntegerType{value: 1}, right: %IR.IntegerType{value: 2}}
   """
   @intercept true
+  @spec transform(AST.t()) :: IR.t()
   def transform(ast)
 
   # --- OPERATORS ---
@@ -140,6 +142,10 @@ defmodule Hologram.Compiler.Transformer do
     %IR.TupleType{data: data}
   end
 
+  @doc """
+  Prints debug info for intercepted transform/1 call.
+  """
+  @spec debug({module, atom, [AST.t()]}, IR.t()) :: :ok
   def debug({_module, _function, [ast] = _args}, result) do
     IO.puts("\nTRANSFORM...............................\n")
     IO.puts("ast")
