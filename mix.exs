@@ -9,6 +9,7 @@ defmodule Hologram.MixProject do
 
   defp deps do
     [
+      {:dialyxir, "~> 1.0", only: [:dev, :test], runtime: false},
       {:doctor, "~> 0.21", only: [:dev, :test]},
       {:interceptor, "~> 0.5", only: [:dev, :test]}
     ]
@@ -35,6 +36,9 @@ defmodule Hologram.MixProject do
       elixir: "~> 1.0",
       elixirc_paths: elixirc_paths(Mix.env()),
       package: package(),
+      dialyzer: [
+        plt_add_apps: [:ex_unit, :mix]
+      ],
       start_permanent: Mix.env() == :prod,
       test_paths: ["test/elixir"],
       version: "0.1.0"
