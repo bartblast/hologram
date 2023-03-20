@@ -3,9 +3,8 @@ defmodule Mix.Tasks.Holo.Test.CheckFileNames do
   alias Hologram.Commons.FileUtils
 
   @moduledoc """
-  Checks whether all test scripts have valid file names,
-  i.e. they end with "_test" suffix and have ".exs" file extension.
-
+  Checks if any test scripts have invalid file names.
+  File name is valid if it ends with "_test" suffix and has ".exs" extension.
   If there are any invalid file names, the task exits with code 1.
 
   Scripts not adhering to the aforementioned rules wouldn't be picked up by the mix test task.
@@ -17,18 +16,37 @@ defmodule Mix.Tasks.Holo.Test.CheckFileNames do
 
   @doc false
   def run(args) do
-    invalid_file_names =
-      args
-      |> FileUtils.list_files_recursively()
-      |> Enum.reject(&String.ends_with?(&1, "_test.exs"))
+    args
+    |> find_invalid_file_names()
+    |> print_result_and_exit()
+  end
 
-    if Enum.any?(invalid_file_names) do
-      IO.puts(red("Found invalid file names:"))
-      Enum.each(invalid_file_names, &IO.puts(red(&1)))
-      exit({:shutdown, 1})
-    end
+  defp find_invalid_file_names(paths) do
+    paths
+    |> FileUtils.list_files_recursively()
+    |> Enum.reject(&String.ends_with?(&1, "_test.exs"))
+  end
+
+  defp green(text) do
+    IO.ANSI.green() <> text <> IO.ANSI.reset()
+  end
+
+  defp print_result_and_exit([]) do
+    "All test scripts have valid file names."
+    |> green()
+    |> IO.puts()
 
     :ok
+  end
+
+  defp print_result_and_exit(invalid_file_names) do
+    "Found test scripts with invalid file names:"
+    |> red()
+    |> IO.puts()
+
+    Enum.each(invalid_file_names, &IO.puts(red("  * " <> &1)))
+
+    exit({:shutdown, 1})
   end
 
   defp red(text) do
