@@ -5,10 +5,6 @@ defmodule Hologram.Compiler.IR do
     defstruct left: nil, right: nil
   end
 
-  defmodule MembershipOperator do
-    defstruct left: nil, right: nil
-  end
-
   defmodule ModuleAttributeOperator do
     defstruct name: nil
   end

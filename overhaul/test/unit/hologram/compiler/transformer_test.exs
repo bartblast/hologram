@@ -42,21 +42,6 @@ defmodule Hologram.Compiler.TransformerTest do
     end
   end
 
-  test "membership operator" do
-    # 1 in [2, 3]
-    ast = {:in, [line: 1], [1, [2, 3]]}
-
-    assert transform(ast) == %IR.MembershipOperator{
-             left: %IR.IntegerType{value: 1},
-             right: %IR.ListType{
-               data: [
-                 %IR.IntegerType{value: 2},
-                 %IR.IntegerType{value: 3}
-               ]
-             }
-           }
-  end
-
   describe "module attribute operator" do
     test "AST obtained directly from source file" do
       # @my_attr
