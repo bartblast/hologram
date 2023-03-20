@@ -42,16 +42,6 @@ defmodule Hologram.Compiler.TransformerTest do
     end
   end
 
-  test "less than operator" do
-    # 1 < 2
-    ast = {:<, [line: 1], [1, 2]}
-
-    assert transform(ast) == %IR.LessThanOperator{
-             left: %IR.IntegerType{value: 1},
-             right: %IR.IntegerType{value: 2}
-           }
-  end
-
   test "list concatenation operator" do
     # [1, 2] ++ [3, 4]
     ast = {:++, [line: 1], [[1, 2], [3, 4]]}
