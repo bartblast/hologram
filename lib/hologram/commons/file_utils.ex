@@ -18,6 +18,9 @@ defmodule Hologram.Commons.FileUtils do
         |> Enum.map(&list_files_recursively/1)
         |> Enum.concat()
         |> Enum.sort()
+
+      true ->
+        raise ArgumentError, ~s(Invalid path: "#{path}")
     end
   end
 end
