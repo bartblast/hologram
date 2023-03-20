@@ -7,6 +7,7 @@ defmodule Mix.Tasks.Holo.Test.CheckFileNames do
   so that they can be picked up by the mix test task.
   """
 
+  @doc false
   def run(args) do
     result =
       args
