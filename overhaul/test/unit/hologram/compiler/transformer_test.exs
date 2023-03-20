@@ -42,26 +42,6 @@ defmodule Hologram.Compiler.TransformerTest do
     end
   end
 
-  test "list concatenation operator" do
-    # [1, 2] ++ [3, 4]
-    ast = {:++, [line: 1], [[1, 2], [3, 4]]}
-
-    assert transform(ast) == %IR.ListConcatenationOperator{
-             left: %IR.ListType{
-               data: [
-                 %IR.IntegerType{value: 1},
-                 %IR.IntegerType{value: 2}
-               ]
-             },
-             right: %IR.ListType{
-               data: [
-                 %IR.IntegerType{value: 3},
-                 %IR.IntegerType{value: 4}
-               ]
-             }
-           }
-  end
-
   test "list subtraction operator" do
     # [1, 2] -- [3, 2]
     ast = {:--, [line: 1], [[1, 2], [3, 2]]}

@@ -60,6 +60,12 @@ defmodule Hologram.Compiler.IR do
     @type t :: %__MODULE__{left: IR.t(), right: IR.t()}
   end
 
+  defmodule ListConcatenationOperator do
+    defstruct left: nil, right: nil
+
+    @type t :: %__MODULE__{left: IR.t(), right: IR.t()}
+  end
+
   defmodule MatchOperator do
     defstruct left: nil, right: nil
 

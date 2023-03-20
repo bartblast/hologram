@@ -5,10 +5,6 @@ defmodule Hologram.Compiler.IR do
     defstruct left: nil, right: nil
   end
 
-  defmodule ListConcatenationOperator do
-    defstruct left: nil, right: nil
-  end
-
   defmodule ListSubtractionOperator do
     defstruct left: nil, right: nil
   end
