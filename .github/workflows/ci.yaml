@@ -104,20 +104,19 @@ jobs:
       run: mix compile --warnings-as-errors
 
     # Step: Check that the lib code has already been formatted.
-    # This step fails if something was found unformatted.
     - name: Check lib code formatted
       run: mix format --check-formatted
 
-    # Step: Check whether doc and spec coverage are above thresholds (with Doctor).
+    # Step: Check that doc and spec coverage are above thresholds (with Doctor).
     - name: Check doc and spec coverage
       run: mix doctor
 
-    # Step: Check whether any test scripts have invalid file names.
+    # Step: Check that all test scripts have valid file names.
     - name: Check test file names
       run: mix holo.test.check_file_names test/elixir/hologram
 
-    # Step: Execute the unit tests.
-    - name: Run unit tests
+    # Step: Execute Elixir unit tests.
+    - name: Run Elixir unit tests
       run: mix test
 
     # Step: Download test app dependencies.
