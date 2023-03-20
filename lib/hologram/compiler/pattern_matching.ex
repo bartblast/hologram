@@ -31,13 +31,13 @@ defmodule Hologram.Compiler.PatternMatching do
   end
 
   def deconstruct(%IR.MatchOperator{left: left_ir, right: right_ir}, nil, []) do
-    left_paths = deconstruct(left_ir, :left, [])
-    right_paths = deconstruct(right_ir, :right, [])
+    left_paths = deconstruct(left_ir, :lhs, [])
+    right_paths = deconstruct(right_ir, :rhs, [])
 
     left_paths ++ right_paths
   end
 
-  def deconstruct(%IR.Symbol{name: name}, :left, path) do
+  def deconstruct(%IR.Symbol{name: name}, :lhs, path) do
     [[{:binding, name} | path]]
   end
 
@@ -50,11 +50,11 @@ defmodule Hologram.Compiler.PatternMatching do
     end)
   end
 
-  def deconstruct(ir, :left, path) do
-    [[{:left_value, ir} | path]]
+  def deconstruct(ir, :lhs, path) do
+    [[{:lhs_value, ir} | path]]
   end
 
-  def deconstruct(_ir, :right, path) do
-    [[:right_value | path]]
+  def deconstruct(_ir, :rhs, path) do
+    [[:rhs_value | path]]
   end
 end
