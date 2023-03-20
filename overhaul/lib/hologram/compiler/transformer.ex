@@ -23,13 +23,6 @@ defmodule Hologram.Compiler.Transformer do
     }
   end
 
-  transform({:--, _, [left, right]}) do
-    %IR.ListSubtractionOperator{
-      left: transform(left),
-      right: transform(right)
-    }
-  end
-
   transform({:in, _, [left, right]}) do
     %IR.MembershipOperator{
       left: transform(left),
