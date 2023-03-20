@@ -36,16 +36,6 @@ defmodule Hologram.Compiler.TransformerTest do
     end
   end
 
-  test "division operator" do
-    # a / 2
-    ast = {:/, [line: 1], [{:a, [line: 1], nil}, 2]}
-
-    assert transform(ast) == %IR.DivisionOperator{
-             left: %IR.Symbol{name: :a},
-             right: %IR.IntegerType{value: 2}
-           }
-  end
-
   describe "dot operator" do
     test "on symbol" do
       # a.x
