@@ -2,6 +2,11 @@ defmodule Mix.Tasks.Holo.Test.CheckFileNames do
   use Mix.Task
   alias Hologram.Commons.FileUtils
 
+  @moduledoc """
+  Checks whether test scripts have valid file names (end with _test.exs),
+  so that they can be picked up by the mix test task.
+  """
+
   def run(args) do
     result =
       args
