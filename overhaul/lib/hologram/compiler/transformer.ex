@@ -23,13 +23,6 @@ defmodule Hologram.Compiler.Transformer do
     }
   end
 
-  transform({:==, _, [left, right]}) do
-    %IR.EqualToOperator{
-      left: transform(left),
-      right: transform(right)
-    }
-  end
-
   transform({:<, _, [left, right]}) do
     %IR.LessThanOperator{
       left: transform(left),

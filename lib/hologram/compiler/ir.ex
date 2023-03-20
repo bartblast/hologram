@@ -48,6 +48,12 @@ defmodule Hologram.Compiler.IR do
     @type t :: %__MODULE__{left: IR.t(), right: IR.t()}
   end
 
+  defmodule EqualToOperator do
+    defstruct left: nil, right: nil
+
+    @type t :: %__MODULE__{left: IR.t(), right: IR.t()}
+  end
+
   defmodule MatchOperator do
     defstruct left: nil, right: nil
 

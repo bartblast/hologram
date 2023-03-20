@@ -56,6 +56,13 @@ defmodule Hologram.Compiler.Transformer do
     }
   end
 
+  def transform({:==, _, [left, right]}) do
+    %IR.EqualToOperator{
+      left: transform(left),
+      right: transform(right)
+    }
+  end
+
   def transform({:=, _, [left, right]}) do
     %IR.MatchOperator{
       left: transform(left),
