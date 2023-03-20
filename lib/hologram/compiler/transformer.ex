@@ -56,6 +56,22 @@ defmodule Hologram.Compiler.Transformer do
     }
   end
 
+  def transform({{:., _, [{marker, _, _} = left, right]}, [no_parens: true, line: _], []})
+      when marker not in [:__aliases__, :__MODULE__] do
+    %IR.DotOperator{
+      left: transform(left),
+      right: transform(right)
+    }
+  end
+
+  def transform({{:., _, [{marker, _, _} = left, right]}, [no_parens: true, line: _], []})
+      when marker not in [:__aliases__, :__MODULE__] do
+    %IR.DotOperator{
+      left: transform(left),
+      right: transform(right)
+    }
+  end
+
   def transform({:==, _, [left, right]}) do
     %IR.EqualToOperator{
       left: transform(left),

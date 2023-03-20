@@ -7,22 +7,6 @@ defmodule Hologram.Compiler.Transformer do
 
   # --- OPERATORS ---
 
-  transform _({{:., _, [{marker, _, _} = left, right]}, [no_parens: true, line: _], []})
-            when marker not in [:__aliases__, :__MODULE__] do
-    %IR.DotOperator{
-      left: transform(left),
-      right: transform(right)
-    }
-  end
-
-  transform _({{:., _, [{marker, _, _} = left, right]}, [no_parens: true, line: _], []})
-            when marker not in [:__aliases__, :__MODULE__] do
-    %IR.DotOperator{
-      left: transform(left),
-      right: transform(right)
-    }
-  end
-
   transform({:*, _, [left, right]}) do
     %IR.MultiplicationOperator{
       left: transform(left),
