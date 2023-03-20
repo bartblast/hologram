@@ -7,13 +7,6 @@ defmodule Hologram.Compiler.Transformer do
 
   # --- OPERATORS ---
 
-  transform({{:., _, [{:__aliases__, [alias: false], [:Access]}, :get]}, _, [data, key]}) do
-    %IR.AccessOperator{
-      data: transform(data),
-      key: transform(key)
-    }
-  end
-
   transform _({{:., _, [{marker, _, _} = left, right]}, [no_parens: true, line: _], []})
             when marker not in [:__aliases__, :__MODULE__] do
     %IR.DotOperator{

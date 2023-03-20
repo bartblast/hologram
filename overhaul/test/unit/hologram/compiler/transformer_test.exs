@@ -5,37 +5,6 @@ defmodule Hologram.Compiler.TransformerTest do
 
   # --- OPERATORS ---
 
-  describe "access operator" do
-    test "data is a variable" do
-      # a[:b]
-      ast =
-        {{:., [line: 1], [{:__aliases__, [alias: false], [:Access]}, :get]}, [line: 1],
-         [{:a, [line: 1], nil}, :b]}
-
-      assert transform(ast) == %IR.AccessOperator{
-               data: %IR.Symbol{name: :a},
-               key: %IR.AtomType{value: :b}
-             }
-    end
-
-    test "data is an explicit value" do
-      # %{a: 1, b: 2}[:b]
-      ast =
-        {{:., [line: 1], [{:__aliases__, [alias: false], [:Access]}, :get]}, [line: 1],
-         [{:%{}, [line: 1], [a: 1, b: 2]}, :b]}
-
-      assert transform(ast) == %IR.AccessOperator{
-               data: %IR.MapType{
-                 data: [
-                   {%IR.AtomType{value: :a}, %IR.IntegerType{value: 1}},
-                   {%IR.AtomType{value: :b}, %IR.IntegerType{value: 2}}
-                 ]
-               },
-               key: %IR.AtomType{value: :b}
-             }
-    end
-  end
-
   describe "dot operator" do
     test "on symbol" do
       # a.x

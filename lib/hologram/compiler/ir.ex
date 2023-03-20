@@ -24,6 +24,12 @@ defmodule Hologram.Compiler.IR do
 
   # --- OPERATORS ---
 
+  defmodule AccessOperator do
+    defstruct data: nil, key: nil
+
+    @type t :: %__MODULE__{data: IR.t(), key: IR.t()}
+  end
+
   defmodule AdditionOperator do
     defstruct left: nil, right: nil
 
