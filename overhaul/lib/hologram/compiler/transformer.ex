@@ -23,10 +23,6 @@ defmodule Hologram.Compiler.Transformer do
     }
   end
 
-  transform _({:@, _, [{name, _, term}]}) when not is_list(term) do
-    %IR.ModuleAttributeOperator{name: name}
-  end
-
   transform({:*, _, [left, right]}) do
     %IR.MultiplicationOperator{
       left: transform(left),

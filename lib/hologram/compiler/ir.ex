@@ -84,6 +84,12 @@ defmodule Hologram.Compiler.IR do
     @type t :: %__MODULE__{left: IR.t(), right: IR.t()}
   end
 
+  defmodule ModuleAttributeOperator do
+    defstruct name: nil
+
+    @type t :: %__MODULE__{name: atom}
+  end
+
   # --- DATA TYPES ---
 
   defmodule AtomType do
