@@ -3,12 +3,141 @@ defmodule Hologram.Compiler.PatternMatchingTest do
   import Hologram.Compiler.PatternMatching
   alias Hologram.Compiler.IR
 
-  # describe "match operator" do
-  #   test "root" do
-  #     code = "{1, a} = {b, 2}"
-  #     Hologram.Compiler.Reflection.ir(code) |> IO.inspect()
-  #   end
-  # end
+  describe "match operator" do
+    test "literal value on both sides" do
+      # 1 = 2
+      ir = %IR.MatchOperator{
+        left: %IR.IntegerType{value: 1},
+        right: %IR.IntegerType{value: 2}
+      }
+
+      assert deconstruct(ir) == [[lhs_value: %IR.IntegerType{value: 1}], [:rhs_value]]
+    end
+
+    test "symbol on lhs" do
+      # x = 2
+      ir = %IR.MatchOperator{
+        left: %IR.Symbol{name: :x},
+        right: %IR.IntegerType{value: 2}
+      }
+
+      assert deconstruct(ir) == [[binding: :x], [:rhs_value]]
+    end
+
+    test "symbol on rhs" do
+      # 1 = x
+      ir = %IR.MatchOperator{
+        left: %IR.IntegerType{value: 1},
+        right: %IR.Symbol{name: :x}
+      }
+
+      assert deconstruct(ir) == [[lhs_value: %IR.IntegerType{value: 1}], [:rhs_value]]
+    end
+
+    test "nested, symbol on lhs" do
+      # x = 2 = 3
+      ir = %IR.MatchOperator{
+        left: %IR.Symbol{name: :x},
+        right: %IR.MatchOperator{
+          left: %IR.IntegerType{value: 2},
+          right: %IR.IntegerType{value: 3}
+        }
+      }
+
+      assert deconstruct(ir) == [
+               [binding: :x],
+               [lhs_value: %IR.IntegerType{value: 2}],
+               [:rhs_value]
+             ]
+    end
+
+    test "nested, symbol in the middle" do
+      # 1 = x = 3
+      ir = %IR.MatchOperator{
+        left: %IR.IntegerType{value: 1},
+        right: %IR.MatchOperator{
+          left: %IR.Symbol{name: :x},
+          right: %IR.IntegerType{value: 3}
+        }
+      }
+
+      assert deconstruct(ir) == [
+               [lhs_value: %IR.IntegerType{value: 1}],
+               [binding: :x],
+               [:rhs_value]
+             ]
+    end
+
+    test "nested, symbol on rhs" do
+      # 1 = 2 = x
+      ir = %IR.MatchOperator{
+        left: %IR.IntegerType{value: 1},
+        right: %IR.MatchOperator{
+          left: %IR.IntegerType{value: 2},
+          right: %IR.Symbol{name: :x}
+        }
+      }
+
+      assert deconstruct(ir) == [
+               [lhs_value: %IR.IntegerType{value: 1}],
+               [lhs_value: %IR.IntegerType{value: 2}],
+               [:rhs_value]
+             ]
+    end
+
+    test "nested multiple-times" do
+      # {a = b, 2, 3} = {1, c = d, 3} = {1, 2, e = f}
+      ir = %IR.MatchOperator{
+        left: %IR.TupleType{
+          data: [
+            %IR.MatchOperator{
+              left: %IR.Symbol{name: :a},
+              right: %IR.Symbol{name: :b}
+            },
+            %IR.IntegerType{value: 2},
+            %IR.IntegerType{value: 3}
+          ]
+        },
+        right: %IR.MatchOperator{
+          left: %IR.TupleType{
+            data: [
+              %IR.IntegerType{value: 1},
+              %IR.MatchOperator{
+                left: %IR.Symbol{name: :c},
+                right: %IR.Symbol{name: :d}
+              },
+              %IR.IntegerType{value: 3}
+            ]
+          },
+          right: %IR.TupleType{
+            data: [
+              %IR.IntegerType{value: 1},
+              %IR.IntegerType{value: 2},
+              %IR.MatchOperator{
+                left: %IR.Symbol{name: :e},
+                right: %IR.Symbol{name: :f}
+              }
+            ]
+          }
+        }
+      }
+
+      assert deconstruct(ir) == [
+               [binding: :a, tuple_index: 0],
+               [binding: :b, tuple_index: 0],
+               [lhs_value: %IR.IntegerType{value: 2}, tuple_index: 1],
+               [lhs_value: %IR.IntegerType{value: 3}, tuple_index: 2],
+               [lhs_value: %IR.IntegerType{value: 1}, tuple_index: 0],
+               [binding: :c, tuple_index: 1],
+               [binding: :d, tuple_index: 1],
+               [lhs_value: %IR.IntegerType{value: 3}, tuple_index: 2],
+               [:rhs_value, {:tuple_index, 0}],
+               [:rhs_value, {:tuple_index, 1}],
+               [binding: :e, tuple_index: 2],
+               [:rhs_value, {:tuple_index, 2}]
+             ]
+    end
+  end
 
   describe "literal value" do
     test "left hand side" do
