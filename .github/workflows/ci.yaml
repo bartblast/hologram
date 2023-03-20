@@ -112,6 +112,10 @@ jobs:
     - name: Check doc and spec coverage
       run: mix doctor
 
+    # Step: Check whether any test scripts have invalid file names.
+    - name: Check test file names
+      run: mix holo.test.check_file_names test/elixir/hologram
+
     # Step: Execute the unit tests.
     - name: Run unit tests
       run: mix test

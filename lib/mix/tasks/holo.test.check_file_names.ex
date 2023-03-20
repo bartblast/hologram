@@ -3,8 +3,8 @@ defmodule Mix.Tasks.Holo.Test.CheckFileNames do
   alias Hologram.Commons.FileUtils
 
   @moduledoc """
-  Checks whether test scripts have valid file names,
-  i.e. they end with "_test" and have ".exs" file extension.
+  Checks whether all test scripts have valid file names,
+  i.e. they end with "_test" suffix and have ".exs" file extension.
 
   If there are any invalid file names, the task exits with code 1.
 
