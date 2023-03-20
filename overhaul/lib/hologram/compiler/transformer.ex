@@ -2,7 +2,6 @@ defmodule Hologram.Compiler.Transformer do
   import Hologram.Compiler.Macros, only: [transform: 2]
 
   alias Hologram.Compiler.Helpers
-  alias Hologram.Compiler.PatternDeconstructor
   alias Hologram.Compiler.Reflection
 
   # --- OPERATORS ---

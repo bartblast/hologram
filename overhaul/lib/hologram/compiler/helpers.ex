@@ -1,7 +1,6 @@
 defmodule Hologram.Compiler.Helpers do
   alias Hologram.Compiler.IR.{Binding, FunctionDefinitionVariants, ModuleDefinition, ParamAccess}
   alias Hologram.Compiler.Normalizer
-  alias Hologram.Compiler.PatternDeconstructor
   alias Hologram.Compiler.Transformer
   alias Hologram.Typespecs, as: T
   alias Hologram.Utils
