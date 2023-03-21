@@ -1,7 +1,23 @@
 defmodule Hologram.Compiler.PatternMatching do
   alias Hologram.Compiler.IR
 
-  # TODO: add @doc and typespec and remove this module from .doctor.exs ignore_modules list.
+  @doc """
+  Deconstructs pattern match IR into binding and literal value access paths.
+  An access path specifies how a given element can be accessed in a nested data structure.
+  The nodes in access paths are reversed, i.e. the first node is the deepest one.
+
+  ## Examples
+
+      iex> ir = IR.for_code("{1, b} = {a, 2}")
+      iex> PatternMatching.deconstruct(ir)
+      [
+        [lhs_value: %IR.IntegerType{value: 1}, tuple_index: 0],
+        [binding: :b, tuple_index: 1],
+        [:rhs_value, {:tuple_index, 0}],
+        [:rhs_value, {:tuple_index, 1}]
+      ]
+  """
+  @spec deconstruct(IR.t(), nil | :lhs | :rhs, list) :: list
   def deconstruct(ir, side \\ nil, path \\ [])
 
   def deconstruct(%IR.ConsOperator{head: head, tail: tail}, side, path) do

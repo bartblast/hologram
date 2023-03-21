@@ -1,7 +1,6 @@
 %Doctor.Config{
   exception_moduledoc_required: true,
-  # TODO: remove Hologram.Compiler.PatternMatching
-  ignore_modules: [Hologram.Compiler.PatternMatching],
+  ignore_modules: [],
   ignore_paths: [~r(^test/*)],
   min_module_doc_coverage: 100,
   min_module_spec_coverage: 100,
