@@ -19,9 +19,18 @@ defmodule Hologram.Compiler.IR do
           | IR.TupleType.t()
 
   @type operator_ir ::
-          IR.AdditionOperator.t()
+          IR.AccessOperator.t()
+          | IR.AdditionOperator.t()
           | IR.ConsOperator.t()
+          | IR.DivisionOperator.t()
+          | IR.DotOperator.t()
+          | IR.EqualToOperator.t()
+          | IR.LessThanOperator.t()
+          | IR.ListConcatenationOperator.t()
+          | IR.ListSubtractionOperator.t()
           | IR.MatchOperator.t()
+          | IR.MembershipOperator.t()
+          | IR.ModuleAttributeOperator.t()
           | IR.PinOperator.t()
 
   @type t :: data_type_ir | operator_ir
