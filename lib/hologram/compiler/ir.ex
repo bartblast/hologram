@@ -18,7 +18,11 @@ defmodule Hologram.Compiler.IR do
           | IR.StructType.t()
           | IR.TupleType.t()
 
-  @type operator_ir :: IR.AdditionOperator.t() | IR.ConsOperator.t() | IR.MatchOperator.t()
+  @type operator_ir ::
+          IR.AdditionOperator.t()
+          | IR.ConsOperator.t()
+          | IR.MatchOperator.t()
+          | IR.PinOperator.t()
 
   @type t :: data_type_ir | operator_ir
 
@@ -91,6 +95,12 @@ defmodule Hologram.Compiler.IR do
   end
 
   defmodule ModuleAttributeOperator do
+    defstruct name: nil
+
+    @type t :: %__MODULE__{name: atom}
+  end
+
+  defmodule PinOperator do
     defstruct name: nil
 
     @type t :: %__MODULE__{name: atom}

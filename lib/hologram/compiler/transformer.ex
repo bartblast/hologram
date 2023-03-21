@@ -118,6 +118,10 @@ defmodule Hologram.Compiler.Transformer do
     %IR.ModuleAttributeOperator{name: name}
   end
 
+  def transform({:^, _, [{name, _, _}]}) do
+    %IR.PinOperator{name: name}
+  end
+
   # --- DATA TYPES ---
 
   def transform(ast) when is_atom(ast) and ast not in [nil, false, true] do

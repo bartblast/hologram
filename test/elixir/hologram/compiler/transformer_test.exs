@@ -223,6 +223,13 @@ defmodule Hologram.Compiler.TransformerTest do
     end
   end
 
+  test "pin operator" do
+    # ^my_var
+    ast = {:^, [line: 1], [{:my_var, [line: 1], nil}]}
+
+    assert transform(ast) == %IR.PinOperator{name: :my_var}
+  end
+
   # --- DATA TYPES --
 
   test "atom type" do
