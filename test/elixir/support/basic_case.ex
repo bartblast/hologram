@@ -3,6 +3,8 @@ defmodule Hologram.Test.BasicCase do
 
   using do
     quote do
+      import Hologram.Test.Helpers
+
       @fixtures_path "#{File.cwd!()}/test/elixir/fixtures"
     end
   end
