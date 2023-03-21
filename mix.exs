@@ -11,7 +11,7 @@ defmodule Hologram.MixProject do
     [
       {:dialyxir, "~> 1.0", only: [:dev, :test], runtime: false},
       {:doctor, "~> 0.21", only: [:dev, :test]},
-      {:interceptor, "~> 0.5", only: [:dev, :test]}
+      {:interceptor, "~> 0.5"}
     ]
   end
 
