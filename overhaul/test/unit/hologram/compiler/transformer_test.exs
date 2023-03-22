@@ -5,16 +5,6 @@ defmodule Hologram.Compiler.TransformerTest do
 
   # --- OPERATORS ---
 
-  test "multiplication operator" do
-    # a * 2
-    ast = {:*, [line: 1], [{:a, [line: 1], nil}, 2]}
-
-    assert transform(ast) == %IR.MultiplicationOperator{
-             left: %IR.Symbol{name: :a},
-             right: %IR.IntegerType{value: 2}
-           }
-  end
-
   test "not equal to operator" do
     # 1 != 2
     ast = {:!=, [line: 1], [1, 2]}

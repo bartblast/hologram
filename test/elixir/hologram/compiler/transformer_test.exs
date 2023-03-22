@@ -223,6 +223,16 @@ defmodule Hologram.Compiler.TransformerTest do
     end
   end
 
+  test "multiplication operator" do
+    # a * 2
+    ast = {:*, [line: 1], [{:a, [line: 1], nil}, 2]}
+
+    assert transform(ast) == %IR.MultiplicationOperator{
+             left: %IR.Symbol{name: :a},
+             right: %IR.IntegerType{value: 2}
+           }
+  end
+
   test "pin operator" do
     # ^my_var
     ast = {:^, [line: 1], [{:my_var, [line: 1], nil}]}

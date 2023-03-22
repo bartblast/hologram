@@ -118,6 +118,13 @@ defmodule Hologram.Compiler.Transformer do
     %IR.ModuleAttributeOperator{name: name}
   end
 
+  def transform({:*, _, [left, right]}) do
+    %IR.MultiplicationOperator{
+      left: transform(left),
+      right: transform(right)
+    }
+  end
+
   def transform({:^, _, [{name, _, _}]}) do
     %IR.PinOperator{name: name}
   end
