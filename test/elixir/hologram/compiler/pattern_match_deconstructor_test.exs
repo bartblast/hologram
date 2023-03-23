@@ -1,6 +1,6 @@
-defmodule Hologram.Compiler.PatternMatchingTest do
+defmodule Hologram.Compiler.PatternMatchDeconstructorTest do
   use Hologram.Test.BasicCase, async: true
-  import Hologram.Compiler.PatternMatching
+  import Hologram.Compiler.PatternMatchDeconstructor
   alias Hologram.Compiler.IR
 
   describe "match operator" do
