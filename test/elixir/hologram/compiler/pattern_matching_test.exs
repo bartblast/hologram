@@ -139,22 +139,6 @@ defmodule Hologram.Compiler.PatternMatchingTest do
     end
   end
 
-  describe "literal value" do
-    test "left hand side" do
-      # 1
-      ir = %IR.IntegerType{value: 1}
-
-      assert deconstruct(ir, :lhs) == [[lhs_value: %IR.IntegerType{value: 1}]]
-    end
-
-    test "right hand side" do
-      # 1
-      ir = %IR.IntegerType{value: 1}
-
-      assert deconstruct(ir, :rhs) == [[:rhs_value]]
-    end
-  end
-
   describe "symbol" do
     test "left hand side" do
       # a
@@ -171,112 +155,21 @@ defmodule Hologram.Compiler.PatternMatchingTest do
     end
   end
 
-  describe "cons operator" do
-    # [a | [1, 2]]
-    @ir_1 %IR.ConsOperator{
-      head: %IR.Symbol{name: :a},
-      tail: %IR.ListType{
-        data: [
-          %IR.IntegerType{value: 1},
-          %IR.IntegerType{value: 2}
-        ]
-      }
-    }
+  # --- DATA TYPES ---
 
-    # [1 | [2, a]]
-    @ir_2 %IR.ConsOperator{
-      head: %IR.IntegerType{value: 1},
-      tail: %IR.ListType{
-        data: [
-          %IR.IntegerType{value: 2},
-          %IR.Symbol{name: :a}
-        ]
-      }
-    }
+  describe "basic types" do
+    test "left hand side" do
+      # 1
+      ir = %IR.IntegerType{value: 1}
 
-    # [1 | [2 | [3, a]]]
-    @ir_3 %IR.ConsOperator{
-      head: %IR.IntegerType{value: 1},
-      tail: %IR.ConsOperator{
-        head: %IR.IntegerType{value: 2},
-        tail: %IR.ListType{
-          data: [
-            %IR.IntegerType{value: 3},
-            %IR.Symbol{name: :a}
-          ]
-        }
-      }
-    }
-
-    test "non-nested cons operator with symbol in head, left hand side" do
-      assert deconstruct(@ir_1, :lhs) == [
-               [binding: :a, list_index: 0],
-               [
-                 {:lhs_value, %IR.IntegerType{value: 1}},
-                 {:list_index, 0},
-                 :list_tail
-               ],
-               [
-                 {:lhs_value, %IR.IntegerType{value: 2}},
-                 {:list_index, 1},
-                 :list_tail
-               ]
-             ]
+      assert deconstruct(ir, :lhs) == [[lhs_value: %IR.IntegerType{value: 1}]]
     end
 
-    test "non-nested cons operator with symbol in head, right hand side" do
-      assert deconstruct(@ir_1, :rhs) == [
-               [:rhs_value, {:list_index, 0}],
-               [:rhs_value, {:list_index, 0}, :list_tail],
-               [:rhs_value, {:list_index, 1}, :list_tail]
-             ]
-    end
+    test "right hand side" do
+      # 1
+      ir = %IR.IntegerType{value: 1}
 
-    test "non-nested cons operator with symbol in tail, left hand side" do
-      assert deconstruct(@ir_2, :lhs) == [
-               [lhs_value: %IR.IntegerType{value: 1}, list_index: 0],
-               [
-                 {:lhs_value, %IR.IntegerType{value: 2}},
-                 {:list_index, 0},
-                 :list_tail
-               ],
-               [{:binding, :a}, {:list_index, 1}, :list_tail]
-             ]
-    end
-
-    test "non-nested cons operator with symbol in tail, right hand side" do
-      assert deconstruct(@ir_2, :rhs) == [
-               [:rhs_value, {:list_index, 0}],
-               [:rhs_value, {:list_index, 0}, :list_tail],
-               [:rhs_value, {:list_index, 1}, :list_tail]
-             ]
-    end
-
-    test "nested cons operator, left hand side" do
-      assert deconstruct(@ir_3, :lhs) == [
-               [lhs_value: %IR.IntegerType{value: 1}, list_index: 0],
-               [
-                 {:lhs_value, %IR.IntegerType{value: 2}},
-                 {:list_index, 0},
-                 :list_tail
-               ],
-               [
-                 {:lhs_value, %IR.IntegerType{value: 3}},
-                 {:list_index, 0},
-                 :list_tail,
-                 :list_tail
-               ],
-               [{:binding, :a}, {:list_index, 1}, :list_tail, :list_tail]
-             ]
-    end
-
-    test "nested cons operator, right hand side" do
-      assert deconstruct(@ir_3, :rhs) == [
-               [:rhs_value, {:list_index, 0}],
-               [:rhs_value, {:list_index, 0}, :list_tail],
-               [:rhs_value, {:list_index, 0}, :list_tail, :list_tail],
-               [:rhs_value, {:list_index, 1}, :list_tail, :list_tail]
-             ]
+      assert deconstruct(ir, :rhs) == [[:rhs_value]]
     end
   end
 
@@ -466,6 +359,117 @@ defmodule Hologram.Compiler.PatternMatchingTest do
                [:rhs_value, {:tuple_index, 0}],
                [:rhs_value, {:tuple_index, 0}, {:tuple_index, 1}],
                [:rhs_value, {:tuple_index, 1}, {:tuple_index, 1}]
+             ]
+    end
+  end
+
+  # --- OPERATORS ---
+
+  describe "cons operator" do
+    # [a | [1, 2]]
+    @ir_1 %IR.ConsOperator{
+      head: %IR.Symbol{name: :a},
+      tail: %IR.ListType{
+        data: [
+          %IR.IntegerType{value: 1},
+          %IR.IntegerType{value: 2}
+        ]
+      }
+    }
+
+    # [1 | [2, a]]
+    @ir_2 %IR.ConsOperator{
+      head: %IR.IntegerType{value: 1},
+      tail: %IR.ListType{
+        data: [
+          %IR.IntegerType{value: 2},
+          %IR.Symbol{name: :a}
+        ]
+      }
+    }
+
+    # [1 | [2 | [3, a]]]
+    @ir_3 %IR.ConsOperator{
+      head: %IR.IntegerType{value: 1},
+      tail: %IR.ConsOperator{
+        head: %IR.IntegerType{value: 2},
+        tail: %IR.ListType{
+          data: [
+            %IR.IntegerType{value: 3},
+            %IR.Symbol{name: :a}
+          ]
+        }
+      }
+    }
+
+    test "non-nested cons operator with symbol in head, left hand side" do
+      assert deconstruct(@ir_1, :lhs) == [
+               [binding: :a, list_index: 0],
+               [
+                 {:lhs_value, %IR.IntegerType{value: 1}},
+                 {:list_index, 0},
+                 :list_tail
+               ],
+               [
+                 {:lhs_value, %IR.IntegerType{value: 2}},
+                 {:list_index, 1},
+                 :list_tail
+               ]
+             ]
+    end
+
+    test "non-nested cons operator with symbol in head, right hand side" do
+      assert deconstruct(@ir_1, :rhs) == [
+               [:rhs_value, {:list_index, 0}],
+               [:rhs_value, {:list_index, 0}, :list_tail],
+               [:rhs_value, {:list_index, 1}, :list_tail]
+             ]
+    end
+
+    test "non-nested cons operator with symbol in tail, left hand side" do
+      assert deconstruct(@ir_2, :lhs) == [
+               [lhs_value: %IR.IntegerType{value: 1}, list_index: 0],
+               [
+                 {:lhs_value, %IR.IntegerType{value: 2}},
+                 {:list_index, 0},
+                 :list_tail
+               ],
+               [{:binding, :a}, {:list_index, 1}, :list_tail]
+             ]
+    end
+
+    test "non-nested cons operator with symbol in tail, right hand side" do
+      assert deconstruct(@ir_2, :rhs) == [
+               [:rhs_value, {:list_index, 0}],
+               [:rhs_value, {:list_index, 0}, :list_tail],
+               [:rhs_value, {:list_index, 1}, :list_tail]
+             ]
+    end
+
+    test "nested cons operator, left hand side" do
+      assert deconstruct(@ir_3, :lhs) == [
+               [lhs_value: %IR.IntegerType{value: 1}, list_index: 0],
+               [
+                 {:lhs_value, %IR.IntegerType{value: 2}},
+                 {:list_index, 0},
+                 :list_tail
+               ],
+               [
+                 {:lhs_value, %IR.IntegerType{value: 3}},
+                 {:list_index, 0},
+                 :list_tail,
+                 :list_tail
+               ],
+               [{:binding, :a}, {:list_index, 1}, :list_tail, :list_tail]
+             ]
+    end
+
+    test "nested cons operator, right hand side" do
+      assert deconstruct(@ir_3, :rhs) == [
+               [:rhs_value, {:list_index, 0}],
+               [:rhs_value, {:list_index, 0}, :list_tail],
+               [:rhs_value, {:list_index, 0}, :list_tail, :list_tail],
+               [:rhs_value, {:list_index, 1}, :list_tail, :list_tail]
              ]
     end
   end
