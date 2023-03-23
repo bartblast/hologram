@@ -32,13 +32,6 @@ defmodule Hologram.Compiler.Transformer do
     }
   end
 
-  transform({:and, _, [left, right]}) do
-    %IR.StrictBooleanAndOperator{
-      left: transform(left),
-      right: transform(right)
-    }
-  end
-
   transform({:-, _, [left, right]}) do
     %IR.SubtractionOperator{
       left: transform(left),

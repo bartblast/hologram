@@ -9,10 +9,6 @@ defmodule Hologram.Compiler.IR do
     defstruct left: nil, right: nil
   end
 
-  defmodule StrictBooleanAndOperator do
-    defstruct left: nil, right: nil
-  end
-
   defmodule SubtractionOperator do
     defstruct left: nil, right: nil
   end
