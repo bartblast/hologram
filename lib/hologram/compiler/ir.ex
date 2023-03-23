@@ -34,6 +34,7 @@ defmodule Hologram.Compiler.IR do
           | IR.MultiplicationOperator.t()
           | IR.NotEqualToOperator.t()
           | IR.PinOperator.t()
+          | IR.RelaxedBooleanAndOperator.t()
 
   @type t :: data_type_ir | operator_ir
 
