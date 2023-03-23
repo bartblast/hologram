@@ -129,6 +129,12 @@ defmodule Hologram.Compiler.IR do
     @type t :: %__MODULE__{name: atom}
   end
 
+  defmodule RelaxedBooleanAndOperator do
+    defstruct left: nil, right: nil
+
+    @type t :: %__MODULE__{left: IR.t(), right: IR.t()}
+  end
+
   # --- DATA TYPES ---
 
   defmodule AtomType do

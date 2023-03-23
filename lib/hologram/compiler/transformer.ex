@@ -136,6 +136,13 @@ defmodule Hologram.Compiler.Transformer do
     %IR.PinOperator{name: name}
   end
 
+  def transform({:&&, _, [left, right]}) do
+    %IR.RelaxedBooleanAndOperator{
+      left: transform(left),
+      right: transform(right)
+    }
+  end
+
   # --- DATA TYPES ---
 
   def transform(ast) when is_atom(ast) and ast not in [nil, false, true] do

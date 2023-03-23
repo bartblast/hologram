@@ -250,6 +250,16 @@ defmodule Hologram.Compiler.TransformerTest do
     assert transform(ast) == %IR.PinOperator{name: :my_var}
   end
 
+  test "relaxed boolean and operator" do
+    # 1 && 2
+    ast = {:&&, [line: 1], [1, 2]}
+
+    assert transform(ast) == %IR.RelaxedBooleanAndOperator{
+             left: %IR.IntegerType{value: 1},
+             right: %IR.IntegerType{value: 2}
+           }
+  end
+
   # --- DATA TYPES --
 
   test "atom type" do

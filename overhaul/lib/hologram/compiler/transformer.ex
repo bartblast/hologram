@@ -17,13 +17,6 @@ defmodule Hologram.Compiler.Transformer do
     |> transform()
   end
 
-  transform({:&&, _, [left, right]}) do
-    %IR.RelaxedBooleanAndOperator{
-      left: transform(left),
-      right: transform(right)
-    }
-  end
-
   transform({:__block__, _, [{:!, _, [value]}]}) do
     build_relaxed_boolean_not_operator_ir(value)
   end
