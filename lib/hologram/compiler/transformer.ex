@@ -212,7 +212,7 @@ defmodule Hologram.Compiler.Transformer do
     |> build_tuple_type_ir()
   end
 
-  # --- CONTROL FLOW ---
+  # --- IDENTIFIERS ---
 
   def transform({:__aliases__, [alias: module], _alias_segs}) when module != false do
     module_segs = Helpers.alias_segments(module)

@@ -18,6 +18,8 @@ defmodule Hologram.Compiler.IR do
           | IR.StructType.t()
           | IR.TupleType.t()
 
+  @type identifier_ir :: IR.Alias.t() | IR.Symbol.t()
+
   @type operator_ir ::
           IR.AccessOperator.t()
           | IR.AdditionOperator.t()
@@ -36,7 +38,7 @@ defmodule Hologram.Compiler.IR do
           | IR.PinOperator.t()
           | IR.RelaxedBooleanAndOperator.t()
 
-  @type t :: data_type_ir | operator_ir
+  @type t :: data_type_ir | identifier_ir | operator_ir
 
   # --- OPERATORS ---
 
@@ -210,7 +212,7 @@ defmodule Hologram.Compiler.IR do
     @type t :: %__MODULE__{data: list(IR.t())}
   end
 
-  # --- CONTROL FLOW ---
+  # --- IDENTIFIERS ---
 
   defmodule Alias do
     defstruct segments: nil

@@ -479,6 +479,6 @@ defmodule Hologram.Compiler.PatternMatchDeconstructorTest do
     # ^x
     ir = %IR.PinOperator{name: :my_var}
 
-    deconstruct(ir, :pattern) == [[variable: :my_var]]
+    assert deconstruct(ir, :pattern) == [[variable: :my_var]]
   end
 end

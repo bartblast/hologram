@@ -408,7 +408,7 @@ defmodule Hologram.Compiler.TransformerTest do
     end
   end
 
-  # --- CONTROL FLOW ---
+  # --- IDENTIFIERS ---
 
   describe "alias" do
     test "non-contextual" do
