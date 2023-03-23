@@ -18,7 +18,7 @@ defmodule Hologram.Compiler.PatternMatchDeconstructor do
       ]
   """
   @spec deconstruct(IR.t(), nil | :pattern | :expression, list) :: list
-  def deconstruct(ir, context \\ nil, path \\ [])
+  def deconstruct(ir, side \\ nil, path \\ [])
 
   def deconstruct(%IR.ConsOperator{head: head, tail: tail}, side, path) do
     head_path = [{:list_index, 0} | path]
