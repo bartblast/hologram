@@ -11,30 +11,30 @@ defmodule Hologram.Compiler.PatternMatchDeconstructorTest do
         right: %IR.IntegerType{value: 2}
       }
 
-      assert deconstruct(ir) == [[lhs_value: %IR.IntegerType{value: 1}], [:rhs_value]]
+      assert deconstruct(ir) == [[pattern_value: %IR.IntegerType{value: 1}], [:expression_value]]
     end
 
-    test "symbol on lhs" do
+    test "symbol in pattern" do
       # x = 2
       ir = %IR.MatchOperator{
         left: %IR.Symbol{name: :x},
         right: %IR.IntegerType{value: 2}
       }
 
-      assert deconstruct(ir) == [[binding: :x], [:rhs_value]]
+      assert deconstruct(ir) == [[binding: :x], [:expression_value]]
     end
 
-    test "symbol on rhs" do
+    test "symbol in expression" do
       # 1 = x
       ir = %IR.MatchOperator{
         left: %IR.IntegerType{value: 1},
         right: %IR.Symbol{name: :x}
       }
 
-      assert deconstruct(ir) == [[lhs_value: %IR.IntegerType{value: 1}], [:rhs_value]]
+      assert deconstruct(ir) == [[pattern_value: %IR.IntegerType{value: 1}], [:expression_value]]
     end
 
-    test "nested, symbol on lhs" do
+    test "nested, symbol in pattern" do
       # x = 2 = 3
       ir = %IR.MatchOperator{
         left: %IR.Symbol{name: :x},
@@ -46,8 +46,8 @@ defmodule Hologram.Compiler.PatternMatchDeconstructorTest do
 
       assert deconstruct(ir) == [
                [binding: :x],
-               [lhs_value: %IR.IntegerType{value: 2}],
-               [:rhs_value]
+               [pattern_value: %IR.IntegerType{value: 2}],
+               [:expression_value]
              ]
     end
 
@@ -62,13 +62,13 @@ defmodule Hologram.Compiler.PatternMatchDeconstructorTest do
       }
 
       assert deconstruct(ir) == [
-               [lhs_value: %IR.IntegerType{value: 1}],
+               [pattern_value: %IR.IntegerType{value: 1}],
                [binding: :x],
-               [:rhs_value]
+               [:expression_value]
              ]
     end
 
-    test "nested, symbol on rhs" do
+    test "nested, symbol in expression" do
       # 1 = 2 = x
       ir = %IR.MatchOperator{
         left: %IR.IntegerType{value: 1},
@@ -79,9 +79,9 @@ defmodule Hologram.Compiler.PatternMatchDeconstructorTest do
       }
 
       assert deconstruct(ir) == [
-               [lhs_value: %IR.IntegerType{value: 1}],
-               [lhs_value: %IR.IntegerType{value: 2}],
-               [:rhs_value]
+               [pattern_value: %IR.IntegerType{value: 1}],
+               [pattern_value: %IR.IntegerType{value: 2}],
+               [:expression_value]
              ]
     end
 
@@ -125,51 +125,51 @@ defmodule Hologram.Compiler.PatternMatchDeconstructorTest do
       assert deconstruct(ir) == [
                [binding: :a, tuple_index: 0],
                [binding: :b, tuple_index: 0],
-               [lhs_value: %IR.IntegerType{value: 2}, tuple_index: 1],
-               [lhs_value: %IR.IntegerType{value: 3}, tuple_index: 2],
-               [lhs_value: %IR.IntegerType{value: 1}, tuple_index: 0],
+               [pattern_value: %IR.IntegerType{value: 2}, tuple_index: 1],
+               [pattern_value: %IR.IntegerType{value: 3}, tuple_index: 2],
+               [pattern_value: %IR.IntegerType{value: 1}, tuple_index: 0],
                [binding: :c, tuple_index: 1],
                [binding: :d, tuple_index: 1],
-               [lhs_value: %IR.IntegerType{value: 3}, tuple_index: 2],
-               [:rhs_value, {:tuple_index, 0}],
-               [:rhs_value, {:tuple_index, 1}],
+               [pattern_value: %IR.IntegerType{value: 3}, tuple_index: 2],
+               [:expression_value, {:tuple_index, 0}],
+               [:expression_value, {:tuple_index, 1}],
                [binding: :e, tuple_index: 2],
-               [:rhs_value, {:tuple_index, 2}]
+               [:expression_value, {:tuple_index, 2}]
              ]
     end
   end
 
   describe "symbol" do
-    test "left hand side" do
+    test "in pattern" do
       # a
       ir = %IR.Symbol{name: :a}
 
-      assert deconstruct(ir, :lhs) == [[binding: :a]]
+      assert deconstruct(ir, :pattern) == [[binding: :a]]
     end
 
-    test "right hand side" do
+    test "in expression" do
       # a
       ir = %IR.Symbol{name: :a}
 
-      assert deconstruct(ir, :rhs) == [[:rhs_value]]
+      assert deconstruct(ir, :expression) == [[:expression_value]]
     end
   end
 
   # --- DATA TYPES ---
 
   describe "basic types" do
-    test "left hand side" do
+    test "in pattern" do
       # 1
       ir = %IR.IntegerType{value: 1}
 
-      assert deconstruct(ir, :lhs) == [[lhs_value: %IR.IntegerType{value: 1}]]
+      assert deconstruct(ir, :pattern) == [[pattern_value: %IR.IntegerType{value: 1}]]
     end
 
-    test "right hand side" do
+    test "in expression" do
       # 1
       ir = %IR.IntegerType{value: 1}
 
-      assert deconstruct(ir, :rhs) == [[:rhs_value]]
+      assert deconstruct(ir, :expression) == [[:expression_value]]
     end
   end
 
@@ -195,25 +195,25 @@ defmodule Hologram.Compiler.PatternMatchDeconstructorTest do
       ]
     }
 
-    test "non-nested list, left hand side" do
-      assert deconstruct(@non_nested_list, :lhs) == [
-               [lhs_value: %IR.IntegerType{value: 1}, list_index: 0],
+    test "non-nested list, in pattern" do
+      assert deconstruct(@non_nested_list, :pattern) == [
+               [pattern_value: %IR.IntegerType{value: 1}, list_index: 0],
                [binding: :a, list_index: 1]
              ]
     end
 
-    test "non-nested list, right hand side" do
-      assert deconstruct(@non_nested_list, :rhs) == [
-               [:rhs_value, {:list_index, 0}],
-               [:rhs_value, {:list_index, 1}]
+    test "non-nested list, in expression" do
+      assert deconstruct(@non_nested_list, :expression) == [
+               [:expression_value, {:list_index, 0}],
+               [:expression_value, {:list_index, 1}]
              ]
     end
 
-    test "nested list, left hand side" do
-      assert deconstruct(@nested_list, :lhs) == [
+    test "nested list, in pattern" do
+      assert deconstruct(@nested_list, :pattern) == [
                [binding: :a, list_index: 0],
                [
-                 lhs_value: %IR.IntegerType{value: 1},
+                 pattern_value: %IR.IntegerType{value: 1},
                  list_index: 0,
                  list_index: 1
                ],
@@ -221,11 +221,11 @@ defmodule Hologram.Compiler.PatternMatchDeconstructorTest do
              ]
     end
 
-    test "nested list, right hand side" do
-      assert deconstruct(@nested_list, :rhs) == [
-               [:rhs_value, {:list_index, 0}],
-               [:rhs_value, {:list_index, 0}, {:list_index, 1}],
-               [:rhs_value, {:list_index, 1}, {:list_index, 1}]
+    test "nested list, in expression" do
+      assert deconstruct(@nested_list, :expression) == [
+               [:expression_value, {:list_index, 0}],
+               [:expression_value, {:list_index, 0}, {:list_index, 1}],
+               [:expression_value, {:list_index, 1}, {:list_index, 1}]
              ]
     end
   end
@@ -253,31 +253,31 @@ defmodule Hologram.Compiler.PatternMatchDeconstructorTest do
       ]
     }
 
-    test "non-nested map, left hand side" do
-      assert deconstruct(@non_nested_map, :lhs) == [
+    test "non-nested map, in pattern" do
+      assert deconstruct(@non_nested_map, :pattern) == [
                [
-                 lhs_value: %IR.IntegerType{value: 1},
+                 pattern_value: %IR.IntegerType{value: 1},
                  map_key: %IR.AtomType{value: :a}
                ],
                [binding: :c, map_key: %IR.StringType{value: "b"}]
              ]
     end
 
-    test "non-nested map, right hand side" do
-      assert deconstruct(@non_nested_map, :rhs) == [
-               [:rhs_value, {:map_key, %IR.AtomType{value: :a}}],
-               [:rhs_value, {:map_key, %IR.StringType{value: "b"}}]
+    test "non-nested map, in expression" do
+      assert deconstruct(@non_nested_map, :expression) == [
+               [:expression_value, {:map_key, %IR.AtomType{value: :a}}],
+               [:expression_value, {:map_key, %IR.StringType{value: "b"}}]
              ]
     end
 
-    test "nested map, left hand side" do
-      assert deconstruct(@nested_map, :lhs) == [
+    test "nested map, in pattern" do
+      assert deconstruct(@nested_map, :pattern) == [
                [
-                 lhs_value: %IR.IntegerType{value: 1},
+                 pattern_value: %IR.IntegerType{value: 1},
                  map_key: %IR.AtomType{value: :a}
                ],
                [
-                 lhs_value: %IR.IntegerType{value: 2},
+                 pattern_value: %IR.IntegerType{value: 2},
                  map_key: %IR.AtomType{value: :c},
                  map_key: %IR.StringType{value: "b"}
                ],
@@ -289,16 +289,16 @@ defmodule Hologram.Compiler.PatternMatchDeconstructorTest do
              ]
     end
 
-    test "nested map, right hand side" do
-      assert deconstruct(@nested_map, :rhs) == [
-               [:rhs_value, {:map_key, %IR.AtomType{value: :a}}],
+    test "nested map, in expression" do
+      assert deconstruct(@nested_map, :expression) == [
+               [:expression_value, {:map_key, %IR.AtomType{value: :a}}],
                [
-                 :rhs_value,
+                 :expression_value,
                  {:map_key, %IR.AtomType{value: :c}},
                  {:map_key, %IR.StringType{value: "b"}}
                ],
                [
-                 :rhs_value,
+                 :expression_value,
                  {:map_key, %IR.StringType{value: "d"}},
                  {:map_key, %IR.StringType{value: "b"}}
                ]
@@ -328,25 +328,25 @@ defmodule Hologram.Compiler.PatternMatchDeconstructorTest do
       ]
     }
 
-    test "non-nested tuple, left hand side" do
-      assert deconstruct(@non_nested_tuple, :lhs) == [
-               [lhs_value: %IR.IntegerType{value: 1}, tuple_index: 0],
+    test "non-nested tuple, in pattern" do
+      assert deconstruct(@non_nested_tuple, :pattern) == [
+               [pattern_value: %IR.IntegerType{value: 1}, tuple_index: 0],
                [binding: :a, tuple_index: 1]
              ]
     end
 
-    test "non-nested tuple, right hand side" do
-      assert deconstruct(@non_nested_tuple, :rhs) == [
-               [:rhs_value, {:tuple_index, 0}],
-               [:rhs_value, {:tuple_index, 1}]
+    test "non-nested tuple, in expression" do
+      assert deconstruct(@non_nested_tuple, :expression) == [
+               [:expression_value, {:tuple_index, 0}],
+               [:expression_value, {:tuple_index, 1}]
              ]
     end
 
-    test "nested tuple, left hand side" do
-      assert deconstruct(@nested_tuple, :lhs) == [
+    test "nested tuple, in pattern" do
+      assert deconstruct(@nested_tuple, :pattern) == [
                [binding: :a, tuple_index: 0],
                [
-                 lhs_value: %IR.IntegerType{value: 1},
+                 pattern_value: %IR.IntegerType{value: 1},
                  tuple_index: 0,
                  tuple_index: 1
                ],
@@ -354,11 +354,11 @@ defmodule Hologram.Compiler.PatternMatchDeconstructorTest do
              ]
     end
 
-    test "nested tuple, right hand side" do
-      assert deconstruct(@nested_tuple, :rhs) == [
-               [:rhs_value, {:tuple_index, 0}],
-               [:rhs_value, {:tuple_index, 0}, {:tuple_index, 1}],
-               [:rhs_value, {:tuple_index, 1}, {:tuple_index, 1}]
+    test "nested tuple, in expression" do
+      assert deconstruct(@nested_tuple, :expression) == [
+               [:expression_value, {:tuple_index, 0}],
+               [:expression_value, {:tuple_index, 0}, {:tuple_index, 1}],
+               [:expression_value, {:tuple_index, 1}, {:tuple_index, 1}]
              ]
     end
   end
@@ -402,35 +402,35 @@ defmodule Hologram.Compiler.PatternMatchDeconstructorTest do
       }
     }
 
-    test "non-nested cons operator with symbol in head, left hand side" do
-      assert deconstruct(@ir_1, :lhs) == [
+    test "non-nested cons operator with symbol in head, in pattern" do
+      assert deconstruct(@ir_1, :pattern) == [
                [binding: :a, list_index: 0],
                [
-                 {:lhs_value, %IR.IntegerType{value: 1}},
+                 {:pattern_value, %IR.IntegerType{value: 1}},
                  {:list_index, 0},
                  :list_tail
                ],
                [
-                 {:lhs_value, %IR.IntegerType{value: 2}},
+                 {:pattern_value, %IR.IntegerType{value: 2}},
                  {:list_index, 1},
                  :list_tail
                ]
              ]
     end
 
-    test "non-nested cons operator with symbol in head, right hand side" do
-      assert deconstruct(@ir_1, :rhs) == [
-               [:rhs_value, {:list_index, 0}],
-               [:rhs_value, {:list_index, 0}, :list_tail],
-               [:rhs_value, {:list_index, 1}, :list_tail]
+    test "non-nested cons operator with symbol in head, in expression" do
+      assert deconstruct(@ir_1, :expression) == [
+               [:expression_value, {:list_index, 0}],
+               [:expression_value, {:list_index, 0}, :list_tail],
+               [:expression_value, {:list_index, 1}, :list_tail]
              ]
     end
 
-    test "non-nested cons operator with symbol in tail, left hand side" do
-      assert deconstruct(@ir_2, :lhs) == [
-               [lhs_value: %IR.IntegerType{value: 1}, list_index: 0],
+    test "non-nested cons operator with symbol in tail, in pattern" do
+      assert deconstruct(@ir_2, :pattern) == [
+               [pattern_value: %IR.IntegerType{value: 1}, list_index: 0],
                [
-                 {:lhs_value, %IR.IntegerType{value: 2}},
+                 {:pattern_value, %IR.IntegerType{value: 2}},
                  {:list_index, 0},
                  :list_tail
                ],
@@ -438,24 +438,24 @@ defmodule Hologram.Compiler.PatternMatchDeconstructorTest do
              ]
     end
 
-    test "non-nested cons operator with symbol in tail, right hand side" do
-      assert deconstruct(@ir_2, :rhs) == [
-               [:rhs_value, {:list_index, 0}],
-               [:rhs_value, {:list_index, 0}, :list_tail],
-               [:rhs_value, {:list_index, 1}, :list_tail]
+    test "non-nested cons operator with symbol in tail, in expression" do
+      assert deconstruct(@ir_2, :expression) == [
+               [:expression_value, {:list_index, 0}],
+               [:expression_value, {:list_index, 0}, :list_tail],
+               [:expression_value, {:list_index, 1}, :list_tail]
              ]
     end
 
-    test "nested cons operator, left hand side" do
-      assert deconstruct(@ir_3, :lhs) == [
-               [lhs_value: %IR.IntegerType{value: 1}, list_index: 0],
+    test "nested cons operator, in pattern" do
+      assert deconstruct(@ir_3, :pattern) == [
+               [pattern_value: %IR.IntegerType{value: 1}, list_index: 0],
                [
-                 {:lhs_value, %IR.IntegerType{value: 2}},
+                 {:pattern_value, %IR.IntegerType{value: 2}},
                  {:list_index, 0},
                  :list_tail
                ],
                [
-                 {:lhs_value, %IR.IntegerType{value: 3}},
+                 {:pattern_value, %IR.IntegerType{value: 3}},
                  {:list_index, 0},
                  :list_tail,
                  :list_tail
@@ -464,12 +464,12 @@ defmodule Hologram.Compiler.PatternMatchDeconstructorTest do
              ]
     end
 
-    test "nested cons operator, right hand side" do
-      assert deconstruct(@ir_3, :rhs) == [
-               [:rhs_value, {:list_index, 0}],
-               [:rhs_value, {:list_index, 0}, :list_tail],
-               [:rhs_value, {:list_index, 0}, :list_tail, :list_tail],
-               [:rhs_value, {:list_index, 1}, :list_tail, :list_tail]
+    test "nested cons operator, in expression" do
+      assert deconstruct(@ir_3, :expression) == [
+               [:expression_value, {:list_index, 0}],
+               [:expression_value, {:list_index, 0}, :list_tail],
+               [:expression_value, {:list_index, 0}, :list_tail, :list_tail],
+               [:expression_value, {:list_index, 1}, :list_tail, :list_tail]
              ]
     end
   end

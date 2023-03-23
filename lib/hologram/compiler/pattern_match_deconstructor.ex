@@ -11,13 +11,13 @@ defmodule Hologram.Compiler.PatternMatchDeconstructor do
       iex> ir = IR.for_code("{1, b} = {a, 2}")
       iex> PatternMatchDeconstructor.deconstruct(ir)
       [
-        [lhs_value: %IR.IntegerType{value: 1}, tuple_index: 0],
+        [pattern_value: %IR.IntegerType{value: 1}, tuple_index: 0],
         [binding: :b, tuple_index: 1],
-        [:rhs_value, {:tuple_index, 0}],
-        [:rhs_value, {:tuple_index, 1}]
+        [:expression_value, {:tuple_index, 0}],
+        [:expression_value, {:tuple_index, 1}]
       ]
   """
-  @spec deconstruct(IR.t(), nil | :lhs | :rhs, list) :: list
+  @spec deconstruct(IR.t(), nil | :pattern | :expression, list) :: list
   def deconstruct(ir, context \\ nil, path \\ [])
 
   def deconstruct(%IR.ConsOperator{head: head, tail: tail}, side, path) do
@@ -46,21 +46,21 @@ defmodule Hologram.Compiler.PatternMatchDeconstructor do
     end)
   end
 
-  def deconstruct(%IR.MatchOperator{left: left_ir, right: right_ir}, :lhs, path) do
-    left_paths = deconstruct(left_ir, :lhs, path)
-    right_paths = deconstruct(right_ir, :lhs, path)
+  def deconstruct(%IR.MatchOperator{left: left_ir, right: right_ir}, :pattern, path) do
+    left_paths = deconstruct(left_ir, :pattern, path)
+    right_paths = deconstruct(right_ir, :pattern, path)
 
     left_paths ++ right_paths
   end
 
   def deconstruct(%IR.MatchOperator{left: left_ir, right: right_ir}, _side, path) do
-    left_paths = deconstruct(left_ir, :lhs, path)
-    right_paths = deconstruct(right_ir, :rhs, path)
+    left_paths = deconstruct(left_ir, :pattern, path)
+    right_paths = deconstruct(right_ir, :expression, path)
 
     left_paths ++ right_paths
   end
 
-  def deconstruct(%IR.Symbol{name: name}, :lhs, path) do
+  def deconstruct(%IR.Symbol{name: name}, :pattern, path) do
     [[{:binding, name} | path]]
   end
 
@@ -73,11 +73,11 @@ defmodule Hologram.Compiler.PatternMatchDeconstructor do
     end)
   end
 
-  def deconstruct(ir, :lhs, path) do
-    [[{:lhs_value, ir} | path]]
+  def deconstruct(ir, :pattern, path) do
+    [[{:pattern_value, ir} | path]]
   end
 
-  def deconstruct(_ir, :rhs, path) do
-    [[:rhs_value | path]]
+  def deconstruct(_ir, :expression, path) do
+    [[:expression_value | path]]
   end
 end
