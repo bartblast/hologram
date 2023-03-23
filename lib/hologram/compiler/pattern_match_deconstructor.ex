@@ -60,6 +60,10 @@ defmodule Hologram.Compiler.PatternMatchDeconstructor do
     left_paths ++ right_paths
   end
 
+  def deconstruct(%IR.PinOperator{name: name}, :pattern, path) do
+    [[{:variable, name} | path]]
+  end
+
   def deconstruct(%IR.Symbol{name: name}, :pattern, path) do
     [[{:binding, name} | path]]
   end

@@ -1,5 +1,5 @@
 import Config
 
-config :hologram, debug_transformer: true
+config :hologram, debug_transformer: false
 
 config :logger, level: :warn

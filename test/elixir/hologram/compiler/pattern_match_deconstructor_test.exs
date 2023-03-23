@@ -473,4 +473,12 @@ defmodule Hologram.Compiler.PatternMatchDeconstructorTest do
              ]
     end
   end
+
+  # Only side = :pattern need to be tested, since pin operators in expression sides shouldn't compile.
+  test "pin operator" do
+    # ^x
+    ir = %IR.PinOperator{name: :my_var}
+
+    deconstruct(ir, :pattern) == [[variable: :my_var]]
+  end
 end
