@@ -233,6 +233,16 @@ defmodule Hologram.Compiler.TransformerTest do
            }
   end
 
+  test "not equal to operator" do
+    # 1 != 2
+    ast = {:!=, [line: 1], [1, 2]}
+
+    assert transform(ast) == %IR.NotEqualToOperator{
+             left: %IR.IntegerType{value: 1},
+             right: %IR.IntegerType{value: 2}
+           }
+  end
+
   test "pin operator" do
     # ^my_var
     ast = {:^, [line: 1], [{:my_var, [line: 1], nil}]}

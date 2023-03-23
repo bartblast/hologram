@@ -6,13 +6,6 @@ defmodule Hologram.Compiler.Transformer do
 
   # --- OPERATORS ---
 
-  transform({:!=, _, [left, right]}) do
-    %IR.NotEqualToOperator{
-      left: transform(left),
-      right: transform(right)
-    }
-  end
-
   # based on: https://ianrumford.github.io/elixir/pipe/clojure/thread-first/macro/2016/07/24/writing-your-own-elixir-pipe-operator.html
   transform({:|>, _, _} = ast) do
     [{first_ast, _index} | rest_tuples] = Macro.unpipe(ast)

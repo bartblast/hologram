@@ -32,6 +32,7 @@ defmodule Hologram.Compiler.IR do
           | IR.MembershipOperator.t()
           | IR.ModuleAttributeOperator.t()
           | IR.MultiplicationOperator.t()
+          | IR.NotEqualToOperator.t()
           | IR.PinOperator.t()
 
   @type t :: data_type_ir | operator_ir
@@ -111,6 +112,12 @@ defmodule Hologram.Compiler.IR do
   end
 
   defmodule MultiplicationOperator do
+    defstruct left: nil, right: nil
+
+    @type t :: %__MODULE__{left: IR.t(), right: IR.t()}
+  end
+
+  defmodule NotEqualToOperator do
     defstruct left: nil, right: nil
 
     @type t :: %__MODULE__{left: IR.t(), right: IR.t()}

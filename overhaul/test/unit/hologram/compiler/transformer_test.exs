@@ -5,16 +5,6 @@ defmodule Hologram.Compiler.TransformerTest do
 
   # --- OPERATORS ---
 
-  test "not equal to operator" do
-    # 1 != 2
-    ast = {:!=, [line: 1], [1, 2]}
-
-    assert transform(ast) == %IR.NotEqualToOperator{
-             left: %IR.IntegerType{value: 1},
-             right: %IR.IntegerType{value: 2}
-           }
-  end
-
   describe "pipe operator" do
     test "non-nested pipeline" do
       # 100 |> div(2)
