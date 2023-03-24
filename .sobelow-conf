@@ -1,0 +1,4 @@
+[
+  ignore: ["Config.HTTPS"],
+  skip: true
+]

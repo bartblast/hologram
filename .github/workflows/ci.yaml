@@ -19,7 +19,7 @@ permissions:
 jobs:
   test:
     runs-on: ubuntu-latest
-    name: Test on OTP ${{matrix.otp}} / Elixir ${{matrix.elixir}}
+    name: Test on OTP ${{ matrix.otp }} / Elixir ${{ matrix.elixir }}
     strategy:
       # Specify the OTP and Elixir versions to use when building
       # and running the workflow steps.
@@ -27,28 +27,29 @@ jobs:
         otp: ['25.2.2']
         elixir: ['1.14.3']
     steps:
+
     # Step: Setup Elixir + Erlang image as the base.
     - name: Set up Elixir
       uses: erlef/setup-beam@v1
       with:
-        otp-version: ${{matrix.otp}}
-        elixir-version: ${{matrix.elixir}}
+        otp-version: ${{ matrix.otp }}
+        elixir-version: ${{ matrix.elixir }}
 
     # Step: Check out the code.
     - name: Checkout code
       uses: actions/checkout@v3
 
-    # Step: Define how to cache lib deps. Restores existing cache if present.
-    - name: Cache lib deps
-      id: cache-lib-deps
+    # Step: Define how to cache the lib Elixir dependencies.
+    - name: Cache lib Elixir deps
+      id: cache-lib-elixir-deps
       uses: actions/cache@v3
       env:
-        cache-name: cache-elixir-lib-deps
+        cache-name: cache-lib-elixir-deps
       with:
         path: deps
         key: ${{ runner.os }}-mix-${{ env.cache-name }}-${{ hashFiles('mix.lock') }}
         restore-keys: |
-          ${{ runner.os }}-mix-${{ env.cache-name }}-     
+          ${{ runner.os }}-mix-${{ env.cache-name }}-    
 
     # Step: Define how to cache test app deps. Restores existing cache if present.
     # TODO: uncomment when E2E tests are implemented
@@ -63,14 +64,12 @@ jobs:
     #     restore-keys: |
     #       ${{ runner.os }}-mix-${{ env.cache-name }}-             
 
-    # Step: Define how to cache the lib `_build` directory. After the first run,
-    # this speeds up tests runs a lot. This includes not re-compiling our
-    # project's downloaded deps every run.
-    - name: Cache lib build
-      id: cache-lib-build
+    # Step: Define how to cache the lib Elixir build.
+    - name: Cache lib Elixir build
+      id: cache-lib-elixir-build
       uses: actions/cache@v3
       env:
-        cache-name: cache-elixir-lib-build
+        cache-name: cache-lib-elixir-build
       with:
         path: _build
         key: ${{ runner.os }}-mix-${{ env.cache-name }}-${{ hashFiles('mix.lock') }}
@@ -94,29 +93,70 @@ jobs:
     #       ${{ runner.os }}-mix-${{ env.cache-name }}-
     #       ${{ runner.os }}-mix-                 
 
-    # Step: Download lib dependencies. If unchanged, uses
-    # the cached version.
-    - name: Install lib dependencies
-      run: mix deps.get      
+    # Step: Define how to cache Dialyzer PLTs.
+    # Don't cache PLTs based on mix.lock hash, as Dialyzer can incrementally update even old ones -
+    # instead the cache key is based on Elixir & OTP version.
+    - name: Cache Dialyzer PLTs
+      id: cache-dialyzer-plt
+      uses: actions/cache@v3
+      with:
+        path: priv/plts
+        key: ${{ runner.os }}-${{ matrix.elixir }}-${{ matrix.otp }}-cache-dialyzer-plt
+        restore-keys: |
+          ${{ runner.os }}-${{ matrix.elixir }}-${{ matrix.otp }}-cache-dialyzer-plt
+          
+    # Step: Download lib Elixir dependencies.
+    # If unchanged, uses the cached version.
+    - name: Install lib Elixir deps
+      run: mix deps.get
 
-    # Step: Compile the lib treating any warnings as errors.
-    - name: Check lib compiles without warnings
-      run: mix compile --warnings-as-errors
+    # Step: Check if lib mix.lock has any unused dependencies.
+    - name: Check lib unused Elixir deps
+      run: mix deps.unlock --check-unused
+      
+    # Step: Check if there are any lib Elixir dependencies which have been marked as retired.
+    - name: Check lib retired Elixir deps
+      run: mix hex.audit      
+
+    # Step: Check if there are any security vulnerabilities in the lib Elixir dependencies.
+    - name: Check lib security vulnerabilities in Elixir deps
+      run: mix deps.audit
 
     # Step: Check that the lib code has already been formatted.
     - name: Check lib code formatted
       run: mix format --check-formatted
 
-    # Step: Check that doc and spec coverage are above thresholds (with Doctor).
-    - name: Check doc and spec coverage
+    # Step: Compile the lib project treating any warnings as errors.
+    - name: Check lib project compiles without warnings
+      run: mix compile --all-warnings --warnings-as-errors
+
+    # Step: Check that lib doc and spec coverage are above thresholds (with Doctor).
+    - name: Check lib doc and spec coverage
       run: mix doctor
 
-    # Step: Check that all test scripts have valid file names.
-    - name: Check test file names
+    # Step: Run lib Elixir static code analysis with Credo.
+    - name: Run lib Elixir static code analysis with Credo
+      run: mix credo --strict
+
+    # Step: Run lib Elixir security-focused analysis with Sobelow.
+    - name: Run lib Elixir security-focused analysis with Sobelow
+      run: mix sobelow --config --exit
+
+    # Step: Create lib Dialyzer PLTs if no cache was found.
+    - name: Create lib Dialyzer PLTs
+      if: steps.cache-dialyzer-plt.outputs.cache-hit != 'true'
+      run: mix dialyzer --plt
+
+    # Step: Run lib Elixir static code analysis with Dialyzer.
+    - name: Run lib Elixir static code analysis with Dialyzer
+      run: mix dialyzer --format github
+
+    # Step: Check that all lib test scripts have valid file names.
+    - name: Check lib test file names
       run: mix holo.test.check_file_names test/elixir/hologram
 
-    # Step: Execute Elixir unit tests.
-    - name: Run Elixir unit tests
+    # Step: Execute lib Elixir unit tests.
+    - name: Run lib Elixir unit tests
       run: mix test
 
     # Step: Download test app dependencies.
