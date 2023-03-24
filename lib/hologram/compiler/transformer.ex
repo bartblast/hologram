@@ -136,6 +136,17 @@ defmodule Hologram.Compiler.Transformer do
     %IR.PinOperator{name: name}
   end
 
+  # Pipe operator, based on: https://ianrumford.github.io/elixir/pipe/clojure/thread-first/macro/2016/07/24/writing-your-own-elixir-pipe-operator.html
+  def transform({:|>, _, _} = ast) do
+    [{first_ast, _index} | rest_tuples] = Macro.unpipe(ast)
+
+    rest_tuples
+    |> Enum.reduce(first_ast, fn {rest_ast, rest_index}, this_ast ->
+      Macro.pipe(this_ast, rest_ast, rest_index)
+    end)
+    |> transform()
+  end
+
   def transform({:&&, _, [left, right]}) do
     %IR.RelaxedBooleanAndOperator{
       left: transform(left),
@@ -143,8 +154,23 @@ defmodule Hologram.Compiler.Transformer do
     }
   end
 
+  def transform({:__block__, _, [{:!, _, [value]}]}) do
+    build_relaxed_boolean_not_operator_ir(value)
+  end
+
+  def transform({:!, _, [value]}) do
+    build_relaxed_boolean_not_operator_ir(value)
+  end
+
   def transform({:||, _, [left, right]}) do
     %IR.RelaxedBooleanOrOperator{
+      left: transform(left),
+      right: transform(right)
+    }
+  end
+
+  def transform({:and, _, [left, right]}) do
+    %IR.StrictBooleanAndOperator{
       left: transform(left),
       right: transform(right)
     }
@@ -161,32 +187,6 @@ defmodule Hologram.Compiler.Transformer do
     %IR.TypeOperator{
       left: transform(left),
       right: right
-    }
-  end
-
-  # Based on: https://ianrumford.github.io/elixir/pipe/clojure/thread-first/macro/2016/07/24/writing-your-own-elixir-pipe-operator.html
-  def transform({:|>, _, _} = ast) do
-    [{first_ast, _index} | rest_tuples] = Macro.unpipe(ast)
-
-    rest_tuples
-    |> Enum.reduce(first_ast, fn {rest_ast, rest_index}, this_ast ->
-      Macro.pipe(this_ast, rest_ast, rest_index)
-    end)
-    |> transform()
-  end
-
-  def transform({:__block__, _, [{:!, _, [value]}]}) do
-    build_relaxed_boolean_not_operator_ir(value)
-  end
-
-  def transform({:!, _, [value]}) do
-    build_relaxed_boolean_not_operator_ir(value)
-  end
-
-  def transform({:and, _, [left, right]}) do
-    %IR.StrictBooleanAndOperator{
-      left: transform(left),
-      right: transform(right)
     }
   end
 
