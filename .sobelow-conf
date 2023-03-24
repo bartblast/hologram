@@ -1,4 +1,5 @@
 [
+  exit: "low",
   ignore: ["Config.HTTPS"],
   skip: true
 ]

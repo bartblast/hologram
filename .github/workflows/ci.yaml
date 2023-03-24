@@ -140,7 +140,7 @@ jobs:
 
     # Step: Run lib Elixir security-focused analysis with Sobelow.
     - name: Run lib Elixir security-focused analysis with Sobelow
-      run: mix sobelow --config --exit
+      run: mix sobelow --config
 
     # Step: Create lib Dialyzer PLTs if no cache was found.
     - name: Create lib Dialyzer PLTs
