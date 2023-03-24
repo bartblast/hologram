@@ -103,6 +103,28 @@ defmodule Hologram.Compiler.PatternMatchDeconstructorTest do
     ]
   }
 
+  test "aggregate_bindings/1" do
+    access_paths = [
+      [pattern_value: %IR.IntegerType{value: 2}, tuple_index: 1],
+      [binding: :a, tuple_index: 0],
+      [:expression_value, {:tuple_index, 0}],
+      [binding: :b, list_index: 2, list_index: 1],
+      [pattern_value: %IR.IntegerType{value: 3}, tuple_index: 2],
+      [binding: :a, map_key: %IR.AtomType{value: :c}, map_key: %IR.StringType{value: "b"}]
+    ]
+
+    assert aggregate_bindings(access_paths) == %{
+             a: [
+               [tuple_index: 0],
+               [
+                 map_key: %IR.StringType{value: "b"},
+                 map_key: %IR.AtomType{value: :c}
+               ]
+             ],
+             b: [[list_index: 1, list_index: 2]]
+           }
+  end
+
   describe "deconstruct/3" do
     # --- MATCH OPERATOR ---
 

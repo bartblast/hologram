@@ -2,7 +2,44 @@ defmodule Hologram.Compiler.PatternMatchDeconstructor do
   alias Hologram.Compiler.IR
 
   @doc """
-  Deconstructs a pattern match IR into binding and literal value access paths.
+  Given reversed access paths from a deconstructed pattern match, it extracts bindings info.
+
+  ## Examples
+
+      iex> reversed_access_paths = [
+      ...> [pattern_value: %IR.IntegerType{value: 2}, tuple_index: 1],
+      ...> [binding: :a, tuple_index: 0],
+      ...> [:expression_value, {:tuple_index, 0}],
+      ...> [binding: :b, list_index: 2, list_index: 1],
+      ...> [pattern_value: %IR.IntegerType{value: 3}, tuple_index: 2],
+      ...> [binding: :a, map_key: %IR.AtomType{value: :c}, map_key: %IR.StringType{value: "b"}]
+      ...> ]
+      iex> PatternMatchDeconstructor.aggregate_bindings(reversed_access_paths)
+      %{
+        a: [
+          [tuple_index: 0],
+          [
+            map_key: %IR.StringType{value: "b"},
+            map_key: %IR.AtomType{value: :c}
+          ]
+        ],
+        b: [[list_index: 1, list_index: 2]]
+      }
+  """
+  @spec aggregate_bindings(list) :: %{atom => list}
+  def aggregate_bindings(reversed_access_paths) do
+    reversed_access_paths
+    |> Enum.filter(&match?([{:binding, _} | _], &1))
+    |> Enum.group_by(fn [{:binding, name} | _] -> name end)
+    |> Enum.map(fn {name, binding_reversed_access_paths} ->
+      {name,
+       Enum.map(binding_reversed_access_paths, fn [{:binding, _} | tail] -> Enum.reverse(tail) end)}
+    end)
+    |> Enum.into(%{})
+  end
+
+  @doc """
+  Deconstructs a pattern match into binding and literal value access paths.
   An access path specifies how a given element can be accessed in a nested data structure.
   The nodes in access paths are reversed, i.e. the first node is the deepest one.
 
