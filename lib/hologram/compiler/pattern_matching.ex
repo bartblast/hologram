@@ -1,4 +1,4 @@
-defmodule Hologram.Compiler.PatternMatchDeconstructor do
+defmodule Hologram.Compiler.PatternMatching do
   alias Hologram.Compiler.IR
 
   @doc """
@@ -14,7 +14,7 @@ defmodule Hologram.Compiler.PatternMatchDeconstructor do
       ...> [pattern_value: %IR.IntegerType{value: 3}, tuple_index: 2],
       ...> [binding: :a, map_key: %IR.AtomType{value: :c}, map_key: %IR.StringType{value: "b"}]
       ...> ]
-      iex> PatternMatchDeconstructor.aggregate_bindings(reversed_access_paths)
+      iex> PatternMatching.aggregate_bindings(reversed_access_paths)
       %{
         a: [
           [tuple_index: 0],
@@ -46,7 +46,7 @@ defmodule Hologram.Compiler.PatternMatchDeconstructor do
   ## Examples
 
       iex> ir = IR.for_code("{1, b} = {a, 2}")
-      iex> PatternMatchDeconstructor.deconstruct(ir)
+      iex> PatternMatching.deconstruct(ir)
       [
         [pattern_value: %IR.IntegerType{value: 1}, tuple_index: 0],
         [binding: :b, tuple_index: 1],
