@@ -41,6 +41,7 @@ defmodule Hologram.Compiler.IR do
           | IR.RelaxedBooleanOrOperator.t()
           | IR.StrictBooleanAndOperator.t()
           | IR.SubtractionOperator.t()
+          | IR.TypeOperator.t()
 
   @type t :: data_type_ir | identifier_ir | operator_ir
 
@@ -161,6 +162,12 @@ defmodule Hologram.Compiler.IR do
   end
 
   defmodule SubtractionOperator do
+    defstruct left: nil, right: nil
+
+    @type t :: %__MODULE__{left: IR.t(), right: IR.t()}
+  end
+
+  defmodule TypeOperator do
     defstruct left: nil, right: nil
 
     @type t :: %__MODULE__{left: IR.t(), right: IR.t()}

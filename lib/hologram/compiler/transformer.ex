@@ -157,6 +157,13 @@ defmodule Hologram.Compiler.Transformer do
     }
   end
 
+  def transform({:"::", _, [left, {right, _, _}]}) do
+    %IR.TypeOperator{
+      left: transform(left),
+      right: right
+    }
+  end
+
   # Based on: https://ianrumford.github.io/elixir/pipe/clojure/thread-first/macro/2016/07/24/writing-your-own-elixir-pipe-operator.html
   def transform({:|>, _, _} = ast) do
     [{first_ast, _index} | rest_tuples] = Macro.unpipe(ast)
