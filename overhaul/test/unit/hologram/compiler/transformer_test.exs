@@ -44,16 +44,6 @@ defmodule Hologram.Compiler.TransformerTest do
     end
   end
 
-  test "relaxed boolean or operator" do
-    # 1 || 2
-    ast = {:||, [line: 1], [1, 2]}
-
-    assert transform(ast) == %IR.RelaxedBooleanOrOperator{
-             left: %IR.IntegerType{value: 1},
-             right: %IR.IntegerType{value: 2}
-           }
-  end
-
   test "subtraction operator" do
     # a - 2
     ast = {:-, [line: 1], [{:a, [line: 1], nil}, 2]}

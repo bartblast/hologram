@@ -1,10 +1,6 @@
 defmodule Hologram.Compiler.IR do
   # --- OPERATORS ---
 
-  defmodule RelaxedBooleanOrOperator do
-    defstruct left: nil, right: nil
-  end
-
   defmodule SubtractionOperator do
     defstruct left: nil, right: nil
   end
