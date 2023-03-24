@@ -17,11 +17,11 @@ defmodule Hologram.Compiler.Helpers do
 
   def alias_segments(module_name) when is_binary(module_name) do
     Module.split("Elixir.#{module_name}")
-    |> Enum.map(&String.to_atom/1)
+    |> Enum.map(&String.to_existing_atom/1)
   end
 
   def alias_segments(module) do
     Module.split(module)
-    |> Enum.map(&String.to_atom/1)
+    |> Enum.map(&String.to_existing_atom/1)
   end
 end
