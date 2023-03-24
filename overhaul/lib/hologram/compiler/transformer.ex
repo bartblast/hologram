@@ -6,25 +6,6 @@ defmodule Hologram.Compiler.Transformer do
 
   # --- OPERATORS ---
 
-  # based on: https://ianrumford.github.io/elixir/pipe/clojure/thread-first/macro/2016/07/24/writing-your-own-elixir-pipe-operator.html
-  transform({:|>, _, _} = ast) do
-    [{first_ast, _index} | rest_tuples] = Macro.unpipe(ast)
-
-    rest_tuples
-    |> Enum.reduce(first_ast, fn {rest_ast, rest_index}, this_ast ->
-      Macro.pipe(this_ast, rest_ast, rest_index)
-    end)
-    |> transform()
-  end
-
-  transform({:__block__, _, [{:!, _, [value]}]}) do
-    build_relaxed_boolean_not_operator_ir(value)
-  end
-
-  transform({:!, _, [value]}) do
-    build_relaxed_boolean_not_operator_ir(value)
-  end
-
   transform({:||, _, [left, right]}) do
     %IR.RelaxedBooleanOrOperator{
       left: transform(left),
@@ -297,12 +278,6 @@ defmodule Hologram.Compiler.Transformer do
 
   defp build_import_directive_ir(alias_segs, only, except) do
     %IR.ImportDirective{alias_segs: alias_segs, only: only, except: except}
-  end
-
-  defp build_relaxed_boolean_not_operator_ir(value) do
-    %IR.RelaxedBooleanNotOperator{
-      value: transform(value)
-    }
   end
 
   defp find_for_expression_generators(parts) do

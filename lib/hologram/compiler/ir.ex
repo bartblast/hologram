@@ -37,6 +37,7 @@ defmodule Hologram.Compiler.IR do
           | IR.NotEqualToOperator.t()
           | IR.PinOperator.t()
           | IR.RelaxedBooleanAndOperator.t()
+          | IR.RelaxedBooleanNotOperator.t()
           | IR.StrictBooleanAndOperator.t()
 
   @type t :: data_type_ir | identifier_ir | operator_ir
@@ -137,6 +138,12 @@ defmodule Hologram.Compiler.IR do
     defstruct left: nil, right: nil
 
     @type t :: %__MODULE__{left: IR.t(), right: IR.t()}
+  end
+
+  defmodule RelaxedBooleanNotOperator do
+    defstruct value: nil
+
+    @type t :: %__MODULE__{value: IR.t()}
   end
 
   defmodule StrictBooleanAndOperator do

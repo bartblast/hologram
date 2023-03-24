@@ -260,6 +260,27 @@ defmodule Hologram.Compiler.TransformerTest do
            }
   end
 
+  describe "relaxed boolean not operator" do
+    test "block AST" do
+      # !false
+      ast = {:__block__, [], [{:!, [line: 1], [false]}]}
+
+      assert transform(ast) == %IR.RelaxedBooleanNotOperator{
+               value: %IR.BooleanType{value: false}
+             }
+    end
+
+    test "non-block AST" do
+      # true && !false
+      ast = {:&&, [line: 1], [true, {:!, [line: 1], [false]}]}
+
+      assert transform(ast) == %IR.RelaxedBooleanAndOperator{
+               left: %IR.BooleanType{value: true},
+               right: %IR.RelaxedBooleanNotOperator{value: %IR.BooleanType{value: false}}
+             }
+    end
+  end
+
   test "strict boolean and operator" do
     # true and false
     ast = {:and, [line: 1], [true, false]}
