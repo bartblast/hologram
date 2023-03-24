@@ -3,8 +3,110 @@ defmodule Hologram.Compiler.PatternMatchDeconstructorTest do
   import Hologram.Compiler.PatternMatchDeconstructor
   alias Hologram.Compiler.IR
 
-  describe "match operator" do
-    test "literal value on both sides" do
+  # [a | [1, 2]]
+  @ir_1 %IR.ConsOperator{
+    head: %IR.Symbol{name: :a},
+    tail: %IR.ListType{
+      data: [
+        %IR.IntegerType{value: 1},
+        %IR.IntegerType{value: 2}
+      ]
+    }
+  }
+
+  # [1 | [2, a]]
+  @ir_2 %IR.ConsOperator{
+    head: %IR.IntegerType{value: 1},
+    tail: %IR.ListType{
+      data: [
+        %IR.IntegerType{value: 2},
+        %IR.Symbol{name: :a}
+      ]
+    }
+  }
+
+  # [1 | [2 | [3, a]]]
+  @ir_3 %IR.ConsOperator{
+    head: %IR.IntegerType{value: 1},
+    tail: %IR.ConsOperator{
+      head: %IR.IntegerType{value: 2},
+      tail: %IR.ListType{
+        data: [
+          %IR.IntegerType{value: 3},
+          %IR.Symbol{name: :a}
+        ]
+      }
+    }
+  }
+
+  # [1, a]
+  @non_nested_list %IR.ListType{
+    data: [
+      %IR.IntegerType{value: 1},
+      %IR.Symbol{name: :a}
+    ]
+  }
+
+  # [a, [1, b]]
+  @nested_list %IR.ListType{
+    data: [
+      %IR.Symbol{name: :a},
+      %IR.ListType{
+        data: [
+          %IR.IntegerType{value: 1},
+          %IR.Symbol{name: :b}
+        ]
+      }
+    ]
+  }
+
+  # %{:a => 1, "b" => c}
+  @non_nested_map %IR.MapType{
+    data: [
+      {%IR.AtomType{value: :a}, %IR.IntegerType{value: 1}},
+      {%IR.StringType{value: "b"}, %IR.Symbol{name: :c}}
+    ]
+  }
+
+  # %{:a => 1, "b" => %{:c => 2, "d" => e}}
+  @nested_map %IR.MapType{
+    data: [
+      {%IR.AtomType{value: :a}, %IR.IntegerType{value: 1}},
+      {%IR.StringType{value: "b"},
+       %IR.MapType{
+         data: [
+           {%IR.AtomType{value: :c}, %IR.IntegerType{value: 2}},
+           {%IR.StringType{value: "d"}, %IR.Symbol{name: :e}}
+         ]
+       }}
+    ]
+  }
+
+  # {1, a}
+  @non_nested_tuple %IR.TupleType{
+    data: [
+      %IR.IntegerType{value: 1},
+      %IR.Symbol{name: :a}
+    ]
+  }
+
+  # {a, {1, b}}
+  @nested_tuple %IR.TupleType{
+    data: [
+      %IR.Symbol{name: :a},
+      %IR.TupleType{
+        data: [
+          %IR.IntegerType{value: 1},
+          %IR.Symbol{name: :b}
+        ]
+      }
+    ]
+  }
+
+  describe "deconstruct/3" do
+    # --- MATCH OPERATOR ---
+
+    test "match operator, literal value on both sides" do
       # 1 = 2
       ir = %IR.MatchOperator{
         left: %IR.IntegerType{value: 1},
@@ -14,7 +116,7 @@ defmodule Hologram.Compiler.PatternMatchDeconstructorTest do
       assert deconstruct(ir) == [[pattern_value: %IR.IntegerType{value: 1}], [:expression_value]]
     end
 
-    test "symbol in pattern" do
+    test "match operator, symbol in pattern" do
       # x = 2
       ir = %IR.MatchOperator{
         left: %IR.Symbol{name: :x},
@@ -24,7 +126,7 @@ defmodule Hologram.Compiler.PatternMatchDeconstructorTest do
       assert deconstruct(ir) == [[binding: :x], [:expression_value]]
     end
 
-    test "symbol in expression" do
+    test "match operator, symbol in expression" do
       # 1 = x
       ir = %IR.MatchOperator{
         left: %IR.IntegerType{value: 1},
@@ -34,7 +136,7 @@ defmodule Hologram.Compiler.PatternMatchDeconstructorTest do
       assert deconstruct(ir) == [[pattern_value: %IR.IntegerType{value: 1}], [:expression_value]]
     end
 
-    test "nested, symbol in pattern" do
+    test "match operator, nested, symbol in pattern" do
       # x = 2 = 3
       ir = %IR.MatchOperator{
         left: %IR.Symbol{name: :x},
@@ -51,7 +153,7 @@ defmodule Hologram.Compiler.PatternMatchDeconstructorTest do
              ]
     end
 
-    test "nested, symbol in the middle" do
+    test "match operator, nested, symbol in the middle" do
       # 1 = x = 3
       ir = %IR.MatchOperator{
         left: %IR.IntegerType{value: 1},
@@ -68,7 +170,7 @@ defmodule Hologram.Compiler.PatternMatchDeconstructorTest do
              ]
     end
 
-    test "nested, symbol in expression" do
+    test "match operator, nested, symbol in expression" do
       # 1 = 2 = x
       ir = %IR.MatchOperator{
         left: %IR.IntegerType{value: 1},
@@ -85,7 +187,7 @@ defmodule Hologram.Compiler.PatternMatchDeconstructorTest do
              ]
     end
 
-    test "nested multiple-times" do
+    test "match operator, nested multiple-times" do
       # {a = b, 2, 3} = {1, c = d, 3} = {1, 2, e = f}
       ir = %IR.MatchOperator{
         left: %IR.TupleType{
@@ -137,63 +239,40 @@ defmodule Hologram.Compiler.PatternMatchDeconstructorTest do
                [:expression_value, {:tuple_index, 2}]
              ]
     end
-  end
 
-  describe "symbol" do
-    test "in pattern" do
+    # --- SYMBOL ---
+
+    test "symbol in pattern" do
       # a
       ir = %IR.Symbol{name: :a}
 
       assert deconstruct(ir, :pattern) == [[binding: :a]]
     end
 
-    test "in expression" do
+    test "symbol in expression" do
       # a
       ir = %IR.Symbol{name: :a}
 
       assert deconstruct(ir, :expression) == [[:expression_value]]
     end
-  end
 
-  # --- DATA TYPES ---
+    # --- BASIC DATA TYPES ---
 
-  describe "basic types" do
-    test "in pattern" do
+    test "basic data type in pattern" do
       # 1
       ir = %IR.IntegerType{value: 1}
 
       assert deconstruct(ir, :pattern) == [[pattern_value: %IR.IntegerType{value: 1}]]
     end
 
-    test "in expression" do
+    test "basic data type in expression" do
       # 1
       ir = %IR.IntegerType{value: 1}
 
       assert deconstruct(ir, :expression) == [[:expression_value]]
     end
-  end
 
-  describe "list type" do
-    # [1, a]
-    @non_nested_list %IR.ListType{
-      data: [
-        %IR.IntegerType{value: 1},
-        %IR.Symbol{name: :a}
-      ]
-    }
-
-    # [a, [1, b]]
-    @nested_list %IR.ListType{
-      data: [
-        %IR.Symbol{name: :a},
-        %IR.ListType{
-          data: [
-            %IR.IntegerType{value: 1},
-            %IR.Symbol{name: :b}
-          ]
-        }
-      ]
-    }
+    # --- LIST TYPE ---
 
     test "non-nested list, in pattern" do
       assert deconstruct(@non_nested_list, :pattern) == [
@@ -228,30 +307,8 @@ defmodule Hologram.Compiler.PatternMatchDeconstructorTest do
                [:expression_value, {:list_index, 1}, {:list_index, 1}]
              ]
     end
-  end
 
-  describe "map type" do
-    # %{:a => 1, "b" => c}
-    @non_nested_map %IR.MapType{
-      data: [
-        {%IR.AtomType{value: :a}, %IR.IntegerType{value: 1}},
-        {%IR.StringType{value: "b"}, %IR.Symbol{name: :c}}
-      ]
-    }
-
-    # %{:a => 1, "b" => %{:c => 2, "d" => e}}
-    @nested_map %IR.MapType{
-      data: [
-        {%IR.AtomType{value: :a}, %IR.IntegerType{value: 1}},
-        {%IR.StringType{value: "b"},
-         %IR.MapType{
-           data: [
-             {%IR.AtomType{value: :c}, %IR.IntegerType{value: 2}},
-             {%IR.StringType{value: "d"}, %IR.Symbol{name: :e}}
-           ]
-         }}
-      ]
-    }
+    # --- MAP TYPE ---
 
     test "non-nested map, in pattern" do
       assert deconstruct(@non_nested_map, :pattern) == [
@@ -304,29 +361,8 @@ defmodule Hologram.Compiler.PatternMatchDeconstructorTest do
                ]
              ]
     end
-  end
 
-  describe "tuple type" do
-    # {1, a}
-    @non_nested_tuple %IR.TupleType{
-      data: [
-        %IR.IntegerType{value: 1},
-        %IR.Symbol{name: :a}
-      ]
-    }
-
-    # {a, {1, b}}
-    @nested_tuple %IR.TupleType{
-      data: [
-        %IR.Symbol{name: :a},
-        %IR.TupleType{
-          data: [
-            %IR.IntegerType{value: 1},
-            %IR.Symbol{name: :b}
-          ]
-        }
-      ]
-    }
+    # --- TUPLE TYPE ---
 
     test "non-nested tuple, in pattern" do
       assert deconstruct(@non_nested_tuple, :pattern) == [
@@ -361,46 +397,8 @@ defmodule Hologram.Compiler.PatternMatchDeconstructorTest do
                [:expression_value, {:tuple_index, 1}, {:tuple_index, 1}]
              ]
     end
-  end
 
-  # --- OPERATORS ---
-
-  describe "cons operator" do
-    # [a | [1, 2]]
-    @ir_1 %IR.ConsOperator{
-      head: %IR.Symbol{name: :a},
-      tail: %IR.ListType{
-        data: [
-          %IR.IntegerType{value: 1},
-          %IR.IntegerType{value: 2}
-        ]
-      }
-    }
-
-    # [1 | [2, a]]
-    @ir_2 %IR.ConsOperator{
-      head: %IR.IntegerType{value: 1},
-      tail: %IR.ListType{
-        data: [
-          %IR.IntegerType{value: 2},
-          %IR.Symbol{name: :a}
-        ]
-      }
-    }
-
-    # [1 | [2 | [3, a]]]
-    @ir_3 %IR.ConsOperator{
-      head: %IR.IntegerType{value: 1},
-      tail: %IR.ConsOperator{
-        head: %IR.IntegerType{value: 2},
-        tail: %IR.ListType{
-          data: [
-            %IR.IntegerType{value: 3},
-            %IR.Symbol{name: :a}
-          ]
-        }
-      }
-    }
+    # --- CONS OPERATOR ---
 
     test "non-nested cons operator with symbol in head, in pattern" do
       assert deconstruct(@ir_1, :pattern) == [
@@ -472,13 +470,13 @@ defmodule Hologram.Compiler.PatternMatchDeconstructorTest do
                [:expression_value, {:list_index, 1}, :list_tail, :list_tail]
              ]
     end
-  end
 
-  # Only side = :pattern need to be tested, since pin operators in expression sides shouldn't compile.
-  test "pin operator" do
-    # ^x
-    ir = %IR.PinOperator{name: :my_var}
+    # Only side = :pattern need to be tested, since pin operators in expression sides shouldn't compile.
+    test "pin operator" do
+      # ^x
+      ir = %IR.PinOperator{name: :my_var}
 
-    assert deconstruct(ir, :pattern) == [[variable: :my_var]]
+      assert deconstruct(ir, :pattern) == [[variable: :my_var]]
+    end
   end
 end
