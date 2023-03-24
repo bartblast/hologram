@@ -301,6 +301,16 @@ defmodule Hologram.Compiler.TransformerTest do
            }
   end
 
+  test "subtraction operator" do
+    # a - 2
+    ast = {:-, [line: 1], [{:a, [line: 1], nil}, 2]}
+
+    assert transform(ast) == %IR.SubtractionOperator{
+             left: %IR.Symbol{name: :a},
+             right: %IR.IntegerType{value: 2}
+           }
+  end
+
   # --- DATA TYPES --
 
   test "atom type" do
