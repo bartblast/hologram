@@ -103,17 +103,17 @@ defmodule Hologram.Compiler.PatternMatchingTest do
     ]
   }
 
-  test "aggregate_bindings/1" do
-    access_paths = [
-      [pattern_value: %IR.IntegerType{value: 2}, tuple_index: 1],
-      [binding: :a, tuple_index: 0],
-      [:expression_value, {:tuple_index, 0}],
-      [binding: :b, list_index: 2, list_index: 1],
-      [pattern_value: %IR.IntegerType{value: 3}, tuple_index: 2],
-      [binding: :a, map_key: %IR.AtomType{value: :c}, map_key: %IR.StringType{value: "b"}]
-    ]
+  @reversed_access_paths [
+    [pattern_value: %IR.IntegerType{value: 2}, tuple_index: 1],
+    [binding: :a, tuple_index: 0],
+    [:expression_value, {:tuple_index, 0}],
+    [binding: :b, list_index: 2, list_index: 1],
+    [{:pattern_value, %IR.IntegerType{value: 1}}, {:list_index, 0}, :list_tail],
+    [binding: :a, map_key: %IR.AtomType{value: :c}, map_key: %IR.StringType{value: "b"}]
+  ]
 
-    assert aggregate_bindings(access_paths) == %{
+  test "aggregate_bindings/1" do
+    assert aggregate_bindings(@reversed_access_paths) == %{
              a: [
                [tuple_index: 0],
                [
@@ -123,6 +123,13 @@ defmodule Hologram.Compiler.PatternMatchingTest do
              ],
              b: [[list_index: 1, list_index: 2]]
            }
+  end
+
+  test "aggregate_pattern_values/1" do
+    assert aggregate_pattern_values(@reversed_access_paths) == [
+             [{:tuple_index, 1}, %IR.IntegerType{value: 2}],
+             [:list_tail, {:list_index, 0}, %IR.IntegerType{value: 1}]
+           ]
   end
 
   describe "deconstruct/3" do
