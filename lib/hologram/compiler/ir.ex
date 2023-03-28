@@ -6,6 +6,7 @@ defmodule Hologram.Compiler.IR do
           | IR.ListType.t()
           | IR.ModuleAttributeDefinition.t()
           | IR.ModuleAttributeOperator.t()
+          | IR.Symbol.t()
           | IR.TupleType.t()
 
   defmodule AtomType do
@@ -39,6 +40,12 @@ defmodule Hologram.Compiler.IR do
   end
 
   defmodule ModuleAttributeOperator do
+    defstruct name: nil
+
+    @type t :: %__MODULE__{name: atom}
+  end
+
+  defmodule Symbol do
     defstruct name: nil
 
     @type t :: %__MODULE__{name: atom}

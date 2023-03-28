@@ -68,7 +68,7 @@ defmodule Hologram.Compiler.TransformerTest do
     end
 
     test "AST returned from macro" do
-      # apply(Module1, :"MACRO-macro_module_attribute_definition_1", [__ENV__])
+      # apply(Module1, :"MACRO-macro_module_attribute_definition", [__ENV__])
       ast =
         {:@, [context: Module1, imports: [{1, Kernel}]], [{:my_attr, [context: Module1], [987]}]}
 
@@ -87,10 +87,28 @@ defmodule Hologram.Compiler.TransformerTest do
     end
 
     test "AST returned from macro" do
-      # apply(Module1, :"MACRO-macro_module_attribute_operator_1", [__ENV__])
+      # apply(Module1, :"MACRO-macro_module_attribute_operator", [__ENV__])
       ast =
         {:@, [context: Module1, imports: [{1, Kernel}]],
          [{:my_attr, [context: Module1], Module1}]}
+
+      assert transform(ast) == @expected_ir
+    end
+  end
+
+  describe "symbol" do
+    @expected_ir %IR.Symbol{name: :my_symbol}
+
+    test "AST obtained directly from source file" do
+      # my_symbol
+      ast = {:my_symbol, [line: 1], nil}
+
+      assert transform(ast) == @expected_ir
+    end
+
+    test "AST returned from macro" do
+      # apply(Module1, :"MACRO-macro_symbol", [__ENV__])
+      ast = {:my_symbol, [], Module1}
 
       assert transform(ast) == @expected_ir
     end

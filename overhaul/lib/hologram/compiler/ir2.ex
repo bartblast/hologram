@@ -11,7 +11,7 @@ defmodule Hologram.Compiler.IR do
           | IR.StringType.t()
           | IR.StructType.t()
 
-  @type identifier_ir :: IR.Alias.t() | IR.Symbol.t()
+  @type identifier_ir :: IR.Alias.t()
 
   @type operator_ir ::
           IR.AccessOperator.t()
@@ -197,12 +197,6 @@ defmodule Hologram.Compiler.IR do
     defstruct segments: nil
 
     @type t :: %__MODULE__{segments: T.alias_segments()}
-  end
-
-  defmodule Symbol do
-    defstruct name: nil
-
-    @type t :: %__MODULE__{name: atom}
   end
 
   # --- API ---

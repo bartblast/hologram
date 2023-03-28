@@ -48,6 +48,12 @@ defmodule Hologram.Compiler.Transformer do
     |> build_tuple_type_ir()
   end
 
+  # preserve order:
+
+  def transform({name, _, _}) when is_atom(name) do
+    %IR.Symbol{name: name}
+  end
+
   @doc """
   Prints debug info for intercepted transform/1 call.
   """
