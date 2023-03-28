@@ -26,7 +26,6 @@ defmodule Hologram.Compiler.IR do
           | IR.ListSubtractionOperator.t()
           | IR.MatchOperator.t()
           | IR.MembershipOperator.t()
-          | IR.ModuleAttributeOperator.t()
           | IR.MultiplicationOperator.t()
           | IR.NotEqualToOperator.t()
           | IR.PinOperator.t()
@@ -105,12 +104,6 @@ defmodule Hologram.Compiler.IR do
     defstruct left: nil, right: nil
 
     @type t :: %__MODULE__{left: IR.t(), right: IR.t()}
-  end
-
-  defmodule ModuleAttributeOperator do
-    defstruct name: nil
-
-    @type t :: %__MODULE__{name: atom}
   end
 
   defmodule MultiplicationOperator do

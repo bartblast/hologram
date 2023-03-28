@@ -52,4 +52,22 @@ defmodule Hologram.Compiler.TransformerTest do
              ]
            }
   end
+
+  describe "module attribute operator" do
+    test "AST obtained directly from source file" do
+      # @my_attr
+      ast = {:@, [line: 1], [{:my_attr, [line: 1], nil}]}
+
+      assert transform(ast) == %IR.ModuleAttributeOperator{name: :my_attr}
+    end
+
+    test "AST returned from macro" do
+      # apply(Module1, :"MACRO-macro_module_attribute_operator_1", [__ENV__])
+      ast =
+        {:@, [context: Module1, imports: [{1, Kernel}]],
+         [{:my_attr, [context: Module1], Module1}]}
+
+      assert transform(ast) == %IR.ModuleAttributeOperator{name: :my_attr}
+    end
+  end
 end

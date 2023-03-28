@@ -27,6 +27,10 @@ defmodule Hologram.Compiler.Transformer do
     %IR.ListType{data: data}
   end
 
+  def transform({:@, _, [{name, _, ast}]}) when not is_list(ast) do
+    %IR.ModuleAttributeOperator{name: name}
+  end
+
   @doc """
   Prints debug info for intercepted transform/1 call.
   """
