@@ -74,8 +74,6 @@ defmodule Hologram.Compiler.Transformer do
     %IR.Alias{segments: segments}
   end
 
-  {{:., [line: 1], [{:a, [line: 1], nil}, :x]}, [line: 1], []}
-
   def transform({{:., _, [module, function]}, _, args}) when not is_atom(module) do
     build_call_ir(module, function, args)
   end
@@ -112,6 +110,7 @@ defmodule Hologram.Compiler.Transformer do
         nil ->
           nil
 
+        # TODO: uncomment after contextual call transformer is implemented
         # %IR.ModuleType{} ->
         #   module
 
