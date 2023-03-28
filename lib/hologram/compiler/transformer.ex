@@ -18,6 +18,10 @@ defmodule Hologram.Compiler.Transformer do
     %IR.BooleanType{value: ast}
   end
 
+  def transform(ast) when is_float(ast) do
+    %IR.FloatType{value: ast}
+  end
+
   @doc """
   Prints debug info for intercepted transform/1 call.
   """
