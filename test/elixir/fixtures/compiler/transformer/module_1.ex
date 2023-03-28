@@ -13,6 +13,12 @@ defmodule Hologram.Test.Fixtures.Compiler.Transformer.Module1 do
     end
   end
 
+  defmacro macro_env_pseudo_variable do
+    quote do
+      __ENV__
+    end
+  end
+
   defmacro macro_module_attribute_definition do
     quote do
       @my_attr 987
