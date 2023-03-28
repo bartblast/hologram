@@ -1,7 +1,15 @@
 defmodule Hologram.Test.Fixtures.Compiler.Transformer.Module1 do
-  defmacro macro_alias do
+  alias Hologram.Test.Fixtures.Compiler.Transformer.Module2, as: InnerAlias
+
+  defmacro macro_alias_1 do
     quote do
       Aaa.Bbb
+    end
+  end
+
+  defmacro macro_alias_2 do
+    quote do
+      InnerAlias
     end
   end
 

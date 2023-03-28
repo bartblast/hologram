@@ -8,11 +8,8 @@ defmodule Hologram.Compiler.Transformer do
       }
   end
 
+  alias Hologram.Compiler.Helpers
   alias Hologram.Compiler.IR
-
-  def transform({:__aliases__, _, segments}) do
-    %IR.Alias{segments: segments}
-  end
 
   def transform(ast) when is_atom(ast) do
     %IR.AtomType{value: ast}
@@ -42,6 +39,11 @@ defmodule Hologram.Compiler.Transformer do
     %IR.ModuleAttributeOperator{name: name}
   end
 
+  def transform({:__aliases__, [alias: module], _alias_segs}) when module != false do
+    module_segs = Helpers.alias_segments(module)
+    %IR.ModuleType{module: module, segments: module_segs}
+  end
+
   def transform({:{}, _, data}) do
     build_tuple_type_ir(data)
   end
@@ -53,6 +55,10 @@ defmodule Hologram.Compiler.Transformer do
   end
 
   # preserve order:
+
+  def transform({:__aliases__, _, segments}) do
+    %IR.Alias{segments: segments}
+  end
 
   def transform({name, _, _}) when is_atom(name) do
     %IR.Symbol{name: name}

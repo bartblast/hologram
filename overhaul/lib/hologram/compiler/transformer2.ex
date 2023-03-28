@@ -1,6 +1,5 @@
 defmodule Hologram.Compiler.Transformer do
   alias Hologram.Compiler.AST
-  alias Hologram.Compiler.Helpers
 
   @doc """
   Transforms Elixir AST to Hologram IR.
@@ -210,13 +209,6 @@ defmodule Hologram.Compiler.Transformer do
     %IR.StringType{value: ast}
   end
 
-  # --- IDENTIFIERS ---
-
-  def transform({:__aliases__, [alias: module], _alias_segs}) when module != false do
-    module_segs = Helpers.alias_segments(module)
-    %IR.ModuleType{module: module, segments: module_segs}
-  end
-  
   # --- HELPERS ---
 
   defp build_relaxed_boolean_not_operator_ir(value) do
