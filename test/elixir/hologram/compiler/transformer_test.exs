@@ -55,6 +55,13 @@ defmodule Hologram.Compiler.TransformerTest do
     end
   end
 
+  test "__ENV__ pseudo-variable" do
+    # __ENV__
+    ast = {:__ENV__, [line: 1], nil}
+
+    assert transform(ast) == %IR.EnvPseudoVariable{}
+  end
+
   test "float type" do
     # 1.0
     ast = 1.0

@@ -4,14 +4,17 @@ defmodule Hologram.Compiler.IR do
   @type ir ::
           IR.Alias.t()
           | IR.AtomType.t()
-          | IR.FloatType.t()
-          | IR.IntegerType.t()
-          | IR.ListType.t()
-          | IR.ModuleAttributeDefinition.t()
-          | IR.ModuleAttributeOperator.t()
-          | IR.ModuleType.t()
-          | IR.Symbol.t()
-          | IR.TupleType.t()
+          | IR.EnvPseudoVariable.t(
+              {}
+              | IR.FloatType.t()
+              | IR.IntegerType.t()
+              | IR.ListType.t()
+              | IR.ModuleAttributeDefinition.t()
+              | IR.ModuleAttributeOperator.t()
+              | IR.ModuleType.t()
+              | IR.Symbol.t()
+              | IR.TupleType.t()
+            )
 
   defmodule Alias do
     defstruct segments: nil
@@ -23,6 +26,12 @@ defmodule Hologram.Compiler.IR do
     defstruct value: nil
 
     @type t :: %__MODULE__{value: atom}
+  end
+
+  defmodule EnvPseudoVariable do
+    defstruct []
+
+    @type t :: %__MODULE__{}
   end
 
   defmodule FloatType do

@@ -17,10 +17,6 @@ defmodule Hologram.Compiler.IR do
 
   # --- PSEUDO-VARIABLES ---
 
-  defmodule EnvPseudoVariable do
-    defstruct []
-  end
-
   defmodule ModulePseudoVariable do
     defstruct []
   end

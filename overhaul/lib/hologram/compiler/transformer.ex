@@ -31,10 +31,6 @@ defmodule Hologram.Compiler.Transformer do
 
   # --- PSEUDO-VARIABLES ---
 
-  transform({:__ENV__, _, _}) do
-    %IR.EnvPseudoVariable{}
-  end
-
   transform({:__MODULE__, _, _}) do
     %IR.ModulePseudoVariable{}
   end
