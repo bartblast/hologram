@@ -1,8 +1,4 @@
 defmodule Hologram.Compiler.TransformerTest do
-  use Hologram.Test.BasicCase, async: true
-  import Hologram.Compiler.Transformer
-
-  alias Hologram.Compiler.IR
   alias Hologram.Test.Fixtures.Compiler.Transformer.Module2
 
   # --- OPERATORS ---
@@ -322,13 +318,6 @@ defmodule Hologram.Compiler.TransformerTest do
   end
 
   # --- DATA TYPES --
-
-  test "atom type" do
-    # :test
-    ast = :test
-
-    assert transform(ast) == %IR.AtomType{value: :test}
-  end
 
   describe "binary type" do
     test "empty" do

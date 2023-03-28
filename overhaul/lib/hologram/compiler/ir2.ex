@@ -5,7 +5,6 @@ defmodule Hologram.Compiler.IR do
   alias Hologram.Compiler.Transformer
 
   @type data_type_ir ::
-          IR.AtomType.t()
           | IR.BinaryType.t()
           | IR.BooleanType.t()
           | IR.FloatType.t()
@@ -174,12 +173,6 @@ defmodule Hologram.Compiler.IR do
   end
 
   # --- DATA TYPES ---
-
-  defmodule AtomType do
-    defstruct value: nil
-
-    @type t :: %__MODULE__{value: atom}
-  end
 
   defmodule BinaryType do
     defstruct parts: nil

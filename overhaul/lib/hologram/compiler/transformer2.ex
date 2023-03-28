@@ -1,7 +1,6 @@
 defmodule Hologram.Compiler.Transformer do
   alias Hologram.Compiler.AST
   alias Hologram.Compiler.Helpers
-  alias Hologram.Compiler.IR
 
   @doc """
   Transforms Elixir AST to Hologram IR.
@@ -182,10 +181,6 @@ defmodule Hologram.Compiler.Transformer do
   end
 
   # --- DATA TYPES ---
-
-  def transform(ast) when is_atom(ast) and ast not in [nil, false, true] do
-    %IR.AtomType{value: ast}
-  end
 
   def transform({:<<>>, _, parts}) do
     %IR.BinaryType{parts: transform_list(parts)}
