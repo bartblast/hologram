@@ -17,4 +17,20 @@ defmodule Hologram.Compiler.Transformer do
   def transform(ast) when is_boolean(ast) do
     %IR.BooleanType{value: ast}
   end
+
+  @doc """
+  Prints debug info for intercepted transform/1 call.
+  """
+  @spec debug({module, atom, [AST.t()]}, IR.t()) :: :ok
+  def debug({_module, _function, [ast] = _args}, result) do
+    IO.puts("\nTRANSFORM...............................\n")
+    IO.puts("ast")
+    # credo:disable-for-next-line
+    IO.inspect(ast)
+    IO.puts("")
+    IO.puts("result")
+    # credo:disable-for-next-line
+    IO.inspect(result)
+    IO.puts("\n........................................\n")
+  end
 end
