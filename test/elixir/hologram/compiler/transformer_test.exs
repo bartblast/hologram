@@ -33,4 +33,11 @@ defmodule Hologram.Compiler.TransformerTest do
 
     assert transform(ast) == %IR.FloatType{value: 1.0}
   end
+
+  test "integer type" do
+    # 1
+    ast = 1
+
+    assert transform(ast) == %IR.IntegerType{value: 1}
+  end
 end
