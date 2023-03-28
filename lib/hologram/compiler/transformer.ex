@@ -22,6 +22,11 @@ defmodule Hologram.Compiler.Transformer do
     %IR.IntegerType{value: ast}
   end
 
+  def transform(ast) when is_list(ast) do
+    data = Enum.map(ast, &transform/1)
+    %IR.ListType{data: data}
+  end
+
   @doc """
   Prints debug info for intercepted transform/1 call.
   """

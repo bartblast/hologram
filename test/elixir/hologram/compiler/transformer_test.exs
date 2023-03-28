@@ -40,4 +40,16 @@ defmodule Hologram.Compiler.TransformerTest do
 
     assert transform(ast) == %IR.IntegerType{value: 1}
   end
+
+  test "list type" do
+    # [1, 2]
+    ast = [1, 2]
+
+    assert transform(ast) == %IR.ListType{
+             data: [
+               %IR.IntegerType{value: 1},
+               %IR.IntegerType{value: 2}
+             ]
+           }
+  end
 end

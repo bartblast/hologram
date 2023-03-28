@@ -6,7 +6,6 @@ defmodule Hologram.Compiler.IR do
 
   @type data_type_ir ::
           | IR.BinaryType.t()
-          | IR.ListType.t()
           | IR.MapType.t()
           | IR.ModuleType.t()
           | IR.StringType.t()
@@ -174,12 +173,6 @@ defmodule Hologram.Compiler.IR do
     defstruct parts: nil
 
     @type t :: %__MODULE__{parts: list(IR.t())}
-  end
-
-  defmodule ListType do
-    defstruct data: nil
-
-    @type t :: %__MODULE__{data: list(IR.t())}
   end
 
   defmodule MapType do

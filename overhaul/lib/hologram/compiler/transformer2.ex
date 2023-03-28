@@ -186,11 +186,6 @@ defmodule Hologram.Compiler.Transformer do
     %IR.BinaryType{parts: transform_list(parts)}
   end
 
-  def transform(ast) when is_list(ast) do
-    data = Enum.map(ast, &transform/1)
-    %IR.ListType{data: data}
-  end
-
   def transform({:%{}, _, data}) do
     {module, new_data} = Keyword.pop(data, :__struct__)
 
