@@ -46,10 +46,6 @@ defmodule Hologram.Compiler.IR do
 
   # --- CONTROL FLOW ---
 
-  defmodule AnonymousFunctionCall do
-    defstruct name: nil, args: []
-  end
-
   defmodule Block do
     defstruct expressions: []
   end

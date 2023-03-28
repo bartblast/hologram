@@ -2,7 +2,8 @@ defmodule Hologram.Compiler.IR do
   alias Hologram.Commons.Types, as: T
 
   @type ir ::
-          IR.Alias.t()
+          IR.AnonymousFunctionCall.t()
+          | IR.Alias.t()
           | IR.AtomType.t()
           | IR.EnvPseudoVariable.t()
           | IR.FloatType.t()
@@ -14,6 +15,12 @@ defmodule Hologram.Compiler.IR do
           | IR.ModuleType.t()
           | IR.Symbol.t()
           | IR.TupleType.t()
+
+  defmodule AnonymousFunctionCall do
+    defstruct name: nil, args: []
+
+    @type t :: %__MODULE__{name: atom, args: list(IR.t())}
+  end
 
   defmodule Alias do
     defstruct segments: nil

@@ -113,13 +113,6 @@ defmodule Hologram.Compiler.Transformer do
 
   # --- CONTROL FLOW ---
 
-  transform({{:., _, [{name, _, nil}]}, _, args}) do
-    %IR.AnonymousFunctionCall{
-      name: name,
-      args: Enum.map(args, &transform/1)
-    }
-  end
-
   transform({:__block__, _, ast}) do
     ir = Enum.map(ast, &transform/1)
     %IR.Block{expressions: ir}

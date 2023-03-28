@@ -1,5 +1,6 @@
 defmodule Hologram.Compiler.Transformer do
   alias Hologram.Compiler.AST
+  alias Hologram.Compiler.Helpers
 
   @doc """
   Transforms Elixir AST to Hologram IR.
@@ -215,11 +216,5 @@ defmodule Hologram.Compiler.Transformer do
     %IR.RelaxedBooleanNotOperator{
       value: transform(value)
     }
-  end
-
-  defp transform_list(list) do
-    list
-    |> List.wrap()
-    |> Enum.map(&transform/1)
   end
 end

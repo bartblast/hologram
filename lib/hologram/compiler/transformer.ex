@@ -11,6 +11,13 @@ defmodule Hologram.Compiler.Transformer do
   alias Hologram.Compiler.Helpers
   alias Hologram.Compiler.IR
 
+  def transform({{:., _, [{name, _, _}]}, _, args}) do
+    %IR.AnonymousFunctionCall{
+      name: name,
+      args: transform_list(args)
+    }
+  end
+
   def transform(ast) when is_atom(ast) do
     %IR.AtomType{value: ast}
   end
@@ -28,8 +35,7 @@ defmodule Hologram.Compiler.Transformer do
   end
 
   def transform(ast) when is_list(ast) do
-    data = Enum.map(ast, &transform/1)
-    %IR.ListType{data: data}
+    %IR.ListType{data: transform_list(ast)}
   end
 
   def transform({:@, _, [{name, _, [ast]}]}) do
@@ -89,7 +95,12 @@ defmodule Hologram.Compiler.Transformer do
   end
 
   defp build_tuple_type_ir(data) do
-    data = Enum.map(data, &transform/1)
-    %IR.TupleType{data: data}
+    %IR.TupleType{data: transform_list(data)}
+  end
+
+  defp transform_list(list) do
+    list
+    |> List.wrap()
+    |> Enum.map(&transform/1)
   end
 end

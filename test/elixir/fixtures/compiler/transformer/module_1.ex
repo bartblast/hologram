@@ -13,6 +13,18 @@ defmodule Hologram.Test.Fixtures.Compiler.Transformer.Module1 do
     end
   end
 
+  defmacro macro_anonymous_function_call_1 do
+    quote do
+      test.()
+    end
+  end
+
+  defmacro macro_anonymous_function_call_2 do
+    quote do
+      test.(1, 2)
+    end
+  end
+
   defmacro macro_env_pseudo_variable do
     quote do
       __ENV__
