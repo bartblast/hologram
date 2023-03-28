@@ -58,13 +58,6 @@ defmodule Hologram.Compiler.Transformer do
     }
   end
 
-  transform({:@, _, [{name, _, [ast]}]}) do
-    %IR.ModuleAttributeDefinition{
-      name: name,
-      expression: transform(ast)
-    }
-  end
-
   transform({:defmodule, _, [module, [do: body]]}) do
     %IR.ModuleDefinition{
       module: transform(module),

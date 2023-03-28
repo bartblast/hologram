@@ -36,10 +36,6 @@ defmodule Hologram.Compiler.IR do
               visibility: nil
   end
 
-  defmodule ModuleAttributeDefinition do
-    defstruct name: nil, expression: nil
-  end
-
   defmodule ModuleDefinition do
     defstruct module: nil, body: nil
   end

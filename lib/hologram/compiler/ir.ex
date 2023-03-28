@@ -4,6 +4,7 @@ defmodule Hologram.Compiler.IR do
           | IR.FloatType.t()
           | IR.IntegerType.t()
           | IR.ListType.t()
+          | IR.ModuleAttributeDefinition.t()
           | IR.ModuleAttributeOperator.t()
 
   defmodule AtomType do
@@ -28,6 +29,12 @@ defmodule Hologram.Compiler.IR do
     defstruct data: nil
 
     @type t :: %__MODULE__{data: list(IR.t())}
+  end
+
+  defmodule ModuleAttributeDefinition do
+    defstruct name: nil, expression: nil
+
+    @type t :: %__MODULE__{name: atom, expression: IR.t()}
   end
 
   defmodule ModuleAttributeOperator do

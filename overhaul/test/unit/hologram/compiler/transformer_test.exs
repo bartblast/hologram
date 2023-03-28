@@ -1,7 +1,6 @@
 defmodule Hologram.Compiler.TransformerTest do
   use Hologram.Test.UnitCase, async: true
   import Hologram.Compiler.Transformer
-  alias Hologram.Test.Fixtures.Compiler.Transformer.Module1
 
   # --- OPERATORS ---
 
@@ -291,19 +290,6 @@ defmodule Hologram.Compiler.TransformerTest do
 
       assert %IR.FunctionDefinition{visibility: :private} = transform(ast)
     end
-  end
-
-  test "module attribute definition" do
-    # @abc 1 + 2
-    ast = {:@, [line: 1], [{:abc, [line: 1], [{:+, [line: 1], [1, 2]}]}]}
-
-    assert transform(ast) == %IR.ModuleAttributeDefinition{
-             name: :abc,
-             expression: %IR.AdditionOperator{
-               left: %IR.IntegerType{value: 1},
-               right: %IR.IntegerType{value: 2}
-             }
-           }
   end
 
   describe "module definition" do
