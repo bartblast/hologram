@@ -25,6 +25,12 @@ defmodule Hologram.Test.Fixtures.Compiler.Transformer.Module1 do
     end
   end
 
+  defmacro macro_module_pseudo_variable do
+    quote do
+      __MODULE__
+    end
+  end
+
   defmacro macro_symbol do
     quote do
       my_symbol

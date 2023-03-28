@@ -130,6 +130,22 @@ defmodule Hologram.Compiler.TransformerTest do
     end
   end
 
+  describe "__MODULE__ pseudo-variable" do
+    test "AST obtained directly from source file" do
+      # __MODULE__
+      ast = {:__MODULE__, [line: 1], nil}
+
+      assert transform(ast) == %IR.ModulePseudoVariable{}
+    end
+
+    test "AST returned from macro" do
+      # apply(Module1, :"MACRO-macro_module_pseudo_variable", [__ENV__])
+      ast = {:__MODULE__, [], Module1}
+
+      assert transform(ast) == %IR.ModulePseudoVariable{}
+    end
+  end
+
   describe "symbol" do
     @expected_ir %IR.Symbol{name: :my_symbol}
 

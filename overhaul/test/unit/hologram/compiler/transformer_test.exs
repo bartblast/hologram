@@ -145,15 +145,6 @@ defmodule Hologram.Compiler.TransformerTest do
     end
   end
 
-  # --- PSEUDO-VARIABLES ---
-
-  test "__MODULE__ pseudo-variable" do
-    # __MODULE__
-    ast = {:__MODULE__, [line: 1], nil}
-
-    assert transform(ast) == %IR.ModulePseudoVariable{}
-  end
-
   # --- DEFINITIONS ---
 
   describe "function definition" do

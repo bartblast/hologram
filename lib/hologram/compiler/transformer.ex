@@ -43,6 +43,10 @@ defmodule Hologram.Compiler.Transformer do
     %IR.ModuleAttributeOperator{name: name}
   end
 
+  def transform({:__MODULE__, _, _}) do
+    %IR.ModulePseudoVariable{}
+  end
+
   def transform({:__aliases__, [alias: module], _alias_segs}) when module != false do
     module_segs = Helpers.alias_segments(module)
     %IR.ModuleType{module: module, segments: module_segs}

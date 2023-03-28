@@ -15,12 +15,6 @@ defmodule Hologram.Compiler.IR do
     defstruct arity: nil, params: [], bindings: [], body: nil
   end
 
-  # --- PSEUDO-VARIABLES ---
-
-  defmodule ModulePseudoVariable do
-    defstruct []
-  end
-
   # --- DEFINITIONS ---
 
   defmodule FunctionDefinition do

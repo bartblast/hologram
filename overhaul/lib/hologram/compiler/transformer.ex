@@ -29,12 +29,6 @@ defmodule Hologram.Compiler.Transformer do
     %IR.AnonymousFunctionType{arity: arity, params: params, bindings: bindings, body: body}
   end
 
-  # --- PSEUDO-VARIABLES ---
-
-  transform({:__MODULE__, _, _}) do
-    %IR.ModulePseudoVariable{}
-  end
-
   # --- DEFINITIONS ---
 
   transform _({marker, _, [{name, _, params}, [do: body]]}) when marker in [:def, :defp] do
