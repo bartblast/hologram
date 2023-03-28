@@ -340,13 +340,6 @@ defmodule Hologram.Compiler.TransformerTest do
     end
   end
 
-  test "boolean type" do
-    # true
-    ast = true
-
-    assert transform(ast) == %IR.BooleanType{value: true}
-  end
-
   test "float type" do
     # 1.0
     ast = 1.0

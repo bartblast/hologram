@@ -6,7 +6,6 @@ defmodule Hologram.Compiler.IR do
 
   @type data_type_ir ::
           | IR.BinaryType.t()
-          | IR.BooleanType.t()
           | IR.FloatType.t()
           | IR.IntegerType.t()
           | IR.ListType.t()
@@ -178,12 +177,6 @@ defmodule Hologram.Compiler.IR do
     defstruct parts: nil
 
     @type t :: %__MODULE__{parts: list(IR.t())}
-  end
-
-  defmodule BooleanType do
-    defstruct value: nil
-
-    @type t :: %__MODULE__{value: boolean}
   end
 
   defmodule FloatType do
