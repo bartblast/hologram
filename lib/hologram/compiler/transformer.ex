@@ -38,6 +38,16 @@ defmodule Hologram.Compiler.Transformer do
     %IR.ModuleAttributeOperator{name: name}
   end
 
+  def transform({:{}, _, data}) do
+    build_tuple_type_ir(data)
+  end
+
+  def transform({_, _} = data) do
+    data
+    |> Tuple.to_list()
+    |> build_tuple_type_ir()
+  end
+
   @doc """
   Prints debug info for intercepted transform/1 call.
   """
@@ -52,5 +62,10 @@ defmodule Hologram.Compiler.Transformer do
     # credo:disable-for-next-line
     IO.inspect(result)
     IO.puts("\n........................................\n")
+  end
+
+  defp build_tuple_type_ir(data) do
+    data = Enum.map(data, &transform/1)
+    %IR.TupleType{data: data}
   end
 end

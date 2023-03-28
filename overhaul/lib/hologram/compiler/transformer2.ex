@@ -210,16 +210,6 @@ defmodule Hologram.Compiler.Transformer do
     %IR.StringType{value: ast}
   end
 
-  def transform({:{}, _, data}) do
-    build_tuple_type_ir(data)
-  end
-
-  def transform({_, _} = data) do
-    data
-    |> Tuple.to_list()
-    |> build_tuple_type_ir()
-  end
-
   # --- IDENTIFIERS ---
 
   def transform({:__aliases__, [alias: module], _alias_segs}) when module != false do
@@ -243,11 +233,6 @@ defmodule Hologram.Compiler.Transformer do
     %IR.RelaxedBooleanNotOperator{
       value: transform(value)
     }
-  end
-
-  defp build_tuple_type_ir(data) do
-    data = Enum.map(data, &transform/1)
-    %IR.TupleType{data: data}
   end
 
   defp transform_list(list) do

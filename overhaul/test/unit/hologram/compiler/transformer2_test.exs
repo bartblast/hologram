@@ -373,33 +373,6 @@ defmodule Hologram.Compiler.TransformerTest do
     end
   end
 
-  describe "tuple type" do
-    test "2-element tuple" do
-      # {1, 2}
-      ast = {1, 2}
-
-      assert transform(ast) == %IR.TupleType{
-               data: [
-                 %IR.IntegerType{value: 1},
-                 %IR.IntegerType{value: 2}
-               ]
-             }
-    end
-
-    test "non-2-element tuple" do
-      # {1, 2, 3}
-      ast = {:{}, [line: 1], [1, 2, 3]}
-
-      assert transform(ast) == %IR.TupleType{
-               data: [
-                 %IR.IntegerType{value: 1},
-                 %IR.IntegerType{value: 2},
-                 %IR.IntegerType{value: 3}
-               ]
-             }
-    end
-  end
-
   # --- IDENTIFIERS ---
 
   describe "alias" do

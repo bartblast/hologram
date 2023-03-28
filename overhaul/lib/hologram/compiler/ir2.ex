@@ -10,7 +10,6 @@ defmodule Hologram.Compiler.IR do
           | IR.ModuleType.t()
           | IR.StringType.t()
           | IR.StructType.t()
-          | IR.TupleType.t()
 
   @type identifier_ir :: IR.Alias.t() | IR.Symbol.t()
 
@@ -190,12 +189,6 @@ defmodule Hologram.Compiler.IR do
     defstruct module: nil, data: nil
 
     @type t :: %__MODULE__{module: module, data: list({IR.t(), IR.t()})}
-  end
-
-  defmodule TupleType do
-    defstruct data: nil
-
-    @type t :: %__MODULE__{data: list(IR.t())}
   end
 
   # --- IDENTIFIERS ---
