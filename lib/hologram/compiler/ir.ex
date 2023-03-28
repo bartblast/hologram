@@ -1,6 +1,9 @@
 defmodule Hologram.Compiler.IR do
+  alias Hologram.Commons.Types, as: T
+
   @type ir ::
-          IR.AtomType.t()
+          IR.Alias.t()
+          | IR.AtomType.t()
           | IR.FloatType.t()
           | IR.IntegerType.t()
           | IR.ListType.t()
@@ -8,6 +11,12 @@ defmodule Hologram.Compiler.IR do
           | IR.ModuleAttributeOperator.t()
           | IR.Symbol.t()
           | IR.TupleType.t()
+
+  defmodule Alias do
+    defstruct segments: nil
+
+    @type t :: %__MODULE__{segments: T.alias_segments()}
+  end
 
   defmodule AtomType do
     defstruct value: nil

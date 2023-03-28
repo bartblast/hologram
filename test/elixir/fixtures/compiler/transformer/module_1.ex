@@ -1,4 +1,10 @@
 defmodule Hologram.Test.Fixtures.Compiler.Transformer.Module1 do
+  defmacro macro_alias do
+    quote do
+      Aaa.Bbb
+    end
+  end
+
   defmacro macro_module_attribute_definition do
     quote do
       @my_attr 987

@@ -4,6 +4,23 @@ defmodule Hologram.Compiler.TransformerTest do
 
   alias Hologram.Compiler.IR
   alias Hologram.Test.Fixtures.Compiler.Transformer.Module1
+  alias Hologram.Test.Fixtures.Compiler.Transformer.Module2
+
+  describe "alias" do
+    test "AST obtained directly from source file" do
+      # Aaa.Bbb
+      ast = {:__aliases__, [line: 1], [:Aaa, :Bbb]}
+
+      assert transform(ast) == %IR.Alias{segments: [:Aaa, :Bbb]}
+    end
+
+    test "AST returned from macro, not an inner alias" do
+      # apply(Module1, :"MACRO-macro_alias", [__ENV__])
+      ast = {:__aliases__, [alias: false], [:Aaa, :Bbb]}
+
+      assert transform(ast) == %IR.Alias{segments: [:Aaa, :Bbb]}
+    end
+  end
 
   describe "atom type" do
     test "boolean" do

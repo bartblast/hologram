@@ -10,6 +10,10 @@ defmodule Hologram.Compiler.Transformer do
 
   alias Hologram.Compiler.IR
 
+  def transform({:__aliases__, _, segments}) do
+    %IR.Alias{segments: segments}
+  end
+
   def transform(ast) when is_atom(ast) do
     %IR.AtomType{value: ast}
   end

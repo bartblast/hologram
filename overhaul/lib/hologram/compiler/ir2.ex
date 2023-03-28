@@ -1,5 +1,4 @@
 defmodule Hologram.Compiler.IR do
-  alias Hologram.Commons.Types, as: T
   alias Hologram.Compiler.AST
   alias Hologram.Compiler.IR
   alias Hologram.Compiler.Transformer
@@ -10,8 +9,6 @@ defmodule Hologram.Compiler.IR do
           | IR.ModuleType.t()
           | IR.StringType.t()
           | IR.StructType.t()
-
-  @type identifier_ir :: IR.Alias.t()
 
   @type operator_ir ::
           IR.AccessOperator.t()
@@ -35,7 +32,7 @@ defmodule Hologram.Compiler.IR do
           | IR.SubtractionOperator.t()
           | IR.TypeOperator.t()
 
-  @type t :: data_type_ir | identifier_ir | operator_ir
+  @type t :: data_type_ir | operator_ir
 
   # --- OPERATORS ---
 
@@ -189,14 +186,6 @@ defmodule Hologram.Compiler.IR do
     defstruct module: nil, data: nil
 
     @type t :: %__MODULE__{module: module, data: list({IR.t(), IR.t()})}
-  end
-
-  # --- IDENTIFIERS ---
-
-  defmodule Alias do
-    defstruct segments: nil
-
-    @type t :: %__MODULE__{segments: T.alias_segments()}
   end
 
   # --- API ---

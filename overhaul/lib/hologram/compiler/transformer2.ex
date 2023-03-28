@@ -216,11 +216,7 @@ defmodule Hologram.Compiler.Transformer do
     module_segs = Helpers.alias_segments(module)
     %IR.ModuleType{module: module, segments: module_segs}
   end
-
-  def transform({:__aliases__, _, segments}) do
-    %IR.Alias{segments: segments}
-  end
-
+  
   # --- HELPERS ---
 
   defp build_relaxed_boolean_not_operator_ir(value) do
