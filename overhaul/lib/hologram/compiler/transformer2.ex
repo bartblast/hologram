@@ -195,10 +195,6 @@ defmodule Hologram.Compiler.Transformer do
     %IR.ListType{data: data}
   end
 
-  def transform(nil) do
-    %IR.NilType{}
-  end
-
   def transform({:%{}, _, data}) do
     {module, new_data} = Keyword.pop(data, :__struct__)
 

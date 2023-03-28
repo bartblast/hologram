@@ -10,12 +10,8 @@ defmodule Hologram.Compiler.Transformer do
 
   alias Hologram.Compiler.IR
 
-  def transform(ast) when is_atom(ast) and ast not in [nil, false, true] do
+  def transform(ast) when is_atom(ast) do
     %IR.AtomType{value: ast}
-  end
-
-  def transform(ast) when is_boolean(ast) do
-    %IR.BooleanType{value: ast}
   end
 
   def transform(ast) when is_float(ast) do

@@ -371,13 +371,6 @@ defmodule Hologram.Compiler.TransformerTest do
            }
   end
 
-  test "nil type" do
-    # nil
-    ast = nil
-
-    assert transform(ast) == %IR.NilType{}
-  end
-
   test "string type" do
     # "test"
     ast = "test"

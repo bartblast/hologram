@@ -4,18 +4,27 @@ defmodule Hologram.Compiler.TransformerTest do
 
   alias Hologram.Compiler.IR
 
-  test "atom type" do
-    # :test
-    ast = :test
+  describe "atom type" do
+    test "boolean" do
+      # true
+      ast = true
 
-    assert transform(ast) == %IR.AtomType{value: :test}
-  end
+      assert transform(ast) == %IR.AtomType{value: true}
+    end
 
-  test "boolean type" do
-    # true
-    ast = true
+    test "nil" do
+      # nil
+      ast = nil
 
-    assert transform(ast) == %IR.BooleanType{value: true}
+      assert transform(ast) == %IR.AtomType{value: nil}
+    end
+
+    test "other than boolean or nil" do
+      # :test
+      ast = :test
+
+      assert transform(ast) == %IR.AtomType{value: :test}
+    end
   end
 
   test "float type" do

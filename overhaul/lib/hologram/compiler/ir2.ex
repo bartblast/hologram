@@ -10,7 +10,6 @@ defmodule Hologram.Compiler.IR do
           | IR.ListType.t()
           | IR.MapType.t()
           | IR.ModuleType.t()
-          | IR.NilType.t()
           | IR.StringType.t()
           | IR.StructType.t()
           | IR.TupleType.t()
@@ -200,12 +199,6 @@ defmodule Hologram.Compiler.IR do
     defstruct module: nil, segments: nil
 
     @type t :: %__MODULE__{module: module, segments: T.alias_segments()}
-  end
-
-  defmodule NilType do
-    defstruct []
-
-    @type t :: %__MODULE__{}
   end
 
   defmodule StringType do
