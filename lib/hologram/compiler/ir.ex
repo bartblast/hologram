@@ -17,7 +17,7 @@ defmodule Hologram.Compiler.IR do
           | IR.TupleType.t()
 
   defmodule AnonymousFunctionCall do
-    defstruct name: nil, args: []
+    defstruct name: nil, args: nil
 
     @type t :: %__MODULE__{name: atom, args: list(IR.t())}
   end
@@ -32,6 +32,12 @@ defmodule Hologram.Compiler.IR do
     defstruct value: nil
 
     @type t :: %__MODULE__{value: atom}
+  end
+
+  defmodule Call do
+    defstruct module: nil, function: nil, args: nil
+
+    @type t :: %__MODULE__{module: module | nil, function: atom, args: list(IR.t())}
   end
 
   defmodule EnvPseudoVariable do

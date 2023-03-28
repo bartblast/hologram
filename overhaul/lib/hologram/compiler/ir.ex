@@ -50,10 +50,6 @@ defmodule Hologram.Compiler.IR do
     defstruct expressions: []
   end
 
-  defmodule Call do
-    defstruct module: nil, function: nil, args: []
-  end
-
   defmodule CaseExpression do
     defstruct condition: nil, clauses: []
   end

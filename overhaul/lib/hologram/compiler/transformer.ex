@@ -118,10 +118,6 @@ defmodule Hologram.Compiler.Transformer do
     %IR.Block{expressions: ir}
   end
 
-  transform _({{:., _, [module, function]}, _, args}) when not is_atom(module) do
-    build_call_ir(module, function, args)
-  end
-
   transform({:case, _, [condition, [do: clauses]]}) do
     %IR.CaseExpression{
       condition: transform(condition),
@@ -184,31 +180,7 @@ defmodule Hologram.Compiler.Transformer do
     build_call_ir(module_ir, function, [])
   end
 
-  transform _({function, _, args}) when is_atom(function) and is_list(args) do
-    build_call_ir(nil, function, args)
-  end
-
   # --- HELPERS ---
-
-  defp build_call_ir(module, function, args) do
-    new_module =
-      case module do
-        nil ->
-          nil
-
-        %IR.ModuleType{} ->
-          module
-
-        module ->
-          transform(module)
-      end
-
-    %IR.Call{
-      module: new_module,
-      function: function,
-      args: transform_list(args)
-    }
-  end
 
   defp build_alias_directive_irs(alias_segs, aliases) do
     Enum.map(aliases, fn {:__aliases__, _, [as]} ->

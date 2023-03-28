@@ -68,15 +68,27 @@ defmodule Hologram.Compiler.Transformer do
     |> build_tuple_type_ir()
   end
 
-  # preserve order:
+  # --- PRESERVE ORDER (BEGIN) ---
 
   def transform({:__aliases__, _, segments}) do
     %IR.Alias{segments: segments}
   end
 
+  {{:., [line: 1], [{:a, [line: 1], nil}, :x]}, [line: 1], []}
+
+  def transform({{:., _, [module, function]}, _, args}) when not is_atom(module) do
+    build_call_ir(module, function, args)
+  end
+
+  def transform({function, _, args}) when is_atom(function) and is_list(args) do
+    build_call_ir(nil, function, args)
+  end
+
   def transform({name, _, _}) when is_atom(name) do
     %IR.Symbol{name: name}
   end
+
+  # --- PRESERVE ORDER (END) ---
 
   @doc """
   Prints debug info for intercepted transform/1 call.
@@ -92,6 +104,26 @@ defmodule Hologram.Compiler.Transformer do
     # credo:disable-for-next-line
     IO.inspect(result)
     IO.puts("\n........................................\n")
+  end
+
+  defp build_call_ir(module, function, args) do
+    new_module =
+      case module do
+        nil ->
+          nil
+
+        # %IR.ModuleType{} ->
+        #   module
+
+        module ->
+          transform(module)
+      end
+
+    %IR.Call{
+      module: new_module,
+      function: function,
+      args: transform_list(args)
+    }
   end
 
   defp build_tuple_type_ir(data) do
