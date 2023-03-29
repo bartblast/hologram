@@ -5,6 +5,7 @@ defmodule Hologram.Compiler.IR do
           IR.AnonymousFunctionCall.t()
           | IR.Alias.t()
           | IR.AtomType.t()
+          | IR.DotOperator.t()
           | IR.EnvPseudoVariable.t()
           | IR.FloatType.t()
           | IR.IntegerType.t()
@@ -38,6 +39,12 @@ defmodule Hologram.Compiler.IR do
     defstruct module: nil, function: nil, args: nil
 
     @type t :: %__MODULE__{module: module | nil, function: atom, args: list(IR.t())}
+  end
+
+  defmodule DotOperator do
+    defstruct left: nil, right: nil
+
+    @type t :: %__MODULE__{left: IR.t(), right: IR.t()}
   end
 
   defmodule EnvPseudoVariable do

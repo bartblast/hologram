@@ -22,6 +22,14 @@ defmodule Hologram.Compiler.Transformer do
     %IR.AtomType{value: ast}
   end
 
+  def transform({{:., _, [{marker, _, _} = left, right]}, [{:no_parens, true} | _], []})
+      when marker not in [:__aliases__, :__MODULE__] do
+    %IR.DotOperator{
+      left: transform(left),
+      right: transform(right)
+    }
+  end
+
   def transform({:__ENV__, _, _}) do
     %IR.EnvPseudoVariable{}
   end

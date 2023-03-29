@@ -302,6 +302,94 @@ defmodule Hologram.Compiler.TransformerTest do
     end
   end
 
+  describe "dot operator, AST obtained directly from source file" do
+    test "on symbol" do
+      # abc.x
+      ast = {{:., [line: 1], [{:abc, [line: 1], nil}, :x]}, [no_parens: true, line: 1], []}
+
+      assert transform(ast) == %IR.DotOperator{
+               left: %IR.Symbol{name: :abc},
+               right: %IR.AtomType{value: :x}
+             }
+    end
+
+    test "on module attribute" do
+      # @abc.x
+      ast =
+        {{:., [line: 1], [{:@, [line: 1], [{:abc, [line: 1], nil}]}, :x]},
+         [no_parens: true, line: 1], []}
+
+      assert transform(ast) == %IR.DotOperator{
+               left: %IR.ModuleAttributeOperator{name: :abc},
+               right: %IR.AtomType{value: :x}
+             }
+    end
+
+    test "on expression" do
+      # (3 + 4).x
+      ast = {{:., [line: 1], [{:+, [line: 1], [3, 4]}, :x]}, [no_parens: true, line: 1], []}
+
+      assert transform(ast) == %IR.DotOperator{
+               left: %IR.Call{
+                 module: nil,
+                 function: :+,
+                 args: [
+                   %IR.IntegerType{value: 3},
+                   %IR.IntegerType{value: 4}
+                 ]
+               },
+               right: %IR.AtomType{value: :x}
+             }
+    end
+  end
+
+  describe "dot operator, AST returned from macro" do
+    test "on symbol" do
+      # apply(Module1, :"MACRO-macro_dot_operator_1", [__ENV__])
+      ast = {{:., [], [{:abc, [], Module1}, :x]}, [no_parens: true], []}
+
+      assert transform(ast) == %IR.DotOperator{
+               left: %IR.Symbol{name: :abc},
+               right: %IR.AtomType{value: :x}
+             }
+    end
+
+    test "on module attribute" do
+      # apply(Module1, :"MACRO-macro_dot_operator_2", [__ENV__])
+      ast =
+        {{:., [],
+          [
+            {:@, [context: Module1, imports: [{1, Kernel}]],
+             [{:abc, [context: Module1], Module1}]},
+            :x
+          ]}, [no_parens: true], []}
+
+      assert transform(ast) == %IR.DotOperator{
+               left: %IR.ModuleAttributeOperator{name: :abc},
+               right: %IR.AtomType{value: :x}
+             }
+    end
+
+    test "on expression" do
+      # apply(Module1, :"MACRO-macro_dot_operator_3", [__ENV__])
+      ast =
+        {{:., [], [{:+, [context: Module1, imports: [{1, Kernel}, {2, Kernel}]], [3, 4]}, :x]},
+         [no_parens: true], []}
+
+      assert transform(ast) == %IR.DotOperator{
+               left: %IR.Call{
+                 module: nil,
+                 function: :+,
+                 args: [
+                   %IR.IntegerType{value: 3},
+                   %IR.IntegerType{value: 4}
+                 ]
+               },
+               right: %IR.AtomType{value: :x}
+             }
+    end
+  end
+
   describe "__ENV__ pseudo-variable" do
     test "AST obtained directly from source file" do
       # __ENV__

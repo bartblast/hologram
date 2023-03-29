@@ -64,43 +64,6 @@ defmodule Hologram.Compiler.TransformerTest do
            }
   end
 
-  describe "dot operator" do
-    test "on symbol" do
-      # a.x
-      ast = {{:., [line: 1], [{:a, [line: 1], nil}, :x]}, [no_parens: true, line: 1], []}
-
-      assert transform(ast) == %IR.DotOperator{
-               left: %IR.Symbol{name: :a},
-               right: %IR.AtomType{value: :x}
-             }
-    end
-
-    test "on module attribute" do
-      # @abc.x
-      ast =
-        {{:., [line: 1], [{:@, [line: 1], [{:abc, [line: 1], nil}]}, :x]},
-         [no_parens: true, line: 1], []}
-
-      assert transform(ast) == %IR.DotOperator{
-               left: %IR.ModuleAttributeOperator{name: :abc},
-               right: %IR.AtomType{value: :x}
-             }
-    end
-
-    test "on expression" do
-      # (3 + 4).x
-      ast = {{:., [line: 1], [{:+, [line: 1], [3, 4]}, :x]}, [no_parens: true, line: 1], []}
-
-      assert transform(ast) == %IR.DotOperator{
-               left: %IR.AdditionOperator{
-                 left: %IR.IntegerType{value: 3},
-                 right: %IR.IntegerType{value: 4}
-               },
-               right: %IR.AtomType{value: :x}
-             }
-    end
-  end
-
   test "equal to operator" do
     # 1 == 2
     ast = {:==, [line: 1], [1, 2]}
