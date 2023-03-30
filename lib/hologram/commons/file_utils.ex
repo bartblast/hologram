@@ -4,7 +4,7 @@ defmodule Hologram.Commons.FileUtils do
 
   ## Examples
 
-      iex> FileUtils.list_files_recursively("test/elixir/fixtures/commons/file_utils/list_files_recursively/dir_1")
+      iex> list_files_recursively("test/elixir/fixtures/commons/file_utils/list_files_recursively/dir_1")
       ["test/elixir/fixtures/commons/file_utils/list_files_recursively/dir_1/dir_3/file_5.txt",
        "test/elixir/fixtures/commons/file_utils/list_files_recursively/dir_1/dir_3/file_6.txt",
        "test/elixir/fixtures/commons/file_utils/list_files_recursively/dir_1/file_3.txt",
