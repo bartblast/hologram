@@ -26,6 +26,13 @@ defmodule Hologram.Compiler.Transformer do
   @spec transform(AST.t()) :: IR.t()
   def transform(ast)
 
+  def transform({{:., _, [function]}, _, args}) do
+    %IR.AnonymousFunctionCall{
+      function: transform(function),
+      args: transform_list(args)
+    }
+  end
+
   def transform(ast) when is_atom(ast) do
     %IR.AtomType{value: ast}
   end

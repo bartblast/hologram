@@ -3,6 +3,31 @@ defmodule Hologram.Compiler.TransformerTest do
   import Hologram.Compiler.Transformer
   alias Hologram.Compiler.IR
 
+  describe "anonymous function call" do
+    test "without args" do
+      # test.()
+      ast = {{:., [line: 1], [{:test, [line: 1], nil}]}, [line: 1], []}
+
+      assert transform(ast) == %IR.AnonymousFunctionCall{
+               function: %IR.Variable{name: :test},
+               args: []
+             }
+    end
+
+    test "with args" do
+      # test.(1, 2)
+      ast = {{:., [line: 1], [{:test, [line: 1], nil}]}, [line: 1], [1, 2]}
+
+      assert transform(ast) == %IR.AnonymousFunctionCall{
+               name: %IR.Variable{name: :test},
+               args: [
+                 %IR.IntegerType{value: 1},
+                 %IR.IntegerType{value: 2}
+               ]
+             }
+    end
+  end
+
   describe "atom type" do
     test "boolean" do
       # true

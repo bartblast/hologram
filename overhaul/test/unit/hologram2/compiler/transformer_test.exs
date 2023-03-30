@@ -2,56 +2,6 @@ defmodule Hologram.Compiler.TransformerTest do
   alias Hologram.Test.Fixtures.Compiler.Transformer.Module1
   alias Hologram.Test.Fixtures.Compiler.Transformer.Module2
 
-  describe "anonymous function call, AST obtained directly from source file" do
-    test "without args" do
-      # test.()
-      ast = {{:., [line: 1], [{:test, [line: 1], nil}]}, [line: 1], []}
-
-      assert transform(ast) == %IR.AnonymousFunctionCall{
-               name: :test,
-               args: []
-             }
-    end
-
-    test "with args" do
-      # test.(1, 2)
-      ast = {{:., [line: 1], [{:test, [line: 1], nil}]}, [line: 1], [1, 2]}
-
-      assert transform(ast) == %IR.AnonymousFunctionCall{
-               name: :test,
-               args: [
-                 %IR.IntegerType{value: 1},
-                 %IR.IntegerType{value: 2}
-               ]
-             }
-    end
-  end
-
-  describe "anonymous function call, AST returned from macro" do
-    test "without args" do
-      # apply(Module1, :"MACRO-macro_anonymous_function_call_1", [__ENV__])
-      ast = {{:., [], [{:test, [], Module1}]}, [], []}
-
-      assert transform(ast) == %IR.AnonymousFunctionCall{
-               name: :test,
-               args: []
-             }
-    end
-
-    test "with args" do
-      # apply(Module1, :"MACRO-macro_anonymous_function_call_2", [__ENV__])
-      ast = {{:., [], [{:test, [], Module1}]}, [], [1, 2]}
-
-      assert transform(ast) == %IR.AnonymousFunctionCall{
-               name: :test,
-               args: [
-                 %IR.IntegerType{value: 1},
-                 %IR.IntegerType{value: 2}
-               ]
-             }
-    end
-  end
-
   describe "call, AST obtained directly from source file" do
     # direct call, without args, without parenthesis case is tested as part of the symbol tests
 

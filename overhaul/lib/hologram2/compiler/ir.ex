@@ -1,16 +1,9 @@
 defmodule Hologram.Compiler.IR do
   @type ir ::
-          IR.AnonymousFunctionCall.t()
-          | IR.Alias.t()
+          IR.Alias.t()
           | IR.DotOperator.t()
           | IR.ModuleAttributeOperator.t()
           | IR.Symbol.t()
-
-  defmodule AnonymousFunctionCall do
-    defstruct name: nil, args: nil
-
-    @type t :: %__MODULE__{name: atom, args: list(IR.t())}
-  end
 
   defmodule Alias do
     defstruct segments: nil

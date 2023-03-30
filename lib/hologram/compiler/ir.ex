@@ -3,12 +3,19 @@ defmodule Hologram.Compiler.IR do
   alias Hologram.Compiler.IR
 
   @type t ::
-          IR.AtomType.t()
+          IR.AnonymousFunctionCall.t()
+          | IR.AtomType.t()
           | IR.FloatType.t()
           | IR.IntegerType.t()
           | IR.ListType.t()
           | IR.ModuleType.t()
           | IR.TupleType.t()
+
+  defmodule AnonymousFunctionCall do
+    defstruct function: nil, args: nil
+
+    @type t :: %__MODULE__{function: IR.t(), args: list(IR.t())}
+  end
 
   defmodule AtomType do
     defstruct value: nil

@@ -1,11 +1,4 @@
 defmodule Hologram.Compiler.Transformer do
-  def transform({{:., _, [{name, _, _}]}, _, args}) do
-    %IR.AnonymousFunctionCall{
-      name: name,
-      args: transform_list(args)
-    }
-  end
-
   def transform({{:., _, [{marker, _, _} = left, right]}, [{:no_parens, true} | _], []})
       when marker not in [:__aliases__, :__MODULE__] do
     %IR.DotOperator{
