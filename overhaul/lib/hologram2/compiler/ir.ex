@@ -7,7 +7,6 @@ defmodule Hologram.Compiler.IR do
           | IR.DotOperator.t()
           | IR.ModuleAttributeDefinition.t()
           | IR.ModuleAttributeOperator.t()
-          | IR.ModulePseudoVariable.t()
           | IR.ModuleType.t()
           | IR.Symbol.t()
 
@@ -45,12 +44,6 @@ defmodule Hologram.Compiler.IR do
     defstruct name: nil
 
     @type t :: %__MODULE__{name: atom}
-  end
-
-  defmodule ModulePseudoVariable do
-    defstruct []
-
-    @type t :: %__MODULE__{}
   end
 
   defmodule ModuleType do

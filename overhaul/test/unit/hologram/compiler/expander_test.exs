@@ -193,16 +193,6 @@ defmodule Hologram.Compiler.ExpanderTest do
     assert expand(ir, @context_dummy) == {ir, @context_dummy}
   end
 
-  # --- PSEUDO-VARIABLES ---
-
-  test "module pseudo-variable" do
-    ir = %IR.ModulePseudoVariable{}
-    module = %IR.ModuleType{module: A.B, segments: [:A, :B]}
-    context = %Context{module: module}
-
-    assert expand(ir, context) == {module, context}
-  end
-
   # --- DIRECTIVES ---
 
   describe "alias directive" do

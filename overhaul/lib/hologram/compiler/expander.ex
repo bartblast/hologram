@@ -101,12 +101,6 @@ defmodule Hologram.Compiler.Expander do
     {ir, context}
   end
 
-  # --- PSEUDO-VARIABLES ---
-
-  expand(%IR.ModulePseudoVariable{}, %Context{module: module} = context) do
-    {module, context}
-  end
-
   # --- DEFINITIONS ---
 
   expand(

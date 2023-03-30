@@ -235,44 +235,6 @@ defmodule Hologram.Compiler.TransformerTest do
     #            ]
     #          }
     # end
-
-    test "on __MODULE__ pseudo-variable, without args, without parenthesis" do
-      # __MODULE__.my_fun
-      ast =
-        {{:., [line: 1], [{:__MODULE__, [line: 1], nil}, :my_fun]}, [no_parens: true, line: 1],
-         []}
-
-      assert transform(ast) == %IR.Call{
-               module: %IR.ModulePseudoVariable{},
-               function: :my_fun,
-               args: []
-             }
-    end
-
-    test "on __MODULE__ pseudo-variable, without args, with parenthesis" do
-      # __MODULE__.my_fun()
-      ast = {{:., [line: 1], [{:__MODULE__, [line: 1], nil}, :my_fun]}, [line: 1], []}
-
-      assert transform(ast) == %IR.Call{
-               module: %IR.ModulePseudoVariable{},
-               function: :my_fun,
-               args: []
-             }
-    end
-
-    test "on __MODULE__ pseudo-variable, with args" do
-      # __MODULE__.my_fun(1, 2)
-      ast = {{:., [line: 1], [{:__MODULE__, [line: 1], nil}, :my_fun]}, [line: 1], [1, 2]}
-
-      assert transform(ast) == %IR.Call{
-               module: %IR.ModulePseudoVariable{},
-               function: :my_fun,
-               args: [
-                 %IR.IntegerType{value: 1},
-                 %IR.IntegerType{value: 2}
-               ]
-             }
-    end
   end
 
   describe "dot operator, AST obtained directly from source file" do
@@ -402,22 +364,6 @@ defmodule Hologram.Compiler.TransformerTest do
          [{:my_attr, [context: Module1], Module1}]}
 
       assert transform(ast) == @expected_ir
-    end
-  end
-
-  describe "__MODULE__ pseudo-variable" do
-    test "AST obtained directly from source file" do
-      # __MODULE__
-      ast = {:__MODULE__, [line: 1], nil}
-
-      assert transform(ast) == %IR.ModulePseudoVariable{}
-    end
-
-    test "AST returned from macro" do
-      # apply(Module1, :"MACRO-macro_module_pseudo_variable", [__ENV__])
-      ast = {:__MODULE__, [], Module1}
-
-      assert transform(ast) == %IR.ModulePseudoVariable{}
     end
   end
 
