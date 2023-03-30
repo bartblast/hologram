@@ -104,24 +104,6 @@ defmodule Hologram.Compiler.Expander do
   # --- DEFINITIONS ---
 
   expand(
-    %IR.ModuleAttributeDefinition{name: name, expression: expr},
-    %Context{} = context
-  ) do
-    {expanded_ir, _context} = expand(expr, context)
-
-    value =
-      expanded_ir
-      |> List.wrap()
-      |> hd()
-      |> Evaluator.evaluate()
-      |> Helpers.term_to_ir()
-
-    new_context = Context.put_module_attribute(context, name, value)
-
-    {%IR.IgnoredExpression{type: :module_attribute_definition}, new_context}
-  end
-
-  expand(
     %IR.ModuleDefinition{} = ir,
     %Context{module: nil} = context
   ) do

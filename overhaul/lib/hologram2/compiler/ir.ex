@@ -5,7 +5,6 @@ defmodule Hologram.Compiler.IR do
           IR.AnonymousFunctionCall.t()
           | IR.Alias.t()
           | IR.DotOperator.t()
-          | IR.ModuleAttributeDefinition.t()
           | IR.ModuleAttributeOperator.t()
           | IR.ModuleType.t()
           | IR.Symbol.t()
@@ -32,12 +31,6 @@ defmodule Hologram.Compiler.IR do
     defstruct left: nil, right: nil
 
     @type t :: %__MODULE__{left: IR.t(), right: IR.t()}
-  end
-
-  defmodule ModuleAttributeDefinition do
-    defstruct name: nil, expression: nil
-
-    @type t :: %__MODULE__{name: atom, expression: IR.t()}
   end
 
   defmodule ModuleAttributeOperator do

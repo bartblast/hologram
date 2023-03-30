@@ -16,13 +16,6 @@ defmodule Hologram.Compiler.Transformer do
     }
   end
 
-  def transform({:@, _, [{name, _, [ast]}]}) do
-    %IR.ModuleAttributeDefinition{
-      name: name,
-      expression: transform(ast)
-    }
-  end
-
   def transform({:@, _, [{name, _, ast}]}) when not is_list(ast) do
     %IR.ModuleAttributeOperator{name: name}
   end

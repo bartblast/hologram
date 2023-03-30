@@ -11,7 +11,6 @@ defmodule Hologram.Compiler.JSEncoder.ModuleDefinitionTest do
     Block,
     FunctionDefinition,
     IntegerType,
-    ModuleAttributeDefinition,
     ModuleDefinition,
     ParamAccess,
     Variable
@@ -21,59 +20,6 @@ defmodule Hologram.Compiler.JSEncoder.ModuleDefinitionTest do
 
   # this case is not possible, because such module would be pruned:
   # test "empty module"
-
-  describe "attributes" do
-    test "single attribute" do
-      ir = %ModuleDefinition{
-        module: @module,
-        attributes: [
-          %ModuleAttributeDefinition{
-            name: :abc,
-            value: %IntegerType{value: 123}
-          }
-        ]
-      }
-
-      result = JSEncoder.encode(ir, %Context{}, %Opts{})
-
-      expected = """
-      window.Elixir_Abc_Bcd = class Elixir_Abc_Bcd {
-
-      static $abc = { type: 'integer', value: 123 };
-      }
-      """
-
-      assert result == expected
-    end
-
-    test "multiple attributes" do
-      ir = %ModuleDefinition{
-        module: @module,
-        attributes: [
-          %ModuleAttributeDefinition{
-            name: :abc,
-            value: %IntegerType{value: 123}
-          },
-          %ModuleAttributeDefinition{
-            name: :bcd,
-            value: %AtomType{value: :bcd_value}
-          }
-        ]
-      }
-
-      result = JSEncoder.encode(ir, %Context{}, %Opts{})
-
-      expected = """
-      window.Elixir_Abc_Bcd = class Elixir_Abc_Bcd {
-
-      static $abc = { type: 'integer', value: 123 };
-      static $bcd = { type: 'atom', value: 'bcd_value' };
-      }
-      """
-
-      assert result == expected
-    end
-  end
 
   describe "functions" do
     test "not preceded by attributes section" do
