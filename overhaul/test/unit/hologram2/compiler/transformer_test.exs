@@ -5,31 +5,6 @@ defmodule Hologram.Compiler.TransformerTest do
   describe "call, AST obtained directly from source file" do
     # direct call, without args, without parenthesis case is tested as part of the symbol tests
 
-    test "direct, without args, with parenthesis" do
-      # my_fun()
-      ast = {:my_fun, [line: 1], []}
-
-      assert transform(ast) == %IR.Call{
-               module: nil,
-               function: :my_fun,
-               args: []
-             }
-    end
-
-    test "direct, with args" do
-      # my_fun(1, 2)
-      ast = {:my_fun, [line: 1], [1, 2]}
-
-      assert transform(ast) == %IR.Call{
-               module: nil,
-               function: :my_fun,
-               args: [
-                 %IR.IntegerType{value: 1},
-                 %IR.IntegerType{value: 2}
-               ]
-             }
-    end
-
     # call on symbol, without args, without parenthesis case is tested as part of the dot operator tests
 
     test "on symbol, without args, with parenthesis" do

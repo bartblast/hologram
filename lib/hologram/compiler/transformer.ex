@@ -76,9 +76,20 @@ defmodule Hologram.Compiler.Transformer do
     |> build_tuple_type_ir()
   end
 
+  # --- PRESERVE ORDER (BEGIN) ---
+
   def transform({name, _, nil}) when is_atom(name) do
     %IR.Variable{name: name}
   end
+
+  def transform({function, _, args}) when is_atom(function) and is_list(args) do
+    %IR.LocalFunctionCall{
+      function: function,
+      args: transform_list(args)
+    }
+  end
+
+  # --- PRESERVE ORDER (END) ---
 
   @doc """
   Prints debug info for intercepted transform/1 call.

@@ -87,6 +87,28 @@ defmodule Hologram.Compiler.TransformerTest do
            }
   end
 
+  describe "local function call" do
+    test "without args" do
+      # my_fun()
+      ast = {:my_fun, [line: 1], []}
+
+      assert transform(ast) == %IR.LocalFunctionCall{function: :my_fun, args: []}
+    end
+
+    test "with args" do
+      # my_fun(1, 2)
+      ast = {:my_fun, [line: 1], [1, 2]}
+
+      assert transform(ast) == %IR.LocalFunctionCall{
+               function: :my_fun,
+               args: [
+                 %IR.IntegerType{value: 1},
+                 %IR.IntegerType{value: 2}
+               ]
+             }
+    end
+  end
+
   describe "module type" do
     test "when first alias segment is not 'Elixir'" do
       # Aaa.Bbb

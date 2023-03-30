@@ -9,6 +9,7 @@ defmodule Hologram.Compiler.IR do
           | IR.FloatType.t()
           | IR.IntegerType.t()
           | IR.ListType.t()
+          | IR.LocalFunctionCall.t()
           | IR.ModuleType.t()
           | IR.TupleType.t()
           | IR.Variable.t()
@@ -47,6 +48,12 @@ defmodule Hologram.Compiler.IR do
     defstruct data: nil
 
     @type t :: %__MODULE__{data: list(IR.t())}
+  end
+
+  defmodule LocalFunctionCall do
+    defstruct function: nil, args: nil
+
+    @type t :: %__MODULE__{function: atom, args: list(IR.t())}
   end
 
   defmodule ModuleType do
