@@ -57,6 +57,10 @@ defmodule Hologram.Compiler.Transformer do
     %IR.ListType{data: transform_list(ast)}
   end
 
+  def transform({:@, _, [{name, _, ast}]}) when not is_list(ast) do
+    %IR.ModuleAttributeOperator{name: name}
+  end
+
   def transform({:__aliases__, meta, [:"Elixir" | alias_segs]}) do
     transform({:__aliases__, meta, alias_segs})
   end

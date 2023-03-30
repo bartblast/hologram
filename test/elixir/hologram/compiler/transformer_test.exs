@@ -109,6 +109,13 @@ defmodule Hologram.Compiler.TransformerTest do
     end
   end
 
+  test "module attribute operator" do
+    # @my_attr
+    ast = {:@, [line: 1], [{:my_attr, [line: 1], nil}]}
+
+    assert transform(ast) == %IR.ModuleAttributeOperator{name: :my_attr}
+  end
+
   describe "module type" do
     test "when first alias segment is not 'Elixir'" do
       # Aaa.Bbb

@@ -10,6 +10,7 @@ defmodule Hologram.Compiler.IR do
           | IR.IntegerType.t()
           | IR.ListType.t()
           | IR.LocalFunctionCall.t()
+          | IR.ModuleAttributeOperator.t()
           | IR.ModuleType.t()
           | IR.TupleType.t()
           | IR.Variable.t()
@@ -54,6 +55,12 @@ defmodule Hologram.Compiler.IR do
     defstruct function: nil, args: nil
 
     @type t :: %__MODULE__{function: atom, args: list(IR.t())}
+  end
+
+  defmodule ModuleAttributeOperator do
+    defstruct name: nil
+
+    @type t :: %__MODULE__{name: atom}
   end
 
   defmodule ModuleType do

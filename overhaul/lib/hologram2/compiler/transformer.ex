@@ -1,8 +1,4 @@
 defmodule Hologram.Compiler.Transformer do
-  def transform({:@, _, [{name, _, ast}]}) when not is_list(ast) do
-    %IR.ModuleAttributeOperator{name: name}
-  end
-
   def transform({{:., _, [module, function]}, _, args}) when not is_atom(module) do
     build_call_ir(module, function, args)
   end
