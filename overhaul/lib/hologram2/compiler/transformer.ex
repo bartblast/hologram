@@ -16,10 +16,6 @@ defmodule Hologram.Compiler.Transformer do
     }
   end
 
-  def transform(ast) when is_float(ast) do
-    %IR.FloatType{value: ast}
-  end
-
   def transform(ast) when is_integer(ast) do
     %IR.IntegerType{value: ast}
   end
