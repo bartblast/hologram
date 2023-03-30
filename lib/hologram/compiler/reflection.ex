@@ -4,10 +4,10 @@ defmodule Hologram.Compiler.Reflection do
 
   ## Examples
 
-      iex> Reflection.is_alias?(Calendar.ISO)
+      iex> is_alias?(Calendar.ISO)
       true
 
-      iex> Reflection.is_alias?(:abc)
+      iex> is_alias?(:abc)
       false
   """
   @spec is_alias?(any) :: boolean

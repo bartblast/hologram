@@ -6,10 +6,10 @@ defmodule Hologram.Compiler.Helpers do
 
   ## Examples
 
-      iex> Helpers.alias_segments("Aaa.Bbb")
+      iex> alias_segments("Aaa.Bbb")
       [:Aaa, :Bbb]
 
-      iex> Helpers.alias_segments(Aaa.Bbb)
+      iex> alias_segments(Aaa.Bbb)
       [:Aaa, :Bbb]
   """
   @spec alias_segments(binary | module) :: T.alias_segments()
