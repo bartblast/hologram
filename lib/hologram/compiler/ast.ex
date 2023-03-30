@@ -19,7 +19,7 @@ defmodule Hologram.Compiler.AST do
 
   ## Examples
 
-      iex> AST.for_code("1 + 2")
+      iex> for_code("1 + 2")
       {:+, [line: 1], [1, 2]}
   """
   @spec for_code(binary) :: AST.t()
