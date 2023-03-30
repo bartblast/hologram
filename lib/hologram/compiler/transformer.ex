@@ -57,6 +57,7 @@ defmodule Hologram.Compiler.Transformer do
     %IR.ListType{data: transform_list(ast)}
   end
 
+  # Module attributes are expanded by beam_file package, but we still need them for templates.
   def transform({:@, _, [{name, _, ast}]}) when not is_list(ast) do
     %IR.ModuleAttributeOperator{name: name}
   end
