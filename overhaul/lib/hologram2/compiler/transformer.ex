@@ -1,12 +1,4 @@
 defmodule Hologram.Compiler.Transformer do
-  def transform({{:., _, [{marker, _, _} = left, right]}, [{:no_parens, true} | _], []})
-      when marker not in [:__aliases__, :__MODULE__] do
-    %IR.DotOperator{
-      left: transform(left),
-      right: transform(right)
-    }
-  end
-
   def transform({:@, _, [{name, _, ast}]}) when not is_list(ast) do
     %IR.ModuleAttributeOperator{name: name}
   end

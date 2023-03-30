@@ -1,7 +1,6 @@
 defmodule Hologram.Compiler.IR do
   @type ir ::
           IR.Alias.t()
-          | IR.DotOperator.t()
           | IR.ModuleAttributeOperator.t()
 
   defmodule Alias do
@@ -14,12 +13,6 @@ defmodule Hologram.Compiler.IR do
     defstruct module: nil, function: nil, args: nil
 
     @type t :: %__MODULE__{module: module | nil, function: atom, args: list(IR.t())}
-  end
-
-  defmodule DotOperator do
-    defstruct left: nil, right: nil
-
-    @type t :: %__MODULE__{left: IR.t(), right: IR.t()}
   end
 
   defmodule ModuleAttributeOperator do

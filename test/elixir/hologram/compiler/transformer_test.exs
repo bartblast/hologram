@@ -51,6 +51,16 @@ defmodule Hologram.Compiler.TransformerTest do
     end
   end
 
+  test "dot operator" do
+    # abc.x
+    ast = {{:., [line: 1], [{:abc, [line: 1], nil}, :x]}, [no_parens: true, line: 1], []}
+
+    assert transform(ast) == %IR.DotOperator{
+             left: %IR.Variable{name: :abc},
+             right: %IR.AtomType{value: :x}
+           }
+  end
+
   test "float type" do
     # 1.0
     ast = 1.0
