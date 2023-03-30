@@ -1,5 +1,7 @@
 defmodule Hologram.Compiler.IR do
-  @type ir :: IR.AtomType.t()
+  alias Hologram.Compiler.IR
+
+  @type t :: IR.AtomType.t()
 
   defmodule AtomType do
     defstruct value: nil
