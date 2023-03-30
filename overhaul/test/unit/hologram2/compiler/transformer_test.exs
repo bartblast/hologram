@@ -363,22 +363,6 @@ defmodule Hologram.Compiler.TransformerTest do
     end
   end
 
-  describe "__ENV__ pseudo-variable" do
-    test "AST obtained directly from source file" do
-      # __ENV__
-      ast = {:__ENV__, [line: 1], nil}
-
-      assert transform(ast) == %IR.EnvPseudoVariable{}
-    end
-
-    test "AST returned from macro" do
-      # apply(Module1, :"MACRO-macro_env_pseudo_variable", [__ENV__])
-      ast = {:__ENV__, [], Module1}
-
-      assert transform(ast) == %IR.EnvPseudoVariable{}
-    end
-  end
-
   test "float type" do
     # 1.0
     ast = 1.0

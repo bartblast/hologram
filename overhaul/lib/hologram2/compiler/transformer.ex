@@ -16,10 +16,6 @@ defmodule Hologram.Compiler.Transformer do
     }
   end
 
-  def transform({:__ENV__, _, _}) do
-    %IR.EnvPseudoVariable{}
-  end
-
   def transform(ast) when is_float(ast) do
     %IR.FloatType{value: ast}
   end

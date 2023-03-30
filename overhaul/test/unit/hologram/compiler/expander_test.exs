@@ -195,14 +195,6 @@ defmodule Hologram.Compiler.ExpanderTest do
 
   # --- PSEUDO-VARIABLES ---
 
-  test "env pseudo-variable" do
-    ir = %IR.EnvPseudoVariable{}
-
-    assert {%IR.StructType{
-              module: %IR.ModuleType{module: Macro.Env}
-            }, @context_dummy} = expand(ir, @context_dummy)
-  end
-
   test "module pseudo-variable" do
     ir = %IR.ModulePseudoVariable{}
     module = %IR.ModuleType{module: A.B, segments: [:A, :B]}

@@ -103,15 +103,6 @@ defmodule Hologram.Compiler.Expander do
 
   # --- PSEUDO-VARIABLES ---
 
-  expand(%IR.EnvPseudoVariable{}, %Context{} = context) do
-    ir =
-      context
-      |> Context.build_env()
-      |> Helpers.term_to_ir()
-
-    {ir, context}
-  end
-
   expand(%IR.ModulePseudoVariable{}, %Context{module: module} = context) do
     {module, context}
   end
