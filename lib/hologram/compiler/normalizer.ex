@@ -10,7 +10,7 @@ defmodule Hologram.Compiler.Normalizer do
 
       iex> ast = Hologram.Compiler.Parser.parse!("if true, do: 987")
       {:if, [line: 1], [true, [do: 987]]}
-      iex> Normalizer.normalize(ast)
+      iex> normalize(ast)
       {:if, [line: 1], [true, [do: {:__block__, [], [987]}, else: {:__block__, [], [nil]}]]}
   """
   @spec normalize(AST.t()) :: AST.t()
