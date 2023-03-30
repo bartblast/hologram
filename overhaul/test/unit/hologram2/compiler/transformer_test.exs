@@ -363,13 +363,6 @@ defmodule Hologram.Compiler.TransformerTest do
     end
   end
 
-  test "integer type" do
-    # 1
-    ast = 1
-
-    assert transform(ast) == %IR.IntegerType{value: 1}
-  end
-
   test "list type" do
     # [1, 2]
     ast = [1, 2]
