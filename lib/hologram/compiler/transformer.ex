@@ -8,6 +8,13 @@ defmodule Hologram.Compiler.Transformer do
       }
   end
 
+  alias Hologram.Compiler.AST
+  alias Hologram.Compiler.IR
+
+  def transform(ast) when is_atom(ast) do
+    %IR.AtomType{value: ast}
+  end
+
   @doc """
   Prints debug info for intercepted transform/1 call.
   """

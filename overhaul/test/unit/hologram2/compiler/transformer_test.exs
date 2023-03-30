@@ -1,8 +1,4 @@
 defmodule Hologram.Compiler.TransformerTest do
-  use Hologram.Test.BasicCase, async: true
-  import Hologram.Compiler.Transformer
-
-  alias Hologram.Compiler.IR
   alias Hologram.Test.Fixtures.Compiler.Transformer.Module1
   alias Hologram.Test.Fixtures.Compiler.Transformer.Module2
 
@@ -79,29 +75,6 @@ defmodule Hologram.Compiler.TransformerTest do
                  %IR.IntegerType{value: 2}
                ]
              }
-    end
-  end
-
-  describe "atom type" do
-    test "boolean" do
-      # true
-      ast = true
-
-      assert transform(ast) == %IR.AtomType{value: true}
-    end
-
-    test "nil" do
-      # nil
-      ast = nil
-
-      assert transform(ast) == %IR.AtomType{value: nil}
-    end
-
-    test "other than boolean or nil" do
-      # :test
-      ast = :test
-
-      assert transform(ast) == %IR.AtomType{value: :test}
     end
   end
 

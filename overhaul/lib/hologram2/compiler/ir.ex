@@ -4,7 +4,6 @@ defmodule Hologram.Compiler.IR do
   @type ir ::
           IR.AnonymousFunctionCall.t()
           | IR.Alias.t()
-          | IR.AtomType.t()
           | IR.DotOperator.t()
           | IR.EnvPseudoVariable.t()
           | IR.FloatType.t()
@@ -27,12 +26,6 @@ defmodule Hologram.Compiler.IR do
     defstruct segments: nil
 
     @type t :: %__MODULE__{segments: T.alias_segments()}
-  end
-
-  defmodule AtomType do
-    defstruct value: nil
-
-    @type t :: %__MODULE__{value: atom}
   end
 
   defmodule Call do

@@ -1,16 +1,11 @@
 defmodule Hologram.Compiler.Transformer do
   alias Hologram.Compiler.Helpers
-  alias Hologram.Compiler.IR
 
   def transform({{:., _, [{name, _, _}]}, _, args}) do
     %IR.AnonymousFunctionCall{
       name: name,
       args: transform_list(args)
     }
-  end
-
-  def transform(ast) when is_atom(ast) do
-    %IR.AtomType{value: ast}
   end
 
   def transform({{:., _, [{marker, _, _} = left, right]}, [{:no_parens, true} | _], []})
