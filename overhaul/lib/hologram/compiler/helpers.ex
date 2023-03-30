@@ -106,22 +106,6 @@ defmodule Hologram.Compiler.Helpers do
   end
 
   @doc """
-  Returns the corresponding Elixir module.
-  ## Examples
-      iex> Helpers.module([:Abc, :Bcd])
-      Elixir.Abc.Bcd
-  """
-  @spec module(T.alias_segments()) :: module()
-
-  def module([]), do: nil
-
-  def module(alias_segs) do
-    [:"Elixir" | alias_segs]
-    |> Enum.join(".")
-    |> String.to_atom()
-  end
-
-  @doc """
   Returns the corresponding module name (without the "Elixir" segment at the beginning).
   ## Examples
       iex> Helpers.module_name(Abc.Bcd)

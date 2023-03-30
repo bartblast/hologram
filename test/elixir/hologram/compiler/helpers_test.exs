@@ -11,4 +11,15 @@ defmodule Hologram.Compiler.HelpersTest do
       assert Helpers.alias_segments("Aaa.Bbb") == [:Aaa, :Bbb]
     end
   end
+
+  describe "module/1" do
+    test "first alias segment is not 'Elixir'" do
+      assert Helpers.module([:Hologram, :Compiler, :HelpersTest]) == Hologram.Compiler.HelpersTest
+    end
+
+    test "first alias segment is 'Elixir'" do
+      assert Helpers.module([:"Elixir", :Hologram, :Compiler, :HelpersTest]) ==
+               Hologram.Compiler.HelpersTest
+    end
+  end
 end
