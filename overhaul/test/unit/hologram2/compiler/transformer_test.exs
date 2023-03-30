@@ -2,32 +2,6 @@ defmodule Hologram.Compiler.TransformerTest do
   alias Hologram.Test.Fixtures.Compiler.Transformer.Module1
   alias Hologram.Test.Fixtures.Compiler.Transformer.Module2
 
-  describe "alias / module type" do
-    test "AST obtained directly from source file" do
-      # Aaa.Bbb
-      ast = {:__aliases__, [line: 1], [:Aaa, :Bbb]}
-
-      assert transform(ast) == %IR.Alias{segments: [:Aaa, :Bbb]}
-    end
-
-    test "AST returned from macro, not an inner alias" do
-      # apply(Module1, :"MACRO-macro_alias_1", [__ENV__])
-      ast = {:__aliases__, [alias: false], [:Aaa, :Bbb]}
-
-      assert transform(ast) == %IR.Alias{segments: [:Aaa, :Bbb]}
-    end
-
-    test "AST returned from macro, an inner alias" do
-      # apply(Module1, :"MACRO-macro_alias_2", [__ENV__])
-      ast = {:__aliases__, [alias: Module2], [:InnerAlias]}
-
-      assert transform(ast) == %IR.ModuleType{
-               module: Module2,
-               segments: [:Hologram, :Test, :Fixtures, :Compiler, :Transformer, :Module2]
-             }
-    end
-  end
-
   describe "anonymous function call, AST obtained directly from source file" do
     test "without args" do
       # test.()

@@ -1,12 +1,9 @@
 defmodule Hologram.Compiler.IR do
-  alias Hologram.Commons.Types, as: T
-
   @type ir ::
           IR.AnonymousFunctionCall.t()
           | IR.Alias.t()
           | IR.DotOperator.t()
           | IR.ModuleAttributeOperator.t()
-          | IR.ModuleType.t()
           | IR.Symbol.t()
 
   defmodule AnonymousFunctionCall do
@@ -37,12 +34,6 @@ defmodule Hologram.Compiler.IR do
     defstruct name: nil
 
     @type t :: %__MODULE__{name: atom}
-  end
-
-  defmodule ModuleType do
-    defstruct module: nil, segments: nil
-
-    @type t :: %__MODULE__{module: module, segments: T.alias_segments()}
   end
 
   defmodule Symbol do

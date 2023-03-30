@@ -9,6 +9,7 @@ defmodule Hologram.Compiler.Transformer do
   end
 
   alias Hologram.Compiler.AST
+  alias Hologram.Compiler.Helpers
   alias Hologram.Compiler.IR
 
   @doc """
@@ -39,6 +40,15 @@ defmodule Hologram.Compiler.Transformer do
 
   def transform(ast) when is_list(ast) do
     %IR.ListType{data: transform_list(ast)}
+  end
+
+  def transform({:__aliases__, meta, [:"Elixir" | alias_segs]}) do
+    transform({:__aliases__, meta, alias_segs})
+  end
+
+  def transform({:__aliases__, _, alias_segs}) do
+    module = Helpers.module(alias_segs)
+    %IR.ModuleType{module: module, segments: alias_segs}
   end
 
   def transform({:{}, _, data}) do

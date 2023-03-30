@@ -52,6 +52,22 @@ defmodule Hologram.Compiler.TransformerTest do
            }
   end
 
+  describe "module type" do
+    test "when first alias segment is not 'Elixir'" do
+      # Aaa.Bbb
+      ast = {:__aliases__, [line: 1], [:Aaa, :Bbb]}
+
+      assert transform(ast) == %IR.ModuleType{module: Aaa.Bbb, segments: [:Aaa, :Bbb]}
+    end
+
+    test "when first alias segment is 'Elixir'" do
+      # Elixir.Aaa.Bbb
+      ast = {:__aliases__, [line: 1], [Elixir, :Aaa, :Bbb]}
+
+      assert transform(ast) == %IR.ModuleType{module: Aaa.Bbb, segments: [:Aaa, :Bbb]}
+    end
+  end
+
   describe "tuple type" do
     test "2-element tuple" do
       # {1, 2}

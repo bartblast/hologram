@@ -1,6 +1,4 @@
 defmodule Hologram.Compiler.Transformer do
-  alias Hologram.Compiler.Helpers
-
   def transform({{:., _, [{name, _, _}]}, _, args}) do
     %IR.AnonymousFunctionCall{
       name: name,
@@ -20,16 +18,7 @@ defmodule Hologram.Compiler.Transformer do
     %IR.ModuleAttributeOperator{name: name}
   end
 
-  def transform({:__aliases__, [alias: module], _alias_segs}) when module != false do
-    module_segs = Helpers.alias_segments(module)
-    %IR.ModuleType{module: module, segments: module_segs}
-  end
-
   # --- PRESERVE ORDER (BEGIN) ---
-
-  def transform({:__aliases__, _, segments}) do
-    %IR.Alias{segments: segments}
-  end
 
   def transform({{:., _, [module, function]}, _, args}) when not is_atom(module) do
     build_call_ir(module, function, args)
