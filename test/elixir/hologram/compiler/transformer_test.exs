@@ -19,7 +19,7 @@ defmodule Hologram.Compiler.TransformerTest do
       ast = {{:., [line: 1], [{:test, [line: 1], nil}]}, [line: 1], [1, 2]}
 
       assert transform(ast) == %IR.AnonymousFunctionCall{
-               name: %IR.Variable{name: :test},
+               function: %IR.Variable{name: :test},
                args: [
                  %IR.IntegerType{value: 1},
                  %IR.IntegerType{value: 2}
@@ -118,5 +118,12 @@ defmodule Hologram.Compiler.TransformerTest do
                ]
              }
     end
+  end
+
+  test "variable" do
+    # my_var
+    ast = {:my_var, [line: 1], nil}
+
+    assert transform(ast) == %IR.Variable{name: :my_var}
   end
 end

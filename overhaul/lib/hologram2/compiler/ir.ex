@@ -3,7 +3,6 @@ defmodule Hologram.Compiler.IR do
           IR.Alias.t()
           | IR.DotOperator.t()
           | IR.ModuleAttributeOperator.t()
-          | IR.Symbol.t()
 
   defmodule Alias do
     defstruct segments: nil
@@ -24,12 +23,6 @@ defmodule Hologram.Compiler.IR do
   end
 
   defmodule ModuleAttributeOperator do
-    defstruct name: nil
-
-    @type t :: %__MODULE__{name: atom}
-  end
-
-  defmodule Symbol do
     defstruct name: nil
 
     @type t :: %__MODULE__{name: atom}

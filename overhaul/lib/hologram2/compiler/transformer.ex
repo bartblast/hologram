@@ -21,10 +21,6 @@ defmodule Hologram.Compiler.Transformer do
     build_call_ir(nil, function, args)
   end
 
-  def transform({name, _, _}) when is_atom(name) do
-    %IR.Symbol{name: name}
-  end
-
   # --- PRESERVE ORDER (END) ---
 
   defp build_call_ir(module, function, args) do
