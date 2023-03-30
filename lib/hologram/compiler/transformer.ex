@@ -37,6 +37,10 @@ defmodule Hologram.Compiler.Transformer do
     %IR.IntegerType{value: ast}
   end
 
+  def transform(ast) when is_list(ast) do
+    %IR.ListType{data: transform_list(ast)}
+  end
+
   @doc """
   Prints debug info for intercepted transform/1 call.
   """
@@ -51,5 +55,11 @@ defmodule Hologram.Compiler.Transformer do
     # credo:disable-for-next-line
     IO.inspect(result)
     IO.puts("\n........................................\n")
+  end
+
+  defp transform_list(list) do
+    list
+    |> List.wrap()
+    |> Enum.map(&transform/1)
   end
 end

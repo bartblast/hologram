@@ -1,7 +1,7 @@
 defmodule Hologram.Compiler.IR do
   alias Hologram.Compiler.IR
 
-  @type t :: IR.AtomType.t() | IR.FloatType.t() | IR.IntegerType.t()
+  @type t :: IR.AtomType.t() | IR.FloatType.t() | IR.IntegerType.t() | IR.ListType.t()
 
   defmodule AtomType do
     defstruct value: nil
@@ -19,5 +19,11 @@ defmodule Hologram.Compiler.IR do
     defstruct value: nil
 
     @type t :: %__MODULE__{value: integer}
+  end
+
+  defmodule ListType do
+    defstruct data: nil
+
+    @type t :: %__MODULE__{data: list(IR.t())}
   end
 end

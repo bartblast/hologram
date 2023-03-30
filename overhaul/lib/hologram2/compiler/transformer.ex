@@ -16,10 +16,6 @@ defmodule Hologram.Compiler.Transformer do
     }
   end
 
-  def transform(ast) when is_list(ast) do
-    %IR.ListType{data: transform_list(ast)}
-  end
-
   def transform({:@, _, [{name, _, [ast]}]}) do
     %IR.ModuleAttributeDefinition{
       name: name,
@@ -93,11 +89,5 @@ defmodule Hologram.Compiler.Transformer do
 
   defp build_tuple_type_ir(data) do
     %IR.TupleType{data: transform_list(data)}
-  end
-
-  defp transform_list(list) do
-    list
-    |> List.wrap()
-    |> Enum.map(&transform/1)
   end
 end

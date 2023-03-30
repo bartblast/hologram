@@ -5,7 +5,6 @@ defmodule Hologram.Compiler.IR do
           IR.AnonymousFunctionCall.t()
           | IR.Alias.t()
           | IR.DotOperator.t()
-          | IR.ListType.t()
           | IR.ModuleAttributeDefinition.t()
           | IR.ModuleAttributeOperator.t()
           | IR.ModulePseudoVariable.t()
@@ -35,12 +34,6 @@ defmodule Hologram.Compiler.IR do
     defstruct left: nil, right: nil
 
     @type t :: %__MODULE__{left: IR.t(), right: IR.t()}
-  end
-
-  defmodule ListType do
-    defstruct data: nil
-
-    @type t :: %__MODULE__{data: list(IR.t())}
   end
 
   defmodule ModuleAttributeDefinition do
