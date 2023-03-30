@@ -36,16 +36,6 @@ defmodule Hologram.Compiler.Transformer do
     %IR.ModuleType{module: module, segments: module_segs}
   end
 
-  def transform({:{}, _, data}) do
-    build_tuple_type_ir(data)
-  end
-
-  def transform({_, _} = data) do
-    data
-    |> Tuple.to_list()
-    |> build_tuple_type_ir()
-  end
-
   # --- PRESERVE ORDER (BEGIN) ---
 
   def transform({:__aliases__, _, segments}) do
@@ -85,9 +75,5 @@ defmodule Hologram.Compiler.Transformer do
       function: function,
       args: transform_list(args)
     }
-  end
-
-  defp build_tuple_type_ir(data) do
-    %IR.TupleType{data: transform_list(data)}
   end
 end
