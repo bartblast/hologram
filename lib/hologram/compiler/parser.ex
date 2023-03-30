@@ -6,10 +6,10 @@ defmodule Hologram.Compiler.Parser do
 
   ## Examples
 
-      iex> Parser.parse("1 + 2)
+      iex> parse("1 + 2)
       {:ok, {:+, [line: 1], [1, 2]}}
 
-      iex> Parser.parse(".1")
+      iex> parse(".1")
       {:error, {[line: 1, column: 1], "syntax error before: ", "'.'"}}
   """
   @impl Hologram.Commons.Parser
