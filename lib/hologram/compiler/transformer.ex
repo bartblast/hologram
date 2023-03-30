@@ -11,6 +11,20 @@ defmodule Hologram.Compiler.Transformer do
   alias Hologram.Compiler.AST
   alias Hologram.Compiler.IR
 
+  @doc """
+  Transforms Elixir AST to Hologram IR.
+
+  ## Examples
+
+      iex> ast = quote do {1, 2, 3} end
+      {:{}, [], [1, 2, 3]}
+      iex> transform(ast)
+      %IR.TupleType{data: [%IR.IntegerType{value: 1}, %IR.IntegerType{value: 2}, %IR.IntegerType{value: 3}]}
+  """
+  @intercept true
+  @spec transform(AST.t()) :: IR.t()
+  def transform(ast)
+
   def transform(ast) when is_atom(ast) do
     %IR.AtomType{value: ast}
   end
