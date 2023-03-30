@@ -9,6 +9,7 @@ defmodule Hologram.MixProject do
 
   defp deps do
     [
+      {:beam_file, "~> 0.4"},
       {:credo, "~> 1.0", only: [:dev, :test], runtime: false},
       {:dialyxir, "~> 1.0", only: [:dev, :test], runtime: false},
       {:doctor, "~> 0.21", only: [:dev, :test]},
