@@ -12,7 +12,6 @@ defmodule Hologram.Compiler.IR do
           | IR.LessThanOperator.t()
           | IR.ListConcatenationOperator.t()
           | IR.ListSubtractionOperator.t()
-          | IR.MatchOperator.t()
           | IR.MembershipOperator.t()
           | IR.MultiplicationOperator.t()
           | IR.NotEqualToOperator.t()
@@ -64,12 +63,6 @@ defmodule Hologram.Compiler.IR do
   end
 
   defmodule ListSubtractionOperator do
-    defstruct left: nil, right: nil
-
-    @type t :: %__MODULE__{left: IR.t(), right: IR.t()}
-  end
-
-  defmodule MatchOperator do
     defstruct left: nil, right: nil
 
     @type t :: %__MODULE__{left: IR.t(), right: IR.t()}

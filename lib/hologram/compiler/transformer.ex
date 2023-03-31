@@ -73,6 +73,13 @@ defmodule Hologram.Compiler.Transformer do
     %IR.MapType{data: data_ir}
   end
 
+  def transform({:=, _, [left, right]}) do
+    %IR.MatchOperator{
+      left: transform(left),
+      right: transform(right)
+    }
+  end
+
   # Modules are transformed to atom types.
   def transform({:__aliases__, meta, [:"Elixir" | alias_segs]}) do
     transform({:__aliases__, meta, alias_segs})

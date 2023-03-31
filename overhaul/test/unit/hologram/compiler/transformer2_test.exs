@@ -114,31 +114,6 @@ defmodule Hologram.Compiler.TransformerTest do
            }
   end
 
-  test "match operator" do
-    # %{a: x, b: y} = %{a: 1, b: 2}
-    ast =
-      {:=, [line: 1],
-       [
-         {:%{}, [line: 1], [a: {:x, [line: 1], nil}, b: {:y, [line: 1], nil}]},
-         {:%{}, [line: 1], [a: 1, b: 2]}
-       ]}
-
-    assert transform(ast) == %IR.MatchOperator{
-             left: %IR.MapType{
-               data: [
-                 {%IR.AtomType{value: :a}, %IR.Symbol{name: :x}},
-                 {%IR.AtomType{value: :b}, %IR.Symbol{name: :y}}
-               ]
-             },
-             right: %IR.MapType{
-               data: [
-                 {%IR.AtomType{value: :a}, %IR.IntegerType{value: 1}},
-                 {%IR.AtomType{value: :b}, %IR.IntegerType{value: 2}}
-               ]
-             }
-           }
-  end
-
   test "membership operator" do
     # 1 in [2, 3]
     ast = {:in, [line: 1], [1, [2, 3]]}

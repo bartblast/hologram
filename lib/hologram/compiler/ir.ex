@@ -13,6 +13,7 @@ defmodule Hologram.Compiler.IR do
           | IR.ListType.t()
           | IR.LocalFunctionCall.t()
           | IR.MapType.t()
+          | IR.MatchOperator.t()
           | IR.ModuleAttributeOperator.t()
           | IR.PinOperator.t()
           | IR.RemoteFunctionCall.t()
@@ -71,6 +72,12 @@ defmodule Hologram.Compiler.IR do
     defstruct data: nil
 
     @type t :: %__MODULE__{data: list({IR.t(), IR.t()})}
+  end
+
+  defmodule MatchOperator do
+    defstruct left: nil, right: nil
+
+    @type t :: %__MODULE__{left: IR.t(), right: IR.t()}
   end
 
   defmodule ModuleAttributeOperator do

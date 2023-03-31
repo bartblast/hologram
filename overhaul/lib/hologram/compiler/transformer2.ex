@@ -52,13 +52,6 @@ defmodule Hologram.Compiler.Transformer do
     }
   end
 
-  def transform({:=, _, [left, right]}) do
-    %IR.MatchOperator{
-      left: transform(left),
-      right: transform(right)
-    }
-  end
-
   def transform({:in, _, [left, right]}) do
     %IR.MembershipOperator{
       left: transform(left),
