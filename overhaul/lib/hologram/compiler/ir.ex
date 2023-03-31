@@ -54,16 +54,8 @@ defmodule Hologram.Compiler.IR do
     defstruct condition: nil, clauses: []
   end
 
-  defmodule FunctionCall do
-    defstruct module: nil, function: nil, args: [], erlang: false
-  end
-
   defmodule IfExpression do
     defstruct condition: nil, do: nil, else: nil
-  end
-
-  defmodule Variable do
-    defstruct name: nil
   end
 
   # --- BINDINGS ---
