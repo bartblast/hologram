@@ -9,6 +9,7 @@ defmodule Hologram.Compiler.IR do
           | IR.IntegerType.t()
           | IR.ListType.t()
           | IR.LocalFunctionCall.t()
+          | IR.MapType.t()
           | IR.ModuleAttributeOperator.t()
           | IR.RemoteFunctionCall.t()
           | IR.TupleType.t()
@@ -54,6 +55,12 @@ defmodule Hologram.Compiler.IR do
     defstruct function: nil, args: nil
 
     @type t :: %__MODULE__{function: atom, args: list(IR.t())}
+  end
+
+  defmodule MapType do
+    defstruct data: nil
+
+    @type t :: %__MODULE__{data: list({IR.t(), IR.t()})}
   end
 
   defmodule ModuleAttributeOperator do

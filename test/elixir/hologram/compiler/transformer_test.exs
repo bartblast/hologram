@@ -109,6 +109,18 @@ defmodule Hologram.Compiler.TransformerTest do
     end
   end
 
+  test "map type " do
+    # %{a: 1, b: 2}
+    ast = {:%{}, [line: 1], [a: 1, b: 2]}
+
+    assert transform(ast) == %IR.MapType{
+             data: [
+               {%IR.AtomType{value: :a}, %IR.IntegerType{value: 1}},
+               {%IR.AtomType{value: :b}, %IR.IntegerType{value: 2}}
+             ]
+           }
+  end
+
   test "module attribute operator" do
     # @my_attr
     ast = {:@, [line: 1], [{:my_attr, [line: 1], nil}]}

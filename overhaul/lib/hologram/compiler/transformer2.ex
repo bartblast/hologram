@@ -151,23 +151,6 @@ defmodule Hologram.Compiler.Transformer do
     %IR.BinaryType{parts: transform_list(parts)}
   end
 
-  def transform({:%{}, _, data}) do
-    {module, new_data} = Keyword.pop(data, :__struct__)
-
-    data_ir =
-      Enum.map(new_data, fn {key, value} ->
-        {transform(key), transform(value)}
-      end)
-
-    if module do
-      segments = Helpers.alias_segments(module)
-      module_ir = %IR.ModuleType{module: module, segments: segments}
-      %IR.StructType{module: module_ir, data: data_ir}
-    else
-      %IR.MapType{data: data_ir}
-    end
-  end
-
   def transform({:%, _, [alias_ast, map_ast]}) do
     module = transform(alias_ast)
     data = transform(map_ast).data
