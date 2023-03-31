@@ -1,5 +1,7 @@
 defmodule Hologram.Compiler.IR do
+  alias Hologram.Compiler.AST
   alias Hologram.Compiler.IR
+  alias Hologram.Compiler.Transformer
 
   @type t ::
           IR.AnonymousFunctionCall.t()
@@ -85,5 +87,20 @@ defmodule Hologram.Compiler.IR do
     defstruct name: nil
 
     @type t :: %__MODULE__{name: atom}
+  end
+
+  @doc """
+  Given Elixir source code returns its Hologram IR.
+
+  ## Examples
+
+      iex> for_code("my_fun(1, 2)")
+      %IR.LocalFunctionCall{function: :my_fun, args: [%IR.IntegerType{value: 1}, %IR.IntegerType{value: 2}]}
+  """
+  @spec for_code(binary) :: IR.t()
+  def for_code(code) do
+    code
+    |> AST.for_code()
+    |> Transformer.transform()
   end
 end

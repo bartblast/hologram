@@ -1,8 +1,4 @@
 defmodule Hologram.Compiler.IR do
-  alias Hologram.Compiler.AST
-  alias Hologram.Compiler.IR
-  alias Hologram.Compiler.Transformer
-
   @type data_type_ir ::
           | IR.BinaryType.t()
           | IR.StringType.t()
@@ -165,22 +161,5 @@ defmodule Hologram.Compiler.IR do
     defstruct module: nil, data: nil
 
     @type t :: %__MODULE__{module: module, data: list({IR.t(), IR.t()})}
-  end
-
-  # --- API ---
-
-  @doc """
-  Given Elixir source code returns its Hologram IR.
-
-  ## Examples
-
-      iex> IR.for_code("1 + 2")
-      %IR.AdditionOperator{left: %IR.IntegerType{value: 1}, right: %IR.IntegerType{value: 2}}
-  """
-  @spec for_code(binary) :: IR.t()
-  def for_code(code) do
-    code
-    |> AST.for_code()
-    |> Transformer.transform()
   end
 end
