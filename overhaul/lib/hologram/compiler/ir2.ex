@@ -7,7 +7,6 @@ defmodule Hologram.Compiler.IR do
   @type operator_ir ::
           IR.AccessOperator.t()
           | IR.AdditionOperator.t()
-          | IR.ConsOperator.t()
           | IR.DivisionOperator.t()
           | IR.EqualToOperator.t()
           | IR.LessThanOperator.t()
@@ -39,12 +38,6 @@ defmodule Hologram.Compiler.IR do
     defstruct left: nil, right: nil
 
     @type t :: %__MODULE__{left: IR.t(), right: IR.t()}
-  end
-
-  defmodule ConsOperator do
-    defstruct head: nil, tail: nil
-
-    @type t :: %__MODULE__{head: IR.t(), tail: IR.t()}
   end
 
   defmodule DivisionOperator do

@@ -37,6 +37,13 @@ defmodule Hologram.Compiler.Transformer do
     %IR.AtomType{value: ast}
   end
 
+  def transform([{:|, _, [head, tail]}]) do
+    %IR.ConsOperator{
+      head: transform(head),
+      tail: transform(tail)
+    }
+  end
+
   def transform({{:., _, [{marker, _, _} = left, right]}, [{:no_parens, true} | _], []})
       when marker != :__aliases__ do
     %IR.DotOperator{
