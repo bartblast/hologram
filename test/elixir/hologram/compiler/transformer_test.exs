@@ -121,14 +121,14 @@ defmodule Hologram.Compiler.TransformerTest do
       # Aaa.Bbb
       ast = {:__aliases__, [line: 1], [:Aaa, :Bbb]}
 
-      assert transform(ast) == %IR.ModuleType{module: Aaa.Bbb, segments: [:Aaa, :Bbb]}
+      assert transform(ast) == %IR.AtomType{value: :"Elixir.Aaa.Bbb"}
     end
 
     test "when first alias segment is 'Elixir'" do
       # Elixir.Aaa.Bbb
       ast = {:__aliases__, [line: 1], [Elixir, :Aaa, :Bbb]}
 
-      assert transform(ast) == %IR.ModuleType{module: Aaa.Bbb, segments: [:Aaa, :Bbb]}
+      assert transform(ast) == %IR.AtomType{value: :"Elixir.Aaa.Bbb"}
     end
   end
 

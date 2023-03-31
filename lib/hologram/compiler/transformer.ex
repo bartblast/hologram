@@ -67,8 +67,9 @@ defmodule Hologram.Compiler.Transformer do
   end
 
   def transform({:__aliases__, _, alias_segs}) do
-    module = Helpers.module(alias_segs)
-    %IR.ModuleType{module: module, segments: alias_segs}
+    alias_segs
+    |> Helpers.module()
+    |> transform()
   end
 
   def transform({:{}, _, data}) do
