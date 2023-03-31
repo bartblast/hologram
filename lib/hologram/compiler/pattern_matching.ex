@@ -12,14 +12,14 @@ defmodule Hologram.Compiler.PatternMatching do
       ...> [:expression_value, {:tuple_index, 0}],
       ...> [binding: :b, list_index: 2, list_index: 1],
       ...> [{:pattern_value, %IR.IntegerType{value: 1}}, {:list_index, 0}, :list_tail],
-      ...> [binding: :a, map_key: %IR.AtomType{value: :c}, map_key: %IR.StringType{value: "b"}]
+      ...> [binding: :a, map_key: %IR.AtomType{value: :c}, map_key: %IR.FloatType{value: 1.23}]
       ...> ]
-      iex> PatternMatching.aggregate_bindings(reversed_access_paths)
+      iex> aggregate_bindings(reversed_access_paths)
       %{
         a: [
           [tuple_index: 0],
           [
-            map_key: %IR.StringType{value: "b"},
+            map_key: %IR.MapType{value: 1.23},
             map_key: %IR.AtomType{value: :c}
           ]
         ],
@@ -49,9 +49,9 @@ defmodule Hologram.Compiler.PatternMatching do
       ...> [:expression_value, {:tuple_index, 0}],
       ...> [binding: :b, list_index: 2, list_index: 1],
       ...> [{:pattern_value, %IR.IntegerType{value: 1}}, {:list_index, 0}, :list_tail],
-      ...> [binding: :a, map_key: %IR.AtomType{value: :c}, map_key: %IR.StringType{value: "b"}]
+      ...> [binding: :a, map_key: %IR.AtomType{value: :c}, map_key: %IR.FloatType{value: 1.23}]
       ...> ]
-      iex> PatternMatching.aggregate_pattern_values(reversed_access_paths)
+      iex> aggregate_pattern_values(reversed_access_paths)
       [
         [{:tuple_index, 1}, %IR.IntegerType{value: 2}],
         [:list_tail, {:list_index, 0}, %IR.IntegerType{value: 1}]
@@ -74,7 +74,7 @@ defmodule Hologram.Compiler.PatternMatching do
   ## Examples
 
       iex> ir = IR.for_code("{1, b} = {a, 2}")
-      iex> PatternMatching.deconstruct(ir)
+      iex> deconstruct(ir)
       [
         [pattern_value: %IR.IntegerType{value: 1}, tuple_index: 0],
         [binding: :b, tuple_index: 1],
@@ -129,10 +129,6 @@ defmodule Hologram.Compiler.PatternMatching do
     [[{:variable, name} | path]]
   end
 
-  def deconstruct(%IR.Symbol{name: name}, :pattern, path) do
-    [[{:binding, name} | path]]
-  end
-
   def deconstruct(%IR.TupleType{data: data}, side, path) do
     data
     |> Enum.with_index()
@@ -140,6 +136,10 @@ defmodule Hologram.Compiler.PatternMatching do
       tuple_index_path = [{:tuple_index, index} | path]
       acc ++ deconstruct(value, side, tuple_index_path)
     end)
+  end
+
+  def deconstruct(%IR.Variable{name: name}, :pattern, path) do
+    [[{:binding, name} | path]]
   end
 
   def deconstruct(ir, :pattern, path) do
