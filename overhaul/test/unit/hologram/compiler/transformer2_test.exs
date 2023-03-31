@@ -174,13 +174,6 @@ defmodule Hologram.Compiler.TransformerTest do
            }
   end
 
-  test "pin operator" do
-    # ^my_var
-    ast = {:^, [line: 1], [{:my_var, [line: 1], nil}]}
-
-    assert transform(ast) == %IR.PinOperator{name: :my_var}
-  end
-
   test "relaxed boolean and operator" do
     # 1 && 2
     ast = {:&&, [line: 1], [1, 2]}

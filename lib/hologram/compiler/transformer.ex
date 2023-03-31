@@ -90,8 +90,8 @@ defmodule Hologram.Compiler.Transformer do
     %IR.ModuleAttributeOperator{name: name}
   end
 
-  def transform({:{}, _, data}) do
-    build_tuple_type_ir(data)
+  def transform({:^, _, [{name, _, _}]}) do
+    %IR.PinOperator{name: name}
   end
 
   # Structs are transformed to remote function calls.
@@ -101,6 +101,10 @@ defmodule Hologram.Compiler.Transformer do
       function: :__struct__,
       args: [transform(data)]
     }
+  end
+
+  def transform({:{}, _, data}) do
+    build_tuple_type_ir(data)
   end
 
   def transform({_, _} = data) do

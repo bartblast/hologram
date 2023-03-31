@@ -138,7 +138,7 @@ defmodule Hologram.Compiler.TransformerTest do
     assert transform(ast) == %IR.ModuleAttributeOperator{name: :my_attr}
   end
 
-  describe "module type" do
+  describe "module" do
     test "when first alias segment is not 'Elixir'" do
       # Aaa.Bbb
       ast = {:__aliases__, [line: 1], [:Aaa, :Bbb]}
@@ -152,6 +152,13 @@ defmodule Hologram.Compiler.TransformerTest do
 
       assert transform(ast) == %IR.AtomType{value: :"Elixir.Aaa.Bbb"}
     end
+  end
+
+  test "pin operator" do
+    # ^my_var
+    ast = {:^, [line: 1], [{:my_var, [line: 1], nil}]}
+
+    assert transform(ast) == %IR.PinOperator{name: :my_var}
   end
 
   describe "remote function call" do

@@ -16,7 +16,6 @@ defmodule Hologram.Compiler.IR do
           | IR.MembershipOperator.t()
           | IR.MultiplicationOperator.t()
           | IR.NotEqualToOperator.t()
-          | IR.PinOperator.t()
           | IR.RelaxedBooleanAndOperator.t()
           | IR.RelaxedBooleanNotOperator.t()
           | IR.RelaxedBooleanOrOperator.t()
@@ -92,12 +91,6 @@ defmodule Hologram.Compiler.IR do
     defstruct left: nil, right: nil
 
     @type t :: %__MODULE__{left: IR.t(), right: IR.t()}
-  end
-
-  defmodule PinOperator do
-    defstruct name: nil
-
-    @type t :: %__MODULE__{name: atom}
   end
 
   defmodule RelaxedBooleanAndOperator do

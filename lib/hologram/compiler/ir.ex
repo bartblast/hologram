@@ -14,6 +14,7 @@ defmodule Hologram.Compiler.IR do
           | IR.LocalFunctionCall.t()
           | IR.MapType.t()
           | IR.ModuleAttributeOperator.t()
+          | IR.PinOperator.t()
           | IR.RemoteFunctionCall.t()
           | IR.TupleType.t()
           | IR.Variable.t()
@@ -73,6 +74,12 @@ defmodule Hologram.Compiler.IR do
   end
 
   defmodule ModuleAttributeOperator do
+    defstruct name: nil
+
+    @type t :: %__MODULE__{name: atom}
+  end
+
+  defmodule PinOperator do
     defstruct name: nil
 
     @type t :: %__MODULE__{name: atom}
