@@ -10,6 +10,7 @@ defmodule Hologram.Compiler.IR do
           | IR.ListType.t()
           | IR.LocalFunctionCall.t()
           | IR.ModuleAttributeOperator.t()
+          | IR.RemoteFunctionCall.t()
           | IR.TupleType.t()
           | IR.Variable.t()
 
@@ -59,6 +60,12 @@ defmodule Hologram.Compiler.IR do
     defstruct name: nil
 
     @type t :: %__MODULE__{name: atom}
+  end
+
+  defmodule RemoteFunctionCall do
+    defstruct module: nil, function: nil, args: nil
+
+    @type t :: %__MODULE__{module: IR.t(), function: IR.t(), args: list(IR.t())}
   end
 
   defmodule TupleType do

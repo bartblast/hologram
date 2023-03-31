@@ -84,6 +84,14 @@ defmodule Hologram.Compiler.Transformer do
 
   # --- PRESERVE ORDER (BEGIN) ---
 
+  def transform({{:., _, [module, function]}, _, args}) do
+    %IR.RemoteFunctionCall{
+      module: transform(module),
+      function: function,
+      args: transform_list(args)
+    }
+  end
+
   def transform({name, _, nil}) when is_atom(name) do
     %IR.Variable{name: name}
   end

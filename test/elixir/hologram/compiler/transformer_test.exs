@@ -132,6 +132,188 @@ defmodule Hologram.Compiler.TransformerTest do
     end
   end
 
+  describe "remote function call" do
+    # remote call on variable, without args, without parenthesis case is tested as part of the dot operator tests
+
+    test "on variable, without args, with parenthesis" do
+      # a.x()
+      ast = {{:., [line: 1], [{:a, [line: 1], nil}, :x]}, [line: 1], []}
+
+      assert transform(ast) == %IR.RemoteFunctionCall{
+               module: %IR.Variable{name: :a},
+               function: :x,
+               args: []
+             }
+    end
+
+    test "on variable, with args" do
+      # a.x(1, 2)
+      ast = {{:., [line: 1], [{:a, [line: 1], nil}, :x]}, [line: 1], [1, 2]}
+
+      assert transform(ast) == %IR.RemoteFunctionCall{
+               module: %IR.Variable{name: :a},
+               function: :x,
+               args: [
+                 %IR.IntegerType{value: 1},
+                 %IR.IntegerType{value: 2}
+               ]
+             }
+    end
+
+    test "on alias, without args, without parenthesis" do
+      # Abc.my_fun
+      ast =
+        {{:., [line: 1], [{:__aliases__, [line: 1], [:Abc]}, :my_fun]},
+         [no_parens: true, line: 1], []}
+
+      assert transform(ast) == %IR.RemoteFunctionCall{
+               module: %IR.AtomType{value: :"Elixir.Abc"},
+               function: :my_fun,
+               args: []
+             }
+    end
+
+    test "on alias, without args, with parenthesis" do
+      # Abc.my_fun()
+      ast = {{:., [line: 1], [{:__aliases__, [line: 1], [:Abc]}, :my_fun]}, [line: 1], []}
+
+      assert transform(ast) == %IR.RemoteFunctionCall{
+               module: %IR.AtomType{value: :"Elixir.Abc"},
+               function: :my_fun,
+               args: []
+             }
+    end
+
+    test "on alias, with args" do
+      # Abc.my_fun(1, 2)
+      ast = {{:., [line: 1], [{:__aliases__, [line: 1], [:Abc]}, :my_fun]}, [line: 1], [1, 2]}
+
+      assert transform(ast) == %IR.RemoteFunctionCall{
+               module: %IR.AtomType{value: :"Elixir.Abc"},
+               function: :my_fun,
+               args: [
+                 %IR.IntegerType{value: 1},
+                 %IR.IntegerType{value: 2}
+               ]
+             }
+    end
+
+    # remote call on module attribute, without args, without parenthesis case is tested as part of the dot operator tests
+
+    test "on module attribute, without args" do
+      # @my_attr.my_fun()
+      ast =
+        {{:., [line: 1], [{:@, [line: 1], [{:my_attr, [line: 1], nil}]}, :my_fun]}, [line: 1], []}
+
+      assert transform(ast) == %IR.RemoteFunctionCall{
+               module: %IR.ModuleAttributeOperator{name: :my_attr},
+               function: :my_fun,
+               args: []
+             }
+    end
+
+    test "on module attribute, with args" do
+      # @my_attr.my_fun(1, 2)
+      ast =
+        {{:., [line: 1], [{:@, [line: 1], [{:my_attr, [line: 1], nil}]}, :my_fun]}, [line: 1],
+         [1, 2]}
+
+      assert transform(ast) == %IR.RemoteFunctionCall{
+               module: %IR.ModuleAttributeOperator{name: :my_attr},
+               function: :my_fun,
+               args: [
+                 %IR.IntegerType{value: 1},
+                 %IR.IntegerType{value: 2}
+               ]
+             }
+    end
+
+    # remote call on expression, without args, without parenthesis case is tested as part of the dot operator tests
+
+    test "on expression, without args" do
+      # (anon_fun.(1, 2)).remote_fun()
+      ast =
+        {{:., [line: 1],
+          [
+            {{:., [line: 1], [{:anon_fun, [line: 1], nil}]}, [line: 1], [1, 2]},
+            :remote_fun
+          ]}, [line: 1], []}
+
+      assert transform(ast) == %IR.RemoteFunctionCall{
+               module: %IR.AnonymousFunctionCall{
+                 function: %IR.Variable{name: :anon_fun},
+                 args: [
+                   %IR.IntegerType{value: 1},
+                   %IR.IntegerType{value: 2}
+                 ]
+               },
+               function: :remote_fun,
+               args: []
+             }
+    end
+
+    test "on expression, with args" do
+      # (anon_fun.(1, 2)).remote_fun(3, 4)
+      ast =
+        {{:., [line: 1],
+          [
+            {{:., [line: 1], [{:anon_fun, [line: 1], nil}]}, [line: 1], [1, 2]},
+            :remote_fun
+          ]}, [line: 1], [3, 4]}
+
+      assert transform(ast) == %IR.RemoteFunctionCall{
+               module: %IR.AnonymousFunctionCall{
+                 function: %IR.Variable{name: :anon_fun},
+                 args: [
+                   %IR.IntegerType{value: 1},
+                   %IR.IntegerType{value: 2}
+                 ]
+               },
+               function: :remote_fun,
+               args: [
+                 %IR.IntegerType{value: 3},
+                 %IR.IntegerType{value: 4}
+               ]
+             }
+    end
+
+    test "on Erlang module, without args, without parenthesis" do
+      # :my_module.my_fun
+      ast = {{:., [line: 1], [:my_module, :my_fun]}, [no_parens: true, line: 1], []}
+
+      assert transform(ast) == %IR.RemoteFunctionCall{
+               module: %IR.AtomType{value: :my_module},
+               function: :my_fun,
+               args: []
+             }
+    end
+
+    test "on Erlang module, without args, with parenthesis" do
+      # :my_module.my_fun()
+      ast = {{:., [line: 1], [:my_module, :my_fun]}, [line: 1], []}
+
+      assert transform(ast) == %IR.RemoteFunctionCall{
+               module: %IR.AtomType{value: :my_module},
+               function: :my_fun,
+               args: []
+             }
+    end
+
+    test "on Erlang module, with args" do
+      # :my_module.my_fun(1, 2)
+      ast = {{:., [line: 1], [:my_module, :my_fun]}, [line: 1], [1, 2]}
+
+      assert transform(ast) == %IR.RemoteFunctionCall{
+               module: %IR.AtomType{value: :my_module},
+               function: :my_fun,
+               args: [
+                 %IR.IntegerType{value: 1},
+                 %IR.IntegerType{value: 2}
+               ]
+             }
+    end
+  end
+
   describe "tuple type" do
     test "2-element tuple" do
       # {1, 2}
