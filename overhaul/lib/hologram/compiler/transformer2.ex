@@ -151,13 +151,6 @@ defmodule Hologram.Compiler.Transformer do
     %IR.BinaryType{parts: transform_list(parts)}
   end
 
-  def transform({:%, _, [alias_ast, map_ast]}) do
-    module = transform(alias_ast)
-    data = transform(map_ast).data
-
-    %IR.StructType{module: module, data: data}
-  end
-
   def transform(ast) when is_binary(ast) do
     %IR.StringType{value: ast}
   end

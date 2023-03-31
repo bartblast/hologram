@@ -66,23 +66,34 @@ defmodule Hologram.Compiler.Transformer do
     %IR.MapType{data: data_ir}
   end
 
-  # Module attributes are expanded by beam_file package, but we still need them for templates.
-  def transform({:@, _, [{name, _, ast}]}) when not is_list(ast) do
-    %IR.ModuleAttributeOperator{name: name}
-  end
-
+  # Modules are transformed to atom types.
   def transform({:__aliases__, meta, [:"Elixir" | alias_segs]}) do
     transform({:__aliases__, meta, alias_segs})
   end
 
+  # Modules are transformed to atom types.
   def transform({:__aliases__, _, alias_segs}) do
     alias_segs
     |> Helpers.module()
     |> transform()
   end
 
+  # Module attributes are expanded by beam_file package, but we still need them for templates.
+  def transform({:@, _, [{name, _, ast}]}) when not is_list(ast) do
+    %IR.ModuleAttributeOperator{name: name}
+  end
+
   def transform({:{}, _, data}) do
     build_tuple_type_ir(data)
+  end
+
+  # Structs are transformed to remote function calls.
+  def transform({:%, _, [module, {:%{}, _, data}]}) do
+    %IR.RemoteFunctionCall{
+      module: transform(module),
+      function: :__struct__,
+      args: [transform(data)]
+    }
   end
 
   def transform({_, _} = data) do

@@ -329,6 +329,35 @@ defmodule Hologram.Compiler.TransformerTest do
     end
   end
 
+  test "struct type" do
+    # %Aaa.Bbb{x: 1, y: 2}
+    ast =
+      {:%, [line: 1], [{:__aliases__, [line: 1], [:Aaa, :Bbb]}, {:%{}, [line: 1], [x: 1, y: 2]}]}
+
+    assert transform(ast) == %IR.RemoteFunctionCall{
+             module: %IR.AtomType{value: Aaa.Bbb},
+             function: :__struct__,
+             args: [
+               %IR.ListType{
+                 data: [
+                   %IR.TupleType{
+                     data: [
+                       %IR.AtomType{value: :x},
+                       %IR.IntegerType{value: 1}
+                     ]
+                   },
+                   %IR.TupleType{
+                     data: [
+                       %IR.AtomType{value: :y},
+                       %IR.IntegerType{value: 2}
+                     ]
+                   }
+                 ]
+               }
+             ]
+           }
+  end
+
   describe "tuple type" do
     test "2-element tuple" do
       # {1, 2}
