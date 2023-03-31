@@ -133,7 +133,8 @@ defmodule Hologram.Compiler.TransformerTest do
   end
 
   describe "remote function call" do
-    # remote call on variable, without args, without parenthesis case is tested as part of the dot operator tests
+    # Remote call on variable, without args, without parenthesis case
+    # is tested as part of the dot operator tests.
 
     test "on variable, without args, with parenthesis" do
       # a.x()
@@ -198,7 +199,8 @@ defmodule Hologram.Compiler.TransformerTest do
              }
     end
 
-    # remote call on module attribute, without args, without parenthesis case is tested as part of the dot operator tests
+    # Remote call on module attribute, without args, without parenthesis case
+    # is tested as part of the dot operator tests.
 
     test "on module attribute, without args" do
       # @my_attr.my_fun()
@@ -228,7 +230,8 @@ defmodule Hologram.Compiler.TransformerTest do
              }
     end
 
-    # remote call on expression, without args, without parenthesis case is tested as part of the dot operator tests
+    # Remote call on expression, without args, without parenthesis case
+    # is tested as part of the dot operator tests.
 
     test "on expression, without args" do
       # (anon_fun.(1, 2)).remote_fun()
