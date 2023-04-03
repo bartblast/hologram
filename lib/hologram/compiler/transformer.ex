@@ -140,7 +140,7 @@ defmodule Hologram.Compiler.Transformer do
     transform({:%{}, meta, new_data}, context)
   end
 
-  # Struct without cons operator not in pattern is transformed to __struct__/1 remote function call.
+  # Struct without cons operator not in a pattern is transformed to __struct__/1 remote function call.
   def transform({:%, _, [module, {:%{}, _, data}]}, %Context{pattern?: false}) do
     %IR.RemoteFunctionCall{
       module: transform(module),
