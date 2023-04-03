@@ -76,7 +76,7 @@ defmodule Hologram.Compiler.Transformer do
 
   def transform({:=, _, [left, right]}, context) do
     %IR.MatchOperator{
-      left: transform(left, context),
+      left: transform(left, %{context | pattern?: true}),
       right: transform(right, context)
     }
   end
@@ -100,6 +100,25 @@ defmodule Hologram.Compiler.Transformer do
 
   def transform({:^, _, [{name, _, _}]}, _context) do
     %IR.PinOperator{name: name}
+  end
+
+  # Structs in patterns are transformed into map IR in place.
+  def transform(
+        {:%, _, [{:__aliases__, _, alias_segs}, {:%{}, meta, data}]},
+        %Context{pattern?: true} = context
+      ) do
+    module = Helpers.module(alias_segs)
+    new_data = [{:__struct__, module} | data]
+    transform({:%{}, meta, new_data}, context)
+  end
+
+  # Structs not in patterns are transformed to __struct__/1 remote function calls.
+  def transform({:%, _, [module, {:%{}, _, data}]}, %Context{pattern?: false}) do
+    %IR.RemoteFunctionCall{
+      module: transform(module),
+      function: :__struct__,
+      args: [transform(data)]
+    }
   end
 
   def transform({:{}, _, data}, context) do
