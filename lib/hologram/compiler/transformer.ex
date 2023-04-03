@@ -101,15 +101,6 @@ defmodule Hologram.Compiler.Transformer do
     %IR.PinOperator{name: name}
   end
 
-  # Structs are transformed to remote function calls.
-  def transform({:%, _, [module, {:%{}, _, data}]}) do
-    %IR.RemoteFunctionCall{
-      module: transform(module),
-      function: :__struct__,
-      args: [transform(data)]
-    }
-  end
-
   def transform({:{}, _, data}) do
     build_tuple_type_ir(data)
   end
