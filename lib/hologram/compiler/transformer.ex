@@ -65,7 +65,7 @@ defmodule Hologram.Compiler.Transformer do
     %IR.ListType{data: transform_list(ast, context)}
   end
 
-  # Maps with cons operator are transformed to Map.merge/2 remote function calls.
+  # Map with cons operator is transformed to Map.merge/2 remote function call.
   def transform({:%{}, _, [{:|, _, [map, data]}]}, context) do
     %IR.RemoteFunctionCall{
       module: %IR.AtomType{value: Map},
@@ -93,12 +93,12 @@ defmodule Hologram.Compiler.Transformer do
     }
   end
 
-  # Modules are transformed to atom types.
+  # Module is transformed to atom type.
   def transform({:__aliases__, meta, [:"Elixir" | alias_segs]}, context) do
     transform({:__aliases__, meta, alias_segs}, context)
   end
 
-  # Modules are transformed to atom types.
+  # Module is transformed to atom type.
   def transform({:__aliases__, _, alias_segs}, context) do
     alias_segs
     |> Helpers.module()
@@ -114,7 +114,23 @@ defmodule Hologram.Compiler.Transformer do
     %IR.PinOperator{name: name}
   end
 
-  # Structs in patterns are transformed into map IR in place.
+  # Struct with cons operator is transformer to nested Map.merge/2 and __struct__/1 remote function calls.
+  def transform({:%, _, [module, {:%{}, _, [{:|, _, [map, data]}]}]}, context) do
+    %IR.RemoteFunctionCall{
+      module: %IR.AtomType{value: Map},
+      function: :merge,
+      args: [
+        transform(map, context),
+        %IR.RemoteFunctionCall{
+          module: transform(module),
+          function: :__struct__,
+          args: [transform(data)]
+        }
+      ]
+    }
+  end
+
+  # Struct without cons operator inside a pattern is transformed into map IR in place.
   def transform(
         {:%, _, [{:__aliases__, _, alias_segs}, {:%{}, meta, data}]},
         %Context{pattern?: true} = context
@@ -124,7 +140,7 @@ defmodule Hologram.Compiler.Transformer do
     transform({:%{}, meta, new_data}, context)
   end
 
-  # Structs not in patterns are transformed to __struct__/1 remote function calls.
+  # Struct without cons operator not in pattern is transformed to __struct__/1 remote function call.
   def transform({:%, _, [module, {:%{}, _, data}]}, %Context{pattern?: false}) do
     %IR.RemoteFunctionCall{
       module: transform(module),

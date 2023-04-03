@@ -405,11 +405,11 @@ defmodule Hologram.Compiler.TransformerTest do
   end
 
   describe "struct" do
-    # %Aaa.Bbb{x: 1, y: 2}
+    # %Aaa.Bbb{a: 1, b: 2}
     @ast {:%, [line: 1],
-          [{:__aliases__, [line: 1], [:Aaa, :Bbb]}, {:%{}, [line: 1], [x: 1, y: 2]}]}
+          [{:__aliases__, [line: 1], [:Aaa, :Bbb]}, {:%{}, [line: 1], [a: 1, b: 2]}]}
 
-    test "not in pattern" do
+    test "without cons operator, not in pattern" do
       context = %Context{pattern?: false}
 
       assert transform(@ast, context) == %IR.RemoteFunctionCall{
@@ -420,13 +420,13 @@ defmodule Hologram.Compiler.TransformerTest do
                    data: [
                      %IR.TupleType{
                        data: [
-                         %IR.AtomType{value: :x},
+                         %IR.AtomType{value: :a},
                          %IR.IntegerType{value: 1}
                        ]
                      },
                      %IR.TupleType{
                        data: [
-                         %IR.AtomType{value: :y},
+                         %IR.AtomType{value: :b},
                          %IR.IntegerType{value: 2}
                        ]
                      }
@@ -436,17 +436,62 @@ defmodule Hologram.Compiler.TransformerTest do
              }
     end
 
-    test "in pattern" do
+    test "without cons operator, in pattern" do
       context = %Context{pattern?: true}
 
       assert transform(@ast, context) == %IR.MapType{
                data: [
                  {%IR.AtomType{value: :__struct__}, %IR.AtomType{value: Aaa.Bbb}},
-                 {%IR.AtomType{value: :x}, %IR.IntegerType{value: 1}},
-                 {%IR.AtomType{value: :y}, %IR.IntegerType{value: 2}}
+                 {%IR.AtomType{value: :a}, %IR.IntegerType{value: 1}},
+                 {%IR.AtomType{value: :b}, %IR.IntegerType{value: 2}}
                ]
              }
     end
+
+    test "with cons operator, not in pattern" do
+      # %Aaa.Bbb{x | a: 1, b: 2}
+      ast =
+        {:%, [line: 1],
+         [
+           {:__aliases__, [line: 1], [:Aaa, :Bbb]},
+           {:%{}, [line: 1], [{:|, [line: 1], [{:x, [line: 1], nil}, [a: 1, b: 2]]}]}
+         ]}
+
+      context = %Context{pattern?: false}
+
+      assert transform(ast, context) == %IR.RemoteFunctionCall{
+               module: %IR.AtomType{value: Map},
+               function: :merge,
+               args: [
+                 %IR.Variable{name: :x},
+                 %IR.RemoteFunctionCall{
+                   module: %IR.AtomType{value: Aaa.Bbb},
+                   function: :__struct__,
+                   args: [
+                     %IR.ListType{
+                       data: [
+                         %IR.TupleType{
+                           data: [
+                             %IR.AtomType{value: :a},
+                             %IR.IntegerType{value: 1}
+                           ]
+                         },
+                         %IR.TupleType{
+                           data: [
+                             %IR.AtomType{value: :b},
+                             %IR.IntegerType{value: 2}
+                           ]
+                         }
+                       ]
+                     }
+                   ]
+                 }
+               ]
+             }
+    end
+
+    # Case not possible, since it wouldn't compile:
+    # test "with cons operator, in pattern"
   end
 
   describe "tuple type" do
