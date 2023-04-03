@@ -24,7 +24,7 @@ defmodule Hologram.Compiler.Transformer do
       %IR.TupleType{data: [%IR.IntegerType{value: 1}, %IR.IntegerType{value: 2}, %IR.IntegerType{value: 3}]}
   """
   @intercept true
-  @spec transform(AST.t(), %Context{}) :: IR.t()
+  @spec transform(AST.t(), Context.t()) :: IR.t()
   def transform(ast, context \\ %Context{})
 
   def transform({{:., _, [function]}, _, args}, context) do
