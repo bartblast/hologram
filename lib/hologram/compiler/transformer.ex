@@ -114,7 +114,7 @@ defmodule Hologram.Compiler.Transformer do
     %IR.PinOperator{name: name}
   end
 
-  # Struct with cons operator is transformer to nested Map.merge/2 and __struct__/1 remote function calls.
+  # Struct with cons operator is transformed to nested Map.merge/2 and __struct__/1 remote function calls.
   def transform({:%, _, [module, {:%{}, _, [{:|, _, [map, data]}]}]}, context) do
     %IR.RemoteFunctionCall{
       module: %IR.AtomType{value: Map},
