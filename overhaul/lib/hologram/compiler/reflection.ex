@@ -154,19 +154,6 @@ defmodule Hologram.Compiler.Reflection do
     list_modules_of_type(:layout, app_path)
   end
 
-  def list_modules(app) do
-    Keyword.fetch!(Application.spec(app), :modules)
-    |> Enum.reduce([], fn module, acc ->
-      case Code.ensure_loaded(module) do
-        {:module, _} ->
-          acc ++ [module]
-
-        _ ->
-          acc
-      end
-    end)
-  end
-
   defp list_modules_of_type(type, path, app \\ @config[:otp_app]) do
     :ok = Application.ensure_loaded(app)
     modules = Keyword.fetch!(Application.spec(app), :modules)
