@@ -121,16 +121,47 @@ defmodule Hologram.Compiler.TransformerTest do
     end
   end
 
-  test "map type " do
-    # %{a: 1, b: 2}
-    ast = {:%{}, [line: 1], [a: 1, b: 2]}
+  describe "map type " do
+    test "without cons operator" do
+      # %{a: 1, b: 2}
+      ast = {:%{}, [line: 1], [a: 1, b: 2]}
 
-    assert transform(ast) == %IR.MapType{
-             data: [
-               {%IR.AtomType{value: :a}, %IR.IntegerType{value: 1}},
-               {%IR.AtomType{value: :b}, %IR.IntegerType{value: 2}}
-             ]
-           }
+      assert transform(ast) == %IR.MapType{
+               data: [
+                 {%IR.AtomType{value: :a}, %IR.IntegerType{value: 1}},
+                 {%IR.AtomType{value: :b}, %IR.IntegerType{value: 2}}
+               ]
+             }
+    end
+
+    test "with cons operator" do
+      # %{x | a: 1, b: 2}
+      ast = {:%{}, [line: 1], [{:|, [line: 1], [{:x, [line: 1], nil}, [a: 1, b: 2]]}]}
+
+      assert transform(ast) == %IR.RemoteFunctionCall{
+               module: %IR.AtomType{value: Map},
+               function: :merge,
+               args: [
+                 %IR.Variable{name: :x},
+                 %IR.MapType{
+                   data: [
+                     %IR.TupleType{
+                       data: [
+                         %IR.AtomType{value: :a},
+                         %IR.IntegerType{value: 1}
+                       ]
+                     },
+                     %IR.TupleType{
+                       data: [
+                         %IR.AtomType{value: :b},
+                         %IR.IntegerType{value: 2}
+                       ]
+                     }
+                   ]
+                 }
+               ]
+             }
+    end
   end
 
   test "match operator" do

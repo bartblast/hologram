@@ -65,6 +65,18 @@ defmodule Hologram.Compiler.Transformer do
     %IR.ListType{data: transform_list(ast, context)}
   end
 
+  # Maps with cons operator are transformed to Map.merge/2 remote function calls.
+  def transform({:%{}, _, [{:|, _, [map, data]}]}, context) do
+    %IR.RemoteFunctionCall{
+      module: %IR.AtomType{value: Map},
+      function: :merge,
+      args: [
+        transform(map, context),
+        %IR.MapType{data: transform_list(data, context)}
+      ]
+    }
+  end
+
   def transform({:%{}, _, data}, context) do
     data_ir =
       Enum.map(data, fn {key, value} ->
