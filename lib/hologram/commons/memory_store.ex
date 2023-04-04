@@ -8,6 +8,15 @@ defmodule Hologram.Commons.MemoryStore do
 
       @behaviour MemoryStore
 
+      @doc """
+      Starts the memory store process.
+
+      ## Examples
+
+          iex> MyMemoryStore.run()
+          {:ok, #PID<0.273.0>}
+      """
+      @spec run() :: {:ok, pid} | :ignore | {:error, {:already_started, pid} | term}
       def run do
         GenServer.start_link(__MODULE__, nil, name: __MODULE__)
       end
