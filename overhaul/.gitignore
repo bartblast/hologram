@@ -1,7 +1,3 @@
-# Temporary files.
-/tmp/*
-!/tmp/.keep
-
 # Node.js and npm.
 npm-debug.log
 /assets/node_modules/
