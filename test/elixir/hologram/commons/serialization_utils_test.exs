@@ -1,6 +1,6 @@
 defmodule Hologram.Commons.SerializationUtilsTest do
   use Hologram.Test.BasicCase, async: true
-  alias Hologram.Commons.SerializationUtils
+  import Hologram.Commons.SerializationUtils
 
   test "deserialize/1" do
     data = %{
@@ -14,7 +14,7 @@ defmodule Hologram.Commons.SerializationUtilsTest do
 
     serialized = :erlang.term_to_binary(data, compressed: 9)
 
-    assert SerializationUtils.deserialize(serialized) == data
+    assert deserialize(serialized) == data
   end
 
   test "serialize/1" do
@@ -36,8 +36,8 @@ defmodule Hologram.Commons.SerializationUtilsTest do
       key_2: 2
     }
 
-    result_1 = SerializationUtils.serialize(data_1)
-    result_2 = SerializationUtils.serialize(data_2)
+    result_1 = serialize(data_1)
+    result_2 = serialize(data_2)
 
     assert result_1 == result_2
     assert byte_size(result_1) == 53
