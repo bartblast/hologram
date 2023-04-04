@@ -22,10 +22,6 @@ defmodule Hologram.Utils do
     Enum.map(tasks, &Task.await(&1, :infinity))
   end
 
-  def deserialize(data) do
-    :erlang.binary_to_term(data)
-  end
-
   def keyword_to_map(keyword) do
     Enum.into(keyword, %{})
   end
@@ -38,10 +34,6 @@ defmodule Hologram.Utils do
   end
 
   def prepend(str, prefix), do: prefix <> str
-
-  def serialize(data) do
-    :erlang.term_to_binary(data, compressed: 9)
-  end
 
   def string_prepend(str, prepended) do
     prepended <> str
