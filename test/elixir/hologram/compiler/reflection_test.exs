@@ -1,6 +1,7 @@
 defmodule Hologram.Compiler.ReflectionTest do
   use Hologram.Test.BasicCase, async: true
   import Hologram.Compiler.Reflection
+  alias Hologram.Test.Fixtures.Compiler.Reflection.Module1
 
   describe "is_alias?/1" do
     test "atom which is an alias" do
@@ -26,5 +27,18 @@ defmodule Hologram.Compiler.ReflectionTest do
 
     refute :dialyzer in result
     refute :typer_core in result
+  end
+
+  test "module_beam_defs/1" do
+    assert module_beam_defs(Module1) == [
+             {{:fun_2, 2}, :def, [line: 6],
+              [
+                {[line: 6], [{:a, [version: 0, line: 6], nil}, {:b, [version: 1, line: 6], nil}],
+                 [],
+                 {{:., [line: 7], [:erlang, :+]}, [line: 7],
+                  [{:a, [version: 0, line: 7], nil}, {:b, [version: 1, line: 7], nil}]}}
+              ]},
+             {{:fun_1, 0}, :def, [line: 2], [{[line: 2], [], [], :value_1}]}
+           ]
   end
 end

@@ -47,4 +47,36 @@ defmodule Hologram.Compiler.Reflection do
     end)
     |> Enum.filter(&is_alias?/1)
   end
+
+  @doc """
+  Returns BEAM definitions for the given module.
+
+  ## Examples
+
+      iex> module_beam_defs(Hologram.Compiler.Reflection)
+      [
+        ...,
+        {{:is_alias?, 1}, :def, [line: 14],
+        [
+          {[line: 16], [{:term, [version: 0, line: 16], nil}],
+            [
+              {{:., [line: 16], [:erlang, :is_atom]}, [line: 16],
+              [{:term, [version: 0, line: 16], nil}]}
+            ],
+            {{:., [line: 19], [String, :starts_with?]}, [line: 19],
+            [
+              {{:., [line: 18], [String.Chars, :to_string]}, [line: 18],
+                [{:term, [version: 0, line: 17], nil}]},
+              "Elixir."
+            ]}},
+          {[line: 22], [{:_, [line: 22], nil}], [], false}
+        ]}
+      ]
+  """
+  @spec module_beam_defs(module) :: list(tuple)
+  def module_beam_defs(module) do
+    beam_file_path = :code.which(module)
+    %{definitions: defs} = BeamFile.debug_info!(beam_file_path)
+    defs
+  end
 end
