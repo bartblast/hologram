@@ -21,8 +21,17 @@ defmodule Hologram.Commons.MemoryStore do
         GenServer.start_link(__MODULE__, nil, name: __MODULE__)
       end
 
+      @doc """
+      Creates the ETS table if it doesn't exist yet, truncates it and populates it.
+
+      ## Examples
+
+          iex> MyMemoryStore.init(nil)
+          {:ok, nil}
+      """
       @impl GenServer
-      def init(_arg) do
+      @spec init(nil) :: {:ok, nil}
+      def init(nil) do
         maybe_create_table()
         reload_table()
         {:ok, nil}
