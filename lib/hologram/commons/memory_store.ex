@@ -19,6 +19,15 @@ defmodule Hologram.Commons.MemoryStore do
         {:ok, nil}
       end
 
+      @doc """
+      Returns the value stored in the memory store under the given key.
+
+      ## Examples
+
+          iex> MyMemoryStore.get(:my_key)
+          :my_value
+      """
+      @spec get(atom | binary) :: {:ok, term} | :error
       def get(key) do
         case :ets.lookup(table_name(), key) do
           [{^key, value}] ->
