@@ -56,6 +56,15 @@ defmodule Hologram.Commons.MemoryStore do
         end
       end
 
+      @doc """
+      Returns all items stored in the memory store.
+
+      ## Examples
+
+          iex> MyMemoryStore.get_all()
+          %{key_1: :value_1, key_2: :value_3}
+      """
+      @spec get_all() :: %{atom => term}
       def get_all do
         table_name()
         |> :ets.tab2list()
