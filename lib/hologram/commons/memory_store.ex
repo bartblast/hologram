@@ -1,5 +1,6 @@
 defmodule Hologram.Commons.MemoryStore do
   defmacro __using__(_opts) do
+    # credo:disable-for-next-line Credo.Check.Refactor.LongQuoteBlocks
     quote do
       use GenServer
 
