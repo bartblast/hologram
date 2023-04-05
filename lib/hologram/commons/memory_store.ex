@@ -9,7 +9,7 @@ defmodule Hologram.Commons.MemoryStore do
       @behaviour MemoryStore
 
       @doc """
-      Starts the memory store GenServer process.
+      Starts the underlying GenServer process.
 
       ## Examples
 
@@ -103,6 +103,15 @@ defmodule Hologram.Commons.MemoryStore do
         table_name() |> :ets.insert({key, value})
       end
 
+      @doc """
+      Tells whether the underlying GenServer process is alive.
+
+      ## Examples
+
+          iex> MyMemoryStore.running?()
+          true
+      """
+      @spec running?() :: boolean
       def running? do
         pid = Process.whereis(__MODULE__)
         if pid, do: Process.alive?(pid), else: false
