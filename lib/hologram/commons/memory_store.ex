@@ -117,7 +117,16 @@ defmodule Hologram.Commons.MemoryStore do
         if pid, do: Process.alive?(pid), else: false
       end
 
-      def table_created? do
+      @doc """
+      Tells whether the underlying ETS table exists.
+
+      ## Examples
+
+          iex> MyMemoryStore.table_exists?()
+          true
+      """
+      @spec table_exists?() :: boolean
+      def table_exists? do
         table_name() |> :ets.info() != :undefined
       end
 
@@ -126,7 +135,7 @@ defmodule Hologram.Commons.MemoryStore do
       end
 
       defp maybe_create_table do
-        if !table_created?(), do: create_table()
+        if !table_exists?(), do: create_table()
       end
 
       defp populate_table_from_file(path) do

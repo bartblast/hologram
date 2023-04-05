@@ -15,7 +15,7 @@ defmodule Hologram.Commons.MemoryStoreTest do
   end
 
   defp wait_for_test_cleanup do
-    if StoreFixture.running?() || StoreFixture.table_created?() do
+    if StoreFixture.running?() || StoreFixture.table_exists?() do
       :timer.sleep(1)
       wait_for_test_cleanup()
     end
@@ -114,14 +114,14 @@ defmodule Hologram.Commons.MemoryStoreTest do
     end
   end
 
-  describe "table_created?/0" do
-    test "is created" do
+  describe "table_exists?/0" do
+    test "exists" do
       @table_name |> :ets.new([:public, :named_table])
-      assert StoreFixture.table_created?()
+      assert StoreFixture.table_exists?()
     end
 
-    test "is not created" do
-      refute StoreFixture.table_created?()
+    test "doesn't exist" do
+      refute StoreFixture.table_exists?()
     end
   end
 end
