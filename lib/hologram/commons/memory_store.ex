@@ -159,7 +159,18 @@ defmodule Hologram.Commons.MemoryStore do
     end
   end
 
+  @doc """
+  Returns the value stored in the underlying ETS table under the given key.
+  """
   @callback get(atom | binary) :: {:ok, term} | :error
+
+  @doc """
+  Populates the underlying ETS table according to custom strategy defined in the overriden function.
+  """
   @callback populate_table() :: :ok
+
+  @doc """
+  Returns the underlying ETS table name.
+  """
   @callback table_name() :: atom
 end
