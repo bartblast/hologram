@@ -77,6 +77,15 @@ defmodule Hologram.Commons.MemoryStore do
       @spec populate_table() :: :ok
       def populate_table, do: :ok
 
+      @doc """
+      Puts multiple items into the underlying ETS table.
+
+      ## Examples
+
+          iex> MyMemoryStore.put([key_1: :value_1, key_2: :value_2])
+          true
+      """
+      @spec put(keyword) :: true
       def put(items) do
         table_name() |> :ets.insert(items)
       end
