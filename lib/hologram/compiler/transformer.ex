@@ -189,11 +189,11 @@ defmodule Hologram.Compiler.Transformer do
   def debug({_module, _function, [ast] = _args}, result) do
     IO.puts("\nTRANSFORM...............................\n")
     IO.puts("ast")
-    # credo:disable-for-next-line
+    # credo:disable-for-next-line Credo.Check.Warning.IoInspect
     IO.inspect(ast)
     IO.puts("")
     IO.puts("result")
-    # credo:disable-for-next-line
+    # credo:disable-for-next-line Credo.Check.Warning.IoInspect
     IO.inspect(result)
     IO.puts("\n........................................\n")
   end
