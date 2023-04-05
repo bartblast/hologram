@@ -9,7 +9,7 @@ defmodule Hologram.Commons.MemoryStore do
       @behaviour MemoryStore
 
       @doc """
-      Starts the memory store process.
+      Starts the memory store GenServer process.
 
       ## Examples
 
@@ -22,7 +22,7 @@ defmodule Hologram.Commons.MemoryStore do
       end
 
       @doc """
-      Creates the ETS table if it doesn't exist yet, truncates it and populates it.
+      Creates the underlying ETS table if it doesn't exist yet, truncates it and populates it.
 
       ## Examples
 
@@ -38,7 +38,7 @@ defmodule Hologram.Commons.MemoryStore do
       end
 
       @doc """
-      Returns the value stored in the memory store under the given key.
+      Returns the value stored in the underlying ETS table under the given key.
 
       ## Examples
 
@@ -57,7 +57,7 @@ defmodule Hologram.Commons.MemoryStore do
       end
 
       @doc """
-      Returns all items stored in the memory store.
+      Returns all items stored in the underlying ETS table.
 
       ## Examples
 
