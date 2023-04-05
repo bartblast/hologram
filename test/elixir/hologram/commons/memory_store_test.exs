@@ -7,7 +7,6 @@ defmodule Hologram.Commons.MemoryStoreTest do
 
   @dump_path StoreFixture.dump_path()
   @store_items %{key_1: :value_1, key_2: :value_2}
-  @table_name StoreFixture.table_name()
 
   defp dump_store_items(store_items) do
     binary = SerializationUtils.serialize(store_items)
@@ -36,19 +35,19 @@ defmodule Hologram.Commons.MemoryStoreTest do
 
     test "ETS table is created if it doesn't exist yet" do
       StoreFixture.run()
-      assert :ets.info(@table_name) |> is_list()
+      assert :ets.info(StoreFixture) |> is_list()
     end
 
     test "ETS table is not created if it already exists" do
-      :ets.new(@table_name, [:public, :named_table])
+      :ets.new(StoreFixture, [:public, :named_table])
       StoreFixture.run()
 
-      assert :ets.info(@table_name) |> is_list()
+      assert :ets.info(StoreFixture) |> is_list()
     end
 
     test "ETS table is truncated" do
-      :ets.new(@table_name, [:public, :named_table])
-      :ets.insert(@table_name, {:key_3, :value_3})
+      :ets.new(StoreFixture, [:public, :named_table])
+      :ets.insert(StoreFixture, {:key_3, :value_3})
       StoreFixture.run()
 
       assert StoreFixture.get_all() == @store_items
@@ -116,7 +115,7 @@ defmodule Hologram.Commons.MemoryStoreTest do
 
   describe "table_exists?/0" do
     test "exists" do
-      @table_name |> :ets.new([:public, :named_table])
+      :ets.new(StoreFixture, [:public, :named_table])
       assert StoreFixture.table_exists?()
     end
 

@@ -47,7 +47,7 @@ defmodule Hologram.Commons.MemoryStore do
       """
       @spec get(atom | binary) :: {:ok, term} | :error
       def get(key) do
-        case :ets.lookup(table_name(), key) do
+        case :ets.lookup(__MODULE__, key) do
           [{^key, value}] ->
             {:ok, value}
 
@@ -66,7 +66,7 @@ defmodule Hologram.Commons.MemoryStore do
       """
       @spec get_all() :: %{atom => term}
       def get_all do
-        table_name()
+        __MODULE__
         |> :ets.tab2list()
         |> Enum.into(%{})
       end
@@ -87,7 +87,7 @@ defmodule Hologram.Commons.MemoryStore do
       """
       @spec put(keyword) :: true
       def put(items) do
-        table_name() |> :ets.insert(items)
+        :ets.insert(__MODULE__, items)
       end
 
       @doc """
@@ -100,7 +100,7 @@ defmodule Hologram.Commons.MemoryStore do
       """
       @spec put(atom, term) :: true
       def put(key, value) do
-        table_name() |> :ets.insert({key, value})
+        :ets.insert(__MODULE__, {key, value})
       end
 
       @doc """
@@ -127,11 +127,11 @@ defmodule Hologram.Commons.MemoryStore do
       """
       @spec table_exists?() :: boolean
       def table_exists? do
-        table_name() |> :ets.info() != :undefined
+        :ets.info(__MODULE__) != :undefined
       end
 
       defp create_table do
-        table_name() |> :ets.new([:public, :named_table])
+        :ets.new(__MODULE__, [:public, :named_table])
       end
 
       defp maybe_create_table do
@@ -151,7 +151,7 @@ defmodule Hologram.Commons.MemoryStore do
       end
 
       defp truncate_table do
-        table_name() |> :ets.delete_all_objects()
+        :ets.delete_all_objects(__MODULE__)
       end
 
       defoverridable get: 1
@@ -168,9 +168,4 @@ defmodule Hologram.Commons.MemoryStore do
   Populates the underlying ETS table according to custom strategy defined in the overriden function.
   """
   @callback populate_table() :: :ok
-
-  @doc """
-  Returns the underlying ETS table name.
-  """
-  @callback table_name() :: atom
 end

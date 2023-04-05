@@ -9,7 +9,4 @@ defmodule Hologram.Test.Fixtures.Commons.MemoryStore.Module2 do
       :error
     end
   end
-
-  @impl MemoryStore
-  def table_name, do: :test_fixture_memory_store_2
 end
