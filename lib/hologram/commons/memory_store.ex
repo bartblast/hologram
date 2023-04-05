@@ -71,6 +71,10 @@ defmodule Hologram.Commons.MemoryStore do
         |> Enum.into(%{})
       end
 
+      @doc """
+      Populates the underlying ETS table according to custom strategy defined in the overriden function.
+      """
+      @spec populate_table() :: :ok
       def populate_table, do: :ok
 
       def put(items) do
