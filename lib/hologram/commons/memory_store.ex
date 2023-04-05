@@ -145,7 +145,7 @@ defmodule Hologram.Commons.MemoryStore do
         |> Enum.each(fn {key, value} -> put(key, value) end)
       end
 
-      defp reload_table() do
+      defp reload_table do
         truncate_table()
         populate_table()
       end
