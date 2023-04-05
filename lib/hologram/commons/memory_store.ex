@@ -90,6 +90,15 @@ defmodule Hologram.Commons.MemoryStore do
         table_name() |> :ets.insert(items)
       end
 
+      @doc """
+      Puts the given item into the underlying ETS table.
+
+      ## Examples
+
+          iex> MyMemoryStore.put(:key_1, :value_1)
+          true
+      """
+      @spec put(atom, term) :: true
       def put(key, value) do
         table_name() |> :ets.insert({key, value})
       end
