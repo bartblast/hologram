@@ -312,7 +312,8 @@ defmodule Hologram.Compiler.PatternMatchingTest do
       assert deconstruct(ir, :expression) == [[:expression_value]]
     end
 
-    # Only match placeholders on pattern side need to be tested, since match placeholders on expression side shouldn't compile.
+    # Only match placeholders on pattern side need to be tested,
+    # since match placeholders on expression side shouldn't compile.
     test "match placeholder in pattern" do
       # _a
       ir = %IR.MatchPlaceholder{}
@@ -535,7 +536,8 @@ defmodule Hologram.Compiler.PatternMatchingTest do
              ]
     end
 
-    # Only pin operators on pattern side need to be tested, since pin operators on expression side shouldn't compile.
+    # Only pin operators on pattern side need to be tested,
+    # since pin operators on expression side shouldn't compile.
     test "pin operator" do
       # ^x
       ir = %IR.PinOperator{name: :my_var}
