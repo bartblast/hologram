@@ -189,6 +189,13 @@ defmodule Hologram.Compiler.TransformerTest do
            }
   end
 
+  test "match placeholder" do
+    # _abc
+    ast = {:_abc, [line: 1], nil}
+
+    assert transform(ast, %Context{}) == %IR.MatchPlaceholder{}
+  end
+
   test "module attribute operator" do
     # @my_attr
     ast = {:@, [line: 1], [{:my_attr, [line: 1], nil}]}

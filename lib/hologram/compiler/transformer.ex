@@ -170,7 +170,13 @@ defmodule Hologram.Compiler.Transformer do
   end
 
   def transform({name, _, nil}, _context) when is_atom(name) do
-    %IR.Variable{name: name}
+    case to_string(name) do
+      "_" <> _ ->
+        %IR.MatchPlaceholder{}
+
+      _ ->
+        %IR.Variable{name: name}
+    end
   end
 
   def transform({function, _, args}, context) when is_atom(function) and is_list(args) do
