@@ -131,14 +131,12 @@ defmodule Hologram.Compiler.Transformer do
   end
 
   # Struct without cons operator inside a pattern is transformed into map IR in place.
-  def transform(
-        {:%, _, [{:__aliases__, _, alias_segs}, {:%{}, meta, data}]},
-        %Context{pattern?: true} = context
-      ) do
-    module = Helpers.module(alias_segs)
+  def transform({:%, _, [module, {:%{}, meta, data}]}, %Context{pattern?: true} = context) do
     new_data = [{:__struct__, module} | data]
     transform({:%{}, meta, new_data}, context)
   end
+
+  # test a case with %_{a: 1...}
 
   # Struct without cons operator not in a pattern is transformed to __struct__/1 remote function call.
   def transform({:%, _, [module, {:%{}, _, data}]}, %Context{pattern?: false} = context) do
