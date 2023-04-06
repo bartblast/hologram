@@ -66,17 +66,46 @@ defmodule Hologram.Compiler.PatternMatching do
   ## Examples
 
       iex> reversed_access_paths = [
-      ...> [pattern_value: %IR.IntegerType{value: 2}, tuple_index: 1],
-      ...> [binding: :a, tuple_index: 0],
-      ...> [:expression_value, {:tuple_index, 0}],
-      ...> [binding: :b, list_index: 2, list_index: 1],
-      ...> [{:pattern_value, %IR.IntegerType{value: 1}}, {:list_index, 0}, :list_tail],
-      ...> [binding: :a, map_key: %IR.AtomType{value: :c}, map_key: %IR.FloatType{value: 1.23}]
+      ...>   [binding: :a, tuple_index: 0, list_index: 0],
+      ...>   [
+      ...>     pattern_value: %IR.IntegerType{value: 1},
+      ...>     tuple_index: 1,
+      ...>     list_index: 0
+      ...>   ],
+      ...>   [
+      ...>     binding: :b,
+      ...>     map_key: %IR.AtomType{value: :b},
+      ...>     tuple_index: 2,
+      ...>     list_index: 0
+      ...>   ],
+      ...>   [
+      ...>     :match_placeholder,
+      ...>     {:map_key, %IR.AtomType{value: :c}},
+      ...>     {:tuple_index, 2},
+      ...>     {:list_index, 0}
+      ...>   ],
+      ...>   [
+      ...>     pattern_value: %IR.IntegerType{value: 2},
+      ...>     map_key: %IR.AtomType{value: :d},
+      ...>     tuple_index: 2,
+      ...>     list_index: 0
+      ...>   ],
+      ...>   [binding: :b, tuple_index: 3, list_index: 0],
+      ...>   [:match_placeholder, {:list_index, 0}, :list_tail],
+      ...>   [{:binding, :f}, {:list_index, 1}, :list_tail],
+      ...>   [:expression_value, {:list_index, 0}],
+      ...>   [:expression_value, {:list_index, 1}],
+      ...>   [:expression_value, {:list_index, 2}]
       ...> ]
       iex> aggregate_pattern_values(reversed_access_paths)
       [
-        [{:tuple_index, 1}, %IR.IntegerType{value: 2}],
-        [:list_tail, {:list_index, 0}, %IR.IntegerType{value: 1}]
+        [{:list_index, 0}, {:tuple_index, 1}, %IR.IntegerType{value: 1}],
+        [
+          {:list_index, 0},
+          {:tuple_index, 2},
+          {:map_key, %IR.AtomType{value: :d}},
+          %IR.IntegerType{value: 2}
+        ]
       ]
   """
   @spec aggregate_pattern_values(list) :: list

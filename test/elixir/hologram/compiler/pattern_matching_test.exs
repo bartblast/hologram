@@ -154,8 +154,13 @@ defmodule Hologram.Compiler.PatternMatchingTest do
 
   test "aggregate_pattern_values/1" do
     assert aggregate_pattern_values(@reversed_access_paths) == [
-             [{:tuple_index, 1}, %IR.IntegerType{value: 2}],
-             [:list_tail, {:list_index, 0}, %IR.IntegerType{value: 1}]
+             [{:list_index, 0}, {:tuple_index, 1}, %IR.IntegerType{value: 1}],
+             [
+               {:list_index, 0},
+               {:tuple_index, 2},
+               {:map_key, %IR.AtomType{value: :d}},
+               %IR.IntegerType{value: 2}
+             ]
            ]
   end
 
