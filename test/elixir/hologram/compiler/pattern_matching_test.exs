@@ -1,7 +1,10 @@
 defmodule Hologram.Compiler.PatternMatchingTest do
   use Hologram.Test.BasicCase, async: true
   import Hologram.Compiler.PatternMatching
+
+  alias Hologram.Compiler.Context
   alias Hologram.Compiler.IR
+  alias Hologram.Test.Fixtures.Compiler.PatternMatching.Module1
 
   # [a | [1, 2]]
   @ir_1 %IR.ConsOperator{
@@ -540,6 +543,33 @@ defmodule Hologram.Compiler.PatternMatchingTest do
                [:expression_value, {:list_index, 1}, :list_tail, :list_tail]
              ]
     end
+
+    # --- STRUCTS ---
+
+    test "struct in pattern, with module specified" do
+      # "%Module1{a: a, b: 2}" |> ir(%Context{pattern?: true})
+      ir = %IR.MapType{
+        data: [
+          {%IR.AtomType{value: :__struct__}, %IR.AtomType{value: Module1}},
+          {%IR.AtomType{value: :a}, %IR.Variable{name: :a}},
+          {%IR.AtomType{value: :b}, %IR.IntegerType{value: 2}}
+        ]
+      }
+
+      assert deconstruct(ir, :pattern) == [
+               [
+                 pattern_value: %IR.AtomType{value: Module1},
+                 map_key: %IR.AtomType{value: :__struct__}
+               ],
+               [binding: :a, map_key: %IR.AtomType{value: :a}],
+               [
+                 pattern_value: %IR.IntegerType{value: 2},
+                 map_key: %IR.AtomType{value: :b}
+               ]
+             ]
+    end
+
+    # --- OTHER ----
 
     # Only pin operators on pattern side need to be tested,
     # since pin operators on expression side shouldn't compile.
