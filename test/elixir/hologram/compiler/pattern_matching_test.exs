@@ -103,25 +103,52 @@ defmodule Hologram.Compiler.PatternMatchingTest do
     ]
   }
 
+  # [{a, 1, %{b: b, c: _c, d: 2}, b} | [_e, f]] = [my_var, 3, 4]
   @reversed_access_paths [
-    [pattern_value: %IR.IntegerType{value: 2}, tuple_index: 1],
-    [binding: :a, tuple_index: 0],
-    [:expression_value, {:tuple_index, 0}],
-    [binding: :b, list_index: 2, list_index: 1],
-    [{:pattern_value, %IR.IntegerType{value: 1}}, {:list_index, 0}, :list_tail],
-    [binding: :a, map_key: %IR.AtomType{value: :c}, map_key: %IR.FloatType{value: 2.34}]
+    [binding: :a, tuple_index: 0, list_index: 0],
+    [
+      pattern_value: %IR.IntegerType{value: 1},
+      tuple_index: 1,
+      list_index: 0
+    ],
+    [
+      binding: :b,
+      map_key: %IR.AtomType{value: :b},
+      tuple_index: 2,
+      list_index: 0
+    ],
+    [
+      :match_placeholder,
+      {:map_key, %IR.AtomType{value: :c}},
+      {:tuple_index, 2},
+      {:list_index, 0}
+    ],
+    [
+      pattern_value: %IR.IntegerType{value: 2},
+      map_key: %IR.AtomType{value: :d},
+      tuple_index: 2,
+      list_index: 0
+    ],
+    [binding: :b, tuple_index: 3, list_index: 0],
+    [:match_placeholder, {:list_index, 0}, :list_tail],
+    [{:binding, :f}, {:list_index, 1}, :list_tail],
+    [:expression_value, {:list_index, 0}],
+    [:expression_value, {:list_index, 1}],
+    [:expression_value, {:list_index, 2}]
   ]
 
   test "aggregate_bindings/1" do
     assert aggregate_bindings(@reversed_access_paths) == %{
-             a: [
-               [tuple_index: 0],
+             a: [[list_index: 0, tuple_index: 0]],
+             b: [
                [
-                 map_key: %IR.FloatType{value: 2.34},
-                 map_key: %IR.AtomType{value: :c}
-               ]
+                 list_index: 0,
+                 tuple_index: 2,
+                 map_key: %IR.AtomType{value: :b}
+               ],
+               [list_index: 0, tuple_index: 3]
              ],
-             b: [[list_index: 1, list_index: 2]]
+             f: [[:list_tail, {:list_index, 1}]]
            }
   end
 
