@@ -2,7 +2,6 @@ defmodule Hologram.Compiler.PatternMatchingTest do
   use Hologram.Test.BasicCase, async: true
   import Hologram.Compiler.PatternMatching
 
-  alias Hologram.Compiler.Context
   alias Hologram.Compiler.IR
   alias Hologram.Test.Fixtures.Compiler.PatternMatching.Module1
 
@@ -567,6 +566,41 @@ defmodule Hologram.Compiler.PatternMatchingTest do
                  map_key: %IR.AtomType{value: :b}
                ]
              ]
+    end
+
+    test "struct in pattern, with match placeholder instead of module" do
+      # "%_{a: a, b: 2}" |> ir(%Context{pattern?: true})
+      ir = %IR.MapType{
+        data: [
+          {%IR.AtomType{value: :__struct__}, %IR.MatchPlaceholder{}},
+          {%IR.AtomType{value: :a}, %IR.Variable{name: :a}},
+          {%IR.AtomType{value: :b}, %IR.IntegerType{value: 2}}
+        ]
+      }
+
+      assert deconstruct(ir, :pattern) == [
+               [:match_placeholder, {:map_key, %IR.AtomType{value: :__struct__}}],
+               [binding: :a, map_key: %IR.AtomType{value: :a}],
+               [pattern_value: %IR.IntegerType{value: 2}, map_key: %IR.AtomType{value: :b}]
+             ]
+    end
+
+    test "struct in expression" do
+      # "%Module1{a: a, b: 2}" |> ir(%Context{pattern?: false})
+      ir = %IR.RemoteFunctionCall{
+        module: %IR.AtomType{value: Module1},
+        function: :__struct__,
+        args: [
+          %IR.ListType{
+            data: [
+              %IR.TupleType{data: [%IR.AtomType{value: :a}, %IR.Variable{name: :a}]},
+              %IR.TupleType{data: [%IR.AtomType{value: :b}, %IR.IntegerType{value: 2}]}
+            ]
+          }
+        ]
+      }
+
+      assert deconstruct(ir, :expression) == [[:expression_value]]
     end
 
     # --- OTHER ----
