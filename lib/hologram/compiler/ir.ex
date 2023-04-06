@@ -21,91 +21,91 @@ defmodule Hologram.Compiler.IR do
           | IR.Variable.t()
 
   defmodule AnonymousFunctionCall do
-    defstruct function: nil, args: nil
+    defstruct [:function, :args]
 
     @type t :: %__MODULE__{function: IR.t(), args: list(IR.t())}
   end
 
   defmodule AtomType do
-    defstruct value: nil
+    defstruct [:value]
 
     @type t :: %__MODULE__{value: atom}
   end
 
   defmodule ConsOperator do
-    defstruct head: nil, tail: nil
+    defstruct [:head, :tail]
 
     @type t :: %__MODULE__{head: IR.t(), tail: IR.t()}
   end
 
   defmodule DotOperator do
-    defstruct left: nil, right: nil
+    defstruct [:left, :right]
 
     @type t :: %__MODULE__{left: IR.t(), right: IR.t()}
   end
 
   defmodule FloatType do
-    defstruct value: nil
+    defstruct [:value]
 
     @type t :: %__MODULE__{value: float}
   end
 
   defmodule IntegerType do
-    defstruct value: nil
+    defstruct [:value]
 
     @type t :: %__MODULE__{value: integer}
   end
 
   defmodule ListType do
-    defstruct data: nil
+    defstruct [:data]
 
     @type t :: %__MODULE__{data: list(IR.t())}
   end
 
   defmodule LocalFunctionCall do
-    defstruct function: nil, args: nil
+    defstruct [:function, :args]
 
     @type t :: %__MODULE__{function: atom, args: list(IR.t())}
   end
 
   defmodule MapType do
-    defstruct data: nil
+    defstruct [:data]
 
     @type t :: %__MODULE__{data: list({IR.t(), IR.t()})}
   end
 
   defmodule MatchOperator do
-    defstruct left: nil, right: nil
+    defstruct [:left, :right]
 
     @type t :: %__MODULE__{left: IR.t(), right: IR.t()}
   end
 
   defmodule ModuleAttributeOperator do
-    defstruct name: nil
+    defstruct [:name]
 
     @type t :: %__MODULE__{name: atom}
   end
 
   defmodule PinOperator do
-    defstruct name: nil
+    defstruct [:name]
 
     @type t :: %__MODULE__{name: atom}
   end
 
   defmodule RemoteFunctionCall do
-    defstruct module: nil, function: nil, args: nil
+    defstruct [:module, :function, :args]
 
     @type t :: %__MODULE__{module: IR.t(), function: IR.t(), args: list(IR.t())}
   end
 
   defmodule TupleType do
-    defstruct data: nil
+    defstruct [:data]
 
     @type t :: %__MODULE__{data: list(IR.t())}
   end
 
   defmodule Variable do
-    defstruct name: nil
+    defstruct [:name]
 
     @type t :: %__MODULE__{name: atom}
   end
