@@ -10,7 +10,7 @@ defmodule Hologram.Compiler.TransformerTest do
       # test.()
       ast = {{:., [line: 1], [{:test, [line: 1], nil}]}, [line: 1], []}
 
-      assert transform(ast) == %IR.AnonymousFunctionCall{
+      assert transform(ast, %Context{}) == %IR.AnonymousFunctionCall{
                function: %IR.Variable{name: :test},
                args: []
              }
@@ -20,7 +20,7 @@ defmodule Hologram.Compiler.TransformerTest do
       # test.(1, 2)
       ast = {{:., [line: 1], [{:test, [line: 1], nil}]}, [line: 1], [1, 2]}
 
-      assert transform(ast) == %IR.AnonymousFunctionCall{
+      assert transform(ast, %Context{}) == %IR.AnonymousFunctionCall{
                function: %IR.Variable{name: :test},
                args: [
                  %IR.IntegerType{value: 1},
@@ -35,21 +35,21 @@ defmodule Hologram.Compiler.TransformerTest do
       # true
       ast = true
 
-      assert transform(ast) == %IR.AtomType{value: true}
+      assert transform(ast, %Context{}) == %IR.AtomType{value: true}
     end
 
     test "nil" do
       # nil
       ast = nil
 
-      assert transform(ast) == %IR.AtomType{value: nil}
+      assert transform(ast, %Context{}) == %IR.AtomType{value: nil}
     end
 
     test "other than boolean or nil" do
       # :test
       ast = :test
 
-      assert transform(ast) == %IR.AtomType{value: :test}
+      assert transform(ast, %Context{}) == %IR.AtomType{value: :test}
     end
   end
 
@@ -57,7 +57,7 @@ defmodule Hologram.Compiler.TransformerTest do
     # [h | t]
     ast = [{:|, [line: 1], [{:h, [line: 1], nil}, {:t, [line: 1], nil}]}]
 
-    assert transform(ast) == %IR.ConsOperator{
+    assert transform(ast, %Context{}) == %IR.ConsOperator{
              head: %IR.Variable{name: :h},
              tail: %IR.Variable{name: :t}
            }
@@ -67,7 +67,7 @@ defmodule Hologram.Compiler.TransformerTest do
     # abc.x
     ast = {{:., [line: 1], [{:abc, [line: 1], nil}, :x]}, [no_parens: true, line: 1], []}
 
-    assert transform(ast) == %IR.DotOperator{
+    assert transform(ast, %Context{}) == %IR.DotOperator{
              left: %IR.Variable{name: :abc},
              right: %IR.AtomType{value: :x}
            }
@@ -77,21 +77,21 @@ defmodule Hologram.Compiler.TransformerTest do
     # 1.0
     ast = 1.0
 
-    assert transform(ast) == %IR.FloatType{value: 1.0}
+    assert transform(ast, %Context{}) == %IR.FloatType{value: 1.0}
   end
 
   test "integer type" do
     # 1
     ast = 1
 
-    assert transform(ast) == %IR.IntegerType{value: 1}
+    assert transform(ast, %Context{}) == %IR.IntegerType{value: 1}
   end
 
   test "list type" do
     # [1, 2]
     ast = [1, 2]
 
-    assert transform(ast) == %IR.ListType{
+    assert transform(ast, %Context{}) == %IR.ListType{
              data: [
                %IR.IntegerType{value: 1},
                %IR.IntegerType{value: 2}
@@ -104,14 +104,14 @@ defmodule Hologram.Compiler.TransformerTest do
       # my_fun()
       ast = {:my_fun, [line: 1], []}
 
-      assert transform(ast) == %IR.LocalFunctionCall{function: :my_fun, args: []}
+      assert transform(ast, %Context{}) == %IR.LocalFunctionCall{function: :my_fun, args: []}
     end
 
     test "with args" do
       # my_fun(1, 2)
       ast = {:my_fun, [line: 1], [1, 2]}
 
-      assert transform(ast) == %IR.LocalFunctionCall{
+      assert transform(ast, %Context{}) == %IR.LocalFunctionCall{
                function: :my_fun,
                args: [
                  %IR.IntegerType{value: 1},
@@ -126,7 +126,7 @@ defmodule Hologram.Compiler.TransformerTest do
       # %{a: 1, b: 2}
       ast = {:%{}, [line: 1], [a: 1, b: 2]}
 
-      assert transform(ast) == %IR.MapType{
+      assert transform(ast, %Context{}) == %IR.MapType{
                data: [
                  {%IR.AtomType{value: :a}, %IR.IntegerType{value: 1}},
                  {%IR.AtomType{value: :b}, %IR.IntegerType{value: 2}}
@@ -138,7 +138,7 @@ defmodule Hologram.Compiler.TransformerTest do
       # %{x | a: 1, b: 2}
       ast = {:%{}, [line: 1], [{:|, [line: 1], [{:x, [line: 1], nil}, [a: 1, b: 2]]}]}
 
-      assert transform(ast) == %IR.RemoteFunctionCall{
+      assert transform(ast, %Context{}) == %IR.RemoteFunctionCall{
                module: %IR.AtomType{value: Map},
                function: :merge,
                args: [
@@ -173,7 +173,7 @@ defmodule Hologram.Compiler.TransformerTest do
          {:%{}, [line: 1], [a: 1, b: 2]}
        ]}
 
-    assert transform(ast) == %IR.MatchOperator{
+    assert transform(ast, %Context{}) == %IR.MatchOperator{
              left: %IR.MapType{
                data: [
                  {%IR.AtomType{value: :a}, %IR.Variable{name: :x}},
@@ -193,7 +193,7 @@ defmodule Hologram.Compiler.TransformerTest do
     # @my_attr
     ast = {:@, [line: 1], [{:my_attr, [line: 1], nil}]}
 
-    assert transform(ast) == %IR.ModuleAttributeOperator{name: :my_attr}
+    assert transform(ast, %Context{}) == %IR.ModuleAttributeOperator{name: :my_attr}
   end
 
   describe "module" do
@@ -201,14 +201,14 @@ defmodule Hologram.Compiler.TransformerTest do
       # Aaa.Bbb
       ast = {:__aliases__, [line: 1], [:Aaa, :Bbb]}
 
-      assert transform(ast) == %IR.AtomType{value: :"Elixir.Aaa.Bbb"}
+      assert transform(ast, %Context{}) == %IR.AtomType{value: :"Elixir.Aaa.Bbb"}
     end
 
     test "when first alias segment is 'Elixir'" do
       # Elixir.Aaa.Bbb
       ast = {:__aliases__, [line: 1], [Elixir, :Aaa, :Bbb]}
 
-      assert transform(ast) == %IR.AtomType{value: :"Elixir.Aaa.Bbb"}
+      assert transform(ast, %Context{}) == %IR.AtomType{value: :"Elixir.Aaa.Bbb"}
     end
   end
 
@@ -216,7 +216,7 @@ defmodule Hologram.Compiler.TransformerTest do
     # ^my_var
     ast = {:^, [line: 1], [{:my_var, [line: 1], nil}]}
 
-    assert transform(ast) == %IR.PinOperator{name: :my_var}
+    assert transform(ast, %Context{}) == %IR.PinOperator{name: :my_var}
   end
 
   describe "remote function call" do
@@ -227,7 +227,7 @@ defmodule Hologram.Compiler.TransformerTest do
       # a.x()
       ast = {{:., [line: 1], [{:a, [line: 1], nil}, :x]}, [line: 1], []}
 
-      assert transform(ast) == %IR.RemoteFunctionCall{
+      assert transform(ast, %Context{}) == %IR.RemoteFunctionCall{
                module: %IR.Variable{name: :a},
                function: :x,
                args: []
@@ -238,7 +238,7 @@ defmodule Hologram.Compiler.TransformerTest do
       # a.x(1, 2)
       ast = {{:., [line: 1], [{:a, [line: 1], nil}, :x]}, [line: 1], [1, 2]}
 
-      assert transform(ast) == %IR.RemoteFunctionCall{
+      assert transform(ast, %Context{}) == %IR.RemoteFunctionCall{
                module: %IR.Variable{name: :a},
                function: :x,
                args: [
@@ -254,7 +254,7 @@ defmodule Hologram.Compiler.TransformerTest do
         {{:., [line: 1], [{:__aliases__, [line: 1], [:Abc]}, :my_fun]},
          [no_parens: true, line: 1], []}
 
-      assert transform(ast) == %IR.RemoteFunctionCall{
+      assert transform(ast, %Context{}) == %IR.RemoteFunctionCall{
                module: %IR.AtomType{value: :"Elixir.Abc"},
                function: :my_fun,
                args: []
@@ -265,7 +265,7 @@ defmodule Hologram.Compiler.TransformerTest do
       # Abc.my_fun()
       ast = {{:., [line: 1], [{:__aliases__, [line: 1], [:Abc]}, :my_fun]}, [line: 1], []}
 
-      assert transform(ast) == %IR.RemoteFunctionCall{
+      assert transform(ast, %Context{}) == %IR.RemoteFunctionCall{
                module: %IR.AtomType{value: :"Elixir.Abc"},
                function: :my_fun,
                args: []
@@ -276,7 +276,7 @@ defmodule Hologram.Compiler.TransformerTest do
       # Abc.my_fun(1, 2)
       ast = {{:., [line: 1], [{:__aliases__, [line: 1], [:Abc]}, :my_fun]}, [line: 1], [1, 2]}
 
-      assert transform(ast) == %IR.RemoteFunctionCall{
+      assert transform(ast, %Context{}) == %IR.RemoteFunctionCall{
                module: %IR.AtomType{value: :"Elixir.Abc"},
                function: :my_fun,
                args: [
@@ -294,7 +294,7 @@ defmodule Hologram.Compiler.TransformerTest do
       ast =
         {{:., [line: 1], [{:@, [line: 1], [{:my_attr, [line: 1], nil}]}, :my_fun]}, [line: 1], []}
 
-      assert transform(ast) == %IR.RemoteFunctionCall{
+      assert transform(ast, %Context{}) == %IR.RemoteFunctionCall{
                module: %IR.ModuleAttributeOperator{name: :my_attr},
                function: :my_fun,
                args: []
@@ -307,7 +307,7 @@ defmodule Hologram.Compiler.TransformerTest do
         {{:., [line: 1], [{:@, [line: 1], [{:my_attr, [line: 1], nil}]}, :my_fun]}, [line: 1],
          [1, 2]}
 
-      assert transform(ast) == %IR.RemoteFunctionCall{
+      assert transform(ast, %Context{}) == %IR.RemoteFunctionCall{
                module: %IR.ModuleAttributeOperator{name: :my_attr},
                function: :my_fun,
                args: [
@@ -329,7 +329,7 @@ defmodule Hologram.Compiler.TransformerTest do
             :remote_fun
           ]}, [line: 1], []}
 
-      assert transform(ast) == %IR.RemoteFunctionCall{
+      assert transform(ast, %Context{}) == %IR.RemoteFunctionCall{
                module: %IR.AnonymousFunctionCall{
                  function: %IR.Variable{name: :anon_fun},
                  args: [
@@ -351,7 +351,7 @@ defmodule Hologram.Compiler.TransformerTest do
             :remote_fun
           ]}, [line: 1], [3, 4]}
 
-      assert transform(ast) == %IR.RemoteFunctionCall{
+      assert transform(ast, %Context{}) == %IR.RemoteFunctionCall{
                module: %IR.AnonymousFunctionCall{
                  function: %IR.Variable{name: :anon_fun},
                  args: [
@@ -371,7 +371,7 @@ defmodule Hologram.Compiler.TransformerTest do
       # :my_module.my_fun
       ast = {{:., [line: 1], [:my_module, :my_fun]}, [no_parens: true, line: 1], []}
 
-      assert transform(ast) == %IR.RemoteFunctionCall{
+      assert transform(ast, %Context{}) == %IR.RemoteFunctionCall{
                module: %IR.AtomType{value: :my_module},
                function: :my_fun,
                args: []
@@ -382,7 +382,7 @@ defmodule Hologram.Compiler.TransformerTest do
       # :my_module.my_fun()
       ast = {{:., [line: 1], [:my_module, :my_fun]}, [line: 1], []}
 
-      assert transform(ast) == %IR.RemoteFunctionCall{
+      assert transform(ast, %Context{}) == %IR.RemoteFunctionCall{
                module: %IR.AtomType{value: :my_module},
                function: :my_fun,
                args: []
@@ -393,7 +393,7 @@ defmodule Hologram.Compiler.TransformerTest do
       # :my_module.my_fun(1, 2)
       ast = {{:., [line: 1], [:my_module, :my_fun]}, [line: 1], [1, 2]}
 
-      assert transform(ast) == %IR.RemoteFunctionCall{
+      assert transform(ast, %Context{}) == %IR.RemoteFunctionCall{
                module: %IR.AtomType{value: :my_module},
                function: :my_fun,
                args: [
@@ -499,7 +499,7 @@ defmodule Hologram.Compiler.TransformerTest do
       # {1, 2}
       ast = {1, 2}
 
-      assert transform(ast) == %IR.TupleType{
+      assert transform(ast, %Context{}) == %IR.TupleType{
                data: [
                  %IR.IntegerType{value: 1},
                  %IR.IntegerType{value: 2}
@@ -511,7 +511,7 @@ defmodule Hologram.Compiler.TransformerTest do
       # {1, 2, 3}
       ast = {:{}, [line: 1], [1, 2, 3]}
 
-      assert transform(ast) == %IR.TupleType{
+      assert transform(ast, %Context{}) == %IR.TupleType{
                data: [
                  %IR.IntegerType{value: 1},
                  %IR.IntegerType{value: 2},
@@ -525,6 +525,6 @@ defmodule Hologram.Compiler.TransformerTest do
     # my_var
     ast = {:my_var, [line: 1], nil}
 
-    assert transform(ast) == %IR.Variable{name: :my_var}
+    assert transform(ast, %Context{}) == %IR.Variable{name: :my_var}
   end
 end

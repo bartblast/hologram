@@ -1,5 +1,6 @@
 defmodule Hologram.Compiler.IR do
   alias Hologram.Compiler.AST
+  alias Hologram.Compiler.Context
   alias Hologram.Compiler.IR
   alias Hologram.Compiler.Transformer
 
@@ -122,6 +123,6 @@ defmodule Hologram.Compiler.IR do
   def for_code(code) do
     code
     |> AST.for_code()
-    |> Transformer.transform()
+    |> Transformer.transform(%Context{})
   end
 end

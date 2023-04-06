@@ -25,7 +25,7 @@ defmodule Hologram.Compiler.Transformer do
   """
   @intercept true
   @spec transform(AST.t(), Context.t()) :: IR.t()
-  def transform(ast, context \\ %Context{})
+  def transform(ast, context)
 
   def transform({{:., _, [function]}, _, args}, context) do
     %IR.AnonymousFunctionCall{
@@ -122,9 +122,9 @@ defmodule Hologram.Compiler.Transformer do
       args: [
         transform(map, context),
         %IR.RemoteFunctionCall{
-          module: transform(module),
+          module: transform(module, context),
           function: :__struct__,
-          args: [transform(data)]
+          args: [transform(data, context)]
         }
       ]
     }
@@ -141,11 +141,11 @@ defmodule Hologram.Compiler.Transformer do
   end
 
   # Struct without cons operator not in a pattern is transformed to __struct__/1 remote function call.
-  def transform({:%, _, [module, {:%{}, _, data}]}, %Context{pattern?: false}) do
+  def transform({:%, _, [module, {:%{}, _, data}]}, %Context{pattern?: false} = context) do
     %IR.RemoteFunctionCall{
-      module: transform(module),
+      module: transform(module, context),
       function: :__struct__,
-      args: [transform(data)]
+      args: [transform(data, context)]
     }
   end
 
