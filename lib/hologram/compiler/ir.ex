@@ -126,10 +126,10 @@ defmodule Hologram.Compiler.IR do
       iex> for_code("my_fun(1, 2)")
       %IR.LocalFunctionCall{function: :my_fun, args: [%IR.IntegerType{value: 1}, %IR.IntegerType{value: 2}]}
   """
-  @spec for_code(binary) :: IR.t()
-  def for_code(code) do
+  @spec for_code(binary, Context.t()) :: IR.t()
+  def for_code(code, %Context{} = context) do
     code
     |> AST.for_code()
-    |> Transformer.transform(%Context{})
+    |> Transformer.transform(context)
   end
 end
