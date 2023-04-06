@@ -75,8 +75,9 @@ defmodule Hologram.Compiler.Reflection do
   """
   @spec module_beam_defs(module) :: list(tuple)
   def module_beam_defs(module) do
-    beam_file_path = :code.which(module)
-    %{definitions: defs} = BeamFile.debug_info!(beam_file_path)
-    defs
+    module
+    |> :code.which()
+    |> BeamFile.debug_info!()
+    |> Map.fetch!(:definitions)
   end
 end
