@@ -285,6 +285,13 @@ defmodule Hologram.Compiler.PatternMatchingTest do
       assert deconstruct(ir, :expression) == [[:expression_value]]
     end
 
+    test "match placeholder in pattern" do
+      # _a
+      ir = %IR.MatchPlaceholder{}
+
+      assert deconstruct(ir, :pattern) == [[:match_placeholder]]
+    end
+
     # --- BASIC DATA TYPES ---
 
     test "basic data type in pattern" do

@@ -129,6 +129,10 @@ defmodule Hologram.Compiler.PatternMatching do
     [[{:variable, name} | path]]
   end
 
+  def deconstruct(%IR.MatchPlaceholder{}, :pattern, path) do
+    [[:match_placeholder | path]]
+  end
+
   def deconstruct(%IR.TupleType{data: data}, side, path) do
     data
     |> Enum.with_index()
