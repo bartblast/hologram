@@ -7,6 +7,8 @@ defmodule Hologram.Compiler.IR do
   @type t ::
           IR.AnonymousFunctionCall.t()
           | IR.AtomType.t()
+          | IR.BitstringSegment.t()
+          | IR.BitstringType.t()
           | IR.ConsOperator.t()
           | IR.DotOperator.t()
           | IR.FloatType.t()
@@ -22,6 +24,11 @@ defmodule Hologram.Compiler.IR do
           | IR.TupleType.t()
           | IR.Variable.t()
 
+  @type bitstring_segment_endianness :: :big | :little | :native
+
+  @type bitstring_segment_type ::
+          :integer | :float | :bits | :bitstring | :binary | :bytes | :utf8 | :utf16 | :utf32
+
   defmodule AnonymousFunctionCall do
     defstruct [:function, :args]
 
@@ -32,6 +39,24 @@ defmodule Hologram.Compiler.IR do
     defstruct [:value]
 
     @type t :: %__MODULE__{value: atom}
+  end
+
+  defmodule BitstringSegment do
+    defstruct [:endianness, :signed?, :size, :type, :unit]
+
+    @type t :: %__MODULE__{
+            endianness: IR.bitstring_segment_endianness(),
+            signed?: boolean,
+            size: integer,
+            type: IR.bitstring_segment_type(),
+            unit: integer
+          }
+  end
+
+  defmodule BitstringType do
+    defstruct [:segments]
+
+    @type t :: %__MODULE__{segments: list(IR.BitstringSegment.t())}
   end
 
   defmodule ConsOperator do
