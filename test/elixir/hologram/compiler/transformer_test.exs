@@ -53,6 +53,321 @@ defmodule Hologram.Compiler.TransformerTest do
     end
   end
 
+  describe "bitstring type" do
+    test "empty" do
+      # <<>>
+      ast = {:<<>>, [line: 1], []}
+
+      assert transform(ast, %Context{}) == %IR.BitstringType{segments: []}
+    end
+
+    test "single segment" do
+      # <<987>>
+      ast = {:<<>>, [line: 1], [987]}
+
+      assert %IR.BitstringType{segments: [%IR.BitstringSegment{}]} = transform(ast, %Context{})
+    end
+
+    test "multiple segments" do
+      # <<987, 876>>
+      ast = {:<<>>, [line: 1], [987, 876]}
+
+      assert %IR.BitstringType{segments: [%IR.BitstringSegment{}, %IR.BitstringSegment{}]} =
+               transform(ast, %Context{})
+    end
+
+    # --- ENDIANNESS MODIFIER ---
+
+    test "default endianness" do
+      # <<xyz>>
+      ast = {:<<>>, [line: 1], [{:xyz, [line: 1], nil}]}
+
+      assert %IR.BitstringType{segments: [%IR.BitstringSegment{endianness: :big}]} =
+               transform(ast, %Context{})
+    end
+
+    test "big endianness modifier" do
+      # <<xyz::big>>
+      ast =
+        {:<<>>, [line: 1], [{:"::", [line: 1], [{:xyz, [line: 1], nil}, {:big, [line: 1], nil}]}]}
+
+      assert %IR.BitstringType{segments: [%IR.BitstringSegment{endianness: :big}]} =
+               transform(ast, %Context{})
+    end
+
+    test "little endianness modifier" do
+      # <<xyz::little>>
+      ast =
+        {:<<>>, [line: 1],
+         [{:"::", [line: 1], [{:xyz, [line: 1], nil}, {:little, [line: 1], nil}]}]}
+
+      assert %IR.BitstringType{segments: [%IR.BitstringSegment{endianness: :little}]} =
+               transform(ast, %Context{})
+    end
+
+    test "native endianness modifier" do
+      # <<xyz::native>>
+      ast =
+        {:<<>>, [line: 1],
+         [{:"::", [line: 1], [{:xyz, [line: 1], nil}, {:native, [line: 1], nil}]}]}
+
+      assert %IR.BitstringType{segments: [%IR.BitstringSegment{endianness: :native}]} =
+               transform(ast, %Context{})
+    end
+
+    # --- SIGNEDNESS MODIFIER ---
+
+    test "default signedness" do
+      # <<xyz>>
+      ast = {:<<>>, [line: 1], [{:xyz, [line: 1], nil}]}
+
+      assert %IR.BitstringType{segments: [%IR.BitstringSegment{signedness: :unsigned}]} =
+               transform(ast, %Context{})
+    end
+
+    test "signed signedness modifier" do
+      # <<xyz::signed>>
+      ast =
+        {:<<>>, [line: 1],
+         [{:"::", [line: 1], [{:xyz, [line: 1], nil}, {:signed, [line: 1], nil}]}]}
+
+      assert %IR.BitstringType{segments: [%IR.BitstringSegment{signedness: :signed}]} =
+               transform(ast, %Context{})
+    end
+
+    test "unsigned signedness modifier" do
+      # <<xyz::unsigned>>
+      ast =
+        {:<<>>, [line: 1],
+         [{:"::", [line: 1], [{:xyz, [line: 1], nil}, {:unsigned, [line: 1], nil}]}]}
+
+      assert %IR.BitstringType{segments: [%IR.BitstringSegment{signedness: :unsigned}]} =
+               transform(ast, %Context{})
+    end
+
+    # --- SIZE MODIFIER ---
+
+    test "default size for float type" do
+      # <<xyz::float>>
+      ast =
+        {:<<>>, [line: 1],
+         [{:"::", [line: 1], [{:xyz, [line: 1], nil}, {:float, [line: 1], nil}]}]}
+
+      assert %IR.BitstringType{segments: [%IR.BitstringSegment{size: 64}]} =
+               transform(ast, %Context{})
+    end
+
+    test "default size for integer type" do
+      # <<xyz::integer>>
+      ast =
+        {:<<>>, [line: 1],
+         [{:"::", [line: 1], [{:xyz, [line: 1], nil}, {:integer, [line: 1], nil}]}]}
+
+      assert %IR.BitstringType{segments: [%IR.BitstringSegment{size: 8}]} =
+               transform(ast, %Context{})
+    end
+
+    test "default size for types other than float or integer" do
+      # <<xyz::binary>>
+      ast =
+        {:<<>>, [line: 1],
+         [{:"::", [line: 1], [{:xyz, [line: 1], nil}, {:binary, [line: 1], nil}]}]}
+
+      assert %IR.BitstringType{segments: [%IR.BitstringSegment{size: nil}]} =
+               transform(ast, %Context{})
+    end
+
+    test "explicit size modifier syntax" do
+      # <<xyz::size(3)>>
+      ast =
+        {:<<>>, [line: 1],
+         [{:"::", [line: 1], [{:xyz, [line: 1], nil}, {:size, [line: 1], [3]}]}]}
+
+      assert %IR.BitstringType{segments: [%IR.BitstringSegment{size: 3}]} =
+               transform(ast, %Context{})
+    end
+
+    test "shorthand size modifier syntax" do
+      # <<xyz::3>>
+      ast = {:<<>>, [line: 1], [{:"::", [line: 1], [{:xyz, [line: 1], nil}, 3]}]}
+
+      assert %IR.BitstringType{segments: [%IR.BitstringSegment{size: 3}]} =
+               transform(ast, %Context{})
+    end
+
+    test "shorthand size modifier syntax inside size * unit group" do
+      # <<xyz::3*5>>
+      ast =
+        {:<<>>, [line: 1],
+         [{:"::", [line: 1], [{:xyz, [line: 1], nil}, {:*, [line: 1], [3, 5]}]}]}
+
+      assert %IR.BitstringType{segments: [%IR.BitstringSegment{size: 3}]} =
+               transform(ast, %Context{})
+    end
+
+    # --- TYPE MODIFIER ---
+
+    test "default type" do
+      # <<xyz>>
+      ast = {:<<>>, [line: 1], [{:xyz, [line: 1], nil}]}
+
+      assert %IR.BitstringType{segments: [%IR.BitstringSegment{type: :integer}]} =
+               transform(ast, %Context{})
+    end
+
+    test "binary type modifier" do
+      # <<xyz::binary>>
+      ast =
+        {:<<>>, [line: 1],
+         [{:"::", [line: 1], [{:xyz, [line: 1], nil}, {:binary, [line: 1], nil}]}]}
+
+      assert %IR.BitstringType{segments: [%IR.BitstringSegment{type: :binary}]} =
+               transform(ast, %Context{})
+    end
+
+    test "bits type modifier" do
+      # <<xyz::bits>>
+      ast =
+        {:<<>>, [line: 1],
+         [{:"::", [line: 1], [{:xyz, [line: 1], nil}, {:bits, [line: 1], nil}]}]}
+
+      assert %IR.BitstringType{segments: [%IR.BitstringSegment{type: :bitstring}]} =
+               transform(ast, %Context{})
+    end
+
+    test "bitstring type modifier" do
+      # <<xyz::bitstring>>
+      ast =
+        {:<<>>, [line: 1],
+         [{:"::", [line: 1], [{:xyz, [line: 1], nil}, {:bitstring, [line: 1], nil}]}]}
+
+      assert %IR.BitstringType{segments: [%IR.BitstringSegment{type: :bitstring}]} =
+               transform(ast, %Context{})
+    end
+
+    test "bytes type modifier" do
+      # <<xyz::bytes>>
+      ast =
+        {:<<>>, [line: 1],
+         [{:"::", [line: 1], [{:xyz, [line: 1], nil}, {:bytes, [line: 1], nil}]}]}
+
+      assert %IR.BitstringType{segments: [%IR.BitstringSegment{type: :binary}]} =
+               transform(ast, %Context{})
+    end
+
+    test "float type modifier" do
+      # <<xyz::float>>
+      ast =
+        {:<<>>, [line: 1],
+         [{:"::", [line: 1], [{:xyz, [line: 1], nil}, {:float, [line: 1], nil}]}]}
+
+      assert %IR.BitstringType{segments: [%IR.BitstringSegment{type: :float}]} =
+               transform(ast, %Context{})
+    end
+
+    test "integer type modifier" do
+      # <<xyz::integer>>
+      ast =
+        {:<<>>, [line: 1],
+         [{:"::", [line: 1], [{:xyz, [line: 1], nil}, {:integer, [line: 1], nil}]}]}
+
+      assert %IR.BitstringType{segments: [%IR.BitstringSegment{type: :integer}]} =
+               transform(ast, %Context{})
+    end
+
+    test "utf8 type modifier" do
+      # <<xyz::utf8>>
+      ast =
+        {:<<>>, [line: 1],
+         [{:"::", [line: 1], [{:xyz, [line: 1], nil}, {:utf8, [line: 1], nil}]}]}
+
+      assert %IR.BitstringType{segments: [%IR.BitstringSegment{type: :utf8}]} =
+               transform(ast, %Context{})
+    end
+
+    test "utf16 type modifier" do
+      # <<xyz::utf16>>
+      ast =
+        {:<<>>, [line: 1],
+         [{:"::", [line: 1], [{:xyz, [line: 1], nil}, {:utf16, [line: 1], nil}]}]}
+
+      assert %IR.BitstringType{segments: [%IR.BitstringSegment{type: :utf16}]} =
+               transform(ast, %Context{})
+    end
+
+    test "utf32 type modifier" do
+      # <<xyz::utf32>>
+      ast =
+        {:<<>>, [line: 1],
+         [{:"::", [line: 1], [{:xyz, [line: 1], nil}, {:utf32, [line: 1], nil}]}]}
+
+      assert %IR.BitstringType{segments: [%IR.BitstringSegment{type: :utf32}]} =
+               transform(ast, %Context{})
+    end
+
+    # --- UNIT MODIFIER ---
+
+    test "default unit for binary type" do
+      # <<xyz::binary>>
+      ast =
+        {:<<>>, [line: 1],
+         [{:"::", [line: 1], [{:xyz, [line: 1], nil}, {:binary, [line: 1], nil}]}]}
+
+      assert %IR.BitstringType{segments: [%IR.BitstringSegment{unit: 8}]} =
+               transform(ast, %Context{})
+    end
+
+    test "default unit for float type" do
+      # <<xyz::float>>
+      ast =
+        {:<<>>, [line: 1],
+         [{:"::", [line: 1], [{:xyz, [line: 1], nil}, {:float, [line: 1], nil}]}]}
+
+      assert %IR.BitstringType{segments: [%IR.BitstringSegment{unit: 1}]} =
+               transform(ast, %Context{})
+    end
+
+    test "default unit for integer type" do
+      # <<xyz::integer>>
+      ast =
+        {:<<>>, [line: 1],
+         [{:"::", [line: 1], [{:xyz, [line: 1], nil}, {:integer, [line: 1], nil}]}]}
+
+      assert %IR.BitstringType{segments: [%IR.BitstringSegment{unit: 1}]} =
+               transform(ast, %Context{})
+    end
+
+    test "default unit for types other than binary, float or integer" do
+      # <<xyz::utf32>>
+      ast =
+        {:<<>>, [line: 1],
+         [{:"::", [line: 1], [{:xyz, [line: 1], nil}, {:utf32, [line: 1], nil}]}]}
+
+      assert %IR.BitstringType{segments: [%IR.BitstringSegment{unit: nil}]} =
+               transform(ast, %Context{})
+    end
+
+    test "explicit unit modifier syntax" do
+      # <<xyz::unit(3)>>
+      ast =
+        {:<<>>, [line: 1],
+         [{:"::", [line: 1], [{:xyz, [line: 1], nil}, {:unit, [line: 1], [3]}]}]}
+
+      assert %IR.BitstringType{segments: [%IR.BitstringSegment{unit: 3}]} =
+               transform(ast, %Context{})
+    end
+
+    test "shorthand unit modifier syntax inside size * unit group" do
+      # <<xyz::3*5>>
+      ast =
+        {:<<>>, [line: 1],
+         [{:"::", [line: 1], [{:xyz, [line: 1], nil}, {:*, [line: 1], [3, 5]}]}]}
+
+      assert %IR.BitstringType{segments: [%IR.BitstringSegment{unit: 5}]} =
+               transform(ast, %Context{})
+    end
+  end
+
   test "cons operatoror" do
     # [h | t]
     ast = [{:|, [line: 1], [{:h, [line: 1], nil}, {:t, [line: 1], nil}]}]

@@ -24,11 +24,6 @@ defmodule Hologram.Compiler.IR do
           | IR.TupleType.t()
           | IR.Variable.t()
 
-  @type bitstring_segment_endianness :: :big | :little | :native
-
-  @type bitstring_segment_type ::
-          :integer | :float | :bits | :bitstring | :binary | :bytes | :utf8 | :utf16 | :utf32
-
   defmodule AnonymousFunctionCall do
     defstruct [:function, :args]
 
@@ -42,14 +37,15 @@ defmodule Hologram.Compiler.IR do
   end
 
   defmodule BitstringSegment do
-    defstruct [:endianness, :signed?, :size, :type, :unit]
+    defstruct [:endianness, :signedness, :size, :type, :unit, :value]
 
     @type t :: %__MODULE__{
-            endianness: IR.bitstring_segment_endianness(),
-            signed?: boolean,
+            endianness: :big | :little | :native,
+            signedness: :signed | :unsigned,
             size: integer,
-            type: IR.bitstring_segment_type(),
-            unit: integer
+            type: :binary | :bitstring | :float | :integer | :utf8 | :utf16 | :utf32,
+            unit: integer,
+            value: bitstring
           }
   end
 
