@@ -726,6 +726,13 @@ defmodule Hologram.Compiler.TransformerTest do
     end
   end
 
+  test "string type" do
+    # "abc"
+    ast = "abc"
+
+    assert transform(ast, %Context{}) == %IR.StringType{value: "abc"}
+  end
+
   describe "struct" do
     # %Aaa.Bbb{a: 1, b: 2}
     @ast {:%, [line: 1],

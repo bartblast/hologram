@@ -121,6 +121,10 @@ defmodule Hologram.Compiler.Transformer do
     %IR.PinOperator{name: name}
   end
 
+  def transform(value, _context) when is_binary(value) do
+    %IR.StringType{value: value}
+  end
+
   # Struct with cons operator is transformed to nested Map.merge/2 and __struct__/1 remote function calls.
   def transform({:%, _, [module, {:%{}, _, [{:|, _, [map, data]}]}]}, context) do
     %IR.RemoteFunctionCall{

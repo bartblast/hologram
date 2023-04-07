@@ -21,6 +21,7 @@ defmodule Hologram.Compiler.IR do
           | IR.ModuleAttributeOperator.t()
           | IR.PinOperator.t()
           | IR.RemoteFunctionCall.t()
+          | IR.StringType.t()
           | IR.TupleType.t()
           | IR.Variable.t()
 
@@ -125,6 +126,12 @@ defmodule Hologram.Compiler.IR do
     defstruct [:module, :function, :args]
 
     @type t :: %__MODULE__{module: IR.t(), function: IR.t(), args: list(IR.t())}
+  end
+
+  defmodule StringType do
+    defstruct [:value]
+
+    @type t :: %__MODULE__{value: String.t()}
   end
 
   defmodule TupleType do
