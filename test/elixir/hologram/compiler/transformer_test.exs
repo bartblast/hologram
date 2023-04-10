@@ -369,7 +369,7 @@ defmodule Hologram.Compiler.TransformerTest do
 
     # --- VALUE ---
 
-    test "literal value" do
+    test "integer value" do
       # <<6>>
       ast = {:<<>>, [line: 1], [6]}
 
@@ -377,7 +377,15 @@ defmodule Hologram.Compiler.TransformerTest do
                transform(ast, %Context{})
     end
 
-    test "variable" do
+    test "string value" do
+      # <<"my_str">>
+      ast = {:<<>>, [line: 1], ["my_str"]}
+
+      %IR.BitstringType{segments: [%IR.BitstringSegment{value: %IR.StringType{value: "my_str"}}]} =
+        transform(ast, %Context{})
+    end
+
+    test "variable value" do
       # <<xyz>>
       ast = {:<<>>, [line: 1], [{:xyz, [line: 1], nil}]}
 
@@ -385,7 +393,7 @@ defmodule Hologram.Compiler.TransformerTest do
                transform(ast, %Context{})
     end
 
-    test "expression" do
+    test "expression value" do
       # <<Map.get(my_map, :my_key)>>
       ast =
         {:<<>>, [line: 1],
