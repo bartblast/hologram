@@ -250,6 +250,20 @@ defmodule Hologram.Compiler.Transformer do
 
   defp maybe_add_default_bitstring_size_modifier(segment), do: segment
 
+  defp maybe_add_default_bitstring_type_modifier(%{type: nil, value: %IR.StringType{}} = segment) do
+    %{segment | type: :binary}
+  end
+
+  defp maybe_add_default_bitstring_type_modifier(
+         %{type: nil, value: %IR.BitstringType{}} = segment
+       ) do
+    %{segment | type: :bitstring}
+  end
+
+  defp maybe_add_default_bitstring_type_modifier(%{type: nil, value: %IR.FloatType{}} = segment) do
+    %{segment | type: :float}
+  end
+
   defp maybe_add_default_bitstring_type_modifier(%{type: nil} = segment) do
     %{segment | type: :integer}
   end

@@ -207,11 +207,43 @@ defmodule Hologram.Compiler.TransformerTest do
 
     # --- TYPE MODIFIER ---
 
-    test "default type" do
+    test "default type for value of unknown data type" do
       # <<xyz>>
       ast = {:<<>>, [line: 1], [{:xyz, [line: 1], nil}]}
 
       assert %IR.BitstringType{segments: [%IR.BitstringSegment{type: :integer}]} =
+               transform(ast, %Context{})
+    end
+
+    test "default type for bitstring data type" do
+      # << <<1>> >>
+      ast = {:<<>>, [line: 1], [{:<<>>, [line: 1], [1]}]}
+
+      assert %IR.BitstringType{segments: [%IR.BitstringSegment{type: :bitstring}]} =
+               transform(ast, %Context{})
+    end
+
+    test "default type for float data type" do
+      # <<5.0>>
+      ast = {:<<>>, [line: 1], [5.0]}
+
+      assert %IR.BitstringType{segments: [%IR.BitstringSegment{type: :float}]} =
+               transform(ast, %Context{})
+    end
+
+    test "default type for integer data type" do
+      # <<5>>
+      ast = {:<<>>, [line: 1], [5]}
+
+      assert %IR.BitstringType{segments: [%IR.BitstringSegment{type: :integer}]} =
+               transform(ast, %Context{})
+    end
+
+    test "default type for string data type" do
+      # <<"abc">>
+      ast = {:<<>>, [line: 1], ["abc"]}
+
+      assert %IR.BitstringType{segments: [%IR.BitstringSegment{type: :binary}]} =
                transform(ast, %Context{})
     end
 
