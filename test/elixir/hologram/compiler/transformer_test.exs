@@ -366,6 +366,24 @@ defmodule Hologram.Compiler.TransformerTest do
       assert %IR.BitstringType{segments: [%IR.BitstringSegment{unit: 5}]} =
                transform(ast, %Context{})
     end
+
+    # --- VALUE ---
+
+    test "literal value" do
+      # <<6>>
+      ast = {:<<>>, [line: 1], [6]}
+
+      assert %IR.BitstringType{segments: [%IR.BitstringSegment{value: %IR.IntegerType{value: 6}}]} =
+               transform(ast, %Context{})
+    end
+
+    test "variable" do
+      # <<xyz>>
+      ast = {:<<>>, [line: 1], [{:xyz, [line: 1], nil}]}
+
+      assert %IR.BitstringType{segments: [%IR.BitstringSegment{value: %IR.Variable{name: :xyz}}]} =
+               transform(ast, %Context{})
+    end
   end
 
   test "cons operatoror" do
