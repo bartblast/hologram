@@ -237,11 +237,15 @@ defmodule Hologram.Compiler.Transformer do
   defp maybe_add_default_bitstring_signedness_modifier(segment), do: segment
 
   defp maybe_add_default_bitstring_size_modifier(%{type: :float, size: nil} = segment) do
-    %{segment | size: 64}
+    %{segment | size: %IR.IntegerType{value: 64}}
   end
 
   defp maybe_add_default_bitstring_size_modifier(%{type: :integer, size: nil} = segment) do
-    %{segment | size: 8}
+    %{segment | size: %IR.IntegerType{value: 8}}
+  end
+
+  defp maybe_add_default_bitstring_size_modifier(%{size: nil} = segment) do
+    %{segment | size: %IR.AtomType{value: nil}}
   end
 
   defp maybe_add_default_bitstring_size_modifier(segment), do: segment
@@ -266,87 +270,87 @@ defmodule Hologram.Compiler.Transformer do
 
   defp maybe_add_default_bitstring_unit_modifier(segment), do: segment
 
-  defp transform_bitstring_modifiers({:-, _, [left, right]}, acc) do
-    new_acc = transform_bitstring_modifiers(left, acc)
-    transform_bitstring_modifiers(right, new_acc)
+  defp transform_bitstring_modifiers({:-, _, [left, right]}, context, acc) do
+    new_acc = transform_bitstring_modifiers(left, context, acc)
+    transform_bitstring_modifiers(right, context, new_acc)
   end
 
-  defp transform_bitstring_modifiers({:*, _, [size, unit]}, acc) do
-    %{acc | size: size, unit: unit}
+  defp transform_bitstring_modifiers({:*, _, [size, unit]}, context, acc) do
+    %{acc | size: transform(size, context), unit: unit}
   end
 
-  defp transform_bitstring_modifiers({:big, _, _}, acc) do
+  defp transform_bitstring_modifiers({:big, _, _}, _context, acc) do
     %{acc | endianness: :big}
   end
 
-  defp transform_bitstring_modifiers({:binary, _, _}, acc) do
+  defp transform_bitstring_modifiers({:binary, _, _}, _context, acc) do
     %{acc | type: :binary}
   end
 
-  defp transform_bitstring_modifiers({:bits, _, _}, acc) do
+  defp transform_bitstring_modifiers({:bits, _, _}, _context, acc) do
     %{acc | type: :bitstring}
   end
 
-  defp transform_bitstring_modifiers({:bitstring, _, _}, acc) do
+  defp transform_bitstring_modifiers({:bitstring, _, _}, _context, acc) do
     %{acc | type: :bitstring}
   end
 
-  defp transform_bitstring_modifiers({:bytes, _, _}, acc) do
+  defp transform_bitstring_modifiers({:bytes, _, _}, _context, acc) do
     %{acc | type: :binary}
   end
 
-  defp transform_bitstring_modifiers({:float, _, _}, acc) do
+  defp transform_bitstring_modifiers({:float, _, _}, _context, acc) do
     %{acc | type: :float}
   end
 
-  defp transform_bitstring_modifiers({:integer, _, _}, acc) do
+  defp transform_bitstring_modifiers({:integer, _, _}, _context, acc) do
     %{acc | type: :integer}
   end
 
-  defp transform_bitstring_modifiers({:little, _, _}, acc) do
+  defp transform_bitstring_modifiers({:little, _, _}, _context, acc) do
     %{acc | endianness: :little}
   end
 
-  defp transform_bitstring_modifiers({:native, _, _}, acc) do
+  defp transform_bitstring_modifiers({:native, _, _}, _context, acc) do
     %{acc | endianness: :native}
   end
 
-  defp transform_bitstring_modifiers({:signed, _, _}, acc) do
+  defp transform_bitstring_modifiers({:signed, _, _}, _context, acc) do
     %{acc | signedness: :signed}
   end
 
-  defp transform_bitstring_modifiers({:size, _, [size]}, acc) do
-    %{acc | size: size}
+  defp transform_bitstring_modifiers({:size, _, [size]}, context, acc) do
+    %{acc | size: transform(size, context)}
   end
 
-  defp transform_bitstring_modifiers({:unit, _, [unit]}, acc) do
+  defp transform_bitstring_modifiers({:unit, _, [unit]}, _context, acc) do
     %{acc | unit: unit}
   end
 
-  defp transform_bitstring_modifiers({:unsigned, _, _}, acc) do
+  defp transform_bitstring_modifiers({:unsigned, _, _}, _context, acc) do
     %{acc | signedness: :unsigned}
   end
 
-  defp transform_bitstring_modifiers({:utf8, _, _}, acc) do
+  defp transform_bitstring_modifiers({:utf8, _, _}, _context, acc) do
     %{acc | type: :utf8}
   end
 
-  defp transform_bitstring_modifiers({:utf16, _, _}, acc) do
+  defp transform_bitstring_modifiers({:utf16, _, _}, _context, acc) do
     %{acc | type: :utf16}
   end
 
-  defp transform_bitstring_modifiers({:utf32, _, _}, acc) do
+  defp transform_bitstring_modifiers({:utf32, _, _}, _context, acc) do
     %{acc | type: :utf32}
   end
 
-  defp transform_bitstring_modifiers(size, acc) do
-    %{acc | size: size}
+  defp transform_bitstring_modifiers(size, context, acc) do
+    %{acc | size: transform(size, context)}
   end
 
   defp transform_bitstring_segment({:"::", _, [left, right]}, context, acc) do
     new_acc = %{acc | value: transform(left, context)}
 
-    transform_bitstring_modifiers(right, new_acc)
+    transform_bitstring_modifiers(right, context, new_acc)
     |> maybe_add_default_bitstring_modifiers()
   end
 

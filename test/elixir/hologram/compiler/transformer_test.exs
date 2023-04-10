@@ -153,7 +153,7 @@ defmodule Hologram.Compiler.TransformerTest do
         {:<<>>, [line: 1],
          [{:"::", [line: 1], [{:xyz, [line: 1], nil}, {:float, [line: 1], nil}]}]}
 
-      assert %IR.BitstringType{segments: [%IR.BitstringSegment{size: 64}]} =
+      assert %IR.BitstringType{segments: [%IR.BitstringSegment{size: %IR.IntegerType{value: 64}}]} =
                transform(ast, %Context{})
     end
 
@@ -163,7 +163,7 @@ defmodule Hologram.Compiler.TransformerTest do
         {:<<>>, [line: 1],
          [{:"::", [line: 1], [{:xyz, [line: 1], nil}, {:integer, [line: 1], nil}]}]}
 
-      assert %IR.BitstringType{segments: [%IR.BitstringSegment{size: 8}]} =
+      assert %IR.BitstringType{segments: [%IR.BitstringSegment{size: %IR.IntegerType{value: 8}}]} =
                transform(ast, %Context{})
     end
 
@@ -173,7 +173,7 @@ defmodule Hologram.Compiler.TransformerTest do
         {:<<>>, [line: 1],
          [{:"::", [line: 1], [{:xyz, [line: 1], nil}, {:binary, [line: 1], nil}]}]}
 
-      assert %IR.BitstringType{segments: [%IR.BitstringSegment{size: nil}]} =
+      assert %IR.BitstringType{segments: [%IR.BitstringSegment{size: %IR.AtomType{value: nil}}]} =
                transform(ast, %Context{})
     end
 
@@ -183,7 +183,7 @@ defmodule Hologram.Compiler.TransformerTest do
         {:<<>>, [line: 1],
          [{:"::", [line: 1], [{:xyz, [line: 1], nil}, {:size, [line: 1], [3]}]}]}
 
-      assert %IR.BitstringType{segments: [%IR.BitstringSegment{size: 3}]} =
+      assert %IR.BitstringType{segments: [%IR.BitstringSegment{size: %IR.IntegerType{value: 3}}]} =
                transform(ast, %Context{})
     end
 
@@ -191,7 +191,7 @@ defmodule Hologram.Compiler.TransformerTest do
       # <<xyz::3>>
       ast = {:<<>>, [line: 1], [{:"::", [line: 1], [{:xyz, [line: 1], nil}, 3]}]}
 
-      assert %IR.BitstringType{segments: [%IR.BitstringSegment{size: 3}]} =
+      assert %IR.BitstringType{segments: [%IR.BitstringSegment{size: %IR.IntegerType{value: 3}}]} =
                transform(ast, %Context{})
     end
 
@@ -201,7 +201,7 @@ defmodule Hologram.Compiler.TransformerTest do
         {:<<>>, [line: 1],
          [{:"::", [line: 1], [{:xyz, [line: 1], nil}, {:*, [line: 1], [3, 5]}]}]}
 
-      assert %IR.BitstringType{segments: [%IR.BitstringSegment{size: 3}]} =
+      assert %IR.BitstringType{segments: [%IR.BitstringSegment{size: %IR.IntegerType{value: 3}}]} =
                transform(ast, %Context{})
     end
 
