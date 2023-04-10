@@ -384,6 +384,28 @@ defmodule Hologram.Compiler.TransformerTest do
       assert %IR.BitstringType{segments: [%IR.BitstringSegment{value: %IR.Variable{name: :xyz}}]} =
                transform(ast, %Context{})
     end
+
+    test "expression" do
+      # <<Map.get(my_map, :my_key)>>
+      ast =
+        {:<<>>, [line: 1],
+         [
+           {{:., [line: 1], [{:__aliases__, [line: 1], [:Map]}, :get]}, [line: 1],
+            [{:my_map, [line: 1], nil}, :my_key]}
+         ]}
+
+      %IR.BitstringType{
+        segments: [
+          %IR.BitstringSegment{
+            value: %IR.RemoteFunctionCall{
+              module: %IR.AtomType{value: Map},
+              function: :get,
+              args: [%IR.Variable{name: :my_map}, %IR.AtomType{value: :my_key}]
+            }
+          }
+        ]
+      } = transform(ast, %Context{})
+    end
   end
 
   test "cons operatoror" do
