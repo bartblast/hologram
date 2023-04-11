@@ -304,6 +304,18 @@ defmodule Hologram.Compiler.Transformer do
     %{segment | unit: 1}
   end
 
+  defp maybe_add_default_bitstring_unit_modifier(%{type: :utf8, unit: nil} = segment) do
+    %{segment | unit: 8}
+  end
+
+  defp maybe_add_default_bitstring_unit_modifier(%{type: :utf16, unit: nil} = segment) do
+    %{segment | unit: 16}
+  end
+
+  defp maybe_add_default_bitstring_unit_modifier(%{type: :utf32, unit: nil} = segment) do
+    %{segment | unit: 32}
+  end
+
   defp maybe_add_default_bitstring_unit_modifier(segment), do: segment
 
   defp transform_bitstring_modifiers({:-, _, [left, right]}, context, acc) do

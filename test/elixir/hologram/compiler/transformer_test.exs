@@ -426,6 +426,16 @@ defmodule Hologram.Compiler.TransformerTest do
                transform(ast, %Context{})
     end
 
+    test "default unit for bistring type" do
+      # <<xyz::bitstring>>
+      ast =
+        {:<<>>, [line: 1],
+         [{:"::", [line: 1], [{:xyz, [line: 1], nil}, {:bitstring, [line: 1], nil}]}]}
+
+      assert %IR.BitstringType{segments: [%IR.BitstringSegment{unit: nil}]} =
+               transform(ast, %Context{})
+    end
+
     test "default unit for float type" do
       # <<xyz::float>>
       ast =
@@ -446,13 +456,33 @@ defmodule Hologram.Compiler.TransformerTest do
                transform(ast, %Context{})
     end
 
-    test "default unit for types other than binary, float or integer" do
+    test "default unit for utf8 type" do
+      # <<xyz::utf8>>
+      ast =
+        {:<<>>, [line: 1],
+         [{:"::", [line: 1], [{:xyz, [line: 1], nil}, {:utf8, [line: 1], nil}]}]}
+
+      assert %IR.BitstringType{segments: [%IR.BitstringSegment{unit: 8}]} =
+               transform(ast, %Context{})
+    end
+
+    test "default unit for utf16 type" do
+      # <<xyz::utf16>>
+      ast =
+        {:<<>>, [line: 1],
+         [{:"::", [line: 1], [{:xyz, [line: 1], nil}, {:utf16, [line: 1], nil}]}]}
+
+      assert %IR.BitstringType{segments: [%IR.BitstringSegment{unit: 16}]} =
+               transform(ast, %Context{})
+    end
+
+    test "default unit for utf32 type" do
       # <<xyz::utf32>>
       ast =
         {:<<>>, [line: 1],
          [{:"::", [line: 1], [{:xyz, [line: 1], nil}, {:utf32, [line: 1], nil}]}]}
 
-      assert %IR.BitstringType{segments: [%IR.BitstringSegment{unit: nil}]} =
+      assert %IR.BitstringType{segments: [%IR.BitstringSegment{unit: 32}]} =
                transform(ast, %Context{})
     end
 
