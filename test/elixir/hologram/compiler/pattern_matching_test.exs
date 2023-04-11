@@ -36,7 +36,7 @@ defmodule Hologram.Compiler.PatternMatchingTest do
   }
 
   # [a | [1, 2]]
-  @ir_1 %IR.ConsOperator{
+  @cons_operator_1 %IR.ConsOperator{
     head: %IR.Variable{name: :a},
     tail: %IR.ListType{
       data: [
@@ -47,7 +47,7 @@ defmodule Hologram.Compiler.PatternMatchingTest do
   }
 
   # [1 | [2, a]]
-  @ir_2 %IR.ConsOperator{
+  @cons_operator_2 %IR.ConsOperator{
     head: %IR.IntegerType{value: 1},
     tail: %IR.ListType{
       data: [
@@ -58,7 +58,7 @@ defmodule Hologram.Compiler.PatternMatchingTest do
   }
 
   # [1 | [2 | [3, a]]]
-  @ir_3 %IR.ConsOperator{
+  @cons_operator_3 %IR.ConsOperator{
     head: %IR.IntegerType{value: 1},
     tail: %IR.ConsOperator{
       head: %IR.IntegerType{value: 2},
@@ -590,7 +590,7 @@ defmodule Hologram.Compiler.PatternMatchingTest do
     # --- CONS OPERATOR ---
 
     test "non-nested cons operator with variable in head, in pattern" do
-      assert deconstruct(@ir_1, :pattern) == [
+      assert deconstruct(@cons_operator_1, :pattern) == [
                [binding: :a, list_index: 0],
                [
                  {:pattern_value, %IR.IntegerType{value: 1}},
@@ -606,7 +606,7 @@ defmodule Hologram.Compiler.PatternMatchingTest do
     end
 
     test "non-nested cons operator with variable in head, in expression" do
-      assert deconstruct(@ir_1, :expression) == [
+      assert deconstruct(@cons_operator_1, :expression) == [
                [:expression_value, {:list_index, 0}],
                [:expression_value, {:list_index, 0}, :list_tail],
                [:expression_value, {:list_index, 1}, :list_tail]
@@ -614,7 +614,7 @@ defmodule Hologram.Compiler.PatternMatchingTest do
     end
 
     test "non-nested cons operator with variable in tail, in pattern" do
-      assert deconstruct(@ir_2, :pattern) == [
+      assert deconstruct(@cons_operator_2, :pattern) == [
                [pattern_value: %IR.IntegerType{value: 1}, list_index: 0],
                [
                  {:pattern_value, %IR.IntegerType{value: 2}},
@@ -626,7 +626,7 @@ defmodule Hologram.Compiler.PatternMatchingTest do
     end
 
     test "non-nested cons operator with variable in tail, in expression" do
-      assert deconstruct(@ir_2, :expression) == [
+      assert deconstruct(@cons_operator_2, :expression) == [
                [:expression_value, {:list_index, 0}],
                [:expression_value, {:list_index, 0}, :list_tail],
                [:expression_value, {:list_index, 1}, :list_tail]
@@ -634,7 +634,7 @@ defmodule Hologram.Compiler.PatternMatchingTest do
     end
 
     test "nested cons operator, in pattern" do
-      assert deconstruct(@ir_3, :pattern) == [
+      assert deconstruct(@cons_operator_3, :pattern) == [
                [pattern_value: %IR.IntegerType{value: 1}, list_index: 0],
                [
                  {:pattern_value, %IR.IntegerType{value: 2}},
@@ -652,7 +652,7 @@ defmodule Hologram.Compiler.PatternMatchingTest do
     end
 
     test "nested cons operator, in expression" do
-      assert deconstruct(@ir_3, :expression) == [
+      assert deconstruct(@cons_operator_3, :expression) == [
                [:expression_value, {:list_index, 0}],
                [:expression_value, {:list_index, 0}, :list_tail],
                [:expression_value, {:list_index, 0}, :list_tail, :list_tail],
