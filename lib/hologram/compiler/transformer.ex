@@ -246,17 +246,23 @@ defmodule Hologram.Compiler.Transformer do
 
   defp maybe_add_default_bitstring_endianness_modifier(segment), do: segment
 
-  defp maybe_add_default_bitstring_signedness_modifier(%{signedness: nil} = segment) do
+  defp maybe_add_default_bitstring_signedness_modifier(%{signedness: nil, type: type} = segment)
+       when type in [:float, :integer] do
     %{segment | signedness: :unsigned}
+  end
+
+  # Signed and unsigned modifiers are supported only for integer and float types
+  defp maybe_add_default_bitstring_signedness_modifier(%{signedness: nil} = segment) do
+    %{segment | signedness: :not_applicable}
   end
 
   defp maybe_add_default_bitstring_signedness_modifier(segment), do: segment
 
-  defp maybe_add_default_bitstring_size_modifier(%{type: :float, size: nil} = segment) do
+  defp maybe_add_default_bitstring_size_modifier(%{size: nil, type: :float} = segment) do
     %{segment | size: %IR.IntegerType{value: 64}}
   end
 
-  defp maybe_add_default_bitstring_size_modifier(%{type: :integer, size: nil} = segment) do
+  defp maybe_add_default_bitstring_size_modifier(%{size: nil, type: :integer} = segment) do
     %{segment | size: %IR.IntegerType{value: 8}}
   end
 

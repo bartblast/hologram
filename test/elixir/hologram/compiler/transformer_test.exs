@@ -132,11 +132,73 @@ defmodule Hologram.Compiler.TransformerTest do
 
     # --- SIGNEDNESS MODIFIER ---
 
-    test "default signedness" do
-      # <<xyz>>
-      ast = {:<<>>, [line: 1], [{:xyz, [line: 1], nil}]}
+    test "default signedness for binary type" do
+      # <<xyz::binary>>
+      ast =
+        {:<<>>, [line: 1],
+         [{:"::", [line: 1], [{:xyz, [line: 1], nil}, {:binary, [line: 1], nil}]}]}
+
+      assert %IR.BitstringType{segments: [%IR.BitstringSegment{signedness: :not_applicable}]} =
+               transform(ast, %Context{})
+    end
+
+    test "default signedness for bitstring type" do
+      # <<xyz::bitstring>>
+      ast =
+        {:<<>>, [line: 1],
+         [{:"::", [line: 1], [{:xyz, [line: 1], nil}, {:bitstring, [line: 1], nil}]}]}
+
+      assert %IR.BitstringType{segments: [%IR.BitstringSegment{signedness: :not_applicable}]} =
+               transform(ast, %Context{})
+    end
+
+    test "default signedness for float type" do
+      # <<xyz::float>>
+      ast =
+        {:<<>>, [line: 1],
+         [{:"::", [line: 1], [{:xyz, [line: 1], nil}, {:float, [line: 1], nil}]}]}
 
       assert %IR.BitstringType{segments: [%IR.BitstringSegment{signedness: :unsigned}]} =
+               transform(ast, %Context{})
+    end
+
+    test "default signedness for integer type" do
+      # <<xyz::integer>>
+      ast =
+        {:<<>>, [line: 1],
+         [{:"::", [line: 1], [{:xyz, [line: 1], nil}, {:integer, [line: 1], nil}]}]}
+
+      assert %IR.BitstringType{segments: [%IR.BitstringSegment{signedness: :unsigned}]} =
+               transform(ast, %Context{})
+    end
+
+    test "default signedness for utf8 type" do
+      # <<xyz::utf8>>
+      ast =
+        {:<<>>, [line: 1],
+         [{:"::", [line: 1], [{:xyz, [line: 1], nil}, {:utf8, [line: 1], nil}]}]}
+
+      assert %IR.BitstringType{segments: [%IR.BitstringSegment{signedness: :not_applicable}]} =
+               transform(ast, %Context{})
+    end
+
+    test "default signedness for utf16 type" do
+      # <<xyz::utf16>>
+      ast =
+        {:<<>>, [line: 1],
+         [{:"::", [line: 1], [{:xyz, [line: 1], nil}, {:utf16, [line: 1], nil}]}]}
+
+      assert %IR.BitstringType{segments: [%IR.BitstringSegment{signedness: :not_applicable}]} =
+               transform(ast, %Context{})
+    end
+
+    test "default signedness for utf32 type" do
+      # <<xyz::utf32>>
+      ast =
+        {:<<>>, [line: 1],
+         [{:"::", [line: 1], [{:xyz, [line: 1], nil}, {:utf32, [line: 1], nil}]}]}
+
+      assert %IR.BitstringType{segments: [%IR.BitstringSegment{signedness: :not_applicable}]} =
                transform(ast, %Context{})
     end
 
