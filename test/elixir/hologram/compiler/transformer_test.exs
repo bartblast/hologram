@@ -312,7 +312,7 @@ defmodule Hologram.Compiler.TransformerTest do
       # <<"abc">>
       ast = {:<<>>, [line: 1], ["abc"]}
 
-      assert %IR.BitstringType{segments: [%IR.BitstringSegment{type: :binary}]} =
+      assert %IR.BitstringType{segments: [%IR.BitstringSegment{type: :utf8}]} =
                transform(ast, %Context{})
     end
 
