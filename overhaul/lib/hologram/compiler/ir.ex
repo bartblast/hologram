@@ -1,14 +1,4 @@
 defmodule Hologram.Compiler.IR do
-  # --- OPERATORS ---
-
-  defmodule UnaryNegativeOperator do
-    defstruct value: nil
-  end
-
-  defmodule UnaryPositiveOperator do
-    defstruct value: nil
-  end
-
   # --- DATA TYPES ---
 
   defmodule AnonymousFunctionType do
@@ -28,20 +18,6 @@ defmodule Hologram.Compiler.IR do
 
   defmodule ModuleDefinition do
     defstruct module: nil, body: nil
-  end
-
-  # --- DIRECTIVES ---
-
-  defmodule AliasDirective do
-    defstruct alias_segs: nil, as: nil
-  end
-
-  defmodule ImportDirective do
-    defstruct alias_segs: nil, only: [], except: []
-  end
-
-  defmodule UseDirective do
-    defstruct alias_segs: nil, opts: []
   end
 
   # --- CONTROL FLOW ---
