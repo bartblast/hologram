@@ -245,7 +245,7 @@ defmodule Hologram.Compiler.TransformerTest do
     end
 
     test "default size for string values" do
-      # ~s(<<"foo">>) |> ast() |> IO.inspect()
+      # <<"foo">>
       ast = {:<<>>, [line: 1], ["foo"]}
 
       assert %IR.BitstringType{segments: [%IR.BitstringSegment{size: %IR.IntegerType{value: 3}}]} =
