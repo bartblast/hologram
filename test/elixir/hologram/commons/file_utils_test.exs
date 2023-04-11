@@ -1,12 +1,12 @@
 defmodule Hologram.Commons.FileUtilsTest do
   use Hologram.Test.BasicCase, async: true
-  alias Hologram.Commons.FileUtils
+  import Hologram.Commons.FileUtils
 
   describe "list_files_recursively/1" do
     @base_path "test/elixir/fixtures/commons/file_utils/list_files_recursively"
 
     test "single path" do
-      assert FileUtils.list_files_recursively(@base_path) == [
+      assert list_files_recursively(@base_path) == [
                "#{@base_path}/dir_1/dir_3/file_5.txt",
                "#{@base_path}/dir_1/dir_3/file_6.txt",
                "#{@base_path}/dir_1/file_3.txt",
@@ -24,7 +24,7 @@ defmodule Hologram.Commons.FileUtilsTest do
         "#{@base_path}/dir_2"
       ]
 
-      assert FileUtils.list_files_recursively(paths) == [
+      assert list_files_recursively(paths) == [
                "#{@base_path}/dir_1/dir_3/file_5.txt",
                "#{@base_path}/dir_1/dir_3/file_6.txt",
                "#{@base_path}/dir_1/file_3.txt",
@@ -40,7 +40,7 @@ defmodule Hologram.Commons.FileUtilsTest do
         "#{@base_path}/dir_1/dir_3"
       ]
 
-      assert FileUtils.list_files_recursively(paths) == [
+      assert list_files_recursively(paths) == [
                "#{@base_path}/dir_1/dir_3/file_5.txt",
                "#{@base_path}/dir_1/dir_3/file_6.txt",
                "#{@base_path}/dir_1/file_3.txt",
@@ -50,7 +50,7 @@ defmodule Hologram.Commons.FileUtilsTest do
 
     test "invalid path" do
       assert_raise ArgumentError, ~s(Invalid path: "my/invalid/path"), fn ->
-        FileUtils.list_files_recursively("my/invalid/path")
+        list_files_recursively("my/invalid/path")
       end
     end
   end
