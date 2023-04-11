@@ -136,6 +136,24 @@ defmodule Hologram.Compiler.PatternMatching do
   @spec deconstruct(IR.t(), nil | :pattern | :expression, list) :: list
   def deconstruct(ir, side \\ nil, path \\ [])
 
+  def deconstruct(%IR.BitstringType{segments: segments}, side, path) do
+    segments
+    |> Enum.reduce({[], []}, fn segment, {acc, offset} ->
+      details =
+        segment
+        |> Map.take([:endianness, :signedness, :size, :type, :unit])
+        |> Map.put(:offset, offset)
+
+      bitstring_segment_path = [{:bitstring_segment, details} | path]
+
+      new_acc = acc ++ deconstruct(segment.value, side, bitstring_segment_path)
+      new_offset = [{segment.size, segment.unit} | offset]
+
+      {new_acc, new_offset}
+    end)
+    |> elem(0)
+  end
+
   def deconstruct(%IR.ConsOperator{head: head, tail: tail}, side, path) do
     head_path = [{:list_index, 0} | path]
     paths_nested_in_head = deconstruct(head, side, head_path)

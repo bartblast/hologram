@@ -5,6 +5,36 @@ defmodule Hologram.Compiler.PatternMatchingTest do
   alias Hologram.Compiler.IR
   alias Hologram.Test.Fixtures.Compiler.PatternMatching.Module1
 
+  # <<1, 2.0, 3>>
+  @bitstring %IR.BitstringType{
+    segments: [
+      %IR.BitstringSegment{
+        endianness: :big,
+        signedness: :unsigned,
+        size: %IR.IntegerType{value: 8},
+        type: :integer,
+        unit: 1,
+        value: %IR.IntegerType{value: 1}
+      },
+      %IR.BitstringSegment{
+        endianness: :big,
+        signedness: :unsigned,
+        size: %IR.IntegerType{value: 64},
+        type: :float,
+        unit: 1,
+        value: %IR.FloatType{value: 2.0}
+      },
+      %IR.BitstringSegment{
+        endianness: :big,
+        signedness: :unsigned,
+        size: %IR.IntegerType{value: 8},
+        type: :integer,
+        unit: 1,
+        value: %IR.IntegerType{value: 3}
+      }
+    ]
+  }
+
   # [a | [1, 2]]
   @ir_1 %IR.ConsOperator{
     head: %IR.Variable{name: :a},
@@ -467,6 +497,93 @@ defmodule Hologram.Compiler.PatternMatchingTest do
                [:expression_value, {:tuple_index, 0}],
                [:expression_value, {:tuple_index, 0}, {:tuple_index, 1}],
                [:expression_value, {:tuple_index, 1}, {:tuple_index, 1}]
+             ]
+    end
+
+    # --- BITSTRING TYPE ---
+
+    test "bitstring in pattern" do
+      assert deconstruct(@bitstring, :pattern) == [
+               [
+                 pattern_value: %IR.IntegerType{value: 1},
+                 bitstring_segment: %{
+                   endianness: :big,
+                   offset: [],
+                   signedness: :unsigned,
+                   size: %IR.IntegerType{value: 8},
+                   type: :integer,
+                   unit: 1
+                 }
+               ],
+               [
+                 pattern_value: %IR.FloatType{value: 2.0},
+                 bitstring_segment: %{
+                   endianness: :big,
+                   offset: [{%IR.IntegerType{value: 8}, 1}],
+                   signedness: :unsigned,
+                   size: %IR.IntegerType{value: 64},
+                   type: :float,
+                   unit: 1
+                 }
+               ],
+               [
+                 pattern_value: %IR.IntegerType{value: 3},
+                 bitstring_segment: %{
+                   endianness: :big,
+                   offset: [
+                     {%IR.IntegerType{value: 64}, 1},
+                     {%IR.IntegerType{value: 8}, 1}
+                   ],
+                   signedness: :unsigned,
+                   size: %IR.IntegerType{value: 8},
+                   type: :integer,
+                   unit: 1
+                 }
+               ]
+             ]
+    end
+
+    test "bitstring in expression" do
+      assert deconstruct(@bitstring, :expression) == [
+               [
+                 :expression_value,
+                 {:bitstring_segment,
+                  %{
+                    endianness: :big,
+                    offset: [],
+                    signedness: :unsigned,
+                    size: %IR.IntegerType{value: 8},
+                    type: :integer,
+                    unit: 1
+                  }}
+               ],
+               [
+                 :expression_value,
+                 {:bitstring_segment,
+                  %{
+                    endianness: :big,
+                    offset: [{%IR.IntegerType{value: 8}, 1}],
+                    signedness: :unsigned,
+                    size: %IR.IntegerType{value: 64},
+                    type: :float,
+                    unit: 1
+                  }}
+               ],
+               [
+                 :expression_value,
+                 {:bitstring_segment,
+                  %{
+                    endianness: :big,
+                    offset: [
+                      {%IR.IntegerType{value: 64}, 1},
+                      {%IR.IntegerType{value: 8}, 1}
+                    ],
+                    signedness: :unsigned,
+                    size: %IR.IntegerType{value: 8},
+                    type: :integer,
+                    unit: 1
+                  }}
+               ]
              ]
     end
 
