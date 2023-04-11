@@ -76,6 +76,21 @@ defmodule Hologram.Compiler.TransformerTest do
                transform(ast, %Context{})
     end
 
+    test "nested bistrings are flattened" do
+      # <<333, <<444, 555, 666>>, 777>>
+      ast = {:<<>>, [line: 1], [333, {:<<>>, [line: 1], [444, 555, 666]}, 777]}
+
+      assert %IR.BitstringType{
+               segments: [
+                 %IR.BitstringSegment{value: %IR.IntegerType{value: 333}},
+                 %IR.BitstringSegment{value: %IR.IntegerType{value: 444}},
+                 %IR.BitstringSegment{value: %IR.IntegerType{value: 555}},
+                 %IR.BitstringSegment{value: %IR.IntegerType{value: 666}},
+                 %IR.BitstringSegment{value: %IR.IntegerType{value: 777}}
+               ]
+             } = transform(ast, %Context{})
+    end
+
     # --- ENDIANNESS MODIFIER ---
 
     test "default endianness" do
@@ -212,14 +227,6 @@ defmodule Hologram.Compiler.TransformerTest do
       ast = {:<<>>, [line: 1], [{:xyz, [line: 1], nil}]}
 
       assert %IR.BitstringType{segments: [%IR.BitstringSegment{type: :integer}]} =
-               transform(ast, %Context{})
-    end
-
-    test "default type for bitstring data type" do
-      # << <<1>> >>
-      ast = {:<<>>, [line: 1], [{:<<>>, [line: 1], [1]}]}
-
-      assert %IR.BitstringType{segments: [%IR.BitstringSegment{type: :bitstring}]} =
                transform(ast, %Context{})
     end
 

@@ -40,7 +40,9 @@ defmodule Hologram.Compiler.Transformer do
 
   def transform({:<<>>, _, segments}, context) do
     segments_ir =
-      Enum.map(segments, &transform_bitstring_segment(&1, context, %IR.BitstringSegment{}))
+      segments
+      |> Enum.map(&transform_bitstring_segment(&1, context, %IR.BitstringSegment{}))
+      |> flatten_bitstring_segments()
 
     %IR.BitstringType{segments: segments_ir}
   end
@@ -213,6 +215,20 @@ defmodule Hologram.Compiler.Transformer do
 
   defp build_tuple_type_ir(data, context) do
     %IR.TupleType{data: transform_list(data, context)}
+  end
+
+  defp flatten_bitstring_segments(segments) do
+    segments
+    |> Enum.reduce([], fn segment, acc ->
+      case segment do
+        %IR.BitstringSegment{value: %IR.BitstringType{segments: nested_segments}} ->
+          Enum.reverse(nested_segments) ++ acc
+
+        segment ->
+          [segment | acc]
+      end
+    end)
+    |> Enum.reverse()
   end
 
   defp maybe_add_default_bitstring_modifiers(segment) do
