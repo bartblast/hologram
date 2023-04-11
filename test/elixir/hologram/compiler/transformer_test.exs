@@ -244,7 +244,15 @@ defmodule Hologram.Compiler.TransformerTest do
                transform(ast, %Context{})
     end
 
-    test "default size for types other than float or integer" do
+    test "default size for string values" do
+      # ~s(<<"foo">>) |> ast() |> IO.inspect()
+      ast = {:<<>>, [line: 1], ["foo"]}
+
+      assert %IR.BitstringType{segments: [%IR.BitstringSegment{size: %IR.IntegerType{value: 3}}]} =
+               transform(ast, %Context{})
+    end
+
+    test "unknown size" do
       # <<xyz::binary>>
       ast =
         {:<<>>, [line: 1],

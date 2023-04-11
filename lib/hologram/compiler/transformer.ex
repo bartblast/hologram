@@ -266,6 +266,12 @@ defmodule Hologram.Compiler.Transformer do
     %{segment | size: %IR.IntegerType{value: 8}}
   end
 
+  defp maybe_add_default_bitstring_size_modifier(
+         %{size: nil, value: %IR.StringType{value: value}} = segment
+       ) do
+    %{segment | size: %IR.IntegerType{value: String.length(value)}}
+  end
+
   defp maybe_add_default_bitstring_size_modifier(%{size: nil} = segment) do
     %{segment | size: %IR.AtomType{value: nil}}
   end
