@@ -292,7 +292,7 @@ defmodule Hologram.Compiler.TransformerTest do
 
     # --- TYPE MODIFIER ---
 
-    test "default type for value of unknown data type" do
+    test "default type for variable value" do
       # <<xyz>>
       ast = {:<<>>, [line: 1], [{:xyz, [line: 1], nil}]}
 
