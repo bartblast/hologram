@@ -9,7 +9,7 @@ defimpl Renderer, for: Component do
     props = evaluate_props(component.props, outer_bindings)
     initial_state = initialize_state(component.module, props, conn)
     slots = {outer_bindings, default: component.children}
-    bindings = aggregate_bindings(props, initial_state, outer_bindings)
+    bindings = aggregate_pattern_bindings(props, initial_state, outer_bindings)
 
     {html, nested_initial_state} =
       component.module.template()
@@ -19,7 +19,7 @@ defimpl Renderer, for: Component do
     {html, state}
   end
 
-  defp aggregate_bindings(props, initial_state, outer_bindings) do
+  defp aggregate_pattern_bindings(props, initial_state, outer_bindings) do
     props
     |> Map.merge(initial_state)
     |> Map.put(:__context__, outer_bindings.__context__)

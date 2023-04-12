@@ -19,12 +19,12 @@ defmodule Hologram.Compiler.HelpersTest do
     Variable
   }
 
-  test "aggregate_bindings_from_expression/1" do
+  test "aggregate_pattern_bindings_from_expression/1" do
     result =
       "%{a: x, b: y}"
       |> ast()
       |> Transformer.transform(%Context{})
-      |> Helpers.aggregate_bindings_from_expression()
+      |> Helpers.aggregate_pattern_bindings_from_expression()
 
     expected = [
       %Binding{
@@ -48,14 +48,14 @@ defmodule Hologram.Compiler.HelpersTest do
     assert result == expected
   end
 
-  describe "aggregate_bindings_from_params/1" do
+  describe "aggregate_pattern_bindings_from_params/1" do
     test "no bindings" do
       # def test(1, 2) do
       # end
 
       params_ast = [1, 2]
       params = Helpers.transform_params(params_ast)
-      result = Helpers.aggregate_bindings_from_params(params)
+      result = Helpers.aggregate_pattern_bindings_from_params(params)
 
       assert result == []
     end
@@ -66,7 +66,7 @@ defmodule Hologram.Compiler.HelpersTest do
 
       params_ast = [1, {:%{}, [line: 2], [a: {:x, [line: 2], nil}]}]
       params = Helpers.transform_params(params_ast)
-      result = Helpers.aggregate_bindings_from_params(params)
+      result = Helpers.aggregate_pattern_bindings_from_params(params)
 
       expected = [
         %Binding{
@@ -87,7 +87,7 @@ defmodule Hologram.Compiler.HelpersTest do
 
       params_ast = [1, {:%{}, [line: 2], [a: {:x, [line: 2], nil}, b: {:y, [line: 2], nil}]}]
       params = Helpers.transform_params(params_ast)
-      result = Helpers.aggregate_bindings_from_params(params)
+      result = Helpers.aggregate_pattern_bindings_from_params(params)
 
       expected = [
         %Binding{
@@ -121,7 +121,7 @@ defmodule Hologram.Compiler.HelpersTest do
       ]
 
       params = Helpers.transform_params(params_ast)
-      result = Helpers.aggregate_bindings_from_params(params)
+      result = Helpers.aggregate_pattern_bindings_from_params(params)
 
       expected = [
         %Binding{
@@ -163,7 +163,7 @@ defmodule Hologram.Compiler.HelpersTest do
 
       params_ast = [{:y, [line: 2], nil}, {:x, [line: 2], nil}]
       params = Helpers.transform_params(params_ast)
-      result = Helpers.aggregate_bindings_from_params(params)
+      result = Helpers.aggregate_pattern_bindings_from_params(params)
 
       expected = [
         %Binding{

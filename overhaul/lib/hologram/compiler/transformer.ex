@@ -23,7 +23,7 @@ defmodule Hologram.Compiler.Transformer do
   transform({:fn, _, [{:->, _, [params, body]}]}) do
     params = transform_list(params)
     arity = Enum.count(params)
-    bindings = Helpers.aggregate_bindings_from_params(params)
+    bindings = Helpers.aggregate_pattern_bindings_from_params(params)
     body = transform(body)
 
     %IR.AnonymousFunctionType{arity: arity, params: params, bindings: bindings, body: body}
@@ -34,7 +34,7 @@ defmodule Hologram.Compiler.Transformer do
   transform _({marker, _, [{name, _, params}, [do: body]]}) when marker in [:def, :defp] do
     params = transform_list(params)
     arity = Enum.count(params)
-    bindings = Helpers.aggregate_bindings_from_params(params)
+    bindings = Helpers.aggregate_pattern_bindings_from_params(params)
     body = transform(body)
     visibility = if marker == :def, do: :public, else: :private
 
@@ -193,7 +193,7 @@ defmodule Hologram.Compiler.Transformer do
     body = transform(body)
 
     bindings =
-      Helpers.aggregate_bindings_from_expression(pattern)
+      Helpers.aggregate_pattern_bindings_from_expression(pattern)
       |> Enum.map(&prepend_case_condition_access/1)
 
     %{

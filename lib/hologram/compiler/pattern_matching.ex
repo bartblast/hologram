@@ -2,19 +2,19 @@ defmodule Hologram.Compiler.PatternMatching do
   alias Hologram.Compiler.IR
 
   @doc """
-  Given reversed access paths from a deconstructed pattern match, it extracts bindings info.
+  Given reversed access paths from a deconstructed pattern match, it extracts pattern bindings access paths.
 
   ## Examples
 
       iex> reversed_access_paths = [
-      ...>   [binding: :a, tuple_index: 0, list_index: 0],
+      ...>   [pattern_binding: :a, tuple_index: 0, list_index: 0],
       ...>   [
-      ...>     pattern_value: %IR.IntegerType{value: 1},
+      ...>     pattern_literal: %IR.IntegerType{value: 1},
       ...>     tuple_index: 1,
       ...>     list_index: 0
       ...>   ],
       ...>   [
-      ...>     binding: :b,
+      ...>     pattern_binding: :b,
       ...>     map_key: %IR.AtomType{value: :b},
       ...>     tuple_index: 2,
       ...>     list_index: 0
@@ -26,19 +26,19 @@ defmodule Hologram.Compiler.PatternMatching do
       ...>     {:list_index, 0}
       ...>   ],
       ...>   [
-      ...>     pattern_value: %IR.IntegerType{value: 2},
+      ...>     pattern_literal: %IR.IntegerType{value: 2},
       ...>     map_key: %IR.AtomType{value: :d},
       ...>     tuple_index: 2,
       ...>     list_index: 0
       ...>   ],
-      ...>   [binding: :b, tuple_index: 3, list_index: 0],
+      ...>   [pattern_binding: :b, tuple_index: 3, list_index: 0],
       ...>   [:match_placeholder, {:list_index, 0}, :list_tail],
-      ...>   [{:binding, :f}, {:list_index, 1}, :list_tail],
-      ...>   [:expression_value, {:list_index, 0}],
-      ...>   [:expression_value, {:list_index, 1}],
-      ...>   [:expression_value, {:list_index, 2}]
+      ...>   [{:pattern_binding, :f}, {:list_index, 1}, :list_tail],
+      ...>   [:expression, {:list_index, 0}],
+      ...>   [:expression, {:list_index, 1}],
+      ...>   [:expression, {:list_index, 2}]
       ...> ]
-      iex> aggregate_bindings(reversed_access_paths)
+      iex> aggregate_pattern_bindings(reversed_access_paths)
       %{
         a: [[list_index: 0, tuple_index: 0]],
         b: [
@@ -48,32 +48,34 @@ defmodule Hologram.Compiler.PatternMatching do
         f: [[:list_tail, {:list_index, 1}]]
       }
   """
-  @spec aggregate_bindings(list) :: %{atom => list}
-  def aggregate_bindings(reversed_access_paths) do
+  @spec aggregate_pattern_bindings(list) :: %{atom => list}
+  def aggregate_pattern_bindings(reversed_access_paths) do
     reversed_access_paths
-    |> Enum.filter(&match?([{:binding, _} | _], &1))
-    |> Enum.group_by(fn [{:binding, name} | _] -> name end)
+    |> Enum.filter(&match?([{:pattern_binding, _} | _], &1))
+    |> Enum.group_by(fn [{:pattern_binding, name} | _] -> name end)
     |> Enum.map(fn {name, binding_reversed_access_paths} ->
       {name,
-       Enum.map(binding_reversed_access_paths, fn [{:binding, _} | tail] -> Enum.reverse(tail) end)}
+       Enum.map(binding_reversed_access_paths, fn [{:pattern_binding, _} | tail] ->
+         Enum.reverse(tail)
+       end)}
     end)
     |> Enum.into(%{})
   end
 
   @doc """
-  Given reversed access paths from a deconstructed pattern match, it extracts pattern values.
+  Given reversed access paths from a deconstructed pattern match, it extracts pattern literals access paths.
 
   ## Examples
 
       iex> reversed_access_paths = [
-      ...>   [binding: :a, tuple_index: 0, list_index: 0],
+      ...>   [pattern_binding: :a, tuple_index: 0, list_index: 0],
       ...>   [
-      ...>     pattern_value: %IR.IntegerType{value: 1},
+      ...>     pattern_literal: %IR.IntegerType{value: 1},
       ...>     tuple_index: 1,
       ...>     list_index: 0
       ...>   ],
       ...>   [
-      ...>     binding: :b,
+      ...>     pattern_binding: :b,
       ...>     map_key: %IR.AtomType{value: :b},
       ...>     tuple_index: 2,
       ...>     list_index: 0
@@ -85,19 +87,19 @@ defmodule Hologram.Compiler.PatternMatching do
       ...>     {:list_index, 0}
       ...>   ],
       ...>   [
-      ...>     pattern_value: %IR.IntegerType{value: 2},
+      ...>     pattern_literal: %IR.IntegerType{value: 2},
       ...>     map_key: %IR.AtomType{value: :d},
       ...>     tuple_index: 2,
       ...>     list_index: 0
       ...>   ],
-      ...>   [binding: :b, tuple_index: 3, list_index: 0],
+      ...>   [pattern_binding: :b, tuple_index: 3, list_index: 0],
       ...>   [:match_placeholder, {:list_index, 0}, :list_tail],
-      ...>   [{:binding, :f}, {:list_index, 1}, :list_tail],
-      ...>   [:expression_value, {:list_index, 0}],
-      ...>   [:expression_value, {:list_index, 1}],
-      ...>   [:expression_value, {:list_index, 2}]
+      ...>   [{:pattern_binding, :f}, {:list_index, 1}, :list_tail],
+      ...>   [:expression, {:list_index, 0}],
+      ...>   [:expression, {:list_index, 1}],
+      ...>   [:expression, {:list_index, 2}]
       ...> ]
-      iex> aggregate_pattern_values(reversed_access_paths)
+      iex> aggregate_pattern_literals(reversed_access_paths)
       [
         [{:list_index, 0}, {:tuple_index, 1}, %IR.IntegerType{value: 1}],
         [
@@ -108,17 +110,17 @@ defmodule Hologram.Compiler.PatternMatching do
         ]
       ]
   """
-  @spec aggregate_pattern_values(list) :: list
-  def aggregate_pattern_values(reversed_access_paths) do
+  @spec aggregate_pattern_literals(list) :: list
+  def aggregate_pattern_literals(reversed_access_paths) do
     reversed_access_paths
-    |> Enum.filter(&match?([{:pattern_value, _} | _], &1))
-    |> Enum.map(fn [{:pattern_value, value} | tail] ->
+    |> Enum.filter(&match?([{:pattern_literal, _} | _], &1))
+    |> Enum.map(fn [{:pattern_literal, value} | tail] ->
       Enum.reverse([value | tail])
     end)
   end
 
   @doc """
-  Deconstructs a pattern match into binding and literal value access paths.
+  Deconstructs a pattern match into pattern bindings, pattern literals and expressions access paths.
   An access path specifies how a given element can be accessed in a nested data structure.
   The nodes in access paths are reversed, i.e. the first node is the deepest one.
 
@@ -127,10 +129,10 @@ defmodule Hologram.Compiler.PatternMatching do
       iex> ir = IR.for_code("{1, b} = {a, 2}")
       iex> deconstruct(ir)
       [
-        [pattern_value: %IR.IntegerType{value: 1}, tuple_index: 0],
-        [binding: :b, tuple_index: 1],
-        [:expression_value, {:tuple_index, 0}],
-        [:expression_value, {:tuple_index, 1}]
+        [pattern_literal: %IR.IntegerType{value: 1}, tuple_index: 0],
+        [pattern_binding: :b, tuple_index: 1],
+        [:expression, {:tuple_index, 0}],
+        [:expression, {:tuple_index, 1}]
       ]
   """
   @spec deconstruct(IR.t(), nil | :pattern | :expression, list) :: list
@@ -212,14 +214,14 @@ defmodule Hologram.Compiler.PatternMatching do
   end
 
   def deconstruct(%IR.Variable{name: name}, :pattern, path) do
-    [[{:binding, name} | path]]
+    [[{:pattern_binding, name} | path]]
   end
 
   def deconstruct(ir, :pattern, path) do
-    [[{:pattern_value, ir} | path]]
+    [[{:pattern_literal, ir} | path]]
   end
 
   def deconstruct(_ir, :expression, path) do
-    [[:expression_value | path]]
+    [[:expression | path]]
   end
 end

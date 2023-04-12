@@ -5,7 +5,7 @@ defmodule Hologram.Compiler.Helpers do
   alias Hologram.Typespecs, as: T
   alias Hologram.Utils
 
-  def aggregate_bindings_from_expression(expr) do
+  def aggregate_pattern_bindings_from_expression(expr) do
     PatternDeconstructor.deconstruct(expr)
     |> Enum.reduce([], fn binding, acc ->
       name = List.last(binding).name
@@ -17,10 +17,10 @@ defmodule Hologram.Compiler.Helpers do
     end)
   end
 
-  def aggregate_bindings_from_params(params) do
+  def aggregate_pattern_bindings_from_params(params) do
     params
     |> Enum.with_index()
-    |> Enum.reduce([], &aggregate_bindings_from_param/2)
+    |> Enum.reduce([], &aggregate_pattern_bindings_from_param/2)
     |> Enum.sort()
     |> Enum.map(fn {name, {index, path}} ->
       %Binding{name: name, access_path: build_param_binding_access_path(path, index)}
@@ -38,7 +38,7 @@ defmodule Hologram.Compiler.Helpers do
     [%ParamAccess{index: param_index} | build_binding_access_path(pattern_path)]
   end
 
-  defp aggregate_bindings_from_param({param, idx}, acc) do
+  defp aggregate_pattern_bindings_from_param({param, idx}, acc) do
     PatternDeconstructor.deconstruct(param)
     |> Enum.reduce(acc, fn binding, acc ->
       name = List.last(binding).name
