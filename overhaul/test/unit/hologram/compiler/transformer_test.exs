@@ -484,21 +484,6 @@ defmodule Hologram.Compiler.TransformerTest do
 
   # --- CONTROL FLOW ---
 
-  test "block" do
-    # do
-    #   1
-    #   2
-    # end
-    ast = {:__block__, [], [1, 2]}
-
-    assert transform(ast) == %IR.Block{
-             expressions: [
-               %IR.IntegerType{value: 1},
-               %IR.IntegerType{value: 2}
-             ]
-           }
-  end
-
   describe "case expression" do
     test "single clause with single expression body" do
       # case x do

@@ -18,17 +18,6 @@ defmodule Hologram.Compiler.Transformer do
     }
   end
 
-  # --- DATA TYPES ---
-
-  transform({:fn, _, [{:->, _, [params, body]}]}) do
-    params = transform_list(params)
-    arity = Enum.count(params)
-    bindings = Helpers.aggregate_pattern_bindings_from_params(params)
-    body = transform(body)
-
-    %IR.AnonymousFunctionType{arity: arity, params: params, bindings: bindings, body: body}
-  end
-
   # --- DEFINITIONS ---
 
   transform _({marker, _, [{name, _, params}, [do: body]]}) when marker in [:def, :defp] do
@@ -112,11 +101,6 @@ defmodule Hologram.Compiler.Transformer do
   end
 
   # --- CONTROL FLOW ---
-
-  transform({:__block__, _, ast}) do
-    ir = Enum.map(ast, &transform/1)
-    %IR.Block{expressions: ir}
-  end
 
   transform({:case, _, [condition, [do: clauses]]}) do
     %IR.CaseExpression{

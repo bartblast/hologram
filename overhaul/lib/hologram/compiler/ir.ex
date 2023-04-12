@@ -1,10 +1,4 @@
 defmodule Hologram.Compiler.IR do
-  # --- DATA TYPES ---
-
-  defmodule AnonymousFunctionType do
-    defstruct arity: nil, params: [], bindings: [], body: nil
-  end
-
   # --- DEFINITIONS ---
 
   defmodule FunctionDefinition do
@@ -21,10 +15,6 @@ defmodule Hologram.Compiler.IR do
   end
 
   # --- CONTROL FLOW ---
-
-  defmodule Block do
-    defstruct expressions: []
-  end
 
   defmodule CaseExpression do
     defstruct condition: nil, clauses: []

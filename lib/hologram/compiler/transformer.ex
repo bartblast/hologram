@@ -47,6 +47,11 @@ defmodule Hologram.Compiler.Transformer do
     %IR.BitstringType{segments: segments_ir}
   end
 
+  def transform({:__block__, _, ast}, context) do
+    exprs = Enum.map(ast, &transform(&1, context))
+    %IR.Block{expressions: exprs}
+  end
+
   def transform([{:|, _, [head, tail]}], context) do
     %IR.ConsOperator{
       head: transform(head, context),

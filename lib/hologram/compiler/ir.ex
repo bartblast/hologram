@@ -9,6 +9,7 @@ defmodule Hologram.Compiler.IR do
           | IR.AtomType.t()
           | IR.BitstringSegment.t()
           | IR.BitstringType.t()
+          | IR.Block.t()
           | IR.ConsOperator.t()
           | IR.DotOperator.t()
           | IR.FloatType.t()
@@ -54,6 +55,12 @@ defmodule Hologram.Compiler.IR do
     defstruct [:segments]
 
     @type t :: %__MODULE__{segments: list(IR.BitstringSegment.t())}
+  end
+
+  defmodule Block do
+    defstruct expressions: []
+
+    @type t :: %__MODULE__{expressions: list(IR.t())}
   end
 
   defmodule ConsOperator do

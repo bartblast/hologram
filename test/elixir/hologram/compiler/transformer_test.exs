@@ -555,6 +555,19 @@ defmodule Hologram.Compiler.TransformerTest do
     end
   end
 
+  test "block" do
+    #  1
+    #  2
+    ast = {:__block__, [], [1, 2]}
+
+    assert transform(ast, %Context{}) == %IR.Block{
+             expressions: [
+               %IR.IntegerType{value: 1},
+               %IR.IntegerType{value: 2}
+             ]
+           }
+  end
+
   test "cons operatoror" do
     # [h | t]
     ast = [{:|, [line: 1], [{:h, [line: 1], nil}, {:t, [line: 1], nil}]}]
