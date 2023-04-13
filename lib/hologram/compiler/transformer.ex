@@ -92,6 +92,24 @@ defmodule Hologram.Compiler.Transformer do
     %IR.FloatType{value: ast}
   end
 
+  def transform({marker, _, [{name, _, params}, [do: body]]}, context)
+      when marker in [:def, :defp] do
+    params =
+      params
+      |> List.wrap()
+      |> transform_list(context)
+
+    visibility = if marker == :def, do: :public, else: :private
+
+    %IR.FunctionDefinition{
+      name: name,
+      arity: Enum.count(params),
+      params: params,
+      body: transform(body, context),
+      visibility: visibility
+    }
+  end
+
   def transform(ast, _context) when is_integer(ast) do
     %IR.IntegerType{value: ast}
   end

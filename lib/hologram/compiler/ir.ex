@@ -91,6 +91,14 @@ defmodule Hologram.Compiler.IR do
     @type t :: %__MODULE__{value: float}
   end
 
+  defmodule FunctionDefinition do
+    defstruct name: nil,
+              arity: nil,
+              params: nil,
+              body: nil,
+              visibility: nil
+  end
+
   defmodule IntegerType do
     defstruct [:value]
 

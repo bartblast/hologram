@@ -710,6 +710,98 @@ defmodule Hologram.Compiler.TransformerTest do
     assert transform(ast, %Context{}) == %IR.FloatType{value: 1.0}
   end
 
+  describe "function definition" do
+    test "name" do
+      # def my_fun do
+      # end
+      ast = {:def, [line: 1], [{:my_fun, [line: 1], nil}, [do: {:__block__, [], []}]]}
+
+      assert %IR.FunctionDefinition{name: :my_fun} = transform(ast, %Context{})
+    end
+
+    test "no params" do
+      # def my_fun do
+      # end
+      ast = {:def, [line: 1], [{:my_fun, [line: 1], nil}, [do: {:__block__, [], []}]]}
+
+      assert %IR.FunctionDefinition{arity: 0, params: []} = transform(ast, %Context{})
+    end
+
+    test "single param" do
+      # def my_fun(x) do
+      # end
+      ast =
+        {:def, [line: 1],
+         [{:my_fun, [line: 1], [{:x, [line: 1], nil}]}, [do: {:__block__, [], []}]]}
+
+      %IR.FunctionDefinition{arity: 1, params: [%IR.Variable{name: :x}]} =
+        transform(ast, %Context{})
+    end
+
+    test "multiple params" do
+      # def my_fun(x, y) do
+      # end
+      ast =
+        {:def, [line: 1],
+         [
+           {:my_fun, [line: 1], [{:x, [line: 1], nil}, {:y, [line: 1], nil}]},
+           [do: {:__block__, [], []}]
+         ]}
+
+      %IR.FunctionDefinition{arity: 2, params: [%IR.Variable{name: :x}, %IR.Variable{name: :y}]} =
+        transform(ast, %Context{})
+    end
+
+    test "empty body" do
+      # def my_fun do
+      # end
+      ast = {:def, [line: 1], [{:my_fun, [line: 1], nil}, [do: {:__block__, [], []}]]}
+
+      assert %IR.FunctionDefinition{body: %IR.Block{expressions: []}} = transform(ast, %Context{})
+    end
+
+    test "single expression body" do
+      # def my_fun do
+      #   :expr_1
+      # end
+      ast = {:def, [line: 1], [{:my_fun, [line: 1], nil}, [do: {:__block__, [], [:expr_1]}]]}
+
+      assert %IR.FunctionDefinition{body: %IR.Block{expressions: [%IR.AtomType{value: :expr_1}]}} =
+               transform(ast, %Context{})
+    end
+
+    test "multiple expressions body" do
+      # def my_fun do
+      #   :expr_1
+      #   :expr_2
+      # end
+      ast =
+        {:def, [line: 1], [{:my_fun, [line: 1], nil}, [do: {:__block__, [], [:expr_1, :expr_2]}]]}
+
+      assert %IR.FunctionDefinition{
+               body: %IR.Block{
+                 expressions: [%IR.AtomType{value: :expr_1}, %IR.AtomType{value: :expr_2}]
+               }
+             } = transform(ast, %Context{})
+    end
+
+    test "public visibility" do
+      # def my_fun do
+      # end
+      ast = {:def, [line: 1], [{:my_fun, [line: 1], nil}, [do: {:__block__, [], []}]]}
+
+      assert %IR.FunctionDefinition{visibility: :public} = transform(ast, %Context{})
+    end
+
+    test "private visibility" do
+      # defp my_fun do
+      # end
+      ast = {:defp, [line: 2], [{:my_fun, [line: 2], nil}, [do: {:__block__, [], []}]]}
+
+      assert %IR.FunctionDefinition{visibility: :private} = transform(ast, %Context{})
+    end
+  end
+
   test "integer type" do
     # 1
     ast = 1
