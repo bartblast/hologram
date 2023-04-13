@@ -37,10 +37,14 @@ defmodule Hologram.Compiler.IR do
 
   defmodule AnonymousFunctionClause do
     defstruct [:params, :body]
+
+    @type t :: %__MODULE__{params: list(IR.t()), body: IR.Block.t()}
   end
 
   defmodule AnonymousFunctionType do
     defstruct [:arity, :clauses]
+
+    @type t :: %__MODULE__{arity: integer, clauses: list(IR.AnonymousFunctionClause.t())}
   end
 
   defmodule AtomType do
@@ -98,6 +102,14 @@ defmodule Hologram.Compiler.IR do
               params: nil,
               body: nil,
               visibility: nil
+
+    @type t :: %__MODULE__{
+            name: atom,
+            arity: integer,
+            params: list(IR.t()),
+            body: IR.Block.t(),
+            visibility: :public | :private
+          }
   end
 
   defmodule IntegerType do
