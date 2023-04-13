@@ -15,6 +15,7 @@ defmodule Hologram.Compiler.IR do
           | IR.ConsOperator.t()
           | IR.DotOperator.t()
           | IR.FloatType.t()
+          | IR.FunctionDefinition.t()
           | IR.IntegerType.t()
           | IR.ListType.t()
           | IR.LocalFunctionCall.t()
