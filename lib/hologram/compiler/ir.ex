@@ -6,6 +6,8 @@ defmodule Hologram.Compiler.IR do
 
   @type t ::
           IR.AnonymousFunctionCall.t()
+          | IR.AnonymousFunctionClause.t()
+          | IR.AnonymousFunctionType.t()
           | IR.AtomType.t()
           | IR.BitstringSegment.t()
           | IR.BitstringType.t()
@@ -30,6 +32,14 @@ defmodule Hologram.Compiler.IR do
     defstruct [:function, :args]
 
     @type t :: %__MODULE__{function: IR.t(), args: list(IR.t())}
+  end
+
+  defmodule AnonymousFunctionClause do
+    defstruct [:params, :body]
+  end
+
+  defmodule AnonymousFunctionType do
+    defstruct [:arity, :clauses]
   end
 
   defmodule AtomType do

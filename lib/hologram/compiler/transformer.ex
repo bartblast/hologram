@@ -34,6 +34,27 @@ defmodule Hologram.Compiler.Transformer do
     }
   end
 
+  def transform({:fn, _, clauses}, context) do
+    clauses_ir =
+      Enum.map(clauses, fn {:->, _, [params, body]} ->
+        %IR.AnonymousFunctionClause{
+          params: transform_list(params, context),
+          body: transform(body, context)
+        }
+      end)
+
+    arity =
+      clauses_ir
+      |> hd()
+      |> Map.get(:params)
+      |> Enum.count()
+
+    %IR.AnonymousFunctionType{
+      arity: arity,
+      clauses: clauses_ir
+    }
+  end
+
   def transform(ast, _context) when is_atom(ast) do
     %IR.AtomType{value: ast}
   end

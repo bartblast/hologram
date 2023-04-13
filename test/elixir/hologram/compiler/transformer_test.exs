@@ -30,6 +30,129 @@ defmodule Hologram.Compiler.TransformerTest do
     end
   end
 
+  describe "anonymous function type" do
+    test "single clause, no params, single expression body" do
+      # fn -> :expr_1 end
+      ast = {:fn, [line: 1], [{:->, [line: 1], [[], {:__block__, [], [:expr_1]}]}]}
+
+      assert transform(ast, %Context{}) == %IR.AnonymousFunctionType{
+               arity: 0,
+               clauses: [
+                 %IR.AnonymousFunctionClause{
+                   params: [],
+                   body: %IR.Block{
+                     expressions: [%IR.AtomType{value: :expr_1}]
+                   }
+                 }
+               ]
+             }
+    end
+
+    test "single param" do
+      # fn x -> :expr_1 end
+      ast =
+        {:fn, [line: 1],
+         [{:->, [line: 1], [[{:x, [line: 1], nil}], {:__block__, [], [:expr_1]}]}]}
+
+      assert transform(ast, %Context{}) == %IR.AnonymousFunctionType{
+               arity: 1,
+               clauses: [
+                 %IR.AnonymousFunctionClause{
+                   params: [%IR.Variable{name: :x}],
+                   body: %IR.Block{
+                     expressions: [%IR.AtomType{value: :expr_1}]
+                   }
+                 }
+               ]
+             }
+    end
+
+    test "multiple params" do
+      # fn x, y -> :expr_1 end
+      ast =
+        {:fn, [line: 1],
+         [
+           {:->, [line: 1],
+            [[{:x, [line: 1], nil}, {:y, [line: 1], nil}], {:__block__, [], [:expr_1]}]}
+         ]}
+
+      assert transform(ast, %Context{}) == %IR.AnonymousFunctionType{
+               arity: 2,
+               clauses: [
+                 %IR.AnonymousFunctionClause{
+                   params: [
+                     %IR.Variable{name: :x},
+                     %IR.Variable{name: :y}
+                   ],
+                   body: %IR.Block{
+                     expressions: [%IR.AtomType{value: :expr_1}]
+                   }
+                 }
+               ]
+             }
+    end
+
+    test "multiple expressions body" do
+      # fn x ->
+      #   :expr_1
+      #   :expr_2
+      # end
+      ast =
+        {:fn, [line: 1],
+         [
+           {:->, [line: 1], [[{:x, [line: 1], nil}], {:__block__, [], [:expr_1, :expr_2]}]}
+         ]}
+
+      assert transform(ast, %Context{}) == %IR.AnonymousFunctionType{
+               arity: 1,
+               clauses: [
+                 %IR.AnonymousFunctionClause{
+                   params: [%IR.Variable{name: :x}],
+                   body: %IR.Block{
+                     expressions: [
+                       %IR.AtomType{value: :expr_1},
+                       %IR.AtomType{value: :expr_2}
+                     ]
+                   }
+                 }
+               ]
+             }
+    end
+
+    test "multiple clauses" do
+      # fn
+      #   x ->
+      #     :expr_1
+      #   y ->
+      #     :expr_2
+      # end
+      ast =
+        {:fn, [line: 1],
+         [
+           {:->, [line: 2], [[{:x, [line: 2], nil}], {:__block__, [], [:expr_1]}]},
+           {:->, [line: 4], [[{:y, [line: 4], nil}], {:__block__, [], [:expr_2]}]}
+         ]}
+
+      assert transform(ast, %Context{}) == %IR.AnonymousFunctionType{
+               arity: 1,
+               clauses: [
+                 %IR.AnonymousFunctionClause{
+                   params: [%IR.Variable{name: :x}],
+                   body: %IR.Block{
+                     expressions: [%IR.AtomType{value: :expr_1}]
+                   }
+                 },
+                 %IR.AnonymousFunctionClause{
+                   params: [%IR.Variable{name: :y}],
+                   body: %IR.Block{
+                     expressions: [%IR.AtomType{value: :expr_2}]
+                   }
+                 }
+               ]
+             }
+    end
+  end
+
   describe "atom type" do
     test "boolean" do
       # true
