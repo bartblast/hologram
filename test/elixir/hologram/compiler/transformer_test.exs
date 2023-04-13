@@ -54,17 +54,14 @@ defmodule Hologram.Compiler.TransformerTest do
         {:fn, [line: 1],
          [{:->, [line: 1], [[{:x, [line: 1], nil}], {:__block__, [], [:expr_1]}]}]}
 
-      assert transform(ast, %Context{}) == %IR.AnonymousFunctionType{
+      assert %IR.AnonymousFunctionType{
                arity: 1,
                clauses: [
                  %IR.AnonymousFunctionClause{
-                   params: [%IR.Variable{name: :x}],
-                   body: %IR.Block{
-                     expressions: [%IR.AtomType{value: :expr_1}]
-                   }
+                   params: [%IR.Variable{name: :x}]
                  }
                ]
-             }
+             } = transform(ast, %Context{})
     end
 
     test "multiple params" do
@@ -76,20 +73,17 @@ defmodule Hologram.Compiler.TransformerTest do
             [[{:x, [line: 1], nil}, {:y, [line: 1], nil}], {:__block__, [], [:expr_1]}]}
          ]}
 
-      assert transform(ast, %Context{}) == %IR.AnonymousFunctionType{
+      assert %IR.AnonymousFunctionType{
                arity: 2,
                clauses: [
                  %IR.AnonymousFunctionClause{
                    params: [
                      %IR.Variable{name: :x},
                      %IR.Variable{name: :y}
-                   ],
-                   body: %IR.Block{
-                     expressions: [%IR.AtomType{value: :expr_1}]
-                   }
+                   ]
                  }
                ]
-             }
+             } = transform(ast, %Context{})
     end
 
     test "multiple expressions body" do
@@ -103,11 +97,9 @@ defmodule Hologram.Compiler.TransformerTest do
            {:->, [line: 1], [[{:x, [line: 1], nil}], {:__block__, [], [:expr_1, :expr_2]}]}
          ]}
 
-      assert transform(ast, %Context{}) == %IR.AnonymousFunctionType{
-               arity: 1,
+      assert %IR.AnonymousFunctionType{
                clauses: [
                  %IR.AnonymousFunctionClause{
-                   params: [%IR.Variable{name: :x}],
                    body: %IR.Block{
                      expressions: [
                        %IR.AtomType{value: :expr_1},
@@ -116,7 +108,7 @@ defmodule Hologram.Compiler.TransformerTest do
                    }
                  }
                ]
-             }
+             } = transform(ast, %Context{})
     end
 
     test "multiple clauses" do
