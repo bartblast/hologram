@@ -734,8 +734,8 @@ defmodule Hologram.Compiler.TransformerTest do
         {:def, [line: 1],
          [{:my_fun, [line: 1], [{:x, [line: 1], nil}]}, [do: {:__block__, [], []}]]}
 
-      %IR.FunctionDefinition{arity: 1, params: [%IR.Variable{name: :x}]} =
-        transform(ast, %Context{})
+      assert %IR.FunctionDefinition{arity: 1, params: [%IR.Variable{name: :x}]} =
+               transform(ast, %Context{})
     end
 
     test "multiple params" do
@@ -748,8 +748,10 @@ defmodule Hologram.Compiler.TransformerTest do
            [do: {:__block__, [], []}]
          ]}
 
-      %IR.FunctionDefinition{arity: 2, params: [%IR.Variable{name: :x}, %IR.Variable{name: :y}]} =
-        transform(ast, %Context{})
+      assert %IR.FunctionDefinition{
+               arity: 2,
+               params: [%IR.Variable{name: :x}, %IR.Variable{name: :y}]
+             } = transform(ast, %Context{})
     end
 
     test "empty body" do
