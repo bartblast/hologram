@@ -4,74 +4,8 @@ defmodule Hologram.Compiler.Transformer do
   alias Hologram.Compiler.Helpers
   alias Hologram.Compiler.Reflection
 
-  # --- OPERATORS ---
-
-  transform({:-, _, [value]}) do
-    %IR.UnaryNegativeOperator{
-      value: transform(value)
-    }
-  end
-
-  transform({:+, _, [value]}) do
-    %IR.UnaryPositiveOperator{
-      value: transform(value)
-    }
-  end
-
-  # --- DIRECTIVES ---
-
-  transform({:alias, _, [{{_, _, [{_, _, alias_segs}, _]}, _, aliases}, _]}) do
-    build_alias_directive_irs(alias_segs, aliases)
-  end
-
-  transform({:alias, _, [{{_, _, [{_, _, alias_segs}, _]}, _, aliases}]}) do
-    build_alias_directive_irs(alias_segs, aliases)
-  end
-
-  transform({:alias, _, [{_, _, alias_segs}]}) do
-    %IR.AliasDirective{alias_segs: alias_segs, as: List.last(alias_segs)}
-  end
-
-  transform({:alias, _, [{_, _, alias_segs}, opts]}) do
-    as =
-      if Keyword.has_key?(opts, :as) do
-        {:__aliases__, _, [alias_seg | _]} = opts[:as]
-        alias_seg
-      else
-        List.last(alias_segs)
-      end
-
-    %IR.AliasDirective{alias_segs: alias_segs, as: as}
-  end
-
-  transform({:import, _, [{:__aliases__, _, alias_segs}, opts]}) do
-    only = if opts[:only], do: opts[:only], else: []
-    except = if opts[:except], do: opts[:except], else: []
-
-    build_import_directive_ir(alias_segs, only, except)
-  end
-
-  transform({:import, _, [{:__aliases__, _, alias_segs}]}) do
-    build_import_directive_ir(alias_segs, [], [])
-  end
-
   transform({:defmacro, _, _}) do
     %IR.IgnoredExpression{type: :public_macro_definition}
-  end
-
-  transform({:require, _, _}) do
-    %IR.IgnoredExpression{type: :require_directive}
-  end
-
-  transform({:use, _, [{_, _, alias_segs}]}) do
-    %IR.UseDirective{alias_segs: alias_segs, opts: []}
-  end
-
-  transform({:use, _, [{_, _, alias_segs}, opts]}) do
-    %IR.UseDirective{
-      alias_segs: alias_segs,
-      opts: transform(opts)
-    }
   end
 
   # --- CONTROL FLOW ---
@@ -93,58 +27,7 @@ defmodule Hologram.Compiler.Transformer do
     |> transform()
   end
 
-  transform _({{:., _, [module, function]}, _, args}) when is_atom(module) do
-    args = transform_list(args)
-
-    if Reflection.is_alias?(module) do
-      segments = Helpers.alias_segments(module)
-
-      %IR.Call{
-        module: %IR.Alias{segments: segments},
-        function: function,
-        args: args
-      }
-    else
-      %IR.FunctionCall{
-        module: module,
-        function: function,
-        args: args,
-        erlang: true
-      }
-    end
-  end
-
-  transform({:if, _, [condition, [do: do_block, else: else_block]]}) do
-    %IR.IfExpression{
-      condition: transform(condition),
-      do: transform(do_block),
-      else: transform(else_block)
-    }
-  end
-
-  # preserve order:
-
-  transform _({function, [context: _, imports: [{_arity, module}]], args})
-            when is_atom(function) and is_list(args) do
-    segments = Helpers.alias_segments(module)
-    module_ir = %IR.ModuleType{module: module, segments: segments}
-    build_call_ir(module_ir, function, args)
-  end
-
-  transform _({function, [context: _, imports: [{_arity, called_module}]], calling_module})
-            when is_atom(function) and not is_list(calling_module) do
-    segments = Helpers.alias_segments(called_module)
-    module_ir = %IR.ModuleType{module: called_module, segments: segments}
-    build_call_ir(module_ir, function, [])
-  end
-
   # --- HELPERS ---
-
-  defp build_alias_directive_irs(alias_segs, aliases) do
-    Enum.map(aliases, fn {:__aliases__, _, [as]} ->
-      %IR.AliasDirective{alias_segs: alias_segs ++ [as], as: as}
-    end)
-  end
 
   defp build_case_clause_ir({:->, _, [[pattern], body]}) do
     pattern = transform(pattern)
@@ -159,10 +42,6 @@ defmodule Hologram.Compiler.Transformer do
       bindings: bindings,
       body: body
     }
-  end
-
-  defp build_import_directive_ir(alias_segs, only, except) do
-    %IR.ImportDirective{alias_segs: alias_segs, only: only, except: except}
   end
 
   defp find_for_expression_generators(parts) do
