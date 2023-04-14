@@ -6,13 +6,6 @@ defmodule Hologram.Compiler.Transformer do
 
   # --- CONTROL FLOW ---
 
-  transform({:case, _, [condition, [do: clauses]]}) do
-    %IR.CaseExpression{
-      condition: transform(condition),
-      clauses: Enum.map(clauses, &build_case_clause_ir/1)
-    }
-  end
-
   transform({:for, _, parts}) do
     generators = find_for_expression_generators(parts)
     mapper = find_for_expression_mapper(parts)
@@ -24,21 +17,6 @@ defmodule Hologram.Compiler.Transformer do
   end
 
   # --- HELPERS ---
-
-  defp build_case_clause_ir({:->, _, [[pattern], body]}) do
-    pattern = transform(pattern)
-    body = transform(body)
-
-    bindings =
-      Helpers.aggregate_pattern_bindings_from_expression(pattern)
-      |> Enum.map(&prepend_case_condition_access/1)
-
-    %{
-      pattern: pattern,
-      bindings: bindings,
-      body: body
-    }
-  end
 
   defp find_for_expression_generators(parts) do
     Enum.filter(parts, fn part ->

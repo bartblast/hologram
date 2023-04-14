@@ -80,6 +80,18 @@ defmodule Hologram.Compiler.IR do
     @type t :: %__MODULE__{expressions: list(IR.t())}
   end
 
+  defmodule CaseExpression do
+    defstruct [:condition, :clauses]
+
+    @type t :: %__MODULE__{condition: IR.t(), clauses: list(IR.CaseExpressionClause.t())}
+  end
+
+  defmodule CaseExpressionClause do
+    defstruct [:head, :body]
+
+    @type t :: %__MODULE__{head: IR.t(), body: IR.Block.t()}
+  end
+
   defmodule ConsOperator do
     defstruct [:head, :tail]
 

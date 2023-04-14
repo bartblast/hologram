@@ -1,12 +1,4 @@
 defmodule Hologram.Compiler.IR do
-  defmodule CaseExpression do
-    defstruct condition: nil, clauses: []
-  end
-
-  defmodule IfExpression do
-    defstruct condition: nil, do: nil, else: nil
-  end
-
   # --- BINDINGS ---
 
   defmodule Binding do

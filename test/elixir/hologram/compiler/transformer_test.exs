@@ -683,6 +683,97 @@ defmodule Hologram.Compiler.TransformerTest do
            }
   end
 
+  describe "case expression" do
+    test "single clause, single expression body" do
+      # case x do
+      #   1 -> :expr_1
+      # end
+      ast =
+        {:case, [line: 2],
+         [
+           {:x, [line: 2], nil},
+           [do: [{:->, [line: 3], [[1], {:__block__, [], [:expr_1]}]}]]
+         ]}
+
+      assert transform(ast, %Context{}) == %IR.CaseExpression{
+               condition: %IR.Variable{name: :x},
+               clauses: [
+                 %IR.CaseExpressionClause{
+                   head: %IR.IntegerType{value: 1},
+                   body: %IR.Block{
+                     expressions: [%IR.AtomType{value: :expr_1}]
+                   }
+                 }
+               ]
+             }
+    end
+
+    test "multiple clauses" do
+      # case x do
+      #   1 -> :expr_1
+      #   2 -> :expr_2
+      # end
+      ast =
+        {:case, [line: 2],
+         [
+           {:x, [line: 2], nil},
+           [
+             do: [
+               {:->, [line: 3], [[1], {:__block__, [], [:expr_1]}]},
+               {:->, [line: 4], [[2], {:__block__, [], [:expr_2]}]}
+             ]
+           ]
+         ]}
+
+      assert transform(ast, %Context{}) == %IR.CaseExpression{
+               condition: %IR.Variable{name: :x},
+               clauses: [
+                 %IR.CaseExpressionClause{
+                   head: %IR.IntegerType{value: 1},
+                   body: %IR.Block{
+                     expressions: [%IR.AtomType{value: :expr_1}]
+                   }
+                 },
+                 %IR.CaseExpressionClause{
+                   head: %IR.IntegerType{value: 2},
+                   body: %IR.Block{
+                     expressions: [%IR.AtomType{value: :expr_2}]
+                   }
+                 }
+               ]
+             }
+    end
+
+    test "multiple expressions body" do
+      # case x do
+      #   1 ->
+      #     :expr_1
+      #     :expr_2
+      # end
+      ast =
+        {:case, [line: 2],
+         [
+           {:x, [line: 2], nil},
+           [do: [{:->, [line: 3], [[1], {:__block__, [], [:expr_1, :expr_2]}]}]]
+         ]}
+
+      assert transform(ast, %Context{}) == %IR.CaseExpression{
+               condition: %IR.Variable{name: :x},
+               clauses: [
+                 %IR.CaseExpressionClause{
+                   head: %IR.IntegerType{value: 1},
+                   body: %IR.Block{
+                     expressions: [
+                       %IR.AtomType{value: :expr_1},
+                       %IR.AtomType{value: :expr_2}
+                     ]
+                   }
+                 }
+               ]
+             }
+    end
+  end
+
   test "cons operatoror" do
     # [h | t]
     ast = [{:|, [line: 1], [{:h, [line: 1], nil}, {:t, [line: 1], nil}]}]

@@ -73,6 +73,16 @@ defmodule Hologram.Compiler.Transformer do
     %IR.Block{expressions: exprs}
   end
 
+  def transform({:case, _, [condition, [do: clauses]]}, context) do
+    condition_ir = transform(condition, context)
+    clauses_ir = Enum.map(clauses, &build_case_expression_clause_ir(&1, context))
+
+    %IR.CaseExpression{
+      condition: condition_ir,
+      clauses: clauses_ir
+    }
+  end
+
   def transform([{:|, _, [head, tail]}], context) do
     %IR.ConsOperator{
       head: transform(head, context),
@@ -270,6 +280,13 @@ defmodule Hologram.Compiler.Transformer do
     # credo:disable-for-next-line Credo.Check.Warning.IoInspect
     IO.inspect(result)
     IO.puts("\n........................................\n")
+  end
+
+  defp build_case_expression_clause_ir({:->, _, [[head], body]}, context) do
+    %IR.CaseExpressionClause{
+      head: transform(head, context),
+      body: transform(body, context)
+    }
   end
 
   defp build_tuple_type_ir(data, context) do
