@@ -1,10 +1,4 @@
 defmodule Hologram.Compiler.IR do
-  defmodule ModuleDefinition do
-    defstruct module: nil, body: nil
-  end
-
-  # --- CONTROL FLOW ---
-
   defmodule CaseExpression do
     defstruct condition: nil, clauses: []
   end

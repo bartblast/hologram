@@ -920,13 +920,6 @@ defmodule Hologram.Compiler.TransformerTest do
     assert transform(ast, %Context{}) == %IR.MatchPlaceholder{}
   end
 
-  test "module attribute operator" do
-    # @my_attr
-    ast = {:@, [line: 1], [{:my_attr, [line: 1], nil}]}
-
-    assert transform(ast, %Context{}) == %IR.ModuleAttributeOperator{name: :my_attr}
-  end
-
   describe "module" do
     test "when first alias segment is not 'Elixir'" do
       # Aaa.Bbb
@@ -940,6 +933,66 @@ defmodule Hologram.Compiler.TransformerTest do
       ast = {:__aliases__, [line: 1], [Elixir, :Aaa, :Bbb]}
 
       assert transform(ast, %Context{}) == %IR.AtomType{value: :"Elixir.Aaa.Bbb"}
+    end
+  end
+
+  test "module attribute operator" do
+    # @my_attr
+    ast = {:@, [line: 1], [{:my_attr, [line: 1], nil}]}
+
+    assert transform(ast, %Context{}) == %IR.ModuleAttributeOperator{name: :my_attr}
+  end
+
+  describe "module definition" do
+    test "empty body" do
+      # defmodule Aaa.Bbb do end
+      ast =
+        {:defmodule, [line: 1],
+         [{:__aliases__, [line: 1], [:Aaa, :Bbb]}, [do: {:__block__, [], []}]]}
+
+      assert transform(ast, %Context{}) == %IR.ModuleDefinition{
+               module: %IR.AtomType{value: Aaa.Bbb},
+               body: %IR.Block{expressions: []}
+             }
+    end
+
+    test "single expression body" do
+      # defmodule Aaa.Bbb do
+      #   :expr_1
+      # end
+      ast =
+        {:defmodule, [line: 2],
+         [{:__aliases__, [line: 2], [:Aaa, :Bbb]}, [do: {:__block__, [], [:expr_1]}]]}
+
+      assert transform(ast, %Context{}) == %IR.ModuleDefinition{
+               module: %IR.AtomType{value: Aaa.Bbb},
+               body: %IR.Block{
+                 expressions: [%IR.AtomType{value: :expr_1}]
+               }
+             }
+    end
+
+    test "multiple expressions body" do
+      # defmodule Aaa.Bbb do
+      #   :expr_1
+      #   :expr_2
+      # end
+      ast =
+        {:defmodule, [line: 1],
+         [
+           {:__aliases__, [line: 1], [:Aaa, :Bbb]},
+           [do: {:__block__, [], [:expr_1, :expr_2]}]
+         ]}
+
+      assert transform(ast, %Context{}) == %IR.ModuleDefinition{
+               module: %IR.AtomType{value: Aaa.Bbb},
+               body: %IR.Block{
+                 expressions: [
+                   %IR.AtomType{value: :expr_1},
+                   %IR.AtomType{value: :expr_2}
+                 ]
+               }
+             }
     end
   end
 

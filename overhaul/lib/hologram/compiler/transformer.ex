@@ -18,15 +18,6 @@ defmodule Hologram.Compiler.Transformer do
     }
   end
 
-  # --- DEFINITIONS ---
-
-  transform({:defmodule, _, [module, [do: body]]}) do
-    %IR.ModuleDefinition{
-      module: transform(module),
-      body: transform(body)
-    }
-  end
-
   # --- DIRECTIVES ---
 
   transform({:alias, _, [{{_, _, [{_, _, alias_segs}, _]}, _, aliases}, _]}) do

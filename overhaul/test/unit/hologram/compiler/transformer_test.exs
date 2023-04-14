@@ -61,59 +61,6 @@ defmodule Hologram.Compiler.TransformerTest do
            }
   end
 
-  # --- DEFINITIONS ---
-
-  describe "module definition" do
-    test "empty body" do
-      # defmodule A.B do end
-      ast =
-        {:defmodule, [line: 1], [{:__aliases__, [line: 1], [:A, :B]}, [do: {:__block__, [], []}]]}
-
-      assert transform(ast) == %IR.ModuleDefinition{
-               module: %IR.Alias{segments: [:A, :B]},
-               body: %IR.Block{expressions: []}
-             }
-    end
-
-    test "single expression body" do
-      # defmodule A.B do
-      #   1
-      # end
-      ast =
-        {:defmodule, [line: 1],
-         [{:__aliases__, [line: 1], [:A, :B]}, [do: {:__block__, [], [1]}]]}
-
-      assert transform(ast) == %IR.ModuleDefinition{
-               module: %IR.Alias{segments: [:A, :B]},
-               body: %IR.Block{
-                 expressions: [
-                   %IR.IntegerType{value: 1}
-                 ]
-               }
-             }
-    end
-
-    test "multiple expressions body" do
-      # defmodule A.B do
-      #   1
-      #   2
-      # end
-      ast =
-        {:defmodule, [line: 1],
-         [{:__aliases__, [line: 1], [:A, :B]}, [do: {:__block__, [], [1, 2]}]]}
-
-      assert transform(ast) == %IR.ModuleDefinition{
-               module: %IR.Alias{segments: [:A, :B]},
-               body: %IR.Block{
-                 expressions: [
-                   %IR.IntegerType{value: 1},
-                   %IR.IntegerType{value: 2}
-                 ]
-               }
-             }
-    end
-  end
-
   # --- DIRECTIVES ---
 
   describe "alias directive" do

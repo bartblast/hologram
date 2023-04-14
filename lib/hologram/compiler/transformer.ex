@@ -163,6 +163,13 @@ defmodule Hologram.Compiler.Transformer do
     %IR.ModuleAttributeOperator{name: name}
   end
 
+  def transform({:defmodule, _, [module, [do: body]]}, context) do
+    %IR.ModuleDefinition{
+      module: transform(module, context),
+      body: transform(body, context)
+    }
+  end
+
   def transform({:^, _, [{name, _, _}]}, _context) do
     %IR.PinOperator{name: name}
   end

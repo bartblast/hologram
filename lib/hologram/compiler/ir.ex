@@ -23,6 +23,7 @@ defmodule Hologram.Compiler.IR do
           | IR.MatchOperator.t()
           | IR.MatchPlaceholder.t()
           | IR.ModuleAttributeOperator.t()
+          | IR.ModuleDefinition.t()
           | IR.PinOperator.t()
           | IR.RemoteFunctionCall.t()
           | IR.StringType.t()
@@ -73,7 +74,7 @@ defmodule Hologram.Compiler.IR do
   end
 
   defmodule Block do
-    defstruct expressions: []
+    defstruct [:expressions]
 
     @type t :: %__MODULE__{expressions: list(IR.t())}
   end
@@ -97,11 +98,7 @@ defmodule Hologram.Compiler.IR do
   end
 
   defmodule FunctionDefinition do
-    defstruct name: nil,
-              arity: nil,
-              params: nil,
-              body: nil,
-              visibility: nil
+    defstruct [:name, :arity, :params, :body, :visibility]
 
     @type t :: %__MODULE__{
             name: atom,
@@ -152,6 +149,12 @@ defmodule Hologram.Compiler.IR do
     defstruct [:name]
 
     @type t :: %__MODULE__{name: atom}
+  end
+
+  defmodule ModuleDefinition do
+    defstruct [:module, :body]
+
+    @type t :: %__MODULE__{module: IR.AtomType.t(), body: IR.Block.t()}
   end
 
   defmodule PinOperator do
