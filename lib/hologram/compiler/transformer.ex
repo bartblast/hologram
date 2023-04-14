@@ -118,6 +118,14 @@ defmodule Hologram.Compiler.Transformer do
     %IR.ListType{data: transform_list(ast, context)}
   end
 
+  def transform({:defmacro, _, _}, _context) do
+    %IR.IgnoredExpression{type: :public_macro_definition}
+  end
+
+  def transform({:defmacrop, _, _}, _context) do
+    %IR.IgnoredExpression{type: :private_macro_definition}
+  end
+
   # Map with cons operator is transformed to Map.merge/2 remote function call.
   def transform({:%{}, _, [{:|, _, [map, data]}]}, context) do
     %IR.RemoteFunctionCall{

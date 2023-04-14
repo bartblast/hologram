@@ -736,20 +736,4 @@ defmodule Hologram.Compiler.TransformerTest do
              }
            }
   end
-
-  test "public macro definition" do
-    # defmacro my_macro do
-    #   quote do
-    #     123
-    #   end
-    # end
-    ast =
-      {:defmacro, [line: 1],
-       [
-         {:my_macro, [line: 1], nil},
-         [do: {:__block__, [], [{:quote, [line: 2], [[do: {:__block__, [], [123]}]]}]}]
-       ]}
-
-    assert transform(ast) == %IR.IgnoredExpression{type: :public_macro_definition}
-  end
 end

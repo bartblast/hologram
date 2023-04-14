@@ -4,10 +4,6 @@ defmodule Hologram.Compiler.Transformer do
   alias Hologram.Compiler.Helpers
   alias Hologram.Compiler.Reflection
 
-  transform({:defmacro, _, _}) do
-    %IR.IgnoredExpression{type: :public_macro_definition}
-  end
-
   # --- CONTROL FLOW ---
 
   transform({:case, _, [condition, [do: clauses]]}) do

@@ -845,6 +845,44 @@ defmodule Hologram.Compiler.TransformerTest do
     end
   end
 
+  describe "macro definition" do
+    test "public" do
+      # defmacro my_macro do
+      #   quote do
+      #     :expr
+      #   end
+      # end
+      ast =
+        {:defmacro, [line: 2],
+         [
+           {:my_macro, [line: 2], nil},
+           [
+             do: {:__block__, [], [{:quote, [line: 3], [[do: {:__block__, [], [:expr]}]]}]}
+           ]
+         ]}
+
+      assert transform(ast, %Context{}) == %IR.IgnoredExpression{type: :public_macro_definition}
+    end
+
+    test "private" do
+      # defmacrop my_macro do
+      #   quote do
+      #     :expr
+      #   end
+      # end
+      ast =
+        {:defmacrop, [line: 2],
+         [
+           {:my_macro, [line: 2], nil},
+           [
+             do: {:__block__, [], [{:quote, [line: 3], [[do: {:__block__, [], [:expr]}]]}]}
+           ]
+         ]}
+
+      assert transform(ast, %Context{}) == %IR.IgnoredExpression{type: :private_macro_definition}
+    end
+  end
+
   describe "map type " do
     test "without cons operator" do
       # %{a: 1, b: 2}

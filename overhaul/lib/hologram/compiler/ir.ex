@@ -29,12 +29,6 @@ defmodule Hologram.Compiler.IR do
     defstruct []
   end
 
-  # --- OTHER IR ---
-
-  defmodule IgnoredExpression do
-    defstruct type: nil
-  end
-
   # --- OVERHAUL ---
 
   # DEFINITIONS

@@ -16,6 +16,7 @@ defmodule Hologram.Compiler.IR do
           | IR.DotOperator.t()
           | IR.FloatType.t()
           | IR.FunctionDefinition.t()
+          | IR.IgnoredExpression.t()
           | IR.IntegerType.t()
           | IR.ListType.t()
           | IR.LocalFunctionCall.t()
@@ -107,6 +108,12 @@ defmodule Hologram.Compiler.IR do
             body: IR.Block.t(),
             visibility: :public | :private
           }
+  end
+
+  defmodule IgnoredExpression do
+    defstruct [:type]
+
+    @type t :: %__MODULE__{type: :public_macro_definition | :private_macro_definition}
   end
 
   defmodule IntegerType do
