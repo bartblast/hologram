@@ -55,6 +55,13 @@ defmodule Hologram.Compiler.Transformer do
     }
   end
 
+  # Local function capture
+  def transform({:&, meta, [{:/, meta, [{function, meta, nil}, arity]}]}, context) do
+    args = Enum.map(1..arity, &{:"holo_arg_#{&1}__", meta, nil})
+    ast = {:fn, meta, [{:->, meta, [args, {:__block__, [], [{function, meta, args}]}]}]}
+    transform(ast, context)
+  end
+
   def transform(ast, _context) when is_atom(ast) do
     %IR.AtomType{value: ast}
   end

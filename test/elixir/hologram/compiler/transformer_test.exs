@@ -683,6 +683,36 @@ defmodule Hologram.Compiler.TransformerTest do
            }
   end
 
+  describe "capture operator" do
+    test "local function capture" do
+      # &my_fun/2
+      ast = {:&, [line: 1], [{:/, [line: 1], [{:my_fun, [line: 1], nil}, 2]}]}
+
+      assert transform(ast, %Context{}) == %IR.AnonymousFunctionType{
+               arity: 2,
+               clauses: [
+                 %IR.AnonymousFunctionClause{
+                   params: [
+                     %IR.Variable{name: :holo_arg_1__},
+                     %IR.Variable{name: :holo_arg_2__}
+                   ],
+                   body: %IR.Block{
+                     expressions: [
+                       %IR.LocalFunctionCall{
+                         function: :my_fun,
+                         args: [
+                           %IR.Variable{name: :holo_arg_1__},
+                           %IR.Variable{name: :holo_arg_2__}
+                         ]
+                       }
+                     ]
+                   }
+                 }
+               ]
+             }
+    end
+  end
+
   describe "case expression" do
     test "single clause, single expression body" do
       # case x do
