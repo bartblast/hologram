@@ -56,11 +56,16 @@ defmodule Hologram.Compiler.Transformer do
   end
 
   # Local function capture
-  # sobelow_skip ["DOS.BinToAtom"]
   def transform({:&, meta, [{:/, meta, [{function, meta, nil}, arity]}]}, context) do
-    args = Enum.map(1..arity, &{:"holo_arg_#{&1}__", meta, nil})
-    ast = {:fn, meta, [{:->, meta, [args, {:__block__, [], [{function, meta, args}]}]}]}
-    transform(ast, context)
+    transform_function_capture(function, arity, meta, context)
+  end
+
+  # Remote function capture
+  def transform(
+        {:&, meta, [{:/, meta, [{function, [{:no_parens, true} | meta], []}, arity]}]},
+        context
+      ) do
+    transform_function_capture(function, arity, meta, context)
   end
 
   def transform(ast, _context) when is_atom(ast) do
@@ -489,6 +494,13 @@ defmodule Hologram.Compiler.Transformer do
   defp transform_bitstring_segment(ast, context, acc) do
     %{acc | value: transform(ast, context)}
     |> maybe_add_default_bitstring_modifiers()
+  end
+
+  # sobelow_skip ["DOS.BinToAtom"]
+  defp transform_function_capture(function, arity, meta, context) do
+    args = Enum.map(1..arity, &{:"holo_arg_#{&1}__", meta, nil})
+    ast = {:fn, meta, [{:->, meta, [args, {:__block__, [], [{function, meta, args}]}]}]}
+    transform(ast, context)
   end
 
   defp transform_list(list, context) do

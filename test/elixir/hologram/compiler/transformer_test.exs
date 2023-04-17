@@ -711,6 +711,44 @@ defmodule Hologram.Compiler.TransformerTest do
                ]
              }
     end
+
+    test "remote function capture" do
+      # &Calendar.ISO.parse_date/2
+      ast =
+        {:&, [line: 1],
+         [
+           {:/, [line: 1],
+            [
+              {{:., [line: 1], [{:__aliases__, [line: 1], [:Calendar, :ISO]}, :parse_date]},
+               [no_parens: true, line: 1], []},
+              2
+            ]}
+         ]}
+
+      assert transform(ast, %Context{}) == %IR.AnonymousFunctionType{
+               arity: 2,
+               clauses: [
+                 %IR.AnonymousFunctionClause{
+                   params: [
+                     %IR.Variable{name: :holo_arg_1__},
+                     %IR.Variable{name: :holo_arg_2__}
+                   ],
+                   body: %IR.Block{
+                     expressions: [
+                       %IR.RemoteFunctionCall{
+                         module: %IR.AtomType{value: Calendar.ISO},
+                         function: :parse_date,
+                         args: [
+                           %IR.Variable{name: :holo_arg_1__},
+                           %IR.Variable{name: :holo_arg_2__}
+                         ]
+                       }
+                     ]
+                   }
+                 }
+               ]
+             }
+    end
   end
 
   describe "case expression" do
