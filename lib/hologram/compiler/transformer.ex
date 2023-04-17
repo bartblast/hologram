@@ -56,6 +56,7 @@ defmodule Hologram.Compiler.Transformer do
   end
 
   # Local function capture
+  # sobelow_skip ["DOS.BinToAtom"]
   def transform({:&, meta, [{:/, meta, [{function, meta, nil}, arity]}]}, context) do
     args = Enum.map(1..arity, &{:"holo_arg_#{&1}__", meta, nil})
     ast = {:fn, meta, [{:->, meta, [args, {:__block__, [], [{function, meta, args}]}]}]}
