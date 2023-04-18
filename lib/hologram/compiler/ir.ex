@@ -14,6 +14,8 @@ defmodule Hologram.Compiler.IR do
           | IR.Block.t()
           | IR.CaseClause.t()
           | IR.CaseExpression.t()
+          | IR.CondClause.t()
+          | IR.CondExpression.t()
           | IR.ConsOperator.t()
           | IR.DotOperator.t()
           | IR.FloatType.t()
@@ -92,6 +94,18 @@ defmodule Hologram.Compiler.IR do
     defstruct [:condition, :clauses]
 
     @type t :: %__MODULE__{condition: IR.t(), clauses: list(IR.CaseClause.t())}
+  end
+
+  defmodule CondClause do
+    defstruct [:condition, :body]
+
+    @type t :: %__MODULE__{condition: IR.t(), body: IR.Block.t()}
+  end
+
+  defmodule CondExpression do
+    defstruct [:clauses]
+
+    @type t :: %__MODULE__{clauses: list(IR.CondClause.t())}
   end
 
   defmodule ConsOperator do
