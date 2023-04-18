@@ -166,6 +166,13 @@ defmodule Hologram.Compiler.TransformerTest do
 
       assert transform(ast, %Context{}) == %IR.AtomType{value: :test}
     end
+
+    test "double quoted" do
+      # :"aaa bbb"
+      ast = :"aaa bbb"
+
+      assert transform(ast, %Context{}) == %IR.AtomType{value: :"aaa bbb"}
+    end
   end
 
   describe "bitstring type" do
