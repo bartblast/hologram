@@ -750,6 +750,44 @@ defmodule Hologram.Compiler.TransformerTest do
              }
     end
 
+    test "partially applied local function" do
+      # &my_fun(&1, 2, [3, &4])
+      ast =
+        {:&, [line: 1],
+         [{:my_fun, [line: 1], [{:&, [line: 1], [1]}, 2, [3, {:&, [line: 1], [4]}]]}]}
+
+      assert transform(ast, %Context{}) == %IR.AnonymousFunctionType{
+               arity: 4,
+               clauses: [
+                 %IR.AnonymousFunctionClause{
+                   params: [
+                     %IR.Variable{name: :holo_arg_1__},
+                     %IR.Variable{name: :holo_arg_2__},
+                     %IR.Variable{name: :holo_arg_3__},
+                     %IR.Variable{name: :holo_arg_4__}
+                   ],
+                   body: %IR.Block{
+                     expressions: [
+                       %IR.LocalFunctionCall{
+                         function: :my_fun,
+                         args: [
+                           %IR.Variable{name: :holo_arg_1__},
+                           %IR.IntegerType{value: 2},
+                           %IR.ListType{
+                             data: [
+                               %IR.IntegerType{value: 3},
+                               %IR.Variable{name: :holo_arg_4__}
+                             ]
+                           }
+                         ]
+                       }
+                     ]
+                   }
+                 }
+               ]
+             }
+    end
+
     test "partially applied anonymous function" do
       # &([&1, 2, my_fun(&3)])
       ast =
