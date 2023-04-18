@@ -312,7 +312,7 @@ defmodule Hologram.Compiler.Transformer do
   end
 
   defp build_case_expression_clause_ir({:->, _, [[head], body]}, context) do
-    %IR.CaseExpressionClause{
+    %IR.CaseClause{
       head: transform(head, context),
       body: transform(body, context)
     }

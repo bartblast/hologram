@@ -12,6 +12,8 @@ defmodule Hologram.Compiler.IR do
           | IR.BitstringSegment.t()
           | IR.BitstringType.t()
           | IR.Block.t()
+          | IR.CaseClause.t()
+          | IR.CaseExpression.t()
           | IR.ConsOperator.t()
           | IR.DotOperator.t()
           | IR.FloatType.t()
@@ -80,16 +82,16 @@ defmodule Hologram.Compiler.IR do
     @type t :: %__MODULE__{expressions: list(IR.t())}
   end
 
-  defmodule CaseExpression do
-    defstruct [:condition, :clauses]
-
-    @type t :: %__MODULE__{condition: IR.t(), clauses: list(IR.CaseExpressionClause.t())}
-  end
-
-  defmodule CaseExpressionClause do
+  defmodule CaseClause do
     defstruct [:head, :body]
 
     @type t :: %__MODULE__{head: IR.t(), body: IR.Block.t()}
+  end
+
+  defmodule CaseExpression do
+    defstruct [:condition, :clauses]
+
+    @type t :: %__MODULE__{condition: IR.t(), clauses: list(IR.CaseClause.t())}
   end
 
   defmodule ConsOperator do
