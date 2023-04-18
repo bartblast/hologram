@@ -104,12 +104,18 @@ defmodule Hologram.Compiler.Transformer do
 
   def transform({:case, _, [condition, [do: clauses]]}, context) do
     condition_ir = transform(condition, context)
-    clauses_ir = Enum.map(clauses, &build_case_expression_clause_ir(&1, context))
+    clauses_ir = Enum.map(clauses, &build_case_clause_ir(&1, context))
 
     %IR.CaseExpression{
       condition: condition_ir,
       clauses: clauses_ir
     }
+  end
+
+  def transform({:cond, _, [[do: clauses]]}, context) do
+    clauses_ir = Enum.map(clauses, &build_cond_clause_ir(&1, context))
+
+    %IR.CondExpression{clauses: clauses_ir}
   end
 
   def transform([{:|, _, [head, tail]}], context) do
@@ -311,9 +317,16 @@ defmodule Hologram.Compiler.Transformer do
     IO.puts("\n........................................\n")
   end
 
-  defp build_case_expression_clause_ir({:->, _, [[head], body]}, context) do
+  defp build_case_clause_ir({:->, _, [[head], body]}, context) do
     %IR.CaseClause{
       head: transform(head, context),
+      body: transform(body, context)
+    }
+  end
+
+  defp build_cond_clause_ir({:->, _, [[condition], body]}, context) do
+    %IR.CondClause{
+      condition: transform(condition, context),
       body: transform(body, context)
     }
   end
