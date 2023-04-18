@@ -84,8 +84,8 @@ defmodule Hologram.Compiler.Transformer do
     transform(ast, context)
   end
 
-  def transform(ast, _context) when is_atom(ast) do
-    %IR.AtomType{value: ast}
+  def transform(value, _context) when is_atom(value) do
+    %IR.AtomType{value: value}
   end
 
   def transform({:<<>>, _, segments}, context) do
@@ -97,9 +97,9 @@ defmodule Hologram.Compiler.Transformer do
     %IR.BitstringType{segments: segments_ir}
   end
 
-  def transform({:__block__, _, ast}, context) do
-    exprs = Enum.map(ast, &transform(&1, context))
-    %IR.Block{expressions: exprs}
+  def transform({:__block__, _, exprs}, context) do
+    exprs_ir = Enum.map(exprs, &transform(&1, context))
+    %IR.Block{expressions: exprs_ir}
   end
 
   def transform({:case, _, [condition, [do: clauses]]}, context) do
@@ -127,8 +127,8 @@ defmodule Hologram.Compiler.Transformer do
     }
   end
 
-  def transform(ast, _context) when is_float(ast) do
-    %IR.FloatType{value: ast}
+  def transform(value, _context) when is_float(value) do
+    %IR.FloatType{value: value}
   end
 
   def transform({marker, _, [{name, _, params}, [do: body]]}, context)
@@ -149,12 +149,12 @@ defmodule Hologram.Compiler.Transformer do
     }
   end
 
-  def transform(ast, _context) when is_integer(ast) do
-    %IR.IntegerType{value: ast}
+  def transform(value, _context) when is_integer(value) do
+    %IR.IntegerType{value: value}
   end
 
-  def transform(ast, context) when is_list(ast) do
-    %IR.ListType{data: transform_list(ast, context)}
+  def transform(data, context) when is_list(data) do
+    %IR.ListType{data: transform_list(data, context)}
   end
 
   def transform({:defmacro, _, _}, _context) do
@@ -206,7 +206,7 @@ defmodule Hologram.Compiler.Transformer do
   end
 
   # Module attributes are expanded by beam_file package, but we still need them for templates.
-  def transform({:@, _, [{name, _, ast}]}, _context) when not is_list(ast) do
+  def transform({:@, _, [{name, _, expr}]}, _context) when not is_list(expr) do
     %IR.ModuleAttributeOperator{name: name}
   end
 
