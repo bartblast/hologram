@@ -69,6 +69,7 @@ defmodule Hologram.Compiler.Transformer do
   end
 
   # Partially applied function arg placeholder
+  # sobelow_skip ["DOS.BinToAtom"]
   def transform({:&, meta, [index]}, context) when is_integer(index) do
     {:"holo_arg_#{index}__", meta, nil}
     |> transform(context)
@@ -317,6 +318,7 @@ defmodule Hologram.Compiler.Transformer do
     }
   end
 
+  # sobelow_skip ["DOS.BinToAtom"]
   defp build_function_capture_args(arity, meta) do
     Enum.map(1..arity, &{:"holo_arg_#{&1}__", meta, nil})
   end
@@ -530,7 +532,6 @@ defmodule Hologram.Compiler.Transformer do
     |> maybe_add_default_bitstring_modifiers()
   end
 
-  # sobelow_skip ["DOS.BinToAtom"]
   defp transform_function_capture(function, arity, meta, context) do
     args = build_function_capture_args(arity, meta)
     ast = {:fn, meta, [{:->, meta, [args, {:__block__, [], [{function, meta, args}]}]}]}
