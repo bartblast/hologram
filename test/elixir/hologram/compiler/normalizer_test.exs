@@ -60,6 +60,30 @@ defmodule Hologram.Compiler.NormalizerTest do
     end
   end
 
+  describe "cond expression" do
+    test "clause with single expression" do
+      # cond do
+      #   1 ->
+      #     :expr_a
+      # end
+      ast = {:cond, [], [[do: [{:->, [], [[1], :expr_a]}]]]}
+
+      assert normalize(ast) ==
+               {:cond, [], [[do: [{:->, [], [[1], {:__block__, [], [:expr_a]}]}]]]}
+    end
+
+    test "clause with multiple expressions" do
+      # cond do
+      #   1 ->
+      #     :expr_a
+      #     :expr_b
+      # end
+      ast = {:cond, [], [[do: [{:->, [], [[1], {:__block__, [], [:expr_a, :expr_b]}]}]]]}
+
+      assert normalize(ast) == ast
+    end
+  end
+
   describe "do block" do
     test "single expression" do
       # abc do
