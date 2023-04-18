@@ -872,7 +872,7 @@ defmodule Hologram.Compiler.TransformerTest do
   end
 
   describe "case expression" do
-    test "single clause, single expression body" do
+    test "single clause without guard, single expression body" do
       # case x do
       #   1 -> :expr_1
       # end
@@ -955,6 +955,53 @@ defmodule Hologram.Compiler.TransformerTest do
                        %IR.AtomType{value: :expr_1},
                        %IR.AtomType{value: :expr_2}
                      ]
+                   }
+                 }
+               ]
+             }
+    end
+
+    test "guard" do
+      # case x do
+      #   {:ok, n} when is_integer(n) -> :expr_1
+      # end
+      ast =
+        {:case, [line: 1],
+         [
+           {:x, [line: 1], nil},
+           [
+             do: [
+               {:->, [line: 2],
+                [
+                  [
+                    {:when, [line: 2],
+                     [
+                       {:ok, {:n, [line: 2], nil}},
+                       {:is_integer, [line: 2], [{:n, [line: 2], nil}]}
+                     ]}
+                  ],
+                  {:__block__, [], [:expr_1]}
+                ]}
+             ]
+           ]
+         ]}
+
+      assert transform(ast, %Context{}) == %IR.CaseExpression{
+               condition: %IR.Variable{name: :x},
+               clauses: [
+                 %IR.CaseClause{
+                   head: %IR.TupleType{
+                     data: [
+                       %IR.AtomType{value: :ok},
+                       %IR.Variable{name: :n}
+                     ]
+                   },
+                   guard: %IR.LocalFunctionCall{
+                     function: :is_integer,
+                     args: [%IR.Variable{name: :n}]
+                   },
+                   body: %IR.Block{
+                     expressions: [%IR.AtomType{value: :expr_1}]
                    }
                  }
                ]

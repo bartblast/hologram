@@ -317,9 +317,18 @@ defmodule Hologram.Compiler.Transformer do
     IO.puts("\n........................................\n")
   end
 
+  defp build_case_clause_ir({:->, _, [[{:when, _, [head, guard]}], body]}, context) do
+    %IR.CaseClause{
+      head: transform(head, context),
+      guard: transform(guard, context),
+      body: transform(body, context)
+    }
+  end
+
   defp build_case_clause_ir({:->, _, [[head], body]}, context) do
     %IR.CaseClause{
       head: transform(head, context),
+      guard: nil,
       body: transform(body, context)
     }
   end

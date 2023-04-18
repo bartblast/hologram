@@ -85,9 +85,9 @@ defmodule Hologram.Compiler.IR do
   end
 
   defmodule CaseClause do
-    defstruct [:head, :body]
+    defstruct [:head, :guard, :body]
 
-    @type t :: %__MODULE__{head: IR.t(), body: IR.Block.t()}
+    @type t :: %__MODULE__{head: IR.t(), guard: IR.t() | nil, body: IR.Block.t()}
   end
 
   defmodule CaseExpression do
