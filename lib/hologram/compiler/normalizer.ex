@@ -28,14 +28,6 @@ defmodule Hologram.Compiler.Normalizer do
     {:->, line, [pattern, {:__block__, [], [normalize(expr)]}]}
   end
 
-  def normalize({:if, line, [condition, [do: do_exprs]]}) do
-    normalize({:if, line, [condition, [do: do_exprs, else: nil]]})
-  end
-
-  def normalize({:if, line, [condition, [do: do_exprs, else: else_exprs]]}) do
-    {:if, line, [condition, normalize(do: do_exprs) ++ normalize(else: else_exprs)]}
-  end
-
   def normalize(do: {:__block__, [], exprs}) do
     [do: {:__block__, [], Enum.map(exprs, &normalize/1)}]
   end
