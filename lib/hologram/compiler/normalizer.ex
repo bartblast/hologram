@@ -16,8 +16,8 @@ defmodule Hologram.Compiler.Normalizer do
   @spec normalize(AST.t()) :: AST.t()
   def normalize(ast)
 
-  def normalize({:case, line, [condition, [do: clauses]]}) do
-    {:case, line, [condition, [do: normalize(clauses)]]}
+  def normalize({:case, meta, [condition, [do: clauses]]}) do
+    {:case, meta, [condition, [do: normalize(clauses)]]}
   end
 
   def normalize({:cond, meta, [[do: clauses]]}) do
@@ -40,12 +40,12 @@ defmodule Hologram.Compiler.Normalizer do
     [else: {:__block__, [], [normalize(expr)]}]
   end
 
-  def normalize({:->, line, [pattern, {:__block__, [], exprs}]}) do
-    {:->, line, [pattern, {:__block__, [], normalize(exprs)}]}
+  def normalize({:->, meta, [pattern, {:__block__, [], exprs}]}) do
+    {:->, meta, [pattern, {:__block__, [], normalize(exprs)}]}
   end
 
-  def normalize({:->, line, [pattern, expr]}) do
-    {:->, line, [pattern, {:__block__, [], [normalize(expr)]}]}
+  def normalize({:->, meta, [pattern, expr]}) do
+    {:->, meta, [pattern, {:__block__, [], [normalize(expr)]}]}
   end
 
   def normalize(ast) when is_atom(ast) do
