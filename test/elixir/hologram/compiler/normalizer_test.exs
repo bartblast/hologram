@@ -2,20 +2,16 @@ defmodule Hologram.Compiler.NormalizerTest do
   use Hologram.Test.BasicCase, async: true
   import Hologram.Compiler.Normalizer
 
-  describe "anonymous function" do
-    test "arrow syntax" do
-      # fn x -> x end
-      ast = {:fn, [line: 1], [{:->, [line: 1], [[{:x, [line: 1], nil}], {:x, [line: 1], nil}]}]}
+  test "anonymous function" do
+    # fn x -> x end
+    ast = {:fn, [line: 1], [{:->, [line: 1], [[{:x, [line: 1], nil}], {:x, [line: 1], nil}]}]}
 
-      assert normalize(ast) ==
-               {:fn, [line: 1],
-                [
-                  {:->, [line: 1],
-                   [[{:x, [line: 1], nil}], {:__block__, [], [{:x, [line: 1], nil}]}]}
-                ]}
-    end
-
-    # TODO: anonymous function shorthand syntax
+    assert normalize(ast) ==
+             {:fn, [line: 1],
+              [
+                {:->, [line: 1],
+                 [[{:x, [line: 1], nil}], {:__block__, [], [{:x, [line: 1], nil}]}]}
+              ]}
   end
 
   describe "case expression" do
@@ -51,12 +47,7 @@ defmodule Hologram.Compiler.NormalizerTest do
            [do: [{:->, [line: 2], [[1], {:__block__, [], [:expr_a, :expr_b]}]}]]
          ]}
 
-      assert normalize(ast) ==
-               {:case, [line: 1],
-                [
-                  {:x, [line: 1], nil},
-                  [do: [{:->, [line: 2], [[1], {:__block__, [], [:expr_a, :expr_b]}]}]]
-                ]}
+      assert normalize(ast) == ast
     end
   end
 
@@ -105,7 +96,7 @@ defmodule Hologram.Compiler.NormalizerTest do
       # end
       ast = {:abc, [line: 1], [[do: {:__block__, [], [1, 2]}]]}
 
-      assert normalize(ast) == {:abc, [line: 1], [[do: {:__block__, [], [1, 2]}]]}
+      assert normalize(ast) == ast
     end
   end
 
@@ -131,8 +122,7 @@ defmodule Hologram.Compiler.NormalizerTest do
       # end
       ast = {:def, [line: 1], [{:abc, [line: 1], nil}, [do: {:__block__, [], [1, 2]}]]}
 
-      assert normalize(ast) ==
-               {:def, [line: 1], [{:abc, [line: 1], nil}, [do: {:__block__, [], [1, 2]}]]}
+      assert normalize(ast) == ast
     end
   end
 
