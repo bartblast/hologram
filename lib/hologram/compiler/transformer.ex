@@ -68,6 +68,21 @@ defmodule Hologram.Compiler.Transformer do
     transform_function_capture(function, arity, meta, context)
   end
 
+  # Partially applied function arg placeholder
+  def transform({:&, meta, [index]}, context) when is_integer(index) do
+    {:"holo_arg_#{index}__", meta, nil}
+    |> transform(context)
+  end
+
+  # Partially applied anonymous function
+  def transform({:&, meta, body}, context) do
+    arity = determine_partially_applied_function_arity(body, 0)
+    args = build_function_capture_args(arity, meta)
+    ast = {:fn, meta, [{:->, meta, [args, {:__block__, [], body}]}]}
+
+    transform(ast, context)
+  end
+
   def transform(ast, _context) when is_atom(ast) do
     %IR.AtomType{value: ast}
   end
@@ -302,9 +317,28 @@ defmodule Hologram.Compiler.Transformer do
     }
   end
 
+  defp build_function_capture_args(arity, meta) do
+    Enum.map(1..arity, &{:"holo_arg_#{&1}__", meta, nil})
+  end
+
   defp build_tuple_type_ir(data, context) do
     %IR.TupleType{data: transform_list(data, context)}
   end
+
+  defp determine_partially_applied_function_arity({:&, _meta, [index]}, arity)
+       when is_integer(index) and index > arity,
+       do: index
+
+  defp determine_partially_applied_function_arity(ast, arity) when is_list(ast) do
+    Enum.reduce(ast, arity, &determine_partially_applied_function_arity/2)
+  end
+
+  defp determine_partially_applied_function_arity({_marker, _meta, children}, arity)
+       when is_list(children) do
+    determine_partially_applied_function_arity(children, arity)
+  end
+
+  defp determine_partially_applied_function_arity(_ast, arity), do: arity
 
   defp flatten_bitstring_segments(segments) do
     segments
@@ -498,7 +532,7 @@ defmodule Hologram.Compiler.Transformer do
 
   # sobelow_skip ["DOS.BinToAtom"]
   defp transform_function_capture(function, arity, meta, context) do
-    args = Enum.map(1..arity, &{:"holo_arg_#{&1}__", meta, nil})
+    args = build_function_capture_args(arity, meta)
     ast = {:fn, meta, [{:->, meta, [args, {:__block__, [], [{function, meta, args}]}]}]}
     transform(ast, context)
   end

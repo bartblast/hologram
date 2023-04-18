@@ -749,6 +749,39 @@ defmodule Hologram.Compiler.TransformerTest do
                ]
              }
     end
+
+    test "partially applied anonymous function" do
+      # &([&1, 2, my_fun(&3)])
+      ast =
+        {:&, [line: 1], [[{:&, [line: 1], [1]}, 2, {:my_fun, [line: 1], [{:&, [line: 1], [3]}]}]]}
+
+      assert transform(ast, %Context{}) == %IR.AnonymousFunctionType{
+               arity: 3,
+               clauses: [
+                 %IR.AnonymousFunctionClause{
+                   params: [
+                     %IR.Variable{name: :holo_arg_1__},
+                     %IR.Variable{name: :holo_arg_2__},
+                     %IR.Variable{name: :holo_arg_3__}
+                   ],
+                   body: %IR.Block{
+                     expressions: [
+                       %IR.ListType{
+                         data: [
+                           %IR.Variable{name: :holo_arg_1__},
+                           %IR.IntegerType{value: 2},
+                           %IR.LocalFunctionCall{
+                             function: :my_fun,
+                             args: [%IR.Variable{name: :holo_arg_3__}]
+                           }
+                         ]
+                       }
+                     ]
+                   }
+                 }
+               ]
+             }
+    end
   end
 
   describe "case expression" do

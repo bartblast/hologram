@@ -5,6 +5,7 @@ defmodule Hologram.Compiler.AST do
 
   @type t ::
           {atom, list, list}
+          | {atom, list, nil}
           | {any, any}
           | module
           | atom
