@@ -4,14 +4,16 @@ defmodule Hologram.Compiler.Normalizer do
   alias Hologram.Compiler.Reflection
 
   @doc """
-  Normalizes Elixir AST.
+  Normalizes Elixir AST by ensuring that:
+  * single expression blocks are wrapped in __block__ tuple
+  * alias atoms are wrapped in __aliases__ tuple
 
   ## Examples
 
-      iex> ast = Hologram.Compiler.Parser.parse!("if true, do: 987")
-      {:if, [line: 1], [true, [do: 987]]}
+      iex> ast = Hologram.Compiler.Parser.parse!("cond do true -> 123 end")
+      {:cond, [line: 1], [[do: [{:->, [line: 1], [[true], 987]}]]]}
       iex> normalize(ast)
-      {:if, [line: 1], [true, [do: {:__block__, [], [987]}, else: {:__block__, [], [nil]}]]}
+      {:cond, [line: 1], [[do: [{:->, [line: 1], [[true], {:__block__, [], [987]}]}]]]}
   """
   @spec normalize(AST.t()) :: AST.t()
   def normalize(ast)
