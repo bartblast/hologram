@@ -138,6 +138,10 @@ jobs:
     - name: Run lib Elixir static code analysis with Credo
       run: mix credo --strict
 
+    # Step: Run lib Elixir static code analysis with Recode.
+    - name: Run lib Elixir static code analysis with Recode
+      run: mix recode --no-autocorrect 
+
     # Step: Run lib Elixir security-focused analysis with Sobelow.
     - name: Run lib Elixir security-focused analysis with Sobelow
       run: mix sobelow --config
