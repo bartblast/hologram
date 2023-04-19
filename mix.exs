@@ -15,7 +15,7 @@ defmodule Hologram.MixProject do
       {:doctor, "~> 0.21", only: [:dev, :test]},
       {:interceptor, "~> 0.5"},
       {:mix_audit, "~> 2.0", only: [:dev, :test], runtime: false},
-      {:recode, "~> 0.4", only: :dev},
+      {:recode, "~> 0.4", only: [:dev, :test]},
       {:sobelow, "~> 0.11", only: [:dev, :test], runtime: false}
     ]
   end
