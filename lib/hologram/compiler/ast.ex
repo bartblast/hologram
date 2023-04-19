@@ -25,7 +25,8 @@ defmodule Hologram.Compiler.AST do
   """
   @spec for_code(binary) :: AST.t()
   def for_code(code) do
-    Parser.parse!(code)
+    code
+    |> Parser.parse!()
     |> Normalizer.normalize()
   end
 end
