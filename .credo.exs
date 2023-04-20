@@ -71,7 +71,6 @@
           {Credo.Check.Refactor.IoPuts, []},
           {Credo.Check.Refactor.LongQuoteBlocks, []},
           {Credo.Check.Refactor.MapJoin, []},
-          {Credo.Check.Refactor.MapMap, []},
           {Credo.Check.Refactor.MatchInCondition, []},
           {Credo.Check.Refactor.ModuleDependencies, []},
           {Credo.Check.Refactor.NegatedConditionsInUnless, []},
@@ -115,7 +114,8 @@
         ],
         disabled: [
           {Credo.Check.Design.TagTODO, []},
-          {Credo.Check.Readability.ModuleDoc, []}
+          {Credo.Check.Readability.ModuleDoc, []},
+          {Credo.Check.Refactor.MapMap, []}
         ]
       }
     }

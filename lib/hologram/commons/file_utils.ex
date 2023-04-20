@@ -27,7 +27,8 @@ defmodule Hologram.Commons.FileUtils do
         [path]
 
       File.dir?(path) ->
-        File.ls!(path)
+        path
+        |> File.ls!()
         |> Enum.map(&Path.join(path, &1))
         |> Enum.map(&list_files_recursively/1)
         |> Enum.concat()
