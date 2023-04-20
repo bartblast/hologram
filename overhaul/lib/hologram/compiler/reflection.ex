@@ -92,7 +92,7 @@ defmodule Hologram.Compiler.Reflection do
   end
 
   def is_module?(term) do
-    if is_alias?(term) do
+    if alias?(term) do
       case Code.ensure_loaded(term) do
         {:module, _} ->
           !is_protocol?(term)
@@ -106,7 +106,7 @@ defmodule Hologram.Compiler.Reflection do
   end
 
   def is_protocol?(term) do
-    if is_alias?(term) do
+    if alias?(term) do
       case Code.ensure_loaded(term) do
         {:module, _} ->
           Keyword.has_key?(term.module_info(:exports), :__protocol__)

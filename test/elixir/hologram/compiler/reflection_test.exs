@@ -3,17 +3,17 @@ defmodule Hologram.Compiler.ReflectionTest do
   import Hologram.Compiler.Reflection
   alias Hologram.Test.Fixtures.Compiler.Reflection.Module1
 
-  describe "is_alias?/1" do
+  describe "alias?/1" do
     test "atom which is an alias" do
-      assert is_alias?(Calendar.ISO)
+      assert alias?(Calendar.ISO)
     end
 
     test "atom which is not an alias" do
-      refute is_alias?(:abc)
+      refute alias?(:abc)
     end
 
     test "non-atom" do
-      refute is_alias?(123)
+      refute alias?(123)
     end
   end
 

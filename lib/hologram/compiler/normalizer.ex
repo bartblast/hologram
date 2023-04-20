@@ -51,7 +51,7 @@ defmodule Hologram.Compiler.Normalizer do
   end
 
   def normalize(ast) when is_atom(ast) do
-    if Reflection.is_alias?(ast) do
+    if Reflection.alias?(ast) do
       segments = Helpers.alias_segments(ast)
       {:__aliases__, [alias: false], segments}
     else

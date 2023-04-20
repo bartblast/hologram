@@ -4,22 +4,22 @@ defmodule Hologram.Compiler.Reflection do
 
   ## Examples
 
-      iex> is_alias?(Calendar.ISO)
+      iex> alias?(Calendar.ISO)
       true
 
-      iex> is_alias?(:abc)
+      iex> alias?(:abc)
       false
   """
-  @spec is_alias?(any) :: boolean
-  def is_alias?(term)
+  @spec alias?(any) :: boolean
+  def alias?(term)
 
-  def is_alias?(term) when is_atom(term) do
+  def alias?(term) when is_atom(term) do
     term
     |> to_string()
     |> String.starts_with?("Elixir.")
   end
 
-  def is_alias?(_term), do: false
+  def alias?(_term), do: false
 
   @doc """
   Lists Elixir modules belonging to the given OTP apps.
@@ -48,7 +48,7 @@ defmodule Hologram.Compiler.Reflection do
       |> Keyword.fetch!(:modules)
       |> Kernel.++(acc)
     end)
-    |> Enum.filter(&is_alias?/1)
+    |> Enum.filter(&alias?/1)
   end
 
   @doc """
@@ -59,7 +59,7 @@ defmodule Hologram.Compiler.Reflection do
       iex> module_beam_defs(Hologram.Compiler.Reflection)
       [
         ...,
-        {{:is_alias?, 1}, :def, [line: 14],
+        {{:alias?, 1}, :def, [line: 14],
         [
           {[line: 16], [{:term, [version: 0, line: 16], nil}],
             [
