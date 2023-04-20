@@ -31,14 +31,14 @@ defmodule Hologram.Compiler.ReflectionTest do
 
   test "module_beam_defs/1" do
     assert module_beam_defs(Module1) == [
-             {{:fun_2, 2}, :def, [line: 6],
+             {{:fun_2, 2}, :def, [line: 7],
               [
-                {[line: 6], [{:a, [version: 0, line: 6], nil}, {:b, [version: 1, line: 6], nil}],
+                {[line: 7], [{:a, [version: 0, line: 7], nil}, {:b, [version: 1, line: 7], nil}],
                  [],
-                 {{:., [line: 7], [:erlang, :+]}, [line: 7],
-                  [{:a, [version: 0, line: 7], nil}, {:b, [version: 1, line: 7], nil}]}}
+                 {{:., [line: 8], [:erlang, :+]}, [line: 8],
+                  [{:a, [version: 0, line: 8], nil}, {:b, [version: 1, line: 8], nil}]}}
               ]},
-             {{:fun_1, 0}, :def, [line: 2], [{[line: 2], [], [], :value_1}]}
+             {{:fun_1, 0}, :def, [line: 3], [{[line: 3], [], [], :value_1}]}
            ]
   end
 end
