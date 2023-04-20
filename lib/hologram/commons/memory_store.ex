@@ -52,7 +52,7 @@ defmodule Hologram.Commons.MemoryStore do
           [{^key, value}] ->
             {:ok, value}
 
-          _ ->
+          _fallback ->
             :error
         end
       end

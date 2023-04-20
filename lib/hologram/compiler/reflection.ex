@@ -19,7 +19,7 @@ defmodule Hologram.Compiler.Reflection do
     |> String.starts_with?("Elixir.")
   end
 
-  def is_alias?(_), do: false
+  def is_alias?(_term), do: false
 
   @doc """
   Lists Elixir modules belonging to the given OTP apps.

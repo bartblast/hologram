@@ -19,7 +19,7 @@
           {Credo.Check.Consistency.SpaceAroundOperators, []},
           {Credo.Check.Consistency.SpaceInParentheses, []},
           {Credo.Check.Consistency.TabsOrSpaces, []},
-          {Credo.Check.Consistency.UnusedVariableNames, []},
+          {Credo.Check.Consistency.UnusedVariableNames, force: :meaningful},
           {Credo.Check.Design.AliasUsage,
            [priority: :low, if_nested_deeper_than: 2, if_called_more_often_than: 0]},
           {Credo.Check.Design.DuplicatedCode, []},

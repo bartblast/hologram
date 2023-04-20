@@ -15,7 +15,7 @@ defmodule Hologram.Commons.Parser do
           {:ok, result} ->
             result
 
-          _ ->
+          _fallback ->
             raise """
             Invalid code:
             -----

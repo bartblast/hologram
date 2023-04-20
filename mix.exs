@@ -20,7 +20,7 @@ defmodule Hologram.MixProject do
   end
 
   defp elixirc_paths(:test), do: ["lib", "test/elixir/fixtures", "test/elixir/support"]
-  defp elixirc_paths(_), do: ["lib"]
+  defp elixirc_paths(_env), do: ["lib"]
 
   def package do
     [
