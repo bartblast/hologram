@@ -314,13 +314,12 @@ defmodule Hologram.Compiler.Transformer do
   """
   @spec debug({module, atom, [AST.t()]}, IR.t()) :: :ok
   def debug({_module, _function, [ast] = _args}, result) do
+    # credo:disable-for-lines:7 /Credo.Check.Refactor.IoPuts|Credo.Check.Warning.IoInspect/
     IO.puts("\nTRANSFORM...............................\n")
     IO.puts("ast")
-    # credo:disable-for-next-line Credo.Check.Warning.IoInspect
     IO.inspect(ast)
     IO.puts("")
     IO.puts("result")
-    # credo:disable-for-next-line Credo.Check.Warning.IoInspect
     IO.inspect(result)
     IO.puts("\n........................................\n")
   end

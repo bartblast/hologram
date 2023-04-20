@@ -34,6 +34,7 @@ defmodule Mix.Tasks.Holo.Test.CheckFileNames do
   defp print_result_and_exit([]) do
     "All test scripts have valid file names."
     |> green()
+    # credo:disable-for-next-line Credo.Check.Refactor.IoPuts
     |> IO.puts()
 
     :ok
@@ -42,8 +43,10 @@ defmodule Mix.Tasks.Holo.Test.CheckFileNames do
   defp print_result_and_exit(invalid_file_names) do
     "Found test scripts with invalid file names:"
     |> red()
+    # credo:disable-for-next-line Credo.Check.Refactor.IoPuts
     |> IO.puts()
 
+    # credo:disable-for-next-line Credo.Check.Refactor.IoPuts
     Enum.each(invalid_file_names, &IO.puts(red("  * " <> &1)))
 
     exit({:shutdown, 1})
