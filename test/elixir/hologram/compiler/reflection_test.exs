@@ -29,6 +29,15 @@ defmodule Hologram.Compiler.ReflectionTest do
     refute :typer_core in result
   end
 
+  test "list_loaded_otp_apps/0" do
+    result = list_loaded_otp_apps()
+
+    assert :crypto in result
+    assert :elixir in result
+    assert :file_system in result
+    assert :hologram in result
+  end
+
   test "module_beam_defs/1" do
     assert module_beam_defs(Module1) == [
              {{:fun_2, 2}, :def, [line: 7],

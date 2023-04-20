@@ -52,6 +52,26 @@ defmodule Hologram.Compiler.Reflection do
   end
 
   @doc """
+  Lists loaded OTP applications.
+
+  ## Examples
+
+    iex> list_loaded_otp_apps()
+    [
+      {:inets, 'INETS  CXC 138 49', '8.2.1'},
+      {:logger, 'logger', '1.14.3'},
+      {:stdlib, 'ERTS  CXC 138 10', '4.2'},
+      {:file_system, 'A file system change watcher wrapper based on [fs](https://github.com/synrc/fs)', '0.2.10'},
+      ...
+    ]
+  """
+  @spec list_loaded_otp_apps() :: list(:atom)
+  def list_loaded_otp_apps do
+    Application.loaded_applications()
+    |> Enum.map(fn {app, _description, _version} -> app end)
+  end
+
+  @doc """
   Returns BEAM definitions for the given module.
 
   ## Examples
