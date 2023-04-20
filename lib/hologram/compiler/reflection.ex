@@ -73,6 +73,7 @@ defmodule Hologram.Compiler.Reflection do
 
   @doc """
   Returns BEAM definitions for the given module.
+  If the BEAM file doesn't have debug info an empty list is returned.
 
   ## Examples
 
@@ -95,12 +96,23 @@ defmodule Hologram.Compiler.Reflection do
           {[line: 22], [{:_, [line: 22], nil}], [], false}
         ]}
       ]
+
+      iex> module_beam_defs(Elixir.Hex)
+      []
   """
   @spec module_beam_defs(module) :: list(tuple)
   def module_beam_defs(module) do
-    module
-    |> :code.which()
-    |> BeamFile.debug_info!()
-    |> Map.fetch!(:definitions)
+    debug_info =
+      module
+      |> :code.which()
+      |> BeamFile.debug_info()
+
+    case debug_info do
+      {:ok, %{definitions: definitions}} ->
+        definitions
+
+      {:error, :no_debug_info} ->
+        []
+    end
   end
 end

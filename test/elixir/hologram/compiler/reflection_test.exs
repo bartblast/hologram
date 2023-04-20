@@ -38,16 +38,22 @@ defmodule Hologram.Compiler.ReflectionTest do
     assert :hologram in result
   end
 
-  test "module_beam_defs/1" do
-    assert module_beam_defs(Module1) == [
-             {{:fun_2, 2}, :def, [line: 7],
-              [
-                {[line: 7], [{:a, [version: 0, line: 7], nil}, {:b, [version: 1, line: 7], nil}],
-                 [],
-                 {{:., [line: 8], [:erlang, :+]}, [line: 8],
-                  [{:a, [version: 0, line: 8], nil}, {:b, [version: 1, line: 8], nil}]}}
-              ]},
-             {{:fun_1, 0}, :def, [line: 3], [{[line: 3], [], [], :value_1}]}
-           ]
+  describe "module_beam_defs/1" do
+    test "with debug info present in the BEAM file" do
+      assert module_beam_defs(Module1) == [
+               {{:fun_2, 2}, :def, [line: 7],
+                [
+                  {[line: 7],
+                   [{:a, [version: 0, line: 7], nil}, {:b, [version: 1, line: 7], nil}], [],
+                   {{:., [line: 8], [:erlang, :+]}, [line: 8],
+                    [{:a, [version: 0, line: 8], nil}, {:b, [version: 1, line: 8], nil}]}}
+                ]},
+               {{:fun_1, 0}, :def, [line: 3], [{[line: 3], [], [], :value_1}]}
+             ]
+    end
+
+    test "with debug info not present in the BEAM file" do
+      assert module_beam_defs(Elixir.Hex) == []
+    end
   end
 end
