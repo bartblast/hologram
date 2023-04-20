@@ -15,6 +15,7 @@ defmodule Mix.Tasks.Holo.Test.CheckFileNames do
   alias Hologram.Commons.FileUtils
 
   @doc false
+  @impl Mix.Task
   def run(args) do
     args
     |> find_invalid_file_names()

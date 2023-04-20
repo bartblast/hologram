@@ -13,6 +13,12 @@ defmodule Hologram.Commons.MemoryStoreTest do
     File.write!(@dump_path, binary)
   end
 
+  defp ets_table_exists?(table_name) do
+    table_name
+    |> :ets.info()
+    |> is_list()
+  end
+
   defp wait_for_test_cleanup do
     if StoreFixture.running?() || StoreFixture.table_exists?() do
       :timer.sleep(1)
@@ -35,14 +41,14 @@ defmodule Hologram.Commons.MemoryStoreTest do
 
     test "ETS table is created if it doesn't exist yet" do
       StoreFixture.run()
-      assert StoreFixture |> :ets.info() |> is_list()
+      assert ets_table_exists?(StoreFixture)
     end
 
     test "ETS table is not created if it already exists" do
       :ets.new(StoreFixture, [:public, :named_table])
       StoreFixture.run()
 
-      assert StoreFixture |> :ets.info() |> is_list()
+      assert ets_table_exists?(StoreFixture)
     end
 
     test "ETS table is truncated" do
