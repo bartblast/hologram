@@ -1,7 +1,4 @@
 defmodule Mix.Tasks.Holo.Test.CheckFileNames do
-  use Mix.Task
-  alias Hologram.Commons.FileUtils
-
   @moduledoc """
   Checks if any test scripts have invalid file names.
   File name is valid if it ends with "_test" suffix and has ".exs" extension.
@@ -13,6 +10,9 @@ defmodule Mix.Tasks.Holo.Test.CheckFileNames do
 
       $ mix holo.test.check_file_names test/elixir/hologram/compiler test/elixir/hologram/template
   """
+
+  use Mix.Task
+  alias Hologram.Commons.FileUtils
 
   @doc false
   def run(args) do

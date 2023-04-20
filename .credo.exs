@@ -25,7 +25,6 @@
           {Credo.Check.Design.DuplicatedCode, []},
           {Credo.Check.Design.SkipTestWithoutComment, []},
           {Credo.Check.Design.TagFIXME, []},
-          {Credo.Check.Readability.AliasAs, []},
           {Credo.Check.Readability.AliasOrder, []},
           {Credo.Check.Readability.BlockPipe, []},
           {Credo.Check.Readability.FunctionNames, []},
@@ -113,6 +112,7 @@
         ],
         disabled: [
           {Credo.Check.Design.TagTODO, []},
+          {Credo.Check.Readability.AliasAs, []},
           {Credo.Check.Readability.ModuleDoc, []},
           {Credo.Check.Refactor.MapMap, []},
           {Credo.Check.Refactor.ModuleDependencies, []}

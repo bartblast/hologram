@@ -43,7 +43,10 @@ defmodule Hologram.Compiler.Reflection do
   def list_elixir_modules(apps) do
     apps
     |> Enum.reduce([], fn app, acc ->
-      Keyword.fetch!(Application.spec(app), :modules) ++ acc
+      app
+      |> Application.spec()
+      |> Keyword.fetch!(:modules)
+      |> Kernel.++(acc)
     end)
     |> Enum.filter(&is_alias?/1)
   end
