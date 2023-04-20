@@ -35,14 +35,14 @@ defmodule Hologram.Commons.MemoryStoreTest do
 
     test "ETS table is created if it doesn't exist yet" do
       StoreFixture.run()
-      assert :ets.info(StoreFixture) |> is_list()
+      assert StoreFixture |> :ets.info() |> is_list()
     end
 
     test "ETS table is not created if it already exists" do
       :ets.new(StoreFixture, [:public, :named_table])
       StoreFixture.run()
 
-      assert :ets.info(StoreFixture) |> is_list()
+      assert StoreFixture |> :ets.info() |> is_list()
     end
 
     test "ETS table is truncated" do

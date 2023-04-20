@@ -71,8 +71,8 @@ defmodule Hologram.Compiler.Transformer do
   # Partially applied function arg placeholder
   # sobelow_skip ["DOS.BinToAtom"]
   def transform({:&, meta, [index]}, context) when is_integer(index) do
-    {:"holo_arg_#{index}__", meta, nil}
-    |> transform(context)
+    ast = {:"holo_arg_#{index}__", meta, nil}
+    transform(ast, context)
   end
 
   # Partially applied anonymous function
@@ -552,13 +552,14 @@ defmodule Hologram.Compiler.Transformer do
   defp transform_bitstring_segment({:"::", _meta, [left, right]}, context, acc) do
     new_acc = %{acc | value: transform(left, context)}
 
-    transform_bitstring_modifiers(right, context, new_acc)
+    right
+    |> transform_bitstring_modifiers(context, new_acc)
     |> maybe_add_default_bitstring_modifiers()
   end
 
   defp transform_bitstring_segment(ast, context, acc) do
-    %{acc | value: transform(ast, context)}
-    |> maybe_add_default_bitstring_modifiers()
+    new_acc = %{acc | value: transform(ast, context)}
+    maybe_add_default_bitstring_modifiers(new_acc)
   end
 
   defp transform_function_capture(function, arity, meta, context) do
