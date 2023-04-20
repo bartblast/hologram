@@ -46,7 +46,7 @@ defmodule Hologram.Compiler.Transformer do
     arity =
       clauses_ir
       |> hd()
-      |> Map.get(:params)
+      |> Map.fetch!(:params)
       |> Enum.count()
 
     %IR.AnonymousFunctionType{
@@ -71,6 +71,7 @@ defmodule Hologram.Compiler.Transformer do
   # Partially applied function arg placeholder
   # sobelow_skip ["DOS.BinToAtom"]
   def transform({:&, meta, [index]}, context) when is_integer(index) do
+    # credo:disable-for-next-line Credo.Check.Warning.UnsafeToAtom
     ast = {:"holo_arg_#{index}__", meta, nil}
     transform(ast, context)
   end
@@ -349,6 +350,7 @@ defmodule Hologram.Compiler.Transformer do
 
   # sobelow_skip ["DOS.BinToAtom"]
   defp build_function_capture_args(arity, meta) do
+    # credo:disable-for-next-line Credo.Check.Warning.UnsafeToAtom
     Enum.map(1..arity, &{:"holo_arg_#{&1}__", meta, nil})
   end
 
