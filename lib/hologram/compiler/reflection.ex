@@ -67,8 +67,8 @@ defmodule Hologram.Compiler.Reflection do
   """
   @spec list_loaded_otp_apps() :: list(:atom)
   def list_loaded_otp_apps do
-    Application.loaded_applications()
-    |> Enum.map(fn {app, _description, _version} -> app end)
+    apps_info = Application.loaded_applications()
+    Enum.map(apps_info, fn {app, _description, _version} -> app end)
   end
 
   @doc """
