@@ -11,4 +11,26 @@ defmodule Hologram.Template.HelpersTest do
       assert tag_type("MyComponent") == :component
     end
   end
+
+  describe "void_element?/1" do
+    test "void HTML element" do
+      assert void_element?("br")
+    end
+
+    test "void SVG element" do
+      assert void_element?("path")
+    end
+
+    test "slot element" do
+      assert void_element?("slot")
+    end
+
+    test "non-void HTML element" do
+      refute void_element?("div")
+    end
+
+    test "non-void SVG element" do
+      refute void_element?("g")
+    end
+  end
 end
