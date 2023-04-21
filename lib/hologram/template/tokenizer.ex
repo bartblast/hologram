@@ -18,6 +18,8 @@ defmodule Hologram.Template.Tokenizer do
       ]
   """
   @spec tokenize(String.t()) :: list({:string | :symbol | :whitespace, String.t()})
+  def tokenize(markup)
+
   def tokenize(""), do: []
 
   def tokenize(" " <> rest) do
