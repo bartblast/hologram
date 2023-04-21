@@ -1,6 +1,6 @@
 defmodule Hologram.Template.Tokenizer do
   @doc """
-  Splits template code into a list of tokens.
+  Splits template markup into a list of tokens.
 
   ## Examples
 
