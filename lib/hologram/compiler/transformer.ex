@@ -310,7 +310,7 @@ defmodule Hologram.Compiler.Transformer do
   # --- PRESERVE ORDER (END) ---
 
   @doc """
-  Prints debug info for intercepted transform/1 call.
+  Prints debug info for intercepted transform/1 calls.
   """
   @spec debug({module, atom, list(AST.t() | Context.t())}, IR.t()) :: :ok
   def debug({_module, _function, [ast, context] = _args}, result) do
