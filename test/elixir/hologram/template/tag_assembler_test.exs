@@ -1,0 +1,685 @@
+defmodule Hologram.Template.TagAssemblerTest do
+  use Hologram.Test.BasicCase, async: true
+
+  alias Hologram.Template.TagAssembler
+  alias Hologram.Template.Tokenizer
+
+  def assemble(markup) do
+    markup
+    |> Tokenizer.tokenize()
+    |> TagAssembler.assemble()
+  end
+
+  describe "text" do
+    test "empty" do
+      assert assemble("") == []
+    end
+
+    test "whitespaces" do
+      markup = " \n\r\t"
+      assert assemble(markup) == [text: markup]
+    end
+
+    test "string, ASCI alphabet lowercase" do
+      markup = "abcdefghijklmnopqrstuvwxyz"
+      assert assemble(markup) == [text: markup]
+    end
+
+    test "string, ASCI alphabet uppercase" do
+      markup = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+      assert assemble(markup) == [text: markup]
+    end
+
+    test "string, UTF-8 chars" do
+      markup = "ąćęłńóśźżĄĆĘŁŃÓŚŹŻ"
+      assert assemble(markup) == [text: markup]
+    end
+
+    test "symbols" do
+      markup = "!@#$%^&*()-_=+[];:'\"\\|,./?`~"
+      assert assemble(markup) == [text: markup]
+    end
+
+    test "opening curly bracket escaping" do
+      assert assemble("abc\\{xyz") == [text: "abc{xyz"]
+    end
+
+    test "closing curly bracket escaping" do
+      assert assemble("abc\\}xyz") == [text: "abc}xyz"]
+    end
+
+    test "ended by start tag" do
+      assert assemble("abc<div>") == [text: "abc", start_tag: {"div", []}]
+    end
+
+    test "ended by end tag" do
+      assert assemble("abc</div>") == [text: "abc", end_tag: "div"]
+    end
+
+    test "ended by block start" do
+      assert assemble("abc{#xyz}") == [text: "abc", block_start: {"xyz", "{}"}]
+    end
+  end
+
+  describe "start tag" do
+    test "non-void HTML element" do
+      assert assemble("<div>") == [start_tag: {"div", []}]
+    end
+
+    test "non-void SVG element" do
+      assert assemble("<g>") == [start_tag: {"g", []}]
+    end
+
+    test "void HTML element, unclosed" do
+      assert assemble("<br>") == [self_closing_tag: {"br", []}]
+    end
+
+    test "void HTML element, self-closed" do
+      assert assemble("<br />") == [self_closing_tag: {"br", []}]
+    end
+
+    test "void SVG element, unclosed" do
+      assert assemble("<path>") == [self_closing_tag: {"path", []}]
+    end
+
+    test "void SVG element, self-closed" do
+      assert assemble("<path />") == [self_closing_tag: {"path", []}]
+    end
+
+    test "slot element, unclosed" do
+      assert assemble("<slot>") == [self_closing_tag: {"slot", []}]
+    end
+
+    test "slot element, self-closed" do
+      assert assemble("<slot />") == [self_closing_tag: {"slot", []}]
+    end
+
+    test "component, unclosed" do
+      assert assemble("<Aaa.Bbb>") == [start_tag: {"Aaa.Bbb", []}]
+    end
+
+    test "component, self-closed" do
+      assert assemble("<Aaa.Bbb />") == [self_closing_tag: {"Aaa.Bbb", []}]
+    end
+
+    test "whitespace after tag name" do
+      assert assemble("<div \n\r\t>") == [start_tag: {"div", []}]
+    end
+
+    test "inside text" do
+      assert assemble("abc<div>xyz") == [text: "abc", start_tag: {"div", []}, text: "xyz"]
+    end
+  end
+
+  describe "end tag" do
+    test "element" do
+      assert assemble("</div>") == [end_tag: "div"]
+    end
+
+    test "component" do
+      assert assemble("</Aaa.Bbb>") == [end_tag: "Aaa.Bbb"]
+    end
+
+    test "whitespace after tag name" do
+      assert assemble("</div \n\r\t>") == [end_tag: "div"]
+    end
+
+    test "inside text" do
+      assert assemble("abc</div>xyz") == [text: "abc", end_tag: "div", text: "xyz"]
+    end
+  end
+
+  describe "element" do
+    test "single" do
+      assert assemble("<div></div>") == [start_tag: {"div", []}, end_tag: "div"]
+    end
+
+    test "multiple, siblings" do
+      assert assemble("<span></span><button></button>") == [
+               start_tag: {"span", []},
+               end_tag: "span",
+               start_tag: {"button", []},
+               end_tag: "button"
+             ]
+    end
+
+    test "multiple, nested" do
+      assert assemble("<div><span></span></div>") == [
+               start_tag: {"div", []},
+               start_tag: {"span", []},
+               end_tag: "span",
+               end_tag: "div"
+             ]
+    end
+  end
+
+  describe "component" do
+    test "single" do
+      assert assemble("<Aaa.Bbb></Aaa.Bbb>") == [start_tag: {"Aaa.Bbb", []}, end_tag: "Aaa.Bbb"]
+    end
+
+    test "multiple, siblings" do
+      assert assemble("<Aaa.Bbb></Aaa.Bbb><Eee.Fff></Eee.Fff>") == [
+               start_tag: {"Aaa.Bbb", []},
+               end_tag: "Aaa.Bbb",
+               start_tag: {"Eee.Fff", []},
+               end_tag: "Eee.Fff"
+             ]
+    end
+
+    test "multiple, nested" do
+      assert assemble("<Aaa.Bbb><Eee.Fff></Eee.Fff></Aaa.Bbb>") == [
+               start_tag: {"Aaa.Bbb", []},
+               start_tag: {"Eee.Fff", []},
+               end_tag: "Eee.Fff",
+               end_tag: "Aaa.Bbb"
+             ]
+    end
+  end
+
+  describe "attribute" do
+    test "text" do
+      assert assemble("<div id=\"test\">") == [start_tag: {"div", [{"id", [text: "test"]}]}]
+    end
+
+    test "expression" do
+      assert assemble("<div id={1 + 2}>") == [
+               start_tag: {"div", [{"id", [expression: "{1 + 2}"]}]}
+             ]
+    end
+
+    test "expression in double quotes" do
+      assert assemble("<div id=\"{1 + 2}\">") == [
+               start_tag: {"div", [{"id", [text: "", expression: "{1 + 2}", text: ""]}]}
+             ]
+    end
+
+    test "text, expression" do
+      assert assemble("<div id=\"abc{1 + 2}\">") == [
+               start_tag: {"div", [{"id", [text: "abc", expression: "{1 + 2}", text: ""]}]}
+             ]
+    end
+
+    test "expression, text" do
+      assert assemble("<div id=\"{1 + 2}abc\">") == [
+               start_tag: {"div", [{"id", [text: "", expression: "{1 + 2}", text: "abc"]}]}
+             ]
+    end
+
+    test "text, expression, text" do
+      assert assemble("<div id=\"abc{1 + 2}xyz\">") == [
+               start_tag: {"div", [{"id", [text: "abc", expression: "{1 + 2}", text: "xyz"]}]}
+             ]
+    end
+
+    test "boolean attribute followed by whitespace" do
+      assert assemble("<div my_attr >") == [start_tag: {"div", [{"my_attr", []}]}]
+    end
+
+    test "boolean attribute followed by start tag closing" do
+      assert assemble("<div my_attr>") == [start_tag: {"div", [{"my_attr", []}]}]
+    end
+
+    test "multiple attributes" do
+      assert assemble("<div attr_1=\"value_1\" attr_2=\"value_2\">") == [
+               start_tag: {"div", [{"attr_1", [text: "value_1"]}, {"attr_2", [text: "value_2"]}]}
+             ]
+    end
+  end
+
+  describe "expression" do
+    test "empty" do
+      assert assemble("{}") == [expression: "{}"]
+    end
+
+    test "whitespaces" do
+      assert assemble("{ \n\r\t}") == [expression: "{ \n\r\t}"]
+    end
+
+    test "string, ASCI alphabet lowercase" do
+      markup = "{abcdefghijklmnopqrstuvwxyz}"
+      assert assemble(markup) == [expression: markup]
+    end
+
+    test "string, ASCI alphabet uppercase" do
+      markup = "{ABCDEFGHIJKLMNOPQRSTUVWXYZ}"
+      assert assemble(markup) == [expression: markup]
+    end
+
+    test "string, UTF-8 chars" do
+      markup = "{ąćęłńóśźżĄĆĘŁŃÓŚŹŻ}"
+      assert assemble(markup) == [expression: markup]
+    end
+
+    test "symbols" do
+      markup = "{!@#$%^&*()-_=+[];:'\\\"\\|,./?`~}"
+      assert assemble(markup) == [expression: markup]
+    end
+
+    test "single group of curly brackets" do
+      markup = "{{123}}"
+      assert assemble(markup) == [expression: markup]
+    end
+
+    test "multiple groups of curly brackets" do
+      markup = "{{1},{2}}"
+      assert assemble(markup) == [expression: markup]
+    end
+
+    test "opening curly bracket escaping" do
+      markup = "{{\"\\{123\"}}"
+      assert assemble(markup) == [expression: markup]
+    end
+
+    test "closing curly bracket escaping" do
+      markup = "{{\"123\\}\"}}"
+      assert assemble(markup) == [expression: markup]
+    end
+
+    test "single group of double quotes" do
+      markup = "{{\"123\"}}"
+      assert assemble(markup) == [expression: markup]
+    end
+
+    test "multiple groups of double quotes" do
+      markup = "{{\"1\",\"2\"}}"
+      assert assemble(markup) == [expression: markup]
+    end
+
+    test "double quote escaping" do
+      markup = "{{1\\\"2}}"
+      assert assemble(markup) == [expression: markup]
+    end
+
+    test "opening curly bracket inside double quoted string" do
+      markup = "{{\"1\\{2\"}}"
+      assert assemble(markup) == [expression: markup]
+    end
+
+    test "closing curly bracket inside double quoted string" do
+      markup = "{{\"1\\}2\"}}"
+      assert assemble(markup) == [expression: markup]
+    end
+
+    test "inside text" do
+      assert assemble("abc{@kmn}xyz") == [text: "abc", expression: "{@kmn}", text: "xyz"]
+    end
+
+    test "inside element" do
+      assert assemble("<div>{@abc}</div>") == [
+               start_tag: {"div", []},
+               expression: "{@abc}",
+               end_tag: "div"
+             ]
+    end
+  end
+
+  describe "raw block" do
+    test "block start" do
+      assert assemble("{#raw}") == []
+    end
+
+    test "block end" do
+      assert assemble("{#raw}{/raw}") == []
+    end
+
+    test "expression" do
+      assert assemble("{#raw}{1 + 2}{/raw}") == [text: "{1 + 2}"]
+    end
+
+    test "inside text" do
+      assert assemble("abc{#raw}{/raw}xyz") == [text: "abcxyz"]
+    end
+
+    test "nested template block" do
+      assert assemble("{#raw}{#abc}{/abc}{/raw}") == [text: "{#abc}{/abc}"]
+    end
+  end
+
+  describe "block start" do
+    test "without expression" do
+      assert assemble("{#abc}") == [block_start: {"abc", "{}"}]
+    end
+
+    test "with whitespace expression" do
+      assert assemble("{#abc \n\r\t}") == [block_start: {"abc", "{ \n\r\t}"}]
+    end
+
+    test "with non-whitespace expression" do
+      assert assemble("{#if abc == {1, 2}}") == [block_start: {"if", "{ abc == {1, 2}}"}]
+    end
+
+    test "inside text" do
+      assert assemble("abc{#kmn}xyz") == [text: "abc", block_start: {"kmn", "{}"}, text: "xyz"]
+    end
+
+    test "inside element" do
+      assert assemble("<div>{#abc}</div>") == [
+               start_tag: {"div", []},
+               block_start: {"abc", "{}"},
+               end_tag: "div"
+             ]
+    end
+  end
+
+  describe "block end" do
+    test "isolated" do
+      assert assemble("{/abc}") == [block_end: "abc"]
+    end
+
+    test "inside text" do
+      assert assemble("abc{/kmn}xyz") == [text: "abc", block_end: "kmn", text: "xyz"]
+    end
+  end
+
+  describe "block" do
+    test "single" do
+      assert assemble("{#abc}{/abc}") == [block_start: {"abc", "{}"}, block_end: "abc"]
+    end
+
+    test "multiple, siblings" do
+      assert assemble("{#abc}{/abc}{#xyz}{/xyz}") == [
+               block_start: {"abc", "{}"},
+               block_end: "abc",
+               block_start: {"xyz", "{}"},
+               block_end: "xyz"
+             ]
+    end
+
+    test "multiple, nested" do
+      assert assemble("{#abc}{#xyz}{/xyz}{/abc}") == [
+               block_start: {"abc", "{}"},
+               block_start: {"xyz", "{}"},
+               block_end: "xyz",
+               block_end: "abc"
+             ]
+    end
+  end
+
+  describe "script" do
+    test "symbol '<' not inside double quoted string" do
+      assert assemble("<script>1 < 2</script>") == [
+               start_tag: {"script", []},
+               text: "1 < 2",
+               end_tag: "script"
+             ]
+    end
+
+    test "symbol '<' inside double quoted string" do
+      assert assemble("<script>\"1 < 2\"</script>") == [
+               start_tag: {"script", []},
+               text: "\"1 < 2\"",
+               end_tag: "script"
+             ]
+    end
+
+    test "symbol '>' not inside double quoted string" do
+      assert assemble("<script>1 > 2</script>") == [
+               start_tag: {"script", []},
+               text: "1 > 2",
+               end_tag: "script"
+             ]
+    end
+
+    test "symbol '>' inside double quoted string" do
+      assert assemble("<script>\"1 > 2\"</script>") == [
+               start_tag: {"script", []},
+               text: "\"1 > 2\"",
+               end_tag: "script"
+             ]
+    end
+
+    test "symbol '</' inside double quoted string" do
+      assert assemble("<script>\"abc</xyz\"</script>") == [
+               start_tag: {"script", []},
+               text: "\"abc</xyz\"",
+               end_tag: "script"
+             ]
+    end
+  end
+
+  # TODO: cleanup
+
+  # alias Hologram.Template.SyntaxError
+
+  # describe "text node nested in raw directive" do
+  #   test "empty" do
+  #     markup = "aaa{#raw}{/raw}bbb"
+
+  #     result = assemble(markup)
+  #     expected = [text: "aaabbb"]
+
+  #     assert result == expected
+  #   end
+
+  #   test "text with expression" do
+  #     markup = "aaa{#raw}bbb{@test}ccc{/raw}ddd"
+
+  #     result = assemble(markup)
+  #     expected = [text: "aaabbb{@test}cccddd"]
+
+  #     assert result == expected
+  #   end
+
+  #   test "text with '=' char" do
+  #     markup = "aaa{#raw}bbb = ccc{/raw}ddd"
+
+  #     result = assemble(markup)
+  #     expected = [text: "aaabbb = cccddd"]
+
+  #     assert result == expected
+  #   end
+
+  #   test "text with '\"' char" do
+  #     markup = "aaa{#raw}bbb \" ccc{/raw}ddd"
+
+  #     result = assemble(markup)
+  #     expected = [text: "aaabbb \" cccddd"]
+
+  #     assert result == expected
+  #   end
+
+  #   # TODO: test
+  #   # test "element node with double quoted expression attribute value" do
+  #   #   markup = "aaa{#raw}<div id=\"bbb{@test}ccc\"></div>{/raw}ddd"
+  #   #   result = assemble(markup)
+
+  #   #   expected = [
+  #   #     text: "aaa",
+  #   #     start_tag: {"div", [{"id", [text: "bbb{@test}ccc"]}]},
+  #   #     end_tag: "div",
+  #   #     text: "ddd"
+  #   #   ]
+
+  #   #   assert result == expected
+  #   # end
+
+  #   # test "element node with expression attribute value" do
+  #   #   markup = "aaa{#raw}<div id={@test}></div>{/raw}"
+  #   #   result = assemble(markup)
+
+  #   #   expected = [
+  #   #     text: "aaa",
+  #   #     start_tag: {"div", [{"id", [expression: "{@test}"]}]},
+  #   #     end_tag: "div"
+  #   #   ]
+
+  #   #   assert result == expected
+  #   # end
+
+  #   # test "component node with double quoted expression prop value" do
+  #   #   markup = "aaa{#raw}<Abc.Bcd xyz=\"bbb{@test}ccc\"></Abc.Bcd>{/raw}ddd"
+  #   #   result = assemble(markup)
+
+  #   #   expected = [
+  #   #     text: "aaa",
+  #   #     start_tag: {"Abc.Bcd", [{"xyz", [text: "bbb{@test}ccc"]}]},
+  #   #     end_tag: "Abc.Bcd",
+  #   #     text: "ddd"
+  #   #   ]
+
+  #   #   assert result == expected
+  #   # end
+
+  #   # test "component node with expression prop value" do
+  #   #   markup = "aaa{#raw}<Abc.Bcd xyz={@test}></Abc.Bcd>{/raw}"
+  #   #   result = assemble(markup)
+
+  #   #   expected = [
+  #   #     text: "aaa",
+  #   #     start_tag: {"Abc.Bcd", [{"xyz", [expression: "{@test}"]}]},
+  #   #     end_tag: "Abc.Bcd"
+  #   #   ]
+
+  #   #   assert result == expected
+  #   # end
+
+  #   # test "script with special symbols" do
+  #   #   markup = """
+  #   #   <script>
+  #   #     {#raw}
+  #   #       document.getElementById("test_elem").addEventListener("click", () => { history.forward() })
+  #   #     {/raw}
+  #   #   </script>
+  #   #   """
+
+  #   #   result = assemble(markup)
+  #   # end
+  # end
+
+  # # TODO: cleanup
+  # # test "JS script" do
+  # #   markup = """
+  # #   <script>
+  # #   {#raw}
+  # #   "absdfsd </dupa jaisa"
+  # #     if (abc > 0 || xyz < 10) {
+  # #       () => { test("param") }.()
+
+  # #     }
+  # #   {/raw}
+  # #   </script>
+  # #   """
+
+  # #   result = assemble(markup)
+  # #   IO.inspect(result)
+  # #   # expected = [text: "aaabbb"]
+
+  # #   # assert result == expected
+  # # end
+
+  # describe "template syntax errors" do
+  #   test "unescaped '<' character inside text node" do
+  #     markup = "abc < xyz"
+
+  #     expected_msg = """
+
+  #     Unescaped '<' character inside text node.
+  #     To escape use HTML entity: '&lt;'
+
+  #     abc < xyz
+  #         ^
+
+  #     status = :text
+
+  #     token = {:symbol, :<}
+
+  #     context = %{attr_key: nil, attr_value: [], attrs: [], double_quote_open?: false, node_type: :text_node, num_open_curly_brackets: 0, processed_tags: [], processed_tokens: [string: \"abc\", whitespace: \" \"], raw?: false, tag_name: nil, token_buffer: [string: \"abc\", whitespace: \" \"]}
+  #     """
+
+  #     assert_raise SyntaxError, expected_msg, fn ->
+  #       assemble(markup)
+  #     end
+  #   end
+
+  #   test "unescaped '>' character inside text node" do
+  #     markup = "abc > xyz"
+
+  #     expected_msg = """
+
+  #     Unescaped '>' character inside text node.
+  #     To escape use HTML entity: '&gt;'
+
+  #     abc > xyz
+  #         ^
+
+  #     status = :text
+
+  #     token = {:symbol, :>}
+
+  #     context = %{attr_key: nil, attr_value: [], attrs: [], double_quote_open?: false, node_type: :text_node, num_open_curly_brackets: 0, processed_tags: [], processed_tokens: [string: \"abc\", whitespace: \" \"], raw?: false, tag_name: nil, token_buffer: [string: \"abc\", whitespace: \" \"]}
+  #     """
+
+  #     assert_raise SyntaxError, expected_msg, fn ->
+  #       assemble(markup)
+  #     end
+  #   end
+
+  #   test "previous fragment trimming in error message" do
+  #     markup = "012345678901234567890123456789 > xyz"
+
+  #     expected_msg = """
+
+  #     Unescaped '>' character inside text node.
+  #     To escape use HTML entity: '&gt;'
+
+  #     1234567890123456789 > xyz
+  #                         ^
+
+  #     status = :text
+
+  #     token = {:symbol, :>}
+
+  #     context = %{attr_key: nil, attr_value: [], attrs: [], double_quote_open?: false, node_type: :text_node, num_open_curly_brackets: 0, processed_tags: [], processed_tokens: [string: \"012345678901234567890123456789\", whitespace: \" \"], raw?: false, tag_name: nil, token_buffer: [string: \"012345678901234567890123456789\", whitespace: \" \"]}
+  #     """
+
+  #     assert_raise SyntaxError, expected_msg, fn ->
+  #       assemble(markup)
+  #     end
+  #   end
+
+  #   test "unclosed start tag" do
+  #     markup = "<div "
+
+  #     expected_msg = """
+
+  #     Unclosed start tag.
+
+  #     <div\s
+  #          ^
+
+  #     status = :start_tag
+
+  #     token = nil
+
+  #     context = %{attr_key: nil, attr_value: [], attrs: [], double_quote_open?: false, node_type: :element_node, num_open_curly_brackets: 0, processed_tags: [], processed_tokens: [symbol: :<, string: \"div\", whitespace: \" \"], raw?: false, tag_name: \"div\", token_buffer: []}
+  #     """
+
+  #     assert_raise SyntaxError, expected_msg, fn ->
+  #       assemble(markup)
+  #     end
+  #   end
+
+  #   test "missing attribute name" do
+  #     markup = "<div =\"abc\">"
+
+  #     expected_msg = """
+
+  #     Missing attribute name.
+
+  #     <div ="abc">
+  #          ^
+
+  #     status = :start_tag
+
+  #     token = {:symbol, :=}
+
+  #     context = %{attr_key: nil, attr_value: [], attrs: [], double_quote_open?: false, node_type: :element_node, num_open_curly_brackets: 0, processed_tags: [], processed_tokens: [symbol: :<, string: \"div\", whitespace: \" \"], raw?: false, tag_name: \"div\", token_buffer: []}
+  #     """
+
+  #     assert_raise SyntaxError, expected_msg, fn ->
+  #       assemble(markup)
+  #     end
+  #   end
+  # end
+end
