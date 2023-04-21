@@ -33,7 +33,7 @@ defmodule Hologram.Template.Helpers do
       :component
   """
   @spec tag_type(String.t()) :: :component | :element
-  def tag_type(<<first_char::binary-size(1), _rest>>) do
+  def tag_type(<<first_char::binary-size(1), _rest::binary>>) do
     if String.downcase(first_char) == first_char do
       :element
     else
