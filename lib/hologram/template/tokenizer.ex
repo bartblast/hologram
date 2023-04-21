@@ -1,4 +1,23 @@
 defmodule Hologram.Template.Tokenizer do
+  @doc """
+  Splits template code into a list of tokens.
+
+  ## Examples
+
+      iex> tokenize("<span>aaa bbb</span>")
+      [
+        symbol: "<",
+        string: "span",
+        symbol: ">",
+        string: "aaa",
+        whitespace: " ",
+        string: "bbb",
+        symbol: "</",
+        string: "span",
+        symbol: ">"
+      ]
+  """
+  @spec tokenize(String.t()) :: list({:string | :symbol | :whitespace, String.t()})
   def tokenize(""), do: []
 
   def tokenize(" " <> rest) do
@@ -88,7 +107,7 @@ defmodule Hologram.Template.Tokenizer do
   def tokenize(rest) do
     excluded_chars = " \n\r\t<>/=\"{}\\" |> Regex.escape()
     regex = ~r/\A([^#{excluded_chars}]+)(.*)\z/s
-    [_, string, rest] = Regex.run(regex, rest)
-    [{:string, string} | tokenize(rest)]
+    [_full_capture, token, rest] = Regex.run(regex, rest)
+    [{:string, token} | tokenize(rest)]
   end
 end
