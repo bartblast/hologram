@@ -41,6 +41,18 @@ defmodule Hologram.Template.Helpers do
     end
   end
 
+  @doc """
+  Determines whether the given tag name belongs to a void element.
+
+  ## Examples
+
+      iex> void_element?("br")
+      true
+
+      iex> void_element?("div")
+      false
+  """
+  @spec void_element?(String.t()) :: boolean
   def void_element?(tag_name) do
     void_html_element?(tag_name) || void_svg_element?(tag_name) || tag_name == "slot"
   end
