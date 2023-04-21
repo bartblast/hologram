@@ -2,7 +2,7 @@ defmodule Hologram.Compiler.Transformer do
   if Application.compile_env(:hologram, :debug_transformer) do
     use Interceptor.Annotated,
       config: %{
-        {Hologram.Compiler.Transformer, :transform, 1} => [
+        {Hologram.Compiler.Transformer, :transform, 2} => [
           after: {Hologram.Compiler.Transformer, :debug, 2}
         ]
       }
@@ -312,12 +312,15 @@ defmodule Hologram.Compiler.Transformer do
   @doc """
   Prints debug info for intercepted transform/1 call.
   """
-  @spec debug({module, atom, [AST.t()]}, IR.t()) :: :ok
-  def debug({_module, _function, [ast] = _args}, result) do
-    # credo:disable-for-lines:7 /Credo.Check.Refactor.IoPuts|Credo.Check.Warning.IoInspect/
+  @spec debug({module, atom, list(AST.t() | Context.t())}, IR.t()) :: :ok
+  def debug({_module, _function, [ast, context] = _args}, result) do
+    # credo:disable-for-lines:10 /Credo.Check.Refactor.IoPuts|Credo.Check.Warning.IoInspect/
     IO.puts("\nTRANSFORM...............................\n")
     IO.puts("ast")
     IO.inspect(ast)
+    IO.puts("")
+    IO.puts("context")
+    IO.inspect(context)
     IO.puts("")
     IO.puts("result")
     IO.inspect(result)
