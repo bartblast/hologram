@@ -314,28 +314,6 @@ defmodule Hologram.Template.TagAssemblerTest do
     end
   end
 
-  describe "raw block" do
-    test "block start" do
-      assert assemble("{#raw}") == []
-    end
-
-    test "block end" do
-      assert assemble("{#raw}{/raw}") == []
-    end
-
-    test "expression" do
-      assert assemble("{#raw}{1 + 2}{/raw}") == [text: "{1 + 2}"]
-    end
-
-    test "inside text" do
-      assert assemble("abc{#raw}{/raw}xyz") == [text: "abcxyz"]
-    end
-
-    test "nested template block" do
-      assert assemble("{#raw}{#abc}{/abc}{/raw}") == [text: "{#abc}{/abc}"]
-    end
-  end
-
   describe "block start" do
     test "without expression" do
       assert assemble("{#abc}") == [block_start: {"abc", "{}"}]
@@ -396,6 +374,86 @@ defmodule Hologram.Template.TagAssemblerTest do
     end
   end
 
+  describe "raw block" do
+    test "block start" do
+      assert assemble("{#raw}") == []
+    end
+
+    test "block end" do
+      assert assemble("{#raw}{/raw}") == []
+    end
+
+    test "with text" do
+      assert assemble("{#raw}abc{/raw}") == [text: "abc"]
+    end
+
+    test "with element" do
+      assert assemble("{#raw}<div></div>{/raw}") == [start_tag: {"div", []}, end_tag: "div"]
+    end
+
+    test "with component" do
+      assert assemble("{#raw}<MyComponent></MyComponent>{/raw}") == [
+               start_tag: {"MyComponent", []},
+               end_tag: "MyComponent"
+             ]
+    end
+
+    test "with expression" do
+      assert assemble("{#raw}{1 + 2}{/raw}") == [text: "{1 + 2}"]
+    end
+
+    test "with expression nested in text" do
+      assert assemble("{#raw}aaa{@test}bbb{/raw}") == [text: "aaa{@test}bbb"]
+    end
+
+    test "with template block" do
+      assert assemble("{#raw}{#abc}{/abc}{/raw}") == [text: "{#abc}{/abc}"]
+    end
+
+    test "with '=' char nested in text" do
+      assert assemble("{#raw}aaa = bbb{/raw}") == [text: "aaa = bbb"]
+    end
+
+    test "with '\"' char nested in text" do
+      assert assemble("{#raw}aaa \" bbb{/raw}") == [text: "aaa \" bbb"]
+    end
+
+    test "with element having an attribute value with expression in double quotes" do
+      assert assemble("{#raw}<div id=\"aaa{@test}bbb\"></div>{/raw}") == [
+               start_tag: {"div", [{"id", [text: "aaa{@test}bbb"]}]},
+               end_tag: "div"
+             ]
+    end
+
+    #   # test "element node with expression attribute value" do
+    #   #   markup = "aaa{#raw}<div id={@test}></div>{/raw}"
+    #   #   result = assemble(markup)
+
+    #   #   expected = [
+    #   #     text: "aaa",
+    #   #     start_tag: {"div", [{"id", [expression: "{@test}"]}]},
+    #   #     end_tag: "div"
+    #   #   ]
+
+    #   #   assert result == expected
+    #   # end
+
+    test "inside text" do
+      assert assemble("abc{#raw}{/raw}xyz") == [text: "abcxyz"]
+    end
+
+    test "inside element" do
+      assert assemble("<div>{#raw}{/raw}</div>") == [start_tag: {"div", []}, end_tag: "div"]
+    end
+
+    test "inside component" do
+      assert assemble("<MyComponent>{#raw}{/raw}</MyComponent>") == [
+               start_tag: {"MyComponent", []},
+               end_tag: "MyComponent"
+             ]
+    end
+  end
+
   describe "script" do
     test "symbol '<' not inside double quoted string" do
       assert assemble("<script>1 < 2</script>") == [
@@ -443,69 +501,6 @@ defmodule Hologram.Template.TagAssemblerTest do
   # alias Hologram.Template.SyntaxError
 
   # describe "text node nested in raw directive" do
-  #   test "empty" do
-  #     markup = "aaa{#raw}{/raw}bbb"
-
-  #     result = assemble(markup)
-  #     expected = [text: "aaabbb"]
-
-  #     assert result == expected
-  #   end
-
-  #   test "text with expression" do
-  #     markup = "aaa{#raw}bbb{@test}ccc{/raw}ddd"
-
-  #     result = assemble(markup)
-  #     expected = [text: "aaabbb{@test}cccddd"]
-
-  #     assert result == expected
-  #   end
-
-  #   test "text with '=' char" do
-  #     markup = "aaa{#raw}bbb = ccc{/raw}ddd"
-
-  #     result = assemble(markup)
-  #     expected = [text: "aaabbb = cccddd"]
-
-  #     assert result == expected
-  #   end
-
-  #   test "text with '\"' char" do
-  #     markup = "aaa{#raw}bbb \" ccc{/raw}ddd"
-
-  #     result = assemble(markup)
-  #     expected = [text: "aaabbb \" cccddd"]
-
-  #     assert result == expected
-  #   end
-
-  #   # TODO: test
-  #   # test "element node with double quoted expression attribute value" do
-  #   #   markup = "aaa{#raw}<div id=\"bbb{@test}ccc\"></div>{/raw}ddd"
-  #   #   result = assemble(markup)
-
-  #   #   expected = [
-  #   #     text: "aaa",
-  #   #     start_tag: {"div", [{"id", [text: "bbb{@test}ccc"]}]},
-  #   #     end_tag: "div",
-  #   #     text: "ddd"
-  #   #   ]
-
-  #   #   assert result == expected
-  #   # end
-
-  #   # test "element node with expression attribute value" do
-  #   #   markup = "aaa{#raw}<div id={@test}></div>{/raw}"
-  #   #   result = assemble(markup)
-
-  #   #   expected = [
-  #   #     text: "aaa",
-  #   #     start_tag: {"div", [{"id", [expression: "{@test}"]}]},
-  #   #     end_tag: "div"
-  #   #   ]
-
-  #   #   assert result == expected
-  #   # end
 
   #   # test "component node with double quoted expression prop value" do
   #   #   markup = "aaa{#raw}<Abc.Bcd xyz=\"bbb{@test}ccc\"></Abc.Bcd>{/raw}ddd"
