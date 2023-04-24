@@ -330,7 +330,7 @@ defmodule Hologram.Template.TagAssemblerTest do
     end
 
     test "symbols" do
-      markup = "{!@#$%^&*()-_=+[];:'\\\"\\|,./?`~}"
+      markup = "{!@#$%^&*()-_=+[];:\\\'\\\"\\|,./?`~}"
       assert assemble(markup) == [expression: markup]
     end
 
@@ -344,13 +344,23 @@ defmodule Hologram.Template.TagAssemblerTest do
       assert assemble(markup) == [expression: markup]
     end
 
-    test "opening curly bracket escaping" do
+    test "opening curly bracket escaping inside double quotes" do
       markup = "{{\"\\{123\"}}"
       assert assemble(markup) == [expression: markup]
     end
 
-    test "closing curly bracket escaping" do
+    test "opening curly bracket escaping inside single quotes" do
+      markup = "{{'\\{123'}}"
+      assert assemble(markup) == [expression: markup]
+    end
+
+    test "closing curly bracket escaping inside double quotes" do
       markup = "{{\"123\\}\"}}"
+      assert assemble(markup) == [expression: markup]
+    end
+
+    test "closing curly bracket escaping inside single quotes" do
+      markup = "{{'123\\}'}}"
       assert assemble(markup) == [expression: markup]
     end
 
@@ -359,8 +369,28 @@ defmodule Hologram.Template.TagAssemblerTest do
       assert assemble(markup) == [expression: markup]
     end
 
+    test "single group of single quotes" do
+      markup = "{{'123'}}"
+      assert assemble(markup) == [expression: markup]
+    end
+
     test "multiple groups of double quotes" do
       markup = "{{\"1\",\"2\"}}"
+      assert assemble(markup) == [expression: markup]
+    end
+
+    test "multiple groups of single quotes" do
+      markup = "{{'1','2'}}"
+      assert assemble(markup) == [expression: markup]
+    end
+
+    test "single quote nested in double quotes" do
+      markup = "{\"abc'xyz\"}"
+      assert assemble(markup) == [expression: markup]
+    end
+
+    test "double quote nested in single quotes" do
+      markup = "{'abc\"xyz'}"
       assert assemble(markup) == [expression: markup]
     end
 
@@ -369,13 +399,28 @@ defmodule Hologram.Template.TagAssemblerTest do
       assert assemble(markup) == [expression: markup]
     end
 
-    test "opening curly bracket inside double quoted string" do
+    test "single quote escaping" do
+      markup = "{{1\\\'2}}"
+      assert assemble(markup) == [expression: markup]
+    end
+
+    test "opening curly bracket inside double quotes" do
       markup = "{{\"1\\{2\"}}"
       assert assemble(markup) == [expression: markup]
     end
 
-    test "closing curly bracket inside double quoted string" do
+    test "opening curly bracket inside single quotes" do
+      markup = "{{'1\\{2'}}"
+      assert assemble(markup) == [expression: markup]
+    end
+
+    test "closing curly bracket inside double quotes" do
       markup = "{{\"1\\}2\"}}"
+      assert assemble(markup) == [expression: markup]
+    end
+
+    test "closing curly bracket inside single quotes" do
+      markup = "{{'1\\}2'}}"
       assert assemble(markup) == [expression: markup]
     end
 
@@ -512,6 +557,10 @@ defmodule Hologram.Template.TagAssemblerTest do
       assert assemble("{#raw}aaa \" bbb{/raw}") == [text: "aaa \" bbb"]
     end
 
+    test "with \"'\" char nested in text" do
+      assert assemble("{#raw}aaa ' bbb{/raw}") == [text: "aaa ' bbb"]
+    end
+
     test "with element having an attribute value with expression in double quotes" do
       assert assemble("{#raw}<div id=\"aaa{@test}bbb\"></div>{/raw}") == [
                start_tag: {"div", [{"id", [text: "aaa{@test}bbb"]}]},
@@ -543,7 +592,7 @@ defmodule Hologram.Template.TagAssemblerTest do
   end
 
   describe "script" do
-    test "symbol '<' not inside double quoted string" do
+    test "symbol '<' not inside double or single quotes" do
       assert assemble("<script>1 < 2</script>") == [
                start_tag: {"script", []},
                text: "1 < 2",
@@ -551,7 +600,7 @@ defmodule Hologram.Template.TagAssemblerTest do
              ]
     end
 
-    test "symbol '<' inside double quoted string" do
+    test "symbol '<' inside double quotes" do
       assert assemble("<script>\"1 < 2\"</script>") == [
                start_tag: {"script", []},
                text: "\"1 < 2\"",
@@ -559,7 +608,15 @@ defmodule Hologram.Template.TagAssemblerTest do
              ]
     end
 
-    test "symbol '>' not inside double quoted string" do
+    test "symbol '<' inside single quotes" do
+      assert assemble("<script>'1 < 2'</script>") == [
+               start_tag: {"script", []},
+               text: "'1 < 2'",
+               end_tag: "script"
+             ]
+    end
+
+    test "symbol '>' not inside double quotes" do
       assert assemble("<script>1 > 2</script>") == [
                start_tag: {"script", []},
                text: "1 > 2",
@@ -567,7 +624,7 @@ defmodule Hologram.Template.TagAssemblerTest do
              ]
     end
 
-    test "symbol '>' inside double quoted string" do
+    test "symbol '>' inside double quotes" do
       assert assemble("<script>\"1 > 2\"</script>") == [
                start_tag: {"script", []},
                text: "\"1 > 2\"",
@@ -575,10 +632,26 @@ defmodule Hologram.Template.TagAssemblerTest do
              ]
     end
 
-    test "symbol '</' inside double quoted string" do
+    test "symbol '>' inside single quotes" do
+      assert assemble("<script>'1 > 2'</script>") == [
+               start_tag: {"script", []},
+               text: "'1 > 2'",
+               end_tag: "script"
+             ]
+    end
+
+    test "symbol '</' inside double quotes" do
       assert assemble("<script>\"abc</xyz\"</script>") == [
                start_tag: {"script", []},
                text: "\"abc</xyz\"",
+               end_tag: "script"
+             ]
+    end
+
+    test "symbol '</' inside single quotes" do
+      assert assemble("<script>'abc</xyz'</script>") == [
+               start_tag: {"script", []},
+               text: "'abc</xyz'",
                end_tag: "script"
              ]
     end
@@ -593,10 +666,34 @@ defmodule Hologram.Template.TagAssemblerTest do
              ]
     end
 
-    test "script end tag inside double quoted string" do
+    test "single quote nested in double quotes" do
+      assert assemble("<script>const str = \"abc'xyz\";</script>") == [
+               start_tag: {"script", []},
+               text: "const str = \"abc'xyz\";",
+               end_tag: "script"
+             ]
+    end
+
+    test "double quote nested in single quotes" do
+      assert assemble("<script>const str = 'abc\"xyz';</script>") == [
+               start_tag: {"script", []},
+               text: "const str = 'abc\"xyz';",
+               end_tag: "script"
+             ]
+    end
+
+    test "script end tag inside double quotes" do
       assert assemble("<script>const abc = 'substr' + \"</script>\";</script>") == [
                start_tag: {"script", []},
                text: "const abc = 'substr' + \"</script>\";",
+               end_tag: "script"
+             ]
+    end
+
+    test "script end tag inside single quotes" do
+      assert assemble("<script>const abc = 'substr' + '</script>';</script>") == [
+               start_tag: {"script", []},
+               text: "const abc = 'substr' + '</script>';",
                end_tag: "script"
              ]
     end

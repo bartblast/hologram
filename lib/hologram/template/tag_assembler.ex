@@ -3,7 +3,8 @@ defmodule Hologram.Template.TagAssembler do
     use Interceptor.Annotated,
       config: %{
         {Hologram.Template.TagAssembler, :assemble, 3} => [
-          after: {Hologram.Template.TagAssembler, :debug, 2}
+          on_success: {Hologram.Template.TagAssembler, :debug, 3},
+          on_error: {Hologram.Template.TagAssembler, :debug, 3}
         ]
       }
   end
@@ -25,6 +26,7 @@ defmodule Hologram.Template.TagAssembler do
     processed_tokens: [],
     raw?: false,
     script?: false,
+    single_quote_open?: false,
     tag_name: nil,
     token_buffer: []
   }
@@ -61,23 +63,59 @@ defmodule Hologram.Template.TagAssembler do
     |> assemble(:start_tag, rest)
   end
 
-  def assemble(%{double_quote_open?: false, script?: true} = context, :text, [
-        {:symbol, "\""} = token | rest
-      ]) do
+  def assemble(
+        %{script?: true, double_quote_open?: false, single_quote_open?: false} = context,
+        :text,
+        [
+          {:symbol, "\""} = token | rest
+        ]
+      ) do
     context
     |> open_double_quote()
     |> assemble_text(token, rest)
   end
 
-  def assemble(%{double_quote_open?: true, script?: true} = context, :text, [
-        {:symbol, "\""} = token | rest
-      ]) do
+  def assemble(
+        %{script?: true, double_quote_open?: false, single_quote_open?: false} = context,
+        :text,
+        [
+          {:symbol, "'"} = token | rest
+        ]
+      ) do
+    context
+    |> open_single_quote()
+    |> assemble_text(token, rest)
+  end
+
+  def assemble(
+        %{script?: true, double_quote_open?: true} = context,
+        :text,
+        [
+          {:symbol, "\""} = token | rest
+        ]
+      ) do
     context
     |> close_double_quote()
     |> assemble_text(token, rest)
   end
 
+  def assemble(
+        %{script?: true, single_quote_open?: true} = context,
+        :text,
+        [
+          {:symbol, "'"} = token | rest
+        ]
+      ) do
+    context
+    |> close_single_quote()
+    |> assemble_text(token, rest)
+  end
+
   def assemble(context, :text, [{:symbol, "\""} = token | rest]) do
+    assemble_text(context, token, rest)
+  end
+
+  def assemble(context, :text, [{:symbol, "'"} = token | rest]) do
     assemble_text(context, token, rest)
   end
 
@@ -140,6 +178,7 @@ defmodule Hologram.Template.TagAssembler do
     context
     |> add_attr_value_part(:text)
     |> reset_double_quotes()
+    |> reset_single_quotes()
     |> reset_braces()
     |> reset_token_buffer()
     |> set_prev_status(:text)
@@ -150,6 +189,7 @@ defmodule Hologram.Template.TagAssembler do
     context
     |> maybe_add_text_tag()
     |> reset_double_quotes()
+    |> reset_single_quotes()
     |> reset_braces()
     |> reset_token_buffer()
     |> set_prev_status(:text)
@@ -164,7 +204,13 @@ defmodule Hologram.Template.TagAssembler do
     assemble_text(context, {:symbol, "}"}, rest)
   end
 
-  def assemble(%{double_quote_open?: true, script?: true} = context, :text, [
+  def assemble(%{script?: true, double_quote_open?: true} = context, :text, [
+        {:symbol, "</"} = token | rest
+      ]) do
+    assemble_text(context, token, rest)
+  end
+
+  def assemble(%{script?: true, single_quote_open?: true} = context, :text, [
         {:symbol, "</"} = token | rest
       ]) do
     assemble_text(context, token, rest)
@@ -331,11 +377,19 @@ defmodule Hologram.Template.TagAssembler do
     |> assemble(:text, rest)
   end
 
-  def assemble(%{double_quote_open?: false} = context, :expression, [
+  def assemble(%{double_quote_open?: false, single_quote_open?: false} = context, :expression, [
         {:symbol, "\""} = token | rest
       ]) do
     context
     |> open_double_quote()
+    |> assemble_expression(token, rest)
+  end
+
+  def assemble(%{double_quote_open?: false, single_quote_open?: false} = context, :expression, [
+        {:symbol, "'"} = token | rest
+      ]) do
+    context
+    |> open_single_quote()
     |> assemble_expression(token, rest)
   end
 
@@ -347,7 +401,15 @@ defmodule Hologram.Template.TagAssembler do
     |> assemble_expression(token, rest)
   end
 
-  def assemble(%{double_quote_open?: false} = context, :expression, [
+  def assemble(%{single_quote_open?: true} = context, :expression, [
+        {:symbol, "'"} = token | rest
+      ]) do
+    context
+    |> close_single_quote()
+    |> assemble_expression(token, rest)
+  end
+
+  def assemble(%{double_quote_open?: false, single_quote_open?: false} = context, :expression, [
         {:symbol, "{"} = token | rest
       ]) do
     context
@@ -356,7 +418,12 @@ defmodule Hologram.Template.TagAssembler do
   end
 
   def assemble(
-        %{double_quote_open?: false, node_type: :text, num_open_curly_brackets: 0} = context,
+        %{
+          double_quote_open?: false,
+          single_quote_open?: false,
+          node_type: :text,
+          num_open_curly_brackets: 0
+        } = context,
         :expression,
         [{:symbol, "}"} = token | rest]
       ) do
@@ -372,6 +439,7 @@ defmodule Hologram.Template.TagAssembler do
   def assemble(
         %{
           double_quote_open?: false,
+          single_quote_open?: false,
           node_type: :attribute,
           num_open_curly_brackets: 0,
           prev_status: :text
@@ -391,6 +459,7 @@ defmodule Hologram.Template.TagAssembler do
   def assemble(
         %{
           double_quote_open?: false,
+          single_quote_open?: false,
           node_type: :attribute,
           num_open_curly_brackets: 0,
           prev_status: :attr_assignment
@@ -408,7 +477,12 @@ defmodule Hologram.Template.TagAssembler do
   end
 
   def assemble(
-        %{double_quote_open?: false, node_type: :block, num_open_curly_brackets: 0} = context,
+        %{
+          double_quote_open?: false,
+          single_quote_open?: false,
+          node_type: :block,
+          num_open_curly_brackets: 0
+        } = context,
         :expression,
         [{:symbol, "}"} = token | rest]
       ) do
@@ -422,7 +496,7 @@ defmodule Hologram.Template.TagAssembler do
     |> assemble(:text, rest)
   end
 
-  def assemble(%{double_quote_open?: false} = context, :expression, [
+  def assemble(%{double_quote_open?: false, single_quote_open?: false} = context, :expression, [
         {:symbol, "}"} = token | rest
       ]) do
     context
@@ -437,8 +511,8 @@ defmodule Hologram.Template.TagAssembler do
   # @doc """
   # Prints debug info for intercepted assemble/3 calls.
   # """
-  @spec debug({module, atom, list}, list) :: :ok
-  def debug({_module, _function, [context, status, tokens] = _args}, result) do
+  # @spec debug({module, atom, list}, list) :: :ok
+  def debug({_module, _function, [context, status, tokens] = _args}, result, _start_timestamp) do
     # credo:disable-for-lines:13 /Credo.Check.Refactor.IoPuts|Credo.Check.Warning.IoInspect/
     IO.puts("\nASSEMBLE................................\n")
     IO.puts("context")
@@ -515,6 +589,10 @@ defmodule Hologram.Template.TagAssembler do
 
   defp close_double_quote(context) do
     %{context | double_quote_open?: false}
+  end
+
+  defp close_single_quote(context) do
+    %{context | single_quote_open?: false}
   end
 
   defp decrement_num_open_curly_brackets(context) do
@@ -627,12 +705,17 @@ defmodule Hologram.Template.TagAssembler do
   defp maybe_enable_script_mode(context, "script") do
     %{context | script?: true}
     |> reset_double_quotes()
+    |> reset_single_quotes()
   end
 
   defp maybe_enable_script_mode(context, _tag_name), do: context
 
   defp open_double_quote(context) do
     %{context | double_quote_open?: true}
+  end
+
+  defp open_single_quote(context) do
+    %{context | single_quote_open?: true}
   end
 
   defp raise_error(%{processed_tokens: processed_tokens} = context, status, token, rest) do
@@ -694,6 +777,10 @@ defmodule Hologram.Template.TagAssembler do
 
   defp reset_double_quotes(context) do
     %{context | double_quote_open?: false}
+  end
+
+  defp reset_single_quotes(context) do
+    %{context | single_quote_open?: false}
   end
 
   defp reset_token_buffer(context) do
