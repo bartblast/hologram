@@ -541,22 +541,25 @@ defmodule Hologram.Template.TagAssembler do
     |> String.replace("\t", "\\t")
   end
 
-  defp error_reason(context, status, token)
+  defp error_reason_and_hint(context, status, token)
 
-  defp error_reason(_context, :attr_assignment, {:symbol, "{"}) do
+  defp error_reason_and_hint(_context, :attr_assignment, {:symbol, "{"}) do
     """
     Reason:
     Expression attribute value inside raw block detected.
 
-    Hints:
+    Hint:
     Either wrap the attribute value with double quotes or remove the parent raw block".
     """
   end
 
-  defp error_reason(_context, :text, {:symbol, "<"}) do
+  defp error_reason_and_hint(_context, :text, {:symbol, "<"}) do
     """
+    Reason:
     Unescaped '<' character inside text node.
-    To escape use HTML entity: '&lt;'\
+
+    Hint:
+    To escape use HTML entity: '&lt;'.
     """
   end
 
@@ -645,12 +648,12 @@ defmodule Hologram.Template.TagAssembler do
       |> String.slice(0, 20)
       |> escape_non_printable_chars()
 
-    reason = error_reason(context, status, token)
+    reason_and_hint = error_reason_and_hint(context, status, token)
 
     message = """
 
 
-    #{reason}
+    #{reason_and_hint}
     #{prev_fragment}#{current_fragment}#{next_fragment}
     #{indent}^
 

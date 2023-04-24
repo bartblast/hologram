@@ -426,13 +426,6 @@ defmodule Hologram.Template.TagAssemblerTest do
              ]
     end
 
-    test "with element having an attribute value with expression" do
-      assert assemble("{#raw}<div id={@test}></div>{/raw}") == [
-               start_tag: {"div", [{"id", [text: "{@test}"]}]},
-               end_tag: "div"
-             ]
-    end
-
     test "inside text" do
       assert assemble("abc{#raw}{/raw}xyz") == [text: "abcxyz"]
     end
@@ -512,8 +505,11 @@ defmodule Hologram.Template.TagAssemblerTest do
       expected_msg = """
 
 
+      Reason:
       Unescaped '<' character inside text node.
-      To escape use HTML entity: '&lt;'
+
+      Hint:
+      To escape use HTML entity: '&lt;'.
 
       abc < xyz
           ^
@@ -537,7 +533,7 @@ defmodule Hologram.Template.TagAssemblerTest do
       Reason:
       Expression attribute value inside raw block detected.
 
-      Hints:
+      Hint:
       Either wrap the attribute value with double quotes or remove the parent raw block".
 
       {#raw}<div id={@abc}></div>{/raw}
