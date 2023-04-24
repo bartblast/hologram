@@ -228,6 +228,59 @@ defmodule Hologram.Template.TagAssemblerTest do
     end
   end
 
+  describe "property" do
+    test "text" do
+      assert assemble("<Aaa.Bbb id=\"test\">") == [
+               start_tag: {"Aaa.Bbb", [{"id", [text: "test"]}]}
+             ]
+    end
+
+    test "expression" do
+      assert assemble("<Aaa.Bbb id={1 + 2}>") == [
+               start_tag: {"Aaa.Bbb", [{"id", [expression: "{1 + 2}"]}]}
+             ]
+    end
+
+    test "expression in double quotes" do
+      assert assemble("<Aaa.Bbb id=\"{1 + 2}\">") == [
+               start_tag: {"Aaa.Bbb", [{"id", [text: "", expression: "{1 + 2}", text: ""]}]}
+             ]
+    end
+
+    test "text, expression" do
+      assert assemble("<Aaa.Bbb id=\"abc{1 + 2}\">") == [
+               start_tag: {"Aaa.Bbb", [{"id", [text: "abc", expression: "{1 + 2}", text: ""]}]}
+             ]
+    end
+
+    test "expression, text" do
+      assert assemble("<Aaa.Bbb id=\"{1 + 2}abc\">") == [
+               start_tag: {"Aaa.Bbb", [{"id", [text: "", expression: "{1 + 2}", text: "abc"]}]}
+             ]
+    end
+
+    test "text, expression, text" do
+      assert assemble("<Aaa.Bbb id=\"abc{1 + 2}xyz\">") == [
+               start_tag: {"Aaa.Bbb", [{"id", [text: "abc", expression: "{1 + 2}", text: "xyz"]}]}
+             ]
+    end
+
+    test "boolean property followed by whitespace" do
+      assert assemble("<Aaa.Bbb my_prop >") == [start_tag: {"Aaa.Bbb", [{"my_prop", []}]}]
+    end
+
+    test "boolean property followed by start tag closing" do
+      assert assemble("<Aaa.Bbb my_prop>") == [start_tag: {"Aaa.Bbb", [{"my_prop", []}]}]
+    end
+
+    test "multiple properties" do
+      assert assemble("<Aaa.Bbb prop_1=\"value_1\" prop_2=\"value_2\">") == [
+               start_tag:
+                 {"Aaa.Bbb", [{"prop_1", [text: "value_1"]}, {"prop_2", [text: "value_2"]}]}
+             ]
+    end
+  end
+
   describe "expression" do
     test "empty" do
       assert assemble("{}") == [expression: "{}"]
@@ -578,8 +631,6 @@ defmodule Hologram.Template.TagAssemblerTest do
   end
 
   # TODO: cleanup
-
-  # alias Hologram.Template.SyntaxError
 
   # describe "text node nested in raw directive" do
 
