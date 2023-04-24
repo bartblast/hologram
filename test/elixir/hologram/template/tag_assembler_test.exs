@@ -582,6 +582,16 @@ defmodule Hologram.Template.TagAssemblerTest do
                end_tag: "script"
              ]
     end
+
+    test "expression" do
+      assert assemble("<script>const abc = {1 + 2};</script>") == [
+               start_tag: {"script", []},
+               text: "const abc = ",
+               expression: "{1 + 2}",
+               text: ";",
+               end_tag: "script"
+             ]
+    end
   end
 
   describe "template syntax errors" do
