@@ -526,6 +526,31 @@ defmodule Hologram.Template.TagAssemblerTest do
       end
     end
 
+    test "unescaped '>' character inside text node" do
+      expected_msg = """
+
+
+      Reason:
+      Unescaped '>' character inside text node.
+
+      Hint:
+      To escape use HTML entity: '&gt;'.
+
+      abc > xyz
+          ^
+
+      status = :text
+
+      token = {:symbol, ">"}
+
+      context = %{attr_name: nil, attr_value: [], attrs: [], block_expression: nil, block_name: nil, double_quote_open?: false, node_type: :text, num_open_curly_brackets: 0, prev_status: nil, processed_tags: [], processed_tokens: [string: "abc", whitespace: " "], raw?: false, script?: false, tag_name: nil, token_buffer: [string: "abc", whitespace: " "]}
+      """
+
+      assert_raise SyntaxError, expected_msg, fn ->
+        assemble("abc > xyz")
+      end
+    end
+
     test "expression attribute value inside raw block" do
       expected_msg = """
 

@@ -201,9 +201,9 @@ defmodule Hologram.Template.TagAssembler do
     raise_error(context, :text, token, rest)
   end
 
-  # assemble(context, :text, [{:symbol, :>} = token | rest]) do
-  #   raise_error(context, :text, token, rest)
-  # end
+  def assemble(context, :text, [{:symbol, ">"} = token | rest]) do
+    raise_error(context, :text, token, rest)
+  end
 
   def assemble(context, :start_tag_name, [{:string, tag_name} = token | rest]) do
     context
@@ -563,6 +563,16 @@ defmodule Hologram.Template.TagAssembler do
     """
   end
 
+  defp error_reason_and_hint(_context, :text, {:symbol, ">"}) do
+    """
+    Reason:
+    Unescaped '>' character inside text node.
+
+    Hint:
+    To escape use HTML entity: '&gt;'.
+    """
+  end
+
   defp flush_attr(context) do
     new_attr = {context.attr_name, context.attr_value}
     %{context | attr_name: nil, attr_value: [], attrs: context.attrs ++ [new_attr]}
@@ -715,13 +725,6 @@ defmodule Hologram.Template.TagAssembler do
 
   # assemble(context, type, []) do
   #   raise_error(context, type, nil, [])
-  # end
-
-  # defp error_reason(_, :text, {:symbol, :>}) do
-  #   """
-  #   Unescaped '>' character inside text node.
-  #   To escape use HTML entity: '&gt;'\
-  #   """
   # end
 
   # defp error_reason(_, :start_tag, nil) do
