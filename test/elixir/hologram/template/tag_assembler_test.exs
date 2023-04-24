@@ -479,6 +479,13 @@ defmodule Hologram.Template.TagAssemblerTest do
              ]
     end
 
+    test "with component having a property value with expression in double quotes" do
+      assert assemble("{#raw}<Aaa.Bbb id=\"aaa{@test}bbb\"></Aaa.Bbb>{/raw}") == [
+               start_tag: {"Aaa.Bbb", [{"id", [text: "aaa{@test}bbb"]}]},
+               end_tag: "Aaa.Bbb"
+             ]
+    end
+
     test "inside text" do
       assert assemble("abc{#raw}{/raw}xyz") == [text: "abcxyz"]
     end
