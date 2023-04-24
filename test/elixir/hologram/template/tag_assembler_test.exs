@@ -425,18 +425,12 @@ defmodule Hologram.Template.TagAssemblerTest do
              ]
     end
 
-    #   # test "element node with expression attribute value" do
-    #   #   markup = "aaa{#raw}<div id={@test}></div>{/raw}"
-    #   #   result = assemble(markup)
-
-    #   #   expected = [
-    #   #     text: "aaa",
-    #   #     start_tag: {"div", [{"id", [expression: "{@test}"]}]},
-    #   #     end_tag: "div"
-    #   #   ]
-
-    #   #   assert result == expected
-    #   # end
+    test "with element having an attribute value with expression" do
+      assert assemble("{#raw}<div id={@test}></div>{/raw}") == [
+               start_tag: {"div", [{"id", [text: "{@test}"]}]},
+               end_tag: "div"
+             ]
+    end
 
     test "inside text" do
       assert assemble("abc{#raw}{/raw}xyz") == [text: "abcxyz"]
@@ -564,29 +558,6 @@ defmodule Hologram.Template.TagAssemblerTest do
   # # end
 
   # describe "template syntax errors" do
-  #   test "unescaped '<' character inside text node" do
-  #     markup = "abc < xyz"
-
-  #     expected_msg = """
-
-  #     Unescaped '<' character inside text node.
-  #     To escape use HTML entity: '&lt;'
-
-  #     abc < xyz
-  #         ^
-
-  #     status = :text
-
-  #     token = {:symbol, :<}
-
-  #     context = %{attr_key: nil, attr_value: [], attrs: [], double_quote_open?: false, node_type: :text_node, num_open_curly_brackets: 0, processed_tags: [], processed_tokens: [string: \"abc\", whitespace: \" \"], raw?: false, tag_name: nil, token_buffer: [string: \"abc\", whitespace: \" \"]}
-  #     """
-
-  #     assert_raise SyntaxError, expected_msg, fn ->
-  #       assemble(markup)
-  #     end
-  #   end
-
   #   test "unescaped '>' character inside text node" do
   #     markup = "abc > xyz"
 
