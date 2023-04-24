@@ -543,13 +543,16 @@ defmodule Hologram.Template.TagAssembler do
 
   defp error_reason_and_hint(context, status, token)
 
-  defp error_reason_and_hint(_context, :attr_assignment, {:symbol, "{"}) do
+  defp error_reason_and_hint(context, :attr_assignment, {:symbol, "{"}) do
+    tag_type = Helpers.tag_type(context.tag_name)
+    node_name = if tag_type == :element, do: "attribute", else: "property"
+
     """
     Reason:
-    Expression attribute value inside raw block detected.
+    Expression #{node_name} value inside raw block detected.
 
     Hint:
-    Either wrap the attribute value with double quotes or remove the parent raw block".
+    Either wrap the #{node_name} value with double quotes or remove the parent raw block".
     """
   end
 
@@ -579,10 +582,10 @@ defmodule Hologram.Template.TagAssembler do
   end
 
   defp handle_start_tag_end(context, token, rest, self_closing?) do
-    type = Helpers.tag_type(context.tag_name)
+    tag_type = Helpers.tag_type(context.tag_name)
 
     add_tag_fun =
-      if (type == :component && self_closing?) || Helpers.void_element?(context.tag_name) do
+      if (tag_type == :component && self_closing?) || Helpers.void_element?(context.tag_name) do
         &add_self_closing_tag/1
       else
         &add_start_tag/1

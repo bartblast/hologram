@@ -635,39 +635,36 @@ defmodule Hologram.Template.TagAssemblerTest do
         assemble("{#raw}<div id={@abc}></div>{/raw}")
       end
     end
+
+    test "expression property value inside raw block" do
+      expected_msg = """
+
+
+      Reason:
+      Expression property value inside raw block detected.
+
+      Hint:
+      Either wrap the property value with double quotes or remove the parent raw block".
+
+      {#raw}<Aa.Bb id={@abc}></Aa.Bb>{/raw}
+                      ^
+
+      status = :attr_assignment
+
+      token = {:symbol, "{"}
+
+      context = %{attr_name: "id", attr_value: [], attrs: [], block_expression: nil, block_name: nil, double_quote_open?: false, node_type: :attribute, num_open_curly_brackets: 0, prev_status: :attr_name, processed_tags: [], processed_tokens: [symbol: "{#raw}", symbol: "<", string: "Aa.Bb", whitespace: " ", string: "id", symbol: "="], raw?: true, script?: false, tag_name: "Aa.Bb", token_buffer: []}
+      """
+
+      assert_raise SyntaxError, expected_msg, fn ->
+        assemble("{#raw}<Aa.Bb id={@abc}></Aa.Bb>{/raw}")
+      end
+    end
   end
 
   # TODO: cleanup
 
   # describe "text node nested in raw directive" do
-
-  #   # test "component node with double quoted expression prop value" do
-  #   #   markup = "aaa{#raw}<Abc.Bcd xyz=\"bbb{@test}ccc\"></Abc.Bcd>{/raw}ddd"
-  #   #   result = assemble(markup)
-
-  #   #   expected = [
-  #   #     text: "aaa",
-  #   #     start_tag: {"Abc.Bcd", [{"xyz", [text: "bbb{@test}ccc"]}]},
-  #   #     end_tag: "Abc.Bcd",
-  #   #     text: "ddd"
-  #   #   ]
-
-  #   #   assert result == expected
-  #   # end
-
-  #   # test "component node with expression prop value" do
-  #   #   markup = "aaa{#raw}<Abc.Bcd xyz={@test}></Abc.Bcd>{/raw}"
-  #   #   result = assemble(markup)
-
-  #   #   expected = [
-  #   #     text: "aaa",
-  #   #     start_tag: {"Abc.Bcd", [{"xyz", [expression: "{@test}"]}]},
-  #   #     end_tag: "Abc.Bcd"
-  #   #   ]
-
-  #   #   assert result == expected
-  #   # end
-
   #   # test "script with special symbols" do
   #   #   markup = """
   #   #   <script>
