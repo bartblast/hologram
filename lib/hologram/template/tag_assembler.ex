@@ -9,6 +9,7 @@ defmodule Hologram.Template.TagAssembler do
   end
 
   alias Hologram.Template.Helpers
+  alias Hologram.Template.SyntaxError
 
   @initial_context %{
     attr_name: nil,
@@ -196,9 +197,9 @@ defmodule Hologram.Template.TagAssembler do
     assemble_text(context, token, rest)
   end
 
-  # assemble(context, :text, [{:symbol, :<} = token | rest]) do
-  #   raise_error(context, :text, token, rest)
-  # end
+  def assemble(context, :text, [{:symbol, "<"} = token | rest]) do
+    raise_error(context, :text, token, rest)
+  end
 
   # assemble(context, :text, [{:symbol, :>} = token | rest]) do
   #   raise_error(context, :text, token, rest)
@@ -524,6 +525,27 @@ defmodule Hologram.Template.TagAssembler do
     %{context | raw?: true}
   end
 
+  defp encode_tokens(tokens) do
+    Enum.map(tokens, fn {_type, value} -> value end)
+    |> Enum.join("")
+  end
+
+  defp escape_non_printable_chars(str) do
+    str
+    |> String.replace("\n", "\\n")
+    |> String.replace("\r", "\\r")
+    |> String.replace("\t", "\\t")
+  end
+
+  defp error_reason(context, status, token)
+
+  defp error_reason(_context, :text, {:symbol, "<"}) do
+    """
+    Unescaped '<' character inside text node.
+    To escape use HTML entity: '&lt;'\
+    """
+  end
+
   defp flush_attr(context) do
     new_attr = {context.attr_name, context.attr_value}
     %{context | attr_name: nil, attr_value: [], attrs: context.attrs ++ [new_attr]}
@@ -583,6 +605,52 @@ defmodule Hologram.Template.TagAssembler do
     %{context | double_quote_open?: true}
   end
 
+  defp raise_error(%{processed_tokens: processed_tokens} = context, status, token, rest) do
+    processed_tokens_str = encode_tokens(processed_tokens)
+    processed_tokens_len = String.length(processed_tokens_str)
+
+    prev_fragment =
+      if processed_tokens_len > 20 do
+        String.slice(processed_tokens_str, -20..-1)
+      else
+        processed_tokens_str
+      end
+      |> escape_non_printable_chars()
+
+    prev_fragment_len = String.length(prev_fragment)
+    indent = String.duplicate(" ", prev_fragment_len)
+
+    current_fragment =
+      [token]
+      |> encode_tokens()
+      |> escape_non_printable_chars()
+
+    next_fragment =
+      rest
+      |> encode_tokens()
+      |> String.slice(0, 20)
+      |> escape_non_printable_chars()
+
+    reason = error_reason(context, status, token)
+
+    message = """
+
+
+    #{reason}
+
+    #{prev_fragment}#{current_fragment}#{next_fragment}
+    #{indent}^
+
+    status = #{inspect(status)}
+
+    token = #{inspect(token)}
+
+    context = #{inspect(context)}
+    """
+
+    raise SyntaxError, message: message
+  end
+
   defp reset_attr_value(context) do
     %{context | attr_value: []}
   end
@@ -625,23 +693,12 @@ defmodule Hologram.Template.TagAssembler do
 
   # TODO: cleanup
 
-  # alias Hologram.Template.SyntaxError
-
   # assemble(context, type, [token | rest]) do
   #   raise_error(context, type, token, rest)
   # end
 
   # assemble(context, type, []) do
   #   raise_error(context, type, nil, [])
-  # end
-
-  # defp error_reason(context, status, token)
-
-  # defp error_reason(_, :text, {:symbol, :<}) do
-  #   """
-  #   Unescaped '<' character inside text node.
-  #   To escape use HTML entity: '&lt;'\
-  #   """
   # end
 
   # defp error_reason(_, :text, {:symbol, :>}) do
@@ -661,56 +718,5 @@ defmodule Hologram.Template.TagAssembler do
 
   # defp error_reason(_, _, _) do
   #   "Unknown reason."
-  # end
-
-  # # TODO: test
-  # defp escape_non_printable_chars(str) do
-  #   str
-  #   |> String.replace("\n", "\\n")
-  #   |> String.replace("\r", "\\r")
-  #   |> String.replace("\t", "\\t")
-  # end
-
-  # defp raise_error(%{processed_tokens: processed_tokens} = context, status, token, rest) do
-  #   processed_tokens_str = TokenHTMLEncoder.encode(processed_tokens)
-  #   processed_tokens_len = String.length(processed_tokens_str)
-
-  #   prev_fragment =
-  #     if processed_tokens_len > 20 do
-  #       String.slice(processed_tokens_str, -20..-1)
-  #     else
-  #       processed_tokens_str
-  #     end
-  #     |> escape_non_printable_chars()
-
-  #   prev_fragment_len = String.length(prev_fragment)
-  #   indent = String.duplicate(" ", prev_fragment_len)
-
-  #   current_fragment =
-  #     TokenHTMLEncoder.encode(token)
-  #     |> escape_non_printable_chars()
-
-  #   next_fragment =
-  #     TokenHTMLEncoder.encode(rest)
-  #     |> String.slice(0, 20)
-  #     |> escape_non_printable_chars()
-
-  #   reason = error_reason(context, status, token)
-
-  #   message = """
-
-  #   #{reason}
-
-  #   #{prev_fragment}#{current_fragment}#{next_fragment}
-  #   #{indent}^
-
-  #   status = #{inspect(status)}
-
-  #   token = #{inspect(token)}
-
-  #   context = #{inspect(context)}
-  #   """
-
-  #   raise SyntaxError, message: message
   # end
 end

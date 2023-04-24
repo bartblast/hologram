@@ -1,6 +1,7 @@
 defmodule Hologram.Template.TagAssemblerTest do
   use Hologram.Test.BasicCase, async: true
 
+  alias Hologram.Template.SyntaxError
   alias Hologram.Template.TagAssembler
   alias Hologram.Template.Tokenizer
 
@@ -487,6 +488,46 @@ defmodule Hologram.Template.TagAssemblerTest do
                text: "\"abc</xyz\"",
                end_tag: "script"
              ]
+    end
+  end
+
+  describe "template syntax errors" do
+    test "escape non-printable characters" do
+      expected_msg = ~r/\na\\nb\\rc\\td < x\\ny\\rz\\tv\n {11}\^/s
+
+      assert_raise SyntaxError, expected_msg, fn ->
+        assemble("a\nb\rc\td < x\ny\rz\tv")
+      end
+    end
+
+    test "strip excess characters" do
+      expected_msg = ~r/\n2345678901234567890 < 1234567890123456789\n {20}\^/s
+
+      assert_raise SyntaxError, expected_msg, fn ->
+        assemble("123456789012345678901234567890 < 123456789012345678901234567890")
+      end
+    end
+
+    test "unescaped '<' character inside text node" do
+      expected_msg = """
+
+
+      Unescaped '<' character inside text node.
+      To escape use HTML entity: '&lt;'
+
+      abc < xyz
+          ^
+
+      status = :text
+
+      token = {:symbol, "<"}
+
+      context = %{attr_name: nil, attr_value: [], attrs: [], block_expression: nil, block_name: nil, double_quote_open?: false, node_type: :text, num_open_curly_brackets: 0, prev_status: nil, processed_tags: [], processed_tokens: [string: "abc", whitespace: " "], raw?: false, script?: false, tag_name: nil, token_buffer: [string: "abc", whitespace: " "]}
+      """
+
+      assert_raise SyntaxError, expected_msg, fn ->
+        assemble("abc < xyz")
+      end
     end
   end
 
