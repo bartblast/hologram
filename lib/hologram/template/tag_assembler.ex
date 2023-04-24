@@ -292,6 +292,10 @@ defmodule Hologram.Template.TagAssembler do
     |> assemble(:text, rest)
   end
 
+  def assemble(%{raw?: true} = context, :attr_assignment, [{:symbol, "{"} = token | rest]) do
+    raise_error(context, :attr_assignment, token, rest)
+  end
+
   def assemble(context, :attr_assignment, [{:symbol, "{"} = token | rest]) do
     context
     |> buffer_token(token)
@@ -539,6 +543,16 @@ defmodule Hologram.Template.TagAssembler do
 
   defp error_reason(context, status, token)
 
+  defp error_reason(_context, :attr_assignment, {:symbol, "{"}) do
+    """
+    Reason:
+    Expression attribute value inside raw block detected.
+
+    Hints:
+    Either wrap the attribute value with double quotes or remove the parent raw block".
+    """
+  end
+
   defp error_reason(_context, :text, {:symbol, "<"}) do
     """
     Unescaped '<' character inside text node.
@@ -637,7 +651,6 @@ defmodule Hologram.Template.TagAssembler do
 
 
     #{reason}
-
     #{prev_fragment}#{current_fragment}#{next_fragment}
     #{indent}^
 

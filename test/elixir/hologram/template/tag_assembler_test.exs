@@ -529,6 +529,31 @@ defmodule Hologram.Template.TagAssemblerTest do
         assemble("abc < xyz")
       end
     end
+
+    test "expression attribute value inside raw block" do
+      expected_msg = """
+
+
+      Reason:
+      Expression attribute value inside raw block detected.
+
+      Hints:
+      Either wrap the attribute value with double quotes or remove the parent raw block".
+
+      {#raw}<div id={@abc}></div>{/raw}
+                    ^
+
+      status = :attr_assignment
+
+      token = {:symbol, "{"}
+
+      context = %{attr_name: "id", attr_value: [], attrs: [], block_expression: nil, block_name: nil, double_quote_open?: false, node_type: :attribute, num_open_curly_brackets: 0, prev_status: :attr_name, processed_tags: [], processed_tokens: [symbol: "{#raw}", symbol: "<", string: "div", whitespace: " ", string: "id", symbol: "="], raw?: true, script?: false, tag_name: "div", token_buffer: []}
+      """
+
+      assert_raise SyntaxError, expected_msg, fn ->
+        assemble("{#raw}<div id={@abc}></div>{/raw}")
+      end
+    end
   end
 
   # TODO: cleanup
