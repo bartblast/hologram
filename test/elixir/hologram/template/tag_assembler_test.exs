@@ -49,12 +49,20 @@ defmodule Hologram.Template.TagAssemblerTest do
       assert assemble("abc\\}xyz") == [text: "abc}xyz"]
     end
 
-    test "ended by start tag" do
+    test "ended by element start tag" do
       assert assemble("abc<div>") == [text: "abc", start_tag: {"div", []}]
     end
 
-    test "ended by end tag" do
+    test "ended by component start tag" do
+      assert assemble("abc<Aaa.Bbb>") == [text: "abc", start_tag: {"Aaa.Bbb", []}]
+    end
+
+    test "ended by element end tag" do
       assert assemble("abc</div>") == [text: "abc", end_tag: "div"]
+    end
+
+    test "ended by component end tag" do
+      assert assemble("abc</Aaa.Bbb>") == [text: "abc", end_tag: "Aaa.Bbb"]
     end
 
     test "ended by block start" do
@@ -103,12 +111,20 @@ defmodule Hologram.Template.TagAssemblerTest do
       assert assemble("<Aaa.Bbb />") == [self_closing_tag: {"Aaa.Bbb", []}]
     end
 
-    test "whitespace after tag name" do
+    test "whitespace after element tag name" do
       assert assemble("<div \n\r\t>") == [start_tag: {"div", []}]
     end
 
-    test "inside text" do
+    test "whitespace after component tag name" do
+      assert assemble("<Aaa.Bbb \n\r\t>") == [start_tag: {"Aaa.Bbb", []}]
+    end
+
+    test "inside text, element" do
       assert assemble("abc<div>xyz") == [text: "abc", start_tag: {"div", []}, text: "xyz"]
+    end
+
+    test "inside text, component" do
+      assert assemble("abc<Aaa.Bbb>xyz") == [text: "abc", start_tag: {"Aaa.Bbb", []}, text: "xyz"]
     end
   end
 
@@ -121,12 +137,20 @@ defmodule Hologram.Template.TagAssemblerTest do
       assert assemble("</Aaa.Bbb>") == [end_tag: "Aaa.Bbb"]
     end
 
-    test "whitespace after tag name" do
+    test "whitespace after element tag name" do
       assert assemble("</div \n\r\t>") == [end_tag: "div"]
     end
 
-    test "inside text" do
+    test "whitespace after component tag name" do
+      assert assemble("</Aaa.Bbb \n\r\t>") == [end_tag: "Aaa.Bbb"]
+    end
+
+    test "inside text, element" do
       assert assemble("abc</div>xyz") == [text: "abc", end_tag: "div", text: "xyz"]
+    end
+
+    test "inside text, component" do
+      assert assemble("abc</Aaa.Bbb>xyz") == [text: "abc", end_tag: "Aaa.Bbb", text: "xyz"]
     end
   end
 
@@ -366,6 +390,14 @@ defmodule Hologram.Template.TagAssemblerTest do
                end_tag: "div"
              ]
     end
+
+    test "inside component" do
+      assert assemble("<Aaa.Bbb>{@abc}</Aaa.Bbb>") == [
+               start_tag: {"Aaa.Bbb", []},
+               expression: "{@abc}",
+               end_tag: "Aaa.Bbb"
+             ]
+    end
   end
 
   describe "block start" do
@@ -390,6 +422,14 @@ defmodule Hologram.Template.TagAssemblerTest do
                start_tag: {"div", []},
                block_start: {"abc", "{}"},
                end_tag: "div"
+             ]
+    end
+
+    test "inside component" do
+      assert assemble("<Aaa.Bbb>{#abc}</Aaa.Bbb>") == [
+               start_tag: {"Aaa.Bbb", []},
+               block_start: {"abc", "{}"},
+               end_tag: "Aaa.Bbb"
              ]
     end
   end
