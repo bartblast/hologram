@@ -592,6 +592,14 @@ defmodule Hologram.Template.TagAssemblerTest do
                end_tag: "script"
              ]
     end
+
+    test "script end tag inside double quoted string" do
+      assert assemble("<script>const abc = 'substr' + \"</script>\";</script>") == [
+               start_tag: {"script", []},
+               text: "const abc = 'substr' + \"</script>\";",
+               end_tag: "script"
+             ]
+    end
   end
 
   describe "template syntax errors" do
