@@ -61,6 +61,14 @@ defmodule Hologram.Template.TokenizerTest do
            ]
   end
 
+  test "single quotes" do
+    assert tokenize("'\\''") == [
+             symbol: "'",
+             symbol: "\\'",
+             symbol: "'"
+           ]
+  end
+
   test "curly braces" do
     assert tokenize("\\{{\\\\}}") == [
              symbol: "\\{",
@@ -83,7 +91,7 @@ defmodule Hologram.Template.TokenizerTest do
   end
 
   test "strings" do
-    assert tokenize("abc bcd\ncde\rdef\tefg<fgh>ghi/hij=ijk\"jkl{klm}lmn\\mno") == [
+    assert tokenize("abc bcd\ncde\rdef\tefg<fgh>ghi/hij=ijk\"jkl{klm}lmn\\mno'pqr") == [
              string: "abc",
              whitespace: " ",
              string: "bcd",
@@ -108,7 +116,9 @@ defmodule Hologram.Template.TokenizerTest do
              symbol: "}",
              string: "lmn",
              symbol: "\\",
-             string: "mno"
+             string: "mno",
+             symbol: "'",
+             string: "pqr"
            ]
   end
 end
