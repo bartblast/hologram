@@ -80,12 +80,10 @@ defmodule Hologram.Template.TokenizerTest do
   end
 
   test "other symbols" do
-    assert tokenize("\\=/\\=/") == [
+    assert tokenize("\\=\#{/") == [
              symbol: "\\",
              symbol: "=",
-             symbol: "/",
-             symbol: "\\",
-             symbol: "=",
+             symbol: "\#{",
              symbol: "/"
            ]
   end
