@@ -1,14 +1,14 @@
-defmodule Hologram.Template.TagAssemblerTest do
+defmodule Hologram.Template.ParserTest do
   use Hologram.Test.BasicCase, async: true
 
   alias Hologram.Template.SyntaxError
-  alias Hologram.Template.TagAssembler
+  alias Hologram.Template.Parser
   alias Hologram.Template.Tokenizer
 
   def assemble(markup) do
     markup
     |> Tokenizer.tokenize()
-    |> TagAssembler.assemble()
+    |> Parser.assemble()
   end
 
   describe "text" do

@@ -1,10 +1,10 @@
-defmodule Hologram.Template.TagAssembler do
+defmodule Hologram.Template.Parser do
   if Application.compile_env(:hologram, :debug_tag_assembler) do
     use Interceptor.Annotated,
       config: %{
-        {Hologram.Template.TagAssembler, :assemble, 3} => [
-          on_success: {Hologram.Template.TagAssembler, :debug, 3},
-          on_error: {Hologram.Template.TagAssembler, :debug, 3}
+        {Hologram.Template.Parser, :assemble, 3} => [
+          on_success: {Hologram.Template.Parser, :debug, 3},
+          on_error: {Hologram.Template.Parser, :debug, 3}
         ]
       }
   end
