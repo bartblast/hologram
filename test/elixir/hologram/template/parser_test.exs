@@ -1,166 +1,166 @@
 defmodule Hologram.Template.ParserTest do
   use Hologram.Test.BasicCase, async: true
 
-  alias Hologram.Template.SyntaxError
   alias Hologram.Template.Parser
+  alias Hologram.Template.SyntaxError
   alias Hologram.Template.Tokenizer
 
-  def assemble(markup) do
+  def parse(markup) do
     markup
     |> Tokenizer.tokenize()
-    |> Parser.assemble()
+    |> Parser.parse()
   end
 
   describe "text" do
     test "empty" do
-      assert assemble("") == []
+      assert parse("") == []
     end
 
     test "whitespaces" do
       markup = " \n\r\t"
-      assert assemble(markup) == [text: markup]
+      assert parse(markup) == [text: markup]
     end
 
     test "string, ASCI alphabet lowercase" do
       markup = "abcdefghijklmnopqrstuvwxyz"
-      assert assemble(markup) == [text: markup]
+      assert parse(markup) == [text: markup]
     end
 
     test "string, ASCI alphabet uppercase" do
       markup = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
-      assert assemble(markup) == [text: markup]
+      assert parse(markup) == [text: markup]
     end
 
     test "string, UTF-8 chars" do
       markup = "ąćęłńóśźżĄĆĘŁŃÓŚŹŻ"
-      assert assemble(markup) == [text: markup]
+      assert parse(markup) == [text: markup]
     end
 
     test "symbols" do
       markup = "!@#$%^&*()-_=+[];:'\"\\|,./?`~"
-      assert assemble(markup) == [text: markup]
+      assert parse(markup) == [text: markup]
     end
 
     test "opening curly bracket escaping" do
-      assert assemble("abc\\{xyz") == [text: "abc{xyz"]
+      assert parse("abc\\{xyz") == [text: "abc{xyz"]
     end
 
     test "closing curly bracket escaping" do
-      assert assemble("abc\\}xyz") == [text: "abc}xyz"]
+      assert parse("abc\\}xyz") == [text: "abc}xyz"]
     end
 
     test "ended by element start tag" do
-      assert assemble("abc<div>") == [text: "abc", start_tag: {"div", []}]
+      assert parse("abc<div>") == [text: "abc", start_tag: {"div", []}]
     end
 
     test "ended by component start tag" do
-      assert assemble("abc<Aaa.Bbb>") == [text: "abc", start_tag: {"Aaa.Bbb", []}]
+      assert parse("abc<Aaa.Bbb>") == [text: "abc", start_tag: {"Aaa.Bbb", []}]
     end
 
     test "ended by element end tag" do
-      assert assemble("abc</div>") == [text: "abc", end_tag: "div"]
+      assert parse("abc</div>") == [text: "abc", end_tag: "div"]
     end
 
     test "ended by component end tag" do
-      assert assemble("abc</Aaa.Bbb>") == [text: "abc", end_tag: "Aaa.Bbb"]
+      assert parse("abc</Aaa.Bbb>") == [text: "abc", end_tag: "Aaa.Bbb"]
     end
 
     test "ended by block start" do
-      assert assemble("abc{#xyz}") == [text: "abc", block_start: {"xyz", "{}"}]
+      assert parse("abc{#xyz}") == [text: "abc", block_start: {"xyz", "{}"}]
     end
   end
 
   describe "start tag" do
     test "non-void HTML element" do
-      assert assemble("<div>") == [start_tag: {"div", []}]
+      assert parse("<div>") == [start_tag: {"div", []}]
     end
 
     test "non-void SVG element" do
-      assert assemble("<g>") == [start_tag: {"g", []}]
+      assert parse("<g>") == [start_tag: {"g", []}]
     end
 
     test "void HTML element, unclosed" do
-      assert assemble("<br>") == [self_closing_tag: {"br", []}]
+      assert parse("<br>") == [self_closing_tag: {"br", []}]
     end
 
     test "void HTML element, self-closed" do
-      assert assemble("<br />") == [self_closing_tag: {"br", []}]
+      assert parse("<br />") == [self_closing_tag: {"br", []}]
     end
 
     test "void SVG element, unclosed" do
-      assert assemble("<path>") == [self_closing_tag: {"path", []}]
+      assert parse("<path>") == [self_closing_tag: {"path", []}]
     end
 
     test "void SVG element, self-closed" do
-      assert assemble("<path />") == [self_closing_tag: {"path", []}]
+      assert parse("<path />") == [self_closing_tag: {"path", []}]
     end
 
     test "slot element, unclosed" do
-      assert assemble("<slot>") == [self_closing_tag: {"slot", []}]
+      assert parse("<slot>") == [self_closing_tag: {"slot", []}]
     end
 
     test "slot element, self-closed" do
-      assert assemble("<slot />") == [self_closing_tag: {"slot", []}]
+      assert parse("<slot />") == [self_closing_tag: {"slot", []}]
     end
 
     test "component, unclosed" do
-      assert assemble("<Aaa.Bbb>") == [start_tag: {"Aaa.Bbb", []}]
+      assert parse("<Aaa.Bbb>") == [start_tag: {"Aaa.Bbb", []}]
     end
 
     test "component, self-closed" do
-      assert assemble("<Aaa.Bbb />") == [self_closing_tag: {"Aaa.Bbb", []}]
+      assert parse("<Aaa.Bbb />") == [self_closing_tag: {"Aaa.Bbb", []}]
     end
 
     test "whitespace after element tag name" do
-      assert assemble("<div \n\r\t>") == [start_tag: {"div", []}]
+      assert parse("<div \n\r\t>") == [start_tag: {"div", []}]
     end
 
     test "whitespace after component tag name" do
-      assert assemble("<Aaa.Bbb \n\r\t>") == [start_tag: {"Aaa.Bbb", []}]
+      assert parse("<Aaa.Bbb \n\r\t>") == [start_tag: {"Aaa.Bbb", []}]
     end
 
     test "inside text, element" do
-      assert assemble("abc<div>xyz") == [text: "abc", start_tag: {"div", []}, text: "xyz"]
+      assert parse("abc<div>xyz") == [text: "abc", start_tag: {"div", []}, text: "xyz"]
     end
 
     test "inside text, component" do
-      assert assemble("abc<Aaa.Bbb>xyz") == [text: "abc", start_tag: {"Aaa.Bbb", []}, text: "xyz"]
+      assert parse("abc<Aaa.Bbb>xyz") == [text: "abc", start_tag: {"Aaa.Bbb", []}, text: "xyz"]
     end
   end
 
   describe "end tag" do
     test "element" do
-      assert assemble("</div>") == [end_tag: "div"]
+      assert parse("</div>") == [end_tag: "div"]
     end
 
     test "component" do
-      assert assemble("</Aaa.Bbb>") == [end_tag: "Aaa.Bbb"]
+      assert parse("</Aaa.Bbb>") == [end_tag: "Aaa.Bbb"]
     end
 
     test "whitespace after element tag name" do
-      assert assemble("</div \n\r\t>") == [end_tag: "div"]
+      assert parse("</div \n\r\t>") == [end_tag: "div"]
     end
 
     test "whitespace after component tag name" do
-      assert assemble("</Aaa.Bbb \n\r\t>") == [end_tag: "Aaa.Bbb"]
+      assert parse("</Aaa.Bbb \n\r\t>") == [end_tag: "Aaa.Bbb"]
     end
 
     test "inside text, element" do
-      assert assemble("abc</div>xyz") == [text: "abc", end_tag: "div", text: "xyz"]
+      assert parse("abc</div>xyz") == [text: "abc", end_tag: "div", text: "xyz"]
     end
 
     test "inside text, component" do
-      assert assemble("abc</Aaa.Bbb>xyz") == [text: "abc", end_tag: "Aaa.Bbb", text: "xyz"]
+      assert parse("abc</Aaa.Bbb>xyz") == [text: "abc", end_tag: "Aaa.Bbb", text: "xyz"]
     end
   end
 
   describe "element" do
     test "single" do
-      assert assemble("<div></div>") == [start_tag: {"div", []}, end_tag: "div"]
+      assert parse("<div></div>") == [start_tag: {"div", []}, end_tag: "div"]
     end
 
     test "multiple, siblings" do
-      assert assemble("<span></span><button></button>") == [
+      assert parse("<span></span><button></button>") == [
                start_tag: {"span", []},
                end_tag: "span",
                start_tag: {"button", []},
@@ -169,7 +169,7 @@ defmodule Hologram.Template.ParserTest do
     end
 
     test "multiple, nested" do
-      assert assemble("<div><span></span></div>") == [
+      assert parse("<div><span></span></div>") == [
                start_tag: {"div", []},
                start_tag: {"span", []},
                end_tag: "span",
@@ -180,11 +180,11 @@ defmodule Hologram.Template.ParserTest do
 
   describe "component" do
     test "single" do
-      assert assemble("<Aaa.Bbb></Aaa.Bbb>") == [start_tag: {"Aaa.Bbb", []}, end_tag: "Aaa.Bbb"]
+      assert parse("<Aaa.Bbb></Aaa.Bbb>") == [start_tag: {"Aaa.Bbb", []}, end_tag: "Aaa.Bbb"]
     end
 
     test "multiple, siblings" do
-      assert assemble("<Aaa.Bbb></Aaa.Bbb><Eee.Fff></Eee.Fff>") == [
+      assert parse("<Aaa.Bbb></Aaa.Bbb><Eee.Fff></Eee.Fff>") == [
                start_tag: {"Aaa.Bbb", []},
                end_tag: "Aaa.Bbb",
                start_tag: {"Eee.Fff", []},
@@ -193,7 +193,7 @@ defmodule Hologram.Template.ParserTest do
     end
 
     test "multiple, nested" do
-      assert assemble("<Aaa.Bbb><Eee.Fff></Eee.Fff></Aaa.Bbb>") == [
+      assert parse("<Aaa.Bbb><Eee.Fff></Eee.Fff></Aaa.Bbb>") == [
                start_tag: {"Aaa.Bbb", []},
                start_tag: {"Eee.Fff", []},
                end_tag: "Eee.Fff",
@@ -204,49 +204,49 @@ defmodule Hologram.Template.ParserTest do
 
   describe "attribute" do
     test "text" do
-      assert assemble("<div id=\"test\">") == [start_tag: {"div", [{"id", [text: "test"]}]}]
+      assert parse("<div id=\"test\">") == [start_tag: {"div", [{"id", [text: "test"]}]}]
     end
 
     test "expression" do
-      assert assemble("<div id={1 + 2}>") == [
+      assert parse("<div id={1 + 2}>") == [
                start_tag: {"div", [{"id", [expression: "{1 + 2}"]}]}
              ]
     end
 
     test "expression in double quotes" do
-      assert assemble("<div id=\"{1 + 2}\">") == [
+      assert parse("<div id=\"{1 + 2}\">") == [
                start_tag: {"div", [{"id", [text: "", expression: "{1 + 2}", text: ""]}]}
              ]
     end
 
     test "text, expression" do
-      assert assemble("<div id=\"abc{1 + 2}\">") == [
+      assert parse("<div id=\"abc{1 + 2}\">") == [
                start_tag: {"div", [{"id", [text: "abc", expression: "{1 + 2}", text: ""]}]}
              ]
     end
 
     test "expression, text" do
-      assert assemble("<div id=\"{1 + 2}abc\">") == [
+      assert parse("<div id=\"{1 + 2}abc\">") == [
                start_tag: {"div", [{"id", [text: "", expression: "{1 + 2}", text: "abc"]}]}
              ]
     end
 
     test "text, expression, text" do
-      assert assemble("<div id=\"abc{1 + 2}xyz\">") == [
+      assert parse("<div id=\"abc{1 + 2}xyz\">") == [
                start_tag: {"div", [{"id", [text: "abc", expression: "{1 + 2}", text: "xyz"]}]}
              ]
     end
 
     test "boolean attribute followed by whitespace" do
-      assert assemble("<div my_attr >") == [start_tag: {"div", [{"my_attr", []}]}]
+      assert parse("<div my_attr >") == [start_tag: {"div", [{"my_attr", []}]}]
     end
 
     test "boolean attribute followed by start tag closing" do
-      assert assemble("<div my_attr>") == [start_tag: {"div", [{"my_attr", []}]}]
+      assert parse("<div my_attr>") == [start_tag: {"div", [{"my_attr", []}]}]
     end
 
     test "multiple attributes" do
-      assert assemble("<div attr_1=\"value_1\" attr_2=\"value_2\">") == [
+      assert parse("<div attr_1=\"value_1\" attr_2=\"value_2\">") == [
                start_tag: {"div", [{"attr_1", [text: "value_1"]}, {"attr_2", [text: "value_2"]}]}
              ]
     end
@@ -254,51 +254,51 @@ defmodule Hologram.Template.ParserTest do
 
   describe "property" do
     test "text" do
-      assert assemble("<Aaa.Bbb id=\"test\">") == [
+      assert parse("<Aaa.Bbb id=\"test\">") == [
                start_tag: {"Aaa.Bbb", [{"id", [text: "test"]}]}
              ]
     end
 
     test "expression" do
-      assert assemble("<Aaa.Bbb id={1 + 2}>") == [
+      assert parse("<Aaa.Bbb id={1 + 2}>") == [
                start_tag: {"Aaa.Bbb", [{"id", [expression: "{1 + 2}"]}]}
              ]
     end
 
     test "expression in double quotes" do
-      assert assemble("<Aaa.Bbb id=\"{1 + 2}\">") == [
+      assert parse("<Aaa.Bbb id=\"{1 + 2}\">") == [
                start_tag: {"Aaa.Bbb", [{"id", [text: "", expression: "{1 + 2}", text: ""]}]}
              ]
     end
 
     test "text, expression" do
-      assert assemble("<Aaa.Bbb id=\"abc{1 + 2}\">") == [
+      assert parse("<Aaa.Bbb id=\"abc{1 + 2}\">") == [
                start_tag: {"Aaa.Bbb", [{"id", [text: "abc", expression: "{1 + 2}", text: ""]}]}
              ]
     end
 
     test "expression, text" do
-      assert assemble("<Aaa.Bbb id=\"{1 + 2}abc\">") == [
+      assert parse("<Aaa.Bbb id=\"{1 + 2}abc\">") == [
                start_tag: {"Aaa.Bbb", [{"id", [text: "", expression: "{1 + 2}", text: "abc"]}]}
              ]
     end
 
     test "text, expression, text" do
-      assert assemble("<Aaa.Bbb id=\"abc{1 + 2}xyz\">") == [
+      assert parse("<Aaa.Bbb id=\"abc{1 + 2}xyz\">") == [
                start_tag: {"Aaa.Bbb", [{"id", [text: "abc", expression: "{1 + 2}", text: "xyz"]}]}
              ]
     end
 
     test "boolean property followed by whitespace" do
-      assert assemble("<Aaa.Bbb my_prop >") == [start_tag: {"Aaa.Bbb", [{"my_prop", []}]}]
+      assert parse("<Aaa.Bbb my_prop >") == [start_tag: {"Aaa.Bbb", [{"my_prop", []}]}]
     end
 
     test "boolean property followed by start tag closing" do
-      assert assemble("<Aaa.Bbb my_prop>") == [start_tag: {"Aaa.Bbb", [{"my_prop", []}]}]
+      assert parse("<Aaa.Bbb my_prop>") == [start_tag: {"Aaa.Bbb", [{"my_prop", []}]}]
     end
 
     test "multiple properties" do
-      assert assemble("<Aaa.Bbb prop_1=\"value_1\" prop_2=\"value_2\">") == [
+      assert parse("<Aaa.Bbb prop_1=\"value_1\" prop_2=\"value_2\">") == [
                start_tag:
                  {"Aaa.Bbb", [{"prop_1", [text: "value_1"]}, {"prop_2", [text: "value_2"]}]}
              ]
@@ -307,129 +307,129 @@ defmodule Hologram.Template.ParserTest do
 
   describe "expression" do
     test "empty" do
-      assert assemble("{}") == [expression: "{}"]
+      assert parse("{}") == [expression: "{}"]
     end
 
     test "whitespaces" do
-      assert assemble("{ \n\r\t}") == [expression: "{ \n\r\t}"]
+      assert parse("{ \n\r\t}") == [expression: "{ \n\r\t}"]
     end
 
     test "string, ASCI alphabet lowercase" do
       markup = "{abcdefghijklmnopqrstuvwxyz}"
-      assert assemble(markup) == [expression: markup]
+      assert parse(markup) == [expression: markup]
     end
 
     test "string, ASCI alphabet uppercase" do
       markup = "{ABCDEFGHIJKLMNOPQRSTUVWXYZ}"
-      assert assemble(markup) == [expression: markup]
+      assert parse(markup) == [expression: markup]
     end
 
     test "string, UTF-8 chars" do
       markup = "{ąćęłńóśźżĄĆĘŁŃÓŚŹŻ}"
-      assert assemble(markup) == [expression: markup]
+      assert parse(markup) == [expression: markup]
     end
 
     test "symbols" do
       markup = "{!@#$%^&*()-_=+[];:\\\'\\\"\\|,./?`~}"
-      assert assemble(markup) == [expression: markup]
+      assert parse(markup) == [expression: markup]
     end
 
     test "single group of curly brackets" do
       markup = "{{123}}"
-      assert assemble(markup) == [expression: markup]
+      assert parse(markup) == [expression: markup]
     end
 
     test "multiple groups of curly brackets" do
       markup = "{{1},{2}}"
-      assert assemble(markup) == [expression: markup]
+      assert parse(markup) == [expression: markup]
     end
 
     test "opening curly bracket escaping inside double quotes" do
       markup = "{{\"\\{123\"}}"
-      assert assemble(markup) == [expression: markup]
+      assert parse(markup) == [expression: markup]
     end
 
     test "opening curly bracket escaping inside single quotes" do
       markup = "{{'\\{123'}}"
-      assert assemble(markup) == [expression: markup]
+      assert parse(markup) == [expression: markup]
     end
 
     test "closing curly bracket escaping inside double quotes" do
       markup = "{{\"123\\}\"}}"
-      assert assemble(markup) == [expression: markup]
+      assert parse(markup) == [expression: markup]
     end
 
     test "closing curly bracket escaping inside single quotes" do
       markup = "{{'123\\}'}}"
-      assert assemble(markup) == [expression: markup]
+      assert parse(markup) == [expression: markup]
     end
 
     test "single group of double quotes" do
       markup = "{{\"123\"}}"
-      assert assemble(markup) == [expression: markup]
+      assert parse(markup) == [expression: markup]
     end
 
     test "single group of single quotes" do
       markup = "{{'123'}}"
-      assert assemble(markup) == [expression: markup]
+      assert parse(markup) == [expression: markup]
     end
 
     test "multiple groups of double quotes" do
       markup = "{{\"1\",\"2\"}}"
-      assert assemble(markup) == [expression: markup]
+      assert parse(markup) == [expression: markup]
     end
 
     test "multiple groups of single quotes" do
       markup = "{{'1','2'}}"
-      assert assemble(markup) == [expression: markup]
+      assert parse(markup) == [expression: markup]
     end
 
     test "single quote nested in double quotes" do
       markup = "{\"abc'xyz\"}"
-      assert assemble(markup) == [expression: markup]
+      assert parse(markup) == [expression: markup]
     end
 
     test "double quote nested in single quotes" do
       markup = "{'abc\"xyz'}"
-      assert assemble(markup) == [expression: markup]
+      assert parse(markup) == [expression: markup]
     end
 
     test "double quote escaping" do
       markup = "{{1\\\"2}}"
-      assert assemble(markup) == [expression: markup]
+      assert parse(markup) == [expression: markup]
     end
 
     test "single quote escaping" do
       markup = "{{1\\\'2}}"
-      assert assemble(markup) == [expression: markup]
+      assert parse(markup) == [expression: markup]
     end
 
     test "opening curly bracket inside double quotes" do
       markup = "{{\"1\\{2\"}}"
-      assert assemble(markup) == [expression: markup]
+      assert parse(markup) == [expression: markup]
     end
 
     test "opening curly bracket inside single quotes" do
       markup = "{{'1\\{2'}}"
-      assert assemble(markup) == [expression: markup]
+      assert parse(markup) == [expression: markup]
     end
 
     test "closing curly bracket inside double quotes" do
       markup = "{{\"1\\}2\"}}"
-      assert assemble(markup) == [expression: markup]
+      assert parse(markup) == [expression: markup]
     end
 
     test "closing curly bracket inside single quotes" do
       markup = "{{'1\\}2'}}"
-      assert assemble(markup) == [expression: markup]
+      assert parse(markup) == [expression: markup]
     end
 
     test "inside text" do
-      assert assemble("abc{@kmn}xyz") == [text: "abc", expression: "{@kmn}", text: "xyz"]
+      assert parse("abc{@kmn}xyz") == [text: "abc", expression: "{@kmn}", text: "xyz"]
     end
 
     test "inside element" do
-      assert assemble("<div>{@abc}</div>") == [
+      assert parse("<div>{@abc}</div>") == [
                start_tag: {"div", []},
                expression: "{@abc}",
                end_tag: "div"
@@ -437,7 +437,7 @@ defmodule Hologram.Template.ParserTest do
     end
 
     test "inside component" do
-      assert assemble("<Aaa.Bbb>{@abc}</Aaa.Bbb>") == [
+      assert parse("<Aaa.Bbb>{@abc}</Aaa.Bbb>") == [
                start_tag: {"Aaa.Bbb", []},
                expression: "{@abc}",
                end_tag: "Aaa.Bbb"
@@ -447,23 +447,23 @@ defmodule Hologram.Template.ParserTest do
 
   describe "block start" do
     test "without expression" do
-      assert assemble("{#abc}") == [block_start: {"abc", "{}"}]
+      assert parse("{#abc}") == [block_start: {"abc", "{}"}]
     end
 
     test "with whitespace expression" do
-      assert assemble("{#abc \n\r\t}") == [block_start: {"abc", "{ \n\r\t}"}]
+      assert parse("{#abc \n\r\t}") == [block_start: {"abc", "{ \n\r\t}"}]
     end
 
     test "with non-whitespace expression" do
-      assert assemble("{#if abc == {1, 2}}") == [block_start: {"if", "{ abc == {1, 2}}"}]
+      assert parse("{#if abc == {1, 2}}") == [block_start: {"if", "{ abc == {1, 2}}"}]
     end
 
     test "inside text" do
-      assert assemble("abc{#kmn}xyz") == [text: "abc", block_start: {"kmn", "{}"}, text: "xyz"]
+      assert parse("abc{#kmn}xyz") == [text: "abc", block_start: {"kmn", "{}"}, text: "xyz"]
     end
 
     test "inside element" do
-      assert assemble("<div>{#abc}</div>") == [
+      assert parse("<div>{#abc}</div>") == [
                start_tag: {"div", []},
                block_start: {"abc", "{}"},
                end_tag: "div"
@@ -471,7 +471,7 @@ defmodule Hologram.Template.ParserTest do
     end
 
     test "inside component" do
-      assert assemble("<Aaa.Bbb>{#abc}</Aaa.Bbb>") == [
+      assert parse("<Aaa.Bbb>{#abc}</Aaa.Bbb>") == [
                start_tag: {"Aaa.Bbb", []},
                block_start: {"abc", "{}"},
                end_tag: "Aaa.Bbb"
@@ -481,21 +481,21 @@ defmodule Hologram.Template.ParserTest do
 
   describe "block end" do
     test "isolated" do
-      assert assemble("{/abc}") == [block_end: "abc"]
+      assert parse("{/abc}") == [block_end: "abc"]
     end
 
     test "inside text" do
-      assert assemble("abc{/kmn}xyz") == [text: "abc", block_end: "kmn", text: "xyz"]
+      assert parse("abc{/kmn}xyz") == [text: "abc", block_end: "kmn", text: "xyz"]
     end
   end
 
   describe "block" do
     test "single" do
-      assert assemble("{#abc}{/abc}") == [block_start: {"abc", "{}"}, block_end: "abc"]
+      assert parse("{#abc}{/abc}") == [block_start: {"abc", "{}"}, block_end: "abc"]
     end
 
     test "multiple, siblings" do
-      assert assemble("{#abc}{/abc}{#xyz}{/xyz}") == [
+      assert parse("{#abc}{/abc}{#xyz}{/xyz}") == [
                block_start: {"abc", "{}"},
                block_end: "abc",
                block_start: {"xyz", "{}"},
@@ -504,7 +504,7 @@ defmodule Hologram.Template.ParserTest do
     end
 
     test "multiple, nested" do
-      assert assemble("{#abc}{#xyz}{/xyz}{/abc}") == [
+      assert parse("{#abc}{#xyz}{/xyz}{/abc}") == [
                block_start: {"abc", "{}"},
                block_start: {"xyz", "{}"},
                block_end: "xyz",
@@ -515,76 +515,76 @@ defmodule Hologram.Template.ParserTest do
 
   describe "raw block" do
     test "block start" do
-      assert assemble("{#raw}") == []
+      assert parse("{#raw}") == []
     end
 
     test "block end" do
-      assert assemble("{#raw}{/raw}") == []
+      assert parse("{#raw}{/raw}") == []
     end
 
     test "with text" do
-      assert assemble("{#raw}abc{/raw}") == [text: "abc"]
+      assert parse("{#raw}abc{/raw}") == [text: "abc"]
     end
 
     test "with element" do
-      assert assemble("{#raw}<div></div>{/raw}") == [start_tag: {"div", []}, end_tag: "div"]
+      assert parse("{#raw}<div></div>{/raw}") == [start_tag: {"div", []}, end_tag: "div"]
     end
 
     test "with component" do
-      assert assemble("{#raw}<MyComponent></MyComponent>{/raw}") == [
+      assert parse("{#raw}<MyComponent></MyComponent>{/raw}") == [
                start_tag: {"MyComponent", []},
                end_tag: "MyComponent"
              ]
     end
 
     test "with expression" do
-      assert assemble("{#raw}{1 + 2}{/raw}") == [text: "{1 + 2}"]
+      assert parse("{#raw}{1 + 2}{/raw}") == [text: "{1 + 2}"]
     end
 
     test "with expression nested in text" do
-      assert assemble("{#raw}aaa{@test}bbb{/raw}") == [text: "aaa{@test}bbb"]
+      assert parse("{#raw}aaa{@test}bbb{/raw}") == [text: "aaa{@test}bbb"]
     end
 
     test "with template block" do
-      assert assemble("{#raw}{#abc}{/abc}{/raw}") == [text: "{#abc}{/abc}"]
+      assert parse("{#raw}{#abc}{/abc}{/raw}") == [text: "{#abc}{/abc}"]
     end
 
     test "with '=' char nested in text" do
-      assert assemble("{#raw}aaa = bbb{/raw}") == [text: "aaa = bbb"]
+      assert parse("{#raw}aaa = bbb{/raw}") == [text: "aaa = bbb"]
     end
 
     test "with '\"' char nested in text" do
-      assert assemble("{#raw}aaa \" bbb{/raw}") == [text: "aaa \" bbb"]
+      assert parse("{#raw}aaa \" bbb{/raw}") == [text: "aaa \" bbb"]
     end
 
     test "with \"'\" char nested in text" do
-      assert assemble("{#raw}aaa ' bbb{/raw}") == [text: "aaa ' bbb"]
+      assert parse("{#raw}aaa ' bbb{/raw}") == [text: "aaa ' bbb"]
     end
 
     test "with element having an attribute value with expression in double quotes" do
-      assert assemble("{#raw}<div id=\"aaa{@test}bbb\"></div>{/raw}") == [
+      assert parse("{#raw}<div id=\"aaa{@test}bbb\"></div>{/raw}") == [
                start_tag: {"div", [{"id", [text: "aaa{@test}bbb"]}]},
                end_tag: "div"
              ]
     end
 
     test "with component having a property value with expression in double quotes" do
-      assert assemble("{#raw}<Aaa.Bbb id=\"aaa{@test}bbb\"></Aaa.Bbb>{/raw}") == [
+      assert parse("{#raw}<Aaa.Bbb id=\"aaa{@test}bbb\"></Aaa.Bbb>{/raw}") == [
                start_tag: {"Aaa.Bbb", [{"id", [text: "aaa{@test}bbb"]}]},
                end_tag: "Aaa.Bbb"
              ]
     end
 
     test "inside text" do
-      assert assemble("abc{#raw}{/raw}xyz") == [text: "abcxyz"]
+      assert parse("abc{#raw}{/raw}xyz") == [text: "abcxyz"]
     end
 
     test "inside element" do
-      assert assemble("<div>{#raw}{/raw}</div>") == [start_tag: {"div", []}, end_tag: "div"]
+      assert parse("<div>{#raw}{/raw}</div>") == [start_tag: {"div", []}, end_tag: "div"]
     end
 
     test "inside component" do
-      assert assemble("<MyComponent>{#raw}{/raw}</MyComponent>") == [
+      assert parse("<MyComponent>{#raw}{/raw}</MyComponent>") == [
                start_tag: {"MyComponent", []},
                end_tag: "MyComponent"
              ]
@@ -593,7 +593,7 @@ defmodule Hologram.Template.ParserTest do
 
   describe "script" do
     test "symbol '<' not inside double or single quotes" do
-      assert assemble("<script>1 < 2</script>") == [
+      assert parse("<script>1 < 2</script>") == [
                start_tag: {"script", []},
                text: "1 < 2",
                end_tag: "script"
@@ -601,7 +601,7 @@ defmodule Hologram.Template.ParserTest do
     end
 
     test "symbol '<' inside double quotes" do
-      assert assemble("<script>\"1 < 2\"</script>") == [
+      assert parse("<script>\"1 < 2\"</script>") == [
                start_tag: {"script", []},
                text: "\"1 < 2\"",
                end_tag: "script"
@@ -609,7 +609,7 @@ defmodule Hologram.Template.ParserTest do
     end
 
     test "symbol '<' inside single quotes" do
-      assert assemble("<script>'1 < 2'</script>") == [
+      assert parse("<script>'1 < 2'</script>") == [
                start_tag: {"script", []},
                text: "'1 < 2'",
                end_tag: "script"
@@ -617,7 +617,7 @@ defmodule Hologram.Template.ParserTest do
     end
 
     test "symbol '>' not inside double quotes" do
-      assert assemble("<script>1 > 2</script>") == [
+      assert parse("<script>1 > 2</script>") == [
                start_tag: {"script", []},
                text: "1 > 2",
                end_tag: "script"
@@ -625,7 +625,7 @@ defmodule Hologram.Template.ParserTest do
     end
 
     test "symbol '>' inside double quotes" do
-      assert assemble("<script>\"1 > 2\"</script>") == [
+      assert parse("<script>\"1 > 2\"</script>") == [
                start_tag: {"script", []},
                text: "\"1 > 2\"",
                end_tag: "script"
@@ -633,7 +633,7 @@ defmodule Hologram.Template.ParserTest do
     end
 
     test "symbol '>' inside single quotes" do
-      assert assemble("<script>'1 > 2'</script>") == [
+      assert parse("<script>'1 > 2'</script>") == [
                start_tag: {"script", []},
                text: "'1 > 2'",
                end_tag: "script"
@@ -641,7 +641,7 @@ defmodule Hologram.Template.ParserTest do
     end
 
     test "symbol '</' inside double quotes" do
-      assert assemble("<script>\"abc</xyz\"</script>") == [
+      assert parse("<script>\"abc</xyz\"</script>") == [
                start_tag: {"script", []},
                text: "\"abc</xyz\"",
                end_tag: "script"
@@ -649,7 +649,7 @@ defmodule Hologram.Template.ParserTest do
     end
 
     test "symbol '</' inside single quotes" do
-      assert assemble("<script>'abc</xyz'</script>") == [
+      assert parse("<script>'abc</xyz'</script>") == [
                start_tag: {"script", []},
                text: "'abc</xyz'",
                end_tag: "script"
@@ -657,7 +657,7 @@ defmodule Hologram.Template.ParserTest do
     end
 
     test "expression" do
-      assert assemble("<script>const abc = {1 + 2};</script>") == [
+      assert parse("<script>const abc = {1 + 2};</script>") == [
                start_tag: {"script", []},
                text: "const abc = ",
                expression: "{1 + 2}",
@@ -667,7 +667,7 @@ defmodule Hologram.Template.ParserTest do
     end
 
     test "single quote nested in double quotes" do
-      assert assemble("<script>const str = \"abc'xyz\";</script>") == [
+      assert parse("<script>const str = \"abc'xyz\";</script>") == [
                start_tag: {"script", []},
                text: "const str = \"abc'xyz\";",
                end_tag: "script"
@@ -675,7 +675,7 @@ defmodule Hologram.Template.ParserTest do
     end
 
     test "double quote nested in single quotes" do
-      assert assemble("<script>const str = 'abc\"xyz';</script>") == [
+      assert parse("<script>const str = 'abc\"xyz';</script>") == [
                start_tag: {"script", []},
                text: "const str = 'abc\"xyz';",
                end_tag: "script"
@@ -683,7 +683,7 @@ defmodule Hologram.Template.ParserTest do
     end
 
     test "script end tag inside double quotes" do
-      assert assemble("<script>const abc = 'substr' + \"</script>\";</script>") == [
+      assert parse("<script>const abc = 'substr' + \"</script>\";</script>") == [
                start_tag: {"script", []},
                text: "const abc = 'substr' + \"</script>\";",
                end_tag: "script"
@@ -691,7 +691,7 @@ defmodule Hologram.Template.ParserTest do
     end
 
     test "script end tag inside single quotes" do
-      assert assemble("<script>const abc = 'substr' + '</script>';</script>") == [
+      assert parse("<script>const abc = 'substr' + '</script>';</script>") == [
                start_tag: {"script", []},
                text: "const abc = 'substr' + '</script>';",
                end_tag: "script"
@@ -704,7 +704,7 @@ defmodule Hologram.Template.ParserTest do
       expected_msg = ~r/\na\\nb\\rc\\td < x\\ny\\rz\\tv\n {11}\^/s
 
       assert_raise SyntaxError, expected_msg, fn ->
-        assemble("a\nb\rc\td < x\ny\rz\tv")
+        parse("a\nb\rc\td < x\ny\rz\tv")
       end
     end
 
@@ -712,7 +712,7 @@ defmodule Hologram.Template.ParserTest do
       expected_msg = ~r/\n2345678901234567890 < 1234567890123456789\n {20}\^/s
 
       assert_raise SyntaxError, expected_msg, fn ->
-        assemble("123456789012345678901234567890 < 123456789012345678901234567890")
+        parse("123456789012345678901234567890 < 123456789012345678901234567890")
       end
     end
 
@@ -729,7 +729,7 @@ defmodule Hologram.Template.ParserTest do
       """
 
       assert_raise SyntaxError, ~r/#{Regex.escape(msg)}/s, fn ->
-        assemble("abc < xyz")
+        parse("abc < xyz")
       end
     end
 
@@ -746,7 +746,7 @@ defmodule Hologram.Template.ParserTest do
       """
 
       assert_raise SyntaxError, ~r/#{Regex.escape(msg)}/s, fn ->
-        assemble("abc > xyz")
+        parse("abc > xyz")
       end
     end
 
@@ -763,7 +763,7 @@ defmodule Hologram.Template.ParserTest do
       """
 
       assert_raise SyntaxError, ~r/#{Regex.escape(msg)}/s, fn ->
-        assemble("{#raw}<div id={@abc}></div>{/raw}")
+        parse("{#raw}<div id={@abc}></div>{/raw}")
       end
     end
 
@@ -780,7 +780,7 @@ defmodule Hologram.Template.ParserTest do
       """
 
       assert_raise SyntaxError, ~r/#{Regex.escape(msg)}/s, fn ->
-        assemble("{#raw}<Aa.Bb id={@abc}></Aa.Bb>{/raw}")
+        parse("{#raw}<Aa.Bb id={@abc}></Aa.Bb>{/raw}")
       end
     end
   end
@@ -797,7 +797,7 @@ defmodule Hologram.Template.ParserTest do
   #   #   </script>
   #   #   """
 
-  #   #   result = assemble(markup)
+  #   #   result = parse(markup)
   #   # end
   # end
 
@@ -815,7 +815,7 @@ defmodule Hologram.Template.ParserTest do
   # #   </script>
   # #   """
 
-  # #   result = assemble(markup)
+  # #   result = parse(markup)
   # #   IO.inspect(result)
   # #   # expected = [text: "aaabbb"]
 
@@ -842,7 +842,7 @@ defmodule Hologram.Template.ParserTest do
   #     """
 
   #     assert_raise SyntaxError, expected_msg, fn ->
-  #       assemble(markup)
+  #       parse(markup)
   #     end
   #   end
 
@@ -865,7 +865,7 @@ defmodule Hologram.Template.ParserTest do
   #     """
 
   #     assert_raise SyntaxError, expected_msg, fn ->
-  #       assemble(markup)
+  #       parse(markup)
   #     end
   #   end
 
@@ -887,7 +887,7 @@ defmodule Hologram.Template.ParserTest do
   #     """
 
   #     assert_raise SyntaxError, expected_msg, fn ->
-  #       assemble(markup)
+  #       parse(markup)
   #     end
   #   end
 
@@ -909,7 +909,7 @@ defmodule Hologram.Template.ParserTest do
   #     """
 
   #     assert_raise SyntaxError, expected_msg, fn ->
-  #       assemble(markup)
+  #       parse(markup)
   #     end
   #   end
   # end
