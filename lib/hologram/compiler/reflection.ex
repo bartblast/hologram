@@ -35,7 +35,7 @@ defmodule Hologram.Compiler.Reflection do
       ...,
       Mix.Tasks.Holo.Test.CheckFileNames,
       Hologram.Commons.FileUtils,
-      Hologram.Commons.Parser,
+      Hologram.Template.Tokenizer,
       ...
     ]
   """

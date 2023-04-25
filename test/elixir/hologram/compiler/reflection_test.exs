@@ -23,7 +23,7 @@ defmodule Hologram.Compiler.ReflectionTest do
     assert Mix.Tasks.Sobelow in result
     assert Sobelow.CI in result
     assert Mix.Tasks.Holo.Test.CheckFileNames in result
-    assert Hologram.Commons.Parser in result
+    assert Hologram.Template.Tokenizer in result
 
     refute :dialyzer in result
     refute :typer_core in result

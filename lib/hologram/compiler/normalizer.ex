@@ -10,7 +10,7 @@ defmodule Hologram.Compiler.Normalizer do
 
   ## Examples
 
-      iex> ast = Hologram.Compiler.Parser.parse!("cond do true -> 123 end")
+      iex> ast = Code.string_to_quoted!("cond do true -> 123 end")
       {:cond, [line: 1], [[do: [{:->, [line: 1], [[true], 987]}]]]}
       iex> normalize(ast)
       {:cond, [line: 1], [[do: [{:->, [line: 1], [[true], {:__block__, [], [987]}]}]]]}

@@ -1,7 +1,6 @@
 defmodule Hologram.Compiler.AST do
   alias Hologram.Compiler.AST
   alias Hologram.Compiler.Normalizer
-  alias Hologram.Compiler.Parser
 
   @type t ::
           {atom, list, list}
@@ -16,7 +15,7 @@ defmodule Hologram.Compiler.AST do
           | list
 
   @doc """
-  Given Elixir source code returns its Elixir AST.
+  Given Elixir source code returns its normalized Elixir AST.
 
   ## Examples
 
@@ -26,7 +25,7 @@ defmodule Hologram.Compiler.AST do
   @spec for_code(binary) :: AST.t()
   def for_code(code) do
     code
-    |> Parser.parse!()
+    |> Code.string_to_quoted!()
     |> Normalizer.normalize()
   end
 end
