@@ -641,7 +641,8 @@ defmodule Hologram.Template.Parser do
   end
 
   defp encode_tokens(tokens) do
-    Enum.map(tokens, fn {_type, value} -> value end)
+    tokens
+    |> Enum.map(fn {_type, value} -> value end)
     |> Enum.join("")
   end
 
@@ -718,7 +719,8 @@ defmodule Hologram.Template.Parser do
   end
 
   defp join_tokens(tokens) do
-    Enum.map(tokens, fn {_type, value} -> value end)
+    tokens
+    |> Enum.map(fn {_type, value} -> value end)
     |> Enum.join("")
   end
 
@@ -793,9 +795,9 @@ defmodule Hologram.Template.Parser do
       else
         processed_tokens_str
       end
-      |> escape_non_printable_chars()
 
-    prev_fragment_len = String.length(prev_fragment)
+    escaped_prev_fragment = escape_non_printable_chars(prev_fragment)
+    prev_fragment_len = String.length(escaped_prev_fragment)
     indent = String.duplicate(" ", prev_fragment_len)
 
     current_fragment =
@@ -815,7 +817,7 @@ defmodule Hologram.Template.Parser do
 
 
     #{reason_and_hint}
-    #{prev_fragment}#{current_fragment}#{next_fragment}
+    #{escaped_prev_fragment}#{current_fragment}#{next_fragment}
     #{indent}^
 
     status = #{inspect(status)}
