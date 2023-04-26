@@ -5,7 +5,7 @@ defmodule Hologram.Template.ParserTest do
   alias Hologram.Template.SyntaxError
   alias Hologram.Template.Tokenizer
 
-  def parse(markup) do
+  defp parse(markup) do
     markup
     |> Tokenizer.tokenize()
     |> Parser.parse()
