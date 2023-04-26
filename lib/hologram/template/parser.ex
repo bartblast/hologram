@@ -582,7 +582,7 @@ defmodule Hologram.Template.Parser do
 
   defp add_attribute_value_part(context, type) do
     part = {type, encode_tokens(context.token_buffer)}
-    %{context | attribute_value: context.attribute_value ++ [part]}
+    %{context | attribute_value: [part | context.attribute_value]}
   end
 
   defp add_block_start(context) do
@@ -689,7 +689,7 @@ defmodule Hologram.Template.Parser do
   end
 
   defp flush_attribute(context) do
-    new_attr = {context.attribute_name, context.attribute_value}
+    new_attr = {context.attribute_name, Enum.reverse(context.attribute_value)}
 
     %{
       context
