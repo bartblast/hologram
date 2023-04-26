@@ -607,7 +607,7 @@ defmodule Hologram.Template.Parser do
   end
 
   defp add_processed_token(%{processed_tokens: processed_tokens} = context, token) do
-    %{context | processed_tokens: processed_tokens ++ [token]}
+    %{context | processed_tokens: [token | processed_tokens]}
   end
 
   defp add_self_closing_tag(context) do
@@ -780,14 +780,15 @@ defmodule Hologram.Template.Parser do
   end
 
   defp raise_error(%{processed_tokens: processed_tokens} = context, status, token, rest) do
-    processed_tokens_str = encode_tokens(processed_tokens)
-    processed_tokens_len = String.length(processed_tokens_str)
+    reversed_processed_tokens = Enum.reverse(processed_tokens)
+    encoded_tokens = encode_tokens(reversed_processed_tokens)
+    encoded_tokens_len = String.length(encoded_tokens)
 
     prev_fragment =
-      if processed_tokens_len > 20 do
-        String.slice(processed_tokens_str, -20..-1)
+      if encoded_tokens_len > 20 do
+        String.slice(encoded_tokens, -20..-1)
       else
-        processed_tokens_str
+        encoded_tokens
       end
 
     escaped_prev_fragment = escape_non_printable_chars(prev_fragment)
