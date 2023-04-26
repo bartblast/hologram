@@ -539,9 +539,9 @@ defmodule Hologram.Template.Parser do
     parse_expression(context, token, rest)
   end
 
-  # @doc """
-  # Prints debug info for intercepted parse/3 calls.
-  # """
+  @doc """
+  Prints debug info for intercepted parse/3 calls.
+  """
   @spec debug({module, atom, list}, list | %FunctionClauseError{}, integer) :: :ok
   def debug({_module, _function, [context, status, tokens] = _args}, result, _start_timestamp) do
     # credo:disable-for-lines:13 /Credo.Check.Refactor.IoPuts|Credo.Check.Warning.IoInspect/
