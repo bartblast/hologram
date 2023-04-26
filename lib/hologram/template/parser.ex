@@ -581,12 +581,12 @@ defmodule Hologram.Template.Parser do
   end
 
   defp add_attribute_value_part(context, type) do
-    part = {type, join_tokens(context.token_buffer)}
+    part = {type, encode_tokens(context.token_buffer)}
     %{context | attribute_value: context.attribute_value ++ [part]}
   end
 
   defp add_block_start(context) do
-    expression = join_tokens(context.token_buffer)
+    expression = encode_tokens(context.token_buffer)
     new_tag = {:block_start, {context.block_name, expression}}
     %{context | processed_tags: context.processed_tags ++ [new_tag]}
   end
@@ -602,7 +602,7 @@ defmodule Hologram.Template.Parser do
   end
 
   defp add_expression_tag(%{token_buffer: token_buffer, processed_tags: processed_tags} = context) do
-    new_processed_tags = processed_tags ++ [{:expression, join_tokens(token_buffer)}]
+    new_processed_tags = processed_tags ++ [{:expression, encode_tokens(token_buffer)}]
     %{context | processed_tags: new_processed_tags}
   end
 
@@ -718,15 +718,9 @@ defmodule Hologram.Template.Parser do
     |> parse(:text, rest)
   end
 
-  defp join_tokens(tokens) do
-    tokens
-    |> Enum.map(fn {_type, value} -> value end)
-    |> Enum.join("")
-  end
-
   defp maybe_add_text_tag(%{token_buffer: token_buffer, processed_tags: processed_tags} = context) do
     if Enum.any?(token_buffer) do
-      new_processed_tags = processed_tags ++ [{:text, join_tokens(token_buffer)}]
+      new_processed_tags = processed_tags ++ [{:text, encode_tokens(token_buffer)}]
       %{context | processed_tags: new_processed_tags}
     else
       context
