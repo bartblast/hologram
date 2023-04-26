@@ -611,12 +611,14 @@ defmodule Hologram.Template.Parser do
   end
 
   defp add_self_closing_tag(context) do
-    new_tag = {:self_closing_tag, {context.tag_name, context.attributes}}
+    attributes = Enum.reverse(context.attributes)
+    new_tag = {:self_closing_tag, {context.tag_name, attributes}}
     %{context | processed_tags: context.processed_tags ++ [new_tag]}
   end
 
   defp add_start_tag(context) do
-    new_tag = {:start_tag, {context.tag_name, context.attributes}}
+    attributes = Enum.reverse(context.attributes)
+    new_tag = {:start_tag, {context.tag_name, attributes}}
     %{context | processed_tags: context.processed_tags ++ [new_tag]}
   end
 
@@ -693,7 +695,7 @@ defmodule Hologram.Template.Parser do
       context
       | attribute_name: nil,
         attribute_value: [],
-        attributes: context.attributes ++ [new_attr]
+        attributes: [new_attr | context.attributes]
     }
   end
 
