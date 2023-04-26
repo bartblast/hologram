@@ -11,6 +11,12 @@ defmodule Hologram.Template.ParserTest do
     |> Parser.parse()
   end
 
+  defp test_syntax_error_msg(markup, msg) do
+    assert_raise SyntaxError, ~r/#{Regex.escape(msg)}/s, fn ->
+      parse(markup)
+    end
+  end
+
   describe "text" do
     test "empty" do
       assert parse("") == []
@@ -846,9 +852,7 @@ defmodule Hologram.Template.ParserTest do
           ^
       """
 
-      assert_raise SyntaxError, ~r/#{Regex.escape(msg)}/s, fn ->
-        parse("abc < xyz")
-      end
+      test_syntax_error_msg("abc < xyz", msg)
     end
 
     test "unescaped '>' character inside text node" do
@@ -863,9 +867,7 @@ defmodule Hologram.Template.ParserTest do
           ^
       """
 
-      assert_raise SyntaxError, ~r/#{Regex.escape(msg)}/s, fn ->
-        parse("abc > xyz")
-      end
+      test_syntax_error_msg("abc > xyz", msg)
     end
 
     test "expression attribute value inside raw block" do
@@ -880,9 +882,7 @@ defmodule Hologram.Template.ParserTest do
                     ^
       """
 
-      assert_raise SyntaxError, ~r/#{Regex.escape(msg)}/s, fn ->
-        parse("{#raw}<div id={@abc}></div>{/raw}")
-      end
+      test_syntax_error_msg("{#raw}<div id={@abc}></div>{/raw}", msg)
     end
 
     test "expression property value inside raw block" do
@@ -897,9 +897,7 @@ defmodule Hologram.Template.ParserTest do
                       ^
       """
 
-      assert_raise SyntaxError, ~r/#{Regex.escape(msg)}/s, fn ->
-        parse("{#raw}<Aa.Bb id={@abc}></Aa.Bb>{/raw}")
-      end
+      test_syntax_error_msg("{#raw}<Aa.Bb id={@abc}></Aa.Bb>{/raw}", msg)
     end
 
     test "unclosed start tag" do
@@ -914,9 +912,7 @@ defmodule Hologram.Template.ParserTest do
           ^
       """
 
-      assert_raise SyntaxError, ~r/#{Regex.escape(msg)}/s, fn ->
-        parse("<div")
-      end
+      test_syntax_error_msg("<div", msg)
     end
 
     test "missing attribute name" do
@@ -931,9 +927,7 @@ defmodule Hologram.Template.ParserTest do
            ^
       """
 
-      assert_raise SyntaxError, ~r/#{Regex.escape(msg)}/s, fn ->
-        parse("<div =\"abc\">")
-      end
+      test_syntax_error_msg("<div =\"abc\">", msg)
     end
   end
 
