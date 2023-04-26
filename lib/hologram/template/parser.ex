@@ -641,9 +641,7 @@ defmodule Hologram.Template.Parser do
   end
 
   defp encode_tokens(tokens) do
-    tokens
-    |> Enum.map(fn {_type, value} -> value end)
-    |> Enum.join("")
+    Enum.map_join(tokens, "", fn {_type, value} -> value end)
   end
 
   defp escape_non_printable_chars(str) do
