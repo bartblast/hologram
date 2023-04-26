@@ -1,4 +1,6 @@
 defmodule Hologram.Template.Tokenizer do
+  @type token :: {:string | :symbol | :whitespace, String.t()}
+
   @doc """
   Splits template markup into a list of tokens.
 
@@ -17,7 +19,7 @@ defmodule Hologram.Template.Tokenizer do
         symbol: ">"
       ]
   """
-  @spec tokenize(String.t()) :: list({:string | :symbol | :whitespace, String.t()})
+  @spec tokenize(String.t()) :: list(token)
   def tokenize(markup)
 
   def tokenize(""), do: []

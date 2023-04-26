@@ -11,26 +11,71 @@ defmodule Hologram.Template.Parser do
 
   alias Hologram.Template.Helpers
   alias Hologram.Template.SyntaxError
+  alias Hologram.Template.Tokenizer
 
-  @initial_context %{
-    attr_name: nil,
-    attr_value: [],
-    attrs: [],
-    block_expression: nil,
-    block_name: nil,
-    delimiter_stack: [],
-    node_type: :text,
-    prev_status: nil,
-    processed_tags: [],
-    processed_tokens: [],
-    raw?: false,
-    script?: false,
-    tag_name: nil,
-    token_buffer: []
-  }
+  @type parsed_tag ::
+          {:block_end | :block_start | :end_tag | :expression | :self_closing_tag,
+           :start_tag | :text, any}
+
+  @type status ::
+          :attribute_assignment
+          | :attribute_name
+          | :block_end
+          | :block_start
+          | :end_tag
+          | :end_tag_name
+          | :expression
+          | :text
+          | :start_tag
+          | :start_tag_name
+
+  defmodule Context do
+    alias Hologram.Template.Parser
+
+    defstruct attribute_name: nil,
+              attribute_value: [],
+              attributes: [],
+              block_name: nil,
+              delimiter_stack: [],
+              node_type: :text,
+              prev_status: nil,
+              processed_tags: [],
+              processed_tokens: [],
+              raw?: false,
+              script?: false,
+              tag_name: nil,
+              token_buffer: []
+
+    @type attribute_value_part :: list({:expression | :text, String.t()})
+
+    @type delimiter ::
+            :backtick
+            | :curly_bracket
+            | :double_quote
+            | :ex_interpolation
+            | :js_interpolation
+            | :single_quote
+
+    @type t :: %__MODULE__{
+            attribute_name: String.t() | nil,
+            attribute_value: list(attribute_value_part),
+            attributes: list({String.t(), list(attribute_value_part())}),
+            block_name: String.t(),
+            delimiter_stack: list(delimiter),
+            node_type: :attribute | :block | :tag | :text,
+            prev_status: Parser.status(),
+            processed_tags: [],
+            processed_tokens: list(Tokenizer.token()),
+            raw?: boolean,
+            script?: boolean,
+            tag_name: String.t(),
+            token_buffer: list(Tokenizer.token())
+          }
+  end
 
   @intercept true
-  def parse(context \\ @initial_context, status \\ :text, tokens)
+  @spec parse(%Context{}, status, list(Tokenizer.token())) :: list(parsed_tag)
+  def parse(context \\ %Context{}, status \\ :text, tokens)
 
   def parse(context, :text, []) do
     context
@@ -53,7 +98,7 @@ defmodule Hologram.Template.Parser do
 
   def parse(%{node_type: :attribute} = context, :text, [{:symbol, "\""} = token | rest]) do
     context
-    |> add_attr_value_part(:text)
+    |> add_attribute_value_part(:text)
     |> flush_attr()
     |> add_processed_token(token)
     |> set_prev_status(:text)
@@ -158,7 +203,7 @@ defmodule Hologram.Template.Parser do
 
   def parse(%{node_type: :attribute} = context, :text, [{:symbol, "{"} = token | rest]) do
     context
-    |> add_attr_value_part(:text)
+    |> add_attribute_value_part(:text)
     |> reset_delimiter_stack()
     |> reset_token_buffer()
     |> set_prev_status(:text)
@@ -226,7 +271,7 @@ defmodule Hologram.Template.Parser do
 
   def parse(context, :start_tag_name, [{:string, tag_name} = token | rest]) do
     context
-    |> reset_attrs()
+    |> reset_attributes()
     |> set_tag_name(tag_name)
     |> maybe_enable_script_mode(tag_name)
     |> add_processed_token(token)
@@ -242,12 +287,12 @@ defmodule Hologram.Template.Parser do
 
   def parse(context, :start_tag, [{:string, str} = token | rest]) do
     context
-    |> set_attr_name(str)
-    |> reset_attr_value()
+    |> set_attribute_name(str)
+    |> reset_attribute_value()
     |> add_processed_token(token)
     |> reset_token_buffer()
     |> set_prev_status(:start_tag)
-    |> parse(:attr_name, rest)
+    |> parse(:attribute_name, rest)
   end
 
   def parse(context, :start_tag, [{:symbol, "/>"} = token | rest]) do
@@ -282,44 +327,44 @@ defmodule Hologram.Template.Parser do
     |> parse(:text, rest)
   end
 
-  def parse(context, :attr_name, [{:whitespace, _value} = token | rest]) do
+  def parse(context, :attribute_name, [{:whitespace, _value} = token | rest]) do
     context
     |> flush_attr()
     |> add_processed_token(token)
-    |> set_prev_status(:attr_name)
+    |> set_prev_status(:attribute_name)
     |> parse(:start_tag, rest)
   end
 
-  def parse(context, :attr_name, [{:symbol, ">"} = token | rest]) do
+  def parse(context, :attribute_name, [{:symbol, ">"} = token | rest]) do
     context
     |> flush_attr()
     |> handle_start_tag_end(token, rest, false)
   end
 
-  def parse(context, :attr_name, [{:symbol, "="} = token | rest]) do
+  def parse(context, :attribute_name, [{:symbol, "="} = token | rest]) do
     context
     |> add_processed_token(token)
-    |> set_prev_status(:attr_name)
+    |> set_prev_status(:attribute_name)
     |> set_node_type(:attribute)
-    |> parse(:attr_assignment, rest)
+    |> parse(:attribute_assignment, rest)
   end
 
-  def parse(context, :attr_assignment, [{:symbol, "\""} = token | rest]) do
+  def parse(context, :attribute_assignment, [{:symbol, "\""} = token | rest]) do
     context
     |> add_processed_token(token)
-    |> set_prev_status(:attr_assignment)
+    |> set_prev_status(:attribute_assignment)
     |> parse(:text, rest)
   end
 
-  def parse(%{raw?: true} = context, :attr_assignment, [{:symbol, "{"} = token | rest]) do
-    raise_error(context, :attr_assignment, token, rest)
+  def parse(%{raw?: true} = context, :attribute_assignment, [{:symbol, "{"} = token | rest]) do
+    raise_error(context, :attribute_assignment, token, rest)
   end
 
-  def parse(context, :attr_assignment, [{:symbol, "{"} = token | rest]) do
+  def parse(context, :attribute_assignment, [{:symbol, "{"} = token | rest]) do
     context
     |> buffer_token(token)
     |> add_processed_token(token)
-    |> set_prev_status(:attr_assignment)
+    |> set_prev_status(:attribute_assignment)
     |> parse(:expression, rest)
   end
 
@@ -424,21 +469,22 @@ defmodule Hologram.Template.Parser do
     context
     |> buffer_token(token)
     |> add_processed_token(token)
-    |> add_attr_value_part(:expression)
+    |> add_attribute_value_part(:expression)
     |> reset_token_buffer()
     |> set_prev_status(:expression)
     |> parse(:text, rest)
   end
 
   def parse(
-        %{delimiter_stack: [], node_type: :attribute, prev_status: :attr_assignment} = context,
+        %{delimiter_stack: [], node_type: :attribute, prev_status: :attribute_assignment} =
+          context,
         :expression,
         [{:symbol, "}"} = token | rest]
       ) do
     context
     |> buffer_token(token)
     |> add_processed_token(token)
-    |> add_attr_value_part(:expression)
+    |> add_attribute_value_part(:expression)
     |> flush_attr()
     |> set_prev_status(:expression)
     |> parse(:start_tag, rest)
@@ -490,9 +536,9 @@ defmodule Hologram.Template.Parser do
     IO.puts("\n........................................\n")
   end
 
-  defp add_attr_value_part(context, type) do
+  defp add_attribute_value_part(context, type) do
     part = {type, join_tokens(context.token_buffer)}
-    %{context | attr_value: context.attr_value ++ [part]}
+    %{context | attribute_value: context.attribute_value ++ [part]}
   end
 
   defp add_block_start(context) do
@@ -521,12 +567,12 @@ defmodule Hologram.Template.Parser do
   end
 
   defp add_self_closing_tag(context) do
-    new_tag = {:self_closing_tag, {context.tag_name, context.attrs}}
+    new_tag = {:self_closing_tag, {context.tag_name, context.attributes}}
     %{context | processed_tags: context.processed_tags ++ [new_tag]}
   end
 
   defp add_start_tag(context) do
-    new_tag = {:start_tag, {context.tag_name, context.attrs}}
+    new_tag = {:start_tag, {context.tag_name, context.attributes}}
     %{context | processed_tags: context.processed_tags ++ [new_tag]}
   end
 
@@ -564,7 +610,7 @@ defmodule Hologram.Template.Parser do
 
   defp error_reason_and_hint(context, status, token)
 
-  defp error_reason_and_hint(context, :attr_assignment, {:symbol, "{"}) do
+  defp error_reason_and_hint(context, :attribute_assignment, {:symbol, "{"}) do
     tag_type = Helpers.tag_type(context.tag_name)
     node_name = if tag_type == :element, do: "attribute", else: "property"
 
@@ -598,8 +644,14 @@ defmodule Hologram.Template.Parser do
   end
 
   defp flush_attr(context) do
-    new_attr = {context.attr_name, context.attr_value}
-    %{context | attr_name: nil, attr_value: [], attrs: context.attrs ++ [new_attr]}
+    new_attr = {context.attribute_name, context.attribute_value}
+
+    %{
+      context
+      | attribute_name: nil,
+        attribute_value: [],
+        attributes: context.attributes ++ [new_attr]
+    }
   end
 
   defp handle_start_tag_end(context, token, rest, self_closing?) do
@@ -724,12 +776,12 @@ defmodule Hologram.Template.Parser do
     raise SyntaxError, message: message
   end
 
-  defp reset_attr_value(context) do
-    %{context | attr_value: []}
+  defp reset_attribute_value(context) do
+    %{context | attribute_value: []}
   end
 
-  defp reset_attrs(context) do
-    %{context | attrs: []}
+  defp reset_attributes(context) do
+    %{context | attributes: []}
   end
 
   defp reset_delimiter_stack(context) do
@@ -740,8 +792,8 @@ defmodule Hologram.Template.Parser do
     %{context | token_buffer: []}
   end
 
-  defp set_attr_name(context, name) do
-    %{context | attr_name: name}
+  defp set_attribute_name(context, name) do
+    %{context | attribute_name: name}
   end
 
   defp set_block_name(context, name) do
