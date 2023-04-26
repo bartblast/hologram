@@ -306,10 +306,6 @@ defmodule Hologram.Template.Parser do
     |> parse(:start_tag, rest)
   end
 
-  def parse(context, :start_tag, []) do
-    raise_error(context, :start_tag, nil, [])
-  end
-
   def parse(context, :start_tag, [{:whitespace, _} = token | rest]) do
     context
     |> add_processed_token(token)
@@ -332,6 +328,14 @@ defmodule Hologram.Template.Parser do
 
   def parse(context, :start_tag, [{:symbol, ">"} = token | rest]) do
     handle_start_tag_end(context, token, rest, false)
+  end
+
+  def parse(context, :start_tag, []) do
+    raise_error(context, :start_tag, nil, [])
+  end
+
+  def parse(context, :start_tag, [{:symbol, "="} = token | rest]) do
+    raise_error(context, :start_tag, token, rest)
   end
 
   def parse(context, :end_tag_name, [{:string, tag_name} = token | rest]) do
@@ -682,6 +686,16 @@ defmodule Hologram.Template.Parser do
     """
   end
 
+  defp error_reason_and_hint(_context, :start_tag, {:symbol, "="}) do
+    """
+    Reason:
+    Missing attribute name.
+
+    Hint:
+    Specify the attribute name before the '=' character.
+    """
+  end
+
   defp error_reason_and_hint(_context, :text, {:symbol, "<"}) do
     """
     Reason:
@@ -884,10 +898,6 @@ defmodule Hologram.Template.Parser do
 
   # parse(context, type, []) do
   #   raise_error(context, type, nil, [])
-  # end
-
-  # defp error_reason(_, :start_tag, {:symbol, :=}) do
-  #   "Missing attribute name."
   # end
 
   # defp error_reason(_, _, _) do

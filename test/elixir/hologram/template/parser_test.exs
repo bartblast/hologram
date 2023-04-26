@@ -918,6 +918,23 @@ defmodule Hologram.Template.ParserTest do
         parse("<div")
       end
     end
+
+    test "missing attribute name" do
+      msg = """
+      Reason:
+      Missing attribute name.
+
+      Hint:
+      Specify the attribute name before the '=' character.
+
+      <div ="abc">
+           ^
+      """
+
+      assert_raise SyntaxError, ~r/#{Regex.escape(msg)}/s, fn ->
+        parse("<div =\"abc\">")
+      end
+    end
   end
 
   # TODO: cleanup
@@ -956,50 +973,4 @@ defmodule Hologram.Template.ParserTest do
 
   # #   # assert result == expected
   # # end
-
-  # describe "template syntax errors" do
-  #   test "unclosed start tag" do
-  #     markup = "<div "
-
-  #     expected_msg = """
-
-  #     Unclosed start tag.
-
-  #     <div\s
-  #          ^
-
-  #     status = :start_tag
-
-  #     token = nil
-
-  #     context = %{attr_key: nil, attr_value: [], attrs: [], double_quote_open?: false, node_type: :element_node, num_open_curly_brackets: 0, processed_tags: [], processed_tokens: [symbol: :<, string: \"div\", whitespace: \" \"], raw?: false, tag_name: \"div\", token_buffer: []}
-  #     """
-
-  #     assert_raise SyntaxError, expected_msg, fn ->
-  #       parse(markup)
-  #     end
-  #   end
-
-  #   test "missing attribute name" do
-  #     markup = "<div =\"abc\">"
-
-  #     expected_msg = """
-
-  #     Missing attribute name.
-
-  #     <div ="abc">
-  #          ^
-
-  #     status = :start_tag
-
-  #     token = {:symbol, :=}
-
-  #     context = %{attr_key: nil, attr_value: [], attrs: [], double_quote_open?: false, node_type: :element_node, num_open_curly_brackets: 0, processed_tags: [], processed_tokens: [symbol: :<, string: \"div\", whitespace: \" \"], raw?: false, tag_name: \"div\", token_buffer: []}
-  #     """
-
-  #     assert_raise SyntaxError, expected_msg, fn ->
-  #       parse(markup)
-  #     end
-  #   end
-  # end
 end
