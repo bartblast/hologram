@@ -34,7 +34,6 @@
           {Credo.Check.Readability.ModuleAttributeNames, []},
           {Credo.Check.Readability.ModuleNames, []},
           {Credo.Check.Readability.MultiAlias, []},
-          {Credo.Check.Readability.NestedFunctionCalls, []},
           {Credo.Check.Readability.OneArityFunctionInPipe, []},
           {Credo.Check.Readability.OnePipePerLine, []},
           {Credo.Check.Readability.ParenthesesInCondition, []},
@@ -115,7 +114,9 @@
           {Credo.Check.Readability.AliasAs, []},
           {Credo.Check.Readability.ModuleDoc, []},
           {Credo.Check.Refactor.MapMap, []},
-          {Credo.Check.Refactor.ModuleDependencies, []}
+          {Credo.Check.Refactor.ModuleDependencies, []},
+          # TODO: enable when Credo issue #1034 is fixed, see: https://github.com/rrrene/credo/issues/1034
+          {Credo.Check.Readability.NestedFunctionCalls, []}
         ]
       }
     }
