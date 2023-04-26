@@ -18,15 +18,13 @@ defmodule Hologram.Template.Parser do
     attrs: [],
     block_expression: nil,
     block_name: nil,
-    double_quote_open?: false,
+    delimiter_stack: [],
     node_type: :text,
-    num_open_curly_brackets: 0,
     prev_status: nil,
     processed_tags: [],
     processed_tokens: [],
     raw?: false,
     script?: false,
-    single_quote_open?: false,
     tag_name: nil,
     token_buffer: []
   }
@@ -63,56 +61,40 @@ defmodule Hologram.Template.Parser do
     |> parse(:start_tag, rest)
   end
 
-  def parse(
-        %{script?: true, double_quote_open?: false, single_quote_open?: false} = context,
-        :text,
-        [
-          {:symbol, "\""} = token | rest
-        ]
-      ) do
+  def parse(%{script?: true, delimiter_stack: [:double_quote | _tail]} = context, :text, [
+        {:symbol, "\""} = token | rest
+      ]) do
+    context
+    |> pop_delimiter_stack()
+    |> parse_text(token, rest)
+  end
+
+  def parse(%{script?: true, delimiter_stack: []} = context, :text, [
+        {:symbol, "\""} = token | rest
+      ]) do
     context
     |> open_double_quote()
     |> parse_text(token, rest)
   end
 
-  def parse(
-        %{script?: true, double_quote_open?: false, single_quote_open?: false} = context,
-        :text,
-        [
-          {:symbol, "'"} = token | rest
-        ]
-      ) do
+  def parse(context, :text, [{:symbol, "\""} = token | rest]) do
+    parse_text(context, token, rest)
+  end
+
+  def parse(%{script?: true, delimiter_stack: [:single_quote | _tail]} = context, :text, [
+        {:symbol, "'"} = token | rest
+      ]) do
+    context
+    |> pop_delimiter_stack()
+    |> parse_text(token, rest)
+  end
+
+  def parse(%{script?: true, delimiter_stack: []} = context, :text, [
+        {:symbol, "'"} = token | rest
+      ]) do
     context
     |> open_single_quote()
     |> parse_text(token, rest)
-  end
-
-  def parse(
-        %{script?: true, double_quote_open?: true} = context,
-        :text,
-        [
-          {:symbol, "\""} = token | rest
-        ]
-      ) do
-    context
-    |> close_double_quote()
-    |> parse_text(token, rest)
-  end
-
-  def parse(
-        %{script?: true, single_quote_open?: true} = context,
-        :text,
-        [
-          {:symbol, "'"} = token | rest
-        ]
-      ) do
-    context
-    |> close_single_quote()
-    |> parse_text(token, rest)
-  end
-
-  def parse(context, :text, [{:symbol, "\""} = token | rest]) do
-    parse_text(context, token, rest)
   end
 
   def parse(context, :text, [{:symbol, "'"} = token | rest]) do
@@ -177,9 +159,7 @@ defmodule Hologram.Template.Parser do
   def parse(%{node_type: :attribute} = context, :text, [{:symbol, "{"} = token | rest]) do
     context
     |> add_attr_value_part(:text)
-    |> reset_double_quotes()
-    |> reset_single_quotes()
-    |> reset_braces()
+    |> reset_delimiter_stack()
     |> reset_token_buffer()
     |> set_prev_status(:text)
     |> parse_expression(token, rest)
@@ -188,9 +168,7 @@ defmodule Hologram.Template.Parser do
   def parse(context, :text, [{:symbol, "{"} = token | rest]) do
     context
     |> maybe_add_text_tag()
-    |> reset_double_quotes()
-    |> reset_single_quotes()
-    |> reset_braces()
+    |> reset_delimiter_stack()
     |> reset_token_buffer()
     |> set_prev_status(:text)
     |> parse_expression(token, rest)
@@ -204,15 +182,10 @@ defmodule Hologram.Template.Parser do
     parse_text(context, {:symbol, "}"}, rest)
   end
 
-  def parse(%{script?: true, double_quote_open?: true} = context, :text, [
+  def parse(%{script?: true, delimiter_stack: [delimiter | _tail]} = context, :text, [
         {:symbol, "</"} = token | rest
-      ]) do
-    parse_text(context, token, rest)
-  end
-
-  def parse(%{script?: true, single_quote_open?: true} = context, :text, [
-        {:symbol, "</"} = token | rest
-      ]) do
+      ])
+      when delimiter in [:double_quote, :single_quote] do
     parse_text(context, token, rest)
   end
 
@@ -377,56 +350,63 @@ defmodule Hologram.Template.Parser do
     |> parse(:text, rest)
   end
 
-  def parse(%{double_quote_open?: false, single_quote_open?: false} = context, :expression, [
+  def parse(%{delimiter_stack: [:double_quote | _tail]} = context, :expression, [
         {:symbol, "\""} = token | rest
       ]) do
+    context
+    |> pop_delimiter_stack()
+    |> parse_expression(token, rest)
+  end
+
+  def parse(%{delimiter_stack: [:single_quote | _tail]} = context, :expression, [
+        {:symbol, "\""} = token | rest
+      ]) do
+    parse_expression(context, token, rest)
+  end
+
+  def parse(context, :expression, [{:symbol, "\""} = token | rest]) do
     context
     |> open_double_quote()
     |> parse_expression(token, rest)
   end
 
-  def parse(%{double_quote_open?: false, single_quote_open?: false} = context, :expression, [
+  def parse(%{delimiter_stack: [:double_quote | _tail]} = context, :expression, [
         {:symbol, "'"} = token | rest
       ]) do
+    parse_expression(context, token, rest)
+  end
+
+  def parse(%{delimiter_stack: [:single_quote | _tail]} = context, :expression, [
+        {:symbol, "'"} = token | rest
+      ]) do
+    context
+    |> pop_delimiter_stack()
+    |> parse_expression(token, rest)
+  end
+
+  def parse(context, :expression, [{:symbol, "'"} = token | rest]) do
     context
     |> open_single_quote()
     |> parse_expression(token, rest)
   end
 
-  def parse(%{double_quote_open?: true} = context, :expression, [
-        {:symbol, "\""} = token | rest
-      ]) do
-    context
-    |> close_double_quote()
-    |> parse_expression(token, rest)
-  end
-
-  def parse(%{single_quote_open?: true} = context, :expression, [
-        {:symbol, "'"} = token | rest
-      ]) do
-    context
-    |> close_single_quote()
-    |> parse_expression(token, rest)
-  end
-
-  def parse(%{double_quote_open?: false, single_quote_open?: false} = context, :expression, [
+  def parse(%{delimiter_stack: [:ex_interpolation | _tail]} = context, :expression, [
         {:symbol, "{"} = token | rest
       ]) do
     context
-    |> increment_num_open_curly_brackets()
+    |> open_curly_bracket()
     |> parse_expression(token, rest)
   end
 
-  def parse(
-        %{
-          double_quote_open?: false,
-          single_quote_open?: false,
-          node_type: :text,
-          num_open_curly_brackets: 0
-        } = context,
-        :expression,
-        [{:symbol, "}"} = token | rest]
-      ) do
+  def parse(%{delimiter_stack: []} = context, :expression, [{:symbol, "{"} = token | rest]) do
+    context
+    |> open_curly_bracket()
+    |> parse_expression(token, rest)
+  end
+
+  def parse(%{delimiter_stack: [], node_type: :text} = context, :expression, [
+        {:symbol, "}"} = token | rest
+      ]) do
     context
     |> buffer_token(token)
     |> add_expression_tag()
@@ -437,13 +417,7 @@ defmodule Hologram.Template.Parser do
   end
 
   def parse(
-        %{
-          double_quote_open?: false,
-          single_quote_open?: false,
-          node_type: :attribute,
-          num_open_curly_brackets: 0,
-          prev_status: :text
-        } = context,
+        %{delimiter_stack: [], node_type: :attribute, prev_status: :text} = context,
         :expression,
         [{:symbol, "}"} = token | rest]
       ) do
@@ -457,13 +431,7 @@ defmodule Hologram.Template.Parser do
   end
 
   def parse(
-        %{
-          double_quote_open?: false,
-          single_quote_open?: false,
-          node_type: :attribute,
-          num_open_curly_brackets: 0,
-          prev_status: :attr_assignment
-        } = context,
+        %{delimiter_stack: [], node_type: :attribute, prev_status: :attr_assignment} = context,
         :expression,
         [{:symbol, "}"} = token | rest]
       ) do
@@ -476,16 +444,9 @@ defmodule Hologram.Template.Parser do
     |> parse(:start_tag, rest)
   end
 
-  def parse(
-        %{
-          double_quote_open?: false,
-          single_quote_open?: false,
-          node_type: :block,
-          num_open_curly_brackets: 0
-        } = context,
-        :expression,
-        [{:symbol, "}"} = token | rest]
-      ) do
+  def parse(%{delimiter_stack: [], node_type: :block} = context, :expression, [
+        {:symbol, "}"} = token | rest
+      ]) do
     context
     |> buffer_token(token)
     |> add_block_start()
@@ -496,11 +457,11 @@ defmodule Hologram.Template.Parser do
     |> parse(:text, rest)
   end
 
-  def parse(%{double_quote_open?: false, single_quote_open?: false} = context, :expression, [
+  def parse(%{delimiter_stack: [:curly_bracket | _tail]} = context, :expression, [
         {:symbol, "}"} = token | rest
       ]) do
     context
-    |> decrement_num_open_curly_brackets()
+    |> pop_delimiter_stack()
     |> parse_expression(token, rest)
   end
 
@@ -573,24 +534,20 @@ defmodule Hologram.Template.Parser do
     %{context | token_buffer: token_buffer ++ [token]}
   end
 
-  defp close_double_quote(context) do
-    %{context | double_quote_open?: false}
-  end
-
-  defp close_single_quote(context) do
-    %{context | single_quote_open?: false}
-  end
-
-  defp decrement_num_open_curly_brackets(context) do
-    %{context | num_open_curly_brackets: context.num_open_curly_brackets - 1}
-  end
-
   defp disable_raw_mode(context) do
     %{context | raw?: false}
   end
 
+  defp disable_script_mode(context) do
+    %{context | script?: false}
+  end
+
   defp enable_raw_mode(context) do
     %{context | raw?: true}
+  end
+
+  defp enable_script_mode(context) do
+    %{context | script?: true}
   end
 
   defp encode_tokens(tokens) do
@@ -664,10 +621,6 @@ defmodule Hologram.Template.Parser do
     |> parse(:text, rest)
   end
 
-  defp increment_num_open_curly_brackets(context) do
-    %{context | num_open_curly_brackets: context.num_open_curly_brackets + 1}
-  end
-
   defp join_tokens(tokens) do
     Enum.map(tokens, fn {_type, value} -> value end)
     |> Enum.join("")
@@ -683,25 +636,29 @@ defmodule Hologram.Template.Parser do
   end
 
   defp maybe_disable_script_mode(context, "script") do
-    %{context | script?: false}
+    disable_script_mode(context)
   end
 
   defp maybe_disable_script_mode(context, _tag_name), do: context
 
   defp maybe_enable_script_mode(context, "script") do
-    %{context | script?: true}
-    |> reset_double_quotes()
-    |> reset_single_quotes()
+    context
+    |> enable_script_mode()
+    |> reset_delimiter_stack()
   end
 
   defp maybe_enable_script_mode(context, _tag_name), do: context
 
+  defp open_curly_bracket(context) do
+    %{context | delimiter_stack: [:curly_bracket | context.delimiter_stack]}
+  end
+
   defp open_double_quote(context) do
-    %{context | double_quote_open?: true}
+    %{context | delimiter_stack: [:double_quote | context.delimiter_stack]}
   end
 
   defp open_single_quote(context) do
-    %{context | single_quote_open?: true}
+    %{context | delimiter_stack: [:single_quote | context.delimiter_stack]}
   end
 
   defp parse_expression(context, token, rest) do
@@ -716,6 +673,10 @@ defmodule Hologram.Template.Parser do
     |> buffer_token(token)
     |> add_processed_token(token)
     |> parse(:text, rest)
+  end
+
+  defp pop_delimiter_stack(%{delimiter_stack: [_head | tail]} = context) do
+    %{context | delimiter_stack: tail}
   end
 
   defp raise_error(%{processed_tokens: processed_tokens} = context, status, token, rest) do
@@ -771,16 +732,8 @@ defmodule Hologram.Template.Parser do
     %{context | attrs: []}
   end
 
-  defp reset_braces(context) do
-    %{context | num_open_curly_brackets: 0}
-  end
-
-  defp reset_double_quotes(context) do
-    %{context | double_quote_open?: false}
-  end
-
-  defp reset_single_quotes(context) do
-    %{context | single_quote_open?: false}
+  defp reset_delimiter_stack(context) do
+    %{context | delimiter_stack: []}
   end
 
   defp reset_token_buffer(context) do
