@@ -941,52 +941,6 @@ defmodule Hologram.Template.ParserTest do
   # # end
 
   # describe "template syntax errors" do
-  #   test "unescaped '>' character inside text node" do
-  #     markup = "abc > xyz"
-
-  #     expected_msg = """
-
-  #     Unescaped '>' character inside text node.
-  #     To escape use HTML entity: '&gt;'
-
-  #     abc > xyz
-  #         ^
-
-  #     status = :text
-
-  #     token = {:symbol, :>}
-
-  #     context = %{attr_key: nil, attr_value: [], attrs: [], double_quote_open?: false, node_type: :text_node, num_open_curly_brackets: 0, processed_tags: [], processed_tokens: [string: \"abc\", whitespace: \" \"], raw?: false, tag_name: nil, token_buffer: [string: \"abc\", whitespace: \" \"]}
-  #     """
-
-  #     assert_raise SyntaxError, expected_msg, fn ->
-  #       parse(markup)
-  #     end
-  #   end
-
-  #   test "previous fragment trimming in error message" do
-  #     markup = "012345678901234567890123456789 > xyz"
-
-  #     expected_msg = """
-
-  #     Unescaped '>' character inside text node.
-  #     To escape use HTML entity: '&gt;'
-
-  #     1234567890123456789 > xyz
-  #                         ^
-
-  #     status = :text
-
-  #     token = {:symbol, :>}
-
-  #     context = %{attr_key: nil, attr_value: [], attrs: [], double_quote_open?: false, node_type: :text_node, num_open_curly_brackets: 0, processed_tags: [], processed_tokens: [string: \"012345678901234567890123456789\", whitespace: \" \"], raw?: false, tag_name: nil, token_buffer: [string: \"012345678901234567890123456789\", whitespace: \" \"]}
-  #     """
-
-  #     assert_raise SyntaxError, expected_msg, fn ->
-  #       parse(markup)
-  #     end
-  #   end
-
   #   test "unclosed start tag" do
   #     markup = "<div "
 
