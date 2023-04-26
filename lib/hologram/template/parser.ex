@@ -10,6 +10,7 @@ defmodule Hologram.Template.Parser do
   end
 
   alias Hologram.Template.Helpers
+  alias Hologram.Template.Parser
   alias Hologram.Template.SyntaxError
   alias Hologram.Template.Tokenizer
 
@@ -30,8 +31,6 @@ defmodule Hologram.Template.Parser do
           | :start_tag_name
 
   defmodule Context do
-    alias Hologram.Template.Parser
-
     defstruct attribute_name: nil,
               attribute_value: [],
               attributes: [],
