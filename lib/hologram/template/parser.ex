@@ -59,15 +59,15 @@ defmodule Hologram.Template.Parser do
             attribute_name: String.t() | nil,
             attribute_value: list(attribute_value_part),
             attributes: list({String.t(), list(attribute_value_part())}),
-            block_name: String.t(),
+            block_name: String.t() | nil,
             delimiter_stack: list(delimiter),
             node_type: :attribute | :block | :tag | :text,
-            prev_status: Parser.status(),
+            prev_status: Parser.status() | nil,
             processed_tags: [],
             processed_tokens: list(Tokenizer.token()),
             raw?: boolean,
             script?: boolean,
-            tag_name: String.t(),
+            tag_name: String.t() | nil,
             token_buffer: list(Tokenizer.token())
           }
   end
@@ -81,7 +81,7 @@ defmodule Hologram.Template.Parser do
       [start_tag: {"div", [{"id", [text: "test"]}]}, end_tag: "div"]
   """
   @intercept true
-  @spec parse(%Context{}, status, list(Tokenizer.token())) :: list(parsed_tag)
+  @spec parse(Context.t(), status, list(Tokenizer.token())) :: list(parsed_tag)
   def parse(context \\ %Context{}, status \\ :text, tokens)
 
   def parse(context, :text, []) do
