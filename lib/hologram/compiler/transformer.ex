@@ -315,7 +315,7 @@ defmodule Hologram.Compiler.Transformer do
   """
   @spec debug(
           {module, atom, list(AST.t() | Context.t())},
-          IR.t() | %FunctionClauseError{},
+          IR.t() | %{__struct__: FunctionClauseError},
           integer
         ) :: :ok
   def debug({_module, _function, [ast, context] = _args}, result, _start_timestamp) do
