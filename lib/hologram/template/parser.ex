@@ -98,7 +98,7 @@ defmodule Hologram.Template.Parser do
   def parse(%{node_type: :attribute} = context, :text, [{:symbol, "\""} = token | rest]) do
     context
     |> add_attribute_value_part(:text)
-    |> flush_attr()
+    |> flush_attribute()
     |> add_processed_token(token)
     |> set_prev_status(:text)
     |> set_node_type(:tag)
@@ -328,7 +328,7 @@ defmodule Hologram.Template.Parser do
 
   def parse(context, :attribute_name, [{:whitespace, _value} = token | rest]) do
     context
-    |> flush_attr()
+    |> flush_attribute()
     |> add_processed_token(token)
     |> set_prev_status(:attribute_name)
     |> parse(:start_tag, rest)
@@ -336,7 +336,7 @@ defmodule Hologram.Template.Parser do
 
   def parse(context, :attribute_name, [{:symbol, ">"} = token | rest]) do
     context
-    |> flush_attr()
+    |> flush_attribute()
     |> handle_start_tag_end(token, rest, false)
   end
 
@@ -484,7 +484,7 @@ defmodule Hologram.Template.Parser do
     |> buffer_token(token)
     |> add_processed_token(token)
     |> add_attribute_value_part(:expression)
-    |> flush_attr()
+    |> flush_attribute()
     |> set_prev_status(:expression)
     |> parse(:start_tag, rest)
   end
@@ -642,7 +642,7 @@ defmodule Hologram.Template.Parser do
     """
   end
 
-  defp flush_attr(context) do
+  defp flush_attribute(context) do
     new_attr = {context.attribute_name, context.attribute_value}
 
     %{
