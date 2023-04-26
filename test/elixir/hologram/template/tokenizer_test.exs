@@ -80,16 +80,17 @@ defmodule Hologram.Template.TokenizerTest do
   end
 
   test "other symbols" do
-    assert tokenize("\\=\#{/") == [
+    assert tokenize("\\=\#{/`") == [
              symbol: "\\",
              symbol: "=",
              symbol: "\#{",
-             symbol: "/"
+             symbol: "/",
+             symbol: "`"
            ]
   end
 
   test "strings" do
-    assert tokenize("abc bcd\ncde\rdef\tefg<fgh>ghi/hij=ijk\"jkl{klm}lmn\\mno'pqr") == [
+    assert tokenize("abc bcd\ncde\rdef\tefg<fgh>ghi/hij=ijk\"jkl{klm}lmn\\mno'nop`opr") == [
              string: "abc",
              whitespace: " ",
              string: "bcd",
@@ -116,7 +117,9 @@ defmodule Hologram.Template.TokenizerTest do
              symbol: "\\",
              string: "mno",
              symbol: "'",
-             string: "pqr"
+             string: "nop",
+             symbol: "`",
+             string: "opr"
            ]
   end
 end

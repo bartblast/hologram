@@ -129,16 +129,24 @@ defmodule Hologram.Template.Parser do
     |> parse_text(token, rest)
   end
 
-  def parse(context, :text, [{:symbol, "\""} = token | rest]) do
-    parse_text(context, token, rest)
+  def parse(%{script?: true, delimiter_stack: []} = context, :text, [
+        {:symbol, "`"} = token | rest
+      ]) do
+    context
+    |> open_backtick()
+    |> parse_text(token, rest)
   end
 
-  def parse(%{script?: true, delimiter_stack: [:single_quote | _tail]} = context, :text, [
-        {:symbol, "'"} = token | rest
+  def parse(%{script?: true, delimiter_stack: [:backtick | _tail]} = context, :text, [
+        {:symbol, "`"} = token | rest
       ]) do
     context
     |> pop_delimiter_stack()
     |> parse_text(token, rest)
+  end
+
+  def parse(context, :text, [{:symbol, "\""} = token | rest]) do
+    parse_text(context, token, rest)
   end
 
   def parse(%{script?: true, delimiter_stack: []} = context, :text, [
@@ -149,7 +157,19 @@ defmodule Hologram.Template.Parser do
     |> parse_text(token, rest)
   end
 
+  def parse(%{script?: true, delimiter_stack: [:single_quote | _tail]} = context, :text, [
+        {:symbol, "'"} = token | rest
+      ]) do
+    context
+    |> pop_delimiter_stack()
+    |> parse_text(token, rest)
+  end
+
   def parse(context, :text, [{:symbol, "'"} = token | rest]) do
+    parse_text(context, token, rest)
+  end
+
+  def parse(context, :text, [{:symbol, "`"} = token | rest]) do
     parse_text(context, token, rest)
   end
 
@@ -237,7 +257,7 @@ defmodule Hologram.Template.Parser do
   def parse(%{script?: true, delimiter_stack: [delimiter | _tail]} = context, :text, [
         {:symbol, "</"} = token | rest
       ])
-      when delimiter in [:double_quote, :single_quote] do
+      when delimiter in [:backtick, :double_quote, :single_quote] do
     parse_text(context, token, rest)
   end
 
@@ -724,6 +744,10 @@ defmodule Hologram.Template.Parser do
   end
 
   defp maybe_enable_script_mode(context, _tag_name), do: context
+
+  defp open_backtick(context) do
+    %{context | delimiter_stack: [:backtick | context.delimiter_stack]}
+  end
 
   defp open_curly_bracket(context) do
     %{context | delimiter_stack: [:curly_bracket | context.delimiter_stack]}
