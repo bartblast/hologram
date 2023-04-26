@@ -51,8 +51,8 @@ defmodule Hologram.Template.Parser do
             :backtick
             | :curly_bracket
             | :double_quote
-            | :ex_interpolation
-            | :js_interpolation
+            | :elixir_interpolation
+            | :javascript_interpolation
             | :single_quote
 
     @type t :: %__MODULE__{
@@ -442,7 +442,7 @@ defmodule Hologram.Template.Parser do
     |> parse_expression(token, rest)
   end
 
-  def parse(%{delimiter_stack: [:ex_interpolation | _tail]} = context, :expression, [
+  def parse(%{delimiter_stack: [:elixir_interpolation | _tail]} = context, :expression, [
         {:symbol, "{"} = token | rest
       ]) do
     context
@@ -515,6 +515,23 @@ defmodule Hologram.Template.Parser do
       ]) do
     context
     |> pop_delimiter_stack()
+    |> parse_expression(token, rest)
+  end
+
+  def parse(%{delimiter_stack: [:elixir_interpolation | _tail]} = context, :expression, [
+        {:symbol, "}"} = token | rest
+      ]) do
+    context
+    |> pop_delimiter_stack()
+    |> parse_expression(token, rest)
+  end
+
+  def parse(%{delimiter_stack: [delimiter | _tail]} = context, :expression, [
+        {:symbol, "\#{"} = token | rest
+      ])
+      when delimiter in [:double_qoute, :single_quote] do
+    context
+    |> open_elixir_interpolation()
     |> parse_expression(token, rest)
   end
 
@@ -714,6 +731,10 @@ defmodule Hologram.Template.Parser do
 
   defp open_double_quote(context) do
     %{context | delimiter_stack: [:double_quote | context.delimiter_stack]}
+  end
+
+  defp open_elixir_interpolation(context) do
+    %{context | delimiter_stack: [:elixir_interpolation | context.delimiter_stack]}
   end
 
   defp open_single_quote(context) do

@@ -424,6 +424,36 @@ defmodule Hologram.Template.ParserTest do
       assert parse(markup) == [expression: markup]
     end
 
+    test "non-nested elixir interpolation inside double quotes" do
+      markup = "{\"aaa\#{123}bbb\"}"
+      assert parse(markup) == [expression: "{\"aaa\#{123}bbb\"}"]
+    end
+
+    test "nested elixir interpolation inside double quotes" do
+      markup = "{\"aaa\#{\"bbb\#{123}ccc\"}ddd\"}"
+      assert parse(markup) == [expression: "{\"aaa\#{\"bbb\#{123}ccc\"}ddd\"}"]
+    end
+
+    test "non-nested elixir interpolation inside single quotes" do
+      markup = "{'aaa\#{123}bbb'}"
+      assert parse(markup) == [expression: "{'aaa\#{123}bbb'}"]
+    end
+
+    test "nested elixir interpolation inside single quotes" do
+      markup = "{'aaa\#{'bbb\#{123}ccc'}ddd'}"
+      assert parse(markup) == [expression: "{'aaa\#{'bbb\#{123}ccc'}ddd'}"]
+    end
+
+    test "nested elixir interpolation inside double and single quotes" do
+      markup = "{\"aaa\#{'bbb\#{123}ccc'}ddd\"}"
+      assert parse(markup) == [expression: "{\"aaa\#{'bbb\#{123}ccc'}ddd\"}"]
+    end
+
+    test "nested elixir interpolation inside single and double quotes" do
+      markup = "{'aaa\#{\"bbb\#{123}ccc\"}ddd'}"
+      assert parse(markup) == [expression: "{'aaa\#{\"bbb\#{123}ccc\"}ddd'}"]
+    end
+
     test "inside text" do
       assert parse("abc{@kmn}xyz") == [text: "abc", expression: "{@kmn}", text: "xyz"]
     end
