@@ -901,6 +901,23 @@ defmodule Hologram.Template.ParserTest do
         parse("{#raw}<Aa.Bb id={@abc}></Aa.Bb>{/raw}")
       end
     end
+
+    test "unclosed start tag" do
+      msg = """
+      Reason:
+      Unclosed start tag.
+
+      Hint:
+      Close the start tag with '>' character.
+
+      <div
+          ^
+      """
+
+      assert_raise SyntaxError, ~r/#{Regex.escape(msg)}/s, fn ->
+        parse("<div")
+      end
+    end
   end
 
   # TODO: cleanup

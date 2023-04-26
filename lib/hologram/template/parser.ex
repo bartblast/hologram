@@ -306,6 +306,10 @@ defmodule Hologram.Template.Parser do
     |> parse(:start_tag, rest)
   end
 
+  def parse(context, :start_tag, []) do
+    raise_error(context, :start_tag, nil, [])
+  end
+
   def parse(context, :start_tag, [{:whitespace, _} = token | rest]) do
     context
     |> add_processed_token(token)
@@ -668,6 +672,16 @@ defmodule Hologram.Template.Parser do
     """
   end
 
+  defp error_reason_and_hint(_context, :start_tag, nil) do
+    """
+    Reason:
+    Unclosed start tag.
+
+    Hint:
+    Close the start tag with '>' character.
+    """
+  end
+
   defp error_reason_and_hint(_context, :text, {:symbol, "<"}) do
     """
     Reason:
@@ -796,7 +810,8 @@ defmodule Hologram.Template.Parser do
     indent = String.duplicate(" ", prev_fragment_len)
 
     current_fragment =
-      [token]
+      token
+      |> List.wrap()
       |> encode_tokens()
       |> escape_non_printable_chars()
 
@@ -869,10 +884,6 @@ defmodule Hologram.Template.Parser do
 
   # parse(context, type, []) do
   #   raise_error(context, type, nil, [])
-  # end
-
-  # defp error_reason(_, :start_tag, nil) do
-  #   "Unclosed start tag."
   # end
 
   # defp error_reason(_, :start_tag, {:symbol, :=}) do
