@@ -72,6 +72,14 @@ defmodule Hologram.Template.Parser do
           }
   end
 
+  @doc """
+  Parses template markup into a list of tags.
+
+  ## Examples
+
+      iex> parse("<div id=\"test\"></div>")
+      [start_tag: {"div", [{"id", [text: "test"]}]}, end_tag: "div"]
+  """
   @intercept true
   @spec parse(%Context{}, status, list(Tokenizer.token())) :: list(parsed_tag)
   def parse(context \\ %Context{}, status \\ :text, tokens)
