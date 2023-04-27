@@ -73,11 +73,25 @@ defmodule Hologram.Template.Parser do
   end
 
   @doc """
-  Parses template markup into a list of tags.
+  Parses tokens into tags.
 
   ## Examples
 
-      iex> parse("<div id=\"test\"></div>")
+      iex> tokens = [
+      ...>   symbol: "<",
+      ...>   string: "div",
+      ...>   whitespace: " ",
+      ...>   string: "id",
+      ...>   symbol: "=",
+      ...>   symbol: "\"",
+      ...>   string: "test",
+      ...>   symbol: "\"",
+      ...>   symbol: ">",
+      ...>   symbol: "</",
+      ...>   string: "div",
+      ...>   symbol: ">"
+      ...> ]
+      iex> parse(tokens)
       [start_tag: {"div", [{"id", [text: "test"]}]}, end_tag: "div"]
   """
   @intercept true
