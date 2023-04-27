@@ -89,7 +89,7 @@ defmodule Hologram.Template.TokenizerTest do
   end
 
   test "double quotes" do
-    assert tokenize("aaa\\\"bbb\"ccc\\ddd\\\"eee\"fff\\") == [
+    assert tokenize(~s(aaa\\"bbb"ccc\\ddd\\"eee"fff\\)) == [
              string: "aaa",
              symbol: "\\\"",
              string: "bbb",
