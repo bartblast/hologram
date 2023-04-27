@@ -252,7 +252,7 @@ defmodule Hologram.Template.ParserTest do
     end
 
     test "multiple attributes" do
-      assert parse("<div attr_1=\"value_1\" attr_2=\"value_2\">") == [
+      assert parse(~s(<div attr_1="value_1" attr_2="value_2">)) == [
                start_tag: {"div", [{"attr_1", [text: "value_1"]}, {"attr_2", [text: "value_2"]}]}
              ]
     end
@@ -304,7 +304,7 @@ defmodule Hologram.Template.ParserTest do
     end
 
     test "multiple properties" do
-      assert parse("<Aaa.Bbb prop_1=\"value_1\" prop_2=\"value_2\">") == [
+      assert parse(~s(<Aaa.Bbb prop_1="value_1" prop_2="value_2">)) == [
                start_tag:
                  {"Aaa.Bbb", [{"prop_1", [text: "value_1"]}, {"prop_2", [text: "value_2"]}]}
              ]
@@ -637,7 +637,7 @@ defmodule Hologram.Template.ParserTest do
     end
 
     test "multiple groups of double quotes" do
-      assert parse("<script>\"abc\" + \"xyz\"</script>") == [
+      assert parse(~s(<script>"abc" + "xyz"</script>)) == [
                start_tag: {"script", []},
                text: "\"abc\" + \"xyz\"",
                end_tag: "script"
