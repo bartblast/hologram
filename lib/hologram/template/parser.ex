@@ -558,7 +558,7 @@ defmodule Hologram.Template.Parser do
   def parse(%{delimiter_stack: [delimiter | _tail]} = context, :expression, [
         {:symbol, "\#{"} = token | rest
       ])
-      when delimiter in [:double_qoute, :single_quote] do
+      when delimiter in [:double_quote, :single_quote] do
     context
     |> open_elixir_interpolation()
     |> parse_expression(token, rest)

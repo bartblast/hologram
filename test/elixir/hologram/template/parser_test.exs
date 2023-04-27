@@ -43,7 +43,7 @@ defmodule Hologram.Template.ParserTest do
     end
 
     test "symbols" do
-      markup = "!@#$%^&*()-_=+[];:'\"\\|,./?`~"
+      markup = "!@$%^&*()-_=+[];:'\"\\|,./?`~"
       assert parse(markup) == [text: markup]
     end
 

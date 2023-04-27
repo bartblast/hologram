@@ -79,6 +79,18 @@ defmodule Hologram.Template.TokenizerTest do
            ]
   end
 
+  test "elixir interpolation" do
+    assert tokenize("aaa\#{bbb#ccc\#{ddd") == [
+             string: "aaa",
+             symbol: "\#{",
+             string: "bbb",
+             symbol: "#",
+             string: "ccc",
+             symbol: "\#{",
+             string: "ddd"
+           ]
+  end
+
   test "other symbols" do
     assert tokenize("\\=\#{/`") == [
              symbol: "\\",
