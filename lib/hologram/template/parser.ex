@@ -632,7 +632,7 @@ defmodule Hologram.Template.Parser do
   end
 
   defp buffer_token(%{token_buffer: token_buffer} = context, token) do
-    %{context | token_buffer: token_buffer ++ [token]}
+    %{context | token_buffer: [token | token_buffer]}
   end
 
   defp disable_raw_mode(context) do
@@ -652,7 +652,9 @@ defmodule Hologram.Template.Parser do
   end
 
   defp encode_tokens(tokens) do
-    Enum.map_join(tokens, "", fn {_type, value} -> value end)
+    tokens
+    |> Enum.reverse()
+    |> join_tokens()
   end
 
   defp escape_non_printable_chars(str) do
@@ -747,6 +749,10 @@ defmodule Hologram.Template.Parser do
     |> parse(:text, rest)
   end
 
+  defp join_tokens(tokens) do
+    Enum.map_join(tokens, "", fn {_type, value} -> value end)
+  end
+
   defp maybe_add_text_tag(%{token_buffer: token_buffer, processed_tags: processed_tags} = context) do
     if Enum.any?(token_buffer) do
       new_processed_tags = [{:text, encode_tokens(token_buffer)} | processed_tags]
@@ -809,8 +815,8 @@ defmodule Hologram.Template.Parser do
   end
 
   defp raise_error(%{processed_tokens: processed_tokens} = context, status, token, rest) do
-    reversed_processed_tokens = Enum.reverse(processed_tokens)
-    encoded_tokens = encode_tokens(reversed_processed_tokens)
+    # reversed_processed_tokens = Enum.reverse(processed_tokens)
+    encoded_tokens = encode_tokens(processed_tokens)
     encoded_tokens_len = String.length(encoded_tokens)
 
     prev_fragment =
@@ -832,7 +838,7 @@ defmodule Hologram.Template.Parser do
 
     next_fragment =
       rest
-      |> encode_tokens()
+      |> join_tokens()
       |> String.slice(0, 20)
       |> escape_non_printable_chars()
 
