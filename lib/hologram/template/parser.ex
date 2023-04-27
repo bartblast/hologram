@@ -815,7 +815,6 @@ defmodule Hologram.Template.Parser do
   end
 
   defp raise_error(%{processed_tokens: processed_tokens} = context, status, token, rest) do
-    # reversed_processed_tokens = Enum.reverse(processed_tokens)
     encoded_tokens = encode_tokens(processed_tokens)
     encoded_tokens_len = String.length(encoded_tokens)
 
