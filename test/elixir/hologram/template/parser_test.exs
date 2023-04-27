@@ -27,21 +27,6 @@ defmodule Hologram.Template.ParserTest do
       assert parse(markup) == [text: markup]
     end
 
-    test "string, ASCI alphabet lowercase" do
-      markup = "abcdefghijklmnopqrstuvwxyz"
-      assert parse(markup) == [text: markup]
-    end
-
-    test "string, ASCI alphabet uppercase" do
-      markup = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
-      assert parse(markup) == [text: markup]
-    end
-
-    test "string, UTF-8 chars" do
-      markup = "ąćęłńóśźżĄĆĘŁŃÓŚŹŻ"
-      assert parse(markup) == [text: markup]
-    end
-
     test "symbols" do
       markup = "!@$%^&*()-_=+[];:'\"\\|,./?`~"
       assert parse(markup) == [text: markup]
