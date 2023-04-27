@@ -98,6 +98,10 @@ defmodule Hologram.Template.Parser do
   @spec parse(Context.t(), status, list(Tokenizer.token())) :: list(parsed_tag)
   def parse(context \\ %Context{}, status \\ :text, tokens)
 
+  # Note: try to keep the pattern matching order from Hologram.Template.Tokenizer where possible.
+
+  # --- PARSE TEXT ---
+
   def parse(context, :text, []) do
     context
     |> maybe_add_text_tag()
@@ -107,14 +111,6 @@ defmodule Hologram.Template.Parser do
   end
 
   def parse(context, :text, [{:whitespace, _value} = token | rest]) do
-    parse_text(context, token, rest)
-  end
-
-  def parse(context, :text, [{:string, _value} = token | rest]) do
-    parse_text(context, token, rest)
-  end
-
-  def parse(context, :text, [{:symbol, "="} = token | rest]) do
     parse_text(context, token, rest)
   end
 
@@ -144,11 +140,19 @@ defmodule Hologram.Template.Parser do
     |> parse_text(token, rest)
   end
 
-  def parse(%{script?: true, delimiter_stack: []} = context, :text, [
-        {:symbol, "`"} = token | rest
+  def parse(%{script?: true, delimiter_stack: [:single_quote | _tail]} = context, :text, [
+        {:symbol, "'"} = token | rest
       ]) do
     context
-    |> open_backtick()
+    |> pop_delimiter_stack()
+    |> parse_text(token, rest)
+  end
+
+  def parse(%{script?: true, delimiter_stack: []} = context, :text, [
+        {:symbol, "'"} = token | rest
+      ]) do
+    context
+    |> open_single_quote()
     |> parse_text(token, rest)
   end
 
@@ -160,40 +164,12 @@ defmodule Hologram.Template.Parser do
     |> parse_text(token, rest)
   end
 
-  def parse(context, :text, [{:symbol, "\""} = token | rest]) do
-    parse_text(context, token, rest)
-  end
-
   def parse(%{script?: true, delimiter_stack: []} = context, :text, [
-        {:symbol, "'"} = token | rest
+        {:symbol, "`"} = token | rest
       ]) do
     context
-    |> open_single_quote()
+    |> open_backtick()
     |> parse_text(token, rest)
-  end
-
-  def parse(%{script?: true, delimiter_stack: [:single_quote | _tail]} = context, :text, [
-        {:symbol, "'"} = token | rest
-      ]) do
-    context
-    |> pop_delimiter_stack()
-    |> parse_text(token, rest)
-  end
-
-  def parse(context, :text, [{:symbol, "'"} = token | rest]) do
-    parse_text(context, token, rest)
-  end
-
-  def parse(context, :text, [{:symbol, "`"} = token | rest]) do
-    parse_text(context, token, rest)
-  end
-
-  def parse(context, :text, [{:symbol, "\\"} = token | rest]) do
-    parse_text(context, token, rest)
-  end
-
-  def parse(context, :text, [{:symbol, "/"} = token | rest]) do
-    parse_text(context, token, rest)
   end
 
   def parse(context, :text, [{:symbol, "\\{"} | rest]) do
@@ -207,11 +183,7 @@ defmodule Hologram.Template.Parser do
     |> parse(:text, rest)
   end
 
-  def parse(%{raw?: true} = context, :text, [{:symbol, "{#"} = token | rest]) do
-    parse_text(context, token, rest)
-  end
-
-  def parse(context, :text, [{:symbol, "{#"} = token | rest]) do
+  def parse(%{raw?: false} = context, :text, [{:symbol, "{#"} = token | rest]) do
     context
     |> maybe_add_text_tag()
     |> add_processed_token(token)
@@ -227,11 +199,7 @@ defmodule Hologram.Template.Parser do
     |> parse(:text, rest)
   end
 
-  def parse(%{raw?: true} = context, :text, [{:symbol, "{/"} = token | rest]) do
-    parse_text(context, token, rest)
-  end
-
-  def parse(context, :text, [{:symbol, "{/"} = token | rest]) do
+  def parse(%{raw?: false} = context, :text, [{:symbol, "{/"} = token | rest]) do
     context
     |> maybe_add_text_tag()
     |> add_processed_token(token)
@@ -239,11 +207,9 @@ defmodule Hologram.Template.Parser do
     |> parse(:block_end, rest)
   end
 
-  def parse(%{raw?: true} = context, :text, [{:symbol, "{"} | rest]) do
-    parse_text(context, {:symbol, "{"}, rest)
-  end
-
-  def parse(%{node_type: :attribute} = context, :text, [{:symbol, "{"} = token | rest]) do
+  def parse(%{raw?: false, node_type: :attribute} = context, :text, [
+        {:symbol, "{"} = token | rest
+      ]) do
     context
     |> add_attribute_value_part(:text)
     |> reset_delimiter_stack()
@@ -252,7 +218,7 @@ defmodule Hologram.Template.Parser do
     |> parse_expression(token, rest)
   end
 
-  def parse(context, :text, [{:symbol, "{"} = token | rest]) do
+  def parse(%{raw?: false} = context, :text, [{:symbol, "{"} = token | rest]) do
     context
     |> maybe_add_text_tag()
     |> reset_delimiter_stack()
@@ -262,10 +228,6 @@ defmodule Hologram.Template.Parser do
   end
 
   def parse(context, :text, [{:symbol, "\\}"} | rest]) do
-    parse_text(context, {:symbol, "}"}, rest)
-  end
-
-  def parse(%{raw?: true} = context, :text, [{:symbol, "}"} | rest]) do
     parse_text(context, {:symbol, "}"}, rest)
   end
 
@@ -285,11 +247,9 @@ defmodule Hologram.Template.Parser do
     |> parse(:end_tag_name, rest)
   end
 
-  def parse(%{script?: true} = context, :text, [{:symbol, "<"} = token | rest]) do
-    parse_text(context, token, rest)
-  end
-
-  def parse(context, :text, [{:symbol, "<"} = token | [{:string, _value} | _tokens] = rest]) do
+  def parse(%{script?: false} = context, :text, [
+        {:symbol, "<"} = token | [{:string, _value} | _tokens] = rest
+      ]) do
     context
     |> maybe_add_text_tag()
     |> reset_token_buffer()
@@ -299,16 +259,16 @@ defmodule Hologram.Template.Parser do
     |> parse(:start_tag_name, rest)
   end
 
-  def parse(%{script?: true} = context, :text, [token | rest]) do
+  def parse(%{script?: false} = context, :text, [{:symbol, "<"} = token | rest]) do
+    raise_error(context, :text, token, rest)
+  end
+
+  def parse(%{script?: false} = context, :text, [{:symbol, ">"} = token | rest]) do
+    raise_error(context, :text, token, rest)
+  end
+
+  def parse(context, :text, [token | rest]) do
     parse_text(context, token, rest)
-  end
-
-  def parse(context, :text, [{:symbol, "<"} = token | rest]) do
-    raise_error(context, :text, token, rest)
-  end
-
-  def parse(context, :text, [{:symbol, ">"} = token | rest]) do
-    raise_error(context, :text, token, rest)
   end
 
   def parse(context, :start_tag_name, [{:string, tag_name} = token | rest]) do
