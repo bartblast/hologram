@@ -7,349 +7,200 @@ defmodule Hologram.Template.TokenizerTest do
   end
 
   test "whitespaces" do
-    assert tokenize("aaa \\\n\r\t\\bbb \\\n\r\t\\") == [
-             string: "aaa",
+    assert tokenize(" \n\r\t") == [
              whitespace: " ",
-             symbol: "\\",
              whitespace: "\n",
              whitespace: "\r",
-             whitespace: "\t",
-             symbol: "\\",
-             string: "bbb",
-             whitespace: " ",
-             symbol: "\\",
-             whitespace: "\n",
-             whitespace: "\r",
-             whitespace: "\t",
-             symbol: "\\"
+             whitespace: "\t"
            ]
   end
 
-  test "elixir interpolation" do
-    assert tokenize("aaa\\\#{bbb\#{ccc#ddd{eee\\fff\\\#{ggg\#{hhh#iii{jjj\\") == [
-             string: "aaa",
-             symbol: "\\#",
-             symbol: "{",
-             string: "bbb",
-             symbol: "\#{",
-             string: "ccc",
-             symbol: "#",
-             string: "ddd",
-             symbol: "{",
-             string: "eee",
-             symbol: "\\",
-             string: "fff",
-             symbol: "\\#",
-             symbol: "{",
-             string: "ggg",
-             symbol: "\#{",
-             string: "hhh",
-             symbol: "#",
-             string: "iii",
-             symbol: "{",
-             string: "jjj",
-             symbol: "\\"
-           ]
-  end
-
-  test "javascript interpolation" do
-    assert tokenize("aaa\\${bbb${ccc$ddd{eee\\fff\\${ggg${hhh$iii{jjj\\") == [
-             string: "aaa",
-             symbol: "\\$",
-             symbol: "{",
-             string: "bbb",
-             symbol: "${",
-             string: "ccc",
-             symbol: "$",
-             string: "ddd",
-             symbol: "{",
-             string: "eee",
-             symbol: "\\",
-             string: "fff",
-             symbol: "\\$",
-             symbol: "{",
-             string: "ggg",
-             symbol: "${",
-             string: "hhh",
-             symbol: "$",
-             string: "iii",
-             symbol: "{",
-             string: "jjj",
-             symbol: "\\"
-           ]
-  end
-
-  test "equal sign" do
-    assert tokenize("aaa=bbb=") == [
-             string: "aaa",
-             symbol: "=",
-             string: "bbb",
-             symbol: "="
-           ]
-  end
-
-  test "double quotes" do
-    assert tokenize(~s(aaa\\"bbb"ccc\\ddd\\"eee"fff\\)) == [
-             string: "aaa",
-             symbol: "\\\"",
-             string: "bbb",
-             symbol: "\"",
-             string: "ccc",
-             symbol: "\\",
-             string: "ddd",
-             symbol: "\\\"",
-             string: "eee",
-             symbol: "\"",
-             string: "fff",
-             symbol: "\\"
-           ]
-  end
-
-  test "single quotes" do
-    assert tokenize("aaa\\'bbb'ccc\\ddd\\'eee'fff\\") == [
-             string: "aaa",
-             symbol: "\\'",
-             string: "bbb",
-             symbol: "'",
-             string: "ccc",
-             symbol: "\\",
-             string: "ddd",
-             symbol: "\\'",
-             string: "eee",
-             symbol: "'",
-             string: "fff",
-             symbol: "\\"
-           ]
-  end
-
-  test "backticks" do
-    assert tokenize("aaa\\`bbb`ccc\\ddd\\`eee`fff\\ggg") == [
-             string: "aaa",
-             symbol: "\\`",
-             string: "bbb",
-             symbol: "`",
-             string: "ccc",
-             symbol: "\\",
-             string: "ddd",
-             symbol: "\\`",
-             string: "eee",
-             symbol: "`",
-             string: "fff",
-             symbol: "\\",
-             string: "ggg"
-           ]
-  end
-
-  describe "curly braces" do
-    test "opening" do
-      assert tokenize("aaa\\{bbb{ccc\\ddd\\{eee{fff\\ggg") == [
-               string: "aaa",
-               symbol: "\\{",
-               string: "bbb",
-               symbol: "{",
-               string: "ccc",
-               symbol: "\\",
-               string: "ddd",
-               symbol: "\\{",
-               string: "eee",
-               symbol: "{",
-               string: "fff",
-               symbol: "\\",
-               string: "ggg"
-             ]
+  describe "quoting" do
+    test "double quotes" do
+      assert tokenize("\\\"\"") == [symbol: "\\\"", symbol: "\""]
     end
 
-    test "closing" do
-      assert tokenize("aaa\\}bbb}ccc\\ddd\\}eee}fff\\ggg") == [
-               string: "aaa",
-               symbol: "\\}",
-               string: "bbb",
-               symbol: "}",
-               string: "ccc",
-               symbol: "\\",
-               string: "ddd",
-               symbol: "\\}",
-               string: "eee",
-               symbol: "}",
-               string: "fff",
-               symbol: "\\",
-               string: "ggg"
-             ]
+    test "single quotes" do
+      assert tokenize("\\''") == [symbol: "\\'", symbol: "'"]
     end
-  end
 
-  test "raw block start" do
-    assert tokenize(
-             "aaa\\{$raw}bbb{\\$raw}ccc{$raw}ddd\\{$eee{$fff\\ggg\\{$raw}hhh{\\$raw}iii{$raw}jjj\\{$kkk{$lll\\"
-           ) == [
-             string: "aaa",
-             symbol: "\\{",
-             symbol: "$",
-             string: "raw",
-             symbol: "}",
-             string: "bbb",
-             symbol: "{",
-             symbol: "\\$",
-             string: "raw",
-             symbol: "}",
-             string: "ccc",
-             symbol: "{$raw}",
-             string: "ddd",
-             symbol: "\\{",
-             symbol: "$",
-             string: "eee",
-             symbol: "{$",
-             string: "fff",
-             symbol: "\\",
-             string: "ggg",
-             symbol: "\\{",
-             symbol: "$",
-             string: "raw",
-             symbol: "}",
-             string: "hhh",
-             symbol: "{",
-             symbol: "\\$",
-             string: "raw",
-             symbol: "}",
-             string: "iii",
-             symbol: "{$raw}",
-             string: "jjj",
-             symbol: "\\{",
-             symbol: "$",
-             string: "kkk",
-             symbol: "{$",
-             string: "lll",
-             symbol: "\\"
-           ]
-  end
-
-  test "non-raw block start" do
-    assert tokenize(
-             "aaa\\{$xxx}bbb{\\$xxx}ccc{$xxx}ddd\\{$eee{$fff\\ggg\\{$xxx}hhh{\\$xxx}iii{$xxx}jjj\\{$kkk{$lll\\"
-           ) == [
-             string: "aaa",
-             symbol: "\\{",
-             symbol: "$",
-             string: "xxx",
-             symbol: "}",
-             string: "bbb",
-             symbol: "{",
-             symbol: "\\$",
-             string: "xxx",
-             symbol: "}",
-             string: "ccc",
-             symbol: "{$",
-             string: "xxx",
-             symbol: "}",
-             string: "ddd",
-             symbol: "\\{",
-             symbol: "$",
-             string: "eee",
-             symbol: "{$",
-             string: "fff",
-             symbol: "\\",
-             string: "ggg",
-             symbol: "\\{",
-             symbol: "$",
-             string: "xxx",
-             symbol: "}",
-             string: "hhh",
-             symbol: "{",
-             symbol: "\\$",
-             string: "xxx",
-             symbol: "}",
-             string: "iii",
-             symbol: "{$",
-             string: "xxx",
-             symbol: "}",
-             string: "jjj",
-             symbol: "\\{",
-             symbol: "$",
-             string: "kkk",
-             symbol: "{$",
-             string: "lll",
-             symbol: "\\"
-           ]
-  end
-
-  test "block end" do
-    assert tokenize(
-             "aaa\\{$end}bbb{\\$end}ccc{$end}ddd\\{$eee{$fff\\ggg\\{$end}hhh{\\$end}iii{$end}jjj\\{$kkk{$lll\\"
-           ) == [
-             string: "aaa",
-             symbol: "\\{",
-             symbol: "$",
-             string: "end",
-             symbol: "}",
-             string: "bbb",
-             symbol: "{",
-             symbol: "\\$",
-             string: "end",
-             symbol: "}",
-             string: "ccc",
-             symbol: "{$end}",
-             string: "ddd",
-             symbol: "\\{",
-             symbol: "$",
-             string: "eee",
-             symbol: "{$",
-             string: "fff",
-             symbol: "\\",
-             string: "ggg",
-             symbol: "\\{",
-             symbol: "$",
-             string: "end",
-             symbol: "}",
-             string: "hhh",
-             symbol: "{",
-             symbol: "\\$",
-             string: "end",
-             symbol: "}",
-             string: "iii",
-             symbol: "{$end}",
-             string: "jjj",
-             symbol: "\\{",
-             symbol: "$",
-             string: "kkk",
-             symbol: "{$",
-             string: "lll",
-             symbol: "\\"
-           ]
+    test "backticks" do
+      assert tokenize("\\``") == [symbol: "\\`", symbol: "`"]
+    end
   end
 
   describe "angle brackets" do
     test "opening" do
-      assert tokenize("aaa<bbb</ccc/ddd<eee</fff/") == [
-               string: "aaa",
-               symbol: "<",
-               string: "bbb",
+      assert tokenize("</.<./") == [
                symbol: "</",
-               string: "ccc",
-               symbol: "/",
-               string: "ddd",
+               string: ".",
                symbol: "<",
-               string: "eee",
-               symbol: "</",
-               string: "fff",
+               string: ".",
                symbol: "/"
              ]
     end
 
     test "closing" do
-      assert tokenize("aaa>bbb/>ccc/ddd>eee/>fff/") == [
-               string: "aaa",
-               symbol: ">",
-               string: "bbb",
+      assert tokenize("/>.>./") == [
                symbol: "/>",
-               string: "ccc",
-               symbol: "/",
-               string: "ddd",
+               string: ".",
                symbol: ">",
-               string: "eee",
-               symbol: "/>",
-               string: "fff",
+               string: ".",
                symbol: "/"
              ]
+    end
+  end
+
+  describe "curly braces" do
+    test "opening" do
+      assert tokenize("\\{.{") == [symbol: "\\{", string: ".", symbol: "{"]
+    end
+
+    test "closing" do
+      assert tokenize("\\}.}") == [symbol: "\\}", string: ".", symbol: "}"]
+    end
+  end
+
+  describe "interpolation" do
+    test "elixir" do
+      assert tokenize("\\#.\#{.#.\\\#{.#\\{") == [
+               symbol: "\\#",
+               string: ".",
+               symbol: "\#{",
+               string: ".",
+               symbol: "#",
+               string: ".",
+               symbol: "\\#",
+               symbol: "{",
+               string: ".",
+               symbol: "#",
+               symbol: "\\{"
+             ]
+    end
+
+    test "javascript" do
+      assert tokenize("\\$.${.$.\\${.$\\{") == [
+               symbol: "\\$",
+               string: ".",
+               symbol: "${",
+               string: ".",
+               symbol: "$",
+               string: ".",
+               symbol: "\\$",
+               symbol: "{",
+               string: ".",
+               symbol: "$",
+               symbol: "\\{"
+             ]
+    end
+  end
+
+  describe "blocks" do
+    test "raw" do
+      assert tokenize("{$raw}.\\{$raw}.{\\$raw}.{$raw\\}") == [
+               symbol: "{$raw}",
+               string: ".",
+               symbol: "\\{",
+               symbol: "$",
+               string: "raw",
+               symbol: "}",
+               string: ".",
+               symbol: "{",
+               symbol: "\\$",
+               string: "raw",
+               symbol: "}",
+               string: ".",
+               symbol: "{$",
+               string: "raw",
+               symbol: "\\}"
+             ]
+    end
+
+    test "end" do
+      assert tokenize("{$end}.\\{$end}.{\\$end}.{$end\\}") == [
+               symbol: "{$end}",
+               string: ".",
+               symbol: "\\{",
+               symbol: "$",
+               string: "end",
+               symbol: "}",
+               string: ".",
+               symbol: "{",
+               symbol: "\\$",
+               string: "end",
+               symbol: "}",
+               string: ".",
+               symbol: "{$",
+               string: "end",
+               symbol: "\\}"
+             ]
+    end
+
+    test "case" do
+      assert tokenize("{$case.\\{$case.{\\$case") == [
+               symbol: "{$case",
+               string: ".",
+               symbol: "\\{",
+               symbol: "$",
+               string: "case.",
+               symbol: "{",
+               symbol: "\\$",
+               string: "case"
+             ]
+    end
+
+    test "for" do
+      assert tokenize("{$for.\\{$for.{\\$for") == [
+               symbol: "{$for",
+               string: ".",
+               symbol: "\\{",
+               symbol: "$",
+               string: "for.",
+               symbol: "{",
+               symbol: "\\$",
+               string: "for"
+             ]
+    end
+
+    test "if" do
+      assert tokenize("{$if.\\{$if.{\\$if") == [
+               symbol: "{$if",
+               string: ".",
+               symbol: "\\{",
+               symbol: "$",
+               string: "if.",
+               symbol: "{",
+               symbol: "\\$",
+               string: "if"
+             ]
+    end
+
+    test "subblock" do
+      assert tokenize("{$.{.\\{$.{\\$") == [
+               symbol: "{$",
+               string: ".",
+               symbol: "{",
+               string: ".",
+               symbol: "\\{",
+               symbol: "$",
+               string: ".",
+               symbol: "{",
+               symbol: "\\$"
+             ]
+    end
+  end
+
+  describe "other symbols" do
+    test "equal sign" do
+      assert tokenize("=") == [symbol: "="]
+    end
+
+    test "slash" do
+      assert tokenize("/") == [symbol: "/"]
+    end
+
+    test "backslash" do
+      assert tokenize("\\") == [symbol: "\\"]
     end
   end
 
