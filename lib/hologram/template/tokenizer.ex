@@ -40,8 +40,8 @@ defmodule Hologram.Template.Tokenizer do
     [{:whitespace, "\t"} | tokenize(rest)]
   end
 
-  def tokenize("\\\#" <> rest) do
-    [{:symbol, "\\\#"} | tokenize(rest)]
+  def tokenize("\\#" <> rest) do
+    [{:symbol, "\\#"} | tokenize(rest)]
   end
 
   def tokenize("\#{" <> rest) do
@@ -102,6 +102,18 @@ defmodule Hologram.Template.Tokenizer do
 
   def tokenize("{$end}" <> rest) do
     [{:symbol, "{$end}"} | tokenize(rest)]
+  end
+
+  def tokenize("{$case" <> rest) do
+    [{:symbol, "{$case"} | tokenize(rest)]
+  end
+
+  def tokenize("{$for" <> rest) do
+    [{:symbol, "{$for"} | tokenize(rest)]
+  end
+
+  def tokenize("{$if" <> rest) do
+    [{:symbol, "{$if"} | tokenize(rest)]
   end
 
   def tokenize("{$" <> rest) do
