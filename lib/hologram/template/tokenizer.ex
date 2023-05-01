@@ -96,32 +96,36 @@ defmodule Hologram.Template.Tokenizer do
     [{:symbol, "\\{"} | tokenize(rest)]
   end
 
-  def tokenize("{$raw}" <> rest) do
-    [{:symbol, "{$raw}"} | tokenize(rest)]
+  def tokenize("{%for" <> rest) do
+    [{:symbol, "{%for"} | tokenize(rest)]
   end
 
-  def tokenize("{$end}" <> rest) do
-    [{:symbol, "{$end}"} | tokenize(rest)]
+  def tokenize("{/for}" <> rest) do
+    [{:symbol, "{/for}"} | tokenize(rest)]
   end
 
-  def tokenize("{$case" <> rest) do
-    [{:symbol, "{$case"} | tokenize(rest)]
+  def tokenize("{%if" <> rest) do
+    [{:symbol, "{%if"} | tokenize(rest)]
   end
 
-  def tokenize("{$for" <> rest) do
-    [{:symbol, "{$for"} | tokenize(rest)]
+  def tokenize("{/if}" <> rest) do
+    [{:symbol, "{/if}"} | tokenize(rest)]
   end
 
-  def tokenize("{$if" <> rest) do
-    [{:symbol, "{$if"} | tokenize(rest)]
+  def tokenize("{%raw}" <> rest) do
+    [{:symbol, "{%raw}"} | tokenize(rest)]
   end
 
-  def tokenize("{$" <> rest) do
-    [{:symbol, "{$"} | tokenize(rest)]
+  def tokenize("{/raw}" <> rest) do
+    [{:symbol, "{/raw}"} | tokenize(rest)]
   end
 
   def tokenize("{" <> rest) do
     [{:symbol, "{"} | tokenize(rest)]
+  end
+
+  def tokenize("%" <> rest) do
+    [{:symbol, "%"} | tokenize(rest)]
   end
 
   def tokenize("\\}" <> rest) do
@@ -157,7 +161,7 @@ defmodule Hologram.Template.Tokenizer do
   end
 
   def tokenize(rest) do
-    excluded_chars = Regex.escape(" \n\r\t#$=\"'`{}<>/\\")
+    excluded_chars = Regex.escape(" \n\r\t#$%=\"'`{}<>/\\")
     regex = ~r/\A([^#{excluded_chars}]+)(.*)\z/s
     [_full_capture, value, rest] = Regex.run(regex, rest)
     [{:string, value} | tokenize(rest)]

@@ -96,111 +96,110 @@ defmodule Hologram.Template.TokenizerTest do
   end
 
   describe "blocks" do
-    test "raw" do
-      assert tokenize("{$raw}.\\{$raw}.{\\$raw}.{$raw\\}") == [
-               symbol: "{$raw}",
+    test "for start" do
+      assert tokenize("{%for.\\{%for") == [
+               symbol: "{%for",
                string: ".",
                symbol: "\\{",
-               symbol: "$",
-               string: "raw",
-               symbol: "}",
-               string: ".",
-               symbol: "{",
-               symbol: "\\$",
-               string: "raw",
-               symbol: "}",
-               string: ".",
-               symbol: "{$",
-               string: "raw",
-               symbol: "\\}"
-             ]
-    end
-
-    test "end" do
-      assert tokenize("{$end}.\\{$end}.{\\$end}.{$end\\}") == [
-               symbol: "{$end}",
-               string: ".",
-               symbol: "\\{",
-               symbol: "$",
-               string: "end",
-               symbol: "}",
-               string: ".",
-               symbol: "{",
-               symbol: "\\$",
-               string: "end",
-               symbol: "}",
-               string: ".",
-               symbol: "{$",
-               string: "end",
-               symbol: "\\}"
-             ]
-    end
-
-    test "case" do
-      assert tokenize("{$case.\\{$case.{\\$case") == [
-               symbol: "{$case",
-               string: ".",
-               symbol: "\\{",
-               symbol: "$",
-               string: "case.",
-               symbol: "{",
-               symbol: "\\$",
-               string: "case"
-             ]
-    end
-
-    test "for" do
-      assert tokenize("{$for.\\{$for.{\\$for") == [
-               symbol: "{$for",
-               string: ".",
-               symbol: "\\{",
-               symbol: "$",
-               string: "for.",
-               symbol: "{",
-               symbol: "\\$",
+               symbol: "%",
                string: "for"
              ]
     end
 
-    test "if" do
-      assert tokenize("{$if.\\{$if.{\\$if") == [
-               symbol: "{$if",
+    test "for end" do
+      assert tokenize("{/for}.\\{/for}.{/for\\}") == [
+               symbol: "{/for}",
                string: ".",
                symbol: "\\{",
-               symbol: "$",
-               string: "if.",
+               symbol: "/",
+               string: "for",
+               symbol: "}",
+               string: ".",
                symbol: "{",
-               symbol: "\\$",
+               symbol: "/",
+               string: "for",
+               symbol: "\\}"
+             ]
+    end
+
+    test "if start" do
+      assert tokenize("{%if.\\{%if") == [
+               symbol: "{%if",
+               string: ".",
+               symbol: "\\{",
+               symbol: "%",
                string: "if"
              ]
     end
 
-    test "subblock" do
-      assert tokenize("{$.{.\\{$.{\\$") == [
-               symbol: "{$",
-               string: ".",
-               symbol: "{",
+    test "if end" do
+      assert tokenize("{/if}.\\{/if}.{/if\\}") == [
+               symbol: "{/if}",
                string: ".",
                symbol: "\\{",
-               symbol: "$",
+               symbol: "/",
+               string: "if",
+               symbol: "}",
                string: ".",
                symbol: "{",
-               symbol: "\\$"
+               symbol: "/",
+               string: "if",
+               symbol: "\\}"
+             ]
+    end
+
+    test "raw start" do
+      assert tokenize("{%raw}.\\{%raw}.{%raw\\}") == [
+               symbol: "{%raw}",
+               string: ".",
+               symbol: "\\{",
+               symbol: "%",
+               string: "raw",
+               symbol: "}",
+               string: ".",
+               symbol: "{",
+               symbol: "%",
+               string: "raw",
+               symbol: "\\}"
+             ]
+    end
+
+    test "raw end" do
+      assert tokenize("{/raw}.\\{/raw}.{/raw\\}") == [
+               symbol: "{/raw}",
+               string: ".",
+               symbol: "\\{",
+               symbol: "/",
+               string: "raw",
+               symbol: "}",
+               string: ".",
+               symbol: "{",
+               symbol: "/",
+               string: "raw",
+               symbol: "\\}"
              ]
     end
   end
 
   describe "other symbols" do
+    test "backslash" do
+      assert tokenize("\\") == [symbol: "\\"]
+    end
+
+    test "dollar sign" do
+      assert tokenize("$") == [symbol: "$"]
+    end
+
     test "equal sign" do
       assert tokenize("=") == [symbol: "="]
     end
 
-    test "slash" do
-      assert tokenize("/") == [symbol: "/"]
+    test "percentage sign" do
+      assert tokenize("%") == [symbol: "%"]
     end
 
-    test "backslash" do
-      assert tokenize("\\") == [symbol: "\\"]
+    test "slash" do
+      assert tokenize("/") == [symbol: "/"]
     end
   end
 
@@ -226,7 +225,7 @@ defmodule Hologram.Template.TokenizerTest do
     end
 
     test "special characters" do
-      markup = "§£@%^&*()-_+[];:|~,.?"
+      markup = "§£@^&*()-_+[];:|~,.?"
       assert tokenize(markup) == [string: markup]
     end
   end
