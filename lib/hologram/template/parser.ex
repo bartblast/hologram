@@ -100,18 +100,270 @@ defmodule Hologram.Template.Parser do
 
   # Note: try to keep the pattern matching order from Hologram.Template.Tokenizer where possible.
 
-  # --- PARSE TEXT ---
+  # --- ATTRIBUTE ASSIGNMENT ---
+
+  def parse(context, :attribute_assignment, [{:symbol, "\""} = token | rest]) do
+    context
+    |> add_processed_token(token)
+    |> set_prev_status(:attribute_assignment)
+    |> parse(:text, rest)
+  end
+
+  def parse(%{raw?: true} = context, :attribute_assignment, [{:symbol, "{"} = token | rest]) do
+    raise_error(context, :attribute_assignment, token, rest)
+  end
+
+  def parse(context, :attribute_assignment, [{:symbol, "{"} = token | rest]) do
+    context
+    |> buffer_token(token)
+    |> add_processed_token(token)
+    |> set_prev_status(:attribute_assignment)
+    |> parse(:expression, rest)
+  end
+
+  # --- ATTRIBUTE NAME ---
+
+  def parse(context, :attribute_name, [{:whitespace, _value} = token | rest]) do
+    context
+    |> flush_attribute()
+    |> add_processed_token(token)
+    |> set_prev_status(:attribute_name)
+    |> parse(:start_tag, rest)
+  end
+
+  def parse(context, :attribute_name, [{:symbol, "="} = token | rest]) do
+    context
+    |> add_processed_token(token)
+    |> set_prev_status(:attribute_name)
+    |> set_node_type(:attribute)
+    |> parse(:attribute_assignment, rest)
+  end
+
+  def parse(context, :attribute_name, [{:symbol, ">"} = token | rest]) do
+    context
+    |> flush_attribute()
+    |> parse_start_tag_end(token, rest, false)
+  end
+
+  # --- END TAG NAME ---
+
+  def parse(context, :end_tag_name, [{:string, tag_name} = token | rest]) do
+    context
+    |> set_tag_name(tag_name)
+    |> maybe_disable_script_mode(tag_name)
+    |> add_processed_token(token)
+    |> set_prev_status(:end_tag_name)
+    |> parse(:end_tag, rest)
+  end
+
+  # --- END TAG ---
+
+  def parse(context, :end_tag, [{:whitespace, _value} = token | rest]) do
+    context
+    |> add_processed_token(token)
+    |> parse(:end_tag, rest)
+  end
+
+  def parse(context, :end_tag, [{:symbol, ">"} = token | rest]) do
+    context
+    |> add_end_tag()
+    |> add_processed_token(token)
+    |> set_prev_status(:end_tag)
+    |> set_node_type(:text)
+    |> parse(:text, rest)
+  end
+
+  # --- EXPRESSION ---
+
+  def parse(%{delimiter_stack: [delimiter | _tail]} = context, :expression, [
+        {:symbol, "\#{"} = token | rest
+      ])
+      when delimiter in [:double_quote, :single_quote] do
+    context
+    |> open_elixir_interpolation()
+    |> parse_expression(token, rest)
+  end
+
+  def parse(%{delimiter_stack: [:double_quote | _tail]} = context, :expression, [
+        {:symbol, "\""} = token | rest
+      ]) do
+    context
+    |> pop_delimiter_stack()
+    |> parse_expression(token, rest)
+  end
+
+  def parse(%{delimiter_stack: [:single_quote | _tail]} = context, :expression, [
+        {:symbol, "\""} = token | rest
+      ]) do
+    parse_expression(context, token, rest)
+  end
+
+  def parse(context, :expression, [{:symbol, "\""} = token | rest]) do
+    context
+    |> open_double_quote()
+    |> parse_expression(token, rest)
+  end
+
+  def parse(%{delimiter_stack: [:double_quote | _tail]} = context, :expression, [
+        {:symbol, "'"} = token | rest
+      ]) do
+    parse_expression(context, token, rest)
+  end
+
+  def parse(%{delimiter_stack: [:single_quote | _tail]} = context, :expression, [
+        {:symbol, "'"} = token | rest
+      ]) do
+    context
+    |> pop_delimiter_stack()
+    |> parse_expression(token, rest)
+  end
+
+  def parse(context, :expression, [{:symbol, "'"} = token | rest]) do
+    context
+    |> open_single_quote()
+    |> parse_expression(token, rest)
+  end
+
+  def parse(%{delimiter_stack: [delimiter | _tail]} = context, :expression, [
+        {:symbol, "{"} = token | rest
+      ])
+      when delimiter in [:double_quote, :single_quote] do
+    parse_expression(context, token, rest)
+  end
+
+  def parse(context, :expression, [{:symbol, "{"} = token | rest]) do
+    context
+    |> open_curly_bracket()
+    |> parse_expression(token, rest)
+  end
+
+  def parse(
+        %{delimiter_stack: [], node_type: :attribute, prev_status: :attribute_assignment} =
+          context,
+        :expression,
+        [{:symbol, "}"} = token | rest]
+      ) do
+    context
+    |> buffer_token(token)
+    |> add_processed_token(token)
+    |> add_attribute_value_part(:expression)
+    |> flush_attribute()
+    |> set_prev_status(:expression)
+    |> parse(:start_tag, rest)
+  end
+
+  def parse(
+        %{delimiter_stack: [], node_type: :attribute, prev_status: :text} = context,
+        :expression,
+        [{:symbol, "}"} = token | rest]
+      ) do
+    context
+    |> buffer_token(token)
+    |> add_processed_token(token)
+    |> add_attribute_value_part(:expression)
+    |> reset_token_buffer()
+    |> set_prev_status(:expression)
+    |> parse(:text, rest)
+  end
+
+  def parse(%{delimiter_stack: [], node_type: :block} = context, :expression, [
+        {:symbol, "}"} = token | rest
+      ]) do
+    context
+    |> buffer_token(token)
+    |> add_block_start()
+    |> add_processed_token(token)
+    |> reset_token_buffer()
+    |> set_prev_status(:expression)
+    |> set_node_type(:text)
+    |> parse(:text, rest)
+  end
+
+  def parse(%{delimiter_stack: [], node_type: :text} = context, :expression, [
+        {:symbol, "}"} = token | rest
+      ]) do
+    context
+    |> buffer_token(token)
+    |> add_expression_tag()
+    |> add_processed_token(token)
+    |> reset_token_buffer()
+    |> set_prev_status(:expression)
+    |> parse(:text, rest)
+  end
+
+  def parse(%{delimiter_stack: [:curly_bracket | _tail]} = context, :expression, [
+        {:symbol, "}"} = token | rest
+      ]) do
+    context
+    |> pop_delimiter_stack()
+    |> parse_expression(token, rest)
+  end
+
+  def parse(%{delimiter_stack: [:elixir_interpolation | _tail]} = context, :expression, [
+        {:symbol, "}"} = token | rest
+      ]) do
+    context
+    |> pop_delimiter_stack()
+    |> parse_expression(token, rest)
+  end
+
+  def parse(context, :expression, [token | rest]) do
+    parse_expression(context, token, rest)
+  end
+
+  # --- START TAG NAME ---
+
+  def parse(context, :start_tag_name, [{:string, tag_name} = token | rest]) do
+    context
+    |> reset_attributes()
+    |> set_tag_name(tag_name)
+    |> maybe_enable_script_mode(tag_name)
+    |> add_processed_token(token)
+    |> set_prev_status(:start_tag_name)
+    |> parse(:start_tag, rest)
+  end
+
+  # --- START TAG ---
+
+  def parse(context, :start_tag, []) do
+    raise_error(context, :start_tag, nil, [])
+  end
+
+  def parse(context, :start_tag, [{:whitespace, _} = token | rest]) do
+    context
+    |> add_processed_token(token)
+    |> parse(:start_tag, rest)
+  end
+
+  def parse(context, :start_tag, [{:symbol, "="} = token | rest]) do
+    raise_error(context, :start_tag, token, rest)
+  end
+
+  def parse(context, :start_tag, [{:symbol, "/>"} = token | rest]) do
+    parse_start_tag_end(context, token, rest, true)
+  end
+
+  def parse(context, :start_tag, [{:symbol, ">"} = token | rest]) do
+    parse_start_tag_end(context, token, rest, false)
+  end
+
+  def parse(context, :start_tag, [{:string, str} = token | rest]) do
+    context
+    |> set_attribute_name(str)
+    |> reset_attribute_value()
+    |> add_processed_token(token)
+    |> reset_token_buffer()
+    |> set_prev_status(:start_tag)
+    |> parse(:attribute_name, rest)
+  end
+
+  # --- TEXT ---
 
   def parse(context, :text, []) do
     context
     |> maybe_add_text_tag()
-    |> reset_token_buffer()
     |> Map.fetch!(:processed_tags)
     |> Enum.reverse()
-  end
-
-  def parse(context, :text, [{:whitespace, _value} = token | rest]) do
-    parse_text(context, token, rest)
   end
 
   def parse(%{node_type: :attribute} = context, :text, [{:symbol, "\""} = token | rest]) do
@@ -124,14 +376,6 @@ defmodule Hologram.Template.Parser do
     |> parse(:start_tag, rest)
   end
 
-  def parse(%{script?: true, delimiter_stack: [:double_quote | _tail]} = context, :text, [
-        {:symbol, "\""} = token | rest
-      ]) do
-    context
-    |> pop_delimiter_stack()
-    |> parse_text(token, rest)
-  end
-
   def parse(%{script?: true, delimiter_stack: []} = context, :text, [
         {:symbol, "\""} = token | rest
       ]) do
@@ -140,8 +384,8 @@ defmodule Hologram.Template.Parser do
     |> parse_text(token, rest)
   end
 
-  def parse(%{script?: true, delimiter_stack: [:single_quote | _tail]} = context, :text, [
-        {:symbol, "'"} = token | rest
+  def parse(%{script?: true, delimiter_stack: [:double_quote | _tail]} = context, :text, [
+        {:symbol, "\""} = token | rest
       ]) do
     context
     |> pop_delimiter_stack()
@@ -156,8 +400,8 @@ defmodule Hologram.Template.Parser do
     |> parse_text(token, rest)
   end
 
-  def parse(%{script?: true, delimiter_stack: [:backtick | _tail]} = context, :text, [
-        {:symbol, "`"} = token | rest
+  def parse(%{script?: true, delimiter_stack: [:single_quote | _tail]} = context, :text, [
+        {:symbol, "'"} = token | rest
       ]) do
     context
     |> pop_delimiter_stack()
@@ -172,24 +416,23 @@ defmodule Hologram.Template.Parser do
     |> parse_text(token, rest)
   end
 
+  def parse(%{script?: true, delimiter_stack: [:backtick | _tail]} = context, :text, [
+        {:symbol, "`"} = token | rest
+      ]) do
+    context
+    |> pop_delimiter_stack()
+    |> parse_text(token, rest)
+  end
+
   def parse(context, :text, [{:symbol, "\\{"} | rest]) do
     parse_text(context, {:symbol, "{"}, rest)
   end
 
-  def parse(%{raw?: false} = context, :text, [{:symbol, "{#raw}"} = token | rest]) do
+  def parse(%{raw?: false} = context, :text, [{:symbol, "{%raw}"} = token | rest]) do
     context
     |> add_processed_token(token)
     |> enable_raw_mode()
     |> parse(:text, rest)
-  end
-
-  def parse(%{raw?: false} = context, :text, [{:symbol, "{#"} = token | rest]) do
-    context
-    |> maybe_add_text_tag()
-    |> add_processed_token(token)
-    |> set_prev_status(:text)
-    |> set_node_type(:block)
-    |> parse(:block_start, rest)
   end
 
   def parse(%{raw?: true} = context, :text, [{:symbol, "{/raw}"} = token | rest]) do
@@ -199,12 +442,20 @@ defmodule Hologram.Template.Parser do
     |> parse(:text, rest)
   end
 
-  def parse(%{raw?: false} = context, :text, [{:symbol, "{/"} = token | rest]) do
-    context
-    |> maybe_add_text_tag()
-    |> add_processed_token(token)
-    |> set_prev_status(:text)
-    |> parse(:block_end, rest)
+  def parse(%{raw?: false} = context, :text, [{:symbol, "{%for"} = token | rest]) do
+    parse_block_start(context, "for", token, rest)
+  end
+
+  def parse(%{raw?: false} = context, :text, [{:symbol, "{/for}"} = token | rest]) do
+    parse_block_end(context, "for", token, rest)
+  end
+
+  def parse(%{raw?: false} = context, :text, [{:symbol, "{%if"} = token | rest]) do
+    parse_block_start(context, "if", token, rest)
+  end
+
+  def parse(%{raw?: false} = context, :text, [{:symbol, "{/if}"} = token | rest]) do
+    parse_block_end(context, "if", token, rest)
   end
 
   def parse(%{raw?: false, node_type: :attribute} = context, :text, [
@@ -271,277 +522,6 @@ defmodule Hologram.Template.Parser do
     parse_text(context, token, rest)
   end
 
-  def parse(context, :start_tag_name, [{:string, tag_name} = token | rest]) do
-    context
-    |> reset_attributes()
-    |> set_tag_name(tag_name)
-    |> maybe_enable_script_mode(tag_name)
-    |> add_processed_token(token)
-    |> set_prev_status(:start_tag_name)
-    |> parse(:start_tag, rest)
-  end
-
-  def parse(context, :start_tag, [{:whitespace, _} = token | rest]) do
-    context
-    |> add_processed_token(token)
-    |> parse(:start_tag, rest)
-  end
-
-  def parse(context, :start_tag, [{:string, str} = token | rest]) do
-    context
-    |> set_attribute_name(str)
-    |> reset_attribute_value()
-    |> add_processed_token(token)
-    |> reset_token_buffer()
-    |> set_prev_status(:start_tag)
-    |> parse(:attribute_name, rest)
-  end
-
-  def parse(context, :start_tag, [{:symbol, "/>"} = token | rest]) do
-    handle_start_tag_end(context, token, rest, true)
-  end
-
-  def parse(context, :start_tag, [{:symbol, ">"} = token | rest]) do
-    handle_start_tag_end(context, token, rest, false)
-  end
-
-  def parse(context, :start_tag, []) do
-    raise_error(context, :start_tag, nil, [])
-  end
-
-  def parse(context, :start_tag, [{:symbol, "="} = token | rest]) do
-    raise_error(context, :start_tag, token, rest)
-  end
-
-  def parse(context, :end_tag_name, [{:string, tag_name} = token | rest]) do
-    context
-    |> set_tag_name(tag_name)
-    |> maybe_disable_script_mode(tag_name)
-    |> add_processed_token(token)
-    |> set_prev_status(:end_tag_name)
-    |> parse(:end_tag, rest)
-  end
-
-  def parse(context, :end_tag, [{:whitespace, _value} = token | rest]) do
-    context
-    |> add_processed_token(token)
-    |> parse(:end_tag, rest)
-  end
-
-  def parse(context, :end_tag, [{:symbol, ">"} = token | rest]) do
-    context
-    |> add_end_tag()
-    |> add_processed_token(token)
-    |> set_prev_status(:end_tag)
-    |> set_node_type(:text)
-    |> parse(:text, rest)
-  end
-
-  def parse(context, :attribute_name, [{:whitespace, _value} = token | rest]) do
-    context
-    |> flush_attribute()
-    |> add_processed_token(token)
-    |> set_prev_status(:attribute_name)
-    |> parse(:start_tag, rest)
-  end
-
-  def parse(context, :attribute_name, [{:symbol, ">"} = token | rest]) do
-    context
-    |> flush_attribute()
-    |> handle_start_tag_end(token, rest, false)
-  end
-
-  def parse(context, :attribute_name, [{:symbol, "="} = token | rest]) do
-    context
-    |> add_processed_token(token)
-    |> set_prev_status(:attribute_name)
-    |> set_node_type(:attribute)
-    |> parse(:attribute_assignment, rest)
-  end
-
-  def parse(context, :attribute_assignment, [{:symbol, "\""} = token | rest]) do
-    context
-    |> add_processed_token(token)
-    |> set_prev_status(:attribute_assignment)
-    |> parse(:text, rest)
-  end
-
-  def parse(%{raw?: true} = context, :attribute_assignment, [{:symbol, "{"} = token | rest]) do
-    raise_error(context, :attribute_assignment, token, rest)
-  end
-
-  def parse(context, :attribute_assignment, [{:symbol, "{"} = token | rest]) do
-    context
-    |> buffer_token(token)
-    |> add_processed_token(token)
-    |> set_prev_status(:attribute_assignment)
-    |> parse(:expression, rest)
-  end
-
-  def parse(context, :block_start, [{:string, block_name} = token | rest]) do
-    context
-    |> set_block_name(block_name)
-    |> add_processed_token(token)
-    |> reset_token_buffer()
-    |> buffer_token({:symbol, "{"})
-    |> set_prev_status(:block_start)
-    |> parse(:expression, rest)
-  end
-
-  def parse(context, :block_end, [{:string, block_name} = token | rest]) do
-    context
-    |> set_block_name(block_name)
-    |> add_processed_token(token)
-    |> reset_token_buffer()
-    |> parse(:block_end, rest)
-  end
-
-  def parse(context, :block_end, [{:symbol, "}"} = token | rest]) do
-    context
-    |> add_block_end()
-    |> add_processed_token(token)
-    |> reset_token_buffer()
-    |> set_prev_status(:block_end)
-    |> parse(:text, rest)
-  end
-
-  def parse(%{delimiter_stack: [:double_quote | _tail]} = context, :expression, [
-        {:symbol, "\""} = token | rest
-      ]) do
-    context
-    |> pop_delimiter_stack()
-    |> parse_expression(token, rest)
-  end
-
-  def parse(%{delimiter_stack: [:single_quote | _tail]} = context, :expression, [
-        {:symbol, "\""} = token | rest
-      ]) do
-    parse_expression(context, token, rest)
-  end
-
-  def parse(context, :expression, [{:symbol, "\""} = token | rest]) do
-    context
-    |> open_double_quote()
-    |> parse_expression(token, rest)
-  end
-
-  def parse(%{delimiter_stack: [:double_quote | _tail]} = context, :expression, [
-        {:symbol, "'"} = token | rest
-      ]) do
-    parse_expression(context, token, rest)
-  end
-
-  def parse(%{delimiter_stack: [:single_quote | _tail]} = context, :expression, [
-        {:symbol, "'"} = token | rest
-      ]) do
-    context
-    |> pop_delimiter_stack()
-    |> parse_expression(token, rest)
-  end
-
-  def parse(context, :expression, [{:symbol, "'"} = token | rest]) do
-    context
-    |> open_single_quote()
-    |> parse_expression(token, rest)
-  end
-
-  def parse(%{delimiter_stack: [:elixir_interpolation | _tail]} = context, :expression, [
-        {:symbol, "{"} = token | rest
-      ]) do
-    context
-    |> open_curly_bracket()
-    |> parse_expression(token, rest)
-  end
-
-  def parse(%{delimiter_stack: []} = context, :expression, [{:symbol, "{"} = token | rest]) do
-    context
-    |> open_curly_bracket()
-    |> parse_expression(token, rest)
-  end
-
-  def parse(%{delimiter_stack: [], node_type: :text} = context, :expression, [
-        {:symbol, "}"} = token | rest
-      ]) do
-    context
-    |> buffer_token(token)
-    |> add_expression_tag()
-    |> add_processed_token(token)
-    |> reset_token_buffer()
-    |> set_prev_status(:expression)
-    |> parse(:text, rest)
-  end
-
-  def parse(
-        %{delimiter_stack: [], node_type: :attribute, prev_status: :text} = context,
-        :expression,
-        [{:symbol, "}"} = token | rest]
-      ) do
-    context
-    |> buffer_token(token)
-    |> add_processed_token(token)
-    |> add_attribute_value_part(:expression)
-    |> reset_token_buffer()
-    |> set_prev_status(:expression)
-    |> parse(:text, rest)
-  end
-
-  def parse(
-        %{delimiter_stack: [], node_type: :attribute, prev_status: :attribute_assignment} =
-          context,
-        :expression,
-        [{:symbol, "}"} = token | rest]
-      ) do
-    context
-    |> buffer_token(token)
-    |> add_processed_token(token)
-    |> add_attribute_value_part(:expression)
-    |> flush_attribute()
-    |> set_prev_status(:expression)
-    |> parse(:start_tag, rest)
-  end
-
-  def parse(%{delimiter_stack: [], node_type: :block} = context, :expression, [
-        {:symbol, "}"} = token | rest
-      ]) do
-    context
-    |> buffer_token(token)
-    |> add_block_start()
-    |> add_processed_token(token)
-    |> reset_token_buffer()
-    |> set_prev_status(:expression)
-    |> set_node_type(:text)
-    |> parse(:text, rest)
-  end
-
-  def parse(%{delimiter_stack: [:curly_bracket | _tail]} = context, :expression, [
-        {:symbol, "}"} = token | rest
-      ]) do
-    context
-    |> pop_delimiter_stack()
-    |> parse_expression(token, rest)
-  end
-
-  def parse(%{delimiter_stack: [:elixir_interpolation | _tail]} = context, :expression, [
-        {:symbol, "}"} = token | rest
-      ]) do
-    context
-    |> pop_delimiter_stack()
-    |> parse_expression(token, rest)
-  end
-
-  def parse(%{delimiter_stack: [delimiter | _tail]} = context, :expression, [
-        {:symbol, "\#{"} = token | rest
-      ])
-      when delimiter in [:double_quote, :single_quote] do
-    context
-    |> open_elixir_interpolation()
-    |> parse_expression(token, rest)
-  end
-
-  def parse(context, :expression, [token | rest]) do
-    parse_expression(context, token, rest)
-  end
-
   @doc """
   Prints debug info for intercepted parse/3 calls.
   """
@@ -574,8 +554,8 @@ defmodule Hologram.Template.Parser do
     %{context | processed_tags: [new_tag | context.processed_tags]}
   end
 
-  defp add_block_end(context) do
-    new_tag = {:block_end, context.block_name}
+  defp add_block_end(context, block_name) do
+    new_tag = {:block_end, block_name}
     %{context | processed_tags: [new_tag | context.processed_tags]}
   end
 
@@ -704,25 +684,6 @@ defmodule Hologram.Template.Parser do
     }
   end
 
-  defp handle_start_tag_end(context, token, rest, self_closing?) do
-    tag_type = Helpers.tag_type(context.tag_name)
-
-    add_tag_fun =
-      if (tag_type == :component && self_closing?) || Helpers.void_element?(context.tag_name) do
-        &add_self_closing_tag/1
-      else
-        &add_start_tag/1
-      end
-
-    context
-    |> add_tag_fun.()
-    |> reset_token_buffer()
-    |> add_processed_token(token)
-    |> set_prev_status(:start_tag)
-    |> set_node_type(:text)
-    |> parse(:text, rest)
-  end
-
   defp join_tokens(tokens) do
     Enum.map_join(tokens, "", fn {_type, value} -> value end)
   end
@@ -770,11 +731,52 @@ defmodule Hologram.Template.Parser do
     %{context | delimiter_stack: [:single_quote | context.delimiter_stack]}
   end
 
+  defp parse_block_end(context, block_name, token, rest) do
+    context
+    |> maybe_add_text_tag()
+    |> add_processed_token(token)
+    |> set_prev_status(:text)
+    |> add_block_end(block_name)
+    |> set_prev_status(:block_end)
+    |> parse(:text, rest)
+  end
+
+  defp parse_block_start(context, block_name, token, rest) do
+    context
+    |> maybe_add_text_tag()
+    |> add_processed_token(token)
+    |> set_block_name(block_name)
+    |> set_node_type(:block)
+    |> reset_token_buffer()
+    |> buffer_token({:symbol, "{"})
+    |> set_prev_status(:block_start)
+    |> parse(:expression, rest)
+  end
+
   defp parse_expression(context, token, rest) do
     context
     |> buffer_token(token)
     |> add_processed_token(token)
     |> parse(:expression, rest)
+  end
+
+  defp parse_start_tag_end(context, token, rest, self_closing?) do
+    tag_type = Helpers.tag_type(context.tag_name)
+
+    add_tag_fun =
+      if (tag_type == :component && self_closing?) || Helpers.void_element?(context.tag_name) do
+        &add_self_closing_tag/1
+      else
+        &add_start_tag/1
+      end
+
+    context
+    |> add_tag_fun.()
+    |> reset_token_buffer()
+    |> add_processed_token(token)
+    |> set_prev_status(:start_tag)
+    |> set_node_type(:text)
+    |> parse(:text, rest)
   end
 
   defp parse_text(context, token, rest) do
