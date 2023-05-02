@@ -160,6 +160,68 @@ defmodule Hologram.Template.ParserTest do
     end
   end
 
+  describe "element end tag" do
+    test "isolated" do
+      assert parse("</div>") == [end_tag: "div"]
+    end
+
+    test "inside text" do
+      assert parse("abc</div>xyz") == [text: "abc", end_tag: "div", text: "xyz"]
+    end
+
+    test "inside for block" do
+      assert parse("{%for item <- @items}</div>{/for}") == [
+               block_start: {"for", "{ item <- @items}"},
+               end_tag: "div",
+               block_end: "for"
+             ]
+    end
+
+    test "inside if block" do
+      assert parse("{%if true}</div>{/if}") == [
+               block_start: {"if", "{ true}"},
+               end_tag: "div",
+               block_end: "if"
+             ]
+    end
+
+    test "inside raw block" do
+      assert parse("{%raw}</div>{/raw}") == [end_tag: "div"]
+    end
+
+    test "inside elixir expression double quoted string" do
+      assert parse("{\"</div>\"}") == [expression: "{\"</div>\"}"]
+    end
+
+    test "inside elixir expression single quoted string" do
+      assert parse("{'</div>'}") == [expression: "{'</div>'}"]
+    end
+
+    test "inside javascript script double quoted string" do
+      assert parse("<script>\"</div>\"</script>") == [
+               start_tag: {"script", []},
+               text: "\"</div>\"",
+               end_tag: "script"
+             ]
+    end
+
+    test "inside javascript script single quoted string" do
+      assert parse("<script>'</div>'</script>") == [
+               start_tag: {"script", []},
+               text: "'</div>'",
+               end_tag: "script"
+             ]
+    end
+
+    test "inside javascript script backtick quoted string" do
+      assert parse("<script>`</div>`</script>") == [
+               start_tag: {"script", []},
+               text: "`</div>`",
+               end_tag: "script"
+             ]
+    end
+  end
+
   describe "component start tag" do
     test "unclosed" do
       assert parse("<Aaa.Bbb>") == [start_tag: {"Aaa.Bbb", []}]
@@ -171,6 +233,68 @@ defmodule Hologram.Template.ParserTest do
 
     test "inside text" do
       assert parse("abc<Aaa.Bbb>xyz") == [text: "abc", start_tag: {"Aaa.Bbb", []}, text: "xyz"]
+    end
+  end
+
+  describe "component end tag" do
+    test "isolated" do
+      assert parse("</Aaa.Bbb>") == [end_tag: "Aaa.Bbb"]
+    end
+
+    test "inside text" do
+      assert parse("abc</Aaa.Bbb>xyz") == [text: "abc", end_tag: "Aaa.Bbb", text: "xyz"]
+    end
+
+    test "inside for block" do
+      assert parse("{%for item <- @items}</Aaa.Bbb>{/for}") == [
+               block_start: {"for", "{ item <- @items}"},
+               end_tag: "Aaa.Bbb",
+               block_end: "for"
+             ]
+    end
+
+    test "inside if block" do
+      assert parse("{%if true}</Aaa.Bbb>{/if}") == [
+               block_start: {"if", "{ true}"},
+               end_tag: "Aaa.Bbb",
+               block_end: "if"
+             ]
+    end
+
+    test "inside raw block" do
+      assert parse("{%raw}</Aaa.Bbb>{/raw}") == [end_tag: "Aaa.Bbb"]
+    end
+
+    test "inside elixir expression double quoted string" do
+      assert parse("{\"</Aaa.Bbb>\"}") == [expression: "{\"</Aaa.Bbb>\"}"]
+    end
+
+    test "inside elixir expression single quoted string" do
+      assert parse("{'</Aaa.Bbb>'}") == [expression: "{'</Aaa.Bbb>'}"]
+    end
+
+    test "inside javascript script double quoted string" do
+      assert parse("<script>\"</Aaa.Bbb>\"</script>") == [
+               start_tag: {"script", []},
+               text: "\"</Aaa.Bbb>\"",
+               end_tag: "script"
+             ]
+    end
+
+    test "inside javascript script single quoted string" do
+      assert parse("<script>'</Aaa.Bbb>'</script>") == [
+               start_tag: {"script", []},
+               text: "'</Aaa.Bbb>'",
+               end_tag: "script"
+             ]
+    end
+
+    test "inside javascript script backtick quoted string" do
+      assert parse("<script>`</Aaa.Bbb>`</script>") == [
+               start_tag: {"script", []},
+               text: "`</Aaa.Bbb>`",
+               end_tag: "script"
+             ]
     end
   end
 
@@ -332,24 +456,6 @@ defmodule Hologram.Template.ParserTest do
 
   #   test "ended by block start" do
   #     assert parse("abc{%if}") == [text: "abc", block_start: {"if", "{}"}]
-  #   end
-  # end
-
-  # describe "end tag" do
-  #   test "element" do
-  #     assert parse("</div>") == [end_tag: "div"]
-  #   end
-
-  #   test "component" do
-  #     assert parse("</Aaa.Bbb>") == [end_tag: "Aaa.Bbb"]
-  #   end
-
-  #   test "inside text, element" do
-  #     assert parse("abc</div>xyz") == [text: "abc", end_tag: "div", text: "xyz"]
-  #   end
-
-  #   test "inside text, component" do
-  #     assert parse("abc</Aaa.Bbb>xyz") == [text: "abc", end_tag: "Aaa.Bbb", text: "xyz"]
   #   end
   # end
 
