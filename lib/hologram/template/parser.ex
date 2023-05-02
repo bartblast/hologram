@@ -738,6 +738,7 @@ defmodule Hologram.Template.Parser do
     |> set_prev_status(:text)
     |> add_block_end(block_name)
     |> set_prev_status(:block_end)
+    |> reset_token_buffer()
     |> parse(:text, rest)
   end
 
