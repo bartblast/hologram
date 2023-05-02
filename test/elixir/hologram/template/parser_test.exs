@@ -2,8 +2,10 @@ defmodule Hologram.Template.ParserTest do
   use Hologram.Test.BasicCase, async: true
 
   alias Hologram.Template.Parser
-  alias Hologram.Template.SyntaxError
+  # alias Hologram.Template.SyntaxError
   alias Hologram.Template.Tokenizer
+
+  @whitespaces " \n\r\t"
 
   defp parse(markup) do
     markup
@@ -11,972 +13,1026 @@ defmodule Hologram.Template.ParserTest do
     |> Parser.parse()
   end
 
-  defp test_syntax_error_msg(markup, msg) do
-    assert_raise SyntaxError, ~r/#{Regex.escape(msg)}/s, fn ->
-      parse(markup)
-    end
-  end
+  # defp test_syntax_error_msg(markup, msg) do
+  #   assert_raise SyntaxError, ~r/#{Regex.escape(msg)}/s, fn ->
+  #     parse(markup)
+  #   end
+  # end
 
-  describe "text" do
-    test "empty" do
-      assert parse("") == []
-    end
-
-    test "with whitespaces" do
-      markup = " \n\r\t"
-      assert parse(markup) == [text: markup]
+  describe "whitespaces" do
+    test "in text" do
+      assert parse(@whitespaces) == [text: @whitespaces]
     end
 
-    test "with symbols" do
-      markup = "#$%=\"'`/\\"
-      assert parse(markup) == [text: markup]
+    test "in text interpolated expression" do
+      markup = "{#{@whitespaces}}"
+      assert parse(markup) == [expression: markup]
     end
 
-    test "with string" do
-      markup = "abc"
-      assert parse(markup) == [text: markup]
+    test "in attribute value text part" do
+      markup = "<div my_attr=\"#{@whitespaces}\">"
+      assert parse(markup) == [start_tag: {"div", [{"my_attr", [text: @whitespaces]}]}]
     end
 
-    test "opening curly bracket escaping" do
-      assert parse("abc\\{xyz") == [text: "abc{xyz"]
-    end
+    test "in attribute value expression part" do
+      markup = "<div my_attr={#{@whitespaces}}>"
 
-    test "closing curly bracket escaping" do
-      assert parse("abc\\}xyz") == [text: "abc}xyz"]
-    end
-
-    test "ended by element start tag" do
-      assert parse("abc<div>") == [text: "abc", start_tag: {"div", []}]
-    end
-
-    test "ended by component start tag" do
-      assert parse("abc<Aaa.Bbb>") == [text: "abc", start_tag: {"Aaa.Bbb", []}]
-    end
-
-    test "ended by element end tag" do
-      assert parse("abc</div>") == [text: "abc", end_tag: "div"]
-    end
-
-    test "ended by component end tag" do
-      assert parse("abc</Aaa.Bbb>") == [text: "abc", end_tag: "Aaa.Bbb"]
-    end
-
-    test "ended by block start" do
-      assert parse("abc{%if}") == [text: "abc", block_start: {"if", "{}"}]
-    end
-  end
-
-  describe "start tag" do
-    test "non-void HTML element" do
-      assert parse("<div>") == [start_tag: {"div", []}]
-    end
-
-    test "non-void SVG element" do
-      assert parse("<g>") == [start_tag: {"g", []}]
-    end
-
-    test "void HTML element, unclosed" do
-      assert parse("<br>") == [self_closing_tag: {"br", []}]
-    end
-
-    test "void HTML element, self-closed" do
-      assert parse("<br />") == [self_closing_tag: {"br", []}]
-    end
-
-    test "void SVG element, unclosed" do
-      assert parse("<path>") == [self_closing_tag: {"path", []}]
-    end
-
-    test "void SVG element, self-closed" do
-      assert parse("<path />") == [self_closing_tag: {"path", []}]
-    end
-
-    test "slot element, unclosed" do
-      assert parse("<slot>") == [self_closing_tag: {"slot", []}]
-    end
-
-    test "slot element, self-closed" do
-      assert parse("<slot />") == [self_closing_tag: {"slot", []}]
-    end
-
-    test "component, unclosed" do
-      assert parse("<Aaa.Bbb>") == [start_tag: {"Aaa.Bbb", []}]
-    end
-
-    test "component, self-closed" do
-      assert parse("<Aaa.Bbb />") == [self_closing_tag: {"Aaa.Bbb", []}]
-    end
-
-    test "whitespace after element tag name" do
-      assert parse("<div \n\r\t>") == [start_tag: {"div", []}]
-    end
-
-    test "whitespace after component tag name" do
-      assert parse("<Aaa.Bbb \n\r\t>") == [start_tag: {"Aaa.Bbb", []}]
-    end
-
-    test "inside text, element" do
-      assert parse("abc<div>xyz") == [text: "abc", start_tag: {"div", []}, text: "xyz"]
-    end
-
-    test "inside text, component" do
-      assert parse("abc<Aaa.Bbb>xyz") == [text: "abc", start_tag: {"Aaa.Bbb", []}, text: "xyz"]
-    end
-  end
-
-  describe "end tag" do
-    test "element" do
-      assert parse("</div>") == [end_tag: "div"]
-    end
-
-    test "component" do
-      assert parse("</Aaa.Bbb>") == [end_tag: "Aaa.Bbb"]
-    end
-
-    test "whitespace after element tag name" do
-      assert parse("</div \n\r\t>") == [end_tag: "div"]
-    end
-
-    test "whitespace after component tag name" do
-      assert parse("</Aaa.Bbb \n\r\t>") == [end_tag: "Aaa.Bbb"]
-    end
-
-    test "inside text, element" do
-      assert parse("abc</div>xyz") == [text: "abc", end_tag: "div", text: "xyz"]
-    end
-
-    test "inside text, component" do
-      assert parse("abc</Aaa.Bbb>xyz") == [text: "abc", end_tag: "Aaa.Bbb", text: "xyz"]
-    end
-  end
-
-  describe "element" do
-    test "single" do
-      assert parse("<div></div>") == [start_tag: {"div", []}, end_tag: "div"]
-    end
-
-    test "multiple, siblings" do
-      assert parse("<span></span><button></button>") == [
-               start_tag: {"span", []},
-               end_tag: "span",
-               start_tag: {"button", []},
-               end_tag: "button"
+      assert parse(markup) == [
+               start_tag: {"div", [{"my_attr", [expression: "{#{@whitespaces}}"]}]}
              ]
     end
 
-    test "multiple, nested" do
-      assert parse("<div><span></span></div>") == [
-               start_tag: {"div", []},
-               start_tag: {"span", []},
-               end_tag: "span",
-               end_tag: "div"
-             ]
-    end
-  end
-
-  describe "component" do
-    test "single" do
-      assert parse("<Aaa.Bbb></Aaa.Bbb>") == [start_tag: {"Aaa.Bbb", []}, end_tag: "Aaa.Bbb"]
+    test "after element start tag name" do
+      assert parse("<div#{@whitespaces}>") == [start_tag: {"div", []}]
     end
 
-    test "multiple, siblings" do
-      assert parse("<Aaa.Bbb></Aaa.Bbb><Eee.Fff></Eee.Fff>") == [
-               start_tag: {"Aaa.Bbb", []},
-               end_tag: "Aaa.Bbb",
-               start_tag: {"Eee.Fff", []},
-               end_tag: "Eee.Fff"
-             ]
+    test "after component start tag name" do
+      assert parse("<Aaa.Bbb#{@whitespaces}>") == [start_tag: {"Aaa.Bbb", []}]
     end
 
-    test "multiple, nested" do
-      assert parse("<Aaa.Bbb><Eee.Fff></Eee.Fff></Aaa.Bbb>") == [
-               start_tag: {"Aaa.Bbb", []},
-               start_tag: {"Eee.Fff", []},
-               end_tag: "Eee.Fff",
-               end_tag: "Aaa.Bbb"
-             ]
-    end
-  end
-
-  describe "attribute" do
-    test "text" do
-      assert parse("<div id=\"test\">") == [start_tag: {"div", [{"id", [text: "test"]}]}]
+    test "after element end tag name" do
+      assert parse("</div#{@whitespaces}>") == [end_tag: "div"]
     end
 
-    test "expression" do
-      assert parse("<div id={1 + 2}>") == [
-               start_tag: {"div", [{"id", [expression: "{1 + 2}"]}]}
-             ]
+    test "after component end tag name" do
+      assert parse("</Aaa.Bbb#{@whitespaces}>") == [end_tag: "Aaa.Bbb"]
     end
 
-    test "expression in double quotes" do
-      assert parse("<div id=\"{1 + 2}\">") == [
-               start_tag: {"div", [{"id", [text: "", expression: "{1 + 2}", text: ""]}]}
-             ]
-    end
-
-    test "text, expression" do
-      assert parse("<div id=\"abc{1 + 2}\">") == [
-               start_tag: {"div", [{"id", [text: "abc", expression: "{1 + 2}", text: ""]}]}
-             ]
-    end
-
-    test "expression, text" do
-      assert parse("<div id=\"{1 + 2}abc\">") == [
-               start_tag: {"div", [{"id", [text: "", expression: "{1 + 2}", text: "abc"]}]}
-             ]
-    end
-
-    test "text, expression, text" do
-      assert parse("<div id=\"abc{1 + 2}xyz\">") == [
-               start_tag: {"div", [{"id", [text: "abc", expression: "{1 + 2}", text: "xyz"]}]}
-             ]
-    end
-
-    test "boolean attribute followed by whitespace" do
+    test "after boolean attribute" do
       assert parse("<div my_attr >") == [start_tag: {"div", [{"my_attr", []}]}]
     end
 
-    test "boolean attribute followed by start tag closing" do
-      assert parse("<div my_attr>") == [start_tag: {"div", [{"my_attr", []}]}]
+    test "after boolean prop" do
+      assert parse("<Aaa.Bbb my_attr >") == [start_tag: {"Aaa.Bbb", [{"my_attr", []}]}]
     end
 
-    test "multiple attributes" do
-      assert parse(~s(<div attr_1="value_1" attr_2="value_2">)) == [
-               start_tag: {"div", [{"attr_1", [text: "value_1"]}, {"attr_2", [text: "value_2"]}]}
-             ]
-    end
-  end
+    test "in for block expression" do
+      markup = "{%for #{@whitespaces}item <- @items}{/for}"
 
-  describe "property" do
-    test "text" do
-      assert parse("<Aaa.Bbb id=\"test\">") == [
-               start_tag: {"Aaa.Bbb", [{"id", [text: "test"]}]}
-             ]
-    end
-
-    test "expression" do
-      assert parse("<Aaa.Bbb id={1 + 2}>") == [
-               start_tag: {"Aaa.Bbb", [{"id", [expression: "{1 + 2}"]}]}
-             ]
-    end
-
-    test "expression in double quotes" do
-      assert parse("<Aaa.Bbb id=\"{1 + 2}\">") == [
-               start_tag: {"Aaa.Bbb", [{"id", [text: "", expression: "{1 + 2}", text: ""]}]}
-             ]
-    end
-
-    test "text, expression" do
-      assert parse("<Aaa.Bbb id=\"abc{1 + 2}\">") == [
-               start_tag: {"Aaa.Bbb", [{"id", [text: "abc", expression: "{1 + 2}", text: ""]}]}
-             ]
-    end
-
-    test "expression, text" do
-      assert parse("<Aaa.Bbb id=\"{1 + 2}abc\">") == [
-               start_tag: {"Aaa.Bbb", [{"id", [text: "", expression: "{1 + 2}", text: "abc"]}]}
-             ]
-    end
-
-    test "text, expression, text" do
-      assert parse("<Aaa.Bbb id=\"abc{1 + 2}xyz\">") == [
-               start_tag: {"Aaa.Bbb", [{"id", [text: "abc", expression: "{1 + 2}", text: "xyz"]}]}
-             ]
-    end
-
-    test "boolean property followed by whitespace" do
-      assert parse("<Aaa.Bbb my_prop >") == [start_tag: {"Aaa.Bbb", [{"my_prop", []}]}]
-    end
-
-    test "boolean property followed by start tag closing" do
-      assert parse("<Aaa.Bbb my_prop>") == [start_tag: {"Aaa.Bbb", [{"my_prop", []}]}]
-    end
-
-    test "multiple properties" do
-      assert parse(~s(<Aaa.Bbb prop_1="value_1" prop_2="value_2">)) == [
-               start_tag:
-                 {"Aaa.Bbb", [{"prop_1", [text: "value_1"]}, {"prop_2", [text: "value_2"]}]}
-             ]
-    end
-  end
-
-  describe "expression" do
-    test "empty" do
-      assert parse("{}") == [expression: "{}"]
-    end
-
-    test "with whitespaces" do
-      assert parse("{ \n\r\t}") == [expression: "{ \n\r\t}"]
-    end
-
-    test "with symbols" do
-      markup = "{!@#$%^&*()-_=+[];:\\\'\\\"\\|,./?`~}"
-      assert parse(markup) == [expression: markup]
-    end
-
-    test "with string" do
-      markup = "{abc}"
-      assert parse(markup) == [expression: markup]
-    end
-
-    test "single group of curly brackets" do
-      markup = "{{123}}"
-      assert parse(markup) == [expression: markup]
-    end
-
-    test "multiple groups of curly brackets" do
-      markup = "{{1}, {2}}"
-      assert parse(markup) == [expression: markup]
-    end
-
-    test "opening curly bracket inside double quotes" do
-      markup = "{{\"{123\"}}"
-      assert parse(markup) == [expression: markup]
-    end
-
-    test "opening curly bracket inside single quotes" do
-      markup = "{{'{123'}}"
-      assert parse(markup) == [expression: markup]
-    end
-
-    test "closing curly bracket inside double quotes" do
-      markup = "{{\"123}\"}}"
-      assert parse(markup) == [expression: markup]
-    end
-
-    test "closing curly bracket inside single quotes" do
-      markup = "{{'123}'}}"
-      assert parse(markup) == [expression: markup]
-    end
-
-    test "single group of double quotes" do
-      markup = "{{\"123\"}}"
-      assert parse(markup) == [expression: markup]
-    end
-
-    test "multiple groups of double quotes" do
-      markup = "{{\"1\", \"2\"}}"
-      assert parse(markup) == [expression: markup]
-    end
-
-    test "single group of single quotes" do
-      markup = "{{'123'}}"
-      assert parse(markup) == [expression: markup]
-    end
-
-    test "multiple groups of single quotes" do
-      markup = "{{'1', '2'}}"
-      assert parse(markup) == [expression: markup]
-    end
-
-    test "single quote nested in double quotes" do
-      markup = "{\"abc'xyz\"}"
-      assert parse(markup) == [expression: markup]
-    end
-
-    test "double quote nested in single quotes" do
-      markup = "{'abc\"xyz'}"
-      assert parse(markup) == [expression: markup]
-    end
-
-    test "double quote escaping" do
-      markup = "{{1\\\"2}}"
-      assert parse(markup) == [expression: markup]
-    end
-
-    test "single quote escaping" do
-      markup = "{{1\\\'2}}"
-      assert parse(markup) == [expression: markup]
-    end
-
-    test "non-nested elixir interpolation inside double quotes" do
-      markup = "{\"aaa\#{123}bbb\"}"
-      assert parse(markup) == [expression: "{\"aaa\#{123}bbb\"}"]
-    end
-
-    test "nested elixir interpolation inside double quotes" do
-      markup = "{\"aaa\#{\"bbb\#{123}ccc\"}ddd\"}"
-      assert parse(markup) == [expression: "{\"aaa\#{\"bbb\#{123}ccc\"}ddd\"}"]
-    end
-
-    test "non-nested elixir interpolation inside single quotes" do
-      markup = "{'aaa\#{123}bbb'}"
-      assert parse(markup) == [expression: "{'aaa\#{123}bbb'}"]
-    end
-
-    test "nested elixir interpolation inside single quotes" do
-      markup = "{'aaa\#{'bbb\#{123}ccc'}ddd'}"
-      assert parse(markup) == [expression: "{'aaa\#{'bbb\#{123}ccc'}ddd'}"]
-    end
-
-    test "nested elixir interpolation inside double and single quotes" do
-      markup = "{\"aaa\#{'bbb\#{123}ccc'}ddd\"}"
-      assert parse(markup) == [expression: "{\"aaa\#{'bbb\#{123}ccc'}ddd\"}"]
-    end
-
-    test "nested elixir interpolation inside single and double quotes" do
-      markup = "{'aaa\#{\"bbb\#{123}ccc\"}ddd'}"
-      assert parse(markup) == [expression: "{'aaa\#{\"bbb\#{123}ccc\"}ddd'}"]
-    end
-
-    test "inside text" do
-      assert parse("abc{@kmn}xyz") == [text: "abc", expression: "{@kmn}", text: "xyz"]
-    end
-
-    test "inside element" do
-      assert parse("<div>{@abc}</div>") == [
-               start_tag: {"div", []},
-               expression: "{@abc}",
-               end_tag: "div"
-             ]
-    end
-
-    test "inside component" do
-      assert parse("<Aaa.Bbb>{@abc}</Aaa.Bbb>") == [
-               start_tag: {"Aaa.Bbb", []},
-               expression: "{@abc}",
-               end_tag: "Aaa.Bbb"
-             ]
-    end
-  end
-
-  describe "for block" do
-    test "start, isolated" do
-      assert parse("{%for item <- @items}") == [block_start: {"for", "{ item <- @items}"}]
-    end
-
-    test "start, inside text" do
-      assert parse("abc{%for item <- @items}xyz") == [
-               text: "abc",
-               block_start: {"for", "{ item <- @items}"},
-               text: "xyz"
-             ]
-    end
-
-    test "start, inside element" do
-      assert parse("<div>{%for item <- @items}</div>") == [
-               start_tag: {"div", []},
-               block_start: {"for", "{ item <- @items}"},
-               end_tag: "div"
-             ]
-    end
-
-    test "start, inside component" do
-      assert parse("<Aaa.Bbb>{%for item <- @items}</Aaa.Bbb>") == [
-               start_tag: {"Aaa.Bbb", []},
-               block_start: {"for", "{ item <- @items}"},
-               end_tag: "Aaa.Bbb"
-             ]
-    end
-
-    test "end, isolated" do
-      assert parse("{/for}") == [block_end: "for"]
-    end
-
-    test "end, inside text" do
-      assert parse("abc{/for}xyz") == [text: "abc", block_end: "for", text: "xyz"]
-    end
-
-    test "end, inside element" do
-      assert parse("<div>{/for}</div>") == [
-               start_tag: {"div", []},
-               block_end: "for",
-               end_tag: "div"
-             ]
-    end
-
-    test "end, inside component" do
-      assert parse("<Aaa.Bbb>{/for}</Aaa.Bbb>") == [
-               start_tag: {"Aaa.Bbb", []},
-               block_end: "for",
-               end_tag: "Aaa.Bbb"
-             ]
-    end
-  end
-
-  describe "if block" do
-    test "start, isolated" do
-      assert parse("{%if @abc == 123}") == [block_start: {"if", "{ @abc == 123}"}]
-    end
-
-    test "start, inside text" do
-      assert parse("abc{%if @abc == 123}xyz") == [
-               text: "abc",
-               block_start: {"if", "{ @abc == 123}"},
-               text: "xyz"
-             ]
-    end
-
-    test "start, inside element" do
-      assert parse("<div>{%if @abc == 123}</div>") == [
-               start_tag: {"div", []},
-               block_start: {"if", "{ @abc == 123}"},
-               end_tag: "div"
-             ]
-    end
-
-    test "start, inside component" do
-      assert parse("<Aaa.Bbb>{%if @abc == 123}</Aaa.Bbb>") == [
-               start_tag: {"Aaa.Bbb", []},
-               block_start: {"if", "{ @abc == 123}"},
-               end_tag: "Aaa.Bbb"
-             ]
-    end
-
-    test "end, isolated" do
-      assert parse("{/if}") == [block_end: "if"]
-    end
-
-    test "end, inside text" do
-      assert parse("abc{/if}xyz") == [text: "abc", block_end: "if", text: "xyz"]
-    end
-
-    test "end, inside element" do
-      assert parse("<div>{/if}</div>") == [
-               start_tag: {"div", []},
-               block_end: "if",
-               end_tag: "div"
-             ]
-    end
-
-    test "end, inside component" do
-      assert parse("<Aaa.Bbb>{/if}</Aaa.Bbb>") == [
-               start_tag: {"Aaa.Bbb", []},
-               block_end: "if",
-               end_tag: "Aaa.Bbb"
-             ]
-    end
-  end
-
-  describe "block group" do
-    test "single block" do
-      assert parse("{%if @abc == 123}{/if}") == [
-               block_start: {"if", "{ @abc == 123}"},
-               block_end: "if"
-             ]
-    end
-
-    test "multiple blocks, siblings" do
-      assert parse("{%if @abc == 123}{/if}{%for item <- @items}{/for}") == [
-               block_start: {"if", "{ @abc == 123}"},
-               block_end: "if",
-               block_start: {"for", "{ item <- @items}"},
+      assert parse(markup) == [
+               block_start: {"for", "{ #{@whitespaces}item <- @items}"},
                block_end: "for"
              ]
     end
 
-    test "multiple blocks, nested" do
-      assert parse("{%if @abc == 123}{%for item <- @items}{/for}{/if}") == [
-               block_start: {"if", "{ @abc == 123}"},
-               block_start: {"for", "{ item <- @items}"},
-               block_end: "for",
+    test "in if block expression" do
+      markup = "{%if #{@whitespaces}@abc == 123}{/if}"
+
+      assert parse(markup) == [
+               block_start: {"if", "{ #{@whitespaces}@abc == 123}"},
                block_end: "if"
              ]
     end
-  end
 
-  describe "raw block" do
-    test "block start" do
-      assert parse("{%raw}") == []
+    test "in raw block" do
+      markup = "{%raw}#{@whitespaces}{/raw}"
+      assert parse(markup) == [text: @whitespaces]
     end
 
-    test "block end / empty" do
-      assert parse("{%raw}{/raw}") == []
-    end
-
-    test "with whitespaces text" do
-      assert parse("{%raw} \n\r\t{/raw}") == [text: " \n\r\t"]
-    end
-
-    test "with symbols text" do
-      assert parse("{%raw}#$%=\"'`\\/{/raw}") == [text: "#$%=\"'`\\/"]
-    end
-
-    test "with string text" do
-      assert parse("{%raw}abc{/raw}") == [text: "abc"]
-    end
-
-    test "with element" do
-      assert parse("{%raw}<div></div>{/raw}") == [start_tag: {"div", []}, end_tag: "div"]
-    end
-
-    test "with component" do
-      assert parse("{%raw}<MyComponent></MyComponent>{/raw}") == [
-               start_tag: {"MyComponent", []},
-               end_tag: "MyComponent"
-             ]
-    end
-
-    test "with expression" do
-      assert parse("{%raw}{1 + 2}{/raw}") == [text: "{1 + 2}"]
-    end
-
-    test "with expression nested in text" do
-      assert parse("{%raw}aaa{@test}bbb{/raw}") == [text: "aaa{@test}bbb"]
-    end
-
-    test "with block" do
-      assert parse("{%raw}{%if @abc == 123}{/if}{/raw}") == [text: "{%if @abc == 123}{/if}"]
-    end
-
-    test "with element having an attribute value with expression in double quotes" do
-      assert parse("{%raw}<div id=\"aaa{@test}bbb\"></div>{/raw}") == [
-               start_tag: {"div", [{"id", [text: "aaa{@test}bbb"]}]},
-               end_tag: "div"
-             ]
-    end
-
-    test "with component having a property value with expression in double quotes" do
-      assert parse("{%raw}<Aaa.Bbb id=\"aaa{@test}bbb\"></Aaa.Bbb>{/raw}") == [
-               start_tag: {"Aaa.Bbb", [{"id", [text: "aaa{@test}bbb"]}]},
-               end_tag: "Aaa.Bbb"
-             ]
-    end
-
-    test "inside text" do
-      assert parse("abc{%raw}{/raw}xyz") == [text: "abcxyz"]
-    end
-
-    test "inside element" do
-      assert parse("<div>{%raw}{/raw}</div>") == [start_tag: {"div", []}, end_tag: "div"]
-    end
-
-    test "inside component" do
-      assert parse("<Aaa.Bbb>{%raw}{/raw}</Aaa.Bbb>") == [
-               start_tag: {"Aaa.Bbb", []},
-               end_tag: "Aaa.Bbb"
-             ]
+    test "in script" do
+      markup = "<script>#{@whitespaces}</script>"
+      assert parse(markup) == [start_tag: {"script", []}, text: @whitespaces, end_tag: "script"]
     end
   end
 
-  describe "script" do
-    test "single group of double quotes" do
-      assert parse("<script>\"abc\"</script>") == [
-               start_tag: {"script", []},
-               text: "\"abc\"",
-               end_tag: "script"
-             ]
-    end
+  # describe "text" do
+  #   test "empty" do
+  #     assert parse("") == []
+  #   end
 
-    test "multiple groups of double quotes" do
-      assert parse(~s(<script>"abc" + "xyz"</script>)) == [
-               start_tag: {"script", []},
-               text: "\"abc\" + \"xyz\"",
-               end_tag: "script"
-             ]
-    end
+  #   test "with symbols" do
+  #     markup = "#$%=\"'`/\\"
+  #     assert parse(markup) == [text: markup]
+  #   end
 
-    test "single group of single quotes" do
-      assert parse("<script>'abc'</script>") == [
-               start_tag: {"script", []},
-               text: "'abc'",
-               end_tag: "script"
-             ]
-    end
+  #   test "with string" do
+  #     markup = "abc"
+  #     assert parse(markup) == [text: markup]
+  #   end
 
-    test "multiple groups of single quotes" do
-      assert parse("<script>'abc' + 'xyz'</script>") == [
-               start_tag: {"script", []},
-               text: "'abc' + 'xyz'",
-               end_tag: "script"
-             ]
-    end
+  #   test "opening curly bracket escaping" do
+  #     assert parse("abc\\{xyz") == [text: "abc{xyz"]
+  #   end
 
-    test "single group of backticks" do
-      assert parse("<script>`abc`</script>") == [
-               start_tag: {"script", []},
-               text: "`abc`",
-               end_tag: "script"
-             ]
-    end
+  #   test "closing curly bracket escaping" do
+  #     assert parse("abc\\}xyz") == [text: "abc}xyz"]
+  #   end
 
-    test "multiple groups of backticks" do
-      assert parse("<script>`abc` + `xyz`</script>") == [
-               start_tag: {"script", []},
-               text: "`abc` + `xyz`",
-               end_tag: "script"
-             ]
-    end
+  #   test "ended by element start tag" do
+  #     assert parse("abc<div>") == [text: "abc", start_tag: {"div", []}]
+  #   end
 
-    test "symbol '<' not inside delimiters" do
-      assert parse("<script>1 < 2</script>") == [
-               start_tag: {"script", []},
-               text: "1 < 2",
-               end_tag: "script"
-             ]
-    end
+  #   test "ended by component start tag" do
+  #     assert parse("abc<Aaa.Bbb>") == [text: "abc", start_tag: {"Aaa.Bbb", []}]
+  #   end
 
-    test "symbol '<' inside double quotes" do
-      assert parse("<script>\"1 < 2\"</script>") == [
-               start_tag: {"script", []},
-               text: "\"1 < 2\"",
-               end_tag: "script"
-             ]
-    end
+  #   test "ended by element end tag" do
+  #     assert parse("abc</div>") == [text: "abc", end_tag: "div"]
+  #   end
 
-    test "symbol '<' inside single quotes" do
-      assert parse("<script>'1 < 2'</script>") == [
-               start_tag: {"script", []},
-               text: "'1 < 2'",
-               end_tag: "script"
-             ]
-    end
+  #   test "ended by component end tag" do
+  #     assert parse("abc</Aaa.Bbb>") == [text: "abc", end_tag: "Aaa.Bbb"]
+  #   end
 
-    test "symbol '<' inside backticks" do
-      assert parse("<script>`1 < 2`</script>") == [
-               start_tag: {"script", []},
-               text: "`1 < 2`",
-               end_tag: "script"
-             ]
-    end
+  #   test "ended by block start" do
+  #     assert parse("abc{%if}") == [text: "abc", block_start: {"if", "{}"}]
+  #   end
+  # end
 
-    test "symbol '>' not inside delimiters" do
-      assert parse("<script>1 > 2</script>") == [
-               start_tag: {"script", []},
-               text: "1 > 2",
-               end_tag: "script"
-             ]
-    end
+  # describe "start tag" do
+  #   test "non-void HTML element" do
+  #     assert parse("<div>") == [start_tag: {"div", []}]
+  #   end
 
-    test "symbol '>' inside double quotes" do
-      assert parse("<script>\"1 > 2\"</script>") == [
-               start_tag: {"script", []},
-               text: "\"1 > 2\"",
-               end_tag: "script"
-             ]
-    end
+  #   test "non-void SVG element" do
+  #     assert parse("<g>") == [start_tag: {"g", []}]
+  #   end
 
-    test "symbol '>' inside single quotes" do
-      assert parse("<script>'1 > 2'</script>") == [
-               start_tag: {"script", []},
-               text: "'1 > 2'",
-               end_tag: "script"
-             ]
-    end
+  #   test "void HTML element, unclosed" do
+  #     assert parse("<br>") == [self_closing_tag: {"br", []}]
+  #   end
 
-    test "symbol '>' inside backticks" do
-      assert parse("<script>`1 > 2`</script>") == [
-               start_tag: {"script", []},
-               text: "`1 > 2`",
-               end_tag: "script"
-             ]
-    end
+  #   test "void HTML element, self-closed" do
+  #     assert parse("<br />") == [self_closing_tag: {"br", []}]
+  #   end
 
-    test "symbol '</' inside double quotes" do
-      assert parse("<script>\"abc</xyz\"</script>") == [
-               start_tag: {"script", []},
-               text: "\"abc</xyz\"",
-               end_tag: "script"
-             ]
-    end
+  #   test "void SVG element, unclosed" do
+  #     assert parse("<path>") == [self_closing_tag: {"path", []}]
+  #   end
 
-    test "symbol '</' inside single quotes" do
-      assert parse("<script>'abc</xyz'</script>") == [
-               start_tag: {"script", []},
-               text: "'abc</xyz'",
-               end_tag: "script"
-             ]
-    end
+  #   test "void SVG element, self-closed" do
+  #     assert parse("<path />") == [self_closing_tag: {"path", []}]
+  #   end
 
-    test "symbol '</' inside backticks" do
-      assert parse("<script>`abc</xyz`</script>") == [
-               start_tag: {"script", []},
-               text: "`abc</xyz`",
-               end_tag: "script"
-             ]
-    end
+  #   test "slot element, unclosed" do
+  #     assert parse("<slot>") == [self_closing_tag: {"slot", []}]
+  #   end
 
-    test "double quote nested in single quotes" do
-      assert parse("<script>'abc\"xyz'</script>") == [
-               start_tag: {"script", []},
-               text: "'abc\"xyz'",
-               end_tag: "script"
-             ]
-    end
+  #   test "slot element, self-closed" do
+  #     assert parse("<slot />") == [self_closing_tag: {"slot", []}]
+  #   end
 
-    test "double quote nested in backticks" do
-      assert parse("<script>`abc\"xyz`</script>") == [
-               start_tag: {"script", []},
-               text: "`abc\"xyz`",
-               end_tag: "script"
-             ]
-    end
+  #   test "component, unclosed" do
+  #     assert parse("<Aaa.Bbb>") == [start_tag: {"Aaa.Bbb", []}]
+  #   end
 
-    test "single quote nested in double quotes" do
-      assert parse("<script>\"abc'xyz\"</script>") == [
-               start_tag: {"script", []},
-               text: "\"abc'xyz\"",
-               end_tag: "script"
-             ]
-    end
+  #   test "component, self-closed" do
+  #     assert parse("<Aaa.Bbb />") == [self_closing_tag: {"Aaa.Bbb", []}]
+  #   end
 
-    test "single quote nested in backticks" do
-      assert parse("<script>`abc'xyz`</script>") == [
-               start_tag: {"script", []},
-               text: "`abc'xyz`",
-               end_tag: "script"
-             ]
-    end
+  #   test "inside text, element" do
+  #     assert parse("abc<div>xyz") == [text: "abc", start_tag: {"div", []}, text: "xyz"]
+  #   end
 
-    test "backtick nested in double quotes" do
-      assert parse("<script>\"abc`xyz\"</script>") == [
-               start_tag: {"script", []},
-               text: "\"abc`xyz\"",
-               end_tag: "script"
-             ]
-    end
+  #   test "inside text, component" do
+  #     assert parse("abc<Aaa.Bbb>xyz") == [text: "abc", start_tag: {"Aaa.Bbb", []}, text: "xyz"]
+  #   end
+  # end
 
-    test "backtick nested in single quotes" do
-      assert parse("<script>'abc`xyz'</script>") == [
-               start_tag: {"script", []},
-               text: "'abc`xyz'",
-               end_tag: "script"
-             ]
-    end
+  # describe "end tag" do
+  #   test "element" do
+  #     assert parse("</div>") == [end_tag: "div"]
+  #   end
 
-    test "script end tag inside double quotes" do
-      assert parse("<script>const abc = 'substr' + \"</script>\";</script>") == [
-               start_tag: {"script", []},
-               text: "const abc = 'substr' + \"</script>\";",
-               end_tag: "script"
-             ]
-    end
+  #   test "component" do
+  #     assert parse("</Aaa.Bbb>") == [end_tag: "Aaa.Bbb"]
+  #   end
 
-    test "script end tag inside single quotes" do
-      assert parse("<script>const abc = 'substr' + '</script>';</script>") == [
-               start_tag: {"script", []},
-               text: "const abc = 'substr' + '</script>';",
-               end_tag: "script"
-             ]
-    end
+  #   test "inside text, element" do
+  #     assert parse("abc</div>xyz") == [text: "abc", end_tag: "div", text: "xyz"]
+  #   end
 
-    test "script end tag inside backticks" do
-      assert parse("<script>const abc = 'substr' + `</script>`;</script>") == [
-               start_tag: {"script", []},
-               text: "const abc = 'substr' + `</script>`;",
-               end_tag: "script"
-             ]
-    end
+  #   test "inside text, component" do
+  #     assert parse("abc</Aaa.Bbb>xyz") == [text: "abc", end_tag: "Aaa.Bbb", text: "xyz"]
+  #   end
+  # end
 
-    test "expression" do
-      assert parse("<script>const abc = {1 + 2};</script>") == [
-               start_tag: {"script", []},
-               text: "const abc = ",
-               expression: "{1 + 2}",
-               text: ";",
-               end_tag: "script"
-             ]
-    end
-  end
+  # describe "element" do
+  #   test "single" do
+  #     assert parse("<div></div>") == [start_tag: {"div", []}, end_tag: "div"]
+  #   end
 
-  describe "template syntax errors" do
-    test "escape non-printable characters" do
-      expected_msg = ~r/\na\\nb\\rc\\td < x\\ny\\rz\\tv\n {11}\^/s
+  #   test "multiple, siblings" do
+  #     assert parse("<span></span><button></button>") == [
+  #              start_tag: {"span", []},
+  #              end_tag: "span",
+  #              start_tag: {"button", []},
+  #              end_tag: "button"
+  #            ]
+  #   end
 
-      assert_raise SyntaxError, expected_msg, fn ->
-        parse("a\nb\rc\td < x\ny\rz\tv")
-      end
-    end
+  #   test "multiple, nested" do
+  #     assert parse("<div><span></span></div>") == [
+  #              start_tag: {"div", []},
+  #              start_tag: {"span", []},
+  #              end_tag: "span",
+  #              end_tag: "div"
+  #            ]
+  #   end
+  # end
 
-    test "strip excess characters" do
-      expected_msg = ~r/\n2345678901234567890 < 1234567890123456789\n {20}\^/s
+  # describe "component" do
+  #   test "single" do
+  #     assert parse("<Aaa.Bbb></Aaa.Bbb>") == [start_tag: {"Aaa.Bbb", []}, end_tag: "Aaa.Bbb"]
+  #   end
 
-      assert_raise SyntaxError, expected_msg, fn ->
-        parse("123456789012345678901234567890 < 123456789012345678901234567890")
-      end
-    end
+  #   test "multiple, siblings" do
+  #     assert parse("<Aaa.Bbb></Aaa.Bbb><Eee.Fff></Eee.Fff>") == [
+  #              start_tag: {"Aaa.Bbb", []},
+  #              end_tag: "Aaa.Bbb",
+  #              start_tag: {"Eee.Fff", []},
+  #              end_tag: "Eee.Fff"
+  #            ]
+  #   end
 
-    test "unescaped '<' character inside text node" do
-      msg = """
-      Reason:
-      Unescaped '<' character inside text node.
+  #   test "multiple, nested" do
+  #     assert parse("<Aaa.Bbb><Eee.Fff></Eee.Fff></Aaa.Bbb>") == [
+  #              start_tag: {"Aaa.Bbb", []},
+  #              start_tag: {"Eee.Fff", []},
+  #              end_tag: "Eee.Fff",
+  #              end_tag: "Aaa.Bbb"
+  #            ]
+  #   end
+  # end
 
-      Hint:
-      To escape use HTML entity: '&lt;'.
+  # describe "attribute" do
+  #   test "text" do
+  #     assert parse("<div id=\"test\">") == [start_tag: {"div", [{"id", [text: "test"]}]}]
+  #   end
 
-      abc < xyz
-          ^
-      """
+  #   test "expression" do
+  #     assert parse("<div id={1 + 2}>") == [
+  #              start_tag: {"div", [{"id", [expression: "{1 + 2}"]}]}
+  #            ]
+  #   end
 
-      test_syntax_error_msg("abc < xyz", msg)
-    end
+  #   test "expression in double quotes" do
+  #     assert parse("<div id=\"{1 + 2}\">") == [
+  #              start_tag: {"div", [{"id", [text: "", expression: "{1 + 2}", text: ""]}]}
+  #            ]
+  #   end
 
-    test "unescaped '>' character inside text node" do
-      msg = """
-      Reason:
-      Unescaped '>' character inside text node.
+  #   test "text, expression" do
+  #     assert parse("<div id=\"abc{1 + 2}\">") == [
+  #              start_tag: {"div", [{"id", [text: "abc", expression: "{1 + 2}", text: ""]}]}
+  #            ]
+  #   end
 
-      Hint:
-      To escape use HTML entity: '&gt;'.
+  #   test "expression, text" do
+  #     assert parse("<div id=\"{1 + 2}abc\">") == [
+  #              start_tag: {"div", [{"id", [text: "", expression: "{1 + 2}", text: "abc"]}]}
+  #            ]
+  #   end
 
-      abc > xyz
-          ^
-      """
+  #   test "text, expression, text" do
+  #     assert parse("<div id=\"abc{1 + 2}xyz\">") == [
+  #              start_tag: {"div", [{"id", [text: "abc", expression: "{1 + 2}", text: "xyz"]}]}
+  #            ]
+  #   end
 
-      test_syntax_error_msg("abc > xyz", msg)
-    end
+  #   test "boolean attribute followed by start tag closing" do
+  #     assert parse("<div my_attr>") == [start_tag: {"div", [{"my_attr", []}]}]
+  #   end
 
-    test "expression attribute value inside raw block" do
-      msg = """
-      Reason:
-      Expression attribute value inside raw block detected.
+  #   test "multiple attributes" do
+  #     assert parse(~s(<div attr_1="value_1" attr_2="value_2">)) == [
+  #              start_tag: {"div", [{"attr_1", [text: "value_1"]}, {"attr_2", [text: "value_2"]}]}
+  #            ]
+  #   end
+  # end
 
-      Hint:
-      Either wrap the attribute value with double quotes or remove the parent raw block".
+  # describe "property" do
+  #   test "text" do
+  #     assert parse("<Aaa.Bbb id=\"test\">") == [
+  #              start_tag: {"Aaa.Bbb", [{"id", [text: "test"]}]}
+  #            ]
+  #   end
 
-      {%raw}<div id={@abc}></div>{/raw}
-                    ^
-      """
+  #   test "expression" do
+  #     assert parse("<Aaa.Bbb id={1 + 2}>") == [
+  #              start_tag: {"Aaa.Bbb", [{"id", [expression: "{1 + 2}"]}]}
+  #            ]
+  #   end
 
-      test_syntax_error_msg("{%raw}<div id={@abc}></div>{/raw}", msg)
-    end
+  #   test "expression in double quotes" do
+  #     assert parse("<Aaa.Bbb id=\"{1 + 2}\">") == [
+  #              start_tag: {"Aaa.Bbb", [{"id", [text: "", expression: "{1 + 2}", text: ""]}]}
+  #            ]
+  #   end
 
-    test "expression property value inside raw block" do
-      msg = """
-      Reason:
-      Expression property value inside raw block detected.
+  #   test "text, expression" do
+  #     assert parse("<Aaa.Bbb id=\"abc{1 + 2}\">") == [
+  #              start_tag: {"Aaa.Bbb", [{"id", [text: "abc", expression: "{1 + 2}", text: ""]}]}
+  #            ]
+  #   end
 
-      Hint:
-      Either wrap the property value with double quotes or remove the parent raw block".
+  #   test "expression, text" do
+  #     assert parse("<Aaa.Bbb id=\"{1 + 2}abc\">") == [
+  #              start_tag: {"Aaa.Bbb", [{"id", [text: "", expression: "{1 + 2}", text: "abc"]}]}
+  #            ]
+  #   end
 
-      {%raw}<Aa.Bb id={@abc}></Aa.Bb>{/raw}
-                      ^
-      """
+  #   test "text, expression, text" do
+  #     assert parse("<Aaa.Bbb id=\"abc{1 + 2}xyz\">") == [
+  #              start_tag: {"Aaa.Bbb", [{"id", [text: "abc", expression: "{1 + 2}", text: "xyz"]}]}
+  #            ]
+  #   end
 
-      test_syntax_error_msg("{%raw}<Aa.Bb id={@abc}></Aa.Bb>{/raw}", msg)
-    end
+  #   test "boolean property followed by start tag closing" do
+  #     assert parse("<Aaa.Bbb my_prop>") == [start_tag: {"Aaa.Bbb", [{"my_prop", []}]}]
+  #   end
 
-    test "unclosed start tag" do
-      msg = """
-      Reason:
-      Unclosed start tag.
+  #   test "multiple properties" do
+  #     assert parse(~s(<Aaa.Bbb prop_1="value_1" prop_2="value_2">)) == [
+  #              start_tag:
+  #                {"Aaa.Bbb", [{"prop_1", [text: "value_1"]}, {"prop_2", [text: "value_2"]}]}
+  #            ]
+  #   end
+  # end
 
-      Hint:
-      Close the start tag with '>' character.
+  # describe "expression" do
+  #   test "empty" do
+  #     assert parse("{}") == [expression: "{}"]
+  #   end
 
-      <div
-          ^
-      """
+  #   test "with symbols" do
+  #     markup = "{!@#$%^&*()-_=+[];:\\\'\\\"\\|,./?`~}"
+  #     assert parse(markup) == [expression: markup]
+  #   end
 
-      test_syntax_error_msg("<div", msg)
-    end
+  #   test "with string" do
+  #     markup = "{abc}"
+  #     assert parse(markup) == [expression: markup]
+  #   end
 
-    test "missing attribute name" do
-      msg = """
-      Reason:
-      Missing attribute name.
+  #   test "single group of curly brackets" do
+  #     markup = "{{123}}"
+  #     assert parse(markup) == [expression: markup]
+  #   end
 
-      Hint:
-      Specify the attribute name before the '=' character.
+  #   test "multiple groups of curly brackets" do
+  #     markup = "{{1}, {2}}"
+  #     assert parse(markup) == [expression: markup]
+  #   end
 
-      <div ="abc">
-           ^
-      """
+  #   test "opening curly bracket inside double quotes" do
+  #     markup = "{{\"{123\"}}"
+  #     assert parse(markup) == [expression: markup]
+  #   end
 
-      test_syntax_error_msg("<div =\"abc\">", msg)
-    end
-  end
+  #   test "opening curly bracket inside single quotes" do
+  #     markup = "{{'{123'}}"
+  #     assert parse(markup) == [expression: markup]
+  #   end
+
+  #   test "closing curly bracket inside double quotes" do
+  #     markup = "{{\"123}\"}}"
+  #     assert parse(markup) == [expression: markup]
+  #   end
+
+  #   test "closing curly bracket inside single quotes" do
+  #     markup = "{{'123}'}}"
+  #     assert parse(markup) == [expression: markup]
+  #   end
+
+  #   test "single group of double quotes" do
+  #     markup = "{{\"123\"}}"
+  #     assert parse(markup) == [expression: markup]
+  #   end
+
+  #   test "multiple groups of double quotes" do
+  #     markup = "{{\"1\", \"2\"}}"
+  #     assert parse(markup) == [expression: markup]
+  #   end
+
+  #   test "single group of single quotes" do
+  #     markup = "{{'123'}}"
+  #     assert parse(markup) == [expression: markup]
+  #   end
+
+  #   test "multiple groups of single quotes" do
+  #     markup = "{{'1', '2'}}"
+  #     assert parse(markup) == [expression: markup]
+  #   end
+
+  #   test "single quote nested in double quotes" do
+  #     markup = "{\"abc'xyz\"}"
+  #     assert parse(markup) == [expression: markup]
+  #   end
+
+  #   test "double quote nested in single quotes" do
+  #     markup = "{'abc\"xyz'}"
+  #     assert parse(markup) == [expression: markup]
+  #   end
+
+  #   test "for block nested in double quotes" do
+  #     markup = "{\"{%for item <- @items}xyz{/for}\"}"
+  #     assert parse(markup) == [expression: markup]
+  #   end
+
+  #   test "if block nested in double quotes" do
+  #     markup = "{\"{%if @abc == 123}xyz{/if}\"}"
+  #     assert parse(markup) == [expression: markup]
+  #   end
+
+  #   test "raw block nested in double quotes" do
+  #     markup = "{\"{%raw}abc{/raw}\"}"
+  #     assert parse(markup) == [expression: markup]
+  #   end
+
+  #   test "double quote escaping" do
+  #     markup = "{{1\\\"2}}"
+  #     assert parse(markup) == [expression: markup]
+  #   end
+
+  #   test "single quote escaping" do
+  #     markup = "{{1\\\'2}}"
+  #     assert parse(markup) == [expression: markup]
+  #   end
+
+  #   test "non-nested elixir interpolation inside double quotes" do
+  #     markup = "{\"aaa\#{123}bbb\"}"
+  #     assert parse(markup) == [expression: "{\"aaa\#{123}bbb\"}"]
+  #   end
+
+  #   test "nested elixir interpolation inside double quotes" do
+  #     markup = "{\"aaa\#{\"bbb\#{123}ccc\"}ddd\"}"
+  #     assert parse(markup) == [expression: "{\"aaa\#{\"bbb\#{123}ccc\"}ddd\"}"]
+  #   end
+
+  #   test "non-nested elixir interpolation inside single quotes" do
+  #     markup = "{'aaa\#{123}bbb'}"
+  #     assert parse(markup) == [expression: "{'aaa\#{123}bbb'}"]
+  #   end
+
+  #   test "nested elixir interpolation inside single quotes" do
+  #     markup = "{'aaa\#{'bbb\#{123}ccc'}ddd'}"
+  #     assert parse(markup) == [expression: "{'aaa\#{'bbb\#{123}ccc'}ddd'}"]
+  #   end
+
+  #   test "nested elixir interpolation inside double and single quotes" do
+  #     markup = "{\"aaa\#{'bbb\#{123}ccc'}ddd\"}"
+  #     assert parse(markup) == [expression: "{\"aaa\#{'bbb\#{123}ccc'}ddd\"}"]
+  #   end
+
+  #   test "nested elixir interpolation inside single and double quotes" do
+  #     markup = "{'aaa\#{\"bbb\#{123}ccc\"}ddd'}"
+  #     assert parse(markup) == [expression: "{'aaa\#{\"bbb\#{123}ccc\"}ddd'}"]
+  #   end
+
+  #   test "inside text" do
+  #     assert parse("abc{@kmn}xyz") == [text: "abc", expression: "{@kmn}", text: "xyz"]
+  #   end
+
+  #   test "inside element" do
+  #     assert parse("<div>{@abc}</div>") == [
+  #              start_tag: {"div", []},
+  #              expression: "{@abc}",
+  #              end_tag: "div"
+  #            ]
+  #   end
+
+  #   test "inside component" do
+  #     assert parse("<Aaa.Bbb>{@abc}</Aaa.Bbb>") == [
+  #              start_tag: {"Aaa.Bbb", []},
+  #              expression: "{@abc}",
+  #              end_tag: "Aaa.Bbb"
+  #            ]
+  #   end
+  # end
+
+  # describe "for block" do
+  #   test "start, isolated" do
+  #     assert parse("{%for item <- @items}") == [block_start: {"for", "{ item <- @items}"}]
+  #   end
+
+  #   test "start, inside text" do
+  #     assert parse("abc{%for item <- @items}xyz") == [
+  #              text: "abc",
+  #              block_start: {"for", "{ item <- @items}"},
+  #              text: "xyz"
+  #            ]
+  #   end
+
+  #   test "start, inside element" do
+  #     assert parse("<div>{%for item <- @items}</div>") == [
+  #              start_tag: {"div", []},
+  #              block_start: {"for", "{ item <- @items}"},
+  #              end_tag: "div"
+  #            ]
+  #   end
+
+  #   test "start, inside component" do
+  #     assert parse("<Aaa.Bbb>{%for item <- @items}</Aaa.Bbb>") == [
+  #              start_tag: {"Aaa.Bbb", []},
+  #              block_start: {"for", "{ item <- @items}"},
+  #              end_tag: "Aaa.Bbb"
+  #            ]
+  #   end
+
+  #   test "end, isolated" do
+  #     assert parse("{/for}") == [block_end: "for"]
+  #   end
+
+  #   test "end, inside text" do
+  #     assert parse("abc{/for}xyz") == [text: "abc", block_end: "for", text: "xyz"]
+  #   end
+
+  #   test "end, inside element" do
+  #     assert parse("<div>{/for}</div>") == [
+  #              start_tag: {"div", []},
+  #              block_end: "for",
+  #              end_tag: "div"
+  #            ]
+  #   end
+
+  #   test "end, inside component" do
+  #     assert parse("<Aaa.Bbb>{/for}</Aaa.Bbb>") == [
+  #              start_tag: {"Aaa.Bbb", []},
+  #              block_end: "for",
+  #              end_tag: "Aaa.Bbb"
+  #            ]
+  #   end
+  # end
+
+  # describe "if block" do
+  #   test "start, isolated" do
+  #     assert parse("{%if @abc == 123}") == [block_start: {"if", "{ @abc == 123}"}]
+  #   end
+
+  #   test "start, inside text" do
+  #     assert parse("abc{%if @abc == 123}xyz") == [
+  #              text: "abc",
+  #              block_start: {"if", "{ @abc == 123}"},
+  #              text: "xyz"
+  #            ]
+  #   end
+
+  #   test "start, inside element" do
+  #     assert parse("<div>{%if @abc == 123}</div>") == [
+  #              start_tag: {"div", []},
+  #              block_start: {"if", "{ @abc == 123}"},
+  #              end_tag: "div"
+  #            ]
+  #   end
+
+  #   test "start, inside component" do
+  #     assert parse("<Aaa.Bbb>{%if @abc == 123}</Aaa.Bbb>") == [
+  #              start_tag: {"Aaa.Bbb", []},
+  #              block_start: {"if", "{ @abc == 123}"},
+  #              end_tag: "Aaa.Bbb"
+  #            ]
+  #   end
+
+  #   test "end, isolated" do
+  #     assert parse("{/if}") == [block_end: "if"]
+  #   end
+
+  #   test "end, inside text" do
+  #     assert parse("abc{/if}xyz") == [text: "abc", block_end: "if", text: "xyz"]
+  #   end
+
+  #   test "end, inside element" do
+  #     assert parse("<div>{/if}</div>") == [
+  #              start_tag: {"div", []},
+  #              block_end: "if",
+  #              end_tag: "div"
+  #            ]
+  #   end
+
+  #   test "end, inside component" do
+  #     assert parse("<Aaa.Bbb>{/if}</Aaa.Bbb>") == [
+  #              start_tag: {"Aaa.Bbb", []},
+  #              block_end: "if",
+  #              end_tag: "Aaa.Bbb"
+  #            ]
+  #   end
+  # end
+
+  # describe "block group" do
+  #   test "single block" do
+  #     assert parse("{%if @abc == 123}{/if}") == [
+  #              block_start: {"if", "{ @abc == 123}"},
+  #              block_end: "if"
+  #            ]
+  #   end
+
+  #   test "multiple blocks, siblings" do
+  #     assert parse("{%if @abc == 123}{/if}{%for item <- @items}{/for}") == [
+  #              block_start: {"if", "{ @abc == 123}"},
+  #              block_end: "if",
+  #              block_start: {"for", "{ item <- @items}"},
+  #              block_end: "for"
+  #            ]
+  #   end
+
+  #   test "multiple blocks, nested" do
+  #     assert parse("{%if @abc == 123}{%for item <- @items}{/for}{/if}") == [
+  #              block_start: {"if", "{ @abc == 123}"},
+  #              block_start: {"for", "{ item <- @items}"},
+  #              block_end: "for",
+  #              block_end: "if"
+  #            ]
+  #   end
+  # end
+
+  # describe "raw block" do
+  #   test "block start" do
+  #     assert parse("{%raw}") == []
+  #   end
+
+  #   test "block end / empty" do
+  #     assert parse("{%raw}{/raw}") == []
+  #   end
+
+  #   test "with symbols text" do
+  #     assert parse("{%raw}#$%=\"'`\\/{/raw}") == [text: "#$%=\"'`\\/"]
+  #   end
+
+  #   test "with string text" do
+  #     assert parse("{%raw}abc{/raw}") == [text: "abc"]
+  #   end
+
+  #   test "with element" do
+  #     assert parse("{%raw}<div></div>{/raw}") == [start_tag: {"div", []}, end_tag: "div"]
+  #   end
+
+  #   test "with component" do
+  #     assert parse("{%raw}<MyComponent></MyComponent>{/raw}") == [
+  #              start_tag: {"MyComponent", []},
+  #              end_tag: "MyComponent"
+  #            ]
+  #   end
+
+  #   test "with expression" do
+  #     assert parse("{%raw}{1 + 2}{/raw}") == [text: "{1 + 2}"]
+  #   end
+
+  #   test "with expression nested in text" do
+  #     assert parse("{%raw}aaa{@test}bbb{/raw}") == [text: "aaa{@test}bbb"]
+  #   end
+
+  #   test "with block" do
+  #     assert parse("{%raw}{%if @abc == 123}{/if}{/raw}") == [text: "{%if @abc == 123}{/if}"]
+  #   end
+
+  #   test "with element having an attribute value with expression in double quotes" do
+  #     assert parse("{%raw}<div id=\"aaa{@test}bbb\"></div>{/raw}") == [
+  #              start_tag: {"div", [{"id", [text: "aaa{@test}bbb"]}]},
+  #              end_tag: "div"
+  #            ]
+  #   end
+
+  #   test "with component having a property value with expression in double quotes" do
+  #     assert parse("{%raw}<Aaa.Bbb id=\"aaa{@test}bbb\"></Aaa.Bbb>{/raw}") == [
+  #              start_tag: {"Aaa.Bbb", [{"id", [text: "aaa{@test}bbb"]}]},
+  #              end_tag: "Aaa.Bbb"
+  #            ]
+  #   end
+
+  #   test "inside text" do
+  #     assert parse("abc{%raw}{/raw}xyz") == [text: "abcxyz"]
+  #   end
+
+  #   test "inside element" do
+  #     assert parse("<div>{%raw}{/raw}</div>") == [start_tag: {"div", []}, end_tag: "div"]
+  #   end
+
+  #   test "inside component" do
+  #     assert parse("<Aaa.Bbb>{%raw}{/raw}</Aaa.Bbb>") == [
+  #              start_tag: {"Aaa.Bbb", []},
+  #              end_tag: "Aaa.Bbb"
+  #            ]
+  #   end
+  # end
+
+  # describe "script" do
+  #   test "single group of double quotes" do
+  #     assert parse("<script>\"abc\"</script>") == [
+  #              start_tag: {"script", []},
+  #              text: "\"abc\"",
+  #              end_tag: "script"
+  #            ]
+  #   end
+
+  #   test "multiple groups of double quotes" do
+  #     assert parse(~s(<script>"abc" + "xyz"</script>)) == [
+  #              start_tag: {"script", []},
+  #              text: "\"abc\" + \"xyz\"",
+  #              end_tag: "script"
+  #            ]
+  #   end
+
+  #   test "single group of single quotes" do
+  #     assert parse("<script>'abc'</script>") == [
+  #              start_tag: {"script", []},
+  #              text: "'abc'",
+  #              end_tag: "script"
+  #            ]
+  #   end
+
+  #   test "multiple groups of single quotes" do
+  #     assert parse("<script>'abc' + 'xyz'</script>") == [
+  #              start_tag: {"script", []},
+  #              text: "'abc' + 'xyz'",
+  #              end_tag: "script"
+  #            ]
+  #   end
+
+  #   test "single group of backticks" do
+  #     assert parse("<script>`abc`</script>") == [
+  #              start_tag: {"script", []},
+  #              text: "`abc`",
+  #              end_tag: "script"
+  #            ]
+  #   end
+
+  #   test "multiple groups of backticks" do
+  #     assert parse("<script>`abc` + `xyz`</script>") == [
+  #              start_tag: {"script", []},
+  #              text: "`abc` + `xyz`",
+  #              end_tag: "script"
+  #            ]
+  #   end
+
+  #   test "symbol '<' not inside delimiters" do
+  #     assert parse("<script>1 < 2</script>") == [
+  #              start_tag: {"script", []},
+  #              text: "1 < 2",
+  #              end_tag: "script"
+  #            ]
+  #   end
+
+  #   test "symbol '<' inside double quotes" do
+  #     assert parse("<script>\"1 < 2\"</script>") == [
+  #              start_tag: {"script", []},
+  #              text: "\"1 < 2\"",
+  #              end_tag: "script"
+  #            ]
+  #   end
+
+  #   test "symbol '<' inside single quotes" do
+  #     assert parse("<script>'1 < 2'</script>") == [
+  #              start_tag: {"script", []},
+  #              text: "'1 < 2'",
+  #              end_tag: "script"
+  #            ]
+  #   end
+
+  #   test "symbol '<' inside backticks" do
+  #     assert parse("<script>`1 < 2`</script>") == [
+  #              start_tag: {"script", []},
+  #              text: "`1 < 2`",
+  #              end_tag: "script"
+  #            ]
+  #   end
+
+  #   test "symbol '>' not inside delimiters" do
+  #     assert parse("<script>1 > 2</script>") == [
+  #              start_tag: {"script", []},
+  #              text: "1 > 2",
+  #              end_tag: "script"
+  #            ]
+  #   end
+
+  #   test "symbol '>' inside double quotes" do
+  #     assert parse("<script>\"1 > 2\"</script>") == [
+  #              start_tag: {"script", []},
+  #              text: "\"1 > 2\"",
+  #              end_tag: "script"
+  #            ]
+  #   end
+
+  #   test "symbol '>' inside single quotes" do
+  #     assert parse("<script>'1 > 2'</script>") == [
+  #              start_tag: {"script", []},
+  #              text: "'1 > 2'",
+  #              end_tag: "script"
+  #            ]
+  #   end
+
+  #   test "symbol '>' inside backticks" do
+  #     assert parse("<script>`1 > 2`</script>") == [
+  #              start_tag: {"script", []},
+  #              text: "`1 > 2`",
+  #              end_tag: "script"
+  #            ]
+  #   end
+
+  #   test "symbol '</' inside double quotes" do
+  #     assert parse("<script>\"abc</xyz\"</script>") == [
+  #              start_tag: {"script", []},
+  #              text: "\"abc</xyz\"",
+  #              end_tag: "script"
+  #            ]
+  #   end
+
+  #   test "symbol '</' inside single quotes" do
+  #     assert parse("<script>'abc</xyz'</script>") == [
+  #              start_tag: {"script", []},
+  #              text: "'abc</xyz'",
+  #              end_tag: "script"
+  #            ]
+  #   end
+
+  #   test "symbol '</' inside backticks" do
+  #     assert parse("<script>`abc</xyz`</script>") == [
+  #              start_tag: {"script", []},
+  #              text: "`abc</xyz`",
+  #              end_tag: "script"
+  #            ]
+  #   end
+
+  #   test "double quote nested in single quotes" do
+  #     assert parse("<script>'abc\"xyz'</script>") == [
+  #              start_tag: {"script", []},
+  #              text: "'abc\"xyz'",
+  #              end_tag: "script"
+  #            ]
+  #   end
+
+  #   test "double quote nested in backticks" do
+  #     assert parse("<script>`abc\"xyz`</script>") == [
+  #              start_tag: {"script", []},
+  #              text: "`abc\"xyz`",
+  #              end_tag: "script"
+  #            ]
+  #   end
+
+  #   test "single quote nested in double quotes" do
+  #     assert parse("<script>\"abc'xyz\"</script>") == [
+  #              start_tag: {"script", []},
+  #              text: "\"abc'xyz\"",
+  #              end_tag: "script"
+  #            ]
+  #   end
+
+  #   test "single quote nested in backticks" do
+  #     assert parse("<script>`abc'xyz`</script>") == [
+  #              start_tag: {"script", []},
+  #              text: "`abc'xyz`",
+  #              end_tag: "script"
+  #            ]
+  #   end
+
+  #   test "backtick nested in double quotes" do
+  #     assert parse("<script>\"abc`xyz\"</script>") == [
+  #              start_tag: {"script", []},
+  #              text: "\"abc`xyz\"",
+  #              end_tag: "script"
+  #            ]
+  #   end
+
+  #   test "backtick nested in single quotes" do
+  #     assert parse("<script>'abc`xyz'</script>") == [
+  #              start_tag: {"script", []},
+  #              text: "'abc`xyz'",
+  #              end_tag: "script"
+  #            ]
+  #   end
+
+  #   test "script end tag inside double quotes" do
+  #     assert parse("<script>const abc = 'substr' + \"</script>\";</script>") == [
+  #              start_tag: {"script", []},
+  #              text: "const abc = 'substr' + \"</script>\";",
+  #              end_tag: "script"
+  #            ]
+  #   end
+
+  #   test "script end tag inside single quotes" do
+  #     assert parse("<script>const abc = 'substr' + '</script>';</script>") == [
+  #              start_tag: {"script", []},
+  #              text: "const abc = 'substr' + '</script>';",
+  #              end_tag: "script"
+  #            ]
+  #   end
+
+  #   test "script end tag inside backticks" do
+  #     assert parse("<script>const abc = 'substr' + `</script>`;</script>") == [
+  #              start_tag: {"script", []},
+  #              text: "const abc = 'substr' + `</script>`;",
+  #              end_tag: "script"
+  #            ]
+  #   end
+
+  #   test "expression" do
+  #     assert parse("<script>const abc = {1 + 2};</script>") == [
+  #              start_tag: {"script", []},
+  #              text: "const abc = ",
+  #              expression: "{1 + 2}",
+  #              text: ";",
+  #              end_tag: "script"
+  #            ]
+  #   end
+  # end
+
+  # describe "template syntax errors" do
+  #   test "escape non-printable characters" do
+  #     expected_msg = ~r/\na\\nb\\rc\\td < x\\ny\\rz\\tv\n {11}\^/s
+
+  #     assert_raise SyntaxError, expected_msg, fn ->
+  #       parse("a\nb\rc\td < x\ny\rz\tv")
+  #     end
+  #   end
+
+  #   test "strip excess characters" do
+  #     expected_msg = ~r/\n2345678901234567890 < 1234567890123456789\n {20}\^/s
+
+  #     assert_raise SyntaxError, expected_msg, fn ->
+  #       parse("123456789012345678901234567890 < 123456789012345678901234567890")
+  #     end
+  #   end
+
+  #   test "unescaped '<' character inside text node" do
+  #     msg = """
+  #     Reason:
+  #     Unescaped '<' character inside text node.
+
+  #     Hint:
+  #     To escape use HTML entity: '&lt;'.
+
+  #     abc < xyz
+  #         ^
+  #     """
+
+  #     test_syntax_error_msg("abc < xyz", msg)
+  #   end
+
+  #   test "unescaped '>' character inside text node" do
+  #     msg = """
+  #     Reason:
+  #     Unescaped '>' character inside text node.
+
+  #     Hint:
+  #     To escape use HTML entity: '&gt;'.
+
+  #     abc > xyz
+  #         ^
+  #     """
+
+  #     test_syntax_error_msg("abc > xyz", msg)
+  #   end
+
+  #   test "expression attribute value inside raw block" do
+  #     msg = """
+  #     Reason:
+  #     Expression attribute value inside raw block detected.
+
+  #     Hint:
+  #     Either wrap the attribute value with double quotes or remove the parent raw block".
+
+  #     {%raw}<div id={@abc}></div>{/raw}
+  #                   ^
+  #     """
+
+  #     test_syntax_error_msg("{%raw}<div id={@abc}></div>{/raw}", msg)
+  #   end
+
+  #   test "expression property value inside raw block" do
+  #     msg = """
+  #     Reason:
+  #     Expression property value inside raw block detected.
+
+  #     Hint:
+  #     Either wrap the property value with double quotes or remove the parent raw block".
+
+  #     {%raw}<Aa.Bb id={@abc}></Aa.Bb>{/raw}
+  #                     ^
+  #     """
+
+  #     test_syntax_error_msg("{%raw}<Aa.Bb id={@abc}></Aa.Bb>{/raw}", msg)
+  #   end
+
+  #   test "unclosed start tag" do
+  #     msg = """
+  #     Reason:
+  #     Unclosed start tag.
+
+  #     Hint:
+  #     Close the start tag with '>' character.
+
+  #     <div
+  #         ^
+  #     """
+
+  #     test_syntax_error_msg("<div", msg)
+  #   end
+
+  #   test "missing attribute name" do
+  #     msg = """
+  #     Reason:
+  #     Missing attribute name.
+
+  #     Hint:
+  #     Specify the attribute name before the '=' character.
+
+  #     <div ="abc">
+  #          ^
+  #     """
+
+  #     test_syntax_error_msg("<div =\"abc\">", msg)
+  #   end
+  # end
 
   # TODO: cleanup
 
