@@ -122,6 +122,58 @@ defmodule Hologram.Template.ParserTest do
     end
   end)
 
+  describe "element start tag" do
+    test "non-void HTML element" do
+      assert parse("<div>") == [start_tag: {"div", []}]
+    end
+
+    test "non-void SVG element" do
+      assert parse("<g>") == [start_tag: {"g", []}]
+    end
+
+    test "void HTML element, unclosed" do
+      assert parse("<br>") == [self_closing_tag: {"br", []}]
+    end
+
+    test "void HTML element, self-closed" do
+      assert parse("<br />") == [self_closing_tag: {"br", []}]
+    end
+
+    test "void SVG element, unclosed" do
+      assert parse("<path>") == [self_closing_tag: {"path", []}]
+    end
+
+    test "void SVG element, self-closed" do
+      assert parse("<path />") == [self_closing_tag: {"path", []}]
+    end
+
+    test "slot element, unclosed" do
+      assert parse("<slot>") == [self_closing_tag: {"slot", []}]
+    end
+
+    test "slot element, self-closed" do
+      assert parse("<slot />") == [self_closing_tag: {"slot", []}]
+    end
+
+    test "inside text" do
+      assert parse("abc<div>xyz") == [text: "abc", start_tag: {"div", []}, text: "xyz"]
+    end
+  end
+
+  describe "component start tag" do
+    test "unclosed" do
+      assert parse("<Aaa.Bbb>") == [start_tag: {"Aaa.Bbb", []}]
+    end
+
+    test "self-closed" do
+      assert parse("<Aaa.Bbb />") == [self_closing_tag: {"Aaa.Bbb", []}]
+    end
+
+    test "inside text" do
+      assert parse("abc<Aaa.Bbb>xyz") == [text: "abc", start_tag: {"Aaa.Bbb", []}, text: "xyz"]
+    end
+  end
+
   # defp test_syntax_error_msg(markup, msg) do
   #   assert_raise SyntaxError, ~r/#{Regex.escape(msg)}/s, fn ->
   #     parse(markup)
@@ -280,56 +332,6 @@ defmodule Hologram.Template.ParserTest do
 
   #   test "ended by block start" do
   #     assert parse("abc{%if}") == [text: "abc", block_start: {"if", "{}"}]
-  #   end
-  # end
-
-  # describe "start tag" do
-  #   test "non-void HTML element" do
-  #     assert parse("<div>") == [start_tag: {"div", []}]
-  #   end
-
-  #   test "non-void SVG element" do
-  #     assert parse("<g>") == [start_tag: {"g", []}]
-  #   end
-
-  #   test "void HTML element, unclosed" do
-  #     assert parse("<br>") == [self_closing_tag: {"br", []}]
-  #   end
-
-  #   test "void HTML element, self-closed" do
-  #     assert parse("<br />") == [self_closing_tag: {"br", []}]
-  #   end
-
-  #   test "void SVG element, unclosed" do
-  #     assert parse("<path>") == [self_closing_tag: {"path", []}]
-  #   end
-
-  #   test "void SVG element, self-closed" do
-  #     assert parse("<path />") == [self_closing_tag: {"path", []}]
-  #   end
-
-  #   test "slot element, unclosed" do
-  #     assert parse("<slot>") == [self_closing_tag: {"slot", []}]
-  #   end
-
-  #   test "slot element, self-closed" do
-  #     assert parse("<slot />") == [self_closing_tag: {"slot", []}]
-  #   end
-
-  #   test "component, unclosed" do
-  #     assert parse("<Aaa.Bbb>") == [start_tag: {"Aaa.Bbb", []}]
-  #   end
-
-  #   test "component, self-closed" do
-  #     assert parse("<Aaa.Bbb />") == [self_closing_tag: {"Aaa.Bbb", []}]
-  #   end
-
-  #   test "inside text, element" do
-  #     assert parse("abc<div>xyz") == [text: "abc", start_tag: {"div", []}, text: "xyz"]
-  #   end
-
-  #   test "inside text, component" do
-  #     assert parse("abc<Aaa.Bbb>xyz") == [text: "abc", start_tag: {"Aaa.Bbb", []}, text: "xyz"]
   #   end
   # end
 
