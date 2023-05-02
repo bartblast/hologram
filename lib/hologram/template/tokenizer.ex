@@ -45,15 +45,15 @@ defmodule Hologram.Template.Tokenizer do
   end
 
   def tokenize("\#{/for}" <> rest) do
-    [{{:symbol, "#"}} | [{:symbol, "{/for}"} | tokenize(rest)]]
+    [{:symbol, "#"} | [{:symbol, "{/for}"} | tokenize(rest)]]
   end
 
   def tokenize("\#{/if}" <> rest) do
-    [{{:symbol, "#"}} | [{:symbol, "{/if}"} | tokenize(rest)]]
+    [{:symbol, "#"} | [{:symbol, "{/if}"} | tokenize(rest)]]
   end
 
   def tokenize("\#{/raw}" <> rest) do
-    [{{:symbol, "#"}} | [{:symbol, "{/raw}"} | tokenize(rest)]]
+    [{:symbol, "#"} | [{:symbol, "{/raw}"} | tokenize(rest)]]
   end
 
   def tokenize("\#{" <> rest) do
