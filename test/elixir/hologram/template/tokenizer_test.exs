@@ -122,6 +122,10 @@ defmodule Hologram.Template.TokenizerTest do
              ]
     end
 
+    test "hash before for end" do
+      assert tokenize("\#{/for}") == [{:symbol, "{/for}"}, {{:symbol, "#"}}]
+    end
+
     test "if start" do
       assert tokenize("{%if.\\{%if") == [
                symbol: "{%if",
@@ -146,6 +150,10 @@ defmodule Hologram.Template.TokenizerTest do
                string: "if",
                symbol: "\\}"
              ]
+    end
+
+    test "hash before if end" do
+      assert tokenize("\#{/if}") == [{:symbol, "{/if}"}, {{:symbol, "#"}}]
     end
 
     test "raw start" do
@@ -178,6 +186,10 @@ defmodule Hologram.Template.TokenizerTest do
                string: "raw",
                symbol: "\\}"
              ]
+    end
+
+    test "hash before raw end" do
+      assert tokenize("\#{/raw}") == [{:symbol, "{/raw}"}, {{:symbol, "#"}}]
     end
   end
 
