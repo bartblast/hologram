@@ -95,6 +95,58 @@ defmodule Hologram.Template.ParserTest do
     end
   end
 
+  describe "hash '#' character" do
+    test "in text" do
+      assert parse("#") == [text: "#"]
+    end
+
+    test "in text interpolated expression" do
+      markup = "{\"#\"}"
+      assert parse(markup) == [expression: markup]
+    end
+
+    test "in attribute value text part" do
+      markup = "<div my_attr=\"#\">"
+      assert parse(markup) == [start_tag: {"div", [{"my_attr", [text: "#"]}]}]
+    end
+
+    test "in attribute value expression part" do
+      markup = "<div my_attr={\"#\"}>"
+
+      assert parse(markup) == [
+               start_tag: {"div", [{"my_attr", [expression: "{\"#\"}"]}]}
+             ]
+    end
+
+    test "in for block expression" do
+      markup = "{%for item <- [\"#\"]}{/for}"
+
+      assert parse(markup) == [
+               block_start: {"for", "{ item <- [\"#\"]}"},
+               block_end: "for"
+             ]
+    end
+
+    test "in if block expression" do
+      markup = "{%if \"#\"}{/if}"
+
+      assert parse(markup) == [
+               block_start: {"if", "{ \"#\"}"},
+               block_end: "if"
+             ]
+    end
+
+    test "in raw block" do
+      markup = "{%raw}.#.{/raw}"
+      assert parse(markup) == [text: ".#."]
+    end
+
+    test "in script" do
+      markup = "<script>'#'</script>"
+      assert parse(markup) == [start_tag: {"script", []}, text: "'#'", end_tag: "script"]
+    end
+  end
+
   # describe "text" do
   #   test "empty" do
   #     assert parse("") == []
