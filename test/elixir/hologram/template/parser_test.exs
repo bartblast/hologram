@@ -166,11 +166,7 @@ defmodule Hologram.Template.ParserTest do
   end
 
   # Test blocks in quotes inside expressions.
-  [
-    {"for", "item <- @items"},
-    {"if", "true"}
-  ]
-  |> Enum.each(fn {name, expression} ->
+  Enum.each([{"for", "item <- @items"}, {"if", "true"}], fn {name, expression} ->
     describe "#{name} block inside expression" do
       test "start block in double quotes" do
         markup = "{\"{%#{unquote(name)} #{unquote(expression)}}\"}"
