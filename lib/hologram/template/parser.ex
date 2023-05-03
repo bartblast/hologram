@@ -180,7 +180,7 @@ defmodule Hologram.Template.Parser do
       ])
       when delimiter in [:double_quote, :single_quote] do
     context
-    |> open_elixir_interpolation()
+    |> push_delimiter_stack(:elixir_interpolation)
     |> parse_expression(token, rest)
   end
 
@@ -200,7 +200,7 @@ defmodule Hologram.Template.Parser do
 
   def parse(context, :expression, [{:symbol, "\""} = token | rest]) do
     context
-    |> open_double_quote()
+    |> push_delimiter_stack(:double_quote)
     |> parse_expression(token, rest)
   end
 
@@ -220,7 +220,7 @@ defmodule Hologram.Template.Parser do
 
   def parse(context, :expression, [{:symbol, "'"} = token | rest]) do
     context
-    |> open_single_quote()
+    |> push_delimiter_stack(:single_quote)
     |> parse_expression(token, rest)
   end
 
@@ -233,7 +233,7 @@ defmodule Hologram.Template.Parser do
 
   def parse(context, :expression, [{:symbol, "{"} = token | rest]) do
     context
-    |> open_curly_bracket()
+    |> push_delimiter_stack(:curly_bracket)
     |> parse_expression(token, rest)
   end
 
@@ -381,7 +381,7 @@ defmodule Hologram.Template.Parser do
         {:symbol, "\""} = token | rest
       ]) do
     context
-    |> open_double_quote()
+    |> push_delimiter_stack(:double_quote)
     |> parse_text(token, rest)
   end
 
@@ -397,7 +397,7 @@ defmodule Hologram.Template.Parser do
         {:symbol, "'"} = token | rest
       ]) do
     context
-    |> open_single_quote()
+    |> push_delimiter_stack(:single_quote)
     |> parse_text(token, rest)
   end
 
@@ -413,7 +413,7 @@ defmodule Hologram.Template.Parser do
         {:symbol, "`"} = token | rest
       ]) do
     context
-    |> open_backtick()
+    |> push_delimiter_stack(:backtick)
     |> parse_text(token, rest)
   end
 
@@ -712,30 +712,6 @@ defmodule Hologram.Template.Parser do
 
   defp maybe_enable_script_mode(context, _tag_name), do: context
 
-  defp open_backtick(context) do
-    %{context | delimiter_stack: [:backtick | context.delimiter_stack]}
-  end
-
-  defp open_block(context) do
-    %{context | delimiter_stack: [:block | context.delimiter_stack]}
-  end
-
-  defp open_curly_bracket(context) do
-    %{context | delimiter_stack: [:curly_bracket | context.delimiter_stack]}
-  end
-
-  defp open_double_quote(context) do
-    %{context | delimiter_stack: [:double_quote | context.delimiter_stack]}
-  end
-
-  defp open_elixir_interpolation(context) do
-    %{context | delimiter_stack: [:elixir_interpolation | context.delimiter_stack]}
-  end
-
-  defp open_single_quote(context) do
-    %{context | delimiter_stack: [:single_quote | context.delimiter_stack]}
-  end
-
   defp parse_block_end(context, block_name, token, rest) do
     context
     |> maybe_add_text_tag()
@@ -751,7 +727,7 @@ defmodule Hologram.Template.Parser do
     context
     |> maybe_add_text_tag()
     |> add_processed_token(token)
-    |> open_block()
+    |> push_delimiter_stack(:block)
     |> set_node_type(:block)
     |> set_block_name(block_name)
     |> reset_token_buffer()
@@ -795,6 +771,10 @@ defmodule Hologram.Template.Parser do
 
   defp pop_delimiter_stack(%{delimiter_stack: [_head | tail]} = context) do
     %{context | delimiter_stack: tail}
+  end
+
+  defp push_delimiter_stack(context, delimiter) do
+    %{context | delimiter_stack: [delimiter | context.delimiter_stack]}
   end
 
   defp raise_error(%{processed_tokens: processed_tokens} = context, status, token, rest) do
