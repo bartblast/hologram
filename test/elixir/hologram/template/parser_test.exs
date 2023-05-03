@@ -438,6 +438,84 @@ defmodule Hologram.Template.ParserTest do
     end
   end)
 
+  describe "elixir interpolation" do
+    test "in text" do
+      markup = "\#{abc}"
+      assert parse(markup) == [text: markup]
+    end
+
+    test "in expression, inside double quotes" do
+      markup = "{\"aaa\#{123}bbb\"}"
+      assert parse(markup) == [expression: "{\"aaa\#{123}bbb\"}"]
+    end
+
+    test "in expression, inside single quotes" do
+      markup = "{'aaa\#{123}bbb'}"
+      assert parse(markup) == [expression: "{'aaa\#{123}bbb'}"]
+    end
+
+    test "in expression, nested inside double quotes and then inside double quotes" do
+      markup = "{\"aaa\#{\"bbb\#{123}ccc\"}ddd\"}"
+      assert parse(markup) == [expression: "{\"aaa\#{\"bbb\#{123}ccc\"}ddd\"}"]
+    end
+
+    test "in expression, nested inside single quotes and then inside single quotes" do
+      markup = "{'aaa\#{'bbb\#{123}ccc'}ddd'}"
+      assert parse(markup) == [expression: "{'aaa\#{'bbb\#{123}ccc'}ddd'}"]
+    end
+
+    test "in expression, nested inside double quotes and then inside single quotes" do
+      markup = "{\"aaa\#{'bbb\#{123}ccc'}ddd\"}"
+      assert parse(markup) == [expression: "{\"aaa\#{'bbb\#{123}ccc'}ddd\"}"]
+    end
+
+    test "in expression, nested inside single quotes and then inside double quotes" do
+      markup = "{'aaa\#{\"bbb\#{123}ccc\"}ddd'}"
+      assert parse(markup) == [expression: "{'aaa\#{\"bbb\#{123}ccc\"}ddd'}"]
+    end
+
+    test "in attribute value text part" do
+      markup = "<div my_attr=\"\#{abc}\">"
+      assert parse(markup) == [start_tag: {"div", [{"my_attr", [text: "\#{abc}"]}]}]
+    end
+
+    test "in attribute value expression part" do
+      markup = "<div my_attr={\"\#{abc}\"}>"
+
+      assert parse(markup) == [
+               start_tag: {"div", [{"my_attr", [expression: "{\"\#{abc}\"}"]}]}
+             ]
+    end
+
+    test "in for block expression" do
+      markup = "{%for item <- [\"\#{abc}\"]}{/for}"
+
+      assert parse(markup) == [
+               block_start: {"for", "{ item <- [\"\#{abc}\"]}"},
+               block_end: "for"
+             ]
+    end
+
+    test "in if block expression" do
+      markup = "{%if \"\#{abc}\"}{/if}"
+
+      assert parse(markup) == [
+               block_start: {"if", "{ \"\#{abc}\"}"},
+               block_end: "if"
+             ]
+    end
+
+    test "in raw block" do
+      markup = "{%raw}\#{abc}{/raw}"
+      assert parse(markup) == [text: "\#{abc}"]
+    end
+
+    test "in script" do
+      markup = "<script>\#{abc}</script>"
+      assert parse(markup) == [start_tag: {"script", []}, text: "\#{abc}", end_tag: "script"]
+    end
+  end
+
   describe "template syntax errors" do
     test "escape non-printable characters" do
       expected_msg = ~r/\na\\nb\\rc\\td < x\\ny\\rz\\tv\n {11}\^/s
@@ -670,91 +748,6 @@ defmodule Hologram.Template.ParserTest do
   # test "after boolean prop" do
   #   assert parse("<Aaa.Bbb my_attr >") == [start_tag: {"Aaa.Bbb", [{"my_attr", []}]}]
   # end
-  # end
-
-  # describe "elixir interpolation" do
-  #   test "in text" do
-  #     markup = "\#{abc}"
-  #     assert parse(markup) == [text: markup]
-  #   end
-
-  #   test "in text interpolated expression" do
-  #     markup = "{\"\#{abc}\"}"
-  #     assert parse(markup) == [expression: markup]
-  #   end
-
-  #   test "in attribute value text part" do
-  #     markup = "<div my_attr=\"\#{abc}\">"
-  #     assert parse(markup) == [start_tag: {"div", [{"my_attr", [text: "\#{abc}"]}]}]
-  #   end
-
-  #   test "in attribute value expression part" do
-  #     markup = "<div my_attr={\"\#{abc}\"}>"
-
-  #     assert parse(markup) == [
-  #              start_tag: {"div", [{"my_attr", [expression: "{\"\#{abc}\"}"]}]}
-  #            ]
-  #   end
-
-  #   test "in for block expression" do
-  #     markup = "{%for item <- [\"\#{abc}\"]}{/for}"
-
-  #     assert parse(markup) == [
-  #              block_start: {"for", "{ item <- [\"\#{abc}\"]}"},
-  #              block_end: "for"
-  #            ]
-  #   end
-
-  #   test "in if block expression" do
-  #     markup = "{%if \"\#{abc}\"}{/if}"
-
-  #     assert parse(markup) == [
-  #              block_start: {"if", "{ \"\#{abc}\"}"},
-  #              block_end: "if"
-  #            ]
-  #   end
-
-  #   test "in raw block" do
-  #     markup = "{%raw}\#{abc}{/raw}"
-  #     assert parse(markup) == [text: "\#{abc}"]
-  #   end
-
-  #   # test "in script" do
-  #   #   markup = "<script>'#'</script>"
-  #   #   assert parse(markup) == [start_tag: {"script", []}, text: "'#'", end_tag: "script"]
-  #   # end
-  # end
-
-  # describe "elixir interpolation" do
-  # test "in expression, inside double quotes, not nested" do
-  #   markup = "{\"aaa\#{123}bbb\"}"
-  #   assert parse(markup) == [expression: "{\"aaa\#{123}bbb\"}"]
-  # end
-
-  #   test "nested elixir interpolation inside double quotes" do
-  #     markup = "{\"aaa\#{\"bbb\#{123}ccc\"}ddd\"}"
-  #     assert parse(markup) == [expression: "{\"aaa\#{\"bbb\#{123}ccc\"}ddd\"}"]
-  #   end
-
-  #   test "non-nested elixir interpolation inside single quotes" do
-  #     markup = "{'aaa\#{123}bbb'}"
-  #     assert parse(markup) == [expression: "{'aaa\#{123}bbb'}"]
-  #   end
-
-  #   test "nested elixir interpolation inside single quotes" do
-  #     markup = "{'aaa\#{'bbb\#{123}ccc'}ddd'}"
-  #     assert parse(markup) == [expression: "{'aaa\#{'bbb\#{123}ccc'}ddd'}"]
-  #   end
-
-  #   test "nested elixir interpolation inside double and single quotes" do
-  #     markup = "{\"aaa\#{'bbb\#{123}ccc'}ddd\"}"
-  #     assert parse(markup) == [expression: "{\"aaa\#{'bbb\#{123}ccc'}ddd\"}"]
-  #   end
-
-  #   test "nested elixir interpolation inside single and double quotes" do
-  #     markup = "{'aaa\#{\"bbb\#{123}ccc\"}ddd'}"
-  #     assert parse(markup) == [expression: "{'aaa\#{\"bbb\#{123}ccc\"}ddd'}"]
-  #   end
   # end
 
   # describe "attribute" do
