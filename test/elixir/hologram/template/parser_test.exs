@@ -172,6 +172,7 @@ defmodule Hologram.Template.ParserTest do
       {"element end tag", "</div>", end_tag: "div"},
       {"component start tag", "<Aaa.Bbb>", start_tag: {"Aaa.Bbb", []}},
       {"component end tag", "</Aaa.Bbb>", end_tag: "Aaa.Bbb"},
+      {"expression", "{@abc}", expression: "{@abc}"},
       {"for block start", "{%for item <- @items}", block_start: {"for", "{ item <- @items}"}},
       {"for block end", "{/for}", block_end: "for"},
       {"if block start", "{%if true}", block_start: {"if", "{ true}"}},
