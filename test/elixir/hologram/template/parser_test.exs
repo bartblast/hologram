@@ -43,6 +43,7 @@ defmodule Hologram.Template.ParserTest do
     |> Parser.parse()
   end
 
+  # Test special chararacters nested in various markup.
   Enum.each(@special_chars, fn char ->
     describe "'#{char}' character" do
       test "in text" do
@@ -122,181 +123,138 @@ defmodule Hologram.Template.ParserTest do
     end
   end)
 
-  describe "element start tag" do
-    test "non-void HTML element" do
-      assert parse("<div>") == [start_tag: {"div", []}]
-    end
+  # Test start and end tags nested in various markup.
+  Enum.each(
+    [
+      {"element start tag", "<div>", start_tag: {"div", []}},
+      {"element end tag", "</div>", end_tag: "div"},
+      {"component start tag", "<Aaa.Bbb>", start_tag: {"Aaa.Bbb", []}},
+      {"component end tag", "</Aaa.Bbb>", end_tag: "Aaa.Bbb"}
+    ],
+    fn {name, markup, [expected]} ->
+      describe "#{name} inside" do
+        test "text" do
+          assert parse("abc#{unquote(markup)}xyz") == [
+                   {:text, "abc"},
+                   unquote(expected),
+                   {:text, "xyz"}
+                 ]
+        end
 
-    test "non-void SVG element" do
-      assert parse("<g>") == [start_tag: {"g", []}]
-    end
+        test "for block" do
+          assert parse("{%for item <- @items}#{unquote(markup)}{/for}") == [
+                   {:block_start, {"for", "{ item <- @items}"}},
+                   unquote(expected),
+                   {:block_end, "for"}
+                 ]
+        end
 
-    test "void HTML element, unclosed" do
-      assert parse("<br>") == [self_closing_tag: {"br", []}]
-    end
+        test "if block" do
+          assert parse("{%if true}#{unquote(markup)}{/if}") == [
+                   {:block_start, {"if", "{ true}"}},
+                   unquote(expected),
+                   {:block_end, "if"}
+                 ]
+        end
 
-    test "void HTML element, self-closed" do
-      assert parse("<br />") == [self_closing_tag: {"br", []}]
-    end
+        test "raw block" do
+          assert parse("{%raw}#{unquote(markup)}{/raw}") == [unquote(expected)]
+        end
 
-    test "void SVG element, unclosed" do
-      assert parse("<path>") == [self_closing_tag: {"path", []}]
-    end
+        test "elixir expression double quoted string" do
+          assert parse("{\"#{unquote(markup)}\"}") == [expression: "{\"#{unquote(markup)}\"}"]
+        end
 
-    test "void SVG element, self-closed" do
-      assert parse("<path />") == [self_closing_tag: {"path", []}]
-    end
+        test "elixir expression single quoted string" do
+          assert parse("{'#{unquote(markup)}'}") == [expression: "{'#{unquote(markup)}'}"]
+        end
 
-    test "slot element, unclosed" do
-      assert parse("<slot>") == [self_closing_tag: {"slot", []}]
-    end
+        test "javascript script double quoted string" do
+          assert parse("<script>\"#{unquote(markup)}\"</script>") == [
+                   start_tag: {"script", []},
+                   text: "\"#{unquote(markup)}\"",
+                   end_tag: "script"
+                 ]
+        end
 
-    test "slot element, self-closed" do
-      assert parse("<slot />") == [self_closing_tag: {"slot", []}]
-    end
+        test "javascript script single quoted string" do
+          assert parse("<script>'#{unquote(markup)}'</script>") == [
+                   start_tag: {"script", []},
+                   text: "'#{unquote(markup)}'",
+                   end_tag: "script"
+                 ]
+        end
 
-    test "inside text" do
-      assert parse("abc<div>xyz") == [text: "abc", start_tag: {"div", []}, text: "xyz"]
+        test "javascript script backtick quoted string" do
+          assert parse("<script>`#{unquote(markup)}`</script>") == [
+                   start_tag: {"script", []},
+                   text: "`#{unquote(markup)}`",
+                   end_tag: "script"
+                 ]
+        end
+      end
     end
-  end
+  )
 
-  describe "element end tag" do
-    test "isolated" do
-      assert parse("</div>") == [end_tag: "div"]
-    end
+  # DONE
+  # describe "element start tag" do
+  #   test "non-void HTML element" do
+  #     assert parse("<div>") == [start_tag: {"div", []}]
+  #   end
 
-    test "inside text" do
-      assert parse("abc</div>xyz") == [text: "abc", end_tag: "div", text: "xyz"]
-    end
+  #   test "non-void SVG element" do
+  #     assert parse("<g>") == [start_tag: {"g", []}]
+  #   end
 
-    test "inside for block" do
-      assert parse("{%for item <- @items}</div>{/for}") == [
-               block_start: {"for", "{ item <- @items}"},
-               end_tag: "div",
-               block_end: "for"
-             ]
-    end
+  #   test "void HTML element, unclosed" do
+  #     assert parse("<br>") == [self_closing_tag: {"br", []}]
+  #   end
 
-    test "inside if block" do
-      assert parse("{%if true}</div>{/if}") == [
-               block_start: {"if", "{ true}"},
-               end_tag: "div",
-               block_end: "if"
-             ]
-    end
+  #   test "void HTML element, self-closed" do
+  #     assert parse("<br />") == [self_closing_tag: {"br", []}]
+  #   end
 
-    test "inside raw block" do
-      assert parse("{%raw}</div>{/raw}") == [end_tag: "div"]
-    end
+  #   test "void SVG element, unclosed" do
+  #     assert parse("<path>") == [self_closing_tag: {"path", []}]
+  #   end
 
-    test "inside elixir expression double quoted string" do
-      assert parse("{\"</div>\"}") == [expression: "{\"</div>\"}"]
-    end
+  #   test "void SVG element, self-closed" do
+  #     assert parse("<path />") == [self_closing_tag: {"path", []}]
+  #   end
 
-    test "inside elixir expression single quoted string" do
-      assert parse("{'</div>'}") == [expression: "{'</div>'}"]
-    end
+  #   test "slot element, unclosed" do
+  #     assert parse("<slot>") == [self_closing_tag: {"slot", []}]
+  #   end
 
-    test "inside javascript script double quoted string" do
-      assert parse("<script>\"</div>\"</script>") == [
-               start_tag: {"script", []},
-               text: "\"</div>\"",
-               end_tag: "script"
-             ]
-    end
+  #   test "slot element, self-closed" do
+  #     assert parse("<slot />") == [self_closing_tag: {"slot", []}]
+  #   end
+  # end
 
-    test "inside javascript script single quoted string" do
-      assert parse("<script>'</div>'</script>") == [
-               start_tag: {"script", []},
-               text: "'</div>'",
-               end_tag: "script"
-             ]
-    end
+  # DONE
+  # describe "element end tag" do
+  #   test "isolated" do
+  #     assert parse("</div>") == [end_tag: "div"]
+  #   end
+  # end
 
-    test "inside javascript script backtick quoted string" do
-      assert parse("<script>`</div>`</script>") == [
-               start_tag: {"script", []},
-               text: "`</div>`",
-               end_tag: "script"
-             ]
-    end
-  end
+  # DONE
+  # describe "component start tag" do
+  #   test "unclosed" do
+  #     assert parse("<Aaa.Bbb>") == [start_tag: {"Aaa.Bbb", []}]
+  #   end
 
-  describe "component start tag" do
-    test "unclosed" do
-      assert parse("<Aaa.Bbb>") == [start_tag: {"Aaa.Bbb", []}]
-    end
+  #   test "self-closed" do
+  #     assert parse("<Aaa.Bbb />") == [self_closing_tag: {"Aaa.Bbb", []}]
+  #   end
+  # end
 
-    test "self-closed" do
-      assert parse("<Aaa.Bbb />") == [self_closing_tag: {"Aaa.Bbb", []}]
-    end
-
-    test "inside text" do
-      assert parse("abc<Aaa.Bbb>xyz") == [text: "abc", start_tag: {"Aaa.Bbb", []}, text: "xyz"]
-    end
-  end
-
-  describe "component end tag" do
-    test "isolated" do
-      assert parse("</Aaa.Bbb>") == [end_tag: "Aaa.Bbb"]
-    end
-
-    test "inside text" do
-      assert parse("abc</Aaa.Bbb>xyz") == [text: "abc", end_tag: "Aaa.Bbb", text: "xyz"]
-    end
-
-    test "inside for block" do
-      assert parse("{%for item <- @items}</Aaa.Bbb>{/for}") == [
-               block_start: {"for", "{ item <- @items}"},
-               end_tag: "Aaa.Bbb",
-               block_end: "for"
-             ]
-    end
-
-    test "inside if block" do
-      assert parse("{%if true}</Aaa.Bbb>{/if}") == [
-               block_start: {"if", "{ true}"},
-               end_tag: "Aaa.Bbb",
-               block_end: "if"
-             ]
-    end
-
-    test "inside raw block" do
-      assert parse("{%raw}</Aaa.Bbb>{/raw}") == [end_tag: "Aaa.Bbb"]
-    end
-
-    test "inside elixir expression double quoted string" do
-      assert parse("{\"</Aaa.Bbb>\"}") == [expression: "{\"</Aaa.Bbb>\"}"]
-    end
-
-    test "inside elixir expression single quoted string" do
-      assert parse("{'</Aaa.Bbb>'}") == [expression: "{'</Aaa.Bbb>'}"]
-    end
-
-    test "inside javascript script double quoted string" do
-      assert parse("<script>\"</Aaa.Bbb>\"</script>") == [
-               start_tag: {"script", []},
-               text: "\"</Aaa.Bbb>\"",
-               end_tag: "script"
-             ]
-    end
-
-    test "inside javascript script single quoted string" do
-      assert parse("<script>'</Aaa.Bbb>'</script>") == [
-               start_tag: {"script", []},
-               text: "'</Aaa.Bbb>'",
-               end_tag: "script"
-             ]
-    end
-
-    test "inside javascript script backtick quoted string" do
-      assert parse("<script>`</Aaa.Bbb>`</script>") == [
-               start_tag: {"script", []},
-               text: "`</Aaa.Bbb>`",
-               end_tag: "script"
-             ]
-    end
-  end
+  # DONE
+  # describe "component end tag" do
+  #   test "isolated" do
+  #     assert parse("</Aaa.Bbb>") == [end_tag: "Aaa.Bbb"]
+  #   end
+  # end
 
   # defp test_syntax_error_msg(markup, msg) do
   #   assert_raise SyntaxError, ~r/#{Regex.escape(msg)}/s, fn ->
