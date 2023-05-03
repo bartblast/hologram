@@ -43,6 +43,27 @@ defmodule Hologram.Template.ParserTest do
     |> Parser.parse()
   end
 
+  describe "text" do
+    test "empty" do
+      assert parse("") == []
+    end
+
+    test "with whitespaces" do
+      markup = " \n\r\t"
+      assert parse(markup) == [text: markup]
+    end
+
+    test "with symbols" do
+      markup = "#$%"
+      assert parse(markup) == [text: markup]
+    end
+
+    test "with string" do
+      markup = "abc"
+      assert parse(markup) == [text: markup]
+    end
+  end
+
   # Test special chararacters nested in various markup.
   Enum.each(@special_chars, fn char ->
     describe "'#{char}' character" do
@@ -195,6 +216,28 @@ defmodule Hologram.Template.ParserTest do
       end
     end
   )
+
+  # describe "tag combinations" do
+  #   test "text, element start tag" do
+  #     assert parse("abc<div>") == [text: "abc", start_tag: {"div", []}]
+  #   end
+
+  #   test "text, component start tag" do
+  #     assert parse("abc<Aaa.Bbb>") == [text: "abc", start_tag: {"Aaa.Bbb", []}]
+  #   end
+
+  #   test "text, element end tag" do
+  #     assert parse("abc</div>") == [text: "abc", end_tag: "div"]
+  #   end
+
+  #   test "text, component end tag" do
+  #     assert parse("abc</Aaa.Bbb>") == [text: "abc", end_tag: "Aaa.Bbb"]
+  #   end
+
+  #   test "ended by block start" do
+  #     assert parse("abc{%if}") == [text: "abc", block_start: {"if", "{}"}]
+  #   end
+  # end
 
   # DONE
   # describe "element start tag" do
@@ -373,50 +416,6 @@ defmodule Hologram.Template.ParserTest do
   #   end
   # end
 
-  # describe "text" do
-  #   test "empty" do
-  #     assert parse("") == []
-  #   end
-
-  #   test "with symbols" do
-  #     markup = "#$%=\"'`/\\"
-  #     assert parse(markup) == [text: markup]
-  #   end
-
-  #   test "with string" do
-  #     markup = "abc"
-  #     assert parse(markup) == [text: markup]
-  #   end
-
-  #   test "opening curly bracket escaping" do
-  #     assert parse("abc\\{xyz") == [text: "abc{xyz"]
-  #   end
-
-  #   test "closing curly bracket escaping" do
-  #     assert parse("abc\\}xyz") == [text: "abc}xyz"]
-  #   end
-
-  #   test "ended by element start tag" do
-  #     assert parse("abc<div>") == [text: "abc", start_tag: {"div", []}]
-  #   end
-
-  #   test "ended by component start tag" do
-  #     assert parse("abc<Aaa.Bbb>") == [text: "abc", start_tag: {"Aaa.Bbb", []}]
-  #   end
-
-  #   test "ended by element end tag" do
-  #     assert parse("abc</div>") == [text: "abc", end_tag: "div"]
-  #   end
-
-  #   test "ended by component end tag" do
-  #     assert parse("abc</Aaa.Bbb>") == [text: "abc", end_tag: "Aaa.Bbb"]
-  #   end
-
-  #   test "ended by block start" do
-  #     assert parse("abc{%if}") == [text: "abc", block_start: {"if", "{}"}]
-  #   end
-  # end
-
   # describe "element" do
   #   test "single" do
   #     assert parse("<div></div>") == [start_tag: {"div", []}, end_tag: "div"]
@@ -559,6 +558,14 @@ defmodule Hologram.Template.ParserTest do
   #            ]
   #   end
   # end
+
+  #   test "opening curly bracket escaping" do
+  #     assert parse("abc\\{xyz") == [text: "abc{xyz"]
+  #   end
+
+  #   test "closing curly bracket escaping" do
+  #     assert parse("abc\\}xyz") == [text: "abc}xyz"]
+  #   end
 
   # describe "expression" do
   #   test "empty" do
