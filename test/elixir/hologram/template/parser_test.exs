@@ -64,6 +64,33 @@ defmodule Hologram.Template.ParserTest do
     end
   end
 
+  describe "tag combinations" do
+    tags = [
+      {"text", "abc", text: "abc"},
+      {"element start tag", "<div>", start_tag: {"div", []}},
+      {"element end tag", "</div>", end_tag: "div"},
+      {"component start tag", "<Aaa.Bbb>", start_tag: {"Aaa.Bbb", []}},
+      {"component end tag", "</Aaa.Bbb>", end_tag: "Aaa.Bbb"},
+      {"for block start", "{%for item <- @items}", block_start: {"for", "{ item <- @items}"}},
+      {"for block end", "{/for}", block_end: "for"},
+      {"if block start", "{%if true}", block_start: {"if", "{ true}"}},
+      {"if block end", "{/if}", block_end: "if"}
+    ]
+
+    for(tag_1 <- tags, tag_2 <- tags, do: {tag_1, tag_2})
+    |> Enum.reject(fn {{name_1, _markup_1, [_expected_1]}, {name_2, _markup_2, [_expected_2]}} ->
+      name_1 == "text" && name_2 == "text"
+    end)
+    |> Enum.each(fn {{name_1, markup_1, [expected_1]}, {name_2, markup_2, [expected_2]}} ->
+      test "#{name_1}, #{name_2}" do
+        assert parse("#{unquote(markup_1)}#{unquote(markup_2)}") == [
+                 unquote(expected_1),
+                 unquote(expected_2)
+               ]
+      end
+    end)
+  end
+
   # Test special chararacters nested in various markup.
   Enum.each(@special_chars, fn char ->
     describe "'#{char}' character" do
@@ -216,28 +243,6 @@ defmodule Hologram.Template.ParserTest do
       end
     end
   )
-
-  # describe "tag combinations" do
-  #   test "text, element start tag" do
-  #     assert parse("abc<div>") == [text: "abc", start_tag: {"div", []}]
-  #   end
-
-  #   test "text, component start tag" do
-  #     assert parse("abc<Aaa.Bbb>") == [text: "abc", start_tag: {"Aaa.Bbb", []}]
-  #   end
-
-  #   test "text, element end tag" do
-  #     assert parse("abc</div>") == [text: "abc", end_tag: "div"]
-  #   end
-
-  #   test "text, component end tag" do
-  #     assert parse("abc</Aaa.Bbb>") == [text: "abc", end_tag: "Aaa.Bbb"]
-  #   end
-
-  #   test "ended by block start" do
-  #     assert parse("abc{%if}") == [text: "abc", block_start: {"if", "{}"}]
-  #   end
-  # end
 
   # DONE
   # describe "element start tag" do
