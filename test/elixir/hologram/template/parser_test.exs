@@ -413,54 +413,6 @@ defmodule Hologram.Template.ParserTest do
   #   end
   # end
 
-  # describe "element" do
-  #   test "single" do
-  #     assert parse("<div></div>") == [start_tag: {"div", []}, end_tag: "div"]
-  #   end
-
-  #   test "multiple, siblings" do
-  #     assert parse("<span></span><button></button>") == [
-  #              start_tag: {"span", []},
-  #              end_tag: "span",
-  #              start_tag: {"button", []},
-  #              end_tag: "button"
-  #            ]
-  #   end
-
-  #   test "multiple, nested" do
-  #     assert parse("<div><span></span></div>") == [
-  #              start_tag: {"div", []},
-  #              start_tag: {"span", []},
-  #              end_tag: "span",
-  #              end_tag: "div"
-  #            ]
-  #   end
-  # end
-
-  # describe "component" do
-  #   test "single" do
-  #     assert parse("<Aaa.Bbb></Aaa.Bbb>") == [start_tag: {"Aaa.Bbb", []}, end_tag: "Aaa.Bbb"]
-  #   end
-
-  #   test "multiple, siblings" do
-  #     assert parse("<Aaa.Bbb></Aaa.Bbb><Eee.Fff></Eee.Fff>") == [
-  #              start_tag: {"Aaa.Bbb", []},
-  #              end_tag: "Aaa.Bbb",
-  #              start_tag: {"Eee.Fff", []},
-  #              end_tag: "Eee.Fff"
-  #            ]
-  #   end
-
-  #   test "multiple, nested" do
-  #     assert parse("<Aaa.Bbb><Eee.Fff></Eee.Fff></Aaa.Bbb>") == [
-  #              start_tag: {"Aaa.Bbb", []},
-  #              start_tag: {"Eee.Fff", []},
-  #              end_tag: "Eee.Fff",
-  #              end_tag: "Aaa.Bbb"
-  #            ]
-  #   end
-  # end
-
   # describe "attribute" do
   #   test "text" do
   #     assert parse("<div id=\"test\">") == [start_tag: {"div", [{"id", [text: "test"]}]}]
