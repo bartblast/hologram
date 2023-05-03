@@ -143,38 +143,51 @@ defmodule Hologram.Template.ParserTest do
     end
   end
 
-  # Test blocks.
+  describe "for block" do
+    test "start" do
+      markup = "{%for item <- @items}"
+      assert parse(markup) == [block_start: {"for", "{ item <- @items}"}]
+    end
+
+    test "end" do
+      assert parse("{/for}") == [block_end: "for"]
+    end
+  end
+
+  describe "if block" do
+    test "start" do
+      markup = "{%if true}"
+      assert parse(markup) == [block_start: {"if", "{ true}"}]
+    end
+
+    test "end" do
+      assert parse("{/if}") == [block_end: "if"]
+    end
+  end
+
+  # Test blocks in quotes inside expressions.
   [
     {"for", "item <- @items"},
     {"if", "true"}
   ]
   |> Enum.each(fn {name, expression} ->
-    describe "#{name} block" do
-      test "start" do
-        markup = "{%#{unquote(name)} #{unquote(expression)}}"
-        assert parse(markup) == [block_start: {unquote(name), "{ #{unquote(expression)}}"}]
-      end
-
-      test "end" do
-        assert parse("{/#{unquote(name)}}") == [block_end: unquote(name)]
-      end
-
-      test "start nested in double quotes inside expression" do
+    describe "#{name} block inside expression" do
+      test "start block in double quotes" do
         markup = "{\"{%#{unquote(name)} #{unquote(expression)}}\"}"
         assert parse(markup) == [expression: markup]
       end
 
-      test "end nested in double quotes inside expression" do
+      test "end block in double quotes" do
         markup = "{\"{/#{unquote(name)}}\"}"
         assert parse(markup) == [expression: markup]
       end
 
-      test "start nested in single quotes inside expression" do
+      test "start block in single quotes" do
         markup = "{'{%#{unquote(name)} #{unquote(expression)}}'}"
         assert parse(markup) == [expression: markup]
       end
 
-      test "end nested in single quotes inside expression" do
+      test "end block in single quotes" do
         markup = "{'{/#{unquote(name)}}'}"
         assert parse(markup) == [expression: markup]
       end
