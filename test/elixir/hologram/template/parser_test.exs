@@ -143,6 +143,44 @@ defmodule Hologram.Template.ParserTest do
     end
   end
 
+  # Test blocks.
+  [
+    {"for", "item <- @items"},
+    {"if", "true"}
+  ]
+  |> Enum.each(fn {name, expression} ->
+    describe "#{name} block" do
+      test "start" do
+        markup = "{%#{unquote(name)} #{unquote(expression)}}"
+        assert parse(markup) == [block_start: {unquote(name), "{ #{unquote(expression)}}"}]
+      end
+
+      test "end" do
+        assert parse("{/#{unquote(name)}}") == [block_end: unquote(name)]
+      end
+
+      test "start nested in double quotes inside expression" do
+        markup = "{\"{%#{unquote(name)} #{unquote(expression)}}\"}"
+        assert parse(markup) == [expression: markup]
+      end
+
+      test "end nested in double quotes inside expression" do
+        markup = "{\"{/#{unquote(name)}}\"}"
+        assert parse(markup) == [expression: markup]
+      end
+
+      test "start nested in single quotes inside expression" do
+        markup = "{'{%#{unquote(name)} #{unquote(expression)}}'}"
+        assert parse(markup) == [expression: markup]
+      end
+
+      test "end nested in single quotes inside expression" do
+        markup = "{'{/#{unquote(name)}}'}"
+        assert parse(markup) == [expression: markup]
+      end
+    end
+  end)
+
   describe "tag combinations" do
     tags = [
       {"text", "abc", text: "abc"},
@@ -318,11 +356,6 @@ defmodule Hologram.Template.ParserTest do
       end
     end
   )
-
-  #   test "for block nested in double quotes" do
-  #     markup = "{\"{%for item <- @items}xyz{/for}\"}"
-  #     assert parse(markup) == [expression: markup]
-  #   end
 
   #   test "if block nested in double quotes" do
   #     markup = "{\"{%if @abc == 123}xyz{/if}\"}"
@@ -642,141 +675,6 @@ defmodule Hologram.Template.ParserTest do
   #   test "closing curly bracket escaping" do
   #     assert parse("abc\\}xyz") == [text: "abc}xyz"]
   #   end
-
-  # describe "for block" do
-  #   test "start, isolated" do
-  #     assert parse("{%for item <- @items}") == [block_start: {"for", "{ item <- @items}"}]
-  #   end
-
-  #   test "start, inside text" do
-  #     assert parse("abc{%for item <- @items}xyz") == [
-  #              text: "abc",
-  #              block_start: {"for", "{ item <- @items}"},
-  #              text: "xyz"
-  #            ]
-  #   end
-
-  #   test "start, inside element" do
-  #     assert parse("<div>{%for item <- @items}</div>") == [
-  #              start_tag: {"div", []},
-  #              block_start: {"for", "{ item <- @items}"},
-  #              end_tag: "div"
-  #            ]
-  #   end
-
-  #   test "start, inside component" do
-  #     assert parse("<Aaa.Bbb>{%for item <- @items}</Aaa.Bbb>") == [
-  #              start_tag: {"Aaa.Bbb", []},
-  #              block_start: {"for", "{ item <- @items}"},
-  #              end_tag: "Aaa.Bbb"
-  #            ]
-  #   end
-
-  #   test "end, isolated" do
-  #     assert parse("{/for}") == [block_end: "for"]
-  #   end
-
-  #   test "end, inside text" do
-  #     assert parse("abc{/for}xyz") == [text: "abc", block_end: "for", text: "xyz"]
-  #   end
-
-  #   test "end, inside element" do
-  #     assert parse("<div>{/for}</div>") == [
-  #              start_tag: {"div", []},
-  #              block_end: "for",
-  #              end_tag: "div"
-  #            ]
-  #   end
-
-  #   test "end, inside component" do
-  #     assert parse("<Aaa.Bbb>{/for}</Aaa.Bbb>") == [
-  #              start_tag: {"Aaa.Bbb", []},
-  #              block_end: "for",
-  #              end_tag: "Aaa.Bbb"
-  #            ]
-  #   end
-  # end
-
-  # describe "if block" do
-  #   test "start, isolated" do
-  #     assert parse("{%if @abc == 123}") == [block_start: {"if", "{ @abc == 123}"}]
-  #   end
-
-  #   test "start, inside text" do
-  #     assert parse("abc{%if @abc == 123}xyz") == [
-  #              text: "abc",
-  #              block_start: {"if", "{ @abc == 123}"},
-  #              text: "xyz"
-  #            ]
-  #   end
-
-  #   test "start, inside element" do
-  #     assert parse("<div>{%if @abc == 123}</div>") == [
-  #              start_tag: {"div", []},
-  #              block_start: {"if", "{ @abc == 123}"},
-  #              end_tag: "div"
-  #            ]
-  #   end
-
-  #   test "start, inside component" do
-  #     assert parse("<Aaa.Bbb>{%if @abc == 123}</Aaa.Bbb>") == [
-  #              start_tag: {"Aaa.Bbb", []},
-  #              block_start: {"if", "{ @abc == 123}"},
-  #              end_tag: "Aaa.Bbb"
-  #            ]
-  #   end
-
-  #   test "end, isolated" do
-  #     assert parse("{/if}") == [block_end: "if"]
-  #   end
-
-  #   test "end, inside text" do
-  #     assert parse("abc{/if}xyz") == [text: "abc", block_end: "if", text: "xyz"]
-  #   end
-
-  #   test "end, inside element" do
-  #     assert parse("<div>{/if}</div>") == [
-  #              start_tag: {"div", []},
-  #              block_end: "if",
-  #              end_tag: "div"
-  #            ]
-  #   end
-
-  #   test "end, inside component" do
-  #     assert parse("<Aaa.Bbb>{/if}</Aaa.Bbb>") == [
-  #              start_tag: {"Aaa.Bbb", []},
-  #              block_end: "if",
-  #              end_tag: "Aaa.Bbb"
-  #            ]
-  #   end
-  # end
-
-  # describe "block group" do
-  #   test "single block" do
-  #     assert parse("{%if @abc == 123}{/if}") == [
-  #              block_start: {"if", "{ @abc == 123}"},
-  #              block_end: "if"
-  #            ]
-  #   end
-
-  #   test "multiple blocks, siblings" do
-  #     assert parse("{%if @abc == 123}{/if}{%for item <- @items}{/for}") == [
-  #              block_start: {"if", "{ @abc == 123}"},
-  #              block_end: "if",
-  #              block_start: {"for", "{ item <- @items}"},
-  #              block_end: "for"
-  #            ]
-  #   end
-
-  #   test "multiple blocks, nested" do
-  #     assert parse("{%if @abc == 123}{%for item <- @items}{/for}{/if}") == [
-  #              block_start: {"if", "{ @abc == 123}"},
-  #              block_start: {"for", "{ item <- @items}"},
-  #              block_end: "for",
-  #              block_end: "if"
-  #            ]
-  #   end
-  # end
 
   # describe "raw block" do
   #   test "block start" do
