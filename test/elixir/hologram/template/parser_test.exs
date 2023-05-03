@@ -43,6 +43,12 @@ defmodule Hologram.Template.ParserTest do
     |> Parser.parse()
   end
 
+  # defp test_syntax_error_msg(markup, msg) do
+  #   assert_raise SyntaxError, ~r/#{Regex.escape(msg)}/s, fn ->
+  #     parse(markup)
+  #   end
+  # end
+
   describe "text" do
     test "empty" do
       assert parse("") == []
@@ -64,37 +70,55 @@ defmodule Hologram.Template.ParserTest do
     end
   end
 
-  describe "element start tag" do
-    test "non-void HTML element" do
+  describe "element tags" do
+    test "non-void HTML element start tag" do
       assert parse("<div>") == [start_tag: {"div", []}]
     end
 
-    test "non-void SVG element" do
+    test "non-void SVG element start tag" do
       assert parse("<g>") == [start_tag: {"g", []}]
     end
 
-    test "void HTML element, unclosed" do
+    test "void HTML element, unclosed start tag" do
       assert parse("<br>") == [self_closing_tag: {"br", []}]
     end
 
-    test "void HTML element, self-closed" do
+    test "void HTML element, self-closed start tag" do
       assert parse("<br />") == [self_closing_tag: {"br", []}]
     end
 
-    test "void SVG element, unclosed" do
+    test "void SVG element, unclosed start tag" do
       assert parse("<path>") == [self_closing_tag: {"path", []}]
     end
 
-    test "void SVG element, self-closed" do
+    test "void SVG element, self-closed start tag" do
       assert parse("<path />") == [self_closing_tag: {"path", []}]
     end
 
-    test "slot element, unclosed" do
+    test "slot element, unclosed start tag" do
       assert parse("<slot>") == [self_closing_tag: {"slot", []}]
     end
 
-    test "slot element, self-closed" do
+    test "slot element, self-closed start tag" do
       assert parse("<slot />") == [self_closing_tag: {"slot", []}]
+    end
+
+    test "end tag" do
+      assert parse("</div>") == [end_tag: "div"]
+    end
+  end
+
+  describe "component tags" do
+    test "unclosed start tag" do
+      assert parse("<Aaa.Bbb>") == [start_tag: {"Aaa.Bbb", []}]
+    end
+
+    test "self-closed start tag" do
+      assert parse("<Aaa.Bbb />") == [self_closing_tag: {"Aaa.Bbb", []}]
+    end
+
+    test "end tag" do
+      assert parse("</Aaa.Bbb>") == [end_tag: "Aaa.Bbb"]
     end
   end
 
@@ -277,37 +301,6 @@ defmodule Hologram.Template.ParserTest do
       end
     end
   )
-
-  # DONE
-  # describe "element end tag" do
-  #   test "isolated" do
-  #     assert parse("</div>") == [end_tag: "div"]
-  #   end
-  # end
-
-  # DONE
-  # describe "component start tag" do
-  #   test "unclosed" do
-  #     assert parse("<Aaa.Bbb>") == [start_tag: {"Aaa.Bbb", []}]
-  #   end
-
-  #   test "self-closed" do
-  #     assert parse("<Aaa.Bbb />") == [self_closing_tag: {"Aaa.Bbb", []}]
-  #   end
-  # end
-
-  # DONE
-  # describe "component end tag" do
-  #   test "isolated" do
-  #     assert parse("</Aaa.Bbb>") == [end_tag: "Aaa.Bbb"]
-  #   end
-  # end
-
-  # defp test_syntax_error_msg(markup, msg) do
-  #   assert_raise SyntaxError, ~r/#{Regex.escape(msg)}/s, fn ->
-  #     parse(markup)
-  #   end
-  # end
 
   # describe "whitespaces" do
   # test "after element start tag name" do
