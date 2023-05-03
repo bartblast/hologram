@@ -64,6 +64,40 @@ defmodule Hologram.Template.ParserTest do
     end
   end
 
+  describe "element start tag" do
+    test "non-void HTML element" do
+      assert parse("<div>") == [start_tag: {"div", []}]
+    end
+
+    test "non-void SVG element" do
+      assert parse("<g>") == [start_tag: {"g", []}]
+    end
+
+    test "void HTML element, unclosed" do
+      assert parse("<br>") == [self_closing_tag: {"br", []}]
+    end
+
+    test "void HTML element, self-closed" do
+      assert parse("<br />") == [self_closing_tag: {"br", []}]
+    end
+
+    test "void SVG element, unclosed" do
+      assert parse("<path>") == [self_closing_tag: {"path", []}]
+    end
+
+    test "void SVG element, self-closed" do
+      assert parse("<path />") == [self_closing_tag: {"path", []}]
+    end
+
+    test "slot element, unclosed" do
+      assert parse("<slot>") == [self_closing_tag: {"slot", []}]
+    end
+
+    test "slot element, self-closed" do
+      assert parse("<slot />") == [self_closing_tag: {"slot", []}]
+    end
+  end
+
   describe "tag combinations" do
     tags = [
       {"text", "abc", text: "abc"},
@@ -243,41 +277,6 @@ defmodule Hologram.Template.ParserTest do
       end
     end
   )
-
-  # DONE
-  # describe "element start tag" do
-  #   test "non-void HTML element" do
-  #     assert parse("<div>") == [start_tag: {"div", []}]
-  #   end
-
-  #   test "non-void SVG element" do
-  #     assert parse("<g>") == [start_tag: {"g", []}]
-  #   end
-
-  #   test "void HTML element, unclosed" do
-  #     assert parse("<br>") == [self_closing_tag: {"br", []}]
-  #   end
-
-  #   test "void HTML element, self-closed" do
-  #     assert parse("<br />") == [self_closing_tag: {"br", []}]
-  #   end
-
-  #   test "void SVG element, unclosed" do
-  #     assert parse("<path>") == [self_closing_tag: {"path", []}]
-  #   end
-
-  #   test "void SVG element, self-closed" do
-  #     assert parse("<path />") == [self_closing_tag: {"path", []}]
-  #   end
-
-  #   test "slot element, unclosed" do
-  #     assert parse("<slot>") == [self_closing_tag: {"slot", []}]
-  #   end
-
-  #   test "slot element, self-closed" do
-  #     assert parse("<slot />") == [self_closing_tag: {"slot", []}]
-  #   end
-  # end
 
   # DONE
   # describe "element end tag" do
