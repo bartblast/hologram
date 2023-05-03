@@ -122,6 +122,27 @@ defmodule Hologram.Template.ParserTest do
     end
   end
 
+  describe "expression" do
+    test "empty" do
+      assert parse("{}") == [expression: "{}"]
+    end
+
+    test "with whitespaces" do
+      markup = "{ \n\r\t}"
+      assert parse(markup) == [expression: markup]
+    end
+
+    test "with symbols" do
+      markup = "{#$%}"
+      assert parse(markup) == [expression: markup]
+    end
+
+    test "with string" do
+      markup = "{abc}"
+      assert parse(markup) == [expression: markup]
+    end
+  end
+
   describe "tag combinations" do
     tags = [
       {"text", "abc", text: "abc"},
@@ -263,10 +284,6 @@ defmodule Hologram.Template.ParserTest do
                  ]
         end
 
-        test "raw block" do
-          assert parse("{%raw}#{unquote(markup)}{/raw}") == [unquote(expected)]
-        end
-
         test "elixir expression double quoted string" do
           assert parse("{\"#{unquote(markup)}\"}") == [expression: "{\"#{unquote(markup)}\"}"]
         end
@@ -301,6 +318,116 @@ defmodule Hologram.Template.ParserTest do
       end
     end
   )
+
+  #   test "for block nested in double quotes" do
+  #     markup = "{\"{%for item <- @items}xyz{/for}\"}"
+  #     assert parse(markup) == [expression: markup]
+  #   end
+
+  #   test "if block nested in double quotes" do
+  #     markup = "{\"{%if @abc == 123}xyz{/if}\"}"
+  #     assert parse(markup) == [expression: markup]
+  #   end
+
+  #   test "raw block nested in double quotes" do
+  #     markup = "{\"{%raw}abc{/raw}\"}"
+  #     assert parse(markup) == [expression: markup]
+  #   end
+
+  #   test "double quote escaping" do
+  #     markup = "{{1\\\"2}}"
+  #     assert parse(markup) == [expression: markup]
+  #   end
+
+  #   test "single quote escaping" do
+  #     markup = "{{1\\\'2}}"
+  #     assert parse(markup) == [expression: markup]
+  #   end
+
+  #   test "inside text" do
+  #     assert parse("abc{@kmn}xyz") == [text: "abc", expression: "{@kmn}", text: "xyz"]
+  #   end
+
+  #   test "inside element" do
+  #     assert parse("<div>{@abc}</div>") == [
+  #              start_tag: {"div", []},
+  #              expression: "{@abc}",
+  #              end_tag: "div"
+  #            ]
+  #   end
+
+  #   test "inside component" do
+  #     assert parse("<Aaa.Bbb>{@abc}</Aaa.Bbb>") == [
+  #              start_tag: {"Aaa.Bbb", []},
+  #              expression: "{@abc}",
+  #              end_tag: "Aaa.Bbb"
+  #            ]
+  #   end
+
+  # nesting tags in raw block
+  # test "raw block" do
+  #   assert parse("{%raw}#{unquote(markup)}{/raw}") == [unquote(expected)]
+  # end
+
+  #   test "single group of curly brackets" do
+  #     markup = "{{123}}"
+  #     assert parse(markup) == [expression: markup]
+  #   end
+
+  #   test "multiple groups of curly brackets" do
+  #     markup = "{{1}, {2}}"
+  #     assert parse(markup) == [expression: markup]
+  #   end
+
+  #   test "opening curly bracket inside double quotes" do
+  #     markup = "{{\"{123\"}}"
+  #     assert parse(markup) == [expression: markup]
+  #   end
+
+  #   test "opening curly bracket inside single quotes" do
+  #     markup = "{{'{123'}}"
+  #     assert parse(markup) == [expression: markup]
+  #   end
+
+  #   test "closing curly bracket inside double quotes" do
+  #     markup = "{{\"123}\"}}"
+  #     assert parse(markup) == [expression: markup]
+  #   end
+
+  #   test "closing curly bracket inside single quotes" do
+  #     markup = "{{'123}'}}"
+  #     assert parse(markup) == [expression: markup]
+  #   end
+
+  #   test "single group of double quotes" do
+  #     markup = "{{\"123\"}}"
+  #     assert parse(markup) == [expression: markup]
+  #   end
+
+  #   test "multiple groups of double quotes" do
+  #     markup = "{{\"1\", \"2\"}}"
+  #     assert parse(markup) == [expression: markup]
+  #   end
+
+  #   test "single group of single quotes" do
+  #     markup = "{{'123'}}"
+  #     assert parse(markup) == [expression: markup]
+  #   end
+
+  #   test "multiple groups of single quotes" do
+  #     markup = "{{'1', '2'}}"
+  #     assert parse(markup) == [expression: markup]
+  #   end
+
+  #   test "single quote nested in double quotes" do
+  #     markup = "{\"abc'xyz\"}"
+  #     assert parse(markup) == [expression: markup]
+  #   end
+
+  #   test "double quote nested in single quotes" do
+  #     markup = "{'abc\"xyz'}"
+  #     assert parse(markup) == [expression: markup]
+  #   end
 
   # describe "whitespaces" do
   # test "after element start tag name" do
@@ -515,127 +642,6 @@ defmodule Hologram.Template.ParserTest do
   #   test "closing curly bracket escaping" do
   #     assert parse("abc\\}xyz") == [text: "abc}xyz"]
   #   end
-
-  # describe "expression" do
-  #   test "empty" do
-  #     assert parse("{}") == [expression: "{}"]
-  #   end
-
-  #   test "with symbols" do
-  #     markup = "{!@#$%^&*()-_=+[];:\\\'\\\"\\|,./?`~}"
-  #     assert parse(markup) == [expression: markup]
-  #   end
-
-  #   test "with string" do
-  #     markup = "{abc}"
-  #     assert parse(markup) == [expression: markup]
-  #   end
-
-  #   test "single group of curly brackets" do
-  #     markup = "{{123}}"
-  #     assert parse(markup) == [expression: markup]
-  #   end
-
-  #   test "multiple groups of curly brackets" do
-  #     markup = "{{1}, {2}}"
-  #     assert parse(markup) == [expression: markup]
-  #   end
-
-  #   test "opening curly bracket inside double quotes" do
-  #     markup = "{{\"{123\"}}"
-  #     assert parse(markup) == [expression: markup]
-  #   end
-
-  #   test "opening curly bracket inside single quotes" do
-  #     markup = "{{'{123'}}"
-  #     assert parse(markup) == [expression: markup]
-  #   end
-
-  #   test "closing curly bracket inside double quotes" do
-  #     markup = "{{\"123}\"}}"
-  #     assert parse(markup) == [expression: markup]
-  #   end
-
-  #   test "closing curly bracket inside single quotes" do
-  #     markup = "{{'123}'}}"
-  #     assert parse(markup) == [expression: markup]
-  #   end
-
-  #   test "single group of double quotes" do
-  #     markup = "{{\"123\"}}"
-  #     assert parse(markup) == [expression: markup]
-  #   end
-
-  #   test "multiple groups of double quotes" do
-  #     markup = "{{\"1\", \"2\"}}"
-  #     assert parse(markup) == [expression: markup]
-  #   end
-
-  #   test "single group of single quotes" do
-  #     markup = "{{'123'}}"
-  #     assert parse(markup) == [expression: markup]
-  #   end
-
-  #   test "multiple groups of single quotes" do
-  #     markup = "{{'1', '2'}}"
-  #     assert parse(markup) == [expression: markup]
-  #   end
-
-  #   test "single quote nested in double quotes" do
-  #     markup = "{\"abc'xyz\"}"
-  #     assert parse(markup) == [expression: markup]
-  #   end
-
-  #   test "double quote nested in single quotes" do
-  #     markup = "{'abc\"xyz'}"
-  #     assert parse(markup) == [expression: markup]
-  #   end
-
-  #   test "for block nested in double quotes" do
-  #     markup = "{\"{%for item <- @items}xyz{/for}\"}"
-  #     assert parse(markup) == [expression: markup]
-  #   end
-
-  #   test "if block nested in double quotes" do
-  #     markup = "{\"{%if @abc == 123}xyz{/if}\"}"
-  #     assert parse(markup) == [expression: markup]
-  #   end
-
-  #   test "raw block nested in double quotes" do
-  #     markup = "{\"{%raw}abc{/raw}\"}"
-  #     assert parse(markup) == [expression: markup]
-  #   end
-
-  #   test "double quote escaping" do
-  #     markup = "{{1\\\"2}}"
-  #     assert parse(markup) == [expression: markup]
-  #   end
-
-  #   test "single quote escaping" do
-  #     markup = "{{1\\\'2}}"
-  #     assert parse(markup) == [expression: markup]
-  #   end
-
-  #   test "inside text" do
-  #     assert parse("abc{@kmn}xyz") == [text: "abc", expression: "{@kmn}", text: "xyz"]
-  #   end
-
-  #   test "inside element" do
-  #     assert parse("<div>{@abc}</div>") == [
-  #              start_tag: {"div", []},
-  #              expression: "{@abc}",
-  #              end_tag: "div"
-  #            ]
-  #   end
-
-  #   test "inside component" do
-  #     assert parse("<Aaa.Bbb>{@abc}</Aaa.Bbb>") == [
-  #              start_tag: {"Aaa.Bbb", []},
-  #              expression: "{@abc}",
-  #              end_tag: "Aaa.Bbb"
-  #            ]
-  #   end
-  # end
 
   # describe "for block" do
   #   test "start, isolated" do
