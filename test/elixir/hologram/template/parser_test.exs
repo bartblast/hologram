@@ -2,7 +2,7 @@ defmodule Hologram.Template.ParserTest do
   use Hologram.Test.BasicCase, async: true
 
   alias Hologram.Template.Parser
-  # alias Hologram.Template.SyntaxError
+  alias Hologram.Template.SyntaxError
   alias Hologram.Template.Tokenizer
 
   # Except: { } " ' ` \ < >
@@ -43,11 +43,11 @@ defmodule Hologram.Template.ParserTest do
     |> Parser.parse()
   end
 
-  # defp test_syntax_error_msg(markup, msg) do
-  #   assert_raise SyntaxError, ~r/#{Regex.escape(msg)}/s, fn ->
-  #     parse(markup)
-  #   end
-  # end
+  defp test_syntax_error_msg(markup, msg) do
+    assert_raise SyntaxError, ~r/#{Regex.escape(msg)}/s, fn ->
+      parse(markup)
+    end
+  end
 
   describe "text" do
     test "empty" do
@@ -365,6 +365,114 @@ defmodule Hologram.Template.ParserTest do
       end
     end
   )
+
+  describe "template syntax errors" do
+    test "escape non-printable characters" do
+      expected_msg = ~r/\na\\nb\\rc\\td < x\\ny\\rz\\tv\n {11}\^/s
+
+      assert_raise SyntaxError, expected_msg, fn ->
+        parse("a\nb\rc\td < x\ny\rz\tv")
+      end
+    end
+
+    test "strip excess characters" do
+      expected_msg = ~r/\n2345678901234567890 < 1234567890123456789\n {20}\^/s
+
+      assert_raise SyntaxError, expected_msg, fn ->
+        parse("123456789012345678901234567890 < 123456789012345678901234567890")
+      end
+    end
+
+    test "unescaped '<' character inside text node" do
+      msg = """
+      Reason:
+      Unescaped '<' character inside text node.
+
+      Hint:
+      To escape use HTML entity: '&lt;'.
+
+      abc < xyz
+          ^
+      """
+
+      test_syntax_error_msg("abc < xyz", msg)
+    end
+
+    test "unescaped '>' character inside text node" do
+      msg = """
+      Reason:
+      Unescaped '>' character inside text node.
+
+      Hint:
+      To escape use HTML entity: '&gt;'.
+
+      abc > xyz
+          ^
+      """
+
+      test_syntax_error_msg("abc > xyz", msg)
+    end
+
+    test "expression attribute value inside raw block" do
+      msg = """
+      Reason:
+      Expression attribute value inside raw block detected.
+
+      Hint:
+      Either wrap the attribute value with double quotes or remove the parent raw block".
+
+      {%raw}<div id={@abc}></div>{/raw}
+                    ^
+      """
+
+      test_syntax_error_msg("{%raw}<div id={@abc}></div>{/raw}", msg)
+    end
+
+    test "expression property value inside raw block" do
+      msg = """
+      Reason:
+      Expression property value inside raw block detected.
+
+      Hint:
+      Either wrap the property value with double quotes or remove the parent raw block".
+
+      {%raw}<Aa.Bb id={@abc}></Aa.Bb>{/raw}
+                      ^
+      """
+
+      test_syntax_error_msg("{%raw}<Aa.Bb id={@abc}></Aa.Bb>{/raw}", msg)
+    end
+
+    test "unclosed start tag" do
+      msg = """
+      Reason:
+      Unclosed start tag.
+
+      Hint:
+      Close the start tag with '>' character.
+
+      <div
+          ^
+      """
+
+      test_syntax_error_msg("<div", msg)
+    end
+
+    test "missing attribute name" do
+      msg = """
+      Reason:
+      Missing attribute name.
+
+      Hint:
+      Specify the attribute name before the '=' character.
+
+      <div ="abc">
+           ^
+      """
+
+      test_syntax_error_msg("<div =\"abc\">", msg)
+    end
+  end
 
   #   test "if block nested in double quotes" do
   #     markup = "{\"{%if @abc == 123}xyz{/if}\"}"
@@ -972,114 +1080,6 @@ defmodule Hologram.Template.ParserTest do
   #              text: ";",
   #              end_tag: "script"
   #            ]
-  #   end
-  # end
-
-  # describe "template syntax errors" do
-  #   test "escape non-printable characters" do
-  #     expected_msg = ~r/\na\\nb\\rc\\td < x\\ny\\rz\\tv\n {11}\^/s
-
-  #     assert_raise SyntaxError, expected_msg, fn ->
-  #       parse("a\nb\rc\td < x\ny\rz\tv")
-  #     end
-  #   end
-
-  #   test "strip excess characters" do
-  #     expected_msg = ~r/\n2345678901234567890 < 1234567890123456789\n {20}\^/s
-
-  #     assert_raise SyntaxError, expected_msg, fn ->
-  #       parse("123456789012345678901234567890 < 123456789012345678901234567890")
-  #     end
-  #   end
-
-  #   test "unescaped '<' character inside text node" do
-  #     msg = """
-  #     Reason:
-  #     Unescaped '<' character inside text node.
-
-  #     Hint:
-  #     To escape use HTML entity: '&lt;'.
-
-  #     abc < xyz
-  #         ^
-  #     """
-
-  #     test_syntax_error_msg("abc < xyz", msg)
-  #   end
-
-  #   test "unescaped '>' character inside text node" do
-  #     msg = """
-  #     Reason:
-  #     Unescaped '>' character inside text node.
-
-  #     Hint:
-  #     To escape use HTML entity: '&gt;'.
-
-  #     abc > xyz
-  #         ^
-  #     """
-
-  #     test_syntax_error_msg("abc > xyz", msg)
-  #   end
-
-  #   test "expression attribute value inside raw block" do
-  #     msg = """
-  #     Reason:
-  #     Expression attribute value inside raw block detected.
-
-  #     Hint:
-  #     Either wrap the attribute value with double quotes or remove the parent raw block".
-
-  #     {%raw}<div id={@abc}></div>{/raw}
-  #                   ^
-  #     """
-
-  #     test_syntax_error_msg("{%raw}<div id={@abc}></div>{/raw}", msg)
-  #   end
-
-  #   test "expression property value inside raw block" do
-  #     msg = """
-  #     Reason:
-  #     Expression property value inside raw block detected.
-
-  #     Hint:
-  #     Either wrap the property value with double quotes or remove the parent raw block".
-
-  #     {%raw}<Aa.Bb id={@abc}></Aa.Bb>{/raw}
-  #                     ^
-  #     """
-
-  #     test_syntax_error_msg("{%raw}<Aa.Bb id={@abc}></Aa.Bb>{/raw}", msg)
-  #   end
-
-  #   test "unclosed start tag" do
-  #     msg = """
-  #     Reason:
-  #     Unclosed start tag.
-
-  #     Hint:
-  #     Close the start tag with '>' character.
-
-  #     <div
-  #         ^
-  #     """
-
-  #     test_syntax_error_msg("<div", msg)
-  #   end
-
-  #   test "missing attribute name" do
-  #     msg = """
-  #     Reason:
-  #     Missing attribute name.
-
-  #     Hint:
-  #     Specify the attribute name before the '=' character.
-
-  #     <div ="abc">
-  #          ^
-  #     """
-
-  #     test_syntax_error_msg("<div =\"abc\">", msg)
   #   end
   # end
 
