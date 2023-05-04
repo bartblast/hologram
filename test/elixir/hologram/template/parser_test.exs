@@ -823,6 +823,38 @@ defmodule Hologram.Template.ParserTest do
     end
   end
 
+  describe "curly brackets in expression" do
+    test "single group" do
+      markup = "{{123}}"
+      assert parse(markup) == [expression: markup]
+    end
+
+    test "multiple groups" do
+      markup = "{{1}, {2}}"
+      assert parse(markup) == [expression: markup]
+    end
+
+    test "opening curly bracket inside double quotes" do
+      markup = "{\"{123\"}"
+      assert parse(markup) == [expression: markup]
+    end
+
+    test "opening curly bracket inside single quotes" do
+      markup = "{'{123'}"
+      assert parse(markup) == [expression: markup]
+    end
+
+    test "closing curly bracket inside double quotes" do
+      markup = "{\"123}\"}"
+      assert parse(markup) == [expression: markup]
+    end
+
+    test "closing curly bracket inside single quotes" do
+      markup = "{'123}'}"
+      assert parse(markup) == [expression: markup]
+    end
+  end
+
   describe "elixir interpolation" do
     test "in text" do
       markup = "\#{@abc}"
@@ -1113,44 +1145,6 @@ defmodule Hologram.Template.ParserTest do
       test_syntax_error_msg("<div =\"abc\">", msg)
     end
   end
-
-  #   test "single group of curly brackets" do
-  #     markup = "{{123}}"
-  #     assert parse(markup) == [expression: markup]
-  #   end
-
-  #   test "multiple groups of curly brackets" do
-  #     markup = "{{1}, {2}}"
-  #     assert parse(markup) == [expression: markup]
-  #   end
-
-  #   test "opening curly bracket inside double quotes" do
-  #     markup = "{{\"{123\"}}"
-  #     assert parse(markup) == [expression: markup]
-  #   end
-
-  #   test "opening curly bracket inside single quotes" do
-  #     markup = "{{'{123'}}"
-  #     assert parse(markup) == [expression: markup]
-  #   end
-
-  #   test "closing curly bracket inside double quotes" do
-  #     markup = "{{\"123}\"}}"
-  #     assert parse(markup) == [expression: markup]
-  #   end
-
-  #   test "closing curly bracket inside single quotes" do
-  #     markup = "{{'123}'}}"
-  #     assert parse(markup) == [expression: markup]
-  #   end
-
-  #   test "opening curly bracket escaping" do
-  #     assert parse("abc\\{xyz") == [text: "abc{xyz"]
-  #   end
-
-  #   test "closing curly bracket escaping" do
-  #     assert parse("abc\\}xyz") == [text: "abc}xyz"]
-  #   end
 
   # describe "script" do
   #   test "symbol '<' not inside delimiters" do
