@@ -401,7 +401,7 @@ defmodule Hologram.Template.ParserTest do
     end)
   end
 
-  describe "special characters nesting in various markup" do
+  describe "special characters nested in various markup" do
     Enum.each(@special_chars, fn char ->
       test "'#{char}' character in text" do
         assert parse(unquote(char)) == [text: unquote(char)]
@@ -480,74 +480,72 @@ defmodule Hologram.Template.ParserTest do
     end)
   end
 
-  # Test start and end tags nested in various markup.
-  Enum.each(
-    [
+  describe "start and end tags nested in various markup" do
+    tags = [
       {"element start tag", "<div>", start_tag: {"div", []}},
       {"element end tag", "</div>", end_tag: "div"},
       {"component start tag", "<Aaa.Bbb>", start_tag: {"Aaa.Bbb", []}},
       {"component end tag", "</Aaa.Bbb>", end_tag: "Aaa.Bbb"}
-    ],
-    fn {name, markup, [expected]} ->
-      describe "#{name} inside" do
-        test "text" do
-          assert parse("abc#{unquote(markup)}xyz") == [
-                   {:text, "abc"},
-                   unquote(expected),
-                   {:text, "xyz"}
-                 ]
-        end
+    ]
 
-        test "for block" do
-          assert parse("{%for item <- @items}#{unquote(markup)}{/for}") == [
-                   {:block_start, {"for", "{ item <- @items}"}},
-                   unquote(expected),
-                   {:block_end, "for"}
-                 ]
-        end
-
-        test "if block" do
-          assert parse("{%if true}#{unquote(markup)}{/if}") == [
-                   {:block_start, {"if", "{ true}"}},
-                   unquote(expected),
-                   {:block_end, "if"}
-                 ]
-        end
-
-        test "elixir expression double quoted string" do
-          assert parse("{\"#{unquote(markup)}\"}") == [expression: "{\"#{unquote(markup)}\"}"]
-        end
-
-        test "elixir expression single quoted string" do
-          assert parse("{'#{unquote(markup)}'}") == [expression: "{'#{unquote(markup)}'}"]
-        end
-
-        test "javascript script double quoted string" do
-          assert parse("<script>\"#{unquote(markup)}\"</script>") == [
-                   start_tag: {"script", []},
-                   text: "\"#{unquote(markup)}\"",
-                   end_tag: "script"
-                 ]
-        end
-
-        test "javascript script single quoted string" do
-          assert parse("<script>'#{unquote(markup)}'</script>") == [
-                   start_tag: {"script", []},
-                   text: "'#{unquote(markup)}'",
-                   end_tag: "script"
-                 ]
-        end
-
-        test "javascript script backtick quoted string" do
-          assert parse("<script>`#{unquote(markup)}`</script>") == [
-                   start_tag: {"script", []},
-                   text: "`#{unquote(markup)}`",
-                   end_tag: "script"
-                 ]
-        end
+    Enum.each(tags, fn {name, markup, [expected]} ->
+      test "#{name} inside text" do
+        assert parse("abc#{unquote(markup)}xyz") == [
+                 {:text, "abc"},
+                 unquote(expected),
+                 {:text, "xyz"}
+               ]
       end
-    end
-  )
+
+      test "#{name} inside for block" do
+        assert parse("{%for item <- @items}#{unquote(markup)}{/for}") == [
+                 {:block_start, {"for", "{ item <- @items}"}},
+                 unquote(expected),
+                 {:block_end, "for"}
+               ]
+      end
+
+      test "#{name} inside if block" do
+        assert parse("{%if true}#{unquote(markup)}{/if}") == [
+                 {:block_start, {"if", "{ true}"}},
+                 unquote(expected),
+                 {:block_end, "if"}
+               ]
+      end
+
+      test "#{name} inside elixir expression double quoted string" do
+        assert parse("{\"#{unquote(markup)}\"}") == [expression: "{\"#{unquote(markup)}\"}"]
+      end
+
+      test "#{name} inside elixir expression single quoted string" do
+        assert parse("{'#{unquote(markup)}'}") == [expression: "{'#{unquote(markup)}'}"]
+      end
+
+      test "#{name} inside javascript script double quoted string" do
+        assert parse("<script>\"#{unquote(markup)}\"</script>") == [
+                 start_tag: {"script", []},
+                 text: "\"#{unquote(markup)}\"",
+                 end_tag: "script"
+               ]
+      end
+
+      test "#{name} inside javascript script single quoted string" do
+        assert parse("<script>'#{unquote(markup)}'</script>") == [
+                 start_tag: {"script", []},
+                 text: "'#{unquote(markup)}'",
+                 end_tag: "script"
+               ]
+      end
+
+      test "#{name} inside javascript script backtick quoted string" do
+        assert parse("<script>`#{unquote(markup)}`</script>") == [
+                 start_tag: {"script", []},
+                 text: "`#{unquote(markup)}`",
+                 end_tag: "script"
+               ]
+      end
+    end)
+  end
 
   describe "blocks in quoting inside expression" do
     quotings = [
