@@ -159,7 +159,7 @@ defmodule Hologram.Template.ParserTest do
     end
   end
 
-  describe "element attribute and component property" do
+  describe "attributes and properties" do
     Enum.each([{"attribute", "div"}, {"property", "Aaa.Bbb"}], fn {name, tag} ->
       test "#{name} value text" do
         assert parse("<#{unquote(tag)} id=\"test\">") == [
@@ -893,6 +893,61 @@ defmodule Hologram.Template.ParserTest do
     end
   end
 
+  describe "script" do
+    test "text" do
+      assert parse("<script>abc</script>") == [
+               start_tag: {"script", []},
+               text: "abc",
+               end_tag: "script"
+             ]
+    end
+
+    test "expression" do
+      markup = "<script>{@abc}</script>"
+      assert parse(markup) == [start_tag: {"script", []}, expression: "{@abc}", end_tag: "script"]
+    end
+
+    test "for block start" do
+      markup = "<script>{%for item <- @items}</script>"
+
+      assert parse(markup) == [
+               start_tag: {"script", []},
+               block_start: {"for", "{ item <- @items}"},
+               end_tag: "script"
+             ]
+    end
+
+    test "for block end" do
+      markup = "<script>{/for}</script>"
+
+      assert parse(markup) == [
+               start_tag: {"script", []},
+               block_end: "for",
+               end_tag: "script"
+             ]
+    end
+
+    test "if block start" do
+      markup = "<script>{%if true}</script>"
+
+      assert parse(markup) == [
+               start_tag: {"script", []},
+               block_start: {"if", "{ true}"},
+               end_tag: "script"
+             ]
+    end
+
+    test "if block end" do
+      markup = "<script>{/if}</script>"
+
+      assert parse(markup) == [
+               start_tag: {"script", []},
+               block_end: "if",
+               end_tag: "script"
+             ]
+    end
+  end
+
   describe "template syntax errors" do
     test "escape non-printable characters" do
       expected_msg = ~r/\na\\nb\\rc\\td < x\\ny\\rz\\tv\n {11}\^/s
@@ -1124,16 +1179,6 @@ defmodule Hologram.Template.ParserTest do
   #     assert parse("<script>`abc</xyz`</script>") == [
   #              start_tag: {"script", []},
   #              text: "`abc</xyz`",
-  #              end_tag: "script"
-  #            ]
-  #   end
-
-  #   test "expression" do
-  #     assert parse("<script>const abc = {1 + 2};</script>") == [
-  #              start_tag: {"script", []},
-  #              text: "const abc = ",
-  #              expression: "{1 + 2}",
-  #              text: ";",
   #              end_tag: "script"
   #            ]
   #   end
