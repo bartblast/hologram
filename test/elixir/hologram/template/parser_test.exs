@@ -831,6 +831,52 @@ defmodule Hologram.Template.ParserTest do
     end
   end
 
+  describe "angle brackets in script" do
+    test "opening angle bracket '<' not inside quoting" do
+      assert parse("<script>1 < 2</script>") == [
+               start_tag: {"script", []},
+               text: "1 < 2",
+               end_tag: "script"
+             ]
+    end
+
+    test "closing angle bracket '>' not inside quoting" do
+      assert parse("<script>1 > 2</script>") == [
+               start_tag: {"script", []},
+               text: "1 > 2",
+               end_tag: "script"
+             ]
+    end
+
+    brackets = [
+      {"opening angle bracket", "<"},
+      {"closing angle bracket", ">"},
+      {"opening bracket with slash", "</"},
+      {"closing bracket with slash", "/>"}
+    ]
+
+    quotings = [
+      {"double quotes", "\""},
+      {"single quotes", "'"},
+      {"backtick quotes", "`"}
+    ]
+
+    combinations = for bracket <- brackets, quoting <- quotings, do: {bracket, quoting}
+
+    Enum.each(combinations, fn {{bracket_name, bracket_char}, {quoting_name, quoting_char}} ->
+      test "#{bracket_name} '#{bracket_char}' inside #{quoting_name}" do
+        assert parse(
+                 "<script>#{unquote(quoting_char)}1 #{unquote(bracket_char)} 2#{unquote(quoting_char)}</script>"
+               ) == [
+                 start_tag: {"script", []},
+                 text:
+                   "#{unquote(quoting_char)}1 #{unquote(bracket_char)} 2#{unquote(quoting_char)}",
+                 end_tag: "script"
+               ]
+      end
+    end)
+  end
+
   describe "elixir interpolation" do
     test "in text" do
       markup = "\#{@abc}"
@@ -1121,96 +1167,6 @@ defmodule Hologram.Template.ParserTest do
       test_syntax_error_msg("<div =\"abc\">", msg)
     end
   end
-
-  # describe "script" do
-  #   test "symbol '<' not inside delimiters" do
-  #     assert parse("<script>1 < 2</script>") == [
-  #              start_tag: {"script", []},
-  #              text: "1 < 2",
-  #              end_tag: "script"
-  #            ]
-  #   end
-
-  #   test "symbol '<' inside double quotes" do
-  #     assert parse("<script>\"1 < 2\"</script>") == [
-  #              start_tag: {"script", []},
-  #              text: "\"1 < 2\"",
-  #              end_tag: "script"
-  #            ]
-  #   end
-
-  #   test "symbol '<' inside single quotes" do
-  #     assert parse("<script>'1 < 2'</script>") == [
-  #              start_tag: {"script", []},
-  #              text: "'1 < 2'",
-  #              end_tag: "script"
-  #            ]
-  #   end
-
-  #   test "symbol '<' inside backticks" do
-  #     assert parse("<script>`1 < 2`</script>") == [
-  #              start_tag: {"script", []},
-  #              text: "`1 < 2`",
-  #              end_tag: "script"
-  #            ]
-  #   end
-
-  #   test "symbol '>' not inside delimiters" do
-  #     assert parse("<script>1 > 2</script>") == [
-  #              start_tag: {"script", []},
-  #              text: "1 > 2",
-  #              end_tag: "script"
-  #            ]
-  #   end
-
-  #   test "symbol '>' inside double quotes" do
-  #     assert parse("<script>\"1 > 2\"</script>") == [
-  #              start_tag: {"script", []},
-  #              text: "\"1 > 2\"",
-  #              end_tag: "script"
-  #            ]
-  #   end
-
-  #   test "symbol '>' inside single quotes" do
-  #     assert parse("<script>'1 > 2'</script>") == [
-  #              start_tag: {"script", []},
-  #              text: "'1 > 2'",
-  #              end_tag: "script"
-  #            ]
-  #   end
-
-  #   test "symbol '>' inside backticks" do
-  #     assert parse("<script>`1 > 2`</script>") == [
-  #              start_tag: {"script", []},
-  #              text: "`1 > 2`",
-  #              end_tag: "script"
-  #            ]
-  #   end
-
-  #   test "symbol '</' inside double quotes" do
-  #     assert parse("<script>\"abc</xyz\"</script>") == [
-  #              start_tag: {"script", []},
-  #              text: "\"abc</xyz\"",
-  #              end_tag: "script"
-  #            ]
-  #   end
-
-  #   test "symbol '</' inside single quotes" do
-  #     assert parse("<script>'abc</xyz'</script>") == [
-  #              start_tag: {"script", []},
-  #              text: "'abc</xyz'",
-  #              end_tag: "script"
-  #            ]
-  #   end
-
-  #   test "symbol '</' inside backticks" do
-  #     assert parse("<script>`abc</xyz`</script>") == [
-  #              start_tag: {"script", []},
-  #              text: "`abc</xyz`",
-  #              end_tag: "script"
-  #            ]
-  #   end
-  # end
 
   # TODO: cleanup
 
