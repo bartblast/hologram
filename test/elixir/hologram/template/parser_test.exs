@@ -138,7 +138,7 @@ defmodule Hologram.Template.ParserTest do
     end
 
     test "with string" do
-      markup = "{abc}"
+      markup = "{@abc}"
       assert parse(markup) == [expression: markup]
     end
   end
@@ -578,7 +578,7 @@ defmodule Hologram.Template.ParserTest do
 
   describe "elixir interpolation" do
     test "in text" do
-      markup = "\#{abc}"
+      markup = "\#{@abc}"
       assert parse(markup) == [text: markup]
     end
 
@@ -613,44 +613,44 @@ defmodule Hologram.Template.ParserTest do
     end
 
     test "in attribute value text part" do
-      markup = "<div my_attr=\"\#{abc}\">"
-      assert parse(markup) == [start_tag: {"div", [{"my_attr", [text: "\#{abc}"]}]}]
+      markup = "<div my_attr=\"\#{@abc}\">"
+      assert parse(markup) == [start_tag: {"div", [{"my_attr", [text: "\#{@abc}"]}]}]
     end
 
     test "in attribute value expression part" do
-      markup = "<div my_attr={\"\#{abc}\"}>"
+      markup = "<div my_attr={\"\#{@abc}\"}>"
 
       assert parse(markup) == [
-               start_tag: {"div", [{"my_attr", [expression: "{\"\#{abc}\"}"]}]}
+               start_tag: {"div", [{"my_attr", [expression: "{\"\#{@abc}\"}"]}]}
              ]
     end
 
     test "in for block expression" do
-      markup = "{%for item <- [\"\#{abc}\"]}{/for}"
+      markup = "{%for item <- [\"\#{@abc}\"]}{/for}"
 
       assert parse(markup) == [
-               block_start: {"for", "{ item <- [\"\#{abc}\"]}"},
+               block_start: {"for", "{ item <- [\"\#{@abc}\"]}"},
                block_end: "for"
              ]
     end
 
     test "in if block expression" do
-      markup = "{%if \"\#{abc}\"}{/if}"
+      markup = "{%if \"\#{@abc}\"}{/if}"
 
       assert parse(markup) == [
-               block_start: {"if", "{ \"\#{abc}\"}"},
+               block_start: {"if", "{ \"\#{@abc}\"}"},
                block_end: "if"
              ]
     end
 
     test "in raw block" do
-      markup = "{%raw}\#{abc}{/raw}"
-      assert parse(markup) == [text: "\#{abc}"]
+      markup = "{%raw}\#{@abc}{/raw}"
+      assert parse(markup) == [text: "\#{@abc}"]
     end
 
     test "in script" do
-      markup = "<script>\#{abc}</script>"
-      assert parse(markup) == [start_tag: {"script", []}, text: "\#{abc}", end_tag: "script"]
+      markup = "<script>\#{@abc}</script>"
+      assert parse(markup) == [start_tag: {"script", []}, text: "\#{@abc}", end_tag: "script"]
     end
   end
 
