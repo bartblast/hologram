@@ -401,24 +401,23 @@ defmodule Hologram.Template.ParserTest do
     end)
   end
 
-  # Test special chararacters nested in various markup.
-  Enum.each(@special_chars, fn char ->
-    describe "'#{char}' character" do
-      test "in text" do
+  describe "special characters nesting in various markup" do
+    Enum.each(@special_chars, fn char ->
+      test "'#{char}' character in text" do
         assert parse(unquote(char)) == [text: unquote(char)]
       end
 
-      test "in text interpolated expression" do
+      test "'#{char}' character in text interpolated expression" do
         markup = "{#{unquote(char)}}"
         assert parse(markup) == [expression: markup]
       end
 
-      test "in attribute value text part" do
+      test "'#{char}' character in attribute value text part" do
         markup = "<div my_attr=\"#{unquote(char)}\">"
         assert parse(markup) == [start_tag: {"div", [{"my_attr", [text: unquote(char)]}]}]
       end
 
-      test "in attribute value expression part" do
+      test "'#{char}' character in attribute value expression part" do
         markup = "<div my_attr={#{unquote(char)}}>"
 
         assert parse(markup) == [
@@ -426,7 +425,7 @@ defmodule Hologram.Template.ParserTest do
                ]
       end
 
-      test "in for block expression" do
+      test "'#{char}' character in for block expression" do
         markup = "{%for #{unquote(char)}}{/for}"
 
         assert parse(markup) == [
@@ -435,7 +434,7 @@ defmodule Hologram.Template.ParserTest do
                ]
       end
 
-      test "in for block content" do
+      test "'#{char}' character in for block content" do
         markup = "{%for item <- @items}#{unquote(char)}{/for}"
 
         assert parse(markup) == [
@@ -445,7 +444,7 @@ defmodule Hologram.Template.ParserTest do
                ]
       end
 
-      test "in if block expression" do
+      test "'#{char}' character in if block expression" do
         markup = "{%if #{unquote(char)}}{/if}"
 
         assert parse(markup) == [
@@ -454,7 +453,7 @@ defmodule Hologram.Template.ParserTest do
                ]
       end
 
-      test "in if block content" do
+      test "'#{char}' character in if block content" do
         markup = "{%if true}#{unquote(char)}{/if}"
 
         assert parse(markup) == [
@@ -464,12 +463,12 @@ defmodule Hologram.Template.ParserTest do
                ]
       end
 
-      test "in raw block content" do
+      test "'#{char}' character in raw block content" do
         markup = "{%raw}#{unquote(char)}{/raw}"
         assert parse(markup) == [text: "#{unquote(char)}"]
       end
 
-      test "in script" do
+      test "'#{char}' character in script" do
         markup = "<script>#{unquote(char)}</script>"
 
         assert parse(markup) == [
@@ -478,8 +477,8 @@ defmodule Hologram.Template.ParserTest do
                  end_tag: "script"
                ]
       end
-    end
-  end)
+    end)
+  end
 
   # Test start and end tags nested in various markup.
   Enum.each(
