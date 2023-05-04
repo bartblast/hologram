@@ -262,10 +262,18 @@ defmodule Hologram.Template.ParserTest do
              ]
     end
 
-    test "with script" do
+    test "with script, having expression" do
       assert parse("{%raw}<script>{@abc}</script>{/raw}") == [
                start_tag: {"script", []},
                text: "{@abc}",
+               end_tag: "script"
+             ]
+    end
+
+    test "with script, having javascript interpolation" do
+      assert parse("{%raw}<script>`abc${123}xyz`</script>{/raw}") == [
+               start_tag: {"script", []},
+               text: "`abc${123}xyz`",
                end_tag: "script"
              ]
     end
@@ -943,6 +951,56 @@ defmodule Hologram.Template.ParserTest do
       assert parse(markup) == [
                start_tag: {"script", []},
                block_end: "if",
+               end_tag: "script"
+             ]
+    end
+  end
+
+  describe "javascript interpolation" do
+    test "in double quotes" do
+      assert parse("<script>\"abc${123}xyz\"</script>") == [
+               start_tag: {"script", []},
+               text: "\"abc${123}xyz\"",
+               end_tag: "script"
+             ]
+    end
+
+    test "in single quotes" do
+      assert parse("<script>'abc${123}xyz'</script>") == [
+               start_tag: {"script", []},
+               text: "'abc${123}xyz'",
+               end_tag: "script"
+             ]
+    end
+
+    test "in backtick quotes" do
+      assert parse("<script>`abc${123}xyz`</script>") == [
+               start_tag: {"script", []},
+               text: "`abc${123}xyz`",
+               end_tag: "script"
+             ]
+    end
+
+    test "nested double quotes" do
+      assert parse("<script>`abc${\"123\"}xyz`</script>") == [
+               start_tag: {"script", []},
+               text: "`abc${\"123\"}xyz`",
+               end_tag: "script"
+             ]
+    end
+
+    test "nested single quotes" do
+      assert parse("<script>`abc${'123'}xyz`</script>") == [
+               start_tag: {"script", []},
+               text: "`abc${'123'}xyz`",
+               end_tag: "script"
+             ]
+    end
+
+    test "nested backtick quotes" do
+      assert parse("<script>`abc${`123`}xyz`</script>") == [
+               start_tag: {"script", []},
+               text: "`abc${`123`}xyz`",
                end_tag: "script"
              ]
     end
