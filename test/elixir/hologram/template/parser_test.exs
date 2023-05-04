@@ -550,102 +550,71 @@ defmodule Hologram.Template.ParserTest do
     end
   )
 
-  # Test block starts and ends nested inside quotes within various markup.
-  Enum.each([{"for", "item <- @items"}, {"if", "true"}], fn {name, expression} ->
-    describe "nested #{name}" do
-      test "block start inside double quotes within elixir expression" do
-        markup = "{\"{%#{unquote(name)} #{unquote(expression)}}\"}"
+  describe "blocks in quoting inside expression" do
+    quotings = [
+      {"double quotes", "\""},
+      {"single quotes", "'"}
+    ]
+
+    tags = [
+      {"for", "item <- @items"},
+      {"if", "true"}
+    ]
+
+    for(quoting <- quotings, tag <- tags, do: {quoting, tag})
+    |> Enum.each(fn {{quoting_name, char}, {tag_name, expr}} ->
+      test "#{tag_name} block start in #{quoting_name}" do
+        markup = "{#{unquote(char)}{%#{unquote(tag_name)} #{unquote(expr)}}#{unquote(char)}}"
         assert parse(markup) == [expression: markup]
       end
 
-      test "block end inside double quotes within elixir expression" do
-        markup = "{\"{/#{unquote(name)}}\"}"
+      test "#{tag_name} block end in #{quoting_name}" do
+        markup = "{#{unquote(char)}{/#{unquote(tag_name)}}#{unquote(char)}}"
         assert parse(markup) == [expression: markup]
       end
+    end)
+  end
 
-      test "block start inside single quotes within elixir expression" do
-        markup = "{'{%#{unquote(name)} #{unquote(expression)}}'}"
-        assert parse(markup) == [expression: markup]
-      end
+  describe "blocks in quoting inside script" do
+    quotings = [
+      {"double quotes", "\""},
+      {"single quotes", "'"},
+      {"backtick quotes", "`"}
+    ]
 
-      test "block end inside single quotes within elixir expression" do
-        markup = "{'{/#{unquote(name)}}'}"
-        assert parse(markup) == [expression: markup]
-      end
+    tags = [
+      {"for", "item <- @items"},
+      {"if", "true"}
+    ]
 
-      test "block start inside double quotes within javascript script" do
-        markup = "<script>\"{%#{unquote(name)} #{unquote(expression)}}\"</script>"
+    for(quoting <- quotings, tag <- tags, do: {quoting, tag})
+    |> Enum.each(fn {{quoting_name, char}, {tag_name, expr}} ->
+      test "#{tag_name} block start in #{quoting_name}" do
+        markup =
+          "<script>#{unquote(char)}{%#{unquote(tag_name)} #{unquote(expr)}}#{unquote(char)}</script>"
 
         assert parse(markup) == [
                  start_tag: {"script", []},
-                 text: "\"",
-                 block_start: {unquote(name), "{ #{unquote(expression)}}"},
-                 text: "\"",
+                 text: unquote(char),
+                 block_start: {unquote(tag_name), "{ #{unquote(expr)}}"},
+                 text: unquote(char),
                  end_tag: "script"
                ]
       end
 
-      test "block end inside double quotes within javascript script" do
-        markup = "<script>\"{/#{unquote(name)}}\"</script>"
+      test "#{tag_name} block end in #{quoting_name}" do
+        markup = "<script>#{unquote(char)}{/#{unquote(tag_name)}}#{unquote(char)}</script>"
 
         assert parse(markup) == [
                  start_tag: {"script", []},
-                 text: "\"",
-                 block_end: unquote(name),
-                 text: "\"",
+                 text: unquote(char),
+                 block_end: unquote(tag_name),
+                 text: unquote(char),
                  end_tag: "script"
                ]
       end
-
-      test "block start inside single quotes within javascript script" do
-        markup = "<script>'{%#{unquote(name)} #{unquote(expression)}}'</script>"
-
-        assert parse(markup) == [
-                 start_tag: {"script", []},
-                 text: "'",
-                 block_start: {unquote(name), "{ #{unquote(expression)}}"},
-                 text: "'",
-                 end_tag: "script"
-               ]
-      end
-
-      test "block end inside single quotes within javascript script" do
-        markup = "<script>'{/#{unquote(name)}}'</script>"
-
-        assert parse(markup) == [
-                 start_tag: {"script", []},
-                 text: "'",
-                 block_end: unquote(name),
-                 text: "'",
-                 end_tag: "script"
-               ]
-      end
-
-      test "block start inside backtick quotes within javascript script" do
-        markup = "<script>`{%#{unquote(name)} #{unquote(expression)}}`</script>"
-
-        assert parse(markup) == [
-                 start_tag: {"script", []},
-                 text: "`",
-                 block_start: {unquote(name), "{ #{unquote(expression)}}"},
-                 text: "`",
-                 end_tag: "script"
-               ]
-      end
-
-      test "block end inside backtick quotes within javascript script" do
-        markup = "<script>`{/#{unquote(name)}}`</script>"
-
-        assert parse(markup) == [
-                 start_tag: {"script", []},
-                 text: "`",
-                 block_end: unquote(name),
-                 text: "`",
-                 end_tag: "script"
-               ]
-      end
-    end
-  end)
+    end)
+  end
 
   describe "double quotes in expression" do
     test "escaping" do
@@ -994,47 +963,6 @@ defmodule Hologram.Template.ParserTest do
                end_tag: "script"
              ]
     end
-  end
-
-  describe "blocks in quoting inside script" do
-    quotings = [
-      {"double quotes", "\""},
-      {"single quotes", "'"},
-      {"backtick quotes", "`"}
-    ]
-
-    tags = [
-      {"for", "item <- @items"},
-      {"if", "true"}
-    ]
-
-    for(quoting <- quotings, tag <- tags, do: {quoting, tag})
-    |> Enum.each(fn {{quoting_name, char}, {tag_name, expr}} ->
-      test "#{tag_name} block start in #{quoting_name}" do
-        markup =
-          "<script>#{unquote(char)}{%#{unquote(tag_name)} #{unquote(expr)}}#{unquote(char)}</script>"
-
-        assert parse(markup) == [
-                 start_tag: {"script", []},
-                 text: unquote(char),
-                 block_start: {unquote(tag_name), "{ #{unquote(expr)}}"},
-                 text: unquote(char),
-                 end_tag: "script"
-               ]
-      end
-
-      test "#{tag_name} block end in #{quoting_name}" do
-        markup = "<script>#{unquote(char)}{/#{unquote(tag_name)}}#{unquote(char)}</script>"
-
-        assert parse(markup) == [
-                 start_tag: {"script", []},
-                 text: unquote(char),
-                 block_end: unquote(tag_name),
-                 text: unquote(char),
-                 end_tag: "script"
-               ]
-      end
-    end)
   end
 
   describe "javascript interpolation" do
