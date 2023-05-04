@@ -661,6 +661,50 @@ defmodule Hologram.Template.ParserTest do
     end
   end
 
+  describe "double quotes in script" do
+    test "escaping" do
+      markup = "<script>\"abc\\\"xyz\"</script>"
+
+      assert parse(markup) == [
+               start_tag: {"script", []},
+               text: "\"abc\\\"xyz\"",
+               end_tag: "script"
+             ]
+    end
+
+    test "single group" do
+      assert parse("<script>\"abc\"</script>") == [
+               start_tag: {"script", []},
+               text: "\"abc\"",
+               end_tag: "script"
+             ]
+    end
+
+    test "multiple groups" do
+      assert parse(~s(<script>"abc" + "xyz"</script>)) == [
+               start_tag: {"script", []},
+               text: "\"abc\" + \"xyz\"",
+               end_tag: "script"
+             ]
+    end
+
+    test "nested in single quotes" do
+      assert parse("<script>'abc\"xyz'</script>") == [
+               start_tag: {"script", []},
+               text: "'abc\"xyz'",
+               end_tag: "script"
+             ]
+    end
+
+    test "nested in backticks" do
+      assert parse("<script>`abc\"xyz`</script>") == [
+               start_tag: {"script", []},
+               text: "`abc\"xyz`",
+               end_tag: "script"
+             ]
+    end
+  end
+
   describe "single quotes in expression" do
     test "escaping" do
       markup = "{\\'}"
@@ -908,22 +952,6 @@ defmodule Hologram.Template.ParserTest do
   #   end
 
   # describe "script" do
-  #   test "single group of double quotes" do
-  #     assert parse("<script>\"abc\"</script>") == [
-  #              start_tag: {"script", []},
-  #              text: "\"abc\"",
-  #              end_tag: "script"
-  #            ]
-  #   end
-
-  #   test "multiple groups of double quotes" do
-  #     assert parse(~s(<script>"abc" + "xyz"</script>)) == [
-  #              start_tag: {"script", []},
-  #              text: "\"abc\" + \"xyz\"",
-  #              end_tag: "script"
-  #            ]
-  #   end
-
   #   test "single group of single quotes" do
   #     assert parse("<script>'abc'</script>") == [
   #              start_tag: {"script", []},
@@ -1040,22 +1068,6 @@ defmodule Hologram.Template.ParserTest do
   #     assert parse("<script>`abc</xyz`</script>") == [
   #              start_tag: {"script", []},
   #              text: "`abc</xyz`",
-  #              end_tag: "script"
-  #            ]
-  #   end
-
-  #   test "double quote nested in single quotes" do
-  #     assert parse("<script>'abc\"xyz'</script>") == [
-  #              start_tag: {"script", []},
-  #              text: "'abc\"xyz'",
-  #              end_tag: "script"
-  #            ]
-  #   end
-
-  #   test "double quote nested in backticks" do
-  #     assert parse("<script>`abc\"xyz`</script>") == [
-  #              start_tag: {"script", []},
-  #              text: "`abc\"xyz`",
   #              end_tag: "script"
   #            ]
   #   end
