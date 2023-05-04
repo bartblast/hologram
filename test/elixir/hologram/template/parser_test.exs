@@ -277,7 +277,6 @@ defmodule Hologram.Template.ParserTest do
 
   describe "row block after" do
     tags = [
-      {"text", "abc", text: "abc"},
       {"element start tag", "<div>", start_tag: {"div", []}},
       {"element end tag", "</div>", end_tag: "div"},
       {"component start tag", "<Aaa.Bbb>", start_tag: {"Aaa.Bbb", []}},
@@ -297,6 +296,10 @@ defmodule Hologram.Template.ParserTest do
                ]
       end
     end)
+
+    test "text" do
+      assert parse("abc{%raw}{@abc}{/raw}") == [text: "abc{@abc}"]
+    end
   end
 
   describe "tag combinations other than raw block" do
