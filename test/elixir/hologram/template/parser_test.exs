@@ -198,6 +198,22 @@ defmodule Hologram.Template.ParserTest do
                end_tag: "Aaa.Bbb"
              ]
     end
+
+    test "with script" do
+      assert parse("{%raw}<script>{@abc}</script>{/raw}") == [
+               start_tag: {"script", []},
+               text: "{@abc}",
+               end_tag: "script"
+             ]
+    end
+
+    test "within script" do
+      assert parse("<script>{%raw}{@abc}{/raw}</script>") == [
+               start_tag: {"script", []},
+               text: "{@abc}",
+               end_tag: "script"
+             ]
+    end
   end
 
   describe "raw block with nested tag not using curly bracket" do
@@ -275,7 +291,10 @@ defmodule Hologram.Template.ParserTest do
 
     Enum.each(tags, fn {name, markup, [expected]} ->
       test "#{name}" do
-        parse("#{unquote(markup)}{%raw}{@abc}{/raw}") == [unquote(expected), {:text, "{@abc}"}]
+        assert parse("#{unquote(markup)}{%raw}{@abc}{/raw}") == [
+                 unquote(expected),
+                 {:text, "{@abc}"}
+               ]
       end
     end)
   end
