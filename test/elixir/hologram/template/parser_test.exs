@@ -143,6 +143,54 @@ defmodule Hologram.Template.ParserTest do
     end
   end
 
+  describe "element attribute and component property" do
+    [{"attribute", "div"}, {"property", "Aaa.Bbb"}]
+    |> Enum.each(fn {name, tag} ->
+      test "#{name} value text" do
+        assert parse("<#{unquote(tag)} id=\"test\">") == [
+                 start_tag: {unquote(tag), [{"id", [text: "test"]}]}
+               ]
+      end
+
+      test "#{name} value expression" do
+        assert parse("<#{unquote(tag)} id={1 + 2}>") == [
+                 start_tag: {unquote(tag), [{"id", [expression: "{1 + 2}"]}]}
+               ]
+      end
+
+      test "#{name} value expression in double quotes" do
+        assert parse("<#{unquote(tag)} id=\"{1 + 2}\">") == [
+                 start_tag: {unquote(tag), [{"id", [text: "", expression: "{1 + 2}", text: ""]}]}
+               ]
+      end
+
+      test "multi-part #{name} value: text, expression" do
+        assert parse("<#{unquote(tag)} id=\"abc{1 + 2}\">") == [
+                 start_tag:
+                   {unquote(tag), [{"id", [text: "abc", expression: "{1 + 2}", text: ""]}]}
+               ]
+      end
+
+      test "multi-part #{name} value: expression, text" do
+        assert parse("<#{unquote(tag)} id=\"{1 + 2}abc\">") == [
+                 start_tag:
+                   {unquote(tag), [{"id", [text: "", expression: "{1 + 2}", text: "abc"]}]}
+               ]
+      end
+
+      test "boolean #{name} followed by start tag closing" do
+        assert parse("<#{unquote(tag)} key>") == [start_tag: {unquote(tag), [{"key", []}]}]
+      end
+
+      test "multiple #{name}(s)" do
+        assert parse(~s(<#{unquote(tag)} key_1="value_1" key_2="value_2">)) == [
+                 start_tag:
+                   {unquote(tag), [{"key_1", [text: "value_1"]}, {"key_2", [text: "value_2"]}]}
+               ]
+      end
+    end)
+  end
+
   describe "for block" do
     test "start" do
       markup = "{%for item <- @items}"
@@ -851,110 +899,6 @@ defmodule Hologram.Template.ParserTest do
 
   # test "after component end tag name" do
   #   assert parse("</Aaa.Bbb#{@whitespaces}>") == [end_tag: "Aaa.Bbb"]
-  # end
-
-  # test "after boolean attribute" do
-  #   assert parse("<div my_attr >") == [start_tag: {"div", [{"my_attr", []}]}]
-  # end
-
-  # test "after boolean prop" do
-  #   assert parse("<Aaa.Bbb my_attr >") == [start_tag: {"Aaa.Bbb", [{"my_attr", []}]}]
-  # end
-  # end
-
-  # describe "attribute" do
-  #   test "text" do
-  #     assert parse("<div id=\"test\">") == [start_tag: {"div", [{"id", [text: "test"]}]}]
-  #   end
-
-  #   test "expression" do
-  #     assert parse("<div id={1 + 2}>") == [
-  #              start_tag: {"div", [{"id", [expression: "{1 + 2}"]}]}
-  #            ]
-  #   end
-
-  #   test "expression in double quotes" do
-  #     assert parse("<div id=\"{1 + 2}\">") == [
-  #              start_tag: {"div", [{"id", [text: "", expression: "{1 + 2}", text: ""]}]}
-  #            ]
-  #   end
-
-  #   test "text, expression" do
-  #     assert parse("<div id=\"abc{1 + 2}\">") == [
-  #              start_tag: {"div", [{"id", [text: "abc", expression: "{1 + 2}", text: ""]}]}
-  #            ]
-  #   end
-
-  #   test "expression, text" do
-  #     assert parse("<div id=\"{1 + 2}abc\">") == [
-  #              start_tag: {"div", [{"id", [text: "", expression: "{1 + 2}", text: "abc"]}]}
-  #            ]
-  #   end
-
-  #   test "text, expression, text" do
-  #     assert parse("<div id=\"abc{1 + 2}xyz\">") == [
-  #              start_tag: {"div", [{"id", [text: "abc", expression: "{1 + 2}", text: "xyz"]}]}
-  #            ]
-  #   end
-
-  #   test "boolean attribute followed by start tag closing" do
-  #     assert parse("<div my_attr>") == [start_tag: {"div", [{"my_attr", []}]}]
-  #   end
-
-  #   test "multiple attributes" do
-  #     assert parse(~s(<div attr_1="value_1" attr_2="value_2">)) == [
-  #              start_tag: {"div", [{"attr_1", [text: "value_1"]}, {"attr_2", [text: "value_2"]}]}
-  #            ]
-  #   end
-  # end
-
-  # describe "property" do
-  #   test "text" do
-  #     assert parse("<Aaa.Bbb id=\"test\">") == [
-  #              start_tag: {"Aaa.Bbb", [{"id", [text: "test"]}]}
-  #            ]
-  #   end
-
-  #   test "expression" do
-  #     assert parse("<Aaa.Bbb id={1 + 2}>") == [
-  #              start_tag: {"Aaa.Bbb", [{"id", [expression: "{1 + 2}"]}]}
-  #            ]
-  #   end
-
-  #   test "expression in double quotes" do
-  #     assert parse("<Aaa.Bbb id=\"{1 + 2}\">") == [
-  #              start_tag: {"Aaa.Bbb", [{"id", [text: "", expression: "{1 + 2}", text: ""]}]}
-  #            ]
-  #   end
-
-  #   test "text, expression" do
-  #     assert parse("<Aaa.Bbb id=\"abc{1 + 2}\">") == [
-  #              start_tag: {"Aaa.Bbb", [{"id", [text: "abc", expression: "{1 + 2}", text: ""]}]}
-  #            ]
-  #   end
-
-  #   test "expression, text" do
-  #     assert parse("<Aaa.Bbb id=\"{1 + 2}abc\">") == [
-  #              start_tag: {"Aaa.Bbb", [{"id", [text: "", expression: "{1 + 2}", text: "abc"]}]}
-  #            ]
-  #   end
-
-  #   test "text, expression, text" do
-  #     assert parse("<Aaa.Bbb id=\"abc{1 + 2}xyz\">") == [
-  #              start_tag: {"Aaa.Bbb", [{"id", [text: "abc", expression: "{1 + 2}", text: "xyz"]}]}
-  #            ]
-  #   end
-
-  #   test "boolean property followed by start tag closing" do
-  #     assert parse("<Aaa.Bbb my_prop>") == [start_tag: {"Aaa.Bbb", [{"my_prop", []}]}]
-  #   end
-
-  #   test "multiple properties" do
-  #     assert parse(~s(<Aaa.Bbb prop_1="value_1" prop_2="value_2">)) == [
-  #              start_tag:
-  #                {"Aaa.Bbb", [{"prop_1", [text: "value_1"]}, {"prop_2", [text: "value_2"]}]}
-  #            ]
-  #   end
   # end
 
   #   test "opening curly bracket escaping" do
