@@ -639,6 +639,50 @@ defmodule Hologram.Template.ParserTest do
     end
   end)
 
+  describe "double quotes in expression" do
+    test "escaping" do
+      markup = "{\\\"}"
+      assert parse(markup) == [expression: markup]
+    end
+
+    test "single group" do
+      markup = "{\"123\"}"
+      assert parse(markup) == [expression: markup]
+    end
+
+    test "multiple groups" do
+      markup = "{\"1\", \"2\"}"
+      assert parse(markup) == [expression: markup]
+    end
+
+    test "nested in single quotes" do
+      markup = "{'abc\"xyz'}"
+      assert parse(markup) == [expression: markup]
+    end
+  end
+
+  describe "single quotes in expression" do
+    test "escaping" do
+      markup = "{\\'}"
+      assert parse(markup) == [expression: markup]
+    end
+
+    test "single group" do
+      markup = "{'123'}"
+      assert parse(markup) == [expression: markup]
+    end
+
+    test "multiple groups" do
+      markup = "{'1', '2'}"
+      assert parse(markup) == [expression: markup]
+    end
+
+    test "nested in double quotes" do
+      markup = "{\"abc'xyz\"}"
+      assert parse(markup) == [expression: markup]
+    end
+  end
+
   describe "elixir interpolation" do
     test "in text" do
       markup = "\#{@abc}"
@@ -825,20 +869,6 @@ defmodule Hologram.Template.ParserTest do
     end
   end
 
-  #   test "double quote escaping" do
-  #     markup = "{{1\\\"2}}"
-  #     assert parse(markup) == [expression: markup]
-  #   end
-
-  #   test "single quote escaping" do
-  #     markup = "{{1\\\'2}}"
-  #     assert parse(markup) == [expression: markup]
-  #   end
-
-  #   test "inside text" do
-  #     assert parse("abc{@kmn}xyz") == [text: "abc", expression: "{@kmn}", text: "xyz"]
-  #   end
-
   #   test "single group of curly brackets" do
   #     markup = "{{123}}"
   #     assert parse(markup) == [expression: markup]
@@ -866,36 +896,6 @@ defmodule Hologram.Template.ParserTest do
 
   #   test "closing curly bracket inside single quotes" do
   #     markup = "{{'123}'}}"
-  #     assert parse(markup) == [expression: markup]
-  #   end
-
-  #   test "single group of double quotes" do
-  #     markup = "{{\"123\"}}"
-  #     assert parse(markup) == [expression: markup]
-  #   end
-
-  #   test "multiple groups of double quotes" do
-  #     markup = "{{\"1\", \"2\"}}"
-  #     assert parse(markup) == [expression: markup]
-  #   end
-
-  #   test "single group of single quotes" do
-  #     markup = "{{'123'}}"
-  #     assert parse(markup) == [expression: markup]
-  #   end
-
-  #   test "multiple groups of single quotes" do
-  #     markup = "{{'1', '2'}}"
-  #     assert parse(markup) == [expression: markup]
-  #   end
-
-  #   test "single quote nested in double quotes" do
-  #     markup = "{\"abc'xyz\"}"
-  #     assert parse(markup) == [expression: markup]
-  #   end
-
-  #   test "double quote nested in single quotes" do
-  #     markup = "{'abc\"xyz'}"
   #     assert parse(markup) == [expression: markup]
   #   end
 
