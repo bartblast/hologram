@@ -165,7 +165,122 @@ defmodule Hologram.Template.ParserTest do
     end
   end
 
-  describe "tag combinations" do
+  describe "raw block" do
+    test "empty" do
+      assert parse("{%raw}{/raw}") == []
+    end
+
+    test "with whitespaces" do
+      markup = " \n\r\t"
+      assert parse("{%raw}#{markup}{/raw}") == [text: markup]
+    end
+
+    test "with symbols" do
+      markup = "#$%"
+      assert parse("{%raw}#{markup}{/raw}") == [text: markup]
+    end
+
+    test "with string" do
+      markup = "abc"
+      assert parse("{%raw}#{markup}{/raw}") == [text: markup]
+    end
+
+    test "with element having an attribute value with expression in double quotes" do
+      assert parse("{%raw}<div id=\"aaa{@test}bbb\"></div>{/raw}") == [
+               start_tag: {"div", [{"id", [text: "aaa{@test}bbb"]}]},
+               end_tag: "div"
+             ]
+    end
+
+    test "with component having a property value with expression in double quotes" do
+      assert parse("{%raw}<Aaa.Bbb id=\"aaa{@test}bbb\"></Aaa.Bbb>{/raw}") == [
+               start_tag: {"Aaa.Bbb", [{"id", [text: "aaa{@test}bbb"]}]},
+               end_tag: "Aaa.Bbb"
+             ]
+    end
+  end
+
+  describe "raw block with nested tag not using curly bracket" do
+    tags = [
+      {"text", "abc", text: "abc"},
+      {"element start tag", "<div>", start_tag: {"div", []}},
+      {"element end tag", "</div>", end_tag: "div"},
+      {"component start tag", "<Aaa.Bbb>", start_tag: {"Aaa.Bbb", []}},
+      {"component end tag", "</Aaa.Bbb>", end_tag: "Aaa.Bbb"}
+    ]
+
+    Enum.each(tags, fn {name, markup, expected} ->
+      test "raw block start, #{name}, raw block end" do
+        assert parse("{%raw}#{unquote(markup)}{/raw}") == unquote(expected)
+      end
+    end)
+  end
+
+  describe "raw block with nested tag using curly brackets" do
+    tags = [
+      {"expression", "{@abc}"},
+      {"for block start", "{%for item &lt;- @items}"},
+      {"for block end", "{/for}"},
+      {"if block start", "{%if true}"},
+      {"if block end", "{/if}"}
+    ]
+
+    Enum.each(tags, fn {name, markup} ->
+      test "raw block start, #{name}, raw block end" do
+        assert parse("{%raw}#{unquote(markup)}{/raw}") == [text: unquote(markup)]
+      end
+    end)
+  end
+
+  describe "raw block nested in quotes" do
+    test "inside double quotes within elixir expression" do
+      markup = "{\"{%raw}{@abc}{/raw}\"}"
+      assert parse(markup) == [expression: markup]
+    end
+
+    test "inside single quotes within elixir expression" do
+      markup = "{'{%raw}{@abc}{/raw}'}"
+      assert parse(markup) == [expression: markup]
+    end
+
+    test "inside double quotes within javascript script" do
+      markup = "<script>\"{%raw}{@abc}{/raw}\"</script>"
+      assert parse(markup) == [start_tag: {"script", []}, text: "\"{@abc}\"", end_tag: "script"]
+    end
+
+    test "inside single quotes within javascript script" do
+      markup = "<script>'{%raw}{@abc}{/raw}'</script>"
+      assert parse(markup) == [start_tag: {"script", []}, text: "'{@abc}'", end_tag: "script"]
+    end
+
+    test "inside backtick quotes within javascript script" do
+      markup = "<script>`{%raw}{@abc}{/raw}`</script>"
+      assert parse(markup) == [start_tag: {"script", []}, text: "`{@abc}`", end_tag: "script"]
+    end
+  end
+
+  describe "row block after" do
+    tags = [
+      {"text", "abc", text: "abc"},
+      {"element start tag", "<div>", start_tag: {"div", []}},
+      {"element end tag", "</div>", end_tag: "div"},
+      {"component start tag", "<Aaa.Bbb>", start_tag: {"Aaa.Bbb", []}},
+      {"component end tag", "</Aaa.Bbb>", end_tag: "Aaa.Bbb"},
+      {"expression", "{@abc}", expression: "{@abc}"},
+      {"for block start", "{%for item <- @items}", block_start: {"for", "{ item <- @items}"}},
+      {"for block end", "{/for}", block_end: "for"},
+      {"if block start", "{%if true}", block_start: {"if", "{ true}"}},
+      {"if block end", "{/if}", block_end: "if"}
+    ]
+
+    Enum.each(tags, fn {name, markup, [expected]} ->
+      test "#{name}" do
+        parse("#{unquote(markup)}{%raw}{@abc}{/raw}") == [unquote(expected), {:text, "{@abc}"}]
+      end
+    end)
+  end
+
+  describe "tag combinations other than raw block" do
     tags = [
       {"text", "abc", text: "abc"},
       {"element start tag", "<div>", start_tag: {"div", []}},
@@ -625,11 +740,6 @@ defmodule Hologram.Template.ParserTest do
     end
   end
 
-  #   test "raw block nested in double quotes" do
-  #     markup = "{\"{%raw}abc{/raw}\"}"
-  #     assert parse(markup) == [expression: markup]
-  #   end
-
   #   test "double quote escaping" do
   #     markup = "{{1\\\"2}}"
   #     assert parse(markup) == [expression: markup]
@@ -643,27 +753,6 @@ defmodule Hologram.Template.ParserTest do
   #   test "inside text" do
   #     assert parse("abc{@kmn}xyz") == [text: "abc", expression: "{@kmn}", text: "xyz"]
   #   end
-
-  #   test "inside element" do
-  #     assert parse("<div>{@abc}</div>") == [
-  #              start_tag: {"div", []},
-  #              expression: "{@abc}",
-  #              end_tag: "div"
-  #            ]
-  #   end
-
-  #   test "inside component" do
-  #     assert parse("<Aaa.Bbb>{@abc}</Aaa.Bbb>") == [
-  #              start_tag: {"Aaa.Bbb", []},
-  #              expression: "{@abc}",
-  #              end_tag: "Aaa.Bbb"
-  #            ]
-  #   end
-
-  # nesting tags in raw block
-  # test "raw block" do
-  #   assert parse("{%raw}#{unquote(markup)}{/raw}") == [unquote(expected)]
-  # end
 
   #   test "single group of curly brackets" do
   #     markup = "{{123}}"
@@ -853,76 +942,6 @@ defmodule Hologram.Template.ParserTest do
   #   test "closing curly bracket escaping" do
   #     assert parse("abc\\}xyz") == [text: "abc}xyz"]
   #   end
-
-  # describe "raw block" do
-  #   test "block start" do
-  #     assert parse("{%raw}") == []
-  #   end
-
-  #   test "block end / empty" do
-  #     assert parse("{%raw}{/raw}") == []
-  #   end
-
-  #   test "with symbols text" do
-  #     assert parse("{%raw}#$%=\"'`\\/{/raw}") == [text: "#$%=\"'`\\/"]
-  #   end
-
-  #   test "with string text" do
-  #     assert parse("{%raw}abc{/raw}") == [text: "abc"]
-  #   end
-
-  #   test "with element" do
-  #     assert parse("{%raw}<div></div>{/raw}") == [start_tag: {"div", []}, end_tag: "div"]
-  #   end
-
-  #   test "with component" do
-  #     assert parse("{%raw}<MyComponent></MyComponent>{/raw}") == [
-  #              start_tag: {"MyComponent", []},
-  #              end_tag: "MyComponent"
-  #            ]
-  #   end
-
-  #   test "with expression" do
-  #     assert parse("{%raw}{1 + 2}{/raw}") == [text: "{1 + 2}"]
-  #   end
-
-  #   test "with expression nested in text" do
-  #     assert parse("{%raw}aaa{@test}bbb{/raw}") == [text: "aaa{@test}bbb"]
-  #   end
-
-  #   test "with block" do
-  #     assert parse("{%raw}{%if @abc == 123}{/if}{/raw}") == [text: "{%if @abc == 123}{/if}"]
-  #   end
-
-  #   test "with element having an attribute value with expression in double quotes" do
-  #     assert parse("{%raw}<div id=\"aaa{@test}bbb\"></div>{/raw}") == [
-  #              start_tag: {"div", [{"id", [text: "aaa{@test}bbb"]}]},
-  #              end_tag: "div"
-  #            ]
-  #   end
-
-  #   test "with component having a property value with expression in double quotes" do
-  #     assert parse("{%raw}<Aaa.Bbb id=\"aaa{@test}bbb\"></Aaa.Bbb>{/raw}") == [
-  #              start_tag: {"Aaa.Bbb", [{"id", [text: "aaa{@test}bbb"]}]},
-  #              end_tag: "Aaa.Bbb"
-  #            ]
-  #   end
-
-  #   test "inside text" do
-  #     assert parse("abc{%raw}{/raw}xyz") == [text: "abcxyz"]
-  #   end
-
-  #   test "inside element" do
-  #     assert parse("<div>{%raw}{/raw}</div>") == [start_tag: {"div", []}, end_tag: "div"]
-  #   end
-
-  #   test "inside component" do
-  #     assert parse("<Aaa.Bbb>{%raw}{/raw}</Aaa.Bbb>") == [
-  #              start_tag: {"Aaa.Bbb", []},
-  #              end_tag: "Aaa.Bbb"
-  #            ]
-  #   end
-  # end
 
   # describe "script" do
   #   test "single group of double quotes" do
