@@ -824,34 +824,42 @@ defmodule Hologram.Template.ParserTest do
   end
 
   describe "curly brackets in expression" do
-    test "single group" do
+    test "single group in expression" do
       markup = "{{123}}"
       assert parse(markup) == [expression: markup]
     end
 
-    test "multiple groups" do
+    test "multiple groups in expression" do
       markup = "{{1}, {2}}"
       assert parse(markup) == [expression: markup]
     end
 
-    test "opening curly bracket inside double quotes" do
+    test "opening curly bracket inside double quotes in expression" do
       markup = "{\"{123\"}"
       assert parse(markup) == [expression: markup]
     end
 
-    test "opening curly bracket inside single quotes" do
+    test "opening curly bracket inside single quotes in expression" do
       markup = "{'{123'}"
       assert parse(markup) == [expression: markup]
     end
 
-    test "closing curly bracket inside double quotes" do
+    test "closing curly bracket inside double quotes in expression" do
       markup = "{\"123}\"}"
       assert parse(markup) == [expression: markup]
     end
 
-    test "closing curly bracket inside single quotes" do
+    test "closing curly bracket inside single quotes in expression" do
       markup = "{'123}'}"
       assert parse(markup) == [expression: markup]
+    end
+
+    test "escaping opening curly bracket in text" do
+      assert parse("abc\\{xyz") == [text: "abc{xyz"]
+    end
+
+    test "escaping closing curly bracket in text" do
+      assert parse("abc\\}xyz") == [text: "abc}xyz"]
     end
   end
 
@@ -1036,6 +1044,9 @@ defmodule Hologram.Template.ParserTest do
                end_tag: "script"
              ]
     end
+  end
+
+  describe "escaping" do
   end
 
   describe "template syntax errors" do
