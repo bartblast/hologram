@@ -160,8 +160,7 @@ defmodule Hologram.Template.ParserTest do
   end
 
   describe "element attribute and component property" do
-    [{"attribute", "div"}, {"property", "Aaa.Bbb"}]
-    |> Enum.each(fn {name, tag} ->
+    Enum.each([{"attribute", "div"}, {"property", "Aaa.Bbb"}], fn {name, tag} ->
       test "#{name} value text" do
         assert parse("<#{unquote(tag)} id=\"test\">") == [
                  start_tag: {unquote(tag), [{"id", [text: "test"]}]}
