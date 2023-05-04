@@ -560,8 +560,9 @@ defmodule Hologram.Template.ParserTest do
       {"if", "true"}
     ]
 
-    for(quoting <- quotings, tag <- tags, do: {quoting, tag})
-    |> Enum.each(fn {{quoting_name, char}, {tag_name, expr}} ->
+    combinations = for quoting <- quotings, tag <- tags, do: {quoting, tag}
+
+    Enum.each(combinations, fn {{quoting_name, char}, {tag_name, expr}} ->
       test "#{tag_name} block start in #{quoting_name}" do
         markup = "{#{unquote(char)}{%#{unquote(tag_name)} #{unquote(expr)}}#{unquote(char)}}"
         assert parse(markup) == [expression: markup]
@@ -586,8 +587,9 @@ defmodule Hologram.Template.ParserTest do
       {"if", "true"}
     ]
 
-    for(quoting <- quotings, tag <- tags, do: {quoting, tag})
-    |> Enum.each(fn {{quoting_name, char}, {tag_name, expr}} ->
+    combinations = for quoting <- quotings, tag <- tags, do: {quoting, tag}
+
+    Enum.each(combinations, fn {{quoting_name, char}, {tag_name, expr}} ->
       test "#{tag_name} block start in #{quoting_name}" do
         markup =
           "<script>#{unquote(char)}{%#{unquote(tag_name)} #{unquote(expr)}}#{unquote(char)}</script>"
