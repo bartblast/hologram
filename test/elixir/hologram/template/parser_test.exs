@@ -103,8 +103,16 @@ defmodule Hologram.Template.ParserTest do
       assert parse("<slot />") == [self_closing_tag: {"slot", []}]
     end
 
+    test "whitespaces after unclosed start tag name" do
+      assert parse("<div \n\r\t>") == [start_tag: {"div", []}]
+    end
+
     test "end tag" do
       assert parse("</div>") == [end_tag: "div"]
+    end
+
+    test "whitespaces after end tag name" do
+      assert parse("</div \n\r\t>") == [end_tag: "div"]
     end
   end
 
@@ -117,8 +125,16 @@ defmodule Hologram.Template.ParserTest do
       assert parse("<Aaa.Bbb />") == [self_closing_tag: {"Aaa.Bbb", []}]
     end
 
+    test "whitespaces after unclosed start tag name" do
+      assert parse("<Aaa.Bbb \n\r\t>") == [start_tag: {"Aaa.Bbb", []}]
+    end
+
     test "end tag" do
       assert parse("</Aaa.Bbb>") == [end_tag: "Aaa.Bbb"]
+    end
+
+    test "whitespaces after end tag name" do
+      assert parse("</Aaa.Bbb \n\r\t>") == [end_tag: "Aaa.Bbb"]
     end
   end
 
@@ -883,23 +899,6 @@ defmodule Hologram.Template.ParserTest do
   #     markup = "{'abc\"xyz'}"
   #     assert parse(markup) == [expression: markup]
   #   end
-
-  # describe "whitespaces" do
-  # test "after element start tag name" do
-  #   assert parse("<div#{@whitespaces}>") == [start_tag: {"div", []}]
-  # end
-
-  # test "after component start tag name" do
-  #   assert parse("<Aaa.Bbb#{@whitespaces}>") == [start_tag: {"Aaa.Bbb", []}]
-  # end
-
-  # test "after element end tag name" do
-  #   assert parse("</div#{@whitespaces}>") == [end_tag: "div"]
-  # end
-
-  # test "after component end tag name" do
-  #   assert parse("</Aaa.Bbb#{@whitespaces}>") == [end_tag: "Aaa.Bbb"]
-  # end
 
   #   test "opening curly bracket escaping" do
   #     assert parse("abc\\{xyz") == [text: "abc{xyz"]
