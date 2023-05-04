@@ -1046,9 +1046,6 @@ defmodule Hologram.Template.ParserTest do
     end
   end
 
-  describe "escaping" do
-  end
-
   describe "template syntax errors" do
     test "escape non-printable characters" do
       expected_msg = ~r/\na\\nb\\rc\\td < x\\ny\\rz\\tv\n {11}\^/s
