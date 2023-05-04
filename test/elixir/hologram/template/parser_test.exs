@@ -138,7 +138,7 @@ defmodule Hologram.Template.ParserTest do
     end
 
     test "with string" do
-      markup = "{@abc}"
+      markup = "{abc}"
       assert parse(markup) == [expression: markup]
     end
   end
