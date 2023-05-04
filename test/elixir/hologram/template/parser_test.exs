@@ -996,6 +996,47 @@ defmodule Hologram.Template.ParserTest do
     end
   end
 
+  describe "blocks in quoting inside script" do
+    quotings = [
+      {"double quotes", "\""},
+      {"single quotes", "'"},
+      {"backtick quotes", "`"}
+    ]
+
+    tags = [
+      {"for", "item <- @items"},
+      {"if", "true"}
+    ]
+
+    for(quoting <- quotings, tag <- tags, do: {quoting, tag})
+    |> Enum.each(fn {{quoting_name, char}, {tag_name, expr}} ->
+      test "#{tag_name} block start in #{quoting_name}" do
+        markup =
+          "<script>#{unquote(char)}{%#{unquote(tag_name)} #{unquote(expr)}}#{unquote(char)}</script>"
+
+        assert parse(markup) == [
+                 start_tag: {"script", []},
+                 text: unquote(char),
+                 block_start: {unquote(tag_name), "{ #{unquote(expr)}}"},
+                 text: unquote(char),
+                 end_tag: "script"
+               ]
+      end
+
+      test "#{tag_name} block end in #{quoting_name}" do
+        markup = "<script>#{unquote(char)}{/#{unquote(tag_name)}}#{unquote(char)}</script>"
+
+        assert parse(markup) == [
+                 start_tag: {"script", []},
+                 text: unquote(char),
+                 block_end: unquote(tag_name),
+                 text: unquote(char),
+                 end_tag: "script"
+               ]
+      end
+    end)
+  end
+
   describe "javascript interpolation" do
     test "in double quotes" do
       assert parse("<script>\"abc${123}xyz\"</script>") == [
