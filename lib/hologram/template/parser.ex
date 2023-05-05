@@ -14,6 +14,15 @@ defmodule Hologram.Template.Parser do
   alias Hologram.Template.SyntaxError
   alias Hologram.Template.Tokenizer
 
+  @default_error_details """
+  Reason:
+  Unknown reason.
+
+  Hint:
+  Please report that you received this message here: https://github.com/bartblast/hologram/issues
+  and include a markup snippet that will allow us to reproduce the issue.
+  """
+
   @type parsed_tag ::
           {:block_end | :block_start | :end_tag | :expression | :self_closing_tag,
            :start_tag | :text, any}
@@ -573,6 +582,16 @@ defmodule Hologram.Template.Parser do
     parse_text(context, token, rest)
   end
 
+  # These two cases shouldn't happen once we've got template syntax errors covered.
+
+  def parse(context, type, [token | rest]) do
+    raise_error(@default_error_details, context, type, token, rest)
+  end
+
+  def parse(context, type, []) do
+    raise_error(@default_error_details, context, type, nil, [])
+  end
+
   @doc """
   Prints debug info for intercepted parse/3 calls.
   """
@@ -845,18 +864,4 @@ defmodule Hologram.Template.Parser do
   defp set_tag_name(context, name) do
     %{context | tag_name: name}
   end
-
-  # TODO: cleanup
-
-  # parse(context, type, [token | rest]) do
-  #   raise_error(context, type, token, rest)
-  # end
-
-  # parse(context, type, []) do
-  #   raise_error(context, type, nil, [])
-  # end
-
-  # defp error_reason(_, _, _) do
-  #   "Unknown reason."
-  # end
 end
