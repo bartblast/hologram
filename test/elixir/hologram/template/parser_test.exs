@@ -1167,41 +1167,4 @@ defmodule Hologram.Template.ParserTest do
       test_syntax_error_msg("<div =\"abc\">", msg)
     end
   end
-
-  # TODO: cleanup
-
-  # describe "text node nested in raw directive" do
-  #   # test "script with special symbols" do
-  #   #   markup = """
-  #   #   <script>
-  #   #     {#raw}
-  #   #       document.getElementById("test_elem").addEventListener("click", () => { history.forward() })
-  #   #     {/raw}
-  #   #   </script>
-  #   #   """
-
-  #   #   result = parse(markup)
-  #   # end
-  # end
-
-  # # TODO: cleanup
-  # # test "JS script" do
-  # #   markup = """
-  # #   <script>
-  # #   {#raw}
-  # #   "absdfsd </dupa jaisa"
-  # #     if (abc > 0 || xyz < 10) {
-  # #       () => { test("param") }.()
-
-  # #     }
-  # #   {/raw}
-  # #   </script>
-  # #   """
-
-  # #   result = parse(markup)
-  # #   IO.inspect(result)
-  # #   # expected = [text: "aaabbb"]
-
-  # #   # assert result == expected
-  # # end
 end
