@@ -110,7 +110,18 @@ defmodule Hologram.Template.Parser do
   end
 
   def parse(%{raw?: true} = context, :attribute_assignment, [{:symbol, "{"} = token | rest]) do
-    raise_error(context, :attribute_assignment, token, rest)
+    tag_type = Helpers.tag_type(context.tag_name)
+    node_name = if tag_type == :element, do: "attribute", else: "property"
+
+    details = """
+    Reason:
+    Expression #{node_name} value inside raw block detected.
+
+    Hint:
+    Either wrap the #{node_name} value with double quotes or remove the parent raw block".
+    """
+
+    raise_error(details, context, :attribute_assignment, token, rest)
   end
 
   def parse(context, :attribute_assignment, [{:symbol, "{"} = token | rest]) do
@@ -334,7 +345,15 @@ defmodule Hologram.Template.Parser do
   # --- START TAG ---
 
   def parse(context, :start_tag, []) do
-    raise_error(context, :start_tag, nil, [])
+    details = """
+    Reason:
+    Unclosed start tag.
+
+    Hint:
+    Close the start tag with '>' character.
+    """
+
+    raise_error(details, context, :start_tag, nil, [])
   end
 
   def parse(context, :start_tag, [{:whitespace, _} = token | rest]) do
@@ -344,7 +363,15 @@ defmodule Hologram.Template.Parser do
   end
 
   def parse(context, :start_tag, [{:symbol, "="} = token | rest]) do
-    raise_error(context, :start_tag, token, rest)
+    details = """
+    Reason:
+    Missing attribute name.
+
+    Hint:
+    Specify the attribute name before the '=' character.
+    """
+
+    raise_error(details, context, :start_tag, token, rest)
   end
 
   def parse(context, :start_tag, [{:symbol, "/>"} = token | rest]) do
@@ -519,11 +546,27 @@ defmodule Hologram.Template.Parser do
   end
 
   def parse(%{script?: false} = context, :text, [{:symbol, "<"} = token | rest]) do
-    raise_error(context, :text, token, rest)
+    details = """
+    Reason:
+    Unescaped '<' character inside text node.
+
+    Hint:
+    To escape use HTML entity: '&lt;'.
+    """
+
+    raise_error(details, context, :text, token, rest)
   end
 
   def parse(%{script?: false} = context, :text, [{:symbol, ">"} = token | rest]) do
-    raise_error(context, :text, token, rest)
+    details = """
+    Reason:
+    Unescaped '>' character inside text node.
+
+    Hint:
+    To escape use HTML entity: '&gt;'.
+    """
+
+    raise_error(details, context, :text, token, rest)
   end
 
   def parse(context, :text, [token | rest]) do
@@ -624,61 +667,6 @@ defmodule Hologram.Template.Parser do
     |> String.replace("\n", "\\n")
     |> String.replace("\r", "\\r")
     |> String.replace("\t", "\\t")
-  end
-
-  defp error_details(context, status, token)
-
-  defp error_details(context, :attribute_assignment, {:symbol, "{"}) do
-    tag_type = Helpers.tag_type(context.tag_name)
-    node_name = if tag_type == :element, do: "attribute", else: "property"
-
-    """
-    Reason:
-    Expression #{node_name} value inside raw block detected.
-
-    Hint:
-    Either wrap the #{node_name} value with double quotes or remove the parent raw block".
-    """
-  end
-
-  defp error_details(_context, :start_tag, nil) do
-    """
-    Reason:
-    Unclosed start tag.
-
-    Hint:
-    Close the start tag with '>' character.
-    """
-  end
-
-  defp error_details(_context, :start_tag, {:symbol, "="}) do
-    """
-    Reason:
-    Missing attribute name.
-
-    Hint:
-    Specify the attribute name before the '=' character.
-    """
-  end
-
-  defp error_details(_context, :text, {:symbol, "<"}) do
-    """
-    Reason:
-    Unescaped '<' character inside text node.
-
-    Hint:
-    To escape use HTML entity: '&lt;'.
-    """
-  end
-
-  defp error_details(_context, :text, {:symbol, ">"}) do
-    """
-    Reason:
-    Unescaped '>' character inside text node.
-
-    Hint:
-    To escape use HTML entity: '&gt;'.
-    """
   end
 
   defp flush_attribute(context) do
@@ -782,7 +770,7 @@ defmodule Hologram.Template.Parser do
     %{context | delimiter_stack: [delimiter | context.delimiter_stack]}
   end
 
-  defp raise_error(%{processed_tokens: processed_tokens} = context, status, token, rest) do
+  defp raise_error(details, %{processed_tokens: processed_tokens} = context, status, token, rest) do
     encoded_tokens = encode_tokens(processed_tokens)
     encoded_tokens_len = String.length(encoded_tokens)
 
@@ -809,12 +797,10 @@ defmodule Hologram.Template.Parser do
       |> String.slice(0, 20)
       |> escape_non_printable_chars()
 
-    error_details = error_details(context, status, token)
-
     message = """
 
 
-    #{error_details}
+    #{details}
     #{escaped_prev_fragment}#{current_fragment}#{next_fragment}
     #{indent}^
 
