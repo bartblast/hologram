@@ -118,6 +118,7 @@ defmodule Hologram.Template.Parser do
     |> buffer_token(token)
     |> add_processed_token(token)
     |> set_prev_status(:attribute_assignment)
+    |> push_delimiter_stack(:expression)
     |> parse(:expression, rest)
   end
 
@@ -238,8 +239,11 @@ defmodule Hologram.Template.Parser do
   end
 
   def parse(
-        %{delimiter_stack: [], node_type: :attribute, prev_status: :attribute_assignment} =
-          context,
+        %{
+          delimiter_stack: [:expression],
+          node_type: :attribute,
+          prev_status: :attribute_assignment
+        } = context,
         :expression,
         [{:symbol, "}"} = token | rest]
       ) do
@@ -249,11 +253,12 @@ defmodule Hologram.Template.Parser do
     |> add_attribute_value_part(:expression)
     |> flush_attribute()
     |> set_prev_status(:expression)
+    |> pop_delimiter_stack()
     |> parse(:start_tag, rest)
   end
 
   def parse(
-        %{delimiter_stack: [], node_type: :attribute, prev_status: :text} = context,
+        %{delimiter_stack: [:expression], node_type: :attribute, prev_status: :text} = context,
         :expression,
         [{:symbol, "}"} = token | rest]
       ) do
@@ -263,10 +268,11 @@ defmodule Hologram.Template.Parser do
     |> add_attribute_value_part(:expression)
     |> reset_token_buffer()
     |> set_prev_status(:expression)
+    |> pop_delimiter_stack()
     |> parse(:text, rest)
   end
 
-  def parse(%{delimiter_stack: [:block | _tail], node_type: :block} = context, :expression, [
+  def parse(%{delimiter_stack: [:expression | _tail], node_type: :block} = context, :expression, [
         {:symbol, "}"} = token | rest
       ]) do
     context
@@ -280,12 +286,13 @@ defmodule Hologram.Template.Parser do
     |> parse(:text, rest)
   end
 
-  def parse(%{delimiter_stack: [], node_type: :text} = context, :expression, [
+  def parse(%{delimiter_stack: [:expression | _tail], node_type: :text} = context, :expression, [
         {:symbol, "}"} = token | rest
       ]) do
     context
     |> buffer_token(token)
     |> add_expression_tag()
+    |> pop_delimiter_stack()
     |> add_processed_token(token)
     |> reset_token_buffer()
     |> set_prev_status(:expression)
@@ -464,18 +471,18 @@ defmodule Hologram.Template.Parser do
       ]) do
     context
     |> add_attribute_value_part(:text)
-    |> reset_delimiter_stack()
     |> reset_token_buffer()
     |> set_prev_status(:text)
+    |> push_delimiter_stack(:expression)
     |> parse_expression(token, rest)
   end
 
   def parse(%{raw?: false} = context, :text, [{:symbol, "{"} = token | rest]) do
     context
     |> maybe_add_text_tag()
-    |> reset_delimiter_stack()
     |> reset_token_buffer()
     |> set_prev_status(:text)
+    |> push_delimiter_stack(:expression)
     |> parse_expression(token, rest)
   end
 
@@ -705,9 +712,7 @@ defmodule Hologram.Template.Parser do
   defp maybe_disable_script_mode(context, _tag_name), do: context
 
   defp maybe_enable_script_mode(context, "script") do
-    context
-    |> enable_script_mode()
-    |> reset_delimiter_stack()
+    enable_script_mode(context)
   end
 
   defp maybe_enable_script_mode(context, _tag_name), do: context
@@ -727,7 +732,7 @@ defmodule Hologram.Template.Parser do
     context
     |> maybe_add_text_tag()
     |> add_processed_token(token)
-    |> push_delimiter_stack(:block)
+    |> push_delimiter_stack(:expression)
     |> set_node_type(:block)
     |> set_block_name(block_name)
     |> reset_token_buffer()
@@ -829,10 +834,6 @@ defmodule Hologram.Template.Parser do
 
   defp reset_attributes(context) do
     %{context | attributes: []}
-  end
-
-  defp reset_delimiter_stack(context) do
-    %{context | delimiter_stack: []}
   end
 
   defp reset_token_buffer(context) do

@@ -655,6 +655,78 @@ defmodule Hologram.Template.ParserTest do
     end)
   end
 
+  describe "expression in quoting inside script" do
+    test "in double quotes" do
+      assert parse("<script>\"abc{@my_var}xyz\"</script>") == [
+               start_tag: {"script", []},
+               text: "\"abc",
+               expression: "{@my_var}",
+               text: "xyz\"",
+               end_tag: "script"
+             ]
+    end
+
+    test "in single quotes" do
+      assert parse("<script>'abc{@my_var}xyz'</script>") == [
+               start_tag: {"script", []},
+               text: "'abc",
+               expression: "{@my_var}",
+               text: "xyz'",
+               end_tag: "script"
+             ]
+    end
+
+    test "in backtick quotes" do
+      assert parse("<script>`abc{@my_var}xyz`</script>") == [
+               start_tag: {"script", []},
+               text: "`abc",
+               expression: "{@my_var}",
+               text: "xyz`",
+               end_tag: "script"
+             ]
+    end
+
+    test "inside javascript interpolation" do
+      assert parse("<script>`abc${123{@my_var}456}xyz`</script>") == [
+               start_tag: {"script", []},
+               text: "`abc${123",
+               expression: "{@my_var}",
+               text: "456}xyz`",
+               end_tag: "script"
+             ]
+    end
+
+    test "inside double quotes nested in javascription interpolation" do
+      assert parse("<script>`abc${\"123{@my_var}456\"}xyz`</script>") == [
+               start_tag: {"script", []},
+               text: "`abc${\"123",
+               expression: "{@my_var}",
+               text: "456\"}xyz`",
+               end_tag: "script"
+             ]
+    end
+
+    test "inside single quotes nested in javascription interpolation" do
+      assert parse("<script>`abc${'123{@my_var}456'}xyz`</script>") == [
+               start_tag: {"script", []},
+               text: "`abc${'123",
+               expression: "{@my_var}",
+               text: "456'}xyz`",
+               end_tag: "script"
+             ]
+    end
+
+    test "inside backtick quotes nested in javascription interpolation" do
+      assert parse("<script>`abc${`123{@my_var}456`}xyz`</script>") == [
+               start_tag: {"script", []},
+               text: "`abc${`123",
+               expression: "{@my_var}",
+               text: "456`}xyz`",
+               end_tag: "script"
+             ]
+    end
+  end
+
   describe "double quotes in expression" do
     test "escaping" do
       markup = "{\\\"}"
