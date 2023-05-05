@@ -626,9 +626,9 @@ defmodule Hologram.Template.Parser do
     |> String.replace("\t", "\\t")
   end
 
-  defp error_reason_and_hint(context, status, token)
+  defp error_details(context, status, token)
 
-  defp error_reason_and_hint(context, :attribute_assignment, {:symbol, "{"}) do
+  defp error_details(context, :attribute_assignment, {:symbol, "{"}) do
     tag_type = Helpers.tag_type(context.tag_name)
     node_name = if tag_type == :element, do: "attribute", else: "property"
 
@@ -641,7 +641,7 @@ defmodule Hologram.Template.Parser do
     """
   end
 
-  defp error_reason_and_hint(_context, :start_tag, nil) do
+  defp error_details(_context, :start_tag, nil) do
     """
     Reason:
     Unclosed start tag.
@@ -651,7 +651,7 @@ defmodule Hologram.Template.Parser do
     """
   end
 
-  defp error_reason_and_hint(_context, :start_tag, {:symbol, "="}) do
+  defp error_details(_context, :start_tag, {:symbol, "="}) do
     """
     Reason:
     Missing attribute name.
@@ -661,7 +661,7 @@ defmodule Hologram.Template.Parser do
     """
   end
 
-  defp error_reason_and_hint(_context, :text, {:symbol, "<"}) do
+  defp error_details(_context, :text, {:symbol, "<"}) do
     """
     Reason:
     Unescaped '<' character inside text node.
@@ -671,7 +671,7 @@ defmodule Hologram.Template.Parser do
     """
   end
 
-  defp error_reason_and_hint(_context, :text, {:symbol, ">"}) do
+  defp error_details(_context, :text, {:symbol, ">"}) do
     """
     Reason:
     Unescaped '>' character inside text node.
@@ -809,12 +809,12 @@ defmodule Hologram.Template.Parser do
       |> String.slice(0, 20)
       |> escape_non_printable_chars()
 
-    reason_and_hint = error_reason_and_hint(context, status, token)
+    error_details = error_details(context, status, token)
 
     message = """
 
 
-    #{reason_and_hint}
+    #{error_details}
     #{escaped_prev_fragment}#{current_fragment}#{next_fragment}
     #{indent}^
 
