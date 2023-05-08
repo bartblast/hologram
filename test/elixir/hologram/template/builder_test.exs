@@ -145,4 +145,101 @@ defmodule Hologram.Template.BuilderTest do
       end
     end)
   end
+
+  describe "expression node" do
+    test "in text" do
+      tags = [{:text, "abc"}, {:expression, "{1 + 2}"}, {:text, "xyz"}]
+      assert build(tags) == [text: "abc", expression: {:+, [line: 1], [1, 2]}, text: "xyz"]
+    end
+
+    [
+      {:element, "attribute", "div"},
+      {:component, "property", "Aaa.Bbb"}
+    ]
+    |> Enum.each(fn {tag_type, attr_or_prop, tag_name} ->
+      test "in #{tag_type} #{attr_or_prop} value, with one part only" do
+        tag_name = unquote(tag_name)
+
+        tags = [
+          {:start_tag, {tag_name, [{"my_key", [expression: "{1 + 2}"]}]}},
+          {:end_tag, tag_name}
+        ]
+
+        assert build(tags) == [
+                 {:{}, [line: 1],
+                  [
+                    unquote(tag_type),
+                    tag_name,
+                    [{"my_key", [expression: {:+, [line: 1], [1, 2]}]}],
+                    []
+                  ]}
+               ]
+      end
+
+      test "in #{tag_type} #{attr_or_prop} value, after text part" do
+        tag_name = unquote(tag_name)
+
+        tags = [
+          {:start_tag, {tag_name, [{"my_key", [text: "my_value", expression: "{1 + 2}"]}]}},
+          {:end_tag, tag_name}
+        ]
+
+        assert build(tags) == [
+                 {:{}, [line: 1],
+                  [
+                    unquote(tag_type),
+                    tag_name,
+                    [{"my_key", [text: "my_value", expression: {:+, [line: 1], [1, 2]}]}],
+                    []
+                  ]}
+               ]
+      end
+
+      test "in #{tag_type} #{attr_or_prop} value, before text part" do
+        tag_name = unquote(tag_name)
+
+        tags = [
+          {:start_tag, {tag_name, [{"my_key", [expression: "{1 + 2}", text: "my_value"]}]}},
+          {:end_tag, tag_name}
+        ]
+
+        assert build(tags) == [
+                 {:{}, [line: 1],
+                  [
+                    unquote(tag_type),
+                    tag_name,
+                    [{"my_key", [expression: {:+, [line: 1], [1, 2]}, text: "my_value"]}],
+                    []
+                  ]}
+               ]
+      end
+
+      test "in #{tag_type} #{attr_or_prop} value, after another expression part" do
+        tag_name = unquote(tag_name)
+
+        tags = [
+          {:start_tag,
+           {tag_name, [{"my_key", [expression: "{1 + 2}", expression: "{@my_var * 9}"]}]}},
+          {:end_tag, tag_name}
+        ]
+
+        assert build(tags) == [
+                 {:{}, [line: 1],
+                  [
+                    unquote(tag_type),
+                    tag_name,
+                    [
+                      {"my_key",
+                       [
+                         expression: {:+, [line: 1], [1, 2]},
+                         expression:
+                           {:*, [line: 1], [{:@, [line: 1], [{:my_var, [line: 1], nil}]}, 9]}
+                       ]}
+                    ],
+                    []
+                  ]}
+               ]
+      end
+    end)
+  end
 end

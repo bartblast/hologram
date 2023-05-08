@@ -16,7 +16,8 @@ defmodule Hologram.Template.Builder do
     AST.for_code("[#{code}]")
   end
 
-  defp append_code(code_acc, code, last_tag_type) when last_tag_type in [:end_tag, :text] do
+  defp append_code(code_acc, code, last_tag_type)
+       when last_tag_type in [:end_tag, :expression, :text] do
     code_acc <> ", " <> code
   end
 
@@ -26,6 +27,15 @@ defmodule Hologram.Template.Builder do
 
   defp render_code({:end_tag, _tag_name}) do
     "]}"
+  end
+
+  defp render_code({:expression, str}) do
+    expr =
+      str
+      |> String.slice(1, String.length(str) - 2)
+      |> String.trim()
+
+    "{:expression, #{expr}}"
   end
 
   defp render_code({:start_tag, {tag_name, attributes}}) do
