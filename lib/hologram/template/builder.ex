@@ -4,7 +4,12 @@ defmodule Hologram.Template.Builder do
   def build(tags) do
     {code, _last_tag} =
       tags
-      |> Enum.reduce({"", nil}, &render_tag/2)
+      |> Enum.reduce({"", nil}, fn tag, {code_acc, last_tag} ->
+        tag_code = render_code(tag)
+        new_code_acc = append_code(code_acc, tag_code, last_tag)
+
+        {new_code_acc, :text}
+      end)
 
     AST.for_code("[#{code}]")
   end
@@ -17,10 +22,7 @@ defmodule Hologram.Template.Builder do
     code_acc <> ", " <> code
   end
 
-  defp render_tag({:text, str}, {code_acc, last_tag}) do
-    tag_code = "{:text, \"#{str}\"}"
-    new_code_acc = append_code(code_acc, tag_code, last_tag)
-
-    {new_code_acc, :text}
+  defp render_code({:text, str}) do
+    "{:text, \"#{str}\"}"
   end
 end
