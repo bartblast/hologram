@@ -15,8 +15,7 @@ defmodule Hologram.Template.Builder do
   @spec build(list(Parser.parsed_tag())) :: AST.t()
   def build(tags) do
     {code, _last_tag_type} =
-      tags
-      |> Enum.reduce({"", nil}, fn tag, {code_acc, last_tag_type} ->
+      Enum.reduce(tags, {"", nil}, fn tag, {code_acc, last_tag_type} ->
         current_tag_type = elem(tag, 0)
         current_tag_code = render_code(tag)
         new_code_acc = append_code(code_acc, current_tag_code, last_tag_type)

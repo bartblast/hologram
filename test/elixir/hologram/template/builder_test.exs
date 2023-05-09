@@ -7,11 +7,12 @@ defmodule Hologram.Template.BuilderTest do
   end
 
   describe "element node & component node" do
-    [
+    nodes = [
       {:element, "attribute", "div"},
       {:component, "property", "Aaa.Bbb"}
     ]
-    |> Enum.each(fn {tag_type, attr_or_prop, tag_name} ->
+
+    Enum.each(nodes, fn {tag_type, attr_or_prop, tag_name} ->
       test "#{tag_type} node without #{attr_or_prop}(s) or children" do
         tag_name = unquote(tag_name)
         tags = [{:start_tag, {tag_name, []}}, {:end_tag, tag_name}]
@@ -152,11 +153,12 @@ defmodule Hologram.Template.BuilderTest do
       assert build(tags) == [text: "abc", expression: {:+, [line: 1], [1, 2]}, text: "xyz"]
     end
 
-    [
+    nodes = [
       {:element, "attribute", "div"},
       {:component, "property", "Aaa.Bbb"}
     ]
-    |> Enum.each(fn {tag_type, attr_or_prop, tag_name} ->
+
+    Enum.each(nodes, fn {tag_type, attr_or_prop, tag_name} ->
       test "in #{tag_type} #{attr_or_prop} value, with one part only" do
         tag_name = unquote(tag_name)
 
