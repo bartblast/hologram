@@ -140,6 +140,22 @@ defmodule Hologram.Template.TokenizerTest do
              ]
     end
 
+    test "if else" do
+      assert tokenize("{%else}.\\{%else}.{%else\\}") == [
+               symbol: "{%else}",
+               string: ".",
+               symbol: "\\{",
+               symbol: "%",
+               string: "else",
+               symbol: "}",
+               string: ".",
+               symbol: "{",
+               symbol: "%",
+               string: "else",
+               symbol: "\\}"
+             ]
+    end
+
     test "if end" do
       assert tokenize("{/if}.\\{/if}.{/if\\}") == [
                symbol: "{/if}",

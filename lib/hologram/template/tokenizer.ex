@@ -120,6 +120,10 @@ defmodule Hologram.Template.Tokenizer do
     [{:symbol, "\\{"} | tokenize(rest)]
   end
 
+  def tokenize("{%else}" <> rest) do
+    [{:symbol, "{%else}"} | tokenize(rest)]
+  end
+
   def tokenize("{%for" <> rest) do
     [{:symbol, "{%for"} | tokenize(rest)]
   end
