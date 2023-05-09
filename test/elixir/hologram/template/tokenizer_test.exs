@@ -95,8 +95,8 @@ defmodule Hologram.Template.TokenizerTest do
     end
   end
 
-  describe "blocks" do
-    test "for start" do
+  describe "for block" do
+    test "block start" do
       assert tokenize("{%for.\\{%for") == [
                symbol: "{%for",
                string: ".",
@@ -106,7 +106,7 @@ defmodule Hologram.Template.TokenizerTest do
              ]
     end
 
-    test "for end" do
+    test "block end" do
       assert tokenize("{/for}.\\{/for}.{/for\\}") == [
                symbol: "{/for}",
                string: ".",
@@ -122,15 +122,17 @@ defmodule Hologram.Template.TokenizerTest do
              ]
     end
 
-    test "hash before for end" do
+    test "hash before block end" do
       assert tokenize("\#{/for}") == [{:symbol, "#"}, {:symbol, "{/for}"}]
     end
 
-    test "dollar sign before for end" do
+    test "dollar sign before block end" do
       assert tokenize("${/for}") == [{:symbol, "$"}, {:symbol, "{/for}"}]
     end
+  end
 
-    test "if start" do
+  describe "if block" do
+    test "block start" do
       assert tokenize("{%if.\\{%if") == [
                symbol: "{%if",
                string: ".",
@@ -140,7 +142,7 @@ defmodule Hologram.Template.TokenizerTest do
              ]
     end
 
-    test "if else" do
+    test "else subblock" do
       assert tokenize("{%else}.\\{%else}.{%else\\}") == [
                symbol: "{%else}",
                string: ".",
@@ -156,7 +158,7 @@ defmodule Hologram.Template.TokenizerTest do
              ]
     end
 
-    test "if end" do
+    test "block end" do
       assert tokenize("{/if}.\\{/if}.{/if\\}") == [
                symbol: "{/if}",
                string: ".",
@@ -172,15 +174,17 @@ defmodule Hologram.Template.TokenizerTest do
              ]
     end
 
-    test "hash before if end" do
+    test "hash before block end" do
       assert tokenize("\#{/if}") == [{:symbol, "#"}, {:symbol, "{/if}"}]
     end
 
-    test "dollar sign before if end" do
+    test "dollar sign before block end" do
       assert tokenize("${/if}") == [{:symbol, "$"}, {:symbol, "{/if}"}]
     end
+  end
 
-    test "raw start" do
+  describe "raw block" do
+    test "block start" do
       assert tokenize("{%raw}.\\{%raw}.{%raw\\}") == [
                symbol: "{%raw}",
                string: ".",
@@ -196,7 +200,7 @@ defmodule Hologram.Template.TokenizerTest do
              ]
     end
 
-    test "raw end" do
+    test "block end" do
       assert tokenize("{/raw}.\\{/raw}.{/raw\\}") == [
                symbol: "{/raw}",
                string: ".",
@@ -212,11 +216,11 @@ defmodule Hologram.Template.TokenizerTest do
              ]
     end
 
-    test "hash before raw end" do
+    test "hash before block end" do
       assert tokenize("\#{/raw}") == [{:symbol, "#"}, {:symbol, "{/raw}"}]
     end
 
-    test "dollar sign before raw end" do
+    test "dollar sign before block end" do
       assert tokenize("${/raw}") == [{:symbol, "$"}, {:symbol, "{/raw}"}]
     end
   end
