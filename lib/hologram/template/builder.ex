@@ -1,7 +1,18 @@
 defmodule Hologram.Template.Builder do
   alias Hologram.Compiler.AST
   alias Hologram.Template.Helpers
+  alias Hologram.Template.Parser
 
+  @doc """
+  Given template's parsed tags generates Elixir code that builds the corresponding DOM tree, and returns its AST.
+
+  ## Examples
+
+      iex> tags = [{:start_tag, {"div, []}}, {:text, "abc"}, {:end_tag, "div"}]
+      iex> build(tags)
+      [{:{}, [line: 1], [:element, "div", [], [{:text, "abc"}]]}]
+  """
+  @spec build(list(Parser.parsed_tag())) :: AST.t()
   def build(tags) do
     {code, _last_tag_type} =
       tags
