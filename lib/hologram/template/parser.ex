@@ -635,22 +635,22 @@ defmodule Hologram.Template.Parser do
   defp add_block_start(context) do
     expression = encode_tokens(context.token_buffer)
     new_tag = {:block_start, {context.block_name, expression}}
-    %{context | processed_tags: [new_tag | context.processed_tags]}
+    add_processed_tag(context, new_tag)
   end
 
   defp add_block_end(context, block_name) do
     new_tag = {:block_end, block_name}
-    %{context | processed_tags: [new_tag | context.processed_tags]}
+    add_processed_tag(context, new_tag)
   end
 
   defp add_end_tag(context) do
     new_tag = {:end_tag, context.tag_name}
-    %{context | processed_tags: [new_tag | context.processed_tags]}
+    add_processed_tag(context, new_tag)
   end
 
-  defp add_expression_tag(%{token_buffer: token_buffer, processed_tags: processed_tags} = context) do
-    new_processed_tags = [{:expression, encode_tokens(token_buffer)} | processed_tags]
-    %{context | processed_tags: new_processed_tags}
+  defp add_expression_tag(%{token_buffer: token_buffer} = context) do
+    new_tag = {:expression, encode_tokens(token_buffer)}
+    add_processed_tag(context, new_tag)
   end
 
   defp add_processed_tag(%{processed_tags: processed_tags} = context, tag) do
@@ -664,13 +664,13 @@ defmodule Hologram.Template.Parser do
   defp add_self_closing_tag(context) do
     attributes = Enum.reverse(context.attributes)
     new_tag = {:self_closing_tag, {context.tag_name, attributes}}
-    %{context | processed_tags: [new_tag | context.processed_tags]}
+    add_processed_tag(context, new_tag)
   end
 
   defp add_start_tag(context) do
     attributes = Enum.reverse(context.attributes)
     new_tag = {:start_tag, {context.tag_name, attributes}}
-    %{context | processed_tags: [new_tag | context.processed_tags]}
+    add_processed_tag(context, new_tag)
   end
 
   defp buffer_token(%{token_buffer: token_buffer} = context, token) do
@@ -721,10 +721,10 @@ defmodule Hologram.Template.Parser do
     Enum.map_join(tokens, "", fn {_type, value} -> value end)
   end
 
-  defp maybe_add_text_tag(%{token_buffer: token_buffer, processed_tags: processed_tags} = context) do
+  defp maybe_add_text_tag(%{token_buffer: token_buffer} = context) do
     if Enum.any?(token_buffer) do
-      new_processed_tags = [{:text, encode_tokens(token_buffer)} | processed_tags]
-      %{context | processed_tags: new_processed_tags}
+      text_tag = {:text, encode_tokens(token_buffer)}
+      add_processed_tag(context, text_tag)
     else
       context
     end
