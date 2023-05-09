@@ -24,8 +24,13 @@ defmodule Hologram.Template.Parser do
   """
 
   @type parsed_tag ::
-          {:block_end | :block_start | :end_tag | :expression | :self_closing_tag,
-           :start_tag | :text, any}
+          {:block_end
+           | :block_start
+           | :end_tag
+           | :expression
+           | :self_closing_tag
+           | :start_tag
+           | :text, any}
 
   @type status ::
           :attribute_assignment
@@ -486,6 +491,15 @@ defmodule Hologram.Template.Parser do
     |> parse(:text, rest)
   end
 
+  def parse(%{raw?: false} = context, :text, [{:symbol, "{%else}"} = token | rest]) do
+    context
+    |> maybe_add_text_tag()
+    |> add_processed_token(token)
+    |> add_processed_tag({:block_start, "else"})
+    |> reset_token_buffer()
+    |> parse(:text, rest)
+  end
+
   def parse(%{raw?: false} = context, :text, [{:symbol, "{%for"} = token | rest]) do
     parse_block_start(context, "for", token, rest)
   end
@@ -637,6 +651,10 @@ defmodule Hologram.Template.Parser do
   defp add_expression_tag(%{token_buffer: token_buffer, processed_tags: processed_tags} = context) do
     new_processed_tags = [{:expression, encode_tokens(token_buffer)} | processed_tags]
     %{context | processed_tags: new_processed_tags}
+  end
+
+  defp add_processed_tag(%{processed_tags: processed_tags} = context, tag) do
+    %{context | processed_tags: [tag | processed_tags]}
   end
 
   defp add_processed_token(%{processed_tokens: processed_tokens} = context, token) do

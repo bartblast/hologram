@@ -234,6 +234,10 @@ defmodule Hologram.Template.ParserTest do
       assert parse("{%if true}") == [block_start: {"if", "{ true}"}]
     end
 
+    test "else subblock" do
+      assert parse("{%else}") == [block_start: "else"]
+    end
+
     test "end" do
       assert parse("{/if}") == [block_end: "if"]
     end
@@ -317,6 +321,7 @@ defmodule Hologram.Template.ParserTest do
 
   describe "raw block with nested tag using curly brackets" do
     tags = [
+      {"else subblock", "{%else}"},
       {"expression", "{@abc}"},
       {"for block start", "{%for item &lt;- @items}"},
       {"for block end", "{/for}"},
@@ -374,6 +379,7 @@ defmodule Hologram.Template.ParserTest do
       {"element end tag", "</div>", end_tag: "div"},
       {"component start tag", "<Aaa.Bbb>", start_tag: {"Aaa.Bbb", []}},
       {"component end tag", "</Aaa.Bbb>", end_tag: "Aaa.Bbb"},
+      {"else subblock", "{%else}", block_start: "else"},
       {"expression", "{@abc}", expression: "{@abc}"},
       {"for block start", "{%for item <- @items}", block_start: {"for", "{ item <- @items}"}},
       {"for block end", "{/for}", block_end: "for"},
@@ -404,6 +410,7 @@ defmodule Hologram.Template.ParserTest do
       {"element end tag", "</div>", end_tag: "div"},
       {"component start tag", "<Aaa.Bbb>", start_tag: {"Aaa.Bbb", []}},
       {"component end tag", "</Aaa.Bbb>", end_tag: "Aaa.Bbb"},
+      {"else subblock", "{%else}", block_start: "else"},
       {"expression", "{@abc}", expression: "{@abc}"},
       {"for block start", "{%for item <- @items}", block_start: {"for", "{ item <- @items}"}},
       {"for block end", "{/for}", block_end: "for"},
@@ -457,6 +464,16 @@ defmodule Hologram.Template.ParserTest do
         assert parse(markup) == [
                  block_start: {"for", "{ #{unquote(char)}}"},
                  block_end: "for"
+               ]
+      end
+
+      test "'#{char}' character in else subblock content" do
+        markup = "{%else}#{unquote(char)}{/if}"
+
+        assert parse(markup) == [
+                 block_start: "else",
+                 text: "#{unquote(char)}",
+                 block_end: "if"
                ]
       end
 
@@ -522,6 +539,16 @@ defmodule Hologram.Template.ParserTest do
                  {:text, "abc"},
                  unquote(expected),
                  {:text, "xyz"}
+               ]
+      end
+
+      test "#{name} inside else subblock" do
+        markup = "{%else}#{unquote(markup)}{/if}"
+
+        assert parse(markup) == [
+                 {:block_start, "else"},
+                 unquote(expected),
+                 {:block_end, "if"}
                ]
       end
 
@@ -611,6 +638,16 @@ defmodule Hologram.Template.ParserTest do
         assert parse(markup) == [expression: markup]
       end
     end)
+
+    test "else subblock in double quotes" do
+      markup = "{\"{%else}\"}"
+      assert parse(markup) == [expression: markup]
+    end
+
+    test "else subblock in single quotes" do
+      markup = "{'{%else}'}"
+      assert parse(markup) == [expression: markup]
+    end
   end
 
   describe "blocks in quoting inside script" do
@@ -653,6 +690,30 @@ defmodule Hologram.Template.ParserTest do
                ]
       end
     end)
+
+    test "else subblock in double quotes" do
+      markup = "<script>\"{%else}\"</script>"
+
+      assert parse(markup) == [
+               start_tag: {"script", []},
+               text: "\"",
+               block_start: "else",
+               text: "\"",
+               end_tag: "script"
+             ]
+    end
+
+    test "else subblock in single quotes" do
+      markup = "<script>'{%else}'</script>"
+
+      assert parse(markup) == [
+               start_tag: {"script", []},
+               text: "'",
+               block_start: "else",
+               text: "'",
+               end_tag: "script"
+             ]
+    end
   end
 
   describe "expression in quoting inside script" do
@@ -1072,6 +1133,14 @@ defmodule Hologram.Template.ParserTest do
       assert parse("<script>{@abc}</script>") == [
                start_tag: {"script", []},
                expression: "{@abc}",
+               end_tag: "script"
+             ]
+    end
+
+    test "else subblock" do
+      assert parse("<script>{%else}</script>") == [
+               start_tag: {"script", []},
+               block_start: "else",
                end_tag: "script"
              ]
     end
