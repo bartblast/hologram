@@ -244,4 +244,81 @@ defmodule Hologram.Template.BuilderTest do
       end
     end)
   end
+
+  describe "if block" do
+    test "with one child" do
+      tags = [{:block_start, {"if", "{ @xyz == 123}"}}, {:text, "abc"}, {:block_end, "if"}]
+
+      assert build(tags) == [
+               {:if, [line: 1],
+                [
+                  {:==, [line: 1], [{:@, [line: 1], [{:xyz, [line: 1], nil}]}, 123]},
+                  [do: {:__block__, [], [[{:text, "abc"}]]}]
+                ]}
+             ]
+    end
+
+    test "with multiple children" do
+      tags = [
+        {:block_start, {"if", "{ @xyz == 123}"}},
+        {:text, "abc"},
+        {:start_tag, {"div", []}},
+        {:end_tag, "div"},
+        {:block_end, "if"}
+      ]
+
+      assert build(tags) == [
+               {:if, [line: 1],
+                [
+                  {:==, [line: 1], [{:@, [line: 1], [{:xyz, [line: 1], nil}]}, 123]},
+                  [
+                    do:
+                      {:__block__, [],
+                       [[{:text, "abc"}, {:{}, [line: 1], [:element, "div", [], []]}]]}
+                  ]
+                ]}
+             ]
+    end
+
+    test "with else subblock having single child" do
+      tags = [
+        {:block_start, {"if", "{ @xyz == 123}"}},
+        {:text, "aaa"},
+        {:block_start, "else"},
+        {:text, "bbb"},
+        {:block_end, "if"}
+      ]
+
+      assert build(tags) == [
+               {:if, [line: 1],
+                [
+                  {:==, [line: 1], [{:@, [line: 1], [{:xyz, [line: 1], nil}]}, 123]},
+                  [do: [{:text, "aaa"}], else: [{:text, "bbb"}]]
+                ]}
+             ]
+    end
+
+    test "with else subblock having multiple children" do
+      tags = [
+        {:block_start, {"if", "{ @xyz == 123}"}},
+        {:text, "aaa"},
+        {:block_start, "else"},
+        {:text, "bbb"},
+        {:start_tag, {"div", []}},
+        {:end_tag, "div"},
+        {:block_end, "if"}
+      ]
+
+      assert build(tags) == [
+               {:if, [line: 1],
+                [
+                  {:==, [line: 1], [{:@, [line: 1], [{:xyz, [line: 1], nil}]}, 123]},
+                  [
+                    do: [{:text, "aaa"}],
+                    else: [{:text, "bbb"}, {:{}, [line: 1], [:element, "div", [], []]}]
+                  ]
+                ]}
+             ]
+    end
+  end
 end

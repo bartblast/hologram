@@ -35,17 +35,30 @@ defmodule Hologram.Template.Builder do
     code_acc <> code
   end
 
+  defp extract_expression_content(expr_str) do
+    expr_str
+    |> String.slice(1, String.length(expr_str) - 2)
+    |> String.trim()
+  end
+
+  defp render_code({:block_start, "else"}) do
+    "] else ["
+  end
+
+  defp render_code({:block_start, {"if", expr_str}}) do
+    "(if #{extract_expression_content(expr_str)} do ["
+  end
+
+  defp render_code({:block_end, "if"}) do
+    "] end)"
+  end
+
   defp render_code({:end_tag, _tag_name}) do
     "]}"
   end
 
-  defp render_code({:expression, str}) do
-    expr =
-      str
-      |> String.slice(1, String.length(str) - 2)
-      |> String.trim()
-
-    "{:expression, #{expr}}"
+  defp render_code({:expression, expr_str}) do
+    "{:expression, #{extract_expression_content(expr_str)}}"
   end
 
   defp render_code({:start_tag, {tag_name, attributes}}) do
