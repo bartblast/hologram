@@ -1,23 +1,23 @@
-defmodule Hologram.Template.Parser do
-  alias Hologram.Template.DOMTreeBuilder
-  alias Hologram.Template.TagAssembler
+defmodule Hologram.Template.Builder do
+  alias Hologram.Template.Parser
   alias Hologram.Template.Tokenizer
+  alias Hologram.Template.VDOMTree
 
-  def parse!(markup) do
+  def build(markup) do
     markup
     |> remove_doctype()
     |> remove_comments()
     |> String.trim()
     |> Tokenizer.tokenize()
-    |> TagAssembler.assemble()
-    |> DOMTreeBuilder.build()
+    |> Parser.parse()
+    |> VDOMTree.build()
   end
 
-  def remove_comments(markup) do
+  defp remove_comments(markup) do
     Regex.replace(~r/<!\-\-.*\-\->/sU, markup, "")
   end
 
-  def remove_doctype(markup) do
+  defp remove_doctype(markup) do
     regex = ~r/^\s*<!DOCTYPE[^>]*>\s*/i
     String.replace(markup, regex, "")
   end
