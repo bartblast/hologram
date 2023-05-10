@@ -1,10 +1,10 @@
-defmodule Hologram.Template.Builder do
+defmodule Hologram.Template.VDOMTree do
   alias Hologram.Compiler.AST
   alias Hologram.Template.Helpers
   alias Hologram.Template.Parser
 
   @doc """
-  Given template's parsed tags generates Elixir code that builds the corresponding DOM tree, and returns its AST.
+  Builds the AST of Elixir code that creates the VDOM tree representation for the given template's parsed tags list.
 
   ## Examples
 

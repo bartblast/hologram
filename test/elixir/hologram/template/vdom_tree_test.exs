@@ -1,6 +1,6 @@
-defmodule Hologram.Template.BuilderTest do
+defmodule Hologram.Template.VDOMTreeTest do
   use Hologram.Test.BasicCase, async: true
-  import Hologram.Template.Builder
+  import Hologram.Template.VDOMTree
 
   test "text node" do
     assert build([{:text, "abc"}]) == [{:text, "abc"}]
