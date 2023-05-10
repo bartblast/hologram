@@ -150,7 +150,12 @@ defmodule Hologram.Template.BuilderTest do
   describe "expression node" do
     test "in text" do
       tags = [{:text, "abc"}, {:expression, "{1 + 2}"}, {:text, "xyz"}]
-      assert build(tags) == [text: "abc", expression: {:+, [line: 1], [1, 2]}, text: "xyz"]
+
+      assert build(tags) == [
+               text: "abc",
+               expression: {:{}, [line: 1], [{:+, [line: 1], [1, 2]}]},
+               text: "xyz"
+             ]
     end
 
     nodes = [
@@ -172,7 +177,7 @@ defmodule Hologram.Template.BuilderTest do
                   [
                     unquote(tag_type),
                     tag_name,
-                    [{"my_key", [expression: {:+, [line: 1], [1, 2]}]}],
+                    [{"my_key", [expression: {:{}, [line: 1], [{:+, [line: 1], [1, 2]}]}]}],
                     []
                   ]}
                ]
@@ -191,7 +196,13 @@ defmodule Hologram.Template.BuilderTest do
                   [
                     unquote(tag_type),
                     tag_name,
-                    [{"my_key", [text: "my_value", expression: {:+, [line: 1], [1, 2]}]}],
+                    [
+                      {"my_key",
+                       [
+                         text: "my_value",
+                         expression: {:{}, [line: 1], [{:+, [line: 1], [1, 2]}]}
+                       ]}
+                    ],
                     []
                   ]}
                ]
@@ -210,7 +221,13 @@ defmodule Hologram.Template.BuilderTest do
                   [
                     unquote(tag_type),
                     tag_name,
-                    [{"my_key", [expression: {:+, [line: 1], [1, 2]}, text: "my_value"]}],
+                    [
+                      {"my_key",
+                       [
+                         expression: {:{}, [line: 1], [{:+, [line: 1], [1, 2]}]},
+                         text: "my_value"
+                       ]}
+                    ],
                     []
                   ]}
                ]
@@ -233,9 +250,17 @@ defmodule Hologram.Template.BuilderTest do
                     [
                       {"my_key",
                        [
-                         expression: {:+, [line: 1], [1, 2]},
+                         expression: {:{}, [line: 1], [{:+, [line: 1], [1, 2]}]},
                          expression:
-                           {:*, [line: 1], [{:@, [line: 1], [{:my_var, [line: 1], nil}]}, 9]}
+                           {:{}, [line: 1],
+                            [
+                              {:*, [line: 1],
+                               [
+                                 {{:., [line: 1], [{:data, [line: 1], nil}, :my_var]},
+                                  [no_parens: true, line: 1], []},
+                                 9
+                               ]}
+                            ]}
                        ]}
                     ],
                     []
@@ -253,8 +278,12 @@ defmodule Hologram.Template.BuilderTest do
                {:for, [line: 1],
                 [
                   {:<-, [line: 1],
-                   [{:item, [line: 1], nil}, {:@, [line: 1], [{:items, [line: 1], nil}]}]},
-                  [do: {:__block__, [], [[{:text, "abc"}]]}]
+                   [
+                     {:item, [line: 1], nil},
+                     {{:., [line: 1], [{:data, [line: 1], nil}, :items]},
+                      [no_parens: true, line: 1], []}
+                   ]},
+                  [do: {:__block__, [], [[text: "abc"]]}]
                 ]}
              ]
     end
@@ -272,7 +301,11 @@ defmodule Hologram.Template.BuilderTest do
                {:for, [line: 1],
                 [
                   {:<-, [line: 1],
-                   [{:item, [line: 1], nil}, {:@, [line: 1], [{:items, [line: 1], nil}]}]},
+                   [
+                     {:item, [line: 1], nil},
+                     {{:., [line: 1], [{:data, [line: 1], nil}, :items]},
+                      [no_parens: true, line: 1], []}
+                   ]},
                   [
                     do:
                       {:__block__, [],
@@ -290,8 +323,13 @@ defmodule Hologram.Template.BuilderTest do
       assert build(tags) == [
                {:if, [line: 1],
                 [
-                  {:==, [line: 1], [{:@, [line: 1], [{:xyz, [line: 1], nil}]}, 123]},
-                  [do: {:__block__, [], [[{:text, "abc"}]]}]
+                  {:==, [line: 1],
+                   [
+                     {{:., [line: 1], [{:data, [line: 1], nil}, :xyz]},
+                      [no_parens: true, line: 1], []},
+                     123
+                   ]},
+                  [do: {:__block__, [], [[text: "abc"]]}]
                 ]}
              ]
     end
@@ -308,7 +346,12 @@ defmodule Hologram.Template.BuilderTest do
       assert build(tags) == [
                {:if, [line: 1],
                 [
-                  {:==, [line: 1], [{:@, [line: 1], [{:xyz, [line: 1], nil}]}, 123]},
+                  {:==, [line: 1],
+                   [
+                     {{:., [line: 1], [{:data, [line: 1], nil}, :xyz]},
+                      [no_parens: true, line: 1], []},
+                     123
+                   ]},
                   [
                     do:
                       {:__block__, [],
@@ -330,7 +373,12 @@ defmodule Hologram.Template.BuilderTest do
       assert build(tags) == [
                {:if, [line: 1],
                 [
-                  {:==, [line: 1], [{:@, [line: 1], [{:xyz, [line: 1], nil}]}, 123]},
+                  {:==, [line: 1],
+                   [
+                     {{:., [line: 1], [{:data, [line: 1], nil}, :xyz]},
+                      [no_parens: true, line: 1], []},
+                     123
+                   ]},
                   [do: [{:text, "aaa"}], else: [{:text, "bbb"}]]
                 ]}
              ]
@@ -350,7 +398,12 @@ defmodule Hologram.Template.BuilderTest do
       assert build(tags) == [
                {:if, [line: 1],
                 [
-                  {:==, [line: 1], [{:@, [line: 1], [{:xyz, [line: 1], nil}]}, 123]},
+                  {:==, [line: 1],
+                   [
+                     {{:., [line: 1], [{:data, [line: 1], nil}, :xyz]},
+                      [no_parens: true, line: 1], []},
+                     123
+                   ]},
                   [
                     do: [{:text, "aaa"}],
                     else: [{:text, "bbb"}, {:{}, [line: 1], [:element, "div", [], []]}]
