@@ -23,7 +23,9 @@ defmodule Hologram.Template.Builder do
         {new_code_acc, current_tag_type}
       end)
 
-    AST.for_code("[#{code}]")
+    "[#{code}]"
+    |> AST.for_code()
+    |> substitute_module_attributes()
   end
 
   defp append_code(code_acc, code, last_tag_type)
@@ -66,7 +68,7 @@ defmodule Hologram.Template.Builder do
   end
 
   defp render_code({:expression, expr_str}) do
-    "{:expression, #{extract_expression_content(expr_str)}}"
+    "{:expression, #{expr_str}}"
   end
 
   defp render_code({:start_tag, {tag_name, attributes}}) do
@@ -83,4 +85,21 @@ defmodule Hologram.Template.Builder do
   defp render_code({:text, str}) do
     "{:text, \"#{str}\"}"
   end
+
+  defp substitute_module_attributes({:@, meta_1, [{name, _meta_2, _args}]}) do
+    {{:., meta_1, [{:data, meta_1, nil}, name]}, [{:no_parens, true} | meta_1], []}
+  end
+
+  defp substitute_module_attributes(ast) when is_list(ast) do
+    Enum.map(ast, &substitute_module_attributes/1)
+  end
+
+  defp substitute_module_attributes(ast) when is_tuple(ast) do
+    ast
+    |> Tuple.to_list()
+    |> Enum.map(&substitute_module_attributes/1)
+    |> List.to_tuple()
+  end
+
+  defp substitute_module_attributes(ast), do: ast
 end

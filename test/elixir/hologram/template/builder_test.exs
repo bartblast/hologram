@@ -359,4 +359,166 @@ defmodule Hologram.Template.BuilderTest do
              ]
     end
   end
+
+  describe "substitute module attributes" do
+    test "non-nested list" do
+      tags = [{:expression, "{[1, @a, 2, @b]}"}]
+
+      assert build(tags) == [
+               {
+                 :expression,
+                 {:{}, [line: 1],
+                  [
+                    [
+                      1,
+                      {{:., [line: 1], [{:data, [line: 1], nil}, :a]}, [no_parens: true, line: 1],
+                       []},
+                      2,
+                      {{:., [line: 1], [{:data, [line: 1], nil}, :b]}, [no_parens: true, line: 1],
+                       []}
+                    ]
+                  ]}
+               }
+             ]
+    end
+
+    test "nested list" do
+      tags = [{:expression, "{[1, @a, [2, @b, 3, @c]]}"}]
+
+      assert build(tags) == [
+               {
+                 :expression,
+                 {:{}, [line: 1],
+                  [
+                    [
+                      1,
+                      {{:., [line: 1], [{:data, [line: 1], nil}, :a]}, [no_parens: true, line: 1],
+                       []},
+                      [
+                        2,
+                        {{:., [line: 1], [{:data, [line: 1], nil}, :b]},
+                         [no_parens: true, line: 1], []},
+                        3,
+                        {{:., [line: 1], [{:data, [line: 1], nil}, :c]},
+                         [no_parens: true, line: 1], []}
+                      ]
+                    ]
+                  ]}
+               }
+             ]
+    end
+
+    test "non-nested 2-element tuple" do
+      tags = [{:expression, "{{@a, @b}}"}]
+
+      assert build(tags) == [
+               {:expression,
+                {:{}, [line: 1],
+                 [
+                   {{{:., [line: 1], [{:data, [line: 1], nil}, :a]}, [no_parens: true, line: 1],
+                     []},
+                    {{:., [line: 1], [{:data, [line: 1], nil}, :b]}, [no_parens: true, line: 1],
+                     []}}
+                 ]}}
+             ]
+    end
+
+    test "nested 2-element tuple" do
+      tags = [{:expression, "{{1, {@a, @b}}}"}]
+
+      assert build(tags) == [
+               {:expression,
+                {:{}, [line: 1],
+                 [
+                   {1,
+                    {{{:., [line: 1], [{:data, [line: 1], nil}, :a]}, [no_parens: true, line: 1],
+                      []},
+                     {{:., [line: 1], [{:data, [line: 1], nil}, :b]}, [no_parens: true, line: 1],
+                      []}}}
+                 ]}}
+             ]
+    end
+
+    test "non-nested 4-element tuple" do
+      tags = [{:expression, "{{1, @a, 2, @b}}"}]
+
+      assert build(tags) == [
+               {:expression,
+                {:{}, [line: 1],
+                 [
+                   {:{}, [line: 1],
+                    [
+                      1,
+                      {{:., [line: 1], [{:data, [line: 1], nil}, :a]}, [no_parens: true, line: 1],
+                       []},
+                      2,
+                      {{:., [line: 1], [{:data, [line: 1], nil}, :b]}, [no_parens: true, line: 1],
+                       []}
+                    ]}
+                 ]}}
+             ]
+    end
+
+    test "nested 4-element tuple" do
+      tags = [{:expression, "{{1, @a, {2, @b, 3, @c}, 4}}"}]
+
+      assert build(tags) == [
+               {:expression,
+                {:{}, [line: 1],
+                 [
+                   {:{}, [line: 1],
+                    [
+                      1,
+                      {{:., [line: 1], [{:data, [line: 1], nil}, :a]}, [no_parens: true, line: 1],
+                       []},
+                      {:{}, [line: 1],
+                       [
+                         2,
+                         {{:., [line: 1], [{:data, [line: 1], nil}, :b]},
+                          [no_parens: true, line: 1], []},
+                         3,
+                         {{:., [line: 1], [{:data, [line: 1], nil}, :c]},
+                          [no_parens: true, line: 1], []}
+                       ]},
+                      4
+                    ]}
+                 ]}}
+             ]
+    end
+  end
+
+  test "nested AST" do
+    tags = [{:expression, "{(fn x -> [x | @acc] end).(@value)}"}]
+
+    assert build(tags) == [
+             {
+               :expression,
+               {:{}, [line: 1],
+                [
+                  {{:., [line: 1],
+                    [
+                      {:fn, [line: 1],
+                       [
+                         {:->, [line: 1],
+                          [
+                            [{:x, [line: 1], nil}],
+                            [
+                              {:|, [line: 1],
+                               [
+                                 {:x, [line: 1], nil},
+                                 {{:., [line: 1], [{:data, [line: 1], nil}, :acc]},
+                                  [no_parens: true, line: 1], []}
+                               ]}
+                            ]
+                          ]}
+                       ]}
+                    ]}, [line: 1],
+                   [
+                     {{:., [line: 1], [{:data, [line: 1], nil}, :value]},
+                      [no_parens: true, line: 1], []}
+                   ]}
+                ]}
+             }
+           ]
+  end
 end
