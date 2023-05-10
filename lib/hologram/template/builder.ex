@@ -45,6 +45,14 @@ defmodule Hologram.Template.Builder do
     "] else ["
   end
 
+  defp render_code({:block_start, {"for", expr_str}}) do
+    "(for #{extract_expression_content(expr_str)} do ["
+  end
+
+  defp render_code({:block_end, "for"}) do
+    "] end)"
+  end
+
   defp render_code({:block_start, {"if", expr_str}}) do
     "(if #{extract_expression_content(expr_str)} do ["
   end

@@ -245,6 +245,44 @@ defmodule Hologram.Template.BuilderTest do
     end)
   end
 
+  describe "for block" do
+    test "with one child" do
+      tags = [{:block_start, {"for", "{ item <- @items}"}}, {:text, "abc"}, {:block_end, "for"}]
+
+      assert build(tags) == [
+               {:for, [line: 1],
+                [
+                  {:<-, [line: 1],
+                   [{:item, [line: 1], nil}, {:@, [line: 1], [{:items, [line: 1], nil}]}]},
+                  [do: {:__block__, [], [[{:text, "abc"}]]}]
+                ]}
+             ]
+    end
+
+    test "with multiple children" do
+      tags = [
+        {:block_start, {"for", "{ item <- @items}"}},
+        {:text, "abc"},
+        {:start_tag, {"div", []}},
+        {:end_tag, "div"},
+        {:block_end, "for"}
+      ]
+
+      assert build(tags) == [
+               {:for, [line: 1],
+                [
+                  {:<-, [line: 1],
+                   [{:item, [line: 1], nil}, {:@, [line: 1], [{:items, [line: 1], nil}]}]},
+                  [
+                    do:
+                      {:__block__, [],
+                       [[{:text, "abc"}, {:{}, [line: 1], [:element, "div", [], []]}]]}
+                  ]
+                ]}
+             ]
+    end
+  end
+
   describe "if block" do
     test "with one child" do
       tags = [{:block_start, {"if", "{ @xyz == 123}"}}, {:text, "abc"}, {:block_end, "if"}]
