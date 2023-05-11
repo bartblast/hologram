@@ -135,11 +135,6 @@ defmodule Hologram.Commons.EncoderTest do
     assert result == "~atom[test]"
   end
 
-  test "encode_primitive_type/2" do
-    result = Encoder.encode_primitive_type(:atom, "'test'")
-    assert result == "{ type: 'atom', value: 'test' }"
-  end
-
   test "encode_vars/3" do
     code = "fn x, %{a: y} -> 1 end"
     %{bindings: bindings} = ir(code)
