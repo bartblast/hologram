@@ -59,10 +59,6 @@ defmodule Hologram.Commons.Encoder do
     "~#{type}[#{value}]"
   end
 
-  def encode_primitive_type(type, value) do
-    "{ type: '#{type}', value: #{value} }"
-  end
-
   def encode_vars(bindings, context, opts) do
     bindings
     |> Enum.map(&JSEncoder.encode(&1, context, opts))
