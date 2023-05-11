@@ -3,6 +3,10 @@ defmodule Hologram.Compiler.EncoderTest do
   import Hologram.Compiler.Encoder
   alias Hologram.Compiler.IR
 
+  test "atom type" do
+    assert encode(%IR.AtomType{value: :"abc'xyz"}) == "{type: 'atom', value: 'abc\\'xyz'}"
+  end
+
   test "float type" do
     assert encode(%IR.FloatType{value: 1.23}) == "{type: 'float', value: 1.23}"
   end
