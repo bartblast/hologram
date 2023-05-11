@@ -144,6 +144,24 @@ defmodule Hologram.Template.VDOMTreeTest do
                   ]}
                ]
       end
+
+      test "#{tag_type} self-closing" do
+        tags = [
+          {:self_closing_tag,
+           {unquote(tag_name),
+            [{"my_key_1", [text: "my_value_1"]}, {"my_key_2", [text: "my_value_2"]}]}}
+        ]
+
+        assert build(tags) == [
+                 {:{}, [line: 1],
+                  [
+                    unquote(tag_type),
+                    unquote(tag_name),
+                    [{"my_key_1", [text: "my_value_1"]}, {"my_key_2", [text: "my_value_2"]}],
+                    []
+                  ]}
+               ]
+      end
     end)
   end
 

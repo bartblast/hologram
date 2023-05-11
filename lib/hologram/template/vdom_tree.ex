@@ -71,6 +71,10 @@ defmodule Hologram.Template.VDOMTree do
     "{:expression, #{expr_str}}"
   end
 
+  defp render_code({:self_closing_tag, {tag_name, attributes}}) do
+    render_code({:start_tag, {tag_name, attributes}}) <> render_code({:end_tag, tag_name})
+  end
+
   defp render_code({:start_tag, {tag_name, attributes}}) do
     tag_type = Helpers.tag_type(tag_name)
 
