@@ -11,7 +11,7 @@ defmodule Hologram.Template.VDOMTreeTest do
       {:element, "attribute", "div", "div"},
       {:component, "property", "Aaa.Bbb",
        quote do
-         {:__aliases__, [line: 1], [:Aaa, :Bbb]}
+         {:alias!, [line: 1], [{:__aliases__, [line: 1], [:Aaa, :Bbb]}]}
        end}
     ]
 
@@ -121,7 +121,12 @@ defmodule Hologram.Template.VDOMTreeTest do
                     [],
                     [
                       {:{}, [line: 1],
-                       [:component, {:__aliases__, [line: 1], [:Xxx, :Yyy]}, [], []]}
+                       [
+                         :component,
+                         {:alias!, [line: 1], [{:__aliases__, [line: 1], [:Xxx, :Yyy]}]},
+                         [],
+                         []
+                       ]}
                     ]
                   ]}
                ]
@@ -182,7 +187,7 @@ defmodule Hologram.Template.VDOMTreeTest do
       {:element, "attribute", "div", "div"},
       {:component, "property", "Aaa.Bbb",
        quote do
-         {:__aliases__, [line: 1], [:Aaa, :Bbb]}
+         {:alias!, [line: 1], [{:__aliases__, [line: 1], [:Aaa, :Bbb]}]}
        end}
     ]
 

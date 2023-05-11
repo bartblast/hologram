@@ -82,7 +82,7 @@ defmodule Hologram.Template.VDOMTree do
       if tag_type == :element do
         "\"#{tag_name}\""
       else
-        "#{tag_name}"
+        "alias!(#{tag_name})"
       end
 
     attributes_code =

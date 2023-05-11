@@ -18,5 +18,12 @@ defmodule Hologram.ComponentTest do
 
       assert template.(%{}) == [{:element, "div", [], [text: "abc"]}]
     end
+
+    test "alias" do
+      alias Aaa.Bbb.Ccc
+      template = ~H"<Ccc />"
+
+      assert template.(%{}) == [{:component, Aaa.Bbb.Ccc, [], []}]
+    end
   end
 end
