@@ -25,5 +25,15 @@ defmodule Hologram.ComponentTest do
 
       assert template.(%{}) == [{:component, Aaa.Bbb.Ccc, [], []}]
     end
+
+    test "whitespace trimming" do
+      template = ~H"""
+
+      <div>abc</div>
+
+      """
+
+      assert template.(%{}) == [{:element, "div", [], [text: "abc"]}]
+    end
   end
 end
