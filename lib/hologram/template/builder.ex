@@ -1,8 +1,18 @@
 defmodule Hologram.Template.Builder do
+  alias Hologram.Compiler.AST
   alias Hologram.Template.Parser
   alias Hologram.Template.Tokenizer
   alias Hologram.Template.VDOMTree
 
+  @doc """
+  Convertes the given template markup into the AST of Elixir code that creates the corresponding VDOM tree.
+
+  ## Examples
+
+      iex> build("<div>content</div>")
+      [{:{}, [line: 1], [:element, "div", [], [{:text, "content"}]]}]
+  """
+  @spec build(String.t()) :: AST.t()
   def build(markup) do
     markup
     |> remove_doctype()
