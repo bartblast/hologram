@@ -17,6 +17,16 @@ defmodule Hologram.Compiler.Encoder do
     encode_primitive_type(:atom, value, true)
   end
 
+  defp encode_as_string(value) do
+    value_str =
+      value
+      |> to_string()
+      |> String.replace("'", "\\'")
+      |> String.replace("\n", "\\n")
+
+    "'#{value_str}'"
+  end
+
   defp encode_primitive_type(type, value, as_string \\ false)
 
   defp encode_primitive_type(type, value, false) do
@@ -24,12 +34,7 @@ defmodule Hologram.Compiler.Encoder do
   end
 
   defp encode_primitive_type(type, value, true) do
-    value_str =
-      value
-      |> to_string()
-      |> String.replace("'", "\\'")
-      |> String.replace("\n", "\\n")
-
-    encode_primitive_type(type, "'#{value_str}'")
+    value_encoded_as_string = encode_as_string(value)
+    encode_primitive_type(type, value_encoded_as_string)
   end
 end
