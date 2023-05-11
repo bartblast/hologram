@@ -8,45 +8,48 @@ defmodule Hologram.Template.VDOMTreeTest do
 
   describe "element node & component node" do
     nodes = [
-      {:element, "attribute", "div"},
-      {:component, "property", "Aaa.Bbb"}
+      {:element, "attribute", "div", "div"},
+      {:component, "property", "Aaa.Bbb",
+       quote do
+         {:__aliases__, [line: 1], [:Aaa, :Bbb]}
+       end}
     ]
 
-    Enum.each(nodes, fn {tag_type, attr_or_prop, tag_name} ->
+    Enum.each(nodes, fn {tag_type, attr_or_prop, tag_name, expected} ->
       test "#{tag_type} node without #{attr_or_prop}(s) or children" do
-        tag_name = unquote(tag_name)
-        tags = [{:start_tag, {tag_name, []}}, {:end_tag, tag_name}]
+        tags = [{:start_tag, {unquote(tag_name), []}}, {:end_tag, unquote(tag_name)}]
 
         assert build(tags) == [
-                 {:{}, [line: 1], [unquote(tag_type), tag_name, [], []]}
+                 {:{}, [line: 1], [unquote(tag_type), unquote(expected), [], []]}
                ]
       end
 
       test "#{tag_type} node with single #{attr_or_prop}" do
-        tag_name = unquote(tag_name)
-        tags = [{:start_tag, {tag_name, [{"my_key", [text: "my_value"]}]}}, {:end_tag, tag_name}]
+        tags = [
+          {:start_tag, {unquote(tag_name), [{"my_key", [text: "my_value"]}]}},
+          {:end_tag, unquote(tag_name)}
+        ]
 
         assert build(tags) ==
                  [
                    {:{}, [line: 1],
-                    [unquote(tag_type), tag_name, [{"my_key", [text: "my_value"]}], []]}
+                    [unquote(tag_type), unquote(expected), [{"my_key", [text: "my_value"]}], []]}
                  ]
       end
 
       test "#{tag_type} node, with multiple #{attr_or_prop}(s)" do
-        tag_name = unquote(tag_name)
-
         tags = [
           {:start_tag,
-           {tag_name, [{"my_key_1", [text: "my_value_1"]}, {"my_key_2", [text: "my_value_2"]}]}},
-          {:end_tag, tag_name}
+           {unquote(tag_name),
+            [{"my_key_1", [text: "my_value_1"]}, {"my_key_2", [text: "my_value_2"]}]}},
+          {:end_tag, unquote(tag_name)}
         ]
 
         assert build(tags) == [
                  {:{}, [line: 1],
                   [
                     unquote(tag_type),
-                    tag_name,
+                    unquote(expected),
                     [{"my_key_1", [text: "my_value_1"]}, {"my_key_2", [text: "my_value_2"]}],
                     []
                   ]}
@@ -54,18 +57,17 @@ defmodule Hologram.Template.VDOMTreeTest do
       end
 
       test "#{tag_type} node #{attr_or_prop} with multiple value parts" do
-        tag_name = unquote(tag_name)
-
         tags = [
-          {:start_tag, {tag_name, [{"my_key", [text: "my_value_1", text: "my_value_2"]}]}},
-          {:end_tag, tag_name}
+          {:start_tag,
+           {unquote(tag_name), [{"my_key", [text: "my_value_1", text: "my_value_2"]}]}},
+          {:end_tag, unquote(tag_name)}
         ]
 
         assert build(tags) == [
                  {:{}, [line: 1],
                   [
                     unquote(tag_type),
-                    tag_name,
+                    unquote(expected),
                     [{"my_key", [text: "my_value_1", text: "my_value_2"]}],
                     []
                   ]}
@@ -73,29 +75,30 @@ defmodule Hologram.Template.VDOMTreeTest do
       end
 
       test "#{tag_type} node with text child" do
-        tag_name = unquote(tag_name)
-        tags = [{:start_tag, {tag_name, []}}, {:text, "abc"}, {:end_tag, tag_name}]
+        tags = [
+          {:start_tag, {unquote(tag_name), []}},
+          {:text, "abc"},
+          {:end_tag, unquote(tag_name)}
+        ]
 
         assert build(tags) == [
-                 {:{}, [line: 1], [unquote(tag_type), tag_name, [], [{:text, "abc"}]]}
+                 {:{}, [line: 1], [unquote(tag_type), unquote(expected), [], [{:text, "abc"}]]}
                ]
       end
 
       test "#{tag_type} node with element child" do
-        tag_name = unquote(tag_name)
-
         tags = [
-          {:start_tag, {tag_name, []}},
+          {:start_tag, {unquote(tag_name), []}},
           {:start_tag, {"span", []}},
           {:end_tag, "span"},
-          {:end_tag, tag_name}
+          {:end_tag, unquote(tag_name)}
         ]
 
         assert build(tags) == [
                  {:{}, [line: 1],
                   [
                     unquote(tag_type),
-                    tag_name,
+                    unquote(expected),
                     [],
                     [{:{}, [line: 1], [:element, "span", [], []]}]
                   ]}
@@ -103,42 +106,41 @@ defmodule Hologram.Template.VDOMTreeTest do
       end
 
       test "#{tag_type} node with component child" do
-        tag_name = unquote(tag_name)
-
         tags = [
-          {:start_tag, {tag_name, []}},
+          {:start_tag, {unquote(tag_name), []}},
           {:start_tag, {"Xxx.Yyy", []}},
           {:end_tag, "Xxx.Yyy"},
-          {:end_tag, tag_name}
+          {:end_tag, unquote(tag_name)}
         ]
 
         assert build(tags) == [
                  {:{}, [line: 1],
                   [
                     unquote(tag_type),
-                    tag_name,
+                    unquote(expected),
                     [],
-                    [{:{}, [line: 1], [:component, "Xxx.Yyy", [], []]}]
+                    [
+                      {:{}, [line: 1],
+                       [:component, {:__aliases__, [line: 1], [:Xxx, :Yyy]}, [], []]}
+                    ]
                   ]}
                ]
       end
 
       test "#{tag_type} node with multiple children" do
-        tag_name = unquote(tag_name)
-
         tags = [
-          {:start_tag, {tag_name, []}},
+          {:start_tag, {unquote(tag_name), []}},
           {:start_tag, {"span", []}},
           {:end_tag, "span"},
           {:text, "abc"},
-          {:end_tag, tag_name}
+          {:end_tag, unquote(tag_name)}
         ]
 
         assert build(tags) == [
                  {:{}, [line: 1],
                   [
                     unquote(tag_type),
-                    tag_name,
+                    unquote(expected),
                     [],
                     [{:{}, [line: 1], [:element, "span", [], []]}, {:text, "abc"}]
                   ]}
@@ -156,7 +158,7 @@ defmodule Hologram.Template.VDOMTreeTest do
                  {:{}, [line: 1],
                   [
                     unquote(tag_type),
-                    unquote(tag_name),
+                    unquote(expected),
                     [{"my_key_1", [text: "my_value_1"]}, {"my_key_2", [text: "my_value_2"]}],
                     []
                   ]}
@@ -177,24 +179,25 @@ defmodule Hologram.Template.VDOMTreeTest do
     end
 
     nodes = [
-      {:element, "attribute", "div"},
-      {:component, "property", "Aaa.Bbb"}
+      {:element, "attribute", "div", "div"},
+      {:component, "property", "Aaa.Bbb",
+       quote do
+         {:__aliases__, [line: 1], [:Aaa, :Bbb]}
+       end}
     ]
 
-    Enum.each(nodes, fn {tag_type, attr_or_prop, tag_name} ->
+    Enum.each(nodes, fn {tag_type, attr_or_prop, tag_name, expected} ->
       test "in #{tag_type} #{attr_or_prop} value, with one part only" do
-        tag_name = unquote(tag_name)
-
         tags = [
-          {:start_tag, {tag_name, [{"my_key", [expression: "{1 + 2}"]}]}},
-          {:end_tag, tag_name}
+          {:start_tag, {unquote(tag_name), [{"my_key", [expression: "{1 + 2}"]}]}},
+          {:end_tag, unquote(tag_name)}
         ]
 
         assert build(tags) == [
                  {:{}, [line: 1],
                   [
                     unquote(tag_type),
-                    tag_name,
+                    unquote(expected),
                     [{"my_key", [expression: {:{}, [line: 1], [{:+, [line: 1], [1, 2]}]}]}],
                     []
                   ]}
@@ -202,18 +205,17 @@ defmodule Hologram.Template.VDOMTreeTest do
       end
 
       test "in #{tag_type} #{attr_or_prop} value, after text part" do
-        tag_name = unquote(tag_name)
-
         tags = [
-          {:start_tag, {tag_name, [{"my_key", [text: "my_value", expression: "{1 + 2}"]}]}},
-          {:end_tag, tag_name}
+          {:start_tag,
+           {unquote(tag_name), [{"my_key", [text: "my_value", expression: "{1 + 2}"]}]}},
+          {:end_tag, unquote(tag_name)}
         ]
 
         assert build(tags) == [
                  {:{}, [line: 1],
                   [
                     unquote(tag_type),
-                    tag_name,
+                    unquote(expected),
                     [
                       {"my_key",
                        [
@@ -227,18 +229,17 @@ defmodule Hologram.Template.VDOMTreeTest do
       end
 
       test "in #{tag_type} #{attr_or_prop} value, before text part" do
-        tag_name = unquote(tag_name)
-
         tags = [
-          {:start_tag, {tag_name, [{"my_key", [expression: "{1 + 2}", text: "my_value"]}]}},
-          {:end_tag, tag_name}
+          {:start_tag,
+           {unquote(tag_name), [{"my_key", [expression: "{1 + 2}", text: "my_value"]}]}},
+          {:end_tag, unquote(tag_name)}
         ]
 
         assert build(tags) == [
                  {:{}, [line: 1],
                   [
                     unquote(tag_type),
-                    tag_name,
+                    unquote(expected),
                     [
                       {"my_key",
                        [
@@ -252,19 +253,17 @@ defmodule Hologram.Template.VDOMTreeTest do
       end
 
       test "in #{tag_type} #{attr_or_prop} value, after another expression part" do
-        tag_name = unquote(tag_name)
-
         tags = [
           {:start_tag,
-           {tag_name, [{"my_key", [expression: "{1 + 2}", expression: "{@my_var * 9}"]}]}},
-          {:end_tag, tag_name}
+           {unquote(tag_name), [{"my_key", [expression: "{1 + 2}", expression: "{@my_var * 9}"]}]}},
+          {:end_tag, unquote(tag_name)}
         ]
 
         assert build(tags) == [
                  {:{}, [line: 1],
                   [
                     unquote(tag_type),
-                    tag_name,
+                    unquote(expected),
                     [
                       {"my_key",
                        [

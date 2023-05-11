@@ -78,12 +78,19 @@ defmodule Hologram.Template.VDOMTree do
   defp render_code({:start_tag, {tag_name, attributes}}) do
     tag_type = Helpers.tag_type(tag_name)
 
+    tag_name_code =
+      if tag_type == :element do
+        "\"#{tag_name}\""
+      else
+        "#{tag_name}"
+      end
+
     attributes_code =
       Enum.map_join(attributes, ", ", fn {name, value_parts} ->
         "{\"#{name}\", [" <> Enum.map_join(value_parts, ", ", &render_code/1) <> "]}"
       end)
 
-    "{:#{tag_type}, \"#{tag_name}\", [#{attributes_code}], ["
+    "{:#{tag_type}, #{tag_name_code}, [#{attributes_code}], ["
   end
 
   defp render_code({:text, str}) do
