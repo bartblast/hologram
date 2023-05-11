@@ -2,11 +2,21 @@ defmodule Hologram.ComponentTest do
   use Hologram.Test.BasicCase, async: true
   import Hologram.Component
 
-  test "H sigil" do
-    template = ~H"""
-    <div>{@value}</div>
-    """
+  describe "H sigil" do
+    test "template which uses data" do
+      template = ~H"""
+      <div>{@value}</div>
+      """
 
-    assert template.(%{value: 123}) == [{:element, "div", [], [expression: {123}]}]
+      assert template.(%{value: 123}) == [{:element, "div", [], [expression: {123}]}]
+    end
+
+    test "template which doesn't use data" do
+      template = ~H"""
+      <div>abc</div>
+      """
+
+      assert template.(%{}) == [{:element, "div", [], [text: "abc"]}]
+    end
   end
 end
