@@ -13,6 +13,10 @@ defmodule Hologram.Compiler.Encoder do
     encode_primitive_type(:integer, value)
   end
 
+  def encode(%IR.StringType{value: value}) do
+    encode_primitive_type(:atom, value, true)
+  end
+
   defp encode_primitive_type(type, value, as_string \\ false)
 
   defp encode_primitive_type(type, value, false) do

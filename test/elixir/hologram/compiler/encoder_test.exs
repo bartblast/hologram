@@ -14,4 +14,8 @@ defmodule Hologram.Compiler.EncoderTest do
   test "integer type" do
     assert encode(%IR.IntegerType{value: 123}) == "{type: 'integer', value: 123}"
   end
+
+  test "string type" do
+    assert encode(%IR.StringType{value: "aa'bb\ncc"}) == "{type: 'atom', value: 'aa\\'bb\\ncc'}"
+  end
 end
