@@ -24,6 +24,7 @@ defmodule Hologram.Compiler.Encoder do
       value
       |> to_string()
       |> String.replace("'", "\\'")
+      |> String.replace("\n", "\\n")
 
     encode_primitive_type(type, "'#{value_str}'")
   end
