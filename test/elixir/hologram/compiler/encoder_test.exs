@@ -15,6 +15,24 @@ defmodule Hologram.Compiler.EncoderTest do
     assert encode(%IR.IntegerType{value: 123}) == "{type: 'integer', value: 123}"
   end
 
+  describe "list type" do
+    test "empty" do
+      assert encode(%IR.ListType{data: []}) == "{type: 'list', data: []}"
+    end
+
+    test "non-empty" do
+      ir = %IR.ListType{
+        data: [
+          %IR.IntegerType{value: 1},
+          %IR.AtomType{value: :abc}
+        ]
+      }
+
+      assert encode(ir) ==
+               "{type: 'list', data: [{type: 'integer', value: 1}, {type: 'atom', value: 'abc'}]}"
+    end
+  end
+
   test "string type" do
     assert encode(%IR.StringType{value: "aa'bb\ncc"}) == "{type: 'atom', value: 'aa\\'bb\\ncc'}"
   end

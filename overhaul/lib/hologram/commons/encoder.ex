@@ -22,12 +22,6 @@ defmodule Hologram.Commons.Encoder do
     |> Enum.join(", ")
   end
 
-  def encode_as_array(data, %Context{} = context, %Opts{} = opts) do
-    Enum.map(data, &JSEncoder.encode(&1, context, opts))
-    |> Enum.join(", ")
-    |> wrap_with_array()
-  end
-
   def encode_as_arrow_function(%Block{} = block, context, opts) do
     """
     () => {
@@ -63,10 +57,6 @@ defmodule Hologram.Commons.Encoder do
     bindings
     |> Enum.map(&JSEncoder.encode(&1, context, opts))
     |> Enum.join("\n")
-  end
-
-  def wrap_with_array(data) do
-    if data != "", do: "[ #{data} ]", else: "[]"
   end
 
   def wrap_with_object(data) do
