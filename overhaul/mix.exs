@@ -3,9 +3,7 @@ defmodule Hologram.MixProject do
 
   def project do
     [
-      aliases: aliases(),
-      compilers: Mix.compilers(),
-      preferred_cli_env: preferred_cli_env()
+      compilers: Mix.compilers()
     ]
   end
 
@@ -16,8 +14,7 @@ defmodule Hologram.MixProject do
         "cmd npx prettier --write 'assets/**/*.js' 'test/js/**/*.js' '**/*.json'"
       ],
       "test.all": [&test_js/1, "test", "test.e2e"],
-      "test.e2e": ["cmd cd test/e2e && mix test"],
-      "test.js": [&test_js/1]
+      "test.e2e": ["cmd cd test/e2e && mix test"]
     ]
   end
 
@@ -51,25 +48,7 @@ defmodule Hologram.MixProject do
   defp preferred_cli_env do
     [
       "test.all": :test,
-      "test.e2e": :test,
-      "test.js": :test
+      "test.e2e": :test
     ]
-  end
-
-  defp test_js(args) do
-    cmd =
-      if Enum.empty?(args) do
-        ["test"]
-      else
-        ["run", "test-file", "../#{hd(args)}"]
-      end
-
-    opts = [cd: "assets", into: IO.stream(:stdio, :line)]
-    System.cmd("npm", ["install"], opts)
-    {_, status} = System.cmd("npm", cmd, opts)
-
-    if status > 0 do
-      Mix.raise("JavaScript tests failed!")
-    end
   end
 end

@@ -1,0 +1,9 @@
+{
+  "devDependencies": {
+    "mocha": "^10"
+  },
+  "scripts": {
+    "test": "mocha '../test/javascript/**/*.js' --color",
+    "test-file": "mocha --color"
+  }
+}

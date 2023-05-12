@@ -2,6 +2,12 @@
 defmodule Hologram.MixProject do
   use Mix.Project
 
+  defp aliases do
+    [
+      "test.js": [&test_js/1]
+    ]
+  end
+
   def application do
     [
       extra_applications: [:logger]
@@ -32,8 +38,15 @@ defmodule Hologram.MixProject do
     ]
   end
 
+  defp preferred_cli_env do
+    [
+      "test.js": :test
+    ]
+  end
+
   def project do
     [
+      aliases: aliases(),
       app: :hologram,
       deps: deps(),
       description:
@@ -45,9 +58,27 @@ defmodule Hologram.MixProject do
       dialyzer: [
         plt_add_apps: [:ex_unit, :mix]
       ],
+      preferred_cli_env: preferred_cli_env(),
       start_permanent: Mix.env() == :prod,
       test_paths: ["test/elixir"],
       version: "0.1.0"
     ]
+  end
+
+  defp test_js(args) do
+    cmd =
+      if Enum.empty?(args) do
+        ["test"]
+      else
+        ["run", "test-file", "../#{hd(args)}"]
+      end
+
+    opts = [cd: "assets", into: IO.stream(:stdio, :line)]
+    System.cmd("npm", ["install"], opts)
+    {_result, status} = System.cmd("npm", cmd, opts)
+
+    if status > 0 do
+      Mix.raise("JavaScript tests failed!")
+    end
   end
 end

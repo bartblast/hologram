@@ -3,18 +3,10 @@
     "chai": "^4",
     "jsdom": "^21",
     "lodash": "^4",
-    "mocha": "^10",
-    "mochapack": "^2",
     "morphdom": "^2",
     "phoenix": "^1.6",
     "prettier": "^2",
     "sinon": "^15",
-    "snabbdom": "^3",
-    "webpack": "^5",
-    "webpack-node-externals": "^3"
-  },
-  "scripts": {
-    "test": "mochapack --mode development --webpack-config webpack.config.test.js \"../test/js/**/*.js\" --color",
-    "test-file": "mochapack --mode development --webpack-config webpack.config.test.js --color"
+    "snabbdom": "^3"
   }
 }
