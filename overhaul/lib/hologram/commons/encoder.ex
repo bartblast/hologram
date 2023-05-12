@@ -58,8 +58,4 @@ defmodule Hologram.Commons.Encoder do
     |> Enum.map(&JSEncoder.encode(&1, context, opts))
     |> Enum.join("\n")
   end
-
-  def wrap_with_object(data) do
-    if data != "", do: "{ #{data} }", else: "{}"
-  end
 end

@@ -18,6 +18,18 @@ defmodule Hologram.Compiler.Encoder do
     "{type: 'list', data: #{encode_as_array(data)}}"
   end
 
+  def encode(%IR.MapType{data: data}) do
+    data_str =
+      data
+      |> Enum.map(fn {key, value} ->
+        "'#{encode_map_key(key)}': #{encode(value)}"
+      end)
+      |> Enum.join(", ")
+      |> StringUtils.wrap("{", "}")
+
+    "{type: 'map', data: #{data_str}}"
+  end
+
   def encode(%IR.StringType{value: value}) do
     encode_primitive_type(:atom, value, true)
   end
@@ -45,6 +57,11 @@ defmodule Hologram.Compiler.Encoder do
     value
     |> encode_as_string(false)
     |> StringUtils.wrap("'", "'")
+  end
+
+  defp encode_map_key(%IR.AtomType{value: value}) do
+    value_str = encode_as_string(value, false)
+    "~atom(#{value_str})"
   end
 
   defp encode_primitive_type(type, value, as_string)

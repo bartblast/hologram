@@ -33,6 +33,50 @@ defmodule Hologram.Compiler.EncoderTest do
     end
   end
 
+  describe "map type" do
+    test "empty" do
+      assert encode(%IR.MapType{data: []}) == "{type: 'map', data: {}}"
+    end
+
+    test "single key" do
+      ir = %IR.MapType{
+        data: [
+          {
+            %IR.AtomType{value: :a},
+            %IR.IntegerType{value: 1}
+          }
+        ]
+      }
+
+      assert encode(ir) == "{type: 'map', data: {'~atom(a)': {type: 'integer', value: 1}}}"
+    end
+
+    test "multiple keys" do
+      ir = %IR.MapType{
+        data: [
+          {%IR.AtomType{value: :a}, %IR.IntegerType{value: 1}},
+          {%IR.AtomType{value: :b}, %IR.IntegerType{value: 2}}
+        ]
+      }
+
+      assert encode(ir) ==
+               "{type: 'map', data: {'~atom(a)': {type: 'integer', value: 1}, '~atom(b)': {type: 'integer', value: 2}}}"
+    end
+
+    test "atom key" do
+      ir = %IR.MapType{
+        data: [
+          {
+            %IR.AtomType{value: :a},
+            %IR.IntegerType{value: 1}
+          }
+        ]
+      }
+
+      assert encode(ir) == "{type: 'map', data: {'~atom(a)': {type: 'integer', value: 1}}}"
+    end
+  end
+
   test "string type" do
     assert encode(%IR.StringType{value: "aa'bb\ncc"}) == "{type: 'atom', value: 'aa\\'bb\\ncc'}"
   end
