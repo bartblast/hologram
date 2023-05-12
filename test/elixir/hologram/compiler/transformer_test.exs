@@ -1088,7 +1088,7 @@ defmodule Hologram.Compiler.TransformerTest do
     end
   end
 
-  test "cons operatoror" do
+  test "cons operator" do
     # [h | t]
     ast = [{:|, [line: 1], [{:h, [line: 1], nil}, {:t, [line: 1], nil}]}]
 
