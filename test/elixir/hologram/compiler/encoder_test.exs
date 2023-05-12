@@ -75,6 +75,45 @@ defmodule Hologram.Compiler.EncoderTest do
 
       assert encode(ir) == "{type: 'map', data: {'~atom(a)': {type: 'integer', value: 1}}}"
     end
+
+    test "float key" do
+      ir = %IR.MapType{
+        data: [
+          {
+            %IR.FloatType{value: 1.23},
+            %IR.IntegerType{value: 1}
+          }
+        ]
+      }
+
+      assert encode(ir) == "{type: 'map', data: {'~float(1.23)': {type: 'integer', value: 1}}}"
+    end
+
+    test "integer key" do
+      ir = %IR.MapType{
+        data: [
+          {
+            %IR.IntegerType{value: 987},
+            %IR.IntegerType{value: 1}
+          }
+        ]
+      }
+
+      assert encode(ir) == "{type: 'map', data: {'~integer(987)': {type: 'integer', value: 1}}}"
+    end
+
+    test "string key" do
+      ir = %IR.MapType{
+        data: [
+          {
+            %IR.StringType{value: "abc"},
+            %IR.IntegerType{value: 1}
+          }
+        ]
+      }
+
+      assert encode(ir) == "{type: 'map', data: {'~string(abc)': {type: 'integer', value: 1}}}"
+    end
   end
 
   test "string type" do

@@ -38,6 +38,11 @@ defmodule Hologram.Compiler.Encoder do
     "{type: 'tuple', data: #{encode_as_array(data)}}"
   end
 
+  defp build_map_key(type, value) do
+    value_str = encode_as_string(value, false)
+    "~#{type}(#{value_str})"
+  end
+
   defp encode_as_array(data) do
     Enum.map(data, &encode/1)
     |> Enum.join(", ")
@@ -60,8 +65,19 @@ defmodule Hologram.Compiler.Encoder do
   end
 
   defp encode_map_key(%IR.AtomType{value: value}) do
-    value_str = encode_as_string(value, false)
-    "~atom(#{value_str})"
+    build_map_key(:atom, value)
+  end
+
+  defp encode_map_key(%IR.FloatType{value: value}) do
+    build_map_key(:float, value)
+  end
+
+  defp encode_map_key(%IR.IntegerType{value: value}) do
+    build_map_key(:integer, value)
+  end
+
+  defp encode_map_key(%IR.StringType{value: value}) do
+    build_map_key(:string, value)
   end
 
   defp encode_primitive_type(type, value, as_string)
