@@ -102,6 +102,38 @@ defmodule Hologram.Compiler.EncoderTest do
       assert encode(ir) == "{type: 'map', data: {'~integer(987)': {type: 'integer', value: 1}}}"
     end
 
+    test "list key, empty list" do
+      ir = %IR.MapType{
+        data: [
+          {
+            %IR.ListType{data: []},
+            %IR.IntegerType{value: 1}
+          }
+        ]
+      }
+
+      assert encode(ir) == "{type: 'map', data: {'list()': {type: 'integer', value: 1}}}"
+    end
+
+    test "list key, non-empty" do
+      ir = %IR.MapType{
+        data: [
+          {
+            %IR.ListType{
+              data: [
+                %IR.IntegerType{value: 1},
+                %IR.AtomType{value: :abc}
+              ]
+            },
+            %IR.IntegerType{value: 1}
+          }
+        ]
+      }
+
+      assert encode(ir) ==
+               "{type: 'map', data: {'list(~integer(1),~atom(abc))': {type: 'integer', value: 1}}}"
+    end
+
     test "string key" do
       ir = %IR.MapType{
         data: [
