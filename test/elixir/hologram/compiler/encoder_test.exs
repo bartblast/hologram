@@ -36,4 +36,22 @@ defmodule Hologram.Compiler.EncoderTest do
   test "string type" do
     assert encode(%IR.StringType{value: "aa'bb\ncc"}) == "{type: 'atom', value: 'aa\\'bb\\ncc'}"
   end
+
+  describe "tuple type" do
+    test "empty" do
+      assert encode(%IR.TupleType{data: []}) == "{type: 'tuple', data: []}"
+    end
+
+    test "non-empty" do
+      ir = %IR.TupleType{
+        data: [
+          %IR.IntegerType{value: 1},
+          %IR.AtomType{value: :abc}
+        ]
+      }
+
+      assert encode(ir) ==
+               "{type: 'tuple', data: [{type: 'integer', value: 1}, {type: 'atom', value: 'abc'}]}"
+    end
+  end
 end

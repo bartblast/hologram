@@ -22,6 +22,10 @@ defmodule Hologram.Compiler.Encoder do
     encode_primitive_type(:atom, value, true)
   end
 
+  def encode(%IR.TupleType{data: data}) do
+    "{type: 'tuple', data: #{encode_as_array(data)}}"
+  end
+
   def encode_as_array(data) do
     Enum.map(data, &encode/1)
     |> Enum.join(", ")
