@@ -26,18 +26,18 @@ defmodule Hologram.Compiler.Encoder do
     "{type: 'tuple', data: #{encode_as_array(data)}}"
   end
 
-  def encode_as_array(data) do
-    Enum.map(data, &encode/1)
-    |> Enum.join(", ")
-    |> StringUtils.wrap("[", "]")
-  end
-
-  defp encode_as_string(value) do
+  def encode_as_string(value) do
     value
     |> to_string()
     |> String.replace("'", "\\'")
     |> String.replace("\n", "\\n")
     |> StringUtils.wrap("'", "'")
+  end
+
+  defp encode_as_array(data) do
+    Enum.map(data, &encode/1)
+    |> Enum.join(", ")
+    |> StringUtils.wrap("[", "]")
   end
 
   defp encode_primitive_type(type, value, as_string \\ false)
