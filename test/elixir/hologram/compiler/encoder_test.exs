@@ -48,7 +48,7 @@ defmodule Hologram.Compiler.EncoderTest do
         ]
       }
 
-      assert encode(ir) == "{type: 'map', data: {'~atom(a)': {type: 'integer', value: 1}}}"
+      assert encode(ir) == "{type: 'map', data: {'atom(a)': {type: 'integer', value: 1}}}"
     end
 
     test "multiple keys" do
@@ -60,7 +60,7 @@ defmodule Hologram.Compiler.EncoderTest do
       }
 
       assert encode(ir) ==
-               "{type: 'map', data: {'~atom(a)': {type: 'integer', value: 1}, '~atom(b)': {type: 'integer', value: 2}}}"
+               "{type: 'map', data: {'atom(a)': {type: 'integer', value: 1}, 'atom(b)': {type: 'integer', value: 2}}}"
     end
 
     test "atom key" do
@@ -73,7 +73,7 @@ defmodule Hologram.Compiler.EncoderTest do
         ]
       }
 
-      assert encode(ir) == "{type: 'map', data: {'~atom(a)': {type: 'integer', value: 1}}}"
+      assert encode(ir) == "{type: 'map', data: {'atom(a)': {type: 'integer', value: 1}}}"
     end
 
     test "float key" do
@@ -86,7 +86,7 @@ defmodule Hologram.Compiler.EncoderTest do
         ]
       }
 
-      assert encode(ir) == "{type: 'map', data: {'~float(1.23)': {type: 'integer', value: 1}}}"
+      assert encode(ir) == "{type: 'map', data: {'float(1.23)': {type: 'integer', value: 1}}}"
     end
 
     test "integer key" do
@@ -99,7 +99,7 @@ defmodule Hologram.Compiler.EncoderTest do
         ]
       }
 
-      assert encode(ir) == "{type: 'map', data: {'~integer(987)': {type: 'integer', value: 1}}}"
+      assert encode(ir) == "{type: 'map', data: {'integer(987)': {type: 'integer', value: 1}}}"
     end
 
     test "list key, empty list" do
@@ -131,7 +131,7 @@ defmodule Hologram.Compiler.EncoderTest do
       }
 
       assert encode(ir) ==
-               "{type: 'map', data: {'list(~integer(1),~atom(abc))': {type: 'integer', value: 1}}}"
+               "{type: 'map', data: {'list(integer(1),atom(abc))': {type: 'integer', value: 1}}}"
     end
 
     test "string key" do
@@ -144,7 +144,7 @@ defmodule Hologram.Compiler.EncoderTest do
         ]
       }
 
-      assert encode(ir) == "{type: 'map', data: {'~string(abc)': {type: 'integer', value: 1}}}"
+      assert encode(ir) == "{type: 'map', data: {'string(abc)': {type: 'integer', value: 1}}}"
     end
   end
 

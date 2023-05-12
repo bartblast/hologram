@@ -40,7 +40,7 @@ defmodule Hologram.Compiler.Encoder do
 
   defp build_map_key(type, value) do
     value_str = encode_as_string(value, false)
-    "~#{type}(#{value_str})"
+    "#{type}(#{value_str})"
   end
 
   defp encode_as_array(data) do
