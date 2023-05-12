@@ -115,7 +115,7 @@ defmodule Hologram.Compiler.EncoderTest do
       assert encode(ir) == "{type: 'map', data: {'list()': {type: 'integer', value: 1}}}"
     end
 
-    test "list key, non-empty" do
+    test "list key, non-empty list" do
       ir = %IR.MapType{
         data: [
           {
@@ -134,6 +134,38 @@ defmodule Hologram.Compiler.EncoderTest do
                "{type: 'map', data: {'list(integer(1),atom(abc))': {type: 'integer', value: 1}}}"
     end
 
+    test "map key, empty map" do
+      ir = %IR.MapType{
+        data: [
+          {
+            %IR.MapType{data: []},
+            %IR.IntegerType{value: 1}
+          }
+        ]
+      }
+
+      assert encode(ir) == "{type: 'map', data: {'map()': {type: 'integer', value: 1}}}"
+    end
+
+    test "map key, non-empty map" do
+      ir = %IR.MapType{
+        data: [
+          {
+            %IR.MapType{
+              data: [
+                {%IR.IntegerType{value: 1}, %IR.FloatType{value: 1.23}},
+                {%IR.AtomType{value: :b}, %IR.StringType{value: "abc"}}
+              ]
+            },
+            %IR.IntegerType{value: 2}
+          }
+        ]
+      }
+
+      assert encode(ir) ==
+               "{type: 'map', data: {'map(integer(1):float(1.23),atom(b):string(abc))': {type: 'integer', value: 2}}}"
+    end
+
     test "string key" do
       ir = %IR.MapType{
         data: [
@@ -147,7 +179,7 @@ defmodule Hologram.Compiler.EncoderTest do
       assert encode(ir) == "{type: 'map', data: {'string(abc)': {type: 'integer', value: 1}}}"
     end
 
-    test "tuple key, empty list" do
+    test "tuple key, empty tuple" do
       ir = %IR.MapType{
         data: [
           {
@@ -160,7 +192,7 @@ defmodule Hologram.Compiler.EncoderTest do
       assert encode(ir) == "{type: 'map', data: {'tuple()': {type: 'integer', value: 1}}}"
     end
 
-    test "tuple key, non-empty" do
+    test "tuple key, non-empty tuple" do
       ir = %IR.MapType{
         data: [
           {

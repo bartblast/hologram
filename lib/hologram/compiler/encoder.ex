@@ -87,6 +87,15 @@ defmodule Hologram.Compiler.Encoder do
     encode_enum_map_key(:list, data)
   end
 
+  defp encode_map_key(%IR.MapType{data: data}) do
+    data
+    |> Enum.map(fn {key, value} ->
+      encode_map_key(key) <> ":" <> encode_map_key(value)
+    end)
+    |> Enum.join(",")
+    |> StringUtils.wrap("map(", ")")
+  end
+
   defp encode_map_key(%IR.StringType{value: value}) do
     build_map_key(:string, value)
   end
