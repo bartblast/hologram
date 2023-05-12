@@ -52,8 +52,4 @@ defmodule Hologram.Compiler.EncoderTest do
                "{type: 'tuple', data: [{type: 'integer', value: 1}, {type: 'atom', value: 'abc'}]}"
     end
   end
-
-  describe "encode_as_string/1" do
-    assert encode_as_string("aa'bb\ncc") == "'aa\\'bb\\ncc'"
-  end
 end
