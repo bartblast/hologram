@@ -64,6 +64,13 @@ defmodule Hologram.Compiler.Encoder do
     |> StringUtils.wrap("'", "'")
   end
 
+  defp encode_enum_map_key(type, data) do
+    data
+    |> Enum.map(&encode_map_key/1)
+    |> Enum.join(",")
+    |> StringUtils.wrap("#{type}(", ")")
+  end
+
   defp encode_map_key(%IR.AtomType{value: value}) do
     build_map_key(:atom, value)
   end
@@ -77,13 +84,15 @@ defmodule Hologram.Compiler.Encoder do
   end
 
   defp encode_map_key(%IR.ListType{data: data}) do
-    Enum.map(data, &encode_map_key/1)
-    |> Enum.join(",")
-    |> StringUtils.wrap("list(", ")")
+    encode_enum_map_key(:list, data)
   end
 
   defp encode_map_key(%IR.StringType{value: value}) do
     build_map_key(:string, value)
+  end
+
+  defp encode_map_key(%IR.TupleType{data: data}) do
+    encode_enum_map_key(:tuple, data)
   end
 
   defp encode_primitive_type(type, value, as_string)
