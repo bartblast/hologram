@@ -247,4 +247,15 @@ defmodule Hologram.Compiler.EncoderTest do
                "{type: 'tuple', data: [{type: 'integer', value: 1}, {type: 'atom', value: 'abc'}]}"
     end
   end
+
+  describe "variable" do
+    test "not inside pattern" do
+      assert encode(%IR.Variable{name: :my_var}, %Context{pattern?: false}) == "bindings.my_var"
+    end
+
+    test "inside pattern" do
+      assert encode(%IR.Variable{name: :my_var}, %Context{pattern?: true}) ==
+               "{type: 'variable', name: 'my_var'}"
+    end
+  end
 end

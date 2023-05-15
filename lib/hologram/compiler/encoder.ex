@@ -42,6 +42,15 @@ defmodule Hologram.Compiler.Encoder do
     "{type: 'tuple', data: #{encode_as_array(data, context)}}"
   end
 
+  def encode(%IR.Variable{name: name}, %{pattern?: true}) do
+    name_str = encode_as_string(name, true)
+    "{type: 'variable', name: #{name_str}}"
+  end
+
+  def encode(%IR.Variable{name: name}, %{pattern?: false}) do
+    "bindings.#{name}"
+  end
+
   defp build_map_key(type, value) do
     value_str = encode_as_string(value, false)
     "#{type}(#{value_str})"
