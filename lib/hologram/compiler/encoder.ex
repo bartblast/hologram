@@ -1,28 +1,32 @@
 defmodule Hologram.Compiler.Encoder do
   alias Hologram.Commons.StringUtils
+  alias Hologram.Compiler.Context
   alias Hologram.Compiler.IR
 
-  def encode(%IR.AtomType{value: value}) do
+  @spec encode(IR.t(), Context.t()) :: String.t()
+  def encode(ir, context)
+
+  def encode(%IR.AtomType{value: value}, _context) do
     encode_primitive_type(:atom, value, true)
   end
 
-  def encode(%IR.FloatType{value: value}) do
+  def encode(%IR.FloatType{value: value}, _context) do
     encode_primitive_type(:float, value, false)
   end
 
-  def encode(%IR.IntegerType{value: value}) do
+  def encode(%IR.IntegerType{value: value}, _context) do
     encode_primitive_type(:integer, value, false)
   end
 
-  def encode(%IR.ListType{data: data}) do
-    "{type: 'list', data: #{encode_as_array(data)}}"
+  def encode(%IR.ListType{data: data}, context) do
+    "{type: 'list', data: #{encode_as_array(data, context)}}"
   end
 
-  def encode(%IR.MapType{data: data}) do
+  def encode(%IR.MapType{data: data}, context) do
     data_str =
       data
       |> Enum.map(fn {key, value} ->
-        "'#{encode_map_key(key)}': #{encode(value)}"
+        "'#{encode_map_key(key)}': #{encode(value, context)}"
       end)
       |> Enum.join(", ")
       |> StringUtils.wrap("{", "}")
@@ -30,12 +34,12 @@ defmodule Hologram.Compiler.Encoder do
     "{type: 'map', data: #{data_str}}"
   end
 
-  def encode(%IR.StringType{value: value}) do
+  def encode(%IR.StringType{value: value}, _context) do
     encode_primitive_type(:atom, value, true)
   end
 
-  def encode(%IR.TupleType{data: data}) do
-    "{type: 'tuple', data: #{encode_as_array(data)}}"
+  def encode(%IR.TupleType{data: data}, context) do
+    "{type: 'tuple', data: #{encode_as_array(data, context)}}"
   end
 
   defp build_map_key(type, value) do
@@ -43,8 +47,8 @@ defmodule Hologram.Compiler.Encoder do
     "#{type}(#{value_str})"
   end
 
-  defp encode_as_array(data) do
-    Enum.map(data, &encode/1)
+  defp encode_as_array(data, context) do
+    Enum.map(data, &encode(&1, context))
     |> Enum.join(", ")
     |> StringUtils.wrap("[", "]")
   end
@@ -70,6 +74,13 @@ defmodule Hologram.Compiler.Encoder do
     |> Enum.join(",")
     |> StringUtils.wrap("#{type}(", ")")
   end
+
+  # We don't have to pass context when building map keys,
+  # to determine whether to encode IR.Variable as a value or an assignment,
+  # because variables cannot be used in map keys inside a pattern.
+  # Map keys in patterns can only be literals (such as atoms, strings, tuples, and the like)
+  # or an existing variable matched with the pin operator (such as ^some_var).
+  defp encode_map_key(ir)
 
   defp encode_map_key(%IR.AtomType{value: value}) do
     build_map_key(:atom, value)
