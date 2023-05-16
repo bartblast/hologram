@@ -14,4 +14,8 @@ export default class Type {
   static integer(value) {
     return Utils.freeze({type: "integer", value: value});
   }
+
+  static list(data = []) {
+    return Utils.freeze({type: "list", data: data});
+  }
 }

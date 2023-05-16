@@ -410,24 +410,6 @@ describe("keywordToMap()", () => {
   })
 })
 
-describe("list()", () => {
-  let elems, expected, result;
-
-  beforeEach(() => {
-    elems = [Type.integer(1), Type.integer(2)]
-    expected = {type: "list", data: elems}
-    result = Type.list(elems)
-  })
-
-  it("returns boxed list value", () => {
-    assert.deepStrictEqual(result, expected)
-  })
-
-  it("returns frozen object", () => {
-    assertFrozen(result)
-  })
-})
-
 describe("map()", () => {
   let elems, result;
 

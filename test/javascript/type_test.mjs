@@ -41,3 +41,22 @@ describe("integer()", () => {
     assertFrozen(Type.integer(1));
   });
 });
+
+describe("list()", () => {
+  let data, expected, result;
+
+  beforeEach(() => {
+    data = [Type.integer(1), Type.integer(2)];
+
+    result = Type.list(data);
+    expected = { type: "list", data: data };
+  });
+
+  it("returns boxed list value", () => {
+    assert.deepStrictEqual(result, expected);
+  });
+
+  it("returns frozen object", () => {
+    assertFrozen(result);
+  });
+});
