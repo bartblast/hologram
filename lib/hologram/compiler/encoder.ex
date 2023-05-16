@@ -42,7 +42,7 @@ defmodule Hologram.Compiler.Encoder do
   end
 
   def encode(%IR.StringType{value: value}, _context) do
-    encode_primitive_type(:atom, value, true)
+    encode_primitive_type(:string, value, true)
   end
 
   def encode(%IR.TupleType{data: data}, context) do
@@ -74,14 +74,14 @@ defmodule Hologram.Compiler.Encoder do
   defp encode_as_string(value, false) do
     value
     |> to_string()
-    |> String.replace("'", "\\'")
+    |> String.replace("\"", "\\\"")
     |> String.replace("\n", "\\n")
   end
 
   defp encode_as_string(value, true) do
     value
     |> encode_as_string(false)
-    |> StringUtils.wrap("'", "'")
+    |> StringUtils.wrap("\"", "\"")
   end
 
   defp encode_enum_map_key(type, data) do
@@ -133,12 +133,12 @@ defmodule Hologram.Compiler.Encoder do
 
   defp encode_primitive_type(type, value, as_string)
 
-  defp encode_primitive_type(type, value, false) do
-    "{type: '#{type}', value: #{value}}"
-  end
-
   defp encode_primitive_type(type, value, true) do
     value_str = encode_as_string(value, true)
     encode_primitive_type(type, value_str, false)
+  end
+
+  defp encode_primitive_type(type, value, false) do
+    "Type.#{type}(#{value})"
   end
 end

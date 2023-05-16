@@ -6,17 +6,17 @@ defmodule Hologram.Compiler.EncoderTest do
   alias Hologram.Compiler.IR
 
   test "atom type" do
-    ir = %IR.AtomType{value: :"aa'bb\ncc"}
+    ir = %IR.AtomType{value: :"aa\"bb\ncc"}
 
-    assert encode(ir, %Context{}) == "{type: 'atom', value: 'aa\\'bb\\ncc'}"
+    assert encode(ir, %Context{}) == ~s/Type.atom("aa\\"bb\\ncc")/
   end
 
   test "float type" do
-    assert encode(%IR.FloatType{value: 1.23}, %Context{}) == "{type: 'float', value: 1.23}"
+    assert encode(%IR.FloatType{value: 1.23}, %Context{}) == "Type.float(1.23)"
   end
 
   test "integer type" do
-    assert encode(%IR.IntegerType{value: 123}, %Context{}) == "{type: 'integer', value: 123}"
+    assert encode(%IR.IntegerType{value: 123}, %Context{}) == "Type.integer(123)"
   end
 
   describe "list type" do
@@ -33,7 +33,7 @@ defmodule Hologram.Compiler.EncoderTest do
       }
 
       assert encode(ir, %Context{}) ==
-               "{type: 'list', data: [{type: 'integer', value: 1}, {type: 'atom', value: 'abc'}]}"
+               ~s/{type: 'list', data: [Type.integer(1), Type.atom("abc")]}/
     end
   end
 
@@ -53,7 +53,7 @@ defmodule Hologram.Compiler.EncoderTest do
       }
 
       assert encode(ir, %Context{}) ==
-               "{type: 'map', data: {'atom(a)': {type: 'integer', value: 1}}}"
+               "{type: 'map', data: {'atom(a)': Type.integer(1)}}"
     end
 
     test "multiple keys" do
@@ -65,7 +65,7 @@ defmodule Hologram.Compiler.EncoderTest do
       }
 
       assert encode(ir, %Context{}) ==
-               "{type: 'map', data: {'atom(a)': {type: 'integer', value: 1}, 'atom(b)': {type: 'integer', value: 2}}}"
+               "{type: 'map', data: {'atom(a)': Type.integer(1), 'atom(b)': Type.integer(2)}}"
     end
 
     test "atom key" do
@@ -79,7 +79,7 @@ defmodule Hologram.Compiler.EncoderTest do
       }
 
       assert encode(ir, %Context{}) ==
-               "{type: 'map', data: {'atom(a)': {type: 'integer', value: 1}}}"
+               "{type: 'map', data: {'atom(a)': Type.integer(1)}}"
     end
 
     test "float key" do
@@ -93,7 +93,7 @@ defmodule Hologram.Compiler.EncoderTest do
       }
 
       assert encode(ir, %Context{}) ==
-               "{type: 'map', data: {'float(1.23)': {type: 'integer', value: 1}}}"
+               "{type: 'map', data: {'float(1.23)': Type.integer(1)}}"
     end
 
     test "integer key" do
@@ -107,7 +107,7 @@ defmodule Hologram.Compiler.EncoderTest do
       }
 
       assert encode(ir, %Context{}) ==
-               "{type: 'map', data: {'integer(987)': {type: 'integer', value: 1}}}"
+               "{type: 'map', data: {'integer(987)': Type.integer(1)}}"
     end
 
     test "list key, empty list" do
@@ -121,7 +121,7 @@ defmodule Hologram.Compiler.EncoderTest do
       }
 
       assert encode(ir, %Context{}) ==
-               "{type: 'map', data: {'list()': {type: 'integer', value: 1}}}"
+               "{type: 'map', data: {'list()': Type.integer(1)}}"
     end
 
     test "list key, non-empty list" do
@@ -140,7 +140,7 @@ defmodule Hologram.Compiler.EncoderTest do
       }
 
       assert encode(ir, %Context{}) ==
-               "{type: 'map', data: {'list(integer(1),atom(abc))': {type: 'integer', value: 1}}}"
+               "{type: 'map', data: {'list(integer(1),atom(abc))': Type.integer(1)}}"
     end
 
     test "map key, empty map" do
@@ -154,7 +154,7 @@ defmodule Hologram.Compiler.EncoderTest do
       }
 
       assert encode(ir, %Context{}) ==
-               "{type: 'map', data: {'map()': {type: 'integer', value: 1}}}"
+               "{type: 'map', data: {'map()': Type.integer(1)}}"
     end
 
     test "map key, non-empty map" do
@@ -173,7 +173,7 @@ defmodule Hologram.Compiler.EncoderTest do
       }
 
       assert encode(ir, %Context{}) ==
-               "{type: 'map', data: {'map(integer(1):float(1.23),atom(b):string(abc))': {type: 'integer', value: 2}}}"
+               "{type: 'map', data: {'map(integer(1):float(1.23),atom(b):string(abc))': Type.integer(2)}}"
     end
 
     test "string key" do
@@ -187,7 +187,7 @@ defmodule Hologram.Compiler.EncoderTest do
       }
 
       assert encode(ir, %Context{}) ==
-               "{type: 'map', data: {'string(abc)': {type: 'integer', value: 1}}}"
+               "{type: 'map', data: {'string(abc)': Type.integer(1)}}"
     end
 
     test "tuple key, empty tuple" do
@@ -201,7 +201,7 @@ defmodule Hologram.Compiler.EncoderTest do
       }
 
       assert encode(ir, %Context{}) ==
-               "{type: 'map', data: {'tuple()': {type: 'integer', value: 1}}}"
+               "{type: 'map', data: {'tuple()': Type.integer(1)}}"
     end
 
     test "tuple key, non-empty tuple" do
@@ -220,7 +220,7 @@ defmodule Hologram.Compiler.EncoderTest do
       }
 
       assert encode(ir, %Context{}) ==
-               "{type: 'map', data: {'tuple(integer(1),atom(abc))': {type: 'integer', value: 1}}}"
+               "{type: 'map', data: {'tuple(integer(1),atom(abc))': Type.integer(1)}}"
     end
   end
 
@@ -233,7 +233,7 @@ defmodule Hologram.Compiler.EncoderTest do
       }
 
       assert encode(ir, %Context{}) ==
-               "Interpreter.matchOperator({type: 'integer', value: 1}, {type: 'integer', value: 2})"
+               "Interpreter.matchOperator(Type.integer(1), Type.integer(2))"
     end
 
     test "variable in pattern" do
@@ -244,7 +244,7 @@ defmodule Hologram.Compiler.EncoderTest do
       }
 
       assert encode(ir, %Context{}) ==
-               "Interpreter.matchOperator({type: 'variable', name: 'x'}, {type: 'integer', value: 2})"
+               ~s/Interpreter.matchOperator({type: 'variable', name: "x"}, Type.integer(2))/
     end
 
     test "variable in expression" do
@@ -255,7 +255,7 @@ defmodule Hologram.Compiler.EncoderTest do
       }
 
       assert encode(ir, %Context{}) ==
-               "Interpreter.matchOperator({type: 'integer', value: 1}, bindings.x)"
+               "Interpreter.matchOperator(Type.integer(1), bindings.x)"
     end
 
     test "nested, variable in pattern" do
@@ -269,7 +269,7 @@ defmodule Hologram.Compiler.EncoderTest do
       }
 
       assert encode(ir, %Context{}) ==
-               "Interpreter.matchOperator({type: 'variable', name: 'x'}, Interpreter.matchOperator({type: 'integer', value: 2}, {type: 'integer', value: 3}))"
+               ~s/Interpreter.matchOperator({type: 'variable', name: "x"}, Interpreter.matchOperator(Type.integer(2), Type.integer(3)))/
     end
 
     test "nested, variable in the middle" do
@@ -283,7 +283,7 @@ defmodule Hologram.Compiler.EncoderTest do
       }
 
       assert encode(ir, %Context{}) ==
-               "Interpreter.matchOperator({type: 'integer', value: 1}, Interpreter.matchOperator({type: 'variable', name: 'x'}, {type: 'integer', value: 3}))"
+               ~s/Interpreter.matchOperator(Type.integer(1), Interpreter.matchOperator({type: 'variable', name: "x"}, Type.integer(3)))/
     end
 
     test "nested, variable in expression" do
@@ -297,7 +297,7 @@ defmodule Hologram.Compiler.EncoderTest do
       }
 
       assert encode(ir, %Context{}) ==
-               "Interpreter.matchOperator({type: 'integer', value: 1}, Interpreter.matchOperator({type: 'integer', value: 2}, bindings.x))"
+               "Interpreter.matchOperator(Type.integer(1), Interpreter.matchOperator(Type.integer(2), bindings.x))"
     end
 
     test "nested multiple-times" do
@@ -338,14 +338,14 @@ defmodule Hologram.Compiler.EncoderTest do
       }
 
       assert encode(ir, %Context{}) ==
-               "Interpreter.matchOperator({type: 'tuple', data: [Interpreter.matchOperator({type: 'variable', name: 'a'}, {type: 'variable', name: 'b'}), {type: 'integer', value: 2}, {type: 'integer', value: 3}]}, Interpreter.matchOperator({type: 'tuple', data: [{type: 'integer', value: 1}, Interpreter.matchOperator({type: 'variable', name: 'c'}, {type: 'variable', name: 'd'}), {type: 'integer', value: 3}]}, {type: 'tuple', data: [{type: 'integer', value: 1}, {type: 'integer', value: 2}, Interpreter.matchOperator({type: 'variable', name: 'e'}, bindings.f)]}))"
+               ~s/Interpreter.matchOperator({type: 'tuple', data: [Interpreter.matchOperator({type: 'variable', name: "a"}, {type: 'variable', name: "b"}), Type.integer(2), Type.integer(3)]}, Interpreter.matchOperator({type: 'tuple', data: [Type.integer(1), Interpreter.matchOperator({type: 'variable', name: "c"}, {type: 'variable', name: "d"}), Type.integer(3)]}, {type: 'tuple', data: [Type.integer(1), Type.integer(2), Interpreter.matchOperator({type: 'variable', name: "e"}, bindings.f)]}))/
     end
   end
 
   test "string type" do
-    ir = %IR.StringType{value: "aa'bb\ncc"}
+    ir = %IR.StringType{value: "aa\"bb\ncc"}
 
-    assert encode(ir, %Context{}) == "{type: 'atom', value: 'aa\\'bb\\ncc'}"
+    assert encode(ir, %Context{}) == ~s/Type.string("aa\\"bb\\ncc")/
   end
 
   describe "tuple type" do
@@ -362,7 +362,7 @@ defmodule Hologram.Compiler.EncoderTest do
       }
 
       assert encode(ir, %Context{}) ==
-               "{type: 'tuple', data: [{type: 'integer', value: 1}, {type: 'atom', value: 'abc'}]}"
+               ~s/{type: 'tuple', data: [Type.integer(1), Type.atom("abc")]}/
     end
   end
 
@@ -373,7 +373,7 @@ defmodule Hologram.Compiler.EncoderTest do
 
     test "inside pattern" do
       assert encode(%IR.Variable{name: :my_var}, %Context{pattern?: true}) ==
-               "{type: 'variable', name: 'my_var'}"
+               ~s/{type: 'variable', name: "my_var"}/
     end
   end
 end
