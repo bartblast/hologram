@@ -49,20 +49,6 @@ export default class Type {
     return Utils.freeze({type: "element", tag: tag, attrs: attrs, children: children})
   }
 
-  static encodedKey(boxedValue) {
-    switch (boxedValue.type) {
-      case "atom":
-        return Type.atomKey(boxedValue.value)
-
-      case "string":
-        return Type.stringKey(boxedValue.value)
-        
-      default:
-        const message = `Type.encodedKey(): boxedValue = ${JSON.stringify(boxedValue)}`
-        throw new HologramNotImplementedError(message)
-    }
-  }
-
   // DEFER: test
   static expressionNode(callback) {
     return Utils.freeze({type: "expression", callback: callback})

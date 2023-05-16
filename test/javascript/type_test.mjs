@@ -16,6 +16,38 @@ describe("atom()", () => {
   });
 });
 
+describe("encodeMapKey()", () => {
+  it("encodes boxed atom value as map key", () => {
+    const boxed = Type.atom("abc");
+    const result = Type.encodeMapKey(boxed);
+
+    assert.equal(result, "atom(abc)");
+  });
+
+  it("encodes boxed float value as map key", () => {
+    const boxed = Type.float(1.23);
+    const result = Type.encodeMapKey(boxed);
+
+    assert.equal(result, "float(1.23)");
+  });
+
+  it("encodes boxed integer value as map key", () => {
+    const boxed = Type.integer(123);
+    const result = Type.encodeMapKey(boxed);
+
+    assert.equal(result, "integer(123)");
+  });
+});
+
+describe("encodePrimitiveTypeMapKey()", () => {
+  it("encodes primitive type as map key", () => {
+    const boxed = Type.atom("abc");
+    const result = Type.encodePrimitiveTypeMapKey(boxed);
+
+    assert.equal(result, "atom(abc)");
+  });
+});
+
 describe("float()", () => {
   it("returns boxed float value", () => {
     const result = Type.float(1.23);
