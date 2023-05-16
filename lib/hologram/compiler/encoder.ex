@@ -19,7 +19,7 @@ defmodule Hologram.Compiler.Encoder do
   end
 
   def encode(%IR.ListType{data: data}, context) do
-    "{type: 'list', data: #{encode_as_array(data, context)}}"
+    "Type.list(#{encode_as_array(data, context)})"
   end
 
   def encode(%IR.MapType{data: data}, context) do

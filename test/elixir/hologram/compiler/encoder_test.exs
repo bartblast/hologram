@@ -21,7 +21,7 @@ defmodule Hologram.Compiler.EncoderTest do
 
   describe "list type" do
     test "empty" do
-      assert encode(%IR.ListType{data: []}, %Context{}) == "{type: 'list', data: []}"
+      assert encode(%IR.ListType{data: []}, %Context{}) == "Type.list([])"
     end
 
     test "non-empty" do
@@ -32,8 +32,7 @@ defmodule Hologram.Compiler.EncoderTest do
         ]
       }
 
-      assert encode(ir, %Context{}) ==
-               ~s/{type: 'list', data: [Type.integer(1), Type.atom("abc")]}/
+      assert encode(ir, %Context{}) == ~s/Type.list([Type.integer(1), Type.atom("abc")])/
     end
   end
 
