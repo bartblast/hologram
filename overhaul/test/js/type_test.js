@@ -478,20 +478,6 @@ describe("placeholder()", () => {
   })
 })
 
-describe("string()", () => {
-  it("returns boxed string value", () => {
-    const expected = {type: "string", value: "test"}
-    const result = Type.string("test")
-
-    assert.deepStrictEqual(result, expected)
-  })
-
-  it("returns frozen object", () => {
-    const result = Type.string("test")
-    assertFrozen(result)
-  })
-})
-
 describe("stringKey()", () => {
   it("returns serialized boxed string value", () => {
     const result = Type.stringKey("test")

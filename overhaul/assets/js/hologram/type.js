@@ -133,10 +133,6 @@ export default class Type {
     return Utils.freeze({type: "placeholder"})
   }
 
-  static string(value) {
-    return Utils.freeze({type: "string", value: value})
-  }
-
   static stringKey(key) {
     return `~string[${key}]`
   }

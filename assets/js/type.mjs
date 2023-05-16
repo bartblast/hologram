@@ -31,4 +31,8 @@ export default class Type {
   static list(data) {
     return Utils.freeze({type: "list", data: data});
   }
+
+  static string(value) {
+    return Utils.freeze({type: "string", value: value});
+  }
 }

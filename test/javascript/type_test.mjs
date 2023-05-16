@@ -92,3 +92,16 @@ describe("list()", () => {
     assertFrozen(result);
   });
 });
+
+describe("string()", () => {
+  it("returns boxed string value", () => {
+    const result = Type.string("test");
+    const expected = { type: "string", value: "test" };
+
+    assert.deepStrictEqual(result, expected);
+  });
+
+  it("returns frozen object", () => {
+    assertFrozen(Type.string("test"));
+  });
+});
