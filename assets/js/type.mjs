@@ -12,6 +12,7 @@ export default class Type {
       case "atom":
       case "float":
       case "integer":
+      case "string":
         return Type.encodePrimitiveTypeMapKey(boxed);
     }
   }

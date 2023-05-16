@@ -37,6 +37,13 @@ describe("encodeMapKey()", () => {
 
     assert.equal(result, "integer(123)");
   });
+
+  it("encodes boxed string value as map key", () => {
+    const boxed = Type.string("abc");
+    const result = Type.encodeMapKey(boxed);
+
+    assert.equal(result, "string(abc)");
+  });
 });
 
 describe("encodePrimitiveTypeMapKey()", () => {
