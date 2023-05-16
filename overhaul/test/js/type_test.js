@@ -131,20 +131,6 @@ describe("encodedKey()", () => {
   })
 })
 
-describe("integer()", () => {
-  it("returns boxed integer value", () => {
-    const expected = {type: "integer", value: 1}
-    const result = Type.integer(1)
-
-    assert.deepStrictEqual(result, expected)
-  })
-
-  it("returns frozen object", () => {
-    const result = Type.integer(1)
-    assertFrozen(result)
-  })
-})
-
 describe("isAtom()", () => {
   it("returns true for boxed atom value", () => {
     const arg = Type.atom("test")

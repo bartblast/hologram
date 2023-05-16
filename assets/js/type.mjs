@@ -10,4 +10,8 @@ export default class Type {
   static float(value) {
     return Utils.freeze({type: "float", value: value});
   }
+
+  static integer(value) {
+    return Utils.freeze({type: "integer", value: value});
+  }
 }

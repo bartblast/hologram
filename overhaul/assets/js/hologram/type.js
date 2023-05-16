@@ -68,10 +68,6 @@ export default class Type {
     return Utils.freeze({type: "expression", callback: callback})
   }
 
-  static integer(value) {
-    return Utils.freeze({type: "integer", value: value})
-  }
-
   static isAnonymousFunction(boxedValue) {
     return boxedValue.type === "anonymous_function"
   }

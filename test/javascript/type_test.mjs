@@ -28,3 +28,16 @@ describe("float()", () => {
     assertFrozen(Type.float(1.0));
   });
 });
+
+describe("integer()", () => {
+  it("returns boxed integer value", () => {
+    const result = Type.integer(1);
+    const expected = { type: "integer", value: 1 };
+
+    assert.deepStrictEqual(result, expected);
+  });
+
+  it("returns frozen object", () => {
+    assertFrozen(Type.integer(1));
+  });
+});
