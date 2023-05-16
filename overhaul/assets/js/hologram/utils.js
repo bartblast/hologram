@@ -18,21 +18,6 @@ export default class Utils {
     (new Function(`${code};`)());
   }
 
-  // based on deepFreeze() from: https://developer.mozilla.org/pl/docs/Web/JavaScript/Reference/Global_Objects/Object/freeze
-  static freeze(obj) {
-    const props = Object.getOwnPropertyNames(obj);
-    
-    for (const prop of props) {
-      const val = obj[prop];
-
-      if (val && typeof val === "object") {
-        Utils.freeze(val);
-      }
-    }
-
-    return Object.freeze(obj);
-  }
-
   static isEqual(left, right) {
     return isEqual(left, right)
   }

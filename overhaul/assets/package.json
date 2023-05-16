@@ -1,6 +1,5 @@
 {
   "devDependencies": {
-    "chai": "^4",
     "jsdom": "^21",
     "lodash": "^4",
     "morphdom": "^2",
