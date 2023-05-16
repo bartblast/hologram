@@ -9,10 +9,6 @@ defmodule Hologram.MixProject do
 
   defp aliases do
     [
-      "format.all": [
-        "format",
-        "cmd npx prettier --write 'assets/**/*.js' 'test/js/**/*.js' '**/*.json'"
-      ],
       "test.all": [&test_js/1, "test", "test.e2e"],
       "test.e2e": ["cmd cd test/e2e && mix test"]
     ]

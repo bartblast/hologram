@@ -122,9 +122,13 @@ jobs:
     - name: Check lib security vulnerabilities in Elixir deps
       run: mix deps.audit
 
-    # Step: Check that the lib code has already been formatted.
-    - name: Check lib code formatted
+    # Step: Check that the lib Elixir code has already been formatted.
+    - name: Check lib Elixir code formatted
       run: mix format --check-formatted
+
+    # Step: Check that the lib JavaScript & JSON code has already been formatted.
+    - name: Check lib JavaScript & JSON code formatted
+      run: npx prettier 'assets/*.json' 'assets/js/*.mjs' 'test/javascript/**/*.mjs' --check --no-error-on-unmatched-pattern
 
     # Step: Compile the lib project treating any warnings as errors.
     - name: Check lib project compiles without warnings

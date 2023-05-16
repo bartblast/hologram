@@ -1,5 +1,7 @@
 pre-commit:
   parallel: true
   commands:
-      check_code_formatted:
+      check_elixir_code_formatted:
         run: mix format --check-formatted
+      check_javascript_and_json_code_formatted:
+        run: npx prettier 'assets/*.json' 'assets/js/*.mjs' 'test/javascript/**/*.mjs' --check --no-error-on-unmatched-pattern

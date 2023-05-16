@@ -8,29 +8,29 @@ describe("freeze()", () => {
     let obj = {
       a: {
         c: {
-          g: 1
+          g: 1,
         },
         d: {
-          h: 2
-        }
+          h: 2,
+        },
       },
       b: {
         e: {
-          i: 3
+          i: 3,
         },
         f: {
-          j: 4
-        }
+          j: 4,
+        },
       },
-    }
+    };
 
-    Utils.freeze(obj)
+    Utils.freeze(obj);
 
-    assertFrozen(obj.a)
-    assertFrozen(obj.a.c)
-    assertFrozen(obj.a.d)
-    assertFrozen(obj.b)
-    assertFrozen(obj.b.e)
-    assertFrozen(obj.b.f)
-  })
-})
+    assertFrozen(obj.a);
+    assertFrozen(obj.a.c);
+    assertFrozen(obj.a.d);
+    assertFrozen(obj.b);
+    assertFrozen(obj.b.e);
+    assertFrozen(obj.b.f);
+  });
+});
