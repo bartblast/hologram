@@ -224,6 +224,124 @@ defmodule Hologram.Compiler.EncoderTest do
     end
   end
 
+  describe "match operator" do
+    test "literal value on both sides" do
+      # 1 = 2
+      ir = %IR.MatchOperator{
+        left: %IR.IntegerType{value: 1},
+        right: %IR.IntegerType{value: 2}
+      }
+
+      assert encode(ir, %Context{}) ==
+               "Interpreter.matchOperator({type: 'integer', value: 1}, {type: 'integer', value: 2})"
+    end
+
+    test "variable in pattern" do
+      # x = 2
+      ir = %IR.MatchOperator{
+        left: %IR.Variable{name: :x},
+        right: %IR.IntegerType{value: 2}
+      }
+
+      assert encode(ir, %Context{}) ==
+               "Interpreter.matchOperator({type: 'variable', name: 'x'}, {type: 'integer', value: 2})"
+    end
+
+    test "variable in expression" do
+      # 1 = x
+      ir = %IR.MatchOperator{
+        left: %IR.IntegerType{value: 1},
+        right: %IR.Variable{name: :x}
+      }
+
+      assert encode(ir, %Context{}) ==
+               "Interpreter.matchOperator({type: 'integer', value: 1}, bindings.x)"
+    end
+
+    test "nested, variable in pattern" do
+      # x = 2 = 3
+      ir = %IR.MatchOperator{
+        left: %IR.Variable{name: :x},
+        right: %IR.MatchOperator{
+          left: %IR.IntegerType{value: 2},
+          right: %IR.IntegerType{value: 3}
+        }
+      }
+
+      assert encode(ir, %Context{}) ==
+               "Interpreter.matchOperator({type: 'variable', name: 'x'}, Interpreter.matchOperator({type: 'integer', value: 2}, {type: 'integer', value: 3}))"
+    end
+
+    test "nested, variable in the middle" do
+      # 1 = x = 3
+      ir = %IR.MatchOperator{
+        left: %IR.IntegerType{value: 1},
+        right: %IR.MatchOperator{
+          left: %IR.Variable{name: :x},
+          right: %IR.IntegerType{value: 3}
+        }
+      }
+
+      assert encode(ir, %Context{}) ==
+               "Interpreter.matchOperator({type: 'integer', value: 1}, Interpreter.matchOperator({type: 'variable', name: 'x'}, {type: 'integer', value: 3}))"
+    end
+
+    test "nested, variable in expression" do
+      # 1 = 2 = x
+      ir = %IR.MatchOperator{
+        left: %IR.IntegerType{value: 1},
+        right: %IR.MatchOperator{
+          left: %IR.IntegerType{value: 2},
+          right: %IR.Variable{name: :x}
+        }
+      }
+
+      assert encode(ir, %Context{}) ==
+               "Interpreter.matchOperator({type: 'integer', value: 1}, Interpreter.matchOperator({type: 'integer', value: 2}, bindings.x))"
+    end
+
+    test "nested multiple-times" do
+      # {a = b, 2, 3} = {1, c = d, 3} = {1, 2, e = f}
+      ir = %IR.MatchOperator{
+        left: %IR.TupleType{
+          data: [
+            %IR.MatchOperator{
+              left: %IR.Variable{name: :a},
+              right: %IR.Variable{name: :b}
+            },
+            %IR.IntegerType{value: 2},
+            %IR.IntegerType{value: 3}
+          ]
+        },
+        right: %IR.MatchOperator{
+          left: %IR.TupleType{
+            data: [
+              %IR.IntegerType{value: 1},
+              %IR.MatchOperator{
+                left: %IR.Variable{name: :c},
+                right: %IR.Variable{name: :d}
+              },
+              %IR.IntegerType{value: 3}
+            ]
+          },
+          right: %IR.TupleType{
+            data: [
+              %IR.IntegerType{value: 1},
+              %IR.IntegerType{value: 2},
+              %IR.MatchOperator{
+                left: %IR.Variable{name: :e},
+                right: %IR.Variable{name: :f}
+              }
+            ]
+          }
+        }
+      }
+
+      assert encode(ir, %Context{}) ==
+               "Interpreter.matchOperator({type: 'tuple', data: [Interpreter.matchOperator({type: 'variable', name: 'a'}, {type: 'variable', name: 'b'}), {type: 'integer', value: 2}, {type: 'integer', value: 3}]}, Interpreter.matchOperator({type: 'tuple', data: [{type: 'integer', value: 1}, Interpreter.matchOperator({type: 'variable', name: 'c'}, {type: 'variable', name: 'd'}), {type: 'integer', value: 3}]}, {type: 'tuple', data: [{type: 'integer', value: 1}, {type: 'integer', value: 2}, Interpreter.matchOperator({type: 'variable', name: 'e'}, bindings.f)]}))"
+    end
+  end
+
   test "string type" do
     ir = %IR.StringType{value: "aa'bb\ncc"}
 

@@ -34,6 +34,13 @@ defmodule Hologram.Compiler.Encoder do
     "{type: 'map', data: #{data_str}}"
   end
 
+  def encode(%IR.MatchOperator{left: left, right: right}, context) do
+    left = encode(left, %{context | pattern?: true})
+    right = encode(right, context)
+
+    "Interpreter.matchOperator(#{left}, #{right})"
+  end
+
   def encode(%IR.StringType{value: value}, _context) do
     encode_primitive_type(:atom, value, true)
   end
