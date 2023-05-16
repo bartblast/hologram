@@ -6,19 +6,6 @@ beforeEach(() => cleanup())
 import { HologramNotImplementedError } from "../../assets/js/hologram/errors";
 import Type from "../../assets/js/hologram/type";
 
-describe("atom()", () => {
-  it("returns boxed atom value", () => {
-    const expected = {type: "atom", value: "test"}
-    const result = Type.atom("test")
-
-    assert.deepStrictEqual(result, expected)
-  })
-
-  it("returns frozen object", () => {
-    const result = Type.atom("test")
-    assertFrozen(result)
-  })
-})
 
 describe("atomKey()", () => {
   it("returns serialized boxed atom value", () => {
@@ -41,20 +28,6 @@ describe("binary()", () => {
   })
 
   it("returns frozen object", () => {
-    assertFrozen(result)
-  })
-})
-
-describe("boolean()", () => {
-  it("returns boxed boolean value", () => {
-    const expected = {type: "boolean", value: true}
-    const result = Type.boolean(true)
-
-    assert.deepStrictEqual(result, expected)
-  })
-
-  it("returns frozen object", () => {
-    const result = Type.boolean(true)
     assertFrozen(result)
   })
 })
@@ -155,20 +128,6 @@ describe("encodedKey()", () => {
     const expectedMessage = 'Type.encodedKey(): boxedValue = {"type":"not implemented","value":"test"}'
     
     assert.throw(() => { Type.encodedKey(arg) }, HologramNotImplementedError, expectedMessage);
-  })
-})
-
-describe("float()", () => {
-  it("returns boxed float value", () => {
-    const expected = {type: "float", value: 1.0}
-    const result = Type.float(1.0)
-
-    assert.deepStrictEqual(result, expected)
-  })
-
-  it("returns frozen object", () => {
-    const result = Type.float(1.0)
-    assertFrozen(result)
   })
 })
 

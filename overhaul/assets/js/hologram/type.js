@@ -10,20 +10,12 @@ export default class Type {
     return Utils.freeze({type: "anonymous_function", callback: callback})
   }
 
-  static atom(value) {
-    return Utils.freeze({type: "atom", value: value})
-  }
-
   static atomKey(key) {
     return `~atom[${key}]`
   }
 
   static binary(elems) {
     return Utils.freeze({type: "binary", data: elems})
-  }
-
-  static boolean(value) {
-    return Utils.freeze({type: "boolean", value: value})
   }
 
   static componentNode(className, props, children) {
@@ -74,10 +66,6 @@ export default class Type {
   // DEFER: test
   static expressionNode(callback) {
     return Utils.freeze({type: "expression", callback: callback})
-  }
-
-  static float(value) {
-    return Utils.freeze({type: "float", value: value})
   }
 
   static integer(value) {
