@@ -131,6 +131,29 @@ describe("isAtom()", () => {
   });
 });
 
+describe("isFalse()", () => {
+  it("returns true for boxed false value", () => {
+    const arg = Type.atom("false");
+    const result = Type.isFalse(arg);
+
+    assert.isTrue(result);
+  });
+
+  it("returns false for boxed true value", () => {
+    const arg = Type.atom("true");
+    const result = Type.isFalse(arg);
+
+    assert.isFalse(result);
+  });
+
+  it("returns false for values of types other than boxed atom", () => {
+    const arg = Type.integer(123);
+    const result = Type.isFalse(arg);
+
+    assert.isFalse(result);
+  });
+});
+
 describe("isFloat()", () => {
   it("is a float", () => {
     const result = Type.isFloat(Type.float(1.23));

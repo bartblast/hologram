@@ -60,6 +60,10 @@ export default class Type {
     return boxed.type === "atom";
   }
 
+  static isFalse(boxed) {
+    return Type.isAtom(boxed) && boxed.value === "false";
+  }
+
   static isFloat(boxed) {
     return boxed.type === "float";
   }

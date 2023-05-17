@@ -62,10 +62,6 @@ export default class Type {
     return node.type === "expression"
   }
 
-  static isFalse(boxedValue) {
-    return boxedValue.type === "boolean" && boxedValue.value === false
-  }
-
   static isFalsy(boxedValue) {
     return Type.isFalse(boxedValue) || Type.isNil(boxedValue)
   }

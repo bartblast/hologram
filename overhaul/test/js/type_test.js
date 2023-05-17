@@ -147,29 +147,6 @@ describe("isExpressionNode()", () => {
   })
 })
 
-describe("isFalse()", () => {
-  it("returns true for boxed false value", () => {
-    const arg = Type.boolean(false)
-    const result = Type.isFalse(arg)
-
-    assert.isTrue(result)
-  })
-
-  it("returns false for boxed true value", () => {
-    const arg = Type.boolean(true)
-    const result = Type.isFalse(arg)
-
-    assert.isFalse(result)
-  })
-
-  it("returns false for values of type other than boxed boolean", () => {
-    const arg = Type.string("false")
-    const result = Type.isFalse(arg)
-    
-    assert.isFalse(result)
-  })
-})
-
 describe("isFalsy()", () => {
   it("returns true for boxed false value", () => {
     const arg = Type.boolean(false)
