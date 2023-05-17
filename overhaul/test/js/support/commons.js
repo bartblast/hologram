@@ -11,16 +11,8 @@ export const sinon = require("sinon");
 const { JSDOM } = require("jsdom");
 const util = require("util");
 
-export function assertBoxedFalse(boxedValue) {
-  assert.isTrue(Type.isFalse(boxedValue));
-}
-
 export function assertBoxedNil(boxedValue) {
   assert.isTrue(Type.isNil(boxedValue));
-}
-
-export function assertBoxedTrue(boxedValue) {
-  assert.isTrue(Type.isTrue(boxedValue));
 }
 
 export function assertFrozen(obj) {
