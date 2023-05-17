@@ -1,4 +1,7 @@
 {
+  "dependencies": {
+    "lodash": "^4"
+  },
   "devDependencies": {
     "chai": "^4",
     "mocha": "^10",

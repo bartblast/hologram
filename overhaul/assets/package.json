@@ -1,7 +1,6 @@
 {
   "devDependencies": {
     "jsdom": "^21",
-    "lodash": "^4",
     "morphdom": "^2",
     "phoenix": "^1.6",
     "prettier": "^2",
