@@ -175,24 +175,24 @@ describe("isFalse()", () => {
 });
 
 describe("isFloat()", () => {
-  it("is a float", () => {
+  it("returns true for boxed float value", () => {
     const result = Type.isFloat(Type.float(1.23));
     assert.isTrue(result);
   });
 
-  it("is not a float", () => {
+  it("returns false for values of types other than boxed float", () => {
     const result = Type.isFloat(Type.atom("abc"));
     assert.isFalse(result);
   });
 });
 
 describe("isInteger()", () => {
-  it("is an integer", () => {
+  it("returns true for boxed integer value", () => {
     const result = Type.isInteger(Type.integer(123));
     assert.isTrue(result);
   });
 
-  it("is not an integer", () => {
+  it("returns false for values of types other than boxed integer", () => {
     const result = Type.isInteger(Type.atom("abc"));
     assert.isFalse(result);
   });
@@ -245,12 +245,12 @@ describe("isTrue()", () => {
 });
 
 describe("isVariable()", () => {
-  it("is a variable", () => {
+  it("returns true if the given object is a boxed variable", () => {
     const result = Type.isVariable(Type.variable("abc"));
     assert.isTrue(result);
   });
 
-  it("is not a variable", () => {
+  it("returns false if the given object is not a boxed variable", () => {
     const result = Type.isVariable(Type.atom("abc"));
     assert.isFalse(result);
   });
