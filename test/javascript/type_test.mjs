@@ -45,6 +45,23 @@ describe("encodeMapKey()", () => {
     assert.equal(result, "list(integer(1),atom(b))");
   });
 
+  it("encodes empty boxed map value as map key", () => {
+    const result = Type.encodeMapKey(Type.map([]));
+
+    assert.equal(result, "map()");
+  });
+
+  it("encodes non-empty boxed map value as map key", () => {
+    const boxed = Type.map([
+      [Type.atom("b"), Type.integer(2)],
+      [Type.atom("a"), Type.integer(1)],
+    ]);
+
+    const result = Type.encodeMapKey(boxed);
+
+    assert.equal(result, "map(atom(a):integer(1),atom(b):integer(2))");
+  });
+
   it("encodes boxed string value as map key", () => {
     const boxed = Type.string("abc");
     const result = Type.encodeMapKey(boxed);
@@ -102,6 +119,34 @@ describe("list()", () => {
 
   it("returns frozen object", () => {
     assertFrozen(result);
+  });
+});
+
+describe("map", () => {
+  it("returns empty boxed map value", () => {
+    const expected = {type: "map", data: {}};
+
+    assert.deepStrictEqual(Type.map([]), expected);
+  });
+
+  it("returns non-empty boxed map value", () => {
+    const data = [
+      [Type.atom("a"), Type.integer(1)],
+      [Type.atom("b"), Type.integer(2)],
+    ];
+
+    const expectedData = {
+      "atom(a)": [Type.atom("a"), Type.integer(1)],
+      "atom(b)": [Type.atom("b"), Type.integer(2)],
+    };
+
+    const expected = {type: "map", data: expectedData};
+
+    assert.deepStrictEqual(Type.map(data), expected);
+  });
+
+  it("returns frozen object", () => {
+    assertFrozen(Type.map([]));
   });
 });
 

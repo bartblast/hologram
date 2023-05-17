@@ -8,7 +8,7 @@ export default class Type {
   }
 
   // private
-  static encodeEnumMapKey(boxed) {
+  static encodeEnumTypeMapKey(boxed) {
     const itemsStr = boxed.data
       .map((item) => Type.encodeMapKey(item))
       .join(",");
@@ -26,8 +26,21 @@ export default class Type {
 
       case "list":
       case "tuple":
-        return Type.encodeEnumMapKey(boxed);
+        return Type.encodeEnumTypeMapKey(boxed);
+
+      case "map":
+        return Type.encodeMapTypeMapKey(boxed);
     }
+  }
+
+  // private
+  static encodeMapTypeMapKey(boxed) {
+    const itemsStr = Object.keys(boxed.data)
+      .sort()
+      .map((key) => key + ":" + Type.encodeMapKey(boxed.data[key][1]))
+      .join(",");
+
+    return "map(" + itemsStr + ")";
   }
 
   // private
@@ -45,6 +58,15 @@ export default class Type {
 
   static list(data) {
     return Utils.freeze({type: "list", data: data});
+  }
+
+  static map(data) {
+    const hashTableWithMetadata = data.reduce((acc, [boxedKey, boxedValue]) => {
+      acc[Type.encodeMapKey(boxedKey)] = [boxedKey, boxedValue];
+      return acc;
+    }, {});
+
+    return Utils.freeze({type: "map", data: hashTableWithMetadata});
   }
 
   static string(value) {
