@@ -56,6 +56,10 @@ export default class Type {
     return Utils.freeze({type: "integer", value: value});
   }
 
+  static isFloat(boxed) {
+    return boxed.type === "float";
+  }
+
   static isInteger(boxed) {
     return boxed.type === "integer";
   }
