@@ -1,6 +1,5 @@
 "use strict";
 
-import StringUtils from "./string_utils.mjs";
 import Utils from "./utils.mjs";
 
 export default class Type {
