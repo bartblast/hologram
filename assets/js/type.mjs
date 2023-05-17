@@ -72,6 +72,10 @@ export default class Type {
     return Type.isInteger(boxed) || Type.isFloat(boxed);
   }
 
+  static isTrue(boxed) {
+    return Type.isAtom(boxed) && boxed.value === "true";
+  }
+
   static isVariable(boxed) {
     return boxed.type === "variable";
   }

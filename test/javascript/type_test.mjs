@@ -178,6 +178,29 @@ describe("isNumber()", () => {
   });
 });
 
+describe("isTrue()", () => {
+  it("returns true for boxed true value", () => {
+    const arg = Type.atom("true");
+    const result = Type.isTrue(arg);
+
+    assert.isTrue(result);
+  });
+
+  it("returns false for boxed false value", () => {
+    const arg = Type.atom("false");
+    const result = Type.isTrue(arg);
+
+    assert.isFalse(result);
+  });
+
+  it("returns false for values of types other than boxed atom", () => {
+    const arg = Type.integer(123);
+    const result = Type.isTrue(arg);
+
+    assert.isFalse(result);
+  });
+});
+
 describe("isVariable()", () => {
   it("is a variable", () => {
     const result = Type.isVariable(Type.variable("abc"));
