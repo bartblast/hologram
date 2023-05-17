@@ -86,10 +86,6 @@ export default class Type {
     return boxedValue.type === "nil"
   }
 
-  static isNumber(boxedValue) {
-    return boxedValue.type === "float" || boxedValue.type === "integer"
-  }
-
   static isString(boxedValue) {
     return boxedValue.type === "string"
   }

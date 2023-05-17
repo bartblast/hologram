@@ -257,29 +257,6 @@ describe("isNil()", () => {
   })
 })
 
-describe("isNumber()", () => {
-  it("returns true for boxed floats", () => {
-    const arg = Type.float(1.0)
-    const result = Type.isNumber(arg)
-
-    assert.isTrue(result)
-  })
-
-  it("returns true for boxed integers", () => {
-    const arg = Type.integer(1)
-    const result = Type.isNumber(arg)
-
-    assert.isTrue(result)
-  })
-
-  it("returns false for boxed types other than float or integer", () => {
-    const arg = Type.string("1")
-    const result = Type.isNumber(arg)
-
-    assert.isFalse(result)
-  })
-})
-
 describe("isString()", () => {
   it("returns true for boxed string value", () => {
     const arg = Type.string("test")

@@ -64,6 +64,10 @@ export default class Type {
     return boxed.type === "integer";
   }
 
+  static isNumber(boxed) {
+    return Type.isInteger(boxed) || Type.isFloat(boxed);
+  }
+
   static isVariable(boxed) {
     return boxed.type === "variable";
   }
