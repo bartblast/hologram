@@ -58,10 +58,6 @@ export default class Type {
     return boxedValue.type === "anonymous_function"
   }
 
-  static isAtom(boxedValue) {
-    return boxedValue.type === "atom"
-  }
-
   static isExpressionNode(node) {
     return node.type === "expression"
   }
@@ -88,10 +84,6 @@ export default class Type {
 
   static isString(boxedValue) {
     return boxedValue.type === "string"
-  }
-
-  static isTrue(boxedValue) {
-    return boxedValue.type === "boolean" && boxedValue.value === true
   }
 
   static isTruthy(boxedValue) {

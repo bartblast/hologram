@@ -131,22 +131,6 @@ describe("encodedKey()", () => {
   })
 })
 
-describe("isAtom()", () => {
-  it("returns true for boxed atom value", () => {
-    const arg = Type.atom("test")
-    const result = Type.isAtom(arg)
-
-    assert.isTrue(result)
-  })
-
-  it("returns false for values of type other than boxed atom", () => {
-    const arg = Type.boolean(false)
-    const result = Type.isAtom(arg)
-    
-    assert.isFalse(result)
-  })
-})
-
 describe("isExpressionNode()", () => {
   it("returns true if the arg is an expression node", () => {
     const arg = Type.expressionNode("test_callback")
