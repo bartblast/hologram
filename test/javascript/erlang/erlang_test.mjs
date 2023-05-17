@@ -32,6 +32,18 @@ describe("is_float/1", () => {
   });
 });
 
+describe("is_integer/1", () => {
+  it("returns boxed true for boxed integers", () => {
+    const result = erlang.is_integer(Type.integer(123));
+    assertBoxedTrue(result);
+  });
+
+  it("returns boxed false for types other than boxed integer", () => {
+    const result = erlang.is_integer(Type.atom("abc"));
+    assertBoxedFalse(result);
+  });
+});
+
 describe("is_number/1", () => {
   it("returns boxed true for boxed floats", () => {
     const result = erlang.is_number(Type.float(1.23));

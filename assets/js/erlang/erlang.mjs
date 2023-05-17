@@ -15,6 +15,12 @@ export default class erlang {
   }
   // end: is_float/1
 
+  // start: is_integer/1
+  static is_integer(term) {
+    return Type.boolean(Type.isInteger(term));
+  }
+  // end: is_integer/1
+
   // start: is_number/1
   static is_number(term) {
     return Type.boolean(Type.isNumber(term));
