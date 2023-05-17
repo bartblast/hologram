@@ -38,7 +38,13 @@ describe("encodeMapKey()", () => {
     assert.equal(result, "integer(123)");
   });
 
-  it("encodes boxed list value as map key", () => {
+  it("encodes empty boxed list value as map key", () => {
+    const result = Type.encodeMapKey(Type.list([]));
+
+    assert.equal(result, "list()");
+  });
+
+  it("encodes non-empty boxed list value as map key", () => {
     const boxed = Type.list([Type.integer(1), Type.atom("b")]);
     const result = Type.encodeMapKey(boxed);
 
@@ -69,7 +75,13 @@ describe("encodeMapKey()", () => {
     assert.equal(result, "string(abc)");
   });
 
-  it("encodes boxed tuple value as map key", () => {
+  it("encodes empty boxed tuple value as map key", () => {
+    const result = Type.encodeMapKey(Type.tuple([]));
+
+    assert.equal(result, "tuple()");
+  });
+
+  it("encodes non-empty boxed tuple value as map key", () => {
     const boxed = Type.tuple([Type.integer(1), Type.atom("b")]);
     const result = Type.encodeMapKey(boxed);
 
