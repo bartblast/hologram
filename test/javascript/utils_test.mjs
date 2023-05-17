@@ -1,6 +1,6 @@
 "use strict";
 
-import { assertFrozen } from "../../assets/js/test_support.mjs";
+import {assertFrozen} from "../../assets/js/test_support.mjs";
 import Utils from "../../assets/js/utils.mjs";
 
 describe("freeze()", () => {

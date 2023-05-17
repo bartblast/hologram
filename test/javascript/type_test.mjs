@@ -1,12 +1,12 @@
 "use strict";
 
-import { assert, assertFrozen } from "../../assets/js/test_support.mjs";
+import {assert, assertFrozen} from "../../assets/js/test_support.mjs";
 import Type from "../../assets/js/type.mjs";
 
 describe("atom()", () => {
   it("returns boxed atom value", () => {
     const result = Type.atom("test");
-    const expected = { type: "atom", value: "test" };
+    const expected = {type: "atom", value: "test"};
 
     assert.deepStrictEqual(result, expected);
   });
@@ -56,7 +56,7 @@ describe("encodeMapKey()", () => {
 describe("float()", () => {
   it("returns boxed float value", () => {
     const result = Type.float(1.23);
-    const expected = { type: "float", value: 1.23 };
+    const expected = {type: "float", value: 1.23};
 
     assert.deepStrictEqual(result, expected);
   });
@@ -69,7 +69,7 @@ describe("float()", () => {
 describe("integer()", () => {
   it("returns boxed integer value", () => {
     const result = Type.integer(1);
-    const expected = { type: "integer", value: 1 };
+    const expected = {type: "integer", value: 1};
 
     assert.deepStrictEqual(result, expected);
   });
@@ -86,7 +86,7 @@ describe("list()", () => {
     data = [Type.integer(1), Type.integer(2)];
 
     result = Type.list(data);
-    expected = { type: "list", data: data };
+    expected = {type: "list", data: data};
   });
 
   it("returns boxed list value", () => {
@@ -101,7 +101,7 @@ describe("list()", () => {
 describe("string()", () => {
   it("returns boxed string value", () => {
     const result = Type.string("test");
-    const expected = { type: "string", value: "test" };
+    const expected = {type: "string", value: "test"};
 
     assert.deepStrictEqual(result, expected);
   });
@@ -118,7 +118,7 @@ describe("tuple()", () => {
     data = [Type.integer(1), Type.integer(2)];
 
     result = Type.tuple(data);
-    expected = { type: "tuple", data: data };
+    expected = {type: "tuple", data: data};
   });
 
   it("returns boxed tuple value", () => {
