@@ -17,9 +17,18 @@ describe("is_float/1", () => {
 })
 
 describe("is_number/1", () => {
-  it("delegates to runtime Type.isNumber/1", () => {
-    const result = erlang.is_number(Type.integer(123))
+  it("returns boxed true for boxed floats", () => {
+    const result = Type.isNumber(Type.float(1.23));
+    assertBoxedTrue(result)
+  });
 
-    assert.isTrue(result)
-  })
+  it("returns boxed true for boxed integers", () => {
+    const result = Type.isNumber(Type.integer(123));
+    assertBoxedTrue(result)
+  });
+
+  it("returns boxed false for types other than boxed float or boxed integer", () => {
+    const result = Type.isNumber(Type.atom("abc"));
+    assertBoxedFalse(result)
+  });
 })
