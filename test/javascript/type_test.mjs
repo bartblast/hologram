@@ -51,6 +51,13 @@ describe("encodeMapKey()", () => {
 
     assert.equal(result, "string(abc)");
   });
+
+  it("encodes boxed tuple value as map key", () => {
+    const boxed = Type.tuple([Type.integer(1), Type.atom("b")]);
+    const result = Type.encodeMapKey(boxed);
+
+    assert.equal(result, "tuple(integer(1),atom(b))");
+  });
 });
 
 describe("float()", () => {

@@ -25,6 +25,7 @@ export default class Type {
         return Type.encodePrimitiveTypeMapKey(boxed);
 
       case "list":
+      case "tuple":
         return Type.encodeEnumMapKey(boxed);
     }
   }
