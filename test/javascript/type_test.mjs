@@ -16,6 +16,26 @@ describe("atom()", () => {
   });
 });
 
+describe("boolean()", () => {
+  it("returns boxed true value", () => {
+    const result = Type.boolean(true);
+    const expected = {type: "atom", value: "true"};
+
+    assert.deepStrictEqual(result, expected);
+  });
+
+  it("returns boxed false value", () => {
+    const result = Type.boolean(false);
+    const expected = {type: "atom", value: "false"};
+
+    assert.deepStrictEqual(result, expected);
+  });
+
+  it("returns frozen object", () => {
+    assertFrozen(Type.boolean(true));
+  });
+});
+
 describe("encodeMapKey()", () => {
   it("encodes boxed atom value as map key", () => {
     const boxed = Type.atom("abc");

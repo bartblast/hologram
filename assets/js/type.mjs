@@ -7,6 +7,10 @@ export default class Type {
     return Utils.freeze({type: "atom", value: value});
   }
 
+  static boolean(value) {
+    return Type.atom(value.toString());
+  }
+
   // private
   static encodeEnumTypeMapKey(boxed) {
     const itemsStr = boxed.data
