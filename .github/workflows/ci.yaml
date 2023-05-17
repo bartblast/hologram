@@ -128,7 +128,7 @@ jobs:
 
     # Step: Check that the lib JavaScript & JSON code has already been formatted.
     - name: Check lib JavaScript & JSON code formatted
-      run: npx prettier 'assets/*.json' 'assets/js/*.mjs' 'test/javascript/*.mjs' --check --config 'assets/.prettierrc.json' --no-error-on-unmatched-pattern
+      run: npx prettier 'assets/*.json' 'assets/js/**/*.mjs' 'test/javascript/**/*.mjs' --check --config 'assets/.prettierrc.json' --no-error-on-unmatched-pattern
 
     # Step: Compile the lib project treating any warnings as errors.
     - name: Check lib project compiles without warnings

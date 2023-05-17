@@ -4,4 +4,4 @@ pre-commit:
       check_elixir_code_formatted:
         run: mix format --check-formatted
       check_javascript_and_json_code_formatted:
-        run: npx prettier 'assets/*.json' 'assets/js/*.mjs' 'test/javascript/*.mjs' --check --config 'assets/.prettierrc.json' --no-error-on-unmatched-pattern
+        run: npx prettier 'assets/*.json' 'assets/js/**/*.mjs' 'test/javascript/**/*.mjs' --check --config 'assets/.prettierrc.json' --no-error-on-unmatched-pattern
