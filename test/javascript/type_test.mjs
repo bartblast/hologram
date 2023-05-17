@@ -53,15 +53,6 @@ describe("encodeMapKey()", () => {
   });
 });
 
-describe("encodePrimitiveTypeMapKey()", () => {
-  it("encodes primitive type as map key", () => {
-    const boxed = Type.atom("abc");
-    const result = Type.encodePrimitiveTypeMapKey(boxed);
-
-    assert.equal(result, "atom(abc)");
-  });
-});
-
 describe("float()", () => {
   it("returns boxed float value", () => {
     const result = Type.float(1.23);

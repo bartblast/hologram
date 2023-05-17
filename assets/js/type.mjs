@@ -7,6 +7,7 @@ export default class Type {
     return Utils.freeze({type: "atom", value: value});
   }
 
+  // private
   static encodeEnumMapKey(boxed) {
     const itemsStr = boxed.data
       .map((item) => Type.encodeMapKey(item))
@@ -28,6 +29,7 @@ export default class Type {
     }
   }
 
+  // private
   static encodePrimitiveTypeMapKey(boxed) {
     return `${boxed.type}(${boxed.value})`;
   }
