@@ -38,6 +38,13 @@ describe("encodeMapKey()", () => {
     assert.equal(result, "integer(123)");
   });
 
+  it("encodes boxed list value as map key", () => {
+    const boxed = Type.list([Type.integer(1), Type.atom("b")]);
+    const result = Type.encodeMapKey(boxed);
+
+    assert.equal(result, "list(integer(1),atom(b))");
+  });
+
   it("encodes boxed string value as map key", () => {
     const boxed = Type.string("abc");
     const result = Type.encodeMapKey(boxed);

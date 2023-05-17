@@ -1,10 +1,19 @@
 "use strict";
 
+import StringUtils from "./string_utils.mjs";
 import Utils from "./utils.mjs";
 
 export default class Type {
   static atom(value) {
     return Utils.freeze({type: "atom", value: value});
+  }
+
+  static encodeEnumMapKey(boxed) {
+    const itemsStr = boxed.data
+      .map((item) => Type.encodeMapKey(item))
+      .join(",");
+
+    return boxed.type + "(" + itemsStr + ")";
   }
 
   static encodeMapKey(boxed) {
@@ -14,6 +23,9 @@ export default class Type {
       case "integer":
       case "string":
         return Type.encodePrimitiveTypeMapKey(boxed);
+
+      case "list":
+        return Type.encodeEnumMapKey(boxed);
     }
   }
 
