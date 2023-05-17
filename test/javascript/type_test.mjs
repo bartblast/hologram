@@ -115,6 +115,18 @@ describe("integer()", () => {
   });
 });
 
+describe("isInteger()", () => {
+  it("is an integer", () => {
+    const result = Type.isInteger(Type.integer(123));
+    assert.isTrue(result);
+  });
+
+  it("is not an integer", () => {
+    const result = Type.isInteger(Type.atom("abc"));
+    assert.isFalse(result);
+  });
+});
+
 describe("isVariable()", () => {
   it("is a variable", () => {
     const result = Type.isVariable(Type.variable("abc"));
