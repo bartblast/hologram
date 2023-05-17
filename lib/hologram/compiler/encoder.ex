@@ -48,7 +48,7 @@ defmodule Hologram.Compiler.Encoder do
 
   def encode(%IR.Variable{name: name}, %{pattern?: true}) do
     name_str = encode_as_string(name, true)
-    "{type: 'variable', name: #{name_str}}"
+    "Type.variable(#{name_str})"
   end
 
   def encode(%IR.Variable{name: name}, %{pattern?: false}) do
