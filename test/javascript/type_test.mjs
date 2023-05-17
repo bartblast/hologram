@@ -110,3 +110,22 @@ describe("string()", () => {
     assertFrozen(Type.string("test"));
   });
 });
+
+describe("tuple()", () => {
+  let data, expected, result;
+
+  beforeEach(() => {
+    data = [Type.integer(1), Type.integer(2)];
+
+    result = Type.tuple(data);
+    expected = { type: "tuple", data: data };
+  });
+
+  it("returns boxed tuple value", () => {
+    assert.deepStrictEqual(result, expected);
+  });
+
+  it("returns frozen object", () => {
+    assertFrozen(result);
+  });
+});

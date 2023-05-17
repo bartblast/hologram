@@ -49,4 +49,8 @@ export default class Type {
   static string(value) {
     return Utils.freeze({type: "string", value: value});
   }
+
+  static tuple(data) {
+    return Utils.freeze({type: "tuple", data: data});
+  }
 }

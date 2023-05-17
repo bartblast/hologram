@@ -518,21 +518,3 @@ describe("textNode()", () => {
     assertFrozen(result)
   })
 })
-
-describe("tuple()", () => {
-  let elems, expected, result;
-
-  beforeEach(() => {
-    elems = [Type.integer(1), Type.integer(2)]
-    expected = {type: "tuple", data: elems}
-    result = Type.tuple(elems)
-  })
-
-  it("returns boxed tuple value", () => {
-    assert.deepStrictEqual(result, expected)
-  })
-
-  it("returns frozen object", () => {
-    assertFrozen(result)
-  })
-})
