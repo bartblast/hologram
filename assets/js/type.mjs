@@ -12,7 +12,7 @@ export default class Type {
   }
 
   // private
-  static encodeEnumTypeMapKey(boxed) {
+  static _encodeEnumTypeMapKey(boxed) {
     const itemsStr = boxed.data
       .map((item) => Type.encodeMapKey(item))
       .join(",");
@@ -26,19 +26,19 @@ export default class Type {
       case "float":
       case "integer":
       case "string":
-        return Type.encodePrimitiveTypeMapKey(boxed);
+        return Type._encodePrimitiveTypeMapKey(boxed);
 
       case "list":
       case "tuple":
-        return Type.encodeEnumTypeMapKey(boxed);
+        return Type._encodeEnumTypeMapKey(boxed);
 
       case "map":
-        return Type.encodeMapTypeMapKey(boxed);
+        return Type._encodeMapTypeMapKey(boxed);
     }
   }
 
   // private
-  static encodeMapTypeMapKey(boxed) {
+  static _encodeMapTypeMapKey(boxed) {
     const itemsStr = Object.keys(boxed.data)
       .sort()
       .map((key) => key + ":" + Type.encodeMapKey(boxed.data[key][1]))
@@ -48,7 +48,7 @@ export default class Type {
   }
 
   // private
-  static encodePrimitiveTypeMapKey(boxed) {
+  static _encodePrimitiveTypeMapKey(boxed) {
     return `${boxed.type}(${boxed.value})`;
   }
 
