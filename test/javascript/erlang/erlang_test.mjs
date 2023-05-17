@@ -1,12 +1,24 @@
 "use strict";
 
 import {
-  assert,
   assertBoxedTrue,
   assertBoxedFalse,
 } from "../../../assets/js/test_support.mjs";
+
 import erlang from "../../../assets/js/erlang/erlang.mjs";
 import Type from "../../../assets/js/type.mjs";
+
+describe("is_atom/1", () => {
+  it("returns boxed true for boxed atoms", () => {
+    const result = erlang.is_atom(Type.atom("abc"));
+    assertBoxedTrue(result);
+  });
+
+  it("returns boxed false for types other than boxed atom", () => {
+    const result = erlang.is_atom(Type.integer(123));
+    assertBoxedFalse(result);
+  });
+});
 
 describe("is_float/1", () => {
   it("returns boxed true for boxed floats", () => {
