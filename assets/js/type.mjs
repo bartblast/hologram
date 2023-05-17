@@ -76,4 +76,8 @@ export default class Type {
   static tuple(data) {
     return Utils.freeze({type: "tuple", data: data});
   }
+
+  static variable(name) {
+    return Utils.freeze({type: "variable", name: name});
+  }
 }

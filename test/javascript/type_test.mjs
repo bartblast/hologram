@@ -193,3 +193,16 @@ describe("tuple()", () => {
     assertFrozen(result);
   });
 });
+
+describe("variable()", () => {
+  it("returns variable placeholder", () => {
+    const result = Type.variable("test");
+    const expected = {type: "variable", name: "test"};
+
+    assert.deepStrictEqual(result, expected);
+  });
+
+  it("returns frozen object", () => {
+    assertFrozen(Type.variable("test"));
+  });
+});
