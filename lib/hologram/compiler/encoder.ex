@@ -19,7 +19,8 @@ defmodule Hologram.Compiler.Encoder do
   end
 
   def encode(%IR.ListType{data: data}, context) do
-    "Type.list(#{encode_as_array(data, context)})"
+    data_str = encode_as_array(data, context)
+    "Type.list(#{data_str})"
   end
 
   def encode(%IR.MapType{data: data}, context) do
@@ -43,7 +44,8 @@ defmodule Hologram.Compiler.Encoder do
   end
 
   def encode(%IR.TupleType{data: data}, context) do
-    "{type: 'tuple', data: #{encode_as_array(data, context)}}"
+    data_str = encode_as_array(data, context)
+    "Type.tuple(#{data_str})"
   end
 
   def encode(%IR.Variable{name: name}, %{pattern?: true}) do

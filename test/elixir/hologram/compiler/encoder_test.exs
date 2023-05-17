@@ -181,7 +181,7 @@ defmodule Hologram.Compiler.EncoderTest do
       }
 
       assert encode(ir, %Context{}) ==
-               ~s/Interpreter.matchOperator({type: 'tuple', data: [Interpreter.matchOperator(Type.variable("a"), Type.variable("b")), Type.integer(2), Type.integer(3)]}, Interpreter.matchOperator({type: 'tuple', data: [Type.integer(1), Interpreter.matchOperator(Type.variable("c"), Type.variable("d")), Type.integer(3)]}, {type: 'tuple', data: [Type.integer(1), Type.integer(2), Interpreter.matchOperator(Type.variable("e"), bindings.f)]}))/
+               ~s/Interpreter.matchOperator(Type.tuple([Interpreter.matchOperator(Type.variable("a"), Type.variable("b")), Type.integer(2), Type.integer(3)]), Interpreter.matchOperator(Type.tuple([Type.integer(1), Interpreter.matchOperator(Type.variable("c"), Type.variable("d")), Type.integer(3)]), Type.tuple([Type.integer(1), Type.integer(2), Interpreter.matchOperator(Type.variable("e"), bindings.f)])))/
     end
   end
 
@@ -193,7 +193,7 @@ defmodule Hologram.Compiler.EncoderTest do
 
   describe "tuple type" do
     test "empty" do
-      assert encode(%IR.TupleType{data: []}, %Context{}) == "{type: 'tuple', data: []}"
+      assert encode(%IR.TupleType{data: []}, %Context{}) == "Type.tuple([])"
     end
 
     test "non-empty" do
@@ -204,8 +204,7 @@ defmodule Hologram.Compiler.EncoderTest do
         ]
       }
 
-      assert encode(ir, %Context{}) ==
-               ~s/{type: 'tuple', data: [Type.integer(1), Type.atom("abc")]}/
+      assert encode(ir, %Context{}) == ~s/Type.tuple([Type.integer(1), Type.atom("abc")])/
     end
   end
 
