@@ -38,7 +38,7 @@ defmodule Hologram.Compiler.EncoderTest do
 
   describe "map type" do
     test "empty" do
-      assert encode(%IR.MapType{data: []}, %Context{}) == "{type: 'map', data: {}}"
+      assert encode(%IR.MapType{data: []}, %Context{}) == "Type.map([])"
     end
 
     test "single key" do
@@ -51,8 +51,7 @@ defmodule Hologram.Compiler.EncoderTest do
         ]
       }
 
-      assert encode(ir, %Context{}) ==
-               "{type: 'map', data: {'atom(a)': Type.integer(1)}}"
+      assert encode(ir, %Context{}) == ~s/Type.map([[Type.atom("a"), Type.integer(1)]])/
     end
 
     test "multiple keys" do
@@ -64,162 +63,7 @@ defmodule Hologram.Compiler.EncoderTest do
       }
 
       assert encode(ir, %Context{}) ==
-               "{type: 'map', data: {'atom(a)': Type.integer(1), 'atom(b)': Type.integer(2)}}"
-    end
-
-    test "atom key" do
-      ir = %IR.MapType{
-        data: [
-          {
-            %IR.AtomType{value: :a},
-            %IR.IntegerType{value: 1}
-          }
-        ]
-      }
-
-      assert encode(ir, %Context{}) ==
-               "{type: 'map', data: {'atom(a)': Type.integer(1)}}"
-    end
-
-    test "float key" do
-      ir = %IR.MapType{
-        data: [
-          {
-            %IR.FloatType{value: 1.23},
-            %IR.IntegerType{value: 1}
-          }
-        ]
-      }
-
-      assert encode(ir, %Context{}) ==
-               "{type: 'map', data: {'float(1.23)': Type.integer(1)}}"
-    end
-
-    test "integer key" do
-      ir = %IR.MapType{
-        data: [
-          {
-            %IR.IntegerType{value: 987},
-            %IR.IntegerType{value: 1}
-          }
-        ]
-      }
-
-      assert encode(ir, %Context{}) ==
-               "{type: 'map', data: {'integer(987)': Type.integer(1)}}"
-    end
-
-    test "list key, empty list" do
-      ir = %IR.MapType{
-        data: [
-          {
-            %IR.ListType{data: []},
-            %IR.IntegerType{value: 1}
-          }
-        ]
-      }
-
-      assert encode(ir, %Context{}) ==
-               "{type: 'map', data: {'list()': Type.integer(1)}}"
-    end
-
-    test "list key, non-empty list" do
-      ir = %IR.MapType{
-        data: [
-          {
-            %IR.ListType{
-              data: [
-                %IR.IntegerType{value: 1},
-                %IR.AtomType{value: :abc}
-              ]
-            },
-            %IR.IntegerType{value: 1}
-          }
-        ]
-      }
-
-      assert encode(ir, %Context{}) ==
-               "{type: 'map', data: {'list(integer(1),atom(abc))': Type.integer(1)}}"
-    end
-
-    test "map key, empty map" do
-      ir = %IR.MapType{
-        data: [
-          {
-            %IR.MapType{data: []},
-            %IR.IntegerType{value: 1}
-          }
-        ]
-      }
-
-      assert encode(ir, %Context{}) ==
-               "{type: 'map', data: {'map()': Type.integer(1)}}"
-    end
-
-    test "map key, non-empty map" do
-      ir = %IR.MapType{
-        data: [
-          {
-            %IR.MapType{
-              data: [
-                {%IR.IntegerType{value: 1}, %IR.FloatType{value: 1.23}},
-                {%IR.AtomType{value: :b}, %IR.StringType{value: "abc"}}
-              ]
-            },
-            %IR.IntegerType{value: 2}
-          }
-        ]
-      }
-
-      assert encode(ir, %Context{}) ==
-               "{type: 'map', data: {'map(integer(1):float(1.23),atom(b):string(abc))': Type.integer(2)}}"
-    end
-
-    test "string key" do
-      ir = %IR.MapType{
-        data: [
-          {
-            %IR.StringType{value: "abc"},
-            %IR.IntegerType{value: 1}
-          }
-        ]
-      }
-
-      assert encode(ir, %Context{}) ==
-               "{type: 'map', data: {'string(abc)': Type.integer(1)}}"
-    end
-
-    test "tuple key, empty tuple" do
-      ir = %IR.MapType{
-        data: [
-          {
-            %IR.TupleType{data: []},
-            %IR.IntegerType{value: 1}
-          }
-        ]
-      }
-
-      assert encode(ir, %Context{}) ==
-               "{type: 'map', data: {'tuple()': Type.integer(1)}}"
-    end
-
-    test "tuple key, non-empty tuple" do
-      ir = %IR.MapType{
-        data: [
-          {
-            %IR.TupleType{
-              data: [
-                %IR.IntegerType{value: 1},
-                %IR.AtomType{value: :abc}
-              ]
-            },
-            %IR.IntegerType{value: 1}
-          }
-        ]
-      }
-
-      assert encode(ir, %Context{}) ==
-               "{type: 'map', data: {'tuple(integer(1),atom(abc))': Type.integer(1)}}"
+               ~s/Type.map([[Type.atom("a"), Type.integer(1)], [Type.atom("b"), Type.integer(2)]])/
     end
   end
 
