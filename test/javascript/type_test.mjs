@@ -115,6 +115,18 @@ describe("integer()", () => {
   });
 });
 
+describe("isVariable()", () => {
+  it("is a variable", () => {
+    const result = Type.isVariable(Type.variable("abc"));
+    assert.isTrue(result);
+  });
+
+  it("is not a variable", () => {
+    const result = Type.isVariable(Type.atom("abc"));
+    assert.isFalse(result);
+  });
+});
+
 describe("list()", () => {
   let data, expected, result;
 

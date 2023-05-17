@@ -56,6 +56,10 @@ export default class Type {
     return Utils.freeze({type: "integer", value: value});
   }
 
+  static isVariable(boxed) {
+    return boxed.type === "variable";
+  }
+
   static list(data) {
     return Utils.freeze({type: "list", data: data});
   }
