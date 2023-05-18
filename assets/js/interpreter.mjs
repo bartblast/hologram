@@ -18,6 +18,10 @@ export default class Interpreter {
     return enumerable.data.length;
   }
 
+  static head(list) {
+    return list.data[0];
+  }
+
   static isStrictlyEqual(left, right) {
     if (left.type !== right.type) {
       return false;
