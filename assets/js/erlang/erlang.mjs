@@ -10,6 +10,12 @@ export default class erlang {
   }
   // end: =:=/2
 
+  // start: hd/1
+  static hd(list) {
+    return Interpreter.head(list);
+  }
+  // end: hd/1
+
   // start: is_atom/1
   static is_atom(term) {
     return Type.boolean(Type.isAtom(term));

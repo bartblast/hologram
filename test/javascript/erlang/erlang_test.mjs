@@ -53,6 +53,15 @@ describe("$61$58$61/2 (=:=)", () => {
   });
 });
 
+describe("hd/1", () => {
+  it("returns the first item in a boxed list", () => {
+    const list = Type.list([Type.integer(1), Type.integer(2), Type.integer(3)]);
+    const result = erlang.hd(list);
+
+    assert.deepStrictEqual(result, Type.integer(1));
+  });
+});
+
 describe("is_atom/1", () => {
   it("returns boxed true for boxed atoms", () => {
     const result = erlang.is_atom(Type.atom("abc"));
