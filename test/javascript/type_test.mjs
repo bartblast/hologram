@@ -170,6 +170,21 @@ describe("isAtom()", () => {
   });
 });
 
+describe("isConsPattern()", () => {
+  it("returns true if the given object is a boxed cons pattern", () => {
+    const head = Type.integer(1);
+    const tail = Type.list([Type.integer(2), Type.integer(3)]);
+    const result = Type.isConsPattern(Type.consPattern(head, tail));
+
+    assert.isTrue(result);
+  });
+
+  it("returns false if the given object is not a boxed cons pattern", () => {
+    const result = Type.isConsPattern(Type.atom("abc"));
+    assert.isFalse(result);
+  });
+});
+
 describe("isFalse()", () => {
   it("returns true for boxed false value", () => {
     const arg = Type.atom("false");
@@ -264,12 +279,12 @@ describe("isTrue()", () => {
 });
 
 describe("isVariablePattern()", () => {
-  it("returns true if the given object is a boxed variable", () => {
+  it("returns true if the given object is a boxed variable pattern", () => {
     const result = Type.isVariablePattern(Type.variablePattern("abc"));
     assert.isTrue(result);
   });
 
-  it("returns false if the given object is not a boxed variable", () => {
+  it("returns false if the given object is not a boxed variable pattern", () => {
     const result = Type.isVariablePattern(Type.atom("abc"));
     assert.isFalse(result);
   });

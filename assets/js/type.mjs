@@ -68,6 +68,10 @@ export default class Type {
     return boxed.type === "atom";
   }
 
+  static isConsPattern(boxed) {
+    return boxed.type === "cons_pattern";
+  }
+
   static isFalse(boxed) {
     return Type.isAtom(boxed) && boxed.value === "false";
   }
