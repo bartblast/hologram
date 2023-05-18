@@ -36,17 +36,17 @@ describe("boolean()", () => {
   });
 });
 
-describe("cons()", () => {
+describe("consPattern()", () => {
   let head, tail, result;
 
   beforeEach(() => {
     head = Type.integer(1);
     tail = Type.list([Type.integer(2), Type.integer(3)]);
-    result = Type.cons(head, tail);
+    result = Type.consPattern(head, tail);
   });
 
-  it("returns cons operator placeholder", () => {
-    const expected = {type: "cons", head: head, tail: tail};
+  it("returns cons pattern placeholder", () => {
+    const expected = {type: "cons_pattern", head: head, tail: tail};
     assert.deepStrictEqual(result, expected);
   });
 
@@ -354,8 +354,8 @@ describe("tuple()", () => {
   });
 });
 
-describe("variable()", () => {
-  it("returns variable placeholder", () => {
+describe("variablePattern()", () => {
+  it("returns variable pattern placeholder", () => {
     const result = Type.variablePattern("test");
     const expected = {type: "variable_pattern", name: "test"};
 

@@ -11,8 +11,8 @@ export default class Type {
     return Type.atom(value.toString());
   }
 
-  static cons(head, tail) {
-    return Utils.freeze({type: "cons", head: head, tail: tail});
+  static consPattern(head, tail) {
+    return Utils.freeze({type: "cons_pattern", head: head, tail: tail});
   }
 
   // private
