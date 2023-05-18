@@ -10,6 +10,14 @@ defmodule Hologram.Compiler.Encoder do
     encode_primitive_type(:atom, value, true)
   end
 
+  def encode(%IR.ConsOperator{head: head, tail: tail}, %{pattern?: true} = context) do
+    "Type.consPattern(#{encode(head, context)}, #{encode(tail, context)})"
+  end
+
+  def encode(%IR.ConsOperator{head: head, tail: tail}, %{pattern?: false} = context) do
+    "Interpreter.consOperator(#{encode(head, context)}, #{encode(tail, context)}))"
+  end
+
   def encode(%IR.FloatType{value: value}, _context) do
     encode_primitive_type(:float, value, false)
   end

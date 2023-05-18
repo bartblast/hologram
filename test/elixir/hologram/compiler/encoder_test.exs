@@ -11,6 +11,23 @@ defmodule Hologram.Compiler.EncoderTest do
     assert encode(ir, %Context{}) == ~s/Type.atom("aa\\"bb\\ncc")/
   end
 
+  describe "cons operator" do
+    @cons_operator_ir %IR.ConsOperator{
+      head: %IR.IntegerType{value: 1},
+      tail: %IR.ListType{data: [%IR.IntegerType{value: 2}, %IR.IntegerType{value: 3}]}
+    }
+
+    test "not inside pattern" do
+      assert encode(@cons_operator_ir, %Context{pattern?: false}) ==
+               "Interpreter.consOperator(Type.integer(1), Type.list([Type.integer(2), Type.integer(3)])))"
+    end
+
+    test "inside pattern" do
+      assert encode(@cons_operator_ir, %Context{pattern?: true}) ==
+               "Type.consPattern(Type.integer(1), Type.list([Type.integer(2), Type.integer(3)]))"
+    end
+  end
+
   test "float type" do
     assert encode(%IR.FloatType{value: 1.23}, %Context{}) == "Type.float(1.23)"
   end
