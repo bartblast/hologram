@@ -1,8 +1,15 @@
 "use strict";
 
 import Type from "../type.mjs";
+import Interpreter from "../interpreter.mjs";
 
 export default class erlang {
+  // start: =:=/2
+  static $61$58$61(left, right) {
+    return Type.boolean(Interpreter.isStrictlyEqual(left, right));
+  }
+  // end: =:=/2
+
   // start: is_atom/1
   static is_atom(term) {
     return Type.boolean(Type.isAtom(term));

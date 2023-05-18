@@ -10,6 +10,7 @@ describe("isStrictlyEqual()", () => {
       Type.integer(1),
       Type.integer(1)
     );
+
     assert.isTrue(result);
   });
 
@@ -18,6 +19,7 @@ describe("isStrictlyEqual()", () => {
       Type.integer(1),
       Type.float(1.0)
     );
+
     assert.isFalse(result);
   });
 
@@ -33,6 +35,7 @@ describe("isStrictlyEqual()", () => {
     ]);
 
     const result = Interpreter.isStrictlyEqual(left, right);
+
     assert.isTrue(result);
   });
 
@@ -48,6 +51,7 @@ describe("isStrictlyEqual()", () => {
     ]);
 
     const result = Interpreter.isStrictlyEqual(left, right);
+
     assert.isFalse(result);
   });
 });

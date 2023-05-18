@@ -8,6 +8,50 @@ import {
 import erlang from "../../../assets/js/erlang/erlang.mjs";
 import Type from "../../../assets/js/type.mjs";
 
+describe("$61$58$61/2 (=:=)", () => {
+  it("returns boxed true if the args are of the same boxed primitive type and have equal values", () => {
+    const result = erlang.$61$58$61(Type.integer(1), Type.integer(1));
+    assertBoxedTrue(result);
+  });
+
+  it("returns boxed false if the args are not of the same boxed primitive type but have equal values", () => {
+    const result = erlang.$61$58$61(Type.integer(1), Type.float(1.0));
+    assertBoxedFalse(result);
+  });
+
+  it("returns boxed true if the left boxed arg of a composite type is deeply equal to the right boxed arg of a composite type", () => {
+    const left = Type.map([
+      [Type.atom("a"), Type.integer(1)],
+      [Type.atom("b"), Type.map([[Type.atom("c"), Type.integer(3)]])],
+    ]);
+
+    const right = Type.map([
+      [Type.atom("a"), Type.integer(1)],
+      [Type.atom("b"), Type.map([[Type.atom("c"), Type.integer(3)]])],
+    ]);
+
+    const result = erlang.$61$58$61(left, right);
+
+    assertBoxedTrue(result);
+  });
+
+  it("returns false if the left boxed arg of a composite type is not deeply equal to the right boxed arg of a composite type", () => {
+    const left = Type.map([
+      [Type.atom("a"), Type.integer(1)],
+      [Type.atom("b"), Type.map([[Type.atom("c"), Type.integer(3)]])],
+    ]);
+
+    const right = Type.map([
+      [Type.atom("a"), Type.integer(1)],
+      [Type.atom("b"), Type.map([[Type.atom("c"), Type.integer(4)]])],
+    ]);
+
+    const result = Interpreter.isStrictlyEqual(left, right);
+
+    assert.isFalse(result);
+  });
+});
+
 describe("is_atom/1", () => {
   it("returns boxed true for boxed atoms", () => {
     const result = erlang.is_atom(Type.atom("abc"));
