@@ -29,4 +29,8 @@ export default class Interpreter {
 
     return isEqual(left, right);
   }
+
+  static tail(list) {
+    return Type.list(list.data.slice(1));
+  }
 }
