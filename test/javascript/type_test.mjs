@@ -36,17 +36,17 @@ describe("boolean()", () => {
   });
 });
 
-describe("consOperator()", () => {
+describe("cons()", () => {
   let head, tail, result;
 
   beforeEach(() => {
     head = Type.integer(1);
     tail = Type.list([Type.integer(2), Type.integer(3)]);
-    result = Type.consOperator(head, tail);
+    result = Type.cons(head, tail);
   });
 
   it("returns cons operator placeholder", () => {
-    const expected = {type: "cons_operator", head: head, tail: tail};
+    const expected = {type: "cons", head: head, tail: tail};
     assert.deepStrictEqual(result, expected);
   });
 

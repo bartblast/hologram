@@ -11,8 +11,8 @@ export default class Type {
     return Type.atom(value.toString());
   }
 
-  static consOperator(head, tail) {
-    return Utils.freeze({type: "cons_operator", head: head, tail: tail});
+  static cons(head, tail) {
+    return Utils.freeze({type: "cons", head: head, tail: tail});
   }
 
   // private
