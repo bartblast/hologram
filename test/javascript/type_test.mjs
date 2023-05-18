@@ -45,7 +45,7 @@ describe("consPattern()", () => {
     result = Type.consPattern(head, tail);
   });
 
-  it("returns cons pattern placeholder", () => {
+  it("returns cons pattern", () => {
     const expected = {type: "cons_pattern", head: head, tail: tail};
     assert.deepStrictEqual(result, expected);
   });
@@ -370,7 +370,7 @@ describe("tuple()", () => {
 });
 
 describe("variablePattern()", () => {
-  it("returns variable pattern placeholder", () => {
+  it("returns variable pattern", () => {
     const result = Type.variablePattern("test");
     const expected = {type: "variable_pattern", name: "test"};
 
