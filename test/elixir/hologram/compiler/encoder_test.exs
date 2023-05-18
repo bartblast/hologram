@@ -87,7 +87,7 @@ defmodule Hologram.Compiler.EncoderTest do
       }
 
       assert encode(ir, %Context{}) ==
-               ~s/Interpreter.matchOperator(Type.variable("x"), Type.integer(2))/
+               ~s/Interpreter.matchOperator(Type.variablePattern("x"), Type.integer(2))/
     end
 
     test "variable in expression" do
@@ -112,7 +112,7 @@ defmodule Hologram.Compiler.EncoderTest do
       }
 
       assert encode(ir, %Context{}) ==
-               ~s/Interpreter.matchOperator(Type.variable("x"), Interpreter.matchOperator(Type.integer(2), Type.integer(3)))/
+               ~s/Interpreter.matchOperator(Type.variablePattern("x"), Interpreter.matchOperator(Type.integer(2), Type.integer(3)))/
     end
 
     test "nested, variable in the middle" do
@@ -126,7 +126,7 @@ defmodule Hologram.Compiler.EncoderTest do
       }
 
       assert encode(ir, %Context{}) ==
-               ~s/Interpreter.matchOperator(Type.integer(1), Interpreter.matchOperator(Type.variable("x"), Type.integer(3)))/
+               ~s/Interpreter.matchOperator(Type.integer(1), Interpreter.matchOperator(Type.variablePattern("x"), Type.integer(3)))/
     end
 
     test "nested, variable in expression" do
@@ -181,7 +181,7 @@ defmodule Hologram.Compiler.EncoderTest do
       }
 
       assert encode(ir, %Context{}) ==
-               ~s/Interpreter.matchOperator(Type.tuple([Interpreter.matchOperator(Type.variable("a"), Type.variable("b")), Type.integer(2), Type.integer(3)]), Interpreter.matchOperator(Type.tuple([Type.integer(1), Interpreter.matchOperator(Type.variable("c"), Type.variable("d")), Type.integer(3)]), Type.tuple([Type.integer(1), Type.integer(2), Interpreter.matchOperator(Type.variable("e"), bindings.f)])))/
+               ~s/Interpreter.matchOperator(Type.tuple([Interpreter.matchOperator(Type.variablePattern("a"), Type.variablePattern("b")), Type.integer(2), Type.integer(3)]), Interpreter.matchOperator(Type.tuple([Type.integer(1), Interpreter.matchOperator(Type.variablePattern("c"), Type.variablePattern("d")), Type.integer(3)]), Type.tuple([Type.integer(1), Type.integer(2), Interpreter.matchOperator(Type.variablePattern("e"), bindings.f)])))/
     end
   end
 
@@ -215,7 +215,7 @@ defmodule Hologram.Compiler.EncoderTest do
 
     test "inside pattern" do
       assert encode(%IR.Variable{name: :my_var}, %Context{pattern?: true}) ==
-               ~s/Type.variable("my_var")/
+               ~s/Type.variablePattern("my_var")/
     end
   end
 
@@ -225,7 +225,7 @@ defmodule Hologram.Compiler.EncoderTest do
     end
 
     test "escape $ (dollar sign) character" do
-      escape_js_identifier("$") == "$36"
+      assert escape_js_identifier("$") == "$36"
     end
 
     test "does not escape characters which are allowed in JS identifiers" do

@@ -88,8 +88,8 @@ export default class Type {
     return Type.isAtom(boxed) && boxed.value === "true";
   }
 
-  static isVariable(boxed) {
-    return boxed.type === "variable";
+  static isVariablePattern(boxed) {
+    return boxed.type === "variable_pattern";
   }
 
   static list(data) {
@@ -113,7 +113,7 @@ export default class Type {
     return Utils.freeze({type: "tuple", data: data});
   }
 
-  static variable(name) {
-    return Utils.freeze({type: "variable", name: name});
+  static variablePattern(name) {
+    return Utils.freeze({type: "variable_pattern", name: name});
   }
 }

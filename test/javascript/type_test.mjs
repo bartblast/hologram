@@ -263,14 +263,14 @@ describe("isTrue()", () => {
   });
 });
 
-describe("isVariable()", () => {
+describe("isVariablePattern()", () => {
   it("returns true if the given object is a boxed variable", () => {
-    const result = Type.isVariable(Type.variable("abc"));
+    const result = Type.isVariablePattern(Type.variablePattern("abc"));
     assert.isTrue(result);
   });
 
   it("returns false if the given object is not a boxed variable", () => {
-    const result = Type.isVariable(Type.atom("abc"));
+    const result = Type.isVariablePattern(Type.atom("abc"));
     assert.isFalse(result);
   });
 });
@@ -356,13 +356,13 @@ describe("tuple()", () => {
 
 describe("variable()", () => {
   it("returns variable placeholder", () => {
-    const result = Type.variable("test");
-    const expected = {type: "variable", name: "test"};
+    const result = Type.variablePattern("test");
+    const expected = {type: "variable_pattern", name: "test"};
 
     assert.deepStrictEqual(result, expected);
   });
 
   it("returns frozen object", () => {
-    assertFrozen(Type.variable("test"));
+    assertFrozen(Type.variablePattern("test"));
   });
 });
