@@ -45,4 +45,10 @@ export default class erlang {
     return Type.integer(Interpreter.count(list));
   }
   // end: length/1
+
+  // start: tl/1
+  static tl(list) {
+    return Interpreter.tail(list);
+  }
+  // end: tl/1
 }

@@ -7,6 +7,7 @@ import {
 } from "../../../assets/js/test_support.mjs";
 
 import erlang from "../../../assets/js/erlang/erlang.mjs";
+import Interpreter from "../../../assets/js/interpreter.mjs";
 import Type from "../../../assets/js/type.mjs";
 
 describe("$61$58$61/2 (=:=)", () => {
@@ -122,5 +123,13 @@ describe("length/1", () => {
     const expected = Type.integer(2);
 
     assert.deepStrictEqual(result, expected);
+  });
+});
+
+describe("tl/1", () => {
+  it("proxies to Interpreter.tail/1", () => {
+    const list = Type.list([Type.integer(1), Type.integer(2), Type.integer(3)]);
+
+    assert.deepStrictEqual(erlang.tl(list), Interpreter.tail(list));
   });
 });
