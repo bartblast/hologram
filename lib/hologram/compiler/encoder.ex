@@ -57,6 +57,18 @@ defmodule Hologram.Compiler.Encoder do
     "bindings.#{name}"
   end
 
+  @doc """
+  Escapes chacters which are not allowed in JS identifiers with their Unicode code points.
+
+  Although $ (dollar sign) character is allowed in JS identifiers, we escape it as well,
+  because it is used as a marker for other escaped characters.
+
+  ## Examples
+
+      iex> escape_js_identifier("my_fun?")
+      "my_fun$63"
+  """
+  @spec escape_js_identifier(String.t()) :: String.t()
   def escape_js_identifier(identifier) do
     identifier
     |> String.to_charlist()
@@ -77,7 +89,6 @@ defmodule Hologram.Compiler.Encoder do
   # Z = 90
   # a = 97
   # z = 122
-  # We don't allow $ character (code point 36), because it is used as a marker for escaped code points in JS identifiers.
   defp allowed_in_js_identifier?(code_point)
 
   defp allowed_in_js_identifier?(code_point)
