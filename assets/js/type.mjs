@@ -11,6 +11,10 @@ export default class Type {
     return Type.atom(value.toString());
   }
 
+  static consOperator(head, tail) {
+    return Utils.freeze({type: "cons_operator", head: head, tail: tail});
+  }
+
   // private
   static _encodeEnumTypeMapKey(boxed) {
     const itemsStr = boxed.data

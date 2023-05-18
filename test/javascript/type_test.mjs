@@ -36,6 +36,25 @@ describe("boolean()", () => {
   });
 });
 
+describe("consOperator()", () => {
+  let head, tail, result;
+
+  beforeEach(() => {
+    head = Type.integer(1);
+    tail = Type.list([Type.integer(2), Type.integer(3)]);
+    result = Type.consOperator(head, tail);
+  });
+
+  it("returns cons operator placeholder", () => {
+    const expected = {type: "cons_operator", head: head, tail: tail};
+    assert.deepStrictEqual(result, expected);
+  });
+
+  it("returns frozen object", () => {
+    assertFrozen(result);
+  });
+});
+
 describe("encodeMapKey()", () => {
   it("encodes boxed atom value as map key", () => {
     const boxed = Type.atom("abc");
