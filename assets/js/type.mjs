@@ -88,6 +88,10 @@ export default class Type {
     return boxed.type === "list";
   }
 
+  static isMap(boxed) {
+    return boxed.type === "map";
+  }
+
   static isNumber(boxed) {
     return Type.isInteger(boxed) || Type.isFloat(boxed);
   }

@@ -234,7 +234,7 @@ describe("isInteger()", () => {
 
 describe("isList()", () => {
   it("returns true for boxed list value", () => {
-    const list = Type.list([Type.integer(1), Type.integer(2)])
+    const list = Type.list([Type.integer(1), Type.integer(2)]);
     const result = Type.isList(list);
 
     assert.isTrue(result);
@@ -242,6 +242,24 @@ describe("isList()", () => {
 
   it("returns false for values of types other than boxed list", () => {
     const result = Type.isList(Type.atom("abc"));
+    assert.isFalse(result);
+  });
+});
+
+describe("isMap()", () => {
+  it("returns true for boxed map value", () => {
+    const map = Type.map([
+      [Type.atom("a"), Type.integer(1)],
+      [Type.atom("b"), Type.integer(2)],
+    ]);
+
+    const result = Type.isMap(map);
+
+    assert.isTrue(result);
+  });
+
+  it("returns false for values of types other than boxed map", () => {
+    const result = Type.isMap(Type.atom("abc"));
     assert.isFalse(result);
   });
 });
