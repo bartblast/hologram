@@ -232,6 +232,20 @@ describe("isInteger()", () => {
   });
 });
 
+describe("isList()", () => {
+  it("returns true for boxed list value", () => {
+    const list = Type.list([Type.integer(1), Type.integer(2)])
+    const result = Type.isList(list);
+
+    assert.isTrue(result);
+  });
+
+  it("returns false for values of types other than boxed list", () => {
+    const result = Type.isList(Type.atom("abc"));
+    assert.isFalse(result);
+  });
+});
+
 describe("isNumber()", () => {
   it("returns true for boxed floats", () => {
     const arg = Type.float(1.23);

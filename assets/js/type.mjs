@@ -84,6 +84,10 @@ export default class Type {
     return boxed.type === "integer";
   }
 
+  static isList(boxed) {
+    return boxed.type === "list";
+  }
+
   static isNumber(boxed) {
     return Type.isInteger(boxed) || Type.isFloat(boxed);
   }
