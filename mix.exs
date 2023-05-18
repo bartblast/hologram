@@ -4,7 +4,7 @@ defmodule Hologram.MixProject do
 
   defp aliases do
     [
-      "format.all": ["format", "format.js"],
+      format: ["format", "format.js"],
       "format.js":
         "cmd npx prettier 'assets/*.json' 'assets/js/*.mjs' 'assets/js/**/*.mjs' 'test/javascript/*.mjs' 'test/javascript/**/*.mjs' --config 'assets/.prettierrc.json' --no-error-on-unmatched-pattern --write",
       "test.all": ["test", "test.js"],
