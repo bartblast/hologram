@@ -47,9 +47,9 @@ describe("$61$58$61/2 (=:=)", () => {
       [Type.atom("b"), Type.map([[Type.atom("c"), Type.integer(4)]])],
     ]);
 
-    const result = Interpreter.isStrictlyEqual(left, right);
+    const result = erlang.$61$58$61(left, right);
 
-    assert.isFalse(result);
+    assertBoxedFalse(result);
   });
 });
 

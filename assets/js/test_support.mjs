@@ -1,6 +1,7 @@
 "use strict";
 
 import {assert} from "chai";
+import Type from "./type.mjs";
 
 export {assert} from "chai";
 
