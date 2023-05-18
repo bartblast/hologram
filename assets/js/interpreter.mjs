@@ -2,11 +2,20 @@
 
 // See: https://www.blazemeter.com/blog/the-correct-way-to-import-lodash-libraries-a-benchmark
 import isEqual from "lodash/isEqual.js";
+
 import Type from "./type.mjs";
 
 export default class Interpreter {
   static consOperator(left, right) {
     return Type.list([left].concat(right.data));
+  }
+
+  static count(enumerable) {
+    if (Type.isMap(enumerable)) {
+      return Object.keys(enumerable.data).length;
+    }
+
+    return enumerable.data.length;
   }
 
   static isStrictlyEqual(left, right) {
