@@ -57,6 +57,37 @@ defmodule Hologram.Compiler.Encoder do
     "bindings.#{name}"
   end
 
+  def escape_js_identifier(identifier) do
+    identifier
+    |> String.to_charlist()
+    |> Enum.map(fn code_point ->
+      if allowed_in_js_identifier?(code_point) do
+        to_string([code_point])
+      else
+        "$#{code_point}"
+      end
+    end)
+    |> Enum.join()
+  end
+
+  # _ = 95
+  # 0 = 48
+  # 9 = 57
+  # A = 65
+  # Z = 90
+  # a = 97
+  # z = 122
+  # We don't allow $ character (code point 36), because it is used as a marker for escaped code points in JS identifiers.
+  defp allowed_in_js_identifier?(code_point)
+
+  defp allowed_in_js_identifier?(code_point)
+       when code_point == 95 or code_point in 48..57 or code_point in 65..90 or
+              code_point in 97..122 do
+    true
+  end
+
+  defp allowed_in_js_identifier?(_code_point), do: false
+
   defp encode_as_array(data, context) do
     Enum.map(data, &encode(&1, context))
     |> Enum.join(", ")

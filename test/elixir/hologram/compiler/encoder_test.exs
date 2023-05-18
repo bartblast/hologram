@@ -218,4 +218,19 @@ defmodule Hologram.Compiler.EncoderTest do
                ~s/Type.variable("my_var")/
     end
   end
+
+  describe "escape_js_identifier/1" do
+    test "escape characters which are not allowed in JS identifiers" do
+      assert escape_js_identifier("@[^`{") == "$64$91$94$96$123"
+    end
+
+    test "escape $ (dollar sign) character" do
+      escape_js_identifier("$") == "$36"
+    end
+
+    test "does not escape characters which are allowed in JS identifiers" do
+      str = "059AKZakz_"
+      assert escape_js_identifier(str) == str
+    end
+  end
 end
