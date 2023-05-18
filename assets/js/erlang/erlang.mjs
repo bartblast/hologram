@@ -33,4 +33,10 @@ export default class erlang {
     return Type.boolean(Type.isNumber(term));
   }
   // end: is_number/1
+
+  // start: length/1
+  static length(list) {
+    return Type.integer(Interpreter.count(list));
+  }
+  // end: length/1
 }

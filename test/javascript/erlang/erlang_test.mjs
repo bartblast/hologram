@@ -1,6 +1,7 @@
 "use strict";
 
 import {
+  assert,
   assertBoxedTrue,
   assertBoxedFalse,
 } from "../../../assets/js/test_support.mjs";
@@ -102,5 +103,15 @@ describe("is_number/1", () => {
   it("returns boxed false for types other than boxed float or boxed integer", () => {
     const result = erlang.is_number(Type.atom("abc"));
     assertBoxedFalse(result);
+  });
+});
+
+describe("length/1", () => {
+  it("returns the number of items in a list", () => {
+    const list = Type.list([Type.integer(1), Type.integer(2)]);
+    const result = erlang.length(list);
+    const expected = Type.integer(2);
+
+    assert.deepStrictEqual(result, expected);
   });
 });
