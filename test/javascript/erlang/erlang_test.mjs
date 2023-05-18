@@ -55,11 +55,10 @@ describe("$61$58$61/2 (=:=)", () => {
 });
 
 describe("hd/1", () => {
-  it("returns the first item in a boxed list", () => {
+  it("proxies to Interpreter.head/1", () => {
     const list = Type.list([Type.integer(1), Type.integer(2), Type.integer(3)]);
-    const result = erlang.hd(list);
 
-    assert.deepStrictEqual(result, Type.integer(1));
+    assert.deepStrictEqual(erlang.hd(list), Interpreter.head(list));
   });
 });
 
