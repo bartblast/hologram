@@ -3,7 +3,7 @@
 import Type from "../type.mjs";
 import Interpreter from "../interpreter.mjs";
 
-export default class erlang {
+export default class Erlang {
   // start: =:=/2
   static $61$58$61(left, right) {
     return Type.boolean(Interpreter.isStrictlyEqual(left, right));
