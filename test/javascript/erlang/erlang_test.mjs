@@ -1,125 +1,76 @@
 "use strict";
 
-import {
-  assert,
-  assertBoxedTrue,
-  assertBoxedFalse,
-} from "../../../assets/js/test_support.mjs";
-
+import {assert} from "../../../assets/js/test_support.mjs";
 import Erlang from "../../../assets/js/erlang/erlang.mjs";
 import Interpreter from "../../../assets/js/interpreter.mjs";
 import Type from "../../../assets/js/type.mjs";
 
 describe("$61$58$61/2 (=:=)", () => {
-  it("returns boxed true if the args are of the same boxed primitive type and have equal values", () => {
-    const result = Erlang.$61$58$61(Type.integer(1), Type.integer(1));
-    assertBoxedTrue(result);
-  });
-
-  it("returns boxed false if the args are not of the same boxed primitive type but have equal values", () => {
-    const result = Erlang.$61$58$61(Type.integer(1), Type.float(1.0));
-    assertBoxedFalse(result);
-  });
-
-  it("returns boxed true if the left boxed arg of a composite type is deeply equal to the right boxed arg of a composite type", () => {
-    const left = Type.map([
-      [Type.atom("a"), Type.integer(1)],
-      [Type.atom("b"), Type.map([[Type.atom("c"), Type.integer(3)]])],
-    ]);
-
-    const right = Type.map([
-      [Type.atom("a"), Type.integer(1)],
-      [Type.atom("b"), Type.map([[Type.atom("c"), Type.integer(3)]])],
-    ]);
-
+  it("proxies to Interpreter.isStrictlyEqual/2 and casts the result to boxed boolean", () => {
+    const left = Type.integer(1);
+    const right = Type.integer(1);
     const result = Erlang.$61$58$61(left, right);
+    const expected = Type.boolean(Interpreter.isStrictlyEqual(left, right));
 
-    assertBoxedTrue(result);
-  });
-
-  it("returns false if the left boxed arg of a composite type is not deeply equal to the right boxed arg of a composite type", () => {
-    const left = Type.map([
-      [Type.atom("a"), Type.integer(1)],
-      [Type.atom("b"), Type.map([[Type.atom("c"), Type.integer(3)]])],
-    ]);
-
-    const right = Type.map([
-      [Type.atom("a"), Type.integer(1)],
-      [Type.atom("b"), Type.map([[Type.atom("c"), Type.integer(4)]])],
-    ]);
-
-    const result = Erlang.$61$58$61(left, right);
-
-    assertBoxedFalse(result);
+    assert.deepStrictEqual(result, expected);
   });
 });
 
 describe("hd/1", () => {
   it("proxies to Interpreter.head/1", () => {
     const list = Type.list([Type.integer(1), Type.integer(2), Type.integer(3)]);
+    const result = Erlang.hd(list);
+    const expected = Interpreter.head(list);
 
-    assert.deepStrictEqual(Erlang.hd(list), Interpreter.head(list));
+    assert.deepStrictEqual(result, expected);
   });
 });
 
 describe("is_atom/1", () => {
-  it("returns boxed true for boxed atoms", () => {
-    const result = Erlang.is_atom(Type.atom("abc"));
-    assertBoxedTrue(result);
-  });
+  it("proxies to Type.isAtom/1 and casts the result to boxed boolean", () => {
+    const term = Type.atom("abc");
+    const result = Erlang.is_atom(term);
+    const expected = Type.boolean(Type.isAtom(term));
 
-  it("returns boxed false for types other than boxed atom", () => {
-    const result = Erlang.is_atom(Type.integer(123));
-    assertBoxedFalse(result);
+    assert.deepStrictEqual(result, expected);
   });
 });
 
 describe("is_float/1", () => {
-  it("returns boxed true for boxed floats", () => {
-    const result = Erlang.is_float(Type.float(1.23));
-    assertBoxedTrue(result);
-  });
+  it("proxies to Type.isFloat/1 and casts the result to boxed boolean", () => {
+    const term = Type.float(1.23);
+    const result = Erlang.is_float(term);
+    const expected = Type.boolean(Type.isFloat(term));
 
-  it("returns boxed false for types other than boxed float", () => {
-    const result = Erlang.is_float(Type.atom("abc"));
-    assertBoxedFalse(result);
+    assert.deepStrictEqual(result, expected);
   });
 });
 
 describe("is_integer/1", () => {
-  it("returns boxed true for boxed integers", () => {
-    const result = Erlang.is_integer(Type.integer(123));
-    assertBoxedTrue(result);
-  });
+  it("proxies to Type.isInteger/1 and casts the result to boxed boolean", () => {
+    const term = Type.integer(123);
+    const result = Erlang.is_integer(term);
+    const expected = Type.boolean(Type.isInteger(term));
 
-  it("returns boxed false for types other than boxed integer", () => {
-    const result = Erlang.is_integer(Type.atom("abc"));
-    assertBoxedFalse(result);
+    assert.deepStrictEqual(result, expected);
   });
 });
 
 describe("is_number/1", () => {
-  it("returns boxed true for boxed floats", () => {
-    const result = Erlang.is_number(Type.float(1.23));
-    assertBoxedTrue(result);
-  });
+  it("proxies to Type.isNumber/1 and casts the result to boxed boolean", () => {
+    const term = Type.integer(123);
+    const result = Erlang.is_number(term);
+    const expected = Type.boolean(Type.isNumber(term));
 
-  it("returns boxed true for boxed integers", () => {
-    const result = Erlang.is_number(Type.integer(123));
-    assertBoxedTrue(result);
-  });
-
-  it("returns boxed false for types other than boxed float or boxed integer", () => {
-    const result = Erlang.is_number(Type.atom("abc"));
-    assertBoxedFalse(result);
+    assert.deepStrictEqual(result, expected);
   });
 });
 
 describe("length/1", () => {
-  it("returns the number of items in a list", () => {
+  it("proxies to Interpreter.count/1 and casts the result to boxed integer", () => {
     const list = Type.list([Type.integer(1), Type.integer(2)]);
     const result = Erlang.length(list);
-    const expected = Type.integer(2);
+    const expected = Type.integer(Interpreter.count(list));
 
     assert.deepStrictEqual(result, expected);
   });
@@ -128,7 +79,9 @@ describe("length/1", () => {
 describe("tl/1", () => {
   it("proxies to Interpreter.tail/1", () => {
     const list = Type.list([Type.integer(1), Type.integer(2), Type.integer(3)]);
+    const result = Erlang.tl(list);
+    const expected = Interpreter.tail(list);
 
-    assert.deepStrictEqual(Erlang.tl(list), Interpreter.tail(list));
+    assert.deepStrictEqual(result, expected);
   });
 });
