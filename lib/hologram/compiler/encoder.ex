@@ -47,10 +47,9 @@ defmodule Hologram.Compiler.Encoder do
 
   def encode(%IR.MapType{data: data}, context) do
     data
-    |> Enum.map(fn {key, value} ->
+    |> Enum.map_join(", ", fn {key, value} ->
       "[" <> encode(key, context) <> ", " <> encode(value, context) <> "]"
     end)
-    |> Enum.join(", ")
     |> StringUtils.wrap("Type.map([", "])")
   end
 
@@ -94,14 +93,13 @@ defmodule Hologram.Compiler.Encoder do
   def escape_js_identifier(identifier) do
     identifier
     |> String.to_charlist()
-    |> Enum.map(fn code_point ->
+    |> Enum.map_join("", fn code_point ->
       if allowed_in_js_identifier?(code_point) do
         to_string([code_point])
       else
         "$#{code_point}"
       end
     end)
-    |> Enum.join()
   end
 
   # _ = 95
@@ -122,8 +120,8 @@ defmodule Hologram.Compiler.Encoder do
   defp allowed_in_js_identifier?(_code_point), do: false
 
   defp encode_as_array(data, context) do
-    Enum.map(data, &encode(&1, context))
-    |> Enum.join(", ")
+    data
+    |> Enum.map_join(", ", &encode(&1, context))
     |> StringUtils.wrap("[", "]")
   end
 
