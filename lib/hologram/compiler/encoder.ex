@@ -3,6 +3,20 @@ defmodule Hologram.Compiler.Encoder do
   alias Hologram.Compiler.Context
   alias Hologram.Compiler.IR
 
+  @doc """
+  Encodes Elixir IR to JavaScript source code.
+
+  ## Examples
+
+      iex> ir = %IR.ListType{
+      ...>   data: [
+      ...>     %IR.IntegerType{value: 1},
+      ...>     %IR.AtomType{value: :abc}
+      ...>   ]
+      ...> }
+      iex> encode(ir, %Context{})
+      "Type.list([Type.integer(1), Type.atom(\"abc\")])"
+  """
   @spec encode(IR.t(), Context.t()) :: String.t()
   def encode(ir, context)
 
