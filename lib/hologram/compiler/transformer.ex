@@ -14,6 +14,9 @@ defmodule Hologram.Compiler.Transformer do
   alias Hologram.Compiler.Helpers
   alias Hologram.Compiler.IR
 
+  @endianness_relevant_types [:float, :integer, :utf16, :utf32]
+  @signedness_relevant_types [:integer]
+
   @doc """
   Transforms Elixir AST to Hologram IR.
 
@@ -404,7 +407,7 @@ defmodule Hologram.Compiler.Transformer do
   end
 
   defp maybe_add_default_bitstring_endianness_modifier(%{endianness: nil, type: type} = segment)
-       when type in [:float, :integer, :utf16, :utf32] do
+       when type in @endianness_relevant_types do
     %{segment | endianness: :big}
   end
 
@@ -415,7 +418,7 @@ defmodule Hologram.Compiler.Transformer do
   defp maybe_add_default_bitstring_endianness_modifier(segment), do: segment
 
   defp maybe_add_default_bitstring_signedness_modifier(%{signedness: nil, type: type} = segment)
-       when type in [:float, :integer] do
+       when type in @signedness_relevant_types do
     %{segment | signedness: :unsigned}
   end
 
@@ -485,6 +488,20 @@ defmodule Hologram.Compiler.Transformer do
   end
 
   defp maybe_add_default_bitstring_unit_modifier(segment), do: segment
+
+  defp maybe_ignore_endianness_modifier(%{type: type, endianness: endianness} = segment)
+       when type not in @endianness_relevant_types and endianness != nil do
+    %{segment | endianness: :not_applicable}
+  end
+
+  defp maybe_ignore_endianness_modifier(segment), do: segment
+
+  defp maybe_ignore_signedness_modifier(%{type: type, signedness: signedness} = segment)
+       when type not in @signedness_relevant_types and signedness != nil do
+    %{segment | signedness: :not_applicable}
+  end
+
+  defp maybe_ignore_signedness_modifier(segment), do: segment
 
   defp transform_bitstring_modifiers({:-, _meta, [left, right]}, context, acc) do
     new_acc = transform_bitstring_modifiers(left, context, acc)
@@ -569,6 +586,8 @@ defmodule Hologram.Compiler.Transformer do
     right
     |> transform_bitstring_modifiers(context, new_acc)
     |> maybe_add_default_bitstring_modifiers()
+    |> maybe_ignore_endianness_modifier()
+    |> maybe_ignore_signedness_modifier()
   end
 
   defp transform_bitstring_segment(ast, context, acc) do

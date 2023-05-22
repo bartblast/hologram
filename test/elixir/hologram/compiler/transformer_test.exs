@@ -342,7 +342,7 @@ defmodule Hologram.Compiler.TransformerTest do
         {:<<>>, [line: 1],
          [{:"::", [line: 1], [{:xyz, [line: 1], nil}, {:float, [line: 1], nil}]}]}
 
-      assert %IR.BitstringType{segments: [%IR.BitstringSegment{signedness: :unsigned}]} =
+      assert %IR.BitstringType{segments: [%IR.BitstringSegment{signedness: :not_applicable}]} =
                transform(ast, %Context{})
     end
 
