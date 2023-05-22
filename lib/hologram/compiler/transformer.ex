@@ -403,8 +403,13 @@ defmodule Hologram.Compiler.Transformer do
     |> maybe_add_default_bitstring_unit_modifier()
   end
 
-  defp maybe_add_default_bitstring_endianness_modifier(%{endianness: nil} = segment) do
+  defp maybe_add_default_bitstring_endianness_modifier(%{endianness: nil, type: type} = segment)
+       when type in [:float, :integer, :utf16, :utf32] do
     %{segment | endianness: :big}
+  end
+
+  defp maybe_add_default_bitstring_endianness_modifier(%{endianness: nil} = segment) do
+    %{segment | endianness: :not_applicable}
   end
 
   defp maybe_add_default_bitstring_endianness_modifier(segment), do: segment

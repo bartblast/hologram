@@ -215,9 +215,71 @@ defmodule Hologram.Compiler.TransformerTest do
 
     # --- ENDIANNESS MODIFIER ---
 
-    test "default endianness" do
-      # <<xyz>>
-      ast = {:<<>>, [line: 1], [{:xyz, [line: 1], nil}]}
+    test "default endianness for binary type" do
+      # <<xyz::binary>>
+      ast =
+        {:<<>>, [line: 1],
+         [{:"::", [line: 1], [{:xyz, [line: 1], nil}, {:binary, [line: 1], nil}]}]}
+
+      assert %IR.BitstringType{segments: [%IR.BitstringSegment{endianness: :not_applicable}]} =
+               transform(ast, %Context{})
+    end
+
+    test "default endianness for bitstring type" do
+      # <<xyz::bitstring>>
+      ast =
+        {:<<>>, [line: 1],
+         [{:"::", [line: 1], [{:xyz, [line: 1], nil}, {:bitstring, [line: 1], nil}]}]}
+
+      assert %IR.BitstringType{segments: [%IR.BitstringSegment{endianness: :not_applicable}]} =
+               transform(ast, %Context{})
+    end
+
+    test "default endianness for float type" do
+      # <<xyz::float>>
+      ast =
+        {:<<>>, [line: 1],
+         [{:"::", [line: 1], [{:xyz, [line: 1], nil}, {:float, [line: 1], nil}]}]}
+
+      assert %IR.BitstringType{segments: [%IR.BitstringSegment{endianness: :big}]} =
+               transform(ast, %Context{})
+    end
+
+    test "default endianness for integer type" do
+      # <<xyz::integer>>
+      ast =
+        {:<<>>, [line: 1],
+         [{:"::", [line: 1], [{:xyz, [line: 1], nil}, {:integer, [line: 1], nil}]}]}
+
+      assert %IR.BitstringType{segments: [%IR.BitstringSegment{endianness: :big}]} =
+               transform(ast, %Context{})
+    end
+
+    test "default endianness for utf8 type" do
+      # <<xyz::utf8>>
+      ast =
+        {:<<>>, [line: 1],
+         [{:"::", [line: 1], [{:xyz, [line: 1], nil}, {:utf8, [line: 1], nil}]}]}
+
+      assert %IR.BitstringType{segments: [%IR.BitstringSegment{endianness: :not_applicable}]} =
+               transform(ast, %Context{})
+    end
+
+    test "default endianness for utf16 type" do
+      # <<xyz::utf16>>
+      ast =
+        {:<<>>, [line: 1],
+         [{:"::", [line: 1], [{:xyz, [line: 1], nil}, {:utf16, [line: 1], nil}]}]}
+
+      assert %IR.BitstringType{segments: [%IR.BitstringSegment{endianness: :big}]} =
+               transform(ast, %Context{})
+    end
+
+    test "default endianness for utf32 type" do
+      # <<xyz::utf32>>
+      ast =
+        {:<<>>, [line: 1],
+         [{:"::", [line: 1], [{:xyz, [line: 1], nil}, {:utf32, [line: 1], nil}]}]}
 
       assert %IR.BitstringType{segments: [%IR.BitstringSegment{endianness: :big}]} =
                transform(ast, %Context{})

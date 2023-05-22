@@ -63,7 +63,7 @@ defmodule Hologram.Compiler.IR do
     defstruct [:endianness, :signedness, :size, :type, :unit, :value]
 
     @type t :: %__MODULE__{
-            endianness: :big | :little | :native,
+            endianness: :not_applicable | :big | :little | :native,
             signedness: :not_applicable | :signed | :unsigned,
             size: IR.t(),
             type: :binary | :bitstring | :float | :integer | :utf8 | :utf16 | :utf32,
