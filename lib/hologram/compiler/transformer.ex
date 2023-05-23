@@ -397,11 +397,11 @@ defmodule Hologram.Compiler.Transformer do
     |> Enum.reverse()
   end
 
-  defp maybe_add_default_bitstring_modifiers(segment) do
+  defp maybe_add_default_bitstring_modifiers(segment, context) do
     segment
     |> maybe_add_default_bitstring_type_modifier()
     |> maybe_add_default_bitstring_endianness_modifier()
-    |> maybe_add_default_bitstring_signedness_modifier()
+    |> maybe_add_default_bitstring_signedness_modifier(context)
     |> maybe_add_default_bitstring_size_modifier()
     |> maybe_add_default_bitstring_unit_modifier()
   end
@@ -417,17 +417,19 @@ defmodule Hologram.Compiler.Transformer do
 
   defp maybe_add_default_bitstring_endianness_modifier(segment), do: segment
 
-  defp maybe_add_default_bitstring_signedness_modifier(%{signedness: nil, type: type} = segment)
+  defp maybe_add_default_bitstring_signedness_modifier(
+         %{signedness: nil, type: type} = segment,
+         %{pattern?: true}
+       )
        when type in @signedness_relevant_types do
     %{segment | signedness: :unsigned}
   end
 
-  # Signed and unsigned modifiers are supported only for integer and float types
-  defp maybe_add_default_bitstring_signedness_modifier(%{signedness: nil} = segment) do
+  defp maybe_add_default_bitstring_signedness_modifier(%{signedness: nil} = segment, _context) do
     %{segment | signedness: :not_applicable}
   end
 
-  defp maybe_add_default_bitstring_signedness_modifier(segment), do: segment
+  defp maybe_add_default_bitstring_signedness_modifier(segment, _context), do: segment
 
   defp maybe_add_default_bitstring_size_modifier(%{size: nil, type: :float} = segment) do
     %{segment | size: %IR.IntegerType{value: 64}}
@@ -489,19 +491,23 @@ defmodule Hologram.Compiler.Transformer do
 
   defp maybe_add_default_bitstring_unit_modifier(segment), do: segment
 
-  defp maybe_ignore_endianness_modifier(%{type: type, endianness: endianness} = segment)
-       when type not in @endianness_relevant_types and endianness != nil do
+  defp maybe_ignore_endianness_modifier(%{type: type} = segment)
+       when type not in @endianness_relevant_types do
     %{segment | endianness: :not_applicable}
   end
 
   defp maybe_ignore_endianness_modifier(segment), do: segment
 
-  defp maybe_ignore_signedness_modifier(%{type: type, signedness: signedness} = segment)
-       when type not in @signedness_relevant_types and signedness != nil do
+  defp maybe_ignore_signedness_modifier(%{type: type} = segment, _context)
+       when type not in @signedness_relevant_types do
     %{segment | signedness: :not_applicable}
   end
 
-  defp maybe_ignore_signedness_modifier(segment), do: segment
+  defp maybe_ignore_signedness_modifier(segment, %{pattern?: false}) do
+    %{segment | signedness: :not_applicable}
+  end
+
+  defp maybe_ignore_signedness_modifier(segment, _context), do: segment
 
   defp transform_bitstring_modifiers({:-, _meta, [left, right]}, context, acc) do
     new_acc = transform_bitstring_modifiers(left, context, acc)
@@ -585,14 +591,14 @@ defmodule Hologram.Compiler.Transformer do
 
     right
     |> transform_bitstring_modifiers(context, new_acc)
-    |> maybe_add_default_bitstring_modifiers()
+    |> maybe_add_default_bitstring_modifiers(context)
     |> maybe_ignore_endianness_modifier()
-    |> maybe_ignore_signedness_modifier()
+    |> maybe_ignore_signedness_modifier(context)
   end
 
   defp transform_bitstring_segment(ast, context, acc) do
     new_acc = %{acc | value: transform(ast, context)}
-    maybe_add_default_bitstring_modifiers(new_acc)
+    maybe_add_default_bitstring_modifiers(new_acc, context)
   end
 
   defp transform_function_capture(function, arity, meta, context) do

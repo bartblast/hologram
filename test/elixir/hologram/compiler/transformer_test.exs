@@ -314,6 +314,22 @@ defmodule Hologram.Compiler.TransformerTest do
                transform(ast, %Context{})
     end
 
+    test "ignore explicitely specified endianness if it is not applicable" do
+      # <<xyz::binary-little>>
+      ast =
+        {:<<>>, [line: 1],
+         [
+           {:"::", [line: 1],
+            [
+              {:xyz, [line: 1], nil},
+              {:-, [line: 1], [{:binary, [line: 1], nil}, {:little, [line: 1], nil}]}
+            ]}
+         ]}
+
+      assert %IR.BitstringType{segments: [%IR.BitstringSegment{endianness: :not_applicable}]} =
+               transform(ast, %Context{})
+    end
+
     # --- SIGNEDNESS MODIFIER ---
 
     test "default signedness for binary type" do
@@ -346,14 +362,24 @@ defmodule Hologram.Compiler.TransformerTest do
                transform(ast, %Context{})
     end
 
-    test "default signedness for integer type" do
+    test "default signedness for integer type inside pattern" do
       # <<xyz::integer>>
       ast =
         {:<<>>, [line: 1],
          [{:"::", [line: 1], [{:xyz, [line: 1], nil}, {:integer, [line: 1], nil}]}]}
 
       assert %IR.BitstringType{segments: [%IR.BitstringSegment{signedness: :unsigned}]} =
-               transform(ast, %Context{})
+               transform(ast, %Context{pattern?: true})
+    end
+
+    test "default signedness for integer type not inside pattern" do
+      # <<xyz::integer>>
+      ast =
+        {:<<>>, [line: 1],
+         [{:"::", [line: 1], [{:xyz, [line: 1], nil}, {:integer, [line: 1], nil}]}]}
+
+      assert %IR.BitstringType{segments: [%IR.BitstringSegment{signedness: :not_applicable}]} =
+               transform(ast, %Context{pattern?: false})
     end
 
     test "default signedness for utf8 type" do
@@ -393,7 +419,7 @@ defmodule Hologram.Compiler.TransformerTest do
          [{:"::", [line: 1], [{:xyz, [line: 1], nil}, {:signed, [line: 1], nil}]}]}
 
       assert %IR.BitstringType{segments: [%IR.BitstringSegment{signedness: :signed}]} =
-               transform(ast, %Context{})
+               transform(ast, %Context{pattern?: true})
     end
 
     test "unsigned signedness modifier" do
@@ -403,7 +429,23 @@ defmodule Hologram.Compiler.TransformerTest do
          [{:"::", [line: 1], [{:xyz, [line: 1], nil}, {:unsigned, [line: 1], nil}]}]}
 
       assert %IR.BitstringType{segments: [%IR.BitstringSegment{signedness: :unsigned}]} =
-               transform(ast, %Context{})
+               transform(ast, %Context{pattern?: true})
+    end
+
+    test "ignore explicitely specified signedness if it is not applicable" do
+      # <<xyz::float-signed>>
+      ast =
+        {:<<>>, [line: 1],
+         [
+           {:"::", [line: 1],
+            [
+              {:xyz, [line: 1], nil},
+              {:-, [line: 1], [{:float, [line: 1], nil}, {:signed, [line: 1], nil}]}
+            ]}
+         ]}
+
+      assert %IR.BitstringType{segments: [%IR.BitstringSegment{signedness: :not_applicable}]} =
+               transform(ast, %Context{pattern?: true})
     end
 
     # --- SIZE MODIFIER ---
