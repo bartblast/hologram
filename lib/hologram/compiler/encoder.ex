@@ -24,6 +24,15 @@ defmodule Hologram.Compiler.Encoder do
     encode_primitive_type(:atom, value, true)
   end
 
+  def encode(%IR.BitstringSegment{} = segment, context) do
+    value = encode(segment.value, context)
+    size = encode(segment.size, context)
+    signedness = encode_non_applicable_as_null(segment.signedness)
+    endianness = encode_non_applicable_as_null(segment.endianness)
+
+    ~s([#{value}, "#{segment.type}", #{size}, #{segment.unit}, #{signedness}, #{endianness}])
+  end
+
   def encode(%IR.ConsOperator{head: head, tail: tail}, %{pattern?: true} = context) do
     "Type.consPattern(#{encode(head, context)}, #{encode(tail, context)})"
   end
@@ -138,6 +147,14 @@ defmodule Hologram.Compiler.Encoder do
     value
     |> encode_as_string(false)
     |> StringUtils.wrap("\"", "\"")
+  end
+
+  defp encode_non_applicable_as_null(enum_value) do
+    if enum_value == :not_applicable do
+      "null"
+    else
+      "\"#{enum_value}\""
+    end
   end
 
   defp encode_primitive_type(type, value, as_string)

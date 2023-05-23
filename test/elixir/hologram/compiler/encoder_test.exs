@@ -11,6 +11,50 @@ defmodule Hologram.Compiler.EncoderTest do
     assert encode(ir, %Context{}) == ~s/Type.atom("aa\\"bb\\ncc")/
   end
 
+  describe "bitstring segment" do
+    test "all fields applicable" do
+      ir = %IR.BitstringSegment{
+        value: %IR.IntegerType{value: 123},
+        type: :integer,
+        size: %IR.IntegerType{value: 16},
+        unit: 1,
+        signedness: :signed,
+        endianness: :big
+      }
+
+      assert encode(ir, %Context{}) ==
+               ~s/[Type.integer(123), "integer", Type.integer(16), 1, "signed", "big"]/
+    end
+
+    test "signedness not applicable" do
+      ir = %IR.BitstringSegment{
+        value: %IR.IntegerType{value: 123},
+        type: :integer,
+        size: %IR.IntegerType{value: 16},
+        unit: 1,
+        signedness: :not_applicable,
+        endianness: :big
+      }
+
+      assert encode(ir, %Context{}) ==
+               ~s/[Type.integer(123), "integer", Type.integer(16), 1, null, "big"]/
+    end
+
+    test "endianness not applicable" do
+      ir = %IR.BitstringSegment{
+        value: %IR.IntegerType{value: 123},
+        type: :integer,
+        size: %IR.IntegerType{value: 16},
+        unit: 1,
+        signedness: :signed,
+        endianness: :not_applicable
+      }
+
+      assert encode(ir, %Context{}) ==
+               ~s/[Type.integer(123), "integer", Type.integer(16), 1, "signed", null]/
+    end
+  end
+
   describe "cons operator" do
     @cons_operator_ir %IR.ConsOperator{
       head: %IR.IntegerType{value: 1},
