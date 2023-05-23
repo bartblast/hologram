@@ -30,7 +30,7 @@ defmodule Hologram.Compiler.Encoder do
     signedness = encode_non_applicable_as_null(segment.signedness)
     endianness = encode_non_applicable_as_null(segment.endianness)
 
-    ~s([#{value}, "#{segment.type}", #{size}, #{segment.unit}, #{signedness}, #{endianness}])
+    ~s(["#{segment.type}", #{value}, #{size}, #{segment.unit}, #{signedness}, #{endianness}])
   end
 
   def encode(%IR.ConsOperator{head: head, tail: tail}, %{pattern?: true} = context) do
