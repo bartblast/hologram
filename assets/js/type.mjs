@@ -153,14 +153,14 @@ export default class Type {
   }
 
   // private
-  static _buildBitArrayFromInteger(value) {
+  static _buildBitArrayFromInteger(data) {
     // clamp to 0-255
-    value = value & 0xff;
+    data = data & 0xff;
 
     const bitArr = [];
 
     for (let i = 8; i >= 1; --i) {
-      bitArr[8 - i] = Type._getBit(value, i - 1);
+      bitArr[8 - i] = Type._getBit(data, i - 1);
     }
 
     return new Uint8Array(bitArr);
@@ -168,12 +168,12 @@ export default class Type {
 
   // private
   static _buildBitstringSegmentBitArray(segment) {
-    let type, boxed, rest;
-    [type, boxed, ...rest] = segment;
+    let type, data, size, rest;
+    [type, data, size, ...rest] = segment;
 
     switch (type) {
       case "integer":
-        return Type._buildBitArrayFromInteger(boxed.value);
+        return Type._buildBitArrayFromInteger(data.value, size.value);
     }
   }
 
@@ -184,13 +184,13 @@ export default class Type {
 
   // private
   static _verifyBitstringSegmentType(segment, index) {
-    let type, boxed, rest;
-    [type, boxed, ...rest] = segment;
+    let type, data, rest;
+    [type, data, ...rest] = segment;
 
-    if (boxed.type !== type) {
+    if (data.type !== type) {
       // TODO: throw boxed ArgumentError
       throw new Error(
-        `(ArgumentError) construction of binary failed: segment ${index} of type '${type}': expected a ${type} but got: ${boxed.value}`
+        `(ArgumentError) construction of binary failed: segment ${index} of type '${type}': expected a ${type} but got: ${data.value}`
       );
     }
   }
