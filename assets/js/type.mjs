@@ -7,6 +7,29 @@ export default class Type {
     return Utils.freeze({type: "atom", value: value});
   }
 
+  static bitstring(segments) {
+    segments.forEach((segment, index) =>
+      Type._verifyBitstringSegmentType(segment, index)
+    );
+
+    const bits = segments.reduce((acc, segment) => {
+      const segmentArr = Type._buildBitstringSegmentBitArray(segment);
+
+      if (acc === null) {
+        return segmentArr;
+      } else {
+        const mergedArr = new Uint8Array(acc.length + segmentArr.length);
+        mergedArr.set(acc);
+        mergedArr.set(segmentArr, acc.length);
+
+        return mergedArr;
+      }
+    }, null);
+
+    // Cannot freeze array buffer views with elements
+    return {type: "bitstring", bits: bits};
+  }
+
   static boolean(value) {
     return Type.atom(value.toString());
   }
@@ -127,5 +150,48 @@ export default class Type {
 
   static variablePattern(name) {
     return Utils.freeze({type: "variable_pattern", name: name});
+  }
+
+  // private
+  static _buildBitArrayFromInteger(value) {
+    // clamp to 0-255
+    value = value & 0xff;
+
+    const bitArr = [];
+
+    for (let i = 8; i >= 1; --i) {
+      bitArr[8 - i] = Type._getBit(value, i - 1);
+    }
+
+    return new Uint8Array(bitArr);
+  }
+
+  // private
+  static _buildBitstringSegmentBitArray(segment) {
+    let type, boxed, rest;
+    [type, boxed, ...rest] = segment;
+
+    switch (type) {
+      case "integer":
+        return Type._buildBitArrayFromInteger(boxed.value);
+    }
+  }
+
+  // private
+  static _getBit(value, bitPosition) {
+    return (value & (1 << bitPosition)) === 0 ? 0 : 1;
+  }
+
+  // private
+  static _verifyBitstringSegmentType(segment, index) {
+    let type, boxed, rest;
+    [type, boxed, ...rest] = segment;
+
+    if (boxed.type !== type) {
+      // TODO: throw boxed ArgumentError
+      throw new Error(
+        `(ArgumentError) construction of binary failed: segment ${index} of type '${type}': expected a ${type} but got: ${boxed.value}`
+      );
+    }
   }
 }

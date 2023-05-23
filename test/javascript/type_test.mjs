@@ -16,6 +16,88 @@ describe("atom()", () => {
   });
 });
 
+describe("bitstring()", () => {
+  it("builds a segment from unsigned integer without clamping", () => {
+    const segment = [
+      "integer",
+      Type.integer(123),
+      Type.integer(8),
+      1,
+      null,
+      "big",
+    ];
+    const result = Type.bitstring([segment]);
+
+    // 123 -> 123
+    const expected = {
+      type: "bitstring",
+      bits: new Uint8Array([0, 1, 1, 1, 1, 0, 1, 1]),
+    };
+
+    assert.deepStrictEqual(result, expected);
+  });
+
+  it("builds a segment from unsigned integer with clamping", () => {
+    const segment = [
+      "integer",
+      Type.integer(400),
+      Type.integer(8),
+      1,
+      null,
+      "big",
+    ];
+    const result = Type.bitstring([segment]);
+
+    // 400 -> 144
+    const expected = {
+      type: "bitstring",
+      bits: new Uint8Array([1, 0, 0, 1, 0, 0, 0, 0]),
+    };
+
+    assert.deepStrictEqual(result, expected);
+  });
+
+  it("builds a segment from signed integer without clamping", () => {
+    const segment = [
+      "integer",
+      Type.integer(-123),
+      Type.integer(8),
+      1,
+      null,
+      "big",
+    ];
+    const result = Type.bitstring([segment]);
+
+    // -123 -> 133
+    const expected = {
+      type: "bitstring",
+      bits: new Uint8Array([1, 0, 0, 0, 0, 1, 0, 1]),
+    };
+
+    assert.deepStrictEqual(result, expected);
+  });
+
+  it("builds a segment from signed integer with clamping", () => {
+    const segment = [
+      "integer",
+      Type.integer(-400),
+      Type.integer(8),
+      1,
+      null,
+      "big",
+    ];
+    const result = Type.bitstring([segment]);
+
+    // -400 -> 112
+    const expected = {
+      type: "bitstring",
+      bits: new Uint8Array([0, 1, 1, 1, 0, 0, 0, 0]),
+    };
+
+    assert.deepStrictEqual(result, expected);
+  });
+});
+
 describe("boolean()", () => {
   it("returns boxed true value", () => {
     const result = Type.boolean(true);
