@@ -17,6 +17,17 @@ describe("atom()", () => {
 });
 
 describe("bitstring()", () => {
+  it("builds empty bitstring without segments", () => {
+    const result = Type.bitstring([]);
+
+    const expected = {
+      type: "bitstring",
+      bits: new Uint8Array([]),
+    };
+
+    assert.deepStrictEqual(result, expected);
+  });
+
   it("builds a segment from positive integer without clamping", () => {
     // 170 (8 bits) -> 170 (8 bits)
     // 170 == 0b10101010

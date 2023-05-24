@@ -15,16 +15,12 @@ export default class Type {
     const bits = segments.reduce((acc, segment) => {
       const segmentArr = Type._buildBitstringSegmentBitArray(segment);
 
-      if (acc === null) {
-        return segmentArr;
-      } else {
-        const mergedArr = new Uint8Array(acc.length + segmentArr.length);
-        mergedArr.set(acc);
-        mergedArr.set(segmentArr, acc.length);
+      const mergedArr = new Uint8Array(acc.length + segmentArr.length);
+      mergedArr.set(acc);
+      mergedArr.set(segmentArr, acc.length);
 
-        return mergedArr;
-      }
-    }, null);
+      return mergedArr;
+    }, new Uint8Array());
 
     // Cannot freeze array buffer views with elements
     return {type: "bitstring", bits: bits};
