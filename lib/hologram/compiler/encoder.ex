@@ -46,7 +46,7 @@ defmodule Hologram.Compiler.Encoder do
   end
 
   def encode(%IR.IntegerType{value: value}, _context) do
-    encode_primitive_type(:integer, value, false)
+    encode_primitive_type(:integer, "#{value}n", false)
   end
 
   def encode(%IR.ListType{data: data}, context) do
