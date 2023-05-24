@@ -60,6 +60,10 @@ export default class Type {
   }
 
   static integer(value) {
+    if (typeof value !== "bigint") {
+      value = BigInt(value);
+    }
+
     return Utils.freeze({type: "integer", value: value});
   }
 
@@ -131,12 +135,12 @@ export default class Type {
   // private
   static _buildBitArrayFromInteger(data) {
     // clamp to 0-255
-    data = data & 0xff;
+    data = data & 255n;
 
     const bitArr = [];
 
-    for (let i = 8; i >= 1; --i) {
-      bitArr[8 - i] = Type._getBit(data, i - 1);
+    for (let i = 8n; i >= 1n; --i) {
+      bitArr[8n - i] = Type._getBit(data, i - 1n);
     }
 
     return new Uint8Array(bitArr);
@@ -178,8 +182,8 @@ export default class Type {
   }
 
   // private
-  static _getBit(value, bitPosition) {
-    return (value & (1 << bitPosition)) === 0 ? 0 : 1;
+  static _getBit(value, position) {
+    return (value & (1n << position)) === 0n ? 0 : 1;
   }
 
   // private

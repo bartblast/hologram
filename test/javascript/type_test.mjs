@@ -224,9 +224,16 @@ describe("float()", () => {
 });
 
 describe("integer()", () => {
-  it("returns boxed integer value", () => {
+  it("returns boxed integer value given JavaScript integer", () => {
     const result = Type.integer(1);
-    const expected = {type: "integer", value: 1};
+    const expected = {type: "integer", value: 1n};
+
+    assert.deepStrictEqual(result, expected);
+  });
+
+  it("returns boxed integer value given JavaScript bigint", () => {
+    const result = Type.integer(1n);
+    const expected = {type: "integer", value: 1n};
 
     assert.deepStrictEqual(result, expected);
   });
