@@ -225,6 +225,40 @@ describe("encodeMapKey()", () => {
     assert.equal(result, "atom(abc)");
   });
 
+  it("encodes empty boxed bitstring value as map key", () => {
+    const segment = [
+      "integer",
+      Type.integer(0),
+      Type.integer(0),
+      1n,
+      null,
+      "big",
+    ];
+
+    const boxed = Type.bitstring([segment]);
+    const result = Type.encodeMapKey(boxed);
+
+    assert.equal(result, "bitstring()");
+  });
+
+  it("encodes non-empty boxed bitstring value as map key", () => {
+    // 170 == 0b10101010
+
+    const segment = [
+      "integer",
+      Type.integer(170),
+      Type.integer(8),
+      1n,
+      null,
+      "big",
+    ];
+
+    const boxed = Type.bitstring([segment]);
+    const result = Type.encodeMapKey(boxed);
+
+    assert.equal(result, "bitstring(10101010)");
+  });
+
   it("encodes boxed float value as map key", () => {
     const boxed = Type.float(1.23);
     const result = Type.encodeMapKey(boxed);

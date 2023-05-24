@@ -46,6 +46,9 @@ export default class Type {
       case "string":
         return Type._encodePrimitiveTypeMapKey(boxed);
 
+      case "bitstring":
+        return Type._encodeBitstringTypeMapKey(boxed);
+
       case "list":
       case "tuple":
         return Type._encodeEnumTypeMapKey(boxed);
@@ -157,6 +160,11 @@ export default class Type {
       case "integer":
         return Type._buildBitArrayFromInteger(data.value, size.value, unit);
     }
+  }
+
+  // private
+  static _encodeBitstringTypeMapKey(boxed) {
+    return "bitstring(" + boxed.bits.join("") + ")";
   }
 
   // private
