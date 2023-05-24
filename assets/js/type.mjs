@@ -38,15 +38,6 @@ export default class Type {
     return Utils.freeze({type: "cons_pattern", head: head, tail: tail});
   }
 
-  // private
-  static _encodeEnumTypeMapKey(boxed) {
-    const itemsStr = boxed.data
-      .map((item) => Type.encodeMapKey(item))
-      .join(",");
-
-    return boxed.type + "(" + itemsStr + ")";
-  }
-
   static encodeMapKey(boxed) {
     switch (boxed.type) {
       case "atom":
@@ -62,21 +53,6 @@ export default class Type {
       case "map":
         return Type._encodeMapTypeMapKey(boxed);
     }
-  }
-
-  // private
-  static _encodeMapTypeMapKey(boxed) {
-    const itemsStr = Object.keys(boxed.data)
-      .sort()
-      .map((key) => key + ":" + Type.encodeMapKey(boxed.data[key][1]))
-      .join(",");
-
-    return "map(" + itemsStr + ")";
-  }
-
-  // private
-  static _encodePrimitiveTypeMapKey(boxed) {
-    return `${boxed.type}(${boxed.value})`;
   }
 
   static float(value) {
@@ -175,6 +151,30 @@ export default class Type {
       case "integer":
         return Type._buildBitArrayFromInteger(data.value, size.value);
     }
+  }
+
+  // private
+  static _encodeEnumTypeMapKey(boxed) {
+    const itemsStr = boxed.data
+      .map((item) => Type.encodeMapKey(item))
+      .join(",");
+
+    return boxed.type + "(" + itemsStr + ")";
+  }
+
+  // private
+  static _encodeMapTypeMapKey(boxed) {
+    const itemsStr = Object.keys(boxed.data)
+      .sort()
+      .map((key) => key + ":" + Type.encodeMapKey(boxed.data[key][1]))
+      .join(",");
+
+    return "map(" + itemsStr + ")";
+  }
+
+  // private
+  static _encodePrimitiveTypeMapKey(boxed) {
+    return `${boxed.type}(${boxed.value})`;
   }
 
   // private
