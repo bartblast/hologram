@@ -24,6 +24,7 @@ defmodule Hologram.Compiler.Encoder do
     encode_primitive_type(:atom, value, true)
   end
 
+  # See: https://hexdocs.pm/elixir/1.14.5/Kernel.SpecialForms.html#%3C%3C%3E%3E/1
   def encode(%IR.BitstringSegment{} = segment, context) do
     value = encode(segment.value, context)
     size = encode(segment.size, context)
