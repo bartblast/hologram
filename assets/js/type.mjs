@@ -133,14 +133,15 @@ export default class Type {
   }
 
   // private
-  static _buildBitArrayFromInteger(data) {
-    // clamp to 0-255
-    data = data & 255n;
+  static _buildBitArrayFromInteger(data, size) {
+    // clamp to size number of bits
+    const bitmask = 2n ** size - 1n;
+    data = data & bitmask;
 
     const bitArr = [];
 
-    for (let i = 8n; i >= 1n; --i) {
-      bitArr[8n - i] = Type._getBit(data, i - 1n);
+    for (let i = size; i >= 1n; --i) {
+      bitArr[size - i] = Type._getBit(data, i - 1n);
     }
 
     return new Uint8Array(bitArr);
