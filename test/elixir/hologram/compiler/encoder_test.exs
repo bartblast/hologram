@@ -23,7 +23,7 @@ defmodule Hologram.Compiler.EncoderTest do
       }
 
       assert encode(ir, %Context{}) ==
-               ~s/["integer", Type.integer(123n), Type.integer(16n), 1, "signed", "big"]/
+               ~s/["integer", Type.integer(123n), Type.integer(16n), 1n, "signed", "big"]/
     end
 
     test "signedness not applicable" do
@@ -37,7 +37,7 @@ defmodule Hologram.Compiler.EncoderTest do
       }
 
       assert encode(ir, %Context{}) ==
-               ~s/["integer", Type.integer(123n), Type.integer(16n), 1, null, "big"]/
+               ~s/["integer", Type.integer(123n), Type.integer(16n), 1n, null, "big"]/
     end
 
     test "endianness not applicable" do
@@ -51,7 +51,7 @@ defmodule Hologram.Compiler.EncoderTest do
       }
 
       assert encode(ir, %Context{}) ==
-               ~s/["integer", Type.integer(123n), Type.integer(16n), 1, "signed", null]/
+               ~s/["integer", Type.integer(123n), Type.integer(16n), 1n, "signed", null]/
     end
   end
 
