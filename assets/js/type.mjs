@@ -133,15 +133,16 @@ export default class Type {
   }
 
   // private
-  static _buildBitArrayFromInteger(data, size) {
+  static _buildBitArrayFromInteger(data, size, unit) {
     // clamp to size number of bits
-    const bitmask = 2n ** size - 1n;
+    const numBits = size * unit;
+    const bitmask = 2n ** numBits - 1n;
     data = data & bitmask;
 
     const bitArr = [];
 
-    for (let i = size; i >= 1n; --i) {
-      bitArr[size - i] = Type._getBit(data, i - 1n);
+    for (let i = numBits; i >= 1n; --i) {
+      bitArr[numBits - i] = Type._getBit(data, i - 1n);
     }
 
     return new Uint8Array(bitArr);
@@ -149,12 +150,12 @@ export default class Type {
 
   // private
   static _buildBitstringSegmentBitArray(segment) {
-    let type, data, size, rest;
-    [type, data, size, ...rest] = segment;
+    let type, data, size, unit, rest;
+    [type, data, size, unit, ...rest] = segment;
 
     switch (type) {
       case "integer":
-        return Type._buildBitArrayFromInteger(data.value, size.value);
+        return Type._buildBitArrayFromInteger(data.value, size.value, unit);
     }
   }
 

@@ -25,7 +25,7 @@ describe("bitstring()", () => {
       "integer",
       Type.integer(170),
       Type.integer(8),
-      1,
+      1n,
       null,
       "big",
     ];
@@ -48,7 +48,7 @@ describe("bitstring()", () => {
       "integer",
       Type.integer(4010),
       Type.integer(8),
-      1,
+      1n,
       null,
       "big",
     ];
@@ -71,7 +71,7 @@ describe("bitstring()", () => {
       "integer",
       Type.integer(4010),
       Type.integer(9),
-      1,
+      1n,
       null,
       "big",
     ];
@@ -94,7 +94,7 @@ describe("bitstring()", () => {
       "integer",
       Type.integer(-22),
       Type.integer(8),
-      1,
+      1n,
       null,
       "big",
     ];
@@ -117,7 +117,7 @@ describe("bitstring()", () => {
       "integer",
       Type.integer(-86),
       Type.integer(8),
-      1,
+      1n,
       null,
       "big",
     ];
@@ -140,7 +140,7 @@ describe("bitstring()", () => {
       "integer",
       Type.integer(-86),
       Type.integer(9),
-      1,
+      1n,
       null,
       "big",
     ];
@@ -149,6 +149,29 @@ describe("bitstring()", () => {
     const expected = {
       type: "bitstring",
       bits: new Uint8Array([1, 1, 0, 1, 0, 1, 0, 1, 0]),
+    };
+
+    assert.deepStrictEqual(result, expected);
+  });
+
+  it("takes into account the segment's unit value when calculating the number of bits to keep", () => {
+    // 4010 (12 bits) -> 42 (6 bits)
+    // 4010 == 0b111110101010
+    // 42 == 0b101010
+
+    const segment = [
+      "integer",
+      Type.integer(4010),
+      Type.integer(2),
+      3n,
+      null,
+      "big",
+    ];
+    const result = Type.bitstring([segment]);
+
+    const expected = {
+      type: "bitstring",
+      bits: new Uint8Array([1, 0, 1, 0, 1, 0]),
     };
 
     assert.deepStrictEqual(result, expected);
