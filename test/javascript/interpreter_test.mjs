@@ -108,6 +108,20 @@ describe("isStrictlyEqual()", () => {
   });
 });
 
+describe("inspect()", () => {
+  it("stringifies boxed float", () => {
+    const result = Interpreter.inspect(Type.float(123.45));
+    assert.equal(result, '{"type":"float","value":123.45}');
+  });
+
+  it("stringifies boxed integer", () => {
+    const result = Interpreter.inspect(Type.integer(123));
+    assert.equal(result, '{"type":"integer","value":"123n"}');
+  });
+
+  // TODO: test other boxed types
+});
+
 describe("tail()", () => {
   it("returns the tail of a boxed list", () => {
     const list = Type.list([Type.integer(1), Type.integer(2), Type.integer(3)]);

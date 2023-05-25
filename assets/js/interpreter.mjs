@@ -22,6 +22,13 @@ export default class Interpreter {
     return list.data[0];
   }
 
+  // TODO: use Kernel.inspect/2 instead
+  static inspect(term) {
+    return JSON.stringify(term, (_key, value) =>
+      typeof value === "bigint" ? value.toString() + "n" : value
+    );
+  }
+
   static isStrictlyEqual(left, right) {
     if (left.type !== right.type) {
       return false;
