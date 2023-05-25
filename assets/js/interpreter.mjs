@@ -24,9 +24,31 @@ export default class Interpreter {
 
   // TODO: use Kernel.inspect/2 instead
   static inspect(term) {
-    return JSON.stringify(term, (_key, value) =>
-      typeof value === "bigint" ? value.toString() + "n" : value
-    );
+    switch (term.type) {
+      case "float":
+      case "integer":
+        return term.value.toString();
+
+      case "list":
+        return (
+          "[" +
+          term.data.map((item) => Interpreter.inspect(item)).join(", ") +
+          "]"
+        );
+
+      case "string":
+        return '"' + term.value.toString() + '"';
+
+      case "tuple":
+        return (
+          "{" +
+          term.data.map((item) => Interpreter.inspect(item)).join(", ") +
+          "}"
+        );
+
+      default:
+        return JSON.stringify(term);
+    }
   }
 
   static isStrictlyEqual(left, right) {

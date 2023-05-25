@@ -109,14 +109,52 @@ describe("isStrictlyEqual()", () => {
 });
 
 describe("inspect()", () => {
-  it("stringifies boxed float", () => {
+  it("inspects boxed float", () => {
     const result = Interpreter.inspect(Type.float(123.45));
-    assert.equal(result, '{"type":"float","value":123.45}');
+    assert.equal(result, "123.45");
   });
 
-  it("stringifies boxed integer", () => {
+  it("inspects boxed integer", () => {
     const result = Interpreter.inspect(Type.integer(123));
-    assert.equal(result, '{"type":"integer","value":"123n"}');
+    assert.equal(result, "123");
+  });
+
+  it("inspects boxed list", () => {
+    const term = Type.list([Type.integer(123), Type.string("abc")]);
+    const result = Interpreter.inspect(term);
+
+    assert.equal(result, '[123, "abc"]');
+  });
+
+  it("inspects boxed string", () => {
+    const result = Interpreter.inspect(Type.string("abc"));
+    assert.equal(result, '"abc"');
+  });
+
+  it("inspects boxed tuple", () => {
+    const term = Type.tuple([Type.integer(123), Type.string("abc")]);
+    const result = Interpreter.inspect(term);
+
+    assert.equal(result, '{123, "abc"}');
+  });
+
+  it("inspects other boxed types", () => {
+    const segment = [
+      "integer",
+      Type.integer(170),
+      Type.integer(8),
+      1n,
+      null,
+      "big",
+    ];
+
+    const term = Type.bitstring([segment]);
+    const result = Interpreter.inspect(term);
+
+    assert.equal(
+      result,
+      '{"type":"bitstring","bits":{"0":1,"1":0,"2":1,"3":0,"4":1,"5":0,"6":1,"7":0}}'
+    );
   });
 
   // TODO: test other boxed types
