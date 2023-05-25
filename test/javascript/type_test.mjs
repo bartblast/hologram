@@ -272,6 +272,44 @@ describe("bitstring()", () => {
   });
 });
 
+describe("bitstringSegment()", () => {
+  it("builds bitstring segment object with default param values", () => {
+    const result = Type.bitstringSegment(Type.integer(123));
+
+    const expected = {
+      value: {type: "integer", value: 123n},
+      type: null,
+      size: null,
+      unit: null,
+      signedness: null,
+      endianness: null,
+    };
+
+    assert.deepStrictEqual(result, expected);
+  });
+
+  it("builds bitstring segment object with all params specified", () => {
+    const result = Type.bitstringSegment(Type.integer(123), {
+      endianness: "little",
+      signedness: "unsigned",
+      unit: 3,
+      size: Type.integer(8),
+      type: "integer",
+    });
+
+    const expected = {
+      value: {type: "integer", value: 123n},
+      type: "integer",
+      size: Type.integer(8),
+      unit: 3,
+      signedness: "unsigned",
+      endianness: "little",
+    };
+
+    assert.deepStrictEqual(result, expected);
+  });
+});
+
 describe("boolean()", () => {
   it("returns boxed true value", () => {
     const result = Type.boolean(true);

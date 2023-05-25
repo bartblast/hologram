@@ -27,6 +27,16 @@ export default class Type {
     return {type: "bitstring", bits: bits};
   }
 
+  static bitstringSegment(value, modifiers = {}) {
+    const type = Type._getOption(modifiers, "type");
+    const size = Type._getOption(modifiers, "size");
+    const unit = Type._getOption(modifiers, "unit");
+    const signedness = Type._getOption(modifiers, "signedness");
+    const endianness = Type._getOption(modifiers, "endianness");
+
+    return {value, type, size, unit, signedness, endianness};
+  }
+
   static boolean(value) {
     return Type.atom(value.toString());
   }
@@ -199,6 +209,11 @@ export default class Type {
   // private
   static _getBit(value, position) {
     return (value & (1n << position)) === 0n ? 0 : 1;
+  }
+
+  // private
+  static _getOption(options, key) {
+    return typeof options[key] !== "undefined" ? options[key] : null;
   }
 
   // private
