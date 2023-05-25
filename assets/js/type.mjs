@@ -1,5 +1,6 @@
 "use strict";
 
+import Interpreter from "./interpreter.mjs";
 import Utils from "./utils.mjs";
 
 export default class Type {
@@ -9,7 +10,7 @@ export default class Type {
 
   static bitstring(segments) {
     segments.forEach((segment, index) =>
-      Type._verifyBitstringSegmentType(segment, index)
+      Type._validateBitstringSegment(segment, index + 1)
     );
 
     const bits = segments.reduce((acc, segment) => {
@@ -201,15 +202,17 @@ export default class Type {
   }
 
   // private
-  static _verifyBitstringSegmentType(segment, index) {
+  static _validateBitstringSegment(segment, index) {
     let type, data, rest;
     [type, data, ...rest] = segment;
 
+    // iex> x = 123.45
+    // iex> <<x::integer>
     if (data.type !== type) {
-      // TODO: throw boxed ArgumentError
-      throw new Error(
-        `(ArgumentError) construction of binary failed: segment ${index} of type '${type}': expected a ${type} but got: ${data.value}`
-      );
+      const inspectedValue = Interpreter.inspect(data.value);
+      const indefiniteArticle = Utils.indefiniteArticle(type);
+      const message = `construction of binary failed: segment ${index} of type '${type}': expected ${indefiniteArticle} ${type} but got: ${inspectedValue}`;
+      Interpreter.raiseError("ArgumentError", message);
     }
   }
 }

@@ -251,6 +251,25 @@ describe("bitstring()", () => {
 
     assert.deepStrictEqual(result, expected);
   });
+
+  it("raises ArgumentError if there is a mismatch between segment declared and runtime type", () => {
+    const segment = [
+      "integer",
+      Type.float(123.45),
+      Type.integer(8),
+      8n,
+      null,
+      "big",
+    ];
+
+    assert.throw(
+      () => {
+        Type.bitstring([segment]);
+      },
+      Error,
+      "(ArgumentError) construction of binary failed: segment 1 of type 'integer': expected an integer but got: 123.45"
+    );
+  });
 });
 
 describe("boolean()", () => {
