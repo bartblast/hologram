@@ -1,6 +1,6 @@
 "use strict";
 
-import {assertFrozen} from "../../assets/js/test_support.mjs";
+import {assert, assertFrozen} from "../../assets/js/test_support.mjs";
 import Utils from "../../assets/js/utils.mjs";
 
 describe("freeze()", () => {
@@ -32,5 +32,15 @@ describe("freeze()", () => {
     assertFrozen(obj.b);
     assertFrozen(obj.b.e);
     assertFrozen(obj.b.f);
+  });
+});
+
+describe("indefiniteArticle()", () => {
+  it("returns 'a' indefinite article", () => {
+    assert.equal(Utils.indefiniteArticle("float"), "a");
+  });
+
+  it("returns 'an' indefinite article", () => {
+    assert.equal(Utils.indefiniteArticle("integer"), "an");
   });
 });
