@@ -160,6 +160,18 @@ describe("inspect()", () => {
   // TODO: test other boxed types
 });
 
+describe("raiseError()", () => {
+  it("throws an error with the given message", () => {
+    assert.throw(
+      () => {
+        Interpreter.raiseError("MyType", "my message");
+      },
+      Error,
+      "(MyType) my message"
+    );
+  });
+});
+
 describe("tail()", () => {
   it("returns the tail of a boxed list", () => {
     const list = Type.list([Type.integer(1), Type.integer(2), Type.integer(3)]);

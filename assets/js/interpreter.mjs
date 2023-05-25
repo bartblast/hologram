@@ -59,6 +59,10 @@ export default class Interpreter {
     return isEqual(left, right);
   }
 
+  static raiseError(type, message) {
+    throw new Error(`(${type}) ${message}`);
+  }
+
   static tail(list) {
     return Type.list(list.data.slice(1));
   }
