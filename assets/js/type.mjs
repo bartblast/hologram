@@ -132,6 +132,11 @@ export default class Type {
   }
 
   // private
+  static _buildBitArrayFromBitstring(bits) {
+    return new Uint8Array(bits);
+  }
+
+  // private
   static _buildBitArrayFromInteger(data, size, unit) {
     // clamp to size number of bits
     const numBits = size * unit;
@@ -153,6 +158,9 @@ export default class Type {
     [type, data, size, unit, ...rest] = segment;
 
     switch (type) {
+      case "bitstring":
+        return Type._buildBitArrayFromBitstring(data.bits);
+
       case "integer":
         return Type._buildBitArrayFromInteger(data.value, size.value, unit);
     }

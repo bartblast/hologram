@@ -68,6 +68,30 @@ describe("bitstring()", () => {
     assert.deepStrictEqual(result, expected);
   });
 
+  it("builds a segment from bitstring", () => {
+    const integerSegment = [
+      "integer",
+      Type.integer(1),
+      Type.integer(1),
+      1n,
+      null,
+      "big",
+    ];
+
+    const bitstring = Type.bitstring([integerSegment]);
+
+    const bitstringSegment = ["bitstring", bitstring, null, null, null, null];
+
+    const result = Type.bitstring([bitstringSegment]);
+
+    const expected = {
+      type: "bitstring",
+      bits: new Uint8Array([1]),
+    };
+
+    assert.deepStrictEqual(result, expected);
+  });
+
   it("builds a segment from positive integer without clamping", () => {
     // 170 (8 bits) -> 170 (8 bits)
     // 170 == 0b10101010
