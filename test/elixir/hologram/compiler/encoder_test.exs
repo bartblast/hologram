@@ -11,6 +11,46 @@ defmodule Hologram.Compiler.EncoderTest do
     assert encode(ir, %Context{}) == ~s/Type.atom("aa\\"bb\\ncc")/
   end
 
+  describe "bitstring" do
+    test "no segments" do
+      ir = %IR.BitstringType{segments: []}
+
+      assert encode(ir, %Context{}) == "Type.bitstring([])"
+    end
+
+    test "single segment" do
+      ir = %IR.BitstringType{
+        segments: [
+          %IR.BitstringSegment{
+            value: %IR.IntegerType{value: 1},
+            modifiers: []
+          }
+        ]
+      }
+
+      assert encode(ir, %Context{}) ==
+               "Type.bitstring([Type.bitstringSegment(Type.integer(1n), {})])"
+    end
+
+    test "multiple segments" do
+      ir = %IR.BitstringType{
+        segments: [
+          %IR.BitstringSegment{
+            value: %IR.IntegerType{value: 1},
+            modifiers: []
+          },
+          %IR.BitstringSegment{
+            value: %IR.IntegerType{value: 2},
+            modifiers: []
+          }
+        ]
+      }
+
+      assert encode(ir, %Context{}) ==
+               "Type.bitstring([Type.bitstringSegment(Type.integer(1n), {}), Type.bitstringSegment(Type.integer(2n), {})])"
+    end
+  end
+
   describe "bitstring segment" do
     test "no modifiers specified" do
       ir = %IR.BitstringSegment{

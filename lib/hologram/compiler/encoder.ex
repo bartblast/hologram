@@ -24,6 +24,13 @@ defmodule Hologram.Compiler.Encoder do
     encode_primitive_type(:atom, value, true)
   end
 
+  def encode(%IR.BitstringType{segments: segments}, context) do
+    segments
+    |> Enum.map(&encode(&1, context))
+    |> Enum.join(", ")
+    |> StringUtils.wrap("Type.bitstring([", "])")
+  end
+
   # See: https://hexdocs.pm/elixir/1.14.5/Kernel.SpecialForms.html#%3C%3C%3E%3E/1
   def encode(
         %IR.BitstringSegment{value: value, modifiers: modifiers},
