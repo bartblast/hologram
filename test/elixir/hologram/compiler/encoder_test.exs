@@ -12,46 +12,39 @@ defmodule Hologram.Compiler.EncoderTest do
   end
 
   describe "bitstring segment" do
-    test "all fields applicable" do
+    test "no modifiers specified" do
       ir = %IR.BitstringSegment{
         value: %IR.IntegerType{value: 123},
-        type: :integer,
-        size: %IR.IntegerType{value: 16},
-        unit: 1,
-        signedness: :signed,
-        endianness: :big
+        modifiers: []
       }
 
-      assert encode(ir, %Context{}) ==
-               ~s/["integer", Type.integer(123n), Type.integer(16n), 1n, "signed", "big"]/
+      assert encode(ir, %Context{}) == "Type.bitstringSegment(Type.integer(123n), {})"
     end
 
-    test "signedness not applicable" do
+    test "all modifiers specified" do
       ir = %IR.BitstringSegment{
         value: %IR.IntegerType{value: 123},
-        type: :integer,
-        size: %IR.IntegerType{value: 16},
-        unit: 1,
-        signedness: :not_applicable,
-        endianness: :big
+        modifiers: [
+          type: :integer,
+          size: %IR.IntegerType{value: 16},
+          unit: 1,
+          signedness: :signed,
+          endianness: :big
+        ]
       }
 
       assert encode(ir, %Context{}) ==
-               ~s/["integer", Type.integer(123n), Type.integer(16n), 1n, null, "big"]/
+               ~s/Type.bitstringSegment(Type.integer(123n), {type: "integer", size: Type.integer(16n), unit: 1n, signedness: "signed", endianness: "big"})/
     end
 
-    test "endianness not applicable" do
+    test "single modifier specified" do
       ir = %IR.BitstringSegment{
         value: %IR.IntegerType{value: 123},
-        type: :integer,
-        size: %IR.IntegerType{value: 16},
-        unit: 1,
-        signedness: :signed,
-        endianness: :not_applicable
+        modifiers: [endianness: :big]
       }
 
       assert encode(ir, %Context{}) ==
-               ~s/["integer", Type.integer(123n), Type.integer(16n), 1n, "signed", null]/
+               ~s/Type.bitstringSegment(Type.integer(123n), {endianness: "big"})/
     end
   end
 

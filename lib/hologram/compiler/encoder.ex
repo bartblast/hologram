@@ -25,13 +25,19 @@ defmodule Hologram.Compiler.Encoder do
   end
 
   # See: https://hexdocs.pm/elixir/1.14.5/Kernel.SpecialForms.html#%3C%3C%3E%3E/1
-  def encode(%IR.BitstringSegment{} = segment, context) do
-    value = encode(segment.value, context)
-    size = encode(segment.size, context)
-    signedness = encode_non_applicable_as_null(segment.signedness)
-    endianness = encode_non_applicable_as_null(segment.endianness)
+  def encode(
+        %IR.BitstringSegment{value: value, modifiers: modifiers},
+        %{pattern?: false} = context
+      ) do
+    value_str = encode(value, context)
 
-    ~s(["#{segment.type}", #{value}, #{size}, #{segment.unit}n, #{signedness}, #{endianness}])
+    modifiers_str =
+      modifiers
+      |> Enum.map(&encode_bitstring_modifier(&1, context))
+      |> Enum.join(", ")
+      |> StringUtils.wrap("{", "}")
+
+    "Type.bitstringSegment(#{value_str}, #{modifiers_str})"
   end
 
   def encode(%IR.ConsOperator{head: head, tail: tail}, %{pattern?: true} = context) do
@@ -150,12 +156,16 @@ defmodule Hologram.Compiler.Encoder do
     |> StringUtils.wrap("\"", "\"")
   end
 
-  defp encode_non_applicable_as_null(enum_value) do
-    if enum_value == :not_applicable do
-      "null"
-    else
-      "\"#{enum_value}\""
-    end
+  defp encode_bitstring_modifier({:size, size}, context) do
+    "size: #{encode(size, context)}"
+  end
+
+  defp encode_bitstring_modifier({:unit, unit}, _context) do
+    "unit: #{unit}n"
+  end
+
+  defp encode_bitstring_modifier({name, value}, _context) do
+    ~s(#{name}: "#{value}")
   end
 
   defp encode_primitive_type(type, value, as_string)
