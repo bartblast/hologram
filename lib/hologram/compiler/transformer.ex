@@ -14,9 +14,6 @@ defmodule Hologram.Compiler.Transformer do
   alias Hologram.Compiler.Helpers
   alias Hologram.Compiler.IR
 
-  @endianness_relevant_types [:float, :integer, :utf16, :utf32]
-  @signedness_relevant_types [:integer]
-
   @doc """
   Transforms Elixir AST to Hologram IR.
 
@@ -96,7 +93,7 @@ defmodule Hologram.Compiler.Transformer do
   def transform({:<<>>, _meta, segments}, context) do
     segments_ir =
       segments
-      |> Enum.map(&transform_bitstring_segment(&1, context, %IR.BitstringSegment{}))
+      |> Enum.map(&transform_bitstring_segment(&1, context))
       |> flatten_bitstring_segments()
 
     %IR.BitstringType{segments: segments_ir}
@@ -397,208 +394,93 @@ defmodule Hologram.Compiler.Transformer do
     |> Enum.reverse()
   end
 
-  defp maybe_add_default_bitstring_modifiers(segment, context) do
-    segment
-    |> maybe_add_default_bitstring_type_modifier()
-    |> maybe_add_default_bitstring_endianness_modifier()
-    |> maybe_add_default_bitstring_signedness_modifier(context)
-    |> maybe_add_default_bitstring_size_modifier()
-    |> maybe_add_default_bitstring_unit_modifier()
+  defp transform_bitstring_modifiers({:-, _meta, [left, right]}, context, modifiers) do
+    new_modifiers = transform_bitstring_modifiers(left, context, modifiers)
+    transform_bitstring_modifiers(right, context, new_modifiers)
   end
 
-  defp maybe_add_default_bitstring_endianness_modifier(%{endianness: nil, type: type} = segment)
-       when type in @endianness_relevant_types do
-    %{segment | endianness: :big}
+  defp transform_bitstring_modifiers({:*, _meta, [size, unit]}, context, modifiers) do
+    size = transform(size, context)
+    [{:unit, unit} | [{:size, size} | modifiers]]
   end
 
-  defp maybe_add_default_bitstring_endianness_modifier(%{endianness: nil} = segment) do
-    %{segment | endianness: :not_applicable}
+  defp transform_bitstring_modifiers({:big, _meta, nil}, _context, modifiers) do
+    [{:endianness, :big} | modifiers]
   end
 
-  defp maybe_add_default_bitstring_endianness_modifier(segment), do: segment
-
-  defp maybe_add_default_bitstring_signedness_modifier(
-         %{signedness: nil, type: type} = segment,
-         %{pattern?: true}
-       )
-       when type in @signedness_relevant_types do
-    %{segment | signedness: :unsigned}
+  defp transform_bitstring_modifiers({:binary, _meta, nil}, _context, modifiers) do
+    [{:type, :binary} | modifiers]
   end
 
-  defp maybe_add_default_bitstring_signedness_modifier(%{signedness: nil} = segment, _context) do
-    %{segment | signedness: :not_applicable}
+  defp transform_bitstring_modifiers({:bits, _meta, nil}, _context, modifiers) do
+    [{:type, :bitstring} | modifiers]
   end
 
-  defp maybe_add_default_bitstring_signedness_modifier(segment, _context), do: segment
-
-  defp maybe_add_default_bitstring_size_modifier(%{size: nil, type: :float} = segment) do
-    %{segment | size: %IR.IntegerType{value: 64}}
+  defp transform_bitstring_modifiers({:bitstring, _meta, nil}, _context, modifiers) do
+    [{:type, :bitstring} | modifiers]
   end
 
-  defp maybe_add_default_bitstring_size_modifier(%{size: nil, type: :integer} = segment) do
-    %{segment | size: %IR.IntegerType{value: 8}}
+  defp transform_bitstring_modifiers({:bytes, _meta, nil}, _context, modifiers) do
+    [{:type, :binary} | modifiers]
   end
 
-  defp maybe_add_default_bitstring_size_modifier(
-         %{size: nil, value: %IR.StringType{value: value}} = segment
-       ) do
-    %{segment | size: %IR.IntegerType{value: String.length(value)}}
+  defp transform_bitstring_modifiers({:float, _meta, nil}, _context, modifiers) do
+    [{:type, :float} | modifiers]
   end
 
-  defp maybe_add_default_bitstring_size_modifier(%{size: nil} = segment) do
-    %{segment | size: %IR.AtomType{value: nil}}
+  defp transform_bitstring_modifiers({:integer, _meta, nil}, _context, modifiers) do
+    [{:type, :integer} | modifiers]
   end
 
-  defp maybe_add_default_bitstring_size_modifier(segment), do: segment
-
-  defp maybe_add_default_bitstring_type_modifier(%{type: nil, value: %IR.FloatType{}} = segment) do
-    %{segment | type: :float}
+  defp transform_bitstring_modifiers({:little, _meta, nil}, _context, modifiers) do
+    [{:endianness, :little} | modifiers]
   end
 
-  defp maybe_add_default_bitstring_type_modifier(%{type: nil, value: %IR.StringType{}} = segment) do
-    %{segment | type: :utf8}
+  defp transform_bitstring_modifiers({:native, _meta, nil}, _context, modifiers) do
+    [{:endianness, :native} | modifiers]
   end
 
-  defp maybe_add_default_bitstring_type_modifier(%{type: nil} = segment) do
-    %{segment | type: :integer}
+  defp transform_bitstring_modifiers({:signed, _meta, nil}, _context, modifiers) do
+    [{:signedness, :signed} | modifiers]
   end
 
-  defp maybe_add_default_bitstring_type_modifier(segment), do: segment
-
-  defp maybe_add_default_bitstring_unit_modifier(%{type: :binary, unit: nil} = segment) do
-    %{segment | unit: 8}
+  defp transform_bitstring_modifiers({:size, _meta, [size]}, context, modifiers) do
+    [{:size, transform(size, context)} | modifiers]
   end
 
-  defp maybe_add_default_bitstring_unit_modifier(%{type: :float, unit: nil} = segment) do
-    %{segment | unit: 1}
+  defp transform_bitstring_modifiers({:unit, _meta, [unit]}, _context, modifiers) do
+    [{:unit, unit} | modifiers]
   end
 
-  defp maybe_add_default_bitstring_unit_modifier(%{type: :integer, unit: nil} = segment) do
-    %{segment | unit: 1}
+  defp transform_bitstring_modifiers({:unsigned, _meta, nil}, _context, modifiers) do
+    [{:signedness, :unsigned} | modifiers]
   end
 
-  defp maybe_add_default_bitstring_unit_modifier(%{type: :utf8, unit: nil} = segment) do
-    %{segment | unit: 8}
+  defp transform_bitstring_modifiers({:utf8, _meta, nil}, _context, modifiers) do
+    [{:type, :utf8} | modifiers]
   end
 
-  defp maybe_add_default_bitstring_unit_modifier(%{type: :utf16, unit: nil} = segment) do
-    %{segment | unit: 16}
+  defp transform_bitstring_modifiers({:utf16, _meta, nil}, _context, modifiers) do
+    [{:type, :utf16} | modifiers]
   end
 
-  defp maybe_add_default_bitstring_unit_modifier(%{type: :utf32, unit: nil} = segment) do
-    %{segment | unit: 32}
+  defp transform_bitstring_modifiers({:utf32, _meta, nil}, _context, modifiers) do
+    [{:type, :utf32} | modifiers]
   end
 
-  defp maybe_add_default_bitstring_unit_modifier(segment), do: segment
-
-  defp maybe_ignore_endianness_modifier(%{type: type} = segment)
-       when type not in @endianness_relevant_types do
-    %{segment | endianness: :not_applicable}
+  defp transform_bitstring_modifiers(size, context, modifiers) do
+    [{:size, transform(size, context)} | modifiers]
   end
 
-  defp maybe_ignore_endianness_modifier(segment), do: segment
+  defp transform_bitstring_segment({:"::", _meta, [left, right]}, context) do
+    value = transform(left, context)
+    modifiers = transform_bitstring_modifiers(right, context, [])
 
-  defp maybe_ignore_signedness_modifier(%{type: type} = segment, _context)
-       when type not in @signedness_relevant_types do
-    %{segment | signedness: :not_applicable}
+    %IR.BitstringSegment{value: value, modifiers: modifiers}
   end
 
-  defp maybe_ignore_signedness_modifier(segment, %{pattern?: false}) do
-    %{segment | signedness: :not_applicable}
-  end
-
-  defp maybe_ignore_signedness_modifier(segment, _context), do: segment
-
-  defp transform_bitstring_modifiers({:-, _meta, [left, right]}, context, acc) do
-    new_acc = transform_bitstring_modifiers(left, context, acc)
-    transform_bitstring_modifiers(right, context, new_acc)
-  end
-
-  defp transform_bitstring_modifiers({:*, _meta, [size, unit]}, context, acc) do
-    %{acc | size: transform(size, context), unit: unit}
-  end
-
-  defp transform_bitstring_modifiers({:big, _meta, nil}, _context, acc) do
-    %{acc | endianness: :big}
-  end
-
-  defp transform_bitstring_modifiers({:binary, _meta, nil}, _context, acc) do
-    %{acc | type: :binary}
-  end
-
-  defp transform_bitstring_modifiers({:bits, _meta, nil}, _context, acc) do
-    %{acc | type: :bitstring}
-  end
-
-  defp transform_bitstring_modifiers({:bitstring, _meta, nil}, _context, acc) do
-    %{acc | type: :bitstring}
-  end
-
-  defp transform_bitstring_modifiers({:bytes, _meta, nil}, _context, acc) do
-    %{acc | type: :binary}
-  end
-
-  defp transform_bitstring_modifiers({:float, _meta, nil}, _context, acc) do
-    %{acc | type: :float}
-  end
-
-  defp transform_bitstring_modifiers({:integer, _meta, nil}, _context, acc) do
-    %{acc | type: :integer}
-  end
-
-  defp transform_bitstring_modifiers({:little, _meta, nil}, _context, acc) do
-    %{acc | endianness: :little}
-  end
-
-  defp transform_bitstring_modifiers({:native, _meta, nil}, _context, acc) do
-    %{acc | endianness: :native}
-  end
-
-  defp transform_bitstring_modifiers({:signed, _meta, nil}, _context, acc) do
-    %{acc | signedness: :signed}
-  end
-
-  defp transform_bitstring_modifiers({:size, _meta, [size]}, context, acc) do
-    %{acc | size: transform(size, context)}
-  end
-
-  defp transform_bitstring_modifiers({:unit, _meta, [unit]}, _context, acc) do
-    %{acc | unit: unit}
-  end
-
-  defp transform_bitstring_modifiers({:unsigned, _meta, nil}, _context, acc) do
-    %{acc | signedness: :unsigned}
-  end
-
-  defp transform_bitstring_modifiers({:utf8, _meta, nil}, _context, acc) do
-    %{acc | type: :utf8}
-  end
-
-  defp transform_bitstring_modifiers({:utf16, _meta, nil}, _context, acc) do
-    %{acc | type: :utf16}
-  end
-
-  defp transform_bitstring_modifiers({:utf32, _meta, nil}, _context, acc) do
-    %{acc | type: :utf32}
-  end
-
-  defp transform_bitstring_modifiers(size, context, acc) do
-    %{acc | size: transform(size, context)}
-  end
-
-  defp transform_bitstring_segment({:"::", _meta, [left, right]}, context, acc) do
-    new_acc = %{acc | value: transform(left, context)}
-
-    right
-    |> transform_bitstring_modifiers(context, new_acc)
-    |> maybe_add_default_bitstring_modifiers(context)
-    |> maybe_ignore_endianness_modifier()
-    |> maybe_ignore_signedness_modifier(context)
-  end
-
-  defp transform_bitstring_segment(ast, context, acc) do
-    new_acc = %{acc | value: transform(ast, context)}
-    maybe_add_default_bitstring_modifiers(new_acc, context)
+  defp transform_bitstring_segment(ast, context) do
+    %IR.BitstringSegment{value: transform(ast, context), modifiers: []}
   end
 
   defp transform_function_capture(function, arity, meta, context) do
