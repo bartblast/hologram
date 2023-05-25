@@ -252,7 +252,7 @@ describe("bitstring()", () => {
     assert.deepStrictEqual(result, expected);
   });
 
-  it("raises ArgumentError if there is a mismatch between segment declared and runtime type", () => {
+  it("raises ArgumentError if there is a mismatch between segment declared type and runtime type", () => {
     const segment = [
       "integer",
       Type.float(123.45),
