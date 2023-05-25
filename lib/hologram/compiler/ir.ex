@@ -60,16 +60,16 @@ defmodule Hologram.Compiler.IR do
   end
 
   defmodule BitstringSegment do
-    defstruct [:endianness, :signedness, :size, :type, :unit, :value]
+    defstruct [:value, :modifiers]
 
-    @type t :: %__MODULE__{
-            endianness: :not_applicable | :big | :little | :native,
-            signedness: :not_applicable | :signed | :unsigned,
-            size: IR.t(),
-            type: :binary | :bitstring | :float | :integer | :utf8 | :utf16 | :utf32,
-            unit: integer,
-            value: IR.t()
-          }
+    @type(
+      modifier :: {:endianness, :big | :little | :native} | {:signedness, :signed | :unsigned},
+      {:size, IR.t()},
+      {:type, :binary | :bitstring | :float | :integer | :utf8 | :utf16 | :utf32},
+      {:unit, integer}
+    )
+
+    @type t :: %__MODULE__{value: IR.t(), modifiers: list(modifier)}
   end
 
   defmodule BitstringType do
