@@ -273,7 +273,7 @@ describe("bitstring()", () => {
 });
 
 describe("bitstringSegment()", () => {
-  it("builds bitstring segment object with default param values", () => {
+  it("builds bitstring segment spec when no modifiers are given", () => {
     const result = Type.bitstringSegment(Type.integer(123));
 
     const expected = {
@@ -288,7 +288,7 @@ describe("bitstringSegment()", () => {
     assert.deepStrictEqual(result, expected);
   });
 
-  it("builds bitstring segment object with all params specified", () => {
+  it("builds bitstring segment spec when all modifiers given", () => {
     const result = Type.bitstringSegment(Type.integer(123), {
       endianness: "little",
       signedness: "unsigned",
@@ -304,6 +304,23 @@ describe("bitstringSegment()", () => {
       unit: 3,
       signedness: "unsigned",
       endianness: "little",
+    };
+
+    assert.deepStrictEqual(result, expected);
+  });
+
+  it("builds bitstring segment spec when a single modifier is given", () => {
+    const result = Type.bitstringSegment(Type.integer(123), {
+      signedness: "unsigned",
+    });
+
+    const expected = {
+      value: {type: "integer", value: 123n},
+      type: null,
+      size: null,
+      unit: null,
+      signedness: "unsigned",
+      endianness: null,
     };
 
     assert.deepStrictEqual(result, expected);
