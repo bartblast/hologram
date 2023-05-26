@@ -1,6 +1,16 @@
 "use strict";
 
 export default class Utils {
+  static concatUint8Arrays(arrays) {
+    return arrays.reduce((acc, arr) => {
+      const mergedArr = new Uint8Array(acc.length + arr.length);
+      mergedArr.set(acc);
+      mergedArr.set(arr, acc.length);
+
+      return mergedArr;
+    }, new Uint8Array());
+  }
+
   // Based on deepFreeze() from: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Object/freeze
   static freeze(obj) {
     const props = Object.getOwnPropertyNames(obj);
