@@ -157,6 +157,24 @@ export default class Type {
   }
 
   // private
+  static _buildBitArrayFromString(segment) {
+    let type = segment.type;
+    const value = segment.value.value;
+
+    if (type !== "utf8") {
+      Interpreter.raiseNotYetImplementedError(
+        `${type} bitstring segment type is not yet implemented in Hologram`
+      );
+    }
+
+    const bitArrays = Array.from(new TextEncoder().encode(value)).map((byte) =>
+      Type._convertDataToBitArray(BigInt(byte), 8n, 1n)
+    );
+
+    return Utils.concatUint8Arrays(bitArrays);
+  }
+
+  // private
   static _buildBitstringSegmentBitArray(segment, index) {
     segment = Type._resolveBistringSegmentType(segment);
     Type._validateBitstringSegmentType(segment, index);
@@ -167,6 +185,11 @@ export default class Type {
 
       case "integer":
         return Type._buildBitArrayFromInteger(segment);
+
+      case "utf8":
+      case "utf16":
+      case "utf32":
+        return Type._buildBitArrayFromString(segment);
     }
   }
 
@@ -230,8 +253,10 @@ export default class Type {
     const {value, type} = segment;
 
     if (type === null) {
-      if (["bitstring", "integer", "float", "string"].includes(value.type)) {
+      if (["bitstring", "integer", "float"].includes(value.type)) {
         segment.type = value.type;
+      } else if (value.type === "string") {
+        segment.type = "utf8";
       } else {
         segment.type = "integer";
       }
@@ -244,13 +269,22 @@ export default class Type {
   static _validateBitstringSegmentType(segment, index) {
     const {value, type} = segment;
 
-    // iex> x = 123.45
-    // iex> <<x::integer>
-    if (value.type !== type) {
-      const inspectedValue = Interpreter.inspect(value);
-      const indefiniteArticle = Utils.indefiniteArticle(type);
-      const message = `construction of binary failed: segment ${index} of type '${type}': expected ${indefiniteArticle} ${type} but got: ${inspectedValue}`;
-      Interpreter.raiseError("ArgumentError", message);
+    if (value.type === type) {
+      return true;
+    } else if (
+      value.type === "string" &&
+      ["utf8", "utf16", "utf32"].includes(type)
+    ) {
+      return true;
     }
+
+    Type._raiseInvalidBitstringSegmentType(index, value, type);
+  }
+
+  static _raiseInvalidBitstringSegmentType(index, value, type) {
+    const inspectedValue = Interpreter.inspect(value);
+    const indefiniteArticle = Utils.indefiniteArticle(type);
+    const message = `construction of binary failed: segment ${index} of type '${type}': expected ${indefiniteArticle} ${type} but got: ${inspectedValue}`;
+    Interpreter.raiseError("ArgumentError", message);
   }
 }
