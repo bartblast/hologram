@@ -167,7 +167,7 @@ export default class Type {
       );
     }
 
-    const bitArrays = Array.from(new TextEncoder().encode(value)).map((byte) =>
+    const bitArrays = Array.from(Type._getBytesFromString(value)).map((byte) =>
       Type._convertDataToBitArray(BigInt(byte), 8n, 1n)
     );
 
@@ -241,6 +241,11 @@ export default class Type {
   // private
   static _getBit(value, position) {
     return (value & (1n << position)) === 0n ? 0 : 1;
+  }
+
+  // private
+  static _getBytesFromString(string) {
+    return new TextEncoder().encode(string);
   }
 
   // private
