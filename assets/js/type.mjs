@@ -9,12 +9,11 @@ export default class Type {
   }
 
   static bitstring(segments) {
-    segments.forEach((segment, index) =>
-      Type._validateBitstringSegment(segment, index + 1)
-    );
-
-    const bits = segments.reduce((acc, segment) => {
-      const segmentArr = Type._buildBitstringSegmentBitArray(segment);
+    const bits = segments.reduce((acc, segment, index) => {
+      const segmentArr = Type._buildBitstringSegmentBitArray(
+        segment,
+        index + 1
+      );
 
       const mergedArr = new Uint8Array(acc.length + segmentArr.length);
       mergedArr.set(acc);
@@ -164,9 +163,11 @@ export default class Type {
   }
 
   // private
-  static _buildBitstringSegmentBitArray(segment) {
+  static _buildBitstringSegmentBitArray(segment, index) {
     let type, data, size, unit, rest;
     [type, data, size, unit, ...rest] = segment;
+
+    Type._validateBitstringSegmentType(segment, index);
 
     switch (type) {
       case "bitstring":
@@ -217,7 +218,7 @@ export default class Type {
   }
 
   // private
-  static _validateBitstringSegment(segment, index) {
+  static _validateBitstringSegmentType(segment, index) {
     let type, data, rest;
     [type, data, ...rest] = segment;
 
