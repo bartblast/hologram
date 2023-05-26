@@ -11,6 +11,11 @@ export default class Utils {
     }, new Uint8Array());
   }
 
+  static debug(term) {
+    console.debug(term);
+    return term;
+  }
+
   // Based on deepFreeze() from: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Object/freeze
   static freeze(obj) {
     const props = Object.getOwnPropertyNames(obj);
