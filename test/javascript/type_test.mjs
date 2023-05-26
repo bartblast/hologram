@@ -61,7 +61,7 @@ describe("bitstring()", () => {
   });
 
   describe("bitstring segment type", () => {
-    it("builds a segment from bitstring", () => {
+    it("builds segment from bitstring", () => {
       const integerSegment = Type.bitstringSegment(Type.integer(1), {
         size: Type.integer(1),
       });
@@ -79,8 +79,84 @@ describe("bitstring()", () => {
     });
   });
 
+  describe("float segment type", () => {
+    it("builds 64-bit float segment", () => {
+      // <<123.45>> == <<64, 94, 220, 204, 204, 204, 204, 205>>
+      // 64 == 0b01000000
+      // 94 == 0b01011110
+      // 220 == 0b11011100
+      // 204 == 0b11001100
+      // 204 == 0b11001100
+      // 204 == 0b11001100
+      // 204 == 0b11001100
+      // 205 == 0b11001101
+
+      const segment = Type.bitstringSegment(Type.float(123.45), {});
+      const result = Type.bitstring([segment]);
+
+      const expected = {
+        type: "bitstring",
+        // prettier-ignore
+        bits: new Uint8Array([
+          0,1,0,0,0,0,0,0,
+          0,1,0,1,1,1,1,0,
+          1,1,0,1,1,1,0,0,
+          1,1,0,0,1,1,0,0,
+          1,1,0,0,1,1,0,0,
+          1,1,0,0,1,1,0,0,
+          1,1,0,0,1,1,0,0,
+          1,1,0,0,1,1,0,1
+        ]),
+      };
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("fails to build 32-bit float segment", () => {
+      const segment = Type.bitstringSegment(Type.float(123.45), {
+        size: Type.integer(32),
+      });
+
+      assert.throw(
+        () => {
+          Type.bitstring([segment]);
+        },
+        Error,
+        "(Hologram.NotYetImplementedError) 32-bit float bitstring segments are not yet implemented in Hologram"
+      );
+    });
+
+    it("fails to build 16-bit float segment", () => {
+      const segment = Type.bitstringSegment(Type.float(123.45), {
+        size: Type.integer(16),
+      });
+
+      assert.throw(
+        () => {
+          Type.bitstring([segment]);
+        },
+        Error,
+        "(Hologram.NotYetImplementedError) 16-bit float bitstring segments are not yet implemented in Hologram"
+      );
+    });
+
+    it("fails to build float segment which is not 16-bit, 32-bit or 64-bit", () => {
+      const segment = Type.bitstringSegment(Type.float(123.45), {
+        size: Type.integer(11),
+      });
+
+      assert.throw(
+        () => {
+          Type.bitstring([segment]);
+        },
+        Error,
+        "(ArgumentError) construction of binary failed: segment 1 of type 'float': expected one of the supported sizes 16, 32, or 64 but got: 11"
+      );
+    });
+  });
+
   describe("integer segment type", () => {
-    it("builds a segment from positive integer without clamping", () => {
+    it("builds segment from positive integer without clamping", () => {
       // 170 (8 bits) -> 170 (8 bits)
       // 170 == 0b10101010
 
@@ -95,7 +171,7 @@ describe("bitstring()", () => {
       assert.deepStrictEqual(result, expected);
     });
 
-    it("builds a segment from positive integer with clamping to 8 bits", () => {
+    it("builds segment from positive integer with clamping to 8 bits", () => {
       // 4010 (12 bits) -> 170 (8 bits)
       // 4010 == 0b111110101010
       // 170 == 0b10101010
@@ -111,7 +187,7 @@ describe("bitstring()", () => {
       assert.deepStrictEqual(result, expected);
     });
 
-    it("builds a segment from positive integer with clamping to 9 bits", () => {
+    it("builds segment from positive integer with clamping to 9 bits", () => {
       // 4010 (12 bits) -> 426 (9 bits)
       // 4010 == 0b111110101010
       // 426 == 0b110101010
@@ -129,7 +205,7 @@ describe("bitstring()", () => {
       assert.deepStrictEqual(result, expected);
     });
 
-    it("builds a segment from negative integer without clamping", () => {
+    it("builds segment from negative integer without clamping", () => {
       // -22 (8 bits) -> 234 (8 bits)
       // -22 == 0b11101010
       // 234 == 0b11101010
@@ -145,7 +221,7 @@ describe("bitstring()", () => {
       assert.deepStrictEqual(result, expected);
     });
 
-    it("builds a segment from negative integer with clamping to 8 bits", () => {
+    it("builds segment from negative integer with clamping to 8 bits", () => {
       // -86 (12 bits) -> 170 (8 bits)
       // -86 == 0b111110101010
       // 170 == 0b10101010
@@ -161,7 +237,7 @@ describe("bitstring()", () => {
       assert.deepStrictEqual(result, expected);
     });
 
-    it("builds a segment from negative integer with clamping to 9 bits", () => {
+    it("builds segment from negative integer with clamping to 9 bits", () => {
       // -86 (12 bits) -> 426 (9 bits)
       // -86 == 0b111110101010
       // 426 == 0b110101010
@@ -200,7 +276,7 @@ describe("bitstring()", () => {
   });
 
   describe("string segment type", () => {
-    it("builds a segment from string", () => {
+    it("builds segment from string", () => {
       // <<"全息图">> == <<229, 133, 168, 230, 129, 175, 229, 155, 190>>
       // 229 == 0b11100101
       // 133 == 0b10000101

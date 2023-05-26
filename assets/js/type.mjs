@@ -138,6 +138,44 @@ export default class Type {
   }
 
   // private
+  static _buildBitArrayFromFloat(segment, index) {
+    const value = segment.value.value;
+    let unit = segment.unit;
+    let size;
+
+    if (segment.size === null) {
+      size = 64n;
+    } else {
+      size = segment.size.value;
+    }
+
+    if (unit === null) {
+      unit = 1n;
+    }
+
+    const numBits = size * unit;
+
+    if (![16n, 32n, 64n].includes(numBits)) {
+      const message = `construction of binary failed: segment ${index} of type 'float': expected one of the supported sizes 16, 32, or 64 but got: ${Number(
+        numBits
+      )}`;
+      Interpreter.raiseError("ArgumentError", message);
+    }
+
+    if (numBits !== 64n) {
+      Interpreter.raiseNotYetImplementedError(
+        `${numBits}-bit float bitstring segments are not yet implemented in Hologram`
+      );
+    }
+
+    const bitArrays = Array.from(Type._getBytesFromFloat(value)).map((byte) =>
+      Type._convertDataToBitArray(BigInt(byte), 8n, 1n)
+    );
+
+    return Utils.concatUint8Arrays(bitArrays);
+  }
+
+  // private
   static _buildBitArrayFromInteger(segment) {
     const data = segment.value.value;
     let unit = segment.unit;
@@ -182,6 +220,9 @@ export default class Type {
     switch (segment.type) {
       case "bitstring":
         return Type._buildBitArrayFromBitstring(segment);
+
+      case "float":
+        return Type._buildBitArrayFromFloat(segment, index);
 
       case "integer":
         return Type._buildBitArrayFromInteger(segment);
@@ -241,6 +282,12 @@ export default class Type {
   // private
   static _getBit(value, position) {
     return (value & (1n << position)) === 0n ? 0 : 1;
+  }
+
+  // private
+  static _getBytesFromFloat(float) {
+    const floatArr = new Float64Array([float]);
+    return new Uint8Array(floatArr.buffer).reverse();
   }
 
   // private

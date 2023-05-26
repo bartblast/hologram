@@ -64,7 +64,7 @@ export default class Interpreter {
   }
 
   static raiseNotYetImplementedError(message) {
-    Interpreter.raiseError(`(Hologram.NotYetImplementedError) ${message}`);
+    Interpreter.raiseError("Hologram.NotYetImplementedError", `${message}`);
   }
 
   static tail(list) {
