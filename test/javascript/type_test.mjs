@@ -29,15 +29,10 @@ describe("bitstring()", () => {
   });
 
   it("builds single-segment bitstring", () => {
-    const segment = [
-      "integer",
-      Type.integer(1),
-      Type.integer(1),
-      1n,
-      null,
-      "big",
-    ];
-
+    const segment = Type.bitstringSegment(Type.integer(1), {
+      size: Type.integer(1),
+      unit: 1n,
+    });
     const result = Type.bitstring([segment]);
 
     const expected = {
@@ -49,15 +44,10 @@ describe("bitstring()", () => {
   });
 
   it("builds multiple-segment bitstring", () => {
-    const segment = [
-      "integer",
-      Type.integer(1),
-      Type.integer(1),
-      1n,
-      null,
-      "big",
-    ];
-
+    const segment = Type.bitstringSegment(Type.integer(1), {
+      size: Type.integer(1),
+      unit: 1n,
+    });
     const result = Type.bitstring([segment, segment]);
 
     const expected = {
@@ -69,19 +59,12 @@ describe("bitstring()", () => {
   });
 
   it("builds a segment from bitstring", () => {
-    const integerSegment = [
-      "integer",
-      Type.integer(1),
-      Type.integer(1),
-      1n,
-      null,
-      "big",
-    ];
+    const integerSegment = Type.bitstringSegment(Type.integer(1), {
+      size: Type.integer(1),
+    });
 
     const bitstring = Type.bitstring([integerSegment]);
-
-    const bitstringSegment = ["bitstring", bitstring, null, null, null, null];
-
+    const bitstringSegment = Type.bitstringSegment(bitstring);
     const result = Type.bitstring([bitstringSegment]);
 
     const expected = {
@@ -96,14 +79,7 @@ describe("bitstring()", () => {
     // 170 (8 bits) -> 170 (8 bits)
     // 170 == 0b10101010
 
-    const segment = [
-      "integer",
-      Type.integer(170),
-      Type.integer(8),
-      1n,
-      null,
-      "big",
-    ];
+    const segment = Type.bitstringSegment(Type.integer(170), {});
     const result = Type.bitstring([segment]);
 
     const expected = {
@@ -119,14 +95,7 @@ describe("bitstring()", () => {
     // 4010 == 0b111110101010
     // 170 == 0b10101010
 
-    const segment = [
-      "integer",
-      Type.integer(4010),
-      Type.integer(8),
-      1n,
-      null,
-      "big",
-    ];
+    const segment = Type.bitstringSegment(Type.integer(4010), {});
     const result = Type.bitstring([segment]);
 
     const expected = {
@@ -142,14 +111,9 @@ describe("bitstring()", () => {
     // 4010 == 0b111110101010
     // 426 == 0b110101010
 
-    const segment = [
-      "integer",
-      Type.integer(4010),
-      Type.integer(9),
-      1n,
-      null,
-      "big",
-    ];
+    const segment = Type.bitstringSegment(Type.integer(4010), {
+      size: Type.integer(9),
+    });
     const result = Type.bitstring([segment]);
 
     const expected = {
@@ -165,14 +129,7 @@ describe("bitstring()", () => {
     // -22 == 0b11101010
     // 234 == 0b11101010
 
-    const segment = [
-      "integer",
-      Type.integer(-22),
-      Type.integer(8),
-      1n,
-      null,
-      "big",
-    ];
+    const segment = Type.bitstringSegment(Type.integer(-22), {});
     const result = Type.bitstring([segment]);
 
     const expected = {
@@ -188,14 +145,7 @@ describe("bitstring()", () => {
     // -86 == 0b111110101010
     // 170 == 0b10101010
 
-    const segment = [
-      "integer",
-      Type.integer(-86),
-      Type.integer(8),
-      1n,
-      null,
-      "big",
-    ];
+    const segment = Type.bitstringSegment(Type.integer(-86), {});
     const result = Type.bitstring([segment]);
 
     const expected = {
@@ -211,14 +161,9 @@ describe("bitstring()", () => {
     // -86 == 0b111110101010
     // 426 == 0b110101010
 
-    const segment = [
-      "integer",
-      Type.integer(-86),
-      Type.integer(9),
-      1n,
-      null,
-      "big",
-    ];
+    const segment = Type.bitstringSegment(Type.integer(-86), {
+      size: Type.integer(9),
+    });
     const result = Type.bitstring([segment]);
 
     const expected = {
@@ -234,14 +179,10 @@ describe("bitstring()", () => {
     // 4010 == 0b111110101010
     // 42 == 0b101010
 
-    const segment = [
-      "integer",
-      Type.integer(4010),
-      Type.integer(2),
-      3n,
-      null,
-      "big",
-    ];
+    const segment = Type.bitstringSegment(Type.integer(4010), {
+      size: Type.integer(2),
+      unit: 3n,
+    });
     const result = Type.bitstring([segment]);
 
     const expected = {
@@ -253,14 +194,9 @@ describe("bitstring()", () => {
   });
 
   it("raises ArgumentError if there is a mismatch between segment declared type and runtime type", () => {
-    const segment = [
-      "integer",
-      Type.float(123.45),
-      Type.integer(8),
-      8n,
-      null,
-      "big",
-    ];
+    const segment = Type.bitstringSegment(Type.float(123.45), {
+      type: "integer",
+    });
 
     assert.throw(
       () => {
@@ -375,15 +311,9 @@ describe("encodeMapKey()", () => {
   });
 
   it("encodes empty boxed bitstring value as map key", () => {
-    const segment = [
-      "integer",
-      Type.integer(0),
-      Type.integer(0),
-      1n,
-      null,
-      "big",
-    ];
-
+    const segment = Type.bitstringSegment(Type.integer(0), {
+      size: Type.integer(0),
+    });
     const boxed = Type.bitstring([segment]);
     const result = Type.encodeMapKey(boxed);
 
@@ -393,15 +323,7 @@ describe("encodeMapKey()", () => {
   it("encodes non-empty boxed bitstring value as map key", () => {
     // 170 == 0b10101010
 
-    const segment = [
-      "integer",
-      Type.integer(170),
-      Type.integer(8),
-      1n,
-      null,
-      "big",
-    ];
-
+    const segment = Type.bitstringSegment(Type.integer(170), {});
     const boxed = Type.bitstring([segment]);
     const result = Type.encodeMapKey(boxed);
 

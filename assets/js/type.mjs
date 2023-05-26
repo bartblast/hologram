@@ -142,21 +142,35 @@ export default class Type {
   }
 
   // private
-  static _buildBitArrayFromBitstring(bits) {
-    return new Uint8Array(bits);
+  static _buildBitArrayFromBitstring(segment) {
+    return new Uint8Array(segment.value.bits);
   }
 
   // private
-  static _buildBitArrayFromInteger(data, size, unit) {
+  static _buildBitArrayFromInteger(segment) {
+    const data = segment.value.value;
+    let unit = segment.unit;
+    let size;
+
+    if (segment.size === null) {
+      size = 8n;
+    } else {
+      size = segment.size.value;
+    }
+
+    if (unit === null) {
+      unit = 1n;
+    }
+
     // clamp to size number of bits
     const numBits = size * unit;
     const bitmask = 2n ** numBits - 1n;
-    data = data & bitmask;
+    const clampedData = data & bitmask;
 
     const bitArr = [];
 
     for (let i = numBits; i >= 1n; --i) {
-      bitArr[numBits - i] = Type._getBit(data, i - 1n);
+      bitArr[numBits - i] = Type._getBit(clampedData, i - 1n);
     }
 
     return new Uint8Array(bitArr);
@@ -164,17 +178,15 @@ export default class Type {
 
   // private
   static _buildBitstringSegmentBitArray(segment, index) {
-    let type, data, size, unit, rest;
-    [type, data, size, unit, ...rest] = segment;
-
+    segment = Type._resolveBistringSegmentType(segment);
     Type._validateBitstringSegmentType(segment, index);
 
-    switch (type) {
+    switch (segment.type) {
       case "bitstring":
-        return Type._buildBitArrayFromBitstring(data.bits);
+        return Type._buildBitArrayFromBitstring(segment);
 
       case "integer":
-        return Type._buildBitArrayFromInteger(data.value, size.value, unit);
+        return Type._buildBitArrayFromInteger(segment);
     }
   }
 
@@ -218,14 +230,28 @@ export default class Type {
   }
 
   // private
+  static _resolveBistringSegmentType(segment) {
+    const {value, type} = segment;
+
+    if (type === null) {
+      if (["bitstring", "integer", "float", "string"].includes(value.type)) {
+        segment.type = value.type;
+      } else {
+        segment.type = "integer";
+      }
+    }
+
+    return segment;
+  }
+
+  // private
   static _validateBitstringSegmentType(segment, index) {
-    let type, data, rest;
-    [type, data, ...rest] = segment;
+    const {value, type} = segment;
 
     // iex> x = 123.45
     // iex> <<x::integer>
-    if (data.type !== type) {
-      const inspectedValue = Interpreter.inspect(data.value);
+    if (value.type !== type) {
+      const inspectedValue = Interpreter.inspect(value);
       const indefiniteArticle = Utils.indefiniteArticle(type);
       const message = `construction of binary failed: segment ${index} of type '${type}': expected ${indefiniteArticle} ${type} but got: ${inspectedValue}`;
       Interpreter.raiseError("ArgumentError", message);
