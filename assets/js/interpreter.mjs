@@ -63,6 +63,10 @@ export default class Interpreter {
     throw new Error(`(${type}) ${message}`);
   }
 
+  static raiseNotYetImplementedError(message) {
+    Interpreter.raiseError(`(Hologram.NotYetImplementedError) ${message}`);
+  }
+
   static tail(list) {
     return Type.list(list.data.slice(1));
   }
