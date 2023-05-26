@@ -26,8 +26,7 @@ defmodule Hologram.Compiler.Encoder do
 
   def encode(%IR.BitstringType{segments: segments}, context) do
     segments
-    |> Enum.map(&encode(&1, context))
-    |> Enum.join(", ")
+    |> Enum.map_join(", ", &encode(&1, context))
     |> StringUtils.wrap("Type.bitstring([", "])")
   end
 
@@ -40,8 +39,7 @@ defmodule Hologram.Compiler.Encoder do
 
     modifiers_str =
       modifiers
-      |> Enum.map(&encode_bitstring_modifier(&1, context))
-      |> Enum.join(", ")
+      |> Enum.map_join(", ", &encode_bitstring_modifier(&1, context))
       |> StringUtils.wrap("{", "}")
 
     "Type.bitstringSegment(#{value_str}, #{modifiers_str})"
