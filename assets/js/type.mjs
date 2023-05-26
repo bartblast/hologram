@@ -9,21 +9,12 @@ export default class Type {
   }
 
   static bitstring(segments) {
-    const bits = segments.reduce((acc, segment, index) => {
-      const segmentArr = Type._buildBitstringSegmentBitArray(
-        segment,
-        index + 1
-      );
-
-      const mergedArr = new Uint8Array(acc.length + segmentArr.length);
-      mergedArr.set(acc);
-      mergedArr.set(segmentArr, acc.length);
-
-      return mergedArr;
-    }, new Uint8Array());
+    const bitArrays = segments.map((segment, index) =>
+      Type._buildBitstringSegmentBitArray(segment, index + 1)
+    );
 
     // Cannot freeze array buffer views with elements
-    return {type: "bitstring", bits: bits};
+    return {type: "bitstring", bits: Utils.concatUint8Arrays(bitArrays)};
   }
 
   static bitstringSegment(value, modifiers = {}) {
@@ -162,18 +153,7 @@ export default class Type {
       unit = 1n;
     }
 
-    // clamp to size number of bits
-    const numBits = size * unit;
-    const bitmask = 2n ** numBits - 1n;
-    const clampedData = data & bitmask;
-
-    const bitArr = [];
-
-    for (let i = numBits; i >= 1n; --i) {
-      bitArr[numBits - i] = Type._getBit(clampedData, i - 1n);
-    }
-
-    return new Uint8Array(bitArr);
+    return Type._convertDataToBitArray(data, size, unit);
   }
 
   // private
@@ -188,6 +168,22 @@ export default class Type {
       case "integer":
         return Type._buildBitArrayFromInteger(segment);
     }
+  }
+
+  // private
+  static _convertDataToBitArray(data, size, unit) {
+    // clamp to size number of bits
+    const numBits = size * unit;
+    const bitmask = 2n ** numBits - 1n;
+    const clampedData = data & bitmask;
+
+    const bitArr = [];
+
+    for (let i = numBits; i >= 1n; --i) {
+      bitArr[numBits - i] = Type._getBit(clampedData, i - 1n);
+    }
+
+    return new Uint8Array(bitArr);
   }
 
   // private
