@@ -17,194 +17,202 @@ describe("atom()", () => {
 });
 
 describe("bitstring()", () => {
-  it("builds empty bitstring without segments", () => {
-    const result = Type.bitstring([]);
+  describe("different number of segments", () => {
+    it("builds empty bitstring without segments", () => {
+      const result = Type.bitstring([]);
 
-    const expected = {
-      type: "bitstring",
-      bits: new Uint8Array([]),
-    };
+      const expected = {
+        type: "bitstring",
+        bits: new Uint8Array([]),
+      };
 
-    assert.deepStrictEqual(result, expected);
-  });
-
-  it("builds single-segment bitstring", () => {
-    const segment = Type.bitstringSegment(Type.integer(1), {
-      size: Type.integer(1),
-      unit: 1n,
-    });
-    const result = Type.bitstring([segment]);
-
-    const expected = {
-      type: "bitstring",
-      bits: new Uint8Array([1]),
-    };
-
-    assert.deepStrictEqual(result, expected);
-  });
-
-  it("builds multiple-segment bitstring", () => {
-    const segment = Type.bitstringSegment(Type.integer(1), {
-      size: Type.integer(1),
-      unit: 1n,
-    });
-    const result = Type.bitstring([segment, segment]);
-
-    const expected = {
-      type: "bitstring",
-      bits: new Uint8Array([1, 1]),
-    };
-
-    assert.deepStrictEqual(result, expected);
-  });
-
-  it("builds a segment from bitstring", () => {
-    const integerSegment = Type.bitstringSegment(Type.integer(1), {
-      size: Type.integer(1),
+      assert.deepStrictEqual(result, expected);
     });
 
-    const bitstring = Type.bitstring([integerSegment]);
-    const bitstringSegment = Type.bitstringSegment(bitstring);
-    const result = Type.bitstring([bitstringSegment]);
+    it("builds single-segment bitstring", () => {
+      const segment = Type.bitstringSegment(Type.integer(1), {
+        size: Type.integer(1),
+        unit: 1n,
+      });
+      const result = Type.bitstring([segment]);
 
-    const expected = {
-      type: "bitstring",
-      bits: new Uint8Array([1]),
-    };
+      const expected = {
+        type: "bitstring",
+        bits: new Uint8Array([1]),
+      };
 
-    assert.deepStrictEqual(result, expected);
-  });
-
-  it("builds a segment from positive integer without clamping", () => {
-    // 170 (8 bits) -> 170 (8 bits)
-    // 170 == 0b10101010
-
-    const segment = Type.bitstringSegment(Type.integer(170), {});
-    const result = Type.bitstring([segment]);
-
-    const expected = {
-      type: "bitstring",
-      bits: new Uint8Array([1, 0, 1, 0, 1, 0, 1, 0]),
-    };
-
-    assert.deepStrictEqual(result, expected);
-  });
-
-  it("builds a segment from positive integer with clamping to 8 bits", () => {
-    // 4010 (12 bits) -> 170 (8 bits)
-    // 4010 == 0b111110101010
-    // 170 == 0b10101010
-
-    const segment = Type.bitstringSegment(Type.integer(4010), {});
-    const result = Type.bitstring([segment]);
-
-    const expected = {
-      type: "bitstring",
-      bits: new Uint8Array([1, 0, 1, 0, 1, 0, 1, 0]),
-    };
-
-    assert.deepStrictEqual(result, expected);
-  });
-
-  it("builds a segment from positive integer with clamping to 9 bits", () => {
-    // 4010 (12 bits) -> 426 (9 bits)
-    // 4010 == 0b111110101010
-    // 426 == 0b110101010
-
-    const segment = Type.bitstringSegment(Type.integer(4010), {
-      size: Type.integer(9),
-    });
-    const result = Type.bitstring([segment]);
-
-    const expected = {
-      type: "bitstring",
-      bits: new Uint8Array([1, 1, 0, 1, 0, 1, 0, 1, 0]),
-    };
-
-    assert.deepStrictEqual(result, expected);
-  });
-
-  it("builds a segment from negative integer without clamping", () => {
-    // -22 (8 bits) -> 234 (8 bits)
-    // -22 == 0b11101010
-    // 234 == 0b11101010
-
-    const segment = Type.bitstringSegment(Type.integer(-22), {});
-    const result = Type.bitstring([segment]);
-
-    const expected = {
-      type: "bitstring",
-      bits: new Uint8Array([1, 1, 1, 0, 1, 0, 1, 0]),
-    };
-
-    assert.deepStrictEqual(result, expected);
-  });
-
-  it("builds a segment from negative integer with clamping to 8 bits", () => {
-    // -86 (12 bits) -> 170 (8 bits)
-    // -86 == 0b111110101010
-    // 170 == 0b10101010
-
-    const segment = Type.bitstringSegment(Type.integer(-86), {});
-    const result = Type.bitstring([segment]);
-
-    const expected = {
-      type: "bitstring",
-      bits: new Uint8Array([1, 0, 1, 0, 1, 0, 1, 0]),
-    };
-
-    assert.deepStrictEqual(result, expected);
-  });
-
-  it("builds a segment from negative integer with clamping to 9 bits", () => {
-    // -86 (12 bits) -> 426 (9 bits)
-    // -86 == 0b111110101010
-    // 426 == 0b110101010
-
-    const segment = Type.bitstringSegment(Type.integer(-86), {
-      size: Type.integer(9),
-    });
-    const result = Type.bitstring([segment]);
-
-    const expected = {
-      type: "bitstring",
-      bits: new Uint8Array([1, 1, 0, 1, 0, 1, 0, 1, 0]),
-    };
-
-    assert.deepStrictEqual(result, expected);
-  });
-
-  it("takes into account the segment's unit value when calculating the number of bits to keep", () => {
-    // 4010 (12 bits) -> 42 (6 bits)
-    // 4010 == 0b111110101010
-    // 42 == 0b101010
-
-    const segment = Type.bitstringSegment(Type.integer(4010), {
-      size: Type.integer(2),
-      unit: 3n,
-    });
-    const result = Type.bitstring([segment]);
-
-    const expected = {
-      type: "bitstring",
-      bits: new Uint8Array([1, 0, 1, 0, 1, 0]),
-    };
-
-    assert.deepStrictEqual(result, expected);
-  });
-
-  it("raises ArgumentError if there is a mismatch between segment declared type and runtime type", () => {
-    const segment = Type.bitstringSegment(Type.float(123.45), {
-      type: "integer",
+      assert.deepStrictEqual(result, expected);
     });
 
-    assert.throw(
-      () => {
-        Type.bitstring([segment]);
-      },
-      Error,
-      "(ArgumentError) construction of binary failed: segment 1 of type 'integer': expected an integer but got: 123.45"
-    );
+    it("builds multiple-segment bitstring", () => {
+      const segment = Type.bitstringSegment(Type.integer(1), {
+        size: Type.integer(1),
+        unit: 1n,
+      });
+      const result = Type.bitstring([segment, segment]);
+
+      const expected = {
+        type: "bitstring",
+        bits: new Uint8Array([1, 1]),
+      };
+
+      assert.deepStrictEqual(result, expected);
+    });
+  });
+
+  describe("bitstring segment type", () => {
+    it("builds a segment from bitstring", () => {
+      const integerSegment = Type.bitstringSegment(Type.integer(1), {
+        size: Type.integer(1),
+      });
+
+      const bitstring = Type.bitstring([integerSegment]);
+      const bitstringSegment = Type.bitstringSegment(bitstring);
+      const result = Type.bitstring([bitstringSegment]);
+
+      const expected = {
+        type: "bitstring",
+        bits: new Uint8Array([1]),
+      };
+
+      assert.deepStrictEqual(result, expected);
+    });
+  });
+
+  describe("integer segment type", () => {
+    it("builds a segment from positive integer without clamping", () => {
+      // 170 (8 bits) -> 170 (8 bits)
+      // 170 == 0b10101010
+
+      const segment = Type.bitstringSegment(Type.integer(170), {});
+      const result = Type.bitstring([segment]);
+
+      const expected = {
+        type: "bitstring",
+        bits: new Uint8Array([1, 0, 1, 0, 1, 0, 1, 0]),
+      };
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("builds a segment from positive integer with clamping to 8 bits", () => {
+      // 4010 (12 bits) -> 170 (8 bits)
+      // 4010 == 0b111110101010
+      // 170 == 0b10101010
+
+      const segment = Type.bitstringSegment(Type.integer(4010), {});
+      const result = Type.bitstring([segment]);
+
+      const expected = {
+        type: "bitstring",
+        bits: new Uint8Array([1, 0, 1, 0, 1, 0, 1, 0]),
+      };
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("builds a segment from positive integer with clamping to 9 bits", () => {
+      // 4010 (12 bits) -> 426 (9 bits)
+      // 4010 == 0b111110101010
+      // 426 == 0b110101010
+
+      const segment = Type.bitstringSegment(Type.integer(4010), {
+        size: Type.integer(9),
+      });
+      const result = Type.bitstring([segment]);
+
+      const expected = {
+        type: "bitstring",
+        bits: new Uint8Array([1, 1, 0, 1, 0, 1, 0, 1, 0]),
+      };
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("builds a segment from negative integer without clamping", () => {
+      // -22 (8 bits) -> 234 (8 bits)
+      // -22 == 0b11101010
+      // 234 == 0b11101010
+
+      const segment = Type.bitstringSegment(Type.integer(-22), {});
+      const result = Type.bitstring([segment]);
+
+      const expected = {
+        type: "bitstring",
+        bits: new Uint8Array([1, 1, 1, 0, 1, 0, 1, 0]),
+      };
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("builds a segment from negative integer with clamping to 8 bits", () => {
+      // -86 (12 bits) -> 170 (8 bits)
+      // -86 == 0b111110101010
+      // 170 == 0b10101010
+
+      const segment = Type.bitstringSegment(Type.integer(-86), {});
+      const result = Type.bitstring([segment]);
+
+      const expected = {
+        type: "bitstring",
+        bits: new Uint8Array([1, 0, 1, 0, 1, 0, 1, 0]),
+      };
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("builds a segment from negative integer with clamping to 9 bits", () => {
+      // -86 (12 bits) -> 426 (9 bits)
+      // -86 == 0b111110101010
+      // 426 == 0b110101010
+
+      const segment = Type.bitstringSegment(Type.integer(-86), {
+        size: Type.integer(9),
+      });
+      const result = Type.bitstring([segment]);
+
+      const expected = {
+        type: "bitstring",
+        bits: new Uint8Array([1, 1, 0, 1, 0, 1, 0, 1, 0]),
+      };
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("takes into account the segment's unit value when calculating the number of bits to keep", () => {
+      // 4010 (12 bits) -> 42 (6 bits)
+      // 4010 == 0b111110101010
+      // 42 == 0b101010
+
+      const segment = Type.bitstringSegment(Type.integer(4010), {
+        size: Type.integer(2),
+        unit: 3n,
+      });
+      const result = Type.bitstring([segment]);
+
+      const expected = {
+        type: "bitstring",
+        bits: new Uint8Array([1, 0, 1, 0, 1, 0]),
+      };
+
+      assert.deepStrictEqual(result, expected);
+    });
+  });
+
+  describe("errors", () => {
+    it("raises ArgumentError if there is a mismatch between segment declared type and runtime type", () => {
+      const segment = Type.bitstringSegment(Type.float(123.45), {
+        type: "integer",
+      });
+
+      assert.throw(
+        () => {
+          Type.bitstring([segment]);
+        },
+        Error,
+        "(ArgumentError) construction of binary failed: segment 1 of type 'integer': expected an integer but got: 123.45"
+      );
+    });
   });
 });
 
