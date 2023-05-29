@@ -218,7 +218,12 @@ export default class Type {
       Type._convertDataToBitArray(BigInt(byte), 8n, 1n)
     );
 
-    return Utils.concatUint8Arrays(bitArrays);
+    if (size !== null) {
+      const numBits = size.value * (unit === null ? 8n : unit);
+      return Utils.concatUint8Arrays(bitArrays).subarray(0, Number(numBits));
+    } else {
+      return Utils.concatUint8Arrays(bitArrays);
+    }
   }
 
   // private

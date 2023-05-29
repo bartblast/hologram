@@ -61,7 +61,7 @@ describe("bitstring()", () => {
   });
 
   describe("defaults", () => {
-    it("builds bitstring from bitstring", () => {
+    it("for bitstring", () => {
       const integerSegment = Type.bitstringSegment(Type.integer(1), {
         size: Type.integer(1),
       });
@@ -78,7 +78,7 @@ describe("bitstring()", () => {
       assert.deepStrictEqual(result, expected);
     });
 
-    it("builds bitstring from float", () => {
+    it("for float", () => {
       // <<123.45>> == <<64, 94, 220, 204, 204, 204, 204, 205>>
       // 64 == 0b01000000
       // 94 == 0b01011110
@@ -110,7 +110,7 @@ describe("bitstring()", () => {
       assert.deepStrictEqual(result, expected);
     });
 
-    it("builds bitstring from positive integer without clamping", () => {
+    it("for positive 8-bit integer", () => {
       // 170 (8 bits) -> 170 (8 bits)
       // 170 == 0b10101010
 
@@ -125,7 +125,7 @@ describe("bitstring()", () => {
       assert.deepStrictEqual(result, expected);
     });
 
-    it("builds bitstring from positive integer with clamping to 8 bits", () => {
+    it("for positive 12-bit integer", () => {
       // 4010 (12 bits) -> 170 (8 bits)
       // 4010 == 0b111110101010
       // 170 == 0b10101010
@@ -141,7 +141,7 @@ describe("bitstring()", () => {
       assert.deepStrictEqual(result, expected);
     });
 
-    it("builds bitstring from negative integer without clamping", () => {
+    it("for negative 8-bit integer", () => {
       // -22 (8 bits) -> 234 (8 bits)
       // -22 == 0b11101010
       // 234 == 0b11101010
@@ -157,7 +157,7 @@ describe("bitstring()", () => {
       assert.deepStrictEqual(result, expected);
     });
 
-    it("builds bitstring from negative integer with clamping to 8 bits", () => {
+    it("for negative 12-bit integer", () => {
       // -86 (12 bits) -> 170 (8 bits)
       // -86 == 0b111110101010
       // 170 == 0b10101010
@@ -173,7 +173,7 @@ describe("bitstring()", () => {
       assert.deepStrictEqual(result, expected);
     });
 
-    it("builds bitstring from string", () => {
+    it("for string", () => {
       // <<"全息图">> == <<229, 133, 168, 230, 129, 175, 229, 155, 190>>
       // 229 == 0b11100101
       // 133 == 0b10000101
@@ -254,7 +254,7 @@ describe("bitstring()", () => {
       );
     });
 
-    it("on positive integer", () => {
+    it("on positive 12-bit integer", () => {
       // 4010 (12 bits) -> 42 (6 bits)
       // 4010 == 0b111110101010
       // 42 == 0b101010
@@ -273,7 +273,7 @@ describe("bitstring()", () => {
       assert.deepStrictEqual(result, expected);
     });
 
-    it("on negative integer", () => {
+    it("on negative 12-bit integer", () => {
       // -86 (12 bits) -> 42 (6 bits)
       // -86 == 0b111110101010
       // 42 == 0b101010
@@ -287,6 +287,80 @@ describe("bitstring()", () => {
       const expected = {
         type: "bitstring",
         bits: new Uint8Array([1, 0, 1, 0, 1, 0]),
+      };
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("size modifier on string segment with binary type modifier", () => {
+      // ?a == 97 == 0b01100001
+      // ?b == 98 == 0b01100010
+      // ?c == 99 == 0b01100011
+
+      const segment = Type.bitstringSegment(Type.string("abc"), {
+        type: "binary",
+        size: Type.integer(2),
+      });
+
+      const result = Type.bitstring([segment]);
+
+      const expected = {
+        type: "bitstring",
+        // prettier-ignore
+        bits: new Uint8Array([
+          0, 1, 1, 0, 0, 0, 0, 1,
+          0, 1, 1, 0, 0, 0, 1, 0
+        ]),
+      };
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("ignores unit modifier on string segment with binary type modifier if size modifier is not specified", () => {
+      // ?a == 97 == 0b01100001
+      // ?b == 98 == 0b01100010
+      // ?c == 99 == 0b01100011
+
+      const segment = Type.bitstringSegment(Type.string("abc"), {
+        type: "binary",
+        unit: Type.integer(2),
+      });
+
+      const result = Type.bitstring([segment]);
+
+      const expected = {
+        type: "bitstring",
+        // prettier-ignore
+        bits: new Uint8Array([
+          0, 1, 1, 0, 0, 0, 0, 1,
+          0, 1, 1, 0, 0, 0, 1, 0,
+          0, 1, 1, 0, 0, 0, 1, 1
+        ]),
+      };
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("size modifier with unit modifier on string segment with binary type modifier", () => {
+      // ?a == 97 == 0b01100001
+      // ?b == 98 == 0b01100010
+      // ?c == 99 == 0b01100011
+
+      const segment = Type.bitstringSegment(Type.string("abc"), {
+        type: "binary",
+        size: Type.integer(4),
+        unit: 3n,
+      });
+
+      const result = Type.bitstring([segment]);
+
+      const expected = {
+        type: "bitstring",
+        // prettier-ignore
+        bits: new Uint8Array([
+          0, 1, 1, 0, 0, 0, 0, 1,
+          0, 1, 1, 0
+        ]),
       };
 
       assert.deepStrictEqual(result, expected);
