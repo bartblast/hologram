@@ -60,8 +60,8 @@ describe("bitstring()", () => {
     });
   });
 
-  describe("bitstring segment type", () => {
-    it("builds segment from bitstring", () => {
+  describe("defaults", () => {
+    it("builds bitstring from bitstring segment", () => {
       const integerSegment = Type.bitstringSegment(Type.integer(1), {
         size: Type.integer(1),
       });
@@ -77,10 +77,8 @@ describe("bitstring()", () => {
 
       assert.deepStrictEqual(result, expected);
     });
-  });
 
-  describe("float segment type", () => {
-    it("builds 64-bit float segment", () => {
+    it("builds bitstring from 64-bit float segment", () => {
       // <<123.45>> == <<64, 94, 220, 204, 204, 204, 204, 205>>
       // 64 == 0b01000000
       // 94 == 0b01011110
@@ -112,7 +110,7 @@ describe("bitstring()", () => {
       assert.deepStrictEqual(result, expected);
     });
 
-    it("fails to build 32-bit float segment", () => {
+    it("fails to build bitstring from 32-bit float segment", () => {
       const segment = Type.bitstringSegment(Type.float(123.45), {
         size: Type.integer(32),
       });
@@ -126,7 +124,7 @@ describe("bitstring()", () => {
       );
     });
 
-    it("fails to build 16-bit float segment", () => {
+    it("fails to build bitstring from 16-bit float segment", () => {
       const segment = Type.bitstringSegment(Type.float(123.45), {
         size: Type.integer(16),
       });
@@ -140,23 +138,7 @@ describe("bitstring()", () => {
       );
     });
 
-    it("fails to build float segment which is not 16-bit, 32-bit or 64-bit", () => {
-      const segment = Type.bitstringSegment(Type.float(123.45), {
-        size: Type.integer(11),
-      });
-
-      assert.throw(
-        () => {
-          Type.bitstring([segment]);
-        },
-        Error,
-        "(ArgumentError) construction of binary failed: segment 1 of type 'float': expected one of the supported sizes 16, 32, or 64 but got: 11"
-      );
-    });
-  });
-
-  describe("integer segment type", () => {
-    it("builds segment from positive integer without clamping", () => {
+    it("builds bitstring from positive integer without clamping", () => {
       // 170 (8 bits) -> 170 (8 bits)
       // 170 == 0b10101010
 
@@ -171,7 +153,7 @@ describe("bitstring()", () => {
       assert.deepStrictEqual(result, expected);
     });
 
-    it("builds segment from positive integer with clamping to 8 bits", () => {
+    it("builds bitstring from positive integer with clamping to 8 bits", () => {
       // 4010 (12 bits) -> 170 (8 bits)
       // 4010 == 0b111110101010
       // 170 == 0b10101010
@@ -187,25 +169,7 @@ describe("bitstring()", () => {
       assert.deepStrictEqual(result, expected);
     });
 
-    it("builds segment from positive integer with clamping to 9 bits", () => {
-      // 4010 (12 bits) -> 426 (9 bits)
-      // 4010 == 0b111110101010
-      // 426 == 0b110101010
-
-      const segment = Type.bitstringSegment(Type.integer(4010), {
-        size: Type.integer(9),
-      });
-      const result = Type.bitstring([segment]);
-
-      const expected = {
-        type: "bitstring",
-        bits: new Uint8Array([1, 1, 0, 1, 0, 1, 0, 1, 0]),
-      };
-
-      assert.deepStrictEqual(result, expected);
-    });
-
-    it("builds segment from negative integer without clamping", () => {
+    it("builds bitstring from negative integer without clamping", () => {
       // -22 (8 bits) -> 234 (8 bits)
       // -22 == 0b11101010
       // 234 == 0b11101010
@@ -221,7 +185,7 @@ describe("bitstring()", () => {
       assert.deepStrictEqual(result, expected);
     });
 
-    it("builds segment from negative integer with clamping to 8 bits", () => {
+    it("builds bitstring from negative integer with clamping to 8 bits", () => {
       // -86 (12 bits) -> 170 (8 bits)
       // -86 == 0b111110101010
       // 170 == 0b10101010
@@ -237,46 +201,7 @@ describe("bitstring()", () => {
       assert.deepStrictEqual(result, expected);
     });
 
-    it("builds segment from negative integer with clamping to 9 bits", () => {
-      // -86 (12 bits) -> 426 (9 bits)
-      // -86 == 0b111110101010
-      // 426 == 0b110101010
-
-      const segment = Type.bitstringSegment(Type.integer(-86), {
-        size: Type.integer(9),
-      });
-      const result = Type.bitstring([segment]);
-
-      const expected = {
-        type: "bitstring",
-        bits: new Uint8Array([1, 1, 0, 1, 0, 1, 0, 1, 0]),
-      };
-
-      assert.deepStrictEqual(result, expected);
-    });
-
-    it("takes into account the segment's unit value when calculating the number of bits to keep", () => {
-      // 4010 (12 bits) -> 42 (6 bits)
-      // 4010 == 0b111110101010
-      // 42 == 0b101010
-
-      const segment = Type.bitstringSegment(Type.integer(4010), {
-        size: Type.integer(2),
-        unit: 3n,
-      });
-      const result = Type.bitstring([segment]);
-
-      const expected = {
-        type: "bitstring",
-        bits: new Uint8Array([1, 0, 1, 0, 1, 0]),
-      };
-
-      assert.deepStrictEqual(result, expected);
-    });
-  });
-
-  describe("string segment type", () => {
-    it("builds segment from string", () => {
+    it("builds bitstring from string", () => {
       // <<"全息图">> == <<229, 133, 168, 230, 129, 175, 229, 155, 190>>
       // 229 == 0b11100101
       // 133 == 0b10000101
@@ -311,7 +236,85 @@ describe("bitstring()", () => {
     });
   });
 
-  describe("errors", () => {
+  describe("size modifier", () => {
+    it("on positive integer", () => {
+      // 4010 (12 bits) -> 426 (9 bits)
+      // 4010 == 0b111110101010
+      // 426 == 0b110101010
+
+      const segment = Type.bitstringSegment(Type.integer(4010), {
+        size: Type.integer(9),
+      });
+      const result = Type.bitstring([segment]);
+
+      const expected = {
+        type: "bitstring",
+        bits: new Uint8Array([1, 1, 0, 1, 0, 1, 0, 1, 0]),
+      };
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("on negative integer", () => {
+      // -86 (12 bits) -> 426 (9 bits)
+      // -86 == 0b111110101010
+      // 426 == 0b110101010
+
+      const segment = Type.bitstringSegment(Type.integer(-86), {
+        size: Type.integer(9),
+      });
+      const result = Type.bitstring([segment]);
+
+      const expected = {
+        type: "bitstring",
+        bits: new Uint8Array([1, 1, 0, 1, 0, 1, 0, 1, 0]),
+      };
+
+      assert.deepStrictEqual(result, expected);
+    });
+  });
+
+  describe("unit modifier", () => {
+    it("on positive integer", () => {
+      // 4010 (12 bits) -> 42 (6 bits)
+      // 4010 == 0b111110101010
+      // 42 == 0b101010
+
+      const segment = Type.bitstringSegment(Type.integer(4010), {
+        size: Type.integer(2),
+        unit: 3n,
+      });
+      const result = Type.bitstring([segment]);
+
+      const expected = {
+        type: "bitstring",
+        bits: new Uint8Array([1, 0, 1, 0, 1, 0]),
+      };
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("on negative integer", () => {
+      // -86 (12 bits) -> 42 (6 bits)
+      // -86 == 0b111110101010
+      // 42 == 0b101010
+
+      const segment = Type.bitstringSegment(Type.integer(-86), {
+        size: Type.integer(2),
+        unit: 3n,
+      });
+      const result = Type.bitstring([segment]);
+
+      const expected = {
+        type: "bitstring",
+        bits: new Uint8Array([1, 0, 1, 0, 1, 0]),
+      };
+
+      assert.deepStrictEqual(result, expected);
+    });
+  });
+
+  describe("type modifier", () => {
     it("raises ArgumentError if there is a mismatch between segment declared type and runtime type", () => {
       const segment = Type.bitstringSegment(Type.float(123.45), {
         type: "integer",
@@ -325,6 +328,22 @@ describe("bitstring()", () => {
         "(ArgumentError) construction of binary failed: segment 1 of type 'integer': expected an integer but got: 123.45"
       );
     });
+  });
+});
+
+describe("bitstringSegment()", () => {
+  it("fails to build float segment which is not 16-bit, 32-bit or 64-bit", () => {
+    const segment = Type.bitstringSegment(Type.float(123.45), {
+      size: Type.integer(11),
+    });
+
+    assert.throw(
+      () => {
+        Type.bitstring([segment]);
+      },
+      Error,
+      "(ArgumentError) construction of binary failed: segment 1 of type 'float': expected one of the supported sizes 16, 32, or 64 but got: 11"
+    );
   });
 });
 
