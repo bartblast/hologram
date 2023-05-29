@@ -61,7 +61,7 @@ describe("bitstring()", () => {
   });
 
   describe("defaults", () => {
-    it("builds bitstring from bitstring segment", () => {
+    it("builds bitstring from bitstring", () => {
       const integerSegment = Type.bitstringSegment(Type.integer(1), {
         size: Type.integer(1),
       });
@@ -78,7 +78,7 @@ describe("bitstring()", () => {
       assert.deepStrictEqual(result, expected);
     });
 
-    it("builds bitstring from 64-bit float segment", () => {
+    it("builds bitstring from float", () => {
       // <<123.45>> == <<64, 94, 220, 204, 204, 204, 204, 205>>
       // 64 == 0b01000000
       // 94 == 0b01011110
@@ -108,34 +108,6 @@ describe("bitstring()", () => {
       };
 
       assert.deepStrictEqual(result, expected);
-    });
-
-    it("fails to build bitstring from 32-bit float segment", () => {
-      const segment = Type.bitstringSegment(Type.float(123.45), {
-        size: Type.integer(32),
-      });
-
-      assert.throw(
-        () => {
-          Type.bitstring([segment]);
-        },
-        Error,
-        "(Hologram.NotYetImplementedError) 32-bit float bitstring segments are not yet implemented in Hologram"
-      );
-    });
-
-    it("fails to build bitstring from 16-bit float segment", () => {
-      const segment = Type.bitstringSegment(Type.float(123.45), {
-        size: Type.integer(16),
-      });
-
-      assert.throw(
-        () => {
-          Type.bitstring([segment]);
-        },
-        Error,
-        "(Hologram.NotYetImplementedError) 16-bit float bitstring segments are not yet implemented in Hologram"
-      );
     });
 
     it("builds bitstring from positive integer without clamping", () => {
@@ -251,45 +223,37 @@ describe("bitstring()", () => {
     });
   });
 
-  describe("size modifier", () => {
-    it("on positive integer", () => {
-      // 4010 (12 bits) -> 426 (9 bits)
-      // 4010 == 0b111110101010
-      // 426 == 0b110101010
-
-      const segment = Type.bitstringSegment(Type.integer(4010), {
-        size: Type.integer(9),
+  describe("size & unit modifiers", () => {
+    it("fails to build bitstring from 32-bit float segment", () => {
+      const segment = Type.bitstringSegment(Type.float(123.45), {
+        size: Type.integer(8),
+        unit: 4n,
       });
-      const result = Type.bitstring([segment]);
 
-      const expected = {
-        type: "bitstring",
-        bits: new Uint8Array([1, 1, 0, 1, 0, 1, 0, 1, 0]),
-      };
-
-      assert.deepStrictEqual(result, expected);
+      assert.throw(
+        () => {
+          Type.bitstring([segment]);
+        },
+        Error,
+        "(Hologram.NotYetImplementedError) 32-bit float bitstring segments are not yet implemented in Hologram"
+      );
     });
 
-    it("on negative integer", () => {
-      // -86 (12 bits) -> 426 (9 bits)
-      // -86 == 0b111110101010
-      // 426 == 0b110101010
-
-      const segment = Type.bitstringSegment(Type.integer(-86), {
-        size: Type.integer(9),
+    it("fails to build bitstring from 16-bit float segment", () => {
+      const segment = Type.bitstringSegment(Type.float(123.45), {
+        size: Type.integer(8),
+        unit: 2n,
       });
-      const result = Type.bitstring([segment]);
 
-      const expected = {
-        type: "bitstring",
-        bits: new Uint8Array([1, 1, 0, 1, 0, 1, 0, 1, 0]),
-      };
-
-      assert.deepStrictEqual(result, expected);
+      assert.throw(
+        () => {
+          Type.bitstring([segment]);
+        },
+        Error,
+        "(Hologram.NotYetImplementedError) 16-bit float bitstring segments are not yet implemented in Hologram"
+      );
     });
-  });
 
-  describe("unit modifier", () => {
     it("on positive integer", () => {
       // 4010 (12 bits) -> 42 (6 bits)
       // 4010 == 0b111110101010
@@ -326,6 +290,51 @@ describe("bitstring()", () => {
       };
 
       assert.deepStrictEqual(result, expected);
+    });
+
+    it("size modifier on string segment with utf8 type modifier", () => {
+      const segment = Type.bitstringSegment(Type.string("abcdefghi"), {
+        type: "utf8",
+        size: 8,
+      });
+
+      assert.throw(
+        () => {
+          Type.bitstring([segment]);
+        },
+        Error,
+        "(CompileError) size and unit are not supported on utf types"
+      );
+    });
+
+    it("size modifier on string segment with utf16 type modifier", () => {
+      const segment = Type.bitstringSegment(Type.string("abcdefghi"), {
+        type: "utf16",
+        size: 8,
+      });
+
+      assert.throw(
+        () => {
+          Type.bitstring([segment]);
+        },
+        Error,
+        "(CompileError) size and unit are not supported on utf types"
+      );
+    });
+
+    it("size modifier on string segment with utf32 type modifier", () => {
+      const segment = Type.bitstringSegment(Type.string("abcdefghi"), {
+        type: "utf32",
+        size: 8,
+      });
+
+      assert.throw(
+        () => {
+          Type.bitstring([segment]);
+        },
+        Error,
+        "(CompileError) size and unit are not supported on utf types"
+      );
     });
   });
 

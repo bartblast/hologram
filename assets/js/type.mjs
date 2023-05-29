@@ -196,10 +196,19 @@ export default class Type {
 
   // private
   static _buildBitArrayFromString(segment) {
-    let type = segment.type;
+    const {type, size} = segment;
     const value = segment.value.value;
 
-    if (type !== "utf8") {
+    if (["utf8", "utf16", "utf32"].includes(type)) {
+      if (size !== null) {
+        Interpreter.raiseError(
+          "CompileError",
+          "size and unit are not supported on utf types"
+        );
+      }
+    }
+
+    if (["utf16", "utf32"].includes(type)) {
       Interpreter.raiseNotYetImplementedError(
         `${type} bitstring segment type is not yet implemented in Hologram`
       );
@@ -209,7 +218,7 @@ export default class Type {
       Type._convertDataToBitArray(BigInt(byte), 8n, 1n)
     );
 
-    return Utils.concatUint8Arrays(bitArrays);
+    return Utils.concatUint8Arrays(bitArrays).subarray(0);
   }
 
   // private
@@ -218,6 +227,12 @@ export default class Type {
     Type._validateBitstringSegmentType(segment, index);
 
     switch (segment.type) {
+      case "binary":
+      case "utf8":
+      case "utf16":
+      case "utf32":
+        return Type._buildBitArrayFromString(segment);
+
       case "bitstring":
         return Type._buildBitArrayFromBitstring(segment);
 
@@ -226,11 +241,6 @@ export default class Type {
 
       case "integer":
         return Type._buildBitArrayFromInteger(segment);
-
-      case "utf8":
-      case "utf16":
-      case "utf32":
-        return Type._buildBitArrayFromString(segment);
     }
   }
 
@@ -325,7 +335,7 @@ export default class Type {
       return true;
     } else if (
       value.type === "string" &&
-      ["utf8", "utf16", "utf32"].includes(type)
+      ["binary", "utf8", "utf16", "utf32"].includes(type)
     ) {
       return true;
     }
