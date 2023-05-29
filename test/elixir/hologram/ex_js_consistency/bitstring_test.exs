@@ -15,6 +15,40 @@ defmodule Hologram.ExJsConsistency.BitstringTest do
     end
   end
 
+  describe "float" do
+    test "defaults for float value" do
+      # <<123.45>> == <<64, 94, 220, 204, 204, 204, 204, 205>>
+      # 64 == 0b01000000
+      # 94 == 0b01011110
+      # 220 == 0b11011100
+      # 204 == 0b11001100
+      # 204 == 0b11001100
+      # 204 == 0b11001100
+      # 204 == 0b11001100
+      # 205 == 0b11001101
+
+      assert to_bit_list(<<123.45>>) == to_bit_list(<<64, 94, 220, 204, 204, 204, 204, 205>>)
+
+      # Specified this way, because it's not possible to make the formatter ignore specific lines of code.
+      bits =
+        Code.eval_string("""
+        [
+          0, 1, 0, 0, 0, 0, 0, 0,
+          0, 1, 0, 1, 1, 1, 1, 0,
+          1, 1, 0, 1, 1, 1, 0, 0,
+          1, 1, 0, 0, 1, 1, 0, 0,
+          1, 1, 0, 0, 1, 1, 0, 0,
+          1, 1, 0, 0, 1, 1, 0, 0,
+          1, 1, 0, 0, 1, 1, 0, 0,
+          1, 1, 0, 0, 1, 1, 0, 1
+        ]
+        """)
+        |> elem(0)
+
+      assert to_bit_list(<<123.45>>) == bits
+    end
+  end
+
   describe "integer" do
     test "defaults for positive integer value that fits in 8 bits" do
       # 170 == 0b10101010

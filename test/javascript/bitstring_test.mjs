@@ -21,6 +21,30 @@ describe("from()", () => {
     });
   });
 
+  describe("float", () => {
+    it("defaults for float value", () => {
+      const segment = Type.bitstringSegment(Type.float(123.45), {});
+      const result = Type.bitstring([segment]);
+
+      const expected = {
+        type: "bitstring",
+        // prettier-ignore
+        bits: new Uint8Array([
+              0, 1, 0, 0, 0, 0, 0, 0,
+              0, 1, 0, 1, 1, 1, 1, 0,
+              1, 1, 0, 1, 1, 1, 0, 0,
+              1, 1, 0, 0, 1, 1, 0, 0,
+              1, 1, 0, 0, 1, 1, 0, 0,
+              1, 1, 0, 0, 1, 1, 0, 0,
+              1, 1, 0, 0, 1, 1, 0, 0,
+              1, 1, 0, 0, 1, 1, 0, 1
+            ]),
+      };
+
+      assert.deepStrictEqual(result, expected);
+    });
+  });
+
   describe("integer", () => {
     it("defaults for positive value that fits in 8 bits", () => {
       const segment = Type.bitstringSegment(Type.integer(170), {});
@@ -117,38 +141,6 @@ describe("from()", () => {
 //   });
 
 //   describe("defaults", () => {
-//     it("for float", () => {
-//       // <<123.45>> == <<64, 94, 220, 204, 204, 204, 204, 205>>
-//       // 64 == 0b01000000
-//       // 94 == 0b01011110
-//       // 220 == 0b11011100
-//       // 204 == 0b11001100
-//       // 204 == 0b11001100
-//       // 204 == 0b11001100
-//       // 204 == 0b11001100
-//       // 205 == 0b11001101
-
-//       const segment = Type.bitstringSegment(Type.float(123.45), {});
-//       const result = Type.bitstring([segment]);
-
-//       const expected = {
-//         type: "bitstring",
-//         // prettier-ignore
-//         bits: new Uint8Array([
-//           0, 1, 0, 0, 0, 0, 0, 0,
-//           0, 1, 0, 1, 1, 1, 1, 0,
-//           1, 1, 0, 1, 1, 1, 0, 0,
-//           1, 1, 0, 0, 1, 1, 0, 0,
-//           1, 1, 0, 0, 1, 1, 0, 0,
-//           1, 1, 0, 0, 1, 1, 0, 0,
-//           1, 1, 0, 0, 1, 1, 0, 0,
-//           1, 1, 0, 0, 1, 1, 0, 1
-//         ]),
-//       };
-
-//       assert.deepStrictEqual(result, expected);
-//     });
-
 //     it("for string", () => {
 //       // <<"全息图">> == <<229, 133, 168, 230, 129, 175, 229, 155, 190>>
 //       // 229 == 0b11100101
