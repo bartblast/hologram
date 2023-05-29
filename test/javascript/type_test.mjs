@@ -366,6 +366,20 @@ describe("bitstring()", () => {
       assert.deepStrictEqual(result, expected);
     });
 
+    it("requires size modifier if unit modifier is specified on float segment", () => {
+      const segment = Type.bitstringSegment(Type.float(123.45), {
+        unit: Type.integer(1),
+      });
+
+      assert.throw(
+        () => {
+          Type.bitstring([segment]);
+        },
+        Error,
+        "(CompileError) integer and float types require a size specifier if the unit specifier is given"
+      );
+    });
+
     it("size modifier on string segment with utf8 type modifier", () => {
       const segment = Type.bitstringSegment(Type.string("abcdefghi"), {
         type: "utf8",

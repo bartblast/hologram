@@ -140,17 +140,25 @@ export default class Type {
   // private
   static _buildBitArrayFromFloat(segment, index) {
     const value = segment.value.value;
-    let unit = segment.unit;
-    let size;
+    let size, unit;
 
     if (segment.size === null) {
+      if (segment.unit !== null) {
+        Interpreter.raiseError(
+          "CompileError",
+          "integer and float types require a size specifier if the unit specifier is given"
+        );
+      }
+
       size = 64n;
     } else {
       size = segment.size.value;
     }
 
-    if (unit === null) {
+    if (segment.unit === null) {
       unit = 1n;
+    } else {
+      unit = segment.unit;
     }
 
     const numBits = size * unit;
