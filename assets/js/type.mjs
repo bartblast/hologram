@@ -8,13 +8,21 @@ export default class Type {
     return Utils.freeze({type: "atom", value: value});
   }
 
-  static bitstring(segments) {
-    const bitArrays = segments.map((segment, index) =>
-      Type._buildBitstringSegmentBitArray(segment, index + 1)
-    );
+  static bitstring(data) {
+    let bits;
+
+    if (data.length > 0 && typeof data[0] == "object") {
+      const bitArrays = data.map((segment, index) =>
+        Type._buildBitstringSegmentBitArray(segment, index + 1)
+      );
+
+      bits = Utils.concatUint8Arrays(bitArrays);
+    } else {
+      bits = new Uint8Array(data);
+    }
 
     // Cannot freeze array buffer views with elements
-    return {type: "bitstring", bits: Utils.concatUint8Arrays(bitArrays)};
+    return {type: "bitstring", bits: bits};
   }
 
   static bitstringSegment(value, modifiers = {}) {

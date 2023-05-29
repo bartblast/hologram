@@ -16,6 +16,32 @@ describe("atom()", () => {
   });
 });
 
+describe("bitstring()", () => {
+  it("builds bitstring from segments array", () => {
+    const segment1 = Type.bitstringSegment(Type.integer(170), {});
+    const segment2 = Type.bitstringSegment(Type.integer(-22), {});
+    const result = Type.bitstring([segment1, segment2]);
+
+    const expected = {
+      type: "bitstring",
+      // prettier-ignore
+      bits: new Uint8Array([
+          1, 0, 1, 0, 1, 0, 1, 0,
+          1, 1, 1, 0, 1, 0, 1, 0
+        ]),
+    };
+
+    assert.deepStrictEqual(result, expected);
+  });
+
+  it("builds bitstring from bits array", () => {
+    const result = Type.bitstring([1, 0, 1, 0]);
+    const expected = {type: "bitstring", bits: new Uint8Array([1, 0, 1, 0])};
+
+    assert.deepStrictEqual(result, expected);
+  });
+});
+
 // IMPORTANT!
 // Each JavaScript test has a related Elixir consistency test in test/elixir/hologram/ex_js_consistency/bitstring_test.exs
 // Always update both together.
@@ -116,23 +142,6 @@ describe("bitstring()", () => {
 //   });
 
 //   describe("defaults", () => {
-//     it("for bitstring", () => {
-//       const integerSegment = Type.bitstringSegment(Type.integer(1), {
-//         size: Type.integer(1),
-//       });
-
-//       const bitstring = Type.bitstring([integerSegment]);
-//       const bitstringSegment = Type.bitstringSegment(bitstring);
-//       const result = Type.bitstring([bitstringSegment]);
-
-//       const expected = {
-//         type: "bitstring",
-//         bits: new Uint8Array([1]),
-//       };
-
-//       assert.deepStrictEqual(result, expected);
-//     });
-
 //     it("for float", () => {
 //       // <<123.45>> == <<64, 94, 220, 204, 204, 204, 204, 205>>
 //       // 64 == 0b01000000
