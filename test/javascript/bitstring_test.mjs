@@ -8,6 +8,19 @@ import Type from "../../assets/js/type.mjs";
 // Each JavaScript test has a related Elixir consistency test in test/elixir/hologram/ex_js_consistency/bitstring_test.exs
 // Always update both together.
 describe("from()", () => {
+  describe("bitstring", () => {
+    it("defaults for bitstring value", () => {
+      const result = Type.bitstring([1, 1, 1, 1, 1, 0, 1, 0, 1, 0, 1, 0]);
+
+      const expected = {
+        type: "bitstring",
+        bits: new Uint8Array([1, 1, 1, 1, 1, 0, 1, 0, 1, 0, 1, 0]),
+      };
+
+      assert.deepStrictEqual(result, expected);
+    });
+  });
+
   describe("integer", () => {
     it("defaults for positive value that fits in 8 bits", () => {
       const segment = Type.bitstringSegment(Type.integer(170), {});
