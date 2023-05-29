@@ -16,6 +16,61 @@ describe("atom()", () => {
   });
 });
 
+// IMPORTANT!
+// Each JavaScript test has a related Elixir consistency test in test/elixir/hologram/ex_js_consistency/bitstring_test.exs
+// Always update both together.
+describe("bitstring()", () => {
+  describe("integer", () => {
+    it("defaults for positive value that fits in 8 bits", () => {
+      const segment = Type.bitstringSegment(Type.integer(170), {});
+      const result = Type.bitstring([segment]);
+
+      const expected = {
+        type: "bitstring",
+        bits: new Uint8Array([1, 0, 1, 0, 1, 0, 1, 0]),
+      };
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("defaults for negative value that fits in 8 bits", () => {
+      const segment = Type.bitstringSegment(Type.integer(-22), {});
+      const result = Type.bitstring([segment]);
+
+      const expected = {
+        type: "bitstring",
+        bits: new Uint8Array([1, 1, 1, 0, 1, 0, 1, 0]),
+      };
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("defaults for positive value that fits in 12 bits", () => {
+      const segment = Type.bitstringSegment(Type.integer(4010), {});
+      const result = Type.bitstring([segment]);
+
+      const expected = {
+        type: "bitstring",
+        bits: new Uint8Array([1, 0, 1, 0, 1, 0, 1, 0]),
+      };
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("defaults for negative value that fits in 12 bits", () => {
+      const segment = Type.bitstringSegment(Type.integer(-86), {});
+      const result = Type.bitstring([segment]);
+
+      const expected = {
+        type: "bitstring",
+        bits: new Uint8Array([1, 0, 1, 0, 1, 0, 1, 0]),
+      };
+
+      assert.deepStrictEqual(result, expected);
+    });
+  });
+});
+
 // describe("bitstring()", () => {
 //   describe("different number of segments", () => {
 //     it("builds empty bitstring without segments", () => {
@@ -105,54 +160,6 @@ describe("atom()", () => {
 //           1, 1, 0, 0, 1, 1, 0, 0,
 //           1, 1, 0, 0, 1, 1, 0, 1
 //         ]),
-//       };
-
-//       assert.deepStrictEqual(result, expected);
-//     });
-
-//     it("for positive 12-bit integer", () => {
-//       // 4010 (12 bits) -> 170 (8 bits)
-//       // 4010 == 0b111110101010
-//       // 170 == 0b10101010
-
-//       const segment = Type.bitstringSegment(Type.integer(4010), {});
-//       const result = Type.bitstring([segment]);
-
-//       const expected = {
-//         type: "bitstring",
-//         bits: new Uint8Array([1, 0, 1, 0, 1, 0, 1, 0]),
-//       };
-
-//       assert.deepStrictEqual(result, expected);
-//     });
-
-//     it("for negative 8-bit integer", () => {
-//       // -22 (8 bits) -> 234 (8 bits)
-//       // -22 == 0b11101010
-//       // 234 == 0b11101010
-
-//       const segment = Type.bitstringSegment(Type.integer(-22), {});
-//       const result = Type.bitstring([segment]);
-
-//       const expected = {
-//         type: "bitstring",
-//         bits: new Uint8Array([1, 1, 1, 0, 1, 0, 1, 0]),
-//       };
-
-//       assert.deepStrictEqual(result, expected);
-//     });
-
-//     it("for negative 12-bit integer", () => {
-//       // -86 (12 bits) -> 170 (8 bits)
-//       // -86 == 0b111110101010
-//       // 170 == 0b10101010
-
-//       const segment = Type.bitstringSegment(Type.integer(-86), {});
-//       const result = Type.bitstring([segment]);
-
-//       const expected = {
-//         type: "bitstring",
-//         bits: new Uint8Array([1, 0, 1, 0, 1, 0, 1, 0]),
 //       };
 
 //       assert.deepStrictEqual(result, expected);
