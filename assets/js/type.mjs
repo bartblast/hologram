@@ -196,11 +196,11 @@ export default class Type {
 
   // private
   static _buildBitArrayFromString(segment) {
-    const {type, size} = segment;
+    const {type, size, unit} = segment;
     const value = segment.value.value;
 
     if (["utf8", "utf16", "utf32"].includes(type)) {
-      if (size !== null) {
+      if (size !== null || unit !== null) {
         Interpreter.raiseError(
           "CompileError",
           "size and unit are not supported on utf types"
@@ -218,7 +218,7 @@ export default class Type {
       Type._convertDataToBitArray(BigInt(byte), 8n, 1n)
     );
 
-    return Utils.concatUint8Arrays(bitArrays).subarray(0);
+    return Utils.concatUint8Arrays(bitArrays);
   }
 
   // private

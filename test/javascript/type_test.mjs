@@ -295,7 +295,7 @@ describe("bitstring()", () => {
     it("size modifier on string segment with utf8 type modifier", () => {
       const segment = Type.bitstringSegment(Type.string("abcdefghi"), {
         type: "utf8",
-        size: 8,
+        size: Type.integer(8),
       });
 
       assert.throw(
@@ -310,7 +310,7 @@ describe("bitstring()", () => {
     it("size modifier on string segment with utf16 type modifier", () => {
       const segment = Type.bitstringSegment(Type.string("abcdefghi"), {
         type: "utf16",
-        size: 8,
+        size: Type.integer(8),
       });
 
       assert.throw(
@@ -325,7 +325,52 @@ describe("bitstring()", () => {
     it("size modifier on string segment with utf32 type modifier", () => {
       const segment = Type.bitstringSegment(Type.string("abcdefghi"), {
         type: "utf32",
-        size: 8,
+        size: Type.integer(8),
+      });
+
+      assert.throw(
+        () => {
+          Type.bitstring([segment]);
+        },
+        Error,
+        "(CompileError) size and unit are not supported on utf types"
+      );
+    });
+
+    it("unit modifier on string segment with utf8 type modifier", () => {
+      const segment = Type.bitstringSegment(Type.string("abcdefghi"), {
+        type: "utf8",
+        unit: Type.integer(1),
+      });
+
+      assert.throw(
+        () => {
+          Type.bitstring([segment]);
+        },
+        Error,
+        "(CompileError) size and unit are not supported on utf types"
+      );
+    });
+
+    it("unit modifier on string segment with utf16 type modifier", () => {
+      const segment = Type.bitstringSegment(Type.string("abcdefghi"), {
+        type: "utf16",
+        unit: Type.integer(1),
+      });
+
+      assert.throw(
+        () => {
+          Type.bitstring([segment]);
+        },
+        Error,
+        "(CompileError) size and unit are not supported on utf types"
+      );
+    });
+
+    it("unit modifier on string segment with utf32 type modifier", () => {
+      const segment = Type.bitstringSegment(Type.string("abcdefghi"), {
+        type: "utf32",
+        unit: Type.integer(1),
       });
 
       assert.throw(
