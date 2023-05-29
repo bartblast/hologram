@@ -139,28 +139,15 @@ export default class Type {
 
   // private
   static _buildBitArrayFromFloat(segment, index) {
-    const value = segment.value.value;
-    let size, unit;
-
-    if (segment.size === null) {
-      if (segment.unit !== null) {
-        Interpreter.raiseError(
-          "CompileError",
-          "integer and float types require a size specifier if the unit specifier is given"
-        );
-      }
-
-      size = 64n;
-    } else {
-      size = segment.size.value;
+    if (segment.size === null && segment.unit !== null) {
+      Interpreter.raiseError(
+        "CompileError",
+        "integer and float types require a size specifier if the unit specifier is given"
+      );
     }
 
-    if (segment.unit === null) {
-      unit = 1n;
-    } else {
-      unit = segment.unit;
-    }
-
+    const size = Type._resolveSizeModifierValue(segment, 64n);
+    const unit = Type._resolveUnitModifierValue(segment, 1n);
     const numBits = size * unit;
 
     if (![16n, 32n, 64n].includes(numBits)) {
@@ -176,6 +163,8 @@ export default class Type {
       );
     }
 
+    const value = segment.value.value;
+
     const bitArrays = Array.from(Type._getBytesFromFloat(value)).map((byte) =>
       Type._convertDataToBitArray(BigInt(byte), 8n, 1n)
     );
@@ -185,30 +174,19 @@ export default class Type {
 
   // private
   static _buildBitArrayFromInteger(segment) {
-    const data = segment.value.value;
-    let unit = segment.unit;
-    let size;
+    const value = segment.value.value;
+    const size = Type._resolveSizeModifierValue(segment, 8n);
+    const unit = Type._resolveUnitModifierValue(segment, 1n);
 
-    if (segment.size === null) {
-      size = 8n;
-    } else {
-      size = segment.size.value;
-    }
-
-    if (unit === null) {
-      unit = 1n;
-    }
-
-    return Type._convertDataToBitArray(data, size, unit);
+    return Type._convertDataToBitArray(value, size, unit);
   }
 
   // private
   static _buildBitArrayFromString(segment) {
-    const {type, size, unit} = segment;
-    const value = segment.value.value;
+    const {type} = segment;
 
     if (["utf8", "utf16", "utf32"].includes(type)) {
-      if (size !== null || unit !== null) {
+      if (segment.size !== null || segment.unit !== null) {
         Interpreter.raiseError(
           "CompileError",
           "size and unit are not supported on utf types"
@@ -222,12 +200,16 @@ export default class Type {
       );
     }
 
+    const value = segment.value.value;
+
     const bitArrays = Array.from(Type._getBytesFromString(value)).map((byte) =>
       Type._convertDataToBitArray(BigInt(byte), 8n, 1n)
     );
 
-    if (size !== null) {
-      const numBits = size.value * (unit === null ? 8n : unit);
+    if (segment.size !== null) {
+      const unit = Type._resolveUnitModifierValue(segment, 8n);
+      const numBits = segment.size.value * unit;
+
       return Utils.concatUint8Arrays(bitArrays).subarray(0, Number(numBits));
     } else {
       return Utils.concatUint8Arrays(bitArrays);
@@ -361,5 +343,21 @@ export default class Type {
     const indefiniteArticle = Utils.indefiniteArticle(type);
     const message = `construction of binary failed: segment ${index} of type '${type}': expected ${indefiniteArticle} ${type} but got: ${inspectedValue}`;
     Interpreter.raiseError("ArgumentError", message);
+  }
+
+  static _resolveSizeModifierValue(segment, defaultValue) {
+    if (segment.size === null) {
+      return defaultValue;
+    } else {
+      return segment.size.value;
+    }
+  }
+
+  static _resolveUnitModifierValue(segment, defaultValue) {
+    if (segment.unit === null) {
+      return defaultValue;
+    } else {
+      return segment.unit;
+    }
   }
 }
