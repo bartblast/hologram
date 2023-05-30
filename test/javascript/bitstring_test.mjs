@@ -7,7 +7,7 @@ import Type from "../../assets/js/type.mjs";
 // IMPORTANT!
 // Each JavaScript test has a related Elixir consistency test in test/elixir/hologram/ex_js_consistency/bitstring_test.exs
 // Always update both together.
-describe("from(), tests that require related Elixir consistency tests", () => {
+describe("from()", () => {
   describe("number of segments", () => {
     it("builds empty bitstring without segments", () => {
       const result = Type.bitstring([]);
