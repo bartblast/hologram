@@ -94,6 +94,31 @@ describe("from()", () => {
       assert.deepStrictEqual(result, expected);
     });
   });
+
+  describe("string", () => {
+    it("defaults for string value", () => {
+      const segment = Type.bitstringSegment(Type.string("全息图"), {});
+      const result = Type.bitstring([segment]);
+
+      const expected = {
+        type: "bitstring",
+        // prettier-ignore
+        bits: new Uint8Array([
+          1, 1, 1, 0, 0, 1, 0, 1,
+          1, 0, 0, 0, 0, 1, 0, 1,
+          1, 0, 1, 0, 1, 0, 0, 0,
+          1, 1, 1, 0, 0, 1, 1, 0,
+          1, 0, 0, 0, 0, 0, 0, 1,
+          1, 0, 1, 0, 1, 1, 1, 1,
+          1, 1, 1, 0, 0, 1, 0, 1,
+          1, 0, 0, 1, 1, 0, 1, 1,
+          1, 0, 1, 1, 1, 1, 1, 0
+        ]),
+      };
+
+      assert.deepStrictEqual(result, expected);
+    });
+  });
 });
 
 // describe("bitstring()", () => {
@@ -141,40 +166,6 @@ describe("from()", () => {
 //   });
 
 //   describe("defaults", () => {
-//     it("for string", () => {
-//       // <<"全息图">> == <<229, 133, 168, 230, 129, 175, 229, 155, 190>>
-//       // 229 == 0b11100101
-//       // 133 == 0b10000101
-//       // 168 == 0b10101000
-//       // 230 == 0b11100110
-//       // 129 == 0b10000001
-//       // 175 == 0b10101111
-//       // 229 == 0b11100101
-//       // 155 == 0b10011011
-//       // 190 == 0b10111110
-
-//       const segment = Type.bitstringSegment(Type.string("全息图"), {});
-//       const result = Type.bitstring([segment]);
-
-//       const expected = {
-//         type: "bitstring",
-//         // prettier-ignore
-//         bits: new Uint8Array([
-//           1, 1, 1, 0, 0, 1, 0, 1,
-//           1, 0, 0, 0, 0, 1, 0, 1,
-//           1, 0, 1, 0, 1, 0, 0, 0,
-//           1, 1, 1, 0, 0, 1, 1, 0,
-//           1, 0, 0, 0, 0, 0, 0, 1,
-//           1, 0, 1, 0, 1, 1, 1, 1,
-//           1, 1, 1, 0, 0, 1, 0, 1,
-//           1, 0, 0, 1, 1, 0, 1, 1,
-//           1, 0, 1, 1, 1, 1, 1, 0
-//         ]),
-//       };
-
-//       assert.deepStrictEqual(result, expected);
-//     });
-
 //     it("fails to build bitstring from unsupported types", () => {
 //       const segment = Type.bitstringSegment(
 //         Type.tuple([Type.integer(1), Type.integer(2)]),
