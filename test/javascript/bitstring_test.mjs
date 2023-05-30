@@ -121,6 +121,18 @@ describe("from()", () => {
   });
 
   describe("values of not supported data types", () => {
+    it("atom values are not supported", () => {
+      const segment = Type.bitstringSegment(Type.atom("abc"), {});
+
+      assert.throw(
+        () => {
+          Type.bitstring([segment]);
+        },
+        Error,
+        "(ArgumentError) construction of binary failed: segment 1 of type 'integer': expected an integer but got: :abc"
+      );
+    });
+
     it("list values are not supported", () => {
       const segment = Type.bitstringSegment(
         Type.list([Type.integer(1), Type.integer(2)]),
