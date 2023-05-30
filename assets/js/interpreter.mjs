@@ -25,6 +25,9 @@ export default class Interpreter {
   // TODO: use Kernel.inspect/2 instead
   static inspect(term) {
     switch (term.type) {
+      case "atom":
+        return ":" + term.value;
+
       case "float":
       case "integer":
         return term.value.toString();

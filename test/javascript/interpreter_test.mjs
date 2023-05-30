@@ -109,6 +109,11 @@ describe("isStrictlyEqual()", () => {
 });
 
 describe("inspect()", () => {
+  it("inspects boxed atom", () => {
+    const result = Interpreter.inspect(Type.atom("abc"));
+    assert.equal(result, ":abc");
+  });
+
   it("inspects boxed float", () => {
     const result = Interpreter.inspect(Type.float(123.45));
     assert.equal(result, "123.45");
