@@ -1,7 +1,6 @@
 "use strict";
 
 import Bitstring from "./bitstring.mjs";
-import Interpreter from "./interpreter.mjs";
 import Utils from "./utils.mjs";
 
 export default class Type {
@@ -12,7 +11,7 @@ export default class Type {
   static bitstring(data) {
     let bits;
 
-    if (data.length > 0 && typeof data[0] == "object") {
+    if (data.length > 0 && typeof data[0] === "object") {
       return Bitstring.from(data);
     } else {
       // Cannot freeze array buffer views with elements
