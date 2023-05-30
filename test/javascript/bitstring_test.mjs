@@ -8,9 +8,9 @@ import Type from "../../assets/js/type.mjs";
 // Each JavaScript test has a related Elixir consistency test in test/elixir/hologram/ex_js_consistency/bitstring_test.exs
 // Always update both together.
 describe("from()", () => {
-  describe("number of segments", () => {
+  describe("number and structure of segments", () => {
     it("builds empty bitstring without segments", () => {
-      const result = Type.bitstring([]);
+      const result = Bitstring.from([]);
 
       const expected = {
         type: "bitstring",
@@ -26,7 +26,7 @@ describe("from()", () => {
         unit: 1n,
       });
 
-      const result = Type.bitstring([segment]);
+      const result = Bitstring.from([segment]);
 
       const expected = {
         type: "bitstring",
@@ -42,7 +42,7 @@ describe("from()", () => {
         unit: 1n,
       });
 
-      const result = Type.bitstring([segment, segment]);
+      const result = Bitstring.from([segment, segment]);
 
       const expected = {
         type: "bitstring",
@@ -84,7 +84,7 @@ describe("from()", () => {
         {}
       );
 
-      const result = Type.bitstring([segment]);
+      const result = Bitstring.from([segment]);
 
       const expected = {
         type: "bitstring",
@@ -98,7 +98,7 @@ describe("from()", () => {
   describe("float value", () => {
     it("defaults for float value", () => {
       const segment = Type.bitstringSegment(Type.float(123.45), {});
-      const result = Type.bitstring([segment]);
+      const result = Bitstring.from([segment]);
 
       const expected = {
         type: "bitstring",
@@ -172,7 +172,7 @@ describe("from()", () => {
   describe("string value", () => {
     it("defaults for string value", () => {
       const segment = Type.bitstringSegment(Type.string("全息图"), {});
-      const result = Type.bitstring([segment]);
+      const result = Bitstring.from([segment]);
 
       const expected = {
         type: "bitstring",
@@ -200,7 +200,7 @@ describe("from()", () => {
 
       assert.throw(
         () => {
-          Type.bitstring([segment]);
+          Bitstring.from([segment]);
         },
         Error,
         "(ArgumentError) construction of binary failed: segment 1 of type 'integer': expected an integer but got: :abc"
@@ -215,7 +215,7 @@ describe("from()", () => {
 
       assert.throw(
         () => {
-          Type.bitstring([segment]);
+          Bitstring.from([segment]);
         },
         Error,
         "(ArgumentError) construction of binary failed: segment 1 of type 'integer': expected an integer but got: [1, 2]"
@@ -230,7 +230,7 @@ describe("from()", () => {
 
       assert.throw(
         () => {
-          Type.bitstring([segment]);
+          Bitstring.from([segment]);
         },
         Error,
         "(ArgumentError) construction of binary failed: segment 1 of type 'integer': expected an integer but got: {1, 2}"
