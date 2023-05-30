@@ -51,6 +51,30 @@ describe("from()", () => {
 
       assert.deepStrictEqual(result, expected);
     });
+
+    it("nested segments are flattened", () => {
+      const segment1 = Type.bitstringSegment(Type.bitstring([1, 1]), {});
+
+      const segment2 = Type.bitstringSegment(
+        Type.bitstring([
+          Type.bitstringSegment(Type.bitstring([1, 0]), {}),
+          Type.bitstringSegment(Type.bitstring([1]), {}),
+          Type.bitstringSegment(Type.bitstring([1, 0]), {}),
+        ]),
+        {}
+      );
+
+      const segment3 = Type.bitstringSegment(Type.bitstring([1, 1]), {});
+
+      const result = Bitstring.from([segment1, segment2, segment3]);
+
+      const expected = {
+        type: "bitstring",
+        bits: new Uint8Array([1, 1, 1, 0, 1, 1, 0, 1, 1]),
+      };
+
+      assert.deepStrictEqual(result, expected);
+    });
   });
 
   describe("bitstring value", () => {

@@ -8,7 +8,7 @@ defmodule Hologram.ExJsConsistency.BitstringTest do
   use Hologram.Test.BasicCase, async: true
   import Hologram.Commons.BitstringUtils, only: [to_bit_list: 1]
 
-  describe "number of segments" do
+  describe "number and structure of segments" do
     test "builds empty bitstring without segments" do
       assert to_bit_list(<<>>) == []
     end
@@ -19,6 +19,11 @@ defmodule Hologram.ExJsConsistency.BitstringTest do
 
     test "builds multiple-segment bitstring" do
       assert to_bit_list(<<1::1, 1::1>>) == [1, 1]
+    end
+
+    test "nested segments are flattened" do
+      assert to_bit_list(<<0b11::2, <<0b10::2, 0b1::1, 0b10::2>>, 0b11::2>>) ==
+               [1, 1, 1, 0, 1, 1, 0, 1, 1]
     end
   end
 
