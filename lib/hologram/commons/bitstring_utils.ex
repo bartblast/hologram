@@ -9,6 +9,6 @@ defmodule Hologram.Commons.BitstringUtils do
   """
   @spec to_bit_list(bitstring) :: list(integer)
   def to_bit_list(bitstring) do
-    for <<bit::1*1 <- bitstring>>, do: bit
+    for <<bit::1 <- bitstring>>, do: bit
   end
 end

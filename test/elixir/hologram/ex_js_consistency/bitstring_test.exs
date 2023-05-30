@@ -11,7 +11,7 @@ defmodule Hologram.ExJsConsistency.BitstringTest do
   describe "bitstring value" do
     test "defaults for bitstring value" do
       # 4010 == 0b111110101010
-      assert to_bit_list(<<(<<4010::12*1>>)>>) == [1, 1, 1, 1, 1, 0, 1, 0, 1, 0, 1, 0]
+      assert to_bit_list(<<(<<4010::12>>)>>) == [1, 1, 1, 1, 1, 0, 1, 0, 1, 0, 1, 0]
     end
   end
 
@@ -31,7 +31,7 @@ defmodule Hologram.ExJsConsistency.BitstringTest do
 
       # Specified this way, because it's not possible to make the formatter ignore specific lines of code.
       bits =
-        Code.eval_string("""
+        """
         [
           0, 1, 0, 0, 0, 0, 0, 0,
           0, 1, 0, 1, 1, 1, 1, 0,
@@ -42,7 +42,8 @@ defmodule Hologram.ExJsConsistency.BitstringTest do
           1, 1, 0, 0, 1, 1, 0, 0,
           1, 1, 0, 0, 1, 1, 0, 1
         ]
-        """)
+        """
+        |> Code.eval_string()
         |> elem(0)
 
       assert to_bit_list(<<123.45>>) == bits
@@ -94,7 +95,7 @@ defmodule Hologram.ExJsConsistency.BitstringTest do
 
       # Specified this way, because it's not possible to make the formatter ignore specific lines of code.
       bits =
-        Code.eval_string("""
+        """
         [
           1, 1, 1, 0, 0, 1, 0, 1,
           1, 0, 0, 0, 0, 1, 0, 1,
@@ -106,7 +107,8 @@ defmodule Hologram.ExJsConsistency.BitstringTest do
           1, 0, 0, 1, 1, 0, 1, 1,
           1, 0, 1, 1, 1, 1, 1, 0
         ]
-        """)
+        """
+        |> Code.eval_string()
         |> elem(0)
 
       assert to_bit_list(<<"全息图">>) == bits
