@@ -7,7 +7,7 @@ import Type from "../../assets/js/type.mjs";
 // IMPORTANT!
 // Each JavaScript test has a related Elixir consistency test in test/elixir/hologram/ex_js_consistency/bitstring_test.exs
 // Always update both together.
-describe("from()", () => {
+describe("from(), tests that require related Elixir consistency tests", () => {
   describe("bitstring value", () => {
     it("defaults for bitstring value", () => {
       const result = Type.bitstring([1, 1, 1, 1, 1, 0, 1, 0, 1, 0, 1, 0]);
@@ -165,53 +165,54 @@ describe("from()", () => {
   });
 });
 
+describe("from(), tests that do not require related Elixir consistency tests", () => {
+  describe("number of segments", () => {
+    it("builds empty bitstring without segments", () => {
+      const result = Type.bitstring([]);
+
+      const expected = {
+        type: "bitstring",
+        bits: new Uint8Array([]),
+      };
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("builds single-segment bitstring", () => {
+      const segment = Type.bitstringSegment(Type.integer(1), {
+        size: Type.integer(1),
+        unit: 1n,
+      });
+
+      const result = Type.bitstring([segment]);
+
+      const expected = {
+        type: "bitstring",
+        bits: new Uint8Array([1]),
+      };
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("builds multiple-segment bitstring", () => {
+      const segment = Type.bitstringSegment(Type.integer(1), {
+        size: Type.integer(1),
+        unit: 1n,
+      });
+
+      const result = Type.bitstring([segment, segment]);
+
+      const expected = {
+        type: "bitstring",
+        bits: new Uint8Array([1, 1]),
+      };
+
+      assert.deepStrictEqual(result, expected);
+    });
+  });
+});
+
 // describe("bitstring()", () => {
-//   describe("different number of segments", () => {
-//     it("builds empty bitstring without segments", () => {
-//       const result = Type.bitstring([]);
-
-//       const expected = {
-//         type: "bitstring",
-//         bits: new Uint8Array([]),
-//       };
-
-//       assert.deepStrictEqual(result, expected);
-//     });
-
-//     it("builds single-segment bitstring", () => {
-//       const segment = Type.bitstringSegment(Type.integer(1), {
-//         size: Type.integer(1),
-//         unit: 1n,
-//       });
-//       const result = Type.bitstring([segment]);
-
-//       const expected = {
-//         type: "bitstring",
-//         bits: new Uint8Array([1]),
-//       };
-
-//       assert.deepStrictEqual(result, expected);
-//     });
-
-//     it("builds multiple-segment bitstring", () => {
-//       const segment = Type.bitstringSegment(Type.integer(1), {
-//         size: Type.integer(1),
-//         unit: 1n,
-//       });
-//       const result = Type.bitstring([segment, segment]);
-
-//       const expected = {
-//         type: "bitstring",
-//         bits: new Uint8Array([1, 1]),
-//       };
-
-//       assert.deepStrictEqual(result, expected);
-//     });
-//   });
-
-//   describe("defaults", () => {
-//   });
-
 //   describe("size & unit modifiers", () => {
 //     it("fails to build bitstring from 32-bit float segment", () => {
 //       const segment = Type.bitstringSegment(Type.float(123.45), {
