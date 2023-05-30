@@ -121,6 +121,21 @@ describe("from()", () => {
   });
 
   describe("values of not supported data types", () => {
+    it("list values are not supported", () => {
+      const segment = Type.bitstringSegment(
+        Type.list([Type.integer(1), Type.integer(2)]),
+        {}
+      );
+
+      assert.throw(
+        () => {
+          Type.bitstring([segment]);
+        },
+        Error,
+        "(ArgumentError) construction of binary failed: segment 1 of type 'integer': expected an integer but got: [1, 2]"
+      );
+    });
+
     it("tuple values are not supported", () => {
       const segment = Type.bitstringSegment(
         Type.tuple([Type.integer(1), Type.integer(2)]),

@@ -114,6 +114,15 @@ defmodule Hologram.ExJsConsistency.BitstringTest do
   end
 
   describe "values of not supported data types" do
+    test "list values are not supported" do
+      assert_raise ArgumentError,
+                   "construction of binary failed: segment 1 of type 'integer': expected an integer but got: [1, 2]",
+                   fn ->
+                     my_fun = fn segment -> <<segment>> end
+                     my_fun.([1, 2])
+                   end
+    end
+
     test "tuple values are not supported" do
       assert_raise ArgumentError,
                    "construction of binary failed: segment 1 of type 'integer': expected an integer but got: {1, 2}",
