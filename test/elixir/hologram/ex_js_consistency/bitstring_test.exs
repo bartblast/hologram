@@ -135,5 +135,7 @@ defmodule Hologram.ExJsConsistency.BitstringTest do
                    "construction of binary failed: segment 1 of type 'integer': expected an integer but got: {1, 2}",
                    fn -> build_bitstring({1, 2}) end
     end
+
+    # TODO: anonymous function, map, pid, port, reference
   end
 end
