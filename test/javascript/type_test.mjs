@@ -58,7 +58,7 @@ describe("bitstringSegment()", () => {
     assert.deepStrictEqual(result, expected);
   });
 
-  it("builds bitstring segment when all modifiers given", () => {
+  it("builds bitstring segment when all modifiers are given", () => {
     const result = Type.bitstringSegment(Type.integer(123), {
       endianness: "little",
       signedness: "unsigned",
@@ -79,7 +79,7 @@ describe("bitstringSegment()", () => {
     assert.deepStrictEqual(result, expected);
   });
 
-  it("builds bitstring segment when a single modifier is given", () => {
+  it("builds bitstring segment when single modifier is given", () => {
     const result = Type.bitstringSegment(Type.integer(123), {
       signedness: "unsigned",
     });
