@@ -10,7 +10,12 @@ import Type from "../../assets/js/type.mjs";
 describe("from(), tests that require related Elixir consistency tests", () => {
   describe("bitstring value", () => {
     it("defaults for bitstring value", () => {
-      const result = Type.bitstring([1, 1, 1, 1, 1, 0, 1, 0, 1, 0, 1, 0]);
+      const segment = Type.bitstringSegment(
+        Type.bitstring([1, 1, 1, 1, 1, 0, 1, 0, 1, 0, 1, 0]),
+        {}
+      );
+
+      const result = Type.bitstring([segment]);
 
       const expected = {
         type: "bitstring",
