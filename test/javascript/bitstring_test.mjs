@@ -8,7 +8,7 @@ import Type from "../../assets/js/type.mjs";
 // Each JavaScript test has a related Elixir consistency test in test/elixir/hologram/ex_js_consistency/bitstring_test.exs
 // Always update both together.
 describe("from()", () => {
-  describe("bitstring", () => {
+  describe("bitstring value", () => {
     it("defaults for bitstring value", () => {
       const result = Type.bitstring([1, 1, 1, 1, 1, 0, 1, 0, 1, 0, 1, 0]);
 
@@ -21,7 +21,7 @@ describe("from()", () => {
     });
   });
 
-  describe("float", () => {
+  describe("float value", () => {
     it("defaults for float value", () => {
       const segment = Type.bitstringSegment(Type.float(123.45), {});
       const result = Type.bitstring([segment]);
@@ -45,7 +45,7 @@ describe("from()", () => {
     });
   });
 
-  describe("integer", () => {
+  describe("integer value", () => {
     it("defaults for positive value that fits in 8 bits", () => {
       const segment = Type.bitstringSegment(Type.integer(170), {});
       const result = Bitstring.from([segment]);
@@ -95,7 +95,7 @@ describe("from()", () => {
     });
   });
 
-  describe("string", () => {
+  describe("string value", () => {
     it("defaults for string value", () => {
       const segment = Type.bitstringSegment(Type.string("全息图"), {});
       const result = Type.bitstring([segment]);
@@ -117,6 +117,23 @@ describe("from()", () => {
       };
 
       assert.deepStrictEqual(result, expected);
+    });
+  });
+
+  describe("values of not supported data types", () => {
+    it("tuple values are not supported", () => {
+      const segment = Type.bitstringSegment(
+        Type.tuple([Type.integer(1), Type.integer(2)]),
+        {}
+      );
+
+      assert.throw(
+        () => {
+          Type.bitstring([segment]);
+        },
+        Error,
+        "(ArgumentError) construction of binary failed: segment 1 of type 'integer': expected an integer but got: {1, 2}"
+      );
     });
   });
 });
@@ -166,20 +183,6 @@ describe("from()", () => {
 //   });
 
 //   describe("defaults", () => {
-//     it("fails to build bitstring from unsupported types", () => {
-//       const segment = Type.bitstringSegment(
-//         Type.tuple([Type.integer(1), Type.integer(2)]),
-//         {}
-//       );
-
-//       assert.throw(
-//         () => {
-//           Type.bitstring([segment]);
-//         },
-//         Error,
-//         "(ArgumentError) construction of binary failed: segment 1 of type 'integer': expected an integer but got: {1, 2}"
-//       );
-//     });
 //   });
 
 //   describe("size & unit modifiers", () => {

@@ -8,14 +8,14 @@ defmodule Hologram.ExJsConsistency.BitstringTest do
   use Hologram.Test.BasicCase, async: true
   import Hologram.Commons.BitstringUtils, only: [to_bit_list: 1]
 
-  describe "bitstring" do
+  describe "bitstring value" do
     test "defaults for bitstring value" do
       # 4010 == 0b111110101010
       assert to_bit_list(<<(<<4010::12*1>>)>>) == [1, 1, 1, 1, 1, 0, 1, 0, 1, 0, 1, 0]
     end
   end
 
-  describe "float" do
+  describe "float value" do
     test "defaults for float value" do
       # <<123.45>> == <<64, 94, 220, 204, 204, 204, 204, 205>>
       # 64 == 0b01000000
@@ -49,7 +49,7 @@ defmodule Hologram.ExJsConsistency.BitstringTest do
     end
   end
 
-  describe "integer" do
+  describe "integer value" do
     test "defaults for positive integer value that fits in 8 bits" do
       # 170 == 0b10101010
       assert to_bit_list(<<170>>) == [1, 0, 1, 0, 1, 0, 1, 0]
@@ -76,7 +76,7 @@ defmodule Hologram.ExJsConsistency.BitstringTest do
     end
   end
 
-  describe "string" do
+  describe "string value" do
     test "defaults for string value" do
       # <<"全息图">> == <<229, 133, 168, 230, 129, 175, 229, 155, 190>>
       # 229 == 0b11100101
@@ -110,6 +110,17 @@ defmodule Hologram.ExJsConsistency.BitstringTest do
         |> elem(0)
 
       assert to_bit_list(<<"全息图">>) == bits
+    end
+  end
+
+  describe "values of not supported data types" do
+    test "tuple values are not supported" do
+      assert_raise ArgumentError,
+                   "construction of binary failed: segment 1 of type 'integer': expected an integer but got: {1, 2}",
+                   fn ->
+                     my_fun = fn segment -> <<segment>> end
+                     my_fun.({1, 2})
+                   end
     end
   end
 end
