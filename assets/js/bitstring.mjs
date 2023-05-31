@@ -14,6 +14,7 @@ export default class Bitstring {
     return {type: "bitstring", bits: Utils.concatUint8Arrays(bitArrays)};
   }
 
+  // private
   static _buildBitArray(segment) {
     switch (segment.value.type) {
       case "bitstring":
