@@ -9,8 +9,6 @@ export default class Type {
   }
 
   static bitstring(data) {
-    let bits;
-
     if (data.length > 0 && typeof data[0] === "object") {
       return Bitstring.from(data);
     } else {
