@@ -14,9 +14,8 @@ export default class Bitstring {
     return {type: "bitstring", bits: Utils.concatUint8Arrays(bitArrays)};
   }
 
-  // private
   static _buildBitArray(segment) {
-    switch (segment.type) {
+    switch (segment.value.type) {
       case "bitstring":
         return Bitstring._buildBitArrayFromBitstring(segment);
 
@@ -26,10 +25,8 @@ export default class Bitstring {
       case "integer":
         return Bitstring._buildBitArrayFromInteger(segment);
 
-      case "utf8":
-        if (segment.value.type === "string") {
-          return Bitstring._buildBitArrayFromString(segment);
-        }
+      case "string":
+        return Bitstring._buildBitArrayFromString(segment);
     }
   }
 

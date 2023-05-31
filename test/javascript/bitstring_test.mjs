@@ -98,6 +98,22 @@ describe("from()", () => {
 
       assert.deepStrictEqual(result, expected);
     });
+
+    it("with binary type modifier when segment number of bits is divisible by 8", () => {
+      const segment = Type.bitstringSegment(
+        Type.bitstring([1, 0, 1, 0, 1, 0, 1, 0]),
+        {type: "binary"}
+      );
+
+      const result = Bitstring.from([segment]);
+
+      const expected = {
+        type: "bitstring",
+        bits: new Uint8Array([1, 0, 1, 0, 1, 0, 1, 0]),
+      };
+
+      assert.deepStrictEqual(result, expected);
+    });
   });
 
   describe("float value", () => {

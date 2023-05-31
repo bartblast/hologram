@@ -31,6 +31,11 @@ defmodule Hologram.ExJsConsistency.BitstringTest do
     test "defaults for bitstring value" do
       assert to_bit_list(<<(<<1::1, 0::1, 1::1, 0::1>>)>>) == [1, 0, 1, 0]
     end
+
+    test "with binary type modifier when segment number of bits is divisible by 8" do
+      assert to_bit_list(<<(<<1::1, 0::1, 1::1, 0::1, 1::1, 0::1, 1::1, 0::1>>)::binary>>) ==
+               [1, 0, 1, 0, 1, 0, 1, 0]
+    end
   end
 
   describe "float value" do
