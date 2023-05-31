@@ -144,7 +144,7 @@ describe("inspect()", () => {
   });
 
   it("inspects other boxed types", () => {
-    const segment = Type.bitstringSegment(Type.integer(170), {});
+    const segment = Type.bitstringSegment(Type.integer(170), {type: "integer"});
     const term = Type.bitstring([segment]);
     const result = Interpreter.inspect(term);
 

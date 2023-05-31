@@ -164,6 +164,7 @@ describe("encodeMapKey()", () => {
   it("encodes empty boxed bitstring value as map key", () => {
     const segment = Type.bitstringSegment(Type.integer(0), {
       size: Type.integer(0),
+      type: "integer",
     });
     const boxed = Type.bitstring([segment]);
     const result = Type.encodeMapKey(boxed);
@@ -174,7 +175,7 @@ describe("encodeMapKey()", () => {
   it("encodes non-empty boxed bitstring value as map key", () => {
     // 170 == 0b10101010
 
-    const segment = Type.bitstringSegment(Type.integer(170), {});
+    const segment = Type.bitstringSegment(Type.integer(170), {type: "integer"});
     const boxed = Type.bitstring([segment]);
     const result = Type.encodeMapKey(boxed);
 
