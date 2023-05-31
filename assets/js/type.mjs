@@ -19,6 +19,11 @@ export default class Type {
 
   static bitstringSegment(value, modifiers = {}) {
     const type = Type._getOption(modifiers, "type");
+
+    if (type === null) {
+      throw new Error("Bitstring segment type modifier is not specified");
+    }
+
     const size = Type._getOption(modifiers, "size");
     const unit = Type._getOption(modifiers, "unit");
     const signedness = Type._getOption(modifiers, "signedness");

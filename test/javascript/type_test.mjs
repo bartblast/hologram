@@ -49,12 +49,12 @@ describe("bitstring()", () => {
 });
 
 describe("bitstringSegment()", () => {
-  it("builds bitstring segment when no modifiers are given", () => {
-    const result = Type.bitstringSegment(Type.integer(123));
+  it("builds bitstring segment when no modifiers (except type) are given", () => {
+    const result = Type.bitstringSegment(Type.integer(123), {type: "integer"});
 
     const expected = {
       value: {type: "integer", value: 123n},
-      type: null,
+      type: "integer",
       size: null,
       unit: null,
       signedness: null,
@@ -85,14 +85,15 @@ describe("bitstringSegment()", () => {
     assert.deepStrictEqual(result, expected);
   });
 
-  it("builds bitstring segment when single modifier is given", () => {
+  it("builds bitstring segment when single modifier (except type) is given", () => {
     const result = Type.bitstringSegment(Type.integer(123), {
       signedness: "unsigned",
+      type: "integer",
     });
 
     const expected = {
       value: {type: "integer", value: 123n},
-      type: null,
+      type: "integer",
       size: null,
       unit: null,
       signedness: "unsigned",
@@ -100,6 +101,16 @@ describe("bitstringSegment()", () => {
     };
 
     assert.deepStrictEqual(result, expected);
+  });
+
+  it("raises error if type modifier is not given", () => {
+    assert.throw(
+      () => {
+        Type.bitstringSegment(Type.integer(123), {});
+      },
+      Error,
+      "Bitstring segment type modifier is not specified"
+    );
   });
 });
 
