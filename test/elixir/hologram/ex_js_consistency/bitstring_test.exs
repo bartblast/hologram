@@ -221,6 +221,6 @@ defmodule Hologram.ExJsConsistency.BitstringTest do
                    end
     end
 
-    #   # TODO: anonymous function, map, pid, port, reference
+    # TODO: anonymous function, map, pid, port, reference
   end
 end

@@ -105,6 +105,7 @@ describe("from()", () => {
       const segment = Type.bitstringSegment(Type.float(123.45), {
         type: "float",
       });
+
       const result = Bitstring.from([segment]);
 
       const expected = {
@@ -131,6 +132,7 @@ describe("from()", () => {
       const segment = Type.bitstringSegment(Type.integer(170), {
         type: "integer",
       });
+
       const result = Bitstring.from([segment]);
 
       const expected = {
@@ -145,6 +147,7 @@ describe("from()", () => {
       const segment = Type.bitstringSegment(Type.integer(-22), {
         type: "integer",
       });
+
       const result = Bitstring.from([segment]);
 
       const expected = {
@@ -159,6 +162,7 @@ describe("from()", () => {
       const segment = Type.bitstringSegment(Type.integer(4010), {
         type: "integer",
       });
+
       const result = Bitstring.from([segment]);
 
       const expected = {
@@ -173,6 +177,7 @@ describe("from()", () => {
       const segment = Type.bitstringSegment(Type.integer(-86), {
         type: "integer",
       });
+
       const result = Bitstring.from([segment]);
 
       const expected = {
