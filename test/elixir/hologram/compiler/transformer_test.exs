@@ -198,7 +198,7 @@ defmodule Hologram.Compiler.TransformerTest do
                transform(ast, %Context{})
     end
 
-    test "nested bistrings are flattened" do
+    test "nested bitstrings are flattened" do
       # <<333, <<444, 555, 666>>, 777>>
       ast = {:<<>>, [line: 1], [333, {:<<>>, [line: 1], [444, 555, 666]}, 777]}
 

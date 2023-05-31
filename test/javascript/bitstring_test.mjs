@@ -23,6 +23,7 @@ describe("from()", () => {
     it("builds single-segment bitstring", () => {
       const segment = Type.bitstringSegment(Type.integer(1), {
         size: Type.integer(1),
+        type: "integer",
         unit: 1n,
       });
 
@@ -39,6 +40,7 @@ describe("from()", () => {
     it("builds multiple-segment bitstring", () => {
       const segment = Type.bitstringSegment(Type.integer(1), {
         size: Type.integer(1),
+        type: "integer",
         unit: 1n,
       });
 
@@ -53,18 +55,22 @@ describe("from()", () => {
     });
 
     it("nested segments are flattened", () => {
-      const segment1 = Type.bitstringSegment(Type.bitstring([1, 1]), {});
+      const segment1 = Type.bitstringSegment(Type.bitstring([1, 1]), {
+        type: "bitstring",
+      });
 
       const segment2 = Type.bitstringSegment(
         Type.bitstring([
-          Type.bitstringSegment(Type.bitstring([1, 0]), {}),
-          Type.bitstringSegment(Type.bitstring([1]), {}),
-          Type.bitstringSegment(Type.bitstring([1, 0]), {}),
+          Type.bitstringSegment(Type.bitstring([1, 0]), {type: "bitstring"}),
+          Type.bitstringSegment(Type.bitstring([1]), {type: "bitstring"}),
+          Type.bitstringSegment(Type.bitstring([1, 0]), {type: "bitstring"}),
         ]),
-        {}
+        {type: "bitstring"}
       );
 
-      const segment3 = Type.bitstringSegment(Type.bitstring([1, 1]), {});
+      const segment3 = Type.bitstringSegment(Type.bitstring([1, 1]), {
+        type: "bitstring",
+      });
 
       const result = Bitstring.from([segment1, segment2, segment3]);
 
@@ -79,16 +85,15 @@ describe("from()", () => {
 
   describe("bitstring value", () => {
     it("defaults for bitstring value", () => {
-      const segment = Type.bitstringSegment(
-        Type.bitstring([1, 1, 1, 1, 1, 0, 1, 0, 1, 0, 1, 0]),
-        {}
-      );
+      const segment = Type.bitstringSegment(Type.bitstring([1, 0, 1, 0]), {
+        type: "bitstring",
+      });
 
       const result = Bitstring.from([segment]);
 
       const expected = {
         type: "bitstring",
-        bits: new Uint8Array([1, 1, 1, 1, 1, 0, 1, 0, 1, 0, 1, 0]),
+        bits: new Uint8Array([1, 0, 1, 0]),
       };
 
       assert.deepStrictEqual(result, expected);
@@ -97,22 +102,24 @@ describe("from()", () => {
 
   describe("float value", () => {
     it("defaults for float value", () => {
-      const segment = Type.bitstringSegment(Type.float(123.45), {});
+      const segment = Type.bitstringSegment(Type.float(123.45), {
+        type: "float",
+      });
       const result = Bitstring.from([segment]);
 
       const expected = {
         type: "bitstring",
         // prettier-ignore
         bits: new Uint8Array([
-              0, 1, 0, 0, 0, 0, 0, 0,
-              0, 1, 0, 1, 1, 1, 1, 0,
-              1, 1, 0, 1, 1, 1, 0, 0,
-              1, 1, 0, 0, 1, 1, 0, 0,
-              1, 1, 0, 0, 1, 1, 0, 0,
-              1, 1, 0, 0, 1, 1, 0, 0,
-              1, 1, 0, 0, 1, 1, 0, 0,
-              1, 1, 0, 0, 1, 1, 0, 1
-            ]),
+                0, 1, 0, 0, 0, 0, 0, 0,
+                0, 1, 0, 1, 1, 1, 1, 0,
+                1, 1, 0, 1, 1, 1, 0, 0,
+                1, 1, 0, 0, 1, 1, 0, 0,
+                1, 1, 0, 0, 1, 1, 0, 0,
+                1, 1, 0, 0, 1, 1, 0, 0,
+                1, 1, 0, 0, 1, 1, 0, 0,
+                1, 1, 0, 0, 1, 1, 0, 1
+              ]),
       };
 
       assert.deepStrictEqual(result, expected);
@@ -120,8 +127,10 @@ describe("from()", () => {
   });
 
   describe("integer value", () => {
-    it("defaults for positive value that fits in 8 bits", () => {
-      const segment = Type.bitstringSegment(Type.integer(170), {});
+    it("defaults for positive integer value that fits in 8 bits", () => {
+      const segment = Type.bitstringSegment(Type.integer(170), {
+        type: "integer",
+      });
       const result = Bitstring.from([segment]);
 
       const expected = {
@@ -132,8 +141,10 @@ describe("from()", () => {
       assert.deepStrictEqual(result, expected);
     });
 
-    it("defaults for negative value that fits in 8 bits", () => {
-      const segment = Type.bitstringSegment(Type.integer(-22), {});
+    it("defaults for negative integer value that fits in 8 bits", () => {
+      const segment = Type.bitstringSegment(Type.integer(-22), {
+        type: "integer",
+      });
       const result = Bitstring.from([segment]);
 
       const expected = {
@@ -144,8 +155,10 @@ describe("from()", () => {
       assert.deepStrictEqual(result, expected);
     });
 
-    it("defaults for positive value that fits in 12 bits", () => {
-      const segment = Type.bitstringSegment(Type.integer(4010), {});
+    it("defaults for positive integer value that fits in 12 bits", () => {
+      const segment = Type.bitstringSegment(Type.integer(4010), {
+        type: "integer",
+      });
       const result = Bitstring.from([segment]);
 
       const expected = {
@@ -156,8 +169,10 @@ describe("from()", () => {
       assert.deepStrictEqual(result, expected);
     });
 
-    it("defaults for negative value that fits in 12 bits", () => {
-      const segment = Type.bitstringSegment(Type.integer(-86), {});
+    it("defaults for negative integer value that fits in 12 bits", () => {
+      const segment = Type.bitstringSegment(Type.integer(-86), {
+        type: "integer",
+      });
       const result = Bitstring.from([segment]);
 
       const expected = {
@@ -171,23 +186,26 @@ describe("from()", () => {
 
   describe("string value", () => {
     it("defaults for string value", () => {
-      const segment = Type.bitstringSegment(Type.string("全息图"), {});
+      const segment = Type.bitstringSegment(Type.string("全息图"), {
+        type: "utf8",
+      });
+
       const result = Bitstring.from([segment]);
 
       const expected = {
         type: "bitstring",
         // prettier-ignore
         bits: new Uint8Array([
-          1, 1, 1, 0, 0, 1, 0, 1,
-          1, 0, 0, 0, 0, 1, 0, 1,
-          1, 0, 1, 0, 1, 0, 0, 0,
-          1, 1, 1, 0, 0, 1, 1, 0,
-          1, 0, 0, 0, 0, 0, 0, 1,
-          1, 0, 1, 0, 1, 1, 1, 1,
-          1, 1, 1, 0, 0, 1, 0, 1,
-          1, 0, 0, 1, 1, 0, 1, 1,
-          1, 0, 1, 1, 1, 1, 1, 0
-        ]),
+            1, 1, 1, 0, 0, 1, 0, 1,
+            1, 0, 0, 0, 0, 1, 0, 1,
+            1, 0, 1, 0, 1, 0, 0, 0,
+            1, 1, 1, 0, 0, 1, 1, 0,
+            1, 0, 0, 0, 0, 0, 0, 1,
+            1, 0, 1, 0, 1, 1, 1, 1,
+            1, 1, 1, 0, 0, 1, 0, 1,
+            1, 0, 0, 1, 1, 0, 1, 1,
+            1, 0, 1, 1, 1, 1, 1, 0
+          ]),
       };
 
       assert.deepStrictEqual(result, expected);
@@ -196,7 +214,9 @@ describe("from()", () => {
 
   describe("values of not supported data types", () => {
     it("atom values are not supported", () => {
-      const segment = Type.bitstringSegment(Type.atom("abc"), {});
+      const segment = Type.bitstringSegment(Type.atom("abc"), {
+        type: "integer",
+      });
 
       assert.throw(
         () => {
@@ -210,7 +230,7 @@ describe("from()", () => {
     it("list values are not supported", () => {
       const segment = Type.bitstringSegment(
         Type.list([Type.integer(1), Type.integer(2)]),
-        {}
+        {type: "integer"}
       );
 
       assert.throw(
@@ -225,7 +245,7 @@ describe("from()", () => {
     it("tuple values are not supported", () => {
       const segment = Type.bitstringSegment(
         Type.tuple([Type.integer(1), Type.integer(2)]),
-        {}
+        {type: "integer"}
       );
 
       assert.throw(

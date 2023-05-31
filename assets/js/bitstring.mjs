@@ -5,34 +5,31 @@ import Utils from "./utils.mjs";
 
 export default class Bitstring {
   static from(segments) {
-    const bitArrays = segments.map((segment, index) =>
-      Bitstring._buildBitArray(segment, index + 1)
-    );
+    const bitArrays = segments.map((segment, index) => {
+      Bitstring._validateSegment(segment, index + 1);
+      return Bitstring._buildBitArray(segment);
+    });
 
     // Cannot freeze array buffer views with elements
     return {type: "bitstring", bits: Utils.concatUint8Arrays(bitArrays)};
   }
 
   // private
-  static _buildBitArray(segment, index) {
-    segment = Bitstring._resolveSegmentType(segment);
-    Bitstring._validateSegmentType(segment, index);
-
+  static _buildBitArray(segment) {
     switch (segment.type) {
-      case "binary":
-      case "utf8":
-      case "utf16":
-      case "utf32":
-        return Bitstring._buildBitArrayFromString(segment);
-
       case "bitstring":
         return Bitstring._buildBitArrayFromBitstring(segment);
 
       case "float":
-        return Bitstring._buildBitArrayFromFloat(segment, index);
+        return Bitstring._buildBitArrayFromFloat(segment);
 
       case "integer":
         return Bitstring._buildBitArrayFromInteger(segment);
+
+      case "utf8":
+        if (segment.value.type === "string") {
+          return Bitstring._buildBitArrayFromString(segment);
+        }
     }
   }
 
@@ -42,31 +39,7 @@ export default class Bitstring {
   }
 
   // private
-  static _buildBitArrayFromFloat(segment, index) {
-    if (segment.size === null && segment.unit !== null) {
-      Interpreter.raiseError(
-        "CompileError",
-        "integer and float types require a size specifier if the unit specifier is given"
-      );
-    }
-
-    const size = Bitstring._resolveSizeModifierValue(segment, 64n);
-    const unit = Bitstring._resolveUnitModifierValue(segment, 1n);
-    const numBits = size * unit;
-
-    if (![16n, 32n, 64n].includes(numBits)) {
-      const message = `construction of binary failed: segment ${index} of type 'float': expected one of the supported sizes 16, 32, or 64 but got: ${Number(
-        numBits
-      )}`;
-      Interpreter.raiseError("ArgumentError", message);
-    }
-
-    if (numBits !== 64n) {
-      Interpreter.raiseNotYetImplementedError(
-        `${numBits}-bit float bitstring segments are not yet implemented in Hologram`
-      );
-    }
-
+  static _buildBitArrayFromFloat(segment) {
     const value = segment.value.value;
 
     const bitArrays = Array.from(Bitstring._getBytesFromFloat(value)).map(
@@ -87,23 +60,6 @@ export default class Bitstring {
 
   // private
   static _buildBitArrayFromString(segment) {
-    const {type} = segment;
-
-    if (["utf8", "utf16", "utf32"].includes(type)) {
-      if (segment.size !== null || segment.unit !== null) {
-        Interpreter.raiseError(
-          "CompileError",
-          "size and unit are not supported on utf types"
-        );
-      }
-    }
-
-    if (["utf16", "utf32"].includes(type)) {
-      Interpreter.raiseNotYetImplementedError(
-        `${type} bitstring segment type is not yet implemented in Hologram`
-      );
-    }
-
     const value = segment.value.value;
 
     const bitArrays = Array.from(Bitstring._getBytesFromString(value)).map(
@@ -153,28 +109,11 @@ export default class Bitstring {
   }
 
   // private
-  static _raiseInvalidSegmentType(index, value, type) {
+  static _raiseInvalidValueTypeError(index, value, type) {
     const inspectedValue = Interpreter.inspect(value);
     const indefiniteArticle = Utils.indefiniteArticle(type);
     const message = `construction of binary failed: segment ${index} of type '${type}': expected ${indefiniteArticle} ${type} but got: ${inspectedValue}`;
     Interpreter.raiseError("ArgumentError", message);
-  }
-
-  // private
-  static _resolveSegmentType(segment) {
-    const {value, type} = segment;
-
-    if (type === null) {
-      if (["bitstring", "integer", "float"].includes(value.type)) {
-        segment.type = value.type;
-      } else if (value.type === "string") {
-        segment.type = "utf8";
-      } else {
-        segment.type = "integer";
-      }
-    }
-
-    return segment;
   }
 
   // private
@@ -196,18 +135,69 @@ export default class Bitstring {
   }
 
   // private
-  static _validateSegmentType(segment, index) {
-    const {value, type} = segment;
-
-    if (value.type === type) {
-      return true;
-    } else if (
-      value.type === "string" &&
-      ["binary", "utf8", "utf16", "utf32"].includes(type)
-    ) {
-      return true;
+  static _validateFloatSegment(segment, index) {
+    if (segment.size === null && segment.unit !== null) {
+      Interpreter.raiseError(
+        "CompileError",
+        "integer and float types require a size specifier if the unit specifier is given"
+      );
     }
 
-    Bitstring._raiseInvalidSegmentType(index, value, type);
+    const size = Bitstring._resolveSizeModifierValue(segment, 64n);
+    const unit = Bitstring._resolveUnitModifierValue(segment, 1n);
+    const numBits = size * unit;
+
+    if (![16n, 32n, 64n].includes(numBits)) {
+      const message = `construction of binary failed: segment ${index} of type 'float': expected one of the supported sizes 16, 32, or 64 but got: ${Number(
+        numBits
+      )}`;
+      Interpreter.raiseError("ArgumentError", message);
+    }
+
+    if (numBits !== 64n) {
+      Interpreter.raiseNotYetImplementedError(
+        `${numBits}-bit float bitstring segments are not yet implemented in Hologram`
+      );
+    }
+
+    return true;
+  }
+
+  // private
+  static _validateIntegerSegment(segment, index) {
+    if (segment.value.type !== "integer") {
+      Bitstring._raiseInvalidValueTypeError(index, segment.value, "integer");
+    }
+
+    return true;
+  }
+
+  // private
+  static _validateSegment(segment, index) {
+    switch (segment.type) {
+      case "bitstring":
+        return true;
+
+      case "float":
+        return Bitstring._validateFloatSegment(segment, index);
+
+      case "integer":
+        return Bitstring._validateIntegerSegment(segment, index);
+
+      case "utf8":
+        return Bitstring._validateUtf8Segment(segment);
+    }
+  }
+
+  // private
+  static _validateUtf8Segment(segment) {
+    if (segment.size !== null || segment.unit !== null) {
+      Interpreter.raiseError(
+        "CompileError",
+        "size and unit are not supported on utf types"
+      );
+    }
+
+    return true;
   }
 }

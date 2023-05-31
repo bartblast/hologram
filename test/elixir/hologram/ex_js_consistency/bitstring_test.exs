@@ -29,8 +29,7 @@ defmodule Hologram.ExJsConsistency.BitstringTest do
 
   describe "bitstring value" do
     test "defaults for bitstring value" do
-      # 4010 == 0b111110101010
-      assert to_bit_list(<<(<<4010::12>>)>>) == [1, 1, 1, 1, 1, 0, 1, 0, 1, 0, 1, 0]
+      assert to_bit_list(<<(<<1::1, 0::1, 1::1, 0::1>>)>>) == [1, 0, 1, 0]
     end
   end
 
@@ -47,6 +46,25 @@ defmodule Hologram.ExJsConsistency.BitstringTest do
       # 205 == 0b11001101
 
       assert to_bit_list(<<123.45>>) == to_bit_list(<<64, 94, 220, 204, 204, 204, 204, 205>>)
+
+      # Specified this way, because it's not possible to make the formatter ignore specific lines of code.
+      bitstring =
+        """
+        <<
+          0::1, 1::1, 0::1, 0::1, 0::1, 0::1, 0::1, 0::1,
+          0::1, 1::1, 0::1, 1::1, 1::1, 1::1, 1::1, 0::1,
+          1::1, 1::1, 0::1, 1::1, 1::1, 1::1, 0::1, 0::1,
+          1::1, 1::1, 0::1, 0::1, 1::1, 1::1, 0::1, 0::1,
+          1::1, 1::1, 0::1, 0::1, 1::1, 1::1, 0::1, 0::1,
+          1::1, 1::1, 0::1, 0::1, 1::1, 1::1, 0::1, 0::1,
+          1::1, 1::1, 0::1, 0::1, 1::1, 1::1, 0::1, 0::1,
+          1::1, 1::1, 0::1, 0::1, 1::1, 1::1, 0::1, 1::1
+        >>
+        """
+        |> Code.eval_string()
+        |> elem(0)
+
+      assert to_bit_list(<<123.45>>) == to_bit_list(bitstring)
 
       # Specified this way, because it's not possible to make the formatter ignore specific lines of code.
       bits =
@@ -72,12 +90,20 @@ defmodule Hologram.ExJsConsistency.BitstringTest do
   describe "integer value" do
     test "defaults for positive integer value that fits in 8 bits" do
       # 170 == 0b10101010
+
+      assert to_bit_list(<<170>>) ==
+               to_bit_list(<<1::1, 0::1, 1::1, 0::1, 1::1, 0::1, 1::1, 0::1>>)
+
       assert to_bit_list(<<170>>) == [1, 0, 1, 0, 1, 0, 1, 0]
     end
 
     test "defaults for negative integer value that fits in 8 bits" do
       # -22 == 0b11101010
       # 234 == 0b11101010
+
+      assert to_bit_list(<<-22>>) ==
+               to_bit_list(<<1::1, 1::1, 1::1, 0::1, 1::1, 0::1, 1::1, 0::1>>)
+
       assert to_bit_list(<<-22>>) == to_bit_list(<<234>>)
       assert to_bit_list(<<-22>>) == [1, 1, 1, 0, 1, 0, 1, 0]
     end
@@ -85,12 +111,21 @@ defmodule Hologram.ExJsConsistency.BitstringTest do
     test "defaults for positive integer value that fits in 12 bits" do
       # 4010 == 0b111110101010
       # 170 == 0b10101010
+
+      assert to_bit_list(<<4010>>) ==
+               to_bit_list(<<1::1, 0::1, 1::1, 0::1, 1::1, 0::1, 1::1, 0::1>>)
+
+      assert to_bit_list(<<4010>>) == to_bit_list(<<170>>)
       assert to_bit_list(<<4010>>) == [1, 0, 1, 0, 1, 0, 1, 0]
     end
 
     test "defaults for negative integer value that fits in 12 bits" do
       # -86 == 0b111110101010
       # 170 == 0b10101010
+
+      assert to_bit_list(<<-86>>) ==
+               to_bit_list(<<1::1, 0::1, 1::1, 0::1, 1::1, 0::1, 1::1, 0::1>>)
+
       assert to_bit_list(<<-86>>) == to_bit_list(<<170>>)
       assert to_bit_list(<<-86>>) == [1, 0, 1, 0, 1, 0, 1, 0]
     end
@@ -111,6 +146,26 @@ defmodule Hologram.ExJsConsistency.BitstringTest do
 
       assert to_bit_list(<<"全息图">>) ==
                to_bit_list(<<229, 133, 168, 230, 129, 175, 229, 155, 190>>)
+
+      # Specified this way, because it's not possible to make the formatter ignore specific lines of code.
+      bitstring =
+        """
+        <<
+          1::1, 1::1, 1::1, 0::1, 0::1, 1::1, 0::1, 1::1,
+          1::1, 0::1, 0::1, 0::1, 0::1, 1::1, 0::1, 1::1,
+          1::1, 0::1, 1::1, 0::1, 1::1, 0::1, 0::1, 0::1,
+          1::1, 1::1, 1::1, 0::1, 0::1, 1::1, 1::1, 0::1,
+          1::1, 0::1, 0::1, 0::1, 0::1, 0::1, 0::1, 1::1,
+          1::1, 0::1, 1::1, 0::1, 1::1, 1::1, 1::1, 1::1,
+          1::1, 1::1, 1::1, 0::1, 0::1, 1::1, 0::1, 1::1,
+          1::1, 0::1, 0::1, 1::1, 1::1, 0::1, 1::1, 1::1,
+          1::1, 0::1, 1::1, 1::1, 1::1, 1::1, 1::1, 0::1,
+        >>
+        """
+        |> Code.eval_string()
+        |> elem(0)
+
+      assert to_bit_list(<<"全息图">>) == to_bit_list(bitstring)
 
       # Specified this way, because it's not possible to make the formatter ignore specific lines of code.
       bits =
@@ -142,21 +197,30 @@ defmodule Hologram.ExJsConsistency.BitstringTest do
     test "atom values are not supported" do
       assert_raise ArgumentError,
                    "construction of binary failed: segment 1 of type 'integer': expected an integer but got: :abc",
-                   fn -> build_bitstring(:abc) end
+                   fn ->
+                     # The bitstring needs to be built dynamically, otherwise it won't compile.
+                     build_bitstring(:abc)
+                   end
     end
 
     test "list values are not supported" do
       assert_raise ArgumentError,
                    "construction of binary failed: segment 1 of type 'integer': expected an integer but got: [1, 2]",
-                   fn -> build_bitstring([1, 2]) end
+                   fn ->
+                     # The bitstring needs to be built dynamically, otherwise it won't compile.
+                     build_bitstring([1, 2])
+                   end
     end
 
     test "tuple values are not supported" do
       assert_raise ArgumentError,
                    "construction of binary failed: segment 1 of type 'integer': expected an integer but got: {1, 2}",
-                   fn -> build_bitstring({1, 2}) end
+                   fn ->
+                     # The bitstring needs to be built dynamically, otherwise it won't compile.
+                     build_bitstring({1, 2})
+                   end
     end
 
-    # TODO: anonymous function, map, pid, port, reference
+    #   # TODO: anonymous function, map, pid, port, reference
   end
 end
