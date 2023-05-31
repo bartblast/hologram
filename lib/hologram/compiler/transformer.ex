@@ -394,6 +394,23 @@ defmodule Hologram.Compiler.Transformer do
     |> Enum.reverse()
   end
 
+  defp maybe_add_default_bitstring_type_modifier(modifiers, value) do
+    if Keyword.has_key?(modifiers, :type) do
+      modifiers
+    else
+      case value do
+        %IR.FloatType{} ->
+          [{:type, :float} | modifiers]
+
+        %IR.StringType{} ->
+          [{:type, :utf8} | modifiers]
+
+        _value ->
+          [{:type, :integer} | modifiers]
+      end
+    end
+  end
+
   defp transform_bitstring_modifiers({:-, _meta, [left, right]}, context, modifiers) do
     new_modifiers = transform_bitstring_modifiers(left, context, modifiers)
     transform_bitstring_modifiers(right, context, new_modifiers)
@@ -474,13 +491,20 @@ defmodule Hologram.Compiler.Transformer do
 
   defp transform_bitstring_segment({:"::", _meta, [left, right]}, context) do
     value = transform(left, context)
-    modifiers = transform_bitstring_modifiers(right, context, [])
+
+    modifiers =
+      right
+      |> transform_bitstring_modifiers(context, [])
+      |> maybe_add_default_bitstring_type_modifier(value)
 
     %IR.BitstringSegment{value: value, modifiers: modifiers}
   end
 
   defp transform_bitstring_segment(ast, context) do
-    %IR.BitstringSegment{value: transform(ast, context), modifiers: []}
+    value = transform(ast, context)
+    modifiers = maybe_add_default_bitstring_type_modifier([], value)
+
+    %IR.BitstringSegment{value: value, modifiers: modifiers}
   end
 
   defp transform_function_capture(function, arity, meta, context) do

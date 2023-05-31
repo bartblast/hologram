@@ -220,8 +220,9 @@ defmodule Hologram.Compiler.TransformerTest do
       ast =
         {:<<>>, [line: 1], [{:"::", [line: 1], [{:xyz, [line: 1], nil}, {:big, [line: 1], nil}]}]}
 
-      assert %IR.BitstringType{segments: [%IR.BitstringSegment{modifiers: [endianness: :big]}]} =
-               transform(ast, %Context{})
+      assert %IR.BitstringType{
+               segments: [%IR.BitstringSegment{modifiers: [type: :integer, endianness: :big]}]
+             } = transform(ast, %Context{})
     end
 
     test "little endianness modifier" do
@@ -230,8 +231,9 @@ defmodule Hologram.Compiler.TransformerTest do
         {:<<>>, [line: 1],
          [{:"::", [line: 1], [{:xyz, [line: 1], nil}, {:little, [line: 1], nil}]}]}
 
-      assert %IR.BitstringType{segments: [%IR.BitstringSegment{modifiers: [endianness: :little]}]} =
-               transform(ast, %Context{})
+      assert %IR.BitstringType{
+               segments: [%IR.BitstringSegment{modifiers: [type: :integer, endianness: :little]}]
+             } = transform(ast, %Context{})
     end
 
     test "native endianness modifier" do
@@ -240,8 +242,9 @@ defmodule Hologram.Compiler.TransformerTest do
         {:<<>>, [line: 1],
          [{:"::", [line: 1], [{:xyz, [line: 1], nil}, {:native, [line: 1], nil}]}]}
 
-      assert %IR.BitstringType{segments: [%IR.BitstringSegment{modifiers: [endianness: :native]}]} =
-               transform(ast, %Context{})
+      assert %IR.BitstringType{
+               segments: [%IR.BitstringSegment{modifiers: [type: :integer, endianness: :native]}]
+             } = transform(ast, %Context{})
     end
 
     # --- SIGNEDNESS MODIFIER ---
@@ -252,8 +255,9 @@ defmodule Hologram.Compiler.TransformerTest do
         {:<<>>, [line: 1],
          [{:"::", [line: 1], [{:xyz, [line: 1], nil}, {:signed, [line: 1], nil}]}]}
 
-      assert %IR.BitstringType{segments: [%IR.BitstringSegment{modifiers: [signedness: :signed]}]} =
-               transform(ast, %Context{})
+      assert %IR.BitstringType{
+               segments: [%IR.BitstringSegment{modifiers: [type: :integer, signedness: :signed]}]
+             } = transform(ast, %Context{})
     end
 
     test "unsigned signedness modifier" do
@@ -263,7 +267,9 @@ defmodule Hologram.Compiler.TransformerTest do
          [{:"::", [line: 1], [{:xyz, [line: 1], nil}, {:unsigned, [line: 1], nil}]}]}
 
       assert %IR.BitstringType{
-               segments: [%IR.BitstringSegment{modifiers: [signedness: :unsigned]}]
+               segments: [
+                 %IR.BitstringSegment{modifiers: [type: :integer, signedness: :unsigned]}
+               ]
              } = transform(ast, %Context{})
     end
 
@@ -276,7 +282,11 @@ defmodule Hologram.Compiler.TransformerTest do
          [{:"::", [line: 1], [{:xyz, [line: 1], nil}, {:size, [line: 1], [3]}]}]}
 
       assert %IR.BitstringType{
-               segments: [%IR.BitstringSegment{modifiers: [size: %IR.IntegerType{value: 3}]}]
+               segments: [
+                 %IR.BitstringSegment{
+                   modifiers: [type: :integer, size: %IR.IntegerType{value: 3}]
+                 }
+               ]
              } = transform(ast, %Context{})
     end
 
@@ -285,7 +295,11 @@ defmodule Hologram.Compiler.TransformerTest do
       ast = {:<<>>, [line: 1], [{:"::", [line: 1], [{:xyz, [line: 1], nil}, 3]}]}
 
       assert %IR.BitstringType{
-               segments: [%IR.BitstringSegment{modifiers: [size: %IR.IntegerType{value: 3}]}]
+               segments: [
+                 %IR.BitstringSegment{
+                   modifiers: [type: :integer, size: %IR.IntegerType{value: 3}]
+                 }
+               ]
              } = transform(ast, %Context{})
     end
 
@@ -297,12 +311,59 @@ defmodule Hologram.Compiler.TransformerTest do
 
       assert %IR.BitstringType{
                segments: [
-                 %IR.BitstringSegment{modifiers: [unit: 5, size: %IR.IntegerType{value: 3}]}
+                 %IR.BitstringSegment{
+                   modifiers: [type: :integer, unit: 5, size: %IR.IntegerType{value: 3}]
+                 }
                ]
              } = transform(ast, %Context{})
     end
 
     # --- TYPE MODIFIER ---
+
+    test "default type for float literal" do
+      # <<5.0>>
+      ast = {:<<>>, [line: 1], [5.0]}
+
+      assert %IR.BitstringType{segments: [%IR.BitstringSegment{modifiers: [type: :float]}]} =
+               transform(ast, %Context{})
+    end
+
+    test "default type for integer literal" do
+      # <<5>>
+      ast = {:<<>>, [line: 1], [5]}
+
+      assert %IR.BitstringType{segments: [%IR.BitstringSegment{modifiers: [type: :integer]}]} =
+               transform(ast, %Context{})
+    end
+
+    test "default type for string literal" do
+      # <<"abc">>
+      ast = {:<<>>, [line: 1], ["abc"]}
+
+      assert %IR.BitstringType{segments: [%IR.BitstringSegment{modifiers: [type: :utf8]}]} =
+               transform(ast, %Context{})
+    end
+
+    test "default type for variable" do
+      # <<xyz>>
+      ast = {:<<>>, [line: 1], [{:xyz, [line: 1], nil}]}
+
+      assert %IR.BitstringType{segments: [%IR.BitstringSegment{modifiers: [type: :integer]}]} =
+               transform(ast, %Context{})
+    end
+
+    test "default type for expression" do
+      # <<Map.get(my_map, :my_key)>>
+      ast =
+        {:<<>>, [line: 1],
+         [
+           {{:., [line: 1], [{:__aliases__, [line: 1], [:Map]}, :get]}, [line: 1],
+            [{:my_map, [line: 1], nil}, :my_key]}
+         ]}
+
+      assert %IR.BitstringType{segments: [%IR.BitstringSegment{modifiers: [type: :integer]}]} =
+               transform(ast, %Context{})
+    end
 
     test "binary type modifier" do
       # <<xyz::binary>>
@@ -402,8 +463,9 @@ defmodule Hologram.Compiler.TransformerTest do
         {:<<>>, [line: 1],
          [{:"::", [line: 1], [{:xyz, [line: 1], nil}, {:unit, [line: 1], [3]}]}]}
 
-      assert %IR.BitstringType{segments: [%IR.BitstringSegment{modifiers: [unit: 3]}]} =
-               transform(ast, %Context{})
+      assert %IR.BitstringType{
+               segments: [%IR.BitstringSegment{modifiers: [type: :integer, unit: 3]}]
+             } = transform(ast, %Context{})
     end
 
     test "shorthand unit modifier syntax inside size * unit group" do
@@ -414,7 +476,9 @@ defmodule Hologram.Compiler.TransformerTest do
 
       assert %IR.BitstringType{
                segments: [
-                 %IR.BitstringSegment{modifiers: [unit: 5, size: %IR.IntegerType{value: 3}]}
+                 %IR.BitstringSegment{
+                   modifiers: [type: :integer, unit: 5, size: %IR.IntegerType{value: 3}]
+                 }
                ]
              } = transform(ast, %Context{})
     end
