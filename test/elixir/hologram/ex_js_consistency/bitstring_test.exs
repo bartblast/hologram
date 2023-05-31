@@ -48,6 +48,10 @@ defmodule Hologram.ExJsConsistency.BitstringTest do
                      build_bitstring.(<<1::1, 0::1, 1::1>>)
                    end
     end
+
+    test "with bitstring type modifier" do
+      assert to_bit_list(<<(<<1::1, 0::1, 1::1, 0::1>>)::bitstring>>) == [1, 0, 1, 0]
+    end
   end
 
   describe "float value" do
