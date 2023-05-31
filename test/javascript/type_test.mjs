@@ -18,8 +18,14 @@ describe("atom()", () => {
 
 describe("bitstring()", () => {
   it("builds bitstring from segments array", () => {
-    const segment1 = Type.bitstringSegment(Type.integer(170), {});
-    const segment2 = Type.bitstringSegment(Type.integer(-22), {});
+    const segment1 = Type.bitstringSegment(Type.integer(170), {
+      type: "integer",
+    });
+
+    const segment2 = Type.bitstringSegment(Type.integer(-22), {
+      type: "integer",
+    });
+
     const result = Type.bitstring([segment1, segment2]);
 
     const expected = {
