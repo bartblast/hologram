@@ -52,6 +52,16 @@ defmodule Hologram.ExJsConsistency.BitstringTest do
     test "with bitstring type modifier" do
       assert to_bit_list(<<(<<1::1, 0::1, 1::1, 0::1>>)::bitstring>>) == [1, 0, 1, 0]
     end
+
+    test "with float type modifier" do
+      assert_raise ArgumentError,
+                   "construction of binary failed: segment 1 of type 'float': expected a float or an integer but got: <<5::size(3)>>",
+                   fn ->
+                     # The bitstring needs to be built dynamically, otherwise it won't compile.
+                     build_bitstring = fn segment -> <<segment::float>> end
+                     build_bitstring.(<<1::1, 0::1, 1::1>>)
+                   end
+    end
   end
 
   describe "float value" do

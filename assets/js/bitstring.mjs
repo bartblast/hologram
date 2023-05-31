@@ -151,6 +151,15 @@ export default class Bitstring {
 
   // private
   static _validateFloatSegment(segment, index) {
+    if (segment.value.type !== "float") {
+      const inspectedValue = Interpreter.inspect(segment.value);
+
+      Interpreter.raiseError(
+        "ArgumentError",
+        `construction of binary failed: segment 1 of type 'float': expected a float or an integer but got: ${inspectedValue}`
+      );
+    }
+
     if (segment.size === null && segment.unit !== null) {
       Interpreter.raiseError(
         "CompileError",
