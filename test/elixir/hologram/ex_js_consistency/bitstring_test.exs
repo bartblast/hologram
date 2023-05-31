@@ -36,6 +36,18 @@ defmodule Hologram.ExJsConsistency.BitstringTest do
       assert to_bit_list(<<(<<1::1, 0::1, 1::1, 0::1, 1::1, 0::1, 1::1, 0::1>>)::binary>>) ==
                [1, 0, 1, 0, 1, 0, 1, 0]
     end
+
+    test "with binary type modifier when segment number of bits is not divisible by 8" do
+      # 5 == 0b101
+
+      assert_raise ArgumentError,
+                   "construction of binary failed: segment 1 of type 'binary': the size of the value <<5::size(3)>> is not a multiple of the unit for the segment",
+                   fn ->
+                     # The bitstring needs to be built dynamically, otherwise it won't compile.
+                     build_bitstring = fn segment -> <<segment::binary>> end
+                     build_bitstring.(<<1::1, 0::1, 1::1>>)
+                   end
+    end
   end
 
   describe "float value" do

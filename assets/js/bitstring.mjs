@@ -133,6 +133,22 @@ export default class Bitstring {
   }
 
   // private
+  static _validateBinarySegment(segment, index) {
+    if (
+      segment.value.type === "bitstring" &&
+      segment.value.bits.length % 8 !== 0
+    ) {
+      const inspectedValue = Interpreter.inspect(segment.value);
+      Interpreter.raiseError(
+        "ArgumentError",
+        `construction of binary failed: segment ${index} of type 'binary': the size of the value ${inspectedValue} is not a multiple of the unit for the segment`
+      );
+    }
+
+    return true;
+  }
+
+  // private
   static _validateFloatSegment(segment, index) {
     if (segment.size === null && segment.unit !== null) {
       Interpreter.raiseError(
@@ -173,6 +189,9 @@ export default class Bitstring {
   // private
   static _validateSegment(segment, index) {
     switch (segment.type) {
+      case "binary":
+        return Bitstring._validateBinarySegment(segment, index);
+
       case "bitstring":
         return true;
 

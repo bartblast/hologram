@@ -114,6 +114,20 @@ describe("from()", () => {
 
       assert.deepStrictEqual(result, expected);
     });
+
+    it("with binary type modifier when segment number of bits is not divisible by 8", () => {
+      const segment = Type.bitstringSegment(Type.bitstring([1, 0, 1]), {
+        type: "binary",
+      });
+
+      assert.throw(
+        () => {
+          Bitstring.from([segment]);
+        },
+        Error,
+        `(ArgumentError) construction of binary failed: segment 1 of type 'binary': the size of the value {"type":"bitstring","bits":{"0":1,"1":0,"2":1}} is not a multiple of the unit for the segment`
+      );
+    });
   });
 
   describe("float value", () => {
