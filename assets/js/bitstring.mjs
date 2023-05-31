@@ -139,6 +139,7 @@ export default class Bitstring {
       segment.value.bits.length % 8 !== 0
     ) {
       const inspectedValue = Interpreter.inspect(segment.value);
+
       Interpreter.raiseError(
         "ArgumentError",
         `construction of binary failed: segment ${index} of type 'binary': the size of the value ${inspectedValue} is not a multiple of the unit for the segment`
