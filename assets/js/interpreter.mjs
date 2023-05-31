@@ -28,6 +28,8 @@ export default class Interpreter {
       case "atom":
         return ":" + term.value;
 
+      // TODO: case "bitstring"
+
       case "float":
       case "integer":
         return term.value.toString();
