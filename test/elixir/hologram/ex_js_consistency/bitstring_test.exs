@@ -168,6 +168,12 @@ defmodule Hologram.ExJsConsistency.BitstringTest do
                    "construction of binary failed: segment 1 of type 'binary': expected a binary but got: 123.45",
                    fn -> build_from_value_with_bitstring_type_modifier(123.45) end
     end
+
+    test "with float type modifier" do
+      # For bit list values reference the float value defaults test."
+      assert to_bit_list(<<123.45::float>>) ==
+               to_bit_list(<<64, 94, 220, 204, 204, 204, 204, 205>>)
+    end
   end
 
   describe "integer value" do

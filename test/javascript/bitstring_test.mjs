@@ -244,6 +244,9 @@ describe("from()", () => {
         "(ArgumentError) construction of binary failed: segment 1 of type 'binary': expected a binary but got: 123.45"
       );
     });
+
+    // Same test as the float value defaults test.
+    // it("with float type modifier")
   });
 
   describe("integer value", () => {
