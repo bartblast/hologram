@@ -186,7 +186,7 @@ describe("from()", () => {
           Bitstring.from([segment]);
         },
         Error,
-        `(ArgumentError) construction of binary failed: segment 1 of type 'utf8': expected a non-negative integer but got: {"type":"bitstring","bits":{"0":0,"1":1,"2":1,"3":0,"4":0,"5":0,"6":0,"7":1}}`
+        `(ArgumentError) construction of binary failed: segment 1 of type 'utf8': expected a non-negative integer encodable as utf8 but got: {"type":"bitstring","bits":{"0":0,"1":1,"2":1,"3":0,"4":0,"5":0,"6":0,"7":1}}`
       );
     });
   });

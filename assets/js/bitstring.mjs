@@ -221,7 +221,7 @@ export default class Bitstring {
       Bitstring._raiseTypeMismatchError(
         index,
         segment,
-        "a non-negative integer"
+        "a non-negative integer encodable as utf8"
       );
     }
 
