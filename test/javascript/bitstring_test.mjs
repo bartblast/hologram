@@ -230,6 +230,20 @@ describe("from()", () => {
         "(ArgumentError) construction of binary failed: segment 1 of type 'binary': expected a binary but got: 123.45"
       );
     });
+
+    it("with bistring type modifier", () => {
+      const segment = Type.bitstringSegment(Type.float(123.45), {
+        type: "bitstring",
+      });
+
+      assert.throw(
+        () => {
+          Bitstring.from([segment]);
+        },
+        Error,
+        "(ArgumentError) construction of binary failed: segment 1 of type 'binary': expected a binary but got: 123.45"
+      );
+    });
   });
 
   describe("integer value", () => {

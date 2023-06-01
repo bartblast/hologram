@@ -20,6 +20,10 @@ defmodule Hologram.ExJsConsistency.BitstringTest do
     <<value::binary>>
   end
 
+  defp build_from_value_with_bitstring_type_modifier(value) do
+    <<value::bitstring>>
+  end
+
   defp build_from_value_with_float_type_modifier(value) do
     <<value::float>>
   end
@@ -157,6 +161,12 @@ defmodule Hologram.ExJsConsistency.BitstringTest do
       assert_raise ArgumentError,
                    "construction of binary failed: segment 1 of type 'binary': expected a binary but got: 123.45",
                    fn -> build_from_value_with_binary_type_modifier(123.45) end
+    end
+
+    test "with bitstring type modifier" do
+      assert_raise ArgumentError,
+                   "construction of binary failed: segment 1 of type 'binary': expected a binary but got: 123.45",
+                   fn -> build_from_value_with_bitstring_type_modifier(123.45) end
     end
   end
 

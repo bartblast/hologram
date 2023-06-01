@@ -107,9 +107,14 @@ export default class Bitstring {
   }
 
   // private
-  static _raiseTypeMismatchError(index, segment, expectedTypesStr) {
-    const inspectedValue = Interpreter.inspect(segment.value);
-    const message = `construction of binary failed: segment ${index} of type '${segment.type}': expected ${expectedTypesStr} but got: ${inspectedValue}`;
+  static _raiseTypeMismatchError(
+    index,
+    segmentType,
+    expectedValueTypesStr,
+    value
+  ) {
+    const inspectedValue = Interpreter.inspect(value);
+    const message = `construction of binary failed: segment ${index} of type '${segmentType}': expected ${expectedValueTypesStr} but got: ${inspectedValue}`;
 
     Interpreter.raiseError("ArgumentError", message);
   }
@@ -147,7 +152,26 @@ export default class Bitstring {
     }
 
     if (segment.value.type === "float") {
-      Bitstring._raiseTypeMismatchError(index, segment, "a binary");
+      Bitstring._raiseTypeMismatchError(
+        index,
+        "binary",
+        "a binary",
+        segment.value
+      );
+    }
+
+    return true;
+  }
+
+  // private
+  static _validateBitstringSegment(segment, index) {
+    if (segment.value.type === "float") {
+      Bitstring._raiseTypeMismatchError(
+        index,
+        "binary",
+        "a binary",
+        segment.value
+      );
     }
 
     return true;
@@ -158,8 +182,9 @@ export default class Bitstring {
     if (segment.value.type !== "float") {
       Bitstring._raiseTypeMismatchError(
         index,
-        segment,
-        "a float or an integer"
+        "float",
+        "a float or an integer",
+        segment.value
       );
     }
 
@@ -193,7 +218,12 @@ export default class Bitstring {
   // private
   static _validateIntegerSegment(segment, index) {
     if (segment.value.type !== "integer") {
-      Bitstring._raiseTypeMismatchError(index, segment, "an integer");
+      Bitstring._raiseTypeMismatchError(
+        index,
+        "integer",
+        "an integer",
+        segment.value
+      );
     }
 
     return true;
@@ -206,7 +236,7 @@ export default class Bitstring {
         return Bitstring._validateBinarySegment(segment, index);
 
       case "bitstring":
-        return true;
+        return Bitstring._validateBitstringSegment(segment, index);
 
       case "float":
         return Bitstring._validateFloatSegment(segment, index);
@@ -224,8 +254,9 @@ export default class Bitstring {
     if (segment.value.type === "bitstring") {
       Bitstring._raiseTypeMismatchError(
         index,
-        segment,
-        "a non-negative integer encodable as utf8"
+        "utf8",
+        "a non-negative integer encodable as utf8",
+        segment.value
       );
     }
 
