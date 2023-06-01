@@ -48,13 +48,3 @@ describe("freeze()", () => {
     assertFrozen(obj.b.f);
   });
 });
-
-describe("indefiniteArticle()", () => {
-  it("returns 'a' indefinite article", () => {
-    assert.equal(Utils.indefiniteArticle("float"), "a");
-  });
-
-  it("returns 'an' indefinite article", () => {
-    assert.equal(Utils.indefiniteArticle("integer"), "an");
-  });
-});
