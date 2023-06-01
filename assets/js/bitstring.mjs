@@ -251,7 +251,7 @@ export default class Bitstring {
 
   // private
   static _validateUtf8Segment(segment, index) {
-    if (segment.value.type === "bitstring") {
+    if (["bitstring", "float"].includes(segment.value.type)) {
       Bitstring._raiseTypeMismatchError(
         index,
         "utf8",

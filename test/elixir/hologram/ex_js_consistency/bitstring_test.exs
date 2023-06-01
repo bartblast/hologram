@@ -180,6 +180,12 @@ defmodule Hologram.ExJsConsistency.BitstringTest do
                    "construction of binary failed: segment 1 of type 'integer': expected an integer but got: 123.45",
                    fn -> build_from_value_with_integer_type_modifier(123.45) end
     end
+
+    test "with utf8 type modifer" do
+      assert_raise ArgumentError,
+                   "construction of binary failed: segment 1 of type 'utf8': expected a non-negative integer encodable as utf8 but got: 123.45",
+                   fn -> build_from_value_with_utf8_type_modifier(123.45) end
+    end
   end
 
   describe "integer value" do
