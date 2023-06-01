@@ -211,12 +211,20 @@ export default class Bitstring {
         return Bitstring._validateIntegerSegment(segment, index);
 
       case "utf8":
-        return Bitstring._validateUtf8Segment(segment);
+        return Bitstring._validateUtf8Segment(segment, index);
     }
   }
 
   // private
-  static _validateUtf8Segment(segment) {
+  static _validateUtf8Segment(segment, index) {
+    if (segment.value.type === "bitstring") {
+      Bitstring._raiseTypeMismatchError(
+        index,
+        segment,
+        "a non-negative integer"
+      );
+    }
+
     if (segment.size !== null || segment.unit !== null) {
       Interpreter.raiseError(
         "CompileError",

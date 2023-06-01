@@ -72,6 +72,20 @@ defmodule Hologram.ExJsConsistency.BitstringTest do
                      build_bitstring.(<<1::1, 0::1, 1::1>>)
                    end
     end
+
+    test "with utf8 type modifier" do
+      assert <<"a">> == <<0::1, 1::1, 1::1, 0::1, 0::1, 0::1, 0::1, 1::1>>
+
+      assert_raise ArgumentError,
+                   "construction of binary failed: segment 1 of type 'utf8': expected a non-negative integer but got: \"a\"",
+                   fn ->
+                     # The bitstring needs to be built dynamically, otherwise it won't compile.
+                     build_bitstring = fn segment -> <<segment::utf8>> end
+                     build_bitstring.(<<0::1, 1::1, 1::1, 0::1, 0::1, 0::1, 0::1, 1::1>>)
+                   end
+    end
+
+    # TODO: utf8, utf16, utf32
   end
 
   describe "float value" do

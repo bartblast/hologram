@@ -171,6 +171,24 @@ describe("from()", () => {
         `(ArgumentError) construction of binary failed: segment 1 of type 'integer': expected an integer but got: {"type":"bitstring","bits":{"0":1,"1":0,"2":1}}`
       );
     });
+
+    it("with utf8 type modifier", () => {
+      // ?a == 97 == 0b01100001
+      const segment = Type.bitstringSegment(
+        Type.bitstring([0, 1, 1, 0, 0, 0, 0, 1]),
+        {
+          type: "utf8",
+        }
+      );
+
+      assert.throw(
+        () => {
+          Bitstring.from([segment]);
+        },
+        Error,
+        `(ArgumentError) construction of binary failed: segment 1 of type 'utf8': expected a non-negative integer but got: {"type":"bitstring","bits":{"0":0,"1":1,"2":1,"3":0,"4":0,"5":0,"6":0,"7":1}}`
+      );
+    });
   });
 
   describe("float value", () => {
