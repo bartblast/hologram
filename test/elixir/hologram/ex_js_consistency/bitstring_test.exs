@@ -8,6 +8,30 @@ defmodule Hologram.ExJsConsistency.BitstringTest do
   use Hologram.Test.BasicCase, async: true
   import Hologram.Commons.BitstringUtils, only: [to_bit_list: 1]
 
+  # The build_from_value/1 and build_from_value_with_*_*_modifier/1 helpers
+  # enable to built bitstrings with specific value and modifier combinations,
+  # which wouldn't compile otherwise.
+
+  defp build_from_value(value) do
+    <<value>>
+  end
+
+  defp build_from_value_with_binary_type_modifier(value) do
+    <<value::binary>>
+  end
+
+  defp build_from_value_with_float_type_modifier(value) do
+    <<value::float>>
+  end
+
+  defp build_from_value_with_integer_type_modifier(value) do
+    <<value::integer>>
+  end
+
+  defp build_from_value_with_utf8_type_modifier(value) do
+    <<value::utf8>>
+  end
+
   describe "number and structure of segments" do
     test "builds empty bitstring without segments" do
       assert to_bit_list(<<>>) == []
@@ -42,11 +66,7 @@ defmodule Hologram.ExJsConsistency.BitstringTest do
 
       assert_raise ArgumentError,
                    "construction of binary failed: segment 1 of type 'binary': the size of the value <<5::size(3)>> is not a multiple of the unit for the segment",
-                   fn ->
-                     # The bitstring needs to be built dynamically, otherwise it won't compile.
-                     build_bitstring = fn segment -> <<segment::binary>> end
-                     build_bitstring.(<<1::1, 0::1, 1::1>>)
-                   end
+                   fn -> build_from_value_with_binary_type_modifier(<<1::1, 0::1, 1::1>>) end
     end
 
     test "with bitstring type modifier" do
@@ -56,21 +76,13 @@ defmodule Hologram.ExJsConsistency.BitstringTest do
     test "with float type modifier" do
       assert_raise ArgumentError,
                    "construction of binary failed: segment 1 of type 'float': expected a float or an integer but got: <<5::size(3)>>",
-                   fn ->
-                     # The bitstring needs to be built dynamically, otherwise it won't compile.
-                     build_bitstring = fn segment -> <<segment::float>> end
-                     build_bitstring.(<<1::1, 0::1, 1::1>>)
-                   end
+                   fn -> build_from_value_with_float_type_modifier(<<1::1, 0::1, 1::1>>) end
     end
 
     test "with integer type modifier" do
       assert_raise ArgumentError,
                    "construction of binary failed: segment 1 of type 'integer': expected an integer but got: <<5::size(3)>>",
-                   fn ->
-                     # The bitstring needs to be built dynamically, otherwise it won't compile.
-                     build_bitstring = fn segment -> <<segment::integer>> end
-                     build_bitstring.(<<1::1, 0::1, 1::1>>)
-                   end
+                   fn -> build_from_value_with_integer_type_modifier(<<1::1, 0::1, 1::1>>) end
     end
 
     test "with utf8 type modifier" do
@@ -79,9 +91,9 @@ defmodule Hologram.ExJsConsistency.BitstringTest do
       assert_raise ArgumentError,
                    "construction of binary failed: segment 1 of type 'utf8': expected a non-negative integer encodable as utf8 but got: \"a\"",
                    fn ->
-                     # The bitstring needs to be built dynamically, otherwise it won't compile.
-                     build_bitstring = fn segment -> <<segment::utf8>> end
-                     build_bitstring.(<<0::1, 1::1, 1::1, 0::1, 0::1, 0::1, 0::1, 1::1>>)
+                     build_from_value_with_utf8_type_modifier(
+                       <<0::1, 1::1, 1::1, 0::1, 0::1, 0::1, 0::1, 1::1>>
+                     )
                    end
     end
 
@@ -144,11 +156,7 @@ defmodule Hologram.ExJsConsistency.BitstringTest do
     test "with binary type modifier" do
       assert_raise ArgumentError,
                    "construction of binary failed: segment 1 of type 'binary': expected a binary but got: 123.45",
-                   fn ->
-                     # The bitstring needs to be built dynamically, otherwise it won't compile.
-                     build_bitstring = fn segment -> <<segment::binary>> end
-                     build_bitstring.(123.45)
-                   end
+                   fn -> build_from_value_with_binary_type_modifier(123.45) end
     end
   end
 
@@ -255,16 +263,11 @@ defmodule Hologram.ExJsConsistency.BitstringTest do
   end
 
   describe "values of not supported data types" do
-    defp build_bitstring(term) do
-      (fn segment -> <<segment>> end).(term)
-    end
-
     test "atom values are not supported" do
       assert_raise ArgumentError,
                    "construction of binary failed: segment 1 of type 'integer': expected an integer but got: :abc",
                    fn ->
-                     # The bitstring needs to be built dynamically, otherwise it won't compile.
-                     build_bitstring(:abc)
+                     build_from_value(:abc)
                    end
     end
 
@@ -272,8 +275,7 @@ defmodule Hologram.ExJsConsistency.BitstringTest do
       assert_raise ArgumentError,
                    "construction of binary failed: segment 1 of type 'integer': expected an integer but got: [1, 2]",
                    fn ->
-                     # The bitstring needs to be built dynamically, otherwise it won't compile.
-                     build_bitstring([1, 2])
+                     build_from_value([1, 2])
                    end
     end
 
@@ -281,8 +283,7 @@ defmodule Hologram.ExJsConsistency.BitstringTest do
       assert_raise ArgumentError,
                    "construction of binary failed: segment 1 of type 'integer': expected an integer but got: {1, 2}",
                    fn ->
-                     # The bitstring needs to be built dynamically, otherwise it won't compile.
-                     build_bitstring({1, 2})
+                     build_from_value({1, 2})
                    end
     end
 
