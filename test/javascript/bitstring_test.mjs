@@ -248,7 +248,7 @@ describe("from()", () => {
     // Same test as the float value defaults test.
     // it("with float type modifier")
 
-    it("with bistring type modifier", () => {
+    it("with integer type modifier", () => {
       const segment = Type.bitstringSegment(Type.float(123.45), {
         type: "integer",
       });
@@ -339,8 +339,22 @@ describe("from()", () => {
     });
 
     it("with binary type modifier", () => {
-      const segment = Type.bitstringSegment(Type.float(170), {
+      const segment = Type.bitstringSegment(Type.integer(170), {
         type: "binary",
+      });
+
+      assert.throw(
+        () => {
+          Bitstring.from([segment]);
+        },
+        Error,
+        "(ArgumentError) construction of binary failed: segment 1 of type 'binary': expected a binary but got: 170"
+      );
+    });
+
+    it("with bitstring type modifier", () => {
+      const segment = Type.bitstringSegment(Type.integer(170), {
+        type: "bitstring",
       });
 
       assert.throw(

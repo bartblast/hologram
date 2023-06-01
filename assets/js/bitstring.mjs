@@ -151,7 +151,7 @@ export default class Bitstring {
       );
     }
 
-    if (segment.value.type === "float") {
+    if (["float", "integer"].includes(segment.value.type)) {
       Bitstring._raiseTypeMismatchError(
         index,
         "binary",
@@ -165,7 +165,7 @@ export default class Bitstring {
 
   // private
   static _validateBitstringSegment(segment, index) {
-    if (segment.value.type === "float") {
+    if (["float", "integer"].includes(segment.value.type)) {
       Bitstring._raiseTypeMismatchError(
         index,
         "binary",
