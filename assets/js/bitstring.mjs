@@ -107,10 +107,15 @@ export default class Bitstring {
   }
 
   // private
-  static _raiseInvalidValueTypeError(index, value, type) {
-    const inspectedValue = Interpreter.inspect(value);
-    const indefiniteArticle = Utils.indefiniteArticle(type);
-    const message = `construction of binary failed: segment ${index} of type '${type}': expected ${indefiniteArticle} ${type} but got: ${inspectedValue}`;
+  static _raiseTypeMismatchError(index, segment, expectedTypes) {
+    const inspectedValue = Interpreter.inspect(segment.value);
+
+    const expectedTypesStr = expectedTypes
+      .map((type) => Utils.indefiniteArticle(type) + " " + type)
+      .join(" or ");
+
+    const message = `construction of binary failed: segment ${index} of type '${segment.type}': expected ${expectedTypesStr} but got: ${inspectedValue}`;
+
     Interpreter.raiseError("ArgumentError", message);
   }
 
@@ -152,12 +157,7 @@ export default class Bitstring {
   // private
   static _validateFloatSegment(segment, index) {
     if (segment.value.type !== "float") {
-      const inspectedValue = Interpreter.inspect(segment.value);
-
-      Interpreter.raiseError(
-        "ArgumentError",
-        `construction of binary failed: segment 1 of type 'float': expected a float or an integer but got: ${inspectedValue}`
-      );
+      Bitstring._raiseTypeMismatchError(index, segment, ["float", "integer"]);
     }
 
     if (segment.size === null && segment.unit !== null) {
@@ -190,7 +190,7 @@ export default class Bitstring {
   // private
   static _validateIntegerSegment(segment, index) {
     if (segment.value.type !== "integer") {
-      Bitstring._raiseInvalidValueTypeError(index, segment.value, "integer");
+      Bitstring._raiseTypeMismatchError(index, segment, ["integer"]);
     }
 
     return true;
