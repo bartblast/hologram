@@ -365,6 +365,34 @@ describe("from()", () => {
         "(ArgumentError) construction of binary failed: segment 1 of type 'binary': expected a binary but got: 170"
       );
     });
+
+    it("with float type modifier", () => {
+      const segment = Type.bitstringSegment(
+        Type.integer(1234567890123456789n),
+        {
+          type: "float",
+        }
+      );
+
+      const result = Bitstring.from([segment]);
+
+      const expected = {
+        type: "bitstring",
+        // prettier-ignore
+        bits: new Uint8Array([
+                0, 1, 0, 0, 0, 0, 1, 1,
+                1, 0, 1, 1, 0, 0, 0, 1,
+                0, 0, 1, 0, 0, 0, 1, 0,
+                0, 0, 0, 1, 0, 0, 0, 0,
+                1, 1, 1, 1, 0, 1, 0, 0,
+                0, 1, 1, 1, 1, 1, 0, 1,
+                1, 1, 1, 0, 1, 0, 0, 1,
+                1, 0, 0, 0, 0, 0, 0, 1
+              ]),
+      };
+
+      assert.deepStrictEqual(result, expected);
+    });
   });
 
   describe("string value", () => {

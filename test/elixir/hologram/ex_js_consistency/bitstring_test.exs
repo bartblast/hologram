@@ -242,6 +242,60 @@ defmodule Hologram.ExJsConsistency.BitstringTest do
                    "construction of binary failed: segment 1 of type 'binary': expected a binary but got: 170",
                    fn -> build_from_value_with_bitstring_type_modifier(170) end
     end
+
+    test "with float type modifier" do
+      # <<1234567890123456789.0>> == <<67, 177, 34, 16, 244, 125, 233, 129>>
+      # 67 == 0b01000011
+      # 177 == 0b10110001
+      # 34 == 0b00100010
+      # 16 == 0b00010000
+      # 244 == 0b11110100
+      # 125 == 0b01111101
+      # 233 == 0b11101001
+      # 129 == 0b10000001
+
+      assert to_bit_list(<<1_234_567_890_123_456_789.0>>) ==
+               to_bit_list(<<67, 177, 34, 16, 244, 125, 233, 129>>)
+
+      # Specified this way, because it's not possible to make the formatter ignore specific lines of code.
+      bitstring =
+        """
+        <<
+          0::1, 1::1, 0::1, 0::1, 0::1, 0::1, 1::1, 1::1,
+          1::1, 0::1, 1::1, 1::1, 0::1, 0::1, 0::1, 1::1,
+          0::1, 0::1, 1::1, 0::1, 0::1, 0::1, 1::1, 0::1,
+          0::1, 0::1, 0::1, 1::1, 0::1, 0::1, 0::1, 0::1,
+          1::1, 1::1, 1::1, 1::1, 0::1, 1::1, 0::1, 0::1,
+          0::1, 1::1, 1::1, 1::1, 1::1, 1::1, 0::1, 1::1,
+          1::1, 1::1, 1::1, 0::1, 1::1, 0::1, 0::1, 1::1,
+          1::1, 0::1, 0::1, 0::1, 0::1, 0::1, 0::1, 1::1
+        >>
+        """
+        |> Code.eval_string()
+        |> elem(0)
+
+      assert to_bit_list(<<1_234_567_890_123_456_789.0>>) == to_bit_list(bitstring)
+
+      # Specified this way, because it's not possible to make the formatter ignore specific lines of code.
+      bits =
+        """
+        [
+          0, 1, 0, 0, 0, 0, 1, 1,
+          1, 0, 1, 1, 0, 0, 0, 1,
+          0, 0, 1, 0, 0, 0, 1, 0,
+          0, 0, 0, 1, 0, 0, 0, 0,
+          1, 1, 1, 1, 0, 1, 0, 0,
+          0, 1, 1, 1, 1, 1, 0, 1,
+          1, 1, 1, 0, 1, 0, 0, 1,
+          1, 0, 0, 0, 0, 0, 0, 1
+        ]
+        """
+        |> Code.eval_string()
+        |> elem(0)
+
+      assert to_bit_list(<<1_234_567_890_123_456_789.0>>) == bits
+      assert to_bit_list(<<1_234_567_890_123_456_789::float>>) == bits
+    end
   end
 
   describe "string value" do

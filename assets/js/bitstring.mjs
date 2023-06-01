@@ -1,6 +1,7 @@
 "use strict";
 
 import Interpreter from "./interpreter.mjs";
+import Type from "./type.mjs";
 import Utils from "./utils.mjs";
 
 export default class Bitstring {
@@ -49,6 +50,14 @@ export default class Bitstring {
 
   // private
   static _buildBitArrayFromInteger(segment) {
+    if (segment.type === "float") {
+      const segmentCastedToFloat = {
+        ...segment,
+        value: Type.float(Number(segment.value.value)),
+      };
+      return Bitstring._buildBitArrayFromFloat(segmentCastedToFloat);
+    }
+
     const value = segment.value.value;
     const size = Bitstring._resolveSizeModifierValue(segment, 8n);
     const unit = Bitstring._resolveUnitModifierValue(segment, 1n);
@@ -179,7 +188,7 @@ export default class Bitstring {
 
   // private
   static _validateFloatSegment(segment, index) {
-    if (segment.value.type !== "float") {
+    if (!["float", "integer"].includes(segment.value.type)) {
       Bitstring._raiseTypeMismatchError(
         index,
         "float",
