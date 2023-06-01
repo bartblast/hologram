@@ -146,6 +146,10 @@ export default class Bitstring {
       );
     }
 
+    if (segment.value.type === "float") {
+      Bitstring._raiseTypeMismatchError(index, segment, "a binary");
+    }
+
     return true;
   }
 

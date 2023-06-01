@@ -140,6 +140,16 @@ defmodule Hologram.ExJsConsistency.BitstringTest do
 
       assert to_bit_list(<<123.45>>) == bits
     end
+
+    test "with binary type modifier" do
+      assert_raise ArgumentError,
+                   "construction of binary failed: segment 1 of type 'binary': expected a binary but got: 123.45",
+                   fn ->
+                     # The bitstring needs to be built dynamically, otherwise it won't compile.
+                     build_bitstring = fn segment -> <<segment::binary>> end
+                     build_bitstring.(123.45)
+                   end
+    end
   end
 
   describe "integer value" do

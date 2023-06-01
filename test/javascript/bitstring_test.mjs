@@ -216,6 +216,20 @@ describe("from()", () => {
 
       assert.deepStrictEqual(result, expected);
     });
+
+    it("with binary type modifier", () => {
+      const segment = Type.bitstringSegment(Type.float(123.45), {
+        type: "binary",
+      });
+
+      assert.throw(
+        () => {
+          Bitstring.from([segment]);
+        },
+        Error,
+        "(ArgumentError) construction of binary failed: segment 1 of type 'binary': expected a binary but got: 123.45"
+      );
+    });
   });
 
   describe("integer value", () => {
