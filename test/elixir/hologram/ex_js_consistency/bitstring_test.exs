@@ -333,7 +333,7 @@ defmodule Hologram.ExJsConsistency.BitstringTest do
       assert to_bit_list(<<1_234_567_890_123_456_789::float>>) == bits
     end
 
-    test "with string value consisting of single ASCI character" do
+    test "with string value consisting of a single ASCI character" do
       assert_raise ArgumentError,
                    "construction of binary failed: segment 1 of type 'float': expected a float or an integer but got: \"a\"",
                    fn -> build_from_value_with_float_type_modifier("a") end
@@ -365,6 +365,18 @@ defmodule Hologram.ExJsConsistency.BitstringTest do
       assert <<-22::integer>> == <<-22>>
       assert <<4010::integer>> == <<4010>>
       assert <<-86::integer>> == <<-86>>
+    end
+
+    test "with string value consisting of a single ASCI character" do
+      assert_raise ArgumentError,
+                   "construction of binary failed: segment 1 of type 'integer': expected an integer but got: \"a\"",
+                   fn -> build_from_value_with_integer_type_modifier("a") end
+    end
+
+    test "with string value consisting of multiple ASCI characters" do
+      assert_raise ArgumentError,
+                   "construction of binary failed: segment 1 of type 'integer': expected an integer but got: \"abc\"",
+                   fn -> build_from_value_with_integer_type_modifier("abc") end
     end
   end
 

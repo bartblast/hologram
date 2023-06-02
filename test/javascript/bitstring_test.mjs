@@ -402,7 +402,7 @@ describe("from()", () => {
       assert.deepStrictEqual(result, expected);
     });
 
-    it("with string value consisting of single ASCI characters", () => {
+    it("with string value consisting of a single ASCI characters", () => {
       const segment = Type.bitstringSegment(Type.string("a"), {
         type: "float",
       });
@@ -462,6 +462,34 @@ describe("from()", () => {
 
     // Exactly the same as the defaults test for integer value.
     // it("with integer value")
+
+    it("with string value consisting of a single ASCI characters", () => {
+      const segment = Type.bitstringSegment(Type.string("a"), {
+        type: "integer",
+      });
+
+      assert.throw(
+        () => {
+          Bitstring.from([segment]);
+        },
+        Error,
+        `(ArgumentError) construction of binary failed: segment 1 of type 'integer': expected an integer but got: "a"`
+      );
+    });
+
+    it("with string value consisting of multiple ASCI characters", () => {
+      const segment = Type.bitstringSegment(Type.string("abc"), {
+        type: "integer",
+      });
+
+      assert.throw(
+        () => {
+          Bitstring.from([segment]);
+        },
+        Error,
+        `(ArgumentError) construction of binary failed: segment 1 of type 'integer': expected an integer but got: "abc"`
+      );
+    });
   });
 
   describe("utf8 type modifier", () => {
