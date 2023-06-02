@@ -128,6 +128,7 @@ export default class Bitstring {
     switch (encoding) {
       case "utf8":
         return new TextEncoder().encode(str);
+
       case "utf16":
         return Bitstring._encodeUtf16(str, "big");
     }
