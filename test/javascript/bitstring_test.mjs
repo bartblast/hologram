@@ -269,6 +269,32 @@ describe("from()", () => {
         "(ArgumentError) construction of binary failed: segment 1 of type 'binary': expected a binary but got: 170"
       );
     });
+
+    it("with string value", () => {
+      const segment = Type.bitstringSegment(Type.string("全息图"), {
+        type: "binary",
+      });
+
+      const result = Bitstring.from([segment]);
+
+      const expected = {
+        type: "bitstring",
+        // prettier-ignore
+        bits: new Uint8Array([
+            1, 1, 1, 0, 0, 1, 0, 1,
+            1, 0, 0, 0, 0, 1, 0, 1,
+            1, 0, 1, 0, 1, 0, 0, 0,
+            1, 1, 1, 0, 0, 1, 1, 0,
+            1, 0, 0, 0, 0, 0, 0, 1,
+            1, 0, 1, 0, 1, 1, 1, 1,
+            1, 1, 1, 0, 0, 1, 0, 1,
+            1, 0, 0, 1, 1, 0, 1, 1,
+            1, 0, 1, 1, 1, 1, 1, 0
+          ]),
+      };
+
+      assert.deepStrictEqual(result, expected);
+    });
   });
 
   describe("bistring type modifier", () => {

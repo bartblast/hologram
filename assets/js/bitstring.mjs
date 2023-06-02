@@ -126,6 +126,7 @@ export default class Bitstring {
   // private
   static _getBytesFromString(str, encoding) {
     switch (encoding) {
+      case "binary":
       case "utf8":
         return new TextEncoder().encode(str);
 
