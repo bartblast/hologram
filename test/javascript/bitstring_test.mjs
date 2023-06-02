@@ -402,7 +402,21 @@ describe("from()", () => {
       assert.deepStrictEqual(result, expected);
     });
 
-    it("with string value", () => {
+    it("with string value consisting of single ASCI characters", () => {
+      const segment = Type.bitstringSegment(Type.string("a"), {
+        type: "float",
+      });
+
+      assert.throw(
+        () => {
+          Bitstring.from([segment]);
+        },
+        Error,
+        `(ArgumentError) construction of binary failed: segment 1 of type 'float': expected a float or an integer but got: "a"`
+      );
+    });
+
+    it("with string value consisting of multiple ASCI characters", () => {
       const segment = Type.bitstringSegment(Type.string("abc"), {
         type: "float",
       });
