@@ -401,6 +401,20 @@ describe("from()", () => {
 
       assert.deepStrictEqual(result, expected);
     });
+
+    it("with string value", () => {
+      const segment = Type.bitstringSegment(Type.string("abc"), {
+        type: "float",
+      });
+
+      assert.throw(
+        () => {
+          Bitstring.from([segment]);
+        },
+        Error,
+        `(ArgumentError) construction of binary failed: segment 1 of type 'float': expected a float or an integer but got: "abc"`
+      );
+    });
   });
 
   describe("integer type modifier", () => {
