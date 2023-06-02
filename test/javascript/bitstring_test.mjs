@@ -83,8 +83,8 @@ describe("from()", () => {
     });
   });
 
-  describe("bitstring value", () => {
-    it("defaults for bitstring value", () => {
+  describe("defaults", () => {
+    it("for bitstring value", () => {
       const segment = Type.bitstringSegment(Type.bitstring([1, 0, 1, 0]), {
         type: "bitstring",
       });
@@ -99,88 +99,7 @@ describe("from()", () => {
       assert.deepStrictEqual(result, expected);
     });
 
-    it("with binary type modifier when segment number of bits is divisible by 8", () => {
-      const segment = Type.bitstringSegment(
-        Type.bitstring([1, 0, 1, 0, 1, 0, 1, 0]),
-        {type: "binary"}
-      );
-
-      const result = Bitstring.from([segment]);
-
-      const expected = {
-        type: "bitstring",
-        bits: new Uint8Array([1, 0, 1, 0, 1, 0, 1, 0]),
-      };
-
-      assert.deepStrictEqual(result, expected);
-    });
-
-    it("with binary type modifier when segment number of bits is not divisible by 8", () => {
-      const segment = Type.bitstringSegment(Type.bitstring([1, 0, 1]), {
-        type: "binary",
-      });
-
-      assert.throw(
-        () => {
-          Bitstring.from([segment]);
-        },
-        Error,
-        `(ArgumentError) construction of binary failed: segment 1 of type 'binary': the size of the value {"type":"bitstring","bits":{"0":1,"1":0,"2":1}} is not a multiple of the unit for the segment`
-      );
-    });
-
-    // Exactly the same as the bitstring value defaults test.
-    // it("with bitstring type modifier")
-
-    it("with float type modifier", () => {
-      const segment = Type.bitstringSegment(Type.bitstring([1, 0, 1]), {
-        type: "float",
-      });
-
-      assert.throw(
-        () => {
-          Bitstring.from([segment]);
-        },
-        Error,
-        `(ArgumentError) construction of binary failed: segment 1 of type 'float': expected a float or an integer but got: {"type":"bitstring","bits":{"0":1,"1":0,"2":1}}`
-      );
-    });
-
-    it("with integer type modifier", () => {
-      const segment = Type.bitstringSegment(Type.bitstring([1, 0, 1]), {
-        type: "integer",
-      });
-
-      assert.throw(
-        () => {
-          Bitstring.from([segment]);
-        },
-        Error,
-        `(ArgumentError) construction of binary failed: segment 1 of type 'integer': expected an integer but got: {"type":"bitstring","bits":{"0":1,"1":0,"2":1}}`
-      );
-    });
-
-    it("with utf8 type modifier", () => {
-      // ?a == 97 == 0b01100001
-      const segment = Type.bitstringSegment(
-        Type.bitstring([0, 1, 1, 0, 0, 0, 0, 1]),
-        {
-          type: "utf8",
-        }
-      );
-
-      assert.throw(
-        () => {
-          Bitstring.from([segment]);
-        },
-        Error,
-        `(ArgumentError) construction of binary failed: segment 1 of type 'utf8': expected a non-negative integer encodable as utf8 but got: {"type":"bitstring","bits":{"0":0,"1":1,"2":1,"3":0,"4":0,"5":0,"6":0,"7":1}}`
-      );
-    });
-  });
-
-  describe("float value", () => {
-    it("defaults for float value", () => {
+    it("for float value", () => {
       const segment = Type.bitstringSegment(Type.float(123.45), {
         type: "float",
       });
@@ -205,68 +124,7 @@ describe("from()", () => {
       assert.deepStrictEqual(result, expected);
     });
 
-    it("with binary type modifier", () => {
-      const segment = Type.bitstringSegment(Type.float(123.45), {
-        type: "binary",
-      });
-
-      assert.throw(
-        () => {
-          Bitstring.from([segment]);
-        },
-        Error,
-        "(ArgumentError) construction of binary failed: segment 1 of type 'binary': expected a binary but got: 123.45"
-      );
-    });
-
-    it("with bistring type modifier", () => {
-      const segment = Type.bitstringSegment(Type.float(123.45), {
-        type: "bitstring",
-      });
-
-      assert.throw(
-        () => {
-          Bitstring.from([segment]);
-        },
-        Error,
-        "(ArgumentError) construction of binary failed: segment 1 of type 'binary': expected a binary but got: 123.45"
-      );
-    });
-
-    // Exactly the same as the float value defaults test.
-    // it("with float type modifier")
-
-    it("with integer type modifier", () => {
-      const segment = Type.bitstringSegment(Type.float(123.45), {
-        type: "integer",
-      });
-
-      assert.throw(
-        () => {
-          Bitstring.from([segment]);
-        },
-        Error,
-        "(ArgumentError) construction of binary failed: segment 1 of type 'integer': expected an integer but got: 123.45"
-      );
-    });
-
-    it("with utf8 type modifier", () => {
-      const segment = Type.bitstringSegment(Type.float(123.45), {
-        type: "utf8",
-      });
-
-      assert.throw(
-        () => {
-          Bitstring.from([segment]);
-        },
-        Error,
-        "(ArgumentError) construction of binary failed: segment 1 of type 'utf8': expected a non-negative integer encodable as utf8 but got: 123.45"
-      );
-    });
-  });
-
-  describe("integer value", () => {
-    it("defaults for positive integer value that fits in 8 bits", () => {
+    it("for positive integer value that fits in 8 bits", () => {
       const segment = Type.bitstringSegment(Type.integer(170), {
         type: "integer",
       });
@@ -281,7 +139,7 @@ describe("from()", () => {
       assert.deepStrictEqual(result, expected);
     });
 
-    it("defaults for negative integer value that fits in 8 bits", () => {
+    it("for negative integer value that fits in 8 bits", () => {
       const segment = Type.bitstringSegment(Type.integer(-22), {
         type: "integer",
       });
@@ -296,7 +154,7 @@ describe("from()", () => {
       assert.deepStrictEqual(result, expected);
     });
 
-    it("defaults for positive integer value that fits in 12 bits", () => {
+    it("for positive integer value that fits in 12 bits", () => {
       const segment = Type.bitstringSegment(Type.integer(4010), {
         type: "integer",
       });
@@ -311,7 +169,7 @@ describe("from()", () => {
       assert.deepStrictEqual(result, expected);
     });
 
-    it("defaults for negative integer value that fits in 12 bits", () => {
+    it("for negative integer value that fits in 12 bits", () => {
       const segment = Type.bitstringSegment(Type.integer(-86), {
         type: "integer",
       });
@@ -326,7 +184,79 @@ describe("from()", () => {
       assert.deepStrictEqual(result, expected);
     });
 
-    it("with binary type modifier", () => {
+    it("for string value", () => {
+      const segment = Type.bitstringSegment(Type.string("全息图"), {
+        type: "utf8",
+      });
+
+      const result = Bitstring.from([segment]);
+
+      const expected = {
+        type: "bitstring",
+        // prettier-ignore
+        bits: new Uint8Array([
+            1, 1, 1, 0, 0, 1, 0, 1,
+            1, 0, 0, 0, 0, 1, 0, 1,
+            1, 0, 1, 0, 1, 0, 0, 0,
+            1, 1, 1, 0, 0, 1, 1, 0,
+            1, 0, 0, 0, 0, 0, 0, 1,
+            1, 0, 1, 0, 1, 1, 1, 1,
+            1, 1, 1, 0, 0, 1, 0, 1,
+            1, 0, 0, 1, 1, 0, 1, 1,
+            1, 0, 1, 1, 1, 1, 1, 0
+          ]),
+      };
+
+      assert.deepStrictEqual(result, expected);
+    });
+  });
+
+  describe("binary type modifier", () => {
+    it("with bitstring value when number of bits is divisible by 8", () => {
+      const segment = Type.bitstringSegment(
+        Type.bitstring([1, 0, 1, 0, 1, 0, 1, 0]),
+        {type: "binary"}
+      );
+
+      const result = Bitstring.from([segment]);
+
+      const expected = {
+        type: "bitstring",
+        bits: new Uint8Array([1, 0, 1, 0, 1, 0, 1, 0]),
+      };
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("with bitstring value when number of bits is not divisible by 8", () => {
+      const segment = Type.bitstringSegment(Type.bitstring([1, 0, 1]), {
+        type: "binary",
+      });
+
+      assert.throw(
+        () => {
+          Bitstring.from([segment]);
+        },
+        Error,
+        `(ArgumentError) construction of binary failed: segment 1 of type 'binary': the size of the value {"type":"bitstring","bits":{"0":1,"1":0,"2":1}} is not a multiple of the unit for the segment`
+      );
+    });
+
+    it("with float value", () => {
+      const segment = Type.bitstringSegment(Type.float(123.45), {
+        type: "binary",
+      });
+
+      assert.throw(
+        () => {
+          Bitstring.from([segment]);
+        },
+        Error,
+        "(ArgumentError) construction of binary failed: segment 1 of type 'binary': expected a binary but got: 123.45"
+      );
+    });
+
+    it("with integer value", () => {
       const segment = Type.bitstringSegment(Type.integer(170), {
         type: "binary",
       });
@@ -339,8 +269,27 @@ describe("from()", () => {
         "(ArgumentError) construction of binary failed: segment 1 of type 'binary': expected a binary but got: 170"
       );
     });
+  });
 
-    it("with bitstring type modifier", () => {
+  describe("bistring type modifier", () => {
+    // Exactly the same as the defaults test for bitstring value.
+    // it("with bitstring value")
+
+    it("with float value", () => {
+      const segment = Type.bitstringSegment(Type.float(123.45), {
+        type: "bitstring",
+      });
+
+      assert.throw(
+        () => {
+          Bitstring.from([segment]);
+        },
+        Error,
+        "(ArgumentError) construction of binary failed: segment 1 of type 'binary': expected a binary but got: 123.45"
+      );
+    });
+
+    it("with integer value", () => {
       const segment = Type.bitstringSegment(Type.integer(170), {
         type: "bitstring",
       });
@@ -353,8 +302,27 @@ describe("from()", () => {
         "(ArgumentError) construction of binary failed: segment 1 of type 'binary': expected a binary but got: 170"
       );
     });
+  });
 
-    it("with float type modifier", () => {
+  describe("float type modifier", () => {
+    it("with bitstring value", () => {
+      const segment = Type.bitstringSegment(Type.bitstring([1, 0, 1]), {
+        type: "float",
+      });
+
+      assert.throw(
+        () => {
+          Bitstring.from([segment]);
+        },
+        Error,
+        `(ArgumentError) construction of binary failed: segment 1 of type 'float': expected a float or an integer but got: {"type":"bitstring","bits":{"0":1,"1":0,"2":1}}`
+      );
+    });
+
+    // Exactly the same as the defaults test for float value.
+    // it("with float value")
+
+    it("with integer value", () => {
       const segment = Type.bitstringSegment(
         Type.integer(1234567890123456789n),
         {
@@ -381,42 +349,80 @@ describe("from()", () => {
 
       assert.deepStrictEqual(result, expected);
     });
-
-    // Exactly the same as the integer value defaults tests.
-    // it("with integer type modifier")
   });
 
-  describe("string value", () => {
-    it("defaults for string value", () => {
-      const segment = Type.bitstringSegment(Type.string("全息图"), {
+  describe("integer type modifier", () => {
+    it("with bitstring value", () => {
+      const segment = Type.bitstringSegment(Type.bitstring([1, 0, 1]), {
+        type: "integer",
+      });
+
+      assert.throw(
+        () => {
+          Bitstring.from([segment]);
+        },
+        Error,
+        `(ArgumentError) construction of binary failed: segment 1 of type 'integer': expected an integer but got: {"type":"bitstring","bits":{"0":1,"1":0,"2":1}}`
+      );
+    });
+
+    it("with float value", () => {
+      const segment = Type.bitstringSegment(Type.float(123.45), {
+        type: "integer",
+      });
+
+      assert.throw(
+        () => {
+          Bitstring.from([segment]);
+        },
+        Error,
+        "(ArgumentError) construction of binary failed: segment 1 of type 'integer': expected an integer but got: 123.45"
+      );
+    });
+
+    // Exactly the same as the defaults test for integer value.
+    // it("with integer value")
+  });
+
+  describe("utf8 type modifier", () => {
+    it("with bitstring value", () => {
+      // ?a == 97 == 0b01100001
+      const segment = Type.bitstringSegment(
+        Type.bitstring([0, 1, 1, 0, 0, 0, 0, 1]),
+        {
+          type: "utf8",
+        }
+      );
+
+      assert.throw(
+        () => {
+          Bitstring.from([segment]);
+        },
+        Error,
+        `(ArgumentError) construction of binary failed: segment 1 of type 'utf8': expected a non-negative integer encodable as utf8 but got: {"type":"bitstring","bits":{"0":0,"1":1,"2":1,"3":0,"4":0,"5":0,"6":0,"7":1}}`
+      );
+    });
+
+    it("with float value", () => {
+      const segment = Type.bitstringSegment(Type.float(123.45), {
         type: "utf8",
       });
 
-      const result = Bitstring.from([segment]);
-
-      const expected = {
-        type: "bitstring",
-        // prettier-ignore
-        bits: new Uint8Array([
-            1, 1, 1, 0, 0, 1, 0, 1,
-            1, 0, 0, 0, 0, 1, 0, 1,
-            1, 0, 1, 0, 1, 0, 0, 0,
-            1, 1, 1, 0, 0, 1, 1, 0,
-            1, 0, 0, 0, 0, 0, 0, 1,
-            1, 0, 1, 0, 1, 1, 1, 1,
-            1, 1, 1, 0, 0, 1, 0, 1,
-            1, 0, 0, 1, 1, 0, 1, 1,
-            1, 0, 1, 1, 1, 1, 1, 0
-          ]),
-      };
-
-      assert.deepStrictEqual(result, expected);
+      assert.throw(
+        () => {
+          Bitstring.from([segment]);
+        },
+        Error,
+        "(ArgumentError) construction of binary failed: segment 1 of type 'utf8': expected a non-negative integer encodable as utf8 but got: 123.45"
+      );
     });
 
-    // Exactly the same as the string value defaults test.
-    // it("with utf8 type modifier")
+    // Exactly the same as the defaults test for string value.
+    // it("with string value")
+  });
 
-    it("with utf16 type modifier", () => {
+  describe("utf16 type modifier", () => {
+    it("with string value", () => {
       const segment = Type.bitstringSegment(Type.string("全息图"), {
         type: "utf16",
       });
