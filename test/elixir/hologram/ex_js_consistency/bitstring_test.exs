@@ -334,7 +334,7 @@ defmodule Hologram.ExJsConsistency.BitstringTest do
           1::1, 0::1, 1::1, 0::1, 1::1, 1::1, 1::1, 1::1,
           1::1, 1::1, 1::1, 0::1, 0::1, 1::1, 0::1, 1::1,
           1::1, 0::1, 0::1, 1::1, 1::1, 0::1, 1::1, 1::1,
-          1::1, 0::1, 1::1, 1::1, 1::1, 1::1, 1::1, 0::1,
+          1::1, 0::1, 1::1, 1::1, 1::1, 1::1, 1::1, 0::1
         >>
         """
         |> Code.eval_string()
@@ -366,6 +366,52 @@ defmodule Hologram.ExJsConsistency.BitstringTest do
     test "with utf8 type modifier" do
       # See string value defaults test.
       assert <<"全息图"::utf8>> == <<"全息图">>
+    end
+
+    test "with utf16 type modifier" do
+      # <<"全息图"::utf16>> == <<81, 104, 96, 111, 86, 254>>
+      # 81 == 0b01010001
+      # 104 == 0b01101000
+      # 96 == 0b01100000
+      # 111 == 0b01101111
+      # 86 == 0b01010110
+      # 254 == 0b11111110
+
+      assert to_bit_list(<<"全息图"::utf16>>) == to_bit_list(<<81, 104, 96, 111, 86, 254>>)
+
+      # Specified this way, because it's not possible to make the formatter ignore specific lines of code.
+      bitstring =
+        """
+        <<
+          0::1, 1::1, 0::1, 1::1, 0::1, 0::1, 0::1, 1::1,
+          0::1, 1::1, 1::1, 0::1, 1::1, 0::1, 0::1, 0::1,
+          0::1, 1::1, 1::1, 0::1, 0::1, 0::1, 0::1, 0::1,
+          0::1, 1::1, 1::1, 0::1, 1::1, 1::1, 1::1, 1::1,
+          0::1, 1::1, 0::1, 1::1, 0::1, 1::1, 1::1, 0::1,
+          1::1, 1::1, 1::1, 1::1, 1::1, 1::1, 1::1, 0::1
+        >>
+        """
+        |> Code.eval_string()
+        |> elem(0)
+
+      assert to_bit_list(<<"全息图"::utf16>>) == to_bit_list(bitstring)
+
+      # Specified this way, because it's not possible to make the formatter ignore specific lines of code.
+      bits =
+        """
+        [
+          0, 1, 0, 1, 0, 0, 0, 1,
+          0, 1, 1, 0, 1, 0, 0, 0,
+          0, 1, 1, 0, 0, 0, 0, 0,
+          0, 1, 1, 0, 1, 1, 1, 1,
+          0, 1, 0, 1, 0, 1, 1, 0,
+          1, 1, 1, 1, 1, 1, 1, 0
+        ]
+        """
+        |> Code.eval_string()
+        |> elem(0)
+
+      assert to_bit_list(<<"全息图"::utf16>>) == bits
     end
   end
 

@@ -69,9 +69,9 @@ export default class Bitstring {
   static _buildBitArrayFromString(segment) {
     const value = segment.value.value;
 
-    const bitArrays = Array.from(Bitstring._getBytesFromString(value)).map(
-      (byte) => Bitstring._convertDataToBitArray(BigInt(byte), 8n, 1n)
-    );
+    const bitArrays = Array.from(
+      Bitstring._getBytesFromString(value, segment.type)
+    ).map((byte) => Bitstring._convertDataToBitArray(BigInt(byte), 8n, 1n));
 
     if (segment.size !== null) {
       const unit = Bitstring._resolveUnitModifierValue(segment, 8n);
@@ -99,6 +99,19 @@ export default class Bitstring {
     return new Uint8Array(bitArr);
   }
 
+  static _encodeUtf16(str, endianness) {
+    const byteArray = new Uint8Array(str.length * 2);
+    const view = new DataView(byteArray.buffer);
+
+    str
+      .split("")
+      .forEach((char, index) =>
+        view.setUint16(index * 2, char.charCodeAt(0), endianness === "little")
+      );
+
+    return byteArray;
+  }
+
   // private
   static _getBit(value, position) {
     return (value & (1n << position)) === 0n ? 0 : 1;
@@ -111,8 +124,13 @@ export default class Bitstring {
   }
 
   // private
-  static _getBytesFromString(string) {
-    return new TextEncoder().encode(string);
+  static _getBytesFromString(str, encoding) {
+    switch (encoding) {
+      case "utf8":
+        return new TextEncoder().encode(str);
+      case "utf16":
+        return Bitstring._encodeUtf16(str, "big");
+    }
   }
 
   // private

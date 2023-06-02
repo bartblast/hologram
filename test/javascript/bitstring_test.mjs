@@ -415,6 +415,29 @@ describe("from()", () => {
 
     // Exactly the same as the string value defaults test.
     // it("with utf8 type modifier")
+
+    it("with utf16 type modifier", () => {
+      const segment = Type.bitstringSegment(Type.string("全息图"), {
+        type: "utf16",
+      });
+
+      const result = Bitstring.from([segment]);
+
+      const expected = {
+        type: "bitstring",
+        // prettier-ignore
+        bits: new Uint8Array([
+            0, 1, 0, 1, 0, 0, 0, 1,
+            0, 1, 1, 0, 1, 0, 0, 0,
+            0, 1, 1, 0, 0, 0, 0, 0,
+            0, 1, 1, 0, 1, 1, 1, 1,
+            0, 1, 0, 1, 0, 1, 1, 0,
+            1, 1, 1, 1, 1, 1, 1, 0
+          ]),
+      };
+
+      assert.deepStrictEqual(result, expected);
+    });
   });
 
   describe("values of not supported data types", () => {
