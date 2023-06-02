@@ -129,20 +129,8 @@ describe("from()", () => {
       );
     });
 
-    it("with bitstring type modifier", () => {
-      const segment = Type.bitstringSegment(Type.bitstring([1, 0, 1, 0]), {
-        type: "bitstring",
-      });
-
-      const result = Bitstring.from([segment]);
-
-      const expected = {
-        type: "bitstring",
-        bits: new Uint8Array([1, 0, 1, 0]),
-      };
-
-      assert.deepStrictEqual(result, expected);
-    });
+    // Exactly the same as the bitstring value defaults test.
+    // it("with bitstring type modifier")
 
     it("with float type modifier", () => {
       const segment = Type.bitstringSegment(Type.bitstring([1, 0, 1]), {
@@ -245,7 +233,7 @@ describe("from()", () => {
       );
     });
 
-    // Same test as the float value defaults test.
+    // Exactly the same as the float value defaults test.
     // it("with float type modifier")
 
     it("with integer type modifier", () => {
@@ -393,6 +381,9 @@ describe("from()", () => {
 
       assert.deepStrictEqual(result, expected);
     });
+
+    // Exactly the same as the integer value defaults tests.
+    // it("with integer type modifier")
   });
 
   describe("string value", () => {

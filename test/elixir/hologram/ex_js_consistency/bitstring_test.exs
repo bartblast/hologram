@@ -74,7 +74,8 @@ defmodule Hologram.ExJsConsistency.BitstringTest do
     end
 
     test "with bitstring type modifier" do
-      assert to_bit_list(<<(<<1::1, 0::1, 1::1, 0::1>>)::bitstring>>) == [1, 0, 1, 0]
+      # See bitstring value defaults test.
+      assert <<(<<1::1, 0::1, 1::1, 0::1>>)::bitstring>> == <<1::1, 0::1, 1::1, 0::1>>
     end
 
     test "with float type modifier" do
@@ -170,9 +171,8 @@ defmodule Hologram.ExJsConsistency.BitstringTest do
     end
 
     test "with float type modifier" do
-      # For bit list values reference the float value defaults test."
-      assert to_bit_list(<<123.45::float>>) ==
-               to_bit_list(<<64, 94, 220, 204, 204, 204, 204, 205>>)
+      # See float value defaults test.
+      assert <<123.45::float>> == <<123.45>>
     end
 
     test "with integer type modifer" do
@@ -295,6 +295,14 @@ defmodule Hologram.ExJsConsistency.BitstringTest do
 
       assert to_bit_list(<<1_234_567_890_123_456_789.0>>) == bits
       assert to_bit_list(<<1_234_567_890_123_456_789::float>>) == bits
+    end
+
+    test "with integer type modifier" do
+      # See integer value defaults tests.
+      assert <<170::integer>> == <<170>>
+      assert <<-22::integer>> == <<-22>>
+      assert <<4010::integer>> == <<4010>>
+      assert <<-86::integer>> == <<-86>>
     end
   end
 
