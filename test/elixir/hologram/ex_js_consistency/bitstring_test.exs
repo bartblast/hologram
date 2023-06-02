@@ -362,6 +362,11 @@ defmodule Hologram.ExJsConsistency.BitstringTest do
 
       assert to_bit_list(<<"全息图">>) == bits
     end
+
+    test "with utf8 type modifier" do
+      # See string value defaults test.
+      assert <<"全息图"::utf8>> == <<"全息图">>
+    end
   end
 
   describe "values of not supported data types" do

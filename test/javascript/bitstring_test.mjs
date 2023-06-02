@@ -412,6 +412,9 @@ describe("from()", () => {
 
       assert.deepStrictEqual(result, expected);
     });
+
+    // Exactly the same as the string value defaults test.
+    // it("with utf8 type modifier")
   });
 
   describe("values of not supported data types", () => {
