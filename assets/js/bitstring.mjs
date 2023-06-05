@@ -8,7 +8,7 @@ export default class Bitstring {
   static from(segments) {
     const bitArrays = segments.map((segment, index) => {
       Bitstring._validateSegment(segment, index + 1);
-      return Bitstring._buildBitArray(segment);
+      return Bitstring._buildBitArray(segment, index + 1);
     });
 
     // Cannot freeze array buffer views with elements
@@ -16,7 +16,7 @@ export default class Bitstring {
   }
 
   // private
-  static _buildBitArray(segment) {
+  static _buildBitArray(segment, index) {
     switch (segment.value.type) {
       case "bitstring":
         return Bitstring._buildBitArrayFromBitstring(segment);
@@ -25,7 +25,7 @@ export default class Bitstring {
         return Bitstring._buildBitArrayFromFloat(segment);
 
       case "integer":
-        return Bitstring._buildBitArrayFromInteger(segment);
+        return Bitstring._buildBitArrayFromInteger(segment, index);
 
       case "string":
         return Bitstring._buildBitArrayFromString(segment);
@@ -49,13 +49,35 @@ export default class Bitstring {
   }
 
   // private
-  static _buildBitArrayFromInteger(segment) {
+  static _buildBitArrayFromInteger(segment, index) {
     if (segment.type === "float") {
-      const segmentCastedToFloat = {
+      const segmentWithValueCastedToFloat = {
         ...segment,
         value: Type.float(Number(segment.value.value)),
       };
-      return Bitstring._buildBitArrayFromFloat(segmentCastedToFloat);
+      return Bitstring._buildBitArrayFromFloat(segmentWithValueCastedToFloat);
+    }
+
+    // Max Unicode code point value is 1,114,112
+    if (segment.type === "utf8") {
+      if (segment.value.value <= 1114112n) {
+        try {
+          const str = String.fromCodePoint(Number(segment.value.value));
+
+          const segmentWithValueCastedToString = {
+            ...segment,
+            value: Type.string(str),
+          };
+
+          return Bitstring._buildBitArrayFromString(
+            segmentWithValueCastedToString
+          );
+        } catch {
+          Bitstring._raiseInvalidUnicodeCodePointError(segment, index);
+        }
+      } else {
+        Bitstring._raiseInvalidUnicodeCodePointError(segment, index);
+      }
     }
 
     const value = segment.value.value;
@@ -134,6 +156,16 @@ export default class Bitstring {
       case "utf16":
         return Bitstring._encodeUtf16(str, "big");
     }
+  }
+
+  // private
+  static _raiseInvalidUnicodeCodePointError(segment, index) {
+    Bitstring._raiseTypeMismatchError(
+      index,
+      "utf8",
+      "a non-negative integer encodable as utf8",
+      segment.value
+    );
   }
 
   // private

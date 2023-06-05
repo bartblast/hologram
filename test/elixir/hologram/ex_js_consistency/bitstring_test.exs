@@ -399,6 +399,37 @@ defmodule Hologram.ExJsConsistency.BitstringTest do
                    fn -> build_from_value_with_utf8_type_modifier(123.45) end
     end
 
+    test "with integer value that is a valid Unicode code point" do
+      # ?全 == 20840
+      # <<20840::utf8>> == <<229, 133, 168>>
+      # 229 == 0b11100101
+      # 133 == 0b10000101
+      # 168 == 0b10101000
+
+      assert <<20840::utf8>> == <<"全"::utf8>>
+      assert <<20840::utf8>> == <<229, 133, 168>>
+
+      # Specified this way, because it's not possible to make the formatter ignore specific lines of code.
+      bits =
+        """
+        [
+          1, 1, 1, 0, 0, 1, 0, 1,
+          1, 0, 0, 0, 0, 1, 0, 1,
+          1, 0, 1, 0, 1, 0, 0, 0
+        ]
+        """
+        |> Code.eval_string()
+        |> elem(0)
+
+      assert to_bit_list(<<20840::utf8>>) == bits
+    end
+
+    test "with integer value that is not a valid Unicode code point" do
+      assert_raise ArgumentError,
+                   "construction of binary failed: segment 1 of type 'utf8': expected a non-negative integer encodable as utf8 but got: 1114113",
+                   fn -> build_from_value_with_utf8_type_modifier(1_114_113) end
+    end
+
     test "with string value" do
       # See the defaults test for string value.
       assert <<"全息图"::utf8>> == <<"全息图">>
