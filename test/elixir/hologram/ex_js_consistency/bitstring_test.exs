@@ -65,7 +65,8 @@ defmodule Hologram.ExJsConsistency.BitstringTest do
     end
 
     test "for float value" do
-      # <<123.45>> == <<64, 94, 220, 204, 204, 204, 204, 205>>
+      assert <<123.45>> == <<64, 94, 220, 204, 204, 204, 204, 205>>
+
       # 64 == 0b01000000
       # 94 == 0b01011110
       # 220 == 0b11011100
@@ -74,27 +75,6 @@ defmodule Hologram.ExJsConsistency.BitstringTest do
       # 204 == 0b11001100
       # 204 == 0b11001100
       # 205 == 0b11001101
-
-      assert to_bit_list(<<123.45>>) == to_bit_list(<<64, 94, 220, 204, 204, 204, 204, 205>>)
-
-      # Specified this way, because it's not possible to make the formatter ignore specific lines of code.
-      bitstring =
-        """
-        <<
-          0::1, 1::1, 0::1, 0::1, 0::1, 0::1, 0::1, 0::1,
-          0::1, 1::1, 0::1, 1::1, 1::1, 1::1, 1::1, 0::1,
-          1::1, 1::1, 0::1, 1::1, 1::1, 1::1, 0::1, 0::1,
-          1::1, 1::1, 0::1, 0::1, 1::1, 1::1, 0::1, 0::1,
-          1::1, 1::1, 0::1, 0::1, 1::1, 1::1, 0::1, 0::1,
-          1::1, 1::1, 0::1, 0::1, 1::1, 1::1, 0::1, 0::1,
-          1::1, 1::1, 0::1, 0::1, 1::1, 1::1, 0::1, 0::1,
-          1::1, 1::1, 0::1, 0::1, 1::1, 1::1, 0::1, 1::1
-        >>
-        """
-        |> Code.eval_string()
-        |> elem(0)
-
-      assert to_bit_list(<<123.45>>) == to_bit_list(bitstring)
 
       # Specified this way, because it's not possible to make the formatter ignore specific lines of code.
       bits =
@@ -118,10 +98,6 @@ defmodule Hologram.ExJsConsistency.BitstringTest do
 
     test "for positive integer value that fits in 8 bits" do
       # 170 == 0b10101010
-
-      assert to_bit_list(<<170>>) ==
-               to_bit_list(<<1::1, 0::1, 1::1, 0::1, 1::1, 0::1, 1::1, 0::1>>)
-
       assert to_bit_list(<<170>>) == [1, 0, 1, 0, 1, 0, 1, 0]
     end
 
@@ -129,10 +105,7 @@ defmodule Hologram.ExJsConsistency.BitstringTest do
       # -22 == 0b11101010
       # 234 == 0b11101010
 
-      assert to_bit_list(<<-22>>) ==
-               to_bit_list(<<1::1, 1::1, 1::1, 0::1, 1::1, 0::1, 1::1, 0::1>>)
-
-      assert to_bit_list(<<-22>>) == to_bit_list(<<234>>)
+      assert <<-22>> == <<234>>
       assert to_bit_list(<<-22>>) == [1, 1, 1, 0, 1, 0, 1, 0]
     end
 
@@ -140,26 +113,21 @@ defmodule Hologram.ExJsConsistency.BitstringTest do
       # 4010 == 0b111110101010
       # 170 == 0b10101010
 
-      assert to_bit_list(<<4010>>) ==
-               to_bit_list(<<1::1, 0::1, 1::1, 0::1, 1::1, 0::1, 1::1, 0::1>>)
-
-      assert to_bit_list(<<4010>>) == to_bit_list(<<170>>)
-      assert to_bit_list(<<4010>>) == [1, 0, 1, 0, 1, 0, 1, 0]
+      assert <<4_010>> == <<170>>
+      assert to_bit_list(<<4_010>>) == [1, 0, 1, 0, 1, 0, 1, 0]
     end
 
     test "for negative integer value that fits in 12 bits" do
       # -86 == 0b111110101010
       # 170 == 0b10101010
 
-      assert to_bit_list(<<-86>>) ==
-               to_bit_list(<<1::1, 0::1, 1::1, 0::1, 1::1, 0::1, 1::1, 0::1>>)
-
-      assert to_bit_list(<<-86>>) == to_bit_list(<<170>>)
+      assert <<-86>> == <<170>>
       assert to_bit_list(<<-86>>) == [1, 0, 1, 0, 1, 0, 1, 0]
     end
 
     test "for string value" do
-      # <<"全息图">> == <<229, 133, 168, 230, 129, 175, 229, 155, 190>>
+      assert <<"全息图">> == <<229, 133, 168, 230, 129, 175, 229, 155, 190>>
+
       # 229 == 0b11100101
       # 133 == 0b10000101
       # 168 == 0b10101000
@@ -169,29 +137,6 @@ defmodule Hologram.ExJsConsistency.BitstringTest do
       # 229 == 0b11100101
       # 155 == 0b10011011
       # 190 == 0b10111110
-
-      assert to_bit_list(<<"全息图">>) ==
-               to_bit_list(<<229, 133, 168, 230, 129, 175, 229, 155, 190>>)
-
-      # Specified this way, because it's not possible to make the formatter ignore specific lines of code.
-      bitstring =
-        """
-        <<
-          1::1, 1::1, 1::1, 0::1, 0::1, 1::1, 0::1, 1::1,
-          1::1, 0::1, 0::1, 0::1, 0::1, 1::1, 0::1, 1::1,
-          1::1, 0::1, 1::1, 0::1, 1::1, 0::1, 0::1, 0::1,
-          1::1, 1::1, 1::1, 0::1, 0::1, 1::1, 1::1, 0::1,
-          1::1, 0::1, 0::1, 0::1, 0::1, 0::1, 0::1, 1::1,
-          1::1, 0::1, 1::1, 0::1, 1::1, 1::1, 1::1, 1::1,
-          1::1, 1::1, 1::1, 0::1, 0::1, 1::1, 0::1, 1::1,
-          1::1, 0::1, 0::1, 1::1, 1::1, 0::1, 1::1, 1::1,
-          1::1, 0::1, 1::1, 1::1, 1::1, 1::1, 1::1, 0::1
-        >>
-        """
-        |> Code.eval_string()
-        |> elem(0)
-
-      assert to_bit_list(<<"全息图">>) == to_bit_list(bitstring)
 
       # Specified this way, because it's not possible to make the formatter ignore specific lines of code.
       bits =
@@ -284,7 +229,9 @@ defmodule Hologram.ExJsConsistency.BitstringTest do
     end
 
     test "with integer value" do
-      # <<1234567890123456789.0>> == <<67, 177, 34, 16, 244, 125, 233, 129>>
+      assert <<1_234_567_890_123_456_789::float>> == <<1_234_567_890_123_456_789.0>>
+      assert <<1_234_567_890_123_456_789.0>> == <<67, 177, 34, 16, 244, 125, 233, 129>>
+
       # 67 == 0b01000011
       # 177 == 0b10110001
       # 34 == 0b00100010
@@ -293,28 +240,6 @@ defmodule Hologram.ExJsConsistency.BitstringTest do
       # 125 == 0b01111101
       # 233 == 0b11101001
       # 129 == 0b10000001
-
-      assert to_bit_list(<<1_234_567_890_123_456_789.0>>) ==
-               to_bit_list(<<67, 177, 34, 16, 244, 125, 233, 129>>)
-
-      # Specified this way, because it's not possible to make the formatter ignore specific lines of code.
-      bitstring =
-        """
-        <<
-          0::1, 1::1, 0::1, 0::1, 0::1, 0::1, 1::1, 1::1,
-          1::1, 0::1, 1::1, 1::1, 0::1, 0::1, 0::1, 1::1,
-          0::1, 0::1, 1::1, 0::1, 0::1, 0::1, 1::1, 0::1,
-          0::1, 0::1, 0::1, 1::1, 0::1, 0::1, 0::1, 0::1,
-          1::1, 1::1, 1::1, 1::1, 0::1, 1::1, 0::1, 0::1,
-          0::1, 1::1, 1::1, 1::1, 1::1, 1::1, 0::1, 1::1,
-          1::1, 1::1, 1::1, 0::1, 1::1, 0::1, 0::1, 1::1,
-          1::1, 0::1, 0::1, 0::1, 0::1, 0::1, 0::1, 1::1
-        >>
-        """
-        |> Code.eval_string()
-        |> elem(0)
-
-      assert to_bit_list(<<1_234_567_890_123_456_789.0>>) == to_bit_list(bitstring)
 
       # Specified this way, because it's not possible to make the formatter ignore specific lines of code.
       bits =
@@ -333,7 +258,6 @@ defmodule Hologram.ExJsConsistency.BitstringTest do
         |> Code.eval_string()
         |> elem(0)
 
-      assert to_bit_list(<<1_234_567_890_123_456_789.0>>) == bits
       assert to_bit_list(<<1_234_567_890_123_456_789::float>>) == bits
     end
 
@@ -367,7 +291,7 @@ defmodule Hologram.ExJsConsistency.BitstringTest do
       # See the defaults test for integer value.
       assert <<170::integer>> == <<170>>
       assert <<-22::integer>> == <<-22>>
-      assert <<4010::integer>> == <<4010>>
+      assert <<4_010::integer>> == <<4_010>>
       assert <<-86::integer>> == <<-86>>
     end
 
@@ -405,13 +329,12 @@ defmodule Hologram.ExJsConsistency.BitstringTest do
 
     test "with integer value that is a valid Unicode code point" do
       # ?全 == 20_840
-      # <<20_840::utf8>> == <<229, 133, 168>>
+      assert <<20_840::utf8>> == <<"全"::utf8>>
+      assert <<20_840::utf8>> == <<229, 133, 168>>
+
       # 229 == 0b11100101
       # 133 == 0b10000101
       # 168 == 0b10101000
-
-      assert <<20_840::utf8>> == <<"全"::utf8>>
-      assert <<20_840::utf8>> == <<229, 133, 168>>
 
       # Specified this way, because it's not possible to make the formatter ignore specific lines of code.
       bits =
@@ -455,12 +378,11 @@ defmodule Hologram.ExJsConsistency.BitstringTest do
 
     test "with integer value that is a valid Unicode code point" do
       # ?全 == 20_840
-      # <<20_840::utf16>> == <<81, 104>>
-      # 81 == 0b01010001
-      # 104 == 0b01101000
-
       assert <<20_840::utf16>> == <<"全"::utf16>>
       assert <<20_840::utf16>> == <<81, 104>>
+
+      # 81 == 0b01010001
+      # 104 == 0b01101000
 
       # Specified this way, because it's not possible to make the formatter ignore specific lines of code.
       bits =
@@ -483,32 +405,14 @@ defmodule Hologram.ExJsConsistency.BitstringTest do
     end
 
     test "with string value" do
-      # <<"全息图"::utf16>> == <<81, 104, 96, 111, 86, 254>>
+      <<"全息图"::utf16>> == <<81, 104, 96, 111, 86, 254>>
+
       # 81 == 0b01010001
       # 104 == 0b01101000
       # 96 == 0b01100000
       # 111 == 0b01101111
       # 86 == 0b01010110
       # 254 == 0b11111110
-
-      assert to_bit_list(<<"全息图"::utf16>>) == to_bit_list(<<81, 104, 96, 111, 86, 254>>)
-
-      # Specified this way, because it's not possible to make the formatter ignore specific lines of code.
-      bitstring =
-        """
-        <<
-          0::1, 1::1, 0::1, 1::1, 0::1, 0::1, 0::1, 1::1,
-          0::1, 1::1, 1::1, 0::1, 1::1, 0::1, 0::1, 0::1,
-          0::1, 1::1, 1::1, 0::1, 0::1, 0::1, 0::1, 0::1,
-          0::1, 1::1, 1::1, 0::1, 1::1, 1::1, 1::1, 1::1,
-          0::1, 1::1, 0::1, 1::1, 0::1, 1::1, 1::1, 0::1,
-          1::1, 1::1, 1::1, 1::1, 1::1, 1::1, 1::1, 0::1
-        >>
-        """
-        |> Code.eval_string()
-        |> elem(0)
-
-      assert to_bit_list(<<"全息图"::utf16>>) == to_bit_list(bitstring)
 
       # Specified this way, because it's not possible to make the formatter ignore specific lines of code.
       bits =
