@@ -582,6 +582,39 @@ describe("from()", () => {
       );
     });
 
+    it("with integer value that is a valid Unicode code point", () => {
+      const segment = Type.bitstringSegment(Type.integer(20840), {
+        type: "utf16",
+      });
+
+      const result = Bitstring.from([segment]);
+
+      const expected = {
+        type: "bitstring",
+        // prettier-ignore
+        bits: new Uint8Array([
+                0, 1, 0, 1, 0, 0, 0, 1,
+                0, 1, 1, 0, 1, 0, 0, 0
+              ]),
+      };
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("with integer value that is not a valid Unicode code point", () => {
+      const segment = Type.bitstringSegment(Type.integer(1114113), {
+        type: "utf16",
+      });
+
+      assert.throw(
+        () => {
+          Bitstring.from([segment]);
+        },
+        Error,
+        "(ArgumentError) construction of binary failed: segment 1 of type 'utf16': expected a non-negative integer encodable as utf16 but got: 1114113"
+      );
+    });
+
     it("with string value", () => {
       const segment = Type.bitstringSegment(Type.string("全息图"), {
         type: "utf16",

@@ -59,7 +59,7 @@ export default class Bitstring {
     }
 
     // Max Unicode code point value is 1,114,112
-    if (segment.type === "utf8") {
+    if (["utf8", "utf16", "utf32"].includes(segment.type)) {
       if (segment.value.value <= 1114112n) {
         try {
           const str = String.fromCodePoint(Number(segment.value.value));
@@ -162,8 +162,8 @@ export default class Bitstring {
   static _raiseInvalidUnicodeCodePointError(segment, index) {
     Bitstring._raiseTypeMismatchError(
       index,
-      "utf8",
-      "a non-negative integer encodable as utf8",
+      segment.type,
+      "a non-negative integer encodable as " + segment.type,
       segment.value
     );
   }
