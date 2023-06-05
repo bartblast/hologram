@@ -404,14 +404,14 @@ defmodule Hologram.ExJsConsistency.BitstringTest do
     end
 
     test "with integer value that is a valid Unicode code point" do
-      # ?全 == 20840
-      # <<20840::utf8>> == <<229, 133, 168>>
+      # ?全 == 20_840
+      # <<20_840::utf8>> == <<229, 133, 168>>
       # 229 == 0b11100101
       # 133 == 0b10000101
       # 168 == 0b10101000
 
-      assert <<20840::utf8>> == <<"全"::utf8>>
-      assert <<20840::utf8>> == <<229, 133, 168>>
+      assert <<20_840::utf8>> == <<"全"::utf8>>
+      assert <<20_840::utf8>> == <<229, 133, 168>>
 
       # Specified this way, because it's not possible to make the formatter ignore specific lines of code.
       bits =
@@ -425,7 +425,7 @@ defmodule Hologram.ExJsConsistency.BitstringTest do
         |> Code.eval_string()
         |> elem(0)
 
-      assert to_bit_list(<<20840::utf8>>) == bits
+      assert to_bit_list(<<20_840::utf8>>) == bits
     end
 
     test "with integer value that is not a valid Unicode code point" do
