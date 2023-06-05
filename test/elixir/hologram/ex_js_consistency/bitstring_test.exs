@@ -405,7 +405,7 @@ defmodule Hologram.ExJsConsistency.BitstringTest do
     end
 
     test "with string value" do
-      <<"全息图"::utf16>> == <<81, 104, 96, 111, 86, 254>>
+      assert <<"全息图"::utf16>> == <<81, 104, 96, 111, 86, 254>>
 
       # 81 == 0b01010001
       # 104 == 0b01101000
