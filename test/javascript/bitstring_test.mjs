@@ -564,6 +564,24 @@ describe("from()", () => {
   });
 
   describe("utf16 type modifier", () => {
+    it("with bitstring value", () => {
+      // ?a == 97 == 0b01100001
+      const segment = Type.bitstringSegment(
+        Type.bitstring([0, 1, 1, 0, 0, 0, 0, 1]),
+        {
+          type: "utf16",
+        }
+      );
+
+      assert.throw(
+        () => {
+          Bitstring.from([segment]);
+        },
+        Error,
+        `(ArgumentError) construction of binary failed: segment 1 of type 'utf16': expected a non-negative integer encodable as utf16 but got: {"type":"bitstring","bits":{"0":0,"1":1,"2":1,"3":0,"4":0,"5":0,"6":0,"7":1}}`
+      );
+    });
+
     it("with string value", () => {
       const segment = Type.bitstringSegment(Type.string("全息图"), {
         type: "utf16",
@@ -635,6 +653,7 @@ describe("from()", () => {
   });
 });
 
+// TODO: cleanup
 // describe("bitstring()", () => {
 //   describe("size & unit modifiers", () => {
 //     it("fails to build bitstring from 32-bit float segment", () => {

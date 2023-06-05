@@ -307,17 +307,19 @@ export default class Bitstring {
         return Bitstring._validateIntegerSegment(segment, index);
 
       case "utf8":
-        return Bitstring._validateUtf8Segment(segment, index);
+      case "utf16":
+      case "utf32":
+        return Bitstring._validateUtfSegment(segment, index);
     }
   }
 
   // private
-  static _validateUtf8Segment(segment, index) {
+  static _validateUtfSegment(segment, index) {
     if (["bitstring", "float"].includes(segment.value.type)) {
       Bitstring._raiseTypeMismatchError(
         index,
-        "utf8",
-        "a non-negative integer encodable as utf8",
+        segment.type,
+        "a non-negative integer encodable as " + segment.type,
         segment.value
       );
     }

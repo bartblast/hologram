@@ -36,6 +36,10 @@ defmodule Hologram.ExJsConsistency.BitstringTest do
     <<value::utf8>>
   end
 
+  defp build_from_value_with_utf16_type_modifier(value) do
+    <<value::utf16>>
+  end
+
   describe "number and structure of segments" do
     test "builds empty bitstring without segments" do
       assert to_bit_list(<<>>) == []
@@ -437,6 +441,18 @@ defmodule Hologram.ExJsConsistency.BitstringTest do
   end
 
   describe "utf16 type modifier" do
+    test "with bitstring value" do
+      assert <<"a">> == <<0::1, 1::1, 1::1, 0::1, 0::1, 0::1, 0::1, 1::1>>
+
+      assert_raise ArgumentError,
+                   "construction of binary failed: segment 1 of type 'utf16': expected a non-negative integer encodable as utf16 but got: \"a\"",
+                   fn ->
+                     build_from_value_with_utf16_type_modifier(
+                       <<0::1, 1::1, 1::1, 0::1, 0::1, 0::1, 0::1, 1::1>>
+                     )
+                   end
+    end
+
     test "with string value" do
       # <<"全息图"::utf16>> == <<81, 104, 96, 111, 86, 254>>
       # 81 == 0b01010001
