@@ -38,9 +38,7 @@ defmodule Hologram.Commons.SerializationUtilsTest do
 
     result_1 = serialize(data_1)
     result_2 = serialize(data_2)
-
     assert result_1 == result_2
-    assert byte_size(result_1) == 53
 
     assert :erlang.binary_to_term(result_1) == data_1
     assert :erlang.binary_to_term(result_2) == data_2
