@@ -936,23 +936,6 @@ describe("from()", () => {
 //     });
 //   });
 
-//   describe("type modifier", () => {
-//     it("raises ArgumentError if there is a mismatch between segment declared type and runtime type", () => {
-//       const segment = Type.bitstringSegment(Type.float(123.45), {
-//         type: "integer",
-//       });
-
-//       assert.throw(
-//         () => {
-//           Type.bitstring([segment]);
-//         },
-//         Error,
-//         "(ArgumentError) construction of binary failed: segment 1 of type 'integer': expected an integer but got: 123.45"
-//       );
-//     });
-//   });
-// });
-
 // describe("bitstringSegment()", () => {
 //   it("fails to build float segment which is not 16-bit, 32-bit or 64-bit", () => {
 //     const segment = Type.bitstringSegment(Type.float(123.45), {
