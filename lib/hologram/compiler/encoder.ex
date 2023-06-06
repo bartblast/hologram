@@ -24,12 +24,6 @@ defmodule Hologram.Compiler.Encoder do
     encode_primitive_type(:atom, value, true)
   end
 
-  def encode(%IR.BitstringType{segments: segments}, context) do
-    segments
-    |> Enum.map_join(", ", &encode(&1, context))
-    |> StringUtils.wrap("Type.bitstring([", "])")
-  end
-
   # See: https://hexdocs.pm/elixir/1.14.5/Kernel.SpecialForms.html#%3C%3C%3E%3E/1
   def encode(
         %IR.BitstringSegment{value: %IR.StringType{value: value}, modifiers: modifiers},
@@ -46,6 +40,12 @@ defmodule Hologram.Compiler.Encoder do
       ) do
     value_str = encode(value, context)
     encode_bitstring_segment(value_str, modifiers, context)
+  end
+
+  def encode(%IR.BitstringType{segments: segments}, context) do
+    segments
+    |> Enum.map_join(", ", &encode(&1, context))
+    |> StringUtils.wrap("Type.bitstring([", "])")
   end
 
   def encode(%IR.ConsOperator{head: head, tail: tail}, %{pattern?: true} = context) do
