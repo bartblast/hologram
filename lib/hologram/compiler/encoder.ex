@@ -32,17 +32,20 @@ defmodule Hologram.Compiler.Encoder do
 
   # See: https://hexdocs.pm/elixir/1.14.5/Kernel.SpecialForms.html#%3C%3C%3E%3E/1
   def encode(
+        %IR.BitstringSegment{value: %IR.StringType{value: value}, modifiers: modifiers},
+        %{pattern?: false} = context
+      ) do
+    value_str = encode_primitive_type(:string, value, true)
+    encode_bitstring_segment(value_str, modifiers, context)
+  end
+
+  # See: https://hexdocs.pm/elixir/1.14.5/Kernel.SpecialForms.html#%3C%3C%3E%3E/1
+  def encode(
         %IR.BitstringSegment{value: value, modifiers: modifiers},
         %{pattern?: false} = context
       ) do
     value_str = encode(value, context)
-
-    modifiers_str =
-      modifiers
-      |> Enum.map_join(", ", &encode_bitstring_modifier(&1, context))
-      |> StringUtils.wrap("{", "}")
-
-    "Type.bitstringSegment(#{value_str}, #{modifiers_str})"
+    encode_bitstring_segment(value_str, modifiers, context)
   end
 
   def encode(%IR.ConsOperator{head: head, tail: tail}, %{pattern?: true} = context) do
@@ -82,7 +85,7 @@ defmodule Hologram.Compiler.Encoder do
   end
 
   def encode(%IR.StringType{value: value}, _context) do
-    encode_primitive_type(:string, value, true)
+    encode_primitive_type(:bitstring, value, true)
   end
 
   def encode(%IR.TupleType{data: data}, context) do
@@ -171,6 +174,15 @@ defmodule Hologram.Compiler.Encoder do
 
   defp encode_bitstring_modifier({name, value}, _context) do
     ~s(#{name}: "#{value}")
+  end
+
+  defp encode_bitstring_segment(value_str, modifiers, context) do
+    modifiers_str =
+      modifiers
+      |> Enum.map_join(", ", &encode_bitstring_modifier(&1, context))
+      |> StringUtils.wrap("{", "}")
+
+    "Type.bitstringSegment(#{value_str}, #{modifiers_str})"
   end
 
   defp encode_primitive_type(type, value, as_string)

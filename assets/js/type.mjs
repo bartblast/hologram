@@ -9,7 +9,11 @@ export default class Type {
   }
 
   static bitstring(data) {
-    if (data.length > 0 && typeof data[0] === "object") {
+    if (typeof data === "string") {
+      return Type.bitstring([
+        Type.bitstringSegment(Type.string(data), {type: "utf8"}),
+      ]);
+    } else if (data.length > 0 && typeof data[0] === "object") {
       return Bitstring.from(data);
     } else {
       // Cannot freeze array buffer views with elements
@@ -45,7 +49,6 @@ export default class Type {
       case "atom":
       case "float":
       case "integer":
-      case "string":
         return Type._encodePrimitiveTypeMapKey(boxed);
 
       case "bitstring":

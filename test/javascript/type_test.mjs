@@ -17,6 +17,26 @@ describe("atom()", () => {
 });
 
 describe("bitstring()", () => {
+  it("builds bitstring from string value", () => {
+    const result = Type.bitstring("abc");
+
+    // ?a == 97 == 0b01100001
+    // ?b == 98 == 0b01100010
+    // ?c == 99 == 0b01100011
+
+    const expected = {
+      type: "bitstring",
+      // prettier-ignore
+      bits: new Uint8Array([
+              0, 1, 1, 0, 0, 0, 0, 1,
+              0, 1, 1, 0, 0, 0, 1, 0,
+              0, 1, 1, 0, 0, 0, 1, 1
+            ]),
+    };
+
+    assert.deepStrictEqual(result, expected);
+  });
+
   it("builds bitstring from segments array", () => {
     const segment1 = Type.bitstringSegment(Type.integer(170), {
       type: "integer",
@@ -224,13 +244,6 @@ describe("encodeMapKey()", () => {
     const result = Type.encodeMapKey(boxed);
 
     assert.equal(result, "map(atom(a):integer(1),atom(b):integer(2))");
-  });
-
-  it("encodes boxed string value as map key", () => {
-    const boxed = Type.string("abc");
-    const result = Type.encodeMapKey(boxed);
-
-    assert.equal(result, "string(abc)");
   });
 
   it("encodes empty boxed tuple value as map key", () => {

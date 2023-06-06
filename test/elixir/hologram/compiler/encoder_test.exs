@@ -86,6 +86,23 @@ defmodule Hologram.Compiler.EncoderTest do
       assert encode(ir, %Context{}) ==
                ~s/Type.bitstringSegment(Type.integer(123n), {endianness: "big"})/
     end
+
+    test "from string type" do
+      ir = %IR.BitstringSegment{value: %IR.StringType{value: "abc"}, modifiers: [type: "utf16"]}
+
+      assert encode(ir, %Context{}) ==
+               ~s/Type.bitstringSegment(Type.string(\"abc\"), {type: "utf16"})/
+    end
+
+    test "from non-string type" do
+      ir = %IR.BitstringSegment{
+        value: %IR.IntegerType{value: 123},
+        modifiers: [endianness: :big]
+      }
+
+      assert encode(ir, %Context{}) ==
+               ~s/Type.bitstringSegment(Type.integer(123n), {endianness: "big"})/
+    end
   end
 
   describe "cons operator" do
@@ -282,7 +299,7 @@ defmodule Hologram.Compiler.EncoderTest do
   test "string type" do
     ir = %IR.StringType{value: "aa\"bb\ncc"}
 
-    assert encode(ir, %Context{}) == ~s/Type.string("aa\\"bb\\ncc")/
+    assert encode(ir, %Context{}) == ~s/Type.bitstring("aa\\"bb\\ncc")/
   end
 
   describe "tuple type" do

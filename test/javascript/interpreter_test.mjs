@@ -125,22 +125,17 @@ describe("inspect()", () => {
   });
 
   it("inspects boxed list", () => {
-    const term = Type.list([Type.integer(123), Type.string("abc")]);
+    const term = Type.list([Type.integer(123), Type.atom("abc")]);
     const result = Interpreter.inspect(term);
 
-    assert.equal(result, '[123, "abc"]');
-  });
-
-  it("inspects boxed string", () => {
-    const result = Interpreter.inspect(Type.string("abc"));
-    assert.equal(result, '"abc"');
+    assert.equal(result, "[123, :abc]");
   });
 
   it("inspects boxed tuple", () => {
-    const term = Type.tuple([Type.integer(123), Type.string("abc")]);
+    const term = Type.tuple([Type.integer(123), Type.atom("abc")]);
     const result = Interpreter.inspect(term);
 
-    assert.equal(result, '{123, "abc"}');
+    assert.equal(result, "{123, :abc}");
   });
 
   it("inspects other boxed types", () => {
