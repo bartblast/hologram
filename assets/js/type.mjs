@@ -116,7 +116,9 @@ export default class Type {
   }
 
   static list(data) {
-    return Utils.freeze({type: "list", data: data});
+    // Do not freeze lists, since they may contain bitstring items which can't be frozen.
+    // TODO: freeze again once bitstrings are implemented as bigints.
+    return {type: "list", data: data};
   }
 
   static map(data) {
@@ -133,7 +135,9 @@ export default class Type {
   }
 
   static tuple(data) {
-    return Utils.freeze({type: "tuple", data: data});
+    // Do not freeze tuples, since they may contain bitstring items which can't be frozen.
+    // TODO: freeze again once bitstrings are implemented as bigints.
+    return {type: "tuple", data: data};
   }
 
   static variablePattern(name) {

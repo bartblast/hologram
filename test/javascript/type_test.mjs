@@ -475,9 +475,11 @@ describe("list()", () => {
     assert.deepStrictEqual(result, expected);
   });
 
-  it("returns frozen object", () => {
-    assertFrozen(result);
-  });
+  // Do not freeze lists, since they may contain bitstring items which can't be frozen.
+  // TODO: freeze again once bitstrings are implemented as bigints.
+  // it("returns frozen object", () => {
+  //   assertFrozen(result);
+  // });
 });
 
 describe("map", () => {
@@ -535,9 +537,11 @@ describe("tuple()", () => {
     assert.deepStrictEqual(result, expected);
   });
 
-  it("returns frozen object", () => {
-    assertFrozen(result);
-  });
+  // Do not freeze tuples, since they may contain bitstring items which can't be frozen.
+  // TODO: freeze again once bitstrings are implemented as bigints.
+  // it("returns frozen object", () => {
+  //   assertFrozen(result);
+  // });
 });
 
 describe("variablePattern()", () => {
