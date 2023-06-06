@@ -60,22 +60,18 @@ export default class Bitstring {
 
     // Max Unicode code point value is 1,114,112
     if (["utf8", "utf16", "utf32"].includes(segment.type)) {
-      if (segment.value.value <= 1114112n) {
-        try {
-          const str = String.fromCodePoint(Number(segment.value.value));
+      try {
+        const str = String.fromCodePoint(Number(segment.value.value));
 
-          const segmentWithValueCastedToString = {
-            ...segment,
-            value: Type.string(str),
-          };
+        const segmentWithValueCastedToString = {
+          ...segment,
+          value: Type.string(str),
+        };
 
-          return Bitstring._buildBitArrayFromString(
-            segmentWithValueCastedToString
-          );
-        } catch {
-          Bitstring._raiseInvalidUnicodeCodePointError(segment, index);
-        }
-      } else {
+        return Bitstring._buildBitArrayFromString(
+          segmentWithValueCastedToString
+        );
+      } catch {
         Bitstring._raiseInvalidUnicodeCodePointError(segment, index);
       }
     }
