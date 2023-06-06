@@ -40,6 +40,10 @@ defmodule Hologram.ExJsConsistency.BitstringTest do
     <<value::utf16>>
   end
 
+  defp build_from_value_with_utf32_type_modifier(value) do
+    <<value::utf32>>
+  end
+
   describe "number and structure of segments" do
     test "builds empty bitstring without segments" do
       assert to_bit_list(<<>>) == []
@@ -357,9 +361,15 @@ defmodule Hologram.ExJsConsistency.BitstringTest do
                    fn -> build_from_value_with_utf8_type_modifier(1_114_113) end
     end
 
-    test "with string value" do
+    test "with literal string value" do
       # See the defaults test for string value.
       assert <<"全息图"::utf8>> == <<"全息图">>
+    end
+
+    test "with runtime string value" do
+      assert_raise ArgumentError,
+                   "construction of binary failed: segment 1 of type 'utf8': expected a non-negative integer encodable as utf8 but got: \"abc\"",
+                   fn -> build_from_value_with_utf8_type_modifier("abc") end
     end
   end
 
@@ -404,7 +414,7 @@ defmodule Hologram.ExJsConsistency.BitstringTest do
                    fn -> build_from_value_with_utf16_type_modifier(1_114_113) end
     end
 
-    test "with string value" do
+    test "with literal string value" do
       assert <<"全息图"::utf16>> == <<81, 104, 96, 111, 86, 254>>
 
       # 81 == 0b01010001
@@ -430,6 +440,20 @@ defmodule Hologram.ExJsConsistency.BitstringTest do
         |> elem(0)
 
       assert to_bit_list(<<"全息图"::utf16>>) == bits
+    end
+
+    test "with runtime string value" do
+      assert_raise ArgumentError,
+                   "construction of binary failed: segment 1 of type 'utf16': expected a non-negative integer encodable as utf16 but got: \"abc\"",
+                   fn -> build_from_value_with_utf16_type_modifier("abc") end
+    end
+  end
+
+  describe "utf32 type modifier" do
+    test "with runtime string value" do
+      assert_raise ArgumentError,
+                   "construction of binary failed: segment 1 of type 'utf32': expected a non-negative integer encodable as utf32 but got: \"abc\"",
+                   fn -> build_from_value_with_utf32_type_modifier("abc") end
     end
   end
 

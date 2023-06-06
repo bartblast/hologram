@@ -63,7 +63,7 @@ export default class Interpreter {
 
     return isEqual(left, right);
   }
-
+  k;
   static raiseError(type, message) {
     throw new Error(`(${type}) ${message}`);
   }
