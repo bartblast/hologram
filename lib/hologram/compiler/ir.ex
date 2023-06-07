@@ -14,6 +14,9 @@ defmodule Hologram.Compiler.IR do
           | IR.Block.t()
           | IR.CaseClause.t()
           | IR.CaseExpression.t()
+          | IR.Comprehension.t()
+          | IR.ComprehensionFilter.t()
+          | IR.ComprehensionGenerator.t()
           | IR.CondClause.t()
           | IR.CondExpression.t()
           | IR.ConsOperator.t()
@@ -94,6 +97,29 @@ defmodule Hologram.Compiler.IR do
     defstruct [:condition, :clauses]
 
     @type t :: %__MODULE__{condition: IR.t(), clauses: list(IR.CaseClause.t())}
+  end
+
+  defmodule Comprehension do
+    defstruct [:generators, :filters, :collectable, :mapper]
+
+    @type t :: %__MODULE__{
+            generators: list(IR.ComprehensionGenerator.t()),
+            filters: list(IR.ComprehensionFilter.t()),
+            collectable: IR.t(),
+            mapper: IR.t()
+          }
+  end
+
+  defmodule ComprehensionFilter do
+    defstruct [:expression]
+
+    @type t :: %__MODULE__{expression: IR.t()}
+  end
+
+  defmodule ComprehensionGenerator do
+    defstruct [:enumerable, :guard]
+
+    @type t :: %__MODULE__{enumerable: IR.t(), guard: IR.t()}
   end
 
   defmodule CondClause do
