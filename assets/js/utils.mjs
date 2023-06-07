@@ -1,6 +1,15 @@
 "use strict";
 
 export default class Utils {
+  // Based on: https://stackoverflow.com/a/43053803
+  static cartesianProduct(sets) {
+    if (sets.length === 0) {
+      return [];
+    }
+
+    return sets.reduce((a, b) => a.flatMap((d) => b.map((e) => [d, e].flat())));
+  }
+
   static concatUint8Arrays(arrays) {
     return arrays.reduce((acc, arr) => {
       const mergedArr = new Uint8Array(acc.length + arr.length);
