@@ -119,7 +119,7 @@ defmodule Hologram.Compiler.IR do
   defmodule ComprehensionGenerator do
     defstruct [:enumerable, :match, :guard]
 
-    @type t :: %__MODULE__{enumerable: IR.t(), match: IR.t(), guard: IR.t()}
+    @type t :: %__MODULE__{enumerable: IR.t(), match: IR.t(), guard: IR.t() | nil}
   end
 
   defmodule CondClause do

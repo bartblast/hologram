@@ -559,8 +559,16 @@ defmodule Hologram.Compiler.Transformer do
     accumulate_comprehension_generator(acc, enumerable, match, nil, context)
   end
 
-  defp transform_comprehension_part([do: block], acc, context) do
+  defp transform_comprehension_part(ast, acc, context) when is_list(ast) do
+    Enum.reduce(ast, acc, &transform_comprehension_part(&1, &2, context))
+  end
+
+  defp transform_comprehension_part({:do, block}, acc, context) do
     %{acc | mapper: transform(block, context)}
+  end
+
+  defp transform_comprehension_part({:into, collectable}, acc, context) do
+    %{acc | collectable: transform(collectable, context)}
   end
 
   defp transform_function_capture(function, arity, meta, context) do
