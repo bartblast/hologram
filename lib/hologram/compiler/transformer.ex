@@ -119,11 +119,17 @@ defmodule Hologram.Compiler.Transformer do
       generators: [],
       filters: [],
       collectable: %IR.ListType{data: []},
-      uniq: %IR.AtomType{value: false},
+      unique: %IR.AtomType{value: false},
       mapper: nil
     }
 
-    %{generators: generators, filters: filters, collectable: collectable, mapper: mapper} =
+    %{
+      generators: generators,
+      filters: filters,
+      collectable: collectable,
+      unique: unique,
+      mapper: mapper
+    } =
       Enum.reduce(
         parts,
         initial_acc,
@@ -134,6 +140,7 @@ defmodule Hologram.Compiler.Transformer do
       generators: Enum.reverse(generators),
       filters: Enum.reverse(filters),
       collectable: collectable,
+      unique: unique,
       mapper: mapper
     }
   end
@@ -575,6 +582,10 @@ defmodule Hologram.Compiler.Transformer do
 
   defp transform_comprehension_subpart({:into, collectable}, acc, context) do
     %{acc | collectable: transform(collectable, context)}
+  end
+
+  defp transform_comprehension_subpart({:uniq, unique}, acc, context) do
+    %{acc | unique: transform(unique, context)}
   end
 
   defp transform_function_capture(function, arity, meta, context) do

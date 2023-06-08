@@ -100,13 +100,13 @@ defmodule Hologram.Compiler.IR do
   end
 
   defmodule Comprehension do
-    defstruct [:generators, :filters, :collectable, :uniq, :mapper]
+    defstruct [:generators, :filters, :collectable, :unique, :mapper]
 
     @type t :: %__MODULE__{
             generators: list(IR.ComprehensionGenerator.t()),
             filters: list(IR.ComprehensionFilter.t()),
             collectable: IR.t(),
-            uniq: %IR.AtomType{value: boolean},
+            unique: %IR.AtomType{value: boolean},
             mapper: IR.t()
           }
   end

@@ -1105,6 +1105,35 @@ defmodule Hologram.Compiler.TransformerTest do
       } = transform(ast, %Context{})
     end
 
+    test "default unique" do
+      # for a <- [1, 2], do: a * a
+      ast =
+        {:for, [line: 1],
+         [
+           {:<-, [line: 1], [{:a, [line: 1], nil}, [1, 2]]},
+           [
+             do: {:__block__, [], [{:*, [line: 1], [{:a, [line: 1], nil}, {:n, [line: 1], nil}]}]}
+           ]
+         ]}
+
+      assert %IR.Comprehension{unique: %IR.AtomType{value: false}} = transform(ast, %Context{})
+    end
+
+    test "custom unique" do
+      # for a <- [1, 2], uniq: true, do: a * a
+      ast =
+        {:for, [line: 1],
+         [
+           {:<-, [line: 1], [{:a, [line: 1], nil}, [1, 2]]},
+           [
+             uniq: true,
+             do: {:*, [line: 1], [{:a, [line: 1], nil}, {:a, [line: 1], nil}]}
+           ]
+         ]}
+
+      assert %IR.Comprehension{unique: %IR.AtomType{value: true}} = transform(ast, %Context{})
+    end
+
     test "mapper" do
       # for a <- [1, 2], do: my_mapper(a)
       ast =
