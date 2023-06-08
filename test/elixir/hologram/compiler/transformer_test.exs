@@ -876,8 +876,9 @@ defmodule Hologram.Compiler.TransformerTest do
            ]
          ]}
 
-      assert %IR.Comprehension{generators: [%IR.ComprehensionGenerator{}]} =
-               transform(ast, %Context{})
+      assert %IR.Comprehension{
+               generators: [%IR.ComprehensionGenerator{match: %IR.Variable{name: :a}}]
+             } = transform(ast, %Context{})
     end
 
     test "multiple generators" do
@@ -894,8 +895,8 @@ defmodule Hologram.Compiler.TransformerTest do
 
       assert %IR.Comprehension{
                generators: [
-                 %IR.ComprehensionGenerator{},
-                 %IR.ComprehensionGenerator{}
+                 %IR.ComprehensionGenerator{match: %IR.Variable{name: :a}},
+                 %IR.ComprehensionGenerator{match: %IR.Variable{name: :b}}
                ]
              } = transform(ast, %Context{})
     end

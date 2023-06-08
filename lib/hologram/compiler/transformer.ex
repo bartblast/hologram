@@ -119,6 +119,7 @@ defmodule Hologram.Compiler.Transformer do
       generators: [],
       filters: [],
       collectable: %IR.ListType{data: []},
+      uniq: %IR.AtomType{value: false},
       mapper: nil
     }
 
