@@ -178,6 +178,10 @@ defmodule Hologram.Compiler.Encoder do
 
   defp encode_as_string(value, wrap)
 
+  defp encode_as_string(nil, false) do
+    "nil"
+  end
+
   defp encode_as_string(value, false) do
     value
     |> to_string()

@@ -5,10 +5,30 @@ defmodule Hologram.Compiler.EncoderTest do
   alias Hologram.Compiler.Context
   alias Hologram.Compiler.IR
 
-  test "atom type" do
-    ir = %IR.AtomType{value: :"aa\"bb\ncc"}
+  describe "atom type" do
+    test "nil" do
+      ir = %IR.AtomType{value: nil}
 
-    assert encode(ir, %Context{}) == ~s/Type.atom("aa\\"bb\\ncc")/
+      assert encode(ir, %Context{}) == ~s/Type.atom("nil")/
+    end
+
+    test "false" do
+      ir = %IR.AtomType{value: false}
+
+      assert encode(ir, %Context{}) == ~s/Type.atom("false")/
+    end
+
+    test "true" do
+      ir = %IR.AtomType{value: true}
+
+      assert encode(ir, %Context{}) == ~s/Type.atom("true")/
+    end
+
+    test "non-nil and non-boolean" do
+      ir = %IR.AtomType{value: :"aa\"bb\ncc"}
+
+      assert encode(ir, %Context{}) == ~s/Type.atom("aa\\"bb\\ncc")/
+    end
   end
 
   describe "bitstring" do
@@ -112,7 +132,7 @@ defmodule Hologram.Compiler.EncoderTest do
       assert encode(ir, %Context{}) ==
                """
                {
-               return Type.atom("");
+               return Type.atom("nil");
                }\
                """
     end
