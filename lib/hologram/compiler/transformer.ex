@@ -560,14 +560,19 @@ defmodule Hologram.Compiler.Transformer do
   end
 
   defp transform_comprehension_part(ast, acc, context) when is_list(ast) do
-    Enum.reduce(ast, acc, &transform_comprehension_part(&1, &2, context))
+    Enum.reduce(ast, acc, &transform_comprehension_subpart(&1, &2, context))
   end
 
-  defp transform_comprehension_part({:do, block}, acc, context) do
+  defp transform_comprehension_part(filter, acc, context) do
+    filter = %IR.ComprehensionFilter{expression: transform(filter, context)}
+    %{acc | filters: [filter | acc.filters]}
+  end
+
+  defp transform_comprehension_subpart({:do, block}, acc, context) do
     %{acc | mapper: transform(block, context)}
   end
 
-  defp transform_comprehension_part({:into, collectable}, acc, context) do
+  defp transform_comprehension_subpart({:into, collectable}, acc, context) do
     %{acc | collectable: transform(collectable, context)}
   end
 

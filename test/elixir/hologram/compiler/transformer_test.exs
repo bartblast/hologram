@@ -1022,6 +1022,75 @@ defmodule Hologram.Compiler.TransformerTest do
       } = transform(ast, %Context{})
     end
 
+    test "no filters" do
+      # for a <- [1, 2], do: a * a
+      ast =
+        {:for, [line: 1],
+         [
+           {:<-, [line: 1], [{:a, [line: 1], nil}, [1, 2]]},
+           [
+             do: {:__block__, [], [{:*, [line: 1], [{:a, [line: 1], nil}, {:n, [line: 1], nil}]}]}
+           ]
+         ]}
+
+      assert %IR.Comprehension{filters: []} = transform(ast, %Context{})
+    end
+
+    test "single filter" do
+      # for a <- [1, 2], my_filter(a), do: a * a
+      ast =
+        {:for, [line: 1],
+         [
+           {:<-, [line: 1], [{:a, [line: 1], nil}, [1, 2]]},
+           {:my_filter, [line: 1], [{:a, [line: 1], nil}]},
+           [
+             do: {:__block__, [], [{:*, [line: 1], [{:a, [line: 1], nil}, {:a, [line: 1], nil}]}]}
+           ]
+         ]}
+
+      assert %IR.Comprehension{
+               filters: [
+                 %IR.ComprehensionFilter{
+                   expression: %IR.LocalFunctionCall{
+                     function: :my_filter,
+                     args: [%IR.Variable{name: :a}]
+                   }
+                 }
+               ]
+             } = transform(ast, %Context{})
+    end
+
+    test "multiple filters" do
+      # for a <- [1, 2], my_filter_1(a), my_filter_2(a), do: a * a
+      ast =
+        {:for, [line: 1],
+         [
+           {:<-, [line: 1], [{:a, [line: 1], nil}, [1, 2]]},
+           {:my_filter_1, [line: 1], [{:a, [line: 1], nil}]},
+           {:my_filter_2, [line: 1], [{:a, [line: 1], nil}]},
+           [
+             do: {:__block__, [], [{:*, [line: 1], [{:a, [line: 1], nil}, {:a, [line: 1], nil}]}]}
+           ]
+         ]}
+
+      assert %IR.Comprehension{
+               filters: [
+                 %IR.ComprehensionFilter{
+                   expression: %IR.LocalFunctionCall{
+                     function: :my_filter_1,
+                     args: [%IR.Variable{name: :a}]
+                   }
+                 },
+                 %IR.ComprehensionFilter{
+                   expression: %IR.LocalFunctionCall{
+                     function: :my_filter_2,
+                     args: [%IR.Variable{name: :a}]
+                   }
+                 }
+               ]
+             } = transform(ast, %Context{})
+    end
+
     test "default collectable" do
       # for a <- [1, 2], do: a * a
       ast =
