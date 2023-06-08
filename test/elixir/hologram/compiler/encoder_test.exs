@@ -105,6 +105,51 @@ defmodule Hologram.Compiler.EncoderTest do
     end
   end
 
+  describe "block" do
+    test "empty" do
+      ir = %IR.Block{expressions: []}
+
+      assert encode(ir, %Context{}) ==
+               """
+               {
+               return Type.atom("");
+               }\
+               """
+    end
+
+    test "single expression" do
+      ir = %IR.Block{
+        expressions: [
+          %IR.IntegerType{value: 1}
+        ]
+      }
+
+      assert encode(ir, %Context{}) ==
+               """
+               {
+               return Type.integer(1n);
+               }\
+               """
+    end
+
+    test "multiple expressions" do
+      ir = %IR.Block{
+        expressions: [
+          %IR.IntegerType{value: 1},
+          %IR.IntegerType{value: 2}
+        ]
+      }
+
+      assert encode(ir, %Context{}) ==
+               """
+               {
+               Type.integer(1n);
+               return Type.integer(2n);
+               }\
+               """
+    end
+  end
+
   describe "cons operator" do
     @cons_operator_ir %IR.ConsOperator{
       head: %IR.IntegerType{value: 1},

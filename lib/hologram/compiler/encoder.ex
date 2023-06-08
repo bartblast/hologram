@@ -48,6 +48,33 @@ defmodule Hologram.Compiler.Encoder do
     |> StringUtils.wrap("Type.bitstring([", "])")
   end
 
+  def encode(%IR.Block{expressions: exprs}, context) do
+    exprs =
+      if exprs == [] do
+        [%IR.AtomType{value: nil}]
+      else
+        exprs
+      end
+
+    expr_count = Enum.count(exprs)
+
+    body =
+      exprs
+      |> Enum.with_index()
+      |> Enum.map(fn {expr, idx} ->
+        expr_str = encode(expr, context)
+
+        if idx == expr_count - 1 do
+          "\nreturn #{expr_str};"
+        else
+          "\n#{expr_str};"
+        end
+      end)
+      |> Enum.join("")
+
+    "{#{body}\n}"
+  end
+
   def encode(%IR.ConsOperator{head: head, tail: tail}, %{pattern?: true} = context) do
     "Type.consPattern(#{encode(head, context)}, #{encode(tail, context)})"
   end
