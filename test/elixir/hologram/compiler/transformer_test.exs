@@ -971,14 +971,14 @@ defmodule Hologram.Compiler.TransformerTest do
     end
 
     test "generator guard" do
-      # for a when my_fun(a, 2) <- [1, 2, 3], do: a * a
+      # for a when my_guard(a, 2) <- [1, 2, 3], do: a * a
       ast =
         {:for, [line: 1],
          [
            {:<-, [line: 1],
             [
               {:when, [line: 1],
-               [{:a, [line: 1], nil}, {:my_fun, [line: 1], [{:a, [line: 1], nil}, 2]}]},
+               [{:a, [line: 1], nil}, {:my_guard, [line: 1], [{:a, [line: 1], nil}, 2]}]},
               [1, 2, 3]
             ]},
            [
@@ -990,7 +990,7 @@ defmodule Hologram.Compiler.TransformerTest do
         generators: [
           %IR.ComprehensionGenerator{
             guard: %IR.LocalFunctionCall{
-              function: :my_fun,
+              function: :my_guard,
               args: [
                 %IR.Variable{name: :a},
                 %IR.IntegerType{value: 2}
@@ -998,6 +998,27 @@ defmodule Hologram.Compiler.TransformerTest do
             }
           }
         ]
+      } = transform(ast, %Context{})
+    end
+
+    test "mapper" do
+      # for a <- [1, 2], do: my_mapper(a)
+      ast =
+        {:for, [line: 1],
+         [
+           {:<-, [line: 1], [{:a, [line: 1], nil}, [1, 2]]},
+           [do: {:__block__, [], [{:my_mapper, [line: 1], [{:a, [line: 1], nil}]}]}]
+         ]}
+
+      %IR.Comprehension{
+        mapper: %IR.Block{
+          expressions: [
+            %IR.LocalFunctionCall{
+              function: :my_mapper,
+              args: [%IR.Variable{name: :a}]
+            }
+          ]
+        }
       } = transform(ast, %Context{})
     end
   end

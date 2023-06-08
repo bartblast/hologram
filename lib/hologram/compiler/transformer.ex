@@ -559,8 +559,9 @@ defmodule Hologram.Compiler.Transformer do
     accumulate_comprehension_generator(acc, enumerable, match, nil, context)
   end
 
-  # TODO:
-  defp transform_comprehension_part(_part, acc, _context), do: acc
+  defp transform_comprehension_part([do: block], acc, context) do
+    %{acc | mapper: transform(block, context)}
+  end
 
   defp transform_function_capture(function, arity, meta, context) do
     args = build_function_capture_args(arity, meta)
