@@ -114,6 +114,29 @@ defmodule Hologram.Compiler.Transformer do
     }
   end
 
+  def transform({:for, _, parts}, context) do
+    initial_acc = %{
+      generators: [],
+      filters: [],
+      collectable: %IR.ListType{data: []},
+      mapper: nil
+    }
+
+    %{generators: generators, filters: filters, collectable: collectable, mapper: mapper} =
+      Enum.reduce(
+        parts,
+        initial_acc,
+        &transform_comprehension_part(&1, &2, context)
+      )
+
+    %IR.Comprehension{
+      generators: Enum.reverse(generators),
+      filters: Enum.reverse(filters),
+      collectable: collectable,
+      mapper: mapper
+    }
+  end
+
   def transform({:cond, _meta, [[do: clauses]]}, context) do
     clauses_ir = Enum.map(clauses, &build_cond_clause_ir(&1, context))
 
@@ -332,6 +355,23 @@ defmodule Hologram.Compiler.Transformer do
     IO.puts("\n........................................\n")
   end
 
+  defp accumulate_comprehension_generator(acc, enumerable, match, guard, context) do
+    guard_ir =
+      if guard do
+        transform(guard, context)
+      else
+        nil
+      end
+
+    generator = %IR.ComprehensionGenerator{
+      enumerable: transform(enumerable, context),
+      match: transform(match, context),
+      guard: guard_ir
+    }
+
+    %{acc | generators: [generator | acc.generators]}
+  end
+
   defp build_case_clause_ir({:->, _meta_1, [[{:when, _meta_2, [head, guard]}], body]}, context) do
     %IR.CaseClause{
       head: transform(head, context),
@@ -506,6 +546,21 @@ defmodule Hologram.Compiler.Transformer do
 
     %IR.BitstringSegment{value: value, modifiers: modifiers}
   end
+
+  defp transform_comprehension_part(
+         {:<-, _meta_1, [{:when, _meta_2, [match, guard]}, enumerable]},
+         acc,
+         context
+       ) do
+    accumulate_comprehension_generator(acc, enumerable, match, guard, context)
+  end
+
+  defp transform_comprehension_part({:<-, _meta, [match, enumerable]}, acc, context) do
+    accumulate_comprehension_generator(acc, enumerable, match, nil, context)
+  end
+
+  # TODO:
+  defp transform_comprehension_part(_part, acc, _context), do: acc
 
   defp transform_function_capture(function, arity, meta, context) do
     args = build_function_capture_args(arity, meta)

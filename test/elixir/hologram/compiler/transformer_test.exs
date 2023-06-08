@@ -864,6 +864,144 @@ defmodule Hologram.Compiler.TransformerTest do
     end
   end
 
+  describe "comprehension" do
+    test "single generator" do
+      # for a <- [1, 2], do: a * a
+      ast =
+        {:for, [line: 1],
+         [
+           {:<-, [line: 1], [{:a, [line: 1], nil}, [1, 2]]},
+           [
+             do: {:__block__, [], [{:*, [line: 1], [{:a, [line: 1], nil}, {:n, [line: 1], nil}]}]}
+           ]
+         ]}
+
+      assert %IR.Comprehension{generators: [%IR.ComprehensionGenerator{}]} =
+               transform(ast, %Context{})
+    end
+
+    test "multiple generators" do
+      # for a <- [1, 2], b <- [3, 4], do: a * b
+      ast =
+        {:for, [line: 1],
+         [
+           {:<-, [line: 1], [{:a, [line: 1], nil}, [1, 2]]},
+           {:<-, [line: 1], [{:b, [line: 1], nil}, [3, 4]]},
+           [
+             do: {:__block__, [], [{:*, [line: 1], [{:a, [line: 1], nil}, {:b, [line: 1], nil}]}]}
+           ]
+         ]}
+
+      assert %IR.Comprehension{
+               generators: [
+                 %IR.ComprehensionGenerator{},
+                 %IR.ComprehensionGenerator{}
+               ]
+             } = transform(ast, %Context{})
+    end
+
+    test "generator enumerable" do
+      # for a <- [1, 2], do: a * a
+      ast =
+        {:for, [line: 1],
+         [
+           {:<-, [line: 1], [{:a, [line: 1], nil}, [1, 2]]},
+           [
+             do: {:__block__, [], [{:*, [line: 1], [{:a, [line: 1], nil}, {:n, [line: 1], nil}]}]}
+           ]
+         ]}
+
+      %IR.Comprehension{
+        generators: [
+          %IR.ComprehensionGenerator{
+            enumerable: %IR.ListType{
+              data: [
+                %IR.IntegerType{value: 1},
+                %IR.IntegerType{value: 2}
+              ]
+            }
+          }
+        ]
+      } = transform(ast, %Context{})
+    end
+
+    test "single variable in generator match" do
+      # for a <- [1, 2], do: a * a
+      ast =
+        {:for, [line: 1],
+         [
+           {:<-, [line: 1], [{:a, [line: 1], nil}, [1, 2]]},
+           [
+             do: {:__block__, [], [{:*, [line: 1], [{:a, [line: 1], nil}, {:a, [line: 1], nil}]}]}
+           ]
+         ]}
+
+      %IR.Comprehension{
+        generators: [
+          %IR.ComprehensionGenerator{
+            match: %IR.Variable{name: :a}
+          }
+        ]
+      } = transform(ast, %Context{})
+    end
+
+    test "multiple variables in generator match" do
+      # for {a, b} <- [{1, 2}, {3, 4}], do: a * b
+      ast =
+        {:for, [line: 1],
+         [
+           {:<-, [line: 1], [{{:a, [line: 1], nil}, {:b, [line: 1], nil}}, [{1, 2}, {3, 4}]]},
+           [
+             do: {:__block__, [], [{:*, [line: 1], [{:a, [line: 1], nil}, {:b, [line: 1], nil}]}]}
+           ]
+         ]}
+
+      %IR.Comprehension{
+        generators: [
+          %IR.ComprehensionGenerator{
+            match: %IR.TupleType{
+              data: [
+                %IR.Variable{name: :a},
+                %IR.Variable{name: :b}
+              ]
+            }
+          }
+        ]
+      } = transform(ast, %Context{})
+    end
+
+    test "generator guard" do
+      # for a when my_fun(a, 2) <- [1, 2, 3], do: a * a
+      ast =
+        {:for, [line: 1],
+         [
+           {:<-, [line: 1],
+            [
+              {:when, [line: 1],
+               [{:a, [line: 1], nil}, {:my_fun, [line: 1], [{:a, [line: 1], nil}, 2]}]},
+              [1, 2, 3]
+            ]},
+           [
+             do: {:__block__, [], [{:*, [line: 1], [{:a, [line: 1], nil}, {:a, [line: 1], nil}]}]}
+           ]
+         ]}
+
+      %IR.Comprehension{
+        generators: [
+          %IR.ComprehensionGenerator{
+            guard: %IR.LocalFunctionCall{
+              function: :my_fun,
+              args: [
+                %IR.Variable{name: :a},
+                %IR.IntegerType{value: 2}
+              ]
+            }
+          }
+        ]
+      } = transform(ast, %Context{})
+    end
+  end
+
   describe "cond expression" do
     test "single clause, single expression body" do
       # cond do
