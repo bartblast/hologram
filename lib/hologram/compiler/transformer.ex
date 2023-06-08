@@ -114,7 +114,7 @@ defmodule Hologram.Compiler.Transformer do
     }
   end
 
-  def transform({:for, _, parts}, context) do
+  def transform({:for, _meta, parts}, context) do
     initial_acc = %{
       generators: [],
       filters: [],
