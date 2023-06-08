@@ -61,7 +61,7 @@ defmodule Hologram.Compiler.Encoder do
     body =
       exprs
       |> Enum.with_index()
-      |> Enum.map(fn {expr, idx} ->
+      |> Enum.map_join("", fn {expr, idx} ->
         expr_str = encode(expr, context)
 
         if idx == expr_count - 1 do
@@ -70,7 +70,6 @@ defmodule Hologram.Compiler.Encoder do
           "\n#{expr_str};"
         end
       end)
-      |> Enum.join("")
 
     "{#{body}\n}"
   end
