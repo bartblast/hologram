@@ -912,18 +912,18 @@ defmodule Hologram.Compiler.TransformerTest do
            ]
          ]}
 
-      %IR.Comprehension{
-        generators: [
-          %IR.ComprehensionGenerator{
-            enumerable: %IR.ListType{
-              data: [
-                %IR.IntegerType{value: 1},
-                %IR.IntegerType{value: 2}
-              ]
-            }
-          }
-        ]
-      } = transform(ast, %Context{})
+      assert %IR.Comprehension{
+               generators: [
+                 %IR.ComprehensionGenerator{
+                   enumerable: %IR.ListType{
+                     data: [
+                       %IR.IntegerType{value: 1},
+                       %IR.IntegerType{value: 2}
+                     ]
+                   }
+                 }
+               ]
+             } = transform(ast, %Context{})
     end
 
     test "single variable in generator match" do
@@ -937,13 +937,13 @@ defmodule Hologram.Compiler.TransformerTest do
            ]
          ]}
 
-      %IR.Comprehension{
-        generators: [
-          %IR.ComprehensionGenerator{
-            match: %IR.Variable{name: :a}
-          }
-        ]
-      } = transform(ast, %Context{})
+      assert %IR.Comprehension{
+               generators: [
+                 %IR.ComprehensionGenerator{
+                   match: %IR.Variable{name: :a}
+                 }
+               ]
+             } = transform(ast, %Context{})
     end
 
     test "multiple variables in generator match" do
@@ -957,18 +957,18 @@ defmodule Hologram.Compiler.TransformerTest do
            ]
          ]}
 
-      %IR.Comprehension{
-        generators: [
-          %IR.ComprehensionGenerator{
-            match: %IR.TupleType{
-              data: [
-                %IR.Variable{name: :a},
-                %IR.Variable{name: :b}
-              ]
-            }
-          }
-        ]
-      } = transform(ast, %Context{})
+      assert %IR.Comprehension{
+               generators: [
+                 %IR.ComprehensionGenerator{
+                   match: %IR.TupleType{
+                     data: [
+                       %IR.Variable{name: :a},
+                       %IR.Variable{name: :b}
+                     ]
+                   }
+                 }
+               ]
+             } = transform(ast, %Context{})
     end
 
     test "generator guard" do
@@ -987,19 +987,19 @@ defmodule Hologram.Compiler.TransformerTest do
            ]
          ]}
 
-      %IR.Comprehension{
-        generators: [
-          %IR.ComprehensionGenerator{
-            guard: %IR.LocalFunctionCall{
-              function: :my_guard,
-              args: [
-                %IR.Variable{name: :a},
-                %IR.IntegerType{value: 2}
-              ]
-            }
-          }
-        ]
-      } = transform(ast, %Context{})
+      assert %IR.Comprehension{
+               generators: [
+                 %IR.ComprehensionGenerator{
+                   guard: %IR.LocalFunctionCall{
+                     function: :my_guard,
+                     args: [
+                       %IR.Variable{name: :a},
+                       %IR.IntegerType{value: 2}
+                     ]
+                   }
+                 }
+               ]
+             } = transform(ast, %Context{})
     end
 
     test "no filters" do
@@ -1082,7 +1082,7 @@ defmodule Hologram.Compiler.TransformerTest do
            ]
          ]}
 
-      %IR.Comprehension{collectable: %IR.ListType{data: []}} = transform(ast, %Context{})
+      assert %IR.Comprehension{collectable: %IR.ListType{data: []}} = transform(ast, %Context{})
     end
 
     test "custom collectable" do
@@ -1097,12 +1097,12 @@ defmodule Hologram.Compiler.TransformerTest do
            ]
          ]}
 
-      %IR.Comprehension{
-        collectable: %IR.LocalFunctionCall{
-          function: :my_collectable,
-          args: [%IR.IntegerType{value: 123}]
-        }
-      } = transform(ast, %Context{})
+      assert %IR.Comprehension{
+               collectable: %IR.LocalFunctionCall{
+                 function: :my_collectable,
+                 args: [%IR.IntegerType{value: 123}]
+               }
+             } = transform(ast, %Context{})
     end
 
     test "default unique" do
@@ -1143,16 +1143,16 @@ defmodule Hologram.Compiler.TransformerTest do
            [do: {:__block__, [], [{:my_mapper, [line: 1], [{:a, [line: 1], nil}]}]}]
          ]}
 
-      %IR.Comprehension{
-        mapper: %IR.Block{
-          expressions: [
-            %IR.LocalFunctionCall{
-              function: :my_mapper,
-              args: [%IR.Variable{name: :a}]
-            }
-          ]
-        }
-      } = transform(ast, %Context{})
+      assert %IR.Comprehension{
+               mapper: %IR.Block{
+                 expressions: [
+                   %IR.LocalFunctionCall{
+                     function: :my_mapper,
+                     args: [%IR.Variable{name: :a}]
+                   }
+                 ]
+               }
+             } = transform(ast, %Context{})
     end
   end
 
