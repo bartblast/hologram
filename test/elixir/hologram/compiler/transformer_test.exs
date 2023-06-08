@@ -865,20 +865,20 @@ defmodule Hologram.Compiler.TransformerTest do
   end
 
   describe "comprehension" do
-    test "single generator" do
-      # for a <- [1, 2], do: a * a
-      ast =
-        {:for, [line: 1],
-         [
-           {:<-, [line: 1], [{:a, [line: 1], nil}, [1, 2]]},
-           [
-             do: {:__block__, [], [{:*, [line: 1], [{:a, [line: 1], nil}, {:n, [line: 1], nil}]}]}
-           ]
-         ]}
+    # for a <- [1, 2], do: a * a
+    @ast {:for, [line: 1],
+          [
+            {:<-, [line: 1], [{:a, [line: 1], nil}, [1, 2]]},
+            [
+              do:
+                {:__block__, [], [{:*, [line: 1], [{:a, [line: 1], nil}, {:n, [line: 1], nil}]}]}
+            ]
+          ]}
 
+    test "single generator" do
       assert %IR.Comprehension{
                generators: [%IR.ComprehensionGenerator{match: %IR.Variable{name: :a}}]
-             } = transform(ast, %Context{})
+             } = transform(@ast, %Context{})
     end
 
     test "multiple generators" do
@@ -902,16 +902,6 @@ defmodule Hologram.Compiler.TransformerTest do
     end
 
     test "generator enumerable" do
-      # for a <- [1, 2], do: a * a
-      ast =
-        {:for, [line: 1],
-         [
-           {:<-, [line: 1], [{:a, [line: 1], nil}, [1, 2]]},
-           [
-             do: {:__block__, [], [{:*, [line: 1], [{:a, [line: 1], nil}, {:n, [line: 1], nil}]}]}
-           ]
-         ]}
-
       assert %IR.Comprehension{
                generators: [
                  %IR.ComprehensionGenerator{
@@ -923,27 +913,17 @@ defmodule Hologram.Compiler.TransformerTest do
                    }
                  }
                ]
-             } = transform(ast, %Context{})
+             } = transform(@ast, %Context{})
     end
 
     test "single variable in generator match" do
-      # for a <- [1, 2], do: a * a
-      ast =
-        {:for, [line: 1],
-         [
-           {:<-, [line: 1], [{:a, [line: 1], nil}, [1, 2]]},
-           [
-             do: {:__block__, [], [{:*, [line: 1], [{:a, [line: 1], nil}, {:a, [line: 1], nil}]}]}
-           ]
-         ]}
-
       assert %IR.Comprehension{
                generators: [
                  %IR.ComprehensionGenerator{
                    match: %IR.Variable{name: :a}
                  }
                ]
-             } = transform(ast, %Context{})
+             } = transform(@ast, %Context{})
     end
 
     test "multiple variables in generator match" do
@@ -1003,17 +983,7 @@ defmodule Hologram.Compiler.TransformerTest do
     end
 
     test "no filters" do
-      # for a <- [1, 2], do: a * a
-      ast =
-        {:for, [line: 1],
-         [
-           {:<-, [line: 1], [{:a, [line: 1], nil}, [1, 2]]},
-           [
-             do: {:__block__, [], [{:*, [line: 1], [{:a, [line: 1], nil}, {:n, [line: 1], nil}]}]}
-           ]
-         ]}
-
-      assert %IR.Comprehension{filters: []} = transform(ast, %Context{})
+      assert %IR.Comprehension{filters: []} = transform(@ast, %Context{})
     end
 
     test "single filter" do
@@ -1072,17 +1042,7 @@ defmodule Hologram.Compiler.TransformerTest do
     end
 
     test "default collectable" do
-      # for a <- [1, 2], do: a * a
-      ast =
-        {:for, [line: 1],
-         [
-           {:<-, [line: 1], [{:a, [line: 1], nil}, [1, 2]]},
-           [
-             do: {:__block__, [], [{:*, [line: 1], [{:a, [line: 1], nil}, {:n, [line: 1], nil}]}]}
-           ]
-         ]}
-
-      assert %IR.Comprehension{collectable: %IR.ListType{data: []}} = transform(ast, %Context{})
+      assert %IR.Comprehension{collectable: %IR.ListType{data: []}} = transform(@ast, %Context{})
     end
 
     test "custom collectable" do
@@ -1106,17 +1066,7 @@ defmodule Hologram.Compiler.TransformerTest do
     end
 
     test "default unique" do
-      # for a <- [1, 2], do: a * a
-      ast =
-        {:for, [line: 1],
-         [
-           {:<-, [line: 1], [{:a, [line: 1], nil}, [1, 2]]},
-           [
-             do: {:__block__, [], [{:*, [line: 1], [{:a, [line: 1], nil}, {:n, [line: 1], nil}]}]}
-           ]
-         ]}
-
-      assert %IR.Comprehension{unique: %IR.AtomType{value: false}} = transform(ast, %Context{})
+      assert %IR.Comprehension{unique: %IR.AtomType{value: false}} = transform(@ast, %Context{})
     end
 
     test "custom unique" do
