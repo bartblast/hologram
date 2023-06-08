@@ -1037,7 +1037,7 @@ defmodule Hologram.Compiler.TransformerTest do
     end
 
     test "custom collectable" do
-      # for a <- [1, 2], into: my_collectable(123), do: a * a"
+      # for a <- [1, 2], into: my_collectable(123), do: a * a
       ast =
         {:for, [line: 1],
          [
