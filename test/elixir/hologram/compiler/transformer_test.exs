@@ -1002,27 +1002,6 @@ defmodule Hologram.Compiler.TransformerTest do
       } = transform(ast, %Context{})
     end
 
-    test "mapper" do
-      # for a <- [1, 2], do: my_mapper(a)
-      ast =
-        {:for, [line: 1],
-         [
-           {:<-, [line: 1], [{:a, [line: 1], nil}, [1, 2]]},
-           [do: {:__block__, [], [{:my_mapper, [line: 1], [{:a, [line: 1], nil}]}]}]
-         ]}
-
-      %IR.Comprehension{
-        mapper: %IR.Block{
-          expressions: [
-            %IR.LocalFunctionCall{
-              function: :my_mapper,
-              args: [%IR.Variable{name: :a}]
-            }
-          ]
-        }
-      } = transform(ast, %Context{})
-    end
-
     test "no filters" do
       # for a <- [1, 2], do: a * a
       ast =
@@ -1122,6 +1101,27 @@ defmodule Hologram.Compiler.TransformerTest do
         collectable: %IR.LocalFunctionCall{
           function: :my_collectable,
           args: [%IR.IntegerType{value: 123}]
+        }
+      } = transform(ast, %Context{})
+    end
+
+    test "mapper" do
+      # for a <- [1, 2], do: my_mapper(a)
+      ast =
+        {:for, [line: 1],
+         [
+           {:<-, [line: 1], [{:a, [line: 1], nil}, [1, 2]]},
+           [do: {:__block__, [], [{:my_mapper, [line: 1], [{:a, [line: 1], nil}]}]}]
+         ]}
+
+      %IR.Comprehension{
+        mapper: %IR.Block{
+          expressions: [
+            %IR.LocalFunctionCall{
+              function: :my_mapper,
+              args: [%IR.Variable{name: :a}]
+            }
+          ]
         }
       } = transform(ast, %Context{})
     end
