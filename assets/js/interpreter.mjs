@@ -56,6 +56,14 @@ export default class Interpreter {
     }
   }
 
+  static isMatched(left, right) {
+    if (Type.isVariablePattern(left)) {
+      return true;
+    }
+
+    return Interpreter.isStrictlyEqual(left, right);
+  }
+
   static isStrictlyEqual(left, right) {
     if (left.type !== right.type) {
       return false;

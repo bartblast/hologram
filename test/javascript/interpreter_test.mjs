@@ -56,6 +56,15 @@ describe("head()", () => {
   });
 });
 
+describe("isMatched()", () => {
+  it("variable pattern", () => {
+    const left = Type.variablePattern("abc");
+    const right = Type.integer(123);
+
+    assert.isTrue(Interpreter.isMatched(left, right));
+  });
+});
+
 describe("isStrictlyEqual()", () => {
   it("returns true if the args are of the same boxed primitive type and have equal values", () => {
     const result = Interpreter.isStrictlyEqual(
