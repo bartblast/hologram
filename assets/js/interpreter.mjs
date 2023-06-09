@@ -72,9 +72,14 @@ export default class Interpreter {
     return isEqual(left, right);
   }
 
-  static matchOperator(left, right, vars) {
-    if (!Interpreter.isMatched(left, right)) {
+  static matchOperator(left, right, vars, assertMatches = true) {
+    if (assertMatches && !Interpreter.isMatched(left, right)) {
       Interpreter._raiseMatchError(right);
+    }
+
+    if (Type.isVariablePattern(left)) {
+      vars[left.name] = right;
+      return right;
     }
   }
 

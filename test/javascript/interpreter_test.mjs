@@ -240,6 +240,19 @@ describe("matchOperator()", () => {
       "(MatchError) no match of right hand side value: 2"
     );
   });
+
+  it("handles variable pattern", () => {
+    const vars = {a: Type.integer(9)};
+
+    const result = Interpreter.matchOperator(
+      Type.variablePattern("a"),
+      Type.integer(2),
+      vars
+    );
+
+    assert.deepStrictEqual(result, Type.integer(2));
+    assert.deepStrictEqual(vars, {a: Type.integer(2)});
+  });
 });
 
 describe("raiseError()", () => {
