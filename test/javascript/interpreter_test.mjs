@@ -230,6 +230,18 @@ describe("inspect()", () => {
   // TODO: test other boxed types
 });
 
+describe("matchOperator()", () => {
+  it("raises MatchError if the arguments don't match", () => {
+    assert.throw(
+      () => {
+        Interpreter.matchOperator(Type.integer(1), Type.integer(2), {});
+      },
+      Error,
+      "(MatchError) no match of right hand side value: 2"
+    );
+  });
+});
+
 describe("raiseError()", () => {
   it("throws an error with the given message", () => {
     assert.throw(
@@ -240,16 +252,6 @@ describe("raiseError()", () => {
       "(MyType) my message"
     );
   });
-});
-
-it("raiseMatchError()", () => {
-  assert.throw(
-    () => {
-      Interpreter.raiseMatchError(Type.integer(123));
-    },
-    Error,
-    "(MatchError) no match of right hand side value: 123"
-  );
 });
 
 describe("raiseNotYetImplementedError()", () => {

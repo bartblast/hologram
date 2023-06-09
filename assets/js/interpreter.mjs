@@ -72,15 +72,14 @@ export default class Interpreter {
     return isEqual(left, right);
   }
 
-  static raiseError(type, message) {
-    throw new Error(`(${type}) ${message}`);
+  static matchOperator(left, right, vars) {
+    if (!Interpreter.isMatched(left, right)) {
+      Interpreter._raiseMatchError(right);
+    }
   }
 
-  static raiseMatchError(right) {
-    const message =
-      "no match of right hand side value: " + Interpreter.inspect(right);
-
-    return Interpreter.raiseError("MatchError", message);
+  static raiseError(type, message) {
+    throw new Error(`(${type}) ${message}`);
   }
 
   static raiseNotYetImplementedError(message) {
@@ -89,5 +88,13 @@ export default class Interpreter {
 
   static tail(list) {
     return Type.list(list.data.slice(1));
+  }
+
+  // private
+  static _raiseMatchError(right) {
+    const message =
+      "no match of right hand side value: " + Interpreter.inspect(right);
+
+    return Interpreter.raiseError("MatchError", message);
   }
 }
