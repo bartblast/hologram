@@ -57,6 +57,29 @@ describe("head()", () => {
 });
 
 describe("isMatched()", () => {
+  describe("integer", () => {
+    it("is matching another integer", () => {
+      const left = Type.integer(123);
+      const right = Type.integer(123);
+
+      assert.isTrue(Interpreter.isMatched(left, right));
+    });
+
+    it("is not matching another integer", () => {
+      const left = Type.integer(1);
+      const right = Type.integer(2);
+
+      assert.isFalse(Interpreter.isMatched(left, right));
+    });
+
+    it("is not matching another value of different boxed type", () => {
+      const left = Type.integer(123);
+      const right = Type.string("123");
+
+      assert.isFalse(Interpreter.isMatched(left, right));
+    });
+  });
+
   it("variable pattern", () => {
     const left = Type.variablePattern("abc");
     const right = Type.integer(123);
