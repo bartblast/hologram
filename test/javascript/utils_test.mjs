@@ -43,7 +43,7 @@ describe("cartesianProduct()", () => {
   });
 });
 
-describe.only("clone()", () => {
+describe("clone()", () => {
   let obj, result;
 
   beforeEach(() => {
