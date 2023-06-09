@@ -149,6 +149,29 @@ describe("isMatched()", () => {
     });
   });
 
+  describe("tuple", () => {
+    it("is matching another boxed tuple having the same items", () => {
+      const left = Type.tuple([Type.integer(1), Type.integer(2)]);
+      const right = Type.tuple([Type.integer(1), Type.integer(2)]);
+
+      assert.isTrue(Interpreter.isMatched(left, right));
+    });
+
+    it("is not matching another boxed tuple having different items", () => {
+      const left = Type.tuple([Type.integer(1), Type.integer(2)]);
+      const right = Type.tuple([Type.integer(1), Type.integer(3)]);
+
+      assert.isFalse(Interpreter.isMatched(left, right));
+    });
+
+    it("is not matching another boxed value of a non-tuple boxed type", () => {
+      const left = Type.tuple([Type.integer(1), Type.integer(2)]);
+      const right = Type.string("123");
+
+      assert.isFalse(Interpreter.isMatched(left, right));
+    });
+  });
+
   it("variable pattern", () => {
     const left = Type.variablePattern("abc");
     const right = Type.integer(123);
