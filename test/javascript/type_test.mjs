@@ -576,6 +576,18 @@ describe("map", () => {
   });
 });
 
+describe("matchPlaceholder()", () => {
+  it("returns boxed matched placeholder", () => {
+    assert.deepStrictEqual(Type.matchPlaceholder(), {
+      type: "match_placeholder",
+    });
+  });
+
+  it("returns frozen object", () => {
+    assertFrozen(Type.matchPlaceholder());
+  });
+});
+
 describe("string()", () => {
   it("returns boxed string value", () => {
     const result = Type.string("test");

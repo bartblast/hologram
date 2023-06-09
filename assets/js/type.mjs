@@ -146,6 +146,10 @@ export default class Type {
     return Utils.freeze({type: "map", data: hashTableWithMetadata});
   }
 
+  static matchPlaceholder() {
+    return Utils.freeze({type: "match_placeholder"});
+  }
+
   static string(value) {
     return Utils.freeze({type: "string", value: value});
   }
