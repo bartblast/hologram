@@ -326,6 +326,25 @@ describe("matchOperator()", () => {
     assert.deepStrictEqual(vars, {a: Type.integer(9)});
   });
 
+  it("matches on list type", () => {
+    const left = Type.list([
+      Type.variablePattern("b"),
+      Type.integer(2),
+      Type.variablePattern("a"),
+    ]);
+
+    const right = Type.list([
+      Type.integer(1),
+      Type.integer(2),
+      Type.integer(3),
+    ]);
+
+    const result = Interpreter.matchOperator(left, right, vars);
+
+    assert.deepStrictEqual(result, right);
+    assert.deepStrictEqual(vars, {a: Type.integer(3), b: Type.integer(1)});
+  });
+
   it("matches on variable pattern", () => {
     const result = Interpreter.matchOperator(
       Type.variablePattern("a"),

@@ -90,6 +90,14 @@ export default class Interpreter {
       return right;
     }
 
+    if (Type.isList(left) || Type.isTuple(left)) {
+      const count = Interpreter.count(left);
+
+      for (let i = 0; i < count; ++i) {
+        Interpreter.matchOperator(left.data[i], right.data[i], vars, false);
+      }
+    }
+
     return right;
   }
 
