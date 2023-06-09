@@ -57,6 +57,29 @@ describe("head()", () => {
 });
 
 describe("isMatched()", () => {
+  describe("atom", () => {
+    it("is matching another atom", () => {
+      const left = Type.atom("abc");
+      const right = Type.atom("abc");
+
+      assert.isTrue(Interpreter.isMatched(left, right));
+    });
+
+    it("is not matching another atom", () => {
+      const left = Type.atom("abc");
+      const right = Type.atom("xyz");
+
+      assert.isFalse(Interpreter.isMatched(left, right));
+    });
+
+    it("is not matching another value of non-atom boxed type", () => {
+      const left = Type.atom("abc");
+      const right = Type.string("abc");
+
+      assert.isFalse(Interpreter.isMatched(left, right));
+    });
+  });
+
   describe("integer", () => {
     it("is matching another integer", () => {
       const left = Type.integer(123);
@@ -72,7 +95,7 @@ describe("isMatched()", () => {
       assert.isFalse(Interpreter.isMatched(left, right));
     });
 
-    it("is not matching another value of different boxed type", () => {
+    it("is not matching another value of non-integer boxed type", () => {
       const left = Type.integer(123);
       const right = Type.string("123");
 
