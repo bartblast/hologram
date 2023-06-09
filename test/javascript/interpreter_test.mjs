@@ -247,7 +247,7 @@ describe("matchOperator()", () => {
     );
   });
 
-  it("handles integer boxed type", () => {
+  it("matches on integer", () => {
     const result = Interpreter.matchOperator(
       Type.integer(2),
       Type.integer(2),
@@ -258,7 +258,7 @@ describe("matchOperator()", () => {
     assert.deepStrictEqual(vars, {a: Type.integer(9)});
   });
 
-  it("handles variable pattern", () => {
+  it("matches on variable pattern", () => {
     const result = Interpreter.matchOperator(
       Type.variablePattern("a"),
       Type.integer(2),
