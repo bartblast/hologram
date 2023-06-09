@@ -25,17 +25,17 @@ describe("anonymousFunction()", () => {
   it("uses variables closure", () => {
     const vars = {a: Type.integer(9)};
 
-    const result = Type.anonymousFunction(vars, (varsClone) => {
+    const boxed = Type.anonymousFunction(vars, (varsClone) => {
       const vars = varsClone;
-      return (param) => [param, vars.a];
+      return (param) => Type.list([param, vars.a]);
     });
 
     vars.a = Type.integer(8);
 
-    assert.deepStrictEqual(result.closure(Type.integer(1)), [
-      Type.integer(1),
-      Type.integer(9),
-    ]);
+    const result = boxed.closure(Type.integer(1));
+    const expected = Type.list([Type.integer(1), Type.integer(9)]);
+
+    assert.deepStrictEqual(result, expected);
   });
 
   it("returns frozen object", () => {
