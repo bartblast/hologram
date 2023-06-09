@@ -61,6 +61,14 @@ export default class Interpreter {
       return true;
     }
 
+    if (left.type !== right.type) {
+      return false;
+    }
+
+    if (Type.isList(left) || Type.isTuple(left)) {
+      return Interpreter._isListOrTupleMatched(left, right);
+    }
+
     return Interpreter.isStrictlyEqual(left, right);
   }
 
@@ -95,6 +103,23 @@ export default class Interpreter {
 
   static tail(list) {
     return Type.list(list.data.slice(1));
+  }
+
+  // private
+  static _isListOrTupleMatched(left, right) {
+    const count = Interpreter.count(left);
+
+    if (count !== Interpreter.count(right)) {
+      return false;
+    }
+
+    for (let i = 0; i < count; ++i) {
+      if (!Interpreter.isMatched(left.data[i], right.data[i])) {
+        return false;
+      }
+    }
+
+    return true;
   }
 
   // private
