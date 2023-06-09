@@ -90,6 +90,10 @@ export default class Interpreter {
       return right;
     }
 
+    if (Type.isMatchPlaceholder(left)) {
+      return right;
+    }
+
     if (Type.isList(left) || Type.isTuple(left)) {
       const count = Interpreter.count(left);
 

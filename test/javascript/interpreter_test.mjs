@@ -352,6 +352,17 @@ describe("matchOperator()", () => {
     assert.deepStrictEqual(vars, {a: Type.integer(3), b: Type.integer(1)});
   });
 
+  it("matches on match placeholder", () => {
+    const result = Interpreter.matchOperator(
+      Type.matchPlaceholder(),
+      Type.integer(2),
+      vars
+    );
+
+    assert.deepStrictEqual(result, Type.integer(2));
+    assert.deepStrictEqual(vars, {a: Type.integer(9)});
+  });
+
   it("matches on tuple type", () => {
     const left = Type.tuple([
       Type.variablePattern("b"),
