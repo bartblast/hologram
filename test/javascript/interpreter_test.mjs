@@ -231,19 +231,34 @@ describe("inspect()", () => {
 });
 
 describe("matchOperator()", () => {
+  let vars;
+
+  beforeEach(() => {
+    vars = {a: Type.integer(9)};
+  });
+
   it("raises MatchError if the arguments don't match", () => {
     assert.throw(
       () => {
-        Interpreter.matchOperator(Type.integer(1), Type.integer(2), {});
+        Interpreter.matchOperator(Type.integer(1), Type.integer(2), vars);
       },
       Error,
       "(MatchError) no match of right hand side value: 2"
     );
   });
 
-  it("handles variable pattern", () => {
-    const vars = {a: Type.integer(9)};
+  it("handles integer boxed type", () => {
+    const result = Interpreter.matchOperator(
+      Type.integer(2),
+      Type.integer(2),
+      vars
+    );
 
+    assert.deepStrictEqual(result, Type.integer(2));
+    assert.deepStrictEqual(vars, {a: Type.integer(9)});
+  });
+
+  it("handles variable pattern", () => {
     const result = Interpreter.matchOperator(
       Type.variablePattern("a"),
       Type.integer(2),

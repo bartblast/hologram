@@ -81,6 +81,8 @@ export default class Interpreter {
       vars[left.name] = right;
       return right;
     }
+
+    return right;
   }
 
   static raiseError(type, message) {
