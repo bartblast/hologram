@@ -115,6 +115,10 @@ export default class Type {
     return boxed.type === "map";
   }
 
+  static isMatchPlaceholder(boxed) {
+    return boxed.type === "match_placeholder";
+  }
+
   static isNumber(boxed) {
     return Type.isInteger(boxed) || Type.isFloat(boxed);
   }

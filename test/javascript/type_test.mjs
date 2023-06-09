@@ -457,6 +457,18 @@ describe("isMap()", () => {
   });
 });
 
+describe("isMatchPlaceholder()", () => {
+  it("returns true if the given object is a boxed match placeholder", () => {
+    const result = Type.isMatchPlaceholder(Type.matchPlaceholder());
+    assert.isTrue(result);
+  });
+
+  it("returns false if the given object is not a boxed match placeholder", () => {
+    const result = Type.isMatchPlaceholder(Type.integer(1));
+    assert.isFalse(result);
+  });
+});
+
 describe("isNumber()", () => {
   it("returns true for boxed floats", () => {
     const arg = Type.float(1.23);
