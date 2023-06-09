@@ -79,6 +79,7 @@ export default class Interpreter {
   static raiseMatchError(right) {
     const message =
       "no match of right hand side value: " + Interpreter.inspect(right);
+
     return Interpreter.raiseError("MatchError", message);
   }
 
