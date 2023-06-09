@@ -110,6 +110,10 @@ defmodule Hologram.Compiler.Encoder do
     "Interpreter.matchOperator(#{left}, #{right})"
   end
 
+  def encode(%IR.MatchPlaceholder{}, _context) do
+    "Type.matchPlaceholder()"
+  end
+
   def encode(%IR.StringType{value: value}, _context) do
     encode_primitive_type(:bitstring, value, true)
   end

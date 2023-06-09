@@ -361,6 +361,10 @@ defmodule Hologram.Compiler.EncoderTest do
     end
   end
 
+  test "match placeholder" do
+    assert encode(%IR.MatchPlaceholder{}, %Context{}) == "Type.matchPlaceholder()"
+  end
+
   test "string type" do
     ir = %IR.StringType{value: "aa\"bb\ncc"}
 
