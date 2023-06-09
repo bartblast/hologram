@@ -58,21 +58,21 @@ describe("head()", () => {
 
 describe("isMatched()", () => {
   describe("atom", () => {
-    it("is matching another atom", () => {
+    it("is matching another boxed atom having the same value", () => {
       const left = Type.atom("abc");
       const right = Type.atom("abc");
 
       assert.isTrue(Interpreter.isMatched(left, right));
     });
 
-    it("is not matching another atom", () => {
+    it("is not matching another boxed atom having a different value", () => {
       const left = Type.atom("abc");
       const right = Type.atom("xyz");
 
       assert.isFalse(Interpreter.isMatched(left, right));
     });
 
-    it("is not matching another value of non-atom boxed type", () => {
+    it("is not matching another boxed value of a non-atom boxed type", () => {
       const left = Type.atom("abc");
       const right = Type.string("abc");
 
@@ -80,22 +80,45 @@ describe("isMatched()", () => {
     });
   });
 
+  describe("float", () => {
+    it("is matching another boxed float having the same value", () => {
+      const left = Type.float(1.23);
+      const right = Type.float(1.23);
+
+      assert.isTrue(Interpreter.isMatched(left, right));
+    });
+
+    it("is not matching another boxed float having a different value", () => {
+      const left = Type.float(1.23);
+      const right = Type.float(2.34);
+
+      assert.isFalse(Interpreter.isMatched(left, right));
+    });
+
+    it("is not matching another boxed value of a non-float boxed type", () => {
+      const left = Type.float(1.0);
+      const right = Type.integer(1);
+
+      assert.isFalse(Interpreter.isMatched(left, right));
+    });
+  });
+
   describe("integer", () => {
-    it("is matching another integer", () => {
+    it("is matching another boxed integer having the same value", () => {
       const left = Type.integer(123);
       const right = Type.integer(123);
 
       assert.isTrue(Interpreter.isMatched(left, right));
     });
 
-    it("is not matching another integer", () => {
+    it("is not matching another boxed integer having a different value", () => {
       const left = Type.integer(1);
       const right = Type.integer(2);
 
       assert.isFalse(Interpreter.isMatched(left, right));
     });
 
-    it("is not matching another value of non-integer boxed type", () => {
+    it("is not matching another boxed value of a non-integer boxed type", () => {
       const left = Type.integer(123);
       const right = Type.string("123");
 
