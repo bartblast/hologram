@@ -123,6 +123,10 @@ export default class Type {
     return Type.isAtom(boxed) && boxed.value === "true";
   }
 
+  static isTuple(boxed) {
+    return boxed.type === "tuple";
+  }
+
   static isVariablePattern(boxed) {
     return boxed.type === "variable_pattern";
   }

@@ -430,9 +430,7 @@ describe("isInteger()", () => {
 describe("isList()", () => {
   it("returns true for boxed list value", () => {
     const list = Type.list([Type.integer(1), Type.integer(2)]);
-    const result = Type.isList(list);
-
-    assert.isTrue(result);
+    assert.isTrue(Type.isList(list));
   });
 
   it("returns false for values of types other than boxed list", () => {
@@ -501,6 +499,18 @@ describe("isTrue()", () => {
     const arg = Type.integer(123);
     const result = Type.isTrue(arg);
 
+    assert.isFalse(result);
+  });
+});
+
+describe("isTuple()", () => {
+  it("returns true for boxed tuple value", () => {
+    const tuple = Type.tuple([Type.integer(1), Type.integer(2)]);
+    assert.isTrue(Type.isTuple(tuple));
+  });
+
+  it("returns false for values of types other than boxed tuple", () => {
+    const result = Type.isList(Type.atom("abc"));
     assert.isFalse(result);
   });
 });
