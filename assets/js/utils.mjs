@@ -1,5 +1,8 @@
 "use strict";
 
+// See: https://www.blazemeter.com/blog/the-correct-way-to-import-lodash-libraries-a-benchmark
+import cloneDeep from "lodash/cloneDeep.js";
+
 export default class Utils {
   // Based on: https://stackoverflow.com/a/43053803
   static cartesianProduct(sets) {
@@ -8,6 +11,10 @@ export default class Utils {
     }
 
     return sets.reduce((a, b) => a.flatMap((d) => b.map((e) => [d, e].flat())));
+  }
+
+  static clone(obj) {
+    return cloneDeep(obj);
   }
 
   static concatUint8Arrays(arrays) {

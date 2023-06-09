@@ -1,6 +1,10 @@
 "use strict";
 
-import {assert, assertFrozen} from "../../assets/js/test_support.mjs";
+import {
+  assert,
+  assertFrozen,
+  assertNotFrozen,
+} from "../../assets/js/test_support.mjs";
 import Utils from "../../assets/js/utils.mjs";
 
 describe("cartesianProduct()", () => {
@@ -36,6 +40,24 @@ describe("cartesianProduct()", () => {
     ]
 
     assert.deepStrictEqual(result, expected);
+  });
+});
+
+describe.only("clone()", () => {
+  let obj, result;
+
+  beforeEach(() => {
+    obj = {a: 1, b: {c: 3, d: 4}};
+    result = Utils.clone(obj);
+  });
+
+  it("clones object recursively (deep clone)", () => {
+    assert.deepStrictEqual(result, obj);
+    assert.notEqual(result, obj);
+  });
+
+  it("returns non-frozen object", () => {
+    assertNotFrozen(result);
   });
 });
 

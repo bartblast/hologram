@@ -18,11 +18,6 @@ export function assertBoxedNil(boxedValue) {
 export function assertFrozen(obj) {
   assert.isTrue(Object.isFrozen(obj));
 }
-
-export function assertNotFrozen(obj) {
-  assert.isFalse(Object.isFrozen(obj));
-}
-
 export function cleanup() {
   Runtime.componentClassRegistry = {};
   Store.componentStateRegistry = {};

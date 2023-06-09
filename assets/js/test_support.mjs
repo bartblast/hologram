@@ -16,3 +16,7 @@ export function assertBoxedTrue(boxed) {
 export function assertFrozen(obj) {
   assert.isTrue(Object.isFrozen(obj));
 }
+
+export function assertNotFrozen(obj) {
+  assert.isFalse(Object.isFrozen(obj));
+}
