@@ -149,6 +149,13 @@ describe("isMatched()", () => {
     });
   });
 
+  it("match placeholder", () => {
+    const left = Type.matchPlaceholder();
+    const right = Type.integer(123);
+
+    assert.isTrue(Interpreter.isMatched(left, right));
+  });
+
   describe("tuple", () => {
     it("is matching another boxed tuple having the same items", () => {
       const left = Type.tuple([Type.integer(1), Type.integer(2)]);

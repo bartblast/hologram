@@ -57,7 +57,7 @@ export default class Interpreter {
   }
 
   static isMatched(left, right) {
-    if (Type.isVariablePattern(left)) {
+    if (Type.isVariablePattern(left) || Type.isMatchPlaceholder(left)) {
       return true;
     }
 
