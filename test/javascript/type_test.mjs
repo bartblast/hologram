@@ -23,16 +23,19 @@ describe("anonymousFunction()", () => {
   });
 
   it("uses variables closure", () => {
-    const vars = {a: 9};
+    const vars = {a: Type.integer(9)};
 
     const result = Type.anonymousFunction(vars, (varsClone) => {
       const vars = varsClone;
       return (param) => [param, vars.a];
     });
 
-    vars.a = 8;
+    vars.a = Type.integer(8);
 
-    assert.deepStrictEqual(result.closure(1), [1, 9]);
+    assert.deepStrictEqual(result.closure(Type.integer(1)), [
+      Type.integer(1),
+      Type.integer(9),
+    ]);
   });
 
   it("returns frozen object", () => {
