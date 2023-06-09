@@ -1,7 +1,49 @@
 "use strict";
 
 import {assert, assertFrozen} from "../../assets/js/test_support.mjs";
+import Sequence from "../../assets/js/sequence.mjs";
 import Type from "../../assets/js/type.mjs";
+
+describe("anonymousFunction()", () => {
+  it("returns boxed anonymous function", () => {
+    const closure = (param) => param;
+
+    const result = Type.anonymousFunction({}, (varsClone) => {
+      const _vars = varsClone;
+      return closure;
+    });
+
+    const expected = {
+      type: "anonymous_function",
+      closure: closure,
+      uniqueId: Sequence.next() - 1,
+    };
+
+    assert.deepStrictEqual(result, expected);
+  });
+
+  it("uses variables closure", () => {
+    const vars = {a: 9};
+
+    const result = Type.anonymousFunction(vars, (varsClone) => {
+      const vars = varsClone;
+      return (param) => [param, vars.a];
+    });
+
+    vars.a = 8;
+
+    assert.deepStrictEqual(result.closure(1), [1, 9]);
+  });
+
+  it("returns frozen object", () => {
+    const result = Type.anonymousFunction({}, (varsClone) => {
+      const _vars = varsClone;
+      return (param) => param;
+    });
+
+    assertFrozen(result);
+  });
+});
 
 describe("atom()", () => {
   it("returns boxed atom value", () => {

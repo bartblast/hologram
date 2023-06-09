@@ -1,9 +1,18 @@
 "use strict";
 
 import Bitstring from "./bitstring.mjs";
+import Sequence from "./sequence.mjs";
 import Utils from "./utils.mjs";
 
 export default class Type {
+  static anonymousFunction(vars, closureBuilder) {
+    return Utils.freeze({
+      type: "anonymous_function",
+      closure: closureBuilder(Utils.clone(vars)),
+      uniqueId: Sequence.next(),
+    });
+  }
+
   static atom(value) {
     return Utils.freeze({type: "atom", value: value});
   }
