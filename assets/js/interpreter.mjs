@@ -106,6 +106,12 @@ export default class Interpreter {
       }
     }
 
+    if (Type.isMap(left)) {
+      for (const [key, value] of Object.entries(left.data)) {
+        Interpreter.matchOperator(value[1], right.data[key][1], vars, false);
+      }
+    }
+
     return right;
   }
 
@@ -143,7 +149,7 @@ export default class Interpreter {
     for (const [key, value] of Object.entries(left.data)) {
       if (
         !(key in right.data) ||
-        !Interpreter.isMatched(value, right.data[key])
+        !Interpreter.isMatched(value[1], right.data[key][1])
       ) {
         return false;
       }

@@ -57,7 +57,7 @@ describe("head()", () => {
 });
 
 describe("isMatched()", () => {
-  describe("atom", () => {
+  describe("atom type", () => {
     it("is matching another boxed atom having the same value", () => {
       const left = Type.atom("abc");
       const right = Type.atom("abc");
@@ -80,7 +80,7 @@ describe("isMatched()", () => {
     });
   });
 
-  describe("float", () => {
+  describe("float type", () => {
     it("is matching another boxed float having the same value", () => {
       const left = Type.float(1.23);
       const right = Type.float(1.23);
@@ -103,7 +103,7 @@ describe("isMatched()", () => {
     });
   });
 
-  describe("integer", () => {
+  describe("integer type", () => {
     it("is matching another boxed integer having the same value", () => {
       const left = Type.integer(123);
       const right = Type.integer(123);
@@ -126,7 +126,7 @@ describe("isMatched()", () => {
     });
   });
 
-  describe("list", () => {
+  describe("list type", () => {
     it("is matching another boxed list having the same items", () => {
       const left = Type.list([Type.integer(1), Type.integer(2)]);
       const right = Type.list([Type.integer(1), Type.integer(2)]);
@@ -149,7 +149,7 @@ describe("isMatched()", () => {
     });
   });
 
-  describe("map", () => {
+  describe("map type", () => {
     let data;
 
     beforeEach(() => {
@@ -221,7 +221,7 @@ describe("isMatched()", () => {
     assert.isTrue(Interpreter.isMatched(left, right));
   });
 
-  describe("tuple", () => {
+  describe("tuple type", () => {
     it("is matching another boxed tuple having the same items", () => {
       const left = Type.tuple([Type.integer(1), Type.integer(2)]);
       const right = Type.tuple([Type.integer(1), Type.integer(2)]);
@@ -415,6 +415,29 @@ describe("matchOperator()", () => {
 
     assert.deepStrictEqual(result, right);
     assert.deepStrictEqual(vars, {a: Type.integer(3), b: Type.integer(1)});
+  });
+
+  it("matches on map type", () => {
+    const data1 = [
+      [Type.atom("a"), Type.variablePattern("a")],
+      [Type.atom("b"), Type.integer(2)],
+      [Type.atom("c"), Type.variablePattern("c")],
+    ];
+
+    const left = Type.map(data1);
+
+    const data2 = [
+      [Type.atom("a"), Type.integer(1)],
+      [Type.atom("b"), Type.integer(2)],
+      [Type.atom("c"), Type.integer(3)],
+    ];
+
+    const right = Type.map(data2);
+
+    const result = Interpreter.matchOperator(left, right, vars);
+
+    assert.deepStrictEqual(result, right);
+    assert.deepStrictEqual(vars, {a: Type.integer(1), c: Type.integer(3)});
   });
 
   it("matches on match placeholder", () => {
