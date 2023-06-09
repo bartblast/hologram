@@ -247,6 +247,17 @@ describe("matchOperator()", () => {
     );
   });
 
+  it("matches on atom type", () => {
+    const result = Interpreter.matchOperator(
+      Type.atom("abc"),
+      Type.atom("abc"),
+      vars
+    );
+
+    assert.deepStrictEqual(result, Type.atom("abc"));
+    assert.deepStrictEqual(vars, {a: Type.integer(9)});
+  });
+
   it("matches on float type", () => {
     const result = Interpreter.matchOperator(
       Type.float(2.0),
