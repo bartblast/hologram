@@ -76,8 +76,14 @@ export default class Interpreter {
     throw new Error(`(${type}) ${message}`);
   }
 
+  static raiseMatchError(right) {
+    const message =
+      "no match of right hand side value: " + Interpreter.inspect(right);
+    return Interpreter.raiseError("MatchError", message);
+  }
+
   static raiseNotYetImplementedError(message) {
-    Interpreter.raiseError("Hologram.NotYetImplementedError", `${message}`);
+    return Interpreter.raiseError("Hologram.NotYetImplementedError", message);
   }
 
   static tail(list) {

@@ -242,6 +242,16 @@ describe("raiseError()", () => {
   });
 });
 
+it("raiseMatchError()", () => {
+  assert.throw(
+    () => {
+      Interpreter.raiseMatchError(Type.integer(123));
+    },
+    Error,
+    "(MatchError) no match of right hand side value: 123"
+  );
+});
+
 describe("raiseNotYetImplementedError()", () => {
   it("throws a Hologram.NotYetImplemented error with the given message", () => {
     assert.throw(
