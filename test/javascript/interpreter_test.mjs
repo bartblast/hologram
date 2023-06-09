@@ -247,7 +247,18 @@ describe("matchOperator()", () => {
     );
   });
 
-  it("matches on integer", () => {
+  it("matches on float type", () => {
+    const result = Interpreter.matchOperator(
+      Type.float(2.0),
+      Type.float(2.0),
+      vars
+    );
+
+    assert.deepStrictEqual(result, Type.float(2.0));
+    assert.deepStrictEqual(vars, {a: Type.integer(9)});
+  });
+
+  it("matches on integer type", () => {
     const result = Interpreter.matchOperator(
       Type.integer(2),
       Type.integer(2),
