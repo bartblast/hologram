@@ -216,6 +216,17 @@ describe("consPattern()", () => {
 });
 
 describe("encodeMapKey()", () => {
+  it("encodes boxed anonymous function value as map key", () => {
+    const boxed = Type.anonymousFunction({}, (varsClone) => {
+      const _vars = varsClone;
+      return (param) => param;
+    });
+
+    const result = Type.encodeMapKey(boxed);
+
+    assert.equal(result, "anonymous_function(" + (Sequence.next() - 1) + ")");
+  });
+
   it("encodes boxed atom value as map key", () => {
     const boxed = Type.atom("abc");
     const result = Type.encodeMapKey(boxed);

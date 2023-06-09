@@ -55,6 +55,9 @@ export default class Type {
 
   static encodeMapKey(boxed) {
     switch (boxed.type) {
+      case "anonymous_function":
+        return Type._encodeAnonymousFunctionTypeMapKey(boxed);
+
       case "atom":
       case "float":
       case "integer":
@@ -151,6 +154,11 @@ export default class Type {
 
   static variablePattern(name) {
     return Utils.freeze({type: "variable_pattern", name: name});
+  }
+
+  // private
+  static _encodeAnonymousFunctionTypeMapKey(boxed) {
+    return "anonymous_function(" + boxed.uniqueId + ")";
   }
 
   // private
