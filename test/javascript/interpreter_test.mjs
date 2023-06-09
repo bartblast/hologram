@@ -149,6 +149,71 @@ describe("isMatched()", () => {
     });
   });
 
+  describe("map", () => {
+    let data;
+
+    beforeEach(() => {
+      data = [
+        [Type.atom("a"), Type.integer(1)],
+        [Type.atom("b"), Type.integer(2)],
+      ];
+    });
+
+    it("is matching another boxed map having the same items", () => {
+      const left = Type.map(data);
+      const right = Type.map(data);
+
+      assert.isTrue(Interpreter.isMatched(left, right));
+    });
+
+    it("is matching another boxed map which has all the same items as in the left map plus additional ones", () => {
+      const left = Type.map(data);
+
+      const data2 = [
+        [Type.atom("a"), Type.integer(1)],
+        [Type.atom("b"), Type.integer(2)],
+        [Type.atom("c"), Type.integer(3)],
+      ];
+
+      const right = Type.map(data2);
+
+      assert.isTrue(Interpreter.isMatched(left, right));
+    });
+
+    it("is not matching another boxed map if any left map keys are missing in the right map ", () => {
+      const data1 = [
+        [Type.atom("a"), Type.integer(1)],
+        [Type.atom("b"), Type.integer(2)],
+        [Type.atom("c"), Type.integer(3)],
+      ];
+
+      const left = Type.map(data1);
+      const right = Type.map(data);
+
+      assert.isFalse(Interpreter.isMatched(left, right));
+    });
+
+    it("is not matching another boxed map if any left map value is different than corresponding value in the right map", () => {
+      const left = Type.map(data);
+
+      const data2 = [
+        [Type.atom("a"), Type.integer(1)],
+        [Type.atom("b"), Type.integer(3)],
+      ];
+
+      const right = Type.map(data2);
+
+      assert.isFalse(Interpreter.isMatched(left, right));
+    });
+
+    it("is not matching another boxed value of a non-map boxed type", () => {
+      const left = Type.map(data);
+      const right = Type.string("123");
+
+      assert.isFalse(Interpreter.isMatched(left, right));
+    });
+  });
+
   it("match placeholder", () => {
     const left = Type.matchPlaceholder();
     const right = Type.integer(123);
