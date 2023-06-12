@@ -5,10 +5,11 @@ import Sequence from "./sequence.mjs";
 import Utils from "./utils.mjs";
 
 export default class Type {
-  static anonymousFunction(vars, closureBuilder) {
+  static anonymousFunction(vars, clauses) {
     return Utils.freeze({
       type: "anonymous_function",
-      closure: closureBuilder(Utils.clone(vars)),
+      clauses: clauses,
+      vars: Utils.clone(vars),
       uniqueId: Sequence.next(),
     });
   }

@@ -5,45 +5,37 @@ import Sequence from "../../assets/js/sequence.mjs";
 import Type from "../../assets/js/type.mjs";
 
 describe("anonymousFunction()", () => {
-  it("returns boxed anonymous function", () => {
-    const closure = (param) => param;
+  let vars, clauses;
 
-    const result = Type.anonymousFunction({}, (varsClone) => {
-      const _vars = varsClone;
-      return closure;
-    });
+  beforeEach(() => {
+    vars = {a: Type.integer(1), b: Type.integer(2)};
+    clauses = ["clause_dummy_1", "clause_dummy_2"];
+  });
+
+  it("returns boxed anonymous function", () => {
+    const result = Type.anonymousFunction(vars, clauses);
 
     const expected = {
       type: "anonymous_function",
-      closure: closure,
+      clauses: clauses,
+      vars: vars,
       uniqueId: Sequence.next() - 1,
     };
 
     assert.deepStrictEqual(result, expected);
   });
 
-  it("uses variables closure", () => {
-    const vars = {a: Type.integer(9)};
+  it("stores a snapshot of vars", () => {
+    const anonFun = Type.anonymousFunction(vars, clauses);
+    const expected = {a: Type.integer(1), b: Type.integer(2)};
 
-    const boxed = Type.anonymousFunction(vars, (varsClone) => {
-      const vars = varsClone;
-      return (param) => Type.list([param, vars.a]);
-    });
+    vars.c = Type.integer(3);
 
-    vars.a = Type.integer(8);
-
-    const result = boxed.closure(Type.integer(1));
-    const expected = Type.list([Type.integer(1), Type.integer(9)]);
-
-    assert.deepStrictEqual(result, expected);
+    assert.deepStrictEqual(anonFun.vars, expected);
   });
 
   it("returns frozen object", () => {
-    const result = Type.anonymousFunction({}, (varsClone) => {
-      const _vars = varsClone;
-      return (param) => param;
-    });
-
+    const result = Type.anonymousFunction(vars, clauses);
     assertFrozen(result);
   });
 });
