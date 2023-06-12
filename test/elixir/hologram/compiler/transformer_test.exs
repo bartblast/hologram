@@ -143,6 +143,45 @@ defmodule Hologram.Compiler.TransformerTest do
                ]
              }
     end
+
+    test "clause with guard" do
+      # fn x, y when is_integer(x) -> :expr_1 end
+      ast =
+        {:fn, [line: 1],
+         [
+           {:->, [line: 1],
+            [
+              [
+                {:when, [line: 1],
+                 [
+                   {:x, [line: 1], nil},
+                   {:y, [line: 1], nil},
+                   {:is_integer, [line: 1], [{:x, [line: 1], nil}]}
+                 ]}
+              ],
+              {:__block__, [], [:expr_1]}
+            ]}
+         ]}
+
+      assert transform(ast, %Context{}) == %IR.AnonymousFunctionType{
+               arity: 2,
+               clauses: [
+                 %IR.AnonymousFunctionClause{
+                   params: [
+                     %IR.Variable{name: :x},
+                     %IR.Variable{name: :y}
+                   ],
+                   guard: %IR.LocalFunctionCall{
+                     function: :is_integer,
+                     args: [%IR.Variable{name: :x}]
+                   },
+                   body: %IR.Block{
+                     expressions: [%IR.AtomType{value: :expr_1}]
+                   }
+                 }
+               ]
+             }
+    end
   end
 
   describe "atom type" do

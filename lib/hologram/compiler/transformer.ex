@@ -36,13 +36,7 @@ defmodule Hologram.Compiler.Transformer do
   end
 
   def transform({:fn, _meta, clauses}, context) do
-    clauses_ir =
-      Enum.map(clauses, fn {:->, _meta, [params, body]} ->
-        %IR.AnonymousFunctionClause{
-          params: transform_list(params, context),
-          body: transform(body, context)
-        }
-      end)
+    clauses_ir = Enum.map(clauses, &transform_anonymous_function_clause(&1, context))
 
     arity =
       clauses_ir
@@ -457,6 +451,27 @@ defmodule Hologram.Compiler.Transformer do
           [{:type, :integer} | modifiers]
       end
     end
+  end
+
+  defp transform_anonymous_function_clause(
+         {:->, _meta_1, [[{:when, _meta_2, params_and_guard}], body]},
+         context
+       ) do
+    {guard, params} = List.pop_at(params_and_guard, -1)
+
+    %IR.AnonymousFunctionClause{
+      params: transform_list(params, context),
+      guard: transform(guard, context),
+      body: transform(body, context)
+    }
+  end
+
+  defp transform_anonymous_function_clause({:->, _meta, [params, body]}, context) do
+    %IR.AnonymousFunctionClause{
+      params: transform_list(params, context),
+      guard: nil,
+      body: transform(body, context)
+    }
   end
 
   defp transform_bitstring_modifiers({:-, _meta, [left, right]}, context, modifiers) do

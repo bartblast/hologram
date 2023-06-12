@@ -45,9 +45,9 @@ defmodule Hologram.Compiler.IR do
   end
 
   defmodule AnonymousFunctionClause do
-    defstruct [:params, :body]
+    defstruct [:params, :guard, :body]
 
-    @type t :: %__MODULE__{params: list(IR.t()), body: IR.Block.t()}
+    @type t :: %__MODULE__{params: list(IR.t()), guard: IR.t() | nil, body: IR.Block.t()}
   end
 
   defmodule AnonymousFunctionType do
