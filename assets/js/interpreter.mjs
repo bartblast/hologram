@@ -56,26 +56,6 @@ export default class Interpreter {
     }
   }
 
-  static isMatched(left, right) {
-    if (Type.isVariablePattern(left) || Type.isMatchPlaceholder(left)) {
-      return true;
-    }
-
-    if (left.type !== right.type) {
-      return false;
-    }
-
-    if (Type.isList(left) || Type.isTuple(left)) {
-      return Interpreter._isListOrTupleMatched(left, right);
-    }
-
-    if (Type.isMap(left)) {
-      return Interpreter._isMapMatched(left, right);
-    }
-
-    return Interpreter.isStrictlyEqual(left, right);
-  }
-
   static isStrictlyEqual(left, right) {
     if (left.type !== right.type) {
       return false;
@@ -85,7 +65,7 @@ export default class Interpreter {
   }
 
   static matchOperator(left, right, vars, assertMatches = true) {
-    if (assertMatches && !Interpreter.isMatched(left, right)) {
+    if (assertMatches && !Interpreter._isMatched(left, right)) {
       Interpreter._raiseMatchError(right);
     }
 
@@ -136,7 +116,7 @@ export default class Interpreter {
     }
 
     for (let i = 0; i < count; ++i) {
-      if (!Interpreter.isMatched(left.data[i], right.data[i])) {
+      if (!Interpreter._isMatched(left.data[i], right.data[i])) {
         return false;
       }
     }
@@ -149,13 +129,34 @@ export default class Interpreter {
     for (const [key, value] of Object.entries(left.data)) {
       if (
         !(key in right.data) ||
-        !Interpreter.isMatched(value[1], right.data[key][1])
+        !Interpreter._isMatched(value[1], right.data[key][1])
       ) {
         return false;
       }
     }
 
     return true;
+  }
+
+  // private
+  static _isMatched(left, right) {
+    if (Type.isVariablePattern(left) || Type.isMatchPlaceholder(left)) {
+      return true;
+    }
+
+    if (left.type !== right.type) {
+      return false;
+    }
+
+    if (Type.isList(left) || Type.isTuple(left)) {
+      return Interpreter._isListOrTupleMatched(left, right);
+    }
+
+    if (Type.isMap(left)) {
+      return Interpreter._isMapMatched(left, right);
+    }
+
+    return Interpreter.isStrictlyEqual(left, right);
   }
 
   // private

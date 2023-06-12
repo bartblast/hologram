@@ -62,21 +62,21 @@ describe("isMatched()", () => {
       const left = Type.atom("abc");
       const right = Type.atom("abc");
 
-      assert.isTrue(Interpreter.isMatched(left, right));
+      assert.isTrue(Interpreter._isMatched(left, right));
     });
 
     it("is not matching another boxed atom having a different value", () => {
       const left = Type.atom("abc");
       const right = Type.atom("xyz");
 
-      assert.isFalse(Interpreter.isMatched(left, right));
+      assert.isFalse(Interpreter._isMatched(left, right));
     });
 
     it("is not matching another boxed value of a non-atom boxed type", () => {
       const left = Type.atom("abc");
       const right = Type.string("abc");
 
-      assert.isFalse(Interpreter.isMatched(left, right));
+      assert.isFalse(Interpreter._isMatched(left, right));
     });
   });
 
@@ -85,21 +85,21 @@ describe("isMatched()", () => {
       const left = Type.float(1.23);
       const right = Type.float(1.23);
 
-      assert.isTrue(Interpreter.isMatched(left, right));
+      assert.isTrue(Interpreter._isMatched(left, right));
     });
 
     it("is not matching another boxed float having a different value", () => {
       const left = Type.float(1.23);
       const right = Type.float(2.34);
 
-      assert.isFalse(Interpreter.isMatched(left, right));
+      assert.isFalse(Interpreter._isMatched(left, right));
     });
 
     it("is not matching another boxed value of a non-float boxed type", () => {
       const left = Type.float(1.0);
       const right = Type.integer(1);
 
-      assert.isFalse(Interpreter.isMatched(left, right));
+      assert.isFalse(Interpreter._isMatched(left, right));
     });
   });
 
@@ -108,21 +108,21 @@ describe("isMatched()", () => {
       const left = Type.integer(123);
       const right = Type.integer(123);
 
-      assert.isTrue(Interpreter.isMatched(left, right));
+      assert.isTrue(Interpreter._isMatched(left, right));
     });
 
     it("is not matching another boxed integer having a different value", () => {
       const left = Type.integer(1);
       const right = Type.integer(2);
 
-      assert.isFalse(Interpreter.isMatched(left, right));
+      assert.isFalse(Interpreter._isMatched(left, right));
     });
 
     it("is not matching another boxed value of a non-integer boxed type", () => {
       const left = Type.integer(123);
       const right = Type.string("123");
 
-      assert.isFalse(Interpreter.isMatched(left, right));
+      assert.isFalse(Interpreter._isMatched(left, right));
     });
   });
 
@@ -131,21 +131,21 @@ describe("isMatched()", () => {
       const left = Type.list([Type.integer(1), Type.integer(2)]);
       const right = Type.list([Type.integer(1), Type.integer(2)]);
 
-      assert.isTrue(Interpreter.isMatched(left, right));
+      assert.isTrue(Interpreter._isMatched(left, right));
     });
 
     it("is not matching another boxed list having different items", () => {
       const left = Type.list([Type.integer(1), Type.integer(2)]);
       const right = Type.list([Type.integer(1), Type.integer(3)]);
 
-      assert.isFalse(Interpreter.isMatched(left, right));
+      assert.isFalse(Interpreter._isMatched(left, right));
     });
 
     it("is not matching another boxed value of a non-list boxed type", () => {
       const left = Type.list([Type.integer(1), Type.integer(2)]);
       const right = Type.string("123");
 
-      assert.isFalse(Interpreter.isMatched(left, right));
+      assert.isFalse(Interpreter._isMatched(left, right));
     });
   });
 
@@ -163,7 +163,7 @@ describe("isMatched()", () => {
       const left = Type.map(data);
       const right = Type.map(data);
 
-      assert.isTrue(Interpreter.isMatched(left, right));
+      assert.isTrue(Interpreter._isMatched(left, right));
     });
 
     it("is matching another boxed map which has all the same items as in the left map plus additional ones", () => {
@@ -177,7 +177,7 @@ describe("isMatched()", () => {
 
       const right = Type.map(data2);
 
-      assert.isTrue(Interpreter.isMatched(left, right));
+      assert.isTrue(Interpreter._isMatched(left, right));
     });
 
     it("is not matching another boxed map if any left map keys are missing in the right map ", () => {
@@ -190,7 +190,7 @@ describe("isMatched()", () => {
       const left = Type.map(data1);
       const right = Type.map(data);
 
-      assert.isFalse(Interpreter.isMatched(left, right));
+      assert.isFalse(Interpreter._isMatched(left, right));
     });
 
     it("is not matching another boxed map if any left map value is different than corresponding value in the right map", () => {
@@ -203,14 +203,14 @@ describe("isMatched()", () => {
 
       const right = Type.map(data2);
 
-      assert.isFalse(Interpreter.isMatched(left, right));
+      assert.isFalse(Interpreter._isMatched(left, right));
     });
 
     it("is not matching another boxed value of a non-map boxed type", () => {
       const left = Type.map(data);
       const right = Type.string("123");
 
-      assert.isFalse(Interpreter.isMatched(left, right));
+      assert.isFalse(Interpreter._isMatched(left, right));
     });
   });
 
@@ -218,7 +218,7 @@ describe("isMatched()", () => {
     const left = Type.matchPlaceholder();
     const right = Type.integer(123);
 
-    assert.isTrue(Interpreter.isMatched(left, right));
+    assert.isTrue(Interpreter._isMatched(left, right));
   });
 
   describe("tuple type", () => {
@@ -226,21 +226,21 @@ describe("isMatched()", () => {
       const left = Type.tuple([Type.integer(1), Type.integer(2)]);
       const right = Type.tuple([Type.integer(1), Type.integer(2)]);
 
-      assert.isTrue(Interpreter.isMatched(left, right));
+      assert.isTrue(Interpreter._isMatched(left, right));
     });
 
     it("is not matching another boxed tuple having different items", () => {
       const left = Type.tuple([Type.integer(1), Type.integer(2)]);
       const right = Type.tuple([Type.integer(1), Type.integer(3)]);
 
-      assert.isFalse(Interpreter.isMatched(left, right));
+      assert.isFalse(Interpreter._isMatched(left, right));
     });
 
     it("is not matching another boxed value of a non-tuple boxed type", () => {
       const left = Type.tuple([Type.integer(1), Type.integer(2)]);
       const right = Type.string("123");
 
-      assert.isFalse(Interpreter.isMatched(left, right));
+      assert.isFalse(Interpreter._isMatched(left, right));
     });
   });
 
@@ -248,7 +248,7 @@ describe("isMatched()", () => {
     const left = Type.variablePattern("abc");
     const right = Type.integer(123);
 
-    assert.isTrue(Interpreter.isMatched(left, right));
+    assert.isTrue(Interpreter._isMatched(left, right));
   });
 });
 
