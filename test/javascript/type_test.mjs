@@ -5,18 +5,20 @@ import Sequence from "../../assets/js/sequence.mjs";
 import Type from "../../assets/js/type.mjs";
 
 describe("anonymousFunction()", () => {
-  let vars, clauses;
+  let arity, clauses, vars;
 
   beforeEach(() => {
-    vars = {a: Type.integer(1), b: Type.integer(2)};
+    arity = 3;
     clauses = ["clause_dummy_1", "clause_dummy_2"];
+    vars = {a: Type.integer(1), b: Type.integer(2)};
   });
 
   it("returns boxed anonymous function", () => {
-    const result = Type.anonymousFunction(vars, clauses);
+    const result = Type.anonymousFunction(arity, clauses, vars);
 
     const expected = {
       type: "anonymous_function",
+      arity: arity,
       clauses: clauses,
       vars: vars,
       uniqueId: Sequence.next() - 1,
@@ -26,7 +28,7 @@ describe("anonymousFunction()", () => {
   });
 
   it("stores a snapshot of vars", () => {
-    const anonFun = Type.anonymousFunction(vars, clauses);
+    const anonFun = Type.anonymousFunction(arity, clauses, vars);
     const expected = {a: Type.integer(1), b: Type.integer(2)};
 
     vars.c = Type.integer(3);
@@ -35,7 +37,7 @@ describe("anonymousFunction()", () => {
   });
 
   it("returns frozen object", () => {
-    const result = Type.anonymousFunction(vars, clauses);
+    const result = Type.anonymousFunction(arity, clauses, vars);
     assertFrozen(result);
   });
 });

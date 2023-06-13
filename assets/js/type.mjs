@@ -5,9 +5,10 @@ import Sequence from "./sequence.mjs";
 import Utils from "./utils.mjs";
 
 export default class Type {
-  static anonymousFunction(vars, clauses) {
+  static anonymousFunction(arity, clauses, vars) {
     return Utils.freeze({
       type: "anonymous_function",
+      arity: arity,
       clauses: clauses,
       vars: Utils.clone(vars),
       uniqueId: Sequence.next(),
