@@ -22,7 +22,7 @@ defmodule Hologram.Commons.StringUtils do
       iex> starts_with_lowercase?("world")
       true
   """
-  @spec starts_with_lowercase?(String.t()) :: boolean()
+  @spec starts_with_lowercase?(String.t()) :: boolean
   def starts_with_lowercase?(str) do
     case String.next_grapheme(str) do
       {first_letter, _rest} ->
