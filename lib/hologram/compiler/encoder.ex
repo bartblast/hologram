@@ -150,6 +150,43 @@ defmodule Hologram.Compiler.Encoder do
   end
 
   @doc """
+  Encodes an Elixir alias as a class name.
+
+  - This function converts the `alias_atom` to a string using `to_string/1`.
+  - If the resulting `alias_str` starts with a lowercase letter, it prefixes it with `"Erlang."`.
+  - Finally, any dots (`.`) in the `prefixed_alias_str` are replaced with underscores (`_`).
+
+  ## Parameters
+
+  - `alias_atom` - The Elixir alias to be encoded as a class name.
+
+  ## Returns
+
+  The encoded class name.
+
+  ## Examples
+
+      iex> encode_as_class_name(Aaa.Bbb.Ccc)
+      "Elixir_Aaa_Bbb_Ccc"
+
+      iex> encode_as_class_name(:mymodule)
+      "Erlang_Mymodule"
+  """
+  @spec encode_as_class_name(module | atom) :: String.t()
+  def encode_as_class_name(alias_atom) do
+    alias_str = to_string(alias_atom)
+
+    prefixed_alias_str =
+      if StringUtils.starts_with_lowercase?(alias_str) do
+        "Erlang." <> alias_str
+      else
+        alias_str
+      end
+
+    String.replace(prefixed_alias_str, ".", "_")
+  end
+
+  @doc """
   Escapes chacters which are not allowed in JS identifiers with their Unicode code points.
 
   Although $ (dollar sign) character is allowed in JS identifiers, we escape it as well,

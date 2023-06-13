@@ -421,6 +421,16 @@ defmodule Hologram.Compiler.EncoderTest do
     end
   end
 
+  describe "encode_as_class_name/1" do
+    test "encodes module alias having lowercase starting letter" do
+      assert encode_as_class_name(:mymodule) == "Erlang_Mymodule"
+    end
+
+    test "encodes module alias not having lowercase starting letter" do
+      assert encode_as_class_name(Aaa.Bbb.Ccc) == "Elixir_Aaa_Bbb_Ccc"
+    end
+  end
+
   describe "escape_js_identifier/1" do
     test "escape characters which are not allowed in JS identifiers" do
       assert escape_js_identifier("@[^`{") == "$64$91$94$96$123"
