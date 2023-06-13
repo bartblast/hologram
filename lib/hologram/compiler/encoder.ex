@@ -37,6 +37,11 @@ defmodule Hologram.Compiler.Encoder do
     "{params: #{params}, guard: #{guard}, body: #{body}}"
   end
 
+  def encode(%IR.AnonymousFunctionType{arity: arity, clauses: clauses}, context) do
+    clauses_js = encode_as_array(clauses, context)
+    "Type.anonymousFunction(#{arity}, #{clauses_js}, vars)"
+  end
+
   def encode(%IR.AtomType{value: value}, _context) do
     encode_primitive_type(:atom, value, true)
   end

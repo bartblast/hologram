@@ -45,6 +45,59 @@ defmodule Hologram.Compiler.EncoderTest do
     end
   end
 
+  describe "anonymous function type" do
+    test "with single clause" do
+      ir = %IR.AnonymousFunctionType{
+        arity: 2,
+        clauses: [
+          %IR.AnonymousFunctionClause{
+            params: [%IR.Variable{name: :x}],
+            guard: nil,
+            body: %IR.Block{
+              expressions: [%IR.AtomType{value: :expr}]
+            }
+          }
+        ]
+      }
+
+      assert encode(ir, %Context{}) == """
+             Type.anonymousFunction(2, [{params: [Type.variablePattern("x")], guard: null, body: (vars) => {
+             return Type.atom("expr");
+             }}], vars)\
+             """
+    end
+
+    test "with multiple clauses" do
+      ir = %IR.AnonymousFunctionType{
+        arity: 2,
+        clauses: [
+          %IR.AnonymousFunctionClause{
+            params: [%IR.Variable{name: :x}],
+            guard: nil,
+            body: %IR.Block{
+              expressions: [%IR.AtomType{value: :expr_a}]
+            }
+          },
+          %IR.AnonymousFunctionClause{
+            params: [%IR.Variable{name: :y}],
+            guard: nil,
+            body: %IR.Block{
+              expressions: [%IR.AtomType{value: :expr_b}]
+            }
+          }
+        ]
+      }
+
+      assert encode(ir, %Context{}) == """
+             Type.anonymousFunction(2, [{params: [Type.variablePattern("x")], guard: null, body: (vars) => {
+             return Type.atom("expr_a");
+             }}, {params: [Type.variablePattern("y")], guard: null, body: (vars) => {
+             return Type.atom("expr_b");
+             }}], vars)\
+             """
+    end
+  end
+
   describe "atom type" do
     test "nil" do
       ir = %IR.AtomType{value: nil}
