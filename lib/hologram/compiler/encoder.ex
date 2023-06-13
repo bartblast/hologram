@@ -141,6 +141,10 @@ defmodule Hologram.Compiler.Encoder do
     "Type.matchPlaceholder()"
   end
 
+  def encode(%IR.ModuleAttributeOperator{name: name}, _context) do
+    "vars.$64#{name}"
+  end
+
   def encode(%IR.PinOperator{name: name}, _context) do
     "vars.#{name}"
   end
