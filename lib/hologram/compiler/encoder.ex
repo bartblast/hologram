@@ -307,7 +307,7 @@ defmodule Hologram.Compiler.Encoder do
   end
 
   defp encode_function_call(callable, function, args, context) do
-    args_js = encode_as_array(args, context)
+    args_js = Enum.map_join(args, ", ", &encode(&1, context))
     "#{callable}.#{function}(#{args_js})"
   end
 
