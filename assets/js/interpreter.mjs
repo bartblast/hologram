@@ -4,8 +4,30 @@
 import isEqual from "lodash/isEqual.js";
 
 import Type from "./type.mjs";
+import Utils from "./utils.mjs";
 
 export default class Interpreter {
+  static callAnonymousFunction(fun, args) {
+    const right = Type.list(args);
+
+    for (const clause of fun.clauses) {
+      const varsClone = Utils.clone(fun.vars);
+      const left = Type.list(clause.params);
+
+      if (
+        Interpreter.isMatched(left, right) &&
+        Interpreter.matchOperator(left, right, varsClone, false) &&
+        Interpreter._evaluateGuard(clause.guard, varsClone)
+      ) {
+        return clause.body(varsClone);
+      }
+    }
+
+    // TODO: Include module and function info, once context for error reporting is implemented.
+    const message = "no function clause matching in anonymous fn/" + fun.arity;
+    return Interpreter.raiseFunctionClauseError(message);
+  }
+
   static consOperator(left, right) {
     return Type.list([left].concat(right.data));
   }
@@ -119,12 +141,25 @@ export default class Interpreter {
     throw new Error(`(${type}) ${message}`);
   }
 
+  static raiseFunctionClauseError(message) {
+    return Interpreter.raiseError("FunctionClauseError", message);
+  }
+
   static raiseNotYetImplementedError(message) {
     return Interpreter.raiseError("Hologram.NotYetImplementedError", message);
   }
 
   static tail(list) {
     return Type.list(list.data.slice(1));
+  }
+
+  // private
+  static _evaluateGuard(guard, vars) {
+    if (guard === null) {
+      return true;
+    }
+
+    return Type.isTrue(guard(vars));
   }
 
   // private

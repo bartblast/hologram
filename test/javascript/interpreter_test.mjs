@@ -1,8 +1,145 @@
 "use strict";
 
 import {assert} from "../../assets/js/test_support.mjs";
+import Erlang from "../../assets/js/erlang/erlang.mjs";
 import Interpreter from "../../assets/js/interpreter.mjs";
 import Type from "../../assets/js/type.mjs";
+
+describe("callAnonymousFunction()", () => {
+  let vars, anonFun;
+
+  beforeEach(() => {
+    vars = {a: Type.integer(5), b: Type.integer(6), x: Type.integer(9)};
+
+    // fn
+    //   1 -> :expr_1
+    //   2 -> :expr_2
+    // end
+    anonFun = Type.anonymousFunction(
+      1,
+      [
+        {
+          params: [Type.integer(1)],
+          guard: null,
+          body: (vars) => {
+            return Type.atom("expr_1");
+          },
+        },
+        {
+          params: [Type.integer(2)],
+          guard: null,
+          body: (vars) => {
+            return Type.atom("expr_2");
+          },
+        },
+      ],
+      vars
+    );
+  });
+
+  it("runs the first matching clause", () => {
+    const result = Interpreter.callAnonymousFunction(anonFun, [
+      Type.integer(1),
+    ]);
+
+    assert.deepStrictEqual(result, Type.atom("expr_1"));
+  });
+
+  it("ignores not matching clauses", () => {
+    const result = Interpreter.callAnonymousFunction(anonFun, [
+      Type.integer(2),
+    ]);
+
+    assert.deepStrictEqual(result, Type.atom("expr_2"));
+  });
+
+  it("runs guards for each tried clause", () => {
+    // fn
+    //   x when x == 1 -> :expr_1
+    //   y when y == 2 -> :expr_2
+    //   z when z == 3 -> :expr_3
+    // end
+    const anonFun = Type.anonymousFunction(
+      1,
+      [
+        {
+          params: [Type.variablePattern("x")],
+          guard: (vars) => Erlang.$61$61(vars.x, Type.integer(1n)),
+          body: (vars) => {
+            return Type.atom("expr_1");
+          },
+        },
+        {
+          params: [Type.variablePattern("y")],
+          guard: (vars) => Erlang.$61$61(vars.y, Type.integer(2n)),
+          body: (vars) => {
+            return Type.atom("expr_2");
+          },
+        },
+        {
+          params: [Type.variablePattern("z")],
+          guard: (vars) => Erlang.$61$61(vars.z, Type.integer(3n)),
+          body: (vars) => {
+            return Type.atom("expr_3");
+          },
+        },
+      ],
+      vars
+    );
+
+    const result = Interpreter.callAnonymousFunction(anonFun, [
+      Type.integer(3),
+    ]);
+
+    assert.deepStrictEqual(result, Type.atom("expr_3"));
+  });
+
+  it("clones vars for each clause and has access to vars from closure", () => {
+    // x = 9
+    //
+    // fn
+    //   x, 1 when x == 1 -> :expr_1
+    //   y, 2 -> x
+    // end
+    const anonFun = Type.anonymousFunction(
+      2,
+      [
+        {
+          params: [Type.variablePattern("x"), Type.integer(1n)],
+          guard: (vars) => Erlang.$61$61(vars.x, Type.integer(1n)),
+          body: (vars) => {
+            return Type.atom("expr_1");
+          },
+        },
+        {
+          params: [Type.variablePattern("y"), Type.integer(2n)],
+          guard: null,
+          body: (vars) => {
+            return vars.x;
+          },
+        },
+      ],
+      vars
+    );
+
+    const result = Interpreter.callAnonymousFunction(anonFun, [
+      Type.integer(2),
+      Type.integer(2),
+    ]);
+
+    assert.deepStrictEqual(result, Type.integer(9));
+  });
+
+  it("raise FunctionClauseError error if none of the clauses is matched", () => {
+    assert.throw(
+      () => {
+        Interpreter.callAnonymousFunction(anonFun, [Type.integer(3)]);
+      },
+      Error,
+      "(FunctionClauseError) no function clause matching in anonymous fn/1"
+    );
+  });
+});
 
 describe("consOperator()", () => {
   it("prepends left boxed item to the right boxed list", () => {
