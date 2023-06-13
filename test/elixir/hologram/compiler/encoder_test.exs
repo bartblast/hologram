@@ -234,6 +234,16 @@ defmodule Hologram.Compiler.EncoderTest do
     end
   end
 
+  test "local function call" do
+    ir = %IR.LocalFunctionCall{
+      function: :my_fun,
+      args: [%IR.IntegerType{value: 1}, %IR.IntegerType{value: 2}]
+    }
+
+    assert encode(ir, %Context{module: Aaa.Bbb.Ccc}) ==
+             "Elixir_Aaa_Bbb_Ccc.my_fun([Type.integer(1n), Type.integer(2n)])"
+  end
+
   describe "map type" do
     test "empty" do
       assert encode(%IR.MapType{data: []}, %Context{}) == "Type.map([])"

@@ -112,6 +112,13 @@ defmodule Hologram.Compiler.Encoder do
     "Type.list(#{data_str})"
   end
 
+  def encode(%IR.LocalFunctionCall{function: function, args: args}, %{module: module} = context) do
+    class_name = encode_as_class_name(module)
+    args_js = encode_as_array(args, context)
+
+    "#{class_name}.#{function}(#{args_js})"
+  end
+
   def encode(%IR.MapType{data: data}, context) do
     data
     |> Enum.map_join(", ", fn {key, value} ->
