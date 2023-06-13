@@ -22,6 +22,27 @@ defmodule Hologram.Compiler.EncoderTest do
              }}\
              """
     end
+
+    test "with guard" do
+      ir = %IR.AnonymousFunctionClause{
+        params: [%IR.Variable{name: :x}, %IR.Variable{name: :y}],
+        guard: %IR.RemoteFunctionCall{
+          module: %IR.AtomType{value: :erlang},
+          function: :is_integer,
+          args: [%IR.Variable{name: :x}]
+        },
+        body: %IR.Block{
+          expressions: [%IR.AtomType{value: :expr_1}, %IR.AtomType{value: :expr_2}]
+        }
+      }
+
+      assert encode(ir, %Context{}) == """
+             {params: [Type.variablePattern("x"), Type.variablePattern("y")], guard: (vars) => Erlang.is_integer([vars.x]), body: (vars) => {
+             Type.atom("expr_1");
+             return Type.atom("expr_2");
+             }}\
+             """
+    end
   end
 
   describe "atom type" do
