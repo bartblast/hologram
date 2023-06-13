@@ -21,7 +21,7 @@ defmodule Hologram.Compiler.Encoder do
   def encode(ir, context)
 
   def encode(%IR.AnonymousFunctionClause{} = clause, context) do
-    params = encode_as_array(clause.params, context)
+    params = encode_as_array(clause.params, %{context | pattern?: true})
 
     guard =
       if clause.guard do

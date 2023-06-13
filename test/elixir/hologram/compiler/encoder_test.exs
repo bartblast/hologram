@@ -16,7 +16,7 @@ defmodule Hologram.Compiler.EncoderTest do
       }
 
       assert encode(ir, %Context{}) == """
-             {params: [vars.x, vars.y], guard: null, body: (vars) => {
+             {params: [Type.variablePattern("x"), Type.variablePattern("y")], guard: null, body: (vars) => {
              Type.atom("expr_1");
              return Type.atom("expr_2");
              }}\
