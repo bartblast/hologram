@@ -22,9 +22,6 @@ defmodule Hologram.Compiler.EncoderTest do
              }}\
              """
     end
-
-    # TODO: implement guard test
-    # test "with guard"
   end
 
   describe "atom type" do
@@ -461,6 +458,10 @@ defmodule Hologram.Compiler.EncoderTest do
 
     test "encodes module alias not having lowercase starting letter" do
       assert encode_as_class_name(Aaa.Bbb.Ccc) == "Elixir_Aaa_Bbb_Ccc"
+    end
+
+    test "encodes :erlang module alias" do
+      assert encode_as_class_name(:erlang) == "Erlang"
     end
   end
 

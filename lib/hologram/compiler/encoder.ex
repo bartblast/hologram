@@ -180,6 +180,7 @@ defmodule Hologram.Compiler.Encoder do
   - This function converts the `alias_atom` to a string using `to_string/1`.
   - If the resulting `alias_str` starts with a lowercase letter, it prefixes it with `"Erlang."`.
   - Finally, any dots (`.`) in the `prefixed_alias_str` are replaced with underscores (`_`).
+  - If :erlang is given as input, it returns `"Erlang"`.
 
   ## Parameters
 
@@ -196,8 +197,15 @@ defmodule Hologram.Compiler.Encoder do
 
       iex> encode_as_class_name(:mymodule)
       "Erlang_Mymodule"
+
+      iex> encode_as_class_name(:erlang)
+      "Erlang"
   """
   @spec encode_as_class_name(module | atom) :: String.t()
+  def encode_as_class_name(alias_atom)
+
+  def encode_as_class_name(:erlang), do: "Erlang"
+
   def encode_as_class_name(alias_atom) do
     alias_str = to_string(alias_atom)
 
