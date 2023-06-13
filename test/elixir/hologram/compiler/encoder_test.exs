@@ -5,6 +5,28 @@ defmodule Hologram.Compiler.EncoderTest do
   alias Hologram.Compiler.Context
   alias Hologram.Compiler.IR
 
+  describe "anonymous function clause" do
+    test "without guard" do
+      ir = %IR.AnonymousFunctionClause{
+        params: [%IR.Variable{name: :x}, %IR.Variable{name: :y}],
+        guard: nil,
+        body: %IR.Block{
+          expressions: [%IR.AtomType{value: :expr_1}, %IR.AtomType{value: :expr_2}]
+        }
+      }
+
+      assert encode(ir, %Context{}) == """
+             {params: [bindings.x, bindings.y], guard: null, body: (vars) => {
+             Type.atom("expr_1");
+             return Type.atom("expr_2");
+             }}\
+             """
+    end
+
+    # TODO: implement guard test
+    # test "with guard"
+  end
+
   describe "atom type" do
     test "nil" do
       ir = %IR.AtomType{value: nil}

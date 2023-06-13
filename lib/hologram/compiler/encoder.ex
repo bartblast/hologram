@@ -20,6 +20,23 @@ defmodule Hologram.Compiler.Encoder do
   @spec encode(IR.t(), Context.t()) :: String.t()
   def encode(ir, context)
 
+  def encode(%IR.AnonymousFunctionClause{} = clause, context) do
+    params = encode_as_array(clause.params, context)
+
+    guard =
+      if clause.guard do
+        guard_expr_js = encode(clause.guard, context)
+        "(vars) => #{guard_expr_js}"
+      else
+        "null"
+      end
+
+    body_block_js = encode(clause.body, context)
+    body = "(vars) => #{body_block_js}"
+
+    "{params: #{params}, guard: #{guard}, body: #{body}}"
+  end
+
   def encode(%IR.AtomType{value: value}, _context) do
     encode_primitive_type(:atom, value, true)
   end
