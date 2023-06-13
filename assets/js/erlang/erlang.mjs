@@ -1,7 +1,7 @@
 "use strict";
 
-import Type from "../type.mjs";
 import Interpreter from "../interpreter.mjs";
+import Type from "../type.mjs";
 
 export default class Erlang {
   // start: =:=/2
@@ -9,6 +9,29 @@ export default class Erlang {
     return Type.boolean(Interpreter.isStrictlyEqual(left, right));
   }
   // end: =:=/2
+
+  // start: ==/2
+  static $61$61(left, right) {
+    let value;
+
+    switch (left.type) {
+      case "float":
+      case "integer":
+        if (Type.isNumber(left) && Type.isNumber(right)) {
+          value = left.value == right.value;
+        } else {
+          value = false;
+        }
+        break;
+
+      default:
+        value = left.type === right.type && left.value === right.value;
+        break;
+    }
+
+    return Type.boolean(value);
+  }
+  // end: ==/2
 
   // start: hd/1
   static hd(list) {

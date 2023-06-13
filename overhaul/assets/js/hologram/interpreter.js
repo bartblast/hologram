@@ -15,14 +15,6 @@ export default class Interpreter {
     return Utils.freeze({type: type, value: result})
   }
 
-  static _areNumbersEqual(num1, num2) {
-    if (Type.isNumber(num1) && Type.isNumber(num2)) {
-      return num1.value == num2.value
-    } else {
-      return false
-    }
-  }
-
   static $case_expression(condition, clausesAnonFun) {
     const result = clausesAnonFun(condition)
     return Utils.freeze(result)
@@ -41,23 +33,6 @@ export default class Interpreter {
 
   static $dot_operator(left, right) {
     return left.data[Type.encodedKey(right)]
-  }
-
-  static $equal_to_operator(left, right) {
-    let value;
-
-    switch (left.type) {        
-      case "float":
-      case "integer":
-        value = Interpreter._areNumbersEqual(left, right)
-        break;
-
-      default:
-        value = left.type === right.type && left.value === right.value
-        break;
-    }
-
-    return Type.boolean(value)
   }
 
   static $if_expression(condition, doClause, elseClause) {
