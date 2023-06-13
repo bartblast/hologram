@@ -113,10 +113,8 @@ defmodule Hologram.Compiler.Encoder do
   end
 
   def encode(%IR.LocalFunctionCall{function: function, args: args}, %{module: module} = context) do
-    class_name = encode_as_class_name(module)
-    args_js = encode_as_array(args, context)
-
-    "#{class_name}.#{function}(#{args_js})"
+    callable = encode_as_class_name(module)
+    encode_function_call(callable, function, args, context)
   end
 
   def encode(%IR.MapType{data: data}, context) do
@@ -136,6 +134,26 @@ defmodule Hologram.Compiler.Encoder do
 
   def encode(%IR.MatchPlaceholder{}, _context) do
     "Type.matchPlaceholder()"
+  end
+
+  def encode(
+        %IR.RemoteFunctionCall{
+          module: %IR.AtomType{value: module},
+          function: function,
+          args: args
+        },
+        context
+      ) do
+    callable = encode_as_class_name(module)
+    encode_function_call(callable, function, args, context)
+  end
+
+  def encode(
+        %IR.RemoteFunctionCall{module: %IR.Variable{} = variable, function: function, args: args},
+        context
+      ) do
+    callable = encode(variable, context)
+    encode_function_call(callable, function, args, context)
   end
 
   def encode(%IR.StringType{value: value}, _context) do
@@ -278,6 +296,11 @@ defmodule Hologram.Compiler.Encoder do
       |> StringUtils.wrap("{", "}")
 
     "Type.bitstringSegment(#{value_str}, #{modifiers_str})"
+  end
+
+  defp encode_function_call(callable, function, args, context) do
+    args_js = encode_as_array(args, context)
+    "#{callable}.#{function}(#{args_js})"
   end
 
   defp encode_primitive_type(type, value, as_string)

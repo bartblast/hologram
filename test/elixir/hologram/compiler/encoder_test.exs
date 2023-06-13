@@ -397,6 +397,29 @@ defmodule Hologram.Compiler.EncoderTest do
     assert encode(%IR.MatchPlaceholder{}, %Context{}) == "Type.matchPlaceholder()"
   end
 
+  describe "remote function call" do
+    test "called on a module alias" do
+      ir = %IR.RemoteFunctionCall{
+        module: %IR.AtomType{value: Aaa.Bbb.Ccc},
+        function: :my_fun,
+        args: [%IR.IntegerType{value: 1}, %IR.IntegerType{value: 2}]
+      }
+
+      assert encode(ir, %Context{}) ==
+               "Elixir_Aaa_Bbb_Ccc.my_fun([Type.integer(1n), Type.integer(2n)])"
+    end
+
+    test "called on variable" do
+      ir = %IR.RemoteFunctionCall{
+        module: %IR.Variable{name: :x},
+        function: :my_fun,
+        args: [%IR.IntegerType{value: 1}, %IR.IntegerType{value: 2}]
+      }
+
+      assert encode(ir, %Context{}) == "vars.x.my_fun([Type.integer(1n), Type.integer(2n)])"
+    end
+  end
+
   test "string type" do
     ir = %IR.StringType{value: "aa\"bb\ncc"}
 
