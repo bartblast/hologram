@@ -185,7 +185,7 @@ defmodule Hologram.Compiler.Encoder do
 
     prefixed_alias_str =
       if StringUtils.starts_with_lowercase?(alias_str) do
-        "Erlang." <> alias_str
+        "Erlang." <> String.capitalize(alias_str)
       else
         alias_str
       end
