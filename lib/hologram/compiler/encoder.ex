@@ -146,7 +146,7 @@ defmodule Hologram.Compiler.Encoder do
   end
 
   def encode(%IR.Variable{name: name}, %{pattern?: false}) do
-    "bindings.#{name}"
+    "vars.#{name}"
   end
 
   @doc """

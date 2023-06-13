@@ -16,7 +16,7 @@ defmodule Hologram.Compiler.EncoderTest do
       }
 
       assert encode(ir, %Context{}) == """
-             {params: [bindings.x, bindings.y], guard: null, body: (vars) => {
+             {params: [vars.x, vars.y], guard: null, body: (vars) => {
              Type.atom("expr_1");
              return Type.atom("expr_2");
              }}\
@@ -296,7 +296,7 @@ defmodule Hologram.Compiler.EncoderTest do
       }
 
       assert encode(ir, %Context{}) ==
-               "Interpreter.matchOperator(Type.integer(1n), bindings.x)"
+               "Interpreter.matchOperator(Type.integer(1n), vars.x)"
     end
 
     test "nested, variable in pattern" do
@@ -338,7 +338,7 @@ defmodule Hologram.Compiler.EncoderTest do
       }
 
       assert encode(ir, %Context{}) ==
-               "Interpreter.matchOperator(Type.integer(1n), Interpreter.matchOperator(Type.integer(2n), bindings.x))"
+               "Interpreter.matchOperator(Type.integer(1n), Interpreter.matchOperator(Type.integer(2n), vars.x))"
     end
 
     test "nested multiple-times" do
@@ -379,7 +379,7 @@ defmodule Hologram.Compiler.EncoderTest do
       }
 
       assert encode(ir, %Context{}) ==
-               ~s/Interpreter.matchOperator(Type.tuple([Interpreter.matchOperator(Type.variablePattern("a"), Type.variablePattern("b")), Type.integer(2n), Type.integer(3n)]), Interpreter.matchOperator(Type.tuple([Type.integer(1n), Interpreter.matchOperator(Type.variablePattern("c"), Type.variablePattern("d")), Type.integer(3n)]), Type.tuple([Type.integer(1n), Type.integer(2n), Interpreter.matchOperator(Type.variablePattern("e"), bindings.f)])))/
+               ~s/Interpreter.matchOperator(Type.tuple([Interpreter.matchOperator(Type.variablePattern("a"), Type.variablePattern("b")), Type.integer(2n), Type.integer(3n)]), Interpreter.matchOperator(Type.tuple([Type.integer(1n), Interpreter.matchOperator(Type.variablePattern("c"), Type.variablePattern("d")), Type.integer(3n)]), Type.tuple([Type.integer(1n), Type.integer(2n), Interpreter.matchOperator(Type.variablePattern("e"), vars.f)])))/
     end
   end
 
@@ -412,7 +412,7 @@ defmodule Hologram.Compiler.EncoderTest do
 
   describe "variable" do
     test "not inside pattern" do
-      assert encode(%IR.Variable{name: :my_var}, %Context{pattern?: false}) == "bindings.my_var"
+      assert encode(%IR.Variable{name: :my_var}, %Context{pattern?: false}) == "vars.my_var"
     end
 
     test "inside pattern" do
