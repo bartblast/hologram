@@ -468,6 +468,10 @@ defmodule Hologram.Compiler.EncoderTest do
     assert encode(%IR.MatchPlaceholder{}, %Context{}) == "Type.matchPlaceholder()"
   end
 
+  test "pin operator" do
+    assert encode(%IR.PinOperator{name: :abc}, %Context{}) == "vars.abc"
+  end
+
   describe "remote function call" do
     test "called on a module alias" do
       ir = %IR.RemoteFunctionCall{
