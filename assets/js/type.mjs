@@ -137,6 +137,10 @@ export default class Type {
     return Type.isAtom(boxed) && boxed.value === "true";
   }
 
+  static isTruthy(boxed) {
+    return !Type.isFalsy(boxed);
+  }
+
   static isTuple(boxed) {
     return boxed.type === "tuple";
   }

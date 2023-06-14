@@ -74,10 +74,6 @@ export default class Type {
     return boxedValue.type === "string"
   }
 
-  static isTruthy(boxedValue) {
-    return !Type.isFalsy(boxedValue)
-  }
-
   static isTuple(boxedValue) {
     return boxedValue.type === "tuple"
   }

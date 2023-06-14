@@ -555,6 +555,29 @@ describe("isTrue()", () => {
   });
 });
 
+describe("isTruthy()", () => {
+  it("returns false for boxed false value", () => {
+    const arg = Type.boolean(false);
+    const result = Type.isTruthy(arg);
+
+    assert.isFalse(result);
+  });
+
+  it("returns false for boxed nil value", () => {
+    const arg = Type.nil();
+    const result = Type.isTruthy(arg);
+
+    assert.isFalse(result);
+  });
+
+  it("returns true for values other than boxed false or boxed nil values", () => {
+    const arg = Type.integer(0);
+    const result = Type.isTruthy(arg);
+
+    assert.isTrue(result);
+  });
+});
+
 describe("isTuple()", () => {
   it("returns true for boxed tuple value", () => {
     const tuple = Type.tuple([Type.integer(1), Type.integer(2)]);
