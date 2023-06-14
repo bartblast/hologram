@@ -121,6 +121,10 @@ export default class Type {
     return boxed.type === "match_placeholder";
   }
 
+  static isNil(boxed) {
+    return boxed.type === "atom" && boxed.value === "nil";
+  }
+
   static isNumber(boxed) {
     return Type.isInteger(boxed) || Type.isFloat(boxed);
   }

@@ -202,22 +202,6 @@ describe("isMap()", () => {
   })
 })
 
-describe("isNil()", () => {
-  it("returns true for boxed nil value", () => {
-    const arg = Type.nil()
-    const result = Type.isNil(arg)
-
-    assert.isTrue(result)
-  })
-
-  it("returns false for values other than boxed nil value", () => {
-    const arg = Type.boolean(false)
-    const result = Type.isNil(arg)
-    
-    assert.isFalse(result)
-  })
-})
-
 describe("isString()", () => {
   it("returns true for boxed string value", () => {
     const arg = Type.string("test")

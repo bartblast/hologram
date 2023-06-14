@@ -463,6 +463,29 @@ describe("isMatchPlaceholder()", () => {
   });
 });
 
+describe("isNil()", () => {
+  it("returns true for boxed atom with 'nil' value", () => {
+    const arg = Type.atom("nil");
+    const result = Type.isNil(arg);
+
+    assert.isTrue(result);
+  });
+
+  it("returns false for boxed atom with value other than 'nil'", () => {
+    const arg = Type.atom("abc");
+    const result = Type.isNil(arg);
+
+    assert.isFalse(result);
+  });
+
+  it("returns false for values of type other than boxed atom", () => {
+    const arg = Type.string("nil");
+    const result = Type.isNil(arg);
+
+    assert.isFalse(result);
+  });
+});
+
 describe("isNumber()", () => {
   it("returns true for boxed floats", () => {
     const arg = Type.float(1.23);

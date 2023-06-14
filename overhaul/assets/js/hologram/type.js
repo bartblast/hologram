@@ -74,10 +74,6 @@ export default class Type {
     return boxedValue.type === "map"
   }
 
-  static isNil(boxedValue) {
-    return boxedValue.type === "nil"
-  }
-
   static isString(boxedValue) {
     return boxedValue.type === "string"
   }
