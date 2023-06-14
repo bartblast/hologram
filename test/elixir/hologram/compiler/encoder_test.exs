@@ -350,7 +350,7 @@ defmodule Hologram.Compiler.EncoderTest do
     }
 
     assert encode(ir, %Context{module: Aaa.Bbb.Ccc}) ==
-             "Elixir_Aaa_Bbb_Ccc.my_fun$33(Type.integer(1n), Type.integer(2n))"
+             "Elixir_Aaa_Bbb_Ccc.my_fun$233(Type.integer(1n), Type.integer(2n))"
   end
 
   describe "map type" do
@@ -523,7 +523,7 @@ defmodule Hologram.Compiler.EncoderTest do
       }
 
       assert encode(ir, %Context{}) ==
-               "Elixir_Aaa_Bbb_Ccc.my_fun$33(Type.integer(1n), Type.integer(2n))"
+               "Elixir_Aaa_Bbb_Ccc.my_fun$233(Type.integer(1n), Type.integer(2n))"
     end
 
     test "called on variable" do
@@ -533,7 +533,7 @@ defmodule Hologram.Compiler.EncoderTest do
         args: [%IR.IntegerType{value: 1}, %IR.IntegerType{value: 2}]
       }
 
-      assert encode(ir, %Context{}) == "vars.x.my_fun$33(Type.integer(1n), Type.integer(2n))"
+      assert encode(ir, %Context{}) == "vars.x.my_fun$233(Type.integer(1n), Type.integer(2n))"
     end
   end
 
@@ -587,11 +587,11 @@ defmodule Hologram.Compiler.EncoderTest do
 
   describe "escape_js_identifier/1" do
     test "escape characters which are not allowed in JS identifiers" do
-      assert escape_js_identifier("@[^`{") == "$64$91$94$96$123"
+      assert escape_js_identifier("@[^`{") == "$264$291$294$296$3123"
     end
 
     test "escape $ (dollar sign) character" do
-      assert escape_js_identifier("$") == "$36"
+      assert escape_js_identifier("$") == "$236"
     end
 
     test "does not escape characters which are allowed in JS identifiers" do

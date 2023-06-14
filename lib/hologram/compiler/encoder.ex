@@ -1,4 +1,5 @@
 defmodule Hologram.Compiler.Encoder do
+  alias Hologram.Commons.IntegerUtils
   alias Hologram.Commons.StringUtils
   alias Hologram.Compiler.Context
   alias Hologram.Compiler.IR
@@ -261,7 +262,8 @@ defmodule Hologram.Compiler.Encoder do
       if allowed_in_js_identifier?(code_point) do
         to_string([code_point])
       else
-        "$#{code_point}"
+        digit_count = IntegerUtils.count_digits(code_point)
+        "$#{digit_count}#{code_point}"
       end
     end)
   end
