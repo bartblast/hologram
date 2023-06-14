@@ -28,7 +28,13 @@ export default class Utils {
   }
 
   static debug(term) {
-    console.debug(term);
+    console.log(
+      JSON.stringify(
+        term,
+        (_key, value) => (typeof value === "bigint" ? value.toString() : value),
+        4
+      )
+    );
     return term;
   }
 
