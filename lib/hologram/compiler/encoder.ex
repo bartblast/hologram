@@ -96,6 +96,14 @@ defmodule Hologram.Compiler.Encoder do
     "{#{body}\n}"
   end
 
+  def encode(%IR.ComprehensionGenerator{} = generator, context) do
+    enumerable = encode(generator.enumerable, context)
+    match = encode(generator.match, %{context | pattern?: true})
+    guard = "(vars) => {return #{encode(generator.guard, context)}}"
+
+    "{enumerable: #{enumerable}, match: #{match}, guard: #{guard}}"
+  end
+
   def encode(%IR.ConsOperator{head: head, tail: tail}, %{pattern?: true} = context) do
     "Type.consPattern(#{encode(head, context)}, #{encode(tail, context)})"
   end

@@ -263,6 +263,33 @@ defmodule Hologram.Compiler.EncoderTest do
     end
   end
 
+  test "comprehension generator" do
+    ir = %IR.ComprehensionGenerator{
+      enumerable: %IR.ListType{
+        data: [
+          %IR.IntegerType{value: 1},
+          %IR.IntegerType{value: 2}
+        ]
+      },
+      match: %IR.TupleType{
+        data: [
+          %IR.Variable{name: :a},
+          %IR.Variable{name: :b}
+        ]
+      },
+      guard: %IR.LocalFunctionCall{
+        function: :my_guard,
+        args: [
+          %IR.Variable{name: :a},
+          %IR.IntegerType{value: 2}
+        ]
+      }
+    }
+
+    assert encode(ir, %Context{module: MyModule}) ==
+             "{enumerable: Type.list([Type.integer(1n), Type.integer(2n)]), match: Type.tuple([Type.variablePattern(\"a\"), Type.variablePattern(\"b\")]), guard: (vars) => {return Elixir_MyModule.my_guard(vars.a, Type.integer(2n))}}"
+  end
+
   describe "cons operator" do
     @cons_operator_ir %IR.ConsOperator{
       head: %IR.IntegerType{value: 1},
