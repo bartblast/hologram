@@ -95,6 +95,16 @@ defmodule Hologram.Compiler.Encoder do
     "{#{body}\n}"
   end
 
+  def encode(%IR.Comprehension{} = comprehension, context) do
+    generators = encode_as_array(comprehension.generators, context)
+    filters = encode_as_array(comprehension.filters, context)
+    collectable = encode(comprehension.collectable, context)
+    unique = comprehension.unique.value
+    mapper = encode_closure(comprehension.mapper, context)
+
+    "Interpreter.comprehension(#{generators}, #{filters}, #{collectable}, #{unique}, #{mapper})"
+  end
+
   def encode(%IR.ComprehensionFilter{expression: expr}, context) do
     encode_closure(expr, context)
   end

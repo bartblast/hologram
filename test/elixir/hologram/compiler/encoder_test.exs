@@ -263,6 +263,90 @@ defmodule Hologram.Compiler.EncoderTest do
     end
   end
 
+  test "comprehension" do
+    # for x when x < 3 <- [1, 2],
+    #     y when y < 5 <- [3, 4],
+    #     is_integer(x),
+    #     is_integer(y),
+    #     into: %{},
+    #     uniq: true,
+    #     do: {x, y}
+    #
+    # for x when :erlang.<(x, 3) <- [1, 2],
+    #     y when :erlang.<(y, 5) <- [3, 4],
+    #     :erlang.is_integer(x),
+    #     :erlang.is_integer(y),
+    #     into: %{},
+    #     uniq: true,
+    #     do: {x, y}
+
+    ir = %IR.Comprehension{
+      generators: [
+        %IR.ComprehensionGenerator{
+          enumerable: %IR.ListType{
+            data: [
+              %IR.IntegerType{value: 1},
+              %IR.IntegerType{value: 2}
+            ]
+          },
+          match: %IR.Variable{name: :x},
+          guard: %IR.RemoteFunctionCall{
+            module: %IR.AtomType{value: :erlang},
+            function: :<,
+            args: [
+              %IR.Variable{name: :x},
+              %IR.IntegerType{value: 3}
+            ]
+          }
+        },
+        %IR.ComprehensionGenerator{
+          enumerable: %IR.ListType{
+            data: [
+              %IR.IntegerType{value: 3},
+              %IR.IntegerType{value: 4}
+            ]
+          },
+          match: %IR.Variable{name: :y},
+          guard: %IR.RemoteFunctionCall{
+            module: %IR.AtomType{value: :erlang},
+            function: :<,
+            args: [
+              %IR.Variable{name: :y},
+              %IR.IntegerType{value: 5}
+            ]
+          }
+        }
+      ],
+      filters: [
+        %IR.ComprehensionFilter{
+          expression: %IR.RemoteFunctionCall{
+            module: %IR.AtomType{value: :erlang},
+            function: :is_integer,
+            args: [%IR.Variable{name: :x}]
+          }
+        },
+        %IR.ComprehensionFilter{
+          expression: %IR.RemoteFunctionCall{
+            module: %IR.AtomType{value: :erlang},
+            function: :is_integer,
+            args: [%IR.Variable{name: :y}]
+          }
+        }
+      ],
+      collectable: %IR.MapType{data: []},
+      unique: %IR.AtomType{value: true},
+      mapper: %IR.TupleType{
+        data: [
+          %IR.Variable{name: :x},
+          %IR.Variable{name: :y}
+        ]
+      }
+    }
+
+    assert encode(ir, %Context{}) ==
+             "Interpreter.comprehension([{enumerable: Type.list([Type.integer(1n), Type.integer(2n)]), match: Type.variablePattern(\"x\"), guard: (vars) => Erlang.$260(vars.x, Type.integer(3n))}, {enumerable: Type.list([Type.integer(3n), Type.integer(4n)]), match: Type.variablePattern(\"y\"), guard: (vars) => Erlang.$260(vars.y, Type.integer(5n))}], [(vars) => Erlang.is_integer(vars.x), (vars) => Erlang.is_integer(vars.y)], Type.map([]), true, (vars) => Type.tuple([vars.x, vars.y]))"
+  end
+
   test "comprehension filter" do
     ir = %IR.ComprehensionFilter{
       expression: %IR.LocalFunctionCall{
