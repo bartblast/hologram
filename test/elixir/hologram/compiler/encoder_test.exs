@@ -287,7 +287,7 @@ defmodule Hologram.Compiler.EncoderTest do
     }
 
     assert encode(ir, %Context{module: MyModule}) ==
-             "{enumerable: Type.list([Type.integer(1n), Type.integer(2n)]), match: Type.tuple([Type.variablePattern(\"a\"), Type.variablePattern(\"b\")]), guard: (vars) => {return Elixir_MyModule.my_guard(vars.a, Type.integer(2n))}}"
+             "{enumerable: Type.list([Type.integer(1n), Type.integer(2n)]), match: Type.tuple([Type.variablePattern(\"a\"), Type.variablePattern(\"b\")]), guard: (vars) => Elixir_MyModule.my_guard(vars.a, Type.integer(2n))}"
   end
 
   describe "cons operator" do

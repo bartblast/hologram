@@ -25,14 +25,12 @@ defmodule Hologram.Compiler.Encoder do
 
     guard =
       if clause.guard do
-        guard_expr_js = encode(clause.guard, context)
-        "(vars) => #{guard_expr_js}"
+        encode_closure(clause.guard, context)
       else
         "null"
       end
 
-    body_block_js = encode(clause.body, context)
-    body = "(vars) => #{body_block_js}"
+    body = encode_closure(clause.body, context)
 
     "{params: #{params}, guard: #{guard}, body: #{body}}"
   end
@@ -96,10 +94,14 @@ defmodule Hologram.Compiler.Encoder do
     "{#{body}\n}"
   end
 
+  def encode(%IR.ComprehensionFilter{expression: expr}, context) do
+    encode_closure(expr, context)
+  end
+
   def encode(%IR.ComprehensionGenerator{} = generator, context) do
     enumerable = encode(generator.enumerable, context)
     match = encode(generator.match, %{context | pattern?: true})
-    guard = "(vars) => {return #{encode(generator.guard, context)}}"
+    guard = encode_closure(generator.guard, context)
 
     "{enumerable: #{enumerable}, match: #{match}, guard: #{guard}}"
   end
@@ -325,6 +327,10 @@ defmodule Hologram.Compiler.Encoder do
       |> StringUtils.wrap("{", "}")
 
     "Type.bitstringSegment(#{value_str}, #{modifiers_str})"
+  end
+
+  defp encode_closure(ir, context) do
+    "(vars) => #{encode(ir, context)}"
   end
 
   defp encode_function_call(callable, function, args, context) do
