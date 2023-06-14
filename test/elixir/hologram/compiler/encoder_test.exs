@@ -263,6 +263,17 @@ defmodule Hologram.Compiler.EncoderTest do
     end
   end
 
+  test "comprehension filter" do
+    ir = %IR.ComprehensionFilter{
+      expression: %IR.LocalFunctionCall{
+        function: :my_filter,
+        args: [%IR.Variable{name: :a}]
+      }
+    }
+
+    assert encode(ir, %Context{module: MyModule}) == "(vars) => Elixir_MyModule.my_filter(vars.a)"
+  end
+
   test "comprehension generator" do
     ir = %IR.ComprehensionGenerator{
       enumerable: %IR.ListType{
