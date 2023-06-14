@@ -397,6 +397,29 @@ describe("isFalse()", () => {
   });
 });
 
+describe("isFalsy()", () => {
+  it("returns true for boxed false value", () => {
+    const arg = Type.boolean(false);
+    const result = Type.isFalsy(arg);
+
+    assert.isTrue(result);
+  });
+
+  it("returns true for boxed nil value", () => {
+    const arg = Type.nil();
+    const result = Type.isFalsy(arg);
+
+    assert.isTrue(result);
+  });
+
+  it("returns false for values other than boxed false or boxed nil values", () => {
+    const arg = Type.integer(0);
+    const result = Type.isFalsy(arg);
+
+    assert.isFalse(result);
+  });
+});
+
 describe("isFloat()", () => {
   it("returns true for boxed float value", () => {
     const result = Type.isFloat(Type.float(1.23));
