@@ -7,7 +7,7 @@ import Type from "./type.mjs";
 import Utils from "./utils.mjs";
 
 export default class Interpreter {
-  static enumerableProtocol;
+  static _enumerableProtocol;
 
   static callAnonymousFunction(fun, args) {
     const right = Type.list(args);
