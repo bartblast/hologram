@@ -160,6 +160,10 @@ export default class Type {
     return Utils.freeze({type: "match_placeholder"});
   }
 
+  static nil() {
+    return Type.atom("nil");
+  }
+
   static string(value) {
     return Utils.freeze({type: "string", value: value});
   }

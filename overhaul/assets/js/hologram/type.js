@@ -62,10 +62,6 @@ export default class Type {
     return node.type === "expression"
   }
 
-  static isFalsy(boxedValue) {
-    return Type.isFalse(boxedValue) || Type.isNil(boxedValue)
-  }
-
   static isList(boxedValue) {
     return boxedValue.type === "list"
   }
@@ -98,10 +94,6 @@ export default class Type {
 
   static module(className) {
     return Utils.freeze({type: "module", className: className})
-  }
-
-  static nil() {
-    return Utils.freeze({type: "nil"})
   }
 
   static placeholder() {

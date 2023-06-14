@@ -147,29 +147,6 @@ describe("isExpressionNode()", () => {
   })
 })
 
-describe("isFalsy()", () => {
-  it("returns true for boxed false value", () => {
-    const arg = Type.boolean(false)
-    const result = Type.isFalsy(arg)
-
-    assert.isTrue(result)
-  })
-
-  it("returns true for boxed nil value", () => {
-    const arg = Type.nil()
-    const result = Type.isFalsy(arg)
-    
-    assert.isTrue(result)
-  })
-
-  it("returns false for values other than boxed false or boxed nil values", () => {
-    const arg = Type.integer(0)
-    const result = Type.isFalsy(arg)
-
-    assert.isFalse(result)
-  })
-})
-
 describe("isList()", () => {
   it("returns true for boxed list value", () => {
     const arg = Type.list()
@@ -345,20 +322,6 @@ describe("module()", () => {
 
   it("returns frozen object", () => {
     const result = Type.module("Elixir_ClassStub")
-    assertFrozen(result)
-  })
-})
-
-describe("nil()", () => {
-  it("returns boxed nil value", () => {
-    const expected = {type: "nil"}
-    const result = Type.nil()
-
-    assert.deepStrictEqual(result, expected)
-  })
-
-  it("returns frozen object", () => {
-    const result = Type.nil()
     assertFrozen(result)
   })
 })

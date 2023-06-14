@@ -617,6 +617,16 @@ describe("matchPlaceholder()", () => {
   });
 });
 
+describe("nil()", () => {
+  it("returns boxed atom with 'nil' value", () => {
+    assert.deepStrictEqual(Type.nil(), Type.atom("nil"));
+  });
+
+  it("returns frozen object", () => {
+    assertFrozen(Type.nil());
+  });
+});
+
 describe("string()", () => {
   it("returns boxed string value", () => {
     const result = Type.string("test");
