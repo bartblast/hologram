@@ -5,13 +5,13 @@ import Type from "../type.mjs";
 
 export default class Erlang {
   // start: =:=/2
-  static $61$58$61(left, right) {
+  static $261$258$261(left, right) {
     return Type.boolean(Interpreter.isStrictlyEqual(left, right));
   }
   // end: =:=/2
 
   // start: ==/2
-  static $61$61(left, right) {
+  static $261$261(left, right) {
     let value;
 
     switch (left.type) {

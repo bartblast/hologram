@@ -591,7 +591,7 @@ defmodule Hologram.Compiler.EncoderTest do
   end
 
   test "module attribute operator" do
-    assert encode(%IR.ModuleAttributeOperator{name: :abc}, %Context{}) == "vars.$64abc"
+    assert encode(%IR.ModuleAttributeOperator{name: :abc}, %Context{}) == "vars.$264abc"
   end
 
   test "pin operator" do

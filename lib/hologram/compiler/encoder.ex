@@ -163,7 +163,7 @@ defmodule Hologram.Compiler.Encoder do
   end
 
   def encode(%IR.ModuleAttributeOperator{name: name}, _context) do
-    "vars.$64#{name}"
+    "vars.$264#{name}"
   end
 
   def encode(%IR.PinOperator{name: name}, _context) do
@@ -262,7 +262,7 @@ defmodule Hologram.Compiler.Encoder do
   ## Examples
 
       iex> escape_js_identifier("my_fun?")
-      "my_fun$63"
+      "my_fun$263"
   """
   @spec escape_js_identifier(String.t()) :: String.t()
   def escape_js_identifier(identifier) do

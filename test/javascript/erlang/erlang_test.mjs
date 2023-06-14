@@ -11,23 +11,23 @@ import Erlang from "../../../assets/js/erlang/erlang.mjs";
 import Interpreter from "../../../assets/js/interpreter.mjs";
 import Type from "../../../assets/js/type.mjs";
 
-describe("$61$58$61/2 (=:=)", () => {
+describe("$261$258$261/2 (=:=)", () => {
   it("proxies to Interpreter.isStrictlyEqual/2 and casts the result to boxed boolean", () => {
     const left = Type.integer(1);
     const right = Type.integer(1);
-    const result = Erlang.$61$58$61(left, right);
+    const result = Erlang.$261$258$261(left, right);
     const expected = Type.boolean(Interpreter.isStrictlyEqual(left, right));
 
     assert.deepStrictEqual(result, expected);
   });
 });
 
-describe("$61$61/2 (==)", () => {
+describe("$261$261/2 (==)", () => {
   // non-number == non-number
   it("returns boxed true for a boxed non-number equal to another boxed non-number", () => {
     const left = Type.boolean(true);
     const right = Type.boolean(true);
-    const result = Erlang.$61$61(left, right);
+    const result = Erlang.$261$261(left, right);
 
     assertBoxedTrue(result);
   });
@@ -36,7 +36,7 @@ describe("$61$61/2 (==)", () => {
   it("returns boxed false for a boxed non-number not equal to another boxed non-number", () => {
     const left = Type.boolean(true);
     const right = Type.string("abc");
-    const result = Erlang.$61$61(left, right);
+    const result = Erlang.$261$261(left, right);
 
     assertBoxedFalse(result);
   });
@@ -45,7 +45,7 @@ describe("$61$61/2 (==)", () => {
   it("returns boxed true for a boxed integer equal to another boxed integer", () => {
     const left = Type.integer(1);
     const right = Type.integer(1);
-    const result = Erlang.$61$61(left, right);
+    const result = Erlang.$261$261(left, right);
 
     assertBoxedTrue(result);
   });
@@ -54,7 +54,7 @@ describe("$61$61/2 (==)", () => {
   it("returns boxed false for a boxed integer not equal to another boxed integer", () => {
     const left = Type.integer(1);
     const right = Type.integer(2);
-    const result = Erlang.$61$61(left, right);
+    const result = Erlang.$261$261(left, right);
 
     assertBoxedFalse(result);
   });
@@ -63,7 +63,7 @@ describe("$61$61/2 (==)", () => {
   it("returns boxed true for a boxed integer equal to a boxed float", () => {
     const left = Type.integer(1);
     const right = Type.float(1.0);
-    const result = Erlang.$61$61(left, right);
+    const result = Erlang.$261$261(left, right);
 
     assertBoxedTrue(result);
   });
@@ -72,7 +72,7 @@ describe("$61$61/2 (==)", () => {
   it("returns boxed false for a boxed integer not equal to a boxed float", () => {
     const left = Type.integer(1);
     const right = Type.float(2.0);
-    const result = Erlang.$61$61(left, right);
+    const result = Erlang.$261$261(left, right);
 
     assertBoxedFalse(result);
   });
@@ -81,7 +81,7 @@ describe("$61$61/2 (==)", () => {
   it("returns boxed false when a boxed integer is compared to a boxed value of non-number type", () => {
     const left = Type.integer(1);
     const right = Type.string("1");
-    const result = Erlang.$61$61(left, right);
+    const result = Erlang.$261$261(left, right);
 
     assertBoxedFalse(result);
   });
@@ -90,7 +90,7 @@ describe("$61$61/2 (==)", () => {
   it("returns boxed true for a boxed float equal to another boxed float", () => {
     const left = Type.float(1.0);
     const right = Type.float(1.0);
-    const result = Erlang.$61$61(left, right);
+    const result = Erlang.$261$261(left, right);
 
     assertBoxedTrue(result);
   });
@@ -99,7 +99,7 @@ describe("$61$61/2 (==)", () => {
   it("returns boxed false for a boxed float not equal to another boxed float", () => {
     const left = Type.float(1.0);
     const right = Type.float(2.0);
-    const result = Erlang.$61$61(left, right);
+    const result = Erlang.$261$261(left, right);
 
     assertBoxedFalse(result);
   });
@@ -108,7 +108,7 @@ describe("$61$61/2 (==)", () => {
   it("returns boxed true for a boxed float equal to a boxed integer", () => {
     const left = Type.float(1.0);
     const right = Type.integer(1);
-    const result = Erlang.$61$61(left, right);
+    const result = Erlang.$261$261(left, right);
 
     assertBoxedTrue(result);
   });
@@ -117,7 +117,7 @@ describe("$61$61/2 (==)", () => {
   it("returns boxed false for a boxed float not equal to a boxed integer", () => {
     const left = Type.float(1.0);
     const right = Type.integer(2);
-    const result = Erlang.$61$61(left, right);
+    const result = Erlang.$261$261(left, right);
 
     assertBoxedFalse(result);
   });
@@ -126,14 +126,14 @@ describe("$61$61/2 (==)", () => {
   it("returns boxed false when a boxed float is compared to a boxed value of non-number type", () => {
     const left = Type.float(1.0);
     const right = Type.string("1.0");
-    const result = Erlang.$61$61(left, right);
+    const result = Erlang.$261$261(left, right);
 
     assertBoxedFalse(result);
   });
 
   it("returns frozen object", () => {
     const value = Type.integer(1);
-    const result = Erlang.$61$61(value, value);
+    const result = Erlang.$261$261(value, value);
 
     assertFrozen(result);
   });
