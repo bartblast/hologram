@@ -344,7 +344,7 @@ defmodule Hologram.Compiler.EncoderTest do
     }
 
     assert encode(ir, %Context{}) ==
-             "Interpreter.comprehension([{enumerable: Type.list([Type.integer(1n), Type.integer(2n)]), match: Type.variablePattern(\"x\"), guard: (vars) => Erlang.$260(vars.x, Type.integer(3n))}, {enumerable: Type.list([Type.integer(3n), Type.integer(4n)]), match: Type.variablePattern(\"y\"), guard: (vars) => Erlang.$260(vars.y, Type.integer(5n))}], [(vars) => Erlang.is_integer(vars.x), (vars) => Erlang.is_integer(vars.y)], Type.map([]), true, (vars) => Type.tuple([vars.x, vars.y]))"
+             "Interpreter.comprehension([{enumerable: Type.list([Type.integer(1n), Type.integer(2n)]), match: Type.variablePattern(\"x\"), guard: (vars) => Erlang.$260(vars.x, Type.integer(3n))}, {enumerable: Type.list([Type.integer(3n), Type.integer(4n)]), match: Type.variablePattern(\"y\"), guard: (vars) => Erlang.$260(vars.y, Type.integer(5n))}], [(vars) => Erlang.is_integer(vars.x), (vars) => Erlang.is_integer(vars.y)], Type.map([]), true, (vars) => Type.tuple([vars.x, vars.y]), vars)"
   end
 
   test "comprehension filter" do

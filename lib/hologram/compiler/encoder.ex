@@ -102,7 +102,7 @@ defmodule Hologram.Compiler.Encoder do
     unique = comprehension.unique.value
     mapper = encode_closure(comprehension.mapper, context)
 
-    "Interpreter.comprehension(#{generators}, #{filters}, #{collectable}, #{unique}, #{mapper})"
+    "Interpreter.comprehension(#{generators}, #{filters}, #{collectable}, #{unique}, #{mapper}, vars)"
   end
 
   def encode(%IR.ComprehensionFilter{expression: expr}, context) do
