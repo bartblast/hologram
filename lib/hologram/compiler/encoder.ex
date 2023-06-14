@@ -335,7 +335,13 @@ defmodule Hologram.Compiler.Encoder do
 
   defp encode_function_call(callable, function, args, context) do
     args_js = Enum.map_join(args, ", ", &encode(&1, context))
-    "#{callable}.#{function}(#{args_js})"
+
+    escaped_function =
+      function
+      |> to_string()
+      |> escape_js_identifier()
+
+    "#{callable}.#{escaped_function}(#{args_js})"
   end
 
   defp encode_primitive_type(type, value, as_string)

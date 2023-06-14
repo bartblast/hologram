@@ -345,12 +345,12 @@ defmodule Hologram.Compiler.EncoderTest do
 
   test "local function call" do
     ir = %IR.LocalFunctionCall{
-      function: :my_fun,
+      function: :my_fun!,
       args: [%IR.IntegerType{value: 1}, %IR.IntegerType{value: 2}]
     }
 
     assert encode(ir, %Context{module: Aaa.Bbb.Ccc}) ==
-             "Elixir_Aaa_Bbb_Ccc.my_fun(Type.integer(1n), Type.integer(2n))"
+             "Elixir_Aaa_Bbb_Ccc.my_fun$33(Type.integer(1n), Type.integer(2n))"
   end
 
   describe "map type" do
@@ -518,22 +518,22 @@ defmodule Hologram.Compiler.EncoderTest do
     test "called on a module alias" do
       ir = %IR.RemoteFunctionCall{
         module: %IR.AtomType{value: Aaa.Bbb.Ccc},
-        function: :my_fun,
+        function: :my_fun!,
         args: [%IR.IntegerType{value: 1}, %IR.IntegerType{value: 2}]
       }
 
       assert encode(ir, %Context{}) ==
-               "Elixir_Aaa_Bbb_Ccc.my_fun(Type.integer(1n), Type.integer(2n))"
+               "Elixir_Aaa_Bbb_Ccc.my_fun$33(Type.integer(1n), Type.integer(2n))"
     end
 
     test "called on variable" do
       ir = %IR.RemoteFunctionCall{
         module: %IR.Variable{name: :x},
-        function: :my_fun,
+        function: :my_fun!,
         args: [%IR.IntegerType{value: 1}, %IR.IntegerType{value: 2}]
       }
 
-      assert encode(ir, %Context{}) == "vars.x.my_fun(Type.integer(1n), Type.integer(2n))"
+      assert encode(ir, %Context{}) == "vars.x.my_fun$33(Type.integer(1n), Type.integer(2n))"
     end
   end
 
