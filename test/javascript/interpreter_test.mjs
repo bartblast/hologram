@@ -184,6 +184,28 @@ describe("count()", () => {
   });
 });
 
+describe("getEnumerableProtocol()", () => {
+  afterEach(() => {
+    // Reset enumerable protocol after each test
+    Interpreter._enumerableProtocol = null;
+  });
+
+  it("should return the value of enumerable protocol", () => {
+    const moduleClass = "MyEnumerableProtocol";
+
+    // Set enumerable protocol
+    Interpreter._enumerableProtocol = moduleClass;
+
+    const result = Interpreter.getEnumerableProtocol();
+    assert.strictEqual(result, moduleClass);
+  });
+
+  it("should return null if enumerable protocol is not set", () => {
+    const result = Interpreter.getEnumerableProtocol();
+    assert.strictEqual(result, null);
+  });
+});
+
 describe("head()", () => {
   it("returns the first item in a boxed list", () => {
     const list = Type.list([Type.integer(1), Type.integer(2), Type.integer(3)]);
@@ -645,27 +667,27 @@ describe("raiseNotYetImplementedError()", () => {
 
 describe("setEnumerableProtocol()", () => {
   afterEach(() => {
-    // Reset enumerableProtocol after each test
-    Interpreter.enumerableProtocol = null;
+    // Reset enumerable protocol after each test
+    Interpreter._enumerableProtocol = null;
   });
 
-  it("should set the enumerableProtocol to the provided moduleClass", () => {
+  it("should set the enumerable protocol to the provided moduleClass", () => {
     const moduleClass = "MyEnumerableProtocol";
     Interpreter.setEnumerableProtocol(moduleClass);
-    assert.strictEqual(Interpreter.enumerableProtocol, moduleClass);
+    assert.strictEqual(Interpreter._enumerableProtocol, moduleClass);
   });
 
-  it("should overwrite the previously set enumerableProtocol", () => {
+  it("should overwrite the previously set enumerable protocol", () => {
     const initialModuleClass = "InitialEnumerableProtocol";
     const newModuleClass = "NewEnumerableProtocol";
 
-    // Set initial enumerableProtocol
+    // Set initial enumerable protocol
     Interpreter.setEnumerableProtocol(initialModuleClass);
-    assert.strictEqual(Interpreter.enumerableProtocol, initialModuleClass);
+    assert.strictEqual(Interpreter._enumerableProtocol, initialModuleClass);
 
-    // Set new enumerableProtocol
+    // Set new enumerable protocol
     Interpreter.setEnumerableProtocol(newModuleClass);
-    assert.strictEqual(Interpreter.enumerableProtocol, newModuleClass);
+    assert.strictEqual(Interpreter._enumerableProtocol, newModuleClass);
   });
 });
 

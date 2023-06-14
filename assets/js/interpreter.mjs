@@ -42,6 +42,10 @@ export default class Interpreter {
     return enumerable.data.length;
   }
 
+  static getEnumerableProtocol() {
+    return Interpreter._enumerableProtocol;
+  }
+
   static head(list) {
     return list.data[0];
   }
@@ -152,7 +156,7 @@ export default class Interpreter {
   }
 
   static setEnumerableProtocol(moduleClass) {
-    Interpreter.enumerableProtocol = moduleClass;
+    Interpreter._enumerableProtocol = moduleClass;
   }
 
   static tail(list) {
