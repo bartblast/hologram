@@ -7,6 +7,8 @@ import Type from "./type.mjs";
 import Utils from "./utils.mjs";
 
 export default class Interpreter {
+  static enumerableProtocol;
+
   static callAnonymousFunction(fun, args) {
     const right = Type.list(args);
 
@@ -147,6 +149,10 @@ export default class Interpreter {
 
   static raiseNotYetImplementedError(message) {
     return Interpreter.raiseError("Hologram.NotYetImplementedError", message);
+  }
+
+  static setEnumerableProtocol(moduleClass) {
+    Interpreter.enumerableProtocol = moduleClass;
   }
 
   static tail(list) {

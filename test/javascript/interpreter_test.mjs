@@ -643,6 +643,32 @@ describe("raiseNotYetImplementedError()", () => {
   });
 });
 
+describe("setEnumerableProtocol()", () => {
+  afterEach(() => {
+    // Reset enumerableProtocol after each test
+    Interpreter.enumerableProtocol = null;
+  });
+
+  it("should set the enumerableProtocol to the provided moduleClass", () => {
+    const moduleClass = "MyEnumerableProtocol";
+    Interpreter.setEnumerableProtocol(moduleClass);
+    assert.strictEqual(Interpreter.enumerableProtocol, moduleClass);
+  });
+
+  it("should overwrite the previously set enumerableProtocol", () => {
+    const initialModuleClass = "InitialEnumerableProtocol";
+    const newModuleClass = "NewEnumerableProtocol";
+
+    // Set initial enumerableProtocol
+    Interpreter.setEnumerableProtocol(initialModuleClass);
+    assert.strictEqual(Interpreter.enumerableProtocol, initialModuleClass);
+
+    // Set new enumerableProtocol
+    Interpreter.setEnumerableProtocol(newModuleClass);
+    assert.strictEqual(Interpreter.enumerableProtocol, newModuleClass);
+  });
+});
+
 describe("tail()", () => {
   it("returns the tail of a boxed list", () => {
     const list = Type.list([Type.integer(1), Type.integer(2), Type.integer(3)]);
