@@ -64,21 +64,21 @@ describe("callAnonymousFunction()", () => {
       [
         {
           params: [Type.variablePattern("x")],
-          guard: (vars) => Erlang.$61$61(vars.x, Type.integer(1n)),
+          guard: (vars) => Erlang.$261$261(vars.x, Type.integer(1n)),
           body: (vars) => {
             return Type.atom("expr_1");
           },
         },
         {
           params: [Type.variablePattern("y")],
-          guard: (vars) => Erlang.$61$61(vars.y, Type.integer(2n)),
+          guard: (vars) => Erlang.$261$261(vars.y, Type.integer(2n)),
           body: (vars) => {
             return Type.atom("expr_2");
           },
         },
         {
           params: [Type.variablePattern("z")],
-          guard: (vars) => Erlang.$61$61(vars.z, Type.integer(3n)),
+          guard: (vars) => Erlang.$261$261(vars.z, Type.integer(3n)),
           body: (vars) => {
             return Type.atom("expr_3");
           },
@@ -106,7 +106,7 @@ describe("callAnonymousFunction()", () => {
       [
         {
           params: [Type.variablePattern("x"), Type.integer(1n)],
-          guard: (vars) => Erlang.$61$61(vars.x, Type.integer(1n)),
+          guard: (vars) => Erlang.$261$261(vars.x, Type.integer(1n)),
           body: (vars) => {
             return Type.atom("expr_1");
           },
@@ -138,6 +138,208 @@ describe("callAnonymousFunction()", () => {
       Error,
       "(FunctionClauseError) no function clause matching in anonymous fn/1"
     );
+  });
+});
+
+describe("comprehension()", () => {
+  let vars;
+
+  beforeEach(() => {
+    vars = {};
+
+    Interpreter._moduleEnum = class Elixir_Enum {
+      static into(enumerable, _collectable) {
+        return enumerable;
+      }
+
+      static to_list(enumerable) {
+        return enumerable;
+      }
+    };
+  });
+
+  afterEach(() => {
+    Interpreter._moduleEnum = null;
+  });
+
+  describe("generator", () => {
+    it("generates combinations of enumerables items", () => {
+      // for x <- [1, 2], y <- [3, 4], do: {x, y}
+
+      const generator1 = {
+        enumerable: Type.list([Type.integer(1n), Type.integer(2n)]),
+        match: Type.variablePattern("x"),
+        guard: null,
+      };
+
+      const generator2 = {
+        enumerable: Type.list([Type.integer(3n), Type.integer(4n)]),
+        match: Type.variablePattern("y"),
+        guard: null,
+      };
+
+      const result = Interpreter.comprehension(
+        [generator1, generator2],
+        [],
+        Type.map([]),
+        false,
+        (vars) => Type.tuple([vars.x, vars.y]),
+        vars
+      );
+
+      const expected = Type.list([
+        Type.tuple([Type.integer(1), Type.integer(3)]),
+        Type.tuple([Type.integer(1), Type.integer(4)]),
+        Type.tuple([Type.integer(2), Type.integer(3)]),
+        Type.tuple([Type.integer(2), Type.integer(4)]),
+      ]);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("ignores enumerable items that don't match the pattern", () => {
+      // for x <- [1, {11, 2}, 3, {11, 4}],
+      //     y <- [5, {12, 6}, 7, {12, 8}],
+      //     do: {x, y}
+
+      const enumerable1 = Type.list([
+        Type.integer(1),
+        Type.tuple([Type.integer(11), Type.integer(2)]),
+        Type.integer(3),
+        Type.tuple([Type.integer(11), Type.integer(4)]),
+      ]);
+
+      const generator1 = {
+        enumerable: enumerable1,
+        match: Type.tuple([Type.integer(11), Type.variablePattern("x")]),
+        guard: null,
+      };
+
+      const enumerable2 = Type.list([
+        Type.integer(5),
+        Type.tuple([Type.integer(12), Type.integer(6)]),
+        Type.integer(7),
+        Type.tuple([Type.integer(12), Type.integer(8)]),
+      ]);
+
+      const generator2 = {
+        enumerable: enumerable2,
+        match: Type.tuple([Type.integer(12), Type.variablePattern("y")]),
+        guard: null,
+      };
+
+      const result = Interpreter.comprehension(
+        [generator1, generator2],
+        [],
+        Type.list([]),
+        false,
+        (vars) => Type.tuple([vars.x, vars.y]),
+        vars
+      );
+
+      const expected = Type.list([
+        Type.tuple([Type.integer(2), Type.integer(6)]),
+        Type.tuple([Type.integer(2), Type.integer(8)]),
+        Type.tuple([Type.integer(4), Type.integer(6)]),
+        Type.tuple([Type.integer(4), Type.integer(8)]),
+      ]);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("applies guards", () => {
+      // for x when x != 2 <- [1, 2, 3],
+      //     y when y != 4 <- [4, 5, 6],
+      //     do: {x, y}
+      //
+      // for x when :erlang."/="(x, 2) <- [1, 2, 3],
+      //     y when :erlang."/="(y, 4) <- [4, 5, 6],
+      //     do: {x, y}
+
+      const enumerable1 = Type.list([
+        Type.integer(1),
+        Type.integer(2),
+        Type.integer(3),
+      ]);
+
+      const guard1 = (vars) => Erlang.$247$261(vars.x, Type.integer(2));
+
+      const generator1 = {
+        enumerable: enumerable1,
+        match: Type.variablePattern("x"),
+        guard: guard1,
+      };
+
+      const enumerable2 = Type.list([
+        Type.integer(4),
+        Type.integer(5),
+        Type.integer(6),
+      ]);
+
+      const guard2 = (vars) => Erlang.$247$261(vars.y, Type.integer(4));
+
+      const generator2 = {
+        enumerable: enumerable2,
+        match: Type.variablePattern("y"),
+        guard: guard2,
+      };
+
+      const result = Interpreter.comprehension(
+        [generator1, generator2],
+        [],
+        Type.list([]),
+        false,
+        (vars) => Type.tuple([vars.x, vars.y]),
+        vars
+      );
+
+      const expected = Type.list([
+        Type.tuple([Type.integer(1), Type.integer(5)]),
+        Type.tuple([Type.integer(1), Type.integer(6)]),
+        Type.tuple([Type.integer(3), Type.integer(5)]),
+        Type.tuple([Type.integer(3), Type.integer(6)]),
+      ]);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("guards can access variables pattern matched in preceding guards", () => {
+      // for x <- [1, 2], y when x != 1 <- [3, 4], do: {x, y}
+
+      const enumerable1 = Type.list([Type.integer(1), Type.integer(2)]);
+
+      const generator1 = {
+        enumerable: enumerable1,
+        match: Type.variablePattern("x"),
+        guard: null,
+      };
+
+      const enumerable2 = Type.list([Type.integer(3), Type.integer(4)]);
+
+      const guard2 = (vars) => Erlang.$247$261(vars.x, Type.integer(1));
+
+      const generator2 = {
+        enumerable: enumerable2,
+        match: Type.variablePattern("y"),
+        guard: guard2,
+      };
+
+      const result = Interpreter.comprehension(
+        [generator1, generator2],
+        [],
+        Type.list([]),
+        false,
+        (vars) => Type.tuple([vars.x, vars.y]),
+        vars
+      );
+
+      const expected = Type.list([
+        Type.tuple([Type.integer(2), Type.integer(3)]),
+        Type.tuple([Type.integer(2), Type.integer(4)]),
+      ]);
+
+      assert.deepStrictEqual(result, expected);
+    });
   });
 });
 
