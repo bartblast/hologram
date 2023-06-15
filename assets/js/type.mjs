@@ -93,6 +93,13 @@ export default class Type {
     return boxed.type === "atom";
   }
 
+  static isBoolean(boxed) {
+    return (
+      boxed.type === "atom" &&
+      (boxed.value === "false" || boxed.value === "true")
+    );
+  }
+
   static isConsPattern(boxed) {
     return boxed.type === "cons_pattern";
   }

@@ -359,6 +359,36 @@ describe("isAtom()", () => {
   });
 });
 
+describe("isBoolean()", () => {
+  it("returns true for boxed true value", () => {
+    const arg = Type.boolean(true);
+    const result = Type.isBoolean(arg);
+
+    assert.isTrue(result);
+  });
+
+  it("returns true for boxed false value", () => {
+    const arg = Type.boolean(false);
+    const result = Type.isBoolean(arg);
+
+    assert.isTrue(result);
+  });
+
+  it("returns false for boxed nil value", () => {
+    const arg = Type.nil();
+    const result = Type.isBoolean(arg);
+
+    assert.isFalse(result);
+  });
+
+  it("returns false for values which are not boxed booleans", () => {
+    const arg = Type.string("true");
+    const result = Type.isBoolean(arg);
+
+    assert.isFalse(result);
+  });
+});
+
 describe("isConsPattern()", () => {
   it("returns true if the given object is a boxed cons pattern", () => {
     const head = Type.integer(1);
