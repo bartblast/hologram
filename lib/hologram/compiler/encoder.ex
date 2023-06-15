@@ -1,4 +1,14 @@
 defmodule Hologram.Compiler.Encoder do
+  if Application.compile_env(:hologram, :debug_encoder) do
+    use Interceptor.Annotated,
+      config: %{
+        {Hologram.Compiler.Encoder, :encode, 2} => [
+          on_success: {Hologram.Compiler.Encoder, :debug, 3},
+          on_error: {Hologram.Compiler.Encoder, :debug, 3}
+        ]
+      }
+  end
+
   alias Hologram.Commons.IntegerUtils
   alias Hologram.Commons.StringUtils
   alias Hologram.Compiler.Context
@@ -18,6 +28,7 @@ defmodule Hologram.Compiler.Encoder do
       iex> encode(ir, %Context{})
       "Type.list([Type.integer(1), Type.atom(\"abc\")])"
   """
+  @intercept true
   @spec encode(IR.t(), Context.t()) :: String.t()
   def encode(ir, context)
 
@@ -206,6 +217,28 @@ defmodule Hologram.Compiler.Encoder do
 
   def encode(%IR.Variable{name: name}, %{pattern?: false}) do
     "vars.#{name}"
+  end
+
+  @doc """
+  Prints debug info for intercepted encode/2 calls.
+  """
+  @spec debug(
+          {module, atom, list(IR.t() | Context.t())},
+          String.t() | %{__struct__: FunctionClauseError},
+          integer
+        ) :: :ok
+  def debug({_module, _function, [ir, context] = _args}, result, _start_timestamp) do
+    # credo:disable-for-lines:10 /Credo.Check.Refactor.IoPuts|Credo.Check.Warning.IoInspect/
+    IO.puts("\nENCODE..................................\n")
+    IO.puts("ir")
+    IO.inspect(ir)
+    IO.puts("")
+    IO.puts("context")
+    IO.inspect(context)
+    IO.puts("")
+    IO.puts("result")
+    IO.inspect(result)
+    IO.puts("\n........................................\n")
   end
 
   @doc """

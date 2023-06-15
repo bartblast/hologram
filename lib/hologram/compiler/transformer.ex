@@ -336,7 +336,7 @@ defmodule Hologram.Compiler.Transformer do
   # --- PRESERVE ORDER (END) ---
 
   @doc """
-  Prints debug info for intercepted transform/1 calls.
+  Prints debug info for intercepted transform/2 calls.
   """
   @spec debug(
           {module, atom, list(AST.t() | Context.t())},
