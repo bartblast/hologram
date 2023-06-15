@@ -644,9 +644,19 @@ describe("isStrictlyEqual()", () => {
 });
 
 describe("inspect()", () => {
-  it("inspects boxed atom", () => {
+  it("inspects boxed atom not being boolean or nil", () => {
     const result = Interpreter.inspect(Type.atom("abc"));
     assert.equal(result, ":abc");
+  });
+
+  it("inspects boxed atom being boolean", () => {
+    const result = Interpreter.inspect(Type.boolean(true));
+    assert.equal(result, "true");
+  });
+
+  it("inspects boxed atom being nil", () => {
+    const result = Interpreter.inspect(Type.nil());
+    assert.equal(result, "nil");
   });
 
   it("inspects boxed float", () => {

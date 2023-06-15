@@ -97,6 +97,9 @@ export default class Interpreter {
   static inspect(term) {
     switch (term.type) {
       case "atom":
+        if (Type.isBoolean(term) || Type.isNil(term)) {
+          return term.value;
+        }
         return ":" + term.value;
 
       // TODO: case "bitstring"
