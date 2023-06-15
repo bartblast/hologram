@@ -306,6 +306,130 @@ describe("$261$261/2 (==)", () => {
   });
 });
 
+describe("$260", () => {
+  it("should return boxed true when left float argument is smaller than right float argument", () => {
+    const left = Type.float(3.2);
+    const right = Type.float(5.6);
+    const result = Erlang.$260(left, right);
+
+    assertBoxedTrue(result);
+  });
+
+  it("should return boxed true when left float argument is smaller than right integer argument", () => {
+    const left = Type.float(3.2);
+    const right = Type.integer(5);
+    const result = Erlang.$260(left, right);
+
+    assertBoxedTrue(result);
+  });
+
+  it("should return boxed true when left integer argument is smaller than right float argument", () => {
+    const left = Type.integer(3);
+    const right = Type.float(5.6);
+    const result = Erlang.$260(left, right);
+
+    assertBoxedTrue(result);
+  });
+
+  it("should return boxed true when left integer argument is smaller than right integer argument", () => {
+    const left = Type.integer(3);
+    const right = Type.integer(5);
+    const result = Erlang.$260(left, right);
+
+    assertBoxedTrue(result);
+  });
+
+  it("should return boxed false when left float argument is equal to right float argument", () => {
+    const left = Type.float(3.0);
+    const right = Type.float(3.0);
+    const result = Erlang.$260(left, right);
+
+    assertBoxedFalse(result);
+  });
+
+  it("should return boxed false when left float argument is equal to right integer argument", () => {
+    const left = Type.float(3.0);
+    const right = Type.integer(3);
+    const result = Erlang.$260(left, right);
+
+    assertBoxedFalse(result);
+  });
+
+  it("should return boxed false when left integer argument is equal to right float argument", () => {
+    const left = Type.integer(3);
+    const right = Type.float(3.0);
+    const result = Erlang.$260(left, right);
+
+    assertBoxedFalse(result);
+  });
+
+  it("should return boxed false when left integer argument is equal to right integer argument", () => {
+    const left = Type.integer(3);
+    const right = Type.integer(3);
+    const result = Erlang.$260(left, right);
+
+    assertBoxedFalse(result);
+  });
+
+  it("should return boxed false when left float argument is greater than right float argument", () => {
+    const left = Type.float(5.6);
+    const right = Type.float(3.2);
+    const result = Erlang.$260(left, right);
+
+    assertBoxedFalse(result);
+  });
+
+  it("should return boxed false when left float argument is greater than right integer argument", () => {
+    const left = Type.float(5.6);
+    const right = Type.integer(3);
+    const result = Erlang.$260(left, right);
+
+    assertBoxedFalse(result);
+  });
+
+  it("should return boxed false when left integer argument is greater than right float argument", () => {
+    const left = Type.integer(5);
+    const right = Type.float(3.2);
+    const result = Erlang.$260(left, right);
+
+    assertBoxedFalse(result);
+  });
+
+  it("should return boxed false when left integer argument is greater than right integer argument", () => {
+    const left = Type.integer(5);
+    const right = Type.integer(3);
+    const result = Erlang.$260(left, right);
+
+    assertBoxedFalse(result);
+  });
+
+  it("should throw a not yet implemented error for non-integer and non-float left argument", () => {
+    const left = Type.string("abc");
+    const right = Type.integer(2);
+
+    assert.throw(
+      () => {
+        Erlang.$260(left, right);
+      },
+      Error,
+      '(Hologram.NotYetImplementedError) :erlang.</2 currently supports only floats and integers, left = "abc", right = 2'
+    );
+  });
+
+  it("should throw a not yet implemented error for non-integer and non-float right argument", () => {
+    const left = Type.integer(2);
+    const right = Type.string("abc");
+
+    assert.throw(
+      () => {
+        Erlang.$260(left, right);
+      },
+      Error,
+      '(Hologram.NotYetImplementedError) :erlang.</2 currently supports only floats and integers, left = 2, right = "abc"'
+    );
+  });
+});
+
 describe("$262", () => {
   it("should return boxed true when left float argument is greater than right float argument", () => {
     const left = Type.float(5.6);
