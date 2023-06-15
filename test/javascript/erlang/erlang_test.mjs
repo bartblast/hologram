@@ -61,6 +61,56 @@ describe("$243/2 (+)", () => {
   });
 });
 
+describe("$245/2 (-)", () => {
+  it("subtracts integer and integer", () => {
+    const left = Type.integer(3);
+    const right = Type.integer(1);
+
+    const result = Erlang.$245(left, right);
+    const expected = Type.integer(2);
+
+    assert.deepStrictEqual(result, expected);
+  });
+
+  it("subtracts integer and float", () => {
+    const left = Type.integer(3);
+    const right = Type.float(1.0);
+
+    const result = Erlang.$245(left, right);
+    const expected = Type.float(2.0);
+
+    assert.deepStrictEqual(result, expected);
+  });
+
+  it("subtracts float and integer", () => {
+    const left = Type.float(3.0);
+    const right = Type.integer(1);
+
+    const result = Erlang.$245(left, right);
+    const expected = Type.float(2.0);
+
+    assert.deepStrictEqual(result, expected);
+  });
+
+  it("subtracts float and float", () => {
+    const left = Type.float(3.0);
+    const right = Type.float(1.0);
+
+    const result = Erlang.$245(left, right);
+    const expected = Type.float(2.0);
+
+    assert.deepStrictEqual(result, expected);
+  });
+
+  it("returns frozen object", () => {
+    const left = Type.integer(3);
+    const right = Type.integer(1);
+    const result = Erlang.$245(left, right);
+
+    assertFrozen(result);
+  });
+});
+
 describe("$247$261/2 (/=)", () => {
   // non-number == non-number
   it("returns boxed false for a boxed non-number equal to another boxed non-number", () => {
