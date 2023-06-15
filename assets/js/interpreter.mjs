@@ -2,6 +2,7 @@
 
 // See: https://www.blazemeter.com/blog/the-correct-way-to-import-lodash-libraries-a-benchmark
 import isEqual from "lodash/isEqual.js";
+import uniqWith from "lodash/uniqWith.js";
 
 import Type from "./type.mjs";
 import Utils from "./utils.mjs";
@@ -28,6 +29,52 @@ export default class Interpreter {
     // TODO: Include module and function info, once context for error reporting is implemented.
     const message = "no function clause matching in anonymous fn/" + fun.arity;
     return Interpreter.raiseFunctionClauseError(message);
+  }
+
+  static comprehension(generators, filters, collectable, unique, mapper, vars) {
+    const generatorsCount = generators.length;
+
+    const sets = generators.map(
+      (generator) => Interpreter._moduleEnum.to_list(generator.enumerable).data
+    );
+
+    const items = Utils.cartesianProduct(sets).reduce((acc, combination) => {
+      const varsClone = Utils.clone(vars);
+
+      for (let i = 0; i < generatorsCount; ++i) {
+        if (Interpreter.isMatched(generators[i].match, combination[i])) {
+          Interpreter.matchOperator(
+            generators[i].match,
+            combination[i],
+            varsClone,
+            false
+          );
+
+          if (
+            Interpreter._evaluateGuard(generators[i].guard, varsClone) === false
+          ) {
+            return acc;
+          }
+        } else {
+          return acc;
+        }
+      }
+
+      for (const filter of filters) {
+        if (Type.isFalsy(filter(varsClone))) {
+          return acc;
+        }
+      }
+
+      acc.push(mapper(varsClone));
+      return acc;
+    }, []);
+
+    if (unique) {
+      items = uniqWith(items, Interpreter.isStrictlyEqual);
+    }
+
+    return Interpreter._moduleEnum.into(Type.list(items), collectable);
   }
 
   static consOperator(left, right) {
