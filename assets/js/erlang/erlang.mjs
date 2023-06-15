@@ -4,6 +4,13 @@ import Interpreter from "../interpreter.mjs";
 import Type from "../type.mjs";
 
 export default class Erlang {
+  // start: /=/2
+  static $247$261(left, right) {
+    const isEqual = Erlang.$261$261(left, right);
+    return Type.boolean(Type.isFalse(isEqual));
+  }
+  // end: /=/2
+
   // start: =:=/2
   static $261$258$261(left, right) {
     return Type.boolean(Interpreter.isStrictlyEqual(left, right));
