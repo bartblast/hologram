@@ -96,6 +96,7 @@ export default class Interpreter {
   // TODO: use Kernel.inspect/2 instead
   static inspect(term) {
     switch (term.type) {
+      // TODO: handle correctly atoms which need to be double quoted, e.g. :"1"
       case "atom":
         if (Type.isBoolean(term) || Type.isNil(term)) {
           return term.value;
