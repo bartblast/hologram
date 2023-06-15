@@ -6,21 +6,11 @@ import Type from "../type.mjs";
 export default class Erlang {
   // start: +/2
   static $243(left, right) {
-    const type =
-      Type.isFloat(left) || Type.isFloat(right) ? "float" : "integer";
+    const [type, leftValue, rightValue] =
+      Erlang._ensureBothAreIntegersOrBothAreFloats(left, right);
 
-    let leftValue = left.value;
-    let rightValue = right.value;
+    const result = leftValue.value + rightValue.value;
 
-    if (type === "float" && Type.isInteger(left)) {
-      leftValue = Number(leftValue);
-    }
-
-    if (type === "float" && Type.isInteger(right)) {
-      rightValue = Number(rightValue);
-    }
-
-    const result = leftValue + rightValue;
     return type === "float" ? Type.float(result) : Type.integer(result);
   }
   // end: +/2
@@ -102,4 +92,25 @@ export default class Erlang {
     return Interpreter.tail(list);
   }
   // end: tl/1
+
+  static _ensureBothAreIntegersOrBothAreFloats(boxed1, boxed2) {
+    const type =
+      Type.isFloat(boxed1) || Type.isFloat(boxed2) ? "float" : "integer";
+
+    let value1, value2;
+
+    if (type === "float" && Type.isInteger(boxed1)) {
+      value1 = Type.float(Number(boxed1.value));
+    } else {
+      value1 = boxed1;
+    }
+
+    if (type === "float" && Type.isInteger(boxed2)) {
+      value2 = Type.float(Number(boxed2.value));
+    } else {
+      value2 = boxed2;
+    }
+
+    return [type, value1, value2];
+  }
 }
