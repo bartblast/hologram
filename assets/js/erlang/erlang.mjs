@@ -23,6 +23,7 @@ export default class Erlang {
     const result = leftValue + rightValue;
     return type === "float" ? Type.float(result) : Type.integer(result);
   }
+  // end: +/2
 
   // start: /=/2
   static $247$261(left, right) {
