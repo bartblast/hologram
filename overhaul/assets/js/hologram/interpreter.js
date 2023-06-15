@@ -9,12 +9,6 @@ import Type from "./type"
 import Utils from "./utils"
 
 export default class Interpreter {
-  static $addition_operator(left, right) {
-    const type = left.type === "integer" && right.type === "integer" ? "integer" : "float"
-    const result = left.value + right.value
-    return Utils.freeze({type: type, value: result})
-  }
-
   static $case_expression(condition, clausesAnonFun) {
     const result = clausesAnonFun(condition)
     return Utils.freeze(result)

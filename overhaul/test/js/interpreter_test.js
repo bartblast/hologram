@@ -8,56 +8,6 @@ import Interpreter from "../../assets/js/hologram/interpreter"
 import Map from "../../assets/js/hologram/elixir/map"
 import Type from "../../assets/js/hologram/type"
 
-describe("$addition_operator()", () => {
-  it("adds integer and integer", () => {
-    const left = Type.integer(1);
-    const right = Type.integer(2);
-
-    const result = Interpreter.$addition_operator(left, right);
-    const expected = Type.integer(3);
-
-    assert.deepStrictEqual(result, expected);
-  });
-
-  it("adds integer and float", () => {
-    const left = Type.integer(1);
-    const right = Type.float(2.0);
-
-    const result = Interpreter.$addition_operator(left, right);
-    const expected = Type.float(3.0);
-
-    assert.deepStrictEqual(result, expected);
-  });
-
-  it("adds float and integer", () => {
-    const left = Type.float(1.0);
-    const right = Type.integer(2);
-
-    const result = Interpreter.$addition_operator(left, right);
-    const expected = Type.float(3.0);
-
-    assert.deepStrictEqual(result, expected);
-  });
-
-  it("adds float and float", () => {
-    const left = Type.float(1.0);
-    const right = Type.float(2.0);
-
-    const result = Interpreter.$addition_operator(left, right);
-    const expected = Type.float(3.0);
-
-    assert.deepStrictEqual(result, expected);
-  });
-
-  it("returns frozen object", () => {
-    const left = Type.integer(1);
-    const right = Type.integer(2);
-    const result = Interpreter.$addition_operator(left, right);
-
-    assertFrozen(result);
-  });
-});
-
 describe("$case_expression()", () => {
   it("returns the result of the clauses anonymous function given", () => {
     const clausesAnonFun = (param) => {

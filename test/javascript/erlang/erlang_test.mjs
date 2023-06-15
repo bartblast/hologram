@@ -11,6 +11,56 @@ import Erlang from "../../../assets/js/erlang/erlang.mjs";
 import Interpreter from "../../../assets/js/interpreter.mjs";
 import Type from "../../../assets/js/type.mjs";
 
+describe("$243/2 (+)", () => {
+  it("adds integer and integer", () => {
+    const left = Type.integer(1);
+    const right = Type.integer(2);
+
+    const result = Erlang.$243(left, right);
+    const expected = Type.integer(3);
+
+    assert.deepStrictEqual(result, expected);
+  });
+
+  it("adds integer and float", () => {
+    const left = Type.integer(1);
+    const right = Type.float(2.0);
+
+    const result = Erlang.$243(left, right);
+    const expected = Type.float(3.0);
+
+    assert.deepStrictEqual(result, expected);
+  });
+
+  it("adds float and integer", () => {
+    const left = Type.float(1.0);
+    const right = Type.integer(2);
+
+    const result = Erlang.$243(left, right);
+    const expected = Type.float(3.0);
+
+    assert.deepStrictEqual(result, expected);
+  });
+
+  it("adds float and float", () => {
+    const left = Type.float(1.0);
+    const right = Type.float(2.0);
+
+    const result = Erlang.$243(left, right);
+    const expected = Type.float(3.0);
+
+    assert.deepStrictEqual(result, expected);
+  });
+
+  it("returns frozen object", () => {
+    const left = Type.integer(1);
+    const right = Type.integer(2);
+    const result = Erlang.$243(left, right);
+
+    assertFrozen(result);
+  });
+});
+
 describe("$247$261/2 (/=)", () => {
   // non-number == non-number
   it("returns boxed false for a boxed non-number equal to another boxed non-number", () => {

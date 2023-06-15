@@ -4,6 +4,26 @@ import Interpreter from "../interpreter.mjs";
 import Type from "../type.mjs";
 
 export default class Erlang {
+  // start: +/2
+  static $243(left, right) {
+    const type =
+      Type.isFloat(left) || Type.isFloat(right) ? "float" : "integer";
+
+    let leftValue = left.value;
+    let rightValue = right.value;
+
+    if (type === "float" && Type.isInteger(left)) {
+      leftValue = Number(leftValue);
+    }
+
+    if (type === "float" && Type.isInteger(right)) {
+      rightValue = Number(rightValue);
+    }
+
+    const result = leftValue + rightValue;
+    return type === "float" ? Type.float(result) : Type.integer(result);
+  }
+
   // start: /=/2
   static $247$261(left, right) {
     const isEqual = Erlang.$261$261(left, right);
