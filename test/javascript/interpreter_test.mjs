@@ -285,8 +285,10 @@ describe("comprehension()", () => {
       sinon.assert.calledWith(stub, enumerable1);
       sinon.assert.calledWith(stub, enumerable2);
     });
+  });
 
-    it("applies guards", () => {
+  describe("guards", () => {
+    it("are applied", () => {
       // for x when x != 2 <- [1, 2, 3],
       //     y when y != 4 <- [4, 5, 6],
       //     do: {x, y}
@@ -342,7 +344,7 @@ describe("comprehension()", () => {
       assert.deepStrictEqual(result, expected);
     });
 
-    it("guards can access variables from comprehension outer scope", () => {
+    it("can access variables from comprehension outer scope", () => {
       // for x when x != b <- [1, 2, 3], do: x
 
       const enumerable = Type.list([
@@ -373,7 +375,7 @@ describe("comprehension()", () => {
       assert.deepStrictEqual(result, expected);
     });
 
-    it("guards can access variables pattern matched in preceding guards", () => {
+    it("can access variables pattern matched in preceding guards", () => {
       // for x <- [1, 2], y when x != 1 <- [3, 4], do: {x, y}
 
       const enumerable1 = Type.list([Type.integer(1), Type.integer(2)]);
@@ -413,7 +415,7 @@ describe("comprehension()", () => {
   });
 
   describe("filters", () => {
-    it("filters out combinations that don't fullfill specified conditions", () => {
+    it("remove combinations that don't fullfill specified conditions", () => {
       // for x <- [1, 2, 3],
       //     y <- [4, 5, 6],
       //     x + y < 8,
@@ -507,7 +509,7 @@ describe("comprehension()", () => {
   });
 
   describe("unique", () => {
-    it("filters out non-unique items if uniq options is set to true", () => {
+    it("non-unique items are removed if 'uniq' option is set to true", () => {
       // for x <- [1, 2, 1], y <- [3, 4, 3], do: {x, y}
 
       const enumerable1 = Type.list([
@@ -554,48 +556,6 @@ describe("comprehension()", () => {
     });
   });
 
-  it("uses Enum.into/2 to insert the comprehension result into a collectable", () => {
-    // for x <- [1, 2], y <- [3, 4], do: {x, y}
-
-    const enumerable1 = Type.list([Type.integer(1), Type.integer(2)]);
-
-    const generator1 = {
-      enumerable: enumerable1,
-      match: Type.variablePattern("x"),
-      guard: null,
-    };
-
-    const enumerable2 = Type.list([Type.integer(3), Type.integer(4)]);
-
-    const generator2 = {
-      enumerable: enumerable2,
-      match: Type.variablePattern("y"),
-      guard: null,
-    };
-
-    const stub = sinon
-      .stub(Interpreter._moduleEnum, "into")
-      .callsFake((enumerable) => enumerable);
-
-    Interpreter.comprehension(
-      [generator1, generator2],
-      [],
-      Type.map([]),
-      false,
-      (vars) => Type.tuple([vars.x, vars.y]),
-      vars
-    );
-
-    const expectedArg = Type.list([
-      Type.tuple([Type.integer(1), Type.integer(3)]),
-      Type.tuple([Type.integer(1), Type.integer(4)]),
-      Type.tuple([Type.integer(2), Type.integer(3)]),
-      Type.tuple([Type.integer(2), Type.integer(4)]),
-    ]);
-
-    assert.isTrue(stub.calledOnceWith(expectedArg));
-  });
-
   describe("mapper", () => {
     it("can access variables from comprehension outer scope", () => {
       // for x <- [1, 2], do: {x, b}
@@ -623,6 +583,48 @@ describe("comprehension()", () => {
       ]);
 
       assert.deepStrictEqual(result, expected);
+    });
+
+    it("uses Enum.into/2 to insert the comprehension result into a collectable", () => {
+      // for x <- [1, 2], y <- [3, 4], do: {x, y}
+
+      const enumerable1 = Type.list([Type.integer(1), Type.integer(2)]);
+
+      const generator1 = {
+        enumerable: enumerable1,
+        match: Type.variablePattern("x"),
+        guard: null,
+      };
+
+      const enumerable2 = Type.list([Type.integer(3), Type.integer(4)]);
+
+      const generator2 = {
+        enumerable: enumerable2,
+        match: Type.variablePattern("y"),
+        guard: null,
+      };
+
+      const stub = sinon
+        .stub(Interpreter._moduleEnum, "into")
+        .callsFake((enumerable) => enumerable);
+
+      Interpreter.comprehension(
+        [generator1, generator2],
+        [],
+        Type.map([]),
+        false,
+        (vars) => Type.tuple([vars.x, vars.y]),
+        vars
+      );
+
+      const expectedArg = Type.list([
+        Type.tuple([Type.integer(1), Type.integer(3)]),
+        Type.tuple([Type.integer(1), Type.integer(4)]),
+        Type.tuple([Type.integer(2), Type.integer(3)]),
+        Type.tuple([Type.integer(2), Type.integer(4)]),
+      ]);
+
+      assert.isTrue(stub.calledOnceWith(expectedArg));
     });
   });
 });
