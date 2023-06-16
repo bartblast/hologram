@@ -33,6 +33,27 @@ export default class Erlang {
   }
   // end: /=/2
 
+  // TODO: Implement structural comparison, see: https://hexdocs.pm/elixir/main/Kernel.html#module-structural-comparison
+  // start: </2
+  static $260(left, right) {
+    if (
+      (!Type.isFloat(left) && !Type.isInteger(left)) ||
+      (!Type.isFloat(right) && !Type.isInteger(right))
+    ) {
+      const message =
+        ":erlang.</2 currently supports only floats and integers" +
+        ", left = " +
+        Interpreter.inspect(left) +
+        ", right = " +
+        Interpreter.inspect(right);
+
+      Interpreter.raiseNotYetImplementedError(message);
+    }
+
+    return Type.boolean(left.value < right.value);
+  }
+  // end: </2
+
   // start: =:=/2
   static $261$258$261(left, right) {
     return Type.boolean(Interpreter.isStrictlyEqual(left, right));
@@ -61,27 +82,6 @@ export default class Erlang {
     return Type.boolean(value);
   }
   // end: ==/2
-
-  // TODO: Implement structural comparison, see: https://hexdocs.pm/elixir/main/Kernel.html#module-structural-comparison
-  // start: </2
-  static $260(left, right) {
-    if (
-      (!Type.isFloat(left) && !Type.isInteger(left)) ||
-      (!Type.isFloat(right) && !Type.isInteger(right))
-    ) {
-      const message =
-        ":erlang.</2 currently supports only floats and integers" +
-        ", left = " +
-        Interpreter.inspect(left) +
-        ", right = " +
-        Interpreter.inspect(right);
-
-      Interpreter.raiseNotYetImplementedError(message);
-    }
-
-    return Type.boolean(left.value < right.value);
-  }
-  // end: </2
 
   // TODO: Implement structural comparison, see: https://hexdocs.pm/elixir/main/Kernel.html#module-structural-comparison
   // start: >/2
