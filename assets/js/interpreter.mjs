@@ -38,7 +38,7 @@ export default class Interpreter {
       (generator) => Interpreter._moduleEnum.to_list(generator.enumerable).data
     );
 
-    const items = Utils.cartesianProduct(sets).reduce((acc, combination) => {
+    let items = Utils.cartesianProduct(sets).reduce((acc, combination) => {
       const varsClone = Utils.clone(vars);
 
       for (let i = 0; i < generatorsCount; ++i) {

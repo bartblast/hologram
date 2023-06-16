@@ -5,6 +5,9 @@ import Erlang from "../../assets/js/erlang/erlang.mjs";
 import Interpreter from "../../assets/js/interpreter.mjs";
 import Type from "../../assets/js/type.mjs";
 
+// TODO: remove if unused
+import Utils from "../../assets/js/utils.mjs";
+
 describe("callAnonymousFunction()", () => {
   let vars, anonFun;
 
@@ -198,8 +201,8 @@ describe("comprehension()", () => {
     });
 
     it("ignores enumerable items that don't match the pattern", () => {
-      // for x <- [1, {11, 2}, 3, {11, 4}],
-      //     y <- [5, {12, 6}, 7, {12, 8}],
+      // for {11, x} <- [1, {11, 2}, 3, {11, 4}],
+      //     {12, y} <- [5, {12, 6}, 7, {12, 8}],
       //     do: {x, y}
 
       const enumerable1 = Type.list([
@@ -435,6 +438,54 @@ describe("comprehension()", () => {
         Type.tuple([Type.integer(1), Type.integer(5)]),
         Type.tuple([Type.integer(1), Type.integer(6)]),
         Type.tuple([Type.integer(2), Type.integer(5)]),
+      ]);
+
+      assert.deepStrictEqual(result, expected);
+    });
+  });
+
+  describe("unique", () => {
+    it("filters out non-unique items if uniq options is set to true", () => {
+      // for x <- [1, 2, 1], y <- [3, 4, 3], do: {x, y}
+
+      const enumerable1 = Type.list([
+        Type.integer(1),
+        Type.integer(2),
+        Type.integer(1),
+      ]);
+
+      const generator1 = {
+        enumerable: enumerable1,
+        match: Type.variablePattern("x"),
+        guard: null,
+      };
+
+      const enumerable2 = Type.list([
+        Type.integer(3),
+        Type.integer(4),
+        Type.integer(3),
+      ]);
+
+      const generator2 = {
+        enumerable: enumerable2,
+        match: Type.variablePattern("y"),
+        guard: null,
+      };
+
+      const result = Interpreter.comprehension(
+        [generator1, generator2],
+        [],
+        Type.list([]),
+        true,
+        (vars) => Type.tuple([vars.x, vars.y]),
+        vars
+      );
+
+      const expected = Type.list([
+        Type.tuple([Type.integer(1), Type.integer(3)]),
+        Type.tuple([Type.integer(1), Type.integer(4)]),
+        Type.tuple([Type.integer(2), Type.integer(3)]),
+        Type.tuple([Type.integer(2), Type.integer(4)]),
       ]);
 
       assert.deepStrictEqual(result, expected);
