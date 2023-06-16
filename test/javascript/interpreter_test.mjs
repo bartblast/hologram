@@ -158,33 +158,33 @@ describe("case()", () => {
     //   3 -> :expr_3
     // end
 
-    const condition1 = {
+    const clause1 = {
       head: Type.integer(1),
       guard: null,
-      body: (vars) => {
+      body: (_vars) => {
         return Type.atom("expr_1");
       },
     };
 
-    const condition2 = {
+    const clause2 = {
       head: Type.integer(2),
       guard: null,
-      body: (vars) => {
+      body: (_vars) => {
         return Type.atom("expr_2");
       },
     };
 
-    const condition3 = {
+    const clause3 = {
       head: Type.integer(3),
       guard: null,
-      body: (vars) => {
+      body: (_vars) => {
         return Type.atom("expr_3");
       },
     };
 
     const result = Interpreter.case(
       Type.integer(2),
-      [condition1, condition2, condition3],
+      [clause1, clause2, clause3],
       vars
     );
 
@@ -198,7 +198,7 @@ describe("case()", () => {
     //   z when z == 3 -> :expr_3
     // end
 
-    const condition1 = {
+    const clause1 = {
       head: Type.variablePattern("x"),
       guard: (vars) => Erlang.$261$261(vars.x, Type.integer(1n)),
       body: (_vars) => {
@@ -206,7 +206,7 @@ describe("case()", () => {
       },
     };
 
-    const condition2 = {
+    const clause2 = {
       head: Type.variablePattern("y"),
       guard: (vars) => Erlang.$261$261(vars.y, Type.integer(2n)),
       body: (_vars) => {
@@ -214,7 +214,7 @@ describe("case()", () => {
       },
     };
 
-    const condition3 = {
+    const clause3 = {
       head: Type.variablePattern("z"),
       guard: (vars) => Erlang.$261$261(vars.z, Type.integer(3n)),
       body: (_vars) => {
@@ -224,7 +224,7 @@ describe("case()", () => {
 
     const result = Interpreter.case(
       Type.integer(2),
-      [condition1, condition2, condition3],
+      [clause1, clause2, clause3],
       vars
     );
 
@@ -239,7 +239,7 @@ describe("case()", () => {
     //   y -> x
     // end
 
-    const condition1 = {
+    const clause1 = {
       head: Type.variablePattern("x"),
       guard: (vars) => Erlang.$261$261(vars.x, Type.integer(1n)),
       body: (_vars) => {
@@ -247,7 +247,7 @@ describe("case()", () => {
       },
     };
 
-    const condition2 = {
+    const clause2 = {
       head: Type.variablePattern("y"),
       guard: null,
       body: (vars) => {
@@ -255,11 +255,7 @@ describe("case()", () => {
       },
     };
 
-    const result = Interpreter.case(
-      Type.integer(2),
-      [condition1, condition2],
-      vars
-    );
+    const result = Interpreter.case(Type.integer(2), [clause1, clause2], vars);
 
     assert.deepStrictEqual(result, Type.integer(9));
   });
@@ -270,25 +266,25 @@ describe("case()", () => {
     //   2 -> :expr_2
     // end
 
-    const condition1 = {
+    const clause1 = {
       head: Type.integer(1),
       guard: null,
-      body: (vars) => {
+      body: (_vars) => {
         return Type.atom("expr_1");
       },
     };
 
-    const condition2 = {
+    const clause2 = {
       head: Type.integer(2),
       guard: null,
-      body: (vars) => {
+      body: (_vars) => {
         return Type.atom("expr_2");
       },
     };
 
     assert.throw(
       () => {
-        Interpreter.case(Type.integer(3), [condition1, condition2], vars);
+        Interpreter.case(Type.integer(3), [clause1, clause2], vars);
       },
       Error,
       "(CaseClauseError) no case clause matching: 3"
