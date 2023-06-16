@@ -614,7 +614,7 @@ defmodule Hologram.Compiler.EncoderTest do
       }
 
       assert encode(ir, %Context{}) ==
-               "Interpreter.matchOperator(Type.integer(1n), Type.integer(2n))"
+               "Interpreter.matchOperator(Type.integer(1n), Type.integer(2n), vars)"
     end
 
     test "variable in pattern" do
@@ -625,7 +625,7 @@ defmodule Hologram.Compiler.EncoderTest do
       }
 
       assert encode(ir, %Context{}) ==
-               ~s/Interpreter.matchOperator(Type.variablePattern("x"), Type.integer(2n))/
+               ~s/Interpreter.matchOperator(Type.variablePattern("x"), Type.integer(2n), vars)/
     end
 
     test "variable in expression" do
@@ -636,7 +636,7 @@ defmodule Hologram.Compiler.EncoderTest do
       }
 
       assert encode(ir, %Context{}) ==
-               "Interpreter.matchOperator(Type.integer(1n), vars.x)"
+               "Interpreter.matchOperator(Type.integer(1n), vars.x, vars)"
     end
 
     test "nested, variable in pattern" do
@@ -650,7 +650,7 @@ defmodule Hologram.Compiler.EncoderTest do
       }
 
       assert encode(ir, %Context{}) ==
-               ~s/Interpreter.matchOperator(Type.variablePattern("x"), Interpreter.matchOperator(Type.integer(2n), Type.integer(3n)))/
+               ~s/Interpreter.matchOperator(Type.variablePattern("x"), Interpreter.matchOperator(Type.integer(2n), Type.integer(3n), vars), vars)/
     end
 
     test "nested, variable in the middle" do
@@ -664,7 +664,7 @@ defmodule Hologram.Compiler.EncoderTest do
       }
 
       assert encode(ir, %Context{}) ==
-               ~s/Interpreter.matchOperator(Type.integer(1n), Interpreter.matchOperator(Type.variablePattern("x"), Type.integer(3n)))/
+               ~s/Interpreter.matchOperator(Type.integer(1n), Interpreter.matchOperator(Type.variablePattern("x"), Type.integer(3n), vars), vars)/
     end
 
     test "nested, variable in expression" do
@@ -678,7 +678,7 @@ defmodule Hologram.Compiler.EncoderTest do
       }
 
       assert encode(ir, %Context{}) ==
-               "Interpreter.matchOperator(Type.integer(1n), Interpreter.matchOperator(Type.integer(2n), vars.x))"
+               "Interpreter.matchOperator(Type.integer(1n), Interpreter.matchOperator(Type.integer(2n), vars.x, vars), vars)"
     end
 
     test "nested multiple-times" do
@@ -719,7 +719,7 @@ defmodule Hologram.Compiler.EncoderTest do
       }
 
       assert encode(ir, %Context{}) ==
-               ~s/Interpreter.matchOperator(Type.tuple([Interpreter.matchOperator(Type.variablePattern("a"), Type.variablePattern("b")), Type.integer(2n), Type.integer(3n)]), Interpreter.matchOperator(Type.tuple([Type.integer(1n), Interpreter.matchOperator(Type.variablePattern("c"), Type.variablePattern("d")), Type.integer(3n)]), Type.tuple([Type.integer(1n), Type.integer(2n), Interpreter.matchOperator(Type.variablePattern("e"), vars.f)])))/
+               ~s/Interpreter.matchOperator(Type.tuple([Interpreter.matchOperator(Type.variablePattern("a"), Type.variablePattern("b"), vars), Type.integer(2n), Type.integer(3n)]), Interpreter.matchOperator(Type.tuple([Type.integer(1n), Interpreter.matchOperator(Type.variablePattern("c"), Type.variablePattern("d"), vars), Type.integer(3n)]), Type.tuple([Type.integer(1n), Type.integer(2n), Interpreter.matchOperator(Type.variablePattern("e"), vars.f, vars)]), vars), vars)/
     end
   end
 
