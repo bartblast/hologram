@@ -133,7 +133,7 @@ describe("callAnonymousFunction()", () => {
     assert.deepStrictEqual(result, Type.integer(9));
   });
 
-  it("raise FunctionClauseError error if none of the clauses is matched", () => {
+  it("raises FunctionClauseError error if none of the clauses is matched", () => {
     assert.throw(
       () => {
         Interpreter.callAnonymousFunction(anonFun, [Type.integer(3)]);
@@ -264,7 +264,7 @@ describe("case()", () => {
     assert.deepStrictEqual(result, Type.integer(9));
   });
 
-  it("raise CaseClauseError error if none of the clauses is matched", () => {
+  it("raises CaseClauseError error if none of the clauses is matched", () => {
     // case 3 do
     //   1 -> :expr_1
     //   2 -> :expr_2
