@@ -148,7 +148,7 @@ describe("comprehension()", () => {
   let vars;
 
   beforeEach(() => {
-    vars = {};
+    vars = {a: Type.integer(1), b: Type.integer(2)};
 
     Interpreter._moduleEnum = class Elixir_Enum {
       static into(enumerable, _collectable) {
@@ -338,6 +338,37 @@ describe("comprehension()", () => {
         Type.tuple([Type.integer(3), Type.integer(5)]),
         Type.tuple([Type.integer(3), Type.integer(6)]),
       ]);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("guards can access variables from comprehension outer scope", () => {
+      // for x when x != b <- [1, 2, 3], do: x
+
+      const enumerable = Type.list([
+        Type.integer(1),
+        Type.integer(2),
+        Type.integer(3),
+      ]);
+
+      const guard = (vars) => Erlang.$247$261(vars.x, vars.b);
+
+      const generator = {
+        enumerable: enumerable,
+        match: Type.variablePattern("x"),
+        guard: guard,
+      };
+
+      const result = Interpreter.comprehension(
+        [generator],
+        [],
+        Type.list([]),
+        false,
+        (vars) => vars.x,
+        vars
+      );
+
+      const expected = Type.list([Type.integer(1), Type.integer(3)]);
 
       assert.deepStrictEqual(result, expected);
     });
