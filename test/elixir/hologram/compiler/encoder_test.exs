@@ -263,6 +263,38 @@ defmodule Hologram.Compiler.EncoderTest do
     end
   end
 
+  test "case clause" do
+    ir = %IR.CaseClause{
+      head: %IR.TupleType{
+        data: [
+          %IR.IntegerType{value: 1},
+          %IR.Variable{name: :x}
+        ]
+      },
+      guard: %IR.RemoteFunctionCall{
+        module: %IR.AtomType{value: :erlang},
+        function: :<,
+        args: [
+          %IR.Variable{name: :x},
+          %IR.IntegerType{value: 3}
+        ]
+      },
+      body: %IR.Block{
+        expressions: [
+          %IR.IntegerType{value: 11},
+          %IR.IntegerType{value: 12}
+        ]
+      }
+    }
+
+    assert encode(ir, %Context{}) == """
+           {head: Type.tuple([Type.integer(1n), Type.variablePattern("x")]), guard: (vars) => Erlang.$260(vars.x, Type.integer(3n)), body: (vars) => {
+           Type.integer(11n);
+           return Type.integer(12n);
+           }}\
+           """
+  end
+
   test "comprehension" do
     # for x when x < 3 <- [1, 2],
     #     y when y < 5 <- [3, 4],

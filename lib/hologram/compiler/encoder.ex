@@ -99,6 +99,14 @@ defmodule Hologram.Compiler.Encoder do
     "{#{body}\n}"
   end
 
+  def encode(%IR.CaseClause{} = clause, context) do
+    head = encode(clause.head, %{context | pattern?: true})
+    guard = encode_closure(clause.guard, context)
+    body = encode_closure(clause.body, context)
+
+    "{head: #{head}, guard: #{guard}, body: #{body}}"
+  end
+
   def encode(%IR.Comprehension{} = comprehension, context) do
     generators = encode_as_array(comprehension.generators, context)
     filters = encode_as_array(comprehension.filters, context)
