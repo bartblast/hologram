@@ -136,6 +136,13 @@ defmodule Hologram.Compiler.Encoder do
     "{enumerable: #{enumerable}, match: #{match}, guard: #{guard}}"
   end
 
+  def encode(%IR.CondClause{condition: condition_ir, body: body_ir}, context) do
+    condition_js = encode(condition_ir, context)
+    body_js = encode_closure(body_ir, context)
+
+    "{condition: #{condition_js}, body: #{body_js}}"
+  end
+
   def encode(%IR.ConsOperator{head: head, tail: tail}, %{pattern?: true} = context) do
     "Type.consPattern(#{encode(head, context)}, #{encode(tail, context)})"
   end
