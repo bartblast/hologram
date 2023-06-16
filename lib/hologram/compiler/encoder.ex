@@ -142,7 +142,7 @@ defmodule Hologram.Compiler.Encoder do
   end
 
   def encode(%IR.CondClause{condition: condition_ir, body: body_ir}, context) do
-    condition_js = encode(condition_ir, context)
+    condition_js = encode_closure(condition_ir, context)
     body_js = encode_closure(body_ir, context)
 
     "{condition: #{condition_js}, body: #{body_js}}"

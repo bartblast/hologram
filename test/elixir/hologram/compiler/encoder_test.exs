@@ -488,9 +488,9 @@ defmodule Hologram.Compiler.EncoderTest do
     ir = %IR.Cond{clauses: [clause_1, clause_2]}
 
     assert encode(ir, %Context{}) == """
-           Interpreter.cond([{condition: Erlang.$260(vars.x, Type.integer(1n)), body: (vars) => {
+           Interpreter.cond([{condition: (vars) => Erlang.$260(vars.x, Type.integer(1n)), body: (vars) => {
            return Type.integer(1n);
-           }}, {condition: Erlang.$260(vars.x, Type.integer(2n)), body: (vars) => {
+           }}, {condition: (vars) => Erlang.$260(vars.x, Type.integer(2n)), body: (vars) => {
            return Type.integer(2n);
            }}])\
            """
@@ -515,7 +515,7 @@ defmodule Hologram.Compiler.EncoderTest do
     }
 
     assert encode(ir, %Context{}) == """
-           {condition: Erlang.$260(vars.x, Type.integer(3n)), body: (vars) => {
+           {condition: (vars) => Erlang.$260(vars.x, Type.integer(3n)), body: (vars) => {
            Type.integer(1n);
            return Type.integer(2n);
            }}\
