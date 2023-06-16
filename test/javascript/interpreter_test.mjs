@@ -4,7 +4,6 @@ import {assert, sinon} from "../../assets/js/test_support.mjs";
 import Erlang from "../../assets/js/erlang/erlang.mjs";
 import Interpreter from "../../assets/js/interpreter.mjs";
 import Type from "../../assets/js/type.mjs";
-import Utils from "../../assets/js/utils.mjs";
 
 describe("callAnonymousFunction()", () => {
   let vars, anonFun;
