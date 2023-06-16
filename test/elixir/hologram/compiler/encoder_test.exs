@@ -263,6 +263,41 @@ defmodule Hologram.Compiler.EncoderTest do
     end
   end
 
+  test "case" do
+    clause_1 = %IR.CaseClause{
+      head: %IR.Variable{name: :x},
+      guard: nil,
+      body: %IR.Block{
+        expressions: [
+          %IR.AtomType{value: :expr_1}
+        ]
+      }
+    }
+
+    clause_2 = %IR.CaseClause{
+      head: %IR.Variable{name: :y},
+      guard: nil,
+      body: %IR.Block{
+        expressions: [
+          %IR.AtomType{value: :expr_2}
+        ]
+      }
+    }
+
+    ir = %IR.Case{
+      condition: %IR.IntegerType{value: 123},
+      clauses: [clause_1, clause_2]
+    }
+
+    assert encode(ir, %Context{}) == """
+           Interpreter.case(Type.integer(123n), [{head: Type.variablePattern("x"), guard: null, body: (vars) => {
+           return Type.atom("expr_1");
+           }}, {head: Type.variablePattern("y"), guard: null, body: (vars) => {
+           return Type.atom("expr_2");
+           }}])\
+           """
+  end
+
   test "case clause" do
     ir = %IR.CaseClause{
       head: %IR.TupleType{

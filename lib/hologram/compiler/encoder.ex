@@ -99,6 +99,13 @@ defmodule Hologram.Compiler.Encoder do
     "{#{body}\n}"
   end
 
+  def encode(%IR.Case{condition: condition, clauses: clauses}, context) do
+    condition_js = encode(condition, context)
+    clauses_js = encode_as_array(clauses, context)
+
+    "Interpreter.case(#{condition_js}, #{clauses_js})"
+  end
+
   def encode(%IR.CaseClause{} = clause, context) do
     head = encode(clause.head, %{context | pattern?: true})
     guard = encode_closure(clause.guard, context)
