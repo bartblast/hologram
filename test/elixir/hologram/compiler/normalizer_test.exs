@@ -51,7 +51,7 @@ defmodule Hologram.Compiler.NormalizerTest do
     end
   end
 
-  describe "cond expression" do
+  describe "cond" do
     test "clause with single expression" do
       # cond do
       #   1 ->

@@ -142,7 +142,7 @@ defmodule Hologram.Compiler.Transformer do
   def transform({:cond, _meta, [[do: clauses]]}, context) do
     clauses_ir = Enum.map(clauses, &build_cond_clause_ir(&1, context))
 
-    %IR.CondExpression{clauses: clauses_ir}
+    %IR.Cond{clauses: clauses_ir}
   end
 
   def transform([{:|, _meta, [head, tail]}], context) do

@@ -1145,14 +1145,14 @@ defmodule Hologram.Compiler.TransformerTest do
     end
   end
 
-  describe "cond expression" do
+  describe "cond" do
     test "single clause, single expression body" do
       # cond do
       #   1 -> :expr_1
       # end
       ast = {:cond, [line: 2], [[do: [{:->, [line: 3], [[1], {:__block__, [], [:expr_1]}]}]]]}
 
-      assert transform(ast, %Context{}) == %IR.CondExpression{
+      assert transform(ast, %Context{}) == %IR.Cond{
                clauses: [
                  %IR.CondClause{
                    condition: %IR.IntegerType{value: 1},
@@ -1180,7 +1180,7 @@ defmodule Hologram.Compiler.TransformerTest do
            ]
          ]}
 
-      assert transform(ast, %Context{}) == %IR.CondExpression{
+      assert transform(ast, %Context{}) == %IR.Cond{
                clauses: [
                  %IR.CondClause{
                    condition: %IR.IntegerType{value: 1},
@@ -1208,7 +1208,7 @@ defmodule Hologram.Compiler.TransformerTest do
         {:cond, [line: 2],
          [[do: [{:->, [line: 3], [[1], {:__block__, [], [:expr_1, :expr_2]}]}]]]}
 
-      assert transform(ast, %Context{}) == %IR.CondExpression{
+      assert transform(ast, %Context{}) == %IR.Cond{
                clauses: [
                  %IR.CondClause{
                    condition: %IR.IntegerType{value: 1},

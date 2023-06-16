@@ -17,8 +17,8 @@ defmodule Hologram.Compiler.IR do
           | IR.Comprehension.t()
           | IR.ComprehensionFilter.t()
           | IR.ComprehensionGenerator.t()
+          | IR.Cond.t()
           | IR.CondClause.t()
-          | IR.CondExpression.t()
           | IR.ConsOperator.t()
           | IR.DotOperator.t()
           | IR.FloatType.t()
@@ -123,16 +123,16 @@ defmodule Hologram.Compiler.IR do
     @type t :: %__MODULE__{enumerable: IR.t(), match: IR.t(), guard: IR.t() | nil}
   end
 
+  defmodule Cond do
+    defstruct [:clauses]
+
+    @type t :: %__MODULE__{clauses: list(IR.CondClause.t())}
+  end
+
   defmodule CondClause do
     defstruct [:condition, :body]
 
     @type t :: %__MODULE__{condition: IR.t(), body: IR.Block.t()}
-  end
-
-  defmodule CondExpression do
-    defstruct [:clauses]
-
-    @type t :: %__MODULE__{clauses: list(IR.CondClause.t())}
   end
 
   defmodule ConsOperator do
