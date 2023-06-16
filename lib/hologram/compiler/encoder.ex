@@ -34,14 +34,7 @@ defmodule Hologram.Compiler.Encoder do
 
   def encode(%IR.AnonymousFunctionClause{} = clause, context) do
     params = encode_as_array(clause.params, %{context | pattern?: true})
-
-    guard =
-      if clause.guard do
-        encode_closure(clause.guard, context)
-      else
-        "null"
-      end
-
+    guard = encode_closure(clause.guard, context)
     body = encode_closure(clause.body, context)
 
     "{params: #{params}, guard: #{guard}, body: #{body}}"
@@ -373,6 +366,8 @@ defmodule Hologram.Compiler.Encoder do
 
     "Type.bitstringSegment(#{value_str}, #{modifiers_str})"
   end
+
+  defp encode_closure(nil, _context), do: "null"
 
   defp encode_closure(ir, context) do
     "(vars) => #{encode(ir, context)}"
