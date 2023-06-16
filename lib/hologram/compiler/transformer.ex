@@ -102,7 +102,7 @@ defmodule Hologram.Compiler.Transformer do
     condition_ir = transform(condition, context)
     clauses_ir = Enum.map(clauses, &build_case_clause_ir(&1, context))
 
-    %IR.CaseExpression{
+    %IR.Case{
       condition: condition_ir,
       clauses: clauses_ir
     }

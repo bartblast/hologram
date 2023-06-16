@@ -12,8 +12,8 @@ defmodule Hologram.Compiler.IR do
           | IR.BitstringSegment.t()
           | IR.BitstringType.t()
           | IR.Block.t()
+          | IR.Case.t()
           | IR.CaseClause.t()
-          | IR.CaseExpression.t()
           | IR.Comprehension.t()
           | IR.ComprehensionFilter.t()
           | IR.ComprehensionGenerator.t()
@@ -87,16 +87,16 @@ defmodule Hologram.Compiler.IR do
     @type t :: %__MODULE__{expressions: list(IR.t())}
   end
 
+  defmodule Case do
+    defstruct [:condition, :clauses]
+
+    @type t :: %__MODULE__{condition: IR.t(), clauses: list(IR.CaseClause.t())}
+  end
+
   defmodule CaseClause do
     defstruct [:head, :guard, :body]
 
     @type t :: %__MODULE__{head: IR.t(), guard: IR.t() | nil, body: IR.Block.t()}
-  end
-
-  defmodule CaseExpression do
-    defstruct [:condition, :clauses]
-
-    @type t :: %__MODULE__{condition: IR.t(), clauses: list(IR.CaseClause.t())}
   end
 
   defmodule Comprehension do

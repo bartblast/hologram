@@ -777,7 +777,7 @@ defmodule Hologram.Compiler.TransformerTest do
            [do: [{:->, [line: 3], [[1], {:__block__, [], [:expr_1]}]}]]
          ]}
 
-      assert transform(ast, %Context{}) == %IR.CaseExpression{
+      assert transform(ast, %Context{}) == %IR.Case{
                condition: %IR.Variable{name: :x},
                clauses: [
                  %IR.CaseClause{
@@ -807,7 +807,7 @@ defmodule Hologram.Compiler.TransformerTest do
            ]
          ]}
 
-      assert transform(ast, %Context{}) == %IR.CaseExpression{
+      assert transform(ast, %Context{}) == %IR.Case{
                condition: %IR.Variable{name: :x},
                clauses: [
                  %IR.CaseClause{
@@ -839,7 +839,7 @@ defmodule Hologram.Compiler.TransformerTest do
            [do: [{:->, [line: 3], [[1], {:__block__, [], [:expr_1, :expr_2]}]}]]
          ]}
 
-      assert transform(ast, %Context{}) == %IR.CaseExpression{
+      assert transform(ast, %Context{}) == %IR.Case{
                condition: %IR.Variable{name: :x},
                clauses: [
                  %IR.CaseClause{
@@ -880,7 +880,7 @@ defmodule Hologram.Compiler.TransformerTest do
            ]
          ]}
 
-      assert transform(ast, %Context{}) == %IR.CaseExpression{
+      assert transform(ast, %Context{}) == %IR.Case{
                condition: %IR.Variable{name: :x},
                clauses: [
                  %IR.CaseClause{
