@@ -341,6 +341,69 @@ describe("comprehension()", () => {
       assert.deepStrictEqual(result, expected);
     });
   });
+
+  describe("filters", () => {
+    it("filters out combinations that don't fullfill specified conditions", () => {
+      // for x <- [1, 2, 3],
+      //     y <- [4, 5, 6],
+      //     x + y < 8,
+      //     y - x > 2,
+      //     do: {x, y}
+
+      // for x <- [1, 2, 3],
+      //     y <- [4, 5, 6],
+      //     :erlang.<(:erlang.+(x, y), 8),
+      //     :erlang.>(:erlang.-(y, x), 2),
+      //     do: {x, y}
+
+      const enumerable1 = Type.list([
+        Type.integer(1),
+        Type.integer(2),
+        Type.integer(3),
+      ]);
+
+      const generator1 = {
+        enumerable: enumerable1,
+        match: Type.variablePattern("x"),
+        guard: null,
+      };
+
+      const enumerable2 = Type.list([
+        Type.integer(4),
+        Type.integer(5),
+        Type.integer(6),
+      ]);
+
+      const generator2 = {
+        enumerable: enumerable2,
+        match: Type.variablePattern("y"),
+        guard: null,
+      };
+
+      const filters = [
+        (vars) => Erlang.$260(Erlang.$243(vars.x, vars.y), Type.integer(8n)),
+        (vars) => Erlang.$262(Erlang.$245(vars.y, vars.x), Type.integer(2n)),
+      ];
+
+      const result = Interpreter.comprehension(
+        [generator1, generator2],
+        filters,
+        Type.list([]),
+        false,
+        (vars) => Type.tuple([vars.x, vars.y]),
+        vars
+      );
+
+      const expected = Type.list([
+        Type.tuple([Type.integer(1), Type.integer(4)]),
+        Type.tuple([Type.integer(1), Type.integer(5)]),
+        Type.tuple([Type.integer(1), Type.integer(6)]),
+        Type.tuple([Type.integer(2), Type.integer(5)]),
+      ]);
+
+      assert.deepStrictEqual(result, expected);
+    });
+  });
 });
 
 describe("consOperator()", () => {
