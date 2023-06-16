@@ -5,6 +5,9 @@ import Type from "./type.mjs";
 
 export {assert} from "chai";
 
+import sinonESM from "../node_modules/sinon/pkg/sinon-esm.js";
+export const sinon = sinonESM;
+
 export function assertBoxedFalse(boxed) {
   assert.isTrue(Type.isFalse(boxed));
 }

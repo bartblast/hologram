@@ -5,7 +5,8 @@
   "devDependencies": {
     "chai": "^4",
     "mocha": "^10",
-    "prettier": "^2"
+    "prettier": "^2",
+    "sinon": "^15"
   },
   "scripts": {
     "test": "mocha '../test/javascript/**/*.mjs' --color",

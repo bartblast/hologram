@@ -4,7 +4,6 @@
     "morphdom": "^2",
     "phoenix": "^1.6",
     "prettier": "^2",
-    "sinon": "^15",
     "snabbdom": "^3"
   }
 }

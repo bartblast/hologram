@@ -1,9 +1,10 @@
 "use strict";
 
-import {assert} from "../../assets/js/test_support.mjs";
+import {assert, sinon} from "../../assets/js/test_support.mjs";
 import Erlang from "../../assets/js/erlang/erlang.mjs";
 import Interpreter from "../../assets/js/interpreter.mjs";
 import Type from "../../assets/js/type.mjs";
+import Utils from "../../assets/js/utils.mjs";
 
 describe("callAnonymousFunction()", () => {
   let vars, anonFun;
@@ -245,6 +246,42 @@ describe("comprehension()", () => {
       ]);
 
       assert.deepStrictEqual(result, expected);
+    });
+
+    it("uses Enum.to_list/1 to convert generator enumerables to lists", () => {
+      // for x <- [1, 2], y <- [3, 4], do: {x, y}
+
+      const enumerable1 = Type.list([Type.integer(1), Type.integer(2)]);
+
+      const generator1 = {
+        enumerable: enumerable1,
+        match: Type.variablePattern("x"),
+        guard: null,
+      };
+
+      const enumerable2 = Type.list([Type.integer(3), Type.integer(4)]);
+
+      const generator2 = {
+        enumerable: enumerable2,
+        match: Type.variablePattern("y"),
+        guard: null,
+      };
+
+      const stub = sinon
+        .stub(Interpreter._moduleEnum, "to_list")
+        .callsFake((enumerable) => enumerable);
+
+      Interpreter.comprehension(
+        [generator1, generator2],
+        [],
+        Type.map([]),
+        false,
+        (vars) => Type.tuple([vars.x, vars.y]),
+        vars
+      );
+
+      sinon.assert.calledWith(stub, enumerable1);
+      sinon.assert.calledWith(stub, enumerable2);
     });
 
     it("applies guards", () => {
