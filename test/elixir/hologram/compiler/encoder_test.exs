@@ -452,6 +452,50 @@ defmodule Hologram.Compiler.EncoderTest do
              "{enumerable: Type.list([Type.integer(1n), Type.integer(2n)]), match: Type.tuple([Type.variablePattern(\"a\"), Type.variablePattern(\"b\")]), guard: (vars) => Elixir_MyModule.my_guard(vars.a, Type.integer(2n))}"
   end
 
+  test "cond" do
+    clause_1 = %IR.CondClause{
+      condition: %IR.RemoteFunctionCall{
+        module: %IR.AtomType{value: :erlang},
+        function: :<,
+        args: [
+          %IR.Variable{name: :x},
+          %IR.IntegerType{value: 1}
+        ]
+      },
+      body: %IR.Block{
+        expressions: [
+          %IR.IntegerType{value: 1}
+        ]
+      }
+    }
+
+    clause_2 = %IR.CondClause{
+      condition: %IR.RemoteFunctionCall{
+        module: %IR.AtomType{value: :erlang},
+        function: :<,
+        args: [
+          %IR.Variable{name: :x},
+          %IR.IntegerType{value: 2}
+        ]
+      },
+      body: %IR.Block{
+        expressions: [
+          %IR.IntegerType{value: 2}
+        ]
+      }
+    }
+
+    ir = %IR.Cond{clauses: [clause_1, clause_2]}
+
+    assert encode(ir, %Context{}) == """
+           Interpreter.cond([{condition: Erlang.$260(vars.x, Type.integer(1n)), body: (vars) => {
+           return Type.integer(1n);
+           }}, {condition: Erlang.$260(vars.x, Type.integer(2n)), body: (vars) => {
+           return Type.integer(2n);
+           }}])\
+           """
+  end
+
   test "cond clause" do
     ir = %IR.CondClause{
       condition: %IR.RemoteFunctionCall{

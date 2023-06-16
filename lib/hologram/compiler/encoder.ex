@@ -136,6 +136,11 @@ defmodule Hologram.Compiler.Encoder do
     "{enumerable: #{enumerable}, match: #{match}, guard: #{guard}}"
   end
 
+  def encode(%IR.Cond{clauses: clauses_ir}, context) do
+    clauses_js = encode_as_array(clauses_ir, context)
+    "Interpreter.cond(#{clauses_js})"
+  end
+
   def encode(%IR.CondClause{condition: condition_ir, body: body_ir}, context) do
     condition_js = encode(condition_ir, context)
     body_js = encode_closure(body_ir, context)
