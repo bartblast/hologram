@@ -595,6 +595,36 @@ describe("comprehension()", () => {
 
     assert.isTrue(stub.calledOnceWith(expectedArg));
   });
+
+  describe("mapper", () => {
+    it("can access variables from comprehension outer scope", () => {
+      // for x <- [1, 2], do: {x, b}
+
+      const enumerable = Type.list([Type.integer(1), Type.integer(2)]);
+
+      const generator = {
+        enumerable: enumerable,
+        match: Type.variablePattern("x"),
+        guard: null,
+      };
+
+      const result = Interpreter.comprehension(
+        [generator],
+        [],
+        Type.list([]),
+        false,
+        (vars) => Type.tuple([vars.x, vars.b]),
+        vars
+      );
+
+      const expected = Type.list([
+        Type.tuple([Type.integer(1), Type.integer(2)]),
+        Type.tuple([Type.integer(2), Type.integer(2)]),
+      ]);
+
+      assert.deepStrictEqual(result, expected);
+    });
+  });
 });
 
 describe("consOperator()", () => {
