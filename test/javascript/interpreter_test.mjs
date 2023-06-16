@@ -144,6 +144,158 @@ describe("callAnonymousFunction()", () => {
   });
 });
 
+describe("case()", () => {
+  let vars;
+
+  beforeEach(() => {
+    vars = {a: Type.integer(5), b: Type.integer(6), x: Type.integer(9)};
+  });
+
+  it("returns the result of first matching clause's block (and ignores non-matching clauses)", () => {
+    // case 2 do
+    //   1 -> :expr_1
+    //   2 -> :expr_2
+    //   3 -> :expr_3
+    // end
+
+    const condition1 = {
+      head: Type.integer(1),
+      guard: null,
+      body: (vars) => {
+        return Type.atom("expr_1");
+      },
+    };
+
+    const condition2 = {
+      head: Type.integer(2),
+      guard: null,
+      body: (vars) => {
+        return Type.atom("expr_2");
+      },
+    };
+
+    const condition3 = {
+      head: Type.integer(3),
+      guard: null,
+      body: (vars) => {
+        return Type.atom("expr_3");
+      },
+    };
+
+    const result = Interpreter.case(
+      Type.integer(2),
+      [condition1, condition2, condition3],
+      vars
+    );
+
+    assert.deepStrictEqual(result, Type.atom("expr_2"));
+  });
+
+  it("runs guards for each tried clause", () => {
+    // case 2 do
+    //   x when x == 1 -> :expr_1
+    //   y when y == 1 -> :expr_2
+    //   z when z == 3 -> :expr_3
+    // end
+
+    const condition1 = {
+      head: Type.variablePattern("x"),
+      guard: (vars) => Erlang.$261$261(vars.x, Type.integer(1n)),
+      body: (_vars) => {
+        return Type.atom("expr_1");
+      },
+    };
+
+    const condition2 = {
+      head: Type.variablePattern("y"),
+      guard: (vars) => Erlang.$261$261(vars.y, Type.integer(2n)),
+      body: (_vars) => {
+        return Type.atom("expr_2");
+      },
+    };
+
+    const condition3 = {
+      head: Type.variablePattern("z"),
+      guard: (vars) => Erlang.$261$261(vars.z, Type.integer(3n)),
+      body: (_vars) => {
+        return Type.atom("expr_3");
+      },
+    };
+
+    const result = Interpreter.case(
+      Type.integer(2),
+      [condition1, condition2, condition3],
+      vars
+    );
+
+    assert.deepStrictEqual(result, Type.atom("expr_2"));
+  });
+
+  it("clones vars for each clause and has access to vars from closure", () => {
+    // x = 9
+    //
+    // case 2 do
+    //   x when x == 1 -> :expr_1
+    //   y -> x
+    // end
+
+    const condition1 = {
+      head: Type.variablePattern("x"),
+      guard: (vars) => Erlang.$261$261(vars.x, Type.integer(1n)),
+      body: (_vars) => {
+        return Type.atom("expr_1");
+      },
+    };
+
+    const condition2 = {
+      head: Type.variablePattern("y"),
+      guard: null,
+      body: (vars) => {
+        return vars.x;
+      },
+    };
+
+    const result = Interpreter.case(
+      Type.integer(2),
+      [condition1, condition2],
+      vars
+    );
+
+    assert.deepStrictEqual(result, Type.integer(9));
+  });
+
+  it("raise CaseClauseError error if none of the clauses is matched", () => {
+    // case 3 do
+    //   1 -> :expr_1
+    //   2 -> :expr_2
+    // end
+
+    const condition1 = {
+      head: Type.integer(1),
+      guard: null,
+      body: (vars) => {
+        return Type.atom("expr_1");
+      },
+    };
+
+    const condition2 = {
+      head: Type.integer(2),
+      guard: null,
+      body: (vars) => {
+        return Type.atom("expr_2");
+      },
+    };
+
+    assert.throw(
+      () => {
+        Interpreter.case(Type.integer(3), [condition1, condition2], vars);
+      },
+      Error,
+      "(CaseClauseError) no case clause matching: 3"
+    );
+  });
+});
+
 describe("comprehension()", () => {
   let vars;
 

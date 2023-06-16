@@ -31,6 +31,28 @@ export default class Interpreter {
     return Interpreter.raiseFunctionClauseError(message);
   }
 
+  static case(condition, clauses, vars) {
+    for (const clause of clauses) {
+      const varsClone = Utils.clone(vars);
+
+      if (Interpreter.isMatched(clause.head, condition)) {
+        Interpreter.matchOperator(clause.head, condition, varsClone, false);
+
+        if (Interpreter._evaluateGuard(clause.guard, varsClone) === false) {
+          continue;
+        }
+        return clause.body(varsClone);
+      } else {
+        continue;
+      }
+    }
+
+    const message =
+      "no case clause matching: " + Interpreter.inspect(condition);
+
+    return Interpreter.raiseCaseClauseError(message);
+  }
+
   static comprehension(generators, filters, collectable, unique, mapper, vars) {
     const generatorsCount = generators.length;
 
