@@ -194,6 +194,10 @@ export default class Interpreter {
     throw new Error(`(${type}) ${message}`);
   }
 
+  static raiseCaseClauseError(message) {
+    return Interpreter.raiseError("CaseClauseError", message);
+  }
+
   static raiseFunctionClauseError(message) {
     return Interpreter.raiseError("FunctionClauseError", message);
   }

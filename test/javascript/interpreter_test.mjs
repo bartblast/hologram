@@ -1129,6 +1129,18 @@ describe("raiseError()", () => {
   });
 });
 
+describe("raiseFunctionClauseError()", () => {
+  it("throws a FunctionClauseError error with the given message", () => {
+    assert.throw(
+      () => {
+        Interpreter.raiseFunctionClauseError("my message");
+      },
+      Error,
+      "(FunctionClauseError) my message"
+    );
+  });
+});
+
 describe("raiseNotYetImplementedError()", () => {
   it("throws a Hologram.NotYetImplemented error with the given message", () => {
     assert.throw(
