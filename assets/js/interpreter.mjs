@@ -190,12 +190,12 @@ export default class Interpreter {
     return right;
   }
 
-  static raiseError(type, message) {
-    throw new Error(`(${type}) ${message}`);
-  }
-
   static raiseCaseClauseError(message) {
     return Interpreter.raiseError("CaseClauseError", message);
+  }
+
+  static raiseError(type, message) {
+    throw new Error(`(${type}) ${message}`);
   }
 
   static raiseFunctionClauseError(message) {

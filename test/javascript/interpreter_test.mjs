@@ -1117,6 +1117,18 @@ describe("matchOperator()", () => {
   });
 });
 
+describe("raiseCaseClauseError()", () => {
+  it("throws a CaseClauseError error with the given message", () => {
+    assert.throw(
+      () => {
+        Interpreter.raiseCaseClauseError("my message");
+      },
+      Error,
+      "(CaseClauseError) my message"
+    );
+  });
+});
+
 describe("raiseError()", () => {
   it("throws an error with the given message", () => {
     assert.throw(
