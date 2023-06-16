@@ -216,6 +216,10 @@ export default class Interpreter {
     return Interpreter.raiseError("CaseClauseError", message);
   }
 
+  static raiseCondClauseError(message) {
+    return Interpreter.raiseError("CondClauseError", message);
+  }
+
   static raiseError(type, message) {
     throw new Error(`(${type}) ${message}`);
   }

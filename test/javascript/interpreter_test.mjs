@@ -1281,6 +1281,18 @@ describe("raiseCaseClauseError()", () => {
   });
 });
 
+describe("raiseCondClauseError()", () => {
+  it("throws a CondClauseError error with the given message", () => {
+    assert.throw(
+      () => {
+        Interpreter.raiseCondClauseError("my message");
+      },
+      Error,
+      "(CondClauseError) my message"
+    );
+  });
+});
+
 describe("raiseError()", () => {
   it("throws an error with the given message", () => {
     assert.throw(
