@@ -17,7 +17,7 @@ defmodule HologramE2E.ControlFlowTest do
     # feature "shorthand syntax"
   end
 
-  feature "case expression", %{session: session} do
+  feature "case", %{session: session} do
     session
     |> visit(CaseExpressionPage)
     |> click(css("#button"))

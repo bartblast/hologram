@@ -765,7 +765,7 @@ defmodule Hologram.Compiler.TransformerTest do
     end
   end
 
-  describe "case expression" do
+  describe "case" do
     test "single clause without guard, single expression body" do
       # case x do
       #   1 -> :expr_1

@@ -14,7 +14,7 @@ defmodule Hologram.Compiler.NormalizerTest do
               ]}
   end
 
-  describe "case expression" do
+  describe "case" do
     test "clause with single expression" do
       # case x do
       #   1 ->
