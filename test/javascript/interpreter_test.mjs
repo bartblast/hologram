@@ -473,6 +473,37 @@ describe("comprehension()", () => {
 
       assert.deepStrictEqual(result, expected);
     });
+
+    it("can access variables from comprehension outer scope", () => {
+      // for x <- [1, 2, 3], x != b, do: x
+
+      const enumerable = Type.list([
+        Type.integer(1),
+        Type.integer(2),
+        Type.integer(3),
+      ]);
+
+      const generator = {
+        enumerable: enumerable,
+        match: Type.variablePattern("x"),
+        guard: null,
+      };
+
+      const filter = (vars) => Erlang.$247$261(vars.x, vars.b);
+
+      const result = Interpreter.comprehension(
+        [generator],
+        [filter],
+        Type.list([]),
+        false,
+        (vars) => vars.x,
+        vars
+      );
+
+      const expected = Type.list([Type.integer(1), Type.integer(3)]);
+
+      assert.deepStrictEqual(result, expected);
+    });
   });
 
   describe("unique", () => {
