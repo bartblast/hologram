@@ -16,8 +16,8 @@ describe("cartesianProduct()", () => {
     assert.deepStrictEqual(Utils.cartesianProduct([[1, 2], [], [3, 4]]), []);
   });
 
-  it("returns the given set if only a single set is given", () => {
-    assert.deepStrictEqual(Utils.cartesianProduct([[1, 2]]), [1, 2]);
+  it("returns an array of set items wrapped in arrays if only one set is given", () => {
+    assert.deepStrictEqual(Utils.cartesianProduct([[1, 2]]), [[1], [2]]);
   });
 
   it("returns the cartesian product of the given sets if multiple non-empty sets are given", () => {

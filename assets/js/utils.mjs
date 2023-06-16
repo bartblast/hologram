@@ -6,6 +6,10 @@ import cloneDeep from "lodash/cloneDeep.js";
 export default class Utils {
   // Based on: https://stackoverflow.com/a/43053803
   static cartesianProduct(sets) {
+    if (sets.length === 1) {
+      return sets[0].map((item) => [item]);
+    }
+
     if (sets.length === 0) {
       return [];
     }
