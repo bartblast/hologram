@@ -151,7 +151,7 @@ describe("case()", () => {
     vars = {a: Type.integer(5), b: Type.integer(6), x: Type.integer(9)};
   });
 
-  it("returns the result of first matching clause's block (and ignores non-matching clauses)", () => {
+  it("returns the result of the first matching clause's block (and ignores non-matching clauses)", () => {
     // case 2 do
     //   1 -> :expr_1
     //   2 -> :expr_2
@@ -781,6 +781,108 @@ describe("comprehension()", () => {
   });
 });
 
+describe("cond()", () => {
+  let vars;
+
+  beforeEach(() => {
+    vars = {a: Type.integer(5), b: Type.integer(6), x: Type.integer(9)};
+  });
+
+  it("returns the result of the block of the first clause whose condition evaluates to a truthy value (and ignores other clauses)", () => {
+    // cond do
+    //   nil -> :expr_1
+    //   2 -> :expr_2
+    //   3 -> :expr_3
+    // end
+
+    const clause1 = {
+      condition: (_vars) => Type.nil(),
+      body: (_vars) => {
+        return Type.atom("expr_1");
+      },
+    };
+
+    const clause2 = {
+      condition: (_vars) => Type.integer(2),
+      body: (_vars) => {
+        return Type.atom("expr_2");
+      },
+    };
+
+    const clause3 = {
+      condition: (_vars) => Type.integer(3),
+      body: (_vars) => {
+        return Type.atom("expr_3");
+      },
+    };
+
+    const result = Interpreter.cond([clause1, clause2, clause3], vars);
+
+    assert.deepStrictEqual(result, Type.atom("expr_2"));
+  });
+
+  it("clones vars for each clause and has access to vars from closure", () => {
+    // x = 9
+    //
+    // cond do
+    //   x = false -> :expr_1
+    //   true -> x
+    // end
+
+    const clause1 = {
+      condition: (vars) =>
+        Interpreter.matchOperator(
+          Type.variablePattern("x"),
+          Type.boolean(false),
+          vars
+        ),
+      body: (_vars) => {
+        return Type.atom("expr_1");
+      },
+    };
+
+    const clause2 = {
+      condition: (vars) => Type.boolean(true),
+      body: (vars) => {
+        return vars.x;
+      },
+    };
+
+    const result = Interpreter.cond([clause1, clause2], vars);
+
+    assert.deepStrictEqual(result, Type.integer(9));
+  });
+
+  it("raises CaseClauseError error if none of the clauses conditions evaluate to a truthy value", () => {
+    // cond do
+    //   nil -> :expr_1
+    //   false -> :expr_2
+    // end
+
+    const clause1 = {
+      condition: (_vars) => Type.nil(),
+      body: (_vars) => {
+        return Type.atom("expr_1");
+      },
+    };
+
+    const clause2 = {
+      condition: (_vars) => Type.boolean(false),
+      body: (_vars) => {
+        return Type.atom("expr_2");
+      },
+    };
+
+    assert.throw(
+      () => {
+        Interpreter.cond([clause1, clause2], vars);
+      },
+      Error,
+      "(CondClauseError) no cond clause evaluated to a truthy value"
+    );
+  });
+});
+
 describe("consOperator()", () => {
   it("prepends left boxed item to the right boxed list", () => {
     const left = Type.integer(1);
@@ -1285,10 +1387,10 @@ describe("raiseCondClauseError()", () => {
   it("throws a CondClauseError error with the given message", () => {
     assert.throw(
       () => {
-        Interpreter.raiseCondClauseError("my message");
+        Interpreter.raiseCondClauseError();
       },
       Error,
-      "(CondClauseError) my message"
+      "(CondClauseError) no cond clause evaluated to a truthy value"
     );
   });
 });

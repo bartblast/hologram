@@ -99,6 +99,18 @@ export default class Interpreter {
     return Interpreter._moduleEnum.into(Type.list(items), collectable);
   }
 
+  static cond(clauses, vars) {
+    for (const clause of clauses) {
+      const varsClone = Utils.clone(vars);
+
+      if (Type.isTruthy(clause.condition(varsClone))) {
+        return clause.body(varsClone);
+      }
+    }
+
+    return Interpreter.raiseCondClauseError();
+  }
+
   static consOperator(left, right) {
     return Type.list([left].concat(right.data));
   }
@@ -216,8 +228,11 @@ export default class Interpreter {
     return Interpreter.raiseError("CaseClauseError", message);
   }
 
-  static raiseCondClauseError(message) {
-    return Interpreter.raiseError("CondClauseError", message);
+  static raiseCondClauseError() {
+    return Interpreter.raiseError(
+      "CondClauseError",
+      "no cond clause evaluated to a truthy value"
+    );
   }
 
   static raiseError(type, message) {
