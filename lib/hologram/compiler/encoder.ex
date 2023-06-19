@@ -194,7 +194,7 @@ defmodule Hologram.Compiler.Encoder do
   end
 
   def encode(%IR.ModuleAttributeOperator{name: name}, _context) do
-    "vars.$264#{name}"
+    encode_var("@#{name}")
   end
 
   def encode(%IR.PinOperator{name: name}, _context) do
@@ -236,12 +236,7 @@ defmodule Hologram.Compiler.Encoder do
   end
 
   def encode(%IR.Variable{name: name}, %{pattern?: false}) do
-    name_js =
-      name
-      |> to_string()
-      |> escape_js_identifier()
-
-    "vars.#{name_js}"
+    encode_var(name)
   end
 
   @doc """
@@ -425,5 +420,14 @@ defmodule Hologram.Compiler.Encoder do
 
   defp encode_primitive_type(type, value, false) do
     "Type.#{type}(#{value})"
+  end
+
+  defp encode_var(name) do
+    name_js =
+      name
+      |> to_string()
+      |> escape_js_identifier()
+
+    "vars.#{name_js}"
   end
 end
