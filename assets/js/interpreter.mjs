@@ -123,24 +123,6 @@ export default class Interpreter {
     return enumerable.data.length;
   }
 
-  static getClassByModuleAlias(moduleAlias) {
-    const aliasStr = moduleAlias.value;
-    let className;
-
-    if (aliasStr === "erlang") {
-      className = "Erlang";
-    } else {
-      let prefixedAliasStr =
-        aliasStr.charAt(0).toLowerCase() === aliasStr.charAt(0)
-          ? "Erlang_" + aliasStr.charAt(0).toUpperCase() + aliasStr.slice(1)
-          : aliasStr;
-
-      className = prefixedAliasStr.replace(/\./g, "_");
-    }
-
-    return Utils.evaluate(className, false);
-  }
-
   static head(list) {
     return list.data[0];
   }

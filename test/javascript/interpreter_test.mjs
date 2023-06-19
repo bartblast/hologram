@@ -922,56 +922,6 @@ describe("count()", () => {
   });
 });
 
-describe("getClassByModuleAlias()", () => {
-  before(() => {
-    globalThis.Erlang = class {};
-  });
-
-  after(() => {
-    delete globalThis.Erlang;
-  });
-
-  it("encodes module alias having lowercase starting letter", () => {
-    // setup
-    globalThis.Erlang_Mymodule = class {};
-
-    const moduleAlias = Type.atom("mymodule");
-    const result = Interpreter.getClassByModuleAlias(moduleAlias);
-
-    assert.equal(result, globalThis.Erlang_Mymodule);
-
-    // cleanup
-    delete globalThis.Erlang_Mymodule;
-  });
-
-  it("encodes module alias not having lowercase starting letter", () => {
-    // setup
-    globalThis.Elixir_Aaa_Bbb_Ccc = class {};
-
-    const moduleAlias = Type.atom("Elixir.Aaa.Bbb.Ccc");
-    const result = Interpreter.getClassByModuleAlias(moduleAlias);
-
-    assert.equal(result, globalThis.Elixir_Aaa_Bbb_Ccc);
-
-    // cleanup
-    delete globalThis.Elixir_Aaa_Bbb_Ccc;
-  });
-
-  it("encodes :erlang module alias", () => {
-    const moduleAlias = Type.atom("erlang");
-    const result = Interpreter.getClassByModuleAlias(moduleAlias);
-
-    assert.equal(result, globalThis.Erlang);
-  });
-
-  it("doesn't freeze the returned class", () => {
-    const moduleAlias = Type.atom("erlang");
-    const result = Interpreter.getClassByModuleAlias(moduleAlias);
-
-    assertNotFrozen(result);
-  });
-});
-
 describe("head()", () => {
   it("returns the first item in a boxed list", () => {
     const list = Type.list([Type.integer(1), Type.integer(2), Type.integer(3)]);
