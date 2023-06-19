@@ -19,27 +19,6 @@ describe("exec()", () => {
   })
 })
 
-describe("eval()", () => {
-  let result;
-
-  beforeEach(() => {
-    result = Utils.eval("{value: 2 + 2}")
-  })
-
-  it("evaluates code", () => {
-    assert.deepStrictEqual(result, {value: 4})
-  })
-
-  it("returns frozen object by default", () => {
-    assertFrozen(result)
-  })
-
-  it("returns not frozen object if second arg is false", () => {
-    result = Utils.eval("{value: 2 + 2}", false)
-    assertNotFrozen(result)
-  })
-})
-
 describe("freeze()", () => {
   it("freezes object and all of its properties recursively (deep freeze)", () => {
     let obj = {
