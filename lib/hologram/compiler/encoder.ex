@@ -236,7 +236,12 @@ defmodule Hologram.Compiler.Encoder do
   end
 
   def encode(%IR.Variable{name: name}, %{pattern?: false}) do
-    "vars.#{name}"
+    name_js =
+      name
+      |> to_string()
+      |> escape_js_identifier()
+
+    "vars.#{name_js}"
   end
 
   @doc """

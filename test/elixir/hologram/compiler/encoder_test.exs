@@ -790,6 +790,10 @@ defmodule Hologram.Compiler.EncoderTest do
       assert encode(%IR.Variable{name: :my_var}, %Context{pattern?: true}) ==
                ~s/Type.variablePattern("my_var")/
     end
+
+    test "escape" do
+      assert encode(%IR.Variable{name: :my_var?}, %Context{}) == "vars.my_var$263"
+    end
   end
 
   describe "encode_as_class_name/1" do
