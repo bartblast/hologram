@@ -1,6 +1,6 @@
 "use strict";
 
-import {assert, sinon} from "../../assets/js/test_support.mjs";
+import {assert, assertNotFrozen, sinon} from "../../assets/js/test_support.mjs";
 import Erlang from "../../assets/js/erlang/erlang.mjs";
 import Interpreter from "../../assets/js/interpreter.mjs";
 import Type from "../../assets/js/type.mjs";
@@ -919,6 +919,56 @@ describe("count()", () => {
     const result = Interpreter.count(tuple);
 
     assert.equal(result, 2);
+  });
+});
+
+describe("getClassByModuleAlias()", () => {
+  before(() => {
+    globalThis.Erlang = class {};
+  });
+
+  after(() => {
+    delete globalThis.Erlang;
+  });
+
+  it("encodes module alias having lowercase starting letter", () => {
+    // setup
+    globalThis.Erlang_Mymodule = class {};
+
+    const moduleAlias = Type.atom("mymodule");
+    const result = Interpreter.getClassByModuleAlias(moduleAlias);
+
+    assert.equal(result, globalThis.Erlang_Mymodule);
+
+    // cleanup
+    delete globalThis.Erlang_Mymodule;
+  });
+
+  it("encodes module alias not having lowercase starting letter", () => {
+    // setup
+    globalThis.Elixir_Aaa_Bbb_Ccc = class {};
+
+    const moduleAlias = Type.atom("Elixir.Aaa.Bbb.Ccc");
+    const result = Interpreter.getClassByModuleAlias(moduleAlias);
+
+    assert.equal(result, globalThis.Elixir_Aaa_Bbb_Ccc);
+
+    // cleanup
+    delete globalThis.Elixir_Aaa_Bbb_Ccc;
+  });
+
+  it("encodes :erlang module alias", () => {
+    const moduleAlias = Type.atom("erlang");
+    const result = Interpreter.getClassByModuleAlias(moduleAlias);
+
+    assert.equal(result, globalThis.Erlang);
+  });
+
+  it("doesn't freeze the returned class", () => {
+    const moduleAlias = Type.atom("erlang");
+    const result = Interpreter.getClassByModuleAlias(moduleAlias);
+
+    assertNotFrozen(result);
   });
 });
 

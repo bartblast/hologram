@@ -28,20 +28,6 @@ describe("determineLayoutClass()", () => {
   })
 })
 
-describe("getClassByClassName()", () => {
-  const TestClass_Abc_Xyz = class {}
-  globalThis.TestClass_Abc_Xyz = TestClass_Abc_Xyz
-  const result = Runtime.getClassByClassName("TestClass_Abc_Xyz")
-
-  it("returns class object given a class name", () => {
-    assert.equal(result, TestClass_Abc_Xyz)
-  })
-
-  it("doesn't freeze returned class", () => {
-    assertNotFrozen(result)
-  })
-})
-
 describe("getComponentClass()", () => {
   it("returns component class by the given component ID", () => {
     const TestClass1 = class{}
