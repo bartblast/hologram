@@ -3,7 +3,6 @@
 import {assert, assertFrozen} from "../../assets/js/test_support.mjs";
 import Sequence from "../../assets/js/sequence.mjs";
 import Type from "../../assets/js/type.mjs";
-import Utils from "../../assets/js/utils.mjs";
 
 it("alias()", () => {
   const result = Type.alias("Aaa.Bbb");

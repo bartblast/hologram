@@ -1,5 +1,7 @@
 "use strict";
 
+import Type from "./type.mjs";
+
 export default class Hologram {
   static deserialize(json) {
     return JSON.parse(json, (_key, value) => {
@@ -26,6 +28,12 @@ export default class Hologram {
     const className = prefixedAliasStr.replace(/\./g, "_");
 
     return Hologram[className];
+  }
+
+  static raiseError(aliasStr, message) {
+    const errorStruct = Type.errorStruct(aliasStr, message);
+
+    return Hologram.Erlang.error(errorStruct);
   }
 
   static serialize(term) {

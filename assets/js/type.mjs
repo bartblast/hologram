@@ -5,8 +5,8 @@ import Sequence from "./sequence.mjs";
 import Utils from "./utils.mjs";
 
 export default class Type {
-  static alias(moduleStr) {
-    return Type.atom(`Elixir.${moduleStr}`);
+  static alias(aliasStr) {
+    return Type.atom(`Elixir.${aliasStr}`);
   }
 
   static anonymousFunction(arity, clauses, vars) {
@@ -81,13 +81,13 @@ export default class Type {
     }
   }
 
-  static errorStruct(moduleStr, message) {
+  static errorStruct(aliasStr, message) {
     const data = [
       [Type.atom("__exception__"), Type.boolean(true)],
       [Type.atom("message"), Type.bitstring(message)],
     ];
 
-    return Type.struct(moduleStr, data);
+    return Type.struct(aliasStr, data);
   }
 
   static float(value) {
@@ -196,9 +196,9 @@ export default class Type {
     return Utils.freeze({type: "string", value: value});
   }
 
-  static struct(moduleStr, data) {
+  static struct(aliasStr, data) {
     const key = Type.atom("__struct__");
-    const value = Type.alias(moduleStr);
+    const value = Type.alias(aliasStr);
 
     return Type.map(data.concat([[key, value]]));
   }

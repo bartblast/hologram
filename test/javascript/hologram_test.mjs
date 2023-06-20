@@ -1,8 +1,16 @@
 "use strict";
 
-import {assert, assertNotFrozen} from "../../assets/js/test_support.mjs";
+import {
+  assert,
+  assertNotFrozen,
+  linkModules,
+  unlinkModules,
+} from "../../assets/js/test_support.mjs";
 import Hologram from "../../assets/js/hologram.mjs";
 import Type from "../../assets/js/type.mjs";
+
+before(() => linkModules());
+after(() => unlinkModules());
 
 describe("deserialize()", () => {
   it("deserializes number from JSON", () => {
@@ -85,6 +93,25 @@ describe("module()", () => {
 
     assertNotFrozen(result);
   });
+});
+
+it("raiseError()", () => {
+  const expectedErrorData = Hologram.serialize({
+    type: "map",
+    data: {
+      "atom(__exception__)": [Type.atom("__exception__"), Type.boolean(true)],
+      "atom(message)": [Type.atom("message"), Type.bitstring("abc")],
+      "atom(__struct__)": [Type.atom("__struct__"), Type.alias("Aaa.Bbb")],
+    },
+  });
+
+  assert.throw(
+    () => {
+      Hologram.raiseError("Aaa.Bbb", "abc");
+    },
+    Error,
+    `(HologramError) ${expectedErrorData}`
+  );
 });
 
 describe("serialize()", () => {
