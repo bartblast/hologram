@@ -5,8 +5,8 @@ import Sequence from "./sequence.mjs";
 import Utils from "./utils.mjs";
 
 export default class Type {
-  static alias(str) {
-    return Type.atom(`Elixir.${str}`);
+  static alias(moduleStr) {
+    return Type.atom(`Elixir.${moduleStr}`);
   }
 
   static anonymousFunction(arity, clauses, vars) {
@@ -185,6 +185,13 @@ export default class Type {
 
   static string(value) {
     return Utils.freeze({type: "string", value: value});
+  }
+
+  static struct(moduleStr, data) {
+    const key = Type.atom("__struct__");
+    const value = Type.alias(moduleStr);
+
+    return Type.map(data.concat([[key, value]]));
   }
 
   static tuple(data) {

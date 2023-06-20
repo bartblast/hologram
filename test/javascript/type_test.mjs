@@ -723,6 +723,25 @@ describe("string()", () => {
   });
 });
 
+it("struct", () => {
+  const data = [
+    [Type.atom("a"), Type.integer(1)],
+    [Type.atom("b"), Type.integer(2)],
+  ];
+
+  const result = Type.struct("Aaa.Bbb", data);
+
+  const expectedData = {
+    "atom(__struct__)": [Type.atom("__struct__"), Type.atom("Elixir.Aaa.Bbb")],
+    "atom(a)": [Type.atom("a"), Type.integer(1)],
+    "atom(b)": [Type.atom("b"), Type.integer(2)],
+  };
+
+  const expected = {type: "map", data: expectedData};
+
+  assert.deepStrictEqual(result, expected);
+});
+
 describe("tuple()", () => {
   let data, expected, result;
 
