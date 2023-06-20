@@ -5,6 +5,10 @@ import Sequence from "./sequence.mjs";
 import Utils from "./utils.mjs";
 
 export default class Type {
+  static alias(str) {
+    return Type.atom(`Elixir.${str}`);
+  }
+
   static anonymousFunction(arity, clauses, vars) {
     return Utils.freeze({
       type: "anonymous_function",

@@ -4,6 +4,13 @@ import {assert, assertFrozen} from "../../assets/js/test_support.mjs";
 import Sequence from "../../assets/js/sequence.mjs";
 import Type from "../../assets/js/type.mjs";
 
+it("alias", () => {
+  const result = Type.alias("Aaa.Bbb");
+  const expected = Type.atom("Elixir.Aaa.Bbb");
+
+  assert.deepStrictEqual(result, expected);
+});
+
 describe("anonymousFunction()", () => {
   let arity, clauses, vars;
 
