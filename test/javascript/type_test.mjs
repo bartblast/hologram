@@ -3,8 +3,9 @@
 import {assert, assertFrozen} from "../../assets/js/test_support.mjs";
 import Sequence from "../../assets/js/sequence.mjs";
 import Type from "../../assets/js/type.mjs";
+import Utils from "../../assets/js/utils.mjs";
 
-it("alias", () => {
+it("alias()", () => {
   const result = Type.alias("Aaa.Bbb");
   const expected = Type.atom("Elixir.Aaa.Bbb");
 
@@ -315,6 +316,21 @@ describe("encodeMapKey()", () => {
 
     assert.equal(result, "tuple(integer(1),atom(b))");
   });
+});
+
+it("errorStruct()", () => {
+  const result = Type.errorStruct("Aaa.Bbb", "abc");
+
+  const expected = {
+    type: "map",
+    data: {
+      "atom(__exception__)": [Type.atom("__exception__"), Type.boolean(true)],
+      "atom(__struct__)": [Type.atom("__struct__"), Type.alias("Aaa.Bbb")],
+      "atom(message)": [Type.atom("message"), Type.bitstring("abc")],
+    },
+  };
+
+  assert.deepStrictEqual(result, expected);
 });
 
 describe("float()", () => {
@@ -682,10 +698,6 @@ describe("map", () => {
 
     assert.deepStrictEqual(Type.map(data), expected);
   });
-
-  it("returns frozen object", () => {
-    assertFrozen(Type.map([]));
-  });
 });
 
 describe("matchPlaceholder()", () => {
@@ -723,7 +735,7 @@ describe("string()", () => {
   });
 });
 
-it("struct", () => {
+it("struct()", () => {
   const data = [
     [Type.atom("a"), Type.integer(1)],
     [Type.atom("b"), Type.integer(2)],

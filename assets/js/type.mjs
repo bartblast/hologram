@@ -81,6 +81,15 @@ export default class Type {
     }
   }
 
+  static errorStruct(moduleStr, message) {
+    const data = [
+      [Type.atom("__exception__"), Type.boolean(true)],
+      [Type.atom("message"), Type.bitstring(message)],
+    ];
+
+    return Type.struct(moduleStr, data);
+  }
+
   static float(value) {
     return Utils.freeze({type: "float", value: value});
   }
@@ -172,7 +181,7 @@ export default class Type {
       return acc;
     }, {});
 
-    return Utils.freeze({type: "map", data: hashTableWithMetadata});
+    return {type: "map", data: hashTableWithMetadata};
   }
 
   static matchPlaceholder() {
