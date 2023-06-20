@@ -4,6 +4,40 @@ import {assert, assertNotFrozen} from "../../assets/js/test_support.mjs";
 import Hologram from "../../assets/js/hologram.mjs";
 import Type from "../../assets/js/type.mjs";
 
+describe("deserialize()", () => {
+  it("deserializes number from JSON", () => {
+    const result = Hologram.deserialize("123");
+    assert.equal(result, 123);
+  });
+
+  it("deserializes string from JSON", () => {
+    const result = Hologram.deserialize('"abc"');
+    assert.equal(result, "abc");
+  });
+
+  it("deserializes non-negative bigint from JSON", () => {
+    const result = Hologram.deserialize('"__bigint__:123"');
+    assert.equal(result, 123n);
+  });
+
+  it("deserializes negative bigint from JSON", () => {
+    const result = Hologram.deserialize('"__bigint__:-123"');
+    assert.equal(result, -123n);
+  });
+
+  it("deserializes non-nested object from JSON", () => {
+    const result = Hologram.deserialize('{"a":1,"b":2}');
+    assert.deepStrictEqual(result, {a: 1, b: 2});
+  });
+
+  it("deserializes nested object from JSON", () => {
+    const result = Hologram.deserialize('{"a":1,"b":2,"c":{"d":3,"e":4}}');
+    const expected = {a: 1, b: 2, c: {d: 3, e: 4}};
+
+    assert.deepStrictEqual(result, expected);
+  });
+});
+
 describe("module()", () => {
   let Erlang, Erlang_Mymodule, Elixir_Aaa_Bbb_Ccc;
 

@@ -1,6 +1,15 @@
 "use strict";
 
 export default class Hologram {
+  static deserialize(json) {
+    return JSON.parse(json, (_key, value) => {
+      if (typeof value === "string" && /^__bigint__:-?\d+$/.test(value)) {
+        return BigInt(value.substring(11, value.length));
+      }
+      return value;
+    });
+  }
+
   static module(alias) {
     const aliasStr = alias.value;
     let prefixedAliasStr;
