@@ -5,11 +5,16 @@ import {
   assertBoxedFalse,
   assertBoxedTrue,
   assertFrozen,
+  linkModules,
+  unlinkModules,
 } from "../../../assets/js/test_support.mjs";
 
 import Erlang from "../../../assets/js/erlang/erlang.mjs";
 import Interpreter from "../../../assets/js/interpreter.mjs";
 import Type from "../../../assets/js/type.mjs";
+
+before(() => linkModules());
+after(() => unlinkModules());
 
 describe("$243/2 (+)", () => {
   it("adds integer and integer", () => {
@@ -602,6 +607,16 @@ describe("$262", () => {
       '(Hologram.NotYetImplementedError) :erlang.>/2 currently supports only floats and integers, left = 2, right = "abc"'
     );
   });
+});
+
+it("error/1", () => {
+  assert.throw(
+    () => {
+      Erlang.error({a: 1, b: 2});
+    },
+    Error,
+    '(HologramError) {"a":1,"b":2}'
+  );
 });
 
 describe("hd/1", () => {
