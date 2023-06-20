@@ -52,3 +52,28 @@ describe("module()", () => {
     assertNotFrozen(result);
   });
 });
+
+describe("serialize()", () => {
+  it("serializes number", () => {
+    assert.equal(Hologram.serialize(123), "123");
+  });
+
+  it("serializes string", () => {
+    assert.equal(Hologram.serialize("abc"), '"abc"');
+  });
+
+  it("serializes bigint", () => {
+    assert.equal(Hologram.serialize(123n), '"__bigint__:123"');
+  });
+
+  it("serializes non-nested object", () => {
+    assert.equal(Hologram.serialize({a: 1, b: 2}), '{"a":1,"b":2}');
+  });
+
+  it("serializes nested object", () => {
+    const term = {a: 1, b: 2, c: {d: 3, e: 4}};
+    const expected = '{"a":1,"b":2,"c":{"d":3,"e":4}}';
+
+    assert.equal(Hologram.serialize(term), expected);
+  });
+});

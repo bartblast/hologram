@@ -18,4 +18,10 @@ export default class Hologram {
 
     return Hologram[className];
   }
+
+  static serialize(term) {
+    return JSON.stringify(term, (_key, value) =>
+      typeof value === "bigint" ? `__bigint__:${value.toString()}` : value
+    );
+  }
 }

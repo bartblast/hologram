@@ -2,6 +2,7 @@
 
 // See: https://www.blazemeter.com/blog/the-correct-way-to-import-lodash-libraries-a-benchmark
 import cloneDeep from "lodash/cloneDeep.js";
+import Hologram from "./hologram.mjs";
 
 export default class Utils {
   // Based on: https://stackoverflow.com/a/43053803
@@ -32,13 +33,8 @@ export default class Utils {
   }
 
   static debug(term) {
-    console.log(
-      JSON.stringify(
-        term,
-        (_key, value) => (typeof value === "bigint" ? value.toString() : value),
-        4
-      )
-    );
+    console.log(Hologram.serialize(term));
+
     return term;
   }
 
