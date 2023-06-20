@@ -54,23 +54,27 @@ describe("module()", () => {
 });
 
 describe("serialize()", () => {
-  it("serializes number", () => {
+  it("serializes number to JSON", () => {
     assert.equal(Hologram.serialize(123), "123");
   });
 
-  it("serializes string", () => {
+  it("serializes string to JSON", () => {
     assert.equal(Hologram.serialize("abc"), '"abc"');
   });
 
-  it("serializes bigint", () => {
+  it("serializes non-negative bigint to JSON", () => {
     assert.equal(Hologram.serialize(123n), '"__bigint__:123"');
   });
 
-  it("serializes non-nested object", () => {
+  it("serializes negative bigint to JSON", () => {
+    assert.equal(Hologram.serialize(-123n), '"__bigint__:-123"');
+  });
+
+  it("serializes non-nested object to JSON", () => {
     assert.equal(Hologram.serialize({a: 1, b: 2}), '{"a":1,"b":2}');
   });
 
-  it("serializes nested object", () => {
+  it("serializes nested object to JSON", () => {
     const term = {a: 1, b: 2, c: {d: 3, e: 4}};
     const expected = '{"a":1,"b":2,"c":{"d":3,"e":4}}';
 
