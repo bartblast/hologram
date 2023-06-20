@@ -1,11 +1,11 @@
 "use strict";
 
 import {assert} from "chai";
+import Hologram from "./hologram.mjs";
+import sinonESM from "../node_modules/sinon/pkg/sinon-esm.js";
 import Type from "./type.mjs";
 
 export {assert} from "chai";
-
-import sinonESM from "../node_modules/sinon/pkg/sinon-esm.js";
 export const sinon = sinonESM;
 
 export function assertBoxedFalse(boxed) {
@@ -22,4 +22,12 @@ export function assertFrozen(obj) {
 
 export function assertNotFrozen(obj) {
   assert.isFalse(Object.isFrozen(obj));
+}
+
+export function linkModules() {
+  globalThis.Hologram = Hologram;
+}
+
+export function unlinkModules() {
+  delete globalThis.Hologram;
 }
