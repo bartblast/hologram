@@ -233,8 +233,13 @@ describe("from()", () => {
         type: "binary",
       });
 
-      Bitstring.from([segment]);
-      // assertError(() => Bitstring.from([segment]), "ArgumentError")
+      const expectedMessage = `construction of binary failed: segment 1 of type 'binary': the size of the value {"type":"bitstring","bits":{"0":1,"1":0,"2":1}} is not a multiple of the unit for the segment`;
+
+      assertError(
+        () => Bitstring.from([segment]),
+        "ArgumentError",
+        expectedMessage
+      );
     });
 
     it("with float value", () => {

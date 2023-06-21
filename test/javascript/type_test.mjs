@@ -170,7 +170,7 @@ describe("bitstringSegment()", () => {
   });
 
   it("raises error if type modifier is not given", () => {
-    const expectedMessage = "Bitstring segment type modifier is not specified";
+    const expectedMessage = "bitstring segment type modifier is not specified";
 
     assertError(
       () => Type.bitstringSegment(Type.integer(123), {}),
