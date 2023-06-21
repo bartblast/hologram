@@ -247,7 +247,6 @@ export default class Bitstring {
 
     if (segment.size === null && segment.unit !== null) {
       Hologram.raiseCompileError(
-        "CompileError",
         "integer and float types require a size specifier if the unit specifier is given"
       );
     }
