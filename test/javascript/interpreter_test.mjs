@@ -925,6 +925,40 @@ describe("count()", () => {
   });
 });
 
+describe("dotOperator()", () => {
+  it("handles remote function call", () => {
+    // setup
+    globalThis.Elixir_MyModule = {
+      my_fun: () => {
+        return Type.integer(123);
+      },
+    };
+
+    const left = Type.alias("MyModule");
+    const right = Type.atom("my_fun");
+    const result = Interpreter.dotOperator(left, right);
+
+    assert.deepStrictEqual(result, Type.integer(123));
+
+    // cleanup
+    delete globalThis.Elixir_MyModule;
+  });
+
+  it("handles map key access", () => {
+    const key = Type.atom("b");
+    const value = Type.integer(2);
+
+    const left = Type.map([
+      [Type.atom("a"), Type.integer(1)],
+      [key, value],
+    ]);
+
+    const result = Interpreter.dotOperator(left, key);
+
+    assert.deepStrictEqual(result, value);
+  });
+});
+
 describe("head()", () => {
   it("returns the first item in a boxed list", () => {
     const list = Type.list([Type.integer(1), Type.integer(2), Type.integer(3)]);

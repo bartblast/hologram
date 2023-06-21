@@ -3,6 +3,7 @@
 import {assert} from "chai";
 import Elixir_Kernel from "./elixir/kernel.mjs";
 import Erlang from "./erlang/erlang.mjs";
+import Erlang_Maps from "./erlang/maps.mjs";
 import Hologram from "./hologram.mjs";
 import sinonESM from "../node_modules/sinon/pkg/sinon-esm.js";
 import Type from "./type.mjs";
@@ -37,11 +38,13 @@ export function assertNotFrozen(obj) {
 export function linkModules() {
   globalThis.Hologram = Hologram;
   globalThis.Erlang = Erlang;
+  globalThis.Erlang_Maps = Erlang_Maps;
   globalThis.Elixir_Kernel = Elixir_Kernel;
 }
 
 export function unlinkModules() {
   delete globalThis.Hologram;
   delete globalThis.Erlang;
+  delete globalThis.Erlang_Maps;
   delete globalThis.Elixir_Kernel;
 }

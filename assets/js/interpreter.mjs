@@ -121,6 +121,16 @@ export default class Interpreter {
     return enumerable.data.length;
   }
 
+  static dotOperator(left, right) {
+    // if left argument is a boxed atom, treat the operator as a remote function call
+    if (Type.isAtom(left)) {
+      return Hologram.module(left)[right.value]();
+    }
+
+    // otherwise treat the operator as map key access
+    return Erlang_Maps.get(right, left);
+  }
+
   static head(list) {
     return list.data[0];
   }
