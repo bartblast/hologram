@@ -1,5 +1,6 @@
 "use strict";
 
+import Hologram from "./hologram.mjs";
 import Interpreter from "./interpreter.mjs";
 import Type from "./type.mjs";
 import Utils from "./utils.mjs";
@@ -263,7 +264,7 @@ export default class Bitstring {
     }
 
     if (numBits !== 64n) {
-      Hologram.raiseNotYetImplementedError(
+      Hologram.raiseInterpreterError(
         `${numBits}-bit float bitstring segments are not yet implemented in Hologram`
       );
     }
