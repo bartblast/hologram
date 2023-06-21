@@ -17,6 +17,14 @@ export function assertBoxedTrue(boxed) {
   assert.isTrue(Type.isTrue(boxed));
 }
 
+export function assertError(callable, errorAliasStr, message) {
+  const expectedErrorData = Hologram.serialize(
+    Type.errorStruct(errorAliasStr, message)
+  );
+
+  assert.throw(callable, Error, `__hologram__:${expectedErrorData}`);
+}
+
 export function assertFrozen(obj) {
   assert.isTrue(Object.isFrozen(obj));
 }
