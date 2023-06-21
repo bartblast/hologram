@@ -3,7 +3,6 @@
 import {
   assert,
   assertError,
-  assertNotFrozen,
   linkModules,
   sinon,
   unlinkModules,

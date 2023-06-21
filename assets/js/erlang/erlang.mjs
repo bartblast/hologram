@@ -3,43 +3,43 @@
 import Interpreter from "../interpreter.mjs";
 import Type from "../type.mjs";
 
-export default class Erlang {
+const Erlang = {
   // supported arities: 2
   // start: +
-  static $243(left, right) {
+  $243: function (left, right) {
     const [type, leftValue, rightValue] =
       Erlang._ensureBothAreIntegersOrBothAreFloats(left, right);
 
     const result = leftValue.value + rightValue.value;
 
     return type === "float" ? Type.float(result) : Type.integer(result);
-  }
+  },
   // end: +
 
   // supported arities: 2
   // start: -
-  static $245(left, right) {
+  $245: function (left, right) {
     const [type, leftValue, rightValue] =
       Erlang._ensureBothAreIntegersOrBothAreFloats(left, right);
 
     const result = leftValue.value - rightValue.value;
 
     return type === "float" ? Type.float(result) : Type.integer(result);
-  }
+  },
   // end: -
 
   // supported arities: 2
   // start: /=
-  static $247$261(left, right) {
+  $247$261: function (left, right) {
     const isEqual = Erlang.$261$261(left, right);
     return Type.boolean(Type.isFalse(isEqual));
-  }
+  },
   // end: /=
 
   // TODO: Implement structural comparison, see: https://hexdocs.pm/elixir/main/Kernel.html#module-structural-comparison
   // supported arities: 2
   // start: <
-  static $260(left, right) {
+  $260: function (left, right) {
     if (
       (!Type.isFloat(left) && !Type.isInteger(left)) ||
       (!Type.isFloat(right) && !Type.isInteger(right))
@@ -55,19 +55,19 @@ export default class Erlang {
     }
 
     return Type.boolean(left.value < right.value);
-  }
+  },
   // end: <
 
   // supported arities: 2
   // start: =:=
-  static $261$258$261(left, right) {
+  $261$258$261: function (left, right) {
     return Type.boolean(Interpreter.isStrictlyEqual(left, right));
-  }
+  },
   // end: =:=
 
   // supported arities: 2
   // start: ==
-  static $261$261(left, right) {
+  $261$261: function (left, right) {
     let value;
 
     switch (left.type) {
@@ -86,13 +86,13 @@ export default class Erlang {
     }
 
     return Type.boolean(value);
-  }
+  },
   // end: ==
 
   // TODO: Implement structural comparison, see: https://hexdocs.pm/elixir/main/Kernel.html#module-structural-comparison
   // supported arities: 2
   // start: >
-  static $262(left, right) {
+  $262: function (left, right) {
     if (
       (!Type.isFloat(left) && !Type.isInteger(left)) ||
       (!Type.isFloat(right) && !Type.isInteger(right))
@@ -108,67 +108,67 @@ export default class Erlang {
     }
 
     return Type.boolean(left.value > right.value);
-  }
+  },
   // end: >
 
   // TODO: error/2
   // supported arities: 1
   // start: error
-  static error(reason) {
+  error: function (reason) {
     throw new Error(`__hologram__:${Hologram.serialize(reason)}`);
-  }
+  },
   // end: error
 
   // supported arities: 1
   // start: hd
-  static hd(list) {
+  hd: function (list) {
     return Interpreter.head(list);
-  }
+  },
   // end: hd
 
   // supported arities: 1
   // start: is_atom
-  static is_atom(term) {
+  is_atom: function (term) {
     return Type.boolean(Type.isAtom(term));
-  }
+  },
   // end: is_atom
 
   // supported arities: 1
   // start: is_float
-  static is_float(term) {
+  is_float: function (term) {
     return Type.boolean(Type.isFloat(term));
-  }
+  },
   // end: is_float
 
   // supported arities: 1
   // start: is_integer
-  static is_integer(term) {
+  is_integer: function (term) {
     return Type.boolean(Type.isInteger(term));
-  }
+  },
   // end: is_integer
 
   // supported arities: 1
   // start: is_number
-  static is_number(term) {
+  is_number: function (term) {
     return Type.boolean(Type.isNumber(term));
-  }
+  },
   // end: is_number
 
   // supported arities: 1
   // start: length
-  static length(list) {
+  length: function (list) {
     return Type.integer(Interpreter.count(list));
-  }
+  },
   // end: length
 
   // supported arities: 1
   // start: tl
-  static tl(list) {
+  tl: function (list) {
     return Interpreter.tail(list);
-  }
+  },
   // end: tl
 
-  static _ensureBothAreIntegersOrBothAreFloats(boxed1, boxed2) {
+  _ensureBothAreIntegersOrBothAreFloats: function (boxed1, boxed2) {
     const type =
       Type.isFloat(boxed1) || Type.isFloat(boxed2) ? "float" : "integer";
 
@@ -187,5 +187,7 @@ export default class Erlang {
     }
 
     return [type, value1, value2];
-  }
-}
+  },
+};
+
+export default Erlang;
