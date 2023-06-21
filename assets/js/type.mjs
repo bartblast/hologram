@@ -254,8 +254,4 @@ export default class Type {
   static _getOption(options, key) {
     return typeof options[key] !== "undefined" ? options[key] : null;
   }
-
-  static abc() {
-    return Hologram.serialize(123);
-  }
 }
