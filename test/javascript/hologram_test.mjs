@@ -2,6 +2,7 @@
 
 import {
   assert,
+  assertError,
   assertNotFrozen,
   linkModules,
   unlinkModules,
@@ -96,30 +97,14 @@ describe("module()", () => {
 });
 
 it("raiseError()", () => {
-  const expectedErrorData = Hologram.serialize(
-    Type.errorStruct("Aaa.Bbb", "abc")
-  );
-
-  assert.throw(
-    () => {
-      Hologram.raiseError("Aaa.Bbb", "abc");
-    },
-    Error,
-    `__hologram__:${expectedErrorData}`
-  );
+  assertError(() => Hologram.raiseError("Aaa.Bbb", "abc"), "Aaa.Bbb", "abc");
 });
 
-it("raiseNotYetImplementedError()", () => {
-  const expectedErrorData = Hologram.serialize(
-    Type.errorStruct("Hologram.NotYetImplementedError", "abc")
-  );
-
-  assert.throw(
-    () => {
-      Hologram.raiseNotYetImplementedError("abc");
-    },
-    Error,
-    `__hologram__:${expectedErrorData}`
+it("raiseInterpreterError()", () => {
+  assertError(
+    () => Hologram.raiseInterpreterError("abc"),
+    "Hologram.InterpreterError",
+    "abc"
   );
 });
 

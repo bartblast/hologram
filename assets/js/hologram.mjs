@@ -35,8 +35,8 @@ export default class Hologram {
     return Hologram.Erlang.error(errorStruct);
   }
 
-  static raiseNotYetImplementedError(message) {
-    return Hologram.raiseError("Hologram.NotYetImplementedError", message);
+  static raiseInterpreterError(message) {
+    return Hologram.raiseError("Hologram.InterpreterError", message);
   }
 
   static serialize(term) {

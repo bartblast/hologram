@@ -170,12 +170,12 @@ describe("bitstringSegment()", () => {
   });
 
   it("raises error if type modifier is not given", () => {
-    assert.throw(
-      () => {
-        Type.bitstringSegment(Type.integer(123), {});
-      },
-      Error,
-      "Bitstring segment type modifier is not specified"
+    const expectedMessage = "Bitstring segment type modifier is not specified";
+
+    assertError(
+      () => Type.bitstringSegment(Type.integer(123), {}),
+      "Hologram.InterpreterError",
+      expectedMessage
     );
   });
 });

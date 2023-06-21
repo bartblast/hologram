@@ -4,6 +4,7 @@ import {
   assert,
   assertBoxedFalse,
   assertBoxedTrue,
+  assertError,
   assertFrozen,
   linkModules,
   unlinkModules,
@@ -461,13 +462,13 @@ describe("$260", () => {
   it("should throw a not yet implemented error for non-integer and non-float left argument", () => {
     const left = Type.string("abc");
     const right = Type.integer(2);
+    const expectedMessage =
+      ':erlang.</2 currently supports only floats and integers, left = "abc", right = 2';
 
-    assert.throw(
-      () => {
-        Erlang.$260(left, right);
-      },
-      Error,
-      '(Hologram.NotYetImplementedError) :erlang.</2 currently supports only floats and integers, left = "abc", right = 2'
+    assertError(
+      () => Erlang.$260(left, right),
+      "Hologram.InterpreterError",
+      expectedMessage
     );
   });
 
@@ -585,26 +586,26 @@ describe("$262", () => {
   it("should throw a not yet implemented error for non-integer and non-float left argument", () => {
     const left = Type.string("abc");
     const right = Type.integer(2);
+    const expectedMessage =
+      ':erlang.>/2 currently supports only floats and integers, left = "abc", right = 2';
 
-    assert.throw(
-      () => {
-        Erlang.$262(left, right);
-      },
-      Error,
-      '(Hologram.NotYetImplementedError) :erlang.>/2 currently supports only floats and integers, left = "abc", right = 2'
+    assertError(
+      () => Erlang.$262(left, right),
+      "Hologram.InterpreterError",
+      expectedMessage
     );
   });
 
   it("should throw a not yet implemented error for non-integer and non-float right argument", () => {
     const left = Type.integer(2);
     const right = Type.string("abc");
+    const expectedMessage =
+      ':erlang.>/2 currently supports only floats and integers, left = 2, right = "abc"';
 
-    assert.throw(
-      () => {
-        Erlang.$262(left, right);
-      },
-      Error,
-      '(Hologram.NotYetImplementedError) :erlang.>/2 currently supports only floats and integers, left = 2, right = "abc"'
+    assertError(
+      () => Erlang.$262(left, right),
+      "Hologram.InterpreterError",
+      expectedMessage
     );
   });
 });

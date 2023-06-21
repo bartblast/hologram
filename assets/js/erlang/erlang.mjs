@@ -51,7 +51,7 @@ export default class Erlang {
         ", right = " +
         Interpreter.inspect(right);
 
-      Interpreter.raiseNotYetImplementedError(message);
+      Hologram.raiseInterpreterError(message);
     }
 
     return Type.boolean(left.value < right.value);
@@ -104,7 +104,7 @@ export default class Erlang {
         ", right = " +
         Interpreter.inspect(right);
 
-      Interpreter.raiseNotYetImplementedError(message);
+      Hologram.raiseInterpreterError(message);
     }
 
     return Type.boolean(left.value > right.value);

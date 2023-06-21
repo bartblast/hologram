@@ -265,7 +265,7 @@ export default class Bitstring {
     }
 
     if (numBits !== 64n) {
-      Interpreter.raiseNotYetImplementedError(
+      Hologram.raiseInterpreterError(
         `${numBits}-bit float bitstring segments are not yet implemented in Hologram`
       );
     }
