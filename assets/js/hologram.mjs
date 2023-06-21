@@ -40,6 +40,10 @@ export default class Hologram {
     return Hologram.raiseError("ArgumentError", message);
   }
 
+  static raiseBadMapError(message) {
+    return Hologram.raiseError("BadMapError", message);
+  }
+
   static raiseCompileError(message) {
     return Hologram.raiseError("CompileError", message);
   }

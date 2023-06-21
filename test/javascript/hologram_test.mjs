@@ -88,6 +88,10 @@ it("raiseArgumentError()", () => {
   assertError(() => Hologram.raiseArgumentError("abc"), "ArgumentError", "abc");
 });
 
+it("raiseBadMapError()", () => {
+  assertError(() => Hologram.raiseBadMapError("abc"), "BadMapError", "abc");
+});
+
 it("raiseCompileError()", () => {
   assertError(() => Hologram.raiseCompileError("abc"), "CompileError", "abc");
 });
