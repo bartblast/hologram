@@ -8,7 +8,7 @@ const Type = Hologram.Type;
 const Erlang = {
   // supported arities: 2
   // start: +
-  $243: function (left, right) {
+  $243: (left, right) => {
     const [type, leftValue, rightValue] =
       Erlang._ensureBothAreIntegersOrBothAreFloats(left, right);
 
@@ -20,7 +20,7 @@ const Erlang = {
 
   // supported arities: 2
   // start: -
-  $245: function (left, right) {
+  $245: (left, right) => {
     const [type, leftValue, rightValue] =
       Erlang._ensureBothAreIntegersOrBothAreFloats(left, right);
 
@@ -32,7 +32,7 @@ const Erlang = {
 
   // supported arities: 2
   // start: /=
-  $247$261: function (left, right) {
+  $247$261: (left, right) => {
     const isEqual = Erlang.$261$261(left, right);
     return Type.boolean(Type.isFalse(isEqual));
   },
@@ -41,7 +41,7 @@ const Erlang = {
   // TODO: Implement structural comparison, see: https://hexdocs.pm/elixir/main/Kernel.html#module-structural-comparison
   // supported arities: 2
   // start: <
-  $260: function (left, right) {
+  $260: (left, right) => {
     if (
       (!Type.isFloat(left) && !Type.isInteger(left)) ||
       (!Type.isFloat(right) && !Type.isInteger(right))
@@ -62,14 +62,14 @@ const Erlang = {
 
   // supported arities: 2
   // start: =:=
-  $261$258$261: function (left, right) {
+  $261$258$261: (left, right) => {
     return Type.boolean(Interpreter.isStrictlyEqual(left, right));
   },
   // end: =:=
 
   // supported arities: 2
   // start: ==
-  $261$261: function (left, right) {
+  $261$261: (left, right) => {
     let value;
 
     switch (left.type) {
@@ -94,7 +94,7 @@ const Erlang = {
   // TODO: Implement structural comparison, see: https://hexdocs.pm/elixir/main/Kernel.html#module-structural-comparison
   // supported arities: 2
   // start: >
-  $262: function (left, right) {
+  $262: (left, right) => {
     if (
       (!Type.isFloat(left) && !Type.isInteger(left)) ||
       (!Type.isFloat(right) && !Type.isInteger(right))
@@ -116,61 +116,61 @@ const Erlang = {
   // TODO: error/2
   // supported arities: 1
   // start: error
-  error: function (reason) {
+  error: (reason) => {
     throw new Error(`__hologram__:${Hologram.serialize(reason)}`);
   },
   // end: error
 
   // supported arities: 1
   // start: hd
-  hd: function (list) {
+  hd: (list) => {
     return Interpreter.head(list);
   },
   // end: hd
 
   // supported arities: 1
   // start: is_atom
-  is_atom: function (term) {
+  is_atom: (term) => {
     return Type.boolean(Type.isAtom(term));
   },
   // end: is_atom
 
   // supported arities: 1
   // start: is_float
-  is_float: function (term) {
+  is_float: (term) => {
     return Type.boolean(Type.isFloat(term));
   },
   // end: is_float
 
   // supported arities: 1
   // start: is_integer
-  is_integer: function (term) {
+  is_integer: (term) => {
     return Type.boolean(Type.isInteger(term));
   },
   // end: is_integer
 
   // supported arities: 1
   // start: is_number
-  is_number: function (term) {
+  is_number: (term) => {
     return Type.boolean(Type.isNumber(term));
   },
   // end: is_number
 
   // supported arities: 1
   // start: length
-  length: function (list) {
+  length: (list) => {
     return Type.integer(Interpreter.count(list));
   },
   // end: length
 
   // supported arities: 1
   // start: tl
-  tl: function (list) {
+  tl: (list) => {
     return Interpreter.tail(list);
   },
   // end: tl
 
-  _ensureBothAreIntegersOrBothAreFloats: function (boxed1, boxed2) {
+  _ensureBothAreIntegersOrBothAreFloats: (boxed1, boxed2) => {
     const type =
       Type.isFloat(boxed1) || Type.isFloat(boxed2) ? "float" : "integer";
 
