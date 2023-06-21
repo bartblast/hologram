@@ -9,8 +9,6 @@ import Type from "./type.mjs";
 import Utils from "./utils.mjs";
 
 export default class Interpreter {
-  static _moduleEnum;
-
   static callAnonymousFunction(fun, args) {
     const right = Type.list(args);
 
@@ -58,7 +56,7 @@ export default class Interpreter {
     const generatorsCount = generators.length;
 
     const sets = generators.map(
-      (generator) => Interpreter._moduleEnum.to_list(generator.enumerable).data
+      (generator) => Elixir_Enum.to_list(generator.enumerable).data
     );
 
     let items = Utils.cartesianProduct(sets).reduce((acc, combination) => {
@@ -97,7 +95,7 @@ export default class Interpreter {
       items = uniqWith(items, Interpreter.isStrictlyEqual);
     }
 
-    return Interpreter._moduleEnum.into(Type.list(items), collectable);
+    return Elixir_Enum.into(Type.list(items), collectable);
   }
 
   static cond(clauses, vars) {

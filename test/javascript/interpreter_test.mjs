@@ -304,19 +304,19 @@ describe("comprehension()", () => {
   beforeEach(() => {
     vars = {a: Type.integer(1), b: Type.integer(2)};
 
-    Interpreter._moduleEnum = class Elixir_Enum {
-      static into(enumerable, _collectable) {
+    globalThis.Elixir_Enum = {
+      into: function (enumerable, _collectable) {
         return enumerable;
-      }
+      },
 
-      static to_list(enumerable) {
+      to_list: function (enumerable) {
         return enumerable;
-      }
+      },
     };
   });
 
   afterEach(() => {
-    Interpreter._moduleEnum = null;
+    delete globalThis.Elixir_Enum;
   });
 
   describe("generator", () => {
@@ -424,7 +424,7 @@ describe("comprehension()", () => {
       };
 
       const stub = sinon
-        .stub(Interpreter._moduleEnum, "to_list")
+        .stub(Elixir_Enum, "to_list")
         .callsFake((enumerable) => enumerable);
 
       Interpreter.comprehension(
@@ -759,7 +759,7 @@ describe("comprehension()", () => {
       };
 
       const stub = sinon
-        .stub(Interpreter._moduleEnum, "into")
+        .stub(Elixir_Enum, "into")
         .callsFake((enumerable) => enumerable);
 
       Interpreter.comprehension(
