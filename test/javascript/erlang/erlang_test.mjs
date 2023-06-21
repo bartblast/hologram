@@ -475,13 +475,13 @@ describe("$260", () => {
   it("should throw a not yet implemented error for non-integer and non-float right argument", () => {
     const left = Type.integer(2);
     const right = Type.string("abc");
+    const expectedMessage =
+      ':erlang.</2 currently supports only floats and integers, left = 2, right = "abc"';
 
-    assert.throw(
-      () => {
-        Erlang.$260(left, right);
-      },
-      Error,
-      '(Hologram.NotYetImplementedError) :erlang.</2 currently supports only floats and integers, left = 2, right = "abc"'
+    assertError(
+      () => Erlang.$260(left, right),
+      "Hologram.InterpreterError",
+      expectedMessage
     );
   });
 });

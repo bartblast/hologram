@@ -289,6 +289,6 @@ export default class Interpreter {
     const message =
       "no match of right hand side value: " + Interpreter.inspect(right);
 
-    return Interpreter.raiseError("MatchError", message);
+    return Hologram.raiseError("MatchError", message);
   }
 }

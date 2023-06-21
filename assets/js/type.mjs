@@ -41,7 +41,7 @@ export default class Type {
 
     // TODO: is this needed?
     if (type === null) {
-      Hologram.raiseInpreterError(
+      Hologram.raiseInterpreterError(
         "bitstring segment type modifier is not specified"
       );
     }
@@ -253,5 +253,9 @@ export default class Type {
   // private
   static _getOption(options, key) {
     return typeof options[key] !== "undefined" ? options[key] : null;
+  }
+
+  static abc() {
+    return Hologram.serialize(123);
   }
 }

@@ -48,23 +48,19 @@ describe("deserialize()", () => {
 });
 
 describe("module()", () => {
-  let Erlang, Erlang_Mymodule, Elixir_Aaa_Bbb_Ccc;
+  let Erlang_Mymodule, Elixir_Aaa_Bbb_Ccc;
 
   before(() => {
-    Erlang = class {};
-    Hologram.Erlang = Erlang;
-
     Erlang_Mymodule = class {};
-    Hologram.Erlang_Mymodule = Erlang_Mymodule;
+    globalThis.Erlang_Mymodule = Erlang_Mymodule;
 
     Elixir_Aaa_Bbb_Ccc = class {};
-    Hologram.Elixir_Aaa_Bbb_Ccc = Elixir_Aaa_Bbb_Ccc;
+    globalThis.Elixir_Aaa_Bbb_Ccc = Elixir_Aaa_Bbb_Ccc;
   });
 
   after(() => {
-    delete Hologram.Erlang;
-    delete Hologram.Erlang_Mymodule;
-    delete Hologram.Elixir_Aaa_Bbb_Ccc;
+    delete globalThis.Erlang_Mymodule;
+    delete globalThis.Elixir_Aaa_Bbb_Ccc;
   });
 
   it("returns class for alias having lowercase starting letter", () => {
@@ -87,13 +83,14 @@ describe("module()", () => {
 
     assert.equal(result, Erlang);
   });
+});
 
-  it("doesn't freeze the returned class", () => {
-    const alias = Type.atom("erlang");
-    const result = Hologram.module(alias);
+it("raiseArgumentError()", () => {
+  assertError(() => Hologram.raiseArgumentError("abc"), "ArgumentError", "abc");
+});
 
-    assertNotFrozen(result);
-  });
+it("raiseCompileError()", () => {
+  assertError(() => Hologram.raiseCompileError("abc"), "CompileError", "abc");
 });
 
 it("raiseError()", () => {

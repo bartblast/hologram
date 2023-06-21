@@ -27,12 +27,20 @@ export default class Hologram {
 
     const className = prefixedAliasStr.replace(/\./g, "_");
 
-    return Hologram[className];
+    return globalThis[className];
+  }
+
+  static raiseArgumentError(message) {
+    return Hologram.raiseError("ArgumentError", message);
+  }
+
+  static raiseCompileError(message) {
+    return Hologram.raiseError("CompileError", message);
   }
 
   static raiseError(aliasStr, message) {
     const errorStruct = Type.errorStruct(aliasStr, message);
-    return Hologram.Erlang.error(errorStruct);
+    return Erlang.error(errorStruct);
   }
 
   static raiseInterpreterError(message) {

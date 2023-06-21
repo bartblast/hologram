@@ -1,8 +1,17 @@
 "use strict";
 
-import {assert, assertFrozen} from "../../assets/js/test_support.mjs";
+import {
+  assert,
+  assertError,
+  assertFrozen,
+  linkModules,
+  unlinkModules,
+} from "../../assets/js/test_support.mjs";
 import Sequence from "../../assets/js/sequence.mjs";
 import Type from "../../assets/js/type.mjs";
+
+before(() => linkModules());
+after(() => unlinkModules());
 
 it("alias()", () => {
   const result = Type.alias("Aaa.Bbb");
@@ -786,3 +795,7 @@ describe("variablePattern()", () => {
     assertFrozen(Type.variablePattern("test"));
   });
 });
+
+// it.only("test", () => {
+//   console.debug(Type.abc())
+// })

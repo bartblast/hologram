@@ -174,7 +174,7 @@ export default class Bitstring {
     const inspectedValue = Interpreter.inspect(value);
     const message = `construction of binary failed: segment ${index} of type '${segmentType}': expected ${expectedValueTypesStr} but got: ${inspectedValue}`;
 
-    Interpreter.raiseError("ArgumentError", message);
+    Hologram.raiseArgumentError(message);
   }
 
   // private
@@ -203,8 +203,7 @@ export default class Bitstring {
     ) {
       const inspectedValue = Interpreter.inspect(segment.value);
 
-      Interpreter.raiseError(
-        "ArgumentError",
+      Hologram.raiseArgumentError(
         `construction of binary failed: segment ${index} of type 'binary': the size of the value ${inspectedValue} is not a multiple of the unit for the segment`
       );
     }
@@ -247,7 +246,7 @@ export default class Bitstring {
     }
 
     if (segment.size === null && segment.unit !== null) {
-      Interpreter.raiseError(
+      Hologram.raiseCompileError(
         "CompileError",
         "integer and float types require a size specifier if the unit specifier is given"
       );
@@ -261,11 +260,11 @@ export default class Bitstring {
       const message = `construction of binary failed: segment ${index} of type 'float': expected one of the supported sizes 16, 32, or 64 but got: ${Number(
         numBits
       )}`;
-      Interpreter.raiseError("ArgumentError", message);
+      Hologram.raiseArgumentError(message);
     }
 
     if (numBits !== 64n) {
-      Hologram.raiseInterpreterError(
+      Hologram.raiseNotYetImplementedError(
         `${numBits}-bit float bitstring segments are not yet implemented in Hologram`
       );
     }
@@ -321,8 +320,7 @@ export default class Bitstring {
     }
 
     if (segment.size !== null || segment.unit !== null) {
-      Interpreter.raiseError(
-        "CompileError",
+      Hologram.raiseCompileError(
         "size and unit are not supported on utf types"
       );
     }

@@ -4,8 +4,13 @@ import {
   assert,
   assertFrozen,
   assertNotFrozen,
+  linkModules,
+  unlinkModules,
 } from "../../assets/js/test_support.mjs";
 import Utils from "../../assets/js/utils.mjs";
+
+before(() => linkModules());
+after(() => unlinkModules());
 
 describe("cartesianProduct()", () => {
   it("returns empty array if no sets are given", () => {

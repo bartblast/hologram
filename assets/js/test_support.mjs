@@ -35,9 +35,10 @@ export function assertNotFrozen(obj) {
 
 export function linkModules() {
   globalThis.Hologram = Hologram;
-  globalThis.Hologram.Erlang = Erlang;
+  globalThis.Erlang = Erlang;
 }
 
 export function unlinkModules() {
   delete globalThis.Hologram;
+  delete globalThis.Erlang;
 }

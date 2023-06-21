@@ -1,12 +1,22 @@
 "use strict";
 
-import {assert, assertNotFrozen, sinon} from "../../assets/js/test_support.mjs";
+import {
+  assert,
+  assertError,
+  assertNotFrozen,
+  linkModules,
+  sinon,
+  unlinkModules,
+} from "../../assets/js/test_support.mjs";
 import Erlang from "../../assets/js/erlang/erlang.mjs";
 import Interpreter from "../../assets/js/interpreter.mjs";
 import Type from "../../assets/js/type.mjs";
 
 // TODO: remove if unused
 import Utils from "../../assets/js/utils.mjs";
+
+before(() => linkModules());
+after(() => unlinkModules());
 
 describe("callAnonymousFunction()", () => {
   let vars, anonFun;
@@ -134,12 +144,10 @@ describe("callAnonymousFunction()", () => {
   });
 
   it("raises FunctionClauseError error if none of the clauses is matched", () => {
-    assert.throw(
-      () => {
-        Interpreter.callAnonymousFunction(anonFun, [Type.integer(3)]);
-      },
-      Error,
-      "(FunctionClauseError) no function clause matching in anonymous fn/1"
+    assertError(
+      () => Interpreter.callAnonymousFunction(anonFun, [Type.integer(3)]),
+      "FunctionClauseError",
+      "no function clause matching in anonymous fn/1"
     );
   });
 });
@@ -282,12 +290,10 @@ describe("case()", () => {
       },
     };
 
-    assert.throw(
-      () => {
-        Interpreter.case(Type.integer(3), [clause1, clause2], vars);
-      },
-      Error,
-      "(CaseClauseError) no case clause matching: 3"
+    assertError(
+      () => Interpreter.case(Type.integer(3), [clause1, clause2], vars),
+      "CaseClauseError",
+      "no case clause matching: 3"
     );
   });
 });
@@ -869,12 +875,10 @@ describe("cond()", () => {
       },
     };
 
-    assert.throw(
-      () => {
-        Interpreter.cond([clause1, clause2], vars);
-      },
-      Error,
-      "(CondClauseError) no cond clause evaluated to a truthy value"
+    assertError(
+      () => Interpreter.cond([clause1, clause2], vars),
+      "CondClauseError",
+      "no cond clause evaluated to a truthy value"
     );
   });
 });
@@ -1241,12 +1245,10 @@ describe("matchOperator()", () => {
   });
 
   it("raises MatchError if the arguments don't match", () => {
-    assert.throw(
-      () => {
-        Interpreter.matchOperator(Type.integer(1), Type.integer(2), vars);
-      },
-      Error,
-      "(MatchError) no match of right hand side value: 2"
+    assertError(
+      () => Interpreter.matchOperator(Type.integer(1), Type.integer(2), vars),
+      "MatchError",
+      "no match of right hand side value: 2"
     );
   });
 
@@ -1367,52 +1369,29 @@ describe("matchOperator()", () => {
   });
 });
 
-describe("raiseCaseClauseError()", () => {
-  it("throws a CaseClauseError error with the given message", () => {
-    assert.throw(
-      () => {
-        Interpreter.raiseCaseClauseError("my message");
-      },
-      Error,
-      "(CaseClauseError) my message"
-    );
-  });
+it("raiseCaseClauseError()", () => {
+  assertError(
+    () => Interpreter.raiseCaseClauseError("abc"),
+    "CaseClauseError",
+    "abc"
+  );
 });
 
-describe("raiseCondClauseError()", () => {
-  it("throws a CondClauseError error with the given message", () => {
-    assert.throw(
-      () => {
-        Interpreter.raiseCondClauseError();
-      },
-      Error,
-      "(CondClauseError) no cond clause evaluated to a truthy value"
-    );
-  });
+it("raiseCondClauseError()", () => {
+  const expectedMessage = "no cond clause evaluated to a truthy value";
+  assertError(
+    () => Interpreter.raiseCondClauseError(),
+    "CondClauseError",
+    expectedMessage
+  );
 });
 
-describe("raiseError()", () => {
-  it("throws an error with the given message", () => {
-    assert.throw(
-      () => {
-        Interpreter.raiseError("MyType", "my message");
-      },
-      Error,
-      "(MyType) my message"
-    );
-  });
-});
-
-describe("raiseFunctionClauseError()", () => {
-  it("throws a FunctionClauseError error with the given message", () => {
-    assert.throw(
-      () => {
-        Interpreter.raiseFunctionClauseError("my message");
-      },
-      Error,
-      "(FunctionClauseError) my message"
-    );
-  });
+it("raiseFunctionClauseError()", () => {
+  assertError(
+    () => Interpreter.raiseFunctionClauseError("abc"),
+    "FunctionClauseError",
+    "abc"
+  );
 });
 
 describe("tail()", () => {
