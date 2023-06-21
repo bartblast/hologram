@@ -105,7 +105,7 @@ it("raiseError()", () => {
       Hologram.raiseError("Aaa.Bbb", "abc");
     },
     Error,
-    `(HologramError) ${expectedErrorData}`
+    `__hologram__:${expectedErrorData}`
   );
 });
 
@@ -119,7 +119,7 @@ it("raiseNotYetImplementedError()", () => {
       Hologram.raiseNotYetImplementedError("abc");
     },
     Error,
-    `(HologramError) ${expectedErrorData}`
+    `__hologram__:${expectedErrorData}`
   );
 });
 

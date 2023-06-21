@@ -115,7 +115,7 @@ export default class Erlang {
   // supported arities: 1
   // start: error
   static error(reason) {
-    throw new Error(`(HologramError) ${Hologram.serialize(reason)}`);
+    throw new Error(`__hologram__:${Hologram.serialize(reason)}`);
   }
   // end: error
 

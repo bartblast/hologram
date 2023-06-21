@@ -615,7 +615,7 @@ it("error/1", () => {
       Erlang.error({a: 1, b: 2});
     },
     Error,
-    '(HologramError) {"a":1,"b":2}'
+    '__hologram__:{"a":1,"b":2}'
   );
 });
 
