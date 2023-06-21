@@ -160,7 +160,7 @@ defmodule Hologram.Compiler.Encoder do
     left_js = encode(left, context)
     right_js = encode(right, context)
 
-    "Hologram.Interpreter.dotOperator(#{left_js}, #{right_js})"
+    "Interpreter.dotOperator(#{left_js}, #{right_js})"
   end
 
   def encode(%IR.FloatType{value: value}, _context) do
