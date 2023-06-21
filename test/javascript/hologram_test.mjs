@@ -3,7 +3,6 @@
 import {
   assert,
   assertError,
-  assertNotFrozen,
   linkModules,
   unlinkModules,
 } from "../../assets/js/test_support.mjs";

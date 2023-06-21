@@ -46,8 +46,7 @@ export default class Interpreter {
       }
     }
 
-    const message =
-      "no case clause matching: " + Interpreter.inspect(condition);
+    const message = "no case clause matching: " + Hologram.inspect(condition);
 
     return Interpreter.raiseCaseClauseError(message);
   }
@@ -124,44 +123,6 @@ export default class Interpreter {
 
   static head(list) {
     return list.data[0];
-  }
-
-  // TODO: use Kernel.inspect/2 instead
-  static inspect(term) {
-    switch (term.type) {
-      // TODO: handle correctly atoms which need to be double quoted, e.g. :"1"
-      case "atom":
-        if (Type.isBoolean(term) || Type.isNil(term)) {
-          return term.value;
-        }
-        return ":" + term.value;
-
-      // TODO: case "bitstring"
-
-      case "float":
-      case "integer":
-        return term.value.toString();
-
-      case "list":
-        return (
-          "[" +
-          term.data.map((item) => Interpreter.inspect(item)).join(", ") +
-          "]"
-        );
-
-      case "string":
-        return '"' + term.value.toString() + '"';
-
-      case "tuple":
-        return (
-          "{" +
-          term.data.map((item) => Interpreter.inspect(item)).join(", ") +
-          "}"
-        );
-
-      default:
-        return Hologram.serialize(term);
-    }
   }
 
   static isMatched(left, right) {
@@ -285,7 +246,7 @@ export default class Interpreter {
   // private
   static _raiseMatchError(right) {
     const message =
-      "no match of right hand side value: " + Interpreter.inspect(right);
+      "no match of right hand side value: " + Hologram.inspect(right);
 
     return Hologram.raiseError("MatchError", message);
   }

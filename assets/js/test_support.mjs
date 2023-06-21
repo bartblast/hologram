@@ -1,6 +1,7 @@
 "use strict";
 
 import {assert} from "chai";
+import Elixir_Kernel from "./elixir/kernel.mjs";
 import Erlang from "./erlang/erlang.mjs";
 import Hologram from "./hologram.mjs";
 import sinonESM from "../node_modules/sinon/pkg/sinon-esm.js";
@@ -36,9 +37,11 @@ export function assertNotFrozen(obj) {
 export function linkModules() {
   globalThis.Hologram = Hologram;
   globalThis.Erlang = Erlang;
+  globalThis.Elixir_Kernel = Elixir_Kernel;
 }
 
 export function unlinkModules() {
   delete globalThis.Hologram;
   delete globalThis.Erlang;
+  delete globalThis.Elixir_Kernel;
 }

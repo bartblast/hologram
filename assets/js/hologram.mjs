@@ -14,6 +14,10 @@ export default class Hologram {
     });
   }
 
+  static inspect(term) {
+    return Elixir_Kernel.inspect(term, Type.list([]));
+  }
+
   static module(alias) {
     const aliasStr = alias.value;
     let prefixedAliasStr;

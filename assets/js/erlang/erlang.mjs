@@ -1,7 +1,9 @@
 "use strict";
 
+import Hologram from "../hologram.mjs";
 import Interpreter from "../interpreter.mjs";
-import Type from "../type.mjs";
+
+const Type = Hologram.Type;
 
 const Erlang = {
   // supported arities: 2
@@ -47,9 +49,9 @@ const Erlang = {
       const message =
         ":erlang.</2 currently supports only floats and integers" +
         ", left = " +
-        Interpreter.inspect(left) +
+        Hologram.inspect(left) +
         ", right = " +
-        Interpreter.inspect(right);
+        Hologram.inspect(right);
 
       Hologram.raiseInterpreterError(message);
     }
@@ -100,9 +102,9 @@ const Erlang = {
       const message =
         ":erlang.>/2 currently supports only floats and integers" +
         ", left = " +
-        Interpreter.inspect(left) +
+        Hologram.inspect(left) +
         ", right = " +
-        Interpreter.inspect(right);
+        Hologram.inspect(right);
 
       Hologram.raiseInterpreterError(message);
     }
