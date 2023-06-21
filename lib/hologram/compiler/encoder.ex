@@ -156,6 +156,13 @@ defmodule Hologram.Compiler.Encoder do
     "Interpreter.consOperator(#{encode(head, context)}, #{encode(tail, context)}))"
   end
 
+  def encode(%IR.DotOperator{left: left, right: right}, context) do
+    left_js = encode(left, context)
+    right_js = encode(right, context)
+
+    "Hologram.Interpreter.dotOperator(#{left_js}, #{right_js})"
+  end
+
   def encode(%IR.FloatType{value: value}, _context) do
     encode_primitive_type(:float, value, false)
   end

@@ -539,6 +539,16 @@ defmodule Hologram.Compiler.EncoderTest do
     end
   end
 
+  test "dot operator" do
+    ir = %IR.DotOperator{
+      left: %IR.Variable{name: :my_module},
+      right: %IR.AtomType{value: :my_key}
+    }
+
+    assert encode(ir, %Context{}) ==
+             "Hologram.Interpreter.dotOperator(vars.my_module, Type.atom(\"my_key\"))"
+  end
+
   test "float type" do
     assert encode(%IR.FloatType{value: 1.23}, %Context{}) == "Type.float(1.23)"
   end
