@@ -795,7 +795,3 @@ describe("variablePattern()", () => {
     assertFrozen(Type.variablePattern("test"));
   });
 });
-
-// it.only("test", () => {
-//   console.debug(Type.abc())
-// })
