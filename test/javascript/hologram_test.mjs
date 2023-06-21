@@ -105,6 +105,10 @@ it("raiseInterpreterError()", () => {
   );
 });
 
+it("raiseKeyError()", () => {
+  assertError(() => Hologram.raiseKeyError("abc"), "KeyError", "abc");
+});
+
 describe("serialize()", () => {
   it("serializes number to JSON", () => {
     assert.equal(Hologram.serialize(123), "123");

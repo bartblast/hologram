@@ -3,6 +3,8 @@
 import Type from "./type.mjs";
 
 export default class Hologram {
+  static Type = Type;
+
   static deserialize(json) {
     return JSON.parse(json, (_key, value) => {
       if (typeof value === "string" && /^__bigint__:-?\d+$/.test(value)) {
@@ -45,6 +47,10 @@ export default class Hologram {
 
   static raiseInterpreterError(message) {
     return Hologram.raiseError("Hologram.InterpreterError", message);
+  }
+
+  static raiseKeyError(message) {
+    return Hologram.raiseError("KeyError", message);
   }
 
   static serialize(term) {
