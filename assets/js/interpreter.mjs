@@ -4,6 +4,7 @@
 import isEqual from "lodash/isEqual.js";
 import uniqWith from "lodash/uniqWith.js";
 
+import Hologram from "./hologram.mjs";
 import Type from "./type.mjs";
 import Utils from "./utils.mjs";
 
@@ -161,7 +162,7 @@ export default class Interpreter {
         );
 
       default:
-        return JSON.stringify(term);
+        return Hologram.serialize(term);
     }
   }
 
@@ -225,26 +226,18 @@ export default class Interpreter {
   }
 
   static raiseCaseClauseError(message) {
-    return Interpreter.raiseError("CaseClauseError", message);
+    return Hologram.raiseError("CaseClauseError", message);
   }
 
   static raiseCondClauseError() {
-    return Interpreter.raiseError(
+    return Hologram.raiseError(
       "CondClauseError",
       "no cond clause evaluated to a truthy value"
     );
   }
 
-  static raiseError(type, message) {
-    throw new Error(`(${type}) ${message}`);
-  }
-
   static raiseFunctionClauseError(message) {
-    return Interpreter.raiseError("FunctionClauseError", message);
-  }
-
-  static raiseNotYetImplementedError(message) {
-    return Interpreter.raiseError("Hologram.NotYetImplementedError", message);
+    return Hologram.raiseError("FunctionClauseError", message);
   }
 
   static tail(list) {

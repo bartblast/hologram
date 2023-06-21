@@ -1415,18 +1415,6 @@ describe("raiseFunctionClauseError()", () => {
   });
 });
 
-describe("raiseNotYetImplementedError()", () => {
-  it("throws a Hologram.NotYetImplemented error with the given message", () => {
-    assert.throw(
-      () => {
-        Interpreter.raiseNotYetImplementedError("my message");
-      },
-      Error,
-      "(Hologram.NotYetImplementedError) my message"
-    );
-  });
-});
-
 describe("tail()", () => {
   it("returns the tail of a boxed list", () => {
     const list = Type.list([Type.integer(1), Type.integer(2), Type.integer(3)]);

@@ -32,8 +32,11 @@ export default class Hologram {
 
   static raiseError(aliasStr, message) {
     const errorStruct = Type.errorStruct(aliasStr, message);
-
     return Hologram.Erlang.error(errorStruct);
+  }
+
+  static raiseNotYetImplementedError(message) {
+    return Hologram.raiseError("Hologram.NotYetImplementedError", message);
   }
 
   static serialize(term) {

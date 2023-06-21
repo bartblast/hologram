@@ -96,18 +96,27 @@ describe("module()", () => {
 });
 
 it("raiseError()", () => {
-  const expectedErrorData = Hologram.serialize({
-    type: "map",
-    data: {
-      "atom(__exception__)": [Type.atom("__exception__"), Type.boolean(true)],
-      "atom(message)": [Type.atom("message"), Type.bitstring("abc")],
-      "atom(__struct__)": [Type.atom("__struct__"), Type.alias("Aaa.Bbb")],
-    },
-  });
+  const expectedErrorData = Hologram.serialize(
+    Type.errorStruct("Aaa.Bbb", "abc")
+  );
 
   assert.throw(
     () => {
       Hologram.raiseError("Aaa.Bbb", "abc");
+    },
+    Error,
+    `(HologramError) ${expectedErrorData}`
+  );
+});
+
+it("raiseNotYetImplementedError()", () => {
+  const expectedErrorData = Hologram.serialize(
+    Type.errorStruct("Hologram.NotYetImplementedError", "abc")
+  );
+
+  assert.throw(
+    () => {
+      Hologram.raiseNotYetImplementedError("abc");
     },
     Error,
     `(HologramError) ${expectedErrorData}`
