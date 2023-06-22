@@ -459,7 +459,7 @@ defmodule Hologram.Compiler.Transformer do
        ) do
     {guard, params} = List.pop_at(params_and_guard, -1)
 
-    %IR.AnonymousFunctionClause{
+    %IR.FunctionClause{
       params: transform_list(params, context),
       guard: transform(guard, context),
       body: transform(body, context)
@@ -467,7 +467,7 @@ defmodule Hologram.Compiler.Transformer do
   end
 
   defp transform_anonymous_function_clause({:->, _meta, [params, body]}, context) do
-    %IR.AnonymousFunctionClause{
+    %IR.FunctionClause{
       params: transform_list(params, context),
       guard: nil,
       body: transform(body, context)

@@ -38,7 +38,7 @@ defmodule Hologram.Compiler.TransformerTest do
       assert transform(ast, %Context{}) == %IR.AnonymousFunctionType{
                arity: 0,
                clauses: [
-                 %IR.AnonymousFunctionClause{
+                 %IR.FunctionClause{
                    params: [],
                    body: %IR.Block{
                      expressions: [%IR.AtomType{value: :expr_1}]
@@ -57,7 +57,7 @@ defmodule Hologram.Compiler.TransformerTest do
       assert %IR.AnonymousFunctionType{
                arity: 1,
                clauses: [
-                 %IR.AnonymousFunctionClause{
+                 %IR.FunctionClause{
                    params: [%IR.Variable{name: :x}]
                  }
                ]
@@ -76,7 +76,7 @@ defmodule Hologram.Compiler.TransformerTest do
       assert %IR.AnonymousFunctionType{
                arity: 2,
                clauses: [
-                 %IR.AnonymousFunctionClause{
+                 %IR.FunctionClause{
                    params: [
                      %IR.Variable{name: :x},
                      %IR.Variable{name: :y}
@@ -99,7 +99,7 @@ defmodule Hologram.Compiler.TransformerTest do
 
       assert %IR.AnonymousFunctionType{
                clauses: [
-                 %IR.AnonymousFunctionClause{
+                 %IR.FunctionClause{
                    body: %IR.Block{
                      expressions: [
                        %IR.AtomType{value: :expr_1},
@@ -128,13 +128,13 @@ defmodule Hologram.Compiler.TransformerTest do
       assert transform(ast, %Context{}) == %IR.AnonymousFunctionType{
                arity: 1,
                clauses: [
-                 %IR.AnonymousFunctionClause{
+                 %IR.FunctionClause{
                    params: [%IR.Variable{name: :x}],
                    body: %IR.Block{
                      expressions: [%IR.AtomType{value: :expr_1}]
                    }
                  },
-                 %IR.AnonymousFunctionClause{
+                 %IR.FunctionClause{
                    params: [%IR.Variable{name: :y}],
                    body: %IR.Block{
                      expressions: [%IR.AtomType{value: :expr_2}]
@@ -166,7 +166,7 @@ defmodule Hologram.Compiler.TransformerTest do
       assert transform(ast, %Context{}) == %IR.AnonymousFunctionType{
                arity: 2,
                clauses: [
-                 %IR.AnonymousFunctionClause{
+                 %IR.FunctionClause{
                    params: [
                      %IR.Variable{name: :x},
                      %IR.Variable{name: :y}
@@ -592,7 +592,7 @@ defmodule Hologram.Compiler.TransformerTest do
       assert transform(ast, %Context{}) == %IR.AnonymousFunctionType{
                arity: 2,
                clauses: [
-                 %IR.AnonymousFunctionClause{
+                 %IR.FunctionClause{
                    params: [
                      %IR.Variable{name: :holo_arg_1__},
                      %IR.Variable{name: :holo_arg_2__}
@@ -629,7 +629,7 @@ defmodule Hologram.Compiler.TransformerTest do
       assert transform(ast, %Context{}) == %IR.AnonymousFunctionType{
                arity: 2,
                clauses: [
-                 %IR.AnonymousFunctionClause{
+                 %IR.FunctionClause{
                    params: [
                      %IR.Variable{name: :holo_arg_1__},
                      %IR.Variable{name: :holo_arg_2__}
@@ -660,7 +660,7 @@ defmodule Hologram.Compiler.TransformerTest do
       assert transform(ast, %Context{}) == %IR.AnonymousFunctionType{
                arity: 4,
                clauses: [
-                 %IR.AnonymousFunctionClause{
+                 %IR.FunctionClause{
                    params: [
                      %IR.Variable{name: :holo_arg_1__},
                      %IR.Variable{name: :holo_arg_2__},
@@ -701,7 +701,7 @@ defmodule Hologram.Compiler.TransformerTest do
       assert transform(ast, %Context{}) == %IR.AnonymousFunctionType{
                arity: 4,
                clauses: [
-                 %IR.AnonymousFunctionClause{
+                 %IR.FunctionClause{
                    params: [
                      %IR.Variable{name: :holo_arg_1__},
                      %IR.Variable{name: :holo_arg_2__},
@@ -739,7 +739,7 @@ defmodule Hologram.Compiler.TransformerTest do
       assert transform(ast, %Context{}) == %IR.AnonymousFunctionType{
                arity: 3,
                clauses: [
-                 %IR.AnonymousFunctionClause{
+                 %IR.FunctionClause{
                    params: [
                      %IR.Variable{name: :holo_arg_1__},
                      %IR.Variable{name: :holo_arg_2__},

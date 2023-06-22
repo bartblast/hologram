@@ -32,14 +32,6 @@ defmodule Hologram.Compiler.Encoder do
   @spec encode(IR.t(), Context.t()) :: String.t()
   def encode(ir, context)
 
-  def encode(%IR.AnonymousFunctionClause{} = clause, context) do
-    params = encode_as_array(clause.params, %{context | pattern?: true})
-    guard = encode_closure(clause.guard, context)
-    body = encode_closure(clause.body, context)
-
-    "{params: #{params}, guard: #{guard}, body: #{body}}"
-  end
-
   def encode(%IR.AnonymousFunctionType{arity: arity, clauses: clauses}, context) do
     clauses_js = encode_as_array(clauses, context)
     "Type.anonymousFunction(#{arity}, #{clauses_js}, vars)"
@@ -165,6 +157,14 @@ defmodule Hologram.Compiler.Encoder do
 
   def encode(%IR.FloatType{value: value}, _context) do
     encode_primitive_type(:float, value, false)
+  end
+
+  def encode(%IR.FunctionClause{} = clause, context) do
+    params = encode_as_array(clause.params, %{context | pattern?: true})
+    guard = encode_closure(clause.guard, context)
+    body = encode_closure(clause.body, context)
+
+    "{params: #{params}, guard: #{guard}, body: #{body}}"
   end
 
   def encode(%IR.IntegerType{value: value}, _context) do

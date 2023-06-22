@@ -5,52 +5,12 @@ defmodule Hologram.Compiler.EncoderTest do
   alias Hologram.Compiler.Context
   alias Hologram.Compiler.IR
 
-  describe "anonymous function clause" do
-    test "without guard" do
-      ir = %IR.AnonymousFunctionClause{
-        params: [%IR.Variable{name: :x}, %IR.Variable{name: :y}],
-        guard: nil,
-        body: %IR.Block{
-          expressions: [%IR.AtomType{value: :expr_1}, %IR.AtomType{value: :expr_2}]
-        }
-      }
-
-      assert encode(ir, %Context{}) == """
-             {params: [Type.variablePattern("x"), Type.variablePattern("y")], guard: null, body: (vars) => {
-             Type.atom("expr_1");
-             return Type.atom("expr_2");
-             }}\
-             """
-    end
-
-    test "with guard" do
-      ir = %IR.AnonymousFunctionClause{
-        params: [%IR.Variable{name: :x}, %IR.Variable{name: :y}],
-        guard: %IR.RemoteFunctionCall{
-          module: %IR.AtomType{value: :erlang},
-          function: :is_integer,
-          args: [%IR.Variable{name: :x}]
-        },
-        body: %IR.Block{
-          expressions: [%IR.AtomType{value: :expr_1}, %IR.AtomType{value: :expr_2}]
-        }
-      }
-
-      assert encode(ir, %Context{}) == """
-             {params: [Type.variablePattern("x"), Type.variablePattern("y")], guard: (vars) => Erlang.is_integer(vars.x), body: (vars) => {
-             Type.atom("expr_1");
-             return Type.atom("expr_2");
-             }}\
-             """
-    end
-  end
-
   describe "anonymous function type" do
     test "with single clause" do
       ir = %IR.AnonymousFunctionType{
         arity: 2,
         clauses: [
-          %IR.AnonymousFunctionClause{
+          %IR.FunctionClause{
             params: [%IR.Variable{name: :x}],
             guard: nil,
             body: %IR.Block{
@@ -71,14 +31,14 @@ defmodule Hologram.Compiler.EncoderTest do
       ir = %IR.AnonymousFunctionType{
         arity: 2,
         clauses: [
-          %IR.AnonymousFunctionClause{
+          %IR.FunctionClause{
             params: [%IR.Variable{name: :x}],
             guard: nil,
             body: %IR.Block{
               expressions: [%IR.AtomType{value: :expr_a}]
             }
           },
-          %IR.AnonymousFunctionClause{
+          %IR.FunctionClause{
             params: [%IR.Variable{name: :y}],
             guard: nil,
             body: %IR.Block{
@@ -551,6 +511,46 @@ defmodule Hologram.Compiler.EncoderTest do
 
   test "float type" do
     assert encode(%IR.FloatType{value: 1.23}, %Context{}) == "Type.float(1.23)"
+  end
+
+  describe "function clause" do
+    test "without guard" do
+      ir = %IR.FunctionClause{
+        params: [%IR.Variable{name: :x}, %IR.Variable{name: :y}],
+        guard: nil,
+        body: %IR.Block{
+          expressions: [%IR.AtomType{value: :expr_1}, %IR.AtomType{value: :expr_2}]
+        }
+      }
+
+      assert encode(ir, %Context{}) == """
+             {params: [Type.variablePattern("x"), Type.variablePattern("y")], guard: null, body: (vars) => {
+             Type.atom("expr_1");
+             return Type.atom("expr_2");
+             }}\
+             """
+    end
+
+    test "with guard" do
+      ir = %IR.FunctionClause{
+        params: [%IR.Variable{name: :x}, %IR.Variable{name: :y}],
+        guard: %IR.RemoteFunctionCall{
+          module: %IR.AtomType{value: :erlang},
+          function: :is_integer,
+          args: [%IR.Variable{name: :x}]
+        },
+        body: %IR.Block{
+          expressions: [%IR.AtomType{value: :expr_1}, %IR.AtomType{value: :expr_2}]
+        }
+      }
+
+      assert encode(ir, %Context{}) == """
+             {params: [Type.variablePattern("x"), Type.variablePattern("y")], guard: (vars) => Erlang.is_integer(vars.x), body: (vars) => {
+             Type.atom("expr_1");
+             return Type.atom("expr_2");
+             }}\
+             """
+    end
   end
 
   test "integer type" do

@@ -6,7 +6,6 @@ defmodule Hologram.Compiler.IR do
 
   @type t ::
           IR.AnonymousFunctionCall.t()
-          | IR.AnonymousFunctionClause.t()
           | IR.AnonymousFunctionType.t()
           | IR.AtomType.t()
           | IR.BitstringSegment.t()
@@ -22,6 +21,7 @@ defmodule Hologram.Compiler.IR do
           | IR.ConsOperator.t()
           | IR.DotOperator.t()
           | IR.FloatType.t()
+          | IR.FunctionClause.t()
           | IR.FunctionDefinition.t()
           | IR.IgnoredExpression.t()
           | IR.IntegerType.t()
@@ -44,16 +44,10 @@ defmodule Hologram.Compiler.IR do
     @type t :: %__MODULE__{function: IR.t(), args: list(IR.t())}
   end
 
-  defmodule AnonymousFunctionClause do
-    defstruct [:params, :guard, :body]
-
-    @type t :: %__MODULE__{params: list(IR.t()), guard: IR.t() | nil, body: IR.Block.t()}
-  end
-
   defmodule AnonymousFunctionType do
     defstruct [:arity, :clauses]
 
-    @type t :: %__MODULE__{arity: integer, clauses: list(IR.AnonymousFunctionClause.t())}
+    @type t :: %__MODULE__{arity: integer, clauses: list(IR.FunctionClause.t())}
   end
 
   defmodule AtomType do
@@ -151,6 +145,12 @@ defmodule Hologram.Compiler.IR do
     defstruct [:value]
 
     @type t :: %__MODULE__{value: float}
+  end
+
+  defmodule FunctionClause do
+    defstruct [:params, :guard, :body]
+
+    @type t :: %__MODULE__{params: list(IR.t()), guard: IR.t() | nil, body: IR.Block.t()}
   end
 
   defmodule FunctionDefinition do
