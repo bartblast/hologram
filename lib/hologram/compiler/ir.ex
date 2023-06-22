@@ -154,14 +154,13 @@ defmodule Hologram.Compiler.IR do
   end
 
   defmodule FunctionDefinition do
-    defstruct [:name, :arity, :params, :body, :visibility]
+    defstruct [:name, :arity, :visibility, :clause]
 
     @type t :: %__MODULE__{
             name: atom,
             arity: integer,
-            params: list(IR.t()),
-            body: IR.Block.t(),
-            visibility: :public | :private
+            visibility: :public | :private,
+            clause: IR.FunctionClause.t()
           }
   end
 

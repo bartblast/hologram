@@ -180,9 +180,12 @@ defmodule Hologram.Compiler.Transformer do
     %IR.FunctionDefinition{
       name: name,
       arity: Enum.count(params),
-      params: params,
-      body: transform(body, context),
-      visibility: visibility
+      visibility: visibility,
+      clause: %IR.FunctionClause{
+        params: params,
+        guard: nil,
+        body: transform(body, context)
+      }
     }
   end
 

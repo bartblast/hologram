@@ -1265,7 +1265,8 @@ defmodule Hologram.Compiler.TransformerTest do
       # end
       ast = {:def, [line: 1], [{:my_fun, [line: 1], nil}, [do: {:__block__, [], []}]]}
 
-      assert %IR.FunctionDefinition{arity: 0, params: []} = transform(ast, %Context{})
+      assert %IR.FunctionDefinition{arity: 0, clause: %IR.FunctionClause{params: []}} =
+               transform(ast, %Context{})
     end
 
     test "single param" do
@@ -1275,8 +1276,10 @@ defmodule Hologram.Compiler.TransformerTest do
         {:def, [line: 1],
          [{:my_fun, [line: 1], [{:x, [line: 1], nil}]}, [do: {:__block__, [], []}]]}
 
-      assert %IR.FunctionDefinition{arity: 1, params: [%IR.Variable{name: :x}]} =
-               transform(ast, %Context{})
+      assert %IR.FunctionDefinition{
+               arity: 1,
+               clause: %IR.FunctionClause{params: [%IR.Variable{name: :x}]}
+             } = transform(ast, %Context{})
     end
 
     test "multiple params" do
@@ -1291,7 +1294,9 @@ defmodule Hologram.Compiler.TransformerTest do
 
       assert %IR.FunctionDefinition{
                arity: 2,
-               params: [%IR.Variable{name: :x}, %IR.Variable{name: :y}]
+               clause: %IR.FunctionClause{
+                 params: [%IR.Variable{name: :x}, %IR.Variable{name: :y}]
+               }
              } = transform(ast, %Context{})
     end
 
@@ -1300,7 +1305,8 @@ defmodule Hologram.Compiler.TransformerTest do
       # end
       ast = {:def, [line: 1], [{:my_fun, [line: 1], nil}, [do: {:__block__, [], []}]]}
 
-      assert %IR.FunctionDefinition{body: %IR.Block{expressions: []}} = transform(ast, %Context{})
+      assert %IR.FunctionDefinition{clause: %IR.FunctionClause{body: %IR.Block{expressions: []}}} =
+               transform(ast, %Context{})
     end
 
     test "single expression body" do
@@ -1309,8 +1315,11 @@ defmodule Hologram.Compiler.TransformerTest do
       # end
       ast = {:def, [line: 1], [{:my_fun, [line: 1], nil}, [do: {:__block__, [], [:expr_1]}]]}
 
-      assert %IR.FunctionDefinition{body: %IR.Block{expressions: [%IR.AtomType{value: :expr_1}]}} =
-               transform(ast, %Context{})
+      assert %IR.FunctionDefinition{
+               clause: %IR.FunctionClause{
+                 body: %IR.Block{expressions: [%IR.AtomType{value: :expr_1}]}
+               }
+             } = transform(ast, %Context{})
     end
 
     test "multiple expressions body" do
@@ -1322,8 +1331,10 @@ defmodule Hologram.Compiler.TransformerTest do
         {:def, [line: 1], [{:my_fun, [line: 1], nil}, [do: {:__block__, [], [:expr_1, :expr_2]}]]}
 
       assert %IR.FunctionDefinition{
-               body: %IR.Block{
-                 expressions: [%IR.AtomType{value: :expr_1}, %IR.AtomType{value: :expr_2}]
+               clause: %IR.FunctionClause{
+                 body: %IR.Block{
+                   expressions: [%IR.AtomType{value: :expr_1}, %IR.AtomType{value: :expr_2}]
+                 }
                }
              } = transform(ast, %Context{})
     end
