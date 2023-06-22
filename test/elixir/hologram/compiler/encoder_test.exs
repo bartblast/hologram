@@ -741,6 +741,125 @@ defmodule Hologram.Compiler.EncoderTest do
     assert encode(%IR.ModuleAttributeOperator{name: :abc?}, %Context{}) == "vars.$264abc$263"
   end
 
+  test "module definition" do
+    # defmodule Aaa.Bbb do
+    #   def fun_1(a, b) do
+    #     :erlang.+(a, b)
+    #   end
+
+    #   def fun_1(c) when :erlang.is_integer(c), do: c
+
+    #   defp fun_2(x, y) do
+    #     :erlang.*(x, y)
+    #   end
+
+    #   defp fun_2(z) when :erlang.is_float(z), do: z
+    # end
+    ir = %IR.ModuleDefinition{
+      module: %IR.AtomType{value: Aaa.Bbb},
+      body: %IR.Block{
+        expressions: [
+          %IR.FunctionDefinition{
+            name: :fun_1,
+            arity: 2,
+            visibility: :public,
+            clause: %IR.FunctionClause{
+              params: [
+                %IR.Variable{name: :a},
+                %IR.Variable{name: :b}
+              ],
+              guard: nil,
+              body: %IR.Block{
+                expressions: [
+                  %IR.RemoteFunctionCall{
+                    module: %IR.AtomType{value: :erlang},
+                    function: :+,
+                    args: [
+                      %IR.Variable{name: :a},
+                      %IR.Variable{name: :b}
+                    ]
+                  }
+                ]
+              }
+            }
+          },
+          %IR.FunctionDefinition{
+            name: :fun_1,
+            arity: 1,
+            visibility: :public,
+            clause: %IR.FunctionClause{
+              params: [%IR.Variable{name: :c}],
+              guard: %IR.RemoteFunctionCall{
+                module: %IR.AtomType{value: :erlang},
+                function: :is_integer,
+                args: [%IR.Variable{name: :c}]
+              },
+              body: %IR.Block{
+                expressions: [%IR.Variable{name: :c}]
+              }
+            }
+          },
+          %IR.FunctionDefinition{
+            name: :fun_2,
+            arity: 2,
+            visibility: :private,
+            clause: %IR.FunctionClause{
+              params: [
+                %IR.Variable{name: :x},
+                %IR.Variable{name: :y}
+              ],
+              guard: nil,
+              body: %IR.Block{
+                expressions: [
+                  %IR.RemoteFunctionCall{
+                    module: %IR.AtomType{value: :erlang},
+                    function: :*,
+                    args: [
+                      %IR.Variable{name: :x},
+                      %IR.Variable{name: :y}
+                    ]
+                  }
+                ]
+              }
+            }
+          },
+          %IR.FunctionDefinition{
+            name: :fun_2,
+            arity: 1,
+            visibility: :private,
+            clause: %IR.FunctionClause{
+              params: [%IR.Variable{name: :z}],
+              guard: %IR.RemoteFunctionCall{
+                module: %IR.AtomType{value: :erlang},
+                function: :is_float,
+                args: [%IR.Variable{name: :z}]
+              },
+              body: %IR.Block{
+                expressions: [%IR.Variable{name: :z}]
+              }
+            }
+          }
+        ]
+      }
+    }
+
+    assert encode(ir, %Context{}) == """
+
+
+           Interpreter.defineFunction("Elixir_Aaa_Bbb", "fun_1", [{params: [Type.variablePattern("a"), Type.variablePattern("b")], guard: null, body: (vars) => {
+           return Erlang.$243(vars.a, vars.b);
+           }}, {params: [Type.variablePattern("c")], guard: (vars) => Erlang.is_integer(vars.c), body: (vars) => {
+           return vars.c;
+           }}])
+
+           Interpreter.defineFunction("Elixir_Aaa_Bbb", "fun_2", [{params: [Type.variablePattern("x"), Type.variablePattern("y")], guard: null, body: (vars) => {
+           return Erlang.$242(vars.x, vars.y);
+           }}, {params: [Type.variablePattern("z")], guard: (vars) => Erlang.is_float(vars.z), body: (vars) => {
+           return vars.z;
+           }}])\
+           """
+  end
+
   test "pin operator" do
     assert encode(%IR.PinOperator{name: :abc}, %Context{}) == "vars.abc"
   end

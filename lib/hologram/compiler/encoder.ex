@@ -204,6 +204,22 @@ defmodule Hologram.Compiler.Encoder do
     encode_var("@#{name}")
   end
 
+  def encode(%IR.ModuleDefinition{module: module, body: body}, context) do
+    class_name = encode_as_class_name(module.value)
+
+    body.expressions
+    |> aggregate_module_functions()
+    |> Enum.reduce("", fn {name, clauses}, acc ->
+      clauses_js = encode_as_array(clauses, context)
+
+      """
+      #{acc}
+
+      Interpreter.defineFunction("#{class_name}", "#{name}", #{clauses_js})\
+      """
+    end)
+  end
+
   def encode(%IR.PinOperator{name: name}, _context) do
     "vars.#{name}"
   end
@@ -336,6 +352,24 @@ defmodule Hologram.Compiler.Encoder do
         "$#{digit_count}#{code_point}"
       end
     end)
+  end
+
+  defp aggregate_module_functions(exprs) do
+    exprs
+    |> Enum.reduce(%{}, fn expr, acc ->
+      case expr do
+        %IR.FunctionDefinition{name: name, clause: clause} ->
+          if acc[name] do
+            %{acc | name => [clause | acc[name]]}
+          else
+            Map.put(acc, name, [clause])
+          end
+
+        _non_function_def ->
+          acc
+      end
+    end)
+    |> Enum.map(fn {key, value} -> {key, Enum.reverse(value)} end)
   end
 
   # _ = 95
