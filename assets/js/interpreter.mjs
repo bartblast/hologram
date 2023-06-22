@@ -19,7 +19,7 @@ export default class Interpreter {
       if (
         Interpreter.isMatched(left, right) &&
         Interpreter.matchOperator(left, right, varsClone, false) &&
-        Interpreter._evaluateGuard(clause.guard, varsClone)
+        Interpreter.#evaluateGuard(clause.guard, varsClone)
       ) {
         return clause.body(varsClone);
       }
@@ -37,7 +37,7 @@ export default class Interpreter {
       if (Interpreter.isMatched(clause.head, condition)) {
         Interpreter.matchOperator(clause.head, condition, varsClone, false);
 
-        if (Interpreter._evaluateGuard(clause.guard, varsClone) === false) {
+        if (Interpreter.#evaluateGuard(clause.guard, varsClone) === false) {
           continue;
         }
         return clause.body(varsClone);
@@ -71,7 +71,7 @@ export default class Interpreter {
           );
 
           if (
-            Interpreter._evaluateGuard(generators[i].guard, varsClone) === false
+            Interpreter.#evaluateGuard(generators[i].guard, varsClone) === false
           ) {
             return acc;
           }
@@ -145,11 +145,11 @@ export default class Interpreter {
     }
 
     if (Type.isList(left) || Type.isTuple(left)) {
-      return Interpreter._isListOrTupleMatched(left, right);
+      return Interpreter.#isListOrTupleMatched(left, right);
     }
 
     if (Type.isMap(left)) {
-      return Interpreter._isMapMatched(left, right);
+      return Interpreter.#isMapMatched(left, right);
     }
 
     return Interpreter.isStrictlyEqual(left, right);
@@ -165,7 +165,7 @@ export default class Interpreter {
 
   static matchOperator(left, right, vars, assertMatches = true) {
     if (assertMatches && !Interpreter.isMatched(left, right)) {
-      Interpreter._raiseMatchError(right);
+      Interpreter.#raiseMatchError(right);
     }
 
     if (Type.isVariablePattern(left)) {
@@ -213,8 +213,7 @@ export default class Interpreter {
     return Type.list(list.data.slice(1));
   }
 
-  // private
-  static _evaluateGuard(guard, vars) {
+  static #evaluateGuard(guard, vars) {
     if (guard === null) {
       return true;
     }
@@ -222,8 +221,7 @@ export default class Interpreter {
     return Type.isTrue(guard(vars));
   }
 
-  // private
-  static _isListOrTupleMatched(left, right) {
+  static #isListOrTupleMatched(left, right) {
     const count = Interpreter.count(left);
 
     if (count !== Interpreter.count(right)) {
@@ -239,8 +237,7 @@ export default class Interpreter {
     return true;
   }
 
-  // private
-  static _isMapMatched(left, right) {
+  static #isMapMatched(left, right) {
     for (const [key, value] of Object.entries(left.data)) {
       if (
         !(key in right.data) ||
@@ -253,8 +250,7 @@ export default class Interpreter {
     return true;
   }
 
-  // private
-  static _raiseMatchError(right) {
+  static #raiseMatchError(right) {
     const message =
       "no match of right hand side value: " + Hologram.inspect(right);
 

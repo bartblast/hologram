@@ -37,7 +37,7 @@ export default class Type {
   }
 
   static bitstringSegment(value, modifiers = {}) {
-    const type = Type._getOption(modifiers, "type");
+    const type = Type.#getOption(modifiers, "type");
 
     // TODO: is this needed?
     if (type === null) {
@@ -46,10 +46,10 @@ export default class Type {
       );
     }
 
-    const size = Type._getOption(modifiers, "size");
-    const unit = Type._getOption(modifiers, "unit");
-    const signedness = Type._getOption(modifiers, "signedness");
-    const endianness = Type._getOption(modifiers, "endianness");
+    const size = Type.#getOption(modifiers, "size");
+    const unit = Type.#getOption(modifiers, "unit");
+    const signedness = Type.#getOption(modifiers, "signedness");
+    const endianness = Type.#getOption(modifiers, "endianness");
 
     return {value, type, size, unit, signedness, endianness};
   }
@@ -65,22 +65,22 @@ export default class Type {
   static encodeMapKey(boxed) {
     switch (boxed.type) {
       case "anonymous_function":
-        return Type._encodeAnonymousFunctionTypeMapKey(boxed);
+        return Type.#encodeAnonymousFunctionTypeMapKey(boxed);
 
       case "atom":
       case "float":
       case "integer":
-        return Type._encodePrimitiveTypeMapKey(boxed);
+        return Type.#encodePrimitiveTypeMapKey(boxed);
 
       case "bitstring":
-        return Type._encodeBitstringTypeMapKey(boxed);
+        return Type.#encodeBitstringTypeMapKey(boxed);
 
       case "list":
       case "tuple":
-        return Type._encodeEnumTypeMapKey(boxed);
+        return Type.#encodeEnumTypeMapKey(boxed);
 
       case "map":
-        return Type._encodeMapTypeMapKey(boxed);
+        return Type.#encodeMapTypeMapKey(boxed);
     }
   }
 
@@ -216,18 +216,15 @@ export default class Type {
     return Utils.freeze({type: "variable_pattern", name: name});
   }
 
-  // private
-  static _encodeAnonymousFunctionTypeMapKey(boxed) {
+  static #encodeAnonymousFunctionTypeMapKey(boxed) {
     return "anonymous_function(" + boxed.uniqueId + ")";
   }
 
-  // private
-  static _encodeBitstringTypeMapKey(boxed) {
+  static #encodeBitstringTypeMapKey(boxed) {
     return "bitstring(" + boxed.bits.join("") + ")";
   }
 
-  // private
-  static _encodeEnumTypeMapKey(boxed) {
+  static #encodeEnumTypeMapKey(boxed) {
     const itemsStr = boxed.data
       .map((item) => Type.encodeMapKey(item))
       .join(",");
@@ -235,8 +232,7 @@ export default class Type {
     return boxed.type + "(" + itemsStr + ")";
   }
 
-  // private
-  static _encodeMapTypeMapKey(boxed) {
+  static #encodeMapTypeMapKey(boxed) {
     const itemsStr = Object.keys(boxed.data)
       .sort()
       .map((key) => key + ":" + Type.encodeMapKey(boxed.data[key][1]))
@@ -245,13 +241,11 @@ export default class Type {
     return "map(" + itemsStr + ")";
   }
 
-  // private
-  static _encodePrimitiveTypeMapKey(boxed) {
+  static #encodePrimitiveTypeMapKey(boxed) {
     return `${boxed.type}(${boxed.value})`;
   }
 
-  // private
-  static _getOption(options, key) {
+  static #getOption(options, key) {
     return typeof options[key] !== "undefined" ? options[key] : null;
   }
 }
