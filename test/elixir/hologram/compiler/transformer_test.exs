@@ -1251,7 +1251,7 @@ defmodule Hologram.Compiler.TransformerTest do
     assert transform(ast, %Context{}) == %IR.FloatType{value: 1.0}
   end
 
-  describe "function definition" do
+  describe "function definition, without guard" do
     test "name" do
       # def my_fun do
       # end
@@ -1354,6 +1354,42 @@ defmodule Hologram.Compiler.TransformerTest do
 
       assert %IR.FunctionDefinition{visibility: :private} = transform(ast, %Context{})
     end
+  end
+
+  test "function definition, with guard" do
+    ast =
+      {:def, [line: 1],
+       [
+         {:when, [line: 1],
+          [
+            {:my_fun, [line: 1], [{:x, [line: 1], nil}, {:y, [line: 1], nil}]},
+            {{:., [line: 1], [:erlang, :is_integer]}, [line: 1], [{:x, [line: 1], nil}]}
+          ]},
+         [do: {:__block__, [], [1, 2]}]
+       ]}
+
+    assert %IR.FunctionDefinition{
+             name: :my_fun,
+             arity: 2,
+             visibility: :public,
+             clause: %IR.FunctionClause{
+               params: [
+                 %IR.Variable{name: :x},
+                 %IR.Variable{name: :y}
+               ],
+               guard: %IR.RemoteFunctionCall{
+                 module: %IR.AtomType{value: :erlang},
+                 function: :is_integer,
+                 args: [%IR.Variable{name: :x}]
+               },
+               body: %IR.Block{
+                 expressions: [
+                   %IR.IntegerType{value: 1},
+                   %IR.IntegerType{value: 2}
+                 ]
+               }
+             }
+           } = transform(ast, %Context{})
   end
 
   test "integer type" do

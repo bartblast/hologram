@@ -168,25 +168,17 @@ defmodule Hologram.Compiler.Transformer do
     %IR.FloatType{value: value}
   end
 
+  def transform(
+        {marker, _meta_1, [{:when, _meta_2, [{name, _meta_3, params}, guard]}, [do: body]]},
+        context
+      )
+      when marker in [:def, :defp] do
+    transform_function_definition(marker, name, params, guard, body, context)
+  end
+
   def transform({marker, _meta_1, [{name, _meta_2, params}, [do: body]]}, context)
       when marker in [:def, :defp] do
-    params =
-      params
-      |> List.wrap()
-      |> transform_list(context)
-
-    visibility = if marker == :def, do: :public, else: :private
-
-    %IR.FunctionDefinition{
-      name: name,
-      arity: Enum.count(params),
-      visibility: visibility,
-      clause: %IR.FunctionClause{
-        params: params,
-        guard: nil,
-        body: transform(body, context)
-      }
-    }
+    transform_function_definition(marker, name, params, nil, body, context)
   end
 
   def transform(value, _context) when is_integer(value) do
@@ -610,6 +602,35 @@ defmodule Hologram.Compiler.Transformer do
     args = build_function_capture_args(arity, meta)
     ast = {:fn, meta, [{:->, meta, [args, {:__block__, [], [{function, meta, args}]}]}]}
     transform(ast, context)
+  end
+
+  defp transform_function_definition(marker, name, params, guard, body, context) do
+    visibility =
+      if marker == :def do
+        :public
+      else
+        :private
+      end
+
+    guard_ir =
+      if guard do
+        transform(guard, context)
+      else
+        nil
+      end
+
+    params_ir = transform_list(params, context)
+
+    %IR.FunctionDefinition{
+      name: name,
+      arity: Enum.count(params_ir),
+      visibility: visibility,
+      clause: %IR.FunctionClause{
+        params: params_ir,
+        guard: guard_ir,
+        body: transform(body, context)
+      }
+    }
   end
 
   defp transform_list(list, context) do
