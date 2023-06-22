@@ -1,8 +1,8 @@
 "use strict";
 
 import Hologram from "../hologram.mjs";
-import Interpreter from "../interpreter.mjs";
 
+const Interpreter = Hologram.Interpreter;
 const Type = Hologram.Type;
 
 const Erlang = {
