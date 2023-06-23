@@ -25,7 +25,7 @@ export default class Interpreter {
       }
     }
 
-    // TODO: Include module and function info, once context for error reporting is implemented.
+    // TODO: include parent module and function info, once context for error reporting is implemented.
     const message = "no function clause matching in anonymous fn/" + fun.arity;
     return Interpreter.#raiseFunctionClauseError(message);
   }
@@ -255,5 +255,13 @@ export default class Interpreter {
       "no match of right hand side value: " + Hologram.inspect(right);
 
     return Hologram.raiseError("MatchError", message);
+  }
+
+  static #raiseUndefinedFunctionError(moduleName, functionName, arity) {
+    // TODO: include info about available alternative arities
+    const inspectedModuleName = Hologram.inspectedModuleName(moduleName);
+    const message = `function ${inspectedModuleName}.${functionName}/${arity} is undefined or private`;
+
+    return Hologram.raiseError("UndefinedFunctionError", message);
   }
 }
