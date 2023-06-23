@@ -20,6 +20,19 @@ export default class Hologram {
     return Elixir_Kernel.inspect(term, Type.list([]));
   }
 
+  static inspectModuleName(moduleName) {
+    if (moduleName.startsWith("Elixir_")) {
+      return moduleName.slice(7).replace("_", ".");
+    }
+
+    if (moduleName === "Erlang") {
+      return ":erlang";
+    }
+
+    // starts with "Erlang_"
+    return ":" + moduleName.slice(7).toLowerCase();
+  }
+
   static module(alias) {
     const aliasStr = alias.value;
     let prefixedAliasStr;
@@ -29,13 +42,14 @@ export default class Hologram {
     } else {
       prefixedAliasStr =
         aliasStr.charAt(0).toLowerCase() === aliasStr.charAt(0)
-          ? "Erlang_" + aliasStr.charAt(0).toUpperCase() + aliasStr.slice(1)
+          ? "Erlang_" + aliasStr
           : aliasStr;
     }
 
-    const className = prefixedAliasStr.replace(/\./g, "_");
+    const moduleName = prefixedAliasStr.replace(/\./g, "_");
+    console.debug(moduleName);
 
-    return globalThis[className];
+    return globalThis[moduleName];
   }
 
   static raiseArgumentError(message) {
