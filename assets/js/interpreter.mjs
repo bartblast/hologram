@@ -121,6 +121,42 @@ export default class Interpreter {
     return enumerable.data.length;
   }
 
+  static defineFunction(moduleName, functionName, clauses) {
+    if (!globalThis[moduleName]) {
+      globalThis[moduleName] = {};
+    }
+
+    globalThis[moduleName][functionName] = function () {
+      const right = Type.list(arguments);
+      const arity = arguments.length;
+
+      if (!Interpreter.#isArityDefined(clauses, arity)) {
+        Interpreter.#raiseUndefinedFunctionError(
+          moduleName,
+          functionName,
+          arity
+        );
+      }
+
+      for (const clause of clauses) {
+        const vars = {};
+        const left = Type.list(clause.params);
+
+        if (
+          Interpreter.isMatched(left, right) &&
+          Interpreter.matchOperator(left, right, vars, false) &&
+          Interpreter.#evaluateGuard(clause.guard, vars)
+        ) {
+          return clause.body(vars);
+        }
+      }
+
+      const inspectedModuleName = Hologram.inspectModuleName(moduleName);
+      const message = `no function clause matching in ${inspectedModuleName}.${functionName}/${arity}`;
+      Interpreter.#raiseFunctionClauseError(message);
+    };
+  }
+
   static dotOperator(left, right) {
     // if left argument is a boxed atom, treat the operator as a remote function call
     if (Type.isAtom(left)) {
@@ -128,7 +164,7 @@ export default class Interpreter {
     }
 
     // otherwise treat the operator as map key access
-    return Erlang_Maps.get(right, left);
+    return Erlang_maps.get(right, left);
   }
 
   static head(list) {
@@ -217,6 +253,10 @@ export default class Interpreter {
     return Type.isTrue(guard(vars));
   }
 
+  static #isArityDefined(clauses, arity) {
+    return clauses.some((clause) => clause.params.length === arity);
+  }
+
   static #isListOrTupleMatched(left, right) {
     const count = Interpreter.count(left);
 
@@ -259,7 +299,7 @@ export default class Interpreter {
 
   static #raiseUndefinedFunctionError(moduleName, functionName, arity) {
     // TODO: include info about available alternative arities
-    const inspectedModuleName = Hologram.inspectedModuleName(moduleName);
+    const inspectedModuleName = Hologram.inspectModuleName(moduleName);
     const message = `function ${inspectedModuleName}.${functionName}/${arity} is undefined or private`;
 
     return Hologram.raiseError("UndefinedFunctionError", message);

@@ -205,6 +205,8 @@ defmodule Hologram.Compiler.Encoder do
   end
 
   def encode(%IR.ModuleDefinition{module: module, body: body}, context) do
+    class_name = encode_as_class_name(module.value)
+
     body.expressions
     |> aggregate_module_functions()
     |> Enum.reduce("", fn {function_name, clauses}, acc ->
@@ -213,7 +215,7 @@ defmodule Hologram.Compiler.Encoder do
       """
       #{acc}
 
-      Interpreter.defineFunction("#{module.value}", "#{function_name}", #{clauses_js})\
+      Interpreter.defineFunction("#{class_name}", "#{function_name}", #{clauses_js})\
       """
     end)
   end
