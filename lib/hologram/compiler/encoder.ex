@@ -354,18 +354,16 @@ defmodule Hologram.Compiler.Encoder do
 
   defp aggregate_module_functions(exprs) do
     exprs
-    |> Enum.reduce(%{}, fn expr, acc ->
-      case expr do
-        %IR.FunctionDefinition{name: name, clause: clause} ->
-          if acc[name] do
-            %{acc | name => [clause | acc[name]]}
-          else
-            Map.put(acc, name, [clause])
-          end
+    |> Enum.reduce(%{}, fn
+      %IR.FunctionDefinition{name: name, clause: clause}, acc ->
+        if acc[name] do
+          %{acc | name => [clause | acc[name]]}
+        else
+          Map.put(acc, name, [clause])
+        end
 
-        _non_function_def ->
-          acc
-      end
+      _expr, acc ->
+        acc
     end)
     |> Enum.map(fn {key, value} -> {key, Enum.reverse(value)} end)
   end
