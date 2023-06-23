@@ -9,16 +9,16 @@ import Type from "./type.mjs";
 import Utils from "./utils.mjs";
 
 export default class Interpreter {
-  static callAnonymousFunction(fun, args) {
-    const right = Type.list(args);
+  static callAnonymousFunction(fun, argsArray) {
+    const args = Type.list(argsArray);
 
     for (const clause of fun.clauses) {
       const varsClone = Utils.clone(fun.vars);
-      const left = Type.list(clause.params);
+      const pattern = Type.list(clause.params);
 
       if (
-        Interpreter.isMatched(left, right) &&
-        Interpreter.matchOperator(left, right, varsClone, false) &&
+        Interpreter.isMatched(pattern, args) &&
+        Interpreter.matchOperator(pattern, args, varsClone, false) &&
         Interpreter.#evaluateGuard(clause.guard, varsClone)
       ) {
         return clause.body(varsClone);
@@ -127,7 +127,7 @@ export default class Interpreter {
     }
 
     globalThis[moduleName][functionName] = function () {
-      const right = Type.list(arguments);
+      const args = Type.list(arguments);
       const arity = arguments.length;
 
       if (!Interpreter.#isArityDefined(clauses, arity)) {
@@ -140,11 +140,11 @@ export default class Interpreter {
 
       for (const clause of clauses) {
         const vars = {};
-        const left = Type.list(clause.params);
+        const pattern = Type.list(clause.params);
 
         if (
-          Interpreter.isMatched(left, right) &&
-          Interpreter.matchOperator(left, right, vars, false) &&
+          Interpreter.isMatched(pattern, args) &&
+          Interpreter.matchOperator(pattern, args, vars, false) &&
           Interpreter.#evaluateGuard(clause.guard, vars)
         ) {
           return clause.body(vars);
