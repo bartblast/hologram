@@ -1365,14 +1365,6 @@ it("raiseCondClauseError()", () => {
   );
 });
 
-it("raiseFunctionClauseError()", () => {
-  assertError(
-    () => Interpreter.raiseFunctionClauseError("abc"),
-    "FunctionClauseError",
-    "abc"
-  );
-});
-
 describe("tail()", () => {
   it("returns the tail of a boxed list", () => {
     const list = Type.list([Type.integer(1), Type.integer(2), Type.integer(3)]);

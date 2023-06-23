@@ -27,7 +27,7 @@ export default class Interpreter {
 
     // TODO: Include module and function info, once context for error reporting is implemented.
     const message = "no function clause matching in anonymous fn/" + fun.arity;
-    return Interpreter.raiseFunctionClauseError(message);
+    return Interpreter.#raiseFunctionClauseError(message);
   }
 
   static case(condition, clauses, vars) {
@@ -205,10 +205,6 @@ export default class Interpreter {
     );
   }
 
-  static raiseFunctionClauseError(message) {
-    return Hologram.raiseError("FunctionClauseError", message);
-  }
-
   static tail(list) {
     return Type.list(list.data.slice(1));
   }
@@ -248,6 +244,10 @@ export default class Interpreter {
     }
 
     return true;
+  }
+
+  static #raiseFunctionClauseError(message) {
+    return Hologram.raiseError("FunctionClauseError", message);
   }
 
   static #raiseMatchError(right) {
