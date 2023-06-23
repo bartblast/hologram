@@ -91,7 +91,7 @@ describe("moduleName()", () => {
   });
 });
 
-it.only("module()", () => {
+it("module()", () => {
   assert.equal(Hologram.module("maps"), Erlang_maps);
 });
 
