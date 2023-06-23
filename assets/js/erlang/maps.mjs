@@ -4,7 +4,7 @@ import Hologram from "../hologram.mjs";
 
 const Type = Hologram.Type;
 
-const Erlang_Maps = {
+const Erlang_maps = {
   // supported arities: 2
   // start: get
   get: (key, map) => {
@@ -27,4 +27,4 @@ const Erlang_Maps = {
   // end: get
 };
 
-export default Erlang_Maps;
+export default Erlang_maps;

@@ -34,7 +34,11 @@ export default class Hologram {
   }
 
   static module(alias) {
-    const aliasStr = alias.value;
+    return globalThis[Hologram.moduleName(alias)];
+  }
+
+  static moduleName(alias) {
+    const aliasStr = Type.isAtom(alias) ? alias.value : alias;
     let prefixedAliasStr;
 
     if (aliasStr === "erlang") {
@@ -46,10 +50,7 @@ export default class Hologram {
           : aliasStr;
     }
 
-    const moduleName = prefixedAliasStr.replace(/\./g, "_");
-    console.debug(moduleName);
-
-    return globalThis[moduleName];
+    return prefixedAliasStr.replace(/\./g, "_");
   }
 
   static raiseArgumentError(message) {

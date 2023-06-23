@@ -63,42 +63,36 @@ describe("inspectModuleName()", () => {
   });
 });
 
-describe("module()", () => {
-  let Erlang_aaa_bbb, Elixir_Aaa_Bbb_Ccc;
-
-  before(() => {
-    Erlang_aaa_bbb = class {};
-    globalThis.Erlang_aaa_bbb = Erlang_aaa_bbb;
-
-    Elixir_Aaa_Bbb_Ccc = class {};
-    globalThis.Elixir_Aaa_Bbb_Ccc = Elixir_Aaa_Bbb_Ccc;
-  });
-
-  after(() => {
-    delete globalThis.Erlang_aaa_bbb;
-    delete globalThis.Elixir_Aaa_Bbb_Ccc;
-  });
-
-  it("returns class for alias having lowercase starting letter", () => {
+describe("moduleName()", () => {
+  it("returns module name for alias having lowercase starting letter", () => {
     const alias = Type.atom("aaa_bbb");
-    const result = Hologram.module(alias);
+    const result = Hologram.moduleName(alias);
 
-    assert.equal(result, Erlang_aaa_bbb);
+    assert.equal(result, "Erlang_aaa_bbb");
   });
 
-  it("returns class for alias not having lowercase starting letter", () => {
-    const alias = Type.atom("Elixir.Aaa.Bbb.Ccc");
-    const result = Hologram.module(alias);
+  it("returns module name for alias not having lowercase starting letter", () => {
+    const alias = Type.atom("Elixir.Aaa.Bbb");
+    const result = Hologram.moduleName(alias);
 
-    assert.equal(result, Elixir_Aaa_Bbb_Ccc);
+    assert.equal(result, "Elixir_Aaa_Bbb");
   });
 
-  it("returns class for :erlang alias", () => {
+  it("returns module name for :erlang alias", () => {
     const alias = Type.atom("erlang");
-    const result = Hologram.module(alias);
+    const result = Hologram.moduleName(alias);
 
-    assert.equal(result, Erlang);
+    assert.equal(result, "Erlang");
   });
+
+  it("works with string arguments", () => {
+    const result = Hologram.moduleName("Elixir.Aaa.Bbb");
+    assert.equal(result, "Elixir_Aaa_Bbb");
+  });
+});
+
+it.only("module()", () => {
+  assert.equal(Hologram.module("maps"), Erlang_maps);
 });
 
 it("raiseArgumentError()", () => {

@@ -7,7 +7,7 @@ import {
   unlinkModules,
 } from "../../../assets/js/test_support.mjs";
 
-import Erlang_Maps from "../../../assets/js/erlang/maps.mjs";
+import Erlang_maps from "../../../assets/js/erlang/maps.mjs";
 import Type from "../../../assets/js/type.mjs";
 
 before(() => linkModules());
@@ -23,7 +23,7 @@ describe("get/2", () => {
       [key, value],
     ]);
 
-    const result = Erlang_Maps.get(key, map);
+    const result = Erlang_maps.get(key, map);
 
     assert.deepStrictEqual(result, value);
   });
@@ -31,7 +31,7 @@ describe("get/2", () => {
   it("raises BadMapError if the map param is not a boxed map", () => {
     const expectedMessage = "expected a map, got: 1";
     assertError(
-      () => Erlang_Maps.get(Type.atom("a"), Type.integer(1)),
+      () => Erlang_maps.get(Type.atom("a"), Type.integer(1)),
       "BadMapError",
       expectedMessage
     );
@@ -40,7 +40,7 @@ describe("get/2", () => {
   it("raises KeyError if the map doesn't contain the given key", () => {
     const expectedMessage = 'key :a not found in {"type":"map","data":{}}';
     assertError(
-      () => Erlang_Maps.get(Type.atom("a"), Type.map([])),
+      () => Erlang_maps.get(Type.atom("a"), Type.map([])),
       "KeyError",
       expectedMessage
     );
