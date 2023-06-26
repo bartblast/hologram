@@ -194,29 +194,16 @@ export default class Interpreter {
   static matchOperator(left, right, vars, assertMatches = true) {
     if (assertMatches && !Interpreter.isMatched(left, right)) {
       Interpreter.#raiseMatchError(right);
-    }
-
-    if (Type.isVariablePattern(left)) {
+    } else if (Type.isVariablePattern(left)) {
       vars[left.name] = right;
-      return right;
-    }
-
-    if (Type.isMatchPlaceholder(left)) {
-      return right;
-    }
-
-    if (Type.isList(left) || Type.isTuple(left)) {
-      const count = Elixir_Enum.count(left).value;
-
-      for (let i = 0; i < count; ++i) {
-        Interpreter.matchOperator(left.data[i], right.data[i], vars, false);
-      }
-    }
-
-    if (Type.isMap(left)) {
-      for (const [key, value] of Object.entries(left.data)) {
-        Interpreter.matchOperator(value[1], right.data[key][1], vars, false);
-      }
+    } else if (Type.isMatchPlaceholder(left)) {
+      // do nothing
+    } else if (Type.isConsPattern(left, right)) {
+      Interpreter.#matchConsPattern(left, right, vars);
+    } else if (Type.isList(left) || Type.isTuple(left)) {
+      Interpreter.#matchListOrTuple(left, right, vars);
+    } else if (Type.isMap(left)) {
+      Interpreter.#matchMap(left, right, vars);
     }
 
     return right;
@@ -275,6 +262,28 @@ export default class Interpreter {
     }
 
     return true;
+  }
+
+  static #matchConsPattern(left, right, vars) {
+    const rightHead = Erlang.hd(right);
+    const rightTail = Erlang.tl(right);
+
+    Interpreter.matchOperator(left.head, rightHead, vars, false);
+    Interpreter.matchOperator(left.tail, rightTail, vars, false);
+  }
+
+  static #matchListOrTuple(left, right, vars) {
+    const count = Elixir_Enum.count(left).value;
+
+    for (let i = 0; i < count; ++i) {
+      Interpreter.matchOperator(left.data[i], right.data[i], vars, false);
+    }
+  }
+
+  static #matchMap(left, right, vars) {
+    for (const [key, value] of Object.entries(left.data)) {
+      Interpreter.matchOperator(value[1], right.data[key][1], vars, false);
+    }
   }
 
   static #raiseCaseClauseError(message) {
