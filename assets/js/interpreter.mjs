@@ -229,10 +229,6 @@ export default class Interpreter {
     );
   }
 
-  static tail(list) {
-    return Type.list(list.data.slice(1));
-  }
-
   static #evaluateGuard(guard, vars) {
     if (guard === null) {
       return true;

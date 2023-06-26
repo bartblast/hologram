@@ -702,12 +702,28 @@ describe("length/1", () => {
   });
 });
 
-describe("tl/1", () => {
-  it("proxies to Interpreter.tail/1", () => {
+describe("tl/1()", () => {
+  it("returns the tail of a boxed list", () => {
     const list = Type.list([Type.integer(1), Type.integer(2), Type.integer(3)]);
     const result = Erlang.tl(list);
-    const expected = Interpreter.tail(list);
+    const expected = Type.list([Type.integer(2), Type.integer(3)]);
 
     assert.deepStrictEqual(result, expected);
+  });
+
+  it("raises ArgumentError if the argument is an empty boxed list", () => {
+    assertError(
+      () => Erlang.tl(Type.list([])),
+      "ArgumentError",
+      "errors were found at the given arguments:\n\n* 1st argument: not a nonempty list"
+    );
+  });
+
+  it("raises ArgumentError if the argument is not a boxed list", () => {
+    assertError(
+      () => Erlang.tl(Type.integer(123)),
+      "ArgumentError",
+      "errors were found at the given arguments:\n\n* 1st argument: not a nonempty list"
+    );
   });
 });
