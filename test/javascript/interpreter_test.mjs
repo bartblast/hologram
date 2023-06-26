@@ -1448,20 +1448,3 @@ describe("matchOperator()", () => {
     assert.deepStrictEqual(vars, {a: Type.integer(2)});
   });
 });
-
-it("raiseCaseClauseError()", () => {
-  assertError(
-    () => Interpreter.raiseCaseClauseError("abc"),
-    "CaseClauseError",
-    "abc"
-  );
-});
-
-it("raiseCondClauseError()", () => {
-  const expectedMessage = "no cond clause evaluated to a truthy value";
-  assertError(
-    () => Interpreter.raiseCondClauseError(),
-    "CondClauseError",
-    expectedMessage
-  );
-});

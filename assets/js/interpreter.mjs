@@ -48,7 +48,7 @@ export default class Interpreter {
 
     const message = "no case clause matching: " + Hologram.inspect(condition);
 
-    return Interpreter.raiseCaseClauseError(message);
+    return Interpreter.#raiseCaseClauseError(message);
   }
 
   static comprehension(generators, filters, collectable, unique, mapper, vars) {
@@ -106,7 +106,7 @@ export default class Interpreter {
       }
     }
 
-    return Interpreter.raiseCondClauseError();
+    return Interpreter.#raiseCondClauseError();
   }
 
   static consOperator(left, right) {
@@ -218,17 +218,6 @@ export default class Interpreter {
     return right;
   }
 
-  static raiseCaseClauseError(message) {
-    return Hologram.raiseError("CaseClauseError", message);
-  }
-
-  static raiseCondClauseError() {
-    return Hologram.raiseError(
-      "CondClauseError",
-      "no cond clause evaluated to a truthy value"
-    );
-  }
-
   static #evaluateGuard(guard, vars) {
     if (guard === null) {
       return true;
@@ -268,6 +257,17 @@ export default class Interpreter {
     }
 
     return true;
+  }
+
+  static #raiseCaseClauseError(message) {
+    return Hologram.raiseError("CaseClauseError", message);
+  }
+
+  static #raiseCondClauseError() {
+    return Hologram.raiseError(
+      "CondClauseError",
+      "no cond clause evaluated to a truthy value"
+    );
   }
 
   static #raiseFunctionClauseError(message) {
