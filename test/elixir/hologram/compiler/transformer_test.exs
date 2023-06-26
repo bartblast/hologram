@@ -1865,6 +1865,21 @@ defmodule Hologram.Compiler.TransformerTest do
              }
     end
 
+    test "without cons operator, in pattern, with variable pattern instead of module" do
+      # %x{a: 1, b: 2}
+      ast = {:%, [line: 1], [{:x, [line: 1], nil}, {:%{}, [line: 1], [a: 1, b: 2]}]}
+
+      context = %Context{pattern?: true}
+
+      assert transform(ast, context) == %IR.MapType{
+               data: [
+                 {%IR.AtomType{value: :__struct__}, %IR.Variable{name: :x}},
+                 {%IR.AtomType{value: :a}, %IR.IntegerType{value: 1}},
+                 {%IR.AtomType{value: :b}, %IR.IntegerType{value: 2}}
+               ]
+             }
+    end
+
     test "without cons operator, in pattern, with match placeholder instead of module" do
       # %_{a: 1, b: 2}
       ast = {:%, [line: 1], [{:_, [line: 1], nil}, {:%{}, [line: 1], [a: 1, b: 2]}]}
