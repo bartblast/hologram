@@ -54,8 +54,6 @@ export default class Hologram {
   }
 
   static raiseArgumentError(message) {
-    console.log("ERROR:");
-    console.debug(message);
     return Hologram.raiseError("ArgumentError", message);
   }
 
