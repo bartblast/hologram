@@ -22,10 +22,6 @@ export default class Type {
     return Utils.freeze({type: "component", className: className, props: props, children: children})
   }
 
-  static consOperatorPattern(head, tail) {
-    return Utils.freeze({type: "cons_operator_pattern", head: head, tail: tail})
-  }
-
   static decodeKey(key) {
     const regex = /^~([a-z]+)\[(.*)\]$/
     const matches = regex.exec(key)
