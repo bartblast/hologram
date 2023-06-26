@@ -671,12 +671,19 @@ describe("is_number/1", () => {
 });
 
 describe("length/1", () => {
-  it("proxies to Interpreter.count/1 and casts the result to boxed integer", () => {
+  it("returns the number of items in a boxed list", () => {
     const list = Type.list([Type.integer(1), Type.integer(2)]);
     const result = Erlang.length(list);
-    const expected = Type.integer(Interpreter.count(list));
 
-    assert.deepStrictEqual(result, expected);
+    assert.deepStrictEqual(result, Type.integer(2));
+  });
+
+  it("raises ArgumentError if the argument is not a boxed list", () => {
+    assertError(
+      () => Erlang.length(Type.integer(123)),
+      "ArgumentError",
+      "errors were found at the given arguments:\n\n* 1st argument: not a list"
+    );
   });
 });
 

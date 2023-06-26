@@ -159,7 +159,13 @@ const Erlang = {
   // supported arities: 1
   // start: length
   length: (list) => {
-    return Type.integer(Interpreter.count(list));
+    if (!Type.isList(list)) {
+      Hologram.raiseArgumentError(
+        "errors were found at the given arguments:\n\n* 1st argument: not a list"
+      );
+    }
+
+    return Type.integer(list.data.length);
   },
   // end: length
 

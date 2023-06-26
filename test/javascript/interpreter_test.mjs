@@ -899,13 +899,6 @@ describe("consOperator()", () => {
 });
 
 describe("count()", () => {
-  it("returns the number of items in a boxed list", () => {
-    const list = Type.list([Type.integer(1), Type.integer(2)]);
-    const result = Interpreter.count(list);
-
-    assert.equal(result, 2);
-  });
-
   it("returns the number of items in a boxed map", () => {
     const map = Type.map([
       [Type.atom("a"), Type.integer(1)],
