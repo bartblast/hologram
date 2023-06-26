@@ -1093,6 +1093,35 @@ describe("isMatched()", () => {
     });
   });
 
+  describe("cons pattern", () => {
+    let left;
+
+    beforeEach(() => {
+      left = Type.consPattern(
+        Type.variablePattern("h"),
+        Type.variablePattern("t")
+      );
+    });
+
+    it("is matching right argument which is a non-empty boxed list", () => {
+      const right = Type.list([
+        Type.integer(1),
+        Type.integer(2),
+        Type.integer(3),
+      ]);
+
+      assert.isTrue(Interpreter.isMatched(left, right));
+    });
+
+    it("isn't matching right argument which is not a boxed list", () => {
+      assert.isFalse(Interpreter.isMatched(left, Type.integer(123)));
+    });
+
+    it("isn't matching right argument which is an empty boxed list", () => {
+      assert.isFalse(Interpreter.isMatched(left, Type.list([])));
+    });
+  });
+
   describe("float type", () => {
     it("is matching another boxed float having the same value", () => {
       const left = Type.float(1.23);

@@ -164,6 +164,10 @@ export default class Interpreter {
       return true;
     }
 
+    if (Type.isConsPattern(left)) {
+      return Interpreter.#isConsPatternMatched(left, right);
+    }
+
     if (left.type !== right.type) {
       return false;
     }
@@ -228,6 +232,20 @@ export default class Interpreter {
 
   static #isArityDefined(clauses, arity) {
     return clauses.some((clause) => clause.params.length === arity);
+  }
+
+  static #isConsPatternMatched(left, right) {
+    if (!Type.isList(right) || Erlang.length(right).value === 0n) {
+      return false;
+    }
+
+    const rightHead = Erlang.hd(right);
+    const rightTail = Erlang.tl(right);
+
+    return (
+      Interpreter.isMatched(left.head, rightHead) &&
+      Interpreter.isMatched(left.tail, rightTail)
+    );
   }
 
   static #isListOrTupleMatched(left, right) {
