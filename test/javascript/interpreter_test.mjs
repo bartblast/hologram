@@ -1069,15 +1069,6 @@ describe("dotOperator()", () => {
   });
 });
 
-describe("head()", () => {
-  it("returns the first item in a boxed list", () => {
-    const list = Type.list([Type.integer(1), Type.integer(2), Type.integer(3)]);
-    const result = Interpreter.head(list);
-
-    assert.deepStrictEqual(result, Type.integer(1));
-  });
-});
-
 describe("isMatched()", () => {
   describe("atom type", () => {
     it("is matching another boxed atom having the same value", () => {

@@ -124,7 +124,13 @@ const Erlang = {
   // supported arities: 1
   // start: hd
   hd: (list) => {
-    return Interpreter.head(list);
+    if (!Type.isList(list) || Erlang.length(list).value === 0n) {
+      Hologram.raiseArgumentError(
+        "errors were found at the given arguments:\n\n* 1st argument: not a nonempty list"
+      );
+    }
+
+    return list.data[0];
   },
   // end: hd
 

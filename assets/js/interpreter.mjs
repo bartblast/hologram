@@ -159,10 +159,6 @@ export default class Interpreter {
     return Erlang_maps.get(right, left);
   }
 
-  static head(list) {
-    return list.data[0];
-  }
-
   static isMatched(left, right) {
     if (Type.isVariablePattern(left) || Type.isMatchPlaceholder(left)) {
       return true;
