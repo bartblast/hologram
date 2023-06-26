@@ -113,14 +113,6 @@ export default class Interpreter {
     return Type.list([left].concat(right.data));
   }
 
-  static count(enumerable) {
-    if (Type.isMap(enumerable)) {
-      return Object.keys(enumerable.data).length;
-    }
-
-    return enumerable.data.length;
-  }
-
   static defineFunction(moduleName, functionName, clauses) {
     if (!globalThis[moduleName]) {
       globalThis[moduleName] = {};
@@ -214,7 +206,7 @@ export default class Interpreter {
     }
 
     if (Type.isList(left) || Type.isTuple(left)) {
-      const count = Interpreter.count(left);
+      const count = Elixir_Enum.count(left).value;
 
       for (let i = 0; i < count; ++i) {
         Interpreter.matchOperator(left.data[i], right.data[i], vars, false);
@@ -258,9 +250,9 @@ export default class Interpreter {
   }
 
   static #isListOrTupleMatched(left, right) {
-    const count = Interpreter.count(left);
+    const count = Elixir_Enum.count(left).value;
 
-    if (count !== Interpreter.count(right)) {
+    if (count !== Elixir_Enum.count(right).value) {
       return false;
     }
 

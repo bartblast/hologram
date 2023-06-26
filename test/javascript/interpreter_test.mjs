@@ -298,24 +298,27 @@ describe("case()", () => {
 });
 
 describe("comprehension()", () => {
-  let vars;
+  let vars, prevIntoFun, prevToListFun;
 
   beforeEach(() => {
     vars = {a: Type.integer(1), b: Type.integer(2)};
 
-    globalThis.Elixir_Enum = {
-      into: function (enumerable, _collectable) {
-        return enumerable;
-      },
+    prevIntoFun = globalThis.Elixir_Enum.into;
 
-      to_list: function (enumerable) {
-        return enumerable;
-      },
+    globalThis.Elixir_Enum.into = (enumerable, _collectable) => {
+      return enumerable;
+    };
+
+    prevToListFun = globalThis.Elixir_Enum.to_list;
+
+    globalThis.Elixir_Enum.to_list = (enumerable) => {
+      return enumerable;
     };
   });
 
   afterEach(() => {
-    delete globalThis.Elixir_Enum;
+    globalThis.Elixir_Enum.into = prevIntoFun;
+    globalThis.Elixir_Enum.to_list = prevToListFun;
   });
 
   describe("generator", () => {
@@ -895,26 +898,6 @@ describe("consOperator()", () => {
     ]);
 
     assert.deepStrictEqual(result, expected);
-  });
-});
-
-describe("count()", () => {
-  it("returns the number of items in a boxed map", () => {
-    const map = Type.map([
-      [Type.atom("a"), Type.integer(1)],
-      [Type.atom("b"), Type.integer(2)],
-    ]);
-
-    const result = Interpreter.count(map);
-
-    assert.equal(result, 2);
-  });
-
-  it("returns the number of items in a boxed tuple", () => {
-    const tuple = Type.tuple([Type.integer(1), Type.integer(2)]);
-    const result = Interpreter.count(tuple);
-
-    assert.equal(result, 2);
   });
 });
 
