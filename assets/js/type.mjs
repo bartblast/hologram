@@ -187,6 +187,10 @@ export default class Type {
     return {type: "map", data: hashTableWithMetadata};
   }
 
+  static matchPattern(left, right) {
+    return {type: "match_pattern", left: left, right: right};
+  }
+
   static matchPlaceholder() {
     return Utils.freeze({type: "match_placeholder"});
   }

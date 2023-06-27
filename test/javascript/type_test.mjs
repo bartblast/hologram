@@ -708,6 +708,17 @@ describe("map", () => {
   });
 });
 
+it("matchPattern()", () => {
+  const result = Type.matchPattern(Type.integer(1), Type.integer(2));
+  const expected = {
+    type: "match_pattern",
+    left: Type.integer(1),
+    right: Type.integer(2),
+  };
+
+  assert.deepStrictEqual(result, expected);
+});
+
 describe("matchPlaceholder()", () => {
   it("returns boxed matched placeholder", () => {
     assert.deepStrictEqual(Type.matchPlaceholder(), {
