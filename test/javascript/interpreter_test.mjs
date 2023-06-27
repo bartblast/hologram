@@ -1551,4 +1551,70 @@ describe.only("matchOperator()", () => {
       );
     });
   });
+
+  describe("list type", () => {
+    let list1;
+
+    beforeEach(() => {
+      list1 = Type.list([Type.integer(1), Type.integer(2)]);
+    });
+
+    it("left list == right list", () => {
+      const result = Interpreter.matchOperator(list1, list1, vars);
+
+      assert.deepStrictEqual(result, list1);
+      assert.deepStrictEqual(vars, {a: Type.integer(9)});
+    });
+
+    it("left list != right list", () => {
+      const list2 = Type.list([Type.integer(1), Type.integer(3)]);
+
+      assertError(
+        () => Interpreter.matchOperator(list1, list2, vars),
+        "MatchError",
+        "no match of right hand side value: [1, 3]"
+      );
+    });
+
+    it("left list != right non-list", () => {
+      assertError(
+        () => Interpreter.matchOperator(list1, Type.atom("abc"), vars),
+        "MatchError",
+        "no match of right hand side value: :abc"
+      );
+    });
+  });
+
+  describe("tuple type", () => {
+    let tuple1;
+
+    beforeEach(() => {
+      tuple1 = Type.tuple([Type.integer(1), Type.integer(2)]);
+    });
+
+    it("left tuple == right tuple", () => {
+      const result = Interpreter.matchOperator(tuple1, tuple1, vars);
+
+      assert.deepStrictEqual(result, tuple1);
+      assert.deepStrictEqual(vars, {a: Type.integer(9)});
+    });
+
+    it("left tuple != right tuple", () => {
+      const tuple2 = Type.tuple([Type.integer(1), Type.integer(3)]);
+
+      assertError(
+        () => Interpreter.matchOperator(tuple1, tuple2, vars),
+        "MatchError",
+        "no match of right hand side value: {1, 3}"
+      );
+    });
+
+    it("left tuple != right non-tuple", () => {
+      assertError(
+        () => Interpreter.matchOperator(tuple1, Type.atom("abc"), vars),
+        "MatchError",
+        "no match of right hand side value: :abc"
+      );
+    });
+  });
 });

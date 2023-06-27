@@ -215,6 +215,16 @@ export default class Interpreter {
         throw new Error("__match_error__");
       }
 
+      if (Type.isList(left) || Type.isTuple(left)) {
+        const count = Elixir_Enum.count(left).value;
+
+        for (let i = 0; i < count; ++i) {
+          Interpreter.matchOperator(left.data[i], right.data[i], vars, false);
+        }
+
+        return right;
+      }
+
       if (!Interpreter.isStrictlyEqual(left, right)) {
         throw new Error("__match_error__");
       }
@@ -290,14 +300,6 @@ export default class Interpreter {
 
     Interpreter.matchOperator(left.head, rightHead, vars, false);
     Interpreter.matchOperator(left.tail, rightTail, vars, false);
-  }
-
-  static #matchListOrTuple(left, right, vars) {
-    const count = Elixir_Enum.count(left).value;
-
-    for (let i = 0; i < count; ++i) {
-      Interpreter.matchOperator(left.data[i], right.data[i], vars, false);
-    }
   }
 
   static #matchMap(left, right, vars) {
