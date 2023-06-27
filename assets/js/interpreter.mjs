@@ -211,6 +211,10 @@ export default class Interpreter {
 
   static matchOperator(left, right, vars, rootMatchOperator = true) {
     try {
+      if (Type.isMatchPlaceholder(left)) {
+        return right;
+      }
+
       if (left.type !== right.type) {
         throw new Error("__match_error__");
       }
