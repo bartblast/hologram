@@ -1491,6 +1491,37 @@ describe.only("matchOperator()", () => {
     vars = {a: Type.integer(9)};
   });
 
+  describe("atom type", () => {
+    it("left atom == right atom", () => {
+      const result = Interpreter.matchOperator(
+        Type.atom("abc"),
+        Type.atom("abc"),
+        vars
+      );
+
+      assert.deepStrictEqual(result, Type.atom("abc"));
+      assert.deepStrictEqual(vars, {a: Type.integer(9)});
+    });
+
+    it("left atom != right atom", () => {
+      assertError(
+        () =>
+          Interpreter.matchOperator(Type.atom("abc"), Type.atom("xyz"), vars),
+        "MatchError",
+        "no match of right hand side value: :xyz"
+      );
+    });
+
+    it("left atom != right non-atom", () => {
+      assertError(
+        () =>
+          Interpreter.matchOperator(Type.atom("abc"), Type.integer(2), vars),
+        "MatchError",
+        "no match of right hand side value: 2"
+      );
+    });
+  });
+
   describe("integer type", () => {
     it("left integer == right integer", () => {
       const result = Interpreter.matchOperator(
@@ -1508,6 +1539,15 @@ describe.only("matchOperator()", () => {
         () => Interpreter.matchOperator(Type.integer(2), Type.integer(3), vars),
         "MatchError",
         "no match of right hand side value: 3"
+      );
+    });
+
+    it("left integer != right non-integer", () => {
+      assertError(
+        () =>
+          Interpreter.matchOperator(Type.integer(2), Type.atom("abc"), vars),
+        "MatchError",
+        "no match of right hand side value: :abc"
       );
     });
   });
