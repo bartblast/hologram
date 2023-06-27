@@ -540,6 +540,7 @@ describe("isMatchPattern()", () => {
     const result = Type.isMatchPattern(
       Type.matchPattern(Type.integer(1), Type.integer(2))
     );
+
     assert.isTrue(result);
   });
 
