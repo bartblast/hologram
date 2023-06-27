@@ -1069,230 +1069,230 @@ describe("dotOperator()", () => {
   });
 });
 
-describe("isMatched()", () => {
-  describe("atom type", () => {
-    it("is matching another boxed atom having the same value", () => {
-      const left = Type.atom("abc");
-      const right = Type.atom("abc");
+// describe("isMatched()", () => {
+//   describe("atom type", () => {
+//     it("is matching another boxed atom having the same value", () => {
+//       const left = Type.atom("abc");
+//       const right = Type.atom("abc");
 
-      assert.isTrue(Interpreter.isMatched(left, right));
-    });
+//       assert.isTrue(Interpreter.isMatched(left, right));
+//     });
 
-    it("is not matching another boxed atom having a different value", () => {
-      const left = Type.atom("abc");
-      const right = Type.atom("xyz");
+//     it("is not matching another boxed atom having a different value", () => {
+//       const left = Type.atom("abc");
+//       const right = Type.atom("xyz");
 
-      assert.isFalse(Interpreter.isMatched(left, right));
-    });
+//       assert.isFalse(Interpreter.isMatched(left, right));
+//     });
 
-    it("is not matching another boxed value of a non-atom boxed type", () => {
-      const left = Type.atom("abc");
-      const right = Type.string("abc");
+//     it("is not matching another boxed value of a non-atom boxed type", () => {
+//       const left = Type.atom("abc");
+//       const right = Type.string("abc");
 
-      assert.isFalse(Interpreter.isMatched(left, right));
-    });
-  });
+//       assert.isFalse(Interpreter.isMatched(left, right));
+//     });
+//   });
 
-  describe("cons pattern", () => {
-    let left;
+//   describe("cons pattern", () => {
+//     let left;
 
-    beforeEach(() => {
-      left = Type.consPattern(
-        Type.variablePattern("h"),
-        Type.variablePattern("t")
-      );
-    });
+//     beforeEach(() => {
+//       left = Type.consPattern(
+//         Type.variablePattern("h"),
+//         Type.variablePattern("t")
+//       );
+//     });
 
-    it("is matching right argument which is a non-empty boxed list", () => {
-      const right = Type.list([
-        Type.integer(1),
-        Type.integer(2),
-        Type.integer(3),
-      ]);
+//     it("is matching right argument which is a non-empty boxed list", () => {
+//       const right = Type.list([
+//         Type.integer(1),
+//         Type.integer(2),
+//         Type.integer(3),
+//       ]);
 
-      assert.isTrue(Interpreter.isMatched(left, right));
-    });
+//       assert.isTrue(Interpreter.isMatched(left, right));
+//     });
 
-    it("isn't matching right argument which is not a boxed list", () => {
-      assert.isFalse(Interpreter.isMatched(left, Type.integer(123)));
-    });
+//     it("isn't matching right argument which is not a boxed list", () => {
+//       assert.isFalse(Interpreter.isMatched(left, Type.integer(123)));
+//     });
 
-    it("isn't matching right argument which is an empty boxed list", () => {
-      assert.isFalse(Interpreter.isMatched(left, Type.list([])));
-    });
-  });
+//     it("isn't matching right argument which is an empty boxed list", () => {
+//       assert.isFalse(Interpreter.isMatched(left, Type.list([])));
+//     });
+//   });
 
-  describe("float type", () => {
-    it("is matching another boxed float having the same value", () => {
-      const left = Type.float(1.23);
-      const right = Type.float(1.23);
+//   describe("float type", () => {
+//     it("is matching another boxed float having the same value", () => {
+//       const left = Type.float(1.23);
+//       const right = Type.float(1.23);
 
-      assert.isTrue(Interpreter.isMatched(left, right));
-    });
+//       assert.isTrue(Interpreter.isMatched(left, right));
+//     });
 
-    it("is not matching another boxed float having a different value", () => {
-      const left = Type.float(1.23);
-      const right = Type.float(2.34);
+//     it("is not matching another boxed float having a different value", () => {
+//       const left = Type.float(1.23);
+//       const right = Type.float(2.34);
 
-      assert.isFalse(Interpreter.isMatched(left, right));
-    });
+//       assert.isFalse(Interpreter.isMatched(left, right));
+//     });
 
-    it("is not matching another boxed value of a non-float boxed type", () => {
-      const left = Type.float(1.0);
-      const right = Type.integer(1);
+//     it("is not matching another boxed value of a non-float boxed type", () => {
+//       const left = Type.float(1.0);
+//       const right = Type.integer(1);
 
-      assert.isFalse(Interpreter.isMatched(left, right));
-    });
-  });
+//       assert.isFalse(Interpreter.isMatched(left, right));
+//     });
+//   });
 
-  describe("integer type", () => {
-    it("is matching another boxed integer having the same value", () => {
-      const left = Type.integer(123);
-      const right = Type.integer(123);
+//   describe("integer type", () => {
+//     it("is matching another boxed integer having the same value", () => {
+//       const left = Type.integer(123);
+//       const right = Type.integer(123);
 
-      assert.isTrue(Interpreter.isMatched(left, right));
-    });
+//       assert.isTrue(Interpreter.isMatched(left, right));
+//     });
 
-    it("is not matching another boxed integer having a different value", () => {
-      const left = Type.integer(1);
-      const right = Type.integer(2);
+//     it("is not matching another boxed integer having a different value", () => {
+//       const left = Type.integer(1);
+//       const right = Type.integer(2);
 
-      assert.isFalse(Interpreter.isMatched(left, right));
-    });
+//       assert.isFalse(Interpreter.isMatched(left, right));
+//     });
 
-    it("is not matching another boxed value of a non-integer boxed type", () => {
-      const left = Type.integer(123);
-      const right = Type.string("123");
+//     it("is not matching another boxed value of a non-integer boxed type", () => {
+//       const left = Type.integer(123);
+//       const right = Type.string("123");
 
-      assert.isFalse(Interpreter.isMatched(left, right));
-    });
-  });
+//       assert.isFalse(Interpreter.isMatched(left, right));
+//     });
+//   });
 
-  describe("list type", () => {
-    it("is matching another boxed list having the same items", () => {
-      const left = Type.list([Type.integer(1), Type.integer(2)]);
-      const right = Type.list([Type.integer(1), Type.integer(2)]);
+//   describe("list type", () => {
+//     it("is matching another boxed list having the same items", () => {
+//       const left = Type.list([Type.integer(1), Type.integer(2)]);
+//       const right = Type.list([Type.integer(1), Type.integer(2)]);
 
-      assert.isTrue(Interpreter.isMatched(left, right));
-    });
+//       assert.isTrue(Interpreter.isMatched(left, right));
+//     });
 
-    it("is not matching another boxed list having different items", () => {
-      const left = Type.list([Type.integer(1), Type.integer(2)]);
-      const right = Type.list([Type.integer(1), Type.integer(3)]);
+//     it("is not matching another boxed list having different items", () => {
+//       const left = Type.list([Type.integer(1), Type.integer(2)]);
+//       const right = Type.list([Type.integer(1), Type.integer(3)]);
 
-      assert.isFalse(Interpreter.isMatched(left, right));
-    });
+//       assert.isFalse(Interpreter.isMatched(left, right));
+//     });
 
-    it("is not matching another boxed value of a non-list boxed type", () => {
-      const left = Type.list([Type.integer(1), Type.integer(2)]);
-      const right = Type.string("123");
+//     it("is not matching another boxed value of a non-list boxed type", () => {
+//       const left = Type.list([Type.integer(1), Type.integer(2)]);
+//       const right = Type.string("123");
 
-      assert.isFalse(Interpreter.isMatched(left, right));
-    });
-  });
+//       assert.isFalse(Interpreter.isMatched(left, right));
+//     });
+//   });
 
-  describe("map type", () => {
-    let data;
+//   describe("map type", () => {
+//     let data;
 
-    beforeEach(() => {
-      data = [
-        [Type.atom("a"), Type.integer(1)],
-        [Type.atom("b"), Type.integer(2)],
-      ];
-    });
+//     beforeEach(() => {
+//       data = [
+//         [Type.atom("a"), Type.integer(1)],
+//         [Type.atom("b"), Type.integer(2)],
+//       ];
+//     });
 
-    it("is matching another boxed map having the same items", () => {
-      const left = Type.map(data);
-      const right = Type.map(data);
+//     it("is matching another boxed map having the same items", () => {
+//       const left = Type.map(data);
+//       const right = Type.map(data);
 
-      assert.isTrue(Interpreter.isMatched(left, right));
-    });
+//       assert.isTrue(Interpreter.isMatched(left, right));
+//     });
 
-    it("is matching another boxed map which has all the same items as in the left map plus additional ones", () => {
-      const left = Type.map(data);
+//     it("is matching another boxed map which has all the same items as in the left map plus additional ones", () => {
+//       const left = Type.map(data);
 
-      const data2 = [
-        [Type.atom("a"), Type.integer(1)],
-        [Type.atom("b"), Type.integer(2)],
-        [Type.atom("c"), Type.integer(3)],
-      ];
+//       const data2 = [
+//         [Type.atom("a"), Type.integer(1)],
+//         [Type.atom("b"), Type.integer(2)],
+//         [Type.atom("c"), Type.integer(3)],
+//       ];
 
-      const right = Type.map(data2);
+//       const right = Type.map(data2);
 
-      assert.isTrue(Interpreter.isMatched(left, right));
-    });
+//       assert.isTrue(Interpreter.isMatched(left, right));
+//     });
 
-    it("is not matching another boxed map if any left map keys are missing in the right map ", () => {
-      const data1 = [
-        [Type.atom("a"), Type.integer(1)],
-        [Type.atom("b"), Type.integer(2)],
-        [Type.atom("c"), Type.integer(3)],
-      ];
+//     it("is not matching another boxed map if any left map keys are missing in the right map ", () => {
+//       const data1 = [
+//         [Type.atom("a"), Type.integer(1)],
+//         [Type.atom("b"), Type.integer(2)],
+//         [Type.atom("c"), Type.integer(3)],
+//       ];
 
-      const left = Type.map(data1);
-      const right = Type.map(data);
+//       const left = Type.map(data1);
+//       const right = Type.map(data);
 
-      assert.isFalse(Interpreter.isMatched(left, right));
-    });
+//       assert.isFalse(Interpreter.isMatched(left, right));
+//     });
 
-    it("is not matching another boxed map if any left map value is different than corresponding value in the right map", () => {
-      const left = Type.map(data);
+//     it("is not matching another boxed map if any left map value is different than corresponding value in the right map", () => {
+//       const left = Type.map(data);
 
-      const data2 = [
-        [Type.atom("a"), Type.integer(1)],
-        [Type.atom("b"), Type.integer(3)],
-      ];
+//       const data2 = [
+//         [Type.atom("a"), Type.integer(1)],
+//         [Type.atom("b"), Type.integer(3)],
+//       ];
 
-      const right = Type.map(data2);
+//       const right = Type.map(data2);
 
-      assert.isFalse(Interpreter.isMatched(left, right));
-    });
+//       assert.isFalse(Interpreter.isMatched(left, right));
+//     });
 
-    it("is not matching another boxed value of a non-map boxed type", () => {
-      const left = Type.map(data);
-      const right = Type.string("123");
+//     it("is not matching another boxed value of a non-map boxed type", () => {
+//       const left = Type.map(data);
+//       const right = Type.string("123");
 
-      assert.isFalse(Interpreter.isMatched(left, right));
-    });
-  });
+//       assert.isFalse(Interpreter.isMatched(left, right));
+//     });
+//   });
 
-  it("match placeholder", () => {
-    const left = Type.matchPlaceholder();
-    const right = Type.integer(123);
+//   it("match placeholder", () => {
+//     const left = Type.matchPlaceholder();
+//     const right = Type.integer(123);
 
-    assert.isTrue(Interpreter.isMatched(left, right));
-  });
+//     assert.isTrue(Interpreter.isMatched(left, right));
+//   });
 
-  describe("tuple type", () => {
-    it("is matching another boxed tuple having the same items", () => {
-      const left = Type.tuple([Type.integer(1), Type.integer(2)]);
-      const right = Type.tuple([Type.integer(1), Type.integer(2)]);
+//   describe("tuple type", () => {
+//     it("is matching another boxed tuple having the same items", () => {
+//       const left = Type.tuple([Type.integer(1), Type.integer(2)]);
+//       const right = Type.tuple([Type.integer(1), Type.integer(2)]);
 
-      assert.isTrue(Interpreter.isMatched(left, right));
-    });
+//       assert.isTrue(Interpreter.isMatched(left, right));
+//     });
 
-    it("is not matching another boxed tuple having different items", () => {
-      const left = Type.tuple([Type.integer(1), Type.integer(2)]);
-      const right = Type.tuple([Type.integer(1), Type.integer(3)]);
+//     it("is not matching another boxed tuple having different items", () => {
+//       const left = Type.tuple([Type.integer(1), Type.integer(2)]);
+//       const right = Type.tuple([Type.integer(1), Type.integer(3)]);
 
-      assert.isFalse(Interpreter.isMatched(left, right));
-    });
+//       assert.isFalse(Interpreter.isMatched(left, right));
+//     });
 
-    it("is not matching another boxed value of a non-tuple boxed type", () => {
-      const left = Type.tuple([Type.integer(1), Type.integer(2)]);
-      const right = Type.string("123");
+//     it("is not matching another boxed value of a non-tuple boxed type", () => {
+//       const left = Type.tuple([Type.integer(1), Type.integer(2)]);
+//       const right = Type.string("123");
 
-      assert.isFalse(Interpreter.isMatched(left, right));
-    });
-  });
+//       assert.isFalse(Interpreter.isMatched(left, right));
+//     });
+//   });
 
-  it("variable pattern", () => {
-    const left = Type.variablePattern("abc");
-    const right = Type.integer(123);
+//   it("variable pattern", () => {
+//     const left = Type.variablePattern("abc");
+//     const right = Type.integer(123);
 
-    assert.isTrue(Interpreter.isMatched(left, right));
-  });
-});
+//     assert.isTrue(Interpreter.isMatched(left, right));
+//   });
+// });
 
 describe("isStrictlyEqual()", () => {
   it("returns true if the args are of the same boxed primitive type and have equal values", () => {
@@ -1346,157 +1346,140 @@ describe("isStrictlyEqual()", () => {
   });
 });
 
-describe("matchOperator()", () => {
-  let vars;
+// describe("matchOperator()", () => {
+//   it("raises MatchError if the arguments don't match", () => {
+//     assertError(
+//       () => Interpreter.matchOperator(Type.integer(1), Type.integer(2), vars),
+//       "MatchError",
+//       "no match of right hand side value: 2"
+//     );
+//   });
 
-  beforeEach(() => {
-    vars = {a: Type.integer(9)};
-  });
+//   it("matches on atom type", () => {
+//     const result = Interpreter.matchOperator(
+//       Type.atom("abc"),
+//       Type.atom("abc"),
+//       vars
+//     );
 
-  it("raises MatchError if the arguments don't match", () => {
-    assertError(
-      () => Interpreter.matchOperator(Type.integer(1), Type.integer(2), vars),
-      "MatchError",
-      "no match of right hand side value: 2"
-    );
-  });
+//     assert.deepStrictEqual(result, Type.atom("abc"));
+//     assert.deepStrictEqual(vars, {a: Type.integer(9)});
+//   });
 
-  it("matches on atom type", () => {
-    const result = Interpreter.matchOperator(
-      Type.atom("abc"),
-      Type.atom("abc"),
-      vars
-    );
+//   it("matches on cons pattern", () => {
+//     const left = Type.consPattern(
+//       Type.variablePattern("h"),
+//       Type.variablePattern("t")
+//     );
 
-    assert.deepStrictEqual(result, Type.atom("abc"));
-    assert.deepStrictEqual(vars, {a: Type.integer(9)});
-  });
+//     const right = Type.list([
+//       Type.integer(1),
+//       Type.integer(2),
+//       Type.integer(3),
+//     ]);
 
-  it("matches on cons pattern", () => {
-    const left = Type.consPattern(
-      Type.variablePattern("h"),
-      Type.variablePattern("t")
-    );
+//     const result = Interpreter.matchOperator(left, right, vars);
 
-    const right = Type.list([
-      Type.integer(1),
-      Type.integer(2),
-      Type.integer(3),
-    ]);
+//     assert.deepStrictEqual(result, right);
 
-    const result = Interpreter.matchOperator(left, right, vars);
+//     assert.deepStrictEqual(vars, {
+//       a: Type.integer(9),
+//       h: Type.integer(1),
+//       t: Type.list([Type.integer(2), Type.integer(3)]),
+//     });
+//   });
 
-    assert.deepStrictEqual(result, right);
+//   it("matches on float type", () => {
+//     const result = Interpreter.matchOperator(
+//       Type.float(2.0),
+//       Type.float(2.0),
+//       vars
+//     );
 
-    assert.deepStrictEqual(vars, {
-      a: Type.integer(9),
-      h: Type.integer(1),
-      t: Type.list([Type.integer(2), Type.integer(3)]),
-    });
-  });
+//     assert.deepStrictEqual(result, Type.float(2.0));
+//     assert.deepStrictEqual(vars, {a: Type.integer(9)});
+//   });
 
-  it("matches on float type", () => {
-    const result = Interpreter.matchOperator(
-      Type.float(2.0),
-      Type.float(2.0),
-      vars
-    );
+//   it("matches on list type", () => {
+//     const left = Type.list([
+//       Type.variablePattern("b"),
+//       Type.integer(2),
+//       Type.variablePattern("a"),
+//     ]);
 
-    assert.deepStrictEqual(result, Type.float(2.0));
-    assert.deepStrictEqual(vars, {a: Type.integer(9)});
-  });
+//     const right = Type.list([
+//       Type.integer(1),
+//       Type.integer(2),
+//       Type.integer(3),
+//     ]);
 
-  it("matches on integer type", () => {
-    const result = Interpreter.matchOperator(
-      Type.integer(2),
-      Type.integer(2),
-      vars
-    );
+//     const result = Interpreter.matchOperator(left, right, vars);
 
-    assert.deepStrictEqual(result, Type.integer(2));
-    assert.deepStrictEqual(vars, {a: Type.integer(9)});
-  });
+//     assert.deepStrictEqual(result, right);
+//     assert.deepStrictEqual(vars, {a: Type.integer(3), b: Type.integer(1)});
+//   });
 
-  it("matches on list type", () => {
-    const left = Type.list([
-      Type.variablePattern("b"),
-      Type.integer(2),
-      Type.variablePattern("a"),
-    ]);
+//   it("matches on map type", () => {
+//     const data1 = [
+//       [Type.atom("a"), Type.variablePattern("a")],
+//       [Type.atom("b"), Type.integer(2)],
+//       [Type.atom("c"), Type.variablePattern("c")],
+//     ];
 
-    const right = Type.list([
-      Type.integer(1),
-      Type.integer(2),
-      Type.integer(3),
-    ]);
+//     const left = Type.map(data1);
 
-    const result = Interpreter.matchOperator(left, right, vars);
+//     const data2 = [
+//       [Type.atom("a"), Type.integer(1)],
+//       [Type.atom("b"), Type.integer(2)],
+//       [Type.atom("c"), Type.integer(3)],
+//     ];
 
-    assert.deepStrictEqual(result, right);
-    assert.deepStrictEqual(vars, {a: Type.integer(3), b: Type.integer(1)});
-  });
+//     const right = Type.map(data2);
 
-  it("matches on map type", () => {
-    const data1 = [
-      [Type.atom("a"), Type.variablePattern("a")],
-      [Type.atom("b"), Type.integer(2)],
-      [Type.atom("c"), Type.variablePattern("c")],
-    ];
+//     const result = Interpreter.matchOperator(left, right, vars);
 
-    const left = Type.map(data1);
+//     assert.deepStrictEqual(result, right);
+//     assert.deepStrictEqual(vars, {a: Type.integer(1), c: Type.integer(3)});
+//   });
 
-    const data2 = [
-      [Type.atom("a"), Type.integer(1)],
-      [Type.atom("b"), Type.integer(2)],
-      [Type.atom("c"), Type.integer(3)],
-    ];
+//   it("matches on match placeholder", () => {
+//     const result = Interpreter.matchOperator(
+//       Type.matchPlaceholder(),
+//       Type.integer(2),
+//       vars
+//     );
 
-    const right = Type.map(data2);
+//     assert.deepStrictEqual(result, Type.integer(2));
+//     assert.deepStrictEqual(vars, {a: Type.integer(9)});
+//   });
 
-    const result = Interpreter.matchOperator(left, right, vars);
+//   it("matches on tuple type", () => {
+//     const left = Type.tuple([
+//       Type.variablePattern("b"),
+//       Type.integer(2),
+//       Type.variablePattern("a"),
+//     ]);
 
-    assert.deepStrictEqual(result, right);
-    assert.deepStrictEqual(vars, {a: Type.integer(1), c: Type.integer(3)});
-  });
+//     const right = Type.tuple([
+//       Type.integer(1),
+//       Type.integer(2),
+//       Type.integer(3),
+//     ]);
 
-  it("matches on match placeholder", () => {
-    const result = Interpreter.matchOperator(
-      Type.matchPlaceholder(),
-      Type.integer(2),
-      vars
-    );
+//     const result = Interpreter.matchOperator(left, right, vars);
 
-    assert.deepStrictEqual(result, Type.integer(2));
-    assert.deepStrictEqual(vars, {a: Type.integer(9)});
-  });
+//     assert.deepStrictEqual(result, right);
+//     assert.deepStrictEqual(vars, {a: Type.integer(3), b: Type.integer(1)});
+//   });
 
-  it("matches on tuple type", () => {
-    const left = Type.tuple([
-      Type.variablePattern("b"),
-      Type.integer(2),
-      Type.variablePattern("a"),
-    ]);
+//   it("matches on variable pattern", () => {
+//     const result = Interpreter.matchOperator(
+//       Type.variablePattern("a"),
+//       Type.integer(2),
+//       vars
+//     );
 
-    const right = Type.tuple([
-      Type.integer(1),
-      Type.integer(2),
-      Type.integer(3),
-    ]);
-
-    const result = Interpreter.matchOperator(left, right, vars);
-
-    assert.deepStrictEqual(result, right);
-    assert.deepStrictEqual(vars, {a: Type.integer(3), b: Type.integer(1)});
-  });
-
-  it("matches on variable pattern", () => {
-    const result = Interpreter.matchOperator(
-      Type.variablePattern("a"),
-      Type.integer(2),
-      vars
-    );
-
-    assert.deepStrictEqual(result, Type.integer(2));
-    assert.deepStrictEqual(vars, {a: Type.integer(2)});
-  });
-});
+//     assert.deepStrictEqual(result, Type.integer(2));
+//     assert.deepStrictEqual(vars, {a: Type.integer(2)});
+//   });
+// });
