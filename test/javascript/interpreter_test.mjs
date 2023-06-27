@@ -1483,3 +1483,32 @@ describe("isStrictlyEqual()", () => {
 //     assert.deepStrictEqual(vars, {a: Type.integer(2)});
 //   });
 // });
+
+describe.only("matchOperator()", () => {
+  let vars;
+
+  beforeEach(() => {
+    vars = {a: Type.integer(9)};
+  });
+
+  describe("integer type", () => {
+    it("left integer == right integer", () => {
+      const result = Interpreter.matchOperator(
+        Type.integer(2),
+        Type.integer(2),
+        vars
+      );
+
+      assert.deepStrictEqual(result, Type.integer(2));
+      assert.deepStrictEqual(vars, {a: Type.integer(9)});
+    });
+
+    it("left integer != right integer", () => {
+      assertError(
+        () => Interpreter.matchOperator(Type.integer(2), Type.integer(3), vars),
+        "MatchError",
+        "no match of right hand side value: 3"
+      );
+    });
+  });
+});

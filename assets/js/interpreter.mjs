@@ -209,6 +209,26 @@ export default class Interpreter {
   //   return right;
   // }
 
+  static matchOperator(left, right, vars, rootMatchOperator = true) {
+    try {
+      if (left.type !== right.type) {
+        throw new Error("__match_error__");
+      }
+
+      if (!Interpreter.isStrictlyEqual(left, right)) {
+        throw new Error("__match_error__");
+      }
+
+      return right;
+    } catch {
+      if (rootMatchOperator) {
+        Interpreter.#raiseMatchError(right);
+      } else {
+        throw error;
+      }
+    }
+  }
+
   static #evaluateGuard(guard, vars) {
     if (guard === null) {
       return true;
