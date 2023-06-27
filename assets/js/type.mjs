@@ -144,6 +144,10 @@ export default class Type {
     return boxed.type === "map";
   }
 
+  static isMatchPattern(boxed) {
+    return boxed.type === "match_pattern";
+  }
+
   static isMatchPlaceholder(boxed) {
     return boxed.type === "match_placeholder";
   }
