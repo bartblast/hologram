@@ -1093,35 +1093,6 @@ describe("dotOperator()", () => {
 //     });
 //   });
 
-//   describe("cons pattern", () => {
-//     let left;
-
-//     beforeEach(() => {
-//       left = Type.consPattern(
-//         Type.variablePattern("h"),
-//         Type.variablePattern("t")
-//       );
-//     });
-
-//     it("is matching right argument which is a non-empty boxed list", () => {
-//       const right = Type.list([
-//         Type.integer(1),
-//         Type.integer(2),
-//         Type.integer(3),
-//       ]);
-
-//       assert.isTrue(Interpreter.isMatched(left, right));
-//     });
-
-//     it("isn't matching right argument which is not a boxed list", () => {
-//       assert.isFalse(Interpreter.isMatched(left, Type.integer(123)));
-//     });
-
-//     it("isn't matching right argument which is an empty boxed list", () => {
-//       assert.isFalse(Interpreter.isMatched(left, Type.list([])));
-//     });
-//   });
-
 //   describe("float type", () => {
 //     it("is matching another boxed float having the same value", () => {
 //       const left = Type.float(1.23);
@@ -1366,29 +1337,6 @@ describe("isStrictlyEqual()", () => {
 //     assert.deepStrictEqual(vars, {a: Type.integer(9)});
 //   });
 
-//   it("matches on cons pattern", () => {
-//     const left = Type.consPattern(
-//       Type.variablePattern("h"),
-//       Type.variablePattern("t")
-//     );
-
-//     const right = Type.list([
-//       Type.integer(1),
-//       Type.integer(2),
-//       Type.integer(3),
-//     ]);
-
-//     const result = Interpreter.matchOperator(left, right, vars);
-
-//     assert.deepStrictEqual(result, right);
-
-//     assert.deepStrictEqual(vars, {
-//       a: Type.integer(9),
-//       h: Type.integer(1),
-//       t: Type.list([Type.integer(2), Type.integer(3)]),
-//     });
-//   });
-
 //   it("matches on float type", () => {
 //     const result = Interpreter.matchOperator(
 //       Type.float(2.0),
@@ -1473,7 +1421,7 @@ describe("isStrictlyEqual()", () => {
 //   });
 // });
 
-describe.only("matchOperator()", () => {
+describe("matchOperator()", () => {
   let vars;
 
   beforeEach(() => {
@@ -1507,6 +1455,124 @@ describe.only("matchOperator()", () => {
           Interpreter.matchOperator(Type.atom("abc"), Type.integer(2), vars),
         "MatchError",
         "no match of right hand side value: 2"
+      );
+    });
+  });
+
+  describe("cons pattern", () => {
+    let left, right;
+
+    beforeEach(() => {
+      left = Type.consPattern(
+        Type.variablePattern("h"),
+        Type.variablePattern("t")
+      );
+
+      right = Type.list([Type.integer(1), Type.integer(2), Type.integer(3)]);
+    });
+
+    it("left cons pattern == right list, cons pattern head and tail are variables", () => {
+      const result = Interpreter.matchOperator(left, right, vars);
+      assert.deepStrictEqual(result, right);
+
+      assert.deepStrictEqual(vars, {
+        __matchedVars__: {
+          h: Type.integer(1),
+          t: Type.list([Type.integer(2), Type.integer(3)]),
+        },
+        a: Type.integer(9),
+        h: Type.integer(1),
+        t: Type.list([Type.integer(2), Type.integer(3)]),
+      });
+    });
+
+    it("left cons pattern == right list, cons pattern head is variable, tail is literal", () => {
+      const left = Type.consPattern(
+        Type.variablePattern("h"),
+        Type.list([Type.integer(2), Type.integer(3)])
+      );
+
+      const result = Interpreter.matchOperator(left, right, vars);
+      assert.deepStrictEqual(result, right);
+
+      assert.deepStrictEqual(vars, {
+        __matchedVars__: {
+          h: Type.integer(1),
+        },
+        a: Type.integer(9),
+        h: Type.integer(1),
+      });
+    });
+
+    it("left cons pattern == right list, cons pattern head is literal, tail is variable", () => {
+      const left = Type.consPattern(Type.integer(1), Type.variablePattern("t"));
+
+      const result = Interpreter.matchOperator(left, right, vars);
+      assert.deepStrictEqual(result, right);
+
+      assert.deepStrictEqual(vars, {
+        __matchedVars__: {
+          t: Type.list([Type.integer(2), Type.integer(3)]),
+        },
+        a: Type.integer(9),
+        t: Type.list([Type.integer(2), Type.integer(3)]),
+      });
+    });
+
+    it("left cons pattern == right list, cons pattern head and tail are literals", () => {
+      const left = Type.consPattern(
+        Type.integer(1),
+        Type.list([Type.integer(2), Type.integer(3)])
+      );
+
+      const result = Interpreter.matchOperator(left, right, vars);
+      assert.deepStrictEqual(result, right);
+
+      assert.deepStrictEqual(vars, {
+        __matchedVars__: {},
+        a: Type.integer(9),
+      });
+    });
+
+    it("raises match error if right is not a boxed list", () => {
+      assertError(
+        () => Interpreter.matchOperator(left, Type.integer(123), vars),
+        "MatchError",
+        "no match of right hand side value: 123"
+      );
+    });
+
+    it("raises match error if right is an empty boxed list", () => {
+      assertError(
+        () => Interpreter.matchOperator(left, Type.list([]), vars),
+        "MatchError",
+        "no match of right hand side value: []"
+      );
+    });
+
+    it("raises match error if head doesn't match", () => {
+      const left = Type.consPattern(
+        Type.integer(4),
+        Type.list([Type.integer(2), Type.integer(3)])
+      );
+
+      assertError(
+        () => Interpreter.matchOperator(left, right, vars),
+        "MatchError",
+        "no match of right hand side value: [1, 2, 3]"
+      );
+    });
+
+    it("raises match error if tail doesn't match", () => {
+      const left = Type.consPattern(
+        Type.integer(1),
+        Type.list([Type.integer(4), Type.integer(3)])
+      );
+
+      assertError(
+        () => Interpreter.matchOperator(left, right, vars),
+        "MatchError",
+        "no match of right hand side value: [1, 2, 3]"
       );
     });
   });

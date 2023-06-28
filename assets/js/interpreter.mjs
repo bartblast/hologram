@@ -237,6 +237,20 @@ export default class Interpreter {
         return right;
       }
 
+      if (Type.isConsPattern(left)) {
+        if (!Type.isList(right) || Erlang.length(right).value === 0n) {
+          throw new Error("__match_error__");
+        }
+
+        const rightHead = Erlang.hd(right);
+        const rightTail = Erlang.tl(right);
+
+        Interpreter.matchOperator(left.head, rightHead, vars, false);
+        Interpreter.matchOperator(left.tail, rightTail, vars, false);
+
+        return right;
+      }
+
       if (left.type !== right.type) {
         throw new Error("__match_error__");
       }
@@ -277,36 +291,6 @@ export default class Interpreter {
     return clauses.some((clause) => clause.params.length === arity);
   }
 
-  static #isConsPatternMatched(left, right) {
-    if (!Type.isList(right) || Erlang.length(right).value === 0n) {
-      return false;
-    }
-
-    const rightHead = Erlang.hd(right);
-    const rightTail = Erlang.tl(right);
-
-    return (
-      Interpreter.isMatched(left.head, rightHead) &&
-      Interpreter.isMatched(left.tail, rightTail)
-    );
-  }
-
-  static #isListOrTupleMatched(left, right) {
-    const count = Elixir_Enum.count(left).value;
-
-    if (count !== Elixir_Enum.count(right).value) {
-      return false;
-    }
-
-    for (let i = 0; i < count; ++i) {
-      if (!Interpreter.isMatched(left.data[i], right.data[i])) {
-        return false;
-      }
-    }
-
-    return true;
-  }
-
   static #isMapMatched(left, right) {
     for (const [key, value] of Object.entries(left.data)) {
       if (
@@ -318,14 +302,6 @@ export default class Interpreter {
     }
 
     return true;
-  }
-
-  static #matchConsPattern(left, right, vars) {
-    const rightHead = Erlang.hd(right);
-    const rightTail = Erlang.tl(right);
-
-    Interpreter.matchOperator(left.head, rightHead, vars, false);
-    Interpreter.matchOperator(left.tail, rightTail, vars, false);
   }
 
   static #matchMap(left, right, vars) {
