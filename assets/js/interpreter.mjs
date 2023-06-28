@@ -134,13 +134,13 @@ export default class Interpreter {
         const vars = {};
         const pattern = Type.list(clause.params);
 
-        if (
-          Interpreter.isMatched(pattern, args) &&
-          Interpreter.matchOperator(pattern, args, vars, false) &&
-          Interpreter.#evaluateGuard(clause.guard, vars)
-        ) {
-          return clause.body(vars);
-        }
+        try {
+          Interpreter.matchOperator(pattern, args, vars);
+
+          if (Interpreter.#evaluateGuard(clause.guard, vars)) {
+            return clause.body(vars);
+          }
+        } catch {}
       }
 
       const inspectedModuleName = Hologram.inspectModuleName(moduleName);
