@@ -11,9 +11,6 @@ import Erlang from "../../assets/js/erlang/erlang.mjs";
 import Interpreter from "../../assets/js/interpreter.mjs";
 import Type from "../../assets/js/type.mjs";
 
-// TODO: remove if unused
-import Utils from "../../assets/js/utils.mjs";
-
 before(() => linkModules());
 after(() => unlinkModules());
 

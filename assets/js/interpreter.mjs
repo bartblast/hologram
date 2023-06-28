@@ -159,30 +159,6 @@ export default class Interpreter {
     return Erlang_maps.get(right, left);
   }
 
-  // static isMatched(left, right) {
-  //   if (Type.isVariablePattern(left) || Type.isMatchPlaceholder(left)) {
-  //     return true;
-  //   }
-
-  //   if (Type.isConsPattern(left)) {
-  //     return Interpreter.#isConsPatternMatched(left, right);
-  //   }
-
-  //   if (left.type !== right.type) {
-  //     return false;
-  //   }
-
-  //   if (Type.isList(left) || Type.isTuple(left)) {
-  //     return Interpreter.#isListOrTupleMatched(left, right);
-  //   }
-
-  //   if (Type.isMap(left)) {
-  //     return Interpreter.#isMapMatched(left, right);
-  //   }
-
-  //   return Interpreter.isStrictlyEqual(left, right);
-  // }
-
   static isStrictlyEqual(left, right) {
     if (left.type !== right.type) {
       return false;
@@ -190,24 +166,6 @@ export default class Interpreter {
 
     return isEqual(left, right);
   }
-
-  // static matchOperator(left, right, vars, assertMatches = true) {
-  //   if (assertMatches && !Interpreter.isMatched(left, right)) {
-  //     Interpreter.#raiseMatchError(right);
-  //   } else if (Type.isVariablePattern(left)) {
-  //     vars[left.name] = right;
-  //   } else if (Type.isMatchPlaceholder(left)) {
-  //     // do nothing
-  //   } else if (Type.isConsPattern(left, right)) {
-  //     Interpreter.#matchConsPattern(left, right, vars);
-  //   } else if (Type.isList(left) || Type.isTuple(left)) {
-  //     Interpreter.#matchListOrTuple(left, right, vars);
-  //   } else if (Type.isMap(left)) {
-  //     Interpreter.#matchMap(left, right, vars);
-  //   }
-
-  //   return right;
-  // }
 
   // vars.__matchedVars__ keeps track of already pattern matched variables' values,
   // which enables to fail pattern matching if the variables with the same name
