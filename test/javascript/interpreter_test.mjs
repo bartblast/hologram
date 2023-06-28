@@ -1477,6 +1477,35 @@ describe("matchOperator()", () => {
         "no match of right hand side value: :abc"
       );
     });
+
+    it("left list has variables", () => {
+      const left = Type.map([
+        [Type.atom("k"), Type.variablePattern("x")],
+        [Type.atom("m"), Type.integer(2)],
+        [Type.atom("n"), Type.variablePattern("z")],
+      ]);
+
+      const right = Type.map([
+        [Type.atom("k"), Type.integer(1)],
+        [Type.atom("m"), Type.integer(2)],
+        [Type.atom("n"), Type.integer(3)],
+      ]);
+
+      const result = Interpreter.matchOperator(left, right, vars);
+      assert.deepStrictEqual(result, right);
+
+      const expectedVars = {
+        __matchedVars__: {
+          x: Type.integer(1),
+          z: Type.integer(3),
+        },
+        a: Type.integer(9),
+        x: Type.integer(1),
+        z: Type.integer(3),
+      };
+
+      assert.deepStrictEqual(vars, expectedVars);
+    });
   });
 
   it("match placeholder", () => {
