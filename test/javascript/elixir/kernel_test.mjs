@@ -28,9 +28,14 @@ describe("inspect()", () => {
     assert.equal(result, "nil");
   });
 
-  it("inspects boxed float", () => {
+  it("inspects boxed float, which can't be converted to integer", () => {
     const result = Elixir_Kernel.inspect(Type.float(123.45));
     assert.equal(result, "123.45");
+  });
+
+  it("inspects boxed float, which can be converted to integer", () => {
+    const result = Elixir_Kernel.inspect(Type.float(123.0));
+    assert.equal(result, "123.0");
   });
 
   it("inspects boxed integer", () => {

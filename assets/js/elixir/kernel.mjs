@@ -22,6 +22,12 @@ const Elixir_Kernel = {
       // TODO: case "bitstring"
 
       case "float":
+        if (Number.isInteger(term.value)) {
+          return term.value.toString() + ".0";
+        } else {
+          return term.value.toString();
+        }
+
       case "integer":
         return term.value.toString();
 
