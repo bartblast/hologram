@@ -1162,71 +1162,6 @@ describe("dotOperator()", () => {
 //     });
 //   });
 
-//   describe("map type", () => {
-//     let data;
-
-//     beforeEach(() => {
-//       data = [
-//         [Type.atom("a"), Type.integer(1)],
-//         [Type.atom("b"), Type.integer(2)],
-//       ];
-//     });
-
-//     it("is matching another boxed map having the same items", () => {
-//       const left = Type.map(data);
-//       const right = Type.map(data);
-
-//       assert.isTrue(Interpreter.isMatched(left, right));
-//     });
-
-//     it("is matching another boxed map which has all the same items as in the left map plus additional ones", () => {
-//       const left = Type.map(data);
-
-//       const data2 = [
-//         [Type.atom("a"), Type.integer(1)],
-//         [Type.atom("b"), Type.integer(2)],
-//         [Type.atom("c"), Type.integer(3)],
-//       ];
-
-//       const right = Type.map(data2);
-
-//       assert.isTrue(Interpreter.isMatched(left, right));
-//     });
-
-//     it("is not matching another boxed map if any left map keys are missing in the right map ", () => {
-//       const data1 = [
-//         [Type.atom("a"), Type.integer(1)],
-//         [Type.atom("b"), Type.integer(2)],
-//         [Type.atom("c"), Type.integer(3)],
-//       ];
-
-//       const left = Type.map(data1);
-//       const right = Type.map(data);
-
-//       assert.isFalse(Interpreter.isMatched(left, right));
-//     });
-
-//     it("is not matching another boxed map if any left map value is different than corresponding value in the right map", () => {
-//       const left = Type.map(data);
-
-//       const data2 = [
-//         [Type.atom("a"), Type.integer(1)],
-//         [Type.atom("b"), Type.integer(3)],
-//       ];
-
-//       const right = Type.map(data2);
-
-//       assert.isFalse(Interpreter.isMatched(left, right));
-//     });
-
-//     it("is not matching another boxed value of a non-map boxed type", () => {
-//       const left = Type.map(data);
-//       const right = Type.string("123");
-
-//       assert.isFalse(Interpreter.isMatched(left, right));
-//     });
-//   });
-
 //   it("match placeholder", () => {
 //     const left = Type.matchPlaceholder();
 //     const right = Type.integer(123);
@@ -1255,13 +1190,6 @@ describe("dotOperator()", () => {
 
 //       assert.isFalse(Interpreter.isMatched(left, right));
 //     });
-//   });
-
-//   it("variable pattern", () => {
-//     const left = Type.variablePattern("abc");
-//     const right = Type.integer(123);
-
-//     assert.isTrue(Interpreter.isMatched(left, right));
 //   });
 // });
 
@@ -1366,30 +1294,6 @@ describe("isStrictlyEqual()", () => {
 //     assert.deepStrictEqual(result, right);
 //     assert.deepStrictEqual(vars, {a: Type.integer(3), b: Type.integer(1)});
 //   });
-
-//   it("matches on map type", () => {
-//     const data1 = [
-//       [Type.atom("a"), Type.variablePattern("a")],
-//       [Type.atom("b"), Type.integer(2)],
-//       [Type.atom("c"), Type.variablePattern("c")],
-//     ];
-
-//     const left = Type.map(data1);
-
-//     const data2 = [
-//       [Type.atom("a"), Type.integer(1)],
-//       [Type.atom("b"), Type.integer(2)],
-//       [Type.atom("c"), Type.integer(3)],
-//     ];
-
-//     const right = Type.map(data2);
-
-//     const result = Interpreter.matchOperator(left, right, vars);
-
-//     assert.deepStrictEqual(result, right);
-//     assert.deepStrictEqual(vars, {a: Type.integer(1), c: Type.integer(3)});
-//   });
-
 //   it("matches on tuple type", () => {
 //     const left = Type.tuple([
 //       Type.variablePattern("b"),
@@ -1407,17 +1311,6 @@ describe("isStrictlyEqual()", () => {
 
 //     assert.deepStrictEqual(result, right);
 //     assert.deepStrictEqual(vars, {a: Type.integer(3), b: Type.integer(1)});
-//   });
-
-//   it("matches on variable pattern", () => {
-//     const result = Interpreter.matchOperator(
-//       Type.variablePattern("a"),
-//       Type.integer(2),
-//       vars
-//     );
-
-//     assert.deepStrictEqual(result, Type.integer(2));
-//     assert.deepStrictEqual(vars, {a: Type.integer(2)});
 //   });
 // });
 
@@ -1634,6 +1527,89 @@ describe("matchOperator()", () => {
     it("left list != right non-list", () => {
       assertError(
         () => Interpreter.matchOperator(list1, Type.atom("abc"), vars),
+        "MatchError",
+        "no match of right hand side value: :abc"
+      );
+    });
+  });
+
+  describe("map type", () => {
+    let data;
+
+    beforeEach(() => {
+      data = [
+        [Type.atom("x"), Type.integer(1)],
+        [Type.atom("y"), Type.integer(2)],
+      ];
+    });
+
+    it("left and right boxed maps have the same items", () => {
+      const left = Type.map(data);
+      const right = Type.map(data);
+
+      const result = Interpreter.matchOperator(left, right, vars);
+
+      assert.deepStrictEqual(result, right);
+      assert.deepStrictEqual(vars, {__matchedVars__: {}, a: Type.integer(9)});
+    });
+
+    it("right boxed map have all the same items as the left boxed map plus additional ones", () => {
+      const left = Type.map(data);
+
+      const data2 = [
+        [Type.atom("x"), Type.integer(1)],
+        [Type.atom("y"), Type.integer(2)],
+        [Type.atom("z"), Type.integer(3)],
+      ];
+
+      const right = Type.map(data2);
+
+      const result = Interpreter.matchOperator(left, right, vars);
+
+      assert.deepStrictEqual(result, right);
+      assert.deepStrictEqual(vars, {__matchedVars__: {}, a: Type.integer(9)});
+    });
+
+    it("right boxed map is missing some some keys from the left boxed map", () => {
+      const data1 = [
+        [Type.atom("x"), Type.integer(1)],
+        [Type.atom("y"), Type.integer(2)],
+        [Type.atom("z"), Type.integer(3)],
+      ];
+
+      const left = Type.map(data1);
+      const right = Type.map(data);
+
+      assertError(
+        () => Interpreter.matchOperator(left, right, vars),
+        "MatchError",
+        'no match of right hand side value: {"type":"map","data":{"atom(x)":[{"type":"atom","value":"x"},{"type":"integer","value":"__bigint__:1"}],"atom(y)":[{"type":"atom","value":"y"},{"type":"integer","value":"__bigint__:2"}]}}'
+      );
+    });
+
+    it("some left boxed map item values don't match right boxed map item values", () => {
+      const left = Type.map(data);
+
+      const data2 = [
+        [Type.atom("x"), Type.integer(1)],
+        [Type.atom("y"), Type.integer(3)],
+      ];
+
+      const right = Type.map(data2);
+
+      assertError(
+        () => Interpreter.matchOperator(left, right, vars),
+        "MatchError",
+        'no match of right hand side value: {"type":"map","data":{"atom(x)":[{"type":"atom","value":"x"},{"type":"integer","value":"__bigint__:1"}],"atom(y)":[{"type":"atom","value":"y"},{"type":"integer","value":"__bigint__:3"}]}}'
+      );
+    });
+
+    it("left map != right non-map", () => {
+      const left = Type.map(data);
+      const right = Type.atom("abc");
+
+      assertError(
+        () => Interpreter.matchOperator(left, right, vars),
         "MatchError",
         "no match of right hand side value: :abc"
       );

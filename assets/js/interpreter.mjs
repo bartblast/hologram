@@ -265,6 +265,14 @@ export default class Interpreter {
         return right;
       }
 
+      if (Type.isMap(left)) {
+        for (const [key, value] of Object.entries(left.data)) {
+          Interpreter.matchOperator(value[1], right.data[key][1], vars, false);
+        }
+
+        return right;
+      }
+
       if (!Interpreter.isStrictlyEqual(left, right)) {
         throw new Error("__match_error__");
       }
@@ -289,25 +297,6 @@ export default class Interpreter {
 
   static #isArityDefined(clauses, arity) {
     return clauses.some((clause) => clause.params.length === arity);
-  }
-
-  static #isMapMatched(left, right) {
-    for (const [key, value] of Object.entries(left.data)) {
-      if (
-        !(key in right.data) ||
-        !Interpreter.isMatched(value[1], right.data[key][1])
-      ) {
-        return false;
-      }
-    }
-
-    return true;
-  }
-
-  static #matchMap(left, right, vars) {
-    for (const [key, value] of Object.entries(left.data)) {
-      Interpreter.matchOperator(value[1], right.data[key][1], vars, false);
-    }
   }
 
   static #raiseCaseClauseError(message) {
