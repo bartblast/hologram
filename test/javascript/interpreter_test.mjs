@@ -1633,7 +1633,7 @@ describe("matchOperator()", () => {
   });
 });
 
-describe.only("raiseMatchError()", () => {
+describe("raiseMatchError()", () => {
   it("atom type", () => {
     assertError(
       () => Interpreter.raiseMatchError(Type.atom("abc")),
