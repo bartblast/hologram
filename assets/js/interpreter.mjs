@@ -63,12 +63,11 @@ export default class Interpreter {
       const varsClone = Utils.clone(vars);
 
       for (let i = 0; i < generatorsCount; ++i) {
-        if (Interpreter.isMatched(generators[i].match, combination[i])) {
+        try {
           Interpreter.matchOperator(
             generators[i].match,
             combination[i],
-            varsClone,
-            false
+            varsClone
           );
 
           if (
@@ -76,7 +75,7 @@ export default class Interpreter {
           ) {
             return acc;
           }
-        } else {
+        } catch {
           return acc;
         }
       }
