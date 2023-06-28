@@ -1067,28 +1067,6 @@ describe("dotOperator()", () => {
 });
 
 // describe("isMatched()", () => {
-//   describe("atom type", () => {
-//     it("is matching another boxed atom having the same value", () => {
-//       const left = Type.atom("abc");
-//       const right = Type.atom("abc");
-
-//       assert.isTrue(Interpreter.isMatched(left, right));
-//     });
-
-//     it("is not matching another boxed atom having a different value", () => {
-//       const left = Type.atom("abc");
-//       const right = Type.atom("xyz");
-
-//       assert.isFalse(Interpreter.isMatched(left, right));
-//     });
-
-//     it("is not matching another boxed value of a non-atom boxed type", () => {
-//       const left = Type.atom("abc");
-//       const right = Type.string("abc");
-
-//       assert.isFalse(Interpreter.isMatched(left, right));
-//     });
-//   });
 
 //   describe("float type", () => {
 //     it("is matching another boxed float having the same value", () => {
@@ -1463,6 +1441,36 @@ describe("matchOperator()", () => {
         () => Interpreter.matchOperator(left, right, vars),
         "MatchError",
         "no match of right hand side value: [1, 2, 3]"
+      );
+    });
+  });
+
+  describe("float type", () => {
+    it("left float == right float", () => {
+      const result = Interpreter.matchOperator(
+        Type.float(2.0),
+        Type.float(2.0),
+        vars
+      );
+
+      assert.deepStrictEqual(result, Type.float(2.0));
+      assert.deepStrictEqual(vars, {__matchedVars__: {}, a: Type.integer(9)});
+    });
+
+    it("left float != right float", () => {
+      assertError(
+        () => Interpreter.matchOperator(Type.float(2.0), Type.float(3.0), vars),
+        "MatchError",
+        "no match of right hand side value: 3.0"
+      );
+    });
+
+    it("left float != right non-float", () => {
+      assertError(
+        () =>
+          Interpreter.matchOperator(Type.float(2.0), Type.atom("abc"), vars),
+        "MatchError",
+        "no match of right hand side value: :abc"
       );
     });
   });
