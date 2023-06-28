@@ -209,9 +209,9 @@ export default class Interpreter {
   //   return right;
   // }
 
-  // vars.__matchedVars__ keeps track of already matched variables' values,
-  // which enables to fail matching if the variables with the same name
-  // are being matched to different values.
+  // vars.__matchedVars__ keeps track of already pattern matched variables' values,
+  // which enables to fail pattern matching if the variables with the same name
+  // are being pattern matched to different values.
   static matchOperator(left, right, vars, rootMatchOperator = true) {
     if (rootMatchOperator) {
       vars.__matchedVars__ = {};
