@@ -16,13 +16,14 @@ export default class Interpreter {
       const varsClone = Utils.clone(fun.vars);
       const pattern = Type.list(clause.params);
 
-      if (
-        Interpreter.isMatched(pattern, args) &&
-        Interpreter.matchOperator(pattern, args, varsClone, false) &&
-        Interpreter.#evaluateGuard(clause.guard, varsClone)
-      ) {
-        return clause.body(varsClone);
-      }
+      try {
+        if (
+          Interpreter.matchOperator(pattern, args, varsClone) &&
+          Interpreter.#evaluateGuard(clause.guard, varsClone)
+        ) {
+          return clause.body(varsClone);
+        }
+      } catch {}
     }
 
     // TODO: include parent module and function info, once context for error reporting is implemented.
