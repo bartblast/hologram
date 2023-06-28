@@ -275,7 +275,7 @@ export default class Interpreter {
   static #raiseMatchError(right) {
     const message =
       "no match of right hand side value: " + Hologram.inspect(right);
-    console.debug(message);
+
     return Hologram.raiseError("MatchError", message);
   }
 
