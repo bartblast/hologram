@@ -1477,7 +1477,7 @@ describe.only("matchOperator()", () => {
   let vars;
 
   beforeEach(() => {
-    vars = {a: Type.integer(9)};
+    vars = {__matchedVars__: {}, a: Type.integer(9)};
   });
 
   describe("atom type", () => {
@@ -1489,7 +1489,7 @@ describe.only("matchOperator()", () => {
       );
 
       assert.deepStrictEqual(result, Type.atom("abc"));
-      assert.deepStrictEqual(vars, {a: Type.integer(9)});
+      assert.deepStrictEqual(vars, {__matchedVars__: {}, a: Type.integer(9)});
     });
 
     it("left atom != right atom", () => {
@@ -1520,7 +1520,7 @@ describe.only("matchOperator()", () => {
       );
 
       assert.deepStrictEqual(result, Type.integer(2));
-      assert.deepStrictEqual(vars, {a: Type.integer(9)});
+      assert.deepStrictEqual(vars, {__matchedVars__: {}, a: Type.integer(9)});
     });
 
     it("left integer != right integer", () => {
@@ -1552,7 +1552,7 @@ describe.only("matchOperator()", () => {
       const result = Interpreter.matchOperator(list1, list1, vars);
 
       assert.deepStrictEqual(result, list1);
-      assert.deepStrictEqual(vars, {a: Type.integer(9)});
+      assert.deepStrictEqual(vars, {__matchedVars__: {}, a: Type.integer(9)});
     });
 
     it("left list != right list", () => {
@@ -1582,7 +1582,7 @@ describe.only("matchOperator()", () => {
     );
 
     assert.deepStrictEqual(result, Type.integer(2));
-    assert.deepStrictEqual(vars, {a: Type.integer(9)});
+    assert.deepStrictEqual(vars, {__matchedVars__: {}, a: Type.integer(9)});
   });
 
   describe("tuple type", () => {
@@ -1596,7 +1596,7 @@ describe.only("matchOperator()", () => {
       const result = Interpreter.matchOperator(tuple1, tuple1, vars);
 
       assert.deepStrictEqual(result, tuple1);
-      assert.deepStrictEqual(vars, {a: Type.integer(9)});
+      assert.deepStrictEqual(vars, {__matchedVars__: {}, a: Type.integer(9)});
     });
 
     it("left tuple != right tuple", () => {
@@ -1614,6 +1614,57 @@ describe.only("matchOperator()", () => {
         () => Interpreter.matchOperator(tuple1, Type.atom("abc"), vars),
         "MatchError",
         "no match of right hand side value: :abc"
+      );
+    });
+  });
+
+  describe("variable pattern", () => {
+    it("variable pattern == anything", () => {
+      const result = Interpreter.matchOperator(
+        Type.variablePattern("x"),
+        Type.integer(2),
+        vars
+      );
+
+      assert.deepStrictEqual(result, Type.integer(2));
+
+      const expectedVars = {
+        __matchedVars__: {x: Type.integer(2)},
+        a: Type.integer(9),
+        x: Type.integer(2),
+      };
+      assert.deepStrictEqual(vars, expectedVars);
+    });
+
+    it("multiple variables with the same name being matched to the same value", () => {
+      const list1 = Type.list([
+        Type.variablePattern("x"),
+        Type.variablePattern("x"),
+      ]);
+      const list2 = Type.list([Type.integer(1), Type.integer(1)]);
+
+      const result = Interpreter.matchOperator(list1, list2, vars);
+      assert.deepStrictEqual(result, list2);
+
+      const expectedVars = {
+        __matchedVars__: {x: Type.integer(1)},
+        a: Type.integer(9),
+        x: Type.integer(1),
+      };
+      assert.deepStrictEqual(vars, expectedVars);
+    });
+
+    it("multiple variables with the same name being matched to the different values", () => {
+      const list1 = Type.list([
+        Type.variablePattern("x"),
+        Type.variablePattern("x"),
+      ]);
+      const list2 = Type.list([Type.integer(1), Type.integer(2)]);
+
+      assertError(
+        () => Interpreter.matchOperator(list1, list2, vars),
+        "MatchError",
+        "no match of right hand side value: [1, 2]"
       );
     });
   });

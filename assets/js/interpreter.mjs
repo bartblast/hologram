@@ -209,9 +209,31 @@ export default class Interpreter {
   //   return right;
   // }
 
+  // vars.__matchedVars__ keeps track of already matched variables' values,
+  // which enables to fail matching if the variables with the same name
+  // are being matched to different values.
   static matchOperator(left, right, vars, rootMatchOperator = true) {
+    if (rootMatchOperator) {
+      vars.__matchedVars__ = {};
+    }
+
     try {
       if (Type.isMatchPlaceholder(left)) {
+        return right;
+      }
+
+      if (Type.isVariablePattern(left)) {
+        if (vars.__matchedVars__[left.name]) {
+          if (
+            !Interpreter.isStrictlyEqual(vars.__matchedVars__[left.name], right)
+          ) {
+            throw new Error("__match_error__");
+          }
+        } else {
+          vars[left.name] = right;
+          vars.__matchedVars__[left.name] = right;
+        }
+
         return right;
       }
 
