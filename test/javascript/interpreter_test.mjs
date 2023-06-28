@@ -1478,7 +1478,7 @@ describe("matchOperator()", () => {
       );
     });
 
-    it("left list has variables", () => {
+    it("left map has variables", () => {
       const left = Type.map([
         [Type.atom("k"), Type.variablePattern("x")],
         [Type.atom("m"), Type.integer(2)],
@@ -1549,6 +1549,35 @@ describe("matchOperator()", () => {
         "MatchError",
         "no match of right hand side value: :abc"
       );
+    });
+
+    it("left tuple has variables", () => {
+      const left = Type.tuple([
+        Type.variablePattern("x"),
+        Type.integer(2),
+        Type.variablePattern("y"),
+      ]);
+
+      const right = Type.tuple([
+        Type.integer(1),
+        Type.integer(2),
+        Type.integer(3),
+      ]);
+
+      const result = Interpreter.matchOperator(left, right, vars);
+      assert.deepStrictEqual(result, right);
+
+      const expectedVars = {
+        __matchedVars__: {
+          x: Type.integer(1),
+          y: Type.integer(3),
+        },
+        a: Type.integer(9),
+        x: Type.integer(1),
+        y: Type.integer(3),
+      };
+
+      assert.deepStrictEqual(vars, expectedVars);
     });
   });
 
