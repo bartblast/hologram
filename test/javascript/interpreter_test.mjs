@@ -1632,3 +1632,116 @@ describe("matchOperator()", () => {
     });
   });
 });
+
+describe.only("raiseMatchError()", () => {
+  it("atom type", () => {
+    assertError(
+      () => Interpreter.raiseMatchError(Type.atom("abc")),
+      "MatchError",
+      "no match of right hand side value: :abc"
+    );
+  });
+
+  it("float type", () => {
+    assertError(
+      () => Interpreter.raiseMatchError(Type.float(1.23)),
+      "MatchError",
+      "no match of right hand side value: 1.23"
+    );
+  });
+
+  it("integer type", () => {
+    assertError(
+      () => Interpreter.raiseMatchError(Type.integer(123)),
+      "MatchError",
+      "no match of right hand side value: 123"
+    );
+  });
+
+  it("list type", () => {
+    const right = Type.list([Type.integer(1), Type.integer(2)]);
+
+    assertError(
+      () => Interpreter.raiseMatchError(right),
+      "MatchError",
+      "no match of right hand side value: [1, 2]"
+    );
+  });
+
+  it("map type", () => {
+    const right = Type.map([
+      [Type.atom("a"), Type.integer(1)],
+      [Type.atom("b"), Type.integer(2)],
+    ]);
+
+    assertError(
+      () => Interpreter.raiseMatchError(right),
+      "MatchError",
+      'no match of right hand side value: {"type":"map","data":{"atom(a)":[{"type":"atom","value":"a"},{"type":"integer","value":"__bigint__:1"}],"atom(b)":[{"type":"atom","value":"b"},{"type":"integer","value":"__bigint__:2"}]}}'
+    );
+  });
+
+  it("tuple type", () => {
+    const right = Type.tuple([Type.integer(1), Type.integer(2)]);
+
+    assertError(
+      () => Interpreter.raiseMatchError(right),
+      "MatchError",
+      "no match of right hand side value: {1, 2}"
+    );
+  });
+
+  describe("match pattern", () => {
+    it("nested in list", () => {
+      const right = Type.list([
+        Type.integer(1),
+        Type.matchPattern(Type.integer(3), Type.integer(2)),
+      ]);
+
+      assertError(
+        () => Interpreter.raiseMatchError(right),
+        "MatchError",
+        "no match of right hand side value: [1, 2]"
+      );
+    });
+
+    it("nested in map", () => {
+      const right = Type.map([
+        [Type.atom("a"), Type.integer(1)],
+        [Type.atom("b"), Type.matchPattern(Type.integer(3), Type.integer(2))],
+      ]);
+
+      assertError(
+        () => Interpreter.raiseMatchError(right),
+        "MatchError",
+        'no match of right hand side value: {"type":"map","data":{"atom(a)":[{"type":"atom","value":"a"},{"type":"integer","value":"__bigint__:1"}],"atom(b)":[{"type":"atom","value":"b"},{"type":"integer","value":"__bigint__:2"}]}}'
+      );
+    });
+
+    it("nested in tuple", () => {
+      const right = Type.tuple([
+        Type.integer(1),
+        Type.matchPattern(Type.integer(3), Type.integer(2)),
+      ]);
+
+      assertError(
+        () => Interpreter.raiseMatchError(right),
+        "MatchError",
+        "no match of right hand side value: {1, 2}"
+      );
+    });
+
+    it("nested in match pattern", () => {
+      const right = Type.matchPattern(
+        Type.integer(1),
+        Type.matchPattern(Type.integer(3), Type.integer(2))
+      );
+
+      assertError(
+        () => Interpreter.raiseMatchError(right),
+        "MatchError",
+        "no match of right hand side value: 2"
+      );
+    });
+  });
+});

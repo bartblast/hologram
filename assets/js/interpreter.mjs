@@ -238,11 +238,20 @@ export default class Interpreter {
       return right;
     } catch {
       if (rootMatchOperator) {
-        Interpreter.#raiseMatchError(right);
+        Interpreter.raiseMatchError(right);
       } else {
         throw error;
       }
     }
+  }
+
+  static raiseMatchError(right) {
+    const rhsValue = Interpreter.#evaluateRightHandSideValue(right);
+
+    const message =
+      "no match of right hand side value: " + Hologram.inspect(rhsValue);
+
+    return Hologram.raiseError("MatchError", message);
   }
 
   static #evaluateGuard(guard, vars) {
@@ -272,11 +281,31 @@ export default class Interpreter {
     return Hologram.raiseError("FunctionClauseError", message);
   }
 
-  static #raiseMatchError(right) {
-    const message =
-      "no match of right hand side value: " + Hologram.inspect(right);
+  static #evaluateRightHandSideValue(right) {
+    if (Type.isList(right) || Type.isTuple(right)) {
+      const evaluatedData = right.data.map((item) =>
+        Interpreter.#evaluateRightHandSideValue(item)
+      );
 
-    return Hologram.raiseError("MatchError", message);
+      return Type.isList(right)
+        ? Type.list(evaluatedData)
+        : Type.tuple(evaluatedData);
+    }
+
+    if (Type.isMap(right)) {
+      const evaluatedData = Object.entries(right.data).map(([_key, value]) => [
+        value[0],
+        Interpreter.#evaluateRightHandSideValue(value[1]),
+      ]);
+
+      return Type.map(evaluatedData);
+    }
+
+    if (Type.isMatchPattern(right)) {
+      return Interpreter.#evaluateRightHandSideValue(right.right);
+    }
+
+    return right;
   }
 
   static #raiseUndefinedFunctionError(moduleName, functionName, arity) {
