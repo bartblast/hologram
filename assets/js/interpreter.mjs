@@ -34,14 +34,14 @@ export default class Interpreter {
     for (const clause of clauses) {
       const varsClone = Utils.clone(vars);
 
-      if (Interpreter.isMatched(clause.head, condition)) {
-        Interpreter.matchOperator(clause.head, condition, varsClone, false);
+      try {
+        Interpreter.matchOperator(clause.head, condition, varsClone);
 
         if (Interpreter.#evaluateGuard(clause.guard, varsClone) === false) {
           continue;
         }
         return clause.body(varsClone);
-      } else {
+      } catch {
         continue;
       }
     }

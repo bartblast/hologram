@@ -148,7 +148,7 @@ describe("callAnonymousFunction()", () => {
   });
 });
 
-describe("case()", () => {
+describe.only("case()", () => {
   let vars;
 
   beforeEach(() => {
