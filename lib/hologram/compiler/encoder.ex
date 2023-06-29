@@ -189,18 +189,11 @@ defmodule Hologram.Compiler.Encoder do
     |> StringUtils.wrap("Type.map([", "])")
   end
 
-  def encode(%IR.MatchOperator{left: left, right: right}, %{match_operator?: true} = context) do
+  def encode(%IR.MatchOperator{left: left, right: right}, context) do
     left = encode(left, %{context | pattern?: true})
     right = encode(right, context)
 
-    "Type.matchPattern(#{left}, #{right})"
-  end
-
-  def encode(%IR.MatchOperator{left: left, right: right}, context) do
-    left = encode(left, %{context | match_operator?: true, pattern?: true})
-    right = encode(right, %{context | match_operator?: true})
-
-    "Interpreter.matchOperator(#{left}, #{right}, vars)"
+    "Interpreter.matchOperator(#{right}, #{left}, vars)"
   end
 
   def encode(%IR.MatchPlaceholder{}, _context) do

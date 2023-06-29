@@ -535,21 +535,6 @@ describe("isMap()", () => {
   });
 });
 
-describe("isMatchPattern()", () => {
-  it("returns true if the given object is a boxed match pattern", () => {
-    const result = Type.isMatchPattern(
-      Type.matchPattern(Type.integer(1), Type.integer(2))
-    );
-
-    assert.isTrue(result);
-  });
-
-  it("returns false if the given object is not a boxed match pattern", () => {
-    const result = Type.isMatchPattern(Type.atom("abc"));
-    assert.isFalse(result);
-  });
-});
-
 describe("isMatchPlaceholder()", () => {
   it("returns true if the given object is a boxed match placeholder", () => {
     const result = Type.isMatchPlaceholder(Type.matchPlaceholder());
@@ -721,18 +706,6 @@ describe("map", () => {
 
     assert.deepStrictEqual(Type.map(data), expected);
   });
-});
-
-it("matchPattern()", () => {
-  const result = Type.matchPattern(Type.integer(1), Type.integer(2));
-
-  const expected = {
-    type: "match_pattern",
-    left: Type.integer(1),
-    right: Type.integer(2),
-  };
-
-  assert.deepStrictEqual(result, expected);
 });
 
 describe("matchPlaceholder()", () => {
