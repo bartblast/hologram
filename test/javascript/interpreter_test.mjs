@@ -1807,6 +1807,128 @@ describe("matchOperator()", () => {
         "no match of right hand side value: [1, 2]"
       );
     });
+
+    describe("nested match patterns", () => {
+      it("x = 2 = 2", () => {
+        const right = Type.matchPattern(Type.integer(2), Type.integer(2));
+
+        const result = Interpreter.matchOperator(
+          Type.variablePattern("x"),
+          right,
+          vars
+        );
+
+        assert.deepStrictEqual(result, Type.integer(2));
+
+        const expectedVars = {
+          __matchedVars__: {
+            x: Type.integer(2),
+          },
+          a: Type.integer(9),
+          x: Type.integer(2),
+        };
+
+        assert.deepStrictEqual(vars, expectedVars);
+      });
+
+      it("x = 2 = 3", () => {
+        const right = Type.matchPattern(Type.integer(2), Type.integer(3));
+
+        assertError(
+          () =>
+            Interpreter.matchOperator(Type.variablePattern("x"), right, vars),
+          "MatchError",
+          "no match of right hand side value: 3"
+        );
+      });
+
+      it("2 = x = 2", () => {
+        const right = Type.matchPattern(
+          Type.variablePattern("x"),
+          Type.integer(2n)
+        );
+
+        const result = Interpreter.matchOperator(Type.integer(2), right, vars);
+
+        assert.deepStrictEqual(result, Type.integer(2));
+
+        const expectedVars = {
+          __matchedVars__: {
+            x: Type.integer(2),
+          },
+          a: Type.integer(9),
+          x: Type.integer(2),
+        };
+
+        assert.deepStrictEqual(vars, expectedVars);
+      });
+
+      it("2 = x = 3", () => {
+        const right = Type.matchPattern(
+          Type.variablePattern("x"),
+          Type.integer(3n)
+        );
+
+        assertError(
+          () => Interpreter.matchOperator(Type.integer(2), right, vars),
+          "MatchError",
+          "no match of right hand side value: 3"
+        );
+      });
+
+      it("2 = 2 = x, (x = 2)", () => {
+        const vars = {
+          __matchedVars__: {},
+          a: Type.integer(9),
+          x: Type.integer(2),
+        };
+
+        const right = Type.matchPattern(Type.integer(2), vars.x);
+        const result = Interpreter.matchOperator(Type.integer(2), right, vars);
+
+        assert.deepStrictEqual(result, Type.integer(2));
+
+        const expectedVars = {
+          __matchedVars__: {},
+          a: Type.integer(9),
+          x: Type.integer(2),
+        };
+
+        assert.deepStrictEqual(vars, expectedVars);
+      });
+
+      it("2 = 2 = x, (x = 3)", () => {
+        const vars = {
+          __matchedVars__: {},
+          a: Type.integer(9),
+          x: Type.integer(3),
+        };
+
+        const right = Type.matchPattern(Type.integer(2), vars.x);
+
+        assertError(
+          () => Interpreter.matchOperator(Type.integer(2), right, vars),
+          "MatchError",
+          "no match of right hand side value: 3"
+        );
+      });
+
+      it("1 = 2 = x, (x = 2)", () => {
+        const vars = {
+          __matchedVars__: {},
+          a: Type.integer(9),
+          x: Type.integer(2),
+        };
+
+        const right = Type.matchPattern(Type.integer(2), vars.x);
+
+        assertError(
+          () => Interpreter.matchOperator(Type.integer(1), right, vars),
+          "MatchError",
+          "no match of right hand side value: 2"
+        );
+      });
+    });
   });
 });
 
