@@ -660,7 +660,7 @@ defmodule Hologram.Compiler.EncoderTest do
       }
 
       assert encode(ir, %Context{}) ==
-               ~s/Interpreter.matchOperator(Interpreter.matchOperator(Type.integer(3n), Type.integer(2n), vars), Type.variablePattern("x"), vars)/
+               ~s/Interpreter.matchOperator(Interpreter.matchOperator(Type.integer(3n), Type.integer(2n), vars, false), Type.variablePattern("x"), vars)/
     end
 
     test "nested, variable in the middle" do
@@ -674,7 +674,7 @@ defmodule Hologram.Compiler.EncoderTest do
       }
 
       assert encode(ir, %Context{}) ==
-               ~s/Interpreter.matchOperator(Interpreter.matchOperator(Type.integer(3n), Type.variablePattern("x"), vars), Type.integer(1n), vars)/
+               ~s/Interpreter.matchOperator(Interpreter.matchOperator(Type.integer(3n), Type.variablePattern("x"), vars, false), Type.integer(1n), vars)/
     end
 
     test "nested, variable in expression" do
@@ -688,7 +688,7 @@ defmodule Hologram.Compiler.EncoderTest do
       }
 
       assert encode(ir, %Context{}) ==
-               "Interpreter.matchOperator(Interpreter.matchOperator(vars.x, Type.integer(2n), vars), Type.integer(1n), vars)"
+               "Interpreter.matchOperator(Interpreter.matchOperator(vars.x, Type.integer(2n), vars, false), Type.integer(1n), vars)"
     end
 
     test "nested multiple-times" do
@@ -729,7 +729,7 @@ defmodule Hologram.Compiler.EncoderTest do
       }
 
       assert encode(ir, %Context{}) ==
-               ~s/Interpreter.matchOperator(Interpreter.matchOperator(Type.tuple([Type.integer(1n), Type.integer(2n), Interpreter.matchOperator(vars.f, Type.variablePattern("e"), vars)]), Type.tuple([Type.integer(1n), Interpreter.matchOperator(Type.variablePattern("d"), Type.variablePattern("c"), vars), Type.integer(3n)]), vars), Type.tuple([Interpreter.matchOperator(Type.variablePattern("b"), Type.variablePattern("a"), vars), Type.integer(2n), Type.integer(3n)]), vars)/
+               ~s/Interpreter.matchOperator(Interpreter.matchOperator(Type.tuple([Type.integer(1n), Type.integer(2n), Interpreter.matchOperator(vars.f, Type.variablePattern("e"), vars, false)]), Type.tuple([Type.integer(1n), Interpreter.matchOperator(Type.variablePattern("d"), Type.variablePattern("c"), vars, false), Type.integer(3n)]), vars, false), Type.tuple([Interpreter.matchOperator(Type.variablePattern("b"), Type.variablePattern("a"), vars, false), Type.integer(2n), Type.integer(3n)]), vars)/
     end
   end
 
