@@ -170,27 +170,14 @@ export default class Interpreter {
   // vars.__matchedVars__ keeps track of already pattern matched variables' values,
   // which enables to fail pattern matching if the variables with the same name
   // are being pattern matched to different values.
-  static matchOperator(left, right, vars, rootMatchOperator = true) {
+  //
+  // right param is before left param, because we need the right arg evaluated before left arg.
+  static matchOperator(right, left, vars, rootMatchOperator = true) {
     if (rootMatchOperator) {
       vars.__matchedVars__ = {};
     }
 
     try {
-      if (Type.isMatchPattern(right)) {
-        right = Interpreter.matchOperator(right.left, right.right, vars, false);
-      }
-
-      if (Type.isMatchPattern(left)) {
-        const leftRight = Interpreter.matchOperator(
-          left.right,
-          right,
-          vars,
-          false
-        );
-
-        return Interpreter.matchOperator(left.left, leftRight, vars, false);
-      }
-
       if (Type.isMatchPlaceholder(left)) {
         return right;
       }
@@ -218,8 +205,8 @@ export default class Interpreter {
         const rightHead = Erlang.hd(right);
         const rightTail = Erlang.tl(right);
 
-        Interpreter.matchOperator(left.head, rightHead, vars, false);
-        Interpreter.matchOperator(left.tail, rightTail, vars, false);
+        Interpreter.matchOperator(rightHead, left.head, vars, false);
+        Interpreter.matchOperator(rightTail, left.tail, vars, false);
 
         return right;
       }
@@ -232,7 +219,7 @@ export default class Interpreter {
         const count = Elixir_Enum.count(left).value;
 
         for (let i = 0; i < count; ++i) {
-          Interpreter.matchOperator(left.data[i], right.data[i], vars, false);
+          Interpreter.matchOperator(right.data[i], left.data[i], vars, false);
         }
 
         return right;
@@ -240,7 +227,7 @@ export default class Interpreter {
 
       if (Type.isMap(left)) {
         for (const [key, value] of Object.entries(left.data)) {
-          Interpreter.matchOperator(value[1], right.data[key][1], vars, false);
+          Interpreter.matchOperator(right.data[key][1], value[1], vars, false);
         }
 
         return right;
