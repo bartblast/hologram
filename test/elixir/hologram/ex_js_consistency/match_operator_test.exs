@@ -90,4 +90,74 @@ defmodule Hologram.ExJsConsistency.MatchOperatorTest do
       end
     end
   end
+
+  describe "variable pattern" do
+    test "variable pattern == anything" do
+      result = x = 2
+
+      assert result == 2
+      assert x == 2
+    end
+
+    test "multiple variables with the same name being matched to the same value" do
+      result = [x, x] = [1, 1]
+
+      assert result == [1, 1]
+      assert x == 1
+    end
+
+    test "multiple variables with the same name being matched to the different values" do
+      assert_raise MatchError, "no match of right hand side value: [1, 2]", fn ->
+        [x, x] = build_value([1, 2])
+      end
+    end
+
+    test "x = 2 = 2" do
+      result = x = 2 = 2
+
+      assert result == 2
+      assert x == 2
+    end
+
+    test "x = 2 = 3" do
+      assert_raise MatchError, "no match of right hand side value: 3", fn ->
+        _x = 2 = build_value(3)
+      end
+    end
+
+    test "2 = x = 2" do
+      result = 2 = x = 2
+
+      assert result == 2
+      assert x == 2
+    end
+
+    test "2 = x = 3" do
+      assert_raise MatchError, "no match of right hand side value: 3", fn ->
+        2 = _x = build_value(3)
+      end
+    end
+
+    test "2 = 2 = x, (x = 2)" do
+      x = 2
+      result = 2 = 2 = x
+
+      assert result == 2
+      assert x == 2
+    end
+
+    test "2 = 2 = x, (x = 3)" do
+      assert_raise MatchError, "no match of right hand side value: 3", fn ->
+        x = 3
+        2 = 2 = build_value(x)
+      end
+    end
+
+    test "1 = 2 = x, (x = 2)" do
+      assert_raise MatchError, "no match of right hand side value: 2", fn ->
+        x = 2
+        1 = 2 = build_value(x)
+      end
+    end
+  end
 end

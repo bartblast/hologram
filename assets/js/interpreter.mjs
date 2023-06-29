@@ -173,13 +173,17 @@ export default class Interpreter {
   //
   // right param is before left param, because we need the right arg evaluated before left arg.
   static matchOperator(right, left, vars, rootMatchOperator = true) {
-    if (rootMatchOperator) {
+    if (!vars.__matchedVars__) {
       vars.__matchedVars__ = {};
     }
 
     try {
       if (Type.isMatchPlaceholder(left)) {
-        return right;
+        return Interpreter.#handleMatchOperatorResult(
+          right,
+          vars,
+          rootMatchOperator
+        );
       }
 
       if (Type.isVariablePattern(left)) {
@@ -194,7 +198,11 @@ export default class Interpreter {
           vars.__matchedVars__[left.name] = right;
         }
 
-        return right;
+        return Interpreter.#handleMatchOperatorResult(
+          right,
+          vars,
+          rootMatchOperator
+        );
       }
 
       if (Type.isConsPattern(left)) {
@@ -208,7 +216,11 @@ export default class Interpreter {
         Interpreter.matchOperator(rightHead, left.head, vars, false);
         Interpreter.matchOperator(rightTail, left.tail, vars, false);
 
-        return right;
+        return Interpreter.#handleMatchOperatorResult(
+          right,
+          vars,
+          rootMatchOperator
+        );
       }
 
       if (left.type !== right.type) {
@@ -222,7 +234,11 @@ export default class Interpreter {
           Interpreter.matchOperator(right.data[i], left.data[i], vars, false);
         }
 
-        return right;
+        return Interpreter.#handleMatchOperatorResult(
+          right,
+          vars,
+          rootMatchOperator
+        );
       }
 
       if (Type.isMap(left)) {
@@ -230,20 +246,24 @@ export default class Interpreter {
           Interpreter.matchOperator(right.data[key][1], value[1], vars, false);
         }
 
-        return right;
+        return Interpreter.#handleMatchOperatorResult(
+          right,
+          vars,
+          rootMatchOperator
+        );
       }
 
       if (!Interpreter.isStrictlyEqual(left, right)) {
         throw new Error("__match_error__");
       }
 
-      return right;
+      return Interpreter.#handleMatchOperatorResult(
+        right,
+        vars,
+        rootMatchOperator
+      );
     } catch {
-      if (rootMatchOperator) {
-        Interpreter.raiseMatchError(right);
-      } else {
-        throw error;
-      }
+      Interpreter.raiseMatchError(right);
     }
   }
 
@@ -260,6 +280,14 @@ export default class Interpreter {
     }
 
     return Type.isTrue(guard(vars));
+  }
+
+  static #handleMatchOperatorResult(result, vars, rootMatchOperator) {
+    if (rootMatchOperator) {
+      delete vars.__matchedVars__;
+    }
+
+    return result;
   }
 
   static #isArityDefined(clauses, arity) {

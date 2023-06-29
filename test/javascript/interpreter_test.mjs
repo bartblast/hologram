@@ -1176,10 +1176,7 @@ describe("matchOperator()", () => {
       );
 
       assert.deepStrictEqual(vars, {
-        __matchedVars__: {
-          h: Type.integer(1),
-          t: Type.list([Type.integer(2), Type.integer(3)]),
-        },
+        __matchedVars__: {},
         a: Type.integer(9),
         h: Type.integer(1),
         t: Type.list([Type.integer(2), Type.integer(3)]),
@@ -1202,9 +1199,7 @@ describe("matchOperator()", () => {
       );
 
       assert.deepStrictEqual(vars, {
-        __matchedVars__: {
-          h: Type.integer(1),
-        },
+        __matchedVars__: {},
         a: Type.integer(9),
         h: Type.integer(1),
       });
@@ -1223,9 +1218,7 @@ describe("matchOperator()", () => {
       );
 
       assert.deepStrictEqual(vars, {
-        __matchedVars__: {
-          t: Type.list([Type.integer(2), Type.integer(3)]),
-        },
+        __matchedVars__: {},
         a: Type.integer(9),
         t: Type.list([Type.integer(2), Type.integer(3)]),
       });
@@ -1801,72 +1794,73 @@ describe("matchOperator()", () => {
     });
   });
 
-  describe("variable pattern", () => {
+  describe.only("variable pattern", () => {
     it("variable pattern == anything", () => {
       const result = Interpreter.matchOperator(
-        Type.variablePattern("x"),
         Type.integer(2),
+        Type.variablePattern("x"),
         vars
       );
 
       assert.deepStrictEqual(result, Type.integer(2));
 
       const expectedVars = {
-        __matchedVars__: {x: Type.integer(2)},
         a: Type.integer(9),
         x: Type.integer(2),
       };
+
       assert.deepStrictEqual(vars, expectedVars);
     });
 
     it("multiple variables with the same name being matched to the same value", () => {
-      const list1 = Type.list([
-        Type.variablePattern("x"),
-        Type.variablePattern("x"),
-      ]);
-      const list2 = Type.list([Type.integer(1), Type.integer(1)]);
+      const result = Interpreter.matchOperator(
+        Type.list([Type.integer(1), Type.integer(1)]),
+        Type.list([Type.variablePattern("x"), Type.variablePattern("x")]),
+        vars
+      );
 
-      const result = Interpreter.matchOperator(list1, list2, vars);
-      assert.deepStrictEqual(result, list2);
+      assert.deepStrictEqual(
+        result,
+        Type.list([Type.integer(1), Type.integer(1)])
+      );
 
       const expectedVars = {
-        __matchedVars__: {x: Type.integer(1)},
         a: Type.integer(9),
         x: Type.integer(1),
       };
+
       assert.deepStrictEqual(vars, expectedVars);
     });
 
     it("multiple variables with the same name being matched to the different values", () => {
-      const list1 = Type.list([
-        Type.variablePattern("x"),
-        Type.variablePattern("x"),
-      ]);
-      const list2 = Type.list([Type.integer(1), Type.integer(2)]);
-
       assertError(
-        () => Interpreter.matchOperator(list1, list2, vars),
+        () =>
+          Interpreter.matchOperator(
+            Type.list([Type.integer(1), Type.integer(2)]),
+            Type.list([Type.variablePattern("x"), Type.variablePattern("x")]),
+            vars
+          ),
         "MatchError",
         "no match of right hand side value: [1, 2]"
       );
     });
 
-    describe("nested match patterns", () => {
+    describe("nested match operators", () => {
       it("x = 2 = 2", () => {
-        const right = Type.matchPattern(Type.integer(2), Type.integer(2));
-
         const result = Interpreter.matchOperator(
+          Interpreter.matchOperator(
+            Type.integer(2),
+            Type.integer(2),
+            vars,
+            false
+          ),
           Type.variablePattern("x"),
-          right,
           vars
         );
 
         assert.deepStrictEqual(result, Type.integer(2));
 
         const expectedVars = {
-          __matchedVars__: {
-            x: Type.integer(2),
-          },
           a: Type.integer(9),
           x: Type.integer(2),
         };
@@ -1875,30 +1869,38 @@ describe("matchOperator()", () => {
       });
 
       it("x = 2 = 3", () => {
-        const right = Type.matchPattern(Type.integer(2), Type.integer(3));
-
         assertError(
           () =>
-            Interpreter.matchOperator(Type.variablePattern("x"), right, vars),
+            Interpreter.matchOperator(
+              Interpreter.matchOperator(
+                Type.integer(3),
+                Type.integer(2),
+                vars,
+                false
+              ),
+              Type.variablePattern("x"),
+              vars
+            ),
           "MatchError",
           "no match of right hand side value: 3"
         );
       });
 
       it("2 = x = 2", () => {
-        const right = Type.matchPattern(
-          Type.variablePattern("x"),
-          Type.integer(2n)
+        const result = Interpreter.matchOperator(
+          Interpreter.matchOperator(
+            Type.integer(2n),
+            Type.variablePattern("x"),
+            vars,
+            false
+          ),
+          Type.integer(2),
+          vars
         );
-
-        const result = Interpreter.matchOperator(Type.integer(2), right, vars);
 
         assert.deepStrictEqual(result, Type.integer(2));
 
         const expectedVars = {
-          __matchedVars__: {
-            x: Type.integer(2),
-          },
           a: Type.integer(9),
           x: Type.integer(2),
         };
@@ -1907,13 +1909,18 @@ describe("matchOperator()", () => {
       });
 
       it("2 = x = 3", () => {
-        const right = Type.matchPattern(
-          Type.variablePattern("x"),
-          Type.integer(3n)
-        );
-
         assertError(
-          () => Interpreter.matchOperator(Type.integer(2), right, vars),
+          () =>
+            Interpreter.matchOperator(
+              Interpreter.matchOperator(
+                Type.integer(3n),
+                Type.variablePattern("x"),
+                vars,
+                false
+              ),
+              Type.integer(2),
+              vars
+            ),
           "MatchError",
           "no match of right hand side value: 3"
         );
@@ -1921,18 +1928,19 @@ describe("matchOperator()", () => {
 
       it("2 = 2 = x, (x = 2)", () => {
         const vars = {
-          __matchedVars__: {},
           a: Type.integer(9),
           x: Type.integer(2),
         };
 
-        const right = Type.matchPattern(Type.integer(2), vars.x);
-        const result = Interpreter.matchOperator(Type.integer(2), right, vars);
+        const result = Interpreter.matchOperator(
+          Interpreter.matchOperator(vars.x, Type.integer(2), vars, false),
+          Type.integer(2),
+          vars
+        );
 
         assert.deepStrictEqual(result, Type.integer(2));
 
         const expectedVars = {
-          __matchedVars__: {},
           a: Type.integer(9),
           x: Type.integer(2),
         };
@@ -1942,15 +1950,17 @@ describe("matchOperator()", () => {
 
       it("2 = 2 = x, (x = 3)", () => {
         const vars = {
-          __matchedVars__: {},
           a: Type.integer(9),
           x: Type.integer(3),
         };
 
-        const right = Type.matchPattern(Type.integer(2), vars.x);
-
         assertError(
-          () => Interpreter.matchOperator(Type.integer(2), right, vars),
+          () =>
+            Interpreter.matchOperator(
+              Interpreter.matchOperator(vars.x, Type.integer(2), vars, false),
+              Type.integer(2),
+              vars
+            ),
           "MatchError",
           "no match of right hand side value: 3"
         );
@@ -1958,15 +1968,17 @@ describe("matchOperator()", () => {
 
       it("1 = 2 = x, (x = 2)", () => {
         const vars = {
-          __matchedVars__: {},
           a: Type.integer(9),
           x: Type.integer(2),
         };
 
-        const right = Type.matchPattern(Type.integer(2), vars.x);
-
         assertError(
-          () => Interpreter.matchOperator(Type.integer(1), right, vars),
+          () =>
+            Interpreter.matchOperator(
+              Interpreter.matchOperator(vars.x, Type.integer(2), vars, false),
+              Type.integer(1),
+              vars
+            ),
           "MatchError",
           "no match of right hand side value: 2"
         );
