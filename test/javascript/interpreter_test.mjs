@@ -1172,7 +1172,7 @@ describe("matchOperator()", () => {
     });
 
     it("left cons pattern == right list, cons pattern head and tail are variables", () => {
-      const result = Interpreter.matchOperator(left, right, vars);
+      const result = Interpreter.matchOperator(right, left, vars);
       assert.deepStrictEqual(result, right);
 
       assert.deepStrictEqual(vars, {
@@ -1192,7 +1192,7 @@ describe("matchOperator()", () => {
         Type.list([Type.integer(2), Type.integer(3)])
       );
 
-      const result = Interpreter.matchOperator(left, right, vars);
+      const result = Interpreter.matchOperator(right, left, vars);
       assert.deepStrictEqual(result, right);
 
       assert.deepStrictEqual(vars, {
@@ -1207,7 +1207,7 @@ describe("matchOperator()", () => {
     it("left cons pattern == right list, cons pattern head is literal, tail is variable", () => {
       const left = Type.consPattern(Type.integer(1), Type.variablePattern("t"));
 
-      const result = Interpreter.matchOperator(left, right, vars);
+      const result = Interpreter.matchOperator(right, left, vars);
       assert.deepStrictEqual(result, right);
 
       assert.deepStrictEqual(vars, {
@@ -1225,7 +1225,7 @@ describe("matchOperator()", () => {
         Type.list([Type.integer(2), Type.integer(3)])
       );
 
-      const result = Interpreter.matchOperator(left, right, vars);
+      const result = Interpreter.matchOperator(right, left, vars);
       assert.deepStrictEqual(result, right);
 
       assert.deepStrictEqual(vars, {
@@ -1236,7 +1236,7 @@ describe("matchOperator()", () => {
 
     it("raises match error if right is not a boxed list", () => {
       assertError(
-        () => Interpreter.matchOperator(left, Type.integer(123), vars),
+        () => Interpreter.matchOperator(Type.integer(123), left, vars),
         "MatchError",
         "no match of right hand side value: 123"
       );
@@ -1244,7 +1244,7 @@ describe("matchOperator()", () => {
 
     it("raises match error if right is an empty boxed list", () => {
       assertError(
-        () => Interpreter.matchOperator(left, Type.list([]), vars),
+        () => Interpreter.matchOperator(Type.list([]), left, vars),
         "MatchError",
         "no match of right hand side value: []"
       );
@@ -1257,7 +1257,7 @@ describe("matchOperator()", () => {
       );
 
       assertError(
-        () => Interpreter.matchOperator(left, right, vars),
+        () => Interpreter.matchOperator(right, left, vars),
         "MatchError",
         "no match of right hand side value: [1, 2, 3]"
       );
@@ -1270,7 +1270,7 @@ describe("matchOperator()", () => {
       );
 
       assertError(
-        () => Interpreter.matchOperator(left, right, vars),
+        () => Interpreter.matchOperator(right, left, vars),
         "MatchError",
         "no match of right hand side value: [1, 2, 3]"
       );
