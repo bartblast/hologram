@@ -1,7 +1,7 @@
 defmodule Hologram.ExJsConsistency.BitstringTest do
   @moduledoc """
   IMPORTANT!
-  Each Elixir consistency test has a related Javascript test in test/javascript/bitstring_test.mjs
+  Each Elixir consistency test has a related JavaScript test in test/javascript/bitstring_test.mjs
   Always update both together.
   """
 

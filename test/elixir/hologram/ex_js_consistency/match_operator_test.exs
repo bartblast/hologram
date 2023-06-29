@@ -1,7 +1,7 @@
-defmodule Hologram.ExJsConsistency.PatternMatchingTest do
+defmodule Hologram.ExJsConsistency.MatchOperatorTest do
   @moduledoc """
   IMPORTANT!
-  Each Elixir consistency test has a related Javascript test in test/javascript/interpreter_test.mjs (matchOperator() tests)
+  Each Elixir consistency test has a related JavaScript test in test/javascript/interpreter_test.mjs (matchOperator() section)
   Always update both together.
   """
 

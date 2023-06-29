@@ -1118,6 +1118,9 @@ describe("isStrictlyEqual()", () => {
   });
 });
 
+// IMPORTANT!
+// Each JavaScript test has a related Elixir consistency test in test/elixir/hologram/ex_js_consistency/match_operator_test.exs
+// Always update both together.
 describe("matchOperator()", () => {
   let vars;
 
