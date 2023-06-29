@@ -1508,6 +1508,183 @@ describe("matchOperator()", () => {
     });
   });
 
+  describe("match pattern", () => {
+    describe("on the right", () => {
+      it("left basic type, right matching match pattern", () => {
+        const left = Type.integer(2);
+        const right = Type.matchPattern(Type.integer(2n), Type.integer(2n));
+        const result = Interpreter.matchOperator(left, right, vars);
+
+        assert.deepStrictEqual(result, Type.integer(2));
+        assert.deepStrictEqual(vars, {__matchedVars__: {}, a: Type.integer(9)});
+      });
+
+      it("left basic type, right match pattern with right arg not matching", () => {
+        const left = Type.integer(2);
+        const right = Type.matchPattern(Type.integer(2n), Type.integer(3n));
+
+        assertError(
+          () => Interpreter.matchOperator(left, right, vars),
+          "MatchError",
+          "no match of right hand side value: 3"
+        );
+      });
+
+      it("left basic type, right match pattern with left arg not matching", () => {
+        const left = Type.integer(2);
+        const right = Type.matchPattern(Type.integer(3n), Type.integer(2n));
+
+        assertError(
+          () => Interpreter.matchOperator(left, right, vars),
+          "MatchError",
+          "no match of right hand side value: 2"
+        );
+      });
+
+      it("left basic type, right match pattern with both left and right args not matching", () => {
+        const left = Type.integer(2);
+        const right = Type.matchPattern(Type.integer(3n), Type.integer(4n));
+
+        assertError(
+          () => Interpreter.matchOperator(left, right, vars),
+          "MatchError",
+          "no match of right hand side value: 4"
+        );
+      });
+    });
+
+    describe("on the left", () => {
+      it("left matching match pattern, right basic type", () => {
+        const left = Type.matchPattern(Type.integer(2n), Type.integer(2n));
+        const right = Type.integer(2);
+        const result = Interpreter.matchOperator(left, right, vars);
+
+        assert.deepStrictEqual(result, Type.integer(2));
+        assert.deepStrictEqual(vars, {__matchedVars__: {}, a: Type.integer(9)});
+      });
+
+      it("left match pattern with right arg not matching, right basic type", () => {
+        const left = Type.matchPattern(Type.integer(2n), Type.integer(3n));
+        const right = Type.integer(2);
+
+        assertError(
+          () => Interpreter.matchOperator(left, right, vars),
+          "MatchError",
+          "no match of right hand side value: 2"
+        );
+      });
+
+      it("left match pattern with left arg not matching, right basic type", () => {
+        const left = Type.matchPattern(Type.integer(3n), Type.integer(2n));
+        const right = Type.integer(2);
+
+        assertError(
+          () => Interpreter.matchOperator(left, right, vars),
+          "MatchError",
+          "no match of right hand side value: 2"
+        );
+      });
+
+      it("left match pattern with both left and right args not matching, right basic type", () => {
+        const left = Type.matchPattern(Type.integer(3n), Type.integer(4n));
+        const right = Type.integer(2);
+
+        assertError(
+          () => Interpreter.matchOperator(left, right, vars),
+          "MatchError",
+          "no match of right hand side value: 2"
+        );
+      });
+    });
+
+    describe("on both sides", () => {
+      describe("left matching match pattern", () => {
+        it("right matching match pattern", () => {
+          const left = Type.matchPattern(Type.integer(2n), Type.integer(2n));
+          const right = Type.matchPattern(Type.integer(2n), Type.integer(2n));
+          const result = Interpreter.matchOperator(left, right, vars);
+
+          assert.deepStrictEqual(result, Type.integer(2));
+          assert.deepStrictEqual(vars, {
+            __matchedVars__: {},
+            a: Type.integer(9),
+          });
+        });
+
+        it("right match pattern with right arg not matching", () => {
+          const left = Type.matchPattern(Type.integer(2n), Type.integer(2n));
+          const right = Type.matchPattern(Type.integer(2n), Type.integer(3n));
+
+          assertError(
+            () => Interpreter.matchOperator(left, right, vars),
+            "MatchError",
+            "no match of right hand side value: 3"
+          );
+        });
+
+        it("right match pattern with left arg not matching", () => {
+          const left = Type.matchPattern(Type.integer(2n), Type.integer(2n));
+          const right = Type.matchPattern(Type.integer(3n), Type.integer(2n));
+
+          assertError(
+            () => Interpreter.matchOperator(left, right, vars),
+            "MatchError",
+            "no match of right hand side value: 2"
+          );
+        });
+
+        it("right match pattern with both left and right args not matching", () => {
+          const left = Type.matchPattern(Type.integer(2n), Type.integer(2n));
+          const right = Type.matchPattern(Type.integer(3n), Type.integer(4n));
+
+          assertError(
+            () => Interpreter.matchOperator(left, right, vars),
+            "MatchError",
+            "no match of right hand side value: 4"
+          );
+        });
+      });
+
+      describe("right matching match pattern", () => {
+        // case covered in previous section
+        // it("left matching match pattern")
+
+        it("left match pattern with right arg not matching", () => {
+          const left = Type.matchPattern(Type.integer(2n), Type.integer(3n));
+          const right = Type.matchPattern(Type.integer(2n), Type.integer(2n));
+
+          assertError(
+            () => Interpreter.matchOperator(left, right, vars),
+            "MatchError",
+            "no match of right hand side value: 2"
+          );
+        });
+
+        it("left match pattern with left arg not matching", () => {
+          const left = Type.matchPattern(Type.integer(3n), Type.integer(2n));
+          const right = Type.matchPattern(Type.integer(2n), Type.integer(2n));
+
+          assertError(
+            () => Interpreter.matchOperator(left, right, vars),
+            "MatchError",
+            "no match of right hand side value: 2"
+          );
+        });
+
+        it("left match pattern with both left and right args not matching", () => {
+          const left = Type.matchPattern(Type.integer(3n), Type.integer(4n));
+          const right = Type.matchPattern(Type.integer(2n), Type.integer(2n));
+
+          assertError(
+            () => Interpreter.matchOperator(left, right, vars),
+            "MatchError",
+            "no match of right hand side value: 2"
+          );
+        });
+      });
+    });
+  });
+
   it("match placeholder", () => {
     const result = Interpreter.matchOperator(
       Type.matchPlaceholder(),

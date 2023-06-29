@@ -176,6 +176,21 @@ export default class Interpreter {
     }
 
     try {
+      if (Type.isMatchPattern(right)) {
+        right = Interpreter.matchOperator(right.left, right.right, vars, false);
+      }
+
+      if (Type.isMatchPattern(left)) {
+        const leftRight = Interpreter.matchOperator(
+          left.right,
+          right,
+          vars,
+          false
+        );
+
+        return Interpreter.matchOperator(left.left, leftRight, vars, false);
+      }
+
       if (Type.isMatchPlaceholder(left)) {
         return right;
       }
