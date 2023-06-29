@@ -1140,7 +1140,7 @@ describe("matchOperator()", () => {
     it("left atom != right atom", () => {
       assertError(
         () =>
-          Interpreter.matchOperator(Type.atom("abc"), Type.atom("xyz"), vars),
+          Interpreter.matchOperator(Type.atom("xyz"), Type.atom("abc"), vars),
         "MatchError",
         "no match of right hand side value: :xyz"
       );
@@ -1149,7 +1149,7 @@ describe("matchOperator()", () => {
     it("left atom != right non-atom", () => {
       assertError(
         () =>
-          Interpreter.matchOperator(Type.atom("abc"), Type.integer(2), vars),
+          Interpreter.matchOperator(Type.integer(2), Type.atom("abc"), vars),
         "MatchError",
         "no match of right hand side value: 2"
       );
