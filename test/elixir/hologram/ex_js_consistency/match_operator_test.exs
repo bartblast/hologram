@@ -110,6 +110,25 @@ defmodule Hologram.ExJsConsistency.MatchOperatorTest do
     end
   end
 
+  describe "integer type" do
+    test "left integer == right integer" do
+      result = 2 = 2
+      assert result == 2
+    end
+
+    test "left integer != right integer" do
+      assert_raise MatchError, "no match of right hand side value: 3", fn ->
+        2 = build_value(3)
+      end
+    end
+
+    test "left float != right non-float" do
+      assert_raise MatchError, "no match of right hand side value: :abc", fn ->
+        2 = build_value(:abc)
+      end
+    end
+  end
+
   describe "variable pattern" do
     test "variable pattern == anything" do
       result = x = 2

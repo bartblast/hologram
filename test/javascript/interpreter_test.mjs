@@ -1315,7 +1315,7 @@ describe("matchOperator()", () => {
     });
   });
 
-  describe.only("float type", () => {
+  describe("float type", () => {
     it("left float == right float", () => {
       // 2.0 = 2.0
       const result = Interpreter.matchOperator(
@@ -1350,6 +1350,7 @@ describe("matchOperator()", () => {
 
   describe("integer type", () => {
     it("left integer == right integer", () => {
+      // 2 = 2
       const result = Interpreter.matchOperator(
         Type.integer(2),
         Type.integer(2),
@@ -1357,21 +1358,23 @@ describe("matchOperator()", () => {
       );
 
       assert.deepStrictEqual(result, Type.integer(2));
-      assert.deepStrictEqual(vars, {__matchedVars__: {}, a: Type.integer(9)});
+      assert.deepStrictEqual(vars, {a: Type.integer(9)});
     });
 
     it("left integer != right integer", () => {
+      // 2 = 3
       assertError(
-        () => Interpreter.matchOperator(Type.integer(2), Type.integer(3), vars),
+        () => Interpreter.matchOperator(Type.integer(3), Type.integer(2), vars),
         "MatchError",
         "no match of right hand side value: 3"
       );
     });
 
     it("left integer != right non-integer", () => {
+      // 2 = :abc
       assertError(
         () =>
-          Interpreter.matchOperator(Type.integer(2), Type.atom("abc"), vars),
+          Interpreter.matchOperator(Type.atom("abc"), Type.integer(2), vars),
         "MatchError",
         "no match of right hand side value: :abc"
       );
