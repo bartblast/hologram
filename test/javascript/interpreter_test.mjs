@@ -73,21 +73,21 @@ describe("callAnonymousFunction()", () => {
       [
         {
           params: [Type.variablePattern("x")],
-          guard: (vars) => Erlang.$261$261(vars.x, Type.integer(1n)),
+          guard: (vars) => Erlang.$261$261(vars.x, Type.integer(1)),
           body: (vars) => {
             return Type.atom("expr_1");
           },
         },
         {
           params: [Type.variablePattern("y")],
-          guard: (vars) => Erlang.$261$261(vars.y, Type.integer(2n)),
+          guard: (vars) => Erlang.$261$261(vars.y, Type.integer(2)),
           body: (vars) => {
             return Type.atom("expr_2");
           },
         },
         {
           params: [Type.variablePattern("z")],
-          guard: (vars) => Erlang.$261$261(vars.z, Type.integer(3n)),
+          guard: (vars) => Erlang.$261$261(vars.z, Type.integer(3)),
           body: (vars) => {
             return Type.atom("expr_3");
           },
@@ -114,14 +114,14 @@ describe("callAnonymousFunction()", () => {
       2,
       [
         {
-          params: [Type.variablePattern("x"), Type.integer(1n)],
-          guard: (vars) => Erlang.$261$261(vars.x, Type.integer(1n)),
+          params: [Type.variablePattern("x"), Type.integer(1)],
+          guard: (vars) => Erlang.$261$261(vars.x, Type.integer(1)),
           body: (vars) => {
             return Type.atom("expr_1");
           },
         },
         {
-          params: [Type.variablePattern("y"), Type.integer(2n)],
+          params: [Type.variablePattern("y"), Type.integer(2)],
           guard: null,
           body: (vars) => {
             return vars.x;
@@ -204,7 +204,7 @@ describe("case()", () => {
 
     const clause1 = {
       head: Type.variablePattern("x"),
-      guard: (vars) => Erlang.$261$261(vars.x, Type.integer(1n)),
+      guard: (vars) => Erlang.$261$261(vars.x, Type.integer(1)),
       body: (_vars) => {
         return Type.atom("expr_1");
       },
@@ -212,7 +212,7 @@ describe("case()", () => {
 
     const clause2 = {
       head: Type.variablePattern("y"),
-      guard: (vars) => Erlang.$261$261(vars.y, Type.integer(2n)),
+      guard: (vars) => Erlang.$261$261(vars.y, Type.integer(2)),
       body: (_vars) => {
         return Type.atom("expr_2");
       },
@@ -220,7 +220,7 @@ describe("case()", () => {
 
     const clause3 = {
       head: Type.variablePattern("z"),
-      guard: (vars) => Erlang.$261$261(vars.z, Type.integer(3n)),
+      guard: (vars) => Erlang.$261$261(vars.z, Type.integer(3)),
       body: (_vars) => {
         return Type.atom("expr_3");
       },
@@ -245,7 +245,7 @@ describe("case()", () => {
 
     const clause1 = {
       head: Type.variablePattern("x"),
-      guard: (vars) => Erlang.$261$261(vars.x, Type.integer(1n)),
+      guard: (vars) => Erlang.$261$261(vars.x, Type.integer(1)),
       body: (_vars) => {
         return Type.atom("expr_1");
       },
@@ -323,13 +323,13 @@ describe("comprehension()", () => {
       // for x <- [1, 2], y <- [3, 4], do: {x, y}
 
       const generator1 = {
-        enumerable: Type.list([Type.integer(1n), Type.integer(2n)]),
+        enumerable: Type.list([Type.integer(1), Type.integer(2)]),
         match: Type.variablePattern("x"),
         guard: null,
       };
 
       const generator2 = {
-        enumerable: Type.list([Type.integer(3n), Type.integer(4n)]),
+        enumerable: Type.list([Type.integer(3), Type.integer(4)]),
         match: Type.variablePattern("y"),
         guard: null,
       };
@@ -606,8 +606,8 @@ describe("comprehension()", () => {
       };
 
       const filters = [
-        (vars) => Erlang.$260(Erlang.$243(vars.x, vars.y), Type.integer(8n)),
-        (vars) => Erlang.$262(Erlang.$245(vars.y, vars.x), Type.integer(2n)),
+        (vars) => Erlang.$260(Erlang.$243(vars.x, vars.y), Type.integer(8)),
+        (vars) => Erlang.$262(Erlang.$245(vars.y, vars.x), Type.integer(2)),
       ];
 
       const result = Interpreter.comprehension(
@@ -963,21 +963,21 @@ describe("defineFunction()", () => {
     Interpreter.defineFunction("Elixir_Aaa_Bbb", "my_fun_b", [
       {
         params: [Type.variablePattern("x")],
-        guard: (vars) => Erlang.$261$261(vars.x, Type.integer(1n)),
+        guard: (vars) => Erlang.$261$261(vars.x, Type.integer(1)),
         body: (_vars) => {
           return Type.atom("expr_1");
         },
       },
       {
         params: [Type.variablePattern("y")],
-        guard: (vars) => Erlang.$261$261(vars.y, Type.integer(2n)),
+        guard: (vars) => Erlang.$261$261(vars.y, Type.integer(2)),
         body: (_vars) => {
           return Type.atom("expr_2");
         },
       },
       {
         params: [Type.variablePattern("z")],
-        guard: (vars) => Erlang.$261$261(vars.z, Type.integer(3n)),
+        guard: (vars) => Erlang.$261$261(vars.z, Type.integer(3)),
         body: (_vars) => {
           return Type.atom("expr_3");
         },
@@ -995,14 +995,14 @@ describe("defineFunction()", () => {
     Interpreter.defineFunction("Elixir_Aaa_Bbb", "my_fun_c", [
       {
         params: [Type.variablePattern("x")],
-        guard: (vars) => Erlang.$261$261(vars.x, Type.integer(1n)),
+        guard: (vars) => Erlang.$261$261(vars.x, Type.integer(1)),
         body: (_vars) => {
           return Type.atom("expr_1");
         },
       },
       {
         params: [Type.variablePattern("x")],
-        guard: (vars) => Erlang.$261$261(vars.x, Type.integer(2n)),
+        guard: (vars) => Erlang.$261$261(vars.x, Type.integer(2)),
         body: (_vars) => {
           return Type.atom("expr_2");
         },
@@ -1553,7 +1553,7 @@ describe("matchOperator()", () => {
     describe("on the right", () => {
       it("left basic type, right matching match pattern", () => {
         const left = Type.integer(2);
-        const right = Type.matchPattern(Type.integer(2n), Type.integer(2n));
+        const right = Type.matchPattern(Type.integer(2), Type.integer(2));
         const result = Interpreter.matchOperator(left, right, vars);
 
         assert.deepStrictEqual(result, Type.integer(2));
@@ -1562,7 +1562,7 @@ describe("matchOperator()", () => {
 
       it("left basic type, right match pattern with right arg not matching", () => {
         const left = Type.integer(2);
-        const right = Type.matchPattern(Type.integer(2n), Type.integer(3n));
+        const right = Type.matchPattern(Type.integer(2), Type.integer(3));
 
         assertError(
           () => Interpreter.matchOperator(left, right, vars),
@@ -1573,7 +1573,7 @@ describe("matchOperator()", () => {
 
       it("left basic type, right match pattern with left arg not matching", () => {
         const left = Type.integer(2);
-        const right = Type.matchPattern(Type.integer(3n), Type.integer(2n));
+        const right = Type.matchPattern(Type.integer(3), Type.integer(2));
 
         assertError(
           () => Interpreter.matchOperator(left, right, vars),
@@ -1584,7 +1584,7 @@ describe("matchOperator()", () => {
 
       it("left basic type, right match pattern with both left and right args not matching", () => {
         const left = Type.integer(2);
-        const right = Type.matchPattern(Type.integer(3n), Type.integer(4n));
+        const right = Type.matchPattern(Type.integer(3), Type.integer(4));
 
         assertError(
           () => Interpreter.matchOperator(left, right, vars),
@@ -1596,7 +1596,7 @@ describe("matchOperator()", () => {
 
     describe("on the left", () => {
       it("left matching match pattern, right basic type", () => {
-        const left = Type.matchPattern(Type.integer(2n), Type.integer(2n));
+        const left = Type.matchPattern(Type.integer(2), Type.integer(2));
         const right = Type.integer(2);
         const result = Interpreter.matchOperator(left, right, vars);
 
@@ -1605,7 +1605,7 @@ describe("matchOperator()", () => {
       });
 
       it("left match pattern with right arg not matching, right basic type", () => {
-        const left = Type.matchPattern(Type.integer(2n), Type.integer(3n));
+        const left = Type.matchPattern(Type.integer(2), Type.integer(3));
         const right = Type.integer(2);
 
         assertError(
@@ -1616,7 +1616,7 @@ describe("matchOperator()", () => {
       });
 
       it("left match pattern with left arg not matching, right basic type", () => {
-        const left = Type.matchPattern(Type.integer(3n), Type.integer(2n));
+        const left = Type.matchPattern(Type.integer(3), Type.integer(2));
         const right = Type.integer(2);
 
         assertError(
@@ -1627,7 +1627,7 @@ describe("matchOperator()", () => {
       });
 
       it("left match pattern with both left and right args not matching, right basic type", () => {
-        const left = Type.matchPattern(Type.integer(3n), Type.integer(4n));
+        const left = Type.matchPattern(Type.integer(3), Type.integer(4));
         const right = Type.integer(2);
 
         assertError(
@@ -1641,8 +1641,8 @@ describe("matchOperator()", () => {
     describe("on both sides", () => {
       describe("left matching match pattern", () => {
         it("right matching match pattern", () => {
-          const left = Type.matchPattern(Type.integer(2n), Type.integer(2n));
-          const right = Type.matchPattern(Type.integer(2n), Type.integer(2n));
+          const left = Type.matchPattern(Type.integer(2), Type.integer(2));
+          const right = Type.matchPattern(Type.integer(2), Type.integer(2));
           const result = Interpreter.matchOperator(left, right, vars);
 
           assert.deepStrictEqual(result, Type.integer(2));
@@ -1653,8 +1653,8 @@ describe("matchOperator()", () => {
         });
 
         it("right match pattern with right arg not matching", () => {
-          const left = Type.matchPattern(Type.integer(2n), Type.integer(2n));
-          const right = Type.matchPattern(Type.integer(2n), Type.integer(3n));
+          const left = Type.matchPattern(Type.integer(2), Type.integer(2));
+          const right = Type.matchPattern(Type.integer(2), Type.integer(3));
 
           assertError(
             () => Interpreter.matchOperator(left, right, vars),
@@ -1664,8 +1664,8 @@ describe("matchOperator()", () => {
         });
 
         it("right match pattern with left arg not matching", () => {
-          const left = Type.matchPattern(Type.integer(2n), Type.integer(2n));
-          const right = Type.matchPattern(Type.integer(3n), Type.integer(2n));
+          const left = Type.matchPattern(Type.integer(2), Type.integer(2));
+          const right = Type.matchPattern(Type.integer(3), Type.integer(2));
 
           assertError(
             () => Interpreter.matchOperator(left, right, vars),
@@ -1675,8 +1675,8 @@ describe("matchOperator()", () => {
         });
 
         it("right match pattern with both left and right args not matching", () => {
-          const left = Type.matchPattern(Type.integer(2n), Type.integer(2n));
-          const right = Type.matchPattern(Type.integer(3n), Type.integer(4n));
+          const left = Type.matchPattern(Type.integer(2), Type.integer(2));
+          const right = Type.matchPattern(Type.integer(3), Type.integer(4));
 
           assertError(
             () => Interpreter.matchOperator(left, right, vars),
@@ -1691,8 +1691,8 @@ describe("matchOperator()", () => {
         // it("left matching match pattern")
 
         it("left match pattern with right arg not matching", () => {
-          const left = Type.matchPattern(Type.integer(2n), Type.integer(3n));
-          const right = Type.matchPattern(Type.integer(2n), Type.integer(2n));
+          const left = Type.matchPattern(Type.integer(2), Type.integer(3));
+          const right = Type.matchPattern(Type.integer(2), Type.integer(2));
 
           assertError(
             () => Interpreter.matchOperator(left, right, vars),
@@ -1702,8 +1702,8 @@ describe("matchOperator()", () => {
         });
 
         it("left match pattern with left arg not matching", () => {
-          const left = Type.matchPattern(Type.integer(3n), Type.integer(2n));
-          const right = Type.matchPattern(Type.integer(2n), Type.integer(2n));
+          const left = Type.matchPattern(Type.integer(3), Type.integer(2));
+          const right = Type.matchPattern(Type.integer(2), Type.integer(2));
 
           assertError(
             () => Interpreter.matchOperator(left, right, vars),
@@ -1713,8 +1713,8 @@ describe("matchOperator()", () => {
         });
 
         it("left match pattern with both left and right args not matching", () => {
-          const left = Type.matchPattern(Type.integer(3n), Type.integer(4n));
-          const right = Type.matchPattern(Type.integer(2n), Type.integer(2n));
+          const left = Type.matchPattern(Type.integer(3), Type.integer(4));
+          const right = Type.matchPattern(Type.integer(2), Type.integer(2));
 
           assertError(
             () => Interpreter.matchOperator(left, right, vars),
@@ -1897,7 +1897,7 @@ describe("matchOperator()", () => {
       it("2 = x = 2", () => {
         const result = Interpreter.matchOperator(
           Interpreter.matchOperator(
-            Type.integer(2n),
+            Type.integer(2),
             Type.variablePattern("x"),
             vars,
             false
@@ -1921,7 +1921,7 @@ describe("matchOperator()", () => {
           () =>
             Interpreter.matchOperator(
               Interpreter.matchOperator(
-                Type.integer(3n),
+                Type.integer(3),
                 Type.variablePattern("x"),
                 vars,
                 false
@@ -2005,7 +2005,7 @@ describe("matchOperator()", () => {
             Erlang.$243(
               vars.__snapshot__.x,
               Interpreter.matchOperator(
-                Type.integer(3n),
+                Type.integer(3),
                 Type.variablePattern("x"),
                 vars,
                 false
