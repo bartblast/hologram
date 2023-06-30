@@ -1141,7 +1141,7 @@ describe("matchOperator()", () => {
       );
 
       assert.deepStrictEqual(result, Type.atom("abc"));
-      assert.deepStrictEqual(vars, {__matchedVars__: {}, a: Type.integer(9)});
+      assert.deepStrictEqual(vars, {a: Type.integer(9)});
     });
 
     it("left atom != right atom", () => {
@@ -1180,7 +1180,6 @@ describe("matchOperator()", () => {
       );
 
       assert.deepStrictEqual(vars, {
-        __matchedVars__: {},
         a: Type.integer(9),
         h: Type.integer(1),
         t: Type.list([Type.integer(2), Type.integer(3)]),
@@ -1204,7 +1203,6 @@ describe("matchOperator()", () => {
       );
 
       assert.deepStrictEqual(vars, {
-        __matchedVars__: {},
         a: Type.integer(9),
         h: Type.integer(1),
       });
@@ -1224,7 +1222,6 @@ describe("matchOperator()", () => {
       );
 
       assert.deepStrictEqual(vars, {
-        __matchedVars__: {},
         a: Type.integer(9),
         t: Type.list([Type.integer(2), Type.integer(3)]),
       });
@@ -1246,10 +1243,7 @@ describe("matchOperator()", () => {
         Type.list([Type.integer(1), Type.integer(2), Type.integer(3)])
       );
 
-      assert.deepStrictEqual(vars, {
-        __matchedVars__: {},
-        a: Type.integer(9),
-      });
+      assert.deepStrictEqual(vars, {a: Type.integer(9)});
     });
 
     it("raises match error if right is not a boxed list", () => {
