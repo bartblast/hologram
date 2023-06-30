@@ -1389,25 +1389,28 @@ describe("matchOperator()", () => {
     });
 
     it("left list == right list", () => {
+      // [1, 2] = [1, 2]
       const result = Interpreter.matchOperator(list1, list1, vars);
 
       assert.deepStrictEqual(result, list1);
-      assert.deepStrictEqual(vars, {__matchedVars__: {}, a: Type.integer(9)});
+      assert.deepStrictEqual(vars, {a: Type.integer(9)});
     });
 
     it("left list != right list", () => {
       const list2 = Type.list([Type.integer(1), Type.integer(3)]);
 
+      // [1, 2] = [1, 3]
       assertError(
-        () => Interpreter.matchOperator(list1, list2, vars),
+        () => Interpreter.matchOperator(list2, list1, vars),
         "MatchError",
         "no match of right hand side value: [1, 3]"
       );
     });
 
     it("left list != right non-list", () => {
+      // [1, 2] = :abc
       assertError(
-        () => Interpreter.matchOperator(list1, Type.atom("abc"), vars),
+        () => Interpreter.matchOperator(Type.atom("abc"), list1, vars),
         "MatchError",
         "no match of right hand side value: :abc"
       );
@@ -1426,14 +1429,11 @@ describe("matchOperator()", () => {
         Type.integer(3),
       ]);
 
-      const result = Interpreter.matchOperator(left, right, vars);
+      // [x, 2, y] = [1, 2, 3]
+      const result = Interpreter.matchOperator(right, left, vars);
       assert.deepStrictEqual(result, right);
 
       const expectedVars = {
-        __matchedVars__: {
-          x: Type.integer(1),
-          y: Type.integer(3),
-        },
         a: Type.integer(9),
         x: Type.integer(1),
         y: Type.integer(3),

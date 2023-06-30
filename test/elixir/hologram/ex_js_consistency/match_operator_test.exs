@@ -129,6 +129,33 @@ defmodule Hologram.ExJsConsistency.MatchOperatorTest do
     end
   end
 
+  describe "list type" do
+    test "left list == right list" do
+      result = [1, 2] = [1, 2]
+      assert result == [1, 2]
+    end
+
+    test "left list != right list" do
+      assert_raise MatchError, "no match of right hand side value: [1, 3]", fn ->
+        [1, 2] = build_value([1, 3])
+      end
+    end
+
+    test "left list != right non-list" do
+      assert_raise MatchError, "no match of right hand side value: :abc", fn ->
+        [1, 2] = build_value(:abc)
+      end
+    end
+
+    test "left list has variables" do
+      result = [x, 2, y] = [1, 2, 3]
+
+      assert result == [1, 2, 3]
+      assert x == 1
+      assert y == 3
+    end
+  end
+
   describe "variable pattern" do
     test "variable pattern == anything" do
       result = x = 2
