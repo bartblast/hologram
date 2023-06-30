@@ -1128,7 +1128,7 @@ describe("matchOperator()", () => {
   let vars;
 
   beforeEach(() => {
-    vars = {__matchedVars__: {}, a: Type.integer(9)};
+    vars = {a: Type.integer(9)};
   });
 
   describe("atom type", () => {
@@ -1794,7 +1794,7 @@ describe("matchOperator()", () => {
     });
   });
 
-  describe.only("variable pattern", () => {
+  describe("variable pattern", () => {
     it("variable pattern == anything", () => {
       const result = Interpreter.matchOperator(
         Type.integer(2),
@@ -2097,5 +2097,36 @@ describe("raiseMatchError()", () => {
         "no match of right hand side value: 2"
       );
     });
+  });
+});
+
+describe("takeVarsSnapshot()", () => {
+  let expected;
+
+  beforeEach(() => {
+    expected = {
+      __snapshot__: {a: Type.integer(1), b: Type.integer(2)},
+      a: Type.integer(1),
+      b: Type.integer(2),
+    };
+  });
+
+  it("when snapshot hasn't been taken yet", () => {
+    const vars = {a: Type.integer(1), b: Type.integer(2)};
+    Interpreter.takeVarsSnapshot(vars);
+
+    assert.deepStrictEqual(vars, expected);
+  });
+
+  it("when snapshot has already been taken", () => {
+    const vars = {
+      __snapshot__: "dummy",
+      a: Type.integer(1),
+      b: Type.integer(2),
+    };
+
+    Interpreter.takeVarsSnapshot(vars);
+
+    assert.deepStrictEqual(vars, expected);
   });
 });

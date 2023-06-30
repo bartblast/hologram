@@ -167,7 +167,7 @@ export default class Interpreter {
     return isEqual(left, right);
   }
 
-  // vars.__matchedVars__ keeps track of already pattern matched variables' values,
+  // vars.__matchedVars__ keeps track of already pattern matched variables,
   // which enables to fail pattern matching if the variables with the same name
   // are being pattern matched to different values.
   //
@@ -274,8 +274,13 @@ export default class Interpreter {
   static raiseMatchError(right) {
     const message =
       "no match of right hand side value: " + Hologram.inspect(right);
-    console.debug(message);
+
     return Hologram.raiseError("MatchError", message);
+  }
+
+  static takeVarsSnapshot(vars) {
+    delete vars.__snapshot__;
+    vars.__snapshot__ = Utils.clone(vars);
   }
 
   static #evaluateGuard(guard, vars) {
