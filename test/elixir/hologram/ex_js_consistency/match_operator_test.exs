@@ -66,13 +66,13 @@ defmodule Hologram.ExJsConsistency.MatchOperatorTest do
       assert result == [1, 2, 3]
     end
 
-    test "raises match error if right is not a boxed list" do
+    test "raises match error if right is not a list" do
       assert_raise MatchError, "no match of right hand side value: 123", fn ->
         [_h | _t] = build_value(123)
       end
     end
 
-    test "raises match error if right is an empty boxed list" do
+    test "raises match error if right is an empty list" do
       assert_raise MatchError, "no match of right hand side value: []", fn ->
         [_h | _t] = build_value([])
       end

@@ -1246,7 +1246,7 @@ describe("matchOperator()", () => {
       assert.deepStrictEqual(vars, {a: Type.integer(9)});
     });
 
-    it("raises match error if right is not a boxed list", () => {
+    it("raises match error if right is not a list", () => {
       // [h | t] = 123
       assertError(
         () =>
@@ -1263,7 +1263,7 @@ describe("matchOperator()", () => {
       );
     });
 
-    it("raises match error if right is an empty boxed list", () => {
+    it("raises match error if right is an empty list", () => {
       // [h | t] = []
       assertError(
         () =>
