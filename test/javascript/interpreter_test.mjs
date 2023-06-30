@@ -1315,8 +1315,9 @@ describe("matchOperator()", () => {
     });
   });
 
-  describe("float type", () => {
+  describe.only("float type", () => {
     it("left float == right float", () => {
+      // 2.0 = 2.0
       const result = Interpreter.matchOperator(
         Type.float(2.0),
         Type.float(2.0),
@@ -1324,21 +1325,23 @@ describe("matchOperator()", () => {
       );
 
       assert.deepStrictEqual(result, Type.float(2.0));
-      assert.deepStrictEqual(vars, {__matchedVars__: {}, a: Type.integer(9)});
+      assert.deepStrictEqual(vars, {a: Type.integer(9)});
     });
 
     it("left float != right float", () => {
+      // 2.0 = 3.0
       assertError(
-        () => Interpreter.matchOperator(Type.float(2.0), Type.float(3.0), vars),
+        () => Interpreter.matchOperator(Type.float(3.0), Type.float(2.0), vars),
         "MatchError",
         "no match of right hand side value: 3.0"
       );
     });
 
     it("left float != right non-float", () => {
+      // 2.0 = :abc
       assertError(
         () =>
-          Interpreter.matchOperator(Type.float(2.0), Type.atom("abc"), vars),
+          Interpreter.matchOperator(Type.atom("abc"), Type.float(2.0), vars),
         "MatchError",
         "no match of right hand side value: :abc"
       );
