@@ -1991,6 +1991,46 @@ describe("matchOperator()", () => {
           "no match of right hand side value: 2"
         );
       });
+
+      it("y = x + (x = 3) + x, (x = 11)", () => {
+        let vars = {
+          a: Type.integer(9),
+          x: Type.integer(11),
+        };
+
+        Interpreter.takeVarsSnapshot(vars);
+
+        const result = Interpreter.matchOperator(
+          Erlang.$243(
+            Erlang.$243(
+              vars.__snapshot__.x,
+              Interpreter.matchOperator(
+                Type.integer(3n),
+                Type.variablePattern("x"),
+                vars,
+                false
+              )
+            ),
+            vars.__snapshot__.x
+          ),
+          Type.variablePattern("y"),
+          vars
+        );
+
+        assert.deepStrictEqual(result, Type.integer(25));
+
+        const expectedVars = {
+          __snapshot__: {
+            a: Type.integer(9),
+            x: Type.integer(11),
+          },
+          a: Type.integer(9),
+          x: Type.integer(3),
+          y: Type.integer(25),
+        };
+
+        assert.deepStrictEqual(vars, expectedVars);
+      });
     });
   });
 });

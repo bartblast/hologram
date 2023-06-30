@@ -159,5 +159,14 @@ defmodule Hologram.ExJsConsistency.MatchOperatorTest do
         1 = 2 = build_value(x)
       end
     end
+
+    test "y = x + (x = 3) + x, (x = 11)" do
+      x = 11
+      result = y = x + (x = 3) + x
+
+      assert result == 25
+      assert x == 3
+      assert y == 25
+    end
   end
 end
