@@ -1165,7 +1165,7 @@ describe("matchOperator()", () => {
     });
   });
 
-  describe.only("cons pattern", () => {
+  describe("cons pattern", () => {
     it("left cons pattern == right list, cons pattern head and tail are variables", () => {
       // [h | t] = [1, 2, 3]
       const result = Interpreter.matchOperator(

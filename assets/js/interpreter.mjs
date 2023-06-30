@@ -212,8 +212,12 @@ export default class Interpreter {
       const rightHead = Erlang.hd(right);
       const rightTail = Erlang.tl(right);
 
-      Interpreter.matchOperator(rightHead, left.head, vars, false);
-      Interpreter.matchOperator(rightTail, left.tail, vars, false);
+      try {
+        Interpreter.matchOperator(rightHead, left.head, vars, false);
+        Interpreter.matchOperator(rightTail, left.tail, vars, false);
+      } catch {
+        Interpreter.raiseMatchError(right);
+      }
 
       return Interpreter.#handleMatchOperatorResult(
         right,
@@ -274,6 +278,7 @@ export default class Interpreter {
   static raiseMatchError(right) {
     const message =
       "no match of right hand side value: " + Hologram.inspect(right);
+    console.debug(message);
 
     return Hologram.raiseError("MatchError", message);
   }
