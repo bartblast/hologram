@@ -11,6 +11,7 @@ defmodule Hologram.Compiler.Encoder do
 
   alias Hologram.Commons.IntegerUtils
   alias Hologram.Commons.StringUtils
+  alias Hologram.Compiler.Analyzer
   alias Hologram.Compiler.Context
   alias Hologram.Compiler.IR
 
@@ -79,13 +80,41 @@ defmodule Hologram.Compiler.Encoder do
       exprs
       |> Enum.with_index()
       |> Enum.map_join("", fn {expr, idx} ->
+        # If the expression contains variables that are used both as patterns (in match operator)
+        # and as values (value access), then we need to take a snapshot of these variables
+        # before evaluating the expression, and then use that snapshot for accessing variable values.
+
+        %{var_patterns: var_patterns, var_values: var_values} = Analyzer.analyze(expr)
+
+        use_vars_snapshot? =
+          var_patterns
+          |> MapSet.intersection(var_values)
+          |> Enum.any?()
+
+        output =
+          if use_vars_snapshot? do
+            "\nInterpreter.takeVarsSnapshot(vars);"
+          else
+            ""
+          end
+
+        context =
+          if use_vars_snapshot? do
+            %{context | use_vars_snapshot?: true}
+          else
+            context
+          end
+
         expr_str = encode(expr, context)
 
-        if idx == expr_count - 1 do
-          "\nreturn #{expr_str};"
-        else
-          "\n#{expr_str};"
-        end
+        output =
+          if idx == expr_count - 1 do
+            output <> "\nreturn "
+          else
+            output <> "\n"
+          end
+
+        output <> expr_str <> ";"
       end)
 
     "{#{body}\n}"
@@ -208,7 +237,7 @@ defmodule Hologram.Compiler.Encoder do
   end
 
   def encode(%IR.ModuleAttributeOperator{name: name}, _context) do
-    encode_var("@#{name}")
+    encode_var_value("@#{name}", false)
   end
 
   def encode(%IR.ModuleDefinition{module: module, body: body}, context) do
@@ -265,8 +294,8 @@ defmodule Hologram.Compiler.Encoder do
     "Type.variablePattern(#{name_str})"
   end
 
-  def encode(%IR.Variable{name: name}, %{pattern?: false}) do
-    encode_var(name)
+  def encode(%IR.Variable{name: name}, %{pattern?: false, use_vars_snapshot?: use_vars_snapshot?}) do
+    encode_var_value(name, use_vars_snapshot?)
   end
 
   @doc """
@@ -468,12 +497,19 @@ defmodule Hologram.Compiler.Encoder do
     "Type.#{type}(#{value})"
   end
 
-  defp encode_var(name) do
-    name_js =
-      name
-      |> to_string()
-      |> escape_js_identifier()
+  defp encode_var_value(name, use_vars_snapshot?)
 
-    "vars.#{name_js}"
+  defp encode_var_value(name, true) do
+    "vars.__snapshot__.#{escape_var_name(name)}"
+  end
+
+  defp encode_var_value(name, false) do
+    "vars.#{escape_var_name(name)}"
+  end
+
+  defp escape_var_name(name) do
+    name
+    |> to_string()
+    |> escape_js_identifier()
   end
 end

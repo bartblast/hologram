@@ -221,6 +221,57 @@ defmodule Hologram.Compiler.EncoderTest do
                }\
                """
     end
+
+    test "expression not using vars snapshot" do
+      # x + (y = 123)
+      ir = %IR.Block{
+        expressions: [
+          %IR.RemoteFunctionCall{
+            module: %IR.AtomType{value: :erlang},
+            function: :+,
+            args: [
+              %IR.Variable{name: :x},
+              %IR.MatchOperator{left: %IR.Variable{name: :y}, right: %IR.IntegerType{value: 123}}
+            ]
+          },
+          %IR.AtomType{value: :ok}
+        ]
+      }
+
+      assert encode(ir, %Context{}) ==
+               """
+               {
+               Erlang.$243(vars.x, Interpreter.matchOperator(Type.integer(123n), Type.variablePattern("y"), vars));
+               return Type.atom("ok");
+               }\
+               """
+    end
+
+    test "expression using vars snapshot" do
+      # x + (x = 123)
+      ir = %IR.Block{
+        expressions: [
+          %IR.RemoteFunctionCall{
+            module: %IR.AtomType{value: :erlang},
+            function: :+,
+            args: [
+              %IR.Variable{name: :x},
+              %IR.MatchOperator{left: %IR.Variable{name: :x}, right: %IR.IntegerType{value: 123}}
+            ]
+          },
+          %IR.AtomType{value: :ok}
+        ]
+      }
+
+      assert encode(ir, %Context{}) ==
+               """
+               {
+               Interpreter.takeVarsSnapshot(vars);
+               Erlang.$243(vars.__snapshot__.x, Interpreter.matchOperator(Type.integer(123n), Type.variablePattern("x"), vars));
+               return Type.atom("ok");
+               }\
+               """
+    end
   end
 
   test "case" do
