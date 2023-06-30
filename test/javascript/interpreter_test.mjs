@@ -1558,14 +1558,15 @@ describe("matchOperator()", () => {
   });
 
   it("match placeholder", () => {
+    // _ = 2
     const result = Interpreter.matchOperator(
-      Type.matchPlaceholder(),
       Type.integer(2),
+      Type.matchPlaceholder(),
       vars
     );
 
     assert.deepStrictEqual(result, Type.integer(2));
-    assert.deepStrictEqual(vars, {__matchedVars__: {}, a: Type.integer(9)});
+    assert.deepStrictEqual(vars, {a: Type.integer(9)});
   });
 
   describe("nested match operators", () => {
