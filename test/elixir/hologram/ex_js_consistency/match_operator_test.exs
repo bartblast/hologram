@@ -194,27 +194,7 @@ defmodule Hologram.ExJsConsistency.MatchOperatorTest do
     end
   end
 
-  describe "variable pattern" do
-    test "variable pattern == anything" do
-      result = x = 2
-
-      assert result == 2
-      assert x == 2
-    end
-
-    test "multiple variables with the same name being matched to the same value" do
-      result = [x, x] = [1, 1]
-
-      assert result == [1, 1]
-      assert x == 1
-    end
-
-    test "multiple variables with the same name being matched to the different values" do
-      assert_raise MatchError, "no match of right hand side value: [1, 2]", fn ->
-        [x, x] = build_value([1, 2])
-      end
-    end
-
+  describe "nested match operators" do
     test "x = 2 = 2" do
       result = x = 2 = 2
 
@@ -270,6 +250,61 @@ defmodule Hologram.ExJsConsistency.MatchOperatorTest do
       assert result == 25
       assert x == 3
       assert y == 25
+    end
+
+    test "[1 = 1] = [1 = 1]" do
+      result = [1 = 1] = [1 = 1]
+      assert result == [1]
+    end
+
+    test "[1 = 1] = [1 = 2]" do
+      assert_raise MatchError, "no match of right hand side value: 2", fn ->
+        [1 = 1] = [1 = build_value(2)]
+      end
+    end
+
+    test "[1 = 1] = [2 = 1]" do
+      assert_raise MatchError, "no match of right hand side value: 1", fn ->
+        [1 = 1] = [2 = build_value(1)]
+      end
+    end
+
+    # TODO: JavaScript error message for this case is inconsistent with Elixir error message (see test/javascript/interpreter_test.mjs)
+    test "[1 = 2] = [1 = 1]" do
+      assert_raise MatchError, "no match of right hand side value: [1]", fn ->
+        x = build_value(2)
+        [1 = ^x] = [1 = 1]
+      end
+    end
+
+    # TODO: JavaScript error message for this case is inconsistent with Elixir error message (see test/javascript/interpreter_test.mjs)
+    test "[2 = 1] = [1 = 1]" do
+      assert_raise MatchError, "no match of right hand side value: [1]", fn ->
+        x = build_value(2)
+        [^x = 1] = [1 = 1]
+      end
+    end
+  end
+
+  describe "variable pattern" do
+    test "variable pattern == anything" do
+      result = x = 2
+
+      assert result == 2
+      assert x == 2
+    end
+
+    test "multiple variables with the same name being matched to the same value" do
+      result = [x, x] = [1, 1]
+
+      assert result == [1, 1]
+      assert x == 1
+    end
+
+    test "multiple variables with the same name being matched to the different values" do
+      assert_raise MatchError, "no match of right hand side value: [1, 2]", fn ->
+        [x, x] = build_value([1, 2])
+      end
     end
   end
 end
