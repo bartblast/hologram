@@ -177,84 +177,24 @@ export default class Interpreter {
       vars.__matchedVars__ = {};
     }
 
-    try {
-      if (Type.isMatchPlaceholder(left)) {
-        return Interpreter.#handleMatchOperatorResult(
-          right,
-          vars,
-          rootMatchOperator
-        );
-      }
+    if (Type.isMatchPlaceholder(left)) {
+      return Interpreter.#handleMatchOperatorResult(
+        right,
+        vars,
+        rootMatchOperator
+      );
+    }
 
-      if (Type.isVariablePattern(left)) {
-        if (vars.__matchedVars__[left.name]) {
-          if (
-            !Interpreter.isStrictlyEqual(vars.__matchedVars__[left.name], right)
-          ) {
-            throw new Error("__match_error__");
-          }
-        } else {
-          vars[left.name] = right;
-          vars.__matchedVars__[left.name] = right;
+    if (Type.isVariablePattern(left)) {
+      if (vars.__matchedVars__[left.name]) {
+        if (
+          !Interpreter.isStrictlyEqual(vars.__matchedVars__[left.name], right)
+        ) {
+          Interpreter.raiseMatchError(right);
         }
-
-        return Interpreter.#handleMatchOperatorResult(
-          right,
-          vars,
-          rootMatchOperator
-        );
-      }
-
-      if (Type.isConsPattern(left)) {
-        if (!Type.isList(right) || Erlang.length(right).value === 0n) {
-          throw new Error("__match_error__");
-        }
-
-        const rightHead = Erlang.hd(right);
-        const rightTail = Erlang.tl(right);
-
-        Interpreter.matchOperator(rightHead, left.head, vars, false);
-        Interpreter.matchOperator(rightTail, left.tail, vars, false);
-
-        return Interpreter.#handleMatchOperatorResult(
-          right,
-          vars,
-          rootMatchOperator
-        );
-      }
-
-      if (left.type !== right.type) {
-        throw new Error("__match_error__");
-      }
-
-      if (Type.isList(left) || Type.isTuple(left)) {
-        const count = Elixir_Enum.count(left).value;
-
-        for (let i = 0; i < count; ++i) {
-          Interpreter.matchOperator(right.data[i], left.data[i], vars, false);
-        }
-
-        return Interpreter.#handleMatchOperatorResult(
-          right,
-          vars,
-          rootMatchOperator
-        );
-      }
-
-      if (Type.isMap(left)) {
-        for (const [key, value] of Object.entries(left.data)) {
-          Interpreter.matchOperator(right.data[key][1], value[1], vars, false);
-        }
-
-        return Interpreter.#handleMatchOperatorResult(
-          right,
-          vars,
-          rootMatchOperator
-        );
-      }
-
-      if (!Interpreter.isStrictlyEqual(left, right)) {
-        throw new Error("__match_error__");
+      } else {
+        vars[left.name] = right;
+        vars.__matchedVars__[left.name] = right;
       }
 
       return Interpreter.#handleMatchOperatorResult(
@@ -262,15 +202,79 @@ export default class Interpreter {
         vars,
         rootMatchOperator
       );
-    } catch {
+    }
+
+    if (Type.isConsPattern(left)) {
+      if (!Type.isList(right) || Erlang.length(right).value === 0n) {
+        Interpreter.raiseMatchError(right);
+      }
+
+      const rightHead = Erlang.hd(right);
+      const rightTail = Erlang.tl(right);
+
+      Interpreter.matchOperator(rightHead, left.head, vars, false);
+      Interpreter.matchOperator(rightTail, left.tail, vars, false);
+
+      return Interpreter.#handleMatchOperatorResult(
+        right,
+        vars,
+        rootMatchOperator
+      );
+    }
+
+    if (left.type !== right.type) {
       Interpreter.raiseMatchError(right);
     }
+
+    if (Type.isList(left) || Type.isTuple(left)) {
+      const count = Elixir_Enum.count(left).value;
+
+      try {
+        for (let i = 0; i < count; ++i) {
+          Interpreter.matchOperator(right.data[i], left.data[i], vars, false);
+        }
+      } catch {
+        Interpreter.raiseMatchError(right);
+      }
+
+      return Interpreter.#handleMatchOperatorResult(
+        right,
+        vars,
+        rootMatchOperator
+      );
+    }
+
+    if (Type.isMap(left)) {
+      try {
+        for (const [key, value] of Object.entries(left.data)) {
+          Interpreter.matchOperator(right.data[key][1], value[1], vars, false);
+        }
+      } catch {
+        Interpreter.raiseMatchError(right);
+      }
+
+      return Interpreter.#handleMatchOperatorResult(
+        right,
+        vars,
+        rootMatchOperator
+      );
+    }
+
+    if (!Interpreter.isStrictlyEqual(left, right)) {
+      Interpreter.raiseMatchError(right);
+    }
+
+    return Interpreter.#handleMatchOperatorResult(
+      right,
+      vars,
+      rootMatchOperator
+    );
   }
 
   static raiseMatchError(right) {
     const message =
       "no match of right hand side value: " + Hologram.inspect(right);
-
+    console.debug(message);
     return Hologram.raiseError("MatchError", message);
   }
 
