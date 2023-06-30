@@ -20,7 +20,7 @@ defmodule Hologram.ExJsConsistency.MatchOperatorTest do
 
   describe "atom type" do
     test "left atom == right atom" do
-      result = build_match_operator(:abc, :abc)
+      result = :abc = :abc
       assert result == :abc
     end
 
