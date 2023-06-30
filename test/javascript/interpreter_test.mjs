@@ -1133,6 +1133,7 @@ describe("matchOperator()", () => {
 
   describe("atom type", () => {
     it("left atom == right atom", () => {
+      // :abc = :abc
       const result = Interpreter.matchOperator(
         Type.atom("abc"),
         Type.atom("abc"),
@@ -1144,6 +1145,7 @@ describe("matchOperator()", () => {
     });
 
     it("left atom != right atom", () => {
+      // :abc = :xyz
       assertError(
         () =>
           Interpreter.matchOperator(Type.atom("xyz"), Type.atom("abc"), vars),
@@ -1153,6 +1155,7 @@ describe("matchOperator()", () => {
     });
 
     it("left atom != right non-atom", () => {
+      // :abc = 2
       assertError(
         () =>
           Interpreter.matchOperator(Type.integer(2), Type.atom("abc"), vars),
@@ -1162,8 +1165,9 @@ describe("matchOperator()", () => {
     });
   });
 
-  describe("cons pattern", () => {
+  describe.only("cons pattern", () => {
     it("left cons pattern == right list, cons pattern head and tail are variables", () => {
+      // [h | t] = [1, 2, 3]
       const result = Interpreter.matchOperator(
         Type.list([Type.integer(1), Type.integer(2), Type.integer(3)]),
         Type.consPattern(Type.variablePattern("h"), Type.variablePattern("t")),
@@ -1184,6 +1188,7 @@ describe("matchOperator()", () => {
     });
 
     it("left cons pattern == right list, cons pattern head is variable, tail is literal", () => {
+      // [h | [2, 3]] = [1, 2, 3]
       const result = Interpreter.matchOperator(
         Type.list([Type.integer(1), Type.integer(2), Type.integer(3)]),
         Type.consPattern(
@@ -1206,6 +1211,7 @@ describe("matchOperator()", () => {
     });
 
     it("left cons pattern == right list, cons pattern head is literal, tail is variable", () => {
+      // [1 | t] = [1, 2, 3]
       const result = Interpreter.matchOperator(
         Type.list([Type.integer(1), Type.integer(2), Type.integer(3)]),
         Type.consPattern(Type.integer(1), Type.variablePattern("t")),
@@ -1225,6 +1231,7 @@ describe("matchOperator()", () => {
     });
 
     it("left cons pattern == right list, cons pattern head and tail are literals", () => {
+      // [1 | [2, 3]] = [1, 2, 3]
       const result = Interpreter.matchOperator(
         Type.list([Type.integer(1), Type.integer(2), Type.integer(3)]),
         Type.consPattern(
@@ -1246,6 +1253,7 @@ describe("matchOperator()", () => {
     });
 
     it("raises match error if right is not a boxed list", () => {
+      // [h | t] = 123
       assertError(
         () =>
           Interpreter.matchOperator(
@@ -1262,6 +1270,7 @@ describe("matchOperator()", () => {
     });
 
     it("raises match error if right is an empty boxed list", () => {
+      // [h | t] = []
       assertError(
         () =>
           Interpreter.matchOperator(
@@ -1278,6 +1287,7 @@ describe("matchOperator()", () => {
     });
 
     it("raises match error if head doesn't match", () => {
+      // [4 | [2, 3]] = [1, 2, 3]
       assertError(
         () =>
           Interpreter.matchOperator(
@@ -1294,6 +1304,7 @@ describe("matchOperator()", () => {
     });
 
     it("raises match error if tail doesn't match", () => {
+      // [1 | [4, 3]] = [1, 2, 3]
       assertError(
         () =>
           Interpreter.matchOperator(
@@ -1796,6 +1807,7 @@ describe("matchOperator()", () => {
 
   describe("variable pattern", () => {
     it("variable pattern == anything", () => {
+      // x = 2
       const result = Interpreter.matchOperator(
         Type.integer(2),
         Type.variablePattern("x"),
@@ -1813,6 +1825,7 @@ describe("matchOperator()", () => {
     });
 
     it("multiple variables with the same name being matched to the same value", () => {
+      // [x, x] = [1, 1]
       const result = Interpreter.matchOperator(
         Type.list([Type.integer(1), Type.integer(1)]),
         Type.list([Type.variablePattern("x"), Type.variablePattern("x")]),
@@ -1833,6 +1846,7 @@ describe("matchOperator()", () => {
     });
 
     it("multiple variables with the same name being matched to the different values", () => {
+      // [x, x] = [1, 2]
       assertError(
         () =>
           Interpreter.matchOperator(
