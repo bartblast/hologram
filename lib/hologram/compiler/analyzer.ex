@@ -4,8 +4,20 @@ defmodule Hologram.Compiler.Analyzer do
 
   defmodule Info do
     defstruct var_patterns: MapSet.new(), var_values: MapSet.new()
+
+    @type t :: %__MODULE__{var_patterns: MapSet.t(atom), var_values: MapSet.t(atom)}
   end
 
+  @doc """
+  Analyzes an expression and returns analysis information.
+
+  ## Examples
+
+      iex> analyze(%IR.MatchOperator{left: %IR.Variable{name: :x}, right: %IR.Variable{name: :y}})
+      %Info{var_patterns: #MapSet<[:x]>, var_values: #MapSet<[:y]>}
+
+  """
+  @spec analyze(any(), Context.t(), Info.t()) :: Info.t()
   def analyze(expr, context \\ %Context{}, info \\ %Info{})
 
   def analyze(%IR.Variable{name: name}, %{pattern?: true}, info) do
