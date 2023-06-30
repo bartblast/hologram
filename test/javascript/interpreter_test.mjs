@@ -1453,17 +1453,18 @@ describe("matchOperator()", () => {
       ];
     });
 
-    it("left and right boxed maps have the same items", () => {
+    it("left and right maps have the same items", () => {
       const left = Type.map(data);
       const right = Type.map(data);
 
-      const result = Interpreter.matchOperator(left, right, vars);
+      // %{x: 1, y: 2} = %{x: 1, y: 2}
+      const result = Interpreter.matchOperator(right, left, vars);
 
       assert.deepStrictEqual(result, right);
-      assert.deepStrictEqual(vars, {__matchedVars__: {}, a: Type.integer(9)});
+      assert.deepStrictEqual(vars, {a: Type.integer(9)});
     });
 
-    it("right boxed map have all the same items as the left boxed map plus additional ones", () => {
+    it("right map have all the same items as the left map plus additional ones", () => {
       const left = Type.map(data);
 
       const data2 = [
@@ -1474,13 +1475,14 @@ describe("matchOperator()", () => {
 
       const right = Type.map(data2);
 
-      const result = Interpreter.matchOperator(left, right, vars);
+      // %{x: 1, y: 2} = %{x: 1, y: 2, z: 3}
+      const result = Interpreter.matchOperator(right, left, vars);
 
       assert.deepStrictEqual(result, right);
-      assert.deepStrictEqual(vars, {__matchedVars__: {}, a: Type.integer(9)});
+      assert.deepStrictEqual(vars, {a: Type.integer(9)});
     });
 
-    it("right boxed map is missing some some keys from the left boxed map", () => {
+    it("right map is missing some some keys from the left map", () => {
       const data1 = [
         [Type.atom("x"), Type.integer(1)],
         [Type.atom("y"), Type.integer(2)],
@@ -1490,14 +1492,15 @@ describe("matchOperator()", () => {
       const left = Type.map(data1);
       const right = Type.map(data);
 
+      // %{x: 1, y: 2, z: 3} = %{x: 1, y: 2}
       assertError(
-        () => Interpreter.matchOperator(left, right, vars),
+        () => Interpreter.matchOperator(right, left, vars),
         "MatchError",
         'no match of right hand side value: {"type":"map","data":{"atom(x)":[{"type":"atom","value":"x"},{"type":"integer","value":"__bigint__:1"}],"atom(y)":[{"type":"atom","value":"y"},{"type":"integer","value":"__bigint__:2"}]}}'
       );
     });
 
-    it("some left boxed map item values don't match right boxed map item values", () => {
+    it("some left map item values don't match right map item values", () => {
       const left = Type.map(data);
 
       const data2 = [
@@ -1507,8 +1510,9 @@ describe("matchOperator()", () => {
 
       const right = Type.map(data2);
 
+      // %{x: 1, y: 2} = %{x: 1, y: 3}
       assertError(
-        () => Interpreter.matchOperator(left, right, vars),
+        () => Interpreter.matchOperator(right, left, vars),
         "MatchError",
         'no match of right hand side value: {"type":"map","data":{"atom(x)":[{"type":"atom","value":"x"},{"type":"integer","value":"__bigint__:1"}],"atom(y)":[{"type":"atom","value":"y"},{"type":"integer","value":"__bigint__:3"}]}}'
       );
@@ -1518,8 +1522,9 @@ describe("matchOperator()", () => {
       const left = Type.map(data);
       const right = Type.atom("abc");
 
+      // %{x: 1, y: 2} = :abc
       assertError(
-        () => Interpreter.matchOperator(left, right, vars),
+        () => Interpreter.matchOperator(right, left, vars),
         "MatchError",
         "no match of right hand side value: :abc"
       );
@@ -1538,14 +1543,11 @@ describe("matchOperator()", () => {
         [Type.atom("n"), Type.integer(3)],
       ]);
 
-      const result = Interpreter.matchOperator(left, right, vars);
+      // %{k: x, m: 2, n: z} = %{k: 1, m: 2, n: 3}
+      const result = Interpreter.matchOperator(right, left, vars);
       assert.deepStrictEqual(result, right);
 
       const expectedVars = {
-        __matchedVars__: {
-          x: Type.integer(1),
-          z: Type.integer(3),
-        },
         a: Type.integer(9),
         x: Type.integer(1),
         z: Type.integer(3),

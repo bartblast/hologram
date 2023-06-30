@@ -156,6 +156,44 @@ defmodule Hologram.ExJsConsistency.MatchOperatorTest do
     end
   end
 
+  describe "map type" do
+    test "left and right maps have the same items" do
+      result = %{x: 1, y: 2} = %{x: 1, y: 2}
+      assert result == %{x: 1, y: 2}
+    end
+
+    test "right map have all the same items as the left map plus additional ones" do
+      result = %{x: 1, y: 2} = %{x: 1, y: 2, z: 3}
+      assert result == %{x: 1, y: 2, z: 3}
+    end
+
+    test "right map is missing some some keys from the left map" do
+      assert_raise MatchError, "no match of right hand side value: %{x: 1, y: 2}", fn ->
+        %{x: 1, y: 2, z: 3} = build_value(%{x: 1, y: 2})
+      end
+    end
+
+    test "some left map item values don't match right map item values" do
+      assert_raise MatchError, "no match of right hand side value: %{x: 1, y: 3}", fn ->
+        %{x: 1, y: 2} = %{x: 1, y: 3}
+      end
+    end
+
+    test "left map != right non-map" do
+      assert_raise MatchError, "no match of right hand side value: :abc", fn ->
+        %{x: 1, y: 2} = build_value(:abc)
+      end
+    end
+
+    test "left map has variables" do
+      result = %{k: x, m: 2, n: z} = %{k: 1, m: 2, n: 3}
+
+      assert result == %{k: 1, m: 2, n: 3}
+      assert x == 1
+      assert z == 3
+    end
+  end
+
   describe "variable pattern" do
     test "variable pattern == anything" do
       result = x = 2
