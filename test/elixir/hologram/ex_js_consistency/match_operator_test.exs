@@ -289,6 +289,19 @@ defmodule Hologram.ExJsConsistency.MatchOperatorTest do
         [^x = 1] = [1 = 1]
       end
     end
+
+    test "{a = b, 2, 3} = {1, c = d, 3} = {1, 2, e = f}" do
+      f = 3
+      result = {a = b, 2, 3} = {1, c = d, 3} = {1, 2, e = f}
+
+      assert result == {1, 2, 3}
+      assert a == 1
+      assert b == 1
+      assert c == 2
+      assert d == 2
+      assert e == 3
+      assert f == 3
+    end
   end
 
   describe "tuple type" do

@@ -233,6 +233,17 @@ export default class Interpreter {
       delete vars.__matched__;
     }
 
+    // maybe resolve variable values
+    // (there may be nested match operators of this kind: [a = b] = [1])
+    for (const varName of Object.getOwnPropertyNames(vars)) {
+      if (
+        vars[varName].type === "variable_pattern" &&
+        vars[vars[varName].name]
+      ) {
+        vars[varName] = vars[vars[varName].name];
+      }
+    }
+
     return result;
   }
 

@@ -10,6 +10,7 @@ import {
 import Erlang from "../../assets/js/erlang/erlang.mjs";
 import Interpreter from "../../assets/js/interpreter.mjs";
 import Type from "../../assets/js/type.mjs";
+import Utils from "../../assets/js/utils.mjs";
 
 before(() => linkModules());
 after(() => unlinkModules());
@@ -1881,6 +1882,70 @@ describe("matchOperator()", () => {
         "MatchError",
         "no match of right hand side value: 1"
       );
+    });
+
+    it("{a = b, 2, 3} = {1, c = d, 3} = {1, 2, e = f}", () => {
+      const vars = {
+        a: Type.integer(9),
+        f: Type.integer(3),
+      };
+
+      const result = Interpreter.matchOperator(
+        Interpreter.matchOperator(
+          Type.tuple([
+            Type.integer(1n),
+            Type.integer(2n),
+            Interpreter.matchOperator(
+              vars.f,
+              Type.variablePattern("e"),
+              vars,
+              false
+            ),
+          ]),
+          Type.tuple([
+            Type.integer(1n),
+            Interpreter.matchOperator(
+              Type.variablePattern("d"),
+              Type.variablePattern("c"),
+              vars,
+              false
+            ),
+            Type.integer(3n),
+          ]),
+          vars,
+          false
+        ),
+        Type.tuple([
+          Interpreter.matchOperator(
+            Type.variablePattern("b"),
+            Type.variablePattern("a"),
+            vars,
+            false
+          ),
+          Type.integer(2n),
+          Type.integer(3n),
+        ]),
+        vars
+      );
+
+      const expectedResult = Type.tuple([
+        Type.integer(1),
+        Type.integer(2),
+        Type.integer(3),
+      ]);
+
+      assert.deepStrictEqual(result, expectedResult);
+
+      const expectedVars = {
+        a: Type.integer(1),
+        b: Type.integer(1),
+        c: Type.integer(2),
+        d: Type.integer(2),
+        e: Type.integer(3),
+        f: Type.integer(3),
+      };
+
+      assert.deepStrictEqual(vars, expectedVars);
     });
   });
 
