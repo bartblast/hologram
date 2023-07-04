@@ -195,7 +195,7 @@ defmodule Hologram.ExJsConsistency.MatchOperatorTest do
   end
 
   test "match placeholder" do
-    result = _ = 2
+    result = _var = 2
     assert result == 2
   end
 
