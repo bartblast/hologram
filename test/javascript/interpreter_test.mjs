@@ -10,7 +10,6 @@ import {
 import Erlang from "../../assets/js/erlang/erlang.mjs";
 import Interpreter from "../../assets/js/interpreter.mjs";
 import Type from "../../assets/js/type.mjs";
-import Utils from "../../assets/js/utils.mjs";
 
 before(() => linkModules());
 after(() => unlinkModules());
@@ -1710,7 +1709,7 @@ describe("matchOperator()", () => {
     });
 
     it("y = x + (x = 3) + x, (x = 11)", () => {
-      let vars = {
+      const vars = {
         a: Type.integer(9),
         x: Type.integer(11),
       };
