@@ -1558,7 +1558,7 @@ describe("matchOperator()", () => {
   });
 
   it("match placeholder", () => {
-    // _ = 2
+    // _var = 2
     const result = Interpreter.matchOperator(
       Type.integer(2),
       Type.matchPlaceholder(),
@@ -1892,25 +1892,28 @@ describe("matchOperator()", () => {
     });
 
     it("left tuple == right tuple", () => {
+      // {1, 2} = {1, 2}
       const result = Interpreter.matchOperator(tuple1, tuple1, vars);
 
       assert.deepStrictEqual(result, tuple1);
-      assert.deepStrictEqual(vars, {__matchedVars__: {}, a: Type.integer(9)});
+      assert.deepStrictEqual(vars, {a: Type.integer(9)});
     });
 
     it("left tuple != right tuple", () => {
       const tuple2 = Type.tuple([Type.integer(1), Type.integer(3)]);
 
+      // {1, 2} = {1, 3}
       assertError(
-        () => Interpreter.matchOperator(tuple1, tuple2, vars),
+        () => Interpreter.matchOperator(tuple2, tuple1, vars),
         "MatchError",
         "no match of right hand side value: {1, 3}"
       );
     });
 
     it("left tuple != right non-tuple", () => {
+      // {1, 2} = :abc
       assertError(
-        () => Interpreter.matchOperator(tuple1, Type.atom("abc"), vars),
+        () => Interpreter.matchOperator(Type.atom("abc"), tuple1, vars),
         "MatchError",
         "no match of right hand side value: :abc"
       );
@@ -1929,14 +1932,11 @@ describe("matchOperator()", () => {
         Type.integer(3),
       ]);
 
-      const result = Interpreter.matchOperator(left, right, vars);
+      // {x, 2, y} = {1, 2, 3}
+      const result = Interpreter.matchOperator(right, left, vars);
       assert.deepStrictEqual(result, right);
 
       const expectedVars = {
-        __matchedVars__: {
-          x: Type.integer(1),
-          y: Type.integer(3),
-        },
         a: Type.integer(9),
         x: Type.integer(1),
         y: Type.integer(3),

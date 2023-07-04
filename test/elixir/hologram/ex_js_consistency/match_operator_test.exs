@@ -291,6 +291,33 @@ defmodule Hologram.ExJsConsistency.MatchOperatorTest do
     end
   end
 
+  describe "tuple type" do
+    test "left tuple == right tuple" do
+      result = {1, 2} = {1, 2}
+      assert result == {1, 2}
+    end
+
+    test "left tuple != right tuple" do
+      assert_raise MatchError, "no match of right hand side value: {1, 3}", fn ->
+        {1, 2} = build_value({1, 3})
+      end
+    end
+
+    test "left tuple != right non-tuple" do
+      assert_raise MatchError, "no match of right hand side value: :abc", fn ->
+        {1, 2} = build_value(:abc)
+      end
+    end
+
+    test "left tuple has variables" do
+      result = {x, 2, y} = {1, 2, 3}
+
+      assert result == {1, 2, 3}
+      assert x == 1
+      assert y == 3
+    end
+  end
+
   describe "variable pattern" do
     test "variable pattern == anything" do
       result = x = 2
