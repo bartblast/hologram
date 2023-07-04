@@ -18,7 +18,7 @@ export default class Interpreter {
 
       try {
         if (
-          Interpreter.matchOperator(pattern, args, varsClone) &&
+          Interpreter.matchOperator(args, pattern, varsClone) &&
           Interpreter.#evaluateGuard(clause.guard, varsClone)
         ) {
           return clause.body(varsClone);
@@ -36,7 +36,7 @@ export default class Interpreter {
       const varsClone = Utils.clone(vars);
 
       try {
-        Interpreter.matchOperator(clause.head, condition, varsClone);
+        Interpreter.matchOperator(condition, clause.head, varsClone);
 
         if (Interpreter.#evaluateGuard(clause.guard, varsClone) === false) {
           continue;
@@ -65,8 +65,8 @@ export default class Interpreter {
       for (let i = 0; i < generatorsCount; ++i) {
         try {
           Interpreter.matchOperator(
-            generators[i].match,
             combination[i],
+            generators[i].match,
             varsClone
           );
 
@@ -135,7 +135,7 @@ export default class Interpreter {
         const pattern = Type.list(clause.params);
 
         try {
-          Interpreter.matchOperator(pattern, args, vars);
+          Interpreter.matchOperator(args, pattern, vars);
 
           if (Interpreter.#evaluateGuard(clause.guard, vars)) {
             return clause.body(vars);
