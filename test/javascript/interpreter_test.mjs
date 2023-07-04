@@ -833,8 +833,8 @@ describe("cond()", () => {
     const clause1 = {
       condition: (vars) =>
         Interpreter.matchOperator(
-          Type.variablePattern("x"),
           Type.boolean(false),
+          Type.variablePattern("x"),
           vars
         ),
       body: (_vars) => {
@@ -843,7 +843,7 @@ describe("cond()", () => {
     };
 
     const clause2 = {
-      condition: (vars) => Type.boolean(true),
+      condition: (_vars) => Type.boolean(true),
       body: (vars) => {
         return vars.x;
       },
