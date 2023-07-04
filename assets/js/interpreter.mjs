@@ -172,56 +172,21 @@ export default class Interpreter {
   // are being pattern matched to different values.
   //
   // right param is before left param, because we need the right arg evaluated before left arg.
-  static matchOperator(right, left, vars, rootMatchOperator = true) {
+  static matchOperator(right, left, vars, rootMatch = true) {
     if (!vars.__matched__) {
       vars.__matched__ = {};
     }
 
     if (Type.isMatchPlaceholder(left)) {
-      return Interpreter.#handleMatchOperatorResult(
-        right,
-        vars,
-        rootMatchOperator
-      );
+      return Interpreter.#handleMatchResult(right, vars, rootMatch);
     }
 
     if (Type.isVariablePattern(left)) {
-      if (vars.__matched__[left.name]) {
-        if (!Interpreter.isStrictlyEqual(vars.__matched__[left.name], right)) {
-          Interpreter.raiseMatchError(right);
-        }
-      } else {
-        vars[left.name] = right;
-        vars.__matched__[left.name] = right;
-      }
-
-      return Interpreter.#handleMatchOperatorResult(
-        right,
-        vars,
-        rootMatchOperator
-      );
+      return Interpreter.#matchVariablePattern(right, left, vars, rootMatch);
     }
 
     if (Type.isConsPattern(left)) {
-      if (!Type.isList(right) || Erlang.length(right).value === 0n) {
-        Interpreter.raiseMatchError(right);
-      }
-
-      const rightHead = Erlang.hd(right);
-      const rightTail = Erlang.tl(right);
-
-      try {
-        Interpreter.matchOperator(rightHead, left.head, vars, false);
-        Interpreter.matchOperator(rightTail, left.tail, vars, false);
-      } catch {
-        Interpreter.raiseMatchError(right);
-      }
-
-      return Interpreter.#handleMatchOperatorResult(
-        right,
-        vars,
-        rootMatchOperator
-      );
+      return Interpreter.#matchConsPattern(right, left, vars, rootMatch);
     }
 
     if (left.type !== right.type) {
@@ -229,48 +194,18 @@ export default class Interpreter {
     }
 
     if (Type.isList(left) || Type.isTuple(left)) {
-      const count = Elixir_Enum.count(left).value;
-
-      try {
-        for (let i = 0; i < count; ++i) {
-          Interpreter.matchOperator(right.data[i], left.data[i], vars, false);
-        }
-      } catch {
-        Interpreter.raiseMatchError(right);
-      }
-
-      return Interpreter.#handleMatchOperatorResult(
-        right,
-        vars,
-        rootMatchOperator
-      );
+      return Interpreter.#matchListOrTuple(right, left, vars, rootMatch);
     }
 
     if (Type.isMap(left)) {
-      try {
-        for (const [key, value] of Object.entries(left.data)) {
-          Interpreter.matchOperator(right.data[key][1], value[1], vars, false);
-        }
-      } catch {
-        Interpreter.raiseMatchError(right);
-      }
-
-      return Interpreter.#handleMatchOperatorResult(
-        right,
-        vars,
-        rootMatchOperator
-      );
+      return Interpreter.#matchMap(right, left, vars, rootMatch);
     }
 
     if (!Interpreter.isStrictlyEqual(left, right)) {
       Interpreter.raiseMatchError(right);
     }
 
-    return Interpreter.#handleMatchOperatorResult(
-      right,
-      vars,
-      rootMatchOperator
-    );
+    return Interpreter.#handleMatchResult(right, vars, rootMatch);
   }
 
   static raiseMatchError(right) {
@@ -293,8 +228,8 @@ export default class Interpreter {
     return Type.isTrue(guard(vars));
   }
 
-  static #handleMatchOperatorResult(result, vars, rootMatchOperator) {
-    if (rootMatchOperator) {
+  static #handleMatchResult(result, vars, rootMatch) {
+    if (rootMatch) {
       delete vars.__matched__;
     }
 
@@ -303,6 +238,63 @@ export default class Interpreter {
 
   static #isArityDefined(clauses, arity) {
     return clauses.some((clause) => clause.params.length === arity);
+  }
+
+  static #matchConsPattern(right, left, vars, rootMatch) {
+    if (!Type.isList(right) || Erlang.length(right).value === 0n) {
+      Interpreter.raiseMatchError(right);
+    }
+
+    const rightHead = Erlang.hd(right);
+    const rightTail = Erlang.tl(right);
+
+    try {
+      Interpreter.matchOperator(rightHead, left.head, vars, false);
+      Interpreter.matchOperator(rightTail, left.tail, vars, false);
+    } catch {
+      Interpreter.raiseMatchError(right);
+    }
+
+    return Interpreter.#handleMatchResult(right, vars, rootMatch);
+  }
+
+  static #matchListOrTuple(right, left, vars, rootMatch) {
+    const count = Elixir_Enum.count(left).value;
+
+    try {
+      for (let i = 0; i < count; ++i) {
+        Interpreter.matchOperator(right.data[i], left.data[i], vars, false);
+      }
+    } catch {
+      Interpreter.raiseMatchError(right);
+    }
+
+    return Interpreter.#handleMatchResult(right, vars, rootMatch);
+  }
+
+  static #matchMap(right, left, vars, rootMatch) {
+    try {
+      for (const [key, value] of Object.entries(left.data)) {
+        Interpreter.matchOperator(right.data[key][1], value[1], vars, false);
+      }
+    } catch {
+      Interpreter.raiseMatchError(right);
+    }
+
+    return Interpreter.#handleMatchResult(right, vars, rootMatch);
+  }
+
+  static #matchVariablePattern(right, left, vars, rootMatch) {
+    if (vars.__matched__[left.name]) {
+      if (!Interpreter.isStrictlyEqual(vars.__matched__[left.name], right)) {
+        Interpreter.raiseMatchError(right);
+      }
+    } else {
+      vars[left.name] = right;
+      vars.__matched__[left.name] = right;
+    }
+
+    return Interpreter.#handleMatchResult(right, vars, rootMatch);
   }
 
   static #raiseCaseClauseError(message) {
