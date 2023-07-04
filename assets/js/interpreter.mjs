@@ -167,14 +167,14 @@ export default class Interpreter {
     return isEqual(left, right);
   }
 
-  // vars.__matchedVars__ keeps track of already pattern matched variables,
+  // vars.__matched__ keeps track of already pattern matched variables,
   // which enables to fail pattern matching if the variables with the same name
   // are being pattern matched to different values.
   //
   // right param is before left param, because we need the right arg evaluated before left arg.
   static matchOperator(right, left, vars, rootMatchOperator = true) {
-    if (!vars.__matchedVars__) {
-      vars.__matchedVars__ = {};
+    if (!vars.__matched__) {
+      vars.__matched__ = {};
     }
 
     if (Type.isMatchPlaceholder(left)) {
@@ -186,15 +186,13 @@ export default class Interpreter {
     }
 
     if (Type.isVariablePattern(left)) {
-      if (vars.__matchedVars__[left.name]) {
-        if (
-          !Interpreter.isStrictlyEqual(vars.__matchedVars__[left.name], right)
-        ) {
+      if (vars.__matched__[left.name]) {
+        if (!Interpreter.isStrictlyEqual(vars.__matched__[left.name], right)) {
           Interpreter.raiseMatchError(right);
         }
       } else {
         vars[left.name] = right;
-        vars.__matchedVars__[left.name] = right;
+        vars.__matched__[left.name] = right;
       }
 
       return Interpreter.#handleMatchOperatorResult(
@@ -297,7 +295,7 @@ export default class Interpreter {
 
   static #handleMatchOperatorResult(result, vars, rootMatchOperator) {
     if (rootMatchOperator) {
-      delete vars.__matchedVars__;
+      delete vars.__matched__;
     }
 
     return result;
