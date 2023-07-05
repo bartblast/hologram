@@ -23,7 +23,9 @@ export default class Interpreter {
         ) {
           return clause.body(varsClone);
         }
-      } catch {}
+      } catch {
+        // prevent ESLint "Empty block statement" (no-empty) error
+      }
     }
 
     // TODO: include parent module and function info, once context for error reporting is implemented.
@@ -140,7 +142,9 @@ export default class Interpreter {
           if (Interpreter.#evaluateGuard(clause.guard, vars)) {
             return clause.body(vars);
           }
-        } catch {}
+        } catch {
+          // prevent ESLint "Empty block statement" (no-empty) error
+        }
       }
 
       const inspectedModuleName = Hologram.inspectModuleName(moduleName);
