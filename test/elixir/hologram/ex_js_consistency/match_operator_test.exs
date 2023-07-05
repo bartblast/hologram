@@ -304,6 +304,99 @@ defmodule Hologram.ExJsConsistency.MatchOperatorTest do
     end
   end
 
+  describe "nested match pattern (with uresolved variables)" do
+    test "[[a | b] = [c | d]] = [[1, 2, 3]]" do
+      result = [[a | b] = [c | d]] = [[1, 2, 3]]
+
+      assert result == [[1, 2, 3]]
+      assert a == 1
+      assert b == [2, 3]
+      assert c == 1
+      assert d == [2, 3]
+    end
+
+    test "[[[a | b] = [c | d]] = [[e | f]]] = [[[1, 2, 3]]]" do
+      result = [[[a | b] = [c | d]] = [[e | f]]] = [[[1, 2, 3]]]
+
+      assert result == [[[1, 2, 3]]]
+      assert a == 1
+      assert b == [2, 3]
+      assert c == 1
+      assert d == [2, 3]
+      assert e == 1
+      assert f == [2, 3]
+    end
+
+    test "[[a, b] = [c, d]] = [[1, 2]]" do
+      result = [[a, b] = [c, d]] = [[1, 2]]
+
+      assert result == [[1, 2]]
+      assert a == 1
+      assert b == 2
+      assert c == 1
+      assert d == 2
+    end
+
+    test "[[[a, b] = [c, d]] = [[e, f]]] = [[[1, 2]]]" do
+      result = [[[a, b] = [c, d]] = [[e, f]]] = [[[1, 2]]]
+
+      assert result == [[[1, 2]]]
+      assert a == 1
+      assert b == 2
+      assert c == 1
+      assert d == 2
+      assert e == 1
+      assert f == 2
+    end
+
+    test "%{x: %{a: a, b: b} = %{a: c, b: d}} = %{x: %{a: 1, b: 2}}" do
+      result = %{x: %{a: a, b: b} = %{a: c, b: d}} = %{x: %{a: 1, b: 2}}
+
+      assert result == %{x: %{a: 1, b: 2}}
+      assert a == 1
+      assert b == 2
+      assert c == 1
+      assert d == 2
+    end
+
+    test "%{y: %{x: %{a: a, b: b} = %{a: c, b: d}} = %{x: %{a: e, b: f}}} = %{y: %{x: %{a: 1, b: 2}}}" do
+      result =
+        %{y: %{x: %{a: a, b: b} = %{a: c, b: d}} = %{x: %{a: e, b: f}}} = %{
+          y: %{x: %{a: 1, b: 2}}
+        }
+
+      assert result == %{y: %{x: %{a: 1, b: 2}}}
+      assert a == 1
+      assert b == 2
+      assert c == 1
+      assert d == 2
+      assert e == 1
+      assert f == 2
+    end
+
+    test "{{a, b} = {c, d}} = {{1, 2}}" do
+      result = {{a, b} = {c, d}} = {{1, 2}}
+
+      assert result == {{1, 2}}
+      assert a == 1
+      assert b == 2
+      assert c == 1
+      assert d == 2
+    end
+
+    test "{{{a, b} = {c, d}} = {{e, f}}} = {{{1, 2}}}" do
+      result = {{{a, b} = {c, d}} = {{e, f}}} = {{{1, 2}}}
+
+      assert result == {{{1, 2}}}
+      assert a == 1
+      assert b == 2
+      assert c == 1
+      assert d == 2
+      assert e == 1
+      assert f == 2
+    end
+  end
+
   describe "tuple type" do
     test "left tuple == right tuple" do
       result = {1, 2} = {1, 2}

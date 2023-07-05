@@ -177,6 +177,15 @@ export default class Interpreter {
       vars.__matched__ = {};
     }
 
+    if (Interpreter.#hasUnresolvedVariablePattern(right)) {
+      return {type: "match_pattern", left: left, right: right};
+    }
+
+    if (left.type === "match_pattern") {
+      Interpreter.matchOperator(right, left.right, vars, false);
+      return Interpreter.matchOperator(right, left.left, vars, false);
+    }
+
     if (Type.isMatchPlaceholder(left)) {
       return Interpreter.#handleMatchResult(right, vars, rootMatch);
     }
@@ -233,18 +242,52 @@ export default class Interpreter {
       delete vars.__matched__;
     }
 
-    // maybe resolve variable values
-    // (there may be nested match operators of this kind: [a = b] = [1])
-    for (const varName of Object.getOwnPropertyNames(vars)) {
-      if (
-        vars[varName].type === "variable_pattern" &&
-        vars[vars[varName].name]
-      ) {
-        vars[varName] = vars[vars[varName].name];
+    return result;
+  }
+
+  static #hasUnresolvedVariablePattern(term) {
+    if (
+      [
+        "anonymous_function",
+        "atom",
+        "bitstring",
+        "float",
+        "integer",
+        "match_placeholder",
+      ].includes(term.type)
+    ) {
+      return false;
+    }
+
+    if (term.type === "variable_pattern") {
+      return true;
+    }
+
+    if (term.type === "cons_pattern") {
+      return (
+        Interpreter.#hasUnresolvedVariablePattern(term.head) ||
+        Interpreter.#hasUnresolvedVariablePattern(term.tail)
+      );
+    }
+
+    if (term.type === "list" || term.type === "tuple") {
+      return term.data.some((item) =>
+        Interpreter.#hasUnresolvedVariablePattern(item)
+      );
+    }
+
+    if (term.type === "map") {
+      for (const [key, value] of Object.values(term.data)) {
+        if (
+          Interpreter.#hasUnresolvedVariablePattern(key) ||
+          Interpreter.#hasUnresolvedVariablePattern(value)
+        ) {
+          return true;
+        }
       }
     }
 
-    return result;
+    return false;
   }
 
   static #isArityDefined(clauses, arity) {
