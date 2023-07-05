@@ -4,6 +4,8 @@ defmodule Hologram.MixProject do
 
   defp aliases do
     [
+      eslint:
+        "cmd npx eslint --config assets/.eslintrc.js --ext .mjs assets/js/** test/javascript/**",
       format: ["format", "format.js"],
       "format.js":
         "cmd npx prettier 'assets/*.json' 'assets/js/*.mjs' 'assets/js/**/*.mjs' 'test/javascript/*.mjs' 'test/javascript/**/*.mjs' --config 'assets/.prettierrc.json' --no-error-on-unmatched-pattern --write",

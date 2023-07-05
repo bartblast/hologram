@@ -159,6 +159,10 @@ jobs:
     - name: Check lib test file names
       run: mix holo.test.check_file_names test/elixir/hologram
 
+    # Step: Run lib JavaScript static code analysis with ESLint.
+    - name: Run lib JavaScript static code analysis with ESLint
+      run: mix eslint
+
     # Step: Execute lib Elixir unit tests.
     - name: Run lib Elixir unit tests
       run: mix test
