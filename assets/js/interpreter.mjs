@@ -119,7 +119,7 @@ export default class Interpreter {
     }
 
     globalThis[moduleName][functionName] = function () {
-      const args = Type.list(arguments);
+      const args = Type.list([...arguments]);
       const arity = arguments.length;
 
       if (!Interpreter.#isArityDefined(clauses, arity)) {
