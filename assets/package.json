@@ -4,6 +4,7 @@
   },
   "devDependencies": {
     "chai": "^4",
+    "eslint": "^8",
     "mocha": "^10",
     "prettier": "^2",
     "sinon": "^15"
