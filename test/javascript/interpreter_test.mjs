@@ -927,8 +927,8 @@ describe("defineFunction()", () => {
   it("initiates the module global var if it is not initiated yet", () => {
     Interpreter.defineFunction("Elixir_Ddd", "my_fun_d", []);
 
-    assert.isTrue(globalThis.hasOwnProperty("Elixir_Ddd"));
-    assert.isTrue(globalThis.Elixir_Ddd.hasOwnProperty("my_fun_d"));
+    assert.isDefined(globalThis.Elixir_Ddd);
+    assert.isDefined(globalThis.Elixir_Ddd.my_fun_d);
 
     // cleanup
     delete globalThis.Elixir_Ddd;
@@ -938,8 +938,8 @@ describe("defineFunction()", () => {
     globalThis.Elixir_Eee = {dummy: "dummy"};
     Interpreter.defineFunction("Elixir_Eee", "my_fun_e", []);
 
-    assert.isTrue(globalThis.hasOwnProperty("Elixir_Eee"));
-    assert.isTrue(globalThis.Elixir_Eee.hasOwnProperty("my_fun_e"));
+    assert.isDefined(globalThis.Elixir_Eee);
+    assert.isDefined(globalThis.Elixir_Eee.my_fun_e);
     assert.equal(globalThis.Elixir_Eee.dummy, "dummy");
 
     // cleanup
