@@ -1,11 +1,19 @@
 "use strict";
 
+// See: https://www.blazemeter.com/blog/the-correct-way-to-import-lodash-libraries-a-benchmark
+import cloneDeep from "lodash/cloneDeep.js";
+import omit from "lodash/omit.js";
+
 import Interpreter from "./interpreter.mjs";
 import Type from "./type.mjs";
 
 export default class Hologram {
   static Interpreter = Interpreter;
   static Type = Type;
+
+  static cloneVars(vars) {
+    return cloneDeep(omit(vars, ["__snapshot__"]));
+  }
 
   static deserialize(json) {
     return JSON.parse(json, (_key, value) => {
