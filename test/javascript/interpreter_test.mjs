@@ -10,7 +10,6 @@ import {
 import Erlang from "../../assets/js/erlang/erlang.mjs";
 import Interpreter from "../../assets/js/interpreter.mjs";
 import Type from "../../assets/js/type.mjs";
-import Utils from "../../assets/js/utils.mjs";
 
 before(() => linkModules());
 after(() => unlinkModules());
