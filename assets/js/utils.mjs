@@ -1,7 +1,5 @@
 "use strict";
 
-// See: https://www.blazemeter.com/blog/the-correct-way-to-import-lodash-libraries-a-benchmark
-import cloneDeep from "lodash/cloneDeep.js";
 import Hologram from "./hologram.mjs";
 
 export default class Utils {
@@ -16,10 +14,6 @@ export default class Utils {
     }
 
     return sets.reduce((a, b) => a.flatMap((d) => b.map((e) => [d, e].flat())));
-  }
-
-  static clone(obj) {
-    return cloneDeep(obj);
   }
 
   static concatUint8Arrays(arrays) {

@@ -13,7 +13,7 @@ export default class Interpreter {
     const args = Type.list(argsArray);
 
     for (const clause of fun.clauses) {
-      const varsClone = Utils.clone(fun.vars);
+      const varsClone = Hologram.cloneVars(fun.vars);
       const pattern = Type.list(clause.params);
 
       try {
@@ -33,7 +33,7 @@ export default class Interpreter {
 
   static case(condition, clauses, vars) {
     for (const clause of clauses) {
-      const varsClone = Utils.clone(vars);
+      const varsClone = Hologram.cloneVars(vars);
 
       try {
         Interpreter.matchOperator(condition, clause.head, varsClone);
@@ -60,7 +60,7 @@ export default class Interpreter {
     );
 
     let items = Utils.cartesianProduct(sets).reduce((acc, combination) => {
-      const varsClone = Utils.clone(vars);
+      const varsClone = Hologram.cloneVars(vars);
 
       for (let i = 0; i < generatorsCount; ++i) {
         try {
@@ -99,7 +99,7 @@ export default class Interpreter {
 
   static cond(clauses, vars) {
     for (const clause of clauses) {
-      const varsClone = Utils.clone(vars);
+      const varsClone = Hologram.cloneVars(vars);
 
       if (Type.isTruthy(clause.condition(varsClone))) {
         return clause.body(varsClone);
@@ -225,8 +225,7 @@ export default class Interpreter {
   }
 
   static takeVarsSnapshot(vars) {
-    delete vars.__snapshot__;
-    vars.__snapshot__ = Utils.clone(vars);
+    vars.__snapshot__ = Hologram.cloneVars(vars);
   }
 
   static #evaluateGuard(guard, vars) {

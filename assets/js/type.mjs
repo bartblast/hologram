@@ -14,7 +14,7 @@ export default class Type {
       type: "anonymous_function",
       arity: arity,
       clauses: clauses,
-      vars: Utils.clone(vars),
+      vars: Hologram.cloneVars(vars),
       uniqueId: Sequence.next(),
     });
   }

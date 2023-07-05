@@ -48,24 +48,6 @@ describe("cartesianProduct()", () => {
   });
 });
 
-describe("clone()", () => {
-  let obj, result;
-
-  beforeEach(() => {
-    obj = {a: 1, b: {c: 3, d: 4}};
-    result = Utils.clone(obj);
-  });
-
-  it("clones object recursively (deep clone)", () => {
-    assert.deepStrictEqual(result, obj);
-    assert.notEqual(result, obj);
-  });
-
-  it("returns non-frozen object", () => {
-    assertNotFrozen(result);
-  });
-});
-
 describe("concatUint8Arrays()", () => {
   it("concatenates multiple 8-bit unsigned integer arrays", () => {
     const arrays = [
