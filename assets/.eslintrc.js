@@ -5,6 +5,13 @@ module.exports = {
     mocha: true,
   },
   extends: "eslint:recommended",
+  globals: {
+    Elixir_Enum: "readonly",
+    Elixir_Kernel: "readonly",
+    Erlang: "readonly",
+    Erlang_maps: "readonly",
+    Hologram: "readonly",
+  },
   overrides: [
     {
       env: {
