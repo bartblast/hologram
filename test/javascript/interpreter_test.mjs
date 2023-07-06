@@ -1166,6 +1166,56 @@ describe("matchOperator()", () => {
   });
 
   describe("bitstring type", () => {
+    it("left bitstring == right bitstring", () => {
+      const result = Interpreter.matchOperator(
+        Type.bitstring([
+          Type.bitstringSegment(Type.integer(1), {type: "integer"}),
+        ]),
+        Type.bitstringPattern([
+          Type.bitstringSegment(Type.integer(1), {type: "integer"}),
+        ]),
+        vars
+      );
+
+      const expected = Type.bitstring([
+        Type.bitstringSegment(Type.integer(1), {type: "integer"}),
+      ]);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("left bitstring != right bitstring", () => {
+      assertError(
+        () =>
+          Interpreter.matchOperator(
+            Type.bitstring([
+              Type.bitstringSegment(Type.integer(2), {type: "integer"}),
+            ]),
+            Type.bitstringPattern([
+              Type.bitstringSegment(Type.integer(1), {type: "integer"}),
+            ]),
+            vars
+          ),
+        "MatchError",
+        'no match of right hand side value: {"type":"bitstring","bits":{"0":0,"1":0,"2":0,"3":0,"4":0,"5":0,"6":1,"7":0}}'
+      );
+    });
+
+    it("left bitstring != right non-bitstring", () => {
+      assertError(
+        () =>
+          Interpreter.matchOperator(
+            Type.atom("abc"),
+            Type.bitstring([
+              Type.bitstringSegment(Type.integer(1), {type: "integer"}),
+            ]),
+            vars
+          ),
+        "MatchError",
+        "no match of right hand side value: :abc"
+      );
+    });
+
     it("literal integer segments", () => {
       const result = Interpreter.matchOperator(
         Type.bitstring([

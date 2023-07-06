@@ -38,6 +38,23 @@ defmodule Hologram.ExJsConsistency.MatchOperatorTest do
   end
 
   describe "bistring type" do
+    test "left bitstring == right bitstring" do
+      result = <<1>> = <<1>>
+      assert result == <<1>>
+    end
+
+    test "left bitstring != right bitstring" do
+      assert_raise MatchError, "no match of right hand side value: <<2>>", fn ->
+        <<1>> = <<2>>
+      end
+    end
+
+    test "left bitstring != right non-bitstring" do
+      assert_raise MatchError, "no match of right hand side value: :abc", fn ->
+        <<1>> = build_value(:abc)
+      end
+    end
+
     test "literal integer segments" do
       result = <<1, 2>> = <<1, 2>>
 
