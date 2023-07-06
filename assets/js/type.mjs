@@ -113,6 +113,10 @@ export default class Type {
     return boxed.type === "atom";
   }
 
+  static isBitstringPattern(boxed) {
+    return boxed.type === "bitstring_pattern";
+  }
+
   static isBoolean(boxed) {
     return (
       boxed.type === "atom" &&
