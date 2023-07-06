@@ -55,6 +55,12 @@ defmodule Hologram.ExJsConsistency.MatchOperatorTest do
       end
     end
 
+    test "literal bitstring segments" do
+      result = <<1::1, 0::1>> = <<1::1, 0::1>>
+
+      assert result == <<1::1, 0::1>>
+    end
+
     test "literal float segments" do
       result = <<1.0, 2.0>> = <<1.0, 2.0>>
 

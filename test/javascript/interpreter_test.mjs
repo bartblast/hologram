@@ -1216,6 +1216,45 @@ describe("matchOperator()", () => {
       );
     });
 
+    it("literal bitstring segments", () => {
+      const result = Interpreter.matchOperator(
+        Type.bitstring([
+          Type.bitstringSegment(Type.integer(1), {
+            type: "integer",
+            size: Type.integer(1),
+          }),
+          Type.bitstringSegment(Type.integer(0), {
+            type: "integer",
+            size: Type.integer(1),
+          }),
+        ]),
+        Type.bitstringPattern([
+          Type.bitstringSegment(Type.integer(1), {
+            type: "integer",
+            size: Type.integer(1),
+          }),
+          Type.bitstringSegment(Type.integer(0), {
+            type: "integer",
+            size: Type.integer(1),
+          }),
+        ]),
+        vars
+      );
+
+      const expected = Type.bitstring([
+        Type.bitstringSegment(Type.integer(1), {
+          type: "integer",
+          size: Type.integer(1),
+        }),
+        Type.bitstringSegment(Type.integer(0), {
+          type: "integer",
+          size: Type.integer(1),
+        }),
+      ]);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
     it("literal float segments", () => {
       const result = Interpreter.matchOperator(
         Type.bitstring([
