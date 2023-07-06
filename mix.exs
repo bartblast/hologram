@@ -63,7 +63,9 @@ defmodule Hologram.MixProject do
       elixirc_paths: elixirc_paths(Mix.env()),
       package: package(),
       dialyzer: [
-        plt_add_apps: [:ex_unit, :mix]
+        plt_add_apps: [:ex_unit, :mix],
+        plt_core_path: "priv/plts/core.plt",
+        plt_local_path: "priv/plts/project.plt"
       ],
       preferred_cli_env: preferred_cli_env(),
       start_permanent: Mix.env() == :prod,
