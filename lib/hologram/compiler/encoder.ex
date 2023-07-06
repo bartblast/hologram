@@ -476,8 +476,7 @@ defmodule Hologram.Compiler.Encoder do
   end
 
   defp encode_bitstring_segments(segments, context) do
-    segments
-    |> Enum.map_join(", ", &encode(&1, context))
+    Enum.map_join(segments, ", ", &encode(&1, context))
   end
 
   defp encode_closure(nil, _context), do: "null"
