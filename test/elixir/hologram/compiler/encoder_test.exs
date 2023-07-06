@@ -84,11 +84,13 @@ defmodule Hologram.Compiler.EncoderTest do
     end
   end
 
-  describe "bitstring" do
+  describe "bitstring pattern" do
+    @context %Context{pattern?: true}
+
     test "no segments" do
       ir = %IR.BitstringType{segments: []}
 
-      assert encode(ir, %Context{}) == "Type.bitstring([])"
+      assert encode(ir, @context) == "Type.bitstringPattern([])"
     end
 
     test "single segment" do
@@ -101,7 +103,49 @@ defmodule Hologram.Compiler.EncoderTest do
         ]
       }
 
-      assert encode(ir, %Context{}) ==
+      assert encode(ir, @context) ==
+               "Type.bitstringPattern([Type.bitstringSegment(Type.integer(1n), {})])"
+    end
+
+    test "multiple segments" do
+      ir = %IR.BitstringType{
+        segments: [
+          %IR.BitstringSegment{
+            value: %IR.IntegerType{value: 1},
+            modifiers: []
+          },
+          %IR.BitstringSegment{
+            value: %IR.IntegerType{value: 2},
+            modifiers: []
+          }
+        ]
+      }
+
+      assert encode(ir, @context) ==
+               "Type.bitstringPattern([Type.bitstringSegment(Type.integer(1n), {}), Type.bitstringSegment(Type.integer(2n), {})])"
+    end
+  end
+
+  describe "bitstring type" do
+    @context %Context{pattern?: false}
+
+    test "no segments" do
+      ir = %IR.BitstringType{segments: []}
+
+      assert encode(ir, @context) == "Type.bitstring([])"
+    end
+
+    test "single segment" do
+      ir = %IR.BitstringType{
+        segments: [
+          %IR.BitstringSegment{
+            value: %IR.IntegerType{value: 1},
+            modifiers: []
+          }
+        ]
+      }
+
+      assert encode(ir, @context) ==
                "Type.bitstring([Type.bitstringSegment(Type.integer(1n), {})])"
     end
 
@@ -119,7 +163,7 @@ defmodule Hologram.Compiler.EncoderTest do
         ]
       }
 
-      assert encode(ir, %Context{}) ==
+      assert encode(ir, @context) ==
                "Type.bitstring([Type.bitstringSegment(Type.integer(1n), {}), Type.bitstringSegment(Type.integer(2n), {})])"
     end
   end
