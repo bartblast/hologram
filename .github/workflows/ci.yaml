@@ -93,37 +93,6 @@ jobs:
     #       ${{ runner.os }}-mix-${{ env.cache-name }}-
     #       ${{ runner.os }}-mix-                 
 
-    # Step: Restore Dialyzer PLT cache.
-    # Cache key is based on Erlang/Elixir version and the mix.lock hash.
-    - name: Restore Dialyzer PLT cache
-      id: restore-dialyzer-plt-cache
-      uses: actions/cache/restore@v3
-      with:
-        key: |
-          dialyzer-plt-${{ runner.os }}-${{ steps.beam.outputs.otp-version }}-${{ steps.beam.outputs.elixir-version }}-${{ hashFiles('**/mix.lock') }}
-        restore-keys: |
-          dialyzer-plt-${{ runner.os }}-${{ steps.beam.outputs.otp-version }}-${{ steps.beam.outputs.elixir-version }}-
-        path: |
-          priv/plts
-
-    # Step: Create Dialzyer PLTs if no cache was found.
-    - name: Create Dialzyer PLTs
-      if: steps.restore-dialyzer-plt-cache.outputs.cache-hit != 'true'
-      run: mix dialyzer --plt
-      
-    # Step: Save Dialyzer PLT cache.
-    # By default, the GitHub Cache action will only save the cache if all steps in the job succeed,
-    # so we separate the cache restore and save steps in case running dialyzer fails.
-    - name: Save Dialyzer PLT cache
-      id: save-dialyzer-plt-cache
-      uses: actions/cache/save@v3
-      if: steps.restore-dialyzer-plt-cache.outputs.cache-hit != 'true'
-      with:
-        key: |
-          dialyzer-plt-${{ runner.os }}-${{ steps.beam.outputs.otp-version }}-${{ steps.beam.outputs.elixir-version }}-${{ hashFiles('**/mix.lock') }}
-        path: |
-          priv/plts
-
     # Step: Download lib Elixir dependencies.
     # If unchanged, uses the cached version.
     - name: Install lib Elixir deps
@@ -164,6 +133,37 @@ jobs:
     # Step: Run lib Elixir security-focused analysis with Sobelow.
     - name: Run lib Elixir security-focused analysis with Sobelow
       run: mix sobelow --config
+
+    # Step: Restore Dialyzer PLT cache.
+    # Cache key is based on Erlang/Elixir version and the mix.lock hash.
+    - name: Restore Dialyzer PLT cache
+      id: restore-dialyzer-plt-cache
+      uses: actions/cache/restore@v3
+      with:
+        key: |
+          dialyzer-plt-${{ runner.os }}-${{ steps.beam.outputs.otp-version }}-${{ steps.beam.outputs.elixir-version }}-${{ hashFiles('**/mix.lock') }}
+        restore-keys: |
+          dialyzer-plt-${{ runner.os }}-${{ steps.beam.outputs.otp-version }}-${{ steps.beam.outputs.elixir-version }}-
+        path: |
+          priv/plts
+
+    # Step: Create Dialzyer PLTs if no cache was found.
+    - name: Create Dialzyer PLTs
+      if: steps.restore-dialyzer-plt-cache.outputs.cache-hit != 'true'
+      run: mix dialyzer --plt
+      
+    # Step: Save Dialyzer PLT cache.
+    # By default, the GitHub Cache action will only save the cache if all steps in the job succeed,
+    # so we separate the cache restore and save steps in case running dialyzer fails.
+    - name: Save Dialyzer PLT cache
+      id: save-dialyzer-plt-cache
+      uses: actions/cache/save@v3
+      if: steps.restore-dialyzer-plt-cache.outputs.cache-hit != 'true'
+      with:
+        key: |
+          dialyzer-plt-${{ runner.os }}-${{ steps.beam.outputs.otp-version }}-${{ steps.beam.outputs.elixir-version }}-${{ hashFiles('**/mix.lock') }}
+        path: |
+          priv/plts      
 
     # Step: Run lib Elixir static code analysis with Dialyzer.
     - name: Run lib Elixir static code analysis with Dialyzer
