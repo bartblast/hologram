@@ -147,8 +147,8 @@ jobs:
         path: |
           priv/plts
 
-    # Step: Create Dialzyer PLTs if no cache was found.
-    - name: Create Dialzyer PLTs
+    # Step: Create Dialyzer PLTs if no cache was found.
+    - name: Create Dialyzer PLTs
       if: steps.restore-dialyzer-plt-cache.outputs.cache-hit != 'true'
       run: mix dialyzer --plt
       
