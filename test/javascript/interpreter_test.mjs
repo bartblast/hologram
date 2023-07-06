@@ -1165,6 +1165,29 @@ describe("matchOperator()", () => {
     });
   });
 
+  describe("bitstring type", () => {
+    it("literal integer segments", () => {
+      const result = Interpreter.matchOperator(
+        Type.bitstring([
+          Type.bitstringSegment(Type.integer(1), {type: "integer"}),
+          Type.bitstringSegment(Type.integer(2), {type: "integer"}),
+        ]),
+        Type.bitstringPattern([
+          Type.bitstringSegment(Type.integer(1), {type: "integer"}),
+          Type.bitstringSegment(Type.integer(2), {type: "integer"}),
+        ]),
+        vars
+      );
+
+      const expected = Type.bitstring([
+        Type.bitstringSegment(Type.integer(1), {type: "integer"}),
+        Type.bitstringSegment(Type.integer(2), {type: "integer"}),
+      ]);
+
+      assert.deepStrictEqual(result, expected);
+    });
+  });
+
   describe("cons pattern", () => {
     it("left cons pattern == right list, cons pattern head and tail are variables", () => {
       // [h | t] = [1, 2, 3]

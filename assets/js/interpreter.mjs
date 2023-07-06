@@ -202,6 +202,10 @@ export default class Interpreter {
       return Interpreter.#matchConsPattern(right, left, vars, rootMatch);
     }
 
+    if (Type.isBitstringPattern(left)) {
+      return Interpreter.#matchBitstringPattern(right, left, vars, rootMatch);
+    }
+
     if (left.type !== right.type) {
       Interpreter.raiseMatchError(right);
     }
@@ -224,6 +228,7 @@ export default class Interpreter {
   static raiseMatchError(right) {
     const message =
       "no match of right hand side value: " + Hologram.inspect(right);
+    console.debug(message);
 
     return Hologram.raiseError("MatchError", message);
   }
@@ -295,6 +300,33 @@ export default class Interpreter {
 
   static #isArityDefined(clauses, arity) {
     return clauses.some((clause) => clause.params.length === arity);
+  }
+
+  static #matchBitstringPattern(right, left, vars, rootMatch) {
+    let offset = 0;
+
+    for (const segment of left.segments) {
+      if (segment.type === "variable_pattern") {
+        // TODO: implement
+      } else {
+        const segmentBitstring = Type.bitstring([segment]);
+        const segmentLen = segmentBitstring.bits.length;
+
+        if (right.bits.length - offset < segmentLen) {
+          Interpreter.raiseMatchError(right);
+        }
+
+        for (let i = 0; i < segmentLen; ++i) {
+          if (segmentBitstring.bits[i] !== right.bits[offset + i]) {
+            Interpreter.raiseMatchError(right);
+          }
+        }
+
+        offset += segmentLen;
+      }
+    }
+
+    return Interpreter.#handleMatchResult(right, vars, rootMatch);
   }
 
   static #matchConsPattern(right, left, vars, rootMatch) {

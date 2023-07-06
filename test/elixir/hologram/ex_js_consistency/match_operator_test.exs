@@ -37,6 +37,14 @@ defmodule Hologram.ExJsConsistency.MatchOperatorTest do
     end
   end
 
+  describe "bistring type" do
+    test "literal integer segments" do
+      result = <<1, 2>> = <<1, 2>>
+
+      assert result == <<1, 2>>
+    end
+  end
+
   describe "cons pattern" do
     test "left cons pattern == right list, cons pattern head and tail are variables" do
       result = [h | t] = [1, 2, 3]

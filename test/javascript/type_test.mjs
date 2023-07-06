@@ -399,7 +399,7 @@ describe("isAtom()", () => {
   });
 });
 
-describe.only("isBitstringPattern()", () => {
+describe("isBitstringPattern()", () => {
   it("returns true if the given object is a boxed bitstring pattern", () => {
     const result = Type.isBitstringPattern(Type.bitstringPattern([]));
     assert.isTrue(result);
