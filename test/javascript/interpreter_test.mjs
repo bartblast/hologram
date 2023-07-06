@@ -1257,6 +1257,27 @@ describe("matchOperator()", () => {
 
       assert.deepStrictEqual(result, expected);
     });
+
+    it("literal string segments", () => {
+      const result = Interpreter.matchOperator(
+        Type.bitstring([
+          Type.bitstringSegment(Type.string("aaa"), {type: "utf8"}),
+          Type.bitstringSegment(Type.string("bbb"), {type: "utf8"}),
+        ]),
+        Type.bitstringPattern([
+          Type.bitstringSegment(Type.string("aaa"), {type: "utf8"}),
+          Type.bitstringSegment(Type.string("bbb"), {type: "utf8"}),
+        ]),
+        vars
+      );
+
+      const expected = Type.bitstring([
+        Type.bitstringSegment(Type.string("aaa"), {type: "utf8"}),
+        Type.bitstringSegment(Type.string("bbb"), {type: "utf8"}),
+      ]);
+
+      assert.deepStrictEqual(result, expected);
+    });
   });
 
   describe("cons pattern", () => {

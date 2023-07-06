@@ -66,6 +66,20 @@ defmodule Hologram.ExJsConsistency.MatchOperatorTest do
 
       assert result == <<1, 2>>
     end
+
+    test "literal string segments" do
+      result = <<"aaa", "bbb">> = <<"aaa", "bbb">>
+
+      assert result == <<"aaa", "bbb">>
+    end
+
+    test "test" do
+      """
+      <<"aaa", "bbb">> = <<"aaa", "bbb">>
+      """
+      |> js()
+      |> IO.inspect()
+    end
   end
 
   describe "cons pattern" do
