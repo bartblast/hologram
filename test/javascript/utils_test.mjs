@@ -114,3 +114,7 @@ describe("freeze()", () => {
     assertFrozen(obj.b.f);
   });
 });
+
+it("test CI", () => {
+  assert.equal(1, 2);
+});

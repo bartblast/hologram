@@ -167,6 +167,10 @@ jobs:
     - name: Run lib Elixir unit tests
       run: mix test
 
+    # Step: Execute lib JavaScript unit tests.
+    - name: Run lib JavaScript unit tests
+      run: mix test.js      
+
     # Step: Download test app dependencies.
     # TODO: uncomment when E2E tests are implemented
     # - name: Install test app dependencies
