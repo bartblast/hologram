@@ -15,12 +15,14 @@ defmodule Hologram.Compiler.Helpers do
   @spec alias_segments(binary | module) :: T.alias_segments()
   def alias_segments(term)
 
+  # sobelow_skip ["DOS.StringToAtom"]
   def alias_segments(module_name) when is_binary(module_name) do
     "Elixir.#{module_name}"
     |> Module.split()
     |> Enum.map(&String.to_atom/1)
   end
 
+  # sobelow_skip ["DOS.StringToAtom"]
   def alias_segments(module) do
     module
     |> Module.split()
