@@ -58,10 +58,10 @@ defmodule Hologram.Compiler.Reflection do
 
     iex> list_loaded_otp_apps()
     [
-      {:inets, 'INETS  CXC 138 49', '8.2.1'},
-      {:logger, 'logger', '1.14.3'},
-      {:stdlib, 'ERTS  CXC 138 10', '4.2'},
-      {:file_system, 'A file system change watcher wrapper based on [fs](https://github.com/synrc/fs)', '0.2.10'},
+      :inets,
+      :logger,
+      :stdlib,
+      :file_system,
       ...
     ]
   """
