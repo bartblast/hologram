@@ -311,7 +311,7 @@ defmodule Hologram.Compiler.Transformer do
     }
   end
 
-  def transform({name, _meta, module}, _context) when is_atom(name) and is_atom(module) do
+  def transform({name, _meta, module}, _context) when is_atom(name) and not is_list(module) do
     case to_string(name) do
       "_" <> _rest ->
         %IR.MatchPlaceholder{}

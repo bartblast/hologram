@@ -1548,7 +1548,7 @@ defmodule Hologram.Compiler.TransformerTest do
     end
 
     test "with non-nil value for module" do
-      ast = {:_abc, [line: 1], Application}
+      ast = {:_abc, [line: 1], {:__aliases__, [alias: false], [:Application]}}
 
       assert transform(ast, %Context{}) == %IR.MatchPlaceholder{}
     end
