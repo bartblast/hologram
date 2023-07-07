@@ -13,11 +13,19 @@ defmodule Hologram.Compiler.HelpersTest do
   end
 
   describe "module/1" do
-    test "when first alias segment is not 'Elixir'" do
+    test "single item list when the item is a module" do
+      assert module([String]) == String
+    end
+
+    test "single item list when the item is not a module" do
+      assert module([:String]) == String
+    end
+
+    test "multiple alias segments, when first alias segment is not 'Elixir'" do
       assert module([:Hologram, :Compiler, :HelpersTest]) == Hologram.Compiler.HelpersTest
     end
 
-    test "when first alias segment is 'Elixir'" do
+    test "multiple alias segments, when first alias segment is 'Elixir'" do
       assert module([:"Elixir", :Hologram, :Compiler, :HelpersTest]) ==
                Hologram.Compiler.HelpersTest
     end
