@@ -18,6 +18,14 @@ defmodule Hologram.Compiler.Normalizer do
   @spec normalize(AST.t()) :: AST.t()
   def normalize(ast)
 
+  def normalize({:__aliases__, meta, [module]} = ast) do
+    maybe_normalize_alias(module, meta, ast)
+  end
+
+  def normalize(ast) when is_atom(ast) do
+    maybe_normalize_alias(ast, [alias: false], ast)
+  end
+
   def normalize({:case, meta, [condition, [do: clauses]]}) do
     {:case, meta, [condition, [do: normalize(clauses)]]}
   end
@@ -54,15 +62,6 @@ defmodule Hologram.Compiler.Normalizer do
     {marker, meta_2, children}
   end
 
-  def normalize(ast) when is_atom(ast) do
-    if Reflection.alias?(ast) do
-      segments = Helpers.alias_segments(ast)
-      {:__aliases__, [alias: false], segments}
-    else
-      ast
-    end
-  end
-
   def normalize(ast) when is_list(ast) do
     Enum.map(ast, &normalize/1)
   end
@@ -76,4 +75,13 @@ defmodule Hologram.Compiler.Normalizer do
   end
 
   def normalize(ast), do: ast
+
+  defp maybe_normalize_alias(module, meta, ast) do
+    if Reflection.alias?(module) do
+      segments = Helpers.alias_segments(module)
+      {:__aliases__, meta, segments}
+    else
+      ast
+    end
+  end
 end

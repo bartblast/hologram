@@ -2,6 +2,20 @@ defmodule Hologram.Compiler.NormalizerTest do
   use Hologram.Test.BasicCase, async: true
   import Hologram.Compiler.Normalizer
 
+  describe "alias" do
+    test "list of atoms" do
+      # Aaa.Bbb
+      ast = {:__aliases__, [line: 1], [:Aaa, :Bbb]}
+
+      assert normalize(ast) == ast
+    end
+
+    test "module" do
+      ast = {:__aliases__, [line: 1], [Aaa.Bbb]}
+      assert normalize(ast) == {:__aliases__, [line: 1], [:Aaa, :Bbb]}
+    end
+  end
+
   test "anonymous function" do
     # fn x -> x end
     ast = {:fn, [line: 1], [{:->, [line: 1], [[{:x, [line: 1], nil}], {:x, [line: 1], nil}]}]}
