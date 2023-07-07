@@ -1,6 +1,5 @@
 defmodule Hologram.Compiler.Helpers do
   alias Hologram.Commons.Types, as: T
-  alias Hologram.Compiler.Reflection
 
   @doc """
   Returns alias segments list (without the "Elixir" segment at the beginning).
@@ -35,27 +34,12 @@ defmodule Hologram.Compiler.Helpers do
 
       iex> module([:Aaa, :Bbb])
       Aaa.Bbb
-
-      iex> module([:Elixir, :Aaa, :Bbb])
-      Aaa.Bbb
   """
   @spec module(T.alias_segments()) :: module
 
-  def module([term]) do
-    if Reflection.alias?(term) do
-      term
-    else
-      module([:"Elixir" | [term]])
-    end
-  end
-
-  def module([:"Elixir" | _] = alias_segs) do
-    alias_segs
+  def module(alias_segs) do
+    [:"Elixir" | alias_segs]
     |> Enum.join(".")
     |> String.to_existing_atom()
-  end
-
-  def module(alias_segs) do
-    module([:"Elixir" | alias_segs])
   end
 end
