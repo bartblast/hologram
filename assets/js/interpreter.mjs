@@ -305,7 +305,7 @@ export default class Interpreter {
     let offset = 0;
 
     for (const segment of left.segments) {
-      if (segment.type === "variable_pattern") {
+      if (segment.value.type === "variable_pattern") {
         // TODO: implement
       } else {
         const segmentBitstring = Type.bitstring([segment]);
