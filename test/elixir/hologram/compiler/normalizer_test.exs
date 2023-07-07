@@ -126,6 +126,16 @@ defmodule Hologram.Compiler.NormalizerTest do
     end
   end
 
+  test "unquote" do
+    ast =
+      {{:unquote, [], [:%]}, [line: 69],
+       [Dialyxir.FilterMap, {:%{}, [line: 69], [list_unused_filters?: true]}]}
+
+    assert normalize(ast) ==
+             {:%, [line: 69],
+              [Dialyxir.FilterMap, {:%{}, [line: 69], [list_unused_filters?: true]}]}
+  end
+
   describe "atom" do
     test "alias" do
       assert normalize(A.B) == {:__aliases__, [alias: false], [:A, :B]}

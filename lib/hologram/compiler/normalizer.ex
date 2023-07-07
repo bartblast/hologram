@@ -50,6 +50,10 @@ defmodule Hologram.Compiler.Normalizer do
     {:->, meta, [pattern, {:__block__, [], [normalize(expr)]}]}
   end
 
+  def normalize({{:unquote, _meta_1, [marker]}, meta_2, children}) do
+    {marker, meta_2, children}
+  end
+
   def normalize(ast) when is_atom(ast) do
     if Reflection.alias?(ast) do
       segments = Helpers.alias_segments(ast)
