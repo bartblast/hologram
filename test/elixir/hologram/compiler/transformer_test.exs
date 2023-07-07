@@ -1539,11 +1539,19 @@ defmodule Hologram.Compiler.TransformerTest do
            }
   end
 
-  test "match placeholder" do
-    # _abc
-    ast = {:_abc, [line: 1], nil}
+  describe "match placeholder" do
+    test "with nil value for module" do
+      # _abc
+      ast = {:_abc, [line: 1], nil}
 
-    assert transform(ast, %Context{}) == %IR.MatchPlaceholder{}
+      assert transform(ast, %Context{}) == %IR.MatchPlaceholder{}
+    end
+
+    test "with non-nil value for module" do
+      ast = {:_abc, [line: 1], Application}
+
+      assert transform(ast, %Context{}) == %IR.MatchPlaceholder{}
+    end
   end
 
   describe "module" do
@@ -1971,10 +1979,18 @@ defmodule Hologram.Compiler.TransformerTest do
     end
   end
 
-  test "variable" do
-    # my_var
-    ast = {:my_var, [line: 1], nil}
+  describe "variable" do
+    test "with nil value for module" do
+      # my_var
+      ast = {:my_var, [line: 1], nil}
 
-    assert transform(ast, %Context{}) == %IR.Variable{name: :my_var}
+      assert transform(ast, %Context{}) == %IR.Variable{name: :my_var}
+    end
+
+    test "with non-nil value for module" do
+      ast = {:my_var, [line: 1], Application}
+
+      assert transform(ast, %Context{}) == %IR.Variable{name: :my_var}
+    end
   end
 end
