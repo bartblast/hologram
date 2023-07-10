@@ -1980,17 +1980,30 @@ defmodule Hologram.Compiler.TransformerTest do
   end
 
   describe "variable" do
-    test "with nil value for module" do
+    test "non-keyword variable name with nil value in AST tuple" do
       # my_var
       ast = {:my_var, [line: 1], nil}
 
       assert transform(ast, %Context{}) == %IR.Variable{name: :my_var}
     end
 
-    test "with non-nil value for module" do
+    test "non-keyword variable name with non-nil value in AST tuple" do
       ast = {:my_var, [line: 1], Application}
 
       assert transform(ast, %Context{}) == %IR.Variable{name: :my_var}
+    end
+
+    test "variable 'for' with nil value in AST tuple" do
+      # for
+      ast = {:for, [line: 1], nil}
+
+      assert transform(ast, %Context{}) == %IR.Variable{name: :for}
+    end
+
+    test "variable 'for' with non-nil value in AST tuple" do
+      ast = {:for, [line: 1], Application}
+
+      assert transform(ast, %Context{}) == %IR.Variable{name: :for}
     end
   end
 end

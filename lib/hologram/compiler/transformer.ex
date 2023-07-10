@@ -108,7 +108,7 @@ defmodule Hologram.Compiler.Transformer do
     }
   end
 
-  def transform({:for, _meta, parts}, context) do
+  def transform({:for, _meta, parts}, context) when is_list(parts) do
     initial_acc = %{
       generators: [],
       filters: [],
@@ -137,6 +137,10 @@ defmodule Hologram.Compiler.Transformer do
       unique: unique,
       mapper: mapper
     }
+  end
+
+  def transform({:for, _meta, module}, _context) when not is_list(module) do
+    transform_variable(:for)
   end
 
   def transform({:cond, _meta, [[do: clauses]]}, context) do
@@ -312,13 +316,7 @@ defmodule Hologram.Compiler.Transformer do
   end
 
   def transform({name, _meta, module}, _context) when is_atom(name) and not is_list(module) do
-    case to_string(name) do
-      "_" <> _rest ->
-        %IR.MatchPlaceholder{}
-
-      _fallback ->
-        %IR.Variable{name: name}
-    end
+    transform_variable(name)
   end
 
   def transform({function, _meta, args}, context) when is_atom(function) and is_list(args) do
@@ -637,5 +635,15 @@ defmodule Hologram.Compiler.Transformer do
     list
     |> List.wrap()
     |> Enum.map(&transform(&1, context))
+  end
+
+  defp transform_variable(name) do
+    case to_string(name) do
+      "_" <> _rest ->
+        %IR.MatchPlaceholder{}
+
+      _fallback ->
+        %IR.Variable{name: name}
+    end
   end
 end
