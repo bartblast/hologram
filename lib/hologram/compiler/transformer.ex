@@ -576,12 +576,30 @@ defmodule Hologram.Compiler.Transformer do
     %{acc | filters: [filter | acc.filters]}
   end
 
+  defp transform_comprehension_opt(
+         {:do, {:__block__, [], [[{:->, _meta, _body} | _clauses_tail] = clauses]}},
+         acc,
+         context
+       ) do
+    reducer = %{acc.reducer | clauses: transform_list(clauses, context)}
+    %{acc | reducer: reducer}
+  end
+
   defp transform_comprehension_opt({:do, block}, acc, context) do
     %{acc | mapper: transform(block, context)}
   end
 
   defp transform_comprehension_opt({:into, collectable}, acc, context) do
     %{acc | collectable: transform(collectable, context)}
+  end
+
+  defp transform_comprehension_opt({:reduce, initial_value}, acc, context) do
+    reducer = %{
+      initial_value: transform(initial_value, context),
+      clauses: []
+    }
+
+    %{acc | reducer: reducer}
   end
 
   defp transform_comprehension_opt({:uniq, unique}, acc, context) do

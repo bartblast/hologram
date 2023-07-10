@@ -1148,6 +1148,127 @@ defmodule Hologram.Compiler.TransformerTest do
                reducer: nil
              } = transform(ast, %Context{})
     end
+
+    test "reducer with single clause " do
+      ast =
+        """
+        for x <- [1, 2], reduce: 0 do
+          acc -> my_reducer(acc, x)
+        end
+        """
+        |> ast()
+
+      assert %IR.Comprehension{
+               mapper: nil,
+               reducer: %{
+                 clauses: [
+                   %IR.Clause{
+                     match: %IR.Variable{name: :acc},
+                     guard: nil,
+                     body: %IR.Block{
+                       expressions: [
+                         %IR.LocalFunctionCall{
+                           function: :my_reducer,
+                           args: [
+                             %IR.Variable{name: :acc},
+                             %IR.Variable{name: :x}
+                           ]
+                         }
+                       ]
+                     }
+                   }
+                 ],
+                 initial_value: %IR.IntegerType{value: 0}
+               }
+             } = transform(ast, %Context{})
+    end
+
+    test "reducer with multiple clauses" do
+      ast =
+        """
+        for x <- [1, 2], reduce: 0 do
+          1 -> my_reducer_1(acc, x)
+          2 -> my_reducer_2(acc, x)
+        end
+        """
+        |> ast()
+
+      assert %IR.Comprehension{
+               mapper: nil,
+               reducer: %{
+                 clauses: [
+                   %IR.Clause{
+                     match: %IR.IntegerType{value: 1},
+                     guard: nil,
+                     body: %IR.Block{
+                       expressions: [
+                         %IR.LocalFunctionCall{
+                           function: :my_reducer_1,
+                           args: [
+                             %IR.Variable{name: :acc},
+                             %IR.Variable{name: :x}
+                           ]
+                         }
+                       ]
+                     }
+                   },
+                   %IR.Clause{
+                     match: %IR.IntegerType{value: 2},
+                     guard: nil,
+                     body: %IR.Block{
+                       expressions: [
+                         %IR.LocalFunctionCall{
+                           function: :my_reducer_2,
+                           args: [
+                             %IR.Variable{name: :acc},
+                             %IR.Variable{name: :x}
+                           ]
+                         }
+                       ]
+                     }
+                   }
+                 ],
+                 initial_value: %IR.IntegerType{value: 0}
+               }
+             } = transform(ast, %Context{})
+    end
+
+    test "reducer clause with guard" do
+      ast =
+        """
+        for x <- [1, 2], reduce: 0 do
+          acc when my_guard(acc) -> my_reducer(acc, x)
+        end
+        """
+        |> ast()
+
+      assert %IR.Comprehension{
+               mapper: nil,
+               reducer: %{
+                 clauses: [
+                   %IR.Clause{
+                     match: %IR.Variable{name: :acc},
+                     guard: %IR.LocalFunctionCall{
+                       function: :my_guard,
+                       args: [%IR.Variable{name: :acc}]
+                     },
+                     body: %IR.Block{
+                       expressions: [
+                         %IR.LocalFunctionCall{
+                           function: :my_reducer,
+                           args: [
+                             %IR.Variable{name: :acc},
+                             %IR.Variable{name: :x}
+                           ]
+                         }
+                       ]
+                     }
+                   }
+                 ],
+                 initial_value: %IR.IntegerType{value: 0}
+               }
+             } = transform(ast, %Context{})
+    end
   end
 
   describe "cond" do
