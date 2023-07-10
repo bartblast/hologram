@@ -323,15 +323,15 @@ describe("comprehension()", () => {
       // for x <- [1, 2], y <- [3, 4], do: {x, y}
 
       const generator1 = {
-        enumerable: Type.list([Type.integer(1), Type.integer(2)]),
         match: Type.variablePattern("x"),
         guard: null,
+        body: (_vars) => Type.list([Type.integer(1), Type.integer(2)]),
       };
 
       const generator2 = {
-        enumerable: Type.list([Type.integer(3), Type.integer(4)]),
         match: Type.variablePattern("y"),
         guard: null,
+        body: (_vars) => Type.list([Type.integer(3), Type.integer(4)]),
       };
 
       const result = Interpreter.comprehension(
@@ -358,30 +358,32 @@ describe("comprehension()", () => {
       //     {12, y} <- [5, {12, 6}, 7, {12, 8}],
       //     do: {x, y}
 
-      const enumerable1 = Type.list([
-        Type.integer(1),
-        Type.tuple([Type.integer(11), Type.integer(2)]),
-        Type.integer(3),
-        Type.tuple([Type.integer(11), Type.integer(4)]),
-      ]);
+      const enumerable1 = (_vars) =>
+        Type.list([
+          Type.integer(1),
+          Type.tuple([Type.integer(11), Type.integer(2)]),
+          Type.integer(3),
+          Type.tuple([Type.integer(11), Type.integer(4)]),
+        ]);
 
       const generator1 = {
-        enumerable: enumerable1,
         match: Type.tuple([Type.integer(11), Type.variablePattern("x")]),
         guard: null,
+        body: enumerable1,
       };
 
-      const enumerable2 = Type.list([
-        Type.integer(5),
-        Type.tuple([Type.integer(12), Type.integer(6)]),
-        Type.integer(7),
-        Type.tuple([Type.integer(12), Type.integer(8)]),
-      ]);
+      const enumerable2 = (_vars) =>
+        Type.list([
+          Type.integer(5),
+          Type.tuple([Type.integer(12), Type.integer(6)]),
+          Type.integer(7),
+          Type.tuple([Type.integer(12), Type.integer(8)]),
+        ]);
 
       const generator2 = {
-        enumerable: enumerable2,
         match: Type.tuple([Type.integer(12), Type.variablePattern("y")]),
         guard: null,
+        body: enumerable2,
       };
 
       const result = Interpreter.comprehension(
@@ -406,20 +408,22 @@ describe("comprehension()", () => {
     it("uses Enum.to_list/1 to convert generator enumerables to lists", () => {
       // for x <- [1, 2], y <- [3, 4], do: {x, y}
 
-      const enumerable1 = Type.list([Type.integer(1), Type.integer(2)]);
+      const enumerable1 = (_vars) =>
+        Type.list([Type.integer(1), Type.integer(2)]);
 
       const generator1 = {
-        enumerable: enumerable1,
         match: Type.variablePattern("x"),
         guard: null,
+        body: enumerable1,
       };
 
-      const enumerable2 = Type.list([Type.integer(3), Type.integer(4)]);
+      const enumerable2 = (_vars) =>
+        Type.list([Type.integer(3), Type.integer(4)]);
 
       const generator2 = {
-        enumerable: enumerable2,
         match: Type.variablePattern("y"),
         guard: null,
+        body: enumerable2,
       };
 
       const stub = sinon
@@ -435,8 +439,8 @@ describe("comprehension()", () => {
         vars
       );
 
-      sinon.assert.calledWith(stub, enumerable1);
-      sinon.assert.calledWith(stub, enumerable2);
+      sinon.assert.calledWith(stub, enumerable1(vars));
+      sinon.assert.calledWith(stub, enumerable2(vars));
     });
   });
 
@@ -450,32 +454,26 @@ describe("comprehension()", () => {
       //     y when :erlang."/="(y, 4) <- [4, 5, 6],
       //     do: {x, y}
 
-      const enumerable1 = Type.list([
-        Type.integer(1),
-        Type.integer(2),
-        Type.integer(3),
-      ]);
+      const enumerable1 = (_vars) =>
+        Type.list([Type.integer(1), Type.integer(2), Type.integer(3)]);
 
       const guard1 = (vars) => Erlang.$247$261(vars.x, Type.integer(2));
 
       const generator1 = {
-        enumerable: enumerable1,
         match: Type.variablePattern("x"),
         guard: guard1,
+        body: enumerable1,
       };
 
-      const enumerable2 = Type.list([
-        Type.integer(4),
-        Type.integer(5),
-        Type.integer(6),
-      ]);
+      const enumerable2 = (_vars) =>
+        Type.list([Type.integer(4), Type.integer(5), Type.integer(6)]);
 
       const guard2 = (vars) => Erlang.$247$261(vars.y, Type.integer(4));
 
       const generator2 = {
-        enumerable: enumerable2,
         match: Type.variablePattern("y"),
         guard: guard2,
+        body: enumerable2,
       };
 
       const result = Interpreter.comprehension(
@@ -500,18 +498,15 @@ describe("comprehension()", () => {
     it("can access variables from comprehension outer scope", () => {
       // for x when x != b <- [1, 2, 3], do: x
 
-      const enumerable = Type.list([
-        Type.integer(1),
-        Type.integer(2),
-        Type.integer(3),
-      ]);
+      const enumerable = (_vars) =>
+        Type.list([Type.integer(1), Type.integer(2), Type.integer(3)]);
 
       const guard = (vars) => Erlang.$247$261(vars.x, vars.b);
 
       const generator = {
-        enumerable: enumerable,
         match: Type.variablePattern("x"),
         guard: guard,
+        body: enumerable,
       };
 
       const result = Interpreter.comprehension(
@@ -531,22 +526,24 @@ describe("comprehension()", () => {
     it("can access variables pattern matched in preceding guards", () => {
       // for x <- [1, 2], y when x != 1 <- [3, 4], do: {x, y}
 
-      const enumerable1 = Type.list([Type.integer(1), Type.integer(2)]);
+      const enumerable1 = (_vars) =>
+        Type.list([Type.integer(1), Type.integer(2)]);
 
       const generator1 = {
-        enumerable: enumerable1,
         match: Type.variablePattern("x"),
         guard: null,
+        body: enumerable1,
       };
 
-      const enumerable2 = Type.list([Type.integer(3), Type.integer(4)]);
+      const enumerable2 = (_vars) =>
+        Type.list([Type.integer(3), Type.integer(4)]);
 
       const guard2 = (vars) => Erlang.$247$261(vars.x, Type.integer(1));
 
       const generator2 = {
-        enumerable: enumerable2,
         match: Type.variablePattern("y"),
         guard: guard2,
+        body: enumerable2,
       };
 
       const result = Interpreter.comprehension(
@@ -581,28 +578,22 @@ describe("comprehension()", () => {
       //     :erlang.>(:erlang.-(y, x), 2),
       //     do: {x, y}
 
-      const enumerable1 = Type.list([
-        Type.integer(1),
-        Type.integer(2),
-        Type.integer(3),
-      ]);
+      const enumerable1 = (_vars) =>
+        Type.list([Type.integer(1), Type.integer(2), Type.integer(3)]);
 
       const generator1 = {
-        enumerable: enumerable1,
         match: Type.variablePattern("x"),
         guard: null,
+        body: enumerable1,
       };
 
-      const enumerable2 = Type.list([
-        Type.integer(4),
-        Type.integer(5),
-        Type.integer(6),
-      ]);
+      const enumerable2 = (_vars) =>
+        Type.list([Type.integer(4), Type.integer(5), Type.integer(6)]);
 
       const generator2 = {
-        enumerable: enumerable2,
         match: Type.variablePattern("y"),
         guard: null,
+        body: enumerable2,
       };
 
       const filters = [
@@ -632,16 +623,13 @@ describe("comprehension()", () => {
     it("can access variables from comprehension outer scope", () => {
       // for x <- [1, 2, 3], x != b, do: x
 
-      const enumerable = Type.list([
-        Type.integer(1),
-        Type.integer(2),
-        Type.integer(3),
-      ]);
+      const enumerable = (_vars) =>
+        Type.list([Type.integer(1), Type.integer(2), Type.integer(3)]);
 
       const generator = {
-        enumerable: enumerable,
         match: Type.variablePattern("x"),
         guard: null,
+        body: enumerable,
       };
 
       const filter = (vars) => Erlang.$247$261(vars.x, vars.b);
@@ -665,28 +653,22 @@ describe("comprehension()", () => {
     it("non-unique items are removed if 'uniq' option is set to true", () => {
       // for x <- [1, 2, 1], y <- [3, 4, 3], do: {x, y}
 
-      const enumerable1 = Type.list([
-        Type.integer(1),
-        Type.integer(2),
-        Type.integer(1),
-      ]);
+      const enumerable1 = (_vars) =>
+        Type.list([Type.integer(1), Type.integer(2), Type.integer(1)]);
 
       const generator1 = {
-        enumerable: enumerable1,
         match: Type.variablePattern("x"),
         guard: null,
+        body: enumerable1,
       };
 
-      const enumerable2 = Type.list([
-        Type.integer(3),
-        Type.integer(4),
-        Type.integer(3),
-      ]);
+      const enumerable2 = (_vars) =>
+        Type.list([Type.integer(3), Type.integer(4), Type.integer(3)]);
 
       const generator2 = {
-        enumerable: enumerable2,
         match: Type.variablePattern("y"),
         guard: null,
+        body: enumerable2,
       };
 
       const result = Interpreter.comprehension(
@@ -713,12 +695,13 @@ describe("comprehension()", () => {
     it("can access variables from comprehension outer scope", () => {
       // for x <- [1, 2], do: {x, b}
 
-      const enumerable = Type.list([Type.integer(1), Type.integer(2)]);
+      const enumerable = (_vars) =>
+        Type.list([Type.integer(1), Type.integer(2)]);
 
       const generator = {
-        enumerable: enumerable,
         match: Type.variablePattern("x"),
         guard: null,
+        body: enumerable,
       };
 
       const result = Interpreter.comprehension(
@@ -741,20 +724,22 @@ describe("comprehension()", () => {
     it("uses Enum.into/2 to insert the comprehension result into a collectable", () => {
       // for x <- [1, 2], y <- [3, 4], do: {x, y}
 
-      const enumerable1 = Type.list([Type.integer(1), Type.integer(2)]);
+      const enumerable1 = (_vars) =>
+        Type.list([Type.integer(1), Type.integer(2)]);
 
       const generator1 = {
-        enumerable: enumerable1,
         match: Type.variablePattern("x"),
         guard: null,
+        body: enumerable1,
       };
 
-      const enumerable2 = Type.list([Type.integer(3), Type.integer(4)]);
+      const enumerable2 = (_vars) =>
+        Type.list([Type.integer(3), Type.integer(4)]);
 
       const generator2 = {
-        enumerable: enumerable2,
         match: Type.variablePattern("y"),
         guard: null,
+        body: enumerable2,
       };
 
       const stub = sinon

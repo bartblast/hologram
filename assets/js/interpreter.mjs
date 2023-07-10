@@ -58,7 +58,7 @@ export default class Interpreter {
     const generatorsCount = generators.length;
 
     const sets = generators.map(
-      (generator) => Elixir_Enum.to_list(generator.enumerable).data
+      (generator) => Elixir_Enum.to_list(generator.body(vars)).data
     );
 
     let items = Utils.cartesianProduct(sets).reduce((acc, combination) => {
