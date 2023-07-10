@@ -163,7 +163,7 @@ describe("case()", () => {
     // end
 
     const clause1 = {
-      head: Type.integer(1),
+      match: Type.integer(1),
       guard: null,
       body: (_vars) => {
         return Type.atom("expr_1");
@@ -171,7 +171,7 @@ describe("case()", () => {
     };
 
     const clause2 = {
-      head: Type.integer(2),
+      match: Type.integer(2),
       guard: null,
       body: (_vars) => {
         return Type.atom("expr_2");
@@ -179,7 +179,7 @@ describe("case()", () => {
     };
 
     const clause3 = {
-      head: Type.integer(3),
+      match: Type.integer(3),
       guard: null,
       body: (_vars) => {
         return Type.atom("expr_3");
@@ -203,7 +203,7 @@ describe("case()", () => {
     // end
 
     const clause1 = {
-      head: Type.variablePattern("x"),
+      match: Type.variablePattern("x"),
       guard: (vars) => Erlang.$261$261(vars.x, Type.integer(1)),
       body: (_vars) => {
         return Type.atom("expr_1");
@@ -211,7 +211,7 @@ describe("case()", () => {
     };
 
     const clause2 = {
-      head: Type.variablePattern("y"),
+      match: Type.variablePattern("y"),
       guard: (vars) => Erlang.$261$261(vars.y, Type.integer(2)),
       body: (_vars) => {
         return Type.atom("expr_2");
@@ -219,7 +219,7 @@ describe("case()", () => {
     };
 
     const clause3 = {
-      head: Type.variablePattern("z"),
+      match: Type.variablePattern("z"),
       guard: (vars) => Erlang.$261$261(vars.z, Type.integer(3)),
       body: (_vars) => {
         return Type.atom("expr_3");
@@ -244,7 +244,7 @@ describe("case()", () => {
     // end
 
     const clause1 = {
-      head: Type.variablePattern("x"),
+      match: Type.variablePattern("x"),
       guard: (vars) => Erlang.$261$261(vars.x, Type.integer(1)),
       body: (_vars) => {
         return Type.atom("expr_1");
@@ -252,7 +252,7 @@ describe("case()", () => {
     };
 
     const clause2 = {
-      head: Type.variablePattern("y"),
+      match: Type.variablePattern("y"),
       guard: null,
       body: (vars) => {
         return vars.x;
@@ -271,7 +271,7 @@ describe("case()", () => {
     // end
 
     const clause1 = {
-      head: Type.integer(1),
+      match: Type.integer(1),
       guard: null,
       body: (_vars) => {
         return Type.atom("expr_1");
@@ -279,7 +279,7 @@ describe("case()", () => {
     };
 
     const clause2 = {
-      head: Type.integer(2),
+      match: Type.integer(2),
       guard: null,
       body: (_vars) => {
         return Type.atom("expr_2");

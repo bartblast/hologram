@@ -38,7 +38,7 @@ export default class Interpreter {
       const varsClone = Hologram.cloneVars(vars);
 
       try {
-        Interpreter.matchOperator(condition, clause.head, varsClone);
+        Interpreter.matchOperator(condition, clause.match, varsClone);
 
         if (Interpreter.#evaluateGuard(clause.guard, varsClone) === false) {
           continue;

@@ -99,12 +99,25 @@ defmodule Hologram.Compiler.Transformer do
   end
 
   def transform({:case, _meta, [condition, [do: clauses]]}, context) do
-    condition_ir = transform(condition, context)
-    clauses_ir = Enum.map(clauses, &build_case_clause_ir(&1, context))
-
     %IR.Case{
-      condition: condition_ir,
-      clauses: clauses_ir
+      condition: transform(condition, context),
+      clauses: transform_list(clauses, context)
+    }
+  end
+
+  def transform({:->, _meta_1, [[{:when, _meta_2, [match, guard]}], body]}, context) do
+    %IR.Clause{
+      match: transform(match, context),
+      guard: transform(guard, context),
+      body: transform(body, context)
+    }
+  end
+
+  def transform({:->, _meta, [[match], body]}, context) do
+    %IR.Clause{
+      match: transform(match, context),
+      guard: nil,
+      body: transform(body, context)
     }
   end
 
@@ -368,22 +381,6 @@ defmodule Hologram.Compiler.Transformer do
     }
 
     %{acc | generators: [generator | acc.generators]}
-  end
-
-  defp build_case_clause_ir({:->, _meta_1, [[{:when, _meta_2, [head, guard]}], body]}, context) do
-    %IR.CaseClause{
-      head: transform(head, context),
-      guard: transform(guard, context),
-      body: transform(body, context)
-    }
-  end
-
-  defp build_case_clause_ir({:->, _meta, [[head], body]}, context) do
-    %IR.CaseClause{
-      head: transform(head, context),
-      guard: nil,
-      body: transform(body, context)
-    }
   end
 
   defp build_cond_clause_ir({:->, _meta, [[condition], body]}, context) do

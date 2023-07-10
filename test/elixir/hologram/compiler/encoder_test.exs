@@ -319,8 +319,8 @@ defmodule Hologram.Compiler.EncoderTest do
   end
 
   test "case" do
-    clause_1 = %IR.CaseClause{
-      head: %IR.Variable{name: :x},
+    clause_1 = %IR.Clause{
+      match: %IR.Variable{name: :x},
       guard: nil,
       body: %IR.Block{
         expressions: [
@@ -329,8 +329,8 @@ defmodule Hologram.Compiler.EncoderTest do
       }
     }
 
-    clause_2 = %IR.CaseClause{
-      head: %IR.Variable{name: :y},
+    clause_2 = %IR.Clause{
+      match: %IR.Variable{name: :y},
       guard: nil,
       body: %IR.Block{
         expressions: [
@@ -345,17 +345,17 @@ defmodule Hologram.Compiler.EncoderTest do
     }
 
     assert encode(ir, %Context{}) == """
-           Interpreter.case(Type.integer(123n), [{head: Type.variablePattern("x"), guard: null, body: (vars) => {
+           Interpreter.case(Type.integer(123n), [{match: Type.variablePattern("x"), guard: null, body: (vars) => {
            return Type.atom("expr_1");
-           }}, {head: Type.variablePattern("y"), guard: null, body: (vars) => {
+           }}, {match: Type.variablePattern("y"), guard: null, body: (vars) => {
            return Type.atom("expr_2");
            }}])\
            """
   end
 
-  test "case clause" do
-    ir = %IR.CaseClause{
-      head: %IR.TupleType{
+  test "clause" do
+    ir = %IR.Clause{
+      match: %IR.TupleType{
         data: [
           %IR.IntegerType{value: 1},
           %IR.Variable{name: :x}
@@ -378,7 +378,7 @@ defmodule Hologram.Compiler.EncoderTest do
     }
 
     assert encode(ir, %Context{}) == """
-           {head: Type.tuple([Type.integer(1n), Type.variablePattern("x")]), guard: (vars) => Erlang.$260(vars.x, Type.integer(3n)), body: (vars) => {
+           {match: Type.tuple([Type.integer(1n), Type.variablePattern("x")]), guard: (vars) => Erlang.$260(vars.x, Type.integer(3n)), body: (vars) => {
            Type.integer(11n);
            return Type.integer(12n);
            }}\

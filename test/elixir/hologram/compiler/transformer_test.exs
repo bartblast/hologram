@@ -780,8 +780,9 @@ defmodule Hologram.Compiler.TransformerTest do
       assert transform(ast, %Context{}) == %IR.Case{
                condition: %IR.Variable{name: :x},
                clauses: [
-                 %IR.CaseClause{
-                   head: %IR.IntegerType{value: 1},
+                 %IR.Clause{
+                   match: %IR.IntegerType{value: 1},
+                   guard: nil,
                    body: %IR.Block{
                      expressions: [%IR.AtomType{value: :expr_1}]
                    }
@@ -810,14 +811,16 @@ defmodule Hologram.Compiler.TransformerTest do
       assert transform(ast, %Context{}) == %IR.Case{
                condition: %IR.Variable{name: :x},
                clauses: [
-                 %IR.CaseClause{
-                   head: %IR.IntegerType{value: 1},
+                 %IR.Clause{
+                   match: %IR.IntegerType{value: 1},
+                   guard: nil,
                    body: %IR.Block{
                      expressions: [%IR.AtomType{value: :expr_1}]
                    }
                  },
-                 %IR.CaseClause{
-                   head: %IR.IntegerType{value: 2},
+                 %IR.Clause{
+                   match: %IR.IntegerType{value: 2},
+                   guard: nil,
                    body: %IR.Block{
                      expressions: [%IR.AtomType{value: :expr_2}]
                    }
@@ -842,8 +845,9 @@ defmodule Hologram.Compiler.TransformerTest do
       assert transform(ast, %Context{}) == %IR.Case{
                condition: %IR.Variable{name: :x},
                clauses: [
-                 %IR.CaseClause{
-                   head: %IR.IntegerType{value: 1},
+                 %IR.Clause{
+                   match: %IR.IntegerType{value: 1},
+                   guard: nil,
                    body: %IR.Block{
                      expressions: [
                        %IR.AtomType{value: :expr_1},
@@ -883,8 +887,8 @@ defmodule Hologram.Compiler.TransformerTest do
       assert transform(ast, %Context{}) == %IR.Case{
                condition: %IR.Variable{name: :x},
                clauses: [
-                 %IR.CaseClause{
-                   head: %IR.TupleType{
+                 %IR.Clause{
+                   match: %IR.TupleType{
                      data: [
                        %IR.AtomType{value: :ok},
                        %IR.Variable{name: :n}
