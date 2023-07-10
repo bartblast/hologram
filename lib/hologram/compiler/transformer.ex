@@ -121,6 +121,22 @@ defmodule Hologram.Compiler.Transformer do
     }
   end
 
+  def transform({:<-, _meta_1, [{:when, _meta_2, [match, guard]}, body]}, context) do
+    %IR.Clause{
+      match: transform(match, context),
+      guard: transform(guard, context),
+      body: transform(body, context)
+    }
+  end
+
+  def transform({:<-, _meta, [match, body]}, context) do
+    %IR.Clause{
+      match: transform(match, context),
+      guard: nil,
+      body: transform(body, context)
+    }
+  end
+
   def transform({:for, _meta, parts}, context) when is_list(parts) do
     initial_acc = %{
       generators: [],
@@ -366,23 +382,6 @@ defmodule Hologram.Compiler.Transformer do
     IO.puts("\n........................................\n")
   end
 
-  defp accumulate_comprehension_generator(acc, enumerable, match, guard, context) do
-    guard_ir =
-      if guard do
-        transform(guard, context)
-      else
-        nil
-      end
-
-    generator = %IR.ComprehensionGenerator{
-      enumerable: transform(enumerable, context),
-      match: transform(match, context),
-      guard: guard_ir
-    }
-
-    %{acc | generators: [generator | acc.generators]}
-  end
-
   defp build_cond_clause_ir({:->, _meta, [[condition], body]}, context) do
     %IR.CondClause{
       condition: transform(condition, context),
@@ -563,16 +562,9 @@ defmodule Hologram.Compiler.Transformer do
     %IR.BitstringSegment{value: value, modifiers: modifiers}
   end
 
-  defp transform_comprehension_part(
-         {:<-, _meta_1, [{:when, _meta_2, [match, guard]}, enumerable]},
-         acc,
-         context
-       ) do
-    accumulate_comprehension_generator(acc, enumerable, match, guard, context)
-  end
-
-  defp transform_comprehension_part({:<-, _meta, [match, enumerable]}, acc, context) do
-    accumulate_comprehension_generator(acc, enumerable, match, nil, context)
+  defp transform_comprehension_part({:<-, _meta, _args} = ast, acc, context) do
+    clause = transform(ast, context)
+    %{acc | generators: [clause | acc.generators]}
   end
 
   defp transform_comprehension_part(ast, acc, context) when is_list(ast) do

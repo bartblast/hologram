@@ -404,13 +404,7 @@ defmodule Hologram.Compiler.EncoderTest do
 
     ir = %IR.Comprehension{
       generators: [
-        %IR.ComprehensionGenerator{
-          enumerable: %IR.ListType{
-            data: [
-              %IR.IntegerType{value: 1},
-              %IR.IntegerType{value: 2}
-            ]
-          },
+        %IR.Clause{
           match: %IR.Variable{name: :x},
           guard: %IR.RemoteFunctionCall{
             module: %IR.AtomType{value: :erlang},
@@ -419,15 +413,15 @@ defmodule Hologram.Compiler.EncoderTest do
               %IR.Variable{name: :x},
               %IR.IntegerType{value: 3}
             ]
+          },
+          body: %IR.ListType{
+            data: [
+              %IR.IntegerType{value: 1},
+              %IR.IntegerType{value: 2}
+            ]
           }
         },
-        %IR.ComprehensionGenerator{
-          enumerable: %IR.ListType{
-            data: [
-              %IR.IntegerType{value: 3},
-              %IR.IntegerType{value: 4}
-            ]
-          },
+        %IR.Clause{
           match: %IR.Variable{name: :y},
           guard: %IR.RemoteFunctionCall{
             module: %IR.AtomType{value: :erlang},
@@ -435,6 +429,12 @@ defmodule Hologram.Compiler.EncoderTest do
             args: [
               %IR.Variable{name: :y},
               %IR.IntegerType{value: 5}
+            ]
+          },
+          body: %IR.ListType{
+            data: [
+              %IR.IntegerType{value: 3},
+              %IR.IntegerType{value: 4}
             ]
           }
         }
@@ -466,7 +466,7 @@ defmodule Hologram.Compiler.EncoderTest do
     }
 
     assert encode(ir, %Context{}) ==
-             "Interpreter.comprehension([{enumerable: Type.list([Type.integer(1n), Type.integer(2n)]), match: Type.variablePattern(\"x\"), guard: (vars) => Erlang.$260(vars.x, Type.integer(3n))}, {enumerable: Type.list([Type.integer(3n), Type.integer(4n)]), match: Type.variablePattern(\"y\"), guard: (vars) => Erlang.$260(vars.y, Type.integer(5n))}], [(vars) => Erlang.is_integer(vars.x), (vars) => Erlang.is_integer(vars.y)], Type.map([]), true, (vars) => Type.tuple([vars.x, vars.y]), vars)"
+             "Interpreter.comprehension([{match: Type.variablePattern(\"x\"), guard: (vars) => Erlang.$260(vars.x, Type.integer(3n)), body: (vars) => Type.list([Type.integer(1n), Type.integer(2n)])}, {match: Type.variablePattern(\"y\"), guard: (vars) => Erlang.$260(vars.y, Type.integer(5n)), body: (vars) => Type.list([Type.integer(3n), Type.integer(4n)])}], [(vars) => Erlang.is_integer(vars.x), (vars) => Erlang.is_integer(vars.y)], Type.map([]), true, (vars) => Type.tuple([vars.x, vars.y]), vars)"
   end
 
   test "comprehension filter" do
@@ -481,13 +481,7 @@ defmodule Hologram.Compiler.EncoderTest do
   end
 
   test "comprehension generator" do
-    ir = %IR.ComprehensionGenerator{
-      enumerable: %IR.ListType{
-        data: [
-          %IR.IntegerType{value: 1},
-          %IR.IntegerType{value: 2}
-        ]
-      },
+    ir = %IR.Clause{
       match: %IR.TupleType{
         data: [
           %IR.Variable{name: :a},
@@ -500,11 +494,17 @@ defmodule Hologram.Compiler.EncoderTest do
           %IR.Variable{name: :a},
           %IR.IntegerType{value: 2}
         ]
+      },
+      body: %IR.ListType{
+        data: [
+          %IR.IntegerType{value: 1},
+          %IR.IntegerType{value: 2}
+        ]
       }
     }
 
     assert encode(ir, %Context{module: MyModule}) ==
-             "{enumerable: Type.list([Type.integer(1n), Type.integer(2n)]), match: Type.tuple([Type.variablePattern(\"a\"), Type.variablePattern(\"b\")]), guard: (vars) => Elixir_MyModule.my_guard(vars.a, Type.integer(2n))}"
+             "{match: Type.tuple([Type.variablePattern(\"a\"), Type.variablePattern(\"b\")]), guard: (vars) => Elixir_MyModule.my_guard(vars.a, Type.integer(2n)), body: (vars) => Type.list([Type.integer(1n), Type.integer(2n)])}"
   end
 
   test "cond" do

@@ -920,7 +920,7 @@ defmodule Hologram.Compiler.TransformerTest do
 
     test "single generator" do
       assert %IR.Comprehension{
-               generators: [%IR.ComprehensionGenerator{match: %IR.Variable{name: :a}}]
+               generators: [%IR.Clause{match: %IR.Variable{name: :a}}]
              } = transform(@ast, %Context{})
     end
 
@@ -938,8 +938,8 @@ defmodule Hologram.Compiler.TransformerTest do
 
       assert %IR.Comprehension{
                generators: [
-                 %IR.ComprehensionGenerator{match: %IR.Variable{name: :a}},
-                 %IR.ComprehensionGenerator{match: %IR.Variable{name: :b}}
+                 %IR.Clause{match: %IR.Variable{name: :a}},
+                 %IR.Clause{match: %IR.Variable{name: :b}}
                ]
              } = transform(ast, %Context{})
     end
@@ -947,8 +947,8 @@ defmodule Hologram.Compiler.TransformerTest do
     test "generator enumerable" do
       assert %IR.Comprehension{
                generators: [
-                 %IR.ComprehensionGenerator{
-                   enumerable: %IR.ListType{
+                 %IR.Clause{
+                   body: %IR.ListType{
                      data: [
                        %IR.IntegerType{value: 1},
                        %IR.IntegerType{value: 2}
@@ -962,7 +962,7 @@ defmodule Hologram.Compiler.TransformerTest do
     test "single variable in generator match" do
       assert %IR.Comprehension{
                generators: [
-                 %IR.ComprehensionGenerator{
+                 %IR.Clause{
                    match: %IR.Variable{name: :a}
                  }
                ]
@@ -982,7 +982,7 @@ defmodule Hologram.Compiler.TransformerTest do
 
       assert %IR.Comprehension{
                generators: [
-                 %IR.ComprehensionGenerator{
+                 %IR.Clause{
                    match: %IR.TupleType{
                      data: [
                        %IR.Variable{name: :a},
@@ -1012,7 +1012,7 @@ defmodule Hologram.Compiler.TransformerTest do
 
       assert %IR.Comprehension{
                generators: [
-                 %IR.ComprehensionGenerator{
+                 %IR.Clause{
                    guard: %IR.LocalFunctionCall{
                      function: :my_guard,
                      args: [

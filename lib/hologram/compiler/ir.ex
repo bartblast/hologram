@@ -15,7 +15,6 @@ defmodule Hologram.Compiler.IR do
           | IR.Clause.t()
           | IR.Comprehension.t()
           | IR.ComprehensionFilter.t()
-          | IR.ComprehensionGenerator.t()
           | IR.Cond.t()
           | IR.CondClause.t()
           | IR.ConsOperator.t()
@@ -97,7 +96,7 @@ defmodule Hologram.Compiler.IR do
     defstruct [:generators, :filters, :collectable, :unique, :mapper, :reducer]
 
     @type t :: %__MODULE__{
-            generators: list(IR.ComprehensionGenerator.t()),
+            generators: list(IR.Clause.t()),
             filters: list(IR.ComprehensionFilter.t()),
             collectable: IR.t(),
             unique: %IR.AtomType{value: boolean},
@@ -115,12 +114,6 @@ defmodule Hologram.Compiler.IR do
     defstruct [:expression]
 
     @type t :: %__MODULE__{expression: IR.t()}
-  end
-
-  defmodule ComprehensionGenerator do
-    defstruct [:enumerable, :match, :guard]
-
-    @type t :: %__MODULE__{enumerable: IR.t(), match: IR.t(), guard: IR.t() | nil}
   end
 
   defmodule Cond do

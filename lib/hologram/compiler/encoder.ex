@@ -155,14 +155,6 @@ defmodule Hologram.Compiler.Encoder do
     encode_closure(expr, context)
   end
 
-  def encode(%IR.ComprehensionGenerator{} = generator, context) do
-    enumerable = encode(generator.enumerable, context)
-    match = encode(generator.match, %{context | pattern?: true})
-    guard = encode_closure(generator.guard, context)
-
-    "{enumerable: #{enumerable}, match: #{match}, guard: #{guard}}"
-  end
-
   def encode(%IR.Cond{clauses: clauses_ir}, context) do
     clauses_js = encode_as_array(clauses_ir, context)
     "Interpreter.cond(#{clauses_js})"
