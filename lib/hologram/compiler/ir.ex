@@ -13,6 +13,7 @@ defmodule Hologram.Compiler.IR do
           | IR.Block.t()
           | IR.Case.t()
           | IR.CaseClause.t()
+          | IR.Clause.t()
           | IR.Comprehension.t()
           | IR.ComprehensionFilter.t()
           | IR.ComprehensionGenerator.t()
@@ -93,15 +94,27 @@ defmodule Hologram.Compiler.IR do
     @type t :: %__MODULE__{head: IR.t(), guard: IR.t() | nil, body: IR.Block.t()}
   end
 
+  defmodule Clause do
+    defstruct [:match, :guard, :body]
+
+    @type t :: %__MODULE__{match: IR.t(), guard: IR.t() | nil, body: IR.t()}
+  end
+
   defmodule Comprehension do
-    defstruct [:generators, :filters, :collectable, :unique, :mapper]
+    defstruct [:generators, :filters, :collectable, :unique, :mapper, :reducer]
 
     @type t :: %__MODULE__{
             generators: list(IR.ComprehensionGenerator.t()),
             filters: list(IR.ComprehensionFilter.t()),
             collectable: IR.t(),
             unique: %IR.AtomType{value: boolean},
-            mapper: IR.t()
+            mapper: IR.t() | nil,
+            reducer:
+              %{
+                initial_value: IR.t(),
+                clauses: list(IR.Clause.t())
+              }
+              | nil
           }
   end
 

@@ -114,7 +114,8 @@ defmodule Hologram.Compiler.Transformer do
       filters: [],
       collectable: %IR.ListType{data: []},
       unique: %IR.AtomType{value: false},
-      mapper: nil
+      mapper: nil,
+      reducer: nil
     }
 
     %{
@@ -122,7 +123,8 @@ defmodule Hologram.Compiler.Transformer do
       filters: filters,
       collectable: collectable,
       unique: unique,
-      mapper: mapper
+      mapper: mapper,
+      reducer: reducer
     } =
       Enum.reduce(
         parts,
@@ -135,7 +137,8 @@ defmodule Hologram.Compiler.Transformer do
       filters: Enum.reverse(filters),
       collectable: collectable,
       unique: unique,
-      mapper: mapper
+      mapper: mapper,
+      reducer: reducer
     }
   end
 

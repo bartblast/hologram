@@ -1140,7 +1140,8 @@ defmodule Hologram.Compiler.TransformerTest do
                      args: [%IR.Variable{name: :a}]
                    }
                  ]
-               }
+               },
+               reducer: nil
              } = transform(ast, %Context{})
     end
   end
