@@ -10,7 +10,6 @@ defmodule Hologram.Compiler.BuilderTest do
              %PersistentLookupTable{name: @plt_name} =
              build_module_beam_defs_digest_plt(@plt_name)
 
-    assert {:ok, <<_digest::size(32)-unit(8)>>} =
-             PersistentLookupTable.get(plt, Hologram.Compiler.Builder)
+    assert {:ok, <<_digest::256>>} = PersistentLookupTable.get(plt, Hologram.Compiler.Builder)
   end
 end
