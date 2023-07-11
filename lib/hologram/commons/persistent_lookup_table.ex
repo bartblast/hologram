@@ -39,12 +39,12 @@ defmodule Hologram.Commons.PersistentLookupTable do
 
   ## Examples
 
-      iex> PersistentLookupTable.get_all(:my_plt)
+      iex> get_all(%PersistentLookupTable{name :my_plt})
       %{key_1: :value_1, key_2: :value_2}
   """
-  @spec get_all(atom) :: %{atom => term}
-  def get_all(name) do
-    name
+  @spec get_all(PersistentLookupTable.t()) :: %{atom => term}
+  def get_all(plt) do
+    plt.name
     |> :ets.tab2list()
     |> Enum.into(%{})
   end

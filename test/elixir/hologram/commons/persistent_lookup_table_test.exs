@@ -53,8 +53,8 @@ defmodule Hologram.Commons.PersistentLookupTableTest do
   end
 
   test "get_all/1" do
-    start(@opts)
-    assert get_all(@name) == @items
+    plt = start(@opts)
+    assert get_all(plt) == @items
   end
 
   test "put/2" do
@@ -119,26 +119,26 @@ defmodule Hologram.Commons.PersistentLookupTableTest do
     test "ETS table is truncated" do
       :ets.new(@name, [:public, :named_table])
       :ets.insert(@name, {:key_3, :value_3})
-      start(@opts)
+      plt = start(@opts)
 
-      assert get_all(@name) == @items
+      assert get_all(plt) == @items
     end
 
     test "ETS table is populated when dump_path is given in opts and dump file exists" do
-      start(@opts)
-      assert get_all(@name) == @items
+      plt = start(@opts)
+      assert get_all(plt) == @items
     end
 
     test "ETS table is not populated when dump_path is not given in opts" do
-      start(name: @name, dump_path: nil)
-      assert get_all(@name) == %{}
+      plt = start(name: @name, dump_path: nil)
+      assert get_all(plt) == %{}
     end
 
     test "ETS table is not populated when dump_path is given in opts but dump file doesn't exist" do
       File.rm!(@dump_path)
-      start(@opts)
+      plt = start(@opts)
 
-      assert get_all(@name) == %{}
+      assert get_all(plt) == %{}
     end
 
     test "applies custom populate table function if it is given in opts" do
@@ -147,9 +147,9 @@ defmodule Hologram.Commons.PersistentLookupTableTest do
         put(@name, :custom_key_2, :custom_value_2)
       end
 
-      start(name: @name, dump_path: @dump_path, populate_table_fun: populate_table_fun)
+      plt = start(name: @name, dump_path: @dump_path, populate_table_fun: populate_table_fun)
 
-      assert get_all(@name) == %{custom_key_1: :custom_value_1, custom_key_2: :custom_value_2}
+      assert get_all(plt) == %{custom_key_1: :custom_value_1, custom_key_2: :custom_value_2}
     end
   end
 
