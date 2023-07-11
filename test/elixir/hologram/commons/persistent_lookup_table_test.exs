@@ -36,19 +36,14 @@ defmodule Hologram.Commons.PersistentLookupTableTest do
   end
 
   describe "get/2" do
-    test "key exists, first arg is %PersistentLookupTable{} struct" do
+    test "key exists" do
       plt = start(@opts)
       assert get(plt, :key_1) == {:ok, :value_1}
     end
 
-    test "key exists, first arg is PLT name" do
-      start(@opts)
-      assert get(@name, :key_1) == {:ok, :value_1}
-    end
-
     test "key doesn't exist" do
-      start(@opts)
-      assert get(@name, :key_invalid) == :error
+      plt = start(@opts)
+      assert get(plt, :key_invalid) == :error
     end
   end
 
@@ -58,7 +53,7 @@ defmodule Hologram.Commons.PersistentLookupTableTest do
   end
 
   test "put/2" do
-    start(@opts)
+    plt = start(@opts)
 
     items = [
       {:key_3, :value_3},
@@ -67,8 +62,8 @@ defmodule Hologram.Commons.PersistentLookupTableTest do
 
     put(@name, items)
 
-    assert get(@name, :key_3) == {:ok, :value_3}
-    assert get(@name, :key_4) == {:ok, :value_4}
+    assert get(plt, :key_3) == {:ok, :value_3}
+    assert get(plt, :key_4) == {:ok, :value_4}
   end
 
   describe "put/3" do
@@ -76,14 +71,14 @@ defmodule Hologram.Commons.PersistentLookupTableTest do
       plt = start(@opts)
       put(plt, :key_3, :value_3)
 
-      assert get(@name, :key_3) == {:ok, :value_3}
+      assert get(plt, :key_3) == {:ok, :value_3}
     end
 
     test "first arg is PLT name" do
-      start(@opts)
+      plt = start(@opts)
       put(@name, :key_3, :value_3)
 
-      assert get(@name, :key_3) == {:ok, :value_3}
+      assert get(plt, :key_3) == {:ok, :value_3}
     end
   end
 

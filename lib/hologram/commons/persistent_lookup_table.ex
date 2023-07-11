@@ -15,17 +15,10 @@ defmodule Hologram.Commons.PersistentLookupTable do
       iex> get(%PersistentLookupTable{name: :my_plt}, :my_key)
       :my_value
 
-      iex> get(:my_plt, :my_key)
-      :my_value
   """
-  @spec get(PersistentLookupTable.t() | atom, atom) :: {:ok, term} | :error
-
-  def get(%PersistentLookupTable{name: name}, key) do
-    get(name, key)
-  end
-
-  def get(name, key) do
-    case :ets.lookup(name, key) do
+  @spec get(PersistentLookupTable.t(), atom) :: {:ok, term} | :error
+  def get(plt, key) do
+    case :ets.lookup(plt.name, key) do
       [{^key, value}] ->
         {:ok, value}
 
@@ -89,8 +82,9 @@ defmodule Hologram.Commons.PersistentLookupTable do
 
       iex> put(:my_plt, :my_key, :my_value)
       true
+
   """
-  @spec put(PersistentLookupTable.t() | atom, atom, term) :: true
+  @spec put(PersistentLookupTable.t(), atom, term) :: true
 
   def put(%PersistentLookupTable{name: name}, key, value) do
     put(name, key, value)
@@ -150,10 +144,13 @@ defmodule Hologram.Commons.PersistentLookupTable do
   end
 
   defp populate_table(opts) do
-    opts[:dump_path]
-    |> File.read!()
-    |> SerializationUtils.deserialize()
-    |> Enum.each(fn {key, value} -> put(opts[:name], key, value) end)
+    items =
+      opts[:dump_path]
+      |> File.read!()
+      |> SerializationUtils.deserialize()
+      |> Map.to_list()
+
+    put(opts[:name], items)
   end
 
   defp reload_table(opts) do
