@@ -1151,12 +1151,11 @@ defmodule Hologram.Compiler.TransformerTest do
 
     test "reducer with single clause " do
       ast =
-        """
+        ast("""
         for x <- [1, 2], reduce: 0 do
           acc -> my_reducer(acc, x)
         end
-        """
-        |> ast()
+        """)
 
       assert %IR.Comprehension{
                mapper: nil,
@@ -1185,13 +1184,12 @@ defmodule Hologram.Compiler.TransformerTest do
 
     test "reducer with multiple clauses" do
       ast =
-        """
+        ast("""
         for x <- [1, 2], reduce: 0 do
           1 -> my_reducer_1(acc, x)
           2 -> my_reducer_2(acc, x)
         end
-        """
-        |> ast()
+        """)
 
       assert %IR.Comprehension{
                mapper: nil,
@@ -1235,12 +1233,11 @@ defmodule Hologram.Compiler.TransformerTest do
 
     test "reducer clause with guard" do
       ast =
-        """
+        ast("""
         for x <- [1, 2], reduce: 0 do
           acc when my_guard(acc) -> my_reducer(acc, x)
         end
-        """
-        |> ast()
+        """)
 
       assert %IR.Comprehension{
                mapper: nil,
