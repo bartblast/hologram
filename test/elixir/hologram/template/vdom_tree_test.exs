@@ -577,14 +577,17 @@ defmodule Hologram.Template.VDOMTreeTest do
                          {:->, [line: 1],
                           [
                             [{:x, [line: 1], nil}],
-                            [
-                              {:|, [line: 1],
+                            {:__block__, [],
+                             [
                                [
-                                 {:x, [line: 1], nil},
-                                 {{:., [line: 1], [{:data, [line: 1], nil}, :acc]},
-                                  [no_parens: true, line: 1], []}
-                               ]}
-                            ]
+                                 {:|, [line: 1],
+                                  [
+                                    {:x, [line: 1], nil},
+                                    {{:., [line: 1], [{:data, [line: 1], nil}, :acc]},
+                                     [no_parens: true, line: 1], []}
+                                  ]}
+                               ]
+                             ]}
                           ]}
                        ]}
                     ]}, [line: 1],
