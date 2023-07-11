@@ -43,6 +43,23 @@ defmodule Hologram.Compiler.NormalizerTest do
                   {:__block__, [], [:expr_1, :expr_2]}
                 ]}
     end
+
+    test "with guard" do
+      ast = {:->, [line: 1], [[{:when, [line: 1], [Aaa, Bbb]}], Ccc]}
+
+      assert normalize(ast) ==
+               {:->, [line: 1],
+                [
+                  [
+                    {:when, [line: 1],
+                     [
+                       {:__aliases__, [alias: false], [:Aaa]},
+                       {:__aliases__, [alias: false], [:Bbb]}
+                     ]}
+                  ],
+                  {:__block__, [], [{:__aliases__, [alias: false], [:Ccc]}]}
+                ]}
+    end
   end
 
   describe "case" do
