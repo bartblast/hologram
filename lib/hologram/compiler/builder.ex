@@ -23,14 +23,15 @@ defmodule Hologram.Compiler.Builder do
     |> Reflection.list_elixir_modules()
     # TODO: remove this line once https://github.com/hrzndhrn/beam_file/issues/13 is fixed
     |> Kernel.--([Mix.Compilers.Test, Mix.Release, Protocol])
-    |> Enum.map(&put_module_beam_defs_digest_to_plt(plt, &1))
+    |> Enum.each(&put_module_beam_defs_digest_to_plt(plt, &1))
 
     plt
   end
 
   defp put_module_beam_defs_digest_to_plt(plt, module) do
     data =
-      Reflection.module_beam_defs(module)
+      module
+      |> Reflection.module_beam_defs()
       |> :erlang.term_to_binary(compressed: 0)
 
     digest = :crypto.hash(:sha256, data)
