@@ -12,10 +12,18 @@ defmodule Hologram.Commons.PersistentLookupTable do
 
   ## Examples
 
+      iex> PersistentLookupTable.get(%PersistentLookupTable{name: :my_plt}, :my_key)
+      :my_value
+
       iex> PersistentLookupTable.get(:my_plt, :my_key)
       :my_value
   """
-  @spec get(atom, atom) :: {:ok, term} | :error
+  @spec get(PersistentLookupTable.t() | atom, atom) :: {:ok, term} | :error
+
+  def get(%PersistentLookupTable{name: name}, key) do
+    get(name, key)
+  end
+
   def get(name, key) do
     case :ets.lookup(name, key) do
       [{^key, value}] ->

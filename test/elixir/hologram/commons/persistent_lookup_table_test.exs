@@ -36,7 +36,12 @@ defmodule Hologram.Commons.PersistentLookupTableTest do
   end
 
   describe "get/2" do
-    test "key exists" do
+    test "key exists, first arg is %PersistentLookupTable{} struct" do
+      plt = start(@opts)
+      assert get(plt, :key_1) == {:ok, :value_1}
+    end
+
+    test "key exists, first arg is PLT name" do
       start(@opts)
       assert get(@name, :key_1) == {:ok, :value_1}
     end
