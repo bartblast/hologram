@@ -84,7 +84,7 @@ defmodule Hologram.Commons.PersistentLookupTable do
       true
 
   """
-  @spec put(PersistentLookupTable.t(), atom, term) :: true
+  @spec put(PersistentLookupTable.t() | atom, atom, term) :: true
 
   def put(%PersistentLookupTable{name: name}, key, value) do
     put(name, key, value)
