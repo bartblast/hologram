@@ -26,21 +26,28 @@ defmodule Hologram.Compiler.NormalizerTest do
 
   describe "-> clause" do
     test "single expression block" do
-      ast = {:->, [line: 1], [[Aaa.Bbb], :expr]}
-
-      assert normalize(ast) ==
-               {:->, [line: 1],
-                [[{:__aliases__, [alias: false], [:Aaa, :Bbb]}], {:__block__, [], [:expr]}]}
-    end
-
-    test "multiple expression block" do
-      ast = {:->, [line: 1], [[Aaa.Bbb], {:__block__, [], [:expr_1, :expr_2]}]}
+      ast = {:->, [line: 1], [[Aaa], Bbb]}
 
       assert normalize(ast) ==
                {:->, [line: 1],
                 [
-                  [{:__aliases__, [alias: false], [:Aaa, :Bbb]}],
-                  {:__block__, [], [:expr_1, :expr_2]}
+                  [{:__aliases__, [alias: false], [:Aaa]}],
+                  {:__block__, [], [{:__aliases__, [alias: false], [:Bbb]}]}
+                ]}
+    end
+
+    test "multiple expression block" do
+      ast = {:->, [line: 1], [[Aaa], {:__block__, [], [Bbb, Ccc]}]}
+
+      assert normalize(ast) ==
+               {:->, [line: 1],
+                [
+                  [{:__aliases__, [alias: false], [:Aaa]}],
+                  {:__block__, [],
+                   [
+                     {:__aliases__, [alias: false], [:Bbb]},
+                     {:__aliases__, [alias: false], [:Ccc]}
+                   ]}
                 ]}
     end
 
@@ -64,18 +71,18 @@ defmodule Hologram.Compiler.NormalizerTest do
 
   describe "case" do
     test "single clause" do
-      ast = {:case, [line: 1], [Aaa.Bbb, [do: [{:->, [line: 2], [[Aaa.Bbb], :expr]}]]]}
+      ast = {:case, [line: 1], [Aaa, [do: [{:->, [line: 2], [[Bbb], Ccc]}]]]}
 
       assert normalize(ast) ==
                {:case, [line: 1],
                 [
-                  {:__aliases__, [alias: false], [:Aaa, :Bbb]},
+                  {:__aliases__, [alias: false], [:Aaa]},
                   [
                     do: [
                       {:->, [line: 2],
                        [
-                         [{:__aliases__, [alias: false], [:Aaa, :Bbb]}],
-                         {:__block__, [], [:expr]}
+                         [{:__aliases__, [alias: false], [:Bbb]}],
+                         {:__block__, [], [{:__aliases__, [alias: false], [:Ccc]}]}
                        ]}
                     ]
                   ]
@@ -86,13 +93,13 @@ defmodule Hologram.Compiler.NormalizerTest do
       ast =
         {:case, [line: 1],
          [
-           Aaa.Bbb,
+           Aaa,
            [
              do: [
                {:->, [line: 2],
                 [
-                  [Aaa.Bbb],
-                  {:__block__, [], [:expr_1, :expr_2]}
+                  [Bbb],
+                  {:__block__, [], [Ccc, Ddd]}
                 ]}
              ]
            ]
@@ -101,13 +108,17 @@ defmodule Hologram.Compiler.NormalizerTest do
       assert normalize(ast) ==
                {:case, [line: 1],
                 [
-                  {:__aliases__, [alias: false], [:Aaa, :Bbb]},
+                  {:__aliases__, [alias: false], [:Aaa]},
                   [
                     do: [
                       {:->, [line: 2],
                        [
-                         [{:__aliases__, [alias: false], [:Aaa, :Bbb]}],
-                         {:__block__, [], [:expr_1, :expr_2]}
+                         [{:__aliases__, [alias: false], [:Bbb]}],
+                         {:__block__, [],
+                          [
+                            {:__aliases__, [alias: false], [:Ccc]},
+                            {:__aliases__, [alias: false], [:Ddd]}
+                          ]}
                        ]}
                     ]
                   ]
@@ -117,7 +128,7 @@ defmodule Hologram.Compiler.NormalizerTest do
 
   describe "cond" do
     test "single clause" do
-      ast = {:cond, [line: 1], [[do: [{:->, [line: 2], [[Aaa.Bbb], :expr]}]]]}
+      ast = {:cond, [line: 1], [[do: [{:->, [line: 2], [[Aaa], Bbb]}]]]}
 
       assert normalize(ast) ==
                {:cond, [line: 1],
@@ -126,8 +137,8 @@ defmodule Hologram.Compiler.NormalizerTest do
                     do: [
                       {:->, [line: 2],
                        [
-                         [{:__aliases__, [alias: false], [:Aaa, :Bbb]}],
-                         {:__block__, [], [:expr]}
+                         [{:__aliases__, [alias: false], [:Aaa]}],
+                         {:__block__, [], [{:__aliases__, [alias: false], [:Bbb]}]}
                        ]}
                     ]
                   ]
@@ -140,8 +151,8 @@ defmodule Hologram.Compiler.NormalizerTest do
          [
            [
              do: [
-               {:->, [line: 2], [[Aaa.Bbb], :expr_1]},
-               {:->, [line: 3], [[Ccc.Ddd], :expr_2]}
+               {:->, [line: 2], [[Aaa], Bbb]},
+               {:->, [line: 3], [[Ccc], Ddd]}
              ]
            ]
          ]}
@@ -153,13 +164,13 @@ defmodule Hologram.Compiler.NormalizerTest do
                     do: [
                       {:->, [line: 2],
                        [
-                         [{:__aliases__, [alias: false], [:Aaa, :Bbb]}],
-                         {:__block__, [], [:expr_1]}
+                         [{:__aliases__, [alias: false], [:Aaa]}],
+                         {:__block__, [], [{:__aliases__, [alias: false], [:Bbb]}]}
                        ]},
                       {:->, [line: 3],
                        [
-                         [{:__aliases__, [alias: false], [:Ccc, :Ddd]}],
-                         {:__block__, [], [:expr_2]}
+                         [{:__aliases__, [alias: false], [:Ccc]}],
+                         {:__block__, [], [{:__aliases__, [alias: false], [:Ddd]}]}
                        ]}
                     ]
                   ]
@@ -169,13 +180,18 @@ defmodule Hologram.Compiler.NormalizerTest do
 
   describe "do block" do
     test "single expression" do
-      ast = [do: :expr]
-      assert normalize(ast) == [do: {:__block__, [], [:expr]}]
+      ast = [do: Aaa]
+      assert normalize(ast) == [do: {:__block__, [], [{:__aliases__, [alias: false], [:Aaa]}]}]
     end
 
     test "multiple expressions" do
-      ast = [do: {:__block__, [], [:expr_1, :expr_2]}]
-      assert normalize(ast) == ast
+      ast = [do: {:__block__, [], [Aaa, Bbb]}]
+
+      assert normalize(ast) == [
+               do:
+                 {:__block__, [],
+                  [{:__aliases__, [alias: false], [:Aaa]}, {:__aliases__, [alias: false], [:Bbb]}]}
+             ]
     end
   end
 
