@@ -12,10 +12,10 @@ defmodule Hologram.Commons.PersistentLookupTable do
 
   ## Examples
 
-      iex> PersistentLookupTable.get(%PersistentLookupTable{name: :my_plt}, :my_key)
+      iex> get(%PersistentLookupTable{name: :my_plt}, :my_key)
       :my_value
 
-      iex> PersistentLookupTable.get(:my_plt, :my_key)
+      iex> get(:my_plt, :my_key)
       :my_value
   """
   @spec get(PersistentLookupTable.t() | atom, atom) :: {:ok, term} | :error
@@ -55,7 +55,7 @@ defmodule Hologram.Commons.PersistentLookupTable do
 
   ## Examples
 
-      iex> PersistentLookupTable.init(name: :my_plt, dump_path: "/my_dump_path")
+      iex> init(name: :my_plt, dump_path: "/my_dump_path")
       {:ok, nil}
   """
   @impl GenServer
@@ -71,7 +71,7 @@ defmodule Hologram.Commons.PersistentLookupTable do
 
   ## Examples
 
-      iex> PersistentLookupTable.put(:my_plt, [key_1: :value_1, key_2: :value_2])
+      iex> put(:my_plt, [key_1: :value_1, key_2: :value_2])
       true
   """
   @spec put(atom, keyword) :: true
@@ -84,10 +84,10 @@ defmodule Hologram.Commons.PersistentLookupTable do
 
   ## Examples
 
-      iex> PersistentLookupTable.put(%PersistentLookupTable{name: :my_plt}, :my_key, :my_value)
+      iex> put(%PersistentLookupTable{name: :my_plt}, :my_key, :my_value)
       true
 
-      iex> PersistentLookupTable.put(:my_plt, :my_key, :my_value)
+      iex> put(:my_plt, :my_key, :my_value)
       true
   """
   @spec put(PersistentLookupTable.t() | atom, atom, term) :: true
@@ -105,7 +105,7 @@ defmodule Hologram.Commons.PersistentLookupTable do
 
   ## Examples
 
-      iex> PersistentLookupTable.running?(:my_plt)
+      iex> running?(:my_plt)
       true
   """
   @spec running?(atom) :: boolean
@@ -119,7 +119,7 @@ defmodule Hologram.Commons.PersistentLookupTable do
 
   ## Examples
 
-      iex> PersistentLookupTable.start(name: :my_plt, dump_path: "/my_dump_path")
+      iex> start(name: :my_plt, dump_path: "/my_dump_path")
       %PersistentLookupTable{pid: #PID<0.273.0>, name: :my_plt}
   """
   @spec start(keyword) :: PersistentLookupTable.t()
@@ -133,7 +133,7 @@ defmodule Hologram.Commons.PersistentLookupTable do
 
   ## Examples
 
-      iex> PersistentLookupTable.table_exists?(:my_plt)
+      iex> table_exists?(:my_plt)
       true
   """
   @spec table_exists?(atom) :: boolean
