@@ -2,6 +2,19 @@ defmodule Hologram.Compiler.Builder do
   alias Hologram.Commons.PersistentLookupTable
   alias Hologram.Compiler.Reflection
 
+  @doc """
+  Builds a persistent lookup table (PLT) containing the BEAM defs digests for all the modules in the project.
+
+  ## Examples
+
+      iex> build_module_beam_defs_digest_plt(:abc)
+      %Hologram.Commons.PersistentLookupTable{
+        pid: #PID<0.251.0>,
+        name: :plt_abc
+      }
+
+  """
+  @spec build_module_beam_defs_digest_plt(atom) :: PersistentLookupTable.t()
   def build_module_beam_defs_digest_plt(name) do
     plt = PersistentLookupTable.start(name: name)
 
