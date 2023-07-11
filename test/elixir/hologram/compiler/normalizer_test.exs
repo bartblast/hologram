@@ -2,168 +2,194 @@ defmodule Hologram.Compiler.NormalizerTest do
   use Hologram.Test.BasicCase, async: true
   import Hologram.Compiler.Normalizer
 
-  describe "alias" do
-    test "list of atoms" do
-      # Aaa.Bbb
+  describe "alias (__aliases__)" do
+    test "3rd tuple elem is a list of atoms" do
       ast = {:__aliases__, [line: 1], [:Aaa, :Bbb]}
-
       assert normalize(ast) == ast
     end
 
-    test "module" do
+    test "3rd tuple elem is a module" do
       ast = {:__aliases__, [line: 1], [Aaa.Bbb]}
       assert normalize(ast) == {:__aliases__, [line: 1], [:Aaa, :Bbb]}
     end
   end
 
-  test "anonymous function" do
-    # fn x -> x end
-    ast = {:fn, [line: 1], [{:->, [line: 1], [[{:x, [line: 1], nil}], {:x, [line: 1], nil}]}]}
+  describe "atom" do
+    test "module" do
+      assert normalize(Aaa.Bbb) == {:__aliases__, [alias: false], [:Aaa, :Bbb]}
+    end
 
-    assert normalize(ast) ==
-             {:fn, [line: 1],
-              [
-                {:->, [line: 1],
-                 [[{:x, [line: 1], nil}], {:__block__, [], [{:x, [line: 1], nil}]}]}
-              ]}
+    test "non-module" do
+      assert normalize(:abc) == :abc
+    end
+  end
+
+  describe "-> clause" do
+    test "single expression block" do
+      ast = {:->, [line: 1], [[Aaa.Bbb], :expr]}
+
+      assert normalize(ast) ==
+               {:->, [line: 1],
+                [[{:__aliases__, [alias: false], [:Aaa, :Bbb]}], {:__block__, [], [:expr]}]}
+    end
+
+    test "multiple expression block" do
+      ast = {:->, [line: 1], [[Aaa.Bbb], {:__block__, [], [:expr_1, :expr_2]}]}
+
+      assert normalize(ast) ==
+               {:->, [line: 1],
+                [
+                  [{:__aliases__, [alias: false], [:Aaa, :Bbb]}],
+                  {:__block__, [], [:expr_1, :expr_2]}
+                ]}
+    end
   end
 
   describe "case" do
-    test "clause with single expression" do
-      # case x do
-      #   1 ->
-      #     :expr
-      # end
-      ast = {:case, [line: 1], [{:x, [line: 1], nil}, [do: [{:->, [line: 2], [[1], :expr]}]]]}
+    test "single clause" do
+      ast = {:case, [line: 1], [Aaa.Bbb, [do: [{:->, [line: 2], [[Aaa.Bbb], :expr]}]]]}
 
       assert normalize(ast) ==
                {:case, [line: 1],
                 [
-                  {:x, [line: 1], nil},
+                  {:__aliases__, [alias: false], [:Aaa, :Bbb]},
                   [
                     do: [
-                      {:->, [line: 2], [[1], {:__block__, [], [:expr]}]}
+                      {:->, [line: 2],
+                       [
+                         [{:__aliases__, [alias: false], [:Aaa, :Bbb]}],
+                         {:__block__, [], [:expr]}
+                       ]}
                     ]
                   ]
                 ]}
     end
 
-    test "clause with multiple expressions" do
-      # case x do
-      #   1 ->
-      #     :expr_a
-      #     :expr_b
-      # end
+    test "multiple clauses" do
       ast =
         {:case, [line: 1],
          [
-           {:x, [line: 1], nil},
-           [do: [{:->, [line: 2], [[1], {:__block__, [], [:expr_a, :expr_b]}]}]]
+           Aaa.Bbb,
+           [
+             do: [
+               {:->, [line: 2],
+                [
+                  [Aaa.Bbb],
+                  {:__block__, [], [:expr_1, :expr_2]}
+                ]}
+             ]
+           ]
          ]}
 
-      assert normalize(ast) == ast
+      assert normalize(ast) ==
+               {:case, [line: 1],
+                [
+                  {:__aliases__, [alias: false], [:Aaa, :Bbb]},
+                  [
+                    do: [
+                      {:->, [line: 2],
+                       [
+                         [{:__aliases__, [alias: false], [:Aaa, :Bbb]}],
+                         {:__block__, [], [:expr_1, :expr_2]}
+                       ]}
+                    ]
+                  ]
+                ]}
     end
   end
 
   describe "cond" do
-    test "clause with single expression" do
-      # cond do
-      #   1 ->
-      #     :expr_a
-      # end
-      ast = {:cond, [], [[do: [{:->, [], [[1], :expr_a]}]]]}
+    test "single clause" do
+      ast = {:cond, [line: 1], [[do: [{:->, [line: 2], [[Aaa.Bbb], :expr]}]]]}
 
       assert normalize(ast) ==
-               {:cond, [], [[do: [{:->, [], [[1], {:__block__, [], [:expr_a]}]}]]]}
+               {:cond, [line: 1],
+                [
+                  [
+                    do: [
+                      {:->, [line: 2],
+                       [
+                         [{:__aliases__, [alias: false], [:Aaa, :Bbb]}],
+                         {:__block__, [], [:expr]}
+                       ]}
+                    ]
+                  ]
+                ]}
     end
 
-    test "clause with multiple expressions" do
-      # cond do
-      #   1 ->
-      #     :expr_a
-      #     :expr_b
-      # end
-      ast = {:cond, [], [[do: [{:->, [], [[1], {:__block__, [], [:expr_a, :expr_b]}]}]]]}
+    test "multiple clauses" do
+      ast =
+        {:cond, [line: 1],
+         [
+           [
+             do: [
+               {:->, [line: 2], [[Aaa.Bbb], :expr_1]},
+               {:->, [line: 3], [[Ccc.Ddd], :expr_2]}
+             ]
+           ]
+         ]}
 
-      assert normalize(ast) == ast
+      assert normalize(ast) ==
+               {:cond, [line: 1],
+                [
+                  [
+                    do: [
+                      {:->, [line: 2],
+                       [
+                         [{:__aliases__, [alias: false], [:Aaa, :Bbb]}],
+                         {:__block__, [], [:expr_1]}
+                       ]},
+                      {:->, [line: 3],
+                       [
+                         [{:__aliases__, [alias: false], [:Ccc, :Ddd]}],
+                         {:__block__, [], [:expr_2]}
+                       ]}
+                    ]
+                  ]
+                ]}
     end
   end
 
   describe "do block" do
     test "single expression" do
-      # abc do
-      #   :ok
-      # end
-      #
-      # (or)
-      #
-      # abc do: :ok
-      ast = {:abc, [line: 1], [[do: :ok]]}
-
-      assert normalize(ast) == {:abc, [line: 1], [[do: {:__block__, [], [:ok]}]]}
+      ast = [do: :expr]
+      assert normalize(ast) == [do: {:__block__, [], [:expr]}]
     end
 
     test "multiple expressions" do
-      # abc do
-      #   1
-      #   2
-      # end
-      ast = {:abc, [line: 1], [[do: {:__block__, [], [1, 2]}]]}
-
-      assert normalize(ast) == ast
-    end
-  end
-
-  describe "function definition" do
-    test "single expression" do
-      # def abc do
-      #   :ok
-      # end
-      #
-      # (or)
-      #
-      # def abc, do: :ok
-      ast = {:def, [line: 1], [{:abc, [line: 1], nil}, [do: :ok]]}
-
-      assert normalize(ast) ==
-               {:def, [line: 1], [{:abc, [line: 1], nil}, [do: {:__block__, [], [:ok]}]]}
-    end
-
-    test "multiple expressions" do
-      # def abc do
-      #   1
-      #   2
-      # end
-      ast = {:def, [line: 1], [{:abc, [line: 1], nil}, [do: {:__block__, [], [1, 2]}]]}
-
+      ast = [do: {:__block__, [], [:expr_1, :expr_2]}]
       assert normalize(ast) == ast
     end
   end
 
   test "unquote" do
-    ast =
-      {{:unquote, [], [:%]}, [line: 69],
-       [Dialyxir.FilterMap, {:%{}, [line: 69], [list_unused_filters?: true]}]}
+    ast = {{:unquote, [], [:%]}, [line: 1], [Aaa, Bbb]}
 
     assert normalize(ast) ==
-             {:%, [line: 69],
-              [Dialyxir.FilterMap, {:%{}, [line: 69], [list_unused_filters?: true]}]}
+             {:%, [line: 1],
+              [
+                {:__aliases__, [alias: false], [:Aaa]},
+                {:__aliases__, [alias: false], [:Bbb]}
+              ]}
   end
 
-  describe "atom" do
-    test "alias" do
-      assert normalize(A.B) == {:__aliases__, [alias: false], [:A, :B]}
-    end
+  test "list" do
+    ast = [Aaa, Bbb, Ccc]
 
-    test "non-alias" do
-      assert normalize(:a) == :a
-    end
+    assert normalize(ast) == [
+             {:__aliases__, [alias: false], [:Aaa]},
+             {:__aliases__, [alias: false], [:Bbb]},
+             {:__aliases__, [alias: false], [:Ccc]}
+           ]
   end
 
-  test "fallback" do
-    # 1 + 2
-    ast = {:+, [line: 1], [1, 2]}
+  test "tuple" do
+    ast = {Aaa, Bbb, Ccc}
 
-    assert normalize(ast) == ast
+    assert normalize(ast) == {
+             {:__aliases__, [alias: false], [:Aaa]},
+             {:__aliases__, [alias: false], [:Bbb]},
+             {:__aliases__, [alias: false], [:Ccc]}
+           }
   end
 end

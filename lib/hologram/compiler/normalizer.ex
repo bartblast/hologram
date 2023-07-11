@@ -7,6 +7,7 @@ defmodule Hologram.Compiler.Normalizer do
   Normalizes Elixir AST by ensuring that:
   * single expression blocks are wrapped in __block__ tuple
   * alias atoms are wrapped in __aliases__ tuple
+  * unquote fragments are expanded
 
   ## Examples
 
@@ -26,8 +27,16 @@ defmodule Hologram.Compiler.Normalizer do
     maybe_normalize_alias(ast, [alias: false], ast)
   end
 
+  def normalize({:->, meta, [pattern, {:__block__, [], exprs}]}) do
+    {:->, meta, [normalize(pattern), {:__block__, [], normalize(exprs)}]}
+  end
+
+  def normalize({:->, meta, [pattern, expr]}) do
+    {:->, meta, [normalize(pattern), {:__block__, [], [normalize(expr)]}]}
+  end
+
   def normalize({:case, meta, [condition, [do: clauses]]}) do
-    {:case, meta, [condition, [do: normalize(clauses)]]}
+    {:case, meta, [normalize(condition), [do: normalize(clauses)]]}
   end
 
   def normalize({:cond, meta, [[do: clauses]]}) do
@@ -35,43 +44,26 @@ defmodule Hologram.Compiler.Normalizer do
   end
 
   def normalize(do: {:__block__, [], exprs}) do
-    [do: {:__block__, [], Enum.map(exprs, &normalize/1)}]
+    [do: {:__block__, [], normalize(exprs)}]
   end
 
   def normalize(do: expr) do
     [do: {:__block__, [], [normalize(expr)]}]
   end
 
-  def normalize(else: {:__block__, [], exprs}) do
-    [else: {:__block__, [], Enum.map(exprs, &normalize/1)}]
-  end
-
-  def normalize(else: expr) do
-    [else: {:__block__, [], [normalize(expr)]}]
-  end
-
-  def normalize({:->, meta, [pattern, {:__block__, [], exprs}]}) do
-    {:->, meta, [pattern, {:__block__, [], normalize(exprs)}]}
-  end
-
-  def normalize({:->, meta, [pattern, expr]}) do
-    {:->, meta, [pattern, {:__block__, [], [normalize(expr)]}]}
-  end
-
   def normalize({{:unquote, _meta_1, [marker]}, meta_2, children}) do
-    {marker, meta_2, children}
+    {marker, meta_2, normalize(children)}
   end
 
   def normalize(ast) when is_list(ast) do
     Enum.map(ast, &normalize/1)
   end
 
-  def normalize({elem_1, elem_2, elem_3}) do
-    {
-      normalize(elem_1),
-      normalize(elem_2),
-      normalize(elem_3)
-    }
+  def normalize(ast) when is_tuple(ast) do
+    ast
+    |> Tuple.to_list()
+    |> normalize()
+    |> List.to_tuple()
   end
 
   def normalize(ast), do: ast
