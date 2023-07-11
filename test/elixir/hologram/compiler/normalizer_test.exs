@@ -69,6 +69,39 @@ defmodule Hologram.Compiler.NormalizerTest do
     end
   end
 
+  describe "<- clause" do
+    test "without guard" do
+      ast = {:<-, [line: 1], [Aaa, Bbb]}
+
+      assert normalize(ast) ==
+               {:<-, [line: 1],
+                [
+                  {:__aliases__, [alias: false], [:Aaa]},
+                  {:__aliases__, [alias: false], [:Bbb]}
+                ]}
+    end
+
+    test "with guard" do
+      ast =
+        {:<-, [line: 1],
+         [
+           {:when, [line: 1], [Aaa, Bbb]},
+           Ccc
+         ]}
+
+      assert normalize(ast) ==
+               {:<-, [line: 1],
+                [
+                  {:when, [line: 1],
+                   [
+                     {:__aliases__, [alias: false], [:Aaa]},
+                     {:__aliases__, [alias: false], [:Bbb]}
+                   ]},
+                  {:__aliases__, [alias: false], [:Ccc]}
+                ]}
+    end
+  end
+
   describe "case" do
     test "single clause" do
       ast = {:case, [line: 1], [Aaa, [do: [{:->, [line: 2], [[Bbb], Ccc]}]]]}
