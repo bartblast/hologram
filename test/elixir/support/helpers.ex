@@ -24,7 +24,7 @@ defmodule Hologram.Test.Helpers do
   end
 
   @doc """
-  Waits until the specified persistent lookup table (PLT) with the given name
+  Waits until the specified persistent lookup table (PLT)
   is no longer running and the related ETS table no longer exists.
 
   ## Examples
