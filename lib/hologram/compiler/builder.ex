@@ -1,5 +1,5 @@
 defmodule Hologram.Compiler.Builder do
-  alias Hologram.Commons.PersistentLookupTable
+  alias Hologram.Commons.PersistentLookupTable, as: PLT
   alias Hologram.Compiler.Reflection
 
   @doc """
@@ -14,9 +14,9 @@ defmodule Hologram.Compiler.Builder do
       }
 
   """
-  @spec build_module_beam_defs_digest_plt(atom) :: PersistentLookupTable.t()
+  @spec build_module_beam_defs_digest_plt(atom) :: PLT.t()
   def build_module_beam_defs_digest_plt(name) do
-    plt = PersistentLookupTable.start(name: name)
+    plt = PLT.start(name: name)
 
     Reflection.list_loaded_otp_apps()
     |> Kernel.--([:hex])
@@ -28,6 +28,40 @@ defmodule Hologram.Compiler.Builder do
     plt
   end
 
+  def diff_module_beam_defs_digest_plts(old_plt, new_plt) do
+    old_mapset = mapset_from_plt(old_plt)
+    new_mapset = mapset_from_plt(new_plt)
+
+    removed_modules =
+      old_mapset
+      |> MapSet.difference(new_mapset)
+      |> MapSet.to_list()
+
+    added_modules =
+      new_mapset
+      |> MapSet.difference(old_mapset)
+      |> MapSet.to_list()
+
+    updated_modules =
+      old_mapset
+      |> MapSet.intersection(new_mapset)
+      |> MapSet.to_list()
+      |> Enum.filter(&(PLT.get(old_plt, &1) != PLT.get(new_plt, &1)))
+
+    %{
+      added_modules: added_modules,
+      removed_modules: removed_modules,
+      updated_modules: updated_modules
+    }
+  end
+
+  defp mapset_from_plt(plt) do
+    plt
+    |> PLT.get_all()
+    |> Map.keys()
+    |> MapSet.new()
+  end
+
   defp put_module_beam_defs_digest_to_plt(plt, module) do
     data =
       module
@@ -36,6 +70,6 @@ defmodule Hologram.Compiler.Builder do
 
     digest = :crypto.hash(:sha256, data)
 
-    PersistentLookupTable.put(plt.name, module, digest)
+    PLT.put(plt.name, module, digest)
   end
 end
