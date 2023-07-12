@@ -1,9 +1,20 @@
 defmodule Hologram.Compiler.BuilderTest do
   use Hologram.Test.BasicCase, async: true
   import Hologram.Compiler.Builder
+
   alias Hologram.Commons.PersistentLookupTable, as: PLT
+  alias Hologram.Compiler.IR
+  alias Hologram.Test.Fixtures.Compiler.Builder.Module1
+  alias Hologram.Test.Fixtures.Compiler.Builder.Module2
+  alias Hologram.Test.Fixtures.Compiler.Builder.Module3
+  alias Hologram.Test.Fixtures.Compiler.Builder.Module4
 
   @plt_name :"plt_#{__MODULE__}"
+
+  setup do
+    wait_for_plt_cleanup(@plt_name)
+    :ok
+  end
 
   test "build_module_beam_defs_digest_plt/1" do
     assert plt = %PLT{name: @plt_name} = build_module_beam_defs_digest_plt(@plt_name)
@@ -27,25 +38,91 @@ defmodule Hologram.Compiler.BuilderTest do
       PLT.put(new_plt, :module_4, :digest_4)
       PLT.put(new_plt, :module_6, :digest_6b)
 
-      [
-        old_plt: old_plt,
-        new_plt: new_plt
-      ]
+      [result: diff_module_beam_defs_digest_plts(old_plt, new_plt)]
     end
 
-    test "added modules", %{old_plt: old_plt, new_plt: new_plt} do
-      assert %{added_modules: [:module_2, :module_4]} =
-               diff_module_beam_defs_digest_plts(old_plt, new_plt)
+    test "added modules", %{result: result} do
+      assert %{added_modules: [:module_2, :module_4]} = result
     end
 
-    test "removed modules", %{old_plt: old_plt, new_plt: new_plt} do
-      assert %{removed_modules: [:module_5, :module_7]} =
-               diff_module_beam_defs_digest_plts(old_plt, new_plt)
+    test "removed modules", %{result: result} do
+      assert %{removed_modules: [:module_5, :module_7]} = result
     end
 
-    test "updated modules", %{old_plt: old_plt, new_plt: new_plt} do
-      assert %{updated_modules: [:module_3, :module_6]} =
-               diff_module_beam_defs_digest_plts(old_plt, new_plt)
+    test "updated modules", %{result: result} do
+      assert %{updated_modules: [:module_3, :module_6]} = result
+    end
+  end
+
+  describe "update_ir_plt/2" do
+    setup do
+      plt = PLT.start(name: @plt_name)
+      PLT.put(plt, :module_5, :ir_5)
+      PLT.put(plt, :module_6, :ir_6)
+      PLT.put(plt, Module3, :ir_3)
+      PLT.put(plt, :module_7, :ir_7)
+      PLT.put(plt, :module_8, :ir_8)
+      PLT.put(plt, Module4, :ir_4)
+
+      diff = %{
+        added_modules: [Module1, Module2],
+        removed_modules: [:module_5, :module_7],
+        updated_modules: [Module3, Module4]
+      }
+
+      update_ir_plt(plt, diff)
+
+      [plt: plt]
+    end
+
+    test "adds entries of added modules", %{plt: plt} do
+      assert PLT.get(plt, Module1) ==
+               {:ok,
+                %IR.ModuleDefinition{
+                  module: %IR.AtomType{
+                    value: Module1
+                  },
+                  body: %IR.Block{expressions: []}
+                }}
+
+      assert PLT.get(plt, Module2) ==
+               {:ok,
+                %IR.ModuleDefinition{
+                  module: %IR.AtomType{
+                    value: Module2
+                  },
+                  body: %IR.Block{expressions: []}
+                }}
+    end
+
+    test "removes entries of removed modules", %{plt: plt} do
+      assert PLT.get(plt, :module_5) == :error
+      assert PLT.get(plt, :module_7) == :error
+    end
+
+    test "updates entries of updated modules", %{plt: plt} do
+      assert PLT.get(plt, Module3) ==
+               {:ok,
+                %IR.ModuleDefinition{
+                  module: %IR.AtomType{
+                    value: Module3
+                  },
+                  body: %IR.Block{expressions: []}
+                }}
+
+      assert PLT.get(plt, Module4) ==
+               {:ok,
+                %IR.ModuleDefinition{
+                  module: %IR.AtomType{
+                    value: Module4
+                  },
+                  body: %IR.Block{expressions: []}
+                }}
+    end
+
+    test "doesn't change entries of not changed modules", %{plt: plt} do
+      assert PLT.get(plt, :module_6) == {:ok, :ir_6}
+      assert PLT.get(plt, :module_8) == {:ok, :ir_8}
     end
   end
 end

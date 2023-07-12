@@ -1,5 +1,7 @@
 defmodule Hologram.Compiler.Builder do
+  alias Hologram.Commons.PersistentLookupTableTest
   alias Hologram.Commons.PersistentLookupTable, as: PLT
+  alias Hologram.Compiler.IR
   alias Hologram.Compiler.Reflection
 
   @doc """
@@ -12,7 +14,6 @@ defmodule Hologram.Compiler.Builder do
         pid: #PID<0.251.0>,
         name: :plt_abc
       }
-
   """
   @spec build_module_beam_defs_digest_plt(atom) :: PLT.t()
   def build_module_beam_defs_digest_plt(name) do
@@ -55,6 +56,35 @@ defmodule Hologram.Compiler.Builder do
     }
   end
 
+  @doc """
+  Updates the IR persistent lookup table PLT by deleting entries for modules that have been removed,
+  rebuilding the IR of modules that have been updated, and adding the IR of new modules.
+
+  ## Examples
+
+      iex> plt = %PersistentLookupTable{
+        pid: #PID<0.251.0>,
+        name: :plt_abc
+      }
+      iex> diff = %{
+      ...>   added_modules: [Module1, Module2],
+      ...>   removed_modules: [Module5, Module6],
+      ...>   updated_modules: [Module3, Module4]
+      ...> }
+      iex> update_ir_plt(plt, diff)
+      %PersistentLookupTable{
+        pid: #PID<0.251.0>,
+        name: :plt_abc
+      }
+  """
+  @spec update_ir_plt(PersistentLookupTableTest.t(), map) :: PersistentLookupTableTest.t()
+  def update_ir_plt(ir_plt, diff) do
+    Enum.each(diff.removed_modules, &PLT.delete(ir_plt, &1))
+    Enum.each(diff.updated_modules, &rebuild_module_ir(ir_plt, &1))
+    Enum.each(diff.added_modules, &rebuild_module_ir(ir_plt, &1))
+    ir_plt
+  end
+
   defp mapset_from_plt(plt) do
     plt
     |> PLT.get_all()
@@ -71,5 +101,9 @@ defmodule Hologram.Compiler.Builder do
     digest = :crypto.hash(:sha256, data)
 
     PLT.put(plt.name, module, digest)
+  end
+
+  defp rebuild_module_ir(plt, module) do
+    PLT.put(plt, module, IR.for_module(module))
   end
 end
