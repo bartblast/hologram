@@ -21,15 +21,8 @@ defmodule Hologram.Commons.PersistentLookupTableTest do
     File.write!(@dump_path, binary)
   end
 
-  defp wait_for_test_cleanup do
-    if running?(@name) || table_exists?(@name) do
-      :timer.sleep(1)
-      wait_for_test_cleanup()
-    end
-  end
-
   setup do
-    wait_for_test_cleanup()
+    wait_for_plt_cleanup(@name)
     dump_items()
 
     :ok

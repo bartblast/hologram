@@ -1,4 +1,5 @@
 defmodule Hologram.Test.Helpers do
+  alias Hologram.Commons.PersistentLookupTable, as: PLT
   alias Hologram.Compiler.AST
   alias Hologram.Compiler.Context
   alias Hologram.Compiler.Encoder
@@ -20,5 +21,24 @@ defmodule Hologram.Test.Helpers do
     code
     |> ir(%Context{})
     |> Encoder.encode(%Context{})
+  end
+
+  @doc """
+  Waits until the specified persistent lookup table (PLT) with the given name
+  is no longer running and the related ETS table no longer exists.
+
+  ## Examples
+
+      iex> wait_for_plt_cleanup(:my_plt)
+      true
+  """
+  @spec wait_for_plt_cleanup(atom) :: :ok
+  def wait_for_plt_cleanup(name) do
+    if PLT.running?(name) || PLT.table_exists?(name) do
+      :timer.sleep(1)
+      wait_for_plt_cleanup(name)
+    else
+      :ok
+    end
   end
 end
