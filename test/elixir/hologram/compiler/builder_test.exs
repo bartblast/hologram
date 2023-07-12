@@ -120,7 +120,7 @@ defmodule Hologram.Compiler.BuilderTest do
                 }}
     end
 
-    test "doesn't change entries of not changed modules", %{plt: plt} do
+    test "doesn't change entries of unchanged modules", %{plt: plt} do
       assert PLT.get(plt, :module_6) == {:ok, :ir_6}
       assert PLT.get(plt, :module_8) == {:ok, :ir_8}
     end
