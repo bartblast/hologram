@@ -1,5 +1,4 @@
 defmodule Hologram.Compiler.Builder do
-  alias Hologram.Commons.PersistentLookupTableTest
   alias Hologram.Commons.PersistentLookupTable, as: PLT
   alias Hologram.Compiler.IR
   alias Hologram.Compiler.Reflection
@@ -77,7 +76,7 @@ defmodule Hologram.Compiler.Builder do
         name: :plt_abc
       }
   """
-  @spec update_ir_plt(PersistentLookupTableTest.t(), map) :: PersistentLookupTableTest.t()
+  @spec update_ir_plt(PLT.t(), map) :: PLT.t()
   def update_ir_plt(ir_plt, diff) do
     Enum.each(diff.removed_modules, &PLT.delete(ir_plt, &1))
     Enum.each(diff.updated_modules, &rebuild_module_ir(ir_plt, &1))
