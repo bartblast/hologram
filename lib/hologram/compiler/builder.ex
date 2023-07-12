@@ -21,8 +21,6 @@ defmodule Hologram.Compiler.Builder do
     Reflection.list_loaded_otp_apps()
     |> Kernel.--([:hex])
     |> Reflection.list_elixir_modules()
-    # TODO: remove this line once https://github.com/hrzndhrn/beam_file/issues/13 is fixed
-    |> Kernel.--([Mix.Compilers.Test, Mix.Release, Protocol])
     |> Enum.each(&put_module_beam_defs_digest_to_plt(plt, &1))
 
     plt
