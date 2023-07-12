@@ -46,6 +46,18 @@ defmodule Hologram.Compiler.CallGraph do
     Agent.get(call_graph, &Graph.reachable(&1, vertices))
   end
 
+  @doc """
+  Starts a new CallGraph agent with an initial empty graph.
+
+  ## Examples
+
+      iex> start(name: :my_call_graph)
+      %Hologram.Compiler.CallGraph{
+        pid: #PID<0.259.0>,
+        name: :my_call_graph
+      }
+  """
+  @spec start(keyword) :: CallGraph.t()
   def start(opts) do
     {:ok, pid} = Agent.start_link(fn -> Graph.new() end, name: opts[:name])
     %CallGraph{pid: pid, name: opts[:name]}
