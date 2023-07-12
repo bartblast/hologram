@@ -30,7 +30,6 @@ defmodule Hologram.MixProject do
       {:deep_merge, "~> 1.0"},
       {:file_system, "~> 0.2"},
       {:jason, "~> 1.0"},
-      {:libgraph, "~> 0.13"},
       {:phoenix, "~> 1.6"}
     ]
   end
