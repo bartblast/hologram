@@ -104,6 +104,10 @@ defmodule Hologram.Commons.PersistentLookupTableTest do
   end
 
   describe "start/1" do
+    test "%PersistentLookupTable{} struct is returned" do
+      assert %PersistentLookupTable{name: @name} = start(@opts)
+    end
+
     test "process name is registered" do
       %PersistentLookupTable{pid: pid} = start(@opts)
       assert Process.whereis(@name) == pid
