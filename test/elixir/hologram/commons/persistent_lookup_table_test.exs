@@ -35,6 +35,23 @@ defmodule Hologram.Commons.PersistentLookupTableTest do
     :ok
   end
 
+  describe "delete/2" do
+    test "key exists" do
+      plt = start(@opts)
+      put(plt, :my_key, :my_value)
+
+      assert delete(plt, :my_key) == true
+      assert get(plt, :my_key) == :error
+    end
+
+    test "key doesn't exist" do
+      plt = start(@opts)
+
+      assert delete(plt, :my_key) == true
+      assert get(plt, :my_key) == :error
+    end
+  end
+
   describe "get/2" do
     test "key exists" do
       plt = start(@opts)

@@ -8,13 +8,25 @@ defmodule Hologram.Commons.PersistentLookupTable do
   @type t :: %PersistentLookupTable{pid: pid, name: atom}
 
   @doc """
+  Deletes a key-value pair from the give persistent lookup table.
+
+  ## Examples
+
+      iex> delete(my_plt, :my_key)
+      true
+  """
+  @spec delete(PersistentLookupTable.t(), atom) :: true
+  def delete(plt, key) do
+    :ets.delete(plt.name, key)
+  end
+
+  @doc """
   Returns the value stored in the underlying ETS table under the given key.
 
   ## Examples
 
       iex> get(%PersistentLookupTable{name: :my_plt}, :my_key)
       :my_value
-
   """
   @spec get(PersistentLookupTable.t(), atom) :: {:ok, term} | :error
   def get(plt, key) do
@@ -82,7 +94,6 @@ defmodule Hologram.Commons.PersistentLookupTable do
 
       iex> put(:my_plt, :my_key, :my_value)
       true
-
   """
   @spec put(PersistentLookupTable.t() | atom, atom, term) :: true
 
