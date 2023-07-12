@@ -2,6 +2,7 @@ defmodule Hologram.Compiler.IR do
   alias Hologram.Compiler.AST
   alias Hologram.Compiler.Context
   alias Hologram.Compiler.IR
+  alias Hologram.Compiler.Normalizer
   alias Hologram.Compiler.Transformer
 
   @type t ::
@@ -260,5 +261,12 @@ defmodule Hologram.Compiler.IR do
     code
     |> AST.for_code()
     |> Transformer.transform(context)
+  end
+
+  def for_module(module) do
+    module
+    |> BeamFile.elixir_quoted!()
+    |> Normalizer.normalize()
+    |> Transformer.transform(%Context{})
   end
 end
