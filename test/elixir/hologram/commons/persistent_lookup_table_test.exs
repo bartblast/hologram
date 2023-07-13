@@ -105,7 +105,16 @@ defmodule Hologram.Commons.PersistentLookupTableTest do
 
   describe "start/1" do
     test "%PersistentLookupTable{} struct is returned" do
+      assert %PersistentLookupTable{} = start(@opts)
+    end
+
+    test "uses name from the opts" do
       assert %PersistentLookupTable{name: @name} = start(@opts)
+    end
+
+    test "generates name if it is not given in the opts" do
+      assert %PersistentLookupTable{name: {:global, ref}} = start([])
+      assert is_reference(ref)
     end
 
     test "process name is registered" do

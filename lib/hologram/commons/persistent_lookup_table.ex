@@ -5,7 +5,7 @@ defmodule Hologram.Commons.PersistentLookupTable do
   alias Hologram.Commons.SerializationUtils
 
   defstruct pid: nil, name: nil
-  @type t :: %PersistentLookupTable{pid: pid, name: atom}
+  @type t :: %PersistentLookupTable{pid: pid, name: atom | {:global, reference}}
 
   @doc """
   Deletes a key-value pair from the give persistent lookup table.
@@ -129,8 +129,9 @@ defmodule Hologram.Commons.PersistentLookupTable do
   """
   @spec start(keyword) :: PersistentLookupTable.t()
   def start(opts) do
-    {:ok, pid} = GenServer.start_link(PersistentLookupTable, opts, name: opts[:name])
-    %PersistentLookupTable{pid: pid, name: opts[:name]}
+    name = opts[:name] || {:global, make_ref()}
+    {:ok, pid} = GenServer.start_link(PersistentLookupTable, opts, name: name)
+    %PersistentLookupTable{pid: pid, name: name}
   end
 
   @doc """
