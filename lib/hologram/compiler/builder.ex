@@ -8,25 +8,25 @@ defmodule Hologram.Compiler.Builder do
 
   ## Examples
 
-      iex> build_module_beam_defs_digest_plt(:abc)
+      iex> build_module_digest_plt(:abc)
       %Hologram.Commons.PersistentLookupTable{
         pid: #PID<0.251.0>,
         name: :plt_abc
       }
   """
-  @spec build_module_beam_defs_digest_plt(atom) :: PLT.t()
-  def build_module_beam_defs_digest_plt(name) do
+  @spec build_module_digest_plt(atom) :: PLT.t()
+  def build_module_digest_plt(name) do
     plt = PLT.start(name: name)
 
     Reflection.list_loaded_otp_apps()
     |> Kernel.--([:hex])
     |> Reflection.list_elixir_modules()
-    |> Enum.each(&put_module_beam_defs_digest_to_plt(plt, &1))
+    |> Enum.each(&rebuild_module_digest_plt_entry(plt, &1))
 
     plt
   end
 
-  def diff_module_beam_defs_digest_plts(old_plt, new_plt) do
+  def diff_module_digest_plts(old_plt, new_plt) do
     old_mapset = mapset_from_plt(old_plt)
     new_mapset = mapset_from_plt(new_plt)
 
@@ -54,8 +54,10 @@ defmodule Hologram.Compiler.Builder do
   end
 
   @doc """
-  Updates the IR persistent lookup table PLT by deleting entries for modules that have been removed,
-  rebuilding the IR of modules that have been updated, and adding the IR of new modules.
+  Given a diff of changes, updates the IR persistent lookup table (PLT)
+  by deleting entries for modules that have been removed,
+  rebuilding the IR of modules that have been updated,
+  and adding the IR of new modules.
 
   ## Examples
 
@@ -68,17 +70,17 @@ defmodule Hologram.Compiler.Builder do
       ...>   removed_modules: [Module5, Module6],
       ...>   updated_modules: [Module3, Module4]
       ...> }
-      iex> update_ir_plt(plt, diff)
+      iex> patch_ir_plt(plt, diff)
       %PersistentLookupTable{
         pid: #PID<0.251.0>,
         name: :plt_abc
       }
   """
-  @spec update_ir_plt(PLT.t(), map) :: PLT.t()
-  def update_ir_plt(ir_plt, diff) do
+  @spec patch_ir_plt(PLT.t(), map) :: PLT.t()
+  def patch_ir_plt(ir_plt, diff) do
     Enum.each(diff.removed_modules, &PLT.delete(ir_plt, &1))
-    Enum.each(diff.updated_modules, &rebuild_module_ir(ir_plt, &1))
-    Enum.each(diff.added_modules, &rebuild_module_ir(ir_plt, &1))
+    Enum.each(diff.updated_modules, &rebuild_ir_plt_entry(ir_plt, &1))
+    Enum.each(diff.added_modules, &rebuild_ir_plt_entry(ir_plt, &1))
     ir_plt
   end
 
@@ -89,7 +91,11 @@ defmodule Hologram.Compiler.Builder do
     |> MapSet.new()
   end
 
-  defp put_module_beam_defs_digest_to_plt(plt, module) do
+  defp rebuild_ir_plt_entry(plt, module) do
+    PLT.put(plt, module, IR.for_module(module))
+  end
+
+  defp rebuild_module_digest_plt_entry(plt, module) do
     data =
       module
       |> Reflection.module_beam_defs()
@@ -98,9 +104,5 @@ defmodule Hologram.Compiler.Builder do
     digest = :crypto.hash(:sha256, data)
 
     PLT.put(plt.name, module, digest)
-  end
-
-  defp rebuild_module_ir(plt, module) do
-    PLT.put(plt, module, IR.for_module(module))
   end
 end
