@@ -26,6 +26,25 @@ defmodule Hologram.Compiler.Builder do
     plt
   end
 
+  @doc """
+  Compares two module digest PLTs and returns the added, removed, and updated modules lists.
+
+  ## Examples
+
+      iex> old_plt = %PersistentLookupTable{pid: #PID<0.251.0>, name: :my_old_plt}
+      iex> new_plt = %PersistentLookupTable{pid: #PID<0.259.0>, name: :my_new_plt}
+      iex> diff_module_digest_plts(old_plt, new_plt)
+      %{
+        added_modules: [Module5, Module9],
+        removed_modules: [Module1, Module3],
+        updated_modules: [Module6, Module2]
+      }
+  """
+  @spec diff_module_digest_plts(PLT.t(), PLT.t()) :: %{
+          added_modules: list,
+          removed_modules: list,
+          updated_modules: list
+        }
   def diff_module_digest_plts(old_plt, new_plt) do
     old_mapset = mapset_from_plt(old_plt)
     new_mapset = mapset_from_plt(new_plt)
