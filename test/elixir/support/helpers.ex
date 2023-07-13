@@ -1,5 +1,6 @@
 defmodule Hologram.Test.Helpers do
   alias Hologram.Commons.PersistentLookupTable, as: PLT
+  alias Hologram.Commons.ProcessUtils
   alias Hologram.Compiler.AST
   alias Hologram.Compiler.Context
   alias Hologram.Compiler.Encoder
@@ -30,13 +31,33 @@ defmodule Hologram.Test.Helpers do
   ## Examples
 
       iex> wait_for_plt_cleanup(:my_plt)
-      true
+      :ok
   """
   @spec wait_for_plt_cleanup(atom) :: :ok
   def wait_for_plt_cleanup(name) do
-    if PLT.running?(name) || PLT.table_exists?(name) do
+    wait_for_process_cleanup(name)
+
+    if PLT.table_exists?(name) do
       :timer.sleep(1)
       wait_for_plt_cleanup(name)
+    else
+      :ok
+    end
+  end
+
+  @doc """
+  Waits until the specified process is no longer running.
+
+  ## Examples
+
+      iex> wait_for_process_cleanup(:my_process)
+      :ok
+  """
+  @spec wait_for_process_cleanup(atom) :: :ok
+  def wait_for_process_cleanup(name) do
+    if ProcessUtils.running?(name) do
+      :timer.sleep(1)
+      wait_for_process_cleanup(name)
     else
       :ok
     end
