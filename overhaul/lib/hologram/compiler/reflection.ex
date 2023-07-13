@@ -264,13 +264,6 @@ defmodule Hologram.Compiler.Reflection do
     root_priv_path() <> "/page_list.bin"
   end
 
-  def root_path(opts \\ @config) do
-    case Keyword.get(opts, :root_path) do
-      nil -> File.cwd!()
-      root_path -> root_path
-    end
-  end
-
   # DEFER: test
   def root_priv_path(opts \\ []) do
     root_path(opts) <> "/priv/hologram"

@@ -115,4 +115,16 @@ defmodule Hologram.Compiler.Reflection do
         []
     end
   end
+
+  @doc """
+  Returns the absolute path of the project.
+
+  ## Examples
+
+      iex> root_path()
+      "/Users/bartblast/Projects/hologram"
+  """
+  def root_path do
+    File.cwd!()
+  end
 end
