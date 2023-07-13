@@ -138,7 +138,7 @@ defmodule Hologram.Compiler.Reflection do
       "/Users/bartblast/Projects/my_project/priv/hologram"
   """
   @spec root_priv_path() :: String.t()
-  def root_priv_path() do
+  def root_priv_path do
     root_path() <> "/priv/hologram"
   end
 end
