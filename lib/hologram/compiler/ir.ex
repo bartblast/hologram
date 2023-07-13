@@ -249,7 +249,7 @@ defmodule Hologram.Compiler.IR do
   end
 
   @doc """
-  Given Elixir source code returns its Hologram IR.
+  Returns Hologram IR for the given Elixir source code.
 
   ## Examples
 
@@ -263,6 +263,15 @@ defmodule Hologram.Compiler.IR do
     |> Transformer.transform(context)
   end
 
+  @doc """
+  Returns Hologram IR for the given module.
+
+  ## Examples
+
+      iex> for_module(MyModule)
+      %IR.ModuleDefinition{module: MyModule, body: %IR.Block{expressions: [...]}}
+  """
+  @spec for_module(module) :: IR.t()
   def for_module(module) do
     module
     |> BeamFile.elixir_quoted!()
