@@ -10,9 +10,20 @@ defmodule Hologram.Compiler.CallGraph do
   defstruct pid: nil, name: nil
   @type t :: %CallGraph{pid: pid, name: atom}
 
-  # def add_edge(call_graph, from_vertex, to_vertex) do
-  #   Agent.update(call_graph.name, &Graph.add_edge(&1, from_vertex, to_vertex))
-  # end
+  @doc """
+  Adds an edge between two vertices in the call graph.
+
+  ## Examples
+
+      iex> call_graph = %CallGraph{name: :my_call_graph, pid: #PID<0.259.0>}
+      iex> add_adge(call_graph, :vertex_1, :vertex_2)
+      :ok
+  """
+  @spec add_edge(CallGraph.t(), any, any) :: :ok
+  def add_edge(call_graph, from_vertex, to_vertex) do
+    Agent.update(call_graph.name, &Graph.add_edge(&1, from_vertex, to_vertex))
+    :ok
+  end
 
   # def add_vertex(call_graph, vertex) do
   #   Agent.update(call_graph.name, &Graph.add_vertex(&1, vertex))
@@ -23,16 +34,27 @@ defmodule Hologram.Compiler.CallGraph do
 
   ## Examples
 
-      iex> data(%CallGraph{name: :my_call_graph, pid: #PID<0.259.0>})
+      iex> call_graph = CallGraph{name: :my_call_graph, pid: #PID<0.259.0>}
+      iex> data(call_graph)
       #Graph<type: directed, vertices: [], edges: []>
   """
-  def data(call_graph) do
+  def graph(call_graph) do
     Agent.get(call_graph.pid, & &1)
   end
 
+  @doc """
+  Checks if an edge exists between two given vertices in the call graph.
+
+  ## Examples
+
+      iex> call_graph = %CallGraph{name: :my_call_graph, pid: #PID<0.259.0>}
+      iex> has_edge?(call_graph, :vertex_1, :vertex_2)
+      true
+  """
+  @spec has_edge?(CallGraph.t(), any, any) :: boolean
   def has_edge?(call_graph, from_vertex, to_vertex) do
     getter = fn graph ->
-      Graph.edges(graph, from_vertex, to_vertex) != []
+      Graph.edge(graph, from_vertex, to_vertex) != nil
     end
 
     Agent.get(call_graph.name, getter)
