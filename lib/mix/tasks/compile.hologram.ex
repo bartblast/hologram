@@ -1,6 +1,14 @@
 # TODO: finish & test
 
 defmodule Mix.Tasks.Compile.Hologram do
+  @moduledoc """
+  Builds JavaScript files for the current project.
+
+  ## Examples
+
+      $ mix compile.hologram
+  """
+
   use Mix.Task.Compiler
 
   alias Hologram.Commons.PersistentLookupTable, as: PLT
@@ -16,6 +24,8 @@ defmodule Mix.Tasks.Compile.Hologram do
   @module_digest_plt_dump_path Reflection.root_priv_path() <> "/plt_module_digest.bin"
   @module_digest_plt_name :hologram_plt_module_digest
 
+  @doc false
+  @impl Mix.Task.Compiler
   def run(_opts \\ []) do
     new_module_digest_plt_name = :"new_#{@module_digest_plt_name}"
     new_module_digest_plt = Builder.build_module_digest_plt(new_module_digest_plt_name)
