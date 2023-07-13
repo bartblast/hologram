@@ -56,4 +56,8 @@ defmodule Hologram.Compiler.ReflectionTest do
       assert module_beam_defs(Elixir.Hex) == []
     end
   end
+
+  test "root_path/0" do
+    assert root_path() == File.cwd!()
+  end
 end
