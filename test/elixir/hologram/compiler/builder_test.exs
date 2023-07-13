@@ -9,29 +9,31 @@ defmodule Hologram.Compiler.BuilderTest do
   alias Hologram.Test.Fixtures.Compiler.Builder.Module3
   alias Hologram.Test.Fixtures.Compiler.Builder.Module4
 
-  @plt_name :"hologram_plt_#{__MODULE__}"
+  @plt_name_1 :"hologram_plt_#{__MODULE__}_1"
+  @plt_name_2 :"hologram_plt_#{__MODULE__}_2"
 
   setup do
-    wait_for_plt_cleanup(@plt_name)
+    wait_for_plt_cleanup(@plt_name_1)
+    wait_for_plt_cleanup(@plt_name_2)
     :ok
   end
 
   test "build_module_digest_plt/1" do
-    assert plt = %PLT{name: @plt_name} = build_module_digest_plt(@plt_name)
+    assert %PLT{name: @plt_name_1} = plt = build_module_digest_plt(@plt_name_1)
 
     assert {:ok, <<_digest::256>>} = PLT.get(plt, Hologram.Compiler.Builder)
   end
 
   describe "diff_module_digest_plts/2" do
     setup do
-      old_plt = PLT.start(name: :"old_#{@plt_name}")
+      old_plt = PLT.start(name: @plt_name_1)
       PLT.put(old_plt, :module_1, :digest_1)
       PLT.put(old_plt, :module_3, :digest_3a)
       PLT.put(old_plt, :module_5, :digest_5)
       PLT.put(old_plt, :module_6, :digest_6a)
       PLT.put(old_plt, :module_7, :digest_7)
 
-      new_plt = PLT.start(name: :"new_#{@plt_name}")
+      new_plt = PLT.start(name: @plt_name_2)
       PLT.put(new_plt, :module_1, :digest_1)
       PLT.put(new_plt, :module_2, :digest_2)
       PLT.put(new_plt, :module_3, :digest_3b)
@@ -56,7 +58,7 @@ defmodule Hologram.Compiler.BuilderTest do
 
   describe "patch_ir_plt/2" do
     setup do
-      plt = PLT.start(name: @plt_name)
+      plt = PLT.start(name: @plt_name_1)
       PLT.put(plt, :module_5, :ir_5)
       PLT.put(plt, :module_6, :ir_6)
       PLT.put(plt, Module3, :ir_3)

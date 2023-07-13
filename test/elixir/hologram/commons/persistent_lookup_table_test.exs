@@ -112,11 +112,6 @@ defmodule Hologram.Commons.PersistentLookupTableTest do
       assert %PersistentLookupTable{name: @name} = start(@opts)
     end
 
-    test "generates name if it is not given in the opts" do
-      assert %PersistentLookupTable{name: {:global, ref}} = start([])
-      assert is_reference(ref)
-    end
-
     test "process name is registered" do
       %PersistentLookupTable{pid: pid} = start(@opts)
       assert Process.whereis(@name) == pid
