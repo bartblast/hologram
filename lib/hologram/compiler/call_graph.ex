@@ -5,6 +5,7 @@ defmodule Hologram.Compiler.CallGraph do
 
   alias Hologram.Compiler.CallGraph
   # alias Hologram.Compiler.IR
+  # alias Hologram.Compiler.Reflection
 
   defstruct pid: nil, name: nil
   @type t :: %CallGraph{pid: pid, name: atom}
@@ -29,17 +30,16 @@ defmodule Hologram.Compiler.CallGraph do
     Agent.get(call_graph.pid, & &1)
   end
 
+  def has_edge?(call_graph, from_vertex, to_vertex) do
+    getter = fn graph ->
+      Graph.edges(graph, from_vertex, to_vertex) != []
+    end
+
+    Agent.get(call_graph.name, getter)
+  end
+
   # def edges(call_graph, vertex) do
   #   Agent.get(call_graph.name, &Graph.edges(&1, vertex))
-  # end
-
-  # def has_edge?(call_graph, from_vertex, to_vertex) do
-  #   getter = fn graph ->
-  #     edges = Graph.edges(graph, from_vertex, to_vertex)
-  #     Enum.count(edges) == 1
-  #   end
-
-  #   Agent.get(call_graph.name, getter)
   # end
 
   # def has_vertex?(call_graph, vertex) do
