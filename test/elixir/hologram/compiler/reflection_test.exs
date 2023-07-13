@@ -60,4 +60,8 @@ defmodule Hologram.Compiler.ReflectionTest do
   test "root_path/0" do
     assert root_path() == File.cwd!()
   end
+
+  test "root_priv_path/0" do
+    assert root_priv_path() == File.cwd!() <> "/priv/hologram"
+  end
 end

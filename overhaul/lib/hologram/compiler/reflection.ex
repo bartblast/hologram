@@ -265,11 +265,6 @@ defmodule Hologram.Compiler.Reflection do
   end
 
   # DEFER: test
-  def root_priv_path(opts \\ []) do
-    root_path(opts) <> "/priv/hologram"
-  end
-
-  # DEFER: test
   def root_source_digest_path(opts \\ []) do
     root_priv_path(opts) <> "/source_digest.bin"
   end

@@ -122,9 +122,21 @@ defmodule Hologram.Compiler.Reflection do
   ## Examples
 
       iex> root_path()
-      "/Users/bartblast/Projects/hologram"
+      "/Users/bartblast/Projects/my_project"
   """
   def root_path do
     File.cwd!()
+  end
+
+  @doc """
+  Returns the absolute path of the project priv subdir for Hologram.
+
+  ## Examples
+
+      iex> root_priv_path()
+      "/Users/bartblast/Projects/my_project/priv/hologram"
+  """
+  def root_priv_path() do
+    root_path() <> "/priv/hologram"
   end
 end
