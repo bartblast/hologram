@@ -275,23 +275,6 @@ defmodule Hologram.Compiler.ReflectionTest do
     assert Reflection.otp_app() == :hologram
   end
 
-  describe "root_path/0" do
-    test "default" do
-      result = Reflection.root_path([])
-      expected = File.cwd!()
-
-      assert result == expected
-    end
-
-    test "custom" do
-      expected = "/test/path"
-      config = [root_path: expected]
-      result = Reflection.root_path(config)
-
-      assert result == expected
-    end
-  end
-
   test "source_code/1" do
     module = Hologram.Test.Fixtures.Compiler.Reflection.Module5
 
