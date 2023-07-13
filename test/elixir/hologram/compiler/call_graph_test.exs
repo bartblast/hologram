@@ -6,6 +6,11 @@ defmodule Hologram.Compiler.CallGraphTest do
   @name :"cg_#{__MODULE__}"
   @opts name: @name
 
+  test "data/1" do
+    cg = start(@opts)
+    assert %Graph{} = CallGraph.data(cg)
+  end
+
   describe "start/1" do
     test "%CallGraph{} struct is returned" do
       assert %CallGraph{name: @name} = start(@opts)

@@ -17,9 +17,17 @@ defmodule Hologram.Compiler.CallGraph do
   #   Agent.update(call_graph.name, &Graph.add_vertex(&1, vertex))
   # end
 
-  # def data(call_graph) do
-  #   Agent.get(call_graph, & &1)
-  # end
+  @doc """
+  Returns the underlying libgraph %Graph{} struct containing the information about vertices and edges.
+
+  ## Examples
+
+      iex> data(%CallGraph{name: :my_call_graph, pid: #PID<0.259.0>})
+      #Graph<type: directed, vertices: [], edges: []>
+  """
+  def data(call_graph) do
+    Agent.get(call_graph.pid, & &1)
+  end
 
   # def edges(call_graph, vertex) do
   #   Agent.get(call_graph.name, &Graph.edges(&1, vertex))
