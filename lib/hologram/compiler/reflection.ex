@@ -124,6 +124,7 @@ defmodule Hologram.Compiler.Reflection do
       iex> root_path()
       "/Users/bartblast/Projects/my_project"
   """
+  @spec root_path() :: String.t()
   def root_path do
     File.cwd!()
   end
@@ -136,6 +137,7 @@ defmodule Hologram.Compiler.Reflection do
       iex> root_priv_path()
       "/Users/bartblast/Projects/my_project/priv/hologram"
   """
+  @spec root_priv_path() :: String.t()
   def root_priv_path() do
     root_path() <> "/priv/hologram"
   end
