@@ -38,6 +38,7 @@ defmodule Hologram.Compiler.CallGraph do
       iex> data(call_graph)
       #Graph<type: directed, vertices: [], edges: []>
   """
+  @spec graph(CallGraph.t()) :: Graph.t()
   def graph(call_graph) do
     Agent.get(call_graph.pid, & &1)
   end
