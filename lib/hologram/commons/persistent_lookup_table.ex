@@ -106,20 +106,6 @@ defmodule Hologram.Commons.PersistentLookupTable do
   end
 
   @doc """
-  Tells whether the underlying GenServer process is alive.
-
-  ## Examples
-
-      iex> running?(:my_plt)
-      true
-  """
-  @spec running?(atom) :: boolean
-  def running?(name) do
-    pid = Process.whereis(name)
-    if pid, do: Process.alive?(pid), else: false
-  end
-
-  @doc """
   Starts the underlying GenServer process.
 
   ## Examples

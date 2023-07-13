@@ -92,17 +92,6 @@ defmodule Hologram.Commons.PersistentLookupTableTest do
     end
   end
 
-  describe "running?/1" do
-    test "is running" do
-      start(@opts)
-      assert running?(@name)
-    end
-
-    test "is not running" do
-      refute running?(@name)
-    end
-  end
-
   describe "start/1" do
     test "%PersistentLookupTable{} struct is returned" do
       assert %PersistentLookupTable{} = start(@opts)
