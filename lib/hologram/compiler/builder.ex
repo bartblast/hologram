@@ -14,8 +14,8 @@ defmodule Hologram.Compiler.Builder do
         name: :plt_abc
       }
   """
-  @spec build_module_digest_plt(atom) :: PLT.t()
-  def build_module_digest_plt(name) do
+  @spec build_module_digest_plt(atom | nil) :: PLT.t()
+  def build_module_digest_plt(name \\ nil) do
     plt = PLT.start(name: name)
 
     Reflection.list_loaded_otp_apps()

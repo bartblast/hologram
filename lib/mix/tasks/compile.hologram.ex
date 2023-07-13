@@ -27,8 +27,7 @@ defmodule Mix.Tasks.Compile.Hologram do
   @doc false
   @impl Mix.Task.Compiler
   def run(_opts \\ []) do
-    new_module_digest_plt_name = :"new_#{@module_digest_plt_name}"
-    new_module_digest_plt = Builder.build_module_digest_plt(new_module_digest_plt_name)
+    new_module_digest_plt = Builder.build_module_digest_plt()
 
     old_module_digest_plt =
       PLT.start(name: @module_digest_plt_name, dump_path: @module_digest_plt_dump_path)
