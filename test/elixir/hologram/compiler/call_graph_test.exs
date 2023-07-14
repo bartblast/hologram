@@ -28,6 +28,13 @@ defmodule Hologram.Compiler.CallGraphTest do
            }
   end
 
+  test "add_vertex/2", %{call_graph: call_graph} do
+    :ok = CallGraph.add_vertex(call_graph, :vertex_3)
+    graph = CallGraph.graph(call_graph)
+
+    assert Graph.has_vertex?(graph, :vertex_3)
+  end
+
   describe "build/3" do
     test "atom, which is not an alias", %{call_graph: call_graph} do
       ir = %IR.AtomType{value: :abc}

@@ -26,6 +26,21 @@ defmodule Hologram.Compiler.CallGraph do
   end
 
   @doc """
+  Adds a vertex to the call graph.
+
+  ## Examples
+
+      iex> call_graph = %CallGraph{name: :my_call_graph, pid: #PID<0.259.0>}
+      iex> add_vertex(call_graph, :vertex_3)
+      :ok
+  """
+  @spec add_vertex(CallGraph.t(), any) :: :ok
+  def add_vertex(call_graph, vertex) do
+    Agent.update(call_graph.name, &Graph.add_vertex(&1, vertex))
+    :ok
+  end
+
+  @doc """
   Builds a call graph from IR.
 
   ## Examples
@@ -44,10 +59,6 @@ defmodule Hologram.Compiler.CallGraph do
 
     :ok
   end
-
-  # def add_vertex(call_graph, vertex) do
-  #   Agent.update(call_graph.name, &Graph.add_vertex(&1, vertex))
-  # end
 
   @doc """
   Returns the underlying libgraph %Graph{} struct containing the information about vertices and edges.
