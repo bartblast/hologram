@@ -1,7 +1,9 @@
 defmodule Hologram.Compiler.CallGraphTest do
   use Hologram.Test.BasicCase, async: true
   import Hologram.Compiler.CallGraph
+
   alias Hologram.Compiler.CallGraph
+  alias Hologram.Compiler.IR
 
   @call_graph_name_1 :"cg_#{__MODULE__}_1"
   @call_graph_name_2 :"cg_#{__MODULE__}_2"
@@ -24,6 +26,22 @@ defmodule Hologram.Compiler.CallGraphTest do
              weight: 1,
              label: nil
            }
+  end
+
+  describe "build/3" do
+    test "atom, which is not an alias", %{call_graph: call_graph} do
+      ir = %IR.AtomType{value: :abc}
+      build(call_graph, ir, :vertex_1)
+
+      refute CallGraph.has_edge?(call_graph, :vertex_1, :abc)
+    end
+
+    test "atom, which is an alias", %{call_graph: call_graph} do
+      ir = %IR.AtomType{value: Aaa.Bbb}
+      build(call_graph, ir, :vertex_1)
+
+      assert CallGraph.has_edge?(call_graph, :vertex_1, Aaa.Bbb)
+    end
   end
 
   test "graph/1", %{call_graph: call_graph} do

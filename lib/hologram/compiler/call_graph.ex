@@ -4,8 +4,8 @@ defmodule Hologram.Compiler.CallGraph do
   use Agent
 
   alias Hologram.Compiler.CallGraph
-  # alias Hologram.Compiler.IR
-  # alias Hologram.Compiler.Reflection
+  alias Hologram.Compiler.IR
+  alias Hologram.Compiler.Reflection
 
   defstruct pid: nil, name: nil
   @type t :: %CallGraph{pid: pid, name: atom}
@@ -22,6 +22,26 @@ defmodule Hologram.Compiler.CallGraph do
   @spec add_edge(CallGraph.t(), any, any) :: :ok
   def add_edge(call_graph, from_vertex, to_vertex) do
     Agent.update(call_graph.name, &Graph.add_edge(&1, from_vertex, to_vertex))
+    :ok
+  end
+
+  @doc """
+  Builds a call graph from IR.
+
+  ## Examples
+
+      iex> call_graph = %CallGraph{name: :my_call_graph, pid: #PID<0.259.0>}
+      iex> ir = %IR.LocalFunctionCall{function: :my_fun, args: [%IR.IntegerType{value: 123}]}
+      iex> build(call_graph, ir, MyModule)
+  """
+  @spec build(CallGraph.t(), IR.t(), module | nil) :: :ok
+  def build(call_graph, ir, from_vertex \\ nil)
+
+  def build(call_graph, %IR.AtomType{value: value}, from_vertex) do
+    if Reflection.alias?(value) do
+      add_edge(call_graph, from_vertex, value)
+    end
+
     :ok
   end
 
