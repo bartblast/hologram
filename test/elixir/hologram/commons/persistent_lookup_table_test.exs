@@ -97,7 +97,7 @@ defmodule Hologram.Commons.PersistentLookupTableTest do
       assert %PersistentLookupTable{} = start(@opts)
     end
 
-    test "uses name from the opts" do
+    test "uses name from opts" do
       assert %PersistentLookupTable{name: @name} = start(@opts)
     end
 

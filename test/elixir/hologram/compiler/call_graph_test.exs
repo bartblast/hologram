@@ -3,10 +3,14 @@ defmodule Hologram.Compiler.CallGraphTest do
   import Hologram.Compiler.CallGraph
   alias Hologram.Compiler.CallGraph
 
-  @name :"cg_#{__MODULE__}"
-  @opts name: @name
+  @call_graph_name_1 :"cg_#{__MODULE__}_1"
+  @call_graph_name_2 :"cg_#{__MODULE__}_2"
+  @opts name: @call_graph_name_1
 
   setup do
+    wait_for_process_cleanup(@call_graph_name_1)
+    wait_for_process_cleanup(@call_graph_name_2)
+
     [call_graph: start(@opts)]
   end
 
@@ -39,15 +43,16 @@ defmodule Hologram.Compiler.CallGraphTest do
 
   describe "start/1" do
     test "%CallGraph{} struct is returned" do
-      name = :"#{@name}_start_test"
-      assert %CallGraph{name: ^name} = start(name: name)
+      assert %CallGraph{} = start(name: @call_graph_name_2)
+    end
+
+    test "uses name from opts" do
+      assert %CallGraph{name: @call_graph_name_2} = start(name: @call_graph_name_2)
     end
 
     test "process name is registered" do
-      name = :"#{@name}_start_test"
-      %CallGraph{pid: pid} = start(name: name)
-
-      assert Process.whereis(name) == pid
+      %CallGraph{pid: pid} = start(name: @call_graph_name_2)
+      assert Process.whereis(@call_graph_name_2) == pid
     end
   end
 end
