@@ -2,7 +2,6 @@
 
 import Bitstring from "./bitstring.mjs";
 import Sequence from "./sequence.mjs";
-import Utils from "./utils.mjs";
 
 export default class Type {
   static alias(aliasStr) {
