@@ -11,7 +11,6 @@ export default class Bitstring {
       return Bitstring.#buildBitArray(segment, index + 1);
     });
 
-    // Cannot freeze array buffer views with elements
     return {type: "bitstring", bits: Utils.concatUint8Arrays(bitArrays)};
   }
 

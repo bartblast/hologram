@@ -3,7 +3,6 @@
 import {
   assert,
   assertError,
-  assertFrozen,
   linkModules,
   unlinkModules,
 } from "../../assets/js/test_support.mjs";
@@ -51,24 +50,13 @@ describe("anonymousFunction()", () => {
 
     assert.deepStrictEqual(anonFun.vars, expected);
   });
-
-  it("returns frozen object", () => {
-    const result = Type.anonymousFunction(arity, clauses, vars);
-    assertFrozen(result);
-  });
 });
 
-describe("atom()", () => {
-  it("returns boxed atom value", () => {
-    const result = Type.atom("test");
-    const expected = {type: "atom", value: "test"};
+it("atom()", () => {
+  const result = Type.atom("test");
+  const expected = {type: "atom", value: "test"};
 
-    assert.deepStrictEqual(result, expected);
-  });
-
-  it("returns frozen object", () => {
-    assertFrozen(Type.atom("test"));
-  });
+  assert.deepStrictEqual(result, expected);
 });
 
 describe("bitstring()", () => {
@@ -212,29 +200,15 @@ describe("boolean()", () => {
 
     assert.deepStrictEqual(result, expected);
   });
-
-  it("returns frozen object", () => {
-    assertFrozen(Type.boolean(true));
-  });
 });
 
-describe("consPattern()", () => {
-  let head, tail, result;
+it("consPattern()", () => {
+  const head = Type.integer(1);
+  const tail = Type.list([Type.integer(2), Type.integer(3)]);
+  const result = Type.consPattern(head, tail);
 
-  beforeEach(() => {
-    head = Type.integer(1);
-    tail = Type.list([Type.integer(2), Type.integer(3)]);
-    result = Type.consPattern(head, tail);
-  });
-
-  it("returns cons pattern", () => {
-    const expected = {type: "cons_pattern", head: head, tail: tail};
-    assert.deepStrictEqual(result, expected);
-  });
-
-  it("returns frozen object", () => {
-    assertFrozen(result);
-  });
+  const expected = {type: "cons_pattern", head: head, tail: tail};
+  assert.deepStrictEqual(result, expected);
 });
 
 describe("encodeMapKey()", () => {
@@ -350,17 +324,11 @@ it("errorStruct()", () => {
   assert.deepStrictEqual(result, expected);
 });
 
-describe("float()", () => {
-  it("returns boxed float value", () => {
-    const result = Type.float(1.23);
-    const expected = {type: "float", value: 1.23};
+it("float()", () => {
+  const result = Type.float(1.23);
+  const expected = {type: "float", value: 1.23};
 
-    assert.deepStrictEqual(result, expected);
-  });
-
-  it("returns frozen object", () => {
-    assertFrozen(Type.float(1.0));
-  });
+  assert.deepStrictEqual(result, expected);
 });
 
 describe("integer()", () => {
@@ -376,10 +344,6 @@ describe("integer()", () => {
     const expected = {type: "integer", value: 1n};
 
     assert.deepStrictEqual(result, expected);
-  });
-
-  it("returns frozen object", () => {
-    assertFrozen(Type.integer(1));
   });
 });
 
@@ -697,12 +661,6 @@ describe("list()", () => {
   it("returns boxed list value", () => {
     assert.deepStrictEqual(result, expected);
   });
-
-  // Do not freeze lists, since they may contain bitstring items which can't be frozen.
-  // TODO: freeze again once bitstrings are implemented as bigints.
-  // it("returns frozen object", () => {
-  //   assertFrozen(result);
-  // });
 });
 
 describe("map", () => {
@@ -729,39 +687,21 @@ describe("map", () => {
   });
 });
 
-describe("matchPlaceholder()", () => {
-  it("returns boxed matched placeholder", () => {
-    assert.deepStrictEqual(Type.matchPlaceholder(), {
-      type: "match_placeholder",
-    });
-  });
-
-  it("returns frozen object", () => {
-    assertFrozen(Type.matchPlaceholder());
+it("matchPlaceholder()", () => {
+  assert.deepStrictEqual(Type.matchPlaceholder(), {
+    type: "match_placeholder",
   });
 });
 
-describe("nil()", () => {
-  it("returns boxed atom with 'nil' value", () => {
-    assert.deepStrictEqual(Type.nil(), Type.atom("nil"));
-  });
-
-  it("returns frozen object", () => {
-    assertFrozen(Type.nil());
-  });
+it("nil()", () => {
+  assert.deepStrictEqual(Type.nil(), Type.atom("nil"));
 });
 
-describe("string()", () => {
-  it("returns boxed string value", () => {
-    const result = Type.string("test");
-    const expected = {type: "string", value: "test"};
+it("string()", () => {
+  const result = Type.string("test");
+  const expected = {type: "string", value: "test"};
 
-    assert.deepStrictEqual(result, expected);
-  });
-
-  it("returns frozen object", () => {
-    assertFrozen(Type.string("test"));
-  });
+  assert.deepStrictEqual(result, expected);
 });
 
 it("struct()", () => {
@@ -796,23 +736,11 @@ describe("tuple()", () => {
   it("returns boxed tuple value", () => {
     assert.deepStrictEqual(result, expected);
   });
-
-  // Do not freeze tuples, since they may contain bitstring items which can't be frozen.
-  // TODO: freeze again once bitstrings are implemented as bigints.
-  // it("returns frozen object", () => {
-  //   assertFrozen(result);
-  // });
 });
 
-describe("variablePattern()", () => {
-  it("returns variable pattern", () => {
-    const result = Type.variablePattern("test");
-    const expected = {type: "variable_pattern", name: "test"};
+it("variablePattern()", () => {
+  const result = Type.variablePattern("test");
+  const expected = {type: "variable_pattern", name: "test"};
 
-    assert.deepStrictEqual(result, expected);
-  });
-
-  it("returns frozen object", () => {
-    assertFrozen(Type.variablePattern("test"));
-  });
+  assert.deepStrictEqual(result, expected);
 });

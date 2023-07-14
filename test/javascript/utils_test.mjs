@@ -2,8 +2,6 @@
 
 import {
   assert,
-  assertFrozen,
-  assertNotFrozen,
   linkModules,
   unlinkModules,
 } from "../../assets/js/test_support.mjs";
@@ -62,55 +60,7 @@ describe("concatUint8Arrays()", () => {
   });
 });
 
-describe("evaluate()", () => {
-  let result;
-
-  beforeEach(() => {
-    result = Utils.evaluate("{value: 2 + 2}");
-  });
-
-  it("evaluates code", () => {
-    assert.deepStrictEqual(result, {value: 4});
-  });
-
-  it("returns frozen object by default", () => {
-    assertFrozen(result);
-  });
-
-  it("returns not frozen object if second arg is false", () => {
-    result = Utils.evaluate("{value: 2 + 2}", false);
-    assertNotFrozen(result);
-  });
-});
-
-describe("freeze()", () => {
-  it("freezes object and all of its properties recursively (deep freeze)", () => {
-    const obj = {
-      a: {
-        c: {
-          g: 1,
-        },
-        d: {
-          h: 2,
-        },
-      },
-      b: {
-        e: {
-          i: 3,
-        },
-        f: {
-          j: 4,
-        },
-      },
-    };
-
-    Utils.freeze(obj);
-
-    assertFrozen(obj.a);
-    assertFrozen(obj.a.c);
-    assertFrozen(obj.a.d);
-    assertFrozen(obj.b);
-    assertFrozen(obj.b.e);
-    assertFrozen(obj.b.f);
-  });
+it("evaluate()", () => {
+  const result = Utils.evaluate("{value: 2 + 2}");
+  assert.deepStrictEqual(result, {value: 4});
 });

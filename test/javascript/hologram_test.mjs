@@ -3,7 +3,6 @@
 import {
   assert,
   assertError,
-  assertNotFrozen,
   linkModules,
   unlinkModules,
 } from "../../assets/js/test_support.mjs";
@@ -14,22 +13,14 @@ before(() => linkModules());
 after(() => unlinkModules());
 
 describe("cloneVars()", () => {
-  let nested, vars, expected, result;
-
-  beforeEach(() => {
-    nested = {c: 3, d: 4};
-    vars = {a: 1, b: nested, __snapshot__: "dummy"};
-    expected = {a: 1, b: nested};
-    result = Hologram.cloneVars(vars);
-  });
-
   it("clones vars recursively (deep clone) and removes __snapshot__ property", () => {
+    const nested = {c: 3, d: 4};
+    const vars = {a: 1, b: nested, __snapshot__: "dummy"};
+    const expected = {a: 1, b: nested};
+    const result = Hologram.cloneVars(vars);
+
     assert.deepStrictEqual(result, expected);
     assert.notEqual(result.b, nested);
-  });
-
-  it("returns non-frozen object", () => {
-    assertNotFrozen(result);
   });
 });
 

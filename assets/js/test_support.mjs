@@ -28,14 +28,6 @@ export function assertError(callable, errorAliasStr, message) {
   assert.throw(callable, Error, `__hologram__:${expectedErrorData}`);
 }
 
-export function assertFrozen(obj) {
-  assert.isTrue(Object.isFrozen(obj));
-}
-
-export function assertNotFrozen(obj) {
-  assert.isFalse(Object.isFrozen(obj));
-}
-
 export function linkModules() {
   globalThis.Hologram = Hologram;
   globalThis.Erlang = Erlang;

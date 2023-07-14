@@ -10,17 +10,17 @@ export default class Type {
   }
 
   static anonymousFunction(arity, clauses, vars) {
-    return Utils.freeze({
+    return {
       type: "anonymous_function",
       arity: arity,
       clauses: clauses,
       vars: Hologram.cloneVars(vars),
       uniqueId: Sequence.next(),
-    });
+    };
   }
 
   static atom(value) {
-    return Utils.freeze({type: "atom", value: value});
+    return {type: "atom", value: value};
   }
 
   static bitstring(data) {
@@ -31,7 +31,6 @@ export default class Type {
     } else if (data.length > 0 && typeof data[0] === "object") {
       return Bitstring.from(data);
     } else {
-      // Cannot freeze array buffer views with elements
       return {type: "bitstring", bits: new Uint8Array(data)};
     }
   }
@@ -63,7 +62,7 @@ export default class Type {
   }
 
   static consPattern(head, tail) {
-    return Utils.freeze({type: "cons_pattern", head: head, tail: tail});
+    return {type: "cons_pattern", head: head, tail: tail};
   }
 
   static encodeMapKey(boxed) {
@@ -98,7 +97,7 @@ export default class Type {
   }
 
   static float(value) {
-    return Utils.freeze({type: "float", value: value});
+    return {type: "float", value: value};
   }
 
   static integer(value) {
@@ -106,7 +105,7 @@ export default class Type {
       value = BigInt(value);
     }
 
-    return Utils.freeze({type: "integer", value: value});
+    return {type: "integer", value: value};
   }
 
   static isAtom(boxed) {
@@ -181,8 +180,6 @@ export default class Type {
   }
 
   static list(data) {
-    // Do not freeze lists, since they may contain bitstring items which can't be frozen.
-    // TODO: freeze again once bitstrings are implemented as bigints.
     return {type: "list", data: data};
   }
 
@@ -196,7 +193,7 @@ export default class Type {
   }
 
   static matchPlaceholder() {
-    return Utils.freeze({type: "match_placeholder"});
+    return {type: "match_placeholder"};
   }
 
   static nil() {
@@ -204,7 +201,7 @@ export default class Type {
   }
 
   static string(value) {
-    return Utils.freeze({type: "string", value: value});
+    return {type: "string", value: value};
   }
 
   static struct(aliasStr, data) {
@@ -215,13 +212,11 @@ export default class Type {
   }
 
   static tuple(data) {
-    // Do not freeze tuples, since they may contain bitstring items which can't be frozen.
-    // TODO: freeze again once bitstrings are implemented as bigints.
     return {type: "tuple", data: data};
   }
 
   static variablePattern(name) {
-    return Utils.freeze({type: "variable_pattern", name: name});
+    return {type: "variable_pattern", name: name};
   }
 
   static #encodeAnonymousFunctionTypeMapKey(boxed) {

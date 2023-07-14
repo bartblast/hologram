@@ -5,7 +5,6 @@ import {
   assertBoxedFalse,
   assertBoxedTrue,
   assertError,
-  assertFrozen,
   linkModules,
   unlinkModules,
 } from "../../../assets/js/test_support.mjs";
@@ -57,14 +56,6 @@ describe("$243/2 (+)", () => {
 
     assert.deepStrictEqual(result, expected);
   });
-
-  it("returns frozen object", () => {
-    const left = Type.integer(1);
-    const right = Type.integer(2);
-    const result = Erlang.$243(left, right);
-
-    assertFrozen(result);
-  });
 });
 
 describe("$245/2 (-)", () => {
@@ -106,14 +97,6 @@ describe("$245/2 (-)", () => {
     const expected = Type.float(2.0);
 
     assert.deepStrictEqual(result, expected);
-  });
-
-  it("returns frozen object", () => {
-    const left = Type.integer(3);
-    const right = Type.integer(1);
-    const result = Erlang.$245(left, right);
-
-    assertFrozen(result);
   });
 });
 
@@ -224,13 +207,6 @@ describe("$247$261/2 (/=)", () => {
     const result = Erlang.$247$261(left, right);
 
     assertBoxedTrue(result);
-  });
-
-  it("returns frozen object", () => {
-    const value = Type.integer(1);
-    const result = Erlang.$247$261(value, value);
-
-    assertFrozen(result);
   });
 });
 
@@ -352,13 +328,6 @@ describe("$261$261/2 (==)", () => {
     const result = Erlang.$261$261(left, right);
 
     assertBoxedFalse(result);
-  });
-
-  it("returns frozen object", () => {
-    const value = Type.integer(1);
-    const result = Erlang.$261$261(value, value);
-
-    assertFrozen(result);
   });
 });
 
