@@ -528,7 +528,7 @@ describe("$262", () => {
     assertBoxedFalse(result);
   });
 
-  it("shouldreturns boxed false when left float argument is smaller than right integer argument", () => {
+  it("returns boxed false when left float argument is smaller than right integer argument", () => {
     const left = Type.float(3.2);
     const right = Type.integer(5);
     const result = Erlang.$262(left, right);
