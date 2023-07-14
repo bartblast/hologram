@@ -7,6 +7,7 @@ defmodule Hologram.Compiler.EncoderTest do
 
   describe "anonymous function type" do
     test "with single clause" do
+      # fn x -> :expr end
       ir = %IR.AnonymousFunctionType{
         arity: 2,
         clauses: [
@@ -28,6 +29,10 @@ defmodule Hologram.Compiler.EncoderTest do
     end
 
     test "with multiple clauses" do
+      # fn
+      #   x -> :expr_a
+      #   y -> :expr_b
+      # end
       ir = %IR.AnonymousFunctionType{
         arity: 2,
         clauses: [
@@ -60,24 +65,28 @@ defmodule Hologram.Compiler.EncoderTest do
 
   describe "atom type" do
     test "nil" do
+      # nil
       ir = %IR.AtomType{value: nil}
 
       assert encode(ir, %Context{}) == ~s/Type.atom("nil")/
     end
 
     test "false" do
+      # false
       ir = %IR.AtomType{value: false}
 
       assert encode(ir, %Context{}) == ~s/Type.atom("false")/
     end
 
     test "true" do
+      # true
       ir = %IR.AtomType{value: true}
 
       assert encode(ir, %Context{}) == ~s/Type.atom("true")/
     end
 
     test "non-nil and non-boolean" do
+      # :"aa\"bb\ncc"
       ir = %IR.AtomType{value: :"aa\"bb\ncc"}
 
       assert encode(ir, %Context{}) == ~s/Type.atom("aa\\"bb\\ncc")/
@@ -88,12 +97,14 @@ defmodule Hologram.Compiler.EncoderTest do
     @context %Context{pattern?: true}
 
     test "no segments" do
+      # <<>>
       ir = %IR.BitstringType{segments: []}
 
       assert encode(ir, @context) == "Type.bitstringPattern([])"
     end
 
     test "single segment" do
+      # <<1>>
       ir = %IR.BitstringType{
         segments: [
           %IR.BitstringSegment{
@@ -108,6 +119,7 @@ defmodule Hologram.Compiler.EncoderTest do
     end
 
     test "multiple segments" do
+      # <<1, 2>>
       ir = %IR.BitstringType{
         segments: [
           %IR.BitstringSegment{
@@ -130,12 +142,14 @@ defmodule Hologram.Compiler.EncoderTest do
     @context %Context{pattern?: false}
 
     test "no segments" do
+      # <<>>
       ir = %IR.BitstringType{segments: []}
 
       assert encode(ir, @context) == "Type.bitstring([])"
     end
 
     test "single segment" do
+      # <<1>>
       ir = %IR.BitstringType{
         segments: [
           %IR.BitstringSegment{
@@ -150,6 +164,7 @@ defmodule Hologram.Compiler.EncoderTest do
     end
 
     test "multiple segments" do
+      # <<1, 2>>
       ir = %IR.BitstringType{
         segments: [
           %IR.BitstringSegment{
@@ -170,6 +185,7 @@ defmodule Hologram.Compiler.EncoderTest do
 
   describe "bitstring segment" do
     test "no modifiers specified" do
+      # <<123>>
       ir = %IR.BitstringSegment{
         value: %IR.IntegerType{value: 123},
         modifiers: []
@@ -179,6 +195,7 @@ defmodule Hologram.Compiler.EncoderTest do
     end
 
     test "all modifiers specified" do
+      # <<123::integer-size(16)-unit(1)-signed-big>>
       ir = %IR.BitstringSegment{
         value: %IR.IntegerType{value: 123},
         modifiers: [
@@ -195,6 +212,7 @@ defmodule Hologram.Compiler.EncoderTest do
     end
 
     test "single modifier specified" do
+      # <<123::big>>
       ir = %IR.BitstringSegment{
         value: %IR.IntegerType{value: 123},
         modifiers: [endianness: :big]
@@ -205,13 +223,15 @@ defmodule Hologram.Compiler.EncoderTest do
     end
 
     test "from string type" do
-      ir = %IR.BitstringSegment{value: %IR.StringType{value: "abc"}, modifiers: [type: "utf16"]}
+      # <<"abc">>
+      ir = %IR.BitstringSegment{value: %IR.StringType{value: "abc"}, modifiers: [type: "utf8"]}
 
       assert encode(ir, %Context{}) ==
-               ~s/Type.bitstringSegment(Type.string(\"abc\"), {type: "utf16"})/
+               ~s/Type.bitstringSegment(Type.string(\"abc\"), {type: "utf8"})/
     end
 
     test "from non-string type" do
+      # <<123::big>>
       ir = %IR.BitstringSegment{
         value: %IR.IntegerType{value: 123},
         modifiers: [endianness: :big]
@@ -224,6 +244,8 @@ defmodule Hologram.Compiler.EncoderTest do
 
   describe "block" do
     test "empty" do
+      # do
+      # end
       ir = %IR.Block{expressions: []}
 
       assert encode(ir, %Context{}) ==
@@ -235,6 +257,9 @@ defmodule Hologram.Compiler.EncoderTest do
     end
 
     test "single expression" do
+      # do
+      #   1
+      # end
       ir = %IR.Block{
         expressions: [
           %IR.IntegerType{value: 1}
@@ -250,6 +275,10 @@ defmodule Hologram.Compiler.EncoderTest do
     end
 
     test "multiple expressions" do
+      # do
+      #   1
+      #   2
+      # end
       ir = %IR.Block{
         expressions: [
           %IR.IntegerType{value: 1},
@@ -339,6 +368,10 @@ defmodule Hologram.Compiler.EncoderTest do
       }
     }
 
+    # case 123 do
+    #   x -> :expr_1
+    #   y -> :expr_2
+    # end
     ir = %IR.Case{
       condition: %IR.IntegerType{value: 123},
       clauses: [clause_1, clause_2]
@@ -354,6 +387,9 @@ defmodule Hologram.Compiler.EncoderTest do
   end
 
   test "clause" do
+    # {1, x} when :erlang.<(x, 3) ->
+    #   11
+    #   12
     ir = %IR.Clause{
       match: %IR.TupleType{
         data: [
@@ -470,6 +506,7 @@ defmodule Hologram.Compiler.EncoderTest do
   end
 
   test "comprehension filter" do
+    # my_filter(a)
     ir = %IR.ComprehensionFilter{
       expression: %IR.LocalFunctionCall{
         function: :my_filter,
@@ -481,6 +518,7 @@ defmodule Hologram.Compiler.EncoderTest do
   end
 
   test "comprehension generator" do
+    # {a, b} when my_guard(a, 2) -> [1, 2]
     ir = %IR.Clause{
       match: %IR.TupleType{
         data: [
@@ -540,6 +578,10 @@ defmodule Hologram.Compiler.EncoderTest do
       }
     }
 
+    # cond do
+    #   :erlang.<(x, 1) -> 1
+    #   :erlang.<(x, 2) -> 2
+    # end
     ir = %IR.Cond{clauses: [clause_1, clause_2]}
 
     assert encode(ir, %Context{}) == """
@@ -552,6 +594,9 @@ defmodule Hologram.Compiler.EncoderTest do
   end
 
   test "cond clause" do
+    # :erlang.<(x, 3) ->
+    #   1
+    #   2
     ir = %IR.CondClause{
       condition: %IR.RemoteFunctionCall{
         module: %IR.AtomType{value: :erlang},
@@ -578,6 +623,7 @@ defmodule Hologram.Compiler.EncoderTest do
   end
 
   describe "cons operator" do
+    # [1 | [2, 3]]
     @cons_operator_ir %IR.ConsOperator{
       head: %IR.IntegerType{value: 1},
       tail: %IR.ListType{data: [%IR.IntegerType{value: 2}, %IR.IntegerType{value: 3}]}
@@ -595,6 +641,7 @@ defmodule Hologram.Compiler.EncoderTest do
   end
 
   test "dot operator" do
+    # my_module.my_key
     ir = %IR.DotOperator{
       left: %IR.Variable{name: :my_module},
       right: %IR.AtomType{value: :my_key}
@@ -605,10 +652,14 @@ defmodule Hologram.Compiler.EncoderTest do
   end
 
   test "float type" do
+    # 1.23
     assert encode(%IR.FloatType{value: 1.23}, %Context{}) == "Type.float(1.23)"
   end
 
   describe "function clause" do
+    # (x, y) do
+    #  :expr_1
+    #  :expr_2
     test "without guard" do
       ir = %IR.FunctionClause{
         params: [%IR.Variable{name: :x}, %IR.Variable{name: :y}],
@@ -627,6 +678,9 @@ defmodule Hologram.Compiler.EncoderTest do
     end
 
     test "with guard" do
+      # (x, y) when :erlang.is_integer(x) do
+      #  :expr_1
+      #  :expr_2
       ir = %IR.FunctionClause{
         params: [%IR.Variable{name: :x}, %IR.Variable{name: :y}],
         guard: %IR.RemoteFunctionCall{
@@ -649,15 +703,18 @@ defmodule Hologram.Compiler.EncoderTest do
   end
 
   test "integer type" do
+    # 123
     assert encode(%IR.IntegerType{value: 123}, %Context{}) == "Type.integer(123n)"
   end
 
   describe "list type" do
     test "empty" do
+      # []
       assert encode(%IR.ListType{data: []}, %Context{}) == "Type.list([])"
     end
 
     test "non-empty" do
+      # [1, :abc]
       ir = %IR.ListType{
         data: [
           %IR.IntegerType{value: 1},
@@ -670,6 +727,7 @@ defmodule Hologram.Compiler.EncoderTest do
   end
 
   test "local function call" do
+    # my_fun!(1, 2)
     ir = %IR.LocalFunctionCall{
       function: :my_fun!,
       args: [%IR.IntegerType{value: 1}, %IR.IntegerType{value: 2}]
@@ -681,10 +739,12 @@ defmodule Hologram.Compiler.EncoderTest do
 
   describe "map type" do
     test "empty" do
+      # %{}
       assert encode(%IR.MapType{data: []}, %Context{}) == "Type.map([])"
     end
 
     test "single key" do
+      # %{a: 1}
       ir = %IR.MapType{
         data: [
           {
@@ -698,6 +758,7 @@ defmodule Hologram.Compiler.EncoderTest do
     end
 
     test "multiple keys" do
+      # %{a: 1, b: 2}
       ir = %IR.MapType{
         data: [
           {%IR.AtomType{value: :a}, %IR.IntegerType{value: 1}},
@@ -829,10 +890,12 @@ defmodule Hologram.Compiler.EncoderTest do
   end
 
   test "match placeholder" do
+    # _abc
     assert encode(%IR.MatchPlaceholder{}, %Context{}) == "Type.matchPlaceholder()"
   end
 
   test "module attribute operator" do
+    # @abc?
     assert encode(%IR.ModuleAttributeOperator{name: :abc?}, %Context{}) == "vars.$264abc$263"
   end
 
@@ -956,11 +1019,13 @@ defmodule Hologram.Compiler.EncoderTest do
   end
 
   test "pin operator" do
+    # ^abc
     assert encode(%IR.PinOperator{name: :abc}, %Context{}) == "vars.abc"
   end
 
   describe "remote function call" do
     test "called on a module alias" do
+      # Aaa.Bbb.Ccc.my_fun!(1, 2)
       ir = %IR.RemoteFunctionCall{
         module: %IR.AtomType{value: Aaa.Bbb.Ccc},
         function: :my_fun!,
@@ -972,6 +1037,7 @@ defmodule Hologram.Compiler.EncoderTest do
     end
 
     test "called on variable" do
+      # x.my_fun!(1, 2)
       ir = %IR.RemoteFunctionCall{
         module: %IR.Variable{name: :x},
         function: :my_fun!,
@@ -983,6 +1049,7 @@ defmodule Hologram.Compiler.EncoderTest do
   end
 
   test "string type" do
+    # "aa\"bb\ncc"
     ir = %IR.StringType{value: "aa\"bb\ncc"}
 
     assert encode(ir, %Context{}) == ~s/Type.bitstring("aa\\"bb\\ncc")/
@@ -990,10 +1057,12 @@ defmodule Hologram.Compiler.EncoderTest do
 
   describe "tuple type" do
     test "empty" do
+      # {}
       assert encode(%IR.TupleType{data: []}, %Context{}) == "Type.tuple([])"
     end
 
     test "non-empty" do
+      # {1, :abc}
       ir = %IR.TupleType{
         data: [
           %IR.IntegerType{value: 1},
@@ -1007,15 +1076,18 @@ defmodule Hologram.Compiler.EncoderTest do
 
   describe "variable" do
     test "not inside pattern" do
+      # my_var
       assert encode(%IR.Variable{name: :my_var}, %Context{pattern?: false}) == "vars.my_var"
     end
 
     test "inside pattern" do
+      # my_var
       assert encode(%IR.Variable{name: :my_var}, %Context{pattern?: true}) ==
                ~s/Type.variablePattern("my_var")/
     end
 
     test "escape" do
+      # my_var?
       assert encode(%IR.Variable{name: :my_var?}, %Context{}) == "vars.my_var$263"
     end
   end
