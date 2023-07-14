@@ -49,7 +49,7 @@ defmodule Hologram.Compiler.CallGraph do
       iex> ir = %IR.LocalFunctionCall{function: :my_fun, args: [%IR.IntegerType{value: 123}]}
       iex> build(call_graph, ir, MyModule)
   """
-  @spec build(CallGraph.t(), IR.t(), module | nil) :: :ok
+  @spec build(CallGraph.t(), IR.t(), module | {module, atom, integer} | nil) :: :ok
   def build(call_graph, ir, from_vertex \\ nil)
 
   def build(call_graph, %IR.AtomType{value: value}, from_vertex) do
@@ -60,8 +60,14 @@ defmodule Hologram.Compiler.CallGraph do
     :ok
   end
 
+  def build(call_graph, %IR.FunctionDefinition{} = ir, from_vertex) do
+    new_from_vertex = {from_vertex, ir.name, ir.arity}
+    add_vertex(call_graph, new_from_vertex)
+    build(call_graph, ir.clause, new_from_vertex)
+  end
+
   def build(call_graph, %IR.ModuleDefinition{module: module, body: body}, _from_vertex) do
-    CallGraph.add_vertex(call_graph, module)
+    add_vertex(call_graph, module)
     build(call_graph, body, module)
   end
 

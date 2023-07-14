@@ -50,6 +50,33 @@ defmodule Hologram.Compiler.CallGraphTest do
       assert CallGraph.has_edge?(call_graph, :vertex_1, Aaa)
     end
 
+    test "function definition ir", %{call_graph: call_graph} do
+      ir = %IR.FunctionDefinition{
+        name: :my_fun,
+        arity: 2,
+        visibility: :public,
+        clause: %IR.FunctionClause{
+          params: [%IR.Variable{name: :x}, %IR.Variable{name: :y}],
+          guard: %IR.AtomType{value: Bbb},
+          body: %IR.Block{
+            expressions: [
+              %IR.AtomType{value: Ccc},
+              %IR.AtomType{value: Ddd}
+            ]
+          }
+        }
+      }
+
+      build(call_graph, ir, Aaa)
+      graph = graph(call_graph)
+
+      assert Graph.has_vertex?(graph, {Aaa, :my_fun, 2})
+
+      assert has_edge?(call_graph, {Aaa, :my_fun, 2}, Bbb)
+      assert has_edge?(call_graph, {Aaa, :my_fun, 2}, Ccc)
+      assert has_edge?(call_graph, {Aaa, :my_fun, 2}, Ddd)
+    end
+
     test "list", %{call_graph: call_graph} do
       list = [%IR.AtomType{value: Aaa}, %IR.AtomType{value: Bbb}]
       build(call_graph, list, :vertex_1)
