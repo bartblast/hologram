@@ -67,6 +67,11 @@ describe("deserialize()", () => {
   });
 });
 
+it("inspect() proxies to Kernel.inspect/2", () => {
+  const result = Hologram.inspect(Type.integer(123));
+  assert.equal(result, "123");
+});
+
 describe("inspectModuleName()", () => {
   it("inspects Elixir module name", () => {
     const result = Hologram.inspectModuleName("Elixir_Aaa_Bbb");
@@ -82,6 +87,10 @@ describe("inspectModuleName()", () => {
     const result = Hologram.inspectModuleName("Erlang_uri_string");
     assert.deepStrictEqual(result, ":uri_string");
   });
+});
+
+it("module()", () => {
+  assert.equal(Hologram.module("maps"), Erlang_maps);
 });
 
 describe("moduleName()", () => {
@@ -110,10 +119,6 @@ describe("moduleName()", () => {
     const result = Hologram.moduleName("Elixir.Aaa.Bbb");
     assert.equal(result, "Elixir_Aaa_Bbb");
   });
-});
-
-it("module()", () => {
-  assert.equal(Hologram.module("maps"), Erlang_maps);
 });
 
 it("raiseArgumentError()", () => {
