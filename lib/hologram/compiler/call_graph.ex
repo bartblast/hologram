@@ -65,6 +65,14 @@ defmodule Hologram.Compiler.CallGraph do
     :ok
   end
 
+  def build(call_graph, tuple, from_vertex) when is_tuple(tuple) do
+    tuple
+    |> Tuple.to_list()
+    |> Enum.each(&build(call_graph, &1, from_vertex))
+
+    :ok
+  end
+
   @doc """
   Returns the underlying libgraph %Graph{} struct containing the information about vertices and edges.
 
