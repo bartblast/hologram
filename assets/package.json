@@ -5,6 +5,7 @@
   "devDependencies": {
     "chai": "^4",
     "eslint": "^8",
+    "eslint-plugin-jsdoc": "^46",
     "mocha": "^10",
     "prettier": "^2",
     "sinon": "^15"

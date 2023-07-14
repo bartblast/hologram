@@ -4,7 +4,7 @@ module.exports = {
     es2021: true,
     mocha: true,
   },
-  extends: "eslint:recommended",
+  extends: ["eslint:recommended", "plugin:jsdoc/recommended-error"],
   globals: {
     Elixir_Enum: "readonly",
     Elixir_Kernel: "readonly",
@@ -27,6 +27,7 @@ module.exports = {
     ecmaVersion: "latest",
     sourceType: "module",
   },
+  plugins: ["jsdoc"],
   rules: {
     "no-unused-vars": [
       "error",
