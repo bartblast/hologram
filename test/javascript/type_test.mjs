@@ -648,19 +648,12 @@ describe("isVariablePattern()", () => {
   });
 });
 
-describe("list()", () => {
-  let data, expected, result;
+it("list()", () => {
+  const data = [Type.integer(1), Type.integer(2)];
+  const result = Type.list(data);
+  const expected = {type: "list", data: data};
 
-  beforeEach(() => {
-    data = [Type.integer(1), Type.integer(2)];
-
-    result = Type.list(data);
-    expected = {type: "list", data: data};
-  });
-
-  it("returns boxed list value", () => {
-    assert.deepStrictEqual(result, expected);
-  });
+  assert.deepStrictEqual(result, expected);
 });
 
 describe("map", () => {
@@ -723,19 +716,12 @@ it("struct()", () => {
   assert.deepStrictEqual(result, expected);
 });
 
-describe("tuple()", () => {
-  let data, expected, result;
+it("tuple()", () => {
+  const data = [Type.integer(1), Type.integer(2)];
+  const result = Type.tuple(data);
+  const expected = {type: "tuple", data: data};
 
-  beforeEach(() => {
-    data = [Type.integer(1), Type.integer(2)];
-
-    result = Type.tuple(data);
-    expected = {type: "tuple", data: data};
-  });
-
-  it("returns boxed tuple value", () => {
-    assert.deepStrictEqual(result, expected);
-  });
+  assert.deepStrictEqual(result, expected);
 });
 
 it("variablePattern()", () => {

@@ -58,9 +58,11 @@ describe("deserialize()", () => {
   });
 });
 
-it("inspect() proxies to Kernel.inspect/2", () => {
-  const result = Hologram.inspect(Type.integer(123));
-  assert.equal(result, "123");
+describe("inspect()", () => {
+  it("proxies to Kernel.inspect/2", () => {
+    const result = Hologram.inspect(Type.integer(123));
+    assert.equal(result, "123");
+  });
 });
 
 describe("inspectModuleName()", () => {
