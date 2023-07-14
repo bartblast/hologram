@@ -14,7 +14,9 @@ defmodule Hologram.Compiler.AnalyzerTest do
   }
 
   test "variable pattern" do
+    # x
     ir = %IR.Variable{name: :x}
+
     result = analyze(ir, %Context{pattern?: true}, @info)
 
     assert result == %Info{
@@ -24,7 +26,9 @@ defmodule Hologram.Compiler.AnalyzerTest do
   end
 
   test "variable value" do
+    # x
     ir = %IR.Variable{name: :x}
+
     result = analyze(ir, %Context{pattern?: false}, @info)
 
     assert result == %Info{
@@ -34,7 +38,9 @@ defmodule Hologram.Compiler.AnalyzerTest do
   end
 
   test "match operator" do
+    # x = y
     ir = %IR.MatchOperator{left: %IR.Variable{name: :x}, right: %IR.Variable{name: :y}}
+
     result = analyze(ir, @context, @info)
 
     assert result == %Info{
@@ -44,6 +50,7 @@ defmodule Hologram.Compiler.AnalyzerTest do
   end
 
   test "nested match operator" do
+    # x = y = z
     ir = %IR.MatchOperator{
       left: %IR.Variable{name: :x},
       right: %IR.MatchOperator{left: %IR.Variable{name: :y}, right: %IR.Variable{name: :z}}
@@ -58,6 +65,7 @@ defmodule Hologram.Compiler.AnalyzerTest do
   end
 
   test "list" do
+    # [a, b = c, d, e = f]
     ir = %IR.ListType{
       data: [
         %IR.Variable{name: :a},
@@ -76,6 +84,7 @@ defmodule Hologram.Compiler.AnalyzerTest do
   end
 
   test "map" do
+    # %{key_1 => a, :key_2 => b = c, :key_3 => d, key_4 => e = f}
     ir = %IR.MapType{
       data: [
         {%IR.Variable{name: :key_1}, %IR.Variable{name: :a}},
@@ -96,6 +105,7 @@ defmodule Hologram.Compiler.AnalyzerTest do
   end
 
   test "tuple" do
+    # {a, b = c, d, e = f}
     ir = %IR.TupleType{
       data: [
         %IR.Variable{name: :a},
@@ -114,7 +124,9 @@ defmodule Hologram.Compiler.AnalyzerTest do
   end
 
   test "basic type" do
+    # :abc
     ir = %IR.AtomType{value: :abc}
+
     result = analyze(ir, @context, @info)
 
     assert result == @info
