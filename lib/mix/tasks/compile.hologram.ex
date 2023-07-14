@@ -11,7 +11,7 @@ defmodule Mix.Tasks.Compile.Hologram do
 
   use Mix.Task.Compiler
 
-  alias Hologram.Commons.PersistentLookupTable, as: PLT
+  alias Hologram.Commons.PLT
   alias Hologram.Compiler.Builder
   alias Hologram.Compiler.Reflection
 

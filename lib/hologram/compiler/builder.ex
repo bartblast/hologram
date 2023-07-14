@@ -1,5 +1,5 @@
 defmodule Hologram.Compiler.Builder do
-  alias Hologram.Commons.PersistentLookupTable, as: PLT
+  alias Hologram.Commons.PLT
   alias Hologram.Compiler.IR
   alias Hologram.Compiler.Reflection
 
@@ -9,10 +9,7 @@ defmodule Hologram.Compiler.Builder do
   ## Examples
 
       iex> build_module_digest_plt(:abc)
-      %Hologram.Commons.PersistentLookupTable{
-        pid: #PID<0.251.0>,
-        name: :plt_abc
-      }
+      %PLT{pid: #PID<0.251.0>, name: :plt_abc}
   """
   @spec build_module_digest_plt(atom) :: PLT.t()
   def build_module_digest_plt(name) do
@@ -31,8 +28,8 @@ defmodule Hologram.Compiler.Builder do
 
   ## Examples
 
-      iex> old_plt = %PersistentLookupTable{pid: #PID<0.251.0>, name: :my_old_plt}
-      iex> new_plt = %PersistentLookupTable{pid: #PID<0.259.0>, name: :my_new_plt}
+      iex> old_plt = %PLT{pid: #PID<0.251.0>, name: :my_old_plt}
+      iex> new_plt = %PLT{pid: #PID<0.259.0>, name: :my_new_plt}
       iex> diff_module_digest_plts(old_plt, new_plt)
       %{
         added_modules: [Module5, Module9],
@@ -80,20 +77,14 @@ defmodule Hologram.Compiler.Builder do
 
   ## Examples
 
-      iex> plt = %PersistentLookupTable{
-        pid: #PID<0.251.0>,
-        name: :plt_abc
-      }
+      iex> plt = %PLT{pid: #PID<0.251.0>, name: :plt_abc}
       iex> diff = %{
       ...>   added_modules: [Module1, Module2],
       ...>   removed_modules: [Module5, Module6],
       ...>   updated_modules: [Module3, Module4]
       ...> }
       iex> patch_ir_plt(plt, diff)
-      %PersistentLookupTable{
-        pid: #PID<0.251.0>,
-        name: :plt_abc
-      }
+      %PLT{pid: #PID<0.251.0>, name: :plt_abc}
   """
   @spec patch_ir_plt(PLT.t(), map) :: PLT.t()
   def patch_ir_plt(ir_plt, diff) do

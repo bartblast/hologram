@@ -1,5 +1,5 @@
 defmodule Hologram.Test.Helpers do
-  alias Hologram.Commons.PersistentLookupTable, as: PLT
+  alias Hologram.Commons.PLT
   alias Hologram.Commons.ProcessUtils
   alias Hologram.Compiler.AST
   alias Hologram.Compiler.Context

@@ -35,7 +35,7 @@ defmodule Hologram.Compiler.CallGraph do
   ## Examples
 
       iex> call_graph = CallGraph{name: :my_call_graph, pid: #PID<0.259.0>}
-      iex> data(call_graph)
+      iex> graph(call_graph)
       #Graph<type: directed, vertices: [], edges: []>
   """
   @spec graph(CallGraph.t()) :: Graph.t()
@@ -87,10 +87,7 @@ defmodule Hologram.Compiler.CallGraph do
   ## Examples
 
       iex> start(name: :my_call_graph)
-      %Hologram.Compiler.CallGraph{
-        pid: #PID<0.259.0>,
-        name: :my_call_graph
-      }
+      %CallGraph{pid: #PID<0.259.0>, name: :my_call_graph}
   """
   @spec start(keyword) :: CallGraph.t()
   def start(opts) do

@@ -1,11 +1,16 @@
-defmodule Hologram.Commons.PersistentLookupTable do
+defmodule Hologram.Commons.PLT do
+  @moduledoc """
+  Provides a persistent lookup table (PLT) implemented using ETS (Erlang Term Storage) and GenServer.
+  It allows you to store key-value pairs in memory and perform various operations on the data.
+  """
+
   use GenServer
 
-  alias Hologram.Commons.PersistentLookupTable
+  alias Hologram.Commons.PLT
   alias Hologram.Commons.SerializationUtils
 
   defstruct pid: nil, name: nil
-  @type t :: %PersistentLookupTable{pid: pid, name: atom}
+  @type t :: %PLT{pid: pid, name: atom}
 
   @doc """
   Deletes a key-value pair from the give persistent lookup table.
@@ -15,7 +20,7 @@ defmodule Hologram.Commons.PersistentLookupTable do
       iex> delete(my_plt, :my_key)
       true
   """
-  @spec delete(PersistentLookupTable.t(), atom) :: true
+  @spec delete(PLT.t(), atom) :: true
   def delete(plt, key) do
     :ets.delete(plt.name, key)
   end
@@ -25,10 +30,10 @@ defmodule Hologram.Commons.PersistentLookupTable do
 
   ## Examples
 
-      iex> get(%PersistentLookupTable{name: :my_plt}, :my_key)
+      iex> get(%PLT{name: :my_plt}, :my_key)
       :my_value
   """
-  @spec get(PersistentLookupTable.t(), atom) :: {:ok, term} | :error
+  @spec get(PLT.t(), atom) :: {:ok, term} | :error
   def get(plt, key) do
     case :ets.lookup(plt.name, key) do
       [{^key, value}] ->
@@ -44,10 +49,10 @@ defmodule Hologram.Commons.PersistentLookupTable do
 
   ## Examples
 
-      iex> get_all(%PersistentLookupTable{name :my_plt})
+      iex> get_all(%PLT{name :my_plt})
       %{key_1: :value_1, key_2: :value_2}
   """
-  @spec get_all(PersistentLookupTable.t()) :: %{atom => term}
+  @spec get_all(PLT.t()) :: %{atom => term}
   def get_all(plt) do
     plt.name
     |> :ets.tab2list()
@@ -89,15 +94,15 @@ defmodule Hologram.Commons.PersistentLookupTable do
 
   ## Examples
 
-      iex> put(%PersistentLookupTable{name: :my_plt}, :my_key, :my_value)
+      iex> put(%PLT{name: :my_plt}, :my_key, :my_value)
       true
 
       iex> put(:my_plt, :my_key, :my_value)
       true
   """
-  @spec put(PersistentLookupTable.t() | atom, atom, term) :: true
+  @spec put(PLT.t() | atom, atom, term) :: true
 
-  def put(%PersistentLookupTable{name: name}, key, value) do
+  def put(%PLT{name: name}, key, value) do
     put(name, key, value)
   end
 
@@ -111,12 +116,12 @@ defmodule Hologram.Commons.PersistentLookupTable do
   ## Examples
 
       iex> start(name: :my_plt, dump_path: "/my_dump_path")
-      %PersistentLookupTable{pid: #PID<0.273.0>, name: :my_plt}
+      %PLT{pid: #PID<0.273.0>, name: :my_plt}
   """
-  @spec start(keyword) :: PersistentLookupTable.t()
+  @spec start(keyword) :: PLT.t()
   def start(opts) do
-    {:ok, pid} = GenServer.start_link(PersistentLookupTable, opts, name: opts[:name])
-    %PersistentLookupTable{pid: pid, name: opts[:name]}
+    {:ok, pid} = GenServer.start_link(PLT, opts, name: opts[:name])
+    %PLT{pid: pid, name: opts[:name]}
   end
 
   @doc """

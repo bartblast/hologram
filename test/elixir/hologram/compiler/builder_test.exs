@@ -2,7 +2,7 @@ defmodule Hologram.Compiler.BuilderTest do
   use Hologram.Test.BasicCase, async: true
   import Hologram.Compiler.Builder
 
-  alias Hologram.Commons.PersistentLookupTable, as: PLT
+  alias Hologram.Commons.PLT
   alias Hologram.Compiler.IR
   alias Hologram.Test.Fixtures.Compiler.Builder.Module1
   alias Hologram.Test.Fixtures.Compiler.Builder.Module2

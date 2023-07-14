@@ -1,8 +1,8 @@
-defmodule Hologram.Commons.PersistentLookupTableTest do
+defmodule Hologram.Commons.PLTTest do
   use Hologram.Test.BasicCase, async: false
-  import Hologram.Commons.PersistentLookupTable
+  import Hologram.Commons.PLT
 
-  alias Hologram.Commons.PersistentLookupTable
+  alias Hologram.Commons.PLT
   alias Hologram.Commons.SerializationUtils
 
   @dump_path "#{File.cwd!()}/tmp/plt_#{__MODULE__}.bin"
@@ -77,7 +77,7 @@ defmodule Hologram.Commons.PersistentLookupTableTest do
   end
 
   describe "put/3" do
-    test "first arg is %PersistentLookupTable{} struct" do
+    test "first arg is %PLT{} struct" do
       plt = start(@opts)
       put(plt, :key_3, :value_3)
 
@@ -93,16 +93,16 @@ defmodule Hologram.Commons.PersistentLookupTableTest do
   end
 
   describe "start/1" do
-    test "%PersistentLookupTable{} struct is returned" do
-      assert %PersistentLookupTable{} = start(@opts)
+    test "%PLT{} struct is returned" do
+      assert %PLT{} = start(@opts)
     end
 
     test "uses name from opts" do
-      assert %PersistentLookupTable{name: @name} = start(@opts)
+      assert %PLT{name: @name} = start(@opts)
     end
 
     test "process name is registered" do
-      %PersistentLookupTable{pid: pid} = start(@opts)
+      %PLT{pid: pid} = start(@opts)
       assert Process.whereis(@name) == pid
     end
 
