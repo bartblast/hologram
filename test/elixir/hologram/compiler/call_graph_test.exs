@@ -36,18 +36,26 @@ defmodule Hologram.Compiler.CallGraphTest do
   end
 
   describe "build/3" do
-    test "atom, which is not an alias", %{call_graph: call_graph} do
+    test "atom type ir, which is not an alias", %{call_graph: call_graph} do
       ir = %IR.AtomType{value: :abc}
       build(call_graph, ir, :vertex_1)
 
       refute CallGraph.has_edge?(call_graph, :vertex_1, :abc)
     end
 
-    test "atom, which is an alias", %{call_graph: call_graph} do
+    test "atom type ir, which is an alias", %{call_graph: call_graph} do
       ir = %IR.AtomType{value: Aaa.Bbb}
       build(call_graph, ir, :vertex_1)
 
       assert CallGraph.has_edge?(call_graph, :vertex_1, Aaa.Bbb)
+    end
+
+    test "list", %{call_graph: call_graph} do
+      list = [%IR.AtomType{value: Aaa}, %IR.AtomType{value: Bbb}]
+      build(call_graph, list, :vertex_1)
+
+      assert CallGraph.has_edge?(call_graph, :vertex_1, Aaa)
+      assert CallGraph.has_edge?(call_graph, :vertex_1, Bbb)
     end
   end
 
