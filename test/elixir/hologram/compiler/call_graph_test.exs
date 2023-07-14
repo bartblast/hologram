@@ -58,6 +58,20 @@ defmodule Hologram.Compiler.CallGraphTest do
       assert CallGraph.has_edge?(call_graph, :vertex_1, Bbb)
     end
 
+    test "map", %{call_graph: call_graph} do
+      map = %{
+        %IR.AtomType{value: Aaa} => %IR.AtomType{value: Bbb},
+        %IR.AtomType{value: Ccc} => %IR.AtomType{value: Ddd}
+      }
+
+      build(call_graph, map, :vertex_1)
+
+      assert CallGraph.has_edge?(call_graph, :vertex_1, Aaa)
+      assert CallGraph.has_edge?(call_graph, :vertex_1, Bbb)
+      assert CallGraph.has_edge?(call_graph, :vertex_1, Ccc)
+      assert CallGraph.has_edge?(call_graph, :vertex_1, Ddd)
+    end
+
     test "tuple", %{call_graph: call_graph} do
       tuple = {%IR.AtomType{value: Aaa}, %IR.AtomType{value: Bbb}}
       build(call_graph, tuple, :vertex_1)

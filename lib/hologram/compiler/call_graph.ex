@@ -65,6 +65,17 @@ defmodule Hologram.Compiler.CallGraph do
     :ok
   end
 
+  def build(call_graph, map, from_vertex) when is_map(map) do
+    map
+    |> Map.to_list()
+    |> Enum.each(fn {key, value} ->
+      build(call_graph, key, from_vertex)
+      build(call_graph, value, from_vertex)
+    end)
+
+    :ok
+  end
+
   def build(call_graph, tuple, from_vertex) when is_tuple(tuple) do
     tuple
     |> Tuple.to_list()
