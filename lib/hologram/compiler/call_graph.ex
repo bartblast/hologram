@@ -66,6 +66,13 @@ defmodule Hologram.Compiler.CallGraph do
     build(call_graph, ir.clause, new_from_vertex)
   end
 
+  def build(call_graph, %IR.LocalFunctionCall{} = ir, {module, _function, _arity} = from_vertex) do
+    to_vertex = {module, ir.function, Enum.count(ir.args)}
+    add_edge(call_graph, from_vertex, to_vertex)
+
+    build(call_graph, ir.args, from_vertex)
+  end
+
   def build(call_graph, %IR.ModuleDefinition{module: module, body: body}, _from_vertex) do
     add_vertex(call_graph, module)
     build(call_graph, body, module)

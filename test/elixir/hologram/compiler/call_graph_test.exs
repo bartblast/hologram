@@ -85,6 +85,20 @@ defmodule Hologram.Compiler.CallGraphTest do
       assert has_edge?(call_graph, :vertex_1, Bbb)
     end
 
+    test "local function call ir", %{call_graph: call_graph} do
+      ir = %IR.LocalFunctionCall{
+        function: :my_fun_2,
+        args: [%IR.AtomType{value: Bbb}, %IR.AtomType{value: Ccc}, %IR.AtomType{value: Ddd}]
+      }
+
+      build(call_graph, ir, {Aaa, :my_fun_1, 3})
+
+      assert has_edge?(call_graph, {Aaa, :my_fun_1, 3}, {Aaa, :my_fun_2, 3})
+      assert has_edge?(call_graph, {Aaa, :my_fun_1, 3}, Bbb)
+      assert has_edge?(call_graph, {Aaa, :my_fun_1, 3}, Ccc)
+      assert has_edge?(call_graph, {Aaa, :my_fun_1, 3}, Ddd)
+    end
+
     test "map", %{call_graph: call_graph} do
       map = %{
         %IR.AtomType{value: Aaa} => %IR.AtomType{value: Bbb},
