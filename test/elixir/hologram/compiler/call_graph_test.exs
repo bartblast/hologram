@@ -91,12 +91,12 @@ defmodule Hologram.Compiler.CallGraphTest do
         args: [%IR.AtomType{value: Bbb}, %IR.AtomType{value: Ccc}, %IR.AtomType{value: Ddd}]
       }
 
-      build(call_graph, ir, {Aaa, :my_fun_1, 3})
+      build(call_graph, ir, {Aaa, :my_fun_1, 4})
 
-      assert has_edge?(call_graph, {Aaa, :my_fun_1, 3}, {Aaa, :my_fun_2, 3})
-      assert has_edge?(call_graph, {Aaa, :my_fun_1, 3}, Bbb)
-      assert has_edge?(call_graph, {Aaa, :my_fun_1, 3}, Ccc)
-      assert has_edge?(call_graph, {Aaa, :my_fun_1, 3}, Ddd)
+      assert has_edge?(call_graph, {Aaa, :my_fun_1, 4}, {Aaa, :my_fun_2, 3})
+      assert has_edge?(call_graph, {Aaa, :my_fun_1, 4}, Bbb)
+      assert has_edge?(call_graph, {Aaa, :my_fun_1, 4}, Ccc)
+      assert has_edge?(call_graph, {Aaa, :my_fun_1, 4}, Ddd)
     end
 
     test "map", %{call_graph: call_graph} do
@@ -128,6 +128,21 @@ defmodule Hologram.Compiler.CallGraphTest do
 
       assert has_edge?(call_graph, Aaa, Bbb)
       assert has_edge?(call_graph, Aaa, Ccc)
+    end
+
+    test "remote function call ir", %{call_graph: call_graph} do
+      ir = %IR.RemoteFunctionCall{
+        module: %IR.AtomType{value: Bbb},
+        function: :my_fun_2,
+        args: [%IR.AtomType{value: Ccc}, %IR.AtomType{value: Ddd}, %IR.AtomType{value: Eee}]
+      }
+
+      build(call_graph, ir, {Aaa, :my_fun_1, 4})
+
+      assert has_edge?(call_graph, {Aaa, :my_fun_1, 4}, {Bbb, :my_fun_2, 3})
+      assert has_edge?(call_graph, {Aaa, :my_fun_1, 4}, Ccc)
+      assert has_edge?(call_graph, {Aaa, :my_fun_1, 4}, Ddd)
+      assert has_edge?(call_graph, {Aaa, :my_fun_1, 4}, Eee)
     end
 
     test "tuple", %{call_graph: call_graph} do
