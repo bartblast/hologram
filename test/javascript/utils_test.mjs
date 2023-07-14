@@ -85,7 +85,7 @@ describe("evaluate()", () => {
 
 describe("freeze()", () => {
   it("freezes object and all of its properties recursively (deep freeze)", () => {
-    let obj = {
+    const obj = {
       a: {
         c: {
           g: 1,
