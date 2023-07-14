@@ -60,6 +60,11 @@ defmodule Hologram.Compiler.CallGraph do
     :ok
   end
 
+  def build(call_graph, %IR.ModuleDefinition{module: module, body: body}, _from_vertex) do
+    CallGraph.add_vertex(call_graph, module)
+    build(call_graph, body, module)
+  end
+
   def build(call_graph, list, from_vertex) when is_list(list) do
     Enum.each(list, &build(call_graph, &1, from_vertex))
     :ok
@@ -83,6 +88,8 @@ defmodule Hologram.Compiler.CallGraph do
 
     :ok
   end
+
+  def build(_call_graph, _ir, _from_vertex), do: :ok
 
   @doc """
   Returns the underlying libgraph %Graph{} struct containing the information about vertices and edges.

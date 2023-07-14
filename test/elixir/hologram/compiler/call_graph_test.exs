@@ -44,10 +44,10 @@ defmodule Hologram.Compiler.CallGraphTest do
     end
 
     test "atom type ir, which is an alias", %{call_graph: call_graph} do
-      ir = %IR.AtomType{value: Aaa.Bbb}
+      ir = %IR.AtomType{value: Aaa}
       build(call_graph, ir, :vertex_1)
 
-      assert CallGraph.has_edge?(call_graph, :vertex_1, Aaa.Bbb)
+      assert CallGraph.has_edge?(call_graph, :vertex_1, Aaa)
     end
 
     test "list", %{call_graph: call_graph} do
@@ -70,6 +70,23 @@ defmodule Hologram.Compiler.CallGraphTest do
       assert CallGraph.has_edge?(call_graph, :vertex_1, Bbb)
       assert CallGraph.has_edge?(call_graph, :vertex_1, Ccc)
       assert CallGraph.has_edge?(call_graph, :vertex_1, Ddd)
+    end
+
+    test "module definition ir", %{call_graph: call_graph} do
+      ir = %IR.ModuleDefinition{
+        module: Aaa,
+        body: %IR.Block{
+          expressions: [
+            %IR.AtomType{value: Bbb},
+            %IR.AtomType{value: Ccc}
+          ]
+        }
+      }
+
+      build(call_graph, ir)
+
+      assert CallGraph.has_edge?(call_graph, Aaa, Bbb)
+      assert CallGraph.has_edge?(call_graph, Aaa, Ccc)
     end
 
     test "tuple", %{call_graph: call_graph} do
