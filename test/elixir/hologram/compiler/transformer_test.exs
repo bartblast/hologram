@@ -7,8 +7,7 @@ defmodule Hologram.Compiler.TransformerTest do
 
   describe "anonymous function call" do
     test "without args" do
-      # test.()
-      ast = {{:., [line: 1], [{:test, [line: 1], nil}]}, [line: 1], []}
+      ast = ast("test.()")
 
       assert transform(ast, %Context{}) == %IR.AnonymousFunctionCall{
                function: %IR.Variable{name: :test},
@@ -17,8 +16,7 @@ defmodule Hologram.Compiler.TransformerTest do
     end
 
     test "with args" do
-      # test.(1, 2)
-      ast = {{:., [line: 1], [{:test, [line: 1], nil}]}, [line: 1], [1, 2]}
+      ast = ast("test.(1, 2)")
 
       assert transform(ast, %Context{}) == %IR.AnonymousFunctionCall{
                function: %IR.Variable{name: :test},
@@ -32,8 +30,7 @@ defmodule Hologram.Compiler.TransformerTest do
 
   describe "anonymous function type" do
     test "single clause, no params, single expression body" do
-      # fn -> :expr_1 end
-      ast = {:fn, [line: 1], [{:->, [line: 1], [[], {:__block__, [], [:expr_1]}]}]}
+      ast = ast("fn -> :expr_1 end")
 
       assert transform(ast, %Context{}) == %IR.AnonymousFunctionType{
                arity: 0,
@@ -49,10 +46,7 @@ defmodule Hologram.Compiler.TransformerTest do
     end
 
     test "single param" do
-      # fn x -> :expr_1 end
-      ast =
-        {:fn, [line: 1],
-         [{:->, [line: 1], [[{:x, [line: 1], nil}], {:__block__, [], [:expr_1]}]}]}
+      ast = ast("fn x -> :expr_1 end")
 
       assert %IR.AnonymousFunctionType{
                arity: 1,
@@ -65,13 +59,7 @@ defmodule Hologram.Compiler.TransformerTest do
     end
 
     test "multiple params" do
-      # fn x, y -> :expr_1 end
-      ast =
-        {:fn, [line: 1],
-         [
-           {:->, [line: 1],
-            [[{:x, [line: 1], nil}, {:y, [line: 1], nil}], {:__block__, [], [:expr_1]}]}
-         ]}
+      ast = ast("fn x, y -> :expr_1 end")
 
       assert %IR.AnonymousFunctionType{
                arity: 2,
@@ -87,15 +75,13 @@ defmodule Hologram.Compiler.TransformerTest do
     end
 
     test "multiple expressions body" do
-      # fn x ->
-      #   :expr_1
-      #   :expr_2
-      # end
       ast =
-        {:fn, [line: 1],
-         [
-           {:->, [line: 1], [[{:x, [line: 1], nil}], {:__block__, [], [:expr_1, :expr_2]}]}
-         ]}
+        ast("""
+        fn x ->
+          :expr_1
+          :expr_2
+        end
+        """)
 
       assert %IR.AnonymousFunctionType{
                clauses: [
@@ -112,18 +98,15 @@ defmodule Hologram.Compiler.TransformerTest do
     end
 
     test "multiple clauses" do
-      # fn
-      #   x ->
-      #     :expr_1
-      #   y ->
-      #     :expr_2
-      # end
       ast =
-        {:fn, [line: 1],
-         [
-           {:->, [line: 2], [[{:x, [line: 2], nil}], {:__block__, [], [:expr_1]}]},
-           {:->, [line: 4], [[{:y, [line: 4], nil}], {:__block__, [], [:expr_2]}]}
-         ]}
+        ast("""
+        fn
+          x ->
+            :expr_1
+          y ->
+            :expr_2
+        end
+        """)
 
       assert transform(ast, %Context{}) == %IR.AnonymousFunctionType{
                arity: 1,
@@ -145,23 +128,7 @@ defmodule Hologram.Compiler.TransformerTest do
     end
 
     test "clause with guard" do
-      # fn x, y when is_integer(x) -> :expr_1 end
-      ast =
-        {:fn, [line: 1],
-         [
-           {:->, [line: 1],
-            [
-              [
-                {:when, [line: 1],
-                 [
-                   {:x, [line: 1], nil},
-                   {:y, [line: 1], nil},
-                   {:is_integer, [line: 1], [{:x, [line: 1], nil}]}
-                 ]}
-              ],
-              {:__block__, [], [:expr_1]}
-            ]}
-         ]}
+      ast = ast("fn x, y when is_integer(x) -> :expr_1 end")
 
       assert transform(ast, %Context{}) == %IR.AnonymousFunctionType{
                arity: 2,
@@ -186,29 +153,25 @@ defmodule Hologram.Compiler.TransformerTest do
 
   describe "atom type" do
     test "boolean" do
-      # true
-      ast = true
+      ast = ast("true")
 
       assert transform(ast, %Context{}) == %IR.AtomType{value: true}
     end
 
     test "nil" do
-      # nil
-      ast = nil
+      ast = ast("nil")
 
       assert transform(ast, %Context{}) == %IR.AtomType{value: nil}
     end
 
     test "other than boolean or nil" do
-      # :test
-      ast = :test
+      ast = ast(":test")
 
       assert transform(ast, %Context{}) == %IR.AtomType{value: :test}
     end
 
     test "double quoted" do
-      # :"aaa bbb"
-      ast = :"aaa bbb"
+      ast = ast(":\"aaa bbb\"")
 
       assert transform(ast, %Context{}) == %IR.AtomType{value: :"aaa bbb"}
     end
@@ -216,30 +179,26 @@ defmodule Hologram.Compiler.TransformerTest do
 
   describe "bitstring type" do
     test "empty" do
-      # <<>>
-      ast = {:<<>>, [line: 1], []}
+      ast = ast("<<>>")
 
       assert transform(ast, %Context{}) == %IR.BitstringType{segments: []}
     end
 
     test "single segment" do
-      # <<987>>
-      ast = {:<<>>, [line: 1], [987]}
+      ast = ast("<<987>>")
 
       assert %IR.BitstringType{segments: [%IR.BitstringSegment{}]} = transform(ast, %Context{})
     end
 
     test "multiple segments" do
-      # <<987, 876>>
-      ast = {:<<>>, [line: 1], [987, 876]}
+      ast = ast("<<987, 876>>")
 
       assert %IR.BitstringType{segments: [%IR.BitstringSegment{}, %IR.BitstringSegment{}]} =
                transform(ast, %Context{})
     end
 
     test "nested bitstrings are flattened" do
-      # <<333, <<444, 555, 666>>, 777>>
-      ast = {:<<>>, [line: 1], [333, {:<<>>, [line: 1], [444, 555, 666]}, 777]}
+      ast = ast("<<333, <<444, 555, 666>>, 777>>")
 
       assert %IR.BitstringType{
                segments: [
@@ -255,9 +214,7 @@ defmodule Hologram.Compiler.TransformerTest do
     # --- ENDIANNESS MODIFIER ---
 
     test "big endianness modifier" do
-      # <<xyz::big>>
-      ast =
-        {:<<>>, [line: 1], [{:"::", [line: 1], [{:xyz, [line: 1], nil}, {:big, [line: 1], nil}]}]}
+      ast = ast("<<xyz::big>>")
 
       assert %IR.BitstringType{
                segments: [%IR.BitstringSegment{modifiers: [type: :integer, endianness: :big]}]
@@ -265,10 +222,7 @@ defmodule Hologram.Compiler.TransformerTest do
     end
 
     test "little endianness modifier" do
-      # <<xyz::little>>
-      ast =
-        {:<<>>, [line: 1],
-         [{:"::", [line: 1], [{:xyz, [line: 1], nil}, {:little, [line: 1], nil}]}]}
+      ast = ast("<<xyz::little>>")
 
       assert %IR.BitstringType{
                segments: [%IR.BitstringSegment{modifiers: [type: :integer, endianness: :little]}]
@@ -276,10 +230,7 @@ defmodule Hologram.Compiler.TransformerTest do
     end
 
     test "native endianness modifier" do
-      # <<xyz::native>>
-      ast =
-        {:<<>>, [line: 1],
-         [{:"::", [line: 1], [{:xyz, [line: 1], nil}, {:native, [line: 1], nil}]}]}
+      ast = ast("<<xyz::native>>")
 
       assert %IR.BitstringType{
                segments: [%IR.BitstringSegment{modifiers: [type: :integer, endianness: :native]}]
@@ -289,10 +240,7 @@ defmodule Hologram.Compiler.TransformerTest do
     # --- SIGNEDNESS MODIFIER ---
 
     test "signed signedness modifier" do
-      # <<xyz::signed>>
-      ast =
-        {:<<>>, [line: 1],
-         [{:"::", [line: 1], [{:xyz, [line: 1], nil}, {:signed, [line: 1], nil}]}]}
+      ast = ast("<<xyz::signed>>")
 
       assert %IR.BitstringType{
                segments: [%IR.BitstringSegment{modifiers: [type: :integer, signedness: :signed]}]
@@ -300,10 +248,7 @@ defmodule Hologram.Compiler.TransformerTest do
     end
 
     test "unsigned signedness modifier" do
-      # <<xyz::unsigned>>
-      ast =
-        {:<<>>, [line: 1],
-         [{:"::", [line: 1], [{:xyz, [line: 1], nil}, {:unsigned, [line: 1], nil}]}]}
+      ast = ast("<<xyz::unsigned>>")
 
       assert %IR.BitstringType{
                segments: [
@@ -315,10 +260,7 @@ defmodule Hologram.Compiler.TransformerTest do
     # --- SIZE MODIFIER ---
 
     test "explicit size modifier syntax" do
-      # <<xyz::size(3)>>
-      ast =
-        {:<<>>, [line: 1],
-         [{:"::", [line: 1], [{:xyz, [line: 1], nil}, {:size, [line: 1], [3]}]}]}
+      ast = ast("<<xyz::size(3)>>")
 
       assert %IR.BitstringType{
                segments: [
@@ -330,8 +272,7 @@ defmodule Hologram.Compiler.TransformerTest do
     end
 
     test "shorthand size modifier syntax" do
-      # <<xyz::3>>
-      ast = {:<<>>, [line: 1], [{:"::", [line: 1], [{:xyz, [line: 1], nil}, 3]}]}
+      ast = ast("<<xyz::3>>")
 
       assert %IR.BitstringType{
                segments: [
@@ -343,10 +284,7 @@ defmodule Hologram.Compiler.TransformerTest do
     end
 
     test "shorthand size modifier syntax inside size * unit group" do
-      # <<xyz::3*5>>
-      ast =
-        {:<<>>, [line: 1],
-         [{:"::", [line: 1], [{:xyz, [line: 1], nil}, {:*, [line: 1], [3, 5]}]}]}
+      ast = ast("<<xyz::3*5>>")
 
       assert %IR.BitstringType{
                segments: [
@@ -360,135 +298,98 @@ defmodule Hologram.Compiler.TransformerTest do
     # --- TYPE MODIFIER ---
 
     test "default type for float literal" do
-      # <<5.0>>
-      ast = {:<<>>, [line: 1], [5.0]}
+      ast = ast("<<5.0>>")
 
       assert %IR.BitstringType{segments: [%IR.BitstringSegment{modifiers: [type: :float]}]} =
                transform(ast, %Context{})
     end
 
     test "default type for integer literal" do
-      # <<5>>
-      ast = {:<<>>, [line: 1], [5]}
+      ast = ast("<<5>>")
 
       assert %IR.BitstringType{segments: [%IR.BitstringSegment{modifiers: [type: :integer]}]} =
                transform(ast, %Context{})
     end
 
     test "default type for string literal" do
-      # <<"abc">>
-      ast = {:<<>>, [line: 1], ["abc"]}
+      ast = ast("<<\"abc\">>")
 
       assert %IR.BitstringType{segments: [%IR.BitstringSegment{modifiers: [type: :utf8]}]} =
                transform(ast, %Context{})
     end
 
     test "default type for variable" do
-      # <<xyz>>
-      ast = {:<<>>, [line: 1], [{:xyz, [line: 1], nil}]}
+      ast = ast("<<xyz>>")
 
       assert %IR.BitstringType{segments: [%IR.BitstringSegment{modifiers: [type: :integer]}]} =
                transform(ast, %Context{})
     end
 
     test "default type for expression" do
-      # <<Map.get(my_map, :my_key)>>
-      ast =
-        {:<<>>, [line: 1],
-         [
-           {{:., [line: 1], [{:__aliases__, [line: 1], [:Map]}, :get]}, [line: 1],
-            [{:my_map, [line: 1], nil}, :my_key]}
-         ]}
+      ast = ast("<<Map.get(my_map, :my_key)>>")
 
       assert %IR.BitstringType{segments: [%IR.BitstringSegment{modifiers: [type: :integer]}]} =
                transform(ast, %Context{})
     end
 
     test "binary type modifier" do
-      # <<xyz::binary>>
-      ast =
-        {:<<>>, [line: 1],
-         [{:"::", [line: 1], [{:xyz, [line: 1], nil}, {:binary, [line: 1], nil}]}]}
+      ast = ast("<<xyz::binary>>")
 
       assert %IR.BitstringType{segments: [%IR.BitstringSegment{modifiers: [type: :binary]}]} =
                transform(ast, %Context{})
     end
 
     test "bits type modifier" do
-      # <<xyz::bits>>
-      ast =
-        {:<<>>, [line: 1],
-         [{:"::", [line: 1], [{:xyz, [line: 1], nil}, {:bits, [line: 1], nil}]}]}
+      ast = ast("<<xyz::bits>>")
 
       assert %IR.BitstringType{segments: [%IR.BitstringSegment{modifiers: [type: :bitstring]}]} =
                transform(ast, %Context{})
     end
 
     test "bitstring type modifier" do
-      # <<xyz::bitstring>>
-      ast =
-        {:<<>>, [line: 1],
-         [{:"::", [line: 1], [{:xyz, [line: 1], nil}, {:bitstring, [line: 1], nil}]}]}
+      ast = ast("<<xyz::bitstring>>")
 
       assert %IR.BitstringType{segments: [%IR.BitstringSegment{modifiers: [type: :bitstring]}]} =
                transform(ast, %Context{})
     end
 
     test "bytes type modifier" do
-      # <<xyz::bytes>>
-      ast =
-        {:<<>>, [line: 1],
-         [{:"::", [line: 1], [{:xyz, [line: 1], nil}, {:bytes, [line: 1], nil}]}]}
+      ast = ast("<<xyz::bytes>>")
 
       assert %IR.BitstringType{segments: [%IR.BitstringSegment{modifiers: [type: :binary]}]} =
                transform(ast, %Context{})
     end
 
     test "float type modifier" do
-      # <<xyz::float>>
-      ast =
-        {:<<>>, [line: 1],
-         [{:"::", [line: 1], [{:xyz, [line: 1], nil}, {:float, [line: 1], nil}]}]}
+      ast = ast("<<xyz::float>>")
 
       assert %IR.BitstringType{segments: [%IR.BitstringSegment{modifiers: [type: :float]}]} =
                transform(ast, %Context{})
     end
 
     test "integer type modifier" do
-      # <<xyz::integer>>
-      ast =
-        {:<<>>, [line: 1],
-         [{:"::", [line: 1], [{:xyz, [line: 1], nil}, {:integer, [line: 1], nil}]}]}
+      ast = ast("<<xyz::integer>>")
 
       assert %IR.BitstringType{segments: [%IR.BitstringSegment{modifiers: [type: :integer]}]} =
                transform(ast, %Context{})
     end
 
     test "utf8 type modifier" do
-      # <<xyz::utf8>>
-      ast =
-        {:<<>>, [line: 1],
-         [{:"::", [line: 1], [{:xyz, [line: 1], nil}, {:utf8, [line: 1], nil}]}]}
+      ast = ast("<<xyz::utf8>>")
 
       assert %IR.BitstringType{segments: [%IR.BitstringSegment{modifiers: [type: :utf8]}]} =
                transform(ast, %Context{})
     end
 
     test "utf16 type modifier" do
-      # <<xyz::utf16>>
-      ast =
-        {:<<>>, [line: 1],
-         [{:"::", [line: 1], [{:xyz, [line: 1], nil}, {:utf16, [line: 1], nil}]}]}
+      ast = ast("<<xyz::utf16>>")
 
       assert %IR.BitstringType{segments: [%IR.BitstringSegment{modifiers: [type: :utf16]}]} =
                transform(ast, %Context{})
     end
 
     test "utf32 type modifier" do
-      # <<xyz::utf32>>
-      ast =
-        {:<<>>, [line: 1],
-         [{:"::", [line: 1], [{:xyz, [line: 1], nil}, {:utf32, [line: 1], nil}]}]}
+      ast = ast("<<xyz::utf32>>")
 
       assert %IR.BitstringType{segments: [%IR.BitstringSegment{modifiers: [type: :utf32]}]} =
                transform(ast, %Context{})
@@ -497,10 +398,7 @@ defmodule Hologram.Compiler.TransformerTest do
     # --- UNIT MODIFIER ---
 
     test "explicit unit modifier syntax" do
-      # <<xyz::unit(3)>>
-      ast =
-        {:<<>>, [line: 1],
-         [{:"::", [line: 1], [{:xyz, [line: 1], nil}, {:unit, [line: 1], [3]}]}]}
+      ast = ast("<<xyz::unit(3)>>")
 
       assert %IR.BitstringType{
                segments: [%IR.BitstringSegment{modifiers: [type: :integer, unit: 3]}]
@@ -508,10 +406,7 @@ defmodule Hologram.Compiler.TransformerTest do
     end
 
     test "shorthand unit modifier syntax inside size * unit group" do
-      # <<xyz::3*5>>
-      ast =
-        {:<<>>, [line: 1],
-         [{:"::", [line: 1], [{:xyz, [line: 1], nil}, {:*, [line: 1], [3, 5]}]}]}
+      ast = ast("<<xyz::3*5>>")
 
       assert %IR.BitstringType{
                segments: [
@@ -525,37 +420,28 @@ defmodule Hologram.Compiler.TransformerTest do
     # --- VALUE ---
 
     test "integer value" do
-      # <<6>>
-      ast = {:<<>>, [line: 1], [6]}
+      ast = ast("<<6>>")
 
       assert %IR.BitstringType{segments: [%IR.BitstringSegment{value: %IR.IntegerType{value: 6}}]} =
                transform(ast, %Context{})
     end
 
     test "string value" do
-      # <<"my_str">>
-      ast = {:<<>>, [line: 1], ["my_str"]}
+      ast = ast("<<\"my_str\">>")
 
       %IR.BitstringType{segments: [%IR.BitstringSegment{value: %IR.StringType{value: "my_str"}}]} =
         transform(ast, %Context{})
     end
 
     test "variable value" do
-      # <<xyz>>
-      ast = {:<<>>, [line: 1], [{:xyz, [line: 1], nil}]}
+      ast = ast("<<xyz>>")
 
       assert %IR.BitstringType{segments: [%IR.BitstringSegment{value: %IR.Variable{name: :xyz}}]} =
                transform(ast, %Context{})
     end
 
     test "expression value" do
-      # <<Map.get(my_map, :my_key)>>
-      ast =
-        {:<<>>, [line: 1],
-         [
-           {{:., [line: 1], [{:__aliases__, [line: 1], [:Map]}, :get]}, [line: 1],
-            [{:my_map, [line: 1], nil}, :my_key]}
-         ]}
+      ast = ast("<<Map.get(my_map, :my_key)>>")
 
       %IR.BitstringType{
         segments: [
@@ -586,8 +472,7 @@ defmodule Hologram.Compiler.TransformerTest do
 
   describe "capture operator" do
     test "local function capture" do
-      # &my_fun/2
-      ast = {:&, [line: 1], [{:/, [line: 1], [{:my_fun, [line: 1], nil}, 2]}]}
+      ast = ast("&my_fun/2")
 
       assert transform(ast, %Context{}) == %IR.AnonymousFunctionType{
                arity: 2,
@@ -614,17 +499,7 @@ defmodule Hologram.Compiler.TransformerTest do
     end
 
     test "remote function capture" do
-      # &Calendar.ISO.parse_date/2
-      ast =
-        {:&, [line: 1],
-         [
-           {:/, [line: 1],
-            [
-              {{:., [line: 1], [{:__aliases__, [line: 1], [:Calendar, :ISO]}, :parse_date]},
-               [no_parens: true, line: 1], []},
-              2
-            ]}
-         ]}
+      ast = ast("&Calendar.ISO.parse_date/2")
 
       assert transform(ast, %Context{}) == %IR.AnonymousFunctionType{
                arity: 2,
@@ -652,10 +527,7 @@ defmodule Hologram.Compiler.TransformerTest do
     end
 
     test "partially applied local function" do
-      # &my_fun(&1, 2, [3, &4])
-      ast =
-        {:&, [line: 1],
-         [{:my_fun, [line: 1], [{:&, [line: 1], [1]}, 2, [3, {:&, [line: 1], [4]}]]}]}
+      ast = ast("&my_fun(&1, 2, [3, &4])")
 
       assert transform(ast, %Context{}) == %IR.AnonymousFunctionType{
                arity: 4,
@@ -690,13 +562,7 @@ defmodule Hologram.Compiler.TransformerTest do
     end
 
     test "partially applied remote function" do
-      # &Aaa.Bbb.my_fun(&1, 2, [3, &4])
-      ast =
-        {:&, [line: 1],
-         [
-           {{:., [line: 1], [{:__aliases__, [line: 1], [:Aaa, :Bbb]}, :my_fun]}, [line: 1],
-            [{:&, [line: 1], [1]}, 2, [3, {:&, [line: 1], [4]}]]}
-         ]}
+      ast = ast("&Aaa.Bbb.my_fun(&1, 2, [3, &4])")
 
       assert transform(ast, %Context{}) == %IR.AnonymousFunctionType{
                arity: 4,
@@ -732,9 +598,7 @@ defmodule Hologram.Compiler.TransformerTest do
     end
 
     test "partially applied anonymous function" do
-      # &([&1, 2, my_fun(&3)])
-      ast =
-        {:&, [line: 1], [[{:&, [line: 1], [1]}, 2, {:my_fun, [line: 1], [{:&, [line: 1], [3]}]}]]}
+      ast = ast("&([&1, 2, my_fun(&3)])")
 
       assert transform(ast, %Context{}) == %IR.AnonymousFunctionType{
                arity: 3,
@@ -767,15 +631,12 @@ defmodule Hologram.Compiler.TransformerTest do
 
   describe "case" do
     test "single clause without guard, single expression body" do
-      # case x do
-      #   1 -> :expr_1
-      # end
       ast =
-        {:case, [line: 2],
-         [
-           {:x, [line: 2], nil},
-           [do: [{:->, [line: 3], [[1], {:__block__, [], [:expr_1]}]}]]
-         ]}
+        ast("""
+        case x do
+          1 -> :expr_1
+        end
+        """)
 
       assert transform(ast, %Context{}) == %IR.Case{
                condition: %IR.Variable{name: :x},
@@ -792,21 +653,13 @@ defmodule Hologram.Compiler.TransformerTest do
     end
 
     test "multiple clauses" do
-      # case x do
-      #   1 -> :expr_1
-      #   2 -> :expr_2
-      # end
       ast =
-        {:case, [line: 2],
-         [
-           {:x, [line: 2], nil},
-           [
-             do: [
-               {:->, [line: 3], [[1], {:__block__, [], [:expr_1]}]},
-               {:->, [line: 4], [[2], {:__block__, [], [:expr_2]}]}
-             ]
-           ]
-         ]}
+        ast("""
+        case x do
+          1 -> :expr_1
+          2 -> :expr_2
+        end
+        """)
 
       assert transform(ast, %Context{}) == %IR.Case{
                condition: %IR.Variable{name: :x},
@@ -830,17 +683,14 @@ defmodule Hologram.Compiler.TransformerTest do
     end
 
     test "multiple expressions body" do
-      # case x do
-      #   1 ->
-      #     :expr_1
-      #     :expr_2
-      # end
       ast =
-        {:case, [line: 2],
-         [
-           {:x, [line: 2], nil},
-           [do: [{:->, [line: 3], [[1], {:__block__, [], [:expr_1, :expr_2]}]}]]
-         ]}
+        ast("""
+        case x do
+          1 ->
+            :expr_1
+            :expr_2
+        end
+        """)
 
       assert transform(ast, %Context{}) == %IR.Case{
                condition: %IR.Variable{name: :x},
@@ -860,29 +710,12 @@ defmodule Hologram.Compiler.TransformerTest do
     end
 
     test "guard" do
-      # case x do
-      #   {:ok, n} when is_integer(n) -> :expr_1
-      # end
       ast =
-        {:case, [line: 1],
-         [
-           {:x, [line: 1], nil},
-           [
-             do: [
-               {:->, [line: 2],
-                [
-                  [
-                    {:when, [line: 2],
-                     [
-                       {:ok, {:n, [line: 2], nil}},
-                       {:is_integer, [line: 2], [{:n, [line: 2], nil}]}
-                     ]}
-                  ],
-                  {:__block__, [], [:expr_1]}
-                ]}
-             ]
-           ]
-         ]}
+        ast("""
+        case x do
+          {:ok, n} when is_integer(n) -> :expr_1
+        end
+        """)
 
       assert transform(ast, %Context{}) == %IR.Case{
                condition: %IR.Variable{name: :x},
@@ -908,15 +741,7 @@ defmodule Hologram.Compiler.TransformerTest do
   end
 
   describe "comprehension" do
-    # for a <- [1, 2], do: a * a
-    @ast {:for, [line: 1],
-          [
-            {:<-, [line: 1], [{:a, [line: 1], nil}, [1, 2]]},
-            [
-              do:
-                {:__block__, [], [{:*, [line: 1], [{:a, [line: 1], nil}, {:n, [line: 1], nil}]}]}
-            ]
-          ]}
+    @ast ast("for a <- [1, 2], do: a * a")
 
     test "single generator" do
       assert %IR.Comprehension{
@@ -925,16 +750,7 @@ defmodule Hologram.Compiler.TransformerTest do
     end
 
     test "multiple generators" do
-      # for a <- [1, 2], b <- [3, 4], do: a * b
-      ast =
-        {:for, [line: 1],
-         [
-           {:<-, [line: 1], [{:a, [line: 1], nil}, [1, 2]]},
-           {:<-, [line: 1], [{:b, [line: 1], nil}, [3, 4]]},
-           [
-             do: {:__block__, [], [{:*, [line: 1], [{:a, [line: 1], nil}, {:b, [line: 1], nil}]}]}
-           ]
-         ]}
+      ast = ast("for a <- [1, 2], b <- [3, 4], do: a * b")
 
       assert %IR.Comprehension{
                generators: [
@@ -970,15 +786,7 @@ defmodule Hologram.Compiler.TransformerTest do
     end
 
     test "multiple variables in generator match" do
-      # for {a, b} <- [{1, 2}, {3, 4}], do: a * b
-      ast =
-        {:for, [line: 1],
-         [
-           {:<-, [line: 1], [{{:a, [line: 1], nil}, {:b, [line: 1], nil}}, [{1, 2}, {3, 4}]]},
-           [
-             do: {:__block__, [], [{:*, [line: 1], [{:a, [line: 1], nil}, {:b, [line: 1], nil}]}]}
-           ]
-         ]}
+      ast = ast("for {a, b} <- [{1, 2}, {3, 4}], do: a * b")
 
       assert %IR.Comprehension{
                generators: [
@@ -995,20 +803,7 @@ defmodule Hologram.Compiler.TransformerTest do
     end
 
     test "generator guard" do
-      # for a when my_guard(a, 2) <- [1, 2, 3], do: a * a
-      ast =
-        {:for, [line: 1],
-         [
-           {:<-, [line: 1],
-            [
-              {:when, [line: 1],
-               [{:a, [line: 1], nil}, {:my_guard, [line: 1], [{:a, [line: 1], nil}, 2]}]},
-              [1, 2, 3]
-            ]},
-           [
-             do: {:__block__, [], [{:*, [line: 1], [{:a, [line: 1], nil}, {:a, [line: 1], nil}]}]}
-           ]
-         ]}
+      ast = ast("for a when my_guard(a, 2) <- [1, 2, 3], do: a * a")
 
       assert %IR.Comprehension{
                generators: [
@@ -1030,16 +825,7 @@ defmodule Hologram.Compiler.TransformerTest do
     end
 
     test "single filter" do
-      # for a <- [1, 2], my_filter(a), do: a * a
-      ast =
-        {:for, [line: 1],
-         [
-           {:<-, [line: 1], [{:a, [line: 1], nil}, [1, 2]]},
-           {:my_filter, [line: 1], [{:a, [line: 1], nil}]},
-           [
-             do: {:__block__, [], [{:*, [line: 1], [{:a, [line: 1], nil}, {:a, [line: 1], nil}]}]}
-           ]
-         ]}
+      ast = ast("for a <- [1, 2], my_filter(a), do: a * a")
 
       assert %IR.Comprehension{
                filters: [
@@ -1054,17 +840,7 @@ defmodule Hologram.Compiler.TransformerTest do
     end
 
     test "multiple filters" do
-      # for a <- [1, 2], my_filter_1(a), my_filter_2(a), do: a * a
-      ast =
-        {:for, [line: 1],
-         [
-           {:<-, [line: 1], [{:a, [line: 1], nil}, [1, 2]]},
-           {:my_filter_1, [line: 1], [{:a, [line: 1], nil}]},
-           {:my_filter_2, [line: 1], [{:a, [line: 1], nil}]},
-           [
-             do: {:__block__, [], [{:*, [line: 1], [{:a, [line: 1], nil}, {:a, [line: 1], nil}]}]}
-           ]
-         ]}
+      ast = ast("for a <- [1, 2], my_filter_1(a), my_filter_2(a), do: a * a")
 
       assert %IR.Comprehension{
                filters: [
@@ -1089,16 +865,7 @@ defmodule Hologram.Compiler.TransformerTest do
     end
 
     test "custom collectable" do
-      # for a <- [1, 2], into: my_collectable(123), do: a * a
-      ast =
-        {:for, [line: 1],
-         [
-           {:<-, [line: 1], [{:a, [line: 1], nil}, [1, 2]]},
-           [
-             into: {:my_collectable, [line: 1], [123]},
-             do: {:*, [line: 1], [{:a, [line: 1], nil}, {:a, [line: 1], nil}]}
-           ]
-         ]}
+      ast = ast("for a <- [1, 2], into: my_collectable(123), do: a * a")
 
       assert %IR.Comprehension{
                collectable: %IR.LocalFunctionCall{
@@ -1113,28 +880,13 @@ defmodule Hologram.Compiler.TransformerTest do
     end
 
     test "custom unique" do
-      # for a <- [1, 2], uniq: true, do: a * a
-      ast =
-        {:for, [line: 1],
-         [
-           {:<-, [line: 1], [{:a, [line: 1], nil}, [1, 2]]},
-           [
-             uniq: true,
-             do: {:*, [line: 1], [{:a, [line: 1], nil}, {:a, [line: 1], nil}]}
-           ]
-         ]}
+      ast = ast("for a <- [1, 2], uniq: true, do: a * a")
 
       assert %IR.Comprehension{unique: %IR.AtomType{value: true}} = transform(ast, %Context{})
     end
 
     test "mapper" do
-      # for a <- [1, 2], do: my_mapper(a)
-      ast =
-        {:for, [line: 1],
-         [
-           {:<-, [line: 1], [{:a, [line: 1], nil}, [1, 2]]},
-           [do: {:__block__, [], [{:my_mapper, [line: 1], [{:a, [line: 1], nil}]}]}]
-         ]}
+      ast = ast("for a <- [1, 2], do: my_mapper(a)")
 
       assert %IR.Comprehension{
                mapper: %IR.Block{
@@ -1270,10 +1022,12 @@ defmodule Hologram.Compiler.TransformerTest do
 
   describe "cond" do
     test "single clause, single expression body" do
-      # cond do
-      #   1 -> :expr_1
-      # end
-      ast = {:cond, [line: 2], [[do: [{:->, [line: 3], [[1], {:__block__, [], [:expr_1]}]}]]]}
+      ast =
+        ast("""
+        cond do
+          1 -> :expr_1
+        end
+        """)
 
       assert transform(ast, %Context{}) == %IR.Cond{
                clauses: [
@@ -1288,20 +1042,13 @@ defmodule Hologram.Compiler.TransformerTest do
     end
 
     test "multiple clauses" do
-      # cond do
-      #   1 -> :expr_1
-      #   2 -> :expr_2
-      # end
       ast =
-        {:cond, [line: 2],
-         [
-           [
-             do: [
-               {:->, [line: 3], [[1], {:__block__, [], [:expr_1]}]},
-               {:->, [line: 4], [[2], {:__block__, [], [:expr_2]}]}
-             ]
-           ]
-         ]}
+        ast("""
+        cond do
+          1 -> :expr_1
+          2 -> :expr_2
+        end
+        """)
 
       assert transform(ast, %Context{}) == %IR.Cond{
                clauses: [
@@ -1322,14 +1069,14 @@ defmodule Hologram.Compiler.TransformerTest do
     end
 
     test "multiple expressions body" do
-      # cond do
-      #   1 ->
-      #     :expr_1
-      #     :expr_2
-      # end
       ast =
-        {:cond, [line: 2],
-         [[do: [{:->, [line: 3], [[1], {:__block__, [], [:expr_1, :expr_2]}]}]]]}
+        ast("""
+        cond do
+          1 ->
+            :expr_1
+            :expr_2
+        end
+        """)
 
       assert transform(ast, %Context{}) == %IR.Cond{
                clauses: [
@@ -1348,8 +1095,7 @@ defmodule Hologram.Compiler.TransformerTest do
   end
 
   test "cons operator" do
-    # [h | t]
-    ast = [{:|, [line: 1], [{:h, [line: 1], nil}, {:t, [line: 1], nil}]}]
+    ast = ast("[h | t]")
 
     assert transform(ast, %Context{}) == %IR.ConsOperator{
              head: %IR.Variable{name: :h},
@@ -1358,8 +1104,7 @@ defmodule Hologram.Compiler.TransformerTest do
   end
 
   test "dot operator" do
-    # abc.x
-    ast = {{:., [line: 1], [{:abc, [line: 1], nil}, :x]}, [no_parens: true, line: 1], []}
+    ast = ast("abc.x")
 
     assert transform(ast, %Context{}) == %IR.DotOperator{
              left: %IR.Variable{name: :abc},
@@ -1368,36 +1113,39 @@ defmodule Hologram.Compiler.TransformerTest do
   end
 
   test "float type" do
-    # 1.0
-    ast = 1.0
+    ast = ast("1.0")
 
     assert transform(ast, %Context{}) == %IR.FloatType{value: 1.0}
   end
 
   describe "function definition, without guard" do
     test "name" do
-      # def my_fun do
-      # end
-      ast = {:def, [line: 1], [{:my_fun, [line: 1], nil}, [do: {:__block__, [], []}]]}
+      ast =
+        ast("""
+        def my_fun do
+        end
+        """)
 
       assert %IR.FunctionDefinition{name: :my_fun} = transform(ast, %Context{})
     end
 
     test "no params" do
-      # def my_fun do
-      # end
-      ast = {:def, [line: 1], [{:my_fun, [line: 1], nil}, [do: {:__block__, [], []}]]}
+      ast =
+        ast("""
+        def my_fun do
+        end
+        """)
 
       assert %IR.FunctionDefinition{arity: 0, clause: %IR.FunctionClause{params: []}} =
                transform(ast, %Context{})
     end
 
     test "single param" do
-      # def my_fun(x) do
-      # end
       ast =
-        {:def, [line: 1],
-         [{:my_fun, [line: 1], [{:x, [line: 1], nil}]}, [do: {:__block__, [], []}]]}
+        ast("""
+        def my_fun(x) do
+        end
+        """)
 
       assert %IR.FunctionDefinition{
                arity: 1,
@@ -1406,14 +1154,11 @@ defmodule Hologram.Compiler.TransformerTest do
     end
 
     test "multiple params" do
-      # def my_fun(x, y) do
-      # end
       ast =
-        {:def, [line: 1],
-         [
-           {:my_fun, [line: 1], [{:x, [line: 1], nil}, {:y, [line: 1], nil}]},
-           [do: {:__block__, [], []}]
-         ]}
+        ast("""
+        def my_fun(x, y) do
+        end
+        """)
 
       assert %IR.FunctionDefinition{
                arity: 2,
@@ -1424,19 +1169,23 @@ defmodule Hologram.Compiler.TransformerTest do
     end
 
     test "empty body" do
-      # def my_fun do
-      # end
-      ast = {:def, [line: 1], [{:my_fun, [line: 1], nil}, [do: {:__block__, [], []}]]}
+      ast =
+        ast("""
+        def my_fun do
+        end
+        """)
 
       assert %IR.FunctionDefinition{clause: %IR.FunctionClause{body: %IR.Block{expressions: []}}} =
                transform(ast, %Context{})
     end
 
     test "single expression body" do
-      # def my_fun do
-      #   :expr_1
-      # end
-      ast = {:def, [line: 1], [{:my_fun, [line: 1], nil}, [do: {:__block__, [], [:expr_1]}]]}
+      ast =
+        ast("""
+        def my_fun do
+          :expr_1
+        end
+        """)
 
       assert %IR.FunctionDefinition{
                clause: %IR.FunctionClause{
@@ -1446,12 +1195,13 @@ defmodule Hologram.Compiler.TransformerTest do
     end
 
     test "multiple expressions body" do
-      # def my_fun do
-      #   :expr_1
-      #   :expr_2
-      # end
       ast =
-        {:def, [line: 1], [{:my_fun, [line: 1], nil}, [do: {:__block__, [], [:expr_1, :expr_2]}]]}
+        ast("""
+        def my_fun do
+          :expr_1
+          :expr_2
+        end
+        """)
 
       assert %IR.FunctionDefinition{
                clause: %IR.FunctionClause{
@@ -1463,17 +1213,21 @@ defmodule Hologram.Compiler.TransformerTest do
     end
 
     test "public visibility" do
-      # def my_fun do
-      # end
-      ast = {:def, [line: 1], [{:my_fun, [line: 1], nil}, [do: {:__block__, [], []}]]}
+      ast =
+        ast("""
+        def my_fun do
+        end
+        """)
 
       assert %IR.FunctionDefinition{visibility: :public} = transform(ast, %Context{})
     end
 
     test "private visibility" do
-      # defp my_fun do
-      # end
-      ast = {:defp, [line: 2], [{:my_fun, [line: 2], nil}, [do: {:__block__, [], []}]]}
+      ast =
+        ast("""
+        defp my_fun do
+        end
+        """)
 
       assert %IR.FunctionDefinition{visibility: :private} = transform(ast, %Context{})
     end
@@ -1481,15 +1235,12 @@ defmodule Hologram.Compiler.TransformerTest do
 
   test "function definition, with guard" do
     ast =
-      {:def, [line: 1],
-       [
-         {:when, [line: 1],
-          [
-            {:my_fun, [line: 1], [{:x, [line: 1], nil}, {:y, [line: 1], nil}]},
-            {{:., [line: 1], [:erlang, :is_integer]}, [line: 1], [{:x, [line: 1], nil}]}
-          ]},
-         [do: {:__block__, [], [1, 2]}]
-       ]}
+      ast("""
+      def my_fun(x, y) when :erlang.is_integer(x) do
+        1
+        2
+      end
+      """)
 
     assert %IR.FunctionDefinition{
              name: :my_fun,
@@ -1516,15 +1267,13 @@ defmodule Hologram.Compiler.TransformerTest do
   end
 
   test "integer type" do
-    # 1
-    ast = 1
+    ast = ast("1")
 
     assert transform(ast, %Context{}) == %IR.IntegerType{value: 1}
   end
 
   test "list type" do
-    # [1, 2]
-    ast = [1, 2]
+    ast = ast("[1, 2]")
 
     assert transform(ast, %Context{}) == %IR.ListType{
              data: [
@@ -1536,15 +1285,13 @@ defmodule Hologram.Compiler.TransformerTest do
 
   describe "local function call" do
     test "without args" do
-      # my_fun()
-      ast = {:my_fun, [line: 1], []}
+      ast = ast("my_fun()")
 
       assert transform(ast, %Context{}) == %IR.LocalFunctionCall{function: :my_fun, args: []}
     end
 
     test "with args" do
-      # my_fun(1, 2)
-      ast = {:my_fun, [line: 1], [1, 2]}
+      ast = ast("my_fun(1, 2)")
 
       assert transform(ast, %Context{}) == %IR.LocalFunctionCall{
                function: :my_fun,
@@ -1558,37 +1305,27 @@ defmodule Hologram.Compiler.TransformerTest do
 
   describe "macro definition" do
     test "public" do
-      # defmacro my_macro do
-      #   quote do
-      #     :expr
-      #   end
-      # end
       ast =
-        {:defmacro, [line: 2],
-         [
-           {:my_macro, [line: 2], nil},
-           [
-             do: {:__block__, [], [{:quote, [line: 3], [[do: {:__block__, [], [:expr]}]]}]}
-           ]
-         ]}
+        ast("""
+        defmacro my_macro do
+          quote do
+            :expr
+          end
+        end
+        """)
 
       assert transform(ast, %Context{}) == %IR.IgnoredExpression{type: :public_macro_definition}
     end
 
     test "private" do
-      # defmacrop my_macro do
-      #   quote do
-      #     :expr
-      #   end
-      # end
       ast =
-        {:defmacrop, [line: 2],
-         [
-           {:my_macro, [line: 2], nil},
-           [
-             do: {:__block__, [], [{:quote, [line: 3], [[do: {:__block__, [], [:expr]}]]}]}
-           ]
-         ]}
+        ast("""
+        defmacrop my_macro do
+          quote do
+            :expr
+          end
+        end
+        """)
 
       assert transform(ast, %Context{}) == %IR.IgnoredExpression{type: :private_macro_definition}
     end
@@ -1596,8 +1333,7 @@ defmodule Hologram.Compiler.TransformerTest do
 
   describe "map type " do
     test "without cons operator" do
-      # %{a: 1, b: 2}
-      ast = {:%{}, [line: 1], [a: 1, b: 2]}
+      ast = ast("%{a: 1, b: 2}")
 
       assert transform(ast, %Context{}) == %IR.MapType{
                data: [
@@ -1608,8 +1344,7 @@ defmodule Hologram.Compiler.TransformerTest do
     end
 
     test "with cons operator" do
-      # %{x | a: 1, b: 2}
-      ast = {:%{}, [line: 1], [{:|, [line: 1], [{:x, [line: 1], nil}, [a: 1, b: 2]]}]}
+      ast = ast("%{x | a: 1, b: 2}")
 
       assert transform(ast, %Context{}) == %IR.RemoteFunctionCall{
                module: %IR.AtomType{value: Map},
@@ -1638,13 +1373,7 @@ defmodule Hologram.Compiler.TransformerTest do
   end
 
   test "match operator" do
-    # %{a: x, b: y} = %{a: 1, b: 2}
-    ast =
-      {:=, [line: 1],
-       [
-         {:%{}, [line: 1], [a: {:x, [line: 1], nil}, b: {:y, [line: 1], nil}]},
-         {:%{}, [line: 1], [a: 1, b: 2]}
-       ]}
+    ast = ast("%{a: x, b: y} = %{a: 1, b: 2}")
 
     assert transform(ast, %Context{}) == %IR.MatchOperator{
              left: %IR.MapType{
@@ -1664,8 +1393,7 @@ defmodule Hologram.Compiler.TransformerTest do
 
   describe "match placeholder" do
     test "with nil value for module" do
-      # _abc
-      ast = {:_abc, [line: 1], nil}
+      ast = ast("_abc")
 
       assert transform(ast, %Context{}) == %IR.MatchPlaceholder{}
     end
@@ -1679,33 +1407,27 @@ defmodule Hologram.Compiler.TransformerTest do
 
   describe "module" do
     test "when first alias segment is not 'Elixir'" do
-      # Aaa.Bbb
-      ast = {:__aliases__, [line: 1], [:Aaa, :Bbb]}
+      ast = ast("Aaa.Bbb")
 
       assert transform(ast, %Context{}) == %IR.AtomType{value: :"Elixir.Aaa.Bbb"}
     end
 
     test "when first alias segment is 'Elixir'" do
-      # Elixir.Aaa.Bbb
-      ast = {:__aliases__, [line: 1], [Elixir, :Aaa, :Bbb]}
+      ast = ast("Elixir.Aaa.Bbb")
 
       assert transform(ast, %Context{}) == %IR.AtomType{value: :"Elixir.Aaa.Bbb"}
     end
   end
 
   test "module attribute operator" do
-    # @my_attr
-    ast = {:@, [line: 1], [{:my_attr, [line: 1], nil}]}
+    ast = ast("@my_attr")
 
     assert transform(ast, %Context{}) == %IR.ModuleAttributeOperator{name: :my_attr}
   end
 
   describe "module definition" do
     test "empty body" do
-      # defmodule Aaa.Bbb do end
-      ast =
-        {:defmodule, [line: 1],
-         [{:__aliases__, [line: 1], [:Aaa, :Bbb]}, [do: {:__block__, [], []}]]}
+      ast = ast("defmodule Aaa.Bbb do end")
 
       assert transform(ast, %Context{}) == %IR.ModuleDefinition{
                module: %IR.AtomType{value: Aaa.Bbb},
@@ -1714,12 +1436,12 @@ defmodule Hologram.Compiler.TransformerTest do
     end
 
     test "single expression body" do
-      # defmodule Aaa.Bbb do
-      #   :expr_1
-      # end
       ast =
-        {:defmodule, [line: 2],
-         [{:__aliases__, [line: 2], [:Aaa, :Bbb]}, [do: {:__block__, [], [:expr_1]}]]}
+        ast("""
+        defmodule Aaa.Bbb do
+          :expr_1
+        end
+        """)
 
       assert transform(ast, %Context{}) == %IR.ModuleDefinition{
                module: %IR.AtomType{value: Aaa.Bbb},
@@ -1730,16 +1452,13 @@ defmodule Hologram.Compiler.TransformerTest do
     end
 
     test "multiple expressions body" do
-      # defmodule Aaa.Bbb do
-      #   :expr_1
-      #   :expr_2
-      # end
       ast =
-        {:defmodule, [line: 1],
-         [
-           {:__aliases__, [line: 1], [:Aaa, :Bbb]},
-           [do: {:__block__, [], [:expr_1, :expr_2]}]
-         ]}
+        ast("""
+        defmodule Aaa.Bbb do
+          :expr_1
+          :expr_2
+        end
+        """)
 
       assert transform(ast, %Context{}) == %IR.ModuleDefinition{
                module: %IR.AtomType{value: Aaa.Bbb},
@@ -1754,8 +1473,7 @@ defmodule Hologram.Compiler.TransformerTest do
   end
 
   test "pin operator" do
-    # ^my_var
-    ast = {:^, [line: 1], [{:my_var, [line: 1], nil}]}
+    ast = ast("^my_var")
 
     assert transform(ast, %Context{}) == %IR.PinOperator{name: :my_var}
   end
@@ -1765,8 +1483,7 @@ defmodule Hologram.Compiler.TransformerTest do
     # is tested as part of the dot operator tests.
 
     test "on variable, without args, with parenthesis" do
-      # a.x()
-      ast = {{:., [line: 1], [{:a, [line: 1], nil}, :x]}, [line: 1], []}
+      ast = ast("a.x()")
 
       assert transform(ast, %Context{}) == %IR.RemoteFunctionCall{
                module: %IR.Variable{name: :a},
@@ -1776,8 +1493,7 @@ defmodule Hologram.Compiler.TransformerTest do
     end
 
     test "on variable, with args" do
-      # a.x(1, 2)
-      ast = {{:., [line: 1], [{:a, [line: 1], nil}, :x]}, [line: 1], [1, 2]}
+      ast = ast("a.x(1, 2)")
 
       assert transform(ast, %Context{}) == %IR.RemoteFunctionCall{
                module: %IR.Variable{name: :a},
@@ -1790,10 +1506,7 @@ defmodule Hologram.Compiler.TransformerTest do
     end
 
     test "on alias, without args, without parenthesis" do
-      # Abc.my_fun
-      ast =
-        {{:., [line: 1], [{:__aliases__, [line: 1], [:Abc]}, :my_fun]},
-         [no_parens: true, line: 1], []}
+      ast = ast("Abc.my_fun")
 
       assert transform(ast, %Context{}) == %IR.RemoteFunctionCall{
                module: %IR.AtomType{value: :"Elixir.Abc"},
@@ -1803,8 +1516,7 @@ defmodule Hologram.Compiler.TransformerTest do
     end
 
     test "on alias, without args, with parenthesis" do
-      # Abc.my_fun()
-      ast = {{:., [line: 1], [{:__aliases__, [line: 1], [:Abc]}, :my_fun]}, [line: 1], []}
+      ast = ast("Abc.my_fun()")
 
       assert transform(ast, %Context{}) == %IR.RemoteFunctionCall{
                module: %IR.AtomType{value: :"Elixir.Abc"},
@@ -1814,8 +1526,7 @@ defmodule Hologram.Compiler.TransformerTest do
     end
 
     test "on alias, with args" do
-      # Abc.my_fun(1, 2)
-      ast = {{:., [line: 1], [{:__aliases__, [line: 1], [:Abc]}, :my_fun]}, [line: 1], [1, 2]}
+      ast = ast("Abc.my_fun(1, 2)")
 
       assert transform(ast, %Context{}) == %IR.RemoteFunctionCall{
                module: %IR.AtomType{value: :"Elixir.Abc"},
@@ -1831,9 +1542,7 @@ defmodule Hologram.Compiler.TransformerTest do
     # is tested as part of the dot operator tests.
 
     test "on module attribute, without args" do
-      # @my_attr.my_fun()
-      ast =
-        {{:., [line: 1], [{:@, [line: 1], [{:my_attr, [line: 1], nil}]}, :my_fun]}, [line: 1], []}
+      ast = ast("@my_attr.my_fun()")
 
       assert transform(ast, %Context{}) == %IR.RemoteFunctionCall{
                module: %IR.ModuleAttributeOperator{name: :my_attr},
@@ -1843,10 +1552,7 @@ defmodule Hologram.Compiler.TransformerTest do
     end
 
     test "on module attribute, with args" do
-      # @my_attr.my_fun(1, 2)
-      ast =
-        {{:., [line: 1], [{:@, [line: 1], [{:my_attr, [line: 1], nil}]}, :my_fun]}, [line: 1],
-         [1, 2]}
+      ast = ast("@my_attr.my_fun(1, 2)")
 
       assert transform(ast, %Context{}) == %IR.RemoteFunctionCall{
                module: %IR.ModuleAttributeOperator{name: :my_attr},
@@ -1862,13 +1568,7 @@ defmodule Hologram.Compiler.TransformerTest do
     # is tested as part of the dot operator tests.
 
     test "on expression, without args" do
-      # (anon_fun.(1, 2)).remote_fun()
-      ast =
-        {{:., [line: 1],
-          [
-            {{:., [line: 1], [{:anon_fun, [line: 1], nil}]}, [line: 1], [1, 2]},
-            :remote_fun
-          ]}, [line: 1], []}
+      ast = ast("(anon_fun.(1, 2)).remote_fun()")
 
       assert transform(ast, %Context{}) == %IR.RemoteFunctionCall{
                module: %IR.AnonymousFunctionCall{
@@ -1884,13 +1584,7 @@ defmodule Hologram.Compiler.TransformerTest do
     end
 
     test "on expression, with args" do
-      # (anon_fun.(1, 2)).remote_fun(3, 4)
-      ast =
-        {{:., [line: 1],
-          [
-            {{:., [line: 1], [{:anon_fun, [line: 1], nil}]}, [line: 1], [1, 2]},
-            :remote_fun
-          ]}, [line: 1], [3, 4]}
+      ast = ast("(anon_fun.(1, 2)).remote_fun(3, 4)")
 
       assert transform(ast, %Context{}) == %IR.RemoteFunctionCall{
                module: %IR.AnonymousFunctionCall{
@@ -1909,8 +1603,7 @@ defmodule Hologram.Compiler.TransformerTest do
     end
 
     test "on Erlang module, without args, without parenthesis" do
-      # :my_module.my_fun
-      ast = {{:., [line: 1], [:my_module, :my_fun]}, [no_parens: true, line: 1], []}
+      ast = ast(":my_module.my_fun")
 
       assert transform(ast, %Context{}) == %IR.RemoteFunctionCall{
                module: %IR.AtomType{value: :my_module},
@@ -1920,8 +1613,7 @@ defmodule Hologram.Compiler.TransformerTest do
     end
 
     test "on Erlang module, without args, with parenthesis" do
-      # :my_module.my_fun()
-      ast = {{:., [line: 1], [:my_module, :my_fun]}, [line: 1], []}
+      ast = ast(":my_module.my_fun()")
 
       assert transform(ast, %Context{}) == %IR.RemoteFunctionCall{
                module: %IR.AtomType{value: :my_module},
@@ -1931,8 +1623,7 @@ defmodule Hologram.Compiler.TransformerTest do
     end
 
     test "on Erlang module, with args" do
-      # :my_module.my_fun(1, 2)
-      ast = {{:., [line: 1], [:my_module, :my_fun]}, [line: 1], [1, 2]}
+      ast = ast(":my_module.my_fun(1, 2)")
 
       assert transform(ast, %Context{}) == %IR.RemoteFunctionCall{
                module: %IR.AtomType{value: :my_module},
@@ -1946,16 +1637,13 @@ defmodule Hologram.Compiler.TransformerTest do
   end
 
   test "string type" do
-    # "abc"
-    ast = "abc"
+    ast = ast("\"abc\"")
 
     assert transform(ast, %Context{}) == %IR.StringType{value: "abc"}
   end
 
   describe "struct" do
-    # %Aaa.Bbb{a: 1, b: 2}
-    @ast {:%, [line: 1],
-          [{:__aliases__, [line: 1], [:Aaa, :Bbb]}, {:%{}, [line: 1], [a: 1, b: 2]}]}
+    @ast ast("%Aaa.Bbb{a: 1, b: 2}")
 
     test "without cons operator, not in pattern" do
       context = %Context{pattern?: false}
@@ -1997,8 +1685,7 @@ defmodule Hologram.Compiler.TransformerTest do
     end
 
     test "without cons operator, in pattern, with variable pattern instead of module" do
-      # %x{a: 1, b: 2}
-      ast = {:%, [line: 1], [{:x, [line: 1], nil}, {:%{}, [line: 1], [a: 1, b: 2]}]}
+      ast = ast("%x{a: 1, b: 2}")
 
       context = %Context{pattern?: true}
 
@@ -2012,8 +1699,7 @@ defmodule Hologram.Compiler.TransformerTest do
     end
 
     test "without cons operator, in pattern, with match placeholder instead of module" do
-      # %_{a: 1, b: 2}
-      ast = {:%, [line: 1], [{:_, [line: 1], nil}, {:%{}, [line: 1], [a: 1, b: 2]}]}
+      ast = ast("%_{a: 1, b: 2}")
 
       context = %Context{pattern?: true}
 
@@ -2030,13 +1716,7 @@ defmodule Hologram.Compiler.TransformerTest do
     # test "without cons operator, not in pattern, with match placeholder instead of module"
 
     test "with cons operator, not in pattern" do
-      # %Aaa.Bbb{x | a: 1, b: 2}
-      ast =
-        {:%, [line: 1],
-         [
-           {:__aliases__, [line: 1], [:Aaa, :Bbb]},
-           {:%{}, [line: 1], [{:|, [line: 1], [{:x, [line: 1], nil}, [a: 1, b: 2]]}]}
-         ]}
+      ast = ast("%Aaa.Bbb{x | a: 1, b: 2}")
 
       context = %Context{pattern?: false}
 
@@ -2077,8 +1757,7 @@ defmodule Hologram.Compiler.TransformerTest do
 
   describe "tuple type" do
     test "2-element tuple" do
-      # {1, 2}
-      ast = {1, 2}
+      ast = ast("{1, 2}")
 
       assert transform(ast, %Context{}) == %IR.TupleType{
                data: [
@@ -2089,8 +1768,7 @@ defmodule Hologram.Compiler.TransformerTest do
     end
 
     test "non-2-element tuple" do
-      # {1, 2, 3}
-      ast = {:{}, [line: 1], [1, 2, 3]}
+      ast = ast("{1, 2, 3}")
 
       assert transform(ast, %Context{}) == %IR.TupleType{
                data: [
@@ -2104,8 +1782,7 @@ defmodule Hologram.Compiler.TransformerTest do
 
   describe "variable" do
     test "non-keyword variable name with nil value in AST tuple" do
-      # my_var
-      ast = {:my_var, [line: 1], nil}
+      ast = ast("my_var")
 
       assert transform(ast, %Context{}) == %IR.Variable{name: :my_var}
     end
@@ -2117,8 +1794,7 @@ defmodule Hologram.Compiler.TransformerTest do
     end
 
     test "variable 'for' with nil value in AST tuple" do
-      # for
-      ast = {:for, [line: 1], nil}
+      ast = ast("for")
 
       assert transform(ast, %Context{}) == %IR.Variable{name: :for}
     end
