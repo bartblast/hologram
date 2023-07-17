@@ -117,6 +117,19 @@ defmodule Hologram.Compiler.Reflection do
   end
 
   @doc """
+  Returns true if the given module is a page module (has "use Hologram.Page" directive) or false otherwise.
+
+  ## Examples
+
+      iex> page?(MyPage)
+      true
+  """
+  @spec page?(module) :: boolean
+  def page?(module) do
+    {:__is_hologram_page__, 0} in module.__info__(:functions)
+  end
+
+  @doc """
   Returns the absolute path of the project.
 
   ## Examples

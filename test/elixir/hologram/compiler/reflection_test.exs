@@ -2,6 +2,7 @@ defmodule Hologram.Compiler.ReflectionTest do
   use Hologram.Test.BasicCase, async: true
   import Hologram.Compiler.Reflection
   alias Hologram.Test.Fixtures.Compiler.Reflection.Module1
+  alias Hologram.Test.Fixtures.Compiler.Reflection.Module2
 
   describe "alias?/1" do
     test "atom which is an alias" do
@@ -54,6 +55,16 @@ defmodule Hologram.Compiler.ReflectionTest do
 
     test "with debug info not present in the BEAM file" do
       assert module_beam_defs(Elixir.Hex) == []
+    end
+  end
+
+  describe "page?" do
+    test "is a page module" do
+      assert page?(Module2)
+    end
+
+    test "is not a page module" do
+      refute page?(__MODULE__)
     end
   end
 
