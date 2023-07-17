@@ -35,6 +35,19 @@ defmodule Hologram.Compiler.Reflection do
   end
 
   @doc """
+  Returns true if the given module is a layout module (has "use Hologram.Layout" directive) or false otherwise.
+
+  ## Examples
+
+      iex> layout?(MyLayout)
+      true
+  """
+  @spec layout?(module) :: boolean
+  def layout?(module) do
+    {:__is_hologram_layout__, 0} in module.__info__(:functions)
+  end
+
+  @doc """
   Lists Elixir modules belonging to the given OTP apps.
   Erlang modules are filtered out.
 

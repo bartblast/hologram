@@ -5,6 +5,7 @@ defmodule Hologram.Compiler.ReflectionTest do
   alias Hologram.Test.Fixtures.Compiler.Reflection.Module1
   alias Hologram.Test.Fixtures.Compiler.Reflection.Module2
   alias Hologram.Test.Fixtures.Compiler.Reflection.Module3
+  alias Hologram.Test.Fixtures.Compiler.Reflection.Module4
 
   describe "alias?/1" do
     test "atom which is an alias" do
@@ -27,6 +28,16 @@ defmodule Hologram.Compiler.ReflectionTest do
 
     test "is not a component module" do
       refute component?(__MODULE__)
+    end
+  end
+
+  describe "layout?" do
+    test "is a layout module" do
+      assert layout?(Module4)
+    end
+
+    test "is not a layout module" do
+      refute layout?(__MODULE__)
     end
   end
 
