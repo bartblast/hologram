@@ -1,6 +1,7 @@
 defmodule Hologram.Runtime.ComponentTest do
   use Hologram.Test.BasicCase, async: true
   import Hologram.Component
+  alias Hologram.Test.Fixtures.Runtime.Component.Module1
 
   describe "H sigil" do
     test "template which uses data" do
@@ -35,5 +36,9 @@ defmodule Hologram.Runtime.ComponentTest do
 
       assert template.(%{}) == [{:element, "div", [], [text: "abc"]}]
     end
+  end
+
+  test "__is_hologram_component__/0" do
+    assert Module1.__is_hologram_component__()
   end
 end
