@@ -1,4 +1,4 @@
-defmodule Hologram.ComponentTest do
+defmodule Hologram.Runtime.ComponentTest do
   use Hologram.Test.BasicCase, async: true
   import Hologram.Component
 

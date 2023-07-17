@@ -1,0 +1,16 @@
+defmodule Hologram.Runtime.PageTest do
+  use Hologram.Test.BasicCase, async: true
+  alias Hologram.Test.Fixtures.Runtime.Page.Module1
+
+  test "__is_hologram_page__/0" do
+    assert Module1.__is_hologram_page__()
+  end
+
+  test "__hologram_layout__/0" do
+    assert Module1.__hologram_layout__() == MyLayout
+  end
+
+  test "__hologram_route__/0" do
+    assert Module1.__hologram_route__() == "/my_path"
+  end
+end
