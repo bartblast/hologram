@@ -2,17 +2,7 @@ defmodule Hologram.Compiler.AST do
   alias Hologram.Compiler.AST
   alias Hologram.Compiler.Normalizer
 
-  @type t ::
-          {atom, list, list}
-          | {atom, list, nil}
-          | {any, any}
-          | module
-          | atom
-          | binary
-          | boolean
-          | float
-          | integer
-          | list
+  @type t :: Macro.t()
 
   @doc """
   Given Elixir source code returns its normalized Elixir AST.
