@@ -4,6 +4,15 @@ defmodule Hologram.Page do
       import Hologram.Component, only: [sigil_H: 2]
       import Hologram.Page
 
+      @doc """
+      Returns true to indicate that the callee module is a page module (has "use Hologram.Page" directive).
+
+      ## Examples
+
+          iex> __is_hologram_page__()
+          true
+      """
+      @spec __is_hologram_page__() :: boolean
       def __is_hologram_page__, do: true
     end
   end
