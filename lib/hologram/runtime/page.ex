@@ -19,6 +19,15 @@ defmodule Hologram.Page do
 
   defmacro layout(module) do
     quote do
+      @doc """
+      Returns the page's layout module.
+
+      ## Examples
+
+          iex> __hologram_layout__()
+          MyLayout
+      """
+      @spec __hologram_layout__() :: module
       def __hologram_layout__ do
         unquote(module)
       end
@@ -27,6 +36,15 @@ defmodule Hologram.Page do
 
   defmacro route(path) do
     quote do
+      @doc """
+      Returns the page's route.
+
+      ## Examples
+
+          iex> __hologram_route__()
+          "/my_path"
+      """
+      @spec __hologram_layout__() :: module
       def __hologram_route__ do
         unquote(path)
       end
