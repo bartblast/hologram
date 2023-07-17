@@ -28,6 +28,7 @@ defmodule Hologram.Page do
   @spec layout(module) :: Macro.t()
   defmacro layout(module) do
     quote do
+      @spec __hologram_layout__() :: module
       def __hologram_layout__ do
         unquote(module)
       end
@@ -45,6 +46,7 @@ defmodule Hologram.Page do
   @spec route(String.t()) :: Macro.t()
   defmacro route(path) do
     quote do
+      @spec __hologram_route__() :: String.t()
       def __hologram_route__ do
         unquote(path)
       end
