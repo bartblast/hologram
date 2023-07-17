@@ -1,8 +1,10 @@
 defmodule Hologram.Compiler.ReflectionTest do
   use Hologram.Test.BasicCase, async: true
   import Hologram.Compiler.Reflection
+
   alias Hologram.Test.Fixtures.Compiler.Reflection.Module1
   alias Hologram.Test.Fixtures.Compiler.Reflection.Module2
+  alias Hologram.Test.Fixtures.Compiler.Reflection.Module3
 
   describe "alias?/1" do
     test "atom which is an alias" do
@@ -15,6 +17,16 @@ defmodule Hologram.Compiler.ReflectionTest do
 
     test "non-atom" do
       refute alias?(123)
+    end
+  end
+
+  describe "component?" do
+    test "is a component module" do
+      assert component?(Module3)
+    end
+
+    test "is not a component module" do
+      refute component?(__MODULE__)
     end
   end
 

@@ -22,6 +22,19 @@ defmodule Hologram.Compiler.Reflection do
   def alias?(_term), do: false
 
   @doc """
+  Returns true if the given module is a component module (has "use Hologram.Component" directive) or false otherwise.
+
+  ## Examples
+
+      iex> component?(MyComponent)
+      true
+  """
+  @spec component?(module) :: boolean
+  def component?(module) do
+    {:__is_hologram_component__, 0} in module.__info__(:functions)
+  end
+
+  @doc """
   Lists Elixir modules belonging to the given OTP apps.
   Erlang modules are filtered out.
 
