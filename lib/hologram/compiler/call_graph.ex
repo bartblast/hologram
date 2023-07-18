@@ -55,6 +55,18 @@ defmodule Hologram.Compiler.CallGraph do
   def build(call_graph, %IR.AtomType{value: value}, from_vertex) do
     if Reflection.alias?(value) do
       add_edge(call_graph, from_vertex, value)
+
+      if Reflection.page?(value) do
+        add_page_call_graph_edges(call_graph, value)
+      end
+
+      if Reflection.layout?(value) do
+        add_layout_call_graph_edges(call_graph, value)
+      end
+
+      if Reflection.component?(value) do
+        add_component_call_graph_edges(call_graph, value)
+      end
     end
 
     :ok
@@ -180,4 +192,25 @@ defmodule Hologram.Compiler.CallGraph do
   # def stop(call_graph) do
   #   Agent.stop(call_graph.name)
   # end
+
+  defp add_component_call_graph_edges(call_graph, module) do
+    add_templatable_call_graph_edges(call_graph, module)
+    add_edge(call_graph, module, {module, :init, 1})
+  end
+
+  defp add_layout_call_graph_edges(call_graph, module) do
+    add_templatable_call_graph_edges(call_graph, module)
+  end
+
+  defp add_page_call_graph_edges(call_graph, module) do
+    add_templatable_call_graph_edges(call_graph, module)
+
+    add_edge(call_graph, module, {module, :__hologram_layout_module__, 0})
+    add_edge(call_graph, module, {module, :__hologram_route__, 0})
+  end
+
+  defp add_templatable_call_graph_edges(call_graph, module) do
+    add_edge(call_graph, module, {module, :action, 3})
+    add_edge(call_graph, module, {module, :template, 0})
+  end
 end
