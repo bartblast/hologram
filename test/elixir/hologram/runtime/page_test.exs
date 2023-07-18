@@ -33,7 +33,7 @@ defmodule Hologram.Runtime.PageTest do
     end
 
     test "overridden" do
-      assert Module2.init(:arg_1, :arg_2) == :overridden
+      assert Module2.init(:arg_1, :arg_2) == %{overridden: true}
     end
   end
 end

@@ -50,7 +50,7 @@ defmodule Hologram.Runtime.ComponentTest do
     end
 
     test "overridden" do
-      assert Module2.init(:arg) == :overridden_1
+      assert Module2.init(:arg) == %{overridden_1: true}
     end
   end
 
@@ -60,7 +60,7 @@ defmodule Hologram.Runtime.ComponentTest do
     end
 
     test "overridden" do
-      assert Module2.init(:arg_1, :arg_2) == :overridden_2
+      assert Module2.init(:arg_1, :arg_2) == %{overridden_2: true}
     end
   end
 end
