@@ -15,6 +15,12 @@ defmodule Hologram.Component do
       """
       @spec __is_hologram_component__() :: boolean
       def __is_hologram_component__, do: true
+
+      def init(_props), do: %{}
+
+      def init(_props, _conn), do: %{}
+
+      defoverridable init: 1, init: 2
     end
   end
 
