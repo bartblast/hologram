@@ -1,4 +1,6 @@
 defmodule Hologram.Page do
+  alias Hologram.Conn
+
   defmacro __using__(_opts) do
     quote do
       import Hologram.Component, only: [sigil_H: 2]
