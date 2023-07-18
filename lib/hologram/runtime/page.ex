@@ -26,19 +26,28 @@ defmodule Hologram.Page do
   end
 
   @doc """
-  Defines __hologram_layout__/0 which returns the page's layout module.
+  Defines __hologram_layout_module__/0 which returns the page's layout module,
+  and __hologram_layout_props__/0 which returns the page's layout props.
 
   ## Examples
 
-      iex> __hologram_layout__()
+      iex> __hologram_layout_module__()
       MyLayout
+
+      iex> __hologram_layout_props__()
+      [a: 1, b: 2]
   """
-  @spec layout(module) :: Macro.t()
-  defmacro layout(module) do
+  @spec layout(module, keyword) :: Macro.t()
+  defmacro layout(module, props \\ []) do
     quote do
-      @spec __hologram_layout__() :: module
-      def __hologram_layout__ do
+      @spec __hologram_layout_module__() :: module
+      def __hologram_layout_module__ do
         unquote(module)
+      end
+
+      @spec __hologram_layout_props__() :: keyword
+      def __hologram_layout_props__ do
+        unquote(props)
       end
     end
   end

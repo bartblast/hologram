@@ -3,13 +3,24 @@ defmodule Hologram.Runtime.PageTest do
 
   alias Hologram.Test.Fixtures.Runtime.Page.Module1
   alias Hologram.Test.Fixtures.Runtime.Page.Module2
+  alias Hologram.Test.Fixtures.Runtime.Page.Module3
 
   test "__is_hologram_page__/0" do
     assert Module1.__is_hologram_page__()
   end
 
-  test "__hologram_layout__/0" do
-    assert Module1.__hologram_layout__() == MyLayout
+  test "__hologram_layout_module__/0" do
+    assert Module1.__hologram_layout_module__() == MyLayout
+  end
+
+  describe "__hologram_layout_props__/0" do
+    test "default" do
+      assert Module1.__hologram_layout_props__() == []
+    end
+
+    test "custom" do
+      assert Module3.__hologram_layout_props__() == [a: 1, b: 2]
+    end
   end
 
   test "__hologram_route__/0" do
