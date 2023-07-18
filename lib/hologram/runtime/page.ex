@@ -14,6 +14,14 @@ defmodule Hologram.Page do
       """
       @spec __is_hologram_page__() :: boolean
       def __is_hologram_page__, do: true
+
+      @doc """
+      Builds the initial page state.
+      """
+      @spec init(map, Conn.t()) :: map
+      def init(_params, _conn), do: %{}
+
+      defoverridable init: 2
     end
   end
 
