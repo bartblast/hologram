@@ -1,4 +1,5 @@
 defmodule Hologram.Component do
+  alias Hologram.Conn
   alias Hologram.Template.Builder
 
   defmacro __using__(_opts) do
@@ -16,8 +17,16 @@ defmodule Hologram.Component do
       @spec __is_hologram_component__() :: boolean
       def __is_hologram_component__, do: true
 
+      @doc """
+      Builds initial component state when run on the client.
+      """
+      @spec init(map) :: map
       def init(_props), do: %{}
 
+      @doc """
+      Builds initial component state when run on the server.
+      """
+      @spec init(map, Conn.t()) :: map
       def init(_props, _conn), do: %{}
 
       defoverridable init: 1, init: 2
