@@ -13,6 +13,14 @@ defmodule Hologram.Layout do
       """
       @spec __is_hologram_layout__() :: boolean
       def __is_hologram_layout__, do: true
+
+      @doc """
+      Builds the initial layout state.
+      """
+      @spec init(map, Conn.t()) :: map
+      def init(_props, _conn), do: %{}
+
+      defoverridable init: 2
     end
   end
 end
