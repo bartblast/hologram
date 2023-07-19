@@ -3,7 +3,6 @@
 defmodule Hologram.Compiler.CallGraph do
   use Agent
 
-  alias Dialyxir.Warnings.Call
   alias Hologram.Compiler.CallGraph
   alias Hologram.Compiler.IR
   alias Hologram.Compiler.Reflection
