@@ -181,9 +181,44 @@ defmodule Hologram.Compiler.CallGraph do
     Agent.get(call_graph.name, &Graph.has_vertex?(&1, vertex))
   end
 
-  # def edges(call_graph, vertex) do
-  #   Agent.get(call_graph.name, &Graph.edges(&1, vertex))
-  # end
+  @doc """
+  Returns edges in which the second vertex is either the given module or a function from the given module,
+  and the first vertex is a function from a different module.
+
+  ## Examples
+
+      iex> call_graph = %CallGraph{name: :my_call_graph, pid: #PID<0.259.0>}
+      iex> inbound_remote_edges(call_graph, Module5)
+      [
+        %Graph.Edge{
+          v1: {Module2, :my_fun_6, 3},
+          v2: Module5,
+          weight: 1,
+          label: nil
+        },
+        %Graph.Edge{
+          v1: {Module3, :my_fun_8, 1},
+          v2: {Module5, :my_fun_1, 4},
+          weight: 1,
+          label: nil
+        }
+      ]
+  """
+  def inbound_remote_edges(call_graph, to_module) do
+    call_graph
+    |> edges()
+    |> Enum.filter(fn
+      %{v1: {from_module, _fun_1, _arity_1}, v2: {^to_module, _fun_2, _arity_2}}
+      when from_module != to_module ->
+        true
+
+      %{v1: {from_module, _fun_1, _arity_1}, v2: ^to_module} when from_module != to_module ->
+        true
+
+      _other ->
+        false
+    end)
+  end
 
   # def num_edges(call_graph) do
   #   Agent.get(call_graph, &Graph.num_edges/1)
@@ -247,5 +282,9 @@ defmodule Hologram.Compiler.CallGraph do
   defp add_page_call_graph_edges(call_graph, module) do
     add_edge(call_graph, module, {module, :__hologram_layout_module__, 0})
     add_edge(call_graph, module, {module, :__hologram_route__, 0})
+  end
+
+  defp edges(call_graph) do
+    Agent.get(call_graph.name, &Graph.edges/1)
   end
 end
