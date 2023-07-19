@@ -31,7 +31,7 @@ defmodule Hologram.Compiler.Reflection do
   """
   @spec component?(module) :: boolean
   def component?(module) do
-    {:__is_hologram_component__, 0} in module.__info__(:functions)
+    alias?(module) && {:__is_hologram_component__, 0} in module.__info__(:functions)
   end
 
   @doc """
@@ -44,7 +44,7 @@ defmodule Hologram.Compiler.Reflection do
   """
   @spec layout?(module) :: boolean
   def layout?(module) do
-    {:__is_hologram_layout__, 0} in module.__info__(:functions)
+    alias?(module) && {:__is_hologram_layout__, 0} in module.__info__(:functions)
   end
 
   @doc """
@@ -152,7 +152,7 @@ defmodule Hologram.Compiler.Reflection do
   """
   @spec page?(module) :: boolean
   def page?(module) do
-    {:__is_hologram_page__, 0} in module.__info__(:functions)
+    alias?(module) && {:__is_hologram_page__, 0} in module.__info__(:functions)
   end
 
   @doc """

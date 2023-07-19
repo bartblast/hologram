@@ -26,6 +26,10 @@ defmodule Hologram.Compiler.ReflectionTest do
       assert component?(Module3)
     end
 
+    test "is not a module" do
+      refute component?(123)
+    end
+
     test "is not a component module" do
       refute component?(__MODULE__)
     end
@@ -34,6 +38,10 @@ defmodule Hologram.Compiler.ReflectionTest do
   describe "layout?" do
     test "is a layout module" do
       assert layout?(Module4)
+    end
+
+    test "is not a module" do
+      refute layout?(123)
     end
 
     test "is not a layout module" do
@@ -84,6 +92,10 @@ defmodule Hologram.Compiler.ReflectionTest do
   describe "page?" do
     test "is a page module" do
       assert page?(Module2)
+    end
+
+    test "is not a module" do
+      refute page?(123)
     end
 
     test "is not a page module" do
