@@ -18,7 +18,7 @@ defmodule Hologram.Page do
       def __is_hologram_page__, do: true
 
       @doc """
-      Builds the initial page state.
+      Builds data that is used for page initial state and layout props.
       """
       @spec init(map, Conn.t()) :: map
       def init(_params, _conn), do: %{}
