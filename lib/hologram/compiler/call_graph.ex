@@ -3,6 +3,7 @@
 defmodule Hologram.Compiler.CallGraph do
   use Agent
 
+  alias Dialyxir.Warnings.Call
   alias Hologram.Compiler.CallGraph
   alias Hologram.Compiler.IR
   alias Hologram.Compiler.Reflection
@@ -129,6 +130,7 @@ defmodule Hologram.Compiler.CallGraph do
       iex> clone(%CallGraph{name: :my_call_graph}, name: :my_call_graph_clone)
       %CallGraph{pid: #PID<0.259.0>, name: :my_call_graph_clone}
   """
+  @spec clone(CallGraph.t(), keyword) :: CallGraph.t()
   def clone(old_call_graph, opts) do
     new_call_graph = start(opts)
     Agent.update(new_call_graph.name, fn _state -> graph(old_call_graph) end)
@@ -204,6 +206,7 @@ defmodule Hologram.Compiler.CallGraph do
         }
       ]
   """
+  @spec inbound_remote_edges(CallGraph.t(), module) :: list(Graph.Edge.t())
   def inbound_remote_edges(call_graph, to_module) do
     call_graph
     |> edges()
@@ -250,6 +253,7 @@ defmodule Hologram.Compiler.CallGraph do
       iex> remove_vertex(call_graph, :vertex_3)
       :ok
   """
+  @spec remove_vertex(CallGraph.t(), vertex) :: :ok
   def remove_vertex(call_graph, vertex) do
     Agent.update(call_graph.name, &Graph.delete_vertex(&1, vertex))
     :ok
