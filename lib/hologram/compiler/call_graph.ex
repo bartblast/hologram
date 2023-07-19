@@ -1,4 +1,4 @@
-# TODO: remove comments
+# TODO: remove old commented out code
 
 defmodule Hologram.Compiler.CallGraph do
   use Agent
@@ -118,6 +118,20 @@ defmodule Hologram.Compiler.CallGraph do
   end
 
   def build(_call_graph, _ir, _from_vertex), do: :ok
+
+  @doc """
+  Clones a call graph and uses a new name for it.
+
+  ## Examples
+
+      iex> clone(%CallGraph{name: :my_call_graph}, name: :my_call_graph_clone)
+      %CallGraph{pid: #PID<0.259.0>, name: :my_call_graph_clone}
+  """
+  def clone(old_call_graph, opts) do
+    new_call_graph = start(opts)
+    Agent.update(new_call_graph.name, fn _state -> graph(old_call_graph) end)
+    new_call_graph
+  end
 
   @doc """
   Returns the underlying libgraph %Graph{} struct containing the information about vertices and edges.

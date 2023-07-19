@@ -220,6 +220,28 @@ defmodule Hologram.Compiler.CallGraphTest do
     end
   end
 
+  describe "clone/1" do
+    test "returns CallGraph struct with name from opts", %{call_graph: call_graph} do
+      assert %CallGraph{name: @call_graph_name_2} = clone(call_graph, name: @call_graph_name_2)
+    end
+
+    test "clones the call graph", %{call_graph: call_graph} do
+      add_vertex(call_graph, :vertex_1)
+
+      call_graph_clone = clone(call_graph, name: @call_graph_name_2)
+      add_vertex(call_graph_clone, :vertex_2)
+
+      graph = graph(call_graph)
+      graph_clone = graph(call_graph_clone)
+
+      assert Graph.has_vertex?(graph, :vertex_1)
+      refute Graph.has_vertex?(graph, :vertex_2)
+
+      assert Graph.has_vertex?(graph_clone, :vertex_1)
+      assert Graph.has_vertex?(graph_clone, :vertex_2)
+    end
+  end
+
   test "graph/1", %{call_graph: call_graph} do
     assert %Graph{} = graph(call_graph)
   end
@@ -236,11 +258,7 @@ defmodule Hologram.Compiler.CallGraphTest do
   end
 
   describe "start/1" do
-    test "%CallGraph{} struct is returned" do
-      assert %CallGraph{} = start(name: @call_graph_name_2)
-    end
-
-    test "uses name from opts" do
+    test "returns CallGraph struct with name from opts" do
       assert %CallGraph{name: @call_graph_name_2} = start(name: @call_graph_name_2)
     end
 
