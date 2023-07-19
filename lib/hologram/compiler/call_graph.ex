@@ -183,6 +183,14 @@ defmodule Hologram.Compiler.CallGraph do
   #   Agent.get(call_graph, &Graph.num_vertices/1)
   # end
 
+  @doc """
+  Determine vertices reachable from the given vertex.
+
+  ## Examples
+
+      iex> reachable(%CallGraph{name: :my_call_graph}, :vertex_3)
+      [:vertex_12, :vertex_5, :vertex_9, :vertex_3]
+  """
   @spec reachable(CallGraph.t(), vertex) :: list(vertex)
   def reachable(call_graph, vertex) do
     Agent.get(call_graph.name, &Graph.reachable(&1, [vertex]))
