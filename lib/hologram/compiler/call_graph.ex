@@ -10,6 +10,8 @@ defmodule Hologram.Compiler.CallGraph do
   defstruct pid: nil, name: nil
   @type t :: %CallGraph{pid: pid, name: atom}
 
+  @type vertex :: module | {module, atom, integer}
+
   @doc """
   Adds an edge between two vertices in the call graph.
 
@@ -19,7 +21,7 @@ defmodule Hologram.Compiler.CallGraph do
       iex> add_adge(call_graph, :vertex_1, :vertex_2)
       :ok
   """
-  @spec add_edge(CallGraph.t(), any, any) :: :ok
+  @spec add_edge(CallGraph.t(), vertex, vertex) :: :ok
   def add_edge(call_graph, from_vertex, to_vertex) do
     Agent.update(call_graph.name, &Graph.add_edge(&1, from_vertex, to_vertex))
     :ok
@@ -34,7 +36,7 @@ defmodule Hologram.Compiler.CallGraph do
       iex> add_vertex(call_graph, :vertex_3)
       :ok
   """
-  @spec add_vertex(CallGraph.t(), any) :: :ok
+  @spec add_vertex(CallGraph.t(), vertex) :: :ok
   def add_vertex(call_graph, vertex) do
     Agent.update(call_graph.name, &Graph.add_vertex(&1, vertex))
     :ok
@@ -49,7 +51,7 @@ defmodule Hologram.Compiler.CallGraph do
       iex> ir = %IR.LocalFunctionCall{function: :my_fun, args: [%IR.IntegerType{value: 123}]}
       iex> build(call_graph, ir, MyModule)
   """
-  @spec build(CallGraph.t(), IR.t(), module | {module, atom, integer} | nil) :: :ok
+  @spec build(CallGraph.t(), IR.t(), vertex | nil) :: :ok
   def build(call_graph, ir, from_vertex \\ nil)
 
   def build(call_graph, %IR.AtomType{value: value}, from_vertex) do
@@ -156,7 +158,7 @@ defmodule Hologram.Compiler.CallGraph do
       iex> has_edge?(call_graph, :vertex_1, :vertex_2)
       true
   """
-  @spec has_edge?(CallGraph.t(), any, any) :: boolean
+  @spec has_edge?(CallGraph.t(), vertex, vertex) :: boolean
   def has_edge?(call_graph, from_vertex, to_vertex) do
     getter = fn graph ->
       Graph.edge(graph, from_vertex, to_vertex) != nil
@@ -181,9 +183,10 @@ defmodule Hologram.Compiler.CallGraph do
   #   Agent.get(call_graph, &Graph.num_vertices/1)
   # end
 
-  # def reachable(call_graph, vertices) do
-  #   Agent.get(call_graph, &Graph.reachable(&1, vertices))
-  # end
+  @spec reachable(CallGraph.t(), vertex) :: list(vertex)
+  def reachable(call_graph, vertex) do
+    Agent.get(call_graph.name, &Graph.reachable(&1, [vertex]))
+  end
 
   @doc """
   Starts a new CallGraph agent with an initial empty graph.
