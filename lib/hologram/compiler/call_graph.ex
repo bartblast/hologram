@@ -28,7 +28,7 @@ defmodule Hologram.Compiler.CallGraph do
   end
 
   @doc """
-  Adds a vertex to the call graph.
+  Adds the vertex to the call graph.
 
   ## Examples
 
@@ -167,12 +167,22 @@ defmodule Hologram.Compiler.CallGraph do
     Agent.get(call_graph.name, getter)
   end
 
+  @doc """
+  Checks if the given vertex exists in the call graph.
+
+  ## Examples
+
+      iex> call_graph = %CallGraph{name: :my_call_graph, pid: #PID<0.259.0>}
+      iex> has_vertex?(call_graph, :vertex_3)
+      true
+  """
+  @spec has_vertex?(CallGraph.t(), vertex) :: boolean
+  def has_vertex?(call_graph, vertex) do
+    Agent.get(call_graph.name, &Graph.has_vertex?(&1, vertex))
+  end
+
   # def edges(call_graph, vertex) do
   #   Agent.get(call_graph.name, &Graph.edges(&1, vertex))
-  # end
-
-  # def has_vertex?(call_graph, vertex) do
-  #   Agent.get(call_graph, &Graph.has_vertex?(&1, vertex))
   # end
 
   # def num_edges(call_graph) do

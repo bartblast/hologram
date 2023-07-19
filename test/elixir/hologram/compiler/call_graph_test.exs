@@ -126,9 +126,8 @@ defmodule Hologram.Compiler.CallGraphTest do
       }
 
       build(call_graph, ir, Module1)
-      graph = graph(call_graph)
 
-      assert Graph.has_vertex?(graph, {Module1, :my_fun, 2})
+      assert has_vertex?(call_graph, {Module1, :my_fun, 2})
 
       assert has_edge?(call_graph, {Module1, :my_fun, 2}, Module5)
       assert has_edge?(call_graph, {Module1, :my_fun, 2}, Module6)
@@ -231,14 +230,11 @@ defmodule Hologram.Compiler.CallGraphTest do
       call_graph_clone = clone(call_graph, name: @call_graph_name_2)
       add_vertex(call_graph_clone, :vertex_2)
 
-      graph = graph(call_graph)
-      graph_clone = graph(call_graph_clone)
+      assert has_vertex?(call_graph, :vertex_1)
+      refute has_vertex?(call_graph, :vertex_2)
 
-      assert Graph.has_vertex?(graph, :vertex_1)
-      refute Graph.has_vertex?(graph, :vertex_2)
-
-      assert Graph.has_vertex?(graph_clone, :vertex_1)
-      assert Graph.has_vertex?(graph_clone, :vertex_2)
+      assert has_vertex?(call_graph_clone, :vertex_1)
+      assert has_vertex?(call_graph_clone, :vertex_2)
     end
   end
 
@@ -254,6 +250,17 @@ defmodule Hologram.Compiler.CallGraphTest do
     test "has the given edge", %{call_graph: call_graph} do
       add_edge(call_graph, :vertex_1, :vertex_2)
       assert has_edge?(call_graph, :vertex_1, :vertex_2)
+    end
+  end
+
+  describe "has_vertex?/2" do
+    test "doesn't have the given vertex", %{call_graph: call_graph} do
+      refute has_vertex?(call_graph, :vertex)
+    end
+
+    test "has the given vertex", %{call_graph: call_graph} do
+      add_vertex(call_graph, :vertex)
+      assert has_vertex?(call_graph, :vertex)
     end
   end
 
