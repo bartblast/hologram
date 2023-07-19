@@ -46,6 +46,8 @@ defmodule Mix.Tasks.Compile.Hologram do
     # |> create page-digest files
 
     # write PLTs and call graph...
+    PLT.dump(ir_plt)
+    PLT.dump(new_module_digest_plt)
 
     :ok
   end

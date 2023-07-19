@@ -26,6 +26,24 @@ defmodule Hologram.Commons.PLT do
   end
 
   @doc """
+  Serializes the contents of the given PLT's ETS table and writes them to a file.
+
+  ## Examples
+
+      iex> dump(%PLT{name: :my_plt, dump_path: "/my_dump_path"})
+      :ok
+  """
+  @spec dump(PLT.t()) :: :ok
+  def dump(%PLT{dump_path: dump_path} = plt) do
+    data =
+      plt
+      |> get_all()
+      |> SerializationUtils.serialize()
+
+    File.write!(dump_path, data)
+  end
+
+  @doc """
   Returns the value stored in the underlying ETS table under the given key.
 
   ## Examples

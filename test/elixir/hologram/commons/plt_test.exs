@@ -28,6 +28,19 @@ defmodule Hologram.Commons.PLTTest do
     :ok
   end
 
+  test "dump/1" do
+    plt = start(@opts)
+    put(plt, :dump_test, 123)
+    dump(plt)
+
+    items =
+      @dump_path
+      |> File.read!()
+      |> SerializationUtils.deserialize()
+
+    assert items.dump_test == 123
+  end
+
   describe "delete/2" do
     test "key exists" do
       plt = start(@opts)
