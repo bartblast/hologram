@@ -313,6 +313,26 @@ defmodule Hologram.Compiler.CallGraphTest do
            ]
   end
 
+  test "remove_vertex/2", %{call_graph: call_graph} do
+    add_vertex(call_graph, :vertex_1)
+    add_vertex(call_graph, :vertex_2)
+    add_vertex(call_graph, :vertex_3)
+
+    add_edge(call_graph, :vertex_1, :vertex_2)
+    add_edge(call_graph, :vertex_2, :vertex_3)
+    add_edge(call_graph, :vertex_3, :vertex_1)
+
+    remove_vertex(call_graph, :vertex_2)
+
+    assert has_vertex?(call_graph, :vertex_1)
+    refute has_vertex?(call_graph, :vertex_2)
+    assert has_vertex?(call_graph, :vertex_3)
+
+    refute has_edge?(call_graph, :vertex_1, :vertex_2)
+    refute has_edge?(call_graph, :vertex_2, :vertex_3)
+    assert has_edge?(call_graph, :vertex_3, :vertex_1)
+  end
+
   describe "start/1" do
     test "returns CallGraph struct with name from opts" do
       assert %CallGraph{name: @call_graph_name_2} = start(name: @call_graph_name_2)

@@ -207,6 +207,20 @@ defmodule Hologram.Compiler.CallGraph do
   end
 
   @doc """
+  Removes the vertex from the call graph.
+
+  ## Examples
+
+      iex> call_graph = %CallGraph{name: :my_call_graph, pid: #PID<0.259.0>}
+      iex> remove_vertex(call_graph, :vertex_3)
+      :ok
+  """
+  def remove_vertex(call_graph, vertex) do
+    Agent.update(call_graph.name, &Graph.delete_vertex(&1, vertex))
+    :ok
+  end
+
+  @doc """
   Starts a new CallGraph agent with an initial empty graph.
 
   ## Examples
