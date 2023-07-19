@@ -9,8 +9,8 @@ defmodule Hologram.Commons.PLT do
   alias Hologram.Commons.PLT
   alias Hologram.Commons.SerializationUtils
 
-  defstruct pid: nil, name: nil
-  @type t :: %PLT{pid: pid, name: atom}
+  defstruct pid: nil, name: nil, dump_path: nil
+  @type t :: %PLT{pid: pid, name: atom, dump_path: String.t() | nil}
 
   @doc """
   Deletes a key-value pair from the give persistent lookup table.
@@ -116,12 +116,12 @@ defmodule Hologram.Commons.PLT do
   ## Examples
 
       iex> start(name: :my_plt, dump_path: "/my_dump_path")
-      %PLT{pid: #PID<0.273.0>, name: :my_plt}
+      %PLT{pid: #PID<0.273.0>, name: :my_plt, dump_path: "/my_dump_path"}
   """
   @spec start(keyword) :: PLT.t()
   def start(opts) do
     {:ok, pid} = GenServer.start_link(PLT, opts, name: opts[:name])
-    %PLT{pid: pid, name: opts[:name]}
+    %PLT{pid: pid, name: opts[:name], dump_path: opts[:dump_path]}
   end
 
   @doc """

@@ -93,12 +93,8 @@ defmodule Hologram.Commons.PLTTest do
   end
 
   describe "start/1" do
-    test "%PLT{} struct is returned" do
-      assert %PLT{} = start(@opts)
-    end
-
-    test "uses name from opts" do
-      assert %PLT{name: @name} = start(@opts)
+    test "returns PLT struct with name and dump_path from opts" do
+      assert %PLT{name: @name, dump_path: @dump_path} = start(@opts)
     end
 
     test "process name is registered" do
