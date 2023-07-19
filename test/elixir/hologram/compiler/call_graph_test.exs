@@ -74,10 +74,10 @@ defmodule Hologram.Compiler.CallGraphTest do
 
       assert has_edge?(call_graph, Module2, {Module2, :__hologram_layout_module__, 0})
       assert has_edge?(call_graph, Module2, {Module2, :__hologram_route__, 0})
-      assert has_edge?(call_graph, Module2, {Module2, :action, 3})
-      assert has_edge?(call_graph, Module2, {Module2, :template, 0})
 
+      refute has_edge?(call_graph, Module2, {Module2, :action, 3})
       refute has_edge?(call_graph, Module2, {Module2, :init, 1})
+      refute has_edge?(call_graph, Module2, {Module2, :template, 0})
     end
 
     test "atom type ir, which is a layout module alias", %{call_graph: call_graph} do
@@ -86,12 +86,12 @@ defmodule Hologram.Compiler.CallGraphTest do
 
       assert has_edge?(call_graph, :vertex_1, Module3)
 
-      assert has_edge?(call_graph, Module3, {Module3, :action, 3})
-      assert has_edge?(call_graph, Module3, {Module3, :template, 0})
-
       refute has_edge?(call_graph, Module3, {Module3, :__hologram_layout_module__, 0})
       refute has_edge?(call_graph, Module3, {Module3, :__hologram_route__, 0})
+
+      refute has_edge?(call_graph, Module3, {Module3, :action, 3})
       refute has_edge?(call_graph, Module3, {Module3, :init, 1})
+      refute has_edge?(call_graph, Module3, {Module3, :template, 0})
     end
 
     test "atom type ir, which is a component module alias", %{call_graph: call_graph} do

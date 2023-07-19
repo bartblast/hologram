@@ -60,10 +60,6 @@ defmodule Hologram.Compiler.CallGraph do
         add_page_call_graph_edges(call_graph, value)
       end
 
-      if Reflection.layout?(value) do
-        add_layout_call_graph_edges(call_graph, value)
-      end
-
       if Reflection.component?(value) do
         add_component_call_graph_edges(call_graph, value)
       end
@@ -194,23 +190,13 @@ defmodule Hologram.Compiler.CallGraph do
   # end
 
   defp add_component_call_graph_edges(call_graph, module) do
-    add_templatable_call_graph_edges(call_graph, module)
+    add_edge(call_graph, module, {module, :action, 3})
     add_edge(call_graph, module, {module, :init, 1})
-  end
-
-  defp add_layout_call_graph_edges(call_graph, module) do
-    add_templatable_call_graph_edges(call_graph, module)
+    add_edge(call_graph, module, {module, :template, 0})
   end
 
   defp add_page_call_graph_edges(call_graph, module) do
-    add_templatable_call_graph_edges(call_graph, module)
-
     add_edge(call_graph, module, {module, :__hologram_layout_module__, 0})
     add_edge(call_graph, module, {module, :__hologram_route__, 0})
-  end
-
-  defp add_templatable_call_graph_edges(call_graph, module) do
-    add_edge(call_graph, module, {module, :action, 3})
-    add_edge(call_graph, module, {module, :template, 0})
   end
 end
