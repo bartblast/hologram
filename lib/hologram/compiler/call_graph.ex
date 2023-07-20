@@ -136,6 +136,32 @@ defmodule Hologram.Compiler.CallGraph do
   end
 
   @doc """
+  Returns graph edges.
+
+  ## Examples
+
+      iex> edges(%CallGraph{name: :my_call_graph})
+      [
+        %Graph.Edge{
+          v1: {Module2, :my_fun_6, 3},
+          v2: Module5,
+          weight: 1,
+          label: nil
+        },
+        %Graph.Edge{
+          v1: {Module3, :my_fun_8, 1},
+          v2: {Module5, :my_fun_1, 4},
+          weight: 1,
+          label: nil
+        }
+      ]
+  """
+  @spec edges(CallGraph.t()) :: list(Graph.Edge.t())
+  def edges(call_graph) do
+    Agent.get(call_graph.name, &Graph.edges/1)
+  end
+
+  @doc """
   Returns the underlying libgraph %Graph{} struct containing the information about vertices and edges.
 
   ## Examples

@@ -2,6 +2,7 @@ defmodule Hologram.Compiler.CallGraphTest do
   use Hologram.Test.BasicCase, async: true
   import Hologram.Compiler.CallGraph
 
+  alias Hologram.Commons.PLT
   alias Hologram.Compiler.CallGraph
   alias Hologram.Compiler.IR
   alias Hologram.Test.Fixtures.Compiler.CallGraph.Module1
@@ -13,8 +14,9 @@ defmodule Hologram.Compiler.CallGraphTest do
   alias Hologram.Test.Fixtures.Compiler.CallGraph.Module7
   alias Hologram.Test.Fixtures.Compiler.CallGraph.Module8
 
-  @call_graph_name_1 :"cg_#{__MODULE__}_1"
-  @call_graph_name_2 :"cg_#{__MODULE__}_2"
+  @call_graph_name_1 :"call_graph_#{__MODULE__}_1"
+  @call_graph_name_2 :"call_graph_#{__MODULE__}_2"
+  @ir_plt_name :"plt_{__MODULE__}"
   @opts name: @call_graph_name_1
 
   setup do
@@ -236,6 +238,17 @@ defmodule Hologram.Compiler.CallGraphTest do
       assert has_vertex?(call_graph_clone, :vertex_1)
       assert has_vertex?(call_graph_clone, :vertex_2)
     end
+  end
+
+  test "edges/1", %{call_graph: call_graph} do
+    add_vertex(call_graph, :vertex_1)
+    add_edge(call_graph, :vertex_2, :vertex_3)
+    add_edge(call_graph, :vertex_4, :vertex_5)
+
+    assert edges(call_graph) == [
+             %Graph.Edge{v1: :vertex_2, v2: :vertex_3, weight: 1, label: nil},
+             %Graph.Edge{v1: :vertex_4, v2: :vertex_5, weight: 1, label: nil}
+           ]
   end
 
   test "graph/1", %{call_graph: call_graph} do
