@@ -83,8 +83,8 @@ defmodule Hologram.Compiler.CallGraph do
   end
 
   def build(call_graph, %IR.ModuleDefinition{module: module, body: body}, _from_vertex) do
-    add_vertex(call_graph, module)
-    build(call_graph, body, module)
+    add_vertex(call_graph, module.value)
+    build(call_graph, body, module.value)
   end
 
   def build(call_graph, %IR.RemoteFunctionCall{} = ir, from_vertex) do

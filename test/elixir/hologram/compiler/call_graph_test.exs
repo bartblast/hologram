@@ -179,7 +179,7 @@ defmodule Hologram.Compiler.CallGraphTest do
 
     test "module definition ir", %{call_graph: call_graph} do
       ir = %IR.ModuleDefinition{
-        module: Module1,
+        module: %IR.AtomType{value: Module1},
         body: %IR.Block{
           expressions: [
             %IR.AtomType{value: Module5},
