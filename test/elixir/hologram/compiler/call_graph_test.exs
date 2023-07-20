@@ -29,7 +29,8 @@ defmodule Hologram.Compiler.CallGraphTest do
   end
 
   test "add_edge/3", %{call_graph: call_graph} do
-    :ok = add_edge(call_graph, :vertex_1, :vertex_2)
+    assert ^call_graph = add_edge(call_graph, :vertex_1, :vertex_2)
+
     graph = graph(call_graph)
 
     assert Graph.edge(graph, :vertex_1, :vertex_2) == %Graph.Edge{
@@ -42,22 +43,22 @@ defmodule Hologram.Compiler.CallGraphTest do
 
   test "add_edges/2", %{call_graph: call_graph} do
     edges = [Graph.Edge.new(:a, :b), Graph.Edge.new(:c, :d)]
-    add_edges(call_graph, edges)
 
+    assert ^call_graph = add_edges(call_graph, edges)
     assert edges(call_graph) == edges
   end
 
   test "add_vertex/2", %{call_graph: call_graph} do
-    :ok = add_vertex(call_graph, :vertex_3)
-    graph = graph(call_graph)
+    assert ^call_graph = add_vertex(call_graph, :vertex_3)
 
+    graph = graph(call_graph)
     assert Graph.has_vertex?(graph, :vertex_3)
   end
 
   describe "build/3" do
     test "atom type ir, which is not a module alias", %{call_graph: call_graph} do
       ir = %IR.AtomType{value: :abc}
-      build(call_graph, ir, :vertex_1)
+      assert ^call_graph = build(call_graph, ir, :vertex_1)
 
       refute has_edge?(call_graph, :vertex_1, :abc)
     end
@@ -66,7 +67,7 @@ defmodule Hologram.Compiler.CallGraphTest do
       call_graph: call_graph
     } do
       ir = %IR.AtomType{value: Module1}
-      build(call_graph, ir, :vertex_1)
+      assert ^call_graph = build(call_graph, ir, :vertex_1)
 
       assert has_edge?(call_graph, :vertex_1, Module1)
 
@@ -79,7 +80,7 @@ defmodule Hologram.Compiler.CallGraphTest do
 
     test "atom type ir, which is a page module alias", %{call_graph: call_graph} do
       ir = %IR.AtomType{value: Module2}
-      build(call_graph, ir, :vertex_1)
+      assert ^call_graph = build(call_graph, ir, :vertex_1)
 
       assert has_edge?(call_graph, :vertex_1, Module2)
 
@@ -93,7 +94,7 @@ defmodule Hologram.Compiler.CallGraphTest do
 
     test "atom type ir, which is a layout module alias", %{call_graph: call_graph} do
       ir = %IR.AtomType{value: Module3}
-      build(call_graph, ir, :vertex_1)
+      assert ^call_graph = build(call_graph, ir, :vertex_1)
 
       assert has_edge?(call_graph, :vertex_1, Module3)
 
@@ -107,7 +108,7 @@ defmodule Hologram.Compiler.CallGraphTest do
 
     test "atom type ir, which is a component module alias", %{call_graph: call_graph} do
       ir = %IR.AtomType{value: Module4}
-      build(call_graph, ir, :vertex_1)
+      assert ^call_graph = build(call_graph, ir, :vertex_1)
 
       assert has_edge?(call_graph, :vertex_1, Module4)
 
@@ -136,7 +137,7 @@ defmodule Hologram.Compiler.CallGraphTest do
         }
       }
 
-      build(call_graph, ir, Module1)
+      assert ^call_graph = build(call_graph, ir, Module1)
 
       assert has_edge?(call_graph, {Module1, :my_fun, 2}, Module5)
       assert has_edge?(call_graph, {Module1, :my_fun, 2}, Module6)
@@ -145,7 +146,7 @@ defmodule Hologram.Compiler.CallGraphTest do
 
     test "list", %{call_graph: call_graph} do
       list = [%IR.AtomType{value: Module1}, %IR.AtomType{value: Module5}]
-      build(call_graph, list, :vertex_1)
+      assert ^call_graph = build(call_graph, list, :vertex_1)
 
       assert has_edge?(call_graph, :vertex_1, Module1)
       assert has_edge?(call_graph, :vertex_1, Module5)
@@ -161,7 +162,7 @@ defmodule Hologram.Compiler.CallGraphTest do
         ]
       }
 
-      build(call_graph, ir, {Module1, :my_fun_1, 4})
+      assert ^call_graph = build(call_graph, ir, {Module1, :my_fun_1, 4})
 
       assert has_edge?(call_graph, {Module1, :my_fun_1, 4}, {Module1, :my_fun_2, 3})
       assert has_edge?(call_graph, {Module1, :my_fun_1, 4}, Module5)
@@ -175,7 +176,7 @@ defmodule Hologram.Compiler.CallGraphTest do
         %IR.AtomType{value: Module6} => %IR.AtomType{value: Module7}
       }
 
-      build(call_graph, map, :vertex_1)
+      assert ^call_graph = build(call_graph, map, :vertex_1)
 
       assert has_edge?(call_graph, :vertex_1, Module1)
       assert has_edge?(call_graph, :vertex_1, Module5)
@@ -194,7 +195,7 @@ defmodule Hologram.Compiler.CallGraphTest do
         }
       }
 
-      build(call_graph, ir)
+      assert ^call_graph = build(call_graph, ir)
 
       assert has_edge?(call_graph, Module1, Module5)
       assert has_edge?(call_graph, Module1, Module6)
@@ -211,7 +212,7 @@ defmodule Hologram.Compiler.CallGraphTest do
         ]
       }
 
-      build(call_graph, ir, {Module1, :my_fun_1, 4})
+      assert ^call_graph = build(call_graph, ir, {Module1, :my_fun_1, 4})
 
       assert has_edge?(call_graph, {Module1, :my_fun_1, 4}, {Module5, :my_fun_2, 3})
       assert has_edge?(call_graph, {Module1, :my_fun_1, 4}, Module6)
@@ -221,7 +222,7 @@ defmodule Hologram.Compiler.CallGraphTest do
 
     test "tuple", %{call_graph: call_graph} do
       tuple = {%IR.AtomType{value: Module1}, %IR.AtomType{value: Module5}}
-      build(call_graph, tuple, :vertex_1)
+      assert ^call_graph = build(call_graph, tuple, :vertex_1)
 
       assert has_edge?(call_graph, :vertex_1, Module1)
       assert has_edge?(call_graph, :vertex_1, Module5)
@@ -236,8 +237,10 @@ defmodule Hologram.Compiler.CallGraphTest do
     test "clones the call graph", %{call_graph: call_graph} do
       add_vertex(call_graph, :vertex_1)
 
-      call_graph_clone = clone(call_graph, name: @call_graph_name_2)
-      add_vertex(call_graph_clone, :vertex_2)
+      call_graph_clone =
+        call_graph
+        |> clone(name: @call_graph_name_2)
+        |> add_vertex(:vertex_2)
 
       assert has_vertex?(call_graph, :vertex_1)
       refute has_vertex?(call_graph, :vertex_2)
@@ -248,9 +251,10 @@ defmodule Hologram.Compiler.CallGraphTest do
   end
 
   test "edges/1", %{call_graph: call_graph} do
-    add_vertex(call_graph, :vertex_1)
-    add_edge(call_graph, :vertex_2, :vertex_3)
-    add_edge(call_graph, :vertex_4, :vertex_5)
+    call_graph
+    |> add_vertex(:vertex_1)
+    |> add_edge(:vertex_2, :vertex_3)
+    |> add_edge(:vertex_4, :vertex_5)
 
     assert edges(call_graph) == [
              %Graph.Edge{v1: :vertex_2, v2: :vertex_3, weight: 1, label: nil},
@@ -285,13 +289,13 @@ defmodule Hologram.Compiler.CallGraphTest do
   end
 
   test "inbound_remote_edges/2", %{call_graph: call_graph} do
-    add_edge(call_graph, {:module_1, :fun_a, :arity_a}, {:module_2, :fun_b, :arity_b})
-    add_edge(call_graph, {:module_3, :fun_c, :arity_c}, {:module_2, :fun_d, :arity_d})
-    add_edge(call_graph, {:module_4, :fun_e, :arity_e}, :module_2)
-    add_edge(call_graph, {:module_5, :fun_f, :arity_f}, :module_2)
-
-    add_edge(call_graph, {:module_6, :fun_g, :arity_g}, {:module_7, :fun_h, :arity_h})
-    add_edge(call_graph, {:module_8, :fun_i, :arity_i}, :module_9)
+    call_graph
+    |> add_edge({:module_1, :fun_a, :arity_a}, {:module_2, :fun_b, :arity_b})
+    |> add_edge({:module_3, :fun_c, :arity_c}, {:module_2, :fun_d, :arity_d})
+    |> add_edge({:module_4, :fun_e, :arity_e}, :module_2)
+    |> add_edge({:module_5, :fun_f, :arity_f}, :module_2)
+    |> add_edge({:module_6, :fun_g, :arity_g}, {:module_7, :fun_h, :arity_h})
+    |> add_edge({:module_8, :fun_i, :arity_i}, :module_9)
 
     result =
       call_graph
@@ -327,12 +331,13 @@ defmodule Hologram.Compiler.CallGraphTest do
   end
 
   test "module_vertices/2", %{call_graph: call_graph} do
-    add_vertex(call_graph, {:module_1, :fun_a, :arity_a})
-    add_vertex(call_graph, {:module_2, :fun_b, :arity_b})
-    add_vertex(call_graph, {:module_3, :fun_c, :arity_c})
-    add_vertex(call_graph, {:module_2, :fun_d, :arity_d})
-    add_vertex(call_graph, :module_4)
-    add_vertex(call_graph, :module_2)
+    call_graph
+    |> add_vertex({:module_1, :fun_a, :arity_a})
+    |> add_vertex({:module_2, :fun_b, :arity_b})
+    |> add_vertex({:module_3, :fun_c, :arity_c})
+    |> add_vertex({:module_2, :fun_d, :arity_d})
+    |> add_vertex(:module_4)
+    |> add_vertex(:module_2)
 
     assert module_vertices(call_graph, :module_2) == [
              :module_2,
@@ -351,9 +356,10 @@ defmodule Hologram.Compiler.CallGraphTest do
       module_10_ir = IR.for_module(Module10)
       PLT.put(ir_plt, Module10, module_10_ir)
 
-      call_graph_2 = start(name: @call_graph_name_2)
-      build(call_graph_2, module_9_ir)
-      build(call_graph_2, module_10_ir)
+      call_graph_2 =
+        start(name: @call_graph_name_2)
+        |> build(module_9_ir)
+        |> build(module_10_ir)
 
       diff = %{
         added_modules: [Module10, Module9],
@@ -368,11 +374,12 @@ defmodule Hologram.Compiler.CallGraphTest do
     end
 
     test "removes modules", %{call_graph: call_graph} do
-      add_edge(call_graph, {:module_1, :fun_a, :arity_a}, {:module_2, :fun_b, :arity_b})
-      add_edge(call_graph, {:module_2, :fun_c, :arity_c}, {:module_3, :fun_d, :arity_d})
-      add_edge(call_graph, {:module_1, :fun_e, :arity_e}, {:module_3, :fun_f, :arity_f})
-      add_edge(call_graph, {:module_4, :fun_g, :arity_g}, :module_2)
-      add_edge(call_graph, {:module_5, :fun_h, :arity_h}, :module_6)
+      call_graph
+      |> add_edge({:module_1, :fun_a, :arity_a}, {:module_2, :fun_b, :arity_b})
+      |> add_edge({:module_2, :fun_c, :arity_c}, {:module_3, :fun_d, :arity_d})
+      |> add_edge({:module_1, :fun_e, :arity_e}, {:module_3, :fun_f, :arity_f})
+      |> add_edge({:module_4, :fun_g, :arity_g}, :module_2)
+      |> add_edge({:module_5, :fun_h, :arity_h}, :module_6)
 
       ir_plt = PLT.start(name: @ir_plt_name)
 
@@ -411,12 +418,13 @@ defmodule Hologram.Compiler.CallGraphTest do
       module_10_ir = IR.for_module(Module10)
       PLT.put(ir_plt, Module10, module_10_ir)
 
-      add_edge(call_graph, {:module_3, :fun_c, :arity_c}, Module9)
-      add_edge(call_graph, {:module_1, :fun_a, :arity_a}, {Module9, :my_fun_1, 0})
-      add_edge(call_graph, {:module_2, :fun_b, :arity_b}, {Module9, :my_fun_2, 0})
-      add_edge(call_graph, {:module_1, :fun_d, :arity_d}, Module9)
-      add_edge(call_graph, {Module9, :my_fun_3, 2}, {:module_4, :fun_e, :arity_e})
-      add_edge(call_graph, {Module10, :my_fun_4, 2}, {:module_5, :fun_f, :arity_f})
+      call_graph
+      |> add_edge({:module_3, :fun_c, :arity_c}, Module9)
+      |> add_edge({:module_1, :fun_a, :arity_a}, {Module9, :my_fun_1, 0})
+      |> add_edge({:module_2, :fun_b, :arity_b}, {Module9, :my_fun_2, 0})
+      |> add_edge({:module_1, :fun_d, :arity_d}, Module9)
+      |> add_edge({Module9, :my_fun_3, 2}, {:module_4, :fun_e, :arity_e})
+      |> add_edge({Module10, :my_fun_4, 2}, {:module_5, :fun_f, :arity_f})
 
       diff = %{
         added_modules: [],
@@ -498,26 +506,21 @@ defmodule Hologram.Compiler.CallGraphTest do
     # │  │  ├─ 14
     # │  │  ├─ 15
 
-    add_edge(call_graph, :vertex_1, :vertex_2)
-    add_edge(call_graph, :vertex_1, :vertex_3)
-
-    add_edge(call_graph, :vertex_2, :vertex_4)
-    add_edge(call_graph, :vertex_2, :vertex_5)
-
-    add_edge(call_graph, :vertex_3, :vertex_6)
-    add_edge(call_graph, :vertex_3, :vertex_7)
-
-    add_edge(call_graph, :vertex_4, :vertex_8)
-    add_edge(call_graph, :vertex_4, :vertex_9)
-
-    add_edge(call_graph, :vertex_5, :vertex_10)
-    add_edge(call_graph, :vertex_5, :vertex_11)
-
-    add_edge(call_graph, :vertex_6, :vertex_12)
-    add_edge(call_graph, :vertex_6, :vertex_13)
-
-    add_edge(call_graph, :vertex_7, :vertex_14)
-    add_edge(call_graph, :vertex_7, :vertex_15)
+    call_graph
+    |> add_edge(:vertex_1, :vertex_2)
+    |> add_edge(:vertex_1, :vertex_3)
+    |> add_edge(:vertex_2, :vertex_4)
+    |> add_edge(:vertex_2, :vertex_5)
+    |> add_edge(:vertex_3, :vertex_6)
+    |> add_edge(:vertex_3, :vertex_7)
+    |> add_edge(:vertex_4, :vertex_8)
+    |> add_edge(:vertex_4, :vertex_9)
+    |> add_edge(:vertex_5, :vertex_10)
+    |> add_edge(:vertex_5, :vertex_11)
+    |> add_edge(:vertex_6, :vertex_12)
+    |> add_edge(:vertex_6, :vertex_13)
+    |> add_edge(:vertex_7, :vertex_14)
+    |> add_edge(:vertex_7, :vertex_15)
 
     assert reachable(call_graph, :vertex_3) == [
              :vertex_15,
@@ -531,15 +534,14 @@ defmodule Hologram.Compiler.CallGraphTest do
   end
 
   test "remove_vertex/2", %{call_graph: call_graph} do
-    add_vertex(call_graph, :vertex_1)
-    add_vertex(call_graph, :vertex_2)
-    add_vertex(call_graph, :vertex_3)
-
-    add_edge(call_graph, :vertex_1, :vertex_2)
-    add_edge(call_graph, :vertex_2, :vertex_3)
-    add_edge(call_graph, :vertex_3, :vertex_1)
-
-    remove_vertex(call_graph, :vertex_2)
+    call_graph
+    |> add_vertex(:vertex_1)
+    |> add_vertex(:vertex_2)
+    |> add_vertex(:vertex_3)
+    |> add_edge(:vertex_1, :vertex_2)
+    |> add_edge(:vertex_2, :vertex_3)
+    |> add_edge(:vertex_3, :vertex_1)
+    |> remove_vertex(:vertex_2)
 
     assert has_vertex?(call_graph, :vertex_1)
     refute has_vertex?(call_graph, :vertex_2)
@@ -562,9 +564,10 @@ defmodule Hologram.Compiler.CallGraphTest do
   end
 
   test "vertices/1", %{call_graph: call_graph} do
-    add_vertex(call_graph, :vertex_1)
-    add_edge(call_graph, :vertex_2, :vertex_3)
-    add_edge(call_graph, :vertex_4, :vertex_5)
+    call_graph
+    |> add_vertex(:vertex_1)
+    |> add_edge(:vertex_2, :vertex_3)
+    |> add_edge(:vertex_4, :vertex_5)
 
     assert vertices(call_graph) == [:vertex_1, :vertex_2, :vertex_3, :vertex_4, :vertex_5]
   end

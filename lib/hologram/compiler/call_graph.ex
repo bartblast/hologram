@@ -18,12 +18,12 @@ defmodule Hologram.Compiler.CallGraph do
 
       iex> call_graph = %CallGraph{name: :my_call_graph, pid: #PID<0.259.0>}
       iex> add_adge(call_graph, :vertex_1, :vertex_2)
-      :ok
+      %CallGraph{name: :my_call_graph, pid: #PID<0.259.0>}
   """
-  @spec add_edge(CallGraph.t(), vertex, vertex) :: :ok
+  @spec add_edge(CallGraph.t(), vertex, vertex) :: CallGraph.t()
   def add_edge(call_graph, from_vertex, to_vertex) do
     Agent.update(call_graph.name, &Graph.add_edge(&1, from_vertex, to_vertex))
-    :ok
+    call_graph
   end
 
   @doc """
@@ -49,12 +49,12 @@ defmodule Hologram.Compiler.CallGraph do
 
       iex> call_graph = %CallGraph{name: :my_call_graph, pid: #PID<0.259.0>}
       iex> add_vertex(call_graph, :vertex_3)
-      :ok
+      %CallGraph{name: :my_call_graph, pid: #PID<0.259.0>}
   """
-  @spec add_vertex(CallGraph.t(), vertex) :: :ok
+  @spec add_vertex(CallGraph.t(), vertex) :: CallGraph.t()
   def add_vertex(call_graph, vertex) do
     Agent.update(call_graph.name, &Graph.add_vertex(&1, vertex))
-    :ok
+    call_graph
   end
 
   @doc """
@@ -65,8 +65,9 @@ defmodule Hologram.Compiler.CallGraph do
       iex> call_graph = %CallGraph{name: :my_call_graph, pid: #PID<0.259.0>}
       iex> ir = %IR.LocalFunctionCall{function: :my_fun, args: [%IR.IntegerType{value: 123}]}
       iex> build(call_graph, ir, MyModule)
+      %CallGraph{name: :my_call_graph, pid: #PID<0.259.0>}
   """
-  @spec build(CallGraph.t(), IR.t(), vertex | nil) :: :ok
+  @spec build(CallGraph.t(), IR.t(), vertex | nil) :: CallGraph.t()
   def build(call_graph, ir, from_vertex \\ nil)
 
   def build(call_graph, %IR.AtomType{value: value}, from_vertex) do
@@ -82,7 +83,7 @@ defmodule Hologram.Compiler.CallGraph do
       end
     end
 
-    :ok
+    call_graph
   end
 
   def build(call_graph, %IR.FunctionDefinition{} = ir, from_vertex) do
@@ -110,7 +111,7 @@ defmodule Hologram.Compiler.CallGraph do
 
   def build(call_graph, list, from_vertex) when is_list(list) do
     Enum.each(list, &build(call_graph, &1, from_vertex))
-    :ok
+    call_graph
   end
 
   def build(call_graph, map, from_vertex) when is_map(map) do
@@ -121,7 +122,7 @@ defmodule Hologram.Compiler.CallGraph do
       build(call_graph, value, from_vertex)
     end)
 
-    :ok
+    call_graph
   end
 
   def build(call_graph, tuple, from_vertex) when is_tuple(tuple) do
@@ -129,10 +130,10 @@ defmodule Hologram.Compiler.CallGraph do
     |> Tuple.to_list()
     |> Enum.each(&build(call_graph, &1, from_vertex))
 
-    :ok
+    call_graph
   end
 
-  def build(_call_graph, _ir, _from_vertex), do: :ok
+  def build(call_graph, _ir, _from_vertex), do: call_graph
 
   @doc """
   Clones the call graph and uses a new name for it.
@@ -332,12 +333,12 @@ defmodule Hologram.Compiler.CallGraph do
 
       iex> call_graph = %CallGraph{name: :my_call_graph, pid: #PID<0.259.0>}
       iex> remove_vertex(call_graph, :vertex_3)
-      :ok
+      %CallGraph{name: :my_call_graph, pid: #PID<0.259.0>}
   """
-  @spec remove_vertex(CallGraph.t(), vertex) :: :ok
+  @spec remove_vertex(CallGraph.t(), vertex) :: CallGraph.t()
   def remove_vertex(call_graph, vertex) do
     Agent.update(call_graph.name, &Graph.delete_vertex(&1, vertex))
-    :ok
+    call_graph
   end
 
   @doc """
