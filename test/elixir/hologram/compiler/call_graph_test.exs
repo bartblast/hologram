@@ -401,6 +401,84 @@ defmodule Hologram.Compiler.CallGraphTest do
                }
              ]
     end
+
+    test "updates modules", %{call_graph: call_graph} do
+      ir_plt = PLT.start(name: @ir_plt_name)
+
+      module_9_ir = IR.for_module(Module9)
+      PLT.put(ir_plt, Module9, module_9_ir)
+
+      module_10_ir = IR.for_module(Module10)
+      PLT.put(ir_plt, Module10, module_10_ir)
+
+      add_edge(call_graph, {:module_3, :fun_c, :arity_c}, Module9)
+      add_edge(call_graph, {:module_1, :fun_a, :arity_a}, {Module9, :my_fun_1, 0})
+      add_edge(call_graph, {:module_2, :fun_b, :arity_b}, {Module9, :my_fun_2, 0})
+      add_edge(call_graph, {:module_1, :fun_d, :arity_d}, Module9)
+      add_edge(call_graph, {Module9, :my_fun_3, 2}, {:module_4, :fun_e, :arity_e})
+      add_edge(call_graph, {Module10, :my_fun_4, 2}, {:module_5, :fun_f, :arity_f})
+
+      diff = %{
+        added_modules: [],
+        removed_modules: [],
+        updated_modules: [Module9, Module10]
+      }
+
+      patch(call_graph, ir_plt, diff)
+
+      assert vertices(call_graph) == [
+               Module9,
+               {Module9, :my_fun_1, 0},
+               {:module_4, :fun_e, :arity_e},
+               {:module_2, :fun_b, :arity_b},
+               {:module_1, :fun_a, :arity_a},
+               {Module9, :my_fun_2, 0},
+               {:module_1, :fun_d, :arity_d},
+               {Module10, :my_fun_3, 0},
+               {:module_5, :fun_f, :arity_f},
+               {Module10, :my_fun_4, 0},
+               {:module_3, :fun_c, :arity_c}
+             ]
+
+      assert edges(call_graph) == [
+               %Graph.Edge{
+                 v1: {Module9, :my_fun_1, 0},
+                 v2: {Module9, :my_fun_2, 0},
+                 weight: 1,
+                 label: nil
+               },
+               %Graph.Edge{
+                 v1: {:module_2, :fun_b, :arity_b},
+                 v2: {Module9, :my_fun_2, 0},
+                 weight: 1,
+                 label: nil
+               },
+               %Graph.Edge{
+                 v1: {:module_1, :fun_a, :arity_a},
+                 v2: {Module9, :my_fun_1, 0},
+                 weight: 1,
+                 label: nil
+               },
+               %Graph.Edge{
+                 v1: {:module_1, :fun_d, :arity_d},
+                 v2: Module9,
+                 weight: 1,
+                 label: nil
+               },
+               %Graph.Edge{
+                 v1: {Module10, :my_fun_3, 0},
+                 v2: {Module10, :my_fun_4, 0},
+                 weight: 1,
+                 label: nil
+               },
+               %Graph.Edge{
+                 v1: {:module_3, :fun_c, :arity_c},
+                 v2: Module9,
+                 weight: 1,
+                 label: nil
+               }
+             ]
+    end
   end
 
   test "reachable/2", %{call_graph: call_graph} do
