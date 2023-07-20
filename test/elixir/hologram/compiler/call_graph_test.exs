@@ -14,6 +14,7 @@ defmodule Hologram.Compiler.CallGraphTest do
   alias Hologram.Test.Fixtures.Compiler.CallGraph.Module7
   alias Hologram.Test.Fixtures.Compiler.CallGraph.Module8
   alias Hologram.Test.Fixtures.Compiler.CallGraph.Module9
+  alias Hologram.Test.Fixtures.Compiler.CallGraph.Module10
 
   @call_graph_name_1 :"call_graph_#{__MODULE__}_1"
   @call_graph_name_2 :"call_graph_#{__MODULE__}_2"
@@ -129,8 +130,6 @@ defmodule Hologram.Compiler.CallGraphTest do
       }
 
       build(call_graph, ir, Module1)
-
-      assert has_vertex?(call_graph, {Module1, :my_fun, 2})
 
       assert has_edge?(call_graph, {Module1, :my_fun, 2}, Module5)
       assert has_edge?(call_graph, {Module1, :my_fun, 2}, Module6)
@@ -336,6 +335,31 @@ defmodule Hologram.Compiler.CallGraphTest do
   end
 
   describe "patch/3" do
+    test "adds modules", %{call_graph: call_graph} do
+      ir_plt = PLT.start(name: @ir_plt_name)
+
+      module_9_ir = IR.for_module(Module9)
+      PLT.put(ir_plt, Module9, module_9_ir)
+
+      module_10_ir = IR.for_module(Module10)
+      PLT.put(ir_plt, Module10, module_10_ir)
+
+      call_graph_2 = start(name: @call_graph_name_2)
+      build(call_graph_2, module_9_ir)
+      build(call_graph_2, module_10_ir)
+
+      diff = %{
+        added_modules: [Module10, Module9],
+        removed_modules: [],
+        updated_modules: []
+      }
+
+      patch(call_graph, ir_plt, diff)
+
+      assert vertices(call_graph) == vertices(call_graph_2)
+      assert edges(call_graph) == edges(call_graph_2)
+    end
+
     test "removes modules", %{call_graph: call_graph} do
       add_edge(call_graph, {:module_1, :fun_a, :arity_a}, {:module_2, :fun_b, :arity_b})
       add_edge(call_graph, {:module_2, :fun_c, :arity_c}, {:module_3, :fun_d, :arity_d})
