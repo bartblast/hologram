@@ -273,7 +273,12 @@ defmodule Hologram.Compiler.CallGraphTest do
     add_edge(call_graph, {:module_6, :fun_g, :arity_g}, {:module_7, :fun_h, :arity_h})
     add_edge(call_graph, {:module_8, :fun_i, :arity_i}, :module_9)
 
-    assert call_graph |> inbound_remote_edges(:module_2) |> Enum.sort() == [
+    result =
+      call_graph
+      |> inbound_remote_edges(:module_2)
+      |> Enum.sort()
+
+    assert result == [
              %Graph.Edge{
                v1: {:module_1, :fun_a, :arity_a},
                v2: {:module_2, :fun_b, :arity_b},
