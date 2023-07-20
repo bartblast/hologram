@@ -279,7 +279,24 @@ defmodule Hologram.Compiler.CallGraph do
     end)
   end
 
-  # TODO: doc, spec, tests
+  @doc """
+  Given a diff of changes, updates the call graph
+  by deleting the graph paths of modules that have been removed,
+  rebuilding the graph paths of modules that have been updated,
+  and adding the graph paths of modules that have been added.
+
+  ## Examples
+
+      iex> call_graph = %CallGraph{name: :my_call_graph, pid: #PID<0.259.0>}
+      iex> diff = %{
+      ...>   added_modules: [Module1, Module2],
+      ...>   removed_modules: [Module5, Module6],
+      ...>   updated_modules: [Module3, Module4]
+      ...> }
+      iex> patch(call_graph, diff)
+      %CallGraph{name: :my_call_graph, pid: #PID<0.259.0>}
+  """
+  @spec patch(CallGraph.t(), PLT.t(), map) :: CallGraph.t()
   def patch(call_graph, ir_plt, diff) do
     Enum.each(diff.removed_modules, &remove_module_vertices(call_graph, &1))
 
@@ -292,7 +309,7 @@ defmodule Hologram.Compiler.CallGraph do
 
     Enum.each(diff.added_modules, &build_module(call_graph, ir_plt, &1))
 
-    :ok
+    call_graph
   end
 
   @doc """
