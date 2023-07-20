@@ -2,12 +2,13 @@ defmodule Hologram.Compiler.CallGraph do
   use Agent
 
   alias Hologram.Commons.PLT
+  alias Hologram.Commons.SerializationUtils
   alias Hologram.Compiler.CallGraph
   alias Hologram.Compiler.IR
   alias Hologram.Compiler.Reflection
 
-  defstruct pid: nil, name: nil
-  @type t :: %CallGraph{pid: pid, name: atom}
+  defstruct pid: nil, name: nil, dump_path: nil
+  @type t :: %CallGraph{pid: pid, name: atom, dump_path: String.t() | nil}
 
   @type vertex :: module | {module, atom, integer}
 
@@ -148,6 +149,24 @@ defmodule Hologram.Compiler.CallGraph do
     new_call_graph = start(opts)
     Agent.update(new_call_graph.name, fn _state -> graph(old_call_graph) end)
     new_call_graph
+  end
+
+  @doc """
+  Serializes the graph and writes it to a file.
+
+  ## Examples
+
+      iex> dump(%CallGraph{name: :my_call_graph, dump_path: "/my_dump_path"})
+      :ok
+  """
+  @spec dump(CallGraph.t()) :: :ok
+  def dump(%CallGraph{dump_path: dump_path} = call_graph) do
+    data =
+      call_graph
+      |> graph()
+      |> SerializationUtils.serialize()
+
+    File.write!(dump_path, data)
   end
 
   @doc """

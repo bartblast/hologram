@@ -3,8 +3,10 @@ defmodule Hologram.Compiler.CallGraphTest do
   import Hologram.Compiler.CallGraph
 
   alias Hologram.Commons.PLT
+  alias Hologram.Commons.SerializationUtils
   alias Hologram.Compiler.CallGraph
   alias Hologram.Compiler.IR
+  alias Hologram.Compiler.Reflection
   alias Hologram.Test.Fixtures.Compiler.CallGraph.Module10
   alias Hologram.Test.Fixtures.Compiler.CallGraph.Module1
   alias Hologram.Test.Fixtures.Compiler.CallGraph.Module2
@@ -16,6 +18,7 @@ defmodule Hologram.Compiler.CallGraphTest do
   alias Hologram.Test.Fixtures.Compiler.CallGraph.Module8
   alias Hologram.Test.Fixtures.Compiler.CallGraph.Module9
 
+  @call_graph_dump_path Reflection.tmp_path() <> "/call_graph_#{__MODULE__}.bin"
   @call_graph_name_1 :"call_graph_#{__MODULE__}_1"
   @call_graph_name_2 :"call_graph_#{__MODULE__}_2"
   @ir_plt_name :"plt_{__MODULE__}"
@@ -24,6 +27,8 @@ defmodule Hologram.Compiler.CallGraphTest do
   setup do
     wait_for_process_cleanup(@call_graph_name_1)
     wait_for_process_cleanup(@call_graph_name_2)
+
+    File.rm_rf!(@call_graph_dump_path)
 
     [call_graph: start(@opts)]
   end
@@ -248,6 +253,19 @@ defmodule Hologram.Compiler.CallGraphTest do
       assert has_vertex?(call_graph_clone, :vertex_1)
       assert has_vertex?(call_graph_clone, :vertex_2)
     end
+  end
+
+  test "dump/1", %{call_graph: call_graph} do
+    %{call_graph | dump_path: @call_graph_dump_path}
+    |> add_vertex(:vertex_1)
+    |> dump()
+
+    graph =
+      @call_graph_dump_path
+      |> File.read!()
+      |> SerializationUtils.deserialize()
+
+    assert Graph.vertices(graph) == [:vertex_1]
   end
 
   test "edges/1", %{call_graph: call_graph} do
