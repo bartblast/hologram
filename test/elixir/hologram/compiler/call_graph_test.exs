@@ -5,6 +5,7 @@ defmodule Hologram.Compiler.CallGraphTest do
   alias Hologram.Commons.PLT
   alias Hologram.Compiler.CallGraph
   alias Hologram.Compiler.IR
+  alias Hologram.Test.Fixtures.Compiler.CallGraph.Module10
   alias Hologram.Test.Fixtures.Compiler.CallGraph.Module1
   alias Hologram.Test.Fixtures.Compiler.CallGraph.Module2
   alias Hologram.Test.Fixtures.Compiler.CallGraph.Module3
@@ -14,7 +15,6 @@ defmodule Hologram.Compiler.CallGraphTest do
   alias Hologram.Test.Fixtures.Compiler.CallGraph.Module7
   alias Hologram.Test.Fixtures.Compiler.CallGraph.Module8
   alias Hologram.Test.Fixtures.Compiler.CallGraph.Module9
-  alias Hologram.Test.Fixtures.Compiler.CallGraph.Module10
 
   @call_graph_name_1 :"call_graph_#{__MODULE__}_1"
   @call_graph_name_2 :"call_graph_#{__MODULE__}_2"
