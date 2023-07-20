@@ -5,7 +5,7 @@ defmodule Hologram.Commons.PLTTest do
   alias Hologram.Commons.PLT
   alias Hologram.Commons.SerializationUtils
 
-  @dump_path "#{File.cwd!()}/tmp/plt_#{__MODULE__}.bin"
+  @dump_path Reflection.tmp_path() <> "/plt_#{__MODULE__}.bin"
   @items %{key_1: :value_1, key_2: :value_2}
   @name :"plt_#{__MODULE__}"
   @opts name: @name, dump_path: @dump_path
@@ -28,19 +28,6 @@ defmodule Hologram.Commons.PLTTest do
     :ok
   end
 
-  test "dump/1" do
-    plt = start(@opts)
-    put(plt, :dump_test, 123)
-    dump(plt)
-
-    items =
-      @dump_path
-      |> File.read!()
-      |> SerializationUtils.deserialize()
-
-    assert items.dump_test == 123
-  end
-
   describe "delete/2" do
     test "key exists" do
       plt = start(@opts)
@@ -56,6 +43,19 @@ defmodule Hologram.Commons.PLTTest do
       assert delete(plt, :my_key) == true
       assert get(plt, :my_key) == :error
     end
+  end
+
+  test "dump/1" do
+    plt = start(@opts)
+    put(plt, :dump_test, 123)
+    dump(plt)
+
+    items =
+      @dump_path
+      |> File.read!()
+      |> SerializationUtils.deserialize()
+
+    assert items.dump_test == 123
   end
 
   describe "get/2" do

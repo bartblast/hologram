@@ -9,8 +9,8 @@ defmodule Hologram.Compiler.BuilderTest do
   alias Hologram.Test.Fixtures.Compiler.Builder.Module3
   alias Hologram.Test.Fixtures.Compiler.Builder.Module4
 
-  @plt_name_1 :"hologram_plt_#{__MODULE__}_1"
-  @plt_name_2 :"hologram_plt_#{__MODULE__}_2"
+  @plt_name_1 :"plt_#{__MODULE__}_1"
+  @plt_name_2 :"plt_#{__MODULE__}_2"
 
   setup do
     wait_for_plt_cleanup(@plt_name_1)

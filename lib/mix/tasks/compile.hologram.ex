@@ -13,10 +13,11 @@ defmodule Mix.Tasks.Compile.Hologram do
 
   alias Hologram.Commons.PLT
   alias Hologram.Compiler.Builder
+  alias Hologram.Compiler.CallGraph
   alias Hologram.Compiler.Reflection
 
-  # @call_graph_dump_path Reflection.root_priv_path() <> "/call_graph.bin"
-  # @call_graph_name :hologram_call_graph
+  @call_graph_dump_path Reflection.root_priv_path() <> "/call_graph.bin"
+  @call_graph_name :hologram_call_graph
 
   @ir_plt_dump_path Reflection.root_priv_path() <> "/plt_ir.bin"
   @ir_plt_name :hologram_plt_ir
@@ -38,8 +39,8 @@ defmodule Mix.Tasks.Compile.Hologram do
     ir_plt = PLT.start(name: @ir_plt_name, dump_path: @ir_plt_dump_path)
     Builder.patch_ir_plt(ir_plt, diff)
 
-    # call_graph = CallGraph.start(name: @call_graph_name, dump_path: @call_graph_dump_path)
-    # CallGraph.patch(call_graph, diff)
+    call_graph = CallGraph.start(name: @call_graph_name, dump_path: @call_graph_dump_path)
+    CallGraph.patch(call_graph, ir_plt, diff)
 
     # Reflections.list_pages()
     # |> Builder.build_page_js(&1, output_path, module_defs, call_graph))
