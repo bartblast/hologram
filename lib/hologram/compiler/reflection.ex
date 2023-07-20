@@ -189,6 +189,7 @@ defmodule Hologram.Compiler.Reflection do
       iex> tmp_path()
       "/Users/bartblast/Projects/my_project/tmp"
   """
+  @spec tmp_path() :: String.t()
   def tmp_path do
     root_path() <> "/tmp"
   end
