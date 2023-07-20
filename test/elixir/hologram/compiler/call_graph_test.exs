@@ -301,6 +301,21 @@ defmodule Hologram.Compiler.CallGraphTest do
            ]
   end
 
+  test "module_vertices/2", %{call_graph: call_graph} do
+    add_vertex(call_graph, {:module_1, :fun_a, :arity_a})
+    add_vertex(call_graph, {:module_2, :fun_b, :arity_b})
+    add_vertex(call_graph, {:module_3, :fun_c, :arity_c})
+    add_vertex(call_graph, {:module_2, :fun_d, :arity_d})
+    add_vertex(call_graph, :module_4)
+    add_vertex(call_graph, :module_2)
+
+    assert module_vertices(call_graph, :module_2) == [
+             :module_2,
+             {:module_2, :fun_b, :arity_b},
+             {:module_2, :fun_d, :arity_d}
+           ]
+  end
+
   test "reachable/2", %{call_graph: call_graph} do
     # 1
     # ├─ 2
