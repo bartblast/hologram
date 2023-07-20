@@ -66,7 +66,22 @@ defmodule Hologram.Commons.PLTTest do
 
     test "key doesn't exist" do
       plt = start(@opts)
-      assert get(plt, :key_invalid) == :error
+      assert get(plt, :invalid_key) == :error
+    end
+  end
+
+  describe "get!/2" do
+    test "key exists" do
+      plt = start(@opts)
+      assert get!(plt, :key_1) == :value_1
+    end
+
+    test "key doesn't exist" do
+      plt = start(@opts)
+
+      assert_raise KeyError, "key :invalid_key not found in the PLT", fn ->
+        get!(plt, :invalid_key)
+      end
     end
   end
 

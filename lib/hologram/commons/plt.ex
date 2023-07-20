@@ -45,6 +45,7 @@ defmodule Hologram.Commons.PLT do
 
   @doc """
   Returns the value stored in the underlying ETS table under the given key.
+  If the key doesn't exist the :error :atom is returned.
 
   ## Examples
 
@@ -59,6 +60,26 @@ defmodule Hologram.Commons.PLT do
 
       _fallback ->
         :error
+    end
+  end
+
+  @doc """
+  Returns the value stored in the underlying ETS table under the given key.
+  If the key doesn't exist a KeyError is raised.
+
+  ## Examples
+
+      iex> get!(%PLT{name: :my_plt}, :my_key)
+      :my_value
+
+      iex> get!(%PLT{name: :my_plt}, :invalid_key)
+      ** (KeyError) key :invalid_key not found in the PLT
+  """
+  @spec get!(PLT.t(), atom) :: term
+  def get!(plt, key) do
+    case get(plt, key) do
+      {:ok, value} -> value
+      _fallback -> raise KeyError, message: "key #{inspect(key)} not found in the PLT"
     end
   end
 
