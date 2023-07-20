@@ -273,13 +273,7 @@ defmodule Hologram.Compiler.CallGraphTest do
     add_edge(call_graph, {:module_6, :fun_g, :arity_g}, {:module_7, :fun_h, :arity_h})
     add_edge(call_graph, {:module_8, :fun_i, :arity_i}, :module_9)
 
-    assert inbound_remote_edges(call_graph, :module_2) == [
-             %Graph.Edge{
-               v1: {:module_4, :fun_e, :arity_e},
-               v2: :module_2,
-               weight: 1,
-               label: nil
-             },
+    assert inbound_remote_edges(call_graph, :module_2) |> Enum.sort() == [
              %Graph.Edge{
                v1: {:module_1, :fun_a, :arity_a},
                v2: {:module_2, :fun_b, :arity_b},
@@ -287,14 +281,20 @@ defmodule Hologram.Compiler.CallGraphTest do
                label: nil
              },
              %Graph.Edge{
-               v1: {:module_5, :fun_f, :arity_f},
+               v1: {:module_3, :fun_c, :arity_c},
+               v2: {:module_2, :fun_d, :arity_d},
+               weight: 1,
+               label: nil
+             },
+             %Graph.Edge{
+               v1: {:module_4, :fun_e, :arity_e},
                v2: :module_2,
                weight: 1,
                label: nil
              },
              %Graph.Edge{
-               v1: {:module_3, :fun_c, :arity_c},
-               v2: {:module_2, :fun_d, :arity_d},
+               v1: {:module_5, :fun_f, :arity_f},
+               v2: :module_2,
                weight: 1,
                label: nil
              }

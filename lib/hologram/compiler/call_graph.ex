@@ -208,17 +208,15 @@ defmodule Hologram.Compiler.CallGraph do
   @spec inbound_remote_edges(CallGraph.t(), module) :: list(Graph.Edge.t())
   def inbound_remote_edges(call_graph, to_module) do
     call_graph
-    |> edges()
-    |> Enum.filter(fn
-      %{v1: {from_module, _fun_1, _arity_1}, v2: {^to_module, _fun_2, _arity_2}}
-      when from_module != to_module ->
-        true
-
-      %{v1: {from_module, _fun_1, _arity_1}, v2: ^to_module} when from_module != to_module ->
-        true
-
-      _other ->
-        false
+    |> module_vertices(to_module)
+    |> Enum.reduce([], fn vertex, acc ->
+      call_graph
+      |> inbound_edges(vertex)
+      |> Enum.filter(fn
+        %{v1: {from_module, _fun, _arity}} when from_module != to_module -> true
+        _other -> false
+      end)
+      |> Enum.concat(acc)
     end)
   end
 
@@ -307,8 +305,8 @@ defmodule Hologram.Compiler.CallGraph do
     add_edge(call_graph, module, {module, :__hologram_route__, 0})
   end
 
-  defp edges(call_graph) do
-    Agent.get(call_graph.name, &Graph.edges/1)
+  defp inbound_edges(call_graph, vertex) do
+    Agent.get(call_graph.name, &Graph.in_edges(&1, vertex))
   end
 
   defp vertices(call_graph) do
