@@ -361,17 +361,25 @@ defmodule Hologram.Compiler.CallGraph do
   end
 
   @doc """
-  Starts a new CallGraph agent with an initial empty graph.
+  Starts a new CallGraph agent with an initial empty graph
+  or loads the graph from the dump file if it exists.
 
   ## Examples
 
-      iex> start(name: :my_call_graph)
-      %CallGraph{pid: #PID<0.259.0>, name: :my_call_graph}
+      iex> start(name: :my_call_graph, dump_path: "/my_dump_path")
+      %CallGraph{pid: #PID<0.259.0>, name: :my_call_graph, dump_path: "/my_dump_path"}
   """
   @spec start(keyword) :: CallGraph.t()
   def start(opts) do
     {:ok, pid} = Agent.start_link(fn -> Graph.new() end, name: opts[:name])
-    %CallGraph{pid: pid, name: opts[:name]}
+
+    call_graph = %CallGraph{pid: pid, name: opts[:name], dump_path: opts[:dump_path]}
+
+    if opts[:dump_path] && File.exists?(opts[:dump_path]) do
+      load_graph_from_file(call_graph)
+    end
+
+    call_graph
   end
 
   @doc """
@@ -405,6 +413,20 @@ defmodule Hologram.Compiler.CallGraph do
 
   defp inbound_edges(call_graph, vertex) do
     Agent.get(call_graph.name, &Graph.in_edges(&1, vertex))
+  end
+
+  defp load_graph_from_file(%{dump_path: dump_path} = call_graph) do
+    graph =
+      dump_path
+      |> File.read!()
+      |> SerializationUtils.deserialize()
+
+    put_graph(call_graph, graph)
+  end
+
+  defp put_graph(call_graph, graph) do
+    Agent.update(call_graph.name, fn _state -> graph end)
+    call_graph
   end
 
   defp remove_module_vertices(call_graph, module) do

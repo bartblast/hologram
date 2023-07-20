@@ -579,6 +579,27 @@ defmodule Hologram.Compiler.CallGraphTest do
       %CallGraph{pid: pid} = start(name: @call_graph_name_2)
       assert Process.whereis(@call_graph_name_2) == pid
     end
+
+    test "graph is loaded from file when dump_path is given in opts and dump file exists", %{
+      call_graph: call_graph
+    } do
+      %{call_graph | dump_path: @call_graph_dump_path}
+      |> add_vertex(:vertex_2)
+      |> dump()
+
+      call_graph_2 = start(name: @call_graph_name_2, dump_path: @call_graph_dump_path)
+      assert vertices(call_graph_2) == [:vertex_2]
+    end
+
+    test "graph is not loaded from file when dump_path is not given in opts" do
+      call_graph = start(name: @call_graph_name_2)
+      assert vertices(call_graph) == []
+    end
+
+    test "graph is not loaded from file when dump_path is given in opts but dump file doesn't exist" do
+      call_graph = start(name: @call_graph_name_2, dump_path: @call_graph_dump_path)
+      assert vertices(call_graph) == []
+    end
   end
 
   test "vertices/1", %{call_graph: call_graph} do
