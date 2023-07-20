@@ -4,6 +4,7 @@ defmodule Hologram.Commons.PLTTest do
 
   alias Hologram.Commons.PLT
   alias Hologram.Commons.SerializationUtils
+  alias Hologram.Compiler.Reflection
 
   @dump_path Reflection.tmp_path() <> "/plt_#{__MODULE__}.bin"
   @items %{key_1: :value_1, key_2: :value_2}
