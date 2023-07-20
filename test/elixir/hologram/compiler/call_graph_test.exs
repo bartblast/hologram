@@ -7,8 +7,8 @@ defmodule Hologram.Compiler.CallGraphTest do
   alias Hologram.Compiler.CallGraph
   alias Hologram.Compiler.IR
   alias Hologram.Compiler.Reflection
-  alias Hologram.Test.Fixtures.Compiler.CallGraph.Module10
   alias Hologram.Test.Fixtures.Compiler.CallGraph.Module1
+  alias Hologram.Test.Fixtures.Compiler.CallGraph.Module10
   alias Hologram.Test.Fixtures.Compiler.CallGraph.Module2
   alias Hologram.Test.Fixtures.Compiler.CallGraph.Module3
   alias Hologram.Test.Fixtures.Compiler.CallGraph.Module4
@@ -375,7 +375,8 @@ defmodule Hologram.Compiler.CallGraphTest do
       PLT.put(ir_plt, Module10, module_10_ir)
 
       call_graph_2 =
-        start(name: @call_graph_name_2)
+        [name: @call_graph_name_2]
+        |> start()
         |> build(module_9_ir)
         |> build(module_10_ir)
 
