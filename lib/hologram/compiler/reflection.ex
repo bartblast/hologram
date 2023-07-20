@@ -180,4 +180,16 @@ defmodule Hologram.Compiler.Reflection do
   def root_priv_path do
     root_path() <> "/priv/hologram"
   end
+
+  @doc """
+  Returns the absolute path of the tmp directory.
+
+  ## Examples
+
+      iex> tmp_path()
+      "/Users/bartblast/Projects/my_project/tmp"
+  """
+  def tmp_path do
+    root_path() <> "/tmp"
+  end
 end
