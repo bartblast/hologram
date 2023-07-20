@@ -27,6 +27,22 @@ defmodule Hologram.Compiler.CallGraph do
   end
 
   @doc """
+  Adds multiple edges to the call graph.
+
+  ## Examples
+
+      iex> call_graph = %CallGraph{name: :my_call_graph, pid: #PID<0.259.0>}
+      iex> edges = [Graph.Edge.new(:a, :b), Graph.Edge.new(:c, :d)]
+      iex> add_adges(call_graph, edges)
+      %CallGraph{name: :my_call_graph, pid: #PID<0.259.0>}
+  """
+  @spec add_edges(CallGraph.t(), list(Graph.Edge.t())) :: CallGraph.t()
+  def add_edges(call_graph, edges) do
+    Agent.update(call_graph.name, &Graph.add_edges(&1, edges))
+    call_graph
+  end
+
+  @doc """
   Adds the vertex to the call graph.
 
   ## Examples
@@ -338,10 +354,6 @@ defmodule Hologram.Compiler.CallGraph do
     add_edge(call_graph, module, {module, :action, 3})
     add_edge(call_graph, module, {module, :init, 1})
     add_edge(call_graph, module, {module, :template, 0})
-  end
-
-  defp add_edges(call_graph, edges) do
-    Agent.get(call_graph.name, &Graph.add_edges(&1, edges))
   end
 
   defp build_module(call_graph, ir_plt, module) do

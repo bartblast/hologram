@@ -40,6 +40,13 @@ defmodule Hologram.Compiler.CallGraphTest do
            }
   end
 
+  test "add_edges/2", %{call_graph: call_graph} do
+    edges = [Graph.Edge.new(:a, :b), Graph.Edge.new(:c, :d)]
+    add_edges(call_graph, edges)
+
+    assert edges(call_graph) == edges
+  end
+
   test "add_vertex/2", %{call_graph: call_graph} do
     :ok = add_vertex(call_graph, :vertex_3)
     graph = graph(call_graph)
