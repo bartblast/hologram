@@ -1129,12 +1129,27 @@ defmodule Hologram.Compiler.TransformerTest do
       assert %IR.FunctionDefinition{name: :my_fun} = transform(ast, %Context{})
     end
 
-    test "no params" do
+    test "no params, third tuple elem is nil" do
+      # {:def, [line: 1], [{:my_fun, [line: 1], nil}, [do: {:__block__, [], []}]]}
       ast =
         ast("""
         def my_fun do
         end
         """)
+
+      assert %IR.FunctionDefinition{arity: 0, clause: %IR.FunctionClause{params: []}} =
+               transform(ast, %Context{})
+    end
+
+    test "no params, third tuple elem is an empty list" do
+      ast = {:def, [line: 1], [{:my_fun, [line: 1], []}, [do: {:__block__, [], []}]]}
+
+      assert %IR.FunctionDefinition{arity: 0, clause: %IR.FunctionClause{params: []}} =
+               transform(ast, %Context{})
+    end
+
+    test "no params, third tuple elem is a module alias" do
+      ast = {:def, [line: 1], [{:my_fun, [line: 1], Elixir}, [do: {:__block__, [], []}]]}
 
       assert %IR.FunctionDefinition{arity: 0, clause: %IR.FunctionClause{params: []}} =
                transform(ast, %Context{})

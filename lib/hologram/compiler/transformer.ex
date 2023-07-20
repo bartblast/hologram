@@ -213,8 +213,13 @@ defmodule Hologram.Compiler.Transformer do
   end
 
   def transform({marker, _meta_1, [{name, _meta_2, params}, [do: body]]}, context)
-      when marker in [:def, :defp] do
+      when marker in [:def, :defp] and is_list(params) do
     transform_function_definition(marker, name, params, nil, body, context)
+  end
+
+  def transform({marker, _meta_1, [{name, _meta_2, module}, [do: body]]}, context)
+      when marker in [:def, :defp] and is_atom(module) do
+    transform_function_definition(marker, name, [], nil, body, context)
   end
 
   def transform(value, _context) when is_integer(value) do
