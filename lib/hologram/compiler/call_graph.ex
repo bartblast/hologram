@@ -1,5 +1,3 @@
-# TODO: remove old commented out code
-
 defmodule Hologram.Compiler.CallGraph do
   use Agent
 
@@ -122,7 +120,7 @@ defmodule Hologram.Compiler.CallGraph do
   def build(_call_graph, _ir, _from_vertex), do: :ok
 
   @doc """
-  Clones a call graph and uses a new name for it.
+  Clones the call graph and uses a new name for it.
 
   ## Examples
 
@@ -183,7 +181,7 @@ defmodule Hologram.Compiler.CallGraph do
   end
 
   @doc """
-  Returns edges in which the second vertex is either the given module or a function from the given module,
+  Returns the edges in which the second vertex is either the given module or a function from the given module,
   and the first vertex is a function from a different module.
 
   ## Examples
@@ -240,16 +238,8 @@ defmodule Hologram.Compiler.CallGraph do
     end)
   end
 
-  # def num_edges(call_graph) do
-  #   Agent.get(call_graph, &Graph.num_edges/1)
-  # end
-
-  # def num_vertices(call_graph) do
-  #   Agent.get(call_graph, &Graph.num_vertices/1)
-  # end
-
   @doc """
-  Determine vertices reachable from the given vertex.
+  Determines vertices which are reachable from the given vertex.
 
   ## Examples
 
@@ -289,10 +279,6 @@ defmodule Hologram.Compiler.CallGraph do
     {:ok, pid} = Agent.start_link(fn -> Graph.new() end, name: opts[:name])
     %CallGraph{pid: pid, name: opts[:name]}
   end
-
-  # def stop(call_graph) do
-  #   Agent.stop(call_graph.name)
-  # end
 
   defp add_component_call_graph_edges(call_graph, module) do
     add_edge(call_graph, module, {module, :action, 3})
