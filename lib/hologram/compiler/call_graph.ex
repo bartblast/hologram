@@ -323,6 +323,19 @@ defmodule Hologram.Compiler.CallGraph do
     %CallGraph{pid: pid, name: opts[:name]}
   end
 
+  @doc """
+  Returns graph vertices.
+
+  ## Examples
+
+      iex> vertices(%CallGraph{name: :my_call_graph})
+      [:vertex_5, :vertex_1, :vertex_3]
+  """
+  @spec vertices(CallGraph.t()) :: list(vertex)
+  def vertices(call_graph) do
+    Agent.get(call_graph.name, &Graph.vertices/1)
+  end
+
   defp add_component_call_graph_edges(call_graph, module) do
     add_edge(call_graph, module, {module, :action, 3})
     add_edge(call_graph, module, {module, :init, 1})
@@ -351,9 +364,5 @@ defmodule Hologram.Compiler.CallGraph do
     call_graph
     |> module_vertices(module)
     |> Enum.each(&remove_vertex(call_graph, &1))
-  end
-
-  defp vertices(call_graph) do
-    Agent.get(call_graph.name, &Graph.vertices/1)
   end
 end

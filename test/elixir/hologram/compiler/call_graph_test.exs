@@ -413,4 +413,12 @@ defmodule Hologram.Compiler.CallGraphTest do
       assert Process.whereis(@call_graph_name_2) == pid
     end
   end
+
+  test "vertices/1", %{call_graph: call_graph} do
+    add_vertex(call_graph, :vertex_1)
+    add_edge(call_graph, :vertex_2, :vertex_3)
+    add_edge(call_graph, :vertex_4, :vertex_5)
+
+    assert vertices(call_graph) == [:vertex_1, :vertex_2, :vertex_3, :vertex_4, :vertex_5]
+  end
 end
