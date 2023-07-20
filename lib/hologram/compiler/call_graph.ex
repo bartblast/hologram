@@ -1,6 +1,7 @@
 defmodule Hologram.Compiler.CallGraph do
   use Agent
 
+  alias Hologram.Commons.PLT
   alias Hologram.Compiler.CallGraph
   alias Hologram.Compiler.IR
   alias Hologram.Compiler.Reflection
@@ -212,7 +213,7 @@ defmodule Hologram.Compiler.CallGraph do
       |> inbound_edges(vertex)
       |> Enum.filter(fn
         %{v1: {from_module, _fun, _arity}} when from_module != to_module -> true
-        _other -> false
+        _fallback -> false
       end)
       |> Enum.concat(acc)
     end)
@@ -234,8 +235,24 @@ defmodule Hologram.Compiler.CallGraph do
     |> Enum.filter(fn
       ^module -> true
       {^module, _fun, _arity} -> true
-      _other -> false
+      _fallback -> false
     end)
+  end
+
+  # TODO: doc, spec, tests
+  def patch(call_graph, ir_plt, diff) do
+    Enum.each(diff.removed_modules, &remove_module_vertices(call_graph, &1))
+
+    Enum.each(diff.updated_modules, fn module ->
+      inbound_remote_edges = inbound_remote_edges(call_graph, module)
+      remove_module_vertices(call_graph, module)
+      build_module(call_graph, ir_plt, module)
+      add_edges(call_graph, inbound_remote_edges)
+    end)
+
+    Enum.each(diff.added_modules, &build_module(call_graph, ir_plt, &1))
+
+    :ok
   end
 
   @doc """
@@ -286,6 +303,15 @@ defmodule Hologram.Compiler.CallGraph do
     add_edge(call_graph, module, {module, :template, 0})
   end
 
+  defp add_edges(call_graph, edges) do
+    Agent.get(call_graph.name, &Graph.add_edges(&1, edges))
+  end
+
+  defp build_module(call_graph, ir_plt, module) do
+    module_def = PLT.get!(ir_plt, module)
+    build(call_graph, module_def)
+  end
+
   defp add_page_call_graph_edges(call_graph, module) do
     add_edge(call_graph, module, {module, :__hologram_layout_module__, 0})
     add_edge(call_graph, module, {module, :__hologram_route__, 0})
@@ -293,6 +319,12 @@ defmodule Hologram.Compiler.CallGraph do
 
   defp inbound_edges(call_graph, vertex) do
     Agent.get(call_graph.name, &Graph.in_edges(&1, vertex))
+  end
+
+  defp remove_module_vertices(call_graph, module) do
+    call_graph
+    |> module_vertices(module)
+    |> Enum.each(&remove_vertex(call_graph, &1))
   end
 
   defp vertices(call_graph) do
