@@ -308,12 +308,13 @@ defmodule Hologram.Compiler.CallGraph do
   ## Examples
 
       iex> call_graph = %CallGraph{name: :my_call_graph, pid: #PID<0.259.0>}
+      iex> ir_plt = %PLT{name: :my_ir_plt, pid: #PID<0.253.0>}
       iex> diff = %{
       ...>   added_modules: [Module1, Module2],
       ...>   removed_modules: [Module5, Module6],
       ...>   updated_modules: [Module3, Module4]
       ...> }
-      iex> patch(call_graph, diff)
+      iex> patch(call_graph, ir_plt, diff)
       %CallGraph{name: :my_call_graph, pid: #PID<0.259.0>}
   """
   @spec patch(CallGraph.t(), PLT.t(), map) :: CallGraph.t()
