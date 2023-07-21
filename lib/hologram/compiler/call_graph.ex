@@ -327,16 +327,22 @@ defmodule Hologram.Compiler.CallGraph do
   """
   @spec patch(CallGraph.t(), PLT.t(), map) :: CallGraph.t()
   def patch(call_graph, ir_plt, diff) do
-    Enum.each(diff.removed_modules, &remove_module_vertices(call_graph, &1))
+    diff.removed_modules
+    |> Task.async_stream(&remove_module_vertices(call_graph, &1))
+    |> Stream.run()
 
-    Enum.each(diff.updated_modules, fn module ->
+    diff.updated_modules
+    |> Task.async_stream(fn module ->
       inbound_remote_edges = inbound_remote_edges(call_graph, module)
       remove_module_vertices(call_graph, module)
       build_module(call_graph, ir_plt, module)
       add_edges(call_graph, inbound_remote_edges)
     end)
+    |> Stream.run()
 
-    Enum.each(diff.added_modules, &build_module(call_graph, ir_plt, &1))
+    diff.added_modules
+    |> Task.async_stream(&build_module(call_graph, ir_plt, &1))
+    |> Stream.run()
 
     call_graph
   end

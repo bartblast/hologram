@@ -18,7 +18,8 @@ defmodule Hologram.Compiler.Builder do
     Reflection.list_loaded_otp_apps()
     |> Kernel.--([:hex])
     |> Reflection.list_elixir_modules()
-    |> Enum.each(&rebuild_module_digest_plt_entry(plt, &1))
+    |> Task.async_stream(&rebuild_module_digest_plt_entry(plt, &1))
+    |> Stream.run()
 
     plt
   end
@@ -88,9 +89,14 @@ defmodule Hologram.Compiler.Builder do
   """
   @spec patch_ir_plt(PLT.t(), map) :: PLT.t()
   def patch_ir_plt(ir_plt, diff) do
-    Enum.each(diff.removed_modules, &PLT.delete(ir_plt, &1))
-    Enum.each(diff.updated_modules, &rebuild_ir_plt_entry(ir_plt, &1))
-    Enum.each(diff.added_modules, &rebuild_ir_plt_entry(ir_plt, &1))
+    diff.removed_modules
+    |> Task.async_stream(&PLT.delete(ir_plt, &1))
+    |> Stream.run()
+
+    (diff.updated_modules ++ diff.added_modules)
+    |> Task.async_stream(&rebuild_ir_plt_entry(ir_plt, &1))
+    |> Stream.run()
+
     ir_plt
   end
 
