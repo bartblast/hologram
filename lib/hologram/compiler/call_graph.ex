@@ -103,11 +103,19 @@ defmodule Hologram.Compiler.CallGraph do
     build(call_graph, body, module.value)
   end
 
-  def build(call_graph, %IR.RemoteFunctionCall{} = ir, from_vertex) do
-    to_vertex = {ir.module.value, ir.function, Enum.count(ir.args)}
+  def build(
+        call_graph,
+        %IR.RemoteFunctionCall{
+          module: %IR.AtomType{value: module},
+          function: function,
+          args: args
+        },
+        from_vertex
+      ) do
+    to_vertex = {module, function, Enum.count(args)}
     add_edge(call_graph, from_vertex, to_vertex)
 
-    build(call_graph, ir.args, from_vertex)
+    build(call_graph, args, from_vertex)
   end
 
   def build(call_graph, list, from_vertex) when is_list(list) do

@@ -206,7 +206,7 @@ defmodule Hologram.Compiler.CallGraphTest do
       assert has_edge?(call_graph, Module1, Module6)
     end
 
-    test "remote function call ir", %{call_graph: call_graph} do
+    test "remote function call ir, module field as an atom", %{call_graph: call_graph} do
       ir = %IR.RemoteFunctionCall{
         module: %IR.AtomType{value: Module5},
         function: :my_fun_2,
@@ -223,6 +223,26 @@ defmodule Hologram.Compiler.CallGraphTest do
       assert has_edge?(call_graph, {Module1, :my_fun_1, 4}, Module6)
       assert has_edge?(call_graph, {Module1, :my_fun_1, 4}, Module7)
       assert has_edge?(call_graph, {Module1, :my_fun_1, 4}, Module8)
+    end
+
+    test "remote function call ir, module field is a variable", %{call_graph: call_graph} do
+      ir = %IR.RemoteFunctionCall{
+        module: %IR.Variable{name: :my_var},
+        function: :my_fun_2,
+        args: [
+          %IR.AtomType{value: Module6},
+          %IR.AtomType{value: Module7},
+          %IR.AtomType{value: Module8}
+        ]
+      }
+
+      assert ^call_graph = build(call_graph, ir, {Module1, :my_fun_1, 4})
+
+      assert has_edge?(call_graph, {Module1, :my_fun_1, 4}, Module6)
+      assert has_edge?(call_graph, {Module1, :my_fun_1, 4}, Module7)
+      assert has_edge?(call_graph, {Module1, :my_fun_1, 4}, Module8)
+
+      assert vertices(call_graph) == [Module6, Module7, Module8, {Module1, :my_fun_1, 4}]
     end
 
     test "tuple", %{call_graph: call_graph} do
