@@ -136,24 +136,6 @@ defmodule Hologram.Compiler.ReflectionTest do
     end
   end
 
-  describe "is_module?/1" do
-    test "atom which is a module alias" do
-      assert Reflection.is_module?(Kernel)
-    end
-
-    test "atom which is a protocol alias" do
-      refute Reflection.is_module?(Enumerable)
-    end
-
-    test "atom which is not an alias" do
-      refute Reflection.is_module?(:abc)
-    end
-
-    test "non-atom" do
-      refute Reflection.is_module?(123)
-    end
-  end
-
   describe "is_protocol?/1" do
     test "atom which is a module alias" do
       refute Reflection.is_protocol?(Kernel)

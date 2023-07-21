@@ -70,6 +70,20 @@ defmodule Hologram.Compiler.ReflectionTest do
     assert :hologram in result
   end
 
+  describe "module?/1" do
+    test "alias of an existing module" do
+      assert module?(Kernel)
+    end
+
+    test "alias of a non-existing module" do
+      refute module?(Aaa.Bbb)
+    end
+
+    test "non-alias" do
+      refute module?(:abc)
+    end
+  end
+
   describe "module_beam_defs/1" do
     test "with debug info present in the BEAM file" do
       assert module_beam_defs(Module1) == [

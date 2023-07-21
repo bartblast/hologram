@@ -100,6 +100,35 @@ defmodule Hologram.Compiler.Reflection do
   end
 
   @doc """
+  Returns true if the given term is an existing module alias, or false otherwise.
+
+  ## Examples
+
+      iex> module?(Hologram.Compiler.Reflection)
+      true
+
+      iex> module?(Aaa.Bbb)
+      false
+
+      iex> module?(:abc)
+      false
+  """
+  @spec module?(term) :: boolean
+  def module?(term) do
+    if alias?(term) do
+      case Code.ensure_loaded(term) do
+        {:module, _} ->
+          true
+
+        _fallback ->
+          false
+      end
+    else
+      false
+    end
+  end
+
+  @doc """
   Returns BEAM definitions for the given module.
   If the BEAM file doesn't have debug info an empty list is returned.
 

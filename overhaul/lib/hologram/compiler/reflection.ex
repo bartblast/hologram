@@ -91,20 +91,6 @@ defmodule Hologram.Compiler.Reflection do
     end
   end
 
-  def is_module?(term) do
-    if alias?(term) do
-      case Code.ensure_loaded(term) do
-        {:module, _} ->
-          !is_protocol?(term)
-
-        _ ->
-          false
-      end
-    else
-      false
-    end
-  end
-
   def is_protocol?(term) do
     if alias?(term) do
       case Code.ensure_loaded(term) do
