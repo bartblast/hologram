@@ -188,8 +188,6 @@ defmodule Hologram.Compiler.Transformer do
     }
   end
 
-  # {{:., _meta_2, [{marker, _meta_3, Credo.Check}, :filename]}, meta, []}
-
   def transform({{:., _meta_2, [{marker, _meta_3, _module} = left, right]}, meta, []}, context)
       when marker != :__aliases__ do
     if {:no_parens, true} in meta do
