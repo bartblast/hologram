@@ -5,6 +5,7 @@ defmodule Hologram.Compiler.CallGraphTest do
   alias Hologram.Commons.PLT
   alias Hologram.Commons.SerializationUtils
   alias Hologram.Compiler.CallGraph
+  alias Hologram.Compiler.CallGraph.Context
   alias Hologram.Compiler.IR
   alias Hologram.Compiler.Reflection
   alias Hologram.Test.Fixtures.Compiler.CallGraph.Module1
@@ -409,8 +410,8 @@ defmodule Hologram.Compiler.CallGraphTest do
       call_graph_2 =
         [name: @call_graph_name_2]
         |> start()
-        |> build(module_9_ir)
-        |> build(module_10_ir)
+        |> build(module_9_ir, %Context{})
+        |> build(module_10_ir, %Context{})
 
       diff = %{
         added_modules: [Module10, Module9],
