@@ -9,6 +9,7 @@ defmodule Hologram.Compiler.CallGraphTest do
   alias Hologram.Compiler.Reflection
   alias Hologram.Test.Fixtures.Compiler.CallGraph.Module1
   alias Hologram.Test.Fixtures.Compiler.CallGraph.Module10
+  alias Hologram.Test.Fixtures.Compiler.CallGraph.Module11
   alias Hologram.Test.Fixtures.Compiler.CallGraph.Module2
   alias Hologram.Test.Fixtures.Compiler.CallGraph.Module3
   alias Hologram.Test.Fixtures.Compiler.CallGraph.Module4
@@ -198,7 +199,7 @@ defmodule Hologram.Compiler.CallGraphTest do
 
     test "module definition ir", %{call_graph: call_graph} do
       ir = %IR.ModuleDefinition{
-        module: %IR.AtomType{value: Module1},
+        module: %IR.AtomType{value: Module11},
         body: %IR.Block{
           expressions: [
             %IR.AtomType{value: Module5},
@@ -209,8 +210,12 @@ defmodule Hologram.Compiler.CallGraphTest do
 
       assert ^call_graph = build(call_graph, ir)
 
-      assert has_edge?(call_graph, Module1, Module5)
-      assert has_edge?(call_graph, Module1, Module6)
+      assert has_edge?(call_graph, Module11, {Module11, :__hologram_layout_module__, 0})
+      assert has_edge?(call_graph, Module11, {Module11, :__hologram_layout_props__, 0})
+      assert has_edge?(call_graph, Module11, {Module11, :__hologram_route__, 0})
+
+      assert has_edge?(call_graph, Module11, Module5)
+      assert has_edge?(call_graph, Module11, Module6)
     end
 
     test "remote function call ir, module field as an atom", %{call_graph: call_graph} do

@@ -74,14 +74,7 @@ defmodule Hologram.Compiler.CallGraph do
   def build(call_graph, %IR.AtomType{value: value}, from_vertex) do
     if Reflection.module?(value) do
       add_edge(call_graph, from_vertex, value)
-
-      if Reflection.page?(value) do
-        add_page_call_graph_edges(call_graph, value)
-      end
-
-      if Reflection.component?(value) do
-        add_component_call_graph_edges(call_graph, value)
-      end
+      maybe_add_templatable_call_graph_edges(call_graph, value)
     end
 
     call_graph
@@ -100,6 +93,7 @@ defmodule Hologram.Compiler.CallGraph do
   end
 
   def build(call_graph, %IR.ModuleDefinition{module: module, body: body}, _from_vertex) do
+    maybe_add_templatable_call_graph_edges(call_graph, module.value)
     build(call_graph, body, module.value)
   end
 
@@ -416,14 +410,15 @@ defmodule Hologram.Compiler.CallGraph do
     add_edge(call_graph, module, {module, :template, 0})
   end
 
+  defp add_page_call_graph_edges(call_graph, module) do
+    add_edge(call_graph, module, {module, :__hologram_layout_module__, 0})
+    add_edge(call_graph, module, {module, :__hologram_layout_props__, 0})
+    add_edge(call_graph, module, {module, :__hologram_route__, 0})
+  end
+
   defp build_module(call_graph, ir_plt, module) do
     module_def = PLT.get!(ir_plt, module)
     build(call_graph, module_def)
-  end
-
-  defp add_page_call_graph_edges(call_graph, module) do
-    add_edge(call_graph, module, {module, :__hologram_layout_module__, 0})
-    add_edge(call_graph, module, {module, :__hologram_route__, 0})
   end
 
   defp inbound_edges(call_graph, vertex) do
@@ -437,6 +432,16 @@ defmodule Hologram.Compiler.CallGraph do
       |> SerializationUtils.deserialize()
 
     put_graph(call_graph, graph)
+  end
+
+  defp maybe_add_templatable_call_graph_edges(call_graph, module) do
+    if Reflection.page?(module) do
+      add_page_call_graph_edges(call_graph, module)
+    end
+
+    if Reflection.component?(module) do
+      add_component_call_graph_edges(call_graph, module)
+    end
   end
 
   defp put_graph(call_graph, graph) do
