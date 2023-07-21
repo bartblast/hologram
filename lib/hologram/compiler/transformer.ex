@@ -188,16 +188,18 @@ defmodule Hologram.Compiler.Transformer do
     }
   end
 
-  def transform(
-        {{:., _meta_2, [{marker, _meta_3, nil} = left, right]}, [{:no_parens, true} | _meta_1],
-         []},
-        context
-      )
+  # {{:., _meta_2, [{marker, _meta_3, Credo.Check}, :filename]}, meta, []}
+
+  def transform({{:., _meta_2, [{marker, _meta_3, _module} = left, right]}, meta, []}, context)
       when marker != :__aliases__ do
-    %IR.DotOperator{
-      left: transform(left, context),
-      right: transform(right, context)
-    }
+    if {:no_parens, true} in meta do
+      %IR.DotOperator{
+        left: transform(left, context),
+        right: transform(right, context)
+      }
+    else
+      transform_remote_function_call(left, right, [], context)
+    end
   end
 
   def transform(value, _context) when is_float(value) do
@@ -345,11 +347,7 @@ defmodule Hologram.Compiler.Transformer do
   # --- PRESERVE ORDER (BEGIN) ---
 
   def transform({{:., _meta_2, [module, function]}, _meta_1, args}, context) do
-    %IR.RemoteFunctionCall{
-      module: transform(module, context),
-      function: function,
-      args: transform_list(args, context)
-    }
+    transform_remote_function_call(module, function, args, context)
   end
 
   def transform({name, _meta, module}, _context) when is_atom(name) and not is_list(module) do
@@ -650,6 +648,14 @@ defmodule Hologram.Compiler.Transformer do
     list
     |> List.wrap()
     |> Enum.map(&transform(&1, context))
+  end
+
+  defp transform_remote_function_call(module, function, args, context) do
+    %IR.RemoteFunctionCall{
+      module: transform(module, context),
+      function: function,
+      args: transform_list(args, context)
+    }
   end
 
   defp transform_variable(name) do

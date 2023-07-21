@@ -1103,13 +1103,25 @@ defmodule Hologram.Compiler.TransformerTest do
            }
   end
 
-  test "dot operator" do
-    ast = ast("abc.x")
+  describe "dot operator" do
+    test "third tuple elem is nil" do
+      # {{:., [line: 1], [{:abc, [line: 1], nil}, :x]}, [no_parens: true, line: 1], []}
+      ast = ast("abc.x")
 
-    assert transform(ast, %Context{}) == %IR.DotOperator{
-             left: %IR.Variable{name: :abc},
-             right: %IR.AtomType{value: :x}
-           }
+      assert transform(ast, %Context{}) == %IR.DotOperator{
+               left: %IR.Variable{name: :abc},
+               right: %IR.AtomType{value: :x}
+             }
+    end
+
+    test "third tuple elem is a module alias" do
+      ast = {{:., [line: 1], [{:abc, [line: 1], Aaa.Bbb}, :x]}, [no_parens: true, line: 1], []}
+
+      assert transform(ast, %Context{}) == %IR.DotOperator{
+               left: %IR.Variable{name: :abc},
+               right: %IR.AtomType{value: :x}
+             }
+    end
   end
 
   test "float type" do
