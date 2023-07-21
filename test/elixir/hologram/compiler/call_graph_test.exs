@@ -68,7 +68,7 @@ defmodule Hologram.Compiler.CallGraphTest do
       refute has_edge?(call_graph, :vertex_1, :abc)
     end
 
-    test "atom type ir, which as an alias of non-existing module", %{call_graph: call_graph} do
+    test "atom type ir, which as an alias of a non-existing module", %{call_graph: call_graph} do
       ir = %IR.AtomType{value: Aaa.Bbb}
       assert ^call_graph = build(call_graph, ir, :vertex_1)
 
