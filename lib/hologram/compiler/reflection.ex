@@ -22,29 +22,31 @@ defmodule Hologram.Compiler.Reflection do
   def alias?(_term), do: false
 
   @doc """
-  Returns true if the given module is a component module (has "use Hologram.Component" directive) or false otherwise.
+  Returns true if the given term is a component module (a module that has a "use Hologram.Component" directive)
+  Otherwise false is returned.
 
   ## Examples
 
       iex> component?(MyComponent)
       true
   """
-  @spec component?(module) :: boolean
-  def component?(module) do
-    alias?(module) && {:__is_hologram_component__, 0} in module.__info__(:functions)
+  @spec component?(term) :: boolean
+  def component?(term) do
+    alias?(term) && {:__is_hologram_component__, 0} in term.__info__(:functions)
   end
 
   @doc """
-  Returns true if the given module is a layout module (has "use Hologram.Layout" directive) or false otherwise.
+  Returns true if the given term is a layout module (a module that has a "use Hologram.Layout" directive)
+  Otherwise false is returned.
 
   ## Examples
 
       iex> layout?(MyLayout)
       true
   """
-  @spec layout?(module) :: boolean
-  def layout?(module) do
-    alias?(module) && {:__is_hologram_layout__, 0} in module.__info__(:functions)
+  @spec layout?(term) :: boolean
+  def layout?(term) do
+    alias?(term) && {:__is_hologram_layout__, 0} in term.__info__(:functions)
   end
 
   @doc """
@@ -143,16 +145,17 @@ defmodule Hologram.Compiler.Reflection do
   end
 
   @doc """
-  Returns true if the given module is a page module (has "use Hologram.Page" directive) or false otherwise.
+  Returns true if the given term is a page module (a module that has a "use Hologram.Page" directive)
+  Otherwise false is returned.
 
   ## Examples
 
       iex> page?(MyPage)
       true
   """
-  @spec page?(module) :: boolean
-  def page?(module) do
-    alias?(module) && {:__is_hologram_page__, 0} in module.__info__(:functions)
+  @spec page?(term) :: boolean
+  def page?(term) do
+    alias?(term) && {:__is_hologram_page__, 0} in term.__info__(:functions)
   end
 
   @doc """
