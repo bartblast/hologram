@@ -61,14 +61,21 @@ defmodule Hologram.Compiler.CallGraphTest do
   end
 
   describe "build/3" do
-    test "atom type ir, which is not a module alias", %{call_graph: call_graph} do
+    test "atom type ir, which is not an alias", %{call_graph: call_graph} do
       ir = %IR.AtomType{value: :abc}
       assert ^call_graph = build(call_graph, ir, :vertex_1)
 
       refute has_edge?(call_graph, :vertex_1, :abc)
     end
 
-    test "atom type ir, which is a module alias of a non-templatable module", %{
+    test "atom type ir, which as an alias of non-existing module", %{call_graph: call_graph} do
+      ir = %IR.AtomType{value: Aaa.Bbb}
+      assert ^call_graph = build(call_graph, ir, :vertex_1)
+
+      refute has_edge?(call_graph, :vertex_1, Aaa.Bbb)
+    end
+
+    test "atom type ir, which is an alias of an existing non-templatable module", %{
       call_graph: call_graph
     } do
       ir = %IR.AtomType{value: Module1}
@@ -83,7 +90,7 @@ defmodule Hologram.Compiler.CallGraphTest do
       refute has_edge?(call_graph, Module1, {Module1, :template, 0})
     end
 
-    test "atom type ir, which is a page module alias", %{call_graph: call_graph} do
+    test "atom type ir, which is an alias of a page module", %{call_graph: call_graph} do
       ir = %IR.AtomType{value: Module2}
       assert ^call_graph = build(call_graph, ir, :vertex_1)
 
@@ -97,7 +104,7 @@ defmodule Hologram.Compiler.CallGraphTest do
       refute has_edge?(call_graph, Module2, {Module2, :template, 0})
     end
 
-    test "atom type ir, which is a layout module alias", %{call_graph: call_graph} do
+    test "atom type ir, which is an alias of a layout module", %{call_graph: call_graph} do
       ir = %IR.AtomType{value: Module3}
       assert ^call_graph = build(call_graph, ir, :vertex_1)
 
@@ -111,7 +118,7 @@ defmodule Hologram.Compiler.CallGraphTest do
       refute has_edge?(call_graph, Module3, {Module3, :template, 0})
     end
 
-    test "atom type ir, which is a component module alias", %{call_graph: call_graph} do
+    test "atom type ir, which is an alias of a component module", %{call_graph: call_graph} do
       ir = %IR.AtomType{value: Module4}
       assert ^call_graph = build(call_graph, ir, :vertex_1)
 

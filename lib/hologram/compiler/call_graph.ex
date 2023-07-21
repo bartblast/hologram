@@ -72,7 +72,7 @@ defmodule Hologram.Compiler.CallGraph do
   def build(call_graph, ir, from_vertex \\ nil)
 
   def build(call_graph, %IR.AtomType{value: value}, from_vertex) do
-    if Reflection.alias?(value) do
+    if Reflection.module?(value) do
       add_edge(call_graph, from_vertex, value)
 
       if Reflection.page?(value) do
