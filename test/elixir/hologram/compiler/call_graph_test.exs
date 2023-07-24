@@ -37,7 +37,7 @@ defmodule Hologram.Compiler.CallGraphTest do
   test "add_edge/3", %{call_graph: call_graph} do
     assert ^call_graph = add_edge(call_graph, :vertex_1, :vertex_2)
 
-    graph = graph(call_graph)
+    graph = get_graph(call_graph)
 
     assert Graph.edge(graph, :vertex_1, :vertex_2) == %Graph.Edge{
              v1: :vertex_1,
@@ -57,7 +57,7 @@ defmodule Hologram.Compiler.CallGraphTest do
   test "add_vertex/2", %{call_graph: call_graph} do
     assert ^call_graph = add_vertex(call_graph, :vertex_3)
 
-    graph = graph(call_graph)
+    graph = get_graph(call_graph)
     assert Graph.has_vertex?(graph, :vertex_3)
   end
 
@@ -537,7 +537,7 @@ defmodule Hologram.Compiler.CallGraphTest do
   end
 
   test "graph/1", %{call_graph: call_graph} do
-    assert %Graph{} = graph(call_graph)
+    assert %Graph{} = get_graph(call_graph)
   end
 
   describe "has_edge?/3" do

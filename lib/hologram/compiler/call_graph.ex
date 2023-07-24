@@ -161,7 +161,7 @@ defmodule Hologram.Compiler.CallGraph do
   @spec clone(CallGraph.t(), keyword) :: CallGraph.t()
   def clone(old_call_graph, opts) do
     new_call_graph = start(opts)
-    Agent.update(new_call_graph.name, fn _state -> graph(old_call_graph) end)
+    Agent.update(new_call_graph.name, fn _state -> get_graph(old_call_graph) end)
     new_call_graph
   end
 
@@ -177,7 +177,7 @@ defmodule Hologram.Compiler.CallGraph do
   def dump(%CallGraph{dump_path: dump_path} = call_graph) do
     data =
       call_graph
-      |> graph()
+      |> get_graph()
       |> SerializationUtils.serialize()
 
     File.write!(dump_path, data)
@@ -215,11 +215,11 @@ defmodule Hologram.Compiler.CallGraph do
   ## Examples
 
       iex> call_graph = CallGraph{name: :my_call_graph, pid: #PID<0.259.0>}
-      iex> graph(call_graph)
+      iex> get_graph(call_graph)
       #Graph<type: directed, vertices: [], edges: []>
   """
-  @spec graph(CallGraph.t()) :: Graph.t()
-  def graph(call_graph) do
+  @spec get_graph(CallGraph.t()) :: Graph.t()
+  def get_graph(call_graph) do
     Agent.get(call_graph.pid, & &1)
   end
 
