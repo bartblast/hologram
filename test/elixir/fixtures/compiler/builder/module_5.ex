@@ -1,3 +1,4 @@
+# credo:disable-for-this-file Credo.Check.Readability.Specs
 defmodule Hologram.Test.Fixtures.Compiler.Builder.Module5 do
   use Hologram.Page
   alias Hologram.Test.Fixtures.Compiler.Builder.Module7
