@@ -382,6 +382,49 @@ defmodule Hologram.Compiler.CallGraph do
   end
 
   @doc """
+  Returns sorted graph edges.
+
+  ## Examples
+
+      iex> sorted_edges(%CallGraph{name: :my_call_graph})
+      [
+        %Graph.Edge{
+          v1: {Module2, :my_fun_6, 3},
+          v2: Module5,
+          weight: 1,
+          label: nil
+        },
+        %Graph.Edge{
+          v1: {Module3, :my_fun_8, 1},
+          v2: {Module5, :my_fun_1, 4},
+          weight: 1,
+          label: nil
+        }
+      ]
+  """
+  @spec sorted_edges(CallGraph.t()) :: list(Graph.Edge.t())
+  def sorted_edges(call_graph) do
+    call_graph
+    |> edges()
+    |> Enum.sort()
+  end
+
+  @doc """
+  Returns sorted graph vertices.
+
+  ## Examples
+
+      iex> sorted_vertices(%CallGraph{name: :my_call_graph})
+      [:vertex_1, :vertex_3, :vertex_5]
+  """
+  @spec sorted_vertices(CallGraph.t()) :: list(vertex)
+  def sorted_vertices(call_graph) do
+    call_graph
+    |> vertices()
+    |> Enum.sort()
+  end
+
+  @doc """
   Starts a new CallGraph agent with an initial empty graph
   or loads the graph from the dump file if it exists.
 

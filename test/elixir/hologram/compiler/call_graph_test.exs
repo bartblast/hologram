@@ -66,14 +66,16 @@ defmodule Hologram.Compiler.CallGraphTest do
       ir = %IR.AtomType{value: :abc}
       assert ^call_graph = build(call_graph, ir, :vertex_1)
 
-      refute has_edge?(call_graph, :vertex_1, :abc)
+      assert vertices(call_graph) == []
+      assert edges(call_graph) == []
     end
 
     test "atom type ir, which as an alias of a non-existing module", %{call_graph: call_graph} do
       ir = %IR.AtomType{value: Aaa.Bbb}
       assert ^call_graph = build(call_graph, ir, :vertex_1)
 
-      refute has_edge?(call_graph, :vertex_1, Aaa.Bbb)
+      assert vertices(call_graph) == []
+      assert edges(call_graph) == []
     end
 
     test "atom type ir, which is an alias of an existing non-templatable module", %{
@@ -82,55 +84,98 @@ defmodule Hologram.Compiler.CallGraphTest do
       ir = %IR.AtomType{value: Module1}
       assert ^call_graph = build(call_graph, ir, :vertex_1)
 
-      assert has_edge?(call_graph, :vertex_1, Module1)
+      assert sorted_vertices(call_graph) == [Module1, :vertex_1]
 
-      refute has_edge?(call_graph, Module1, {Module1, :__hologram_layout_module__, 0})
-      refute has_edge?(call_graph, Module1, {Module1, :__hologram_route__, 0})
-      refute has_edge?(call_graph, Module1, {Module1, :action, 3})
-      refute has_edge?(call_graph, Module1, {Module1, :init, 1})
-      refute has_edge?(call_graph, Module1, {Module1, :template, 0})
+      assert sorted_edges(call_graph) == [
+               %Graph.Edge{
+                 v1: :vertex_1,
+                 v2: Module1,
+                 weight: 1,
+                 label: nil
+               }
+             ]
     end
 
     test "atom type ir, which is an alias of a page module", %{call_graph: call_graph} do
       ir = %IR.AtomType{value: Module2}
       assert ^call_graph = build(call_graph, ir, :vertex_1)
 
-      assert has_edge?(call_graph, :vertex_1, Module2)
+      assert sorted_vertices(call_graph) == [
+               Module2,
+               :vertex_1,
+               {Module2, :__hologram_route__, 0}
+             ]
 
-      assert has_edge?(call_graph, Module2, {Module2, :__hologram_layout_module__, 0})
-      assert has_edge?(call_graph, Module2, {Module2, :__hologram_route__, 0})
-
-      refute has_edge?(call_graph, Module2, {Module2, :action, 3})
-      refute has_edge?(call_graph, Module2, {Module2, :init, 1})
-      refute has_edge?(call_graph, Module2, {Module2, :template, 0})
+      assert sorted_edges(call_graph) == [
+               %Graph.Edge{
+                 v1: Module2,
+                 v2: {Module2, :__hologram_route__, 0},
+                 weight: 1,
+                 label: nil
+               },
+               %Graph.Edge{
+                 v1: :vertex_1,
+                 v2: Module2,
+                 weight: 1,
+                 label: nil
+               }
+             ]
     end
 
     test "atom type ir, which is an alias of a layout module", %{call_graph: call_graph} do
       ir = %IR.AtomType{value: Module3}
       assert ^call_graph = build(call_graph, ir, :vertex_1)
 
-      assert has_edge?(call_graph, :vertex_1, Module3)
+      assert sorted_vertices(call_graph) == [Module3, :vertex_1]
 
-      refute has_edge?(call_graph, Module3, {Module3, :__hologram_layout_module__, 0})
-      refute has_edge?(call_graph, Module3, {Module3, :__hologram_route__, 0})
-
-      refute has_edge?(call_graph, Module3, {Module3, :action, 3})
-      refute has_edge?(call_graph, Module3, {Module3, :init, 1})
-      refute has_edge?(call_graph, Module3, {Module3, :template, 0})
+      assert sorted_edges(call_graph) == [
+               %Graph.Edge{
+                 v1: :vertex_1,
+                 v2: Module3,
+                 weight: 1,
+                 label: nil
+               }
+             ]
     end
 
     test "atom type ir, which is an alias of a component module", %{call_graph: call_graph} do
       ir = %IR.AtomType{value: Module4}
       assert ^call_graph = build(call_graph, ir, :vertex_1)
 
-      assert has_edge?(call_graph, :vertex_1, Module4)
+      assert sorted_vertices(call_graph) == [
+               Module4,
+               :vertex_1,
+               {Module4, :action, 3},
+               {Module4, :init, 1},
+               {Module4, :template, 0}
+             ]
 
-      assert has_edge?(call_graph, Module4, {Module4, :action, 3})
-      assert has_edge?(call_graph, Module4, {Module4, :init, 1})
-      assert has_edge?(call_graph, Module4, {Module4, :template, 0})
-
-      refute has_edge?(call_graph, Module4, {Module4, :__hologram_layout_module__, 0})
-      refute has_edge?(call_graph, Module4, {Module4, :__hologram_route__, 0})
+      assert sorted_edges(call_graph) == [
+               %Graph.Edge{
+                 v1: Module4,
+                 v2: {Module4, :action, 3},
+                 weight: 1,
+                 label: nil
+               },
+               %Graph.Edge{
+                 v1: Module4,
+                 v2: {Module4, :init, 1},
+                 weight: 1,
+                 label: nil
+               },
+               %Graph.Edge{
+                 v1: Module4,
+                 v2: {Module4, :template, 0},
+                 weight: 1,
+                 label: nil
+               },
+               %Graph.Edge{
+                 v1: :vertex_1,
+                 v2: Module4,
+                 weight: 1,
+                 label: nil
+               }
+             ]
     end
 
     test "function definition ir", %{call_graph: call_graph} do
@@ -152,17 +197,55 @@ defmodule Hologram.Compiler.CallGraphTest do
 
       assert ^call_graph = build(call_graph, ir, Module1)
 
-      assert has_edge?(call_graph, {Module1, :my_fun, 2}, Module5)
-      assert has_edge?(call_graph, {Module1, :my_fun, 2}, Module6)
-      assert has_edge?(call_graph, {Module1, :my_fun, 2}, Module7)
+      assert sorted_vertices(call_graph) == [
+               Module5,
+               Module6,
+               Module7,
+               {Module1, :my_fun, 2}
+             ]
+
+      assert sorted_edges(call_graph) == [
+               %Graph.Edge{
+                 v1: {Module1, :my_fun, 2},
+                 v2: Module5,
+                 weight: 1,
+                 label: nil
+               },
+               %Graph.Edge{
+                 v1: {Module1, :my_fun, 2},
+                 v2: Module6,
+                 weight: 1,
+                 label: nil
+               },
+               %Graph.Edge{
+                 v1: {Module1, :my_fun, 2},
+                 v2: Module7,
+                 weight: 1,
+                 label: nil
+               }
+             ]
     end
 
     test "list", %{call_graph: call_graph} do
       list = [%IR.AtomType{value: Module1}, %IR.AtomType{value: Module5}]
       assert ^call_graph = build(call_graph, list, :vertex_1)
 
-      assert has_edge?(call_graph, :vertex_1, Module1)
-      assert has_edge?(call_graph, :vertex_1, Module5)
+      assert sorted_vertices(call_graph) == [Module1, Module5, :vertex_1]
+
+      assert sorted_edges(call_graph) == [
+               %Graph.Edge{
+                 v1: :vertex_1,
+                 v2: Module1,
+                 weight: 1,
+                 label: nil
+               },
+               %Graph.Edge{
+                 v1: :vertex_1,
+                 v2: Module5,
+                 weight: 1,
+                 label: nil
+               }
+             ]
     end
 
     test "local function call ir", %{call_graph: call_graph} do
@@ -177,10 +260,40 @@ defmodule Hologram.Compiler.CallGraphTest do
 
       assert ^call_graph = build(call_graph, ir, {Module1, :my_fun_1, 4})
 
-      assert has_edge?(call_graph, {Module1, :my_fun_1, 4}, {Module1, :my_fun_2, 3})
-      assert has_edge?(call_graph, {Module1, :my_fun_1, 4}, Module5)
-      assert has_edge?(call_graph, {Module1, :my_fun_1, 4}, Module6)
-      assert has_edge?(call_graph, {Module1, :my_fun_1, 4}, Module7)
+      assert sorted_vertices(call_graph) == [
+               Module5,
+               Module6,
+               Module7,
+               {Module1, :my_fun_1, 4},
+               {Module1, :my_fun_2, 3}
+             ]
+
+      assert sorted_edges(call_graph) == [
+               %Graph.Edge{
+                 v1: {Module1, :my_fun_1, 4},
+                 v2: Module5,
+                 weight: 1,
+                 label: nil
+               },
+               %Graph.Edge{
+                 v1: {Module1, :my_fun_1, 4},
+                 v2: Module6,
+                 weight: 1,
+                 label: nil
+               },
+               %Graph.Edge{
+                 v1: {Module1, :my_fun_1, 4},
+                 v2: Module7,
+                 weight: 1,
+                 label: nil
+               },
+               %Graph.Edge{
+                 v1: {Module1, :my_fun_1, 4},
+                 v2: {Module1, :my_fun_2, 3},
+                 weight: 1,
+                 label: nil
+               }
+             ]
     end
 
     test "map", %{call_graph: call_graph} do
@@ -191,10 +304,34 @@ defmodule Hologram.Compiler.CallGraphTest do
 
       assert ^call_graph = build(call_graph, map, :vertex_1)
 
-      assert has_edge?(call_graph, :vertex_1, Module1)
-      assert has_edge?(call_graph, :vertex_1, Module5)
-      assert has_edge?(call_graph, :vertex_1, Module6)
-      assert has_edge?(call_graph, :vertex_1, Module7)
+      assert sorted_vertices(call_graph) == [Module1, Module5, Module6, Module7, :vertex_1]
+
+      assert sorted_edges(call_graph) == [
+               %Graph.Edge{
+                 v1: :vertex_1,
+                 v2: Module1,
+                 weight: 1,
+                 label: nil
+               },
+               %Graph.Edge{
+                 v1: :vertex_1,
+                 v2: Module5,
+                 weight: 1,
+                 label: nil
+               },
+               %Graph.Edge{
+                 v1: :vertex_1,
+                 v2: Module6,
+                 weight: 1,
+                 label: nil
+               },
+               %Graph.Edge{
+                 v1: :vertex_1,
+                 v2: Module7,
+                 weight: 1,
+                 label: nil
+               }
+             ]
     end
 
     test "module definition ir", %{call_graph: call_graph} do
@@ -210,12 +347,33 @@ defmodule Hologram.Compiler.CallGraphTest do
 
       assert ^call_graph = build(call_graph, ir)
 
-      assert has_edge?(call_graph, Module11, {Module11, :__hologram_layout_module__, 0})
-      assert has_edge?(call_graph, Module11, {Module11, :__hologram_layout_props__, 0})
-      assert has_edge?(call_graph, Module11, {Module11, :__hologram_route__, 0})
+      assert sorted_vertices(call_graph) == [
+               Module11,
+               Module5,
+               Module6,
+               {Module11, :__hologram_route__, 0}
+             ]
 
-      assert has_edge?(call_graph, Module11, Module5)
-      assert has_edge?(call_graph, Module11, Module6)
+      assert sorted_edges(call_graph) == [
+               %Graph.Edge{
+                 v1: Module11,
+                 v2: Module5,
+                 weight: 1,
+                 label: nil
+               },
+               %Graph.Edge{
+                 v1: Module11,
+                 v2: Module6,
+                 weight: 1,
+                 label: nil
+               },
+               %Graph.Edge{
+                 v1: Module11,
+                 v2: {Module11, :__hologram_route__, 0},
+                 weight: 1,
+                 label: nil
+               }
+             ]
     end
 
     test "remote function call ir, module field as an atom", %{call_graph: call_graph} do
@@ -231,10 +389,40 @@ defmodule Hologram.Compiler.CallGraphTest do
 
       assert ^call_graph = build(call_graph, ir, {Module1, :my_fun_1, 4})
 
-      assert has_edge?(call_graph, {Module1, :my_fun_1, 4}, {Module5, :my_fun_2, 3})
-      assert has_edge?(call_graph, {Module1, :my_fun_1, 4}, Module6)
-      assert has_edge?(call_graph, {Module1, :my_fun_1, 4}, Module7)
-      assert has_edge?(call_graph, {Module1, :my_fun_1, 4}, Module8)
+      assert sorted_vertices(call_graph) == [
+               Module6,
+               Module7,
+               Module8,
+               {Module1, :my_fun_1, 4},
+               {Module5, :my_fun_2, 3}
+             ]
+
+      assert sorted_edges(call_graph) == [
+               %Graph.Edge{
+                 v1: {Module1, :my_fun_1, 4},
+                 v2: Module6,
+                 weight: 1,
+                 label: nil
+               },
+               %Graph.Edge{
+                 v1: {Module1, :my_fun_1, 4},
+                 v2: Module7,
+                 weight: 1,
+                 label: nil
+               },
+               %Graph.Edge{
+                 v1: {Module1, :my_fun_1, 4},
+                 v2: Module8,
+                 weight: 1,
+                 label: nil
+               },
+               %Graph.Edge{
+                 v1: {Module1, :my_fun_1, 4},
+                 v2: {Module5, :my_fun_2, 3},
+                 weight: 1,
+                 label: nil
+               }
+             ]
     end
 
     test "remote function call ir, module field is a variable", %{call_graph: call_graph} do
@@ -250,19 +438,55 @@ defmodule Hologram.Compiler.CallGraphTest do
 
       assert ^call_graph = build(call_graph, ir, {Module1, :my_fun_1, 4})
 
-      assert has_edge?(call_graph, {Module1, :my_fun_1, 4}, Module6)
-      assert has_edge?(call_graph, {Module1, :my_fun_1, 4}, Module7)
-      assert has_edge?(call_graph, {Module1, :my_fun_1, 4}, Module8)
+      assert sorted_vertices(call_graph) == [
+               Module6,
+               Module7,
+               Module8,
+               {Module1, :my_fun_1, 4}
+             ]
 
-      assert vertices(call_graph) == [Module6, Module7, Module8, {Module1, :my_fun_1, 4}]
+      assert sorted_edges(call_graph) == [
+               %Graph.Edge{
+                 v1: {Module1, :my_fun_1, 4},
+                 v2: Module6,
+                 weight: 1,
+                 label: nil
+               },
+               %Graph.Edge{
+                 v1: {Module1, :my_fun_1, 4},
+                 v2: Module7,
+                 weight: 1,
+                 label: nil
+               },
+               %Graph.Edge{
+                 v1: {Module1, :my_fun_1, 4},
+                 v2: Module8,
+                 weight: 1,
+                 label: nil
+               }
+             ]
     end
 
     test "tuple", %{call_graph: call_graph} do
       tuple = {%IR.AtomType{value: Module1}, %IR.AtomType{value: Module5}}
       assert ^call_graph = build(call_graph, tuple, :vertex_1)
 
-      assert has_edge?(call_graph, :vertex_1, Module1)
-      assert has_edge?(call_graph, :vertex_1, Module5)
+      assert sorted_vertices(call_graph) == [Module1, Module5, :vertex_1]
+
+      assert sorted_edges(call_graph) == [
+               %Graph.Edge{
+                 v1: :vertex_1,
+                 v2: Module1,
+                 weight: 1,
+                 label: nil
+               },
+               %Graph.Edge{
+                 v1: :vertex_1,
+                 v2: Module5,
+                 weight: 1,
+                 label: nil
+               }
+             ]
     end
   end
 
