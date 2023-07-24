@@ -467,6 +467,133 @@ defmodule Hologram.Compiler.CallGraphTest do
              ]
     end
 
+    test "remote function call using Kernel.apply/3, module and function fields are both atoms",
+         %{
+           call_graph: call_graph
+         } do
+      ir = %IR.RemoteFunctionCall{
+        module: %IR.AtomType{value: :erlang},
+        function: :apply,
+        args: [
+          %IR.AtomType{value: DateTime},
+          %IR.AtomType{value: :utc_now},
+          %IR.ListType{
+            data: [%IR.AtomType{value: Calendar.ISO}]
+          }
+        ]
+      }
+
+      assert ^call_graph = build(call_graph, ir, {Module1, :my_fun_1, 4})
+
+      assert sorted_vertices(call_graph) == [
+               Calendar.ISO,
+               {DateTime, :utc_now, 1},
+               {Module1, :my_fun_1, 4}
+             ]
+
+      assert sorted_edges(call_graph) == [
+               %Graph.Edge{
+                 v1: {Module1, :my_fun_1, 4},
+                 v2: Calendar.ISO,
+                 weight: 1,
+                 label: nil
+               },
+               %Graph.Edge{
+                 v1: {Module1, :my_fun_1, 4},
+                 v2: {DateTime, :utc_now, 1},
+                 weight: 1,
+                 label: nil
+               }
+             ]
+    end
+
+    test "remote function call using Kernel.apply/3, module field is an atom, function field is not an atom",
+         %{
+           call_graph: call_graph
+         } do
+      ir = %IR.RemoteFunctionCall{
+        module: %IR.AtomType{value: :erlang},
+        function: :apply,
+        args: [
+          %IR.AtomType{value: DateTime},
+          %IR.Variable{name: :my_fun},
+          %IR.ListType{
+            data: [%IR.AtomType{value: Calendar.ISO}]
+          }
+        ]
+      }
+
+      assert ^call_graph = build(call_graph, ir, {Module1, :my_fun_1, 4})
+
+      assert sorted_vertices(call_graph) == [
+               Calendar.ISO,
+               DateTime,
+               {Module1, :my_fun_1, 4},
+               {:erlang, :apply, 3}
+             ]
+
+      assert sorted_edges(call_graph) == [
+               %Graph.Edge{
+                 v1: {Module1, :my_fun_1, 4},
+                 v2: Calendar.ISO,
+                 weight: 1,
+                 label: nil
+               },
+               %Graph.Edge{
+                 v1: {Module1, :my_fun_1, 4},
+                 v2: DateTime,
+                 weight: 1,
+                 label: nil
+               },
+               %Graph.Edge{
+                 v1: {Module1, :my_fun_1, 4},
+                 v2: {:erlang, :apply, 3},
+                 weight: 1,
+                 label: nil
+               }
+             ]
+    end
+
+    test "remote function call using Kernel.apply/3, module field is not an atom, function field is an atom",
+         %{
+           call_graph: call_graph
+         } do
+      ir = %IR.RemoteFunctionCall{
+        module: %IR.AtomType{value: :erlang},
+        function: :apply,
+        args: [
+          %IR.Variable{name: :module},
+          %IR.AtomType{value: :utc_now},
+          %IR.ListType{
+            data: [%IR.AtomType{value: Calendar.ISO}]
+          }
+        ]
+      }
+
+      assert ^call_graph = build(call_graph, ir, {Module1, :my_fun_1, 4})
+
+      assert sorted_vertices(call_graph) == [
+               Calendar.ISO,
+               {Module1, :my_fun_1, 4},
+               {:erlang, :apply, 3}
+             ]
+
+      assert sorted_edges(call_graph) == [
+               %Graph.Edge{
+                 v1: {Module1, :my_fun_1, 4},
+                 v2: Calendar.ISO,
+                 weight: 1,
+                 label: nil
+               },
+               %Graph.Edge{
+                 v1: {Module1, :my_fun_1, 4},
+                 v2: {:erlang, :apply, 3},
+                 weight: 1,
+                 label: nil
+               }
+             ]
+    end
+
     test "tuple", %{call_graph: call_graph} do
       tuple = {%IR.AtomType{value: Module1}, %IR.AtomType{value: Module5}}
       assert ^call_graph = build(call_graph, tuple, :vertex_1)

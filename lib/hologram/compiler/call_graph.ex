@@ -112,6 +112,25 @@ defmodule Hologram.Compiler.CallGraph do
   def build(
         call_graph,
         %IR.RemoteFunctionCall{
+          module: %IR.AtomType{value: :erlang},
+          function: :apply,
+          args: [
+            %IR.AtomType{value: module},
+            %IR.AtomType{value: function},
+            %IR.ListType{data: args}
+          ]
+        },
+        from_vertex
+      ) do
+    to_vertex = {module, function, Enum.count(args)}
+    add_edge(call_graph, from_vertex, to_vertex)
+
+    build(call_graph, args, from_vertex)
+  end
+
+  def build(
+        call_graph,
+        %IR.RemoteFunctionCall{
           module: %IR.AtomType{value: module},
           function: function,
           args: args
