@@ -31,25 +31,28 @@ defmodule Hologram.Commons.PLTTest do
 
   describe "delete/2" do
     test "key exists" do
-      plt = start(@opts)
-      put(plt, :my_key, :my_value)
+      plt =
+        @opts
+        |> start()
+        |> put(:my_key, :my_value)
 
-      assert delete(plt, :my_key) == true
+      assert delete(plt, :my_key) == plt
       assert get(plt, :my_key) == :error
     end
 
     test "key doesn't exist" do
       plt = start(@opts)
 
-      assert delete(plt, :my_key) == true
+      assert delete(plt, :my_key) == plt
       assert get(plt, :my_key) == :error
     end
   end
 
   test "dump/1" do
-    plt = start(@opts)
-    put(plt, :dump_test, 123)
-    dump(plt)
+    @opts
+    |> start()
+    |> put(:dump_test, 123)
+    |> dump()
 
     items =
       @dump_path
@@ -107,8 +110,10 @@ defmodule Hologram.Commons.PLTTest do
 
   describe "put/3" do
     test "first arg is %PLT{} struct" do
-      plt = start(@opts)
-      put(plt, :key_3, :value_3)
+      plt =
+        @opts
+        |> start()
+        |> put(:key_3, :value_3)
 
       assert get(plt, :key_3) == {:ok, :value_3}
     end

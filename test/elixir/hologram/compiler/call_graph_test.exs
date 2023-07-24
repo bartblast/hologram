@@ -749,13 +749,14 @@ defmodule Hologram.Compiler.CallGraphTest do
 
   describe "patch/3" do
     test "adds modules", %{call_graph: call_graph} do
-      ir_plt = PLT.start(name: @ir_plt_name)
-
       module_9_ir = IR.for_module(Module9)
-      PLT.put(ir_plt, Module9, module_9_ir)
-
       module_10_ir = IR.for_module(Module10)
-      PLT.put(ir_plt, Module10, module_10_ir)
+
+      ir_plt =
+        [name: @ir_plt_name]
+        |> PLT.start()
+        |> PLT.put(Module9, module_9_ir)
+        |> PLT.put(Module10, module_10_ir)
 
       call_graph_2 =
         [name: @call_graph_name_2]
@@ -812,13 +813,14 @@ defmodule Hologram.Compiler.CallGraphTest do
     end
 
     test "updates modules", %{call_graph: call_graph} do
-      ir_plt = PLT.start(name: @ir_plt_name)
-
       module_9_ir = IR.for_module(Module9)
-      PLT.put(ir_plt, Module9, module_9_ir)
-
       module_10_ir = IR.for_module(Module10)
-      PLT.put(ir_plt, Module10, module_10_ir)
+
+      ir_plt =
+        [name: @ir_plt_name]
+        |> PLT.start()
+        |> PLT.put(Module9, module_9_ir)
+        |> PLT.put(Module10, module_10_ir)
 
       call_graph
       |> add_edge({:module_3, :fun_c, :arity_c}, Module9)

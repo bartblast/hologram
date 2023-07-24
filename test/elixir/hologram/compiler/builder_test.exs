@@ -32,19 +32,23 @@ defmodule Hologram.Compiler.BuilderTest do
 
   describe "diff_module_digest_plts/2" do
     setup do
-      old_plt = PLT.start(name: @plt_name_1)
-      PLT.put(old_plt, :module_1, :digest_1)
-      PLT.put(old_plt, :module_3, :digest_3a)
-      PLT.put(old_plt, :module_5, :digest_5)
-      PLT.put(old_plt, :module_6, :digest_6a)
-      PLT.put(old_plt, :module_7, :digest_7)
+      old_plt =
+        [name: @plt_name_1]
+        |> PLT.start()
+        |> PLT.put(:module_1, :digest_1)
+        |> PLT.put(:module_3, :digest_3a)
+        |> PLT.put(:module_5, :digest_5)
+        |> PLT.put(:module_6, :digest_6a)
+        |> PLT.put(:module_7, :digest_7)
 
-      new_plt = PLT.start(name: @plt_name_2)
-      PLT.put(new_plt, :module_1, :digest_1)
-      PLT.put(new_plt, :module_2, :digest_2)
-      PLT.put(new_plt, :module_3, :digest_3b)
-      PLT.put(new_plt, :module_4, :digest_4)
-      PLT.put(new_plt, :module_6, :digest_6b)
+      new_plt =
+        [name: @plt_name_2]
+        |> PLT.start()
+        |> PLT.put(:module_1, :digest_1)
+        |> PLT.put(:module_2, :digest_2)
+        |> PLT.put(:module_3, :digest_3b)
+        |> PLT.put(:module_4, :digest_4)
+        |> PLT.put(:module_6, :digest_6b)
 
       [result: diff_module_digest_plts(old_plt, new_plt)]
     end
@@ -93,13 +97,15 @@ defmodule Hologram.Compiler.BuilderTest do
 
   describe "patch_ir_plt/2" do
     setup do
-      plt = PLT.start(name: @plt_name_1)
-      PLT.put(plt, :module_5, :ir_5)
-      PLT.put(plt, :module_6, :ir_6)
-      PLT.put(plt, Module3, :ir_3)
-      PLT.put(plt, :module_7, :ir_7)
-      PLT.put(plt, :module_8, :ir_8)
-      PLT.put(plt, Module4, :ir_4)
+      plt =
+        [name: @plt_name_1]
+        |> PLT.start()
+        |> PLT.put(:module_5, :ir_5)
+        |> PLT.put(:module_6, :ir_6)
+        |> PLT.put(Module3, :ir_3)
+        |> PLT.put(:module_7, :ir_7)
+        |> PLT.put(:module_8, :ir_8)
+        |> PLT.put(Module4, :ir_4)
 
       diff = %{
         added_modules: [Module1, Module2],

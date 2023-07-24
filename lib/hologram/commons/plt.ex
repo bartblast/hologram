@@ -17,12 +17,14 @@ defmodule Hologram.Commons.PLT do
 
   ## Examples
 
+      iex> my_plt = %PLT{pid: #PID<0.273.0>, name: :my_plt}
       iex> delete(my_plt, :my_key)
-      true
+      %PLT{pid: #PID<0.273.0>, name: :my_plt}
   """
-  @spec delete(PLT.t(), atom) :: true
+  @spec delete(PLT.t(), atom) :: PLT.t()
   def delete(plt, key) do
     :ets.delete(plt.name, key)
+    plt
   end
 
   @doc """
@@ -30,7 +32,8 @@ defmodule Hologram.Commons.PLT do
 
   ## Examples
 
-      iex> dump(%PLT{name: :my_plt, dump_path: "/my_dump_path"})
+      iex> my_plt = %PLT{pid: #PID<0.273.0>, name: :my_plt, dump_path: "/my_dump_path"}
+      iex> dump(my_plt)
       :ok
   """
   @spec dump(PLT.t()) :: :ok
@@ -133,16 +136,18 @@ defmodule Hologram.Commons.PLT do
 
   ## Examples
 
-      iex> put(%PLT{name: :my_plt}, :my_key, :my_value)
-      true
+      iex> my_plt = %PLT{pid: #PID<0.273.0>, name: :my_plt}
+      iex> put(my_plt, :my_key, :my_value)
+      %PLT{pid: #PID<0.273.0>, name: :my_plt}
 
       iex> put(:my_plt, :my_key, :my_value)
       true
   """
-  @spec put(PLT.t() | atom, atom, term) :: true
+  @spec put(PLT.t() | atom, atom, term) :: PLT.t() | true
 
-  def put(%PLT{name: name}, key, value) do
+  def put(%PLT{name: name} = plt, key, value) do
     put(name, key, value)
+    plt
   end
 
   def put(name, key, value) do
