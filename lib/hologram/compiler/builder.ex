@@ -5,20 +5,15 @@ defmodule Hologram.Compiler.Builder do
   alias Hologram.Compiler.Reflection
 
   @doc """
-  Extracts and aggregates all function clauses with a specific name and arity from the given module definition IR.
+  Extracts and aggregates all function definitions with a specific name and arity from the given module definition IR.
   """
-  @spec aggregate_mfa_clauses(IR.ModuleDefinition.t(), atom, integer) ::
-          list(IR.FunctionClause.t())
-  def aggregate_mfa_clauses(module_ir, function, arity) do
-    module_ir.body.expressions
-    |> Enum.reduce([], fn
-      %IR.FunctionDefinition{name: ^function, arity: ^arity, clause: clause}, acc ->
-        [clause | acc]
-
-      _fallback, acc ->
-        acc
+  @spec aggregate_mfas(IR.ModuleDefinition.t(), atom, integer) :: list(IR.FunctionDefinition.t())
+  def aggregate_mfas(module_def, function, arity) do
+    module_def.body.expressions
+    |> Enum.filter(fn
+      %IR.FunctionDefinition{name: ^function, arity: ^arity} -> true
+      _fallback -> false
     end)
-    |> Enum.reverse()
   end
 
   @doc """
