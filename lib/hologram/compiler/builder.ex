@@ -76,7 +76,18 @@ defmodule Hologram.Compiler.Builder do
 
   ## Examples
 
-      iex>
+      iex> call_graph = %CallGraph{name: :my_call_graph, pid: #PID<0.259.0>}
+      iex> entry_page_reachable_mfas(call_graph, MyPage5, :my_call_graph_clone)
+      [
+        {MyPage5, :__hologram_layout_module__, 0},
+        {MyPage5, :__hologram_layout_props__, 0},
+        {MyPage5, :__hologram_route__, 0},
+        {MyPage5, :action, 3},
+        {MyPage5, :template, 0},
+        {MyLayout, :action, 3},
+        {MyLayout, :template, 0},
+        {MyModule, :my_fun_7a, 2}
+      ]
   """
   @spec entry_page_reachable_mfas(CallGraph.t(), module, atom) :: list({module, atom, integer})
   def entry_page_reachable_mfas(call_graph, entry_page, clone_name) do
