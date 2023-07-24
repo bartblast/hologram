@@ -72,7 +72,7 @@ defmodule Hologram.Compiler.Builder do
   end
 
   @doc """
-  Returns the list of mfas (module, function, arity tuples) that are reachable by the given entry page.
+  Returns the list of mfas ({module, function, arity} tuples) that are reachable by the given entry page.
 
   ## Examples
 
