@@ -80,21 +80,33 @@ defmodule Hologram.Compiler.CallGraph do
     call_graph
   end
 
-  def build(call_graph, %IR.FunctionDefinition{} = ir, from_vertex) do
-    new_from_vertex = {from_vertex, ir.name, ir.arity}
-    build(call_graph, ir.clause, new_from_vertex)
+  def build(
+        call_graph,
+        %IR.FunctionDefinition{name: name, arity: arity, clause: clause},
+        from_vertex
+      ) do
+    new_from_vertex = {from_vertex, name, arity}
+    build(call_graph, clause, new_from_vertex)
   end
 
-  def build(call_graph, %IR.LocalFunctionCall{} = ir, {module, _function, _arity} = from_vertex) do
-    to_vertex = {module, ir.function, Enum.count(ir.args)}
+  def build(
+        call_graph,
+        %IR.LocalFunctionCall{function: function, args: args},
+        {module, _function, _arity} = from_vertex
+      ) do
+    to_vertex = {module, function, Enum.count(args)}
     add_edge(call_graph, from_vertex, to_vertex)
 
-    build(call_graph, ir.args, from_vertex)
+    build(call_graph, args, from_vertex)
   end
 
-  def build(call_graph, %IR.ModuleDefinition{module: module, body: body}, _from_vertex) do
-    maybe_add_templatable_call_graph_edges(call_graph, module.value)
-    build(call_graph, body, module.value)
+  def build(
+        call_graph,
+        %IR.ModuleDefinition{module: %IR.AtomType{value: module}, body: body},
+        _from_vertex
+      ) do
+    maybe_add_templatable_call_graph_edges(call_graph, module)
+    build(call_graph, body, module)
   end
 
   def build(
@@ -411,8 +423,6 @@ defmodule Hologram.Compiler.CallGraph do
   end
 
   defp add_page_call_graph_edges(call_graph, module) do
-    add_edge(call_graph, module, {module, :__hologram_layout_module__, 0})
-    add_edge(call_graph, module, {module, :__hologram_layout_props__, 0})
     add_edge(call_graph, module, {module, :__hologram_route__, 0})
   end
 
