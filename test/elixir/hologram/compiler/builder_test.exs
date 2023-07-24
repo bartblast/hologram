@@ -3,12 +3,18 @@ defmodule Hologram.Compiler.BuilderTest do
   import Hologram.Compiler.Builder
 
   alias Hologram.Commons.PLT
+  alias Hologram.Compiler.CallGraph
   alias Hologram.Compiler.IR
   alias Hologram.Test.Fixtures.Compiler.Builder.Module1
   alias Hologram.Test.Fixtures.Compiler.Builder.Module2
   alias Hologram.Test.Fixtures.Compiler.Builder.Module3
   alias Hologram.Test.Fixtures.Compiler.Builder.Module4
+  alias Hologram.Test.Fixtures.Compiler.Builder.Module5
+  alias Hologram.Test.Fixtures.Compiler.Builder.Module6
+  alias Hologram.Test.Fixtures.Compiler.Builder.Module7
 
+  @call_graph_name_1 :"call_graph_{__MODULE__}_1"
+  @call_graph_name_2 :"call_graph_{__MODULE__}_2"
   @plt_name_1 :"plt_#{__MODULE__}_1"
   @plt_name_2 :"plt_#{__MODULE__}_2"
 
@@ -54,6 +60,35 @@ defmodule Hologram.Compiler.BuilderTest do
     test "updated modules", %{result: result} do
       assert %{updated_modules: [:module_3, :module_6]} = result
     end
+  end
+
+  test "entry_page_reachable_mfas/3" do
+    call_graph = CallGraph.start(name: @call_graph_name_1)
+
+    module_5_ir = IR.for_module(Module5)
+    CallGraph.build(call_graph, module_5_ir)
+
+    module_6_ir = IR.for_module(Module6)
+    CallGraph.build(call_graph, module_6_ir)
+
+    module_7_ir = IR.for_module(Module7)
+    CallGraph.build(call_graph, module_7_ir)
+
+    sorted_mfas =
+      call_graph
+      |> entry_page_reachable_mfas(Module5, @call_graph_name_2)
+      |> Enum.sort()
+
+    assert sorted_mfas == [
+             {Module5, :__hologram_layout_module__, 0},
+             {Module5, :__hologram_layout_props__, 0},
+             {Module5, :__hologram_route__, 0},
+             {Module5, :action, 3},
+             {Module5, :template, 0},
+             {Module6, :action, 3},
+             {Module6, :template, 0},
+             {Module7, :my_fun_7a, 2}
+           ]
   end
 
   describe "patch_ir_plt/2" do

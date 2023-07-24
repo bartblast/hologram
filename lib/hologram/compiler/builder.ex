@@ -1,5 +1,6 @@
 defmodule Hologram.Compiler.Builder do
   alias Hologram.Commons.PLT
+  alias Hologram.Compiler.CallGraph
   alias Hologram.Compiler.IR
   alias Hologram.Compiler.Reflection
 
@@ -68,6 +69,29 @@ defmodule Hologram.Compiler.Builder do
       removed_modules: removed_modules,
       updated_modules: updated_modules
     }
+  end
+
+  @doc """
+  Returns the list of mfas (module, function, arity tuples) that are reachable by the given entry page.
+
+  ## Examples
+
+      iex>
+  """
+  @spec entry_page_reachable_mfas(CallGraph.t(), module, atom) :: list({module, atom, integer})
+  def entry_page_reachable_mfas(call_graph, entry_page, clone_name) do
+    call_graph_clone = CallGraph.clone(call_graph, name: clone_name)
+    layout_module = entry_page.__hologram_layout_module__()
+
+    call_graph_clone
+    |> CallGraph.add_edge(entry_page, {entry_page, :__hologram_layout_module__, 0})
+    |> CallGraph.add_edge(entry_page, {entry_page, :__hologram_layout_props__, 0})
+    |> CallGraph.add_edge(entry_page, {entry_page, :action, 3})
+    |> CallGraph.add_edge(entry_page, {entry_page, :template, 0})
+    |> CallGraph.add_edge(entry_page, {layout_module, :action, 3})
+    |> CallGraph.add_edge(entry_page, {layout_module, :template, 0})
+    |> CallGraph.reachable(entry_page)
+    |> Enum.filter(&is_tuple/1)
   end
 
   @doc """
