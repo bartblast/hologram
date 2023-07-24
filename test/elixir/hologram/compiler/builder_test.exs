@@ -12,6 +12,7 @@ defmodule Hologram.Compiler.BuilderTest do
   alias Hologram.Test.Fixtures.Compiler.Builder.Module5
   alias Hologram.Test.Fixtures.Compiler.Builder.Module6
   alias Hologram.Test.Fixtures.Compiler.Builder.Module7
+  alias Hologram.Test.Fixtures.Compiler.Builder.Module8
 
   @call_graph_name_1 :"call_graph_{__MODULE__}_1"
   @call_graph_name_2 :"call_graph_{__MODULE__}_2"
@@ -22,6 +23,33 @@ defmodule Hologram.Compiler.BuilderTest do
     wait_for_plt_cleanup(@plt_name_1)
     wait_for_plt_cleanup(@plt_name_2)
     :ok
+  end
+
+  test "aggregate_mfa_clauses/3" do
+    module_ir = IR.for_module(Module8)
+
+    assert aggregate_mfa_clauses(module_ir, :fun_2, 2) == [
+             %IR.FunctionClause{
+               params: [
+                 %IR.AtomType{value: :a},
+                 %IR.AtomType{value: :b}
+               ],
+               guard: nil,
+               body: %IR.Block{
+                 expressions: [%IR.IntegerType{value: 3}]
+               }
+             },
+             %IR.FunctionClause{
+               params: [
+                 %IR.AtomType{value: :b},
+                 %IR.AtomType{value: :c}
+               ],
+               guard: nil,
+               body: %IR.Block{
+                 expressions: [%IR.IntegerType{value: 4}]
+               }
+             }
+           ]
   end
 
   test "build_module_digest_plt/1" do

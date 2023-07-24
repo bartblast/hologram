@@ -5,6 +5,23 @@ defmodule Hologram.Compiler.Builder do
   alias Hologram.Compiler.Reflection
 
   @doc """
+  Extracts and aggregates all function clauses with a specific name and arity from the given module definition IR.
+  """
+  @spec aggregate_mfa_clauses(IR.ModuleDefinition.t(), atom, integer) ::
+          list(IR.FunctionClause.t())
+  def aggregate_mfa_clauses(module_ir, function, arity) do
+    module_ir.body.expressions
+    |> Enum.reduce([], fn
+      %IR.FunctionDefinition{name: ^function, arity: ^arity, clause: clause}, acc ->
+        [clause | acc]
+
+      _fallback, acc ->
+        acc
+    end)
+    |> Enum.reverse()
+  end
+
+  @doc """
   Builds a persistent lookup table (PLT) containing the BEAM defs digests for all the modules in the project.
 
   ## Examples
