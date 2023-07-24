@@ -89,7 +89,7 @@ defmodule Hologram.Compiler.Builder do
         {MyModule, :my_fun_7a, 2}
       ]
   """
-  @spec entry_page_reachable_mfas(CallGraph.t(), module, atom) :: list({module, atom, integer})
+  @spec entry_page_reachable_mfas(CallGraph.t(), module, atom) :: list(mfa)
   def entry_page_reachable_mfas(call_graph, entry_page, clone_name) do
     call_graph_clone = CallGraph.clone(call_graph, name: clone_name)
     layout_module = entry_page.__hologram_layout_module__()
