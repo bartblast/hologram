@@ -1,6 +1,8 @@
 defmodule Hologram.Compiler.Builder do
   alias Hologram.Commons.PLT
   alias Hologram.Compiler.CallGraph
+  alias Hologram.Compiler.Context
+  alias Hologram.Compiler.Encoder
   alias Hologram.Compiler.IR
   alias Hologram.Compiler.Reflection
 
@@ -14,6 +16,36 @@ defmodule Hologram.Compiler.Builder do
       %IR.FunctionDefinition{name: ^function, arity: ^arity} -> true
       _fallback -> false
     end)
+  end
+
+  @doc """
+  Builds JavaScript code for the given entry page.
+  """
+  @spec build_entry_page_js(CallGraph.t(), PLT.t(), module) :: String.t()
+  def build_entry_page_js(call_graph, ir_plt, entry_page) do
+    initial_output = """
+    window.__hologramPageReachableFunctionDefs__ = (interpreterClass, typeClass) => {
+      const Interpreter = interpreterClass;
+      const Type = typeClass;\
+    """
+
+    clone_name = :"call_graph_#{__MODULE__}_#{entry_page}"
+
+    call_graph
+    |> entry_page_reachable_mfas(entry_page, clone_name)
+    |> group_mfas()
+    |> Enum.reduce([initial_output], fn {module, reachable_mfas}, output_parts ->
+      module_output =
+        ir_plt
+        |> PLT.get!(module)
+        |> prune_module_def(reachable_mfas)
+        |> Encoder.encode(%Context{})
+
+      [module_output | output_parts]
+    end)
+    |> List.insert_at(0, "\n\n}")
+    |> Enum.reverse()
+    |> Enum.join()
   end
 
   @doc """

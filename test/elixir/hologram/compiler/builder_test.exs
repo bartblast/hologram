@@ -5,6 +5,7 @@ defmodule Hologram.Compiler.BuilderTest do
   alias Hologram.Commons.PLT
   alias Hologram.Compiler.CallGraph
   alias Hologram.Compiler.IR
+
   alias Hologram.Test.Fixtures.Compiler.Builder.Module1
   alias Hologram.Test.Fixtures.Compiler.Builder.Module2
   alias Hologram.Test.Fixtures.Compiler.Builder.Module3
@@ -13,6 +14,8 @@ defmodule Hologram.Compiler.BuilderTest do
   alias Hologram.Test.Fixtures.Compiler.Builder.Module6
   alias Hologram.Test.Fixtures.Compiler.Builder.Module7
   alias Hologram.Test.Fixtures.Compiler.Builder.Module8
+  alias Hologram.Test.Fixtures.Compiler.Builder.Module9
+  alias Hologram.Test.Fixtures.Compiler.Builder.Module10
 
   @call_graph_name_1 :"call_graph_{__MODULE__}_1"
   @call_graph_name_2 :"call_graph_{__MODULE__}_2"
@@ -62,6 +65,80 @@ defmodule Hologram.Compiler.BuilderTest do
            ]
   end
 
+  test "build_entry_page_js/3" do
+    module_8_ir = IR.for_module(Module8)
+    module_9_ir = IR.for_module(Module9)
+    module_10_ir = IR.for_module(Module10)
+
+    call_graph =
+      [name: @call_graph_name_1]
+      |> CallGraph.start()
+      |> CallGraph.build(module_8_ir)
+      |> CallGraph.build(module_9_ir)
+      |> CallGraph.build(module_10_ir)
+
+    ir_plt =
+      [name: @plt_name_1]
+      |> PLT.start()
+      |> PLT.put(Module8, module_8_ir)
+      |> PLT.put(Module9, module_9_ir)
+      |> PLT.put(Module10, module_10_ir)
+
+    assert build_entry_page_js(call_graph, ir_plt, Module9) == """
+           window.__hologramPageReachableFunctionDefs__ = (interpreterClass, typeClass) => {
+             const Interpreter = interpreterClass;
+             const Type = typeClass;
+
+           Interpreter.defineFunction("Elixir_Hologram_Test_Fixtures_Compiler_Builder_Module10", "action", [{params: [Type.atom("action_10a"), Type.variablePattern("params"), Type.variablePattern("state")], guard: null, body: (vars) => {
+           return .fun_10a(vars.params, vars.state);
+           }}])
+
+           Interpreter.defineFunction("Elixir_Hologram_Test_Fixtures_Compiler_Builder_Module10", "fun_10a", [{params: [Type.variablePattern("params"), Type.variablePattern("state")], guard: null, body: (vars) => {
+           return Type.tuple([vars.params, vars.state]);
+           }}])
+
+           Interpreter.defineFunction("Elixir_Hologram_Test_Fixtures_Compiler_Builder_Module10", "template", [{params: [], guard: null, body: (vars) => {
+           return Type.anonymousFunction(1, [{params: [Type.variablePattern("data")], guard: null, body: (vars) => {
+           return {
+           Interpreter.matchOperator(vars.data, Type.matchPlaceholder(), vars);
+           return Type.list([Type.tuple([Type.atom("text"), Type.bitstring("Module10 template")])]);
+           };
+           }}], vars);
+           }}])
+
+           Interpreter.defineFunction("Elixir_Hologram_Test_Fixtures_Compiler_Builder_Module9", "__hologram_layout_module__", [{params: [], guard: null, body: (vars) => {
+           return Type.atom("Elixir.Hologram.Test.Fixtures.Compiler.Builder.Module10");
+           }}])
+
+           Interpreter.defineFunction("Elixir_Hologram_Test_Fixtures_Compiler_Builder_Module9", "__hologram_layout_props__", [{params: [], guard: null, body: (vars) => {
+           return Type.list([]);
+           }}])
+
+           Interpreter.defineFunction("Elixir_Hologram_Test_Fixtures_Compiler_Builder_Module9", "__hologram_route__", [{params: [], guard: null, body: (vars) => {
+           return Type.bitstring("/my_path");
+           }}])
+
+           Interpreter.defineFunction("Elixir_Hologram_Test_Fixtures_Compiler_Builder_Module9", "action", [{params: [Type.atom("action_9a"), Type.variablePattern("params"), Type.variablePattern("state")], guard: null, body: (vars) => {
+           return .fun_9a(vars.params, vars.state);
+           }}])
+
+           Interpreter.defineFunction("Elixir_Hologram_Test_Fixtures_Compiler_Builder_Module9", "fun_9a", [{params: [Type.variablePattern("params"), Type.variablePattern("state")], guard: null, body: (vars) => {
+           return Type.tuple([vars.params, vars.state]);
+           }}])
+
+           Interpreter.defineFunction("Elixir_Hologram_Test_Fixtures_Compiler_Builder_Module9", "template", [{params: [], guard: null, body: (vars) => {
+           return Type.anonymousFunction(1, [{params: [Type.variablePattern("data")], guard: null, body: (vars) => {
+           return {
+           Interpreter.matchOperator(vars.data, Type.matchPlaceholder(), vars);
+           return Type.list([Type.tuple([Type.atom("text"), Type.bitstring("Module9 template")])]);
+           };
+           }}], vars);
+           }}])
+
+           }\
+           """
+  end
+
   test "build_module_digest_plt/1" do
     assert %PLT{name: @plt_name_1} = plt = build_module_digest_plt(@plt_name_1)
 
@@ -105,16 +182,16 @@ defmodule Hologram.Compiler.BuilderTest do
   end
 
   test "entry_page_reachable_mfas/3" do
-    call_graph = CallGraph.start(name: @call_graph_name_1)
-
     module_5_ir = IR.for_module(Module5)
-    CallGraph.build(call_graph, module_5_ir)
-
     module_6_ir = IR.for_module(Module6)
-    CallGraph.build(call_graph, module_6_ir)
-
     module_7_ir = IR.for_module(Module7)
-    CallGraph.build(call_graph, module_7_ir)
+
+    call_graph =
+      [name: @call_graph_name_1]
+      |> CallGraph.start()
+      |> CallGraph.build(module_5_ir)
+      |> CallGraph.build(module_6_ir)
+      |> CallGraph.build(module_7_ir)
 
     sorted_mfas =
       call_graph
