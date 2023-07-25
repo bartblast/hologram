@@ -10,6 +10,7 @@ defmodule Hologram.Compiler.Builder do
   Builds JavaScript code for the given entry page.
   """
   @spec build_entry_page_js(CallGraph.t(), PLT.t(), module) :: String.t()
+  # sobelow_skip ["DOS.BinToAtom"]
   def build_entry_page_js(call_graph, ir_plt, entry_page) do
     initial_output = """
     window.__hologramPageReachableFunctionDefs__ = (interpreterClass, typeClass) => {
