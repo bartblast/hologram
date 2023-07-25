@@ -1,6 +1,7 @@
 defmodule Hologram.Commons.FileUtils do
   @doc """
   Lists files nested in the given path or paths. The results are sorted in ascending order.
+  The result doesn't include directories.
 
   ## Examples
 
