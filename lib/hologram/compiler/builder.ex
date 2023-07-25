@@ -86,7 +86,7 @@ defmodule Hologram.Compiler.Builder do
       "--target=es2020"
     ]
 
-    System.cmd("npx", cmd)
+    System.cmd("npx", cmd, env: [])
 
     digest =
       output_file
@@ -102,7 +102,8 @@ defmodule Hologram.Compiler.Builder do
     File.rename!(source_map_file, source_map_file_with_digest)
 
     js_with_replaced_source_map_url =
-      File.read!(output_file_with_digest)
+      output_file_with_digest
+      |> File.read!()
       |> String.replace(
         "//# sourceMappingURL=hologram.runtime.js.map",
         "//# sourceMappingURL=hologram.runtime-#{digest}.js.map"

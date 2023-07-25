@@ -14,7 +14,7 @@ defmodule Hologram.Test.Helpers do
   Removes all files and directories inside `tmp` directory.
   """
   @spec clean_tmp_dir() :: :ok
-  def clean_tmp_dir() do
+  def clean_tmp_dir do
     tmp_path = Reflection.tmp_path()
 
     File.rm_rf!(tmp_path)
