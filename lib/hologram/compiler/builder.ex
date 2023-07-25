@@ -147,6 +147,34 @@ defmodule Hologram.Compiler.Builder do
     ir_plt
   end
 
+  @doc """
+  Keeps in the body of module definition IR only those expressions that are function definitions of reachable functions.
+  """
+  @spec prune_module_def(IR.ModuduleDefinition.t(), list(mfa)) :: IR.ModuleDefinition.t()
+  def prune_module_def(module_def_ir, reachable_mfas) do
+    module = module_def_ir.module.value
+
+    module_reachable_mfas =
+      reachable_mfas
+      |> Enum.filter(fn {reachable_module, _function, _arity} -> reachable_module == module end)
+      |> MapSet.new()
+
+    function_defs =
+      module_def_ir.body.expressions
+      |> Enum.filter(fn
+        %IR.FunctionDefinition{name: function, arity: arity} ->
+          MapSet.member?(module_reachable_mfas, {module, function, arity})
+
+        _fallback ->
+          false
+      end)
+
+    %IR.ModuleDefinition{
+      module: module_def_ir.module,
+      body: %IR.Block{expressions: function_defs}
+    }
+  end
+
   defp mapset_from_plt(plt) do
     plt
     |> PLT.get_all()

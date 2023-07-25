@@ -26,9 +26,9 @@ defmodule Hologram.Compiler.BuilderTest do
   end
 
   test "aggregate_mfas/3" do
-    module_def = IR.for_module(Module8)
+    module_def_ir = IR.for_module(Module8)
 
-    assert aggregate_mfas(module_def, :fun_2, 2) == [
+    assert aggregate_mfas(module_def_ir, :fun_2, 2) == [
              %IR.FunctionDefinition{
                name: :fun_2,
                arity: 2,
@@ -205,5 +205,73 @@ defmodule Hologram.Compiler.BuilderTest do
       assert PLT.get(plt, :module_6) == {:ok, :ir_6}
       assert PLT.get(plt, :module_8) == {:ok, :ir_8}
     end
+  end
+
+  test "prune_module_def/2" do
+    module_def_ir = IR.for_module(Module8)
+
+    module_def_ir_stub = %{
+      module_def_ir
+      | body: %IR.Block{
+          expressions: [
+            %IR.IgnoredExpression{type: :public_macro_definition} | module_def_ir.body.expressions
+          ]
+        }
+    }
+
+    reachable_mfas = [
+      {Module8, :fun_2, 2},
+      {Module8, :fun_3, 1}
+    ]
+
+    assert prune_module_def(module_def_ir_stub, reachable_mfas) == %IR.ModuleDefinition{
+             module: %IR.AtomType{value: Module8},
+             body: %IR.Block{
+               expressions: [
+                 %IR.FunctionDefinition{
+                   name: :fun_2,
+                   arity: 2,
+                   visibility: :public,
+                   clause: %IR.FunctionClause{
+                     params: [
+                       %IR.AtomType{value: :a},
+                       %IR.AtomType{value: :b}
+                     ],
+                     guard: nil,
+                     body: %IR.Block{
+                       expressions: [%IR.IntegerType{value: 3}]
+                     }
+                   }
+                 },
+                 %IR.FunctionDefinition{
+                   name: :fun_2,
+                   arity: 2,
+                   visibility: :public,
+                   clause: %IR.FunctionClause{
+                     params: [
+                       %IR.AtomType{value: :b},
+                       %IR.AtomType{value: :c}
+                     ],
+                     guard: nil,
+                     body: %IR.Block{
+                       expressions: [%IR.IntegerType{value: 4}]
+                     }
+                   }
+                 },
+                 %IR.FunctionDefinition{
+                   name: :fun_3,
+                   arity: 1,
+                   visibility: :public,
+                   clause: %IR.FunctionClause{
+                     params: [%IR.Variable{name: :x}],
+                     guard: nil,
+                     body: %IR.Block{
+                       expressions: [%IR.Variable{name: :x}]
+                     }
+                   }
+                 }
+               ]
+             }
+           }
   end
 end
