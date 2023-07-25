@@ -17,6 +17,7 @@ defmodule Hologram.Compiler.Builder do
       const Type = typeClass;\
     """
 
+    # credo:disable-for-next-line Credo.Check.Warning.UnsafeToAtom
     clone_name = :"call_graph_#{__MODULE__}_#{entry_page}"
 
     call_graph
@@ -178,7 +179,7 @@ defmodule Hologram.Compiler.Builder do
   @doc """
   Keeps in the body of module definition IR only those expressions that are function definitions of reachable functions.
   """
-  @spec prune_module_def(IR.ModuduleDefinition.t(), list(mfa)) :: IR.ModuleDefinition.t()
+  @spec prune_module_def(IR.ModuleDefinition.t(), list(mfa)) :: IR.ModuleDefinition.t()
   def prune_module_def(module_def_ir, reachable_mfas) do
     module = module_def_ir.module.value
 
@@ -188,8 +189,7 @@ defmodule Hologram.Compiler.Builder do
       |> MapSet.new()
 
     function_defs =
-      module_def_ir.body.expressions
-      |> Enum.filter(fn
+      Enum.filter(module_def_ir.body.expressions, fn
         %IR.FunctionDefinition{name: function, arity: arity} ->
           MapSet.member?(module_reachable_mfas, {module, function, arity})
 

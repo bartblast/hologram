@@ -7,6 +7,7 @@ defmodule Hologram.Compiler.BuilderTest do
   alias Hologram.Compiler.IR
 
   alias Hologram.Test.Fixtures.Compiler.Builder.Module1
+  alias Hologram.Test.Fixtures.Compiler.Builder.Module10
   alias Hologram.Test.Fixtures.Compiler.Builder.Module2
   alias Hologram.Test.Fixtures.Compiler.Builder.Module3
   alias Hologram.Test.Fixtures.Compiler.Builder.Module4
@@ -15,7 +16,6 @@ defmodule Hologram.Compiler.BuilderTest do
   alias Hologram.Test.Fixtures.Compiler.Builder.Module7
   alias Hologram.Test.Fixtures.Compiler.Builder.Module8
   alias Hologram.Test.Fixtures.Compiler.Builder.Module9
-  alias Hologram.Test.Fixtures.Compiler.Builder.Module10
 
   @call_graph_name_1 :"call_graph_{__MODULE__}_1"
   @call_graph_name_2 :"call_graph_{__MODULE__}_2"
