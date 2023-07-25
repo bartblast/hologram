@@ -28,43 +28,6 @@ defmodule Hologram.Compiler.BuilderTest do
     :ok
   end
 
-  test "aggregate_mfas/3" do
-    module_def_ir = IR.for_module(Module8)
-
-    assert aggregate_mfas(module_def_ir, :fun_2, 2) == [
-             %IR.FunctionDefinition{
-               name: :fun_2,
-               arity: 2,
-               visibility: :public,
-               clause: %IR.FunctionClause{
-                 params: [
-                   %IR.AtomType{value: :a},
-                   %IR.AtomType{value: :b}
-                 ],
-                 guard: nil,
-                 body: %IR.Block{
-                   expressions: [%IR.IntegerType{value: 3}]
-                 }
-               }
-             },
-             %IR.FunctionDefinition{
-               name: :fun_2,
-               arity: 2,
-               visibility: :public,
-               clause: %IR.FunctionClause{
-                 params: [
-                   %IR.AtomType{value: :b},
-                   %IR.AtomType{value: :c}
-                 ],
-                 guard: nil,
-                 body: %IR.Block{
-                   expressions: [%IR.IntegerType{value: 4}]
-                 }
-               }
-             }
-           ]
-  end
-
   test "build_entry_page_js/3" do
     module_8_ir = IR.for_module(Module8)
     module_9_ir = IR.for_module(Module9)

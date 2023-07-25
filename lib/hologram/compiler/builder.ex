@@ -7,18 +7,6 @@ defmodule Hologram.Compiler.Builder do
   alias Hologram.Compiler.Reflection
 
   @doc """
-  Extracts and aggregates all function definitions with a specific name and arity from the given module definition IR.
-  """
-  @spec aggregate_mfas(IR.ModuleDefinition.t(), atom, integer) :: list(IR.FunctionDefinition.t())
-  def aggregate_mfas(module_def, function, arity) do
-    module_def.body.expressions
-    |> Enum.filter(fn
-      %IR.FunctionDefinition{name: ^function, arity: ^arity} -> true
-      _fallback -> false
-    end)
-  end
-
-  @doc """
   Builds JavaScript code for the given entry page.
   """
   @spec build_entry_page_js(CallGraph.t(), PLT.t(), module) :: String.t()
