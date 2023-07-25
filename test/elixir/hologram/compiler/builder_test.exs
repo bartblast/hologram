@@ -108,6 +108,28 @@ defmodule Hologram.Compiler.BuilderTest do
     assert {:ok, <<_digest::256>>} = PLT.get(plt, Hologram.Compiler.Builder)
   end
 
+  test "build_runtime_js/3" do
+    clean_tmp_dir()
+
+    assert {digest, output_path, source_map_path} =
+             build_runtime_js("assets/node_modules/esbuild", "assets/js/hologram.mjs", "tmp")
+
+    assert digest =~ ~r/^[0-9a-f]{32}$/
+    assert output_path == "tmp/hologram.runtime-#{digest}.js"
+    assert source_map_path == "tmp/hologram.runtime-#{digest}.js.map"
+
+    output_js = File.read!(output_path)
+    assert String.starts_with?(output_js, ~s("use strict"))
+
+    assert String.ends_with?(
+             output_js,
+             "//# sourceMappingURL=hologram.runtime-#{digest}.js.map\n"
+           )
+
+    source_map_json = File.read!(source_map_path)
+    assert String.starts_with?(source_map_json, ~s({\n  "version": 3,\n  "sources": ["))
+  end
+
   describe "diff_module_digest_plts/2" do
     setup do
       old_plt =

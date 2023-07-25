@@ -1,4 +1,5 @@
 defmodule Hologram.Compiler.Builder do
+  alias Hologram.Commons.CryptographicUtils
   alias Hologram.Commons.PLT
   alias Hologram.Compiler.CallGraph
   alias Hologram.Compiler.Context
@@ -57,6 +58,59 @@ defmodule Hologram.Compiler.Builder do
     |> Stream.run()
 
     plt
+  end
+
+  @doc """
+  Builds Hologram runtime JS file and its source map.
+  The generated filenames contain the hex digest of the built JS content.
+
+  ## Examples
+
+      iex> build_runtime_js("assets/node_modules/esbuild", "assets/js/hologram.mjs", "tmp")
+      {"c4206fe5fa846da67e50ed03874ccbae",
+       "tmp/hologram.runtime-c4206fe5fa846da67e50ed03874ccbae.js",
+      "tmp/hologram.runtime-c4206fe5fa846da67e50ed03874ccbae.js.map"}
+  """
+  @spec build_runtime_js(String.t(), String.t(), String.t()) ::
+          {String.t(), String.t(), String.t()}
+  def build_runtime_js(esbuild_path, source_file, output_dir) do
+    output_file = output_dir <> "/hologram.runtime.js"
+
+    cmd = [
+      esbuild_path,
+      source_file,
+      "--bundle",
+      "--minify",
+      "--outfile=#{output_file}",
+      "--sourcemap",
+      "--target=es2020"
+    ]
+
+    System.cmd("npx", cmd)
+
+    digest =
+      output_file
+      |> File.read!()
+      |> CryptographicUtils.digest(:md5, :hex)
+
+    output_file_with_digest = output_dir <> "/hologram.runtime-#{digest}.js"
+
+    source_map_file = output_file <> ".map"
+    source_map_file_with_digest = output_file_with_digest <> ".map"
+
+    File.rename!(output_file, output_file_with_digest)
+    File.rename!(source_map_file, source_map_file_with_digest)
+
+    js_with_replaced_source_map_url =
+      File.read!(output_file_with_digest)
+      |> String.replace(
+        "//# sourceMappingURL=hologram.runtime.js.map",
+        "//# sourceMappingURL=hologram.runtime-#{digest}.js.map"
+      )
+
+    File.write!(output_file_with_digest, js_with_replaced_source_map_url)
+
+    {digest, output_file_with_digest, source_map_file_with_digest}
   end
 
   @doc """
@@ -221,8 +275,7 @@ defmodule Hologram.Compiler.Builder do
       |> Reflection.module_beam_defs()
       |> :erlang.term_to_binary(compressed: 0)
 
-    digest = :crypto.hash(:sha256, data)
-
+    digest = CryptographicUtils.digest(data, :sha256, :binary)
     PLT.put(plt.name, module, digest)
   end
 end
