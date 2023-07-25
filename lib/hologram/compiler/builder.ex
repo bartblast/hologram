@@ -118,6 +118,14 @@ defmodule Hologram.Compiler.Builder do
   end
 
   @doc """
+  Groups the given mfas by module.
+  """
+  @spec group_mfas(list(mfa)) :: %{module => mfa}
+  def group_mfas(mfas) do
+    Enum.group_by(mfas, fn {module, _function, _arity} -> module end)
+  end
+
+  @doc """
   Given a diff of changes, updates the IR persistent lookup table (PLT)
   by deleting entries for modules that have been removed,
   rebuilding the IR of modules that have been updated,
