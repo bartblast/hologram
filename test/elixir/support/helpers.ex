@@ -5,9 +5,23 @@ defmodule Hologram.Test.Helpers do
   alias Hologram.Compiler.Context
   alias Hologram.Compiler.Encoder
   alias Hologram.Compiler.IR
+  alias Hologram.Compiler.Reflection
 
   defdelegate ast(code), to: AST, as: :for_code
   defdelegate ir(code, context), to: IR, as: :for_code
+
+  @doc """
+  Removes all files and directories inside `tmp` directory.
+  """
+  @spec clean_tmp_dir() :: :ok
+  def clean_tmp_dir() do
+    tmp_path = Reflection.tmp_path()
+
+    File.rm_rf!(tmp_path)
+    File.mkdir!(tmp_path)
+
+    :ok
+  end
 
   @doc """
   Encodes Elixir source code to JavaScript source code.
