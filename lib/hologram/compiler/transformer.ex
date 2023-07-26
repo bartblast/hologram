@@ -568,8 +568,8 @@ defmodule Hologram.Compiler.Transformer do
     %{acc | generators: [clause | acc.generators]}
   end
 
-  defp transform_comprehension_part(ast, acc, context) when is_list(ast) do
-    Enum.reduce(ast, acc, &transform_comprehension_opt(&1, &2, context))
+  defp transform_comprehension_part(opts, acc, context) when is_list(opts) do
+    Enum.reduce(opts, acc, &transform_comprehension_opt(&1, &2, context))
   end
 
   defp transform_comprehension_part(filter, acc, context) do

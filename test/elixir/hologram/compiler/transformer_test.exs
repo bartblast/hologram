@@ -901,7 +901,7 @@ defmodule Hologram.Compiler.TransformerTest do
              } = transform(ast, %Context{})
     end
 
-    test "reducer with single clause " do
+    test "reducer with single clause" do
       ast =
         ast("""
         for x <- [1, 2], reduce: 0 do

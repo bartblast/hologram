@@ -35,6 +35,10 @@ defmodule Hologram.Compiler.Normalizer do
     {:->, meta, [normalize(pattern), {:__block__, [], [normalize(expr)]}]}
   end
 
+  def normalize({:for, meta, parts}) when is_list(parts) do
+    {:for, meta, Enum.map(parts, &normalize_comprehension_part/1)}
+  end
+
   def normalize({marker, meta, [name, [do: {:__block__, [], exprs}]]})
       when marker in [:def, :defp] do
     {marker, meta, [name, [do: {:__block__, [], normalize(exprs)}]]}
@@ -69,4 +73,20 @@ defmodule Hologram.Compiler.Normalizer do
       ast
     end
   end
+
+  defp normalize_comprehension_opt({:do, {:__block__, [], exprs}}) do
+    {:do, {:__block__, [], normalize(exprs)}}
+  end
+
+  defp normalize_comprehension_opt({:do, expr}) do
+    {:do, {:__block__, [], [normalize(expr)]}}
+  end
+
+  defp normalize_comprehension_opt(opt), do: normalize(opt)
+
+  defp normalize_comprehension_part(opts) when is_list(opts) do
+    Enum.map(opts, &normalize_comprehension_opt/1)
+  end
+
+  defp normalize_comprehension_part(part), do: normalize(part)
 end
