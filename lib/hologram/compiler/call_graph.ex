@@ -386,6 +386,25 @@ defmodule Hologram.Compiler.CallGraph do
   end
 
   @doc """
+  Determines mfas which are reachable from the given entry mfa.
+
+  ## Examples
+
+      iex> reachable_mfas(%CallGraph{name: :my_call_graph}, {MyModule5, :my_fun_2, 3})
+      [
+        {MyModule5, :my_fun_3, 1},
+        {MyModule1, :my_fun_2, 3},
+        {MyModule5, :my_fun_9, 2}
+      ]
+  """
+  @spec reachable_mfas(CallGraph.t(), mfa) :: list(mfa)
+  def reachable_mfas(call_graph, entry_mfa) do
+    call_graph
+    |> reachable(entry_mfa)
+    |> Enum.filter(&is_tuple/1)
+  end
+
+  @doc """
   Removes the vertex from the call graph.
 
   ## Examples
