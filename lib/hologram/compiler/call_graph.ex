@@ -174,8 +174,9 @@ defmodule Hologram.Compiler.CallGraph do
 
   ## Examples
 
-      iex> clone(%CallGraph{name: :my_call_graph}, name: :my_call_graph_clone)
-      %CallGraph{pid: #PID<0.259.0>, name: :my_call_graph_clone}
+      iex> call_graph = %CallGraph{name: :my_call_graph, pid: #PID<0.259.0>}
+      iex> clone(call_graph, name: :my_call_graph_clone)
+      %CallGraph{name: :my_call_graph_clone, pid: #PID<0.260.0>}
   """
   @spec clone(CallGraph.t(), keyword) :: CallGraph.t()
   def clone(old_call_graph, opts) do
@@ -189,7 +190,8 @@ defmodule Hologram.Compiler.CallGraph do
 
   ## Examples
 
-      iex> dump(%CallGraph{name: :my_call_graph, dump_path: "/my_dump_path"})
+      iex> call_graph = %CallGraph{name: :my_call_graph, pid: #PID<0.259.0>, dump_path: "/my_dump_path"}
+      iex> dump(call_graph)
       :ok
   """
   @spec dump(CallGraph.t()) :: :ok
@@ -207,7 +209,8 @@ defmodule Hologram.Compiler.CallGraph do
 
   ## Examples
 
-      iex> edges(%CallGraph{name: :my_call_graph})
+      iex> call_graph = %CallGraph{name: :my_call_graph, pid: #PID<0.259.0>}
+      iex> edges(call_graph)
       [
         %Graph.Edge{
           v1: {Module2, :my_fun_6, 3},
@@ -377,7 +380,8 @@ defmodule Hologram.Compiler.CallGraph do
 
   ## Examples
 
-      iex> reachable(%CallGraph{name: :my_call_graph}, :vertex_3)
+      iex> call_graph = %CallGraph{name: :my_call_graph, pid: #PID<0.259.0>}
+      iex> reachable(call_graph, :vertex_3)
       [:vertex_12, :vertex_5, :vertex_9, :vertex_3]
   """
   @spec reachable(CallGraph.t(), vertex) :: list(vertex)
@@ -390,7 +394,8 @@ defmodule Hologram.Compiler.CallGraph do
 
   ## Examples
 
-      iex> reachable_mfas(%CallGraph{name: :my_call_graph}, {MyModule5, :my_fun_2, 3})
+      iex> call_graph = %CallGraph{name: :my_call_graph, pid: #PID<0.259.0>}
+      iex> reachable_mfas(call_graph, {MyModule5, :my_fun_2, 3})
       [
         {MyModule5, :my_fun_3, 1},
         {MyModule1, :my_fun_2, 3},
@@ -424,7 +429,8 @@ defmodule Hologram.Compiler.CallGraph do
 
   ## Examples
 
-      iex> sorted_edges(%CallGraph{name: :my_call_graph})
+      iex> call_graph = %CallGraph{name: :my_call_graph, pid: #PID<0.259.0>}
+      iex> sorted_edges(call_graph)
       [
         %Graph.Edge{
           v1: {Module2, :my_fun_6, 3},
@@ -452,7 +458,8 @@ defmodule Hologram.Compiler.CallGraph do
 
   ## Examples
 
-      iex> sorted_vertices(%CallGraph{name: :my_call_graph})
+      iex> call_graph = %CallGraph{name: :my_call_graph, pid: #PID<0.259.0>}
+      iex> sorted_vertices(call_graph)
       [:vertex_1, :vertex_3, :vertex_5]
   """
   @spec sorted_vertices(CallGraph.t()) :: list(vertex)
@@ -489,7 +496,8 @@ defmodule Hologram.Compiler.CallGraph do
 
   ## Examples
 
-      iex> vertices(%CallGraph{name: :my_call_graph})
+      iex> call_graph = %CallGraph{name: :my_call_graph, pid: #PID<0.259.0>}
+      iex> vertices(call_graph)
       [:vertex_5, :vertex_1, :vertex_3]
   """
   @spec vertices(CallGraph.t()) :: list(vertex)
