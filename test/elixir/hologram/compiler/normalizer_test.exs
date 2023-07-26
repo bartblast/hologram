@@ -233,6 +233,78 @@ defmodule Hologram.Compiler.NormalizerTest do
     end
   end
 
+  describe "def" do
+    test "single expression block" do
+      # def my_fun, do: Aaa
+      ast = {:def, [line: 1], [{:my_fun, [line: 1], nil}, [do: Aaa]]}
+
+      assert normalize(ast) ==
+               {:def, [line: 1],
+                [
+                  {:my_fun, [line: 1], nil},
+                  [do: {:__block__, [], [{:__aliases__, [alias: false], [:Aaa]}]}]
+                ]}
+    end
+
+    test "multiple expressions block" do
+      # def my_fun do
+      #   Aaa
+      #   Bbb
+      # end
+      ast = {:def, [line: 1], [{:my_fun, [line: 1], nil}, [do: {:__block__, [], [Aaa, Bbb]}]]}
+
+      assert normalize(ast) ==
+               {:def, [line: 1],
+                [
+                  {:my_fun, [line: 1], nil},
+                  [
+                    do:
+                      {:__block__, [],
+                       [
+                         {:__aliases__, [alias: false], [:Aaa]},
+                         {:__aliases__, [alias: false], [:Bbb]}
+                       ]}
+                  ]
+                ]}
+    end
+  end
+
+  describe "defp" do
+    test "single expression block" do
+      # defp my_fun, do: Aaa
+      ast = {:defp, [line: 1], [{:my_fun, [line: 1], nil}, [do: Aaa]]}
+
+      assert normalize(ast) ==
+               {:defp, [line: 1],
+                [
+                  {:my_fun, [line: 1], nil},
+                  [do: {:__block__, [], [{:__aliases__, [alias: false], [:Aaa]}]}]
+                ]}
+    end
+
+    test "multiple expressions block" do
+      # defp my_fun do
+      #   Aaa
+      #   Bbb
+      # end
+      ast = {:defp, [line: 1], [{:my_fun, [line: 1], nil}, [do: {:__block__, [], [Aaa, Bbb]}]]}
+
+      assert normalize(ast) ==
+               {:defp, [line: 1],
+                [
+                  {:my_fun, [line: 1], nil},
+                  [
+                    do:
+                      {:__block__, [],
+                       [
+                         {:__aliases__, [alias: false], [:Aaa]},
+                         {:__aliases__, [alias: false], [:Bbb]}
+                       ]}
+                  ]
+                ]}
+    end
+  end
+
   test "unquote" do
     ast = {{:unquote, [], [:%]}, [line: 1], [Aaa, Bbb]}
 

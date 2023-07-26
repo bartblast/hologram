@@ -35,6 +35,15 @@ defmodule Hologram.Compiler.Normalizer do
     {:->, meta, [normalize(pattern), {:__block__, [], [normalize(expr)]}]}
   end
 
+  def normalize({marker, meta, [name, [do: {:__block__, [], exprs}]]})
+      when marker in [:def, :defp] do
+    {marker, meta, [name, [do: {:__block__, [], normalize(exprs)}]]}
+  end
+
+  def normalize({marker, meta, [name, [do: expr]]}) when marker in [:def, :defp] do
+    {marker, meta, [name, [do: {:__block__, [], [normalize(expr)]}]]}
+  end
+
   def normalize({{:unquote, _meta_1, [marker]}, meta_2, children}) do
     {marker, meta_2, normalize(children)}
   end
