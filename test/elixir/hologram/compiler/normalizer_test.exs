@@ -233,30 +233,6 @@ defmodule Hologram.Compiler.NormalizerTest do
     end
   end
 
-  describe "do block" do
-    test "single expression" do
-      # do
-      #   Aaa
-      # end
-      ast = [do: Aaa]
-      assert normalize(ast) == [do: {:__block__, [], [{:__aliases__, [alias: false], [:Aaa]}]}]
-    end
-
-    test "multiple expressions" do
-      # do
-      #   Aaa
-      #   Bbb
-      # end
-      ast = [do: {:__block__, [], [Aaa, Bbb]}]
-
-      assert normalize(ast) == [
-               do:
-                 {:__block__, [],
-                  [{:__aliases__, [alias: false], [:Aaa]}, {:__aliases__, [alias: false], [:Bbb]}]}
-             ]
-    end
-  end
-
   test "unquote" do
     ast = {{:unquote, [], [:%]}, [line: 1], [Aaa, Bbb]}
 

@@ -35,22 +35,6 @@ defmodule Hologram.Compiler.Normalizer do
     {:->, meta, [normalize(pattern), {:__block__, [], [normalize(expr)]}]}
   end
 
-  def normalize({:case, meta, [condition, [do: clauses]]}) do
-    {:case, meta, [normalize(condition), [do: normalize(clauses)]]}
-  end
-
-  def normalize({:cond, meta, [[do: clauses]]}) do
-    {:cond, meta, [[do: normalize(clauses)]]}
-  end
-
-  def normalize(do: {:__block__, [], exprs}) do
-    [do: {:__block__, [], normalize(exprs)}]
-  end
-
-  def normalize(do: expr) do
-    [do: {:__block__, [], [normalize(expr)]}]
-  end
-
   def normalize({{:unquote, _meta_1, [marker]}, meta_2, children}) do
     {marker, meta_2, normalize(children)}
   end
