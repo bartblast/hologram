@@ -109,7 +109,9 @@ defmodule Hologram.Compiler.BuilderTest do
   end
 
   test "build_runtime_js/3" do
+    # setup
     clean_tmp_dir()
+    install_lib_js_deps()
 
     assert {digest, output_path, source_map_path} =
              build_runtime_js("assets/node_modules/esbuild", "assets/js/hologram.mjs", "tmp")

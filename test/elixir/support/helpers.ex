@@ -23,6 +23,11 @@ defmodule Hologram.Test.Helpers do
     :ok
   end
 
+  def install_lib_js_deps do
+    opts = [cd: "assets", into: IO.stream(:stdio, :line)]
+    System.cmd("npm", ["install"], opts)
+  end
+
   @doc """
   Encodes Elixir source code to JavaScript source code.
 
