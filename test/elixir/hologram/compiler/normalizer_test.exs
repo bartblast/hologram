@@ -335,4 +335,11 @@ defmodule Hologram.Compiler.NormalizerTest do
              {:__aliases__, [alias: false], [:Ccc]}
            }
   end
+
+  test "keyword with :do key" do
+    # [do: Aaa]
+    ast = [do: Aaa]
+
+    assert normalize(ast) == [do: {:__aliases__, [alias: false], [:Aaa]}]
+  end
 end
