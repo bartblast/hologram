@@ -724,6 +724,56 @@ defmodule Hologram.Compiler.NormalizerTest do
     end
   end
 
+  describe "defmodule" do
+    test "single expression body" do
+      # defmodule MyModule do
+      #   Aaa
+      # end
+      ast =
+        {:defmodule, [line: 1],
+         [
+           {:__aliases__, [line: 1], [:MyModule]},
+           [do: Aaa]
+         ]}
+
+      assert normalize(ast) ==
+               {:defmodule, [line: 1],
+                [
+                  {:__aliases__, [line: 1], [:MyModule]},
+                  [do: {:__block__, [], [{:__aliases__, [alias: false], [:Aaa]}]}]
+                ]}
+    end
+
+    test "multiple expressions body" do
+      # defmodule MyModule do
+      #   Aaa
+      #   Bbb
+      # end
+      ast =
+        {:defmodule, [line: 1],
+         [
+           {:__aliases__, [line: 1], [:MyModule]},
+           [
+             do: {:__block__, [], [Aaa, Bbb]}
+           ]
+         ]}
+
+      assert normalize(ast) ==
+               {:defmodule, [line: 1],
+                [
+                  {:__aliases__, [line: 1], [:MyModule]},
+                  [
+                    do:
+                      {:__block__, [],
+                       [
+                         {:__aliases__, [alias: false], [:Aaa]},
+                         {:__aliases__, [alias: false], [:Bbb]}
+                       ]}
+                  ]
+                ]}
+    end
+  end
+
   test "unquote" do
     ast = {{:unquote, [], [:%]}, [line: 1], [Aaa, Bbb]}
 
