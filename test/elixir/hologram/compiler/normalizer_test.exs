@@ -850,6 +850,118 @@ defmodule Hologram.Compiler.NormalizerTest do
                 ]}
     end
 
+    test "single rescue clause" do
+      # try do
+      #   1
+      # rescue
+      #   Aaa in [Bbb, Ccc] -> Ddd
+      # end
+      ast =
+        {:try, [line: 1],
+         [
+           [
+             do: 1,
+             rescue: [
+               {:->, [line: 4],
+                [
+                  [{:in, [line: 4], [Aaa, [Bbb, Ccc]]}],
+                  Ddd
+                ]}
+             ]
+           ]
+         ]}
+
+      assert normalize(ast) ==
+               {:try, [line: 1],
+                [
+                  [
+                    do: {:__block__, [], [1]},
+                    rescue: [
+                      {:->, [line: 4],
+                       [
+                         [
+                           {:in, [line: 4],
+                            [
+                              {:__aliases__, [alias: false], [:Aaa]},
+                              [
+                                {:__aliases__, [alias: false], [:Bbb]},
+                                {:__aliases__, [alias: false], [:Ccc]}
+                              ]
+                            ]}
+                         ],
+                         {:__block__, [], [{:__aliases__, [alias: false], [:Ddd]}]}
+                       ]}
+                    ]
+                  ]
+                ]}
+    end
+
+    test "multiple rescue clauses" do
+      # try do
+      #   1
+      # rescue
+      #   Aaa in [Bbb, Ccc] -> Ddd
+      #   Eee in [Fff, Ggg] -> Hhh
+      # end
+      ast =
+        {:try, [line: 1],
+         [
+           [
+             do: 1,
+             rescue: [
+               {:->, [line: 4],
+                [
+                  [{:in, [line: 4], [Aaa, [Bbb, Ccc]]}],
+                  Ddd
+                ]},
+               {:->, [line: 5],
+                [
+                  [{:in, [line: 5], [Eee, [Fff, Ggg]]}],
+                  Hhh
+                ]}
+             ]
+           ]
+         ]}
+
+      assert normalize(ast) ==
+               {:try, [line: 1],
+                [
+                  [
+                    do: {:__block__, [], [1]},
+                    rescue: [
+                      {:->, [line: 4],
+                       [
+                         [
+                           {:in, [line: 4],
+                            [
+                              {:__aliases__, [alias: false], [:Aaa]},
+                              [
+                                {:__aliases__, [alias: false], [:Bbb]},
+                                {:__aliases__, [alias: false], [:Ccc]}
+                              ]
+                            ]}
+                         ],
+                         {:__block__, [], [{:__aliases__, [alias: false], [:Ddd]}]}
+                       ]},
+                      {:->, [line: 5],
+                       [
+                         [
+                           {:in, [line: 5],
+                            [
+                              {:__aliases__, [alias: false], [:Eee]},
+                              [
+                                {:__aliases__, [alias: false], [:Fff]},
+                                {:__aliases__, [alias: false], [:Ggg]}
+                              ]
+                            ]}
+                         ],
+                         {:__block__, [], [{:__aliases__, [alias: false], [:Hhh]}]}
+                       ]}
+                    ]
+                  ]
+                ]}
+    end
+
     test "single catch clause" do
       # try do
       #   1
