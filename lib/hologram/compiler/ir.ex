@@ -35,6 +35,8 @@ defmodule Hologram.Compiler.IR do
           | IR.PinOperator.t()
           | IR.RemoteFunctionCall.t()
           | IR.StringType.t()
+          | IR.Try.t()
+          | IR.TryRescueClause.t()
           | IR.TupleType.t()
           | IR.Variable.t()
 
@@ -234,6 +236,24 @@ defmodule Hologram.Compiler.IR do
     defstruct [:value]
 
     @type t :: %__MODULE__{value: String.t()}
+  end
+
+  defmodule Try do
+    defstruct [:body, :rescue, :catch, :else, :after]
+
+    @type t :: %__MODULE__{
+            body: IR.Block.t(),
+            rescue: list(IR.TryRescueClause.t()),
+            catch: list(IR.Clause.t()),
+            else: list(IR.Clause.t()),
+            after: IR.Block.t()
+          }
+  end
+
+  defmodule TryRescueClause do
+    defstruct [:variable, :modules]
+
+    @type t :: %__MODULE__{variable: atom, modules: list(module)}
   end
 
   defmodule TupleType do

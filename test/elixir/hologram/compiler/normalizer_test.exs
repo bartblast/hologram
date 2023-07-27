@@ -801,7 +801,7 @@ defmodule Hologram.Compiler.NormalizerTest do
   end
 
   describe "try" do
-    test "single expression try block" do
+    test "single expression try body" do
       # try do
       #   Aaa
       # after
@@ -819,7 +819,7 @@ defmodule Hologram.Compiler.NormalizerTest do
                 ]}
     end
 
-    test "multiple expressions try block" do
+    test "multiple expressions try body" do
       # try do
       #   Aaa
       #   Bbb
