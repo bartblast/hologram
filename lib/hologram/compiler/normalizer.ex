@@ -56,6 +56,10 @@ defmodule Hologram.Compiler.Normalizer do
     {:defmodule, meta, [name, [do: {:__block__, [], [normalize(expr)]}]]}
   end
 
+  def normalize({:try, meta, [opts]}) when is_list(opts) do
+    {:try, meta, [Enum.map(opts, &maybe_normalize_do_block/1)]}
+  end
+
   def normalize({{:unquote, _meta_1, [marker]}, meta_2, children}) do
     {marker, meta_2, normalize(children)}
   end
@@ -82,18 +86,18 @@ defmodule Hologram.Compiler.Normalizer do
     end
   end
 
-  defp normalize_comprehension_opt({:do, {:__block__, [], exprs}}) do
+  defp maybe_normalize_do_block({:do, {:__block__, [], exprs}}) do
     {:do, {:__block__, [], normalize(exprs)}}
   end
 
-  defp normalize_comprehension_opt({:do, expr}) do
+  defp maybe_normalize_do_block({:do, expr}) do
     {:do, {:__block__, [], [normalize(expr)]}}
   end
 
-  defp normalize_comprehension_opt(opt), do: normalize(opt)
+  defp maybe_normalize_do_block(opt), do: normalize(opt)
 
   defp normalize_comprehension_part(opts) when is_list(opts) do
-    Enum.map(opts, &normalize_comprehension_opt/1)
+    Enum.map(opts, &maybe_normalize_do_block/1)
   end
 
   defp normalize_comprehension_part(part), do: normalize(part)
