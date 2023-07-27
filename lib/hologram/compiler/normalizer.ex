@@ -93,6 +93,10 @@ defmodule Hologram.Compiler.Normalizer do
 
   defp normalize_comprehension_part(part), do: normalize(part)
 
+  defp normalize_try_opt({:after, block}) do
+    {:after, normalize_block(block)}
+  end
+
   defp normalize_try_opt({:do, block}) do
     {:do, normalize_block(block)}
   end

@@ -844,6 +844,55 @@ defmodule Hologram.Compiler.NormalizerTest do
                   ]
                 ]}
     end
+
+    test "single expression after block" do
+      # try do
+      #   1
+      # after
+      #   Aaa
+      # end
+      ast = {:try, [line: 1], [[do: 1, after: Aaa]]}
+
+      normalize(ast) ==
+        {:try, [line: 1],
+         [
+           [
+             do: {:__block__, [], [1]},
+             after: {:__block__, [], [{:__aliases__, [alias: false], [:Aaa]}]}
+           ]
+         ]}
+    end
+
+    test "multiple expressions after block" do
+      # try do
+      #   1
+      # after
+      #   Aaa
+      #   Bbb
+      # end
+      ast =
+        {:try, [line: 1],
+         [
+           [
+             do: 1,
+             after: {:__block__, [], [Aaa, Bbb]}
+           ]
+         ]}
+
+      assert normalize(ast) ==
+               {:try, [line: 1],
+                [
+                  [
+                    do: {:__block__, [], [1]},
+                    after:
+                      {:__block__, [],
+                       [
+                         {:__aliases__, [alias: false], [:Aaa]},
+                         {:__aliases__, [alias: false], [:Bbb]}
+                       ]}
+                  ]
+                ]}
+    end
   end
 
   test "tuple" do
