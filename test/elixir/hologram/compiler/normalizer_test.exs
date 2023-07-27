@@ -774,17 +774,6 @@ defmodule Hologram.Compiler.NormalizerTest do
     end
   end
 
-  test "unquote" do
-    ast = {{:unquote, [], [:%]}, [line: 1], [Aaa, Bbb]}
-
-    assert normalize(ast) ==
-             {:%, [line: 1],
-              [
-                {:__aliases__, [alias: false], [:Aaa]},
-                {:__aliases__, [alias: false], [:Bbb]}
-              ]}
-  end
-
   test "list" do
     ast = [Aaa, Bbb, Ccc]
 
@@ -803,6 +792,17 @@ defmodule Hologram.Compiler.NormalizerTest do
              {:__aliases__, [alias: false], [:Bbb]},
              {:__aliases__, [alias: false], [:Ccc]}
            }
+  end
+
+  test "unquote" do
+    ast = {{:unquote, [], [:%]}, [line: 1], [Aaa, Bbb]}
+
+    assert normalize(ast) ==
+             {:%, [line: 1],
+              [
+                {:__aliases__, [alias: false], [:Aaa]},
+                {:__aliases__, [alias: false], [:Bbb]}
+              ]}
   end
 
   test "keyword with :do key" do
