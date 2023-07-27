@@ -27,37 +27,24 @@ defmodule Hologram.Compiler.Normalizer do
     maybe_normalize_alias(ast, [alias: false], ast)
   end
 
-  def normalize({:->, meta, [pattern, {:__block__, [], exprs}]}) do
-    {:->, meta, [normalize(pattern), {:__block__, [], normalize(exprs)}]}
-  end
-
-  def normalize({:->, meta, [pattern, expr]}) do
-    {:->, meta, [normalize(pattern), {:__block__, [], [normalize(expr)]}]}
+  def normalize({:->, meta, [pattern, block]}) do
+    {:->, meta, [normalize(pattern), normalize_block(block)]}
   end
 
   def normalize({:for, meta, parts}) when is_list(parts) do
     {:for, meta, Enum.map(parts, &normalize_comprehension_part/1)}
   end
 
-  def normalize({marker, meta, [name, [do: {:__block__, [], exprs}]]})
-      when marker in [:def, :defp] do
-    {marker, meta, [name, [do: {:__block__, [], normalize(exprs)}]]}
+  def normalize({marker, meta, [name, [do: block]]}) when marker in [:def, :defp] do
+    {marker, meta, [name, [do: normalize_block(block)]]}
   end
 
-  def normalize({marker, meta, [name, [do: expr]]}) when marker in [:def, :defp] do
-    {marker, meta, [name, [do: {:__block__, [], [normalize(expr)]}]]}
-  end
-
-  def normalize({:defmodule, meta, [name, [do: {:__block__, [], exprs}]]}) do
-    {:defmodule, meta, [name, [do: {:__block__, [], normalize(exprs)}]]}
-  end
-
-  def normalize({:defmodule, meta, [name, [do: expr]]}) do
-    {:defmodule, meta, [name, [do: {:__block__, [], [normalize(expr)]}]]}
+  def normalize({:defmodule, meta, [name, [do: block]]}) do
+    {:defmodule, meta, [name, [do: normalize_block(block)]]}
   end
 
   def normalize({:try, meta, [opts]}) when is_list(opts) do
-    {:try, meta, [Enum.map(opts, &maybe_normalize_do_block/1)]}
+    {:try, meta, [Enum.map(opts, &normalize_try_opt/1)]}
   end
 
   def normalize({{:unquote, _meta_1, [marker]}, meta_2, children}) do
@@ -86,19 +73,29 @@ defmodule Hologram.Compiler.Normalizer do
     end
   end
 
-  defp maybe_normalize_do_block({:do, {:__block__, [], exprs}}) do
-    {:do, {:__block__, [], normalize(exprs)}}
+  defp normalize_block({:__block__, [], exprs}) do
+    {:__block__, [], normalize(exprs)}
   end
 
-  defp maybe_normalize_do_block({:do, expr}) do
-    {:do, {:__block__, [], [normalize(expr)]}}
+  defp normalize_block(expr) do
+    {:__block__, [], [normalize(expr)]}
   end
 
-  defp maybe_normalize_do_block(opt), do: normalize(opt)
+  defp normalize_comprehension_opt({:do, block}) do
+    {:do, normalize_block(block)}
+  end
+
+  defp normalize_comprehension_opt(opt), do: normalize(opt)
 
   defp normalize_comprehension_part(opts) when is_list(opts) do
-    Enum.map(opts, &maybe_normalize_do_block/1)
+    Enum.map(opts, &normalize_comprehension_opt/1)
   end
 
   defp normalize_comprehension_part(part), do: normalize(part)
+
+  defp normalize_try_opt({:do, block}) do
+    {:do, normalize_block(block)}
+  end
+
+  defp normalize_try_opt(opt), do: normalize(opt)
 end
