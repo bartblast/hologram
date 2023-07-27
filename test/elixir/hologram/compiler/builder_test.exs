@@ -180,12 +180,12 @@ defmodule Hologram.Compiler.BuilderTest do
       |> CallGraph.build(module_6_ir)
       |> CallGraph.build(module_7_ir)
 
-    sorted_mfas =
+    sorted_reachable_mfas =
       call_graph
       |> entry_page_reachable_mfas(Module5, @call_graph_name_2)
       |> Enum.sort()
 
-    assert sorted_mfas == [
+    assert sorted_reachable_mfas == [
              {Module5, :__hologram_layout_module__, 0},
              {Module5, :__hologram_layout_props__, 0},
              {Module5, :__hologram_route__, 0},
