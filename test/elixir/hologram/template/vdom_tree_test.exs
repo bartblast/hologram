@@ -351,7 +351,7 @@ defmodule Hologram.Template.VDOMTreeTest do
                       [no_parens: true, line: 1], []},
                      123
                    ]},
-                  [do: {:__block__, [], [[text: "abc"]]}]
+                  [do: [text: "abc"]]
                 ]}
              ]
     end
@@ -375,9 +375,7 @@ defmodule Hologram.Template.VDOMTreeTest do
                      123
                    ]},
                   [
-                    do:
-                      {:__block__, [],
-                       [[{:text, "abc"}, {:{}, [line: 1], [:element, "div", [], []]}]]}
+                    do: [{:text, "abc"}, {:{}, [line: 1], [:element, "div", [], []]}]
                   ]
                 ]}
              ]
