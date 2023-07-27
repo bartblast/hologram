@@ -1782,6 +1782,350 @@ defmodule Hologram.Compiler.TransformerTest do
     # test "with cons operator, in pattern"
   end
 
+  describe "try" do
+    test "body" do
+      ast =
+        ast("""
+        try do
+          1
+          2
+        rescue
+          x -> nil
+        end
+        """)
+
+      assert %IR.Try{
+               body: %IR.Block{
+                 expressions: [
+                   %IR.IntegerType{value: 1},
+                   %IR.IntegerType{value: 2}
+                 ]
+               }
+             } = transform(ast, %Context{})
+    end
+
+    test "rescue clause without variable and with single module" do
+      ast =
+        ast("""
+        try do
+          1
+        rescue
+          Aaa -> Bbb
+        end
+        """)
+
+      assert %IR.Try{
+               rescue_clauses: [
+                 %IR.TryRescueClause{
+                   variable: nil,
+                   modules: [%IR.AtomType{value: Aaa}],
+                   body: %IR.Block{
+                     expressions: [%IR.AtomType{value: Bbb}]
+                   }
+                 }
+               ]
+             } = transform(ast, %Context{})
+    end
+
+    test "rescue clause without variable and with multiple modules" do
+      ast =
+        ast("""
+        try do
+          1
+        rescue
+          [Aaa, Bbb] -> Ccc
+        end
+        """)
+
+      assert %IR.Try{
+               rescue_clauses: [
+                 %IR.TryRescueClause{
+                   variable: nil,
+                   modules: [%IR.AtomType{value: Aaa}, %IR.AtomType{value: Bbb}],
+                   body: %IR.Block{
+                     expressions: [%IR.AtomType{value: Ccc}]
+                   }
+                 }
+               ]
+             } = transform(ast, %Context{})
+    end
+
+    test "rescue clause with variable and single module" do
+      ast =
+        ast("""
+        try do
+          1
+        rescue
+          x in [Aaa] -> Bbb
+        end
+        """)
+
+      assert %IR.Try{
+               rescue_clauses: [
+                 %IR.TryRescueClause{
+                   variable: %IR.Variable{name: :x},
+                   modules: [%IR.AtomType{value: Aaa}],
+                   body: %IR.Block{
+                     expressions: [%IR.AtomType{value: Bbb}]
+                   }
+                 }
+               ]
+             } = transform(ast, %Context{})
+    end
+
+    test "rescue clause with variable and multiple modules" do
+      ast =
+        ast("""
+        try do
+          1
+        rescue
+          x in [Aaa, Bbb] -> Ccc
+        end
+        """)
+
+      assert %IR.Try{
+               rescue_clauses: [
+                 %IR.TryRescueClause{
+                   variable: %IR.Variable{name: :x},
+                   modules: [%IR.AtomType{value: Aaa}, %IR.AtomType{value: Bbb}],
+                   body: %IR.Block{
+                     expressions: [%IR.AtomType{value: Ccc}]
+                   }
+                 }
+               ]
+             } = transform(ast, %Context{})
+    end
+
+    test "rescue clause with variable and without module" do
+      ast =
+        ast("""
+        try do
+          1
+        rescue
+          x -> Aaa
+        end
+        """)
+
+      assert %IR.Try{
+               rescue_clauses: [
+                 %IR.TryRescueClause{
+                   variable: %IR.Variable{name: :x},
+                   modules: [],
+                   body: %IR.Block{
+                     expressions: [%IR.AtomType{value: Aaa}]
+                   }
+                 }
+               ]
+             } = transform(ast, %Context{})
+    end
+
+    test "multiple rescue clauses" do
+      ast =
+        ast("""
+        try do
+          1
+        rescue
+          x -> Aaa
+          y -> Bbb
+        end
+        """)
+
+      assert %IR.Try{
+               rescue_clauses: [
+                 %IR.TryRescueClause{
+                   variable: %IR.Variable{name: :x},
+                   modules: [],
+                   body: %IR.Block{
+                     expressions: [%IR.AtomType{value: Aaa}]
+                   }
+                 },
+                 %IR.TryRescueClause{
+                   variable: %IR.Variable{name: :y},
+                   modules: [],
+                   body: %IR.Block{
+                     expressions: [%IR.AtomType{value: Bbb}]
+                   }
+                 }
+               ]
+             } = transform(ast, %Context{})
+    end
+
+    test "single catch clause" do
+      ast =
+        ast("""
+        try do
+          1
+        catch
+          Aaa -> Bbb
+        end
+        """)
+
+      assert %IR.Try{
+               catch_clauses: [
+                 %IR.Clause{
+                   match: %IR.AtomType{value: Aaa},
+                   guard: nil,
+                   body: %IR.Block{
+                     expressions: [%IR.AtomType{value: Bbb}]
+                   }
+                 }
+               ]
+             } = transform(ast, %Context{})
+    end
+
+    test "multiple catch clauses" do
+      ast =
+        ast("""
+        try do
+          1
+        catch
+          Aaa -> Bbb
+          Ccc -> Ddd
+        end
+        """)
+
+      assert %IR.Try{
+               catch_clauses: [
+                 %IR.Clause{
+                   match: %IR.AtomType{value: Aaa},
+                   guard: nil,
+                   body: %IR.Block{
+                     expressions: [%IR.AtomType{value: Bbb}]
+                   }
+                 },
+                 %IR.Clause{
+                   match: %IR.AtomType{value: Ccc},
+                   guard: nil,
+                   body: %IR.Block{
+                     expressions: [%IR.AtomType{value: Ddd}]
+                   }
+                 }
+               ]
+             } = transform(ast, %Context{})
+    end
+
+    test "catch clause with guard" do
+      ast =
+        ast("""
+        try do
+          1
+        catch
+          Aaa when Bbb -> Ccc
+        end
+        """)
+
+      assert %IR.Try{
+               catch_clauses: [
+                 %IR.Clause{
+                   match: %IR.AtomType{value: Aaa},
+                   guard: %IR.AtomType{value: Bbb},
+                   body: %IR.Block{
+                     expressions: [%IR.AtomType{value: Ccc}]
+                   }
+                 }
+               ]
+             } = transform(ast, %Context{})
+    end
+
+    test "single else clause" do
+      ast =
+        ast("""
+        try do
+          1
+        else
+          Aaa -> Bbb
+        end
+        """)
+
+      assert %IR.Try{
+               else_clauses: [
+                 %IR.Clause{
+                   match: %IR.AtomType{value: Aaa},
+                   guard: nil,
+                   body: %IR.Block{
+                     expressions: [%IR.AtomType{value: Bbb}]
+                   }
+                 }
+               ]
+             } = transform(ast, %Context{})
+    end
+
+    test "multiple else clauses" do
+      ast =
+        ast("""
+        try do
+          1
+        else
+          Aaa -> Bbb
+          Ccc -> Ddd
+        end
+        """)
+
+      assert %IR.Try{
+               else_clauses: [
+                 %IR.Clause{
+                   match: %IR.AtomType{value: Aaa},
+                   guard: nil,
+                   body: %IR.Block{
+                     expressions: [%IR.AtomType{value: Bbb}]
+                   }
+                 },
+                 %IR.Clause{
+                   match: %IR.AtomType{value: Ccc},
+                   guard: nil,
+                   body: %IR.Block{
+                     expressions: [%IR.AtomType{value: Ddd}]
+                   }
+                 }
+               ]
+             } = transform(ast, %Context{})
+    end
+
+    test "else clause with guard" do
+      ast =
+        ast("""
+        try do
+          1
+        else
+          Aaa when Bbb -> Ccc
+        end
+        """)
+
+      assert %IR.Try{
+               else_clauses: [
+                 %IR.Clause{
+                   match: %IR.AtomType{value: Aaa},
+                   guard: %IR.AtomType{value: Bbb},
+                   body: %IR.Block{
+                     expressions: [%IR.AtomType{value: Ccc}]
+                   }
+                 }
+               ]
+             } = transform(ast, %Context{})
+    end
+
+    test "after block" do
+      ast =
+        ast("""
+        try do
+          1
+        after
+          2
+          3
+        end
+        """)
+
+      assert %IR.Try{
+               after_block: %IR.Block{
+                 expressions: [
+                   %IR.IntegerType{value: 2},
+                   %IR.IntegerType{value: 3}
+                 ]
+               }
+             } = transform(ast, %Context{})
+    end
+  end
+
   describe "tuple type" do
     test "2-element tuple" do
       ast = ast("{1, 2}")
@@ -1830,6 +2174,18 @@ defmodule Hologram.Compiler.TransformerTest do
       ast = {:for, [line: 1], Application}
 
       assert transform(ast, %Context{}) == %IR.Variable{name: :for}
+    end
+
+    test "variable 'try' with nil value in AST tuple" do
+      ast = ast("try")
+
+      assert transform(ast, %Context{}) == %IR.Variable{name: :try}
+    end
+
+    test "variable 'try' with non-nil value in AST tuple" do
+      ast = {:try, [line: 1], Application}
+
+      assert transform(ast, %Context{}) == %IR.Variable{name: :try}
     end
   end
 end

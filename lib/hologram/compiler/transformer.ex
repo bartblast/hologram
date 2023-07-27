@@ -332,6 +332,37 @@ defmodule Hologram.Compiler.Transformer do
     }
   end
 
+  def transform({:try, _meta, [opts]}, context) do
+    initial_acc = %{
+      body: nil,
+      rescue_clauses: [],
+      catch_clauses: [],
+      else_clauses: [],
+      after_block: nil
+    }
+
+    %{
+      body: body,
+      rescue_clauses: rescue_clauses,
+      catch_clauses: catch_clauses,
+      else_clauses: else_clauses,
+      after_block: after_block
+    } =
+      Enum.reduce(
+        opts,
+        initial_acc,
+        &transform_try_opt(&1, &2, context)
+      )
+
+    %IR.Try{
+      body: body,
+      rescue_clauses: rescue_clauses,
+      catch_clauses: catch_clauses,
+      else_clauses: else_clauses,
+      after_block: after_block
+    }
+  end
+
   def transform({:{}, _meta, data}, context) do
     build_tuple_type_ir(data, context)
   end
@@ -394,6 +425,21 @@ defmodule Hologram.Compiler.Transformer do
   defp build_function_capture_args(arity, meta) do
     # credo:disable-for-next-line Credo.Check.Warning.UnsafeToAtom
     Enum.map(1..arity, &{:"holo_arg_#{&1}__", meta, nil})
+  end
+
+  defp build_try_rescue_clause(variable, modules, body, context) do
+    variable_ir =
+      if variable do
+        transform(variable, context)
+      else
+        nil
+      end
+
+    %IR.TryRescueClause{
+      variable: variable_ir,
+      modules: transform_list(modules, context),
+      body: transform(body, context)
+    }
   end
 
   defp build_tuple_type_ir(data, context) do
@@ -654,6 +700,50 @@ defmodule Hologram.Compiler.Transformer do
       function: function,
       args: transform_list(args, context)
     }
+  end
+
+  defp transform_try_opt({:after, block}, acc, context) do
+    %{acc | after_block: transform(block, context)}
+  end
+
+  defp transform_try_opt({:catch, clauses}, acc, context) do
+    %{acc | catch_clauses: transform_list(clauses, context)}
+  end
+
+  defp transform_try_opt({:do, block}, acc, context) do
+    %{acc | body: transform(block, context)}
+  end
+
+  defp transform_try_opt({:else, clauses}, acc, context) do
+    %{acc | else_clauses: transform_list(clauses, context)}
+  end
+
+  defp transform_try_opt({:rescue, clauses}, acc, context) do
+    rescue_clauses = Enum.map(clauses, &transform_try_rescue_clause(&1, context))
+    %{acc | rescue_clauses: rescue_clauses}
+  end
+
+  defp transform_try_rescue_clause(
+         {:->, _meta_1, [[{:in, _meta_2, [variable, modules]}], body]},
+         context
+       ) do
+    build_try_rescue_clause(variable, modules, body, context)
+  end
+
+  defp transform_try_rescue_clause(
+         {:->, _meta_1, [[{:__aliases__, _meta_2, _segments} = module], body]},
+         context
+       ) do
+    build_try_rescue_clause(nil, [module], body, context)
+  end
+
+  defp transform_try_rescue_clause({:->, _meta_1, [[modules], body]}, context)
+       when is_list(modules) do
+    build_try_rescue_clause(nil, modules, body, context)
+  end
+
+  defp transform_try_rescue_clause({:->, _meta_1, [[variable], body]}, context) do
+    build_try_rescue_clause(variable, [], body, context)
   end
 
   defp transform_variable(name) do
