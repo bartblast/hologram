@@ -686,6 +686,24 @@ defmodule Hologram.Compiler.NormalizerTest do
                   ]
                 ]}
     end
+
+    test "with guard" do
+      # def my_fun when Aaa, do: Bbb
+      ast =
+        {:def, [line: 1],
+         [
+           {:when, [line: 1], [{:my_fun, [line: 1], nil}, Aaa]},
+           [do: Bbb]
+         ]}
+
+      assert normalize(ast) ==
+               {:def, [line: 1],
+                [
+                  {:when, [line: 1],
+                   [{:my_fun, [line: 1], nil}, {:__aliases__, [alias: false], [:Aaa]}]},
+                  [do: {:__block__, [], [{:__aliases__, [alias: false], [:Bbb]}]}]
+                ]}
+    end
   end
 
   describe "defp" do
@@ -720,6 +738,24 @@ defmodule Hologram.Compiler.NormalizerTest do
                          {:__aliases__, [alias: false], [:Bbb]}
                        ]}
                   ]
+                ]}
+    end
+
+    test "with guard" do
+      # defp my_fun when Aaa, do: Bbb
+      ast =
+        {:defp, [line: 1],
+         [
+           {:when, [line: 1], [{:my_fun, [line: 1], nil}, Aaa]},
+           [do: Bbb]
+         ]}
+
+      assert normalize(ast) ==
+               {:defp, [line: 1],
+                [
+                  {:when, [line: 1],
+                   [{:my_fun, [line: 1], nil}, {:__aliases__, [alias: false], [:Aaa]}]},
+                  [do: {:__block__, [], [{:__aliases__, [alias: false], [:Bbb]}]}]
                 ]}
     end
   end
@@ -1158,14 +1194,11 @@ defmodule Hologram.Compiler.NormalizerTest do
     end
 
     test "else clause with guard" do
-      code = """
-      try do
-        1
-      else
-        Aaa when Bbb -> Ccc
-      end
-      """
-
+      # try do
+      #   1
+      # else
+      #   Aaa when Bbb -> Ccc
+      # end
       ast =
         {:try, [line: 1],
          [
