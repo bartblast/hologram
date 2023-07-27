@@ -4,6 +4,7 @@ import {assert} from "chai";
 import Elixir_Enum from "./elixir/enum.mjs";
 import Elixir_Kernel from "./elixir/kernel.mjs";
 import Erlang from "./erlang/erlang.mjs";
+import {$243} from "./erlang/erlang.mjs";
 import Erlang_maps from "./erlang/maps.mjs";
 import Hologram from "./hologram.mjs";
 import sinonESM from "../node_modules/sinon/pkg/sinon-esm.js";
@@ -34,6 +35,8 @@ export function linkModules() {
   globalThis.Erlang_maps = Erlang_maps;
   globalThis.Elixir_Enum = Elixir_Enum;
   globalThis.Elixir_Kernel = Elixir_Kernel;
+
+  globalThis.Erlang.$243 = $243;
 }
 
 export function unlinkModules() {
