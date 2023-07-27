@@ -40,7 +40,7 @@ defmodule Hologram.Compiler.Normalizer do
   end
 
   def normalize({:defmodule, meta, [name, [do: block]]}) do
-    {:defmodule, meta, [name, [do: normalize_block(block)]]}
+    {:defmodule, meta, [normalize(name), [do: normalize_block(block)]]}
   end
 
   def normalize({:try, meta, [opts]}) when is_list(opts) do

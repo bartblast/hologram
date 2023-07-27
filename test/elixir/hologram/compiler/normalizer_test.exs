@@ -772,6 +772,22 @@ defmodule Hologram.Compiler.NormalizerTest do
                   ]
                 ]}
     end
+
+    test "name" do
+      # defmodule MyModule do
+      #   1
+      # end
+      ast =
+        {:defmodule, [line: 1],
+         [
+           MyModule,
+           [do: 1]
+         ]}
+
+      assert normalize(ast) ==
+               {:defmodule, [line: 1],
+                [{:__aliases__, [alias: false], [:MyModule]}, [do: {:__block__, [], [1]}]]}
+    end
   end
 
   test "list" do
