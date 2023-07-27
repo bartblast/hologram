@@ -811,7 +811,12 @@ defmodule Hologram.Compiler.NormalizerTest do
 
       assert normalize(ast) ==
                {:try, [line: 1],
-                [[do: {:__block__, [], [{:__aliases__, [alias: false], [:Aaa]}]}, after: 1]]}
+                [
+                  [
+                    do: {:__block__, [], [{:__aliases__, [alias: false], [:Aaa]}]},
+                    after: {:__block__, [], [1]}
+                  ]
+                ]}
     end
 
     test "multiple expressions try block" do
@@ -840,7 +845,80 @@ defmodule Hologram.Compiler.NormalizerTest do
                          {:__aliases__, [alias: false], [:Aaa]},
                          {:__aliases__, [alias: false], [:Bbb]}
                        ]},
-                    after: 1
+                    after: {:__block__, [], [1]}
+                  ]
+                ]}
+    end
+
+    test "single catch clause" do
+      # try do
+      #   1
+      # catch
+      #   Aaa -> Bbb
+      # end
+      ast =
+        {:try, [line: 1],
+         [
+           [
+             do: 1,
+             catch: [
+               {:->, [line: 4], [[Aaa], Bbb]}
+             ]
+           ]
+         ]}
+
+      assert normalize(ast) ==
+               {:try, [line: 1],
+                [
+                  [
+                    do: {:__block__, [], [1]},
+                    catch: [
+                      {:->, [line: 4],
+                       [
+                         [{:__aliases__, [alias: false], [:Aaa]}],
+                         {:__block__, [], [{:__aliases__, [alias: false], [:Bbb]}]}
+                       ]}
+                    ]
+                  ]
+                ]}
+    end
+
+    test "multiple catch clauses" do
+      # try do
+      #   1
+      # catch
+      #   Aaa -> Bbb
+      #   Ccc -> Ddd
+      # end
+      ast =
+        {:try, [line: 1],
+         [
+           [
+             do: 1,
+             catch: [
+               {:->, [line: 4], [[Aaa], Bbb]},
+               {:->, [line: 5], [[Ccc], Ddd]}
+             ]
+           ]
+         ]}
+
+      assert normalize(ast) ==
+               {:try, [line: 1],
+                [
+                  [
+                    do: {:__block__, [], [1]},
+                    catch: [
+                      {:->, [line: 4],
+                       [
+                         [{:__aliases__, [alias: false], [:Aaa]}],
+                         {:__block__, [], [{:__aliases__, [alias: false], [:Bbb]}]}
+                       ]},
+                      {:->, [line: 5],
+                       [
+                         [{:__aliases__, [alias: false], [:Ccc]}],
+                         {:__block__, [], [{:__aliases__, [alias: false], [:Ddd]}]}
+                       ]}
+                    ]
                   ]
                 ]}
     end
@@ -853,14 +931,14 @@ defmodule Hologram.Compiler.NormalizerTest do
       # end
       ast = {:try, [line: 1], [[do: 1, after: Aaa]]}
 
-      normalize(ast) ==
-        {:try, [line: 1],
-         [
-           [
-             do: {:__block__, [], [1]},
-             after: {:__block__, [], [{:__aliases__, [alias: false], [:Aaa]}]}
-           ]
-         ]}
+      assert normalize(ast) ==
+               {:try, [line: 1],
+                [
+                  [
+                    do: {:__block__, [], [1]},
+                    after: {:__block__, [], [{:__aliases__, [alias: false], [:Aaa]}]}
+                  ]
+                ]}
     end
 
     test "multiple expressions after block" do
