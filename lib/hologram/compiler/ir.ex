@@ -251,9 +251,9 @@ defmodule Hologram.Compiler.IR do
   end
 
   defmodule TryRescueClause do
-    defstruct [:variable, :modules]
+    defstruct [:variable, :modules, :body]
 
-    @type t :: %__MODULE__{variable: atom, modules: list(module)}
+    @type t :: %__MODULE__{variable: atom, modules: list(module), body: IR.Block.t()}
   end
 
   defmodule TupleType do
