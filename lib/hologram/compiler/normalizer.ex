@@ -43,7 +43,7 @@ defmodule Hologram.Compiler.Normalizer do
     {:defmodule, meta, [normalize(name), [do: normalize_block(block)]]}
   end
 
-  def normalize({:try, meta, [opts]}) when is_list(opts) do
+  def normalize({:try, meta, [opts]}) do
     {:try, meta, [Enum.map(opts, &normalize_try_opt/1)]}
   end
 
