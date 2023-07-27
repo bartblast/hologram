@@ -239,14 +239,14 @@ defmodule Hologram.Compiler.IR do
   end
 
   defmodule Try do
-    defstruct [:body, :rescue, :catch, :else, :after]
+    defstruct [:body, :rescue_clauses, :catch_clauses, :else_clauses, :after_block]
 
     @type t :: %__MODULE__{
             body: IR.Block.t(),
-            rescue: list(IR.TryRescueClause.t()),
-            catch: list(IR.Clause.t()),
-            else: list(IR.Clause.t()),
-            after: IR.Block.t()
+            rescue_clauses: list(IR.TryRescueClause.t()),
+            catch_clauses: list(IR.Clause.t()),
+            else_clauses: list(IR.Clause.t()),
+            after_block: IR.Block.t()
           }
   end
 
