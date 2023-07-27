@@ -923,6 +923,79 @@ defmodule Hologram.Compiler.NormalizerTest do
                 ]}
     end
 
+    test "single else clause" do
+      # try do
+      #   1
+      # else
+      #   Aaa -> Bbb
+      # end
+      ast =
+        {:try, [line: 1],
+         [
+           [
+             do: 1,
+             else: [
+               {:->, [line: 4], [[Aaa], Bbb]}
+             ]
+           ]
+         ]}
+
+      assert normalize(ast) ==
+               {:try, [line: 1],
+                [
+                  [
+                    do: {:__block__, [], [1]},
+                    else: [
+                      {:->, [line: 4],
+                       [
+                         [{:__aliases__, [alias: false], [:Aaa]}],
+                         {:__block__, [], [{:__aliases__, [alias: false], [:Bbb]}]}
+                       ]}
+                    ]
+                  ]
+                ]}
+    end
+
+    test "multiple else clauses" do
+      # try do
+      #   1
+      # else
+      #   Aaa -> Bbb
+      #   Ccc -> Ddd
+      # end
+      ast =
+        {:try, [line: 1],
+         [
+           [
+             do: 1,
+             else: [
+               {:->, [line: 4], [[Aaa], Bbb]},
+               {:->, [line: 5], [[Ccc], Ddd]}
+             ]
+           ]
+         ]}
+
+      assert normalize(ast) ==
+               {:try, [line: 1],
+                [
+                  [
+                    do: {:__block__, [], [1]},
+                    else: [
+                      {:->, [line: 4],
+                       [
+                         [{:__aliases__, [alias: false], [:Aaa]}],
+                         {:__block__, [], [{:__aliases__, [alias: false], [:Bbb]}]}
+                       ]},
+                      {:->, [line: 5],
+                       [
+                         [{:__aliases__, [alias: false], [:Ccc]}],
+                         {:__block__, [], [{:__aliases__, [alias: false], [:Ddd]}]}
+                       ]}
+                    ]
+                  ]
+                ]}
+    end
+
     test "single expression after block" do
       # try do
       #   1
