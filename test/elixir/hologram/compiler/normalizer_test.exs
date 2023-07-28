@@ -1034,7 +1034,7 @@ defmodule Hologram.Compiler.NormalizerTest do
                 ]}
     end
 
-    test "single catch clause" do
+    test "single catch clause / catch clause with value" do
       # try do
       #   1
       # catch
@@ -1107,7 +1107,7 @@ defmodule Hologram.Compiler.NormalizerTest do
                 ]}
     end
 
-    test "catch clause with guard" do
+    test "catch clause with value and guard" do
       # try do
       #   1
       # catch
@@ -1150,6 +1150,97 @@ defmodule Hologram.Compiler.NormalizerTest do
                             ]}
                          ],
                          {:__block__, [], [{:__aliases__, [alias: false], [:Ccc]}]}
+                       ]}
+                    ]
+                  ]
+                ]}
+    end
+
+    test "catch clause with kind and value" do
+      # try do
+      #   1
+      # catch
+      #   Aaa, Bbb -> Ccc
+      # end
+      ast =
+        {:try, [line: 1],
+         [
+           [
+             do: 1,
+             catch: [
+               {:->, [line: 4],
+                [
+                  [Aaa, Bbb],
+                  Ccc
+                ]}
+             ]
+           ]
+         ]}
+
+      assert normalize(ast) ==
+               {:try, [line: 1],
+                [
+                  [
+                    do: {:__block__, [], [1]},
+                    catch: [
+                      {:->, [line: 4],
+                       [
+                         [
+                           {:__aliases__, [alias: false], [:Aaa]},
+                           {:__aliases__, [alias: false], [:Bbb]}
+                         ],
+                         {:__block__, [], [{:__aliases__, [alias: false], [:Ccc]}]}
+                       ]}
+                    ]
+                  ]
+                ]}
+    end
+
+    test "catch clause with kind, value and guard" do
+      # try do
+      #   1
+      # catch
+      #   Aaa, Bbb when Ccc -> Ddd
+      # end
+      ast =
+        {:try, [line: 1],
+         [
+           [
+             do: 1,
+             catch: [
+               {:->, [line: 4],
+                [
+                  [
+                    {:when, [line: 4],
+                     [
+                       Aaa,
+                       Bbb,
+                       Ccc
+                     ]}
+                  ],
+                  Ddd
+                ]}
+             ]
+           ]
+         ]}
+
+      assert normalize(ast) ==
+               {:try, [line: 1],
+                [
+                  [
+                    do: {:__block__, [], [1]},
+                    catch: [
+                      {:->, [line: 4],
+                       [
+                         [
+                           {:when, [line: 4],
+                            [
+                              {:__aliases__, [alias: false], [:Aaa]},
+                              {:__aliases__, [alias: false], [:Bbb]},
+                              {:__aliases__, [alias: false], [:Ccc]}
+                            ]}
+                         ],
+                         {:__block__, [], [{:__aliases__, [alias: false], [:Ddd]}]}
                        ]}
                     ]
                   ]
@@ -1223,55 +1314,6 @@ defmodule Hologram.Compiler.NormalizerTest do
                        [
                          [{:__aliases__, [alias: false], [:Ccc]}],
                          {:__block__, [], [{:__aliases__, [alias: false], [:Ddd]}]}
-                       ]}
-                    ]
-                  ]
-                ]}
-    end
-
-    test "else clause with guard" do
-      # try do
-      #   1
-      # else
-      #   Aaa when Bbb -> Ccc
-      # end
-      ast =
-        {:try, [line: 1],
-         [
-           [
-             do: 1,
-             else: [
-               {:->, [line: 4],
-                [
-                  [
-                    {:when, [line: 4],
-                     [
-                       Aaa,
-                       Bbb
-                     ]}
-                  ],
-                  Ccc
-                ]}
-             ]
-           ]
-         ]}
-
-      assert normalize(ast) ==
-               {:try, [line: 1],
-                [
-                  [
-                    do: {:__block__, [], [1]},
-                    else: [
-                      {:->, [line: 4],
-                       [
-                         [
-                           {:when, [line: 4],
-                            [
-                              {:__aliases__, [alias: false], [:Aaa]},
-                              {:__aliases__, [alias: false], [:Bbb]}
-                            ]}
-                         ],
-                         {:__block__, [], [{:__aliases__, [alias: false], [:Ccc]}]}
                        ]}
                     ]
                   ]
