@@ -183,7 +183,7 @@ defmodule Hologram.Compiler.NormalizerTest do
                 ]}
     end
 
-    test "multiple expression block" do
+    test "multiple expressions block" do
       # Aaa ->
       #   Bbb
       #   Ccc
@@ -310,6 +310,51 @@ defmodule Hologram.Compiler.NormalizerTest do
                        [
                          [{:__aliases__, [alias: false], [:Ddd]}],
                          {:__block__, [], [{:__aliases__, [alias: false], [:Eee]}]}
+                       ]}
+                    ]
+                  ]
+                ]}
+    end
+
+    test "clause with multiple expressions body" do
+      # case Aaa do
+      #   Bbb ->
+      #     Ccc
+      #     Ddd
+      # end
+      ast =
+        {:case, [line: 1],
+         [
+           Aaa,
+           [
+             do: [
+               {:->, [line: 2],
+                [
+                  [Bbb],
+                  {:__block__, [],
+                   [
+                     Ccc,
+                     Ddd
+                   ]}
+                ]}
+             ]
+           ]
+         ]}
+
+      assert normalize(ast) ==
+               {:case, [line: 1],
+                [
+                  {:__aliases__, [alias: false], [:Aaa]},
+                  [
+                    do: [
+                      {:->, [line: 2],
+                       [
+                         [{:__aliases__, [alias: false], [:Bbb]}],
+                         {:__block__, [],
+                          [
+                            {:__aliases__, [alias: false], [:Ccc]},
+                            {:__aliases__, [alias: false], [:Ddd]}
+                          ]}
                        ]}
                     ]
                   ]
@@ -856,7 +901,7 @@ defmodule Hologram.Compiler.NormalizerTest do
                 ]}
     end
 
-    test "reducer clause with multiple expression body" do
+    test "reducer clause with multiple expressions body" do
       # for x <- [1, 2], reduce: Aaa do
       #   Bbb ->
       #     Ccc
