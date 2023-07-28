@@ -734,7 +734,7 @@ defmodule Hologram.Compiler.NormalizerTest do
                 ]}
     end
 
-    test "reducer clause with guard" do
+    test "reducer clause with single guard" do
       # for x <- [1, 2], reduce: Aaa do
       #   Bbb when Ccc -> Ddd
       # end
@@ -780,6 +780,75 @@ defmodule Hologram.Compiler.NormalizerTest do
                                  ]}
                               ],
                               {:__block__, [], [{:__aliases__, [alias: false], [:Ddd]}]}
+                            ]}
+                         ]
+                       ]}
+                  ]
+                ]}
+    end
+
+    test "reducer clause with multiple guards" do
+      # for x <- [1, 2], reduce: Aaa do
+      #   Bbb when Ccc when Ddd when Eee -> Fff
+      # end
+      ast =
+        {:for, [line: 1],
+         [
+           {:<-, [line: 1], [{:x, [line: 1], nil}, [1, 2]]},
+           [reduce: Aaa],
+           [
+             do: [
+               {:->, [line: 2],
+                [
+                  [
+                    {:when, [line: 2],
+                     [
+                       Bbb,
+                       {:when, [line: 2],
+                        [
+                          Ccc,
+                          {:when, [line: 2],
+                           [
+                             Ddd,
+                             Eee
+                           ]}
+                        ]}
+                     ]}
+                  ],
+                  Fff
+                ]}
+             ]
+           ]
+         ]}
+
+      assert normalize(ast) ==
+               {:for, [line: 1],
+                [
+                  {:<-, [line: 1], [{:x, [line: 1], nil}, [1, 2]]},
+                  [reduce: {:__aliases__, [alias: false], [:Aaa]}],
+                  [
+                    do:
+                      {:__block__, [],
+                       [
+                         [
+                           {:->, [line: 2],
+                            [
+                              [
+                                {:when, [line: 2],
+                                 [
+                                   {:__aliases__, [alias: false], [:Bbb]},
+                                   {:when, [line: 2],
+                                    [
+                                      {:__aliases__, [alias: false], [:Ccc]},
+                                      {:when, [line: 2],
+                                       [
+                                         {:__aliases__, [alias: false], [:Ddd]},
+                                         {:__aliases__, [alias: false], [:Eee]}
+                                       ]}
+                                    ]}
+                                 ]}
+                              ],
+                              {:__block__, [], [{:__aliases__, [alias: false], [:Fff]}]}
                             ]}
                          ]
                        ]}
