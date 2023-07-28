@@ -26,6 +26,139 @@ defmodule Hologram.Compiler.NormalizerTest do
     end
   end
 
+  describe "anonymous function type" do
+    test "single expression body" do
+      # fn Aaa -> Bbb end
+      ast =
+        {:fn, [line: 1],
+         [
+           {:->, [line: 1], [[Aaa], Bbb]}
+         ]}
+
+      assert normalize(ast) ==
+               {:fn, [line: 1],
+                [
+                  {:->, [line: 1],
+                   [
+                     [{:__aliases__, [alias: false], [:Aaa]}],
+                     {:__block__, [], [{:__aliases__, [alias: false], [:Bbb]}]}
+                   ]}
+                ]}
+    end
+
+    test "multiple expressions body" do
+      # fn Aaa ->
+      #   Bbb
+      #   Ccc
+      # end
+      ast =
+        {:fn, [line: 1],
+         [
+           {:->, [line: 1],
+            [
+              [Aaa],
+              {:__block__, [], [Bbb, Ccc]}
+            ]}
+         ]}
+
+      assert normalize(ast) ==
+               {:fn, [line: 1],
+                [
+                  {:->, [line: 1],
+                   [
+                     [{:__aliases__, [alias: false], [:Aaa]}],
+                     {:__block__, [],
+                      [
+                        {:__aliases__, [alias: false], [:Bbb]},
+                        {:__aliases__, [alias: false], [:Ccc]}
+                      ]}
+                   ]}
+                ]}
+    end
+
+    test "single guard" do
+      # fn Aaa when Bbb -> Ccc end
+      ast =
+        {:fn, [line: 1],
+         [
+           {:->, [line: 1],
+            [
+              [
+                {:when, [line: 1], [Aaa, Bbb]}
+              ],
+              Ccc
+            ]}
+         ]}
+
+      assert normalize(ast) ==
+               {:fn, [line: 1],
+                [
+                  {:->, [line: 1],
+                   [
+                     [
+                       {:when, [line: 1],
+                        [
+                          {:__aliases__, [alias: false], [:Aaa]},
+                          {:__aliases__, [alias: false], [:Bbb]}
+                        ]}
+                     ],
+                     {:__block__, [], [{:__aliases__, [alias: false], [:Ccc]}]}
+                   ]}
+                ]}
+    end
+
+    test "multiple guards" do
+      # fn Aaa when Bbb when Ccc when Ddd -> Eee end
+      ast =
+        {:fn, [line: 1],
+         [
+           {:->, [line: 1],
+            [
+              [
+                {:when, [line: 1],
+                 [
+                   Aaa,
+                   {:when, [line: 1],
+                    [
+                      Bbb,
+                      {:when, [line: 1],
+                       [
+                         Ccc,
+                         Ddd
+                       ]}
+                    ]}
+                 ]}
+              ],
+              Eee
+            ]}
+         ]}
+
+      assert normalize(ast) ==
+               {:fn, [line: 1],
+                [
+                  {:->, [line: 1],
+                   [
+                     [
+                       {:when, [line: 1],
+                        [
+                          {:__aliases__, [alias: false], [:Aaa]},
+                          {:when, [line: 1],
+                           [
+                             {:__aliases__, [alias: false], [:Bbb]},
+                             {:when, [line: 1],
+                              [
+                                {:__aliases__, [alias: false], [:Ccc]},
+                                {:__aliases__, [alias: false], [:Ddd]}
+                              ]}
+                           ]}
+                        ]}
+                     ],
+                     {:__block__, [], [{:__aliases__, [alias: false], [:Eee]}]}
+                   ]}
+                ]}
+    end
+  end
+
   describe "atom" do
     test "module" do
       assert normalize(Aaa.Bbb) == {:__aliases__, [alias: false], [:Aaa, :Bbb]}
