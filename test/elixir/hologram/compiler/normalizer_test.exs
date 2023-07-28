@@ -7,6 +7,19 @@ defmodule Hologram.Compiler.NormalizerTest do
   {:__aliases__, [line: 1], [:Aaa]}
   is replaced with:
   Aaa
+
+  Constructs that have blocks:
+  * clause
+  * comprehension mapper
+
+  Constructs that have clauses:
+  * anonymous function type (function clause)
+  * case (clause)
+  * comprehension generator (clause)
+  * comprehension reducer (clause)
+
+  Constructs that have guards:
+  * clause
   """
 
   use Hologram.Test.BasicCase, async: true
@@ -171,7 +184,7 @@ defmodule Hologram.Compiler.NormalizerTest do
   end
 
   describe "-> clause" do
-    test "single expression block" do
+    test "single expression body" do
       # Aaa -> Bbb
       ast = {:->, [line: 1], [[Aaa], Bbb]}
 
@@ -183,7 +196,7 @@ defmodule Hologram.Compiler.NormalizerTest do
                 ]}
     end
 
-    test "multiple expressions block" do
+    test "multiple expressions body" do
       # Aaa ->
       #   Bbb
       #   Ccc
