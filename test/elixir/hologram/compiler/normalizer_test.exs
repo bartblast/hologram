@@ -1,4 +1,14 @@
 defmodule Hologram.Compiler.NormalizerTest do
+  @moduledoc """
+  Fixture AST has module alias tuples replaced with module alias atoms,
+  which allows to test whether that particular part of the AST is normalized as well.
+
+  E.g.
+  {:__aliases__, [line: 1], [:Aaa]}
+  is replaced with:
+  Aaa
+  """
+
   use Hologram.Test.BasicCase, async: true
   import Hologram.Compiler.Normalizer
 
@@ -687,6 +697,19 @@ defmodule Hologram.Compiler.NormalizerTest do
                 ]}
     end
 
+    test "name" do
+      # (this code is invalid, and the AST is made by hand for testing purposes only)
+      # def Aaa, do: Bbb
+      ast = {:def, [line: 1], [Aaa, [do: {:__aliases__, [line: 1], [:Bbb]}]]}
+
+      assert normalize(ast) ==
+               {:def, [line: 1],
+                [
+                  {:__aliases__, [alias: false], [:Aaa]},
+                  [do: {:__block__, [], [{:__aliases__, [line: 1], [:Bbb]}]}]
+                ]}
+    end
+
     test "with guard" do
       # def my_fun when Aaa, do: Bbb
       ast =
@@ -738,6 +761,19 @@ defmodule Hologram.Compiler.NormalizerTest do
                          {:__aliases__, [alias: false], [:Bbb]}
                        ]}
                   ]
+                ]}
+    end
+
+    test "name" do
+      # (this code is invalid, and the AST is made by hand for testing purposes only)
+      # defp Aaa, do: Bbb
+      ast = {:defp, [line: 1], [Aaa, [do: {:__aliases__, [line: 1], [:Bbb]}]]}
+
+      assert normalize(ast) ==
+               {:defp, [line: 1],
+                [
+                  {:__aliases__, [alias: false], [:Aaa]},
+                  [do: {:__block__, [], [{:__aliases__, [line: 1], [:Bbb]}]}]
                 ]}
     end
 
