@@ -52,7 +52,7 @@ defmodule Hologram.Compiler.NormalizerTest do
   end
 
   describe "anonymous function type" do
-    test "single expression body" do
+    test "single clause / single expression body" do
       # fn Aaa -> Bbb end
       ast =
         {:fn, [line: 1],
@@ -67,6 +67,34 @@ defmodule Hologram.Compiler.NormalizerTest do
                    [
                      [{:__aliases__, [alias: false], [:Aaa]}],
                      {:__block__, [], [{:__aliases__, [alias: false], [:Bbb]}]}
+                   ]}
+                ]}
+    end
+
+    test "multiple clauses" do
+      # fn
+      #   Aaa -> Bbb
+      #   Ccc -> Ddd
+      # end
+      ast =
+        {:fn, [line: 1],
+         [
+           {:->, [line: 2], [[Aaa], Bbb]},
+           {:->, [line: 3], [[Ccc], Ddd]}
+         ]}
+
+      assert normalize(ast) ==
+               {:fn, [line: 1],
+                [
+                  {:->, [line: 2],
+                   [
+                     [{:__aliases__, [alias: false], [:Aaa]}],
+                     {:__block__, [], [{:__aliases__, [alias: false], [:Bbb]}]}
+                   ]},
+                  {:->, [line: 3],
+                   [
+                     [{:__aliases__, [alias: false], [:Ccc]}],
+                     {:__block__, [], [{:__aliases__, [alias: false], [:Ddd]}]}
                    ]}
                 ]}
     end
