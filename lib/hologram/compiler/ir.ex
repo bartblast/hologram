@@ -104,7 +104,7 @@ defmodule Hologram.Compiler.IR do
             filters: list(IR.ComprehensionFilter.t()),
             collectable: IR.t(),
             unique: %IR.AtomType{value: boolean},
-            mapper: IR.t() | nil,
+            mapper: IR.Block.t() | nil,
             reducer:
               %{
                 initial_value: IR.t(),
