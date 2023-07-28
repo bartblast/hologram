@@ -706,7 +706,7 @@ defmodule Hologram.Compiler.NormalizerTest do
                 ]}
     end
 
-    test "with guard" do
+    test "single guard" do
       # (this code is invalid, and the AST is made by hand for testing purposes only)
       # def Aaa when Bbb, do: Ccc
       ast =
@@ -725,6 +725,44 @@ defmodule Hologram.Compiler.NormalizerTest do
                      {:__aliases__, [alias: false], [:Bbb]}
                    ]},
                   [do: {:__block__, [], [{:__aliases__, [alias: false], [:Ccc]}]}]
+                ]}
+    end
+
+    test "multiple guards" do
+      # (this code is invalid, and the AST is made by hand for testing purposes only)
+      # def Aaa when Bbb when Ccc when Ddd, do: Eee"
+      ast =
+        {:def, [line: 1],
+         [
+           {:when, [line: 1],
+            [
+              Aaa,
+              {:when, [line: 1],
+               [
+                 Bbb,
+                 {:when, [line: 1], [Ccc, Ddd]}
+               ]}
+            ]},
+           [do: Eee]
+         ]}
+
+      assert normalize(ast) ==
+               {:def, [line: 1],
+                [
+                  {:when, [line: 1],
+                   [
+                     {:__aliases__, [alias: false], [:Aaa]},
+                     {:when, [line: 1],
+                      [
+                        {:__aliases__, [alias: false], [:Bbb]},
+                        {:when, [line: 1],
+                         [
+                           {:__aliases__, [alias: false], [:Ccc]},
+                           {:__aliases__, [alias: false], [:Ddd]}
+                         ]}
+                      ]}
+                   ]},
+                  [do: {:__block__, [], [{:__aliases__, [alias: false], [:Eee]}]}]
                 ]}
     end
   end
@@ -773,7 +811,7 @@ defmodule Hologram.Compiler.NormalizerTest do
                 ]}
     end
 
-    test "with guard" do
+    test "single guard" do
       # (this code is invalid, and the AST is made by hand for testing purposes only)
       # defp Aaa when Bbb, do: Ccc
       ast =
@@ -792,6 +830,44 @@ defmodule Hologram.Compiler.NormalizerTest do
                      {:__aliases__, [alias: false], [:Bbb]}
                    ]},
                   [do: {:__block__, [], [{:__aliases__, [alias: false], [:Ccc]}]}]
+                ]}
+    end
+
+    test "multiple guards" do
+      # (this code is invalid, and the AST is made by hand for testing purposes only)
+      # defp Aaa when Bbb when Ccc when Ddd, do: Eee"
+      ast =
+        {:defp, [line: 1],
+         [
+           {:when, [line: 1],
+            [
+              Aaa,
+              {:when, [line: 1],
+               [
+                 Bbb,
+                 {:when, [line: 1], [Ccc, Ddd]}
+               ]}
+            ]},
+           [do: Eee]
+         ]}
+
+      assert normalize(ast) ==
+               {:defp, [line: 1],
+                [
+                  {:when, [line: 1],
+                   [
+                     {:__aliases__, [alias: false], [:Aaa]},
+                     {:when, [line: 1],
+                      [
+                        {:__aliases__, [alias: false], [:Bbb]},
+                        {:when, [line: 1],
+                         [
+                           {:__aliases__, [alias: false], [:Ccc]},
+                           {:__aliases__, [alias: false], [:Ddd]}
+                         ]}
+                      ]}
+                   ]},
+                  [do: {:__block__, [], [{:__aliases__, [alias: false], [:Eee]}]}]
                 ]}
     end
   end
