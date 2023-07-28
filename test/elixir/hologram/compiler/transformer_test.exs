@@ -1986,6 +1986,7 @@ defmodule Hologram.Compiler.TransformerTest do
 
       assert %IR.Try{
                catch_clauses: [
+                 # credo:disable-for-next-line Credo.Check.Design.DuplicatedCode
                  %IR.Clause{
                    match: %IR.AtomType{value: Aaa},
                    guard: nil,
@@ -2063,6 +2064,7 @@ defmodule Hologram.Compiler.TransformerTest do
 
       assert %IR.Try{
                else_clauses: [
+                 # credo:disable-for-next-line Credo.Check.Design.DuplicatedCode
                  %IR.Clause{
                    match: %IR.AtomType{value: Aaa},
                    guard: nil,
