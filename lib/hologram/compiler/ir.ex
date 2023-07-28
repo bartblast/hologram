@@ -93,7 +93,7 @@ defmodule Hologram.Compiler.IR do
   defmodule Clause do
     defstruct [:match, :guard, :body]
 
-    @type t :: %__MODULE__{match: IR.t(), guard: IR.t() | nil, body: IR.t()}
+    @type t :: %__MODULE__{match: IR.t(), guard: IR.t() | nil, body: IR.Block.t()}
   end
 
   defmodule Comprehension do
