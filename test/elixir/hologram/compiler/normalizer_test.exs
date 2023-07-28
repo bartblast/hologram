@@ -1163,7 +1163,7 @@ defmodule Hologram.Compiler.NormalizerTest do
                 ]}
     end
 
-    test "single catch clause / catch clause with value" do
+    test "catch clause with value" do
       # try do
       #   1
       # catch
@@ -1190,46 +1190,6 @@ defmodule Hologram.Compiler.NormalizerTest do
                        [
                          [{:__aliases__, [alias: false], [:Aaa]}],
                          {:__block__, [], [{:__aliases__, [alias: false], [:Bbb]}]}
-                       ]}
-                    ]
-                  ]
-                ]}
-    end
-
-    test "multiple catch clauses" do
-      # try do
-      #   1
-      # catch
-      #   Aaa -> Bbb
-      #   Ccc -> Ddd
-      # end
-      ast =
-        {:try, [line: 1],
-         [
-           [
-             do: 1,
-             catch: [
-               {:->, [line: 4], [[Aaa], Bbb]},
-               {:->, [line: 5], [[Ccc], Ddd]}
-             ]
-           ]
-         ]}
-
-      assert normalize(ast) ==
-               {:try, [line: 1],
-                [
-                  [
-                    do: {:__block__, [], [1]},
-                    catch: [
-                      {:->, [line: 4],
-                       [
-                         [{:__aliases__, [alias: false], [:Aaa]}],
-                         {:__block__, [], [{:__aliases__, [alias: false], [:Bbb]}]}
-                       ]},
-                      {:->, [line: 5],
-                       [
-                         [{:__aliases__, [alias: false], [:Ccc]}],
-                         {:__block__, [], [{:__aliases__, [alias: false], [:Ddd]}]}
                        ]}
                     ]
                   ]
@@ -1369,6 +1329,46 @@ defmodule Hologram.Compiler.NormalizerTest do
                               {:__aliases__, [alias: false], [:Ccc]}
                             ]}
                          ],
+                         {:__block__, [], [{:__aliases__, [alias: false], [:Ddd]}]}
+                       ]}
+                    ]
+                  ]
+                ]}
+    end
+
+    test "multiple catch clauses" do
+      # try do
+      #   1
+      # catch
+      #   Aaa -> Bbb
+      #   Ccc -> Ddd
+      # end
+      ast =
+        {:try, [line: 1],
+         [
+           [
+             do: 1,
+             catch: [
+               {:->, [line: 4], [[Aaa], Bbb]},
+               {:->, [line: 5], [[Ccc], Ddd]}
+             ]
+           ]
+         ]}
+
+      assert normalize(ast) ==
+               {:try, [line: 1],
+                [
+                  [
+                    do: {:__block__, [], [1]},
+                    catch: [
+                      {:->, [line: 4],
+                       [
+                         [{:__aliases__, [alias: false], [:Aaa]}],
+                         {:__block__, [], [{:__aliases__, [alias: false], [:Bbb]}]}
+                       ]},
+                      {:->, [line: 5],
+                       [
+                         [{:__aliases__, [alias: false], [:Ccc]}],
                          {:__block__, [], [{:__aliases__, [alias: false], [:Ddd]}]}
                        ]}
                     ]
