@@ -922,7 +922,136 @@ defmodule Hologram.Compiler.NormalizerTest do
                 ]}
     end
 
-    test "single rescue clause" do
+    test "rescue clause with single module (or variable)" do
+      # try do
+      #   1
+      # rescue
+      #   Aaa -> Bbb
+      # end
+      ast =
+        {:try, [line: 1],
+         [
+           [
+             do: 1,
+             rescue: [
+               {:->, [line: 4], [[Aaa], Bbb]}
+             ]
+           ]
+         ]}
+
+      assert normalize(ast) ==
+               {:try, [line: 1],
+                [
+                  [
+                    do: {:__block__, [], [1]},
+                    rescue: [
+                      {:->, [line: 4],
+                       [
+                         [{:__aliases__, [alias: false], [:Aaa]}],
+                         {:__block__, [], [{:__aliases__, [alias: false], [:Bbb]}]}
+                       ]}
+                    ]
+                  ]
+                ]}
+    end
+
+    test "rescue clause with multiple modules" do
+      # try do
+      #   1
+      # rescue
+      #   [Aaa, Bbb] -> Ccc
+      # end
+      ast =
+        {:try, [line: 1],
+         [
+           [
+             do: 1,
+             rescue: [
+               {:->, [line: 4],
+                [
+                  [
+                    [
+                      Aaa,
+                      Bbb
+                    ]
+                  ],
+                  Ccc
+                ]}
+             ]
+           ]
+         ]}
+
+      assert normalize(ast) ==
+               {:try, [line: 1],
+                [
+                  [
+                    do: {:__block__, [], [1]},
+                    rescue: [
+                      {:->, [line: 4],
+                       [
+                         [
+                           [
+                             {:__aliases__, [alias: false], [:Aaa]},
+                             {:__aliases__, [alias: false], [:Bbb]}
+                           ]
+                         ],
+                         {:__block__, [], [{:__aliases__, [alias: false], [:Ccc]}]}
+                       ]}
+                    ]
+                  ]
+                ]}
+    end
+
+    test "rescue clause with variable and single module" do
+      # try do
+      #   1
+      # rescue
+      #   Aaa in [Bbb] -> Ccc
+      # end
+      ast =
+        {:try, [line: 1],
+         [
+           [
+             do: 1,
+             rescue: [
+               {:->, [line: 4],
+                [
+                  [
+                    {:in, [line: 4],
+                     [
+                       Aaa,
+                       [Bbb]
+                     ]}
+                  ],
+                  Ccc
+                ]}
+             ]
+           ]
+         ]}
+
+      assert normalize(ast) ==
+               {:try, [line: 1],
+                [
+                  [
+                    do: {:__block__, [], [1]},
+                    rescue: [
+                      {:->, [line: 4],
+                       [
+                         [
+                           {:in, [line: 4],
+                            [
+                              {:__aliases__, [alias: false], [:Aaa]},
+                              [{:__aliases__, [alias: false], [:Bbb]}]
+                            ]}
+                         ],
+                         {:__block__, [], [{:__aliases__, [alias: false], [:Ccc]}]}
+                       ]}
+                    ]
+                  ]
+                ]}
+    end
+
+    test "rescue clause with variable and multiple modules" do
       # try do
       #   1
       # rescue
