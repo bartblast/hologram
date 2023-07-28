@@ -1533,4 +1533,11 @@ defmodule Hologram.Compiler.NormalizerTest do
 
     assert normalize(ast) == ast
   end
+
+  test "try variable" do
+    # try
+    ast = {:try, [line: 1], nil}
+
+    assert normalize(ast) == ast
+  end
 end
