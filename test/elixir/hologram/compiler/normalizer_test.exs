@@ -664,134 +664,134 @@ defmodule Hologram.Compiler.NormalizerTest do
 
   describe "def" do
     test "single expression block" do
-      # def my_fun, do: Aaa
-      ast = {:def, [line: 1], [{:my_fun, [line: 1], nil}, [do: Aaa]]}
-
-      assert normalize(ast) ==
-               {:def, [line: 1],
-                [
-                  {:my_fun, [line: 1], nil},
-                  [do: {:__block__, [], [{:__aliases__, [alias: false], [:Aaa]}]}]
-                ]}
-    end
-
-    test "multiple expressions block" do
-      # def my_fun do
-      #   Aaa
-      #   Bbb
-      # end
-      ast = {:def, [line: 1], [{:my_fun, [line: 1], nil}, [do: {:__block__, [], [Aaa, Bbb]}]]}
-
-      assert normalize(ast) ==
-               {:def, [line: 1],
-                [
-                  {:my_fun, [line: 1], nil},
-                  [
-                    do:
-                      {:__block__, [],
-                       [
-                         {:__aliases__, [alias: false], [:Aaa]},
-                         {:__aliases__, [alias: false], [:Bbb]}
-                       ]}
-                  ]
-                ]}
-    end
-
-    test "name" do
       # (this code is invalid, and the AST is made by hand for testing purposes only)
       # def Aaa, do: Bbb
-      ast = {:def, [line: 1], [Aaa, [do: {:__aliases__, [line: 1], [:Bbb]}]]}
+      ast = {:def, [line: 1], [Aaa, [do: Bbb]]}
 
       assert normalize(ast) ==
                {:def, [line: 1],
                 [
                   {:__aliases__, [alias: false], [:Aaa]},
-                  [do: {:__block__, [], [{:__aliases__, [line: 1], [:Bbb]}]}]
+                  [do: {:__block__, [], [{:__aliases__, [alias: false], [:Bbb]}]}]
+                ]}
+    end
+
+    test "multiple expressions block" do
+      # (this code is invalid, and the AST is made by hand for testing purposes only)
+      # def Aaa do
+      #   Bbb
+      #   Ccc
+      # end
+      ast =
+        {:def, [line: 1],
+         [
+           Aaa,
+           [
+             do: {:__block__, [], [Bbb, Ccc]}
+           ]
+         ]}
+
+      assert normalize(ast) ==
+               {:def, [line: 1],
+                [
+                  {:__aliases__, [alias: false], [:Aaa]},
+                  [
+                    do:
+                      {:__block__, [],
+                       [
+                         {:__aliases__, [alias: false], [:Bbb]},
+                         {:__aliases__, [alias: false], [:Ccc]}
+                       ]}
+                  ]
                 ]}
     end
 
     test "with guard" do
-      # def my_fun when Aaa, do: Bbb
+      # (this code is invalid, and the AST is made by hand for testing purposes only)
+      # def Aaa when Bbb, do: Ccc
       ast =
         {:def, [line: 1],
          [
-           {:when, [line: 1], [{:my_fun, [line: 1], nil}, Aaa]},
-           [do: Bbb]
+           {:when, [line: 1], [Aaa, Bbb]},
+           [do: Ccc]
          ]}
 
       assert normalize(ast) ==
                {:def, [line: 1],
                 [
                   {:when, [line: 1],
-                   [{:my_fun, [line: 1], nil}, {:__aliases__, [alias: false], [:Aaa]}]},
-                  [do: {:__block__, [], [{:__aliases__, [alias: false], [:Bbb]}]}]
+                   [
+                     {:__aliases__, [alias: false], [:Aaa]},
+                     {:__aliases__, [alias: false], [:Bbb]}
+                   ]},
+                  [do: {:__block__, [], [{:__aliases__, [alias: false], [:Ccc]}]}]
                 ]}
     end
   end
 
   describe "defp" do
     test "single expression block" do
-      # defp my_fun, do: Aaa
-      ast = {:defp, [line: 1], [{:my_fun, [line: 1], nil}, [do: Aaa]]}
-
-      assert normalize(ast) ==
-               {:defp, [line: 1],
-                [
-                  {:my_fun, [line: 1], nil},
-                  [do: {:__block__, [], [{:__aliases__, [alias: false], [:Aaa]}]}]
-                ]}
-    end
-
-    test "multiple expressions block" do
-      # defp my_fun do
-      #   Aaa
-      #   Bbb
-      # end
-      ast = {:defp, [line: 1], [{:my_fun, [line: 1], nil}, [do: {:__block__, [], [Aaa, Bbb]}]]}
-
-      assert normalize(ast) ==
-               {:defp, [line: 1],
-                [
-                  {:my_fun, [line: 1], nil},
-                  [
-                    do:
-                      {:__block__, [],
-                       [
-                         {:__aliases__, [alias: false], [:Aaa]},
-                         {:__aliases__, [alias: false], [:Bbb]}
-                       ]}
-                  ]
-                ]}
-    end
-
-    test "name" do
       # (this code is invalid, and the AST is made by hand for testing purposes only)
       # defp Aaa, do: Bbb
-      ast = {:defp, [line: 1], [Aaa, [do: {:__aliases__, [line: 1], [:Bbb]}]]}
+      ast = {:defp, [line: 1], [Aaa, [do: Bbb]]}
 
       assert normalize(ast) ==
                {:defp, [line: 1],
                 [
                   {:__aliases__, [alias: false], [:Aaa]},
-                  [do: {:__block__, [], [{:__aliases__, [line: 1], [:Bbb]}]}]
+                  [do: {:__block__, [], [{:__aliases__, [alias: false], [:Bbb]}]}]
+                ]}
+    end
+
+    test "multiple expressions block" do
+      # (this code is invalid, and the AST is made by hand for testing purposes only)
+      # defp Aaa do
+      #   Bbb
+      #   Ccc
+      # end
+      ast =
+        {:defp, [line: 1],
+         [
+           Aaa,
+           [
+             do: {:__block__, [], [Bbb, Ccc]}
+           ]
+         ]}
+
+      assert normalize(ast) ==
+               {:defp, [line: 1],
+                [
+                  {:__aliases__, [alias: false], [:Aaa]},
+                  [
+                    do:
+                      {:__block__, [],
+                       [
+                         {:__aliases__, [alias: false], [:Bbb]},
+                         {:__aliases__, [alias: false], [:Ccc]}
+                       ]}
+                  ]
                 ]}
     end
 
     test "with guard" do
-      # defp my_fun when Aaa, do: Bbb
+      # (this code is invalid, and the AST is made by hand for testing purposes only)
+      # defp Aaa when Bbb, do: Ccc
       ast =
         {:defp, [line: 1],
          [
-           {:when, [line: 1], [{:my_fun, [line: 1], nil}, Aaa]},
-           [do: Bbb]
+           {:when, [line: 1], [Aaa, Bbb]},
+           [do: Ccc]
          ]}
 
       assert normalize(ast) ==
                {:defp, [line: 1],
                 [
                   {:when, [line: 1],
-                   [{:my_fun, [line: 1], nil}, {:__aliases__, [alias: false], [:Aaa]}]},
-                  [do: {:__block__, [], [{:__aliases__, [alias: false], [:Bbb]}]}]
+                   [
+                     {:__aliases__, [alias: false], [:Aaa]},
+                     {:__aliases__, [alias: false], [:Bbb]}
+                   ]},
+                  [do: {:__block__, [], [{:__aliases__, [alias: false], [:Ccc]}]}]
                 ]}
     end
   end

@@ -37,7 +37,8 @@ defmodule Hologram.Compiler.Normalizer do
 
   def normalize({marker, meta_1, [{:when, meta_2, [name, guard]}, [do: block]]})
       when marker in [:def, :defp] do
-    {marker, meta_1, [{:when, meta_2, [name, normalize(guard)]}, [do: normalize_block(block)]]}
+    {marker, meta_1,
+     [{:when, meta_2, [normalize(name), normalize(guard)]}, [do: normalize_block(block)]]}
   end
 
   def normalize({marker, meta, [name, [do: block]]}) when marker in [:def, :defp] do
