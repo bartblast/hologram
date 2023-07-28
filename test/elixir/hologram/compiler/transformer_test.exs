@@ -1850,6 +1850,29 @@ defmodule Hologram.Compiler.TransformerTest do
              } = transform(ast, %Context{})
     end
 
+    test "rescue clause with variable" do
+      ast =
+        ast("""
+        try do
+          1
+        rescue
+          x -> Aaa
+        end
+        """)
+
+      assert %IR.Try{
+               rescue_clauses: [
+                 %IR.TryRescueClause{
+                   variable: %IR.Variable{name: :x},
+                   modules: [],
+                   body: %IR.Block{
+                     expressions: [%IR.AtomType{value: Aaa}]
+                   }
+                 }
+               ]
+             } = transform(ast, %Context{})
+    end
+
     test "rescue clause with variable and single module" do
       ast =
         ast("""
@@ -1890,29 +1913,6 @@ defmodule Hologram.Compiler.TransformerTest do
                    modules: [%IR.AtomType{value: Aaa}, %IR.AtomType{value: Bbb}],
                    body: %IR.Block{
                      expressions: [%IR.AtomType{value: Ccc}]
-                   }
-                 }
-               ]
-             } = transform(ast, %Context{})
-    end
-
-    test "rescue clause with variable" do
-      ast =
-        ast("""
-        try do
-          1
-        rescue
-          x -> Aaa
-        end
-        """)
-
-      assert %IR.Try{
-               rescue_clauses: [
-                 %IR.TryRescueClause{
-                   variable: %IR.Variable{name: :x},
-                   modules: [],
-                   body: %IR.Block{
-                     expressions: [%IR.AtomType{value: Aaa}]
                    }
                  }
                ]
