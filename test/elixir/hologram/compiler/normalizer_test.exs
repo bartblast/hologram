@@ -796,7 +796,7 @@ defmodule Hologram.Compiler.NormalizerTest do
   end
 
   describe "def" do
-    test "single expression block" do
+    test "single expression body" do
       # (this code is invalid, and the AST is made by hand for testing purposes only)
       # def Aaa, do: Bbb
       ast = {:def, [line: 1], [Aaa, [do: Bbb]]}
@@ -809,7 +809,7 @@ defmodule Hologram.Compiler.NormalizerTest do
                 ]}
     end
 
-    test "multiple expressions block" do
+    test "multiple expressions body" do
       # (this code is invalid, and the AST is made by hand for testing purposes only)
       # def Aaa do
       #   Bbb
@@ -901,7 +901,7 @@ defmodule Hologram.Compiler.NormalizerTest do
   end
 
   describe "defp" do
-    test "single expression block" do
+    test "single expression body" do
       # (this code is invalid, and the AST is made by hand for testing purposes only)
       # defp Aaa, do: Bbb
       ast = {:defp, [line: 1], [Aaa, [do: Bbb]]}
@@ -914,7 +914,7 @@ defmodule Hologram.Compiler.NormalizerTest do
                 ]}
     end
 
-    test "multiple expressions block" do
+    test "multiple expressions body" do
       # (this code is invalid, and the AST is made by hand for testing purposes only)
       # defp Aaa do
       #   Bbb
