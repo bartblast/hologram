@@ -1950,7 +1950,7 @@ defmodule Hologram.Compiler.TransformerTest do
              } = transform(ast, %Context{})
     end
 
-    test "single catch clause" do
+    test "single catch clause / catch clause with value" do
       ast =
         ast("""
         try do
@@ -1962,8 +1962,9 @@ defmodule Hologram.Compiler.TransformerTest do
 
       assert %IR.Try{
                catch_clauses: [
-                 %IR.Clause{
-                   match: %IR.AtomType{value: Aaa},
+                 %IR.TryCatchClause{
+                   kind: nil,
+                   value: %IR.AtomType{value: Aaa},
                    guard: nil,
                    body: %IR.Block{
                      expressions: [%IR.AtomType{value: Bbb}]
@@ -1986,16 +1987,17 @@ defmodule Hologram.Compiler.TransformerTest do
 
       assert %IR.Try{
                catch_clauses: [
-                 # credo:disable-for-next-line Credo.Check.Design.DuplicatedCode
-                 %IR.Clause{
-                   match: %IR.AtomType{value: Aaa},
+                 %IR.TryCatchClause{
+                   kind: nil,
+                   value: %IR.AtomType{value: Aaa},
                    guard: nil,
                    body: %IR.Block{
                      expressions: [%IR.AtomType{value: Bbb}]
                    }
                  },
-                 %IR.Clause{
-                   match: %IR.AtomType{value: Ccc},
+                 %IR.TryCatchClause{
+                   kind: nil,
+                   value: %IR.AtomType{value: Ccc},
                    guard: nil,
                    body: %IR.Block{
                      expressions: [%IR.AtomType{value: Ddd}]
@@ -2005,7 +2007,7 @@ defmodule Hologram.Compiler.TransformerTest do
              } = transform(ast, %Context{})
     end
 
-    test "catch clause with guard" do
+    test "catch clause with value and guard" do
       ast =
         ast("""
         try do
@@ -2017,11 +2019,60 @@ defmodule Hologram.Compiler.TransformerTest do
 
       assert %IR.Try{
                catch_clauses: [
-                 %IR.Clause{
-                   match: %IR.AtomType{value: Aaa},
+                 %IR.TryCatchClause{
+                   kind: nil,
+                   value: %IR.AtomType{value: Aaa},
                    guard: %IR.AtomType{value: Bbb},
                    body: %IR.Block{
                      expressions: [%IR.AtomType{value: Ccc}]
+                   }
+                 }
+               ]
+             } = transform(ast, %Context{})
+    end
+
+    test "catch clause with kind and value" do
+      ast =
+        ast("""
+        try do
+          1
+        catch
+          Aaa, Bbb -> Ccc
+        end
+        """)
+
+      assert %IR.Try{
+               catch_clauses: [
+                 %IR.TryCatchClause{
+                   kind: %IR.AtomType{value: Aaa},
+                   value: %IR.AtomType{value: Bbb},
+                   guard: nil,
+                   body: %IR.Block{
+                     expressions: [%IR.AtomType{value: Ccc}]
+                   }
+                 }
+               ]
+             } = transform(ast, %Context{})
+    end
+
+    test "catch clause with kind, value and guard" do
+      ast =
+        ast("""
+        try do
+          1
+        catch
+          Aaa, Bbb when Ccc -> Ddd
+        end
+        """)
+
+      assert %IR.Try{
+               catch_clauses: [
+                 %IR.TryCatchClause{
+                   kind: %IR.AtomType{value: Aaa},
+                   value: %IR.AtomType{value: Bbb},
+                   guard: %IR.AtomType{value: Ccc},
+                   body: %IR.Block{
+                     expressions: [%IR.AtomType{value: Ddd}]
                    }
                  }
                ]
@@ -2064,7 +2115,6 @@ defmodule Hologram.Compiler.TransformerTest do
 
       assert %IR.Try{
                else_clauses: [
-                 # credo:disable-for-next-line Credo.Check.Design.DuplicatedCode
                  %IR.Clause{
                    match: %IR.AtomType{value: Aaa},
                    guard: nil,

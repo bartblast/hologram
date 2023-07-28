@@ -427,6 +427,29 @@ defmodule Hologram.Compiler.Transformer do
     Enum.map(1..arity, &{:"holo_arg_#{&1}__", meta, nil})
   end
 
+  defp build_try_catch_clause(kind, value, guard, body, context) do
+    kind_ir =
+      if kind do
+        transform(kind, context)
+      else
+        nil
+      end
+
+    guard_ir =
+      if guard do
+        transform(guard, context)
+      else
+        nil
+      end
+
+    %IR.TryCatchClause{
+      kind: kind_ir,
+      value: transform(value, context),
+      guard: guard_ir,
+      body: transform(body, context)
+    }
+  end
+
   defp build_try_rescue_clause(variable, modules, body, context) do
     variable_ir =
       if variable do
@@ -702,12 +725,35 @@ defmodule Hologram.Compiler.Transformer do
     }
   end
 
+  defp transform_try_catch_clause(
+         {:->, _meta_1, [[{:when, _meta_2, [kind, value, guard]}], body]},
+         context
+       ) do
+    build_try_catch_clause(kind, value, guard, body, context)
+  end
+
+  defp transform_try_catch_clause(
+         {:->, _meta_1, [[{:when, _meta_2, [value, guard]}], body]},
+         context
+       ) do
+    build_try_catch_clause(nil, value, guard, body, context)
+  end
+
+  defp transform_try_catch_clause({:->, _meta, [[kind, value], body]}, context) do
+    build_try_catch_clause(kind, value, nil, body, context)
+  end
+
+  defp transform_try_catch_clause({:->, _meta, [[value], body]}, context) do
+    build_try_catch_clause(nil, value, nil, body, context)
+  end
+
   defp transform_try_opt({:after, block}, acc, context) do
     %{acc | after_block: transform(block, context)}
   end
 
   defp transform_try_opt({:catch, clauses}, acc, context) do
-    %{acc | catch_clauses: transform_list(clauses, context)}
+    catch_clauses = Enum.map(clauses, &transform_try_catch_clause(&1, context))
+    %{acc | catch_clauses: catch_clauses}
   end
 
   defp transform_try_opt({:do, block}, acc, context) do
