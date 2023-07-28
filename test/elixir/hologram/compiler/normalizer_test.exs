@@ -426,7 +426,7 @@ defmodule Hologram.Compiler.NormalizerTest do
                 ]}
     end
 
-    test "generator guard" do
+    test "generator single guard" do
       # for Aaa when Bbb <- [Ccc, Ddd], do: 1
       ast =
         {:for, [line: 1],
@@ -452,6 +452,58 @@ defmodule Hologram.Compiler.NormalizerTest do
                      [
                        {:__aliases__, [alias: false], [:Ccc]},
                        {:__aliases__, [alias: false], [:Ddd]}
+                     ]
+                   ]},
+                  [do: {:__block__, [], [1]}]
+                ]}
+    end
+
+    test "generator multiple guards" do
+      # for Aaa when Bbb when Ccc when Ddd <- [Eee, Fff], do: 1
+      ast =
+        {:for, [line: 1],
+         [
+           {:<-, [line: 1],
+            [
+              {:when, [line: 1],
+               [
+                 Aaa,
+                 {:when, [line: 1],
+                  [
+                    Bbb,
+                    {:when, [line: 1],
+                     [
+                       Ccc,
+                       Ddd
+                     ]}
+                  ]}
+               ]},
+              [Eee, Fff]
+            ]},
+           [do: 1]
+         ]}
+
+      assert normalize(ast) ==
+               {:for, [line: 1],
+                [
+                  {:<-, [line: 1],
+                   [
+                     {:when, [line: 1],
+                      [
+                        {:__aliases__, [alias: false], [:Aaa]},
+                        {:when, [line: 1],
+                         [
+                           {:__aliases__, [alias: false], [:Bbb]},
+                           {:when, [line: 1],
+                            [
+                              {:__aliases__, [alias: false], [:Ccc]},
+                              {:__aliases__, [alias: false], [:Ddd]}
+                            ]}
+                         ]}
+                      ]},
+                     [
+                       {:__aliases__, [alias: false], [:Eee]},
+                       {:__aliases__, [alias: false], [:Fff]}
                      ]
                    ]},
                   [do: {:__block__, [], [1]}]
