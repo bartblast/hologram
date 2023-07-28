@@ -36,6 +36,7 @@ defmodule Hologram.Compiler.IR do
           | IR.RemoteFunctionCall.t()
           | IR.StringType.t()
           | IR.Try.t()
+          | IR.TryCatchClause.t()
           | IR.TryRescueClause.t()
           | IR.TupleType.t()
           | IR.Variable.t()
@@ -244,9 +245,20 @@ defmodule Hologram.Compiler.IR do
     @type t :: %__MODULE__{
             body: IR.Block.t(),
             rescue_clauses: list(IR.TryRescueClause.t()),
-            catch_clauses: list(IR.Clause.t()),
+            catch_clauses: list(IR.TryCatchClause.t()),
             else_clauses: list(IR.Clause.t()),
             after_block: IR.Block.t()
+          }
+  end
+
+  defmodule TryCatchClause do
+    defstruct [:kind, :value, :guard, :body]
+
+    @type t :: %__MODULE__{
+            kind: IR.t() | nil,
+            value: IR.t(),
+            guard: IR.t() | nil,
+            body: IR.Block.t()
           }
   end
 
