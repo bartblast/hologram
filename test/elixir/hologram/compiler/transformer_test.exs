@@ -1950,7 +1950,7 @@ defmodule Hologram.Compiler.TransformerTest do
              } = transform(ast, %Context{})
     end
 
-    test "single catch clause / catch clause with value" do
+    test "catch clause with value" do
       ast =
         ast("""
         try do
@@ -1968,39 +1968,6 @@ defmodule Hologram.Compiler.TransformerTest do
                    guard: nil,
                    body: %IR.Block{
                      expressions: [%IR.AtomType{value: Bbb}]
-                   }
-                 }
-               ]
-             } = transform(ast, %Context{})
-    end
-
-    test "multiple catch clauses" do
-      ast =
-        ast("""
-        try do
-          1
-        catch
-          Aaa -> Bbb
-          Ccc -> Ddd
-        end
-        """)
-
-      assert %IR.Try{
-               catch_clauses: [
-                 %IR.TryCatchClause{
-                   kind: nil,
-                   value: %IR.AtomType{value: Aaa},
-                   guard: nil,
-                   body: %IR.Block{
-                     expressions: [%IR.AtomType{value: Bbb}]
-                   }
-                 },
-                 %IR.TryCatchClause{
-                   kind: nil,
-                   value: %IR.AtomType{value: Ccc},
-                   guard: nil,
-                   body: %IR.Block{
-                     expressions: [%IR.AtomType{value: Ddd}]
                    }
                  }
                ]
@@ -2079,7 +2046,40 @@ defmodule Hologram.Compiler.TransformerTest do
              } = transform(ast, %Context{})
     end
 
-    test "single else clause" do
+    test "multiple catch clauses" do
+      ast =
+        ast("""
+        try do
+          1
+        catch
+          Aaa -> Bbb
+          Ccc -> Ddd
+        end
+        """)
+
+      assert %IR.Try{
+               catch_clauses: [
+                 %IR.TryCatchClause{
+                   kind: nil,
+                   value: %IR.AtomType{value: Aaa},
+                   guard: nil,
+                   body: %IR.Block{
+                     expressions: [%IR.AtomType{value: Bbb}]
+                   }
+                 },
+                 %IR.TryCatchClause{
+                   kind: nil,
+                   value: %IR.AtomType{value: Ccc},
+                   guard: nil,
+                   body: %IR.Block{
+                     expressions: [%IR.AtomType{value: Ddd}]
+                   }
+                 }
+               ]
+             } = transform(ast, %Context{})
+    end
+
+    test "else clause without guard" do
       ast =
         ast("""
         try do
@@ -2096,6 +2096,29 @@ defmodule Hologram.Compiler.TransformerTest do
                    guard: nil,
                    body: %IR.Block{
                      expressions: [%IR.AtomType{value: Bbb}]
+                   }
+                 }
+               ]
+             } = transform(ast, %Context{})
+    end
+
+    test "else clause with guard" do
+      ast =
+        ast("""
+        try do
+          1
+        else
+          Aaa when Bbb -> Ccc
+        end
+        """)
+
+      assert %IR.Try{
+               else_clauses: [
+                 %IR.Clause{
+                   match: %IR.AtomType{value: Aaa},
+                   guard: %IR.AtomType{value: Bbb},
+                   body: %IR.Block{
+                     expressions: [%IR.AtomType{value: Ccc}]
                    }
                  }
                ]
@@ -2127,29 +2150,6 @@ defmodule Hologram.Compiler.TransformerTest do
                    guard: nil,
                    body: %IR.Block{
                      expressions: [%IR.AtomType{value: Ddd}]
-                   }
-                 }
-               ]
-             } = transform(ast, %Context{})
-    end
-
-    test "else clause with guard" do
-      ast =
-        ast("""
-        try do
-          1
-        else
-          Aaa when Bbb -> Ccc
-        end
-        """)
-
-      assert %IR.Try{
-               else_clauses: [
-                 %IR.Clause{
-                   match: %IR.AtomType{value: Aaa},
-                   guard: %IR.AtomType{value: Bbb},
-                   body: %IR.Block{
-                     expressions: [%IR.AtomType{value: Ccc}]
                    }
                  }
                ]
