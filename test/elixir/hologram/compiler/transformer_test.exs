@@ -1804,7 +1804,7 @@ defmodule Hologram.Compiler.TransformerTest do
              } = transform(ast, %Context{})
     end
 
-    test "rescue clause without variable and with single module" do
+    test "rescue clause with single module" do
       ast =
         ast("""
         try do
@@ -1827,7 +1827,7 @@ defmodule Hologram.Compiler.TransformerTest do
              } = transform(ast, %Context{})
     end
 
-    test "rescue clause without variable and with multiple modules" do
+    test "rescue clause with multiple modules" do
       ast =
         ast("""
         try do
@@ -1896,7 +1896,7 @@ defmodule Hologram.Compiler.TransformerTest do
              } = transform(ast, %Context{})
     end
 
-    test "rescue clause with variable and without module" do
+    test "rescue clause with variable" do
       ast =
         ast("""
         try do
