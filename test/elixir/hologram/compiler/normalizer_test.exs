@@ -224,7 +224,7 @@ defmodule Hologram.Compiler.NormalizerTest do
   end
 
   describe "case" do
-    test "single clause" do
+    test "single clause / clause with single expression body" do
       # case Aaa do
       #   Bbb -> Ccc
       # end
@@ -323,6 +323,116 @@ defmodule Hologram.Compiler.NormalizerTest do
                             {:__aliases__, [alias: false], [:Ccc]},
                             {:__aliases__, [alias: false], [:Ddd]}
                           ]}
+                       ]}
+                    ]
+                  ]
+                ]}
+    end
+
+    test "clause with single guard" do
+      # case Aaa do
+      #   Bbb when Ccc -> Ddd
+      # end
+      ast =
+        {:case, [line: 1],
+         [
+           Aaa,
+           [
+             do: [
+               {:->, [line: 2],
+                [
+                  [
+                    {:when, [line: 2],
+                     [
+                       Bbb,
+                       Ccc
+                     ]}
+                  ],
+                  Ddd
+                ]}
+             ]
+           ]
+         ]}
+
+      assert normalize(ast) ==
+               {:case, [line: 1],
+                [
+                  {:__aliases__, [alias: false], [:Aaa]},
+                  [
+                    do: [
+                      {:->, [line: 2],
+                       [
+                         [
+                           {:when, [line: 2],
+                            [
+                              {:__aliases__, [alias: false], [:Bbb]},
+                              {:__aliases__, [alias: false], [:Ccc]}
+                            ]}
+                         ],
+                         {:__block__, [], [{:__aliases__, [alias: false], [:Ddd]}]}
+                       ]}
+                    ]
+                  ]
+                ]}
+    end
+
+    test "clause with multiple guards" do
+      # case Aaa do
+      #   Bbb when Ccc when Ddd when Eee -> Fff
+      # end
+      ast =
+        {:case, [line: 1],
+         [
+           Aaa,
+           [
+             do: [
+               {:->, [line: 2],
+                [
+                  [
+                    {:when, [line: 2],
+                     [
+                       Bbb,
+                       {:when, [line: 2],
+                        [
+                          Ccc,
+                          {:when, [line: 2],
+                           [
+                             Ddd,
+                             Eee
+                           ]}
+                        ]}
+                     ]}
+                  ],
+                  Fff
+                ]}
+             ]
+           ]
+         ]}
+
+      assert normalize(ast) ==
+               {:case, [line: 1],
+                [
+                  {:__aliases__, [alias: false], [:Aaa]},
+                  [
+                    do: [
+                      {:->, [line: 2],
+                       [
+                         [
+                           {:when, [line: 2],
+                            [
+                              {:__aliases__, [alias: false], [:Bbb]},
+                              {:when, [line: 2],
+                               [
+                                 {:__aliases__, [alias: false], [:Ccc]},
+                                 {:when, [line: 2],
+                                  [
+                                    {:__aliases__, [alias: false], [:Ddd]},
+                                    {:__aliases__, [alias: false], [:Eee]}
+                                  ]}
+                               ]}
+                            ]}
+                         ],
+                         {:__block__, [], [{:__aliases__, [alias: false], [:Fff]}]}
                        ]}
                     ]
                   ]
