@@ -2227,14 +2227,11 @@ defmodule Hologram.Compiler.NormalizerTest do
     end
 
     test "else clause with multiple guards" do
-      code = """
-      try do
-        1
-      else
-        Aaa when Bbb when Ccc when Ddd -> Eee
-      end
-      """
-
+      # try do
+      #   1
+      # else
+      #   Aaa when Bbb when Ccc when Ddd -> Eee
+      # end
       ast =
         {:try, [line: 1],
          [
