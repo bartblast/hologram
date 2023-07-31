@@ -630,11 +630,11 @@ defmodule Hologram.Compiler.TransformerTest do
   end
 
   describe "case" do
-    test "single clause without guard, single expression body" do
+    test "single clause / clause with single expression body" do
       ast =
         ast("""
         case x do
-          1 -> :expr_1
+          1 -> :expr
         end
         """)
 
@@ -645,7 +645,7 @@ defmodule Hologram.Compiler.TransformerTest do
                    match: %IR.IntegerType{value: 1},
                    guards: [],
                    body: %IR.Block{
-                     expressions: [%IR.AtomType{value: :expr_1}]
+                     expressions: [%IR.AtomType{value: :expr}]
                    }
                  }
                ]
@@ -709,7 +709,7 @@ defmodule Hologram.Compiler.TransformerTest do
              }
     end
 
-    test "guard" do
+    test "clause with single guard" do
       ast =
         ast("""
         case x do
@@ -727,10 +727,88 @@ defmodule Hologram.Compiler.TransformerTest do
                        %IR.Variable{name: :n}
                      ]
                    },
-                   guards: %IR.LocalFunctionCall{
-                     function: :is_integer,
-                     args: [%IR.Variable{name: :n}]
+                   guards: [
+                     %IR.LocalFunctionCall{
+                       function: :is_integer,
+                       args: [%IR.Variable{name: :n}]
+                     }
+                   ],
+                   body: %IR.Block{
+                     expressions: [%IR.AtomType{value: :expr_1}]
+                   }
+                 }
+               ]
+             }
+    end
+
+    test "clause with 2 guards" do
+      ast =
+        ast("""
+        case x do
+          {:ok, n} when guard_1(:a) when guard_2(:b) -> :expr_1
+        end
+        """)
+
+      assert transform(ast, %Context{}) == %IR.Case{
+               condition: %IR.Variable{name: :x},
+               clauses: [
+                 %IR.Clause{
+                   match: %IR.TupleType{
+                     data: [
+                       %IR.AtomType{value: :ok},
+                       %IR.Variable{name: :n}
+                     ]
                    },
+                   guards: [
+                     %IR.LocalFunctionCall{
+                       function: :guard_1,
+                       args: [%IR.AtomType{value: :a}]
+                     },
+                     %IR.LocalFunctionCall{
+                       function: :guard_2,
+                       args: [%IR.AtomType{value: :b}]
+                     }
+                   ],
+                   body: %IR.Block{
+                     expressions: [%IR.AtomType{value: :expr_1}]
+                   }
+                 }
+               ]
+             }
+    end
+
+    test "clause with 3 guards" do
+      ast =
+        ast("""
+        case x do
+          {:ok, n} when guard_1(:a) when guard_2(:b) when guard_3(:c) -> :expr_1
+        end
+        """)
+
+      assert transform(ast, %Context{}) == %IR.Case{
+               condition: %IR.Variable{name: :x},
+               clauses: [
+                 %IR.Clause{
+                   match: %IR.TupleType{
+                     data: [
+                       %IR.AtomType{value: :ok},
+                       %IR.Variable{name: :n}
+                     ]
+                   },
+                   guards: [
+                     %IR.LocalFunctionCall{
+                       function: :guard_1,
+                       args: [%IR.AtomType{value: :a}]
+                     },
+                     %IR.LocalFunctionCall{
+                       function: :guard_2,
+                       args: [%IR.AtomType{value: :b}]
+                     },
+                     %IR.LocalFunctionCall{
+                       function: :guard_3,
+                       args: [%IR.AtomType{value: :c}]
+                     }
+                   ],
                    body: %IR.Block{
                      expressions: [%IR.AtomType{value: :expr_1}]
                    }
