@@ -291,7 +291,7 @@ defmodule Hologram.Compiler.BuilderTest do
   test "prune_module_def/2" do
     module_def_ir = IR.for_module(Module8)
 
-    module_def_ir_stub = %{
+    module_def_ir_fixture = %{
       module_def_ir
       | body: %IR.Block{
           expressions: [
@@ -305,7 +305,7 @@ defmodule Hologram.Compiler.BuilderTest do
       {Module8, :fun_3, 1}
     ]
 
-    assert prune_module_def(module_def_ir_stub, reachable_mfas) == %IR.ModuleDefinition{
+    assert prune_module_def(module_def_ir_fixture, reachable_mfas) == %IR.ModuleDefinition{
              module: %IR.AtomType{value: Module8},
              body: %IR.Block{
                expressions: [
