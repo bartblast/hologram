@@ -52,7 +52,7 @@ defmodule Hologram.Compiler.NormalizerTest do
   end
 
   describe "anonymous function type" do
-    test "single clause / single expression body" do
+    test "single clause / clause with single expression body" do
       # fn Aaa -> Bbb end
       ast =
         {:fn, [line: 1],
@@ -99,7 +99,7 @@ defmodule Hologram.Compiler.NormalizerTest do
                 ]}
     end
 
-    test "multiple expressions body" do
+    test "clause with multiple expressions body" do
       # fn Aaa ->
       #   Bbb
       #   Ccc
@@ -129,7 +129,7 @@ defmodule Hologram.Compiler.NormalizerTest do
                 ]}
     end
 
-    test "single guard" do
+    test "clause with single guard" do
       # fn Aaa when Bbb -> Ccc end
       ast =
         {:fn, [line: 1],
@@ -160,7 +160,7 @@ defmodule Hologram.Compiler.NormalizerTest do
                 ]}
     end
 
-    test "multiple guards" do
+    test "clause with multiple guards" do
       # fn Aaa when Bbb when Ccc when Ddd -> Eee end
       ast =
         {:fn, [line: 1],
@@ -549,7 +549,7 @@ defmodule Hologram.Compiler.NormalizerTest do
                 ]}
     end
 
-    test "generator single guard" do
+    test "generator with single guard" do
       # for Aaa when Bbb <- [Ccc, Ddd], do: 1
       ast =
         {:for, [line: 1],
@@ -581,7 +581,7 @@ defmodule Hologram.Compiler.NormalizerTest do
                 ]}
     end
 
-    test "generator multiple guards" do
+    test "generator with multiple guards" do
       # for Aaa when Bbb when Ccc when Ddd <- [Eee, Fff], do: 1
       ast =
         {:for, [line: 1],
@@ -776,7 +776,7 @@ defmodule Hologram.Compiler.NormalizerTest do
                 ]}
     end
 
-    test "reducer with single clause" do
+    test "reducer with single clause / clause with single expression body" do
       # for x <- [1, 2], reduce: Aaa do
       #   Bbb -> Ccc
       # end
@@ -1032,7 +1032,7 @@ defmodule Hologram.Compiler.NormalizerTest do
   end
 
   describe "cond" do
-    test "single clause" do
+    test "single clause / single expression clause" do
       # cond do
       #   Aaa -> Bbb
       # end
