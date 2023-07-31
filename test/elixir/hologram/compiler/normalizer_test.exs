@@ -1032,7 +1032,7 @@ defmodule Hologram.Compiler.NormalizerTest do
   end
 
   describe "cond" do
-    test "single clause / single expression clause" do
+    test "single clause / clause with single expression body" do
       # cond do
       #   Aaa -> Bbb
       # end
@@ -1083,6 +1083,49 @@ defmodule Hologram.Compiler.NormalizerTest do
                        [
                          [{:__aliases__, [alias: false], [:Ccc]}],
                          {:__block__, [], [{:__aliases__, [alias: false], [:Ddd]}]}
+                       ]}
+                    ]
+                  ]
+                ]}
+    end
+
+    test "clause with multiple expressions body" do
+      # cond do
+      #   Aaa ->
+      #     Bbb
+      #     Ccc
+      # end
+      ast =
+        {:cond, [line: 1],
+         [
+           [
+             do: [
+               {:->, [line: 2],
+                [
+                  [Aaa],
+                  {:__block__, [],
+                   [
+                     Bbb,
+                     Ccc
+                   ]}
+                ]}
+             ]
+           ]
+         ]}
+
+      assert normalize(ast) ==
+               {:cond, [line: 1],
+                [
+                  [
+                    do: [
+                      {:->, [line: 2],
+                       [
+                         [{:__aliases__, [alias: false], [:Aaa]}],
+                         {:__block__, [],
+                          [
+                            {:__aliases__, [alias: false], [:Bbb]},
+                            {:__aliases__, [alias: false], [:Ccc]}
+                          ]}
                        ]}
                     ]
                   ]
