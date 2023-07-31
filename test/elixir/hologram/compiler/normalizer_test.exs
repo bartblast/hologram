@@ -1713,17 +1713,26 @@ defmodule Hologram.Compiler.NormalizerTest do
     test "rescue clause with multiple expressions body" do
       # try do
       #   Aaa
-      #   Bbb
       # rescue
-      #   Ccc -> Ddd
+      #   Bbb ->
+      #     Ccc
+      #     Ddd
       # end
       ast =
         {:try, [line: 1],
          [
            [
-             do: {:__block__, [], [Aaa, Bbb]},
+             do: Aaa,
              rescue: [
-               {:->, [line: 5], [[Ccc], Ddd]}
+               {:->, [line: 4],
+                [
+                  [Bbb],
+                  {:__block__, [],
+                   [
+                     Ccc,
+                     Ddd
+                   ]}
+                ]}
              ]
            ]
          ]}
@@ -1732,17 +1741,16 @@ defmodule Hologram.Compiler.NormalizerTest do
                {:try, [line: 1],
                 [
                   [
-                    do:
-                      {:__block__, [],
-                       [
-                         {:__aliases__, [alias: false], [:Aaa]},
-                         {:__aliases__, [alias: false], [:Bbb]}
-                       ]},
+                    do: {:__block__, [], [{:__aliases__, [alias: false], [:Aaa]}]},
                     rescue: [
-                      {:->, [line: 5],
+                      {:->, [line: 4],
                        [
-                         [{:__aliases__, [alias: false], [:Ccc]}],
-                         {:__block__, [], [{:__aliases__, [alias: false], [:Ddd]}]}
+                         [{:__aliases__, [alias: false], [:Bbb]}],
+                         {:__block__, [],
+                          [
+                            {:__aliases__, [alias: false], [:Ccc]},
+                            {:__aliases__, [alias: false], [:Ddd]}
+                          ]}
                        ]}
                     ]
                   ]
