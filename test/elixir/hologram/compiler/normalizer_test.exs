@@ -1469,7 +1469,7 @@ defmodule Hologram.Compiler.NormalizerTest do
                 ]}
     end
 
-    test "rescue clause with single module (or variable)" do
+    test "rescue clause with single module (or variable) / single rescue clause / rescue clause with single expression body" do
       # try do
       #   1
       # rescue
@@ -1704,6 +1704,45 @@ defmodule Hologram.Compiler.NormalizerTest do
                             ]}
                          ],
                          {:__block__, [], [{:__aliases__, [alias: false], [:Hhh]}]}
+                       ]}
+                    ]
+                  ]
+                ]}
+    end
+
+    test "rescue clause with multiple expressions body" do
+      # try do
+      #   Aaa
+      #   Bbb
+      # rescue
+      #   Ccc -> Ddd
+      # end
+      ast =
+        {:try, [line: 1],
+         [
+           [
+             do: {:__block__, [], [Aaa, Bbb]},
+             rescue: [
+               {:->, [line: 5], [[Ccc], Ddd]}
+             ]
+           ]
+         ]}
+
+      assert normalize(ast) ==
+               {:try, [line: 1],
+                [
+                  [
+                    do:
+                      {:__block__, [],
+                       [
+                         {:__aliases__, [alias: false], [:Aaa]},
+                         {:__aliases__, [alias: false], [:Bbb]}
+                       ]},
+                    rescue: [
+                      {:->, [line: 5],
+                       [
+                         [{:__aliases__, [alias: false], [:Ccc]}],
+                         {:__block__, [], [{:__aliases__, [alias: false], [:Ddd]}]}
                        ]}
                     ]
                   ]
