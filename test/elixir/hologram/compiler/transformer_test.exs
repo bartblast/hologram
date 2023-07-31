@@ -885,16 +885,29 @@ defmodule Hologram.Compiler.TransformerTest do
       assert %IR.Comprehension{unique: %IR.AtomType{value: true}} = transform(ast, %Context{})
     end
 
-    test "mapper" do
-      ast = ast("for a <- [1, 2], do: my_mapper(a)")
+    test "mapper with single expression body" do
+      ast = ast("for a <- [1, 2], do: :expr")
+
+      assert %IR.Comprehension{
+               mapper: %IR.Block{expressions: [%IR.AtomType{value: :expr}]},
+               reducer: nil
+             } = transform(ast, %Context{})
+    end
+
+    test "mapper with multiple expressions body" do
+      ast =
+        ast("""
+        for a <- [1, 2] do
+          :expr_1
+          :expr_2
+        end
+        """)
 
       assert %IR.Comprehension{
                mapper: %IR.Block{
                  expressions: [
-                   %IR.LocalFunctionCall{
-                     function: :my_mapper,
-                     args: [%IR.Variable{name: :a}]
-                   }
+                   %IR.AtomType{value: :expr_1},
+                   %IR.AtomType{value: :expr_2}
                  ]
                },
                reducer: nil
