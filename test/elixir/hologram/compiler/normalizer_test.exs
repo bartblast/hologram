@@ -2057,7 +2057,7 @@ defmodule Hologram.Compiler.NormalizerTest do
                 ]}
     end
 
-    test "single else clause" do
+    test "single else clause / else clause with single expression body" do
       # try do
       #   1
       # else
@@ -2124,6 +2124,170 @@ defmodule Hologram.Compiler.NormalizerTest do
                        [
                          [{:__aliases__, [alias: false], [:Ccc]}],
                          {:__block__, [], [{:__aliases__, [alias: false], [:Ddd]}]}
+                       ]}
+                    ]
+                  ]
+                ]}
+    end
+
+    test "else clause with multiple expressions body" do
+      # try do
+      #   1
+      # else
+      #   Aaa ->
+      #     Bbb
+      #     Ccc
+      # end
+      ast =
+        {:try, [line: 1],
+         [
+           [
+             do: 1,
+             else: [
+               {:->, [line: 4],
+                [
+                  [Aaa],
+                  {:__block__, [],
+                   [
+                     Bbb,
+                     Ccc
+                   ]}
+                ]}
+             ]
+           ]
+         ]}
+
+      assert normalize(ast) ==
+               {:try, [line: 1],
+                [
+                  [
+                    do: {:__block__, [], [1]},
+                    else: [
+                      {:->, [line: 4],
+                       [
+                         [{:__aliases__, [alias: false], [:Aaa]}],
+                         {:__block__, [],
+                          [
+                            {:__aliases__, [alias: false], [:Bbb]},
+                            {:__aliases__, [alias: false], [:Ccc]}
+                          ]}
+                       ]}
+                    ]
+                  ]
+                ]}
+    end
+
+    test "else clause with single guard" do
+      # try do
+      #   1
+      # else
+      #   Aaa when Bbb -> Ccc
+      # end
+      ast =
+        {:try, [line: 1],
+         [
+           [
+             do: 1,
+             else: [
+               {:->, [line: 4],
+                [
+                  [
+                    {:when, [line: 4],
+                     [
+                       Aaa,
+                       Bbb
+                     ]}
+                  ],
+                  Ccc
+                ]}
+             ]
+           ]
+         ]}
+
+      assert normalize(ast) ==
+               {:try, [line: 1],
+                [
+                  [
+                    do: {:__block__, [], [1]},
+                    else: [
+                      {:->, [line: 4],
+                       [
+                         [
+                           {:when, [line: 4],
+                            [
+                              {:__aliases__, [alias: false], [:Aaa]},
+                              {:__aliases__, [alias: false], [:Bbb]}
+                            ]}
+                         ],
+                         {:__block__, [], [{:__aliases__, [alias: false], [:Ccc]}]}
+                       ]}
+                    ]
+                  ]
+                ]}
+    end
+
+    test "else clause with multiple guards" do
+      code = """
+      try do
+        1
+      else
+        Aaa when Bbb when Ccc when Ddd -> Eee
+      end
+      """
+
+      ast =
+        {:try, [line: 1],
+         [
+           [
+             do: 1,
+             else: [
+               {:->, [line: 4],
+                [
+                  [
+                    {:when, [line: 4],
+                     [
+                       Aaa,
+                       {:when, [line: 4],
+                        [
+                          Bbb,
+                          {:when, [line: 4],
+                           [
+                             Ccc,
+                             Ddd
+                           ]}
+                        ]}
+                     ]}
+                  ],
+                  Eee
+                ]}
+             ]
+           ]
+         ]}
+
+      assert normalize(ast) ==
+               {:try, [line: 1],
+                [
+                  [
+                    do: {:__block__, [], [1]},
+                    else: [
+                      {:->, [line: 4],
+                       [
+                         [
+                           {:when, [line: 4],
+                            [
+                              {:__aliases__, [alias: false], [:Aaa]},
+                              {:when, [line: 4],
+                               [
+                                 {:__aliases__, [alias: false], [:Bbb]},
+                                 {:when, [line: 4],
+                                  [
+                                    {:__aliases__, [alias: false], [:Ccc]},
+                                    {:__aliases__, [alias: false], [:Ddd]}
+                                  ]}
+                               ]}
+                            ]}
+                         ],
+                         {:__block__, [], [{:__aliases__, [alias: false], [:Eee]}]}
                        ]}
                     ]
                   ]
