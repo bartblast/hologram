@@ -35,12 +35,6 @@ defmodule Hologram.Compiler.Normalizer do
     {:for, meta, Enum.map(parts, &normalize_comprehension_part/1)}
   end
 
-  def normalize({marker, meta_1, [{:when, meta_2, [name, guard]}, [do: block]]})
-      when marker in [:def, :defp] do
-    {marker, meta_1,
-     [{:when, meta_2, [normalize(name), normalize(guard)]}, [do: normalize_block(block)]]}
-  end
-
   def normalize({marker, meta, [name, [do: block]]}) when marker in [:def, :defp] do
     {marker, meta, [normalize(name), [do: normalize_block(block)]]}
   end
