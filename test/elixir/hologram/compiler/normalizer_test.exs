@@ -7,31 +7,6 @@ defmodule Hologram.Compiler.NormalizerTest do
   {:__aliases__, [line: 1], [:Aaa]}
   is replaced with:
   Aaa
-
-  Constructs that have blocks:
-  * clause
-  * comprehension mapper
-  * cond clause
-  * function clause
-  * module definition
-  * try body
-  * try after block
-  * try catch clause
-  * try rescue clause
-
-  Constructs that have clauses:
-  * anonymous function type (function clause)
-  * case (clause)
-  * comprehension generator (clause)
-  * comprehension reducer (clause)
-  * cond (cond clause)
-  * function definition (function clause)
-  * try (try rescue clause, try catch clause, clause)
-
-  Constructs that have guards:
-  * clause
-  * function clause
-  * try catch clause
   """
 
   use Hologram.Test.BasicCase, async: true
