@@ -350,7 +350,7 @@ defmodule Hologram.Compiler.EncoderTest do
   test "case" do
     clause_1 = %IR.Clause{
       match: %IR.Variable{name: :x},
-      guard: nil,
+      guards: [],
       body: %IR.Block{
         expressions: [
           %IR.AtomType{value: :expr_1}
@@ -360,7 +360,7 @@ defmodule Hologram.Compiler.EncoderTest do
 
     clause_2 = %IR.Clause{
       match: %IR.Variable{name: :y},
-      guard: nil,
+      guards: [],
       body: %IR.Block{
         expressions: [
           %IR.AtomType{value: :expr_2}
@@ -397,7 +397,7 @@ defmodule Hologram.Compiler.EncoderTest do
           %IR.Variable{name: :x}
         ]
       },
-      guard: %IR.RemoteFunctionCall{
+      guards: %IR.RemoteFunctionCall{
         module: %IR.AtomType{value: :erlang},
         function: :<,
         args: [
@@ -442,7 +442,7 @@ defmodule Hologram.Compiler.EncoderTest do
       generators: [
         %IR.Clause{
           match: %IR.Variable{name: :x},
-          guard: %IR.RemoteFunctionCall{
+          guards: %IR.RemoteFunctionCall{
             module: %IR.AtomType{value: :erlang},
             function: :<,
             args: [
@@ -459,7 +459,7 @@ defmodule Hologram.Compiler.EncoderTest do
         },
         %IR.Clause{
           match: %IR.Variable{name: :y},
-          guard: %IR.RemoteFunctionCall{
+          guards: %IR.RemoteFunctionCall{
             module: %IR.AtomType{value: :erlang},
             function: :<,
             args: [
@@ -526,7 +526,7 @@ defmodule Hologram.Compiler.EncoderTest do
           %IR.Variable{name: :b}
         ]
       },
-      guard: %IR.LocalFunctionCall{
+      guards: %IR.LocalFunctionCall{
         function: :my_guard,
         args: [
           %IR.Variable{name: :a},

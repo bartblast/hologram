@@ -135,7 +135,7 @@ defmodule Hologram.Compiler.Encoder do
 
   def encode(%IR.Clause{} = clause, context) do
     match = encode(clause.match, %{context | pattern?: true})
-    guard = encode_closure(clause.guard, context)
+    guard = encode_closure(clause.guards, context)
     body = encode_closure(clause.body, context)
 
     "{match: #{match}, guard: #{guard}, body: #{body}}"

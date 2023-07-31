@@ -108,7 +108,7 @@ defmodule Hologram.Compiler.Transformer do
   def transform({:->, _meta_1, [[{:when, _meta_2, [match, guard]}], body]}, context) do
     %IR.Clause{
       match: transform(match, context),
-      guard: transform(guard, context),
+      guards: transform(guard, context),
       body: transform(body, context)
     }
   end
@@ -116,7 +116,7 @@ defmodule Hologram.Compiler.Transformer do
   def transform({:->, _meta, [[match], body]}, context) do
     %IR.Clause{
       match: transform(match, context),
-      guard: nil,
+      guards: [],
       body: transform(body, context)
     }
   end
@@ -124,7 +124,7 @@ defmodule Hologram.Compiler.Transformer do
   def transform({:<-, _meta_1, [{:when, _meta_2, [match, guard]}, body]}, context) do
     %IR.Clause{
       match: transform(match, context),
-      guard: transform(guard, context),
+      guards: transform(guard, context),
       body: transform(body, context)
     }
   end
@@ -132,7 +132,7 @@ defmodule Hologram.Compiler.Transformer do
   def transform({:<-, _meta, [match, body]}, context) do
     %IR.Clause{
       match: transform(match, context),
-      guard: nil,
+      guards: [],
       body: transform(body, context)
     }
   end
