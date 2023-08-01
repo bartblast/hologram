@@ -29,7 +29,7 @@ defmodule Hologram.Compiler.TransformerTest do
   end
 
   describe "anonymous function type" do
-    test "single clause, no params, single expression body" do
+    test "single clause / single expression body / no params / clause without guards" do
       ast = ast("fn -> :expr_1 end")
 
       assert transform(ast, %Context{}) == %IR.AnonymousFunctionType{
@@ -130,25 +130,84 @@ defmodule Hologram.Compiler.TransformerTest do
              }
     end
 
-    test "clause with guard" do
-      ast = ast("fn x, y when is_integer(x) -> :expr_1 end")
+    test "clause with single guard" do
+      ast = ast("fn x when guard_1(:a) -> :expr end")
 
       assert transform(ast, %Context{}) == %IR.AnonymousFunctionType{
-               arity: 2,
+               arity: 1,
                clauses: [
                  %IR.FunctionClause{
                    params: [
-                     %IR.Variable{name: :x},
-                     %IR.Variable{name: :y}
+                     %IR.Variable{name: :x}
                    ],
                    guards: [
                      %IR.LocalFunctionCall{
-                       function: :is_integer,
-                       args: [%IR.Variable{name: :x}]
+                       function: :guard_1,
+                       args: [%IR.AtomType{value: :a}]
                      }
                    ],
                    body: %IR.Block{
-                     expressions: [%IR.AtomType{value: :expr_1}]
+                     expressions: [%IR.AtomType{value: :expr}]
+                   }
+                 }
+               ]
+             }
+    end
+
+    test "clause with 2 guards" do
+      ast = ast("fn x when guard_1(:a) when guard_2(:b) -> :expr end")
+
+      assert transform(ast, %Context{}) == %IR.AnonymousFunctionType{
+               arity: 1,
+               clauses: [
+                 %IR.FunctionClause{
+                   params: [
+                     %IR.Variable{name: :x}
+                   ],
+                   guards: [
+                     %IR.LocalFunctionCall{
+                       function: :guard_1,
+                       args: [%IR.AtomType{value: :a}]
+                     },
+                     %IR.LocalFunctionCall{
+                       function: :guard_2,
+                       args: [%IR.AtomType{value: :b}]
+                     }
+                   ],
+                   body: %IR.Block{
+                     expressions: [%IR.AtomType{value: :expr}]
+                   }
+                 }
+               ]
+             }
+    end
+
+    test "clause with 3 guards" do
+      ast = ast("fn x when guard_1(:a) when guard_2(:b) when guard_3(:c) -> :expr end")
+
+      assert transform(ast, %Context{}) == %IR.AnonymousFunctionType{
+               arity: 1,
+               clauses: [
+                 %IR.FunctionClause{
+                   params: [
+                     %IR.Variable{name: :x}
+                   ],
+                   guards: [
+                     %IR.LocalFunctionCall{
+                       function: :guard_1,
+                       args: [%IR.AtomType{value: :a}]
+                     },
+                     %IR.LocalFunctionCall{
+                       function: :guard_2,
+                       args: [%IR.AtomType{value: :b}]
+                     },
+                     %IR.LocalFunctionCall{
+                       function: :guard_3,
+                       args: [%IR.AtomType{value: :c}]
+                     }
+                   ],
+                   body: %IR.Block{
+                     expressions: [%IR.AtomType{value: :expr}]
                    }
                  }
                ]
