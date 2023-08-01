@@ -386,39 +386,54 @@ defmodule Hologram.Compiler.EncoderTest do
            """
   end
 
-  test "clause" do
-    # {1, x} when :erlang.<(x, 3) ->
-    #   11
-    #   12
-    ir = %IR.Clause{
-      match: %IR.TupleType{
-        data: [
-          %IR.IntegerType{value: 1},
-          %IR.Variable{name: :x}
-        ]
-      },
-      guards: %IR.RemoteFunctionCall{
-        module: %IR.AtomType{value: :erlang},
-        function: :<,
-        args: [
-          %IR.Variable{name: :x},
-          %IR.IntegerType{value: 3}
-        ]
-      },
-      body: %IR.Block{
-        expressions: [
-          %IR.IntegerType{value: 11},
-          %IR.IntegerType{value: 12}
-        ]
+  describe "clause" do
+    test "no guards" do
+      # case 1 do
+      #   x -> 1
+      # end
+      ir = %IR.Clause{
+        match: %IR.Variable{name: :x},
+        guards: [],
+        body: %IR.Block{
+          expressions: [%IR.IntegerType{value: 1}]
+        }
       }
-    }
 
-    assert encode(ir, %Context{}) == """
-           {match: Type.tuple([Type.integer(1n), Type.variablePattern("x")]), guard: (vars) => Erlang.$260(vars.x, Type.integer(3n)), body: (vars) => {
-           Type.integer(11n);
-           return Type.integer(12n);
-           }}\
-           """
+      assert encode(ir, %Context{}) ==
+               "{match: Type.variablePattern(\"x\"), guards: [], body: (vars) => {\nreturn Type.integer(1n);\n}}"
+    end
+
+    test "single guard" do
+      # case 1 do
+      #   x when y -> 1
+      # end
+      ir = %IR.Clause{
+        match: %IR.Variable{name: :x},
+        guards: [%IR.Variable{name: :y}],
+        body: %IR.Block{
+          expressions: [%IR.IntegerType{value: 1}]
+        }
+      }
+
+      assert encode(ir, %Context{}) ==
+               "{match: Type.variablePattern(\"x\"), guards: [(vars) => vars.y], body: (vars) => {\nreturn Type.integer(1n);\n}}"
+    end
+
+    test "multiple guards" do
+      # case 1 do
+      #   x when y when z -> 1
+      # end
+      ir = %IR.Clause{
+        match: %IR.Variable{name: :x},
+        guards: [%IR.Variable{name: :y}, %IR.Variable{name: :z}],
+        body: %IR.Block{
+          expressions: [%IR.IntegerType{value: 1}]
+        }
+      }
+
+      assert encode(ir, %Context{}) ==
+               "{match: Type.variablePattern(\"x\"), guards: [(vars) => vars.y, (vars) => vars.z], body: (vars) => {\nreturn Type.integer(1n);\n}}"
+    end
   end
 
   test "comprehension" do

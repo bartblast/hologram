@@ -135,10 +135,10 @@ defmodule Hologram.Compiler.Encoder do
 
   def encode(%IR.Clause{} = clause, context) do
     match = encode(clause.match, %{context | pattern?: true})
-    guard = encode_closure(clause.guards, context)
+    guards = encode_as_array(clause.guards, context, &encode_closure/2)
     body = encode_closure(clause.body, context)
 
-    "{match: #{match}, guard: #{guard}, body: #{body}}"
+    "{match: #{match}, guards: #{guards}, body: #{body}}"
   end
 
   def encode(%IR.Comprehension{} = comprehension, context) do
@@ -421,9 +421,9 @@ defmodule Hologram.Compiler.Encoder do
 
   defp allowed_in_js_identifier?(_code_point), do: false
 
-  defp encode_as_array(data, context) do
+  defp encode_as_array(data, context, encoder \\ &encode/2) do
     data
-    |> Enum.map_join(", ", &encode(&1, context))
+    |> Enum.map_join(", ", &encoder.(&1, context))
     |> StringUtils.wrap("[", "]")
   end
 
