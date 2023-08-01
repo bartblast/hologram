@@ -1110,7 +1110,7 @@ defmodule Hologram.Compiler.TransformerTest do
       ast =
         ast("""
         for x <- [1, 2], reduce: 0 do
-          acc -> my_reducer(acc, x)
+          acc -> my_reducer(acc)
         end
         """)
 
@@ -1125,10 +1125,7 @@ defmodule Hologram.Compiler.TransformerTest do
                        expressions: [
                          %IR.LocalFunctionCall{
                            function: :my_reducer,
-                           args: [
-                             %IR.Variable{name: :acc},
-                             %IR.Variable{name: :x}
-                           ]
+                           args: [%IR.Variable{name: :acc}]
                          }
                        ]
                      }
@@ -1188,11 +1185,11 @@ defmodule Hologram.Compiler.TransformerTest do
              } = transform(ast, %Context{})
     end
 
-    test "reducer clause with guard" do
+    test "reducer clause with single guard" do
       ast =
         ast("""
         for x <- [1, 2], reduce: 0 do
-          acc when my_guard(acc) -> my_reducer(acc, x)
+          acc when guard_1(:a) -> :expr
         end
         """)
 
@@ -1204,20 +1201,84 @@ defmodule Hologram.Compiler.TransformerTest do
                      match: %IR.Variable{name: :acc},
                      guards: [
                        %IR.LocalFunctionCall{
-                         function: :my_guard,
-                         args: [%IR.Variable{name: :acc}]
+                         function: :guard_1,
+                         args: [%IR.AtomType{value: :a}]
                        }
                      ],
                      body: %IR.Block{
-                       expressions: [
-                         %IR.LocalFunctionCall{
-                           function: :my_reducer,
-                           args: [
-                             %IR.Variable{name: :acc},
-                             %IR.Variable{name: :x}
-                           ]
-                         }
-                       ]
+                       expressions: [%IR.AtomType{value: :expr}]
+                     }
+                   }
+                 ],
+                 initial_value: %IR.IntegerType{value: 0}
+               }
+             } = transform(ast, %Context{})
+    end
+
+    test "reducer clause with 2 guards" do
+      ast =
+        ast("""
+        for x <- [1, 2], reduce: 0 do
+          acc when guard_1(:a) when guard_2(:b) -> :expr
+        end
+        """)
+
+      assert %IR.Comprehension{
+               mapper: nil,
+               reducer: %{
+                 clauses: [
+                   %IR.Clause{
+                     match: %IR.Variable{name: :acc},
+                     guards: [
+                       %IR.LocalFunctionCall{
+                         function: :guard_1,
+                         args: [%IR.AtomType{value: :a}]
+                       },
+                       %IR.LocalFunctionCall{
+                         function: :guard_2,
+                         args: [%IR.AtomType{value: :b}]
+                       }
+                     ],
+                     body: %IR.Block{
+                       expressions: [%IR.AtomType{value: :expr}]
+                     }
+                   }
+                 ],
+                 initial_value: %IR.IntegerType{value: 0}
+               }
+             } = transform(ast, %Context{})
+    end
+
+    test "reducer clause with 3 guards" do
+      ast =
+        ast("""
+        for x <- [1, 2], reduce: 0 do
+          acc when guard_1(:a) when guard_2(:b) when guard_3(:c) -> :expr
+        end
+        """)
+
+      assert %IR.Comprehension{
+               mapper: nil,
+               reducer: %{
+                 clauses: [
+                   %IR.Clause{
+                     match: %IR.Variable{name: :acc},
+                     guards: [
+                       %IR.LocalFunctionCall{
+                         function: :guard_1,
+                         args: [%IR.AtomType{value: :a}]
+                       },
+                       %IR.LocalFunctionCall{
+                         function: :guard_2,
+                         args: [%IR.AtomType{value: :b}]
+                       },
+                       %IR.LocalFunctionCall{
+                         function: :guard_3,
+                         args: [%IR.AtomType{value: :c}]
+                       }
+                     ],
+                     body: %IR.Block{
+                       expressions: [%IR.AtomType{value: :expr}]
                      }
                    }
                  ],
