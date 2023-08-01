@@ -1526,111 +1526,111 @@ defmodule Hologram.Compiler.TransformerTest do
 
       assert %IR.FunctionDefinition{visibility: :private} = transform(ast, %Context{})
     end
-  end
 
-  test "with single guard" do
-    ast =
-      ast("""
-      def my_fun(x) when guard_1(:a) do
-        :expr
-      end
-      """)
+    test "with single guard" do
+      ast =
+        ast("""
+        def my_fun(x) when guard_1(:a) do
+          :expr
+        end
+        """)
 
-    assert transform(ast, %Context{}) == %IR.FunctionDefinition{
-             name: :my_fun,
-             arity: 1,
-             visibility: :public,
-             clause: %IR.FunctionClause{
-               params: [
-                 %IR.Variable{name: :x}
-               ],
-               guards: [
-                 %IR.LocalFunctionCall{
-                   function: :guard_1,
-                   args: [%IR.AtomType{value: :a}]
+      assert transform(ast, %Context{}) == %IR.FunctionDefinition{
+               name: :my_fun,
+               arity: 1,
+               visibility: :public,
+               clause: %IR.FunctionClause{
+                 params: [
+                   %IR.Variable{name: :x}
+                 ],
+                 guards: [
+                   %IR.LocalFunctionCall{
+                     function: :guard_1,
+                     args: [%IR.AtomType{value: :a}]
+                   }
+                 ],
+                 body: %IR.Block{
+                   expressions: [
+                     %IR.AtomType{value: :expr}
+                   ]
                  }
-               ],
-               body: %IR.Block{
-                 expressions: [
-                   %IR.AtomType{value: :expr}
-                 ]
                }
              }
-           }
-  end
+    end
 
-  test "with 2 guards" do
-    ast =
-      ast("""
-      def my_fun(x) when guard_1(:a) when guard_2(:b) do
-        :expr
-      end
-      """)
+    test "with 2 guards" do
+      ast =
+        ast("""
+        def my_fun(x) when guard_1(:a) when guard_2(:b) do
+          :expr
+        end
+        """)
 
-    assert transform(ast, %Context{}) == %IR.FunctionDefinition{
-             name: :my_fun,
-             arity: 1,
-             visibility: :public,
-             clause: %IR.FunctionClause{
-               params: [
-                 %IR.Variable{name: :x}
-               ],
-               guards: [
-                 %IR.LocalFunctionCall{
-                   function: :guard_1,
-                   args: [%IR.AtomType{value: :a}]
-                 },
-                 %IR.LocalFunctionCall{
-                   function: :guard_2,
-                   args: [%IR.AtomType{value: :b}]
+      assert transform(ast, %Context{}) == %IR.FunctionDefinition{
+               name: :my_fun,
+               arity: 1,
+               visibility: :public,
+               clause: %IR.FunctionClause{
+                 params: [
+                   %IR.Variable{name: :x}
+                 ],
+                 guards: [
+                   %IR.LocalFunctionCall{
+                     function: :guard_1,
+                     args: [%IR.AtomType{value: :a}]
+                   },
+                   %IR.LocalFunctionCall{
+                     function: :guard_2,
+                     args: [%IR.AtomType{value: :b}]
+                   }
+                 ],
+                 body: %IR.Block{
+                   expressions: [
+                     %IR.AtomType{value: :expr}
+                   ]
                  }
-               ],
-               body: %IR.Block{
-                 expressions: [
-                   %IR.AtomType{value: :expr}
-                 ]
                }
              }
-           }
-  end
+    end
 
-  test "with 3 guards" do
-    ast =
-      ast("""
-      def my_fun(x) when guard_1(:a) when guard_2(:b) when guard_3(:c) do
-        :expr
-      end
-      """)
+    test "with 3 guards" do
+      ast =
+        ast("""
+        def my_fun(x) when guard_1(:a) when guard_2(:b) when guard_3(:c) do
+          :expr
+        end
+        """)
 
-    assert transform(ast, %Context{}) == %IR.FunctionDefinition{
-             name: :my_fun,
-             arity: 1,
-             visibility: :public,
-             clause: %IR.FunctionClause{
-               params: [
-                 %IR.Variable{name: :x}
-               ],
-               guards: [
-                 %IR.LocalFunctionCall{
-                   function: :guard_1,
-                   args: [%IR.AtomType{value: :a}]
-                 },
-                 %IR.LocalFunctionCall{
-                   function: :guard_2,
-                   args: [%IR.AtomType{value: :b}]
-                 },
-                 %IR.LocalFunctionCall{
-                   function: :guard_3,
-                   args: [%IR.AtomType{value: :c}]
+      assert transform(ast, %Context{}) == %IR.FunctionDefinition{
+               name: :my_fun,
+               arity: 1,
+               visibility: :public,
+               clause: %IR.FunctionClause{
+                 params: [
+                   %IR.Variable{name: :x}
+                 ],
+                 guards: [
+                   %IR.LocalFunctionCall{
+                     function: :guard_1,
+                     args: [%IR.AtomType{value: :a}]
+                   },
+                   %IR.LocalFunctionCall{
+                     function: :guard_2,
+                     args: [%IR.AtomType{value: :b}]
+                   },
+                   %IR.LocalFunctionCall{
+                     function: :guard_3,
+                     args: [%IR.AtomType{value: :c}]
+                   }
+                 ],
+                 body: %IR.Block{
+                   expressions: [
+                     %IR.AtomType{value: :expr}
+                   ]
                  }
-               ],
-               body: %IR.Block{
-                 expressions: [
-                   %IR.AtomType{value: :expr}
-                 ]
                }
              }
-           }
+    end
   end
 
   test "integer type" do
