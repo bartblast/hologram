@@ -880,19 +880,64 @@ defmodule Hologram.Compiler.TransformerTest do
              } = transform(ast, %Context{})
     end
 
-    test "generator guard" do
-      ast = ast("for a when my_guard(a, 2) <- [1, 2, 3], do: a * a")
+    test "generator with single guard" do
+      ast = ast("for a when guard_1(:x) <- [1, 2], do: a * a")
 
       assert %IR.Comprehension{
                generators: [
                  %IR.Clause{
-                   guards: %IR.LocalFunctionCall{
-                     function: :my_guard,
-                     args: [
-                       %IR.Variable{name: :a},
-                       %IR.IntegerType{value: 2}
-                     ]
-                   }
+                   guards: [
+                     %IR.LocalFunctionCall{
+                       function: :guard_1,
+                       args: [%IR.AtomType{value: :x}]
+                     }
+                   ]
+                 }
+               ]
+             } = transform(ast, %Context{})
+    end
+
+    test "generator with 2 guards" do
+      ast = ast("for a when guard_1(:x) when guard_2(:y) <- [1, 2], do: a * a")
+
+      assert %IR.Comprehension{
+               generators: [
+                 %IR.Clause{
+                   guards: [
+                     %IR.LocalFunctionCall{
+                       function: :guard_1,
+                       args: [%IR.AtomType{value: :x}]
+                     },
+                     %IR.LocalFunctionCall{
+                       function: :guard_2,
+                       args: [%IR.AtomType{value: :y}]
+                     }
+                   ]
+                 }
+               ]
+             } = transform(ast, %Context{})
+    end
+
+    test "generator with 3 guards" do
+      ast = ast("for a when guard_1(:x) when guard_2(:y) when guard_3(:z) <- [1, 2], do: a * a")
+
+      assert %IR.Comprehension{
+               generators: [
+                 %IR.Clause{
+                   guards: [
+                     %IR.LocalFunctionCall{
+                       function: :guard_1,
+                       args: [%IR.AtomType{value: :x}]
+                     },
+                     %IR.LocalFunctionCall{
+                       function: :guard_2,
+                       args: [%IR.AtomType{value: :y}]
+                     },
+                     %IR.LocalFunctionCall{
+                       function: :guard_3,
+                       args: [%IR.AtomType{value: :z}]
+                     }
+                   ]
                  }
                ]
              } = transform(ast, %Context{})
