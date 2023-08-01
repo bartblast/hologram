@@ -378,9 +378,9 @@ defmodule Hologram.Compiler.EncoderTest do
     }
 
     assert encode(ir, %Context{}) == """
-           Interpreter.case(Type.integer(123n), [{match: Type.variablePattern("x"), guard: null, body: (vars) => {
+           Interpreter.case(Type.integer(123n), [{match: Type.variablePattern("x"), guards: [], body: (vars) => {
            return Type.atom("expr_1");
-           }}, {match: Type.variablePattern("y"), guard: null, body: (vars) => {
+           }}, {match: Type.variablePattern("y"), guards: [], body: (vars) => {
            return Type.atom("expr_2");
            }}])\
            """
@@ -457,14 +457,16 @@ defmodule Hologram.Compiler.EncoderTest do
       generators: [
         %IR.Clause{
           match: %IR.Variable{name: :x},
-          guards: %IR.RemoteFunctionCall{
-            module: %IR.AtomType{value: :erlang},
-            function: :<,
-            args: [
-              %IR.Variable{name: :x},
-              %IR.IntegerType{value: 3}
-            ]
-          },
+          guards: [
+            %IR.RemoteFunctionCall{
+              module: %IR.AtomType{value: :erlang},
+              function: :<,
+              args: [
+                %IR.Variable{name: :x},
+                %IR.IntegerType{value: 3}
+              ]
+            }
+          ],
           body: %IR.ListType{
             data: [
               %IR.IntegerType{value: 1},
@@ -474,14 +476,16 @@ defmodule Hologram.Compiler.EncoderTest do
         },
         %IR.Clause{
           match: %IR.Variable{name: :y},
-          guards: %IR.RemoteFunctionCall{
-            module: %IR.AtomType{value: :erlang},
-            function: :<,
-            args: [
-              %IR.Variable{name: :y},
-              %IR.IntegerType{value: 5}
-            ]
-          },
+          guards: [
+            %IR.RemoteFunctionCall{
+              module: %IR.AtomType{value: :erlang},
+              function: :<,
+              args: [
+                %IR.Variable{name: :y},
+                %IR.IntegerType{value: 5}
+              ]
+            }
+          ],
           body: %IR.ListType{
             data: [
               %IR.IntegerType{value: 3},
@@ -517,7 +521,7 @@ defmodule Hologram.Compiler.EncoderTest do
     }
 
     assert encode(ir, %Context{}) ==
-             "Interpreter.comprehension([{match: Type.variablePattern(\"x\"), guard: (vars) => Erlang.$260(vars.x, Type.integer(3n)), body: (vars) => Type.list([Type.integer(1n), Type.integer(2n)])}, {match: Type.variablePattern(\"y\"), guard: (vars) => Erlang.$260(vars.y, Type.integer(5n)), body: (vars) => Type.list([Type.integer(3n), Type.integer(4n)])}], [(vars) => Erlang.is_integer(vars.x), (vars) => Erlang.is_integer(vars.y)], Type.map([]), true, (vars) => Type.tuple([vars.x, vars.y]), vars)"
+             "Interpreter.comprehension([{match: Type.variablePattern(\"x\"), guards: [(vars) => Erlang.$260(vars.x, Type.integer(3n))], body: (vars) => Type.list([Type.integer(1n), Type.integer(2n)])}, {match: Type.variablePattern(\"y\"), guards: [(vars) => Erlang.$260(vars.y, Type.integer(5n))], body: (vars) => Type.list([Type.integer(3n), Type.integer(4n)])}], [(vars) => Erlang.is_integer(vars.x), (vars) => Erlang.is_integer(vars.y)], Type.map([]), true, (vars) => Type.tuple([vars.x, vars.y]), vars)"
   end
 
   test "comprehension filter" do
@@ -541,13 +545,15 @@ defmodule Hologram.Compiler.EncoderTest do
           %IR.Variable{name: :b}
         ]
       },
-      guards: %IR.LocalFunctionCall{
-        function: :my_guard,
-        args: [
-          %IR.Variable{name: :a},
-          %IR.IntegerType{value: 2}
-        ]
-      },
+      guards: [
+        %IR.LocalFunctionCall{
+          function: :my_guard,
+          args: [
+            %IR.Variable{name: :a},
+            %IR.IntegerType{value: 2}
+          ]
+        }
+      ],
       body: %IR.ListType{
         data: [
           %IR.IntegerType{value: 1},
@@ -557,7 +563,7 @@ defmodule Hologram.Compiler.EncoderTest do
     }
 
     assert encode(ir, %Context{module: MyModule}) ==
-             "{match: Type.tuple([Type.variablePattern(\"a\"), Type.variablePattern(\"b\")]), guard: (vars) => Elixir_MyModule.my_guard(vars.a, Type.integer(2n)), body: (vars) => Type.list([Type.integer(1n), Type.integer(2n)])}"
+             "{match: Type.tuple([Type.variablePattern(\"a\"), Type.variablePattern(\"b\")]), guards: [(vars) => Elixir_MyModule.my_guard(vars.a, Type.integer(2n))], body: (vars) => Type.list([Type.integer(1n), Type.integer(2n)])}"
   end
 
   test "cond" do
