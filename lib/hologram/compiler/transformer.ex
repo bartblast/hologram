@@ -205,11 +205,11 @@ defmodule Hologram.Compiler.Transformer do
   end
 
   def transform(
-        {marker, _meta_1, [{:when, _meta_2, [{name, _meta_3, params}, guard]}, [do: body]]},
+        {marker, _meta_1, [{:when, _meta_2, [{name, _meta_3, params}, guards]}, [do: body]]},
         context
       )
       when marker in [:def, :defp] do
-    transform_function_definition(marker, name, params, guard, body, context)
+    transform_function_definition(marker, name, params, guards, body, context)
   end
 
   def transform({marker, _meta_1, [{name, _meta_2, params}, [do: body]]}, context)
@@ -516,14 +516,14 @@ defmodule Hologram.Compiler.Transformer do
   end
 
   defp transform_anonymous_function_clause(
-         {:->, _meta_1, [[{:when, _meta_2, params_and_guard}], body]},
+         {:->, _meta_1, [[{:when, _meta_2, params_and_guards}], body]},
          context
        ) do
-    {guard, params} = List.pop_at(params_and_guard, -1)
+    {guards, params} = List.pop_at(params_and_guards, -1)
 
     %IR.FunctionClause{
       params: transform_list(params, context),
-      guard: transform(guard, context),
+      guards: transform_guards(guards, context),
       body: transform(body, context)
     }
   end
@@ -531,7 +531,7 @@ defmodule Hologram.Compiler.Transformer do
   defp transform_anonymous_function_clause({:->, _meta, [params, body]}, context) do
     %IR.FunctionClause{
       params: transform_list(params, context),
-      guard: nil,
+      guards: [],
       body: transform(body, context)
     }
   end
@@ -682,7 +682,7 @@ defmodule Hologram.Compiler.Transformer do
     transform(ast, context)
   end
 
-  defp transform_function_definition(marker, name, params, guard, body, context) do
+  defp transform_function_definition(marker, name, params, guards, body, context) do
     visibility =
       if marker == :def do
         :public
@@ -690,11 +690,11 @@ defmodule Hologram.Compiler.Transformer do
         :private
       end
 
-    guard_ir =
-      if guard do
-        transform(guard, context)
+    guards_ir =
+      if guards do
+        transform_guards(guards, context)
       else
-        nil
+        []
       end
 
     params_ir = transform_list(params, context)
@@ -705,7 +705,7 @@ defmodule Hologram.Compiler.Transformer do
       visibility: visibility,
       clause: %IR.FunctionClause{
         params: params_ir,
-        guard: guard_ir,
+        guards: guards_ir,
         body: transform(body, context)
       }
     }

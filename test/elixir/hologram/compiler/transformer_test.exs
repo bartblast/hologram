@@ -37,6 +37,7 @@ defmodule Hologram.Compiler.TransformerTest do
                clauses: [
                  %IR.FunctionClause{
                    params: [],
+                   guards: [],
                    body: %IR.Block{
                      expressions: [%IR.AtomType{value: :expr_1}]
                    }
@@ -113,12 +114,14 @@ defmodule Hologram.Compiler.TransformerTest do
                clauses: [
                  %IR.FunctionClause{
                    params: [%IR.Variable{name: :x}],
+                   guards: [],
                    body: %IR.Block{
                      expressions: [%IR.AtomType{value: :expr_1}]
                    }
                  },
                  %IR.FunctionClause{
                    params: [%IR.Variable{name: :y}],
+                   guards: [],
                    body: %IR.Block{
                      expressions: [%IR.AtomType{value: :expr_2}]
                    }
@@ -138,10 +141,12 @@ defmodule Hologram.Compiler.TransformerTest do
                      %IR.Variable{name: :x},
                      %IR.Variable{name: :y}
                    ],
-                   guard: %IR.LocalFunctionCall{
-                     function: :is_integer,
-                     args: [%IR.Variable{name: :x}]
-                   },
+                   guards: [
+                     %IR.LocalFunctionCall{
+                       function: :is_integer,
+                       args: [%IR.Variable{name: :x}]
+                     }
+                   ],
                    body: %IR.Block{
                      expressions: [%IR.AtomType{value: :expr_1}]
                    }
@@ -482,6 +487,7 @@ defmodule Hologram.Compiler.TransformerTest do
                      %IR.Variable{name: :holo_arg_1__},
                      %IR.Variable{name: :holo_arg_2__}
                    ],
+                   guards: [],
                    body: %IR.Block{
                      expressions: [
                        %IR.LocalFunctionCall{
@@ -509,6 +515,7 @@ defmodule Hologram.Compiler.TransformerTest do
                      %IR.Variable{name: :holo_arg_1__},
                      %IR.Variable{name: :holo_arg_2__}
                    ],
+                   guards: [],
                    body: %IR.Block{
                      expressions: [
                        %IR.RemoteFunctionCall{
@@ -539,6 +546,7 @@ defmodule Hologram.Compiler.TransformerTest do
                      %IR.Variable{name: :holo_arg_3__},
                      %IR.Variable{name: :holo_arg_4__}
                    ],
+                   guards: [],
                    body: %IR.Block{
                      expressions: [
                        %IR.LocalFunctionCall{
@@ -574,6 +582,7 @@ defmodule Hologram.Compiler.TransformerTest do
                      %IR.Variable{name: :holo_arg_3__},
                      %IR.Variable{name: :holo_arg_4__}
                    ],
+                   guards: [],
                    body: %IR.Block{
                      expressions: [
                        %IR.RemoteFunctionCall{
@@ -609,6 +618,7 @@ defmodule Hologram.Compiler.TransformerTest do
                      %IR.Variable{name: :holo_arg_2__},
                      %IR.Variable{name: :holo_arg_3__}
                    ],
+                   guards: [],
                    body: %IR.Block{
                      expressions: [
                        %IR.ListType{
@@ -1416,11 +1426,13 @@ defmodule Hologram.Compiler.TransformerTest do
                  %IR.Variable{name: :x},
                  %IR.Variable{name: :y}
                ],
-               guard: %IR.RemoteFunctionCall{
-                 module: %IR.AtomType{value: :erlang},
-                 function: :is_integer,
-                 args: [%IR.Variable{name: :x}]
-               },
+               guards: [
+                 %IR.RemoteFunctionCall{
+                   module: %IR.AtomType{value: :erlang},
+                   function: :is_integer,
+                   args: [%IR.Variable{name: :x}]
+                 }
+               ],
                body: %IR.Block{
                  expressions: [
                    %IR.IntegerType{value: 1},

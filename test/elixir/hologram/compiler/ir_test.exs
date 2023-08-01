@@ -31,7 +31,7 @@ defmodule Hologram.Compiler.IRTest do
                        %IR.Variable{name: :x},
                        %IR.Variable{name: :y}
                      ],
-                     guard: nil,
+                     guards: [],
                      body: %IR.Block{
                        expressions: [
                          %IR.RemoteFunctionCall{

@@ -13,7 +13,7 @@ defmodule Hologram.Compiler.EncoderTest do
         clauses: [
           %IR.FunctionClause{
             params: [%IR.Variable{name: :x}],
-            guard: nil,
+            guards: [],
             body: %IR.Block{
               expressions: [%IR.AtomType{value: :expr}]
             }
@@ -22,7 +22,7 @@ defmodule Hologram.Compiler.EncoderTest do
       }
 
       assert encode(ir, %Context{}) == """
-             Type.anonymousFunction(2, [{params: [Type.variablePattern("x")], guard: null, body: (vars) => {
+             Type.anonymousFunction(2, [{params: [Type.variablePattern("x")], guards: [], body: (vars) => {
              return Type.atom("expr");
              }}], vars)\
              """
@@ -38,14 +38,14 @@ defmodule Hologram.Compiler.EncoderTest do
         clauses: [
           %IR.FunctionClause{
             params: [%IR.Variable{name: :x}],
-            guard: nil,
+            guards: [],
             body: %IR.Block{
               expressions: [%IR.AtomType{value: :expr_a}]
             }
           },
           %IR.FunctionClause{
             params: [%IR.Variable{name: :y}],
-            guard: nil,
+            guards: [],
             body: %IR.Block{
               expressions: [%IR.AtomType{value: :expr_b}]
             }
@@ -54,9 +54,9 @@ defmodule Hologram.Compiler.EncoderTest do
       }
 
       assert encode(ir, %Context{}) == """
-             Type.anonymousFunction(2, [{params: [Type.variablePattern("x")], guard: null, body: (vars) => {
+             Type.anonymousFunction(2, [{params: [Type.variablePattern("x")], guards: [], body: (vars) => {
              return Type.atom("expr_a");
-             }}, {params: [Type.variablePattern("y")], guard: null, body: (vars) => {
+             }}, {params: [Type.variablePattern("y")], guards: [], body: (vars) => {
              return Type.atom("expr_b");
              }}], vars)\
              """
@@ -684,14 +684,14 @@ defmodule Hologram.Compiler.EncoderTest do
     test "without guard" do
       ir = %IR.FunctionClause{
         params: [%IR.Variable{name: :x}, %IR.Variable{name: :y}],
-        guard: nil,
+        guards: [],
         body: %IR.Block{
           expressions: [%IR.AtomType{value: :expr_1}, %IR.AtomType{value: :expr_2}]
         }
       }
 
       assert encode(ir, %Context{}) == """
-             {params: [Type.variablePattern("x"), Type.variablePattern("y")], guard: null, body: (vars) => {
+             {params: [Type.variablePattern("x"), Type.variablePattern("y")], guards: [], body: (vars) => {
              Type.atom("expr_1");
              return Type.atom("expr_2");
              }}\
@@ -704,18 +704,20 @@ defmodule Hologram.Compiler.EncoderTest do
       #  :expr_2
       ir = %IR.FunctionClause{
         params: [%IR.Variable{name: :x}, %IR.Variable{name: :y}],
-        guard: %IR.RemoteFunctionCall{
-          module: %IR.AtomType{value: :erlang},
-          function: :is_integer,
-          args: [%IR.Variable{name: :x}]
-        },
+        guards: [
+          %IR.RemoteFunctionCall{
+            module: %IR.AtomType{value: :erlang},
+            function: :is_integer,
+            args: [%IR.Variable{name: :x}]
+          }
+        ],
         body: %IR.Block{
           expressions: [%IR.AtomType{value: :expr_1}, %IR.AtomType{value: :expr_2}]
         }
       }
 
       assert encode(ir, %Context{}) == """
-             {params: [Type.variablePattern("x"), Type.variablePattern("y")], guard: (vars) => Erlang.is_integer(vars.x), body: (vars) => {
+             {params: [Type.variablePattern("x"), Type.variablePattern("y")], guards: [(vars) => Erlang.is_integer(vars.x)], body: (vars) => {
              Type.atom("expr_1");
              return Type.atom("expr_2");
              }}\
@@ -947,7 +949,7 @@ defmodule Hologram.Compiler.EncoderTest do
                 %IR.Variable{name: :a},
                 %IR.Variable{name: :b}
               ],
-              guard: nil,
+              guards: [],
               body: %IR.Block{
                 expressions: [
                   %IR.RemoteFunctionCall{
@@ -968,11 +970,13 @@ defmodule Hologram.Compiler.EncoderTest do
             visibility: :public,
             clause: %IR.FunctionClause{
               params: [%IR.Variable{name: :c}],
-              guard: %IR.RemoteFunctionCall{
-                module: %IR.AtomType{value: :erlang},
-                function: :is_integer,
-                args: [%IR.Variable{name: :c}]
-              },
+              guards: [
+                %IR.RemoteFunctionCall{
+                  module: %IR.AtomType{value: :erlang},
+                  function: :is_integer,
+                  args: [%IR.Variable{name: :c}]
+                }
+              ],
               body: %IR.Block{
                 expressions: [%IR.Variable{name: :c}]
               }
@@ -987,7 +991,7 @@ defmodule Hologram.Compiler.EncoderTest do
                 %IR.Variable{name: :x},
                 %IR.Variable{name: :y}
               ],
-              guard: nil,
+              guards: [],
               body: %IR.Block{
                 expressions: [
                   %IR.RemoteFunctionCall{
@@ -1008,11 +1012,13 @@ defmodule Hologram.Compiler.EncoderTest do
             visibility: :private,
             clause: %IR.FunctionClause{
               params: [%IR.Variable{name: :z}],
-              guard: %IR.RemoteFunctionCall{
-                module: %IR.AtomType{value: :erlang},
-                function: :is_float,
-                args: [%IR.Variable{name: :z}]
-              },
+              guards: [
+                %IR.RemoteFunctionCall{
+                  module: %IR.AtomType{value: :erlang},
+                  function: :is_float,
+                  args: [%IR.Variable{name: :z}]
+                }
+              ],
               body: %IR.Block{
                 expressions: [%IR.Variable{name: :z}]
               }
@@ -1025,15 +1031,15 @@ defmodule Hologram.Compiler.EncoderTest do
     assert encode(ir, %Context{}) == """
 
 
-           Interpreter.defineFunction("Elixir_Aaa_Bbb", "fun_1", [{params: [Type.variablePattern("a"), Type.variablePattern("b")], guard: null, body: (vars) => {
+           Interpreter.defineFunction("Elixir_Aaa_Bbb", "fun_1", [{params: [Type.variablePattern("a"), Type.variablePattern("b")], guards: [], body: (vars) => {
            return Erlang.$243(vars.a, vars.b);
-           }}, {params: [Type.variablePattern("c")], guard: (vars) => Erlang.is_integer(vars.c), body: (vars) => {
+           }}, {params: [Type.variablePattern("c")], guards: [(vars) => Erlang.is_integer(vars.c)], body: (vars) => {
            return vars.c;
            }}])
 
-           Interpreter.defineFunction("Elixir_Aaa_Bbb", "fun_2", [{params: [Type.variablePattern("x"), Type.variablePattern("y")], guard: null, body: (vars) => {
+           Interpreter.defineFunction("Elixir_Aaa_Bbb", "fun_2", [{params: [Type.variablePattern("x"), Type.variablePattern("y")], guards: [], body: (vars) => {
            return Erlang.$242(vars.x, vars.y);
-           }}, {params: [Type.variablePattern("z")], guard: (vars) => Erlang.is_float(vars.z), body: (vars) => {
+           }}, {params: [Type.variablePattern("z")], guards: [(vars) => Erlang.is_float(vars.z)], body: (vars) => {
            return vars.z;
            }}])\
            """

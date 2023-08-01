@@ -188,10 +188,10 @@ defmodule Hologram.Compiler.Encoder do
 
   def encode(%IR.FunctionClause{} = clause, context) do
     params = encode_as_array(clause.params, %{context | pattern?: true})
-    guard = encode_closure(clause.guard, context)
+    guards = encode_as_array(clause.guards, context, &encode_closure/2)
     body = encode_closure(clause.body, context)
 
-    "{params: #{params}, guard: #{guard}, body: #{body}}"
+    "{params: #{params}, guards: #{guards}, body: #{body}}"
   end
 
   def encode(%IR.IntegerType{value: value}, _context) do

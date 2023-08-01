@@ -151,9 +151,9 @@ defmodule Hologram.Compiler.IR do
   end
 
   defmodule FunctionClause do
-    defstruct [:params, :guard, :body]
+    defstruct [:params, :guards, :body]
 
-    @type t :: %__MODULE__{params: list(IR.t()), guard: IR.t() | nil, body: IR.Block.t()}
+    @type t :: %__MODULE__{params: list(IR.t()), guards: list(IR.t()), body: IR.Block.t()}
   end
 
   defmodule FunctionDefinition do

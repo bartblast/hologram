@@ -185,7 +185,7 @@ defmodule Hologram.Compiler.CallGraphTest do
         visibility: :public,
         clause: %IR.FunctionClause{
           params: [%IR.Variable{name: :x}, %IR.Variable{name: :y}],
-          guard: %IR.AtomType{value: Module5},
+          guards: [%IR.AtomType{value: Module5}],
           body: %IR.Block{
             expressions: [
               %IR.AtomType{value: Module6},
