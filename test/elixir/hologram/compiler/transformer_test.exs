@@ -1133,10 +1133,12 @@ defmodule Hologram.Compiler.TransformerTest do
                  clauses: [
                    %IR.Clause{
                      match: %IR.Variable{name: :acc},
-                     guards: %IR.LocalFunctionCall{
-                       function: :my_guard,
-                       args: [%IR.Variable{name: :acc}]
-                     },
+                     guards: [
+                       %IR.LocalFunctionCall{
+                         function: :my_guard,
+                         args: [%IR.Variable{name: :acc}]
+                       }
+                     ],
                      body: %IR.Block{
                        expressions: [
                          %IR.LocalFunctionCall{
@@ -2252,7 +2254,7 @@ defmodule Hologram.Compiler.TransformerTest do
                else_clauses: [
                  %IR.Clause{
                    match: %IR.AtomType{value: Aaa},
-                   guards: %IR.AtomType{value: Bbb},
+                   guards: [%IR.AtomType{value: Bbb}],
                    body: %IR.Block{
                      expressions: [%IR.AtomType{value: Ccc}]
                    }
