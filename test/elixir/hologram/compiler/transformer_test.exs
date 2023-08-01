@@ -2150,7 +2150,7 @@ defmodule Hologram.Compiler.TransformerTest do
         try do
           1
         rescue
-          Aaa -> Bbb
+          Aaa -> :b
         end
         """)
 
@@ -2160,7 +2160,7 @@ defmodule Hologram.Compiler.TransformerTest do
                    variable: nil,
                    modules: [%IR.AtomType{value: Aaa}],
                    body: %IR.Block{
-                     expressions: [%IR.AtomType{value: Bbb}]
+                     expressions: [%IR.AtomType{value: :b}]
                    }
                  }
                ]
@@ -2173,7 +2173,7 @@ defmodule Hologram.Compiler.TransformerTest do
         try do
           1
         rescue
-          [Aaa, Bbb] -> Ccc
+          [Aaa, Bbb] -> :c
         end
         """)
 
@@ -2183,7 +2183,7 @@ defmodule Hologram.Compiler.TransformerTest do
                    variable: nil,
                    modules: [%IR.AtomType{value: Aaa}, %IR.AtomType{value: Bbb}],
                    body: %IR.Block{
-                     expressions: [%IR.AtomType{value: Ccc}]
+                     expressions: [%IR.AtomType{value: :c}]
                    }
                  }
                ]
@@ -2196,7 +2196,7 @@ defmodule Hologram.Compiler.TransformerTest do
         try do
           1
         rescue
-          x -> Aaa
+          x -> :a
         end
         """)
 
@@ -2206,7 +2206,7 @@ defmodule Hologram.Compiler.TransformerTest do
                    variable: %IR.Variable{name: :x},
                    modules: [],
                    body: %IR.Block{
-                     expressions: [%IR.AtomType{value: Aaa}]
+                     expressions: [%IR.AtomType{value: :a}]
                    }
                  }
                ]
@@ -2219,7 +2219,7 @@ defmodule Hologram.Compiler.TransformerTest do
         try do
           1
         rescue
-          x in [Aaa] -> Bbb
+          x in [Aaa] -> :b
         end
         """)
 
@@ -2229,7 +2229,7 @@ defmodule Hologram.Compiler.TransformerTest do
                    variable: %IR.Variable{name: :x},
                    modules: [%IR.AtomType{value: Aaa}],
                    body: %IR.Block{
-                     expressions: [%IR.AtomType{value: Bbb}]
+                     expressions: [%IR.AtomType{value: :b}]
                    }
                  }
                ]
@@ -2242,7 +2242,7 @@ defmodule Hologram.Compiler.TransformerTest do
         try do
           1
         rescue
-          x in [Aaa, Bbb] -> Ccc
+          x in [Aaa, Bbb] -> :c
         end
         """)
 
@@ -2252,7 +2252,7 @@ defmodule Hologram.Compiler.TransformerTest do
                    variable: %IR.Variable{name: :x},
                    modules: [%IR.AtomType{value: Aaa}, %IR.AtomType{value: Bbb}],
                    body: %IR.Block{
-                     expressions: [%IR.AtomType{value: Ccc}]
+                     expressions: [%IR.AtomType{value: :c}]
                    }
                  }
                ]
@@ -2265,8 +2265,8 @@ defmodule Hologram.Compiler.TransformerTest do
         try do
           1
         rescue
-          x -> Aaa
-          y -> Bbb
+          x -> :a
+          y -> :b
         end
         """)
 
@@ -2276,14 +2276,14 @@ defmodule Hologram.Compiler.TransformerTest do
                    variable: %IR.Variable{name: :x},
                    modules: [],
                    body: %IR.Block{
-                     expressions: [%IR.AtomType{value: Aaa}]
+                     expressions: [%IR.AtomType{value: :a}]
                    }
                  },
                  %IR.TryRescueClause{
                    variable: %IR.Variable{name: :y},
                    modules: [],
                    body: %IR.Block{
-                     expressions: [%IR.AtomType{value: Bbb}]
+                     expressions: [%IR.AtomType{value: :b}]
                    }
                  }
                ]
@@ -2296,7 +2296,7 @@ defmodule Hologram.Compiler.TransformerTest do
         try do
           1
         catch
-          Aaa -> Bbb
+          :a -> :b
         end
         """)
 
@@ -2304,10 +2304,10 @@ defmodule Hologram.Compiler.TransformerTest do
                catch_clauses: [
                  %IR.TryCatchClause{
                    kind: nil,
-                   value: %IR.AtomType{value: Aaa},
+                   value: %IR.AtomType{value: :a},
                    guards: [],
                    body: %IR.Block{
-                     expressions: [%IR.AtomType{value: Bbb}]
+                     expressions: [%IR.AtomType{value: :b}]
                    }
                  }
                ]
@@ -2320,7 +2320,7 @@ defmodule Hologram.Compiler.TransformerTest do
         try do
           1
         catch
-          Aaa when Bbb -> Ccc
+          :a when :b -> :c
         end
         """)
 
@@ -2328,10 +2328,10 @@ defmodule Hologram.Compiler.TransformerTest do
                catch_clauses: [
                  %IR.TryCatchClause{
                    kind: nil,
-                   value: %IR.AtomType{value: Aaa},
-                   guards: [%IR.AtomType{value: Bbb}],
+                   value: %IR.AtomType{value: :a},
+                   guards: [%IR.AtomType{value: :b}],
                    body: %IR.Block{
-                     expressions: [%IR.AtomType{value: Ccc}]
+                     expressions: [%IR.AtomType{value: :c}]
                    }
                  }
                ]
@@ -2344,7 +2344,7 @@ defmodule Hologram.Compiler.TransformerTest do
         try do
           1
         catch
-          Aaa when Bbb when Ccc -> Ddd
+          :a when :b when :c -> :d
         end
         """)
 
@@ -2352,10 +2352,10 @@ defmodule Hologram.Compiler.TransformerTest do
                catch_clauses: [
                  %IR.TryCatchClause{
                    kind: nil,
-                   value: %IR.AtomType{value: Aaa},
-                   guards: [%IR.AtomType{value: Bbb}, %IR.AtomType{value: Ccc}],
+                   value: %IR.AtomType{value: :a},
+                   guards: [%IR.AtomType{value: :b}, %IR.AtomType{value: :c}],
                    body: %IR.Block{
-                     expressions: [%IR.AtomType{value: Ddd}]
+                     expressions: [%IR.AtomType{value: :d}]
                    }
                  }
                ]
@@ -2368,7 +2368,7 @@ defmodule Hologram.Compiler.TransformerTest do
         try do
           1
         catch
-          Aaa when Bbb when Ccc when Ddd -> Eee
+          :a when :b when :c when :d -> :e
         end
         """)
 
@@ -2376,14 +2376,14 @@ defmodule Hologram.Compiler.TransformerTest do
                catch_clauses: [
                  %IR.TryCatchClause{
                    kind: nil,
-                   value: %IR.AtomType{value: Aaa},
+                   value: %IR.AtomType{value: :a},
                    guards: [
-                     %IR.AtomType{value: Bbb},
-                     %IR.AtomType{value: Ccc},
-                     %IR.AtomType{value: Ddd}
+                     %IR.AtomType{value: :b},
+                     %IR.AtomType{value: :c},
+                     %IR.AtomType{value: :d}
                    ],
                    body: %IR.Block{
-                     expressions: [%IR.AtomType{value: Eee}]
+                     expressions: [%IR.AtomType{value: :e}]
                    }
                  }
                ]
@@ -2396,18 +2396,18 @@ defmodule Hologram.Compiler.TransformerTest do
         try do
           1
         catch
-          Aaa, Bbb -> Ccc
+          :a, :b -> :c
         end
         """)
 
       assert %IR.Try{
                catch_clauses: [
                  %IR.TryCatchClause{
-                   kind: %IR.AtomType{value: Aaa},
-                   value: %IR.AtomType{value: Bbb},
+                   kind: %IR.AtomType{value: :a},
+                   value: %IR.AtomType{value: :b},
                    guards: [],
                    body: %IR.Block{
-                     expressions: [%IR.AtomType{value: Ccc}]
+                     expressions: [%IR.AtomType{value: :c}]
                    }
                  }
                ]
@@ -2420,18 +2420,18 @@ defmodule Hologram.Compiler.TransformerTest do
         try do
           1
         catch
-          Aaa, Bbb when Ccc -> Ddd
+          :a, :b when :c -> :d
         end
         """)
 
       assert %IR.Try{
                catch_clauses: [
                  %IR.TryCatchClause{
-                   kind: %IR.AtomType{value: Aaa},
-                   value: %IR.AtomType{value: Bbb},
-                   guards: [%IR.AtomType{value: Ccc}],
+                   kind: %IR.AtomType{value: :a},
+                   value: %IR.AtomType{value: :b},
+                   guards: [%IR.AtomType{value: :c}],
                    body: %IR.Block{
-                     expressions: [%IR.AtomType{value: Ddd}]
+                     expressions: [%IR.AtomType{value: :d}]
                    }
                  }
                ]
@@ -2444,18 +2444,18 @@ defmodule Hologram.Compiler.TransformerTest do
         try do
           1
         catch
-          Aaa, Bbb when Ccc when Ddd -> Eee
+          :a, :b when :c when :d -> :e
         end
         """)
 
       assert %IR.Try{
                catch_clauses: [
                  %IR.TryCatchClause{
-                   kind: %IR.AtomType{value: Aaa},
-                   value: %IR.AtomType{value: Bbb},
-                   guards: [%IR.AtomType{value: Ccc}, %IR.AtomType{value: Ddd}],
+                   kind: %IR.AtomType{value: :a},
+                   value: %IR.AtomType{value: :b},
+                   guards: [%IR.AtomType{value: :c}, %IR.AtomType{value: :d}],
                    body: %IR.Block{
-                     expressions: [%IR.AtomType{value: Eee}]
+                     expressions: [%IR.AtomType{value: :e}]
                    }
                  }
                ]
@@ -2468,22 +2468,22 @@ defmodule Hologram.Compiler.TransformerTest do
         try do
           1
         catch
-          Aaa, Bbb when Ccc when Ddd when Eee -> Fff
+          :a, :b when :c when :d when :e -> :f
         end
         """)
 
       assert %IR.Try{
                catch_clauses: [
                  %IR.TryCatchClause{
-                   kind: %IR.AtomType{value: Aaa},
-                   value: %IR.AtomType{value: Bbb},
+                   kind: %IR.AtomType{value: :a},
+                   value: %IR.AtomType{value: :b},
                    guards: [
-                     %IR.AtomType{value: Ccc},
-                     %IR.AtomType{value: Ddd},
-                     %IR.AtomType{value: Eee}
+                     %IR.AtomType{value: :c},
+                     %IR.AtomType{value: :d},
+                     %IR.AtomType{value: :e}
                    ],
                    body: %IR.Block{
-                     expressions: [%IR.AtomType{value: Fff}]
+                     expressions: [%IR.AtomType{value: :f}]
                    }
                  }
                ]
@@ -2496,8 +2496,8 @@ defmodule Hologram.Compiler.TransformerTest do
         try do
           1
         catch
-          Aaa -> Bbb
-          Ccc -> Ddd
+          :a -> :b
+          :c -> :d
         end
         """)
 
@@ -2505,18 +2505,18 @@ defmodule Hologram.Compiler.TransformerTest do
                catch_clauses: [
                  %IR.TryCatchClause{
                    kind: nil,
-                   value: %IR.AtomType{value: Aaa},
+                   value: %IR.AtomType{value: :a},
                    guards: [],
                    body: %IR.Block{
-                     expressions: [%IR.AtomType{value: Bbb}]
+                     expressions: [%IR.AtomType{value: :b}]
                    }
                  },
                  %IR.TryCatchClause{
                    kind: nil,
-                   value: %IR.AtomType{value: Ccc},
+                   value: %IR.AtomType{value: :c},
                    guards: [],
                    body: %IR.Block{
-                     expressions: [%IR.AtomType{value: Ddd}]
+                     expressions: [%IR.AtomType{value: :d}]
                    }
                  }
                ]
