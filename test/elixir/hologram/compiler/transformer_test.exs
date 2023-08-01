@@ -2144,7 +2144,7 @@ defmodule Hologram.Compiler.TransformerTest do
              } = transform(ast, %Context{})
     end
 
-    test "rescue clause with single module" do
+    test "rescue clause with single module / single rescue clause" do
       ast =
         ast("""
         try do
@@ -2290,7 +2290,7 @@ defmodule Hologram.Compiler.TransformerTest do
              } = transform(ast, %Context{})
     end
 
-    test "catch clause with value" do
+    test "catch clause with value / single catch clause" do
       ast =
         ast("""
         try do
@@ -2305,7 +2305,7 @@ defmodule Hologram.Compiler.TransformerTest do
                  %IR.TryCatchClause{
                    kind: nil,
                    value: %IR.AtomType{value: Aaa},
-                   guard: nil,
+                   guards: [],
                    body: %IR.Block{
                      expressions: [%IR.AtomType{value: Bbb}]
                    }
@@ -2314,7 +2314,7 @@ defmodule Hologram.Compiler.TransformerTest do
              } = transform(ast, %Context{})
     end
 
-    test "catch clause with value and guard" do
+    test "catch clause with value and single guard" do
       ast =
         ast("""
         try do
@@ -2329,9 +2329,61 @@ defmodule Hologram.Compiler.TransformerTest do
                  %IR.TryCatchClause{
                    kind: nil,
                    value: %IR.AtomType{value: Aaa},
-                   guard: %IR.AtomType{value: Bbb},
+                   guards: [%IR.AtomType{value: Bbb}],
                    body: %IR.Block{
                      expressions: [%IR.AtomType{value: Ccc}]
+                   }
+                 }
+               ]
+             } = transform(ast, %Context{})
+    end
+
+    test "catch clause with value and 2 guards" do
+      ast =
+        ast("""
+        try do
+          1
+        catch
+          Aaa when Bbb when Ccc -> Ddd
+        end
+        """)
+
+      assert %IR.Try{
+               catch_clauses: [
+                 %IR.TryCatchClause{
+                   kind: nil,
+                   value: %IR.AtomType{value: Aaa},
+                   guards: [%IR.AtomType{value: Bbb}, %IR.AtomType{value: Ccc}],
+                   body: %IR.Block{
+                     expressions: [%IR.AtomType{value: Ddd}]
+                   }
+                 }
+               ]
+             } = transform(ast, %Context{})
+    end
+
+    test "catch clause with value and 3 guards" do
+      ast =
+        ast("""
+        try do
+          1
+        catch
+          Aaa when Bbb when Ccc when Ddd -> Eee
+        end
+        """)
+
+      assert %IR.Try{
+               catch_clauses: [
+                 %IR.TryCatchClause{
+                   kind: nil,
+                   value: %IR.AtomType{value: Aaa},
+                   guards: [
+                     %IR.AtomType{value: Bbb},
+                     %IR.AtomType{value: Ccc},
+                     %IR.AtomType{value: Ddd}
+                   ],
+                   body: %IR.Block{
+                     expressions: [%IR.AtomType{value: Eee}]
                    }
                  }
                ]
@@ -2353,7 +2405,7 @@ defmodule Hologram.Compiler.TransformerTest do
                  %IR.TryCatchClause{
                    kind: %IR.AtomType{value: Aaa},
                    value: %IR.AtomType{value: Bbb},
-                   guard: nil,
+                   guards: [],
                    body: %IR.Block{
                      expressions: [%IR.AtomType{value: Ccc}]
                    }
@@ -2362,7 +2414,7 @@ defmodule Hologram.Compiler.TransformerTest do
              } = transform(ast, %Context{})
     end
 
-    test "catch clause with kind, value and guard" do
+    test "catch clause with kind, value and single guard" do
       ast =
         ast("""
         try do
@@ -2377,9 +2429,61 @@ defmodule Hologram.Compiler.TransformerTest do
                  %IR.TryCatchClause{
                    kind: %IR.AtomType{value: Aaa},
                    value: %IR.AtomType{value: Bbb},
-                   guard: %IR.AtomType{value: Ccc},
+                   guards: [%IR.AtomType{value: Ccc}],
                    body: %IR.Block{
                      expressions: [%IR.AtomType{value: Ddd}]
+                   }
+                 }
+               ]
+             } = transform(ast, %Context{})
+    end
+
+    test "catch clause with kind, value and 2 guards" do
+      ast =
+        ast("""
+        try do
+          1
+        catch
+          Aaa, Bbb when Ccc when Ddd -> Eee
+        end
+        """)
+
+      assert %IR.Try{
+               catch_clauses: [
+                 %IR.TryCatchClause{
+                   kind: %IR.AtomType{value: Aaa},
+                   value: %IR.AtomType{value: Bbb},
+                   guards: [%IR.AtomType{value: Ccc}, %IR.AtomType{value: Ddd}],
+                   body: %IR.Block{
+                     expressions: [%IR.AtomType{value: Eee}]
+                   }
+                 }
+               ]
+             } = transform(ast, %Context{})
+    end
+
+    test "catch clause with kind, value and 3 guards" do
+      ast =
+        ast("""
+        try do
+          1
+        catch
+          Aaa, Bbb when Ccc when Ddd when Eee -> Fff
+        end
+        """)
+
+      assert %IR.Try{
+               catch_clauses: [
+                 %IR.TryCatchClause{
+                   kind: %IR.AtomType{value: Aaa},
+                   value: %IR.AtomType{value: Bbb},
+                   guards: [
+                     %IR.AtomType{value: Ccc},
+                     %IR.AtomType{value: Ddd},
+                     %IR.AtomType{value: Eee}
+                   ],
+                   body: %IR.Block{
+                     expressions: [%IR.AtomType{value: Fff}]
                    }
                  }
                ]
@@ -2402,7 +2506,7 @@ defmodule Hologram.Compiler.TransformerTest do
                  %IR.TryCatchClause{
                    kind: nil,
                    value: %IR.AtomType{value: Aaa},
-                   guard: nil,
+                   guards: [],
                    body: %IR.Block{
                      expressions: [%IR.AtomType{value: Bbb}]
                    }
@@ -2410,7 +2514,7 @@ defmodule Hologram.Compiler.TransformerTest do
                  %IR.TryCatchClause{
                    kind: nil,
                    value: %IR.AtomType{value: Ccc},
-                   guard: nil,
+                   guards: [],
                    body: %IR.Block{
                      expressions: [%IR.AtomType{value: Ddd}]
                    }
