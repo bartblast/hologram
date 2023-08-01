@@ -2523,46 +2523,23 @@ defmodule Hologram.Compiler.TransformerTest do
              } = transform(ast, %Context{})
     end
 
-    test "else clause without guard" do
+    test "single else clause" do
       ast =
         ast("""
         try do
           1
         else
-          Aaa -> Bbb
+          :a -> :b
         end
         """)
 
       assert %IR.Try{
                else_clauses: [
                  %IR.Clause{
-                   match: %IR.AtomType{value: Aaa},
+                   match: %IR.AtomType{value: :a},
                    guards: [],
                    body: %IR.Block{
-                     expressions: [%IR.AtomType{value: Bbb}]
-                   }
-                 }
-               ]
-             } = transform(ast, %Context{})
-    end
-
-    test "else clause with guard" do
-      ast =
-        ast("""
-        try do
-          1
-        else
-          Aaa when Bbb -> Ccc
-        end
-        """)
-
-      assert %IR.Try{
-               else_clauses: [
-                 %IR.Clause{
-                   match: %IR.AtomType{value: Aaa},
-                   guards: [%IR.AtomType{value: Bbb}],
-                   body: %IR.Block{
-                     expressions: [%IR.AtomType{value: Ccc}]
+                     expressions: [%IR.AtomType{value: :b}]
                    }
                  }
                ]
@@ -2575,25 +2552,98 @@ defmodule Hologram.Compiler.TransformerTest do
         try do
           1
         else
-          Aaa -> Bbb
-          Ccc -> Ddd
+          :a -> :b
+          :c -> :d
         end
         """)
 
       assert %IR.Try{
                else_clauses: [
                  %IR.Clause{
-                   match: %IR.AtomType{value: Aaa},
+                   match: %IR.AtomType{value: :a},
                    guards: [],
                    body: %IR.Block{
-                     expressions: [%IR.AtomType{value: Bbb}]
+                     expressions: [%IR.AtomType{value: :b}]
                    }
                  },
                  %IR.Clause{
-                   match: %IR.AtomType{value: Ccc},
+                   match: %IR.AtomType{value: :c},
                    guards: [],
                    body: %IR.Block{
-                     expressions: [%IR.AtomType{value: Ddd}]
+                     expressions: [%IR.AtomType{value: :d}]
+                   }
+                 }
+               ]
+             } = transform(ast, %Context{})
+    end
+
+    test "else clause with single guard" do
+      ast =
+        ast("""
+        try do
+          1
+        else
+          :a when :b -> :c
+        end
+        """)
+
+      assert %IR.Try{
+               else_clauses: [
+                 %IR.Clause{
+                   match: %IR.AtomType{value: :a},
+                   guards: [%IR.AtomType{value: :b}],
+                   body: %IR.Block{
+                     expressions: [%IR.AtomType{value: :c}]
+                   }
+                 }
+               ]
+             } = transform(ast, %Context{})
+    end
+
+    test "else clause with 2 guards" do
+      ast =
+        ast("""
+        try do
+          1
+        else
+          :a when :b when :c -> :d
+        end
+        """)
+
+      assert %IR.Try{
+               else_clauses: [
+                 %IR.Clause{
+                   match: %IR.AtomType{value: :a},
+                   guards: [%IR.AtomType{value: :b}, %IR.AtomType{value: :c}],
+                   body: %IR.Block{
+                     expressions: [%IR.AtomType{value: :d}]
+                   }
+                 }
+               ]
+             } = transform(ast, %Context{})
+    end
+
+    test "else clause with 3 guards" do
+      ast =
+        ast("""
+        try do
+          1
+        else
+          :a when :b when :c when :d -> :e
+        end
+        """)
+
+      assert %IR.Try{
+               else_clauses: [
+                 %IR.Clause{
+                   match: %IR.AtomType{value: :a},
+                   guards: [
+                     %IR.AtomType{value: :b},
+                     %IR.AtomType{value: :c},
+                     %IR.AtomType{value: :d}
+                   ],
+                   body: %IR.Block{
+                     expressions: [%IR.AtomType{value: :e}]
                    }
                  }
                ]
