@@ -427,7 +427,7 @@ defmodule Hologram.Compiler.Transformer do
     Enum.map(1..arity, &{:"holo_arg_#{&1}__", meta, nil})
   end
 
-  defp build_try_catch_clause(kind, value, guard, body, context) do
+  defp build_try_catch_clause(kind, value, guards, body, context) do
     kind_ir =
       if kind do
         transform(kind, context)
@@ -435,17 +435,17 @@ defmodule Hologram.Compiler.Transformer do
         nil
       end
 
-    guard_ir =
-      if guard do
-        transform(guard, context)
+    guards_ir =
+      if guards do
+        transform_guards(guards, context)
       else
-        nil
+        []
       end
 
     %IR.TryCatchClause{
       kind: kind_ir,
       value: transform(value, context),
-      guard: guard_ir,
+      guards: guards_ir,
       body: transform(body, context)
     }
   end
@@ -734,17 +734,17 @@ defmodule Hologram.Compiler.Transformer do
   end
 
   defp transform_try_catch_clause(
-         {:->, _meta_1, [[{:when, _meta_2, [kind, value, guard]}], body]},
+         {:->, _meta_1, [[{:when, _meta_2, [kind, value, guards]}], body]},
          context
        ) do
-    build_try_catch_clause(kind, value, guard, body, context)
+    build_try_catch_clause(kind, value, guards, body, context)
   end
 
   defp transform_try_catch_clause(
-         {:->, _meta_1, [[{:when, _meta_2, [value, guard]}], body]},
+         {:->, _meta_1, [[{:when, _meta_2, [value, guards]}], body]},
          context
        ) do
-    build_try_catch_clause(nil, value, guard, body, context)
+    build_try_catch_clause(nil, value, guards, body, context)
   end
 
   defp transform_try_catch_clause({:->, _meta, [[kind, value], body]}, context) do

@@ -252,12 +252,12 @@ defmodule Hologram.Compiler.IR do
   end
 
   defmodule TryCatchClause do
-    defstruct [:kind, :value, :guard, :body]
+    defstruct [:kind, :value, :guards, :body]
 
     @type t :: %__MODULE__{
             kind: IR.t() | nil,
             value: IR.t(),
-            guard: IR.t() | nil,
+            guards: list(IR.t()),
             body: IR.Block.t()
           }
   end
