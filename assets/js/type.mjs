@@ -162,6 +162,10 @@ export default class Type {
     return Type.isInteger(boxed) || Type.isFloat(boxed);
   }
 
+  static isProperList(boxedValue) {
+    return Type.isList(boxedValue) && boxedValue.isProper === true;
+  }
+
   static isTrue(boxed) {
     return Type.isAtom(boxed) && boxed.value === "true";
   }

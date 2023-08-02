@@ -578,6 +578,29 @@ describe("isNumber()", () => {
   });
 });
 
+describe("isProperList()", () => {
+  it("returns true for proper boxed list", () => {
+    const arg = Type.list([Type.integer(1), Type.integer(2)]);
+    const result = Type.isProperList(arg);
+
+    assert.isTrue(result);
+  });
+
+  it("returns false for improper boxed list", () => {
+    const arg = Type.list([Type.integer(1), Type.integer(2)], false);
+    const result = Type.isProperList(arg);
+
+    assert.isFalse(result);
+  });
+
+  it("returns false for boxed types other than list", () => {
+    const arg = Type.atom("abc");
+    const result = Type.isProperList(arg);
+
+    assert.isFalse(result);
+  });
+});
+
 describe("isTrue()", () => {
   it("returns true for boxed true value", () => {
     const arg = Type.atom("true");
