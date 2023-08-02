@@ -337,6 +337,13 @@ export default class Interpreter {
       Interpreter.raiseMatchError(right);
     }
 
+    if (
+      !Type.isVariablePattern(left.tail) &&
+      Type.isProperList(left.tail) !== Type.isProperList(right)
+    ) {
+      Interpreter.raiseMatchError(right);
+    }
+
     const rightHead = Erlang.hd(right);
     const rightTail = Erlang.tl(right);
 
