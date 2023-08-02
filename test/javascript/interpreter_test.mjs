@@ -1597,19 +1597,92 @@ describe("matchOperator()", () => {
     });
 
     describe("left head is a variable, left tail is a literal", () => {
-      it("[h | 3] = 3", () => {});
+      let left;
 
-      it("[h | 3] = []", () => {});
+      beforeEach(() => {
+        left = Type.consPattern(Type.variablePattern("h"), Type.integer(3));
+      });
 
-      it("[h | 3] = [3]", () => {});
+      it("[h | 3] = 3", () => {
+        const right = Type.integer(3);
 
-      it("[h | 3] = [2, 3]", () => {});
+        assertError(
+          () => Interpreter.matchOperator(right, left, vars),
+          "MatchError",
+          "no match of right hand side value: 3"
+        );
+      });
 
-      it("[h | 3] = [2 | 3]", () => {});
+      it("[h | 3] = []", () => {
+        const right = Type.list([]);
 
-      it("[h | 3] = [1, 2, 3]", () => {});
+        assertError(
+          () => Interpreter.matchOperator(right, left, vars),
+          "MatchError",
+          "no match of right hand side value: []"
+        );
+      });
 
-      it("[h | 3] = [1, 2 | 3]", () => {});
+      it("[h | 3] = [3]", () => {
+        const right = Type.list([Type.integer(3)]);
+
+        assertError(
+          () => Interpreter.matchOperator(right, left, vars),
+          "MatchError",
+          "no match of right hand side value: [3]"
+        );
+      });
+
+      it("[h | 3] = [2, 3]", () => {
+        const right = Type.list([Type.integer(2), Type.integer(3)]);
+
+        assertError(
+          () => Interpreter.matchOperator(right, left, vars),
+          "MatchError",
+          "no match of right hand side value: [2, 3]"
+        );
+      });
+
+      it("[h | 3] = [2 | 3]", () => {
+        const right = Type.improperList([Type.integer(2), Type.integer(3)]);
+
+        const result = Interpreter.matchOperator(right, left, vars);
+
+        assert.deepStrictEqual(result, right);
+
+        assert.deepStrictEqual(vars, {
+          a: Type.integer(9),
+          h: Type.integer(2),
+        });
+      });
+
+      it("[h | 3] = [1, 2, 3]", () => {
+        const right = Type.list([
+          Type.integer(1),
+          Type.integer(2),
+          Type.integer(3),
+        ]);
+
+        assertError(
+          () => Interpreter.matchOperator(right, left, vars),
+          "MatchError",
+          "no match of right hand side value: [1, 2, 3]"
+        );
+      });
+
+      it("[h | 3] = [1, 2 | 3]", () => {
+        const right = Type.improperList([
+          Type.integer(1),
+          Type.integer(2),
+          Type.integer(3),
+        ]);
+
+        assertError(
+          () => Interpreter.matchOperator(right, left, vars),
+          "MatchError",
+          "no match of right hand side value: [1, 2 | 3]"
+        );
+      });
     });
 
     // TODO: overhaul
