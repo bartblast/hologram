@@ -648,12 +648,22 @@ describe("isVariablePattern()", () => {
   });
 });
 
-it("list()", () => {
-  const data = [Type.integer(1), Type.integer(2)];
-  const result = Type.list(data);
-  const expected = {type: "list", data: data};
+describe("list()", () => {
+  it("default isProper param value", () => {
+    const data = [Type.integer(1), Type.integer(2)];
+    const result = Type.list(data);
+    const expected = {type: "list", data: data, isProper: true};
 
-  assert.deepStrictEqual(result, expected);
+    assert.deepStrictEqual(result, expected);
+  });
+
+  it("custom isProper param value", () => {
+    const data = [Type.integer(1), Type.integer(2)];
+    const result = Type.list(data, false);
+    const expected = {type: "list", data: data, isProper: false};
+
+    assert.deepStrictEqual(result, expected);
+  });
 });
 
 describe("map", () => {

@@ -178,8 +178,8 @@ export default class Type {
     return boxed.type === "variable_pattern";
   }
 
-  static list(data) {
-    return {type: "list", data: data};
+  static list(data, isProper = true) {
+    return {type: "list", data: data, isProper: isProper};
   }
 
   static map(data) {
