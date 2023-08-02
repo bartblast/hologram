@@ -99,6 +99,10 @@ export default class Type {
     return {type: "float", value: value};
   }
 
+  static improperList(data) {
+    return {type: "list", data: data, isProper: false};
+  }
+
   static integer(value) {
     if (typeof value !== "bigint") {
       value = BigInt(value);

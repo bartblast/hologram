@@ -331,6 +331,14 @@ it("float()", () => {
   assert.deepStrictEqual(result, expected);
 });
 
+it("improperList()", () => {
+  const data = [Type.integer(1), Type.integer(2)];
+  const result = Type.improperList(data);
+  const expected = {type: "list", data: data, isProper: false};
+
+  assert.deepStrictEqual(result, expected);
+});
+
 describe("integer()", () => {
   it("returns boxed integer value given JavaScript integer", () => {
     const result = Type.integer(1);
