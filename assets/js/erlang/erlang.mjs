@@ -184,6 +184,16 @@ const Erlang = {
       );
     }
 
+    const length = Erlang.length(list).value;
+
+    if (length === 1n) {
+      return Type.list([]);
+    }
+
+    if (length === 2n && !Type.isProperList(list)) {
+      return list.data[1];
+    }
+
     return Type.list(list.data.slice(1), Type.isProperList(list));
   },
   // end: tl

@@ -672,38 +672,73 @@ describe("length/1", () => {
 });
 
 describe("tl/1()", () => {
-  it("returns the tail of a boxed proper list", () => {
-    const list = Type.list([Type.integer(1), Type.integer(2), Type.integer(3)]);
-    const result = Erlang.tl(list);
-    const expected = Type.list([Type.integer(2), Type.integer(3)]);
+  describe("proper list", () => {
+    it("1 item", () => {
+      const list = Type.list([Type.integer(1)]);
+      const result = Erlang.tl(list);
+      const expected = Type.list([]);
 
-    assert.deepStrictEqual(result, expected);
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("2 items", () => {
+      const list = Type.list([Type.integer(1), Type.integer(2)]);
+      const result = Erlang.tl(list);
+      const expected = Type.list([Type.integer(2)]);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("3 items", () => {
+      const list = Type.list([
+        Type.integer(1),
+        Type.integer(2),
+        Type.integer(3),
+      ]);
+      const result = Erlang.tl(list);
+      const expected = Type.list([Type.integer(2), Type.integer(3)]);
+
+      assert.deepStrictEqual(result, expected);
+    });
   });
 
-  it("returns the tail of a boxed improper list", () => {
-    const list = Type.list(
-      [Type.integer(1), Type.integer(2), Type.integer(3)],
-      false
-    );
-    const result = Erlang.tl(list);
-    const expected = Type.list([Type.integer(2), Type.integer(3)], false);
+  describe("improper list", () => {
+    it("2 items", () => {
+      const list = Type.improperList([Type.integer(1), Type.integer(2)]);
+      const result = Erlang.tl(list);
+      const expected = Type.integer(2);
 
-    assert.deepStrictEqual(result, expected);
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("3 items", () => {
+      const list = Type.improperList([
+        Type.integer(1),
+        Type.integer(2),
+        Type.integer(3),
+      ]);
+      const result = Erlang.tl(list);
+      const expected = Type.improperList([Type.integer(2), Type.integer(3)]);
+
+      assert.deepStrictEqual(result, expected);
+    });
   });
 
-  it("raises ArgumentError if the argument is an empty boxed list", () => {
-    assertError(
-      () => Erlang.tl(Type.list([])),
-      "ArgumentError",
-      "errors were found at the given arguments:\n\n* 1st argument: not a nonempty list"
-    );
-  });
+  describe("errors", () => {
+    it("raises ArgumentError if the argument is an empty boxed list", () => {
+      assertError(
+        () => Erlang.tl(Type.list([])),
+        "ArgumentError",
+        "errors were found at the given arguments:\n\n* 1st argument: not a nonempty list"
+      );
+    });
 
-  it("raises ArgumentError if the argument is not a boxed list", () => {
-    assertError(
-      () => Erlang.tl(Type.integer(123)),
-      "ArgumentError",
-      "errors were found at the given arguments:\n\n* 1st argument: not a nonempty list"
-    );
+    it("raises ArgumentError if the argument is not a boxed list", () => {
+      assertError(
+        () => Erlang.tl(Type.integer(123)),
+        "ArgumentError",
+        "errors were found at the given arguments:\n\n* 1st argument: not a nonempty list"
+      );
+    });
   });
 });
