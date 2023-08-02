@@ -32,11 +32,24 @@ const Elixir_Kernel = {
         return term.value.toString();
 
       case "list":
-        return (
-          "[" +
-          term.data.map((item) => Elixir_Kernel.inspect(item)).join(", ") +
-          "]"
-        );
+        if (term.isProper) {
+          return (
+            "[" +
+            term.data.map((item) => Elixir_Kernel.inspect(item)).join(", ") +
+            "]"
+          );
+        } else {
+          return (
+            "[" +
+            term.data
+              .slice(0, -1)
+              .map((item) => Elixir_Kernel.inspect(item))
+              .join(", ") +
+            " | " +
+            Elixir_Kernel.inspect(term.data.slice(-1)[0]) +
+            "]"
+          );
+        }
 
       case "string":
         return '"' + term.value.toString() + '"';
