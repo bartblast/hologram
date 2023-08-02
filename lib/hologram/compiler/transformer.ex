@@ -226,8 +226,12 @@ defmodule Hologram.Compiler.Transformer do
     %IR.IntegerType{value: value}
   end
 
-  def transform(data, context) when is_list(data) do
-    %IR.ListType{data: transform_list(data, context)}
+  def transform(list, context) when is_list(list) do
+    if has_cons_operator(list) do
+      transform_list_with_cons_operator(list, context)
+    else
+      %IR.ListType{data: transform_list(list, context)}
+    end
   end
 
   def transform({:defmacro, _meta, _args}, _context) do
@@ -498,6 +502,12 @@ defmodule Hologram.Compiler.Transformer do
     |> Enum.reverse()
   end
 
+  defp has_cons_operator([]), do: false
+
+  defp has_cons_operator(list) do
+    match?({:|, _meta, _args}, List.last(list))
+  end
+
   defp maybe_add_default_bitstring_type_modifier(modifiers, value) do
     if Keyword.has_key?(modifiers, :type) do
       modifiers
@@ -723,6 +733,24 @@ defmodule Hologram.Compiler.Transformer do
     list
     |> List.wrap()
     |> Enum.map(&transform(&1, context))
+  end
+
+  defp transform_list_with_cons_operator(list, context) do
+    list
+    |> Enum.reverse()
+    |> Enum.reduce(nil, fn
+      {:|, _meta, [head, tail]}, nil ->
+        %IR.ConsOperator{
+          head: transform(head, context),
+          tail: transform(tail, context)
+        }
+
+      item, acc ->
+        %IR.ConsOperator{
+          head: transform(item, context),
+          tail: acc
+        }
+    end)
   end
 
   defp transform_remote_function_call(module, function, args, context) do

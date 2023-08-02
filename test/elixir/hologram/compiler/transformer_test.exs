@@ -1362,13 +1362,72 @@ defmodule Hologram.Compiler.TransformerTest do
     end
   end
 
-  test "cons operator" do
-    ast = ast("[h | t]")
+  describe "cons operator" do
+    test "1 leading item, proper list" do
+      ast = ast("[1 | []]")
 
-    assert transform(ast, %Context{}) == %IR.ConsOperator{
-             head: %IR.Variable{name: :h},
-             tail: %IR.Variable{name: :t}
-           }
+      assert transform(ast, %Context{}) == %IR.ConsOperator{
+               head: %IR.IntegerType{value: 1},
+               tail: %IR.ListType{data: []}
+             }
+    end
+
+    test "2 leading items, proper list" do
+      ast = ast("[1, 2 | []]")
+
+      assert transform(ast, %Context{}) == %IR.ConsOperator{
+               head: %IR.IntegerType{value: 1},
+               tail: %IR.ConsOperator{
+                 head: %IR.IntegerType{value: 2},
+                 tail: %IR.ListType{data: []}
+               }
+             }
+    end
+
+    test "nested, proper" do
+      ast = ast("[1 | [2 | []]]")
+
+      assert transform(ast, %Context{}) == %IR.ConsOperator{
+               head: %IR.IntegerType{value: 1},
+               tail: %IR.ConsOperator{
+                 head: %IR.IntegerType{value: 2},
+                 tail: %IR.ListType{data: []}
+               }
+             }
+    end
+
+    test "1 leading item, improper list" do
+      ast = ast("[1 | 2]")
+
+      assert transform(ast, %Context{}) == %IR.ConsOperator{
+               head: %IR.IntegerType{value: 1},
+               tail: %IR.IntegerType{value: 2}
+             }
+    end
+
+    test "2 leading items, improper list" do
+      ast = ast("[1, 2 | 3]")
+
+      assert transform(ast, %Context{}) == %IR.ConsOperator{
+               head: %IR.IntegerType{value: 1},
+               tail: %IR.ConsOperator{
+                 head: %IR.IntegerType{value: 2},
+                 tail: %IR.IntegerType{value: 3}
+               }
+             }
+    end
+
+    test "nested, impproper" do
+      ast = ast("[1 | [2 | 3]]")
+
+      assert transform(ast, %Context{}) == %IR.ConsOperator{
+               head: %IR.IntegerType{value: 1},
+               tail: %IR.ConsOperator{
+                 head: %IR.IntegerType{value: 2},
+                 tail: %IR.IntegerType{value: 3}
+               }
+             }
+    end
   end
 
   describe "dot operator" do
