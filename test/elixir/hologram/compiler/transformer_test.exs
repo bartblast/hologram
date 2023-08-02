@@ -1639,15 +1639,33 @@ defmodule Hologram.Compiler.TransformerTest do
     assert transform(ast, %Context{}) == %IR.IntegerType{value: 1}
   end
 
-  test "list type" do
-    ast = ast("[1, 2]")
+  describe "list type" do
+    test "empty" do
+      ast = ast("[]")
 
-    assert transform(ast, %Context{}) == %IR.ListType{
-             data: [
-               %IR.IntegerType{value: 1},
-               %IR.IntegerType{value: 2}
-             ]
-           }
+      assert transform(ast, %Context{}) == %IR.ListType{data: []}
+    end
+
+    test "1 item" do
+      ast = ast("[1]")
+
+      assert transform(ast, %Context{}) == %IR.ListType{
+               data: [
+                 %IR.IntegerType{value: 1}
+               ]
+             }
+    end
+
+    test "2 items" do
+      ast = ast("[1, 2]")
+
+      assert transform(ast, %Context{}) == %IR.ListType{
+               data: [
+                 %IR.IntegerType{value: 1},
+                 %IR.IntegerType{value: 2}
+               ]
+             }
+    end
   end
 
   describe "local function call" do
@@ -2673,7 +2691,23 @@ defmodule Hologram.Compiler.TransformerTest do
   end
 
   describe "tuple type" do
-    test "2-element tuple" do
+    test "empty" do
+      ast = ast("{}")
+
+      assert transform(ast, %Context{}) == %IR.TupleType{data: []}
+    end
+
+    test "1 item" do
+      ast = ast("{1}")
+
+      assert transform(ast, %Context{}) == %IR.TupleType{
+               data: [
+                 %IR.IntegerType{value: 1}
+               ]
+             }
+    end
+
+    test "2 items" do
       ast = ast("{1, 2}")
 
       assert transform(ast, %Context{}) == %IR.TupleType{
@@ -2684,7 +2718,7 @@ defmodule Hologram.Compiler.TransformerTest do
              }
     end
 
-    test "non-2-element tuple" do
+    test "3 items" do
       ast = ast("{1, 2, 3}")
 
       assert transform(ast, %Context{}) == %IR.TupleType{
