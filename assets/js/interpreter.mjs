@@ -350,6 +350,10 @@ export default class Interpreter {
     const count = Elixir_Enum.count(left).value;
 
     try {
+      if (Type.isList(left) && left.isProper !== right.isProper) {
+        Interpreter.raiseMatchError(right);
+      }
+
       for (let i = 0; i < count; ++i) {
         Interpreter.matchOperator(right.data[i], left.data[i], vars, false);
       }

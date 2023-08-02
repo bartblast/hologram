@@ -1535,7 +1535,7 @@ describe("matchOperator()", () => {
       assert.deepStrictEqual(vars, {a: Type.integer(9)});
     });
 
-    it("left list != right list", () => {
+    it("left list != right list (items are different)", () => {
       const list2 = Type.list([Type.integer(1), Type.integer(3)]);
 
       // [1, 2] = [1, 3]
@@ -1543,6 +1543,17 @@ describe("matchOperator()", () => {
         () => Interpreter.matchOperator(list2, list1, vars),
         "MatchError",
         "no match of right hand side value: [1, 3]"
+      );
+    });
+
+    it("left list != right list (items are the same but one list is proper and the other one is improper)", () => {
+      const list2 = Type.list([Type.integer(1), Type.integer(2)], false);
+
+      // [1, 2] = [1 | 2]
+      assertError(
+        () => Interpreter.matchOperator(list2, list1, vars),
+        "MatchError",
+        "no match of right hand side value: [1 | 2]"
       );
     });
 
