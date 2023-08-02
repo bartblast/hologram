@@ -227,7 +227,7 @@ defmodule Hologram.Compiler.Transformer do
   end
 
   def transform(list, context) when is_list(list) do
-    if has_cons_operator(list) do
+    if has_cons_operator?(list) do
       transform_list_with_cons_operator(list, context)
     else
       %IR.ListType{data: transform_list(list, context)}
@@ -502,9 +502,9 @@ defmodule Hologram.Compiler.Transformer do
     |> Enum.reverse()
   end
 
-  defp has_cons_operator([]), do: false
+  defp has_cons_operator?([]), do: false
 
-  defp has_cons_operator(list) do
+  defp has_cons_operator?(list) do
     match?({:|, _meta, _args}, List.last(list))
   end
 
