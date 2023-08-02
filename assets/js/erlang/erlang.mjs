@@ -184,7 +184,7 @@ const Erlang = {
       );
     }
 
-    return Type.list(list.data.slice(1));
+    return Type.list(list.data.slice(1), Type.isProperList(list));
   },
   // end: tl
 

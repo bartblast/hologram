@@ -672,10 +672,21 @@ describe("length/1", () => {
 });
 
 describe("tl/1()", () => {
-  it("returns the tail of a boxed list", () => {
+  it("returns the tail of a boxed proper list", () => {
     const list = Type.list([Type.integer(1), Type.integer(2), Type.integer(3)]);
     const result = Erlang.tl(list);
     const expected = Type.list([Type.integer(2), Type.integer(3)]);
+
+    assert.deepStrictEqual(result, expected);
+  });
+
+  it("returns the tail of a boxed improper list", () => {
+    const list = Type.list(
+      [Type.integer(1), Type.integer(2), Type.integer(3)],
+      false
+    );
+    const result = Erlang.tl(list);
+    const expected = Type.list([Type.integer(2), Type.integer(3)], false);
 
     assert.deepStrictEqual(result, expected);
   });
