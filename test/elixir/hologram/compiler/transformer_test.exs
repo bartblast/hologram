@@ -188,6 +188,7 @@ defmodule Hologram.Compiler.TransformerTest do
       assert transform(ast, %Context{}) == %IR.AnonymousFunctionType{
                arity: 1,
                clauses: [
+                 # credo:disable-for-next-line Credo.Check.Design.DuplicatedCode
                  %IR.FunctionClause{
                    params: [
                      %IR.Variable{name: :x}
@@ -1664,6 +1665,7 @@ defmodule Hologram.Compiler.TransformerTest do
                name: :my_fun,
                arity: 1,
                visibility: :public,
+               # credo:disable-for-next-line Credo.Check.Design.DuplicatedCode
                clause: %IR.FunctionClause{
                  params: [
                    %IR.Variable{name: :x}
