@@ -1329,19 +1329,112 @@ describe("matchOperator()", () => {
 
   describe.only("cons pattern", () => {
     describe("both left head and left tail are variables", () => {
-      it("[h | t] = 1", () => {});
+      let left;
 
-      it("[h | t] = []", () => {});
+      beforeEach(() => {
+        left = Type.consPattern(
+          Type.variablePattern("h"),
+          Type.variablePattern("t")
+        );
+      });
 
-      it("[h | t] = [1]", () => {});
+      it("[h | t] = 1", () => {
+        const right = Type.integer(1);
 
-      it("[h | t] = [1, 2]", () => {});
+        assertError(
+          () => Interpreter.matchOperator(right, left, vars),
+          "MatchError",
+          "no match of right hand side value: 1"
+        );
+      });
 
-      it("[h | t] = [1 | 2]", () => {});
+      it("[h | t] = []", () => {
+        const right = Type.list([]);
 
-      it("[h | t] = [1, 2, 3]", () => {});
+        assertError(
+          () => Interpreter.matchOperator(right, left, vars),
+          "MatchError",
+          "no match of right hand side value: []"
+        );
+      });
 
-      it("[h | t] = [1, 2 | 3]", () => {});
+      it("[h | t] = [1]", () => {
+        const right = Type.list([Type.integer(1)]);
+
+        const result = Interpreter.matchOperator(right, left, vars);
+
+        assert.deepStrictEqual(result, right);
+
+        assert.deepStrictEqual(vars, {
+          a: Type.integer(9),
+          h: Type.integer(1),
+          t: Type.list([]),
+        });
+      });
+
+      it("[h | t] = [1, 2]", () => {
+        const right = Type.list([Type.integer(1), Type.integer(2)]);
+
+        const result = Interpreter.matchOperator(right, left, vars);
+
+        assert.deepStrictEqual(result, right);
+
+        assert.deepStrictEqual(vars, {
+          a: Type.integer(9),
+          h: Type.integer(1),
+          t: Type.list([Type.integer(2)]),
+        });
+      });
+
+      it("[h | t] = [1 | 2]", () => {
+        const right = Type.improperList([Type.integer(1), Type.integer(2)]);
+
+        const result = Interpreter.matchOperator(right, left, vars);
+
+        assert.deepStrictEqual(result, right);
+
+        assert.deepStrictEqual(vars, {
+          a: Type.integer(9),
+          h: Type.integer(1),
+          t: Type.integer(2),
+        });
+      });
+
+      it("[h | t] = [1, 2, 3]", () => {
+        const right = Type.list([
+          Type.integer(1),
+          Type.integer(2),
+          Type.integer(3),
+        ]);
+
+        const result = Interpreter.matchOperator(right, left, vars);
+
+        assert.deepStrictEqual(result, right);
+
+        assert.deepStrictEqual(vars, {
+          a: Type.integer(9),
+          h: Type.integer(1),
+          t: Type.list([Type.integer(2), Type.integer(3)]),
+        });
+      });
+
+      it("[h | t] = [1, 2 | 3]", () => {
+        const right = Type.improperList([
+          Type.integer(1),
+          Type.integer(2),
+          Type.integer(3),
+        ]);
+
+        const result = Interpreter.matchOperator(right, left, vars);
+
+        assert.deepStrictEqual(result, right);
+
+        assert.deepStrictEqual(vars, {
+          a: Type.integer(9),
+          h: Type.integer(1),
+          t: Type.improperList([Type.integer(2), Type.integer(3)]),
+        });
+      });
     });
 
     describe("left head is a literal, left tail is a variable", () => {
