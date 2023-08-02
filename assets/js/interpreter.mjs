@@ -111,8 +111,12 @@ export default class Interpreter {
     return Interpreter.#raiseCondClauseError();
   }
 
-  static consOperator(left, right) {
-    return Type.list([left].concat(right.data));
+  static consOperator(head, tail) {
+    if (Type.isProperList(tail)) {
+      return Type.list([head].concat(tail.data));
+    } else {
+      return Type.list([head, tail], false);
+    }
   }
 
   static defineFunction(moduleName, functionName, clauses) {

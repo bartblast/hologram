@@ -868,10 +868,10 @@ describe("cond()", () => {
 });
 
 describe("consOperator()", () => {
-  it("prepends left boxed item to the right boxed list", () => {
-    const left = Type.integer(1);
-    const right = Type.list([Type.integer(2), Type.integer(3)]);
-    const result = Interpreter.consOperator(left, right);
+  it("constructs a proper list when the tail param is a proper non-empty list", () => {
+    const head = Type.integer(1);
+    const tail = Type.list([Type.integer(2), Type.integer(3)]);
+    const result = Interpreter.consOperator(head, tail);
 
     const expected = Type.list([
       Type.integer(1),
@@ -880,6 +880,29 @@ describe("consOperator()", () => {
     ]);
 
     assert.deepStrictEqual(result, expected);
+    assert.isTrue(Type.isProperList(result));
+  });
+
+  it("constructs a proper list when the tail param is an empty list", () => {
+    const head = Type.integer(1);
+    const tail = Type.list([]);
+    const result = Interpreter.consOperator(head, tail);
+
+    const expected = Type.list([Type.integer(1)]);
+
+    assert.deepStrictEqual(result, expected);
+    assert.isTrue(Type.isProperList(result));
+  });
+
+  it("constructs improper list when the tail is not a list", () => {
+    const head = Type.integer(1);
+    const tail = Type.atom("abc");
+    const result = Interpreter.consOperator(head, tail);
+
+    const expected = Type.list([Type.integer(1), Type.atom("abc")], false);
+
+    assert.deepStrictEqual(result, expected);
+    assert.isFalse(Type.isProperList(result));
   });
 });
 
