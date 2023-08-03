@@ -3168,6 +3168,30 @@ describe("matchOperator()", () => {
       );
     });
 
+    it("{} = {1, 2}", () => {
+      assertError(
+        () => Interpreter.matchOperator(tuple1, Type.tuple([]), vars),
+        "MatchError",
+        "no match of right hand side value: {1, 2}"
+      );
+    });
+
+    it("{1, 2} = {}", () => {
+      assertError(
+        () => Interpreter.matchOperator(Type.tuple([]), tuple1, vars),
+        "MatchError",
+        "no match of right hand side value: {}"
+      );
+    });
+
+    it("{} = {}", () => {
+      const emptyTuple = Type.tuple([]);
+      const result = Interpreter.matchOperator(emptyTuple, emptyTuple, vars);
+
+      assert.deepStrictEqual(result, emptyTuple);
+      assert.deepStrictEqual(vars, {a: Type.integer(9)});
+    });
+
     it("left tuple has variables", () => {
       const left = Type.tuple([
         Type.variablePattern("x"),
