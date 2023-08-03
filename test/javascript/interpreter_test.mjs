@@ -2145,7 +2145,7 @@ describe("matchOperator()", () => {
     });
   });
 
-  describe("list type", () => {
+  describe.only("list type", () => {
     let list1;
 
     beforeEach(() => {
@@ -2160,7 +2160,7 @@ describe("matchOperator()", () => {
       assert.deepStrictEqual(vars, {a: Type.integer(9)});
     });
 
-    it("left list != right list (items are different)", () => {
+    it("left list != right list (items have different values)", () => {
       const list2 = Type.list([Type.integer(1), Type.integer(3)]);
 
       // [1, 2] = [1, 3]
@@ -2189,6 +2189,30 @@ describe("matchOperator()", () => {
         "MatchError",
         "no match of right hand side value: :abc"
       );
+    });
+
+    it("[] = [1, 2]", () => {
+      assertError(
+        () => Interpreter.matchOperator(list1, Type.list([]), vars),
+        "MatchError",
+        "no match of right hand side value: [1, 2]"
+      );
+    });
+
+    it("[1, 2] = []", () => {
+      assertError(
+        () => Interpreter.matchOperator(Type.list([]), list1, vars),
+        "MatchError",
+        "no match of right hand side value: []"
+      );
+    });
+
+    it("[] = []", () => {
+      const emptyList = Type.list([]);
+      const result = Interpreter.matchOperator(emptyList, emptyList, vars);
+
+      assert.deepStrictEqual(result, emptyList);
+      assert.deepStrictEqual(vars, {a: Type.integer(9)});
     });
 
     it("left list has variables", () => {
