@@ -101,10 +101,6 @@ export default class Type {
 
   static improperList(data) {
     if (data.length < 2) {
-      console.log(
-        "improper list must have at least 2 items, received " +
-          Hologram.serialize(data)
-      );
       Hologram.raiseInterpreterError(
         "improper list must have at least 2 items, received " +
           Hologram.serialize(data)
