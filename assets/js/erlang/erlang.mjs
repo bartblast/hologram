@@ -190,11 +190,15 @@ const Erlang = {
       return Type.list([]);
     }
 
-    if (length === 2n && !Type.isProperList(list)) {
+    const isProper = Type.isProperList(list);
+
+    if (length === 2n && !isProper) {
       return list.data[1];
     }
 
-    return Type.list(list.data.slice(1), Type.isProperList(list));
+    const data = list.data.slice(1);
+
+    return isProper ? Type.list(data) : Type.improperList(data);
   },
   // end: tl
 

@@ -51,10 +51,11 @@ describe("inspect()", () => {
   });
 
   it("inspects boxed impproper list", () => {
-    const term = Type.list(
-      [Type.integer(1), Type.atom("b"), Type.integer(3)],
-      false
-    );
+    const term = Type.improperList([
+      Type.integer(1),
+      Type.atom("b"),
+      Type.integer(3),
+    ]);
     const result = Elixir_Kernel.inspect(term);
 
     assert.equal(result, "[1, :b | 3]");

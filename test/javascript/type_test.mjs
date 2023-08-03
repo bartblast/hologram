@@ -331,12 +331,30 @@ it("float()", () => {
   assert.deepStrictEqual(result, expected);
 });
 
-it("improperList()", () => {
-  const data = [Type.integer(1), Type.integer(2)];
-  const result = Type.improperList(data);
-  const expected = {type: "list", data: data, isProper: false};
+describe("improperList()", () => {
+  it("empty list", () => {
+    assertError(
+      () => Type.improperList([]),
+      "Hologram.InterpreterError",
+      "improper list must have at least 2 items, received []"
+    );
+  });
 
-  assert.deepStrictEqual(result, expected);
+  it("1 item list", () => {
+    assertError(
+      () => Type.improperList([Type.integer(1)]),
+      "Hologram.InterpreterError",
+      'improper list must have at least 2 items, received [{"type":"integer","value":"__bigint__:1"}]'
+    );
+  });
+
+  it("2 items list", () => {
+    const data = [Type.integer(1), Type.integer(2)];
+    const result = Type.improperList(data);
+    const expected = {type: "list", data: data, isProper: false};
+
+    assert.deepStrictEqual(result, expected);
+  });
 });
 
 describe("integer()", () => {
@@ -595,7 +613,7 @@ describe("isProperList()", () => {
   });
 
   it("returns false for improper boxed list", () => {
-    const arg = Type.list([Type.integer(1), Type.integer(2)], false);
+    const arg = Type.improperList([Type.integer(1), Type.integer(2)]);
     const result = Type.isProperList(arg);
 
     assert.isFalse(result);
@@ -679,22 +697,12 @@ describe("isVariablePattern()", () => {
   });
 });
 
-describe("list()", () => {
-  it("default isProper param value", () => {
-    const data = [Type.integer(1), Type.integer(2)];
-    const result = Type.list(data);
-    const expected = {type: "list", data: data, isProper: true};
+it("list()", () => {
+  const data = [Type.integer(1), Type.integer(2)];
+  const result = Type.list(data);
+  const expected = {type: "list", data: data, isProper: true};
 
-    assert.deepStrictEqual(result, expected);
-  });
-
-  it("custom isProper param value", () => {
-    const data = [Type.integer(1), Type.integer(2)];
-    const result = Type.list(data, false);
-    const expected = {type: "list", data: data, isProper: false};
-
-    assert.deepStrictEqual(result, expected);
-  });
+  assert.deepStrictEqual(result, expected);
 });
 
 describe("map", () => {

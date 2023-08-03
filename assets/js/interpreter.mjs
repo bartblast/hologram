@@ -115,7 +115,7 @@ export default class Interpreter {
     if (Type.isProperList(tail)) {
       return Type.list([head].concat(tail.data));
     } else {
-      return Type.list([head, tail], false);
+      return Type.improperList([head, tail]);
     }
   }
 

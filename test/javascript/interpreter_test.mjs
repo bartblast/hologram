@@ -887,22 +887,18 @@ describe("consOperator()", () => {
     const head = Type.integer(1);
     const tail = Type.list([]);
     const result = Interpreter.consOperator(head, tail);
-
     const expected = Type.list([Type.integer(1)]);
 
     assert.deepStrictEqual(result, expected);
-    assert.isTrue(Type.isProperList(result));
   });
 
   it("constructs improper list when the tail is not a list", () => {
     const head = Type.integer(1);
     const tail = Type.atom("abc");
     const result = Interpreter.consOperator(head, tail);
-
-    const expected = Type.list([Type.integer(1), Type.atom("abc")], false);
+    const expected = Type.improperList([Type.integer(1), Type.atom("abc")]);
 
     assert.deepStrictEqual(result, expected);
-    assert.isFalse(Type.isProperList(result));
   });
 });
 
@@ -2494,7 +2490,7 @@ describe("matchOperator()", () => {
     });
 
     it("[1, 2] = [1 | 2]", () => {
-      const list2 = Type.list([Type.integer(1), Type.integer(2)], false);
+      const list2 = Type.improperList([Type.integer(1), Type.integer(2)]);
 
       assertError(
         () => Interpreter.matchOperator(list2, list1, vars),

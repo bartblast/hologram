@@ -100,6 +100,17 @@ export default class Type {
   }
 
   static improperList(data) {
+    if (data.length < 2) {
+      console.log(
+        "improper list must have at least 2 items, received " +
+          Hologram.serialize(data)
+      );
+      Hologram.raiseInterpreterError(
+        "improper list must have at least 2 items, received " +
+          Hologram.serialize(data)
+      );
+    }
+
     return {type: "list", data: data, isProper: false};
   }
 
@@ -186,8 +197,8 @@ export default class Type {
     return boxed.type === "variable_pattern";
   }
 
-  static list(data, isProper = true) {
-    return {type: "list", data: data, isProper: isProper};
+  static list(data, isProper) {
+    return {type: "list", data: data, isProper: true};
   }
 
   static map(data) {
