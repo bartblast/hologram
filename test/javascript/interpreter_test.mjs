@@ -1328,7 +1328,7 @@ describe("matchOperator()", () => {
   });
 
   describe("cons pattern", () => {
-    describe("both left head and left tail are variables", () => {
+    describe("[h | t]", () => {
       let left;
 
       beforeEach(() => {
@@ -1437,7 +1437,7 @@ describe("matchOperator()", () => {
       });
     });
 
-    describe("left head is a literal, left tail is a variable", () => {
+    describe("[1 | t]", () => {
       let left;
 
       beforeEach(() => {
@@ -1596,7 +1596,7 @@ describe("matchOperator()", () => {
       });
     });
 
-    describe("left head is a variable, left tail is an integer literal", () => {
+    describe("[h | 3]", () => {
       let left;
 
       beforeEach(() => {
@@ -1685,7 +1685,7 @@ describe("matchOperator()", () => {
       });
     });
 
-    describe("left head is a variable, left tail is a literal empty list", () => {
+    describe("[h | []]", () => {
       let left;
 
       beforeEach(() => {
@@ -1774,7 +1774,7 @@ describe("matchOperator()", () => {
       });
     });
 
-    describe("left head is a variable, left tail is a single item list literal", () => {
+    describe("[h | [3]]", () => {
       let left;
 
       beforeEach(() => {
