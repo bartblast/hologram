@@ -3140,18 +3140,16 @@ describe("matchOperator()", () => {
       tuple1 = Type.tuple([Type.integer(1), Type.integer(2)]);
     });
 
-    it("left tuple == right tuple", () => {
-      // {1, 2} = {1, 2}
+    it("{1, 2} = {1, 2}", () => {
       const result = Interpreter.matchOperator(tuple1, tuple1, vars);
 
       assert.deepStrictEqual(result, tuple1);
       assert.deepStrictEqual(vars, {a: Type.integer(9)});
     });
 
-    it("left tuple != right tuple", () => {
+    it("{1, 2} = {1, 3}", () => {
       const tuple2 = Type.tuple([Type.integer(1), Type.integer(3)]);
 
-      // {1, 2} = {1, 3}
       assertError(
         () => Interpreter.matchOperator(tuple2, tuple1, vars),
         "MatchError",
@@ -3159,8 +3157,7 @@ describe("matchOperator()", () => {
       );
     });
 
-    it("left tuple != right non-tuple", () => {
-      // {1, 2} = :abc
+    it("{1, 2} = :abc", () => {
       assertError(
         () => Interpreter.matchOperator(Type.atom("abc"), tuple1, vars),
         "MatchError",
@@ -3192,7 +3189,7 @@ describe("matchOperator()", () => {
       assert.deepStrictEqual(vars, {a: Type.integer(9)});
     });
 
-    it("left tuple has variables", () => {
+    it("{x, 2, y} = {1, 2, 3}", () => {
       const left = Type.tuple([
         Type.variablePattern("x"),
         Type.integer(2),
@@ -3205,7 +3202,6 @@ describe("matchOperator()", () => {
         Type.integer(3),
       ]);
 
-      // {x, 2, y} = {1, 2, 3}
       const result = Interpreter.matchOperator(right, left, vars);
       assert.deepStrictEqual(result, right);
 
