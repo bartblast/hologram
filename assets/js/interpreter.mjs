@@ -358,7 +358,7 @@ export default class Interpreter {
   }
 
   static #matchListOrTuple(right, left, vars, rootMatch) {
-    const count = Elixir_Enum.count(left).value;
+    const count = left.data.length;
 
     try {
       if (left.data.length !== right.data.length) {
