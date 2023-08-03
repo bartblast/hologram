@@ -2228,26 +2228,174 @@ describe("matchOperator()", () => {
       });
     });
 
-    describe("nested", () => {
-      it("[1 | [2 | [3 | [4]]]] = [1, 2, 3, 4]", () => {
-        const left = Type.consPattern(
+    describe("[1 | [2 | [3 | []]]]", () => {
+      let left;
+
+      beforeEach(() => {
+        left = Type.consPattern(
           Type.integer(1),
           Type.consPattern(
             Type.integer(2),
-            Type.consPattern(Type.integer(3), Type.list([Type.integer(4)]))
+            Type.consPattern(Type.integer(3), Type.list([]))
           )
         );
+      });
 
+      it("[1 | [2 | [3 | []]]] = [1, 2, 3, 4]", () => {
         const right = Type.list([
           Type.integer(1),
           Type.integer(2),
           Type.integer(3),
           Type.integer(4),
         ]);
+
+        assertError(
+          () => Interpreter.matchOperator(right, left, vars),
+          "MatchError",
+          "no match of right hand side value: [1, 2, 3, 4]"
+        );
+      });
+
+      it("[1 | [2 | [3 | []]]] = [1, 2, 3 | 4]", () => {
+        const right = Type.improperList([
+          Type.integer(1),
+          Type.integer(2),
+          Type.integer(3),
+          Type.integer(4),
+        ]);
+
+        assertError(
+          () => Interpreter.matchOperator(right, left, vars),
+          "MatchError",
+          "no match of right hand side value: [1, 2, 3 | 4]"
+        );
+      });
+
+      it("[1 | [2 | [3 | []]]] = [1, 2, 3]", () => {
+        const right = Type.list([
+          Type.integer(1),
+          Type.integer(2),
+          Type.integer(3),
+        ]);
+
         const result = Interpreter.matchOperator(right, left, vars);
 
         assert.deepStrictEqual(result, right);
         assert.deepStrictEqual(vars, {a: Type.integer(9)});
+      });
+    });
+
+    describe("[1 | [2 | [3 | 4]]]", () => {
+      let left;
+
+      beforeEach(() => {
+        left = Type.consPattern(
+          Type.integer(1),
+          Type.consPattern(
+            Type.integer(2),
+            Type.consPattern(Type.integer(3), Type.integer(4))
+          )
+        );
+      });
+
+      it("[1 | [2 | [3 | 4]]] = [1, 2, 3, 4]", () => {
+        const right = Type.list([
+          Type.integer(1),
+          Type.integer(2),
+          Type.integer(3),
+          Type.integer(4),
+        ]);
+
+        assertError(
+          () => Interpreter.matchOperator(right, left, vars),
+          "MatchError",
+          "no match of right hand side value: [1, 2, 3, 4]"
+        );
+      });
+
+      it("[1 | [2 | [3 | 4]]] = [1, 2, 3 | 4]", () => {
+        const right = Type.improperList([
+          Type.integer(1),
+          Type.integer(2),
+          Type.integer(3),
+          Type.integer(4),
+        ]);
+
+        const result = Interpreter.matchOperator(right, left, vars);
+
+        assert.deepStrictEqual(result, right);
+        assert.deepStrictEqual(vars, {a: Type.integer(9)});
+      });
+
+      it("[1 | [2 | [3 | 4]]] = [1, 2, 3]", () => {
+        const right = Type.list([
+          Type.integer(1),
+          Type.integer(2),
+          Type.integer(3),
+        ]);
+
+        assertError(
+          () => Interpreter.matchOperator(right, left, vars),
+          "MatchError",
+          "no match of right hand side value: [1, 2, 3]"
+        );
+      });
+    });
+
+    describe("[1 | [2 | [3 | [4]]]]", () => {
+      let left;
+
+      beforeEach(() => {
+        left = Type.consPattern(
+          Type.integer(1),
+          Type.consPattern(
+            Type.integer(2),
+            Type.consPattern(Type.integer(3), Type.list([Type.integer(4)]))
+          )
+        );
+      });
+
+      it("[1 | [2 | [3 | [4]]]] = [1, 2, 3, 4]", () => {
+        const right = Type.list([
+          Type.integer(1),
+          Type.integer(2),
+          Type.integer(3),
+          Type.integer(4),
+        ]);
+
+        const result = Interpreter.matchOperator(right, left, vars);
+
+        assert.deepStrictEqual(result, right);
+        assert.deepStrictEqual(vars, {a: Type.integer(9)});
+      });
+
+      it("[1 | [2 | [3 | [4]]]] = [1, 2, 3 | 4]", () => {
+        const right = Type.improperList([
+          Type.integer(1),
+          Type.integer(2),
+          Type.integer(3),
+          Type.integer(4),
+        ]);
+
+        assertError(
+          () => Interpreter.matchOperator(right, left, vars),
+          "MatchError",
+          "no match of right hand side value: [1, 2, 3 | 4]"
+        );
+      });
+
+      it("[1 | [2 | [3 | [4]]]] = [1, 2, 3]", () => {
+        const right = Type.list([
+          Type.integer(1),
+          Type.integer(2),
+          Type.integer(3),
+        ]);
+
+        assertError(
+          () => Interpreter.matchOperator(right, left, vars),
+          "MatchError",
+          "no match of right hand side value: [1, 2, 3]"
+        );
       });
     });
   });
