@@ -2319,6 +2319,34 @@ describe("matchOperator()", () => {
       );
     });
 
+    it("%{x: 1, y: 2} = %{}", () => {
+      const left = Type.map(data);
+      const emptyMap = Type.map([]);
+
+      assertError(
+        () => Interpreter.matchOperator(emptyMap, left, vars),
+        "MatchError",
+        'no match of right hand side value: {"type":"map","data":{}}'
+      );
+    });
+
+    it("%{} = %{x: 1, y: 2}", () => {
+      const emptyMap = Type.map([]);
+      const right = Type.map(data);
+      const result = Interpreter.matchOperator(right, emptyMap, vars);
+
+      assert.deepStrictEqual(result, right);
+      assert.deepStrictEqual(vars, {a: Type.integer(9)});
+    });
+
+    it("%{} = %{}", () => {
+      const emptyMap = Type.map([]);
+      const result = Interpreter.matchOperator(emptyMap, emptyMap, vars);
+
+      assert.deepStrictEqual(result, emptyMap);
+      assert.deepStrictEqual(vars, {a: Type.integer(9)});
+    });
+
     it("%{k: x, m: 2, n: z} = %{k: 1, m: 2, n: 3}", () => {
       const left = Type.map([
         [Type.atom("k"), Type.variablePattern("x")],
