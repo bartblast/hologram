@@ -2227,6 +2227,29 @@ describe("matchOperator()", () => {
         );
       });
     });
+
+    describe("nested", () => {
+      it("[1 | [2 | [3 | [4]]]] = [1, 2, 3, 4]", () => {
+        const left = Type.consPattern(
+          Type.integer(1),
+          Type.consPattern(
+            Type.integer(2),
+            Type.consPattern(Type.integer(3), Type.list([Type.integer(4)]))
+          )
+        );
+
+        const right = Type.list([
+          Type.integer(1),
+          Type.integer(2),
+          Type.integer(3),
+          Type.integer(4),
+        ]);
+        const result = Interpreter.matchOperator(right, left, vars);
+
+        assert.deepStrictEqual(result, right);
+        assert.deepStrictEqual(vars, {a: Type.integer(9)});
+      });
+    });
   });
 
   describe("float type", () => {

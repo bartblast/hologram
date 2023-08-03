@@ -338,7 +338,7 @@ export default class Interpreter {
     }
 
     if (
-      !Type.isVariablePattern(left.tail) &&
+      Type.isList(left.tail) &&
       Type.isProperList(left.tail) !== Type.isProperList(right)
     ) {
       Interpreter.raiseMatchError(right);
