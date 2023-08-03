@@ -2145,25 +2145,23 @@ describe("matchOperator()", () => {
     });
   });
 
-  describe.only("list type", () => {
+  describe("list type", () => {
     let list1;
 
     beforeEach(() => {
       list1 = Type.list([Type.integer(1), Type.integer(2)]);
     });
 
-    it("left list == right list", () => {
-      // [1, 2] = [1, 2]
+    it("[1, 2] = [1, 2]", () => {
       const result = Interpreter.matchOperator(list1, list1, vars);
 
       assert.deepStrictEqual(result, list1);
       assert.deepStrictEqual(vars, {a: Type.integer(9)});
     });
 
-    it("left list != right list (items have different values)", () => {
+    it("[1, 2] = [1, 3]", () => {
       const list2 = Type.list([Type.integer(1), Type.integer(3)]);
 
-      // [1, 2] = [1, 3]
       assertError(
         () => Interpreter.matchOperator(list2, list1, vars),
         "MatchError",
@@ -2171,10 +2169,9 @@ describe("matchOperator()", () => {
       );
     });
 
-    it("left list != right list (items are the same but one list is proper and the other one is improper)", () => {
+    it("[1, 2] = [1 | 2]", () => {
       const list2 = Type.list([Type.integer(1), Type.integer(2)], false);
 
-      // [1, 2] = [1 | 2]
       assertError(
         () => Interpreter.matchOperator(list2, list1, vars),
         "MatchError",
@@ -2182,8 +2179,7 @@ describe("matchOperator()", () => {
       );
     });
 
-    it("left list != right non-list", () => {
-      // [1, 2] = :abc
+    it("[1, 2] = :abc", () => {
       assertError(
         () => Interpreter.matchOperator(Type.atom("abc"), list1, vars),
         "MatchError",
@@ -2215,7 +2211,7 @@ describe("matchOperator()", () => {
       assert.deepStrictEqual(vars, {a: Type.integer(9)});
     });
 
-    it("left list has variables", () => {
+    it("[x, 2, y] = [1, 2, 3]", () => {
       const left = Type.list([
         Type.variablePattern("x"),
         Type.integer(2),
@@ -2228,7 +2224,6 @@ describe("matchOperator()", () => {
         Type.integer(3),
       ]);
 
-      // [x, 2, y] = [1, 2, 3]
       const result = Interpreter.matchOperator(right, left, vars);
       assert.deepStrictEqual(result, right);
 
