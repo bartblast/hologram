@@ -1964,7 +1964,7 @@ describe("matchOperator()", () => {
       beforeEach(() => {
         left = Type.consPattern(
           Type.variablePattern("h"),
-          Type.improperList([Type.integer(2), Type.integer(3)])
+          Type.consPattern(Type.integer(2), Type.integer(3))
         );
       });
 
@@ -2145,7 +2145,10 @@ describe("matchOperator()", () => {
       beforeEach(() => {
         left = Type.consPattern(
           Type.variablePattern("h"),
-          Type.improperList([Type.integer(1), Type.integer(2), Type.integer(3)])
+          Type.consPattern(
+            Type.integer(1),
+            Type.consPattern(Type.integer(2), Type.integer(3))
+          )
         );
       });
 
