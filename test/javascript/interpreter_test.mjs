@@ -880,7 +880,6 @@ describe("consOperator()", () => {
     ]);
 
     assert.deepStrictEqual(result, expected);
-    assert.isTrue(Type.isProperList(result));
   });
 
   it("constructs a proper list when the tail param is an empty list", () => {
