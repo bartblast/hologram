@@ -2247,18 +2247,17 @@ describe("matchOperator()", () => {
       ];
     });
 
-    it("left and right maps have the same items", () => {
+    it("%{x: 1, y: 2} = %{x: 1, y: 2}", () => {
       const left = Type.map(data);
       const right = Type.map(data);
 
-      // %{x: 1, y: 2} = %{x: 1, y: 2}
       const result = Interpreter.matchOperator(right, left, vars);
 
       assert.deepStrictEqual(result, right);
       assert.deepStrictEqual(vars, {a: Type.integer(9)});
     });
 
-    it("right map have all the same items as the left map plus additional ones", () => {
+    it("%{x: 1, y: 2} = %{x: 1, y: 2, z: 3}", () => {
       const left = Type.map(data);
 
       const data2 = [
@@ -2269,14 +2268,13 @@ describe("matchOperator()", () => {
 
       const right = Type.map(data2);
 
-      // %{x: 1, y: 2} = %{x: 1, y: 2, z: 3}
       const result = Interpreter.matchOperator(right, left, vars);
 
       assert.deepStrictEqual(result, right);
       assert.deepStrictEqual(vars, {a: Type.integer(9)});
     });
 
-    it("right map is missing some some keys from the left map", () => {
+    it("%{x: 1, y: 2, z: 3} = %{x: 1, y: 2}", () => {
       const data1 = [
         [Type.atom("x"), Type.integer(1)],
         [Type.atom("y"), Type.integer(2)],
@@ -2286,7 +2284,6 @@ describe("matchOperator()", () => {
       const left = Type.map(data1);
       const right = Type.map(data);
 
-      // %{x: 1, y: 2, z: 3} = %{x: 1, y: 2}
       assertError(
         () => Interpreter.matchOperator(right, left, vars),
         "MatchError",
@@ -2294,7 +2291,7 @@ describe("matchOperator()", () => {
       );
     });
 
-    it("some left map item values don't match right map item values", () => {
+    it("%{x: 1, y: 2} = %{x: 1, y: 3}", () => {
       const left = Type.map(data);
 
       const data2 = [
@@ -2304,7 +2301,6 @@ describe("matchOperator()", () => {
 
       const right = Type.map(data2);
 
-      // %{x: 1, y: 2} = %{x: 1, y: 3}
       assertError(
         () => Interpreter.matchOperator(right, left, vars),
         "MatchError",
@@ -2312,11 +2308,10 @@ describe("matchOperator()", () => {
       );
     });
 
-    it("left map != right non-map", () => {
+    it("%{x: 1, y: 2} = :abc", () => {
       const left = Type.map(data);
       const right = Type.atom("abc");
 
-      // %{x: 1, y: 2} = :abc
       assertError(
         () => Interpreter.matchOperator(right, left, vars),
         "MatchError",
@@ -2324,7 +2319,7 @@ describe("matchOperator()", () => {
       );
     });
 
-    it("left map has variables", () => {
+    it("%{k: x, m: 2, n: z} = %{k: 1, m: 2, n: 3}", () => {
       const left = Type.map([
         [Type.atom("k"), Type.variablePattern("x")],
         [Type.atom("m"), Type.integer(2)],
@@ -2337,7 +2332,6 @@ describe("matchOperator()", () => {
         [Type.atom("n"), Type.integer(3)],
       ]);
 
-      // %{k: x, m: 2, n: z} = %{k: 1, m: 2, n: 3}
       const result = Interpreter.matchOperator(right, left, vars);
       assert.deepStrictEqual(result, right);
 
