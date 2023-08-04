@@ -80,6 +80,17 @@ defmodule Hologram.Compiler.Reflection do
   end
 
   @doc """
+  Lists standard library Elixir modules, e.g. DateTime, Kernel, Calendar.ISO, etc.
+  Kernel.SpecialForms module is not included in the result.
+  """
+  @spec list_std_lib_elixir_modules() :: list(module)
+  def list_std_lib_elixir_modules do
+    [:elixir]
+    |> list_elixir_modules()
+    |> Kernel.--([Kernel.SpecialForms])
+  end
+
+  @doc """
   Lists loaded OTP applications.
 
   ## Examples

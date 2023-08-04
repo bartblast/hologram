@@ -70,6 +70,22 @@ defmodule Hologram.Compiler.ReflectionTest do
     assert :hologram in result
   end
 
+  test "list_std_lib_elixir_modules/0" do
+    result = list_std_lib_elixir_modules()
+
+    assert Calendar.ISO in result
+    assert DateTime in result
+    assert Kernel in result
+
+    refute :application in result
+    refute :elixir in result
+    refute :kernel in result
+
+    refute Graph in result
+    refute Kernel.SpecialForms in result
+    refute Hologram.Page in result
+  end
+
   describe "module?/1" do
     test "alias of an existing module" do
       assert module?(Kernel)
