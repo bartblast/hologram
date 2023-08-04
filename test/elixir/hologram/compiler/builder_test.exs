@@ -197,7 +197,7 @@ defmodule Hologram.Compiler.BuilderTest do
            ]
   end
 
-  test "group_mfas/1" do
+  test "group_mfas_by_module/1" do
     mfas = [
       {:module_1, :fun_a, 1},
       {:module_2, :fun_b, 2},
@@ -207,7 +207,7 @@ defmodule Hologram.Compiler.BuilderTest do
       {:module_3, :fun_f, 2}
     ]
 
-    assert group_mfas(mfas) == %{
+    assert group_mfas_by_module(mfas) == %{
              module_1: [{:module_1, :fun_a, 1}, {:module_1, :fun_d, 3}],
              module_2: [{:module_2, :fun_b, 2}, {:module_2, :fun_e, 1}],
              module_3: [{:module_3, :fun_c, 3}, {:module_3, :fun_f, 2}]

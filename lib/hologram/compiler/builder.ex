@@ -24,7 +24,7 @@ defmodule Hologram.Compiler.Builder do
 
     call_graph
     |> entry_page_reachable_mfas(entry_page, clone_name)
-    |> group_mfas()
+    |> group_mfas_by_module()
     |> Enum.reduce([initial_output], fn {module, reachable_mfas}, output_parts ->
       module_output =
         ir_plt
@@ -197,8 +197,8 @@ defmodule Hologram.Compiler.Builder do
   @doc """
   Groups the given mfas by module.
   """
-  @spec group_mfas(list(mfa)) :: %{module => mfa}
-  def group_mfas(mfas) do
+  @spec group_mfas_by_module(list(mfa)) :: %{module => mfa}
+  def group_mfas_by_module(mfas) do
     Enum.group_by(mfas, fn {module, _function, _arity} -> module end)
   end
 
