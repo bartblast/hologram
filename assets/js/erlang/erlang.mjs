@@ -6,14 +6,6 @@ const Interpreter = Hologram.Interpreter;
 const Type = Hologram.Type;
 
 const Erlang = {
-  // supported arities: 2
-  // start: /=
-  $247$261: (left, right) => {
-    const isEqual = Erlang.$261$261(left, right);
-    return Type.boolean(Type.isFalse(isEqual));
-  },
-  // end: /=
-
   // TODO: Implement structural comparison, see: https://hexdocs.pm/elixir/main/Kernel.html#module-structural-comparison
   // supported arities: 2
   // start: <

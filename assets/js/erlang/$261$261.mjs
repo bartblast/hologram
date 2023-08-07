@@ -1,4 +1,5 @@
-// :erlang.==/2
+// function: :erlang.==/2
+// deps: []
 
 "use strict";
 

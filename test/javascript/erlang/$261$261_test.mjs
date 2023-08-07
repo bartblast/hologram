@@ -1,4 +1,4 @@
-// :erlang.==/2
+// function: :erlang.==/2
 
 "use strict";
 
