@@ -157,6 +157,14 @@ export default class Interpreter {
     };
   }
 
+  static defineErlangFunction(moduleName, functionName, jsFunction) {
+    if (!globalThis[moduleName]) {
+      globalThis[moduleName] = {};
+    }
+
+    globalThis[moduleName][functionName] = jsFunction;
+  }
+
   static dotOperator(left, right) {
     // if left argument is a boxed atom, treat the operator as a remote function call
     if (Type.isAtom(left)) {

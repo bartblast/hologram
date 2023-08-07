@@ -1035,6 +1035,45 @@ describe("defineElixirFunction()", () => {
   });
 });
 
+describe("defineErlangFunction()", () => {
+  beforeEach(() => {
+    Interpreter.defineErlangFunction("Erlang_Aaa_Bbb", "my_fun_a", () =>
+      Type.atom("expr_a")
+    );
+  });
+
+  afterEach(() => {
+    delete globalThis.Erlang_Aaa_Bbb;
+  });
+
+  it("initiates the module global var if it is not initiated yet", () => {
+    Interpreter.defineErlangFunction("Erlang_Ddd", "my_fun_d", []);
+
+    assert.isDefined(globalThis.Erlang_Ddd);
+    assert.isDefined(globalThis.Erlang_Ddd.my_fun_d);
+
+    // cleanup
+    delete globalThis.Erlang_Ddd;
+  });
+
+  it("appends to the module global var if it is already initiated", () => {
+    globalThis.Erlang_Eee = {dummy: "dummy"};
+    Interpreter.defineErlangFunction("Erlang_Eee", "my_fun_e", []);
+
+    assert.isDefined(globalThis.Erlang_Eee);
+    assert.isDefined(globalThis.Erlang_Eee.my_fun_e);
+    assert.equal(globalThis.Erlang_Eee.dummy, "dummy");
+
+    // cleanup
+    delete globalThis.Erlang_Eee;
+  });
+
+  it("defines function", () => {
+    const result = globalThis.Erlang_Aaa_Bbb.my_fun_a(Type.integer(1));
+    assert.deepStrictEqual(result, Type.atom("expr_a"));
+  });
+});
+
 describe("dotOperator()", () => {
   it("handles remote function call", () => {
     // setup
