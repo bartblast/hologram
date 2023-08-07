@@ -1031,13 +1031,13 @@ defmodule Hologram.Compiler.EncoderTest do
     assert encode(ir, %Context{}) == """
 
 
-           Interpreter.defineFunction("Elixir_Aaa_Bbb", "fun_1", [{params: [Type.variablePattern("a"), Type.variablePattern("b")], guards: [], body: (vars) => {
+           Interpreter.defineElixirFunction("Elixir_Aaa_Bbb", "fun_1", [{params: [Type.variablePattern("a"), Type.variablePattern("b")], guards: [], body: (vars) => {
            return Erlang.$243(vars.a, vars.b);
            }}, {params: [Type.variablePattern("c")], guards: [(vars) => Erlang.is_integer(vars.c)], body: (vars) => {
            return vars.c;
            }}])
 
-           Interpreter.defineFunction("Elixir_Aaa_Bbb", "fun_2", [{params: [Type.variablePattern("x"), Type.variablePattern("y")], guards: [], body: (vars) => {
+           Interpreter.defineElixirFunction("Elixir_Aaa_Bbb", "fun_2", [{params: [Type.variablePattern("x"), Type.variablePattern("y")], guards: [], body: (vars) => {
            return Erlang.$242(vars.x, vars.y);
            }}, {params: [Type.variablePattern("z")], guards: [(vars) => Erlang.is_float(vars.z)], body: (vars) => {
            return vars.z;

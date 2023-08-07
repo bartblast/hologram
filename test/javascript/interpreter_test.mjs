@@ -901,11 +901,11 @@ describe("consOperator()", () => {
   });
 });
 
-describe("defineFunction()", () => {
+describe("defineElixirFunction()", () => {
   beforeEach(() => {
     // def my_fun_a(1), do: :expr_1
     // def my_fun_a(2), do: :expr_2
-    Interpreter.defineFunction("Elixir_Aaa_Bbb", "my_fun_a", [
+    Interpreter.defineElixirFunction("Elixir_Aaa_Bbb", "my_fun_a", [
       {
         params: [Type.integer(1)],
         guard: null,
@@ -928,7 +928,7 @@ describe("defineFunction()", () => {
   });
 
   it("initiates the module global var if it is not initiated yet", () => {
-    Interpreter.defineFunction("Elixir_Ddd", "my_fun_d", []);
+    Interpreter.defineElixirFunction("Elixir_Ddd", "my_fun_d", []);
 
     assert.isDefined(globalThis.Elixir_Ddd);
     assert.isDefined(globalThis.Elixir_Ddd.my_fun_d);
@@ -939,7 +939,7 @@ describe("defineFunction()", () => {
 
   it("appends to the module global var if it is already initiated", () => {
     globalThis.Elixir_Eee = {dummy: "dummy"};
-    Interpreter.defineFunction("Elixir_Eee", "my_fun_e", []);
+    Interpreter.defineElixirFunction("Elixir_Eee", "my_fun_e", []);
 
     assert.isDefined(globalThis.Elixir_Eee);
     assert.isDefined(globalThis.Elixir_Eee.my_fun_e);
@@ -963,7 +963,7 @@ describe("defineFunction()", () => {
     // def my_fun_b(x) when x == 1, do: :expr_1
     // def my_fun_b(y) when y == 2, do: :expr_2
     // def my_fun_b(z) when z == 3, do: :expr_3
-    Interpreter.defineFunction("Elixir_Aaa_Bbb", "my_fun_b", [
+    Interpreter.defineElixirFunction("Elixir_Aaa_Bbb", "my_fun_b", [
       {
         params: [Type.variablePattern("x")],
         guard: (vars) => Erlang.$261$261(vars.x, Type.integer(1)),
@@ -995,7 +995,7 @@ describe("defineFunction()", () => {
   it("defines function which clones vars for each clause", () => {
     // def my_fun_c(x) when x == 1, do: :expr_1
     // def my_fun_c(x) when x == 2, do: :expr_2
-    Interpreter.defineFunction("Elixir_Aaa_Bbb", "my_fun_c", [
+    Interpreter.defineElixirFunction("Elixir_Aaa_Bbb", "my_fun_c", [
       {
         params: [Type.variablePattern("x")],
         guard: (vars) => Erlang.$261$261(vars.x, Type.integer(1)),

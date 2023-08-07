@@ -249,7 +249,7 @@ defmodule Hologram.Compiler.Encoder do
       """
       #{acc}
 
-      Interpreter.defineFunction("#{class_name}", "#{function_name}", #{clauses_js})\
+      Interpreter.defineElixirFunction("#{class_name}", "#{function_name}", #{clauses_js})\
       """
     end)
   end

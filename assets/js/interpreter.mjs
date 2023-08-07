@@ -119,7 +119,7 @@ export default class Interpreter {
     }
   }
 
-  static defineFunction(moduleName, functionName, clauses) {
+  static defineElixirFunction(moduleName, functionName, clauses) {
     if (!globalThis[moduleName]) {
       globalThis[moduleName] = {};
     }
