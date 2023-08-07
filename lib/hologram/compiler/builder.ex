@@ -207,6 +207,7 @@ defmodule Hologram.Compiler.Builder do
   """
   @spec list_mfas_required_by_runtime(CallGraph.t()) :: list(mfa)
   def list_mfas_required_by_runtime(call_graph) do
+    # Those Elixir functions are used directly by runtime JS classes:
     entry_mfas = [
       {Enum, :into, 2},
       {Enum, :to_list, 1},
