@@ -1,7 +1,6 @@
 "use strict";
 
 import {assert} from "chai";
-import Elixir_Enum from "./elixir/enum.mjs";
 import Elixir_Kernel from "./elixir/kernel.mjs";
 import Erlang from "./erlang/erlang.mjs";
 import {$243} from "./erlang/erlang.mjs";
@@ -33,7 +32,7 @@ export function linkModules() {
   globalThis.Hologram = Hologram;
   globalThis.Erlang = Erlang;
   globalThis.Erlang_maps = Erlang_maps;
-  globalThis.Elixir_Enum = Elixir_Enum;
+  globalThis.Elixir_Enum = {};
   globalThis.Elixir_Kernel = Elixir_Kernel;
 
   globalThis.Erlang.$243 = $243;
