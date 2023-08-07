@@ -214,6 +214,27 @@ export default class Type {
     return Type.atom("nil");
   }
 
+  static maybeNormalizeNumberTerms(term1, term2) {
+    const type =
+      Type.isFloat(term1) || Type.isFloat(term2) ? "float" : "integer";
+
+    let value1, value2;
+
+    if (type === "float" && Type.isInteger(term1)) {
+      value1 = Type.float(Number(term1.value));
+    } else {
+      value1 = term1;
+    }
+
+    if (type === "float" && Type.isInteger(term2)) {
+      value2 = Type.float(Number(term2.value));
+    } else {
+      value2 = term2;
+    }
+
+    return [type, value1, value2];
+  }
+
   static string(value) {
     return {type: "string", value: value};
   }

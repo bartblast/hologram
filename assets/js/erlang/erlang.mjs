@@ -8,8 +8,10 @@ const Type = Hologram.Type;
 // supported arities: 2
 // start: +
 export function $243(left, right) {
-  const [type, leftValue, rightValue] =
-    Erlang._ensureBothAreIntegersOrBothAreFloats(left, right);
+  const [type, leftValue, rightValue] = Type.maybeNormalizeNumberTerms(
+    left,
+    right
+  );
 
   const result = leftValue.value + rightValue.value;
 
@@ -21,8 +23,10 @@ const Erlang = {
   // supported arities: 2
   // start: -
   $245: (left, right) => {
-    const [type, leftValue, rightValue] =
-      Erlang._ensureBothAreIntegersOrBothAreFloats(left, right);
+    const [type, leftValue, rightValue] = Type.maybeNormalizeNumberTerms(
+      left,
+      right
+    );
 
     const result = leftValue.value - rightValue.value;
 
@@ -177,27 +181,6 @@ const Erlang = {
     return isProper ? Type.list(data) : Type.improperList(data);
   },
   // end: tl
-
-  _ensureBothAreIntegersOrBothAreFloats: (boxed1, boxed2) => {
-    const type =
-      Type.isFloat(boxed1) || Type.isFloat(boxed2) ? "float" : "integer";
-
-    let value1, value2;
-
-    if (type === "float" && Type.isInteger(boxed1)) {
-      value1 = Type.float(Number(boxed1.value));
-    } else {
-      value1 = boxed1;
-    }
-
-    if (type === "float" && Type.isInteger(boxed2)) {
-      value2 = Type.float(Number(boxed2.value));
-    } else {
-      value2 = boxed2;
-    }
-
-    return [type, value1, value2];
-  },
 };
 
 export default Erlang;
