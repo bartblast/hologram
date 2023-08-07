@@ -15,7 +15,7 @@ import {
 before(() => linkModules());
 after(() => unlinkModules());
 
-describe("$261$261/2 (==)", () => {
+describe("$261$261()", () => {
   // non-number == non-number
   it("returns boxed true for a boxed non-number equal to another boxed non-number", () => {
     const left = Type.boolean(true);

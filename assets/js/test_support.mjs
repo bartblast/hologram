@@ -2,12 +2,12 @@
 
 import {assert} from "chai";
 import Erlang from "./erlang/erlang.mjs";
-import {$243} from "./erlang/erlang.mjs";
 import Erlang_maps from "./erlang/maps.mjs";
 import Hologram from "./hologram.mjs";
 import sinonESM from "../node_modules/sinon/pkg/sinon-esm.js";
 import Type from "./type.mjs";
 
+import $243 from "./erlang/$243.mjs";
 import $261$261 from "./erlang/$261$261.mjs";
 
 function buildElixirKernelInspectFunction() {

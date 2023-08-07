@@ -5,20 +5,6 @@ import Hologram from "../hologram.mjs";
 const Interpreter = Hologram.Interpreter;
 const Type = Hologram.Type;
 
-// supported arities: 2
-// start: +
-export function $243(left, right) {
-  const [type, leftValue, rightValue] = Type.maybeNormalizeNumberTerms(
-    left,
-    right
-  );
-
-  const result = leftValue.value + rightValue.value;
-
-  return type === "float" ? Type.float(result) : Type.integer(result);
-}
-// end: +
-
 const Erlang = {
   // supported arities: 2
   // start: -
