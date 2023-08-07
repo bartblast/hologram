@@ -8,6 +8,8 @@ import Hologram from "./hologram.mjs";
 import sinonESM from "../node_modules/sinon/pkg/sinon-esm.js";
 import Type from "./type.mjs";
 
+import $261$261 from "./erlang/$261$261.mjs";
+
 function buildElixirKernelInspectFunction() {
   return (term) => {
     switch (term.type) {
@@ -103,6 +105,7 @@ export function linkModules() {
   globalThis.Elixir_Kernel = Elixir_Kernel;
 
   globalThis.Erlang.$243 = $243;
+  globalThis.Erlang.$261$261 = $261$261;
 }
 
 export function unlinkModules() {

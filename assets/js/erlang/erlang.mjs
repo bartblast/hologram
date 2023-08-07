@@ -67,30 +67,6 @@ const Erlang = {
   },
   // end: =:=
 
-  // supported arities: 2
-  // start: ==
-  $261$261: (left, right) => {
-    let value;
-
-    switch (left.type) {
-      case "float":
-      case "integer":
-        if (Type.isNumber(left) && Type.isNumber(right)) {
-          value = left.value == right.value;
-        } else {
-          value = false;
-        }
-        break;
-
-      default:
-        value = left.type === right.type && left.value === right.value;
-        break;
-    }
-
-    return Type.boolean(value);
-  },
-  // end: ==
-
   // TODO: Implement structural comparison, see: https://hexdocs.pm/elixir/main/Kernel.html#module-structural-comparison
   // supported arities: 2
   // start: >
