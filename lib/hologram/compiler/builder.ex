@@ -161,7 +161,7 @@ defmodule Hologram.Compiler.Builder do
   end
 
   @doc """
-  Returns the list of mfas ({module, function, arity} tuples) that are reachable by the given entry page.
+  Returns the list of MFAs ({module, function, arity} tuples) that are reachable by the given entry page.
 
   ## Examples
 
@@ -195,11 +195,30 @@ defmodule Hologram.Compiler.Builder do
   end
 
   @doc """
-  Groups the given mfas by module.
+  Groups the given MFAs ({module, function, arity} tuples) by module.
   """
   @spec group_mfas_by_module(list(mfa)) :: %{module => mfa}
   def group_mfas_by_module(mfas) do
     Enum.group_by(mfas, fn {module, _function, _arity} -> module end)
+  end
+
+  @doc """
+  Lists MFAs ({module, function, arity} tuples) required by the runtime JS script.
+  """
+  @spec list_mfas_required_by_runtime(CallGraph.t()) :: list(mfa)
+  def list_mfas_required_by_runtime(call_graph) do
+    entry_mfas = [
+      {Enum, :into, 2},
+      {Enum, :to_list, 1},
+      {Kernel, :inspect, 2}
+    ]
+
+    entry_mfas
+    |> Enum.reduce([], fn mfa, acc ->
+      acc ++ CallGraph.reachable_mfas(call_graph, mfa)
+    end)
+    |> Enum.uniq()
+    |> Enum.sort()
   end
 
   @doc """

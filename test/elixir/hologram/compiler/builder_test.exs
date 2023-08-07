@@ -5,6 +5,7 @@ defmodule Hologram.Compiler.BuilderTest do
   alias Hologram.Commons.PLT
   alias Hologram.Compiler.CallGraph
   alias Hologram.Compiler.IR
+  alias Hologram.Compiler.Reflection
 
   alias Hologram.Test.Fixtures.Compiler.Builder.Module1
   alias Hologram.Test.Fixtures.Compiler.Builder.Module10
@@ -212,6 +213,47 @@ defmodule Hologram.Compiler.BuilderTest do
              module_2: [{:module_2, :fun_b, 2}, {:module_2, :fun_e, 1}],
              module_3: [{:module_3, :fun_c, 3}, {:module_3, :fun_f, 2}]
            }
+  end
+
+  describe "list_mfas_required_by_runtime/1" do
+    setup do
+      diff = %{
+        added_modules: Reflection.list_std_lib_elixir_modules(),
+        removed_modules: [],
+        updated_modules: []
+      }
+
+      ir_plt = PLT.start(name: @plt_name_1)
+      patch_ir_plt(ir_plt, diff)
+
+      call_graph = CallGraph.start(name: @call_graph_name_1)
+      CallGraph.patch(call_graph, ir_plt, diff)
+
+      [mfas: list_mfas_required_by_runtime(call_graph)]
+    end
+
+    test "returns reachable mfas", %{mfas: mfas} do
+      assert {Enum, :into, 2} in mfas
+      assert {Enum, :into_protocol, 2} in mfas
+      assert {:lists, :foldl, 3} in mfas
+
+      assert {Enum, :to_list, 1} in mfas
+      assert {Enum, :reverse, 1} in mfas
+      assert {:lists, :reverse, 1} in mfas
+
+      assert {Kernel, :inspect, 2} in mfas
+      assert {Inspect.Opts, :new, 1} in mfas
+      assert {:binary, :copy, 2} in mfas
+    end
+
+    test "removes duplicates", %{mfas: mfas} do
+      count = Enum.count(mfas, &(&1 == {Access, :get, 2}))
+      assert count == 1
+    end
+
+    test "sorts results", %{mfas: mfas} do
+      assert hd(mfas) == {Access, :binary, 0}
+    end
   end
 
   describe "patch_ir_plt/2" do
