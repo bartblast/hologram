@@ -8,6 +8,7 @@ import sinonESM from "../node_modules/sinon/pkg/sinon-esm.js";
 import Type from "./type.mjs";
 
 import $243 from "./erlang/$243.mjs";
+import $245 from "./erlang/$245.mjs";
 import $261$261 from "./erlang/$261$261.mjs";
 
 function buildElixirKernelInspectFunction() {
@@ -105,6 +106,7 @@ export function linkModules() {
   globalThis.Elixir_Kernel = Elixir_Kernel;
 
   globalThis.Erlang.$243 = $243;
+  globalThis.Erlang.$245 = $245;
   globalThis.Erlang.$261$261 = $261$261;
 }
 

@@ -7,20 +7,6 @@ const Type = Hologram.Type;
 
 const Erlang = {
   // supported arities: 2
-  // start: -
-  $245: (left, right) => {
-    const [type, leftValue, rightValue] = Type.maybeNormalizeNumberTerms(
-      left,
-      right
-    );
-
-    const result = leftValue.value - rightValue.value;
-
-    return type === "float" ? Type.float(result) : Type.integer(result);
-  },
-  // end: -
-
-  // supported arities: 2
   // start: /=
   $247$261: (left, right) => {
     const isEqual = Erlang.$261$261(left, right);
