@@ -157,12 +157,17 @@ export default class Interpreter {
     };
   }
 
-  static defineErlangFunction(moduleName, functionName, jsFunction) {
+  static defineErlangFunction(
+    moduleName,
+    functionName,
+    functionArity,
+    jsFunction
+  ) {
     if (!globalThis[moduleName]) {
       globalThis[moduleName] = {};
     }
 
-    globalThis[moduleName][functionName] = jsFunction;
+    globalThis[moduleName][`${functionName}/${functionArity}`] = jsFunction;
   }
 
   static dotOperator(left, right) {

@@ -1037,7 +1037,7 @@ describe("defineElixirFunction()", () => {
 
 describe("defineErlangFunction()", () => {
   beforeEach(() => {
-    Interpreter.defineErlangFunction("Erlang_Aaa_Bbb", "my_fun_a", () =>
+    Interpreter.defineErlangFunction("Erlang_Aaa_Bbb", "my_fun_a", 2, () =>
       Type.atom("expr_a")
     );
   });
@@ -1047,10 +1047,10 @@ describe("defineErlangFunction()", () => {
   });
 
   it("initiates the module global var if it is not initiated yet", () => {
-    Interpreter.defineErlangFunction("Erlang_Ddd", "my_fun_d", []);
+    Interpreter.defineErlangFunction("Erlang_Ddd", "my_fun_d", 3, []);
 
     assert.isDefined(globalThis.Erlang_Ddd);
-    assert.isDefined(globalThis.Erlang_Ddd.my_fun_d);
+    assert.isDefined(globalThis.Erlang_Ddd["my_fun_d/3"]);
 
     // cleanup
     delete globalThis.Erlang_Ddd;
@@ -1058,10 +1058,10 @@ describe("defineErlangFunction()", () => {
 
   it("appends to the module global var if it is already initiated", () => {
     globalThis.Erlang_Eee = {dummy: "dummy"};
-    Interpreter.defineErlangFunction("Erlang_Eee", "my_fun_e", []);
+    Interpreter.defineErlangFunction("Erlang_Eee", "my_fun_e", 1, []);
 
     assert.isDefined(globalThis.Erlang_Eee);
-    assert.isDefined(globalThis.Erlang_Eee.my_fun_e);
+    assert.isDefined(globalThis.Erlang_Eee["my_fun_e/1"]);
     assert.equal(globalThis.Erlang_Eee.dummy, "dummy");
 
     // cleanup
@@ -1069,7 +1069,7 @@ describe("defineErlangFunction()", () => {
   });
 
   it("defines function", () => {
-    const result = globalThis.Erlang_Aaa_Bbb.my_fun_a(Type.integer(1));
+    const result = globalThis.Erlang_Aaa_Bbb["my_fun_a/2"](Type.integer(1));
     assert.deepStrictEqual(result, Type.atom("expr_a"));
   });
 });
