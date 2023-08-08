@@ -239,17 +239,17 @@ defmodule Hologram.Compiler.Encoder do
   end
 
   def encode(%IR.ModuleDefinition{module: module, body: body}, context) do
-    class_name = encode_as_class_name(module.value)
+    class = encode_as_class_name(module.value)
 
     body.expressions
     |> aggregate_module_functions()
-    |> Enum.reduce("", fn {{function_name, function_arity}, clauses}, acc ->
+    |> Enum.reduce("", fn {{function, arity}, clauses}, acc ->
       clauses_js = encode_as_array(clauses, context)
 
       """
       #{acc}
 
-      Interpreter.defineElixirFunction("#{class_name}", "#{function_name}", #{function_arity}, #{clauses_js})\
+      Interpreter.defineElixirFunction("#{class}", "#{function}", #{arity}, #{clauses_js})\
       """
     end)
   end
