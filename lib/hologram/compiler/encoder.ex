@@ -363,6 +363,7 @@ defmodule Hologram.Compiler.Encoder do
     String.replace(prefixed_alias_str, ".", "_")
   end
 
+  # TODO: consider - remove
   @doc """
   Escapes chacters which are not allowed in JS identifiers with their Unicode code points.
 
@@ -478,14 +479,10 @@ defmodule Hologram.Compiler.Encoder do
   end
 
   defp encode_function_call(callable, function, args, context) do
+    arity = Enum.count(args)
     args_js = Enum.map_join(args, ", ", &encode(&1, context))
 
-    escaped_function =
-      function
-      |> to_string()
-      |> escape_js_identifier()
-
-    "#{callable}.#{escaped_function}(#{args_js})"
+    "#{callable}[\"#{function}/#{arity}\"](#{args_js})"
   end
 
   defp encode_primitive_type(type, value, as_string)
