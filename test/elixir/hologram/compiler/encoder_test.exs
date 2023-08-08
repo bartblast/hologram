@@ -925,15 +925,19 @@ defmodule Hologram.Compiler.EncoderTest do
 
   test "module definition" do
     # defmodule Aaa.Bbb do
+    #   def fun_1(9, 8), :expr_1
+
+    #   def fun_1(c) when :erlang.is_integer(c), do: c
+
     #   def fun_1(a, b) do
     #     :erlang.+(a, b)
     #   end
 
-    #   def fun_1(c) when :erlang.is_integer(c), do: c
-
     #   defp fun_2(x, y) do
     #     :erlang.*(x, y)
     #   end
+
+    #   defp fun_2(9), do: :expr_2
 
     #   defp fun_2(z) when :erlang.is_float(z), do: z
     # end
@@ -941,6 +945,39 @@ defmodule Hologram.Compiler.EncoderTest do
       module: %IR.AtomType{value: Aaa.Bbb},
       body: %IR.Block{
         expressions: [
+          %IR.FunctionDefinition{
+            name: :fun_1,
+            arity: 2,
+            visibility: :public,
+            clause: %IR.FunctionClause{
+              params: [
+                %IR.IntegerType{value: 9},
+                %IR.IntegerType{value: 8}
+              ],
+              guards: [],
+              body: %IR.Block{
+                expressions: [%IR.AtomType{value: :expr_1}]
+              }
+            }
+          },
+          %IR.FunctionDefinition{
+            name: :fun_1,
+            arity: 1,
+            visibility: :public,
+            clause: %IR.FunctionClause{
+              params: [%IR.Variable{name: :c}],
+              guards: [
+                %IR.RemoteFunctionCall{
+                  module: %IR.AtomType{value: :erlang},
+                  function: :is_integer,
+                  args: [%IR.Variable{name: :c}]
+                }
+              ],
+              body: %IR.Block{
+                expressions: [%IR.Variable{name: :c}]
+              }
+            }
+          },
           %IR.FunctionDefinition{
             name: :fun_1,
             arity: 2,
@@ -962,24 +999,6 @@ defmodule Hologram.Compiler.EncoderTest do
                     ]
                   }
                 ]
-              }
-            }
-          },
-          %IR.FunctionDefinition{
-            name: :fun_1,
-            arity: 1,
-            visibility: :public,
-            clause: %IR.FunctionClause{
-              params: [%IR.Variable{name: :c}],
-              guards: [
-                %IR.RemoteFunctionCall{
-                  module: %IR.AtomType{value: :erlang},
-                  function: :is_integer,
-                  args: [%IR.Variable{name: :c}]
-                }
-              ],
-              body: %IR.Block{
-                expressions: [%IR.Variable{name: :c}]
               }
             }
           },
@@ -1012,6 +1031,18 @@ defmodule Hologram.Compiler.EncoderTest do
             arity: 1,
             visibility: :private,
             clause: %IR.FunctionClause{
+              params: [%IR.IntegerType{value: 9}],
+              guards: [],
+              body: %IR.Block{
+                expressions: [%IR.AtomType{value: :expr_2}]
+              }
+            }
+          },
+          %IR.FunctionDefinition{
+            name: :fun_2,
+            arity: 1,
+            visibility: :private,
+            clause: %IR.FunctionClause{
               params: [%IR.Variable{name: :z}],
               guards: [
                 %IR.RemoteFunctionCall{
@@ -1032,16 +1063,24 @@ defmodule Hologram.Compiler.EncoderTest do
     assert encode(ir, %Context{}) == """
 
 
-           Interpreter.defineElixirFunction("Elixir_Aaa_Bbb", "fun_1", [{params: [Type.variablePattern("a"), Type.variablePattern("b")], guards: [], body: (vars) => {
-           return Erlang["+/2"](vars.a, vars.b);
-           }}, {params: [Type.variablePattern("c")], guards: [(vars) => Erlang["is_integer/1"](vars.c)], body: (vars) => {
+           Interpreter.defineElixirFunction("Elixir_Aaa_Bbb", "fun_1", 1, [{params: [Type.variablePattern("c")], guards: [(vars) => Erlang["is_integer/1"](vars.c)], body: (vars) => {
            return vars.c;
            }}])
 
-           Interpreter.defineElixirFunction("Elixir_Aaa_Bbb", "fun_2", [{params: [Type.variablePattern("x"), Type.variablePattern("y")], guards: [], body: (vars) => {
-           return Erlang["*/2"](vars.x, vars.y);
+           Interpreter.defineElixirFunction("Elixir_Aaa_Bbb", "fun_1", 2, [{params: [Type.integer(9n), Type.integer(8n)], guards: [], body: (vars) => {
+           return Type.atom("expr_1");
+           }}, {params: [Type.variablePattern("a"), Type.variablePattern("b")], guards: [], body: (vars) => {
+           return Erlang["+/2"](vars.a, vars.b);
+           }}])
+
+           Interpreter.defineElixirFunction("Elixir_Aaa_Bbb", "fun_2", 1, [{params: [Type.integer(9n)], guards: [], body: (vars) => {
+           return Type.atom("expr_2");
            }}, {params: [Type.variablePattern("z")], guards: [(vars) => Erlang["is_float/1"](vars.z)], body: (vars) => {
            return vars.z;
+           }}])
+
+           Interpreter.defineElixirFunction("Elixir_Aaa_Bbb", "fun_2", 2, [{params: [Type.variablePattern("x"), Type.variablePattern("y")], guards: [], body: (vars) => {
+           return Erlang["*/2"](vars.x, vars.y);
            }}])\
            """
   end
