@@ -73,21 +73,21 @@ describe("callAnonymousFunction()", () => {
       [
         {
           params: [Type.variablePattern("x")],
-          guard: (vars) => Erlang.$261$261(vars.x, Type.integer(1)),
+          guard: (vars) => Erlang["==/2"](vars.x, Type.integer(1)),
           body: (_vars) => {
             return Type.atom("expr_1");
           },
         },
         {
           params: [Type.variablePattern("y")],
-          guard: (vars) => Erlang.$261$261(vars.y, Type.integer(2)),
+          guard: (vars) => Erlang["==/2"](vars.y, Type.integer(2)),
           body: (_vars) => {
             return Type.atom("expr_2");
           },
         },
         {
           params: [Type.variablePattern("z")],
-          guard: (vars) => Erlang.$261$261(vars.z, Type.integer(3)),
+          guard: (vars) => Erlang["==/2"](vars.z, Type.integer(3)),
           body: (_vars) => {
             return Type.atom("expr_3");
           },
@@ -115,7 +115,7 @@ describe("callAnonymousFunction()", () => {
       [
         {
           params: [Type.variablePattern("x"), Type.integer(1)],
-          guard: (vars) => Erlang.$261$261(vars.x, Type.integer(1)),
+          guard: (vars) => Erlang["==/2"](vars.x, Type.integer(1)),
           body: (_vars) => {
             return Type.atom("expr_1");
           },
@@ -204,7 +204,7 @@ describe("case()", () => {
 
     const clause1 = {
       match: Type.variablePattern("x"),
-      guard: (vars) => Erlang.$261$261(vars.x, Type.integer(1)),
+      guard: (vars) => Erlang["==/2"](vars.x, Type.integer(1)),
       body: (_vars) => {
         return Type.atom("expr_1");
       },
@@ -212,7 +212,7 @@ describe("case()", () => {
 
     const clause2 = {
       match: Type.variablePattern("y"),
-      guard: (vars) => Erlang.$261$261(vars.y, Type.integer(2)),
+      guard: (vars) => Erlang["==/2"](vars.y, Type.integer(2)),
       body: (_vars) => {
         return Type.atom("expr_2");
       },
@@ -220,7 +220,7 @@ describe("case()", () => {
 
     const clause3 = {
       match: Type.variablePattern("z"),
-      guard: (vars) => Erlang.$261$261(vars.z, Type.integer(3)),
+      guard: (vars) => Erlang["==/2"](vars.z, Type.integer(3)),
       body: (_vars) => {
         return Type.atom("expr_3");
       },
@@ -245,7 +245,7 @@ describe("case()", () => {
 
     const clause1 = {
       match: Type.variablePattern("x"),
-      guard: (vars) => Erlang.$261$261(vars.x, Type.integer(1)),
+      guard: (vars) => Erlang["==/2"](vars.x, Type.integer(1)),
       body: (_vars) => {
         return Type.atom("expr_1");
       },
@@ -457,7 +457,7 @@ describe("comprehension()", () => {
       const enumerable1 = (_vars) =>
         Type.list([Type.integer(1), Type.integer(2), Type.integer(3)]);
 
-      const guard1 = (vars) => Erlang.$247$261(vars.x, Type.integer(2));
+      const guard1 = (vars) => Erlang["/=/2"](vars.x, Type.integer(2));
 
       const generator1 = {
         match: Type.variablePattern("x"),
@@ -468,7 +468,7 @@ describe("comprehension()", () => {
       const enumerable2 = (_vars) =>
         Type.list([Type.integer(4), Type.integer(5), Type.integer(6)]);
 
-      const guard2 = (vars) => Erlang.$247$261(vars.y, Type.integer(4));
+      const guard2 = (vars) => Erlang["/=/2"](vars.y, Type.integer(4));
 
       const generator2 = {
         match: Type.variablePattern("y"),
@@ -501,7 +501,7 @@ describe("comprehension()", () => {
       const enumerable = (_vars) =>
         Type.list([Type.integer(1), Type.integer(2), Type.integer(3)]);
 
-      const guard = (vars) => Erlang.$247$261(vars.x, vars.b);
+      const guard = (vars) => Erlang["/=/2"](vars.x, vars.b);
 
       const generator = {
         match: Type.variablePattern("x"),
@@ -538,7 +538,7 @@ describe("comprehension()", () => {
       const enumerable2 = (_vars) =>
         Type.list([Type.integer(3), Type.integer(4)]);
 
-      const guard2 = (vars) => Erlang.$247$261(vars.x, Type.integer(1));
+      const guard2 = (vars) => Erlang["/=/2"](vars.x, Type.integer(1));
 
       const generator2 = {
         match: Type.variablePattern("y"),
@@ -597,8 +597,8 @@ describe("comprehension()", () => {
       };
 
       const filters = [
-        (vars) => Erlang.$260(Erlang.$243(vars.x, vars.y), Type.integer(8)),
-        (vars) => Erlang.$262(Erlang.$245(vars.y, vars.x), Type.integer(2)),
+        (vars) => Erlang["</2"](Erlang["+/2"](vars.x, vars.y), Type.integer(8)),
+        (vars) => Erlang[">/2"](Erlang["-/2"](vars.y, vars.x), Type.integer(2)),
       ];
 
       const result = Interpreter.comprehension(
@@ -632,7 +632,7 @@ describe("comprehension()", () => {
         body: enumerable,
       };
 
-      const filter = (vars) => Erlang.$247$261(vars.x, vars.b);
+      const filter = (vars) => Erlang["/=/2"](vars.x, vars.b);
 
       const result = Interpreter.comprehension(
         [generator],
@@ -966,21 +966,21 @@ describe("defineElixirFunction()", () => {
     Interpreter.defineElixirFunction("Elixir_Aaa_Bbb", "my_fun_b", [
       {
         params: [Type.variablePattern("x")],
-        guard: (vars) => Erlang.$261$261(vars.x, Type.integer(1)),
+        guard: (vars) => Erlang["==/2"](vars.x, Type.integer(1)),
         body: (_vars) => {
           return Type.atom("expr_1");
         },
       },
       {
         params: [Type.variablePattern("y")],
-        guard: (vars) => Erlang.$261$261(vars.y, Type.integer(2)),
+        guard: (vars) => Erlang["==/2"](vars.y, Type.integer(2)),
         body: (_vars) => {
           return Type.atom("expr_2");
         },
       },
       {
         params: [Type.variablePattern("z")],
-        guard: (vars) => Erlang.$261$261(vars.z, Type.integer(3)),
+        guard: (vars) => Erlang["==/2"](vars.z, Type.integer(3)),
         body: (_vars) => {
           return Type.atom("expr_3");
         },
@@ -998,14 +998,14 @@ describe("defineElixirFunction()", () => {
     Interpreter.defineElixirFunction("Elixir_Aaa_Bbb", "my_fun_c", [
       {
         params: [Type.variablePattern("x")],
-        guard: (vars) => Erlang.$261$261(vars.x, Type.integer(1)),
+        guard: (vars) => Erlang["==/2"](vars.x, Type.integer(1)),
         body: (_vars) => {
           return Type.atom("expr_1");
         },
       },
       {
         params: [Type.variablePattern("x")],
-        guard: (vars) => Erlang.$261$261(vars.x, Type.integer(2)),
+        guard: (vars) => Erlang["==/2"](vars.x, Type.integer(2)),
         body: (_vars) => {
           return Type.atom("expr_2");
         },
@@ -2891,8 +2891,8 @@ describe("matchOperator()", () => {
       Interpreter.takeVarsSnapshot(vars);
 
       const result = Interpreter.matchOperator(
-        Erlang.$243(
-          Erlang.$243(
+        Erlang["+/2"](
+          Erlang["+/2"](
             vars.__snapshot__.x,
             Interpreter.matchOperator(
               Type.integer(3),

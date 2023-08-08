@@ -75,7 +75,7 @@ export default class Hologram {
 
   static raiseError(aliasStr, message) {
     const errorStruct = Type.errorStruct(aliasStr, message);
-    return Erlang.error(errorStruct);
+    return Erlang["error/1"](errorStruct);
   }
 
   static raiseInterpreterError(message) {

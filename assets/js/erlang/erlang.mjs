@@ -1,15 +1,72 @@
 "use strict";
 
 import Hologram from "../hologram.mjs";
+import Interpreter from "../interpreter.mjs";
+import Type from "../type.mjs";
 
-const Interpreter = Hologram.Interpreter;
-const Type = Hologram.Type;
+/*
+MFAs for sorting:
+[
+  {:erlang, :+, 2},
+  {:erlang, :-, 2},
+  {:erlang, :"/=", 2},
+  {:erlang, :<, 2},
+  {:erlang, :"=:=", 2},
+  {:erlang, :==, 2},
+  {:erlang, :>, 2},
+  {:erlang, :error, 1},
+  {:erlang, :hd, 1},
+  {:erlang, :is_atom, 1},
+  {:erlang, :is_float, 1},
+  {:erlang, :is_integer, 1},
+  {:erlang, :is_number, 1},
+  {:erlang, :length, 1},
+  {:erlang, :tl, 1},
+  {:erlang, :==, 2}
+]
+|> Enum.sort()
+*/
 
 const Erlang = {
+  // start +/2
+  "+/2": (left, right) => {
+    const [type, leftValue, rightValue] = Type.maybeNormalizeNumberTerms(
+      left,
+      right
+    );
+
+    const result = leftValue.value + rightValue.value;
+
+    return type === "float" ? Type.float(result) : Type.integer(result);
+  },
+  // end +/2
+  // deps: []
+
+  // start -/2
+  "-/2": (left, right) => {
+    const [type, leftValue, rightValue] = Type.maybeNormalizeNumberTerms(
+      left,
+      right
+    );
+
+    const result = leftValue.value - rightValue.value;
+
+    return type === "float" ? Type.float(result) : Type.integer(result);
+  },
+  // end -/2
+  // deps: []
+
+  // start /=/2
+  "/=/2": (left, right) => {
+    const isEqual = Erlang["==/2"](left, right);
+    return Type.boolean(Type.isFalse(isEqual));
+  },
+  // end /=/2
+  // deps: [:erlang.==/2]
+
   // TODO: Implement structural comparison, see: https://hexdocs.pm/elixir/main/Kernel.html#module-structural-comparison
-  // supported arities: 2
-  // start: <
-  $260: (left, right) => {
+  // start </2
+  "</2": (left, right) => {
     if (
       (!Type.isFloat(left) && !Type.isInteger(left)) ||
       (!Type.isFloat(right) && !Type.isInteger(right))
@@ -26,19 +83,43 @@ const Erlang = {
 
     return Type.boolean(left.value < right.value);
   },
-  // end: <
+  // end </2
+  // deps: []
 
-  // supported arities: 2
-  // start: =:=
-  $261$258$261: (left, right) => {
+  // start =:=/2
+  "=:=/2": (left, right) => {
     return Type.boolean(Interpreter.isStrictlyEqual(left, right));
   },
-  // end: =:=
+  // end =:=/2
+  // deps: []
+
+  // start ==/2
+  "==/2": (left, right) => {
+    let value;
+
+    switch (left.type) {
+      case "float":
+      case "integer":
+        if (Type.isNumber(left) && Type.isNumber(right)) {
+          value = left.value == right.value;
+        } else {
+          value = false;
+        }
+        break;
+
+      default:
+        value = left.type === right.type && left.value === right.value;
+        break;
+    }
+
+    return Type.boolean(value);
+  },
+  // end ==/2
+  // deps: []
 
   // TODO: Implement structural comparison, see: https://hexdocs.pm/elixir/main/Kernel.html#module-structural-comparison
-  // supported arities: 2
-  // start: >
-  $262: (left, right) => {
+  // start >/2
+  ">/2": (left, right) => {
     if (
       (!Type.isFloat(left) && !Type.isInteger(left)) ||
       (!Type.isFloat(right) && !Type.isInteger(right))
@@ -55,20 +136,19 @@ const Erlang = {
 
     return Type.boolean(left.value > right.value);
   },
-  // end: >
+  // end >/2
+  // deps: []
 
-  // TODO: error/2
-  // supported arities: 1
-  // start: error
-  error: (reason) => {
+  // start error/1
+  "error/1": (reason) => {
     throw new Error(`__hologram__:${Hologram.serialize(reason)}`);
   },
-  // end: error
+  // end error/1
+  // deps: []
 
-  // supported arities: 1
-  // start: hd
-  hd: (list) => {
-    if (!Type.isList(list) || Erlang.length(list).value === 0n) {
+  // start hd/1
+  "hd/1": (list) => {
+    if (!Type.isList(list) || list.data.length === 0) {
       Hologram.raiseArgumentError(
         "errors were found at the given arguments:\n\n* 1st argument: not a nonempty list"
       );
@@ -76,39 +156,39 @@ const Erlang = {
 
     return list.data[0];
   },
-  // end: hd
+  // end hd/1
+  // deps: []
 
-  // supported arities: 1
-  // start: is_atom
-  is_atom: (term) => {
+  // start is_atom/1
+  "is_atom/1": (term) => {
     return Type.boolean(Type.isAtom(term));
   },
-  // end: is_atom
+  // end is_atom/1
+  // deps: []
 
-  // supported arities: 1
-  // start: is_float
-  is_float: (term) => {
+  // start is_float/1
+  "is_float/1": (term) => {
     return Type.boolean(Type.isFloat(term));
   },
-  // end: is_float
+  // end is_float/1
+  // deps: []
 
-  // supported arities: 1
-  // start: is_integer
-  is_integer: (term) => {
+  // start is_integer/1
+  "is_integer/1": (term) => {
     return Type.boolean(Type.isInteger(term));
   },
-  // end: is_integer
+  // end is_integer/1
+  // deps: []
 
-  // supported arities: 1
-  // start: is_number
-  is_number: (term) => {
+  // start is_number/1
+  "is_number/1": (term) => {
     return Type.boolean(Type.isNumber(term));
   },
-  // end: is_number
+  // end is_number/1
+  // deps: []
 
-  // supported arities: 1
-  // start: length
-  length: (list) => {
+  // start length/1
+  "length/1": (list) => {
     if (!Type.isList(list)) {
       Hologram.raiseArgumentError(
         "errors were found at the given arguments:\n\n* 1st argument: not a list"
@@ -117,26 +197,26 @@ const Erlang = {
 
     return Type.integer(list.data.length);
   },
-  // end: length
+  // end length/1
+  // deps: []
 
-  // supported arities: 1
-  // start: tl
-  tl: (list) => {
-    if (!Type.isList(list) || Erlang.length(list).value === 0n) {
+  // start tl/1
+  "tl/1": (list) => {
+    if (!Type.isList(list) || list.data.length === 0) {
       Hologram.raiseArgumentError(
         "errors were found at the given arguments:\n\n* 1st argument: not a nonempty list"
       );
     }
 
-    const length = Erlang.length(list).value;
+    const length = list.data.length;
 
-    if (length === 1n) {
+    if (length === 1) {
       return Type.list([]);
     }
 
     const isProper = Type.isProperList(list);
 
-    if (length === 2n && !isProper) {
+    if (length === 2 && !isProper) {
       return list.data[1];
     }
 
@@ -144,7 +224,8 @@ const Erlang = {
 
     return isProper ? Type.list(data) : Type.improperList(data);
   },
-  // end: tl
+  // end tl/1
+  // deps: []
 };
 
 export default Erlang;

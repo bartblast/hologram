@@ -7,12 +7,6 @@ import Hologram from "./hologram.mjs";
 import sinonESM from "../node_modules/sinon/pkg/sinon-esm.js";
 import Type from "./type.mjs";
 
-// Erlang
-import $243 from "./erlang/$243.mjs";
-import $245 from "./erlang/$245.mjs";
-import $247$261 from "./erlang/$247$261.mjs";
-import $261$261 from "./erlang/$261$261.mjs";
-
 function buildElixirKernelInspectFunction() {
   return (term) => {
     switch (term.type) {
@@ -106,12 +100,6 @@ export function linkModules() {
   globalThis.Erlang_maps = Erlang_maps;
   globalThis.Elixir_Enum = {};
   globalThis.Elixir_Kernel = Elixir_Kernel;
-
-  // Erlang
-  globalThis.Erlang.$243 = $243;
-  globalThis.Erlang.$245 = $245;
-  globalThis.Erlang.$247$261 = $247$261;
-  globalThis.Erlang.$261$261 = $261$261;
 }
 
 export function unlinkModules() {

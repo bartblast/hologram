@@ -172,7 +172,7 @@ export default class Interpreter {
     }
 
     // otherwise treat the operator as map key access
-    return Erlang_maps.get(right, left);
+    return Erlang_maps["get/2"](right, left);
   }
 
   static isStrictlyEqual(left, right) {
@@ -341,7 +341,7 @@ export default class Interpreter {
   }
 
   static #matchConsPattern(right, left, vars, rootMatch) {
-    if (!Type.isList(right) || Erlang.length(right).value === 0n) {
+    if (!Type.isList(right) || right.data.length === 0) {
       Interpreter.raiseMatchError(right);
     }
 
@@ -352,8 +352,8 @@ export default class Interpreter {
       Interpreter.raiseMatchError(right);
     }
 
-    const rightHead = Erlang.hd(right);
-    const rightTail = Erlang.tl(right);
+    const rightHead = Erlang["hd/1"](right);
+    const rightTail = Erlang["tl/1"](right);
 
     try {
       Interpreter.matchOperator(rightHead, left.head, vars, false);
