@@ -334,10 +334,6 @@ defmodule Hologram.Compiler.Builder do
 
     file_contents = File.read!(file_path)
 
-    # credo:disable-for-lines:2
-    IO.puts("FILE CONTENTS:")
-    IO.inspect(file_contents)
-
     case Regex.run(regex, file_contents) do
       [_full_capture, source_code] -> source_code
       nil -> nil
