@@ -105,7 +105,6 @@ defmodule Hologram.Compiler.Builder do
     output_file = output_dir <> "/hologram.runtime.js"
 
     cmd = [
-      esbuild_path,
       source_file,
       "--bundle",
       "--minify",
@@ -114,7 +113,7 @@ defmodule Hologram.Compiler.Builder do
       "--target=es2020"
     ]
 
-    System.cmd("npx", cmd, env: [])
+    System.cmd(esbuild_path, cmd, env: [])
 
     digest =
       output_file

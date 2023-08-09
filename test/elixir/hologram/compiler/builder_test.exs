@@ -172,8 +172,10 @@ defmodule Hologram.Compiler.BuilderTest do
     clean_tmp_dir()
     install_lib_js_deps()
 
+    esbuild_path = Reflection.root_path() <> "/assets/node_modules/.bin/esbuild"
+
     assert {digest, output_path, source_map_path} =
-             build_runtime_js("assets/node_modules/esbuild", "assets/js/hologram.mjs", "tmp")
+             build_runtime_js(esbuild_path, "assets/js/hologram.mjs", "tmp")
 
     assert digest =~ ~r/^[0-9a-f]{32}$/
     assert output_path == "tmp/hologram.runtime-#{digest}.js"
