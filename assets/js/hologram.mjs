@@ -25,7 +25,7 @@ export default class Hologram {
   }
 
   static inspect(term) {
-    return Elixir_Kernel.inspect(term, Type.list([]));
+    return Elixir_Kernel["inspect/2"](term, Type.list([]));
   }
 
   static inspectModuleName(moduleName) {
