@@ -300,22 +300,22 @@ describe("comprehension()", () => {
   beforeEach(() => {
     vars = {a: Type.integer(1), b: Type.integer(2)};
 
-    prevIntoFun = globalThis.Elixir_Enum.into;
+    prevIntoFun = globalThis.Elixir_Enum["into/2"];
 
-    globalThis.Elixir_Enum.into = (enumerable, _collectable) => {
+    globalThis.Elixir_Enum["into/2"] = (enumerable, _collectable) => {
       return enumerable;
     };
 
-    prevToListFun = globalThis.Elixir_Enum.to_list;
+    prevToListFun = globalThis.Elixir_Enum["to_list/1"];
 
-    globalThis.Elixir_Enum.to_list = (enumerable) => {
+    globalThis.Elixir_Enum["to_list/1"] = (enumerable) => {
       return enumerable;
     };
   });
 
   afterEach(() => {
-    globalThis.Elixir_Enum.into = prevIntoFun;
-    globalThis.Elixir_Enum.to_list = prevToListFun;
+    globalThis.Elixir_Enum["into/2"] = prevIntoFun;
+    globalThis.Elixir_Enum["to_list/1"] = prevToListFun;
   });
 
   describe("generator", () => {
@@ -427,7 +427,7 @@ describe("comprehension()", () => {
       };
 
       const stub = sinon
-        .stub(Elixir_Enum, "to_list")
+        .stub(Elixir_Enum, "to_list/1")
         .callsFake((enumerable) => enumerable);
 
       Interpreter.comprehension(
@@ -743,8 +743,8 @@ describe("comprehension()", () => {
       };
 
       const stub = sinon
-        .stub(Elixir_Enum, "into")
-        .callsFake((enumerable) => enumerable);
+        .stub(Elixir_Enum, "into/2")
+        .callsFake((enumerable, _collectable) => enumerable);
 
       Interpreter.comprehension(
         [generator1, generator2],

@@ -58,7 +58,7 @@ export default class Interpreter {
     const generatorsCount = generators.length;
 
     const sets = generators.map(
-      (generator) => Elixir_Enum.to_list(generator.body(vars)).data
+      (generator) => Elixir_Enum["to_list/1"](generator.body(vars)).data
     );
 
     let items = Utils.cartesianProduct(sets).reduce((acc, combination) => {
@@ -96,7 +96,7 @@ export default class Interpreter {
       items = uniqWith(items, Interpreter.isStrictlyEqual);
     }
 
-    return Elixir_Enum.into(Type.list(items), collectable);
+    return Elixir_Enum["into/2"](Type.list(items), collectable);
   }
 
   static cond(clauses, vars) {
