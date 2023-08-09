@@ -30,7 +30,7 @@ defmodule Hologram.Compiler.Builder do
         ir_plt
         |> PLT.get!(module)
         |> prune_module_def(reachable_mfas)
-        |> Encoder.encode(%Context{})
+        |> Encoder.encode(%Context{module: module})
 
       [module_output | output_parts]
     end)
