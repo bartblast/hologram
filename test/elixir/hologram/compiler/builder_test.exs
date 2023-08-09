@@ -103,6 +103,64 @@ defmodule Hologram.Compiler.BuilderTest do
            """
   end
 
+  describe "build_erlang_function_definition/4" do
+    @erlang_source_dir "assets/js/erlang"
+
+    test ":erlang module function that is implemented" do
+      output = build_erlang_function_definition(:erlang, :length, 1, @erlang_source_dir)
+
+      assert output == """
+             Interpreter.defineErlangFunction("Erlang", "length", 1, (list) => {
+                 if (!Type.isList(list)) {
+                   Hologram.raiseArgumentError(
+                     "errors were found at the given arguments:\\n\\n* 1st argument: not a list"
+                   );
+                 }
+
+                 return Type.integer(list.data.length);
+               });\
+             """
+    end
+
+    test ":erlang module function that is not implemented" do
+      output = build_erlang_function_definition(:erlang, :not_implemented, 2, @erlang_source_dir)
+
+      assert output ==
+               ~s/Interpreter.defineNotImplementedErlangFunction("erlang", "not_implemented", 2);/
+    end
+
+    test ":maps module function that is implemented" do
+      output = build_erlang_function_definition(:maps, :get, 2, @erlang_source_dir)
+
+      assert output == """
+             Interpreter.defineErlangFunction("Erlang_Maps", "get", 2, (key, map) => {
+                 if (!Type.isMap(map)) {
+                   Hologram.raiseBadMapError(
+                     `expected a map, got: ${Hologram.inspect(map)}`
+                   );
+                 }
+
+                 const encodedKey = Type.encodeMapKey(key);
+
+                 if (map.data[encodedKey]) {
+                   return map.data[encodedKey][1];
+                 }
+
+                 Hologram.raiseKeyError(
+                   `key ${Hologram.inspect(key)} not found in ${Hologram.inspect(map)}`
+                 );
+               });\
+             """
+    end
+
+    test ":maps module function that is not implemented" do
+      output = build_erlang_function_definition(:maps, :not_implemented, 2, @erlang_source_dir)
+
+      assert output ==
+               ~s/Interpreter.defineNotImplementedErlangFunction("maps", "not_implemented", 2);/
+    end
+  end
+
   test "build_module_digest_plt/1" do
     assert %PLT{name: @plt_name_1} = plt = build_module_digest_plt(@plt_name_1)
 
