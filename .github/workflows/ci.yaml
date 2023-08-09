@@ -95,8 +95,12 @@ jobs:
 
     # Step: Download lib Elixir dependencies.
     # If unchanged, uses the cached version.
-    - name: Install lib Elixir deps
+    - name: Download lib Elixir deps
       run: mix deps.get
+
+    # Step: Download lib JavaScript dependencies.
+    - name: Download lib JavaScript deps
+      run: cd assets && npm install
 
     # Step: Check if lib mix.lock has any unused dependencies.
     - name: Check lib unused Elixir deps
