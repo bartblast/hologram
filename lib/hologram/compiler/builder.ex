@@ -13,30 +13,20 @@ defmodule Hologram.Compiler.Builder do
   @spec build_entry_page_js(CallGraph.t(), PLT.t(), module) :: String.t()
   # sobelow_skip ["DOS.BinToAtom"]
   def build_entry_page_js(call_graph, ir_plt, entry_page) do
-    initial_output = """
-    window.__hologramPageReachableFunctionDefs__ = (interpreterClass, typeClass) => {
-      const Interpreter = interpreterClass;
-      const Type = typeClass;\
-    """
-
     # credo:disable-for-next-line Credo.Check.Warning.UnsafeToAtom
     clone_name = :"call_graph_#{__MODULE__}_#{entry_page}"
 
-    call_graph
-    |> entry_page_reachable_mfas(entry_page, clone_name)
-    |> group_mfas_by_module()
-    |> Enum.reduce([initial_output], fn {module, reachable_mfas}, output_parts ->
-      module_output =
-        ir_plt
-        |> PLT.get!(module)
-        |> prune_module_def(reachable_mfas)
-        |> Encoder.encode(%Context{module: module})
+    reachable_mfas = entry_page_reachable_mfas(call_graph, entry_page, clone_name)
 
-      [module_output | output_parts]
-    end)
-    |> List.insert_at(0, "\n\n}")
-    |> Enum.reverse()
-    |> Enum.join()
+    """
+    window.__hologramPageReachableFunctionDefs__ = (interpreterClass, typeClass) => {
+      const Interpreter = interpreterClass;
+      const Type = typeClass;
+
+    #{render_reachable_elixir_function_defs(reachable_mfas, ir_plt)}
+
+    }\
+    """
   end
 
   @doc """
@@ -339,6 +329,10 @@ defmodule Hologram.Compiler.Builder do
     end
   end
 
+  defp filter_elixir_mfas(mfas) do
+    Enum.filter(mfas, fn {module, _function, _arity} -> Reflection.alias?(module) end)
+  end
+
   defp mapset_from_plt(plt) do
     plt
     |> PLT.get_all()
@@ -358,5 +352,22 @@ defmodule Hologram.Compiler.Builder do
 
     digest = CryptographicUtils.digest(data, :sha256, :binary)
     PLT.put(plt.name, module, digest)
+  end
+
+  defp render_reachable_elixir_function_defs(reachable_mfas, ir_plt) do
+    reachable_mfas
+    |> filter_elixir_mfas()
+    |> group_mfas_by_module()
+    |> Enum.reduce([], fn {module, reachable_mfas}, output ->
+      module_output =
+        ir_plt
+        |> PLT.get!(module)
+        |> prune_module_def(reachable_mfas)
+        |> Encoder.encode(%Context{module: module})
+
+      [module_output | output]
+    end)
+    |> Enum.reverse()
+    |> Enum.join("\n\n")
   end
 end
