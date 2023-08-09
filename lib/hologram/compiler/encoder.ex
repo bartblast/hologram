@@ -243,15 +243,16 @@ defmodule Hologram.Compiler.Encoder do
 
     body.expressions
     |> aggregate_module_functions()
-    |> Enum.reduce("", fn {{function, arity}, clauses}, acc ->
+    |> Enum.reduce([], fn {{function, arity}, clauses}, acc ->
       clauses_js = encode_as_array(clauses, context)
 
-      """
-      #{acc}
-
-      Interpreter.defineElixirFunction("#{class}", "#{function}", #{arity}, #{clauses_js})\
-      """
+      [
+        ~s/Interpreter.defineElixirFunction("#{class}", "#{function}", #{arity}, #{clauses_js})/
+        | acc
+      ]
     end)
+    |> Enum.reverse()
+    |> Enum.join("\n\n")
   end
 
   def encode(%IR.PinOperator{name: name}, _context) do

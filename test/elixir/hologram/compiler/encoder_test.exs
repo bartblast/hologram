@@ -1061,8 +1061,6 @@ defmodule Hologram.Compiler.EncoderTest do
     }
 
     assert encode(ir, %Context{}) == """
-
-
            Interpreter.defineElixirFunction("Elixir_Aaa_Bbb", "fun_1", 1, [{params: [Type.variablePattern("c")], guards: [(vars) => Erlang["is_integer/1"](vars.c)], body: (vars) => {
            return vars.c;
            }}])
