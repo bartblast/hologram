@@ -235,11 +235,28 @@ defmodule Hologram.Compiler.Builder do
   """
   @spec list_mfas_required_by_runtime(CallGraph.t()) :: list(mfa)
   def list_mfas_required_by_runtime(call_graph) do
-    # These Elixir functions are used directly by runtime JS classes:
+    # These Elixir functions are used directly by JS runtime:
     entry_mfas = [
+      # Interpreter.comprehension()
       {Enum, :into, 2},
+
+      # Interpreter.comprehension()
       {Enum, :to_list, 1},
-      {Kernel, :inspect, 2}
+
+      # Hologram.inspect()
+      {Kernel, :inspect, 2},
+
+      # Hologram.raiseError()
+      {:erlang, :error, 1},
+
+      # Interpreter.#matchConsPattern()
+      {:erlang, :hd, 1},
+
+      # Interpreter.#matchConsPattern()
+      {:erlang, :tl, 1},
+
+      # Interpreter.dotOperator()
+      {:maps, :get, 2}
     ]
 
     entry_mfas
