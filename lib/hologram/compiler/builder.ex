@@ -333,6 +333,8 @@ defmodule Hologram.Compiler.Builder do
       ~r/#{Regex.escape(start_marker)}[[:space:]]+"#{key}":[[:space:]]+(.+),[[:space:]]+#{Regex.escape(end_marker)}/s
 
     file_contents = File.read!(file_path)
+
+    # credo:disable-for-lines:2
     IO.puts("FILE CONTENTS:")
     IO.inspect(file_contents)
 
