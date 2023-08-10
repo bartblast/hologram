@@ -211,13 +211,13 @@ defmodule Hologram.ExJsConsistency.MatchOperatorTest do
     end
 
     test "right map is missing some some keys from the left map" do
-      assert_raise MatchError, "no match of right hand side value: %{x: 1, y: 2}", fn ->
+      assert_raise MatchError, "no match of right hand side value: %{y: 2, x: 1}", fn ->
         %{x: 1, y: 2, z: 3} = build_value(%{x: 1, y: 2})
       end
     end
 
     test "some left map item values don't match right map item values" do
-      assert_raise MatchError, "no match of right hand side value: %{x: 1, y: 3}", fn ->
+      assert_raise MatchError, "no match of right hand side value: %{y: 3, x: 1}", fn ->
         %{x: 1, y: 2} = %{x: 1, y: 3}
       end
     end

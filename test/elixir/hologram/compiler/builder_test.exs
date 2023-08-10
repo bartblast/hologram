@@ -113,7 +113,7 @@ defmodule Hologram.Compiler.BuilderTest do
              Interpreter.defineErlangFunction("Erlang", "length", 1, (list) => {
                  if (!Type.isList(list)) {
                    Hologram.raiseArgumentError(
-                     "errors were found at the given arguments:\\n\\n* 1st argument: not a list"
+                     "errors were found at the given arguments:\\n\\n* 1st argument: not a list",
                    );
                  }
 
@@ -136,7 +136,7 @@ defmodule Hologram.Compiler.BuilderTest do
              Interpreter.defineErlangFunction("Erlang_Maps", "get", 2, (key, map) => {
                  if (!Type.isMap(map)) {
                    Hologram.raiseBadMapError(
-                     `expected a map, got: ${Hologram.inspect(map)}`
+                     `expected a map, got: ${Hologram.inspect(map)}`,
                    );
                  }
 
@@ -147,7 +147,7 @@ defmodule Hologram.Compiler.BuilderTest do
                  }
 
                  Hologram.raiseKeyError(
-                   `key ${Hologram.inspect(key)} not found in ${Hologram.inspect(map)}`
+                   `key ${Hologram.inspect(key)} not found in ${Hologram.inspect(map)}`,
                  );
                });\
              """
@@ -312,7 +312,7 @@ defmodule Hologram.Compiler.BuilderTest do
     end
 
     test "sorts results", %{mfas: mfas} do
-      assert hd(mfas) == {Access, :binary, 0}
+      assert hd(mfas) == {Access, :get, 2}
     end
   end
 
