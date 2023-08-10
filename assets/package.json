@@ -1,13 +1,13 @@
 {
   "dependencies": {
-    "esbuild": "^0.18",
+    "esbuild": "^0.19",
     "lodash": "^4"
   },
   "devDependencies": {
     "chai": "^4",
     "eslint": "^8",
     "mocha": "^10",
-    "prettier": "^2",
+    "prettier": "^3",
     "sinon": "^15"
   },
   "scripts": {
