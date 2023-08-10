@@ -73,8 +73,8 @@ defmodule Hologram.Compiler.Normalizer do
     end
   end
 
-  defp normalize_block({:__block__, [], exprs}) do
-    {:__block__, [], normalize(exprs)}
+  defp normalize_block({:__block__, meta, exprs}) do
+    {:__block__, meta, normalize(exprs)}
   end
 
   defp normalize_block(expr) do

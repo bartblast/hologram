@@ -2382,4 +2382,62 @@ defmodule Hologram.Compiler.NormalizerTest do
 
     assert normalize(ast) == ast
   end
+
+  describe "block" do
+    test "with empty meta" do
+      # fn Aaa ->
+      #   Bbb
+      #   Ccc
+      # end
+      ast =
+        {:fn, [line: 1],
+         [
+           {:->, [line: 1],
+            [
+              [Aaa],
+              {:__block__, [], [Bbb, Ccc]}
+            ]}
+         ]}
+
+      assert normalize(ast) ==
+               {:fn, [line: 1],
+                [
+                  {:->, [line: 1],
+                   [
+                     [{:__aliases__, [alias: false], [:Aaa]}],
+                     {:__block__, [],
+                      [
+                        {:__aliases__, [alias: false], [:Bbb]},
+                        {:__aliases__, [alias: false], [:Ccc]}
+                      ]}
+                   ]}
+                ]}
+    end
+
+    test "with non-empty meta" do
+      ast =
+        {:fn, [line: 1],
+         [
+           {:->, [line: 1],
+            [
+              [Aaa],
+              {:__block__, [line: 123], [Bbb, Ccc]}
+            ]}
+         ]}
+
+      assert normalize(ast) ==
+               {:fn, [line: 1],
+                [
+                  {:->, [line: 1],
+                   [
+                     [{:__aliases__, [alias: false], [:Aaa]}],
+                     {:__block__, [line: 123],
+                      [
+                        {:__aliases__, [alias: false], [:Bbb]},
+                        {:__aliases__, [alias: false], [:Ccc]}
+                      ]}
+                   ]}
+                ]}
+    end
+  end
 end
