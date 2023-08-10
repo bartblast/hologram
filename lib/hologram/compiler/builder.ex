@@ -365,17 +365,12 @@ defmodule Hologram.Compiler.Builder do
     reachable_mfas
     |> filter_elixir_mfas()
     |> group_mfas_by_module()
-    |> Enum.reduce([], fn {module, reachable_mfas}, output ->
-      module_output =
-        ir_plt
-        |> PLT.get!(module)
-        |> prune_module_def(reachable_mfas)
-        |> Encoder.encode(%Context{module: module})
-
-      [module_output | output]
+    |> Enum.map_join("\n\n", fn {module, reachable_mfas} ->
+      ir_plt
+      |> PLT.get!(module)
+      |> prune_module_def(reachable_mfas)
+      |> Encoder.encode(%Context{module: module})
     end)
-    |> Enum.reverse()
-    |> Enum.join("\n\n")
   end
 
   defp render_reachable_erlang_function_defs(reachable_mfas, erlang_source_dir) do
