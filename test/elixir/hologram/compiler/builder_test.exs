@@ -53,23 +53,6 @@ defmodule Hologram.Compiler.BuilderTest do
              const Interpreter = interpreterClass;
              const Type = typeClass;
 
-           Interpreter.defineElixirFunction("Elixir_Hologram_Test_Fixtures_Compiler_Builder_Module10", "action", 3, [{params: [Type.atom("action_10a"), Type.variablePattern("params"), Type.variablePattern("state")], guards: [], body: (vars) => {
-           return Elixir_Hologram_Test_Fixtures_Compiler_Builder_Module10["fun_10a/2"](vars.params, vars.state);
-           }}])
-
-           Interpreter.defineElixirFunction("Elixir_Hologram_Test_Fixtures_Compiler_Builder_Module10", "fun_10a", 2, [{params: [Type.variablePattern("params"), Type.variablePattern("state")], guards: [], body: (vars) => {
-           return Type.tuple([vars.params, vars.state]);
-           }}])
-
-           Interpreter.defineElixirFunction("Elixir_Hologram_Test_Fixtures_Compiler_Builder_Module10", "template", 0, [{params: [], guards: [], body: (vars) => {
-           return Type.anonymousFunction(1, [{params: [Type.variablePattern("data")], guards: [], body: (vars) => {
-           return {
-           Interpreter.matchOperator(vars.data, Type.matchPlaceholder(), vars);
-           return Type.list([Type.tuple([Type.atom("text"), Type.bitstring("Module10 template")])]);
-           };
-           }}], vars);
-           }}])
-
            Interpreter.defineElixirFunction("Elixir_Hologram_Test_Fixtures_Compiler_Builder_Module9", "__hologram_layout_module__", 0, [{params: [], guards: [], body: (vars) => {
            return Type.atom("Elixir.Hologram.Test.Fixtures.Compiler.Builder.Module10");
            }}])
@@ -95,6 +78,23 @@ defmodule Hologram.Compiler.BuilderTest do
            return {
            Interpreter.matchOperator(vars.data, Type.matchPlaceholder(), vars);
            return Type.list([Type.tuple([Type.atom("text"), Type.bitstring("Module9 template")])]);
+           };
+           }}], vars);
+           }}])
+
+           Interpreter.defineElixirFunction("Elixir_Hologram_Test_Fixtures_Compiler_Builder_Module10", "action", 3, [{params: [Type.atom("action_10a"), Type.variablePattern("params"), Type.variablePattern("state")], guards: [], body: (vars) => {
+           return Elixir_Hologram_Test_Fixtures_Compiler_Builder_Module10["fun_10a/2"](vars.params, vars.state);
+           }}])
+
+           Interpreter.defineElixirFunction("Elixir_Hologram_Test_Fixtures_Compiler_Builder_Module10", "fun_10a", 2, [{params: [Type.variablePattern("params"), Type.variablePattern("state")], guards: [], body: (vars) => {
+           return Type.tuple([vars.params, vars.state]);
+           }}])
+
+           Interpreter.defineElixirFunction("Elixir_Hologram_Test_Fixtures_Compiler_Builder_Module10", "template", 0, [{params: [], guards: [], body: (vars) => {
+           return Type.anonymousFunction(1, [{params: [Type.variablePattern("data")], guards: [], body: (vars) => {
+           return {
+           Interpreter.matchOperator(vars.data, Type.matchPlaceholder(), vars);
+           return Type.list([Type.tuple([Type.atom("text"), Type.bitstring("Module10 template")])]);
            };
            }}], vars);
            }}])
