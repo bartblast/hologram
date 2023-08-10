@@ -199,6 +199,7 @@ defmodule Hologram.ExJsConsistency.MatchOperatorTest do
     end
   end
 
+  # Order of keys in maps is undefined (consider this in regard to error messages).
   describe "map type" do
     test "left and right maps have the same items" do
       result = %{x: 1, y: 2} = %{x: 1, y: 2}
