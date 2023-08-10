@@ -58,7 +58,7 @@ export default class Interpreter {
     const generatorsCount = generators.length;
 
     const sets = generators.map(
-      (generator) => Elixir_Enum["to_list/1"](generator.body(vars)).data
+      (generator) => Elixir_Enum["to_list/1"](generator.body(vars)).data,
     );
 
     let items = Utils.cartesianProduct(sets).reduce((acc, combination) => {
@@ -69,7 +69,7 @@ export default class Interpreter {
           Interpreter.matchOperator(
             combination[i],
             generators[i].match,
-            varsClone
+            varsClone,
           );
 
           if (
@@ -132,7 +132,7 @@ export default class Interpreter {
         Interpreter.#raiseUndefinedFunctionError(
           moduleName,
           functionName,
-          arity
+          arity,
         );
       }
 
@@ -161,7 +161,7 @@ export default class Interpreter {
     moduleName,
     functionName,
     functionArity,
-    jsFunction
+    jsFunction,
   ) {
     if (!globalThis[moduleName]) {
       globalThis[moduleName] = {};
@@ -296,7 +296,7 @@ export default class Interpreter {
 
     if (term.type === "list" || term.type === "tuple") {
       return term.data.some((item) =>
-        Interpreter.#hasUnresolvedVariablePattern(item)
+        Interpreter.#hasUnresolvedVariablePattern(item),
       );
     }
 
@@ -424,7 +424,7 @@ export default class Interpreter {
   static #raiseCondClauseError() {
     return Hologram.raiseError(
       "CondClauseError",
-      "no cond clause evaluated to a truthy value"
+      "no cond clause evaluated to a truthy value",
     );
   }
 

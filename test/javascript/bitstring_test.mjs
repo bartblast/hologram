@@ -73,7 +73,7 @@ describe("from()", () => {
           Type.bitstringSegment(Type.bitstring([1]), {type: "bitstring"}),
           Type.bitstringSegment(Type.bitstring([1, 0]), {type: "bitstring"}),
         ]),
-        {type: "bitstring"}
+        {type: "bitstring"},
       );
 
       const segment3 = Type.bitstringSegment(Type.bitstring([1, 1]), {
@@ -223,7 +223,7 @@ describe("from()", () => {
     it("with bitstring value when number of bits is divisible by 8", () => {
       const segment = Type.bitstringSegment(
         Type.bitstring([1, 0, 1, 0, 1, 0, 1, 0]),
-        {type: "binary"}
+        {type: "binary"},
       );
 
       const result = Bitstring.from([segment]);
@@ -246,7 +246,7 @@ describe("from()", () => {
       assertError(
         () => Bitstring.from([segment]),
         "ArgumentError",
-        expectedMessage
+        expectedMessage,
       );
     });
 
@@ -261,7 +261,7 @@ describe("from()", () => {
       assertError(
         () => Bitstring.from([segment]),
         "ArgumentError",
-        expectedMessage
+        expectedMessage,
       );
     });
 
@@ -276,7 +276,7 @@ describe("from()", () => {
       assertError(
         () => Bitstring.from([segment]),
         "ArgumentError",
-        expectedMessage
+        expectedMessage,
       );
     });
 
@@ -322,7 +322,7 @@ describe("from()", () => {
       assertError(
         () => Bitstring.from([segment]),
         "ArgumentError",
-        expectedMessage
+        expectedMessage,
       );
     });
 
@@ -337,7 +337,7 @@ describe("from()", () => {
       assertError(
         () => Bitstring.from([segment]),
         "ArgumentError",
-        expectedMessage
+        expectedMessage,
       );
     });
 
@@ -379,7 +379,7 @@ describe("from()", () => {
       assertError(
         () => Bitstring.from([segment]),
         "ArgumentError",
-        expectedMessage
+        expectedMessage,
       );
     });
 
@@ -391,7 +391,7 @@ describe("from()", () => {
         Type.integer(1234567890123456789n),
         {
           type: "float",
-        }
+        },
       );
 
       const result = Bitstring.from([segment]);
@@ -424,7 +424,7 @@ describe("from()", () => {
       assertError(
         () => Bitstring.from([segment]),
         "ArgumentError",
-        expectedMessage
+        expectedMessage,
       );
     });
 
@@ -438,7 +438,7 @@ describe("from()", () => {
       assertError(
         () => Bitstring.from([segment]),
         "ArgumentError",
-        expectedMessage
+        expectedMessage,
       );
     });
   });
@@ -454,7 +454,7 @@ describe("from()", () => {
       assertError(
         () => Bitstring.from([segment]),
         "ArgumentError",
-        expectedMessage
+        expectedMessage,
       );
     });
 
@@ -469,7 +469,7 @@ describe("from()", () => {
       assertError(
         () => Bitstring.from([segment]),
         "ArgumentError",
-        expectedMessage
+        expectedMessage,
       );
     });
 
@@ -486,7 +486,7 @@ describe("from()", () => {
       assertError(
         () => Bitstring.from([segment]),
         "ArgumentError",
-        expectedMessage
+        expectedMessage,
       );
     });
 
@@ -500,7 +500,7 @@ describe("from()", () => {
       assertError(
         () => Bitstring.from([segment]),
         "ArgumentError",
-        expectedMessage
+        expectedMessage,
       );
     });
   });
@@ -512,7 +512,7 @@ describe("from()", () => {
         Type.bitstring([0, 1, 1, 0, 0, 0, 0, 1]),
         {
           type: "utf8",
-        }
+        },
       );
 
       const expectedMessage = `construction of binary failed: segment 1 of type 'utf8': expected a non-negative integer encodable as utf8 but got: {"type":"bitstring","bits":{"0":0,"1":1,"2":1,"3":0,"4":0,"5":0,"6":0,"7":1}}`;
@@ -520,7 +520,7 @@ describe("from()", () => {
       assertError(
         () => Bitstring.from([segment]),
         "ArgumentError",
-        expectedMessage
+        expectedMessage,
       );
     });
 
@@ -535,7 +535,7 @@ describe("from()", () => {
       assertError(
         () => Bitstring.from([segment]),
         "ArgumentError",
-        expectedMessage
+        expectedMessage,
       );
     });
 
@@ -570,7 +570,7 @@ describe("from()", () => {
       assertError(
         () => Bitstring.from([segment]),
         "ArgumentError",
-        expectedMessage
+        expectedMessage,
       );
     });
 
@@ -587,7 +587,7 @@ describe("from()", () => {
       assertError(
         () => Bitstring.from([segment]),
         "ArgumentError",
-        expectedMessage
+        expectedMessage,
       );
     });
   });
@@ -599,7 +599,7 @@ describe("from()", () => {
         Type.bitstring([0, 1, 1, 0, 0, 0, 0, 1]),
         {
           type: "utf16",
-        }
+        },
       );
 
       const expectedMessage = `construction of binary failed: segment 1 of type 'utf16': expected a non-negative integer encodable as utf16 but got: {"type":"bitstring","bits":{"0":0,"1":1,"2":1,"3":0,"4":0,"5":0,"6":0,"7":1}}`;
@@ -607,7 +607,7 @@ describe("from()", () => {
       assertError(
         () => Bitstring.from([segment]),
         "ArgumentError",
-        expectedMessage
+        expectedMessage,
       );
     });
 
@@ -641,7 +641,7 @@ describe("from()", () => {
       assertError(
         () => Bitstring.from([segment]),
         "ArgumentError",
-        expectedMessage
+        expectedMessage,
       );
     });
 
@@ -678,7 +678,7 @@ describe("from()", () => {
       assertError(
         () => Bitstring.from([segment]),
         "ArgumentError",
-        expectedMessage
+        expectedMessage,
       );
     });
   });
@@ -694,7 +694,7 @@ describe("from()", () => {
       assertError(
         () => Bitstring.from([segment]),
         "ArgumentError",
-        expectedMessage
+        expectedMessage,
       );
     });
   });
@@ -711,14 +711,14 @@ describe("from()", () => {
       assertError(
         () => Bitstring.from([segment]),
         "ArgumentError",
-        expectedMessage
+        expectedMessage,
       );
     });
 
     it("list values are not supported", () => {
       const segment = Type.bitstringSegment(
         Type.list([Type.integer(1), Type.integer(2)]),
-        {type: "integer"}
+        {type: "integer"},
       );
 
       const expectedMessage =
@@ -727,14 +727,14 @@ describe("from()", () => {
       assertError(
         () => Bitstring.from([segment]),
         "ArgumentError",
-        expectedMessage
+        expectedMessage,
       );
     });
 
     it("tuple values are not supported", () => {
       const segment = Type.bitstringSegment(
         Type.tuple([Type.integer(1), Type.integer(2)]),
-        {type: "integer"}
+        {type: "integer"},
       );
 
       const expectedMessage =
@@ -743,7 +743,7 @@ describe("from()", () => {
       assertError(
         () => Bitstring.from([segment]),
         "ArgumentError",
-        expectedMessage
+        expectedMessage,
       );
     });
   });

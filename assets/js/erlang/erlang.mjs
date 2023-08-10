@@ -32,7 +32,7 @@ const Erlang = {
   "+/2": (left, right) => {
     const [type, leftValue, rightValue] = Type.maybeNormalizeNumberTerms(
       left,
-      right
+      right,
     );
 
     const result = leftValue.value + rightValue.value;
@@ -46,7 +46,7 @@ const Erlang = {
   "-/2": (left, right) => {
     const [type, leftValue, rightValue] = Type.maybeNormalizeNumberTerms(
       left,
-      right
+      right,
     );
 
     const result = leftValue.value - rightValue.value;
@@ -150,7 +150,7 @@ const Erlang = {
   "hd/1": (list) => {
     if (!Type.isList(list) || list.data.length === 0) {
       Hologram.raiseArgumentError(
-        "errors were found at the given arguments:\n\n* 1st argument: not a nonempty list"
+        "errors were found at the given arguments:\n\n* 1st argument: not a nonempty list",
       );
     }
 
@@ -191,7 +191,7 @@ const Erlang = {
   "length/1": (list) => {
     if (!Type.isList(list)) {
       Hologram.raiseArgumentError(
-        "errors were found at the given arguments:\n\n* 1st argument: not a list"
+        "errors were found at the given arguments:\n\n* 1st argument: not a list",
       );
     }
 
@@ -204,7 +204,7 @@ const Erlang = {
   "tl/1": (list) => {
     if (!Type.isList(list) || list.data.length === 0) {
       Hologram.raiseArgumentError(
-        "errors were found at the given arguments:\n\n* 1st argument: not a nonempty list"
+        "errors were found at the given arguments:\n\n* 1st argument: not a nonempty list",
       );
     }
 

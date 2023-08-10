@@ -42,7 +42,7 @@ describe("callAnonymousFunction()", () => {
           },
         },
       ],
-      vars
+      vars,
     );
   });
 
@@ -93,7 +93,7 @@ describe("callAnonymousFunction()", () => {
           },
         },
       ],
-      vars
+      vars,
     );
 
     const result = Interpreter.callAnonymousFunction(anonFun, [
@@ -128,7 +128,7 @@ describe("callAnonymousFunction()", () => {
           },
         },
       ],
-      vars
+      vars,
     );
 
     const result = Interpreter.callAnonymousFunction(anonFun, [
@@ -143,7 +143,7 @@ describe("callAnonymousFunction()", () => {
     assertError(
       () => Interpreter.callAnonymousFunction(anonFun, [Type.integer(3)]),
       "FunctionClauseError",
-      "no function clause matching in anonymous fn/1"
+      "no function clause matching in anonymous fn/1",
     );
   });
 });
@@ -189,7 +189,7 @@ describe("case()", () => {
     const result = Interpreter.case(
       Type.integer(2),
       [clause1, clause2, clause3],
-      vars
+      vars,
     );
 
     assert.deepStrictEqual(result, Type.atom("expr_2"));
@@ -229,7 +229,7 @@ describe("case()", () => {
     const result = Interpreter.case(
       Type.integer(2),
       [clause1, clause2, clause3],
-      vars
+      vars,
     );
 
     assert.deepStrictEqual(result, Type.atom("expr_2"));
@@ -289,7 +289,7 @@ describe("case()", () => {
     assertError(
       () => Interpreter.case(Type.integer(3), [clause1, clause2], vars),
       "CaseClauseError",
-      "no case clause matching: 3"
+      "no case clause matching: 3",
     );
   });
 });
@@ -340,7 +340,7 @@ describe("comprehension()", () => {
         Type.map([]),
         false,
         (vars) => Type.tuple([vars.x, vars.y]),
-        vars
+        vars,
       );
 
       const expected = Type.list([
@@ -392,7 +392,7 @@ describe("comprehension()", () => {
         Type.list([]),
         false,
         (vars) => Type.tuple([vars.x, vars.y]),
-        vars
+        vars,
       );
 
       const expected = Type.list([
@@ -436,7 +436,7 @@ describe("comprehension()", () => {
         Type.map([]),
         false,
         (vars) => Type.tuple([vars.x, vars.y]),
-        vars
+        vars,
       );
 
       sinon.assert.calledWith(stub, enumerable1(vars));
@@ -482,7 +482,7 @@ describe("comprehension()", () => {
         Type.list([]),
         false,
         (vars) => Type.tuple([vars.x, vars.y]),
-        vars
+        vars,
       );
 
       const expected = Type.list([
@@ -515,7 +515,7 @@ describe("comprehension()", () => {
         Type.list([]),
         false,
         (vars) => vars.x,
-        vars
+        vars,
       );
 
       const expected = Type.list([Type.integer(1), Type.integer(3)]);
@@ -552,7 +552,7 @@ describe("comprehension()", () => {
         Type.list([]),
         false,
         (vars) => Type.tuple([vars.x, vars.y]),
-        vars
+        vars,
       );
 
       const expected = Type.list([
@@ -607,7 +607,7 @@ describe("comprehension()", () => {
         Type.list([]),
         false,
         (vars) => Type.tuple([vars.x, vars.y]),
-        vars
+        vars,
       );
 
       const expected = Type.list([
@@ -640,7 +640,7 @@ describe("comprehension()", () => {
         Type.list([]),
         false,
         (vars) => vars.x,
-        vars
+        vars,
       );
 
       const expected = Type.list([Type.integer(1), Type.integer(3)]);
@@ -677,7 +677,7 @@ describe("comprehension()", () => {
         Type.list([]),
         true,
         (vars) => Type.tuple([vars.x, vars.y]),
-        vars
+        vars,
       );
 
       const expected = Type.list([
@@ -710,7 +710,7 @@ describe("comprehension()", () => {
         Type.list([]),
         false,
         (vars) => Type.tuple([vars.x, vars.b]),
-        vars
+        vars,
       );
 
       const expected = Type.list([
@@ -752,7 +752,7 @@ describe("comprehension()", () => {
         Type.map([]),
         false,
         (vars) => Type.tuple([vars.x, vars.y]),
-        vars
+        vars,
       );
 
       const expectedArg = Type.list([
@@ -820,7 +820,7 @@ describe("cond()", () => {
         Interpreter.matchOperator(
           Type.boolean(false),
           Type.variablePattern("x"),
-          vars
+          vars,
         ),
       body: (_vars) => {
         return Type.atom("expr_1");
@@ -862,7 +862,7 @@ describe("cond()", () => {
     assertError(
       () => Interpreter.cond([clause1, clause2], vars),
       "CondClauseError",
-      "no cond clause evaluated to a truthy value"
+      "no cond clause evaluated to a truthy value",
     );
   });
 });
@@ -1022,7 +1022,7 @@ describe("defineElixirFunction()", () => {
       () =>
         globalThis.Elixir_Aaa_Bbb.my_fun_a(Type.integer(1), Type.integer(2)),
       "UndefinedFunctionError",
-      "function Aaa.Bbb.my_fun_a/2 is undefined or private"
+      "function Aaa.Bbb.my_fun_a/2 is undefined or private",
     );
   });
 
@@ -1030,7 +1030,7 @@ describe("defineElixirFunction()", () => {
     assertError(
       () => globalThis.Elixir_Aaa_Bbb.my_fun_a(Type.integer(3)),
       "FunctionClauseError",
-      "no function clause matching in Aaa.Bbb.my_fun_a/1"
+      "no function clause matching in Aaa.Bbb.my_fun_a/1",
     );
   });
 });
@@ -1038,7 +1038,7 @@ describe("defineElixirFunction()", () => {
 describe("defineErlangFunction()", () => {
   beforeEach(() => {
     Interpreter.defineErlangFunction("Erlang_Aaa_Bbb", "my_fun_a", 2, () =>
-      Type.atom("expr_a")
+      Type.atom("expr_a"),
     );
   });
 
@@ -1112,7 +1112,7 @@ describe("isStrictlyEqual()", () => {
   it("returns true if the args are of the same boxed primitive type and have equal values", () => {
     const result = Interpreter.isStrictlyEqual(
       Type.integer(1),
-      Type.integer(1)
+      Type.integer(1),
     );
 
     assert.isTrue(result);
@@ -1121,7 +1121,7 @@ describe("isStrictlyEqual()", () => {
   it("returns false if the args are not of the same boxed primitive type but have equal values", () => {
     const result = Interpreter.isStrictlyEqual(
       Type.integer(1),
-      Type.float(1.0)
+      Type.float(1.0),
     );
 
     assert.isFalse(result);
@@ -1179,7 +1179,7 @@ describe("matchOperator()", () => {
       const result = Interpreter.matchOperator(
         Type.atom("abc"),
         Type.atom("abc"),
-        vars
+        vars,
       );
 
       assert.deepStrictEqual(result, Type.atom("abc"));
@@ -1192,7 +1192,7 @@ describe("matchOperator()", () => {
         () =>
           Interpreter.matchOperator(Type.atom("xyz"), Type.atom("abc"), vars),
         "MatchError",
-        "no match of right hand side value: :xyz"
+        "no match of right hand side value: :xyz",
       );
     });
 
@@ -1202,7 +1202,7 @@ describe("matchOperator()", () => {
         () =>
           Interpreter.matchOperator(Type.integer(2), Type.atom("abc"), vars),
         "MatchError",
-        "no match of right hand side value: 2"
+        "no match of right hand side value: 2",
       );
     });
   });
@@ -1216,7 +1216,7 @@ describe("matchOperator()", () => {
         Type.bitstringPattern([
           Type.bitstringSegment(Type.integer(1), {type: "integer"}),
         ]),
-        vars
+        vars,
       );
 
       const expected = Type.bitstring([
@@ -1236,10 +1236,10 @@ describe("matchOperator()", () => {
             Type.bitstringPattern([
               Type.bitstringSegment(Type.integer(1), {type: "integer"}),
             ]),
-            vars
+            vars,
           ),
         "MatchError",
-        'no match of right hand side value: {"type":"bitstring","bits":{"0":0,"1":0,"2":0,"3":0,"4":0,"5":0,"6":1,"7":0}}'
+        'no match of right hand side value: {"type":"bitstring","bits":{"0":0,"1":0,"2":0,"3":0,"4":0,"5":0,"6":1,"7":0}}',
       );
     });
 
@@ -1251,10 +1251,10 @@ describe("matchOperator()", () => {
             Type.bitstring([
               Type.bitstringSegment(Type.integer(1), {type: "integer"}),
             ]),
-            vars
+            vars,
           ),
         "MatchError",
-        "no match of right hand side value: :abc"
+        "no match of right hand side value: :abc",
       );
     });
 
@@ -1280,7 +1280,7 @@ describe("matchOperator()", () => {
             size: Type.integer(1),
           }),
         ]),
-        vars
+        vars,
       );
 
       const expected = Type.bitstring([
@@ -1307,7 +1307,7 @@ describe("matchOperator()", () => {
           Type.bitstringSegment(Type.float(1.0), {type: "float"}),
           Type.bitstringSegment(Type.float(2.0), {type: "float"}),
         ]),
-        vars
+        vars,
       );
 
       const expected = Type.bitstring([
@@ -1328,7 +1328,7 @@ describe("matchOperator()", () => {
           Type.bitstringSegment(Type.integer(1), {type: "integer"}),
           Type.bitstringSegment(Type.integer(2), {type: "integer"}),
         ]),
-        vars
+        vars,
       );
 
       const expected = Type.bitstring([
@@ -1349,7 +1349,7 @@ describe("matchOperator()", () => {
           Type.bitstringSegment(Type.string("aaa"), {type: "utf8"}),
           Type.bitstringSegment(Type.string("bbb"), {type: "utf8"}),
         ]),
-        vars
+        vars,
       );
 
       const expected = Type.bitstring([
@@ -1368,7 +1368,7 @@ describe("matchOperator()", () => {
       beforeEach(() => {
         left = Type.consPattern(
           Type.variablePattern("h"),
-          Type.variablePattern("t")
+          Type.variablePattern("t"),
         );
       });
 
@@ -1378,7 +1378,7 @@ describe("matchOperator()", () => {
         assertError(
           () => Interpreter.matchOperator(right, left, vars),
           "MatchError",
-          "no match of right hand side value: 1"
+          "no match of right hand side value: 1",
         );
       });
 
@@ -1388,7 +1388,7 @@ describe("matchOperator()", () => {
         assertError(
           () => Interpreter.matchOperator(right, left, vars),
           "MatchError",
-          "no match of right hand side value: []"
+          "no match of right hand side value: []",
         );
       });
 
@@ -1484,7 +1484,7 @@ describe("matchOperator()", () => {
         assertError(
           () => Interpreter.matchOperator(right, left, vars),
           "MatchError",
-          "no match of right hand side value: 1"
+          "no match of right hand side value: 1",
         );
       });
 
@@ -1494,7 +1494,7 @@ describe("matchOperator()", () => {
         assertError(
           () => Interpreter.matchOperator(right, left, vars),
           "MatchError",
-          "no match of right hand side value: []"
+          "no match of right hand side value: []",
         );
       });
 
@@ -1517,7 +1517,7 @@ describe("matchOperator()", () => {
         assertError(
           () => Interpreter.matchOperator(right, left, vars),
           "MatchError",
-          "no match of right hand side value: [5]"
+          "no match of right hand side value: [5]",
         );
       });
 
@@ -1540,7 +1540,7 @@ describe("matchOperator()", () => {
         assertError(
           () => Interpreter.matchOperator(right, left, vars),
           "MatchError",
-          "no match of right hand side value: [5, 2]"
+          "no match of right hand side value: [5, 2]",
         );
       });
 
@@ -1563,7 +1563,7 @@ describe("matchOperator()", () => {
         assertError(
           () => Interpreter.matchOperator(right, left, vars),
           "MatchError",
-          "no match of right hand side value: [5 | 2]"
+          "no match of right hand side value: [5 | 2]",
         );
       });
 
@@ -1594,7 +1594,7 @@ describe("matchOperator()", () => {
         assertError(
           () => Interpreter.matchOperator(right, left, vars),
           "MatchError",
-          "no match of right hand side value: [5, 2, 3]"
+          "no match of right hand side value: [5, 2, 3]",
         );
       });
 
@@ -1625,7 +1625,7 @@ describe("matchOperator()", () => {
         assertError(
           () => Interpreter.matchOperator(right, left, vars),
           "MatchError",
-          "no match of right hand side value: [5, 2 | 3]"
+          "no match of right hand side value: [5, 2 | 3]",
         );
       });
     });
@@ -1643,7 +1643,7 @@ describe("matchOperator()", () => {
         assertError(
           () => Interpreter.matchOperator(right, left, vars),
           "MatchError",
-          "no match of right hand side value: 3"
+          "no match of right hand side value: 3",
         );
       });
 
@@ -1653,7 +1653,7 @@ describe("matchOperator()", () => {
         assertError(
           () => Interpreter.matchOperator(right, left, vars),
           "MatchError",
-          "no match of right hand side value: []"
+          "no match of right hand side value: []",
         );
       });
 
@@ -1663,7 +1663,7 @@ describe("matchOperator()", () => {
         assertError(
           () => Interpreter.matchOperator(right, left, vars),
           "MatchError",
-          "no match of right hand side value: [3]"
+          "no match of right hand side value: [3]",
         );
       });
 
@@ -1673,7 +1673,7 @@ describe("matchOperator()", () => {
         assertError(
           () => Interpreter.matchOperator(right, left, vars),
           "MatchError",
-          "no match of right hand side value: [2, 3]"
+          "no match of right hand side value: [2, 3]",
         );
       });
 
@@ -1700,7 +1700,7 @@ describe("matchOperator()", () => {
         assertError(
           () => Interpreter.matchOperator(right, left, vars),
           "MatchError",
-          "no match of right hand side value: [1, 2, 3]"
+          "no match of right hand side value: [1, 2, 3]",
         );
       });
 
@@ -1714,7 +1714,7 @@ describe("matchOperator()", () => {
         assertError(
           () => Interpreter.matchOperator(right, left, vars),
           "MatchError",
-          "no match of right hand side value: [1, 2 | 3]"
+          "no match of right hand side value: [1, 2 | 3]",
         );
       });
     });
@@ -1732,7 +1732,7 @@ describe("matchOperator()", () => {
         assertError(
           () => Interpreter.matchOperator(right, left, vars),
           "MatchError",
-          "no match of right hand side value: 3"
+          "no match of right hand side value: 3",
         );
       });
 
@@ -1742,7 +1742,7 @@ describe("matchOperator()", () => {
         assertError(
           () => Interpreter.matchOperator(right, left, vars),
           "MatchError",
-          "no match of right hand side value: []"
+          "no match of right hand side value: []",
         );
       });
 
@@ -1765,7 +1765,7 @@ describe("matchOperator()", () => {
         assertError(
           () => Interpreter.matchOperator(right, left, vars),
           "MatchError",
-          "no match of right hand side value: [2, 3]"
+          "no match of right hand side value: [2, 3]",
         );
       });
 
@@ -1775,7 +1775,7 @@ describe("matchOperator()", () => {
         assertError(
           () => Interpreter.matchOperator(right, left, vars),
           "MatchError",
-          "no match of right hand side value: [2 | 3]"
+          "no match of right hand side value: [2 | 3]",
         );
       });
 
@@ -1789,7 +1789,7 @@ describe("matchOperator()", () => {
         assertError(
           () => Interpreter.matchOperator(right, left, vars),
           "MatchError",
-          "no match of right hand side value: [1, 2, 3]"
+          "no match of right hand side value: [1, 2, 3]",
         );
       });
 
@@ -1803,7 +1803,7 @@ describe("matchOperator()", () => {
         assertError(
           () => Interpreter.matchOperator(right, left, vars),
           "MatchError",
-          "no match of right hand side value: [1, 2 | 3]"
+          "no match of right hand side value: [1, 2 | 3]",
         );
       });
     });
@@ -1814,7 +1814,7 @@ describe("matchOperator()", () => {
       beforeEach(() => {
         left = Type.consPattern(
           Type.variablePattern("h"),
-          Type.list([Type.integer(3)])
+          Type.list([Type.integer(3)]),
         );
       });
 
@@ -1824,7 +1824,7 @@ describe("matchOperator()", () => {
         assertError(
           () => Interpreter.matchOperator(right, left, vars),
           "MatchError",
-          "no match of right hand side value: 3"
+          "no match of right hand side value: 3",
         );
       });
 
@@ -1834,7 +1834,7 @@ describe("matchOperator()", () => {
         assertError(
           () => Interpreter.matchOperator(right, left, vars),
           "MatchError",
-          "no match of right hand side value: []"
+          "no match of right hand side value: []",
         );
       });
 
@@ -1844,7 +1844,7 @@ describe("matchOperator()", () => {
         assertError(
           () => Interpreter.matchOperator(right, left, vars),
           "MatchError",
-          "no match of right hand side value: [3]"
+          "no match of right hand side value: [3]",
         );
       });
 
@@ -1867,7 +1867,7 @@ describe("matchOperator()", () => {
         assertError(
           () => Interpreter.matchOperator(right, left, vars),
           "MatchError",
-          "no match of right hand side value: [2 | 3]"
+          "no match of right hand side value: [2 | 3]",
         );
       });
 
@@ -1881,7 +1881,7 @@ describe("matchOperator()", () => {
         assertError(
           () => Interpreter.matchOperator(right, left, vars),
           "MatchError",
-          "no match of right hand side value: [1, 2, 3]"
+          "no match of right hand side value: [1, 2, 3]",
         );
       });
 
@@ -1895,7 +1895,7 @@ describe("matchOperator()", () => {
         assertError(
           () => Interpreter.matchOperator(right, left, vars),
           "MatchError",
-          "no match of right hand side value: [1, 2 | 3]"
+          "no match of right hand side value: [1, 2 | 3]",
         );
       });
     });
@@ -1906,7 +1906,7 @@ describe("matchOperator()", () => {
       beforeEach(() => {
         left = Type.consPattern(
           Type.variablePattern("h"),
-          Type.list([Type.integer(2), Type.integer(3)])
+          Type.list([Type.integer(2), Type.integer(3)]),
         );
       });
 
@@ -1916,7 +1916,7 @@ describe("matchOperator()", () => {
         assertError(
           () => Interpreter.matchOperator(right, left, vars),
           "MatchError",
-          "no match of right hand side value: 3"
+          "no match of right hand side value: 3",
         );
       });
 
@@ -1926,7 +1926,7 @@ describe("matchOperator()", () => {
         assertError(
           () => Interpreter.matchOperator(right, left, vars),
           "MatchError",
-          "no match of right hand side value: []"
+          "no match of right hand side value: []",
         );
       });
 
@@ -1936,7 +1936,7 @@ describe("matchOperator()", () => {
         assertError(
           () => Interpreter.matchOperator(right, left, vars),
           "MatchError",
-          "no match of right hand side value: [3]"
+          "no match of right hand side value: [3]",
         );
       });
 
@@ -1946,7 +1946,7 @@ describe("matchOperator()", () => {
         assertError(
           () => Interpreter.matchOperator(right, left, vars),
           "MatchError",
-          "no match of right hand side value: [2, 3]"
+          "no match of right hand side value: [2, 3]",
         );
       });
 
@@ -1956,7 +1956,7 @@ describe("matchOperator()", () => {
         assertError(
           () => Interpreter.matchOperator(right, left, vars),
           "MatchError",
-          "no match of right hand side value: [2 | 3]"
+          "no match of right hand side value: [2 | 3]",
         );
       });
 
@@ -1987,7 +1987,7 @@ describe("matchOperator()", () => {
         assertError(
           () => Interpreter.matchOperator(right, left, vars),
           "MatchError",
-          "no match of right hand side value: [1, 2 | 3]"
+          "no match of right hand side value: [1, 2 | 3]",
         );
       });
     });
@@ -1998,7 +1998,7 @@ describe("matchOperator()", () => {
       beforeEach(() => {
         left = Type.consPattern(
           Type.variablePattern("h"),
-          Type.consPattern(Type.integer(2), Type.integer(3))
+          Type.consPattern(Type.integer(2), Type.integer(3)),
         );
       });
 
@@ -2008,7 +2008,7 @@ describe("matchOperator()", () => {
         assertError(
           () => Interpreter.matchOperator(right, left, vars),
           "MatchError",
-          "no match of right hand side value: 3"
+          "no match of right hand side value: 3",
         );
       });
 
@@ -2018,7 +2018,7 @@ describe("matchOperator()", () => {
         assertError(
           () => Interpreter.matchOperator(right, left, vars),
           "MatchError",
-          "no match of right hand side value: []"
+          "no match of right hand side value: []",
         );
       });
 
@@ -2028,7 +2028,7 @@ describe("matchOperator()", () => {
         assertError(
           () => Interpreter.matchOperator(right, left, vars),
           "MatchError",
-          "no match of right hand side value: [3]"
+          "no match of right hand side value: [3]",
         );
       });
 
@@ -2038,7 +2038,7 @@ describe("matchOperator()", () => {
         assertError(
           () => Interpreter.matchOperator(right, left, vars),
           "MatchError",
-          "no match of right hand side value: [2, 3]"
+          "no match of right hand side value: [2, 3]",
         );
       });
 
@@ -2048,7 +2048,7 @@ describe("matchOperator()", () => {
         assertError(
           () => Interpreter.matchOperator(right, left, vars),
           "MatchError",
-          "no match of right hand side value: [2 | 3]"
+          "no match of right hand side value: [2 | 3]",
         );
       });
 
@@ -2062,7 +2062,7 @@ describe("matchOperator()", () => {
         assertError(
           () => Interpreter.matchOperator(right, left, vars),
           "MatchError",
-          "no match of right hand side value: [1, 2, 3]"
+          "no match of right hand side value: [1, 2, 3]",
         );
       });
 
@@ -2090,7 +2090,7 @@ describe("matchOperator()", () => {
       beforeEach(() => {
         left = Type.consPattern(
           Type.variablePattern("h"),
-          Type.list([Type.integer(1), Type.integer(2), Type.integer(3)])
+          Type.list([Type.integer(1), Type.integer(2), Type.integer(3)]),
         );
       });
 
@@ -2100,7 +2100,7 @@ describe("matchOperator()", () => {
         assertError(
           () => Interpreter.matchOperator(right, left, vars),
           "MatchError",
-          "no match of right hand side value: 3"
+          "no match of right hand side value: 3",
         );
       });
 
@@ -2110,7 +2110,7 @@ describe("matchOperator()", () => {
         assertError(
           () => Interpreter.matchOperator(right, left, vars),
           "MatchError",
-          "no match of right hand side value: []"
+          "no match of right hand side value: []",
         );
       });
 
@@ -2120,7 +2120,7 @@ describe("matchOperator()", () => {
         assertError(
           () => Interpreter.matchOperator(right, left, vars),
           "MatchError",
-          "no match of right hand side value: [3]"
+          "no match of right hand side value: [3]",
         );
       });
 
@@ -2130,7 +2130,7 @@ describe("matchOperator()", () => {
         assertError(
           () => Interpreter.matchOperator(right, left, vars),
           "MatchError",
-          "no match of right hand side value: [2, 3]"
+          "no match of right hand side value: [2, 3]",
         );
       });
 
@@ -2140,7 +2140,7 @@ describe("matchOperator()", () => {
         assertError(
           () => Interpreter.matchOperator(right, left, vars),
           "MatchError",
-          "no match of right hand side value: [2 | 3]"
+          "no match of right hand side value: [2 | 3]",
         );
       });
 
@@ -2154,7 +2154,7 @@ describe("matchOperator()", () => {
         assertError(
           () => Interpreter.matchOperator(right, left, vars),
           "MatchError",
-          "no match of right hand side value: [1, 2, 3]"
+          "no match of right hand side value: [1, 2, 3]",
         );
       });
 
@@ -2168,7 +2168,7 @@ describe("matchOperator()", () => {
         assertError(
           () => Interpreter.matchOperator(right, left, vars),
           "MatchError",
-          "no match of right hand side value: [1, 2 | 3]"
+          "no match of right hand side value: [1, 2 | 3]",
         );
       });
     });
@@ -2181,8 +2181,8 @@ describe("matchOperator()", () => {
           Type.variablePattern("h"),
           Type.consPattern(
             Type.integer(1),
-            Type.consPattern(Type.integer(2), Type.integer(3))
-          )
+            Type.consPattern(Type.integer(2), Type.integer(3)),
+          ),
         );
       });
 
@@ -2192,7 +2192,7 @@ describe("matchOperator()", () => {
         assertError(
           () => Interpreter.matchOperator(right, left, vars),
           "MatchError",
-          "no match of right hand side value: 3"
+          "no match of right hand side value: 3",
         );
       });
 
@@ -2202,7 +2202,7 @@ describe("matchOperator()", () => {
         assertError(
           () => Interpreter.matchOperator(right, left, vars),
           "MatchError",
-          "no match of right hand side value: []"
+          "no match of right hand side value: []",
         );
       });
 
@@ -2212,7 +2212,7 @@ describe("matchOperator()", () => {
         assertError(
           () => Interpreter.matchOperator(right, left, vars),
           "MatchError",
-          "no match of right hand side value: [3]"
+          "no match of right hand side value: [3]",
         );
       });
 
@@ -2222,7 +2222,7 @@ describe("matchOperator()", () => {
         assertError(
           () => Interpreter.matchOperator(right, left, vars),
           "MatchError",
-          "no match of right hand side value: [2, 3]"
+          "no match of right hand side value: [2, 3]",
         );
       });
 
@@ -2232,7 +2232,7 @@ describe("matchOperator()", () => {
         assertError(
           () => Interpreter.matchOperator(right, left, vars),
           "MatchError",
-          "no match of right hand side value: [2 | 3]"
+          "no match of right hand side value: [2 | 3]",
         );
       });
 
@@ -2246,7 +2246,7 @@ describe("matchOperator()", () => {
         assertError(
           () => Interpreter.matchOperator(right, left, vars),
           "MatchError",
-          "no match of right hand side value: [1, 2, 3]"
+          "no match of right hand side value: [1, 2, 3]",
         );
       });
 
@@ -2260,7 +2260,7 @@ describe("matchOperator()", () => {
         assertError(
           () => Interpreter.matchOperator(right, left, vars),
           "MatchError",
-          "no match of right hand side value: [1, 2 | 3]"
+          "no match of right hand side value: [1, 2 | 3]",
         );
       });
     });
@@ -2273,8 +2273,8 @@ describe("matchOperator()", () => {
           Type.integer(1),
           Type.consPattern(
             Type.integer(2),
-            Type.consPattern(Type.integer(3), Type.list([]))
-          )
+            Type.consPattern(Type.integer(3), Type.list([])),
+          ),
         );
       });
 
@@ -2289,7 +2289,7 @@ describe("matchOperator()", () => {
         assertError(
           () => Interpreter.matchOperator(right, left, vars),
           "MatchError",
-          "no match of right hand side value: [1, 2, 3, 4]"
+          "no match of right hand side value: [1, 2, 3, 4]",
         );
       });
 
@@ -2304,7 +2304,7 @@ describe("matchOperator()", () => {
         assertError(
           () => Interpreter.matchOperator(right, left, vars),
           "MatchError",
-          "no match of right hand side value: [1, 2, 3 | 4]"
+          "no match of right hand side value: [1, 2, 3 | 4]",
         );
       });
 
@@ -2330,8 +2330,8 @@ describe("matchOperator()", () => {
           Type.integer(1),
           Type.consPattern(
             Type.integer(2),
-            Type.consPattern(Type.integer(3), Type.integer(4))
-          )
+            Type.consPattern(Type.integer(3), Type.integer(4)),
+          ),
         );
       });
 
@@ -2346,7 +2346,7 @@ describe("matchOperator()", () => {
         assertError(
           () => Interpreter.matchOperator(right, left, vars),
           "MatchError",
-          "no match of right hand side value: [1, 2, 3, 4]"
+          "no match of right hand side value: [1, 2, 3, 4]",
         );
       });
 
@@ -2374,7 +2374,7 @@ describe("matchOperator()", () => {
         assertError(
           () => Interpreter.matchOperator(right, left, vars),
           "MatchError",
-          "no match of right hand side value: [1, 2, 3]"
+          "no match of right hand side value: [1, 2, 3]",
         );
       });
     });
@@ -2387,8 +2387,8 @@ describe("matchOperator()", () => {
           Type.integer(1),
           Type.consPattern(
             Type.integer(2),
-            Type.consPattern(Type.integer(3), Type.list([Type.integer(4)]))
-          )
+            Type.consPattern(Type.integer(3), Type.list([Type.integer(4)])),
+          ),
         );
       });
 
@@ -2417,7 +2417,7 @@ describe("matchOperator()", () => {
         assertError(
           () => Interpreter.matchOperator(right, left, vars),
           "MatchError",
-          "no match of right hand side value: [1, 2, 3 | 4]"
+          "no match of right hand side value: [1, 2, 3 | 4]",
         );
       });
 
@@ -2431,7 +2431,7 @@ describe("matchOperator()", () => {
         assertError(
           () => Interpreter.matchOperator(right, left, vars),
           "MatchError",
-          "no match of right hand side value: [1, 2, 3]"
+          "no match of right hand side value: [1, 2, 3]",
         );
       });
     });
@@ -2443,7 +2443,7 @@ describe("matchOperator()", () => {
       const result = Interpreter.matchOperator(
         Type.float(2.0),
         Type.float(2.0),
-        vars
+        vars,
       );
 
       assert.deepStrictEqual(result, Type.float(2.0));
@@ -2455,7 +2455,7 @@ describe("matchOperator()", () => {
       assertError(
         () => Interpreter.matchOperator(Type.float(3.0), Type.float(2.0), vars),
         "MatchError",
-        "no match of right hand side value: 3.0"
+        "no match of right hand side value: 3.0",
       );
     });
 
@@ -2465,7 +2465,7 @@ describe("matchOperator()", () => {
         () =>
           Interpreter.matchOperator(Type.atom("abc"), Type.float(2.0), vars),
         "MatchError",
-        "no match of right hand side value: :abc"
+        "no match of right hand side value: :abc",
       );
     });
   });
@@ -2476,7 +2476,7 @@ describe("matchOperator()", () => {
       const result = Interpreter.matchOperator(
         Type.integer(2),
         Type.integer(2),
-        vars
+        vars,
       );
 
       assert.deepStrictEqual(result, Type.integer(2));
@@ -2488,7 +2488,7 @@ describe("matchOperator()", () => {
       assertError(
         () => Interpreter.matchOperator(Type.integer(3), Type.integer(2), vars),
         "MatchError",
-        "no match of right hand side value: 3"
+        "no match of right hand side value: 3",
       );
     });
 
@@ -2498,7 +2498,7 @@ describe("matchOperator()", () => {
         () =>
           Interpreter.matchOperator(Type.atom("abc"), Type.integer(2), vars),
         "MatchError",
-        "no match of right hand side value: :abc"
+        "no match of right hand side value: :abc",
       );
     });
   });
@@ -2523,7 +2523,7 @@ describe("matchOperator()", () => {
       assertError(
         () => Interpreter.matchOperator(list2, list1, vars),
         "MatchError",
-        "no match of right hand side value: [1, 3]"
+        "no match of right hand side value: [1, 3]",
       );
     });
 
@@ -2533,7 +2533,7 @@ describe("matchOperator()", () => {
       assertError(
         () => Interpreter.matchOperator(list2, list1, vars),
         "MatchError",
-        "no match of right hand side value: [1 | 2]"
+        "no match of right hand side value: [1 | 2]",
       );
     });
 
@@ -2541,7 +2541,7 @@ describe("matchOperator()", () => {
       assertError(
         () => Interpreter.matchOperator(Type.atom("abc"), list1, vars),
         "MatchError",
-        "no match of right hand side value: :abc"
+        "no match of right hand side value: :abc",
       );
     });
 
@@ -2549,7 +2549,7 @@ describe("matchOperator()", () => {
       assertError(
         () => Interpreter.matchOperator(list1, Type.list([]), vars),
         "MatchError",
-        "no match of right hand side value: [1, 2]"
+        "no match of right hand side value: [1, 2]",
       );
     });
 
@@ -2557,7 +2557,7 @@ describe("matchOperator()", () => {
       assertError(
         () => Interpreter.matchOperator(Type.list([]), list1, vars),
         "MatchError",
-        "no match of right hand side value: []"
+        "no match of right hand side value: []",
       );
     });
 
@@ -2645,7 +2645,7 @@ describe("matchOperator()", () => {
       assertError(
         () => Interpreter.matchOperator(right, left, vars),
         "MatchError",
-        'no match of right hand side value: {"type":"map","data":{"atom(x)":[{"type":"atom","value":"x"},{"type":"integer","value":"__bigint__:1"}],"atom(y)":[{"type":"atom","value":"y"},{"type":"integer","value":"__bigint__:2"}]}}'
+        'no match of right hand side value: {"type":"map","data":{"atom(x)":[{"type":"atom","value":"x"},{"type":"integer","value":"__bigint__:1"}],"atom(y)":[{"type":"atom","value":"y"},{"type":"integer","value":"__bigint__:2"}]}}',
       );
     });
 
@@ -2662,7 +2662,7 @@ describe("matchOperator()", () => {
       assertError(
         () => Interpreter.matchOperator(right, left, vars),
         "MatchError",
-        'no match of right hand side value: {"type":"map","data":{"atom(x)":[{"type":"atom","value":"x"},{"type":"integer","value":"__bigint__:1"}],"atom(y)":[{"type":"atom","value":"y"},{"type":"integer","value":"__bigint__:3"}]}}'
+        'no match of right hand side value: {"type":"map","data":{"atom(x)":[{"type":"atom","value":"x"},{"type":"integer","value":"__bigint__:1"}],"atom(y)":[{"type":"atom","value":"y"},{"type":"integer","value":"__bigint__:3"}]}}',
       );
     });
 
@@ -2673,7 +2673,7 @@ describe("matchOperator()", () => {
       assertError(
         () => Interpreter.matchOperator(right, left, vars),
         "MatchError",
-        "no match of right hand side value: :abc"
+        "no match of right hand side value: :abc",
       );
     });
 
@@ -2684,7 +2684,7 @@ describe("matchOperator()", () => {
       assertError(
         () => Interpreter.matchOperator(emptyMap, left, vars),
         "MatchError",
-        'no match of right hand side value: {"type":"map","data":{}}'
+        'no match of right hand side value: {"type":"map","data":{}}',
       );
     });
 
@@ -2736,7 +2736,7 @@ describe("matchOperator()", () => {
     const result = Interpreter.matchOperator(
       Type.integer(2),
       Type.matchPlaceholder(),
-      vars
+      vars,
     );
 
     assert.deepStrictEqual(result, Type.integer(2));
@@ -2750,10 +2750,10 @@ describe("matchOperator()", () => {
           Type.integer(2),
           Type.integer(2),
           vars,
-          false
+          false,
         ),
         Type.variablePattern("x"),
-        vars
+        vars,
       );
 
       assert.deepStrictEqual(result, Type.integer(2));
@@ -2774,13 +2774,13 @@ describe("matchOperator()", () => {
               Type.integer(3),
               Type.integer(2),
               vars,
-              false
+              false,
             ),
             Type.variablePattern("x"),
-            vars
+            vars,
           ),
         "MatchError",
-        "no match of right hand side value: 3"
+        "no match of right hand side value: 3",
       );
     });
 
@@ -2790,10 +2790,10 @@ describe("matchOperator()", () => {
           Type.integer(2),
           Type.variablePattern("x"),
           vars,
-          false
+          false,
         ),
         Type.integer(2),
-        vars
+        vars,
       );
 
       assert.deepStrictEqual(result, Type.integer(2));
@@ -2814,13 +2814,13 @@ describe("matchOperator()", () => {
               Type.integer(3),
               Type.variablePattern("x"),
               vars,
-              false
+              false,
             ),
             Type.integer(2),
-            vars
+            vars,
           ),
         "MatchError",
-        "no match of right hand side value: 3"
+        "no match of right hand side value: 3",
       );
     });
 
@@ -2833,7 +2833,7 @@ describe("matchOperator()", () => {
       const result = Interpreter.matchOperator(
         Interpreter.matchOperator(vars.x, Type.integer(2), vars, false),
         Type.integer(2),
-        vars
+        vars,
       );
 
       assert.deepStrictEqual(result, Type.integer(2));
@@ -2857,10 +2857,10 @@ describe("matchOperator()", () => {
           Interpreter.matchOperator(
             Interpreter.matchOperator(vars.x, Type.integer(2), vars, false),
             Type.integer(2),
-            vars
+            vars,
           ),
         "MatchError",
-        "no match of right hand side value: 3"
+        "no match of right hand side value: 3",
       );
     });
 
@@ -2875,10 +2875,10 @@ describe("matchOperator()", () => {
           Interpreter.matchOperator(
             Interpreter.matchOperator(vars.x, Type.integer(2), vars, false),
             Type.integer(1),
-            vars
+            vars,
           ),
         "MatchError",
-        "no match of right hand side value: 2"
+        "no match of right hand side value: 2",
       );
     });
 
@@ -2898,13 +2898,13 @@ describe("matchOperator()", () => {
               Type.integer(3),
               Type.variablePattern("x"),
               vars,
-              false
-            )
+              false,
+            ),
           ),
-          vars.__snapshot__.x
+          vars.__snapshot__.x,
         ),
         Type.variablePattern("y"),
-        vars
+        vars,
       );
 
       assert.deepStrictEqual(result, Type.integer(25));
@@ -2929,7 +2929,7 @@ describe("matchOperator()", () => {
             Type.integer(1),
             Type.integer(1),
             vars,
-            false
+            false,
           ),
         ]),
         Type.list([
@@ -2937,10 +2937,10 @@ describe("matchOperator()", () => {
             Type.integer(1),
             Type.integer(1),
             vars,
-            false
+            false,
           ),
         ]),
-        vars
+        vars,
       );
 
       assert.deepStrictEqual(result, Type.list([Type.integer(1)]));
@@ -2956,7 +2956,7 @@ describe("matchOperator()", () => {
                 Type.integer(2),
                 Type.integer(1),
                 vars,
-                false
+                false,
               ),
             ]),
             Type.list([
@@ -2964,13 +2964,13 @@ describe("matchOperator()", () => {
                 Type.integer(1),
                 Type.integer(1),
                 vars,
-                false
+                false,
               ),
             ]),
-            vars
+            vars,
           ),
         "MatchError",
-        "no match of right hand side value: 2"
+        "no match of right hand side value: 2",
       );
     });
 
@@ -2983,7 +2983,7 @@ describe("matchOperator()", () => {
                 Type.integer(1),
                 Type.integer(2),
                 vars,
-                false
+                false,
               ),
             ]),
             Type.list([
@@ -2991,13 +2991,13 @@ describe("matchOperator()", () => {
                 Type.integer(1),
                 Type.integer(1),
                 vars,
-                false
+                false,
               ),
             ]),
-            vars
+            vars,
           ),
         "MatchError",
-        "no match of right hand side value: 1"
+        "no match of right hand side value: 1",
       );
     });
 
@@ -3011,7 +3011,7 @@ describe("matchOperator()", () => {
                 Type.integer(1),
                 Type.integer(1),
                 vars,
-                false
+                false,
               ),
             ]),
             Type.list([
@@ -3019,13 +3019,13 @@ describe("matchOperator()", () => {
                 Type.integer(2),
                 Type.integer(1),
                 vars,
-                false
+                false,
               ),
             ]),
-            vars
+            vars,
           ),
         "MatchError",
-        "no match of right hand side value: 2"
+        "no match of right hand side value: 2",
       );
     });
 
@@ -3039,7 +3039,7 @@ describe("matchOperator()", () => {
                 Type.integer(1),
                 Type.integer(1),
                 vars,
-                false
+                false,
               ),
             ]),
             Type.list([
@@ -3047,13 +3047,13 @@ describe("matchOperator()", () => {
                 Type.integer(1),
                 Type.integer(2),
                 vars,
-                false
+                false,
               ),
             ]),
-            vars
+            vars,
           ),
         "MatchError",
-        "no match of right hand side value: 1"
+        "no match of right hand side value: 1",
       );
     });
 
@@ -3072,7 +3072,7 @@ describe("matchOperator()", () => {
               vars.f,
               Type.variablePattern("e"),
               vars,
-              false
+              false,
             ),
           ]),
           Type.tuple([
@@ -3081,24 +3081,24 @@ describe("matchOperator()", () => {
               Type.variablePattern("d"),
               Type.variablePattern("c"),
               vars,
-              false
+              false,
             ),
             Type.integer(3),
           ]),
           vars,
-          false
+          false,
         ),
         Type.tuple([
           Interpreter.matchOperator(
             Type.variablePattern("b"),
             Type.variablePattern("a"),
             vars,
-            false
+            false,
           ),
           Type.integer(2),
           Type.integer(3),
         ]),
-        vars
+        vars,
       );
 
       const expectedResult = Type.tuple([
@@ -3132,17 +3132,17 @@ describe("matchOperator()", () => {
           Interpreter.matchOperator(
             Type.consPattern(
               Type.variablePattern("c"),
-              Type.variablePattern("d")
+              Type.variablePattern("d"),
             ),
             Type.consPattern(
               Type.variablePattern("a"),
-              Type.variablePattern("b")
+              Type.variablePattern("b"),
             ),
             vars,
-            false
+            false,
           ),
         ]),
-        vars
+        vars,
       );
 
       const expectedResult = Type.list([
@@ -3173,28 +3173,28 @@ describe("matchOperator()", () => {
             Type.list([
               Type.consPattern(
                 Type.variablePattern("e"),
-                Type.variablePattern("f")
+                Type.variablePattern("f"),
               ),
             ]),
             Type.list([
               Interpreter.matchOperator(
                 Type.consPattern(
                   Type.variablePattern("c"),
-                  Type.variablePattern("d")
+                  Type.variablePattern("d"),
                 ),
                 Type.consPattern(
                   Type.variablePattern("a"),
-                  Type.variablePattern("b")
+                  Type.variablePattern("b"),
                 ),
                 vars,
-                false
+                false,
               ),
             ]),
             vars,
-            false
+            false,
           ),
         ]),
-        vars
+        vars,
       );
 
       const expectedResult = Type.list([
@@ -3225,10 +3225,10 @@ describe("matchOperator()", () => {
             Type.list([Type.variablePattern("c"), Type.variablePattern("d")]),
             Type.list([Type.variablePattern("a"), Type.variablePattern("b")]),
             vars,
-            false
+            false,
           ),
         ]),
-        vars
+        vars,
       );
 
       const expectedResult = Type.list([
@@ -3266,14 +3266,14 @@ describe("matchOperator()", () => {
                   Type.variablePattern("b"),
                 ]),
                 vars,
-                false
+                false,
               ),
             ]),
             vars,
-            false
+            false,
           ),
         ]),
-        vars
+        vars,
       );
 
       const expectedResult = Type.list([
@@ -3318,11 +3318,11 @@ describe("matchOperator()", () => {
                 [Type.atom("b"), Type.variablePattern("b")],
               ]),
               vars,
-              false
+              false,
             ),
           ],
         ]),
-        vars
+        vars,
       );
 
       const expectedResult = Type.map([
@@ -3389,16 +3389,16 @@ describe("matchOperator()", () => {
                       [Type.atom("b"), Type.variablePattern("b")],
                     ]),
                     vars,
-                    false
+                    false,
                   ),
                 ],
               ]),
               vars,
-              false
+              false,
             ),
           ],
         ]),
-        vars
+        vars,
       );
 
       const expectedResult = Type.map([
@@ -3438,10 +3438,10 @@ describe("matchOperator()", () => {
             Type.tuple([Type.variablePattern("c"), Type.variablePattern("d")]),
             Type.tuple([Type.variablePattern("a"), Type.variablePattern("b")]),
             vars,
-            false
+            false,
           ),
         ]),
-        vars
+        vars,
       );
 
       const expectedResult = Type.tuple([
@@ -3484,14 +3484,14 @@ describe("matchOperator()", () => {
                   Type.variablePattern("b"),
                 ]),
                 vars,
-                false
+                false,
               ),
             ]),
             vars,
-            false
+            false,
           ),
         ]),
-        vars
+        vars,
       );
 
       const expectedResult = Type.tuple([
@@ -3533,7 +3533,7 @@ describe("matchOperator()", () => {
       assertError(
         () => Interpreter.matchOperator(tuple2, tuple1, vars),
         "MatchError",
-        "no match of right hand side value: {1, 3}"
+        "no match of right hand side value: {1, 3}",
       );
     });
 
@@ -3541,7 +3541,7 @@ describe("matchOperator()", () => {
       assertError(
         () => Interpreter.matchOperator(Type.atom("abc"), tuple1, vars),
         "MatchError",
-        "no match of right hand side value: :abc"
+        "no match of right hand side value: :abc",
       );
     });
 
@@ -3549,7 +3549,7 @@ describe("matchOperator()", () => {
       assertError(
         () => Interpreter.matchOperator(tuple1, Type.tuple([]), vars),
         "MatchError",
-        "no match of right hand side value: {1, 2}"
+        "no match of right hand side value: {1, 2}",
       );
     });
 
@@ -3557,7 +3557,7 @@ describe("matchOperator()", () => {
       assertError(
         () => Interpreter.matchOperator(Type.tuple([]), tuple1, vars),
         "MatchError",
-        "no match of right hand side value: {}"
+        "no match of right hand side value: {}",
       );
     });
 
@@ -3601,7 +3601,7 @@ describe("matchOperator()", () => {
       const result = Interpreter.matchOperator(
         Type.integer(2),
         Type.variablePattern("x"),
-        vars
+        vars,
       );
 
       assert.deepStrictEqual(result, Type.integer(2));
@@ -3619,12 +3619,12 @@ describe("matchOperator()", () => {
       const result = Interpreter.matchOperator(
         Type.list([Type.integer(1), Type.integer(1)]),
         Type.list([Type.variablePattern("x"), Type.variablePattern("x")]),
-        vars
+        vars,
       );
 
       assert.deepStrictEqual(
         result,
-        Type.list([Type.integer(1), Type.integer(1)])
+        Type.list([Type.integer(1), Type.integer(1)]),
       );
 
       const expectedVars = {
@@ -3642,10 +3642,10 @@ describe("matchOperator()", () => {
           Interpreter.matchOperator(
             Type.list([Type.integer(1), Type.integer(2)]),
             Type.list([Type.variablePattern("x"), Type.variablePattern("x")]),
-            vars
+            vars,
           ),
         "MatchError",
-        "no match of right hand side value: [1, 2]"
+        "no match of right hand side value: [1, 2]",
       );
     });
   });
@@ -3655,7 +3655,7 @@ it("raiseMatchError()", () => {
   assertError(
     () => Interpreter.raiseMatchError(Type.atom("abc")),
     "MatchError",
-    "no match of right hand side value: :abc"
+    "no match of right hand side value: :abc",
   );
 });
 

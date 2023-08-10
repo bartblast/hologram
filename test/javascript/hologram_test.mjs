@@ -134,7 +134,7 @@ it("raiseInterpreterError()", () => {
   assertError(
     () => Hologram.raiseInterpreterError("abc"),
     "Hologram.InterpreterError",
-    "abc"
+    "abc",
   );
 });
 

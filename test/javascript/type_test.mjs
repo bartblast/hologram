@@ -181,7 +181,7 @@ describe("bitstringSegment()", () => {
     assertError(
       () => Type.bitstringSegment(Type.integer(123), {}),
       "Hologram.InterpreterError",
-      expectedMessage
+      expectedMessage,
     );
   });
 });
@@ -336,7 +336,7 @@ describe("improperList()", () => {
     assertError(
       () => Type.improperList([]),
       "Hologram.InterpreterError",
-      "improper list must have at least 2 items, received []"
+      "improper list must have at least 2 items, received []",
     );
   });
 
@@ -344,7 +344,7 @@ describe("improperList()", () => {
     assertError(
       () => Type.improperList([Type.integer(1)]),
       "Hologram.InterpreterError",
-      'improper list must have at least 2 items, received [{"type":"integer","value":"__bigint__:1"}]'
+      'improper list must have at least 2 items, received [{"type":"integer","value":"__bigint__:1"}]',
     );
   });
 

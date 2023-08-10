@@ -317,7 +317,7 @@ describe("</2", () => {
     assertError(
       () => Erlang["</2"](left, right),
       "Hologram.InterpreterError",
-      expectedMessage
+      expectedMessage,
     );
   });
 
@@ -331,7 +331,7 @@ describe("</2", () => {
     assertError(
       () => Erlang["</2"](left, right),
       "Hologram.InterpreterError",
-      expectedMessage
+      expectedMessage,
     );
   });
 });
@@ -564,7 +564,7 @@ describe(">/2", () => {
     assertError(
       () => Erlang[">/2"](left, right),
       "Hologram.InterpreterError",
-      expectedMessage
+      expectedMessage,
     );
   });
 
@@ -578,7 +578,7 @@ describe(">/2", () => {
     assertError(
       () => Erlang[">/2"](left, right),
       "Hologram.InterpreterError",
-      expectedMessage
+      expectedMessage,
     );
   });
 });
@@ -589,7 +589,7 @@ it("error/1", () => {
       Erlang["error/1"]({a: 1, b: 2});
     },
     Error,
-    '__hologram__:{"a":1,"b":2}'
+    '__hologram__:{"a":1,"b":2}',
   );
 });
 
@@ -605,7 +605,7 @@ describe("hd/1", () => {
     assertError(
       () => Erlang["hd/1"](Type.list([])),
       "ArgumentError",
-      "errors were found at the given arguments:\n\n* 1st argument: not a nonempty list"
+      "errors were found at the given arguments:\n\n* 1st argument: not a nonempty list",
     );
   });
 
@@ -613,7 +613,7 @@ describe("hd/1", () => {
     assertError(
       () => Erlang["hd/1"](Type.integer(123)),
       "ArgumentError",
-      "errors were found at the given arguments:\n\n* 1st argument: not a nonempty list"
+      "errors were found at the given arguments:\n\n* 1st argument: not a nonempty list",
     );
   });
 });
@@ -670,7 +670,7 @@ describe("length/1", () => {
     assertError(
       () => Erlang["length/1"](Type.integer(123)),
       "ArgumentError",
-      "errors were found at the given arguments:\n\n* 1st argument: not a list"
+      "errors were found at the given arguments:\n\n* 1st argument: not a list",
     );
   });
 });
@@ -735,7 +735,7 @@ describe("tl/1", () => {
       assertError(
         () => Erlang["tl/1"](Type.list([])),
         "ArgumentError",
-        "errors were found at the given arguments:\n\n* 1st argument: not a nonempty list"
+        "errors were found at the given arguments:\n\n* 1st argument: not a nonempty list",
       );
     });
 
@@ -743,7 +743,7 @@ describe("tl/1", () => {
       assertError(
         () => Erlang["tl/1"](Type.integer(123)),
         "ArgumentError",
-        "errors were found at the given arguments:\n\n* 1st argument: not a nonempty list"
+        "errors were found at the given arguments:\n\n* 1st argument: not a nonempty list",
       );
     });
   });

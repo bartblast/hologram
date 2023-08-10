@@ -38,7 +38,7 @@ export default class Bitstring {
     const value = segment.value.value;
 
     const bitArrays = Array.from(Bitstring.#getBytesFromFloat(value)).map(
-      (byte) => Bitstring.#convertDataToBitArray(BigInt(byte), 8n, 1n)
+      (byte) => Bitstring.#convertDataToBitArray(BigInt(byte), 8n, 1n),
     );
 
     return Utils.concatUint8Arrays(bitArrays);
@@ -64,7 +64,7 @@ export default class Bitstring {
         };
 
         return Bitstring.#buildBitArrayFromString(
-          segmentWithValueCastedToString
+          segmentWithValueCastedToString,
         );
       } catch {
         Bitstring.#raiseInvalidUnicodeCodePointError(segment, index);
@@ -82,7 +82,7 @@ export default class Bitstring {
     const value = segment.value.value;
 
     const bitArrays = Array.from(
-      Bitstring.#getBytesFromString(value, segment.type)
+      Bitstring.#getBytesFromString(value, segment.type),
     ).map((byte) => Bitstring.#convertDataToBitArray(BigInt(byte), 8n, 1n));
 
     if (segment.size !== null) {
@@ -117,7 +117,7 @@ export default class Bitstring {
     str
       .split("")
       .forEach((char, index) =>
-        view.setUint16(index * 2, char.charCodeAt(0), endianness === "little")
+        view.setUint16(index * 2, char.charCodeAt(0), endianness === "little"),
       );
 
     return byteArray;
@@ -149,7 +149,7 @@ export default class Bitstring {
       index,
       segment.type,
       "a non-negative integer encodable as " + segment.type,
-      segment.value
+      segment.value,
     );
   }
 
@@ -157,7 +157,7 @@ export default class Bitstring {
     index,
     segmentType,
     expectedValueTypesStr,
-    value
+    value,
   ) {
     const inspectedValue = Hologram.inspect(value);
     const message = `construction of binary failed: segment ${index} of type '${segmentType}': expected ${expectedValueTypesStr} but got: ${inspectedValue}`;
@@ -189,7 +189,7 @@ export default class Bitstring {
       const inspectedValue = Hologram.inspect(segment.value);
 
       Hologram.raiseArgumentError(
-        `construction of binary failed: segment ${index} of type 'binary': the size of the value ${inspectedValue} is not a multiple of the unit for the segment`
+        `construction of binary failed: segment ${index} of type 'binary': the size of the value ${inspectedValue} is not a multiple of the unit for the segment`,
       );
     }
 
@@ -198,7 +198,7 @@ export default class Bitstring {
         index,
         "binary",
         "a binary",
-        segment.value
+        segment.value,
       );
     }
 
@@ -211,7 +211,7 @@ export default class Bitstring {
         index,
         "binary",
         "a binary",
-        segment.value
+        segment.value,
       );
     }
 
@@ -224,13 +224,13 @@ export default class Bitstring {
         index,
         "float",
         "a float or an integer",
-        segment.value
+        segment.value,
       );
     }
 
     if (segment.size === null && segment.unit !== null) {
       Hologram.raiseCompileError(
-        "integer and float types require a size specifier if the unit specifier is given"
+        "integer and float types require a size specifier if the unit specifier is given",
       );
     }
 
@@ -240,14 +240,14 @@ export default class Bitstring {
 
     if (![16n, 32n, 64n].includes(numBits)) {
       const message = `construction of binary failed: segment ${index} of type 'float': expected one of the supported sizes 16, 32, or 64 but got: ${Number(
-        numBits
+        numBits,
       )}`;
       Hologram.raiseArgumentError(message);
     }
 
     if (numBits !== 64n) {
       Hologram.raiseInterpreterError(
-        `${numBits}-bit float bitstring segments are not yet implemented in Hologram`
+        `${numBits}-bit float bitstring segments are not yet implemented in Hologram`,
       );
     }
 
@@ -260,7 +260,7 @@ export default class Bitstring {
         index,
         "integer",
         "an integer",
-        segment.value
+        segment.value,
       );
     }
 
@@ -294,13 +294,13 @@ export default class Bitstring {
         index,
         segment.type,
         "a non-negative integer encodable as " + segment.type,
-        segment.value
+        segment.value,
       );
     }
 
     if (segment.size !== null || segment.unit !== null) {
       Hologram.raiseCompileError(
-        "size and unit are not supported on utf types"
+        "size and unit are not supported on utf types",
       );
     }
 

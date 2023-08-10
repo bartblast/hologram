@@ -34,7 +34,7 @@ describe("get/2", () => {
     assertError(
       () => Erlang_maps["get/2"](Type.atom("a"), Type.integer(1)),
       "BadMapError",
-      expectedMessage
+      expectedMessage,
     );
   });
 
@@ -44,7 +44,7 @@ describe("get/2", () => {
     assertError(
       () => Erlang_maps["get/2"](Type.atom("a"), Type.map([])),
       "KeyError",
-      expectedMessage
+      expectedMessage,
     );
   });
 });

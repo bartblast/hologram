@@ -88,7 +88,7 @@ export default class Hologram {
 
   static serialize(term) {
     return JSON.stringify(term, (_key, value) =>
-      typeof value === "bigint" ? `__bigint__:${value.toString()}` : value
+      typeof value === "bigint" ? `__bigint__:${value.toString()}` : value,
     );
   }
 }

@@ -92,7 +92,7 @@ export function assertBoxedTrue(boxed) {
 
 export function assertError(callable, errorAliasStr, message) {
   const expectedErrorData = Hologram.serialize(
-    Type.errorStruct(errorAliasStr, message)
+    Type.errorStruct(errorAliasStr, message),
   );
 
   assert.throw(callable, Error, `__hologram__:${expectedErrorData}`);
