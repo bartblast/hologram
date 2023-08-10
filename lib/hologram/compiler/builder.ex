@@ -381,9 +381,8 @@ defmodule Hologram.Compiler.Builder do
   defp render_reachable_erlang_function_defs(reachable_mfas, erlang_source_dir) do
     reachable_mfas
     |> filter_erlang_mfas()
-    |> Enum.map(fn {module, function, arity} ->
+    |> Enum.map_join("\n\n", fn {module, function, arity} ->
       build_erlang_function_definition(module, function, arity, erlang_source_dir)
     end)
-    |> Enum.join("\n\n")
   end
 end
