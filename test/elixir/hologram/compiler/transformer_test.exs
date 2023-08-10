@@ -1799,18 +1799,8 @@ defmodule Hologram.Compiler.TransformerTest do
                  %IR.Variable{name: :x},
                  %IR.MapType{
                    data: [
-                     %IR.TupleType{
-                       data: [
-                         %IR.AtomType{value: :a},
-                         %IR.IntegerType{value: 1}
-                       ]
-                     },
-                     %IR.TupleType{
-                       data: [
-                         %IR.AtomType{value: :b},
-                         %IR.IntegerType{value: 2}
-                       ]
-                     }
+                     {%IR.AtomType{value: :a}, %IR.IntegerType{value: 1}},
+                     {%IR.AtomType{value: :b}, %IR.IntegerType{value: 2}}
                    ]
                  }
                ]

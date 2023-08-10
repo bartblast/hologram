@@ -243,13 +243,13 @@ defmodule Hologram.Compiler.Transformer do
   end
 
   # Map with cons operator is transformed to Map.merge/2 remote function call.
-  def transform({:%{}, _meta_1, [{:|, _meta_2, [map, data]}]}, context) do
+  def transform({:%{}, _meta_1, [{:|, _meta_2, [map_1, data_2]}]}, context) do
     %IR.RemoteFunctionCall{
       module: %IR.AtomType{value: Map},
       function: :merge,
       args: [
-        transform(map, context),
-        %IR.MapType{data: transform_list(data, context)}
+        transform(map_1, context),
+        transform({:%{}, [], data_2}, context)
       ]
     }
   end
