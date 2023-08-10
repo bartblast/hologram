@@ -1111,6 +1111,24 @@ defmodule Hologram.Compiler.EncoderTest do
 
       assert encode(ir, %Context{}) == "vars.x[\"my_fun!/2\"](Type.integer(1n), Type.integer(2n))"
     end
+
+    test "called on expression" do
+      # my_fun_a(123).my_fun_b!(1, 2)
+      ir = %IR.RemoteFunctionCall{
+        module: %IR.LocalFunctionCall{
+          function: :my_fun_a,
+          args: [%IR.IntegerType{value: 123}]
+        },
+        function: :my_fun_b!,
+        args: [
+          %IR.IntegerType{value: 1},
+          %IR.IntegerType{value: 2}
+        ]
+      }
+
+      assert encode(ir, %Context{module: MyModule}) ==
+               ~s{Elixir_MyModule["my_fun_a/1"](Type.integer(123n))["my_fun_b!/2"](Type.integer(1n), Type.integer(2n))}
+    end
   end
 
   test "string type" do

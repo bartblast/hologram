@@ -272,10 +272,10 @@ defmodule Hologram.Compiler.Encoder do
   end
 
   def encode(
-        %IR.RemoteFunctionCall{module: %IR.Variable{} = variable, function: function, args: args},
+        %IR.RemoteFunctionCall{module: expr, function: function, args: args},
         context
       ) do
-    callable = encode(variable, context)
+    callable = encode(expr, context)
     encode_function_call(callable, function, args, context)
   end
 
