@@ -15,6 +15,7 @@ MFAs for sorting:
   {:erlang, :==, 2},
   {:erlang, :>, 2},
   {:erlang, :error, 1},
+  {:erlang, :error, 2},
   {:erlang, :hd, 1},
   {:erlang, :is_atom, 1},
   {:erlang, :is_float, 1},
@@ -139,11 +140,21 @@ const Erlang = {
   // end >/2
   // deps: []
 
+  // TODO: review this function after error reporting is implemented
   // start error/1
   "error/1": (reason) => {
-    throw new Error(`__hologram__:${Hologram.serialize(reason)}`);
+    Erlang["error/2"](reason, Type.atom("none"));
   },
   // end error/1
+  // deps: []
+
+  // TODO: review this function after error reporting is implemented
+  // TODO: maybe use args param
+  // start error/2
+  "error/2": (reason, _args) => {
+    throw new Error(`__hologram__:${Hologram.serialize(reason)}`);
+  },
+  // end error/2
   // deps: []
 
   // start hd/1

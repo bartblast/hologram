@@ -584,9 +584,24 @@ describe(">/2", () => {
 });
 
 it("error/1", () => {
+  const reason = {a: 1, b: 2};
+
   assert.throw(
     () => {
-      Erlang["error/1"]({a: 1, b: 2});
+      Erlang["error/1"](reason);
+    },
+    Error,
+    '__hologram__:{"a":1,"b":2}',
+  );
+});
+
+it("error/2", () => {
+  const reason = {a: 1, b: 2};
+  const args = Type.list([Type.integer(1, Type.integer(2))]);
+
+  assert.throw(
+    () => {
+      Erlang["error/2"](reason, args);
     },
     Error,
     '__hologram__:{"a":1,"b":2}',
