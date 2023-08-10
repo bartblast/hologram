@@ -253,6 +253,9 @@ export default class Interpreter {
     vars.__snapshot__ = Hologram.cloneVars(vars);
   }
 
+  // TODO: implement
+  static try() {}
+
   static #evaluateGuard(guard, vars) {
     if (guard === null) {
       return true;

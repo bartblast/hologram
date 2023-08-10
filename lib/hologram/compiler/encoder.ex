@@ -283,6 +283,11 @@ defmodule Hologram.Compiler.Encoder do
     encode_primitive_type(:bitstring, value, true)
   end
 
+  # TODO: implement
+  def encode(%IR.Try{}, _context) do
+    "Interpreter.try()"
+  end
+
   def encode(%IR.TupleType{data: data}, context) do
     data_str = encode_as_array(data, context)
     "Type.tuple(#{data_str})"
