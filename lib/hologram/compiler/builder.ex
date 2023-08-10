@@ -320,7 +320,7 @@ defmodule Hologram.Compiler.Builder do
     end_marker = "// end #{key}"
 
     regex =
-      ~r/#{Regex.escape(start_marker)}[[:space:]]+"#{key}":[[:space:]]+(.+),[[:space:]]+#{Regex.escape(end_marker)}/s
+      ~r/#{Regex.escape(start_marker)}[[:space:]]+"#{Regex.escape(key)}":[[:space:]]+(.+),[[:space:]]+#{Regex.escape(end_marker)}/s
 
     file_contents = File.read!(file_path)
 
