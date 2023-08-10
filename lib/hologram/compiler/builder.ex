@@ -10,9 +10,9 @@ defmodule Hologram.Compiler.Builder do
   @doc """
   Builds JavaScript code for the given entry page.
   """
-  @spec build_entry_page_js(CallGraph.t(), PLT.t(), module) :: String.t()
+  @spec build_entry_page_js(module, CallGraph.t(), PLT.t(), String.t()) :: String.t()
   # sobelow_skip ["DOS.BinToAtom"]
-  def build_entry_page_js(call_graph, ir_plt, entry_page) do
+  def build_entry_page_js(entry_page, call_graph, ir_plt, erlang_source_dir) do
     # credo:disable-for-next-line Credo.Check.Warning.UnsafeToAtom
     clone_name = :"call_graph_#{__MODULE__}_#{entry_page}"
 
@@ -24,6 +24,8 @@ defmodule Hologram.Compiler.Builder do
       const Type = typeClass;
 
     #{render_reachable_elixir_function_defs(reachable_mfas, ir_plt)}
+
+    #{render_reachable_erlang_function_defs(reachable_mfas, erlang_source_dir)}
 
     }\
     """
@@ -334,6 +336,10 @@ defmodule Hologram.Compiler.Builder do
     Enum.filter(mfas, fn {module, _function, _arity} -> Reflection.alias?(module) end)
   end
 
+  defp filter_erlang_mfas(mfas) do
+    Enum.filter(mfas, fn {module, _function, _arity} -> !Reflection.alias?(module) end)
+  end
+
   defp mapset_from_plt(plt) do
     plt
     |> PLT.get_all()
@@ -369,6 +375,15 @@ defmodule Hologram.Compiler.Builder do
       [module_output | output]
     end)
     |> Enum.reverse()
+    |> Enum.join("\n\n")
+  end
+
+  defp render_reachable_erlang_function_defs(reachable_mfas, erlang_source_dir) do
+    reachable_mfas
+    |> filter_erlang_mfas()
+    |> Enum.map(fn {module, function, arity} ->
+      build_erlang_function_definition(module, function, arity, erlang_source_dir)
+    end)
     |> Enum.join("\n\n")
   end
 end
