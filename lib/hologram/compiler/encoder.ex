@@ -33,6 +33,13 @@ defmodule Hologram.Compiler.Encoder do
   @spec encode(IR.t(), Context.t()) :: String.t()
   def encode(ir, context)
 
+  def encode(%IR.AnonymousFunctionCall{function: function, args: args}, context) do
+    function_js = encode(function, context)
+    args_js = encode_as_array(args, context)
+
+    "Interpreter.callAnonymousFunction(#{function_js}, #{args_js})"
+  end
+
   def encode(%IR.AnonymousFunctionType{arity: arity, clauses: clauses}, context) do
     clauses_js = encode_as_array(clauses, context)
     "Type.anonymousFunction(#{arity}, #{clauses_js}, vars)"

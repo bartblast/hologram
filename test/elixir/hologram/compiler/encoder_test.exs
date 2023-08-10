@@ -5,6 +5,20 @@ defmodule Hologram.Compiler.EncoderTest do
   alias Hologram.Compiler.Context
   alias Hologram.Compiler.IR
 
+  test "anonymous function call" do
+    # my_fun.(1, 2)
+    ir = %IR.AnonymousFunctionCall{
+      function: %IR.Variable{name: :my_fun},
+      args: [
+        %IR.IntegerType{value: 1},
+        %IR.IntegerType{value: 2}
+      ]
+    }
+
+    assert encode(ir, %Context{}) ==
+             "Interpreter.callAnonymousFunction(vars.my_fun, [Type.integer(1n), Type.integer(2n)])"
+  end
+
   describe "anonymous function type" do
     test "with single clause" do
       # fn x -> :expr end
