@@ -91,6 +91,7 @@ defmodule Hologram.Compiler.Builder do
   """
   @spec build_runtime_js(String.t(), String.t(), String.t()) ::
           {String.t(), String.t(), String.t()}
+  # sobelow_skip ["CI.System"]
   def build_runtime_js(esbuild_path, source_file, output_dir) do
     output_file = output_dir <> "/hologram.runtime.js"
 
