@@ -893,48 +893,69 @@ defmodule Hologram.Compiler.CallGraphTest do
     end
   end
 
-  test "reachable/2", %{call_graph: call_graph} do
-    # 1
-    # ├─ 2
-    # │  ├─ 4
-    # │  │  ├─ 8
-    # │  │  ├─ 9
-    # │  ├─ 5
-    # │  │  ├─ 10
-    # │  │  ├─ 11
-    # ├─ 3
-    # │  ├─ 6
-    # │  │  ├─ 12
-    # │  │  ├─ 13
-    # │  ├─ 7
-    # │  │  ├─ 14
-    # │  │  ├─ 15
+  describe "reachable/2" do
+    setup %{call_graph: call_graph} do
+      # 1
+      # ├─ 2
+      # │  ├─ 4
+      # │  │  ├─ 8
+      # │  │  ├─ 9
+      # │  ├─ 5
+      # │  │  ├─ 10
+      # │  │  ├─ 11
+      # ├─ 3
+      # │  ├─ 6
+      # │  │  ├─ 12
+      # │  │  ├─ 13
+      # │  ├─ 7
+      # │  │  ├─ 14
+      # │  │  ├─ 15
 
-    call_graph
-    |> add_edge(:vertex_1, :vertex_2)
-    |> add_edge(:vertex_1, :vertex_3)
-    |> add_edge(:vertex_2, :vertex_4)
-    |> add_edge(:vertex_2, :vertex_5)
-    |> add_edge(:vertex_3, :vertex_6)
-    |> add_edge(:vertex_3, :vertex_7)
-    |> add_edge(:vertex_4, :vertex_8)
-    |> add_edge(:vertex_4, :vertex_9)
-    |> add_edge(:vertex_5, :vertex_10)
-    |> add_edge(:vertex_5, :vertex_11)
-    |> add_edge(:vertex_6, :vertex_12)
-    |> add_edge(:vertex_6, :vertex_13)
-    |> add_edge(:vertex_7, :vertex_14)
-    |> add_edge(:vertex_7, :vertex_15)
+      call_graph
+      |> add_edge(:vertex_1, :vertex_2)
+      |> add_edge(:vertex_1, :vertex_3)
+      |> add_edge(:vertex_2, :vertex_4)
+      |> add_edge(:vertex_2, :vertex_5)
+      |> add_edge(:vertex_3, :vertex_6)
+      |> add_edge(:vertex_3, :vertex_7)
+      |> add_edge(:vertex_4, :vertex_8)
+      |> add_edge(:vertex_4, :vertex_9)
+      |> add_edge(:vertex_5, :vertex_10)
+      |> add_edge(:vertex_5, :vertex_11)
+      |> add_edge(:vertex_6, :vertex_12)
+      |> add_edge(:vertex_6, :vertex_13)
+      |> add_edge(:vertex_7, :vertex_14)
+      |> add_edge(:vertex_7, :vertex_15)
 
-    assert reachable(call_graph, :vertex_3) == [
-             :vertex_15,
-             :vertex_14,
-             :vertex_7,
-             :vertex_13,
-             :vertex_12,
-             :vertex_6,
-             :vertex_3
-           ]
+      :ok
+    end
+
+    test "single vertex argument", %{call_graph: call_graph} do
+      assert reachable(call_graph, :vertex_3) == [
+               :vertex_15,
+               :vertex_14,
+               :vertex_7,
+               :vertex_13,
+               :vertex_12,
+               :vertex_6,
+               :vertex_3
+             ]
+    end
+
+    test "multiple vertices argument", %{call_graph: call_graph} do
+      assert reachable(call_graph, [:vertex_3, :vertex_5]) == [
+               :vertex_11,
+               :vertex_10,
+               :vertex_5,
+               :vertex_15,
+               :vertex_14,
+               :vertex_7,
+               :vertex_13,
+               :vertex_12,
+               :vertex_6,
+               :vertex_3
+             ]
+    end
   end
 
   test "reachable_mfas/2", %{call_graph: call_graph} do

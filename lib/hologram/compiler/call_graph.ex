@@ -376,17 +376,17 @@ defmodule Hologram.Compiler.CallGraph do
   end
 
   @doc """
-  Determines vertices which are reachable from the given vertex.
-
-  ## Examples
-
-      iex> call_graph = %CallGraph{name: :my_call_graph, pid: #PID<0.259.0>}
-      iex> reachable(call_graph, :vertex_3)
-      [:vertex_12, :vertex_5, :vertex_9, :vertex_3]
+  Determines vertices which are reachable from the given vertex or vertices.
   """
-  @spec reachable(CallGraph.t(), vertex) :: list(vertex)
+  @spec reachable(CallGraph.t(), vertex | list(vertex)) :: list(vertex)
+  def reachable(call_graph, vertex_or_vertices)
+
+  def reachable(call_graph, vertices) when is_list(vertices) do
+    Agent.get(call_graph.name, &Graph.reachable(&1, vertices))
+  end
+
   def reachable(call_graph, vertex) do
-    Agent.get(call_graph.name, &Graph.reachable(&1, [vertex]))
+    reachable(call_graph, [vertex])
   end
 
   @doc """
