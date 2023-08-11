@@ -221,30 +221,34 @@ defmodule Hologram.Compiler.BuilderTest do
            )
   end
 
-  test "build_runtime_js_file/3" do
+  test "bundle/4" do
     # setup
     clean_tmp_dir()
     install_lib_js_deps()
 
     esbuild_path = Reflection.root_path() <> "/assets/node_modules/.bin/esbuild"
+    tmp_path = Reflection.tmp_path()
 
-    assert {digest, output_path, source_map_path} =
-             build_runtime_js_file(esbuild_path, "assets/js/hologram.mjs", "tmp")
+    assert {_digest, bundle_file, source_map_file} =
+             {"caf8f4e27584852044eb27a37c5eddfd",
+              "/Users/bartblast/Projects/hologram/tmp/my_script.caf8f4e27584852044eb27a37c5eddfd.js",
+              "/Users/bartblast/Projects/hologram/tmp/my_script.caf8f4e27584852044eb27a37c5eddfd.js.map"} =
+             bundle("const myVar = 123;", "my_script", esbuild_path, tmp_path)
 
-    assert digest =~ ~r/^[0-9a-f]{32}$/
-    assert output_path == "tmp/hologram.runtime-#{digest}.js"
-    assert source_map_path == "tmp/hologram.runtime-#{digest}.js.map"
+    assert File.read!(bundle_file) == """
+           (()=>{})();
+           //# sourceMappingURL=my_script.caf8f4e27584852044eb27a37c5eddfd.js.map
+           """
 
-    output_js = File.read!(output_path)
-    assert String.starts_with?(output_js, ~s("use strict"))
-
-    assert String.ends_with?(
-             output_js,
-             "//# sourceMappingURL=hologram.runtime-#{digest}.js.map\n"
-           )
-
-    source_map_json = File.read!(source_map_path)
-    assert String.starts_with?(source_map_json, ~s({\n  "version": 3,\n  "sources": ["))
+    assert File.read!(source_map_file) == """
+           {
+             "version": 3,
+             "sources": [],
+             "sourcesContent": [],
+             "mappings": "",
+             "names": []
+           }
+           """
   end
 
   describe "diff_module_digest_plts/2" do

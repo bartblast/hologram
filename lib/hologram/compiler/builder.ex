@@ -102,27 +102,31 @@ defmodule Hologram.Compiler.Builder do
   end
 
   @doc """
-  Builds Hologram runtime JS file and its source map.
-  The generated filenames contain the hex digest of the built JS content.
+  Bundles the given JavaScript code into a JavaScript file and its source map.
+  The generated file names contain the hex digest of the bundled JavaScript file content.
 
   ## Examples
 
-      iex> build_runtime_js_file("assets/node_modules/esbuild", "assets/js/hologram.mjs", "tmp")
-      {"c4206fe5fa846da67e50ed03874ccbae",
-       "tmp/hologram.runtime-c4206fe5fa846da67e50ed03874ccbae.js",
-      "tmp/hologram.runtime-c4206fe5fa846da67e50ed03874ccbae.js.map"}
+      iex> js = "const myVar = 123;"
+      iex> bundle(js, "my_script", "assets/node_modules/esbuild", "priv/static/assets")
+      {"caf8f4e27584852044eb27a37c5eddfd",
+       "priv/static/assets/my_script.caf8f4e27584852044eb27a37c5eddfd.js",
+       "priv/static/assets/my_script.caf8f4e27584852044eb27a37c5eddfd.js.map"}
   """
-  @spec build_runtime_js_file(String.t(), String.t(), String.t()) ::
+  @spec bundle(String.t(), String.t(), String.t(), String.t()) ::
           {String.t(), String.t(), String.t()}
   # sobelow_skip ["CI.System"]
-  def build_runtime_js_file(esbuild_path, source_file, output_dir) do
-    output_file = output_dir <> "/hologram.runtime.js"
+  def bundle(js, name, esbuild_path, bundle_dir) do
+    entry_file = Reflection.tmp_path() <> "/#{name}.entry.js"
+    File.write!(entry_file, js)
+
+    bundle_file = "#{bundle_dir}/#{name}.js"
 
     cmd = [
-      source_file,
+      entry_file,
       "--bundle",
       "--minify",
-      "--outfile=#{output_file}",
+      "--outfile=#{bundle_file}",
       "--sourcemap",
       "--target=es2020"
     ]
@@ -130,29 +134,29 @@ defmodule Hologram.Compiler.Builder do
     System.cmd(esbuild_path, cmd, env: [])
 
     digest =
-      output_file
+      bundle_file
       |> File.read!()
       |> CryptographicUtils.digest(:md5, :hex)
 
-    output_file_with_digest = output_dir <> "/hologram.runtime-#{digest}.js"
+    bundle_file_with_digest = "#{bundle_dir}/#{name}.#{digest}.js"
 
-    source_map_file = output_file <> ".map"
-    source_map_file_with_digest = output_file_with_digest <> ".map"
+    source_map_file = bundle_file <> ".map"
+    source_map_file_with_digest = bundle_file_with_digest <> ".map"
 
-    File.rename!(output_file, output_file_with_digest)
+    File.rename!(bundle_file, bundle_file_with_digest)
     File.rename!(source_map_file, source_map_file_with_digest)
 
     js_with_replaced_source_map_url =
-      output_file_with_digest
+      bundle_file_with_digest
       |> File.read!()
       |> String.replace(
-        "//# sourceMappingURL=hologram.runtime.js.map",
-        "//# sourceMappingURL=hologram.runtime-#{digest}.js.map"
+        "//# sourceMappingURL=#{name}.js.map",
+        "//# sourceMappingURL=#{name}.#{digest}.js.map"
       )
 
-    File.write!(output_file_with_digest, js_with_replaced_source_map_url)
+    File.write!(bundle_file_with_digest, js_with_replaced_source_map_url)
 
-    {digest, output_file_with_digest, source_map_file_with_digest}
+    {digest, bundle_file_with_digest, source_map_file_with_digest}
   end
 
   @doc """
