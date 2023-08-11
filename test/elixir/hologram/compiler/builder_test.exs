@@ -287,35 +287,6 @@ defmodule Hologram.Compiler.BuilderTest do
     end
   end
 
-  test "entry_page_reachable_mfas/3" do
-    module_5_ir = IR.for_module(Module5)
-    module_6_ir = IR.for_module(Module6)
-    module_7_ir = IR.for_module(Module7)
-
-    call_graph =
-      [name: @call_graph_name_1]
-      |> CallGraph.start()
-      |> CallGraph.build(module_5_ir)
-      |> CallGraph.build(module_6_ir)
-      |> CallGraph.build(module_7_ir)
-
-    sorted_reachable_mfas =
-      call_graph
-      |> entry_page_reachable_mfas(Module5, @call_graph_name_2)
-      |> Enum.sort()
-
-    assert sorted_reachable_mfas == [
-             {Module5, :__hologram_layout_module__, 0},
-             {Module5, :__hologram_layout_props__, 0},
-             {Module5, :__hologram_route__, 0},
-             {Module5, :action, 3},
-             {Module5, :template, 0},
-             {Module6, :action, 3},
-             {Module6, :template, 0},
-             {Module7, :my_fun_7a, 2}
-           ]
-  end
-
   test "group_mfas_by_module/1" do
     mfas = [
       {:module_1, :fun_a, 1},
@@ -333,7 +304,36 @@ defmodule Hologram.Compiler.BuilderTest do
            }
   end
 
-  describe "list_mfas_required_by_runtime/1" do
+  test "list_page_mfas/3" do
+    module_5_ir = IR.for_module(Module5)
+    module_6_ir = IR.for_module(Module6)
+    module_7_ir = IR.for_module(Module7)
+
+    call_graph =
+      [name: @call_graph_name_1]
+      |> CallGraph.start()
+      |> CallGraph.build(module_5_ir)
+      |> CallGraph.build(module_6_ir)
+      |> CallGraph.build(module_7_ir)
+
+    sorted_mfas =
+      call_graph
+      |> list_page_mfas(Module5, @call_graph_name_2)
+      |> Enum.sort()
+
+    assert sorted_mfas == [
+             {Module5, :__hologram_layout_module__, 0},
+             {Module5, :__hologram_layout_props__, 0},
+             {Module5, :__hologram_route__, 0},
+             {Module5, :action, 3},
+             {Module5, :template, 0},
+             {Module6, :action, 3},
+             {Module6, :template, 0},
+             {Module7, :my_fun_7a, 2}
+           ]
+  end
+
+  describe "list_runtime_mfas/1" do
     setup do
       diff = %{
         added_modules: Reflection.list_std_lib_elixir_modules(),
@@ -347,7 +347,7 @@ defmodule Hologram.Compiler.BuilderTest do
       call_graph = CallGraph.start(name: @call_graph_name_1)
       CallGraph.patch(call_graph, ir_plt, diff)
 
-      [mfas: list_mfas_required_by_runtime(call_graph)]
+      [mfas: list_runtime_mfas(call_graph)]
     end
 
     test "returns reachable mfas", %{mfas: mfas} do

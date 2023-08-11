@@ -65,7 +65,7 @@ defmodule Hologram.Compiler.Builder do
     # credo:disable-for-next-line Credo.Check.Warning.UnsafeToAtom
     clone_name = :"call_graph_#{__MODULE__}_#{page}"
 
-    reachable_mfas = entry_page_reachable_mfas(call_graph, page, clone_name)
+    mfas = list_page_mfas(call_graph, page, clone_name)
     erlang_source_dir = source_dir <> "/erlang"
 
     """
@@ -73,9 +73,9 @@ defmodule Hologram.Compiler.Builder do
       const Interpreter = interpreterClass;
       const Type = typeClass;
 
-    #{render_erlang_function_defs(reachable_mfas, erlang_source_dir)}
+    #{render_erlang_function_defs(mfas, erlang_source_dir)}
 
-    #{render_elixir_function_defs(reachable_mfas, ir_plt)}
+    #{render_elixir_function_defs(mfas, ir_plt)}
 
     }\
     """
@@ -86,7 +86,7 @@ defmodule Hologram.Compiler.Builder do
   """
   @spec build_runtime_js(String.t(), CallGraph.t(), PLT.t()) :: String.t()
   def build_runtime_js(source_dir, call_graph, ir_plt) do
-    mfas = list_mfas_required_by_runtime(call_graph)
+    mfas = list_runtime_mfas(call_graph)
 
     """
     "use strict";
@@ -202,27 +202,14 @@ defmodule Hologram.Compiler.Builder do
   end
 
   @doc """
-  Returns the list of MFAs ({module, function, arity} tuples) that are reachable by the given entry page.
-
-  ## Examples
-
-      iex> call_graph = %CallGraph{name: :my_call_graph, pid: #PID<0.259.0>}
-      iex> entry_page_reachable_mfas(call_graph, MyPage5, :my_call_graph_clone)
-      [
-        {MyPage5, :__hologram_layout_module__, 0},
-        {MyPage5, :__hologram_layout_props__, 0},
-        {MyPage5, :__hologram_route__, 0},
-        {MyPage5, :action, 3},
-        {MyPage5, :template, 0},
-        {MyLayout, :action, 3},
-        {MyLayout, :template, 0},
-        {MyModule, :my_fun_7a, 2}
-      ]
+  Returns the list of MFAs ({module, function, arity} tuples) that are reachable by the given page.
+  MFAs required by the runtime are excluded.
   """
-  @spec entry_page_reachable_mfas(CallGraph.t(), module, atom) :: list(mfa)
-  def entry_page_reachable_mfas(call_graph, entry_page, clone_name) do
+  @spec list_page_mfas(CallGraph.t(), module, atom) :: list(mfa)
+  def list_page_mfas(call_graph, entry_page, clone_name) do
     call_graph_clone = CallGraph.clone(call_graph, name: clone_name)
     layout_module = entry_page.__hologram_layout_module__()
+    runtime_mfas = list_runtime_mfas(call_graph)
 
     call_graph_clone
     |> CallGraph.add_edge(entry_page, {entry_page, :__hologram_layout_module__, 0})
@@ -233,6 +220,7 @@ defmodule Hologram.Compiler.Builder do
     |> CallGraph.add_edge(entry_page, {layout_module, :template, 0})
     |> CallGraph.reachable(entry_page)
     |> Enum.filter(&is_tuple/1)
+    |> Kernel.--(runtime_mfas)
   end
 
   @doc """
@@ -246,8 +234,8 @@ defmodule Hologram.Compiler.Builder do
   @doc """
   Lists MFAs ({module, function, arity} tuples) required by the runtime JS script.
   """
-  @spec list_mfas_required_by_runtime(CallGraph.t()) :: list(mfa)
-  def list_mfas_required_by_runtime(call_graph) do
+  @spec list_runtime_mfas(CallGraph.t()) :: list(mfa)
+  def list_runtime_mfas(call_graph) do
     # These Elixir functions are used directly by JS runtime:
     entry_mfas = [
       # Interpreter.comprehension()
