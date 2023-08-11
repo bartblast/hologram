@@ -30,114 +30,6 @@ defmodule Hologram.Compiler.BuilderTest do
     :ok
   end
 
-  test "build_entry_page_js/3" do
-    module_8_ir = IR.for_module(Module8)
-    module_9_ir = IR.for_module(Module9)
-    module_10_ir = IR.for_module(Module10)
-    map_ir = IR.for_module(Map)
-
-    call_graph =
-      [name: @call_graph_name_1]
-      |> CallGraph.start()
-      |> CallGraph.build(module_8_ir)
-      |> CallGraph.build(module_9_ir)
-      |> CallGraph.build(module_10_ir)
-      |> CallGraph.build(map_ir)
-
-    ir_plt =
-      [name: @plt_name_1]
-      |> PLT.start()
-      |> PLT.put(Module8, module_8_ir)
-      |> PLT.put(Module9, module_9_ir)
-      |> PLT.put(Module10, module_10_ir)
-      |> PLT.put(Map, map_ir)
-
-    erlang_source_dir = Reflection.root_path() <> "/assets/js/erlang"
-
-    assert build_entry_page_js(Module9, call_graph, ir_plt, erlang_source_dir) == """
-           window.__hologramPageReachableFunctionDefs__ = (interpreterClass, typeClass) => {
-             const Interpreter = interpreterClass;
-             const Type = typeClass;
-
-           Interpreter.defineElixirFunction("Elixir_Map", "get", 2, [{params: [Type.variablePattern("x0"), Type.variablePattern("x1")], guards: [], body: (vars) => {
-           return Elixir_Map["get/3"](vars.x0, vars.x1, Type.atom("nil"));
-           }}])
-
-           Interpreter.defineElixirFunction("Elixir_Map", "get", 3, [{params: [Type.variablePattern("map"), Type.variablePattern("key"), Type.variablePattern("default")], guards: [], body: (vars) => {
-           return Interpreter.case(vars.map, [{match: Type.map([[vars.key, Type.variablePattern("value")]]), guards: [], body: (vars) => {
-           return vars.value;
-           }}, {match: Type.map([]), guards: [], body: (vars) => {
-           return vars.default;
-           }}, {match: Type.variablePattern("other"), guards: [], body: (vars) => {
-           return Erlang["error/2"](Type.tuple([Type.atom("badmap"), vars.other]), Type.list([vars.map, vars.key, vars.default]));
-           }}]);
-           }}])
-
-           Interpreter.defineElixirFunction("Elixir_Hologram_Test_Fixtures_Compiler_Builder_Module9", "__hologram_layout_module__", 0, [{params: [], guards: [], body: (vars) => {
-           return Type.atom("Elixir.Hologram.Test.Fixtures.Compiler.Builder.Module10");
-           }}])
-
-           Interpreter.defineElixirFunction("Elixir_Hologram_Test_Fixtures_Compiler_Builder_Module9", "__hologram_layout_props__", 0, [{params: [], guards: [], body: (vars) => {
-           return Type.list([]);
-           }}])
-
-           Interpreter.defineElixirFunction("Elixir_Hologram_Test_Fixtures_Compiler_Builder_Module9", "__hologram_route__", 0, [{params: [], guards: [], body: (vars) => {
-           return Type.bitstring("/my_path");
-           }}])
-
-           Interpreter.defineElixirFunction("Elixir_Hologram_Test_Fixtures_Compiler_Builder_Module9", "action", 3, [{params: [Type.atom("action_9a"), Type.variablePattern("params"), Type.variablePattern("state")], guards: [], body: (vars) => {
-           return Elixir_Hologram_Test_Fixtures_Compiler_Builder_Module9["fun_9a/2"](Interpreter.dotOperator(vars.params, Type.atom("my_key")), Erlang["+/2"](vars.state, Type.integer(1n)));
-           }}])
-
-           Interpreter.defineElixirFunction("Elixir_Hologram_Test_Fixtures_Compiler_Builder_Module9", "fun_9a", 2, [{params: [Type.variablePattern("map"), Type.variablePattern("key")], guards: [], body: (vars) => {
-           return Elixir_Map["get/2"](vars.map, vars.key);
-           }}])
-
-           Interpreter.defineElixirFunction("Elixir_Hologram_Test_Fixtures_Compiler_Builder_Module9", "template", 0, [{params: [], guards: [], body: (vars) => {
-           return Type.anonymousFunction(1, [{params: [Type.variablePattern("data")], guards: [], body: (vars) => {
-           return {
-           Interpreter.matchOperator(vars.data, Type.matchPlaceholder(), vars);
-           return Type.list([Type.tuple([Type.atom("text"), Type.bitstring("Module9 template")])]);
-           };
-           }}], vars);
-           }}])
-
-           Interpreter.defineElixirFunction("Elixir_Hologram_Test_Fixtures_Compiler_Builder_Module10", "action", 3, [{params: [Type.atom("action_10a"), Type.variablePattern("params"), Type.variablePattern("state")], guards: [], body: (vars) => {
-           return Elixir_Hologram_Test_Fixtures_Compiler_Builder_Module10["fun_10a/2"](vars.params, vars.state);
-           }}])
-
-           Interpreter.defineElixirFunction("Elixir_Hologram_Test_Fixtures_Compiler_Builder_Module10", "fun_10a", 2, [{params: [Type.variablePattern("params"), Type.variablePattern("state")], guards: [], body: (vars) => {
-           return Type.tuple([vars.params, vars.state]);
-           }}])
-
-           Interpreter.defineElixirFunction("Elixir_Hologram_Test_Fixtures_Compiler_Builder_Module10", "template", 0, [{params: [], guards: [], body: (vars) => {
-           return Type.anonymousFunction(1, [{params: [Type.variablePattern("data")], guards: [], body: (vars) => {
-           return {
-           Interpreter.matchOperator(vars.data, Type.matchPlaceholder(), vars);
-           return Type.list([Type.tuple([Type.atom("text"), Type.bitstring("Module10 template")])]);
-           };
-           }}], vars);
-           }}])
-
-           Interpreter.defineErlangFunction("Erlang", "+", 2, (left, right) => {
-               const [type, leftValue, rightValue] = Type.maybeNormalizeNumberTerms(
-                 left,
-                 right,
-               );
-
-               const result = leftValue.value + rightValue.value;
-
-               return type === "float" ? Type.float(result) : Type.integer(result);
-             });
-
-           Interpreter.defineErlangFunction("Erlang", "error", 2, (reason, _args) => {
-               throw new Error(`__hologram__:${Hologram.serialize(reason)}`);
-             });
-
-           }\
-           """
-  end
-
   describe "build_erlang_function_definition/4" do
     @erlang_source_dir "assets/js/erlang"
 
@@ -201,6 +93,108 @@ defmodule Hologram.Compiler.BuilderTest do
     assert %PLT{name: @plt_name_1} = plt = build_module_digest_plt(@plt_name_1)
 
     assert {:ok, <<_digest::256>>} = PLT.get(plt, Hologram.Compiler.Builder)
+  end
+
+  test "build_page_js/3" do
+    module_8_ir = IR.for_module(Module8)
+    module_9_ir = IR.for_module(Module9)
+    module_10_ir = IR.for_module(Module10)
+    map_ir = IR.for_module(Map)
+
+    call_graph =
+      [name: @call_graph_name_1]
+      |> CallGraph.start()
+      |> CallGraph.build(module_8_ir)
+      |> CallGraph.build(module_9_ir)
+      |> CallGraph.build(module_10_ir)
+      |> CallGraph.build(map_ir)
+
+    ir_plt =
+      [name: @plt_name_1]
+      |> PLT.start()
+      |> PLT.put(Module8, module_8_ir)
+      |> PLT.put(Module9, module_9_ir)
+      |> PLT.put(Module10, module_10_ir)
+      |> PLT.put(Map, map_ir)
+
+    assert build_page_js(Module9, call_graph, ir_plt, @source_dir) == """
+           window.__hologramPageReachableFunctionDefs__ = (interpreterClass, typeClass) => {
+             const Interpreter = interpreterClass;
+             const Type = typeClass;
+
+           Interpreter.defineErlangFunction("Erlang", "+", 2, (left, right) => {
+               const [type, leftValue, rightValue] = Type.maybeNormalizeNumberTerms(
+                 left,
+                 right,
+               );
+
+               const result = leftValue.value + rightValue.value;
+
+               return type === "float" ? Type.float(result) : Type.integer(result);
+             });
+
+           Interpreter.defineErlangFunction("Erlang", "error", 2, (reason, _args) => {
+               throw new Error(`__hologram__:${Hologram.serialize(reason)}`);
+             });
+
+           Interpreter.defineElixirFunction("Elixir_Map", "get", 2, [{params: [Type.variablePattern("x0"), Type.variablePattern("x1")], guards: [], body: (vars) => {
+           return Elixir_Map["get/3"](vars.x0, vars.x1, Type.atom("nil"));
+           }}])
+
+           Interpreter.defineElixirFunction("Elixir_Map", "get", 3, [{params: [Type.variablePattern("map"), Type.variablePattern("key"), Type.variablePattern("default")], guards: [], body: (vars) => {
+           return Interpreter.case(vars.map, [{match: Type.map([[vars.key, Type.variablePattern("value")]]), guards: [], body: (vars) => {
+           return vars.value;
+           }}, {match: Type.map([]), guards: [], body: (vars) => {
+           return vars.default;
+           }}, {match: Type.variablePattern("other"), guards: [], body: (vars) => {
+           return Erlang["error/2"](Type.tuple([Type.atom("badmap"), vars.other]), Type.list([vars.map, vars.key, vars.default]));
+           }}]);
+           }}])
+
+           Interpreter.defineElixirFunction("Elixir_Hologram_Test_Fixtures_Compiler_Builder_Module10", "action", 3, [{params: [Type.atom("action_10a"), Type.variablePattern("params"), Type.variablePattern("state")], guards: [], body: (vars) => {
+           return Elixir_Hologram_Test_Fixtures_Compiler_Builder_Module10["fun_10a/2"](vars.params, vars.state);
+           }}])
+
+           Interpreter.defineElixirFunction("Elixir_Hologram_Test_Fixtures_Compiler_Builder_Module10", "fun_10a", 2, [{params: [Type.variablePattern("params"), Type.variablePattern("state")], guards: [], body: (vars) => {
+           return Type.tuple([vars.params, vars.state]);
+           }}])
+
+           Interpreter.defineElixirFunction("Elixir_Hologram_Test_Fixtures_Compiler_Builder_Module10", "template", 0, [{params: [], guards: [], body: (vars) => {
+           return Type.anonymousFunction(1, [{params: [Type.variablePattern("data")], guards: [], body: (vars) => {
+           Interpreter.matchOperator(vars.data, Type.matchPlaceholder(), vars);
+           return Type.list([Type.tuple([Type.atom("text"), Type.bitstring("Module10 template")])]);
+           }}], vars);
+           }}])
+
+           Interpreter.defineElixirFunction("Elixir_Hologram_Test_Fixtures_Compiler_Builder_Module9", "__hologram_layout_module__", 0, [{params: [], guards: [], body: (vars) => {
+           return Type.atom("Elixir.Hologram.Test.Fixtures.Compiler.Builder.Module10");
+           }}])
+
+           Interpreter.defineElixirFunction("Elixir_Hologram_Test_Fixtures_Compiler_Builder_Module9", "__hologram_layout_props__", 0, [{params: [], guards: [], body: (vars) => {
+           return Type.list([]);
+           }}])
+
+           Interpreter.defineElixirFunction("Elixir_Hologram_Test_Fixtures_Compiler_Builder_Module9", "__hologram_route__", 0, [{params: [], guards: [], body: (vars) => {
+           return Type.bitstring("/my_path");
+           }}])
+
+           Interpreter.defineElixirFunction("Elixir_Hologram_Test_Fixtures_Compiler_Builder_Module9", "action", 3, [{params: [Type.atom("action_9a"), Type.variablePattern("params"), Type.variablePattern("state")], guards: [], body: (vars) => {
+           return Elixir_Hologram_Test_Fixtures_Compiler_Builder_Module9["fun_9a/2"](Interpreter.dotOperator(vars.params, Type.atom("my_key")), Erlang["+/2"](vars.state, Type.integer(1n)));
+           }}])
+
+           Interpreter.defineElixirFunction("Elixir_Hologram_Test_Fixtures_Compiler_Builder_Module9", "fun_9a", 2, [{params: [Type.variablePattern("map"), Type.variablePattern("key")], guards: [], body: (vars) => {
+           return Elixir_Map["get/2"](vars.map, vars.key);
+           }}])
+
+           Interpreter.defineElixirFunction("Elixir_Hologram_Test_Fixtures_Compiler_Builder_Module9", "template", 0, [{params: [], guards: [], body: (vars) => {
+           return Type.anonymousFunction(1, [{params: [Type.variablePattern("data")], guards: [], body: (vars) => {
+           Interpreter.matchOperator(vars.data, Type.matchPlaceholder(), vars);
+           return Type.list([Type.tuple([Type.atom("text"), Type.bitstring("Module9 template")])]);
+           }}], vars);
+           }}])
+
+           }\
+           """
   end
 
   test "build_runtime_js/3" do

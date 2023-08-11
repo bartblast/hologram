@@ -8,30 +8,6 @@ defmodule Hologram.Compiler.Builder do
   alias Hologram.Compiler.Reflection
 
   @doc """
-  Builds JavaScript code for the given entry page.
-  """
-  @spec build_entry_page_js(module, CallGraph.t(), PLT.t(), String.t()) :: String.t()
-  # sobelow_skip ["DOS.BinToAtom"]
-  def build_entry_page_js(entry_page, call_graph, ir_plt, erlang_source_dir) do
-    # credo:disable-for-next-line Credo.Check.Warning.UnsafeToAtom
-    clone_name = :"call_graph_#{__MODULE__}_#{entry_page}"
-
-    reachable_mfas = entry_page_reachable_mfas(call_graph, entry_page, clone_name)
-
-    """
-    window.__hologramPageReachableFunctionDefs__ = (interpreterClass, typeClass) => {
-      const Interpreter = interpreterClass;
-      const Type = typeClass;
-
-    #{render_elixir_function_defs(reachable_mfas, ir_plt)}
-
-    #{render_erlang_function_defs(reachable_mfas, erlang_source_dir)}
-
-    }\
-    """
-  end
-
-  @doc """
   Extracts JavaScript source code for the given ported Erlang function and generates interpreter function definition statetement.
   """
   @spec build_erlang_function_definition(module, atom, integer, String.t()) :: String.t()
@@ -78,6 +54,31 @@ defmodule Hologram.Compiler.Builder do
     |> Stream.run()
 
     plt
+  end
+
+  @doc """
+  Builds JavaScript code for the given Hologram page.
+  """
+  @spec build_page_js(module, CallGraph.t(), PLT.t(), String.t()) :: String.t()
+  # sobelow_skip ["DOS.BinToAtom"]
+  def build_page_js(page, call_graph, ir_plt, source_dir) do
+    # credo:disable-for-next-line Credo.Check.Warning.UnsafeToAtom
+    clone_name = :"call_graph_#{__MODULE__}_#{page}"
+
+    reachable_mfas = entry_page_reachable_mfas(call_graph, page, clone_name)
+    erlang_source_dir = source_dir <> "/erlang"
+
+    """
+    window.__hologramPageReachableFunctionDefs__ = (interpreterClass, typeClass) => {
+      const Interpreter = interpreterClass;
+      const Type = typeClass;
+
+    #{render_erlang_function_defs(reachable_mfas, erlang_source_dir)}
+
+    #{render_elixir_function_defs(reachable_mfas, ir_plt)}
+
+    }\
+    """
   end
 
   @doc """
