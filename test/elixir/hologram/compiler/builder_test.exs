@@ -200,9 +200,9 @@ defmodule Hologram.Compiler.BuilderTest do
   test "build_runtime_js/3" do
     call_graph = CallGraph.start(name: @call_graph_name_1)
     ir_plt = PLT.start(name: @plt_name_1)
+    modules = Reflection.list_std_lib_elixir_modules()
 
-    Reflection.list_std_lib_elixir_modules()
-    |> Enum.each(fn module ->
+    Enum.each(modules, fn module ->
       ir = IR.for_module(module)
       CallGraph.build(call_graph, ir)
       PLT.put(ir_plt, module, ir)
