@@ -374,6 +374,7 @@ defmodule Hologram.Compiler.Builder do
     mfas
     |> filter_elixir_mfas()
     |> group_mfas_by_module()
+    |> Enum.sort()
     |> Enum.map_join("\n\n", fn {module, module_mfas} ->
       ir_plt
       |> PLT.get!(module)

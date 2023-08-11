@@ -137,20 +137,6 @@ defmodule Hologram.Compiler.BuilderTest do
                throw new Error(`__hologram__:${Hologram.serialize(reason)}`);
              });
 
-           Interpreter.defineElixirFunction("Elixir_Map", "get", 2, [{params: [Type.variablePattern("x0"), Type.variablePattern("x1")], guards: [], body: (vars) => {
-           return Elixir_Map["get/3"](vars.x0, vars.x1, Type.atom("nil"));
-           }}])
-
-           Interpreter.defineElixirFunction("Elixir_Map", "get", 3, [{params: [Type.variablePattern("map"), Type.variablePattern("key"), Type.variablePattern("default")], guards: [], body: (vars) => {
-           return Interpreter.case(vars.map, [{match: Type.map([[vars.key, Type.variablePattern("value")]]), guards: [], body: (vars) => {
-           return vars.value;
-           }}, {match: Type.map([]), guards: [], body: (vars) => {
-           return vars.default;
-           }}, {match: Type.variablePattern("other"), guards: [], body: (vars) => {
-           return Erlang["error/2"](Type.tuple([Type.atom("badmap"), vars.other]), Type.list([vars.map, vars.key, vars.default]));
-           }}]);
-           }}])
-
            Interpreter.defineElixirFunction("Elixir_Hologram_Test_Fixtures_Compiler_Builder_Module10", "action", 3, [{params: [Type.atom("action_10a"), Type.variablePattern("params"), Type.variablePattern("state")], guards: [], body: (vars) => {
            return Elixir_Hologram_Test_Fixtures_Compiler_Builder_Module10["fun_10a/2"](vars.params, vars.state);
            }}])
@@ -191,6 +177,20 @@ defmodule Hologram.Compiler.BuilderTest do
            Interpreter.matchOperator(vars.data, Type.matchPlaceholder(), vars);
            return Type.list([Type.tuple([Type.atom("text"), Type.bitstring("Module9 template")])]);
            }}], vars);
+           }}])
+
+           Interpreter.defineElixirFunction("Elixir_Map", "get", 2, [{params: [Type.variablePattern("x0"), Type.variablePattern("x1")], guards: [], body: (vars) => {
+           return Elixir_Map["get/3"](vars.x0, vars.x1, Type.atom("nil"));
+           }}])
+
+           Interpreter.defineElixirFunction("Elixir_Map", "get", 3, [{params: [Type.variablePattern("map"), Type.variablePattern("key"), Type.variablePattern("default")], guards: [], body: (vars) => {
+           return Interpreter.case(vars.map, [{match: Type.map([[vars.key, Type.variablePattern("value")]]), guards: [], body: (vars) => {
+           return vars.value;
+           }}, {match: Type.map([]), guards: [], body: (vars) => {
+           return vars.default;
+           }}, {match: Type.variablePattern("other"), guards: [], body: (vars) => {
+           return Erlang["error/2"](Type.tuple([Type.atom("badmap"), vars.other]), Type.list([vars.map, vars.key, vars.default]));
+           }}]);
            }}])
 
            }\
