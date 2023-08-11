@@ -133,10 +133,6 @@ defmodule Hologram.Compiler.BuilderTest do
                return type === "float" ? Type.float(result) : Type.integer(result);
              });
 
-           Interpreter.defineErlangFunction("Erlang", "error", 2, (reason, _args) => {
-               throw new Error(`__hologram__:${Hologram.serialize(reason)}`);
-             });
-
            Interpreter.defineElixirFunction("Elixir_Hologram_Test_Fixtures_Compiler_Builder_Module10", "action", 3, [{params: [Type.atom("action_10a"), Type.variablePattern("params"), Type.variablePattern("state")], guards: [], body: (vars) => {
            return Elixir_Hologram_Test_Fixtures_Compiler_Builder_Module10["fun_10a/2"](vars.params, vars.state);
            }}])
