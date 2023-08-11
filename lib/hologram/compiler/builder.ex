@@ -236,7 +236,7 @@ defmodule Hologram.Compiler.Builder do
   """
   @spec list_runtime_mfas(CallGraph.t()) :: list(mfa)
   def list_runtime_mfas(call_graph) do
-    # These Elixir functions are used directly by JS runtime:
+    # These Elixir functions are used directly by the JS runtime:
     entry_mfas = [
       # Interpreter.comprehension()
       {Enum, :into, 2},
@@ -259,6 +259,10 @@ defmodule Hologram.Compiler.Builder do
       # Interpreter.dotOperator()
       {:maps, :get, 2}
     ]
+
+    # Add call graph edges for Erlang functions depending on other Erlang functions.
+    CallGraph.add_edge(call_graph, {:erlang, :"/=", 2}, {:erlang, :==, 2})
+    CallGraph.add_edge(call_graph, {:erlang, :error, 1}, {:erlang, :error, 2})
 
     entry_mfas
     |> Enum.reduce([], fn mfa, acc ->

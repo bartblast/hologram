@@ -4,6 +4,10 @@ import Hologram from "../hologram.mjs";
 import Interpreter from "../interpreter.mjs";
 import Type from "../type.mjs";
 
+// IMPORTANT!
+// If the given ported Erlang function calls other Erlang functions list such dependencies in a "deps" comment (see :erlang./=/2 for an example).
+// Also, in such case add respective call graph edges in Hologram.Compiler.Builder.list_runtime_mfas/1.
+
 /*
 MFAs for sorting:
 [
@@ -146,7 +150,7 @@ const Erlang = {
     Erlang["error/2"](reason, Type.atom("none"));
   },
   // end error/1
-  // deps: []
+  // deps: [:erlang.error/2]
 
   // TODO: review this function after error reporting is implemented
   // TODO: maybe use args param

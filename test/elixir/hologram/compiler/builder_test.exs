@@ -350,7 +350,7 @@ defmodule Hologram.Compiler.BuilderTest do
       [mfas: list_runtime_mfas(call_graph)]
     end
 
-    test "returns reachable mfas", %{mfas: mfas} do
+    test "includes MFAs that are reachable by Elixir functions used by the runtime", %{mfas: mfas} do
       assert {Enum, :into, 2} in mfas
       assert {Enum, :into_protocol, 2} in mfas
       assert {:lists, :foldl, 3} in mfas
@@ -362,6 +362,11 @@ defmodule Hologram.Compiler.BuilderTest do
       assert {Kernel, :inspect, 2} in mfas
       assert {Inspect.Opts, :new, 1} in mfas
       assert {:binary, :copy, 2} in mfas
+    end
+
+    test "includes MFAs that are reachable by Erlang functions used by the runtime", %{mfas: mfas} do
+      assert {:erlang, :==, 2} in mfas
+      assert {:erlang, :error, 2} in mfas
     end
 
     test "removes duplicates", %{mfas: mfas} do
