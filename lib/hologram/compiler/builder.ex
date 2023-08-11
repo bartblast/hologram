@@ -23,9 +23,9 @@ defmodule Hologram.Compiler.Builder do
       const Interpreter = interpreterClass;
       const Type = typeClass;
 
-    #{render_reachable_elixir_function_defs(reachable_mfas, ir_plt)}
+    #{render_elixir_function_defs(reachable_mfas, ir_plt)}
 
-    #{render_reachable_erlang_function_defs(reachable_mfas, erlang_source_dir)}
+    #{render_erlang_function_defs(reachable_mfas, erlang_source_dir)}
 
     }\
     """
@@ -81,20 +81,40 @@ defmodule Hologram.Compiler.Builder do
   end
 
   @doc """
+  Builds Hologram runtime JavaScript source code.
+  """
+  @spec build_runtime_js(String.t(), CallGraph.t(), PLT.t()) :: String.t()
+  def build_runtime_js(source_dir, call_graph, ir_plt) do
+    mfas = list_mfas_required_by_runtime(call_graph)
+
+    """
+    "use strict";
+
+    import Hologram from "#{source_dir}/hologram.mjs"
+    import Interpreter from "#{source_dir}/interpreter.mjs"
+    import Type from "#{source_dir}/interpreter.mjs"
+
+    #{render_erlang_function_defs(mfas, "#{source_dir}/erlang")}
+
+    #{render_elixir_function_defs(mfas, ir_plt)}\
+    """
+  end
+
+  @doc """
   Builds Hologram runtime JS file and its source map.
   The generated filenames contain the hex digest of the built JS content.
 
   ## Examples
 
-      iex> build_runtime_js("assets/node_modules/esbuild", "assets/js/hologram.mjs", "tmp")
+      iex> build_runtime_js_file("assets/node_modules/esbuild", "assets/js/hologram.mjs", "tmp")
       {"c4206fe5fa846da67e50ed03874ccbae",
        "tmp/hologram.runtime-c4206fe5fa846da67e50ed03874ccbae.js",
       "tmp/hologram.runtime-c4206fe5fa846da67e50ed03874ccbae.js.map"}
   """
-  @spec build_runtime_js(String.t(), String.t(), String.t()) ::
+  @spec build_runtime_js_file(String.t(), String.t(), String.t()) ::
           {String.t(), String.t(), String.t()}
   # sobelow_skip ["CI.System"]
-  def build_runtime_js(esbuild_path, source_file, output_dir) do
+  def build_runtime_js_file(esbuild_path, source_file, output_dir) do
     output_file = output_dir <> "/hologram.runtime.js"
 
     cmd = [
@@ -361,20 +381,20 @@ defmodule Hologram.Compiler.Builder do
     PLT.put(plt.name, module, digest)
   end
 
-  defp render_reachable_elixir_function_defs(reachable_mfas, ir_plt) do
-    reachable_mfas
+  defp render_elixir_function_defs(mfas, ir_plt) do
+    mfas
     |> filter_elixir_mfas()
     |> group_mfas_by_module()
-    |> Enum.map_join("\n\n", fn {module, reachable_mfas} ->
+    |> Enum.map_join("\n\n", fn {module, module_mfas} ->
       ir_plt
       |> PLT.get!(module)
-      |> prune_module_def(reachable_mfas)
+      |> prune_module_def(module_mfas)
       |> Encoder.encode(%Context{module: module})
     end)
   end
 
-  defp render_reachable_erlang_function_defs(reachable_mfas, erlang_source_dir) do
-    reachable_mfas
+  defp render_erlang_function_defs(mfas, erlang_source_dir) do
+    mfas
     |> filter_erlang_mfas()
     |> Enum.map_join("\n\n", fn {module, function, arity} ->
       build_erlang_function_definition(module, function, arity, erlang_source_dir)

@@ -22,6 +22,7 @@ defmodule Hologram.Compiler.BuilderTest do
   @call_graph_name_2 :"call_graph_{__MODULE__}_2"
   @plt_name_1 :"plt_#{__MODULE__}_1"
   @plt_name_2 :"plt_#{__MODULE__}_2"
+  @source_dir Reflection.root_path() <> "/assets/js"
 
   setup do
     wait_for_plt_cleanup(@plt_name_1)
@@ -203,6 +204,34 @@ defmodule Hologram.Compiler.BuilderTest do
   end
 
   test "build_runtime_js/3" do
+    call_graph = CallGraph.start(name: @call_graph_name_1)
+    ir_plt = PLT.start(name: @plt_name_1)
+
+    Reflection.list_std_lib_elixir_modules()
+    |> Enum.each(fn module ->
+      ir = IR.for_module(module)
+      CallGraph.build(call_graph, ir)
+      PLT.put(ir_plt, module, ir)
+    end)
+
+    js = build_runtime_js(@source_dir, call_graph, ir_plt)
+
+    assert String.contains?(js, ~s/Interpreter.defineElixirFunction("Elixir_Enum", "into", 2/)
+
+    assert String.contains?(
+             js,
+             ~s/Interpreter.defineElixirFunction("Elixir_Enum", "into_protocol", 2/
+           )
+
+    assert String.contains?(js, ~s/Interpreter.defineErlangFunction("Erlang", "error", 1/)
+
+    assert String.contains?(
+             js,
+             ~s/Interpreter.defineNotImplementedErlangFunction("lists", "foldl", 3/
+           )
+  end
+
+  test "build_runtime_js_file/3" do
     # setup
     clean_tmp_dir()
     install_lib_js_deps()
@@ -210,7 +239,7 @@ defmodule Hologram.Compiler.BuilderTest do
     esbuild_path = Reflection.root_path() <> "/assets/node_modules/.bin/esbuild"
 
     assert {digest, output_path, source_map_path} =
-             build_runtime_js(esbuild_path, "assets/js/hologram.mjs", "tmp")
+             build_runtime_js_file(esbuild_path, "assets/js/hologram.mjs", "tmp")
 
     assert digest =~ ~r/^[0-9a-f]{32}$/
     assert output_path == "tmp/hologram.runtime-#{digest}.js"
