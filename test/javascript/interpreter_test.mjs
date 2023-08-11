@@ -905,7 +905,7 @@ describe("defineElixirFunction()", () => {
   beforeEach(() => {
     // def my_fun_a(1), do: :expr_1
     // def my_fun_a(2), do: :expr_2
-    Interpreter.defineElixirFunction("Elixir_Aaa_Bbb", "my_fun_a", [
+    Interpreter.defineElixirFunction("Elixir_Aaa_Bbb", "my_fun_a", 1, [
       {
         params: [Type.integer(1)],
         guard: null,
@@ -928,34 +928,34 @@ describe("defineElixirFunction()", () => {
   });
 
   it("initiates the module global var if it is not initiated yet", () => {
-    Interpreter.defineElixirFunction("Elixir_Ddd", "my_fun_d", []);
+    Interpreter.defineElixirFunction("Elixir_Ddd", "my_fun_d", 4, []);
 
     assert.isDefined(globalThis.Elixir_Ddd);
-    assert.isDefined(globalThis.Elixir_Ddd.my_fun_d);
+    assert.isDefined(globalThis.Elixir_Ddd["my_fun_d/4"]);
 
     // cleanup
     delete globalThis.Elixir_Ddd;
   });
 
   it("appends to the module global var if it is already initiated", () => {
-    globalThis.Elixir_Eee = {dummy: "dummy"};
-    Interpreter.defineElixirFunction("Elixir_Eee", "my_fun_e", []);
+    globalThis.Elixir_Eee = {"dummy/1": "dummy_body"};
+    Interpreter.defineElixirFunction("Elixir_Eee", "my_fun_e", 5, []);
 
     assert.isDefined(globalThis.Elixir_Eee);
-    assert.isDefined(globalThis.Elixir_Eee.my_fun_e);
-    assert.equal(globalThis.Elixir_Eee.dummy, "dummy");
+    assert.isDefined(globalThis.Elixir_Eee["my_fun_e/5"]);
+    assert.equal(globalThis.Elixir_Eee["dummy/1"], "dummy_body");
 
     // cleanup
     delete globalThis.Elixir_Eee;
   });
 
   it("defines function which runs the first matching clause", () => {
-    const result = globalThis.Elixir_Aaa_Bbb.my_fun_a(Type.integer(1));
+    const result = globalThis.Elixir_Aaa_Bbb["my_fun_a/1"](Type.integer(1));
     assert.deepStrictEqual(result, Type.atom("expr_1"));
   });
 
   it("defines function which ignores not matching clauses", () => {
-    const result = globalThis.Elixir_Aaa_Bbb.my_fun_a(Type.integer(2));
+    const result = globalThis.Elixir_Aaa_Bbb["my_fun_a/1"](Type.integer(2));
     assert.deepStrictEqual(result, Type.atom("expr_2"));
   });
 
@@ -963,7 +963,7 @@ describe("defineElixirFunction()", () => {
     // def my_fun_b(x) when x == 1, do: :expr_1
     // def my_fun_b(y) when y == 2, do: :expr_2
     // def my_fun_b(z) when z == 3, do: :expr_3
-    Interpreter.defineElixirFunction("Elixir_Aaa_Bbb", "my_fun_b", [
+    Interpreter.defineElixirFunction("Elixir_Aaa_Bbb", "my_fun_b", 1, [
       {
         params: [Type.variablePattern("x")],
         guard: (vars) => Erlang["==/2"](vars.x, Type.integer(1)),
@@ -987,7 +987,7 @@ describe("defineElixirFunction()", () => {
       },
     ]);
 
-    const result = globalThis.Elixir_Aaa_Bbb.my_fun_b(Type.integer(3));
+    const result = globalThis.Elixir_Aaa_Bbb["my_fun_b/1"](Type.integer(3));
 
     assert.deepStrictEqual(result, Type.atom("expr_3"));
   });
@@ -995,7 +995,7 @@ describe("defineElixirFunction()", () => {
   it("defines function which clones vars for each clause", () => {
     // def my_fun_c(x) when x == 1, do: :expr_1
     // def my_fun_c(x) when x == 2, do: :expr_2
-    Interpreter.defineElixirFunction("Elixir_Aaa_Bbb", "my_fun_c", [
+    Interpreter.defineElixirFunction("Elixir_Aaa_Bbb", "my_fun_c", 1, [
       {
         params: [Type.variablePattern("x")],
         guard: (vars) => Erlang["==/2"](vars.x, Type.integer(1)),
@@ -1012,23 +1012,14 @@ describe("defineElixirFunction()", () => {
       },
     ]);
 
-    const result = globalThis.Elixir_Aaa_Bbb.my_fun_c(Type.integer(2));
+    const result = globalThis.Elixir_Aaa_Bbb["my_fun_c/1"](Type.integer(2));
 
     assert.deepStrictEqual(result, Type.atom("expr_2"));
   });
 
-  it("raises UndefinedFunctionError if there are no clauses with the same arity", () => {
+  it("raises FunctionClauseError if there are no matching clauses", () => {
     assertError(
-      () =>
-        globalThis.Elixir_Aaa_Bbb.my_fun_a(Type.integer(1), Type.integer(2)),
-      "UndefinedFunctionError",
-      "function Aaa.Bbb.my_fun_a/2 is undefined or private",
-    );
-  });
-
-  it("raises FunctionClauseError if there are clauses with the same arity but none of them is matched", () => {
-    assertError(
-      () => globalThis.Elixir_Aaa_Bbb.my_fun_a(Type.integer(3)),
+      () => globalThis.Elixir_Aaa_Bbb["my_fun_a/1"](Type.integer(3)),
       "FunctionClauseError",
       "no function clause matching in Aaa.Bbb.my_fun_a/1",
     );

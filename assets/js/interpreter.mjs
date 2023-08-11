@@ -119,12 +119,17 @@ export default class Interpreter {
     }
   }
 
-  static defineElixirFunction(moduleName, functionName, clauses) {
+  static defineElixirFunction(
+    moduleName,
+    functionName,
+    functionArity,
+    clauses,
+  ) {
     if (!globalThis[moduleName]) {
       globalThis[moduleName] = {};
     }
 
-    globalThis[moduleName][functionName] = function () {
+    globalThis[moduleName][`${functionName}/${functionArity}`] = function () {
       const args = Type.list([...arguments]);
       const arity = arguments.length;
 
