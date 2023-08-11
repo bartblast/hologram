@@ -22,7 +22,9 @@ defmodule Hologram.Compiler.BuilderTest do
   @call_graph_name_2 :"call_graph_{__MODULE__}_2"
   @plt_name_1 :"plt_#{__MODULE__}_1"
   @plt_name_2 :"plt_#{__MODULE__}_2"
+
   @source_dir Reflection.root_path() <> "/assets/js"
+  @erlang_source_dir "#{@source_dir}/erlang"
 
   setup do
     wait_for_plt_cleanup(@plt_name_1)
@@ -31,8 +33,6 @@ defmodule Hologram.Compiler.BuilderTest do
   end
 
   describe "build_erlang_function_definition/4" do
-    @erlang_source_dir "assets/js/erlang"
-
     test ":erlang module function that is implemented" do
       output = build_erlang_function_definition(:erlang, :+, 2, @erlang_source_dir)
 
