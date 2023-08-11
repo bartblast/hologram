@@ -264,10 +264,8 @@ defmodule Hologram.Compiler.Builder do
     CallGraph.add_edge(call_graph, {:erlang, :"/=", 2}, {:erlang, :==, 2})
     CallGraph.add_edge(call_graph, {:erlang, :error, 1}, {:erlang, :error, 2})
 
-    entry_mfas
-    |> Enum.reduce([], fn mfa, acc ->
-      acc ++ CallGraph.reachable_mfas(call_graph, mfa)
-    end)
+    call_graph
+    |> CallGraph.reachable_mfas(entry_mfas)
     |> Enum.uniq()
     |> Enum.sort()
   end
