@@ -958,45 +958,61 @@ defmodule Hologram.Compiler.CallGraphTest do
     end
   end
 
-  test "reachable_mfas/2", %{call_graph: call_graph} do
-    # 1
-    # ├─ {:m2, :f2, 2}
-    # │  ├─ 4
-    # │  │  ├─ {:m8, :f8, 8}
-    # │  │  ├─ 9
-    # │  ├─ {:m5, :f5, 5}
-    # │  │  ├─ 10
-    # │  │  ├─ 11
-    # ├─ {:m3, :f3, 3}
-    # │  ├─ 6
-    # │  │  ├─ {:m12, :f12, 12}
-    # │  │  ├─ 13
-    # │  ├─ {:m7, :f7, 7}
-    # │  │  ├─ 14
-    # │  │  ├─ {:m15, :f15, 15}
+  describe "reachable_mfas/2" do
+    setup %{call_graph: call_graph} do
+      # 1
+      # ├─ {:m2, :f2, 2}
+      # │  ├─ 4
+      # │  │  ├─ {:m8, :f8, 8}
+      # │  │  ├─ 9
+      # │  ├─ {:m5, :f5, 5}
+      # │  │  ├─ 10
+      # │  │  ├─ 11
+      # ├─ {:m3, :f3, 3}
+      # │  ├─ 6
+      # │  │  ├─ {:m12, :f12, 12}
+      # │  │  ├─ 13
+      # │  ├─ {:m7, :f7, 7}
+      # │  │  ├─ 14
+      # │  │  ├─ {:m15, :f15, 15}
 
-    call_graph
-    |> add_edge(:vertex_1, {:m2, :f2, 2})
-    |> add_edge(:vertex_1, {:m3, :f3, 3})
-    |> add_edge({:m2, :f2, 2}, :vertex_4)
-    |> add_edge({:m2, :f2, 2}, {:m5, :f5, 5})
-    |> add_edge({:m3, :f3, 3}, :vertex_6)
-    |> add_edge({:m3, :f3, 3}, {:m7, :f7, 7})
-    |> add_edge(:vertex_4, {:m8, :f8, 8})
-    |> add_edge(:vertex_4, :vertex_9)
-    |> add_edge({:m5, :f5, 5}, :vertex_10)
-    |> add_edge({:m5, :f5, 5}, :vertex_11)
-    |> add_edge(:vertex_6, {:m12, :f12, 12})
-    |> add_edge(:vertex_6, :vertex_13)
-    |> add_edge({:m7, :f7, 7}, :vertex_14)
-    |> add_edge({:m7, :f7, 7}, {:m15, :f15, 15})
+      call_graph
+      |> add_edge(:vertex_1, {:m2, :f2, 2})
+      |> add_edge(:vertex_1, {:m3, :f3, 3})
+      |> add_edge({:m2, :f2, 2}, :vertex_4)
+      |> add_edge({:m2, :f2, 2}, {:m5, :f5, 5})
+      |> add_edge({:m3, :f3, 3}, :vertex_6)
+      |> add_edge({:m3, :f3, 3}, {:m7, :f7, 7})
+      |> add_edge(:vertex_4, {:m8, :f8, 8})
+      |> add_edge(:vertex_4, :vertex_9)
+      |> add_edge({:m5, :f5, 5}, :vertex_10)
+      |> add_edge({:m5, :f5, 5}, :vertex_11)
+      |> add_edge(:vertex_6, {:m12, :f12, 12})
+      |> add_edge(:vertex_6, :vertex_13)
+      |> add_edge({:m7, :f7, 7}, :vertex_14)
+      |> add_edge({:m7, :f7, 7}, {:m15, :f15, 15})
 
-    assert reachable_mfas(call_graph, {:m3, :f3, 3}) == [
-             {:m15, :f15, 15},
-             {:m7, :f7, 7},
-             {:m12, :f12, 12},
-             {:m3, :f3, 3}
-           ]
+      :ok
+    end
+
+    test "single MFA argument", %{call_graph: call_graph} do
+      assert reachable_mfas(call_graph, {:m3, :f3, 3}) == [
+               {:m15, :f15, 15},
+               {:m7, :f7, 7},
+               {:m12, :f12, 12},
+               {:m3, :f3, 3}
+             ]
+    end
+
+    test "multiple MFAs argument", %{call_graph: call_graph} do
+      assert reachable_mfas(call_graph, [{:m5, :f5, 5}, {:m3, :f3, 3}]) == [
+               {:m15, :f15, 15},
+               {:m7, :f7, 7},
+               {:m12, :f12, 12},
+               {:m3, :f3, 3},
+               {:m5, :f5, 5}
+             ]
+    end
   end
 
   test "remove_vertex/2", %{call_graph: call_graph} do
