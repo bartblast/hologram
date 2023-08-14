@@ -94,6 +94,25 @@ defmodule Hologram.Compiler.CallGraph do
   end
 
   @doc """
+  Returns the edges in which the second vertex is either the given module or a function from the given module,
+  and the first vertex is a function from a different module.
+  """
+  @spec inbound_remote_edges(CallGraph.t(), module) :: list(Graph.Edge.t())
+  def inbound_remote_edges(call_graph, to_module) do
+    call_graph
+    |> module_vertices(to_module)
+    |> Enum.reduce([], fn vertex, acc ->
+      call_graph
+      |> inbound_edges(vertex)
+      |> Enum.filter(fn
+        %{v1: {from_module, _fun, _arity}} when from_module != to_module -> true
+        _fallback -> false
+      end)
+      |> Enum.concat(acc)
+    end)
+  end
+
+  @doc """
   Returns the list of vertices that are MFAs belonging to the given module.
   """
   @spec module_vertices(CallGraph.t(), module) :: list(vertex)
@@ -184,6 +203,10 @@ defmodule Hologram.Compiler.CallGraph do
   @spec vertices(CallGraph.t()) :: list(vertex)
   def vertices(%{pid: pid}) do
     Agent.get(pid, &Graph.vertices/1)
+  end
+
+  defp inbound_edges(%{pid: pid}, vertex) do
+    Agent.get(pid, &Graph.in_edges(&1, vertex))
   end
 
   ### OVERHAUL
@@ -306,44 +329,6 @@ defmodule Hologram.Compiler.CallGraph do
   # def build(call_graph, _ir, _from_vertex), do: call_graph
 
   # @doc """
-  # Returns the edges in which the second vertex is either the given module or a function from the given module,
-  # and the first vertex is a function from a different module.
-
-  # ## Examples
-
-  #     iex> call_graph = %CallGraph{name: :my_call_graph, pid: #PID<0.259.0>}
-  #     iex> inbound_remote_edges(call_graph, Module5)
-  #     [
-  #       %Graph.Edge{
-  #         v1: {Module2, :my_fun_6, 3},
-  #         v2: Module5,
-  #         weight: 1,
-  #         label: nil
-  #       },
-  #       %Graph.Edge{
-  #         v1: {Module3, :my_fun_8, 1},
-  #         v2: {Module5, :my_fun_1, 4},
-  #         weight: 1,
-  #         label: nil
-  #       }
-  #     ]
-  # """
-  # @spec inbound_remote_edges(CallGraph.t(), module) :: list(Graph.Edge.t())
-  # def inbound_remote_edges(call_graph, to_module) do
-  #   call_graph
-  #   |> module_vertices(to_module)
-  #   |> Enum.reduce([], fn vertex, acc ->
-  #     call_graph
-  #     |> inbound_edges(vertex)
-  #     |> Enum.filter(fn
-  #       %{v1: {from_module, _fun, _arity}} when from_module != to_module -> true
-  #       _fallback -> false
-  #     end)
-  #     |> Enum.concat(acc)
-  #   end)
-  # end
-
-  # @doc """
   # Given a diff of changes, updates the call graph
   # by deleting the graph paths of modules that have been removed,
   # rebuilding the graph paths of modules that have been updated,
@@ -396,10 +381,6 @@ defmodule Hologram.Compiler.CallGraph do
   # defp build_module(call_graph, ir_plt, module) do
   #   module_def = PLT.get!(ir_plt, module)
   #   build(call_graph, module_def)
-  # end
-
-  # defp inbound_edges(call_graph, vertex) do
-  #   Agent.get(call_graph.name, &Graph.in_edges(&1, vertex))
   # end
 
   # defp load_graph_from_file(%{dump_path: dump_path} = call_graph) do

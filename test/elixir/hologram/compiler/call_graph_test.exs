@@ -100,6 +100,48 @@ defmodule Hologram.Compiler.CallGraphTest do
     end
   end
 
+  test "inbound_remote_edges/2", %{call_graph: call_graph} do
+    call_graph
+    |> add_edge({:module_1, :fun_a, :arity_a}, {:module_2, :fun_b, :arity_b})
+    |> add_edge({:module_3, :fun_c, :arity_c}, {:module_2, :fun_d, :arity_d})
+    |> add_edge({:module_4, :fun_e, :arity_e}, :module_2)
+    |> add_edge({:module_5, :fun_f, :arity_f}, :module_2)
+    |> add_edge({:module_6, :fun_g, :arity_g}, {:module_7, :fun_h, :arity_h})
+    |> add_edge({:module_8, :fun_i, :arity_i}, :module_9)
+
+    result =
+      call_graph
+      |> inbound_remote_edges(:module_2)
+      |> Enum.sort()
+
+    assert result == [
+             %Graph.Edge{
+               v1: {:module_1, :fun_a, :arity_a},
+               v2: {:module_2, :fun_b, :arity_b},
+               weight: 1,
+               label: nil
+             },
+             %Graph.Edge{
+               v1: {:module_3, :fun_c, :arity_c},
+               v2: {:module_2, :fun_d, :arity_d},
+               weight: 1,
+               label: nil
+             },
+             %Graph.Edge{
+               v1: {:module_4, :fun_e, :arity_e},
+               v2: :module_2,
+               weight: 1,
+               label: nil
+             },
+             %Graph.Edge{
+               v1: {:module_5, :fun_f, :arity_f},
+               v2: :module_2,
+               weight: 1,
+               label: nil
+             }
+           ]
+  end
+
   test "module_vertices/2", %{call_graph: call_graph} do
     call_graph
     |> add_vertex({:module_1, :fun_a, :arity_a})
@@ -885,48 +927,6 @@ defmodule Hologram.Compiler.CallGraphTest do
   #              }
   #            ]
   #   end
-  # end
-
-  # test "inbound_remote_edges/2", %{call_graph: call_graph} do
-  #   call_graph
-  #   |> add_edge({:module_1, :fun_a, :arity_a}, {:module_2, :fun_b, :arity_b})
-  #   |> add_edge({:module_3, :fun_c, :arity_c}, {:module_2, :fun_d, :arity_d})
-  #   |> add_edge({:module_4, :fun_e, :arity_e}, :module_2)
-  #   |> add_edge({:module_5, :fun_f, :arity_f}, :module_2)
-  #   |> add_edge({:module_6, :fun_g, :arity_g}, {:module_7, :fun_h, :arity_h})
-  #   |> add_edge({:module_8, :fun_i, :arity_i}, :module_9)
-
-  #   result =
-  #     call_graph
-  #     |> inbound_remote_edges(:module_2)
-  #     |> Enum.sort()
-
-  #   assert result == [
-  #            %Graph.Edge{
-  #              v1: {:module_1, :fun_a, :arity_a},
-  #              v2: {:module_2, :fun_b, :arity_b},
-  #              weight: 1,
-  #              label: nil
-  #            },
-  #            %Graph.Edge{
-  #              v1: {:module_3, :fun_c, :arity_c},
-  #              v2: {:module_2, :fun_d, :arity_d},
-  #              weight: 1,
-  #              label: nil
-  #            },
-  #            %Graph.Edge{
-  #              v1: {:module_4, :fun_e, :arity_e},
-  #              v2: :module_2,
-  #              weight: 1,
-  #              label: nil
-  #            },
-  #            %Graph.Edge{
-  #              v1: {:module_5, :fun_f, :arity_f},
-  #              v2: :module_2,
-  #              weight: 1,
-  #              label: nil
-  #            }
-  #          ]
   # end
 
   # describe "patch/3" do
