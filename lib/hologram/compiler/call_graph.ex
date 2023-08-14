@@ -7,6 +7,15 @@ defmodule Hologram.Compiler.CallGraph do
   @type vertex :: module | {module, atom, integer}
 
   @doc """
+  Adds an edge between two vertices in the call graph.
+  """
+  @spec add_edge(CallGraph.t(), vertex, vertex) :: CallGraph.t()
+  def add_edge(%{pid: pid} = call_graph, from_vertex, to_vertex) do
+    Agent.update(pid, &Graph.add_edge(&1, from_vertex, to_vertex))
+    call_graph
+  end
+
+  @doc """
   Adds the vertex to the call graph.
   """
   @spec add_vertex(CallGraph.t(), vertex) :: CallGraph.t()
@@ -40,21 +49,6 @@ defmodule Hologram.Compiler.CallGraph do
   # alias Hologram.Commons.SerializationUtils
   # alias Hologram.Compiler.IR
   # alias Hologram.Compiler.Reflection
-
-  # @doc """
-  # Adds an edge between two vertices in the call graph.
-
-  # ## Examples
-
-  #     iex> call_graph = %CallGraph{name: :my_call_graph, pid: #PID<0.259.0>}
-  #     iex> add_adge(call_graph, :vertex_1, :vertex_2)
-  #     %CallGraph{name: :my_call_graph, pid: #PID<0.259.0>}
-  # """
-  # @spec add_edge(CallGraph.t(), vertex, vertex) :: CallGraph.t()
-  # def add_edge(call_graph, from_vertex, to_vertex) do
-  #   Agent.update(call_graph.name, &Graph.add_edge(&1, from_vertex, to_vertex))
-  #   call_graph
-  # end
 
   # @doc """
   # Adds multiple edges to the call graph.
