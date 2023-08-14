@@ -94,6 +94,20 @@ defmodule Hologram.Compiler.CallGraph do
   end
 
   @doc """
+  Returns the list of vertices that are MFAs belonging to the given module.
+  """
+  @spec module_vertices(CallGraph.t(), module) :: list(vertex)
+  def module_vertices(call_graph, module) do
+    call_graph
+    |> vertices()
+    |> Enum.filter(fn
+      ^module -> true
+      {^module, _fun, _arity} -> true
+      _fallback -> false
+    end)
+  end
+
+  @doc """
   Replace the state of underlying Agent process with the given graph.
   """
   @spec put_graph(CallGraph.t(), Graph.t()) :: CallGraph.t()
@@ -326,26 +340,6 @@ defmodule Hologram.Compiler.CallGraph do
   #       _fallback -> false
   #     end)
   #     |> Enum.concat(acc)
-  #   end)
-  # end
-
-  # @doc """
-  # Returns the list of vertices which belong to the given module.
-
-  # ## Examples
-
-  #     iex> call_graph = %CallGraph{name: :my_call_graph, pid: #PID<0.259.0>}
-  #     iex> vertices(call_graph, Module5)
-  #     [Module5, {Module5, :my_fun_1, 3}, {Module5, :my_fun_2, 1}]
-  # """
-  # @spec module_vertices(CallGraph.t(), module) :: list(vertex)
-  # def module_vertices(call_graph, module) do
-  #   call_graph
-  #   |> vertices()
-  #   |> Enum.filter(fn
-  #     ^module -> true
-  #     {^module, _fun, _arity} -> true
-  #     _fallback -> false
   #   end)
   # end
 
