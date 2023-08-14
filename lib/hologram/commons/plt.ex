@@ -35,6 +35,18 @@ defmodule Hologram.Commons.PLT do
   end
 
   @doc """
+  Returns the value stored in the underlying ETS table under the given key.
+  If the key doesn't exist a KeyError is raised.
+  """
+  @spec get!(PLT.t(), atom) :: term
+  def get!(plt, key) do
+    case get(plt, key) do
+      {:ok, value} -> value
+      _fallback -> raise KeyError, message: "key #{inspect(key)} not found in the PLT"
+    end
+  end
+
+  @doc """
   Returns the reference of the underlying ETS table.
   """
   @impl GenServer
@@ -93,18 +105,6 @@ defmodule Hologram.Commons.PLT do
   #     |> SerializationUtils.serialize()
 
   #   File.write!(dump_path, data)
-  # end
-
-  # @doc """
-  # Returns the value stored in the underlying ETS table under the given key.
-  # If the key doesn't exist a KeyError is raised.
-  # """
-  # @spec get!(PLT.t(), atom) :: term
-  # def get!(plt, key) do
-  #   case get(plt, key) do
-  #     {:ok, value} -> value
-  #     _fallback -> raise KeyError, message: "key #{inspect(key)} not found in the PLT"
-  #   end
   # end
 
   # @doc """

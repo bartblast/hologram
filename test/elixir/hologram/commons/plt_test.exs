@@ -42,6 +42,24 @@ defmodule Hologram.Commons.PLTTest do
     end
   end
 
+  describe "get!/2" do
+    test "key exists" do
+      plt =
+        start()
+        |> put(:my_key, :my_value)
+
+      assert get!(plt, :my_key) == :my_value
+    end
+
+    test "key doesn't exist" do
+      plt = start()
+
+      assert_raise KeyError, "key :invalid_key not found in the PLT", fn ->
+        get!(plt, :invalid_key)
+      end
+    end
+  end
+
   describe "put/3" do
     test "first arg is a PLT struct" do
       result =
@@ -101,21 +119,6 @@ defmodule Hologram.Commons.PLTTest do
   #     |> SerializationUtils.deserialize()
 
   #   assert items.dump_test == 123
-  # end
-
-  # describe "get!/2" do
-  #   test "key exists" do
-  #     plt = start(@opts)
-  #     assert get!(plt, :key_1) == :value_1
-  #   end
-
-  #   test "key doesn't exist" do
-  #     plt = start(@opts)
-
-  #     assert_raise KeyError, "key :invalid_key not found in the PLT", fn ->
-  #       get!(plt, :invalid_key)
-  #     end
-  #   end
   # end
 
   # test "put/2" do
