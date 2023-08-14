@@ -110,31 +110,4 @@ defmodule Hologram.Commons.PLTTest do
 
     assert ets_table_exists?(table_ref)
   end
-
-  # @items %{key_1: :value_1, key_2: :value_2}
-  # @name :"plt_#{__MODULE__}"
-  # @opts name: @name, dump_path: @dump_path
-
-  # defp dump_items do
-  #   binary = SerializationUtils.serialize(@items)
-  #   File.write!(@dump_path, binary)
-  # end
-
-  # setup do
-  #   wait_for_plt_cleanup(@name)
-  #   dump_items()
-
-  #   :ok
-  # end
-
-  # describe "table_exists?/1" do
-  #   test "exists" do
-  #     :ets.new(@name, [:public, :named_table])
-  #     assert table_exists?(@name)
-  #   end
-
-  #   test "doesn't exist" do
-  #     refute table_exists?(@name)
-  #   end
-  # end
 end

@@ -139,30 +139,4 @@ defmodule Hologram.Commons.PLT do
 
     %PLT{pid: pid, table_ref: table_ref}
   end
-
-  # @doc """
-  # Tells whether the underlying ETS table exists.
-
-  # ## Examples
-
-  #     iex> table_exists?(:my_plt)
-  #     true
-  # """
-  # @spec table_exists?(atom) :: boolean
-  # def table_exists?(name) do
-  #   :ets.info(name) != :undefined
-  # end
-
-  # defp reload_table(opts) do
-  #   truncate_table(opts[:name])
-
-  #   if opts[:dump_path] && File.exists?(opts[:dump_path]) do
-  #     populate_table_fun = opts[:populate_table_fun] || (&populate_table/1)
-  #     populate_table_fun.(opts)
-  #   end
-  # end
-
-  # defp truncate_table(name) do
-  #   :ets.delete_all_objects(name)
-  # end
 end
