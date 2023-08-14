@@ -47,6 +47,16 @@ defmodule Hologram.Commons.PLT do
   end
 
   @doc """
+  Returns all items stored in the underlying ETS table.
+  """
+  @spec get_all(PLT.t()) :: %{atom => term}
+  def get_all(%{table_ref: table_ref}) do
+    table_ref
+    |> :ets.tab2list()
+    |> Enum.into(%{})
+  end
+
+  @doc """
   Returns the reference of the underlying ETS table.
   """
   @impl GenServer
@@ -114,16 +124,6 @@ defmodule Hologram.Commons.PLT do
   #     |> SerializationUtils.serialize()
 
   #   File.write!(dump_path, data)
-  # end
-
-  # @doc """
-  # Returns all items stored in the underlying ETS table.
-  # """
-  # @spec get_all(PLT.t()) :: %{atom => term}
-  # def get_all(plt) do
-  #   plt.table_ref
-  #   |> :ets.tab2list()
-  #   |> Enum.into(%{})
   # end
 
   # @doc """

@@ -60,6 +60,19 @@ defmodule Hologram.Commons.PLTTest do
     end
   end
 
+  test "get_all/1" do
+    items = [
+      {:my_key_1, :my_value_1},
+      {:my_key_2, :my_value_2}
+    ]
+
+    plt =
+      start()
+      |> put(items)
+
+    assert get_all(plt) == %{my_key_1: :my_value_1, my_key_2: :my_value_2}
+  end
+
   test "put/2" do
     items = [
       {:my_key_1, :my_value_1},
