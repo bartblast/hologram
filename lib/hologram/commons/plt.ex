@@ -11,6 +11,21 @@ defmodule Hologram.Commons.PLT do
   @type t :: %PLT{pid: pid, table_ref: :ets.tid()}
 
   @doc """
+  Returns the value stored in the underlying ETS table under the given key.
+  If the key doesn't exist the :error :atom is returned.
+  """
+  @spec get(PLT.t(), atom) :: {:ok, term} | :error
+  def get(%{table_ref: table_ref}, key) do
+    case :ets.lookup(table_ref, key) do
+      [{^key, value}] ->
+        {:ok, value}
+
+      _fallback ->
+        :error
+    end
+  end
+
+  @doc """
   Returns the reference of the underlying ETS table.
   """
   @impl GenServer
@@ -28,6 +43,21 @@ defmodule Hologram.Commons.PLT do
   def init(nil) do
     table_ref = :ets.new(__MODULE__, [:public])
     {:ok, table_ref}
+  end
+
+  @doc """
+  Puts the given item into the underlying ETS table.
+  """
+  @spec put(PLT.t() | :ets.tid(), atom, term) :: PLT.t() | true
+  def put(plt_or_table_ref, key, value)
+
+  def put(%PLT{table_ref: table_ref} = plt, key, value) do
+    put(table_ref, key, value)
+    plt
+  end
+
+  def put(table_ref, key, value) do
+    :ets.insert(table_ref, {key, value})
   end
 
   @doc """
@@ -67,21 +97,6 @@ defmodule Hologram.Commons.PLT do
 
   # @doc """
   # Returns the value stored in the underlying ETS table under the given key.
-  # If the key doesn't exist the :error :atom is returned.
-  # """
-  # @spec get(PLT.t(), atom) :: {:ok, term} | :error
-  # def get(plt, key) do
-  #   case :ets.lookup(plt.table_ref, key) do
-  #     [{^key, value}] ->
-  #       {:ok, value}
-
-  #     _fallback ->
-  #       :error
-  #   end
-  # end
-
-  # @doc """
-  # Returns the value stored in the underlying ETS table under the given key.
   # If the key doesn't exist a KeyError is raised.
   # """
   # @spec get!(PLT.t(), atom) :: term
@@ -104,25 +119,10 @@ defmodule Hologram.Commons.PLT do
 
   # @doc """
   # Puts multiple items into the underlying ETS table.
-
   # """
   # @spec put(reference, keyword) :: true
   # def put(table_ref, items) do
   #   :ets.insert(table_ref, items)
-  # end
-
-  # @doc """
-  # Puts the given item into the underlying ETS table.
-  # """
-  # @spec put(PLT.t() | atom, atom, term) :: PLT.t() | true
-
-  # def put(%PLT{table_ref: table_ref} = plt, key, value) do
-  #   put(table_ref, key, value)
-  #   plt
-  # end
-
-  # def put(name, key, value) do
-  #   :ets.insert(name, {key, value})
   # end
 
   # @doc """
