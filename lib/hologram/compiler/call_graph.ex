@@ -75,6 +75,17 @@ defmodule Hologram.Compiler.CallGraph do
   end
 
   @doc """
+  Checks if an edge exists between two given vertices in the call graph.
+  """
+  @spec has_edge?(CallGraph.t(), vertex, vertex) :: boolean
+  def has_edge?(call_graph, from_vertex, to_vertex) do
+    call_graph
+    |> get_graph()
+    |> Graph.edge(from_vertex, to_vertex)
+    |> is_struct(Graph.Edge)
+  end
+
+  @doc """
   Replace the state of underlying Agent process with the given graph.
   """
   @spec put_graph(CallGraph.t(), Graph.t()) :: CallGraph.t()
@@ -210,24 +221,6 @@ defmodule Hologram.Compiler.CallGraph do
   # end
 
   # def build(call_graph, _ir, _from_vertex), do: call_graph
-
-  # @doc """
-  # Checks if an edge exists between two given vertices in the call graph.
-
-  # ## Examples
-
-  #     iex> call_graph = %CallGraph{name: :my_call_graph, pid: #PID<0.259.0>}
-  #     iex> has_edge?(call_graph, :vertex_1, :vertex_2)
-  #     true
-  # """
-  # @spec has_edge?(CallGraph.t(), vertex, vertex) :: boolean
-  # def has_edge?(call_graph, from_vertex, to_vertex) do
-  #   getter = fn graph ->
-  #     Graph.edge(graph, from_vertex, to_vertex) != nil
-  #   end
-
-  #   Agent.get(call_graph.name, getter)
-  # end
 
   # @doc """
   # Checks if the given vertex exists in the call graph.
