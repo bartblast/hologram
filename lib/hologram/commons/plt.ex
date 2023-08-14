@@ -5,7 +5,9 @@ defmodule Hologram.Commons.PLT do
   """
 
   use GenServer
+
   alias Hologram.Commons.PLT
+  alias Hologram.Commons.SerializationUtils
 
   defstruct pid: nil, table_ref: nil
   @type t :: %PLT{pid: pid, table_ref: :ets.tid()}
@@ -17,6 +19,19 @@ defmodule Hologram.Commons.PLT do
   def delete(plt, key) do
     :ets.delete(plt.table_ref, key)
     plt
+  end
+
+  @doc """
+  Serializes the contents of the given PLT's ETS table and writes it to a file.
+  """
+  @spec dump(PLT.t(), String.t()) :: :ok
+  def dump(plt, path) do
+    data =
+      plt
+      |> get_all()
+      |> SerializationUtils.serialize()
+
+    File.write!(path, data)
   end
 
   @doc """
@@ -110,21 +125,6 @@ defmodule Hologram.Commons.PLT do
 
     %PLT{pid: pid, table_ref: table_ref}
   end
-
-  # alias Hologram.Commons.SerializationUtils
-
-  # @doc """
-  # Serializes the contents of the given PLT's ETS table and writes them to a file.
-  # """
-  # @spec dump(PLT.t()) :: :ok
-  # def dump(%PLT{dump_path: dump_path} = plt) do
-  #   data =
-  #     plt
-  #     |> get_all()
-  #     |> SerializationUtils.serialize()
-
-  #   File.write!(dump_path, data)
-  # end
 
   # @doc """
   # Tells whether the underlying ETS table exists.

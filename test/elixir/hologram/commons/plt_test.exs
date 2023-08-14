@@ -1,7 +1,12 @@
 defmodule Hologram.Commons.PLTTest do
   use Hologram.Test.BasicCase, async: true
   import Hologram.Commons.PLT
+
   alias Hologram.Commons.PLT
+  alias Hologram.Commons.SerializationUtils
+  alias Hologram.Compiler.Reflection
+
+  @dump_path Reflection.tmp_path() <> "/plt_#{__MODULE__}.bin"
 
   defp ets_table_exists?(table_ref) do
     table_ref
@@ -25,6 +30,24 @@ defmodule Hologram.Commons.PLTTest do
       assert delete(plt, :my_key) == plt
       assert get(plt, :my_key) == :error
     end
+  end
+
+  test "dump/2" do
+    items = [
+      {:my_key_1, :my_value_1},
+      {:my_key_2, :my_value_2}
+    ]
+
+    start()
+    |> put(items)
+    |> dump(@dump_path)
+
+    items =
+      @dump_path
+      |> File.read!()
+      |> SerializationUtils.deserialize()
+
+    assert items == Enum.into(%{}, items)
   end
 
   describe "get/2" do
@@ -114,10 +137,6 @@ defmodule Hologram.Commons.PLTTest do
     assert ets_table_exists?(table_ref)
   end
 
-  # alias Hologram.Commons.SerializationUtils
-  # alias Hologram.Compiler.Reflection
-
-  # @dump_path Reflection.tmp_path() <> "/plt_#{__MODULE__}.bin"
   # @items %{key_1: :value_1, key_2: :value_2}
   # @name :"plt_#{__MODULE__}"
   # @opts name: @name, dump_path: @dump_path
@@ -132,20 +151,6 @@ defmodule Hologram.Commons.PLTTest do
   #   dump_items()
 
   #   :ok
-  # end
-
-  # test "dump/1" do
-  #   @opts
-  #   |> start()
-  #   |> put(:dump_test, 123)
-  #   |> dump()
-
-  #   items =
-  #     @dump_path
-  #     |> File.read!()
-  #     |> SerializationUtils.deserialize()
-
-  #   assert items.dump_test == 123
   # end
 
   # describe "table_exists?/1" do
