@@ -231,6 +231,25 @@ defmodule Hologram.Compiler.CallGraphTest do
     end
   end
 
+  test "remove_vertex/2", %{call_graph: call_graph} do
+    call_graph
+    |> add_vertex(:vertex_1)
+    |> add_vertex(:vertex_2)
+    |> add_vertex(:vertex_3)
+    |> add_edge(:vertex_1, :vertex_2)
+    |> add_edge(:vertex_2, :vertex_3)
+    |> add_edge(:vertex_3, :vertex_1)
+    |> remove_vertex(:vertex_2)
+
+    assert has_vertex?(call_graph, :vertex_1)
+    refute has_vertex?(call_graph, :vertex_2)
+    assert has_vertex?(call_graph, :vertex_3)
+
+    refute has_edge?(call_graph, :vertex_1, :vertex_2)
+    refute has_edge?(call_graph, :vertex_2, :vertex_3)
+    assert has_edge?(call_graph, :vertex_3, :vertex_1)
+  end
+
   test "sorted_edges/1", %{call_graph: call_graph} do
     call_graph
     |> add_edge(:vertex_4, :vertex_5)
@@ -1054,25 +1073,6 @@ defmodule Hologram.Compiler.CallGraphTest do
   #              }
   #            ]
   #   end
-  # end
-
-  # test "remove_vertex/2", %{call_graph: call_graph} do
-  #   call_graph
-  #   |> add_vertex(:vertex_1)
-  #   |> add_vertex(:vertex_2)
-  #   |> add_vertex(:vertex_3)
-  #   |> add_edge(:vertex_1, :vertex_2)
-  #   |> add_edge(:vertex_2, :vertex_3)
-  #   |> add_edge(:vertex_3, :vertex_1)
-  #   |> remove_vertex(:vertex_2)
-
-  #   assert has_vertex?(call_graph, :vertex_1)
-  #   refute has_vertex?(call_graph, :vertex_2)
-  #   assert has_vertex?(call_graph, :vertex_3)
-
-  #   refute has_edge?(call_graph, :vertex_1, :vertex_2)
-  #   refute has_edge?(call_graph, :vertex_2, :vertex_3)
-  #   assert has_edge?(call_graph, :vertex_3, :vertex_1)
   # end
 
   # describe "start/1" do

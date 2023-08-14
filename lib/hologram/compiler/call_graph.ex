@@ -127,6 +127,15 @@ defmodule Hologram.Compiler.CallGraph do
   end
 
   @doc """
+  Removes the vertex from the call graph.
+  """
+  @spec remove_vertex(CallGraph.t(), vertex) :: CallGraph.t()
+  def remove_vertex(%{pid: pid} = call_graph, vertex) do
+    Agent.update(pid, &Graph.delete_vertex(&1, vertex))
+    call_graph
+  end
+
+  @doc """
   Returns sorted graph edges.
   """
   @spec sorted_edges(CallGraph.t()) :: list(Graph.Edge.t())
@@ -377,21 +386,6 @@ defmodule Hologram.Compiler.CallGraph do
   #   |> Task.async_stream(&build_module(call_graph, ir_plt, &1))
   #   |> Stream.run()
 
-  #   call_graph
-  # end
-
-  # @doc """
-  # Removes the vertex from the call graph.
-
-  # ## Examples
-
-  #     iex> call_graph = %CallGraph{name: :my_call_graph, pid: #PID<0.259.0>}
-  #     iex> remove_vertex(call_graph, :vertex_3)
-  #     %CallGraph{name: :my_call_graph, pid: #PID<0.259.0>}
-  # """
-  # @spec remove_vertex(CallGraph.t(), vertex) :: CallGraph.t()
-  # def remove_vertex(call_graph, vertex) do
-  #   Agent.update(call_graph.name, &Graph.delete_vertex(&1, vertex))
   #   call_graph
   # end
 
