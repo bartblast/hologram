@@ -1,12 +1,19 @@
 defmodule Hologram.Compiler.CallGraphTest do
-  ### OVERHAUL
+  use Hologram.Test.BasicCase, async: true
+  import Hologram.Compiler.CallGraph
+  alias Hologram.Compiler.CallGraph
 
-  # use Hologram.Test.BasicCase, async: true
-  # import Hologram.Compiler.CallGraph
+  test "start/0" do
+    assert %CallGraph{pid: pid} = start()
+
+    assert is_pid(pid)
+    assert Agent.get(pid, & &1) == Graph.new()
+  end
+
+  ### OVERHAUL
 
   # alias Hologram.Commons.PLT
   # alias Hologram.Commons.SerializationUtils
-  # alias Hologram.Compiler.CallGraph
   # alias Hologram.Compiler.IR
   # alias Hologram.Compiler.Reflection
   # alias Hologram.Test.Fixtures.Compiler.CallGraph.Module1

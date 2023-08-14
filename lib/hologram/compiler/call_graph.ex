@@ -1,16 +1,26 @@
 defmodule Hologram.Compiler.CallGraph do
+  alias Hologram.Compiler.CallGraph
+
+  defstruct pid: nil
+  @type t :: %CallGraph{pid: pid}
+
+  @doc """
+  Starts a new CallGraph agent with an initial empty graph.
+  """
+  @spec start() :: CallGraph.t()
+  def start do
+    {:ok, pid} = Agent.start_link(fn -> Graph.new() end)
+    %CallGraph{pid: pid}
+  end
+
   ### OVERHAUL
 
   # use Agent
 
   # alias Hologram.Commons.PLT
   # alias Hologram.Commons.SerializationUtils
-  # alias Hologram.Compiler.CallGraph
   # alias Hologram.Compiler.IR
   # alias Hologram.Compiler.Reflection
-
-  # defstruct pid: nil, name: nil, dump_path: nil
-  # @type t :: %CallGraph{pid: pid, name: atom, dump_path: String.t() | nil}
 
   # @type vertex :: module | {module, atom, integer}
 
@@ -459,28 +469,6 @@ defmodule Hologram.Compiler.CallGraph do
   #   call_graph
   #   |> vertices()
   #   |> Enum.sort()
-  # end
-
-  # @doc """
-  # Starts a new CallGraph agent with an initial empty graph
-  # or loads the graph from the dump file if it exists.
-
-  # ## Examples
-
-  #     iex> start(name: :my_call_graph, dump_path: "/my_dump_path")
-  #     %CallGraph{pid: #PID<0.259.0>, name: :my_call_graph, dump_path: "/my_dump_path"}
-  # """
-  # @spec start(keyword) :: CallGraph.t()
-  # def start(opts) do
-  #   {:ok, pid} = Agent.start_link(fn -> Graph.new() end, name: opts[:name])
-
-  #   call_graph = %CallGraph{pid: pid, name: opts[:name], dump_path: opts[:dump_path]}
-
-  #   if opts[:dump_path] && File.exists?(opts[:dump_path]) do
-  #     load_graph_from_file(call_graph)
-  #   end
-
-  #   call_graph
   # end
 
   # @doc """
