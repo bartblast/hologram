@@ -86,6 +86,14 @@ defmodule Hologram.Compiler.CallGraph do
   end
 
   @doc """
+  Checks if the given vertex exists in the call graph.
+  """
+  @spec has_vertex?(CallGraph.t(), vertex) :: boolean
+  def has_vertex?(%{pid: pid}, vertex) do
+    Agent.get(pid, &Graph.has_vertex?(&1, vertex))
+  end
+
+  @doc """
   Replace the state of underlying Agent process with the given graph.
   """
   @spec put_graph(CallGraph.t(), Graph.t()) :: CallGraph.t()
@@ -239,20 +247,6 @@ defmodule Hologram.Compiler.CallGraph do
   # end
 
   # def build(call_graph, _ir, _from_vertex), do: call_graph
-
-  # @doc """
-  # Checks if the given vertex exists in the call graph.
-
-  # ## Examples
-
-  #     iex> call_graph = %CallGraph{name: :my_call_graph, pid: #PID<0.259.0>}
-  #     iex> has_vertex?(call_graph, :vertex_3)
-  #     true
-  # """
-  # @spec has_vertex?(CallGraph.t(), vertex) :: boolean
-  # def has_vertex?(call_graph, vertex) do
-  #   Agent.get(call_graph.name, &Graph.has_vertex?(&1, vertex))
-  # end
 
   # @doc """
   # Returns the edges in which the second vertex is either the given module or a function from the given module,

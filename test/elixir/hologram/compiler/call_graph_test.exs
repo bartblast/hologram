@@ -88,6 +88,17 @@ defmodule Hologram.Compiler.CallGraphTest do
     end
   end
 
+  describe "has_vertex?/2" do
+    test "has the given vertex", %{call_graph: call_graph} do
+      add_vertex(call_graph, :vertex)
+      assert has_vertex?(call_graph, :vertex)
+    end
+
+    test "doesn't have the given vertex", %{call_graph: call_graph} do
+      refute has_vertex?(call_graph, :vertex)
+    end
+  end
+
   test "put_graph", %{call_graph: call_graph} do
     graph =
       Graph.new()
@@ -703,17 +714,6 @@ defmodule Hologram.Compiler.CallGraphTest do
   #                label: nil
   #              }
   #            ]
-  #   end
-  # end
-
-  # describe "has_vertex?/2" do
-  #   test "doesn't have the given vertex", %{call_graph: call_graph} do
-  #     refute has_vertex?(call_graph, :vertex)
-  #   end
-
-  #   test "has the given vertex", %{call_graph: call_graph} do
-  #     add_vertex(call_graph, :vertex)
-  #     assert has_vertex?(call_graph, :vertex)
   #   end
   # end
 
