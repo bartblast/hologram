@@ -20,7 +20,9 @@ defmodule Hologram.Commons.PLTTest do
   end
 
   setup do
+    File.rm(@dump_path)
     plt = put(start(), @items)
+
     [plt: plt]
   end
 
@@ -71,6 +73,14 @@ defmodule Hologram.Commons.PLTTest do
 
   test "get_all/1", %{plt: plt} do
     assert get_all(plt) == Enum.into(@items, %{})
+  end
+
+  test "load/2", %{plt: plt} do
+    dump(plt, @dump_path)
+
+    plt_2 = start()
+    assert load(plt_2, @dump_path) == plt_2
+    assert get_all(plt_2) == Enum.into(@items, %{})
   end
 
   test "put/2" do

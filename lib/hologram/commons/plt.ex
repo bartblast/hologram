@@ -92,6 +92,20 @@ defmodule Hologram.Commons.PLT do
   end
 
   @doc """
+  Populates the underlying ETS table of the given PLT with items dumped to the given path.
+  """
+  @spec load(PLT.t(), String.t()) :: PLT.t()
+  def load(plt, path) do
+    items =
+      path
+      |> File.read!()
+      |> SerializationUtils.deserialize()
+      |> Map.to_list()
+
+    put(plt, items)
+  end
+
+  @doc """
   Puts multiple items into the underlying ETS table.
   """
   @spec put(PLT.t(), keyword) :: PLT.t()
@@ -137,16 +151,6 @@ defmodule Hologram.Commons.PLT do
   # @spec table_exists?(atom) :: boolean
   # def table_exists?(name) do
   #   :ets.info(name) != :undefined
-  # end
-
-  # defp populate_table(opts) do
-  #   items =
-  #     opts[:dump_path]
-  #     |> File.read!()
-  #     |> SerializationUtils.deserialize()
-  #     |> Map.to_list()
-
-  #   put(opts[:name], items)
   # end
 
   # defp reload_table(opts) do
