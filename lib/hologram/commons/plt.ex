@@ -11,6 +11,15 @@ defmodule Hologram.Commons.PLT do
   @type t :: %PLT{pid: pid, table_ref: :ets.tid()}
 
   @doc """
+  Deletes a key-value pair from the give persistent lookup table.
+  """
+  @spec delete(PLT.t(), atom) :: PLT.t()
+  def delete(plt, key) do
+    :ets.delete(plt.table_ref, key)
+    plt
+  end
+
+  @doc """
   Returns the value stored in the underlying ETS table under the given key.
   If the key doesn't exist the :error :atom is returned.
   """
@@ -72,15 +81,6 @@ defmodule Hologram.Commons.PLT do
   end
 
   # alias Hologram.Commons.SerializationUtils
-
-  # @doc """
-  # Deletes a key-value pair from the give persistent lookup table.
-  # """
-  # @spec delete(PLT.t(), atom) :: PLT.t()
-  # def delete(plt, key) do
-  #   :ets.delete(plt.table_ref, key)
-  #   plt
-  # end
 
   # @doc """
   # Serializes the contents of the given PLT's ETS table and writes them to a file.

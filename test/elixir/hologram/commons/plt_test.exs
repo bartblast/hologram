@@ -9,6 +9,24 @@ defmodule Hologram.Commons.PLTTest do
     |> is_list()
   end
 
+  describe "delete/2" do
+    test "key exists" do
+      plt =
+        start()
+        |> put(:my_key, :my_value)
+
+      assert delete(plt, :my_key) == plt
+      assert get(plt, :my_key) == :error
+    end
+
+    test "key doesn't exist" do
+      plt = start()
+
+      assert delete(plt, :my_key) == plt
+      assert get(plt, :my_key) == :error
+    end
+  end
+
   describe "get/2" do
     test "key exists" do
       plt =
@@ -69,25 +87,6 @@ defmodule Hologram.Commons.PLTTest do
   #   dump_items()
 
   #   :ok
-  # end
-
-  # describe "delete/2" do
-  #   test "key exists" do
-  #     plt =
-  #       @opts
-  #       |> start()
-  #       |> put(:my_key, :my_value)
-
-  #     assert delete(plt, :my_key) == plt
-  #     assert get(plt, :my_key) == :error
-  #   end
-
-  #   test "key doesn't exist" do
-  #     plt = start(@opts)
-
-  #     assert delete(plt, :my_key) == plt
-  #     assert get(plt, :my_key) == :error
-  #   end
   # end
 
   # test "dump/1" do
