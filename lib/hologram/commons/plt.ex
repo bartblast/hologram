@@ -1,7 +1,7 @@
 defmodule Hologram.Commons.PLT do
   @moduledoc """
   Provides a persistent lookup table (PLT) implemented using ETS (Erlang Term Storage) and GenServer.
-  It allows you to store key-value pairs in memory and perform various operations on the data.
+  It allows to store key-value pairs in memory and perform various operations on the data.
   """
 
   use GenServer
@@ -11,7 +11,7 @@ defmodule Hologram.Commons.PLT do
   @type t :: %PLT{pid: pid, table_ref: :ets.tid()}
 
   @doc """
-  Returns the underlying ETS table's reference.
+  Returns the reference of the underlying ETS table.
   """
   @impl GenServer
   @spec handle_call(:get_table_ref, GenServer.from(), :ets.tid()) ::
