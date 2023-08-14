@@ -103,6 +103,30 @@ defmodule Hologram.Compiler.CallGraph do
   end
 
   @doc """
+  Lists vertices that are reachable from the given vertex or vertices.
+  """
+  @spec reachable(CallGraph.t(), vertex | list(vertex)) :: list(vertex)
+  def reachable(call_graph, vertex_or_vertices)
+
+  def reachable(%{pid: pid}, vertices) when is_list(vertices) do
+    Agent.get(pid, &Graph.reachable(&1, vertices))
+  end
+
+  def reachable(call_graph, vertex) do
+    reachable(call_graph, [vertex])
+  end
+
+  @doc """
+  Lists MFAs ({module, function, arity} tuples) that are reachable from the given entry MFA or MFAs.
+  """
+  @spec reachable_mfas(CallGraph.t(), mfa | list(mfa)) :: list(mfa)
+  def reachable_mfas(call_graph, entry_mfa_or_mfas) do
+    call_graph
+    |> reachable(entry_mfa_or_mfas)
+    |> Enum.filter(&is_tuple/1)
+  end
+
+  @doc """
   Returns sorted graph vertices.
   """
   @spec sorted_vertices(CallGraph.t()) :: list(vertex)
@@ -344,30 +368,6 @@ defmodule Hologram.Compiler.CallGraph do
   #   |> Stream.run()
 
   #   call_graph
-  # end
-
-  # @doc """
-  # Determines vertices which are reachable from the given vertex or vertices.
-  # """
-  # @spec reachable(CallGraph.t(), vertex | list(vertex)) :: list(vertex)
-  # def reachable(call_graph, vertex_or_vertices)
-
-  # def reachable(call_graph, vertices) when is_list(vertices) do
-  #   Agent.get(call_graph.name, &Graph.reachable(&1, vertices))
-  # end
-
-  # def reachable(call_graph, vertex) do
-  #   reachable(call_graph, [vertex])
-  # end
-
-  # @doc """
-  # Determines MFAs ({module, function, arity} tuples) which are reachable from the given entry MFA or MFAs.
-  # """
-  # @spec reachable_mfas(CallGraph.t(), mfa | list(mfa)) :: list(mfa)
-  # def reachable_mfas(call_graph, entry_mfa_or_mfas) do
-  #   call_graph
-  #   |> reachable(entry_mfa_or_mfas)
-  #   |> Enum.filter(&is_tuple/1)
   # end
 
   # @doc """
