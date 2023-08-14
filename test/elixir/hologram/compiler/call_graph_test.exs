@@ -63,14 +63,15 @@ defmodule Hologram.Compiler.CallGraphTest do
 
   test "edges/1", %{call_graph: call_graph} do
     call_graph
+    |> add_edge(:vertex_4, :vertex_5)
     |> add_vertex(:vertex_1)
     |> add_edge(:vertex_2, :vertex_3)
-    |> add_edge(:vertex_4, :vertex_5)
 
-    assert edges(call_graph) == [
-             %Graph.Edge{v1: :vertex_2, v2: :vertex_3, weight: 1, label: nil},
-             %Graph.Edge{v1: :vertex_4, v2: :vertex_5, weight: 1, label: nil}
-           ]
+    result = edges(call_graph)
+
+    assert Enum.count(result) == 2
+    assert %Graph.Edge{v1: :vertex_2, v2: :vertex_3, weight: 1, label: nil} in result
+    assert %Graph.Edge{v1: :vertex_4, v2: :vertex_5, weight: 1, label: nil} in result
   end
 
   test "get_graph/1", %{call_graph: call_graph} do
@@ -230,13 +231,25 @@ defmodule Hologram.Compiler.CallGraphTest do
     end
   end
 
+  test "sorted_edges/1", %{call_graph: call_graph} do
+    call_graph
+    |> add_edge(:vertex_4, :vertex_5)
+    |> add_vertex(:vertex_1)
+    |> add_edge(:vertex_2, :vertex_3)
+
+    assert sorted_edges(call_graph) == [
+             %Graph.Edge{v1: :vertex_2, v2: :vertex_3, weight: 1, label: nil},
+             %Graph.Edge{v1: :vertex_4, v2: :vertex_5, weight: 1, label: nil}
+           ]
+  end
+
   test "sorted_vertices/1", %{call_graph: call_graph} do
     call_graph
     |> add_edge(:vertex_4, :vertex_5)
     |> add_vertex(:vertex_1)
     |> add_edge(:vertex_2, :vertex_3)
 
-    sorted_vertices(call_graph) == [:vertex_1, :vertex_2, :vertex_3, :vertex_4, :vertex_5]
+    assert sorted_vertices(call_graph) == [:vertex_1, :vertex_2, :vertex_3, :vertex_4, :vertex_5]
   end
 
   test "start/0" do

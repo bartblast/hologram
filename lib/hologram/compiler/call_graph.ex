@@ -127,6 +127,16 @@ defmodule Hologram.Compiler.CallGraph do
   end
 
   @doc """
+  Returns sorted graph edges.
+  """
+  @spec sorted_edges(CallGraph.t()) :: list(Graph.Edge.t())
+  def sorted_edges(call_graph) do
+    call_graph
+    |> edges()
+    |> Enum.sort()
+  end
+
+  @doc """
   Returns sorted graph vertices.
   """
   @spec sorted_vertices(CallGraph.t()) :: list(vertex)
@@ -383,35 +393,6 @@ defmodule Hologram.Compiler.CallGraph do
   # def remove_vertex(call_graph, vertex) do
   #   Agent.update(call_graph.name, &Graph.delete_vertex(&1, vertex))
   #   call_graph
-  # end
-
-  # @doc """
-  # Returns sorted graph edges.
-
-  # ## Examples
-
-  #     iex> call_graph = %CallGraph{name: :my_call_graph, pid: #PID<0.259.0>}
-  #     iex> sorted_edges(call_graph)
-  #     [
-  #       %Graph.Edge{
-  #         v1: {Module2, :my_fun_6, 3},
-  #         v2: Module5,
-  #         weight: 1,
-  #         label: nil
-  #       },
-  #       %Graph.Edge{
-  #         v1: {Module3, :my_fun_8, 1},
-  #         v2: {Module5, :my_fun_1, 4},
-  #         weight: 1,
-  #         label: nil
-  #       }
-  #     ]
-  # """
-  # @spec sorted_edges(CallGraph.t()) :: list(Graph.Edge.t())
-  # def sorted_edges(call_graph) do
-  #   call_graph
-  #   |> edges()
-  #   |> Enum.sort()
   # end
 
   # defp add_component_call_graph_edges(call_graph, module) do
