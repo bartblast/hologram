@@ -34,6 +34,13 @@ defmodule Hologram.Compiler.CallGraphTest do
     assert Graph.has_vertex?(graph, :vertex_3)
   end
 
+  test "clone/1", %{call_graph: call_graph} do
+    assert %CallGraph{} = call_graph_clone = clone(call_graph)
+
+    refute call_graph_clone == call_graph
+    assert get_graph(call_graph) == get_graph(call_graph_clone)
+  end
+
   test "edges/1", %{call_graph: call_graph} do
     call_graph
     |> add_vertex(:vertex_1)
@@ -48,6 +55,15 @@ defmodule Hologram.Compiler.CallGraphTest do
 
   test "get_graph/1", %{call_graph: call_graph} do
     assert %Graph{} = get_graph(call_graph)
+  end
+
+  test "put_graph", %{call_graph: call_graph} do
+    graph =
+      Graph.new()
+      |> Graph.add_edge(:vertex_3, :vertex_4)
+
+    assert put_graph(call_graph, graph) == call_graph
+    assert get_graph(call_graph) == graph
   end
 
   test "start/0" do
@@ -634,27 +650,6 @@ defmodule Hologram.Compiler.CallGraphTest do
   #                label: nil
   #              }
   #            ]
-  #   end
-  # end
-
-  # describe "clone/1" do
-  #   test "returns CallGraph struct with name from opts", %{call_graph: call_graph} do
-  #     assert %CallGraph{name: @call_graph_name_2} = clone(call_graph, name: @call_graph_name_2)
-  #   end
-
-  #   test "clones the call graph", %{call_graph: call_graph} do
-  #     add_vertex(call_graph, :vertex_1)
-
-  #     call_graph_clone =
-  #       call_graph
-  #       |> clone(name: @call_graph_name_2)
-  #       |> add_vertex(:vertex_2)
-
-  #     assert has_vertex?(call_graph, :vertex_1)
-  #     refute has_vertex?(call_graph, :vertex_2)
-
-  #     assert has_vertex?(call_graph_clone, :vertex_1)
-  #     assert has_vertex?(call_graph_clone, :vertex_2)
   #   end
   # end
 

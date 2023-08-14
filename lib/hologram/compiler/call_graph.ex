@@ -34,6 +34,15 @@ defmodule Hologram.Compiler.CallGraph do
   end
 
   @doc """
+  Returns a clone of the given call graph.
+  """
+  @spec clone(CallGraph.t()) :: CallGraph.t()
+  def clone(call_graph) do
+    graph = get_graph(call_graph)
+    put_graph(start(), graph)
+  end
+
+  @doc """
   Returns graph edges.
   """
   @spec edges(CallGraph.t()) :: list(Graph.Edge.t())
@@ -47,6 +56,15 @@ defmodule Hologram.Compiler.CallGraph do
   @spec get_graph(CallGraph.t()) :: Graph.t()
   def get_graph(%{pid: pid}) do
     Agent.get(pid, & &1)
+  end
+
+  @doc """
+  Replace the state of underlying Agent process with the given graph.
+  """
+  @spec put_graph(CallGraph.t(), Graph.t()) :: CallGraph.t()
+  def put_graph(%{pid: pid} = call_graph, graph) do
+    Agent.update(pid, fn _state -> graph end)
+    call_graph
   end
 
   @doc """
@@ -177,22 +195,6 @@ defmodule Hologram.Compiler.CallGraph do
   # end
 
   # def build(call_graph, _ir, _from_vertex), do: call_graph
-
-  # @doc """
-  # Clones the call graph and uses a new name for it.
-
-  # ## Examples
-
-  #     iex> call_graph = %CallGraph{name: :my_call_graph, pid: #PID<0.259.0>}
-  #     iex> clone(call_graph, name: :my_call_graph_clone)
-  #     %CallGraph{name: :my_call_graph_clone, pid: #PID<0.260.0>}
-  # """
-  # @spec clone(CallGraph.t(), keyword) :: CallGraph.t()
-  # def clone(old_call_graph, opts) do
-  #   new_call_graph = start(opts)
-  #   Agent.update(new_call_graph.name, fn _state -> get_graph(old_call_graph) end)
-  #   new_call_graph
-  # end
 
   # @doc """
   # Serializes the graph and writes it to a file.
