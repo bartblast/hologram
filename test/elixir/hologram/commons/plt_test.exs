@@ -60,6 +60,20 @@ defmodule Hologram.Commons.PLTTest do
     end
   end
 
+  test "put/2" do
+    items = [
+      {:my_key_1, :my_value_1},
+      {:my_key_2, :my_value_2}
+    ]
+
+    plt =
+      start()
+      |> put(items)
+
+    assert get(plt, :my_key_1) == {:ok, :my_value_1}
+    assert get(plt, :my_key_2) == {:ok, :my_value_2}
+  end
+
   describe "put/3" do
     test "first arg is a PLT struct" do
       result =
@@ -119,20 +133,6 @@ defmodule Hologram.Commons.PLTTest do
   #     |> SerializationUtils.deserialize()
 
   #   assert items.dump_test == 123
-  # end
-
-  # test "put/2" do
-  #   plt = start(@opts)
-
-  #   items = [
-  #     {:key_3, :value_3},
-  #     {:key_4, :value_4}
-  #   ]
-
-  #   put(@name, items)
-
-  #   assert get(plt, :key_3) == {:ok, :value_3}
-  #   assert get(plt, :key_4) == {:ok, :value_4}
   # end
 
   # describe "table_exists?/1" do

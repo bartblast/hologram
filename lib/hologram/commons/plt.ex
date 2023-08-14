@@ -67,6 +67,15 @@ defmodule Hologram.Commons.PLT do
   end
 
   @doc """
+  Puts multiple items into the underlying ETS table.
+  """
+  @spec put(PLT.t(), keyword) :: PLT.t()
+  def put(%{table_ref: table_ref} = plt, items) do
+    :ets.insert(table_ref, items)
+    plt
+  end
+
+  @doc """
   Puts the given item into the underlying ETS table.
   """
   @spec put(PLT.t() | :ets.tid(), atom, term) :: PLT.t() | true
@@ -115,14 +124,6 @@ defmodule Hologram.Commons.PLT do
   #   plt.table_ref
   #   |> :ets.tab2list()
   #   |> Enum.into(%{})
-  # end
-
-  # @doc """
-  # Puts multiple items into the underlying ETS table.
-  # """
-  # @spec put(reference, keyword) :: true
-  # def put(table_ref, items) do
-  #   :ets.insert(table_ref, items)
   # end
 
   # @doc """
