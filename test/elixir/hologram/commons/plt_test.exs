@@ -21,9 +21,7 @@ defmodule Hologram.Commons.PLTTest do
 
   setup do
     File.rm(@dump_path)
-    plt = put(start(), @items)
-
-    [plt: plt]
+    [plt: put(start(), @items)]
   end
 
   describe "delete/2" do
