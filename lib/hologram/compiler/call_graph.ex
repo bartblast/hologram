@@ -1,4 +1,5 @@
 defmodule Hologram.Compiler.CallGraph do
+  alias Hologram.Commons.SerializationUtils
   alias Hologram.Compiler.CallGraph
 
   defstruct pid: nil
@@ -43,6 +44,21 @@ defmodule Hologram.Compiler.CallGraph do
   end
 
   @doc """
+  Serializes the call graph and writes it to a file.
+  """
+  @spec dump(CallGraph.t(), String.t()) :: CallGraph.t()
+  def dump(call_graph, path) do
+    data =
+      call_graph
+      |> get_graph()
+      |> SerializationUtils.serialize()
+
+    File.write!(path, data)
+
+    call_graph
+  end
+
+  @doc """
   Returns graph edges.
   """
   @spec edges(CallGraph.t()) :: list(Graph.Edge.t())
@@ -81,7 +97,6 @@ defmodule Hologram.Compiler.CallGraph do
   # use Agent
 
   # alias Hologram.Commons.PLT
-  # alias Hologram.Commons.SerializationUtils
   # alias Hologram.Compiler.IR
   # alias Hologram.Compiler.Reflection
 
@@ -195,25 +210,6 @@ defmodule Hologram.Compiler.CallGraph do
   # end
 
   # def build(call_graph, _ir, _from_vertex), do: call_graph
-
-  # @doc """
-  # Serializes the graph and writes it to a file.
-
-  # ## Examples
-
-  #     iex> call_graph = %CallGraph{name: :my_call_graph, pid: #PID<0.259.0>, dump_path: "/my_dump_path"}
-  #     iex> dump(call_graph)
-  #     :ok
-  # """
-  # @spec dump(CallGraph.t()) :: :ok
-  # def dump(%CallGraph{dump_path: dump_path} = call_graph) do
-  #   data =
-  #     call_graph
-  #     |> get_graph()
-  #     |> SerializationUtils.serialize()
-
-  #   File.write!(dump_path, data)
-  # end
 
   # @doc """
   # Checks if an edge exists between two given vertices in the call graph.
