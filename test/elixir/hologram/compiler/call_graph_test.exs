@@ -2,6 +2,7 @@ defmodule Hologram.Compiler.CallGraphTest do
   use Hologram.Test.BasicCase, async: true
   import Hologram.Compiler.CallGraph
 
+  alias Hologram.Commons.PLT
   alias Hologram.Commons.SerializationUtils
   alias Hologram.Compiler.CallGraph
   alias Hologram.Compiler.Reflection
@@ -156,6 +157,148 @@ defmodule Hologram.Compiler.CallGraphTest do
              {:module_2, :fun_b, :arity_b},
              {:module_2, :fun_d, :arity_d}
            ]
+  end
+
+  describe "patch/3" do
+    test "adds modules", %{call_graph: call_graph} do
+      module_9_ir = IR.for_module(Module9)
+      module_10_ir = IR.for_module(Module10)
+
+      ir_plt =
+        PLT.start()
+        |> PLT.put(Module9, module_9_ir)
+        |> PLT.put(Module10, module_10_ir)
+
+      call_graph_2 =
+        start()
+        |> build(module_9_ir)
+        |> build(module_10_ir)
+
+      diff = %{
+        added_modules: [Module10, Module9],
+        removed_modules: [],
+        updated_modules: []
+      }
+
+      patch(call_graph, ir_plt, diff)
+
+      assert get_graph(call_graph) == get_graph(call_graph_2)
+    end
+
+    test "removes modules", %{call_graph: call_graph} do
+      call_graph
+      |> add_edge({:module_1, :fun_a, :arity_a}, {:module_2, :fun_b, :arity_b})
+      |> add_edge({:module_2, :fun_c, :arity_c}, {:module_3, :fun_d, :arity_d})
+      |> add_edge({:module_1, :fun_e, :arity_e}, {:module_3, :fun_f, :arity_f})
+      |> add_edge({:module_4, :fun_g, :arity_g}, :module_2)
+      |> add_edge({:module_5, :fun_h, :arity_h}, :module_6)
+
+      ir_plt = PLT.start()
+
+      diff = %{
+        added_modules: [],
+        removed_modules: [:module_2, :module_3],
+        updated_modules: []
+      }
+
+      patch(call_graph, ir_plt, diff)
+
+      assert sorted_vertices(call_graph) == [
+               :module_6,
+               {:module_1, :fun_a, :arity_a},
+               {:module_1, :fun_e, :arity_e},
+               {:module_4, :fun_g, :arity_g},
+               {:module_5, :fun_h, :arity_h}
+             ]
+
+      assert edges(call_graph) == [
+               %Graph.Edge{
+                 v1: {:module_5, :fun_h, :arity_h},
+                 v2: :module_6,
+                 weight: 1,
+                 label: nil
+               }
+             ]
+    end
+
+    test "updates modules", %{call_graph: call_graph} do
+      module_9_ir = IR.for_module(Module9)
+      module_10_ir = IR.for_module(Module10)
+
+      ir_plt =
+        PLT.start()
+        |> PLT.put(Module9, module_9_ir)
+        |> PLT.put(Module10, module_10_ir)
+
+      call_graph
+      |> add_edge({:module_3, :fun_c, :arity_c}, Module9)
+      |> add_edge({:module_1, :fun_a, :arity_a}, {Module9, :my_fun_1, 0})
+      |> add_edge({:module_2, :fun_b, :arity_b}, {Module9, :my_fun_2, 0})
+      |> add_edge({:module_1, :fun_d, :arity_d}, Module9)
+      |> add_edge({Module9, :my_fun_3, 2}, {:module_4, :fun_e, :arity_e})
+      |> add_edge({Module10, :my_fun_4, 2}, {:module_5, :fun_f, :arity_f})
+
+      diff = %{
+        added_modules: [],
+        removed_modules: [],
+        updated_modules: [Module9, Module10]
+      }
+
+      patch(call_graph, ir_plt, diff)
+
+      assert sorted_vertices(call_graph) == [
+               Module9,
+               {Module9, :my_fun_1, 0},
+               {Module9, :my_fun_2, 0},
+               {Module10, :my_fun_3, 0},
+               {Module10, :my_fun_4, 0},
+               {:module_1, :fun_a, :arity_a},
+               {:module_1, :fun_d, :arity_d},
+               {:module_2, :fun_b, :arity_b},
+               {:module_3, :fun_c, :arity_c},
+               {:module_4, :fun_e, :arity_e},
+               {:module_5, :fun_f, :arity_f}
+             ]
+
+      assert sorted_edges(call_graph) == [
+               %Graph.Edge{
+                 v1: {Module9, :my_fun_1, 0},
+                 v2: {Module9, :my_fun_2, 0},
+                 weight: 1,
+                 label: nil
+               },
+               %Graph.Edge{
+                 v1: {:module_2, :fun_b, :arity_b},
+                 v2: {Module9, :my_fun_2, 0},
+                 weight: 1,
+                 label: nil
+               },
+               %Graph.Edge{
+                 v1: {:module_1, :fun_a, :arity_a},
+                 v2: {Module9, :my_fun_1, 0},
+                 weight: 1,
+                 label: nil
+               },
+               %Graph.Edge{
+                 v1: {:module_1, :fun_d, :arity_d},
+                 v2: Module9,
+                 weight: 1,
+                 label: nil
+               },
+               %Graph.Edge{
+                 v1: {Module10, :my_fun_3, 0},
+                 v2: {Module10, :my_fun_4, 0},
+                 weight: 1,
+                 label: nil
+               },
+               %Graph.Edge{
+                 v1: {:module_3, :fun_c, :arity_c},
+                 v2: Module9,
+                 weight: 1,
+                 label: nil
+               }
+             ]
+    end
   end
 
   test "put_graph", %{call_graph: call_graph} do
@@ -353,8 +496,6 @@ defmodule Hologram.Compiler.CallGraphTest do
   end
 
   ### OVERHAUL
-
-  # alias Hologram.Commons.PLT
   # alias Hologram.Compiler.IR
   # alias Hologram.Test.Fixtures.Compiler.CallGraph.Module1
   # alias Hologram.Test.Fixtures.Compiler.CallGraph.Module10
@@ -922,152 +1063,6 @@ defmodule Hologram.Compiler.CallGraphTest do
   #              %Graph.Edge{
   #                v1: :vertex_1,
   #                v2: Module5,
-  #                weight: 1,
-  #                label: nil
-  #              }
-  #            ]
-  #   end
-  # end
-
-  # describe "patch/3" do
-  #   test "adds modules", %{call_graph: call_graph} do
-  #     module_9_ir = IR.for_module(Module9)
-  #     module_10_ir = IR.for_module(Module10)
-
-  #     ir_plt =
-  #       [name: @ir_plt_name]
-  #       |> PLT.start()
-  #       |> PLT.put(Module9, module_9_ir)
-  #       |> PLT.put(Module10, module_10_ir)
-
-  #     call_graph_2 =
-  #       [name: @call_graph_name_2]
-  #       |> start()
-  #       |> build(module_9_ir)
-  #       |> build(module_10_ir)
-
-  #     diff = %{
-  #       added_modules: [Module10, Module9],
-  #       removed_modules: [],
-  #       updated_modules: []
-  #     }
-
-  #     patch(call_graph, ir_plt, diff)
-
-  #     assert vertices(call_graph) == vertices(call_graph_2)
-  #     assert edges(call_graph) == edges(call_graph_2)
-  #   end
-
-  #   test "removes modules", %{call_graph: call_graph} do
-  #     call_graph
-  #     |> add_edge({:module_1, :fun_a, :arity_a}, {:module_2, :fun_b, :arity_b})
-  #     |> add_edge({:module_2, :fun_c, :arity_c}, {:module_3, :fun_d, :arity_d})
-  #     |> add_edge({:module_1, :fun_e, :arity_e}, {:module_3, :fun_f, :arity_f})
-  #     |> add_edge({:module_4, :fun_g, :arity_g}, :module_2)
-  #     |> add_edge({:module_5, :fun_h, :arity_h}, :module_6)
-
-  #     ir_plt = PLT.start(name: @ir_plt_name)
-
-  #     diff = %{
-  #       added_modules: [],
-  #       removed_modules: [:module_2, :module_3],
-  #       updated_modules: []
-  #     }
-
-  #     patch(call_graph, ir_plt, diff)
-
-  #     assert vertices(call_graph) == [
-  #              :module_6,
-  #              {:module_1, :fun_a, :arity_a},
-  #              {:module_4, :fun_g, :arity_g},
-  #              {:module_1, :fun_e, :arity_e},
-  #              {:module_5, :fun_h, :arity_h}
-  #            ]
-
-  #     assert edges(call_graph) == [
-  #              %Graph.Edge{
-  #                v1: {:module_5, :fun_h, :arity_h},
-  #                v2: :module_6,
-  #                weight: 1,
-  #                label: nil
-  #              }
-  #            ]
-  #   end
-
-  #   test "updates modules", %{call_graph: call_graph} do
-  #     module_9_ir = IR.for_module(Module9)
-  #     module_10_ir = IR.for_module(Module10)
-
-  #     ir_plt =
-  #       [name: @ir_plt_name]
-  #       |> PLT.start()
-  #       |> PLT.put(Module9, module_9_ir)
-  #       |> PLT.put(Module10, module_10_ir)
-
-  #     call_graph
-  #     |> add_edge({:module_3, :fun_c, :arity_c}, Module9)
-  #     |> add_edge({:module_1, :fun_a, :arity_a}, {Module9, :my_fun_1, 0})
-  #     |> add_edge({:module_2, :fun_b, :arity_b}, {Module9, :my_fun_2, 0})
-  #     |> add_edge({:module_1, :fun_d, :arity_d}, Module9)
-  #     |> add_edge({Module9, :my_fun_3, 2}, {:module_4, :fun_e, :arity_e})
-  #     |> add_edge({Module10, :my_fun_4, 2}, {:module_5, :fun_f, :arity_f})
-
-  #     diff = %{
-  #       added_modules: [],
-  #       removed_modules: [],
-  #       updated_modules: [Module9, Module10]
-  #     }
-
-  #     patch(call_graph, ir_plt, diff)
-
-  #     assert vertices(call_graph) == [
-  #              Module9,
-  #              {Module9, :my_fun_1, 0},
-  #              {:module_4, :fun_e, :arity_e},
-  #              {:module_2, :fun_b, :arity_b},
-  #              {:module_1, :fun_a, :arity_a},
-  #              {Module9, :my_fun_2, 0},
-  #              {:module_1, :fun_d, :arity_d},
-  #              {Module10, :my_fun_3, 0},
-  #              {:module_5, :fun_f, :arity_f},
-  #              {Module10, :my_fun_4, 0},
-  #              {:module_3, :fun_c, :arity_c}
-  #            ]
-
-  #     assert edges(call_graph) == [
-  #              %Graph.Edge{
-  #                v1: {Module9, :my_fun_1, 0},
-  #                v2: {Module9, :my_fun_2, 0},
-  #                weight: 1,
-  #                label: nil
-  #              },
-  #              %Graph.Edge{
-  #                v1: {:module_2, :fun_b, :arity_b},
-  #                v2: {Module9, :my_fun_2, 0},
-  #                weight: 1,
-  #                label: nil
-  #              },
-  #              %Graph.Edge{
-  #                v1: {:module_1, :fun_a, :arity_a},
-  #                v2: {Module9, :my_fun_1, 0},
-  #                weight: 1,
-  #                label: nil
-  #              },
-  #              %Graph.Edge{
-  #                v1: {:module_1, :fun_d, :arity_d},
-  #                v2: Module9,
-  #                weight: 1,
-  #                label: nil
-  #              },
-  #              %Graph.Edge{
-  #                v1: {Module10, :my_fun_3, 0},
-  #                v2: {Module10, :my_fun_4, 0},
-  #                weight: 1,
-  #                label: nil
-  #              },
-  #              %Graph.Edge{
-  #                v1: {:module_3, :fun_c, :arity_c},
-  #                v2: Module9,
   #                weight: 1,
   #                label: nil
   #              }

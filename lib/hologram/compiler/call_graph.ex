@@ -1,4 +1,5 @@
 defmodule Hologram.Compiler.CallGraph do
+  alias Hologram.Commons.PLT
   alias Hologram.Commons.SerializationUtils
   alias Hologram.Compiler.CallGraph
 
@@ -127,6 +128,34 @@ defmodule Hologram.Compiler.CallGraph do
   end
 
   @doc """
+  Given a diff of changes, updates the call graph
+  by deleting the graph paths of modules that have been removed,
+  rebuilding the graph paths of modules that have been updated,
+  and adding the graph paths of modules that have been added.
+  """
+  @spec patch(CallGraph.t(), PLT.t(), map) :: CallGraph.t()
+  def patch(call_graph, ir_plt, diff) do
+    diff.removed_modules
+    |> Task.async_stream(&remove_module_vertices(call_graph, &1))
+    |> Stream.run()
+
+    diff.updated_modules
+    |> Task.async_stream(fn module ->
+      inbound_remote_edges = inbound_remote_edges(call_graph, module)
+      remove_module_vertices(call_graph, module)
+      build_module(call_graph, ir_plt, module)
+      add_edges(call_graph, inbound_remote_edges)
+    end)
+    |> Stream.run()
+
+    diff.added_modules
+    |> Task.async_stream(&build_module(call_graph, ir_plt, &1))
+    |> Stream.run()
+
+    call_graph
+  end
+
+  @doc """
   Replace the state of underlying Agent process with the given graph.
   """
   @spec put_graph(CallGraph.t(), Graph.t()) :: CallGraph.t()
@@ -205,15 +234,24 @@ defmodule Hologram.Compiler.CallGraph do
     Agent.get(pid, &Graph.vertices/1)
   end
 
+  defp build_module(call_graph, ir_plt, module) do
+    module_def = PLT.get!(ir_plt, module)
+    build(call_graph, module_def)
+  end
+
   defp inbound_edges(%{pid: pid}, vertex) do
     Agent.get(pid, &Graph.in_edges(&1, vertex))
+  end
+
+  defp remove_module_vertices(call_graph, module) do
+    call_graph
+    |> module_vertices(module)
+    |> Enum.each(&remove_vertex(call_graph, &1))
   end
 
   ### OVERHAUL
 
   # use Agent
-
-  # alias Hologram.Commons.PLT
   # alias Hologram.Compiler.IR
   # alias Hologram.Compiler.Reflection
 
@@ -328,46 +366,6 @@ defmodule Hologram.Compiler.CallGraph do
 
   # def build(call_graph, _ir, _from_vertex), do: call_graph
 
-  # @doc """
-  # Given a diff of changes, updates the call graph
-  # by deleting the graph paths of modules that have been removed,
-  # rebuilding the graph paths of modules that have been updated,
-  # and adding the graph paths of modules that have been added.
-
-  # ## Examples
-
-  #     iex> call_graph = %CallGraph{name: :my_call_graph, pid: #PID<0.259.0>}
-  #     iex> ir_plt = %PLT{name: :my_ir_plt, pid: #PID<0.253.0>}
-  #     iex> diff = %{
-  #     ...>   added_modules: [Module1, Module2],
-  #     ...>   removed_modules: [Module5, Module6],
-  #     ...>   updated_modules: [Module3, Module4]
-  #     ...> }
-  #     iex> patch(call_graph, ir_plt, diff)
-  #     %CallGraph{name: :my_call_graph, pid: #PID<0.259.0>}
-  # """
-  # @spec patch(CallGraph.t(), PLT.t(), map) :: CallGraph.t()
-  # def patch(call_graph, ir_plt, diff) do
-  #   diff.removed_modules
-  #   |> Task.async_stream(&remove_module_vertices(call_graph, &1))
-  #   |> Stream.run()
-
-  #   diff.updated_modules
-  #   |> Task.async_stream(fn module ->
-  #     inbound_remote_edges = inbound_remote_edges(call_graph, module)
-  #     remove_module_vertices(call_graph, module)
-  #     build_module(call_graph, ir_plt, module)
-  #     add_edges(call_graph, inbound_remote_edges)
-  #   end)
-  #   |> Stream.run()
-
-  #   diff.added_modules
-  #   |> Task.async_stream(&build_module(call_graph, ir_plt, &1))
-  #   |> Stream.run()
-
-  #   call_graph
-  # end
-
   # defp add_component_call_graph_edges(call_graph, module) do
   #   add_edge(call_graph, module, {module, :action, 3})
   #   add_edge(call_graph, module, {module, :init, 1})
@@ -376,11 +374,6 @@ defmodule Hologram.Compiler.CallGraph do
 
   # defp add_page_call_graph_edges(call_graph, module) do
   #   add_edge(call_graph, module, {module, :__hologram_route__, 0})
-  # end
-
-  # defp build_module(call_graph, ir_plt, module) do
-  #   module_def = PLT.get!(ir_plt, module)
-  #   build(call_graph, module_def)
   # end
 
   # defp load_graph_from_file(%{dump_path: dump_path} = call_graph) do
@@ -405,11 +398,5 @@ defmodule Hologram.Compiler.CallGraph do
   # defp put_graph(call_graph, graph) do
   #   Agent.update(call_graph.name, fn _state -> graph end)
   #   call_graph
-  # end
-
-  # defp remove_module_vertices(call_graph, module) do
-  #   call_graph
-  #   |> module_vertices(module)
-  #   |> Enum.each(&remove_vertex(call_graph, &1))
   # end
 end
