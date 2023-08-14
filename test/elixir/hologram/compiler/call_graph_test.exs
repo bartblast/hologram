@@ -3,6 +3,21 @@ defmodule Hologram.Compiler.CallGraphTest do
   import Hologram.Compiler.CallGraph
   alias Hologram.Compiler.CallGraph
 
+  setup do
+    [call_graph: start()]
+  end
+
+  test "add_vertex/2", %{call_graph: call_graph} do
+    assert add_vertex(call_graph, :vertex_3) == call_graph
+
+    graph = get_graph(call_graph)
+    assert Graph.has_vertex?(graph, :vertex_3)
+  end
+
+  test "get_graph/1", %{call_graph: call_graph} do
+    assert %Graph{} = get_graph(call_graph)
+  end
+
   test "start/0" do
     assert %CallGraph{pid: pid} = start()
 
@@ -34,15 +49,6 @@ defmodule Hologram.Compiler.CallGraphTest do
   # @ir_plt_name :"plt_{__MODULE__}"
   # @opts name: @call_graph_name_1
 
-  # setup do
-  #   wait_for_process_cleanup(@call_graph_name_1)
-  #   wait_for_process_cleanup(@call_graph_name_2)
-
-  #   File.rm_rf!(@call_graph_dump_path)
-
-  #   [call_graph: start(@opts)]
-  # end
-
   # test "add_edge/3", %{call_graph: call_graph} do
   #   assert ^call_graph = add_edge(call_graph, :vertex_1, :vertex_2)
 
@@ -61,13 +67,6 @@ defmodule Hologram.Compiler.CallGraphTest do
 
   #   assert ^call_graph = add_edges(call_graph, edges)
   #   assert edges(call_graph) == edges
-  # end
-
-  # test "add_vertex/2", %{call_graph: call_graph} do
-  #   assert ^call_graph = add_vertex(call_graph, :vertex_3)
-
-  #   graph = get_graph(call_graph)
-  #   assert Graph.has_vertex?(graph, :vertex_3)
   # end
 
   # describe "build/3" do
@@ -670,10 +669,6 @@ defmodule Hologram.Compiler.CallGraphTest do
   #            %Graph.Edge{v1: :vertex_2, v2: :vertex_3, weight: 1, label: nil},
   #            %Graph.Edge{v1: :vertex_4, v2: :vertex_5, weight: 1, label: nil}
   #          ]
-  # end
-
-  # test "graph/1", %{call_graph: call_graph} do
-  #   assert %Graph{} = get_graph(call_graph)
   # end
 
   # describe "has_edge?/3" do

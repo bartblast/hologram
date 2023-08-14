@@ -4,6 +4,25 @@ defmodule Hologram.Compiler.CallGraph do
   defstruct pid: nil
   @type t :: %CallGraph{pid: pid}
 
+  @type vertex :: module | {module, atom, integer}
+
+  @doc """
+  Adds the vertex to the call graph.
+  """
+  @spec add_vertex(CallGraph.t(), vertex) :: CallGraph.t()
+  def add_vertex(%{pid: pid} = call_graph, vertex) do
+    Agent.update(pid, &Graph.add_vertex(&1, vertex))
+    call_graph
+  end
+
+  @doc """
+  Returns the underlying libgraph %Graph{} struct containing vertices and edges data.
+  """
+  @spec get_graph(CallGraph.t()) :: Graph.t()
+  def get_graph(%{pid: pid}) do
+    Agent.get(pid, & &1)
+  end
+
   @doc """
   Starts a new CallGraph agent with an initial empty graph.
   """
@@ -21,8 +40,6 @@ defmodule Hologram.Compiler.CallGraph do
   # alias Hologram.Commons.SerializationUtils
   # alias Hologram.Compiler.IR
   # alias Hologram.Compiler.Reflection
-
-  # @type vertex :: module | {module, atom, integer}
 
   # @doc """
   # Adds an edge between two vertices in the call graph.
@@ -52,21 +69,6 @@ defmodule Hologram.Compiler.CallGraph do
   # @spec add_edges(CallGraph.t(), list(Graph.Edge.t())) :: CallGraph.t()
   # def add_edges(call_graph, edges) do
   #   Agent.update(call_graph.name, &Graph.add_edges(&1, edges))
-  #   call_graph
-  # end
-
-  # @doc """
-  # Adds the vertex to the call graph.
-
-  # ## Examples
-
-  #     iex> call_graph = %CallGraph{name: :my_call_graph, pid: #PID<0.259.0>}
-  #     iex> add_vertex(call_graph, :vertex_3)
-  #     %CallGraph{name: :my_call_graph, pid: #PID<0.259.0>}
-  # """
-  # @spec add_vertex(CallGraph.t(), vertex) :: CallGraph.t()
-  # def add_vertex(call_graph, vertex) do
-  #   Agent.update(call_graph.name, &Graph.add_vertex(&1, vertex))
   #   call_graph
   # end
 
@@ -241,20 +243,6 @@ defmodule Hologram.Compiler.CallGraph do
   # @spec edges(CallGraph.t()) :: list(Graph.Edge.t())
   # def edges(call_graph) do
   #   Agent.get(call_graph.name, &Graph.edges/1)
-  # end
-
-  # @doc """
-  # Returns the underlying libgraph %Graph{} struct containing the information about vertices and edges.
-
-  # ## Examples
-
-  #     iex> call_graph = CallGraph{name: :my_call_graph, pid: #PID<0.259.0>}
-  #     iex> get_graph(call_graph)
-  #     #Graph<type: directed, vertices: [], edges: []>
-  # """
-  # @spec get_graph(CallGraph.t()) :: Graph.t()
-  # def get_graph(call_graph) do
-  #   Agent.get(call_graph.pid, & &1)
   # end
 
   # @doc """
