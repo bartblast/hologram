@@ -97,11 +97,36 @@ defmodule Hologram.Compiler.CallGraphTest do
     assert get_graph(call_graph) == graph
   end
 
+  test "sorted_vertices/1", %{call_graph: call_graph} do
+    call_graph
+    |> add_edge(:vertex_4, :vertex_5)
+    |> add_vertex(:vertex_1)
+    |> add_edge(:vertex_2, :vertex_3)
+
+    sorted_vertices(call_graph) == [:vertex_1, :vertex_2, :vertex_3, :vertex_4, :vertex_5]
+  end
+
   test "start/0" do
     assert %CallGraph{pid: pid} = start()
 
     assert is_pid(pid)
     assert Agent.get(pid, & &1) == Graph.new()
+  end
+
+  test "vertices/1", %{call_graph: call_graph} do
+    call_graph
+    |> add_edge(:vertex_4, :vertex_5)
+    |> add_vertex(:vertex_1)
+    |> add_edge(:vertex_2, :vertex_3)
+
+    result = vertices(call_graph)
+
+    assert Enum.count(result) == 5
+    assert :vertex_1 in result
+    assert :vertex_2 in result
+    assert :vertex_3 in result
+    assert :vertex_4 in result
+    assert :vertex_5 in result
   end
 
   ### OVERHAUL
@@ -1067,14 +1092,5 @@ defmodule Hologram.Compiler.CallGraphTest do
   #     call_graph = start(name: @call_graph_name_2, dump_path: @call_graph_dump_path)
   #     assert vertices(call_graph) == []
   #   end
-  # end
-
-  # test "vertices/1", %{call_graph: call_graph} do
-  #   call_graph
-  #   |> add_vertex(:vertex_1)
-  #   |> add_edge(:vertex_2, :vertex_3)
-  #   |> add_edge(:vertex_4, :vertex_5)
-
-  #   assert vertices(call_graph) == [:vertex_1, :vertex_2, :vertex_3, :vertex_4, :vertex_5]
   # end
 end

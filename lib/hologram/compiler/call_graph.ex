@@ -95,12 +95,30 @@ defmodule Hologram.Compiler.CallGraph do
   end
 
   @doc """
+  Returns sorted graph vertices.
+  """
+  @spec sorted_vertices(CallGraph.t()) :: list(vertex)
+  def sorted_vertices(call_graph) do
+    call_graph
+    |> vertices()
+    |> Enum.sort()
+  end
+
+  @doc """
   Starts a new CallGraph agent with an initial empty graph.
   """
   @spec start() :: CallGraph.t()
   def start do
     {:ok, pid} = Agent.start_link(fn -> Graph.new() end)
     %CallGraph{pid: pid}
+  end
+
+  @doc """
+  Returns graph vertices.
+  """
+  @spec vertices(CallGraph.t()) :: list(vertex)
+  def vertices(%{pid: pid}) do
+    Agent.get(pid, &Graph.vertices/1)
   end
 
   ### OVERHAUL
@@ -400,36 +418,6 @@ defmodule Hologram.Compiler.CallGraph do
   #   call_graph
   #   |> edges()
   #   |> Enum.sort()
-  # end
-
-  # @doc """
-  # Returns sorted graph vertices.
-
-  # ## Examples
-
-  #     iex> call_graph = %CallGraph{name: :my_call_graph, pid: #PID<0.259.0>}
-  #     iex> sorted_vertices(call_graph)
-  #     [:vertex_1, :vertex_3, :vertex_5]
-  # """
-  # @spec sorted_vertices(CallGraph.t()) :: list(vertex)
-  # def sorted_vertices(call_graph) do
-  #   call_graph
-  #   |> vertices()
-  #   |> Enum.sort()
-  # end
-
-  # @doc """
-  # Returns graph vertices.
-
-  # ## Examples
-
-  #     iex> call_graph = %CallGraph{name: :my_call_graph, pid: #PID<0.259.0>}
-  #     iex> vertices(call_graph)
-  #     [:vertex_5, :vertex_1, :vertex_3]
-  # """
-  # @spec vertices(CallGraph.t()) :: list(vertex)
-  # def vertices(call_graph) do
-  #   Agent.get(call_graph.name, &Graph.vertices/1)
   # end
 
   # defp add_component_call_graph_edges(call_graph, module) do
