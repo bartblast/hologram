@@ -39,7 +39,7 @@ defmodule Hologram.Commons.PLTTest do
   end
 
   test "dump/2", %{plt: plt} do
-    dump(plt, @dump_path)
+    assert dump(plt, @dump_path) == plt
 
     items =
       @dump_path
@@ -84,7 +84,8 @@ defmodule Hologram.Commons.PLTTest do
   end
 
   test "put/2" do
-    plt = put(start(), @items)
+    plt = start()
+    assert put(plt, @items) == plt
 
     assert get(plt, :my_key_1) == {:ok, :my_value_1}
     assert get(plt, :my_key_2) == {:ok, :my_value_2}
