@@ -16,12 +16,29 @@ defmodule Hologram.Compiler.CallGraph do
   end
 
   @doc """
+  Adds multiple edges to the call graph.
+  """
+  @spec add_edges(CallGraph.t(), list(Graph.Edge.t())) :: CallGraph.t()
+  def add_edges(%{pid: pid} = call_graph, edges) do
+    Agent.update(pid, &Graph.add_edges(&1, edges))
+    call_graph
+  end
+
+  @doc """
   Adds the vertex to the call graph.
   """
   @spec add_vertex(CallGraph.t(), vertex) :: CallGraph.t()
   def add_vertex(%{pid: pid} = call_graph, vertex) do
     Agent.update(pid, &Graph.add_vertex(&1, vertex))
     call_graph
+  end
+
+  @doc """
+  Returns graph edges.
+  """
+  @spec edges(CallGraph.t()) :: list(Graph.Edge.t())
+  def edges(%{pid: pid}) do
+    Agent.get(pid, &Graph.edges/1)
   end
 
   @doc """
@@ -49,22 +66,6 @@ defmodule Hologram.Compiler.CallGraph do
   # alias Hologram.Commons.SerializationUtils
   # alias Hologram.Compiler.IR
   # alias Hologram.Compiler.Reflection
-
-  # @doc """
-  # Adds multiple edges to the call graph.
-
-  # ## Examples
-
-  #     iex> call_graph = %CallGraph{name: :my_call_graph, pid: #PID<0.259.0>}
-  #     iex> edges = [Graph.Edge.new(:a, :b), Graph.Edge.new(:c, :d)]
-  #     iex> add_adges(call_graph, edges)
-  #     %CallGraph{name: :my_call_graph, pid: #PID<0.259.0>}
-  # """
-  # @spec add_edges(CallGraph.t(), list(Graph.Edge.t())) :: CallGraph.t()
-  # def add_edges(call_graph, edges) do
-  #   Agent.update(call_graph.name, &Graph.add_edges(&1, edges))
-  #   call_graph
-  # end
 
   # @doc """
   # Builds a call graph from IR.
@@ -210,33 +211,6 @@ defmodule Hologram.Compiler.CallGraph do
   #     |> SerializationUtils.serialize()
 
   #   File.write!(dump_path, data)
-  # end
-
-  # @doc """
-  # Returns graph edges.
-
-  # ## Examples
-
-  #     iex> call_graph = %CallGraph{name: :my_call_graph, pid: #PID<0.259.0>}
-  #     iex> edges(call_graph)
-  #     [
-  #       %Graph.Edge{
-  #         v1: {Module2, :my_fun_6, 3},
-  #         v2: Module5,
-  #         weight: 1,
-  #         label: nil
-  #       },
-  #       %Graph.Edge{
-  #         v1: {Module3, :my_fun_8, 1},
-  #         v2: {Module5, :my_fun_1, 4},
-  #         weight: 1,
-  #         label: nil
-  #       }
-  #     ]
-  # """
-  # @spec edges(CallGraph.t()) :: list(Graph.Edge.t())
-  # def edges(call_graph) do
-  #   Agent.get(call_graph.name, &Graph.edges/1)
   # end
 
   # @doc """

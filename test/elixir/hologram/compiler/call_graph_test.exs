@@ -20,11 +20,30 @@ defmodule Hologram.Compiler.CallGraphTest do
            }
   end
 
+  test "add_edges/2", %{call_graph: call_graph} do
+    edges = [Graph.Edge.new(:a, :b), Graph.Edge.new(:c, :d)]
+
+    assert add_edges(call_graph, edges) == call_graph
+    assert edges(call_graph) == edges
+  end
+
   test "add_vertex/2", %{call_graph: call_graph} do
     assert add_vertex(call_graph, :vertex_3) == call_graph
 
     graph = get_graph(call_graph)
     assert Graph.has_vertex?(graph, :vertex_3)
+  end
+
+  test "edges/1", %{call_graph: call_graph} do
+    call_graph
+    |> add_vertex(:vertex_1)
+    |> add_edge(:vertex_2, :vertex_3)
+    |> add_edge(:vertex_4, :vertex_5)
+
+    assert edges(call_graph) == [
+             %Graph.Edge{v1: :vertex_2, v2: :vertex_3, weight: 1, label: nil},
+             %Graph.Edge{v1: :vertex_4, v2: :vertex_5, weight: 1, label: nil}
+           ]
   end
 
   test "get_graph/1", %{call_graph: call_graph} do
@@ -61,13 +80,6 @@ defmodule Hologram.Compiler.CallGraphTest do
   # @call_graph_name_2 :"call_graph_#{__MODULE__}_2"
   # @ir_plt_name :"plt_{__MODULE__}"
   # @opts name: @call_graph_name_1
-
-  # test "add_edges/2", %{call_graph: call_graph} do
-  #   edges = [Graph.Edge.new(:a, :b), Graph.Edge.new(:c, :d)]
-
-  #   assert ^call_graph = add_edges(call_graph, edges)
-  #   assert edges(call_graph) == edges
-  # end
 
   # describe "build/3" do
   #   test "atom type ir, which is not an alias", %{call_graph: call_graph} do
@@ -657,18 +669,6 @@ defmodule Hologram.Compiler.CallGraphTest do
   #     |> SerializationUtils.deserialize()
 
   #   assert Graph.vertices(graph) == [:vertex_1]
-  # end
-
-  # test "edges/1", %{call_graph: call_graph} do
-  #   call_graph
-  #   |> add_vertex(:vertex_1)
-  #   |> add_edge(:vertex_2, :vertex_3)
-  #   |> add_edge(:vertex_4, :vertex_5)
-
-  #   assert edges(call_graph) == [
-  #            %Graph.Edge{v1: :vertex_2, v2: :vertex_3, weight: 1, label: nil},
-  #            %Graph.Edge{v1: :vertex_4, v2: :vertex_5, weight: 1, label: nil}
-  #          ]
   # end
 
   # describe "has_edge?/3" do
