@@ -81,6 +81,29 @@ defmodule Hologram.Commons.PLTTest do
     assert get_all(plt_2) == Enum.into(@items, %{})
   end
 
+  describe "maybe_load/2" do
+    test "dump file exists" do
+      data =
+        @items
+        |> Enum.into(%{})
+        |> SerializationUtils.serialize()
+
+      File.write!(@dump_path, data)
+
+      plt = start()
+      assert maybe_load(plt, @dump_path) == plt
+
+      assert get_all(plt) == Enum.into(@items, %{})
+    end
+
+    test "dump file doesn't exist" do
+      plt = start()
+      assert maybe_load(plt, @dump_path) == plt
+
+      assert get_all(plt) == %{}
+    end
+  end
+
   test "put/2" do
     plt = start()
     assert put(plt, @items) == plt

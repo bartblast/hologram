@@ -97,14 +97,26 @@ defmodule Hologram.Commons.PLT do
   Populates the underlying ETS table of the given PLT with items dumped to the given path.
   """
   @spec load(PLT.t(), String.t()) :: PLT.t()
-  def load(plt, path) do
+  def load(plt, dump_path) do
     items =
-      path
+      dump_path
       |> File.read!()
       |> SerializationUtils.deserialize()
       |> Map.to_list()
 
     put(plt, items)
+  end
+
+  @doc """
+  Populates the underlying ETS table of the given PLT with items dumped to the given path if the dump file exists.
+  """
+  @spec maybe_load(PLT.t(), String.t()) :: PLT.t()
+  def maybe_load(plt, dump_path) do
+    if File.exists?(dump_path) do
+      load(plt, dump_path)
+    else
+      plt
+    end
   end
 
   @doc """
