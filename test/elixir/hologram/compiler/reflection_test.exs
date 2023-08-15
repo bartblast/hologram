@@ -50,7 +50,7 @@ defmodule Hologram.Compiler.ReflectionTest do
   end
 
   test "list_elixir_modules/1" do
-    result = list_elixir_modules([:elixir, :dialyzer, :hologram, :sobelow])
+    result = list_elixir_modules([:dialyzer, :elixir, :hologram, :sobelow])
 
     assert Calendar.ISO in result
     assert Hologram.Template.Tokenizer in result
