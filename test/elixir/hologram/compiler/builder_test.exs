@@ -207,35 +207,35 @@ defmodule Hologram.Compiler.BuilderTest do
            )
   end
 
-  # test "bundle/4" do
-  #   # setup
-  #   clean_tmp_dir()
-  #   install_lib_js_deps()
+  test "bundle/4" do
+    # setup
+    clean_tmp_dir()
+    install_lib_js_deps()
 
-  #   esbuild_path = Reflection.root_path() <> "/assets/node_modules/.bin/esbuild"
-  #   tmp_path = Reflection.tmp_path()
+    esbuild_path = Reflection.root_path() <> "/assets/node_modules/.bin/esbuild"
+    tmp_path = Reflection.tmp_path()
 
-  #   assert {_digest, bundle_file, source_map_file} =
-  #            {"caf8f4e27584852044eb27a37c5eddfd",
-  #             "/Users/bartblast/Projects/hologram/tmp/my_script.caf8f4e27584852044eb27a37c5eddfd.js",
-  #             "/Users/bartblast/Projects/hologram/tmp/my_script.caf8f4e27584852044eb27a37c5eddfd.js.map"} =
-  #            bundle("const myVar = 123;", "my_script", esbuild_path, tmp_path)
+    assert {_digest, bundle_file, source_map_file} =
+             {"caf8f4e27584852044eb27a37c5eddfd",
+              "/Users/bartblast/Projects/hologram/tmp/my_script.caf8f4e27584852044eb27a37c5eddfd.js",
+              "/Users/bartblast/Projects/hologram/tmp/my_script.caf8f4e27584852044eb27a37c5eddfd.js.map"} =
+             bundle("const myVar = 123;", "my_script", esbuild_path, tmp_path)
 
-  #   assert File.read!(bundle_file) == """
-  #          (()=>{})();
-  #          //# sourceMappingURL=my_script.caf8f4e27584852044eb27a37c5eddfd.js.map
-  #          """
+    assert File.read!(bundle_file) == """
+           (()=>{})();
+           //# sourceMappingURL=my_script.caf8f4e27584852044eb27a37c5eddfd.js.map
+           """
 
-  #   assert File.read!(source_map_file) == """
-  #          {
-  #            "version": 3,
-  #            "sources": [],
-  #            "sourcesContent": [],
-  #            "mappings": "",
-  #            "names": []
-  #          }
-  #          """
-  # end
+    assert File.read!(source_map_file) == """
+           {
+             "version": 3,
+             "sources": [],
+             "sourcesContent": [],
+             "mappings": "",
+             "names": []
+           }
+           """
+  end
 
   describe "diff_module_digest_plts/2" do
     setup do

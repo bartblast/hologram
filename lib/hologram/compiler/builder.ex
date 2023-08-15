@@ -92,63 +92,63 @@ defmodule Hologram.Compiler.Builder do
     """
   end
 
-  # @doc """
-  # Bundles the given JavaScript code into a JavaScript file and its source map.
-  # The generated file names contain the hex digest of the bundled JavaScript file content.
+  @doc """
+  Bundles the given JavaScript code into a JavaScript file and its source map.
+  The generated file names contain the hex digest of the bundled JavaScript file content.
 
-  # ## Examples
+  ## Examples
 
-  #     iex> js = "const myVar = 123;"
-  #     iex> bundle(js, "my_script", "assets/node_modules/esbuild", "priv/static/assets")
-  #     {"caf8f4e27584852044eb27a37c5eddfd",
-  #      "priv/static/assets/my_script.caf8f4e27584852044eb27a37c5eddfd.js",
-  #      "priv/static/assets/my_script.caf8f4e27584852044eb27a37c5eddfd.js.map"}
-  # """
-  # @spec bundle(String.t(), String.t(), String.t(), String.t()) ::
-  #         {String.t(), String.t(), String.t()}
-  # # sobelow_skip ["CI.System"]
-  # def bundle(js, name, esbuild_path, bundle_dir) do
-  #   entry_file = Reflection.tmp_path() <> "/#{name}.entry.js"
-  #   File.write!(entry_file, js)
+      iex> js = "const myVar = 123;"
+      iex> bundle(js, "my_script", "assets/node_modules/esbuild", "priv/static/assets")
+      {"caf8f4e27584852044eb27a37c5eddfd",
+       "priv/static/assets/my_script.caf8f4e27584852044eb27a37c5eddfd.js",
+       "priv/static/assets/my_script.caf8f4e27584852044eb27a37c5eddfd.js.map"}
+  """
+  @spec bundle(String.t(), String.t(), String.t(), String.t()) ::
+          {String.t(), String.t(), String.t()}
+  # sobelow_skip ["CI.System"]
+  def bundle(js, name, esbuild_path, bundle_dir) do
+    entry_file = Reflection.tmp_path() <> "/#{name}.entry.js"
+    File.write!(entry_file, js)
 
-  #   bundle_file = "#{bundle_dir}/#{name}.js"
+    bundle_file = "#{bundle_dir}/#{name}.js"
 
-  #   cmd = [
-  #     entry_file,
-  #     "--bundle",
-  #     "--minify",
-  #     "--outfile=#{bundle_file}",
-  #     "--sourcemap",
-  #     "--target=es2020"
-  #   ]
+    cmd = [
+      entry_file,
+      "--bundle",
+      "--minify",
+      "--outfile=#{bundle_file}",
+      "--sourcemap",
+      "--target=es2020"
+    ]
 
-  #   System.cmd(esbuild_path, cmd, env: [])
+    System.cmd(esbuild_path, cmd, env: [])
 
-  #   digest =
-  #     bundle_file
-  #     |> File.read!()
-  #     |> CryptographicUtils.digest(:md5, :hex)
+    digest =
+      bundle_file
+      |> File.read!()
+      |> CryptographicUtils.digest(:md5, :hex)
 
-  #   bundle_file_with_digest = "#{bundle_dir}/#{name}.#{digest}.js"
+    bundle_file_with_digest = "#{bundle_dir}/#{name}.#{digest}.js"
 
-  #   source_map_file = bundle_file <> ".map"
-  #   source_map_file_with_digest = bundle_file_with_digest <> ".map"
+    source_map_file = bundle_file <> ".map"
+    source_map_file_with_digest = bundle_file_with_digest <> ".map"
 
-  #   File.rename!(bundle_file, bundle_file_with_digest)
-  #   File.rename!(source_map_file, source_map_file_with_digest)
+    File.rename!(bundle_file, bundle_file_with_digest)
+    File.rename!(source_map_file, source_map_file_with_digest)
 
-  #   js_with_replaced_source_map_url =
-  #     bundle_file_with_digest
-  #     |> File.read!()
-  #     |> String.replace(
-  #       "//# sourceMappingURL=#{name}.js.map",
-  #       "//# sourceMappingURL=#{name}.#{digest}.js.map"
-  #     )
+    js_with_replaced_source_map_url =
+      bundle_file_with_digest
+      |> File.read!()
+      |> String.replace(
+        "//# sourceMappingURL=#{name}.js.map",
+        "//# sourceMappingURL=#{name}.#{digest}.js.map"
+      )
 
-  #   File.write!(bundle_file_with_digest, js_with_replaced_source_map_url)
+    File.write!(bundle_file_with_digest, js_with_replaced_source_map_url)
 
-  #   {digest, bundle_file_with_digest, source_map_file_with_digest}
-  # end
+    {digest, bundle_file_with_digest, source_map_file_with_digest}
+  end
 
   @doc """
   Compares two module digest PLTs and returns the added, removed, and updated modules lists.
