@@ -3,37 +3,37 @@ defmodule Hologram.Compiler.Builder do
   alias Hologram.Commons.PLT
   alias Hologram.Compiler.CallGraph
   # alias Hologram.Compiler.Context
-  # alias Hologram.Compiler.Encoder
+  alias Hologram.Compiler.Encoder
   alias Hologram.Compiler.IR
   # alias Hologram.Compiler.Reflection
 
-  # @doc """
-  # Extracts JavaScript source code for the given ported Erlang function and generates interpreter function definition statetement.
-  # """
-  # @spec build_erlang_function_definition(module, atom, integer, String.t()) :: String.t()
-  # def build_erlang_function_definition(module, function, arity, erlang_source_dir) do
-  #   class = Encoder.encode_as_class_name(module)
+  @doc """
+  Extracts JavaScript source code for the given ported Erlang function and generates interpreter function definition JavaScript statetement.
+  """
+  @spec build_erlang_function_definition(module, atom, integer, String.t()) :: String.t()
+  def build_erlang_function_definition(module, function, arity, erlang_source_dir) do
+    class = Encoder.encode_as_class_name(module)
 
-  #   file_path =
-  #     if module == :erlang do
-  #       "#{erlang_source_dir}/erlang.mjs"
-  #     else
-  #       "#{erlang_source_dir}/#{module}.mjs"
-  #     end
+    file_path =
+      if module == :erlang do
+        "#{erlang_source_dir}/erlang.mjs"
+      else
+        "#{erlang_source_dir}/#{module}.mjs"
+      end
 
-  #   source_code =
-  #     if File.exists?(file_path) do
-  #       extract_erlang_function_source_code(file_path, function, arity)
-  #     else
-  #       nil
-  #     end
+    source_code =
+      if File.exists?(file_path) do
+        extract_erlang_function_source_code(file_path, function, arity)
+      else
+        nil
+      end
 
-  #   if source_code do
-  #     ~s/Interpreter.defineErlangFunction("#{class}", "#{function}", #{arity}, #{source_code});/
-  #   else
-  #     ~s/Interpreter.defineNotImplementedErlangFunction("#{module}", "#{function}", #{arity});/
-  #   end
-  # end
+    if source_code do
+      ~s/Interpreter.defineErlangFunction("#{class}", "#{function}", #{arity}, #{source_code});/
+    else
+      ~s/Interpreter.defineNotImplementedErlangFunction("#{module}", "#{function}", #{arity});/
+    end
+  end
 
   # @doc """
   # Builds a persistent lookup table (PLT) containing the BEAM defs digests for all the modules in the project.
@@ -311,21 +311,21 @@ defmodule Hologram.Compiler.Builder do
   #   }
   # end
 
-  # defp extract_erlang_function_source_code(file_path, function, arity) do
-  #   key = "#{function}/#{arity}"
-  #   start_marker = "// start #{key}"
-  #   end_marker = "// end #{key}"
+  defp extract_erlang_function_source_code(file_path, function, arity) do
+    key = "#{function}/#{arity}"
+    start_marker = "// start #{key}"
+    end_marker = "// end #{key}"
 
-  #   regex =
-  #     ~r/#{Regex.escape(start_marker)}[[:space:]]+"#{Regex.escape(key)}":[[:space:]]+(.+),[[:space:]]+#{Regex.escape(end_marker)}/s
+    regex =
+      ~r/#{Regex.escape(start_marker)}[[:space:]]+"#{Regex.escape(key)}":[[:space:]]+(.+),[[:space:]]+#{Regex.escape(end_marker)}/s
 
-  #   file_contents = File.read!(file_path)
+    file_contents = File.read!(file_path)
 
-  #   case Regex.run(regex, file_contents) do
-  #     [_full_capture, source_code] -> source_code
-  #     nil -> nil
-  #   end
-  # end
+    case Regex.run(regex, file_contents) do
+      [_full_capture, source_code] -> source_code
+      nil -> nil
+    end
+  end
 
   # defp filter_elixir_mfas(mfas) do
   #   Enum.filter(mfas, fn {module, _function, _arity} -> Reflection.alias?(module) end)
