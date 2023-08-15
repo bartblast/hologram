@@ -722,6 +722,29 @@ defmodule Hologram.Compiler.CallGraphTest do
     assert get_graph(call_graph_2) == get_graph(call_graph)
   end
 
+  describe "maybe_load/2" do
+    test "dump file exists" do
+      graph =
+        Graph.new()
+        |> Graph.add_edge(:vertex_1, :vertex_2)
+
+      data = SerializationUtils.serialize(graph)
+      File.write!(@dump_path, data)
+
+      call_graph = start()
+
+      assert maybe_load(call_graph, @dump_path) == call_graph
+      assert get_graph(call_graph) == graph
+    end
+
+    test "dump file doesn't exist" do
+      call_graph = start()
+
+      assert maybe_load(call_graph, @dump_path) == call_graph
+      assert get_graph(call_graph) == Graph.new()
+    end
+  end
+
   test "module_vertices/2", %{call_graph: call_graph} do
     call_graph
     |> add_vertex({:module_1, :fun_a, :arity_a})

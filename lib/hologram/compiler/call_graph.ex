@@ -233,6 +233,18 @@ defmodule Hologram.Compiler.CallGraph do
   end
 
   @doc """
+  Loads the graph from the given dump file if the file exists.
+  """
+  @spec maybe_load(CallGraph.t(), String.t()) :: CallGraph.t()
+  def maybe_load(call_graph, dump_path) do
+    if File.exists?(dump_path) do
+      load(call_graph, dump_path)
+    else
+      call_graph
+    end
+  end
+
+  @doc """
   Returns the list of vertices that are MFAs belonging to the given module.
   """
   @spec module_vertices(CallGraph.t(), module) :: list(vertex)
