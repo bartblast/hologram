@@ -60,7 +60,7 @@ defmodule Hologram.MixProject do
       description:
         "Full stack isomorphic Elixir web framework that can be used on top of Phoenix.",
       elixir: "~> 1.0",
-      # elixirc_options: [warnings_as_errors: true],
+      elixirc_options: [warnings_as_errors: true],
       elixirc_paths: elixirc_paths(Mix.env()),
       package: package(),
       dialyzer: [
