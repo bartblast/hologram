@@ -150,51 +150,40 @@ defmodule Hologram.Compiler.Builder do
   #   {digest, bundle_file_with_digest, source_map_file_with_digest}
   # end
 
-  # @doc """
-  # Compares two module digest PLTs and returns the added, removed, and updated modules lists.
+  @doc """
+  Compares two module digest PLTs and returns the added, removed, and updated modules lists.
+  """
+  @spec diff_module_digest_plts(PLT.t(), PLT.t()) :: %{
+          added_modules: list,
+          removed_modules: list,
+          updated_modules: list
+        }
+  def diff_module_digest_plts(old_plt, new_plt) do
+    old_mapset = mapset_from_plt(old_plt)
+    new_mapset = mapset_from_plt(new_plt)
 
-  # ## Examples
+    removed_modules =
+      old_mapset
+      |> MapSet.difference(new_mapset)
+      |> MapSet.to_list()
 
-  #     iex> old_plt = %PLT{pid: #PID<0.251.0>, name: :my_old_plt}
-  #     iex> new_plt = %PLT{pid: #PID<0.259.0>, name: :my_new_plt}
-  #     iex> diff_module_digest_plts(old_plt, new_plt)
-  #     %{
-  #       added_modules: [Module5, Module9],
-  #       removed_modules: [Module1, Module3],
-  #       updated_modules: [Module6, Module2]
-  #     }
-  # """
-  # @spec diff_module_digest_plts(PLT.t(), PLT.t()) :: %{
-  #         added_modules: list,
-  #         removed_modules: list,
-  #         updated_modules: list
-  #       }
-  # def diff_module_digest_plts(old_plt, new_plt) do
-  #   old_mapset = mapset_from_plt(old_plt)
-  #   new_mapset = mapset_from_plt(new_plt)
+    added_modules =
+      new_mapset
+      |> MapSet.difference(old_mapset)
+      |> MapSet.to_list()
 
-  #   removed_modules =
-  #     old_mapset
-  #     |> MapSet.difference(new_mapset)
-  #     |> MapSet.to_list()
+    updated_modules =
+      old_mapset
+      |> MapSet.intersection(new_mapset)
+      |> MapSet.to_list()
+      |> Enum.filter(&(PLT.get(old_plt, &1) != PLT.get(new_plt, &1)))
 
-  #   added_modules =
-  #     new_mapset
-  #     |> MapSet.difference(old_mapset)
-  #     |> MapSet.to_list()
-
-  #   updated_modules =
-  #     old_mapset
-  #     |> MapSet.intersection(new_mapset)
-  #     |> MapSet.to_list()
-  #     |> Enum.filter(&(PLT.get(old_plt, &1) != PLT.get(new_plt, &1)))
-
-  #   %{
-  #     added_modules: added_modules,
-  #     removed_modules: removed_modules,
-  #     updated_modules: updated_modules
-  #   }
-  # end
+    %{
+      added_modules: added_modules,
+      removed_modules: removed_modules,
+      updated_modules: updated_modules
+    }
+  end
 
   @doc """
   Returns the list of MFAs ({module, function, arity} tuples) that are reachable by the given page.
@@ -335,12 +324,12 @@ defmodule Hologram.Compiler.Builder do
     Enum.filter(mfas, fn {module, _function, _arity} -> !Reflection.alias?(module) end)
   end
 
-  # defp mapset_from_plt(plt) do
-  #   plt
-  #   |> PLT.get_all()
-  #   |> Map.keys()
-  #   |> MapSet.new()
-  # end
+  defp mapset_from_plt(plt) do
+    plt
+    |> PLT.get_all()
+    |> Map.keys()
+    |> MapSet.new()
+  end
 
   defp rebuild_ir_plt_entry(plt, module) do
     PLT.put(plt, module, IR.for_module(module))
