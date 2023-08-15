@@ -2,7 +2,7 @@ defmodule Hologram.Compiler.Builder do
   alias Hologram.Commons.CryptographicUtils
   alias Hologram.Commons.PLT
   alias Hologram.Compiler.CallGraph
-  # alias Hologram.Compiler.Context
+  alias Hologram.Compiler.Context
   alias Hologram.Compiler.Encoder
   alias Hologram.Compiler.IR
   alias Hologram.Compiler.Reflection
@@ -51,26 +51,26 @@ defmodule Hologram.Compiler.Builder do
     plt
   end
 
-  # @doc """
-  # Builds JavaScript code for the given Hologram page.
-  # """
-  # @spec build_page_js(module, CallGraph.t(), PLT.t(), String.t()) :: String.t()
-  # def build_page_js(page, call_graph, ir_plt, source_dir) do
-  #   mfas = list_page_mfas(call_graph, page, clone_name)
-  #   erlang_source_dir = source_dir <> "/erlang"
+  @doc """
+  Builds JavaScript code for the given Hologram page.
+  """
+  @spec build_page_js(module, CallGraph.t(), PLT.t(), String.t()) :: String.t()
+  def build_page_js(page, call_graph, ir_plt, source_dir) do
+    mfas = list_page_mfas(call_graph, page)
+    erlang_source_dir = source_dir <> "/erlang"
 
-  #   """
-  #   window.__hologramPageReachableFunctionDefs__ = (interpreterClass, typeClass) => {
-  #     const Interpreter = interpreterClass;
-  #     const Type = typeClass;
+    """
+    window.__hologramPageReachableFunctionDefs__ = (interpreterClass, typeClass) => {
+      const Interpreter = interpreterClass;
+      const Type = typeClass;
 
-  #   #{render_erlang_function_defs(mfas, erlang_source_dir)}
+    #{render_erlang_function_defs(mfas, erlang_source_dir)}
 
-  #   #{render_elixir_function_defs(mfas, ir_plt)}
+    #{render_elixir_function_defs(mfas, ir_plt)}
 
-  #   }\
-  #   """
-  # end
+    }\
+    """
+  end
 
   # @doc """
   # Builds Hologram runtime JavaScript source code.
@@ -218,13 +218,13 @@ defmodule Hologram.Compiler.Builder do
     |> Kernel.--(runtime_mfas)
   end
 
-  # @doc """
-  # Groups the given MFAs ({module, function, arity} tuples) by module.
-  # """
-  # @spec group_mfas_by_module(list(mfa)) :: %{module => mfa}
-  # def group_mfas_by_module(mfas) do
-  #   Enum.group_by(mfas, fn {module, _function, _arity} -> module end)
-  # end
+  @doc """
+  Groups the given MFAs ({module, function, arity} tuples) by module.
+  """
+  @spec group_mfas_by_module(list(mfa)) :: %{module => mfa}
+  def group_mfas_by_module(mfas) do
+    Enum.group_by(mfas, fn {module, _function, _arity} -> module end)
+  end
 
   @doc """
   Lists MFAs ({module, function, arity} tuples) required by the runtime JS script.
@@ -284,32 +284,32 @@ defmodule Hologram.Compiler.Builder do
     ir_plt
   end
 
-  # @doc """
-  # Keeps in the body of module definition IR only those expressions that are function definitions of reachable functions.
-  # """
-  # @spec prune_module_def(IR.ModuleDefinition.t(), list(mfa)) :: IR.ModuleDefinition.t()
-  # def prune_module_def(module_def_ir, reachable_mfas) do
-  #   module = module_def_ir.module.value
+  @doc """
+  Keeps only those IR expressions that are function definitions of the given reachable MFAs.
+  """
+  @spec prune_module_def(IR.ModuleDefinition.t(), list(mfa)) :: IR.ModuleDefinition.t()
+  def prune_module_def(module_def_ir, reachable_mfas) do
+    module = module_def_ir.module.value
 
-  #   module_reachable_mfas =
-  #     reachable_mfas
-  #     |> Enum.filter(fn {reachable_module, _function, _arity} -> reachable_module == module end)
-  #     |> MapSet.new()
+    module_reachable_mfas =
+      reachable_mfas
+      |> Enum.filter(fn {reachable_module, _function, _arity} -> reachable_module == module end)
+      |> MapSet.new()
 
-  #   function_defs =
-  #     Enum.filter(module_def_ir.body.expressions, fn
-  #       %IR.FunctionDefinition{name: function, arity: arity} ->
-  #         MapSet.member?(module_reachable_mfas, {module, function, arity})
+    function_defs =
+      Enum.filter(module_def_ir.body.expressions, fn
+        %IR.FunctionDefinition{name: function, arity: arity} ->
+          MapSet.member?(module_reachable_mfas, {module, function, arity})
 
-  #       _fallback ->
-  #         false
-  #     end)
+        _fallback ->
+          false
+      end)
 
-  #   %IR.ModuleDefinition{
-  #     module: module_def_ir.module,
-  #     body: %IR.Block{expressions: function_defs}
-  #   }
-  # end
+    %IR.ModuleDefinition{
+      module: module_def_ir.module,
+      body: %IR.Block{expressions: function_defs}
+    }
+  end
 
   defp extract_erlang_function_source_code(file_path, function, arity) do
     key = "#{function}/#{arity}"
@@ -327,13 +327,13 @@ defmodule Hologram.Compiler.Builder do
     end
   end
 
-  # defp filter_elixir_mfas(mfas) do
-  #   Enum.filter(mfas, fn {module, _function, _arity} -> Reflection.alias?(module) end)
-  # end
+  defp filter_elixir_mfas(mfas) do
+    Enum.filter(mfas, fn {module, _function, _arity} -> Reflection.alias?(module) end)
+  end
 
-  # defp filter_erlang_mfas(mfas) do
-  #   Enum.filter(mfas, fn {module, _function, _arity} -> !Reflection.alias?(module) end)
-  # end
+  defp filter_erlang_mfas(mfas) do
+    Enum.filter(mfas, fn {module, _function, _arity} -> !Reflection.alias?(module) end)
+  end
 
   # defp mapset_from_plt(plt) do
   #   plt
@@ -356,24 +356,24 @@ defmodule Hologram.Compiler.Builder do
     PLT.put(plt, module, digest)
   end
 
-  # defp render_elixir_function_defs(mfas, ir_plt) do
-  #   mfas
-  #   |> filter_elixir_mfas()
-  #   |> group_mfas_by_module()
-  #   |> Enum.sort()
-  #   |> Enum.map_join("\n\n", fn {module, module_mfas} ->
-  #     ir_plt
-  #     |> PLT.get!(module)
-  #     |> prune_module_def(module_mfas)
-  #     |> Encoder.encode(%Context{module: module})
-  #   end)
-  # end
+  defp render_elixir_function_defs(mfas, ir_plt) do
+    mfas
+    |> filter_elixir_mfas()
+    |> group_mfas_by_module()
+    |> Enum.sort()
+    |> Enum.map_join("\n\n", fn {module, module_mfas} ->
+      ir_plt
+      |> PLT.get!(module)
+      |> prune_module_def(module_mfas)
+      |> Encoder.encode(%Context{module: module})
+    end)
+  end
 
-  # defp render_erlang_function_defs(mfas, erlang_source_dir) do
-  #   mfas
-  #   |> filter_erlang_mfas()
-  #   |> Enum.map_join("\n\n", fn {module, function, arity} ->
-  #     build_erlang_function_definition(module, function, arity, erlang_source_dir)
-  #   end)
-  # end
+  defp render_erlang_function_defs(mfas, erlang_source_dir) do
+    mfas
+    |> filter_erlang_mfas()
+    |> Enum.map_join("\n\n", fn {module, function, arity} ->
+      build_erlang_function_definition(module, function, arity, erlang_source_dir)
+    end)
+  end
 end

@@ -8,18 +8,15 @@ defmodule Hologram.Compiler.BuilderTest do
   alias Hologram.Compiler.Reflection
 
   alias Hologram.Test.Fixtures.Compiler.Builder.Module1
-  # alias Hologram.Test.Fixtures.Compiler.Builder.Module10
+  alias Hologram.Test.Fixtures.Compiler.Builder.Module10
   alias Hologram.Test.Fixtures.Compiler.Builder.Module2
   alias Hologram.Test.Fixtures.Compiler.Builder.Module3
   alias Hologram.Test.Fixtures.Compiler.Builder.Module4
   alias Hologram.Test.Fixtures.Compiler.Builder.Module5
   alias Hologram.Test.Fixtures.Compiler.Builder.Module6
   alias Hologram.Test.Fixtures.Compiler.Builder.Module7
-  # alias Hologram.Test.Fixtures.Compiler.Builder.Module8
-  # alias Hologram.Test.Fixtures.Compiler.Builder.Module9
-
-  # # @call_graph_name_1 :"call_graph_{__MODULE__}_1"
-  # # @call_graph_name_2 :"call_graph_{__MODULE__}_2"
+  alias Hologram.Test.Fixtures.Compiler.Builder.Module8
+  alias Hologram.Test.Fixtures.Compiler.Builder.Module9
 
   @source_dir Reflection.root_path() <> "/assets/js"
   @erlang_source_dir "#{@source_dir}/erlang"
@@ -86,103 +83,101 @@ defmodule Hologram.Compiler.BuilderTest do
     assert {:ok, <<_digest::256>>} = PLT.get(plt, Hologram.Compiler.Builder)
   end
 
-  # test "build_page_js/3" do
-  #   module_8_ir = IR.for_module(Module8)
-  #   module_9_ir = IR.for_module(Module9)
-  #   module_10_ir = IR.for_module(Module10)
-  #   map_ir = IR.for_module(Map)
+  test "build_page_js/3" do
+    module_8_ir = IR.for_module(Module8)
+    module_9_ir = IR.for_module(Module9)
+    module_10_ir = IR.for_module(Module10)
+    map_ir = IR.for_module(Map)
 
-  #   call_graph =
-  #     [name: @call_graph_name_1]
-  #     |> CallGraph.start()
-  #     |> CallGraph.build(module_8_ir)
-  #     |> CallGraph.build(module_9_ir)
-  #     |> CallGraph.build(module_10_ir)
-  #     |> CallGraph.build(map_ir)
+    call_graph =
+      CallGraph.start()
+      |> CallGraph.build(module_8_ir)
+      |> CallGraph.build(module_9_ir)
+      |> CallGraph.build(module_10_ir)
+      |> CallGraph.build(map_ir)
 
-  #   ir_plt =
-  #     [name: @plt_name_1]
-  #     |> PLT.start()
-  #     |> PLT.put(Module8, module_8_ir)
-  #     |> PLT.put(Module9, module_9_ir)
-  #     |> PLT.put(Module10, module_10_ir)
-  #     |> PLT.put(Map, map_ir)
+    ir_plt =
+      PLT.start()
+      |> PLT.put(Module8, module_8_ir)
+      |> PLT.put(Module9, module_9_ir)
+      |> PLT.put(Module10, module_10_ir)
+      |> PLT.put(Map, map_ir)
 
-  #   assert build_page_js(Module9, call_graph, ir_plt, @source_dir) == """
-  #          window.__hologramPageReachableFunctionDefs__ = (interpreterClass, typeClass) => {
-  #            const Interpreter = interpreterClass;
-  #            const Type = typeClass;
+    assert build_page_js(Module9, call_graph, ir_plt, @source_dir) == """
+           window.__hologramPageReachableFunctionDefs__ = (interpreterClass, typeClass) => {
+             const Interpreter = interpreterClass;
+             const Type = typeClass;
 
-  #          Interpreter.defineErlangFunction("Erlang", "+", 2, (left, right) => {
-  #              const [type, leftValue, rightValue] = Type.maybeNormalizeNumberTerms(
-  #                left,
-  #                right,
-  #              );
+           Interpreter.defineErlangFunction("Erlang", "+", 2, (left, right) => {
+               const [type, leftValue, rightValue] = Type.maybeNormalizeNumberTerms(
+                 left,
+                 right,
+               );
 
-  #              const result = leftValue.value + rightValue.value;
+               const result = leftValue.value + rightValue.value;
 
-  #              return type === "float" ? Type.float(result) : Type.integer(result);
-  #            });
+               return type === "float" ? Type.float(result) : Type.integer(result);
+             });
 
-  #          Interpreter.defineElixirFunction("Elixir_Hologram_Test_Fixtures_Compiler_Builder_Module10", "action", 3, [{params: [Type.atom("action_10a"), Type.variablePattern("params"), Type.variablePattern("state")], guards: [], body: (vars) => {
-  #          return Elixir_Hologram_Test_Fixtures_Compiler_Builder_Module10["fun_10a/2"](vars.params, vars.state);
-  #          }}])
+           Interpreter.defineElixirFunction("Elixir_Hologram_Test_Fixtures_Compiler_Builder_Module10", "action", 3, [{params: [Type.atom("action_10a"), Type.variablePattern("params"), Type.variablePattern("state")], guards: [], body: (vars) => {
+           return Elixir_Hologram_Test_Fixtures_Compiler_Builder_Module10["fun_10a/2"](vars.params, vars.state);
+           }}])
 
-  #          Interpreter.defineElixirFunction("Elixir_Hologram_Test_Fixtures_Compiler_Builder_Module10", "fun_10a", 2, [{params: [Type.variablePattern("params"), Type.variablePattern("state")], guards: [], body: (vars) => {
-  #          return Type.tuple([vars.params, vars.state]);
-  #          }}])
+           Interpreter.defineElixirFunction("Elixir_Hologram_Test_Fixtures_Compiler_Builder_Module10", "fun_10a", 2, [{params: [Type.variablePattern("params"), Type.variablePattern("state")], guards: [], body: (vars) => {
+           return Type.tuple([vars.params, vars.state]);
+           }}])
 
-  #          Interpreter.defineElixirFunction("Elixir_Hologram_Test_Fixtures_Compiler_Builder_Module10", "template", 0, [{params: [], guards: [], body: (vars) => {
-  #          return Type.anonymousFunction(1, [{params: [Type.variablePattern("data")], guards: [], body: (vars) => {
-  #          Interpreter.matchOperator(vars.data, Type.matchPlaceholder(), vars);
-  #          return Type.list([Type.tuple([Type.atom("text"), Type.bitstring("Module10 template")])]);
-  #          }}], vars);
-  #          }}])
+           Interpreter.defineElixirFunction("Elixir_Hologram_Test_Fixtures_Compiler_Builder_Module10", "template", 0, [{params: [], guards: [], body: (vars) => {
+           return Type.anonymousFunction(1, [{params: [Type.variablePattern("data")], guards: [], body: (vars) => {
+           Interpreter.matchOperator(vars.data, Type.matchPlaceholder(), vars);
+           return Type.list([Type.tuple([Type.atom("text"), Type.bitstring("Module10 template")])]);
+           }}], vars);
+           }}])
 
-  #          Interpreter.defineElixirFunction("Elixir_Hologram_Test_Fixtures_Compiler_Builder_Module9", "__hologram_layout_module__", 0, [{params: [], guards: [], body: (vars) => {
-  #          return Type.atom("Elixir.Hologram.Test.Fixtures.Compiler.Builder.Module10");
-  #          }}])
+           Interpreter.defineElixirFunction("Elixir_Hologram_Test_Fixtures_Compiler_Builder_Module9", "__hologram_layout_module__", 0, [{params: [], guards: [], body: (vars) => {
+           return Type.atom("Elixir.Hologram.Test.Fixtures.Compiler.Builder.Module10");
+           }}])
 
-  #          Interpreter.defineElixirFunction("Elixir_Hologram_Test_Fixtures_Compiler_Builder_Module9", "__hologram_layout_props__", 0, [{params: [], guards: [], body: (vars) => {
-  #          return Type.list([]);
-  #          }}])
+           Interpreter.defineElixirFunction("Elixir_Hologram_Test_Fixtures_Compiler_Builder_Module9", "__hologram_layout_props__", 0, [{params: [], guards: [], body: (vars) => {
+           return Type.list([]);
+           }}])
 
-  #          Interpreter.defineElixirFunction("Elixir_Hologram_Test_Fixtures_Compiler_Builder_Module9", "__hologram_route__", 0, [{params: [], guards: [], body: (vars) => {
-  #          return Type.bitstring("/my_path");
-  #          }}])
+           Interpreter.defineElixirFunction("Elixir_Hologram_Test_Fixtures_Compiler_Builder_Module9", "__hologram_route__", 0, [{params: [], guards: [], body: (vars) => {
+           return Type.bitstring("/my_path");
+           }}])
 
-  #          Interpreter.defineElixirFunction("Elixir_Hologram_Test_Fixtures_Compiler_Builder_Module9", "action", 3, [{params: [Type.atom("action_9a"), Type.variablePattern("params"), Type.variablePattern("state")], guards: [], body: (vars) => {
-  #          return Elixir_Hologram_Test_Fixtures_Compiler_Builder_Module9["fun_9a/2"](Interpreter.dotOperator(vars.params, Type.atom("my_key")), Erlang["+/2"](vars.state, Type.integer(1n)));
-  #          }}])
+           Interpreter.defineElixirFunction("Elixir_Hologram_Test_Fixtures_Compiler_Builder_Module9", "action", 3, [{params: [Type.atom("action_9a"), Type.variablePattern("params"), Type.variablePattern("state")], guards: [], body: (vars) => {
+           return Elixir_Hologram_Test_Fixtures_Compiler_Builder_Module9["fun_9a/2"](Interpreter.dotOperator(vars.params, Type.atom("my_key")), Erlang["+/2"](vars.state, Type.integer(1n)));
+           }}])
 
-  #          Interpreter.defineElixirFunction("Elixir_Hologram_Test_Fixtures_Compiler_Builder_Module9", "fun_9a", 2, [{params: [Type.variablePattern("map"), Type.variablePattern("key")], guards: [], body: (vars) => {
-  #          return Elixir_Map["get/2"](vars.map, vars.key);
-  #          }}])
+           Interpreter.defineElixirFunction("Elixir_Hologram_Test_Fixtures_Compiler_Builder_Module9", "fun_9a", 2, [{params: [Type.variablePattern("map"), Type.variablePattern("key")], guards: [], body: (vars) => {
+           return Elixir_Map["get/2"](vars.map, vars.key);
+           }}])
 
-  #          Interpreter.defineElixirFunction("Elixir_Hologram_Test_Fixtures_Compiler_Builder_Module9", "template", 0, [{params: [], guards: [], body: (vars) => {
-  #          return Type.anonymousFunction(1, [{params: [Type.variablePattern("data")], guards: [], body: (vars) => {
-  #          Interpreter.matchOperator(vars.data, Type.matchPlaceholder(), vars);
-  #          return Type.list([Type.tuple([Type.atom("text"), Type.bitstring("Module9 template")])]);
-  #          }}], vars);
-  #          }}])
+           Interpreter.defineElixirFunction("Elixir_Hologram_Test_Fixtures_Compiler_Builder_Module9", "template", 0, [{params: [], guards: [], body: (vars) => {
+           return Type.anonymousFunction(1, [{params: [Type.variablePattern("data")], guards: [], body: (vars) => {
+           Interpreter.matchOperator(vars.data, Type.matchPlaceholder(), vars);
+           return Type.list([Type.tuple([Type.atom("text"), Type.bitstring("Module9 template")])]);
+           }}], vars);
+           }}])
 
-  #          Interpreter.defineElixirFunction("Elixir_Map", "get", 2, [{params: [Type.variablePattern("x0"), Type.variablePattern("x1")], guards: [], body: (vars) => {
-  #          return Elixir_Map["get/3"](vars.x0, vars.x1, Type.atom("nil"));
-  #          }}])
+           Interpreter.defineElixirFunction("Elixir_Map", "get", 2, [{params: [Type.variablePattern("x0"), Type.variablePattern("x1")], guards: [], body: (vars) => {
+           return Elixir_Map["get/3"](vars.x0, vars.x1, Type.atom("nil"));
+           }}])
 
-  #          Interpreter.defineElixirFunction("Elixir_Map", "get", 3, [{params: [Type.variablePattern("map"), Type.variablePattern("key"), Type.variablePattern("default")], guards: [], body: (vars) => {
-  #          return Interpreter.case(vars.map, [{match: Type.map([[vars.key, Type.variablePattern("value")]]), guards: [], body: (vars) => {
-  #          return vars.value;
-  #          }}, {match: Type.map([]), guards: [], body: (vars) => {
-  #          return vars.default;
-  #          }}, {match: Type.variablePattern("other"), guards: [], body: (vars) => {
-  #          return Erlang["error/2"](Type.tuple([Type.atom("badmap"), vars.other]), Type.list([vars.map, vars.key, vars.default]));
-  #          }}]);
-  #          }}])
+           Interpreter.defineElixirFunction("Elixir_Map", "get", 3, [{params: [Type.variablePattern("map"), Type.variablePattern("key"), Type.variablePattern("default")], guards: [], body: (vars) => {
+           return Interpreter.case(vars.map, [{match: Type.map([[vars.key, Type.variablePattern("value")]]), guards: [], body: (vars) => {
+           return vars.value;
+           }}, {match: Type.map([]), guards: [], body: (vars) => {
+           return vars.default;
+           }}, {match: Type.variablePattern("other"), guards: [], body: (vars) => {
+           return Erlang["error/2"](Type.tuple([Type.atom("badmap"), vars.other]), Type.list([vars.map, vars.key, vars.default]));
+           }}]);
+           }}])
 
-  #          }\
-  #          """
-  # end
+           }\
+           """
+  end
 
   # test "build_runtime_js/3" do
   #   call_graph = CallGraph.start(name: @call_graph_name_1)
@@ -278,22 +273,22 @@ defmodule Hologram.Compiler.BuilderTest do
   #   end
   # end
 
-  # test "group_mfas_by_module/1" do
-  #   mfas = [
-  #     {:module_1, :fun_a, 1},
-  #     {:module_2, :fun_b, 2},
-  #     {:module_3, :fun_c, 3},
-  #     {:module_1, :fun_d, 3},
-  #     {:module_2, :fun_e, 1},
-  #     {:module_3, :fun_f, 2}
-  #   ]
+  test "group_mfas_by_module/1" do
+    mfas = [
+      {:module_1, :fun_a, 1},
+      {:module_2, :fun_b, 2},
+      {:module_3, :fun_c, 3},
+      {:module_1, :fun_d, 3},
+      {:module_2, :fun_e, 1},
+      {:module_3, :fun_f, 2}
+    ]
 
-  #   assert group_mfas_by_module(mfas) == %{
-  #            module_1: [{:module_1, :fun_a, 1}, {:module_1, :fun_d, 3}],
-  #            module_2: [{:module_2, :fun_b, 2}, {:module_2, :fun_e, 1}],
-  #            module_3: [{:module_3, :fun_c, 3}, {:module_3, :fun_f, 2}]
-  #          }
-  # end
+    assert group_mfas_by_module(mfas) == %{
+             module_1: [{:module_1, :fun_a, 1}, {:module_1, :fun_d, 3}],
+             module_2: [{:module_2, :fun_b, 2}, {:module_2, :fun_e, 1}],
+             module_3: [{:module_3, :fun_c, 3}, {:module_3, :fun_f, 2}]
+           }
+  end
 
   test "list_page_mfas/2" do
     module_5_ir = IR.for_module(Module5)
@@ -442,71 +437,71 @@ defmodule Hologram.Compiler.BuilderTest do
     end
   end
 
-  # test "prune_module_def/2" do
-  #   module_def_ir = IR.for_module(Module8)
+  test "prune_module_def/2" do
+    module_def_ir = IR.for_module(Module8)
 
-  #   module_def_ir_fixture = %{
-  #     module_def_ir
-  #     | body: %IR.Block{
-  #         expressions: [
-  #           %IR.IgnoredExpression{type: :public_macro_definition} | module_def_ir.body.expressions
-  #         ]
-  #       }
-  #   }
+    module_def_ir_fixture = %{
+      module_def_ir
+      | body: %IR.Block{
+          expressions: [
+            %IR.IgnoredExpression{type: :public_macro_definition} | module_def_ir.body.expressions
+          ]
+        }
+    }
 
-  #   reachable_mfas = [
-  #     {Module8, :fun_2, 2},
-  #     {Module8, :fun_3, 1}
-  #   ]
+    reachable_mfas = [
+      {Module8, :fun_2, 2},
+      {Module8, :fun_3, 1}
+    ]
 
-  #   assert prune_module_def(module_def_ir_fixture, reachable_mfas) == %IR.ModuleDefinition{
-  #            module: %IR.AtomType{value: Module8},
-  #            body: %IR.Block{
-  #              expressions: [
-  #                %IR.FunctionDefinition{
-  #                  name: :fun_2,
-  #                  arity: 2,
-  #                  visibility: :public,
-  #                  clause: %IR.FunctionClause{
-  #                    params: [
-  #                      %IR.AtomType{value: :a},
-  #                      %IR.AtomType{value: :b}
-  #                    ],
-  #                    guards: [],
-  #                    body: %IR.Block{
-  #                      expressions: [%IR.IntegerType{value: 3}]
-  #                    }
-  #                  }
-  #                },
-  #                %IR.FunctionDefinition{
-  #                  name: :fun_2,
-  #                  arity: 2,
-  #                  visibility: :public,
-  #                  clause: %IR.FunctionClause{
-  #                    params: [
-  #                      %IR.AtomType{value: :b},
-  #                      %IR.AtomType{value: :c}
-  #                    ],
-  #                    guards: [],
-  #                    body: %IR.Block{
-  #                      expressions: [%IR.IntegerType{value: 4}]
-  #                    }
-  #                  }
-  #                },
-  #                %IR.FunctionDefinition{
-  #                  name: :fun_3,
-  #                  arity: 1,
-  #                  visibility: :public,
-  #                  clause: %IR.FunctionClause{
-  #                    params: [%IR.Variable{name: :x}],
-  #                    guards: [],
-  #                    body: %IR.Block{
-  #                      expressions: [%IR.Variable{name: :x}]
-  #                    }
-  #                  }
-  #                }
-  #              ]
-  #            }
-  #          }
-  # end
+    assert prune_module_def(module_def_ir_fixture, reachable_mfas) == %IR.ModuleDefinition{
+             module: %IR.AtomType{value: Module8},
+             body: %IR.Block{
+               expressions: [
+                 %IR.FunctionDefinition{
+                   name: :fun_2,
+                   arity: 2,
+                   visibility: :public,
+                   clause: %IR.FunctionClause{
+                     params: [
+                       %IR.AtomType{value: :a},
+                       %IR.AtomType{value: :b}
+                     ],
+                     guards: [],
+                     body: %IR.Block{
+                       expressions: [%IR.IntegerType{value: 3}]
+                     }
+                   }
+                 },
+                 %IR.FunctionDefinition{
+                   name: :fun_2,
+                   arity: 2,
+                   visibility: :public,
+                   clause: %IR.FunctionClause{
+                     params: [
+                       %IR.AtomType{value: :b},
+                       %IR.AtomType{value: :c}
+                     ],
+                     guards: [],
+                     body: %IR.Block{
+                       expressions: [%IR.IntegerType{value: 4}]
+                     }
+                   }
+                 },
+                 %IR.FunctionDefinition{
+                   name: :fun_3,
+                   arity: 1,
+                   visibility: :public,
+                   clause: %IR.FunctionClause{
+                     params: [%IR.Variable{name: :x}],
+                     guards: [],
+                     body: %IR.Block{
+                       expressions: [%IR.Variable{name: :x}]
+                     }
+                   }
+                 }
+               ]
+             }
+           }
+  end
 end
