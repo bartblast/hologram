@@ -179,7 +179,7 @@ defmodule Hologram.Compiler.Encoder do
   end
 
   def encode(%IR.ConsOperator{head: head, tail: tail}, %{pattern?: false} = context) do
-    "Interpreter.consOperator(#{encode(head, context)}, #{encode(tail, context)}))"
+    "Interpreter.consOperator(#{encode(head, context)}, #{encode(tail, context)})"
   end
 
   def encode(%IR.DotOperator{left: left, right: right}, context) do

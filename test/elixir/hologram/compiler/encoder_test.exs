@@ -667,7 +667,7 @@ defmodule Hologram.Compiler.EncoderTest do
 
     test "not inside pattern" do
       assert encode(@cons_operator_ir, %Context{pattern?: false}) ==
-               "Interpreter.consOperator(Type.integer(1n), Type.list([Type.integer(2n), Type.integer(3n)])))"
+               "Interpreter.consOperator(Type.integer(1n), Type.list([Type.integer(2n), Type.integer(3n)]))"
     end
 
     test "inside pattern" do
