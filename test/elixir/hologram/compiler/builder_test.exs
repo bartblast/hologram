@@ -214,13 +214,14 @@ defmodule Hologram.Compiler.BuilderTest do
     clean_dir(tmp_path)
     install_lib_js_deps()
 
+    js = "const myVar = 123;"
+    name = "my_script"
     esbuild_path = Reflection.root_path() <> "/assets/node_modules/.bin/esbuild"
 
-    assert {_digest, bundle_file, source_map_file} =
+    assert bundle(js, name, esbuild_path, tmp_path, tmp_path) ==
              {"caf8f4e27584852044eb27a37c5eddfd",
-              "/Users/bartblast/Projects/hologram/tmp/Elixir.Hologram.Compiler.BuilderTest.build.4/my_script.caf8f4e27584852044eb27a37c5eddfd.js",
-              "/Users/bartblast/Projects/hologram/tmp/Elixir.Hologram.Compiler.BuilderTest.build.4/my_script.caf8f4e27584852044eb27a37c5eddfd.js.map"} =
-             bundle("const myVar = 123;", "my_script", esbuild_path, tmp_path, tmp_path)
+              bundle_file = "#{tmp_path}/my_script.caf8f4e27584852044eb27a37c5eddfd.js",
+              source_map_file = "#{tmp_path}/my_script.caf8f4e27584852044eb27a37c5eddfd.js.map"}
 
     assert File.read!(bundle_file) == """
            (()=>{})();
