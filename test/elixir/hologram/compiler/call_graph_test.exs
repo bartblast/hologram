@@ -724,9 +724,7 @@ defmodule Hologram.Compiler.CallGraphTest do
 
   describe "maybe_load/2" do
     test "dump file exists" do
-      graph =
-        Graph.new()
-        |> Graph.add_edge(:vertex_1, :vertex_2)
+      graph = Graph.add_edge(Graph.new(), :vertex_1, :vertex_2)
 
       data = SerializationUtils.serialize(graph)
       File.write!(@dump_path, data)
