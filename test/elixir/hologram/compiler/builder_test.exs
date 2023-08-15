@@ -12,9 +12,9 @@ defmodule Hologram.Compiler.BuilderTest do
   alias Hologram.Test.Fixtures.Compiler.Builder.Module2
   alias Hologram.Test.Fixtures.Compiler.Builder.Module3
   alias Hologram.Test.Fixtures.Compiler.Builder.Module4
-  # alias Hologram.Test.Fixtures.Compiler.Builder.Module5
-  # alias Hologram.Test.Fixtures.Compiler.Builder.Module6
-  # alias Hologram.Test.Fixtures.Compiler.Builder.Module7
+  alias Hologram.Test.Fixtures.Compiler.Builder.Module5
+  alias Hologram.Test.Fixtures.Compiler.Builder.Module6
+  alias Hologram.Test.Fixtures.Compiler.Builder.Module7
   # alias Hologram.Test.Fixtures.Compiler.Builder.Module8
   # alias Hologram.Test.Fixtures.Compiler.Builder.Module9
 
@@ -295,34 +295,33 @@ defmodule Hologram.Compiler.BuilderTest do
   #          }
   # end
 
-  # test "list_page_mfas/3" do
-  #   module_5_ir = IR.for_module(Module5)
-  #   module_6_ir = IR.for_module(Module6)
-  #   module_7_ir = IR.for_module(Module7)
+  test "list_page_mfas/2" do
+    module_5_ir = IR.for_module(Module5)
+    module_6_ir = IR.for_module(Module6)
+    module_7_ir = IR.for_module(Module7)
 
-  #   call_graph =
-  #     [name: @call_graph_name_1]
-  #     |> CallGraph.start()
-  #     |> CallGraph.build(module_5_ir)
-  #     |> CallGraph.build(module_6_ir)
-  #     |> CallGraph.build(module_7_ir)
+    call_graph =
+      CallGraph.start()
+      |> CallGraph.build(module_5_ir)
+      |> CallGraph.build(module_6_ir)
+      |> CallGraph.build(module_7_ir)
 
-  #   sorted_mfas =
-  #     call_graph
-  #     |> list_page_mfas(Module5, @call_graph_name_2)
-  #     |> Enum.sort()
+    sorted_mfas =
+      call_graph
+      |> list_page_mfas(Module5)
+      |> Enum.sort()
 
-  #   assert sorted_mfas == [
-  #            {Module5, :__hologram_layout_module__, 0},
-  #            {Module5, :__hologram_layout_props__, 0},
-  #            {Module5, :__hologram_route__, 0},
-  #            {Module5, :action, 3},
-  #            {Module5, :template, 0},
-  #            {Module6, :action, 3},
-  #            {Module6, :template, 0},
-  #            {Module7, :my_fun_7a, 2}
-  #          ]
-  # end
+    assert sorted_mfas == [
+             {Module5, :__hologram_layout_module__, 0},
+             {Module5, :__hologram_layout_props__, 0},
+             {Module5, :__hologram_route__, 0},
+             {Module5, :action, 3},
+             {Module5, :template, 0},
+             {Module6, :action, 3},
+             {Module6, :template, 0},
+             {Module7, :my_fun_7a, 2}
+           ]
+  end
 
   describe "list_runtime_mfas/1" do
     setup do

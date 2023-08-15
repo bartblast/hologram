@@ -196,27 +196,27 @@ defmodule Hologram.Compiler.Builder do
   #   }
   # end
 
-  # @doc """
-  # Returns the list of MFAs ({module, function, arity} tuples) that are reachable by the given page.
-  # MFAs required by the runtime are excluded.
-  # """
-  # @spec list_page_mfas(CallGraph.t(), module, atom) :: list(mfa)
-  # def list_page_mfas(call_graph, entry_page, clone_name) do
-  #   call_graph_clone = CallGraph.clone(call_graph, name: clone_name)
-  #   layout_module = entry_page.__hologram_layout_module__()
-  #   runtime_mfas = list_runtime_mfas(call_graph)
+  @doc """
+  Returns the list of MFAs ({module, function, arity} tuples) that are reachable by the given page.
+  MFAs required by the runtime are excluded.
+  """
+  @spec list_page_mfas(CallGraph.t(), module) :: list(mfa)
+  def list_page_mfas(call_graph, page_module) do
+    call_graph_clone = CallGraph.clone(call_graph)
+    layout_module = page_module.__hologram_layout_module__()
+    runtime_mfas = list_runtime_mfas(call_graph)
 
-  #   call_graph_clone
-  #   |> CallGraph.add_edge(entry_page, {entry_page, :__hologram_layout_module__, 0})
-  #   |> CallGraph.add_edge(entry_page, {entry_page, :__hologram_layout_props__, 0})
-  #   |> CallGraph.add_edge(entry_page, {entry_page, :action, 3})
-  #   |> CallGraph.add_edge(entry_page, {entry_page, :template, 0})
-  #   |> CallGraph.add_edge(entry_page, {layout_module, :action, 3})
-  #   |> CallGraph.add_edge(entry_page, {layout_module, :template, 0})
-  #   |> CallGraph.reachable(entry_page)
-  #   |> Enum.filter(&is_tuple/1)
-  #   |> Kernel.--(runtime_mfas)
-  # end
+    call_graph_clone
+    |> CallGraph.add_edge(page_module, {page_module, :__hologram_layout_module__, 0})
+    |> CallGraph.add_edge(page_module, {page_module, :__hologram_layout_props__, 0})
+    |> CallGraph.add_edge(page_module, {page_module, :action, 3})
+    |> CallGraph.add_edge(page_module, {page_module, :template, 0})
+    |> CallGraph.add_edge(page_module, {layout_module, :action, 3})
+    |> CallGraph.add_edge(page_module, {layout_module, :template, 0})
+    |> CallGraph.reachable(page_module)
+    |> Enum.filter(&is_tuple/1)
+    |> Kernel.--(runtime_mfas)
+  end
 
   # @doc """
   # Groups the given MFAs ({module, function, arity} tuples) by module.
