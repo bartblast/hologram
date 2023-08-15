@@ -2,6 +2,8 @@ defmodule Hologram.Compiler.CallGraph do
   alias Hologram.Commons.PLT
   alias Hologram.Commons.SerializationUtils
   alias Hologram.Compiler.CallGraph
+  alias Hologram.Compiler.IR
+  alias Hologram.Compiler.Reflection
 
   defstruct pid: nil
   @type t :: %CallGraph{pid: pid}
@@ -34,6 +36,110 @@ defmodule Hologram.Compiler.CallGraph do
     Agent.update(pid, &Graph.add_vertex(&1, vertex))
     call_graph
   end
+
+  @doc """
+  Builds a call graph from IR.
+  """
+  @spec build(CallGraph.t(), IR.t(), vertex | nil) :: CallGraph.t()
+  def build(call_graph, ir, from_vertex \\ nil)
+
+  def build(call_graph, %IR.AtomType{value: value}, from_vertex) do
+    if Reflection.module?(value) do
+      add_edge(call_graph, from_vertex, value)
+      maybe_add_templatable_call_graph_edges(call_graph, value)
+    end
+
+    call_graph
+  end
+
+  def build(
+        call_graph,
+        %IR.FunctionDefinition{name: name, arity: arity, clause: clause},
+        from_vertex
+      ) do
+    new_from_vertex = {from_vertex, name, arity}
+    build(call_graph, clause, new_from_vertex)
+  end
+
+  def build(
+        call_graph,
+        %IR.LocalFunctionCall{function: function, args: args},
+        {module, _function, _arity} = from_vertex
+      ) do
+    to_vertex = {module, function, Enum.count(args)}
+    add_edge(call_graph, from_vertex, to_vertex)
+
+    build(call_graph, args, from_vertex)
+  end
+
+  def build(
+        call_graph,
+        %IR.ModuleDefinition{module: %IR.AtomType{value: module}, body: body},
+        _from_vertex
+      ) do
+    maybe_add_templatable_call_graph_edges(call_graph, module)
+    build(call_graph, body, module)
+  end
+
+  def build(
+        call_graph,
+        %IR.RemoteFunctionCall{
+          module: %IR.AtomType{value: :erlang},
+          function: :apply,
+          args: [
+            %IR.AtomType{value: module},
+            %IR.AtomType{value: function},
+            %IR.ListType{data: args}
+          ]
+        },
+        from_vertex
+      ) do
+    to_vertex = {module, function, Enum.count(args)}
+    add_edge(call_graph, from_vertex, to_vertex)
+
+    build(call_graph, args, from_vertex)
+  end
+
+  def build(
+        call_graph,
+        %IR.RemoteFunctionCall{
+          module: %IR.AtomType{value: module},
+          function: function,
+          args: args
+        },
+        from_vertex
+      ) do
+    to_vertex = {module, function, Enum.count(args)}
+    add_edge(call_graph, from_vertex, to_vertex)
+
+    build(call_graph, args, from_vertex)
+  end
+
+  def build(call_graph, list, from_vertex) when is_list(list) do
+    Enum.each(list, &build(call_graph, &1, from_vertex))
+    call_graph
+  end
+
+  def build(call_graph, map, from_vertex) when is_map(map) do
+    map
+    |> Map.to_list()
+    |> Enum.each(fn {key, value} ->
+      build(call_graph, key, from_vertex)
+      build(call_graph, value, from_vertex)
+    end)
+
+    call_graph
+  end
+
+  def build(call_graph, tuple, from_vertex) when is_tuple(tuple) do
+    tuple
+    |> Tuple.to_list()
+    |> Enum.each(&build(call_graph, &1, from_vertex))
+
+    call_graph
+  end
+
+  def build(call_graph, _ir, _from_vertex), do: call_graph
 
   @doc """
   Returns a clone of the given call graph.
@@ -234,6 +340,16 @@ defmodule Hologram.Compiler.CallGraph do
     Agent.get(pid, &Graph.vertices/1)
   end
 
+  defp add_component_call_graph_edges(call_graph, module) do
+    add_edge(call_graph, module, {module, :action, 3})
+    add_edge(call_graph, module, {module, :init, 1})
+    add_edge(call_graph, module, {module, :template, 0})
+  end
+
+  defp add_page_call_graph_edges(call_graph, module) do
+    add_edge(call_graph, module, {module, :__hologram_route__, 0})
+  end
+
   defp build_module(call_graph, ir_plt, module) do
     module_def = PLT.get!(ir_plt, module)
     build(call_graph, module_def)
@@ -243,160 +359,19 @@ defmodule Hologram.Compiler.CallGraph do
     Agent.get(pid, &Graph.in_edges(&1, vertex))
   end
 
+  defp maybe_add_templatable_call_graph_edges(call_graph, module) do
+    if Reflection.page?(module) do
+      add_page_call_graph_edges(call_graph, module)
+    end
+
+    if Reflection.component?(module) do
+      add_component_call_graph_edges(call_graph, module)
+    end
+  end
+
   defp remove_module_vertices(call_graph, module) do
     call_graph
     |> module_vertices(module)
     |> Enum.each(&remove_vertex(call_graph, &1))
   end
-
-  ### OVERHAUL
-
-  # use Agent
-  # alias Hologram.Compiler.IR
-  # alias Hologram.Compiler.Reflection
-
-  # @doc """
-  # Builds a call graph from IR.
-
-  # ## Examples
-
-  #     iex> call_graph = %CallGraph{name: :my_call_graph, pid: #PID<0.259.0>}
-  #     iex> ir = %IR.LocalFunctionCall{function: :my_fun, args: [%IR.IntegerType{value: 123}]}
-  #     iex> build(call_graph, ir, MyModule)
-  #     %CallGraph{name: :my_call_graph, pid: #PID<0.259.0>}
-  # """
-  # @spec build(CallGraph.t(), IR.t(), vertex | nil) :: CallGraph.t()
-  # def build(call_graph, ir, from_vertex \\ nil)
-
-  # def build(call_graph, %IR.AtomType{value: value}, from_vertex) do
-  #   if Reflection.module?(value) do
-  #     add_edge(call_graph, from_vertex, value)
-  #     maybe_add_templatable_call_graph_edges(call_graph, value)
-  #   end
-
-  #   call_graph
-  # end
-
-  # def build(
-  #       call_graph,
-  #       %IR.FunctionDefinition{name: name, arity: arity, clause: clause},
-  #       from_vertex
-  #     ) do
-  #   new_from_vertex = {from_vertex, name, arity}
-  #   build(call_graph, clause, new_from_vertex)
-  # end
-
-  # def build(
-  #       call_graph,
-  #       %IR.LocalFunctionCall{function: function, args: args},
-  #       {module, _function, _arity} = from_vertex
-  #     ) do
-  #   to_vertex = {module, function, Enum.count(args)}
-  #   add_edge(call_graph, from_vertex, to_vertex)
-
-  #   build(call_graph, args, from_vertex)
-  # end
-
-  # def build(
-  #       call_graph,
-  #       %IR.ModuleDefinition{module: %IR.AtomType{value: module}, body: body},
-  #       _from_vertex
-  #     ) do
-  #   maybe_add_templatable_call_graph_edges(call_graph, module)
-  #   build(call_graph, body, module)
-  # end
-
-  # def build(
-  #       call_graph,
-  #       %IR.RemoteFunctionCall{
-  #         module: %IR.AtomType{value: :erlang},
-  #         function: :apply,
-  #         args: [
-  #           %IR.AtomType{value: module},
-  #           %IR.AtomType{value: function},
-  #           %IR.ListType{data: args}
-  #         ]
-  #       },
-  #       from_vertex
-  #     ) do
-  #   to_vertex = {module, function, Enum.count(args)}
-  #   add_edge(call_graph, from_vertex, to_vertex)
-
-  #   build(call_graph, args, from_vertex)
-  # end
-
-  # def build(
-  #       call_graph,
-  #       %IR.RemoteFunctionCall{
-  #         module: %IR.AtomType{value: module},
-  #         function: function,
-  #         args: args
-  #       },
-  #       from_vertex
-  #     ) do
-  #   to_vertex = {module, function, Enum.count(args)}
-  #   add_edge(call_graph, from_vertex, to_vertex)
-
-  #   build(call_graph, args, from_vertex)
-  # end
-
-  # def build(call_graph, list, from_vertex) when is_list(list) do
-  #   Enum.each(list, &build(call_graph, &1, from_vertex))
-  #   call_graph
-  # end
-
-  # def build(call_graph, map, from_vertex) when is_map(map) do
-  #   map
-  #   |> Map.to_list()
-  #   |> Enum.each(fn {key, value} ->
-  #     build(call_graph, key, from_vertex)
-  #     build(call_graph, value, from_vertex)
-  #   end)
-
-  #   call_graph
-  # end
-
-  # def build(call_graph, tuple, from_vertex) when is_tuple(tuple) do
-  #   tuple
-  #   |> Tuple.to_list()
-  #   |> Enum.each(&build(call_graph, &1, from_vertex))
-
-  #   call_graph
-  # end
-
-  # def build(call_graph, _ir, _from_vertex), do: call_graph
-
-  # defp add_component_call_graph_edges(call_graph, module) do
-  #   add_edge(call_graph, module, {module, :action, 3})
-  #   add_edge(call_graph, module, {module, :init, 1})
-  #   add_edge(call_graph, module, {module, :template, 0})
-  # end
-
-  # defp add_page_call_graph_edges(call_graph, module) do
-  #   add_edge(call_graph, module, {module, :__hologram_route__, 0})
-  # end
-
-  # defp load_graph_from_file(%{dump_path: dump_path} = call_graph) do
-  #   graph =
-  #     dump_path
-  #     |> File.read!()
-  #     |> SerializationUtils.deserialize()
-
-  #   put_graph(call_graph, graph)
-  # end
-
-  # defp maybe_add_templatable_call_graph_edges(call_graph, module) do
-  #   if Reflection.page?(module) do
-  #     add_page_call_graph_edges(call_graph, module)
-  #   end
-
-  #   if Reflection.component?(module) do
-  #     add_component_call_graph_edges(call_graph, module)
-  #   end
-  # end
-
-  # defp put_graph(call_graph, graph) do
-  #   Agent.update(call_graph.name, fn _state -> graph end)
-  #   call_graph
-  # end
 end

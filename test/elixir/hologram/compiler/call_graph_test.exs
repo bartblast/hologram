@@ -5,7 +5,20 @@ defmodule Hologram.Compiler.CallGraphTest do
   alias Hologram.Commons.PLT
   alias Hologram.Commons.SerializationUtils
   alias Hologram.Compiler.CallGraph
+  alias Hologram.Compiler.IR
   alias Hologram.Compiler.Reflection
+
+  alias Hologram.Test.Fixtures.Compiler.CallGraph.Module1
+  alias Hologram.Test.Fixtures.Compiler.CallGraph.Module10
+  alias Hologram.Test.Fixtures.Compiler.CallGraph.Module11
+  alias Hologram.Test.Fixtures.Compiler.CallGraph.Module2
+  alias Hologram.Test.Fixtures.Compiler.CallGraph.Module3
+  alias Hologram.Test.Fixtures.Compiler.CallGraph.Module4
+  alias Hologram.Test.Fixtures.Compiler.CallGraph.Module5
+  alias Hologram.Test.Fixtures.Compiler.CallGraph.Module6
+  alias Hologram.Test.Fixtures.Compiler.CallGraph.Module7
+  alias Hologram.Test.Fixtures.Compiler.CallGraph.Module8
+  alias Hologram.Test.Fixtures.Compiler.CallGraph.Module9
 
   @dump_path Reflection.tmp_path() <> "/call_graph_#{__MODULE__}.bin"
 
@@ -39,6 +52,562 @@ defmodule Hologram.Compiler.CallGraphTest do
 
     graph = get_graph(call_graph)
     assert Graph.has_vertex?(graph, :vertex_3)
+  end
+
+  describe "build/3" do
+    test "atom type ir, which is not an alias", %{call_graph: call_graph} do
+      ir = %IR.AtomType{value: :abc}
+      assert build(call_graph, ir, :vertex_1) == call_graph
+
+      assert vertices(call_graph) == []
+      assert edges(call_graph) == []
+    end
+
+    test "atom type ir, which as an alias of a non-existing module", %{call_graph: call_graph} do
+      ir = %IR.AtomType{value: Aaa.Bbb}
+      assert build(call_graph, ir, :vertex_1) == call_graph
+
+      assert vertices(call_graph) == []
+      assert edges(call_graph) == []
+    end
+
+    test "atom type ir, which is an alias of an existing non-templatable module", %{
+      call_graph: call_graph
+    } do
+      ir = %IR.AtomType{value: Module1}
+      assert build(call_graph, ir, :vertex_1) == call_graph
+
+      assert sorted_vertices(call_graph) == [Module1, :vertex_1]
+
+      assert edges(call_graph) == [
+               %Graph.Edge{
+                 v1: :vertex_1,
+                 v2: Module1,
+                 weight: 1,
+                 label: nil
+               }
+             ]
+    end
+
+    test "atom type ir, which is an alias of a page module", %{call_graph: call_graph} do
+      ir = %IR.AtomType{value: Module2}
+      assert build(call_graph, ir, :vertex_1) == call_graph
+
+      assert sorted_vertices(call_graph) == [
+               Module2,
+               :vertex_1,
+               {Module2, :__hologram_route__, 0}
+             ]
+
+      assert sorted_edges(call_graph) == [
+               %Graph.Edge{
+                 v1: Module2,
+                 v2: {Module2, :__hologram_route__, 0},
+                 weight: 1,
+                 label: nil
+               },
+               %Graph.Edge{
+                 v1: :vertex_1,
+                 v2: Module2,
+                 weight: 1,
+                 label: nil
+               }
+             ]
+    end
+
+    test "atom type ir, which is an alias of a layout module", %{call_graph: call_graph} do
+      ir = %IR.AtomType{value: Module3}
+      assert build(call_graph, ir, :vertex_1) == call_graph
+
+      assert sorted_vertices(call_graph) == [Module3, :vertex_1]
+
+      assert edges(call_graph) == [
+               %Graph.Edge{
+                 v1: :vertex_1,
+                 v2: Module3,
+                 weight: 1,
+                 label: nil
+               }
+             ]
+    end
+
+    test "atom type ir, which is an alias of a component module", %{call_graph: call_graph} do
+      ir = %IR.AtomType{value: Module4}
+      assert build(call_graph, ir, :vertex_1) == call_graph
+
+      assert sorted_vertices(call_graph) == [
+               Module4,
+               :vertex_1,
+               {Module4, :action, 3},
+               {Module4, :init, 1},
+               {Module4, :template, 0}
+             ]
+
+      assert sorted_edges(call_graph) == [
+               %Graph.Edge{
+                 v1: Module4,
+                 v2: {Module4, :action, 3},
+                 weight: 1,
+                 label: nil
+               },
+               %Graph.Edge{
+                 v1: Module4,
+                 v2: {Module4, :init, 1},
+                 weight: 1,
+                 label: nil
+               },
+               %Graph.Edge{
+                 v1: Module4,
+                 v2: {Module4, :template, 0},
+                 weight: 1,
+                 label: nil
+               },
+               %Graph.Edge{
+                 v1: :vertex_1,
+                 v2: Module4,
+                 weight: 1,
+                 label: nil
+               }
+             ]
+    end
+
+    test "function definition ir", %{call_graph: call_graph} do
+      ir = %IR.FunctionDefinition{
+        name: :my_fun,
+        arity: 2,
+        visibility: :public,
+        clause: %IR.FunctionClause{
+          params: [%IR.Variable{name: :x}, %IR.Variable{name: :y}],
+          guards: [%IR.AtomType{value: Module5}],
+          body: %IR.Block{
+            expressions: [
+              %IR.AtomType{value: Module6},
+              %IR.AtomType{value: Module7}
+            ]
+          }
+        }
+      }
+
+      assert build(call_graph, ir, Module1) == call_graph
+
+      assert sorted_vertices(call_graph) == [
+               Module5,
+               Module6,
+               Module7,
+               {Module1, :my_fun, 2}
+             ]
+
+      assert sorted_edges(call_graph) == [
+               %Graph.Edge{
+                 v1: {Module1, :my_fun, 2},
+                 v2: Module5,
+                 weight: 1,
+                 label: nil
+               },
+               %Graph.Edge{
+                 v1: {Module1, :my_fun, 2},
+                 v2: Module6,
+                 weight: 1,
+                 label: nil
+               },
+               %Graph.Edge{
+                 v1: {Module1, :my_fun, 2},
+                 v2: Module7,
+                 weight: 1,
+                 label: nil
+               }
+             ]
+    end
+
+    test "list", %{call_graph: call_graph} do
+      list = [%IR.AtomType{value: Module1}, %IR.AtomType{value: Module5}]
+      assert build(call_graph, list, :vertex_1) == call_graph
+
+      assert sorted_vertices(call_graph) == [Module1, Module5, :vertex_1]
+
+      assert sorted_edges(call_graph) == [
+               %Graph.Edge{
+                 v1: :vertex_1,
+                 v2: Module1,
+                 weight: 1,
+                 label: nil
+               },
+               %Graph.Edge{
+                 v1: :vertex_1,
+                 v2: Module5,
+                 weight: 1,
+                 label: nil
+               }
+             ]
+    end
+
+    test "local function call ir", %{call_graph: call_graph} do
+      ir = %IR.LocalFunctionCall{
+        function: :my_fun_2,
+        args: [
+          %IR.AtomType{value: Module5},
+          %IR.AtomType{value: Module6},
+          %IR.AtomType{value: Module7}
+        ]
+      }
+
+      assert build(call_graph, ir, {Module1, :my_fun_1, 4}) == call_graph
+
+      assert sorted_vertices(call_graph) == [
+               Module5,
+               Module6,
+               Module7,
+               {Module1, :my_fun_1, 4},
+               {Module1, :my_fun_2, 3}
+             ]
+
+      assert sorted_edges(call_graph) == [
+               %Graph.Edge{
+                 v1: {Module1, :my_fun_1, 4},
+                 v2: Module5,
+                 weight: 1,
+                 label: nil
+               },
+               %Graph.Edge{
+                 v1: {Module1, :my_fun_1, 4},
+                 v2: Module6,
+                 weight: 1,
+                 label: nil
+               },
+               %Graph.Edge{
+                 v1: {Module1, :my_fun_1, 4},
+                 v2: Module7,
+                 weight: 1,
+                 label: nil
+               },
+               %Graph.Edge{
+                 v1: {Module1, :my_fun_1, 4},
+                 v2: {Module1, :my_fun_2, 3},
+                 weight: 1,
+                 label: nil
+               }
+             ]
+    end
+
+    test "map", %{call_graph: call_graph} do
+      map = %{
+        %IR.AtomType{value: Module1} => %IR.AtomType{value: Module5},
+        %IR.AtomType{value: Module6} => %IR.AtomType{value: Module7}
+      }
+
+      assert build(call_graph, map, :vertex_1) == call_graph
+
+      assert sorted_vertices(call_graph) == [Module1, Module5, Module6, Module7, :vertex_1]
+
+      assert sorted_edges(call_graph) == [
+               %Graph.Edge{
+                 v1: :vertex_1,
+                 v2: Module1,
+                 weight: 1,
+                 label: nil
+               },
+               %Graph.Edge{
+                 v1: :vertex_1,
+                 v2: Module5,
+                 weight: 1,
+                 label: nil
+               },
+               %Graph.Edge{
+                 v1: :vertex_1,
+                 v2: Module6,
+                 weight: 1,
+                 label: nil
+               },
+               %Graph.Edge{
+                 v1: :vertex_1,
+                 v2: Module7,
+                 weight: 1,
+                 label: nil
+               }
+             ]
+    end
+
+    test "module definition ir", %{call_graph: call_graph} do
+      ir = %IR.ModuleDefinition{
+        module: %IR.AtomType{value: Module11},
+        body: %IR.Block{
+          expressions: [
+            %IR.AtomType{value: Module5},
+            %IR.AtomType{value: Module6}
+          ]
+        }
+      }
+
+      assert build(call_graph, ir) == call_graph
+
+      assert sorted_vertices(call_graph) == [
+               Module11,
+               Module5,
+               Module6,
+               {Module11, :__hologram_route__, 0}
+             ]
+
+      assert sorted_edges(call_graph) == [
+               %Graph.Edge{
+                 v1: Module11,
+                 v2: Module5,
+                 weight: 1,
+                 label: nil
+               },
+               %Graph.Edge{
+                 v1: Module11,
+                 v2: Module6,
+                 weight: 1,
+                 label: nil
+               },
+               %Graph.Edge{
+                 v1: Module11,
+                 v2: {Module11, :__hologram_route__, 0},
+                 weight: 1,
+                 label: nil
+               }
+             ]
+    end
+
+    test "remote function call ir, module field as an atom", %{call_graph: call_graph} do
+      ir = %IR.RemoteFunctionCall{
+        module: %IR.AtomType{value: Module5},
+        function: :my_fun_2,
+        args: [
+          %IR.AtomType{value: Module6},
+          %IR.AtomType{value: Module7},
+          %IR.AtomType{value: Module8}
+        ]
+      }
+
+      assert build(call_graph, ir, {Module1, :my_fun_1, 4}) == call_graph
+
+      assert sorted_vertices(call_graph) == [
+               Module6,
+               Module7,
+               Module8,
+               {Module1, :my_fun_1, 4},
+               {Module5, :my_fun_2, 3}
+             ]
+
+      assert sorted_edges(call_graph) == [
+               %Graph.Edge{
+                 v1: {Module1, :my_fun_1, 4},
+                 v2: Module6,
+                 weight: 1,
+                 label: nil
+               },
+               %Graph.Edge{
+                 v1: {Module1, :my_fun_1, 4},
+                 v2: Module7,
+                 weight: 1,
+                 label: nil
+               },
+               %Graph.Edge{
+                 v1: {Module1, :my_fun_1, 4},
+                 v2: Module8,
+                 weight: 1,
+                 label: nil
+               },
+               %Graph.Edge{
+                 v1: {Module1, :my_fun_1, 4},
+                 v2: {Module5, :my_fun_2, 3},
+                 weight: 1,
+                 label: nil
+               }
+             ]
+    end
+
+    test "remote function call ir, module field is a variable", %{call_graph: call_graph} do
+      ir = %IR.RemoteFunctionCall{
+        module: %IR.Variable{name: :my_var},
+        function: :my_fun_2,
+        args: [
+          %IR.AtomType{value: Module6},
+          %IR.AtomType{value: Module7},
+          %IR.AtomType{value: Module8}
+        ]
+      }
+
+      assert build(call_graph, ir, {Module1, :my_fun_1, 4}) == call_graph
+
+      assert sorted_vertices(call_graph) == [
+               Module6,
+               Module7,
+               Module8,
+               {Module1, :my_fun_1, 4}
+             ]
+
+      assert sorted_edges(call_graph) == [
+               %Graph.Edge{
+                 v1: {Module1, :my_fun_1, 4},
+                 v2: Module6,
+                 weight: 1,
+                 label: nil
+               },
+               %Graph.Edge{
+                 v1: {Module1, :my_fun_1, 4},
+                 v2: Module7,
+                 weight: 1,
+                 label: nil
+               },
+               %Graph.Edge{
+                 v1: {Module1, :my_fun_1, 4},
+                 v2: Module8,
+                 weight: 1,
+                 label: nil
+               }
+             ]
+    end
+
+    test "remote function call using Kernel.apply/3, module and function fields are both atoms",
+         %{
+           call_graph: call_graph
+         } do
+      ir = %IR.RemoteFunctionCall{
+        module: %IR.AtomType{value: :erlang},
+        function: :apply,
+        args: [
+          %IR.AtomType{value: DateTime},
+          %IR.AtomType{value: :utc_now},
+          %IR.ListType{
+            data: [%IR.AtomType{value: Calendar.ISO}]
+          }
+        ]
+      }
+
+      assert build(call_graph, ir, {Module1, :my_fun_1, 4}) == call_graph
+
+      assert sorted_vertices(call_graph) == [
+               Calendar.ISO,
+               {DateTime, :utc_now, 1},
+               {Module1, :my_fun_1, 4}
+             ]
+
+      assert sorted_edges(call_graph) == [
+               %Graph.Edge{
+                 v1: {Module1, :my_fun_1, 4},
+                 v2: Calendar.ISO,
+                 weight: 1,
+                 label: nil
+               },
+               %Graph.Edge{
+                 v1: {Module1, :my_fun_1, 4},
+                 v2: {DateTime, :utc_now, 1},
+                 weight: 1,
+                 label: nil
+               }
+             ]
+    end
+
+    test "remote function call using Kernel.apply/3, module field is an atom, function field is not an atom",
+         %{
+           call_graph: call_graph
+         } do
+      ir = %IR.RemoteFunctionCall{
+        module: %IR.AtomType{value: :erlang},
+        function: :apply,
+        args: [
+          %IR.AtomType{value: DateTime},
+          %IR.Variable{name: :my_fun},
+          %IR.ListType{
+            data: [%IR.AtomType{value: Calendar.ISO}]
+          }
+        ]
+      }
+
+      assert build(call_graph, ir, {Module1, :my_fun_1, 4}) == call_graph
+
+      assert sorted_vertices(call_graph) == [
+               Calendar.ISO,
+               DateTime,
+               {Module1, :my_fun_1, 4},
+               {:erlang, :apply, 3}
+             ]
+
+      assert sorted_edges(call_graph) == [
+               %Graph.Edge{
+                 v1: {Module1, :my_fun_1, 4},
+                 v2: Calendar.ISO,
+                 weight: 1,
+                 label: nil
+               },
+               %Graph.Edge{
+                 v1: {Module1, :my_fun_1, 4},
+                 v2: DateTime,
+                 weight: 1,
+                 label: nil
+               },
+               %Graph.Edge{
+                 v1: {Module1, :my_fun_1, 4},
+                 v2: {:erlang, :apply, 3},
+                 weight: 1,
+                 label: nil
+               }
+             ]
+    end
+
+    test "remote function call using Kernel.apply/3, module field is not an atom, function field is an atom",
+         %{
+           call_graph: call_graph
+         } do
+      ir = %IR.RemoteFunctionCall{
+        module: %IR.AtomType{value: :erlang},
+        function: :apply,
+        args: [
+          %IR.Variable{name: :module},
+          %IR.AtomType{value: :utc_now},
+          %IR.ListType{
+            data: [%IR.AtomType{value: Calendar.ISO}]
+          }
+        ]
+      }
+
+      assert build(call_graph, ir, {Module1, :my_fun_1, 4}) == call_graph
+
+      assert sorted_vertices(call_graph) == [
+               Calendar.ISO,
+               {Module1, :my_fun_1, 4},
+               {:erlang, :apply, 3}
+             ]
+
+      assert sorted_edges(call_graph) == [
+               %Graph.Edge{
+                 v1: {Module1, :my_fun_1, 4},
+                 v2: Calendar.ISO,
+                 weight: 1,
+                 label: nil
+               },
+               %Graph.Edge{
+                 v1: {Module1, :my_fun_1, 4},
+                 v2: {:erlang, :apply, 3},
+                 weight: 1,
+                 label: nil
+               }
+             ]
+    end
+
+    test "tuple", %{call_graph: call_graph} do
+      tuple = {%IR.AtomType{value: Module1}, %IR.AtomType{value: Module5}}
+      assert build(call_graph, tuple, :vertex_1) == call_graph
+
+      assert sorted_vertices(call_graph) == [Module1, Module5, :vertex_1]
+
+      assert sorted_edges(call_graph) == [
+               %Graph.Edge{
+                 v1: :vertex_1,
+                 v2: Module1,
+                 weight: 1,
+                 label: nil
+               },
+               %Graph.Edge{
+                 v1: :vertex_1,
+                 v2: Module5,
+                 weight: 1,
+                 label: nil
+               }
+             ]
+    end
   end
 
   test "clone/1", %{call_graph: call_graph} do
@@ -248,10 +817,10 @@ defmodule Hologram.Compiler.CallGraphTest do
 
       assert sorted_vertices(call_graph) == [
                Module9,
-               {Module9, :my_fun_1, 0},
-               {Module9, :my_fun_2, 0},
                {Module10, :my_fun_3, 0},
                {Module10, :my_fun_4, 0},
+               {Module9, :my_fun_1, 0},
+               {Module9, :my_fun_2, 0},
                {:module_1, :fun_a, :arity_a},
                {:module_1, :fun_d, :arity_d},
                {:module_2, :fun_b, :arity_b},
@@ -262,13 +831,13 @@ defmodule Hologram.Compiler.CallGraphTest do
 
       assert sorted_edges(call_graph) == [
                %Graph.Edge{
-                 v1: {Module9, :my_fun_1, 0},
-                 v2: {Module9, :my_fun_2, 0},
+                 v1: {Module10, :my_fun_3, 0},
+                 v2: {Module10, :my_fun_4, 0},
                  weight: 1,
                  label: nil
                },
                %Graph.Edge{
-                 v1: {:module_2, :fun_b, :arity_b},
+                 v1: {Module9, :my_fun_1, 0},
                  v2: {Module9, :my_fun_2, 0},
                  weight: 1,
                  label: nil
@@ -286,8 +855,8 @@ defmodule Hologram.Compiler.CallGraphTest do
                  label: nil
                },
                %Graph.Edge{
-                 v1: {Module10, :my_fun_3, 0},
-                 v2: {Module10, :my_fun_4, 0},
+                 v1: {:module_2, :fun_b, :arity_b},
+                 v2: {Module9, :my_fun_2, 0},
                  weight: 1,
                  label: nil
                },
@@ -494,611 +1063,4 @@ defmodule Hologram.Compiler.CallGraphTest do
     assert :vertex_4 in result
     assert :vertex_5 in result
   end
-
-  ### OVERHAUL
-  # alias Hologram.Compiler.IR
-  # alias Hologram.Test.Fixtures.Compiler.CallGraph.Module1
-  # alias Hologram.Test.Fixtures.Compiler.CallGraph.Module10
-  # alias Hologram.Test.Fixtures.Compiler.CallGraph.Module11
-  # alias Hologram.Test.Fixtures.Compiler.CallGraph.Module2
-  # alias Hologram.Test.Fixtures.Compiler.CallGraph.Module3
-  # alias Hologram.Test.Fixtures.Compiler.CallGraph.Module4
-  # alias Hologram.Test.Fixtures.Compiler.CallGraph.Module5
-  # alias Hologram.Test.Fixtures.Compiler.CallGraph.Module6
-  # alias Hologram.Test.Fixtures.Compiler.CallGraph.Module7
-  # alias Hologram.Test.Fixtures.Compiler.CallGraph.Module8
-  # alias Hologram.Test.Fixtures.Compiler.CallGraph.Module9
-
-  # @call_graph_name_1 :"call_graph_#{__MODULE__}_1"
-  # @call_graph_name_2 :"call_graph_#{__MODULE__}_2"
-  # @ir_plt_name :"plt_{__MODULE__}"
-  # @opts name: @call_graph_name_1
-
-  # describe "build/3" do
-  #   test "atom type ir, which is not an alias", %{call_graph: call_graph} do
-  #     ir = %IR.AtomType{value: :abc}
-  #     assert ^call_graph = build(call_graph, ir, :vertex_1)
-
-  #     assert vertices(call_graph) == []
-  #     assert edges(call_graph) == []
-  #   end
-
-  #   test "atom type ir, which as an alias of a non-existing module", %{call_graph: call_graph} do
-  #     ir = %IR.AtomType{value: Aaa.Bbb}
-  #     assert ^call_graph = build(call_graph, ir, :vertex_1)
-
-  #     assert vertices(call_graph) == []
-  #     assert edges(call_graph) == []
-  #   end
-
-  #   test "atom type ir, which is an alias of an existing non-templatable module", %{
-  #     call_graph: call_graph
-  #   } do
-  #     ir = %IR.AtomType{value: Module1}
-  #     assert ^call_graph = build(call_graph, ir, :vertex_1)
-
-  #     assert sorted_vertices(call_graph) == [Module1, :vertex_1]
-
-  #     assert sorted_edges(call_graph) == [
-  #              %Graph.Edge{
-  #                v1: :vertex_1,
-  #                v2: Module1,
-  #                weight: 1,
-  #                label: nil
-  #              }
-  #            ]
-  #   end
-
-  #   test "atom type ir, which is an alias of a page module", %{call_graph: call_graph} do
-  #     ir = %IR.AtomType{value: Module2}
-  #     assert ^call_graph = build(call_graph, ir, :vertex_1)
-
-  #     assert sorted_vertices(call_graph) == [
-  #              Module2,
-  #              :vertex_1,
-  #              {Module2, :__hologram_route__, 0}
-  #            ]
-
-  #     assert sorted_edges(call_graph) == [
-  #              %Graph.Edge{
-  #                v1: Module2,
-  #                v2: {Module2, :__hologram_route__, 0},
-  #                weight: 1,
-  #                label: nil
-  #              },
-  #              %Graph.Edge{
-  #                v1: :vertex_1,
-  #                v2: Module2,
-  #                weight: 1,
-  #                label: nil
-  #              }
-  #            ]
-  #   end
-
-  #   test "atom type ir, which is an alias of a layout module", %{call_graph: call_graph} do
-  #     ir = %IR.AtomType{value: Module3}
-  #     assert ^call_graph = build(call_graph, ir, :vertex_1)
-
-  #     assert sorted_vertices(call_graph) == [Module3, :vertex_1]
-
-  #     assert sorted_edges(call_graph) == [
-  #              %Graph.Edge{
-  #                v1: :vertex_1,
-  #                v2: Module3,
-  #                weight: 1,
-  #                label: nil
-  #              }
-  #            ]
-  #   end
-
-  #   test "atom type ir, which is an alias of a component module", %{call_graph: call_graph} do
-  #     ir = %IR.AtomType{value: Module4}
-  #     assert ^call_graph = build(call_graph, ir, :vertex_1)
-
-  #     assert sorted_vertices(call_graph) == [
-  #              Module4,
-  #              :vertex_1,
-  #              {Module4, :action, 3},
-  #              {Module4, :init, 1},
-  #              {Module4, :template, 0}
-  #            ]
-
-  #     assert sorted_edges(call_graph) == [
-  #              %Graph.Edge{
-  #                v1: Module4,
-  #                v2: {Module4, :action, 3},
-  #                weight: 1,
-  #                label: nil
-  #              },
-  #              %Graph.Edge{
-  #                v1: Module4,
-  #                v2: {Module4, :init, 1},
-  #                weight: 1,
-  #                label: nil
-  #              },
-  #              %Graph.Edge{
-  #                v1: Module4,
-  #                v2: {Module4, :template, 0},
-  #                weight: 1,
-  #                label: nil
-  #              },
-  #              %Graph.Edge{
-  #                v1: :vertex_1,
-  #                v2: Module4,
-  #                weight: 1,
-  #                label: nil
-  #              }
-  #            ]
-  #   end
-
-  #   test "function definition ir", %{call_graph: call_graph} do
-  #     ir = %IR.FunctionDefinition{
-  #       name: :my_fun,
-  #       arity: 2,
-  #       visibility: :public,
-  #       clause: %IR.FunctionClause{
-  #         params: [%IR.Variable{name: :x}, %IR.Variable{name: :y}],
-  #         guards: [%IR.AtomType{value: Module5}],
-  #         body: %IR.Block{
-  #           expressions: [
-  #             %IR.AtomType{value: Module6},
-  #             %IR.AtomType{value: Module7}
-  #           ]
-  #         }
-  #       }
-  #     }
-
-  #     assert ^call_graph = build(call_graph, ir, Module1)
-
-  #     assert sorted_vertices(call_graph) == [
-  #              Module5,
-  #              Module6,
-  #              Module7,
-  #              {Module1, :my_fun, 2}
-  #            ]
-
-  #     assert sorted_edges(call_graph) == [
-  #              %Graph.Edge{
-  #                v1: {Module1, :my_fun, 2},
-  #                v2: Module5,
-  #                weight: 1,
-  #                label: nil
-  #              },
-  #              %Graph.Edge{
-  #                v1: {Module1, :my_fun, 2},
-  #                v2: Module6,
-  #                weight: 1,
-  #                label: nil
-  #              },
-  #              %Graph.Edge{
-  #                v1: {Module1, :my_fun, 2},
-  #                v2: Module7,
-  #                weight: 1,
-  #                label: nil
-  #              }
-  #            ]
-  #   end
-
-  #   test "list", %{call_graph: call_graph} do
-  #     list = [%IR.AtomType{value: Module1}, %IR.AtomType{value: Module5}]
-  #     assert ^call_graph = build(call_graph, list, :vertex_1)
-
-  #     assert sorted_vertices(call_graph) == [Module1, Module5, :vertex_1]
-
-  #     assert sorted_edges(call_graph) == [
-  #              %Graph.Edge{
-  #                v1: :vertex_1,
-  #                v2: Module1,
-  #                weight: 1,
-  #                label: nil
-  #              },
-  #              %Graph.Edge{
-  #                v1: :vertex_1,
-  #                v2: Module5,
-  #                weight: 1,
-  #                label: nil
-  #              }
-  #            ]
-  #   end
-
-  #   test "local function call ir", %{call_graph: call_graph} do
-  #     ir = %IR.LocalFunctionCall{
-  #       function: :my_fun_2,
-  #       args: [
-  #         %IR.AtomType{value: Module5},
-  #         %IR.AtomType{value: Module6},
-  #         %IR.AtomType{value: Module7}
-  #       ]
-  #     }
-
-  #     assert ^call_graph = build(call_graph, ir, {Module1, :my_fun_1, 4})
-
-  #     assert sorted_vertices(call_graph) == [
-  #              Module5,
-  #              Module6,
-  #              Module7,
-  #              {Module1, :my_fun_1, 4},
-  #              {Module1, :my_fun_2, 3}
-  #            ]
-
-  #     assert sorted_edges(call_graph) == [
-  #              %Graph.Edge{
-  #                v1: {Module1, :my_fun_1, 4},
-  #                v2: Module5,
-  #                weight: 1,
-  #                label: nil
-  #              },
-  #              %Graph.Edge{
-  #                v1: {Module1, :my_fun_1, 4},
-  #                v2: Module6,
-  #                weight: 1,
-  #                label: nil
-  #              },
-  #              %Graph.Edge{
-  #                v1: {Module1, :my_fun_1, 4},
-  #                v2: Module7,
-  #                weight: 1,
-  #                label: nil
-  #              },
-  #              %Graph.Edge{
-  #                v1: {Module1, :my_fun_1, 4},
-  #                v2: {Module1, :my_fun_2, 3},
-  #                weight: 1,
-  #                label: nil
-  #              }
-  #            ]
-  #   end
-
-  #   test "map", %{call_graph: call_graph} do
-  #     map = %{
-  #       %IR.AtomType{value: Module1} => %IR.AtomType{value: Module5},
-  #       %IR.AtomType{value: Module6} => %IR.AtomType{value: Module7}
-  #     }
-
-  #     assert ^call_graph = build(call_graph, map, :vertex_1)
-
-  #     assert sorted_vertices(call_graph) == [Module1, Module5, Module6, Module7, :vertex_1]
-
-  #     assert sorted_edges(call_graph) == [
-  #              %Graph.Edge{
-  #                v1: :vertex_1,
-  #                v2: Module1,
-  #                weight: 1,
-  #                label: nil
-  #              },
-  #              %Graph.Edge{
-  #                v1: :vertex_1,
-  #                v2: Module5,
-  #                weight: 1,
-  #                label: nil
-  #              },
-  #              %Graph.Edge{
-  #                v1: :vertex_1,
-  #                v2: Module6,
-  #                weight: 1,
-  #                label: nil
-  #              },
-  #              %Graph.Edge{
-  #                v1: :vertex_1,
-  #                v2: Module7,
-  #                weight: 1,
-  #                label: nil
-  #              }
-  #            ]
-  #   end
-
-  #   test "module definition ir", %{call_graph: call_graph} do
-  #     ir = %IR.ModuleDefinition{
-  #       module: %IR.AtomType{value: Module11},
-  #       body: %IR.Block{
-  #         expressions: [
-  #           %IR.AtomType{value: Module5},
-  #           %IR.AtomType{value: Module6}
-  #         ]
-  #       }
-  #     }
-
-  #     assert ^call_graph = build(call_graph, ir)
-
-  #     assert sorted_vertices(call_graph) == [
-  #              Module11,
-  #              Module5,
-  #              Module6,
-  #              {Module11, :__hologram_route__, 0}
-  #            ]
-
-  #     assert sorted_edges(call_graph) == [
-  #              %Graph.Edge{
-  #                v1: Module11,
-  #                v2: Module5,
-  #                weight: 1,
-  #                label: nil
-  #              },
-  #              %Graph.Edge{
-  #                v1: Module11,
-  #                v2: Module6,
-  #                weight: 1,
-  #                label: nil
-  #              },
-  #              %Graph.Edge{
-  #                v1: Module11,
-  #                v2: {Module11, :__hologram_route__, 0},
-  #                weight: 1,
-  #                label: nil
-  #              }
-  #            ]
-  #   end
-
-  #   test "remote function call ir, module field as an atom", %{call_graph: call_graph} do
-  #     ir = %IR.RemoteFunctionCall{
-  #       module: %IR.AtomType{value: Module5},
-  #       function: :my_fun_2,
-  #       args: [
-  #         %IR.AtomType{value: Module6},
-  #         %IR.AtomType{value: Module7},
-  #         %IR.AtomType{value: Module8}
-  #       ]
-  #     }
-
-  #     assert ^call_graph = build(call_graph, ir, {Module1, :my_fun_1, 4})
-
-  #     assert sorted_vertices(call_graph) == [
-  #              Module6,
-  #              Module7,
-  #              Module8,
-  #              {Module1, :my_fun_1, 4},
-  #              {Module5, :my_fun_2, 3}
-  #            ]
-
-  #     assert sorted_edges(call_graph) == [
-  #              %Graph.Edge{
-  #                v1: {Module1, :my_fun_1, 4},
-  #                v2: Module6,
-  #                weight: 1,
-  #                label: nil
-  #              },
-  #              %Graph.Edge{
-  #                v1: {Module1, :my_fun_1, 4},
-  #                v2: Module7,
-  #                weight: 1,
-  #                label: nil
-  #              },
-  #              %Graph.Edge{
-  #                v1: {Module1, :my_fun_1, 4},
-  #                v2: Module8,
-  #                weight: 1,
-  #                label: nil
-  #              },
-  #              %Graph.Edge{
-  #                v1: {Module1, :my_fun_1, 4},
-  #                v2: {Module5, :my_fun_2, 3},
-  #                weight: 1,
-  #                label: nil
-  #              }
-  #            ]
-  #   end
-
-  #   test "remote function call ir, module field is a variable", %{call_graph: call_graph} do
-  #     ir = %IR.RemoteFunctionCall{
-  #       module: %IR.Variable{name: :my_var},
-  #       function: :my_fun_2,
-  #       args: [
-  #         %IR.AtomType{value: Module6},
-  #         %IR.AtomType{value: Module7},
-  #         %IR.AtomType{value: Module8}
-  #       ]
-  #     }
-
-  #     assert ^call_graph = build(call_graph, ir, {Module1, :my_fun_1, 4})
-
-  #     assert sorted_vertices(call_graph) == [
-  #              Module6,
-  #              Module7,
-  #              Module8,
-  #              {Module1, :my_fun_1, 4}
-  #            ]
-
-  #     assert sorted_edges(call_graph) == [
-  #              %Graph.Edge{
-  #                v1: {Module1, :my_fun_1, 4},
-  #                v2: Module6,
-  #                weight: 1,
-  #                label: nil
-  #              },
-  #              %Graph.Edge{
-  #                v1: {Module1, :my_fun_1, 4},
-  #                v2: Module7,
-  #                weight: 1,
-  #                label: nil
-  #              },
-  #              %Graph.Edge{
-  #                v1: {Module1, :my_fun_1, 4},
-  #                v2: Module8,
-  #                weight: 1,
-  #                label: nil
-  #              }
-  #            ]
-  #   end
-
-  #   test "remote function call using Kernel.apply/3, module and function fields are both atoms",
-  #        %{
-  #          call_graph: call_graph
-  #        } do
-  #     ir = %IR.RemoteFunctionCall{
-  #       module: %IR.AtomType{value: :erlang},
-  #       function: :apply,
-  #       args: [
-  #         %IR.AtomType{value: DateTime},
-  #         %IR.AtomType{value: :utc_now},
-  #         %IR.ListType{
-  #           data: [%IR.AtomType{value: Calendar.ISO}]
-  #         }
-  #       ]
-  #     }
-
-  #     assert ^call_graph = build(call_graph, ir, {Module1, :my_fun_1, 4})
-
-  #     assert sorted_vertices(call_graph) == [
-  #              Calendar.ISO,
-  #              {DateTime, :utc_now, 1},
-  #              {Module1, :my_fun_1, 4}
-  #            ]
-
-  #     assert sorted_edges(call_graph) == [
-  #              %Graph.Edge{
-  #                v1: {Module1, :my_fun_1, 4},
-  #                v2: Calendar.ISO,
-  #                weight: 1,
-  #                label: nil
-  #              },
-  #              %Graph.Edge{
-  #                v1: {Module1, :my_fun_1, 4},
-  #                v2: {DateTime, :utc_now, 1},
-  #                weight: 1,
-  #                label: nil
-  #              }
-  #            ]
-  #   end
-
-  #   test "remote function call using Kernel.apply/3, module field is an atom, function field is not an atom",
-  #        %{
-  #          call_graph: call_graph
-  #        } do
-  #     ir = %IR.RemoteFunctionCall{
-  #       module: %IR.AtomType{value: :erlang},
-  #       function: :apply,
-  #       args: [
-  #         %IR.AtomType{value: DateTime},
-  #         %IR.Variable{name: :my_fun},
-  #         %IR.ListType{
-  #           data: [%IR.AtomType{value: Calendar.ISO}]
-  #         }
-  #       ]
-  #     }
-
-  #     assert ^call_graph = build(call_graph, ir, {Module1, :my_fun_1, 4})
-
-  #     assert sorted_vertices(call_graph) == [
-  #              Calendar.ISO,
-  #              DateTime,
-  #              {Module1, :my_fun_1, 4},
-  #              {:erlang, :apply, 3}
-  #            ]
-
-  #     assert sorted_edges(call_graph) == [
-  #              %Graph.Edge{
-  #                v1: {Module1, :my_fun_1, 4},
-  #                v2: Calendar.ISO,
-  #                weight: 1,
-  #                label: nil
-  #              },
-  #              %Graph.Edge{
-  #                v1: {Module1, :my_fun_1, 4},
-  #                v2: DateTime,
-  #                weight: 1,
-  #                label: nil
-  #              },
-  #              %Graph.Edge{
-  #                v1: {Module1, :my_fun_1, 4},
-  #                v2: {:erlang, :apply, 3},
-  #                weight: 1,
-  #                label: nil
-  #              }
-  #            ]
-  #   end
-
-  #   test "remote function call using Kernel.apply/3, module field is not an atom, function field is an atom",
-  #        %{
-  #          call_graph: call_graph
-  #        } do
-  #     ir = %IR.RemoteFunctionCall{
-  #       module: %IR.AtomType{value: :erlang},
-  #       function: :apply,
-  #       args: [
-  #         %IR.Variable{name: :module},
-  #         %IR.AtomType{value: :utc_now},
-  #         %IR.ListType{
-  #           data: [%IR.AtomType{value: Calendar.ISO}]
-  #         }
-  #       ]
-  #     }
-
-  #     assert ^call_graph = build(call_graph, ir, {Module1, :my_fun_1, 4})
-
-  #     assert sorted_vertices(call_graph) == [
-  #              Calendar.ISO,
-  #              {Module1, :my_fun_1, 4},
-  #              {:erlang, :apply, 3}
-  #            ]
-
-  #     assert sorted_edges(call_graph) == [
-  #              %Graph.Edge{
-  #                v1: {Module1, :my_fun_1, 4},
-  #                v2: Calendar.ISO,
-  #                weight: 1,
-  #                label: nil
-  #              },
-  #              %Graph.Edge{
-  #                v1: {Module1, :my_fun_1, 4},
-  #                v2: {:erlang, :apply, 3},
-  #                weight: 1,
-  #                label: nil
-  #              }
-  #            ]
-  #   end
-
-  #   test "tuple", %{call_graph: call_graph} do
-  #     tuple = {%IR.AtomType{value: Module1}, %IR.AtomType{value: Module5}}
-  #     assert ^call_graph = build(call_graph, tuple, :vertex_1)
-
-  #     assert sorted_vertices(call_graph) == [Module1, Module5, :vertex_1]
-
-  #     assert sorted_edges(call_graph) == [
-  #              %Graph.Edge{
-  #                v1: :vertex_1,
-  #                v2: Module1,
-  #                weight: 1,
-  #                label: nil
-  #              },
-  #              %Graph.Edge{
-  #                v1: :vertex_1,
-  #                v2: Module5,
-  #                weight: 1,
-  #                label: nil
-  #              }
-  #            ]
-  #   end
-  # end
-
-  # describe "start/1" do
-  #   test "returns CallGraph struct with name from opts" do
-  #     assert %CallGraph{name: @call_graph_name_2} = start(name: @call_graph_name_2)
-  #   end
-
-  #   test "process name is registered" do
-  #     %CallGraph{pid: pid} = start(name: @call_graph_name_2)
-  #     assert Process.whereis(@call_graph_name_2) == pid
-  #   end
-
-  #   test "graph is loaded from file when dump_path is given in opts and dump file exists", %{
-  #     call_graph: call_graph
-  #   } do
-  #     %{call_graph | dump_path: @call_graph_dump_path}
-  #     |> add_vertex(:vertex_2)
-  #     |> dump()
-
-  #     call_graph_2 = start(name: @call_graph_name_2, dump_path: @call_graph_dump_path)
-  #     assert vertices(call_graph_2) == [:vertex_2]
-  #   end
-
-  #   test "graph is not loaded from file when dump_path is not given in opts" do
-  #     call_graph = start(name: @call_graph_name_2)
-  #     assert vertices(call_graph) == []
-  #   end
-
-  #   test "graph is not loaded from file when dump_path is given in opts but dump file doesn't exist" do
-  #     call_graph = start(name: @call_graph_name_2, dump_path: @call_graph_dump_path)
-  #     assert vertices(call_graph) == []
-  #   end
-  # end
 end
