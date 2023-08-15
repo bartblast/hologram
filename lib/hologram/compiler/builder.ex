@@ -1,10 +1,10 @@
 defmodule Hologram.Compiler.Builder do
   # alias Hologram.Commons.CryptographicUtils
-  # alias Hologram.Commons.PLT
-  # alias Hologram.Compiler.CallGraph
+  alias Hologram.Commons.PLT
+  alias Hologram.Compiler.CallGraph
   # alias Hologram.Compiler.Context
   # alias Hologram.Compiler.Encoder
-  # alias Hologram.Compiler.IR
+  alias Hologram.Compiler.IR
   # alias Hologram.Compiler.Reflection
 
   # @doc """
@@ -226,74 +226,63 @@ defmodule Hologram.Compiler.Builder do
   #   Enum.group_by(mfas, fn {module, _function, _arity} -> module end)
   # end
 
-  # @doc """
-  # Lists MFAs ({module, function, arity} tuples) required by the runtime JS script.
-  # """
-  # @spec list_runtime_mfas(CallGraph.t()) :: list(mfa)
-  # def list_runtime_mfas(call_graph) do
-  #   # These Elixir functions are used directly by the JS runtime:
-  #   entry_mfas = [
-  #     # Interpreter.comprehension()
-  #     {Enum, :into, 2},
+  @doc """
+  Lists MFAs ({module, function, arity} tuples) required by the runtime JS script.
+  """
+  @spec list_runtime_mfas(CallGraph.t()) :: list(mfa)
+  def list_runtime_mfas(call_graph) do
+    # These Elixir functions are used directly by the JS runtime:
+    entry_mfas = [
+      # Interpreter.comprehension()
+      {Enum, :into, 2},
 
-  #     # Interpreter.comprehension()
-  #     {Enum, :to_list, 1},
+      # Interpreter.comprehension()
+      {Enum, :to_list, 1},
 
-  #     # Hologram.inspect()
-  #     {Kernel, :inspect, 2},
+      # Hologram.inspect()
+      {Kernel, :inspect, 2},
 
-  #     # Hologram.raiseError()
-  #     {:erlang, :error, 1},
+      # Hologram.raiseError()
+      {:erlang, :error, 1},
 
-  #     # Interpreter.#matchConsPattern()
-  #     {:erlang, :hd, 1},
+      # Interpreter.#matchConsPattern()
+      {:erlang, :hd, 1},
 
-  #     # Interpreter.#matchConsPattern()
-  #     {:erlang, :tl, 1},
+      # Interpreter.#matchConsPattern()
+      {:erlang, :tl, 1},
 
-  #     # Interpreter.dotOperator()
-  #     {:maps, :get, 2}
-  #   ]
+      # Interpreter.dotOperator()
+      {:maps, :get, 2}
+    ]
 
-  #   # Add call graph edges for Erlang functions depending on other Erlang functions.
-  #   CallGraph.add_edge(call_graph, {:erlang, :"/=", 2}, {:erlang, :==, 2})
-  #   CallGraph.add_edge(call_graph, {:erlang, :error, 1}, {:erlang, :error, 2})
+    # Add call graph edges for Erlang functions depending on other Erlang functions.
+    CallGraph.add_edge(call_graph, {:erlang, :"/=", 2}, {:erlang, :==, 2})
+    CallGraph.add_edge(call_graph, {:erlang, :error, 1}, {:erlang, :error, 2})
 
-  #   call_graph
-  #   |> CallGraph.reachable_mfas(entry_mfas)
-  #   |> Enum.uniq()
-  #   |> Enum.sort()
-  # end
+    call_graph
+    |> CallGraph.reachable_mfas(entry_mfas)
+    |> Enum.uniq()
+    |> Enum.sort()
+  end
 
-  # @doc """
-  # Given a diff of changes, updates the IR persistent lookup table (PLT)
-  # by deleting entries for modules that have been removed,
-  # rebuilding the IR of modules that have been updated,
-  # and adding the IR of new modules.
+  @doc """
+  Given a diff of changes, updates the IR persistent lookup table (PLT)
+  by deleting entries for modules that have been removed,
+  rebuilding the IR of modules that have been updated,
+  and adding the IR of new modules.
+  """
+  @spec patch_ir_plt(PLT.t(), map) :: PLT.t()
+  def patch_ir_plt(ir_plt, diff) do
+    diff.removed_modules
+    |> Task.async_stream(&PLT.delete(ir_plt, &1))
+    |> Stream.run()
 
-  # ## Examples
+    (diff.updated_modules ++ diff.added_modules)
+    |> Task.async_stream(&rebuild_ir_plt_entry(ir_plt, &1))
+    |> Stream.run()
 
-  #     iex> plt = %PLT{pid: #PID<0.251.0>, name: :plt_abc}
-  #     iex> diff = %{
-  #     ...>   added_modules: [Module1, Module2],
-  #     ...>   removed_modules: [Module5, Module6],
-  #     ...>   updated_modules: [Module3, Module4]
-  #     ...> }
-  #     iex> patch_ir_plt(plt, diff)
-  #     %PLT{pid: #PID<0.251.0>, name: :plt_abc}
-  # """
-  # @spec patch_ir_plt(PLT.t(), map) :: PLT.t()
-  # def patch_ir_plt(ir_plt, diff) do
-  #   diff.removed_modules
-  #   |> Task.async_stream(&PLT.delete(ir_plt, &1))
-  #   |> Stream.run()
-
-  #   (diff.updated_modules ++ diff.added_modules)
-  #   |> Task.async_stream(&rebuild_ir_plt_entry(ir_plt, &1))
-  #   |> Stream.run()
-
-  #   ir_plt
-  # end
+    ir_plt
+  end
 
   # @doc """
   # Keeps in the body of module definition IR only those expressions that are function definitions of reachable functions.
@@ -353,9 +342,9 @@ defmodule Hologram.Compiler.Builder do
   #   |> MapSet.new()
   # end
 
-  # defp rebuild_ir_plt_entry(plt, module) do
-  #   PLT.put(plt, module, IR.for_module(module))
-  # end
+  defp rebuild_ir_plt_entry(plt, module) do
+    PLT.put(plt, module, IR.for_module(module))
+  end
 
   # defp rebuild_module_digest_plt_entry(plt, module) do
   #   data =
