@@ -50,15 +50,18 @@ defmodule Hologram.Compiler.ReflectionTest do
   end
 
   test "list_elixir_modules/1" do
-    result = list_elixir_modules([:hologram, :dialyzer, :sobelow])
+    result = list_elixir_modules([:elixir, :dialyzer, :hologram, :sobelow])
 
-    assert Mix.Tasks.Sobelow in result
-    assert Sobelow.CI in result
-    assert Mix.Tasks.Holo.Test.CheckFileNames in result
+    assert Calendar.ISO in result
     assert Hologram.Template.Tokenizer in result
+    assert Mix.Tasks.Holo.Test.CheckFileNames in result
+    assert Sobelow.CI in result
+    assert Mix.Tasks.Sobelow in result
 
+    refute :elixir_map in result
     refute :dialyzer in result
-    refute :typer_core in result
+
+    refute Kernel.SpecialForms in result
   end
 
   test "list_loaded_otp_apps/0" do
@@ -82,8 +85,9 @@ defmodule Hologram.Compiler.ReflectionTest do
     refute :kernel in result
 
     refute Graph in result
-    refute Kernel.SpecialForms in result
     refute Hologram.Page in result
+
+    refute Kernel.SpecialForms in result
   end
 
   describe "module?/1" do

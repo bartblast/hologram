@@ -51,7 +51,7 @@ defmodule Hologram.Compiler.Reflection do
 
   @doc """
   Lists Elixir modules belonging to the given OTP apps.
-  Erlang modules are filtered out.
+  Kernel.SpecialForms and Erlang modules are filtered out.
 
   ## Examples
 
@@ -77,6 +77,7 @@ defmodule Hologram.Compiler.Reflection do
       |> Kernel.++(acc)
     end)
     |> Enum.filter(&alias?/1)
+    |> Kernel.--([Kernel.SpecialForms])
   end
 
   @doc """
@@ -85,9 +86,7 @@ defmodule Hologram.Compiler.Reflection do
   """
   @spec list_std_lib_elixir_modules() :: list(module)
   def list_std_lib_elixir_modules do
-    [:elixir]
-    |> list_elixir_modules()
-    |> Kernel.--([Kernel.SpecialForms])
+    list_elixir_modules([:elixir])
   end
 
   @doc """
