@@ -104,11 +104,11 @@ defmodule Hologram.Compiler.Builder do
        "priv/static/assets/my_script.caf8f4e27584852044eb27a37c5eddfd.js",
        "priv/static/assets/my_script.caf8f4e27584852044eb27a37c5eddfd.js.map"}
   """
-  @spec bundle(String.t(), String.t(), String.t(), String.t()) ::
+  @spec bundle(String.t(), String.t(), String.t(), String.t(), String.t()) ::
           {String.t(), String.t(), String.t()}
   # sobelow_skip ["CI.System"]
-  def bundle(js, name, esbuild_path, bundle_dir) do
-    entry_file = Reflection.tmp_path() <> "/#{name}.entry.js"
+  def bundle(js, name, esbuild_path, tmp_dir, bundle_dir) do
+    entry_file = tmp_dir <> "/#{name}.entry.js"
     File.write!(entry_file, js)
 
     bundle_file = "#{bundle_dir}/#{name}.js"

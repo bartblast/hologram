@@ -208,18 +208,19 @@ defmodule Hologram.Compiler.BuilderTest do
   end
 
   test "bundle/4" do
+    tmp_path = "#{Reflection.tmp_path()}/#{__MODULE__}.build.4"
+
     # setup
-    clean_tmp_dir()
+    clean_dir(tmp_path)
     install_lib_js_deps()
 
     esbuild_path = Reflection.root_path() <> "/assets/node_modules/.bin/esbuild"
-    tmp_path = Reflection.tmp_path()
 
     assert {_digest, bundle_file, source_map_file} =
              {"caf8f4e27584852044eb27a37c5eddfd",
-              "/Users/bartblast/Projects/hologram/tmp/my_script.caf8f4e27584852044eb27a37c5eddfd.js",
-              "/Users/bartblast/Projects/hologram/tmp/my_script.caf8f4e27584852044eb27a37c5eddfd.js.map"} =
-             bundle("const myVar = 123;", "my_script", esbuild_path, tmp_path)
+              "/Users/bartblast/Projects/hologram/tmp/Elixir.Hologram.Compiler.BuilderTest.build.4/my_script.caf8f4e27584852044eb27a37c5eddfd.js",
+              "/Users/bartblast/Projects/hologram/tmp/Elixir.Hologram.Compiler.BuilderTest.build.4/my_script.caf8f4e27584852044eb27a37c5eddfd.js.map"} =
+             bundle("const myVar = 123;", "my_script", esbuild_path, tmp_path, tmp_path)
 
     assert File.read!(bundle_file) == """
            (()=>{})();
