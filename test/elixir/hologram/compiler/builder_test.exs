@@ -179,33 +179,33 @@ defmodule Hologram.Compiler.BuilderTest do
            """
   end
 
-  # test "build_runtime_js/3" do
-  #   call_graph = CallGraph.start(name: @call_graph_name_1)
-  #   ir_plt = PLT.start(name: @plt_name_1)
-  #   modules = Reflection.list_std_lib_elixir_modules()
+  test "build_runtime_js/3" do
+    call_graph = CallGraph.start()
+    ir_plt = PLT.start()
+    modules = Reflection.list_std_lib_elixir_modules()
 
-  #   Enum.each(modules, fn module ->
-  #     ir = IR.for_module(module)
-  #     CallGraph.build(call_graph, ir)
-  #     PLT.put(ir_plt, module, ir)
-  #   end)
+    Enum.each(modules, fn module ->
+      ir = IR.for_module(module)
+      CallGraph.build(call_graph, ir)
+      PLT.put(ir_plt, module, ir)
+    end)
 
-  #   js = build_runtime_js(@source_dir, call_graph, ir_plt)
+    js = build_runtime_js(@source_dir, call_graph, ir_plt)
 
-  #   assert String.contains?(js, ~s/Interpreter.defineElixirFunction("Elixir_Enum", "into", 2/)
+    assert String.contains?(js, ~s/Interpreter.defineElixirFunction("Elixir_Enum", "into", 2/)
 
-  #   assert String.contains?(
-  #            js,
-  #            ~s/Interpreter.defineElixirFunction("Elixir_Enum", "into_protocol", 2/
-  #          )
+    assert String.contains?(
+             js,
+             ~s/Interpreter.defineElixirFunction("Elixir_Enum", "into_protocol", 2/
+           )
 
-  #   assert String.contains?(js, ~s/Interpreter.defineErlangFunction("Erlang", "error", 1/)
+    assert String.contains?(js, ~s/Interpreter.defineErlangFunction("Erlang", "error", 1/)
 
-  #   assert String.contains?(
-  #            js,
-  #            ~s/Interpreter.defineNotImplementedErlangFunction("lists", "foldl", 3/
-  #          )
-  # end
+    assert String.contains?(
+             js,
+             ~s/Interpreter.defineNotImplementedErlangFunction("lists", "foldl", 3/
+           )
+  end
 
   # test "bundle/4" do
   #   # setup

@@ -72,25 +72,25 @@ defmodule Hologram.Compiler.Builder do
     """
   end
 
-  # @doc """
-  # Builds Hologram runtime JavaScript source code.
-  # """
-  # @spec build_runtime_js(String.t(), CallGraph.t(), PLT.t()) :: String.t()
-  # def build_runtime_js(source_dir, call_graph, ir_plt) do
-  #   mfas = list_runtime_mfas(call_graph)
+  @doc """
+  Builds Hologram runtime JavaScript source code.
+  """
+  @spec build_runtime_js(String.t(), CallGraph.t(), PLT.t()) :: String.t()
+  def build_runtime_js(source_dir, call_graph, ir_plt) do
+    mfas = list_runtime_mfas(call_graph)
 
-  #   """
-  #   "use strict";
+    """
+    "use strict";
 
-  #   import Hologram from "#{source_dir}/hologram.mjs"
-  #   import Interpreter from "#{source_dir}/interpreter.mjs"
-  #   import Type from "#{source_dir}/interpreter.mjs"
+    import Hologram from "#{source_dir}/hologram.mjs"
+    import Interpreter from "#{source_dir}/interpreter.mjs"
+    import Type from "#{source_dir}/interpreter.mjs"
 
-  #   #{render_erlang_function_defs(mfas, "#{source_dir}/erlang")}
+    #{render_erlang_function_defs(mfas, "#{source_dir}/erlang")}
 
-  #   #{render_elixir_function_defs(mfas, ir_plt)}\
-  #   """
-  # end
+    #{render_elixir_function_defs(mfas, ir_plt)}\
+    """
+  end
 
   # @doc """
   # Bundles the given JavaScript code into a JavaScript file and its source map.
