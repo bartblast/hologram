@@ -24,7 +24,7 @@ defmodule Hologram.Commons.PLT do
   @doc """
   Serializes the contents of the given PLT's ETS table and writes it to a file.
   """
-  @spec dump(PLT.t(), String.t()) :: CallGraph.t()
+  @spec dump(PLT.t(), String.t()) :: PLT.t()
   def dump(plt, path) do
     data =
       plt
