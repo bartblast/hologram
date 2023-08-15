@@ -81,10 +81,10 @@ defmodule Hologram.Compiler.BuilderTest do
     end
   end
 
-  # test "build_module_digest_plt/0" do
-  #   assert %PLT{} = plt = build_module_digest_plt()
-  #   assert {:ok, <<_digest::256>>} = PLT.get(plt, Hologram.Compiler.Builder)
-  # end
+  test "build_module_digest_plt/0" do
+    assert %PLT{} = plt = build_module_digest_plt()
+    assert {:ok, <<_digest::256>>} = PLT.get(plt, Hologram.Compiler.Builder)
+  end
 
   # test "build_page_js/3" do
   #   module_8_ir = IR.for_module(Module8)

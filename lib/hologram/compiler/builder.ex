@@ -1,11 +1,11 @@
 defmodule Hologram.Compiler.Builder do
-  # alias Hologram.Commons.CryptographicUtils
+  alias Hologram.Commons.CryptographicUtils
   alias Hologram.Commons.PLT
   alias Hologram.Compiler.CallGraph
   # alias Hologram.Compiler.Context
   alias Hologram.Compiler.Encoder
   alias Hologram.Compiler.IR
-  # alias Hologram.Compiler.Reflection
+  alias Hologram.Compiler.Reflection
 
   @doc """
   Extracts JavaScript source code for the given ported Erlang function and generates interpreter function definition JavaScript statetement.
@@ -35,21 +35,21 @@ defmodule Hologram.Compiler.Builder do
     end
   end
 
-  # @doc """
-  # Builds a persistent lookup table (PLT) containing the BEAM defs digests for all the modules in the project.
-  # """
-  # @spec build_module_digest_plt() :: PLT.t()
-  # def build_module_digest_plt do
-  #   plt = PLT.start()
+  @doc """
+  Builds a persistent lookup table (PLT) containing the BEAM defs digests for all the modules in the project.
+  """
+  @spec build_module_digest_plt() :: PLT.t()
+  def build_module_digest_plt do
+    plt = PLT.start()
 
-  #   Reflection.list_loaded_otp_apps()
-  #   |> Kernel.--([:hex])
-  #   |> Reflection.list_elixir_modules()
-  #   |> Task.async_stream(&rebuild_module_digest_plt_entry(plt, &1))
-  #   |> Stream.run()
+    Reflection.list_loaded_otp_apps()
+    |> Kernel.--([:hex])
+    |> Reflection.list_elixir_modules()
+    |> Task.async_stream(&rebuild_module_digest_plt_entry(plt, &1))
+    |> Stream.run()
 
-  #   plt
-  # end
+    plt
+  end
 
   # @doc """
   # Builds JavaScript code for the given Hologram page.
@@ -346,15 +346,15 @@ defmodule Hologram.Compiler.Builder do
     PLT.put(plt, module, IR.for_module(module))
   end
 
-  # defp rebuild_module_digest_plt_entry(plt, module) do
-  #   data =
-  #     module
-  #     |> Reflection.module_beam_defs()
-  #     |> :erlang.term_to_binary(compressed: 0)
+  defp rebuild_module_digest_plt_entry(plt, module) do
+    data =
+      module
+      |> Reflection.module_beam_defs()
+      |> :erlang.term_to_binary(compressed: 0)
 
-  #   digest = CryptographicUtils.digest(data, :sha256, :binary)
-  #   PLT.put(plt, module, digest)
-  # end
+    digest = CryptographicUtils.digest(data, :sha256, :binary)
+    PLT.put(plt, module, digest)
+  end
 
   # defp render_elixir_function_defs(mfas, ir_plt) do
   #   mfas
