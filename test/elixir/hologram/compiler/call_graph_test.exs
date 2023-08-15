@@ -871,9 +871,7 @@ defmodule Hologram.Compiler.CallGraphTest do
   end
 
   test "put_graph", %{call_graph: call_graph} do
-    graph =
-      Graph.new()
-      |> Graph.add_edge(:vertex_3, :vertex_4)
+    graph = Graph.add_edge(Graph.new(), :vertex_3, :vertex_4)
 
     assert put_graph(call_graph, graph) == call_graph
     assert get_graph(call_graph) == graph
