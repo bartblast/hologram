@@ -49,14 +49,29 @@ defmodule Hologram.Compiler.ReflectionTest do
     end
   end
 
-  test "list_elixir_modules/1" do
-    result = list_elixir_modules([:dialyzer, :elixir, :hologram, :sobelow])
+  test "list_elixir_modules/0" do
+    result = list_elixir_modules()
 
     assert Calendar.ISO in result
     assert Hologram.Template.Tokenizer in result
     assert Mix.Tasks.Holo.Test.CheckFileNames in result
     assert Sobelow.CI in result
     assert Mix.Tasks.Sobelow in result
+
+    refute :elixir_map in result
+    refute :dialyzer in result
+
+    refute Kernel.SpecialForms in result
+  end
+
+  test "list_elixir_modules/1" do
+    result = list_elixir_modules([:elixir, :hologram])
+
+    assert Calendar.ISO in result
+    assert Hologram.Template.Tokenizer in result
+    assert Mix.Tasks.Holo.Test.CheckFileNames in result
+    refute Sobelow.CI in result
+    refute Mix.Tasks.Sobelow in result
 
     refute :elixir_map in result
     refute :dialyzer in result

@@ -50,22 +50,19 @@ defmodule Hologram.Compiler.Reflection do
   end
 
   @doc """
+  Lists Elixir modules belonging to OTP apps used by the project (except :hex).
+  Kernel.SpecialForms and Erlang modules are filtered out.
+  """
+  @spec list_elixir_modules() :: list(module)
+  def list_elixir_modules do
+    list_loaded_otp_apps()
+    |> Kernel.--([:hex])
+    |> list_elixir_modules()
+  end
+
+  @doc """
   Lists Elixir modules belonging to the given OTP apps.
   Kernel.SpecialForms and Erlang modules are filtered out.
-
-  ## Examples
-
-    iex> list_elixir_modules([:hologram, :dialyzer, :sobelow])
-    [
-      Mix.Tasks.Sobelow,
-      Sobelow,
-      Sobelow.CI,
-      ...,
-      Mix.Tasks.Holo.Test.CheckFileNames,
-      Hologram.Commons.FileUtils,
-      Hologram.Template.Tokenizer,
-      ...
-    ]
   """
   @spec list_elixir_modules(list(atom)) :: list(module)
   def list_elixir_modules(apps) do
