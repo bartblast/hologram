@@ -220,6 +220,19 @@ defmodule Hologram.Compiler.CallGraph do
   end
 
   @doc """
+  Loads the graph from the given dump file.
+  """
+  @spec load(CallGraph.t(), String.t()) :: CallGraph.t()
+  def load(call_graph, dump_path) do
+    graph =
+      dump_path
+      |> File.read!()
+      |> SerializationUtils.deserialize()
+
+    put_graph(call_graph, graph)
+  end
+
+  @doc """
   Returns the list of vertices that are MFAs belonging to the given module.
   """
   @spec module_vertices(CallGraph.t(), module) :: list(vertex)

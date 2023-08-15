@@ -712,6 +712,16 @@ defmodule Hologram.Compiler.CallGraphTest do
            ]
   end
 
+  test "load/2", %{call_graph: call_graph} do
+    add_edge(call_graph, :vertex_1, :vertex_2)
+    dump(call_graph, @dump_path)
+
+    call_graph_2 = start()
+
+    assert load(call_graph_2, @dump_path) == call_graph_2
+    assert get_graph(call_graph_2) == get_graph(call_graph)
+  end
+
   test "module_vertices/2", %{call_graph: call_graph} do
     call_graph
     |> add_vertex({:module_1, :fun_a, :arity_a})

@@ -77,6 +77,7 @@ defmodule Hologram.Commons.PLTTest do
     dump(plt, @dump_path)
 
     plt_2 = start()
+
     assert load(plt_2, @dump_path) == plt_2
     assert get_all(plt_2) == Enum.into(@items, %{})
   end
