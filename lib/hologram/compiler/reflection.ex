@@ -50,7 +50,7 @@ defmodule Hologram.Compiler.Reflection do
   end
 
   @doc """
-  Lists Elixir modules belonging to OTP apps used by the project (except :hex).
+  Lists Elixir modules belonging to any of the OTP apps used by the project (except :hex).
   Kernel.SpecialForms and Erlang modules are filtered out.
   """
   @spec list_elixir_modules() :: list(module)
