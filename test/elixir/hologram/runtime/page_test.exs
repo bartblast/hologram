@@ -4,13 +4,14 @@ defmodule Hologram.Runtime.PageTest do
   alias Hologram.Test.Fixtures.Runtime.Page.Module1
   alias Hologram.Test.Fixtures.Runtime.Page.Module2
   alias Hologram.Test.Fixtures.Runtime.Page.Module3
+  alias Hologram.Test.Fixtures.Runtime.Page.Module4
 
   test "__is_hologram_page__/0" do
     assert Module1.__is_hologram_page__()
   end
 
   test "__hologram_layout_module__/0" do
-    assert Module1.__hologram_layout_module__() == MyLayout
+    assert Module1.__hologram_layout_module__() == Module4
   end
 
   describe "__hologram_layout_props__/0" do

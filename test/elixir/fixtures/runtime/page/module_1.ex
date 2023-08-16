@@ -3,5 +3,5 @@ defmodule Hologram.Test.Fixtures.Runtime.Page.Module1 do
 
   route "/my_path"
 
-  layout MyLayout
+  layout Hologram.Test.Fixtures.Runtime.Page.Module4
 end
