@@ -82,8 +82,7 @@ defmodule Hologram.Compiler.Reflection do
   """
   @spec list_pages() :: list(module)
   def list_pages do
-    list_elixir_modules()
-    |> Enum.filter(&page?/1)
+    Enum.filter(list_elixir_modules(), &page?/1)
   end
 
   @doc """
