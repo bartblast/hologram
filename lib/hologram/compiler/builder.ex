@@ -96,8 +96,7 @@ defmodule Hologram.Compiler.Builder do
 
   ## Examples
 
-      iex> js = "const myVar = 123;"
-      iex> bundle(js, "my_script", "assets/node_modules/esbuild", "priv/static/assets")
+      iex> bundle(js, opts)
       {"caf8f4e27584852044eb27a37c5eddfd",
        "priv/static/assets/my_script.caf8f4e27584852044eb27a37c5eddfd.js",
        "priv/static/assets/my_script.caf8f4e27584852044eb27a37c5eddfd.js.map"}
