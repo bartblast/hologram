@@ -21,6 +21,11 @@ defmodule Hologram.Compiler.BuilderTest do
   @source_dir Reflection.root_path() <> "/assets/js"
   @erlang_source_dir "#{@source_dir}/erlang"
 
+  setup_all do
+    install_lib_js_deps()
+    :ok
+  end
+
   describe "build_erlang_function_definition/4" do
     test ":erlang module function that is implemented" do
       output = build_erlang_function_definition(:erlang, :+, 2, @erlang_source_dir)
@@ -207,36 +212,47 @@ defmodule Hologram.Compiler.BuilderTest do
            )
   end
 
-  test "bundle/4" do
-    tmp_path = "#{Reflection.tmp_path()}/#{__MODULE__}.build.4"
+  describe "bundle/4" do
+    @esbuild_path Reflection.root_path() <> "/assets/node_modules/.bin/esbuild"
+    @js "const myVar = 123;"
+    @name "my_script"
+    @tmp_path "#{Reflection.tmp_path()}/#{__MODULE__}.build.4"
 
-    # setup
-    clean_dir(tmp_path)
-    install_lib_js_deps()
+    setup do
+      clean_dir(@tmp_path)
+      :ok
+    end
 
-    js = "const myVar = 123;"
-    name = "my_script"
-    esbuild_path = Reflection.root_path() <> "/assets/node_modules/.bin/esbuild"
+    test "creates tmp and bundle nested path dirs if they don't exist" do
+      tmp_dir = "#{@tmp_path}/nested_1/nested_2/nested_3"
+      bundle_dir = "#{@tmp_path}/nested_4/nested_5/nested_6"
 
-    assert bundle(js, name, esbuild_path, tmp_path, tmp_path) ==
-             {"caf8f4e27584852044eb27a37c5eddfd",
-              bundle_file = "#{tmp_path}/my_script.caf8f4e27584852044eb27a37c5eddfd.js",
-              source_map_file = "#{tmp_path}/my_script.caf8f4e27584852044eb27a37c5eddfd.js.map"}
+      assert bundle(@js, @name, @esbuild_path, tmp_dir, bundle_dir)
+      assert File.exists?(tmp_dir)
+      assert File.exists?(bundle_dir)
+    end
 
-    assert File.read!(bundle_file) == """
-           (()=>{})();
-           //# sourceMappingURL=my_script.caf8f4e27584852044eb27a37c5eddfd.js.map
-           """
+    test "bundles files" do
+      assert bundle(@js, @name, @esbuild_path, @tmp_path, @tmp_path) ==
+               {"caf8f4e27584852044eb27a37c5eddfd",
+                bundle_file = "#{@tmp_path}/my_script.caf8f4e27584852044eb27a37c5eddfd.js",
+                source_map_file = "#{@tmp_path}/my_script.caf8f4e27584852044eb27a37c5eddfd.js.map"}
 
-    assert File.read!(source_map_file) == """
-           {
-             "version": 3,
-             "sources": [],
-             "sourcesContent": [],
-             "mappings": "",
-             "names": []
-           }
-           """
+      assert File.read!(bundle_file) == """
+             (()=>{})();
+             //# sourceMappingURL=my_script.caf8f4e27584852044eb27a37c5eddfd.js.map
+             """
+
+      assert File.read!(source_map_file) == """
+             {
+               "version": 3,
+               "sources": [],
+               "sourcesContent": [],
+               "mappings": "",
+               "names": []
+             }
+             """
+    end
   end
 
   describe "diff_module_digest_plts/2" do

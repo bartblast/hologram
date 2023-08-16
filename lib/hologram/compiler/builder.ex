@@ -42,9 +42,7 @@ defmodule Hologram.Compiler.Builder do
   def build_module_digest_plt do
     plt = PLT.start()
 
-    Reflection.list_loaded_otp_apps()
-    |> Kernel.--([:hex])
-    |> Reflection.list_elixir_modules()
+    Reflection.list_elixir_modules()
     |> Task.async_stream(&rebuild_module_digest_plt_entry(plt, &1))
     |> Stream.run()
 
@@ -55,8 +53,8 @@ defmodule Hologram.Compiler.Builder do
   Builds JavaScript code for the given Hologram page.
   """
   @spec build_page_js(module, CallGraph.t(), PLT.t(), String.t()) :: String.t()
-  def build_page_js(page, call_graph, ir_plt, source_dir) do
-    mfas = list_page_mfas(call_graph, page)
+  def build_page_js(page_module, call_graph, ir_plt, source_dir) do
+    mfas = list_page_mfas(call_graph, page_module)
     erlang_source_dir = source_dir <> "/erlang"
 
     """
@@ -108,6 +106,9 @@ defmodule Hologram.Compiler.Builder do
           {String.t(), String.t(), String.t()}
   # sobelow_skip ["CI.System"]
   def bundle(js, name, esbuild_path, tmp_dir, bundle_dir) do
+    File.mkdir_p!(tmp_dir)
+    File.mkdir_p!(bundle_dir)
+
     entry_file = tmp_dir <> "/#{name}.entry.js"
     File.write!(entry_file, js)
 
