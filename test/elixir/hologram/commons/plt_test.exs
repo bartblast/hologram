@@ -6,7 +6,9 @@ defmodule Hologram.Commons.PLTTest do
   alias Hologram.Commons.SerializationUtils
   alias Hologram.Compiler.Reflection
 
-  @dump_path Reflection.tmp_path() <> "/plt_#{__MODULE__}.bin"
+  @tmp_path Reflection.tmp_path()
+  @dump_dir "#{@tmp_path}/#{__MODULE__}"
+  @dump_file "#{@dump_dir}/test.plt"
 
   @items [
     {:my_key_1, :my_value_1},
@@ -20,7 +22,7 @@ defmodule Hologram.Commons.PLTTest do
   end
 
   setup do
-    File.rm(@dump_path)
+    clean_dir(@dump_dir)
     [plt: put(start(), @items)]
   end
 
@@ -36,15 +38,25 @@ defmodule Hologram.Commons.PLTTest do
     end
   end
 
-  test "dump/2", %{plt: plt} do
-    assert dump(plt, @dump_path) == plt
+  describe "dump/2" do
+    test "creates nested path dirs if they don't exist", %{plt: plt} do
+      dump_dir = "#{@dump_dir}/nested_1/_nested_2/nested_3"
+      dump_file = "#{dump_dir}/test.plt"
 
-    items =
-      @dump_path
-      |> File.read!()
-      |> SerializationUtils.deserialize()
+      assert dump(plt, dump_file) == plt
+      assert File.exists?(dump_dir)
+    end
 
-    assert items == Enum.into(@items, %{})
+    test "writes serialized items to the given file", %{plt: plt} do
+      assert dump(plt, @dump_file) == plt
+
+      items =
+        @dump_file
+        |> File.read!()
+        |> SerializationUtils.deserialize()
+
+      assert items == Enum.into(@items, %{})
+    end
   end
 
   describe "get/2" do
@@ -74,11 +86,11 @@ defmodule Hologram.Commons.PLTTest do
   end
 
   test "load/2", %{plt: plt} do
-    dump(plt, @dump_path)
+    dump(plt, @dump_file)
 
     plt_2 = start()
 
-    assert load(plt_2, @dump_path) == plt_2
+    assert load(plt_2, @dump_file) == plt_2
     assert get_all(plt_2) == Enum.into(@items, %{})
   end
 
@@ -89,17 +101,17 @@ defmodule Hologram.Commons.PLTTest do
         |> Enum.into(%{})
         |> SerializationUtils.serialize()
 
-      File.write!(@dump_path, data)
+      File.write!(@dump_file, data)
 
       plt = start()
-      assert maybe_load(plt, @dump_path) == plt
+      assert maybe_load(plt, @dump_file) == plt
 
       assert get_all(plt) == Enum.into(@items, %{})
     end
 
     test "dump file doesn't exist" do
       plt = start()
-      assert maybe_load(plt, @dump_path) == plt
+      assert maybe_load(plt, @dump_file) == plt
 
       assert get_all(plt) == %{}
     end

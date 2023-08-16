@@ -31,6 +31,7 @@ defmodule Hologram.Commons.PLT do
       |> get_all()
       |> SerializationUtils.serialize()
 
+    File.mkdir_p!(Path.dirname(path))
     File.write!(path, data)
 
     plt
