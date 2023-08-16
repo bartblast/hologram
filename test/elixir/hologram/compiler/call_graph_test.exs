@@ -20,10 +20,12 @@ defmodule Hologram.Compiler.CallGraphTest do
   alias Hologram.Test.Fixtures.Compiler.CallGraph.Module8
   alias Hologram.Test.Fixtures.Compiler.CallGraph.Module9
 
-  @dump_path Reflection.tmp_path() <> "/call_graph_#{__MODULE__}.bin"
+  @tmp_path Reflection.tmp_path()
+  @dump_dir "#{@tmp_path}/#{__MODULE__}"
+  @dump_file "#{@dump_dir}/test.bin"
 
   setup do
-    File.rm(@dump_path)
+    clean_dir(@dump_dir)
     [call_graph: start()]
   end
 
@@ -617,18 +619,28 @@ defmodule Hologram.Compiler.CallGraphTest do
     assert get_graph(call_graph) == get_graph(call_graph_clone)
   end
 
-  test "dump/2", %{call_graph: call_graph} do
-    add_edge(call_graph, :vertex_1, :vertex_2)
-    graph = get_graph(call_graph)
+  describe "dump/2" do
+    test "creates nested path dirs if they don't exist", %{call_graph: call_graph} do
+      dump_dir = "#{@dump_dir}/nested_1/_nested_2/nested_3"
+      dump_file = "#{dump_dir}/test.bin"
 
-    assert dump(call_graph, @dump_path) == call_graph
+      assert dump(call_graph, dump_file) == call_graph
+      assert File.exists?(dump_dir)
+    end
 
-    deserialized_graph =
-      @dump_path
-      |> File.read!()
-      |> SerializationUtils.deserialize()
+    test "writes serialized graph to the given file", %{call_graph: call_graph} do
+      add_edge(call_graph, :vertex_1, :vertex_2)
+      graph = get_graph(call_graph)
 
-    assert deserialized_graph == graph
+      assert dump(call_graph, @dump_file) == call_graph
+
+      deserialized_graph =
+        @dump_file
+        |> File.read!()
+        |> SerializationUtils.deserialize()
+
+      assert deserialized_graph == graph
+    end
   end
 
   test "edges/1", %{call_graph: call_graph} do
@@ -714,11 +726,11 @@ defmodule Hologram.Compiler.CallGraphTest do
 
   test "load/2", %{call_graph: call_graph} do
     add_edge(call_graph, :vertex_1, :vertex_2)
-    dump(call_graph, @dump_path)
+    dump(call_graph, @dump_file)
 
     call_graph_2 = start()
 
-    assert load(call_graph_2, @dump_path) == call_graph_2
+    assert load(call_graph_2, @dump_file) == call_graph_2
     assert get_graph(call_graph_2) == get_graph(call_graph)
   end
 
@@ -727,18 +739,18 @@ defmodule Hologram.Compiler.CallGraphTest do
       graph = Graph.add_edge(Graph.new(), :vertex_1, :vertex_2)
 
       data = SerializationUtils.serialize(graph)
-      File.write!(@dump_path, data)
+      File.write!(@dump_file, data)
 
       call_graph = start()
 
-      assert maybe_load(call_graph, @dump_path) == call_graph
+      assert maybe_load(call_graph, @dump_file) == call_graph
       assert get_graph(call_graph) == graph
     end
 
     test "dump file doesn't exist" do
       call_graph = start()
 
-      assert maybe_load(call_graph, @dump_path) == call_graph
+      assert maybe_load(call_graph, @dump_file) == call_graph
       assert get_graph(call_graph) == Graph.new()
     end
   end

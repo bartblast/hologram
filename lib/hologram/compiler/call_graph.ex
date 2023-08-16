@@ -160,6 +160,7 @@ defmodule Hologram.Compiler.CallGraph do
       |> get_graph()
       |> SerializationUtils.serialize()
 
+    File.mkdir_p!(Path.dirname(path))
     File.write!(path, data)
 
     call_graph
