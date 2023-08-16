@@ -14,7 +14,7 @@ defmodule Hologram.Test.Helpers do
   @spec clean_dir(String.t()) :: :ok
   def clean_dir(path) do
     File.rm_rf!(path)
-    File.mkdir!(path)
+    File.mkdir_p!(path)
 
     :ok
   end
