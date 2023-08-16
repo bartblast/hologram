@@ -88,6 +88,19 @@ defmodule Hologram.Compiler.ReflectionTest do
     assert :hologram in result
   end
 
+  test "list_pages/0" do
+    result = list_pages()
+
+    assert Hologram.Test.Fixtures.Compiler.Builder.Module5 in result
+    assert Hologram.Test.Fixtures.Compiler.CallGraph.Module11 in result
+    assert Hologram.Test.Fixtures.Compiler.Reflection.Module2 in result
+    assert Hologram.Test.Fixtures.Runtime.Page.Module1 in result
+
+    refute Hologram.Test.Fixtures.Compiler.Builder.Module6 in result
+    refute Hologram.Test.Fixtures.Compiler.CallGraph.Module4 in result
+    refute Hologram.Compiler.Context in result
+  end
+
   test "list_std_lib_elixir_modules/0" do
     result = list_std_lib_elixir_modules()
 

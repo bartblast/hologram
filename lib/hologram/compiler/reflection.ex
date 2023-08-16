@@ -78,6 +78,15 @@ defmodule Hologram.Compiler.Reflection do
   end
 
   @doc """
+  Lists Elixir modules belonging to the project which are Hologram pages.
+  """
+  @spec list_pages() :: list(module)
+  def list_pages do
+    list_elixir_modules()
+    |> Enum.filter(&page?/1)
+  end
+
+  @doc """
   Lists standard library Elixir modules, e.g. DateTime, Kernel, Calendar.ISO, etc.
   Kernel.SpecialForms module is not included in the result.
   """
