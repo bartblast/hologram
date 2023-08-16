@@ -78,7 +78,7 @@ defmodule Hologram.Compiler.Reflection do
   end
 
   @doc """
-  Lists Elixir modules belonging to the project which are Hologram pages.
+  Lists Elixir modules which are Hologram pages and that belong to any of the OTP apps in the project.
   """
   @spec list_pages() :: list(module)
   def list_pages do
