@@ -224,16 +224,27 @@ defmodule Hologram.Compiler.BuilderTest do
     end
 
     test "creates tmp and bundle nested path dirs if they don't exist" do
-      tmp_dir = "#{@tmp_path}/nested_1/nested_2/nested_3"
-      bundle_dir = "#{@tmp_path}/nested_4/nested_5/nested_6"
+      opts = [
+        name: @name,
+        esbuild_path: @esbuild_path,
+        tmp_dir: "#{@tmp_path}/nested_1/nested_2/nested_3",
+        bundle_dir: "#{@tmp_path}/nested_4/nested_5/nested_6"
+      ]
 
-      assert bundle(@js, @name, @esbuild_path, tmp_dir, bundle_dir)
-      assert File.exists?(tmp_dir)
-      assert File.exists?(bundle_dir)
+      assert bundle(@js, opts)
+      assert File.exists?(opts[:tmp_dir])
+      assert File.exists?(opts[:bundle_dir])
     end
 
     test "bundles files" do
-      assert bundle(@js, @name, @esbuild_path, @tmp_path, @tmp_path) ==
+      opts = [
+        name: @name,
+        esbuild_path: @esbuild_path,
+        tmp_dir: @tmp_path,
+        bundle_dir: @tmp_path
+      ]
+
+      assert bundle(@js, opts) ==
                {"caf8f4e27584852044eb27a37c5eddfd",
                 bundle_file = "#{@tmp_path}/my_script.caf8f4e27584852044eb27a37c5eddfd.js",
                 source_map_file = "#{@tmp_path}/my_script.caf8f4e27584852044eb27a37c5eddfd.js.map"}
