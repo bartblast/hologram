@@ -3,7 +3,7 @@ defmodule Hologram.Page do
   alias Hologram.Conn
 
   defmacro __using__(_opts) do
-    template_path = Path.rootname(__CALLER__.file) <> ".holo"
+    template_path = Templatable.colocated_template_path(__CALLER__.file)
 
     [
       quote do
