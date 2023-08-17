@@ -4,6 +4,7 @@ defmodule Hologram.Runtime.LayoutTest do
 
   alias Hologram.Test.Fixtures.Runtime.Layout.Module1
   alias Hologram.Test.Fixtures.Runtime.Layout.Module2
+  alias Hologram.Test.Fixtures.Runtime.Layout.Module3
 
   test "__is_hologram_layout__/0" do
     assert Module1.__is_hologram_layout__()
@@ -16,6 +17,16 @@ defmodule Hologram.Runtime.LayoutTest do
 
     test "overridden" do
       assert Module2.init(:arg_1, :arg_2) == %{overridden: true}
+    end
+  end
+
+  describe "template/0" do
+    test "function" do
+      assert Module1.template().(%{}) == [text: "Module1 template"]
+    end
+
+    test "file (colocated)" do
+      assert Module3.template().(%{}) == [text: "Module3 template"]
     end
   end
 end
