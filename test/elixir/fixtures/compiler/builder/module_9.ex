@@ -2,9 +2,9 @@
 defmodule Hologram.Test.Fixtures.Compiler.Builder.Module9 do
   use Hologram.Page
 
-  layout Hologram.Test.Fixtures.Compiler.Builder.Module10
+  route "/module_9"
 
-  route "/my_path"
+  layout Hologram.Test.Fixtures.Compiler.Builder.Module10
 
   def template do
     ~H"""
