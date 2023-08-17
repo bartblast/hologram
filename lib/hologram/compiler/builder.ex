@@ -68,6 +68,8 @@ defmodule Hologram.Compiler.Builder do
       |> render_block()
 
     """
+    "use strict";
+
     window.__hologramPageReachableFunctionDefs__ = (interpreterClass, typeClass) => {
       const Interpreter = interpreterClass;
       const Type = typeClass;#{erlang_function_defs}#{elixir_function_defs}

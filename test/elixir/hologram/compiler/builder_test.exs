@@ -112,6 +112,8 @@ defmodule Hologram.Compiler.BuilderTest do
 
       assert build_page_js(Module9, call_graph, ir_plt, @source_dir) ==
                """
+               "use strict";
+
                window.__hologramPageReachableFunctionDefs__ = (interpreterClass, typeClass) => {
                  const Interpreter = interpreterClass;
                  const Type = typeClass;
@@ -201,40 +203,42 @@ defmodule Hologram.Compiler.BuilderTest do
         |> PLT.put(Module6, module_6_ir)
         |> PLT.put(Module11, module_11_ir)
 
-      build_page_js(Module11, call_graph, ir_plt, @source_dir) ==
-        """
-        window.__hologramPageReachableFunctionDefs__ = (interpreterClass, typeClass) => {
-          const Interpreter = interpreterClass;
-          const Type = typeClass;
+      assert build_page_js(Module11, call_graph, ir_plt, @source_dir) ==
+               """
+               "use strict";
 
-        Interpreter.defineElixirFunction("Elixir_Hologram_Test_Fixtures_Compiler_Builder_Module11", "__hologram_layout_module__", 0, [{params: [], guards: [], body: (vars) => {
-        return Type.atom("Elixir.Hologram.Test.Fixtures.Compiler.Builder.Module6");
-        }}]);
+               window.__hologramPageReachableFunctionDefs__ = (interpreterClass, typeClass) => {
+                 const Interpreter = interpreterClass;
+                 const Type = typeClass;
 
-        Interpreter.defineElixirFunction("Elixir_Hologram_Test_Fixtures_Compiler_Builder_Module11", "__hologram_layout_props__", 0, [{params: [], guards: [], body: (vars) => {
-        return Type.list([]);
-        }}]);
+               Interpreter.defineElixirFunction("Elixir_Hologram_Test_Fixtures_Compiler_Builder_Module11", "__hologram_layout_module__", 0, [{params: [], guards: [], body: (vars) => {
+               return Type.atom("Elixir.Hologram.Test.Fixtures.Compiler.Builder.Module6");
+               }}]);
 
-        Interpreter.defineElixirFunction("Elixir_Hologram_Test_Fixtures_Compiler_Builder_Module11", "__hologram_route__", 0, [{params: [], guards: [], body: (vars) => {
-        return Type.bitstring("/module_11");
-        }}]);
+               Interpreter.defineElixirFunction("Elixir_Hologram_Test_Fixtures_Compiler_Builder_Module11", "__hologram_layout_props__", 0, [{params: [], guards: [], body: (vars) => {
+               return Type.list([]);
+               }}]);
 
-        Interpreter.defineElixirFunction("Elixir_Hologram_Test_Fixtures_Compiler_Builder_Module11", "template", 0, [{params: [], guards: [], body: (vars) => {
-        return Type.anonymousFunction(1, [{params: [Type.variablePattern("data")], guards: [], body: (vars) => {
-        Interpreter.matchOperator(vars.data, Type.matchPlaceholder(), vars);
-        return Type.list([Type.tuple([Type.atom("text"), Type.bitstring("Module11 template")])]);
-        }}], vars);
-        }}]);
+               Interpreter.defineElixirFunction("Elixir_Hologram_Test_Fixtures_Compiler_Builder_Module11", "__hologram_route__", 0, [{params: [], guards: [], body: (vars) => {
+               return Type.bitstring("/module_11");
+               }}]);
 
-        Interpreter.defineElixirFunction("Elixir_Hologram_Test_Fixtures_Compiler_Builder_Module6", "template", 0, [{params: [], guards: [], body: (vars) => {
-        return Type.anonymousFunction(1, [{params: [Type.variablePattern("data")], guards: [], body: (vars) => {
-        Interpreter.matchOperator(vars.data, Type.matchPlaceholder(), vars);
-        return Type.list([Type.tuple([Type.atom("text"), Type.bitstring("Module6 template")])]);
-        }}], vars);
-        }}]);
+               Interpreter.defineElixirFunction("Elixir_Hologram_Test_Fixtures_Compiler_Builder_Module11", "template", 0, [{params: [], guards: [], body: (vars) => {
+               return Type.anonymousFunction(1, [{params: [Type.variablePattern("data")], guards: [], body: (vars) => {
+               Interpreter.matchOperator(vars.data, Type.matchPlaceholder(), vars);
+               return Type.list([Type.tuple([Type.atom("text"), Type.bitstring("Module11 template")])]);
+               }}], vars);
+               }}]);
 
-        }\
-        """
+               Interpreter.defineElixirFunction("Elixir_Hologram_Test_Fixtures_Compiler_Builder_Module6", "template", 0, [{params: [], guards: [], body: (vars) => {
+               return Type.anonymousFunction(1, [{params: [Type.variablePattern("data")], guards: [], body: (vars) => {
+               Interpreter.matchOperator(vars.data, Type.matchPlaceholder(), vars);
+               return Type.list([Type.tuple([Type.atom("text"), Type.bitstring("Module6 template")])]);
+               }}], vars);
+               }}]);
+
+               }\
+               """
     end
   end
 
