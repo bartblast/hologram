@@ -1,4 +1,6 @@
 defmodule Hologram.Runtime.Templatable do
+  alias Hologram.Compiler.AST
+
   defmacro __using__(_opts) do
     quote do
       alias Hologram.Runtime.Templatable
@@ -7,10 +9,19 @@ defmodule Hologram.Runtime.Templatable do
     end
   end
 
+  @doc """
+  Resolves the colocated template path for the given templatable module (page, layout, component) given its file path.
+  """
+  @spec colocated_template_path(String.t()) :: String.t()
   def colocated_template_path(templatable_file) do
     Path.rootname(templatable_file) <> ".holo"
   end
 
+  @doc """
+  Returns the AST of template/0 function definition that uses markup fetched from the give template file.
+  If the given template file doesn't exist nil is returned.
+  """
+  @spec maybe_define_template_fun(String.t()) :: AST.t() | nil
   def maybe_define_template_fun(template_path) do
     if File.exists?(template_path) do
       markup = File.read!(template_path)
