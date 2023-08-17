@@ -5,41 +5,6 @@ defmodule Hologram.Runtime.ComponentTest do
   alias Hologram.Test.Fixtures.Runtime.Component.Module1
   alias Hologram.Test.Fixtures.Runtime.Component.Module2
 
-  describe "H sigil" do
-    test "template which uses data" do
-      template = ~H"""
-      <div>{@value}</div>
-      """
-
-      assert template.(%{value: 123}) == [{:element, "div", [], [expression: {123}]}]
-    end
-
-    test "template which doesn't use data" do
-      template = ~H"""
-      <div>abc</div>
-      """
-
-      assert template.(%{}) == [{:element, "div", [], [text: "abc"]}]
-    end
-
-    test "alias" do
-      alias Aaa.Bbb.Ccc
-      template = ~H"<Ccc />"
-
-      assert template.(%{}) == [{:component, Aaa.Bbb.Ccc, [], []}]
-    end
-
-    test "whitespace trimming" do
-      template = ~H"""
-
-      <div>abc</div>
-
-      """
-
-      assert template.(%{}) == [{:element, "div", [], [text: "abc"]}]
-    end
-  end
-
   test "__is_hologram_component__/0" do
     assert Module1.__is_hologram_component__()
   end

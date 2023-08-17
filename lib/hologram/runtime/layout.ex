@@ -3,7 +3,8 @@ defmodule Hologram.Layout do
 
   defmacro __using__(_opts) do
     quote do
-      import Hologram.Component, only: [sigil_H: 2]
+      import Hologram.Layout
+      import Hologram.Runtime.Macros, only: [sigil_H: 2]
 
       @doc """
       Returns true to indicate that the callee module is a layout module (has "use Hologram.Layout" directive).
