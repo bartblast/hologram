@@ -57,14 +57,20 @@ defmodule Hologram.Compiler.Builder do
     mfas = list_page_mfas(call_graph, page_module)
     erlang_source_dir = source_dir <> "/erlang"
 
+    erlang_function_defs =
+      mfas
+      |> render_erlang_function_defs(erlang_source_dir)
+      |> render_block()
+
+    elixir_function_defs =
+      mfas
+      |> render_elixir_function_defs(ir_plt)
+      |> render_block()
+
     """
     window.__hologramPageReachableFunctionDefs__ = (interpreterClass, typeClass) => {
       const Interpreter = interpreterClass;
-      const Type = typeClass;
-
-    #{render_erlang_function_defs(mfas, erlang_source_dir)}
-
-    #{render_elixir_function_defs(mfas, ir_plt)}
+      const Type = typeClass;#{erlang_function_defs}#{elixir_function_defs}
 
     }\
     """
@@ -77,16 +83,22 @@ defmodule Hologram.Compiler.Builder do
   def build_runtime_js(source_dir, call_graph, ir_plt) do
     mfas = list_runtime_mfas(call_graph)
 
+    erlang_function_defs =
+      mfas
+      |> render_erlang_function_defs("#{source_dir}/erlang")
+      |> render_block()
+
+    elixir_function_defs =
+      mfas
+      |> render_elixir_function_defs(ir_plt)
+      |> render_block()
+
     """
     "use strict";
 
-    import Hologram from "#{source_dir}/hologram.mjs"
-    import Interpreter from "#{source_dir}/interpreter.mjs"
-    import Type from "#{source_dir}/interpreter.mjs"
-
-    #{render_erlang_function_defs(mfas, "#{source_dir}/erlang")}
-
-    #{render_elixir_function_defs(mfas, ir_plt)}\
+    import Hologram from "#{source_dir}/hologram.mjs";
+    import Interpreter from "#{source_dir}/interpreter.mjs";
+    import Type from "#{source_dir}/interpreter.mjs";#{erlang_function_defs}#{elixir_function_defs}\
     """
   end
 
@@ -349,6 +361,16 @@ defmodule Hologram.Compiler.Builder do
 
     digest = CryptographicUtils.digest(data, :sha256, :binary)
     PLT.put(plt, module, digest)
+  end
+
+  defp render_block(str) do
+    str = String.trim(str)
+
+    if str != "" do
+      "\n\n" <> str
+    else
+      ""
+    end
   end
 
   defp render_elixir_function_defs(mfas, ir_plt) do
