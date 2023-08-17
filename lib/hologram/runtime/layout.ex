@@ -1,6 +1,8 @@
 defmodule Hologram.Layout do
   use Hologram.Runtime.Templatable
+
   alias Hologram.Conn
+  alias Hologram.Layout
 
   defmacro __using__(_opts) do
     template_path = Templatable.colocated_template_path(__CALLER__.file)
@@ -34,7 +36,7 @@ defmodule Hologram.Layout do
 
         defoverridable init: 2
       end,
-      Templatable.maybe_define_template_fun(template_path)
+      Templatable.maybe_define_template_fun(template_path, Layout)
     ]
   end
 end

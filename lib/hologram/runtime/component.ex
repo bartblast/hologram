@@ -1,5 +1,7 @@
 defmodule Hologram.Component do
   use Hologram.Runtime.Templatable
+
+  alias Hologram.Component
   alias Hologram.Conn
 
   defmacro __using__(_opts) do
@@ -40,7 +42,7 @@ defmodule Hologram.Component do
 
         defoverridable init: 1, init: 2
       end,
-      Templatable.maybe_define_template_fun(template_path)
+      Templatable.maybe_define_template_fun(template_path, Component)
     ]
   end
 end
