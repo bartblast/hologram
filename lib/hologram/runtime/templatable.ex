@@ -5,6 +5,9 @@ defmodule Hologram.Runtime.Templatable do
     quote do
       alias Hologram.Runtime.Templatable
 
+      @doc """
+      Returns a template in the form of an anonymous function that given variable bindings returns a VDOM tree.
+      """
       @callback template() :: (map -> list)
     end
   end
