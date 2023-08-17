@@ -35,5 +35,13 @@ defmodule Hologram.Runtime.MacrosTest do
 
       assert template.(%{}) == [{:element, "div", [], [text: "abc"]}]
     end
+
+    test "bitstring argument" do
+      assert sigil_H(<<"test">>, []).(%{}) == [text: "test"]
+    end
+
+    test "string argument" do
+      assert sigil_H("test", []).(%{}) == [text: "test"]
+    end
   end
 end
