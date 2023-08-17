@@ -1,30 +1,49 @@
 defmodule Hologram.Page do
+  use Hologram.Runtime.Templatable
   alias Hologram.Conn
 
   defmacro __using__(_opts) do
-    quote do
-      import Hologram.Component, only: [sigil_H: 2]
-      import Hologram.Page
+    template_path = Path.rootname(__CALLER__.file) <> ".holo"
 
-      @doc """
-      Returns true to indicate that the callee module is a page module (has "use Hologram.Page" directive).
+    [
+      quote do
+        import Hologram.Page
+        import Hologram.Runtime.Macros, only: [sigil_H: 2]
+        alias Hologram.Page
 
-      ## Examples
+        @behaviour Page
 
-          iex> __is_hologram_page__()
-          true
-      """
-      @spec __is_hologram_page__() :: boolean
-      def __is_hologram_page__, do: true
+        @external_resource unquote(template_path)
 
-      @doc """
-      Builds data that is used for page initial state and layout props.
-      """
-      @spec init(map, Conn.t()) :: map
-      def init(_params, _conn), do: %{}
+        @doc """
+        Returns true to indicate that the callee module is a page module (has "use Hologram.Page" directive).
 
-      defoverridable init: 2
-    end
+        ## Examples
+
+            iex> __is_hologram_page__()
+            true
+        """
+        @spec __is_hologram_page__() :: boolean
+        def __is_hologram_page__, do: true
+
+        @doc """
+        Builds data that is used for page initial state and layout props.
+        """
+        @spec init(map, Conn.t()) :: map
+        def init(_params, _conn), do: %{}
+
+        defoverridable init: 2
+      end,
+      if File.exists?(template_path) do
+        markup = File.read!(template_path)
+
+        quote do
+          def template do
+            sigil_H(unquote(markup), [])
+          end
+        end
+      end
+    ]
   end
 
   @doc """

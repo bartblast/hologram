@@ -5,6 +5,7 @@ defmodule Hologram.Runtime.PageTest do
   alias Hologram.Test.Fixtures.Runtime.Page.Module2
   alias Hologram.Test.Fixtures.Runtime.Page.Module3
   alias Hologram.Test.Fixtures.Runtime.Page.Module4
+  alias Hologram.Test.Fixtures.Runtime.Page.Module5
 
   test "__is_hologram_page__/0" do
     assert Module1.__is_hologram_page__()
@@ -35,6 +36,16 @@ defmodule Hologram.Runtime.PageTest do
 
     test "overridden" do
       assert Module2.init(:arg_1, :arg_2) == %{overridden: true}
+    end
+  end
+
+  describe "template/0" do
+    test "function" do
+      assert Module1.template().(%{}) == [text: "Module1 template"]
+    end
+
+    test "file (colocated)" do
+      assert Module5.template().(%{}) == [text: "Module5 template"]
     end
   end
 end
