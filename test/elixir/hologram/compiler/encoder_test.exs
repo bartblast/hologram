@@ -1077,23 +1077,23 @@ defmodule Hologram.Compiler.EncoderTest do
     assert encode(ir, %Context{}) == """
            Interpreter.defineElixirFunction("Elixir_Aaa_Bbb", "fun_1", 1, [{params: [Type.variablePattern("c")], guards: [(vars) => Erlang["is_integer/1"](vars.c)], body: (vars) => {
            return vars.c;
-           }}])
+           }}]);
 
            Interpreter.defineElixirFunction("Elixir_Aaa_Bbb", "fun_1", 2, [{params: [Type.integer(9n), Type.integer(8n)], guards: [], body: (vars) => {
            return Type.atom("expr_1");
            }}, {params: [Type.variablePattern("a"), Type.variablePattern("b")], guards: [], body: (vars) => {
            return Erlang["+/2"](vars.a, vars.b);
-           }}])
+           }}]);
 
            Interpreter.defineElixirFunction("Elixir_Aaa_Bbb", "fun_2", 1, [{params: [Type.integer(9n)], guards: [], body: (vars) => {
            return Type.atom("expr_2");
            }}, {params: [Type.variablePattern("z")], guards: [(vars) => Erlang["is_float/1"](vars.z)], body: (vars) => {
            return vars.z;
-           }}])
+           }}]);
 
            Interpreter.defineElixirFunction("Elixir_Aaa_Bbb", "fun_2", 2, [{params: [Type.variablePattern("x"), Type.variablePattern("y")], guards: [], body: (vars) => {
            return Erlang["*/2"](vars.x, vars.y);
-           }}])\
+           }}]);\
            """
   end
 

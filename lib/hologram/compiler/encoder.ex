@@ -254,7 +254,7 @@ defmodule Hologram.Compiler.Encoder do
       clauses_js = encode_as_array(clauses, context)
 
       [
-        ~s/Interpreter.defineElixirFunction("#{class}", "#{function}", #{arity}, #{clauses_js})/
+        ~s/Interpreter.defineElixirFunction("#{class}", "#{function}", #{arity}, #{clauses_js});/
         | acc
       ]
     end)
