@@ -1,7 +1,7 @@
 %Doctor.Config{
   exception_moduledoc_required: true,
-  # Hologram.Page is ignored because there are false positives.
-  ignore_modules: [Hologram.Page],
+  # False positives are reported for these modules:
+  ignore_modules: [Hologram.Page, Hologram.Runtime.Templatable],
   ignore_paths: [~r(^test/*)],
   min_module_doc_coverage: 100,
   min_module_spec_coverage: 100,
