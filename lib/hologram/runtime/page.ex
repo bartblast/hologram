@@ -34,15 +34,7 @@ defmodule Hologram.Page do
 
         defoverridable init: 2
       end,
-      if File.exists?(template_path) do
-        markup = File.read!(template_path)
-
-        quote do
-          def template do
-            sigil_H(unquote(markup), [])
-          end
-        end
-      end
+      Templatable.maybe_define_template_fun(template_path)
     ]
   end
 
