@@ -5,6 +5,7 @@ defmodule Hologram.Test.Fixtures.Runtime.Page.Module1 do
 
   layout Hologram.Test.Fixtures.Runtime.Page.Module4
 
+  @impl Page
   def template do
     ~H"""
     Module1 template
