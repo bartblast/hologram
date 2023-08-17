@@ -104,22 +104,24 @@ defmodule Hologram.Compiler.Builder do
   @spec bundle(String.t(), keyword) :: {String.t(), String.t(), String.t()}
   # sobelow_skip ["CI.System"]
   def bundle(js, opts) do
-    name = opts[:name]
+    entry_name = opts[:entry_name]
     esbuild_path = opts[:esbuild_path]
     tmp_dir = opts[:tmp_dir]
     bundle_dir = opts[:bundle_dir]
+    bundle_name = opts[:bundle_name]
 
     File.mkdir_p!(tmp_dir)
     File.mkdir_p!(bundle_dir)
 
-    entry_file = tmp_dir <> "/#{name}.entry.js"
+    entry_file = tmp_dir <> "/#{entry_name}.entry.js"
     File.write!(entry_file, js)
 
-    bundle_file = "#{bundle_dir}/#{name}.js"
+    bundle_file = "#{bundle_dir}/#{bundle_name}.js"
 
     cmd = [
       entry_file,
       "--bundle",
+      "--log-level=warning",
       "--minify",
       "--outfile=#{bundle_file}",
       "--sourcemap",
@@ -133,7 +135,7 @@ defmodule Hologram.Compiler.Builder do
       |> File.read!()
       |> CryptographicUtils.digest(:md5, :hex)
 
-    bundle_file_with_digest = "#{bundle_dir}/#{name}.#{digest}.js"
+    bundle_file_with_digest = "#{bundle_dir}/#{bundle_name}.#{digest}.js"
 
     source_map_file = bundle_file <> ".map"
     source_map_file_with_digest = bundle_file_with_digest <> ".map"
@@ -145,8 +147,8 @@ defmodule Hologram.Compiler.Builder do
       bundle_file_with_digest
       |> File.read!()
       |> String.replace(
-        "//# sourceMappingURL=#{name}.js.map",
-        "//# sourceMappingURL=#{name}.#{digest}.js.map"
+        "//# sourceMappingURL=#{bundle_name}.js.map",
+        "//# sourceMappingURL=#{bundle_name}.#{digest}.js.map"
       )
 
     File.write!(bundle_file_with_digest, js_with_replaced_source_map_url)

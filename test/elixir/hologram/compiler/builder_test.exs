@@ -215,8 +215,9 @@ defmodule Hologram.Compiler.BuilderTest do
   describe "bundle/4" do
     @esbuild_path Reflection.root_path() <> "/assets/node_modules/.bin/esbuild"
     @js "const myVar = 123;"
-    @name "my_script"
-    @tmp_path "#{Reflection.tmp_path()}/#{__MODULE__}.build.4"
+    @entry_name "my_entry"
+    @tmp_path "#{Reflection.tmp_path()}/#{__MODULE__}/build_4"
+    @bundle_name "my_bundle"
 
     setup do
       clean_dir(@tmp_path)
@@ -225,10 +226,11 @@ defmodule Hologram.Compiler.BuilderTest do
 
     test "creates tmp and bundle nested path dirs if they don't exist" do
       opts = [
-        name: @name,
+        entry_name: @entry_name,
         esbuild_path: @esbuild_path,
         tmp_dir: "#{@tmp_path}/nested_1/nested_2/nested_3",
-        bundle_dir: "#{@tmp_path}/nested_4/nested_5/nested_6"
+        bundle_dir: "#{@tmp_path}/nested_4/nested_5/nested_6",
+        bundle_name: @bundle_name
       ]
 
       assert bundle(@js, opts)
@@ -238,20 +240,21 @@ defmodule Hologram.Compiler.BuilderTest do
 
     test "bundles files" do
       opts = [
-        name: @name,
+        entry_name: @entry_name,
         esbuild_path: @esbuild_path,
         tmp_dir: @tmp_path,
-        bundle_dir: @tmp_path
+        bundle_dir: @tmp_path,
+        bundle_name: @bundle_name
       ]
 
       assert bundle(@js, opts) ==
-               {"caf8f4e27584852044eb27a37c5eddfd",
-                bundle_file = "#{@tmp_path}/my_script.caf8f4e27584852044eb27a37c5eddfd.js",
-                source_map_file = "#{@tmp_path}/my_script.caf8f4e27584852044eb27a37c5eddfd.js.map"}
+               {"957e59b82bd39eb76bb8c7fea2ca29a8",
+                bundle_file = "#{@tmp_path}/my_bundle.957e59b82bd39eb76bb8c7fea2ca29a8.js",
+                source_map_file = "#{@tmp_path}/my_bundle.957e59b82bd39eb76bb8c7fea2ca29a8.js.map"}
 
       assert File.read!(bundle_file) == """
              (()=>{})();
-             //# sourceMappingURL=my_script.caf8f4e27584852044eb27a37c5eddfd.js.map
+             //# sourceMappingURL=my_bundle.957e59b82bd39eb76bb8c7fea2ca29a8.js.map
              """
 
       assert File.read!(source_map_file) == """
