@@ -3,13 +3,23 @@ defmodule Hologram.Router.SearchTree do
 
   defmodule Node do
     defstruct value: nil, children: %{}
+
+    @type t :: %__MODULE__{value: module | nil, children: %{String.t() => __MODULE__.t()}}
   end
 
+  @doc """
+  Adds route info for the given URL path to the search tree by creating all nodes related to that URL path.
+  """
+  @spec add_route(SearchTree.Node.t(), String.t(), module) :: SearchTree.Node.t()
   def add_route(search_tree, url_path, page_module) do
     url_path_segments = url_path_segments(url_path)
     insert_node(search_tree, url_path_segments, page_module)
   end
 
+  @doc """
+  Matches the given URL path against the search tree.
+  """
+  @spec match_route(SearchTree.Node.t(), String.t()) :: atom | false
   def match_route(search_tree, url_path) do
     url_path_segments = url_path_segments(url_path)
 
