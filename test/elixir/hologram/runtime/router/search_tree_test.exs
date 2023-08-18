@@ -3,6 +3,32 @@ defmodule Hologram.Router.SearchTreeTest do
   import Hologram.Router.SearchTree
   alias Hologram.Router.SearchTree
 
+  defp build_search_tree_fixture do
+    routes =
+      Enum.shuffle([
+        {"/", :page_root},
+        {"/aaa", :page_aaa},
+        {"/:param", :page_param},
+        {"/aaa/bbb", :page_aaa_bbb},
+        {"/aaa/:param", :page_aaa_param},
+        {"/:param/aaa", :page_param_aaa},
+        {"/ccc/aaa", :page_ccc_aaa},
+        {"/ccc/:param", :page_ccc_param},
+        {"/aaa/bbb/ccc", :page_aaa_bbb_ccc},
+        {"/:param/aaa/bbb", :page_param_aaa_bbb},
+        {"/aaa/:param/bbb", :page_aaa_param_bbb},
+        {"/aaa/bbb/:param", :page_aaa_bbb_param},
+        {"/ccc/ddd/aaa", :page_ccc_ddd_aaa},
+        {"/:param/ccc/ddd", :page_param_ccc_ddd},
+        {"ccc/:param/ddd", :page_ccc_param_ddd},
+        {"ccc/ddd/:param", :page_ccc_ddd_param}
+      ])
+
+    Enum.reduce(routes, %SearchTree.Node{}, fn {url_path, page_module}, acc ->
+      add_route(acc, url_path, page_module)
+    end)
+  end
+
   describe "add_route/3" do
     test "/" do
       result = add_route(%SearchTree.Node{}, "/", :page_root)
@@ -189,32 +215,7 @@ defmodule Hologram.Router.SearchTreeTest do
     end
 
     test "multiple routes" do
-      routes =
-        Enum.shuffle([
-          {"/", :page_root},
-          {"/aaa", :page_aaa},
-          {"/:param", :page_param},
-          {"/aaa/bbb", :page_aaa_bbb},
-          {"/aaa/:param", :page_aaa_param},
-          {"/:param/aaa", :page_param_aaa},
-          {"/ccc/aaa", :page_ccc_aaa},
-          {"/ccc/:param", :page_ccc_param},
-          {"/aaa/bbb/ccc", :page_aaa_bbb_ccc},
-          {"/:param/aaa/bbb", :page_param_aaa_bbb},
-          {"/aaa/:param/bbb", :page_aaa_param_bbb},
-          {"/aaa/bbb/:param", :page_aaa_bbb_param},
-          {"/ccc/ddd/aaa", :page_ccc_ddd_aaa},
-          {"/:param/ccc/ddd", :page_param_ccc_ddd},
-          {"ccc/:param/ddd", :page_ccc_param_ddd},
-          {"ccc/ddd/:param", :page_ccc_ddd_param}
-        ])
-
-      result =
-        Enum.reduce(routes, %SearchTree.Node{}, fn {url_path, page_module}, acc ->
-          add_route(acc, url_path, page_module)
-        end)
-
-      assert result == %SearchTree.Node{
+      assert build_search_tree_fixture() == %SearchTree.Node{
                value: :page_root,
                children: %{
                  "*" => %SearchTree.Node{
