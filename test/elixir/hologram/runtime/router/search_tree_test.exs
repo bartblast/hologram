@@ -318,7 +318,7 @@ defmodule Hologram.Router.SearchTreeTest do
     end
 
     test "/:param", %{search_tree: search_tree} do
-      assert match_route(search_tree, "/:param") == :page_param
+      assert match_route(search_tree, "/xyz") == :page_param
     end
 
     test "/aaa/bbb", %{search_tree: search_tree} do
@@ -326,11 +326,11 @@ defmodule Hologram.Router.SearchTreeTest do
     end
 
     test "/aaa/:param", %{search_tree: search_tree} do
-      assert match_route(search_tree, "/aaa/:param") == :page_aaa_param
+      assert match_route(search_tree, "/aaa/xyz") == :page_aaa_param
     end
 
     test "/:param/aaa", %{search_tree: search_tree} do
-      assert match_route(search_tree, "/:param/aaa") == :page_param_aaa
+      assert match_route(search_tree, "/xyz/aaa") == :page_param_aaa
     end
 
     test "/ccc/aaa", %{search_tree: search_tree} do
@@ -338,7 +338,7 @@ defmodule Hologram.Router.SearchTreeTest do
     end
 
     test "/ccc/:param", %{search_tree: search_tree} do
-      assert match_route(search_tree, "/ccc/:param") == :page_ccc_param
+      assert match_route(search_tree, "/ccc/xyz") == :page_ccc_param
     end
 
     test "/aaa/bbb/ccc", %{search_tree: search_tree} do
@@ -346,15 +346,15 @@ defmodule Hologram.Router.SearchTreeTest do
     end
 
     test "/:param/aaa/bbb", %{search_tree: search_tree} do
-      assert match_route(search_tree, "/:param/aaa/bbb") == :page_param_aaa_bbb
+      assert match_route(search_tree, "/xyz/aaa/bbb") == :page_param_aaa_bbb
     end
 
     test "/aaa/:param/bbb", %{search_tree: search_tree} do
-      assert match_route(search_tree, "/aaa/:param/bbb") == :page_aaa_param_bbb
+      assert match_route(search_tree, "/aaa/xyz/bbb") == :page_aaa_param_bbb
     end
 
     test "/aaa/bbb/:param", %{search_tree: search_tree} do
-      assert match_route(search_tree, "/aaa/bbb/:param") == :page_aaa_bbb_param
+      assert match_route(search_tree, "/aaa/bbb/xyz") == :page_aaa_bbb_param
     end
 
     test "/ccc/ddd/aaa", %{search_tree: search_tree} do
@@ -362,71 +362,83 @@ defmodule Hologram.Router.SearchTreeTest do
     end
 
     test "/:param/ccc/ddd", %{search_tree: search_tree} do
-      assert match_route(search_tree, "/:param/ccc/ddd") == :page_param_ccc_ddd
+      assert match_route(search_tree, "/xyz/ccc/ddd") == :page_param_ccc_ddd
     end
 
     test "/ccc/:param/ddd", %{search_tree: search_tree} do
-      assert match_route(search_tree, "/ccc/:param/ddd") == :page_ccc_param_ddd
+      assert match_route(search_tree, "/ccc/xyz/ddd") == :page_ccc_param_ddd
     end
 
     test "/ccc/ddd/:param", %{search_tree: search_tree} do
-      assert match_route(search_tree, "/ccc/ddd/:param") == :page_ccc_ddd_param
+      assert match_route(search_tree, "/ccc/ddd/xyz") == :page_ccc_ddd_param
     end
 
-    test "/eee", %{search_tree: search_tree} do
+    test "/eee" do
+      search_tree = add_route(%SearchTree.Node{}, "/aaa", :page_aaa)
+
       assert match_route(search_tree, "/eee") == false
     end
 
-    test "/aaa/eee", %{search_tree: search_tree} do
+    test "/aaa/eee" do
+      search_tree = add_route(%SearchTree.Node{}, "/aaa/bbb", :page_aaa_bbb)
+
       assert match_route(search_tree, "/aaa/eee") == false
     end
 
-    test "/eee/aaa", %{search_tree: search_tree} do
+    test "/eee/aaa" do
+      search_tree = add_route(%SearchTree.Node{}, "/bbb/aaa", :page_bbb_aaa)
+
       assert match_route(search_tree, "/eee/aaa") == false
     end
 
     test "/:param/eee", %{search_tree: search_tree} do
-      assert match_route(search_tree, "/:param/eee") == false
+      assert match_route(search_tree, "/xyz/eee") == false
     end
 
     test "/eee/:param", %{search_tree: search_tree} do
-      assert match_route(search_tree, "/eee/:param") == false
+      assert match_route(search_tree, "/eee/xyz") == false
     end
 
-    test "/eee/aaa/bbb", %{search_tree: search_tree} do
+    test "/eee/aaa/bbb" do
+      search_tree = add_route(%SearchTree.Node{}, "/ccc/aaa/bbb", :page_ccc_aaa_bbb)
+
       assert match_route(search_tree, "/eee/aaa/bbb") == false
     end
 
-    test "/aaa/eee/bbb", %{search_tree: search_tree} do
+    test "/aaa/eee/bbb" do
+      search_tree = add_route(%SearchTree.Node{}, "/aaa/ccc/bbb", :page_aaa_ccc_bbb)
+
       assert match_route(search_tree, "/aaa/eee/bbb") == false
     end
 
-    test "/aaa/bbb/eee", %{search_tree: search_tree} do
+    test "/aaa/bbb/eee" do
+      search_tree = add_route(%SearchTree.Node{}, "/aaa/bbb/ccc", :page_aaa_bbb_ccc)
+
       assert match_route(search_tree, "/aaa/bbb/eee") == false
     end
 
     test "/eee/aaa/:param", %{search_tree: search_tree} do
-      assert match_route(search_tree, "/eee/aaa/:param") == false
+      assert match_route(search_tree, "/eee/aaa/xyz") == false
     end
 
     test "/eee/:param/aaa", %{search_tree: search_tree} do
-      assert match_route(search_tree, "/eee/:param/aaa") == false
+      assert match_route(search_tree, "/eee/xyz/aaa") == false
     end
 
     test "/aaa/eee/:param", %{search_tree: search_tree} do
-      assert match_route(search_tree, "/aaa/eee/:param") == false
+      assert match_route(search_tree, "/aaa/eee/xyz") == false
     end
 
     test "/:param/eee/aaa", %{search_tree: search_tree} do
-      assert match_route(search_tree, "/:param/eee/aaa") == false
+      assert match_route(search_tree, "/xyz/eee/aaa") == false
     end
 
     test "/aaa/:param/eee", %{search_tree: search_tree} do
-      assert match_route(search_tree, "/aaa/:param/eee") == false
+      assert match_route(search_tree, "/aaa/xyz/eee") == false
     end
 
     test "/:param/aaa/eee", %{search_tree: search_tree} do
-      assert match_route(search_tree, "/:param/aaa/eee") == false
+      assert match_route(search_tree, "/xyz/aaa/eee") == false
     end
 
     test "no root route" do

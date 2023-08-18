@@ -33,10 +33,10 @@ defmodule Hologram.Router.SearchTree do
   defp find_node(%{value: value}, []), do: value
 
   defp find_node(%{children: children}, [head | tail]) do
-    if children[head] do
-      find_node(children[head], tail)
-    else
-      nil
+    cond do
+      children[head] -> find_node(children[head], tail)
+      children["*"] -> find_node(children["*"], tail)
+      true -> nil
     end
   end
 
