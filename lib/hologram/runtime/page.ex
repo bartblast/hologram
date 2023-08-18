@@ -10,7 +10,7 @@ defmodule Hologram.Page do
     [
       quote do
         import Hologram.Page
-        import Hologram.Runtime.Macros, only: [sigil_H: 2]
+        import Templatable, only: [sigil_H: 2]
         alias Hologram.Page
 
         @behaviour Page

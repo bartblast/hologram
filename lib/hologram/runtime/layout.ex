@@ -10,7 +10,7 @@ defmodule Hologram.Layout do
     [
       quote do
         import Hologram.Layout
-        import Hologram.Runtime.Macros, only: [sigil_H: 2]
+        import Templatable, only: [sigil_H: 2]
         alias Hologram.Layout
 
         @behaviour Layout

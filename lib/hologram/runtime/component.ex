@@ -10,7 +10,7 @@ defmodule Hologram.Component do
     [
       quote do
         import Hologram.Component
-        import Hologram.Runtime.Macros, only: [sigil_H: 2]
+        import Templatable, only: [sigil_H: 2]
         alias Hologram.Component
 
         @behaviour Component
