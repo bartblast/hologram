@@ -197,10 +197,16 @@ defmodule Hologram.Router.SearchTreeTest do
           {"/aaa/bbb", :page_aaa_bbb},
           {"/aaa/:param", :page_aaa_param},
           {"/:param/aaa", :page_param_aaa},
+          {"/ccc/aaa", :page_ccc_aaa},
+          {"/ccc/:param", :page_ccc_param},
           {"/aaa/bbb/ccc", :page_aaa_bbb_ccc},
           {"/:param/aaa/bbb", :page_param_aaa_bbb},
           {"/aaa/:param/bbb", :page_aaa_param_bbb},
-          {"/aaa/bbb/:param", :page_aaa_bbb_param}
+          {"/aaa/bbb/:param", :page_aaa_bbb_param},
+          {"/ccc/ddd/aaa", :page_ccc_ddd_aaa},
+          {"/:param/ccc/ddd", :page_param_ccc_ddd},
+          {"ccc/:param/ddd", :page_ccc_param_ddd},
+          {"ccc/ddd/:param", :page_ccc_ddd_param}
         ])
 
       result =
@@ -219,6 +225,15 @@ defmodule Hologram.Router.SearchTreeTest do
                        children: %{
                          "bbb" => %SearchTree.Node{
                            value: :page_param_aaa_bbb,
+                           children: %{}
+                         }
+                       }
+                     },
+                     "ccc" => %SearchTree.Node{
+                       value: nil,
+                       children: %{
+                         "ddd" => %SearchTree.Node{
+                           value: :page_param_ccc_ddd,
                            children: %{}
                          }
                        }
@@ -246,6 +261,37 @@ defmodule Hologram.Router.SearchTreeTest do
                          },
                          "ccc" => %SearchTree.Node{
                            value: :page_aaa_bbb_ccc,
+                           children: %{}
+                         }
+                       }
+                     }
+                   }
+                 },
+                 "ccc" => %SearchTree.Node{
+                   value: nil,
+                   children: %{
+                     "*" => %SearchTree.Node{
+                       value: :page_ccc_param,
+                       children: %{
+                         "ddd" => %SearchTree.Node{
+                           value: :page_ccc_param_ddd,
+                           children: %{}
+                         }
+                       }
+                     },
+                     "aaa" => %SearchTree.Node{
+                       value: :page_ccc_aaa,
+                       children: %{}
+                     },
+                     "ddd" => %SearchTree.Node{
+                       value: nil,
+                       children: %{
+                         "*" => %SearchTree.Node{
+                           value: :page_ccc_ddd_param,
+                           children: %{}
+                         },
+                         "aaa" => %SearchTree.Node{
+                           value: :page_ccc_ddd_aaa,
                            children: %{}
                          }
                        }
