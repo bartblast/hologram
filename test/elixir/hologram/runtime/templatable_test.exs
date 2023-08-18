@@ -1,7 +1,9 @@
 defmodule Hologram.Runtime.TemplatableTest do
   use Hologram.Test.BasicCase, async: true
   import Hologram.Runtime.Templatable
+
   alias Hologram.Component
+  alias Hologram.Test.Fixtures.Runtime.Templatable.Module1
 
   test "colocated_template_path/1" do
     assert colocated_template_path("/my_dir_1/my_dir_2/my_dir_3/my_file.ex") ==
@@ -72,6 +74,13 @@ defmodule Hologram.Runtime.TemplatableTest do
 
     test "string argument" do
       assert sigil_H("test", []).(%{}) == [text: "test"]
+    end
+
+    test "compiler correctly detects alias used in template" do
+      assert Module1.template().(%{}) == [
+               text: "Remote function call result = ",
+               expression: {:ok}
+             ]
     end
   end
 end
