@@ -5,20 +5,29 @@ defmodule Hologram.Router.SearchTree do
     defstruct value: nil, children: %{}
   end
 
-  def add_route(root_node, url_path, page_module) do
-    url_path_segments =
-      url_path
-      |> String.split("/")
-      |> Enum.reject(&(&1 == ""))
-      |> Enum.map(fn segment ->
-        if String.starts_with?(segment, ":") do
-          "*"
-        else
-          segment
-        end
-      end)
+  def add_route(search_tree, url_path, page_module) do
+    url_path_segments = url_path_segments(url_path)
+    insert_node(search_tree, url_path_segments, page_module)
+  end
 
-    insert_node(root_node, url_path_segments, page_module)
+  def match_route(search_tree, url_path) do
+    url_path_segments = url_path_segments(url_path)
+
+    find_node(search_tree, url_path_segments) || false
+  end
+
+  defp find_node(current_node, tree_path)
+
+  defp find_node(%{value: nil}, []), do: false
+
+  defp find_node(%{value: value}, []), do: value
+
+  defp find_node(%{children: children}, [head | tail]) do
+    if children[head] do
+      find_node(children[head], tail)
+    else
+      nil
+    end
   end
 
   defp insert_node(current_node, tree_path, value)
@@ -31,5 +40,18 @@ defmodule Hologram.Router.SearchTree do
     child = children[head] || %SearchTree.Node{}
     new_children = Map.put(children, head, insert_node(child, tail, value))
     %{current_node | children: new_children}
+  end
+
+  defp url_path_segments(url_path) do
+    url_path
+    |> String.split("/")
+    |> Enum.reject(&(&1 == ""))
+    |> Enum.map(fn segment ->
+      if String.starts_with?(segment, ":") do
+        "*"
+      else
+        segment
+      end
+    end)
   end
 end
