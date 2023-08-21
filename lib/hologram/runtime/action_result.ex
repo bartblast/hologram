@@ -5,7 +5,7 @@ defmodule Hologram.ActionResult do
 
   @type t :: %__MODULE__{
           command: Operation.t(),
-          context: %{atom => any},
+          context: %{atom => any} | %{{module, atom} => any},
           navigate: module | {module, keyword},
           state: %{atom => any}
         }
