@@ -2,6 +2,15 @@ defmodule Hologram.Template.VDOMTree do
   alias Hologram.Compiler.AST
   alias Hologram.Template.Helpers
   alias Hologram.Template.Parser
+  alias Hologram.Template.VDOMTree
+
+  @type vdom_node ::
+          {:component, module, list({String.t(), list(VDOMTree.vdom_node())}),
+           list(VDOMTree.vdom_node())}
+          | {:element, String.t(), list({String.t(), list(VDOMTree.vdom_node())}),
+             list(VDOMTree.vdom_node())}
+          | {:expression, {any}}
+          | {:text, String.t()}
 
   @doc """
   Builds the AST of Elixir code that creates the VDOM tree representation for the given template's parsed tags list.
