@@ -13,12 +13,12 @@ defmodule Hologram.Test.Fixtures.Compiler.Builder.Module5 do
     """
   end
 
-  def action(:action_5a, params, state) do
-    Module7.my_fun_7a(params, state)
+  def action(:action_5a, params, client) do
+    Module7.my_fun_7a(params, client)
   end
 
-  def action(:action_5b, _params, state) do
-    state
+  def action(:action_5b, _params, client) do
+    client
     |> Enum.to_list()
     |> :erlang.hd()
   end

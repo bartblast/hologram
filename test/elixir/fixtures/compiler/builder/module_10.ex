@@ -8,8 +8,8 @@ defmodule Hologram.Test.Fixtures.Compiler.Builder.Module10 do
     """
   end
 
-  def action(:action_10a, params, state) do
-    fun_10a(params, state)
+  def action(:action_10a, params, client) do
+    fun_10a(params, client)
   end
 
   def fun_10a(params, state), do: {params, state}

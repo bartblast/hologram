@@ -129,8 +129,8 @@ defmodule Hologram.Compiler.BuilderTest do
                    return type === "float" ? Type.float(result) : Type.integer(result);
                  });
 
-               Interpreter.defineElixirFunction("Elixir_Hologram_Test_Fixtures_Compiler_Builder_Module10", "action", 3, [{params: [Type.atom("action_10a"), Type.variablePattern("params"), Type.variablePattern("state")], guards: [], body: (vars) => {
-               return Elixir_Hologram_Test_Fixtures_Compiler_Builder_Module10["fun_10a/2"](vars.params, vars.state);
+               Interpreter.defineElixirFunction("Elixir_Hologram_Test_Fixtures_Compiler_Builder_Module10", "action", 3, [{params: [Type.atom("action_10a"), Type.variablePattern("params"), Type.variablePattern("client")], guards: [], body: (vars) => {
+               return Elixir_Hologram_Test_Fixtures_Compiler_Builder_Module10["fun_10a/2"](vars.params, vars.client);
                }}]);
 
                Interpreter.defineElixirFunction("Elixir_Hologram_Test_Fixtures_Compiler_Builder_Module10", "fun_10a", 2, [{params: [Type.variablePattern("params"), Type.variablePattern("state")], guards: [], body: (vars) => {
@@ -156,8 +156,8 @@ defmodule Hologram.Compiler.BuilderTest do
                return Type.bitstring("/module_9");
                }}]);
 
-               Interpreter.defineElixirFunction("Elixir_Hologram_Test_Fixtures_Compiler_Builder_Module9", "action", 3, [{params: [Type.atom("action_9a"), Type.variablePattern("params"), Type.variablePattern("state")], guards: [], body: (vars) => {
-               return Elixir_Hologram_Test_Fixtures_Compiler_Builder_Module9["fun_9a/2"](Interpreter.dotOperator(vars.params, Type.atom("my_key")), Erlang["+/2"](vars.state, Type.integer(1n)));
+               Interpreter.defineElixirFunction("Elixir_Hologram_Test_Fixtures_Compiler_Builder_Module9", "action", 3, [{params: [Type.atom("action_9a"), Type.variablePattern("params"), Type.variablePattern("client")], guards: [], body: (vars) => {
+               return Elixir_Hologram_Test_Fixtures_Compiler_Builder_Module9["fun_9a/2"](Interpreter.dotOperator(vars.params, Type.atom("my_key")), Erlang["+/2"](vars.client, Type.integer(1n)));
                }}]);
 
                Interpreter.defineElixirFunction("Elixir_Hologram_Test_Fixtures_Compiler_Builder_Module9", "fun_9a", 2, [{params: [Type.variablePattern("map"), Type.variablePattern("key")], guards: [], body: (vars) => {
