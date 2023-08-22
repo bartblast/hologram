@@ -3,6 +3,7 @@ defmodule Hologram.Runtime.TemplatableTest do
   import Hologram.Runtime.Templatable
 
   alias Hologram.Component
+  alias Hologram.ComponentClient
   alias Hologram.Test.Fixtures.Runtime.Templatable.Module1
 
   test "colocated_template_path/1" do
@@ -32,6 +33,10 @@ defmodule Hologram.Runtime.TemplatableTest do
     test "invalid template path" do
       refute maybe_define_template_fun("/my_invalid_template_path.holo", Component)
     end
+  end
+
+  test "put_state/3" do
+    assert put_state(%ComponentClient{}, :abc, 123) == %ComponentClient{state: %{abc: 123}}
   end
 
   describe "H sigil" do
