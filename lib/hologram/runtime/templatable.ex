@@ -1,6 +1,6 @@
 defmodule Hologram.Runtime.Templatable do
   alias Hologram.Compiler.AST
-  alias Hologram.Runtime.ComponentClient
+  alias Hologram.ComponentClient
   alias Hologram.Template.Builder
 
   defmacro __using__(_opts) do
