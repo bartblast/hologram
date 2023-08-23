@@ -1,5 +1,5 @@
 # credo:disable-for-this-file Credo.Check.Readability.Specs
-defmodule Hologram.Test.Fixtures.Compiler.Builder.Module8 do
+defmodule Hologram.Test.Fixtures.Compiler.Module8 do
   def fun_1(x), do: x
 
   def fun_1(x, y), do: {x, y}

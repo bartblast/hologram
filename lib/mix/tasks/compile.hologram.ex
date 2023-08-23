@@ -5,8 +5,8 @@ defmodule Mix.Tasks.Compile.Hologram do
 
   use Mix.Task.Compiler
 
+  alias Hologram.Compiler
   alias Hologram.Commons.PLT
-  alias Hologram.Compiler.Builder
   alias Hologram.Compiler.CallGraph
   alias Hologram.Compiler.Reflection
 
@@ -34,17 +34,17 @@ defmodule Mix.Tasks.Compile.Hologram do
   def run(opts \\ @default_opts) do
     Logger.info("Hologram: compiler started")
 
-    new_module_digest_plt = Builder.build_module_digest_plt()
+    new_module_digest_plt = Compiler.build_module_digest_plt()
     old_module_digest_plt = PLT.start()
     module_digest_plt_dump_path = opts[:build_dir] <> "/module_digest.plt"
     PLT.maybe_load(old_module_digest_plt, module_digest_plt_dump_path)
 
-    diff = Builder.diff_module_digest_plts(old_module_digest_plt, new_module_digest_plt)
+    diff = Compiler.diff_module_digest_plts(old_module_digest_plt, new_module_digest_plt)
 
     ir_plt = PLT.start()
     ir_plt_dump_path = opts[:build_dir] <> "/ir.plt"
     PLT.maybe_load(ir_plt, ir_plt_dump_path)
-    Builder.patch_ir_plt(ir_plt, diff)
+    Compiler.patch_ir_plt(ir_plt, diff)
 
     call_graph = CallGraph.start()
     call_graph_dump_path = opts[:build_dir] <> "/call_graph.bin"
@@ -87,8 +87,8 @@ defmodule Mix.Tasks.Compile.Hologram do
       ]
 
       page_module
-      |> Builder.build_page_js(call_graph, ir_plt, opts[:js_source_dir])
-      |> Builder.bundle(page_bundle_opts)
+      |> Compiler.build_page_js(call_graph, ir_plt, opts[:js_source_dir])
+      |> Compiler.bundle(page_bundle_opts)
     end)
   end
 
@@ -102,7 +102,7 @@ defmodule Mix.Tasks.Compile.Hologram do
     ]
 
     opts[:js_source_dir]
-    |> Builder.build_runtime_js(call_graph, ir_plt)
-    |> Builder.bundle(runtime_bundle_opts)
+    |> Compiler.build_runtime_js(call_graph, ir_plt)
+    |> Compiler.bundle(runtime_bundle_opts)
   end
 end

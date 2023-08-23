@@ -1,5 +1,5 @@
 # credo:disable-for-this-file Credo.Check.Readability.Specs
-defmodule Hologram.Test.Fixtures.Compiler.Builder.Module10 do
+defmodule Hologram.Test.Fixtures.Compiler.Module10 do
   use Hologram.Layout
 
   def template do

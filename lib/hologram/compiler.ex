@@ -1,4 +1,4 @@
-defmodule Hologram.Compiler.Builder do
+defmodule Hologram.Compiler do
   alias Hologram.Commons.CryptographicUtils
   alias Hologram.Commons.PLT
   alias Hologram.Compiler.CallGraph

@@ -1,11 +1,11 @@
 # credo:disable-for-this-file Credo.Check.Readability.Specs
-defmodule Hologram.Test.Fixtures.Compiler.Builder.Module5 do
+defmodule Hologram.Test.Fixtures.Compiler.Module5 do
   use Hologram.Page
-  alias Hologram.Test.Fixtures.Compiler.Builder.Module7
+  alias Hologram.Test.Fixtures.Compiler.Module7
 
   route "/module_5"
 
-  layout Hologram.Test.Fixtures.Compiler.Builder.Module6
+  layout Hologram.Test.Fixtures.Compiler.Module6
 
   def template do
     ~H"""
