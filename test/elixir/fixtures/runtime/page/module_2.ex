@@ -6,7 +6,9 @@ defmodule Hologram.Test.Fixtures.Runtime.Page.Module2 do
 
   layout Hologram.Test.Fixtures.Runtime.Page.Module4
 
-  def init(_params, _conn), do: %{overridden: true}
+  def init(_params, client, server) do
+    {put_state(client, :overriden, true), server}
+  end
 
   def template do
     ~H"""

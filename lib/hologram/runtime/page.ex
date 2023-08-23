@@ -1,7 +1,5 @@
 defmodule Hologram.Page do
   use Hologram.Runtime.Templatable
-
-  alias Hologram.Conn
   alias Hologram.Page
 
   defmacro __using__(_opts) do
@@ -10,7 +8,7 @@ defmodule Hologram.Page do
     [
       quote do
         import Hologram.Page
-        import Templatable, only: [sigil_H: 2]
+        import Templatable, only: [put_state: 3, sigil_H: 2]
         alias Hologram.Page
 
         @behaviour Page
@@ -29,12 +27,13 @@ defmodule Hologram.Page do
         def __is_hologram_page__, do: true
 
         @doc """
-        Builds data that is used for page initial state and layout props.
+        Initializes component client and server structs (when run on the server).
         """
-        @spec init(map, Conn.t()) :: map
-        def init(_params, _conn), do: %{}
+        @spec init(%{atom => any}, Component.Client.t(), Component.Server.t()) ::
+                {Component.Client.t(), Component.Server.t()}
+        def init(_params, client, server), do: {client, server}
 
-        defoverridable init: 2
+        defoverridable init: 3
       end,
       Templatable.maybe_define_template_fun(template_path, Page)
     ]
