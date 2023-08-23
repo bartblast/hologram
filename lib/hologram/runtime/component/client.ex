@@ -1,4 +1,4 @@
-defmodule Hologram.ComponentClient do
+defmodule Hologram.Component.Client do
   alias Hologram.Operation
 
   defstruct context: %{}, next_command: nil, state: %{}
