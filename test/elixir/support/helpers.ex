@@ -4,6 +4,7 @@ defmodule Hologram.Test.Helpers do
   alias Hologram.Compiler.Context
   alias Hologram.Compiler.Encoder
   alias Hologram.Compiler.IR
+  alias Hologram.Component
 
   defdelegate ast(code), to: AST, as: :for_code
   defdelegate ir(code, context), to: IR, as: :for_code
@@ -17,6 +18,22 @@ defmodule Hologram.Test.Helpers do
     File.mkdir_p!(path)
 
     :ok
+  end
+
+  @doc """
+  Builds empty Component.Client struct.
+  """
+  @spec build_component_client() :: Component.Client.t()
+  def build_component_client do
+    %Component.Client{}
+  end
+
+  @doc """
+  Builds empty Component.Server struct.
+  """
+  @spec build_component_server() :: Component.Server.t()
+  def build_component_server do
+    %Component.Server{}
   end
 
   @doc """
