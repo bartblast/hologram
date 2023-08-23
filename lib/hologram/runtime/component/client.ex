@@ -5,7 +5,7 @@ defmodule Hologram.Component.Client do
 
   @type t :: %__MODULE__{
           context: %{atom => any} | %{{module, atom} => any},
-          next_command: Operation.t(),
+          next_command: Operation.t() | nil,
           state: %{atom => any}
         }
 end

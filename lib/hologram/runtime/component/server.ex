@@ -5,7 +5,7 @@ defmodule Hologram.Component.Server do
 
   @type t :: %__MODULE__{
           cookies: %{atom => any},
-          next_action: Operation.t(),
+          next_action: Operation.t() | nil,
           session: %{atom => any}
         }
 end
