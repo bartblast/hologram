@@ -3,26 +3,26 @@ defmodule Hologram.TemplateTest do
   import Hologram.Template
   alias Hologram.Test.Fixtures.Template.Module1
 
-  describe "dom_ast_from_markup/1" do
-    test "build DOM AST from the given markup" do
-      assert dom_ast_from_markup("<div>content</div>") == [
+  describe "dom_tree_ast/1" do
+    test "build DOM tree AST from the given markup" do
+      assert dom_tree_ast("<div>content</div>") == [
                {:{}, [line: 1], [:element, "div", [], [{:text, "content"}]]}
              ]
     end
 
     test "remove doctype" do
-      assert dom_ast_from_markup("<!DoCtYpE html test_1 test_2>content") == [{:text, "content"}]
+      assert dom_tree_ast("<!DoCtYpE html test_1 test_2>content") == [{:text, "content"}]
     end
 
     test "remove comments" do
       special_chars = "abc \n \r \t < > / = \" { } ! -"
       markup = "aaa<!-- #{special_chars} -->bbb<!-- #{special_chars} -->ccc"
 
-      assert dom_ast_from_markup(markup) == [{:text, "aaabbbccc"}]
+      assert dom_tree_ast(markup) == [{:text, "aaabbbccc"}]
     end
 
     test "trim leading and trailing whitespaces" do
-      assert dom_ast_from_markup("\n\t content \t\n") == [{:text, "content"}]
+      assert dom_tree_ast("\n\t content \t\n") == [{:text, "content"}]
     end
   end
 

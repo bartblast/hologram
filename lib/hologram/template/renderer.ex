@@ -1,11 +1,11 @@
 defmodule Hologram.Template.Renderer do
-  alias Hologram.Template.VDOMTree
+  alias Hologram.Template.DOM
 
   @doc """
-  Renders the given VDOM node or nodes.
+  Renders the given DOM node or DOM tree.
   """
-  @spec render(VDOMTree.vdom_node() | list(VDOMTree.vdom_node())) :: String.t()
-  def render(node_or_nodes)
+  @spec render(DOM.dom_node() | DOM.tree()) :: String.t()
+  def render(node_or_tree)
 
   def render(nodes) when is_list(nodes) do
     Enum.map(nodes, &render/1)

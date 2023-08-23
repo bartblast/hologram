@@ -1,12 +1,12 @@
-defmodule Hologram.Template.VDOMTreeTest do
+defmodule Hologram.Template.DOMTest do
   use Hologram.Test.BasicCase, async: true
-  import Hologram.Template.VDOMTree
+  import Hologram.Template.DOM
 
-  test "text node" do
-    assert build([{:text, "abc"}]) == [{:text, "abc"}]
+  test "tree_ast/1, text node" do
+    assert tree_ast([{:text, "abc"}]) == [{:text, "abc"}]
   end
 
-  describe "element node & component node" do
+  describe "tree_ast/1, element node & component node" do
     nodes = [
       {:element, "attribute", "div", "div"},
       {:component, "property", "Aaa.Bbb",
@@ -19,7 +19,7 @@ defmodule Hologram.Template.VDOMTreeTest do
       test "#{tag_type} node without #{attr_or_prop}(s) or children" do
         tags = [{:start_tag, {unquote(tag_name), []}}, {:end_tag, unquote(tag_name)}]
 
-        assert build(tags) == [
+        assert tree_ast(tags) == [
                  {:{}, [line: 1], [unquote(tag_type), unquote(expected), [], []]}
                ]
       end
@@ -30,7 +30,7 @@ defmodule Hologram.Template.VDOMTreeTest do
           {:end_tag, unquote(tag_name)}
         ]
 
-        assert build(tags) ==
+        assert tree_ast(tags) ==
                  [
                    {:{}, [line: 1],
                     [unquote(tag_type), unquote(expected), [{"my_key", [text: "my_value"]}], []]}
@@ -45,7 +45,7 @@ defmodule Hologram.Template.VDOMTreeTest do
           {:end_tag, unquote(tag_name)}
         ]
 
-        assert build(tags) == [
+        assert tree_ast(tags) == [
                  {:{}, [line: 1],
                   [
                     unquote(tag_type),
@@ -63,7 +63,7 @@ defmodule Hologram.Template.VDOMTreeTest do
           {:end_tag, unquote(tag_name)}
         ]
 
-        assert build(tags) == [
+        assert tree_ast(tags) == [
                  {:{}, [line: 1],
                   [
                     unquote(tag_type),
@@ -81,7 +81,7 @@ defmodule Hologram.Template.VDOMTreeTest do
           {:end_tag, unquote(tag_name)}
         ]
 
-        assert build(tags) == [
+        assert tree_ast(tags) == [
                  {:{}, [line: 1], [unquote(tag_type), unquote(expected), [], [{:text, "abc"}]]}
                ]
       end
@@ -94,7 +94,7 @@ defmodule Hologram.Template.VDOMTreeTest do
           {:end_tag, unquote(tag_name)}
         ]
 
-        assert build(tags) == [
+        assert tree_ast(tags) == [
                  {:{}, [line: 1],
                   [
                     unquote(tag_type),
@@ -113,7 +113,7 @@ defmodule Hologram.Template.VDOMTreeTest do
           {:end_tag, unquote(tag_name)}
         ]
 
-        assert build(tags) == [
+        assert tree_ast(tags) == [
                  {:{}, [line: 1],
                   [
                     unquote(tag_type),
@@ -141,7 +141,7 @@ defmodule Hologram.Template.VDOMTreeTest do
           {:end_tag, unquote(tag_name)}
         ]
 
-        assert build(tags) == [
+        assert tree_ast(tags) == [
                  {:{}, [line: 1],
                   [
                     unquote(tag_type),
@@ -159,7 +159,7 @@ defmodule Hologram.Template.VDOMTreeTest do
             [{"my_key_1", [text: "my_value_1"]}, {"my_key_2", [text: "my_value_2"]}]}}
         ]
 
-        assert build(tags) == [
+        assert tree_ast(tags) == [
                  {:{}, [line: 1],
                   [
                     unquote(tag_type),
@@ -172,11 +172,11 @@ defmodule Hologram.Template.VDOMTreeTest do
     end)
   end
 
-  describe "expression node" do
+  describe "tree_ast/1, expression node" do
     test "in text" do
       tags = [{:text, "abc"}, {:expression, "{1 + 2}"}, {:text, "xyz"}]
 
-      assert build(tags) == [
+      assert tree_ast(tags) == [
                text: "abc",
                expression: {:{}, [line: 1], [{:+, [line: 1], [1, 2]}]},
                text: "xyz"
@@ -198,7 +198,7 @@ defmodule Hologram.Template.VDOMTreeTest do
           {:end_tag, unquote(tag_name)}
         ]
 
-        assert build(tags) == [
+        assert tree_ast(tags) == [
                  {:{}, [line: 1],
                   [
                     unquote(tag_type),
@@ -216,7 +216,7 @@ defmodule Hologram.Template.VDOMTreeTest do
           {:end_tag, unquote(tag_name)}
         ]
 
-        assert build(tags) == [
+        assert tree_ast(tags) == [
                  {:{}, [line: 1],
                   [
                     unquote(tag_type),
@@ -240,7 +240,7 @@ defmodule Hologram.Template.VDOMTreeTest do
           {:end_tag, unquote(tag_name)}
         ]
 
-        assert build(tags) == [
+        assert tree_ast(tags) == [
                  {:{}, [line: 1],
                   [
                     unquote(tag_type),
@@ -264,7 +264,7 @@ defmodule Hologram.Template.VDOMTreeTest do
           {:end_tag, unquote(tag_name)}
         ]
 
-        assert build(tags) == [
+        assert tree_ast(tags) == [
                  {:{}, [line: 1],
                   [
                     unquote(tag_type),
@@ -292,11 +292,11 @@ defmodule Hologram.Template.VDOMTreeTest do
     end)
   end
 
-  describe "for block" do
+  describe "tree_ast/1, for block" do
     test "with one child" do
       tags = [{:block_start, {"for", "{ item <- @items}"}}, {:text, "abc"}, {:block_end, "for"}]
 
-      assert build(tags) == [
+      assert tree_ast(tags) == [
                {:for, [line: 1],
                 [
                   {:<-, [line: 1],
@@ -319,7 +319,7 @@ defmodule Hologram.Template.VDOMTreeTest do
         {:block_end, "for"}
       ]
 
-      assert build(tags) == [
+      assert tree_ast(tags) == [
                {:for, [line: 1],
                 [
                   {:<-, [line: 1],
@@ -338,11 +338,11 @@ defmodule Hologram.Template.VDOMTreeTest do
     end
   end
 
-  describe "if block" do
+  describe "tree_ast/1, if block" do
     test "with one child" do
       tags = [{:block_start, {"if", "{ @xyz == 123}"}}, {:text, "abc"}, {:block_end, "if"}]
 
-      assert build(tags) == [
+      assert tree_ast(tags) == [
                {:if, [line: 1],
                 [
                   {:==, [line: 1],
@@ -365,7 +365,7 @@ defmodule Hologram.Template.VDOMTreeTest do
         {:block_end, "if"}
       ]
 
-      assert build(tags) == [
+      assert tree_ast(tags) == [
                {:if, [line: 1],
                 [
                   {:==, [line: 1],
@@ -390,7 +390,7 @@ defmodule Hologram.Template.VDOMTreeTest do
         {:block_end, "if"}
       ]
 
-      assert build(tags) == [
+      assert tree_ast(tags) == [
                {:if, [line: 1],
                 [
                   {:==, [line: 1],
@@ -415,7 +415,7 @@ defmodule Hologram.Template.VDOMTreeTest do
         {:block_end, "if"}
       ]
 
-      assert build(tags) == [
+      assert tree_ast(tags) == [
                {:if, [line: 1],
                 [
                   {:==, [line: 1],
@@ -433,11 +433,11 @@ defmodule Hologram.Template.VDOMTreeTest do
     end
   end
 
-  describe "substitute module attributes" do
+  describe "tree_ast/1, substitute module attributes" do
     test "non-nested list" do
       tags = [{:expression, "{[1, @a, 2, @b]}"}]
 
-      assert build(tags) == [
+      assert tree_ast(tags) == [
                {
                  :expression,
                  {:{}, [line: 1],
@@ -458,7 +458,7 @@ defmodule Hologram.Template.VDOMTreeTest do
     test "nested list" do
       tags = [{:expression, "{[1, @a, [2, @b, 3, @c]]}"}]
 
-      assert build(tags) == [
+      assert tree_ast(tags) == [
                {
                  :expression,
                  {:{}, [line: 1],
@@ -484,7 +484,7 @@ defmodule Hologram.Template.VDOMTreeTest do
     test "non-nested 2-element tuple" do
       tags = [{:expression, "{{@a, @b}}"}]
 
-      assert build(tags) == [
+      assert tree_ast(tags) == [
                {:expression,
                 {:{}, [line: 1],
                  [
@@ -499,7 +499,7 @@ defmodule Hologram.Template.VDOMTreeTest do
     test "nested 2-element tuple" do
       tags = [{:expression, "{{1, {@a, @b}}}"}]
 
-      assert build(tags) == [
+      assert tree_ast(tags) == [
                {:expression,
                 {:{}, [line: 1],
                  [
@@ -515,7 +515,7 @@ defmodule Hologram.Template.VDOMTreeTest do
     test "non-nested 4-element tuple" do
       tags = [{:expression, "{{1, @a, 2, @b}}"}]
 
-      assert build(tags) == [
+      assert tree_ast(tags) == [
                {:expression,
                 {:{}, [line: 1],
                  [
@@ -535,7 +535,7 @@ defmodule Hologram.Template.VDOMTreeTest do
     test "nested 4-element tuple" do
       tags = [{:expression, "{{1, @a, {2, @b, 3, @c}, 4}}"}]
 
-      assert build(tags) == [
+      assert tree_ast(tags) == [
                {:expression,
                 {:{}, [line: 1],
                  [
@@ -560,10 +560,10 @@ defmodule Hologram.Template.VDOMTreeTest do
     end
   end
 
-  test "nested AST" do
+  test "tree_ast/1, nested AST" do
     tags = [{:expression, "{(fn x -> [x | @acc] end).(@value)}"}]
 
-    assert build(tags) == [
+    assert tree_ast(tags) == [
              {
                :expression,
                {:{}, [line: 1],

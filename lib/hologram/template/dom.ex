@@ -1,28 +1,29 @@
-defmodule Hologram.Template.VDOMTree do
+defmodule Hologram.Template.DOM do
   alias Hologram.Compiler.AST
+  alias Hologram.Template.DOM
   alias Hologram.Template.Helpers
   alias Hologram.Template.Parser
-  alias Hologram.Template.VDOMTree
 
-  @type vdom_node ::
-          {:component, module, list({String.t(), list(VDOMTree.vdom_node())}),
-           list(VDOMTree.vdom_node())}
-          | {:element, String.t(), list({String.t(), list(VDOMTree.vdom_node())}),
-             list(VDOMTree.vdom_node())}
+  # 'dom_node' name used instead of 'node" because type node/0 is a built-in type and it cannot be redefined.
+  @type dom_node ::
+          {:component, module, list({String.t(), list(DOM.dom_node())}), list(DOM.dom_node())}
+          | {:element, String.t(), list({String.t(), list(DOM.dom_node())}), list(DOM.dom_node())}
           | {:expression, {any}}
           | {:text, String.t()}
 
+  @type tree :: dom_node | list(DOM.dom_node())
+
   @doc """
-  Builds the AST of Elixir code that creates the VDOM tree representation for the given template's parsed tags list.
+  Builds DOM tree AST from the given template parsed tags.
 
   ## Examples
 
       iex> tags = [{:start_tag, {"div, []}}, {:text, "abc"}, {:end_tag, "div"}]
-      iex> build(tags)
+      iex> tree_ast(tags)
       [{:{}, [line: 1], [:element, "div", [], [{:text, "abc"}]]}]
   """
-  @spec build(list(Parser.parsed_tag())) :: AST.t()
-  def build(tags) do
+  @spec tree_ast(list(Parser.parsed_tag())) :: AST.t()
+  def tree_ast(tags) do
     {code, _last_tag_type} =
       Enum.reduce(tags, {"", nil}, fn tag, {code_acc, last_tag_type} ->
         current_tag_type = elem(tag, 0)
