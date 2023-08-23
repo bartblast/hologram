@@ -2,9 +2,13 @@
 defmodule Hologram.Test.Fixtures.Runtime.Component.Module2 do
   use Hologram.Component
 
-  def init(_props), do: %{overridden_1: true}
+  def init(_props, client) do
+    put_state(client, :overriden, true)
+  end
 
-  def init(_props, _conn), do: %{overridden_2: true}
+  def init(_props, client, server) do
+    {put_state(client, :overriden, true), server}
+  end
 
   def template do
     ~H"""

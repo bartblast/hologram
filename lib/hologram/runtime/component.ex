@@ -1,8 +1,6 @@
 defmodule Hologram.Component do
   use Hologram.Runtime.Templatable
-
   alias Hologram.Component
-  alias Hologram.Conn
 
   defmacro __using__(_opts) do
     template_path = Templatable.colocated_template_path(__CALLER__.file)
@@ -10,7 +8,7 @@ defmodule Hologram.Component do
     [
       quote do
         import Hologram.Component
-        import Templatable, only: [sigil_H: 2]
+        import Templatable, only: [put_state: 3, sigil_H: 2]
         alias Hologram.Component
 
         @behaviour Component
@@ -29,18 +27,19 @@ defmodule Hologram.Component do
         def __is_hologram_component__, do: true
 
         @doc """
-        Builds the initial component state when run on the client.
+        Initializes component client struct (when run on the client).
         """
-        @spec init(map) :: map
-        def init(_props), do: %{}
+        @spec init(%{atom => any}, Component.Client.t()) :: Component.Client.t()
+        def init(_props, client), do: client
 
         @doc """
-        Builds the initial component state when run on the server.
+        Initializes component client and server structs (when run on the server).
         """
-        @spec init(map, Conn.t()) :: map
-        def init(_props, _conn), do: %{}
+        @spec init(%{atom => any}, Component.Client.t(), Component.Server.t()) ::
+                {Component.Client.t(), Component.Server.t()}
+        def init(_props, client, server), do: {client, server}
 
-        defoverridable init: 1, init: 2
+        defoverridable init: 2, init: 3
       end,
       Templatable.maybe_define_template_fun(template_path, Component)
     ]

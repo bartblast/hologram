@@ -2,6 +2,7 @@ defmodule Hologram.Runtime.ComponentTest do
   use Hologram.Test.BasicCase, async: true
   import Hologram.Component
 
+  alias Hologram.Component
   alias Hologram.Test.Fixtures.Runtime.Component.Module1
   alias Hologram.Test.Fixtures.Runtime.Component.Module2
   alias Hologram.Test.Fixtures.Runtime.Component.Module3
@@ -12,21 +13,25 @@ defmodule Hologram.Runtime.ComponentTest do
 
   describe "init/1" do
     test "default" do
-      assert Module1.init(:arg) == %{}
+      assert Module1.init(:props_dummy, :client_dummy) == :client_dummy
     end
 
     test "overridden" do
-      assert Module2.init(:arg) == %{overridden_1: true}
+      assert Module2.init(:props_dummy, build_component_client()) == %Component.Client{
+               state: %{overriden: true}
+             }
     end
   end
 
-  describe "init/2" do
+  describe "init/3" do
     test "default" do
-      assert Module1.init(:arg_1, :arg_2) == %{}
+      assert Module1.init(:props_dummy, :client_dummy, :server_dummy) ==
+               {:client_dummy, :server_dummy}
     end
 
     test "overridden" do
-      assert Module2.init(:arg_1, :arg_2) == %{overridden_2: true}
+      assert Module2.init(:props_dummy, build_component_client(), build_component_server()) ==
+               {%Component.Client{state: %{overriden: true}}, %Component.Server{}}
     end
   end
 
