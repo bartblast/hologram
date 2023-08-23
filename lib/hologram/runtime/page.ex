@@ -1,5 +1,7 @@
 defmodule Hologram.Page do
   use Hologram.Runtime.Templatable
+
+  alias Component
   alias Hologram.Page
 
   defmacro __using__(_opts) do

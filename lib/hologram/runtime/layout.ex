@@ -1,5 +1,7 @@
 defmodule Hologram.Layout do
   use Hologram.Runtime.Templatable
+
+  alias Hologram.Component
   alias Hologram.Layout
 
   defmacro __using__(_opts) do
