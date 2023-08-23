@@ -1,7 +1,6 @@
 defmodule Hologram.Runtime.Templatable do
   alias Hologram.Compiler.AST
   alias Hologram.Component
-  alias Hologram.Template.Builder
 
   defmacro __using__(_opts) do
     quote do
@@ -46,22 +45,5 @@ defmodule Hologram.Runtime.Templatable do
   @spec put_state(Component.Client.t(), atom, any) :: Component.Client.t()
   def put_state(%{state: state} = client, key, value) do
     %{client | state: Map.put(state, key, value)}
-  end
-
-  defmacro sigil_H({:<<>>, _meta, [markup]}, _modifiers) do
-    build_h_sigil_ast(markup)
-  end
-
-  defmacro sigil_H(markup, _modifiers) do
-    build_h_sigil_ast(markup)
-  end
-
-  defp build_h_sigil_ast(markup) do
-    quote do
-      fn var!(data) ->
-        _fix_unused_data_var = var!(data)
-        unquote(Builder.build(markup))
-      end
-    end
   end
 end

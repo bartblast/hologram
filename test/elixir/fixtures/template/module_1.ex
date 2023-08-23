@@ -1,6 +1,6 @@
-defmodule Hologram.Test.Fixtures.Runtime.Templatable.Module1 do
+defmodule Hologram.Test.Fixtures.Template.Module1 do
   use Hologram.Component
-  alias Hologram.Test.Fixtures.Runtime.Templatable.Module2
+  alias Hologram.Test.Fixtures.Template.Module2
 
   @impl Component
   def template do

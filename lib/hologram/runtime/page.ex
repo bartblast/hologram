@@ -10,7 +10,9 @@ defmodule Hologram.Page do
     [
       quote do
         import Hologram.Page
-        import Templatable, only: [put_state: 3, sigil_H: 2]
+        import Hologram.Template, only: [sigil_H: 2]
+        import Templatable, only: [put_state: 3]
+
         alias Hologram.Page
 
         @behaviour Page

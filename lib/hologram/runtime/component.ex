@@ -8,7 +8,9 @@ defmodule Hologram.Component do
     [
       quote do
         import Hologram.Component
-        import Templatable, only: [put_state: 3, sigil_H: 2]
+        import Hologram.Template, only: [sigil_H: 2]
+        import Templatable, only: [put_state: 3]
+
         alias Hologram.Component
 
         @behaviour Component
