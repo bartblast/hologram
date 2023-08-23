@@ -1,6 +1,6 @@
 defmodule Hologram.Runtime.Templatable do
   alias Hologram.Compiler.AST
-  alias Hologram.ComponentClient
+  alias Hologram.Component
   alias Hologram.Template.Builder
 
   defmacro __using__(_opts) do
@@ -43,7 +43,7 @@ defmodule Hologram.Runtime.Templatable do
   @doc """
   Puts the given key-value pair to the component client state.
   """
-  @spec put_state(ComponentClient.t(), atom, any) :: ComponentClient.t()
+  @spec put_state(Component.Client.t(), atom, any) :: Component.Client.t()
   def put_state(%{state: state} = client, key, value) do
     %{client | state: Map.put(state, key, value)}
   end
