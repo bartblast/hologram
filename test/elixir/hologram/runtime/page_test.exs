@@ -32,11 +32,12 @@ defmodule Hologram.Runtime.PageTest do
 
   describe "init/3" do
     test "default" do
-      assert Module1.init(:arg_1, :client_dummy, :server_dummy) == {:client_dummy, :server_dummy}
+      assert Module1.init(:params_dummy, :client_dummy, :server_dummy) ==
+               {:client_dummy, :server_dummy}
     end
 
     test "overridden" do
-      assert Module2.init(:arg_1, build_component_client(), build_component_server()) ==
+      assert Module2.init(:params_dummy, build_component_client(), build_component_server()) ==
                {%Component.Client{state: %{overriden: true}}, %Component.Server{}}
     end
   end

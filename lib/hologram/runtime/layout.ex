@@ -1,7 +1,5 @@
 defmodule Hologram.Layout do
   use Hologram.Runtime.Templatable
-
-  alias Hologram.Conn
   alias Hologram.Layout
 
   defmacro __using__(_opts) do
@@ -10,7 +8,7 @@ defmodule Hologram.Layout do
     [
       quote do
         import Hologram.Layout
-        import Templatable, only: [sigil_H: 2]
+        import Templatable, only: [put_state: 3, sigil_H: 2]
         alias Hologram.Layout
 
         @behaviour Layout
@@ -29,12 +27,13 @@ defmodule Hologram.Layout do
         def __is_hologram_layout__, do: true
 
         @doc """
-        Builds the initial layout state.
+        Initializes component client and server structs (when run on the server).
         """
-        @spec init(map, Conn.t()) :: map
-        def init(_props, _conn), do: %{}
+        @spec init(%{atom => any}, Component.Client.t(), Component.Server.t()) ::
+                {Component.Client.t(), Component.Server.t()}
+        def init(_props, client, server), do: {client, server}
 
-        defoverridable init: 2
+        defoverridable init: 3
       end,
       Templatable.maybe_define_template_fun(template_path, Layout)
     ]
