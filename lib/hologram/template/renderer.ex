@@ -8,8 +8,7 @@ defmodule Hologram.Template.Renderer do
   def render(node_or_tree)
 
   def render(nodes) when is_list(nodes) do
-    Enum.map(nodes, &render/1)
-    |> Enum.join()
+    Enum.map_join(nodes, "", &render/1)
   end
 
   def render({:text, text}), do: text
