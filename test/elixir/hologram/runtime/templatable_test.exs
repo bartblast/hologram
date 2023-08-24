@@ -32,7 +32,19 @@ defmodule Hologram.Runtime.TemplatableTest do
     end
   end
 
+  test "put_state/2" do
+    client = %Component.Client{state: %{a: 1}}
+
+    assert put_state(client, b: 2, c: 3) == %Component.Client{
+             state: %{a: 1, b: 2, c: 3}
+           }
+  end
+
   test "put_state/3" do
-    assert put_state(%Component.Client{}, :abc, 123) == %Component.Client{state: %{abc: 123}}
+    client = %Component.Client{state: %{a: 1}}
+
+    assert put_state(client, :b, 2) == %Component.Client{
+             state: %{a: 1, b: 2}
+           }
   end
 end
