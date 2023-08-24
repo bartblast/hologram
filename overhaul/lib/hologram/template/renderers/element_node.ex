@@ -15,9 +15,6 @@ defimpl Renderer, for: ElementNode do
     :"on:transition_end"
   ]
 
-  # see: https://html.spec.whatwg.org/multipage/syntax.html#void-elements
-  @void_elems ~w(area base br col embed hr img input link meta param source track wbr)
-
   def render(%{tag: "slot"}, conn, _, {slot_bindings, default: default_slot}) do
     Renderer.render(default_slot, conn, slot_bindings, nil)
   end
