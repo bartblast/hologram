@@ -2,6 +2,10 @@ defmodule Hologram.Commons.StringUtilsTest do
   use Hologram.Test.BasicCase, async: true
   import Hologram.Commons.StringUtils
 
+  test "prepend/2" do
+    assert prepend("abc", "xyz") == "xyzabc"
+  end
+
   describe "starts_with_lowercase?/1" do
     test "returns true for a string starting with lowercase letter" do
       assert starts_with_lowercase?("hello")

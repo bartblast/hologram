@@ -1,5 +1,13 @@
 defmodule Hologram.Commons.StringUtils do
   @doc """
+  Prepends the prefix to the given string.
+  """
+  @spec prepend(String.t(), String.t()) :: String.t()
+  def prepend(str, prefix) do
+    prefix <> str
+  end
+
+  @doc """
   Checks whether a string starts with a lowercase letter.
 
   - This function uses the `String.next_grapheme/1` function to extract the first letter of the string.
