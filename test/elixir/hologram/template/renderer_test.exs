@@ -14,9 +14,9 @@ defmodule Hologram.Template.RendererTest do
     assert render(nodes) == "abcxyz"
   end
 
-  describe "component" do
+  describe "stateful component" do
     test "without props or state" do
-      node = {:component, Module1, [], []}
+      node = {:component, Module1, [{"id", [text: "my_component"]}], []}
       assert render(node) == "<div>abc</div>"
     end
 
@@ -24,6 +24,7 @@ defmodule Hologram.Template.RendererTest do
       node = [
         {:component, Module2,
          [
+           {"id", [text: "my_component"]},
            {"a", [text: "ddd"]},
            {"b", [expression: {222}]},
            {"c", [text: "fff", expression: {333}, text: "hhh"]}
@@ -34,7 +35,7 @@ defmodule Hologram.Template.RendererTest do
     end
 
     test "with state / only client struct returned from init/3" do
-      node = {:component, Module3, [], []}
+      node = {:component, Module3, [{"id", [text: "my_component"]}], []}
       assert render(node) == "<div>state_a = 1, state_b = 2</div>"
     end
 
@@ -42,6 +43,7 @@ defmodule Hologram.Template.RendererTest do
       node =
         {:component, Module4,
          [
+           {"id", [text: "my_component"]},
            {"b", [text: "prop_b"]},
            {"c", [text: "prop_c"]}
          ], []}
@@ -53,6 +55,7 @@ defmodule Hologram.Template.RendererTest do
       node = [
         {:component, Module5,
          [
+           {"id", [text: "my_component"]},
            {"a", [text: "aaa"]},
            {"b", [text: "bbb"]}
          ], []}
@@ -62,7 +65,7 @@ defmodule Hologram.Template.RendererTest do
     end
 
     test "with client and server structs returned from init/3" do
-      node = {:component, Module6, [], []}
+      node = {:component, Module6, [{"id", [text: "my_component"]}], []}
       assert render(node) == "<div>state_a = 1, state_b = 2</div>"
     end
   end

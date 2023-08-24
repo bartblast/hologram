@@ -17,24 +17,12 @@ defmodule Hologram.Template.Renderer do
   end
 
   def render({:component, module, props, _children}) do
-    init_result = module.init(props, %Component.Client{}, %Component.Server{})
-
-    state =
-      case init_result do
-        {%{state: state} = _client, _server} ->
-          state
-
-        %{state: state} ->
-          state
-
-        _fallback ->
-          %{}
-      end
-
-    props
-    |> aggregate_vars(state)
-    |> module.template.()
-    |> render()
+    if has_id_prop?(props) do
+      render_stateful_component(module, props)
+    else
+      # TODO:
+      # render_stateless_component()
+    end
   end
 
   def render({:element, tag, attrs, children}) do
@@ -67,5 +55,30 @@ defmodule Hologram.Template.Renderer do
     end)
     |> Enum.into(%{})
     |> Map.merge(state)
+  end
+
+  defp has_id_prop?(props) do
+    Enum.any?(props, fn {name, _value_parts} -> name == "id" end)
+  end
+
+  defp render_stateful_component(module, props) do
+    init_result = module.init(props, %Component.Client{}, %Component.Server{})
+
+    state =
+      case init_result do
+        {%{state: state} = _client, _server} ->
+          state
+
+        %{state: state} ->
+          state
+
+        _fallback ->
+          %{}
+      end
+
+    props
+    |> aggregate_vars(state)
+    |> module.template.()
+    |> render()
   end
 end
