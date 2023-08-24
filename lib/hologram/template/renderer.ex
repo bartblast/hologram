@@ -1,5 +1,6 @@
 defmodule Hologram.Template.Renderer do
   alias Hologram.Commons.StringUtils
+  alias Hologram.Component
   alias Hologram.Template.DOM
 
   # https://html.spec.whatwg.org/multipage/syntax.html#void-elements
@@ -13,6 +14,27 @@ defmodule Hologram.Template.Renderer do
 
   def render(nodes) when is_list(nodes) do
     Enum.map_join(nodes, "", &render/1)
+  end
+
+  def render({:component, module, props, _children}) do
+    init_result = module.init(props, %Component.Client{}, %Component.Server{})
+
+    state =
+      case init_result do
+        {%{state: state} = _client, _server} ->
+          state
+
+        %{state: state} ->
+          state
+
+        _fallback ->
+          %{}
+      end
+
+    props
+    |> aggregate_vars(state)
+    |> module.template.()
+    |> render()
   end
 
   def render({:element, tag, attrs, children}) do
@@ -36,4 +58,13 @@ defmodule Hologram.Template.Renderer do
   def render({:expression, {value}}), do: to_string(value)
 
   def render({:text, text}), do: text
+
+  defp aggregate_vars(props, state) do
+    props
+    |> Enum.map(fn {name, value_parts} ->
+      {String.to_existing_atom(name), render(value_parts)}
+    end)
+    |> Enum.into(%{})
+    |> Map.merge(state)
+  end
 end
