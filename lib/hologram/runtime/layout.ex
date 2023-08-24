@@ -1,7 +1,5 @@
 defmodule Hologram.Layout do
   use Hologram.Runtime.Templatable
-
-  alias Hologram.Component
   alias Hologram.Layout
 
   defmacro __using__(_opts) do
@@ -30,13 +28,7 @@ defmodule Hologram.Layout do
         @spec __is_hologram_layout__() :: boolean
         def __is_hologram_layout__, do: true
 
-        @doc """
-        Initializes component client and server structs (when run on the server).
-        """
-        @spec init(%{atom => any}, Component.Client.t(), Component.Server.t()) ::
-                {Component.Client.t(), Component.Server.t()}
-                | Component.Client.t()
-                | Component.Server.t()
+        @impl Layout
         def init(_props, client, server), do: {client, server}
 
         defoverridable init: 3

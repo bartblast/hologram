@@ -1,7 +1,5 @@
 defmodule Hologram.Page do
   use Hologram.Runtime.Templatable
-
-  alias Hologram.Component
   alias Hologram.Page
 
   defmacro __using__(_opts) do
@@ -30,13 +28,7 @@ defmodule Hologram.Page do
         @spec __is_hologram_page__() :: boolean
         def __is_hologram_page__, do: true
 
-        @doc """
-        Initializes component client and server structs (when run on the server).
-        """
-        @spec init(%{atom => any}, Component.Client.t(), Component.Server.t()) ::
-                {Component.Client.t(), Component.Server.t()}
-                | Component.Client.t()
-                | Component.Server.t()
+        @impl Page
         def init(_params, client, server), do: {client, server}
 
         defoverridable init: 3

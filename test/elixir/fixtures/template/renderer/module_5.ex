@@ -1,6 +1,7 @@
 defmodule Hologram.Test.Fixtures.Template.Renderer.Module5 do
   use Hologram.Component
 
+  @impl Component
   def init(_props, _client, server) do
     server
   end

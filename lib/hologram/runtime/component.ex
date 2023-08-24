@@ -28,19 +28,10 @@ defmodule Hologram.Component do
         @spec __is_hologram_component__() :: boolean
         def __is_hologram_component__, do: true
 
-        @doc """
-        Initializes component client struct (when run on the client).
-        """
-        @spec init(%{atom => any}, Component.Client.t()) :: Component.Client.t()
+        @impl Component
         def init(_props, client), do: client
 
-        @doc """
-        Initializes component client and server structs (when run on the server).
-        """
-        @spec init(%{atom => any}, Component.Client.t(), Component.Server.t()) ::
-                {Component.Client.t(), Component.Server.t()}
-                | Component.Client.t()
-                | Component.Server.t()
+        @impl Component
         def init(_props, client, server), do: {client, server}
 
         defoverridable init: 2, init: 3

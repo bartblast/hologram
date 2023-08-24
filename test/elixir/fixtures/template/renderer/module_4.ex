@@ -1,6 +1,7 @@
 defmodule Hologram.Test.Fixtures.Template.Renderer.Module4 do
   use Hologram.Component
 
+  @impl Component
   def init(_props, client, _server) do
     put_state(client, a: "state_a", b: "state_b")
   end
