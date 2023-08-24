@@ -39,6 +39,8 @@ defmodule Hologram.Component do
         """
         @spec init(%{atom => any}, Component.Client.t(), Component.Server.t()) ::
                 {Component.Client.t(), Component.Server.t()}
+                | Component.Client.t()
+                | Component.Server.t()
         def init(_props, client, server), do: {client, server}
 
         defoverridable init: 2, init: 3
