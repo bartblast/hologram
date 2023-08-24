@@ -11,5 +11,7 @@ defmodule Hologram.Template.Renderer do
     Enum.map_join(nodes, "", &render/1)
   end
 
+  def render({:expression, {value}}), do: to_string(value)
+
   def render({:text, text}), do: text
 end

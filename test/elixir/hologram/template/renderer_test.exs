@@ -7,6 +7,11 @@ defmodule Hologram.Template.RendererTest do
     assert render(node) == "abc"
   end
 
+  test "expression" do
+    node = {:expression, {123}}
+    assert render(node) == "123"
+  end
+
   test "multiple nodes" do
     nodes = [{:text, "abc"}, {:text, "xyz"}]
     assert render(nodes) == "abcxyz"
