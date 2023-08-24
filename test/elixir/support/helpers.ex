@@ -1,4 +1,6 @@
 defmodule Hologram.Test.Helpers do
+  import Hologram.Template, only: [sigil_H: 2]
+
   alias Hologram.Commons.ProcessUtils
   alias Hologram.Compiler.AST
   alias Hologram.Compiler.Context
@@ -59,6 +61,15 @@ defmodule Hologram.Test.Helpers do
     code
     |> ir(%Context{})
     |> Encoder.encode(%Context{})
+  end
+
+  @doc """
+  Returns the template for the given markup.
+  """
+  defmacro template(markup) do
+    quote do
+      sigil_H(unquote(markup), [])
+    end
   end
 
   @doc """
