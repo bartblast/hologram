@@ -1,5 +1,5 @@
 defmodule Hologram.Component do
-  use Hologram.Runtime.Templatable
+  use Hologram.Runtime.Templatable, initiable_on_client?: true
   alias Hologram.Component
 
   defmacro __using__(_opts) do

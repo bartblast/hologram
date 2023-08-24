@@ -2,28 +2,33 @@ defmodule Hologram.Runtime.Templatable do
   alias Hologram.Compiler.AST
   alias Hologram.Component
 
-  defmacro __using__(_opts) do
-    quote do
-      alias Hologram.Runtime.Templatable
+  defmacro __using__(opts \\ []) do
+    [
+      if opts[:initiable_on_client?] do
+        quote do
+          @doc """
+          Initializes component client data (when run on the client).
+          """
+          @callback init(%{atom => any}, Component.Client.t()) :: Component.Client.t()
+        end
+      end,
+      quote do
+        alias Hologram.Runtime.Templatable
 
-      @doc """
-      Initializes component client data (when run on the client).
-      """
-      @callback init(%{atom => any}, Component.Client.t()) :: Component.Client.t()
+        @doc """
+        Initializes component client and server data (when run on the server).
+        """
+        @callback init(%{atom => any}, Component.Client.t(), Component.Server.t()) ::
+                    {Component.Client.t(), Component.Server.t()}
+                    | Component.Client.t()
+                    | Component.Server.t()
 
-      @doc """
-      Initializes component client and server data (when run on the server).
-      """
-      @callback init(%{atom => any}, Component.Client.t(), Component.Server.t()) ::
-                  {Component.Client.t(), Component.Server.t()}
-                  | Component.Client.t()
-                  | Component.Server.t()
-
-      @doc """
-      Returns a template in the form of an anonymous function that given variable bindings returns a DOM tree.
-      """
-      @callback template() :: (map -> list)
-    end
+        @doc """
+        Returns a template in the form of an anonymous function that given variable bindings returns a DOM tree.
+        """
+        @callback template() :: (map -> list)
+      end
+    ]
   end
 
   @doc """
