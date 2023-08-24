@@ -70,6 +70,26 @@ defmodule Hologram.Template.RendererTest do
     end
   end
 
+  describe "stateless component" do
+    test "without props" do
+      node = {:component, Module1, [], []}
+      assert render(node) == "<div>abc</div>"
+    end
+
+    test "with props" do
+      node = [
+        {:component, Module2,
+         [
+           {"a", [text: "ddd"]},
+           {"b", [expression: {222}]},
+           {"c", [text: "fff", expression: {333}, text: "hhh"]}
+         ], []}
+      ]
+
+      assert render(node) == "<div>prop_a = ddd, prop_b = 222, prop_c = fff333hhh</div>"
+    end
+  end
+
   describe "element" do
     test "non-void element, without attributes or children" do
       node = {:element, "div", [], []}

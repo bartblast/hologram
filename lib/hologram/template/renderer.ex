@@ -20,8 +20,7 @@ defmodule Hologram.Template.Renderer do
     if has_id_prop?(props) do
       render_stateful_component(module, props)
     else
-      # TODO:
-      # render_stateless_component()
+      render_stateless_component(module, props)
     end
   end
 
@@ -78,6 +77,13 @@ defmodule Hologram.Template.Renderer do
 
     props
     |> aggregate_vars(state)
+    |> module.template.()
+    |> render()
+  end
+
+  defp render_stateless_component(module, props) do
+    props
+    |> aggregate_vars(%{})
     |> module.template.()
     |> render()
   end
