@@ -1,17 +1,16 @@
 defmodule Hologram.Template.DOM do
   alias Hologram.Compiler.AST
-  alias Hologram.Template.DOM
   alias Hologram.Template.Helpers
   alias Hologram.Template.Parser
 
   # 'dom_node' name used instead of 'node" because type node/0 is a built-in type and it cannot be redefined.
   @type dom_node ::
-          {:component, module, list({String.t(), list(DOM.dom_node())}), list(DOM.dom_node())}
-          | {:element, String.t(), list({String.t(), list(DOM.dom_node())}), list(DOM.dom_node())}
+          {:component, module, list({String.t(), list(dom_node())}), list(dom_node())}
+          | {:element, String.t(), list({String.t(), list(dom_node())}), list(dom_node())}
           | {:expression, {any}}
           | {:text, String.t()}
 
-  @type tree :: dom_node | list(DOM.dom_node())
+  @type tree :: dom_node | list(dom_node())
 
   @doc """
   Builds DOM tree AST from the given template parsed tags.
