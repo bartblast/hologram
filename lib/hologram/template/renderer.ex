@@ -40,7 +40,8 @@ defmodule Hologram.Template.Renderer do
   def render({:element, tag, attrs, children}) do
     attrs_html =
       if attrs != [] do
-        Enum.map_join(attrs, " ", fn {name, value_parts} ->
+        attrs
+        |> Enum.map_join(" ", fn {name, value_parts} ->
           ~s(#{name}="#{render(value_parts)}")
         end)
         |> StringUtils.prepend(" ")
