@@ -158,7 +158,7 @@ defmodule Hologram.Template.DOMTest do
                ]
       end
 
-      test "#{tag_type} self-closing, without siblings" do
+      test "self-closing #{tag_type} node, not nested, without siblings" do
         tags = [
           {:self_closing_tag,
            {unquote(tag_name),
@@ -176,7 +176,7 @@ defmodule Hologram.Template.DOMTest do
                ]
       end
 
-      test "#{tag_type} self-closing, with siblings" do
+      test "self-closing #{tag_type} node, not nested, with siblings" do
         tags = [
           {:text, "abc"},
           {:self_closing_tag,
@@ -195,6 +195,72 @@ defmodule Hologram.Template.DOMTest do
                     []
                   ]},
                  {:text, "xyz"}
+               ]
+      end
+
+      test "self-closing #{tag_type} node, nested, without siblings" do
+        tags = [
+          {:start_tag, {"div", []}},
+          {:self_closing_tag,
+           {unquote(tag_name),
+            [{"my_key_1", [text: "my_value_1"]}, {"my_key_2", [text: "my_value_2"]}]}},
+          {:end_tag, "div"}
+        ]
+
+        assert tree_ast(tags) == [
+                 {:{}, [line: 1],
+                  [
+                    :element,
+                    "div",
+                    [],
+                    [
+                      {:{}, [line: 1],
+                       [
+                         unquote(tag_type),
+                         unquote(expected_tag_name_ast),
+                         [
+                           {"my_key_1", [text: "my_value_1"]},
+                           {"my_key_2", [text: "my_value_2"]}
+                         ],
+                         []
+                       ]}
+                    ]
+                  ]}
+               ]
+      end
+
+      test "self-closing #{tag_type} node, nested, with siblings" do
+        tags = [
+          {:start_tag, {"div", []}},
+          {:text, "abc"},
+          {:self_closing_tag,
+           {unquote(tag_name),
+            [{"my_key_1", [text: "my_value_1"]}, {"my_key_2", [text: "my_value_2"]}]}},
+          {:text, "xyz"},
+          {:end_tag, "div"}
+        ]
+
+        assert tree_ast(tags) == [
+                 {:{}, [line: 1],
+                  [
+                    :element,
+                    "div",
+                    [],
+                    [
+                      {:text, "abc"},
+                      {:{}, [line: 1],
+                       [
+                         unquote(tag_type),
+                         unquote(expected_tag_name_ast),
+                         [
+                           {"my_key_1", [text: "my_value_1"]},
+                           {"my_key_2", [text: "my_value_2"]}
+                         ],
+                         []
+                       ]},
+                      {:text, "xyz"}
+                    ]
+                  ]}
                ]
       end
     end)
