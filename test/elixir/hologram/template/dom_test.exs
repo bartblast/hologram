@@ -15,12 +15,12 @@ defmodule Hologram.Template.DOMTest do
        end}
     ]
 
-    Enum.each(nodes, fn {tag_type, attr_or_prop, tag_name, expected} ->
+    Enum.each(nodes, fn {tag_type, attr_or_prop, tag_name, expected_tag_name_ast} ->
       test "#{tag_type} node without #{attr_or_prop}(s) or children" do
         tags = [{:start_tag, {unquote(tag_name), []}}, {:end_tag, unquote(tag_name)}]
 
         assert tree_ast(tags) == [
-                 {:{}, [line: 1], [unquote(tag_type), unquote(expected), [], []]}
+                 {:{}, [line: 1], [unquote(tag_type), unquote(expected_tag_name_ast), [], []]}
                ]
       end
 
@@ -33,7 +33,12 @@ defmodule Hologram.Template.DOMTest do
         assert tree_ast(tags) ==
                  [
                    {:{}, [line: 1],
-                    [unquote(tag_type), unquote(expected), [{"my_key", [text: "my_value"]}], []]}
+                    [
+                      unquote(tag_type),
+                      unquote(expected_tag_name_ast),
+                      [{"my_key", [text: "my_value"]}],
+                      []
+                    ]}
                  ]
       end
 
@@ -49,7 +54,7 @@ defmodule Hologram.Template.DOMTest do
                  {:{}, [line: 1],
                   [
                     unquote(tag_type),
-                    unquote(expected),
+                    unquote(expected_tag_name_ast),
                     [{"my_key_1", [text: "my_value_1"]}, {"my_key_2", [text: "my_value_2"]}],
                     []
                   ]}
@@ -67,7 +72,7 @@ defmodule Hologram.Template.DOMTest do
                  {:{}, [line: 1],
                   [
                     unquote(tag_type),
-                    unquote(expected),
+                    unquote(expected_tag_name_ast),
                     [{"my_key", [text: "my_value_1", text: "my_value_2"]}],
                     []
                   ]}
@@ -82,7 +87,8 @@ defmodule Hologram.Template.DOMTest do
         ]
 
         assert tree_ast(tags) == [
-                 {:{}, [line: 1], [unquote(tag_type), unquote(expected), [], [{:text, "abc"}]]}
+                 {:{}, [line: 1],
+                  [unquote(tag_type), unquote(expected_tag_name_ast), [], [{:text, "abc"}]]}
                ]
       end
 
@@ -98,7 +104,7 @@ defmodule Hologram.Template.DOMTest do
                  {:{}, [line: 1],
                   [
                     unquote(tag_type),
-                    unquote(expected),
+                    unquote(expected_tag_name_ast),
                     [],
                     [{:{}, [line: 1], [:element, "span", [], []]}]
                   ]}
@@ -117,7 +123,7 @@ defmodule Hologram.Template.DOMTest do
                  {:{}, [line: 1],
                   [
                     unquote(tag_type),
-                    unquote(expected),
+                    unquote(expected_tag_name_ast),
                     [],
                     [
                       {:{}, [line: 1],
@@ -145,7 +151,7 @@ defmodule Hologram.Template.DOMTest do
                  {:{}, [line: 1],
                   [
                     unquote(tag_type),
-                    unquote(expected),
+                    unquote(expected_tag_name_ast),
                     [],
                     [{:{}, [line: 1], [:element, "span", [], []]}, {:text, "abc"}]
                   ]}
@@ -163,7 +169,7 @@ defmodule Hologram.Template.DOMTest do
                  {:{}, [line: 1],
                   [
                     unquote(tag_type),
-                    unquote(expected),
+                    unquote(expected_tag_name_ast),
                     [{"my_key_1", [text: "my_value_1"]}, {"my_key_2", [text: "my_value_2"]}],
                     []
                   ]}
@@ -184,7 +190,7 @@ defmodule Hologram.Template.DOMTest do
                  {:{}, [line: 1],
                   [
                     unquote(tag_type),
-                    unquote(expected),
+                    unquote(expected_tag_name_ast),
                     [{"my_key_1", [text: "my_value_1"]}, {"my_key_2", [text: "my_value_2"]}],
                     []
                   ]},
@@ -213,7 +219,7 @@ defmodule Hologram.Template.DOMTest do
        end}
     ]
 
-    Enum.each(nodes, fn {tag_type, attr_or_prop, tag_name, expected} ->
+    Enum.each(nodes, fn {tag_type, attr_or_prop, tag_name, expected_tag_name_ast} ->
       test "in #{tag_type} #{attr_or_prop} value, with one part only" do
         tags = [
           {:start_tag, {unquote(tag_name), [{"my_key", [expression: "{1 + 2}"]}]}},
@@ -224,7 +230,7 @@ defmodule Hologram.Template.DOMTest do
                  {:{}, [line: 1],
                   [
                     unquote(tag_type),
-                    unquote(expected),
+                    unquote(expected_tag_name_ast),
                     [{"my_key", [expression: {:{}, [line: 1], [{:+, [line: 1], [1, 2]}]}]}],
                     []
                   ]}
@@ -242,7 +248,7 @@ defmodule Hologram.Template.DOMTest do
                  {:{}, [line: 1],
                   [
                     unquote(tag_type),
-                    unquote(expected),
+                    unquote(expected_tag_name_ast),
                     [
                       {"my_key",
                        [
@@ -266,7 +272,7 @@ defmodule Hologram.Template.DOMTest do
                  {:{}, [line: 1],
                   [
                     unquote(tag_type),
-                    unquote(expected),
+                    unquote(expected_tag_name_ast),
                     [
                       {"my_key",
                        [
@@ -290,7 +296,7 @@ defmodule Hologram.Template.DOMTest do
                  {:{}, [line: 1],
                   [
                     unquote(tag_type),
-                    unquote(expected),
+                    unquote(expected_tag_name_ast),
                     [
                       {"my_key",
                        [
