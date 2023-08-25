@@ -38,7 +38,7 @@ defmodule Hologram.Template.DOM do
   end
 
   defp append_code(code_acc, code, last_tag_type)
-       when last_tag_type in [:end_tag, :expression, :text] do
+       when last_tag_type in [:end_tag, :expression, :self_closing_tag, :text] do
     code_acc <> ", " <> code
   end
 

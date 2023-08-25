@@ -152,7 +152,7 @@ defmodule Hologram.Template.DOMTest do
                ]
       end
 
-      test "#{tag_type} self-closing" do
+      test "#{tag_type} self-closing, without siblings" do
         tags = [
           {:self_closing_tag,
            {unquote(tag_name),
@@ -167,6 +167,28 @@ defmodule Hologram.Template.DOMTest do
                     [{"my_key_1", [text: "my_value_1"]}, {"my_key_2", [text: "my_value_2"]}],
                     []
                   ]}
+               ]
+      end
+
+      test "#{tag_type} self-closing, with siblings" do
+        tags = [
+          {:text, "abc"},
+          {:self_closing_tag,
+           {unquote(tag_name),
+            [{"my_key_1", [text: "my_value_1"]}, {"my_key_2", [text: "my_value_2"]}]}},
+          {:text, "xyz"}
+        ]
+
+        assert tree_ast(tags) == [
+                 {:text, "abc"},
+                 {:{}, [line: 1],
+                  [
+                    unquote(tag_type),
+                    unquote(expected),
+                    [{"my_key_1", [text: "my_value_1"]}, {"my_key_2", [text: "my_value_2"]}],
+                    []
+                  ]},
+                 {:text, "xyz"}
                ]
       end
     end)
