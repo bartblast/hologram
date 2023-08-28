@@ -4,6 +4,8 @@ defmodule Hologram.Template.RendererTest do
 
   alias Hologram.Component
   alias Hologram.Test.Fixtures.Template.Renderer.Module1
+  alias Hologram.Test.Fixtures.Template.Renderer.Module10
+  alias Hologram.Test.Fixtures.Template.Renderer.Module13
   alias Hologram.Test.Fixtures.Template.Renderer.Module2
   alias Hologram.Test.Fixtures.Template.Renderer.Module3
   alias Hologram.Test.Fixtures.Template.Renderer.Module4
@@ -12,8 +14,6 @@ defmodule Hologram.Template.RendererTest do
   alias Hologram.Test.Fixtures.Template.Renderer.Module7
   alias Hologram.Test.Fixtures.Template.Renderer.Module8
   alias Hologram.Test.Fixtures.Template.Renderer.Module9
-  alias Hologram.Test.Fixtures.Template.Renderer.Module10
-  alias Hologram.Test.Fixtures.Template.Renderer.Module13
 
   test "multiple nodes" do
     nodes = [
