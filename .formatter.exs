@@ -1,4 +1,7 @@
 locals_without_parens = [
+  # Hologram.Component
+  prop: 1,
+
   # Hologram.Page
   layout: 1,
   layout: 2,

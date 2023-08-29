@@ -32,6 +32,15 @@ defmodule Hologram.Runtime.Templatable do
   end
 
   @doc """
+  Defines a function which returns the list of props for the compiled component.
+  """
+  defmacro __before_compile__(_env) do
+    quote do
+      def __props__, do: @__props__
+    end
+  end
+
+  @doc """
   Resolves the colocated template path for the given templatable module (page, layout, component) given its file path.
   """
   @spec colocated_template_path(String.t()) :: String.t()
@@ -58,6 +67,15 @@ defmodule Hologram.Runtime.Templatable do
   end
 
   @doc """
+  Accumulates the given prop name in __props__ module attribute.
+  """
+  defmacro prop(name) do
+    quote do
+      Module.put_attribute(__MODULE__, :__props__, unquote(name))
+    end
+  end
+
+  @doc """
   Puts the given key-value entries to the component client state.
   """
   @spec put_state(Component.Client.t(), keyword) :: Component.Client.t()
@@ -72,5 +90,15 @@ defmodule Hologram.Runtime.Templatable do
   @spec put_state(Component.Client.t(), atom, any) :: Component.Client.t()
   def put_state(%{state: state} = client, key, value) do
     %{client | state: Map.put(state, key, value)}
+  end
+
+  @doc """
+  Returns the AST of code that registers __props__ module attribute.
+  """
+  @spec register_props_accumulator() :: AST.t()
+  def register_props_accumulator do
+    quote do
+      Module.register_attribute(__MODULE__, :__props__, accumulate: true)
+    end
   end
 end
