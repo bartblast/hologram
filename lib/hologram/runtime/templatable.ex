@@ -79,6 +79,7 @@ defmodule Hologram.Runtime.Templatable do
   Puts the given key-value entries to the component client state.
   """
   @spec put_state(Component.Client.t(), keyword | map) :: Component.Client.t()
+  def put_state(client, entries)
 
   def put_state(client, entries) when is_list(entries) do
     put_state(client, Enum.into(entries, %{}))
