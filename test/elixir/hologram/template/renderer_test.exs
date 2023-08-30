@@ -8,6 +8,8 @@ defmodule Hologram.Template.RendererTest do
   alias Hologram.Test.Fixtures.Template.Renderer.Module13
   alias Hologram.Test.Fixtures.Template.Renderer.Module14
   alias Hologram.Test.Fixtures.Template.Renderer.Module16
+  alias Hologram.Test.Fixtures.Template.Renderer.Module17
+  alias Hologram.Test.Fixtures.Template.Renderer.Module18
   alias Hologram.Test.Fixtures.Template.Renderer.Module2
   alias Hologram.Test.Fixtures.Template.Renderer.Module3
   alias Hologram.Test.Fixtures.Template.Renderer.Module4
@@ -136,6 +138,18 @@ defmodule Hologram.Template.RendererTest do
                   }
                 }}
     end
+
+    test "with unregistered var used" do
+      node =
+        {:component, Module18,
+         [{"id", [text: "component_18"]}, {"a", [text: "111"]}, {"c", [text: "333"]}], []}
+
+      assert_raise KeyError,
+                   ~s(key :c not found in: %{id: "component_18", a: "111", b: 222}),
+                   fn ->
+                     render(node, [])
+                   end
+    end
   end
 
   describe "stateless component" do
@@ -156,6 +170,14 @@ defmodule Hologram.Template.RendererTest do
 
       assert render(node, []) ==
                {"<div>prop_a = ddd, prop_b = 222, prop_c = fff333hhh</div>", %{}}
+    end
+
+    test "with unregistered var used" do
+      node = {:component, Module17, [{"a", [text: "111"]}, {"b", [text: "222"]}], []}
+
+      assert_raise KeyError, "key :b not found in: %{a: \"111\"}", fn ->
+        render(node, [])
+      end
     end
   end
 
