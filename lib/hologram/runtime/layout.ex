@@ -9,9 +9,11 @@ defmodule Hologram.Layout do
       quote do
         import Hologram.Layout
         import Hologram.Template, only: [sigil_H: 2]
-        import Templatable, only: [put_state: 2, put_state: 3]
+        import Templatable, only: [prop: 1, put_state: 2, put_state: 3]
 
         alias Hologram.Layout
+
+        @before_compile Templatable
 
         @behaviour Layout
 
@@ -33,7 +35,8 @@ defmodule Hologram.Layout do
 
         defoverridable init: 3
       end,
-      Templatable.maybe_define_template_fun(template_path, Layout)
+      Templatable.maybe_define_template_fun(template_path, Layout),
+      Templatable.register_props_accumulator()
     ]
   end
 end
