@@ -13,6 +13,8 @@ defmodule Hologram.Page do
 
         alias Hologram.Page
 
+        @before_compile Templatable
+
         @behaviour Page
 
         @external_resource unquote(template_path)
@@ -33,7 +35,8 @@ defmodule Hologram.Page do
 
         defoverridable init: 3
       end,
-      Templatable.maybe_define_template_fun(template_path, Page)
+      Templatable.maybe_define_template_fun(template_path, Page),
+      Templatable.register_props_accumulator()
     ]
   end
 
@@ -61,6 +64,15 @@ defmodule Hologram.Page do
       def __hologram_layout_props__ do
         unquote(props)
       end
+    end
+  end
+
+  @doc """
+  Accumulates the given param name in __props__ module attribute.
+  """
+  defmacro param(name) do
+    quote do
+      Module.put_attribute(__MODULE__, :__props__, unquote(name))
     end
   end
 

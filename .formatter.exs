@@ -2,6 +2,7 @@ locals_without_parens = [
   # Hologram.Page
   layout: 1,
   layout: 2,
+  param: 1,
   route: 1,
 
   # Hologram.Runtime.Templatable
