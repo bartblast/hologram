@@ -122,11 +122,7 @@ defmodule Hologram.Template.Renderer do
     {client, _server} = init_component(module, props)
     vars = aggregate_vars(props, client.state)
 
-    {html, children_clients} =
-      vars
-      |> module.template.()
-      |> render(default: children)
-
+    {html, children_clients} = render_template(module, vars, children)
     clients = Map.put(children_clients, vars.id, client)
 
     {html, clients}
@@ -140,8 +136,13 @@ defmodule Hologram.Template.Renderer do
         message: "Stateful component #{module} is missing the 'id' property."
     end
 
-    props
-    |> aggregate_vars(%{})
+    vars = aggregate_vars(props, %{})
+
+    render_template(module, vars, children)
+  end
+
+  defp render_template(module, vars, children) do
+    vars
     |> module.template.()
     |> render(default: children)
   end
