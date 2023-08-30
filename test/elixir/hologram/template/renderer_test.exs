@@ -6,6 +6,8 @@ defmodule Hologram.Template.RendererTest do
   alias Hologram.Test.Fixtures.Template.Renderer.Module1
   alias Hologram.Test.Fixtures.Template.Renderer.Module10
   alias Hologram.Test.Fixtures.Template.Renderer.Module13
+  alias Hologram.Test.Fixtures.Template.Renderer.Module14
+  alias Hologram.Test.Fixtures.Template.Renderer.Module16
   alias Hologram.Test.Fixtures.Template.Renderer.Module2
   alias Hologram.Test.Fixtures.Template.Renderer.Module3
   alias Hologram.Test.Fixtures.Template.Renderer.Module4
@@ -108,6 +110,31 @@ defmodule Hologram.Template.RendererTest do
                    fn ->
                      render(node, [])
                    end
+    end
+
+    test "casts props" do
+      node =
+        {:component, Module16,
+         [
+           {"id", [text: "my_component"]},
+           {"prop_1", [text: "value_1"]},
+           {"prop_2", [expression: {2}]},
+           {"prop_3", [text: "aaa", expression: {2}, text: "bbb"]},
+           {"prop_4", [text: "value_4"]}
+         ], []}
+
+      assert render(node, []) ==
+               {"",
+                %{
+                  "my_component" => %Component.Client{
+                    state: %{
+                      id: "my_component",
+                      prop_1: "value_1",
+                      prop_2: 2,
+                      prop_3: "aaa2bbb"
+                    }
+                  }
+                }}
     end
   end
 

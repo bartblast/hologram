@@ -20,7 +20,9 @@ defmodule Hologram.Template.Renderer do
     end)
   end
 
-  def render({:component, module, props, children}, _slots) do
+  def render({:component, module, uncasted_props, children}, _slots) do
+    props = cast_props(uncasted_props, module)
+
     if has_id_prop?(props) do
       render_stateful_component(module, props, children)
     else
@@ -66,17 +68,35 @@ defmodule Hologram.Template.Renderer do
   end
 
   defp aggregate_vars(props, state) do
-    props
-    |> Enum.map(fn {name, value_parts} ->
-      {html, _clients} = render(value_parts, [])
-      {String.to_existing_atom(name), html}
-    end)
+    Map.merge(props, state)
+  end
+
+  def cast_props(uncasted_props, module) do
+    uncasted_props
+    |> filter_allowed_props(module)
+    |> Stream.map(&evaluate_prop_value/1)
+    |> Stream.map(&normalize_prop_name/1)
     |> Enum.into(%{})
-    |> Map.merge(state)
+  end
+
+  defp evaluate_prop_value({name, [expression: {value}]}) do
+    {name, value}
+  end
+
+  defp evaluate_prop_value({name, value_parts}) do
+    {text, _clients} = render(value_parts, [])
+    {name, text}
+  end
+
+  defp filter_allowed_props(props, module) do
+    registered_props = Enum.map(module.__props__(), &to_string/1)
+    allowed_props = ["id" | registered_props]
+
+    Enum.filter(props, fn {name, _value_parts} -> name in allowed_props end)
   end
 
   defp has_id_prop?(props) do
-    Enum.any?(props, fn {name, _value_parts} -> name == "id" end)
+    Enum.any?(props, fn {name, _value_parts} -> name == :id end)
   end
 
   defp init_component(module, props) do
@@ -92,6 +112,10 @@ defmodule Hologram.Template.Renderer do
       %Component.Server{} = server ->
         {%Component.Client{}, server}
     end
+  end
+
+  defp normalize_prop_name({name, value}) do
+    {String.to_existing_atom(name), value}
   end
 
   defp render_stateful_component(module, props, children) do
