@@ -1,6 +1,10 @@
 defmodule Hologram.Test.Fixtures.Template.Renderer.Module2 do
   use Hologram.Component
 
+  prop :a
+  prop :b
+  prop :c
+
   @impl Component
   def template do
     ~H"""
