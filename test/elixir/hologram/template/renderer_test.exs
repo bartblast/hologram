@@ -282,6 +282,8 @@ defmodule Hologram.Template.RendererTest do
                 }}
     end
 
+    test "cast layout params"
+
     test "aggregate page vars, giving state priority over param when there are name conflicts" do
       node =
         {:page, Module21,
@@ -312,6 +314,10 @@ defmodule Hologram.Template.RendererTest do
                   "page" => %Component.Client{}
                 }}
     end
+
+    test "merges in the page component client struct into the result"
+
+    test "merges in the layout component client struct into the result"
   end
 
   test "text" do
