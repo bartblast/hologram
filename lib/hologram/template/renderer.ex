@@ -92,7 +92,7 @@ defmodule Hologram.Template.Renderer do
     Map.merge(props, state)
   end
 
-  def cast_props(props_dom_tree, module) do
+  defp cast_props(props_dom_tree, module) do
     props_dom_tree
     |> filter_allowed_props(module)
     |> Stream.map(&evaluate_prop_value/1)
