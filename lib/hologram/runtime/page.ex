@@ -85,7 +85,7 @@ defmodule Hologram.Page do
   end
 
   @doc """
-  Defines page's route metadata functions
+  Defines page's route metadata functions.
   """
   @spec route(String.t()) :: Macro.t()
   defmacro route(path) do
