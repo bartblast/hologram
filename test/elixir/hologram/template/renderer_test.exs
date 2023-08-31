@@ -11,6 +11,7 @@ defmodule Hologram.Template.RendererTest do
   alias Hologram.Test.Fixtures.Template.Renderer.Module17
   alias Hologram.Test.Fixtures.Template.Renderer.Module18
   alias Hologram.Test.Fixtures.Template.Renderer.Module19
+  alias Hologram.Test.Fixtures.Template.Renderer.Module21
   alias Hologram.Test.Fixtures.Template.Renderer.Module2
   alias Hologram.Test.Fixtures.Template.Renderer.Module3
   alias Hologram.Test.Fixtures.Template.Renderer.Module4
@@ -277,6 +278,24 @@ defmodule Hologram.Template.RendererTest do
                 %{
                   "layout" => %Component.Client{},
                   "page" => %Component.Client{state: %{param_1: "value_1", param_3: "value_3"}}
+                }}
+    end
+
+    test "aggregate page vars, giving state priority over param when there are name conflicts" do
+      node =
+        {:page, Module21,
+         [
+           {"key_1", [text: "param_value_1"]},
+           {"key_2", [text: "param_value_2"]}
+         ], []}
+
+      assert render(node, []) ==
+               {"key_1 = param_value_1, key_2 = state_value_2, key_3 = state_value_3",
+                %{
+                  "layout" => %Component.Client{},
+                  "page" => %Component.Client{
+                    state: %{key_2: "state_value_2", key_3: "state_value_3"}
+                  }
                 }}
     end
   end
