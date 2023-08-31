@@ -63,6 +63,27 @@ defmodule Hologram.Template.Renderer do
     {to_string(value), %{}}
   end
 
+  def render({:page, page_module, params, []}, []) do
+    params = cast_props(params, page_module)
+    {page_client, _server} = init_component(page_module, params)
+    vars = aggregate_vars(params, page_client.state)
+    page_dom_tree = page_module.template().(vars)
+
+    layout_module = page_module.__hologram_layout_module__()
+
+    unprocessed_layout_props =
+      page_module.__hologram_layout_props__()
+      |> Enum.into(%{id: "layout"})
+      |> Map.merge(page_client.state)
+      |> Enum.map(fn {name, value} -> {to_string(name), [expression: {value}]} end)
+
+    node = {:component, layout_module, unprocessed_layout_props, page_dom_tree}
+    {html, clients_without_page} = render(node, [])
+    clients = Map.put(clients_without_page, "page", page_client)
+
+    {html, clients}
+  end
+
   def render({:text, text}, _slots) do
     {text, %{}}
   end
@@ -143,7 +164,7 @@ defmodule Hologram.Template.Renderer do
 
   defp render_template(module, vars, children) do
     vars
-    |> module.template.()
+    |> module.template().()
     |> render(default: children)
   end
 end
