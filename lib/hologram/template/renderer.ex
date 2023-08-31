@@ -20,8 +20,8 @@ defmodule Hologram.Template.Renderer do
     end)
   end
 
-  def render({:component, module, uncasted_props, children}, _slots) do
-    props = cast_props(uncasted_props, module)
+  def render({:component, module, props_dom_tree, children}, _slots) do
+    props = cast_props(props_dom_tree, module)
 
     if has_id_prop?(props) do
       render_stateful_component(module, props, children)
@@ -63,21 +63,21 @@ defmodule Hologram.Template.Renderer do
     {to_string(value), %{}}
   end
 
-  def render({:page, page_module, params, []}, []) do
-    params = cast_props(params, page_module)
+  def render({:page, page_module, params_dom_tree, []}, []) do
+    params = cast_props(params_dom_tree, page_module)
     {page_client, _server} = init_component(page_module, params)
     vars = aggregate_vars(params, page_client.state)
     page_dom_tree = page_module.template().(vars)
 
     layout_module = page_module.__hologram_layout_module__()
 
-    unprocessed_layout_props =
+    layout_props_dom_tree =
       page_module.__hologram_layout_props__()
       |> Enum.into(%{id: "layout"})
       |> Map.merge(page_client.state)
       |> Enum.map(fn {name, value} -> {to_string(name), [expression: {value}]} end)
 
-    node = {:component, layout_module, unprocessed_layout_props, page_dom_tree}
+    node = {:component, layout_module, layout_props_dom_tree, page_dom_tree}
     {html, clients_without_page} = render(node, [])
     clients = Map.put(clients_without_page, "page", page_client)
 
@@ -92,8 +92,8 @@ defmodule Hologram.Template.Renderer do
     Map.merge(props, state)
   end
 
-  def cast_props(uncasted_props, module) do
-    uncasted_props
+  def cast_props(props_dom_tree, module) do
+    props_dom_tree
     |> filter_allowed_props(module)
     |> Stream.map(&evaluate_prop_value/1)
     |> Stream.map(&normalize_prop_name/1)
@@ -109,15 +109,15 @@ defmodule Hologram.Template.Renderer do
     {name, text}
   end
 
-  defp filter_allowed_props(props, module) do
+  defp filter_allowed_props(props_dom_tree, module) do
     registered_props = Enum.map(module.__props__(), &to_string/1)
     allowed_props = ["id" | registered_props]
 
-    Enum.filter(props, fn {name, _value_parts} -> name in allowed_props end)
+    Enum.filter(props_dom_tree, fn {name, _value_parts} -> name in allowed_props end)
   end
 
   defp has_id_prop?(props) do
-    Enum.any?(props, fn {name, _value_parts} -> name == :id end)
+    Enum.any?(props, fn {name, _value} -> name == :id end)
   end
 
   defp init_component(module, props) do
