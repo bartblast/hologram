@@ -74,7 +74,7 @@ defmodule Hologram.Template.Renderer do
     layout_props_dom_tree =
       page_module.__hologram_layout_props__()
       |> Enum.into(%{id: "layout"})
-      |> Map.merge(page_client.state)
+      |> aggregate_vars(page_client.state)
       |> Enum.map(fn {name, value} -> {to_string(name), [expression: {value}]} end)
 
     node = {:component, layout_module, layout_props_dom_tree, page_dom_tree}

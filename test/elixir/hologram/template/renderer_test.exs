@@ -12,6 +12,7 @@ defmodule Hologram.Template.RendererTest do
   alias Hologram.Test.Fixtures.Template.Renderer.Module18
   alias Hologram.Test.Fixtures.Template.Renderer.Module19
   alias Hologram.Test.Fixtures.Template.Renderer.Module21
+  alias Hologram.Test.Fixtures.Template.Renderer.Module24
   alias Hologram.Test.Fixtures.Template.Renderer.Module2
   alias Hologram.Test.Fixtures.Template.Renderer.Module3
   alias Hologram.Test.Fixtures.Template.Renderer.Module4
@@ -69,7 +70,7 @@ defmodule Hologram.Template.RendererTest do
                 %{"my_component" => %Component.Client{state: %{a: 1, b: 2}}}}
     end
 
-    test "with props and state" do
+    test "with props and state, give state priority over prop if there are name conflicts" do
       node =
         {:component, Module4,
          [
@@ -264,7 +265,7 @@ defmodule Hologram.Template.RendererTest do
                 }}
     end
 
-    test "cast params" do
+    test "cast page params" do
       node =
         {:page, Module19,
          [
@@ -296,6 +297,19 @@ defmodule Hologram.Template.RendererTest do
                   "page" => %Component.Client{
                     state: %{key_2: "state_value_2", key_3: "state_value_3"}
                   }
+                }}
+    end
+
+    test "aggregate layout vars, giving state priority over prop when there are name conflicts" do
+      node = {:page, Module24, [], []}
+
+      assert render(node, []) ==
+               {"key_1 = prop_value_1, key_2 = state_value_2, key_3 = state_value_3",
+                %{
+                  "layout" => %Component.Client{
+                    state: %{key_2: "state_value_2", key_3: "state_value_3"}
+                  },
+                  "page" => %Component.Client{}
                 }}
     end
   end
