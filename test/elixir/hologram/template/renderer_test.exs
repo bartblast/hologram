@@ -250,6 +250,19 @@ defmodule Hologram.Template.RendererTest do
     assert render(node, []) == {"123", %{}}
   end
 
+  describe "page" do
+    test "page is rendered inside layout slot" do
+      node = {:page, Module14, [], []}
+
+      assert render(node, []) ==
+               {"layout template start, page template, layout template end",
+                %{
+                  "layout" => %Component.Client{},
+                  "page" => %Component.Client{}
+                }}
+    end
+  end
+
   test "text" do
     node = {:text, "abc"}
     assert render(node, []) == {"abc", %{}}
