@@ -10,6 +10,7 @@ defmodule Hologram.Template.RendererTest do
   alias Hologram.Test.Fixtures.Template.Renderer.Module16
   alias Hologram.Test.Fixtures.Template.Renderer.Module17
   alias Hologram.Test.Fixtures.Template.Renderer.Module18
+  alias Hologram.Test.Fixtures.Template.Renderer.Module19
   alias Hologram.Test.Fixtures.Template.Renderer.Module2
   alias Hologram.Test.Fixtures.Template.Renderer.Module3
   alias Hologram.Test.Fixtures.Template.Renderer.Module4
@@ -114,7 +115,7 @@ defmodule Hologram.Template.RendererTest do
                    end
     end
 
-    test "casts props" do
+    test "cast props" do
       node =
         {:component, Module16,
          [
@@ -251,7 +252,7 @@ defmodule Hologram.Template.RendererTest do
   end
 
   describe "page" do
-    test "page is rendered inside layout slot" do
+    test "render page inside layout slot" do
       node = {:page, Module14, [], []}
 
       assert render(node, []) ==
@@ -259,6 +260,23 @@ defmodule Hologram.Template.RendererTest do
                 %{
                   "layout" => %Component.Client{},
                   "page" => %Component.Client{}
+                }}
+    end
+
+    test "cast params" do
+      node =
+        {:page, Module19,
+         [
+           {"param_1", [text: "value_1"]},
+           {"param_2", [text: "value_2"]},
+           {"param_3", [text: "value_3"]}
+         ], []}
+
+      assert render(node, []) ==
+               {"",
+                %{
+                  "layout" => %Component.Client{},
+                  "page" => %Component.Client{state: %{param_1: "value_1", param_3: "value_3"}}
                 }}
     end
   end
