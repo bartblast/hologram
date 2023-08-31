@@ -41,25 +41,32 @@ defmodule Hologram.Page do
   end
 
   @doc """
-  Defines __hologram_layout_module__/0 which returns the page's layout module,
-  and __hologram_layout_props__/0 which returns the page's layout props.
-
-  ## Examples
-
-      iex> __hologram_layout_module__()
-      MyLayout
-
-      iex> __hologram_layout_props__()
-      [a: 1, b: 2]
+  Defines page's layout metadata functions.
   """
   @spec layout(module, keyword) :: Macro.t()
   defmacro layout(module, props \\ []) do
     quote do
+      @doc """
+      Returns the page's layout module.
+
+      ## Examples
+
+          iex> __hologram_layout_module__()
+          MyLayout
+      """
       @spec __hologram_layout_module__() :: module
       def __hologram_layout_module__ do
         unquote(module)
       end
 
+      @doc """
+      Returns the page's layout props.
+
+      ## Examples
+
+          iex> __hologram_layout_props__()
+          [a: 1, b: 2]
+      """
       @spec __hologram_layout_props__() :: keyword
       def __hologram_layout_props__ do
         unquote(props)
@@ -70,6 +77,7 @@ defmodule Hologram.Page do
   @doc """
   Accumulates the given param name in __props__ module attribute.
   """
+  @spec param(atom) :: Macro.t()
   defmacro param(name) do
     quote do
       Module.put_attribute(__MODULE__, :__props__, unquote(name))
@@ -77,16 +85,19 @@ defmodule Hologram.Page do
   end
 
   @doc """
-  Defines __hologram_route__/0 which returns the page's route.
-
-  ## Examples
-
-      iex> __hologram_route__()
-      "/my_path"
+  Defines page's route metadata functions
   """
   @spec route(String.t()) :: Macro.t()
   defmacro route(path) do
     quote do
+      @doc """
+      Returns the page's route.
+
+      ## Examples
+
+          iex> __hologram_route__()
+          "/my_path"
+      """
       @spec __hologram_route__() :: String.t()
       def __hologram_route__ do
         unquote(path)
