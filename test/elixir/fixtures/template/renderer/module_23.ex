@@ -5,7 +5,7 @@ defmodule Hologram.Test.Fixtures.Template.Renderer.Module23 do
   prop :key_2
 
   @impl Layout
-  def init(_params, client, _server) do
+  def init(_props, client, _server) do
     put_state(client, key_2: "state_value_2", key_3: "state_value_3")
   end
 

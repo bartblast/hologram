@@ -14,6 +14,7 @@ defmodule Hologram.Template.RendererTest do
   alias Hologram.Test.Fixtures.Template.Renderer.Module2
   alias Hologram.Test.Fixtures.Template.Renderer.Module21
   alias Hologram.Test.Fixtures.Template.Renderer.Module24
+  alias Hologram.Test.Fixtures.Template.Renderer.Module25
   alias Hologram.Test.Fixtures.Template.Renderer.Module3
   alias Hologram.Test.Fixtures.Template.Renderer.Module4
   alias Hologram.Test.Fixtures.Template.Renderer.Module5
@@ -282,7 +283,20 @@ defmodule Hologram.Template.RendererTest do
                 }}
     end
 
-    test "cast layout params"
+    test "cast layout explicit static props" do
+      node = {:page, Module25, [], []}
+
+      assert render(node, []) ==
+               {"",
+                %{
+                  "layout" => %Component.Client{
+                    state: %{id: "layout", prop_1: "prop_value_1", prop_3: "prop_value_3"}
+                  },
+                  "page" => %Component.Client{}
+                }}
+    end
+
+    test "cast layout props passed from page state"
 
     test "aggregate page vars, giving state priority over param when there are name conflicts" do
       node =
