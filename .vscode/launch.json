@@ -24,6 +24,22 @@
         "test/**/test_helper.exs",
         "test/**/*_test.exs"
       ]
-    }
+    },
+    {
+      "type": "mix_task",
+      "name": "mix test current line",
+      "request": "launch",
+      "task": "test",
+      "taskArgs": [
+        "${relativeFile}:${lineNumber}",
+        "--trace"
+      ],
+      "startApps": true,
+      "projectDir": "${workspaceRoot}",
+      "requireFiles": [
+        "test/**/test_helper.exs",
+        "${relativeFile}"
+      ]
+    },
   ]
 }
