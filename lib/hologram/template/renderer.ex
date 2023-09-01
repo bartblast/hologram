@@ -64,6 +64,8 @@ defmodule Hologram.Template.Renderer do
     {to_string(value), %{}}
   end
 
+  # TODO: Refactor once there is something akin to {...@var} syntax
+  # (it would be possible to pass page state as layout props this way).
   def render({:page, page_module, params_dom_tree, []}, []) do
     params = cast_props(params_dom_tree, page_module)
     {page_client, _server} = init_component(page_module, params)
