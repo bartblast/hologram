@@ -19,6 +19,7 @@ defmodule Hologram.Template.RendererTest do
   alias Hologram.Test.Fixtures.Template.Renderer.Module28
   alias Hologram.Test.Fixtures.Template.Renderer.Module29
   alias Hologram.Test.Fixtures.Template.Renderer.Module3
+  alias Hologram.Test.Fixtures.Template.Renderer.Module31
   alias Hologram.Test.Fixtures.Template.Renderer.Module4
   alias Hologram.Test.Fixtures.Template.Renderer.Module5
   alias Hologram.Test.Fixtures.Template.Renderer.Module6
@@ -392,12 +393,12 @@ defmodule Hologram.Template.RendererTest do
       assert render(node, []) == {"abc123456xyz", %{}}
     end
 
-    test "nested, not using vars" do
+    test "nested components with slots, no slot tag in the top component template, not using vars" do
       node = {:component, Module8, [], [{:component, Module9, [], [text: "789"]}]}
       assert render(node, []) == {"abcdef789uvwxyz", %{}}
     end
 
-    test "nested, using vars" do
+    test "nested components with slots, no slot tag in the top component template, using vars" do
       node = {:component, Module10, [{"id", [text: "component_10"]}], []}
 
       assert render(node, []) ==
@@ -407,6 +408,12 @@ defmodule Hologram.Template.RendererTest do
                   "component_11" => %Component.Client{state: %{a: 11}},
                   "component_12" => %Component.Client{state: %{a: 12}}
                 }}
+    end
+
+    test "nested components with slots, slot tag in the top component template, not using vars" do
+      node = {:component, Module31, [], [text: "abc"]}
+
+      assert render(node, []) == {"31a,32a,31b,33a,31c,abc,31d,33z,31y,32z,31z", %{}}
     end
   end
 end
