@@ -9,8 +9,8 @@ defmodule Hologram.Commons.PLT do
   alias Hologram.Commons.PLT
   alias Hologram.Commons.SerializationUtils
 
-  defstruct pid: nil, table_ref: nil
-  @type t :: %PLT{pid: pid, table_ref: :ets.tid()}
+  defstruct pid: nil, table_ref: nil, table_name: nil
+  @type t :: %PLT{pid: pid, table_ref: :ets.tid(), table_name: atom | nil}
 
   @doc """
   Deletes a key-value pair from the give persistent lookup table.
@@ -88,10 +88,17 @@ defmodule Hologram.Commons.PLT do
   Creates the underlying ETS table.
   """
   @impl GenServer
-  @spec init(nil) :: {:ok, :ets.tid()}
+  @spec init(atom | nil) :: {:ok, :ets.tid()}
+  def init(table_name)
+
   def init(nil) do
     table_ref = :ets.new(__MODULE__, [:public])
     {:ok, table_ref}
+  end
+
+  def init(table_name) do
+    :ets.new(table_name, [:public, :named_table])
+    {:ok, :ets.whereis(table_name)}
   end
 
   @doc """
@@ -147,11 +154,11 @@ defmodule Hologram.Commons.PLT do
   @doc """
   Starts the underlying GenServer process.
   """
-  @spec start() :: PLT.t()
-  def start do
-    {:ok, pid} = GenServer.start_link(PLT, nil)
+  @spec start(keyword) :: PLT.t()
+  def start(opts \\ []) do
+    {:ok, pid} = GenServer.start_link(PLT, opts[:table_name], opts)
     table_ref = GenServer.call(pid, :get_table_ref)
 
-    %PLT{pid: pid, table_ref: table_ref}
+    %PLT{pid: pid, table_ref: table_ref, table_name: opts[:table_name]}
   end
 end

@@ -137,12 +137,29 @@ defmodule Hologram.Commons.PLTTest do
     end
   end
 
-  test "start/0" do
-    assert %PLT{pid: pid, table_ref: table_ref} = start()
+  describe "start/1" do
+    test "unnamed table" do
+      assert %PLT{pid: pid, table_ref: table_ref, table_name: nil} = start()
 
-    assert is_pid(pid)
-    assert is_reference(table_ref)
+      assert is_pid(pid)
+      assert is_reference(table_ref)
 
-    assert ets_table_exists?(table_ref)
+      assert ets_table_exists?(table_ref)
+    end
+
+    test "named table" do
+      # credo:disable-for-next-line Credo.Check.Warning.UnsafeToAtom
+      table_name = :"#{inspect(make_ref())}"
+
+      assert %PLT{pid: pid, table_ref: table_ref, table_name: ^table_name} =
+               start(table_name: table_name)
+
+      assert is_pid(pid)
+      assert is_reference(table_ref)
+
+      assert ets_table_exists?(table_ref)
+      assert ets_table_exists?(table_name)
+      assert :ets.whereis(table_name)
+    end
   end
 end
