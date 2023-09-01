@@ -17,6 +17,7 @@ defmodule Hologram.Template.RendererTest do
   alias Hologram.Test.Fixtures.Template.Renderer.Module25
   alias Hologram.Test.Fixtures.Template.Renderer.Module27
   alias Hologram.Test.Fixtures.Template.Renderer.Module28
+  alias Hologram.Test.Fixtures.Template.Renderer.Module29
   alias Hologram.Test.Fixtures.Template.Renderer.Module3
   alias Hologram.Test.Fixtures.Template.Renderer.Module4
   alias Hologram.Test.Fixtures.Template.Renderer.Module5
@@ -348,7 +349,7 @@ defmodule Hologram.Template.RendererTest do
                 }}
     end
 
-    test "merge into the result the page component client struct" do
+    test "merge the page component client struct into the result" do
       node = {:page, Module28, [], []}
 
       assert render(node, []) ==
@@ -361,7 +362,18 @@ defmodule Hologram.Template.RendererTest do
                 }}
     end
 
-    test "merge into the result the layout component client struct"
+    test "merge the layout component client struct into the result" do
+      node = {:page, Module29, [], []}
+
+      assert render(node, []) ==
+               {"",
+                %{
+                  "layout" => %Hologram.Component.Client{
+                    state: %{state_1: "value_1", state_2: "value_2"}
+                  },
+                  "page" => %Hologram.Component.Client{}
+                }}
+    end
   end
 
   test "text" do
