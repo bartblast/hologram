@@ -20,6 +20,7 @@ defmodule Hologram.Template.RendererTest do
   alias Hologram.Test.Fixtures.Template.Renderer.Module29
   alias Hologram.Test.Fixtures.Template.Renderer.Module3
   alias Hologram.Test.Fixtures.Template.Renderer.Module31
+  alias Hologram.Test.Fixtures.Template.Renderer.Module34
   alias Hologram.Test.Fixtures.Template.Renderer.Module4
   alias Hologram.Test.Fixtures.Template.Renderer.Module5
   alias Hologram.Test.Fixtures.Template.Renderer.Module6
@@ -413,7 +414,35 @@ defmodule Hologram.Template.RendererTest do
     test "nested components with slots, slot tag in the top component template, not using vars" do
       node = {:component, Module31, [], [text: "abc"]}
 
-      assert render(node, []) == {"31a,32a,31b,33a,31c,abc,31d,33z,31y,32z,31z", %{}}
+      assert render(node, []) == {"31a,32a,31b,33a,31c,abc,31x,33z,31y,32z,31z", %{}}
+    end
+
+    test "nested components with slots, slot tag in the top component template, using vars" do
+      node =
+        {:component, Module34, [{"id", [text: "component_34"]}, {"a", [text: "34a_prop"]}],
+         [text: "abc"]}
+
+      assert render(node, []) ==
+               {"34a_prop,35a_prop,34b_state,36a_prop,34c_state,abc,34x_state,36z_state,34y_state,35z_state,34z_state",
+                %{
+                  "component_34" => %Component.Client{
+                    state: %{
+                      id: "component_34",
+                      c: "34c_state",
+                      a: "34a_prop",
+                      y: "34y_state",
+                      x: "34x_state",
+                      z: "34z_state",
+                      b: "34b_state"
+                    }
+                  },
+                  "component_35" => %Component.Client{
+                    state: %{id: "component_35", a: "35a_prop", z: "35z_state"}
+                  },
+                  "component_36" => %Component.Client{
+                    state: %{id: "component_36", a: "36a_prop", z: "36z_state"}
+                  }
+                }}
     end
   end
 end
