@@ -53,7 +53,7 @@ defmodule Hologram.Template.RendererTest do
     end
 
     test "with props" do
-      node = [
+      node =
         {:component, Module2,
          [
            {"id", [text: "my_component"]},
@@ -61,7 +61,6 @@ defmodule Hologram.Template.RendererTest do
            {"b", [expression: {222}]},
            {"c", [text: "fff", expression: {333}, text: "hhh"]}
          ], []}
-      ]
 
       assert render(node, []) ==
                {"<div>prop_a = ddd, prop_b = 222, prop_c = fff333hhh</div>",
@@ -91,14 +90,13 @@ defmodule Hologram.Template.RendererTest do
     end
 
     test "with only server struct returned from init/3" do
-      node = [
+      node =
         {:component, Module5,
          [
            {"id", [text: "my_component"]},
            {"a", [text: "aaa"]},
            {"b", [text: "bbb"]}
          ], []}
-      ]
 
       assert render(node, []) ==
                {"<div>prop_a = aaa, prop_b = bbb</div>",
@@ -168,14 +166,13 @@ defmodule Hologram.Template.RendererTest do
     end
 
     test "with props" do
-      node = [
+      node =
         {:component, Module2,
          [
            {"a", [text: "ddd"]},
            {"b", [expression: {222}]},
            {"c", [text: "fff", expression: {333}, text: "hhh"]}
          ], []}
-      ]
 
       assert render(node, []) ==
                {"<div>prop_a = ddd, prop_b = 222, prop_c = fff333hhh</div>", %{}}
@@ -221,14 +218,13 @@ defmodule Hologram.Template.RendererTest do
     end
 
     test "void element, with attributes" do
-      node = [
+      node =
         {:element, "img",
          [
            {"attr_1", [text: "aaa"]},
            {"attr_2", [expression: {123}]},
            {"attr_3", [text: "ccc", expression: {987}, text: "eee"]}
          ], []}
-      ]
 
       assert render(node, []) == {~s(<img attr_1="aaa" attr_2="123" attr_3="ccc987eee" />), %{}}
     end
