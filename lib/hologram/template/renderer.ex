@@ -20,7 +20,8 @@ defmodule Hologram.Template.Renderer do
     end)
   end
 
-  def render({:component, module, props_dom_tree, children}, _slots) do
+  def render({:component, module, props_dom_tree, children}, slots) do
+    children = expand_slots(children, slots)
     props = cast_props(props_dom_tree, module)
 
     if has_id_prop?(props) do
@@ -108,6 +109,27 @@ defmodule Hologram.Template.Renderer do
     {text, _clients} = render(value_parts, [])
     {name, text}
   end
+
+  defp expand_slots(node_or_dom_tree, slots)
+
+  defp expand_slots(nodes, slots) when is_list(nodes) do
+    Enum.map(nodes, &expand_slots(&1, slots))
+    |> List.flatten()
+  end
+
+  defp expand_slots({:component, module, props, children}, slots) do
+    {:component, module, props, expand_slots(children, slots)}
+  end
+
+  defp expand_slots({:element, "slot", _attrs, []}, slots) do
+    slots[:default]
+  end
+
+  defp expand_slots({:element, tag, attrs, children}, slots) do
+    {:element, tag, attrs, expand_slots(children, slots)}
+  end
+
+  defp expand_slots(node, _slots), do: node
 
   defp filter_allowed_props(props_dom_tree, module) do
     registered_props = Enum.map(module.__props__(), &to_string/1)
