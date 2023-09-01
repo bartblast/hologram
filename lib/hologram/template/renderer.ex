@@ -113,7 +113,8 @@ defmodule Hologram.Template.Renderer do
   defp expand_slots(node_or_dom_tree, slots)
 
   defp expand_slots(nodes, slots) when is_list(nodes) do
-    Enum.map(nodes, &expand_slots(&1, slots))
+    nodes
+    |> Enum.map(&expand_slots(&1, slots))
     |> List.flatten()
   end
 
