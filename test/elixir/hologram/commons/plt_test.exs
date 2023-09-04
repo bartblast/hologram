@@ -15,12 +15,6 @@ defmodule Hologram.Commons.PLTTest do
     {:my_key_2, :my_value_2}
   ]
 
-  defp ets_table_exists?(table_ref) do
-    table_ref
-    |> :ets.info()
-    |> is_list()
-  end
-
   setup do
     clean_dir(@dump_dir)
     [plt: put(start(), @items)]
