@@ -14,8 +14,7 @@ defmodule Hologram.Router do
         SearchTree.add_route(acc, page.__hologram_route__(), page)
       end)
 
-    :ets.new(name, [:named_table, :public, {:read_concurrency, true}])
-    :ets.insert(name, {:search_tree, search_tree})
+    :persistent_term.put({name, :search_tree}, search_tree)
 
     {:ok, nil}
   end

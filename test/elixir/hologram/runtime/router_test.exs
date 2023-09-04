@@ -8,16 +8,9 @@ defmodule Hologram.Runtime.RouterTest do
 
     assert {:ok, pid} = start_link(name)
     assert is_pid(pid)
+    assert process_name_registered?(name)
 
-    assert ets_table_exists?(name)
-    assert :ets.whereis(name)
-
-    ets_info = :ets.info(name)
-    assert ets_info[:named_table]
-    assert ets_info[:protection] == :public
-    assert ets_info[:read_concurrency]
-
-    [{:search_tree, search_tree}] = :ets.lookup(name, :search_tree)
+    search_tree = :persistent_term.get({name, :search_tree})
 
     assert %SearchTree.Node{
              value: nil,
