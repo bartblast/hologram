@@ -4,11 +4,11 @@ defmodule Hologram.Runtime.RouterTest do
   alias Hologram.Router.SearchTree
 
   test "init/1" do
-    name = random_atom()
+    persistent_term_name = random_atom()
 
-    assert {:ok, nil} = init(name)
+    assert {:ok, nil} = init(persistent_term_name)
 
-    search_tree = :persistent_term.get({name, :search_tree})
+    search_tree = :persistent_term.get(persistent_term_name)
 
     assert %SearchTree.Node{
              value: nil,
