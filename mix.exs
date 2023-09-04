@@ -29,6 +29,7 @@ defmodule Hologram.MixProject do
       {:interceptor, "~> 0.5"},
       {:libgraph, "~> 0.16"},
       {:mix_audit, "~> 2.0", only: [:dev, :test], runtime: false},
+      {:phoenix, "~> 1.7"},
       {:sobelow, "~> 0.12", only: [:dev, :test], runtime: false}
     ]
   end
