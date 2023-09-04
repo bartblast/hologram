@@ -53,8 +53,14 @@ defmodule Mix.Tasks.Compile.Hologram do
 
     bundle_runtime(call_graph, ir_plt, opts)
 
-    bundle_pages(call_graph, ir_plt, opts)
+    page_digest_plt = PLT.start()
+    page_digest_plt_dump_path = opts[:build_dir] <> "/page_digest.plt"
 
+    call_graph
+    |> bundle_pages(ir_plt, opts)
+    |> Enum.each(fn {module, digest} -> PLT.put(page_digest_plt, module, digest) end)
+
+    PLT.dump(page_digest_plt, page_digest_plt_dump_path)
     CallGraph.dump(call_graph, call_graph_dump_path)
     PLT.dump(ir_plt, ir_plt_dump_path)
     PLT.dump(new_module_digest_plt, module_digest_plt_dump_path)
@@ -65,7 +71,7 @@ defmodule Mix.Tasks.Compile.Hologram do
   end
 
   defp bundle_pages(call_graph, ir_plt, opts) do
-    Enum.each(Reflection.list_pages(), fn page_module ->
+    Enum.map(Reflection.list_pages(), fn page_module ->
       if !function_exported?(page_module, :__hologram_route__, 0) do
         raise Hologram.CompileError,
           message:
@@ -86,9 +92,12 @@ defmodule Mix.Tasks.Compile.Hologram do
         bundle_dir: opts[:bundle_dir]
       ]
 
-      page_module
-      |> Compiler.build_page_js(call_graph, ir_plt, opts[:js_source_dir])
-      |> Compiler.bundle(page_bundle_opts)
+      {digest, _bundle_file, _source_map_file} =
+        page_module
+        |> Compiler.build_page_js(call_graph, ir_plt, opts[:js_source_dir])
+        |> Compiler.bundle(page_bundle_opts)
+
+      {page_module, digest}
     end)
   end
 

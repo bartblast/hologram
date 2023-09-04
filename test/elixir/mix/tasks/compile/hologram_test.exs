@@ -1,6 +1,8 @@
 defmodule Mix.Tasks.Compile.HologramTest do
   use Hologram.Test.BasicCase, async: true
   import Mix.Tasks.Compile.Hologram
+
+  alias Hologram.Commons.PLT
   alias Hologram.Compiler.Reflection
 
   @root_path Reflection.root_path()
@@ -12,6 +14,9 @@ defmodule Mix.Tasks.Compile.HologramTest do
   end
 
   defp test_build_artifacts do
+    page_digest_dump_path = "#{@tmp_path}/build/page_digest.plt"
+    assert File.exists?(page_digest_dump_path)
+
     call_graph_dump_path = "#{@tmp_path}/build/call_graph.bin"
     assert File.exists?(call_graph_dump_path)
 
@@ -48,6 +53,14 @@ defmodule Mix.Tasks.Compile.HologramTest do
       |> Enum.count()
 
     assert num_runtime_source_maps == 1
+
+    page_digest_plt = PLT.start()
+    PLT.load(page_digest_plt, page_digest_dump_path)
+    page_digest_items = PLT.get_all(page_digest_plt)
+    assert Enum.count(Map.keys(page_digest_items)) == num_page_bundles
+
+    assert page_digest_items[Hologram.Test.Fixtures.Mix.Tasks.Compile.Module1] ==
+             "992769ebf3ba16495f70bd8cd764555d"
   end
 
   # There are two tests in one test block here, because setup for the second test is expensive.
