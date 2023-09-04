@@ -74,6 +74,14 @@ defmodule Hologram.Test.Helpers do
   end
 
   @doc """
+  Determines whether the given process name has been registered.
+  """
+  @spec process_name_registered?(atom) :: boolean
+  def process_name_registered?(name) do
+    name in Process.registered()
+  end
+
+  @doc """
   Generates a random atom.
   """
   @spec random_atom() :: atom
