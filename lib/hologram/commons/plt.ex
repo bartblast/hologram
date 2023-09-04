@@ -97,7 +97,7 @@ defmodule Hologram.Commons.PLT do
   end
 
   def init(table_name) do
-    :ets.new(table_name, [:public, :named_table])
+    :ets.new(table_name, [:named_table, :public])
     {:ok, :ets.whereis(table_name)}
   end
 
