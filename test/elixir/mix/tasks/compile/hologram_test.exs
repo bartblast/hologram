@@ -3,7 +3,11 @@ defmodule Mix.Tasks.Compile.HologramTest do
   import Mix.Tasks.Compile.Hologram
 
   alias Hologram.Commons.PLT
+  alias Hologram.Compiler.CallGraph
+  alias Hologram.Compiler.IR
   alias Hologram.Compiler.Reflection
+  alias Hologram.Test.Fixtures.Mix.Tasks.Compile.Module1
+  alias Hologram.Test.Fixtures.Mix.Tasks.Compile.Module2
 
   @root_path Reflection.root_path()
   @tmp_path "#{Reflection.tmp_path()}/#{__MODULE__}/run_1"
@@ -58,9 +62,25 @@ defmodule Mix.Tasks.Compile.HologramTest do
     PLT.load(page_digest_plt, page_digest_dump_path)
     page_digest_items = PLT.get_all(page_digest_plt)
     assert Enum.count(Map.keys(page_digest_items)) == num_page_bundles
+    assert page_digest_items[Module1] == "992769ebf3ba16495f70bd8cd764555d"
 
-    assert page_digest_items[Hologram.Test.Fixtures.Mix.Tasks.Compile.Module1] ==
-             "992769ebf3ba16495f70bd8cd764555d"
+    call_graph = CallGraph.start()
+    CallGraph.load(call_graph, call_graph_dump_path)
+
+    assert CallGraph.inbound_remote_edges(call_graph, Module2) == [
+             %Graph.Edge{v1: {Module1, :__hologram_layout_module__, 0}, v2: Module2}
+           ]
+
+    ir_plt = PLT.start()
+    PLT.load(ir_plt, ir_plt_dump_path)
+    assert %IR.ModuleDefinition{} = PLT.get!(ir_plt, Module2)
+
+    module_digest_plt = PLT.start()
+    PLT.load(module_digest_plt, module_digest_plt_dump_path)
+
+    assert PLT.get!(module_digest_plt, Module2) ==
+             <<192, 132, 144, 80, 65, 123, 26, 73, 18, 78, 113, 30, 217, 117, 223, 122, 185, 70,
+               94, 250, 169, 95, 98, 128, 111, 218, 140, 29, 241, 247, 3, 69>>
   end
 
   # There are two tests in one test block here, because setup for the second test is expensive.
