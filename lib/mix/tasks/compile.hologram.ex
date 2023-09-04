@@ -1,3 +1,4 @@
+# credo:disable-for-this-file Credo.Check.Refactor.ABCSize
 defmodule Mix.Tasks.Compile.Hologram do
   @moduledoc """
   Builds Hologram runtime and page JavaScript files for the current project.
@@ -34,22 +35,14 @@ defmodule Mix.Tasks.Compile.Hologram do
   def run(opts \\ @default_opts) do
     Logger.info("Hologram: compiler started")
 
-    new_module_digest_plt = Compiler.build_module_digest_plt()
-    old_module_digest_plt = PLT.start()
-    module_digest_plt_dump_path = opts[:build_dir] <> "/module_digest.plt"
-    PLT.maybe_load(old_module_digest_plt, module_digest_plt_dump_path)
+    {new_module_digest_plt, old_module_digest_plt, module_digest_plt_dump_path} =
+      build_module_digest_plts(opts)
 
     diff = Compiler.diff_module_digest_plts(old_module_digest_plt, new_module_digest_plt)
 
-    ir_plt = PLT.start()
-    ir_plt_dump_path = opts[:build_dir] <> "/ir.plt"
-    PLT.maybe_load(ir_plt, ir_plt_dump_path)
-    Compiler.patch_ir_plt(ir_plt, diff)
+    {ir_plt, ir_plt_dump_path} = build_ir_plt(opts, diff)
 
-    call_graph = CallGraph.start()
-    call_graph_dump_path = opts[:build_dir] <> "/call_graph.bin"
-    CallGraph.maybe_load(call_graph, call_graph_dump_path)
-    CallGraph.patch(call_graph, ir_plt, diff)
+    {call_graph, call_graph_dump_path} = build_call_graph(opts, ir_plt, diff)
 
     bundle_runtime(call_graph, ir_plt, opts)
 
@@ -68,6 +61,33 @@ defmodule Mix.Tasks.Compile.Hologram do
     Logger.info("Hologram: compiler finished")
 
     :ok
+  end
+
+  defp build_call_graph(opts, ir_plt, diff) do
+    call_graph = CallGraph.start()
+    call_graph_dump_path = opts[:build_dir] <> "/call_graph.bin"
+    CallGraph.maybe_load(call_graph, call_graph_dump_path)
+    CallGraph.patch(call_graph, ir_plt, diff)
+
+    {call_graph, call_graph_dump_path}
+  end
+
+  defp build_ir_plt(opts, diff) do
+    ir_plt = PLT.start()
+    ir_plt_dump_path = opts[:build_dir] <> "/ir.plt"
+    PLT.maybe_load(ir_plt, ir_plt_dump_path)
+    Compiler.patch_ir_plt(ir_plt, diff)
+
+    {ir_plt, ir_plt_dump_path}
+  end
+
+  defp build_module_digest_plts(opts) do
+    new_module_digest_plt = Compiler.build_module_digest_plt()
+    old_module_digest_plt = PLT.start()
+    module_digest_plt_dump_path = opts[:build_dir] <> "/module_digest.plt"
+    PLT.maybe_load(old_module_digest_plt, module_digest_plt_dump_path)
+
+    {new_module_digest_plt, old_module_digest_plt, module_digest_plt_dump_path}
   end
 
   defp bundle_pages(call_graph, ir_plt, opts) do

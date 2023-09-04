@@ -18,18 +18,49 @@ defmodule Mix.Tasks.Compile.HologramTest do
   end
 
   defp test_build_artifacts do
-    page_digest_dump_path = "#{@tmp_path}/build/page_digest.plt"
-    assert File.exists?(page_digest_dump_path)
+    num_page_bundles = test_page_bundles()
+    test_runtime_bundle()
 
+    test_module_digest_plt()
+    test_ir_plt()
+    test_call_graph()
+    test_page_digest_plt(num_page_bundles)
+  end
+
+  defp test_call_graph do
     call_graph_dump_path = "#{@tmp_path}/build/call_graph.bin"
     assert File.exists?(call_graph_dump_path)
 
+    call_graph = CallGraph.start()
+    CallGraph.load(call_graph, call_graph_dump_path)
+
+    assert CallGraph.inbound_remote_edges(call_graph, Module2) == [
+             %Graph.Edge{v1: {Module1, :__hologram_layout_module__, 0}, v2: Module2}
+           ]
+  end
+
+  defp test_ir_plt do
     ir_plt_dump_path = "#{@tmp_path}/build/ir.plt"
     assert File.exists?(ir_plt_dump_path)
 
+    ir_plt = PLT.start()
+    PLT.load(ir_plt, ir_plt_dump_path)
+    assert %IR.ModuleDefinition{} = PLT.get!(ir_plt, Module2)
+  end
+
+  defp test_module_digest_plt do
     module_digest_plt_dump_path = "#{@tmp_path}/build/module_digest.plt"
     assert File.exists?(module_digest_plt_dump_path)
 
+    module_digest_plt = PLT.start()
+    PLT.load(module_digest_plt, module_digest_plt_dump_path)
+
+    assert PLT.get!(module_digest_plt, Module2) ==
+             <<192, 132, 144, 80, 65, 123, 26, 73, 18, 78, 113, 30, 217, 117, 223, 122, 185, 70,
+               94, 250, 169, 95, 98, 128, 111, 218, 140, 29, 241, 247, 3, 69>>
+  end
+
+  defp test_page_bundles do
     num_page_bundles =
       "#{@tmp_path}/bundle/hologram.page.????????????????????????????????.js"
       |> Path.wildcard()
@@ -44,6 +75,21 @@ defmodule Mix.Tasks.Compile.HologramTest do
 
     assert num_page_source_maps == num_page_bundles
 
+    num_page_bundles
+  end
+
+  defp test_page_digest_plt(num_page_bundles) do
+    page_digest_dump_path = "#{@tmp_path}/build/page_digest.plt"
+    assert File.exists?(page_digest_dump_path)
+
+    page_digest_plt = PLT.start()
+    PLT.load(page_digest_plt, page_digest_dump_path)
+    page_digest_items = PLT.get_all(page_digest_plt)
+    assert Enum.count(Map.keys(page_digest_items)) == num_page_bundles
+    assert page_digest_items[Module1] == "992769ebf3ba16495f70bd8cd764555d"
+  end
+
+  defp test_runtime_bundle do
     num_runtime_bundles =
       "#{@tmp_path}/bundle/hologram.runtime.????????????????????????????????.js"
       |> Path.wildcard()
@@ -57,30 +103,6 @@ defmodule Mix.Tasks.Compile.HologramTest do
       |> Enum.count()
 
     assert num_runtime_source_maps == 1
-
-    page_digest_plt = PLT.start()
-    PLT.load(page_digest_plt, page_digest_dump_path)
-    page_digest_items = PLT.get_all(page_digest_plt)
-    assert Enum.count(Map.keys(page_digest_items)) == num_page_bundles
-    assert page_digest_items[Module1] == "992769ebf3ba16495f70bd8cd764555d"
-
-    call_graph = CallGraph.start()
-    CallGraph.load(call_graph, call_graph_dump_path)
-
-    assert CallGraph.inbound_remote_edges(call_graph, Module2) == [
-             %Graph.Edge{v1: {Module1, :__hologram_layout_module__, 0}, v2: Module2}
-           ]
-
-    ir_plt = PLT.start()
-    PLT.load(ir_plt, ir_plt_dump_path)
-    assert %IR.ModuleDefinition{} = PLT.get!(ir_plt, Module2)
-
-    module_digest_plt = PLT.start()
-    PLT.load(module_digest_plt, module_digest_plt_dump_path)
-
-    assert PLT.get!(module_digest_plt, Module2) ==
-             <<192, 132, 144, 80, 65, 123, 26, 73, 18, 78, 113, 30, 217, 117, 223, 122, 185, 70,
-               94, 250, 169, 95, 98, 128, 111, 218, 140, 29, 241, 247, 3, 69>>
   end
 
   # There are two tests in one test block here, because setup for the second test is expensive.
