@@ -64,6 +64,15 @@ defmodule Hologram.Test.Helpers do
   end
 
   @doc """
+  Generates a random atom.
+  """
+  @spec random_atom() :: atom
+  def random_atom do
+    # credo:disable-for-next-line Credo.Check.Warning.UnsafeToAtom
+    :"#{inspect(make_ref())}"
+  end
+
+  @doc """
   Returns the template for the given markup.
   """
   defmacro template(markup) do
