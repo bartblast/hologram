@@ -148,7 +148,7 @@ defmodule Hologram.Commons.PLTTest do
 
       ets_info = :ets.info(table_ref)
       refute ets_info[:named_table]
-      assert ets_info[:protection]
+      assert ets_info[:protection] == :public
     end
 
     test "named table" do
@@ -167,7 +167,7 @@ defmodule Hologram.Commons.PLTTest do
 
       ets_info = :ets.info(table_ref)
       assert ets_info[:named_table]
-      assert ets_info[:protection]
+      assert ets_info[:protection] == :public
     end
   end
 end
