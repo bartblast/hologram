@@ -96,7 +96,7 @@ defmodule Hologram.Page do
       ## Examples
 
           iex> __hologram_route__()
-          "/my_path"
+          "/my-path"
       """
       @spec __hologram_route__() :: String.t()
       def __hologram_route__ do

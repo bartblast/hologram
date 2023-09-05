@@ -206,7 +206,7 @@ defmodule Hologram.Compiler do
   end
 
   @doc """
-  Returns the list of MFAs ({module, function, arity} tuples) that are reachable by the given page.
+  Returns the list of MFAs that are reachable by the given page.
   MFAs required by the runtime are excluded.
   """
   @spec list_page_mfas(CallGraph.t(), module) :: list(mfa)
@@ -228,7 +228,7 @@ defmodule Hologram.Compiler do
   end
 
   @doc """
-  Groups the given MFAs ({module, function, arity} tuples) by module.
+  Groups the given MFAs by module.
   """
   @spec group_mfas_by_module(list(mfa)) :: %{module => mfa}
   def group_mfas_by_module(mfas) do
@@ -236,7 +236,7 @@ defmodule Hologram.Compiler do
   end
 
   @doc """
-  Lists MFAs ({module, function, arity} tuples) required by the runtime JS script.
+  Lists MFAs required by the runtime JS script.
   """
   @spec list_runtime_mfas(CallGraph.t()) :: list(mfa)
   def list_runtime_mfas(call_graph) do

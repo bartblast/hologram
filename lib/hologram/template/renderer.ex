@@ -8,6 +8,15 @@ defmodule Hologram.Template.Renderer do
 
   @doc """
   Renders the given DOM node or DOM tree.
+
+  ## Examples
+
+      iex> node = {:component, Module3, [{"id", [text: "my_component"]}], []}
+      iex> render(node, [])
+      {
+        "<div>state_a = 1, state_b = 2</div>",
+        %{"my_component" => %Component.Client{state: %{a: 1, b: 2}}}
+      }
   """
   @spec render(DOM.dom_node() | DOM.tree(), keyword(DOM.tree())) ::
           {String.t(), %{atom => Component.Client.t()}}

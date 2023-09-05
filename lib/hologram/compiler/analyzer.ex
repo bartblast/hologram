@@ -9,7 +9,7 @@ defmodule Hologram.Compiler.Analyzer do
   end
 
   @doc """
-  Analyzes an expression and returns analysis information.
+  Aggregates information about variable patterns and variable values in the given IR.
 
   ## Examples
 

@@ -30,7 +30,7 @@ defmodule Hologram.Compiler.Helpers do
   end
 
   @doc """
-  Builds module symbol from alias segments.
+  Builds module atom from alias segments.
 
   ## Examples
 
@@ -38,7 +38,6 @@ defmodule Hologram.Compiler.Helpers do
       Aaa.Bbb
   """
   @spec module(T.alias_segments()) :: module
-
   def module(alias_segs) do
     [:"Elixir" | alias_segs]
     |> Enum.join(".")

@@ -29,6 +29,9 @@ defmodule Hologram.Compiler.Reflection do
 
       iex> component?(MyComponent)
       true
+
+      iex> component?(Hologram.Compiler.Reflection)
+      false
   """
   @spec component?(term) :: boolean
   def component?(term) do
@@ -43,6 +46,9 @@ defmodule Hologram.Compiler.Reflection do
 
       iex> layout?(MyLayout)
       true
+
+      iex> layout?(Hologram.Compiler.Reflection)
+      false
   """
   @spec layout?(term) :: boolean
   def layout?(term) do
@@ -196,6 +202,9 @@ defmodule Hologram.Compiler.Reflection do
 
       iex> page?(MyPage)
       true
+
+      iex> page?(Hologram.Compiler.Reflection)
+      false
   """
   @spec page?(term) :: boolean
   def page?(term) do

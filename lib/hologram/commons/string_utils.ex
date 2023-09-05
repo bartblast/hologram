@@ -1,6 +1,11 @@
 defmodule Hologram.Commons.StringUtils do
   @doc """
   Prepends the prefix to the given string.
+
+  ## Examples
+
+      iex> prepend("abc", "xyz")
+      "xyzabc"
   """
   @spec prepend(String.t(), String.t()) :: String.t()
   def prepend(str, prefix) do

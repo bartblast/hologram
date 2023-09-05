@@ -311,7 +311,7 @@ defmodule Hologram.Compiler.CallGraph do
   end
 
   @doc """
-  Lists MFAs ({module, function, arity} tuples) that are reachable from the given entry MFA or MFAs.
+  Lists MFAs that are reachable from the given entry MFA or MFAs.
   """
   @spec reachable_mfas(CallGraph.t(), mfa | list(mfa)) :: list(mfa)
   def reachable_mfas(call_graph, entry_mfa_or_mfas) do
