@@ -35,7 +35,7 @@ defmodule Hologram.Layout do
 
         defoverridable init: 3
       end,
-      Templatable.maybe_define_template_fun(template_path, Layout),
+      Templatable.maybe_define_template_fun(template_path, __MODULE__),
       Templatable.register_props_accumulator()
     ]
   end
