@@ -80,7 +80,7 @@ defmodule Hologram.Page do
   @spec param(atom) :: Macro.t()
   defmacro param(name) do
     quote do
-      Module.put_attribute(__MODULE__, :__props__, unquote(name))
+      Module.put_attribute(__MODULE__, :__props__, {unquote(name), nil, []})
     end
   end
 

@@ -4,7 +4,7 @@ defmodule Hologram.Test.Fixtures.Template.Renderer.Module34 do
   alias Hologram.Test.Fixtures.Template.Renderer.Module35
   alias Hologram.Test.Fixtures.Template.Renderer.Module36
 
-  prop :a
+  prop :a, :string
 
   @impl Component
   def init(props, client, _server) do

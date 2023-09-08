@@ -1,7 +1,7 @@
 defmodule Hologram.Test.Fixtures.Template.Renderer.Module13 do
   use Hologram.Component
 
-  prop :my_prop
+  prop :my_prop, :integer
 
   @impl Component
   def init(_props, client, _server) do

@@ -6,7 +6,8 @@ locals_without_parens = [
   route: 1,
 
   # Hologram.Runtime.Templatable
-  prop: 1
+  prop: 2,
+  prop: 3
 ]
 
 [

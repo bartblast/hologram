@@ -1,8 +1,8 @@
 defmodule Hologram.Test.Fixtures.Template.Renderer.Module23 do
   use Hologram.Layout
 
-  prop :key_1
-  prop :key_2
+  prop :key_1, :string
+  prop :key_2, :string
 
   @impl Layout
   def init(_props, client, _server) do

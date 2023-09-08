@@ -144,8 +144,10 @@ defmodule Hologram.Template.Renderer do
   defp expand_slots(node, _slots), do: node
 
   defp filter_allowed_props(props_dom_tree, module) do
-    registered_props = Enum.map(module.__props__(), &to_string/1)
-    allowed_props = ["id" | registered_props]
+    registered_prop_names =
+      Enum.map(module.__props__(), fn {name, _type, _opts} -> to_string(name) end)
+
+    allowed_props = ["id" | registered_prop_names]
 
     Enum.filter(props_dom_tree, fn {name, _value_parts} -> name in allowed_props end)
   end

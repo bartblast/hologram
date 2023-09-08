@@ -36,7 +36,7 @@ defmodule Hologram.Runtime.Templatable do
       @doc """
       Returns the list of prop names for the compiled component.
       """
-      @spec __props__() :: list(atom)
+      @spec __props__() :: list({atom, atom, keyword})
       def __props__, do: @__props__
     end
   end
@@ -70,10 +70,10 @@ defmodule Hologram.Runtime.Templatable do
   @doc """
   Accumulates the given prop name in __props__ module attribute.
   """
-  @spec prop(atom) :: Macro.t()
-  defmacro prop(name) do
+  @spec prop(atom, atom, keyword) :: Macro.t()
+  defmacro prop(name, type, opts \\ []) do
     quote do
-      Module.put_attribute(__MODULE__, :__props__, unquote(name))
+      Module.put_attribute(__MODULE__, :__props__, {unquote(name), unquote(type), unquote(opts)})
     end
   end
 

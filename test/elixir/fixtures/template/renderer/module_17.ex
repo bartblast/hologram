@@ -1,7 +1,7 @@
 defmodule Hologram.Test.Fixtures.Template.Renderer.Module17 do
   use Hologram.Component
 
-  prop :a
+  prop :a, :string
 
   @impl Component
   def template do

@@ -1,9 +1,9 @@
 defmodule Hologram.Test.Fixtures.Template.Renderer.Module2 do
   use Hologram.Component
 
-  prop :a
-  prop :b
-  prop :c
+  prop :a, :string
+  prop :b, :integer
+  prop :c, :string
 
   @impl Component
   def template do
