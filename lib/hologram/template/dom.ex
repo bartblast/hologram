@@ -8,6 +8,7 @@ defmodule Hologram.Template.DOM do
           {:component, module, list({String.t(), list(dom_node())}), list(dom_node())}
           | {:element, String.t(), list({String.t(), list(dom_node())}), list(dom_node())}
           | {:expression, {any}}
+          | {:page, module, list({String.t(), list(dom_node())}), []}
           | {:text, String.t()}
 
   @type tree :: dom_node | list(dom_node())

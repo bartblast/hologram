@@ -3,6 +3,6 @@ defmodule Hologram.Test.Fixtures.LayoutFixture do
 
   @impl Layout
   def template do
-    ~H""
+    ~H"<slot />"
   end
 end
