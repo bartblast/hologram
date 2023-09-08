@@ -2,8 +2,14 @@ defmodule Hologram.Template.DOMTest do
   use Hologram.Test.BasicCase, async: true
   import Hologram.Template.DOM
 
-  test "tree_ast/1, text node" do
-    assert tree_ast([{:text, "abc"}]) == [{:text, "abc"}]
+  describe "tree_ast/1, text node" do
+    test "without double quotes" do
+      assert tree_ast([{:text, "abc"}]) == [{:text, "abc"}]
+    end
+
+    test "with double quotes" do
+      assert tree_ast([{:text, "aaa\"bbb\"ccc"}]) == [text: "aaa\"bbb\"ccc"]
+    end
   end
 
   describe "tree_ast/1, element node & component node" do

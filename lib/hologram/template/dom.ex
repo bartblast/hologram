@@ -104,7 +104,8 @@ defmodule Hologram.Template.DOM do
   end
 
   defp render_code({:text, str}) do
-    "{:text, \"#{str}\"}"
+    escaped_str = String.replace(str, ~s("), ~s(\\"))
+    ~s({:text, "#{escaped_str}"})
   end
 
   defp substitute_module_attributes({:@, meta_1, [{name, _meta_2, _args}]}) do
