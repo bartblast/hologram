@@ -4,13 +4,6 @@ defmodule Hologram.Runtime.RouterTest do
 
   alias Hologram.Router.SearchTree
   alias Hologram.Test.Fixtures.Runtime.Router.Module1
-  alias Hologram.Test.Fixtures.Runtime.Router.Module3
-
-  test "extract_params/2" do
-    url_path = "/hologram-test-fixtures-runtime-router-module3/111/ccc/222"
-
-    assert extract_params(url_path, Module3) == %{aaa: "111", bbb: "222"}
-  end
 
   test "init/1" do
     persistent_term_key = random_atom()

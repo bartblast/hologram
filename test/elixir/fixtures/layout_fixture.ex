@@ -1,4 +1,4 @@
-defmodule Hologram.Test.Fixtures.Runtime.Router.Module2 do
+defmodule Hologram.Test.Fixtures.LayoutFixture do
   use Hologram.Layout
 
   @impl Layout
