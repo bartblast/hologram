@@ -6,9 +6,14 @@ defmodule Hologram.Runtime.LayoutTest do
   alias Hologram.Test.Fixtures.Runtime.Layout.Module1
   alias Hologram.Test.Fixtures.Runtime.Layout.Module2
   alias Hologram.Test.Fixtures.Runtime.Layout.Module3
+  alias Hologram.Test.Fixtures.Runtime.Layout.Module4
 
   test "__is_hologram_layout__/0" do
     assert Module1.__is_hologram_layout__()
+  end
+
+  test "__props__/0" do
+    assert Module4.__props__() == [{:b, :integer, [opt_1: 111, opt_2: 222]}, {:a, :string, []}]
   end
 
   describe "init/3" do

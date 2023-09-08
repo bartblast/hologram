@@ -6,9 +6,14 @@ defmodule Hologram.Runtime.ComponentTest do
   alias Hologram.Test.Fixtures.Runtime.Component.Module1
   alias Hologram.Test.Fixtures.Runtime.Component.Module2
   alias Hologram.Test.Fixtures.Runtime.Component.Module3
+  alias Hologram.Test.Fixtures.Runtime.Component.Module4
 
   test "__is_hologram_component__/0" do
     assert Module1.__is_hologram_component__()
+  end
+
+  test "__props__/0" do
+    assert Module4.__props__() == [{:b, :integer, [opt_1: 111, opt_2: 222]}, {:a, :string, []}]
   end
 
   describe "init/1" do
