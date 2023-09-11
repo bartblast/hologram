@@ -32,6 +32,14 @@ defmodule Hologram.Runtime.TemplatableTest do
     end
   end
 
+  test "put_context/3" do
+    client = %Component.Client{context: %{a: 1}}
+
+    assert put_context(client, :b, 2) == %Component.Client{
+             context: %{a: 1, b: 2}
+           }
+  end
+
   describe "put_state/3" do
     test "keyword" do
       client = %Component.Client{state: %{a: 1}}

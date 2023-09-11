@@ -78,6 +78,14 @@ defmodule Hologram.Runtime.Templatable do
   end
 
   @doc """
+  Puts the given key-value pair to the context.
+  """
+  @spec put_context(Component.Client.t(), any, any) :: Component.Client.t()
+  def put_context(%{context: context} = client, key, value) do
+    %{client | context: Map.put(context, key, value)}
+  end
+
+  @doc """
   Puts the given key-value entries to the component client state.
   """
   @spec put_state(Component.Client.t(), keyword | map) :: Component.Client.t()
