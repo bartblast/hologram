@@ -12,7 +12,7 @@ defmodule Hologram.Template.Renderer do
   ## Examples
 
       iex> node = {:component, Module3, [{"id", [text: "my_component"]}], []}
-      iex> render(node)
+      iex> render(node, %{}, [])
       {
         "<div>state_a = 1, state_b = 2</div>",
         %{"my_component" => %Component.Client{state: %{a: 1, b: 2}}}
