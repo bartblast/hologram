@@ -146,8 +146,7 @@ defmodule Hologram.Commons.PLTTest do
     end
 
     test "named table" do
-      # credo:disable-for-next-line Credo.Check.Warning.UnsafeToAtom
-      table_name = :"#{inspect(make_ref())}"
+      table_name = random_atom()
 
       assert %PLT{pid: pid, table_ref: table_ref, table_name: ^table_name} =
                start(table_name: table_name)
