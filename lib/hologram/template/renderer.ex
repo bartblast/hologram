@@ -82,16 +82,12 @@ defmodule Hologram.Template.Renderer do
   def render({:page, page_module, params_dom_tree, []}, context, _slots) do
     params = cast_props(params_dom_tree, page_module)
     {page_client, _server} = init_component(page_module, params)
+
     vars = aggregate_vars(params, page_client.state)
     new_context = Map.merge(context, page_client.context)
 
     layout_module = page_module.__hologram_layout_module__()
-
-    layout_props_dom_tree =
-      page_module.__hologram_layout_props__()
-      |> Enum.into(%{id: "layout"})
-      |> aggregate_vars(page_client.state)
-      |> Enum.map(fn {name, value} -> {to_string(name), [expression: {value}]} end)
+    layout_props_dom_tree = build_layout_props_dom_tree(page_module, page_client)
 
     page_dom_tree = page_module.template().(vars)
     node = {:component, layout_module, layout_props_dom_tree, page_dom_tree}
@@ -107,6 +103,13 @@ defmodule Hologram.Template.Renderer do
 
   defp aggregate_vars(props, state) do
     Map.merge(props, state)
+  end
+
+  defp build_layout_props_dom_tree(page_module, page_client) do
+    page_module.__hologram_layout_props__()
+    |> Enum.into(%{id: "layout"})
+    |> aggregate_vars(page_client.state)
+    |> Enum.map(fn {name, value} -> {to_string(name), [expression: {value}]} end)
   end
 
   defp cast_props(props_dom_tree, module) do
