@@ -32,7 +32,7 @@ defmodule Hologram.Runtime.Controller do
       conn.request_path
       |> extract_params(page_module)
       |> build_page_dom_node(page_module)
-      |> Renderer.render([])
+      |> Renderer.render(%{}, [])
 
     conn
     |> Controller.html(html)
