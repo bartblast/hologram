@@ -8,8 +8,7 @@ defmodule Hologram.Test.Fixtures.Template.Renderer.Module39 do
 
   @impl Page
   def init(_params, client, _server) do
-    client
-    |> put_context({:my_scope, :my_key}, 123)
+    put_context(client, {:my_scope, :my_key}, 123)
   end
 
   @impl Page

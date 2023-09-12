@@ -4,8 +4,7 @@ defmodule Hologram.Test.Fixtures.Template.Renderer.Module37 do
 
   @impl Component
   def init(_props, client, _server) do
-    client
-    |> put_context({:my_scope, :my_key}, 123)
+    put_context(client, {:my_scope, :my_key}, 123)
   end
 
   @impl Component
