@@ -3,9 +3,9 @@ defmodule Hologram.CompilerTest do
   import Hologram.Compiler
 
   alias Hologram.Commons.PLT
+  alias Hologram.Commons.Reflection
   alias Hologram.Compiler.CallGraph
   alias Hologram.Compiler.IR
-  alias Hologram.Commons.Reflection
 
   alias Hologram.Test.Fixtures.Compiler.Module1
   alias Hologram.Test.Fixtures.Compiler.Module10

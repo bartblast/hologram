@@ -1,11 +1,11 @@
 defmodule Hologram.Compiler do
   alias Hologram.Commons.CryptographicUtils
   alias Hologram.Commons.PLT
+  alias Hologram.Commons.Reflection
   alias Hologram.Compiler.CallGraph
   alias Hologram.Compiler.Context
   alias Hologram.Compiler.Encoder
   alias Hologram.Compiler.IR
-  alias Hologram.Commons.Reflection
 
   @doc """
   Extracts JavaScript source code for the given ported Erlang function and generates interpreter function definition JavaScript statetement.

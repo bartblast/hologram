@@ -3,8 +3,8 @@ defmodule Hologram.Commons.PLTTest do
   import Hologram.Commons.PLT
 
   alias Hologram.Commons.PLT
-  alias Hologram.Commons.SerializationUtils
   alias Hologram.Commons.Reflection
+  alias Hologram.Commons.SerializationUtils
 
   @tmp_path Reflection.tmp_path()
   @dump_dir "#{@tmp_path}/#{__MODULE__}"

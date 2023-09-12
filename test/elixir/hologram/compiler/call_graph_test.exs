@@ -3,10 +3,10 @@ defmodule Hologram.Compiler.CallGraphTest do
   import Hologram.Compiler.CallGraph
 
   alias Hologram.Commons.PLT
+  alias Hologram.Commons.Reflection
   alias Hologram.Commons.SerializationUtils
   alias Hologram.Compiler.CallGraph
   alias Hologram.Compiler.IR
-  alias Hologram.Commons.Reflection
 
   alias Hologram.Test.Fixtures.Compiler.CallGraph.Module1
   alias Hologram.Test.Fixtures.Compiler.CallGraph.Module10
