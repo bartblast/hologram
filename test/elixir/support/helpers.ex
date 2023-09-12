@@ -7,6 +7,7 @@ defmodule Hologram.Test.Helpers do
   alias Hologram.Compiler.Encoder
   alias Hologram.Compiler.IR
   alias Hologram.Component
+  alias Hologram.Template.Renderer
 
   defdelegate ast(code), to: AST, as: :for_code
   defdelegate ir(code, context), to: IR, as: :for_code
@@ -88,6 +89,20 @@ defmodule Hologram.Test.Helpers do
   def random_atom do
     # credo:disable-for-next-line Credo.Check.Warning.UnsafeToAtom
     :"#{inspect(make_ref())}"
+  end
+
+  @doc """
+  Returns the HTML for the given component.
+  """
+  @spec render_component(module, %{atom => any}, %{(atom | {any, atom}) => any}) :: String.t()
+  def render_component(module, props, context) do
+    props_dom_tree =
+      Enum.map(props, fn {name, value} -> {to_string(name), [expression: {value}]} end)
+
+    node = {:component, module, props_dom_tree, []}
+    {html, _clients} = Renderer.render(node, context, [])
+
+    html
   end
 
   @doc """
