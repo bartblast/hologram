@@ -1,11 +1,11 @@
-defmodule Hologram.Compiler.ReflectionTest do
+defmodule Hologram.Commons.ReflectionTest do
   use Hologram.Test.BasicCase, async: true
-  import Hologram.Compiler.Reflection
+  import Hologram.Commons.Reflection
 
-  alias Hologram.Test.Fixtures.Compiler.Reflection.Module1
-  alias Hologram.Test.Fixtures.Compiler.Reflection.Module2
-  alias Hologram.Test.Fixtures.Compiler.Reflection.Module3
-  alias Hologram.Test.Fixtures.Compiler.Reflection.Module4
+  alias Hologram.Test.Fixtures.Commons.Reflection.Module1
+  alias Hologram.Test.Fixtures.Commons.Reflection.Module2
+  alias Hologram.Test.Fixtures.Commons.Reflection.Module3
+  alias Hologram.Test.Fixtures.Commons.Reflection.Module4
 
   describe "alias?/1" do
     test "atom which is an alias" do
@@ -93,7 +93,7 @@ defmodule Hologram.Compiler.ReflectionTest do
 
     assert Hologram.Test.Fixtures.Compiler.Module5 in result
     assert Hologram.Test.Fixtures.Compiler.CallGraph.Module11 in result
-    assert Hologram.Test.Fixtures.Compiler.Reflection.Module2 in result
+    assert Hologram.Test.Fixtures.Commons.Reflection.Module2 in result
     assert Hologram.Test.Fixtures.Runtime.Page.Module1 in result
 
     refute Hologram.Test.Fixtures.Compiler.Module6 in result

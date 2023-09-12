@@ -5,7 +5,7 @@ defmodule Hologram.CompilerTest do
   alias Hologram.Commons.PLT
   alias Hologram.Compiler.CallGraph
   alias Hologram.Compiler.IR
-  alias Hologram.Compiler.Reflection
+  alias Hologram.Commons.Reflection
 
   alias Hologram.Test.Fixtures.Compiler.Module1
   alias Hologram.Test.Fixtures.Compiler.Module10

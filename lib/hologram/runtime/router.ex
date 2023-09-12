@@ -1,7 +1,7 @@
 defmodule Hologram.Router do
   use GenServer
 
-  alias Hologram.Compiler.Reflection
+  alias Hologram.Commons.Reflection
   alias Hologram.Router.SearchTree
 
   @persistent_term_key {__MODULE__, :search_tree}

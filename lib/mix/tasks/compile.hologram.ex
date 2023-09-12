@@ -9,7 +9,7 @@ defmodule Mix.Tasks.Compile.Hologram do
   alias Hologram.Commons.PLT
   alias Hologram.Compiler
   alias Hologram.Compiler.CallGraph
-  alias Hologram.Compiler.Reflection
+  alias Hologram.Commons.Reflection
 
   require Logger
 

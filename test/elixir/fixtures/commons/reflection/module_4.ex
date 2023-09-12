@@ -1,4 +1,4 @@
-defmodule Hologram.Test.Fixtures.Compiler.Reflection.Module4 do
+defmodule Hologram.Test.Fixtures.Commons.Reflection.Module4 do
   use Hologram.Layout
 
   @impl Layout

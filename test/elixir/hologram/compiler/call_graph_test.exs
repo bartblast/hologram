@@ -6,7 +6,7 @@ defmodule Hologram.Compiler.CallGraphTest do
   alias Hologram.Commons.SerializationUtils
   alias Hologram.Compiler.CallGraph
   alias Hologram.Compiler.IR
-  alias Hologram.Compiler.Reflection
+  alias Hologram.Commons.Reflection
 
   alias Hologram.Test.Fixtures.Compiler.CallGraph.Module1
   alias Hologram.Test.Fixtures.Compiler.CallGraph.Module10

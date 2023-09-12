@@ -1,7 +1,7 @@
 defmodule Hologram.Compiler.Normalizer do
   alias Hologram.Compiler.AST
   alias Hologram.Compiler.Helpers
-  alias Hologram.Compiler.Reflection
+  alias Hologram.Commons.Reflection
 
   @doc """
   Normalizes Elixir AST by ensuring that:

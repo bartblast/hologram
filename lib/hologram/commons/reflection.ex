@@ -1,4 +1,4 @@
-defmodule Hologram.Compiler.Reflection do
+defmodule Hologram.Commons.Reflection do
   @doc """
   Determines whether the given term is an alias.
 
@@ -30,7 +30,7 @@ defmodule Hologram.Compiler.Reflection do
       iex> component?(MyComponent)
       true
 
-      iex> component?(Hologram.Compiler.Reflection)
+      iex> component?(Hologram.Commons.Reflection)
       false
   """
   @spec component?(term) :: boolean
@@ -47,7 +47,7 @@ defmodule Hologram.Compiler.Reflection do
       iex> layout?(MyLayout)
       true
 
-      iex> layout?(Hologram.Compiler.Reflection)
+      iex> layout?(Hologram.Commons.Reflection)
       false
   """
   @spec layout?(term) :: boolean
@@ -125,7 +125,7 @@ defmodule Hologram.Compiler.Reflection do
 
   ## Examples
 
-      iex> module?(Hologram.Compiler.Reflection)
+      iex> module?(Hologram.Commons.Reflection)
       true
 
       iex> module?(Aaa.Bbb)
@@ -155,7 +155,7 @@ defmodule Hologram.Compiler.Reflection do
 
   ## Examples
 
-      iex> module_beam_defs(Hologram.Compiler.Reflection)
+      iex> module_beam_defs(Hologram.Commons.Reflection)
       [
         ...,
         {{:alias?, 1}, :def, [line: 14],
@@ -203,7 +203,7 @@ defmodule Hologram.Compiler.Reflection do
       iex> page?(MyPage)
       true
 
-      iex> page?(Hologram.Compiler.Reflection)
+      iex> page?(Hologram.Commons.Reflection)
       false
   """
   @spec page?(term) :: boolean

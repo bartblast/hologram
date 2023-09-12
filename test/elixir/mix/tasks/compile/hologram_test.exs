@@ -5,7 +5,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
   alias Hologram.Commons.PLT
   alias Hologram.Compiler.CallGraph
   alias Hologram.Compiler.IR
-  alias Hologram.Compiler.Reflection
+  alias Hologram.Commons.Reflection
   alias Hologram.Test.Fixtures.Mix.Tasks.Compile.Module1
   alias Hologram.Test.Fixtures.Mix.Tasks.Compile.Module2
 

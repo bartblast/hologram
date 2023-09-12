@@ -3,7 +3,7 @@ defmodule Hologram.Compiler.CallGraph do
   alias Hologram.Commons.SerializationUtils
   alias Hologram.Compiler.CallGraph
   alias Hologram.Compiler.IR
-  alias Hologram.Compiler.Reflection
+  alias Hologram.Commons.Reflection
 
   defstruct pid: nil
   @type t :: %CallGraph{pid: pid}

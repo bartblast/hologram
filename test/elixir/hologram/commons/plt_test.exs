@@ -4,7 +4,7 @@ defmodule Hologram.Commons.PLTTest do
 
   alias Hologram.Commons.PLT
   alias Hologram.Commons.SerializationUtils
-  alias Hologram.Compiler.Reflection
+  alias Hologram.Commons.Reflection
 
   @tmp_path Reflection.tmp_path()
   @dump_dir "#{@tmp_path}/#{__MODULE__}"

@@ -1,4 +1,4 @@
-defmodule Hologram.Test.Fixtures.Compiler.Reflection.Module3 do
+defmodule Hologram.Test.Fixtures.Commons.Reflection.Module3 do
   use Hologram.Component
 
   @impl Component
