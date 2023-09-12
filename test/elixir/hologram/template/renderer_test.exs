@@ -27,6 +27,7 @@ defmodule Hologram.Template.RendererTest do
   alias Hologram.Test.Fixtures.Template.Renderer.Module40
   alias Hologram.Test.Fixtures.Template.Renderer.Module43
   alias Hologram.Test.Fixtures.Template.Renderer.Module45
+  alias Hologram.Test.Fixtures.Template.Renderer.Module46
   alias Hologram.Test.Fixtures.Template.Renderer.Module5
   alias Hologram.Test.Fixtures.Template.Renderer.Module6
   alias Hologram.Test.Fixtures.Template.Renderer.Module7
@@ -449,8 +450,23 @@ defmodule Hologram.Template.RendererTest do
   end
 
   describe "context" do
-    test "set in page, accessed in component" do
+    test "set in page, accessed in component nested in page" do
       node = {:page, Module39, [], []}
+
+      assert render(node, %{}, []) ==
+               {"prop_aaa = 123",
+                %{
+                  "layout" => %Component.Client{
+                    context: %{}
+                  },
+                  "page" => %Component.Client{
+                    context: %{{:my_scope, :my_key} => 123}
+                  }
+                }}
+    end
+
+    test "set in page, accessed in component nested in layout" do
+      node = {:page, Module46, [], []}
 
       assert render(node, %{}, []) ==
                {"prop_aaa = 123",
@@ -470,10 +486,10 @@ defmodule Hologram.Template.RendererTest do
       assert render(node, %{}, []) ==
                {"prop_aaa = 123",
                 %{
-                  "layout" => %Hologram.Component.Client{
+                  "layout" => %Component.Client{
                     context: %{}
                   },
-                  "page" => %Hologram.Component.Client{
+                  "page" => %Component.Client{
                     context: %{{:my_scope, :my_key} => 123}
                   }
                 }}
@@ -485,10 +501,10 @@ defmodule Hologram.Template.RendererTest do
       assert render(node, %{}, []) ==
                {"prop_aaa = 123",
                 %{
-                  "layout" => %Hologram.Component.Client{
+                  "layout" => %Component.Client{
                     context: %{{:my_scope, :my_key} => 123}
                   },
-                  "page" => %Hologram.Component.Client{
+                  "page" => %Component.Client{
                     context: %{}
                   }
                 }}
@@ -500,10 +516,10 @@ defmodule Hologram.Template.RendererTest do
       assert render(node, %{}, []) ==
                {"prop_aaa = 123",
                 %{
-                  "layout" => %Hologram.Component.Client{
+                  "layout" => %Component.Client{
                     context: %{{:my_scope, :my_key} => 123}
                   },
-                  "page" => %Hologram.Component.Client{
+                  "page" => %Component.Client{
                     context: %{}
                   }
                 }}
