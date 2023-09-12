@@ -18,7 +18,7 @@ defmodule Mix.Tasks.Compile.Hologram do
   @tmp_path Reflection.tmp_path()
 
   @build_dir "#{@root_path}/_build/#{@env}/lib/hologram/priv"
-  @bundle_dir "#{@root_path}/priv/static/assets"
+  @bundle_dir "#{@root_path}/priv/static/assets/hologram"
   @esbuild_path "#{@root_path}/deps/hologram/assets/node_modules/.bin/esbuild"
   @js_source_dir "#{@root_path}/deps/hologram/assets/js"
 
@@ -107,7 +107,7 @@ defmodule Mix.Tasks.Compile.Hologram do
       page_bundle_opts = [
         esbuild_path: opts[:esbuild_path],
         entry_name: to_string(page_module),
-        bundle_name: "hologram.page",
+        bundle_name: "page",
         tmp_dir: opts[:tmp_dir],
         bundle_dir: opts[:bundle_dir]
       ]
@@ -124,8 +124,8 @@ defmodule Mix.Tasks.Compile.Hologram do
   defp bundle_runtime(call_graph, ir_plt, opts) do
     runtime_bundle_opts = [
       esbuild_path: opts[:esbuild_path],
-      entry_name: "hologram.runtime",
-      bundle_name: "hologram.runtime",
+      entry_name: "runtime",
+      bundle_name: "runtime",
       tmp_dir: opts[:tmp_dir],
       bundle_dir: opts[:bundle_dir]
     ]

@@ -307,12 +307,12 @@ defmodule Hologram.CompilerTest do
 
       assert bundle(@js, opts) ==
                {"957e59b82bd39eb76bb8c7fea2ca29a8",
-                bundle_file = "#{@tmp_path}/my_bundle.957e59b82bd39eb76bb8c7fea2ca29a8.js",
-                source_map_file = "#{@tmp_path}/my_bundle.957e59b82bd39eb76bb8c7fea2ca29a8.js.map"}
+                bundle_file = "#{@tmp_path}/my_bundle-957e59b82bd39eb76bb8c7fea2ca29a8.js",
+                source_map_file = "#{@tmp_path}/my_bundle-957e59b82bd39eb76bb8c7fea2ca29a8.js.map"}
 
       assert File.read!(bundle_file) == """
              (()=>{})();
-             //# sourceMappingURL=my_bundle.957e59b82bd39eb76bb8c7fea2ca29a8.js.map
+             //# sourceMappingURL=my_bundle-957e59b82bd39eb76bb8c7fea2ca29a8.js.map
              """
 
       assert File.read!(source_map_file) == """
