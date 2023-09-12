@@ -25,6 +25,7 @@ defmodule Hologram.Template.RendererTest do
   alias Hologram.Test.Fixtures.Template.Renderer.Module39
   alias Hologram.Test.Fixtures.Template.Renderer.Module4
   alias Hologram.Test.Fixtures.Template.Renderer.Module40
+  alias Hologram.Test.Fixtures.Template.Renderer.Module43
   alias Hologram.Test.Fixtures.Template.Renderer.Module5
   alias Hologram.Test.Fixtures.Template.Renderer.Module6
   alias Hologram.Test.Fixtures.Template.Renderer.Module7
@@ -473,6 +474,21 @@ defmodule Hologram.Template.RendererTest do
                   },
                   "page" => %Hologram.Component.Client{
                     context: %{{:my_scope, :my_key} => 123}
+                  }
+                }}
+    end
+
+    test "set in layout, accessed in component nested in page" do
+      node = {:page, Module43, [], []}
+
+      assert render(node, %{}, []) ==
+               {"prop_aaa = 123",
+                %{
+                  "layout" => %Hologram.Component.Client{
+                    context: %{{:my_scope, :my_key} => 123}
+                  },
+                  "page" => %Hologram.Component.Client{
+                    context: %{}
                   }
                 }}
     end
