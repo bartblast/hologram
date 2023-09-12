@@ -446,6 +446,21 @@ defmodule Hologram.Template.RendererTest do
   end
 
   describe "context" do
+    test "set in page, accessed in component" do
+      node = {:page, Module39, [], []}
+
+      assert render(node, %{}, []) ==
+               {"prop_aaa = 123",
+                %{
+                  "layout" => %Component.Client{
+                    context: %{}
+                  },
+                  "page" => %Component.Client{
+                    context: %{{:my_scope, :my_key} => 123}
+                  }
+                }}
+    end
+
     test "set in component, accessed in component" do
       node = {:component, Module37, [{"id", [text: "component_37"]}], []}
 
