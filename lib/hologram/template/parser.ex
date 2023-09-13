@@ -615,7 +615,6 @@ defmodule Hologram.Template.Parser do
       iex> parse_markup(markup)
       [start_tag: {"div", [{"id", [text: "test"]}]}, end_tag: "div"]
   """
-  @intercept true
   @spec parse_markup(String.t()) :: list(parsed_tag)
   def parse_markup(markup) do
     markup

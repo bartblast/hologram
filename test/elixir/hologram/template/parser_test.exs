@@ -374,18 +374,6 @@ defmodule Hologram.Template.ParserTest do
                end_tag: "script"
              ]
     end
-
-    test "test" do
-      markup = """
-      <script>
-        {%if true}
-          window.__hologram_runtime_initial_client_data__ = "...";
-        {/if}
-      </script>
-      """
-
-      parse_markup(markup) |> Hologram.Template.DOM.tree_ast() |> IO.inspect()
-    end
   end
 
   describe "row block after" do
