@@ -4,7 +4,6 @@ defmodule Hologram.Template.ParserTest do
 
   alias Hologram.Template.Parser
   alias Hologram.Template.SyntaxError
-  alias Hologram.Template.Tokenizer
 
   # Except: { } " ' ` \ < >
   @special_chars [
