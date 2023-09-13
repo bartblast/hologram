@@ -50,6 +50,17 @@ defmodule Hologram.Template.RendererTest do
               }}
   end
 
+  test "nil nodes" do
+    nodes = [
+      {:text, "abc"},
+      nil,
+      {:text, "xyz"},
+      nil
+    ]
+
+    assert render(nodes, %{}, []) == {"abcxyz", %{}}
+  end
+
   describe "stateful component" do
     test "without props or state" do
       node = {:component, Module1, [{"id", [text: "my_component"]}], []}

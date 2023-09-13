@@ -23,7 +23,10 @@ defmodule Hologram.Template.Renderer do
   def render(node_or_tree, context, slots)
 
   def render(nodes, context, slots) when is_list(nodes) do
-    Enum.reduce(nodes, {"", %{}}, fn node, {acc_html, acc_clients} ->
+    nodes
+    # There may be nil nodes resulting from if blocks, e.g. {%if false}abc{/if}
+    |> Enum.filter(& &1)
+    |> Enum.reduce({"", %{}}, fn node, {acc_html, acc_clients} ->
       {html, clients} = render(node, context, slots)
       {acc_html <> html, Map.merge(acc_clients, clients)}
     end)
@@ -91,8 +94,10 @@ defmodule Hologram.Template.Renderer do
 
     page_dom_tree = page_module.template().(vars)
     node = {:component, layout_module, layout_props_dom_tree, page_dom_tree}
-    {html, clients_without_page} = render(node, new_context, [])
+    {html_without_initial_data, clients_without_page} = render(node, new_context, [])
+
     clients = Map.put(clients_without_page, "page", page_client)
+    html = inject_initial_data(html_without_initial_data, clients)
 
     {html, clients}
   end
@@ -189,6 +194,12 @@ defmodule Hologram.Template.Renderer do
       |> Enum.into(%{})
 
     Map.merge(props_from_template, props_from_context)
+  end
+
+  defp inject_initial_data(html, _clients) do
+    # clients
+    # |> Macro.escape()
+    html
   end
 
   defp normalize_prop_name({name, value}) do
