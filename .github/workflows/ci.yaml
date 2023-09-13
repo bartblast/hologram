@@ -183,7 +183,7 @@ jobs:
 
     # Step: Execute lib Elixir unit tests.
     - name: Run lib Elixir unit tests
-      run: mix test
+      run: mix test --warnings-as-errors
 
     # Step: Execute lib JavaScript unit tests.
     - name: Run lib JavaScript unit tests
