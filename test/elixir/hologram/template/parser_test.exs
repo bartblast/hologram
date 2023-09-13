@@ -1,5 +1,6 @@
 defmodule Hologram.Template.ParserTest do
   use Hologram.Test.BasicCase, async: true
+  import Hologram.Template.Parser
 
   alias Hologram.Template.Parser
   alias Hologram.Template.SyntaxError
@@ -37,125 +38,125 @@ defmodule Hologram.Template.ParserTest do
     "?"
   ]
 
-  defp parse(markup) do
-    markup
-    |> Tokenizer.tokenize()
-    |> Parser.parse()
-  end
-
   defp test_syntax_error_msg(markup, msg) do
     assert_raise SyntaxError, ~r/#{Regex.escape(msg)}/s, fn ->
-      parse(markup)
+      parse_markup(markup)
     end
+  end
+
+  test "parse_markup/1" do
+    markup = "<div id=\"test\"></div>"
+
+    assert parse_markup(markup) == [start_tag: {"div", [{"id", [text: "test"]}]}, end_tag: "div"]
   end
 
   describe "text" do
     test "empty" do
-      assert parse("") == []
+      assert parse_markup("") == []
     end
 
     test "with whitespaces" do
       markup = " \n\r\t"
-      assert parse(markup) == [text: markup]
+      assert parse_markup(markup) == [text: markup]
     end
 
     test "with symbols" do
       markup = "#$%"
-      assert parse(markup) == [text: markup]
+      assert parse_markup(markup) == [text: markup]
     end
 
     test "with string" do
       markup = "abc"
-      assert parse(markup) == [text: markup]
+      assert parse_markup(markup) == [text: markup]
     end
   end
 
   describe "element tags" do
     test "non-void HTML element start tag" do
-      assert parse("<div>") == [start_tag: {"div", []}]
+      assert parse_markup("<div>") == [start_tag: {"div", []}]
     end
 
     test "non-void SVG element start tag" do
-      assert parse("<g>") == [start_tag: {"g", []}]
+      assert parse_markup("<g>") == [start_tag: {"g", []}]
     end
 
     test "void HTML element, unclosed start tag" do
-      assert parse("<br>") == [self_closing_tag: {"br", []}]
+      assert parse_markup("<br>") == [self_closing_tag: {"br", []}]
     end
 
     test "void HTML element, self-closed start tag" do
-      assert parse("<br />") == [self_closing_tag: {"br", []}]
+      assert parse_markup("<br />") == [self_closing_tag: {"br", []}]
     end
 
     test "void SVG element, unclosed start tag" do
-      assert parse("<path>") == [self_closing_tag: {"path", []}]
+      assert parse_markup("<path>") == [self_closing_tag: {"path", []}]
     end
 
     test "void SVG element, self-closed start tag" do
-      assert parse("<path />") == [self_closing_tag: {"path", []}]
+      assert parse_markup("<path />") == [self_closing_tag: {"path", []}]
     end
 
     test "slot element, unclosed start tag" do
-      assert parse("<slot>") == [self_closing_tag: {"slot", []}]
+      assert parse_markup("<slot>") == [self_closing_tag: {"slot", []}]
     end
 
     test "slot element, self-closed start tag" do
-      assert parse("<slot />") == [self_closing_tag: {"slot", []}]
+      assert parse_markup("<slot />") == [self_closing_tag: {"slot", []}]
     end
 
     test "whitespaces after unclosed start tag name" do
-      assert parse("<div \n\r\t>") == [start_tag: {"div", []}]
+      assert parse_markup("<div \n\r\t>") == [start_tag: {"div", []}]
     end
 
     test "end tag" do
-      assert parse("</div>") == [end_tag: "div"]
+      assert parse_markup("</div>") == [end_tag: "div"]
     end
 
     test "whitespaces after end tag name" do
-      assert parse("</div \n\r\t>") == [end_tag: "div"]
+      assert parse_markup("</div \n\r\t>") == [end_tag: "div"]
     end
   end
 
   describe "component tags" do
     test "unclosed start tag" do
-      assert parse("<Aaa.Bbb>") == [start_tag: {"Aaa.Bbb", []}]
+      assert parse_markup("<Aaa.Bbb>") == [start_tag: {"Aaa.Bbb", []}]
     end
 
     test "self-closed start tag" do
-      assert parse("<Aaa.Bbb />") == [self_closing_tag: {"Aaa.Bbb", []}]
+      assert parse_markup("<Aaa.Bbb />") == [self_closing_tag: {"Aaa.Bbb", []}]
     end
 
     test "whitespaces after unclosed start tag name" do
-      assert parse("<Aaa.Bbb \n\r\t>") == [start_tag: {"Aaa.Bbb", []}]
+      assert parse_markup("<Aaa.Bbb \n\r\t>") == [start_tag: {"Aaa.Bbb", []}]
     end
 
     test "end tag" do
-      assert parse("</Aaa.Bbb>") == [end_tag: "Aaa.Bbb"]
+      assert parse_markup("</Aaa.Bbb>") == [end_tag: "Aaa.Bbb"]
     end
 
     test "whitespaces after end tag name" do
-      assert parse("</Aaa.Bbb \n\r\t>") == [end_tag: "Aaa.Bbb"]
+      assert parse_markup("</Aaa.Bbb \n\r\t>") == [end_tag: "Aaa.Bbb"]
     end
   end
 
   describe "expression" do
     test "empty" do
-      assert parse("{}") == [expression: "{}"]
+      assert parse_markup("{}") == [expression: "{}"]
     end
 
     test "with whitespaces" do
       markup = "{ \n\r\t}"
-      assert parse(markup) == [expression: markup]
+      assert parse_markup(markup) == [expression: markup]
     end
 
     test "with symbols" do
       markup = "{#$%}"
-      assert parse(markup) == [expression: markup]
+      assert parse_markup(markup) == [expression: markup]
     end
 
     test "with string" do
       markup = "{abc}"
-      assert parse(markup) == [expression: markup]
+      assert parse_markup(markup) == [expression: markup]
     end
   end
 
@@ -164,7 +165,7 @@ defmodule Hologram.Template.ParserTest do
       test "#{name} value text" do
         markup = "<#{unquote(tag)} id=\"test\">"
 
-        assert parse(markup) == [
+        assert parse_markup(markup) == [
                  start_tag: {unquote(tag), [{"id", [text: "test"]}]}
                ]
       end
@@ -172,7 +173,7 @@ defmodule Hologram.Template.ParserTest do
       test "#{name} value expression" do
         markup = "<#{unquote(tag)} id={1 + 2}>"
 
-        assert parse(markup) == [
+        assert parse_markup(markup) == [
                  start_tag: {unquote(tag), [{"id", [expression: "{1 + 2}"]}]}
                ]
       end
@@ -180,7 +181,7 @@ defmodule Hologram.Template.ParserTest do
       test "#{name} value expression in double quotes" do
         markup = "<#{unquote(tag)} id=\"{1 + 2}\">"
 
-        assert parse(markup) == [
+        assert parse_markup(markup) == [
                  start_tag: {unquote(tag), [{"id", [text: "", expression: "{1 + 2}", text: ""]}]}
                ]
       end
@@ -188,7 +189,7 @@ defmodule Hologram.Template.ParserTest do
       test "multi-part #{name} value: text, expression" do
         markup = "<#{unquote(tag)} id=\"abc{1 + 2}\">"
 
-        assert parse(markup) == [
+        assert parse_markup(markup) == [
                  start_tag:
                    {unquote(tag), [{"id", [text: "abc", expression: "{1 + 2}", text: ""]}]}
                ]
@@ -197,7 +198,7 @@ defmodule Hologram.Template.ParserTest do
       test "multi-part #{name} value: expression, text" do
         markup = "<#{unquote(tag)} id=\"{1 + 2}abc\">"
 
-        assert parse(markup) == [
+        assert parse_markup(markup) == [
                  start_tag:
                    {unquote(tag), [{"id", [text: "", expression: "{1 + 2}", text: "abc"]}]}
                ]
@@ -205,13 +206,13 @@ defmodule Hologram.Template.ParserTest do
 
       test "boolean #{name} followed by start tag closing" do
         markup = "<#{unquote(tag)} key>"
-        assert parse(markup) == [start_tag: {unquote(tag), [{"key", []}]}]
+        assert parse_markup(markup) == [start_tag: {unquote(tag), [{"key", []}]}]
       end
 
       test "multiple #{name}(s)" do
         markup = ~s(<#{unquote(tag)} key_1="value_1" key_2="value_2">)
 
-        assert parse(markup) == [
+        assert parse_markup(markup) == [
                  start_tag:
                    {unquote(tag), [{"key_1", [text: "value_1"]}, {"key_2", [text: "value_2"]}]}
                ]
@@ -221,64 +222,66 @@ defmodule Hologram.Template.ParserTest do
 
   describe "for block" do
     test "start" do
-      assert parse("{%for item <- @items}") == [block_start: {"for", "{ item <- @items}"}]
+      assert parse_markup("{%for item <- @items}") == [
+               block_start: {"for", "{ item <- @items}"}
+             ]
     end
 
     test "end" do
-      assert parse("{/for}") == [block_end: "for"]
+      assert parse_markup("{/for}") == [block_end: "for"]
     end
   end
 
   describe "if block" do
     test "start" do
-      assert parse("{%if true}") == [block_start: {"if", "{ true}"}]
+      assert parse_markup("{%if true}") == [block_start: {"if", "{ true}"}]
     end
 
     test "else subblock" do
-      assert parse("{%else}") == [block_start: "else"]
+      assert parse_markup("{%else}") == [block_start: "else"]
     end
 
     test "end" do
-      assert parse("{/if}") == [block_end: "if"]
+      assert parse_markup("{/if}") == [block_end: "if"]
     end
   end
 
   describe "raw block" do
     test "empty" do
-      assert parse("{%raw}{/raw}") == []
+      assert parse_markup("{%raw}{/raw}") == []
     end
 
     test "with whitespaces" do
       markup = " \n\r\t"
-      assert parse("{%raw}#{markup}{/raw}") == [text: markup]
+      assert parse_markup("{%raw}#{markup}{/raw}") == [text: markup]
     end
 
     test "with symbols" do
       markup = "#$%"
-      assert parse("{%raw}#{markup}{/raw}") == [text: markup]
+      assert parse_markup("{%raw}#{markup}{/raw}") == [text: markup]
     end
 
     test "with string" do
       markup = "abc"
-      assert parse("{%raw}#{markup}{/raw}") == [text: markup]
+      assert parse_markup("{%raw}#{markup}{/raw}") == [text: markup]
     end
 
     test "with element having an attribute value with expression in double quotes" do
-      assert parse("{%raw}<div id=\"aaa{@test}bbb\"></div>{/raw}") == [
+      assert parse_markup("{%raw}<div id=\"aaa{@test}bbb\"></div>{/raw}") == [
                start_tag: {"div", [{"id", [text: "aaa{@test}bbb"]}]},
                end_tag: "div"
              ]
     end
 
     test "with component having a property value with expression in double quotes" do
-      assert parse("{%raw}<Aaa.Bbb id=\"aaa{@test}bbb\"></Aaa.Bbb>{/raw}") == [
+      assert parse_markup("{%raw}<Aaa.Bbb id=\"aaa{@test}bbb\"></Aaa.Bbb>{/raw}") == [
                start_tag: {"Aaa.Bbb", [{"id", [text: "aaa{@test}bbb"]}]},
                end_tag: "Aaa.Bbb"
              ]
     end
 
     test "with script, having expression" do
-      assert parse("{%raw}<script>{@abc}</script>{/raw}") == [
+      assert parse_markup("{%raw}<script>{@abc}</script>{/raw}") == [
                start_tag: {"script", []},
                text: "{@abc}",
                end_tag: "script"
@@ -286,7 +289,7 @@ defmodule Hologram.Template.ParserTest do
     end
 
     test "with script, having javascript interpolation" do
-      assert parse("{%raw}<script>`abc${123}xyz`</script>{/raw}") == [
+      assert parse_markup("{%raw}<script>`abc${123}xyz`</script>{/raw}") == [
                start_tag: {"script", []},
                text: "`abc${123}xyz`",
                end_tag: "script"
@@ -294,7 +297,7 @@ defmodule Hologram.Template.ParserTest do
     end
 
     test "within script" do
-      assert parse("<script>{%raw}{@abc}{/raw}</script>") == [
+      assert parse_markup("<script>{%raw}{@abc}{/raw}</script>") == [
                start_tag: {"script", []},
                text: "{@abc}",
                end_tag: "script"
@@ -314,7 +317,7 @@ defmodule Hologram.Template.ParserTest do
     Enum.each(tags, fn {name, markup, expected} ->
       test "raw block start, #{name}, raw block end" do
         markup = "{%raw}#{unquote(markup)}{/raw}"
-        assert parse(markup) == unquote(expected)
+        assert parse_markup(markup) == unquote(expected)
       end
     end)
   end
@@ -332,7 +335,7 @@ defmodule Hologram.Template.ParserTest do
     Enum.each(tags, fn {name, markup} ->
       test "raw block start, #{name}, raw block end" do
         markup = "{%raw}#{unquote(markup)}{/raw}"
-        assert parse(markup) == [text: unquote(markup)]
+        assert parse_markup(markup) == [text: unquote(markup)]
       end
     end)
   end
@@ -340,16 +343,16 @@ defmodule Hologram.Template.ParserTest do
   describe "raw block nested in quotes" do
     test "inside double quotes within elixir expression" do
       markup = "{\"{%raw}{@abc}{/raw}\"}"
-      assert parse(markup) == [expression: markup]
+      assert parse_markup(markup) == [expression: markup]
     end
 
     test "inside single quotes within elixir expression" do
       markup = "{'{%raw}{@abc}{/raw}'}"
-      assert parse(markup) == [expression: markup]
+      assert parse_markup(markup) == [expression: markup]
     end
 
     test "inside double quotes within javascript script" do
-      assert parse("<script>\"{%raw}{@abc}{/raw}\"</script>") == [
+      assert parse_markup("<script>\"{%raw}{@abc}{/raw}\"</script>") == [
                start_tag: {"script", []},
                text: "\"{@abc}\"",
                end_tag: "script"
@@ -357,7 +360,7 @@ defmodule Hologram.Template.ParserTest do
     end
 
     test "inside single quotes within javascript script" do
-      assert parse("<script>'{%raw}{@abc}{/raw}'</script>") == [
+      assert parse_markup("<script>'{%raw}{@abc}{/raw}'</script>") == [
                start_tag: {"script", []},
                text: "'{@abc}'",
                end_tag: "script"
@@ -365,11 +368,23 @@ defmodule Hologram.Template.ParserTest do
     end
 
     test "inside backtick quotes within javascript script" do
-      assert parse("<script>`{%raw}{@abc}{/raw}`</script>") == [
+      assert parse_markup("<script>`{%raw}{@abc}{/raw}`</script>") == [
                start_tag: {"script", []},
                text: "`{@abc}`",
                end_tag: "script"
              ]
+    end
+
+    test "test" do
+      markup = """
+      <script>
+        {%if true}
+          window.__hologram_runtime_initial_client_data__ = "...";
+        {/if}
+      </script>
+      """
+
+      parse_markup(markup) |> Hologram.Template.DOM.tree_ast() |> IO.inspect()
     end
   end
 
@@ -391,7 +406,7 @@ defmodule Hologram.Template.ParserTest do
       test "#{name}" do
         markup = "#{unquote(markup)}{%raw}{@abc}{/raw}"
 
-        assert parse(markup) == [
+        assert parse_markup(markup) == [
                  unquote(expected),
                  {:text, "{@abc}"}
                ]
@@ -399,7 +414,7 @@ defmodule Hologram.Template.ParserTest do
     end)
 
     test "text" do
-      assert parse("abc{%raw}{@abc}{/raw}") == [text: "abc{@abc}"]
+      assert parse_markup("abc{%raw}{@abc}{/raw}") == [text: "abc{@abc}"]
     end
   end
 
@@ -426,7 +441,7 @@ defmodule Hologram.Template.ParserTest do
       test "#{name_1}, #{name_2}" do
         markup = "#{unquote(markup_1)}#{unquote(markup_2)}"
 
-        assert parse(markup) == [
+        assert parse_markup(markup) == [
                  unquote(expected_1),
                  unquote(expected_2)
                ]
@@ -437,23 +452,26 @@ defmodule Hologram.Template.ParserTest do
   describe "special characters nested in various markup" do
     Enum.each(@special_chars, fn char ->
       test "'#{char}' character in text" do
-        assert parse(unquote(char)) == [text: unquote(char)]
+        assert parse_markup(unquote(char)) == [text: unquote(char)]
       end
 
       test "'#{char}' character in text interpolated expression" do
         markup = "{#{unquote(char)}}"
-        assert parse(markup) == [expression: markup]
+        assert parse_markup(markup) == [expression: markup]
       end
 
       test "'#{char}' character in attribute value text part" do
         markup = "<div my_attr=\"#{unquote(char)}\">"
-        assert parse(markup) == [start_tag: {"div", [{"my_attr", [text: unquote(char)]}]}]
+
+        assert parse_markup(markup) == [
+                 start_tag: {"div", [{"my_attr", [text: unquote(char)]}]}
+               ]
       end
 
       test "'#{char}' character in attribute value expression part" do
         markup = "<div my_attr={#{unquote(char)}}>"
 
-        assert parse(markup) == [
+        assert parse_markup(markup) == [
                  start_tag: {"div", [{"my_attr", [expression: "{#{unquote(char)}}"]}]}
                ]
       end
@@ -461,7 +479,7 @@ defmodule Hologram.Template.ParserTest do
       test "'#{char}' character in for block expression" do
         markup = "{%for #{unquote(char)}}{/for}"
 
-        assert parse(markup) == [
+        assert parse_markup(markup) == [
                  block_start: {"for", "{ #{unquote(char)}}"},
                  block_end: "for"
                ]
@@ -470,7 +488,7 @@ defmodule Hologram.Template.ParserTest do
       test "'#{char}' character in else subblock content" do
         markup = "{%else}#{unquote(char)}{/if}"
 
-        assert parse(markup) == [
+        assert parse_markup(markup) == [
                  block_start: "else",
                  text: "#{unquote(char)}",
                  block_end: "if"
@@ -480,7 +498,7 @@ defmodule Hologram.Template.ParserTest do
       test "'#{char}' character in for block content" do
         markup = "{%for item <- @items}#{unquote(char)}{/for}"
 
-        assert parse(markup) == [
+        assert parse_markup(markup) == [
                  block_start: {"for", "{ item <- @items}"},
                  text: "#{unquote(char)}",
                  block_end: "for"
@@ -490,7 +508,7 @@ defmodule Hologram.Template.ParserTest do
       test "'#{char}' character in if block expression" do
         markup = "{%if #{unquote(char)}}{/if}"
 
-        assert parse(markup) == [
+        assert parse_markup(markup) == [
                  block_start: {"if", "{ #{unquote(char)}}"},
                  block_end: "if"
                ]
@@ -499,7 +517,7 @@ defmodule Hologram.Template.ParserTest do
       test "'#{char}' character in if block content" do
         markup = "{%if true}#{unquote(char)}{/if}"
 
-        assert parse(markup) == [
+        assert parse_markup(markup) == [
                  block_start: {"if", "{ true}"},
                  text: "#{unquote(char)}",
                  block_end: "if"
@@ -508,13 +526,13 @@ defmodule Hologram.Template.ParserTest do
 
       test "'#{char}' character in raw block content" do
         markup = "{%raw}#{unquote(char)}{/raw}"
-        assert parse(markup) == [text: "#{unquote(char)}"]
+        assert parse_markup(markup) == [text: "#{unquote(char)}"]
       end
 
       test "'#{char}' character in script" do
         markup = "<script>#{unquote(char)}</script>"
 
-        assert parse(markup) == [
+        assert parse_markup(markup) == [
                  start_tag: {"script", []},
                  text: "#{unquote(char)}",
                  end_tag: "script"
@@ -535,7 +553,7 @@ defmodule Hologram.Template.ParserTest do
       test "#{name} inside text" do
         markup = "abc#{unquote(markup)}xyz"
 
-        assert parse(markup) == [
+        assert parse_markup(markup) == [
                  {:text, "abc"},
                  unquote(expected),
                  {:text, "xyz"}
@@ -545,7 +563,7 @@ defmodule Hologram.Template.ParserTest do
       test "#{name} inside else subblock" do
         markup = "{%else}#{unquote(markup)}{/if}"
 
-        assert parse(markup) == [
+        assert parse_markup(markup) == [
                  {:block_start, "else"},
                  unquote(expected),
                  {:block_end, "if"}
@@ -555,7 +573,7 @@ defmodule Hologram.Template.ParserTest do
       test "#{name} inside for block" do
         markup = "{%for item <- @items}#{unquote(markup)}{/for}"
 
-        assert parse(markup) == [
+        assert parse_markup(markup) == [
                  {:block_start, {"for", "{ item <- @items}"}},
                  unquote(expected),
                  {:block_end, "for"}
@@ -565,7 +583,7 @@ defmodule Hologram.Template.ParserTest do
       test "#{name} inside if block" do
         markup = "{%if true}#{unquote(markup)}{/if}"
 
-        assert parse(markup) == [
+        assert parse_markup(markup) == [
                  {:block_start, {"if", "{ true}"}},
                  unquote(expected),
                  {:block_end, "if"}
@@ -574,18 +592,18 @@ defmodule Hologram.Template.ParserTest do
 
       test "#{name} inside elixir expression double quoted string" do
         markup = "{\"#{unquote(markup)}\"}"
-        assert parse(markup) == [expression: markup]
+        assert parse_markup(markup) == [expression: markup]
       end
 
       test "#{name} inside elixir expression single quoted string" do
         markup = "{'#{unquote(markup)}'}"
-        assert parse(markup) == [expression: markup]
+        assert parse_markup(markup) == [expression: markup]
       end
 
       test "#{name} inside javascript script double quoted string" do
         markup = "<script>\"#{unquote(markup)}\"</script>"
 
-        assert parse(markup) == [
+        assert parse_markup(markup) == [
                  start_tag: {"script", []},
                  text: "\"#{unquote(markup)}\"",
                  end_tag: "script"
@@ -595,7 +613,7 @@ defmodule Hologram.Template.ParserTest do
       test "#{name} inside javascript script single quoted string" do
         markup = "<script>'#{unquote(markup)}'</script>"
 
-        assert parse(markup) == [
+        assert parse_markup(markup) == [
                  start_tag: {"script", []},
                  text: "'#{unquote(markup)}'",
                  end_tag: "script"
@@ -605,7 +623,7 @@ defmodule Hologram.Template.ParserTest do
       test "#{name} inside javascript script backtick quoted string" do
         markup = "<script>`#{unquote(markup)}`</script>"
 
-        assert parse(markup) == [
+        assert parse_markup(markup) == [
                  start_tag: {"script", []},
                  text: "`#{unquote(markup)}`",
                  end_tag: "script"
@@ -630,23 +648,23 @@ defmodule Hologram.Template.ParserTest do
     Enum.each(combinations, fn {{quoting_name, char}, {tag_name, expr}} ->
       test "#{tag_name} block start in #{quoting_name}" do
         markup = "{#{unquote(char)}{%#{unquote(tag_name)} #{unquote(expr)}}#{unquote(char)}}"
-        assert parse(markup) == [expression: markup]
+        assert parse_markup(markup) == [expression: markup]
       end
 
       test "#{tag_name} block end in #{quoting_name}" do
         markup = "{#{unquote(char)}{/#{unquote(tag_name)}}#{unquote(char)}}"
-        assert parse(markup) == [expression: markup]
+        assert parse_markup(markup) == [expression: markup]
       end
     end)
 
     test "else subblock in double quotes" do
       markup = "{\"{%else}\"}"
-      assert parse(markup) == [expression: markup]
+      assert parse_markup(markup) == [expression: markup]
     end
 
     test "else subblock in single quotes" do
       markup = "{'{%else}'}"
-      assert parse(markup) == [expression: markup]
+      assert parse_markup(markup) == [expression: markup]
     end
   end
 
@@ -669,7 +687,7 @@ defmodule Hologram.Template.ParserTest do
         markup =
           "<script>#{unquote(char)}{%#{unquote(tag_name)} #{unquote(expr)}}#{unquote(char)}</script>"
 
-        assert parse(markup) == [
+        assert parse_markup(markup) == [
                  start_tag: {"script", []},
                  text: unquote(char),
                  block_start: {unquote(tag_name), "{ #{unquote(expr)}}"},
@@ -681,7 +699,7 @@ defmodule Hologram.Template.ParserTest do
       test "#{tag_name} block end in #{quoting_name}" do
         markup = "<script>#{unquote(char)}{/#{unquote(tag_name)}}#{unquote(char)}</script>"
 
-        assert parse(markup) == [
+        assert parse_markup(markup) == [
                  start_tag: {"script", []},
                  text: unquote(char),
                  block_end: unquote(tag_name),
@@ -694,7 +712,7 @@ defmodule Hologram.Template.ParserTest do
     test "else subblock in double quotes" do
       markup = "<script>\"{%else}\"</script>"
 
-      assert parse(markup) == [
+      assert parse_markup(markup) == [
                start_tag: {"script", []},
                text: "\"",
                block_start: "else",
@@ -706,7 +724,7 @@ defmodule Hologram.Template.ParserTest do
     test "else subblock in single quotes" do
       markup = "<script>'{%else}'</script>"
 
-      assert parse(markup) == [
+      assert parse_markup(markup) == [
                start_tag: {"script", []},
                text: "'",
                block_start: "else",
@@ -718,7 +736,7 @@ defmodule Hologram.Template.ParserTest do
 
   describe "expression in quoting inside script" do
     test "in double quotes" do
-      assert parse("<script>\"abc{@my_var}xyz\"</script>") == [
+      assert parse_markup("<script>\"abc{@my_var}xyz\"</script>") == [
                start_tag: {"script", []},
                text: "\"abc",
                expression: "{@my_var}",
@@ -728,7 +746,7 @@ defmodule Hologram.Template.ParserTest do
     end
 
     test "in single quotes" do
-      assert parse("<script>'abc{@my_var}xyz'</script>") == [
+      assert parse_markup("<script>'abc{@my_var}xyz'</script>") == [
                start_tag: {"script", []},
                text: "'abc",
                expression: "{@my_var}",
@@ -738,7 +756,7 @@ defmodule Hologram.Template.ParserTest do
     end
 
     test "in backtick quotes" do
-      assert parse("<script>`abc{@my_var}xyz`</script>") == [
+      assert parse_markup("<script>`abc{@my_var}xyz`</script>") == [
                start_tag: {"script", []},
                text: "`abc",
                expression: "{@my_var}",
@@ -748,7 +766,7 @@ defmodule Hologram.Template.ParserTest do
     end
 
     test "inside javascript interpolation" do
-      assert parse("<script>`abc${123{@my_var}456}xyz`</script>") == [
+      assert parse_markup("<script>`abc${123{@my_var}456}xyz`</script>") == [
                start_tag: {"script", []},
                text: "`abc${123",
                expression: "{@my_var}",
@@ -758,7 +776,7 @@ defmodule Hologram.Template.ParserTest do
     end
 
     test "inside double quotes nested in javascription interpolation" do
-      assert parse("<script>`abc${\"123{@my_var}456\"}xyz`</script>") == [
+      assert parse_markup("<script>`abc${\"123{@my_var}456\"}xyz`</script>") == [
                start_tag: {"script", []},
                text: "`abc${\"123",
                expression: "{@my_var}",
@@ -768,7 +786,7 @@ defmodule Hologram.Template.ParserTest do
     end
 
     test "inside single quotes nested in javascription interpolation" do
-      assert parse("<script>`abc${'123{@my_var}456'}xyz`</script>") == [
+      assert parse_markup("<script>`abc${'123{@my_var}456'}xyz`</script>") == [
                start_tag: {"script", []},
                text: "`abc${'123",
                expression: "{@my_var}",
@@ -778,7 +796,7 @@ defmodule Hologram.Template.ParserTest do
     end
 
     test "inside backtick quotes nested in javascription interpolation" do
-      assert parse("<script>`abc${`123{@my_var}456`}xyz`</script>") == [
+      assert parse_markup("<script>`abc${`123{@my_var}456`}xyz`</script>") == [
                start_tag: {"script", []},
                text: "`abc${`123",
                expression: "{@my_var}",
@@ -791,28 +809,28 @@ defmodule Hologram.Template.ParserTest do
   describe "double quotes in expression" do
     test "escaping" do
       markup = "{\\\"}"
-      assert parse(markup) == [expression: markup]
+      assert parse_markup(markup) == [expression: markup]
     end
 
     test "single group" do
       markup = "{\"123\"}"
-      assert parse(markup) == [expression: markup]
+      assert parse_markup(markup) == [expression: markup]
     end
 
     test "multiple groups" do
       markup = "{\"1\", \"2\"}"
-      assert parse(markup) == [expression: markup]
+      assert parse_markup(markup) == [expression: markup]
     end
 
     test "nested in single quotes" do
       markup = "{'abc\"xyz'}"
-      assert parse(markup) == [expression: markup]
+      assert parse_markup(markup) == [expression: markup]
     end
   end
 
   describe "double quotes in script" do
     test "escaping" do
-      assert parse("<script>\"abc\\\"xyz\"</script>") == [
+      assert parse_markup("<script>\"abc\\\"xyz\"</script>") == [
                start_tag: {"script", []},
                text: "\"abc\\\"xyz\"",
                end_tag: "script"
@@ -820,7 +838,7 @@ defmodule Hologram.Template.ParserTest do
     end
 
     test "single group" do
-      assert parse("<script>\"abc\"</script>") == [
+      assert parse_markup("<script>\"abc\"</script>") == [
                start_tag: {"script", []},
                text: "\"abc\"",
                end_tag: "script"
@@ -828,7 +846,7 @@ defmodule Hologram.Template.ParserTest do
     end
 
     test "multiple groups" do
-      assert parse(~s(<script>"abc" + "xyz"</script>)) == [
+      assert parse_markup(~s(<script>"abc" + "xyz"</script>)) == [
                start_tag: {"script", []},
                text: "\"abc\" + \"xyz\"",
                end_tag: "script"
@@ -836,7 +854,7 @@ defmodule Hologram.Template.ParserTest do
     end
 
     test "nested in single quotes" do
-      assert parse("<script>'abc\"xyz'</script>") == [
+      assert parse_markup("<script>'abc\"xyz'</script>") == [
                start_tag: {"script", []},
                text: "'abc\"xyz'",
                end_tag: "script"
@@ -844,7 +862,7 @@ defmodule Hologram.Template.ParserTest do
     end
 
     test "nested in backticks" do
-      assert parse("<script>`abc\"xyz`</script>") == [
+      assert parse_markup("<script>`abc\"xyz`</script>") == [
                start_tag: {"script", []},
                text: "`abc\"xyz`",
                end_tag: "script"
@@ -855,28 +873,28 @@ defmodule Hologram.Template.ParserTest do
   describe "single quotes in expression" do
     test "escaping" do
       markup = "{\\'}"
-      assert parse(markup) == [expression: markup]
+      assert parse_markup(markup) == [expression: markup]
     end
 
     test "single group" do
       markup = "{'123'}"
-      assert parse(markup) == [expression: markup]
+      assert parse_markup(markup) == [expression: markup]
     end
 
     test "multiple groups" do
       markup = "{'1', '2'}"
-      assert parse(markup) == [expression: markup]
+      assert parse_markup(markup) == [expression: markup]
     end
 
     test "nested in double quotes" do
       markup = "{\"abc'xyz\"}"
-      assert parse(markup) == [expression: markup]
+      assert parse_markup(markup) == [expression: markup]
     end
   end
 
   describe "single quotes in script" do
     test "escaping" do
-      assert parse("<script>'abc\\'xyz'</script>") == [
+      assert parse_markup("<script>'abc\\'xyz'</script>") == [
                start_tag: {"script", []},
                text: "'abc\\'xyz'",
                end_tag: "script"
@@ -884,7 +902,7 @@ defmodule Hologram.Template.ParserTest do
     end
 
     test "single group" do
-      assert parse("<script>'abc'</script>") == [
+      assert parse_markup("<script>'abc'</script>") == [
                start_tag: {"script", []},
                text: "'abc'",
                end_tag: "script"
@@ -892,7 +910,7 @@ defmodule Hologram.Template.ParserTest do
     end
 
     test "multiple groups" do
-      assert parse("<script>'abc' + 'xyz'</script>") == [
+      assert parse_markup("<script>'abc' + 'xyz'</script>") == [
                start_tag: {"script", []},
                text: "'abc' + 'xyz'",
                end_tag: "script"
@@ -900,7 +918,7 @@ defmodule Hologram.Template.ParserTest do
     end
 
     test "nested in double quotes" do
-      assert parse("<script>\"abc'xyz\"</script>") == [
+      assert parse_markup("<script>\"abc'xyz\"</script>") == [
                start_tag: {"script", []},
                text: "\"abc'xyz\"",
                end_tag: "script"
@@ -908,7 +926,7 @@ defmodule Hologram.Template.ParserTest do
     end
 
     test "nested in backticks" do
-      assert parse("<script>`abc'xyz`</script>") == [
+      assert parse_markup("<script>`abc'xyz`</script>") == [
                start_tag: {"script", []},
                text: "`abc'xyz`",
                end_tag: "script"
@@ -918,7 +936,7 @@ defmodule Hologram.Template.ParserTest do
 
   describe "backtick quotes in script" do
     test "escaping" do
-      assert parse("<script>`abc\\`xyz`</script>") == [
+      assert parse_markup("<script>`abc\\`xyz`</script>") == [
                start_tag: {"script", []},
                text: "`abc\\`xyz`",
                end_tag: "script"
@@ -926,7 +944,7 @@ defmodule Hologram.Template.ParserTest do
     end
 
     test "single group" do
-      assert parse("<script>`abc`</script>") == [
+      assert parse_markup("<script>`abc`</script>") == [
                start_tag: {"script", []},
                text: "`abc`",
                end_tag: "script"
@@ -934,7 +952,7 @@ defmodule Hologram.Template.ParserTest do
     end
 
     test "multiple groups" do
-      assert parse("<script>`abc` + `xyz`</script>") == [
+      assert parse_markup("<script>`abc` + `xyz`</script>") == [
                start_tag: {"script", []},
                text: "`abc` + `xyz`",
                end_tag: "script"
@@ -942,7 +960,7 @@ defmodule Hologram.Template.ParserTest do
     end
 
     test "nested in double quotes" do
-      assert parse("<script>\"abc`xyz\"</script>") == [
+      assert parse_markup("<script>\"abc`xyz\"</script>") == [
                start_tag: {"script", []},
                text: "\"abc`xyz\"",
                end_tag: "script"
@@ -950,7 +968,7 @@ defmodule Hologram.Template.ParserTest do
     end
 
     test "nested in single quotes" do
-      assert parse("<script>'abc`xyz'</script>") == [
+      assert parse_markup("<script>'abc`xyz'</script>") == [
                start_tag: {"script", []},
                text: "'abc`xyz'",
                end_tag: "script"
@@ -961,46 +979,46 @@ defmodule Hologram.Template.ParserTest do
   describe "curly brackets in expression" do
     test "single group in expression" do
       markup = "{{123}}"
-      assert parse(markup) == [expression: markup]
+      assert parse_markup(markup) == [expression: markup]
     end
 
     test "multiple groups in expression" do
       markup = "{{1}, {2}}"
-      assert parse(markup) == [expression: markup]
+      assert parse_markup(markup) == [expression: markup]
     end
 
     test "opening curly bracket inside double quotes in expression" do
       markup = "{\"{123\"}"
-      assert parse(markup) == [expression: markup]
+      assert parse_markup(markup) == [expression: markup]
     end
 
     test "opening curly bracket inside single quotes in expression" do
       markup = "{'{123'}"
-      assert parse(markup) == [expression: markup]
+      assert parse_markup(markup) == [expression: markup]
     end
 
     test "closing curly bracket inside double quotes in expression" do
       markup = "{\"123}\"}"
-      assert parse(markup) == [expression: markup]
+      assert parse_markup(markup) == [expression: markup]
     end
 
     test "closing curly bracket inside single quotes in expression" do
       markup = "{'123}'}"
-      assert parse(markup) == [expression: markup]
+      assert parse_markup(markup) == [expression: markup]
     end
 
     test "escaping opening curly bracket in text" do
-      assert parse("abc\\{xyz") == [text: "abc{xyz"]
+      assert parse_markup("abc\\{xyz") == [text: "abc{xyz"]
     end
 
     test "escaping closing curly bracket in text" do
-      assert parse("abc\\}xyz") == [text: "abc}xyz"]
+      assert parse_markup("abc\\}xyz") == [text: "abc}xyz"]
     end
   end
 
   describe "angle brackets in script" do
     test "opening angle bracket '<' not inside quoting" do
-      assert parse("<script>1 < 2</script>") == [
+      assert parse_markup("<script>1 < 2</script>") == [
                start_tag: {"script", []},
                text: "1 < 2",
                end_tag: "script"
@@ -1008,7 +1026,7 @@ defmodule Hologram.Template.ParserTest do
     end
 
     test "closing angle bracket '>' not inside quoting" do
-      assert parse("<script>1 > 2</script>") == [
+      assert parse_markup("<script>1 > 2</script>") == [
                start_tag: {"script", []},
                text: "1 > 2",
                end_tag: "script"
@@ -1035,7 +1053,7 @@ defmodule Hologram.Template.ParserTest do
         markup =
           "<script>#{unquote(quoting_char)}1 #{unquote(bracket_char)} 2#{unquote(quoting_char)}</script>"
 
-        assert parse(markup) == [
+        assert parse_markup(markup) == [
                  start_tag: {"script", []},
                  text:
                    "#{unquote(quoting_char)}1 #{unquote(bracket_char)} 2#{unquote(quoting_char)}",
@@ -1048,71 +1066,71 @@ defmodule Hologram.Template.ParserTest do
   describe "elixir interpolation" do
     test "in text" do
       markup = "\#{@abc}"
-      assert parse(markup) == [text: markup]
+      assert parse_markup(markup) == [text: markup]
     end
 
     test "in expression, inside double quotes" do
       markup = "{\"aaa\#{123}bbb\"}"
-      assert parse(markup) == [expression: markup]
+      assert parse_markup(markup) == [expression: markup]
     end
 
     test "in expression, inside single quotes" do
       markup = "{'aaa\#{123}bbb'}"
-      assert parse(markup) == [expression: markup]
+      assert parse_markup(markup) == [expression: markup]
     end
 
     test "in expression, nested inside double quotes and then inside double quotes" do
       markup = "{\"aaa\#{\"bbb\#{123}ccc\"}ddd\"}"
-      assert parse(markup) == [expression: markup]
+      assert parse_markup(markup) == [expression: markup]
     end
 
     test "in expression, nested inside single quotes and then inside single quotes" do
       markup = "{'aaa\#{'bbb\#{123}ccc'}ddd'}"
-      assert parse(markup) == [expression: markup]
+      assert parse_markup(markup) == [expression: markup]
     end
 
     test "in expression, nested inside double quotes and then inside single quotes" do
       markup = "{\"aaa\#{'bbb\#{123}ccc'}ddd\"}"
-      assert parse(markup) == [expression: markup]
+      assert parse_markup(markup) == [expression: markup]
     end
 
     test "in expression, nested inside single quotes and then inside double quotes" do
       markup = "{'aaa\#{\"bbb\#{123}ccc\"}ddd'}"
-      assert parse(markup) == [expression: markup]
+      assert parse_markup(markup) == [expression: markup]
     end
 
     test "in attribute value text part" do
-      assert parse("<div my_attr=\"\#{@abc}\">") == [
+      assert parse_markup("<div my_attr=\"\#{@abc}\">") == [
                start_tag: {"div", [{"my_attr", [text: "\#{@abc}"]}]}
              ]
     end
 
     test "in attribute value expression part" do
-      assert parse("<div my_attr={\"\#{@abc}\"}>") == [
+      assert parse_markup("<div my_attr={\"\#{@abc}\"}>") == [
                start_tag: {"div", [{"my_attr", [expression: "{\"\#{@abc}\"}"]}]}
              ]
     end
 
     test "in for block expression" do
-      assert parse("{%for item <- [\"\#{@abc}\"]}{/for}") == [
+      assert parse_markup("{%for item <- [\"\#{@abc}\"]}{/for}") == [
                block_start: {"for", "{ item <- [\"\#{@abc}\"]}"},
                block_end: "for"
              ]
     end
 
     test "in if block expression" do
-      assert parse("{%if \"\#{@abc}\"}{/if}") == [
+      assert parse_markup("{%if \"\#{@abc}\"}{/if}") == [
                block_start: {"if", "{ \"\#{@abc}\"}"},
                block_end: "if"
              ]
     end
 
     test "in raw block" do
-      assert parse("{%raw}\#{@abc}{/raw}") == [text: "\#{@abc}"]
+      assert parse_markup("{%raw}\#{@abc}{/raw}") == [text: "\#{@abc}"]
     end
 
     test "in script" do
-      assert parse("<script>\#{@abc}</script>") == [
+      assert parse_markup("<script>\#{@abc}</script>") == [
                start_tag: {"script", []},
                text: "\#{@abc}",
                end_tag: "script"
@@ -1122,7 +1140,7 @@ defmodule Hologram.Template.ParserTest do
 
   describe "script" do
     test "text" do
-      assert parse("<script>abc</script>") == [
+      assert parse_markup("<script>abc</script>") == [
                start_tag: {"script", []},
                text: "abc",
                end_tag: "script"
@@ -1130,7 +1148,7 @@ defmodule Hologram.Template.ParserTest do
     end
 
     test "expression" do
-      assert parse("<script>{@abc}</script>") == [
+      assert parse_markup("<script>{@abc}</script>") == [
                start_tag: {"script", []},
                expression: "{@abc}",
                end_tag: "script"
@@ -1138,7 +1156,7 @@ defmodule Hologram.Template.ParserTest do
     end
 
     test "else subblock" do
-      assert parse("<script>{%else}</script>") == [
+      assert parse_markup("<script>{%else}</script>") == [
                start_tag: {"script", []},
                block_start: "else",
                end_tag: "script"
@@ -1146,7 +1164,7 @@ defmodule Hologram.Template.ParserTest do
     end
 
     test "for block start" do
-      assert parse("<script>{%for item <- @items}</script>") == [
+      assert parse_markup("<script>{%for item <- @items}</script>") == [
                start_tag: {"script", []},
                block_start: {"for", "{ item <- @items}"},
                end_tag: "script"
@@ -1154,7 +1172,7 @@ defmodule Hologram.Template.ParserTest do
     end
 
     test "for block end" do
-      assert parse("<script>{/for}</script>") == [
+      assert parse_markup("<script>{/for}</script>") == [
                start_tag: {"script", []},
                block_end: "for",
                end_tag: "script"
@@ -1162,7 +1180,7 @@ defmodule Hologram.Template.ParserTest do
     end
 
     test "if block start" do
-      assert parse("<script>{%if true}</script>") == [
+      assert parse_markup("<script>{%if true}</script>") == [
                start_tag: {"script", []},
                block_start: {"if", "{ true}"},
                end_tag: "script"
@@ -1170,7 +1188,7 @@ defmodule Hologram.Template.ParserTest do
     end
 
     test "if block end" do
-      assert parse("<script>{/if}</script>") == [
+      assert parse_markup("<script>{/if}</script>") == [
                start_tag: {"script", []},
                block_end: "if",
                end_tag: "script"
@@ -1180,7 +1198,7 @@ defmodule Hologram.Template.ParserTest do
 
   describe "javascript interpolation" do
     test "in double quotes" do
-      assert parse("<script>\"abc${123}xyz\"</script>") == [
+      assert parse_markup("<script>\"abc${123}xyz\"</script>") == [
                start_tag: {"script", []},
                text: "\"abc${123}xyz\"",
                end_tag: "script"
@@ -1188,7 +1206,7 @@ defmodule Hologram.Template.ParserTest do
     end
 
     test "in single quotes" do
-      assert parse("<script>'abc${123}xyz'</script>") == [
+      assert parse_markup("<script>'abc${123}xyz'</script>") == [
                start_tag: {"script", []},
                text: "'abc${123}xyz'",
                end_tag: "script"
@@ -1196,7 +1214,7 @@ defmodule Hologram.Template.ParserTest do
     end
 
     test "in backtick quotes" do
-      assert parse("<script>`abc${123}xyz`</script>") == [
+      assert parse_markup("<script>`abc${123}xyz`</script>") == [
                start_tag: {"script", []},
                text: "`abc${123}xyz`",
                end_tag: "script"
@@ -1204,7 +1222,7 @@ defmodule Hologram.Template.ParserTest do
     end
 
     test "nested double quotes" do
-      assert parse("<script>`abc${\"123\"}xyz`</script>") == [
+      assert parse_markup("<script>`abc${\"123\"}xyz`</script>") == [
                start_tag: {"script", []},
                text: "`abc${\"123\"}xyz`",
                end_tag: "script"
@@ -1212,7 +1230,7 @@ defmodule Hologram.Template.ParserTest do
     end
 
     test "nested single quotes" do
-      assert parse("<script>`abc${'123'}xyz`</script>") == [
+      assert parse_markup("<script>`abc${'123'}xyz`</script>") == [
                start_tag: {"script", []},
                text: "`abc${'123'}xyz`",
                end_tag: "script"
@@ -1220,7 +1238,7 @@ defmodule Hologram.Template.ParserTest do
     end
 
     test "nested backtick quotes" do
-      assert parse("<script>`abc${`123`}xyz`</script>") == [
+      assert parse_markup("<script>`abc${`123`}xyz`</script>") == [
                start_tag: {"script", []},
                text: "`abc${`123`}xyz`",
                end_tag: "script"
@@ -1233,7 +1251,7 @@ defmodule Hologram.Template.ParserTest do
       expected_msg = ~r/\na\\nb\\rc\\td < x\\ny\\rz\\tv\n {11}\^/s
 
       assert_raise SyntaxError, expected_msg, fn ->
-        parse("a\nb\rc\td < x\ny\rz\tv")
+        parse_markup("a\nb\rc\td < x\ny\rz\tv")
       end
     end
 
@@ -1241,7 +1259,7 @@ defmodule Hologram.Template.ParserTest do
       expected_msg = ~r/\n2345678901234567890 < 1234567890123456789\n {20}\^/s
 
       assert_raise SyntaxError, expected_msg, fn ->
-        parse("123456789012345678901234567890 < 123456789012345678901234567890")
+        parse_markup("123456789012345678901234567890 < 123456789012345678901234567890")
       end
     end
 

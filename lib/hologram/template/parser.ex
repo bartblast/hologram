@@ -607,6 +607,23 @@ defmodule Hologram.Template.Parser do
   end
 
   @doc """
+  Parses markup into tags.
+
+  ## Examples
+
+      iex> markup = "<div id=\"test\"></div>"
+      iex> parse_markup(markup)
+      [start_tag: {"div", [{"id", [text: "test"]}]}, end_tag: "div"]
+  """
+  @intercept true
+  @spec parse_markup(String.t()) :: list(parsed_tag)
+  def parse_markup(markup) do
+    markup
+    |> Tokenizer.tokenize()
+    |> parse()
+  end
+
+  @doc """
   Prints debug info for intercepted parse/3 calls.
   """
   @spec debug({module, atom, list}, list | %{__struct__: FunctionClauseError}, integer) :: :ok
