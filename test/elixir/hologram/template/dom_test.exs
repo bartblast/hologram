@@ -564,7 +564,39 @@ defmodule Hologram.Template.DOMTest do
              ]
     end
 
-    test "nested in element node, ast the first child of many" do
+    test "nested in component node, as the only child" do
+      # <MyComponent>{%if @aaa == 123}bbb{/if}</MyComponent>
+      tags = [
+        start_tag: {"MyComponent", []},
+        block_start: {"if", "{ @aaa == 123}"},
+        text: "bbb",
+        block_end: "if",
+        end_tag: "MyComponent"
+      ]
+
+      assert tree_ast(tags) == [
+               {:{}, [line: 1],
+                [
+                  :component,
+                  {:alias!, [line: 1], [{:__aliases__, [line: 1], [:MyComponent]}]},
+                  [],
+                  [
+                    {:if, [line: 1],
+                     [
+                       {:==, [line: 1],
+                        [
+                          {{:., [line: 1], [{:data, [line: 1], nil}, :aaa]},
+                           [no_parens: true, line: 1], []},
+                          123
+                        ]},
+                       [do: [text: "bbb"]]
+                     ]}
+                  ]
+                ]}
+             ]
+    end
+
+    test "nested in element node, as the first child of many" do
       # <div>{%if @aaa == 123}bbb{/if}ccc</div>
       tags = [
         start_tag: {"div", []},
@@ -598,7 +630,41 @@ defmodule Hologram.Template.DOMTest do
              ]
     end
 
-    test "nested in element node, ast the last child of many" do
+    test "nested in component node, as the first child of many" do
+      # <MyComponent>{%if @aaa == 123}bbb{/if}ccc</MyComponent>
+      tags = [
+        start_tag: {"MyComponent", []},
+        block_start: {"if", "{ @aaa == 123}"},
+        text: "bbb",
+        block_end: "if",
+        text: "ccc",
+        end_tag: "MyComponent"
+      ]
+
+      assert tree_ast(tags) == [
+               {:{}, [line: 1],
+                [
+                  :component,
+                  {:alias!, [line: 1], [{:__aliases__, [line: 1], [:MyComponent]}]},
+                  [],
+                  [
+                    {:if, [line: 1],
+                     [
+                       {:==, [line: 1],
+                        [
+                          {{:., [line: 1], [{:data, [line: 1], nil}, :aaa]},
+                           [no_parens: true, line: 1], []},
+                          123
+                        ]},
+                       [do: [text: "bbb"]]
+                     ]},
+                    {:text, "ccc"}
+                  ]
+                ]}
+             ]
+    end
+
+    test "nested in element node, as the last child of many" do
       # <div>ccc{%if @aaa == 123}bbb{/if}</div>
       tags = [
         start_tag: {"div", []},
@@ -614,6 +680,40 @@ defmodule Hologram.Template.DOMTest do
                 [
                   :element,
                   "div",
+                  [],
+                  [
+                    {:text, "ccc"},
+                    {:if, [line: 1],
+                     [
+                       {:==, [line: 1],
+                        [
+                          {{:., [line: 1], [{:data, [line: 1], nil}, :aaa]},
+                           [no_parens: true, line: 1], []},
+                          123
+                        ]},
+                       [do: [text: "bbb"]]
+                     ]}
+                  ]
+                ]}
+             ]
+    end
+
+    test "nested in component node, as the last child of many" do
+      # <MyComponent>ccc{%if @aaa == 123}bbb{/if}</MyComponent>
+      tags = [
+        start_tag: {"MyComponent", []},
+        text: "ccc",
+        block_start: {"if", "{ @aaa == 123}"},
+        text: "bbb",
+        block_end: "if",
+        end_tag: "MyComponent"
+      ]
+
+      assert tree_ast(tags) == [
+               {:{}, [line: 1],
+                [
+                  :component,
+                  {:alias!, [line: 1], [{:__aliases__, [line: 1], [:MyComponent]}]},
                   [],
                   [
                     {:text, "ccc"},
