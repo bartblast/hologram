@@ -7,10 +7,12 @@ defmodule Hologram.Test.Helpers do
   alias Hologram.Compiler.Encoder
   alias Hologram.Compiler.IR
   alias Hologram.Component
+  alias Hologram.Template.Parser
   alias Hologram.Template.Renderer
 
   defdelegate ast(code), to: AST, as: :for_code
   defdelegate ir(code, context), to: IR, as: :for_code
+  defdelegate parsed_tags(markup), to: Parser, as: :parse_markup
 
   @doc """
   Removes all files and directories inside the given directory.
