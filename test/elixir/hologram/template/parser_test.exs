@@ -1,8 +1,6 @@
 defmodule Hologram.Template.ParserTest do
   use Hologram.Test.BasicCase, async: true
   import Hologram.Template.Parser
-
-  alias Hologram.Template.Parser
   alias Hologram.Template.SyntaxError
 
   # Except: { } " ' ` \ < >
