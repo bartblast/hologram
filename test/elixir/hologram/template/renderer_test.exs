@@ -28,6 +28,7 @@ defmodule Hologram.Template.RendererTest do
   alias Hologram.Test.Fixtures.Template.Renderer.Module43
   alias Hologram.Test.Fixtures.Template.Renderer.Module45
   alias Hologram.Test.Fixtures.Template.Renderer.Module46
+  alias Hologram.Test.Fixtures.Template.Renderer.Module48
   alias Hologram.Test.Fixtures.Template.Renderer.Module5
   alias Hologram.Test.Fixtures.Template.Renderer.Module6
   alias Hologram.Test.Fixtures.Template.Renderer.Module7
@@ -281,7 +282,9 @@ defmodule Hologram.Template.RendererTest do
                {"layout template start, page template, layout template end",
                 %{
                   "layout" => %Component.Client{},
-                  "page" => %Component.Client{}
+                  "page" => %Component.Client{
+                    context: %{{Hologram.Runtime, :initial_client_data_loaded?} => true}
+                  }
                 }}
     end
 
@@ -298,7 +301,10 @@ defmodule Hologram.Template.RendererTest do
                {"",
                 %{
                   "layout" => %Component.Client{},
-                  "page" => %Component.Client{state: %{param_1: "value_1", param_3: "value_3"}}
+                  "page" => %Component.Client{
+                    context: %{{Hologram.Runtime, :initial_client_data_loaded?} => true},
+                    state: %{param_1: "value_1", param_3: "value_3"}
+                  }
                 }}
     end
 
@@ -311,7 +317,9 @@ defmodule Hologram.Template.RendererTest do
                   "layout" => %Component.Client{
                     state: %{id: "layout", prop_1: "prop_value_1", prop_3: "prop_value_3"}
                   },
-                  "page" => %Component.Client{}
+                  "page" => %Component.Client{
+                    context: %{{Hologram.Runtime, :initial_client_data_loaded?} => true}
+                  }
                 }}
     end
 
@@ -325,6 +333,7 @@ defmodule Hologram.Template.RendererTest do
                     state: %{id: "layout", prop_1: "prop_value_1", prop_3: "prop_value_3"}
                   },
                   "page" => %Component.Client{
+                    context: %{{Hologram.Runtime, :initial_client_data_loaded?} => true},
                     state: %{
                       prop_1: "prop_value_1",
                       prop_2: "prop_value_2",
@@ -347,6 +356,7 @@ defmodule Hologram.Template.RendererTest do
                 %{
                   "layout" => %Component.Client{},
                   "page" => %Component.Client{
+                    context: %{{Hologram.Runtime, :initial_client_data_loaded?} => true},
                     state: %{key_2: "state_value_2", key_3: "state_value_3"}
                   }
                 }}
@@ -361,7 +371,9 @@ defmodule Hologram.Template.RendererTest do
                   "layout" => %Component.Client{
                     state: %{key_2: "state_value_2", key_3: "state_value_3"}
                   },
-                  "page" => %Component.Client{}
+                  "page" => %Component.Client{
+                    context: %{{Hologram.Runtime, :initial_client_data_loaded?} => true}
+                  }
                 }}
     end
 
@@ -373,6 +385,7 @@ defmodule Hologram.Template.RendererTest do
                 %{
                   "layout" => %Component.Client{},
                   "page" => %Component.Client{
+                    context: %{{Hologram.Runtime, :initial_client_data_loaded?} => true},
                     state: %{state_1: "value_1", state_2: "value_2"}
                   }
                 }}
@@ -387,8 +400,38 @@ defmodule Hologram.Template.RendererTest do
                   "layout" => %Hologram.Component.Client{
                     state: %{state_1: "value_1", state_2: "value_2"}
                   },
-                  "page" => %Hologram.Component.Client{}
+                  "page" => %Hologram.Component.Client{
+                    context: %{{Hologram.Runtime, :initial_client_data_loaded?} => true}
+                  }
                 }}
+    end
+
+    test "inject initial client data" do
+      node = {:page, Module48, [], []}
+
+      assert render(node, %{}, []) == {
+               """
+               layout template start
+               <script>
+               \s\s
+                   window.__hologram_runtime_initial_client_data__ = (typeClass) => {
+                 const Type = typeClass;
+                 return Type.map([[Type.bitstring("layout"), Type.map([[Type.atom("__struct__"), Type.atom("Elixir.Hologram.Component.Client")], [Type.atom("context"), Type.map([])], [Type.atom("next_command"), Type.atom("nil")], [Type.atom("state"), Type.map([])]])], [Type.bitstring("page"), Type.map([[Type.atom("__struct__"), Type.atom("Elixir.Hologram.Component.Client")], [Type.atom("context"), Type.map([[Type.tuple([Type.atom("Elixir.Hologram.Runtime"), Type.atom("initial_client_data_loaded?")]), Type.atom("true")]])], [Type.atom("next_command"), Type.atom("nil")], [Type.atom("state"), Type.map([])]])]]);
+               };
+               \s\s
+               </script>
+               page template
+               layout template end\
+               """,
+               %{
+                 "layout" => %Component.Client{
+                   context: %{}
+                 },
+                 "page" => %Component.Client{
+                   context: %{{Hologram.Runtime, :initial_client_data_loaded?} => true}
+                 }
+               }
+             }
     end
   end
 
@@ -471,7 +514,10 @@ defmodule Hologram.Template.RendererTest do
                     context: %{}
                   },
                   "page" => %Component.Client{
-                    context: %{{:my_scope, :my_key} => 123}
+                    context: %{
+                      {Hologram.Runtime, :initial_client_data_loaded?} => true,
+                      {:my_scope, :my_key} => 123
+                    }
                   }
                 }}
     end
@@ -486,7 +532,10 @@ defmodule Hologram.Template.RendererTest do
                     context: %{}
                   },
                   "page" => %Component.Client{
-                    context: %{{:my_scope, :my_key} => 123}
+                    context: %{
+                      {Hologram.Runtime, :initial_client_data_loaded?} => true,
+                      {:my_scope, :my_key} => 123
+                    }
                   }
                 }}
     end
@@ -501,7 +550,10 @@ defmodule Hologram.Template.RendererTest do
                     context: %{}
                   },
                   "page" => %Component.Client{
-                    context: %{{:my_scope, :my_key} => 123}
+                    context: %{
+                      {Hologram.Runtime, :initial_client_data_loaded?} => true,
+                      {:my_scope, :my_key} => 123
+                    }
                   }
                 }}
     end
@@ -516,7 +568,7 @@ defmodule Hologram.Template.RendererTest do
                     context: %{{:my_scope, :my_key} => 123}
                   },
                   "page" => %Component.Client{
-                    context: %{}
+                    context: %{{Hologram.Runtime, :initial_client_data_loaded?} => true}
                   }
                 }}
     end
@@ -531,7 +583,7 @@ defmodule Hologram.Template.RendererTest do
                     context: %{{:my_scope, :my_key} => 123}
                   },
                   "page" => %Component.Client{
-                    context: %{}
+                    context: %{{Hologram.Runtime, :initial_client_data_loaded?} => true}
                   }
                 }}
     end

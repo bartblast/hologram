@@ -1,6 +1,11 @@
 defmodule Hologram.Template.Renderer do
   alias Hologram.Commons.StringUtils
+  alias Hologram.Compiler.Context
+  alias Hologram.Compiler.Encoder
+  alias Hologram.Compiler.Normalizer
+  alias Hologram.Compiler.Transformer
   alias Hologram.Component
+  alias Hologram.Runtime.Templatable
   alias Hologram.Template.DOM
 
   # https://html.spec.whatwg.org/multipage/syntax.html#void-elements
@@ -96,7 +101,10 @@ defmodule Hologram.Template.Renderer do
     node = {:component, layout_module, layout_props_dom_tree, page_dom_tree}
     {html_without_initial_data, clients_without_page} = render(node, new_context, [])
 
-    clients = Map.put(clients_without_page, "page", page_client)
+    page_client_after_initial_data_loaded =
+      Templatable.put_context(page_client, {Hologram.Runtime, :initial_client_data_loaded?}, true)
+
+    clients = Map.put(clients_without_page, "page", page_client_after_initial_data_loaded)
     html = inject_initial_data(html_without_initial_data, clients)
 
     {html, clients}
@@ -196,10 +204,24 @@ defmodule Hologram.Template.Renderer do
     Map.merge(props_from_template, props_from_context)
   end
 
-  defp inject_initial_data(html, _clients) do
-    # clients
-    # |> Macro.escape()
-    html
+  defp inject_initial_data(html, clients) do
+    initial_client_data =
+      clients
+      |> Macro.escape()
+      |> Normalizer.normalize()
+      |> Transformer.transform(%Context{})
+      |> Encoder.encode(%Context{})
+
+    pattern = "window.__hologram_runtime_initial_client_data__ = \"...\";"
+
+    replacement = """
+    window.__hologram_runtime_initial_client_data__ = (typeClass) => {
+      const Type = typeClass;
+      return #{initial_client_data};
+    };\
+    """
+
+    String.replace(html, pattern, replacement)
   end
 
   defp normalize_prop_name({name, value}) do
