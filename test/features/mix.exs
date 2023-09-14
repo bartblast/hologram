@@ -9,7 +9,12 @@ defmodule HologramFeatureTests.MixProject do
       elixirc_paths: elixirc_paths(Mix.env()),
       start_permanent: Mix.env() == :prod,
       aliases: aliases(),
-      deps: deps()
+      deps: deps(),
+      dialyzer: [
+        plt_add_apps: [:ex_unit, :mix],
+        plt_core_path: "priv/plts/core.plt",
+        plt_local_path: "priv/plts/project.plt"
+      ],      
     ]
   end
 
@@ -38,7 +43,8 @@ defmodule HologramFeatureTests.MixProject do
       {:jason, "~> 1.2"},
       {:plug_cowboy, "~> 2.5"},
       {:hologram, git: "https://github.com/bartblast/hologram.git"},
-      {:credo, "~> 1.0", only: [:dev, :test], runtime: false}
+      {:credo, "~> 1.0", only: [:dev, :test], runtime: false},
+      {:dialyxir, "~> 1.0", only: [:dev, :test], runtime: false}
     ]
   end
 

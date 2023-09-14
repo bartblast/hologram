@@ -25,3 +25,6 @@ erl_crash.dump
 # Ignore package tarball (built via "mix hex.build").
 hologram_feature_tests-*.tar
 
+# Dialyzer PLTs
+/priv/plts/*.plt
+/priv/plts/*.plt.hash
