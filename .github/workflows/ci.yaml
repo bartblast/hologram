@@ -208,12 +208,7 @@ jobs:
       
     # Step: Run feature tests app Elixir static code analysis with Credo.
     - name: Run feature tests app Elixir static code analysis with Credo
-      run: cd test/features && mix credo --strict      
-
-    # Step: Compile the test app treating any warnings as errors.
-    # TODO: uncomment when E2E tests are implemented
-    # - name: Check test app compiles without warnings
-    #   run: cd test/e2e && mix compile --warnings-as-errors
+      run: cd test/features && mix credo --strict
 
     # Step: Execute the E2E tests.
     # TODO: uncomment when E2E tests are implemented
