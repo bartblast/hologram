@@ -200,18 +200,16 @@ jobs:
       
     # Step: Check if there are any security vulnerabilities in the feature tests app Elixir dependencies.
     - name: Check feature tests app security vulnerabilities in Elixir deps
-      run: cd test/features && mix deps.audit      
+      run: cd test/features && mix deps.audit
+      
+    # Step: Check that the feature tests app Elixir code has already been formatted.
+    - name: Check feature tests app Elixir code formatted
+      run: cd test/features && mix format --check-formatted          
 
     # Step: Compile the test app treating any warnings as errors.
     # TODO: uncomment when E2E tests are implemented
     # - name: Check test app compiles without warnings
     #   run: cd test/e2e && mix compile --warnings-as-errors
-
-    # Step: Check that the test app code has already been formatted.
-    # This step fails if something was found unformatted.
-    # TODO: uncomment when E2E tests are implemented
-    # - name: Check test app code formatted
-    #   run: cd test/e2e && mix format --check-formatted
 
     # Step: Execute the E2E tests.
     # TODO: uncomment when E2E tests are implemented
