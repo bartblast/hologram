@@ -75,22 +75,19 @@ jobs:
         restore-keys: |
           ${{ runner.os }}-mix-${{ env.cache-name }}-
           ${{ runner.os }}-mix-
-
-    # Step: Define how to cache the test app `_build` directory. After the first run,
-    # this speeds up tests runs a lot. This includes not re-compiling our
-    # project's downloaded deps every run.
-    # TODO: uncomment when E2E tests are implemented
-    # - name: Cache test app build
-    #   id: cache-e2e-app-build
-    #   uses: actions/cache@v3
-    #   env:
-    #     cache-name: cache-elixir-e2e-app-build
-    #   with:
-    #     path: test/e2e/_build
-    #     key: ${{ runner.os }}-mix-${{ env.cache-name }}-${{ hashFiles('test/e2e/mix.lock') }}
-    #     restore-keys: |
-    #       ${{ runner.os }}-mix-${{ env.cache-name }}-
-    #       ${{ runner.os }}-mix-                 
+          
+    # Step: Define how to cache the feature tests app Elixir build.
+    - name: Cache feature tests app Elixir build
+      id: cache-feature-tests-app-elixir-build
+      uses: actions/cache@v3
+      env:
+        cache-name: cache-feature-tests-app-elixir-build
+      with:
+        path: test/features/_build
+        key: ${{ runner.os }}-mix-${{ env.cache-name }}-${{ hashFiles('test/features/mix.lock') }}
+        restore-keys: |
+          ${{ runner.os }}-mix-${{ env.cache-name }}-
+          ${{ runner.os }}-mix-            
 
     # Step: Download lib Elixir dependencies.
     # If unchanged, uses the cached version.
