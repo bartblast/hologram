@@ -188,7 +188,11 @@ jobs:
     # Step: Download feature tests app Elixir dependencies.
     # If unchanged, uses the cached version.
     - name: Download feature tests app Elixir deps
-      run: cd test/features && mix deps.get      
+      run: cd test/features && mix deps.get
+      
+    # Step: Check if feature tests app mix.lock has any unused dependencies.
+    - name: Check feature tests app unused Elixir deps
+      run: cd test/features && mix deps.unlock --check-unused
 
     # Step: Compile the test app treating any warnings as errors.
     # TODO: uncomment when E2E tests are implemented
