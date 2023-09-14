@@ -248,8 +248,7 @@ jobs:
     # Step: Check that all feature tests app test scripts have valid file names.
     - name: Check feature tests app test file names
       run: cd test/features && mix holo.test.check_file_names test/hologram_feature_tests test/hologram_feature_tests_web
-
-    # Step: Execute the E2E tests.
-    # TODO: uncomment when E2E tests are implemented
-    # - name: Run E2E tests
-    #   run: cd test/e2e && mix test
+      
+    # Step: Execute feature tests app Elixir unit tests.
+    - name: Run feature tests app Elixir unit tests
+      run: cd test/features && mix test --warnings-as-errors
