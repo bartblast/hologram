@@ -243,7 +243,11 @@ jobs:
           
     # Step: Run feature tests app Elixir static code analysis with Dialyzer.
     - name: Run feature tests app Elixir static code analysis with Dialyzer
-      run: cd test/features && mix dialyzer --format github          
+      run: cd test/features && mix dialyzer --format github
+      
+    # Step: Check that all feature tests app test scripts have valid file names.
+    - name: Check feature tests app test file names
+      run: cd test/features && mix holo.test.check_file_names test/hologram_feature_tests test/hologram_feature_tests_web
 
     # Step: Execute the E2E tests.
     # TODO: uncomment when E2E tests are implemented
