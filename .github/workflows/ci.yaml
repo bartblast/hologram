@@ -97,6 +97,10 @@ jobs:
     # Step: Download lib JavaScript dependencies.
     - name: Download lib JavaScript deps
       run: cd assets && npm install
+      
+    # Step: Compile the lib project treating any warnings as errors.
+    - name: Check lib project compiles without warnings
+      run: mix compile --all-warnings --warnings-as-errors      
 
     # Step: Check if lib mix.lock has any unused dependencies.
     - name: Check lib unused Elixir deps
@@ -117,10 +121,6 @@ jobs:
     # Step: Check that the lib JavaScript & JSON code has already been formatted.
     - name: Check lib JavaScript & JSON code formatted
       run: assets/node_modules/.bin/prettier 'assets/*.json' 'assets/js/*.mjs' 'assets/js/**/*.mjs' 'test/javascript/*.mjs' 'test/javascript/**/*.mjs' --check --config 'assets/.prettierrc.json' --no-error-on-unmatched-pattern
-
-    # Step: Compile the lib project treating any warnings as errors.
-    - name: Check lib project compiles without warnings
-      run: mix compile --all-warnings --warnings-as-errors
 
     # Step: Check that lib doc and spec coverage are above thresholds (with Doctor).
     - name: Check lib doc and spec coverage
@@ -190,6 +190,10 @@ jobs:
     - name: Download feature tests app Elixir deps
       run: cd test/features && mix deps.get
       
+    # Step: Compile the feature tests app project treating any warnings as errors.
+    - name: Check feature tests app project compiles without warnings
+      run: cd test/features && mix compile --all-warnings --warnings-as-errors      
+      
     # Step: Check if feature tests app mix.lock has any unused dependencies.
     - name: Check feature tests app unused Elixir deps
       run: cd test/features && mix deps.unlock --check-unused
@@ -201,10 +205,6 @@ jobs:
     # Step: Check that the feature tests app Elixir code has already been formatted.
     - name: Check feature tests app Elixir code formatted
       run: cd test/features && mix format --check-formatted
-      
-    # Step: Compile the feature tests app project treating any warnings as errors.
-    - name: Check feature tests app project compiles without warnings
-      run: cd test/features && mix compile --all-warnings --warnings-as-errors
       
     # Step: Run feature tests app Elixir static code analysis with Credo.
     - name: Run feature tests app Elixir static code analysis with Credo
