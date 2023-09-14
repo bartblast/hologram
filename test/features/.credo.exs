@@ -6,7 +6,7 @@
         # You can give explicit globs or simply directories.
         # In the latter case `**/*.{ex,exs}` will be used.
         included: ["*.{ex,exs}", "config/", "lib/", "priv/", "test/"],
-        excluded: [~r"/_build/", ~r"/deps/", ~r"/node_modules/", "test/features/"]
+        excluded: [~r"/_build/", ~r"/deps/", ~r"/node_modules/"]
       },
       strict: true,
       checks: %{
@@ -46,7 +46,6 @@
           {Credo.Check.Readability.SingleFunctionToBlockPipe, []},
           {Credo.Check.Readability.SinglePipe, []},
           {Credo.Check.Readability.SpaceAfterCommas, []},
-          {Credo.Check.Readability.Specs, []},
           {Credo.Check.Readability.StrictModuleLayout, []},
           {Credo.Check.Readability.StringSigils, []},
           {Credo.Check.Readability.TrailingBlankLine, []},
@@ -112,6 +111,7 @@
           {Credo.Check.Design.TagTODO, []},
           {Credo.Check.Readability.AliasAs, []},
           {Credo.Check.Readability.ModuleDoc, []},
+          {Credo.Check.Readability.Specs, []},
           {Credo.Check.Refactor.MapMap, []},
           {Credo.Check.Refactor.ModuleDependencies, []},
           # TODO: enable when Credo issue #1034 is fixed, see: https://github.com/rrrene/credo/issues/1034
