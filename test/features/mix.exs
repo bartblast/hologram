@@ -14,7 +14,7 @@ defmodule HologramFeatureTests.MixProject do
         plt_add_apps: [:ex_unit, :mix],
         plt_core_path: "priv/plts/core.plt",
         plt_local_path: "priv/plts/project.plt"
-      ],      
+      ]
     ]
   end
 
