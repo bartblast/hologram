@@ -60,15 +60,15 @@ defmodule Hologram.MixProject do
       deps: deps(),
       description:
         "Full stack isomorphic Elixir web framework that can be used on top of Phoenix.",
-      elixir: "~> 1.0",
-      elixirc_options: [warnings_as_errors: true],
-      elixirc_paths: elixirc_paths(Mix.env()),
-      package: package(),
       dialyzer: [
         plt_add_apps: [:ex_unit, :mix],
         plt_core_path: "priv/plts/core.plt",
         plt_local_path: "priv/plts/project.plt"
       ],
+      elixir: "~> 1.0",
+      elixirc_options: [warnings_as_errors: true],
+      elixirc_paths: elixirc_paths(Mix.env()),
+      package: package(),
       preferred_cli_env: preferred_cli_env(),
       start_permanent: Mix.env() == :prod,
       test_paths: ["test/elixir"],
