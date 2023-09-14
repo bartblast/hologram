@@ -19,7 +19,7 @@ defmodule Hologram.Template.DOM do
   ## Examples
 
       iex> tags = [{:start_tag, {"div, []}}, {:text, "abc"}, {:end_tag, "div"}]
-      iex> build(tags)
+      iex> build_ast(tags)
       [{:{}, [line: 1], [:element, "div", [], [{:text, "abc"}]]}]
   """
   @spec build_ast(list(Parser.parsed_tag())) :: AST.t()
