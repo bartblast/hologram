@@ -31,7 +31,7 @@ defmodule Hologram.Runtime.Controller do
     {html, _clients} =
       conn.request_path
       |> extract_params(page_module)
-      |> build_page_dom_node(page_module)
+      |> build_page_dom(page_module)
       |> Renderer.render(%{}, [])
 
     conn
@@ -39,12 +39,12 @@ defmodule Hologram.Runtime.Controller do
     |> Plug.Conn.halt()
   end
 
-  defp build_page_dom_node(params, page_module) do
-    params_dom_tree =
+  defp build_page_dom(params, page_module) do
+    params_dom =
       Enum.map(params, fn {name, value} ->
         {to_string(name), [text: value]}
       end)
 
-    {:page, page_module, params_dom_tree, []}
+    {:page, page_module, params_dom, []}
   end
 end

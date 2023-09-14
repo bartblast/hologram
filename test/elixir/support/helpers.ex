@@ -98,10 +98,10 @@ defmodule Hologram.Test.Helpers do
   """
   @spec render_component(module, %{atom => any}, %{(atom | {any, atom}) => any}) :: String.t()
   def render_component(module, props, context) do
-    props_dom_tree =
+    props_dom =
       Enum.map(props, fn {name, value} -> {to_string(name), [expression: {value}]} end)
 
-    node = {:component, module, props_dom_tree, []}
+    node = {:component, module, props_dom, []}
     {html, _clients} = Renderer.render(node, context, [])
 
     html

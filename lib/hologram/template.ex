@@ -5,22 +5,22 @@ defmodule Hologram.Template do
   alias Hologram.Template.Tokenizer
 
   @doc """
-  Builds DOM tree AST from the given template markup.
+  Builds DOM AST from the given template markup.
 
   ## Examples
 
-      iex> dom_tree_ast("<div>content</div>")
+      iex> dom_ast("<div>content</div>")
       [{:{}, [line: 1], [:element, "div", [], [{:text, "content"}]]}]
   """
-  @spec dom_tree_ast(String.t()) :: AST.t()
-  def dom_tree_ast(markup) do
+  @spec dom_ast(String.t()) :: AST.t()
+  def dom_ast(markup) do
     markup
     |> remove_doctype()
     |> remove_comments()
     |> String.trim()
     |> Tokenizer.tokenize()
     |> Parser.parse()
-    |> DOM.tree_ast()
+    |> DOM.build_ast()
   end
 
   defmacro sigil_H({:<<>>, _meta, [markup]}, _modifiers) do
@@ -35,7 +35,7 @@ defmodule Hologram.Template do
     quote do
       fn var!(data) ->
         _fix_unused_data_var = var!(data)
-        unquote(dom_tree_ast(markup))
+        unquote(dom_ast(markup))
       end
     end
   end

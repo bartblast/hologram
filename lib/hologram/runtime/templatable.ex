@@ -24,7 +24,7 @@ defmodule Hologram.Runtime.Templatable do
                     | Component.Server.t()
 
         @doc """
-        Returns a template in the form of an anonymous function that given variable bindings returns a DOM tree.
+        Returns a template in the form of an anonymous function that given variable bindings returns a DOM.
         """
         @callback template() :: (map -> list)
       end

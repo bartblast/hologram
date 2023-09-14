@@ -2,17 +2,17 @@ defmodule Hologram.Template.DOMTest do
   use Hologram.Test.BasicCase, async: true
   import Hologram.Template.DOM
 
-  describe "tree_ast/1, text node" do
+  describe "build_ast/1, text node" do
     test "without double quotes" do
-      assert tree_ast([{:text, "abc"}]) == [{:text, "abc"}]
+      assert build_ast([{:text, "abc"}]) == [{:text, "abc"}]
     end
 
     test "with double quotes" do
-      assert tree_ast([{:text, "aaa\"bbb\"ccc"}]) == [text: "aaa\"bbb\"ccc"]
+      assert build_ast([{:text, "aaa\"bbb\"ccc"}]) == [text: "aaa\"bbb\"ccc"]
     end
   end
 
-  describe "tree_ast/1, element node & component node" do
+  describe "build_ast/1, element node & component node" do
     nodes = [
       {:element, "attribute", "div", "div"},
       {:component, "property", "Aaa.Bbb",
@@ -25,7 +25,7 @@ defmodule Hologram.Template.DOMTest do
       test "#{tag_type} node without #{attr_or_prop}(s) or children" do
         tags = [{:start_tag, {unquote(tag_name), []}}, {:end_tag, unquote(tag_name)}]
 
-        assert tree_ast(tags) == [
+        assert build_ast(tags) == [
                  {:{}, [line: 1], [unquote(tag_type), unquote(expected_tag_name_ast), [], []]}
                ]
       end
@@ -36,7 +36,7 @@ defmodule Hologram.Template.DOMTest do
           {:end_tag, unquote(tag_name)}
         ]
 
-        assert tree_ast(tags) ==
+        assert build_ast(tags) ==
                  [
                    {:{}, [line: 1],
                     [
@@ -56,7 +56,7 @@ defmodule Hologram.Template.DOMTest do
           {:end_tag, unquote(tag_name)}
         ]
 
-        assert tree_ast(tags) == [
+        assert build_ast(tags) == [
                  {:{}, [line: 1],
                   [
                     unquote(tag_type),
@@ -74,7 +74,7 @@ defmodule Hologram.Template.DOMTest do
           {:end_tag, unquote(tag_name)}
         ]
 
-        assert tree_ast(tags) == [
+        assert build_ast(tags) == [
                  {:{}, [line: 1],
                   [
                     unquote(tag_type),
@@ -92,7 +92,7 @@ defmodule Hologram.Template.DOMTest do
           {:end_tag, unquote(tag_name)}
         ]
 
-        assert tree_ast(tags) == [
+        assert build_ast(tags) == [
                  {:{}, [line: 1],
                   [unquote(tag_type), unquote(expected_tag_name_ast), [], [{:text, "abc"}]]}
                ]
@@ -106,7 +106,7 @@ defmodule Hologram.Template.DOMTest do
           {:end_tag, unquote(tag_name)}
         ]
 
-        assert tree_ast(tags) == [
+        assert build_ast(tags) == [
                  {:{}, [line: 1],
                   [
                     unquote(tag_type),
@@ -125,7 +125,7 @@ defmodule Hologram.Template.DOMTest do
           {:end_tag, unquote(tag_name)}
         ]
 
-        assert tree_ast(tags) == [
+        assert build_ast(tags) == [
                  {:{}, [line: 1],
                   [
                     unquote(tag_type),
@@ -153,7 +153,7 @@ defmodule Hologram.Template.DOMTest do
           {:end_tag, unquote(tag_name)}
         ]
 
-        assert tree_ast(tags) == [
+        assert build_ast(tags) == [
                  {:{}, [line: 1],
                   [
                     unquote(tag_type),
@@ -171,7 +171,7 @@ defmodule Hologram.Template.DOMTest do
             [{"my_key_1", [text: "my_value_1"]}, {"my_key_2", [text: "my_value_2"]}]}}
         ]
 
-        assert tree_ast(tags) == [
+        assert build_ast(tags) == [
                  {:{}, [line: 1],
                   [
                     unquote(tag_type),
@@ -191,7 +191,7 @@ defmodule Hologram.Template.DOMTest do
           {:text, "xyz"}
         ]
 
-        assert tree_ast(tags) == [
+        assert build_ast(tags) == [
                  {:text, "abc"},
                  {:{}, [line: 1],
                   [
@@ -213,7 +213,7 @@ defmodule Hologram.Template.DOMTest do
           {:end_tag, "div"}
         ]
 
-        assert tree_ast(tags) == [
+        assert build_ast(tags) == [
                  {:{}, [line: 1],
                   [
                     :element,
@@ -246,7 +246,7 @@ defmodule Hologram.Template.DOMTest do
           {:end_tag, "div"}
         ]
 
-        assert tree_ast(tags) == [
+        assert build_ast(tags) == [
                  {:{}, [line: 1],
                   [
                     :element,
@@ -272,11 +272,11 @@ defmodule Hologram.Template.DOMTest do
     end)
   end
 
-  describe "tree_ast/1, expression node" do
+  describe "build_ast/1, expression node" do
     test "in text" do
       tags = [{:text, "abc"}, {:expression, "{1 + 2}"}, {:text, "xyz"}]
 
-      assert tree_ast(tags) == [
+      assert build_ast(tags) == [
                text: "abc",
                expression: {:{}, [line: 1], [{:+, [line: 1], [1, 2]}]},
                text: "xyz"
@@ -298,7 +298,7 @@ defmodule Hologram.Template.DOMTest do
           {:end_tag, unquote(tag_name)}
         ]
 
-        assert tree_ast(tags) == [
+        assert build_ast(tags) == [
                  {:{}, [line: 1],
                   [
                     unquote(tag_type),
@@ -316,7 +316,7 @@ defmodule Hologram.Template.DOMTest do
           {:end_tag, unquote(tag_name)}
         ]
 
-        assert tree_ast(tags) == [
+        assert build_ast(tags) == [
                  {:{}, [line: 1],
                   [
                     unquote(tag_type),
@@ -340,7 +340,7 @@ defmodule Hologram.Template.DOMTest do
           {:end_tag, unquote(tag_name)}
         ]
 
-        assert tree_ast(tags) == [
+        assert build_ast(tags) == [
                  {:{}, [line: 1],
                   [
                     unquote(tag_type),
@@ -364,7 +364,7 @@ defmodule Hologram.Template.DOMTest do
           {:end_tag, unquote(tag_name)}
         ]
 
-        assert tree_ast(tags) == [
+        assert build_ast(tags) == [
                  {:{}, [line: 1],
                   [
                     unquote(tag_type),
@@ -392,11 +392,11 @@ defmodule Hologram.Template.DOMTest do
     end)
   end
 
-  describe "tree_ast/1, for block" do
+  describe "build_ast/1, for block" do
     test "with one child" do
       tags = [{:block_start, {"for", "{ item <- @items}"}}, {:text, "abc"}, {:block_end, "for"}]
 
-      assert tree_ast(tags) == [
+      assert build_ast(tags) == [
                {:for, [line: 1],
                 [
                   {:<-, [line: 1],
@@ -419,7 +419,7 @@ defmodule Hologram.Template.DOMTest do
         {:block_end, "for"}
       ]
 
-      assert tree_ast(tags) == [
+      assert build_ast(tags) == [
                {:for, [line: 1],
                 [
                   {:<-, [line: 1],
@@ -438,11 +438,11 @@ defmodule Hologram.Template.DOMTest do
     end
   end
 
-  describe "tree_ast/1, if block" do
+  describe "build_ast/1, if block" do
     test "with one child" do
       tags = [{:block_start, {"if", "{ @xyz == 123}"}}, {:text, "abc"}, {:block_end, "if"}]
 
-      assert tree_ast(tags) == [
+      assert build_ast(tags) == [
                {:if, [line: 1],
                 [
                   {:==, [line: 1],
@@ -465,7 +465,7 @@ defmodule Hologram.Template.DOMTest do
         {:block_end, "if"}
       ]
 
-      assert tree_ast(tags) == [
+      assert build_ast(tags) == [
                {:if, [line: 1],
                 [
                   {:==, [line: 1],
@@ -490,7 +490,7 @@ defmodule Hologram.Template.DOMTest do
         {:block_end, "if"}
       ]
 
-      assert tree_ast(tags) == [
+      assert build_ast(tags) == [
                {:if, [line: 1],
                 [
                   {:==, [line: 1],
@@ -515,7 +515,7 @@ defmodule Hologram.Template.DOMTest do
         {:block_end, "if"}
       ]
 
-      assert tree_ast(tags) == [
+      assert build_ast(tags) == [
                {:if, [line: 1],
                 [
                   {:==, [line: 1],
@@ -542,7 +542,7 @@ defmodule Hologram.Template.DOMTest do
         end_tag: "div"
       ]
 
-      assert tree_ast(tags) == [
+      assert build_ast(tags) == [
                {:{}, [line: 1],
                 [
                   :element,
@@ -574,7 +574,7 @@ defmodule Hologram.Template.DOMTest do
         end_tag: "MyComponent"
       ]
 
-      assert tree_ast(tags) == [
+      assert build_ast(tags) == [
                {:{}, [line: 1],
                 [
                   :component,
@@ -607,7 +607,7 @@ defmodule Hologram.Template.DOMTest do
         end_tag: "div"
       ]
 
-      assert tree_ast(tags) == [
+      assert build_ast(tags) == [
                {:{}, [line: 1],
                 [
                   :element,
@@ -641,7 +641,7 @@ defmodule Hologram.Template.DOMTest do
         end_tag: "MyComponent"
       ]
 
-      assert tree_ast(tags) == [
+      assert build_ast(tags) == [
                {:{}, [line: 1],
                 [
                   :component,
@@ -675,7 +675,7 @@ defmodule Hologram.Template.DOMTest do
         end_tag: "div"
       ]
 
-      assert tree_ast(tags) == [
+      assert build_ast(tags) == [
                {:{}, [line: 1],
                 [
                   :element,
@@ -709,7 +709,7 @@ defmodule Hologram.Template.DOMTest do
         end_tag: "MyComponent"
       ]
 
-      assert tree_ast(tags) == [
+      assert build_ast(tags) == [
                {:{}, [line: 1],
                 [
                   :component,
@@ -733,11 +733,11 @@ defmodule Hologram.Template.DOMTest do
     end
   end
 
-  describe "tree_ast/1, substitute module attributes" do
+  describe "build_ast/1, substitute module attributes" do
     test "non-nested list" do
       tags = [{:expression, "{[1, @a, 2, @b]}"}]
 
-      assert tree_ast(tags) == [
+      assert build_ast(tags) == [
                {
                  :expression,
                  {:{}, [line: 1],
@@ -758,7 +758,7 @@ defmodule Hologram.Template.DOMTest do
     test "nested list" do
       tags = [{:expression, "{[1, @a, [2, @b, 3, @c]]}"}]
 
-      assert tree_ast(tags) == [
+      assert build_ast(tags) == [
                {
                  :expression,
                  {:{}, [line: 1],
@@ -784,7 +784,7 @@ defmodule Hologram.Template.DOMTest do
     test "non-nested 2-element tuple" do
       tags = [{:expression, "{{@a, @b}}"}]
 
-      assert tree_ast(tags) == [
+      assert build_ast(tags) == [
                {:expression,
                 {:{}, [line: 1],
                  [
@@ -799,7 +799,7 @@ defmodule Hologram.Template.DOMTest do
     test "nested 2-element tuple" do
       tags = [{:expression, "{{1, {@a, @b}}}"}]
 
-      assert tree_ast(tags) == [
+      assert build_ast(tags) == [
                {:expression,
                 {:{}, [line: 1],
                  [
@@ -815,7 +815,7 @@ defmodule Hologram.Template.DOMTest do
     test "non-nested 4-element tuple" do
       tags = [{:expression, "{{1, @a, 2, @b}}"}]
 
-      assert tree_ast(tags) == [
+      assert build_ast(tags) == [
                {:expression,
                 {:{}, [line: 1],
                  [
@@ -835,7 +835,7 @@ defmodule Hologram.Template.DOMTest do
     test "nested 4-element tuple" do
       tags = [{:expression, "{{1, @a, {2, @b, 3, @c}, 4}}"}]
 
-      assert tree_ast(tags) == [
+      assert build_ast(tags) == [
                {:expression,
                 {:{}, [line: 1],
                  [
@@ -860,10 +860,10 @@ defmodule Hologram.Template.DOMTest do
     end
   end
 
-  test "tree_ast/1, nested AST" do
+  test "build_ast/1, nested AST" do
     tags = [{:expression, "{(fn x -> [x | @acc] end).(@value)}"}]
 
-    assert tree_ast(tags) == [
+    assert build_ast(tags) == [
              {
                :expression,
                {:{}, [line: 1],

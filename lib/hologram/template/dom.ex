@@ -5,25 +5,25 @@ defmodule Hologram.Template.DOM do
 
   # 'dom_node' name used instead of 'node" because type node/0 is a built-in type and it cannot be redefined.
   @type dom_node ::
-          {:component, module, list({String.t(), list(dom_node())}), list(dom_node())}
-          | {:element, String.t(), list({String.t(), list(dom_node())}), list(dom_node())}
+          {:component, module, list({String.t(), t}), t}
+          | {:element, String.t(), list({String.t(), t}), t}
           | {:expression, {any}}
-          | {:page, module, list({String.t(), list(dom_node())}), []}
+          | {:page, module, list({String.t(), t}), []}
           | {:text, String.t()}
 
-  @type tree :: dom_node | list(dom_node())
+  @type t :: dom_node | list(dom_node())
 
   @doc """
-  Builds DOM tree AST from the given template parsed tags.
+  Builds DOM AST from the given parsed tags.
 
   ## Examples
 
       iex> tags = [{:start_tag, {"div, []}}, {:text, "abc"}, {:end_tag, "div"}]
-      iex> tree_ast(tags)
+      iex> build(tags)
       [{:{}, [line: 1], [:element, "div", [], [{:text, "abc"}]]}]
   """
-  @spec tree_ast(list(Parser.parsed_tag())) :: AST.t()
-  def tree_ast(tags) do
+  @spec build_ast(list(Parser.parsed_tag())) :: AST.t()
+  def build_ast(tags) do
     {code, _last_tag_type} =
       Enum.reduce(tags, {"", nil}, fn tag, {code_acc, last_tag_type} ->
         current_tag_type = elem(tag, 0)
