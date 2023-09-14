@@ -204,7 +204,11 @@ jobs:
       
     # Step: Check that the feature tests app Elixir code has already been formatted.
     - name: Check feature tests app Elixir code formatted
-      run: cd test/features && mix format --check-formatted          
+      run: cd test/features && mix format --check-formatted
+      
+    # Step: Compile the feature tests app project treating any warnings as errors.
+    - name: Check feature tests app project compiles without warnings
+      run: cd test/features && mix compile --all-warnings --warnings-as-errors      
 
     # Step: Compile the test app treating any warnings as errors.
     # TODO: uncomment when E2E tests are implemented
