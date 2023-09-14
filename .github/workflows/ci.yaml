@@ -204,7 +204,11 @@ jobs:
       
     # Step: Compile the feature tests app project treating any warnings as errors.
     - name: Check feature tests app project compiles without warnings
-      run: cd test/features && mix compile --all-warnings --warnings-as-errors      
+      run: cd test/features && mix compile --all-warnings --warnings-as-errors
+      
+    # Step: Run feature tests app Elixir static code analysis with Credo.
+    - name: Run feature tests app Elixir static code analysis with Credo
+      run: cd test/features && mix credo --strict      
 
     # Step: Compile the test app treating any warnings as errors.
     # TODO: uncomment when E2E tests are implemented
