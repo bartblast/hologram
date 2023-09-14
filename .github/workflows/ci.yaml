@@ -193,6 +193,10 @@ jobs:
     # Step: Check if feature tests app mix.lock has any unused dependencies.
     - name: Check feature tests app unused Elixir deps
       run: cd test/features && mix deps.unlock --check-unused
+      
+    # Step: Check if there are any feature tests app Elixir dependencies which have been marked as retired.
+    - name: Check feature tests app retired Elixir deps
+      run: cd test/features && mix hex.audit        
 
     # Step: Compile the test app treating any warnings as errors.
     # TODO: uncomment when E2E tests are implemented
