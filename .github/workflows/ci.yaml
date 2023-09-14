@@ -38,6 +38,8 @@ jobs:
     # Step: Check out the code.
     - name: Checkout code
       uses: actions/checkout@v3
+      
+    ### LIB CHECKS ###
 
     # Step: Define how to cache the lib Elixir dependencies.
     - name: Cache lib Elixir deps
@@ -49,19 +51,7 @@ jobs:
         path: deps
         key: ${{ runner.os }}-mix-${{ env.cache-name }}-${{ hashFiles('mix.lock') }}
         restore-keys: |
-          ${{ runner.os }}-mix-${{ env.cache-name }}-
-
-    # Step: Define how to cache the feature tests app Elixir dependencies.
-    - name: Cache feature tests app Elixir deps
-      id: cache-feature-tests-app-elixir-deps
-      uses: actions/cache@v3
-      env:
-        cache-name: cache-feature-tests-app-elixir-deps
-      with:
-        path: test/features/deps
-        key: ${{ runner.os }}-mix-${{ env.cache-name }}-${{ hashFiles('test/features/mix.lock') }}
-        restore-keys: |
-          ${{ runner.os }}-mix-${{ env.cache-name }}-           
+          ${{ runner.os }}-mix-${{ env.cache-name }}-          
 
     # Step: Define how to cache the lib Elixir build.
     - name: Cache lib Elixir build
@@ -74,20 +64,7 @@ jobs:
         key: ${{ runner.os }}-mix-${{ env.cache-name }}-${{ hashFiles('mix.lock') }}
         restore-keys: |
           ${{ runner.os }}-mix-${{ env.cache-name }}-
-          ${{ runner.os }}-mix-
-          
-    # Step: Define how to cache the feature tests app Elixir build.
-    - name: Cache feature tests app Elixir build
-      id: cache-feature-tests-app-elixir-build
-      uses: actions/cache@v3
-      env:
-        cache-name: cache-feature-tests-app-elixir-build
-      with:
-        path: test/features/_build
-        key: ${{ runner.os }}-mix-${{ env.cache-name }}-${{ hashFiles('test/features/mix.lock') }}
-        restore-keys: |
-          ${{ runner.os }}-mix-${{ env.cache-name }}-
-          ${{ runner.os }}-mix-            
+          ${{ runner.os }}-mix-           
 
     # Step: Download lib Elixir dependencies.
     # If unchanged, uses the cached version.
@@ -184,6 +161,33 @@ jobs:
     # Step: Execute lib JavaScript unit tests.
     - name: Run lib JavaScript unit tests
       run: mix test.js
+      
+    ### FEATURE TESTS APP CHECKS ###  
+      
+    # Step: Define how to cache the feature tests app Elixir dependencies.
+    - name: Cache feature tests app Elixir deps
+      id: cache-feature-tests-app-elixir-deps
+      uses: actions/cache@v3
+      env:
+        cache-name: cache-feature-tests-app-elixir-deps
+      with:
+        path: test/features/deps
+        key: ${{ runner.os }}-mix-${{ env.cache-name }}-${{ hashFiles('test/features/mix.lock') }}
+        restore-keys: |
+          ${{ runner.os }}-mix-${{ env.cache-name }}-
+          
+    # Step: Define how to cache the feature tests app Elixir build.
+    - name: Cache feature tests app Elixir build
+      id: cache-feature-tests-app-elixir-build
+      uses: actions/cache@v3
+      env:
+        cache-name: cache-feature-tests-app-elixir-build
+      with:
+        path: test/features/_build
+        key: ${{ runner.os }}-mix-${{ env.cache-name }}-${{ hashFiles('test/features/mix.lock') }}
+        restore-keys: |
+          ${{ runner.os }}-mix-${{ env.cache-name }}-
+          ${{ runner.os }}-mix-
       
     # Step: Download feature tests app Elixir dependencies.
     # If unchanged, uses the cached version.
