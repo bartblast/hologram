@@ -134,34 +134,34 @@ jobs:
     - name: Run lib Elixir security-focused analysis with Sobelow
       run: mix sobelow --config
 
-    # Step: Restore Dialyzer PLT cache.
+    # Step: Restore lib Dialyzer PLT cache.
     # Cache key is based on Erlang/Elixir version and the mix.lock hash.
-    - name: Restore Dialyzer PLT cache
-      id: restore-dialyzer-plt-cache
+    - name: Restore lib Dialyzer PLT cache
+      id: restore-lib-dialyzer-plt-cache
       uses: actions/cache/restore@v3
       with:
         key: |
-          dialyzer-plt-${{ runner.os }}-${{ steps.beam.outputs.otp-version }}-${{ steps.beam.outputs.elixir-version }}-${{ hashFiles('**/mix.lock') }}
+          dialyzer-plt-lib-${{ runner.os }}-${{ steps.beam.outputs.otp-version }}-${{ steps.beam.outputs.elixir-version }}-${{ hashFiles('mix.lock') }}
         restore-keys: |
-          dialyzer-plt-${{ runner.os }}-${{ steps.beam.outputs.otp-version }}-${{ steps.beam.outputs.elixir-version }}-
+          dialyzer-plt-lib-${{ runner.os }}-${{ steps.beam.outputs.otp-version }}-${{ steps.beam.outputs.elixir-version }}-
         path: |
           priv/plts
 
-    # Step: Create Dialyzer PLTs if no cache was found.
-    - name: Create Dialyzer PLTs
-      if: steps.restore-dialyzer-plt-cache.outputs.cache-hit != 'true'
+    # Step: Create lib Dialyzer PLTs if no cache was found.
+    - name: Create lib Dialyzer PLTs
+      if: steps.restore-lib-dialyzer-plt-cache.outputs.cache-hit != 'true'
       run: mix dialyzer --plt
       
-    # Step: Save Dialyzer PLT cache.
+    # Step: Save lib Dialyzer PLT cache.
     # By default, the GitHub Cache action will only save the cache if all steps in the job succeed,
     # so we separate the cache restore and save steps in case running dialyzer fails.
-    - name: Save Dialyzer PLT cache
-      id: save-dialyzer-plt-cache
+    - name: Save lib Dialyzer PLT cache
+      id: save-lib-dialyzer-plt-cache
       uses: actions/cache/save@v3
-      if: steps.restore-dialyzer-plt-cache.outputs.cache-hit != 'true'
+      if: steps.restore-lib-dialyzer-plt-cache.outputs.cache-hit != 'true'
       with:
         key: |
-          dialyzer-plt-${{ runner.os }}-${{ steps.beam.outputs.otp-version }}-${{ steps.beam.outputs.elixir-version }}-${{ hashFiles('**/mix.lock') }}
+          dialyzer-plt-lib-${{ runner.os }}-${{ steps.beam.outputs.otp-version }}-${{ steps.beam.outputs.elixir-version }}-${{ hashFiles('mix.lock') }}
         path: |
           priv/plts      
 
@@ -209,6 +209,41 @@ jobs:
     # Step: Run feature tests app Elixir static code analysis with Credo.
     - name: Run feature tests app Elixir static code analysis with Credo
       run: cd test/features && mix credo --strict
+      
+    # Step: Restore feature tests app Dialyzer PLT cache.
+    # Cache key is based on Erlang/Elixir version and the mix.lock hash.
+    - name: Restore feature tests app Dialyzer PLT cache
+      id: restore-feature-tests-app-dialyzer-plt-cache
+      uses: actions/cache/restore@v3
+      with:
+        key: |
+          dialyzer-plt-feature-tests-app-${{ runner.os }}-${{ steps.beam.outputs.otp-version }}-${{ steps.beam.outputs.elixir-version }}-${{ hashFiles('test/features/mix.lock') }}
+        restore-keys: |
+          dialyzer-plt-feature-tests-app--${{ runner.os }}-${{ steps.beam.outputs.otp-version }}-${{ steps.beam.outputs.elixir-version }}-
+        path: |
+          test/features/priv/plts
+          
+    # Step: Create feature tests app Dialyzer PLTs if no cache was found.
+    - name: Create feature tests app Dialyzer PLTs
+      if: steps.restore-feature-tests-app-dialyzer-plt-cache.outputs.cache-hit != 'true'
+      run: cd test/features && mix dialyzer --plt
+      
+    # Step: Save feature tests app Dialyzer PLT cache.
+    # By default, the GitHub Cache action will only save the cache if all steps in the job succeed,
+    # so we separate the cache restore and save steps in case running dialyzer fails.
+    - name: Save feature tests app Dialyzer PLT cache
+      id: save-feature-tests-app-dialyzer-plt-cache
+      uses: actions/cache/save@v3
+      if: steps.restore-feature-tests-app-dialyzer-plt-cache.outputs.cache-hit != 'true'
+      with:
+        key: |
+          dialyzer-plt-feature-tests-app-${{ runner.os }}-${{ steps.beam.outputs.otp-version }}-${{ steps.beam.outputs.elixir-version }}-${{ hashFiles('test/features/mix.lock') }}
+        path: |
+          test/features/priv/plts
+          
+    # Step: Run feature tests app Elixir static code analysis with Dialyzer.
+    - name: Run feature tests app Elixir static code analysis with Dialyzer
+      run: cd test/features && mix dialyzer --format github          
 
     # Step: Execute the E2E tests.
     # TODO: uncomment when E2E tests are implemented
