@@ -183,12 +183,12 @@ jobs:
 
     # Step: Execute lib JavaScript unit tests.
     - name: Run lib JavaScript unit tests
-      run: mix test.js      
-
-    # Step: Download test app dependencies.
-    # TODO: uncomment when E2E tests are implemented
-    # - name: Install test app dependencies
-    #   run: cd test/e2e && mix deps.get        
+      run: mix test.js
+      
+    # Step: Download feature tests app Elixir dependencies.
+    # If unchanged, uses the cached version.
+    - name: Download feature tests app Elixir deps
+      run: cd test/features && mix deps.get      
 
     # Step: Compile the test app treating any warnings as errors.
     # TODO: uncomment when E2E tests are implemented
