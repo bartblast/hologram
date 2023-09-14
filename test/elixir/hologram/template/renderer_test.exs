@@ -414,7 +414,7 @@ defmodule Hologram.Template.RendererTest do
                layout template start
                <script>
                \s\s
-                   window.__hologram_runtime_initial_client_data__ = (typeClass) => {
+                   window.__hologram_runtime_bootstrap_data__ = (typeClass) => {
                  const Type = typeClass;
                  return Type.map([[Type.bitstring("layout"), Type.map([[Type.atom("__struct__"), Type.atom("Elixir.Hologram.Component.Client")], [Type.atom("context"), Type.map([])], [Type.atom("next_command"), Type.atom("nil")], [Type.atom("state"), Type.map([])]])], [Type.bitstring("page"), Type.map([[Type.atom("__struct__"), Type.atom("Elixir.Hologram.Component.Client")], [Type.atom("context"), Type.map([[Type.tuple([Type.atom("Elixir.Hologram.Runtime"), Type.atom("initial_client_data_loaded?")]), Type.atom("true")]])], [Type.atom("next_command"), Type.atom("nil")], [Type.atom("state"), Type.map([])]])]]);
                };

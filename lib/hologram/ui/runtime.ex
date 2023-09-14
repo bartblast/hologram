@@ -9,7 +9,7 @@ defmodule Hologram.UI.Runtime do
     ~H"""
     <script>
       {%if !@initial_client_data_loaded?}
-        window.__hologram_runtime_initial_client_data__ = "...";
+        window.__hologram_runtime_bootstrap_data__ = "...";
       {/if}
     </script>
     """

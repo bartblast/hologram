@@ -10,7 +10,7 @@ defmodule Hologram.UI.RuntimeTest do
     assert render_component(Runtime, %{}, context) == """
            <script>
              
-               window.__hologram_runtime_initial_client_data__ = "...";
+               window.__hologram_runtime_bootstrap_data__ = "...";
              
            </script>\
            """

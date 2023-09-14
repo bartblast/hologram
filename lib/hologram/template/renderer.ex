@@ -89,25 +89,29 @@ defmodule Hologram.Template.Renderer do
   # (it would be possible to pass page state as layout props this way).
   def render({:page, page_module, params_dom, []}, context, _slots) do
     params = cast_props(params_dom, page_module)
-    {page_client, _server} = init_component(page_module, params)
+    {initial_page_client, _server} = init_component(page_module, params)
 
-    vars = aggregate_vars(params, page_client.state)
-    context = Map.merge(context, page_client.context)
+    vars = aggregate_vars(params, initial_page_client.state)
+    context = Map.merge(context, initial_page_client.context)
 
     layout_module = page_module.__hologram_layout_module__()
-    layout_props_dom = build_layout_props_dom(page_module, page_client)
+    layout_props_dom = build_layout_props_dom(page_module, initial_page_client)
 
     page_dom = page_module.template().(vars)
     layout_node = {:component, layout_module, layout_props_dom, page_dom}
-    {html, clients} = render(layout_node, context, [])
+    {initial_html, initial_clients} = render(layout_node, context, [])
 
-    page_client =
-      Templatable.put_context(page_client, {Hologram.Runtime, :initial_client_data_loaded?}, true)
+    final_page_client =
+      Templatable.put_context(
+        initial_page_client,
+        {Hologram.Runtime, :initial_client_data_loaded?},
+        true
+      )
 
-    clients = Map.put(clients, "page", page_client)
-    html = inject_initial_client_data(html, clients)
+    final_clients = Map.put(initial_clients, "page", final_page_client)
+    final_html = inject_runtime_bootstrap_data(initial_html, final_clients)
 
-    {html, clients}
+    {final_html, final_clients}
   end
 
   def render({:text, text}, _context, _slots) do
@@ -204,7 +208,7 @@ defmodule Hologram.Template.Renderer do
     Map.merge(props_from_template, props_from_context)
   end
 
-  defp inject_initial_client_data(html, clients) do
+  defp inject_runtime_bootstrap_data(html, clients) do
     data =
       clients
       |> Macro.escape()
@@ -212,10 +216,10 @@ defmodule Hologram.Template.Renderer do
       |> Transformer.transform(%Context{})
       |> Encoder.encode(%Context{})
 
-    pattern = "window.__hologram_runtime_initial_client_data__ = \"...\";"
+    pattern = "window.__hologram_runtime_bootstrap_data__ = \"...\";"
 
     replacement = """
-    window.__hologram_runtime_initial_client_data__ = (typeClass) => {
+    window.__hologram_runtime_bootstrap_data__ = (typeClass) => {
       const Type = typeClass;
       return #{data};
     };\
