@@ -28,23 +28,17 @@ defmodule Hologram.Runtime.Controller do
   @spec handle_request(Plug.Conn.t(), module) :: Plug.Conn.t()
   # sobelow_skip ["XSS.HTML"]
   def handle_request(conn, page_module) do
-    {html, _clients} =
+    params_dom =
       conn.request_path
       |> extract_params(page_module)
-      |> build_page_dom(page_module)
-      |> Renderer.render(%{}, [])
+      |> Enum.map(fn {name, value} ->
+        {to_string(name), [text: value]}
+      end)
+
+    {html, _clients} = Renderer.render_page(page_module, params_dom)
 
     conn
     |> Controller.html(html)
     |> Plug.Conn.halt()
-  end
-
-  defp build_page_dom(params, page_module) do
-    params_dom =
-      Enum.map(params, fn {name, value} ->
-        {to_string(name), [text: value]}
-      end)
-
-    {:page, page_module, params_dom, []}
   end
 end

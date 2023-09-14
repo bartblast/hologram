@@ -85,21 +85,34 @@ defmodule Hologram.Template.Renderer do
     {to_string(value), %{}}
   end
 
+  def render({:text, text}, _context, _slots) do
+    {text, %{}}
+  end
+
   # TODO: Refactor once there is something akin to {...@var} syntax
   # (it would be possible to pass page state as layout props this way).
-  def render({:page, page_module, params_dom, []}, context, _slots) do
+  @doc """
+  Renders the given page.
+
+  ## Examples
+
+      iex> render_page(MyPage, [{"param", [text: "value"]}])
+      {
+        "<div>full page content including layout</div>",
+        %{"page" => %Component.Client{state: %{a: 1, b: 2}}}
+      }
+  """
+  @spec render_page(module, DOM.t()) :: {String.t(), %{atom => Component.Client.t()}}
+  def render_page(page_module, params_dom) do
     params = cast_props(params_dom, page_module)
     {initial_page_client, _server} = init_component(page_module, params)
 
-    vars = aggregate_vars(params, initial_page_client.state)
-    context = Map.merge(context, initial_page_client.context)
-
     layout_module = page_module.__hologram_layout_module__()
     layout_props_dom = build_layout_props_dom(page_module, initial_page_client)
-
+    vars = aggregate_vars(params, initial_page_client.state)
     page_dom = page_module.template().(vars)
     layout_node = {:component, layout_module, layout_props_dom, page_dom}
-    {initial_html, initial_clients} = render(layout_node, context, [])
+    {initial_html, initial_clients} = render(layout_node, initial_page_client.context, [])
 
     final_page_client =
       Templatable.put_context(
@@ -112,10 +125,6 @@ defmodule Hologram.Template.Renderer do
     final_html = inject_runtime_bootstrap_data(initial_html, final_clients)
 
     {final_html, final_clients}
-  end
-
-  def render({:text, text}, _context, _slots) do
-    {text, %{}}
   end
 
   defp aggregate_vars(props, state) do

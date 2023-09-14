@@ -274,167 +274,6 @@ defmodule Hologram.Template.RendererTest do
     assert render(node, %{}, []) == {"123", %{}}
   end
 
-  describe "page" do
-    test "render page inside layout slot" do
-      node = {:page, Module14, [], []}
-
-      assert render(node, %{}, []) ==
-               {"layout template start, page template, layout template end",
-                %{
-                  "layout" => %Component.Client{},
-                  "page" => %Component.Client{
-                    context: %{{Hologram.Runtime, :initial_client_data_loaded?} => true}
-                  }
-                }}
-    end
-
-    test "cast page params" do
-      node =
-        {:page, Module19,
-         [
-           {"param_1", [text: "value_1"]},
-           {"param_2", [text: "value_2"]},
-           {"param_3", [text: "value_3"]}
-         ], []}
-
-      assert render(node, %{}, []) ==
-               {"",
-                %{
-                  "layout" => %Component.Client{},
-                  "page" => %Component.Client{
-                    context: %{{Hologram.Runtime, :initial_client_data_loaded?} => true},
-                    state: %{param_1: "value_1", param_3: "value_3"}
-                  }
-                }}
-    end
-
-    test "cast layout explicit static props" do
-      node = {:page, Module25, [], []}
-
-      assert render(node, %{}, []) ==
-               {"",
-                %{
-                  "layout" => %Component.Client{
-                    state: %{id: "layout", prop_1: "prop_value_1", prop_3: "prop_value_3"}
-                  },
-                  "page" => %Component.Client{
-                    context: %{{Hologram.Runtime, :initial_client_data_loaded?} => true}
-                  }
-                }}
-    end
-
-    test "cast layout props passed implicitely from page state" do
-      node = {:page, Module27, [], []}
-
-      assert render(node, %{}, []) ==
-               {"",
-                %{
-                  "layout" => %Component.Client{
-                    state: %{id: "layout", prop_1: "prop_value_1", prop_3: "prop_value_3"}
-                  },
-                  "page" => %Component.Client{
-                    context: %{{Hologram.Runtime, :initial_client_data_loaded?} => true},
-                    state: %{
-                      prop_1: "prop_value_1",
-                      prop_2: "prop_value_2",
-                      prop_3: "prop_value_3"
-                    }
-                  }
-                }}
-    end
-
-    test "aggregate page vars, giving state priority over param when there are name conflicts" do
-      node =
-        {:page, Module21,
-         [
-           {"key_1", [text: "param_value_1"]},
-           {"key_2", [text: "param_value_2"]}
-         ], []}
-
-      assert render(node, %{}, []) ==
-               {"key_1 = param_value_1, key_2 = state_value_2, key_3 = state_value_3",
-                %{
-                  "layout" => %Component.Client{},
-                  "page" => %Component.Client{
-                    context: %{{Hologram.Runtime, :initial_client_data_loaded?} => true},
-                    state: %{key_2: "state_value_2", key_3: "state_value_3"}
-                  }
-                }}
-    end
-
-    test "aggregate layout vars, giving state priority over prop when there are name conflicts" do
-      node = {:page, Module24, [], []}
-
-      assert render(node, %{}, []) ==
-               {"key_1 = prop_value_1, key_2 = state_value_2, key_3 = state_value_3",
-                %{
-                  "layout" => %Component.Client{
-                    state: %{key_2: "state_value_2", key_3: "state_value_3"}
-                  },
-                  "page" => %Component.Client{
-                    context: %{{Hologram.Runtime, :initial_client_data_loaded?} => true}
-                  }
-                }}
-    end
-
-    test "merge the page component client struct into the result" do
-      node = {:page, Module28, [], []}
-
-      assert render(node, %{}, []) ==
-               {"",
-                %{
-                  "layout" => %Component.Client{},
-                  "page" => %Component.Client{
-                    context: %{{Hologram.Runtime, :initial_client_data_loaded?} => true},
-                    state: %{state_1: "value_1", state_2: "value_2"}
-                  }
-                }}
-    end
-
-    test "merge the layout component client struct into the result" do
-      node = {:page, Module29, [], []}
-
-      assert render(node, %{}, []) ==
-               {"",
-                %{
-                  "layout" => %Hologram.Component.Client{
-                    state: %{state_1: "value_1", state_2: "value_2"}
-                  },
-                  "page" => %Hologram.Component.Client{
-                    context: %{{Hologram.Runtime, :initial_client_data_loaded?} => true}
-                  }
-                }}
-    end
-
-    test "inject initial client data" do
-      node = {:page, Module48, [], []}
-
-      assert render(node, %{}, []) == {
-               """
-               layout template start
-               <script>
-               \s\s
-                   window.__hologram_runtime_bootstrap_data__ = (typeClass) => {
-                 const Type = typeClass;
-                 return Type.map([[Type.bitstring("layout"), Type.map([[Type.atom("__struct__"), Type.atom("Elixir.Hologram.Component.Client")], [Type.atom("context"), Type.map([])], [Type.atom("next_command"), Type.atom("nil")], [Type.atom("state"), Type.map([])]])], [Type.bitstring("page"), Type.map([[Type.atom("__struct__"), Type.atom("Elixir.Hologram.Component.Client")], [Type.atom("context"), Type.map([[Type.tuple([Type.atom("Elixir.Hologram.Runtime"), Type.atom("initial_client_data_loaded?")]), Type.atom("true")]])], [Type.atom("next_command"), Type.atom("nil")], [Type.atom("state"), Type.map([])]])]]);
-               };
-               \s\s
-               </script>
-               page template
-               layout template end\
-               """,
-               %{
-                 "layout" => %Component.Client{
-                   context: %{}
-                 },
-                 "page" => %Component.Client{
-                   context: %{{Hologram.Runtime, :initial_client_data_loaded?} => true}
-                 }
-               }
-             }
-    end
-  end
-
   test "text" do
     node = {:text, "abc"}
     assert render(node, %{}, []) == {"abc", %{}}
@@ -505,9 +344,7 @@ defmodule Hologram.Template.RendererTest do
 
   describe "context" do
     test "set in page, accessed in component nested in page" do
-      node = {:page, Module39, [], []}
-
-      assert render(node, %{}, []) ==
+      assert render_page(Module39, []) ==
                {"prop_aaa = 123",
                 %{
                   "layout" => %Component.Client{
@@ -523,9 +360,7 @@ defmodule Hologram.Template.RendererTest do
     end
 
     test "set in page, accessed in component nested in layout" do
-      node = {:page, Module46, [], []}
-
-      assert render(node, %{}, []) ==
+      assert render_page(Module46, []) ==
                {"prop_aaa = 123",
                 %{
                   "layout" => %Component.Client{
@@ -541,9 +376,7 @@ defmodule Hologram.Template.RendererTest do
     end
 
     test "set in page, accessed in layout" do
-      node = {:page, Module40, [], []}
-
-      assert render(node, %{}, []) ==
+      assert render_page(Module40, []) ==
                {"prop_aaa = 123",
                 %{
                   "layout" => %Component.Client{
@@ -559,9 +392,7 @@ defmodule Hologram.Template.RendererTest do
     end
 
     test "set in layout, accessed in component nested in page" do
-      node = {:page, Module43, [], []}
-
-      assert render(node, %{}, []) ==
+      assert render_page(Module43, []) ==
                {"prop_aaa = 123",
                 %{
                   "layout" => %Component.Client{
@@ -574,9 +405,7 @@ defmodule Hologram.Template.RendererTest do
     end
 
     test "set in layout, accessed in component nested in layout" do
-      node = {:page, Module45, [], []}
-
-      assert render(node, %{}, []) ==
+      assert render_page(Module45, []) ==
                {"prop_aaa = 123",
                 %{
                   "layout" => %Component.Client{
@@ -600,6 +429,151 @@ defmodule Hologram.Template.RendererTest do
                     }
                   }
                 }}
+    end
+  end
+
+  describe "render_page" do
+    test "inside layout slot" do
+      assert render_page(Module14, []) ==
+               {"layout template start, page template, layout template end",
+                %{
+                  "layout" => %Component.Client{},
+                  "page" => %Component.Client{
+                    context: %{{Hologram.Runtime, :initial_client_data_loaded?} => true}
+                  }
+                }}
+    end
+
+    test "cast page params" do
+      params_dom =
+        [
+          {"param_1", [text: "value_1"]},
+          {"param_2", [text: "value_2"]},
+          {"param_3", [text: "value_3"]}
+        ]
+
+      assert render_page(Module19, params_dom) ==
+               {"",
+                %{
+                  "layout" => %Component.Client{},
+                  "page" => %Component.Client{
+                    context: %{{Hologram.Runtime, :initial_client_data_loaded?} => true},
+                    state: %{param_1: "value_1", param_3: "value_3"}
+                  }
+                }}
+    end
+
+    test "cast layout explicit static props" do
+      assert render_page(Module25, []) ==
+               {"",
+                %{
+                  "layout" => %Component.Client{
+                    state: %{id: "layout", prop_1: "prop_value_1", prop_3: "prop_value_3"}
+                  },
+                  "page" => %Component.Client{
+                    context: %{{Hologram.Runtime, :initial_client_data_loaded?} => true}
+                  }
+                }}
+    end
+
+    test "cast layout props passed implicitely from page state" do
+      assert render_page(Module27, []) ==
+               {"",
+                %{
+                  "layout" => %Component.Client{
+                    state: %{id: "layout", prop_1: "prop_value_1", prop_3: "prop_value_3"}
+                  },
+                  "page" => %Component.Client{
+                    context: %{{Hologram.Runtime, :initial_client_data_loaded?} => true},
+                    state: %{
+                      prop_1: "prop_value_1",
+                      prop_2: "prop_value_2",
+                      prop_3: "prop_value_3"
+                    }
+                  }
+                }}
+    end
+
+    test "aggregate page vars, giving state priority over param when there are name conflicts" do
+      params_dom =
+        [
+          {"key_1", [text: "param_value_1"]},
+          {"key_2", [text: "param_value_2"]}
+        ]
+
+      assert render_page(Module21, params_dom) ==
+               {"key_1 = param_value_1, key_2 = state_value_2, key_3 = state_value_3",
+                %{
+                  "layout" => %Component.Client{},
+                  "page" => %Component.Client{
+                    context: %{{Hologram.Runtime, :initial_client_data_loaded?} => true},
+                    state: %{key_2: "state_value_2", key_3: "state_value_3"}
+                  }
+                }}
+    end
+
+    test "aggregate layout vars, giving state priority over prop when there are name conflicts" do
+      assert render_page(Module24, []) ==
+               {"key_1 = prop_value_1, key_2 = state_value_2, key_3 = state_value_3",
+                %{
+                  "layout" => %Component.Client{
+                    state: %{key_2: "state_value_2", key_3: "state_value_3"}
+                  },
+                  "page" => %Component.Client{
+                    context: %{{Hologram.Runtime, :initial_client_data_loaded?} => true}
+                  }
+                }}
+    end
+
+    test "merge the page component client struct into the result" do
+      assert render_page(Module28, []) ==
+               {"",
+                %{
+                  "layout" => %Component.Client{},
+                  "page" => %Component.Client{
+                    context: %{{Hologram.Runtime, :initial_client_data_loaded?} => true},
+                    state: %{state_1: "value_1", state_2: "value_2"}
+                  }
+                }}
+    end
+
+    test "merge the layout component client struct into the result" do
+      assert render_page(Module29, []) ==
+               {"",
+                %{
+                  "layout" => %Hologram.Component.Client{
+                    state: %{state_1: "value_1", state_2: "value_2"}
+                  },
+                  "page" => %Hologram.Component.Client{
+                    context: %{{Hologram.Runtime, :initial_client_data_loaded?} => true}
+                  }
+                }}
+    end
+
+    test "inject initial client data" do
+      assert render_page(Module48, []) == {
+               """
+               layout template start
+               <script>
+               \s\s
+                   window.__hologram_runtime_bootstrap_data__ = (typeClass) => {
+                 const Type = typeClass;
+                 return Type.map([[Type.bitstring("layout"), Type.map([[Type.atom("__struct__"), Type.atom("Elixir.Hologram.Component.Client")], [Type.atom("context"), Type.map([])], [Type.atom("next_command"), Type.atom("nil")], [Type.atom("state"), Type.map([])]])], [Type.bitstring("page"), Type.map([[Type.atom("__struct__"), Type.atom("Elixir.Hologram.Component.Client")], [Type.atom("context"), Type.map([[Type.tuple([Type.atom("Elixir.Hologram.Runtime"), Type.atom("initial_client_data_loaded?")]), Type.atom("true")]])], [Type.atom("next_command"), Type.atom("nil")], [Type.atom("state"), Type.map([])]])]]);
+               };
+               \s\s
+               </script>
+               page template
+               layout template end\
+               """,
+               %{
+                 "layout" => %Component.Client{
+                   context: %{}
+                 },
+                 "page" => %Component.Client{
+                   context: %{{Hologram.Runtime, :initial_client_data_loaded?} => true}
+                 }
+               }
+             }
     end
   end
 end
