@@ -17,27 +17,27 @@ defmodule Hologram.Template.Renderer do
   ## Examples
 
       iex> dom = {:component, Module3, [{"id", [text: "my_component"]}], []}
-      iex> render(dom, %{}, [])
+      iex> render_dom(dom, %{}, [])
       {
         "<div>state_a = 1, state_b = 2</div>",
         %{"my_component" => %Component.Client{state: %{a: 1, b: 2}}}
       }
   """
-  @spec render(DOM.t(), %{(atom | {any, atom}) => any}, keyword(DOM.t())) ::
+  @spec render_dom(DOM.t(), %{(atom | {any, atom}) => any}, keyword(DOM.t())) ::
           {String.t(), %{atom => Component.Client.t()}}
-  def render(dom, context, slots)
+  def render_dom(dom, context, slots)
 
-  def render(nodes, context, slots) when is_list(nodes) do
+  def render_dom(nodes, context, slots) when is_list(nodes) do
     nodes
     # There may be nil DOM nodes resulting from if blocks, e.g. {%if false}abc{/if}
     |> Enum.filter(& &1)
     |> Enum.reduce({"", %{}}, fn node, {acc_html, acc_clients} ->
-      {html, clients} = render(node, context, slots)
+      {html, clients} = render_dom(node, context, slots)
       {acc_html <> html, Map.merge(acc_clients, clients)}
     end)
   end
 
-  def render({:component, module, props_dom, children}, context, slots) do
+  def render_dom({:component, module, props_dom, children}, context, slots) do
     children = expand_slots(children, slots)
 
     props =
@@ -52,16 +52,16 @@ defmodule Hologram.Template.Renderer do
     end
   end
 
-  def render({:element, "slot", _attrs, []}, context, slots) do
-    render(slots[:default], context, [])
+  def render_dom({:element, "slot", _attrs, []}, context, slots) do
+    render_dom(slots[:default], context, [])
   end
 
-  def render({:element, tag, attrs, children}, context, slots) do
+  def render_dom({:element, tag, attrs, children}, context, slots) do
     attrs_html =
       if attrs != [] do
         attrs
         |> Enum.map_join(" ", fn {name, value_parts} ->
-          {html, _clients} = render(value_parts, %{}, [])
+          {html, _clients} = render_dom(value_parts, %{}, [])
           ~s(#{name}="#{html}")
         end)
         |> StringUtils.prepend(" ")
@@ -69,7 +69,7 @@ defmodule Hologram.Template.Renderer do
         ""
       end
 
-    {children_html, children_clients} = render(children, context, slots)
+    {children_html, children_clients} = render_dom(children, context, slots)
 
     html =
       if tag in @void_elems do
@@ -81,11 +81,11 @@ defmodule Hologram.Template.Renderer do
     {html, children_clients}
   end
 
-  def render({:expression, {value}}, _context, _slots) do
+  def render_dom({:expression, {value}}, _context, _slots) do
     {to_string(value), %{}}
   end
 
-  def render({:text, text}, _context, _slots) do
+  def render_dom({:text, text}, _context, _slots) do
     {text, %{}}
   end
 
@@ -112,7 +112,7 @@ defmodule Hologram.Template.Renderer do
     vars = aggregate_vars(params, initial_page_client.state)
     page_dom = page_module.template().(vars)
     layout_node = {:component, layout_module, layout_props_dom, page_dom}
-    {initial_html, initial_clients} = render(layout_node, initial_page_client.context, [])
+    {initial_html, initial_clients} = render_dom(layout_node, initial_page_client.context, [])
 
     final_page_client =
       Templatable.put_context(
@@ -151,7 +151,7 @@ defmodule Hologram.Template.Renderer do
   end
 
   defp evaluate_prop_value({name, value_parts}) do
-    {text, _clients} = render(value_parts, %{}, [])
+    {text, _clients} = render_dom(value_parts, %{}, [])
     {name, text}
   end
 
@@ -270,6 +270,6 @@ defmodule Hologram.Template.Renderer do
   defp render_template(module, vars, children, context) do
     vars
     |> module.template().()
-    |> render(context, default: children)
+    |> render_dom(context, default: children)
   end
 end
