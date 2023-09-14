@@ -15,7 +15,8 @@ locals_without_parens = [
   inputs: [
     "*.{ex,exs}",
     "{config,lib}/**/*.{ex,exs}",
-    "test/elixir/**/*.{ex,exs}"
+    "test/elixir/*.{ex,exs}",
+    "test/elixir/{fixtures,hologram,mix,support}/**/*.{ex,exs}"
   ],
   locals_without_parens: locals_without_parens
 ]
