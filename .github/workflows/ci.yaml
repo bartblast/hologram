@@ -196,7 +196,11 @@ jobs:
       
     # Step: Check if there are any feature tests app Elixir dependencies which have been marked as retired.
     - name: Check feature tests app retired Elixir deps
-      run: cd test/features && mix hex.audit        
+      run: cd test/features && mix hex.audit
+      
+    # Step: Check if there are any security vulnerabilities in the feature tests app Elixir dependencies.
+    - name: Check feature tests app security vulnerabilities in Elixir deps
+      run: cd test/features && mix deps.audit      
 
     # Step: Compile the test app treating any warnings as errors.
     # TODO: uncomment when E2E tests are implemented
