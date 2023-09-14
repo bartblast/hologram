@@ -98,8 +98,8 @@ defmodule Hologram.Template.Renderer do
     layout_props_dom = build_layout_props_dom(page_module, page_client)
 
     page_dom = page_module.template().(vars)
-    layout_dom = {:component, layout_module, layout_props_dom, page_dom}
-    {html, clients} = render(layout_dom, context, [])
+    layout_node = {:component, layout_module, layout_props_dom, page_dom}
+    {html, clients} = render(layout_node, context, [])
 
     page_client =
       Templatable.put_context(page_client, {Hologram.Runtime, :initial_client_data_loaded?}, true)
