@@ -173,6 +173,10 @@ defmodule Hologram.Commons.ReflectionTest do
     end
   end
 
+  test "page_digest_plt_dump_file_name/0" do
+    assert page_digest_plt_dump_file_name() == "page_digest.plt"
+  end
+
   test "root_path/0" do
     assert root_path() == File.cwd!()
   end

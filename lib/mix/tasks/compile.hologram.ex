@@ -45,7 +45,9 @@ defmodule Mix.Tasks.Compile.Hologram do
     bundle_runtime(call_graph, ir_plt, opts)
 
     page_digest_plt = PLT.start()
-    page_digest_plt_dump_path = opts[:build_dir] <> "/page_digest.plt"
+
+    page_digest_plt_dump_path =
+      Path.join([opts[:build_dir], Reflection.page_digest_plt_dump_file_name()])
 
     call_graph
     |> bundle_pages(ir_plt, opts)

@@ -79,11 +79,13 @@ defmodule Mix.Tasks.Compile.HologramTest do
   end
 
   defp test_page_digest_plt(num_page_bundles) do
-    page_digest_dump_path = "#{@tmp_path}/build/page_digest.plt"
-    assert File.exists?(page_digest_dump_path)
+    page_digest_dump_file =
+      Path.join([@tmp_path, "build", Reflection.page_digest_plt_dump_file_name()])
+
+    assert File.exists?(page_digest_dump_file)
 
     page_digest_plt = PLT.start()
-    PLT.load(page_digest_plt, page_digest_dump_path)
+    PLT.load(page_digest_plt, page_digest_dump_file)
     page_digest_items = PLT.get_all(page_digest_plt)
     assert Enum.count(Map.keys(page_digest_items)) == num_page_bundles
     assert page_digest_items[Module1] == "596a456ce39aa7a14cc91b14083dc41d"

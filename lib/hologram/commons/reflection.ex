@@ -228,6 +228,14 @@ defmodule Hologram.Commons.Reflection do
   end
 
   @doc """
+  Returns the page digest PLT dump file name.
+  """
+  @spec page_digest_plt_dump_file_name() :: String.t()
+  def page_digest_plt_dump_file_name do
+    "page_digest.plt"
+  end
+
+  @doc """
   Returns the absolute path of the project.
 
   ## Examples
