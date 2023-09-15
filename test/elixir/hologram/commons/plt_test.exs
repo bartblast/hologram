@@ -54,12 +54,23 @@ defmodule Hologram.Commons.PLTTest do
   end
 
   describe "get/2" do
-    test "key exists", %{plt: plt} do
+    test "key exists / resolve ETS table by reference", %{plt: plt} do
       assert get(plt, :my_key_2) == {:ok, :my_value_2}
     end
 
     test "key doesn't exist", %{plt: plt} do
       assert get(plt, :my_key_3) == :error
+    end
+
+    test "resolve ETS table by name" do
+      table_name = random_atom()
+
+      [table_name: table_name]
+      |> start()
+      |> put(@items)
+
+      plt = %PLT{table_name: table_name}
+      assert get(plt, :my_key_2) == {:ok, :my_value_2}
     end
   end
 

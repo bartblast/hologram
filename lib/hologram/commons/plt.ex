@@ -10,7 +10,7 @@ defmodule Hologram.Commons.PLT do
   alias Hologram.Commons.SerializationUtils
 
   defstruct pid: nil, table_ref: nil, table_name: nil
-  @type t :: %PLT{pid: pid, table_ref: :ets.tid(), table_name: atom | nil}
+  @type t :: %PLT{pid: pid | nil, table_ref: :ets.tid() | nil, table_name: atom | nil}
 
   @doc """
   Deletes a key-value pair from the give persistent lookup table.
@@ -42,8 +42,8 @@ defmodule Hologram.Commons.PLT do
   If the key doesn't exist the :error :atom is returned.
   """
   @spec get(PLT.t(), atom) :: {:ok, term} | :error
-  def get(%{table_ref: table_ref}, key) do
-    case :ets.lookup(table_ref, key) do
+  def get(%{table_ref: table_ref, table_name: table_name}, key) do
+    case :ets.lookup(table_ref || table_name, key) do
       [{^key, value}] ->
         {:ok, value}
 
