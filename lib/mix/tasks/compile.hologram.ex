@@ -13,17 +13,15 @@ defmodule Mix.Tasks.Compile.Hologram do
 
   require Logger
 
-  @env Reflection.env()
   @root_path Reflection.root_path()
   @tmp_path Reflection.tmp_path()
 
-  @build_dir "#{@root_path}/_build/#{@env}/lib/hologram/priv"
   @bundle_dir "#{@root_path}/priv/static/assets/hologram"
   @esbuild_path "#{@root_path}/deps/hologram/assets/node_modules/.bin/esbuild"
   @js_source_dir "#{@root_path}/deps/hologram/assets/js"
 
   @default_opts [
-    build_dir: @build_dir,
+    build_dir: Reflection.build_dir(),
     bundle_dir: @bundle_dir,
     esbuild_path: @esbuild_path,
     js_source_dir: @js_source_dir,

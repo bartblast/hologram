@@ -22,6 +22,14 @@ defmodule Hologram.Commons.Reflection do
   def alias?(_term), do: false
 
   @doc """
+  Returns the build directory path.
+  """
+  @spec build_dir() :: String.t()
+  def build_dir do
+    "#{root_path()}/_build/#{env()}/lib/hologram/priv"
+  end
+
+  @doc """
   Returns true if the given term is a component module (a module that has a "use Hologram.Component" directive)
   Otherwise false is returned.
 

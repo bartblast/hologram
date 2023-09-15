@@ -21,6 +21,10 @@ defmodule Hologram.Commons.ReflectionTest do
     end
   end
 
+  test "build_dir/0" do
+    assert build_dir() == "#{File.cwd!()}/_build/test/lib/hologram/priv"
+  end
+
   describe "component?" do
     test "is a component module" do
       assert component?(Module3)
