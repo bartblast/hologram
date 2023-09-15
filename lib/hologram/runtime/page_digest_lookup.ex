@@ -6,7 +6,6 @@ defmodule Hologram.Runtime.PageDigestLookup do
   def init(opts) do
     plt =
       opts
-      |> Keyword.put(:table_name, opts[:table_name] || __MODULE__)
       |> PLT.start()
       |> PLT.load(opts[:dump_path])
 
