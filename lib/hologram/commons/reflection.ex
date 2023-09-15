@@ -39,6 +39,14 @@ defmodule Hologram.Commons.Reflection do
   end
 
   @doc """
+  Get current environment name.
+  """
+  @spec env() :: atom
+  def env do
+    Application.fetch_env!(:hologram, :env)
+  end
+
+  @doc """
   Returns true if the given term is a layout module (a module that has a "use Hologram.Layout" directive)
   Otherwise false is returned.
 

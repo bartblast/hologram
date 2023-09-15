@@ -35,6 +35,10 @@ defmodule Hologram.Commons.ReflectionTest do
     end
   end
 
+  test "env/0" do
+    assert env() == :test
+  end
+
   describe "layout?" do
     test "is a layout module" do
       assert layout?(Module4)

@@ -13,7 +13,7 @@ defmodule Mix.Tasks.Compile.Hologram do
 
   require Logger
 
-  @env Application.compile_env!(:hologram, :env)
+  @env Reflection.env()
   @root_path Reflection.root_path()
   @tmp_path Reflection.tmp_path()
 
