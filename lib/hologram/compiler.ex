@@ -206,6 +206,16 @@ defmodule Hologram.Compiler do
   end
 
   @doc """
+  Installs JavaScript deps specified in package.json located in the given dir.
+  """
+  @spec install_js_deps(String.t()) :: :ok
+  def install_js_deps(dir) do
+    opts = [cd: dir, into: IO.stream(:stdio, :line)]
+    System.cmd("npm", ["install"], opts)
+    :ok
+  end
+
+  @doc """
   Returns the list of MFAs that are reachable by the given page.
   MFAs required by the runtime are excluded.
   """

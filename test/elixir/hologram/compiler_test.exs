@@ -19,11 +19,12 @@ defmodule Hologram.CompilerTest do
   alias Hologram.Test.Fixtures.Compiler.Module8
   alias Hologram.Test.Fixtures.Compiler.Module9
 
-  @source_dir Reflection.root_path() <> "/assets/js"
-  @erlang_source_dir "#{@source_dir}/erlang"
+  @assets_dir Path.join([Reflection.root_path(), "assets"])
+  @source_dir Path.join([@assets_dir, "js"])
+  @erlang_source_dir Path.join([@source_dir, "erlang"])
 
   setup_all do
-    install_lib_js_deps()
+    install_js_deps(@assets_dir)
     :ok
   end
 
@@ -376,6 +377,10 @@ defmodule Hologram.CompilerTest do
              module_2: [{:module_2, :fun_b, 2}, {:module_2, :fun_e, 1}],
              module_3: [{:module_3, :fun_c, 3}, {:module_3, :fun_f, 2}]
            }
+  end
+
+  test "install_js_deps/1" do
+    assert install_js_deps(@assets_dir) == :ok
   end
 
   test "list_page_mfas/2" do
