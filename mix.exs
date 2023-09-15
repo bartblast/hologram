@@ -15,9 +15,22 @@ defmodule Hologram.MixProject do
   end
 
   def application do
-    [
-      extra_applications: [:logger]
-    ]
+    if dep?() do
+      [
+        mod: {Hologram.Runtime.Application, []},
+        extra_applications: [:logger]
+      ]
+    else
+      [
+        extra_applications: [:logger]
+      ]
+    end
+  end
+
+  def dep? do
+    __MODULE__.module_info()[:compile][:source]
+    |> to_string()
+    |> String.ends_with?("/deps/hologram/mix.exs")
   end
 
   defp deps do

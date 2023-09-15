@@ -1,4 +1,4 @@
-defmodule Hologram.Application do
+defmodule Hologram.Runtime.Application do
   use Application
 
   alias Hologram.Commons.Reflection
