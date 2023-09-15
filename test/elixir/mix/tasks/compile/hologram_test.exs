@@ -110,11 +110,12 @@ defmodule Mix.Tasks.Compile.HologramTest do
   # There are two tests in one test block here, because setup for the second test is expensive.
   test "run/1" do
     opts = [
+      assets_source_dir: "#{@root_path}/assets",
+      build_dir: "#{@tmp_path}/build",
+      bundle_dir: "#{@tmp_path}/bundle/hologram",
       esbuild_path: "#{@root_path}/assets/node_modules/.bin/esbuild",
       js_source_dir: "#{@root_path}/assets/js",
-      tmp_dir: "#{@tmp_path}/tmp",
-      build_dir: "#{@tmp_path}/build",
-      bundle_dir: "#{@tmp_path}/bundle/hologram"
+      tmp_dir: "#{@tmp_path}/tmp"
     ]
 
     # Test case 1: when there are no previous build artifacts

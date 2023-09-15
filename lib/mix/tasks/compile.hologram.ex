@@ -18,9 +18,11 @@ defmodule Mix.Tasks.Compile.Hologram do
 
   @bundle_dir "#{@root_path}/priv/static/assets/hologram"
   @esbuild_path "#{@root_path}/deps/hologram/assets/node_modules/.bin/esbuild"
-  @js_source_dir "#{@root_path}/deps/hologram/assets/js"
+  @assets_source_dir "#{@root_path}/deps/hologram/assets"
+  @js_source_dir "#{@assets_source_dir}/js"
 
   @default_opts [
+    assets_source_dir: @assets_source_dir,
     build_dir: Reflection.build_dir(),
     bundle_dir: @bundle_dir,
     esbuild_path: @esbuild_path,
@@ -45,6 +47,8 @@ defmodule Mix.Tasks.Compile.Hologram do
     {ir_plt, ir_plt_dump_path} = build_ir_plt(opts, diff)
 
     {call_graph, call_graph_dump_path} = build_call_graph(opts, ir_plt, diff)
+
+    Compiler.install_js_deps(opts[:assets_source_dir])
 
     bundle_runtime(call_graph, ir_plt, opts)
 
