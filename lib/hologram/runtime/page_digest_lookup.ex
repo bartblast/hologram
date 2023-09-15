@@ -11,4 +11,8 @@ defmodule Hologram.Runtime.PageDigestLookup do
 
     {:ok, plt}
   end
+
+  def lookup(table_name, page_module) do
+    PLT.get!(%PLT{table_name: table_name}, page_module)
+  end
 end
