@@ -30,7 +30,11 @@ defmodule Mix.Tasks.Compile.Hologram do
 
   @doc false
   @impl Mix.Task.Compiler
-  def run(opts \\ @default_opts) do
+  def run(opts)
+
+  def run([]), do: run(@default_opts)
+
+  def run(opts) do
     Logger.info("Hologram: compiler started")
 
     {new_module_digest_plt, old_module_digest_plt, module_digest_plt_dump_path} =
@@ -84,6 +88,8 @@ defmodule Mix.Tasks.Compile.Hologram do
   defp build_module_digest_plts(opts) do
     new_module_digest_plt = Compiler.build_module_digest_plt()
     old_module_digest_plt = PLT.start()
+    IO.puts("opts")
+    IO.inspect(opts)
     module_digest_plt_dump_path = opts[:build_dir] <> "/module_digest.plt"
     PLT.maybe_load(old_module_digest_plt, module_digest_plt_dump_path)
 
