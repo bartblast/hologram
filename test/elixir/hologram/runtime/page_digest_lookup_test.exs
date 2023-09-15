@@ -4,6 +4,7 @@ defmodule Hologram.Runtime.PageDigestLookupTest do
 
   alias Hologram.Commons.PLT
   alias Hologram.Commons.Reflection
+  alias Hologram.Runtime.PageDigestLookup
 
   @dump_path "#{Reflection.tmp_path()}/#{__MODULE__}/test.plt"
   @table_name random_atom()
@@ -21,11 +22,20 @@ defmodule Hologram.Runtime.PageDigestLookupTest do
     :ok
   end
 
-  test "init/1" do
-    assert {:ok, %PLT{table_name: @table_name} = plt} = init(@opts)
+  describe "init/1" do
+    test "table_name opt specified" do
+      assert {:ok, %PLT{table_name: @table_name} = plt} = init(@opts)
 
-    assert ets_table_exists?(@table_name)
-    assert PLT.get_all(plt) == %{module_1: :aaa, module_2: :bbb, module_3: :ccc}
+      assert ets_table_exists?(@table_name)
+      assert PLT.get_all(plt) == %{module_1: :aaa, module_2: :bbb, module_3: :ccc}
+    end
+
+    test "table_name opt not specified" do
+      assert {:ok, %PLT{table_name: PageDigestLookup} = plt} = init(dump_path: @dump_path)
+
+      assert ets_table_exists?(PageDigestLookup)
+      assert PLT.get_all(plt) == %{module_1: :aaa, module_2: :bbb, module_3: :ccc}
+    end
   end
 
   describe "lookup/2" do
