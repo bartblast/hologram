@@ -12,6 +12,10 @@ defmodule Hologram.Runtime.PageDigestLookup do
     {:ok, plt}
   end
 
+  @doc """
+  Returns the digest of the given page module.
+  """
+  @spec lookup(atom, module) :: String.t()
   def lookup(table_name, page_module) do
     PLT.get!(%PLT{table_name: table_name}, page_module)
   end
