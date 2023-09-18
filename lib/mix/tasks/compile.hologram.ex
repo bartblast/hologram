@@ -30,13 +30,12 @@ defmodule Mix.Tasks.Compile.Hologram do
     tmp_dir: @tmp_path
   ]
 
-  @doc false
   @impl Mix.Task.Compiler
-  def run(opts)
+  def run(_args) do
+    compile(@default_opts)
+  end
 
-  def run([]), do: run(@default_opts)
-
-  def run(opts) do
+  def compile(opts) do
     Logger.info("Hologram: compiler started")
 
     {new_module_digest_plt, old_module_digest_plt, module_digest_plt_dump_path} =

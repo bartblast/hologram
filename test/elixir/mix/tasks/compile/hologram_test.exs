@@ -108,7 +108,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
   end
 
   # There are two tests in one test block here, because setup for the second test is expensive.
-  test "run/1" do
+  test "compile/1" do
     opts = [
       assets_source_dir: "#{@root_path}/assets",
       build_dir: "#{@tmp_path}/build",
@@ -119,11 +119,11 @@ defmodule Mix.Tasks.Compile.HologramTest do
     ]
 
     # Test case 1: when there are no previous build artifacts
-    run(opts)
+    compile(opts)
     test_build_artifacts()
 
     # Test case 2: when there are previous build artifacts
-    run(opts)
+    compile(opts)
     test_build_artifacts()
   end
 end
