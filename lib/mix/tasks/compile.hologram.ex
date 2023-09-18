@@ -13,26 +13,21 @@ defmodule Mix.Tasks.Compile.Hologram do
 
   require Logger
 
-  @root_path Reflection.root_path()
-  @tmp_path Reflection.tmp_path()
-
-  @bundle_dir "#{@root_path}/priv/static/assets/hologram"
-  @esbuild_path "#{@root_path}/deps/hologram/assets/node_modules/.bin/esbuild"
-  @assets_source_dir "#{@root_path}/deps/hologram/assets"
-  @js_source_dir "#{@assets_source_dir}/js"
-
-  @default_opts [
-    assets_source_dir: @assets_source_dir,
-    build_dir: Reflection.build_dir(),
-    bundle_dir: @bundle_dir,
-    esbuild_path: @esbuild_path,
-    js_source_dir: @js_source_dir,
-    tmp_dir: @tmp_path
-  ]
-
   @impl Mix.Task.Compiler
   def run(_args) do
-    compile(@default_opts)
+    root_path = Reflection.root_path()
+    assets_source_dir = "#{root_path}/deps/hologram/assets"
+
+    opts = [
+      assets_source_dir: assets_source_dir,
+      build_dir: Reflection.build_dir(),
+      bundle_dir: "#{root_path}/priv/static/assets/hologram",
+      esbuild_path: "#{root_path}/deps/hologram/assets/node_modules/.bin/esbuild",
+      js_source_dir: "#{assets_source_dir}/js",
+      tmp_dir: Reflection.tmp_path()
+    ]
+
+    compile(opts)
   end
 
   def compile(opts) do
