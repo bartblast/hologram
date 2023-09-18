@@ -30,6 +30,11 @@ defmodule Mix.Tasks.Compile.Hologram do
     compile(opts)
   end
 
+  @doc """
+  Builds Hologram project JavaScript bundles, call graph of the code,
+  PLTs needed by the runtime and PLTs needed to speed up future compilation.
+  """
+  @spec compile(keyword) :: :ok
   def compile(opts) do
     Logger.info("Hologram: compiler started")
 
