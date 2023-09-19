@@ -137,24 +137,24 @@ defmodule Hologram.Commons.Reflection do
   end
 
   @doc """
-  Returns true if the given term is an existing module alias, or false otherwise.
+  Returns true if the given term is an existing Elixir module, or false otherwise.
 
   ## Examples
 
-      iex> module?(Hologram.Commons.Reflection)
+      iex> elixir_module?(Hologram.Commons.Reflection)
       true
 
-      iex> module?(Aaa.Bbb)
+      iex> elixir_module?(Aaa.Bbb)
       false
 
-      iex> module?(:abc)
+      iex> elixir_module?(:abc)
       false
   """
-  @spec module?(term) :: boolean
-  def module?(term) do
+  @spec elixir_module?(term) :: boolean
+  def elixir_module?(term) do
     if alias?(term) do
       case Code.ensure_loaded(term) do
-        {:module, _} ->
+        {:module, ^term} ->
           true
 
         _fallback ->

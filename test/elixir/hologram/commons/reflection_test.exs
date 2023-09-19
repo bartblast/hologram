@@ -39,6 +39,24 @@ defmodule Hologram.Commons.ReflectionTest do
     end
   end
 
+  describe "elixir_module?/1" do
+    test "existing Elixir module" do
+      assert elixir_module?(Kernel)
+    end
+
+    test "non-existing Elixir module" do
+      refute elixir_module?(Aaa.Bbb)
+    end
+
+    test "existing Erlang module" do
+      refute elixir_module?(:maps)
+    end
+
+    test "regular atom / non-existing Erlang module" do
+      refute elixir_module?(:regular_atom)
+    end
+  end
+
   test "env/0" do
     assert env() == :test
   end
@@ -124,20 +142,6 @@ defmodule Hologram.Commons.ReflectionTest do
     refute Hologram.Page in result
 
     refute Kernel.SpecialForms in result
-  end
-
-  describe "module?/1" do
-    test "alias of an existing module" do
-      assert module?(Kernel)
-    end
-
-    test "alias of a non-existing module" do
-      refute module?(Aaa.Bbb)
-    end
-
-    test "non-alias" do
-      refute module?(:abc)
-    end
   end
 
   describe "module_beam_defs/1" do
