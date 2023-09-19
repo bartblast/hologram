@@ -53,17 +53,22 @@ defmodule Hologram.Commons.Reflection do
 
   ## Examples
 
-      iex> elixir_module?(Hologram.Commons.Reflection)
+      iex> elixir_module?(Calendar.ISO)
       true
 
-      iex> elixir_module?(Aaa.Bbb)
+      iex> elixir_module?(MyModule)
       false
 
-      iex> elixir_module?(:abc)
+      iex> elixir_module?(:my_module)
+      false
+      
+      iex> elixir_module?(123)
       false
   """
   @spec elixir_module?(term) :: boolean
-  def elixir_module?(term) do
+  def elixir_module?(term)
+
+  def elixir_module?(term) when is_atom(term) do
     if alias?(term) do
       case Code.ensure_loaded(term) do
         {:module, ^term} ->
@@ -76,6 +81,8 @@ defmodule Hologram.Commons.Reflection do
       false
     end
   end
+
+  def elixir_module?(_term), do: false
 
   @doc """
   Get current environment name.
@@ -95,6 +102,9 @@ defmodule Hologram.Commons.Reflection do
 
       iex> erlang_module?(:my_module)
       false
+      
+      iex> erlang_module?(Calendar.ISO)
+      false 
 
       iex> erlang_module?(123)
       false
