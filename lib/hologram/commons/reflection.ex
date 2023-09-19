@@ -1,4 +1,6 @@
 defmodule Hologram.Commons.Reflection do
+  alias Hologram.Commons.StringUtils
+
   @doc """
   Determines whether the given term is an alias.
 
@@ -82,6 +84,44 @@ defmodule Hologram.Commons.Reflection do
   def env do
     Application.fetch_env!(:hologram, :env)
   end
+
+  @doc """
+  Returns true if the given term is an existing Erlang module, or false otherwise.
+
+  ## Examples
+
+      iex> erlang_module?(:maps)
+      true
+
+      iex> erlang_module?(:my_module)
+      false
+
+      iex> erlang_module?(123)
+      false
+  """
+  @spec erlang_module?(term) :: boolean
+  def erlang_module?(term)
+
+  def erlang_module?(term) when is_atom(term) do
+    starts_with_lowercase? =
+      term
+      |> to_string()
+      |> StringUtils.starts_with_lowercase?()
+
+    if starts_with_lowercase? do
+      case Code.ensure_loaded(term) do
+        {:module, ^term} ->
+          true
+
+        _fallback ->
+          false
+      end
+    else
+      false
+    end
+  end
+
+  def erlang_module?(_term), do: false
 
   @doc """
   Returns true if the given term is a layout module (a module that has a "use Hologram.Layout" directive)
