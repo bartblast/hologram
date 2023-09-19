@@ -44,4 +44,10 @@ defmodule Hologram.Runtime.PageDigestLookupTest do
       end
     end
   end
+
+  test "start_link/1" do
+    assert {:ok, pid} = start_link(@opts)
+    assert is_pid(pid)
+    assert ets_table_exists?(@table_name)
+  end
 end
