@@ -16,15 +16,16 @@ defmodule Mix.Tasks.Compile.Hologram do
   @impl Mix.Task.Compiler
   def run(_args) do
     root_path = Reflection.root_path()
+    build_dir = Reflection.build_dir()
     assets_source_dir = "#{root_path}/deps/hologram/assets"
 
     opts = [
       assets_source_dir: assets_source_dir,
-      build_dir: Reflection.build_dir(),
+      build_dir: build_dir,
       bundle_dir: "#{root_path}/priv/static/assets/hologram",
       esbuild_path: "#{root_path}/deps/hologram/assets/node_modules/.bin/esbuild",
       js_source_dir: "#{assets_source_dir}/js",
-      tmp_dir: Reflection.tmp_path()
+      tmp_dir: "#{build_dir}/tmp"
     ]
 
     compile(opts)
