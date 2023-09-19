@@ -47,6 +47,35 @@ defmodule Hologram.Commons.Reflection do
   end
 
   @doc """
+  Returns true if the given term is an existing Elixir module, or false otherwise.
+
+  ## Examples
+
+      iex> elixir_module?(Hologram.Commons.Reflection)
+      true
+
+      iex> elixir_module?(Aaa.Bbb)
+      false
+
+      iex> elixir_module?(:abc)
+      false
+  """
+  @spec elixir_module?(term) :: boolean
+  def elixir_module?(term) do
+    if alias?(term) do
+      case Code.ensure_loaded(term) do
+        {:module, ^term} ->
+          true
+
+        _fallback ->
+          false
+      end
+    else
+      false
+    end
+  end
+
+  @doc """
   Get current environment name.
   """
   @spec env() :: atom
@@ -134,35 +163,6 @@ defmodule Hologram.Commons.Reflection do
   def list_loaded_otp_apps do
     apps_info = Application.loaded_applications()
     Enum.map(apps_info, fn {app, _description, _version} -> app end)
-  end
-
-  @doc """
-  Returns true if the given term is an existing Elixir module, or false otherwise.
-
-  ## Examples
-
-      iex> elixir_module?(Hologram.Commons.Reflection)
-      true
-
-      iex> elixir_module?(Aaa.Bbb)
-      false
-
-      iex> elixir_module?(:abc)
-      false
-  """
-  @spec elixir_module?(term) :: boolean
-  def elixir_module?(term) do
-    if alias?(term) do
-      case Code.ensure_loaded(term) do
-        {:module, ^term} ->
-          true
-
-        _fallback ->
-          false
-      end
-    else
-      false
-    end
   end
 
   @doc """
