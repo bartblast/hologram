@@ -165,11 +165,14 @@ defmodule Hologram.Commons.Reflection do
   end
 
   @doc """
-  Lists Elixir modules belonging to any of the OTP apps used by the project (except :hex).
+  Lists Elixir modules belonging to any of the loaded OTP applications used by the project (except :hex).
   Kernel.SpecialForms and Erlang modules are filtered out.
+  The project OTP application is included.
   """
   @spec list_elixir_modules() :: list(module)
   def list_elixir_modules do
+    Application.ensure_loaded(otp_app())
+
     list_loaded_otp_apps()
     |> Kernel.--([:hex])
     |> list_elixir_modules()
