@@ -7,10 +7,11 @@ defmodule Hologram.Commons.SerializationUtils do
       iex> deserialize(<<131, 104, 3, 97, 1, 97, 2, 97, 3>>)
       {1, 2, 3}
   """
-  @spec deserialize(binary) :: term
+  @spec deserialize(binary, boolean) :: term
   # sobelow_skip ["Misc.BinToTerm"]
-  def deserialize(binary) do
-    :erlang.binary_to_term(binary, [:safe])
+  def deserialize(binary, allow_non_existing_atoms? \\ false) do
+    opts = if allow_non_existing_atoms?, do: [], else: [:safe]
+    :erlang.binary_to_term(binary, opts)
   end
 
   @doc """
