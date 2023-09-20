@@ -228,7 +228,7 @@ defmodule Hologram.Compiler.CallGraph do
     graph =
       dump_path
       |> File.read!()
-      |> SerializationUtils.deserialize()
+      |> SerializationUtils.deserialize(true)
 
     put_graph(call_graph, graph)
   end

@@ -109,7 +109,7 @@ defmodule Hologram.Commons.PLT do
     items =
       dump_path
       |> File.read!()
-      |> SerializationUtils.deserialize()
+      |> SerializationUtils.deserialize(true)
       |> Map.to_list()
 
     put(plt, items)
