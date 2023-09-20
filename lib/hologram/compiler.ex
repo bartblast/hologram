@@ -280,7 +280,7 @@ defmodule Hologram.Compiler do
 
     call_graph
     |> CallGraph.reachable_mfas(entry_mfas)
-    # FIXME: Some protocol implementations are referenced but not actually implemented, e.g. Collectable.Atom
+    # Some protocol implementations are referenced but not actually implemented, e.g. Collectable.Atom
     |> Enum.reject(fn {module, _function, _arity} -> !Reflection.module?(module) end)
     |> Enum.uniq()
     |> Enum.sort()
