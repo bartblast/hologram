@@ -109,6 +109,10 @@ defmodule Hologram.Commons.ReflectionTest do
     end
   end
 
+  test "list_all_otp_apps/0" do
+    assert list_all_otp_apps() -- list_loaded_otp_apps() == [:poison]
+  end
+
   test "list_elixir_modules/0" do
     result = list_elixir_modules()
 

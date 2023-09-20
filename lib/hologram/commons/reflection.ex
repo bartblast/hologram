@@ -151,6 +151,20 @@ defmodule Hologram.Commons.Reflection do
   end
 
   @doc """
+  Lists all OTP applications, both loaded and not loaded.
+  """
+  @spec list_all_otp_apps() :: list(atom)
+  def list_all_otp_apps do
+    "#{root_path()}/_build/#{env()}/**/ebin/*.app"
+    |> Path.wildcard()
+    |> Stream.map(&Path.basename(&1, ".app"))
+    |> Stream.map(&String.to_atom/1)
+    |> Enum.to_list()
+    |> Kernel.++(list_loaded_otp_apps())
+    |> Enum.uniq()
+  end
+
+  @doc """
   Lists Elixir modules belonging to any of the OTP apps used by the project (except :hex).
   Kernel.SpecialForms and Erlang modules are filtered out.
   """
@@ -286,7 +300,7 @@ defmodule Hologram.Commons.Reflection do
   end
 
   @doc """
-  Returns the project OTP app name.
+  Returns the project OTP application name.
   """
   @spec otp_app() :: atom
   def otp_app do
