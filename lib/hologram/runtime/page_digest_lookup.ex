@@ -2,6 +2,10 @@ defmodule Hologram.Runtime.PageDigestLookup do
   use GenServer
   alias Hologram.Commons.PLT
 
+  @doc """
+  Starts PageDigestLookup process.
+  """
+  @spec start_link(keyword) :: GenServer.on_start()
   def start_link(opts) do
     GenServer.start_link(__MODULE__, opts)
   end
