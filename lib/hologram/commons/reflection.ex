@@ -1,6 +1,14 @@
 defmodule Hologram.Commons.Reflection do
   alias Hologram.Commons.StringUtils
 
+  @ignored_modules [
+    Kernel.SpecialForms,
+    Mix.Tasks.Local.Phx,
+    Phx.New.Generator,
+    Phx.New.Project,
+    Phx.New.Single
+  ]
+
   @doc """
   Determines whether the given term is an alias.
 
@@ -166,7 +174,7 @@ defmodule Hologram.Commons.Reflection do
 
   @doc """
   Lists Elixir modules belonging to any of the loaded OTP applications used by the project (except :hex).
-  Kernel.SpecialForms and Erlang modules are filtered out.
+  Elixir modules listed in @ignored_modules module attribute and Erlang modules are filtered out.
   The project OTP application is included.
   """
   @spec list_elixir_modules() :: list(module)
@@ -180,7 +188,7 @@ defmodule Hologram.Commons.Reflection do
 
   @doc """
   Lists Elixir modules belonging to the given OTP apps.
-  Kernel.SpecialForms and Erlang modules are filtered out.
+  Elixir modules listed in @ignored_modules module attribute and Erlang modules are filtered out.
   """
   @spec list_elixir_modules(list(atom)) :: list(module)
   def list_elixir_modules(apps) do
@@ -192,7 +200,7 @@ defmodule Hologram.Commons.Reflection do
       |> Kernel.++(acc)
     end)
     |> Enum.filter(&alias?/1)
-    |> Kernel.--([Kernel.SpecialForms])
+    |> Kernel.--(@ignored_modules)
   end
 
   @doc """
@@ -225,7 +233,7 @@ defmodule Hologram.Commons.Reflection do
 
   @doc """
   Lists standard library Elixir modules, e.g. DateTime, Kernel, Calendar.ISO, etc.
-  Kernel.SpecialForms module is not included in the result.
+  Elixir modules listed in @ignored_modules module attribute and Erlang modules are filtered out.
   """
   @spec list_std_lib_elixir_modules() :: list(module)
   def list_std_lib_elixir_modules do
