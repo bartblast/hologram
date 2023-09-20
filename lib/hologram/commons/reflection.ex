@@ -162,6 +162,7 @@ defmodule Hologram.Commons.Reflection do
   Lists all OTP applications, both loaded and not loaded.
   """
   @spec list_all_otp_apps() :: list(atom)
+  # sobelow_skip ["DOS.StringToAtom"]
   def list_all_otp_apps do
     "#{root_path()}/_build/#{env()}/**/ebin/*.app"
     |> Path.wildcard()
