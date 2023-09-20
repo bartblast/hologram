@@ -193,23 +193,6 @@ defmodule Hologram.Commons.Reflection do
   end
 
   @doc """
-  Lists Elixir modules which are Hologram pages and that belong to any of the OTP apps in the project.
-  """
-  @spec list_pages() :: list(module)
-  def list_pages do
-    Enum.filter(list_elixir_modules(), &page?/1)
-  end
-
-  @doc """
-  Lists standard library Elixir modules, e.g. DateTime, Kernel, Calendar.ISO, etc.
-  Kernel.SpecialForms module is not included in the result.
-  """
-  @spec list_std_lib_elixir_modules() :: list(module)
-  def list_std_lib_elixir_modules do
-    list_elixir_modules([:elixir])
-  end
-
-  @doc """
   Lists loaded OTP applications.
 
   ## Examples
@@ -227,6 +210,23 @@ defmodule Hologram.Commons.Reflection do
   def list_loaded_otp_apps do
     apps_info = Application.loaded_applications()
     Enum.map(apps_info, fn {app, _description, _version} -> app end)
+  end
+
+  @doc """
+  Lists Elixir modules which are Hologram pages and that belong to any of the OTP apps in the project.
+  """
+  @spec list_pages() :: list(module)
+  def list_pages do
+    Enum.filter(list_elixir_modules(), &page?/1)
+  end
+
+  @doc """
+  Lists standard library Elixir modules, e.g. DateTime, Kernel, Calendar.ISO, etc.
+  Kernel.SpecialForms module is not included in the result.
+  """
+  @spec list_std_lib_elixir_modules() :: list(module)
+  def list_std_lib_elixir_modules do
+    list_elixir_modules([:elixir])
   end
 
   @doc """
