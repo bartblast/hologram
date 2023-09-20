@@ -197,6 +197,32 @@ defmodule Hologram.Commons.ReflectionTest do
     end
   end
 
+  describe "module?/1" do
+    test "existing Elixir module" do
+      assert module?(Calendar.ISO)
+    end
+
+    test "atom that starts with an uppercase letter and is an alias of a non existing Elixir module" do
+      refute module?(Aaa.Bbb)
+    end
+
+    test "atom that starts with an uppercase letter and is not an Elixir alias" do
+      refute module?(:MyModule)
+    end
+
+    test "existing Erlang module" do
+      assert module?(:maps)
+    end
+
+    test "atom that starts with a lowercase letter and is not an existing Erlang module" do
+      refute module?(:my_module)
+    end
+
+    test "non-atom" do
+      refute module?(123)
+    end
+  end
+
   describe "page?" do
     test "is a page module" do
       assert page?(Module2)

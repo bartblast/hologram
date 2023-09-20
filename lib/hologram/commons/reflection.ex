@@ -261,6 +261,31 @@ defmodule Hologram.Commons.Reflection do
   end
 
   @doc """
+  Returns true if the given term is an existing (Elixir or Erlang) module, or false otherwise.
+
+  ## Examples
+
+      iex> module?(Calendar.ISO)
+      true
+
+      iex> module?(MyModule)
+      false
+      
+      iex> module?(:maps)
+      true
+
+      iex> module?(:my_module)
+      false
+      
+      iex> module?(123)
+      false
+  """
+  @spec module?(term) :: boolean
+  def module?(term) do
+    elixir_module?(term) || erlang_module?(term)
+  end
+
+  @doc """
   Returns true if the given term is a page module (a module that has a "use Hologram.Page" directive)
   Otherwise false is returned.
 
