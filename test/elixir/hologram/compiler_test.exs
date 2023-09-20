@@ -425,7 +425,7 @@ defmodule Hologram.CompilerTest do
       call_graph = CallGraph.start()
       CallGraph.patch(call_graph, ir_plt, diff)
 
-      [mfas: list_runtime_mfas(call_graph)]
+      [call_graph: call_graph, mfas: list_runtime_mfas(call_graph)]
     end
 
     test "includes MFAs that are reachable by Elixir functions used by the runtime", %{mfas: mfas} do
@@ -450,6 +450,24 @@ defmodule Hologram.CompilerTest do
     test "removes duplicates", %{mfas: mfas} do
       count = Enum.count(mfas, &(&1 == {Access, :get, 2}))
       assert count == 1
+    end
+
+    test "removes MFAs with non-existing modules", %{call_graph: call_graph} do
+      call_graph
+      |> CallGraph.add_edge({Enum, :into, 2}, {Calendar.ISO, :dummy_function_1, 1})
+      |> CallGraph.add_edge({Enum, :into, 2}, {NonExistingModuleFixture, :dummy_function_2, 2})
+      |> CallGraph.add_edge({Enum, :into, 2}, {:maps, :dummy_function_3, 3})
+      |> CallGraph.add_edge(
+        {Enum, :into, 2},
+        {:non_existing_module_fixture, :dummy_function_4, 4}
+      )
+
+      mfas = list_runtime_mfas(call_graph)
+
+      assert {Calendar.ISO, :dummy_function_1, 1} in mfas
+      refute {NonExistingModuleFixture, :dummy_function_2, 2} in mfas
+      assert {:maps, :dummy_function_3, 3} in mfas
+      refute {:non_existing_module_fixture, :dummy_function_4, 4} in mfas
     end
 
     test "sorts results", %{mfas: mfas} do
