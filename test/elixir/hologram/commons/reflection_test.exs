@@ -223,6 +223,10 @@ defmodule Hologram.Commons.ReflectionTest do
     end
   end
 
+  test "otp_app/0" do
+    assert otp_app() == :hologram
+  end
+
   describe "page?" do
     test "is a page module" do
       assert page?(Module2)

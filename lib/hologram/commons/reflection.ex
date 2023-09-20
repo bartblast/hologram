@@ -286,6 +286,14 @@ defmodule Hologram.Commons.Reflection do
   end
 
   @doc """
+  Returns the project OTP app name.
+  """
+  @spec otp_app() :: atom
+  def otp_app do
+    Mix.Project.config()[:app]
+  end
+
+  @doc """
   Returns true if the given term is a page module (a module that has a "use Hologram.Page" directive)
   Otherwise false is returned.
 
