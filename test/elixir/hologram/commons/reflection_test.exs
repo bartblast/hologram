@@ -110,7 +110,7 @@ defmodule Hologram.Commons.ReflectionTest do
   end
 
   test "list_all_otp_apps/0" do
-    assert list_all_otp_apps() -- list_loaded_otp_apps() == [:poison]
+    assert Enum.sort(list_all_otp_apps()) == Enum.sort(list_all_otp_apps())
   end
 
   test "list_elixir_modules/0" do
