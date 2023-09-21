@@ -19,34 +19,6 @@ defmodule Hologram.Router do
     |> Plug.Conn.halt()
   end
 
-  def call(%Plug.Conn{request_path: request_path} = phx_conn, _opts) do
-    arg =
-      get_path_segments(request_path)
-      |> List.to_tuple()
-
-    # apply/3 is used to prevent compile warnings about undefined module
-    match_result = apply(Hologram.Runtime.RouterMatcher, :match, [arg])
-
-    if match_result do
-      {page, params} = match_result
-      holo_conn = %Hologram.Conn{params: params}
-      bindings = %{}
-      output = Renderer.render(page, holo_conn, bindings)
-
-      phx_conn
-      |> Controller.html(output)
-      |> Plug.Conn.halt()
-    else
-      phx_conn
-    end
-  end
-
-  def get_path_segments(path) do
-    path
-    |> String.split("/")
-    |> List.delete_at(0)
-  end
-
   # DEFER: test
   def static_path(file_path) do
     case StaticDigestStore.get(file_path) do
