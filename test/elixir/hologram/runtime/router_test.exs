@@ -5,14 +5,14 @@ defmodule Hologram.Runtime.RouterTest do
   alias Hologram.Router.SearchTree
   alias Hologram.Test.Fixtures.Runtime.Router.Module1
 
+  setup do
+    persistent_term_key = random_atom()
+    init(persistent_term_key)
+
+    [persistent_term_key: persistent_term_key]
+  end
+
   describe "call/2" do
-    setup do
-      persistent_term_key = random_atom()
-      init(persistent_term_key)
-
-      [persistent_term_key: persistent_term_key]
-    end
-
     test "request path is matched", opts do
       conn = Plug.Test.conn(:get, "/hologram-test-fixtures-runtime-router-module1")
 
@@ -62,13 +62,6 @@ defmodule Hologram.Runtime.RouterTest do
   end
 
   describe "resolve_page/2" do
-    setup do
-      persistent_term_key = random_atom()
-      init(persistent_term_key)
-
-      [persistent_term_key: persistent_term_key]
-    end
-
     test "there is a matching route", %{persistent_term_key: persistent_term_key} do
       request_path = "/hologram-test-fixtures-runtime-router-module1"
       assert resolve_page(request_path, persistent_term_key) == Module1
@@ -78,5 +71,11 @@ defmodule Hologram.Runtime.RouterTest do
       request_path = "/unknown-path"
       refute resolve_page(request_path, persistent_term_key)
     end
+  end
+
+  test "start_link/1" do
+    assert {:ok, pid} = start_link(@opts)
+    assert is_pid(pid)
+    # assert ets_table_exists?(@table_name)
   end
 end
