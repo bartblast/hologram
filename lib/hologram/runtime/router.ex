@@ -34,7 +34,7 @@ defmodule Hologram.Router do
   end
 
   @doc """
-  Given a request path returns the page module that handles it.
+  Given a request path it returns the page module that handles it.
   """
   @spec resolve_page(String.t(), any) :: module
   def resolve_page(request_path, persistent_term_key \\ @persistent_term_key) do
