@@ -4,6 +4,7 @@ defmodule HologramFeatureTests.MixProject do
   def project do
     [
       app: :hologram_feature_tests,
+      # credo:disable-for-next-line Credo.Check.Refactor.AppendSingleItem
       compilers: Mix.compilers() ++ [:hologram],
       version: "0.1.0",
       elixir: "~> 1.14",
