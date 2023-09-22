@@ -52,6 +52,14 @@ defmodule Hologram.Test.Helpers do
   end
 
   @doc """
+  Determines whether a persistent term with the given key exists.
+  """
+  @spec persistent_term_exists?(any) :: boolean
+  def persistent_term_exists?(key) do
+    key in Enum.map(:persistent_term.get(), fn {name, _value} -> name end)
+  end
+
+  @doc """
   Encodes Elixir source code to JavaScript source code.
 
   ## Examples
