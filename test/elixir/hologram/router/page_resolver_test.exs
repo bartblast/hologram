@@ -1,10 +1,10 @@
-defmodule Hologram.Runtime.Router.PageResolverTest do
+defmodule Hologram.Router.PageResolverTest do
   use Hologram.Test.BasicCase, async: true
   import Hologram.Router.PageResolver
 
   alias Hologram.Router.PageResolver
   alias Hologram.Router.SearchTree
-  alias Hologram.Test.Fixtures.Runtime.Router.PageResolver.Module1
+  alias Hologram.Test.Fixtures.Router.PageResolver.Module1
 
   test "default_persistent_term_key/0" do
     assert default_persistent_term_key() == {PageResolver, :search_tree}
@@ -20,7 +20,7 @@ defmodule Hologram.Runtime.Router.PageResolverTest do
     assert %SearchTree.Node{
              value: nil,
              children: %{
-               "hologram-test-fixtures-runtime-router-page-resolver-module1" => %SearchTree.Node{
+               "hologram-test-fixtures-router-page-resolver-module1" => %SearchTree.Node{
                  value: Module1,
                  children: %{}
                }
@@ -37,7 +37,7 @@ defmodule Hologram.Runtime.Router.PageResolverTest do
     end
 
     test "there is a matching route", %{persistent_term_key: persistent_term_key} do
-      request_path = "/hologram-test-fixtures-runtime-router-page-resolver-module1"
+      request_path = "/hologram-test-fixtures-router-page-resolver-module1"
       assert resolve(request_path, persistent_term_key) == Module1
     end
 
