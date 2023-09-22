@@ -1,4 +1,4 @@
-defmodule Hologram.Router.Process do
+defmodule Hologram.Router.PageResolver do
   use GenServer
 
   alias Hologram.Commons.Reflection
@@ -7,7 +7,7 @@ defmodule Hologram.Router.Process do
   @default_persistent_term_key {__MODULE__, :search_tree}
 
   @doc """
-  Starts Router process.
+  Starts page resolver process.
   """
   @spec start_link(keyword) :: GenServer.on_start()
   def start_link(opts) do
@@ -27,7 +27,7 @@ defmodule Hologram.Router.Process do
   end
 
   @doc """
-  Returns the default key for the persistent term used by the router process.
+  Returns the default key for the persistent term used by the page resolver to store the routes search tree.
   """
   @spec default_persistent_term_key() :: {module, atom}
   def default_persistent_term_key, do: @default_persistent_term_key
@@ -35,8 +35,8 @@ defmodule Hologram.Router.Process do
   @doc """
   Given a request path it returns the page module that handles it.
   """
-  @spec resolve_page(String.t(), any) :: module
-  def resolve_page(request_path, persistent_term_key) do
+  @spec resolve(String.t(), any) :: module
+  def resolve(request_path, persistent_term_key) do
     persistent_term_key
     |> :persistent_term.get()
     |> SearchTree.match_route(request_path)

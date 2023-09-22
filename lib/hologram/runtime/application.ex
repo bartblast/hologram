@@ -2,7 +2,7 @@ defmodule Hologram.Runtime.Application do
   use Application
 
   alias Hologram.Commons.Reflection
-  alias Hologram.Router
+  alias Hologram.Router.PageResolver
   alias Hologram.Runtime.PageDigestLookup
 
   @impl Application
@@ -12,7 +12,7 @@ defmodule Hologram.Runtime.Application do
 
     children = [
       {PageDigestLookup, table_name: PageDigestLookup, dump_path: page_digest_dump_file},
-      {Router.Process, persistent_term_key: Router.Process.default_persistent_term_key()}
+      {PageResolver, persistent_term_key: PageResolver.default_persistent_term_key()}
     ]
 
     opts = [strategy: :one_for_one, name: Hologram.Supervisor]
