@@ -6,6 +6,14 @@ defmodule Hologram.Router.Process do
 
   @default_persistent_term_key {__MODULE__, :search_tree}
 
+  @doc """
+  Starts Router process.
+  """
+  @spec start_link(keyword) :: GenServer.on_start()
+  def start_link(opts) do
+    GenServer.start_link(__MODULE__, opts[:persistent_term_key])
+  end
+
   @impl GenServer
   def init(persistent_term_key) do
     search_tree =

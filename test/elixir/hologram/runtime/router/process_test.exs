@@ -45,4 +45,12 @@ defmodule Hologram.Runtime.Router.ProcessTest do
       refute resolve_page(request_path, persistent_term_key)
     end
   end
+
+  test "start_link/1" do
+    persistent_term_key = random_atom()
+
+    assert {:ok, pid} = start_link(persistent_term_key: persistent_term_key)
+    assert is_pid(pid)
+    assert persistent_term_exists?(persistent_term_key)
+  end
 end
