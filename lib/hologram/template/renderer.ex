@@ -5,6 +5,7 @@ defmodule Hologram.Template.Renderer do
   alias Hologram.Compiler.Normalizer
   alias Hologram.Compiler.Transformer
   alias Hologram.Component
+  alias Hologram.Runtime.PageDigestLookup
   alias Hologram.Runtime.Templatable
   alias Hologram.Template.DOM
 
@@ -86,16 +87,21 @@ defmodule Hologram.Template.Renderer do
 
   ## Examples
 
-      iex> render_page(MyPage, [{"param", [text: "value"]}])
+      iex> render_page(MyPage, [{"param", [text: "value"]}], :my_persistent_term_key)
       {
         "<div>full page content including layout</div>",
         %{"page" => %Component.Client{state: %{a: 1, b: 2}}}
       }
   """
-  @spec render_page(module, DOM.t()) :: {String.t(), %{atom => Component.Client.t()}}
-  def render_page(page_module, params_dom) do
+  @spec render_page(module, DOM.t(), atom) :: {String.t(), %{atom => Component.Client.t()}}
+  def render_page(page_module, params_dom, page_digest_lookup_store_key) do
     params = cast_props(params_dom, page_module)
     {initial_page_client, _server} = init_component(page_module, params)
+
+    page_digest = PageDigestLookup.lookup(page_digest_lookup_store_key, page_module)
+
+    initial_page_client =
+      Templatable.put_context(initial_page_client, {Hologram.Runtime, :page_digest}, page_digest)
 
     layout_module = page_module.__hologram_layout_module__()
     layout_props_dom = build_layout_props_dom(page_module, initial_page_client)

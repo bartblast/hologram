@@ -2,6 +2,9 @@ defmodule Hologram.Template.RendererTest do
   use Hologram.Test.BasicCase, async: true
   import Hologram.Template.Renderer
 
+  alias Hologram.Runtime.PageDigestLookup
+  alias Hologram.Commons.PLT
+  alias Hologram.Commons.Reflection
   alias Hologram.Component
   alias Hologram.Test.Fixtures.Template.Renderer.Module1
   alias Hologram.Test.Fixtures.Template.Renderer.Module10
@@ -34,6 +37,33 @@ defmodule Hologram.Template.RendererTest do
   alias Hologram.Test.Fixtures.Template.Renderer.Module7
   alias Hologram.Test.Fixtures.Template.Renderer.Module8
   alias Hologram.Test.Fixtures.Template.Renderer.Module9
+
+  @page_digest_lookup_plt_dump_path "#{Reflection.tmp_path()}/#{__MODULE__}/page_digest_lookup.plt"
+
+  defp setup_page_digest_lookup do
+    File.rm(@page_digest_lookup_plt_dump_path)
+
+    PLT.start()
+    |> PLT.put(:module_a, :module_a_digest)
+    |> PLT.put(:module_b, :module_b_digest)
+    |> PLT.put(:module_c, :module_c_digest)
+    |> PLT.dump(@page_digest_lookup_plt_dump_path)
+
+    page_digest_lookup_store_key = random_atom()
+
+    opts = [
+      store_key: page_digest_lookup_store_key,
+      dump_path: @page_digest_lookup_plt_dump_path
+    ]
+
+    {:ok, pid} = PageDigestLookup.start_link(opts)
+    page_digest_lookup_plt = GenServer.call(pid, :get_plt)
+
+    [
+      page_digest_lookup_plt: page_digest_lookup_plt,
+      page_digest_lookup_store_key: page_digest_lookup_store_key
+    ]
+  end
 
   test "multiple nodes" do
     nodes = [
@@ -349,8 +379,17 @@ defmodule Hologram.Template.RendererTest do
   end
 
   describe "context" do
-    test "set in page, accessed in component nested in page" do
-      assert render_page(Module39, []) ==
+    setup do
+      setup_page_digest_lookup()
+    end
+
+    test "set in page, accessed in component nested in page", %{
+      page_digest_lookup_plt: page_digest_lookup_plt,
+      page_digest_lookup_store_key: page_digest_lookup_store_key
+    } do
+      PLT.put(page_digest_lookup_plt, Module39, :dummy_module_39_digest)
+
+      assert render_page(Module39, [], page_digest_lookup_store_key) ==
                {"prop_aaa = 123",
                 %{
                   "layout" => %Component.Client{
@@ -359,14 +398,20 @@ defmodule Hologram.Template.RendererTest do
                   "page" => %Component.Client{
                     context: %{
                       {Hologram.Runtime, :initial_client_data_loaded?} => true,
+                      {Hologram.Runtime, :page_digest} => :dummy_module_39_digest,
                       {:my_scope, :my_key} => 123
                     }
                   }
                 }}
     end
 
-    test "set in page, accessed in component nested in layout" do
-      assert render_page(Module46, []) ==
+    test "set in page, accessed in component nested in layout", %{
+      page_digest_lookup_plt: page_digest_lookup_plt,
+      page_digest_lookup_store_key: page_digest_lookup_store_key
+    } do
+      PLT.put(page_digest_lookup_plt, Module46, :dummy_module_46_digest)
+
+      assert render_page(Module46, [], page_digest_lookup_store_key) ==
                {"prop_aaa = 123",
                 %{
                   "layout" => %Component.Client{
@@ -375,14 +420,20 @@ defmodule Hologram.Template.RendererTest do
                   "page" => %Component.Client{
                     context: %{
                       {Hologram.Runtime, :initial_client_data_loaded?} => true,
+                      {Hologram.Runtime, :page_digest} => :dummy_module_46_digest,
                       {:my_scope, :my_key} => 123
                     }
                   }
                 }}
     end
 
-    test "set in page, accessed in layout" do
-      assert render_page(Module40, []) ==
+    test "set in page, accessed in layout", %{
+      page_digest_lookup_plt: page_digest_lookup_plt,
+      page_digest_lookup_store_key: page_digest_lookup_store_key
+    } do
+      PLT.put(page_digest_lookup_plt, Module40, :dummy_module_40_digest)
+
+      assert render_page(Module40, [], page_digest_lookup_store_key) ==
                {"prop_aaa = 123",
                 %{
                   "layout" => %Component.Client{
@@ -391,34 +442,51 @@ defmodule Hologram.Template.RendererTest do
                   "page" => %Component.Client{
                     context: %{
                       {Hologram.Runtime, :initial_client_data_loaded?} => true,
+                      {Hologram.Runtime, :page_digest} => :dummy_module_40_digest,
                       {:my_scope, :my_key} => 123
                     }
                   }
                 }}
     end
 
-    test "set in layout, accessed in component nested in page" do
-      assert render_page(Module43, []) ==
+    test "set in layout, accessed in component nested in page", %{
+      page_digest_lookup_plt: page_digest_lookup_plt,
+      page_digest_lookup_store_key: page_digest_lookup_store_key
+    } do
+      PLT.put(page_digest_lookup_plt, Module43, :dummy_module_43_digest)
+
+      assert render_page(Module43, [], page_digest_lookup_store_key) ==
                {"prop_aaa = 123",
                 %{
                   "layout" => %Component.Client{
                     context: %{{:my_scope, :my_key} => 123}
                   },
                   "page" => %Component.Client{
-                    context: %{{Hologram.Runtime, :initial_client_data_loaded?} => true}
+                    context: %{
+                      {Hologram.Runtime, :initial_client_data_loaded?} => true,
+                      {Hologram.Runtime, :page_digest} => :dummy_module_43_digest
+                    }
                   }
                 }}
     end
 
-    test "set in layout, accessed in component nested in layout" do
-      assert render_page(Module45, []) ==
+    test "set in layout, accessed in component nested in layout", %{
+      page_digest_lookup_plt: page_digest_lookup_plt,
+      page_digest_lookup_store_key: page_digest_lookup_store_key
+    } do
+      PLT.put(page_digest_lookup_plt, Module45, :dummy_module_45_digest)
+
+      assert render_page(Module45, [], page_digest_lookup_store_key) ==
                {"prop_aaa = 123",
                 %{
                   "layout" => %Component.Client{
                     context: %{{:my_scope, :my_key} => 123}
                   },
                   "page" => %Component.Client{
-                    context: %{{Hologram.Runtime, :initial_client_data_loaded?} => true}
+                    context: %{
+                      {Hologram.Runtime, :initial_client_data_loaded?} => true,
+                      {Hologram.Runtime, :page_digest} => :dummy_module_45_digest
+                    }
                   }
                 }}
     end
@@ -439,18 +507,35 @@ defmodule Hologram.Template.RendererTest do
   end
 
   describe "render_page" do
-    test "inside layout slot" do
-      assert render_page(Module14, []) ==
+    setup do
+      setup_page_digest_lookup()
+    end
+
+    test "inside layout slot", %{
+      page_digest_lookup_plt: page_digest_lookup_plt,
+      page_digest_lookup_store_key: page_digest_lookup_store_key
+    } do
+      PLT.put(page_digest_lookup_plt, Module14, :dummy_module_14_digest)
+
+      assert render_page(Module14, [], page_digest_lookup_store_key) ==
                {"layout template start, page template, layout template end",
                 %{
                   "layout" => %Component.Client{},
                   "page" => %Component.Client{
-                    context: %{{Hologram.Runtime, :initial_client_data_loaded?} => true}
+                    context: %{
+                      {Hologram.Runtime, :initial_client_data_loaded?} => true,
+                      {Hologram.Runtime, :page_digest} => :dummy_module_14_digest
+                    }
                   }
                 }}
     end
 
-    test "cast page params" do
+    test "cast page params", %{
+      page_digest_lookup_plt: page_digest_lookup_plt,
+      page_digest_lookup_store_key: page_digest_lookup_store_key
+    } do
+      PLT.put(page_digest_lookup_plt, Module19, :dummy_module_19_digest)
+
       params_dom =
         [
           {"param_1", [text: "value_1"]},
@@ -458,39 +543,58 @@ defmodule Hologram.Template.RendererTest do
           {"param_3", [text: "value_3"]}
         ]
 
-      assert render_page(Module19, params_dom) ==
+      assert render_page(Module19, params_dom, page_digest_lookup_store_key) ==
                {"",
                 %{
                   "layout" => %Component.Client{},
                   "page" => %Component.Client{
-                    context: %{{Hologram.Runtime, :initial_client_data_loaded?} => true},
+                    context: %{
+                      {Hologram.Runtime, :initial_client_data_loaded?} => true,
+                      {Hologram.Runtime, :page_digest} => :dummy_module_19_digest
+                    },
                     state: %{param_1: "value_1", param_3: "value_3"}
                   }
                 }}
     end
 
-    test "cast layout explicit static props" do
-      assert render_page(Module25, []) ==
+    test "cast layout explicit static props", %{
+      page_digest_lookup_plt: page_digest_lookup_plt,
+      page_digest_lookup_store_key: page_digest_lookup_store_key
+    } do
+      PLT.put(page_digest_lookup_plt, Module25, :dummy_module_25_digest)
+
+      assert render_page(Module25, [], page_digest_lookup_store_key) ==
                {"",
                 %{
                   "layout" => %Component.Client{
                     state: %{id: "layout", prop_1: "prop_value_1", prop_3: "prop_value_3"}
                   },
                   "page" => %Component.Client{
-                    context: %{{Hologram.Runtime, :initial_client_data_loaded?} => true}
+                    context: %{
+                      {Hologram.Runtime, :initial_client_data_loaded?} => true,
+                      {Hologram.Runtime, :page_digest} => :dummy_module_25_digest
+                    }
                   }
                 }}
     end
 
-    test "cast layout props passed implicitely from page state" do
-      assert render_page(Module27, []) ==
+    test "cast layout props passed implicitely from page state", %{
+      page_digest_lookup_plt: page_digest_lookup_plt,
+      page_digest_lookup_store_key: page_digest_lookup_store_key
+    } do
+      PLT.put(page_digest_lookup_plt, Module27, :dummy_module_27_digest)
+
+      assert render_page(Module27, [], page_digest_lookup_store_key) ==
                {"",
                 %{
                   "layout" => %Component.Client{
                     state: %{id: "layout", prop_1: "prop_value_1", prop_3: "prop_value_3"}
                   },
                   "page" => %Component.Client{
-                    context: %{{Hologram.Runtime, :initial_client_data_loaded?} => true},
+                    context: %{
+                      {Hologram.Runtime, :initial_client_data_loaded?} => true,
+                      {Hologram.Runtime, :page_digest} => :dummy_module_27_digest
+                    },
                     state: %{
                       prop_1: "prop_value_1",
                       prop_2: "prop_value_2",
@@ -500,74 +604,113 @@ defmodule Hologram.Template.RendererTest do
                 }}
     end
 
-    test "aggregate page vars, giving state priority over param when there are name conflicts" do
+    test "aggregate page vars, giving state priority over param when there are name conflicts", %{
+      page_digest_lookup_plt: page_digest_lookup_plt,
+      page_digest_lookup_store_key: page_digest_lookup_store_key
+    } do
+      PLT.put(page_digest_lookup_plt, Module21, :dummy_module_21_digest)
+
       params_dom =
         [
           {"key_1", [text: "param_value_1"]},
           {"key_2", [text: "param_value_2"]}
         ]
 
-      assert render_page(Module21, params_dom) ==
+      assert render_page(Module21, params_dom, page_digest_lookup_store_key) ==
                {"key_1 = param_value_1, key_2 = state_value_2, key_3 = state_value_3",
                 %{
                   "layout" => %Component.Client{},
                   "page" => %Component.Client{
-                    context: %{{Hologram.Runtime, :initial_client_data_loaded?} => true},
+                    context: %{
+                      {Hologram.Runtime, :initial_client_data_loaded?} => true,
+                      {Hologram.Runtime, :page_digest} => :dummy_module_21_digest
+                    },
                     state: %{key_2: "state_value_2", key_3: "state_value_3"}
                   }
                 }}
     end
 
-    test "aggregate layout vars, giving state priority over prop when there are name conflicts" do
-      assert render_page(Module24, []) ==
+    test "aggregate layout vars, giving state priority over prop when there are name conflicts",
+         %{
+           page_digest_lookup_plt: page_digest_lookup_plt,
+           page_digest_lookup_store_key: page_digest_lookup_store_key
+         } do
+      PLT.put(page_digest_lookup_plt, Module24, :dummy_module_24_digest)
+
+      assert render_page(Module24, [], page_digest_lookup_store_key) ==
                {"key_1 = prop_value_1, key_2 = state_value_2, key_3 = state_value_3",
                 %{
                   "layout" => %Component.Client{
                     state: %{key_2: "state_value_2", key_3: "state_value_3"}
                   },
                   "page" => %Component.Client{
-                    context: %{{Hologram.Runtime, :initial_client_data_loaded?} => true}
+                    context: %{
+                      {Hologram.Runtime, :initial_client_data_loaded?} => true,
+                      {Hologram.Runtime, :page_digest} => :dummy_module_24_digest
+                    }
                   }
                 }}
     end
 
-    test "merge the page component client struct into the result" do
-      assert render_page(Module28, []) ==
+    test "merge the page component client struct into the result", %{
+      page_digest_lookup_plt: page_digest_lookup_plt,
+      page_digest_lookup_store_key: page_digest_lookup_store_key
+    } do
+      PLT.put(page_digest_lookup_plt, Module28, :dummy_module_28_digest)
+
+      assert render_page(Module28, [], page_digest_lookup_store_key) ==
                {"",
                 %{
                   "layout" => %Component.Client{},
                   "page" => %Component.Client{
-                    context: %{{Hologram.Runtime, :initial_client_data_loaded?} => true},
+                    context: %{
+                      {Hologram.Runtime, :initial_client_data_loaded?} => true,
+                      {Hologram.Runtime, :page_digest} => :dummy_module_28_digest
+                    },
                     state: %{state_1: "value_1", state_2: "value_2"}
                   }
                 }}
     end
 
-    test "merge the layout component client struct into the result" do
-      assert render_page(Module29, []) ==
+    test "merge the layout component client struct into the result", %{
+      page_digest_lookup_plt: page_digest_lookup_plt,
+      page_digest_lookup_store_key: page_digest_lookup_store_key
+    } do
+      PLT.put(page_digest_lookup_plt, Module29, :dummy_module_29_digest)
+
+      assert render_page(Module29, [], page_digest_lookup_store_key) ==
                {"",
                 %{
                   "layout" => %Hologram.Component.Client{
                     state: %{state_1: "value_1", state_2: "value_2"}
                   },
                   "page" => %Hologram.Component.Client{
-                    context: %{{Hologram.Runtime, :initial_client_data_loaded?} => true}
+                    context: %{
+                      {Hologram.Runtime, :initial_client_data_loaded?} => true,
+                      {Hologram.Runtime, :page_digest} => :dummy_module_29_digest
+                    }
                   }
                 }}
     end
 
-    test "inject initial client data" do
-      assert render_page(Module48, []) == {
+    test "inject initial client data", %{
+      page_digest_lookup_plt: page_digest_lookup_plt,
+      page_digest_lookup_store_key: page_digest_lookup_store_key
+    } do
+      PLT.put(page_digest_lookup_plt, Module48, "102790adb6c3b1956db310be523a7693")
+
+      assert render_page(Module48, [], page_digest_lookup_store_key) == {
                """
                layout template start
                <script>
                \s\s
                    window.__hologram_runtime_bootstrap_data__ = (typeClass) => {
                  const Type = typeClass;
-                 return Type.map([[Type.bitstring("layout"), Type.map([[Type.atom("__struct__"), Type.atom("Elixir.Hologram.Component.Client")], [Type.atom("context"), Type.map([])], [Type.atom("next_command"), Type.atom("nil")], [Type.atom("state"), Type.map([])]])], [Type.bitstring("page"), Type.map([[Type.atom("__struct__"), Type.atom("Elixir.Hologram.Component.Client")], [Type.atom("context"), Type.map([[Type.tuple([Type.atom("Elixir.Hologram.Runtime"), Type.atom("initial_client_data_loaded?")]), Type.atom("true")]])], [Type.atom("next_command"), Type.atom("nil")], [Type.atom("state"), Type.map([])]])]]);
+                 return Type.map([[Type.bitstring("layout"), Type.map([[Type.atom("__struct__"), Type.atom("Elixir.Hologram.Component.Client")], [Type.atom("context"), Type.map([])], [Type.atom("next_command"), Type.atom("nil")], [Type.atom("state"), Type.map([])]])], [Type.bitstring("page"), Type.map([[Type.atom("__struct__"), Type.atom("Elixir.Hologram.Component.Client")], [Type.atom("context"), Type.map([[Type.tuple([Type.atom("Elixir.Hologram.Runtime"), Type.atom("initial_client_data_loaded?")]), Type.atom("true")], [Type.tuple([Type.atom("Elixir.Hologram.Runtime"), Type.atom("page_digest")]), Type.bitstring("102790adb6c3b1956db310be523a7693")]])], [Type.atom("next_command"), Type.atom("nil")], [Type.atom("state"), Type.map([])]])]]);
                };
                \s\s
                </script>
+               <script async src="/assets/hologram/page-102790adb6c3b1956db310be523a7693.js"></script>
                page template
                layout template end\
                """,
@@ -576,7 +719,10 @@ defmodule Hologram.Template.RendererTest do
                    context: %{}
                  },
                  "page" => %Component.Client{
-                   context: %{{Hologram.Runtime, :initial_client_data_loaded?} => true}
+                   context: %{
+                     {Hologram.Runtime, :initial_client_data_loaded?} => true,
+                     {Hologram.Runtime, :page_digest} => "102790adb6c3b1956db310be523a7693"
+                   }
                  }
                }
              }
