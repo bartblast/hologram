@@ -248,6 +248,12 @@ defmodule Hologram.Template.RendererTest do
                {~s(<img attr_1="aaa" attr_2="123" attr_3="ccc987eee" />), %{}}
     end
 
+    test "boolean attributes" do
+      node = {:element, "img", [{"attr_1", []}, {"attr_2", []}], []}
+
+      assert render_dom(node, %{}, []) == {~s(<img attr_1 attr_2 />), %{}}
+    end
+
     test "with nested stateful components" do
       node =
         {:element, "div", [{"attr", [text: "value"]}],

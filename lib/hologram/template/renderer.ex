@@ -56,18 +56,8 @@ defmodule Hologram.Template.Renderer do
     render_dom(slots[:default], context, [])
   end
 
-  def render_dom({:element, tag, attrs, children}, context, slots) do
-    attrs_html =
-      if attrs != [] do
-        attrs
-        |> Enum.map_join(" ", fn {name, value_parts} ->
-          {html, _clients} = render_dom(value_parts, %{}, [])
-          ~s(#{name}="#{html}")
-        end)
-        |> StringUtils.prepend(" ")
-      else
-        ""
-      end
+  def render_dom({:element, tag, attrs_dom, children}, context, slots) do
+    attrs_html = render_atributes(attrs_dom)
 
     {children_html, children_clients} = render_dom(children, context, slots)
 
@@ -239,6 +229,27 @@ defmodule Hologram.Template.Renderer do
 
   defp normalize_prop_name({name, value}) do
     {String.to_existing_atom(name), value}
+  end
+
+  defp render_attribute(name, value_parts)
+
+  defp render_attribute(name, []), do: name
+
+  defp render_attribute(name, value_parts) do
+    {html, _clients} = render_dom(value_parts, %{}, [])
+    ~s(#{name}="#{html}")
+  end
+
+  defp render_atributes(attrs_dom)
+
+  defp render_atributes([]), do: ""
+
+  defp render_atributes(attrs_dom) do
+    attrs_dom
+    |> Enum.map_join(" ", fn {name, value_parts} ->
+      render_attribute(name, value_parts)
+    end)
+    |> StringUtils.prepend(" ")
   end
 
   defp render_stateful_component(module, props, children, context) do
