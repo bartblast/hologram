@@ -22,6 +22,15 @@ defmodule Hologram.Runtime.PageDigestLookup do
   end
 
   @doc """
+  Returns the underlying PLT.
+  """
+  @impl GenServer
+  @spec handle_call(:get_plt, GenServer.from(), PLT.t()) :: {:reply, PLT.t(), PLT.t()}
+  def handle_call(:get_plt, _from, plt) do
+    {:reply, plt, plt}
+  end
+
+  @doc """
   Returns the digest of the given page module.
   """
   @spec lookup(atom, module) :: String.t()

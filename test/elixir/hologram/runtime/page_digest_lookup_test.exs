@@ -21,6 +21,13 @@ defmodule Hologram.Runtime.PageDigestLookupTest do
     :ok
   end
 
+  describe "handle_call/3" do
+    test "get_plt" do
+      {:ok, pid} = start_link(@opts)
+      assert %PLT{} = GenServer.call(pid, :get_plt)
+    end
+  end
+
   test "init/1" do
     assert {:ok, %PLT{table_name: @store_key} = plt} = init(@opts)
 
