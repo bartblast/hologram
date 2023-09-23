@@ -4,10 +4,10 @@ defmodule Hologram.RouterTest do
   alias Hologram.Router.PageResolver
 
   setup do
-    persistent_term_key = random_atom()
-    PageResolver.start_link(persistent_term_key: persistent_term_key)
+    store_key = random_atom()
+    PageResolver.start_link(store_key: store_key)
 
-    [persistent_term_key: persistent_term_key]
+    [page_resolver_store_key: store_key]
   end
 
   describe "call/2" do

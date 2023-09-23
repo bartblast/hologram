@@ -7,16 +7,16 @@ defmodule Hologram.Router do
 
   @impl Plug
   def init(opts) do
-    if opts[:persistent_term_key] do
+    if opts[:page_resolver_store_key] do
       opts
     else
-      Keyword.put(opts, :persistent_term_key, PageResolver.default_persistent_term_key())
+      Keyword.put(opts, :page_resolver_store_key, PageResolver)
     end
   end
 
   @impl Plug
   def call(%Conn{request_path: request_path} = conn, opts) do
-    if page_module = PageResolver.resolve(request_path, opts[:persistent_term_key]) do
+    if page_module = PageResolver.resolve(request_path, opts[:page_resolver_store_key]) do
       Controller.handle_request(conn, page_module)
     else
       conn

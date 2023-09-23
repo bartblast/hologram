@@ -12,7 +12,7 @@ defmodule Hologram.Runtime.Application do
 
     children = [
       {PageDigestLookup, table_name: PageDigestLookup, dump_path: page_digest_dump_file},
-      {PageResolver, persistent_term_key: PageResolver.default_persistent_term_key()}
+      {PageResolver, store_key: PageResolver}
     ]
 
     opts = [strategy: :one_for_one, name: Hologram.Supervisor]
