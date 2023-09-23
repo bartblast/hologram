@@ -74,6 +74,7 @@ defmodule Hologram.Commons.PLT do
     |> Enum.into(%{})
   end
 
+  # TODO: test
   @doc """
   Returns the reference of the underlying ETS table.
   """
@@ -84,6 +85,7 @@ defmodule Hologram.Commons.PLT do
     {:reply, table_ref, table_ref}
   end
 
+  # TODO: test separately from start/1
   @doc """
   Creates the underlying ETS table.
   """
