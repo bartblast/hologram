@@ -14,6 +14,7 @@ defmodule Hologram.Runtime.PageDigestLookup do
   def init(opts) do
     plt =
       opts
+      |> Keyword.put(:table_name, opts[:store_key])
       |> PLT.start()
       |> PLT.load(opts[:dump_path])
 
@@ -24,7 +25,7 @@ defmodule Hologram.Runtime.PageDigestLookup do
   Returns the digest of the given page module.
   """
   @spec lookup(atom, module) :: String.t()
-  def lookup(table_name, page_module) do
-    PLT.get!(%PLT{table_name: table_name}, page_module)
+  def lookup(store_key, page_module) do
+    PLT.get!(%PLT{table_name: store_key}, page_module)
   end
 end

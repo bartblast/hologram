@@ -11,7 +11,7 @@ defmodule Hologram.Runtime.Application do
       Path.join([Reflection.build_dir(), Reflection.page_digest_plt_dump_file_name()])
 
     children = [
-      {PageDigestLookup, table_name: PageDigestLookup, dump_path: page_digest_dump_file},
+      {PageDigestLookup, store_key: PageDigestLookup, dump_path: page_digest_dump_file},
       {PageResolver, store_key: PageResolver}
     ]
 
