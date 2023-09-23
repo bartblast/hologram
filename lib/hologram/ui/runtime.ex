@@ -4,6 +4,8 @@ defmodule Hologram.UI.Runtime do
   prop :initial_client_data_loaded?, :boolean,
     from_context: {Hologram.Runtime, :initial_client_data_loaded?}
 
+  prop :page_digest, :string, from_context: {Hologram.Runtime, :page_digest}
+
   @impl Component
   def template do
     ~H"""
@@ -12,6 +14,7 @@ defmodule Hologram.UI.Runtime do
         window.__hologram_runtime_bootstrap_data__ = "...";
       {/if}
     </script>
+    <script async src="/assets/hologram/page-{@page_digest}.js"></script>
     """
   end
 end
