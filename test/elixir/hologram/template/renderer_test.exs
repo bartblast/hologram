@@ -2,10 +2,10 @@ defmodule Hologram.Template.RendererTest do
   use Hologram.Test.BasicCase, async: true
   import Hologram.Template.Renderer
 
-  alias Hologram.Runtime.PageDigestLookup
   alias Hologram.Commons.PLT
   alias Hologram.Commons.Reflection
   alias Hologram.Component
+  alias Hologram.Runtime.PageDigestLookup
   alias Hologram.Test.Fixtures.Template.Renderer.Module1
   alias Hologram.Test.Fixtures.Template.Renderer.Module10
   alias Hologram.Test.Fixtures.Template.Renderer.Module13
@@ -38,22 +38,23 @@ defmodule Hologram.Template.RendererTest do
   alias Hologram.Test.Fixtures.Template.Renderer.Module8
   alias Hologram.Test.Fixtures.Template.Renderer.Module9
 
-  @page_digest_lookup_plt_dump_path "#{Reflection.tmp_path()}/#{__MODULE__}/page_digest_lookup.plt"
-
   defp setup_page_digest_lookup do
-    File.rm(@page_digest_lookup_plt_dump_path)
+    page_digest_lookup_plt_dump_path =
+      "#{Reflection.tmp_path()}/#{__MODULE__}/page_digest_lookup.plt"
+
+    File.rm(page_digest_lookup_plt_dump_path)
 
     PLT.start()
     |> PLT.put(:module_a, :module_a_digest)
     |> PLT.put(:module_b, :module_b_digest)
     |> PLT.put(:module_c, :module_c_digest)
-    |> PLT.dump(@page_digest_lookup_plt_dump_path)
+    |> PLT.dump(page_digest_lookup_plt_dump_path)
 
     page_digest_lookup_store_key = random_atom()
 
     opts = [
       store_key: page_digest_lookup_store_key,
-      dump_path: @page_digest_lookup_plt_dump_path
+      dump_path: page_digest_lookup_plt_dump_path
     ]
 
     {:ok, pid} = PageDigestLookup.start_link(opts)
