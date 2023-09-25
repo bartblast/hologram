@@ -1,9 +1,12 @@
 defmodule HologramFeatureTests.TmpLayout do
   use Hologram.Layout
+  alias Hologram.UI.Runtime
 
   def template do
     ~H"""
-    layout<slot />
+    <Runtime />
+    layout
+    <slot />
     """
   end
 end
