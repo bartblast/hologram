@@ -3,9 +3,7 @@ defmodule Hologram.Template.RendererTest do
   import Hologram.Template.Renderer
 
   alias Hologram.Commons.PLT
-  alias Hologram.Commons.Reflection
   alias Hologram.Component
-  alias Hologram.Runtime.PageDigestLookup
   alias Hologram.Test.Fixtures.Template.Renderer.Module1
   alias Hologram.Test.Fixtures.Template.Renderer.Module10
   alias Hologram.Test.Fixtures.Template.Renderer.Module13
@@ -37,34 +35,6 @@ defmodule Hologram.Template.RendererTest do
   alias Hologram.Test.Fixtures.Template.Renderer.Module7
   alias Hologram.Test.Fixtures.Template.Renderer.Module8
   alias Hologram.Test.Fixtures.Template.Renderer.Module9
-
-  defp setup_page_digest_lookup do
-    page_digest_lookup_plt_dump_path =
-      "#{Reflection.tmp_path()}/#{__MODULE__}/page_digest_lookup.plt"
-
-    File.rm(page_digest_lookup_plt_dump_path)
-
-    PLT.start()
-    |> PLT.put(:module_a, :module_a_digest)
-    |> PLT.put(:module_b, :module_b_digest)
-    |> PLT.put(:module_c, :module_c_digest)
-    |> PLT.dump(page_digest_lookup_plt_dump_path)
-
-    page_digest_lookup_store_key = random_atom()
-
-    opts = [
-      store_key: page_digest_lookup_store_key,
-      dump_path: page_digest_lookup_plt_dump_path
-    ]
-
-    {:ok, pid} = PageDigestLookup.start_link(opts)
-    page_digest_lookup_plt = GenServer.call(pid, :get_plt)
-
-    [
-      page_digest_lookup_plt: page_digest_lookup_plt,
-      page_digest_lookup_store_key: page_digest_lookup_store_key
-    ]
-  end
 
   test "multiple nodes" do
     nodes = [
@@ -381,7 +351,7 @@ defmodule Hologram.Template.RendererTest do
 
   describe "context" do
     setup do
-      setup_page_digest_lookup()
+      setup_page_digest_lookup(__MODULE__)
     end
 
     test "set in page, accessed in component nested in page", %{
@@ -509,7 +479,7 @@ defmodule Hologram.Template.RendererTest do
 
   describe "render_page" do
     setup do
-      setup_page_digest_lookup()
+      setup_page_digest_lookup(__MODULE__)
     end
 
     test "inside layout slot", %{

@@ -1,12 +1,15 @@
 defmodule Hologram.Test.Helpers do
   import Hologram.Template, only: [sigil_H: 2]
 
+  alias Hologram.Commons.PLT
   alias Hologram.Commons.ProcessUtils
+  alias Hologram.Commons.Reflection
   alias Hologram.Compiler.AST
   alias Hologram.Compiler.Context
   alias Hologram.Compiler.Encoder
   alias Hologram.Compiler.IR
   alias Hologram.Component
+  alias Hologram.Runtime.PageDigestLookup
   alias Hologram.Template.Parser
   alias Hologram.Template.Renderer
 
@@ -103,6 +106,34 @@ defmodule Hologram.Test.Helpers do
     {html, _clients} = Renderer.render_dom(node, context, [])
 
     html
+  end
+
+  def setup_page_digest_lookup(test_module) do
+    page_digest_lookup_plt_dump_path =
+      "#{Reflection.tmp_path()}/#{test_module}/page_digest_lookup.plt"
+
+    File.rm(page_digest_lookup_plt_dump_path)
+
+    PLT.start()
+    |> PLT.put(:module_a, :module_a_digest)
+    |> PLT.put(:module_b, :module_b_digest)
+    |> PLT.put(:module_c, :module_c_digest)
+    |> PLT.dump(page_digest_lookup_plt_dump_path)
+
+    page_digest_lookup_store_key = random_atom()
+
+    opts = [
+      store_key: page_digest_lookup_store_key,
+      dump_path: page_digest_lookup_plt_dump_path
+    ]
+
+    {:ok, pid} = PageDigestLookup.start_link(opts)
+    page_digest_lookup_plt = GenServer.call(pid, :get_plt)
+
+    [
+      page_digest_lookup_plt: page_digest_lookup_plt,
+      page_digest_lookup_store_key: page_digest_lookup_store_key
+    ]
   end
 
   @doc """
