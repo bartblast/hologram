@@ -21,6 +21,7 @@ defmodule Hologram.Runtime.PageDigestLookup do
     {:ok, plt}
   end
 
+  # TODO: maybe implement wrapper PageDigestLookup.get_plt/1
   @doc """
   Returns the underlying PLT.
   """
