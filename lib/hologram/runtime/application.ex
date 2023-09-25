@@ -3,6 +3,7 @@ defmodule Hologram.Runtime.Application do
 
   alias Hologram.Commons.Reflection
   alias Hologram.Router.PageResolver
+  alias Hologram.Runtime.AssetPathLookup
   alias Hologram.Runtime.PageDigestLookup
 
   @impl Application
