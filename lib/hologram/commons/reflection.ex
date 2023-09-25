@@ -355,6 +355,14 @@ defmodule Hologram.Commons.Reflection do
   end
 
   @doc """
+  Returns the release static dir path.
+  """
+  @spec release_static_path() :: String.t()
+  def release_static_path do
+    release_priv_path() <> "/static"
+  end
+
+  @doc """
   Returns the absolute path of the project.
 
   ## Examples

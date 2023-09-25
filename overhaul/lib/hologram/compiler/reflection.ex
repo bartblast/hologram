@@ -230,11 +230,6 @@ defmodule Hologram.Compiler.Reflection do
   end
 
   # DEFER: test
-  def release_static_path do
-    release_priv_path() <> "/static"
-  end
-
-  # DEFER: test
   def root_page_digest_store_path(opts \\ []) do
     root_priv_path(opts) <> "/page_digest_store.bin"
   end

@@ -253,6 +253,10 @@ defmodule Hologram.Commons.ReflectionTest do
     assert release_priv_path() == File.cwd!() <> "/_build/test/lib/hologram/priv"
   end
 
+  test "release_static_path/0" do
+    assert release_static_path() == File.cwd!() <> "/_build/test/lib/hologram/priv/static"
+  end
+
   test "root_path/0" do
     assert root_path() == File.cwd!()
   end
