@@ -108,6 +108,13 @@ defmodule Hologram.Test.Helpers do
     html
   end
 
+  @doc """
+  Sets up page digest lookup PLT process.
+  """
+  @spec setup_page_digest_lookup(module) :: [
+          page_digest_lookup_plt: PLT.t(),
+          page_digest_lookup_store_key: atom
+        ]
   def setup_page_digest_lookup(test_module) do
     page_digest_lookup_plt_dump_path =
       "#{Reflection.tmp_path()}/#{test_module}/page_digest_lookup.plt"
