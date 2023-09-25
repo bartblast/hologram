@@ -3,21 +3,20 @@ defmodule Hologram.Router do
 
   alias Hologram.Router.PageResolver
   alias Hologram.Runtime.Controller
+  alias Hologram.Runtime.PageDigestLookup
   alias Plug.Conn
 
   @impl Plug
   def init(opts) do
-    if opts[:page_resolver_store_key] do
-      opts
-    else
-      Keyword.put(opts, :page_resolver_store_key, PageResolver)
-    end
+    opts
+    |> Keyword.put_new(:page_digest_lookup_store_key, PageDigestLookup)
+    |> Keyword.put_new(:page_resolver_store_key, PageResolver)
   end
 
   @impl Plug
   def call(%Conn{request_path: request_path} = conn, opts) do
     if page_module = PageResolver.resolve(request_path, opts[:page_resolver_store_key]) do
-      Controller.handle_request(conn, page_module)
+      Controller.handle_request(conn, page_module, opts[:page_digest_lookup_store_key])
     else
       conn
     end

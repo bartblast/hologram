@@ -1,17 +1,24 @@
 defmodule Hologram.RouterTest do
   use Hologram.Test.BasicCase, async: true
   import Hologram.Router
+
+  alias Hologram.Commons.PLT
   alias Hologram.Router.PageResolver
-
-  setup do
-    store_key = random_atom()
-    PageResolver.start_link(store_key: store_key)
-
-    [page_resolver_store_key: store_key]
-  end
+  alias Hologram.Test.Fixtures.Router.Module1
 
   describe "call/2" do
+    setup do
+      opts = setup_page_digest_lookup(__MODULE__)
+
+      page_resolver_store_key = random_atom()
+      PageResolver.start_link(store_key: page_resolver_store_key)
+
+      Keyword.put(opts, :page_resolver_store_key, page_resolver_store_key)
+    end
+
     test "request path is matched", opts do
+      PLT.put(opts[:page_digest_lookup_plt], Module1, :dummy_module_1_digest)
+
       conn = Plug.Test.conn(:get, "/hologram-test-fixtures-router-module1")
 
       assert call(conn, opts) == %{
