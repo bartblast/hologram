@@ -34,10 +34,20 @@ defmodule Hologram.Runtime.AssetPathLookup do
     |> Stream.map(&Regex.run(regex, &1))
     |> Stream.filter(& &1)
     |> Stream.map(&List.to_tuple/1)
-    |> Stream.reject(fn {_, prefix, _, _} -> prefix == "/hologram/page" end)
-    |> Stream.map(fn {_, prefix, digest, suffix} ->
+    |> stream_reject_page_bundles()
+    |> stream_build_asset_entries()
+    |> Enum.to_list()
+  end
+
+  defp stream_build_asset_entries(file_infos) do
+    Stream.map(file_infos, fn {_file_path, prefix, digest, suffix} ->
       {prefix <> suffix, prefix <> "-" <> digest <> suffix}
     end)
-    |> Enum.to_list()
+  end
+
+  defp stream_reject_page_bundles(file_infos) do
+    Stream.reject(file_infos, fn {_file_path, prefix, _digest, _suffix} ->
+      prefix == "/hologram/page"
+    end)
   end
 end

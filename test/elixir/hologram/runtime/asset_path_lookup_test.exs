@@ -29,7 +29,7 @@ defmodule Hologram.Runtime.AssetPathLookupTest do
     File.mkdir_p!(dir_3_path)
     File.mkdir_p!(dir_4_path)
 
-    [
+    file_paths = [
       file_1_path,
       file_2_path,
       file_3_path,
@@ -40,7 +40,8 @@ defmodule Hologram.Runtime.AssetPathLookupTest do
       file_8_path,
       file_9_path
     ]
-    |> Enum.each(&File.write!(&1, ""))
+
+    Enum.each(file_paths, &File.write!(&1, ""))
 
     :ok
   end
