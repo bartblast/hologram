@@ -230,12 +230,6 @@ defmodule Hologram.Compiler.Reflection do
   end
 
   # DEFER: test
-  def release_priv_path do
-    :code.priv_dir(@config[:otp_app])
-    |> to_string()
-  end
-
-  # DEFER: test
   def release_static_path do
     release_priv_path() <> "/static"
   end

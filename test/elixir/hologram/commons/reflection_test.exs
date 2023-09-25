@@ -249,6 +249,10 @@ defmodule Hologram.Commons.ReflectionTest do
     assert page_digest_plt_dump_file_name() == "page_digest.plt"
   end
 
+  test "release_priv_path/0" do
+    assert release_priv_path() == File.cwd!() <> "/_build/test/lib/hologram/priv"
+  end
+
   test "root_path/0" do
     assert root_path() == File.cwd!()
   end

@@ -345,6 +345,16 @@ defmodule Hologram.Commons.Reflection do
   end
 
   @doc """
+  Returns the release priv dir path.
+  """
+  @spec release_priv_path() :: String.t()
+  def release_priv_path do
+    otp_app()
+    |> :code.priv_dir()
+    |> to_string()
+  end
+
+  @doc """
   Returns the absolute path of the project.
 
   ## Examples
