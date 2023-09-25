@@ -100,15 +100,20 @@ defmodule Hologram.Template.Renderer do
 
     page_digest = PageDigestLookup.lookup(page_digest_lookup_store_key, page_module)
 
-    initial_page_client =
+    %{context: page_context, state: page_state} =
+      initial_page_client_with_injected_page_digest =
       Templatable.put_context(initial_page_client, {Hologram.Runtime, :page_digest}, page_digest)
 
     layout_module = page_module.__hologram_layout_module__()
-    layout_props_dom = build_layout_props_dom(page_module, initial_page_client)
-    vars = aggregate_vars(params, initial_page_client.state)
+
+    layout_props_dom =
+      build_layout_props_dom(page_module, initial_page_client_with_injected_page_digest)
+
+    vars = aggregate_vars(params, page_state)
     page_dom = page_module.template().(vars)
     layout_node = {:component, layout_module, layout_props_dom, page_dom}
-    {initial_html, initial_clients} = render_dom(layout_node, initial_page_client.context, [])
+
+    {initial_html, initial_clients} = render_dom(layout_node, page_context, [])
 
     final_page_client =
       Templatable.put_context(
