@@ -100,13 +100,13 @@ defmodule Mix.Tasks.Compile.Hologram do
 
   defp bundle_pages(call_graph, ir_plt, opts) do
     Enum.map(Reflection.list_pages(), fn page_module ->
-      if !function_exported?(page_module, :__hologram_route__, 0) do
+      if !function_exported?(page_module, :__route__, 0) do
         raise Hologram.CompileError,
           message:
             "Page '#{page_module}' doesn't have a route specified (use the route/1 macro to fix the issue)."
       end
 
-      if !function_exported?(page_module, :__hologram_layout_module__, 0) do
+      if !function_exported?(page_module, :__layout_module__, 0) do
         raise Hologram.CompileError,
           message:
             "Page '#{page_module}' doesn't have a layout module specified (use the layout/1 macro to fix the issue)."

@@ -16,7 +16,7 @@ defmodule Hologram.Router.PageResolver do
   def init(store_key) do
     search_tree =
       Enum.reduce(Reflection.list_pages(), %SearchTree.Node{}, fn page, acc ->
-        SearchTree.add_route(acc, page.__hologram_route__(), page)
+        SearchTree.add_route(acc, page.__route__(), page)
       end)
 
     :persistent_term.put(store_key, search_tree)

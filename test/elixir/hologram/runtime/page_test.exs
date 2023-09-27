@@ -12,22 +12,22 @@ defmodule Hologram.Runtime.PageTest do
     assert Module1.__is_hologram_page__()
   end
 
-  test "__hologram_layout_module__/0" do
-    assert Module1.__hologram_layout_module__() == Module4
+  test "__layout_module__/0" do
+    assert Module1.__layout_module__() == Module4
   end
 
-  describe "__hologram_layout_props__/0" do
+  describe "__layout_props__/0" do
     test "default" do
-      assert Module1.__hologram_layout_props__() == []
+      assert Module1.__layout_props__() == []
     end
 
     test "custom" do
-      assert Module3.__hologram_layout_props__() == [a: 1, b: 2]
+      assert Module3.__layout_props__() == [a: 1, b: 2]
     end
   end
 
-  test "__hologram_route__/0" do
-    assert Module1.__hologram_route__() == "/module_1"
+  test "__route__/0" do
+    assert Module1.__route__() == "/module_1"
   end
 
   describe "init/3" do

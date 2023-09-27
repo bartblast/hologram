@@ -373,7 +373,7 @@ defmodule Hologram.Compiler.CallGraph do
   end
 
   defp add_page_call_graph_edges(call_graph, module) do
-    add_edge(call_graph, module, {module, :__hologram_route__, 0})
+    add_edge(call_graph, module, {module, :__route__, 0})
   end
 
   defp build_module(call_graph, ir_plt, module) do

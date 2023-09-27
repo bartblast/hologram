@@ -145,15 +145,15 @@ defmodule Hologram.CompilerTest do
                }}], vars);
                }}]);
 
-               Interpreter.defineElixirFunction("Elixir_Hologram_Test_Fixtures_Compiler_Module9", "__hologram_layout_module__", 0, [{params: [], guards: [], body: (vars) => {
+               Interpreter.defineElixirFunction("Elixir_Hologram_Test_Fixtures_Compiler_Module9", "__layout_module__", 0, [{params: [], guards: [], body: (vars) => {
                return Type.atom("Elixir.Hologram.Test.Fixtures.Compiler.Module10");
                }}]);
 
-               Interpreter.defineElixirFunction("Elixir_Hologram_Test_Fixtures_Compiler_Module9", "__hologram_layout_props__", 0, [{params: [], guards: [], body: (vars) => {
+               Interpreter.defineElixirFunction("Elixir_Hologram_Test_Fixtures_Compiler_Module9", "__layout_props__", 0, [{params: [], guards: [], body: (vars) => {
                return Type.list([]);
                }}]);
 
-               Interpreter.defineElixirFunction("Elixir_Hologram_Test_Fixtures_Compiler_Module9", "__hologram_route__", 0, [{params: [], guards: [], body: (vars) => {
+               Interpreter.defineElixirFunction("Elixir_Hologram_Test_Fixtures_Compiler_Module9", "__route__", 0, [{params: [], guards: [], body: (vars) => {
                return Type.bitstring("/module_9");
                }}]);
 
@@ -212,15 +212,15 @@ defmodule Hologram.CompilerTest do
                  const Interpreter = interpreterClass;
                  const Type = typeClass;
 
-               Interpreter.defineElixirFunction("Elixir_Hologram_Test_Fixtures_Compiler_Module11", "__hologram_layout_module__", 0, [{params: [], guards: [], body: (vars) => {
+               Interpreter.defineElixirFunction("Elixir_Hologram_Test_Fixtures_Compiler_Module11", "__layout_module__", 0, [{params: [], guards: [], body: (vars) => {
                return Type.atom("Elixir.Hologram.Test.Fixtures.Compiler.Module6");
                }}]);
 
-               Interpreter.defineElixirFunction("Elixir_Hologram_Test_Fixtures_Compiler_Module11", "__hologram_layout_props__", 0, [{params: [], guards: [], body: (vars) => {
+               Interpreter.defineElixirFunction("Elixir_Hologram_Test_Fixtures_Compiler_Module11", "__layout_props__", 0, [{params: [], guards: [], body: (vars) => {
                return Type.list([]);
                }}]);
 
-               Interpreter.defineElixirFunction("Elixir_Hologram_Test_Fixtures_Compiler_Module11", "__hologram_route__", 0, [{params: [], guards: [], body: (vars) => {
+               Interpreter.defineElixirFunction("Elixir_Hologram_Test_Fixtures_Compiler_Module11", "__route__", 0, [{params: [], guards: [], body: (vars) => {
                return Type.bitstring("/module_11");
                }}]);
 
@@ -400,9 +400,9 @@ defmodule Hologram.CompilerTest do
       |> Enum.sort()
 
     assert sorted_mfas == [
-             {Module5, :__hologram_layout_module__, 0},
-             {Module5, :__hologram_layout_props__, 0},
-             {Module5, :__hologram_route__, 0},
+             {Module5, :__layout_module__, 0},
+             {Module5, :__layout_props__, 0},
+             {Module5, :__route__, 0},
              {Module5, :action, 3},
              {Module5, :template, 0},
              {Module6, :action, 3},

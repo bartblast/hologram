@@ -51,11 +51,11 @@ defmodule Hologram.Page do
 
       ## Examples
 
-          iex> __hologram_layout_module__()
+          iex> __layout_module__()
           MyLayout
       """
-      @spec __hologram_layout_module__() :: module
-      def __hologram_layout_module__ do
+      @spec __layout_module__() :: module
+      def __layout_module__ do
         unquote(module)
       end
 
@@ -64,11 +64,11 @@ defmodule Hologram.Page do
 
       ## Examples
 
-          iex> __hologram_layout_props__()
+          iex> __layout_props__()
           [a: 1, b: 2]
       """
-      @spec __hologram_layout_props__() :: keyword
-      def __hologram_layout_props__ do
+      @spec __layout_props__() :: keyword
+      def __layout_props__ do
         unquote(props)
       end
     end
@@ -95,11 +95,11 @@ defmodule Hologram.Page do
 
       ## Examples
 
-          iex> __hologram_route__()
+          iex> __route__()
           "/my-path"
       """
-      @spec __hologram_route__() :: String.t()
-      def __hologram_route__ do
+      @spec __route__() :: String.t()
+      def __route__ do
         unquote(path)
       end
     end

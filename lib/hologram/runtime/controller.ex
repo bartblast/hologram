@@ -7,7 +7,7 @@ defmodule Hologram.Runtime.Controller do
   """
   @spec extract_params(String.t(), module) :: %{atom => any}
   def extract_params(url_path, page_module) do
-    route_segments = String.split(page_module.__hologram_route__(), "/")
+    route_segments = String.split(page_module.__route__(), "/")
     url_path_segments = String.split(url_path, "/")
 
     route_segments

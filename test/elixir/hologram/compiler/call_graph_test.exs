@@ -98,13 +98,13 @@ defmodule Hologram.Compiler.CallGraphTest do
       assert sorted_vertices(call_graph) == [
                Module2,
                :vertex_1,
-               {Module2, :__hologram_route__, 0}
+               {Module2, :__route__, 0}
              ]
 
       assert sorted_edges(call_graph) == [
                %Graph.Edge{
                  v1: Module2,
-                 v2: {Module2, :__hologram_route__, 0},
+                 v2: {Module2, :__route__, 0},
                  weight: 1,
                  label: nil
                },
@@ -346,7 +346,7 @@ defmodule Hologram.Compiler.CallGraphTest do
                Module11,
                Module5,
                Module6,
-               {Module11, :__hologram_route__, 0}
+               {Module11, :__route__, 0}
              ]
 
       assert sorted_edges(call_graph) == [
@@ -364,7 +364,7 @@ defmodule Hologram.Compiler.CallGraphTest do
                },
                %Graph.Edge{
                  v1: Module11,
-                 v2: {Module11, :__hologram_route__, 0},
+                 v2: {Module11, :__route__, 0},
                  weight: 1,
                  label: nil
                }

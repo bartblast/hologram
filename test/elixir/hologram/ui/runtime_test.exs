@@ -15,7 +15,7 @@ defmodule Hologram.UI.RuntimeTest do
     assert render_component(Runtime, %{}, context) == """
            <script>
              
-               window.__hologram_runtime_bootstrap_data__ = "...";
+               window.__hologramRuntimeBootstrapData__ = "...";
              
            </script>
            <script async src="/assets/hologram/page-102790adb6c3b1956db310be523a7693.js"></script>\

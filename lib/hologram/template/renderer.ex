@@ -104,7 +104,7 @@ defmodule Hologram.Template.Renderer do
       initial_page_client_with_injected_page_digest =
       Templatable.put_context(initial_page_client, {Hologram.Runtime, :page_digest}, page_digest)
 
-    layout_module = page_module.__hologram_layout_module__()
+    layout_module = page_module.__layout_module__()
 
     layout_props_dom =
       build_layout_props_dom(page_module, initial_page_client_with_injected_page_digest)
@@ -133,7 +133,7 @@ defmodule Hologram.Template.Renderer do
   end
 
   defp build_layout_props_dom(page_module, page_client) do
-    page_module.__hologram_layout_props__()
+    page_module.__layout_props__()
     |> Enum.into(%{id: "layout"})
     |> aggregate_vars(page_client.state)
     |> Enum.map(fn {name, value} -> {to_string(name), [expression: {value}]} end)
@@ -226,10 +226,10 @@ defmodule Hologram.Template.Renderer do
       |> Transformer.transform(%Context{})
       |> Encoder.encode(%Context{})
 
-    pattern = "window.__hologram_runtime_bootstrap_data__ = \"...\";"
+    pattern = "window.__hologramRuntimeBootstrapData__ = \"...\";"
 
     replacement = """
-    window.__hologram_runtime_bootstrap_data__ = (typeClass) => {
+    window.__hologramRuntimeBootstrapData__ = (typeClass) => {
       const Type = typeClass;
       return #{data};
     };\

@@ -35,7 +35,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
     CallGraph.load(call_graph, call_graph_dump_path)
 
     assert CallGraph.inbound_remote_edges(call_graph, Module2) == [
-             %Graph.Edge{v1: {Module1, :__hologram_layout_module__, 0}, v2: Module2}
+             %Graph.Edge{v1: {Module1, :__layout_module__, 0}, v2: Module2}
            ]
   end
 
@@ -88,7 +88,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
     PLT.load(page_digest_plt, page_digest_dump_file)
     page_digest_items = PLT.get_all(page_digest_plt)
     assert Enum.count(Map.keys(page_digest_items)) == num_page_bundles
-    assert page_digest_items[Module1] == "2f74e95d269faae9fac7b143de2f98d5"
+    assert page_digest_items[Module1] == "7a00336083b51720b420183c9f950cd8"
   end
 
   defp test_runtime_bundle do

@@ -11,7 +11,7 @@ defmodule Hologram.UI.Runtime do
     ~H"""
     <script>
       {%if !@initial_client_data_loaded?}
-        window.__hologram_runtime_bootstrap_data__ = "...";
+        window.__hologramRuntimeBootstrapData__ = "...";
       {/if}
     </script>
     <script async src="/assets/hologram/page-{@page_digest}.js"></script>
