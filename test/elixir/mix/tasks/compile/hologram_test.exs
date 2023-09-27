@@ -56,8 +56,8 @@ defmodule Mix.Tasks.Compile.HologramTest do
     PLT.load(module_digest_plt, module_digest_plt_dump_path)
 
     assert PLT.get!(module_digest_plt, Module2) ==
-             <<192, 132, 144, 80, 65, 123, 26, 73, 18, 78, 113, 30, 217, 117, 223, 122, 185, 70,
-               94, 250, 169, 95, 98, 128, 111, 218, 140, 29, 241, 247, 3, 69>>
+             <<68, 47, 107, 27, 82, 179, 102, 244, 205, 170, 230, 49, 132, 230, 207, 186, 68, 47,
+               215, 188, 88, 83, 60, 253, 196, 216, 241, 248, 96, 232, 90, 137>>
   end
 
   defp test_page_bundles do
@@ -88,7 +88,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
     PLT.load(page_digest_plt, page_digest_dump_file)
     page_digest_items = PLT.get_all(page_digest_plt)
     assert Enum.count(Map.keys(page_digest_items)) == num_page_bundles
-    assert page_digest_items[Module1] == "596a456ce39aa7a14cc91b14083dc41d"
+    assert page_digest_items[Module1] == "2f74e95d269faae9fac7b143de2f98d5"
   end
 
   defp test_runtime_bundle do

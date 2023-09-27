@@ -139,8 +139,8 @@ defmodule Hologram.CompilerTest do
                }}]);
 
                Interpreter.defineElixirFunction("Elixir_Hologram_Test_Fixtures_Compiler_Module10", "template", 0, [{params: [], guards: [], body: (vars) => {
-               return Type.anonymousFunction(1, [{params: [Type.variablePattern("data")], guards: [], body: (vars) => {
-               Interpreter.matchOperator(vars.data, Type.matchPlaceholder(), vars);
+               return Type.anonymousFunction(1, [{params: [Type.variablePattern("vars")], guards: [], body: (vars) => {
+               Interpreter.matchOperator(vars.vars, Type.matchPlaceholder(), vars);
                return Type.list([Type.tuple([Type.atom("text"), Type.bitstring("Module10 template")])]);
                }}], vars);
                }}]);
@@ -166,8 +166,8 @@ defmodule Hologram.CompilerTest do
                }}]);
 
                Interpreter.defineElixirFunction("Elixir_Hologram_Test_Fixtures_Compiler_Module9", "template", 0, [{params: [], guards: [], body: (vars) => {
-               return Type.anonymousFunction(1, [{params: [Type.variablePattern("data")], guards: [], body: (vars) => {
-               Interpreter.matchOperator(vars.data, Type.matchPlaceholder(), vars);
+               return Type.anonymousFunction(1, [{params: [Type.variablePattern("vars")], guards: [], body: (vars) => {
+               Interpreter.matchOperator(vars.vars, Type.matchPlaceholder(), vars);
                return Type.list([Type.tuple([Type.atom("text"), Type.bitstring("Module9 template")])]);
                }}], vars);
                }}]);
@@ -225,15 +225,15 @@ defmodule Hologram.CompilerTest do
                }}]);
 
                Interpreter.defineElixirFunction("Elixir_Hologram_Test_Fixtures_Compiler_Module11", "template", 0, [{params: [], guards: [], body: (vars) => {
-               return Type.anonymousFunction(1, [{params: [Type.variablePattern("data")], guards: [], body: (vars) => {
-               Interpreter.matchOperator(vars.data, Type.matchPlaceholder(), vars);
+               return Type.anonymousFunction(1, [{params: [Type.variablePattern("vars")], guards: [], body: (vars) => {
+               Interpreter.matchOperator(vars.vars, Type.matchPlaceholder(), vars);
                return Type.list([Type.tuple([Type.atom("text"), Type.bitstring("Module11 template")])]);
                }}], vars);
                }}]);
 
                Interpreter.defineElixirFunction("Elixir_Hologram_Test_Fixtures_Compiler_Module6", "template", 0, [{params: [], guards: [], body: (vars) => {
-               return Type.anonymousFunction(1, [{params: [Type.variablePattern("data")], guards: [], body: (vars) => {
-               Interpreter.matchOperator(vars.data, Type.matchPlaceholder(), vars);
+               return Type.anonymousFunction(1, [{params: [Type.variablePattern("vars")], guards: [], body: (vars) => {
+               Interpreter.matchOperator(vars.vars, Type.matchPlaceholder(), vars);
                return Type.list([Type.tuple([Type.atom("text"), Type.bitstring("Module6 template")])]);
                }}], vars);
                }}]);

@@ -33,8 +33,8 @@ defmodule Hologram.Template do
 
   defp build_h_sigil_ast(markup) do
     quote do
-      fn var!(data) ->
-        _fix_unused_data_var = var!(data)
+      fn var!(vars) ->
+        _fix_unused_var_warning = var!(vars)
         unquote(dom_ast(markup))
       end
     end

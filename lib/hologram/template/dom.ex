@@ -109,7 +109,7 @@ defmodule Hologram.Template.DOM do
   end
 
   defp substitute_module_attributes({:@, meta_1, [{name, _meta_2, _args}]}) do
-    {{:., meta_1, [{:data, meta_1, nil}, name]}, [{:no_parens, true} | meta_1], []}
+    {{:., meta_1, [{:vars, meta_1, nil}, name]}, [{:no_parens, true} | meta_1], []}
   end
 
   defp substitute_module_attributes(ast) when is_list(ast) do

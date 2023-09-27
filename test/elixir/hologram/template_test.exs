@@ -27,7 +27,7 @@ defmodule Hologram.TemplateTest do
   end
 
   describe "H sigil" do
-    test "template which uses data" do
+    test "template which uses vars" do
       template = ~H"""
       <div>{@value}</div>
       """
@@ -35,7 +35,7 @@ defmodule Hologram.TemplateTest do
       assert template.(%{value: 123}) == [{:element, "div", [], [expression: {123}]}]
     end
 
-    test "template which doesn't use data" do
+    test "template which doesn't use vars" do
       template = ~H"""
       <div>abc</div>
       """

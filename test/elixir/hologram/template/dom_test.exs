@@ -378,7 +378,7 @@ defmodule Hologram.Template.DOMTest do
                             [
                               {:*, [line: 1],
                                [
-                                 {{:., [line: 1], [{:data, [line: 1], nil}, :my_var]},
+                                 {{:., [line: 1], [{:vars, [line: 1], nil}, :my_var]},
                                   [no_parens: true, line: 1], []},
                                  9
                                ]}
@@ -402,7 +402,7 @@ defmodule Hologram.Template.DOMTest do
                   {:<-, [line: 1],
                    [
                      {:item, [line: 1], nil},
-                     {{:., [line: 1], [{:data, [line: 1], nil}, :items]},
+                     {{:., [line: 1], [{:vars, [line: 1], nil}, :items]},
                       [no_parens: true, line: 1], []}
                    ]},
                   [do: {:__block__, [], [[text: "abc"]]}]
@@ -425,7 +425,7 @@ defmodule Hologram.Template.DOMTest do
                   {:<-, [line: 1],
                    [
                      {:item, [line: 1], nil},
-                     {{:., [line: 1], [{:data, [line: 1], nil}, :items]},
+                     {{:., [line: 1], [{:vars, [line: 1], nil}, :items]},
                       [no_parens: true, line: 1], []}
                    ]},
                   [
@@ -447,7 +447,7 @@ defmodule Hologram.Template.DOMTest do
                 [
                   {:==, [line: 1],
                    [
-                     {{:., [line: 1], [{:data, [line: 1], nil}, :xyz]},
+                     {{:., [line: 1], [{:vars, [line: 1], nil}, :xyz]},
                       [no_parens: true, line: 1], []},
                      123
                    ]},
@@ -470,7 +470,7 @@ defmodule Hologram.Template.DOMTest do
                 [
                   {:==, [line: 1],
                    [
-                     {{:., [line: 1], [{:data, [line: 1], nil}, :xyz]},
+                     {{:., [line: 1], [{:vars, [line: 1], nil}, :xyz]},
                       [no_parens: true, line: 1], []},
                      123
                    ]},
@@ -495,7 +495,7 @@ defmodule Hologram.Template.DOMTest do
                 [
                   {:==, [line: 1],
                    [
-                     {{:., [line: 1], [{:data, [line: 1], nil}, :xyz]},
+                     {{:., [line: 1], [{:vars, [line: 1], nil}, :xyz]},
                       [no_parens: true, line: 1], []},
                      123
                    ]},
@@ -520,7 +520,7 @@ defmodule Hologram.Template.DOMTest do
                 [
                   {:==, [line: 1],
                    [
-                     {{:., [line: 1], [{:data, [line: 1], nil}, :xyz]},
+                     {{:., [line: 1], [{:vars, [line: 1], nil}, :xyz]},
                       [no_parens: true, line: 1], []},
                      123
                    ]},
@@ -553,7 +553,7 @@ defmodule Hologram.Template.DOMTest do
                      [
                        {:==, [line: 1],
                         [
-                          {{:., [line: 1], [{:data, [line: 1], nil}, :aaa]},
+                          {{:., [line: 1], [{:vars, [line: 1], nil}, :aaa]},
                            [no_parens: true, line: 1], []},
                           123
                         ]},
@@ -585,7 +585,7 @@ defmodule Hologram.Template.DOMTest do
                      [
                        {:==, [line: 1],
                         [
-                          {{:., [line: 1], [{:data, [line: 1], nil}, :aaa]},
+                          {{:., [line: 1], [{:vars, [line: 1], nil}, :aaa]},
                            [no_parens: true, line: 1], []},
                           123
                         ]},
@@ -618,7 +618,7 @@ defmodule Hologram.Template.DOMTest do
                      [
                        {:==, [line: 1],
                         [
-                          {{:., [line: 1], [{:data, [line: 1], nil}, :aaa]},
+                          {{:., [line: 1], [{:vars, [line: 1], nil}, :aaa]},
                            [no_parens: true, line: 1], []},
                           123
                         ]},
@@ -652,7 +652,7 @@ defmodule Hologram.Template.DOMTest do
                      [
                        {:==, [line: 1],
                         [
-                          {{:., [line: 1], [{:data, [line: 1], nil}, :aaa]},
+                          {{:., [line: 1], [{:vars, [line: 1], nil}, :aaa]},
                            [no_parens: true, line: 1], []},
                           123
                         ]},
@@ -687,7 +687,7 @@ defmodule Hologram.Template.DOMTest do
                      [
                        {:==, [line: 1],
                         [
-                          {{:., [line: 1], [{:data, [line: 1], nil}, :aaa]},
+                          {{:., [line: 1], [{:vars, [line: 1], nil}, :aaa]},
                            [no_parens: true, line: 1], []},
                           123
                         ]},
@@ -721,7 +721,7 @@ defmodule Hologram.Template.DOMTest do
                      [
                        {:==, [line: 1],
                         [
-                          {{:., [line: 1], [{:data, [line: 1], nil}, :aaa]},
+                          {{:., [line: 1], [{:vars, [line: 1], nil}, :aaa]},
                            [no_parens: true, line: 1], []},
                           123
                         ]},
@@ -744,10 +744,10 @@ defmodule Hologram.Template.DOMTest do
                   [
                     [
                       1,
-                      {{:., [line: 1], [{:data, [line: 1], nil}, :a]}, [no_parens: true, line: 1],
+                      {{:., [line: 1], [{:vars, [line: 1], nil}, :a]}, [no_parens: true, line: 1],
                        []},
                       2,
-                      {{:., [line: 1], [{:data, [line: 1], nil}, :b]}, [no_parens: true, line: 1],
+                      {{:., [line: 1], [{:vars, [line: 1], nil}, :b]}, [no_parens: true, line: 1],
                        []}
                     ]
                   ]}
@@ -765,14 +765,14 @@ defmodule Hologram.Template.DOMTest do
                   [
                     [
                       1,
-                      {{:., [line: 1], [{:data, [line: 1], nil}, :a]}, [no_parens: true, line: 1],
+                      {{:., [line: 1], [{:vars, [line: 1], nil}, :a]}, [no_parens: true, line: 1],
                        []},
                       [
                         2,
-                        {{:., [line: 1], [{:data, [line: 1], nil}, :b]},
+                        {{:., [line: 1], [{:vars, [line: 1], nil}, :b]},
                          [no_parens: true, line: 1], []},
                         3,
-                        {{:., [line: 1], [{:data, [line: 1], nil}, :c]},
+                        {{:., [line: 1], [{:vars, [line: 1], nil}, :c]},
                          [no_parens: true, line: 1], []}
                       ]
                     ]
@@ -788,9 +788,9 @@ defmodule Hologram.Template.DOMTest do
                {:expression,
                 {:{}, [line: 1],
                  [
-                   {{{:., [line: 1], [{:data, [line: 1], nil}, :a]}, [no_parens: true, line: 1],
+                   {{{:., [line: 1], [{:vars, [line: 1], nil}, :a]}, [no_parens: true, line: 1],
                      []},
-                    {{:., [line: 1], [{:data, [line: 1], nil}, :b]}, [no_parens: true, line: 1],
+                    {{:., [line: 1], [{:vars, [line: 1], nil}, :b]}, [no_parens: true, line: 1],
                      []}}
                  ]}}
              ]
@@ -804,9 +804,9 @@ defmodule Hologram.Template.DOMTest do
                 {:{}, [line: 1],
                  [
                    {1,
-                    {{{:., [line: 1], [{:data, [line: 1], nil}, :a]}, [no_parens: true, line: 1],
+                    {{{:., [line: 1], [{:vars, [line: 1], nil}, :a]}, [no_parens: true, line: 1],
                       []},
-                     {{:., [line: 1], [{:data, [line: 1], nil}, :b]}, [no_parens: true, line: 1],
+                     {{:., [line: 1], [{:vars, [line: 1], nil}, :b]}, [no_parens: true, line: 1],
                       []}}}
                  ]}}
              ]
@@ -822,10 +822,10 @@ defmodule Hologram.Template.DOMTest do
                    {:{}, [line: 1],
                     [
                       1,
-                      {{:., [line: 1], [{:data, [line: 1], nil}, :a]}, [no_parens: true, line: 1],
+                      {{:., [line: 1], [{:vars, [line: 1], nil}, :a]}, [no_parens: true, line: 1],
                        []},
                       2,
-                      {{:., [line: 1], [{:data, [line: 1], nil}, :b]}, [no_parens: true, line: 1],
+                      {{:., [line: 1], [{:vars, [line: 1], nil}, :b]}, [no_parens: true, line: 1],
                        []}
                     ]}
                  ]}}
@@ -842,15 +842,15 @@ defmodule Hologram.Template.DOMTest do
                    {:{}, [line: 1],
                     [
                       1,
-                      {{:., [line: 1], [{:data, [line: 1], nil}, :a]}, [no_parens: true, line: 1],
+                      {{:., [line: 1], [{:vars, [line: 1], nil}, :a]}, [no_parens: true, line: 1],
                        []},
                       {:{}, [line: 1],
                        [
                          2,
-                         {{:., [line: 1], [{:data, [line: 1], nil}, :b]},
+                         {{:., [line: 1], [{:vars, [line: 1], nil}, :b]},
                           [no_parens: true, line: 1], []},
                          3,
-                         {{:., [line: 1], [{:data, [line: 1], nil}, :c]},
+                         {{:., [line: 1], [{:vars, [line: 1], nil}, :c]},
                           [no_parens: true, line: 1], []}
                        ]},
                       4
@@ -881,7 +881,7 @@ defmodule Hologram.Template.DOMTest do
                                  {:|, [line: 1],
                                   [
                                     {:x, [line: 1], nil},
-                                    {{:., [line: 1], [{:data, [line: 1], nil}, :acc]},
+                                    {{:., [line: 1], [{:vars, [line: 1], nil}, :acc]},
                                      [no_parens: true, line: 1], []}
                                   ]}
                                ]
@@ -890,7 +890,7 @@ defmodule Hologram.Template.DOMTest do
                        ]}
                     ]}, [line: 1],
                    [
-                     {{:., [line: 1], [{:data, [line: 1], nil}, :value]},
+                     {{:., [line: 1], [{:vars, [line: 1], nil}, :value]},
                       [no_parens: true, line: 1], []}
                    ]}
                 ]}
