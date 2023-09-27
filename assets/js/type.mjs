@@ -19,7 +19,7 @@ export default class Type {
   }
 
   static atom(value) {
-    return {type: "ATOM", value: value};
+    return {type: "atom", value: value};
   }
 
   static bitstring(data) {
