@@ -11,7 +11,7 @@ defmodule Hologram.Template.Parser do
 
   alias Hologram.Template.Helpers
   alias Hologram.Template.Parser
-  alias Hologram.Template.SyntaxError
+  alias Hologram.TemplateSyntaxError
   alias Hologram.Template.Tokenizer
 
   @default_error_details """
@@ -864,7 +864,7 @@ defmodule Hologram.Template.Parser do
     context = #{inspect(context)}
     """
 
-    raise SyntaxError, message: message
+    raise TemplateSyntaxError, message: message
   end
 
   defp reset_attribute_value(context) do

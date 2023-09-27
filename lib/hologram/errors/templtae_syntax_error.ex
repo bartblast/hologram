@@ -1,4 +1,4 @@
-defmodule Hologram.Template.SyntaxError do
+defmodule Hologram.TemplateSyntaxError do
   @moduledoc """
   Raised when the template markup is invalid.
   """

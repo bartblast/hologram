@@ -1,7 +1,7 @@
 defmodule Hologram.Template.ParserTest do
   use Hologram.Test.BasicCase, async: true
   import Hologram.Template.Parser
-  alias Hologram.Template.SyntaxError
+  alias Hologram.TemplateSyntaxError
 
   # Except: { } " ' ` \ < >
   @special_chars [
@@ -36,7 +36,7 @@ defmodule Hologram.Template.ParserTest do
   ]
 
   defp test_syntax_error_msg(markup, msg) do
-    assert_raise SyntaxError, ~r/#{Regex.escape(msg)}/s, fn ->
+    assert_raise TemplateSyntaxError, ~r/#{Regex.escape(msg)}/s, fn ->
       parse_markup(markup)
     end
   end
@@ -1235,7 +1235,7 @@ defmodule Hologram.Template.ParserTest do
     test "escape non-printable characters" do
       expected_msg = ~r/\na\\nb\\rc\\td < x\\ny\\rz\\tv\n {11}\^/s
 
-      assert_raise SyntaxError, expected_msg, fn ->
+      assert_raise TemplateSyntaxError, expected_msg, fn ->
         parse_markup("a\nb\rc\td < x\ny\rz\tv")
       end
     end
@@ -1243,7 +1243,7 @@ defmodule Hologram.Template.ParserTest do
     test "strip excess characters" do
       expected_msg = ~r/\n2345678901234567890 < 1234567890123456789\n {20}\^/s
 
-      assert_raise SyntaxError, expected_msg, fn ->
+      assert_raise TemplateSyntaxError, expected_msg, fn ->
         parse_markup("123456789012345678901234567890 < 123456789012345678901234567890")
       end
     end

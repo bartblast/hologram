@@ -133,7 +133,7 @@ defmodule Hologram.Template.RendererTest do
     test "with missing 'id' property" do
       node = {:component, Module13, [], []}
 
-      assert_raise Hologram.Template.SyntaxError,
+      assert_raise Hologram.TemplateSyntaxError,
                    "Stateful component Elixir.Hologram.Test.Fixtures.Template.Renderer.Module13 is missing the 'id' property.",
                    fn ->
                      render_dom(node, %{}, [])

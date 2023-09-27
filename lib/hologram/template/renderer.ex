@@ -280,7 +280,7 @@ defmodule Hologram.Template.Renderer do
     {client, server} = init_component(module, props)
 
     if client != %Component.Client{} || server != %Component.Server{} do
-      raise Hologram.Template.SyntaxError,
+      raise Hologram.TemplateSyntaxError,
         message: "Stateful component #{module} is missing the 'id' property."
     end
 
