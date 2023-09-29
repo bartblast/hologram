@@ -15,7 +15,7 @@ defmodule Hologram.Commons.PLT do
   @doc """
   Deletes a key-value pair from the give persistent lookup table.
   """
-  @spec delete(PLT.t(), atom) :: PLT.t()
+  @spec delete(PLT.t(), any) :: PLT.t()
   def delete(plt, key) do
     :ets.delete(plt.table_ref, key)
     plt
@@ -41,7 +41,7 @@ defmodule Hologram.Commons.PLT do
   Returns the value stored in the underlying ETS table under the given key.
   If the key doesn't exist the :error :atom is returned.
   """
-  @spec get(PLT.t(), atom) :: {:ok, term} | :error
+  @spec get(PLT.t(), any) :: {:ok, term} | :error
   def get(%{table_ref: table_ref, table_name: table_name}, key) do
     case :ets.lookup(table_ref || table_name, key) do
       [{^key, value}] ->
@@ -56,7 +56,7 @@ defmodule Hologram.Commons.PLT do
   Returns the value stored in the underlying ETS table under the given key.
   If the key doesn't exist a KeyError is raised.
   """
-  @spec get!(PLT.t(), atom) :: term
+  @spec get!(PLT.t(), any) :: term
   def get!(plt, key) do
     case get(plt, key) do
       {:ok, value} -> value
@@ -67,7 +67,7 @@ defmodule Hologram.Commons.PLT do
   @doc """
   Returns all items stored in the underlying ETS table.
   """
-  @spec get_all(PLT.t()) :: %{atom => term}
+  @spec get_all(PLT.t()) :: map
   def get_all(%{table_ref: table_ref}) do
     table_ref
     |> :ets.tab2list()
@@ -132,7 +132,7 @@ defmodule Hologram.Commons.PLT do
   @doc """
   Puts multiple items into the underlying ETS table.
   """
-  @spec put(PLT.t(), keyword) :: PLT.t()
+  @spec put(PLT.t(), list(tuple)) :: PLT.t()
   def put(%{table_ref: table_ref} = plt, items) do
     :ets.insert(table_ref, items)
     plt
@@ -141,7 +141,7 @@ defmodule Hologram.Commons.PLT do
   @doc """
   Puts the given item into the underlying ETS table.
   """
-  @spec put(PLT.t() | :ets.tid(), atom, term) :: PLT.t() | true
+  @spec put(PLT.t() | :ets.tid(), any, any) :: PLT.t() | true
   def put(plt_or_table_ref, key, value)
 
   def put(%PLT{table_ref: table_ref} = plt, key, value) do
