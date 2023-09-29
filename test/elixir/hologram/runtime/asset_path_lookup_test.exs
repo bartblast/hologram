@@ -5,9 +5,10 @@ defmodule Hologram.Runtime.AssetPathLookupTest do
   alias Hologram.Commons.PLT
   alias Hologram.Commons.Reflection
 
+  @process_name random_atom()
   @static_path "#{Reflection.tmp_path()}/#{__MODULE__}"
   @store_key random_atom()
-  @opts [static_path: @static_path, store_key: @store_key]
+  @opts [process_name: @process_name, static_path: @static_path, store_key: @store_key]
 
   setup do
     dir_2_path = @static_path <> "/test_dir_1/test_dir_2"
@@ -89,6 +90,7 @@ defmodule Hologram.Runtime.AssetPathLookupTest do
   test "start_link/1" do
     assert {:ok, pid} = start_link(@opts)
     assert is_pid(pid)
+    assert process_name_registered?(@process_name)
     assert ets_table_exists?(@store_key)
   end
 end

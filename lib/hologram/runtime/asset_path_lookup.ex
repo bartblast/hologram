@@ -9,7 +9,7 @@ defmodule Hologram.Runtime.AssetPathLookup do
   """
   @spec start_link(keyword) :: GenServer.on_start()
   def start_link(opts) do
-    GenServer.start_link(__MODULE__, opts)
+    GenServer.start_link(__MODULE__, opts, name: opts[:process_name])
   end
 
   @impl GenServer

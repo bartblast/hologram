@@ -14,7 +14,8 @@ defmodule Hologram.Runtime.Application do
     static_path = Reflection.release_static_path()
 
     children = [
-      {AssetPathLookup, static_path: static_path, store_key: AssetPathLookup},
+      {AssetPathLookup,
+       process_name: AssetPathLookup, static_path: static_path, store_key: AssetPathLookup},
       {PageDigestLookup, store_key: PageDigestLookup, dump_path: page_digest_dump_file},
       {PageResolver, store_key: PageResolver}
     ]
