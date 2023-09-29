@@ -18,7 +18,7 @@ defmodule Hologram.Runtime.AssetManifestCache do
   end
 
   defp build_manifest(asset_path_lookup_process_name) do
-    items_js =
+    entries_js =
       asset_path_lookup_process_name
       |> GenServer.call(:get_mapping)
       |> Enum.sort()
@@ -29,7 +29,7 @@ defmodule Hologram.Runtime.AssetManifestCache do
 
     """
     window.__hologramAssetManifest__ = {
-    #{items_js}
+    #{entries_js}
     };\
     """
   end
