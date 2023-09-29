@@ -3,6 +3,7 @@ defmodule Hologram.Runtime.Application do
 
   alias Hologram.Commons.Reflection
   alias Hologram.Router.PageResolver
+  alias Hologram.Runtime.AssetManifestCache
   alias Hologram.Runtime.AssetPathLookup
   alias Hologram.Runtime.PageDigestLookup
 
@@ -16,6 +17,8 @@ defmodule Hologram.Runtime.Application do
     children = [
       {AssetPathLookup,
        process_name: AssetPathLookup, static_path: static_path, store_key: AssetPathLookup},
+      {AssetManifestCache,
+       asset_path_lookup_process_name: AssetPathLookup, store_key: AssetManifestCache},
       {PageDigestLookup, store_key: PageDigestLookup, dump_path: page_digest_dump_file},
       {PageResolver, store_key: PageResolver}
     ]
