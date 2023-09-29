@@ -269,6 +269,10 @@ defmodule Hologram.Commons.ReflectionTest do
     assert root_priv_path() == File.cwd!() <> "/priv/hologram"
   end
 
+  test "source_path/1" do
+    assert source_path(__MODULE__) == __ENV__.file
+  end
+
   test "tmp_path/0" do
     assert tmp_path() == File.cwd!() <> "/tmp"
   end

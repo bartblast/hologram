@@ -404,6 +404,14 @@ defmodule Hologram.Commons.Reflection do
   end
 
   @doc """
+  Returns the file path of the given module's source code.
+  """
+  @spec source_path(module()) :: String.t()
+  def source_path(module) do
+    to_string(module.module_info()[:compile][:source])
+  end
+
+  @doc """
   Returns the absolute path of the tmp directory.
 
   ## Examples

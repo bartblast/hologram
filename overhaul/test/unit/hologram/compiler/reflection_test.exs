@@ -266,13 +266,6 @@ defmodule Hologram.Compiler.ReflectionTest do
     assert result == expected
   end
 
-  test "source_path/1" do
-    result = Reflection.source_path(Hologram.Compiler.ReflectionTest)
-    expected = __ENV__.file
-
-    assert result == expected
-  end
-
   describe "standard_lib?/1" do
     test "standard lib module" do
       assert Reflection.standard_lib?(Map)
