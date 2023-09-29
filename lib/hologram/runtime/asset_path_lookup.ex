@@ -27,6 +27,16 @@ defmodule Hologram.Runtime.AssetPathLookup do
   end
 
   @doc """
+  Returns the asset path mapping.
+  """
+  @impl GenServer
+  @spec handle_call(:get_mapping, GenServer.from(), PLT.t()) ::
+          {:reply, %{Strint.t() => String.t()}, PLT.t()}
+  def handle_call(:get_mapping, _from, plt) do
+    {:reply, PLT.get_all(plt), plt}
+  end
+
+  @doc """
   Returns the asset path (that includes the digest) of the given static file located in static dir.
   """
   @spec lookup(atom, String.t()) :: String.t()

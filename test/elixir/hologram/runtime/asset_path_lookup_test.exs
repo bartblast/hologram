@@ -10,6 +10,21 @@ defmodule Hologram.Runtime.AssetPathLookupTest do
   @store_key random_atom()
   @opts [process_name: @process_name, static_path: @static_path, store_key: @store_key]
 
+  @mapping %{
+    "/test_dir_1/test_dir_2/test_file_1.css" =>
+      "/test_dir_1/test_dir_2/test_file_1-11111111111111111111111111111111.css",
+    "/test_dir_1/test_dir_2/test_file_2.css" =>
+      "/test_dir_1/test_dir_2/test_file_2-22222222222222222222222222222222.css",
+    "/test_dir_1/test_dir_2/page.js" =>
+      "/test_dir_1/test_dir_2/page-33333333333333333333333333333333.js",
+    "/test_dir_3/test_file_4.css" =>
+      "/test_dir_3/test_file_4-44444444444444444444444444444444.css",
+    "/test_dir_3/test_file_5.css" =>
+      "/test_dir_3/test_file_5-55555555555555555555555555555555.css",
+    "/test_dir_3/page.js" => "/test_dir_3/page-66666666666666666666666666666666.js",
+    "/hologram/test_file_9.css" => "/hologram/test_file_9-99999999999999999999999999999999.css"
+  }
+
   setup do
     dir_2_path = @static_path <> "/test_dir_1/test_dir_2"
     file_1_path = dir_2_path <> "/test_file_1-11111111111111111111111111111111.css"
@@ -47,26 +62,18 @@ defmodule Hologram.Runtime.AssetPathLookupTest do
     :ok
   end
 
+  describe "handle_call/3" do
+    test "get_mapping" do
+      start_link(@opts)
+
+      assert GenServer.call(@process_name, :get_mapping) == @mapping
+    end
+  end
+
   test "init/1" do
     assert {:ok, %PLT{table_name: @store_key} = plt} = init(@opts)
-
     assert ets_table_exists?(@store_key)
-
-    assert PLT.get_all(plt) == %{
-             "/test_dir_1/test_dir_2/test_file_1.css" =>
-               "/test_dir_1/test_dir_2/test_file_1-11111111111111111111111111111111.css",
-             "/test_dir_1/test_dir_2/test_file_2.css" =>
-               "/test_dir_1/test_dir_2/test_file_2-22222222222222222222222222222222.css",
-             "/test_dir_1/test_dir_2/page.js" =>
-               "/test_dir_1/test_dir_2/page-33333333333333333333333333333333.js",
-             "/test_dir_3/test_file_4.css" =>
-               "/test_dir_3/test_file_4-44444444444444444444444444444444.css",
-             "/test_dir_3/test_file_5.css" =>
-               "/test_dir_3/test_file_5-55555555555555555555555555555555.css",
-             "/test_dir_3/page.js" => "/test_dir_3/page-66666666666666666666666666666666.js",
-             "/hologram/test_file_9.css" =>
-               "/hologram/test_file_9-99999999999999999999999999999999.css"
-           }
+    assert PLT.get_all(plt) == @mapping
   end
 
   describe "lookup/2" do
