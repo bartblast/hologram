@@ -427,10 +427,6 @@ defmodule Hologram.Compiler.HelpersTest do
   #   assert result == expected
   # end
 
-  test "module_name/1" do
-    assert Helpers.module_name(Abc.Bcd) == "Abc.Bcd"
-  end
-
   test "term_to_ir/1" do
     result =
       %{a: 1, b: 2}

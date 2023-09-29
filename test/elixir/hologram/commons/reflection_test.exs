@@ -227,6 +227,10 @@ defmodule Hologram.Commons.ReflectionTest do
     end
   end
 
+  test "module_name/1" do
+    assert module_name(Aaa.Bbb) == "Aaa.Bbb"
+  end
+
   test "otp_app/0" do
     assert otp_app() == :hologram
   end

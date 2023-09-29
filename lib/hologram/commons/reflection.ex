@@ -312,6 +312,21 @@ defmodule Hologram.Commons.Reflection do
   end
 
   @doc """
+  Returns the module name without "Elixir" prefix at the beginning.
+
+  ## Examples
+
+      iex> module_name(Aaa.Bbb)
+      "Aaa.Bbb"
+  """
+  @spec module_name(module()) :: String.t()
+  def module_name(module) do
+    module
+    |> Module.split()
+    |> Enum.join(".")
+  end
+
+  @doc """
   Returns the project OTP application name.
   """
   @spec otp_app() :: atom
