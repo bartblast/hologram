@@ -11,8 +11,8 @@ defmodule Hologram.Template.Parser do
 
   alias Hologram.Template.Helpers
   alias Hologram.Template.Parser
-  alias Hologram.TemplateSyntaxError
   alias Hologram.Template.Tokenizer
+  alias Hologram.TemplateSyntaxError
 
   @default_error_details """
   Reason:

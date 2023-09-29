@@ -15,22 +15,27 @@ defmodule Mix.Tasks.Holo.Routes do
     :ok
   end
 
+  defp print(output) do
+    # credo:disable-for-next-line Credo.Check.Refactor.IoPuts
+    IO.puts(output)
+  end
+
   defp print_divider do
     "-"
     |> String.duplicate(80)
-    |> IO.puts()
+    |> print()
   end
 
   defp print_header do
     print_divider()
-    IO.puts("ROUTE / MODULE / SOURCE FILE")
+    print("ROUTE / MODULE / SOURCE FILE")
     print_divider()
   end
 
   defp print_route({route, module}) do
-    IO.puts(route)
-    IO.puts(Reflection.module_name(module))
-    IO.puts(Reflection.source_path(module))
+    print(route)
+    print(Reflection.module_name(module))
+    print(Reflection.source_path(module))
     print_divider()
   end
 

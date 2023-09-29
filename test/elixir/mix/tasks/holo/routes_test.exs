@@ -1,6 +1,7 @@
 defmodule Mix.Tasks.Holo.RoutesTest do
   use Hologram.Test.BasicCase, async: true
   import ExUnit.CaptureIO
+  alias Mix.Tasks.Holo.Routes, as: Task
 
   test "run/1" do
     expected_header_output = """
@@ -17,10 +18,7 @@ defmodule Mix.Tasks.Holo.RoutesTest do
     --------------------------------------------------------------------------------\
     """
 
-    output =
-      capture_io(fn ->
-        Mix.Tasks.Holo.Routes.run([])
-      end)
+    output = capture_io(fn -> Task.run([]) end)
 
     assert String.contains?(output, expected_header_output)
     assert String.contains?(output, expected_route_output)
