@@ -68,6 +68,24 @@ defmodule Hologram.Runtime.AssetPathLookupTest do
            }
   end
 
+  describe "lookup/2" do
+    setup do
+      start_link(@opts)
+      :ok
+    end
+
+    test "asset exists" do
+      assert lookup(@store_key, "/test_dir_1/test_dir_2/test_file_1.css") ==
+               "/test_dir_1/test_dir_2/test_file_1-11111111111111111111111111111111.css"
+    end
+
+    test "asset doesn't exist" do
+      assert_raise KeyError, ~s(key "/invalid_file.css" not found in the PLT), fn ->
+        lookup(@store_key, "/invalid_file.css")
+      end
+    end
+  end
+
   test "start_link/1" do
     assert {:ok, pid} = start_link(@opts)
     assert is_pid(pid)
