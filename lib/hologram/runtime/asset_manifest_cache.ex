@@ -22,10 +22,9 @@ defmodule Hologram.Runtime.AssetManifestCache do
       asset_path_lookup_process_name
       |> GenServer.call(:get_mapping)
       |> Enum.sort()
-      |> Enum.map(fn {static_path, asset_path} ->
+      |> Enum.map_join(",\n", fn {static_path, asset_path} ->
         ~s("#{static_path}": "#{asset_path}")
       end)
-      |> Enum.join(",\n")
 
     """
     window.__hologramAssetManifest__ = {
