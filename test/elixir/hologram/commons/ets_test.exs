@@ -15,4 +15,14 @@ defmodule Hologram.Commons.ETSTest do
     assert ets_info[:named_table]
     assert ets_info[:protection] == :public
   end
+
+  describe "put/3" do
+    test "put to named table" do
+      table_name = random_atom()
+      create_named_table(table_name)
+
+      assert put(table_name, :my_key, :my_value) == true
+      assert :ets.lookup(table_name, :my_key) == [{:my_key, :my_value}]
+    end
+  end
 end

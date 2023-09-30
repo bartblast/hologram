@@ -7,4 +7,12 @@ defmodule Hologram.Commons.ETS do
     :ets.new(table_name, [:named_table, :public])
     :ets.whereis(table_name)
   end
+
+  @doc """
+  Puts an item into the ETS table.
+  """
+  @spec put(:ets.tid(), any, any) :: true
+  def put(table_name_or_ref, key, value) do
+    :ets.insert(table_name_or_ref, {key, value})
+  end
 end
