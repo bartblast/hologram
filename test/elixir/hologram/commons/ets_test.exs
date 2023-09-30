@@ -27,6 +27,36 @@ defmodule Hologram.Commons.ETSTest do
     assert ets_info[:protection] == :public
   end
 
+  describe "get/2" do
+    test "key exists, get from named table" do
+      table_name = random_atom()
+      create_named_table(table_name)
+      put(table_name, :my_key, :my_value)
+
+      assert get(table_name, :my_key) == {:ok, :my_value}
+    end
+
+    test "key exists, get from unnamed table" do
+      table_ref = create_unnamed_table()
+      put(table_ref, :my_key, :my_value)
+
+      assert get(table_ref, :my_key) == {:ok, :my_value}
+    end
+
+    test "key doesn't exist, get from named table" do
+      table_name = random_atom()
+      create_named_table(table_name)
+
+      assert get(table_name, :my_non_existing_key) == :error
+    end
+
+    test "key doesn't exist, get from unnamed table" do
+      table_ref = create_unnamed_table()
+
+      assert get(table_ref, :my_non_existing_key) == :error
+    end
+  end
+
   describe "put/3" do
     test "put to named table" do
       table_name = random_atom()
