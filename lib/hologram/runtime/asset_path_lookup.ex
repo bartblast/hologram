@@ -39,7 +39,7 @@ defmodule Hologram.Runtime.AssetPathLookup do
   @doc """
   Returns the asset path (that includes the digest) of the given static file located in static dir.
   """
-  @spec lookup(atom, String.t()) :: String.t()
+  @spec lookup(atom, String.t()) :: {:ok, String.t()} | :error
   def lookup(store_key, static_path) do
     PLT.get(%PLT{table_name: store_key}, static_path)
   end
