@@ -18,15 +18,4 @@ defmodule Hologram.Router do
     |> Plug.Conn.send_resp(200, body)
     |> Plug.Conn.halt()
   end
-
-  # DEFER: test
-  def static_path(file_path) do
-    case StaticDigestStore.get(file_path) do
-      {:ok, file_path} ->
-        file_path
-
-      :error ->
-        file_path
-    end
-  end
 end
