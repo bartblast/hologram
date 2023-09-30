@@ -1,7 +1,7 @@
 defmodule Hologram.Test.Fixtures.Template.Renderer.Module28 do
   use Hologram.Page
 
-  route "/module_28"
+  route "/hologram-test-fixtures-template-renderer-module28"
 
   layout Hologram.Test.Fixtures.Template.Renderer.Module22
 

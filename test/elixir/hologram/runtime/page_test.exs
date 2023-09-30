@@ -27,7 +27,7 @@ defmodule Hologram.Runtime.PageTest do
   end
 
   test "__route__/0" do
-    assert Module1.__route__() == "/module_1"
+    assert Module1.__route__() == "/hologram-test-fixtures-runtime-page-module1"
   end
 
   describe "init/3" do

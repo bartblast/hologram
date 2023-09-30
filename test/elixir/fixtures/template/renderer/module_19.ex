@@ -1,7 +1,7 @@
 defmodule Hologram.Test.Fixtures.Template.Renderer.Module19 do
   use Hologram.Page
 
-  route "/module_19"
+  route "/hologram-test-fixtures-template-renderer-module19"
 
   param :param_1
   param :param_3

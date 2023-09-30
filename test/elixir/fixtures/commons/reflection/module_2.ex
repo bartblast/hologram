@@ -1,7 +1,7 @@
 defmodule Hologram.Test.Fixtures.Commons.Reflection.Module2 do
   use Hologram.Page
 
-  route "/module_2"
+  route "/hologram-test-fixtures-commons-reflection-module2"
 
   layout Hologram.Test.Fixtures.Commons.Reflection.Module4
 

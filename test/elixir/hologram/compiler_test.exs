@@ -154,7 +154,7 @@ defmodule Hologram.CompilerTest do
                }}]);
 
                Interpreter.defineElixirFunction("Elixir_Hologram_Test_Fixtures_Compiler_Module9", "__route__", 0, [{params: [], guards: [], body: (vars) => {
-               return Type.bitstring("/module_9");
+               return Type.bitstring("/hologram-test-fixtures-compiler-module9");
                }}]);
 
                Interpreter.defineElixirFunction("Elixir_Hologram_Test_Fixtures_Compiler_Module9", "action", 3, [{params: [Type.atom("action_9a"), Type.variablePattern("params"), Type.variablePattern("client")], guards: [], body: (vars) => {
@@ -221,7 +221,7 @@ defmodule Hologram.CompilerTest do
                }}]);
 
                Interpreter.defineElixirFunction("Elixir_Hologram_Test_Fixtures_Compiler_Module11", "__route__", 0, [{params: [], guards: [], body: (vars) => {
-               return Type.bitstring("/module_11");
+               return Type.bitstring("/hologram-test-fixtures-compiler-module11");
                }}]);
 
                Interpreter.defineElixirFunction("Elixir_Hologram_Test_Fixtures_Compiler_Module11", "template", 0, [{params: [], guards: [], body: (vars) => {

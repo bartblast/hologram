@@ -1,7 +1,7 @@
 defmodule Hologram.Test.Fixtures.Compiler.CallGraph.Module11 do
   use Hologram.Page
 
-  route "/module_11"
+  route "/hologram-test-fixtures-compiler-callgraph-module11"
 
   layout Hologram.Test.Fixtures.Compiler.CallGraph.Module3
 

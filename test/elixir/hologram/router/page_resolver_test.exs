@@ -15,7 +15,7 @@ defmodule Hologram.Router.PageResolverTest do
     assert %SearchTree.Node{
              value: nil,
              children: %{
-               "hologram-test-fixtures-router-page-resolver-module1" => %SearchTree.Node{
+               "hologram-test-fixtures-router-pageresolver-module1" => %SearchTree.Node{
                  value: Module1,
                  children: %{}
                }
@@ -32,7 +32,7 @@ defmodule Hologram.Router.PageResolverTest do
     end
 
     test "there is a matching route", %{store_key: store_key} do
-      request_path = "/hologram-test-fixtures-router-page-resolver-module1"
+      request_path = "/hologram-test-fixtures-router-pageresolver-module1"
       assert resolve(request_path, store_key) == Module1
     end
 

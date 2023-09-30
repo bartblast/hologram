@@ -3,7 +3,7 @@ defmodule Hologram.Test.Fixtures.Compiler.Module5 do
   use Hologram.Page
   alias Hologram.Test.Fixtures.Compiler.Module7
 
-  route "/module_5"
+  route "/hologram-test-fixtures-compiler-module5"
 
   layout Hologram.Test.Fixtures.Compiler.Module6
 

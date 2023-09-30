@@ -1,7 +1,7 @@
 defmodule Hologram.Test.Fixtures.Runtime.Page.Module1 do
   use Hologram.Page
 
-  route "/module_1"
+  route "/hologram-test-fixtures-runtime-page-module1"
 
   layout Hologram.Test.Fixtures.Runtime.Page.Module4
 

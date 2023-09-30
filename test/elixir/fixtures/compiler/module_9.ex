@@ -2,7 +2,7 @@
 defmodule Hologram.Test.Fixtures.Compiler.Module9 do
   use Hologram.Page
 
-  route "/module_9"
+  route "/hologram-test-fixtures-compiler-module9"
 
   layout Hologram.Test.Fixtures.Compiler.Module10
 
