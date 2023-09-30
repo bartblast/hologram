@@ -12,13 +12,8 @@ defmodule Hologram.Runtime.Application do
     page_digest_dump_file =
       Path.join([Reflection.build_dir(), Reflection.page_digest_plt_dump_file_name()])
 
-    static_path = Reflection.release_static_path()
-
     children = [
-      {AssetPathRegistry,
-       ets_table_name: AssetPathRegistry,
-       process_name: AssetPathRegistry,
-       static_path: static_path},
+      AssetPathRegistry,
       {AssetManifestCache,
        asset_path_registry_process_name: AssetPathRegistry, store_key: AssetManifestCache},
       {PageDigestLookup, store_key: PageDigestLookup, dump_path: page_digest_dump_file},

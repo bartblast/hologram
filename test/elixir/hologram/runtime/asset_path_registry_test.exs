@@ -8,7 +8,7 @@ defmodule Hologram.Runtime.AssetPathRegistryTest do
   @ets_table_name random_atom()
   @process_name random_atom()
   @static_path "#{Reflection.tmp_path()}/#{__MODULE__}"
-  @opts [process_name: @process_name, static_path: @static_path, ets_table_name: @ets_table_name]
+  @opts [ets_table_name: @ets_table_name, process_name: @process_name, static_path: @static_path]
 
   setup do
     clean_dir(@static_path)

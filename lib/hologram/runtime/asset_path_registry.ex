@@ -3,6 +3,7 @@ defmodule Hologram.Runtime.AssetPathRegistry do
 
   alias Hologram.Commons.FileUtils
   alias Hologram.Commons.PLT
+  alias Hologram.Commons.Reflection
 
   @doc """
   Starts AssetDigestLookup process.
@@ -14,6 +15,12 @@ defmodule Hologram.Runtime.AssetPathRegistry do
 
   @impl GenServer
   def init(opts) do
+    opts =
+      opts
+      |> Keyword.put_new(:ets_table_name, __MODULE__)
+      |> Keyword.put_new(:process_name, __MODULE__)
+      |> Keyword.put_new(:static_path, Reflection.release_static_path())
+
     plt =
       opts
       |> Keyword.put(:table_name, opts[:ets_table_name])
