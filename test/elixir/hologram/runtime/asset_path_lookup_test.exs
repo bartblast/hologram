@@ -37,13 +37,11 @@ defmodule Hologram.Runtime.AssetPathLookupTest do
 
     test "asset exists" do
       assert lookup(@store_key, "/test_dir_1/test_dir_2/test_file_1.css") ==
-               "/test_dir_1/test_dir_2/test_file_1-11111111111111111111111111111111.css"
+               {:ok, "/test_dir_1/test_dir_2/test_file_1-11111111111111111111111111111111.css"}
     end
 
     test "asset doesn't exist" do
-      assert_raise KeyError, ~s(key "/invalid_file.css" not found in the PLT), fn ->
-        lookup(@store_key, "/invalid_file.css")
-      end
+      assert lookup(@store_key, "/invalid_file.css") == :error
     end
   end
 

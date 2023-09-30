@@ -41,7 +41,7 @@ defmodule Hologram.Runtime.AssetPathLookup do
   """
   @spec lookup(atom, String.t()) :: String.t()
   def lookup(store_key, static_path) do
-    PLT.get!(%PLT{table_name: store_key}, static_path)
+    PLT.get(%PLT{table_name: store_key}, static_path)
   end
 
   defp find_assets(static_path) do
