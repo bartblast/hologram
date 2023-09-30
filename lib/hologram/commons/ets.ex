@@ -9,6 +9,14 @@ defmodule Hologram.Commons.ETS do
   end
 
   @doc """
+  Creates an unnamed, public ETS table.
+  """
+  @spec create_unnamed_table() :: :ets.tid()
+  def create_unnamed_table do
+    :ets.new(__MODULE__, [:public])
+  end
+
+  @doc """
   Puts an item into the ETS table.
   """
   @spec put(:ets.tid(), any, any) :: true

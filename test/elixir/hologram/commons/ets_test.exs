@@ -16,6 +16,17 @@ defmodule Hologram.Commons.ETSTest do
     assert ets_info[:protection] == :public
   end
 
+  test "create_unnamed_table/1" do
+    table_ref = create_unnamed_table()
+
+    assert is_reference(table_ref)
+    assert ets_table_exists?(table_ref)
+
+    ets_info = :ets.info(table_ref)
+    refute ets_info[:named_table]
+    assert ets_info[:protection] == :public
+  end
+
   describe "put/3" do
     test "put to named table" do
       table_name = random_atom()

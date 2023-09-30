@@ -150,10 +150,6 @@ defmodule Hologram.Commons.PLTTest do
       assert is_reference(table_ref)
 
       assert ets_table_exists?(table_ref)
-
-      ets_info = :ets.info(table_ref)
-      refute ets_info[:named_table]
-      assert ets_info[:protection] == :public
     end
 
     test "named table" do

@@ -96,8 +96,7 @@ defmodule Hologram.Commons.PLT do
   def init(table_name)
 
   def init(nil) do
-    table_ref = :ets.new(__MODULE__, [:public])
-    {:ok, table_ref}
+    {:ok, ETS.create_unnamed_table()}
   end
 
   def init(table_name) do
