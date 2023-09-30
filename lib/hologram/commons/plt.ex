@@ -7,6 +7,7 @@ defmodule Hologram.Commons.PLT do
 
   use GenServer
 
+  alias Hologram.Commons.ETS
   alias Hologram.Commons.PLT
   alias Hologram.Commons.SerializationUtils
 
@@ -100,8 +101,7 @@ defmodule Hologram.Commons.PLT do
   end
 
   def init(table_name) do
-    :ets.new(table_name, [:named_table, :public])
-    {:ok, :ets.whereis(table_name)}
+    {:ok, ETS.create_named_tabled(table_name)}
   end
 
   @doc """
