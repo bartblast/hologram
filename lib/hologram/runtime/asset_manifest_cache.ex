@@ -11,15 +11,15 @@ defmodule Hologram.Runtime.AssetManifestCache do
 
   @impl GenServer
   def init(opts) do
-    manifest = build_manifest(opts[:asset_path_lookup_process_name])
+    manifest = build_manifest(opts[:asset_path_registry_process_name])
     :persistent_term.put(opts[:store_key], manifest)
 
     {:ok, opts}
   end
 
-  defp build_manifest(asset_path_lookup_process_name) do
+  defp build_manifest(asset_path_registry_process_name) do
     entries_js =
-      asset_path_lookup_process_name
+      asset_path_registry_process_name
       |> GenServer.call(:get_mapping)
       |> Enum.sort()
       |> Enum.map_join(",\n", fn {static_path, asset_path} ->

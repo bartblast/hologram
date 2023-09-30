@@ -1,6 +1,6 @@
-defmodule Hologram.Runtime.AssetPathLookupTest do
+defmodule Hologram.Runtime.AssetPathRegistryTest do
   use Hologram.Test.BasicCase, async: true
-  import Hologram.Runtime.AssetPathLookup
+  import Hologram.Runtime.AssetPathRegistry
 
   alias Hologram.Commons.PLT
   alias Hologram.Commons.Reflection

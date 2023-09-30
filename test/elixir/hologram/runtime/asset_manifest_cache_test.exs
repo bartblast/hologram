@@ -3,19 +3,22 @@ defmodule Hologram.Runtime.AssetManifestCacheTest do
   import Hologram.Runtime.AssetManifestCache
 
   alias Hologram.Commons.Reflection
-  alias Hologram.Runtime.AssetPathLookup
+  alias Hologram.Runtime.AssetPathRegistry
 
-  @asset_path_lookup_process_name random_atom()
+  @asset_path_registry_process_name random_atom()
   @static_path "#{Reflection.tmp_path()}/#{__MODULE__}"
   @store_key random_atom()
-  @opts [asset_path_lookup_process_name: @asset_path_lookup_process_name, store_key: @store_key]
+  @opts [
+    asset_path_registry_process_name: @asset_path_registry_process_name,
+    store_key: @store_key
+  ]
 
   setup do
     clean_dir(@static_path)
     setup_asset_fixtures(@static_path)
 
-    AssetPathLookup.start_link(
-      process_name: @asset_path_lookup_process_name,
+    AssetPathRegistry.start_link(
+      process_name: @asset_path_registry_process_name,
       static_path: @static_path,
       store_key: random_atom()
     )
