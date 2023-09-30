@@ -35,5 +35,12 @@ defmodule Hologram.Commons.ETSTest do
       assert put(table_name, :my_key, :my_value) == true
       assert :ets.lookup(table_name, :my_key) == [{:my_key, :my_value}]
     end
+
+    test "put to unnamed table" do
+      table_ref = create_unnamed_table()
+
+      assert put(table_ref, :my_key, :my_value) == true
+      assert :ets.lookup(table_ref, :my_key) == [{:my_key, :my_value}]
+    end
   end
 end
