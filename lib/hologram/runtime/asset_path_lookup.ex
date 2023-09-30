@@ -37,7 +37,8 @@ defmodule Hologram.Runtime.AssetPathLookup do
   end
 
   @doc """
-  Returns the asset path (that includes the digest) of the given static file located in static dir.
+  Looks up the asset path (that includes the digest) of the given static file located in static dir.
+  If there is no matching entry for the given static file then :error atom is returned.
   """
   @spec lookup(atom, String.t()) :: {:ok, String.t()} | :error
   def lookup(store_key, static_path) do
