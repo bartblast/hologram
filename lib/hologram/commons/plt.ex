@@ -101,7 +101,7 @@ defmodule Hologram.Commons.PLT do
   end
 
   def init(table_name) do
-    {:ok, ETS.create_named_tabled(table_name)}
+    {:ok, ETS.create_named_table(table_name)}
   end
 
   @doc """

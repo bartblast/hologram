@@ -4,7 +4,7 @@ defmodule Hologram.Commons.ETSTest do
 
   test "create_named_table/1" do
     table_name = random_atom()
-    table_ref = create_named_tabled(table_name)
+    table_ref = create_named_table(table_name)
 
     assert is_reference(table_ref)
     assert ets_table_exists?(table_ref)
