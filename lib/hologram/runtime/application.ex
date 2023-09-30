@@ -16,7 +16,9 @@ defmodule Hologram.Runtime.Application do
 
     children = [
       {AssetPathRegistry,
-       process_name: AssetPathRegistry, static_path: static_path, store_key: AssetPathRegistry},
+       ets_table_name: AssetPathRegistry,
+       process_name: AssetPathRegistry,
+       static_path: static_path},
       {AssetManifestCache,
        asset_path_registry_process_name: AssetPathRegistry, store_key: AssetManifestCache},
       {PageDigestLookup, store_key: PageDigestLookup, dump_path: page_digest_dump_file},

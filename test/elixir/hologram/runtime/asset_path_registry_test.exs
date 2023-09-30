@@ -5,10 +5,10 @@ defmodule Hologram.Runtime.AssetPathRegistryTest do
   alias Hologram.Commons.PLT
   alias Hologram.Commons.Reflection
 
+  @ets_table_name random_atom()
   @process_name random_atom()
   @static_path "#{Reflection.tmp_path()}/#{__MODULE__}"
-  @store_key random_atom()
-  @opts [process_name: @process_name, static_path: @static_path, store_key: @store_key]
+  @opts [process_name: @process_name, static_path: @static_path, ets_table_name: @ets_table_name]
 
   setup do
     clean_dir(@static_path)
@@ -24,8 +24,8 @@ defmodule Hologram.Runtime.AssetPathRegistryTest do
   end
 
   test "init/1", %{mapping: mapping} do
-    assert {:ok, %PLT{table_name: @store_key} = plt} = init(@opts)
-    assert ets_table_exists?(@store_key)
+    assert {:ok, %PLT{table_name: @ets_table_name} = plt} = init(@opts)
+    assert ets_table_exists?(@ets_table_name)
     assert PLT.get_all(plt) == mapping
   end
 
@@ -36,12 +36,12 @@ defmodule Hologram.Runtime.AssetPathRegistryTest do
     end
 
     test "asset exists" do
-      assert lookup(@store_key, "/test_dir_1/test_dir_2/test_file_1.css") ==
+      assert lookup(@ets_table_name, "/test_dir_1/test_dir_2/test_file_1.css") ==
                {:ok, "/test_dir_1/test_dir_2/test_file_1-11111111111111111111111111111111.css"}
     end
 
     test "asset doesn't exist" do
-      assert lookup(@store_key, "/invalid_file.css") == :error
+      assert lookup(@ets_table_name, "/invalid_file.css") == :error
     end
   end
 
@@ -49,6 +49,6 @@ defmodule Hologram.Runtime.AssetPathRegistryTest do
     assert {:ok, pid} = start_link(@opts)
     assert is_pid(pid)
     assert process_name_registered?(@process_name)
-    assert ets_table_exists?(@store_key)
+    assert ets_table_exists?(@ets_table_name)
   end
 end

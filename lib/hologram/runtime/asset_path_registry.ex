@@ -16,7 +16,7 @@ defmodule Hologram.Runtime.AssetPathRegistry do
   def init(opts) do
     plt =
       opts
-      |> Keyword.put(:table_name, opts[:store_key])
+      |> Keyword.put(:table_name, opts[:ets_table_name])
       |> PLT.start()
 
     opts[:static_path]
@@ -41,8 +41,8 @@ defmodule Hologram.Runtime.AssetPathRegistry do
   If there is no matching entry for the given static file then :error atom is returned.
   """
   @spec lookup(atom, String.t()) :: {:ok, String.t()} | :error
-  def lookup(store_key, static_path) do
-    PLT.get(%PLT{table_name: store_key}, static_path)
+  def lookup(ets_table_name, static_path) do
+    PLT.get(%PLT{table_name: ets_table_name}, static_path)
   end
 
   defp find_assets(static_path) do
