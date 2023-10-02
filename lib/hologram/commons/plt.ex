@@ -144,7 +144,7 @@ defmodule Hologram.Commons.PLT do
   end
 
   def put(table_ref, key, value) do
-    :ets.insert(table_ref, {key, value})
+    ETS.put(table_ref, key, value)
   end
 
   @doc """
