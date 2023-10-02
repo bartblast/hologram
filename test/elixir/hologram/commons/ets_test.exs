@@ -2,6 +2,14 @@ defmodule Hologram.Commons.ETSTest do
   use Hologram.Test.BasicCase, async: true
   import Hologram.Commons.ETS
 
+  setup do
+    table_ref = create_unnamed_table()
+    :ets.insert(table_ref, {:my_key_1, :my_value_1})
+    :ets.insert(table_ref, {:my_key_2, :my_value_2})
+
+    [table_ref: table_ref]
+  end
+
   test "create_named_table/1" do
     table_name = random_atom()
     table_ref = create_named_table(table_name)
@@ -25,6 +33,17 @@ defmodule Hologram.Commons.ETSTest do
     ets_info = :ets.info(table_ref)
     refute ets_info[:named_table]
     assert ets_info[:protection] == :public
+  end
+
+  describe "delete/2" do
+    test "key exists", %{table_ref: table_ref} do
+      assert delete(table_ref, :my_key_2) == true
+      assert :ets.lookup(table_ref, :my_key_2) == []
+    end
+
+    test "key doesn't exist", %{table_ref: table_ref} do
+      assert delete(table_ref, :my_key_3) == true
+    end
   end
 
   describe "get/2" do
@@ -58,10 +77,6 @@ defmodule Hologram.Commons.ETSTest do
   end
 
   describe "get!/2" do
-    setup do
-      [table_ref: create_unnamed_table()]
-    end
-
     test "key exists", %{table_ref: table_ref} do
       :ets.insert(table_ref, {:my_key, :my_value})
       assert get!(table_ref, :my_key) == :my_value
@@ -69,7 +84,7 @@ defmodule Hologram.Commons.ETSTest do
 
     test "key doesn't exist", %{table_ref: table_ref} do
       assert_raise KeyError, "key :my_key not found in the ETS table", fn ->
-        get!(plt, :my_key)
+        get!(table_ref, :my_key)
       end
     end
   end

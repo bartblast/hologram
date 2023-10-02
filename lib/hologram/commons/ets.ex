@@ -17,6 +17,14 @@ defmodule Hologram.Commons.ETS do
   end
 
   @doc """
+  Deletes a key-value pair from the ETS table.
+  """
+  @spec delete(:ets.tid(), any) :: true
+  def delete(table_name_or_ref, key) do
+    :ets.delete(table_name_or_ref, key)
+  end
+
+  @doc """
   Returns the value stored in the ETS table under the given key.
   If the key doesn't exist the :error :atom is returned.
   """
