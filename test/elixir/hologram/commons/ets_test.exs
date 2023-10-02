@@ -57,6 +57,23 @@ defmodule Hologram.Commons.ETSTest do
     end
   end
 
+  describe "get!/2" do
+    setup do
+      [table_ref: create_unnamed_table()]
+    end
+
+    test "key exists", %{table_ref: table_ref} do
+      :ets.insert(table_ref, {:my_key, :my_value})
+      assert get!(table_ref, :my_key) == :my_value
+    end
+
+    test "key doesn't exist", %{table_ref: table_ref} do
+      assert_raise KeyError, "key :my_key not found in the ETS table", fn ->
+        get!(plt, :my_key)
+      end
+    end
+  end
+
   describe "put/3" do
     test "put to named table" do
       table_name = random_atom()

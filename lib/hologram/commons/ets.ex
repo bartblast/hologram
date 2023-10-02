@@ -32,6 +32,18 @@ defmodule Hologram.Commons.ETS do
   end
 
   @doc """
+  Returns the value stored in the ETS table under the given key.
+  If the key doesn't exist a KeyError is raised.
+  """
+  @spec get!(:ets.tid(), any) :: term
+  def get!(table_name_or_ref, key) do
+    case get(table_name_or_ref, key) do
+      {:ok, value} -> value
+      _fallback -> raise KeyError, message: "key #{inspect(key)} not found in the ETS table"
+    end
+  end
+
+  @doc """
   Puts an item into the ETS table.
   """
   @spec put(:ets.tid(), any, any) :: true
