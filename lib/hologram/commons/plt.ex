@@ -15,11 +15,11 @@ defmodule Hologram.Commons.PLT do
   @type t :: %PLT{pid: pid | nil, table_ref: :ets.tid() | nil, table_name: atom | nil}
 
   @doc """
-  Deletes a key-value pair from the give persistent lookup table.
+  Deletes a key-value pair from the underlying ETS table.
   """
   @spec delete(PLT.t(), any) :: PLT.t()
-  def delete(plt, key) do
-    :ets.delete(plt.table_ref, key)
+  def delete(%{table_ref: table_ref} = plt, key) do
+    ETS.delete(table_ref, key)
     plt
   end
 
@@ -65,12 +65,9 @@ defmodule Hologram.Commons.PLT do
   """
   @spec get_all(PLT.t()) :: map
   def get_all(%{table_ref: table_ref}) do
-    table_ref
-    |> :ets.tab2list()
-    |> Enum.into(%{})
+    ETS.get_all(table_ref)
   end
 
-  # TODO: test
   @doc """
   Returns the reference of the underlying ETS table.
   """
@@ -81,7 +78,6 @@ defmodule Hologram.Commons.PLT do
     {:reply, table_ref, table_ref}
   end
 
-  # TODO: test separately from start/1
   @doc """
   Creates the underlying ETS table.
   """
@@ -98,7 +94,7 @@ defmodule Hologram.Commons.PLT do
   end
 
   @doc """
-  Populates the underlying ETS table of the given PLT with items dumped to the given path.
+  Populates the underlying ETS table of the given PLT with items dumped to the given file.
   """
   @spec load(PLT.t(), String.t()) :: PLT.t()
   def load(plt, dump_path) do
@@ -112,7 +108,7 @@ defmodule Hologram.Commons.PLT do
   end
 
   @doc """
-  Populates the underlying ETS table of the given PLT with items dumped to the given path if the dump file exists.
+  Populates the underlying ETS table of the given PLT with items dumped to the given file if the file exists.
   """
   @spec maybe_load(PLT.t(), String.t()) :: PLT.t()
   def maybe_load(plt, dump_path) do
@@ -126,25 +122,19 @@ defmodule Hologram.Commons.PLT do
   @doc """
   Puts multiple items into the underlying ETS table.
   """
-  @spec put(PLT.t(), list(tuple)) :: PLT.t()
+  @spec put(PLT.t(), list({any, any})) :: PLT.t()
   def put(%{table_ref: table_ref} = plt, items) do
-    :ets.insert(table_ref, items)
+    ETS.put(table_ref, items)
     plt
   end
 
   @doc """
   Puts the given item into the underlying ETS table.
   """
-  @spec put(PLT.t() | :ets.tid(), any, any) :: PLT.t() | true
-  def put(plt_or_table_ref, key, value)
-
+  @spec put(PLT.t(), any, any) :: PLT.t()
   def put(%PLT{table_ref: table_ref} = plt, key, value) do
-    put(table_ref, key, value)
-    plt
-  end
-
-  def put(table_ref, key, value) do
     ETS.put(table_ref, key, value)
+    plt
   end
 
   @doc """

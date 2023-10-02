@@ -2,13 +2,14 @@ defmodule Hologram.Commons.PLTTest do
   use Hologram.Test.BasicCase, async: true
   import Hologram.Commons.PLT
 
+  alias Hologram.Commons.ETS
   alias Hologram.Commons.PLT
   alias Hologram.Commons.Reflection
   alias Hologram.Commons.SerializationUtils
 
   @tmp_path Reflection.tmp_path()
-  @dump_dir "#{@tmp_path}/#{__MODULE__}"
-  @dump_file "#{@dump_dir}/test.plt"
+  @dump_dir_path "#{@tmp_path}/#{__MODULE__}"
+  @dump_file_path "#{@dump_dir_path}/test.plt"
 
   @items [
     {:my_key_1, :my_value_1},
@@ -16,36 +17,29 @@ defmodule Hologram.Commons.PLTTest do
   ]
 
   setup do
-    clean_dir(@dump_dir)
+    clean_dir(@dump_dir_path)
     [plt: put(start(), @items)]
   end
 
-  describe "delete/2" do
-    test "key exists", %{plt: plt} do
-      assert delete(plt, :my_key_2) == plt
-      assert get(plt, :my_key_2) == :error
-    end
-
-    test "key doesn't exist", %{plt: plt} do
-      assert delete(plt, :my_key_3) == plt
-      assert get(plt, :my_key_3) == :error
-    end
+  test "delete/2", %{plt: %{table_ref: table_ref} = plt} do
+    assert delete(plt, :my_key_2) == plt
+    assert ETS.get(table_ref, :my_key_2) == :error
   end
 
   describe "dump/2" do
     test "creates nested path dirs if they don't exist", %{plt: plt} do
-      dump_dir = "#{@dump_dir}/nested_1/_nested_2/nested_3"
-      dump_file = "#{dump_dir}/test.plt"
+      dump_dir_path = "#{@tmp_path}/nested_1/nested_2/nested_3"
+      dump_file_path = "#{dump_dir_path}/test.plt"
 
-      assert dump(plt, dump_file) == plt
-      assert File.exists?(dump_dir)
+      assert dump(plt, dump_file_path) == plt
+      assert File.exists?(dump_dir_path)
     end
 
     test "writes serialized items to the given file", %{plt: plt} do
-      assert dump(plt, @dump_file) == plt
+      assert dump(plt, @dump_file_path) == plt
 
       items =
-        @dump_file
+        @dump_file_path
         |> File.read!()
         |> SerializationUtils.deserialize()
 
@@ -54,12 +48,8 @@ defmodule Hologram.Commons.PLTTest do
   end
 
   describe "get/2" do
-    test "key exists / resolve ETS table by reference", %{plt: plt} do
+    test "resolve ETS table by reference", %{plt: plt} do
       assert get(plt, :my_key_2) == {:ok, :my_value_2}
-    end
-
-    test "key doesn't exist", %{plt: plt} do
-      assert get(plt, :my_key_3) == :error
     end
 
     test "resolve ETS table by name" do
@@ -90,12 +80,20 @@ defmodule Hologram.Commons.PLTTest do
     assert get_all(plt) == Enum.into(@items, %{})
   end
 
+  describe "handle_call/3" do
+    # Tested in start/1 tests:
+    # test "get_table_ref"
+  end
+
+  # Tested in start/1 tests:
+  # test "init/1"
+
   test "load/2", %{plt: plt} do
-    dump(plt, @dump_file)
+    dump(plt, @dump_file_path)
 
     plt_2 = start()
 
-    assert load(plt_2, @dump_file) == plt_2
+    assert load(plt_2, @dump_file_path) == plt_2
     assert get_all(plt_2) == Enum.into(@items, %{})
   end
 
@@ -106,40 +104,37 @@ defmodule Hologram.Commons.PLTTest do
         |> Enum.into(%{})
         |> SerializationUtils.serialize()
 
-      File.write!(@dump_file, data)
+      File.write!(@dump_file_path, data)
 
       plt = start()
-      assert maybe_load(plt, @dump_file) == plt
 
+      assert maybe_load(plt, @dump_file_path) == plt
       assert get_all(plt) == Enum.into(@items, %{})
     end
 
     test "dump file doesn't exist" do
       plt = start()
-      assert maybe_load(plt, @dump_file) == plt
 
+      assert maybe_load(plt, @dump_file_path) == plt
       assert get_all(plt) == %{}
     end
   end
 
-  test "put/2" do
-    plt = start()
-    assert put(plt, @items) == plt
+  test "put/2", %{plt: %{table_ref: table_ref} = plt} do
+    items = [
+      {:my_key_3, :my_value_3},
+      {:my_key_4, :my_value_4}
+    ]
 
-    assert get(plt, :my_key_1) == {:ok, :my_value_1}
-    assert get(plt, :my_key_2) == {:ok, :my_value_2}
+    assert put(plt, items) == plt
+
+    assert ETS.get!(table_ref, :my_key_3) == :my_value_3
+    assert ETS.get!(table_ref, :my_key_4) == :my_value_4
   end
 
-  describe "put/3" do
-    test "first arg is a PLT struct", %{plt: plt} do
-      assert put(plt, :my_key_3, :my_value_3) == plt
-      assert get(plt, :my_key_3) == {:ok, :my_value_3}
-    end
-
-    test "first arg is an ETS table ref", %{plt: plt} do
-      assert put(plt.table_ref, :my_key_3, :my_value_3) == true
-      assert get(plt, :my_key_3) == {:ok, :my_value_3}
-    end
+  test "put/3", %{plt: %{table_ref: table_ref} = plt} do
+    assert put(plt, :my_key_3, :my_value_3) == plt
+    assert ETS.get!(table_ref, :my_key_3) == :my_value_3
   end
 
   describe "start/1" do
@@ -163,7 +158,7 @@ defmodule Hologram.Commons.PLTTest do
 
       assert ets_table_exists?(table_ref)
       assert ets_table_exists?(table_name)
-      assert :ets.whereis(table_name)
+      assert ets_table_name_registered?(table_name)
     end
   end
 end
