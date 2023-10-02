@@ -55,6 +55,16 @@ defmodule Hologram.Test.Helpers do
   end
 
   @doc """
+  Determines whether the given ETS table name has been registered.
+  """
+  @spec ets_table_name_registered?(atom) :: boolean
+  def ets_table_name_registered?(table_name) do
+    # Can't use: table_name |> :ets.whereis() |> is_reference()
+    # because Dialyzer will warn about breaking the opacity of the term.
+    :ets.whereis(table_name) != :undefined
+  end
+
+  @doc """
   Determines whether a persistent term with the given key exists.
   """
   @spec persistent_term_exists?(any) :: boolean
