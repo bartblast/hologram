@@ -45,13 +45,7 @@ defmodule Hologram.Commons.PLT do
   """
   @spec get(PLT.t(), any) :: {:ok, term} | :error
   def get(%{table_ref: table_ref, table_name: table_name}, key) do
-    case :ets.lookup(table_ref || table_name, key) do
-      [{^key, value}] ->
-        {:ok, value}
-
-      _fallback ->
-        :error
-    end
+    ETS.get(table_ref || table_name, key)
   end
 
   @doc """
