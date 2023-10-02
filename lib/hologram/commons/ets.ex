@@ -52,6 +52,16 @@ defmodule Hologram.Commons.ETS do
   end
 
   @doc """
+  Returns all items stored in the ETS table.
+  """
+  @spec get_all(:ets.tid()) :: map
+  def get_all(table_name_or_ref) do
+    table_name_or_ref
+    |> :ets.tab2list()
+    |> Enum.into(%{})
+  end
+
+  @doc """
   Puts an item into the ETS table.
   """
   @spec put(:ets.tid(), any, any) :: true

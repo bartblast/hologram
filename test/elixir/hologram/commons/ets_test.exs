@@ -89,6 +89,10 @@ defmodule Hologram.Commons.ETSTest do
     end
   end
 
+  test "get_all/1", %{table_ref: table_ref} do
+    assert get_all(table_ref) == %{my_key_1: :my_value_1, my_key_2: :my_value_2}
+  end
+
   describe "put/3" do
     test "put to named table" do
       table_name = random_atom()
