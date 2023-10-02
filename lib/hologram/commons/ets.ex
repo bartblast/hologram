@@ -62,6 +62,14 @@ defmodule Hologram.Commons.ETS do
   end
 
   @doc """
+  Puts multiple items into the ETS table.
+  """
+  @spec put(:ets.tid(), list({any, any})) :: true
+  def put(table_name_or_ref, items) do
+    :ets.insert(table_name_or_ref, items)
+  end
+
+  @doc """
   Puts an item into the ETS table.
   """
   @spec put(:ets.tid(), any, any) :: true

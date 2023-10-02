@@ -75,6 +75,22 @@ defmodule Hologram.Commons.ETSTest do
     assert get_all(table_ref) == %{my_key_1: :my_value_1, my_key_2: :my_value_2}
   end
 
+  test "put/2", %{table_ref: table_ref} do
+    items = [
+      {:my_key_3, :my_value_3},
+      {:my_key_4, :my_value_4}
+    ]
+
+    assert put(table_ref, items) == true
+
+    assert get_all(table_ref) == %{
+             my_key_1: :my_value_1,
+             my_key_2: :my_value_2,
+             my_key_3: :my_value_3,
+             my_key_4: :my_value_4
+           }
+  end
+
   test "put/3", %{table_ref: table_ref} do
     assert put(table_ref, :my_key_3, :my_value_3) == true
     assert :ets.lookup(table_ref, :my_key_3) == [{:my_key_3, :my_value_3}]
