@@ -1,4 +1,7 @@
 defmodule Hologram.Commons.ETS do
+  # This helps to avoid Dialyzer warnings related to :ets.tid() type opaqueness.
+  @type tid :: :ets.tid() | atom
+
   @doc """
   Creates a named, public ETS table.
   """
@@ -28,7 +31,7 @@ defmodule Hologram.Commons.ETS do
   Returns the value stored in the ETS table under the given key.
   If the key doesn't exist the :error :atom is returned.
   """
-  @spec get(:ets.tid(), any) :: {:ok, term} | :error
+  @spec get(tid(), any) :: {:ok, term} | :error
   def get(table_name_or_ref, key) do
     case :ets.lookup(table_name_or_ref, key) do
       [{^key, value}] ->

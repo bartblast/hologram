@@ -1,15 +1,18 @@
 defmodule Hologram.Runtime.AssetPathRegistry do
   use GenServer
 
+  alias Hologram.Commons.ETS
   alias Hologram.Commons.FileUtils
-  alias Hologram.Commons.PLT
   alias Hologram.Commons.Reflection
+
+  @default_ets_table_name __MODULE__
 
   @doc """
   Starts AssetDigestLookup process.
   """
   @spec start_link(keyword) :: GenServer.on_start()
   def start_link(opts) do
+    opts = Keyword.put_new(opts, :process_name, __MODULE__)
     GenServer.start_link(__MODULE__, opts, name: opts[:process_name])
   end
 
@@ -17,39 +20,35 @@ defmodule Hologram.Runtime.AssetPathRegistry do
   def init(opts) do
     opts =
       opts
-      |> Keyword.put_new(:ets_table_name, __MODULE__)
-      |> Keyword.put_new(:process_name, __MODULE__)
+      |> Keyword.put_new(:ets_table_name, @default_ets_table_name)
       |> Keyword.put_new(:static_path, Reflection.release_static_path())
 
-    plt =
-      opts
-      |> Keyword.put(:table_name, opts[:ets_table_name])
-      |> PLT.start()
+    ETS.create_named_table(opts[:ets_table_name])
 
     opts[:static_path]
     |> find_assets()
-    |> Enum.each(fn {key, value} -> PLT.put(plt, key, value) end)
+    |> Enum.each(fn {key, value} -> ETS.put(opts[:ets_table_name], key, value) end)
 
-    {:ok, plt}
+    {:ok, opts[:ets_table_name]}
   end
 
   @doc """
   Returns the asset path mapping.
   """
   @impl GenServer
-  @spec handle_call(:get_mapping, GenServer.from(), PLT.t()) ::
-          {:reply, %{String.t() => String.t()}, PLT.t()}
-  def handle_call(:get_mapping, _from, plt) do
-    {:reply, PLT.get_all(plt), plt}
+  @spec handle_call(:get_mapping, GenServer.from(), :ets.tid()) ::
+          {:reply, %{String.t() => String.t()}, :ets.tid()}
+  def handle_call(:get_mapping, _from, ets_table_name) do
+    {:reply, ETS.get_all(ets_table_name), ets_table_name}
   end
 
   @doc """
   Looks up the asset path (that includes the digest) of the given static file located in static dir.
   If there is no matching entry for the given static file then :error atom is returned.
   """
-  @spec lookup(atom, String.t()) :: {:ok, String.t()} | :error
-  def lookup(ets_table_name, static_path) do
-    PLT.get(%PLT{table_name: ets_table_name}, static_path)
+  @spec lookup(String.t(), ETS.tid()) :: {:ok, String.t()} | :error
+  def lookup(static_path, ets_table_name \\ @default_ets_table_name) do
+    ETS.get(ets_table_name, static_path)
   end
 
   defp find_assets(static_path) do

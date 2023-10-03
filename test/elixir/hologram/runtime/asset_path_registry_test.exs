@@ -2,7 +2,7 @@ defmodule Hologram.Runtime.AssetPathRegistryTest do
   use Hologram.Test.BasicCase, async: true
   import Hologram.Runtime.AssetPathRegistry
 
-  alias Hologram.Commons.PLT
+  alias Hologram.Commons.ETS
   alias Hologram.Commons.Reflection
 
   @ets_table_name random_atom()
@@ -24,9 +24,9 @@ defmodule Hologram.Runtime.AssetPathRegistryTest do
   end
 
   test "init/1", %{mapping: mapping} do
-    assert {:ok, %PLT{table_name: @ets_table_name} = plt} = init(@opts)
+    assert {:ok, @ets_table_name} = init(@opts)
     assert ets_table_exists?(@ets_table_name)
-    assert PLT.get_all(plt) == mapping
+    assert ETS.get_all(@ets_table_name) == mapping
   end
 
   describe "lookup/2" do
@@ -36,12 +36,12 @@ defmodule Hologram.Runtime.AssetPathRegistryTest do
     end
 
     test "asset exists" do
-      assert lookup(@ets_table_name, "/test_dir_1/test_dir_2/test_file_1.css") ==
+      assert lookup("/test_dir_1/test_dir_2/test_file_1.css", @ets_table_name) ==
                {:ok, "/test_dir_1/test_dir_2/test_file_1-11111111111111111111111111111111.css"}
     end
 
     test "asset doesn't exist" do
-      assert lookup(@ets_table_name, "/invalid_file.css") == :error
+      assert lookup("/invalid_file.css", @ets_table_name) == :error
     end
   end
 
