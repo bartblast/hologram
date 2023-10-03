@@ -12,7 +12,7 @@ defmodule Hologram.Commons.PLT do
   alias Hologram.Commons.SerializationUtils
 
   defstruct pid: nil, table_ref: nil, table_name: nil
-  @type t :: %PLT{pid: pid | nil, table_ref: :ets.tid() | nil, table_name: atom | nil}
+  @type t :: %PLT{pid: pid | nil, table_ref: ETS.tid() | nil, table_name: atom | nil}
 
   @doc """
   Deletes a key-value pair from the underlying ETS table.
@@ -72,8 +72,8 @@ defmodule Hologram.Commons.PLT do
   Returns the reference of the underlying ETS table.
   """
   @impl GenServer
-  @spec handle_call(:get_table_ref, GenServer.from(), :ets.tid()) ::
-          {:reply, :ets.tid(), :ets.tid()}
+  @spec handle_call(:get_table_ref, GenServer.from(), ETS.tid()) ::
+          {:reply, ETS.tid(), ETS.tid()}
   def handle_call(:get_table_ref, _from, table_ref) do
     {:reply, table_ref, table_ref}
   end
@@ -82,7 +82,7 @@ defmodule Hologram.Commons.PLT do
   Creates the underlying ETS table.
   """
   @impl GenServer
-  @spec init(atom | nil) :: {:ok, :ets.tid()}
+  @spec init(atom | nil) :: {:ok, ETS.tid()}
   def init(table_name)
 
   def init(nil) do

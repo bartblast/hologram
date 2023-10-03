@@ -5,7 +5,7 @@ defmodule Hologram.Commons.ETS do
   @doc """
   Creates a named, public ETS table.
   """
-  @spec create_named_table(atom) :: :ets.tid()
+  @spec create_named_table(atom) :: tid
   def create_named_table(table_name) do
     :ets.new(table_name, [:named_table, :public])
     :ets.whereis(table_name)
@@ -14,7 +14,7 @@ defmodule Hologram.Commons.ETS do
   @doc """
   Creates an unnamed, public ETS table.
   """
-  @spec create_unnamed_table() :: :ets.tid()
+  @spec create_unnamed_table() :: tid
   def create_unnamed_table do
     :ets.new(__MODULE__, [:public])
   end
@@ -22,7 +22,7 @@ defmodule Hologram.Commons.ETS do
   @doc """
   Deletes a key-value pair from the ETS table.
   """
-  @spec delete(:ets.tid(), any) :: true
+  @spec delete(tid, any) :: true
   def delete(table_name_or_ref, key) do
     :ets.delete(table_name_or_ref, key)
   end
@@ -31,7 +31,7 @@ defmodule Hologram.Commons.ETS do
   Returns the value stored in the ETS table under the given key.
   If the key doesn't exist the :error :atom is returned.
   """
-  @spec get(tid(), any) :: {:ok, term} | :error
+  @spec get(tid, any) :: {:ok, term} | :error
   def get(table_name_or_ref, key) do
     case :ets.lookup(table_name_or_ref, key) do
       [{^key, value}] ->
@@ -46,7 +46,7 @@ defmodule Hologram.Commons.ETS do
   Returns the value stored in the ETS table under the given key.
   If the key doesn't exist a KeyError is raised.
   """
-  @spec get!(:ets.tid(), any) :: term
+  @spec get!(tid, any) :: term
   def get!(table_name_or_ref, key) do
     case get(table_name_or_ref, key) do
       {:ok, value} -> value
@@ -57,7 +57,7 @@ defmodule Hologram.Commons.ETS do
   @doc """
   Returns all items stored in the ETS table.
   """
-  @spec get_all(:ets.tid()) :: map
+  @spec get_all(tid) :: map
   def get_all(table_name_or_ref) do
     table_name_or_ref
     |> :ets.tab2list()
@@ -67,7 +67,7 @@ defmodule Hologram.Commons.ETS do
   @doc """
   Puts multiple items into the ETS table.
   """
-  @spec put(:ets.tid(), list({any, any})) :: true
+  @spec put(tid, list({any, any})) :: true
   def put(table_name_or_ref, items) do
     :ets.insert(table_name_or_ref, items)
   end
@@ -75,7 +75,7 @@ defmodule Hologram.Commons.ETS do
   @doc """
   Puts an item into the ETS table.
   """
-  @spec put(:ets.tid(), any, any) :: true
+  @spec put(tid, any, any) :: true
   def put(table_name_or_ref, key, value) do
     :ets.insert(table_name_or_ref, {key, value})
   end

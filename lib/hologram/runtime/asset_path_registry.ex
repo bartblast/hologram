@@ -36,8 +36,8 @@ defmodule Hologram.Runtime.AssetPathRegistry do
   Returns the asset path mapping.
   """
   @impl GenServer
-  @spec handle_call(:get_mapping, GenServer.from(), :ets.tid()) ::
-          {:reply, %{String.t() => String.t()}, :ets.tid()}
+  @spec handle_call(:get_mapping, GenServer.from(), ETS.tid()) ::
+          {:reply, %{String.t() => String.t()}, ETS.tid()}
   def handle_call(:get_mapping, _from, ets_table_name) do
     {:reply, ETS.get_all(ets_table_name), ets_table_name}
   end

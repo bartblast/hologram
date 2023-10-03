@@ -47,7 +47,7 @@ defmodule Hologram.Test.Helpers do
   @doc """
   Determines whether the given ETS table exists.
   """
-  @spec ets_table_exists?(:ets.tid()) :: boolean
+  @spec ets_table_exists?(ETS.tid()) :: boolean
   def ets_table_exists?(table_ref_or_name) do
     table_ref_or_name
     |> :ets.info()
