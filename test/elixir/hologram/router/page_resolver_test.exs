@@ -6,11 +6,11 @@ defmodule Hologram.Router.PageResolverTest do
   alias Hologram.Test.Fixtures.Router.PageResolver.Module1
 
   test "init/1" do
-    store_key = random_atom()
+    persistent_term_key = random_atom()
 
-    assert {:ok, nil} = init(store_key)
+    assert {:ok, nil} = init(persistent_term_key)
 
-    search_tree = :persistent_term.get(store_key)
+    search_tree = :persistent_term.get(persistent_term_key)
 
     assert %SearchTree.Node{
              value: nil,
@@ -25,28 +25,28 @@ defmodule Hologram.Router.PageResolverTest do
 
   describe "resolve/2" do
     setup do
-      store_key = random_atom()
-      init(store_key)
+      persistent_term_key = random_atom()
+      init(persistent_term_key)
 
-      [store_key: store_key]
+      [persistent_term_key: persistent_term_key]
     end
 
-    test "there is a matching route", %{store_key: store_key} do
+    test "there is a matching route", %{persistent_term_key: persistent_term_key} do
       request_path = "/hologram-test-fixtures-router-pageresolver-module1"
-      assert resolve(request_path, store_key) == Module1
+      assert resolve(request_path, persistent_term_key) == Module1
     end
 
-    test "there is no matching route", %{store_key: store_key} do
+    test "there is no matching route", %{persistent_term_key: persistent_term_key} do
       request_path = "/unknown-path"
-      refute resolve(request_path, store_key)
+      refute resolve(request_path, persistent_term_key)
     end
   end
 
   test "start_link/1" do
-    store_key = random_atom()
+    persistent_term_key = random_atom()
 
-    assert {:ok, pid} = start_link(store_key: store_key)
+    assert {:ok, pid} = start_link(persistent_term_key: persistent_term_key)
     assert is_pid(pid)
-    assert persistent_term_exists?(store_key)
+    assert persistent_term_exists?(persistent_term_key)
   end
 end

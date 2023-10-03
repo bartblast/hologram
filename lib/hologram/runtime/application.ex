@@ -17,7 +17,7 @@ defmodule Hologram.Runtime.Application do
       {AssetManifestCache,
        asset_path_registry_process_name: AssetPathRegistry, store_key: AssetManifestCache},
       {PageDigestLookup, store_key: PageDigestLookup, dump_path: page_digest_dump_file},
-      {PageResolver, store_key: PageResolver}
+      PageResolver
     ]
 
     opts = [strategy: :one_for_one, name: Hologram.Supervisor]
