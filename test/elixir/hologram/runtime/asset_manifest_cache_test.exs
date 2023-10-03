@@ -6,21 +6,22 @@ defmodule Hologram.Runtime.AssetManifestCacheTest do
   alias Hologram.Runtime.AssetPathRegistry
 
   @asset_path_registry_process_name random_atom()
-  @static_path "#{Reflection.tmp_path()}/#{__MODULE__}"
-  @store_key random_atom()
+  @persistent_term_key random_atom()
   @opts [
     asset_path_registry_process_name: @asset_path_registry_process_name,
-    store_key: @store_key
+    persistent_term_key: @persistent_term_key
   ]
+
+  @static_path "#{Reflection.tmp_path()}/#{__MODULE__}"
 
   setup do
     clean_dir(@static_path)
     setup_asset_fixtures(@static_path)
 
     AssetPathRegistry.start_link(
+      ets_table_name: random_atom(),
       process_name: @asset_path_registry_process_name,
-      static_path: @static_path,
-      store_key: random_atom()
+      static_path: @static_path
     )
 
     :ok
@@ -29,7 +30,7 @@ defmodule Hologram.Runtime.AssetManifestCacheTest do
   test "init/1" do
     assert init(@opts) == {:ok, @opts}
 
-    assert :persistent_term.get(@store_key) ==
+    assert :persistent_term.get(@persistent_term_key) ==
              """
              window.__hologramAssetManifest__ = {
              "/hologram/test_file_9.css": "/hologram/test_file_9-99999999999999999999999999999999.css",
@@ -47,6 +48,6 @@ defmodule Hologram.Runtime.AssetManifestCacheTest do
     assert {:ok, pid} = start_link(@opts)
 
     assert is_pid(pid)
-    assert persistent_term_exists?(@store_key)
+    assert persistent_term_exists?(@persistent_term_key)
   end
 end

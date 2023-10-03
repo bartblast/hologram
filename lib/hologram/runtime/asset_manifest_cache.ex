@@ -12,7 +12,7 @@ defmodule Hologram.Runtime.AssetManifestCache do
   @impl GenServer
   def init(opts) do
     manifest = build_manifest(opts[:asset_path_registry_process_name])
-    :persistent_term.put(opts[:store_key], manifest)
+    :persistent_term.put(opts[:persistent_term_key], manifest)
 
     {:ok, opts}
   end
