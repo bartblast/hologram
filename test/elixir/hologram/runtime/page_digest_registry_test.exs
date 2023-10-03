@@ -1,6 +1,6 @@
-defmodule Hologram.Runtime.PageDigestLookupTest do
+defmodule Hologram.Runtime.PageDigestRegistryTest do
   use Hologram.Test.BasicCase, async: true
-  import Hologram.Runtime.PageDigestLookup
+  import Hologram.Runtime.PageDigestRegistry
 
   alias Hologram.Commons.PLT
   alias Hologram.Commons.Reflection

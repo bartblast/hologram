@@ -13,14 +13,14 @@ defmodule Hologram.Runtime.ControllerTest do
 
   describe "handle_request/2" do
     setup do
-      setup_page_digest_lookup(__MODULE__)
+      setup_page_digest_registry(__MODULE__)
     end
 
     test "conn updates", %{
-      page_digest_lookup_plt: page_digest_lookup_plt,
-      page_digest_lookup_store_key: page_digest_lookup_store_key
+      page_digest_registry_ets_table_name: page_digest_registry_ets_table_name,
+      page_digest_registry_plt: page_digest_registry_plt
     } do
-      PLT.put(page_digest_lookup_plt, Module1, :dummy_module_1_digest)
+      PLT.put(page_digest_registry_plt, Module1, :dummy_module_1_digest)
 
       conn =
         Plug.Test.conn(:get, "/hologram-test-fixtures-runtime-controller-module1/111/ccc/222")

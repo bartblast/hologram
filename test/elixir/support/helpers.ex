@@ -9,7 +9,7 @@ defmodule Hologram.Test.Helpers do
   alias Hologram.Compiler.Encoder
   alias Hologram.Compiler.IR
   alias Hologram.Component
-  alias Hologram.Runtime.PageDigestLookup
+  alias Hologram.Runtime.PageDigestRegistry
   alias Hologram.Template.Parser
   alias Hologram.Template.Renderer
 
@@ -176,37 +176,37 @@ defmodule Hologram.Test.Helpers do
   end
 
   @doc """
-  Sets up page digest lookup PLT process.
+  Sets up page digest registry.
   """
-  @spec setup_page_digest_lookup(module) :: [
-          page_digest_lookup_plt: PLT.t(),
-          page_digest_lookup_store_key: atom
+  @spec setup_page_digest_registry(module) :: [
+          page_digest_registry_ets_table_name: atom,
+          page_digest_registry_plt: PLT.t()
         ]
-  def setup_page_digest_lookup(test_module) do
-    page_digest_lookup_plt_dump_path =
-      "#{Reflection.tmp_path()}/#{test_module}/page_digest_lookup.plt"
+  def setup_page_digest_registry(test_module) do
+    page_digest_registry_plt_dump_path =
+      "#{Reflection.tmp_path()}/#{test_module}/page_digest_registry.plt"
 
-    File.rm(page_digest_lookup_plt_dump_path)
+    File.rm(page_digest_registry_plt_dump_path)
 
     PLT.start()
     |> PLT.put(:module_a, :module_a_digest)
     |> PLT.put(:module_b, :module_b_digest)
     |> PLT.put(:module_c, :module_c_digest)
-    |> PLT.dump(page_digest_lookup_plt_dump_path)
+    |> PLT.dump(page_digest_registry_plt_dump_path)
 
-    page_digest_lookup_store_key = random_atom()
+    page_digest_registry_ets_table_name = random_atom()
 
     opts = [
-      store_key: page_digest_lookup_store_key,
-      dump_path: page_digest_lookup_plt_dump_path
+      ets_table_name: page_digest_registry_ets_table_name,
+      plt_dump_path: page_digest_registry_plt_dump_path
     ]
 
-    {:ok, pid} = PageDigestLookup.start_link(opts)
-    page_digest_lookup_plt = GenServer.call(pid, :get_plt)
+    {:ok, pid} = PageDigestRegistry.start_link(opts)
+    page_digest_registry_plt = GenServer.call(pid, :get_plt)
 
     [
-      page_digest_lookup_plt: page_digest_lookup_plt,
-      page_digest_lookup_store_key: page_digest_lookup_store_key
+      page_digest_registry_ets_table_name: page_digest_registry_ets_table_name,
+      page_digest_registry_plt: page_digest_registry_plt
     ]
   end
 

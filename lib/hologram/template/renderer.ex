@@ -5,7 +5,7 @@ defmodule Hologram.Template.Renderer do
   alias Hologram.Compiler.Normalizer
   alias Hologram.Compiler.Transformer
   alias Hologram.Component
-  alias Hologram.Runtime.PageDigestLookup
+  alias Hologram.Runtime.PageDigestRegistry
   alias Hologram.Runtime.Templatable
   alias Hologram.Template.DOM
 
@@ -98,7 +98,7 @@ defmodule Hologram.Template.Renderer do
     params = cast_props(params_dom, page_module)
     {initial_page_client, _server} = init_component(page_module, params)
 
-    page_digest = PageDigestLookup.lookup(page_digest_lookup_store_key, page_module)
+    page_digest = PageDigestRegistry.lookup(page_module, page_digest_lookup_store_key)
 
     %{context: page_context, state: page_state} =
       initial_page_client_with_injected_page_digest =

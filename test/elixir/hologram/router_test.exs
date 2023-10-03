@@ -8,7 +8,7 @@ defmodule Hologram.RouterTest do
 
   describe "call/2" do
     setup do
-      opts = setup_page_digest_lookup(__MODULE__)
+      opts = setup_page_digest_registry(__MODULE__)
 
       page_resolver_store_key = random_atom()
       PageResolver.start_link(store_key: page_resolver_store_key)
@@ -17,7 +17,7 @@ defmodule Hologram.RouterTest do
     end
 
     test "request path is matched", opts do
-      PLT.put(opts[:page_digest_lookup_plt], Module1, :dummy_module_1_digest)
+      PLT.put(opts[:page_digest_registry_plt], Module1, :dummy_module_1_digest)
 
       conn = Plug.Test.conn(:get, "/hologram-test-fixtures-router-module1")
 

@@ -351,16 +351,16 @@ defmodule Hologram.Template.RendererTest do
 
   describe "context" do
     setup do
-      setup_page_digest_lookup(__MODULE__)
+      setup_page_digest_registry(__MODULE__)
     end
 
     test "set in page, accessed in component nested in page", %{
-      page_digest_lookup_plt: page_digest_lookup_plt,
-      page_digest_lookup_store_key: page_digest_lookup_store_key
+      page_digest_registry_ets_table_name: page_digest_registry_ets_table_name,
+      page_digest_registry_plt: page_digest_registry_plt
     } do
-      PLT.put(page_digest_lookup_plt, Module39, :dummy_module_39_digest)
+      PLT.put(page_digest_registry_plt, Module39, :dummy_module_39_digest)
 
-      assert render_page(Module39, [], page_digest_lookup_store_key) ==
+      assert render_page(Module39, [], page_digest_registry_ets_table_name) ==
                {"prop_aaa = 123",
                 %{
                   "layout" => %Component.Client{
@@ -377,12 +377,12 @@ defmodule Hologram.Template.RendererTest do
     end
 
     test "set in page, accessed in component nested in layout", %{
-      page_digest_lookup_plt: page_digest_lookup_plt,
-      page_digest_lookup_store_key: page_digest_lookup_store_key
+      page_digest_registry_ets_table_name: page_digest_registry_ets_table_name,
+      page_digest_registry_plt: page_digest_registry_plt
     } do
-      PLT.put(page_digest_lookup_plt, Module46, :dummy_module_46_digest)
+      PLT.put(page_digest_registry_plt, Module46, :dummy_module_46_digest)
 
-      assert render_page(Module46, [], page_digest_lookup_store_key) ==
+      assert render_page(Module46, [], page_digest_registry_ets_table_name) ==
                {"prop_aaa = 123",
                 %{
                   "layout" => %Component.Client{
@@ -399,12 +399,12 @@ defmodule Hologram.Template.RendererTest do
     end
 
     test "set in page, accessed in layout", %{
-      page_digest_lookup_plt: page_digest_lookup_plt,
-      page_digest_lookup_store_key: page_digest_lookup_store_key
+      page_digest_registry_ets_table_name: page_digest_registry_ets_table_name,
+      page_digest_registry_plt: page_digest_registry_plt
     } do
-      PLT.put(page_digest_lookup_plt, Module40, :dummy_module_40_digest)
+      PLT.put(page_digest_registry_plt, Module40, :dummy_module_40_digest)
 
-      assert render_page(Module40, [], page_digest_lookup_store_key) ==
+      assert render_page(Module40, [], page_digest_registry_ets_table_name) ==
                {"prop_aaa = 123",
                 %{
                   "layout" => %Component.Client{
@@ -421,12 +421,12 @@ defmodule Hologram.Template.RendererTest do
     end
 
     test "set in layout, accessed in component nested in page", %{
-      page_digest_lookup_plt: page_digest_lookup_plt,
-      page_digest_lookup_store_key: page_digest_lookup_store_key
+      page_digest_registry_ets_table_name: page_digest_registry_ets_table_name,
+      page_digest_registry_plt: page_digest_registry_plt
     } do
-      PLT.put(page_digest_lookup_plt, Module43, :dummy_module_43_digest)
+      PLT.put(page_digest_registry_plt, Module43, :dummy_module_43_digest)
 
-      assert render_page(Module43, [], page_digest_lookup_store_key) ==
+      assert render_page(Module43, [], page_digest_registry_ets_table_name) ==
                {"prop_aaa = 123",
                 %{
                   "layout" => %Component.Client{
@@ -442,12 +442,12 @@ defmodule Hologram.Template.RendererTest do
     end
 
     test "set in layout, accessed in component nested in layout", %{
-      page_digest_lookup_plt: page_digest_lookup_plt,
-      page_digest_lookup_store_key: page_digest_lookup_store_key
+      page_digest_registry_ets_table_name: page_digest_registry_ets_table_name,
+      page_digest_registry_plt: page_digest_registry_plt
     } do
-      PLT.put(page_digest_lookup_plt, Module45, :dummy_module_45_digest)
+      PLT.put(page_digest_registry_plt, Module45, :dummy_module_45_digest)
 
-      assert render_page(Module45, [], page_digest_lookup_store_key) ==
+      assert render_page(Module45, [], page_digest_registry_ets_table_name) ==
                {"prop_aaa = 123",
                 %{
                   "layout" => %Component.Client{
@@ -479,16 +479,16 @@ defmodule Hologram.Template.RendererTest do
 
   describe "render_page" do
     setup do
-      setup_page_digest_lookup(__MODULE__)
+      setup_page_digest_registry(__MODULE__)
     end
 
     test "inside layout slot", %{
-      page_digest_lookup_plt: page_digest_lookup_plt,
-      page_digest_lookup_store_key: page_digest_lookup_store_key
+      page_digest_registry_ets_table_name: page_digest_registry_ets_table_name,
+      page_digest_registry_plt: page_digest_registry_plt
     } do
-      PLT.put(page_digest_lookup_plt, Module14, :dummy_module_14_digest)
+      PLT.put(page_digest_registry_plt, Module14, :dummy_module_14_digest)
 
-      assert render_page(Module14, [], page_digest_lookup_store_key) ==
+      assert render_page(Module14, [], page_digest_registry_ets_table_name) ==
                {"layout template start, page template, layout template end",
                 %{
                   "layout" => %Component.Client{},
@@ -502,10 +502,10 @@ defmodule Hologram.Template.RendererTest do
     end
 
     test "cast page params", %{
-      page_digest_lookup_plt: page_digest_lookup_plt,
-      page_digest_lookup_store_key: page_digest_lookup_store_key
+      page_digest_registry_ets_table_name: page_digest_registry_ets_table_name,
+      page_digest_registry_plt: page_digest_registry_plt
     } do
-      PLT.put(page_digest_lookup_plt, Module19, :dummy_module_19_digest)
+      PLT.put(page_digest_registry_plt, Module19, :dummy_module_19_digest)
 
       params_dom =
         [
@@ -514,7 +514,7 @@ defmodule Hologram.Template.RendererTest do
           {"param_3", [text: "value_3"]}
         ]
 
-      assert render_page(Module19, params_dom, page_digest_lookup_store_key) ==
+      assert render_page(Module19, params_dom, page_digest_registry_ets_table_name) ==
                {"",
                 %{
                   "layout" => %Component.Client{},
@@ -529,12 +529,12 @@ defmodule Hologram.Template.RendererTest do
     end
 
     test "cast layout explicit static props", %{
-      page_digest_lookup_plt: page_digest_lookup_plt,
-      page_digest_lookup_store_key: page_digest_lookup_store_key
+      page_digest_registry_ets_table_name: page_digest_registry_ets_table_name,
+      page_digest_registry_plt: page_digest_registry_plt
     } do
-      PLT.put(page_digest_lookup_plt, Module25, :dummy_module_25_digest)
+      PLT.put(page_digest_registry_plt, Module25, :dummy_module_25_digest)
 
-      assert render_page(Module25, [], page_digest_lookup_store_key) ==
+      assert render_page(Module25, [], page_digest_registry_ets_table_name) ==
                {"",
                 %{
                   "layout" => %Component.Client{
@@ -550,12 +550,12 @@ defmodule Hologram.Template.RendererTest do
     end
 
     test "cast layout props passed implicitely from page state", %{
-      page_digest_lookup_plt: page_digest_lookup_plt,
-      page_digest_lookup_store_key: page_digest_lookup_store_key
+      page_digest_registry_ets_table_name: page_digest_registry_ets_table_name,
+      page_digest_registry_plt: page_digest_registry_plt
     } do
-      PLT.put(page_digest_lookup_plt, Module27, :dummy_module_27_digest)
+      PLT.put(page_digest_registry_plt, Module27, :dummy_module_27_digest)
 
-      assert render_page(Module27, [], page_digest_lookup_store_key) ==
+      assert render_page(Module27, [], page_digest_registry_ets_table_name) ==
                {"",
                 %{
                   "layout" => %Component.Client{
@@ -576,10 +576,10 @@ defmodule Hologram.Template.RendererTest do
     end
 
     test "aggregate page vars, giving state priority over param when there are name conflicts", %{
-      page_digest_lookup_plt: page_digest_lookup_plt,
-      page_digest_lookup_store_key: page_digest_lookup_store_key
+      page_digest_registry_ets_table_name: page_digest_registry_ets_table_name,
+      page_digest_registry_plt: page_digest_registry_plt
     } do
-      PLT.put(page_digest_lookup_plt, Module21, :dummy_module_21_digest)
+      PLT.put(page_digest_registry_plt, Module21, :dummy_module_21_digest)
 
       params_dom =
         [
@@ -587,7 +587,7 @@ defmodule Hologram.Template.RendererTest do
           {"key_2", [text: "param_value_2"]}
         ]
 
-      assert render_page(Module21, params_dom, page_digest_lookup_store_key) ==
+      assert render_page(Module21, params_dom, page_digest_registry_ets_table_name) ==
                {"key_1 = param_value_1, key_2 = state_value_2, key_3 = state_value_3",
                 %{
                   "layout" => %Component.Client{},
@@ -603,12 +603,12 @@ defmodule Hologram.Template.RendererTest do
 
     test "aggregate layout vars, giving state priority over prop when there are name conflicts",
          %{
-           page_digest_lookup_plt: page_digest_lookup_plt,
-           page_digest_lookup_store_key: page_digest_lookup_store_key
+           page_digest_registry_ets_table_name: page_digest_registry_ets_table_name,
+           page_digest_registry_plt: page_digest_registry_plt
          } do
-      PLT.put(page_digest_lookup_plt, Module24, :dummy_module_24_digest)
+      PLT.put(page_digest_registry_plt, Module24, :dummy_module_24_digest)
 
-      assert render_page(Module24, [], page_digest_lookup_store_key) ==
+      assert render_page(Module24, [], page_digest_registry_ets_table_name) ==
                {"key_1 = prop_value_1, key_2 = state_value_2, key_3 = state_value_3",
                 %{
                   "layout" => %Component.Client{
@@ -624,12 +624,12 @@ defmodule Hologram.Template.RendererTest do
     end
 
     test "merge the page component client struct into the result", %{
-      page_digest_lookup_plt: page_digest_lookup_plt,
-      page_digest_lookup_store_key: page_digest_lookup_store_key
+      page_digest_registry_ets_table_name: page_digest_registry_ets_table_name,
+      page_digest_registry_plt: page_digest_registry_plt
     } do
-      PLT.put(page_digest_lookup_plt, Module28, :dummy_module_28_digest)
+      PLT.put(page_digest_registry_plt, Module28, :dummy_module_28_digest)
 
-      assert render_page(Module28, [], page_digest_lookup_store_key) ==
+      assert render_page(Module28, [], page_digest_registry_ets_table_name) ==
                {"",
                 %{
                   "layout" => %Component.Client{},
@@ -644,12 +644,12 @@ defmodule Hologram.Template.RendererTest do
     end
 
     test "merge the layout component client struct into the result", %{
-      page_digest_lookup_plt: page_digest_lookup_plt,
-      page_digest_lookup_store_key: page_digest_lookup_store_key
+      page_digest_registry_ets_table_name: page_digest_registry_ets_table_name,
+      page_digest_registry_plt: page_digest_registry_plt
     } do
-      PLT.put(page_digest_lookup_plt, Module29, :dummy_module_29_digest)
+      PLT.put(page_digest_registry_plt, Module29, :dummy_module_29_digest)
 
-      assert render_page(Module29, [], page_digest_lookup_store_key) ==
+      assert render_page(Module29, [], page_digest_registry_ets_table_name) ==
                {"",
                 %{
                   "layout" => %Hologram.Component.Client{
@@ -665,12 +665,12 @@ defmodule Hologram.Template.RendererTest do
     end
 
     test "inject initial client data", %{
-      page_digest_lookup_plt: page_digest_lookup_plt,
-      page_digest_lookup_store_key: page_digest_lookup_store_key
+      page_digest_registry_ets_table_name: page_digest_registry_ets_table_name,
+      page_digest_registry_plt: page_digest_registry_plt
     } do
-      PLT.put(page_digest_lookup_plt, Module48, "102790adb6c3b1956db310be523a7693")
+      PLT.put(page_digest_registry_plt, Module48, "102790adb6c3b1956db310be523a7693")
 
-      assert render_page(Module48, [], page_digest_lookup_store_key) == {
+      assert render_page(Module48, [], page_digest_registry_ets_table_name) == {
                """
                layout template start
                <script>
