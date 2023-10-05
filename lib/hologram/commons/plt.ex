@@ -142,7 +142,9 @@ defmodule Hologram.Commons.PLT do
   """
   @spec start(keyword) :: PLT.t()
   def start(opts \\ []) do
-    {:ok, pid} = GenServer.start_link(PLT, opts[:table_name], opts)
+    genserver_opts = Keyword.delete(opts, :table_name)
+
+    {:ok, pid} = GenServer.start_link(PLT, opts[:table_name], genserver_opts)
     table_ref = GenServer.call(pid, :get_table_ref)
 
     %PLT{pid: pid, table_ref: table_ref, table_name: opts[:table_name]}
