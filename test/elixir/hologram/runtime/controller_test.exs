@@ -1,9 +1,23 @@
 defmodule Hologram.Runtime.ControllerTest do
-  use Hologram.Test.BasicCase, async: true
-  import Hologram.Runtime.Controller
+  use Hologram.Test.BasicCase, async: false
 
-  alias Hologram.Commons.PLT
+  import Hologram.Runtime.Controller
+  import Mox
+
+  alias Hologram.Commons.ETS
+  alias Hologram.Commons.Reflection
+  alias Hologram.Runtime.PageDigestRegistry
   alias Hologram.Test.Fixtures.Runtime.Controller.Module1
+
+  defmodule Stub do
+    @behaviour PageDigestRegistry
+
+    def dump_path, do: "#{Reflection.tmp_path()}/#{__MODULE__}.plt"
+
+    def ets_table_name, do: __MODULE__
+  end
+
+  setup :set_mox_global
 
   test "extract_params/2" do
     url_path = "/hologram-test-fixtures-runtime-controller-module1/111/ccc/222"
@@ -13,31 +27,29 @@ defmodule Hologram.Runtime.ControllerTest do
 
   describe "handle_request/2" do
     setup do
-      setup_page_digest_registry(__MODULE__)
+      stub_with(PageDigestRegistry.Mock, Stub)
+      setup_page_digest_registry(Stub)
+
+      :ok
     end
 
-    test "conn updates", %{
-      page_digest_registry_ets_table_name: page_digest_registry_ets_table_name,
-      page_digest_registry_plt: page_digest_registry_plt
-    } do
-      PLT.put(page_digest_registry_plt, Module1, :dummy_module_1_digest)
+    test "conn updates" do
+      ETS.put(Stub.ets_table_name(), Module1, :dummy_module_1_digest)
 
       conn =
         Plug.Test.conn(:get, "/hologram-test-fixtures-runtime-controller-module1/111/ccc/222")
 
-      expected = %{
-        conn
-        | halted: true,
-          resp_body: "param_aaa = 111, param_bbb = 222",
-          resp_headers: [
-            {"content-type", "text/html; charset=utf-8"},
-            {"cache-control", "max-age=0, private, must-revalidate"}
-          ],
-          state: :sent,
-          status: 200
-      }
-
-      assert handle_request(conn, Module1, page_digest_lookup_store_key) == expected
+      assert handle_request(conn, Module1) == %{
+               conn
+               | halted: true,
+                 resp_body: "param_aaa = 111, param_bbb = 222",
+                 resp_headers: [
+                   {"content-type", "text/html; charset=utf-8"},
+                   {"cache-control", "max-age=0, private, must-revalidate"}
+                 ],
+                 state: :sent,
+                 status: 200
+             }
     end
   end
 end

@@ -25,9 +25,9 @@ defmodule Hologram.Runtime.Controller do
   @doc """
   Handles the page request by building HTML response body and halting the Plug pipeline.
   """
-  @spec handle_request(Plug.Conn.t(), module, atom) :: Plug.Conn.t()
+  @spec handle_request(Plug.Conn.t(), module) :: Plug.Conn.t()
   # sobelow_skip ["XSS.HTML"]
-  def handle_request(conn, page_module, page_digest_lookup_store_key) do
+  def handle_request(conn, page_module) do
     params_dom =
       conn.request_path
       |> extract_params(page_module)
@@ -35,7 +35,7 @@ defmodule Hologram.Runtime.Controller do
         {to_string(name), [text: value]}
       end)
 
-    {html, _clients} = Renderer.render_page(page_module, params_dom, page_digest_lookup_store_key)
+    {html, _clients} = Renderer.render_page(page_module, params_dom)
 
     conn
     |> Controller.html(html)
