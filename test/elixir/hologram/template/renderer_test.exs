@@ -1,8 +1,11 @@
 defmodule Hologram.Template.RendererTest do
-  use Hologram.Test.BasicCase, async: true
-  import Hologram.Template.Renderer
+  use Hologram.Test.BasicCase, async: false
 
-  alias Hologram.Commons.PLT
+  import Hologram.Template.Renderer
+  import Mox
+
+  alias Hologram.Commons.ETS
+  alias Hologram.Commons.Reflection
   alias Hologram.Component
   alias Hologram.Test.Fixtures.Template.Renderer.Module1
   alias Hologram.Test.Fixtures.Template.Renderer.Module10
@@ -35,6 +38,17 @@ defmodule Hologram.Template.RendererTest do
   alias Hologram.Test.Fixtures.Template.Renderer.Module7
   alias Hologram.Test.Fixtures.Template.Renderer.Module8
   alias Hologram.Test.Fixtures.Template.Renderer.Module9
+  alias Hologram.Runtime.PageDigestRegistry
+
+  defmodule Stub do
+    @behaviour PageDigestRegistry
+
+    def dump_path, do: "#{Reflection.tmp_path()}/#{__MODULE__}.plt"
+
+    def ets_table_name, do: __MODULE__
+  end
+
+  setup :set_mox_global
 
   test "multiple nodes" do
     nodes = [
@@ -351,16 +365,16 @@ defmodule Hologram.Template.RendererTest do
 
   describe "context" do
     setup do
-      setup_page_digest_registry(__MODULE__)
+      stub_with(PageDigestRegistry.Mock, Stub)
+      setup_page_digest_registry(Stub)
+
+      :ok
     end
 
-    test "set in page, accessed in component nested in page", %{
-      page_digest_registry_ets_table_name: page_digest_registry_ets_table_name,
-      page_digest_registry_plt: page_digest_registry_plt
-    } do
-      PLT.put(page_digest_registry_plt, Module39, :dummy_module_39_digest)
+    test "set in page, accessed in component nested in page" do
+      ETS.put(Stub.ets_table_name(), Module39, :dummy_module_39_digest)
 
-      assert render_page(Module39, [], page_digest_registry_ets_table_name) ==
+      assert render_page(Module39, []) ==
                {"prop_aaa = 123",
                 %{
                   "layout" => %Component.Client{
@@ -376,13 +390,10 @@ defmodule Hologram.Template.RendererTest do
                 }}
     end
 
-    test "set in page, accessed in component nested in layout", %{
-      page_digest_registry_ets_table_name: page_digest_registry_ets_table_name,
-      page_digest_registry_plt: page_digest_registry_plt
-    } do
-      PLT.put(page_digest_registry_plt, Module46, :dummy_module_46_digest)
+    test "set in page, accessed in component nested in layout" do
+      ETS.put(Stub.ets_table_name(), Module46, :dummy_module_46_digest)
 
-      assert render_page(Module46, [], page_digest_registry_ets_table_name) ==
+      assert render_page(Module46, []) ==
                {"prop_aaa = 123",
                 %{
                   "layout" => %Component.Client{
@@ -398,13 +409,10 @@ defmodule Hologram.Template.RendererTest do
                 }}
     end
 
-    test "set in page, accessed in layout", %{
-      page_digest_registry_ets_table_name: page_digest_registry_ets_table_name,
-      page_digest_registry_plt: page_digest_registry_plt
-    } do
-      PLT.put(page_digest_registry_plt, Module40, :dummy_module_40_digest)
+    test "set in page, accessed in layout" do
+      ETS.put(Stub.ets_table_name(), Module40, :dummy_module_40_digest)
 
-      assert render_page(Module40, [], page_digest_registry_ets_table_name) ==
+      assert render_page(Module40, []) ==
                {"prop_aaa = 123",
                 %{
                   "layout" => %Component.Client{
@@ -420,13 +428,10 @@ defmodule Hologram.Template.RendererTest do
                 }}
     end
 
-    test "set in layout, accessed in component nested in page", %{
-      page_digest_registry_ets_table_name: page_digest_registry_ets_table_name,
-      page_digest_registry_plt: page_digest_registry_plt
-    } do
-      PLT.put(page_digest_registry_plt, Module43, :dummy_module_43_digest)
+    test "set in layout, accessed in component nested in page" do
+      ETS.put(Stub.ets_table_name(), Module43, :dummy_module_43_digest)
 
-      assert render_page(Module43, [], page_digest_registry_ets_table_name) ==
+      assert render_page(Module43, []) ==
                {"prop_aaa = 123",
                 %{
                   "layout" => %Component.Client{
@@ -441,13 +446,10 @@ defmodule Hologram.Template.RendererTest do
                 }}
     end
 
-    test "set in layout, accessed in component nested in layout", %{
-      page_digest_registry_ets_table_name: page_digest_registry_ets_table_name,
-      page_digest_registry_plt: page_digest_registry_plt
-    } do
-      PLT.put(page_digest_registry_plt, Module45, :dummy_module_45_digest)
+    test "set in layout, accessed in component nested in layout" do
+      ETS.put(Stub.ets_table_name(), Module45, :dummy_module_45_digest)
 
-      assert render_page(Module45, [], page_digest_registry_ets_table_name) ==
+      assert render_page(Module45, []) ==
                {"prop_aaa = 123",
                 %{
                   "layout" => %Component.Client{
@@ -479,16 +481,16 @@ defmodule Hologram.Template.RendererTest do
 
   describe "render_page" do
     setup do
-      setup_page_digest_registry(__MODULE__)
+      stub_with(PageDigestRegistry.Mock, Stub)
+      setup_page_digest_registry(Stub)
+
+      :ok
     end
 
-    test "inside layout slot", %{
-      page_digest_registry_ets_table_name: page_digest_registry_ets_table_name,
-      page_digest_registry_plt: page_digest_registry_plt
-    } do
-      PLT.put(page_digest_registry_plt, Module14, :dummy_module_14_digest)
+    test "inside layout slot" do
+      ETS.put(Stub.ets_table_name(), Module14, :dummy_module_14_digest)
 
-      assert render_page(Module14, [], page_digest_registry_ets_table_name) ==
+      assert render_page(Module14, []) ==
                {"layout template start, page template, layout template end",
                 %{
                   "layout" => %Component.Client{},
@@ -501,11 +503,8 @@ defmodule Hologram.Template.RendererTest do
                 }}
     end
 
-    test "cast page params", %{
-      page_digest_registry_ets_table_name: page_digest_registry_ets_table_name,
-      page_digest_registry_plt: page_digest_registry_plt
-    } do
-      PLT.put(page_digest_registry_plt, Module19, :dummy_module_19_digest)
+    test "cast page params" do
+      ETS.put(Stub.ets_table_name(), Module19, :dummy_module_19_digest)
 
       params_dom =
         [
@@ -514,7 +513,7 @@ defmodule Hologram.Template.RendererTest do
           {"param_3", [text: "value_3"]}
         ]
 
-      assert render_page(Module19, params_dom, page_digest_registry_ets_table_name) ==
+      assert render_page(Module19, params_dom) ==
                {"",
                 %{
                   "layout" => %Component.Client{},
@@ -528,13 +527,10 @@ defmodule Hologram.Template.RendererTest do
                 }}
     end
 
-    test "cast layout explicit static props", %{
-      page_digest_registry_ets_table_name: page_digest_registry_ets_table_name,
-      page_digest_registry_plt: page_digest_registry_plt
-    } do
-      PLT.put(page_digest_registry_plt, Module25, :dummy_module_25_digest)
+    test "cast layout explicit static props" do
+      ETS.put(Stub.ets_table_name(), Module25, :dummy_module_25_digest)
 
-      assert render_page(Module25, [], page_digest_registry_ets_table_name) ==
+      assert render_page(Module25, []) ==
                {"",
                 %{
                   "layout" => %Component.Client{
@@ -549,13 +545,10 @@ defmodule Hologram.Template.RendererTest do
                 }}
     end
 
-    test "cast layout props passed implicitely from page state", %{
-      page_digest_registry_ets_table_name: page_digest_registry_ets_table_name,
-      page_digest_registry_plt: page_digest_registry_plt
-    } do
-      PLT.put(page_digest_registry_plt, Module27, :dummy_module_27_digest)
+    test "cast layout props passed implicitely from page state" do
+      ETS.put(Stub.ets_table_name(), Module27, :dummy_module_27_digest)
 
-      assert render_page(Module27, [], page_digest_registry_ets_table_name) ==
+      assert render_page(Module27, []) ==
                {"",
                 %{
                   "layout" => %Component.Client{
@@ -575,11 +568,8 @@ defmodule Hologram.Template.RendererTest do
                 }}
     end
 
-    test "aggregate page vars, giving state priority over param when there are name conflicts", %{
-      page_digest_registry_ets_table_name: page_digest_registry_ets_table_name,
-      page_digest_registry_plt: page_digest_registry_plt
-    } do
-      PLT.put(page_digest_registry_plt, Module21, :dummy_module_21_digest)
+    test "aggregate page vars, giving state priority over param when there are name conflicts" do
+      ETS.put(Stub.ets_table_name(), Module21, :dummy_module_21_digest)
 
       params_dom =
         [
@@ -587,7 +577,7 @@ defmodule Hologram.Template.RendererTest do
           {"key_2", [text: "param_value_2"]}
         ]
 
-      assert render_page(Module21, params_dom, page_digest_registry_ets_table_name) ==
+      assert render_page(Module21, params_dom) ==
                {"key_1 = param_value_1, key_2 = state_value_2, key_3 = state_value_3",
                 %{
                   "layout" => %Component.Client{},
@@ -601,14 +591,10 @@ defmodule Hologram.Template.RendererTest do
                 }}
     end
 
-    test "aggregate layout vars, giving state priority over prop when there are name conflicts",
-         %{
-           page_digest_registry_ets_table_name: page_digest_registry_ets_table_name,
-           page_digest_registry_plt: page_digest_registry_plt
-         } do
-      PLT.put(page_digest_registry_plt, Module24, :dummy_module_24_digest)
+    test "aggregate layout vars, giving state priority over prop when there are name conflicts" do
+      ETS.put(Stub.ets_table_name(), Module24, :dummy_module_24_digest)
 
-      assert render_page(Module24, [], page_digest_registry_ets_table_name) ==
+      assert render_page(Module24, []) ==
                {"key_1 = prop_value_1, key_2 = state_value_2, key_3 = state_value_3",
                 %{
                   "layout" => %Component.Client{
@@ -623,13 +609,10 @@ defmodule Hologram.Template.RendererTest do
                 }}
     end
 
-    test "merge the page component client struct into the result", %{
-      page_digest_registry_ets_table_name: page_digest_registry_ets_table_name,
-      page_digest_registry_plt: page_digest_registry_plt
-    } do
-      PLT.put(page_digest_registry_plt, Module28, :dummy_module_28_digest)
+    test "merge the page component client struct into the result" do
+      ETS.put(Stub.ets_table_name(), Module28, :dummy_module_28_digest)
 
-      assert render_page(Module28, [], page_digest_registry_ets_table_name) ==
+      assert render_page(Module28, []) ==
                {"",
                 %{
                   "layout" => %Component.Client{},
@@ -643,13 +626,10 @@ defmodule Hologram.Template.RendererTest do
                 }}
     end
 
-    test "merge the layout component client struct into the result", %{
-      page_digest_registry_ets_table_name: page_digest_registry_ets_table_name,
-      page_digest_registry_plt: page_digest_registry_plt
-    } do
-      PLT.put(page_digest_registry_plt, Module29, :dummy_module_29_digest)
+    test "merge the layout component client struct into the result" do
+      ETS.put(Stub.ets_table_name(), Module29, :dummy_module_29_digest)
 
-      assert render_page(Module29, [], page_digest_registry_ets_table_name) ==
+      assert render_page(Module29, []) ==
                {"",
                 %{
                   "layout" => %Hologram.Component.Client{
@@ -664,13 +644,10 @@ defmodule Hologram.Template.RendererTest do
                 }}
     end
 
-    test "inject initial client data", %{
-      page_digest_registry_ets_table_name: page_digest_registry_ets_table_name,
-      page_digest_registry_plt: page_digest_registry_plt
-    } do
-      PLT.put(page_digest_registry_plt, Module48, "102790adb6c3b1956db310be523a7693")
+    test "inject initial client data" do
+      ETS.put(Stub.ets_table_name(), Module48, "102790adb6c3b1956db310be523a7693")
 
-      assert render_page(Module48, [], page_digest_registry_ets_table_name) == {
+      assert render_page(Module48, []) == {
                """
                layout template start
                <script>

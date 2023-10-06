@@ -93,12 +93,12 @@ defmodule Hologram.Template.Renderer do
         %{"page" => %Component.Client{state: %{a: 1, b: 2}}}
       }
   """
-  @spec render_page(module, DOM.t(), atom) :: {String.t(), %{atom => Component.Client.t()}}
-  def render_page(page_module, params_dom, page_digest_lookup_store_key) do
+  @spec render_page(module, DOM.t()) :: {String.t(), %{atom => Component.Client.t()}}
+  def render_page(page_module, params_dom) do
     params = cast_props(params_dom, page_module)
     {initial_page_client, _server} = init_component(page_module, params)
 
-    page_digest = PageDigestRegistry.lookup(page_module, page_digest_lookup_store_key)
+    page_digest = PageDigestRegistry.lookup(page_module)
 
     %{context: page_context, state: page_state} =
       initial_page_client_with_injected_page_digest =
