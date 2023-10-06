@@ -8,7 +8,7 @@ defmodule Hologram.Runtime.PageDigestRegistry do
   @callback dump_path() :: String.t()
 
   @doc """
-  Starts PageDigestRegistry process.
+  Starts page digest registry process.
   """
   @spec start_link([]) :: GenServer.on_start()
   def start_link([]) do
