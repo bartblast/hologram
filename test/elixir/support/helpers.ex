@@ -1,10 +1,8 @@
 defmodule Hologram.Test.Helpers do
   import Hologram.Template, only: [sigil_H: 2]
-  import Mox
 
   alias Hologram.Commons.PLT
   alias Hologram.Commons.ProcessUtils
-  alias Hologram.Commons.Reflection
   alias Hologram.Compiler.AST
   alias Hologram.Compiler.Context
   alias Hologram.Compiler.Encoder
