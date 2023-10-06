@@ -5,7 +5,6 @@ defmodule Hologram.Runtime.PageDigestRegistryTest do
   import Mox
 
   alias Hologram.Commons.ETS
-  alias Hologram.Commons.PLT
   alias Hologram.Commons.Reflection
   alias Hologram.Runtime.PageDigestRegistry
 
