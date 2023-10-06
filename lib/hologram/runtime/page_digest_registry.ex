@@ -42,7 +42,9 @@ defmodule Hologram.Runtime.PageDigestRegistry do
     __MODULE__
   end
 
-  defp impl, do: Application.get_env(:hologram, :page_digest_registry_impl, __MODULE__)
+  defp impl do
+    Application.get_env(:hologram, :page_digest_registry_impl, __MODULE__)
+  end
 
   defp plt(table_name) do
     %PLT{table_name: table_name}

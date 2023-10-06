@@ -20,14 +20,7 @@ defmodule Hologram.Runtime.PageDigestRegistryTest do
   setup :set_mox_global
 
   setup do
-    File.rm(Stub.dump_path())
-
-    PLT.start()
-    |> PLT.put(:module_1, :aaa)
-    |> PLT.put(:module_2, :bbb)
-    |> PLT.put(:module_3, :ccc)
-    |> PLT.dump(Stub.dump_path())
-
+    setup_page_digest_registry_dump(Stub)
     stub_with(PageDigestRegistry.Mock, Stub)
 
     :ok
@@ -37,7 +30,12 @@ defmodule Hologram.Runtime.PageDigestRegistryTest do
     assert {:ok, nil} = init(nil)
 
     assert ets_table_exists?(Stub.ets_table_name())
-    assert ETS.get_all(Stub.ets_table_name()) == %{module_1: :aaa, module_2: :bbb, module_3: :ccc}
+
+    assert ETS.get_all(Stub.ets_table_name()) == %{
+             module_a: :module_a_digest,
+             module_b: :module_b_digest,
+             module_c: :module_c_digest
+           }
   end
 
   describe "lookup/2" do
@@ -47,12 +45,12 @@ defmodule Hologram.Runtime.PageDigestRegistryTest do
     end
 
     test "module entry exists" do
-      assert lookup(:module_2) == :bbb
+      assert lookup(:module_b) == :module_b_digest
     end
 
     test "module entry doesn't exist" do
-      assert_raise KeyError, "key :module_4 not found in the PLT", fn ->
-        lookup(:module_4)
+      assert_raise KeyError, "key :module_d not found in the PLT", fn ->
+        lookup(:module_d)
       end
     end
   end

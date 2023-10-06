@@ -1,5 +1,6 @@
 defmodule Hologram.Test.Helpers do
   import Hologram.Template, only: [sigil_H: 2]
+  import Mox
 
   alias Hologram.Commons.PLT
   alias Hologram.Commons.ProcessUtils
@@ -176,38 +177,30 @@ defmodule Hologram.Test.Helpers do
   end
 
   @doc """
-  Sets up page digest registry.
+  Sets up page digest registry process.
   """
-  @spec setup_page_digest_registry(module) :: [
-          page_digest_registry_ets_table_name: atom,
-          page_digest_registry_plt: PLT.t()
-        ]
-  def setup_page_digest_registry(test_module) do
-    page_digest_registry_plt_dump_path =
-      "#{Reflection.tmp_path()}/#{test_module}/page_digest_registry.plt"
+  @spec setup_page_digest_registry(module) :: :ok
+  def setup_page_digest_registry(stub) do
+    setup_page_digest_registry_dump(stub)
+    PageDigestRegistry.start_link([])
 
-    File.rm(page_digest_registry_plt_dump_path)
+    :ok
+  end
+
+  @doc """
+  Sets up page digest registry dump file.
+  """
+  @spec setup_page_digest_registry_dump(module) :: :ok
+  def setup_page_digest_registry_dump(stub) do
+    File.rm(stub.dump_path())
 
     PLT.start()
     |> PLT.put(:module_a, :module_a_digest)
     |> PLT.put(:module_b, :module_b_digest)
     |> PLT.put(:module_c, :module_c_digest)
-    |> PLT.dump(page_digest_registry_plt_dump_path)
+    |> PLT.dump(stub.dump_path())
 
-    page_digest_registry_ets_table_name = random_atom()
-
-    opts = [
-      ets_table_name: page_digest_registry_ets_table_name,
-      plt_dump_path: page_digest_registry_plt_dump_path
-    ]
-
-    {:ok, pid} = PageDigestRegistry.start_link(opts)
-    page_digest_registry_plt = GenServer.call(pid, :get_plt)
-
-    [
-      page_digest_registry_ets_table_name: page_digest_registry_ets_table_name,
-      page_digest_registry_plt: page_digest_registry_plt
-    ]
+    :ok
   end
 
   @doc """
