@@ -1,26 +1,45 @@
 defmodule Hologram.Runtime.AssetManifestCache do
   use GenServer
+  alias Hologram.Runtime.AssetPathRegistry
+
+  @callback persistent_term_key() :: any
 
   @doc """
-  Starts AssetManifestCache process.
+  Starts asset manifest cache process.
   """
   @spec start_link(keyword) :: GenServer.on_start()
-  def start_link(opts) do
-    GenServer.start_link(__MODULE__, opts)
+  def start_link([]) do
+    GenServer.start_link(__MODULE__, nil)
   end
 
   @impl GenServer
-  def init(opts) do
-    manifest = build_manifest(opts[:asset_path_registry_process_name])
-    :persistent_term.put(opts[:persistent_term_key], manifest)
+  def init(nil) do
+    key = impl().persistent_term_key()
+    manifest = build_manifest()
+    :persistent_term.put(key, manifest)
 
-    {:ok, opts}
+    {:ok, nil}
   end
 
-  defp build_manifest(asset_path_registry_process_name) do
+  @doc """
+  Returns JavaScript code that builds the asset manifest object.
+  """
+  @spec get_manifest_js() :: String.t()
+  def get_manifest_js do
+    :persistent_term.get(impl().persistent_term_key())
+  end
+
+  @doc """
+  Returns the implementation of the asset manifest cache's persistent term key.
+  """
+  @spec persistent_term_key() :: any
+  def persistent_term_key do
+    __MODULE__
+  end
+
+  defp build_manifest() do
     entries_js =
-      asset_path_registry_process_name
-      |> GenServer.call(:get_mapping)
+      AssetPathRegistry.get_mapping()
       |> Enum.sort()
       |> Enum.map_join(",\n", fn {static_path, asset_path} ->
         ~s("#{static_path}": "#{asset_path}")
@@ -31,5 +50,9 @@ defmodule Hologram.Runtime.AssetManifestCache do
     #{entries_js}
     };\
     """
+  end
+
+  defp impl do
+    Application.get_env(:hologram, :asset_manifest_cache_impl, __MODULE__)
   end
 end

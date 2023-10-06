@@ -1,53 +1,66 @@
 defmodule Hologram.Runtime.AssetManifestCacheTest do
-  use Hologram.Test.BasicCase, async: true
+  use Hologram.Test.BasicCase, async: false
+
   import Hologram.Runtime.AssetManifestCache
+  import Mox
 
   alias Hologram.Commons.Reflection
+  alias Hologram.Runtime.AssetManifestCache
   alias Hologram.Runtime.AssetPathRegistry
 
-  @asset_path_registry_process_name random_atom()
-  @persistent_term_key random_atom()
-  @opts [
-    asset_path_registry_process_name: @asset_path_registry_process_name,
-    persistent_term_key: @persistent_term_key
-  ]
+  defmodule AssetManifestCacheStub do
+    @behaviour AssetManifestCache
 
-  @static_path "#{Reflection.tmp_path()}/#{__MODULE__}"
+    def persistent_term_key, do: __MODULE__
+  end
+
+  defmodule AssetPathRegistryStub do
+    @behaviour AssetPathRegistry
+
+    def static_dir_path, do: "#{Reflection.tmp_path()}/#{__MODULE__}"
+
+    def ets_table_name, do: __MODULE__
+
+    def process_name, do: __MODULE__
+  end
+
+  setup :set_mox_global
 
   setup do
-    clean_dir(@static_path)
-    setup_asset_fixtures(@static_path)
+    stub_with(AssetManifestCache.Mock, AssetManifestCacheStub)
+    stub_with(AssetPathRegistry.Mock, AssetPathRegistryStub)
 
-    AssetPathRegistry.start_link(
-      ets_table_name: random_atom(),
-      process_name: @asset_path_registry_process_name,
-      static_path: @static_path
-    )
+    clean_dir(AssetPathRegistryStub.static_dir_path())
+    setup_asset_fixtures(AssetPathRegistryStub.static_dir_path())
+    AssetPathRegistry.start_link([])
 
     :ok
   end
 
-  test "init/1" do
-    assert init(@opts) == {:ok, @opts}
+  test "get_manifest_js/0" do
+    init(nil)
 
-    assert :persistent_term.get(@persistent_term_key) ==
-             """
-             window.__hologramAssetManifest__ = {
-             "/hologram/test_file_9.css": "/hologram/test_file_9-99999999999999999999999999999999.css",
-             "/test_dir_1/test_dir_2/page.js": "/test_dir_1/test_dir_2/page-33333333333333333333333333333333.js",
-             "/test_dir_1/test_dir_2/test_file_1.css": "/test_dir_1/test_dir_2/test_file_1-11111111111111111111111111111111.css",
-             "/test_dir_1/test_dir_2/test_file_2.css": "/test_dir_1/test_dir_2/test_file_2-22222222222222222222222222222222.css",
-             "/test_dir_3/page.js": "/test_dir_3/page-66666666666666666666666666666666.js",
-             "/test_dir_3/test_file_4.css": "/test_dir_3/test_file_4-44444444444444444444444444444444.css",
-             "/test_dir_3/test_file_5.css": "/test_dir_3/test_file_5-55555555555555555555555555555555.css"
-             };\
-             """
+    assert get_manifest_js() == """
+           window.__hologramAssetManifest__ = {
+           "/hologram/test_file_9.css": "/hologram/test_file_9-99999999999999999999999999999999.css",
+           "/test_dir_1/test_dir_2/page.js": "/test_dir_1/test_dir_2/page-33333333333333333333333333333333.js",
+           "/test_dir_1/test_dir_2/test_file_1.css": "/test_dir_1/test_dir_2/test_file_1-11111111111111111111111111111111.css",
+           "/test_dir_1/test_dir_2/test_file_2.css": "/test_dir_1/test_dir_2/test_file_2-22222222222222222222222222222222.css",
+           "/test_dir_3/page.js": "/test_dir_3/page-66666666666666666666666666666666.js",
+           "/test_dir_3/test_file_4.css": "/test_dir_3/test_file_4-44444444444444444444444444444444.css",
+           "/test_dir_3/test_file_5.css": "/test_dir_3/test_file_5-55555555555555555555555555555555.css"
+           };\
+           """
+  end
+
+  test "init/1" do
+    assert init(nil) == {:ok, nil}
+    assert :persistent_term.get(AssetManifestCacheStub.persistent_term_key()) == get_manifest_js()
   end
 
   test "start_link/1" do
-    assert {:ok, pid} = start_link(@opts)
-
+    assert {:ok, pid} = AssetManifestCache.start_link([])
     assert is_pid(pid)
-    assert persistent_term_exists?(@persistent_term_key)
+    assert persistent_term_exists?(AssetManifestCacheStub.persistent_term_key())
   end
 end

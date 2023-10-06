@@ -1,4 +1,5 @@
 alias Hologram.Router.PageResolver
+alias Hologram.Runtime.AssetManifestCache
 alias Hologram.Runtime.AssetPathRegistry
 alias Hologram.Runtime.PageDigestRegistry
 
@@ -7,6 +8,9 @@ tmp_path = "#{File.cwd!()}/tmp"
 File.mkdir_p!(tmp_path)
 
 ExUnit.start()
+
+Mox.defmock(AssetManifestCache.Mock, for: AssetManifestCache)
+Application.put_env(:hologram, :asset_manifest_cache_impl, AssetManifestCache.Mock)
 
 Mox.defmock(AssetPathRegistry.Mock, for: AssetPathRegistry)
 Application.put_env(:hologram, :asset_path_registry_impl, AssetPathRegistry.Mock)
