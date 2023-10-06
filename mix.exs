@@ -80,7 +80,7 @@ defmodule Hologram.MixProject do
         plt_local_path: "priv/plts/project.plt"
       ],
       elixir: "~> 1.0",
-      # elixirc_options: [warnings_as_errors: true],
+      elixirc_options: [warnings_as_errors: true],
       elixirc_paths: elixirc_paths(Mix.env()),
       package: package(),
       preferred_cli_env: preferred_cli_env(),
