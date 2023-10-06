@@ -1,16 +1,30 @@
 defmodule Hologram.Router.PageResolverTest do
-  use Hologram.Test.BasicCase, async: true
-  import Hologram.Router.PageResolver
+  use Hologram.Test.BasicCase, async: false
 
+  import Hologram.Router.PageResolver
+  import Mox
+
+  alias Hologram.Router.PageResolver
   alias Hologram.Router.SearchTree
   alias Hologram.Test.Fixtures.Router.PageResolver.Module1
 
+  defmodule Stub do
+    @behaviour PageResolver
+
+    def persistent_term_key, do: __MODULE__
+  end
+
+  setup :set_mox_global
+
+  setup do
+    stub_with(PageResolver.Mock, Stub)
+    :ok
+  end
+
   test "init/1" do
-    persistent_term_key = random_atom()
+    assert {:ok, nil} = init(nil)
 
-    assert {:ok, nil} = init(persistent_term_key)
-
-    search_tree = :persistent_term.get(persistent_term_key)
+    search_tree = :persistent_term.get(Stub.persistent_term_key())
 
     assert %SearchTree.Node{
              value: nil,
@@ -25,28 +39,24 @@ defmodule Hologram.Router.PageResolverTest do
 
   describe "resolve/2" do
     setup do
-      persistent_term_key = random_atom()
-      init(persistent_term_key)
-
-      [persistent_term_key: persistent_term_key]
+      init(nil)
+      :ok
     end
 
-    test "there is a matching route", %{persistent_term_key: persistent_term_key} do
+    test "there is a matching route" do
       request_path = "/hologram-test-fixtures-router-pageresolver-module1"
-      assert resolve(request_path, persistent_term_key) == Module1
+      assert resolve(request_path) == Module1
     end
 
-    test "there is no matching route", %{persistent_term_key: persistent_term_key} do
+    test "there is no matching route" do
       request_path = "/unknown-path"
-      refute resolve(request_path, persistent_term_key)
+      refute resolve(request_path)
     end
   end
 
   test "start_link/1" do
-    persistent_term_key = random_atom()
-
-    assert {:ok, pid} = start_link(persistent_term_key: persistent_term_key)
+    assert {:ok, pid} = start_link([])
     assert is_pid(pid)
-    assert persistent_term_exists?(persistent_term_key)
+    assert persistent_term_exists?(Stub.persistent_term_key())
   end
 end
