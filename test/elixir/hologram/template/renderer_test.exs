@@ -7,6 +7,7 @@ defmodule Hologram.Template.RendererTest do
   alias Hologram.Commons.ETS
   alias Hologram.Commons.Reflection
   alias Hologram.Component
+  alias Hologram.Runtime.PageDigestRegistry
   alias Hologram.Test.Fixtures.Template.Renderer.Module1
   alias Hologram.Test.Fixtures.Template.Renderer.Module10
   alias Hologram.Test.Fixtures.Template.Renderer.Module13
@@ -38,7 +39,6 @@ defmodule Hologram.Template.RendererTest do
   alias Hologram.Test.Fixtures.Template.Renderer.Module7
   alias Hologram.Test.Fixtures.Template.Renderer.Module8
   alias Hologram.Test.Fixtures.Template.Renderer.Module9
-  alias Hologram.Runtime.PageDigestRegistry
 
   defmodule Stub do
     @behaviour PageDigestRegistry
