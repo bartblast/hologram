@@ -29,15 +29,24 @@ defmodule Hologram.Runtime.AssetPathRegistryTest do
 
   test "get_mapping/0", %{mapping: mapping} do
     AssetPathRegistry.start_link([])
-    assert AssetPathRegistry.get_mapping() == mapping
+    assert get_mapping() == mapping
   end
 
-  test "init/1" do
+  describe "handle_call/3" do
+    test "get_mapping", %{mapping: mapping} do
+      AssetPathRegistry.start_link([])
+      process_name = Stub.process_name()
+
+      assert GenServer.call(process_name, :get_mapping) == mapping
+    end
+  end
+
+  test "init/1", %{mapping: mapping} do
     ets_table_name = Stub.ets_table_name()
 
     assert {:ok, nil} = init(nil)
     assert ets_table_exists?(ets_table_name)
-    assert ETS.get_all(ets_table_name) == AssetPathRegistry.get_mapping()
+    assert ETS.get_all(ets_table_name) == mapping
   end
 
   describe "lookup/2" do
