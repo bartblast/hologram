@@ -1,27 +1,48 @@
 defmodule Hologram.RouterTest do
-  use Hologram.Test.BasicCase, async: true
-  import Hologram.Router
+  use Hologram.Test.BasicCase, async: false
 
-  alias Hologram.Commons.PLT
+  import Hologram.Router
+  import Mox
+
+  alias Hologram.Commons.ETS
+  alias Hologram.Commons.Reflection
   alias Hologram.Router.PageResolver
+  alias Hologram.Runtime.PageDigestRegistry
   alias Hologram.Test.Fixtures.Router.Module1
 
+  defmodule PageDigestRegistryStub do
+    @behaviour PageDigestRegistry
+
+    def dump_path, do: "#{Reflection.tmp_path()}/#{__MODULE__}.plt"
+
+    def ets_table_name, do: __MODULE__
+  end
+
+  defmodule PageResolverStub do
+    @behaviour PageResolver
+
+    def persistent_term_key, do: __MODULE__
+  end
+
+  setup :set_mox_global
+
+  setup do
+    stub_with(PageDigestRegistry.Mock, PageDigestRegistryStub)
+    setup_page_digest_registry(PageDigestRegistryStub)
+
+    stub_with(PageResolver.Mock, PageResolverStub)
+    PageResolver.start_link([])
+
+    :ok
+  end
+
   describe "call/2" do
-    setup do
-      opts = setup_page_digest_registry(__MODULE__)
-
-      page_resolver_store_key = random_atom()
-      PageResolver.start_link(store_key: page_resolver_store_key)
-
-      Keyword.put(opts, :page_resolver_store_key, page_resolver_store_key)
-    end
-
-    test "request path is matched", opts do
-      PLT.put(opts[:page_digest_registry_plt], Module1, :dummy_module_1_digest)
+    test "request path is matched" do
+      ETS.put(PageDigestRegistryStub.ets_table_name(), Module1, :dummy_module_1_digest)
 
       conn = Plug.Test.conn(:get, "/hologram-test-fixtures-router-module1")
 
-      assert call(conn, opts) == %{
+      assert call(conn, []) == %{
                conn
                | halted: true,
                  resp_body: "page Hologram.Test.Fixtures.Router.Module1 template",
@@ -34,10 +55,10 @@ defmodule Hologram.RouterTest do
              }
     end
 
-    test "request path is not matched", opts do
+    test "request path is not matched" do
       conn = Plug.Test.conn(:get, "/my-unmatched-request-path")
 
-      assert call(conn, opts) == %{
+      assert call(conn, []) == %{
                conn
                | halted: false,
                  resp_body: nil,
