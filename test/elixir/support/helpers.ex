@@ -104,6 +104,17 @@ defmodule Hologram.Test.Helpers do
   end
 
   @doc """
+  Generates a random module alias.
+  """
+  @spec random_module() :: module
+  def random_module do
+    random_string()
+    |> String.replace(["#", "<", ".", ">"], "")
+    # credo:disable-for-next-line Credo.Check.Warning.UnsafeToAtom
+    |> String.to_atom()
+  end
+
+  @doc """
   Generates a random string.
   """
   @spec random_string() :: String.t()
