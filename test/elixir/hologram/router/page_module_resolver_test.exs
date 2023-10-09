@@ -5,6 +5,7 @@ defmodule Hologram.Router.PageModuleResolverTest do
   import Hologram.Test.Stubs
   import Mox
 
+  alias Hologram.Router.PageModuleResolver
   alias Hologram.Router.SearchTree
   alias Hologram.Test.Fixtures.Router.PageModuleResolver.Module1
 
