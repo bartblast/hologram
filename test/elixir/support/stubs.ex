@@ -4,8 +4,23 @@ defmodule Hologram.Test.Stubs do
 
   alias Hologram.Commons.Reflection
   alias Hologram.Router.PageModuleResolver
+  alias Hologram.Runtime.AssetManifestCache
   alias Hologram.Runtime.AssetPathRegistry
   alias Hologram.Runtime.PageDigestRegistry
+
+  defmacro use_module_stub(:asset_manifest_cache) do
+    random_module = random_module()
+
+    quote do
+      defmodule alias!(unquote(random_module).AssetManifestCacheStub) do
+        @behaviour AssetManifestCache
+
+        def persistent_term_key, do: unquote(random_atom())
+      end
+
+      alias alias!(unquote(random_module).AssetManifestCacheStub)
+    end
+  end
 
   defmacro use_module_stub(:asset_path_registry) do
     random_module = random_module()

@@ -8,12 +8,7 @@ defmodule Hologram.Runtime.AssetManifestCacheTest do
   alias Hologram.Runtime.AssetManifestCache
   alias Hologram.Runtime.AssetPathRegistry
 
-  defmodule AssetManifestCacheStub do
-    @behaviour AssetManifestCache
-
-    def persistent_term_key, do: __MODULE__
-  end
-
+  use_module_stub :asset_manifest_cache
   use_module_stub :asset_path_registry
 
   setup :set_mox_global
