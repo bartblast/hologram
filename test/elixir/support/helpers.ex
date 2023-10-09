@@ -209,13 +209,15 @@ defmodule Hologram.Test.Helpers do
   """
   @spec setup_page_digest_registry_dump(module) :: :ok
   def setup_page_digest_registry_dump(stub) do
-    File.rm(stub.dump_path())
+    dump_path = stub.dump_path()
+
+    File.rm(dump_path)
 
     PLT.start()
     |> PLT.put(:module_a, :module_a_digest)
     |> PLT.put(:module_b, :module_b_digest)
     |> PLT.put(:module_c, :module_c_digest)
-    |> PLT.dump(stub.dump_path())
+    |> PLT.dump(dump_path)
 
     :ok
   end

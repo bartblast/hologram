@@ -18,8 +18,9 @@ defmodule Hologram.Runtime.ApplicationTest do
     stub_with(PageDigestRegistryMock, PageDigestRegistryStub)
     stub_with(PageModuleResolverMock, PageModuleResolverStub)
 
-    clean_dir(AssetPathRegistryStub.static_dir_path())
-    setup_asset_fixtures(AssetPathRegistryStub.static_dir_path())
+    static_dir_path = AssetPathRegistryStub.static_dir_path()
+    clean_dir(static_dir_path)
+    setup_asset_fixtures(static_dir_path)
 
     setup_page_digest_registry_dump(PageDigestRegistryStub)
 

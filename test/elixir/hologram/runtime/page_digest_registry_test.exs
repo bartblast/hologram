@@ -21,9 +21,11 @@ defmodule Hologram.Runtime.PageDigestRegistryTest do
   test "init/1" do
     assert {:ok, nil} = init(nil)
 
-    assert ets_table_exists?(PageDigestRegistryStub.ets_table_name())
+    ets_table_name = PageDigestRegistryStub.ets_table_name()
 
-    assert ETS.get_all(PageDigestRegistryStub.ets_table_name()) == %{
+    assert ets_table_exists?(ets_table_name)
+
+    assert ETS.get_all(ets_table_name) == %{
              module_a: :module_a_digest,
              module_b: :module_b_digest,
              module_c: :module_c_digest
