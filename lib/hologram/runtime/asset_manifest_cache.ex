@@ -2,6 +2,9 @@ defmodule Hologram.Runtime.AssetManifestCache do
   use GenServer
   alias Hologram.Runtime.AssetPathRegistry
 
+  @doc """
+  Returns the key of the persistent term used by the asset manifest cache registered process.
+  """
   @callback persistent_term_key() :: any
 
   @doc """
