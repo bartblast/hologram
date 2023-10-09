@@ -14,10 +14,7 @@ defmodule Hologram.Runtime.AssetPathRegistryTest do
 
   setup do
     stub_with(AssetPathRegistryMock, AssetPathRegistryStub)
-
-    static_dir_path = AssetPathRegistryStub.static_dir_path()
-    clean_dir(static_dir_path)
-    setup_asset_fixtures(static_dir_path)
+    setup_asset_fixtures(AssetPathRegistryStub.static_dir_path())
   end
 
   test "get_mapping/0", %{mapping: mapping} do

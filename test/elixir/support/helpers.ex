@@ -142,6 +142,8 @@ defmodule Hologram.Test.Helpers do
   """
   @spec setup_asset_fixtures(String.t()) :: [mapping: %{String.t() => String.t()}]
   def setup_asset_fixtures(static_path) do
+    clean_dir(static_path)
+
     dir_2_path = static_path <> "/test_dir_1/test_dir_2"
     file_1_path = dir_2_path <> "/test_file_1-11111111111111111111111111111111.css"
     file_2_path = dir_2_path <> "/test_file_2-22222222222222222222222222222222.css"
