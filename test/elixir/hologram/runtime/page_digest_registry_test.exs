@@ -50,7 +50,7 @@ defmodule Hologram.Runtime.PageDigestRegistryTest do
   end
 
   test "start_link/1" do
-    assert {:ok, pid} = start_link([])
+    assert {:ok, pid} = PageDigestRegistry.start_link([])
     assert is_pid(pid)
     assert ets_table_exists?(PageDigestRegistryStub.ets_table_name())
   end

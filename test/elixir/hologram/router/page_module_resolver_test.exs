@@ -51,7 +51,7 @@ defmodule Hologram.Router.PageModuleResolverTest do
   end
 
   test "start_link/1" do
-    assert {:ok, pid} = start_link([])
+    assert {:ok, pid} = PageModuleResolver.start_link([])
     assert is_pid(pid)
     assert persistent_term_exists?(PageModuleResolverStub.persistent_term_key())
   end
