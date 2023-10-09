@@ -4,6 +4,9 @@ defmodule Hologram.Router.PageModuleResover do
   alias Hologram.Commons.Reflection
   alias Hologram.Router.SearchTree
 
+  @doc """
+  Returns the key of the persistent term used by the page module resolver registered process.
+  """
   @callback persistent_term_key() :: any
 
   @doc """
