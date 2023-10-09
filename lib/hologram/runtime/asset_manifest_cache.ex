@@ -40,7 +40,7 @@ defmodule Hologram.Runtime.AssetManifestCache do
     __MODULE__
   end
 
-  defp build_manifest() do
+  defp build_manifest do
     entries_js =
       AssetPathRegistry.get_mapping()
       |> Enum.sort()
