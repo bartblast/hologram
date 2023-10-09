@@ -2,29 +2,21 @@ defmodule Hologram.Runtime.AssetPathRegistryTest do
   use Hologram.Test.BasicCase, async: false
 
   import Hologram.Runtime.AssetPathRegistry
+  import Hologram.Test.Stubs
   import Mox
 
   alias Hologram.Commons.ETS
-  alias Hologram.Commons.Reflection
   alias Hologram.Runtime.AssetPathRegistry
 
-  defmodule Stub do
-    @behaviour AssetPathRegistry
-
-    def static_dir_path, do: "#{Reflection.tmp_path()}/#{__MODULE__}"
-
-    def ets_table_name, do: __MODULE__
-
-    def process_name, do: __MODULE__
-  end
+  use_module_stub AssetPathRegistryStub
 
   setup :set_mox_global
 
   setup do
-    stub_with(AssetPathRegistry.Mock, Stub)
+    stub_with(AssetPathRegistry.Mock, AssetPathRegistryStub)
 
-    clean_dir(Stub.static_dir_path())
-    setup_asset_fixtures(Stub.static_dir_path())
+    clean_dir(AssetPathRegistryStub.static_dir_path())
+    setup_asset_fixtures(AssetPathRegistryStub.static_dir_path())
   end
 
   test "get_mapping/0", %{mapping: mapping} do
@@ -35,14 +27,14 @@ defmodule Hologram.Runtime.AssetPathRegistryTest do
   describe "handle_call/3" do
     test "get_mapping", %{mapping: mapping} do
       AssetPathRegistry.start_link([])
-      process_name = Stub.process_name()
+      process_name = AssetPathRegistryStub.process_name()
 
       assert GenServer.call(process_name, :get_mapping) == mapping
     end
   end
 
   test "init/1", %{mapping: mapping} do
-    ets_table_name = Stub.ets_table_name()
+    ets_table_name = AssetPathRegistryStub.ets_table_name()
 
     assert {:ok, nil} = init(nil)
     assert ets_table_exists?(ets_table_name)
@@ -68,7 +60,7 @@ defmodule Hologram.Runtime.AssetPathRegistryTest do
   test "start_link/1" do
     assert {:ok, pid} = AssetPathRegistry.start_link([])
     assert is_pid(pid)
-    assert process_name_registered?(Stub.process_name())
-    assert ets_table_exists?(Stub.ets_table_name())
+    assert process_name_registered?(AssetPathRegistryStub.process_name())
+    assert ets_table_exists?(AssetPathRegistryStub.ets_table_name())
   end
 end

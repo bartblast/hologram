@@ -22,16 +22,6 @@ defmodule Hologram.Runtime.ApplicationTest do
     def persistent_term_key, do: __MODULE__
   end
 
-  defmodule AssetPathRegistryStub do
-    @behaviour AssetPathRegistry
-
-    def static_dir_path, do: "#{Reflection.tmp_path()}/#{__MODULE__}"
-
-    def ets_table_name, do: __MODULE__
-
-    def process_name, do: __MODULE__
-  end
-
   defmodule PageDigestRegistryStub do
     @behaviour PageDigestRegistry
 
@@ -39,6 +29,8 @@ defmodule Hologram.Runtime.ApplicationTest do
 
     def ets_table_name, do: __MODULE__
   end
+
+  use_module_stub AssetPathRegistryStub
 
   setup :set_mox_global
 
