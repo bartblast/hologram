@@ -4,7 +4,14 @@ defmodule Hologram.Runtime.PageDigestRegistry do
   alias Hologram.Commons.PLT
   alias Hologram.Commons.Reflection
 
+  @doc """
+  Returns the name of the ETS table used by the page digest registry registered process.
+  """
   @callback ets_table_name() :: atom
+
+  @doc """
+  Returns the path of the dump file used by the page digest registry registered process.
+  """
   @callback dump_path() :: String.t()
 
   @doc """
