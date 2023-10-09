@@ -2,6 +2,7 @@ defmodule Hologram.Runtime.ApplicationTest do
   use Hologram.Test.BasicCase, async: false
 
   import Hologram.Runtime.Application
+  import Hologram.Test.Stubs
   import Mox
 
   alias Hologram.Commons.Reflection

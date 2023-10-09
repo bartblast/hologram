@@ -2,6 +2,7 @@ defmodule Hologram.Runtime.AssetManifestCacheTest do
   use Hologram.Test.BasicCase, async: false
 
   import Hologram.Runtime.AssetManifestCache
+  import Hologram.Test.Stubs
   import Mox
 
   alias Hologram.Commons.Reflection
