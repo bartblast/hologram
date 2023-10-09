@@ -104,6 +104,14 @@ defmodule Hologram.Test.Helpers do
   end
 
   @doc """
+  Generates a random string.
+  """
+  @spec random_string() :: String.t()
+  def random_string do
+    "#{inspect(make_ref())}"
+  end
+
+  @doc """
   Returns the HTML for the given component.
   """
   @spec render_component(module, %{atom => any}, %{(atom | {any, atom}) => any}) :: String.t()
