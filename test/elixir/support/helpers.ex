@@ -96,7 +96,7 @@ defmodule Hologram.Test.Helpers do
   end
 
   @doc """
-  Generates a random atom.
+  Generates a unique random atom.
   """
   @spec random_atom() :: atom
   def random_atom do
@@ -105,7 +105,7 @@ defmodule Hologram.Test.Helpers do
   end
 
   @doc """
-  Generates a random module alias.
+  Generates a unique random module alias.
   """
   @spec random_module() :: module
   def random_module do
@@ -116,7 +116,7 @@ defmodule Hologram.Test.Helpers do
   end
 
   @doc """
-  Generates a random string.
+  Generates a unique random string.
   """
   @spec random_string() :: String.t()
   def random_string do
