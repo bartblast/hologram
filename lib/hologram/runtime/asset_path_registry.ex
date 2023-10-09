@@ -5,8 +5,19 @@ defmodule Hologram.Runtime.AssetPathRegistry do
   alias Hologram.Commons.FileUtils
   alias Hologram.Commons.Reflection
 
+  @doc """
+  Returns the name of the ETS table used by the asset path registry registered process.
+  """
   @callback ets_table_name() :: atom
+
+  @doc """
+  Returns the process name registered for the the asset path registry.
+  """
   @callback process_name() :: atom
+
+  @doc """
+  Returns the path of the static dir used by the asset path registry registered process.
+  """
   @callback static_dir_path() :: String.t()
 
   @doc """
