@@ -31,7 +31,7 @@ defmodule Hologram.Runtime.ApplicationTest do
     def ets_table_name, do: __MODULE__
   end
 
-  use_module_stub AssetPathRegistryStub
+  use_module_stub :asset_path_registry
 
   setup :set_mox_global
 

@@ -8,7 +8,7 @@ defmodule Hologram.Runtime.AssetPathRegistryTest do
   alias Hologram.Commons.ETS
   alias Hologram.Runtime.AssetPathRegistry
 
-  use_module_stub AssetPathRegistryStub
+  use_module_stub :asset_path_registry
 
   setup :set_mox_global
 
