@@ -1,4 +1,4 @@
-alias Hologram.Router.PageResolver
+alias Hologram.Router.PageModuleResover
 alias Hologram.Runtime.AssetManifestCache
 alias Hologram.Runtime.AssetPathRegistry
 alias Hologram.Runtime.PageDigestRegistry
@@ -15,8 +15,8 @@ Application.put_env(:hologram, :asset_manifest_cache_impl, AssetManifestCache.Mo
 Mox.defmock(AssetPathRegistry.Mock, for: AssetPathRegistry)
 Application.put_env(:hologram, :asset_path_registry_impl, AssetPathRegistry.Mock)
 
-Mox.defmock(PageResolver.Mock, for: PageResolver)
-Application.put_env(:hologram, :page_module_resolver_impl, PageResolver.Mock)
+Mox.defmock(PageModuleResover.Mock, for: PageModuleResover)
+Application.put_env(:hologram, :page_module_resolver_impl, PageModuleResover.Mock)
 
 Mox.defmock(PageDigestRegistry.Mock, for: PageDigestRegistry)
 Application.put_env(:hologram, :page_digest_registry_impl, PageDigestRegistry.Mock)

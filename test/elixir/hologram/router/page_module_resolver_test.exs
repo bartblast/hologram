@@ -1,15 +1,15 @@
-defmodule Hologram.Router.PageResolverTest do
+defmodule Hologram.Router.PageModuleResoverTest do
   use Hologram.Test.BasicCase, async: false
 
-  import Hologram.Router.PageResolver
+  import Hologram.Router.PageModuleResover
   import Mox
 
-  alias Hologram.Router.PageResolver
+  alias Hologram.Router.PageModuleResover
   alias Hologram.Router.SearchTree
-  alias Hologram.Test.Fixtures.Router.PageResolver.Module1
+  alias Hologram.Test.Fixtures.Router.PageModuleResover.Module1
 
   defmodule Stub do
-    @behaviour PageResolver
+    @behaviour PageModuleResover
 
     def persistent_term_key, do: __MODULE__
   end
@@ -17,7 +17,7 @@ defmodule Hologram.Router.PageResolverTest do
   setup :set_mox_global
 
   setup do
-    stub_with(PageResolver.Mock, Stub)
+    stub_with(PageModuleResover.Mock, Stub)
     :ok
   end
 
@@ -29,7 +29,7 @@ defmodule Hologram.Router.PageResolverTest do
     assert %SearchTree.Node{
              value: nil,
              children: %{
-               "hologram-test-fixtures-router-pageresolver-module1" => %SearchTree.Node{
+               "hologram-test-fixtures-router-pagemoduleresolver-module1" => %SearchTree.Node{
                  value: Module1,
                  children: %{}
                }
@@ -44,7 +44,7 @@ defmodule Hologram.Router.PageResolverTest do
     end
 
     test "there is a matching route" do
-      request_path = "/hologram-test-fixtures-router-pageresolver-module1"
+      request_path = "/hologram-test-fixtures-router-pagemoduleresolver-module1"
       assert resolve(request_path) == Module1
     end
 

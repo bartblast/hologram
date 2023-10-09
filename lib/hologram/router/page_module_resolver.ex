@@ -1,4 +1,4 @@
-defmodule Hologram.Router.PageResolver do
+defmodule Hologram.Router.PageModuleResover do
   use GenServer
 
   alias Hologram.Commons.Reflection
@@ -7,7 +7,7 @@ defmodule Hologram.Router.PageResolver do
   @callback persistent_term_key() :: any
 
   @doc """
-  Starts page resolver process.
+  Starts page module resolver process.
   """
   @spec start_link(keyword) :: GenServer.on_start()
   def start_link([]) do

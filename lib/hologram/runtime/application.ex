@@ -4,7 +4,7 @@ defmodule Hologram.Runtime.Application do
   @impl Application
   def start(_type, _args) do
     children = [
-      Hologram.Router.PageResolver,
+      Hologram.Router.PageModuleResover,
       Hologram.Runtime.AssetPathRegistry,
       Hologram.Runtime.AssetManifestCache,
       Hologram.Runtime.PageDigestRegistry

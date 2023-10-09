@@ -6,7 +6,7 @@ defmodule Hologram.RouterTest do
 
   alias Hologram.Commons.ETS
   alias Hologram.Commons.Reflection
-  alias Hologram.Router.PageResolver
+  alias Hologram.Router.PageModuleResover
   alias Hologram.Runtime.PageDigestRegistry
   alias Hologram.Test.Fixtures.Router.Module1
 
@@ -18,8 +18,8 @@ defmodule Hologram.RouterTest do
     def ets_table_name, do: __MODULE__
   end
 
-  defmodule PageResolverStub do
-    @behaviour PageResolver
+  defmodule PageModuleResoverStub do
+    @behaviour PageModuleResover
 
     def persistent_term_key, do: __MODULE__
   end
@@ -30,8 +30,8 @@ defmodule Hologram.RouterTest do
     stub_with(PageDigestRegistry.Mock, PageDigestRegistryStub)
     setup_page_digest_registry(PageDigestRegistryStub)
 
-    stub_with(PageResolver.Mock, PageResolverStub)
-    PageResolver.start_link([])
+    stub_with(PageModuleResover.Mock, PageModuleResoverStub)
+    PageModuleResover.start_link([])
 
     :ok
   end

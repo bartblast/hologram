@@ -1,14 +1,14 @@
-defmodule Hologram.Test.Fixtures.Router.PageResolver.Module1 do
+defmodule Hologram.Test.Fixtures.Router.PageModuleResover.Module1 do
   use Hologram.Page
 
-  route "/hologram-test-fixtures-router-pageresolver-module1"
+  route "/hologram-test-fixtures-router-pagemoduleresolver-module1"
 
   layout Hologram.Test.Fixtures.LayoutFixture
 
   @impl Page
   def template do
     ~H"""
-    page Hologram.Test.Fixtures.Router.PageResolver.Module1 template
+    page Hologram.Test.Fixtures.Router.PageModuleResover.Module1 template
     """
   end
 end
