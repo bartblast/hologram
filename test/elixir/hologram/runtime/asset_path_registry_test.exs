@@ -37,7 +37,7 @@ defmodule Hologram.Runtime.AssetPathRegistryTest do
   test "init/1", %{mapping: mapping} do
     ets_table_name = AssetPathRegistryStub.ets_table_name()
 
-    assert {:ok, nil} = init(nil)
+    assert init(nil) == {:ok, nil}
     assert ets_table_exists?(ets_table_name)
     assert ETS.get_all(ets_table_name) == mapping
   end

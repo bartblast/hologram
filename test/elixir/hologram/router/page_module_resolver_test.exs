@@ -18,7 +18,7 @@ defmodule Hologram.Router.PageModuleResolverTest do
   end
 
   test "init/1" do
-    assert {:ok, nil} = init(nil)
+    assert init(nil) == {:ok, nil}
 
     search_tree = :persistent_term.get(PageModuleResolverStub.persistent_term_key())
 

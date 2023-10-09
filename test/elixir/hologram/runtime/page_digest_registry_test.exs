@@ -19,7 +19,7 @@ defmodule Hologram.Runtime.PageDigestRegistryTest do
   end
 
   test "init/1" do
-    assert {:ok, nil} = init(nil)
+    assert init(nil) == {:ok, nil}
 
     ets_table_name = PageDigestRegistryStub.ets_table_name()
 
