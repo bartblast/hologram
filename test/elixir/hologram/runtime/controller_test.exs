@@ -6,7 +6,6 @@ defmodule Hologram.Runtime.ControllerTest do
   import Mox
 
   alias Hologram.Commons.ETS
-  alias Hologram.Runtime.PageDigestRegistry
   alias Hologram.Test.Fixtures.Runtime.Controller.Module1
 
   use_module_stub :page_digest_registry
@@ -21,7 +20,7 @@ defmodule Hologram.Runtime.ControllerTest do
 
   describe "handle_request/2" do
     setup do
-      stub_with(PageDigestRegistry.Mock, PageDigestRegistryStub)
+      stub_with(PageDigestRegistryMock, PageDigestRegistryStub)
       setup_page_digest_registry(PageDigestRegistryStub)
 
       :ok

@@ -13,7 +13,7 @@ defmodule Hologram.Runtime.AssetPathRegistryTest do
   setup :set_mox_global
 
   setup do
-    stub_with(AssetPathRegistry.Mock, AssetPathRegistryStub)
+    stub_with(AssetPathRegistryMock, AssetPathRegistryStub)
 
     clean_dir(AssetPathRegistryStub.static_dir_path())
     setup_asset_fixtures(AssetPathRegistryStub.static_dir_path())

@@ -7,7 +7,6 @@ defmodule Hologram.Template.RendererTest do
 
   alias Hologram.Commons.ETS
   alias Hologram.Component
-  alias Hologram.Runtime.PageDigestRegistry
   alias Hologram.Test.Fixtures.Template.Renderer.Module1
   alias Hologram.Test.Fixtures.Template.Renderer.Module10
   alias Hologram.Test.Fixtures.Template.Renderer.Module13
@@ -359,7 +358,7 @@ defmodule Hologram.Template.RendererTest do
 
   describe "context" do
     setup do
-      stub_with(PageDigestRegistry.Mock, PageDigestRegistryStub)
+      stub_with(PageDigestRegistryMock, PageDigestRegistryStub)
       setup_page_digest_registry(PageDigestRegistryStub)
 
       :ok
@@ -475,7 +474,7 @@ defmodule Hologram.Template.RendererTest do
 
   describe "render_page" do
     setup do
-      stub_with(PageDigestRegistry.Mock, PageDigestRegistryStub)
+      stub_with(PageDigestRegistryMock, PageDigestRegistryStub)
       setup_page_digest_registry(PageDigestRegistryStub)
 
       :ok

@@ -6,7 +6,6 @@ defmodule Hologram.Runtime.PageDigestRegistryTest do
   import Mox
 
   alias Hologram.Commons.ETS
-  alias Hologram.Runtime.PageDigestRegistry
 
   use_module_stub :page_digest_registry
 
@@ -14,7 +13,7 @@ defmodule Hologram.Runtime.PageDigestRegistryTest do
 
   setup do
     setup_page_digest_registry_dump(PageDigestRegistryStub)
-    stub_with(PageDigestRegistry.Mock, PageDigestRegistryStub)
+    stub_with(PageDigestRegistryMock, PageDigestRegistryStub)
 
     :ok
   end

@@ -5,7 +5,6 @@ defmodule Hologram.Router.PageModuleResolverTest do
   import Hologram.Test.Stubs
   import Mox
 
-  alias Hologram.Router.PageModuleResolver
   alias Hologram.Router.SearchTree
   alias Hologram.Test.Fixtures.Router.PageModuleResolver.Module1
 
@@ -14,7 +13,7 @@ defmodule Hologram.Router.PageModuleResolverTest do
   setup :set_mox_global
 
   setup do
-    stub_with(PageModuleResolver.Mock, PageModuleResolverStub)
+    stub_with(PageModuleResolverMock, PageModuleResolverStub)
     :ok
   end
 

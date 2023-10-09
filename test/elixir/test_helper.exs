@@ -9,14 +9,14 @@ File.mkdir_p!(tmp_path)
 
 ExUnit.start()
 
-Mox.defmock(AssetManifestCache.Mock, for: AssetManifestCache)
-Application.put_env(:hologram, :asset_manifest_cache_impl, AssetManifestCache.Mock)
+Mox.defmock(AssetManifestCacheMock, for: AssetManifestCache)
+Application.put_env(:hologram, :asset_manifest_cache_impl, AssetManifestCacheMock)
 
-Mox.defmock(AssetPathRegistry.Mock, for: AssetPathRegistry)
-Application.put_env(:hologram, :asset_path_registry_impl, AssetPathRegistry.Mock)
+Mox.defmock(AssetPathRegistryMock, for: AssetPathRegistry)
+Application.put_env(:hologram, :asset_path_registry_impl, AssetPathRegistryMock)
 
-Mox.defmock(PageModuleResolver.Mock, for: PageModuleResolver)
-Application.put_env(:hologram, :page_module_resolver_impl, PageModuleResolver.Mock)
+Mox.defmock(PageModuleResolverMock, for: PageModuleResolver)
+Application.put_env(:hologram, :page_module_resolver_impl, PageModuleResolverMock)
 
-Mox.defmock(PageDigestRegistry.Mock, for: PageDigestRegistry)
-Application.put_env(:hologram, :page_digest_registry_impl, PageDigestRegistry.Mock)
+Mox.defmock(PageDigestRegistryMock, for: PageDigestRegistry)
+Application.put_env(:hologram, :page_digest_registry_impl, PageDigestRegistryMock)

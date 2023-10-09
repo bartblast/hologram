@@ -5,11 +5,6 @@ defmodule Hologram.Runtime.ApplicationTest do
   import Hologram.Test.Stubs
   import Mox
 
-  alias Hologram.Router.PageModuleResolver
-  alias Hologram.Runtime.AssetManifestCache
-  alias Hologram.Runtime.AssetPathRegistry
-  alias Hologram.Runtime.PageDigestRegistry
-
   use_module_stub :asset_manifest_cache
   use_module_stub :asset_path_registry
   use_module_stub :page_digest_registry
@@ -18,10 +13,10 @@ defmodule Hologram.Runtime.ApplicationTest do
   setup :set_mox_global
 
   setup do
-    stub_with(PageModuleResolver.Mock, PageModuleResolverStub)
-    stub_with(AssetManifestCache.Mock, AssetManifestCacheStub)
-    stub_with(AssetPathRegistry.Mock, AssetPathRegistryStub)
-    stub_with(PageDigestRegistry.Mock, PageDigestRegistryStub)
+    stub_with(PageModuleResolverMock, PageModuleResolverStub)
+    stub_with(AssetManifestCacheMock, AssetManifestCacheStub)
+    stub_with(AssetPathRegistryMock, AssetPathRegistryStub)
+    stub_with(PageDigestRegistryMock, PageDigestRegistryStub)
 
     clean_dir(AssetPathRegistryStub.static_dir_path())
     setup_asset_fixtures(AssetPathRegistryStub.static_dir_path())
