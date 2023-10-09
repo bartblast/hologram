@@ -1,30 +1,27 @@
-defmodule Hologram.Router.PageModuleResoverTest do
+defmodule Hologram.Router.PageModuleResolverTest do
   use Hologram.Test.BasicCase, async: false
 
-  import Hologram.Router.PageModuleResover
+  import Hologram.Router.PageModuleResolver
+  import Hologram.Test.Stubs
   import Mox
 
-  alias Hologram.Router.PageModuleResover
+  alias Hologram.Router.PageModuleResolver
   alias Hologram.Router.SearchTree
-  alias Hologram.Test.Fixtures.Router.PageModuleResover.Module1
+  alias Hologram.Test.Fixtures.Router.PageModuleResolver.Module1
 
-  defmodule Stub do
-    @behaviour PageModuleResover
-
-    def persistent_term_key, do: __MODULE__
-  end
+  use_module_stub :page_module_resolver
 
   setup :set_mox_global
 
   setup do
-    stub_with(PageModuleResover.Mock, Stub)
+    stub_with(PageModuleResolver.Mock, PageModuleResolverStub)
     :ok
   end
 
   test "init/1" do
     assert {:ok, nil} = init(nil)
 
-    search_tree = :persistent_term.get(Stub.persistent_term_key())
+    search_tree = :persistent_term.get(PageModuleResolverStub.persistent_term_key())
 
     assert %SearchTree.Node{
              value: nil,
@@ -57,6 +54,6 @@ defmodule Hologram.Router.PageModuleResoverTest do
   test "start_link/1" do
     assert {:ok, pid} = start_link([])
     assert is_pid(pid)
-    assert persistent_term_exists?(Stub.persistent_term_key())
+    assert persistent_term_exists?(PageModuleResolverStub.persistent_term_key())
   end
 end

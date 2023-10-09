@@ -5,16 +5,10 @@ defmodule Hologram.Runtime.ApplicationTest do
   import Hologram.Test.Stubs
   import Mox
 
-  alias Hologram.Router.PageModuleResover
+  alias Hologram.Router.PageModuleResolver
   alias Hologram.Runtime.AssetManifestCache
   alias Hologram.Runtime.AssetPathRegistry
   alias Hologram.Runtime.PageDigestRegistry
-
-  defmodule PageModuleResoverStub do
-    @behaviour PageModuleResover
-
-    def persistent_term_key, do: __MODULE__
-  end
 
   defmodule AssetManifestCacheStub do
     @behaviour AssetManifestCache
@@ -24,11 +18,12 @@ defmodule Hologram.Runtime.ApplicationTest do
 
   use_module_stub :asset_path_registry
   use_module_stub :page_digest_registry
+  use_module_stub :page_module_resolver
 
   setup :set_mox_global
 
   setup do
-    stub_with(PageModuleResover.Mock, PageModuleResoverStub)
+    stub_with(PageModuleResolver.Mock, PageModuleResolverStub)
     stub_with(AssetManifestCache.Mock, AssetManifestCacheStub)
     stub_with(AssetPathRegistry.Mock, AssetPathRegistryStub)
     stub_with(PageDigestRegistry.Mock, PageDigestRegistryStub)
