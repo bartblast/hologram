@@ -12,8 +12,8 @@ defmodule Hologram.Runtime.PageDigestRegistryTest do
   setup :set_mox_global
 
   setup do
-    setup_page_digest_registry_dump(PageDigestRegistryStub)
     stub_with(PageDigestRegistryMock, PageDigestRegistryStub)
+    setup_page_digest_registry_dump(PageDigestRegistryStub)
 
     :ok
   end

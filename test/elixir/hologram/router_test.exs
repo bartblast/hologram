@@ -16,9 +16,9 @@ defmodule Hologram.RouterTest do
 
   setup do
     stub_with(PageDigestRegistryMock, PageDigestRegistryStub)
-    setup_page_digest_registry(PageDigestRegistryStub)
-
     stub_with(PageModuleResolverMock, PageModuleResolverStub)
+
+    setup_page_digest_registry(PageDigestRegistryStub)
     PageModuleResolver.start_link([])
 
     :ok

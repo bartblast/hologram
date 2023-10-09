@@ -13,10 +13,10 @@ defmodule Hologram.Runtime.ApplicationTest do
   setup :set_mox_global
 
   setup do
-    stub_with(PageModuleResolverMock, PageModuleResolverStub)
     stub_with(AssetManifestCacheMock, AssetManifestCacheStub)
     stub_with(AssetPathRegistryMock, AssetPathRegistryStub)
     stub_with(PageDigestRegistryMock, PageDigestRegistryStub)
+    stub_with(PageModuleResolverMock, PageModuleResolverStub)
 
     clean_dir(AssetPathRegistryStub.static_dir_path())
     setup_asset_fixtures(AssetPathRegistryStub.static_dir_path())
