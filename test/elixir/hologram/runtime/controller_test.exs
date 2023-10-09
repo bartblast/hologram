@@ -2,20 +2,14 @@ defmodule Hologram.Runtime.ControllerTest do
   use Hologram.Test.BasicCase, async: false
 
   import Hologram.Runtime.Controller
+  import Hologram.Test.Stubs
   import Mox
 
   alias Hologram.Commons.ETS
-  alias Hologram.Commons.Reflection
   alias Hologram.Runtime.PageDigestRegistry
   alias Hologram.Test.Fixtures.Runtime.Controller.Module1
 
-  defmodule Stub do
-    @behaviour PageDigestRegistry
-
-    def dump_path, do: "#{Reflection.tmp_path()}/#{__MODULE__}.plt"
-
-    def ets_table_name, do: __MODULE__
-  end
+  use_module_stub :page_digest_registry
 
   setup :set_mox_global
 
@@ -27,14 +21,14 @@ defmodule Hologram.Runtime.ControllerTest do
 
   describe "handle_request/2" do
     setup do
-      stub_with(PageDigestRegistry.Mock, Stub)
-      setup_page_digest_registry(Stub)
+      stub_with(PageDigestRegistry.Mock, PageDigestRegistryStub)
+      setup_page_digest_registry(PageDigestRegistryStub)
 
       :ok
     end
 
     test "conn updates" do
-      ETS.put(Stub.ets_table_name(), Module1, :dummy_module_1_digest)
+      ETS.put(PageDigestRegistryStub.ets_table_name(), Module1, :dummy_module_1_digest)
 
       conn =
         Plug.Test.conn(:get, "/hologram-test-fixtures-runtime-controller-module1/111/ccc/222")

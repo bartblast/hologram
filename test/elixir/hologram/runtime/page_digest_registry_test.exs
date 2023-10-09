@@ -2,25 +2,19 @@ defmodule Hologram.Runtime.PageDigestRegistryTest do
   use Hologram.Test.BasicCase, async: false
 
   import Hologram.Runtime.PageDigestRegistry
+  import Hologram.Test.Stubs
   import Mox
 
   alias Hologram.Commons.ETS
-  alias Hologram.Commons.Reflection
   alias Hologram.Runtime.PageDigestRegistry
 
-  defmodule Stub do
-    @behaviour PageDigestRegistry
-
-    def dump_path, do: "#{Reflection.tmp_path()}/#{__MODULE__}.plt"
-
-    def ets_table_name, do: __MODULE__
-  end
+  use_module_stub :page_digest_registry
 
   setup :set_mox_global
 
   setup do
-    setup_page_digest_registry_dump(Stub)
-    stub_with(PageDigestRegistry.Mock, Stub)
+    setup_page_digest_registry_dump(PageDigestRegistryStub)
+    stub_with(PageDigestRegistry.Mock, PageDigestRegistryStub)
 
     :ok
   end
@@ -28,9 +22,9 @@ defmodule Hologram.Runtime.PageDigestRegistryTest do
   test "init/1" do
     assert {:ok, nil} = init(nil)
 
-    assert ets_table_exists?(Stub.ets_table_name())
+    assert ets_table_exists?(PageDigestRegistryStub.ets_table_name())
 
-    assert ETS.get_all(Stub.ets_table_name()) == %{
+    assert ETS.get_all(PageDigestRegistryStub.ets_table_name()) == %{
              module_a: :module_a_digest,
              module_b: :module_b_digest,
              module_c: :module_c_digest
@@ -57,6 +51,6 @@ defmodule Hologram.Runtime.PageDigestRegistryTest do
   test "start_link/1" do
     assert {:ok, pid} = start_link([])
     assert is_pid(pid)
-    assert ets_table_exists?(Stub.ets_table_name())
+    assert ets_table_exists?(PageDigestRegistryStub.ets_table_name())
   end
 end

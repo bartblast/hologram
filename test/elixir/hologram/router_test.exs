@@ -2,27 +2,21 @@ defmodule Hologram.RouterTest do
   use Hologram.Test.BasicCase, async: false
 
   import Hologram.Router
+  import Hologram.Test.Stubs
   import Mox
 
   alias Hologram.Commons.ETS
-  alias Hologram.Commons.Reflection
   alias Hologram.Router.PageModuleResover
   alias Hologram.Runtime.PageDigestRegistry
   alias Hologram.Test.Fixtures.Router.Module1
-
-  defmodule PageDigestRegistryStub do
-    @behaviour PageDigestRegistry
-
-    def dump_path, do: "#{Reflection.tmp_path()}/#{__MODULE__}.plt"
-
-    def ets_table_name, do: __MODULE__
-  end
 
   defmodule PageModuleResoverStub do
     @behaviour PageModuleResover
 
     def persistent_term_key, do: __MODULE__
   end
+
+  use_module_stub :page_digest_registry
 
   setup :set_mox_global
 
