@@ -125,6 +125,7 @@ defmodule Hologram.Commons.ReflectionTest do
     refute :elixir_map in result
     refute :dialyzer in result
 
+    refute Enumerable.Atom in result
     refute Kernel.SpecialForms in result
   end
 
@@ -140,6 +141,7 @@ defmodule Hologram.Commons.ReflectionTest do
     refute :elixir_map in result
     refute :dialyzer in result
 
+    refute Enumerable.Atom in result
     refute Kernel.SpecialForms in result
   end
 
@@ -179,6 +181,7 @@ defmodule Hologram.Commons.ReflectionTest do
     refute Graph in result
     refute Hologram.Page in result
 
+    refute Enumerable.Atom in result
     refute Kernel.SpecialForms in result
   end
 
