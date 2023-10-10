@@ -283,6 +283,9 @@ defmodule Hologram.Commons.Reflection do
 
       {:error, :no_debug_info} ->
         []
+
+      _fallback ->
+        "Module debug info not found for: #{module}"
     end
   end
 
