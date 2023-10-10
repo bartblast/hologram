@@ -1,8 +1,21 @@
 defmodule Hologram.UI.RuntimeTest do
-  use Hologram.Test.BasicCase, async: true
+  use Hologram.Test.BasicCase, async: false
+
+  import Hologram.Test.Stubs
+  import Mox
+
+  alias Hologram.Runtime.AssetPathRegistry
   alias Hologram.UI.Runtime
 
+  use_module_stub :asset_path_registry
+
+  setup :set_mox_global
+
   setup do
+    stub_with(AssetPathRegistryMock, AssetPathRegistryStub)
+    setup_asset_fixtures(AssetPathRegistryStub.static_dir_path())
+    AssetPathRegistry.start_link([])
+
     [
       context: %{
         {Hologram.Runtime, :initial_client_data_loaded?} => false,
@@ -18,6 +31,7 @@ defmodule Hologram.UI.RuntimeTest do
                window.__hologramRuntimeBootstrapData__ = "...";
              
            </script>
+           <script async src="/hologram/runtime.js"></script>
            <script async src="/hologram/page-102790adb6c3b1956db310be523a7693.js"></script>\
            """
   end
@@ -29,6 +43,7 @@ defmodule Hologram.UI.RuntimeTest do
            <script>
              
            </script>
+           <script async src="/hologram/runtime.js"></script>
            <script async src="/hologram/page-102790adb6c3b1956db310be523a7693.js"></script>\
            """
   end
