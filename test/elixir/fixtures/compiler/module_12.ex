@@ -18,6 +18,7 @@ defmodule Hologram.Test.Fixtures.Compiler.Module12 do
   end
 
   def action(:action_12b, params, client) do
+    # credo:disable-for-next-line Credo.Check.Refactor.Apply
     apply(ModuleWithoutBEAMFile, :my_fun, [params, client])
   end
 end
