@@ -31,7 +31,7 @@ defmodule Hologram.Compiler do
     if source_code do
       ~s/Interpreter.defineErlangFunction("#{class}", "#{function}", #{arity}, #{source_code});/
     else
-      ~s/Interpreter.defineNotImplementedErlangFunction("#{module}", "#{function}", #{arity});/
+      ~s/Interpreter.defineNotImplementedErlangFunction("#{module}", "#{class}", "#{function}", #{arity});/
     end
   end
 

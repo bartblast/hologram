@@ -51,7 +51,7 @@ defmodule Hologram.CompilerTest do
       output = build_erlang_function_definition(:erlang, :not_implemented, 2, @erlang_source_dir)
 
       assert output ==
-               ~s/Interpreter.defineNotImplementedErlangFunction("erlang", "not_implemented", 2);/
+               ~s/Interpreter.defineNotImplementedErlangFunction("erlang", "Erlang", "not_implemented", 2);/
     end
 
     test ":maps module function that is implemented" do
@@ -82,7 +82,7 @@ defmodule Hologram.CompilerTest do
       output = build_erlang_function_definition(:maps, :not_implemented, 2, @erlang_source_dir)
 
       assert output ==
-               ~s/Interpreter.defineNotImplementedErlangFunction("maps", "not_implemented", 2);/
+               ~s/Interpreter.defineNotImplementedErlangFunction("maps", "Erlang_Maps", "not_implemented", 2);/
     end
   end
 
@@ -294,7 +294,7 @@ defmodule Hologram.CompilerTest do
 
     assert String.contains?(
              js,
-             ~s/Interpreter.defineNotImplementedErlangFunction("lists", "foldl", 3/
+             ~s/Interpreter.defineNotImplementedErlangFunction("lists", "Erlang_Lists", "foldl", 3/
            )
   end
 
