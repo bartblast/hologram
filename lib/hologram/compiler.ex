@@ -112,8 +112,8 @@ defmodule Hologram.Compiler do
 
       iex> bundle(js, opts)
       {"caf8f4e27584852044eb27a37c5eddfd",
-       "priv/static/assets/my_script-caf8f4e27584852044eb27a37c5eddfd.js",
-       "priv/static/assets/my_script-caf8f4e27584852044eb27a37c5eddfd.js.map"}
+       "priv/static/my_script-caf8f4e27584852044eb27a37c5eddfd.js",
+       "priv/static/my_script-caf8f4e27584852044eb27a37c5eddfd.js.map"}
   """
   @spec bundle(String.t(), keyword) :: {String.t(), String.t(), String.t()}
   # sobelow_skip ["CI.System"]

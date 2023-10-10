@@ -35,4 +35,4 @@ hologram_feature_tests-*.tar
 /priv/static/**/*.gz
 
 # Hologram generated JavaScript bundles.
-/priv/static/assets/hologram/
+/priv/static/hologram/

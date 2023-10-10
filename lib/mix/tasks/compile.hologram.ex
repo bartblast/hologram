@@ -22,7 +22,7 @@ defmodule Mix.Tasks.Compile.Hologram do
     opts = [
       assets_source_dir: assets_source_dir,
       build_dir: build_dir,
-      bundle_dir: "#{root_path}/priv/static/assets/hologram",
+      bundle_dir: "#{root_path}/priv/static/hologram",
       esbuild_path: "#{root_path}/deps/hologram/assets/node_modules/.bin/esbuild",
       js_source_dir: "#{assets_source_dir}/js",
       tmp_dir: "#{build_dir}/tmp"

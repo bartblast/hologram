@@ -18,7 +18,7 @@ defmodule Hologram.UI.RuntimeTest do
                window.__hologramRuntimeBootstrapData__ = "...";
              
            </script>
-           <script async src="/assets/hologram/page-102790adb6c3b1956db310be523a7693.js"></script>\
+           <script async src="/hologram/page-102790adb6c3b1956db310be523a7693.js"></script>\
            """
   end
 
@@ -29,7 +29,7 @@ defmodule Hologram.UI.RuntimeTest do
            <script>
              
            </script>
-           <script async src="/assets/hologram/page-102790adb6c3b1956db310be523a7693.js"></script>\
+           <script async src="/hologram/page-102790adb6c3b1956db310be523a7693.js"></script>\
            """
   end
 end
