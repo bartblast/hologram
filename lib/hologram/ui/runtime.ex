@@ -14,7 +14,8 @@ defmodule Hologram.UI.Runtime do
         window.__hologramRuntimeBootstrapData__ = "...";
       {/if}
     </script>
-    <script async src="/assets/hologram/page-{@page_digest}.js"></script>
+    <script async src={asset_path("hologram/runtime.js")}></script>
+    <script async src="/hologram/page-{@page_digest}.js"></script>
     """
   end
 end
