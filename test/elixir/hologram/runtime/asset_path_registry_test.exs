@@ -46,12 +46,12 @@ defmodule Hologram.Runtime.AssetPathRegistryTest do
     end
 
     test "asset exists" do
-      assert lookup("/test_dir_1/test_dir_2/test_file_1.css") ==
+      assert lookup("test_dir_1/test_dir_2/test_file_1.css") ==
                {:ok, "/test_dir_1/test_dir_2/test_file_1-11111111111111111111111111111111.css"}
     end
 
     test "asset doesn't exist" do
-      assert lookup("/invalid_file.css") == :error
+      assert lookup("invalid_file.css") == :error
     end
   end
 

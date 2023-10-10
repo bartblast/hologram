@@ -92,7 +92,7 @@ defmodule Hologram.Runtime.AssetPathRegistry do
   end
 
   defp find_assets(static_dir_path) do
-    regex = ~r/^#{Regex.escape(static_dir_path)}(.+)\-([0-9a-f]{32})(.+)$/
+    regex = ~r"#{Regex.escape(static_dir_path)}/(.+)\-([0-9a-f]{32})(.+)$"
 
     static_dir_path
     |> FileUtils.list_files_recursively()
@@ -110,13 +110,13 @@ defmodule Hologram.Runtime.AssetPathRegistry do
 
   defp stream_build_asset_entries(file_infos) do
     Stream.map(file_infos, fn {_file_path, prefix, digest, suffix} ->
-      {prefix <> suffix, prefix <> "-" <> digest <> suffix}
+      {prefix <> suffix, "/#{prefix}-#{digest}#{suffix}"}
     end)
   end
 
   defp stream_reject_page_bundles(file_infos) do
     Stream.reject(file_infos, fn {_file_path, prefix, _digest, _suffix} ->
-      prefix == "/hologram/page"
+      prefix == "hologram/page"
     end)
   end
 end
