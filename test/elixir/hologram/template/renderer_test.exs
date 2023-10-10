@@ -7,6 +7,7 @@ defmodule Hologram.Template.RendererTest do
 
   alias Hologram.Commons.ETS
   alias Hologram.Component
+  alias Hologram.Runtime.AssetPathRegistry
   alias Hologram.Test.Fixtures.Template.Renderer.Module1
   alias Hologram.Test.Fixtures.Template.Renderer.Module10
   alias Hologram.Test.Fixtures.Template.Renderer.Module13
@@ -39,6 +40,7 @@ defmodule Hologram.Template.RendererTest do
   alias Hologram.Test.Fixtures.Template.Renderer.Module8
   alias Hologram.Test.Fixtures.Template.Renderer.Module9
 
+  use_module_stub :asset_path_registry
   use_module_stub :page_digest_registry
 
   setup :set_mox_global
@@ -358,7 +360,12 @@ defmodule Hologram.Template.RendererTest do
 
   describe "context" do
     setup do
+      stub_with(AssetPathRegistryMock, AssetPathRegistryStub)
       stub_with(PageDigestRegistryMock, PageDigestRegistryStub)
+
+      setup_asset_fixtures(AssetPathRegistryStub.static_dir_path())
+      AssetPathRegistry.start_link([])
+
       setup_page_digest_registry(PageDigestRegistryStub)
 
       :ok
@@ -474,7 +481,12 @@ defmodule Hologram.Template.RendererTest do
 
   describe "render_page" do
     setup do
+      stub_with(AssetPathRegistryMock, AssetPathRegistryStub)
       stub_with(PageDigestRegistryMock, PageDigestRegistryStub)
+
+      setup_asset_fixtures(AssetPathRegistryStub.static_dir_path())
+      AssetPathRegistry.start_link([])
+
       setup_page_digest_registry(PageDigestRegistryStub)
 
       :ok
@@ -655,6 +667,7 @@ defmodule Hologram.Template.RendererTest do
                };
                \s\s
                </script>
+               <script async src="hologram/runtime.js"></script>
                <script async src="/hologram/page-102790adb6c3b1956db310be523a7693.js"></script>
                page template
                layout template end\
