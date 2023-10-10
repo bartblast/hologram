@@ -1065,6 +1065,69 @@ describe("defineErlangFunction()", () => {
   });
 });
 
+describe("defineNotImplementedErlangFunction()", () => {
+  beforeEach(() => {
+    Interpreter.defineNotImplementedErlangFunction(
+      "aaa_bbb",
+      "Erlang_Aaa_Bbb",
+      "my_fun_a",
+      2,
+    );
+  });
+
+  afterEach(() => {
+    delete globalThis.Erlang_Aaa_Bbb;
+  });
+
+  it("initiates the module global var if it is not initiated yet", () => {
+    Interpreter.defineNotImplementedErlangFunction(
+      "ddd",
+      "Erlang_Ddd",
+      "my_fun_d",
+      3,
+      [],
+    );
+
+    assert.isDefined(globalThis.Erlang_Ddd);
+    assert.isDefined(globalThis.Erlang_Ddd["my_fun_d/3"]);
+
+    // cleanup
+    delete globalThis.Erlang_Ddd;
+  });
+
+  it("appends to the module global var if it is already initiated", () => {
+    globalThis.Erlang_Eee = {dummy: "dummy"};
+    Interpreter.defineNotImplementedErlangFunction(
+      "eee",
+      "Erlang_Eee",
+      "my_fun_e",
+      1,
+      [],
+    );
+
+    assert.isDefined(globalThis.Erlang_Eee);
+    assert.isDefined(globalThis.Erlang_Eee["my_fun_e/1"]);
+    assert.equal(globalThis.Erlang_Eee.dummy, "dummy");
+
+    // cleanup
+    delete globalThis.Erlang_Eee;
+  });
+
+  it("defines a function which raises an exception with instructions", () => {
+    const expectedMessage = `Function :aaa_bbb.my_fun_a/2 is not yet ported. See what to do here: https://www.hologram.page/TODO`;
+
+    assert.throw(
+      () =>
+        globalThis.Erlang_Aaa_Bbb["my_fun_a/2"](
+          Type.integer(1),
+          Type.integer(2),
+        ),
+      Error,
+      expectedMessage,
+    );
+  });
+});
+
 describe("dotOperator()", () => {
   it("handles remote function call", () => {
     // setup

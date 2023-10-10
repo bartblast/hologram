@@ -175,6 +175,24 @@ export default class Interpreter {
     globalThis[moduleName][`${functionName}/${functionArity}`] = jsFunction;
   }
 
+  static defineNotImplementedErlangFunction(
+    exModuleName,
+    jsModuleName,
+    functionName,
+    functionArity,
+  ) {
+    if (!globalThis[jsModuleName]) {
+      globalThis[jsModuleName] = {};
+    }
+
+    globalThis[jsModuleName][`${functionName}/${functionArity}`] = () => {
+      // TODO: use Hologram.raiseInterpreterError() and update the URL
+      const message = `Function :${exModuleName}.${functionName}/${functionArity} is not yet ported. See what to do here: https://www.hologram.page/TODO`;
+
+      throw new Error(message);
+    };
+  }
+
   static dotOperator(left, right) {
     // if left argument is a boxed atom, treat the operator as a remote function call
     if (Type.isAtom(left)) {
