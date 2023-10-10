@@ -23,12 +23,12 @@ defmodule Hologram.Router.HelpersTest do
     end
 
     test "asset exists" do
-      assert asset_path("/test_dir_1/test_dir_2/test_file_1.css") ==
+      assert asset_path("test_dir_1/test_dir_2/test_file_1.css") ==
                "/test_dir_1/test_dir_2/test_file_1-11111111111111111111111111111111.css"
     end
 
     test "asset doesn't exist" do
-      assert asset_path("/invalid_file.css") == "/invalid_file.css"
+      assert asset_path("invalid_file.css") == "/invalid_file.css"
     end
   end
 end

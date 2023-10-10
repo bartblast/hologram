@@ -12,7 +12,7 @@ defmodule Hologram.Router.Helpers do
         asset_path
 
       :error ->
-        static_path
+        "/" <> static_path
     end
   end
 end
