@@ -1,3 +1,4 @@
+# credo:disable-for-this-file Credo.Check.Readability.Specs
 defmodule Hologram.Test.Fixtures.Compiler.Module12 do
   use Hologram.Page
   alias Hologram.Test.Fixtures.Compiler.Module7
@@ -6,7 +7,6 @@ defmodule Hologram.Test.Fixtures.Compiler.Module12 do
 
   layout Hologram.Test.Fixtures.Compiler.Module6
 
-  @impl Page
   def template do
     ~H"""
     Module12 template
