@@ -199,6 +199,14 @@ defmodule Hologram.Commons.ReflectionTest do
     test "with debug info not present in the BEAM file" do
       assert module_beam_defs(Elixir.Hex) == []
     end
+
+    test "with BEAM file not existing" do
+      assert_raise Hologram.TemplateSyntaxError,
+                   "BEAM file doesn't exist for module: Elixir.MyInvalidModule",
+                   fn ->
+                     module_beam_defs(MyInvalidModule)
+                   end
+    end
   end
 
   describe "module?/1" do

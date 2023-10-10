@@ -284,8 +284,9 @@ defmodule Hologram.Commons.Reflection do
       {:error, :no_debug_info} ->
         []
 
-      _fallback ->
-        "Module debug info not found for: #{module}"
+      {:error, :non_existing} ->
+        raise Hologram.TemplateSyntaxError,
+          message: "BEAM file doesn't exist for module: #{module}"
     end
   end
 
