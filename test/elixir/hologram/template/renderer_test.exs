@@ -667,7 +667,7 @@ defmodule Hologram.Template.RendererTest do
                };
                \s\s
                </script>
-               <script async src="hologram/runtime.js"></script>
+               <script async src="/hologram/runtime.js"></script>
                <script async src="/hologram/page-102790adb6c3b1956db310be523a7693.js"></script>
                page template
                layout template end\
