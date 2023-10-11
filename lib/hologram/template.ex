@@ -19,7 +19,7 @@ defmodule Hologram.Template do
     |> remove_comments()
     |> String.trim()
     |> Tokenizer.tokenize()
-    |> Parser.parse()
+    |> Parser.parse_tokens()
     |> DOM.build_ast()
   end
 
