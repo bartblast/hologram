@@ -23,7 +23,7 @@ defmodule Hologram.Compiler.EncoderTest do
     test "with single clause" do
       # fn x -> :expr end
       ir = %IR.AnonymousFunctionType{
-        arity: 2,
+        arity: 1,
         clauses: [
           %IR.FunctionClause{
             params: [%IR.Variable{name: :x}],
@@ -36,7 +36,7 @@ defmodule Hologram.Compiler.EncoderTest do
       }
 
       assert encode(ir, %Context{}) == """
-             Type.anonymousFunction(2, [{params: [Type.variablePattern("x")], guards: [], body: (vars) => {
+             Type.anonymousFunction(1, [{params: [Type.variablePattern("x")], guards: [], body: (vars) => {
              return Type.atom("expr");
              }}], vars)\
              """
@@ -48,7 +48,7 @@ defmodule Hologram.Compiler.EncoderTest do
       #   y -> :expr_b
       # end
       ir = %IR.AnonymousFunctionType{
-        arity: 2,
+        arity: 1,
         clauses: [
           %IR.FunctionClause{
             params: [%IR.Variable{name: :x}],
@@ -68,7 +68,7 @@ defmodule Hologram.Compiler.EncoderTest do
       }
 
       assert encode(ir, %Context{}) == """
-             Type.anonymousFunction(2, [{params: [Type.variablePattern("x")], guards: [], body: (vars) => {
+             Type.anonymousFunction(1, [{params: [Type.variablePattern("x")], guards: [], body: (vars) => {
              return Type.atom("expr_a");
              }}, {params: [Type.variablePattern("y")], guards: [], body: (vars) => {
              return Type.atom("expr_b");
