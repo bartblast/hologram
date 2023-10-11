@@ -36,7 +36,7 @@ defmodule Hologram.Compiler.EncoderTest do
       }
 
       assert encode(ir, %Context{}) == """
-             Type.anonymousFunction(1, [{params: [Type.variablePattern("x")], guards: [], body: (vars) => {
+             Type.anonymousFunction(1, [{params: (vars) => [Type.variablePattern("x")], guards: [], body: (vars) => {
              return Type.atom("expr");
              }}], vars)\
              """
@@ -68,9 +68,9 @@ defmodule Hologram.Compiler.EncoderTest do
       }
 
       assert encode(ir, %Context{}) == """
-             Type.anonymousFunction(1, [{params: [Type.variablePattern("x")], guards: [], body: (vars) => {
+             Type.anonymousFunction(1, [{params: (vars) => [Type.variablePattern("x")], guards: [], body: (vars) => {
              return Type.atom("expr_a");
-             }}, {params: [Type.variablePattern("y")], guards: [], body: (vars) => {
+             }}, {params: (vars) => [Type.variablePattern("y")], guards: [], body: (vars) => {
              return Type.atom("expr_b");
              }}], vars)\
              """
@@ -706,7 +706,7 @@ defmodule Hologram.Compiler.EncoderTest do
       }
 
       assert encode(ir, %Context{}) == """
-             {params: [Type.variablePattern("x"), Type.variablePattern("y")], guards: [], body: (vars) => {
+             {params: (vars) => [Type.variablePattern("x"), Type.variablePattern("y")], guards: [], body: (vars) => {
              Type.atom("expr_1");
              return Type.atom("expr_2");
              }}\
@@ -732,7 +732,7 @@ defmodule Hologram.Compiler.EncoderTest do
       }
 
       assert encode(ir, %Context{}) == """
-             {params: [Type.variablePattern("x"), Type.variablePattern("y")], guards: [(vars) => Erlang["is_integer/1"](vars.x)], body: (vars) => {
+             {params: (vars) => [Type.variablePattern("x"), Type.variablePattern("y")], guards: [(vars) => Erlang["is_integer/1"](vars.x)], body: (vars) => {
              Type.atom("expr_1");
              return Type.atom("expr_2");
              }}\
@@ -1075,23 +1075,23 @@ defmodule Hologram.Compiler.EncoderTest do
     }
 
     assert encode(ir, %Context{}) == """
-           Interpreter.defineElixirFunction("Elixir_Aaa_Bbb", "fun_1", 1, [{params: [Type.variablePattern("c")], guards: [(vars) => Erlang["is_integer/1"](vars.c)], body: (vars) => {
+           Interpreter.defineElixirFunction("Elixir_Aaa_Bbb", "fun_1", 1, [{params: (vars) => [Type.variablePattern("c")], guards: [(vars) => Erlang["is_integer/1"](vars.c)], body: (vars) => {
            return vars.c;
            }}]);
 
-           Interpreter.defineElixirFunction("Elixir_Aaa_Bbb", "fun_1", 2, [{params: [Type.integer(9n), Type.integer(8n)], guards: [], body: (vars) => {
+           Interpreter.defineElixirFunction("Elixir_Aaa_Bbb", "fun_1", 2, [{params: (vars) => [Type.integer(9n), Type.integer(8n)], guards: [], body: (vars) => {
            return Type.atom("expr_1");
-           }}, {params: [Type.variablePattern("a"), Type.variablePattern("b")], guards: [], body: (vars) => {
+           }}, {params: (vars) => [Type.variablePattern("a"), Type.variablePattern("b")], guards: [], body: (vars) => {
            return Erlang["+/2"](vars.a, vars.b);
            }}]);
 
-           Interpreter.defineElixirFunction("Elixir_Aaa_Bbb", "fun_2", 1, [{params: [Type.integer(9n)], guards: [], body: (vars) => {
+           Interpreter.defineElixirFunction("Elixir_Aaa_Bbb", "fun_2", 1, [{params: (vars) => [Type.integer(9n)], guards: [], body: (vars) => {
            return Type.atom("expr_2");
-           }}, {params: [Type.variablePattern("z")], guards: [(vars) => Erlang["is_float/1"](vars.z)], body: (vars) => {
+           }}, {params: (vars) => [Type.variablePattern("z")], guards: [(vars) => Erlang["is_float/1"](vars.z)], body: (vars) => {
            return vars.z;
            }}]);
 
-           Interpreter.defineElixirFunction("Elixir_Aaa_Bbb", "fun_2", 2, [{params: [Type.variablePattern("x"), Type.variablePattern("y")], guards: [], body: (vars) => {
+           Interpreter.defineElixirFunction("Elixir_Aaa_Bbb", "fun_2", 2, [{params: (vars) => [Type.variablePattern("x"), Type.variablePattern("y")], guards: [], body: (vars) => {
            return Erlang["*/2"](vars.x, vars.y);
            }}]);\
            """

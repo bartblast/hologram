@@ -194,7 +194,9 @@ defmodule Hologram.Compiler.Encoder do
   end
 
   def encode(%IR.FunctionClause{} = clause, context) do
-    params = encode_as_array(clause.params, %{context | pattern?: true})
+    params_array = encode_as_array(clause.params, %{context | pattern?: true})
+    params = "(vars) => #{params_array}"
+
     guards = encode_as_array(clause.guards, context, &encode_closure/2)
     body = encode_closure(clause.body, context)
 
