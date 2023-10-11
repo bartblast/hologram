@@ -20,8 +20,8 @@ defmodule Hologram.Router.PageModuleResolver do
   @impl GenServer
   def init(nil) do
     search_tree =
-      Enum.reduce(Reflection.list_pages(), %SearchTree.Node{}, fn page, acc ->
-        SearchTree.add_route(acc, page.__route__(), page)
+      Enum.reduce(Reflection.list_pages(), %SearchTree.Node{}, fn page_module, acc ->
+        SearchTree.add_route(acc, page_module.__route__(), page_module)
       end)
 
     :persistent_term.put(impl().persistent_term_key(), search_tree)
