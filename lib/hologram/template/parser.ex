@@ -87,6 +87,22 @@ defmodule Hologram.Template.Parser do
   end
 
   @doc """
+  Parses markup into tags.
+
+  ## Examples
+
+      iex> markup = "<div id=\"test\"></div>"
+      iex> parse_markup(markup)
+      [start_tag: {"div", [{"id", [text: "test"]}]}, end_tag: "div"]
+  """
+  @spec parse_markup(String.t()) :: list(parsed_tag)
+  def parse_markup(markup) do
+    markup
+    |> Tokenizer.tokenize()
+    |> parse_tokens()
+  end
+
+  @doc """
   Parses tokens into tags.
 
   ## Examples
@@ -612,22 +628,6 @@ defmodule Hologram.Template.Parser do
 
   def parse_tokens(context, type, []) do
     raise_error(@default_error_details, context, type, nil, [])
-  end
-
-  @doc """
-  Parses markup into tags.
-
-  ## Examples
-
-      iex> markup = "<div id=\"test\"></div>"
-      iex> parse_markup(markup)
-      [start_tag: {"div", [{"id", [text: "test"]}]}, end_tag: "div"]
-  """
-  @spec parse_markup(String.t()) :: list(parsed_tag)
-  def parse_markup(markup) do
-    markup
-    |> Tokenizer.tokenize()
-    |> parse_tokens()
   end
 
   @doc """
