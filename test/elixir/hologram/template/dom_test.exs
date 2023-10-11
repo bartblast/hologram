@@ -23,6 +23,9 @@ defmodule Hologram.Template.DOMTest do
 
     Enum.each(nodes, fn {tag_type, attr_or_prop, tag_name, expected_tag_name_ast} ->
       test "#{tag_type} node without #{attr_or_prop}(s) or children" do
+        # <div></div>
+        # or
+        # <Aaa.Bbb></Aaa.Bbb>
         tags = [{:start_tag, {unquote(tag_name), []}}, {:end_tag, unquote(tag_name)}]
 
         assert build_ast(tags) == [
@@ -31,6 +34,9 @@ defmodule Hologram.Template.DOMTest do
       end
 
       test "#{tag_type} node with single #{attr_or_prop}" do
+        # <div my_key="my_value"></div>
+        # or
+        # <Aaa.Bbb my_key="my_value"></Aaa.Bbb>
         tags = [
           {:start_tag, {unquote(tag_name), [{"my_key", [text: "my_value"]}]}},
           {:end_tag, unquote(tag_name)}
@@ -49,6 +55,9 @@ defmodule Hologram.Template.DOMTest do
       end
 
       test "#{tag_type} node, with multiple #{attr_or_prop}(s)" do
+        # <div my_key_1="my_value_1" my_key_2="my_value_2"></div>
+        # or
+        # <Aaa.Bbb my_key_1="my_value_1" my_key_2="my_value_2"></Aaa.Bbb>        
         tags = [
           {:start_tag,
            {unquote(tag_name),
@@ -440,6 +449,7 @@ defmodule Hologram.Template.DOMTest do
 
   describe "build_ast/1, if block" do
     test "with one child" do
+      # {%if @xyz == 123}abc{/if}      
       tags = [{:block_start, {"if", "{ @xyz == 123}"}}, {:text, "abc"}, {:block_end, "if"}]
 
       assert build_ast(tags) == [
@@ -457,6 +467,7 @@ defmodule Hologram.Template.DOMTest do
     end
 
     test "with multiple children" do
+      # {%if @xyz == 123}abc<div></div>{/if}      
       tags = [
         {:block_start, {"if", "{ @xyz == 123}"}},
         {:text, "abc"},
@@ -482,6 +493,7 @@ defmodule Hologram.Template.DOMTest do
     end
 
     test "with else subblock having single child" do
+      # {%if @xyz == 123}aaa{%else}bbb{/if}      
       tags = [
         {:block_start, {"if", "{ @xyz == 123}"}},
         {:text, "aaa"},
@@ -505,6 +517,7 @@ defmodule Hologram.Template.DOMTest do
     end
 
     test "with else subblock having multiple children" do
+      # {%if @xyz == 123}aaa{%else}bbb<div></div>{/if}
       tags = [
         {:block_start, {"if", "{ @xyz == 123}"}},
         {:text, "aaa"},
