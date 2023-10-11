@@ -28,14 +28,14 @@ describe("callAnonymousFunction()", () => {
       1,
       [
         {
-          params: [Type.integer(1)],
+          params: (_vars) => [Type.integer(1)],
           guard: null,
           body: (_vars) => {
             return Type.atom("expr_1");
           },
         },
         {
-          params: [Type.integer(2)],
+          params: (_vars) => [Type.integer(2)],
           guard: null,
           body: (_vars) => {
             return Type.atom("expr_2");
@@ -72,21 +72,21 @@ describe("callAnonymousFunction()", () => {
       1,
       [
         {
-          params: [Type.variablePattern("x")],
+          params: (_vars) => [Type.variablePattern("x")],
           guard: (vars) => Erlang["==/2"](vars.x, Type.integer(1)),
           body: (_vars) => {
             return Type.atom("expr_1");
           },
         },
         {
-          params: [Type.variablePattern("y")],
+          params: (_vars) => [Type.variablePattern("y")],
           guard: (vars) => Erlang["==/2"](vars.y, Type.integer(2)),
           body: (_vars) => {
             return Type.atom("expr_2");
           },
         },
         {
-          params: [Type.variablePattern("z")],
+          params: (_vars) => [Type.variablePattern("z")],
           guard: (vars) => Erlang["==/2"](vars.z, Type.integer(3)),
           body: (_vars) => {
             return Type.atom("expr_3");
@@ -114,14 +114,14 @@ describe("callAnonymousFunction()", () => {
       2,
       [
         {
-          params: [Type.variablePattern("x"), Type.integer(1)],
+          params: (_vars) => [Type.variablePattern("x"), Type.integer(1)],
           guard: (vars) => Erlang["==/2"](vars.x, Type.integer(1)),
           body: (_vars) => {
             return Type.atom("expr_1");
           },
         },
         {
-          params: [Type.variablePattern("y"), Type.integer(2)],
+          params: (_vars) => [Type.variablePattern("y"), Type.integer(2)],
           guard: null,
           body: (vars) => {
             return vars.x;

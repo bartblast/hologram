@@ -14,11 +14,14 @@ export default class Interpreter {
 
     for (const clause of fun.clauses) {
       const varsClone = Hologram.cloneVars(fun.vars);
-      const pattern = Type.list(clause.params);
 
       try {
         if (
-          Interpreter.matchOperator(args, pattern, varsClone) &&
+          Interpreter.matchOperator(
+            args,
+            Type.list(clause.params(varsClone)),
+            varsClone,
+          ) &&
           Interpreter.#evaluateGuard(clause.guard, varsClone)
         ) {
           return clause.body(varsClone);
