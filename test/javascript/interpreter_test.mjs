@@ -29,14 +29,14 @@ describe("callAnonymousFunction()", () => {
       [
         {
           params: (_vars) => [Type.integer(1)],
-          guard: null,
+          guards: [],
           body: (_vars) => {
             return Type.atom("expr_1");
           },
         },
         {
           params: (_vars) => [Type.integer(2)],
-          guard: null,
+          guards: [],
           body: (_vars) => {
             return Type.atom("expr_2");
           },
@@ -73,21 +73,21 @@ describe("callAnonymousFunction()", () => {
       [
         {
           params: (_vars) => [Type.variablePattern("x")],
-          guard: (vars) => Erlang["==/2"](vars.x, Type.integer(1)),
+          guards: [(vars) => Erlang["==/2"](vars.x, Type.integer(1))],
           body: (_vars) => {
             return Type.atom("expr_1");
           },
         },
         {
           params: (_vars) => [Type.variablePattern("y")],
-          guard: (vars) => Erlang["==/2"](vars.y, Type.integer(2)),
+          guards: [(vars) => Erlang["==/2"](vars.y, Type.integer(2))],
           body: (_vars) => {
             return Type.atom("expr_2");
           },
         },
         {
           params: (_vars) => [Type.variablePattern("z")],
-          guard: (vars) => Erlang["==/2"](vars.z, Type.integer(3)),
+          guards: [(vars) => Erlang["==/2"](vars.z, Type.integer(3))],
           body: (_vars) => {
             return Type.atom("expr_3");
           },
@@ -115,14 +115,14 @@ describe("callAnonymousFunction()", () => {
       [
         {
           params: (_vars) => [Type.variablePattern("x"), Type.integer(1)],
-          guard: (vars) => Erlang["==/2"](vars.x, Type.integer(1)),
+          guards: [(vars) => Erlang["==/2"](vars.x, Type.integer(1))],
           body: (_vars) => {
             return Type.atom("expr_1");
           },
         },
         {
           params: (_vars) => [Type.variablePattern("y"), Type.integer(2)],
-          guard: null,
+          guards: [],
           body: (vars) => {
             return vars.x;
           },

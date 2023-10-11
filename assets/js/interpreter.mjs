@@ -14,15 +14,12 @@ export default class Interpreter {
 
     for (const clause of fun.clauses) {
       const varsClone = Hologram.cloneVars(fun.vars);
+      const pattern = Type.list(clause.params(varsClone));
 
       try {
         if (
-          Interpreter.matchOperator(
-            args,
-            Type.list(clause.params(varsClone)),
-            varsClone,
-          ) &&
-          Interpreter.#evaluateGuard(clause.guard, varsClone)
+          Interpreter.matchOperator(args, pattern, varsClone) &&
+          Interpreter.#evaluateGuard(clause.guards, varsClone)
         ) {
           return clause.body(varsClone);
         }
@@ -282,12 +279,13 @@ export default class Interpreter {
   // TODO: implement
   static try() {}
 
-  static #evaluateGuard(guard, vars) {
-    if (guard === null) {
+  // TODO: evaluate multiple guards
+  static #evaluateGuard(guards, vars) {
+    if (guards.length === 0) {
       return true;
     }
 
-    return Type.isTrue(guard(vars));
+    return Type.isTrue(guards[0](vars));
   }
 
   static #handleMatchResult(result, vars, rootMatch) {
