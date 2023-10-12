@@ -3348,6 +3348,457 @@ describe("matchOperator()", () => {
       assert.deepStrictEqual(vars, expectedVars);
     });
 
+    it("[x = y] = [1]", () => {
+      const result = Interpreter.matchOperator(
+        Type.list([Type.integer(1n)]),
+        Type.list([
+          Interpreter.matchOperator(
+            Type.variablePattern("y"),
+            Type.variablePattern("x"),
+            vars,
+            false,
+          ),
+        ]),
+        vars,
+      );
+
+      const expectedResult = Type.list([Type.integer(1)]);
+
+      assert.deepStrictEqual(result, expectedResult);
+
+      const expectedVars = {
+        a: Type.integer(9),
+        x: Type.integer(1),
+        y: Type.integer(1),
+      };
+
+      assert.deepStrictEqual(vars, expectedVars);
+    });
+
+    it("[1 = x] = [1]", () => {
+      const result = Interpreter.matchOperator(
+        Type.list([Type.integer(1n)]),
+        Type.list([
+          Interpreter.matchOperator(
+            Type.variablePattern("x"),
+            Type.integer(1n),
+            vars,
+            false,
+          ),
+        ]),
+        vars,
+      );
+
+      const expectedResult = Type.list([Type.integer(1)]);
+
+      assert.deepStrictEqual(result, expectedResult);
+
+      const expectedVars = {
+        a: Type.integer(9),
+        x: Type.integer(1),
+      };
+
+      assert.deepStrictEqual(vars, expectedVars);
+    });
+
+    it("[x = 1] = [1]", () => {
+      const result = Interpreter.matchOperator(
+        Type.list([Type.integer(1n)]),
+        Type.list([
+          Interpreter.matchOperator(
+            Type.integer(1n),
+            Type.variablePattern("x"),
+            vars,
+            false,
+          ),
+        ]),
+        vars,
+      );
+
+      const expectedResult = Type.list([Type.integer(1)]);
+
+      assert.deepStrictEqual(result, expectedResult);
+
+      const expectedVars = {
+        a: Type.integer(9),
+        x: Type.integer(1),
+      };
+
+      assert.deepStrictEqual(vars, expectedVars);
+    });
+
+    it("[x = y = z] = [1]", () => {
+      const result = Interpreter.matchOperator(
+        Type.list([Type.integer(1n)]),
+        Type.list([
+          Interpreter.matchOperator(
+            Interpreter.matchOperator(
+              Type.variablePattern("z"),
+              Type.variablePattern("y"),
+              vars,
+              false,
+            ),
+            Type.variablePattern("x"),
+            vars,
+            false,
+          ),
+        ]),
+        vars,
+      );
+
+      const expectedResult = Type.list([Type.integer(1)]);
+
+      assert.deepStrictEqual(result, expectedResult);
+
+      const expectedVars = {
+        a: Type.integer(9),
+        x: Type.integer(1),
+        y: Type.integer(1),
+        z: Type.integer(1),
+      };
+
+      assert.deepStrictEqual(vars, expectedVars);
+    });
+
+    it("[1 = x = y] = [1]", () => {
+      const result = Interpreter.matchOperator(
+        Type.list([Type.integer(1n)]),
+        Type.list([
+          Interpreter.matchOperator(
+            Interpreter.matchOperator(
+              Type.variablePattern("y"),
+              Type.variablePattern("x"),
+              vars,
+              false,
+            ),
+            Type.integer(1n),
+            vars,
+            false,
+          ),
+        ]),
+        vars,
+      );
+
+      const expectedResult = Type.list([Type.integer(1)]);
+
+      assert.deepStrictEqual(result, expectedResult);
+
+      const expectedVars = {
+        a: Type.integer(9),
+        x: Type.integer(1),
+        y: Type.integer(1),
+      };
+
+      assert.deepStrictEqual(vars, expectedVars);
+    });
+
+    it("[x = 1 = y] = [1]", () => {
+      const result = Interpreter.matchOperator(
+        Type.list([Type.integer(1n)]),
+        Type.list([
+          Interpreter.matchOperator(
+            Interpreter.matchOperator(
+              Type.variablePattern("y"),
+              Type.integer(1n),
+              vars,
+              false,
+            ),
+            Type.variablePattern("x"),
+            vars,
+            false,
+          ),
+        ]),
+        vars,
+      );
+
+      const expectedResult = Type.list([Type.integer(1)]);
+
+      assert.deepStrictEqual(result, expectedResult);
+
+      const expectedVars = {
+        a: Type.integer(9),
+        x: Type.integer(1),
+        y: Type.integer(1),
+      };
+
+      assert.deepStrictEqual(vars, expectedVars);
+    });
+
+    it("[x = y = 1] = [1]", () => {
+      const result = Interpreter.matchOperator(
+        Type.list([Type.integer(1n)]),
+        Type.list([
+          Interpreter.matchOperator(
+            Interpreter.matchOperator(
+              Type.integer(1n),
+              Type.variablePattern("y"),
+              vars,
+              false,
+            ),
+            Type.variablePattern("x"),
+            vars,
+            false,
+          ),
+        ]),
+        vars,
+      );
+
+      const expectedResult = Type.list([Type.integer(1)]);
+
+      assert.deepStrictEqual(result, expectedResult);
+
+      const expectedVars = {
+        a: Type.integer(9),
+        x: Type.integer(1),
+        y: Type.integer(1),
+      };
+
+      assert.deepStrictEqual(vars, expectedVars);
+    });
+
+    it("[v = x = y = z] = [1]", () => {
+      const result = Interpreter.matchOperator(
+        Type.list([Type.integer(1n)]),
+        Type.list([
+          Interpreter.matchOperator(
+            Interpreter.matchOperator(
+              Interpreter.matchOperator(
+                Type.variablePattern("z"),
+                Type.variablePattern("y"),
+                vars,
+                false,
+              ),
+              Type.variablePattern("x"),
+              vars,
+              false,
+            ),
+            Type.variablePattern("v"),
+            vars,
+            false,
+          ),
+        ]),
+        vars,
+      );
+
+      const expectedResult = Type.list([Type.integer(1)]);
+
+      assert.deepStrictEqual(result, expectedResult);
+
+      const expectedVars = {
+        a: Type.integer(9),
+        v: Type.integer(1),
+        x: Type.integer(1),
+        y: Type.integer(1),
+        z: Type.integer(1),
+      };
+
+      assert.deepStrictEqual(vars, expectedVars);
+    });
+
+    it("[1 = x = y = z] = [1]", () => {
+      const result = Interpreter.matchOperator(
+        Type.list([Type.integer(1n)]),
+        Type.list([
+          Interpreter.matchOperator(
+            Interpreter.matchOperator(
+              Interpreter.matchOperator(
+                Type.variablePattern("z"),
+                Type.variablePattern("y"),
+                vars,
+                false,
+              ),
+              Type.variablePattern("x"),
+              vars,
+              false,
+            ),
+            Type.integer(1n),
+            vars,
+            false,
+          ),
+        ]),
+        vars,
+      );
+
+      const expectedResult = Type.list([Type.integer(1)]);
+
+      assert.deepStrictEqual(result, expectedResult);
+
+      const expectedVars = {
+        a: Type.integer(9),
+        x: Type.integer(1),
+        y: Type.integer(1),
+        z: Type.integer(1),
+      };
+
+      assert.deepStrictEqual(vars, expectedVars);
+    });
+
+    it("[x = 1 = y = z] = [1]", () => {
+      const result = Interpreter.matchOperator(
+        Type.list([Type.integer(1n)]),
+        Type.list([
+          Interpreter.matchOperator(
+            Interpreter.matchOperator(
+              Interpreter.matchOperator(
+                Type.variablePattern("z"),
+                Type.variablePattern("y"),
+                vars,
+                false,
+              ),
+              Type.integer(1n),
+              vars,
+              false,
+            ),
+            Type.variablePattern("x"),
+            vars,
+            false,
+          ),
+        ]),
+        vars,
+      );
+
+      const expectedResult = Type.list([Type.integer(1)]);
+
+      assert.deepStrictEqual(result, expectedResult);
+
+      const expectedVars = {
+        a: Type.integer(9),
+        x: Type.integer(1),
+        y: Type.integer(1),
+        z: Type.integer(1),
+      };
+
+      assert.deepStrictEqual(vars, expectedVars);
+    });
+
+    it("[x = y = 1 = z] = [1]", () => {
+      const result = Interpreter.matchOperator(
+        Type.list([Type.integer(1n)]),
+        Type.list([
+          Interpreter.matchOperator(
+            Interpreter.matchOperator(
+              Interpreter.matchOperator(
+                Type.variablePattern("z"),
+                Type.integer(1n),
+                vars,
+                false,
+              ),
+              Type.variablePattern("y"),
+              vars,
+              false,
+            ),
+            Type.variablePattern("x"),
+            vars,
+            false,
+          ),
+        ]),
+        vars,
+      );
+
+      const expectedResult = Type.list([Type.integer(1)]);
+
+      assert.deepStrictEqual(result, expectedResult);
+
+      const expectedVars = {
+        a: Type.integer(9),
+        x: Type.integer(1),
+        y: Type.integer(1),
+        z: Type.integer(1),
+      };
+
+      assert.deepStrictEqual(vars, expectedVars);
+    });
+
+    it("[x = y = z = 1] = [1]", () => {
+      const result = Interpreter.matchOperator(
+        Type.list([Type.integer(1n)]),
+        Type.list([
+          Interpreter.matchOperator(
+            Interpreter.matchOperator(
+              Interpreter.matchOperator(
+                Type.integer(1n),
+                Type.variablePattern("z"),
+                vars,
+                false,
+              ),
+              Type.variablePattern("y"),
+              vars,
+              false,
+            ),
+            Type.variablePattern("x"),
+            vars,
+            false,
+          ),
+        ]),
+        vars,
+      );
+
+      const expectedResult = Type.list([Type.integer(1)]);
+
+      assert.deepStrictEqual(result, expectedResult);
+
+      const expectedVars = {
+        a: Type.integer(9),
+        x: Type.integer(1),
+        y: Type.integer(1),
+        z: Type.integer(1),
+      };
+
+      assert.deepStrictEqual(vars, expectedVars);
+    });
+
+    it("[x = y = z] = [a = b = c = 2]", () => {
+      const result = Interpreter.matchOperator(
+        Type.list([
+          Interpreter.matchOperator(
+            Interpreter.matchOperator(
+              Interpreter.matchOperator(
+                Type.integer(2n),
+                Type.variablePattern("c"),
+                vars,
+                false,
+              ),
+              Type.variablePattern("b"),
+              vars,
+              false,
+            ),
+            Type.variablePattern("a"),
+            vars,
+            false,
+          ),
+        ]),
+        Type.list([
+          Interpreter.matchOperator(
+            Interpreter.matchOperator(
+              Type.variablePattern("z"),
+              Type.variablePattern("y"),
+              vars,
+              false,
+            ),
+            Type.variablePattern("x"),
+            vars,
+            false,
+          ),
+        ]),
+        vars,
+      );
+
+      const expectedResult = Type.list([Type.integer(2)]);
+
+      assert.deepStrictEqual(result, expectedResult);
+
+      const expectedVars = {
+        a: Type.integer(2),
+        b: Type.integer(2),
+        c: Type.integer(2),
+        x: Type.integer(2),
+        y: Type.integer(2),
+        z: Type.integer(2),
+      };
+
+      assert.deepStrictEqual(vars, expectedVars);
+    });
+
     it("%{x: %{a: a, b: b} = %{a: c, b: d}} = %{x: %{a: 1, b: 2}}", () => {
       const result = Interpreter.matchOperator(
         Type.map([
