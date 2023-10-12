@@ -338,6 +338,13 @@ export default class Interpreter {
       }
     }
 
+    if (term.type === "match_pattern") {
+      return (
+        Interpreter.#hasUnresolvedVariablePattern(term.left) ||
+        Interpreter.#hasUnresolvedVariablePattern(term.right)
+      );
+    }
+
     return false;
   }
 
