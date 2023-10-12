@@ -4,8 +4,6 @@ defmodule Hologram.ExJsConsistency.MatchOperatorTest do
   Each Elixir consistency test has a related JavaScript test in test/javascript/interpreter_test.mjs (matchOperator() section)
   Always update both together.
   """
-  alias Hologram.Template.DOM
-
   use Hologram.Test.BasicCase, async: true
 
   # The build_match_operator/2 and build_value/1 helpers
