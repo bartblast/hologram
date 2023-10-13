@@ -103,6 +103,46 @@ describe("callAnonymousFunction()", () => {
     assert.deepStrictEqual(result, Type.atom("expr_3"));
   });
 
+  it("runs mutliple guards", () => {
+    // fn x when x == 1 when x == 2 -> x end
+    //
+    // fn x when :erlang.==(x, 1) when :erlang.==(x, 2) -> x end
+    const anonFun = Type.anonymousFunction(
+      1,
+      [
+        {
+          params: (vars) => [Type.variablePattern("x")],
+          guards: [
+            (vars) => Erlang["==/2"](vars.x, Type.integer(1)),
+            (vars) => Erlang["==/2"](vars.x, Type.integer(2)),
+          ],
+          body: (vars) => {
+            return vars.x;
+          },
+        },
+      ],
+      vars,
+    );
+
+    const result1 = Interpreter.callAnonymousFunction(anonFun, [
+      Type.integer(1),
+    ]);
+
+    assert.deepStrictEqual(result1, Type.integer(1));
+
+    const result2 = Interpreter.callAnonymousFunction(anonFun, [
+      Type.integer(2),
+    ]);
+
+    assert.deepStrictEqual(result2, Type.integer(2));
+
+    assertError(
+      () => Interpreter.callAnonymousFunction(anonFun, [Type.integer(3)]),
+      "FunctionClauseError",
+      "no function clause matching in anonymous fn/1",
+    );
+  });
+
   it("clones vars for each clause and has access to vars from closure", () => {
     // x = 9
     //
@@ -180,46 +220,6 @@ describe("callAnonymousFunction()", () => {
     ]);
 
     assert.deepStrictEqual(result, Type.integer(2));
-  });
-
-  it("has mutliple guards", () => {
-    // fn x when x == 1 when x == 2 -> x end
-    //
-    // fn x when :erlang.==(x, 1) when :erlang.==(x, 2) -> x end
-    const anonFun = Type.anonymousFunction(
-      1,
-      [
-        {
-          params: (vars) => [Type.variablePattern("x")],
-          guards: [
-            (vars) => Erlang["==/2"](vars.x, Type.integer(1)),
-            (vars) => Erlang["==/2"](vars.x, Type.integer(2)),
-          ],
-          body: (vars) => {
-            return vars.x;
-          },
-        },
-      ],
-      vars,
-    );
-
-    const result1 = Interpreter.callAnonymousFunction(anonFun, [
-      Type.integer(1),
-    ]);
-
-    assert.deepStrictEqual(result1, Type.integer(1));
-
-    const result2 = Interpreter.callAnonymousFunction(anonFun, [
-      Type.integer(2),
-    ]);
-
-    assert.deepStrictEqual(result2, Type.integer(2));
-
-    assertError(
-      () => Interpreter.callAnonymousFunction(anonFun, [Type.integer(3)]),
-      "FunctionClauseError",
-      "no function clause matching in anonymous fn/1",
-    );
   });
 });
 
@@ -1108,14 +1108,14 @@ describe("defineElixirFunction()", () => {
     Interpreter.defineElixirFunction("Elixir_Aaa_Bbb", "my_fun_a", 1, [
       {
         params: [Type.integer(1)],
-        guard: null,
+        guards: [],
         body: (_vars) => {
           return Type.atom("expr_1");
         },
       },
       {
         params: [Type.integer(2)],
-        guard: null,
+        guards: [],
         body: (_vars) => {
           return Type.atom("expr_2");
         },
@@ -1166,21 +1166,21 @@ describe("defineElixirFunction()", () => {
     Interpreter.defineElixirFunction("Elixir_Aaa_Bbb", "my_fun_b", 1, [
       {
         params: [Type.variablePattern("x")],
-        guard: (vars) => Erlang["==/2"](vars.x, Type.integer(1)),
+        guards: [(vars) => Erlang["==/2"](vars.x, Type.integer(1))],
         body: (_vars) => {
           return Type.atom("expr_1");
         },
       },
       {
         params: [Type.variablePattern("y")],
-        guard: (vars) => Erlang["==/2"](vars.y, Type.integer(2)),
+        guards: [(vars) => Erlang["==/2"](vars.y, Type.integer(2))],
         body: (_vars) => {
           return Type.atom("expr_2");
         },
       },
       {
         params: [Type.variablePattern("z")],
-        guard: (vars) => Erlang["==/2"](vars.z, Type.integer(3)),
+        guards: [(vars) => Erlang["==/2"](vars.z, Type.integer(3))],
         body: (_vars) => {
           return Type.atom("expr_3");
         },
@@ -1192,20 +1192,50 @@ describe("defineElixirFunction()", () => {
     assert.deepStrictEqual(result, Type.atom("expr_3"));
   });
 
+  it("defines function with multiple guards", () => {
+    // def my_fun_b(x) when x == 1 when x == 2, do: x
+    //
+    // def my_fun_b(x) when :erlang.==(x, 1) when :erlang.==(x, 2), do: x
+    Interpreter.defineElixirFunction("Elixir_Aaa_Bbb", "my_fun_b", 1, [
+      {
+        params: [Type.variablePattern("x")],
+        guards: [
+          (vars) => Erlang["==/2"](vars.x, Type.integer(1)),
+          (vars) => Erlang["==/2"](vars.x, Type.integer(2)),
+        ],
+        body: (vars) => {
+          return vars.x;
+        },
+      },
+    ]);
+
+    const result1 = globalThis.Elixir_Aaa_Bbb["my_fun_b/1"](Type.integer(1));
+    assert.deepStrictEqual(result1, Type.integer(1));
+
+    const result2 = globalThis.Elixir_Aaa_Bbb["my_fun_b/1"](Type.integer(2));
+    assert.deepStrictEqual(result2, Type.integer(2));
+
+    assertError(
+      () => globalThis.Elixir_Aaa_Bbb["my_fun_b/1"](Type.integer(3)),
+      "FunctionClauseError",
+      "no function clause matching in Aaa.Bbb.my_fun_b/1",
+    );
+  });
+
   it("defines function which clones vars for each clause", () => {
     // def my_fun_c(x) when x == 1, do: :expr_1
     // def my_fun_c(x) when x == 2, do: :expr_2
     Interpreter.defineElixirFunction("Elixir_Aaa_Bbb", "my_fun_c", 1, [
       {
         params: [Type.variablePattern("x")],
-        guard: (vars) => Erlang["==/2"](vars.x, Type.integer(1)),
+        guards: [(vars) => Erlang["==/2"](vars.x, Type.integer(1))],
         body: (_vars) => {
           return Type.atom("expr_1");
         },
       },
       {
         params: [Type.variablePattern("x")],
-        guard: (vars) => Erlang["==/2"](vars.x, Type.integer(2)),
+        guards: [(vars) => Erlang["==/2"](vars.x, Type.integer(2))],
         body: (_vars) => {
           return Type.atom("expr_2");
         },

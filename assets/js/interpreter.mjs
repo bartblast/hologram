@@ -149,7 +149,7 @@ export default class Interpreter {
         try {
           Interpreter.matchOperator(args, pattern, vars);
 
-          if (Interpreter.#evaluateGuards(clause.guard, vars)) {
+          if (Interpreter.#evaluateGuards(clause.guards, vars)) {
             return clause.body(vars);
           }
         } catch {
