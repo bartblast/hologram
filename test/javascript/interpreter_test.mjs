@@ -181,6 +181,46 @@ describe("callAnonymousFunction()", () => {
 
     assert.deepStrictEqual(result, Type.integer(2));
   });
+
+  it("has mutliple guards", () => {
+    // fn x when x == 1 when x == 2 -> x end
+    //
+    // fn x when :erlang.==(x, 1) when :erlang.==(x, 2) -> x end
+    const anonFun = Type.anonymousFunction(
+      1,
+      [
+        {
+          params: (vars) => [Type.variablePattern("x")],
+          guards: [
+            (vars) => Erlang["==/2"](vars.x, Type.integer(1)),
+            (vars) => Erlang["==/2"](vars.x, Type.integer(2)),
+          ],
+          body: (vars) => {
+            return vars.x;
+          },
+        },
+      ],
+      vars,
+    );
+
+    const result1 = Interpreter.callAnonymousFunction(anonFun, [
+      Type.integer(1),
+    ]);
+
+    assert.deepStrictEqual(result1, Type.integer(1));
+
+    const result2 = Interpreter.callAnonymousFunction(anonFun, [
+      Type.integer(2),
+    ]);
+
+    assert.deepStrictEqual(result2, Type.integer(2));
+
+    assertError(
+      () => Interpreter.callAnonymousFunction(anonFun, [Type.integer(3)]),
+      "FunctionClauseError",
+      "no function clause matching in anonymous fn/1",
+    );
+  });
 });
 
 describe("case()", () => {
