@@ -722,7 +722,7 @@ defmodule Hologram.Compiler.EncoderTest do
              """
     end
 
-    test "with guard" do
+    test "with single guard" do
       # (x, y) when :erlang.is_integer(x) do
       #  :expr_1
       #  :expr_2
@@ -745,6 +745,37 @@ defmodule Hologram.Compiler.EncoderTest do
              Type.atom("expr_1");
              return Type.atom("expr_2");
              }}\
+             """
+    end
+
+    test "with multiple guards" do
+      # (x, y) when :erlang.is_integer(x) when :erlang.is_integer(y) do
+      #  :expr_1
+      #  :expr_2
+      ir = %IR.FunctionClause{
+        params: [%IR.Variable{name: :x}, %IR.Variable{name: :y}],
+        guards: [
+          %IR.RemoteFunctionCall{
+            module: %IR.AtomType{value: :erlang},
+            function: :is_integer,
+            args: [%IR.Variable{name: :x}]
+          },
+          %IR.RemoteFunctionCall{
+            module: %IR.AtomType{value: :erlang},
+            function: :is_integer,
+            args: [%IR.Variable{name: :y}]
+          }
+        ],
+        body: %IR.Block{
+          expressions: [%IR.AtomType{value: :expr_1}, %IR.AtomType{value: :expr_2}]
+        }
+      }
+
+      assert encode(ir, %Context{}) == """
+             {params: (vars) => [Type.variablePattern("x"), Type.variablePattern("y")], guards: [(vars) => Erlang["is_integer/1"](vars.x), (vars) => Erlang["is_integer/1"](vars.y)], body: (vars) => {
+             Type.atom("expr_1");
+             return Type.atom("expr_2");
+               }}
              """
     end
   end
