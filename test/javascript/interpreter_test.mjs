@@ -111,7 +111,7 @@ describe("callAnonymousFunction()", () => {
       1,
       [
         {
-          params: (vars) => [Type.variablePattern("x")],
+          params: (_vars) => [Type.variablePattern("x")],
           guards: [
             (vars) => Erlang["==/2"](vars.x, Type.integer(1)),
             (vars) => Erlang["==/2"](vars.x, Type.integer(2)),
@@ -203,7 +203,6 @@ describe("callAnonymousFunction()", () => {
               ),
               Type.variablePattern("x"),
               vars,
-              false,
             ),
           ],
           guards: [],
@@ -1253,6 +1252,34 @@ describe("defineElixirFunction()", () => {
       "FunctionClauseError",
       "no function clause matching in Aaa.Bbb.my_fun_a/1",
     );
+  });
+
+  it("defines function which has match operator in params", () => {
+    // def my_fun_d(x = 1 = y), do: x + y
+    Interpreter.defineElixirFunction("Elixir_Aaa_Bbb", "my_fun_d", 1, [
+      {
+        params: (vars) => [
+          Interpreter.matchOperator(
+            Interpreter.matchOperator(
+              Type.variablePattern("y"),
+              Type.integer(1),
+              vars,
+              false,
+            ),
+            Type.variablePattern("x"),
+            vars,
+          ),
+        ],
+        guards: [],
+        body: (vars) => {
+          return Erlang["+/2"](vars.x, vars.y);
+        },
+      },
+    ]);
+
+    const result = globalThis.Elixir_Aaa_Bbb["my_fun_d/1"](Type.integer(1));
+
+    assert.deepStrictEqual(result, Type.integer(2));
   });
 });
 

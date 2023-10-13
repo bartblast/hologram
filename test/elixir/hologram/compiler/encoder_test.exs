@@ -778,6 +778,32 @@ defmodule Hologram.Compiler.EncoderTest do
              }}\
              """
     end
+
+    test "with match operator in param" do
+      # (x = 1 = y) do
+      #  :ok
+      ir = %IR.FunctionClause{
+        params: [
+          %IR.MatchOperator{
+            left: %IR.Variable{name: :x},
+            right: %IR.MatchOperator{
+              left: %IR.IntegerType{value: 1},
+              right: %IR.Variable{name: :y}
+            }
+          }
+        ],
+        guards: [],
+        body: %IR.Block{
+          expressions: [%IR.AtomType{value: :ok}]
+        }
+      }
+
+      encode(ir, %Context{}) == """
+      {params: (vars) => [Interpreter.matchOperator(Interpreter.matchOperator(Type.variablePattern("y"), Type.integer(1n), vars, false), Type.variablePattern("x"), vars)], guards: [], body: (vars) => {
+      return Type.atom("ok");
+      }}
+      """
+    end
   end
 
   test "integer type" do
