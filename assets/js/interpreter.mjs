@@ -40,7 +40,7 @@ export default class Interpreter {
       try {
         Interpreter.matchOperator(condition, clause.match, varsClone);
 
-        if (Interpreter.#evaluateGuards(clause.guard, varsClone) === false) {
+        if (Interpreter.#evaluateGuards(clause.guards, varsClone) === false) {
           continue;
         }
         return clause.body(varsClone);

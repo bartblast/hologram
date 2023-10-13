@@ -199,7 +199,7 @@ describe("case()", () => {
 
     const clause1 = {
       match: Type.integer(1),
-      guard: null,
+      guards: [],
       body: (_vars) => {
         return Type.atom("expr_1");
       },
@@ -207,7 +207,7 @@ describe("case()", () => {
 
     const clause2 = {
       match: Type.integer(2),
-      guard: null,
+      guards: [],
       body: (_vars) => {
         return Type.atom("expr_2");
       },
@@ -215,7 +215,7 @@ describe("case()", () => {
 
     const clause3 = {
       match: Type.integer(3),
-      guard: null,
+      guards: [],
       body: (_vars) => {
         return Type.atom("expr_3");
       },
@@ -236,10 +236,16 @@ describe("case()", () => {
     //   y when y == 1 -> :expr_2
     //   z when z == 3 -> :expr_3
     // end
+    //
+    // case 2 do
+    //   x when :erlang.==(x, 1) -> :expr_1
+    //   y when :erlang.==(y, 1) -> :expr_2
+    //   z when :erlang.==(z, 1) -> :expr_3
+    // end
 
     const clause1 = {
       match: Type.variablePattern("x"),
-      guard: (vars) => Erlang["==/2"](vars.x, Type.integer(1)),
+      guards: [(vars) => Erlang["==/2"](vars.x, Type.integer(1))],
       body: (_vars) => {
         return Type.atom("expr_1");
       },
@@ -247,7 +253,7 @@ describe("case()", () => {
 
     const clause2 = {
       match: Type.variablePattern("y"),
-      guard: (vars) => Erlang["==/2"](vars.y, Type.integer(2)),
+      guards: [(vars) => Erlang["==/2"](vars.y, Type.integer(2))],
       body: (_vars) => {
         return Type.atom("expr_2");
       },
@@ -255,7 +261,7 @@ describe("case()", () => {
 
     const clause3 = {
       match: Type.variablePattern("z"),
-      guard: (vars) => Erlang["==/2"](vars.z, Type.integer(3)),
+      guards: [(vars) => Erlang["==/2"](vars.z, Type.integer(3))],
       body: (_vars) => {
         return Type.atom("expr_3");
       },
@@ -263,6 +269,63 @@ describe("case()", () => {
 
     const result = Interpreter.case(
       Type.integer(2),
+      [clause1, clause2, clause3],
+      vars,
+    );
+
+    assert.deepStrictEqual(result, Type.atom("expr_2"));
+  });
+
+  it("clause with multiple guards", () => {
+    // case my_var do
+    //   x when x == 1 when x == 11 -> :expr_1
+    //   y when y == 2 when y == 22 -> :expr_2
+    //   z when z == 3 when z == 33 -> :expr_3
+    // end
+    //
+    // case my_var do
+    //   x when :erlang.==(x, 1) when :erlang.==(x, 11) -> :expr_1
+    //   y when :erlang.==(y, 2) when :erlang.==(y, 22) -> :expr_2
+    //   z when :erlang.==(z, 3) when :erlang.==(z, 33) -> :expr_3
+    // end
+
+    const clause1 = {
+      match: Type.variablePattern("x"),
+      guards: [
+        (vars) => Erlang["==/2"](vars.x, Type.integer(1)),
+        (vars) => Erlang["==/2"](vars.x, Type.integer(11)),
+      ],
+      body: (_vars) => {
+        return Type.atom("expr_1");
+      },
+    };
+
+    const clause2 = {
+      match: Type.variablePattern("y"),
+      guards: [
+        (vars) => Erlang["==/2"](vars.y, Type.integer(2)),
+        (vars) => Erlang["==/2"](vars.y, Type.integer(22)),
+      ],
+      body: (_vars) => {
+        return Type.atom("expr_2");
+      },
+    };
+
+    const clause3 = {
+      match: Type.variablePattern("z"),
+      guards: [
+        (vars) => Erlang["==/2"](vars.z, Type.integer(3)),
+        (vars) => Erlang["==/2"](vars.z, Type.integer(33)),
+      ],
+      body: (_vars) => {
+        return Type.atom("expr_3");
+      },
+    };
+
+    const vars = {my_var: Type.integer(22)};
+
+    const result = Interpreter.case(
+      vars.my_var,
       [clause1, clause2, clause3],
       vars,
     );
@@ -280,7 +343,7 @@ describe("case()", () => {
 
     const clause1 = {
       match: Type.variablePattern("x"),
-      guard: (vars) => Erlang["==/2"](vars.x, Type.integer(1)),
+      guards: [(vars) => Erlang["==/2"](vars.x, Type.integer(1))],
       body: (_vars) => {
         return Type.atom("expr_1");
       },
@@ -288,7 +351,7 @@ describe("case()", () => {
 
     const clause2 = {
       match: Type.variablePattern("y"),
-      guard: null,
+      guards: [],
       body: (vars) => {
         return vars.x;
       },
@@ -307,7 +370,7 @@ describe("case()", () => {
 
     const clause1 = {
       match: Type.integer(1),
-      guard: null,
+      guards: [],
       body: (_vars) => {
         return Type.atom("expr_1");
       },
@@ -315,7 +378,7 @@ describe("case()", () => {
 
     const clause2 = {
       match: Type.integer(2),
-      guard: null,
+      guards: [],
       body: (_vars) => {
         return Type.atom("expr_2");
       },
@@ -480,7 +543,7 @@ describe("comprehension()", () => {
   });
 
   describe("guards", () => {
-    it("are applied", () => {
+    it("single guard", () => {
       // for x when x != 2 <- [1, 2, 3],
       //     y when y != 4 <- [4, 5, 6],
       //     do: {x, y}
@@ -492,22 +555,22 @@ describe("comprehension()", () => {
       const enumerable1 = (_vars) =>
         Type.list([Type.integer(1), Type.integer(2), Type.integer(3)]);
 
-      const guard1 = (vars) => Erlang["/=/2"](vars.x, Type.integer(2));
+      const guard1a = (vars) => Erlang["/=/2"](vars.x, Type.integer(2));
 
       const generator1 = {
         match: Type.variablePattern("x"),
-        guards: [guard1],
+        guards: [guard1a],
         body: enumerable1,
       };
 
       const enumerable2 = (_vars) =>
         Type.list([Type.integer(4), Type.integer(5), Type.integer(6)]);
 
-      const guard2 = (vars) => Erlang["/=/2"](vars.y, Type.integer(4));
+      const guard2a = (vars) => Erlang["/=/2"](vars.y, Type.integer(4));
 
       const generator2 = {
         match: Type.variablePattern("y"),
-        guards: [guard2],
+        guards: [guard2a],
         body: enumerable2,
       };
 
@@ -525,6 +588,68 @@ describe("comprehension()", () => {
         Type.tuple([Type.integer(1), Type.integer(6)]),
         Type.tuple([Type.integer(3), Type.integer(5)]),
         Type.tuple([Type.integer(3), Type.integer(6)]),
+      ]);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("multiple guards", () => {
+      // for x when x == 2 when x == 4 <- [1, 2, 3, 4],
+      //     y when y == 5 when y == 7 <- [5, 6, 7, 8],
+      //     do: {x, y}
+      //
+      // for x when :erlang."=="(x, 2) when :erlang."=="(x, 4) <- [1, 2, 3, 4],
+      //     y when :erlang."=="(y, 5) when :erlang."=="(y, 7) <- [5, 6, 7, 8],
+      //     do: {x, y}
+
+      const enumerable1 = (_vars) =>
+        Type.list([
+          Type.integer(1),
+          Type.integer(2),
+          Type.integer(3),
+          Type.integer(4),
+        ]);
+
+      const guard1a = (vars) => Erlang["==/2"](vars.x, Type.integer(2));
+      const guard1b = (vars) => Erlang["==/2"](vars.x, Type.integer(4));
+
+      const generator1 = {
+        match: Type.variablePattern("x"),
+        guards: [guard1a, guard1b],
+        body: enumerable1,
+      };
+
+      const enumerable2 = (_vars) =>
+        Type.list([
+          Type.integer(5),
+          Type.integer(6),
+          Type.integer(7),
+          Type.integer(8),
+        ]);
+
+      const guard2a = (vars) => Erlang["==/2"](vars.y, Type.integer(5));
+      const guard2b = (vars) => Erlang["==/2"](vars.y, Type.integer(7));
+
+      const generator2 = {
+        match: Type.variablePattern("y"),
+        guards: [guard2a, guard2b],
+        body: enumerable2,
+      };
+
+      const result = Interpreter.comprehension(
+        [generator1, generator2],
+        [],
+        Type.list([]),
+        false,
+        (vars) => Type.tuple([vars.x, vars.y]),
+        vars,
+      );
+
+      const expected = Type.list([
+        Type.tuple([Type.integer(2), Type.integer(5)]),
+        Type.tuple([Type.integer(2), Type.integer(7)]),
+        Type.tuple([Type.integer(4), Type.integer(5)]),
+        Type.tuple([Type.integer(4), Type.integer(7)]),
       ]);
 
       assert.deepStrictEqual(result, expected);
