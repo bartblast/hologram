@@ -19,7 +19,7 @@ export default class Interpreter {
       try {
         if (
           Interpreter.matchOperator(args, pattern, varsClone) &&
-          Interpreter.#evaluateGuard(clause.guards, varsClone)
+          Interpreter.#evaluateGuards(clause.guards, varsClone)
         ) {
           return clause.body(varsClone);
         }
@@ -40,7 +40,7 @@ export default class Interpreter {
       try {
         Interpreter.matchOperator(condition, clause.match, varsClone);
 
-        if (Interpreter.#evaluateGuard(clause.guard, varsClone) === false) {
+        if (Interpreter.#evaluateGuards(clause.guard, varsClone) === false) {
           continue;
         }
         return clause.body(varsClone);
@@ -73,7 +73,7 @@ export default class Interpreter {
           );
 
           if (
-            Interpreter.#evaluateGuard(generators[i].guards, varsClone) ===
+            Interpreter.#evaluateGuards(generators[i].guards, varsClone) ===
             false
           ) {
             return acc;
@@ -149,7 +149,7 @@ export default class Interpreter {
         try {
           Interpreter.matchOperator(args, pattern, vars);
 
-          if (Interpreter.#evaluateGuard(clause.guard, vars)) {
+          if (Interpreter.#evaluateGuards(clause.guard, vars)) {
             return clause.body(vars);
           }
         } catch {
@@ -278,7 +278,9 @@ export default class Interpreter {
   }
 
   // TODO: implement
-  static try() {}
+  static try() {
+    throw new Error("try syntax is not yet implemented");
+  }
 
   static #evaluateGuards(guards, vars) {
     if (guards.length === 0) {
