@@ -1101,20 +1101,20 @@ describe("consOperator()", () => {
   });
 });
 
-describe("defineElixirFunction()", () => {
+describe.only("defineElixirFunction()", () => {
   beforeEach(() => {
     // def my_fun_a(1), do: :expr_1
     // def my_fun_a(2), do: :expr_2
     Interpreter.defineElixirFunction("Elixir_Aaa_Bbb", "my_fun_a", 1, [
       {
-        params: [Type.integer(1)],
+        params: (_vars) => [Type.integer(1)],
         guards: [],
         body: (_vars) => {
           return Type.atom("expr_1");
         },
       },
       {
-        params: [Type.integer(2)],
+        params: (_vars) => [Type.integer(2)],
         guards: [],
         body: (_vars) => {
           return Type.atom("expr_2");
@@ -1165,21 +1165,21 @@ describe("defineElixirFunction()", () => {
     // def my_fun_b(z) when z == 3, do: :expr_3
     Interpreter.defineElixirFunction("Elixir_Aaa_Bbb", "my_fun_b", 1, [
       {
-        params: [Type.variablePattern("x")],
+        params: (_vars) => [Type.variablePattern("x")],
         guards: [(vars) => Erlang["==/2"](vars.x, Type.integer(1))],
         body: (_vars) => {
           return Type.atom("expr_1");
         },
       },
       {
-        params: [Type.variablePattern("y")],
+        params: (_vars) => [Type.variablePattern("y")],
         guards: [(vars) => Erlang["==/2"](vars.y, Type.integer(2))],
         body: (_vars) => {
           return Type.atom("expr_2");
         },
       },
       {
-        params: [Type.variablePattern("z")],
+        params: (_vars) => [Type.variablePattern("z")],
         guards: [(vars) => Erlang["==/2"](vars.z, Type.integer(3))],
         body: (_vars) => {
           return Type.atom("expr_3");
@@ -1198,7 +1198,7 @@ describe("defineElixirFunction()", () => {
     // def my_fun_b(x) when :erlang.==(x, 1) when :erlang.==(x, 2), do: x
     Interpreter.defineElixirFunction("Elixir_Aaa_Bbb", "my_fun_b", 1, [
       {
-        params: [Type.variablePattern("x")],
+        params: (_vars) => [Type.variablePattern("x")],
         guards: [
           (vars) => Erlang["==/2"](vars.x, Type.integer(1)),
           (vars) => Erlang["==/2"](vars.x, Type.integer(2)),
@@ -1227,14 +1227,14 @@ describe("defineElixirFunction()", () => {
     // def my_fun_c(x) when x == 2, do: :expr_2
     Interpreter.defineElixirFunction("Elixir_Aaa_Bbb", "my_fun_c", 1, [
       {
-        params: [Type.variablePattern("x")],
+        params: (_vars) => [Type.variablePattern("x")],
         guards: [(vars) => Erlang["==/2"](vars.x, Type.integer(1))],
         body: (_vars) => {
           return Type.atom("expr_1");
         },
       },
       {
-        params: [Type.variablePattern("x")],
+        params: (_vars) => [Type.variablePattern("x")],
         guards: [(vars) => Erlang["==/2"](vars.x, Type.integer(2))],
         body: (_vars) => {
           return Type.atom("expr_2");

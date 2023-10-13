@@ -144,7 +144,7 @@ export default class Interpreter {
 
       for (const clause of clauses) {
         const vars = {};
-        const pattern = Type.list(clause.params);
+        const pattern = Type.list(clause.params(vars));
 
         try {
           Interpreter.matchOperator(args, pattern, vars);
