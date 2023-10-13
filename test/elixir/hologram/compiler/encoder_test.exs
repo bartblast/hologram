@@ -362,40 +362,49 @@ defmodule Hologram.Compiler.EncoderTest do
   end
 
   test "case" do
-    clause_1 = %IR.Clause{
-      match: %IR.Variable{name: :x},
-      guards: [],
-      body: %IR.Block{
-        expressions: [
-          %IR.AtomType{value: :expr_1}
-        ]
-      }
-    }
-
-    clause_2 = %IR.Clause{
-      match: %IR.Variable{name: :y},
-      guards: [],
-      body: %IR.Block{
-        expressions: [
-          %IR.AtomType{value: :expr_2}
-        ]
-      }
-    }
-
-    # case 123 do
-    #   x -> :expr_1
-    #   y -> :expr_2
+    # case my_var do
+    #   x when x == 100 -> :ok
+    #   y -> y
+    # end
+    #
+    # case my_var do
+    #   x when :erlang.==(x, 100) -> :ok
+    #   y -> y
     # end
     ir = %IR.Case{
-      condition: %IR.IntegerType{value: 123},
-      clauses: [clause_1, clause_2]
+      condition: %IR.Variable{name: :my_var},
+      clauses: [
+        %IR.Clause{
+          match: %IR.Variable{name: :x},
+          guards: [
+            %IR.RemoteFunctionCall{
+              module: %IR.AtomType{value: :erlang},
+              function: :==,
+              args: [
+                %IR.Variable{name: :x},
+                %IR.IntegerType{value: 100}
+              ]
+            }
+          ],
+          body: %IR.Block{
+            expressions: [%IR.AtomType{value: :ok}]
+          }
+        },
+        %IR.Clause{
+          match: %IR.Variable{name: :y},
+          guards: [],
+          body: %IR.Block{
+            expressions: [%IR.Variable{name: :y}]
+          }
+        }
+      ]
     }
 
     assert encode(ir, %Context{}) == """
-           Interpreter.case(Type.integer(123n), [{match: Type.variablePattern("x"), guards: [], body: (vars) => {
-           return Type.atom("expr_1");
+           Interpreter.case(vars.my_var, [{match: Type.variablePattern("x"), guards: [(vars) => Erlang["==/2"](vars.x, Type.integer(100n))], body: (vars) => {
+           return Type.atom("ok");
            }}, {match: Type.variablePattern("y"), guards: [], body: (vars) => {
-           return Type.atom("expr_2");
+           return vars.y;
            }}])\
            """
   end
