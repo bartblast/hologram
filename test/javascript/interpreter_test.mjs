@@ -14,7 +14,7 @@ import Type from "../../assets/js/type.mjs";
 before(() => linkModules());
 after(() => unlinkModules());
 
-describe.only("callAnonymousFunction()", () => {
+describe("callAnonymousFunction()", () => {
   let vars, anonFun;
 
   beforeEach(() => {
