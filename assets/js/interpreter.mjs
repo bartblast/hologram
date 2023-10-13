@@ -7,6 +7,7 @@ import uniqWith from "lodash/uniqWith.js";
 import Hologram from "./hologram.mjs";
 import Type from "./type.mjs";
 import Utils from "./utils.mjs";
+import {forEach} from "lodash";
 
 export default class Interpreter {
   static callAnonymousFunction(fun, argsArray) {
@@ -280,13 +281,14 @@ export default class Interpreter {
   // TODO: implement
   static try() {}
 
-  // TODO: evaluate multiple guards
-  static #evaluateGuard(guards, vars) {
-    if (guards.length === 0) {
-      return true;
+  static #evaluateGuards(guards, vars) {
+    for (const guard of guards) {
+      if (Type.isFalse(guard(vars))) {
+        return false;
+      }
     }
 
-    return Type.isTrue(guards[0](vars));
+    return true;
   }
 
   static #handleMatchResult(result, vars, rootMatch) {
