@@ -14,7 +14,7 @@ import Type from "../../assets/js/type.mjs";
 before(() => linkModules());
 after(() => unlinkModules());
 
-describe("callAnonymousFunction()", () => {
+describe.only("callAnonymousFunction()", () => {
   let vars, anonFun;
 
   beforeEach(() => {
@@ -145,6 +145,41 @@ describe("callAnonymousFunction()", () => {
       "FunctionClauseError",
       "no function clause matching in anonymous fn/1",
     );
+  });
+
+  it("has match operator in the clause pattern", () => {
+    // fn x = 1 = y -> x + y end
+    const anonFun = Type.anonymousFunction(
+      1,
+      [
+        {
+          params: (vars) => [
+            Interpreter.matchOperator(
+              Interpreter.matchOperator(
+                Type.variablePattern("y"),
+                Type.integer(1n),
+                vars,
+                false,
+              ),
+              Type.variablePattern("x"),
+              vars,
+              false,
+            ),
+          ],
+          guards: [],
+          body: (vars) => {
+            return Erlang["+/2"](vars.x, vars.y);
+          },
+        },
+      ],
+      vars,
+    );
+
+    const result = Interpreter.callAnonymousFunction(anonFun, [
+      Type.integer(1),
+    ]);
+
+    assert.deepStrictEqual(result, Type.integer(2));
   });
 });
 
