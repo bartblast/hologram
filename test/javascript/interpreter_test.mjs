@@ -359,13 +359,13 @@ describe("comprehension()", () => {
 
       const generator1 = {
         match: Type.variablePattern("x"),
-        guard: null,
+        guards: [],
         body: (_vars) => Type.list([Type.integer(1), Type.integer(2)]),
       };
 
       const generator2 = {
         match: Type.variablePattern("y"),
-        guard: null,
+        guards: [],
         body: (_vars) => Type.list([Type.integer(3), Type.integer(4)]),
       };
 
@@ -403,7 +403,7 @@ describe("comprehension()", () => {
 
       const generator1 = {
         match: Type.tuple([Type.integer(11), Type.variablePattern("x")]),
-        guard: null,
+        guards: [],
         body: enumerable1,
       };
 
@@ -417,7 +417,7 @@ describe("comprehension()", () => {
 
       const generator2 = {
         match: Type.tuple([Type.integer(12), Type.variablePattern("y")]),
-        guard: null,
+        guards: [],
         body: enumerable2,
       };
 
@@ -448,7 +448,7 @@ describe("comprehension()", () => {
 
       const generator1 = {
         match: Type.variablePattern("x"),
-        guard: null,
+        guards: [],
         body: enumerable1,
       };
 
@@ -457,7 +457,7 @@ describe("comprehension()", () => {
 
       const generator2 = {
         match: Type.variablePattern("y"),
-        guard: null,
+        guards: [],
         body: enumerable2,
       };
 
@@ -496,7 +496,7 @@ describe("comprehension()", () => {
 
       const generator1 = {
         match: Type.variablePattern("x"),
-        guard: guard1,
+        guards: [guard1],
         body: enumerable1,
       };
 
@@ -507,7 +507,7 @@ describe("comprehension()", () => {
 
       const generator2 = {
         match: Type.variablePattern("y"),
-        guard: guard2,
+        guards: [guard2],
         body: enumerable2,
       };
 
@@ -540,7 +540,7 @@ describe("comprehension()", () => {
 
       const generator = {
         match: Type.variablePattern("x"),
-        guard: guard,
+        guards: [guard],
         body: enumerable,
       };
 
@@ -566,7 +566,7 @@ describe("comprehension()", () => {
 
       const generator1 = {
         match: Type.variablePattern("x"),
-        guard: null,
+        guards: [],
         body: enumerable1,
       };
 
@@ -577,7 +577,7 @@ describe("comprehension()", () => {
 
       const generator2 = {
         match: Type.variablePattern("y"),
-        guard: guard2,
+        guards: [guard2],
         body: enumerable2,
       };
 
@@ -618,7 +618,7 @@ describe("comprehension()", () => {
 
       const generator1 = {
         match: Type.variablePattern("x"),
-        guard: null,
+        guards: [],
         body: enumerable1,
       };
 
@@ -627,7 +627,7 @@ describe("comprehension()", () => {
 
       const generator2 = {
         match: Type.variablePattern("y"),
-        guard: null,
+        guards: [],
         body: enumerable2,
       };
 
@@ -663,7 +663,7 @@ describe("comprehension()", () => {
 
       const generator = {
         match: Type.variablePattern("x"),
-        guard: null,
+        guards: [],
         body: enumerable,
       };
 
@@ -693,7 +693,7 @@ describe("comprehension()", () => {
 
       const generator1 = {
         match: Type.variablePattern("x"),
-        guard: null,
+        guards: [],
         body: enumerable1,
       };
 
@@ -702,7 +702,7 @@ describe("comprehension()", () => {
 
       const generator2 = {
         match: Type.variablePattern("y"),
-        guard: null,
+        guards: [],
         body: enumerable2,
       };
 
@@ -735,7 +735,7 @@ describe("comprehension()", () => {
 
       const generator = {
         match: Type.variablePattern("x"),
-        guard: null,
+        guards: [],
         body: enumerable,
       };
 
@@ -764,7 +764,7 @@ describe("comprehension()", () => {
 
       const generator1 = {
         match: Type.variablePattern("x"),
-        guard: null,
+        guards: [],
         body: enumerable1,
       };
 
@@ -773,7 +773,7 @@ describe("comprehension()", () => {
 
       const generator2 = {
         match: Type.variablePattern("y"),
-        guard: null,
+        guards: [],
         body: enumerable2,
       };
 

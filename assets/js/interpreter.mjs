@@ -73,7 +73,8 @@ export default class Interpreter {
           );
 
           if (
-            Interpreter.#evaluateGuard(generators[i].guard, varsClone) === false
+            Interpreter.#evaluateGuard(generators[i].guards, varsClone) ===
+            false
           ) {
             return acc;
           }
