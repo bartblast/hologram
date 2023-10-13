@@ -798,11 +798,11 @@ defmodule Hologram.Compiler.EncoderTest do
         }
       }
 
-      encode(ir, %Context{}) == """
-      {params: (vars) => [Interpreter.matchOperator(Interpreter.matchOperator(Type.variablePattern("y"), Type.integer(1n), vars, false), Type.variablePattern("x"), vars)], guards: [], body: (vars) => {
-      return Type.atom("ok");
-      }}
-      """
+      assert encode(ir, %Context{}) == """
+             {params: (vars) => [Interpreter.matchOperator(Interpreter.matchOperator(Type.variablePattern("y"), Type.integer(1n), vars, false), Type.variablePattern("x"), vars)], guards: [], body: (vars) => {
+             return Type.atom("ok");
+             }}\
+             """
     end
   end
 
