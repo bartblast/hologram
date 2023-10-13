@@ -233,14 +233,14 @@ describe("case()", () => {
   it("runs guards for each tried clause", () => {
     // case 2 do
     //   x when x == 1 -> :expr_1
-    //   y when y == 1 -> :expr_2
+    //   y when y == 2 -> :expr_2
     //   z when z == 3 -> :expr_3
     // end
     //
     // case 2 do
     //   x when :erlang.==(x, 1) -> :expr_1
-    //   y when :erlang.==(y, 1) -> :expr_2
-    //   z when :erlang.==(z, 1) -> :expr_3
+    //   y when :erlang.==(y, 2) -> :expr_2
+    //   z when :erlang.==(z, 3) -> :expr_3
     // end
 
     const clause1 = {
