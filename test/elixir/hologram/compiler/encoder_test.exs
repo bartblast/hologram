@@ -775,7 +775,7 @@ defmodule Hologram.Compiler.EncoderTest do
              {params: (vars) => [Type.variablePattern("x"), Type.variablePattern("y")], guards: [(vars) => Erlang["is_integer/1"](vars.x), (vars) => Erlang["is_integer/1"](vars.y)], body: (vars) => {
              Type.atom("expr_1");
              return Type.atom("expr_2");
-               }}
+             }}\
              """
     end
   end
