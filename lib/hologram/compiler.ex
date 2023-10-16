@@ -258,10 +258,10 @@ defmodule Hologram.Compiler do
       # Interpreter.comprehension()
       {Enum, :to_list, 1},
 
-      # Hologram.inspect()
+      # Interpreter.inspect()
       {Kernel, :inspect, 2},
 
-      # Hologram.raiseError()
+      # Interpreter.raiseError()
       {:erlang, :error, 1},
 
       # Interpreter.#matchConsPattern()

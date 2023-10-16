@@ -310,11 +310,16 @@ export default class Interpreter {
     return prefixedAliasStr.replace(/\./g, "_");
   }
 
+  static raiseError(aliasStr, message) {
+    const errorStruct = Type.errorStruct(aliasStr, message);
+    return Erlang["error/1"](errorStruct);
+  }
+
   static raiseMatchError(right) {
     const message =
       "no match of right hand side value: " + Interpreter.inspect(right);
 
-    return Hologram.raiseError("MatchError", message);
+    return Interpreter.raiseError("MatchError", message);
   }
 
   static serialize(term) {
@@ -510,18 +515,18 @@ export default class Interpreter {
   }
 
   static #raiseCaseClauseError(message) {
-    return Hologram.raiseError("CaseClauseError", message);
+    return Interpreter.raiseError("CaseClauseError", message);
   }
 
   static #raiseCondClauseError() {
-    return Hologram.raiseError(
+    return Interpreter.raiseError(
       "CondClauseError",
       "no cond clause evaluated to a truthy value",
     );
   }
 
   static #raiseFunctionClauseError(message) {
-    return Hologram.raiseError("FunctionClauseError", message);
+    return Interpreter.raiseError("FunctionClauseError", message);
   }
 
   static #raiseUndefinedFunctionError(moduleName, functionName, arity) {
@@ -529,6 +534,6 @@ export default class Interpreter {
     const inspectedModuleName = Interpreter.inspectModuleName(moduleName);
     const message = `function ${inspectedModuleName}.${functionName}/${arity} is undefined or private`;
 
-    return Hologram.raiseError("UndefinedFunctionError", message);
+    return Interpreter.raiseError("UndefinedFunctionError", message);
   }
 }

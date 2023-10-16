@@ -8,27 +8,22 @@ export default class Hologram {
   static Type = Type;
 
   static raiseArgumentError(message) {
-    return Hologram.raiseError("ArgumentError", message);
+    return Interpreter.raiseError("ArgumentError", message);
   }
 
   static raiseBadMapError(message) {
-    return Hologram.raiseError("BadMapError", message);
+    return Interpreter.raiseError("BadMapError", message);
   }
 
   static raiseCompileError(message) {
-    return Hologram.raiseError("CompileError", message);
-  }
-
-  static raiseError(aliasStr, message) {
-    const errorStruct = Type.errorStruct(aliasStr, message);
-    return Erlang["error/1"](errorStruct);
+    return Interpreter.raiseError("CompileError", message);
   }
 
   static raiseInterpreterError(message) {
-    return Hologram.raiseError("Hologram.InterpreterError", message);
+    return Interpreter.raiseError("Hologram.InterpreterError", message);
   }
 
   static raiseKeyError(message) {
-    return Hologram.raiseError("KeyError", message);
+    return Interpreter.raiseError("KeyError", message);
   }
 }

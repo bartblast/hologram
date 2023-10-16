@@ -4481,6 +4481,10 @@ describe("moduleName()", () => {
   });
 });
 
+it("raiseError()", () => {
+  assertError(() => Interpreter.raiseError("Aaa.Bbb", "abc"), "Aaa.Bbb", "abc");
+});
+
 it("raiseMatchError()", () => {
   assertError(
     () => Interpreter.raiseMatchError(Type.atom("abc")),

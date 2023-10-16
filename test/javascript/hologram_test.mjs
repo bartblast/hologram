@@ -22,10 +22,6 @@ it("raiseCompileError()", () => {
   assertError(() => Hologram.raiseCompileError("abc"), "CompileError", "abc");
 });
 
-it("raiseError()", () => {
-  assertError(() => Hologram.raiseError("Aaa.Bbb", "abc"), "Aaa.Bbb", "abc");
-});
-
 it("raiseInterpreterError()", () => {
   assertError(
     () => Hologram.raiseInterpreterError("abc"),
