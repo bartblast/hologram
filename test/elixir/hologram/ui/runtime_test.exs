@@ -18,17 +18,17 @@ defmodule Hologram.UI.RuntimeTest do
 
     [
       context: %{
-        {Hologram.Runtime, :initial_client_data_loaded?} => false,
+        {Hologram.Runtime, :client_data_loaded?} => false,
         {Hologram.Runtime, :page_digest} => "102790adb6c3b1956db310be523a7693"
       }
     ]
   end
 
-  test "initial_client_data_loaded? = false", %{context: context} do
+  test "client_data_loaded? = false", %{context: context} do
     assert render_component(Runtime, %{}, context) == """
            <script>
              
-               window.__hologramRuntimeBootstrapData__ = "...";
+               window.__hologramClientData__ = "...";
              
            </script>
            <script async src="/hologram/runtime.js"></script>
@@ -36,8 +36,8 @@ defmodule Hologram.UI.RuntimeTest do
            """
   end
 
-  test "initial_client_data_loaded? = true", %{context: context} do
-    context = Map.put(context, {Hologram.Runtime, :initial_client_data_loaded?}, true)
+  test "client_data_loaded? = true", %{context: context} do
+    context = Map.put(context, {Hologram.Runtime, :client_data_loaded?}, true)
 
     assert render_component(Runtime, %{}, context) == """
            <script>

@@ -118,12 +118,12 @@ defmodule Hologram.Template.Renderer do
     final_page_client =
       Templatable.put_context(
         initial_page_client_with_injected_page_digest,
-        {Hologram.Runtime, :initial_client_data_loaded?},
+        {Hologram.Runtime, :client_data_loaded?},
         true
       )
 
     final_clients = Map.put(initial_clients, "page", final_page_client)
-    final_html = inject_runtime_bootstrap_data(initial_html, final_clients)
+    final_html = inject_runtime_page_client_data(initial_html, final_clients)
 
     {final_html, final_clients}
   end
@@ -218,7 +218,7 @@ defmodule Hologram.Template.Renderer do
     Map.merge(props_from_template, props_from_context)
   end
 
-  defp inject_runtime_bootstrap_data(html, clients) do
+  defp inject_runtime_page_client_data(html, clients) do
     data =
       clients
       |> Macro.escape()
@@ -226,10 +226,10 @@ defmodule Hologram.Template.Renderer do
       |> Transformer.transform(%Context{})
       |> Encoder.encode(%Context{})
 
-    pattern = "window.__hologramRuntimeBootstrapData__ = \"...\";"
+    pattern = "window.__hologramClientData__ = \"...\";"
 
     replacement = """
-    window.__hologramRuntimeBootstrapData__ = (typeClass) => {
+    window.__hologramClientData__ = (typeClass) => {
       const Type = typeClass;
       return #{data};
     };\
