@@ -12,18 +12,6 @@ import Type from "../../assets/js/type.mjs";
 before(() => linkModules());
 after(() => unlinkModules());
 
-describe("cloneVars()", () => {
-  it("clones vars recursively (deep clone) and removes __snapshot__ property", () => {
-    const nested = {c: 3, d: 4};
-    const vars = {a: 1, b: nested, __snapshot__: "dummy"};
-    const expected = {a: 1, b: nested};
-    const result = Hologram.cloneVars(vars);
-
-    assert.deepStrictEqual(result, expected);
-    assert.notEqual(result.b, nested);
-  });
-});
-
 describe("deserialize()", () => {
   it("deserializes number from JSON", () => {
     const result = Hologram.deserialize("123");

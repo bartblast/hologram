@@ -1,7 +1,9 @@
 "use strict";
 
 // See: https://www.blazemeter.com/blog/the-correct-way-to-import-lodash-libraries-a-benchmark
+import cloneDeep from "lodash/cloneDeep.js";
 import isEqual from "lodash/isEqual.js";
+import omit from "lodash/omit.js";
 import uniqWith from "lodash/uniqWith.js";
 
 import Hologram from "./hologram.mjs";
@@ -13,7 +15,7 @@ export default class Interpreter {
     const args = Type.list(argsArray);
 
     for (const clause of fun.clauses) {
-      const varsClone = Hologram.cloneVars(fun.vars);
+      const varsClone = Interpreter.cloneVars(fun.vars);
       const pattern = Type.list(clause.params(varsClone));
 
       try {
@@ -35,7 +37,7 @@ export default class Interpreter {
 
   static case(condition, clauses, vars) {
     for (const clause of clauses) {
-      const varsClone = Hologram.cloneVars(vars);
+      const varsClone = Interpreter.cloneVars(vars);
 
       try {
         Interpreter.matchOperator(condition, clause.match, varsClone);
@@ -54,6 +56,10 @@ export default class Interpreter {
     return Interpreter.#raiseCaseClauseError(message);
   }
 
+  static cloneVars(vars) {
+    return cloneDeep(omit(vars, ["__snapshot__"]));
+  }
+
   static comprehension(generators, filters, collectable, unique, mapper, vars) {
     const generatorsCount = generators.length;
 
@@ -62,7 +68,7 @@ export default class Interpreter {
     );
 
     let items = Utils.cartesianProduct(sets).reduce((acc, combination) => {
-      const varsClone = Hologram.cloneVars(vars);
+      const varsClone = Interpreter.cloneVars(vars);
 
       for (let i = 0; i < generatorsCount; ++i) {
         try {
@@ -102,7 +108,7 @@ export default class Interpreter {
 
   static cond(clauses, vars) {
     for (const clause of clauses) {
-      const varsClone = Hologram.cloneVars(vars);
+      const varsClone = Interpreter.cloneVars(vars);
 
       if (Type.isTruthy(clause.condition(varsClone))) {
         return clause.body(varsClone);
@@ -274,7 +280,7 @@ export default class Interpreter {
   }
 
   static takeVarsSnapshot(vars) {
-    vars.__snapshot__ = Hologram.cloneVars(vars);
+    vars.__snapshot__ = Interpreter.cloneVars(vars);
   }
 
   // TODO: implement

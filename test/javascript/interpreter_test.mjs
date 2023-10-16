@@ -431,6 +431,18 @@ describe("case()", () => {
   });
 });
 
+describe("cloneVars()", () => {
+  it("clones vars recursively (deep clone) and removes __snapshot__ property", () => {
+    const nested = {c: 3, d: 4};
+    const vars = {a: 1, b: nested, __snapshot__: "dummy"};
+    const expected = {a: 1, b: nested};
+    const result = Interpreter.cloneVars(vars);
+
+    assert.deepStrictEqual(result, expected);
+    assert.notEqual(result.b, nested);
+  });
+});
+
 describe("comprehension()", () => {
   let vars, prevIntoFun, prevToListFun;
 

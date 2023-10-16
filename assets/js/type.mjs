@@ -1,6 +1,7 @@
 "use strict";
 
 import Bitstring from "./bitstring.mjs";
+import Interpreter from "./interpreter.mjs";
 import Sequence from "./sequence.mjs";
 
 export default class Type {
@@ -13,7 +14,7 @@ export default class Type {
       type: "anonymous_function",
       arity: arity,
       clauses: clauses,
-      vars: Hologram.cloneVars(vars),
+      vars: Interpreter.cloneVars(vars),
       uniqueId: Sequence.next(),
     };
   }
