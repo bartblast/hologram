@@ -4481,6 +4481,14 @@ describe("moduleName()", () => {
   });
 });
 
+it("raiseArgumentError()", () => {
+  assertError(
+    () => Interpreter.raiseArgumentError("abc"),
+    "ArgumentError",
+    "abc",
+  );
+});
+
 it("raiseError()", () => {
   assertError(() => Interpreter.raiseError("Aaa.Bbb", "abc"), "Aaa.Bbb", "abc");
 });

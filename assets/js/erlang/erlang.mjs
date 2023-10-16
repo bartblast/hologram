@@ -164,7 +164,7 @@ const Erlang = {
   // start hd/1
   "hd/1": (list) => {
     if (!Type.isList(list) || list.data.length === 0) {
-      Hologram.raiseArgumentError(
+      Interpreter.raiseArgumentError(
         "errors were found at the given arguments:\n\n* 1st argument: not a nonempty list",
       );
     }
@@ -205,7 +205,7 @@ const Erlang = {
   // start length/1
   "length/1": (list) => {
     if (!Type.isList(list)) {
-      Hologram.raiseArgumentError(
+      Interpreter.raiseArgumentError(
         "errors were found at the given arguments:\n\n* 1st argument: not a list",
       );
     }
@@ -218,7 +218,7 @@ const Erlang = {
   // start tl/1
   "tl/1": (list) => {
     if (!Type.isList(list) || list.data.length === 0) {
-      Hologram.raiseArgumentError(
+      Interpreter.raiseArgumentError(
         "errors were found at the given arguments:\n\n* 1st argument: not a nonempty list",
       );
     }

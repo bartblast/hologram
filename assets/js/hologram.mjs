@@ -7,10 +7,6 @@ export default class Hologram {
   static Interpreter = Interpreter;
   static Type = Type;
 
-  static raiseArgumentError(message) {
-    return Interpreter.raiseError("ArgumentError", message);
-  }
-
   static raiseBadMapError(message) {
     return Interpreter.raiseError("BadMapError", message);
   }

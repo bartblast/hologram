@@ -310,6 +310,10 @@ export default class Interpreter {
     return prefixedAliasStr.replace(/\./g, "_");
   }
 
+  static raiseArgumentError(message) {
+    return Interpreter.raiseError("ArgumentError", message);
+  }
+
   static raiseError(aliasStr, message) {
     const errorStruct = Type.errorStruct(aliasStr, message);
     return Erlang["error/1"](errorStruct);

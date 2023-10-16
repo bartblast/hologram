@@ -163,7 +163,7 @@ export default class Bitstring {
     const inspectedValue = Interpreter.inspect(value);
     const message = `construction of binary failed: segment ${index} of type '${segmentType}': expected ${expectedValueTypesStr} but got: ${inspectedValue}`;
 
-    Hologram.raiseArgumentError(message);
+    Interpreter.raiseArgumentError(message);
   }
 
   static #resolveSizeModifierValue(segment, defaultValue) {
@@ -189,7 +189,7 @@ export default class Bitstring {
     ) {
       const inspectedValue = Interpreter.inspect(segment.value);
 
-      Hologram.raiseArgumentError(
+      Interpreter.raiseArgumentError(
         `construction of binary failed: segment ${index} of type 'binary': the size of the value ${inspectedValue} is not a multiple of the unit for the segment`,
       );
     }
@@ -243,11 +243,11 @@ export default class Bitstring {
       const message = `construction of binary failed: segment ${index} of type 'float': expected one of the supported sizes 16, 32, or 64 but got: ${Number(
         numBits,
       )}`;
-      Hologram.raiseArgumentError(message);
+      Interpreter.raiseArgumentError(message);
     }
 
     if (numBits !== 64n) {
-      Hologram.raiseInterpreterError(
+      Interpreter.raiseInterpreterError(
         `${numBits}-bit float bitstring segments are not yet implemented in Hologram`,
       );
     }
