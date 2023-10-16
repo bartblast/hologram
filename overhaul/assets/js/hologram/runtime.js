@@ -16,7 +16,6 @@ const morphdom = require("morphdom");
 export default class Runtime {
   static componentClassRegistry = {}
   static document = null
-  static isInitiated = false
   static staticDigestStore = null
   static window = null
 
