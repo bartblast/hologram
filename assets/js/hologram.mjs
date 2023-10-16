@@ -7,15 +7,6 @@ export default class Hologram {
   static Interpreter = Interpreter;
   static Type = Type;
 
-  static deserialize(json) {
-    return JSON.parse(json, (_key, value) => {
-      if (typeof value === "string" && /^__bigint__:-?\d+$/.test(value)) {
-        return BigInt(value.substring(11, value.length));
-      }
-      return value;
-    });
-  }
-
   static inspect(term) {
     return Elixir_Kernel["inspect/2"](term, Type.list([]));
   }
