@@ -4513,6 +4513,10 @@ it("raiseInterpreterError()", () => {
   );
 });
 
+it("raiseKeyError()", () => {
+  assertError(() => Interpreter.raiseKeyError("abc"), "KeyError", "abc");
+});
+
 it("raiseMatchError()", () => {
   assertError(
     () => Interpreter.raiseMatchError(Type.atom("abc")),

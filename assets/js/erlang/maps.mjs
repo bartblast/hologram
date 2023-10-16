@@ -27,7 +27,7 @@ const Erlang_maps = {
       return map.data[encodedKey][1];
     }
 
-    Hologram.raiseKeyError(
+    Interpreter.raiseKeyError(
       `key ${Interpreter.inspect(key)} not found in ${Interpreter.inspect(
         map,
       )}`,

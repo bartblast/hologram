@@ -331,6 +331,10 @@ export default class Interpreter {
     return Interpreter.raiseError("Hologram.InterpreterError", message);
   }
 
+  static raiseKeyError(message) {
+    return Interpreter.raiseError("KeyError", message);
+  }
+
   static raiseMatchError(right) {
     const message =
       "no match of right hand side value: " + Interpreter.inspect(right);
