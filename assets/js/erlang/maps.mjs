@@ -16,7 +16,7 @@ const Erlang_maps = {
   // start get/2
   "get/2": (key, map) => {
     if (!Type.isMap(map)) {
-      Hologram.raiseBadMapError(
+      Interpreter.raiseBadMapError(
         `expected a map, got: ${Interpreter.inspect(map)}`,
       );
     }

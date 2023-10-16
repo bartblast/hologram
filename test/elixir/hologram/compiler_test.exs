@@ -60,7 +60,7 @@ defmodule Hologram.CompilerTest do
       assert output == """
              Interpreter.defineErlangFunction("Erlang_Maps", "get", 2, (key, map) => {
                  if (!Type.isMap(map)) {
-                   Hologram.raiseBadMapError(
+                   Interpreter.raiseBadMapError(
                      `expected a map, got: ${Interpreter.inspect(map)}`,
                    );
                  }

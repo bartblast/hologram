@@ -314,6 +314,10 @@ export default class Interpreter {
     return Interpreter.raiseError("ArgumentError", message);
   }
 
+  static raiseBadMapError(message) {
+    return Interpreter.raiseError("BadMapError", message);
+  }
+
   static raiseError(aliasStr, message) {
     const errorStruct = Type.errorStruct(aliasStr, message);
     return Erlang["error/1"](errorStruct);
