@@ -1,6 +1,5 @@
 "use strict";
 
-import Hologram from "../hologram.mjs";
 import Interpreter from "../interpreter.mjs";
 import Type from "../type.mjs";
 

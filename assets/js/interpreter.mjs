@@ -6,7 +6,6 @@ import isEqual from "lodash/isEqual.js";
 import omit from "lodash/omit.js";
 import uniqWith from "lodash/uniqWith.js";
 
-import Hologram from "./hologram.mjs";
 import Type from "./type.mjs";
 import Utils from "./utils.mjs";
 

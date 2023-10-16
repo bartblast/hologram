@@ -1,6 +1,6 @@
 "use strict";
 
-import Hologram from "./hologram.mjs";
+import Interpreter from "./interpreter.mjs";
 
 export default class Utils {
   // Based on: https://stackoverflow.com/a/43053803

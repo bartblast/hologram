@@ -3,7 +3,6 @@
 import {assert} from "chai";
 import Erlang from "./erlang/erlang.mjs";
 import Erlang_maps from "./erlang/maps.mjs";
-import Hologram from "./hologram.mjs";
 import Interpreter from "./interpreter.mjs";
 import sinonESM from "../node_modules/sinon/pkg/sinon-esm.js";
 import Type from "./type.mjs";
@@ -100,7 +99,6 @@ export function assertError(callable, errorAliasStr, message) {
 }
 
 export function linkModules() {
-  globalThis.Hologram = Hologram;
   globalThis.Erlang = Erlang;
   globalThis.Erlang_maps = Erlang_maps;
   globalThis.Elixir_Enum = {};
@@ -108,7 +106,6 @@ export function linkModules() {
 }
 
 export function unlinkModules() {
-  delete globalThis.Hologram;
   delete globalThis.Erlang;
   delete globalThis.Erlang_maps;
   delete globalThis.Elixir_Enum;
