@@ -88,7 +88,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
     PLT.load(page_digest_plt, page_digest_dump_file)
     page_digest_items = PLT.get_all(page_digest_plt)
     assert Enum.count(Map.keys(page_digest_items)) == num_page_bundles
-    assert page_digest_items[Module1] == "b072e5c852a56d105c0dbb37296ae706"
+    assert page_digest_items[Module1] == "459ad24b8978be7e96bccd67685442af"
   end
 
   defp test_runtime_bundle do

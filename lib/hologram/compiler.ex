@@ -74,7 +74,10 @@ defmodule Hologram.Compiler do
       const Interpreter = interpreterClass;
       const Type = typeClass;#{erlang_function_defs}#{elixir_function_defs}
 
-    }\
+    }
+
+    window.__hologramPageScriptLoaded__ = true;
+    document.dispatchEvent(new CustomEvent("hologram:pageScriptLoaded"));\
     """
   end
 

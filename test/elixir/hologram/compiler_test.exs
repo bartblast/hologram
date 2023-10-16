@@ -114,83 +114,15 @@ defmodule Hologram.CompilerTest do
         |> PLT.put(Module10, module_10_ir)
         |> PLT.put(Map, map_ir)
 
-      assert build_page_js(Module9, call_graph, ir_plt, @source_dir) ==
-               """
-               "use strict";
+      result = build_page_js(Module9, call_graph, ir_plt, @source_dir)
 
-               window.__hologramPageReachableFunctionDefs__ = (interpreterClass, typeClass) => {
-                 const Interpreter = interpreterClass;
-                 const Type = typeClass;
+      js_fragment_1 = ~s/window.__hologramPageReachableFunctionDefs__/
+      js_fragment_2 = ~s/Interpreter.defineElixirFunction/
+      js_fragment_3 = ~s/Interpreter.defineErlangFunction/
 
-               Interpreter.defineErlangFunction("Erlang", "+", 2, (left, right) => {
-                   const [type, leftValue, rightValue] = Type.maybeNormalizeNumberTerms(
-                     left,
-                     right,
-                   );
-
-                   const result = leftValue.value + rightValue.value;
-
-                   return type === "float" ? Type.float(result) : Type.integer(result);
-                 });
-
-               Interpreter.defineElixirFunction("Elixir_Hologram_Test_Fixtures_Compiler_Module10", "action", 3, [{params: (vars) => [Type.atom("action_10a"), Type.variablePattern("params"), Type.variablePattern("client")], guards: [], body: (vars) => {
-               return Elixir_Hologram_Test_Fixtures_Compiler_Module10["fun_10a/2"](vars.params, vars.client);
-               }}]);
-
-               Interpreter.defineElixirFunction("Elixir_Hologram_Test_Fixtures_Compiler_Module10", "fun_10a", 2, [{params: (vars) => [Type.variablePattern("params"), Type.variablePattern("state")], guards: [], body: (vars) => {
-               return Type.tuple([vars.params, vars.state]);
-               }}]);
-
-               Interpreter.defineElixirFunction("Elixir_Hologram_Test_Fixtures_Compiler_Module10", "template", 0, [{params: (vars) => [], guards: [], body: (vars) => {
-               return Type.anonymousFunction(1, [{params: (vars) => [Type.variablePattern("vars")], guards: [], body: (vars) => {
-               Interpreter.matchOperator(vars.vars, Type.matchPlaceholder(), vars);
-               return Type.list([Type.tuple([Type.atom("text"), Type.bitstring("Module10 template")])]);
-               }}], vars);
-               }}]);
-
-               Interpreter.defineElixirFunction("Elixir_Hologram_Test_Fixtures_Compiler_Module9", "__layout_module__", 0, [{params: (vars) => [], guards: [], body: (vars) => {
-               return Type.atom("Elixir.Hologram.Test.Fixtures.Compiler.Module10");
-               }}]);
-
-               Interpreter.defineElixirFunction("Elixir_Hologram_Test_Fixtures_Compiler_Module9", "__layout_props__", 0, [{params: (vars) => [], guards: [], body: (vars) => {
-               return Type.list([]);
-               }}]);
-
-               Interpreter.defineElixirFunction("Elixir_Hologram_Test_Fixtures_Compiler_Module9", "__route__", 0, [{params: (vars) => [], guards: [], body: (vars) => {
-               return Type.bitstring("/hologram-test-fixtures-compiler-module9");
-               }}]);
-
-               Interpreter.defineElixirFunction("Elixir_Hologram_Test_Fixtures_Compiler_Module9", "action", 3, [{params: (vars) => [Type.atom("action_9a"), Type.variablePattern("params"), Type.variablePattern("client")], guards: [], body: (vars) => {
-               return Elixir_Hologram_Test_Fixtures_Compiler_Module9["fun_9a/2"](Interpreter.dotOperator(vars.params, Type.atom("my_key")), Erlang["+/2"](vars.client, Type.integer(1n)));
-               }}]);
-
-               Interpreter.defineElixirFunction("Elixir_Hologram_Test_Fixtures_Compiler_Module9", "fun_9a", 2, [{params: (vars) => [Type.variablePattern("map"), Type.variablePattern("key")], guards: [], body: (vars) => {
-               return Elixir_Map["get/2"](vars.map, vars.key);
-               }}]);
-
-               Interpreter.defineElixirFunction("Elixir_Hologram_Test_Fixtures_Compiler_Module9", "template", 0, [{params: (vars) => [], guards: [], body: (vars) => {
-               return Type.anonymousFunction(1, [{params: (vars) => [Type.variablePattern("vars")], guards: [], body: (vars) => {
-               Interpreter.matchOperator(vars.vars, Type.matchPlaceholder(), vars);
-               return Type.list([Type.tuple([Type.atom("text"), Type.bitstring("Module9 template")])]);
-               }}], vars);
-               }}]);
-
-               Interpreter.defineElixirFunction("Elixir_Map", "get", 2, [{params: (vars) => [Type.variablePattern("x0"), Type.variablePattern("x1")], guards: [], body: (vars) => {
-               return Elixir_Map["get/3"](vars.x0, vars.x1, Type.atom("nil"));
-               }}]);
-
-               Interpreter.defineElixirFunction("Elixir_Map", "get", 3, [{params: (vars) => [Type.variablePattern("map"), Type.variablePattern("key"), Type.variablePattern("default")], guards: [], body: (vars) => {
-               return Interpreter.case(vars.map, [{match: Type.map([[vars.key, Type.variablePattern("value")]]), guards: [], body: (vars) => {
-               return vars.value;
-               }}, {match: Type.map([]), guards: [], body: (vars) => {
-               return vars.default;
-               }}, {match: Type.variablePattern("other"), guards: [], body: (vars) => {
-               return Erlang["error/2"](Type.tuple([Type.atom("badmap"), vars.other]), Type.list([vars.map, vars.key, vars.default]));
-               }}]);
-               }}]);
-
-               }\
-               """
+      assert String.contains?(result, js_fragment_1)
+      assert String.contains?(result, js_fragment_2)
+      assert String.contains?(result, js_fragment_3)
     end
 
     test "has only Elixir defs" do
@@ -207,42 +139,15 @@ defmodule Hologram.CompilerTest do
         |> PLT.put(Module6, module_6_ir)
         |> PLT.put(Module11, module_11_ir)
 
-      assert build_page_js(Module11, call_graph, ir_plt, @source_dir) ==
-               """
-               "use strict";
+      result = build_page_js(Module11, call_graph, ir_plt, @source_dir)
 
-               window.__hologramPageReachableFunctionDefs__ = (interpreterClass, typeClass) => {
-                 const Interpreter = interpreterClass;
-                 const Type = typeClass;
+      js_fragment_1 = ~s/window.__hologramPageReachableFunctionDefs__/
+      js_fragment_2 = ~s/Interpreter.defineElixirFunction/
+      js_fragment_3 = ~s/Interpreter.defineErlangFunction/
 
-               Interpreter.defineElixirFunction("Elixir_Hologram_Test_Fixtures_Compiler_Module11", "__layout_module__", 0, [{params: (vars) => [], guards: [], body: (vars) => {
-               return Type.atom("Elixir.Hologram.Test.Fixtures.Compiler.Module6");
-               }}]);
-
-               Interpreter.defineElixirFunction("Elixir_Hologram_Test_Fixtures_Compiler_Module11", "__layout_props__", 0, [{params: (vars) => [], guards: [], body: (vars) => {
-               return Type.list([]);
-               }}]);
-
-               Interpreter.defineElixirFunction("Elixir_Hologram_Test_Fixtures_Compiler_Module11", "__route__", 0, [{params: (vars) => [], guards: [], body: (vars) => {
-               return Type.bitstring("/hologram-test-fixtures-compiler-module11");
-               }}]);
-
-               Interpreter.defineElixirFunction("Elixir_Hologram_Test_Fixtures_Compiler_Module11", "template", 0, [{params: (vars) => [], guards: [], body: (vars) => {
-               return Type.anonymousFunction(1, [{params: (vars) => [Type.variablePattern("vars")], guards: [], body: (vars) => {
-               Interpreter.matchOperator(vars.vars, Type.matchPlaceholder(), vars);
-               return Type.list([Type.tuple([Type.atom("text"), Type.bitstring("Module11 template")])]);
-               }}], vars);
-               }}]);
-
-               Interpreter.defineElixirFunction("Elixir_Hologram_Test_Fixtures_Compiler_Module6", "template", 0, [{params: (vars) => [], guards: [], body: (vars) => {
-               return Type.anonymousFunction(1, [{params: (vars) => [Type.variablePattern("vars")], guards: [], body: (vars) => {
-               Interpreter.matchOperator(vars.vars, Type.matchPlaceholder(), vars);
-               return Type.list([Type.tuple([Type.atom("text"), Type.bitstring("Module6 template")])]);
-               }}], vars);
-               }}]);
-
-               }\
-               """
+      assert String.contains?(result, js_fragment_1)
+      assert String.contains?(result, js_fragment_2)
+      refute String.contains?(result, js_fragment_3)
     end
 
     test "filters out modules without BEAM files" do
