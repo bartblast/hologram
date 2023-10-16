@@ -317,6 +317,12 @@ export default class Interpreter {
     return Hologram.raiseError("MatchError", message);
   }
 
+  static serialize(term) {
+    return JSON.stringify(term, (_key, value) =>
+      typeof value === "bigint" ? `__bigint__:${value.toString()}` : value,
+    );
+  }
+
   static takeVarsSnapshot(vars) {
     vars.__snapshot__ = Interpreter.cloneVars(vars);
   }

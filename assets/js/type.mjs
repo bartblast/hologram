@@ -104,7 +104,7 @@ export default class Type {
     if (data.length < 2) {
       Hologram.raiseInterpreterError(
         "improper list must have at least 2 items, received " +
-          Hologram.serialize(data),
+          Interpreter.serialize(data),
       );
     }
 

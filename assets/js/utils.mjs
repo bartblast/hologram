@@ -27,7 +27,7 @@ export default class Utils {
   }
 
   static debug(term) {
-    console.log(Hologram.serialize(term));
+    console.log(Interpreter.serialize(term));
 
     return term;
   }

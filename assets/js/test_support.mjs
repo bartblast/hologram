@@ -4,6 +4,7 @@ import {assert} from "chai";
 import Erlang from "./erlang/erlang.mjs";
 import Erlang_maps from "./erlang/maps.mjs";
 import Hologram from "./hologram.mjs";
+import Interpreter from "./interpreter.mjs";
 import sinonESM from "../node_modules/sinon/pkg/sinon-esm.js";
 import Type from "./type.mjs";
 
@@ -64,7 +65,7 @@ function buildElixirKernelInspectFunction() {
         );
 
       default:
-        return Hologram.serialize(term);
+        return Interpreter.serialize(term);
     }
   };
 }
@@ -91,7 +92,7 @@ export function assertBoxedTrue(boxed) {
 }
 
 export function assertError(callable, errorAliasStr, message) {
-  const expectedErrorData = Hologram.serialize(
+  const expectedErrorData = Interpreter.serialize(
     Type.errorStruct(errorAliasStr, message),
   );
 
