@@ -72,7 +72,9 @@ defmodule Hologram.CompilerTest do
                  }
 
                  Hologram.raiseKeyError(
-                   `key ${Interpreter.inspect(key)} not found in ${Interpreter.inspect(map)}`,
+                   `key ${Interpreter.inspect(key)} not found in ${Interpreter.inspect(
+                     map,
+                   )}`,
                  );
                });\
              """
