@@ -83,7 +83,7 @@ const Erlang = {
         ", right = " +
         Interpreter.inspect(right);
 
-      Hologram.raiseInterpreterError(message);
+      Interpreter.raiseInterpreterError(message);
     }
 
     return Type.boolean(left.value < right.value);
@@ -136,7 +136,7 @@ const Erlang = {
         ", right = " +
         Interpreter.inspect(right);
 
-      Hologram.raiseInterpreterError(message);
+      Interpreter.raiseInterpreterError(message);
     }
 
     return Type.boolean(left.value > right.value);

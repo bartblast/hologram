@@ -44,7 +44,7 @@ export default class Type {
 
     // TODO: is this needed?
     if (type === null) {
-      Hologram.raiseInterpreterError(
+      Interpreter.raiseInterpreterError(
         "bitstring segment type modifier is not specified",
       );
     }
@@ -102,7 +102,7 @@ export default class Type {
 
   static improperList(data) {
     if (data.length < 2) {
-      Hologram.raiseInterpreterError(
+      Interpreter.raiseInterpreterError(
         "improper list must have at least 2 items, received " +
           Interpreter.serialize(data),
       );

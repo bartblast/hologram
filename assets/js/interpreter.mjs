@@ -194,7 +194,7 @@ export default class Interpreter {
     }
 
     globalThis[jsModuleName][`${functionName}/${functionArity}`] = () => {
-      // TODO: use Hologram.raiseInterpreterError() and update the URL
+      // TODO: use Interpreter.raiseInterpreterError() and update the URL
       const message = `Function :${exModuleName}.${functionName}/${functionArity} is not yet ported. See what to do here: https://www.hologram.page/TODO`;
 
       throw new Error(message);
@@ -325,6 +325,10 @@ export default class Interpreter {
   static raiseError(aliasStr, message) {
     const errorStruct = Type.errorStruct(aliasStr, message);
     return Erlang["error/1"](errorStruct);
+  }
+
+  static raiseInterpreterError(message) {
+    return Interpreter.raiseError("Hologram.InterpreterError", message);
   }
 
   static raiseMatchError(right) {
