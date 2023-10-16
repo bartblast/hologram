@@ -100,7 +100,13 @@ defmodule Hologram.Compiler do
 
     import Hologram from "#{source_dir}/hologram.mjs";
     import Interpreter from "#{source_dir}/interpreter.mjs";
-    import Type from "#{source_dir}/type.mjs";#{erlang_function_defs}#{elixir_function_defs}\
+    import Type from "#{source_dir}/type.mjs";#{erlang_function_defs}#{elixir_function_defs}
+
+    document.addEventListener("hologram:pageScriptLoaded", () => Hologram.run());
+
+    if (window.__hologramPageScriptLoaded__) {
+      document.dispatchEvent(new CustomEvent("hologram:pageScriptLoaded"));
+    }\
     """
   end
 

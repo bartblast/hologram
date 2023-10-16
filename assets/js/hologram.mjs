@@ -39,14 +39,3 @@ export default class Hologram {
     });
   }
 }
-
-window.__hologramRuntimeScriptLoaded__ = true;
-
-if (
-  window.__hologramRuntimeScriptLoaded__ &&
-  window.__hologramPageScriptLoaded__ &&
-  !window.__hologramPageMounted__
-) {
-  window.__hologramPageMounted__ = true;
-  Hologram.run();
-}
