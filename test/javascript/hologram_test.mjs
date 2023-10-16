@@ -1,13 +1,11 @@
 "use strict";
 
 import {
-  assert,
   assertError,
   linkModules,
   unlinkModules,
 } from "../../assets/js/test_support.mjs";
 import Hologram from "../../assets/js/hologram.mjs";
-import Type from "../../assets/js/type.mjs";
 
 before(() => linkModules());
 after(() => unlinkModules());
