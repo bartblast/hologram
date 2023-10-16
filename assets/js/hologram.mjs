@@ -4,16 +4,15 @@ import Interpreter from "./interpreter.mjs";
 import Type from "./type.mjs";
 
 export default class Hologram {
-  static Interpreter = Interpreter;
-  static Type = Type;
-
   static isInitiated = false;
 
   // TODO: implement
   static init() {}
 
   // TODO: implement
-  static mountPage() {}
+  static mountPage() {
+    window.__hologramPageReachableFunctionDefs__(Interpreter, Type);
+  }
 
   static onReady(callback) {
     if (
