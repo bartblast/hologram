@@ -123,7 +123,7 @@ defmodule Hologram.Template.Renderer do
       )
 
     final_clients = Map.put(initial_clients, "page", final_page_client)
-    final_html = inject_runtime_page_client_data(initial_html, final_clients)
+    final_html = inject_runtime_client_data(initial_html, final_clients)
 
     {final_html, final_clients}
   end
@@ -218,7 +218,7 @@ defmodule Hologram.Template.Renderer do
     Map.merge(props_from_template, props_from_context)
   end
 
-  defp inject_runtime_page_client_data(html, clients) do
+  defp inject_runtime_client_data(html, clients) do
     data =
       clients
       |> Macro.escape()
