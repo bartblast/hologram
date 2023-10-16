@@ -204,7 +204,7 @@ export default class Interpreter {
   static dotOperator(left, right) {
     // if left argument is a boxed atom, treat the operator as a remote function call
     if (Type.isAtom(left)) {
-      return Hologram.module(left)[right.value]();
+      return Interpreter.module(left)[right.value]();
     }
 
     // otherwise treat the operator as map key access
@@ -288,6 +288,26 @@ export default class Interpreter {
     }
 
     return Interpreter.#handleMatchResult(right, vars, rootMatch);
+  }
+
+  static module(alias) {
+    return globalThis[Interpreter.moduleName(alias)];
+  }
+
+  static moduleName(alias) {
+    const aliasStr = Type.isAtom(alias) ? alias.value : alias;
+    let prefixedAliasStr;
+
+    if (aliasStr === "erlang") {
+      prefixedAliasStr = "Erlang";
+    } else {
+      prefixedAliasStr =
+        aliasStr.charAt(0).toLowerCase() === aliasStr.charAt(0)
+          ? "Erlang_" + aliasStr
+          : aliasStr;
+    }
+
+    return prefixedAliasStr.replace(/\./g, "_");
   }
 
   static raiseMatchError(right) {

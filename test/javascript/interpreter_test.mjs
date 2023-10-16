@@ -4449,6 +4449,38 @@ describe("matchOperator()", () => {
   });
 });
 
+it("module()", () => {
+  assert.equal(Interpreter.module("maps"), Erlang_maps);
+});
+
+describe("moduleName()", () => {
+  it("returns module name for alias having lowercase starting letter", () => {
+    const alias = Type.atom("aaa_bbb");
+    const result = Interpreter.moduleName(alias);
+
+    assert.equal(result, "Erlang_aaa_bbb");
+  });
+
+  it("returns module name for alias not having lowercase starting letter", () => {
+    const alias = Type.atom("Elixir.Aaa.Bbb");
+    const result = Interpreter.moduleName(alias);
+
+    assert.equal(result, "Elixir_Aaa_Bbb");
+  });
+
+  it("returns module name for :erlang alias", () => {
+    const alias = Type.atom("erlang");
+    const result = Interpreter.moduleName(alias);
+
+    assert.equal(result, "Erlang");
+  });
+
+  it("works with string arguments", () => {
+    const result = Interpreter.moduleName("Elixir.Aaa.Bbb");
+    assert.equal(result, "Elixir_Aaa_Bbb");
+  });
+});
+
 it("raiseMatchError()", () => {
   assertError(
     () => Interpreter.raiseMatchError(Type.atom("abc")),

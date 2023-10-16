@@ -12,38 +12,6 @@ import Type from "../../assets/js/type.mjs";
 before(() => linkModules());
 after(() => unlinkModules());
 
-it("module()", () => {
-  assert.equal(Hologram.module("maps"), Erlang_maps);
-});
-
-describe("moduleName()", () => {
-  it("returns module name for alias having lowercase starting letter", () => {
-    const alias = Type.atom("aaa_bbb");
-    const result = Hologram.moduleName(alias);
-
-    assert.equal(result, "Erlang_aaa_bbb");
-  });
-
-  it("returns module name for alias not having lowercase starting letter", () => {
-    const alias = Type.atom("Elixir.Aaa.Bbb");
-    const result = Hologram.moduleName(alias);
-
-    assert.equal(result, "Elixir_Aaa_Bbb");
-  });
-
-  it("returns module name for :erlang alias", () => {
-    const alias = Type.atom("erlang");
-    const result = Hologram.moduleName(alias);
-
-    assert.equal(result, "Erlang");
-  });
-
-  it("works with string arguments", () => {
-    const result = Hologram.moduleName("Elixir.Aaa.Bbb");
-    assert.equal(result, "Elixir_Aaa_Bbb");
-  });
-});
-
 it("raiseArgumentError()", () => {
   assertError(() => Hologram.raiseArgumentError("abc"), "ArgumentError", "abc");
 });

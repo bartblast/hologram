@@ -7,26 +7,6 @@ export default class Hologram {
   static Interpreter = Interpreter;
   static Type = Type;
 
-  static module(alias) {
-    return globalThis[Hologram.moduleName(alias)];
-  }
-
-  static moduleName(alias) {
-    const aliasStr = Type.isAtom(alias) ? alias.value : alias;
-    let prefixedAliasStr;
-
-    if (aliasStr === "erlang") {
-      prefixedAliasStr = "Erlang";
-    } else {
-      prefixedAliasStr =
-        aliasStr.charAt(0).toLowerCase() === aliasStr.charAt(0)
-          ? "Erlang_" + aliasStr
-          : aliasStr;
-    }
-
-    return prefixedAliasStr.replace(/\./g, "_");
-  }
-
   static raiseArgumentError(message) {
     return Hologram.raiseError("ArgumentError", message);
   }
