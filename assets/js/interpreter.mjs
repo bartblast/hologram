@@ -318,6 +318,10 @@ export default class Interpreter {
     return Interpreter.raiseError("BadMapError", message);
   }
 
+  static raiseCompileError(message) {
+    return Interpreter.raiseError("CompileError", message);
+  }
+
   static raiseError(aliasStr, message) {
     const errorStruct = Type.errorStruct(aliasStr, message);
     return Erlang["error/1"](errorStruct);

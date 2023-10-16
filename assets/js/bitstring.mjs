@@ -230,7 +230,7 @@ export default class Bitstring {
     }
 
     if (segment.size === null && segment.unit !== null) {
-      Hologram.raiseCompileError(
+      Interpreter.raiseCompileError(
         "integer and float types require a size specifier if the unit specifier is given",
       );
     }
@@ -300,7 +300,7 @@ export default class Bitstring {
     }
 
     if (segment.size !== null || segment.unit !== null) {
-      Hologram.raiseCompileError(
+      Interpreter.raiseCompileError(
         "size and unit are not supported on utf types",
       );
     }

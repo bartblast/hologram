@@ -7,10 +7,6 @@ export default class Hologram {
   static Interpreter = Interpreter;
   static Type = Type;
 
-  static raiseCompileError(message) {
-    return Interpreter.raiseError("CompileError", message);
-  }
-
   static raiseInterpreterError(message) {
     return Interpreter.raiseError("Hologram.InterpreterError", message);
   }

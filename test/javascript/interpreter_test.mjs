@@ -4493,6 +4493,14 @@ it("raiseBadMapError()", () => {
   assertError(() => Interpreter.raiseBadMapError("abc"), "BadMapError", "abc");
 });
 
+it("raiseCompileError()", () => {
+  assertError(
+    () => Interpreter.raiseCompileError("abc"),
+    "CompileError",
+    "abc",
+  );
+});
+
 it("raiseError()", () => {
   assertError(() => Interpreter.raiseError("Aaa.Bbb", "abc"), "Aaa.Bbb", "abc");
 });

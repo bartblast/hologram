@@ -10,10 +10,6 @@ import Hologram from "../../assets/js/hologram.mjs";
 before(() => linkModules());
 after(() => unlinkModules());
 
-it("raiseCompileError()", () => {
-  assertError(() => Hologram.raiseCompileError("abc"), "CompileError", "abc");
-});
-
 it("raiseInterpreterError()", () => {
   assertError(
     () => Hologram.raiseInterpreterError("abc"),
