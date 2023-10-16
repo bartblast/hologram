@@ -12,23 +12,6 @@ import Type from "../../assets/js/type.mjs";
 before(() => linkModules());
 after(() => unlinkModules());
 
-describe("inspectModuleName()", () => {
-  it("inspects Elixir module name", () => {
-    const result = Hologram.inspectModuleName("Elixir_Aaa_Bbb");
-    assert.deepStrictEqual(result, "Aaa.Bbb");
-  });
-
-  it("inspects 'Erlang' module name", () => {
-    const result = Hologram.inspectModuleName("Erlang");
-    assert.deepStrictEqual(result, ":erlang");
-  });
-
-  it("inspects Erlang standard lib module name", () => {
-    const result = Hologram.inspectModuleName("Erlang_uri_string");
-    assert.deepStrictEqual(result, ":uri_string");
-  });
-});
-
 it("module()", () => {
   assert.equal(Hologram.module("maps"), Erlang_maps);
 });

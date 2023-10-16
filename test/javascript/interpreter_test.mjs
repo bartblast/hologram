@@ -1438,6 +1438,23 @@ describe("inspect()", () => {
   });
 });
 
+describe("inspectModuleName()", () => {
+  it("inspects Elixir module name", () => {
+    const result = Interpreter.inspectModuleName("Elixir_Aaa_Bbb");
+    assert.deepStrictEqual(result, "Aaa.Bbb");
+  });
+
+  it("inspects 'Erlang' module name", () => {
+    const result = Interpreter.inspectModuleName("Erlang");
+    assert.deepStrictEqual(result, ":erlang");
+  });
+
+  it("inspects Erlang standard lib module name", () => {
+    const result = Interpreter.inspectModuleName("Erlang_uri_string");
+    assert.deepStrictEqual(result, ":uri_string");
+  });
+});
+
 describe("isStrictlyEqual()", () => {
   it("returns true if the args are of the same boxed primitive type and have equal values", () => {
     const result = Interpreter.isStrictlyEqual(

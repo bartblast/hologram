@@ -7,19 +7,6 @@ export default class Hologram {
   static Interpreter = Interpreter;
   static Type = Type;
 
-  static inspectModuleName(moduleName) {
-    if (moduleName.startsWith("Elixir_")) {
-      return moduleName.slice(7).replace("_", ".");
-    }
-
-    if (moduleName === "Erlang") {
-      return ":erlang";
-    }
-
-    // starts with "Erlang_"
-    return ":" + moduleName.slice(7).toLowerCase();
-  }
-
   static module(alias) {
     return globalThis[Hologram.moduleName(alias)];
   }

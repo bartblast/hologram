@@ -164,7 +164,7 @@ export default class Interpreter {
         }
       }
 
-      const inspectedModuleName = Hologram.inspectModuleName(moduleName);
+      const inspectedModuleName = Interpreter.inspectModuleName(moduleName);
       const message = `no function clause matching in ${inspectedModuleName}.${functionName}/${arity}`;
       Interpreter.#raiseFunctionClauseError(message);
     };
@@ -213,6 +213,19 @@ export default class Interpreter {
 
   static inspect(term) {
     return Elixir_Kernel["inspect/2"](term, Type.list([]));
+  }
+
+  static inspectModuleName(moduleName) {
+    if (moduleName.startsWith("Elixir_")) {
+      return moduleName.slice(7).replace("_", ".");
+    }
+
+    if (moduleName === "Erlang") {
+      return ":erlang";
+    }
+
+    // starts with "Erlang_"
+    return ":" + moduleName.slice(7).toLowerCase();
   }
 
   static isStrictlyEqual(left, right) {
@@ -487,7 +500,7 @@ export default class Interpreter {
 
   static #raiseUndefinedFunctionError(moduleName, functionName, arity) {
     // TODO: include info about available alternative arities
-    const inspectedModuleName = Hologram.inspectModuleName(moduleName);
+    const inspectedModuleName = Interpreter.inspectModuleName(moduleName);
     const message = `function ${inspectedModuleName}.${functionName}/${arity} is undefined or private`;
 
     return Hologram.raiseError("UndefinedFunctionError", message);
