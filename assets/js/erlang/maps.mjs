@@ -1,6 +1,7 @@
 "use strict";
 
 import Hologram from "../hologram.mjs";
+import Interpreter from "../interpreter.mjs";
 import Type from "../type.mjs";
 
 /*
@@ -16,7 +17,7 @@ const Erlang_maps = {
   "get/2": (key, map) => {
     if (!Type.isMap(map)) {
       Hologram.raiseBadMapError(
-        `expected a map, got: ${Hologram.inspect(map)}`,
+        `expected a map, got: ${Interpreter.inspect(map)}`,
       );
     }
 
@@ -27,7 +28,9 @@ const Erlang_maps = {
     }
 
     Hologram.raiseKeyError(
-      `key ${Hologram.inspect(key)} not found in ${Hologram.inspect(map)}`,
+      `key ${Interpreter.inspect(key)} not found in ${Interpreter.inspect(
+        map,
+      )}`,
     );
   },
   // end get/2

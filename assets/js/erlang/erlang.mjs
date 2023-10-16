@@ -79,9 +79,9 @@ const Erlang = {
       const message =
         ":erlang.</2 currently supports only floats and integers" +
         ", left = " +
-        Hologram.inspect(left) +
+        Interpreter.inspect(left) +
         ", right = " +
-        Hologram.inspect(right);
+        Interpreter.inspect(right);
 
       Hologram.raiseInterpreterError(message);
     }
@@ -132,9 +132,9 @@ const Erlang = {
       const message =
         ":erlang.>/2 currently supports only floats and integers" +
         ", left = " +
-        Hologram.inspect(left) +
+        Interpreter.inspect(left) +
         ", right = " +
-        Hologram.inspect(right);
+        Interpreter.inspect(right);
 
       Hologram.raiseInterpreterError(message);
     }

@@ -7,10 +7,6 @@ export default class Hologram {
   static Interpreter = Interpreter;
   static Type = Type;
 
-  static inspect(term) {
-    return Elixir_Kernel["inspect/2"](term, Type.list([]));
-  }
-
   static inspectModuleName(moduleName) {
     if (moduleName.startsWith("Elixir_")) {
       return moduleName.slice(7).replace("_", ".");

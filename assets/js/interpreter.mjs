@@ -51,7 +51,8 @@ export default class Interpreter {
       }
     }
 
-    const message = "no case clause matching: " + Hologram.inspect(condition);
+    const message =
+      "no case clause matching: " + Interpreter.inspect(condition);
 
     return Interpreter.#raiseCaseClauseError(message);
   }
@@ -210,6 +211,10 @@ export default class Interpreter {
     return Erlang_maps["get/2"](right, left);
   }
 
+  static inspect(term) {
+    return Elixir_Kernel["inspect/2"](term, Type.list([]));
+  }
+
   static isStrictlyEqual(left, right) {
     if (left.type !== right.type) {
       return false;
@@ -274,7 +279,7 @@ export default class Interpreter {
 
   static raiseMatchError(right) {
     const message =
-      "no match of right hand side value: " + Hologram.inspect(right);
+      "no match of right hand side value: " + Interpreter.inspect(right);
 
     return Hologram.raiseError("MatchError", message);
   }

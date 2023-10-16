@@ -1,6 +1,7 @@
 "use strict";
 
 import Hologram from "./hologram.mjs";
+import Interpreter from "./interpreter.mjs";
 import Type from "./type.mjs";
 import Utils from "./utils.mjs";
 
@@ -159,7 +160,7 @@ export default class Bitstring {
     expectedValueTypesStr,
     value,
   ) {
-    const inspectedValue = Hologram.inspect(value);
+    const inspectedValue = Interpreter.inspect(value);
     const message = `construction of binary failed: segment ${index} of type '${segmentType}': expected ${expectedValueTypesStr} but got: ${inspectedValue}`;
 
     Hologram.raiseArgumentError(message);
@@ -186,7 +187,7 @@ export default class Bitstring {
       segment.value.type === "bitstring" &&
       segment.value.bits.length % 8 !== 0
     ) {
-      const inspectedValue = Hologram.inspect(segment.value);
+      const inspectedValue = Interpreter.inspect(segment.value);
 
       Hologram.raiseArgumentError(
         `construction of binary failed: segment ${index} of type 'binary': the size of the value ${inspectedValue} is not a multiple of the unit for the segment`,

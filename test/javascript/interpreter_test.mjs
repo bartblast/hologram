@@ -1431,6 +1431,13 @@ describe("dotOperator()", () => {
   });
 });
 
+describe("inspect()", () => {
+  it("proxies to Kernel.inspect/2", () => {
+    const result = Interpreter.inspect(Type.integer(123));
+    assert.equal(result, "123");
+  });
+});
+
 describe("isStrictlyEqual()", () => {
   it("returns true if the args are of the same boxed primitive type and have equal values", () => {
     const result = Interpreter.isStrictlyEqual(

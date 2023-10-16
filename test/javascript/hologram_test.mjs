@@ -12,13 +12,6 @@ import Type from "../../assets/js/type.mjs";
 before(() => linkModules());
 after(() => unlinkModules());
 
-describe("inspect()", () => {
-  it("proxies to Kernel.inspect/2", () => {
-    const result = Hologram.inspect(Type.integer(123));
-    assert.equal(result, "123");
-  });
-});
-
 describe("inspectModuleName()", () => {
   it("inspects Elixir module name", () => {
     const result = Hologram.inspectModuleName("Elixir_Aaa_Bbb");
