@@ -17,25 +17,25 @@ export default class Hologram {
     window.__hologramPageReachableFunctionDefs__(Interpreter, Type);
 
     console.log("window.__hologramPageMountData__ =");
-    console.debug(window.__hologramPageMountData__);
+    console.dir(window.__hologramPageMountData__);
 
     const mountData = window.__hologramPageMountData__(Type);
 
     console.log("mountData =");
-    console.debug(mountData);
+    console.dir(mountData);
 
     Hologram.clientsData = mountData.clientsData;
     Hologram.pageModule = mountData.pageModule;
     Hologram.pageParams = mountData.pageParams;
 
     console.log("Hologram.clientsData =");
-    console.debug(Hologram.clientsData);
+    console.dir(Hologram.clientsData);
 
     console.log("Hologram.pageModule =");
-    console.debug(Hologram.pageModule);
+    console.dir(Hologram.pageModule);
 
     console.log("Hologram.pageParams =");
-    console.debug(Hologram.pageParams);
+    console.dir(Hologram.pageParams);
   }
 
   static onReady(callback) {
