@@ -29,8 +29,8 @@ defmodule Hologram.UI.RuntimeTest do
            <script>
              
                
-                 window.__hologramPageMountData__ = (typeClass) => {
-                   const Type = typeClass;
+                 window.__hologramPageMountData__ = (deps) => {
+                   const Type = deps.Type;
                    
                    return {
                      clientsData: $INJECT_CLIENTS_DATA,

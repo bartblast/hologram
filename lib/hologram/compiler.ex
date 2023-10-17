@@ -70,9 +70,10 @@ defmodule Hologram.Compiler do
     """
     "use strict";
 
-    window.__hologramPageReachableFunctionDefs__ = (interpreterClass, typeClass) => {
-      const Interpreter = interpreterClass;
-      const Type = typeClass;#{erlang_function_defs}#{elixir_function_defs}
+    window.__hologramPageReachableFunctionDefs__ = (deps) => {
+      const HologramError = deps.HologramError;
+      const Interpreter = deps.Interpreter;
+      const Type = deps.Type;#{erlang_function_defs}#{elixir_function_defs}
 
     }
 

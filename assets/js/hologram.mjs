@@ -1,10 +1,17 @@
 "use strict";
 
+import HologramError from "./error.mjs";
 import Interpreter from "./interpreter.mjs";
 import Renderer from "./renderer.mjs";
 import Type from "./type.mjs";
 
 export default class Hologram {
+  static deps = {
+    HologramError: HologramError,
+    Interpreter: Interpreter,
+    Type: Type,
+  };
+
   static clientsData = null;
   static isInitiated = false;
   static pageModule = null;
@@ -14,9 +21,9 @@ export default class Hologram {
   static init() {}
 
   static mountPage() {
-    window.__hologramPageReachableFunctionDefs__(Interpreter, Type);
+    window.__hologramPageReachableFunctionDefs__(Hologram.deps);
 
-    const mountData = window.__hologramPageMountData__(Type);
+    const mountData = window.__hologramPageMountData__(Hologram.deps);
     Hologram.clientsData = mountData.clientsData;
     Hologram.pageModule = mountData.pageModule;
     Hologram.pageParams = mountData.pageParams;
