@@ -650,7 +650,7 @@ defmodule Hologram.Template.RendererTest do
                 }}
     end
 
-    test "inject runtime client data" do
+    test "inject runtime clients data" do
       ETS.put(
         PageDigestRegistryStub.ets_table_name(),
         Module48,
@@ -671,7 +671,33 @@ defmodule Hologram.Template.RendererTest do
               }} = render_page(Module48, [])
 
       expected =
-        ~s/window.__hologramClientData__ = (typeClass) => { const Type = typeClass; return Type.map([[Type.bitstring("layout"), Type.map([[Type.atom("__struct__"), Type.atom("Elixir.Hologram.Component.Client")], [Type.atom("context"), Type.map([])], [Type.atom("next_command"), Type.atom("nil")], [Type.atom("state"), Type.map([])]])], [Type.bitstring("page"), Type.map([[Type.atom("__struct__"), Type.atom("Elixir.Hologram.Component.Client")], [Type.atom("context"), Type.map([[Type.tuple([Type.atom("Elixir.Hologram.Runtime"), Type.atom("client_data_loaded?")]), Type.atom("true")], [Type.tuple([Type.atom("Elixir.Hologram.Runtime"), Type.atom("page_digest")]), Type.bitstring("102790adb6c3b1956db310be523a7693")]])], [Type.atom("next_command"), Type.atom("nil")], [Type.atom("state"), Type.map([])]])]]); };/
+        ~s/clientsData: Type.map([[Type.bitstring("layout"), Type.map([[Type.atom("__struct__"), Type.atom("Elixir.Hologram.Component.Client")], [Type.atom("context"), Type.map([])], [Type.atom("next_command"), Type.atom("nil")], [Type.atom("state"), Type.map([])]])], [Type.bitstring("page"), Type.map([[Type.atom("__struct__"), Type.atom("Elixir.Hologram.Component.Client")], [Type.atom("context"), Type.map([[Type.tuple([Type.atom("Elixir.Hologram.Runtime"), Type.atom("client_data_loaded?")]), Type.atom("true")], [Type.tuple([Type.atom("Elixir.Hologram.Runtime"), Type.atom("page_digest")]), Type.bitstring("102790adb6c3b1956db310be523a7693")]])], [Type.atom("next_command"), Type.atom("nil")], [Type.atom("state"), Type.map([])]])]])/
+
+      assert String.contains?(html, expected)
+    end
+
+    test "inject runtime page module" do
+      ETS.put(
+        PageDigestRegistryStub.ets_table_name(),
+        Module48,
+        "102790adb6c3b1956db310be523a7693"
+      )
+
+      assert {html,
+              %{
+                "layout" => %Component.Client{
+                  context: %{}
+                },
+                "page" => %Component.Client{
+                  context: %{
+                    {Hologram.Runtime, :client_data_loaded?} => true,
+                    {Hologram.Runtime, :page_digest} => "102790adb6c3b1956db310be523a7693"
+                  }
+                }
+              }} = render_page(Module48, [])
+
+      expected =
+        ~s/pageModule: Type.atom("Elixir.Hologram.Test.Fixtures.Template.Renderer.Module48")/
 
       assert String.contains?(html, expected)
     end
@@ -703,7 +729,7 @@ defmodule Hologram.Template.RendererTest do
               }} = render_page(Module50, params_dom)
 
       expected =
-        ~s/window.__hologramPageParams__ = (typeClass) => { const Type = typeClass; return Type.map([[Type.atom("key_1"), Type.integer(123n)], [Type.atom("key_2"), Type.bitstring("value_2")]]); };/
+        ~s/pageParams: Type.map([[Type.atom("key_1"), Type.integer(123n)], [Type.atom("key_2"), Type.bitstring("value_2")]])/
 
       assert String.contains?(html, expected)
     end

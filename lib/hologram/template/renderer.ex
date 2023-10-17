@@ -123,7 +123,8 @@ defmodule Hologram.Template.Renderer do
 
     final_html =
       initial_html
-      |> inject_runtime_client_data(final_clients)
+      |> inject_runtime_clients_data(final_clients)
+      |> inject_runtime_page_module(page_module)
       |> inject_runtime_page_params(params)
 
     {final_html, final_clients}
@@ -219,24 +220,19 @@ defmodule Hologram.Template.Renderer do
     Map.merge(props_from_template, props_from_context)
   end
 
-  defp inject_runtime_client_data(html, clients) do
-    pattern = "window.__hologramClientData__ = \"...\";"
+  defp inject_runtime_clients_data(html, clients) do
     clients_js = Encoder.encode_term(clients)
-
-    replacement =
-      "window.__hologramClientData__ = (typeClass) => { const Type = typeClass; return #{clients_js}; };"
-
-    String.replace(html, pattern, replacement)
+    String.replace(html, "$INJECT_CLIENTS_DATA", clients_js)
   end
 
-  defp inject_runtime_page_params(html, params) do
-    pattern = "window.__hologramPageParams__ = \"...\";"
-    params_js = Encoder.encode_term(params)
+  defp inject_runtime_page_module(html, page_module) do
+    page_module_js = Encoder.encode_term(page_module)
+    String.replace(html, "$INJECT_PAGE_MODULE", page_module_js)
+  end
 
-    replacement =
-      "window.__hologramPageParams__ = (typeClass) => { const Type = typeClass; return #{params_js}; };"
-
-    String.replace(html, pattern, replacement)
+  defp inject_runtime_page_params(html, page_params) do
+    page_params_js = Encoder.encode_term(page_params)
+    String.replace(html, "$INJECT_PAGE_PARAMS", page_params_js)
   end
 
   defp normalize_prop_name({name, value}) do
