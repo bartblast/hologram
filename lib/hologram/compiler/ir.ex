@@ -320,6 +320,7 @@ defmodule Hologram.Compiler.IR do
       iex> for_term(my_var)
       %IR.IntegerType{value: 123}
   """
+  @spec for_term(any) :: IR.t()
   def for_term(term) do
     term
     |> Macro.escape()
