@@ -51,7 +51,15 @@ export default class Hologram {
         Hologram.init();
       }
 
-      Hologram.mountPage();
+      try {
+        Hologram.mountPage();
+      } catch (error) {
+        if (error instanceof HologramError) {
+          console.dir(Interpreter.deserialize(error.message));
+        } else {
+          throw error;
+        }
+      }
     });
   }
 }
