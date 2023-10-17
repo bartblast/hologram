@@ -378,6 +378,16 @@ defmodule Hologram.Compiler.Encoder do
     String.replace(prefixed_alias_str, ".", "_")
   end
 
+  @doc """
+  Encodes Elixir data chunk into JavaScript.
+  """
+  @spec encode_term(any) :: String.t()
+  def encode_term(term) do
+    term
+    |> IR.for_term()
+    |> encode(%Context{})
+  end
+
   # TODO: consider - remove
   @doc """
   Escapes chacters which are not allowed in JS identifiers with their Unicode code points.

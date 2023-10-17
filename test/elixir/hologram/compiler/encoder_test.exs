@@ -1269,6 +1269,11 @@ defmodule Hologram.Compiler.EncoderTest do
     end
   end
 
+  test "encode_term/1" do
+    my_var = 123
+    assert encode_term(my_var) == "Type.integer(123n)"
+  end
+
   describe "escape_js_identifier/1" do
     test "escape characters which are not allowed in JS identifiers" do
       assert escape_js_identifier("@[^`{") == "$264$291$294$296$3123"
