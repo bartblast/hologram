@@ -1,0 +1,17 @@
+defmodule Hologram.Test.Fixtures.Template.Renderer.Module50 do
+  use Hologram.Page
+
+  route "/hologram-test-fixtures-template-renderer-module50"
+
+  param :key_1
+  param :key_2
+
+  layout Hologram.Test.Fixtures.Template.Renderer.Module49
+
+  @impl Page
+  def template do
+    ~H"""
+    page Module50 template
+    """
+  end
+end
