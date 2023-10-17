@@ -310,4 +310,20 @@ defmodule Hologram.Compiler.IR do
     |> Normalizer.normalize()
     |> Transformer.transform(%Context{})
   end
+
+  @doc """
+  Returns Hologram IR for the given Elixir term (value).
+
+  ## Examples
+
+      iex> my_var = 123
+      iex> for_term(my_var)
+      %IR.IntegerType{value: 123}
+  """
+  def for_term(term) do
+    term
+    |> Macro.escape()
+    |> Normalizer.normalize()
+    |> Transformer.transform(%Context{})
+  end
 end

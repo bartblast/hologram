@@ -50,4 +50,10 @@ defmodule Hologram.Compiler.IRTest do
              }
            }
   end
+
+  test "for_term/1" do
+    my_var = 123
+
+    assert for_term(my_var) == %IR.IntegerType{value: 123}
+  end
 end
