@@ -96,7 +96,7 @@ export function assertError(callable, errorAliasStr, message) {
     Type.errorStruct(errorAliasStr, message),
   );
 
-  assert.throw(callable, HologramError, `${expectedErrorData}`);
+  assert.throw(callable, HologramError, expectedErrorData);
 }
 
 export function linkModules() {
