@@ -1,6 +1,7 @@
 "use strict";
 
 import Interpreter from "./interpreter.mjs";
+import Renderer from "./renderer.mjs";
 import Type from "./type.mjs";
 
 export default class Hologram {
@@ -12,30 +13,15 @@ export default class Hologram {
   // TODO: implement
   static init() {}
 
-  // TODO: implement
   static mountPage() {
     window.__hologramPageReachableFunctionDefs__(Interpreter, Type);
 
-    console.log("window.__hologramPageMountData__ =");
-    console.dir(window.__hologramPageMountData__);
-
     const mountData = window.__hologramPageMountData__(Type);
-
-    console.log("mountData =");
-    console.dir(mountData);
-
     Hologram.clientsData = mountData.clientsData;
     Hologram.pageModule = mountData.pageModule;
     Hologram.pageParams = mountData.pageParams;
 
-    console.log("Hologram.clientsData =");
-    console.dir(Hologram.clientsData);
-
-    console.log("Hologram.pageModule =");
-    console.dir(Hologram.pageModule);
-
-    console.log("Hologram.pageParams =");
-    console.dir(Hologram.pageParams);
+    Renderer.renderPage(mountData.pageModule, mountData.pageParams);
   }
 
   static onReady(callback) {
