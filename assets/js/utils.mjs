@@ -32,15 +32,6 @@ export default class Utils {
     return term;
   }
 
-  static deserialize(json) {
-    return JSON.parse(json, (_key, value) => {
-      if (typeof value === "string" && /^__bigint__:-?\d+$/.test(value)) {
-        return BigInt(value.substring(11, value.length));
-      }
-      return value;
-    });
-  }
-
   static evaluate(code) {
     return new Function(`return (${code});`)();
   }

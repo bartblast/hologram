@@ -60,40 +60,6 @@ describe("concatUint8Arrays()", () => {
   });
 });
 
-describe("deserialize()", () => {
-  it("deserializes number from JSON", () => {
-    const result = Utils.deserialize("123");
-    assert.equal(result, 123);
-  });
-
-  it("deserializes string from JSON", () => {
-    const result = Utils.deserialize('"abc"');
-    assert.equal(result, "abc");
-  });
-
-  it("deserializes non-negative bigint from JSON", () => {
-    const result = Utils.deserialize('"__bigint__:123"');
-    assert.equal(result, 123n);
-  });
-
-  it("deserializes negative bigint from JSON", () => {
-    const result = Utils.deserialize('"__bigint__:-123"');
-    assert.equal(result, -123n);
-  });
-
-  it("deserializes non-nested object from JSON", () => {
-    const result = Utils.deserialize('{"a":1,"b":2}');
-    assert.deepStrictEqual(result, {a: 1, b: 2});
-  });
-
-  it("deserializes nested object from JSON", () => {
-    const result = Utils.deserialize('{"a":1,"b":2,"c":{"d":3,"e":4}}');
-    const expected = {a: 1, b: 2, c: {d: 3, e: 4}};
-
-    assert.deepStrictEqual(result, expected);
-  });
-});
-
 it("evaluate()", () => {
   const result = Utils.evaluate("{value: 2 + 2}");
   assert.deepStrictEqual(result, {value: 4});

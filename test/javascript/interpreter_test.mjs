@@ -1397,6 +1397,40 @@ describe("defineNotImplementedErlangFunction()", () => {
   });
 });
 
+describe("deserialize()", () => {
+  it("deserializes number from JSON", () => {
+    const result = Interpreter.deserialize("123");
+    assert.equal(result, 123);
+  });
+
+  it("deserializes string from JSON", () => {
+    const result = Interpreter.deserialize('"abc"');
+    assert.equal(result, "abc");
+  });
+
+  it("deserializes non-negative bigint from JSON", () => {
+    const result = Interpreter.deserialize('"__bigint__:123"');
+    assert.equal(result, 123n);
+  });
+
+  it("deserializes negative bigint from JSON", () => {
+    const result = Interpreter.deserialize('"__bigint__:-123"');
+    assert.equal(result, -123n);
+  });
+
+  it("deserializes non-nested object from JSON", () => {
+    const result = Interpreter.deserialize('{"a":1,"b":2}');
+    assert.deepStrictEqual(result, {a: 1, b: 2});
+  });
+
+  it("deserializes nested object from JSON", () => {
+    const result = Interpreter.deserialize('{"a":1,"b":2,"c":{"d":3,"e":4}}');
+    const expected = {a: 1, b: 2, c: {d: 3, e: 4}};
+
+    assert.deepStrictEqual(result, expected);
+  });
+});
+
 describe("dotOperator()", () => {
   it("handles remote function call", () => {
     // setup
