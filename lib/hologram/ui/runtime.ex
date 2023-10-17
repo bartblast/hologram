@@ -9,8 +9,15 @@ defmodule Hologram.UI.Runtime do
     ~H"""
     <script>
       {%if !@client_data_loaded?}
-        window.__hologramClientData__ = "...";
-        window.__hologramPageParams__ = "...";
+        {%raw}
+          window.__hologramPageMountData__ = (typeClass) => {
+            return {
+              clientsData: $INJECT_CLIENTS_DATA,
+              pageModule: $INJECT_PAGE_MODULE,
+              pageParams: $INJECT_PAGE_PARAMS
+            };
+          };
+        {/raw}
       {/if}
     </script>
     <script async src={asset_path("hologram/runtime.js")}></script>

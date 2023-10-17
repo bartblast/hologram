@@ -28,8 +28,15 @@ defmodule Hologram.UI.RuntimeTest do
     assert render_component(Runtime, %{}, context) == """
            <script>
              
-               window.__hologramClientData__ = "...";
-               window.__hologramPageParams__ = "...";
+               
+                 window.__hologramPageMountData__ = (typeClass) => {
+                   return {
+                     clientsData: $INJECT_CLIENTS_DATA,
+                     pageModule: $INJECT_PAGE_MODULE,
+                     pageParams: $INJECT_PAGE_PARAMS
+                   };
+                 };
+               
              
            </script>
            <script async src="/hologram/runtime.js"></script>
