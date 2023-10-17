@@ -3,6 +3,7 @@
 import {assert} from "chai";
 import Erlang from "./erlang/erlang.mjs";
 import Erlang_maps from "./erlang/maps.mjs";
+import HologramError from "./error.mjs";
 import Interpreter from "./interpreter.mjs";
 import sinonESM from "../node_modules/sinon/pkg/sinon-esm.js";
 import Type from "./type.mjs";
@@ -95,7 +96,7 @@ export function assertError(callable, errorAliasStr, message) {
     Type.errorStruct(errorAliasStr, message),
   );
 
-  assert.throw(callable, Error, `__hologram__:${expectedErrorData}`);
+  assert.throw(callable, HologramError, `${expectedErrorData}`);
 }
 
 export function linkModules() {

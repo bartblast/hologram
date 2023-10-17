@@ -10,6 +10,7 @@ import {
 } from "../../../assets/js/test_support.mjs";
 
 import Erlang from "../../../assets/js/erlang/erlang.mjs";
+import HologramError from "../../../assets/js/error.mjs";
 import Interpreter from "../../../assets/js/interpreter.mjs";
 import Type from "../../../assets/js/type.mjs";
 
@@ -590,8 +591,8 @@ it("error/1", () => {
     () => {
       Erlang["error/1"](reason);
     },
-    Error,
-    '__hologram__:{"a":1,"b":2}',
+    HologramError,
+    '{"a":1,"b":2}',
   );
 });
 
@@ -603,8 +604,8 @@ it("error/2", () => {
     () => {
       Erlang["error/2"](reason, args);
     },
-    Error,
-    '__hologram__:{"a":1,"b":2}',
+    HologramError,
+    '{"a":1,"b":2}',
   );
 });
 

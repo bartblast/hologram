@@ -1,5 +1,6 @@
 "use strict";
 
+import HologramError from "../error.mjs";
 import Interpreter from "../interpreter.mjs";
 import Type from "../type.mjs";
 
@@ -155,7 +156,7 @@ const Erlang = {
   // TODO: maybe use args param
   // start error/2
   "error/2": (reason, _args) => {
-    throw new Error(`__hologram__:${Interpreter.serialize(reason)}`);
+    throw new HologramError(`${Interpreter.serialize(reason)}`);
   },
   // end error/2
   // deps: []
