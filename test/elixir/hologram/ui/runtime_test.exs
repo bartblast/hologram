@@ -29,6 +29,7 @@ defmodule Hologram.UI.RuntimeTest do
            <script>
              
                window.__hologramClientData__ = "...";
+               window.__hologramPageParams__ = "...";
              
            </script>
            <script async src="/hologram/runtime.js"></script>

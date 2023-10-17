@@ -1,9 +1,6 @@
 defmodule Hologram.Template.Renderer do
   alias Hologram.Commons.StringUtils
-  alias Hologram.Compiler.Context
   alias Hologram.Compiler.Encoder
-  alias Hologram.Compiler.Normalizer
-  alias Hologram.Compiler.Transformer
   alias Hologram.Component
   alias Hologram.Runtime.PageDigestRegistry
   alias Hologram.Runtime.Templatable
@@ -123,7 +120,11 @@ defmodule Hologram.Template.Renderer do
       )
 
     final_clients = Map.put(initial_clients, "page", final_page_client)
-    final_html = inject_runtime_client_data(initial_html, final_clients)
+
+    final_html =
+      initial_html
+      |> inject_runtime_client_data(final_clients)
+      |> inject_runtime_page_params(params)
 
     {final_html, final_clients}
   end
@@ -219,21 +220,21 @@ defmodule Hologram.Template.Renderer do
   end
 
   defp inject_runtime_client_data(html, clients) do
-    data =
-      clients
-      |> Macro.escape()
-      |> Normalizer.normalize()
-      |> Transformer.transform(%Context{})
-      |> Encoder.encode(%Context{})
-
     pattern = "window.__hologramClientData__ = \"...\";"
+    clients_js = Encoder.encode_term(clients)
 
-    replacement = """
-    window.__hologramClientData__ = (typeClass) => {
-      const Type = typeClass;
-      return #{data};
-    };\
-    """
+    replacement =
+      "window.__hologramClientData__ = (typeClass) => { const Type = typeClass; return #{clients_js}; };"
+
+    String.replace(html, pattern, replacement)
+  end
+
+  defp inject_runtime_page_params(html, params) do
+    pattern = "window.__hologramPageParams__ = \"...\";"
+    params_js = Encoder.encode_term(params)
+
+    replacement =
+      "window.__hologramPageParams__ = (typeClass) => { const Type = typeClass; return #{params_js}; };"
 
     String.replace(html, pattern, replacement)
   end

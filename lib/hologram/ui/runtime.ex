@@ -10,6 +10,7 @@ defmodule Hologram.UI.Runtime do
     <script>
       {%if !@client_data_loaded?}
         window.__hologramClientData__ = "...";
+        window.__hologramPageParams__ = "...";
       {/if}
     </script>
     <script async src={asset_path("hologram/runtime.js")}></script>
