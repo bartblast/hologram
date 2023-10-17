@@ -11,6 +11,8 @@ defmodule Hologram.UI.Runtime do
       {%if !@client_data_loaded?}
         {%raw}
           window.__hologramPageMountData__ = (typeClass) => {
+            const Type = typeClass;
+            
             return {
               clientsData: $INJECT_CLIENTS_DATA,
               pageModule: $INJECT_PAGE_MODULE,
