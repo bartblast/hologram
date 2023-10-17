@@ -103,6 +103,7 @@ defmodule Hologram.Compiler do
     "use strict";
 
     import Hologram from "#{source_dir}/hologram.mjs";
+    import HologramError from "#{source_dir}/error.mjs";
     import Interpreter from "#{source_dir}/interpreter.mjs";
     import Type from "#{source_dir}/type.mjs";#{erlang_function_defs}#{elixir_function_defs}
 
