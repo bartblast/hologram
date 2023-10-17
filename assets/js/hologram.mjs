@@ -16,7 +16,14 @@ export default class Hologram {
   static mountPage() {
     window.__hologramPageReachableFunctionDefs__(Interpreter, Type);
 
+    console.log("window.__hologramPageMountData__ =");
+    console.debug(window.__hologramPageMountData__);
+
     const mountData = window.__hologramPageMountData__(Type);
+
+    console.log("mountData =");
+    console.debug(mountData);
+
     Hologram.clientsData = mountData.clientsData;
     Hologram.pageModule = mountData.pageModule;
     Hologram.pageParams = mountData.pageParams;
