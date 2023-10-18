@@ -14,6 +14,13 @@ export default class Bitstring {
     return {type: "bitstring", bits: Utils.concatUint8Arrays(bitArrays)};
   }
 
+  static toText(bitstring) {
+    const byteArray = Bitstring.#convertBitArrayToByteArray(bitstring.bits);
+    const decoder = new TextDecoder("utf-8");
+
+    return decoder.decode(byteArray);
+  }
+
   static #buildBitArray(segment, index) {
     switch (segment.value.type) {
       case "bitstring":
@@ -95,7 +102,7 @@ export default class Bitstring {
     }
   }
 
-  static convertBitArrayToByteArray(bitArray) {
+  static #convertBitArrayToByteArray(bitArray) {
     if (bitArray.length % 8 !== 0) {
       Interpreter.raiseInterpreterError(
         `number of bits must be divisible by 8, got ${bitArray.length} bits`,

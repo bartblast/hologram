@@ -12,38 +12,6 @@ import Type from "../../assets/js/type.mjs";
 before(() => linkModules());
 after(() => unlinkModules());
 
-describe("convertBitArrayToByteArray()", () => {
-  it("converts bit array containing 8 bits", () => {
-    const bitArray = new Uint8Array([1, 0, 1, 0, 1, 0, 1, 0]);
-    const result = Bitstring.convertBitArrayToByteArray(bitArray);
-
-    assert.deepStrictEqual(result, new Uint8Array([170]));
-  });
-
-  it("converts bit array containing 24 bits", () => {
-    // prettier-ignore
-    const bitArray = new Uint8Array([
-      1, 0, 1, 0, 1, 0, 1, 0,
-      0, 1, 0, 1, 0, 1, 0, 1,
-      1, 0, 1, 0, 1, 0, 1, 0,
-    ]);
-
-    const result = Bitstring.convertBitArrayToByteArray(bitArray);
-
-    assert.deepStrictEqual(result, new Uint8Array([170, 85, 170]));
-  });
-
-  it("raises error when the number of bits in the bit array is not divisible by 8", () => {
-    const bitArray = new Uint8Array([1, 0, 1, 0, 1, 0, 1, 0, 0, 1, 0, 1]);
-
-    assertError(
-      () => Bitstring.convertBitArrayToByteArray(bitArray),
-      "Hologram.InterpreterError",
-      "number of bits must be divisible by 8, got 12 bits",
-    );
-  });
-});
-
 // IMPORTANT!
 // Each JavaScript test has a related Elixir consistency test in test/elixir/hologram/ex_js_consistency/bitstring_test.exs
 // Always update both together.
@@ -778,6 +746,25 @@ describe("from()", () => {
         expectedMessage,
       );
     });
+  });
+});
+
+describe("toText()", () => {
+  it("converts the bitstring to UTF-8 text if the number of its bits is divisible by 8", () => {
+    const bitstring = Type.bitstring("全息图");
+    const result = Bitstring.toText(bitstring);
+
+    assert.equal(result, "全息图");
+  });
+
+  it("raises error when the number of bits in the bitstring is not divisible by 8", () => {
+    const bitstring = Type.bitstring([1, 0, 1, 0, 1, 0, 1, 0, 0, 1, 0, 1]);
+
+    assertError(
+      () => Bitstring.toText(bitstring),
+      "Hologram.InterpreterError",
+      "number of bits must be divisible by 8, got 12 bits",
+    );
   });
 });
 
