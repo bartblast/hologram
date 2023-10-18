@@ -95,6 +95,27 @@ export default class Bitstring {
     }
   }
 
+  static convertBitArrayToByteArray(bitArray) {
+    if (bitArray.length % 8 !== 0) {
+      Interpreter.raiseInterpreterError(
+        `number of bits must be divisible by 8, got ${bitArray.length} bits`,
+      );
+    }
+
+    const numBytes = bitArray.length / 8;
+    const byteArray = new Uint8Array(numBytes);
+
+    for (let i = 0; i < numBytes; ++i) {
+      for (let j = 0; j < 8; ++j) {
+        if (bitArray[i * 8 + j] === 1) {
+          byteArray[i] = Bitstring.#putBit(byteArray[i], 7 - j);
+        }
+      }
+    }
+
+    return byteArray;
+  }
+
   static #convertDataToBitArray(data, size, unit) {
     // clamp to size number of bits
     const numBits = size * unit;
@@ -142,6 +163,10 @@ export default class Bitstring {
       case "utf16":
         return Bitstring.#encodeUtf16(str, "big");
     }
+  }
+
+  static #putBit(value, position) {
+    return value | (1 << position);
   }
 
   static #raiseInvalidUnicodeCodePointError(segment, index) {
