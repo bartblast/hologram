@@ -1,6 +1,8 @@
 export default class HologramError extends Error {
-  constructor(message) {
-    super(message);
+  constructor(struct) {
+    super("");
+
     this.name = "HologramError";
+    this.struct = struct;
   }
 }
