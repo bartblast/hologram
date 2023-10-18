@@ -431,10 +431,6 @@ export default class Interpreter {
     return false;
   }
 
-  static #isArityDefined(clauses, arity) {
-    return clauses.some((clause) => clause.params({}).length === arity);
-  }
-
   static #matchBitstringPattern(right, left, vars, rootMatch) {
     let offset = 0;
 
