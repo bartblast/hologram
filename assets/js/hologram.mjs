@@ -62,8 +62,16 @@ export default class Hologram {
         if (error instanceof HologramError) {
           console.dir(error.struct);
 
-          // TODO: use Map.fetch!(error.struct, :message)
-          console.log(Bitstring.toText(error.struct.data["atom(message)"][1]));
+          // TODO: use transpiled Elixir code
+          const message = Bitstring.toText(
+            error.struct.data["atom(message)"][1],
+          );
+
+          // TODO: use transpiled Elixir code
+          const type =
+            error.struct.data["atom(__struct__)"][1].value.substring(7);
+
+          console.error(`${type}: ${message}`);
         }
         throw error;
       }
