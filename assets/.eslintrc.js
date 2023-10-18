@@ -7,10 +7,11 @@ module.exports = {
   extends: "eslint:recommended",
   globals: {
     Elixir_Enum: "readonly",
+    Elixir_Hologram_Template_Renderer: "readonly",
     Elixir_Kernel: "readonly",
+    Elixir_Map: "readonly",
     Erlang: "readonly",
-    Erlang_maps: "readonly",
-    Hologram: "readonly",
+    Erlang_maps: "readonly"
   },
   overrides: [
     {

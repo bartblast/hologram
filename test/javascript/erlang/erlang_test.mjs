@@ -10,7 +10,6 @@ import {
 } from "../../../assets/js/test_support.mjs";
 
 import Erlang from "../../../assets/js/erlang/erlang.mjs";
-import HologramError from "../../../assets/js/error.mjs";
 import Interpreter from "../../../assets/js/interpreter.mjs";
 import Type from "../../../assets/js/type.mjs";
 
