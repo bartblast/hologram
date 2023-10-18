@@ -585,28 +585,16 @@ describe(">/2", () => {
 });
 
 it("error/1", () => {
-  const reason = {a: 1, b: 2};
+  const reason = Type.errorStruct("MyError", "my message");
 
-  assert.throw(
-    () => {
-      Erlang["error/1"](reason);
-    },
-    HologramError,
-    '{"a":1,"b":2}',
-  );
+  assertError(() => Erlang["error/1"](reason), "MyError", "my message");
 });
 
 it("error/2", () => {
-  const reason = {a: 1, b: 2};
+  const reason = Type.errorStruct("MyError", "my message");
   const args = Type.list([Type.integer(1, Type.integer(2))]);
 
-  assert.throw(
-    () => {
-      Erlang["error/2"](reason, args);
-    },
-    HologramError,
-    '{"a":1,"b":2}',
-  );
+  assertError(() => Erlang["error/2"](reason, args), "MyError", "my message");
 });
 
 describe("hd/1", () => {

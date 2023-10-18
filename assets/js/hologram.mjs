@@ -60,11 +60,10 @@ export default class Hologram {
         Hologram.mountPage();
       } catch (error) {
         if (error instanceof HologramError) {
-          const errorStruct = Interpreter.deserialize(error.message);
-          console.dir(errorStruct);
+          console.dir(error.struct);
 
-          // TODO: use Map.fetch!(errorStruct, :message)
-          console.log(Bitstring.toText(errorStruct.data["atom(message)"][1]));
+          // TODO: use Map.fetch!(error.struct, :message)
+          console.log(Bitstring.toText(error.struct.data["atom(message)"][1]));
         }
         throw error;
       }

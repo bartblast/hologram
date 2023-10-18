@@ -92,11 +92,26 @@ export function assertBoxedTrue(boxed) {
 }
 
 export function assertError(callable, errorAliasStr, message) {
-  const expectedErrorData = Interpreter.serialize(
-    Type.errorStruct(errorAliasStr, message),
-  );
+  const errorStruct = Type.errorStruct(errorAliasStr, message);
 
-  assert.throw(callable, HologramError, expectedErrorData);
+  let isErrorThrown = false;
+  let isAnyAssertFailed = false;
+
+  try {
+    callable();
+  } catch (error) {
+    isErrorThrown = true;
+
+    if (!(error instanceof HologramError)) {
+      isAnyAssertFailed = true;
+    } else if (!Interpreter.isStrictlyEqual(error.struct, errorStruct)) {
+      isAnyAssertFailed = true;
+    }
+  }
+
+  if (!isErrorThrown || isAnyAssertFailed) {
+    assert.fail(`expected ${errorAliasStr}: ${message}`);
+  }
 }
 
 export function linkModules() {

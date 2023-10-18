@@ -156,7 +156,7 @@ const Erlang = {
   // TODO: maybe use args param
   // start error/2
   "error/2": (reason, _args) => {
-    throw new HologramError(Interpreter.serialize(reason));
+    throw new HologramError(reason);
   },
   // end error/2
   // deps: []
