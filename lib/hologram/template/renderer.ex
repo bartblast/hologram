@@ -130,10 +130,12 @@ defmodule Hologram.Template.Renderer do
     {final_html, final_clients}
   end
 
+  # Used both on the client and the server.
   defp aggregate_vars(props, state) do
     Map.merge(props, state)
   end
 
+  # Used both on the client and the server.
   defp build_layout_props_dom(page_module, page_client) do
     page_module.__layout_props__()
     |> Enum.into(%{id: "layout"})

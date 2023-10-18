@@ -268,6 +268,8 @@ defmodule Hologram.Compiler do
 
       # Interpreter.comprehension()
       {Enum, :to_list, 1},
+      {Hologram.Template.Renderer, :aggregate_vars, 2},
+      {Hologram.Template.Renderer, :build_layout_props_dom, 2},
 
       # Interpreter.inspect()
       {Kernel, :inspect, 2},
