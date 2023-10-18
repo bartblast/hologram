@@ -140,14 +140,6 @@ export default class Interpreter {
       const args = Type.list([...arguments]);
       const arity = arguments.length;
 
-      if (!Interpreter.#isArityDefined(clauses, arity)) {
-        Interpreter.#raiseUndefinedFunctionError(
-          moduleName,
-          functionName,
-          arity,
-        );
-      }
-
       for (const clause of clauses) {
         const vars = {};
         const pattern = Type.list(clause.params(vars));
