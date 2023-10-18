@@ -1,5 +1,6 @@
 "use strict";
 
+import Bitstring from "./bitstring.mjs";
 import HologramError from "./error.mjs";
 import Interpreter from "./interpreter.mjs";
 import Renderer from "./renderer.mjs";
@@ -59,7 +60,11 @@ export default class Hologram {
         Hologram.mountPage();
       } catch (error) {
         if (error instanceof HologramError) {
-          console.dir(Interpreter.deserialize(error.message));
+          const errorStruct = Interpreter.deserialize(error.message);
+          console.dir(errorStruct);
+
+          // TODO: use Map.fetch!(errorStruct, :message)
+          console.log(Bitstring.toText(errorStruct.data["atom(message)"][1]));
         }
         throw error;
       }
