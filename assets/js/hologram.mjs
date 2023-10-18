@@ -28,7 +28,11 @@ export default class Hologram {
     Hologram.pageModule = mountData.pageModule;
     Hologram.pageParams = mountData.pageParams;
 
-    Renderer.renderPage(mountData.pageModule, mountData.pageParams);
+    Renderer.renderPage(
+      mountData.pageModule,
+      mountData.pageParam,
+      mountData.clientsData,
+    );
   }
 
   static onReady(callback) {

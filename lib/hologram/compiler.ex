@@ -276,6 +276,9 @@ defmodule Hologram.Compiler do
       # Interpreter.inspect()
       {Kernel, :inspect, 2},
 
+      # Renderer.renderPage()
+      {Map, :fetch!, 2},
+
       # Interpreter.raiseError()
       {:erlang, :error, 1},
 
