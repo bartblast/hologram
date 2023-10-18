@@ -60,9 +60,8 @@ export default class Hologram {
       } catch (error) {
         if (error instanceof HologramError) {
           console.dir(Interpreter.deserialize(error.message));
-        } else {
-          throw error;
         }
+        throw error;
       }
     });
   }
