@@ -1160,6 +1160,27 @@ describe("defineElixirFunction()", () => {
     delete globalThis.Elixir_Eee;
   });
 
+  it("defines function with multiple params", () => {
+    // def my_fun_e(1, 2, 3), do: :ok
+    Interpreter.defineElixirFunction("Elixir_Aaa_Bbb", "my_fun_e", 3, [
+      {
+        params: (_vars) => [Type.integer(1), Type.integer(2), Type.integer(3)],
+        guards: [],
+        body: (_vars) => {
+          return Type.atom("ok");
+        },
+      },
+    ]);
+
+    const result = globalThis.Elixir_Aaa_Bbb["my_fun_e/3"](
+      Type.integer(1),
+      Type.integer(2),
+      Type.integer(3),
+    );
+
+    assert.deepStrictEqual(result, Type.atom("ok"));
+  });
+
   it("defines function which runs the first matching clause", () => {
     const result = globalThis.Elixir_Aaa_Bbb["my_fun_a/1"](Type.integer(1));
     assert.deepStrictEqual(result, Type.atom("expr_1"));

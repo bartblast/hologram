@@ -440,7 +440,7 @@ export default class Interpreter {
   }
 
   static #isArityDefined(clauses, arity) {
-    return clauses.some((clause) => clause.params.length === arity);
+    return clauses.some((clause) => clause.params({}).length === arity);
   }
 
   static #matchBitstringPattern(right, left, vars, rootMatch) {
