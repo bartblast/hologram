@@ -59,13 +59,13 @@ export default class Hologram {
         Hologram.mountPage();
       } catch (error) {
         if (error instanceof HologramError) {
-          console.dir(error.struct);
-
           const type = Interpreter.fetchErrorType(error);
           const message = Interpreter.fetchErrorMessage(error);
 
-          console.error(`${type}: ${message}`);
+          error.name = type;
+          error.message = `${type}: ${message}`;
         }
+
         throw error;
       }
     });
