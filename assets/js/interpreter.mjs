@@ -7,6 +7,7 @@ import omit from "lodash/omit.js";
 import uniqWith from "lodash/uniqWith.js";
 
 import Bitstring from "./bitstring.mjs";
+import HologramError from "./error.mjs";
 import Type from "./type.mjs";
 import Utils from "./utils.mjs";
 
