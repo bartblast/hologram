@@ -211,6 +211,11 @@ export default class Interpreter {
     return Erlang_maps["get/2"](right, left);
   }
 
+  static fetchErrorType(jsError) {
+    // TODO: use transpiled Elixir code
+    return jsError.struct.data["atom(__struct__)"][1].value.substring(7);
+  }
+
   static inspect(term) {
     return Elixir_Kernel["inspect/2"](term, Type.list([]));
   }

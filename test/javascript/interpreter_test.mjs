@@ -10,6 +10,7 @@ import {
 import Erlang from "../../assets/js/erlang/erlang.mjs";
 import Interpreter from "../../assets/js/interpreter.mjs";
 import Type from "../../assets/js/type.mjs";
+import HologramError from "../../assets/js/error.mjs";
 
 before(() => linkModules());
 after(() => unlinkModules());
@@ -1484,6 +1485,14 @@ describe("dotOperator()", () => {
 
     assert.deepStrictEqual(result, value);
   });
+});
+
+it("fetchErrorType()", () => {
+  const errorStruct = Type.errorStruct("MyError", "my message");
+  const jsError = new HologramError(errorStruct);
+  const result = Interpreter.fetchErrorType(jsError);
+
+  assert.equal(result, "MyError");
 });
 
 describe("inspect()", () => {
