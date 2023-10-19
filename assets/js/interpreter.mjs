@@ -36,6 +36,10 @@ export default class Interpreter {
     return Interpreter.#raiseFunctionClauseError(message);
   }
 
+  static callNamedFunction(alias, functionArityStr, args) {
+    return Interpreter.module(alias)[functionArityStr](...args);
+  }
+
   static case(condition, clauses, vars) {
     for (const clause of clauses) {
       const varsClone = Interpreter.cloneVars(vars);
@@ -211,7 +215,8 @@ export default class Interpreter {
   static dotOperator(left, right) {
     // if left argument is a boxed atom, treat the operator as a remote function call
     if (Type.isAtom(left)) {
-      return Interpreter.module(left)[right.value]();
+      const functionArityStr = `${right.value}/0`;
+      return Interpreter.module(left)[functionArityStr]();
     }
 
     // otherwise treat the operator as map key access

@@ -223,6 +223,24 @@ describe("callAnonymousFunction()", () => {
   });
 });
 
+it("callNamedFunction()", () => {
+  // setup
+  globalThis.Elixir_MyModule = {
+    "my_fun/2": (arg1, arg2) => {
+      return Erlang["+/2"](arg1, arg2);
+    },
+  };
+
+  const alias = Type.alias("MyModule");
+  const args = [Type.integer(1), Type.integer(2)];
+  const result = Interpreter.callNamedFunction(alias, "my_fun/2", args);
+
+  assert.deepStrictEqual(result, Type.integer(3));
+
+  // cleanup
+  delete globalThis.Elixir_MyModule;
+});
+
 describe("case()", () => {
   let vars;
 
@@ -1457,7 +1475,7 @@ describe("dotOperator()", () => {
   it("handles remote function call", () => {
     // setup
     globalThis.Elixir_MyModule = {
-      my_fun: () => {
+      "my_fun/0": () => {
         return Type.integer(123);
       },
     };
