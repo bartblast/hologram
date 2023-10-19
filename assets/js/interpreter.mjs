@@ -152,7 +152,10 @@ export default class Interpreter {
             return clause.body(vars);
           }
         } catch (error) {
-          if (Interpreter.fetchErrorType(error) !== "MatchError") {
+          if (
+            !(error instanceof HologramError) ||
+            Interpreter.fetchErrorType(error) !== "MatchError"
+          ) {
             throw error;
           }
         }
