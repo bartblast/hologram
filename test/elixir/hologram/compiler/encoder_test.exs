@@ -1189,25 +1189,49 @@ defmodule Hologram.Compiler.EncoderTest do
         args: [%IR.IntegerType{value: 1}, %IR.IntegerType{value: 2}]
       }
 
-      assert encode(ir, %Context{}) == "vars.x[\"my_fun!/2\"](Type.integer(1n), Type.integer(2n))"
+      assert encode(ir, %Context{}) ==
+               "Interpreter.callNamedFunction(vars.x, \"my_fun!/2\", [Type.integer(1n), Type.integer(2n)])"
     end
 
     test "called on expression" do
-      # my_fun_a(123).my_fun_b!(1, 2)
+      # (case my_var do
+      #   :a -> MyModule1
+      #   :b -> MyModule2
+      # end).my_fun!(1, 2)
       ir = %IR.RemoteFunctionCall{
-        module: %IR.LocalFunctionCall{
-          function: :my_fun_a,
-          args: [%IR.IntegerType{value: 123}]
+        module: %IR.Case{
+          condition: %IR.Variable{name: :my_var},
+          clauses: [
+            %IR.Clause{
+              match: %IR.AtomType{value: :a},
+              guards: [],
+              body: %IR.Block{
+                expressions: [%IR.AtomType{value: MyModule1}]
+              }
+            },
+            %IR.Clause{
+              match: %IR.AtomType{value: :b},
+              guards: [],
+              body: %IR.Block{
+                expressions: [%IR.AtomType{value: MyModule2}]
+              }
+            }
+          ]
         },
-        function: :my_fun_b!,
+        function: :my_fun!,
         args: [
           %IR.IntegerType{value: 1},
           %IR.IntegerType{value: 2}
         ]
       }
 
-      assert encode(ir, %Context{module: MyModule}) ==
-               ~s{Elixir_MyModule["my_fun_a/1"](Type.integer(123n))["my_fun_b!/2"](Type.integer(1n), Type.integer(2n))}
+      assert encode(ir, %Context{module: MyModule}) == """
+             Interpreter.callNamedFunction(Interpreter.case(vars.my_var, [{match: Type.atom("a"), guards: [], body: (vars) => {
+             return Type.atom("Elixir.MyModule1");
+             }}, {match: Type.atom("b"), guards: [], body: (vars) => {
+             return Type.atom("Elixir.MyModule2");
+             }}]), "my_fun!/2", [Type.integer(1n), Type.integer(2n)])\
+             """
     end
   end
 

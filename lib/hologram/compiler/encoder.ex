@@ -213,8 +213,8 @@ defmodule Hologram.Compiler.Encoder do
   end
 
   def encode(%IR.LocalFunctionCall{function: function, args: args}, %{module: module} = context) do
-    callable = encode_as_class_name(module)
-    encode_function_call(callable, function, args, context)
+    module_ir = %IR.AtomType{value: module}
+    encode_named_function_call(module_ir, function, args, context)
   end
 
   def encode(%IR.MapType{data: data}, context) do
@@ -270,22 +270,13 @@ defmodule Hologram.Compiler.Encoder do
 
   def encode(
         %IR.RemoteFunctionCall{
-          module: %IR.AtomType{value: module},
+          module: module,
           function: function,
           args: args
         },
         context
       ) do
-    callable = encode_as_class_name(module)
-    encode_function_call(callable, function, args, context)
-  end
-
-  def encode(
-        %IR.RemoteFunctionCall{module: expr, function: function, args: args},
-        context
-      ) do
-    callable = encode(expr, context)
-    encode_function_call(callable, function, args, context)
+    encode_named_function_call(module, function, args, context)
   end
 
   def encode(%IR.StringType{value: value}, _context) do
@@ -505,11 +496,20 @@ defmodule Hologram.Compiler.Encoder do
     "(vars) => #{encode(ir, context)}"
   end
 
-  defp encode_function_call(callable, function, args, context) do
+  defp encode_named_function_call(%IR.AtomType{} = module, function, args, context) do
+    class = encode_as_class_name(module.value)
     arity = Enum.count(args)
     args_js = Enum.map_join(args, ", ", &encode(&1, context))
 
-    "#{callable}[\"#{function}/#{arity}\"](#{args_js})"
+    "#{class}[\"#{function}/#{arity}\"](#{args_js})"
+  end
+
+  defp encode_named_function_call(module, function, args, context) do
+    module_js = encode(module, context)
+    function_arity_str = "#{function}/#{Enum.count(args)}"
+    args_js = encode_as_array(args, context)
+
+    "Interpreter.callNamedFunction(#{module_js}, \"#{function_arity_str}\", #{args_js})"
   end
 
   defp encode_primitive_type(type, value, as_string)
