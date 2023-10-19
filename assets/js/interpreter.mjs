@@ -151,8 +151,10 @@ export default class Interpreter {
           if (Interpreter.#evaluateGuards(clause.guards, vars)) {
             return clause.body(vars);
           }
-        } catch {
-          // prevent ESLint "Empty block statement" (no-empty) error
+        } catch (error) {
+          if (Interpreter.fetchErrorType(error) !== "MatchError") {
+            throw error;
+          }
         }
       }
 
