@@ -6,6 +6,7 @@ import isEqual from "lodash/isEqual.js";
 import omit from "lodash/omit.js";
 import uniqWith from "lodash/uniqWith.js";
 
+import Bitstring from "./bitstring.mjs";
 import Type from "./type.mjs";
 import Utils from "./utils.mjs";
 
@@ -209,6 +210,11 @@ export default class Interpreter {
 
     // otherwise treat the operator as map key access
     return Erlang_maps["get/2"](right, left);
+  }
+
+  static fetchErrorMessage(jsError) {
+    // TODO: use transpiled Elixir code
+    return Bitstring.toText(jsError.struct.data["atom(message)"][1]);
   }
 
   static fetchErrorType(jsError) {

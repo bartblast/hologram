@@ -1,6 +1,5 @@
 "use strict";
 
-import Bitstring from "./bitstring.mjs";
 import HologramError from "./error.mjs";
 import Interpreter from "./interpreter.mjs";
 import Renderer from "./renderer.mjs";
@@ -63,11 +62,7 @@ export default class Hologram {
           console.dir(error.struct);
 
           const type = Interpreter.fetchErrorType(error);
-
-          // TODO: use transpiled Elixir code
-          const message = Bitstring.toText(
-            error.struct.data["atom(message)"][1],
-          );
+          const message = Interpreter.fetchErrorMessage(error);
 
           console.error(`${type}: ${message}`);
         }

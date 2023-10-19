@@ -8,9 +8,9 @@ import {
   unlinkModules,
 } from "../../assets/js/test_support.mjs";
 import Erlang from "../../assets/js/erlang/erlang.mjs";
+import HologramError from "../../assets/js/error.mjs";
 import Interpreter from "../../assets/js/interpreter.mjs";
 import Type from "../../assets/js/type.mjs";
-import HologramError from "../../assets/js/error.mjs";
 
 before(() => linkModules());
 after(() => unlinkModules());
@@ -1485,6 +1485,14 @@ describe("dotOperator()", () => {
 
     assert.deepStrictEqual(result, value);
   });
+});
+
+it("fetchErrorMessage()", () => {
+  const errorStruct = Type.errorStruct("MyError", "my message");
+  const jsError = new HologramError(errorStruct);
+  const result = Interpreter.fetchErrorMessage(jsError);
+
+  assert.equal(result, "my message");
 });
 
 it("fetchErrorType()", () => {
