@@ -223,6 +223,26 @@ describe("callAnonymousFunction()", () => {
 
     assert.deepStrictEqual(result, Type.integer(2));
   });
+
+  it("errors raised inside function body are not caught", () => {
+    const anonFun = Type.anonymousFunction(
+      0,
+      [
+        {
+          params: (_vars) => [],
+          guards: [],
+          body: (_vars) => Interpreter.raiseArgumentError("my message"),
+        },
+      ],
+      vars,
+    );
+
+    assertError(
+      () => Interpreter.callAnonymousFunction(anonFun, []),
+      "ArgumentError",
+      "my message",
+    );
+  });
 });
 
 it("callNamedFunction()", () => {
@@ -455,9 +475,7 @@ describe("case()", () => {
     const clause = {
       match: Type.integer(1),
       guards: [],
-      body: (_vars) => {
-        Interpreter.raiseArgumentError("my message");
-      },
+      body: (_vars) => Interpreter.raiseArgumentError("my message"),
     };
 
     assertError(
@@ -1357,9 +1375,7 @@ describe("defineElixirFunction()", () => {
       {
         params: () => [],
         guards: [],
-        body: (_vars) => {
-          Interpreter.raiseArgumentError("my message");
-        },
+        body: (_vars) => Interpreter.raiseArgumentError("my message"),
       },
     ]);
 

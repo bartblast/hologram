@@ -20,15 +20,11 @@ export default class Interpreter {
       const varsClone = Interpreter.cloneVars(fun.vars);
       const pattern = Type.list(clause.params(varsClone));
 
-      try {
-        if (
-          Interpreter.matchOperator(args, pattern, varsClone) &&
-          Interpreter.#evaluateGuards(clause.guards, varsClone)
-        ) {
-          return clause.body(varsClone);
-        }
-      } catch {
-        // prevent ESLint "Empty block statement" (no-empty) error
+      if (
+        Interpreter.isMatched(pattern, args, varsClone) &&
+        Interpreter.#evaluateGuards(clause.guards, varsClone)
+      ) {
+        return clause.body(varsClone);
       }
     }
 
