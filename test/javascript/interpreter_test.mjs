@@ -1133,7 +1133,7 @@ describe("consOperator()", () => {
   });
 });
 
-describe("defineElixirFunction()", () => {
+describe.only("defineElixirFunction()", () => {
   beforeEach(() => {
     // def my_fun_a(1), do: :expr_1
     // def my_fun_a(2), do: :expr_2
@@ -1336,7 +1336,23 @@ describe("defineElixirFunction()", () => {
     assert.deepStrictEqual(result, Type.integer(2));
   });
 
-  it("errors raised inside function body are thrown, only HologramMatchError");
+  it("errors raised inside function body are not caught", () => {
+    Interpreter.defineElixirFunction("Elixir_Aaa_Bbb", "my_fun_f", 0, [
+      {
+        params: () => [],
+        guards: [],
+        body: (_vars) => {
+          Interpreter.raiseArgumentError("my message");
+        },
+      },
+    ]);
+
+    assertError(
+      () => globalThis.Elixir_Aaa_Bbb["my_fun_f/0"](),
+      "ArgumentError",
+      "my message",
+    );
+  });
 });
 
 describe("defineErlangFunction()", () => {

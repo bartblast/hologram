@@ -151,17 +151,11 @@ export default class Interpreter {
         const vars = {};
         const pattern = Type.list(clause.params(vars));
 
-        try {
-          Interpreter.matchOperator(args, pattern, vars);
-
-          if (Interpreter.#evaluateGuards(clause.guards, vars)) {
-            return clause.body(vars);
-          }
-        } catch (error) {
-          // TODO: use isMatched()
-          if (!(error instanceof HologramMatchError)) {
-            throw error;
-          }
+        if (
+          Interpreter.isMatched(pattern, args, vars) &&
+          Interpreter.#evaluateGuards(clause.guards, vars)
+        ) {
+          return clause.body(vars);
         }
       }
 
