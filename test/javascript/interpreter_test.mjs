@@ -450,6 +450,22 @@ describe("case()", () => {
       "no case clause matching: 3",
     );
   });
+
+  it("errors raised inside case clause are not caught", () => {
+    const clause = {
+      match: Type.integer(1),
+      guards: [],
+      body: (_vars) => {
+        Interpreter.raiseArgumentError("my message");
+      },
+    };
+
+    assertError(
+      () => Interpreter.case(Type.integer(1), [clause], vars),
+      "ArgumentError",
+      "my message",
+    );
+  });
 });
 
 describe("cloneVars()", () => {
