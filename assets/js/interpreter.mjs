@@ -229,9 +229,9 @@ export default class Interpreter {
     return ":" + moduleName.slice(7).toLowerCase();
   }
 
-  static isMatched(left, right, vars) {
+  static isMatched(left, right, vars, rootMatch = true) {
     try {
-      Interpreter.matchOperator(right, left, vars);
+      Interpreter.matchOperator(right, left, vars, rootMatch);
       return true;
     } catch {
       return false;
@@ -479,16 +479,11 @@ export default class Interpreter {
     const rightHead = Erlang["hd/1"](right);
     const rightTail = Erlang["tl/1"](right);
 
-    try {
-      Interpreter.matchOperator(rightHead, left.head, vars, false);
-      Interpreter.matchOperator(rightTail, left.tail, vars, false);
-    } catch (error) {
-      if (error instanceof HologramMatchError) {
-        throw new HologramMatchError(right);
-      } else {
-        // TODO: Is this possible? How to test it?
-        throw error;
-      }
+    if (
+      !Interpreter.isMatched(left.head, rightHead, vars, false) ||
+      !Interpreter.isMatched(left.tail, rightTail, vars, false)
+    ) {
+      throw new HologramMatchError(right);
     }
 
     return Interpreter.#handleMatchResult(right, vars, rootMatch);
