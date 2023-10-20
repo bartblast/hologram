@@ -1133,7 +1133,7 @@ describe("consOperator()", () => {
   });
 });
 
-describe.only("defineElixirFunction()", () => {
+describe("defineElixirFunction()", () => {
   beforeEach(() => {
     // def my_fun_a(1), do: :expr_1
     // def my_fun_a(2), do: :expr_2
