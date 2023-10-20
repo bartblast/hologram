@@ -249,9 +249,9 @@ export default class Interpreter {
     return ":" + moduleName.slice(7).toLowerCase();
   }
 
-  static isMatched(left, right) {
+  static isMatched(left, right, vars) {
     try {
-      Interpreter.matchOperator(right, left, {});
+      Interpreter.matchOperator(right, left, vars);
       return true;
     } catch {
       return false;

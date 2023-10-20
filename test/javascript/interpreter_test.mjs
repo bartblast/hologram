@@ -1551,11 +1551,23 @@ describe("inspectModuleName()", () => {
 
 describe("isMatched()", () => {
   it("is matched", () => {
-    assert.isTrue(Interpreter.isMatched(Type.integer(1), Type.integer(1)));
+    assert.isTrue(Interpreter.isMatched(Type.integer(1), Type.integer(1), {}));
   });
 
   it("is not matched", () => {
-    assert.isFalse(Interpreter.isMatched(Type.integer(1), Type.integer(2)));
+    assert.isFalse(Interpreter.isMatched(Type.integer(1), Type.integer(2), {}));
+  });
+
+  it("mutates vars given in the argument", () => {
+    const vars = {};
+    const result = Interpreter.isMatched(
+      Type.variablePattern("x"),
+      Type.integer(9),
+      vars,
+    );
+
+    assert.isTrue(result);
+    assert.deepStrictEqual(vars, {x: Type.integer(9)});
   });
 });
 
