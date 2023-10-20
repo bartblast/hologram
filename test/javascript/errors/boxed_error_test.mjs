@@ -1,7 +1,7 @@
 "use strict";
 
-import {assert} from "../../assets/js/test_support.mjs";
-import HologramBoxedError from "../../assets/js/errors/boxed_error.mjs";
+import {assert} from "../../../assets/js/test_support.mjs";
+import HologramBoxedError from "../../../assets/js/errors/boxed_error.mjs";
 
 it("HologramBoxedError", () => {
   const struct = {a: 1, b: 2};

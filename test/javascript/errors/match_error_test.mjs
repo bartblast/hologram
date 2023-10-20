@@ -1,7 +1,7 @@
 "use strict";
 
-import {assert} from "../../assets/js/test_support.mjs";
-import HologramMatchError from "../../assets/js/errors/match_error.mjs";
+import {assert} from "../../../assets/js/test_support.mjs";
+import HologramMatchError from "../../../assets/js/errors/match_error.mjs";
 
 it("HologramMatchError", () => {
   const value = {a: 1, b: 2};
