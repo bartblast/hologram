@@ -7,7 +7,6 @@ import omit from "lodash/omit.js";
 import uniqWith from "lodash/uniqWith.js";
 
 import Bitstring from "./bitstring.mjs";
-import HologramBoxedError from "./errors/boxed_error.mjs";
 import HologramInterpreterError from "./errors/interpreter_error.mjs";
 import HologramMatchError from "./errors/match_error.mjs";
 import Type from "./type.mjs";
@@ -171,10 +170,8 @@ export default class Interpreter {
             return clause.body(vars);
           }
         } catch (error) {
-          if (
-            !(error instanceof HologramBoxedError) ||
-            Interpreter.fetchErrorType(error) !== "MatchError"
-          ) {
+          // TODO: use isMatched()
+          if (!(error instanceof HologramMatchError)) {
             throw error;
           }
         }
@@ -262,6 +259,15 @@ export default class Interpreter {
 
     // starts with "Erlang_"
     return ":" + moduleName.slice(7).toLowerCase();
+  }
+
+  static isMatched(left, right) {
+    try {
+      Interpreter.matchOperator(right, left, {});
+      return true;
+    } catch {
+      return false;
+    }
   }
 
   static isStrictlyEqual(left, right) {

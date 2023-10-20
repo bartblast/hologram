@@ -1370,6 +1370,8 @@ describe("defineElixirFunction()", () => {
 
     assert.deepStrictEqual(result, Type.integer(2));
   });
+
+  it("errors raised inside function body are thrown, only HologramMatchError");
 });
 
 describe("defineErlangFunction()", () => {
@@ -1579,6 +1581,16 @@ describe("inspectModuleName()", () => {
   it("inspects Erlang standard lib module name", () => {
     const result = Interpreter.inspectModuleName("Erlang_uri_string");
     assert.deepStrictEqual(result, ":uri_string");
+  });
+});
+
+describe("isMatched()", () => {
+  it("is matched", () => {
+    assert.isTrue(Interpreter.isMatched(Type.integer(1), Type.integer(1)));
+  });
+
+  it("is not matched", () => {
+    assert.isFalse(Interpreter.isMatched(Type.integer(1), Type.integer(2)));
   });
 });
 
