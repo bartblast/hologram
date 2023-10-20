@@ -1900,7 +1900,7 @@ describe("matchOperator()", () => {
     });
   });
 
-  describe.only("cons pattern", () => {
+  describe("cons pattern", () => {
     describe("[h | t]", () => {
       let left;
 
