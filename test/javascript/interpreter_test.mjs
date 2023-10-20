@@ -828,6 +828,33 @@ describe("comprehension()", () => {
 
       assert.deepStrictEqual(result, expected);
     });
+
+    it("errors raised inside generators are not caught", () => {
+      const enumerable = (_vars) =>
+        Type.list([Type.integer(1), Type.integer(2), Type.integer(3)]);
+
+      const guard = (_vars) => Interpreter.raiseArgumentError("my message");
+
+      const generator = {
+        match: Type.variablePattern("x"),
+        guards: [guard],
+        body: enumerable,
+      };
+
+      assertError(
+        () =>
+          Interpreter.comprehension(
+            [generator],
+            [],
+            Type.list([]),
+            false,
+            (vars) => vars.x,
+            vars,
+          ),
+        "ArgumentError",
+        "my message",
+      );
+    });
   });
 
   describe("filters", () => {

@@ -70,20 +70,14 @@ export default class Interpreter {
       const varsClone = Interpreter.cloneVars(vars);
 
       for (let i = 0; i < generatorsCount; ++i) {
-        try {
-          Interpreter.matchOperator(
-            combination[i],
+        if (
+          !Interpreter.isMatched(
             generators[i].match,
+            combination[i],
             varsClone,
-          );
-
-          if (
-            Interpreter.#evaluateGuards(generators[i].guards, varsClone) ===
-            false
-          ) {
-            return acc;
-          }
-        } catch {
+          ) ||
+          !Interpreter.#evaluateGuards(generators[i].guards, varsClone)
+        ) {
           return acc;
         }
       }
