@@ -4,6 +4,7 @@ import {assert} from "chai";
 import Erlang from "./erlang/erlang.mjs";
 import Erlang_maps from "./erlang/maps.mjs";
 import HologramBoxedError from "./errors/boxed_error.mjs";
+import HologramMatchError from "./errors/match_error.mjs";
 import Interpreter from "./interpreter.mjs";
 import sinonESM from "../node_modules/sinon/pkg/sinon-esm.js";
 import Type from "./type.mjs";
@@ -105,6 +106,27 @@ export function assertError(callable, errorAliasStr, message) {
     if (!(error instanceof HologramBoxedError)) {
       isAnyAssertFailed = true;
     } else if (!Interpreter.isStrictlyEqual(error.struct, errorStruct)) {
+      isAnyAssertFailed = true;
+    }
+  }
+
+  if (!isErrorThrown || isAnyAssertFailed) {
+    assert.fail(`expected ${errorAliasStr}: ${message}`);
+  }
+}
+
+export function assertMatchError(callable, value) {
+  let isErrorThrown = false;
+  let isAnyAssertFailed = false;
+
+  try {
+    callable();
+  } catch (error) {
+    isErrorThrown = true;
+
+    if (!(error instanceof HologramMatchError)) {
+      isAnyAssertFailed = true;
+    } else if (!Interpreter.isStrictlyEqual(error.value, value)) {
       isAnyAssertFailed = true;
     }
   }
