@@ -6,6 +6,7 @@ import {
   linkModules,
   unlinkModules,
 } from "../../assets/js/test_support.mjs";
+import HologramInterpreterError from "../../assets/js/errors/interpreter_error.mjs";
 import Sequence from "../../assets/js/sequence.mjs";
 import Type from "../../assets/js/type.mjs";
 
@@ -178,9 +179,9 @@ describe("bitstringSegment()", () => {
   it("raises error if type modifier is not given", () => {
     const expectedMessage = "bitstring segment type modifier is not specified";
 
-    assertError(
+    assert.throw(
       () => Type.bitstringSegment(Type.integer(123), {}),
-      "Hologram.InterpreterError",
+      HologramInterpreterError,
       expectedMessage,
     );
   });
@@ -333,17 +334,17 @@ it("float()", () => {
 
 describe("improperList()", () => {
   it("empty list", () => {
-    assertError(
+    assert.throw(
       () => Type.improperList([]),
-      "Hologram.InterpreterError",
+      HologramInterpreterError,
       "improper list must have at least 2 items, received []",
     );
   });
 
   it("1 item list", () => {
-    assertError(
+    assert.throw(
       () => Type.improperList([Type.integer(1)]),
-      "Hologram.InterpreterError",
+      HologramInterpreterError,
       'improper list must have at least 2 items, received [{"type":"integer","value":"__bigint__:1"}]',
     );
   });

@@ -8,6 +8,7 @@ import uniqWith from "lodash/uniqWith.js";
 
 import Bitstring from "./bitstring.mjs";
 import HologramBoxedError from "./errors/boxed_error.mjs";
+import HologramInterpreterError from "./errors/interpreter_error.mjs";
 import Type from "./type.mjs";
 import Utils from "./utils.mjs";
 
@@ -196,10 +197,10 @@ export default class Interpreter {
     }
 
     globalThis[jsModuleName][`${functionName}/${functionArity}`] = () => {
-      // TODO: use Interpreter.raiseInterpreterError() and update the URL
+      // TODO: update the URL
       const message = `Function :${exModuleName}.${functionName}/${functionArity} is not yet ported. See what to do here: https://www.hologram.page/TODO`;
 
-      throw new Error(message);
+      throw new HologramInterpreterError(message);
     };
   }
 
@@ -347,10 +348,6 @@ export default class Interpreter {
   static raiseError(aliasStr, message) {
     const errorStruct = Type.errorStruct(aliasStr, message);
     return Erlang["error/1"](errorStruct);
-  }
-
-  static raiseInterpreterError(message) {
-    return Interpreter.raiseError("Hologram.InterpreterError", message);
   }
 
   static raiseKeyError(message) {

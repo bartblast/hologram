@@ -10,6 +10,7 @@ import {
 } from "../../../assets/js/test_support.mjs";
 
 import Erlang from "../../../assets/js/erlang/erlang.mjs";
+import HologramInterpreterError from "../../../assets/js/errors/interpreter_error.mjs";
 import Interpreter from "../../../assets/js/interpreter.mjs";
 import Type from "../../../assets/js/type.mjs";
 
@@ -314,9 +315,9 @@ describe("</2", () => {
     const expectedMessage =
       ':erlang.</2 currently supports only floats and integers, left = "abc", right = 2';
 
-    assertError(
+    assert.throw(
       () => Erlang["</2"](left, right),
-      "Hologram.InterpreterError",
+      HologramInterpreterError,
       expectedMessage,
     );
   });
@@ -328,9 +329,9 @@ describe("</2", () => {
     const expectedMessage =
       ':erlang.</2 currently supports only floats and integers, left = 2, right = "abc"';
 
-    assertError(
+    assert.throw(
       () => Erlang["</2"](left, right),
-      "Hologram.InterpreterError",
+      HologramInterpreterError,
       expectedMessage,
     );
   });
@@ -561,9 +562,9 @@ describe(">/2", () => {
     const expectedMessage =
       ':erlang.>/2 currently supports only floats and integers, left = "abc", right = 2';
 
-    assertError(
+    assert.throw(
       () => Erlang[">/2"](left, right),
-      "Hologram.InterpreterError",
+      HologramInterpreterError,
       expectedMessage,
     );
   });
@@ -575,9 +576,9 @@ describe(">/2", () => {
     const expectedMessage =
       ':erlang.>/2 currently supports only floats and integers, left = 2, right = "abc"';
 
-    assertError(
+    assert.throw(
       () => Erlang[">/2"](left, right),
-      "Hologram.InterpreterError",
+      HologramInterpreterError,
       expectedMessage,
     );
   });

@@ -72,6 +72,7 @@ defmodule Hologram.Compiler do
 
     window.__hologramPageReachableFunctionDefs__ = (deps) => {
       const HologramBoxedError = deps.HologramBoxedError;
+      const HologramInterpreterError = deps.HologramInterpreterError;
       const Interpreter = deps.Interpreter;
       const Type = deps.Type;#{erlang_function_defs}#{elixir_function_defs}
 
@@ -104,6 +105,7 @@ defmodule Hologram.Compiler do
 
     import Hologram from "#{source_dir}/hologram.mjs";
     import HologramBoxedError from "#{source_dir}/errors/boxed_error.mjs";
+    import HologramInterpreterError from "#{source_dir}/errors/interpreter_error.mjs";
     import Interpreter from "#{source_dir}/interpreter.mjs";
     import Type from "#{source_dir}/type.mjs";#{erlang_function_defs}#{elixir_function_defs}
 

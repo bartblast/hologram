@@ -1,6 +1,7 @@
 "use strict";
 
 import Bitstring from "./bitstring.mjs";
+import HologramInterpreterError from "./errors/interpreter_error.mjs";
 import Interpreter from "./interpreter.mjs";
 import Sequence from "./sequence.mjs";
 
@@ -44,7 +45,7 @@ export default class Type {
 
     // TODO: is this needed?
     if (type === null) {
-      Interpreter.raiseInterpreterError(
+      throw new HologramInterpreterError(
         "bitstring segment type modifier is not specified",
       );
     }
@@ -102,7 +103,7 @@ export default class Type {
 
   static improperList(data) {
     if (data.length < 2) {
-      Interpreter.raiseInterpreterError(
+      throw new HologramInterpreterError(
         "improper list must have at least 2 items, received " +
           Interpreter.serialize(data),
       );

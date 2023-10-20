@@ -1,5 +1,6 @@
 "use strict";
 
+import HologramInterpreterError from "./errors/interpreter_error.mjs";
 import Interpreter from "./interpreter.mjs";
 import Type from "./type.mjs";
 import Utils from "./utils.mjs";
@@ -104,7 +105,7 @@ export default class Bitstring {
 
   static #convertBitArrayToByteArray(bitArray) {
     if (bitArray.length % 8 !== 0) {
-      Interpreter.raiseInterpreterError(
+      throw new HologramInterpreterError(
         `number of bits must be divisible by 8, got ${bitArray.length} bits`,
       );
     }
@@ -278,7 +279,7 @@ export default class Bitstring {
     }
 
     if (numBits !== 64n) {
-      Interpreter.raiseInterpreterError(
+      throw new HologramInterpreterError(
         `${numBits}-bit float bitstring segments are not yet implemented in Hologram`,
       );
     }

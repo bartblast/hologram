@@ -1,6 +1,7 @@
 "use strict";
 
 import HologramBoxedError from "../errors/boxed_error.mjs";
+import HologramInterpreterError from "../errors/interpreter_error.mjs";
 import Interpreter from "../interpreter.mjs";
 import Type from "../type.mjs";
 
@@ -83,7 +84,7 @@ const Erlang = {
         ", right = " +
         Interpreter.inspect(right);
 
-      Interpreter.raiseInterpreterError(message);
+      throw new HologramInterpreterError(message);
     }
 
     return Type.boolean(left.value < right.value);
@@ -136,7 +137,7 @@ const Erlang = {
         ", right = " +
         Interpreter.inspect(right);
 
-      Interpreter.raiseInterpreterError(message);
+      throw new HologramInterpreterError(message);
     }
 
     return Type.boolean(left.value > right.value);

@@ -3,7 +3,7 @@
 import {assert} from "../../../assets/js/test_support.mjs";
 import HologramInterpreterError from "../../../assets/js/errors/interpreter_error.mjs";
 
-it.only("HologramInterpreterError", () => {
+it("HologramInterpreterError", () => {
   try {
     throw new HologramInterpreterError("my message");
   } catch (error) {

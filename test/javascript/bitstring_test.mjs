@@ -7,6 +7,7 @@ import {
   unlinkModules,
 } from "../../assets/js/test_support.mjs";
 import Bitstring from "../../assets/js/bitstring.mjs";
+import HologramInterpreterError from "../../assets/js/errors/interpreter_error.mjs";
 import Type from "../../assets/js/type.mjs";
 
 before(() => linkModules());
@@ -760,9 +761,9 @@ describe("toText()", () => {
   it("raises error when the number of bits in the bitstring is not divisible by 8", () => {
     const bitstring = Type.bitstring([1, 0, 1, 0, 1, 0, 1, 0, 0, 1, 0, 1]);
 
-    assertError(
+    assert.throw(
       () => Bitstring.toText(bitstring),
-      "Hologram.InterpreterError",
+      HologramInterpreterError,
       "number of bits must be divisible by 8, got 12 bits",
     );
   });

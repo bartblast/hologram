@@ -4595,14 +4595,6 @@ it("raiseError()", () => {
   assertError(() => Interpreter.raiseError("Aaa.Bbb", "abc"), "Aaa.Bbb", "abc");
 });
 
-it("raiseInterpreterError()", () => {
-  assertError(
-    () => Interpreter.raiseInterpreterError("abc"),
-    "Hologram.InterpreterError",
-    "abc",
-  );
-});
-
 it("raiseKeyError()", () => {
   assertError(() => Interpreter.raiseKeyError("abc"), "KeyError", "abc");
 });
