@@ -63,18 +63,6 @@ export default class Interpreter {
     return Interpreter.#raiseCaseClauseError(message);
   }
 
-  static catchError(errorType, tryBlock, catchBlock) {
-    try {
-      tryBlock();
-    } catch (error) {
-      if (error instanceof errorType) {
-        catchBlock();
-      } else {
-        throw error;
-      }
-    }
-  }
-
   static cloneVars(vars) {
     return cloneDeep(omit(vars, ["__snapshot__"]));
   }

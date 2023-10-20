@@ -452,41 +452,6 @@ describe("case()", () => {
   });
 });
 
-describe("catchError()", () => {
-  it("catches an error of the given type and executes the catch block", () => {
-    let value = 1;
-
-    Utils.catchError(
-      HologramMatchError,
-      () => {
-        throw new HologramMatchError("dummy");
-      },
-      () => (value += 1),
-    );
-
-    assert.equal(value, 2);
-  });
-
-  it("rethrows errors of other types without executing the catch block", () => {
-    let value = 1;
-
-    assert.throw(
-      () =>
-        Utils.catchError(
-          HologramMatchError,
-          () => {
-            throw new HologramInterpreterError("my message");
-          },
-          () => (value += 1),
-        ),
-      HologramInterpreterError,
-      "my message",
-    );
-
-    assert.equal(value, 1);
-  });
-});
-
 describe("cloneVars()", () => {
   it("clones vars recursively (deep clone) and removes __snapshot__ property", () => {
     const nested = {c: 3, d: 4};
