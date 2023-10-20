@@ -8,7 +8,7 @@ import {
   unlinkModules,
 } from "../../assets/js/test_support.mjs";
 import Erlang from "../../assets/js/erlang/erlang.mjs";
-import HologramBoxedError from "../../assets/js/boxed_error.mjs";
+import HologramBoxedError from "../../assets/js/errors/boxed_error.mjs";
 import Interpreter from "../../assets/js/interpreter.mjs";
 import Type from "../../assets/js/type.mjs";
 

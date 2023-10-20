@@ -1,6 +1,6 @@
 "use strict";
 
-import HologramBoxedError from "../boxed_error.mjs";
+import HologramBoxedError from "../errors/boxed_error.mjs";
 import Interpreter from "../interpreter.mjs";
 import Type from "../type.mjs";
 
