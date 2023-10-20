@@ -7,7 +7,7 @@ import omit from "lodash/omit.js";
 import uniqWith from "lodash/uniqWith.js";
 
 import Bitstring from "./bitstring.mjs";
-import HologramError from "./error.mjs";
+import HologramBoxedError from "./boxed_error.mjs";
 import Type from "./type.mjs";
 import Utils from "./utils.mjs";
 
@@ -158,7 +158,7 @@ export default class Interpreter {
           }
         } catch (error) {
           if (
-            !(error instanceof HologramError) ||
+            !(error instanceof HologramBoxedError) ||
             Interpreter.fetchErrorType(error) !== "MatchError"
           ) {
             throw error;

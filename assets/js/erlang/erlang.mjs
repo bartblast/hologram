@@ -1,6 +1,6 @@
 "use strict";
 
-import HologramError from "../error.mjs";
+import HologramBoxedError from "../boxed_error.mjs";
 import Interpreter from "../interpreter.mjs";
 import Type from "../type.mjs";
 
@@ -156,7 +156,7 @@ const Erlang = {
   // TODO: maybe use args param
   // start error/2
   "error/2": (reason, _args) => {
-    throw new HologramError(reason);
+    throw new HologramBoxedError(reason);
   },
   // end error/2
   // deps: []

@@ -1,13 +1,13 @@
 "use strict";
 
-import HologramError from "./error.mjs";
+import HologramBoxedError from "./boxed_error.mjs";
 import Interpreter from "./interpreter.mjs";
 import Renderer from "./renderer.mjs";
 import Type from "./type.mjs";
 
 export default class Hologram {
   static deps = {
-    HologramError: HologramError,
+    HologramBoxedError: HologramBoxedError,
     Interpreter: Interpreter,
     Type: Type,
   };
@@ -58,7 +58,7 @@ export default class Hologram {
       try {
         Hologram.mountPage();
       } catch (error) {
-        if (error instanceof HologramError) {
+        if (error instanceof HologramBoxedError) {
           error.name = Interpreter.fetchErrorType(error);
           error.message = Interpreter.fetchErrorMessage(error);
         }

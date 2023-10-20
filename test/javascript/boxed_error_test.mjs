@@ -1,15 +1,15 @@
 "use strict";
 
 import {assert} from "../../assets/js/test_support.mjs";
-import HologramError from "../../assets/js/error.mjs";
+import HologramBoxedError from "../../assets/js/boxed_error.mjs";
 
-it("HologramError", () => {
+it("HologramBoxedError", () => {
   const struct = {a: 1, b: 2};
 
   try {
-    throw new HologramError(struct);
+    throw new HologramBoxedError(struct);
   } catch (error) {
-    assert.instanceOf(error, HologramError);
+    assert.instanceOf(error, HologramBoxedError);
     assert.deepStrictEqual(error.struct, struct);
   }
 });

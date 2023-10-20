@@ -8,7 +8,7 @@ import {
   unlinkModules,
 } from "../../assets/js/test_support.mjs";
 import Erlang from "../../assets/js/erlang/erlang.mjs";
-import HologramError from "../../assets/js/error.mjs";
+import HologramBoxedError from "../../assets/js/boxed_error.mjs";
 import Interpreter from "../../assets/js/interpreter.mjs";
 import Type from "../../assets/js/type.mjs";
 
@@ -1507,7 +1507,7 @@ describe("dotOperator()", () => {
 
 it("fetchErrorMessage()", () => {
   const errorStruct = Type.errorStruct("MyError", "my message");
-  const jsError = new HologramError(errorStruct);
+  const jsError = new HologramBoxedError(errorStruct);
   const result = Interpreter.fetchErrorMessage(jsError);
 
   assert.equal(result, "my message");
@@ -1515,7 +1515,7 @@ it("fetchErrorMessage()", () => {
 
 it("fetchErrorType()", () => {
   const errorStruct = Type.errorStruct("MyError", "my message");
-  const jsError = new HologramError(errorStruct);
+  const jsError = new HologramBoxedError(errorStruct);
   const result = Interpreter.fetchErrorType(jsError);
 
   assert.equal(result, "MyError");

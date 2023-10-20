@@ -3,7 +3,7 @@
 import {assert} from "chai";
 import Erlang from "./erlang/erlang.mjs";
 import Erlang_maps from "./erlang/maps.mjs";
-import HologramError from "./error.mjs";
+import HologramBoxedError from "./boxed_error.mjs";
 import Interpreter from "./interpreter.mjs";
 import sinonESM from "../node_modules/sinon/pkg/sinon-esm.js";
 import Type from "./type.mjs";
@@ -102,7 +102,7 @@ export function assertError(callable, errorAliasStr, message) {
   } catch (error) {
     isErrorThrown = true;
 
-    if (!(error instanceof HologramError)) {
+    if (!(error instanceof HologramBoxedError)) {
       isAnyAssertFailed = true;
     } else if (!Interpreter.isStrictlyEqual(error.struct, errorStruct)) {
       isAnyAssertFailed = true;
