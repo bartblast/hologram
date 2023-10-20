@@ -482,8 +482,13 @@ export default class Interpreter {
     try {
       Interpreter.matchOperator(rightHead, left.head, vars, false);
       Interpreter.matchOperator(rightTail, left.tail, vars, false);
-    } catch {
-      throw new HologramMatchError(right);
+    } catch (error) {
+      if (error instanceof HologramMatchError) {
+        throw new HologramMatchError(right);
+      } else {
+        // TODO: Is this possible? How to test it?
+        throw error;
+      }
     }
 
     return Interpreter.#handleMatchResult(right, vars, rootMatch);

@@ -3,6 +3,7 @@
 import {
   assert,
   assertError,
+  assertMatchError,
   linkModules,
   sinon,
   unlinkModules,
@@ -1899,7 +1900,7 @@ describe("matchOperator()", () => {
     });
   });
 
-  describe("cons pattern", () => {
+  describe.only("cons pattern", () => {
     describe("[h | t]", () => {
       let left;
 
@@ -1913,20 +1914,18 @@ describe("matchOperator()", () => {
       it("[h | t] = 1", () => {
         const right = Type.integer(1);
 
-        assertError(
+        assertMatchError(
           () => Interpreter.matchOperator(right, left, vars),
-          "MatchError",
-          "no match of right hand side value: 1",
+          right,
         );
       });
 
       it("[h | t] = []", () => {
         const right = Type.list([]);
 
-        assertError(
+        assertMatchError(
           () => Interpreter.matchOperator(right, left, vars),
-          "MatchError",
-          "no match of right hand side value: []",
+          right,
         );
       });
 
@@ -2019,20 +2018,18 @@ describe("matchOperator()", () => {
       it("[1 | t] = 1", () => {
         const right = Type.integer(1);
 
-        assertError(
+        assertMatchError(
           () => Interpreter.matchOperator(right, left, vars),
-          "MatchError",
-          "no match of right hand side value: 1",
+          right,
         );
       });
 
       it("[1 | t] = []", () => {
         const right = Type.list([]);
 
-        assertError(
+        assertMatchError(
           () => Interpreter.matchOperator(right, left, vars),
-          "MatchError",
-          "no match of right hand side value: []",
+          right,
         );
       });
 
@@ -2052,10 +2049,9 @@ describe("matchOperator()", () => {
       it("[1 | t] = [5]", () => {
         const right = Type.list([Type.integer(5)]);
 
-        assertError(
+        assertMatchError(
           () => Interpreter.matchOperator(right, left, vars),
-          "MatchError",
-          "no match of right hand side value: [5]",
+          right,
         );
       });
 
@@ -2075,10 +2071,9 @@ describe("matchOperator()", () => {
       it("[1 | t] = [5, 2]", () => {
         const right = Type.list([Type.integer(5), Type.integer(2)]);
 
-        assertError(
+        assertMatchError(
           () => Interpreter.matchOperator(right, left, vars),
-          "MatchError",
-          "no match of right hand side value: [5, 2]",
+          right,
         );
       });
 
@@ -2098,10 +2093,9 @@ describe("matchOperator()", () => {
       it("[1 | t] = [5 | 2]", () => {
         const right = Type.improperList([Type.integer(5), Type.integer(2)]);
 
-        assertError(
+        assertMatchError(
           () => Interpreter.matchOperator(right, left, vars),
-          "MatchError",
-          "no match of right hand side value: [5 | 2]",
+          right,
         );
       });
 
@@ -2129,10 +2123,9 @@ describe("matchOperator()", () => {
           Type.integer(3),
         ]);
 
-        assertError(
+        assertMatchError(
           () => Interpreter.matchOperator(right, left, vars),
-          "MatchError",
-          "no match of right hand side value: [5, 2, 3]",
+          right,
         );
       });
 
@@ -2160,10 +2153,9 @@ describe("matchOperator()", () => {
           Type.integer(3),
         ]);
 
-        assertError(
+        assertMatchError(
           () => Interpreter.matchOperator(right, left, vars),
-          "MatchError",
-          "no match of right hand side value: [5, 2 | 3]",
+          right,
         );
       });
     });
@@ -2178,40 +2170,36 @@ describe("matchOperator()", () => {
       it("[h | 3] = 3", () => {
         const right = Type.integer(3);
 
-        assertError(
+        assertMatchError(
           () => Interpreter.matchOperator(right, left, vars),
-          "MatchError",
-          "no match of right hand side value: 3",
+          right,
         );
       });
 
       it("[h | 3] = []", () => {
         const right = Type.list([]);
 
-        assertError(
+        assertMatchError(
           () => Interpreter.matchOperator(right, left, vars),
-          "MatchError",
-          "no match of right hand side value: []",
+          right,
         );
       });
 
       it("[h | 3] = [3]", () => {
         const right = Type.list([Type.integer(3)]);
 
-        assertError(
+        assertMatchError(
           () => Interpreter.matchOperator(right, left, vars),
-          "MatchError",
-          "no match of right hand side value: [3]",
+          right,
         );
       });
 
       it("[h | 3] = [2, 3]", () => {
         const right = Type.list([Type.integer(2), Type.integer(3)]);
 
-        assertError(
+        assertMatchError(
           () => Interpreter.matchOperator(right, left, vars),
-          "MatchError",
-          "no match of right hand side value: [2, 3]",
+          right,
         );
       });
 
@@ -2235,10 +2223,9 @@ describe("matchOperator()", () => {
           Type.integer(3),
         ]);
 
-        assertError(
+        assertMatchError(
           () => Interpreter.matchOperator(right, left, vars),
-          "MatchError",
-          "no match of right hand side value: [1, 2, 3]",
+          right,
         );
       });
 
@@ -2249,10 +2236,9 @@ describe("matchOperator()", () => {
           Type.integer(3),
         ]);
 
-        assertError(
+        assertMatchError(
           () => Interpreter.matchOperator(right, left, vars),
-          "MatchError",
-          "no match of right hand side value: [1, 2 | 3]",
+          right,
         );
       });
     });
@@ -2267,20 +2253,18 @@ describe("matchOperator()", () => {
       it("[h | []] = 3", () => {
         const right = Type.integer(3);
 
-        assertError(
+        assertMatchError(
           () => Interpreter.matchOperator(right, left, vars),
-          "MatchError",
-          "no match of right hand side value: 3",
+          right,
         );
       });
 
       it("[h | []] = []", () => {
         const right = Type.list([]);
 
-        assertError(
+        assertMatchError(
           () => Interpreter.matchOperator(right, left, vars),
-          "MatchError",
-          "no match of right hand side value: []",
+          right,
         );
       });
 
@@ -2300,20 +2284,18 @@ describe("matchOperator()", () => {
       it("[h | []] = [2, 3]", () => {
         const right = Type.list([Type.integer(2), Type.integer(3)]);
 
-        assertError(
+        assertMatchError(
           () => Interpreter.matchOperator(right, left, vars),
-          "MatchError",
-          "no match of right hand side value: [2, 3]",
+          right,
         );
       });
 
       it("[h | []] = [2 | 3]", () => {
         const right = Type.improperList([Type.integer(2), Type.integer(3)]);
 
-        assertError(
+        assertMatchError(
           () => Interpreter.matchOperator(right, left, vars),
-          "MatchError",
-          "no match of right hand side value: [2 | 3]",
+          right,
         );
       });
 
@@ -2324,10 +2306,9 @@ describe("matchOperator()", () => {
           Type.integer(3),
         ]);
 
-        assertError(
+        assertMatchError(
           () => Interpreter.matchOperator(right, left, vars),
-          "MatchError",
-          "no match of right hand side value: [1, 2, 3]",
+          right,
         );
       });
 
@@ -2338,10 +2319,9 @@ describe("matchOperator()", () => {
           Type.integer(3),
         ]);
 
-        assertError(
+        assertMatchError(
           () => Interpreter.matchOperator(right, left, vars),
-          "MatchError",
-          "no match of right hand side value: [1, 2 | 3]",
+          right,
         );
       });
     });
@@ -2359,30 +2339,27 @@ describe("matchOperator()", () => {
       it("[h | [3]] = 3", () => {
         const right = Type.integer(3);
 
-        assertError(
+        assertMatchError(
           () => Interpreter.matchOperator(right, left, vars),
-          "MatchError",
-          "no match of right hand side value: 3",
+          right,
         );
       });
 
       it("[h | [3]] = []", () => {
         const right = Type.list([]);
 
-        assertError(
+        assertMatchError(
           () => Interpreter.matchOperator(right, left, vars),
-          "MatchError",
-          "no match of right hand side value: []",
+          right,
         );
       });
 
       it("[h | [3]] = [3]", () => {
         const right = Type.list([Type.integer(3)]);
 
-        assertError(
+        assertMatchError(
           () => Interpreter.matchOperator(right, left, vars),
-          "MatchError",
-          "no match of right hand side value: [3]",
+          right,
         );
       });
 
@@ -2402,10 +2379,9 @@ describe("matchOperator()", () => {
       it("[h | [3]] = [2 | 3]", () => {
         const right = Type.improperList([Type.integer(2), Type.integer(3)]);
 
-        assertError(
+        assertMatchError(
           () => Interpreter.matchOperator(right, left, vars),
-          "MatchError",
-          "no match of right hand side value: [2 | 3]",
+          right,
         );
       });
 
@@ -2416,10 +2392,9 @@ describe("matchOperator()", () => {
           Type.integer(3),
         ]);
 
-        assertError(
+        assertMatchError(
           () => Interpreter.matchOperator(right, left, vars),
-          "MatchError",
-          "no match of right hand side value: [1, 2, 3]",
+          right,
         );
       });
 
@@ -2430,10 +2405,9 @@ describe("matchOperator()", () => {
           Type.integer(3),
         ]);
 
-        assertError(
+        assertMatchError(
           () => Interpreter.matchOperator(right, left, vars),
-          "MatchError",
-          "no match of right hand side value: [1, 2 | 3]",
+          right,
         );
       });
     });
@@ -2451,50 +2425,45 @@ describe("matchOperator()", () => {
       it("[h | [2, 3]] = 3", () => {
         const right = Type.integer(3);
 
-        assertError(
+        assertMatchError(
           () => Interpreter.matchOperator(right, left, vars),
-          "MatchError",
-          "no match of right hand side value: 3",
+          right,
         );
       });
 
       it("[h | [2, 3]] = []", () => {
         const right = Type.list([]);
 
-        assertError(
+        assertMatchError(
           () => Interpreter.matchOperator(right, left, vars),
-          "MatchError",
-          "no match of right hand side value: []",
+          right,
         );
       });
 
       it("[h | [2, 3]] = [3]", () => {
         const right = Type.list([Type.integer(3)]);
 
-        assertError(
+        assertMatchError(
           () => Interpreter.matchOperator(right, left, vars),
-          "MatchError",
-          "no match of right hand side value: [3]",
+          right,
         );
       });
 
       it("[h | [2, 3]] = [2, 3]", () => {
         const right = Type.list([Type.integer(2), Type.integer(3)]);
 
-        assertError(
+        assertMatchError(
           () => Interpreter.matchOperator(right, left, vars),
-          "MatchError",
-          "no match of right hand side value: [2, 3]",
+          right,
         );
       });
 
       it("[h | [2, 3]] = [2 | 3]", () => {
         const right = Type.improperList([Type.integer(2), Type.integer(3)]);
 
-        assertError(
+        assertMatchError(
           () => Interpreter.matchOperator(right, left, vars),
-          "MatchError",
-          "no match of right hand side value: [2 | 3]",
+          right,
         );
       });
 
@@ -2522,10 +2491,9 @@ describe("matchOperator()", () => {
           Type.integer(3),
         ]);
 
-        assertError(
+        assertMatchError(
           () => Interpreter.matchOperator(right, left, vars),
-          "MatchError",
-          "no match of right hand side value: [1, 2 | 3]",
+          right,
         );
       });
     });
@@ -2543,50 +2511,45 @@ describe("matchOperator()", () => {
       it("[h | [2 | 3]] = 3", () => {
         const right = Type.integer(3);
 
-        assertError(
+        assertMatchError(
           () => Interpreter.matchOperator(right, left, vars),
-          "MatchError",
-          "no match of right hand side value: 3",
+          right,
         );
       });
 
       it("[h | [2 | 3]] = []", () => {
         const right = Type.list([]);
 
-        assertError(
+        assertMatchError(
           () => Interpreter.matchOperator(right, left, vars),
-          "MatchError",
-          "no match of right hand side value: []",
+          right,
         );
       });
 
       it("[h | [2 | 3]] = [3]", () => {
         const right = Type.list([Type.integer(3)]);
 
-        assertError(
+        assertMatchError(
           () => Interpreter.matchOperator(right, left, vars),
-          "MatchError",
-          "no match of right hand side value: [3]",
+          right,
         );
       });
 
       it("[h | [2 | 3]] = [2, 3]", () => {
         const right = Type.list([Type.integer(2), Type.integer(3)]);
 
-        assertError(
+        assertMatchError(
           () => Interpreter.matchOperator(right, left, vars),
-          "MatchError",
-          "no match of right hand side value: [2, 3]",
+          right,
         );
       });
 
       it("[h | [2 | 3]] = [2 | 3]", () => {
         const right = Type.improperList([Type.integer(2), Type.integer(3)]);
 
-        assertError(
+        assertMatchError(
           () => Interpreter.matchOperator(right, left, vars),
-          "MatchError",
-          "no match of right hand side value: [2 | 3]",
+          right,
         );
       });
 
@@ -2597,10 +2560,9 @@ describe("matchOperator()", () => {
           Type.integer(3),
         ]);
 
-        assertError(
+        assertMatchError(
           () => Interpreter.matchOperator(right, left, vars),
-          "MatchError",
-          "no match of right hand side value: [1, 2, 3]",
+          right,
         );
       });
 
@@ -2635,50 +2597,45 @@ describe("matchOperator()", () => {
       it("[h | [1, 2, 3]] = 3", () => {
         const right = Type.integer(3);
 
-        assertError(
+        assertMatchError(
           () => Interpreter.matchOperator(right, left, vars),
-          "MatchError",
-          "no match of right hand side value: 3",
+          right,
         );
       });
 
       it("[h | [1, 2, 3]] = []", () => {
         const right = Type.list([]);
 
-        assertError(
+        assertMatchError(
           () => Interpreter.matchOperator(right, left, vars),
-          "MatchError",
-          "no match of right hand side value: []",
+          right,
         );
       });
 
       it("[h | [1, 2, 3]] = [3]", () => {
         const right = Type.list([Type.integer(3)]);
 
-        assertError(
+        assertMatchError(
           () => Interpreter.matchOperator(right, left, vars),
-          "MatchError",
-          "no match of right hand side value: [3]",
+          right,
         );
       });
 
       it("[h | [1, 2, 3]] = [2, 3]", () => {
         const right = Type.list([Type.integer(2), Type.integer(3)]);
 
-        assertError(
+        assertMatchError(
           () => Interpreter.matchOperator(right, left, vars),
-          "MatchError",
-          "no match of right hand side value: [2, 3]",
+          right,
         );
       });
 
       it("[h | [1, 2, 3]] = [2 | 3]", () => {
         const right = Type.improperList([Type.integer(2), Type.integer(3)]);
 
-        assertError(
+        assertMatchError(
           () => Interpreter.matchOperator(right, left, vars),
-          "MatchError",
-          "no match of right hand side value: [2 | 3]",
+          right,
         );
       });
 
@@ -2689,10 +2646,9 @@ describe("matchOperator()", () => {
           Type.integer(3),
         ]);
 
-        assertError(
+        assertMatchError(
           () => Interpreter.matchOperator(right, left, vars),
-          "MatchError",
-          "no match of right hand side value: [1, 2, 3]",
+          right,
         );
       });
 
@@ -2703,10 +2659,9 @@ describe("matchOperator()", () => {
           Type.integer(3),
         ]);
 
-        assertError(
+        assertMatchError(
           () => Interpreter.matchOperator(right, left, vars),
-          "MatchError",
-          "no match of right hand side value: [1, 2 | 3]",
+          right,
         );
       });
     });
@@ -2727,50 +2682,45 @@ describe("matchOperator()", () => {
       it("[h | [1, 2 | 3]] = 3", () => {
         const right = Type.integer(3);
 
-        assertError(
+        assertMatchError(
           () => Interpreter.matchOperator(right, left, vars),
-          "MatchError",
-          "no match of right hand side value: 3",
+          right,
         );
       });
 
       it("[h | [1, 2 | 3]] = []", () => {
         const right = Type.list([]);
 
-        assertError(
+        assertMatchError(
           () => Interpreter.matchOperator(right, left, vars),
-          "MatchError",
-          "no match of right hand side value: []",
+          right,
         );
       });
 
       it("[h | [1, 2 | 3]] = [3]", () => {
         const right = Type.list([Type.integer(3)]);
 
-        assertError(
+        assertMatchError(
           () => Interpreter.matchOperator(right, left, vars),
-          "MatchError",
-          "no match of right hand side value: [3]",
+          right,
         );
       });
 
       it("[h | [1, 2 | 3]] = [2, 3]", () => {
         const right = Type.list([Type.integer(2), Type.integer(3)]);
 
-        assertError(
+        assertMatchError(
           () => Interpreter.matchOperator(right, left, vars),
-          "MatchError",
-          "no match of right hand side value: [2, 3]",
+          right,
         );
       });
 
       it("[h | [1, 2 | 3]] = [2 | 3]", () => {
         const right = Type.improperList([Type.integer(2), Type.integer(3)]);
 
-        assertError(
+        assertMatchError(
           () => Interpreter.matchOperator(right, left, vars),
-          "MatchError",
-          "no match of right hand side value: [2 | 3]",
+          right,
         );
       });
 
@@ -2781,10 +2731,9 @@ describe("matchOperator()", () => {
           Type.integer(3),
         ]);
 
-        assertError(
+        assertMatchError(
           () => Interpreter.matchOperator(right, left, vars),
-          "MatchError",
-          "no match of right hand side value: [1, 2, 3]",
+          right,
         );
       });
 
@@ -2795,10 +2744,9 @@ describe("matchOperator()", () => {
           Type.integer(3),
         ]);
 
-        assertError(
+        assertMatchError(
           () => Interpreter.matchOperator(right, left, vars),
-          "MatchError",
-          "no match of right hand side value: [1, 2 | 3]",
+          right,
         );
       });
     });
@@ -2824,10 +2772,9 @@ describe("matchOperator()", () => {
           Type.integer(4),
         ]);
 
-        assertError(
+        assertMatchError(
           () => Interpreter.matchOperator(right, left, vars),
-          "MatchError",
-          "no match of right hand side value: [1, 2, 3, 4]",
+          right,
         );
       });
 
@@ -2839,10 +2786,9 @@ describe("matchOperator()", () => {
           Type.integer(4),
         ]);
 
-        assertError(
+        assertMatchError(
           () => Interpreter.matchOperator(right, left, vars),
-          "MatchError",
-          "no match of right hand side value: [1, 2, 3 | 4]",
+          right,
         );
       });
 
@@ -2881,10 +2827,9 @@ describe("matchOperator()", () => {
           Type.integer(4),
         ]);
 
-        assertError(
+        assertMatchError(
           () => Interpreter.matchOperator(right, left, vars),
-          "MatchError",
-          "no match of right hand side value: [1, 2, 3, 4]",
+          right,
         );
       });
 
@@ -2909,10 +2854,9 @@ describe("matchOperator()", () => {
           Type.integer(3),
         ]);
 
-        assertError(
+        assertMatchError(
           () => Interpreter.matchOperator(right, left, vars),
-          "MatchError",
-          "no match of right hand side value: [1, 2, 3]",
+          right,
         );
       });
     });
@@ -2952,10 +2896,9 @@ describe("matchOperator()", () => {
           Type.integer(4),
         ]);
 
-        assertError(
+        assertMatchError(
           () => Interpreter.matchOperator(right, left, vars),
-          "MatchError",
-          "no match of right hand side value: [1, 2, 3 | 4]",
+          right,
         );
       });
 
@@ -2966,10 +2909,9 @@ describe("matchOperator()", () => {
           Type.integer(3),
         ]);
 
-        assertError(
+        assertMatchError(
           () => Interpreter.matchOperator(right, left, vars),
-          "MatchError",
-          "no match of right hand side value: [1, 2, 3]",
+          right,
         );
       });
     });
