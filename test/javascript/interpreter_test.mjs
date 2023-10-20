@@ -9,6 +9,8 @@ import {
 } from "../../assets/js/test_support.mjs";
 import Erlang from "../../assets/js/erlang/erlang.mjs";
 import HologramBoxedError from "../../assets/js/errors/boxed_error.mjs";
+import HologramInterpreterError from "../../assets/js/errors/interpreter_error.mjs";
+import HologramMatchError from "../../assets/js/errors/match_error.mjs";
 import Interpreter from "../../assets/js/interpreter.mjs";
 import Type from "../../assets/js/type.mjs";
 
@@ -447,6 +449,41 @@ describe("case()", () => {
       "CaseClauseError",
       "no case clause matching: 3",
     );
+  });
+});
+
+describe("catchError()", () => {
+  it("catches an error of the given type and executes the catch block", () => {
+    let value = 1;
+
+    Utils.catchError(
+      HologramMatchError,
+      () => {
+        throw new HologramMatchError("dummy");
+      },
+      () => (value += 1),
+    );
+
+    assert.equal(value, 2);
+  });
+
+  it("rethrows errors of other types without executing the catch block", () => {
+    let value = 1;
+
+    assert.throw(
+      () =>
+        Utils.catchError(
+          HologramMatchError,
+          () => {
+            throw new HologramInterpreterError("my message");
+          },
+          () => (value += 1),
+        ),
+      HologramInterpreterError,
+      "my message",
+    );
+
+    assert.equal(value, 1);
   });
 });
 

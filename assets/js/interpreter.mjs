@@ -9,6 +9,7 @@ import uniqWith from "lodash/uniqWith.js";
 import Bitstring from "./bitstring.mjs";
 import HologramBoxedError from "./errors/boxed_error.mjs";
 import HologramInterpreterError from "./errors/interpreter_error.mjs";
+import HologramMatchError from "./errors/match_error.mjs";
 import Type from "./type.mjs";
 import Utils from "./utils.mjs";
 
@@ -61,6 +62,18 @@ export default class Interpreter {
       "no case clause matching: " + Interpreter.inspect(condition);
 
     return Interpreter.#raiseCaseClauseError(message);
+  }
+
+  static catchError(errorType, tryBlock, catchBlock) {
+    try {
+      tryBlock();
+    } catch (error) {
+      if (error instanceof errorType) {
+        catchBlock();
+      } else {
+        throw error;
+      }
+    }
   }
 
   static cloneVars(vars) {
@@ -295,7 +308,7 @@ export default class Interpreter {
     }
 
     if (left.type !== right.type) {
-      Interpreter.raiseMatchError(right);
+      throw new HologramMatchError(right);
     }
 
     if (Type.isList(left) || Type.isTuple(left)) {
@@ -307,7 +320,7 @@ export default class Interpreter {
     }
 
     if (!Interpreter.isStrictlyEqual(left, right)) {
-      Interpreter.raiseMatchError(right);
+      throw new HologramMatchError(right);
     }
 
     return Interpreter.#handleMatchResult(right, vars, rootMatch);
@@ -461,12 +474,12 @@ export default class Interpreter {
         const segmentLen = segmentBitstring.bits.length;
 
         if (right.bits.length - offset < segmentLen) {
-          Interpreter.raiseMatchError(right);
+          throw new HologramMatchError(right);
         }
 
         for (let i = 0; i < segmentLen; ++i) {
           if (segmentBitstring.bits[i] !== right.bits[offset + i]) {
-            Interpreter.raiseMatchError(right);
+            throw new HologramMatchError(right);
           }
         }
 
@@ -479,14 +492,14 @@ export default class Interpreter {
 
   static #matchConsPattern(right, left, vars, rootMatch) {
     if (!Type.isList(right) || right.data.length === 0) {
-      Interpreter.raiseMatchError(right);
+      throw new HologramMatchError(right);
     }
 
     if (
       Type.isList(left.tail) &&
       Type.isProperList(left.tail) !== Type.isProperList(right)
     ) {
-      Interpreter.raiseMatchError(right);
+      throw new HologramMatchError(right);
     }
 
     const rightHead = Erlang["hd/1"](right);
@@ -496,7 +509,7 @@ export default class Interpreter {
       Interpreter.matchOperator(rightHead, left.head, vars, false);
       Interpreter.matchOperator(rightTail, left.tail, vars, false);
     } catch {
-      Interpreter.raiseMatchError(right);
+      throw new HologramMatchError(right);
     }
 
     return Interpreter.#handleMatchResult(right, vars, rootMatch);
@@ -507,18 +520,18 @@ export default class Interpreter {
 
     try {
       if (left.data.length !== right.data.length) {
-        Interpreter.raiseMatchError(right);
+        throw new HologramMatchError(right);
       }
 
       if (Type.isList(left) && left.isProper !== right.isProper) {
-        Interpreter.raiseMatchError(right);
+        throw new HologramMatchError(right);
       }
 
       for (let i = 0; i < count; ++i) {
         Interpreter.matchOperator(right.data[i], left.data[i], vars, false);
       }
     } catch {
-      Interpreter.raiseMatchError(right);
+      throw new HologramMatchError(right);
     }
 
     return Interpreter.#handleMatchResult(right, vars, rootMatch);
@@ -530,7 +543,7 @@ export default class Interpreter {
         Interpreter.matchOperator(right.data[key][1], value[1], vars, false);
       }
     } catch {
-      Interpreter.raiseMatchError(right);
+      throw new HologramMatchError(right);
     }
 
     return Interpreter.#handleMatchResult(right, vars, rootMatch);
@@ -539,7 +552,7 @@ export default class Interpreter {
   static #matchVariablePattern(right, left, vars, rootMatch) {
     if (vars.__matched__[left.name]) {
       if (!Interpreter.isStrictlyEqual(vars.__matched__[left.name], right)) {
-        Interpreter.raiseMatchError(right);
+        throw new HologramMatchError(right);
       }
     } else {
       vars[left.name] = right;
