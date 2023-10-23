@@ -14,6 +14,12 @@ MFAs for sorting:
 const Erlang_Maps = {
   // start from_list/1
   "from_list/1": (list) => {
+    if (!Type.isList(list)) {
+      Interpreter.raiseArgumentError(
+        "errors were found at the given arguments:\n\n* 1st argument: not a list",
+      );
+    }
+
     return Type.map(list.data.map((tuple) => tuple.data));
   },
   // end from_list/1

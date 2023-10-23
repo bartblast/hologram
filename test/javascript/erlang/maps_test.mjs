@@ -49,6 +49,14 @@ describe("from_list/1", () => {
 
     assert.deepStrictEqual(result, expected);
   });
+
+  it("raises ArgumentError if the argument is not a list", () => {
+    assertBoxedError(
+      () => Erlang_Maps["from_list/1"](Type.integer(123)),
+      "ArgumentError",
+      "errors were found at the given arguments:\n\n* 1st argument: not a list",
+    );
+  });
 });
 
 describe("get/2", () => {
