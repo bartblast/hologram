@@ -344,17 +344,19 @@ defmodule Hologram.Compiler.Encoder do
   def encode_as_class_name(:erlang), do: "Erlang"
 
   def encode_as_class_name(alias_atom) do
-    segments =
+    module_segments =
       alias_atom
       |> to_string()
       |> String.split([".", "_"])
 
-    if hd(segments) == "Elixir" do
-      segments
-    else
-      ["Erlang" | segments]
-    end
-    |> Enum.map_join("_", &:string.titlecase/1)
+    class_segments =
+      if hd(module_segments) == "Elixir" do
+        module_segments
+      else
+        ["Erlang" | module_segments]
+      end
+
+    Enum.map_join(class_segments, "_", &:string.titlecase/1)
   end
 
   @doc """
