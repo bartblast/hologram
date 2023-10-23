@@ -3222,7 +3222,7 @@ describe("matchOperator()", () => {
     assert.deepStrictEqual(vars, {a: Type.integer(9)});
   });
 
-  describe.only("nested match operators", () => {
+  describe("nested match operators", () => {
     it("x = 2 = 2", () => {
       const result = Interpreter.matchOperator(
         Interpreter.matchOperator(
@@ -4535,16 +4535,17 @@ describe("matchOperator()", () => {
     });
 
     it("multiple variables with the same name being matched to the different values", () => {
+      const right = Type.list([Type.integer(1), Type.integer(2)]);
+
       // [x, x] = [1, 2]
-      assertError(
+      assertMatchError(
         () =>
           Interpreter.matchOperator(
-            Type.list([Type.integer(1), Type.integer(2)]),
+            right,
             Type.list([Type.variablePattern("x"), Type.variablePattern("x")]),
             vars,
           ),
-        "MatchError",
-        "no match of right hand side value: [1, 2]",
+        right,
       );
     });
   });
