@@ -3121,10 +3121,9 @@ describe("matchOperator()", () => {
       const left = Type.map(data1);
       const right = Type.map(data);
 
-      assertError(
+      assertMatchError(
         () => Interpreter.matchOperator(right, left, vars),
-        "MatchError",
-        'no match of right hand side value: {"type":"map","data":{"atom(x)":[{"type":"atom","value":"x"},{"type":"integer","value":"__bigint__:1"}],"atom(y)":[{"type":"atom","value":"y"},{"type":"integer","value":"__bigint__:2"}]}}',
+        right,
       );
     });
 
@@ -3138,10 +3137,9 @@ describe("matchOperator()", () => {
 
       const right = Type.map(data2);
 
-      assertError(
+      assertMatchError(
         () => Interpreter.matchOperator(right, left, vars),
-        "MatchError",
-        'no match of right hand side value: {"type":"map","data":{"atom(x)":[{"type":"atom","value":"x"},{"type":"integer","value":"__bigint__:1"}],"atom(y)":[{"type":"atom","value":"y"},{"type":"integer","value":"__bigint__:3"}]}}',
+        right,
       );
     });
 
@@ -3149,10 +3147,9 @@ describe("matchOperator()", () => {
       const left = Type.map(data);
       const right = Type.atom("abc");
 
-      assertError(
+      assertMatchError(
         () => Interpreter.matchOperator(right, left, vars),
-        "MatchError",
-        "no match of right hand side value: :abc",
+        right,
       );
     });
 
@@ -3160,10 +3157,9 @@ describe("matchOperator()", () => {
       const left = Type.map(data);
       const emptyMap = Type.map([]);
 
-      assertError(
+      assertMatchError(
         () => Interpreter.matchOperator(emptyMap, left, vars),
-        "MatchError",
-        'no match of right hand side value: {"type":"map","data":{}}',
+        emptyMap,
       );
     });
 

@@ -510,12 +510,13 @@ export default class Interpreter {
   }
 
   static #matchMap(right, left, vars, rootMatch) {
-    try {
-      for (const [key, value] of Object.entries(left.data)) {
-        Interpreter.matchOperator(right.data[key][1], value[1], vars, false);
+    for (const [key, value] of Object.entries(left.data)) {
+      if (
+        typeof right.data[key] === "undefined" ||
+        !Interpreter.isMatched(value[1], right.data[key][1], vars, false)
+      ) {
+        throw new HologramMatchError(right);
       }
-    } catch {
-      throw new HologramMatchError(right);
     }
 
     return Interpreter.#handleMatchResult(right, vars, rootMatch);
