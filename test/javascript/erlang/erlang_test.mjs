@@ -683,7 +683,7 @@ describe("length/1", () => {
   });
 });
 
-describe.only("map_size/1", () => {
+describe("map_size/1", () => {
   it("returns the number of items in a boxed map", () => {
     const map = Type.map([
       [Type.atom("a"), Type.integer(1)],
