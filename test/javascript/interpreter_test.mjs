@@ -1726,22 +1726,22 @@ describe("matchOperator()", () => {
     });
 
     it("left atom != right atom", () => {
+      const myAtom = Type.atom("xyz");
+
       // :abc = :xyz
-      assertError(
-        () =>
-          Interpreter.matchOperator(Type.atom("xyz"), Type.atom("abc"), vars),
-        "MatchError",
-        "no match of right hand side value: :xyz",
+      assertMatchError(
+        () => Interpreter.matchOperator(myAtom, Type.atom("abc"), vars),
+        myAtom,
       );
     });
 
     it("left atom != right non-atom", () => {
+      const myInteger = Type.integer(2);
+
       // :abc = 2
-      assertError(
-        () =>
-          Interpreter.matchOperator(Type.integer(2), Type.atom("abc"), vars),
-        "MatchError",
-        "no match of right hand side value: 2",
+      assertMatchError(
+        () => Interpreter.matchOperator(myInteger, Type.atom("abc"), vars),
+        myInteger,
       );
     });
   });
@@ -1766,34 +1766,36 @@ describe("matchOperator()", () => {
     });
 
     it("left bitstring != right bitstring", () => {
-      assertError(
+      const myBitstring = Type.bitstring([
+        Type.bitstringSegment(Type.integer(2), {type: "integer"}),
+      ]);
+
+      assertMatchError(
         () =>
           Interpreter.matchOperator(
-            Type.bitstring([
-              Type.bitstringSegment(Type.integer(2), {type: "integer"}),
-            ]),
+            myBitstring,
             Type.bitstringPattern([
               Type.bitstringSegment(Type.integer(1), {type: "integer"}),
             ]),
             vars,
           ),
-        "MatchError",
-        'no match of right hand side value: {"type":"bitstring","bits":{"0":0,"1":0,"2":0,"3":0,"4":0,"5":0,"6":1,"7":0}}',
+        myBitstring,
       );
     });
 
     it("left bitstring != right non-bitstring", () => {
-      assertError(
+      const myAtom = Type.atom("abc");
+
+      assertMatchError(
         () =>
           Interpreter.matchOperator(
-            Type.atom("abc"),
+            myAtom,
             Type.bitstring([
               Type.bitstringSegment(Type.integer(1), {type: "integer"}),
             ]),
             vars,
           ),
-        "MatchError",
-        "no match of right hand side value: :abc",
+        myAtom,
       );
     });
 
