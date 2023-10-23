@@ -383,8 +383,8 @@ defmodule Hologram.Template.RendererTest do
                   },
                   "page" => %Component.Client{
                     context: %{
-                      {Hologram.Runtime, :client_data_loaded?} => true,
                       {Hologram.Runtime, :page_digest} => :dummy_module_39_digest,
+                      {Hologram.Runtime, :page_mounted?} => true,
                       {:my_scope, :my_key} => 123
                     }
                   }
@@ -402,8 +402,8 @@ defmodule Hologram.Template.RendererTest do
                   },
                   "page" => %Component.Client{
                     context: %{
-                      {Hologram.Runtime, :client_data_loaded?} => true,
                       {Hologram.Runtime, :page_digest} => :dummy_module_46_digest,
+                      {Hologram.Runtime, :page_mounted?} => true,
                       {:my_scope, :my_key} => 123
                     }
                   }
@@ -421,8 +421,8 @@ defmodule Hologram.Template.RendererTest do
                   },
                   "page" => %Component.Client{
                     context: %{
-                      {Hologram.Runtime, :client_data_loaded?} => true,
                       {Hologram.Runtime, :page_digest} => :dummy_module_40_digest,
+                      {Hologram.Runtime, :page_mounted?} => true,
                       {:my_scope, :my_key} => 123
                     }
                   }
@@ -440,8 +440,8 @@ defmodule Hologram.Template.RendererTest do
                   },
                   "page" => %Component.Client{
                     context: %{
-                      {Hologram.Runtime, :client_data_loaded?} => true,
-                      {Hologram.Runtime, :page_digest} => :dummy_module_43_digest
+                      {Hologram.Runtime, :page_digest} => :dummy_module_43_digest,
+                      {Hologram.Runtime, :page_mounted?} => true
                     }
                   }
                 }}
@@ -458,8 +458,8 @@ defmodule Hologram.Template.RendererTest do
                   },
                   "page" => %Component.Client{
                     context: %{
-                      {Hologram.Runtime, :client_data_loaded?} => true,
-                      {Hologram.Runtime, :page_digest} => :dummy_module_45_digest
+                      {Hologram.Runtime, :page_digest} => :dummy_module_45_digest,
+                      {Hologram.Runtime, :page_mounted?} => true
                     }
                   }
                 }}
@@ -502,8 +502,8 @@ defmodule Hologram.Template.RendererTest do
                   "layout" => %Component.Client{},
                   "page" => %Component.Client{
                     context: %{
-                      {Hologram.Runtime, :client_data_loaded?} => true,
-                      {Hologram.Runtime, :page_digest} => :dummy_module_14_digest
+                      {Hologram.Runtime, :page_digest} => :dummy_module_14_digest,
+                      {Hologram.Runtime, :page_mounted?} => true
                     }
                   }
                 }}
@@ -525,8 +525,8 @@ defmodule Hologram.Template.RendererTest do
                   "layout" => %Component.Client{},
                   "page" => %Component.Client{
                     context: %{
-                      {Hologram.Runtime, :client_data_loaded?} => true,
-                      {Hologram.Runtime, :page_digest} => :dummy_module_19_digest
+                      {Hologram.Runtime, :page_digest} => :dummy_module_19_digest,
+                      {Hologram.Runtime, :page_mounted?} => true
                     },
                     state: %{param_1: "value_1", param_3: "value_3"}
                   }
@@ -544,8 +544,8 @@ defmodule Hologram.Template.RendererTest do
                   },
                   "page" => %Component.Client{
                     context: %{
-                      {Hologram.Runtime, :client_data_loaded?} => true,
-                      {Hologram.Runtime, :page_digest} => :dummy_module_25_digest
+                      {Hologram.Runtime, :page_digest} => :dummy_module_25_digest,
+                      {Hologram.Runtime, :page_mounted?} => true
                     }
                   }
                 }}
@@ -562,8 +562,8 @@ defmodule Hologram.Template.RendererTest do
                   },
                   "page" => %Component.Client{
                     context: %{
-                      {Hologram.Runtime, :client_data_loaded?} => true,
-                      {Hologram.Runtime, :page_digest} => :dummy_module_27_digest
+                      {Hologram.Runtime, :page_digest} => :dummy_module_27_digest,
+                      {Hologram.Runtime, :page_mounted?} => true
                     },
                     state: %{
                       prop_1: "prop_value_1",
@@ -589,8 +589,8 @@ defmodule Hologram.Template.RendererTest do
                   "layout" => %Component.Client{},
                   "page" => %Component.Client{
                     context: %{
-                      {Hologram.Runtime, :client_data_loaded?} => true,
-                      {Hologram.Runtime, :page_digest} => :dummy_module_21_digest
+                      {Hologram.Runtime, :page_digest} => :dummy_module_21_digest,
+                      {Hologram.Runtime, :page_mounted?} => true
                     },
                     state: %{key_2: "state_value_2", key_3: "state_value_3"}
                   }
@@ -608,8 +608,8 @@ defmodule Hologram.Template.RendererTest do
                   },
                   "page" => %Component.Client{
                     context: %{
-                      {Hologram.Runtime, :client_data_loaded?} => true,
-                      {Hologram.Runtime, :page_digest} => :dummy_module_24_digest
+                      {Hologram.Runtime, :page_digest} => :dummy_module_24_digest,
+                      {Hologram.Runtime, :page_mounted?} => true
                     }
                   }
                 }}
@@ -624,8 +624,8 @@ defmodule Hologram.Template.RendererTest do
                   "layout" => %Component.Client{},
                   "page" => %Component.Client{
                     context: %{
-                      {Hologram.Runtime, :client_data_loaded?} => true,
-                      {Hologram.Runtime, :page_digest} => :dummy_module_28_digest
+                      {Hologram.Runtime, :page_digest} => :dummy_module_28_digest,
+                      {Hologram.Runtime, :page_mounted?} => true
                     },
                     state: %{state_1: "value_1", state_2: "value_2"}
                   }
@@ -643,8 +643,8 @@ defmodule Hologram.Template.RendererTest do
                   },
                   "page" => %Hologram.Component.Client{
                     context: %{
-                      {Hologram.Runtime, :client_data_loaded?} => true,
-                      {Hologram.Runtime, :page_digest} => :dummy_module_29_digest
+                      {Hologram.Runtime, :page_digest} => :dummy_module_29_digest,
+                      {Hologram.Runtime, :page_mounted?} => true
                     }
                   }
                 }}
@@ -664,14 +664,14 @@ defmodule Hologram.Template.RendererTest do
                 },
                 "page" => %Component.Client{
                   context: %{
-                    {Hologram.Runtime, :client_data_loaded?} => true,
-                    {Hologram.Runtime, :page_digest} => "102790adb6c3b1956db310be523a7693"
+                    {Hologram.Runtime, :page_digest} => "102790adb6c3b1956db310be523a7693",
+                    {Hologram.Runtime, :page_mounted?} => true
                   }
                 }
               }} = render_page(Module48, [])
 
       expected =
-        ~s/clientsData: Type.map([[Type.bitstring("layout"), Type.map([[Type.atom("__struct__"), Type.atom("Elixir.Hologram.Component.Client")], [Type.atom("context"), Type.map([])], [Type.atom("next_command"), Type.atom("nil")], [Type.atom("state"), Type.map([])]])], [Type.bitstring("page"), Type.map([[Type.atom("__struct__"), Type.atom("Elixir.Hologram.Component.Client")], [Type.atom("context"), Type.map([[Type.tuple([Type.atom("Elixir.Hologram.Runtime"), Type.atom("client_data_loaded?")]), Type.atom("true")], [Type.tuple([Type.atom("Elixir.Hologram.Runtime"), Type.atom("page_digest")]), Type.bitstring("102790adb6c3b1956db310be523a7693")]])], [Type.atom("next_command"), Type.atom("nil")], [Type.atom("state"), Type.map([])]])]])/
+        ~s/clientsData: Type.map([[Type.bitstring("layout"), Type.map([[Type.atom("__struct__"), Type.atom("Elixir.Hologram.Component.Client")], [Type.atom("context"), Type.map([])], [Type.atom("next_command"), Type.atom("nil")], [Type.atom("state"), Type.map([])]])], [Type.bitstring("page"), Type.map([[Type.atom("__struct__"), Type.atom("Elixir.Hologram.Component.Client")], [Type.atom("context"), Type.map([[Type.tuple([Type.atom("Elixir.Hologram.Runtime"), Type.atom("page_digest")]), Type.bitstring("102790adb6c3b1956db310be523a7693")], [Type.tuple([Type.atom("Elixir.Hologram.Runtime"), Type.atom("page_mounted?")]), Type.atom("true")]])], [Type.atom("next_command"), Type.atom("nil")], [Type.atom("state"), Type.map([])]])]])/
 
       assert String.contains?(html, expected)
     end
@@ -690,8 +690,8 @@ defmodule Hologram.Template.RendererTest do
                 },
                 "page" => %Component.Client{
                   context: %{
-                    {Hologram.Runtime, :client_data_loaded?} => true,
-                    {Hologram.Runtime, :page_digest} => "102790adb6c3b1956db310be523a7693"
+                    {Hologram.Runtime, :page_digest} => "102790adb6c3b1956db310be523a7693",
+                    {Hologram.Runtime, :page_mounted?} => true
                   }
                 }
               }} = render_page(Module48, [])
@@ -722,8 +722,8 @@ defmodule Hologram.Template.RendererTest do
                 },
                 "page" => %Component.Client{
                   context: %{
-                    {Hologram.Runtime, :client_data_loaded?} => true,
-                    {Hologram.Runtime, :page_digest} => "102790adb6c3b1956db310be523a7693"
+                    {Hologram.Runtime, :page_digest} => "102790adb6c3b1956db310be523a7693",
+                    {Hologram.Runtime, :page_mounted?} => true
                   }
                 }
               }} = render_page(Module50, params_dom)

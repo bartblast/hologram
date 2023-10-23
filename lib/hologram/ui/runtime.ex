@@ -1,14 +1,14 @@
 defmodule Hologram.UI.Runtime do
   use Hologram.Component
 
-  prop :client_data_loaded?, :boolean, from_context: {Hologram.Runtime, :client_data_loaded?}
   prop :page_digest, :string, from_context: {Hologram.Runtime, :page_digest}
+  prop :page_mounted?, :boolean, from_context: {Hologram.Runtime, :page_mounted?}
 
   @impl Component
   def template do
     ~H"""
     <script>
-      {%if !@client_data_loaded?}
+      {%if !@page_mounted?}
         {%raw}
           window.__hologramPageMountData__ = (deps) => {
             const Type = deps.Type;

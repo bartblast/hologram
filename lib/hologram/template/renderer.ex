@@ -115,7 +115,7 @@ defmodule Hologram.Template.Renderer do
     final_page_client =
       Templatable.put_context(
         initial_page_client_with_injected_page_digest,
-        {Hologram.Runtime, :client_data_loaded?},
+        {Hologram.Runtime, :page_mounted?},
         true
       )
 

@@ -18,13 +18,13 @@ defmodule Hologram.UI.RuntimeTest do
 
     [
       context: %{
-        {Hologram.Runtime, :client_data_loaded?} => false,
-        {Hologram.Runtime, :page_digest} => "102790adb6c3b1956db310be523a7693"
+        {Hologram.Runtime, :page_digest} => "102790adb6c3b1956db310be523a7693",
+        {Hologram.Runtime, :page_mounted?} => false
       }
     ]
   end
 
-  test "client_data_loaded? = false", %{context: context} do
+  test "page_mounted? = false", %{context: context} do
     assert render_component(Runtime, %{}, context) == """
            <script>
              
@@ -46,8 +46,8 @@ defmodule Hologram.UI.RuntimeTest do
            """
   end
 
-  test "client_data_loaded? = true", %{context: context} do
-    context = Map.put(context, {Hologram.Runtime, :client_data_loaded?}, true)
+  test "page_mounted? = true", %{context: context} do
+    context = Map.put(context, {Hologram.Runtime, :page_mounted?}, true)
 
     assert render_component(Runtime, %{}, context) == """
            <script>
