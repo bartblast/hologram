@@ -13,6 +13,44 @@ import Type from "../../../assets/js/type.mjs";
 before(() => linkModules());
 after(() => unlinkModules());
 
+describe("from_list/1", () => {
+  it("builds a map from the given list of key-value tuples", () => {
+    const list = Type.list([
+      Type.tuple([Type.atom("a"), Type.integer(2)]),
+      Type.tuple([Type.integer(3), Type.float(4.0)]),
+    ]);
+
+    const result = Erlang_Maps["from_list/1"](list);
+
+    const expected = Type.map([
+      [Type.atom("a"), Type.integer(2)],
+      [Type.integer(3), Type.float(4.0)],
+    ]);
+
+    assert.deepStrictEqual(result, expected);
+  });
+
+  it("if the same key appears more than once, the latter (right-most) value is used and the previous values are ignored", () => {
+    const list = Type.list([
+      Type.tuple([Type.atom("a"), Type.integer(1)]),
+      Type.tuple([Type.atom("b"), Type.integer(2)]),
+      Type.tuple([Type.atom("a"), Type.integer(3)]),
+      Type.tuple([Type.atom("b"), Type.integer(4)]),
+      Type.tuple([Type.atom("a"), Type.integer(5)]),
+      Type.tuple([Type.atom("b"), Type.integer(6)]),
+    ]);
+
+    const result = Erlang_Maps["from_list/1"](list);
+
+    const expected = Type.map([
+      [Type.atom("a"), Type.integer(5)],
+      [Type.atom("b"), Type.integer(6)],
+    ]);
+
+    assert.deepStrictEqual(result, expected);
+  });
+});
+
 describe("get/2", () => {
   it("returns the value assiociated with the given key if map contains the key", () => {
     const key = Type.atom("b");

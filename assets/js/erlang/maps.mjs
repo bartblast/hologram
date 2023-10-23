@@ -12,6 +12,13 @@ MFAs for sorting:
 */
 
 const Erlang_Maps = {
+  // start from_list/1
+  "from_list/1": (list) => {
+    return Type.map(list.data.map((tuple) => tuple.data));
+  },
+  // end from_list/1
+  // deps: []
+
   // start get/2
   "get/2": (key, map) => {
     if (!Type.isMap(map)) {
