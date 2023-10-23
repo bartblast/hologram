@@ -2933,21 +2933,22 @@ describe("matchOperator()", () => {
     });
 
     it("left float != right float", () => {
+      const myFloat = Type.float(3.0);
+
       // 2.0 = 3.0
-      assertError(
-        () => Interpreter.matchOperator(Type.float(3.0), Type.float(2.0), vars),
-        "MatchError",
-        "no match of right hand side value: 3.0",
+      assertMatchError(
+        () => Interpreter.matchOperator(myFloat, Type.float(2.0), vars),
+        myFloat,
       );
     });
 
     it("left float != right non-float", () => {
+      const myAtom = Type.atom("abc");
+
       // 2.0 = :abc
-      assertError(
-        () =>
-          Interpreter.matchOperator(Type.atom("abc"), Type.float(2.0), vars),
-        "MatchError",
-        "no match of right hand side value: :abc",
+      assertMatchError(
+        () => Interpreter.matchOperator(myAtom, Type.float(2.0), vars),
+        myAtom,
       );
     });
   });
