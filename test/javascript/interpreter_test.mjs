@@ -3000,44 +3000,43 @@ describe("matchOperator()", () => {
     it("[1, 2] = [1, 3]", () => {
       const list2 = Type.list([Type.integer(1), Type.integer(3)]);
 
-      assertError(
+      assertMatchError(
         () => Interpreter.matchOperator(list2, list1, vars),
-        "MatchError",
-        "no match of right hand side value: [1, 3]",
+        list2,
       );
     });
 
     it("[1, 2] = [1 | 2]", () => {
       const list2 = Type.improperList([Type.integer(1), Type.integer(2)]);
 
-      assertError(
+      assertMatchError(
         () => Interpreter.matchOperator(list2, list1, vars),
-        "MatchError",
-        "no match of right hand side value: [1 | 2]",
+        list2,
       );
     });
 
     it("[1, 2] = :abc", () => {
-      assertError(
-        () => Interpreter.matchOperator(Type.atom("abc"), list1, vars),
-        "MatchError",
-        "no match of right hand side value: :abc",
+      const myAtom = Type.atom("abc");
+
+      assertMatchError(
+        () => Interpreter.matchOperator(myAtom, list1, vars),
+        myAtom,
       );
     });
 
     it("[] = [1, 2]", () => {
-      assertError(
+      assertMatchError(
         () => Interpreter.matchOperator(list1, Type.list([]), vars),
-        "MatchError",
-        "no match of right hand side value: [1, 2]",
+        list1,
       );
     });
 
     it("[1, 2] = []", () => {
-      assertError(
-        () => Interpreter.matchOperator(Type.list([]), list1, vars),
-        "MatchError",
-        "no match of right hand side value: []",
+      const emptyList = Type.list([]);
+
+      assertMatchError(
+        () => Interpreter.matchOperator(emptyList, list1, vars),
+        emptyList,
       );
     });
 
@@ -4461,34 +4460,34 @@ describe("matchOperator()", () => {
     it("{1, 2} = {1, 3}", () => {
       const tuple2 = Type.tuple([Type.integer(1), Type.integer(3)]);
 
-      assertError(
+      assertMatchError(
         () => Interpreter.matchOperator(tuple2, tuple1, vars),
-        "MatchError",
-        "no match of right hand side value: {1, 3}",
+        tuple2,
       );
     });
 
     it("{1, 2} = :abc", () => {
-      assertError(
-        () => Interpreter.matchOperator(Type.atom("abc"), tuple1, vars),
-        "MatchError",
-        "no match of right hand side value: :abc",
+      const myAtom = Type.atom("abc");
+
+      assertMatchError(
+        () => Interpreter.matchOperator(myAtom, tuple1, vars),
+        myAtom,
       );
     });
 
     it("{} = {1, 2}", () => {
-      assertError(
+      assertMatchError(
         () => Interpreter.matchOperator(tuple1, Type.tuple([]), vars),
-        "MatchError",
-        "no match of right hand side value: {1, 2}",
+        tuple1,
       );
     });
 
     it("{1, 2} = {}", () => {
-      assertError(
-        () => Interpreter.matchOperator(Type.tuple([]), tuple1, vars),
-        "MatchError",
-        "no match of right hand side value: {}",
+      const emptyTuple = Type.tuple([]);
+
+      assertMatchError(
+        () => Interpreter.matchOperator(emptyTuple, tuple1, vars),
+        emptyTuple,
       );
     });
 

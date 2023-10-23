@@ -492,20 +492,18 @@ export default class Interpreter {
   static #matchListOrTuple(right, left, vars, rootMatch) {
     const count = left.data.length;
 
-    try {
-      if (left.data.length !== right.data.length) {
-        throw new HologramMatchError(right);
-      }
-
-      if (Type.isList(left) && left.isProper !== right.isProper) {
-        throw new HologramMatchError(right);
-      }
-
-      for (let i = 0; i < count; ++i) {
-        Interpreter.matchOperator(right.data[i], left.data[i], vars, false);
-      }
-    } catch {
+    if (left.data.length !== right.data.length) {
       throw new HologramMatchError(right);
+    }
+
+    if (Type.isList(left) && left.isProper !== right.isProper) {
+      throw new HologramMatchError(right);
+    }
+
+    for (let i = 0; i < count; ++i) {
+      if (!Interpreter.isMatched(left.data[i], right.data[i], vars, false)) {
+        throw new HologramMatchError(right);
+      }
     }
 
     return Interpreter.#handleMatchResult(right, vars, rootMatch);
