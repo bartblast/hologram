@@ -132,7 +132,9 @@ export function assertMatchError(callable, value) {
   }
 
   if (!isErrorThrown || isAnyAssertFailed) {
-    assert.fail(`expected ${errorAliasStr}: ${message}`);
+    assert.fail(
+      `expected HologramMatchError with value: ${Interpreter.inspect(value)}`,
+    );
   }
 }
 
