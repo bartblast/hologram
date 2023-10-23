@@ -627,7 +627,7 @@ describe("hd/1", () => {
 });
 
 describe("is_atom/1", () => {
-  it("proxies to Type.isAtom/1 and casts the result to boxed boolean", () => {
+  it("proxies to Type.isAtom() and casts the result to boxed boolean", () => {
     const term = Type.atom("abc");
     const result = Erlang["is_atom/1"](term);
     const expected = Type.boolean(Type.isAtom(term));
@@ -637,7 +637,7 @@ describe("is_atom/1", () => {
 });
 
 describe("is_float/1", () => {
-  it("proxies to Type.isFloat/1 and casts the result to boxed boolean", () => {
+  it("proxies to Type.isFloat() and casts the result to boxed boolean", () => {
     const term = Type.float(1.23);
     const result = Erlang["is_float/1"](term);
     const expected = Type.boolean(Type.isFloat(term));
@@ -647,7 +647,7 @@ describe("is_float/1", () => {
 });
 
 describe("is_integer/1", () => {
-  it("proxies to Type.isInteger/1 and casts the result to boxed boolean", () => {
+  it("proxies to Type.isInteger() and casts the result to boxed boolean", () => {
     const term = Type.integer(123);
     const result = Erlang["is_integer/1"](term);
     const expected = Type.boolean(Type.isInteger(term));
@@ -656,8 +656,18 @@ describe("is_integer/1", () => {
   });
 });
 
+describe("is_list/1", () => {
+  it("proxies to Type.isList() and casts the result to boxed boolean", () => {
+    const term = Type.list([Type.integer(1), Type.integer(2)]);
+    const result = Erlang["is_list/1"](term);
+    const expected = Type.boolean(Type.isList(term));
+
+    assert.deepStrictEqual(result, expected);
+  });
+});
+
 describe("is_number/1", () => {
-  it("proxies to Type.isNumber/1 and casts the result to boxed boolean", () => {
+  it("proxies to Type.isNumber() and casts the result to boxed boolean", () => {
     const term = Type.integer(123);
     const result = Erlang["is_number/1"](term);
     const expected = Type.boolean(Type.isNumber(term));

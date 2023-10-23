@@ -196,6 +196,13 @@ const Erlang = {
   // end is_integer/1
   // deps: []
 
+  // start is_list/1
+  "is_list/1": (term) => {
+    return Type.boolean(Type.isList(term));
+  },
+  // end is_list/1
+  // deps: []
+
   // start is_number/1
   "is_number/1": (term) => {
     return Type.boolean(Type.isNumber(term));
