@@ -325,31 +325,18 @@ defmodule Hologram.Compiler.Encoder do
   end
 
   @doc """
-  Encodes an Elixir alias as a class name.
-
-  - This function converts the `alias_atom` to a string using `to_string/1`.
-  - If the resulting `alias_str` starts with a lowercase letter, it prefixes it with `"Erlang."`.
-  - Finally, any dots (`.`) in the `prefixed_alias_str` are replaced with underscores (`_`).
-  - If :erlang is given as input, it returns `"Erlang"`.
-
-  ## Parameters
-
-  - `alias_atom` - The Elixir alias to be encoded as a class name.
-
-  ## Returns
-
-  The encoded class name.
+  Encodes Elixir or Erlang alias as JavaScript class name.
 
   ## Examples
 
       iex> encode_as_class_name(Aaa.Bbb.Ccc)
       "Elixir_Aaa_Bbb_Ccc"
 
-      iex> encode_as_class_name(:mymodule)
-      "Erlang_Mymodule"
-
       iex> encode_as_class_name(:erlang)
       "Erlang"
+      
+      iex> encode_as_class_name(:aaa_bbb)
+      "Erlang_Aaa_Bbb"      
   """
   @spec encode_as_class_name(module | atom) :: String.t()
   def encode_as_class_name(alias_atom)
@@ -357,16 +344,17 @@ defmodule Hologram.Compiler.Encoder do
   def encode_as_class_name(:erlang), do: "Erlang"
 
   def encode_as_class_name(alias_atom) do
-    alias_str = to_string(alias_atom)
+    segments =
+      alias_atom
+      |> to_string()
+      |> String.split([".", "_"])
 
-    prefixed_alias_str =
-      if StringUtils.starts_with_lowercase?(alias_str) do
-        "Erlang." <> String.capitalize(alias_str)
-      else
-        alias_str
-      end
-
-    String.replace(prefixed_alias_str, ".", "_")
+    if hd(segments) == "Elixir" do
+      segments
+    else
+      ["Erlang" | segments]
+    end
+    |> Enum.map_join("_", &String.capitalize/1)
   end
 
   @doc """

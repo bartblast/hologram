@@ -1280,16 +1280,20 @@ defmodule Hologram.Compiler.EncoderTest do
   end
 
   describe "encode_as_class_name/1" do
-    test "encodes module alias having lowercase starting letter" do
-      assert encode_as_class_name(:mymodule) == "Erlang_Mymodule"
-    end
-
-    test "encodes module alias not having lowercase starting letter" do
+    test "Elixir module alias" do
       assert encode_as_class_name(Aaa.Bbb.Ccc) == "Elixir_Aaa_Bbb_Ccc"
     end
 
-    test "encodes :erlang module alias" do
+    test ":erlang alias" do
       assert encode_as_class_name(:erlang) == "Erlang"
+    end
+
+    test "single-word Erlang module alias" do
+      assert encode_as_class_name(:mymodule) == "Erlang_Mymodule"
+    end
+
+    test "multiple-word Erlang module alias" do
+      assert encode_as_class_name(:aaa_bbb) == "Erlang_Aaa_Bbb"
     end
   end
 
