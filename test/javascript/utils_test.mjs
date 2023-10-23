@@ -10,6 +10,20 @@ import Utils from "../../assets/js/utils.mjs";
 before(() => linkModules());
 after(() => unlinkModules());
 
+describe("capitalize()", () => {
+  it("empty string", () => {
+    assert.equal(Utils.capitalize(""), "");
+  });
+
+  it("single-word string", () => {
+    assert.equal(Utils.capitalize("aaa"), "Aaa");
+  });
+
+  it("multiple-word string", () => {
+    assert.equal(Utils.capitalize("aaa bbb"), "Aaa bbb");
+  });
+});
+
 describe("cartesianProduct()", () => {
   it("returns empty array if no sets are given", () => {
     assert.deepStrictEqual(Utils.cartesianProduct([]), []);

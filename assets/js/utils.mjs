@@ -3,6 +3,10 @@
 import Interpreter from "./interpreter.mjs";
 
 export default class Utils {
+  static capitalize(str) {
+    return str.charAt(0).toUpperCase() + str.slice(1);
+  }
+
   // Based on: https://stackoverflow.com/a/43053803
   static cartesianProduct(sets) {
     if (sets.length === 1) {
