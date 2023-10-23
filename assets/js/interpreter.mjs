@@ -312,7 +312,7 @@ export default class Interpreter {
       return "Erlang";
     }
 
-    let segments = aliasStr.split(/[\._]/);
+    let segments = aliasStr.split(/[._]/);
 
     if (segments[0] !== "Elixir") {
       segments.unshift("Erlang");
