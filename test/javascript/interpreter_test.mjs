@@ -1618,7 +1618,7 @@ describe("inspectModuleName()", () => {
   });
 
   it("inspects Erlang standard lib module name", () => {
-    const result = Interpreter.inspectModuleName("Erlang_uri_string");
+    const result = Interpreter.inspectModuleName("Erlang_Uri_String");
     assert.deepStrictEqual(result, ":uri_string");
   });
 });
