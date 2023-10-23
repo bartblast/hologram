@@ -199,7 +199,7 @@ export default class Interpreter {
     }
 
     // otherwise treat the operator as map key access
-    return Erlang_maps["get/2"](right, left);
+    return Erlang_Maps["get/2"](right, left);
   }
 
   static fetchErrorMessage(jsError) {
@@ -304,20 +304,21 @@ export default class Interpreter {
     return globalThis[Interpreter.moduleName(alias)];
   }
 
+  // Based on: Hologram.Compiler.Encoder.encode_as_class_name/1
   static moduleName(alias) {
     const aliasStr = Type.isAtom(alias) ? alias.value : alias;
-    let prefixedAliasStr;
 
     if (aliasStr === "erlang") {
-      prefixedAliasStr = "Erlang";
-    } else {
-      prefixedAliasStr =
-        aliasStr.charAt(0).toLowerCase() === aliasStr.charAt(0)
-          ? "Erlang_" + aliasStr
-          : aliasStr;
+      return "Erlang";
     }
 
-    return prefixedAliasStr.replace(/\./g, "_");
+    let segments = aliasStr.split(/[\._]/);
+
+    if (segments[0] !== "Elixir") {
+      segments.unshift("Erlang");
+    }
+
+    return segments.map((segment) => Utils.capitalize(segment)).join("_");
   }
 
   static raiseArgumentError(message) {

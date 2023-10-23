@@ -4550,34 +4550,60 @@ describe("matchOperator()", () => {
 });
 
 it("module()", () => {
-  assert.equal(Interpreter.module("maps"), Erlang_maps);
+  assert.equal(Interpreter.module("maps"), Erlang_Maps);
 });
 
 describe("moduleName()", () => {
-  it("returns module name for alias having lowercase starting letter", () => {
-    const alias = Type.atom("aaa_bbb");
-    const result = Interpreter.moduleName(alias);
+  describe("boxed alias argument", () => {
+    it("Elixir module alias", () => {
+      const alias = Type.atom("Elixir.Aaa.Bbb");
+      const result = Interpreter.moduleName(alias);
 
-    assert.equal(result, "Erlang_aaa_bbb");
+      assert.equal(result, "Elixir_Aaa_Bbb");
+    });
+
+    it(":erlang alias", () => {
+      const alias = Type.atom("erlang");
+      const result = Interpreter.moduleName(alias);
+
+      assert.equal(result, "Erlang");
+    });
+
+    it("single-word Erlang module alias", () => {
+      const alias = Type.atom("aaa");
+      const result = Interpreter.moduleName(alias);
+
+      assert.equal(result, "Erlang_Aaa");
+    });
+
+    it("multiple-word Erlang module alias", () => {
+      const alias = Type.atom("aaa_bbb");
+      const result = Interpreter.moduleName(alias);
+
+      assert.equal(result, "Erlang_Aaa_Bbb");
+    });
   });
 
-  it("returns module name for alias not having lowercase starting letter", () => {
-    const alias = Type.atom("Elixir.Aaa.Bbb");
-    const result = Interpreter.moduleName(alias);
+  describe("JS string argument", () => {
+    it("Elixir module alias", () => {
+      const result = Interpreter.moduleName("Elixir.Aaa.Bbb");
+      assert.equal(result, "Elixir_Aaa_Bbb");
+    });
 
-    assert.equal(result, "Elixir_Aaa_Bbb");
-  });
+    it(":erlang alias", () => {
+      const result = Interpreter.moduleName("erlang");
+      assert.equal(result, "Erlang");
+    });
 
-  it("returns module name for :erlang alias", () => {
-    const alias = Type.atom("erlang");
-    const result = Interpreter.moduleName(alias);
+    it("single-word Erlang module alias", () => {
+      const result = Interpreter.moduleName("aaa");
+      assert.equal(result, "Erlang_Aaa");
+    });
 
-    assert.equal(result, "Erlang");
-  });
-
-  it("works with string arguments", () => {
-    const result = Interpreter.moduleName("Elixir.Aaa.Bbb");
-    assert.equal(result, "Elixir_Aaa_Bbb");
+    it("multiple-word Erlang module alias", () => {
+      const result = Interpreter.moduleName("aaa_bbb");
+      assert.equal(result, "Erlang_Aaa_Bbb");
+    });
   });
 });
 
