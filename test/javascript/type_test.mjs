@@ -2,7 +2,6 @@
 
 import {
   assert,
-  assertError,
   linkModules,
   unlinkModules,
 } from "../../assets/js/test_support.mjs";

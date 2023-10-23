@@ -84,15 +84,7 @@ const Elixir_Kernel = buildElixirKernelModule();
 export {assert} from "chai";
 export const sinon = sinonESM;
 
-export function assertBoxedFalse(boxed) {
-  assert.isTrue(Type.isFalse(boxed));
-}
-
-export function assertBoxedTrue(boxed) {
-  assert.isTrue(Type.isTrue(boxed));
-}
-
-export function assertError(callable, errorAliasStr, message) {
+export function assertBoxedError(callable, errorAliasStr, message) {
   const errorStruct = Type.errorStruct(errorAliasStr, message);
 
   let isErrorThrown = false;
@@ -113,6 +105,14 @@ export function assertError(callable, errorAliasStr, message) {
   if (!isErrorThrown || isAnyAssertFailed) {
     assert.fail(`expected ${errorAliasStr}: ${message}`);
   }
+}
+
+export function assertBoxedFalse(boxed) {
+  assert.isTrue(Type.isFalse(boxed));
+}
+
+export function assertBoxedTrue(boxed) {
+  assert.isTrue(Type.isTrue(boxed));
 }
 
 export function assertMatchError(callable, value) {

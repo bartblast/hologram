@@ -2,7 +2,7 @@
 
 import {
   assert,
-  assertError,
+  assertBoxedError,
   assertMatchError,
   linkModules,
   sinon,
@@ -10,8 +10,6 @@ import {
 } from "../../assets/js/test_support.mjs";
 import Erlang from "../../assets/js/erlang/erlang.mjs";
 import HologramBoxedError from "../../assets/js/errors/boxed_error.mjs";
-import HologramInterpreterError from "../../assets/js/errors/interpreter_error.mjs";
-import HologramMatchError from "../../assets/js/errors/match_error.mjs";
 import Interpreter from "../../assets/js/interpreter.mjs";
 import Type from "../../assets/js/type.mjs";
 
@@ -140,7 +138,7 @@ describe("callAnonymousFunction()", () => {
 
     assert.deepStrictEqual(result2, Type.integer(2));
 
-    assertError(
+    assertBoxedError(
       () => Interpreter.callAnonymousFunction(anonFun, [Type.integer(3)]),
       "FunctionClauseError",
       "no function clause matching in anonymous fn/1",
@@ -184,7 +182,7 @@ describe("callAnonymousFunction()", () => {
   });
 
   it("raises FunctionClauseError error if none of the clauses is matched", () => {
-    assertError(
+    assertBoxedError(
       () => Interpreter.callAnonymousFunction(anonFun, [Type.integer(3)]),
       "FunctionClauseError",
       "no function clause matching in anonymous fn/1",
@@ -238,7 +236,7 @@ describe("callAnonymousFunction()", () => {
       vars,
     );
 
-    assertError(
+    assertBoxedError(
       () => Interpreter.callAnonymousFunction(anonFun, []),
       "ArgumentError",
       "my message",
@@ -465,7 +463,7 @@ describe("case()", () => {
       },
     };
 
-    assertError(
+    assertBoxedError(
       () => Interpreter.case(Type.integer(3), [clause1, clause2], vars),
       "CaseClauseError",
       "no case clause matching: 3",
@@ -479,7 +477,7 @@ describe("case()", () => {
       body: (_vars) => Interpreter.raiseArgumentError("my message"),
     };
 
-    assertError(
+    assertBoxedError(
       () => Interpreter.case(Type.integer(1), [clause], vars),
       "ArgumentError",
       "my message",
@@ -842,7 +840,7 @@ describe("comprehension()", () => {
         body: enumerable,
       };
 
-      assertError(
+      assertBoxedError(
         () =>
           Interpreter.comprehension(
             [generator],
@@ -1153,7 +1151,7 @@ describe("cond()", () => {
       },
     };
 
-    assertError(
+    assertBoxedError(
       () => Interpreter.cond([clause1, clause2], vars),
       "CondClauseError",
       "no cond clause evaluated to a truthy value",
@@ -1330,7 +1328,7 @@ describe("defineElixirFunction()", () => {
     const result2 = globalThis.Elixir_Aaa_Bbb["my_fun_b/1"](Type.integer(2));
     assert.deepStrictEqual(result2, Type.integer(2));
 
-    assertError(
+    assertBoxedError(
       () => globalThis.Elixir_Aaa_Bbb["my_fun_b/1"](Type.integer(3)),
       "FunctionClauseError",
       "no function clause matching in Aaa.Bbb.my_fun_b/1",
@@ -1363,7 +1361,7 @@ describe("defineElixirFunction()", () => {
   });
 
   it("raises FunctionClauseError if there are no matching clauses", () => {
-    assertError(
+    assertBoxedError(
       () => globalThis.Elixir_Aaa_Bbb["my_fun_a/1"](Type.integer(3)),
       "FunctionClauseError",
       "no function clause matching in Aaa.Bbb.my_fun_a/1",
@@ -1407,7 +1405,7 @@ describe("defineElixirFunction()", () => {
       },
     ]);
 
-    assertError(
+    assertBoxedError(
       () => globalThis.Elixir_Aaa_Bbb["my_fun_f/0"](),
       "ArgumentError",
       "my message",
@@ -4584,7 +4582,7 @@ describe("moduleName()", () => {
 });
 
 it("raiseArgumentError()", () => {
-  assertError(
+  assertBoxedError(
     () => Interpreter.raiseArgumentError("abc"),
     "ArgumentError",
     "abc",
@@ -4592,11 +4590,15 @@ it("raiseArgumentError()", () => {
 });
 
 it("raiseBadMapError()", () => {
-  assertError(() => Interpreter.raiseBadMapError("abc"), "BadMapError", "abc");
+  assertBoxedError(
+    () => Interpreter.raiseBadMapError("abc"),
+    "BadMapError",
+    "abc",
+  );
 });
 
 it("raiseCompileError()", () => {
-  assertError(
+  assertBoxedError(
     () => Interpreter.raiseCompileError("abc"),
     "CompileError",
     "abc",
@@ -4604,15 +4606,19 @@ it("raiseCompileError()", () => {
 });
 
 it("raiseError()", () => {
-  assertError(() => Interpreter.raiseError("Aaa.Bbb", "abc"), "Aaa.Bbb", "abc");
+  assertBoxedError(
+    () => Interpreter.raiseError("Aaa.Bbb", "abc"),
+    "Aaa.Bbb",
+    "abc",
+  );
 });
 
 it("raiseKeyError()", () => {
-  assertError(() => Interpreter.raiseKeyError("abc"), "KeyError", "abc");
+  assertBoxedError(() => Interpreter.raiseKeyError("abc"), "KeyError", "abc");
 });
 
 it("raiseMatchError()", () => {
-  assertError(
+  assertBoxedError(
     () => Interpreter.raiseMatchError(Type.atom("abc")),
     "MatchError",
     "no match of right hand side value: :abc",

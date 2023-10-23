@@ -2,9 +2,9 @@
 
 import {
   assert,
+  assertBoxedError,
   assertBoxedFalse,
   assertBoxedTrue,
-  assertError,
   linkModules,
   unlinkModules,
 } from "../../../assets/js/test_support.mjs";
@@ -587,14 +587,18 @@ describe(">/2", () => {
 it("error/1", () => {
   const reason = Type.errorStruct("MyError", "my message");
 
-  assertError(() => Erlang["error/1"](reason), "MyError", "my message");
+  assertBoxedError(() => Erlang["error/1"](reason), "MyError", "my message");
 });
 
 it("error/2", () => {
   const reason = Type.errorStruct("MyError", "my message");
   const args = Type.list([Type.integer(1, Type.integer(2))]);
 
-  assertError(() => Erlang["error/2"](reason, args), "MyError", "my message");
+  assertBoxedError(
+    () => Erlang["error/2"](reason, args),
+    "MyError",
+    "my message",
+  );
 });
 
 describe("hd/1", () => {
@@ -606,7 +610,7 @@ describe("hd/1", () => {
   });
 
   it("raises ArgumentError if the argument is an empty boxed list", () => {
-    assertError(
+    assertBoxedError(
       () => Erlang["hd/1"](Type.list([])),
       "ArgumentError",
       "errors were found at the given arguments:\n\n* 1st argument: not a nonempty list",
@@ -614,7 +618,7 @@ describe("hd/1", () => {
   });
 
   it("raises ArgumentError if the argument is not a boxed list", () => {
-    assertError(
+    assertBoxedError(
       () => Erlang["hd/1"](Type.integer(123)),
       "ArgumentError",
       "errors were found at the given arguments:\n\n* 1st argument: not a nonempty list",
@@ -671,7 +675,7 @@ describe("length/1", () => {
   });
 
   it("raises ArgumentError if the argument is not a boxed list", () => {
-    assertError(
+    assertBoxedError(
       () => Erlang["length/1"](Type.integer(123)),
       "ArgumentError",
       "errors were found at the given arguments:\n\n* 1st argument: not a list",
@@ -736,7 +740,7 @@ describe("tl/1", () => {
 
   describe("errors", () => {
     it("raises ArgumentError if the argument is an empty boxed list", () => {
-      assertError(
+      assertBoxedError(
         () => Erlang["tl/1"](Type.list([])),
         "ArgumentError",
         "errors were found at the given arguments:\n\n* 1st argument: not a nonempty list",
@@ -744,7 +748,7 @@ describe("tl/1", () => {
     });
 
     it("raises ArgumentError if the argument is not a boxed list", () => {
-      assertError(
+      assertBoxedError(
         () => Erlang["tl/1"](Type.integer(123)),
         "ArgumentError",
         "errors were found at the given arguments:\n\n* 1st argument: not a nonempty list",
