@@ -1280,19 +1280,23 @@ defmodule Hologram.Compiler.EncoderTest do
   end
 
   describe "encode_as_class_name/1" do
-    test "Elixir module alias" do
+    test "Elixir module alias without camel case segments" do
       assert encode_as_class_name(Aaa.Bbb.Ccc) == "Elixir_Aaa_Bbb_Ccc"
+    end
+
+    test "Elixir module alias with camel case segments" do
+      assert encode_as_class_name(AaaBbb.CccDdd) == "Elixir_AaaBbb_CccDdd"
     end
 
     test ":erlang alias" do
       assert encode_as_class_name(:erlang) == "Erlang"
     end
 
-    test "single-word Erlang module alias" do
-      assert encode_as_class_name(:mymodule) == "Erlang_Mymodule"
+    test "single-segment Erlang module alias" do
+      assert encode_as_class_name(:aaa) == "Erlang_Aaa"
     end
 
-    test "multiple-word Erlang module alias" do
+    test "multiple-segment Erlang module alias" do
       assert encode_as_class_name(:aaa_bbb) == "Erlang_Aaa_Bbb"
     end
   end

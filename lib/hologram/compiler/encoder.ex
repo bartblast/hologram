@@ -354,7 +354,7 @@ defmodule Hologram.Compiler.Encoder do
     else
       ["Erlang" | segments]
     end
-    |> Enum.map_join("_", &String.capitalize/1)
+    |> Enum.map_join("_", &:string.titlecase/1)
   end
 
   @doc """
