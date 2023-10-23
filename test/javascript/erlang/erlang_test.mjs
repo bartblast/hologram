@@ -683,6 +683,27 @@ describe("length/1", () => {
   });
 });
 
+describe.only("map_size/1", () => {
+  it("returns the number of items in a boxed map", () => {
+    const map = Type.map([
+      [Type.atom("a"), Type.integer(1)],
+      [Type.atom("b"), Type.integer(2)],
+    ]);
+
+    const result = Erlang["map_size/1"](map);
+
+    assert.deepStrictEqual(result, Type.integer(2));
+  });
+
+  it("raises BadMapError if the argument is not a boxed map", () => {
+    assertBoxedError(
+      () => Erlang["map_size/1"](Type.atom("abc")),
+      "BadMapError",
+      "expected a map, got: :abc",
+    );
+  });
+});
+
 describe("tl/1", () => {
   describe("proper list", () => {
     it("1 item", () => {

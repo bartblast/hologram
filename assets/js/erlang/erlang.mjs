@@ -216,6 +216,17 @@ const Erlang = {
   // end length/1
   // deps: []
 
+  // start map_size/1
+  "map_size/1": (map) => {
+    if (!Type.isMap(map)) {
+      Interpreter.raiseBadMapError(map);
+    }
+
+    return Type.integer(Object.keys(map.data).length);
+  },
+  // end map_size/1
+  // deps: []
+
   // start tl/1
   "tl/1": (list) => {
     if (!Type.isList(list) || list.data.length === 0) {
