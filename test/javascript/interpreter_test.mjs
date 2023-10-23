@@ -4629,9 +4629,9 @@ it("raiseArgumentError()", () => {
 
 it("raiseBadMapError()", () => {
   assertBoxedError(
-    () => Interpreter.raiseBadMapError("abc"),
+    () => Interpreter.raiseBadMapError(Type.atom("abc")),
     "BadMapError",
-    "abc",
+    "expected a map, got: :abc",
   );
 });
 

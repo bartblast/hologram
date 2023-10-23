@@ -15,9 +15,7 @@ const Erlang_Maps = {
   // start get/2
   "get/2": (key, map) => {
     if (!Type.isMap(map)) {
-      Interpreter.raiseBadMapError(
-        `expected a map, got: ${Interpreter.inspect(map)}`,
-      );
+      Interpreter.raiseBadMapError(map);
     }
 
     const encodedKey = Type.encodeMapKey(key);

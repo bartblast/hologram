@@ -325,7 +325,9 @@ export default class Interpreter {
     return Interpreter.raiseError("ArgumentError", message);
   }
 
-  static raiseBadMapError(message) {
+  static raiseBadMapError(arg) {
+    const message = "expected a map, got: " + Interpreter.inspect(arg);
+
     return Interpreter.raiseError("BadMapError", message);
   }
 
@@ -342,9 +344,9 @@ export default class Interpreter {
     return Interpreter.raiseError("KeyError", message);
   }
 
-  static raiseMatchError(right) {
+  static raiseMatchError(arg) {
     const message =
-      "no match of right hand side value: " + Interpreter.inspect(right);
+      "no match of right hand side value: " + Interpreter.inspect(arg);
 
     return Interpreter.raiseError("MatchError", message);
   }
