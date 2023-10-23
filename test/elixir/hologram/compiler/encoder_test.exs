@@ -405,7 +405,7 @@ defmodule Hologram.Compiler.EncoderTest do
            return Type.atom("ok");
            }}, {match: Type.variablePattern("y"), guards: [], body: (vars) => {
            return vars.y;
-           }}])\
+           }}], vars)\
            """
   end
 
@@ -1230,7 +1230,7 @@ defmodule Hologram.Compiler.EncoderTest do
              return Type.atom("Elixir.MyModule1");
              }}, {match: Type.atom("b"), guards: [], body: (vars) => {
              return Type.atom("Elixir.MyModule2");
-             }}]), "my_fun!/2", [Type.integer(1n), Type.integer(2n)])\
+             }}], vars), "my_fun!/2", [Type.integer(1n), Type.integer(2n)])\
              """
     end
   end

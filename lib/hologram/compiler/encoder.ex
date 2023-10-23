@@ -137,7 +137,7 @@ defmodule Hologram.Compiler.Encoder do
     condition_js = encode(condition, context)
     clauses_js = encode_as_array(clauses, context)
 
-    "Interpreter.case(#{condition_js}, #{clauses_js})"
+    "Interpreter.case(#{condition_js}, #{clauses_js}, vars)"
   end
 
   def encode(%IR.Clause{} = clause, context) do

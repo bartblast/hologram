@@ -130,14 +130,6 @@ export default class Interpreter {
     }
 
     globalThis[moduleName][`${functionName}/${functionArity}`] = function () {
-      console.log(
-        `${Interpreter.inspectModuleName(
-          moduleName,
-        )}.${functionName}/${functionArity}`,
-      );
-      console.dir(arguments);
-      console.log("----------");
-
       const args = Type.list([...arguments]);
       const arity = arguments.length;
 
