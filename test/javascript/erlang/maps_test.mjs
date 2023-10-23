@@ -94,3 +94,73 @@ describe("get/2", () => {
     );
   });
 });
+
+describe("merge/2", () => {
+  it("merges two maps", () => {
+    const map1 = Type.map([
+      [Type.atom("a"), Type.integer(1)],
+      [Type.atom("b"), Type.integer(2)],
+    ]);
+
+    const map2 = Type.map([
+      [Type.atom("c"), Type.integer(3)],
+      [Type.atom("d"), Type.integer(4)],
+    ]);
+
+    const result = Erlang_Maps["merge/2"](map1, map2);
+
+    const expected = Type.map([
+      [Type.atom("a"), Type.integer(1)],
+      [Type.atom("b"), Type.integer(2)],
+      [Type.atom("c"), Type.integer(3)],
+      [Type.atom("d"), Type.integer(4)],
+    ]);
+
+    assert.deepStrictEqual(result, expected);
+  });
+
+  it("if two keys exist in both maps, the value in the first map is superseded by the value in the second map", () => {
+    const map1 = Type.map([
+      [Type.atom("a"), Type.integer(1)],
+      [Type.atom("b"), Type.integer(2)],
+      [Type.atom("c"), Type.integer(3)],
+    ]);
+
+    const map2 = Type.map([
+      [Type.atom("c"), Type.integer(4)],
+      [Type.atom("d"), Type.integer(5)],
+      [Type.atom("a"), Type.integer(6)],
+    ]);
+
+    const result = Erlang_Maps["merge/2"](map1, map2);
+
+    const expected = Type.map([
+      [Type.atom("a"), Type.integer(6)],
+      [Type.atom("b"), Type.integer(2)],
+      [Type.atom("c"), Type.integer(4)],
+      [Type.atom("d"), Type.integer(5)],
+    ]);
+
+    assert.deepStrictEqual(result, expected);
+  });
+
+  it("raises BadMapError if the first argument is not a map", () => {
+    const map = Type.map([[Type.atom("a"), Type.integer(1)]]);
+
+    assertBoxedError(
+      () => Erlang_Maps["merge/2"](Type.integer(123), map),
+      "BadMapError",
+      "expected a map, got: 123",
+    );
+  });
+
+  it("raises BadMapError if the second argument is not a map", () => {
+    const map = Type.map([[Type.atom("a"), Type.integer(1)]]);
+
+    assertBoxedError(
+      () => Erlang_Maps["merge/2"](map, Type.integer(123)),
+      "BadMapError",
+      "expected a map, got: 123",
+    );
+  });
+});

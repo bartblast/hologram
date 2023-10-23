@@ -45,6 +45,21 @@ const Erlang_Maps = {
   },
   // end get/2
   // deps: []
+
+  // start merge/2
+  "merge/2": (map1, map2) => {
+    if (!Type.isMap(map1)) {
+      Interpreter.raiseBadMapError(map1);
+    }
+
+    if (!Type.isMap(map2)) {
+      Interpreter.raiseBadMapError(map2);
+    }
+
+    return {type: "map", data: {...map1.data, ...map2.data}};
+  },
+  // end merge/2
+  // deps: []
 };
 
 export default Erlang_Maps;
