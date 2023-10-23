@@ -713,7 +713,7 @@ describe("map", () => {
   });
 
   it("returns non-empty boxed map value", () => {
-    const data = [
+    const inputData = [
       [Type.atom("a"), Type.integer(1)],
       [Type.atom("b"), Type.integer(2)],
     ];
@@ -725,7 +725,27 @@ describe("map", () => {
 
     const expected = {type: "map", data: expectedData};
 
-    assert.deepStrictEqual(Type.map(data), expected);
+    assert.deepStrictEqual(Type.map(inputData), expected);
+  });
+
+  it("if the same key appears more than once, the latter (right-most) value is used and the previous values are ignored", () => {
+    const inputData = [
+      [Type.atom("a"), Type.integer(1)],
+      [Type.atom("b"), Type.integer(2)],
+      [Type.atom("a"), Type.integer(3)],
+      [Type.atom("b"), Type.integer(4)],
+      [Type.atom("a"), Type.integer(5)],
+      [Type.atom("b"), Type.integer(6)],
+    ];
+
+    const expectedData = {
+      "atom(a)": [Type.atom("a"), Type.integer(5)],
+      "atom(b)": [Type.atom("b"), Type.integer(6)],
+    };
+
+    const expected = {type: "map", data: expectedData};
+
+    assert.deepStrictEqual(Type.map(inputData), expected);
   });
 });
 
