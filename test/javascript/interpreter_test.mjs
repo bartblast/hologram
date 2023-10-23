@@ -3222,7 +3222,7 @@ describe("matchOperator()", () => {
     assert.deepStrictEqual(vars, {a: Type.integer(9)});
   });
 
-  describe("nested match operators", () => {
+  describe.only("nested match operators", () => {
     it("x = 2 = 2", () => {
       const result = Interpreter.matchOperator(
         Interpreter.matchOperator(
@@ -3246,20 +3246,16 @@ describe("matchOperator()", () => {
     });
 
     it("x = 2 = 3", () => {
-      assertError(
+      const integer3 = Type.integer(3);
+
+      assertMatchError(
         () =>
           Interpreter.matchOperator(
-            Interpreter.matchOperator(
-              Type.integer(3),
-              Type.integer(2),
-              vars,
-              false,
-            ),
+            Interpreter.matchOperator(integer3, Type.integer(2), vars, false),
             Type.variablePattern("x"),
             vars,
           ),
-        "MatchError",
-        "no match of right hand side value: 3",
+        integer3,
       );
     });
 
@@ -3286,11 +3282,13 @@ describe("matchOperator()", () => {
     });
 
     it("2 = x = 3", () => {
-      assertError(
+      const integer3 = Type.integer(3);
+
+      assertMatchError(
         () =>
           Interpreter.matchOperator(
             Interpreter.matchOperator(
-              Type.integer(3),
+              integer3,
               Type.variablePattern("x"),
               vars,
               false,
@@ -3298,8 +3296,7 @@ describe("matchOperator()", () => {
             Type.integer(2),
             vars,
           ),
-        "MatchError",
-        "no match of right hand side value: 3",
+        integer3,
       );
     });
 
@@ -3331,15 +3328,14 @@ describe("matchOperator()", () => {
         x: Type.integer(3),
       };
 
-      assertError(
+      assertMatchError(
         () =>
           Interpreter.matchOperator(
             Interpreter.matchOperator(vars.x, Type.integer(2), vars, false),
             Type.integer(2),
             vars,
           ),
-        "MatchError",
-        "no match of right hand side value: 3",
+        Type.integer(3),
       );
     });
 
@@ -3349,15 +3345,14 @@ describe("matchOperator()", () => {
         x: Type.integer(2),
       };
 
-      assertError(
+      assertMatchError(
         () =>
           Interpreter.matchOperator(
             Interpreter.matchOperator(vars.x, Type.integer(2), vars, false),
             Type.integer(1),
             vars,
           ),
-        "MatchError",
-        "no match of right hand side value: 2",
+        Type.integer(2),
       );
     });
 
@@ -3427,16 +3422,13 @@ describe("matchOperator()", () => {
     });
 
     it("[1 = 1] = [1 = 2]", () => {
-      assertError(
+      const integer2 = Type.integer(2);
+
+      assertMatchError(
         () =>
           Interpreter.matchOperator(
             Type.list([
-              Interpreter.matchOperator(
-                Type.integer(2),
-                Type.integer(1),
-                vars,
-                false,
-              ),
+              Interpreter.matchOperator(integer2, Type.integer(1), vars, false),
             ]),
             Type.list([
               Interpreter.matchOperator(
@@ -3448,41 +3440,33 @@ describe("matchOperator()", () => {
             ]),
             vars,
           ),
-        "MatchError",
-        "no match of right hand side value: 2",
+        integer2,
       );
     });
 
     it("[1 = 1] = [2 = 1]", () => {
-      assertError(
+      const integer1 = Type.integer(1);
+
+      assertMatchError(
         () =>
           Interpreter.matchOperator(
             Type.list([
-              Interpreter.matchOperator(
-                Type.integer(1),
-                Type.integer(2),
-                vars,
-                false,
-              ),
+              Interpreter.matchOperator(integer1, Type.integer(2), vars, false),
             ]),
             Type.list([
-              Interpreter.matchOperator(
-                Type.integer(1),
-                Type.integer(1),
-                vars,
-                false,
-              ),
+              Interpreter.matchOperator(integer1, integer1, vars, false),
             ]),
             vars,
           ),
-        "MatchError",
-        "no match of right hand side value: 1",
+        integer1,
       );
     });
 
     // TODO: JavaScript error message for this case is inconsistent with Elixir error message (see test/elixir/hologram/ex_js_consistency/match_operator_test.exs)
     it("[1 = 2] = [1 = 1]", () => {
-      assertError(
+      const integer2 = Type.integer(2);
+
+      assertMatchError(
         () =>
           Interpreter.matchOperator(
             Type.list([
@@ -3494,45 +3478,30 @@ describe("matchOperator()", () => {
               ),
             ]),
             Type.list([
-              Interpreter.matchOperator(
-                Type.integer(2),
-                Type.integer(1),
-                vars,
-                false,
-              ),
+              Interpreter.matchOperator(integer2, Type.integer(1), vars, false),
             ]),
             vars,
           ),
-        "MatchError",
-        "no match of right hand side value: 2",
+        integer2,
       );
     });
 
     // TODO: JavaScript error message for this case is inconsistent with Elixir error message (see test/elixir/hologram/ex_js_consistency/match_operator_test.exs)
     it("[2 = 1] = [1 = 1]", () => {
-      assertError(
+      const integer1 = Type.integer(1);
+
+      assertMatchError(
         () =>
           Interpreter.matchOperator(
             Type.list([
-              Interpreter.matchOperator(
-                Type.integer(1),
-                Type.integer(1),
-                vars,
-                false,
-              ),
+              Interpreter.matchOperator(integer1, integer1, vars, false),
             ]),
             Type.list([
-              Interpreter.matchOperator(
-                Type.integer(1),
-                Type.integer(2),
-                vars,
-                false,
-              ),
+              Interpreter.matchOperator(integer1, Type.integer(2), vars, false),
             ]),
             vars,
           ),
-        "MatchError",
-        "no match of right hand side value: 1",
+        integer1,
       );
     });
 
