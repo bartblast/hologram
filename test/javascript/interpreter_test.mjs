@@ -2967,21 +2967,22 @@ describe("matchOperator()", () => {
     });
 
     it("left integer != right integer", () => {
+      const myInteger = Type.integer(3);
+
       // 2 = 3
-      assertError(
-        () => Interpreter.matchOperator(Type.integer(3), Type.integer(2), vars),
-        "MatchError",
-        "no match of right hand side value: 3",
+      assertMatchError(
+        () => Interpreter.matchOperator(myInteger, Type.integer(2), vars),
+        myInteger,
       );
     });
 
     it("left integer != right non-integer", () => {
+      const myAtom = Type.atom("abc");
+
       // 2 = :abc
-      assertError(
-        () =>
-          Interpreter.matchOperator(Type.atom("abc"), Type.integer(2), vars),
-        "MatchError",
-        "no match of right hand side value: :abc",
+      assertMatchError(
+        () => Interpreter.matchOperator(myAtom, Type.integer(2), vars),
+        myAtom,
       );
     });
   });
