@@ -11,7 +11,7 @@ MFAs for sorting:
 |> Enum.sort()
 */
 
-const Erlang_maps = {
+const Erlang_Maps = {
   // start get/2
   "get/2": (key, map) => {
     if (!Type.isMap(map)) {
@@ -36,4 +36,4 @@ const Erlang_maps = {
   // deps: []
 };
 
-export default Erlang_maps;
+export default Erlang_Maps;

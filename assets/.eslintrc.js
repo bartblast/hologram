@@ -11,7 +11,7 @@ module.exports = {
     Elixir_Kernel: "readonly",
     Elixir_Map: "readonly",
     Erlang: "readonly",
-    Erlang_maps: "readonly",
+    Erlang_Maps: "readonly",
   },
   overrides: [
     {
