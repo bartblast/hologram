@@ -13,7 +13,7 @@ import Type from "../../../assets/js/type.mjs";
 before(() => linkModules());
 after(() => unlinkModules());
 
-describe.only("fold/3", () => {
+describe("fold/3", () => {
   let fun, map;
 
   beforeEach(() => {
