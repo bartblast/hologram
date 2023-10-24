@@ -373,6 +373,22 @@ describe("integer()", () => {
   });
 });
 
+describe("isAnonymousFunction()", () => {
+  it("returns true for boxed anonymous function argument", () => {
+    const arg = Type.anonymousFunction(3, ["dummy_clause"], {});
+    const result = Type.isAnonymousFunction(arg);
+
+    assert.isTrue(result);
+  });
+
+  it("returns false for arguments of type other than boxed anonymous function", () => {
+    const arg = Type.integer(123);
+    const result = Type.isAnonymousFunction(arg);
+
+    assert.isFalse(result);
+  });
+});
+
 describe("isAtom()", () => {
   it("returns true for boxed atom value", () => {
     const arg = Type.atom("test");

@@ -120,6 +120,10 @@ export default class Type {
     return {type: "integer", value: value};
   }
 
+  static isAnonymousFunction(boxed) {
+    return boxed.type === "anonymous_function";
+  }
+
   static isAtom(boxed) {
     return boxed.type === "atom";
   }
