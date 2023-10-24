@@ -13,6 +13,77 @@ import Type from "../../../assets/js/type.mjs";
 before(() => linkModules());
 after(() => unlinkModules());
 
+describe.only("fold/3", () => {
+  let fun, map;
+
+  beforeEach(() => {
+    fun = Type.anonymousFunction(
+      3,
+      [
+        {
+          params: (_vars) => [
+            Type.variablePattern("key"),
+            Type.variablePattern("value"),
+            Type.variablePattern("acc"),
+          ],
+          guards: [],
+          body: (vars) =>
+            Erlang["+/2"](vars.acc, Erlang["*/2"](vars.key, vars.value)),
+        },
+      ],
+      {},
+    );
+
+    map = Type.map([
+      [Type.integer(1), Type.integer(1)],
+      [Type.integer(10), Type.integer(2)],
+      [Type.integer(100), Type.integer(3)],
+    ]);
+  });
+
+  it("reduces non-empty map", () => {
+    const result = Erlang_Maps["fold/3"](fun, Type.integer(10), map);
+    assert.deepStrictEqual(result, Type.integer(331));
+  });
+
+  it("reduces empty map", () => {
+    const result = Erlang_Maps["fold/3"](fun, Type.integer(10), Type.map([]));
+    assert.deepStrictEqual(result, Type.integer(10));
+  });
+
+  it("raises ArgumentError if the first argument is not an anonymous function", () => {
+    assertBoxedError(
+      () =>
+        Erlang_Maps["fold/3"](Type.atom("abc"), Type.integer(10), Type.map([])),
+      "ArgumentError",
+      "errors were found at the given arguments:\n\n* 1st argument: not a fun that takes three arguments",
+    );
+  });
+
+  it("raises ArgumentError if the first argument is an anonymous function with arity different than 3", () => {
+    fun = Type.anonymousFunction(
+      0,
+      [{params: (_vars) => [], guards: [], body: (_vars) => Type.atom("abc")}],
+      {},
+    );
+
+    assertBoxedError(
+      () =>
+        Erlang_Maps["fold/3"](Type.atom("abc"), Type.integer(10), Type.map([])),
+      "ArgumentError",
+      "errors were found at the given arguments:\n\n* 1st argument: not a fun that takes three arguments",
+    );
+  });
+
+  it("raises BadMapError if the third argument is not a map", () => {
+    assertBoxedError(
+      () => Erlang_Maps["fold/3"](fun, Type.integer(10), Type.atom("abc")),
+      "BadMapError",
+      "expected a map, got: :abc",
+    );
+  });
+});
+
 describe("from_list/1", () => {
   it("builds a map from the given list of key-value tuples", () => {
     const list = Type.list([

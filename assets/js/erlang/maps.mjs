@@ -3,15 +3,28 @@
 import Interpreter from "../interpreter.mjs";
 import Type from "../type.mjs";
 
-/*
-MFAs for sorting:
-[
-  {:maps, :get, 2}
-]
-|> Enum.sort()
-*/
-
 const Erlang_Maps = {
+  // start fold/3
+  "fold/3": (fun, initialAcc, map) => {
+    if (!Type.isAnonymousFunction(fun) || fun.arity !== 3) {
+      Interpreter.raiseArgumentError(
+        "errors were found at the given arguments:\n\n* 1st argument: not a fun that takes three arguments",
+      );
+    }
+
+    if (!Type.isMap(map)) {
+      Interpreter.raiseBadMapError(map);
+    }
+
+    return Object.values(map.data).reduce(
+      (acc, [key, value]) =>
+        Interpreter.callAnonymousFunction(fun, [key, value, acc]),
+      initialAcc,
+    );
+  },
+  // end fold/3
+  // deps: []
+
   // start from_list/1
   "from_list/1": (list) => {
     if (!Type.isList(list)) {
