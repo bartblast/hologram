@@ -216,6 +216,13 @@ const Erlang = {
   // end is_list/1
   // deps: []
 
+  // start is_map/1
+  "is_map/1": (term) => {
+    return Type.boolean(Type.isMap(term));
+  },
+  // end is_map/1
+  // deps: []
+
   // start is_number/1
   "is_number/1": (term) => {
     return Type.boolean(Type.isNumber(term));

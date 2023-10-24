@@ -545,20 +545,18 @@ describe("isList()", () => {
 });
 
 describe("isMap()", () => {
-  it("returns true for boxed map value", () => {
-    const map = Type.map([
+  it("returns true if the term is a map", () => {
+    const term = Type.map([
       [Type.atom("a"), Type.integer(1)],
       [Type.atom("b"), Type.integer(2)],
     ]);
 
-    const result = Type.isMap(map);
-
-    assert.isTrue(result);
+    assert.isTrue(Type.isMap(term));
   });
 
-  it("returns false for values of types other than boxed map", () => {
-    const result = Type.isMap(Type.atom("abc"));
-    assert.isFalse(result);
+  it("returns false if the term is not a map", () => {
+    const term = Type.atom("abc");
+    assert.isFalse(Type.isMap(term));
   });
 });
 
