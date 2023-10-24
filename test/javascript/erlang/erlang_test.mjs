@@ -698,6 +698,18 @@ describe("is_atom/1", () => {
   });
 });
 
+describe("is_bitstring/1", () => {
+  it("returns true if the term is a bitstring", () => {
+    const term = Type.bitstring("abc");
+    assertBoxedTrue(Erlang["is_bitstring/1"](term));
+  });
+
+  it("returns false if the term is not a bitstring", () => {
+    const term = Type.atom("abc");
+    assertBoxedFalse(Erlang["is_bitstring/1"](term));
+  });
+});
+
 describe("is_float/1", () => {
   it("proxies to Type.isFloat() and casts the result to boxed boolean", () => {
     const term = Type.float(1.23);

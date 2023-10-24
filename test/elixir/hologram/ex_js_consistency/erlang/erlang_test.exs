@@ -7,6 +7,16 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
 
   use Hologram.Test.BasicCase, async: true
 
+  describe ":erlang.is_bitstring/1" do
+    test "returns true if the term is a bistring" do
+      assert :erlang.is_bitstring(<<2::size(7)>>) == true
+    end
+
+    test "returns false if the term is not a bitstring" do
+      assert :erlang.is_bitstring(:abc) == false
+    end
+  end
+
   describe ":erlang.is_map/1" do
     test "returns true if the term is a map" do
       assert :erlang.is_map(%{a: 1, b: 2}) == true

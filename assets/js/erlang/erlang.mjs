@@ -195,6 +195,13 @@ const Erlang = {
   // end is_atom/1
   // deps: []
 
+  // start is_bitstring/1
+  "is_bitstring/1": (term) => {
+    return Type.boolean(Type.isBitstring(term));
+  },
+  // end is_bitstring/1
+  // deps: []
+
   // start is_float/1
   "is_float/1": (term) => {
     return Type.boolean(Type.isFloat(term));
