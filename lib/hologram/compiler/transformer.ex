@@ -708,7 +708,6 @@ defmodule Hologram.Compiler.Transformer do
       end
 
     params_ir = transform_list(params, %{context | pattern?: true})
-    # params_ir = transform_list(params, context)
 
     %IR.FunctionDefinition{
       name: name,
