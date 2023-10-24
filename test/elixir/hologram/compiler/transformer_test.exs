@@ -214,6 +214,38 @@ defmodule Hologram.Compiler.TransformerTest do
                ]
              }
     end
+
+    test "params are transformed as patterns in clauses without guards" do
+      ast = ast("fn %x{} -> :ok end")
+
+      assert %IR.AnonymousFunctionType{
+               clauses: [
+                 %IR.FunctionClause{
+                   params: [
+                     %IR.MapType{
+                       data: [{%IR.AtomType{value: :__struct__}, %IR.Variable{name: :x}}]
+                     }
+                   ]
+                 }
+               ]
+             } = transform(ast, %Context{})
+    end
+
+    test "params are transformed as patterns in clauses with guards" do
+      ast = ast("fn %x{} when true -> :ok end")
+
+      assert %IR.AnonymousFunctionType{
+               clauses: [
+                 %IR.FunctionClause{
+                   params: [
+                     %IR.MapType{
+                       data: [{%IR.AtomType{value: :__struct__}, %IR.Variable{name: :x}}]
+                     }
+                   ]
+                 }
+               ]
+             } = transform(ast, %Context{})
+    end
   end
 
   describe "atom type" do
@@ -1691,6 +1723,18 @@ defmodule Hologram.Compiler.TransformerTest do
                  }
                }
              }
+    end
+
+    test "params are transformed as patterns" do
+      ast = ast("def my_fun(%x{}), do: :ok")
+
+      assert %IR.FunctionDefinition{
+               clause: %IR.FunctionClause{
+                 params: [
+                   %IR.MapType{data: [{%IR.AtomType{value: :__struct__}, %IR.Variable{name: :x}}]}
+                 ]
+               }
+             } = transform(ast, %Context{})
     end
   end
 
