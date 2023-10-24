@@ -128,6 +128,10 @@ export default class Type {
     return boxed.type === "atom";
   }
 
+  static isBitstring(boxed) {
+    return boxed.type === "bitstring";
+  }
+
   static isBitstringPattern(boxed) {
     return boxed.type === "bitstring_pattern";
   }

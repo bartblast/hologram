@@ -405,6 +405,18 @@ describe("isAtom()", () => {
   });
 });
 
+describe("isBitstring()", () => {
+  it("returns true if the term is a bitstring", () => {
+    const term = Type.bitstring("abc");
+    assert.isTrue(Type.isBitstring(term));
+  });
+
+  it("returns false if the term is not a bitstring", () => {
+    const term = Type.atom("abc");
+    assert.isFalse(Type.isBitstring(term));
+  });
+});
+
 describe("isBitstringPattern()", () => {
   it("returns true if the given object is a boxed bitstring pattern", () => {
     const result = Type.isBitstringPattern(Type.bitstringPattern([]));
