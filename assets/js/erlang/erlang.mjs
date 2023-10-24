@@ -12,28 +12,41 @@ import Type from "../type.mjs";
 /*
 MFAs for sorting:
 [
+  {:erlang, :*, 2},
   {:erlang, :+, 2},
   {:erlang, :-, 2},
   {:erlang, :"/=", 2},
   {:erlang, :<, 2},
   {:erlang, :"=:=", 2},
   {:erlang, :==, 2},
-  {:erlang, :>, 2},
-  {:erlang, :error, 1},
-  {:erlang, :error, 2},
-  {:erlang, :hd, 1},
-  {:erlang, :is_atom, 1},
-  {:erlang, :is_float, 1},
-  {:erlang, :is_integer, 1},
-  {:erlang, :is_number, 1},
-  {:erlang, :length, 1},
-  {:erlang, :tl, 1},
-  {:erlang, :==, 2}
+  {:erlang, :>, 2}
 ]
 |> Enum.sort()
 */
 
 const Erlang = {
+  // start */2
+  "*/2": (left, right) => {
+    if (!Type.isNumber(left) || !Type.isNumber(right)) {
+      Interpreter.raiseArgumentError(
+        `bad argument in arithmetic expression: ${Interpreter.inspect(
+          left,
+        )} * ${Interpreter.inspect(right)}`,
+      );
+    }
+
+    const [type, leftValue, rightValue] = Type.maybeNormalizeNumberTerms(
+      left,
+      right,
+    );
+
+    const result = leftValue.value * rightValue.value;
+
+    return type === "float" ? Type.float(result) : Type.integer(result);
+  },
+  // end */2
+  // deps: []
+
   // start +/2
   "+/2": (left, right) => {
     const [type, leftValue, rightValue] = Type.maybeNormalizeNumberTerms(

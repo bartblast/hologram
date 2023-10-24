@@ -17,6 +17,64 @@ import Type from "../../../assets/js/type.mjs";
 before(() => linkModules());
 after(() => unlinkModules());
 
+describe("*/2", () => {
+  it("multiplies integer by integer", () => {
+    const left = Type.integer(2);
+    const right = Type.integer(3);
+
+    const result = Erlang["*/2"](left, right);
+    const expected = Type.integer(6);
+
+    assert.deepStrictEqual(result, expected);
+  });
+
+  it("multiplies integer by float", () => {
+    const left = Type.integer(2);
+    const right = Type.float(3.0);
+
+    const result = Erlang["*/2"](left, right);
+    const expected = Type.float(6.0);
+
+    assert.deepStrictEqual(result, expected);
+  });
+
+  it("multiplies float by integer", () => {
+    const left = Type.float(2.0);
+    const right = Type.integer(3);
+
+    const result = Erlang["*/2"](left, right);
+    const expected = Type.float(6.0);
+
+    assert.deepStrictEqual(result, expected);
+  });
+
+  it("miltiplies float by float", () => {
+    const left = Type.float(2.0);
+    const right = Type.float(3.0);
+
+    const result = Erlang["*/2"](left, right);
+    const expected = Type.float(6.0);
+
+    assert.deepStrictEqual(result, expected);
+  });
+
+  it("raises ArgumentError if the first argument is not a number", () => {
+    assertBoxedError(
+      () => Erlang["*/2"](Type.atom("abc"), Type.integer(123)),
+      "ArgumentError",
+      "bad argument in arithmetic expression: :abc * 123",
+    );
+  });
+
+  it("raises ArgumentError if the second argument is not a number", () => {
+    assertBoxedError(
+      () => Erlang["*/2"](Type.integer(123), Type.atom("abc")),
+      "ArgumentError",
+      "bad argument in arithmetic expression: 123 * :abc",
+    );
+  });
+});
+
 describe("+/2", () => {
   it("adds integer and integer", () => {
     const left = Type.integer(1);
