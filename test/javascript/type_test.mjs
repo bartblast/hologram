@@ -690,14 +690,14 @@ describe("isTruthy()", () => {
 });
 
 describe("isTuple()", () => {
-  it("returns true for boxed tuple value", () => {
-    const tuple = Type.tuple([Type.integer(1), Type.integer(2)]);
-    assert.isTrue(Type.isTuple(tuple));
+  it("returns true if the term is a tuple", () => {
+    const term = Type.tuple([Type.integer(1), Type.integer(2)]);
+    assert.isTrue(Type.isTuple(term));
   });
 
-  it("returns false for values of types other than boxed tuple", () => {
-    const result = Type.isList(Type.atom("abc"));
-    assert.isFalse(result);
+  it("returns false if the term is not a tuple", () => {
+    const term = Type.atom("abc");
+    assert.isFalse(Type.isTuple(term));
   });
 });
 

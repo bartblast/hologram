@@ -17,6 +17,10 @@ import Type from "../../../assets/js/type.mjs";
 before(() => linkModules());
 after(() => unlinkModules());
 
+// IMPORTANT!
+// Each JavaScript test has a related Elixir consistency test in test/elixir/hologram/ex_js_consistency/erlang/erlang_test.exs
+// Always update both together.
+
 describe("*/2", () => {
   it("multiplies integer by integer", () => {
     const left = Type.integer(2);
@@ -731,6 +735,18 @@ describe("is_number/1", () => {
     const expected = Type.boolean(Type.isNumber(term));
 
     assert.deepStrictEqual(result, expected);
+  });
+});
+
+describe("is_tuple/1", () => {
+  it("returns true if the term is a tuple", () => {
+    const term = Type.tuple([Type.integer(1), Type.integer(2)]);
+    assertBoxedTrue(Erlang["is_tuple/1"](term));
+  });
+
+  it("returns false if the term is not a tuple", () => {
+    const term = Type.atom("abc");
+    assertBoxedFalse(Erlang["is_tuple/1"](term));
   });
 });
 

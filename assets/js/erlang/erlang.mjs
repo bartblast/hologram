@@ -223,6 +223,13 @@ const Erlang = {
   // end is_number/1
   // deps: []
 
+  // start is_tuple/1
+  "is_tuple/1": (term) => {
+    return Type.boolean(Type.isTuple(term));
+  },
+  // end is_tuple/1
+  // deps: []
+
   // start length/1
   "length/1": (list) => {
     if (!Type.isList(list)) {
