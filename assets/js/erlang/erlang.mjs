@@ -244,6 +244,13 @@ const Erlang = {
   // end is_number/1
   // deps: []
 
+  // start is_pid/1
+  "is_pid/1": (term) => {
+    return Type.boolean(Type.isPid(term));
+  },
+  // end is_pid/1
+  // deps: []
+
   // start is_tuple/1
   "is_tuple/1": (term) => {
     return Type.boolean(Type.isTuple(term));

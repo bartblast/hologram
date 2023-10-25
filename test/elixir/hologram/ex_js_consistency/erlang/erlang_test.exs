@@ -37,6 +37,16 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
     end
   end
 
+  describe ":erlang.is_pid/1" do
+    test "returns true if the term is a pid" do
+      assert :erlang.is_pid(self()) == true
+    end
+
+    test "returns false if the term is not a pid" do
+      assert :erlang.is_pid(:abc) == false
+    end
+  end
+
   describe ":erlang.is_tuple/1" do
     test "returns true if the term is a tuple" do
       assert :erlang.is_tuple({1, 2}) == true
