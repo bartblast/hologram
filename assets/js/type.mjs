@@ -245,6 +245,10 @@ export default class Type {
     return [type, value1, value2];
   }
 
+  static pid(value, origin = "server") {
+    return {type: "pid", origin: origin, value: value};
+  }
+
   static string(value) {
     return {type: "string", value: value};
   }

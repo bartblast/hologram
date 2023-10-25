@@ -819,6 +819,13 @@ describe("maybeNormalizeNumberTerms()", () => {
   });
 });
 
+it("pid()", () => {
+  const result = Type.pid("0.11.222", "client");
+  const expected = {type: "pid", origin: "client", value: "0.11.222"};
+
+  assert.deepStrictEqual(result, expected);
+});
+
 it("string()", () => {
   const result = Type.string("test");
   const expected = {type: "string", value: "test"};
