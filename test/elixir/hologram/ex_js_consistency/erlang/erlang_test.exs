@@ -47,6 +47,16 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
     end
   end
 
+  describe ":erlang.is_port/1" do
+    test "returns true if the term is a port" do
+      assert :erlang.is_port(port("0.11")) == true
+    end
+
+    test "returns false if the term is not a port" do
+      assert :erlang.is_port(:abc) == false
+    end
+  end
+
   describe ":erlang.is_tuple/1" do
     test "returns true if the term is a tuple" do
       assert :erlang.is_tuple({1, 2}) == true
