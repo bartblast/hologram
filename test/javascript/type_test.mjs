@@ -626,6 +626,18 @@ describe("isNumber()", () => {
   });
 });
 
+describe("isPid()", () => {
+  it("returns true if the term is a pid", () => {
+    const term = Type.pid("0.11.222");
+    assert.isTrue(Type.isPid(term));
+  });
+
+  it("returns false if the term is not a pid", () => {
+    const term = Type.atom("abc");
+    assert.isFalse(Type.isPid(term));
+  });
+});
+
 describe("isProperList()", () => {
   it("returns true for proper boxed list", () => {
     const arg = Type.list([Type.integer(1), Type.integer(2)]);

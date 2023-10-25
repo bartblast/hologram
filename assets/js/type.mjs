@@ -183,6 +183,10 @@ export default class Type {
     return Type.isInteger(boxed) || Type.isFloat(boxed);
   }
 
+  static isPid(boxed) {
+    return boxed.type === "pid";
+  }
+
   static isProperList(boxedValue) {
     return Type.isList(boxedValue) && boxedValue.isProper === true;
   }
