@@ -638,6 +638,18 @@ describe("isPid()", () => {
   });
 });
 
+describe("isPort()", () => {
+  it("returns true if the term is a port", () => {
+    const term = Type.port("0.11");
+    assert.isTrue(Type.isPort(term));
+  });
+
+  it("returns false if the term is not a port", () => {
+    const term = Type.atom("abc");
+    assert.isFalse(Type.isPort(term));
+  });
+});
+
 describe("isProperList()", () => {
   it("returns true for proper boxed list", () => {
     const arg = Type.list([Type.integer(1), Type.integer(2)]);
