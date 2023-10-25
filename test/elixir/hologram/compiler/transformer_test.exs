@@ -1954,15 +1954,20 @@ defmodule Hologram.Compiler.TransformerTest do
 
   test "pid" do
     pid = pid("0.11.222")
-    ast = Macro.escape(pid)
 
-    assert transform(ast, %Context{}) == %IR.PIDType{value: pid}
+    assert transform(pid, %Context{}) == %IR.PIDType{value: pid}
   end
 
   test "pin operator" do
     ast = ast("^my_var")
 
     assert transform(ast, %Context{}) == %IR.PinOperator{name: :my_var}
+  end
+
+  test "port" do
+    port = port("0.11")
+
+    assert transform(port, %Context{}) == %IR.PortType{value: port}
   end
 
   describe "remote function call" do

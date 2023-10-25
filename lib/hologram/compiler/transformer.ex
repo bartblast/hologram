@@ -302,6 +302,10 @@ defmodule Hologram.Compiler.Transformer do
     %IR.PinOperator{name: name}
   end
 
+  def transform(value, _context) when is_port(value) do
+    %IR.PortType{value: value}
+  end
+
   def transform(value, _context) when is_binary(value) do
     %IR.StringType{value: value}
   end
