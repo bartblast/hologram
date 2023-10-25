@@ -1952,6 +1952,13 @@ defmodule Hologram.Compiler.TransformerTest do
     end
   end
 
+  test "pid" do
+    pid = IEx.Helpers.pid("0.11.222")
+    ast = Macro.escape(pid)
+
+    assert transform(ast, %Context{}) == %IR.PIDType{value: pid}
+  end
+
   test "pin operator" do
     ast = ast("^my_var")
 

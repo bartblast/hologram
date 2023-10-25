@@ -294,6 +294,10 @@ defmodule Hologram.Compiler.Transformer do
     }
   end
 
+  def transform(value, _context) when is_pid(value) do
+    %IR.PIDType{value: value}
+  end
+
   def transform({:^, _meta_1, [{name, _meta_2, _args}]}, _context) do
     %IR.PinOperator{name: name}
   end
