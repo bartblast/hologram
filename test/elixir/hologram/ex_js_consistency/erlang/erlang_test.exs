@@ -17,6 +17,16 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
     end
   end
 
+  describe ":erlang.is_function/1" do
+    test "returns true if the term is an anonymous function" do
+      assert :erlang.is_function(fn x -> x end) == true
+    end
+
+    test "returns false if the term is not an anonymous function" do
+      assert :erlang.is_function(:abc) == false
+    end
+  end
+
   describe ":erlang.is_map/1" do
     test "returns true if the term is a map" do
       assert :erlang.is_map(%{a: 1, b: 2}) == true

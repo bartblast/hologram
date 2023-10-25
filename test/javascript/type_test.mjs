@@ -374,18 +374,14 @@ describe("integer()", () => {
 });
 
 describe("isAnonymousFunction()", () => {
-  it("returns true for boxed anonymous function argument", () => {
-    const arg = Type.anonymousFunction(3, ["dummy_clause"], {});
-    const result = Type.isAnonymousFunction(arg);
-
-    assert.isTrue(result);
+  it("returns true if the term is an anonymous function", () => {
+    const term = Type.anonymousFunction(3, ["dummy_clause"], {});
+    assert.isTrue(Type.isAnonymousFunction(term));
   });
 
-  it("returns false for arguments of type other than boxed anonymous function", () => {
-    const arg = Type.integer(123);
-    const result = Type.isAnonymousFunction(arg);
-
-    assert.isFalse(result);
+  it("returns false if the term is not an anonymous function", () => {
+    const term = Type.atom("abc");
+    assert.isFalse(Type.isAnonymousFunction(term));
   });
 });
 

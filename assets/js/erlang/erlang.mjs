@@ -209,6 +209,13 @@ const Erlang = {
   // end is_float/1
   // deps: []
 
+  // start is_function/1
+  "is_function/1": (term) => {
+    return Type.boolean(Type.isAnonymousFunction(term));
+  },
+  // end is_function/1
+  // deps: []
+
   // start is_integer/1
   "is_integer/1": (term) => {
     return Type.boolean(Type.isInteger(term));

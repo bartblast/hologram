@@ -720,6 +720,18 @@ describe("is_float/1", () => {
   });
 });
 
+describe("is_function/1", () => {
+  it("returns true if the term is an anonymous function", () => {
+    const term = Type.anonymousFunction(3, ["dummy_clause"], {});
+    assertBoxedTrue(Erlang["is_function/1"](term));
+  });
+
+  it("returns false if the term is not an anonymous function", () => {
+    const term = Type.atom("abc");
+    assertBoxedFalse(Erlang["is_function/1"](term));
+  });
+});
+
 describe("is_integer/1", () => {
   it("proxies to Type.isInteger() and casts the result to boxed boolean", () => {
     const term = Type.integer(123);
