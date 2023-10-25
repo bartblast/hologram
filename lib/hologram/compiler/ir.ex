@@ -34,6 +34,7 @@ defmodule Hologram.Compiler.IR do
           | IR.ModuleDefinition.t()
           | IR.PIDType.t()
           | IR.PinOperator.t()
+          | IR.PortType.t()
           | IR.RemoteFunctionCall.t()
           | IR.StringType.t()
           | IR.Try.t()
@@ -232,6 +233,12 @@ defmodule Hologram.Compiler.IR do
     defstruct [:name]
 
     @type t :: %__MODULE__{name: atom}
+  end
+
+  defmodule PortType do
+    defstruct [:value]
+
+    @type t :: %__MODULE__{value: atom}
   end
 
   defmodule RemoteFunctionCall do
