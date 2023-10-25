@@ -264,6 +264,10 @@ defmodule Hologram.Compiler.Encoder do
     |> Enum.join("\n\n")
   end
 
+  def encode(%IR.PIDType{value: value}, _context) do
+    encode_primitive_type(:pid, value, true)
+  end
+
   def encode(%IR.PinOperator{name: name}, _context) do
     "vars.#{name}"
   end
@@ -440,6 +444,14 @@ defmodule Hologram.Compiler.Encoder do
 
   defp encode_as_string(nil, false) do
     "nil"
+  end
+
+  defp encode_as_string(value, false) when is_pid(value) do
+    value
+    |> :erlang.pid_to_list()
+    |> List.delete_at(0)
+    |> List.delete_at(-1)
+    |> to_string()
   end
 
   defp encode_as_string(value, false) do
