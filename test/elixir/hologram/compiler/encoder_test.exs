@@ -1175,6 +1175,13 @@ defmodule Hologram.Compiler.EncoderTest do
     assert encode(%IR.PinOperator{name: :abc}, %Context{}) == "vars.abc"
   end
 
+  test "port" do
+    # #Port<0.11>
+    ir = %IR.PortType{value: port("0.11")}
+
+    assert encode(ir, %Context{}) == ~s/Type.port("0.11")/
+  end
+
   describe "remote function call" do
     test "called on a module alias" do
       # Aaa.Bbb.Ccc.my_fun!(1, 2)

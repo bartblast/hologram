@@ -272,6 +272,10 @@ defmodule Hologram.Compiler.Encoder do
     "vars.#{name}"
   end
 
+  def encode(%IR.PortType{value: value}, _context) do
+    encode_primitive_type(:port, value, true)
+  end
+
   def encode(
         %IR.RemoteFunctionCall{
           module: module,
@@ -450,6 +454,14 @@ defmodule Hologram.Compiler.Encoder do
     value
     |> :erlang.pid_to_list()
     |> List.delete_at(0)
+    |> List.delete_at(-1)
+    |> to_string()
+  end
+
+  defp encode_as_string(value, false) when is_port(value) do
+    value
+    |> :erlang.port_to_list()
+    |> Enum.drop(6)
     |> List.delete_at(-1)
     |> to_string()
   end
