@@ -32,6 +32,7 @@ defmodule Hologram.Compiler.IR do
           | IR.MatchPlaceholder.t()
           | IR.ModuleAttributeOperator.t()
           | IR.ModuleDefinition.t()
+          | IR.PIDType.t()
           | IR.PinOperator.t()
           | IR.RemoteFunctionCall.t()
           | IR.StringType.t()
@@ -219,6 +220,12 @@ defmodule Hologram.Compiler.IR do
     defstruct [:module, :body]
 
     @type t :: %__MODULE__{module: IR.AtomType.t(), body: IR.Block.t()}
+  end
+
+  defmodule PIDType do
+    defstruct [:value]
+
+    @type t :: %__MODULE__{value: atom}
   end
 
   defmodule PinOperator do
