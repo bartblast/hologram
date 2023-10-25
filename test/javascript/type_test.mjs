@@ -838,6 +838,13 @@ it("pid()", () => {
   assert.deepStrictEqual(result, expected);
 });
 
+it("port()", () => {
+  const result = Type.port("0.11", "client");
+  const expected = {type: "port", origin: "client", value: "0.11"};
+
+  assert.deepStrictEqual(result, expected);
+});
+
 it("string()", () => {
   const result = Type.string("test");
   const expected = {type: "string", value: "test"};

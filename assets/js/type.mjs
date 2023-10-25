@@ -253,6 +253,10 @@ export default class Type {
     return {type: "pid", origin: origin, value: value};
   }
 
+  static port(value, origin = "server") {
+    return {type: "port", origin: origin, value: value};
+  }
+
   static string(value) {
     return {type: "string", value: value};
   }
