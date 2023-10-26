@@ -292,18 +292,19 @@ defmodule Hologram.Compiler.Encoder do
   end
 
   # TODO: implement
-  def encode(%IR.Try{}, _context) do
-    "Interpreter.try()"
+  def encode(%IR.Try{} = ir, context) do
+    body_js = encode_closure(ir.body, context)
+    "Interpreter.try(#{body_js})"
   end
 
   def encode(%IR.TupleType{data: data}, context) do
-    data_str = encode_as_array(data, context)
-    "Type.tuple(#{data_str})"
+    data_js = encode_as_array(data, context)
+    "Type.tuple(#{data_js})"
   end
 
   def encode(%IR.Variable{name: name}, %{pattern?: true}) do
-    name_str = encode_as_string(name, true)
-    "Type.variablePattern(#{name_str})"
+    name_js = encode_as_string(name, true)
+    "Type.variablePattern(#{name_js})"
   end
 
   def encode(%IR.Variable{name: name}, %{pattern?: false, use_vars_snapshot?: use_vars_snapshot?}) do

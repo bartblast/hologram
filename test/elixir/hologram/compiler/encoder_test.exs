@@ -1256,6 +1256,22 @@ defmodule Hologram.Compiler.EncoderTest do
     assert encode(ir, %Context{}) == ~s/Type.bitstring("aa\\"bb\\ncc")/
   end
 
+  describe "try" do
+    test "body" do
+      ir = %IR.Try{
+        body: %IR.Block{
+          expressions: [%IR.AtomType{value: :ok}]
+        }
+      }
+
+      assert encode(ir, %Context{}) == """
+             Interpreter.try((vars) => {
+             return Type.atom("ok");
+             })\
+             """
+    end
+  end
+
   describe "tuple type" do
     test "empty" do
       # {}
