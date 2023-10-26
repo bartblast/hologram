@@ -66,4 +66,20 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
       assert :erlang.is_tuple(:abc) == false
     end
   end
+
+  describe ":erlang.orelse/2" do
+    test "returns true if the first argument is true" do
+      assert :erlang.orelse(true, :abc) == true
+    end
+
+    test "returns the second argument if the first argument is false" do
+      assert :erlang.orelse(false, :abc) == :abc
+    end
+
+    test "raises ArgumentError if the first argument is not a boolean" do
+      assert_raise ArgumentError, "argument error: nil", fn ->
+        :erlang.orelse(nil, true)
+      end
+    end
+  end
 end

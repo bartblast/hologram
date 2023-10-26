@@ -852,6 +852,26 @@ describe("map_size/1", () => {
   });
 });
 
+describe("orelse/2", () => {
+  it("returns true if the first argument is true", () => {
+    const result = Erlang["orelse/2"](Type.boolean(true), Type.atom("abc"));
+    assertBoxedTrue(result);
+  });
+
+  it("returns the second argument if the first argument is false", () => {
+    const result = Erlang["orelse/2"](Type.boolean(false), Type.atom("abc"));
+    assert.deepStrictEqual(result, Type.atom("abc"));
+  });
+
+  it("raises ArgumentError if the first argument is not a boolean", () => {
+    assertBoxedError(
+      () => Erlang["orelse/2"](Type.nil(), Type.boolean(true)),
+      "ArgumentError",
+      "argument error: nil",
+    );
+  });
+});
+
 describe("tl/1", () => {
   describe("proper list", () => {
     it("1 item", () => {

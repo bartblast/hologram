@@ -289,6 +289,19 @@ const Erlang = {
   // end map_size/1
   // deps: []
 
+  // start orelse/2
+  "orelse/2": (left, right) => {
+    if (!Type.isBoolean(left)) {
+      Interpreter.raiseArgumentError(
+        `argument error: ${Interpreter.inspect(left)}`,
+      );
+    }
+
+    return Type.isTrue(left) ? left : right;
+  },
+  // end orelse/2
+  // deps: []
+
   // start tl/1
   "tl/1": (list) => {
     if (!Type.isList(list) || list.data.length === 0) {
