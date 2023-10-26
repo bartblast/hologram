@@ -7,7 +7,7 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
 
   use Hologram.Test.BasicCase, async: true
 
-  describe ":erlang.is_bitstring/1" do
+  describe "is_bitstring/1" do
     test "returns true if the term is a bistring" do
       assert :erlang.is_bitstring(<<2::size(7)>>) == true
     end
@@ -17,7 +17,7 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
     end
   end
 
-  describe ":erlang.is_function/1" do
+  describe "is_function/1" do
     test "returns true if the term is an anonymous function" do
       assert :erlang.is_function(fn x -> x end) == true
     end
@@ -27,7 +27,7 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
     end
   end
 
-  describe ":erlang.is_map/1" do
+  describe "is_map/1" do
     test "returns true if the term is a map" do
       assert :erlang.is_map(%{a: 1, b: 2}) == true
     end
@@ -37,7 +37,7 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
     end
   end
 
-  describe ":erlang.is_pid/1" do
+  describe "is_pid/1" do
     test "returns true if the term is a pid" do
       assert :erlang.is_pid(self()) == true
     end
@@ -47,7 +47,7 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
     end
   end
 
-  describe ":erlang.is_port/1" do
+  describe "is_port/1" do
     test "returns true if the term is a port" do
       assert :erlang.is_port(port("0.11")) == true
     end
@@ -57,7 +57,7 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
     end
   end
 
-  describe ":erlang.is_tuple/1" do
+  describe "is_tuple/1" do
     test "returns true if the term is a tuple" do
       assert :erlang.is_tuple({1, 2}) == true
     end
@@ -67,7 +67,7 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
     end
   end
 
-  describe ":erlang.orelse/2" do
+  describe "orelse/2" do
     test "returns true if the first argument is true" do
       assert :erlang.orelse(true, :abc) == true
     end
