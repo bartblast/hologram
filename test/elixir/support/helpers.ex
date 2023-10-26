@@ -18,6 +18,7 @@ defmodule Hologram.Test.Helpers do
   defdelegate parsed_tags(markup), to: Parser, as: :parse_markup
   defdelegate pid(str), to: IEx.Helpers
   defdelegate port(str), to: IEx.Helpers
+  defdelegate ref(str), to: IEx.Helpers
 
   @doc """
   Removes all files and directories inside the given directory.
