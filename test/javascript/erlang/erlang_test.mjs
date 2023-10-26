@@ -802,6 +802,18 @@ describe("is_port/1", () => {
   });
 });
 
+describe("is_reference/1", () => {
+  it("returns true if the term is a reference", () => {
+    const term = Type.reference("0.1.2.3");
+    assertBoxedTrue(Erlang["is_reference/1"](term));
+  });
+
+  it("returns false if the term is not a reference", () => {
+    const term = Type.atom("abc");
+    assertBoxedFalse(Erlang["is_reference/1"](term));
+  });
+});
+
 describe("is_tuple/1", () => {
   it("returns true if the term is a tuple", () => {
     const term = Type.tuple([Type.integer(1), Type.integer(2)]);

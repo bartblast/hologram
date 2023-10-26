@@ -258,6 +258,13 @@ const Erlang = {
   // end is_port/1
   // deps: []
 
+  // start is_reference/1
+  "is_reference/1": (term) => {
+    return Type.boolean(Type.isReference(term));
+  },
+  // end is_reference/1
+  // deps: []
+
   // start is_tuple/1
   "is_tuple/1": (term) => {
     return Type.boolean(Type.isTuple(term));

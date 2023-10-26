@@ -57,6 +57,16 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
     end
   end
 
+  describe "is_reference/1" do
+    test "returns true if the term is a reference" do
+      assert :erlang.is_reference(make_ref()) == true
+    end
+
+    test "returns false if the term is not a reference" do
+      assert :erlang.is_reference(:abc) == false
+    end
+  end
+
   describe "is_tuple/1" do
     test "returns true if the term is a tuple" do
       assert :erlang.is_tuple({1, 2}) == true
