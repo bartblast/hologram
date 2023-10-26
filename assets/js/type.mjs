@@ -261,6 +261,10 @@ export default class Type {
     return {type: "port", origin: origin, value: value};
   }
 
+  static reference(value, origin = "server") {
+    return {type: "reference", origin: origin, value: value};
+  }
+
   static string(value) {
     return {type: "string", value: value};
   }

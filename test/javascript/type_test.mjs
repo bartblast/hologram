@@ -857,6 +857,13 @@ it("port()", () => {
   assert.deepStrictEqual(result, expected);
 });
 
+it("reference()", () => {
+  const result = Type.reference("0.1.2.3", "client");
+  const expected = {type: "reference", origin: "client", value: "0.1.2.3"};
+
+  assert.deepStrictEqual(result, expected);
+});
+
 it("string()", () => {
   const result = Type.string("test");
   const expected = {type: "string", value: "test"};
