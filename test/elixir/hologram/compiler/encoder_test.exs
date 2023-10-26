@@ -1182,6 +1182,13 @@ defmodule Hologram.Compiler.EncoderTest do
     assert encode(ir, %Context{}) == ~s/Type.port("0.11")/
   end
 
+  test "reference" do
+    # #Reference<0.1.2.3>
+    ir = %IR.ReferenceType{value: ref("0.1.2.3")}
+
+    assert encode(ir, %Context{}) == ~s/Type.reference("0.1.2.3")/
+  end
+
   describe "remote function call" do
     test "called on a module alias" do
       # Aaa.Bbb.Ccc.my_fun!(1, 2)

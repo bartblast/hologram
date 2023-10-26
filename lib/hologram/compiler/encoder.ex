@@ -276,6 +276,10 @@ defmodule Hologram.Compiler.Encoder do
     encode_primitive_type(:port, value, true)
   end
 
+  def encode(%IR.ReferenceType{value: value}, _context) do
+    encode_primitive_type(:reference, value, true)
+  end
+
   def encode(
         %IR.RemoteFunctionCall{
           module: module,
@@ -479,6 +483,14 @@ defmodule Hologram.Compiler.Encoder do
     value
     |> :erlang.port_to_list()
     |> Enum.drop(6)
+    |> List.delete_at(-1)
+    |> to_string()
+  end
+
+  defp encode_as_string(value, false) when is_reference(value) do
+    value
+    |> :erlang.ref_to_list()
+    |> Enum.drop(5)
     |> List.delete_at(-1)
     |> to_string()
   end
