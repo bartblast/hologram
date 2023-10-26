@@ -673,6 +673,18 @@ describe("isProperList()", () => {
   });
 });
 
+describe("isReference()", () => {
+  it("returns true if the term is a reference", () => {
+    const term = Type.reference("0.1.2.3");
+    assert.isTrue(Type.isReference(term));
+  });
+
+  it("returns false if the term is not a reference", () => {
+    const term = Type.atom("abc");
+    assert.isFalse(Type.isReference(term));
+  });
+});
+
 describe("isTrue()", () => {
   it("returns true for boxed true value", () => {
     const arg = Type.atom("true");

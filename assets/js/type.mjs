@@ -195,6 +195,10 @@ export default class Type {
     return Type.isList(boxedValue) && boxedValue.isProper === true;
   }
 
+  static isReference(boxed) {
+    return boxed.type === "reference";
+  }
+
   static isTrue(boxed) {
     return Type.isAtom(boxed) && boxed.value === "true";
   }
