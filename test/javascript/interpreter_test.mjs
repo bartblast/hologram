@@ -4722,3 +4722,34 @@ describe("takeVarsSnapshot()", () => {
     assert.deepStrictEqual(vars, expected);
   });
 });
+
+describe("try()", () => {
+  let vars;
+
+  beforeEach(() => {
+    vars = {
+      a: Type.integer(1),
+      b: Type.integer(2),
+    };
+  });
+
+  it("body without any errors, throws or exists / vars are not mutated in body", () => {
+    // try do
+    //   a = 3
+    //   :ok
+    // end
+    const body = (vars) => {
+      Interpreter.matchOperator(
+        Type.integer(3n),
+        Type.variablePattern("a"),
+        vars,
+      );
+      return Type.atom("ok");
+    };
+
+    const result = Interpreter.try(body, [], [], [], null, vars);
+
+    assert.deepStrictEqual(result, Type.atom("ok"));
+    assert.deepStrictEqual(vars.a, Type.integer(1));
+  });
+});
