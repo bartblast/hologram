@@ -385,6 +385,7 @@ export default class Interpreter {
     } finally {
       // TODO: handle after block
       if (afterBlock) {
+        // eslint-disable-next-line no-unsafe-finally
         throw new Error(
           "try expression after block is not yet implemented in Hologram",
         );
