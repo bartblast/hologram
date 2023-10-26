@@ -35,6 +35,7 @@ defmodule Hologram.Compiler.IR do
           | IR.PIDType.t()
           | IR.PinOperator.t()
           | IR.PortType.t()
+          | IR.ReferenceType.t()
           | IR.RemoteFunctionCall.t()
           | IR.StringType.t()
           | IR.Try.t()
@@ -226,7 +227,7 @@ defmodule Hologram.Compiler.IR do
   defmodule PIDType do
     defstruct [:value]
 
-    @type t :: %__MODULE__{value: atom}
+    @type t :: %__MODULE__{value: pid}
   end
 
   defmodule PinOperator do
@@ -238,7 +239,13 @@ defmodule Hologram.Compiler.IR do
   defmodule PortType do
     defstruct [:value]
 
-    @type t :: %__MODULE__{value: atom}
+    @type t :: %__MODULE__{value: port}
+  end
+
+  defmodule ReferenceType do
+    defstruct [:value]
+
+    @type t :: %__MODULE__{value: reference}
   end
 
   defmodule RemoteFunctionCall do
