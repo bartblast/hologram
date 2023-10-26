@@ -592,9 +592,11 @@ export default class Interpreter {
     return Interpreter.#handleMatchResult(right, vars, rootMatch);
   }
 
-  // TODO: implement
   static #matchRescueClause(_clause, _error, _vars) {
-    return false;
+    // TODO: handle rescue clauses
+    throw new Error(
+      "try expression rescue clauses are not yet implemented in Hologram",
+    );
   }
 
   static #matchVariablePattern(right, left, vars, rootMatch) {
