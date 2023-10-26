@@ -372,9 +372,45 @@ export default class Interpreter {
     vars.__snapshot__ = Interpreter.cloneVars(vars);
   }
 
-  // TODO: implement
-  static try() {
-    throw new Error("try syntax is not yet implemented");
+  static try(body, rescueClauses, catchClauses, elseClauses, afterBlock, vars) {
+    let result;
+
+    try {
+      const varsClone = Interpreter.cloneVars(vars);
+      result = body(varsClone);
+    } catch (error) {
+      result =
+        Interpreter.#evaluateRescueClauses(rescueClauses, error, vars) ||
+        Interpreter.#evaluateCatchClauses(catchClauses, error, vars);
+    } finally {
+      // TODO: handle after block
+      if (afterBlock) {
+        throw new Error(
+          "try expression after block is not yet implemented in Hologram",
+        );
+      }
+    }
+
+    if (elseClauses.length === 0) {
+      return result;
+    } else {
+      // TODO: handle else clauses
+      throw new Error(
+        "try expression else clauses are not yet implemented in Hologram",
+      );
+    }
+  }
+
+  static #evaluateCatchClauses(clauses, error, vars) {
+    for (const clause of clauses) {
+      const varsClone = Interpreter.cloneVars(vars);
+
+      if (Interpreter.#matchCatchClause(clause, error, varsClone)) {
+        return clause.body(varsClone);
+      }
+    }
+
+    return false;
   }
 
   static #evaluateGuards(guards, vars) {
@@ -385,6 +421,18 @@ export default class Interpreter {
     for (const guard of guards) {
       if (Type.isTrue(guard(vars))) {
         return true;
+      }
+    }
+
+    return false;
+  }
+
+  static #evaluateRescueClauses(clauses, error, vars) {
+    for (const clause of clauses) {
+      const varsClone = Interpreter.cloneVars(vars);
+
+      if (Interpreter.#matchRescueClause(clause, error, varsClone)) {
+        return clause.body(varsClone);
       }
     }
 
@@ -478,6 +526,13 @@ export default class Interpreter {
     return Interpreter.#handleMatchResult(right, vars, rootMatch);
   }
 
+  static #matchCatchClause(_clause, _error, _vars) {
+    // TODO: handle catch clauses
+    throw new Error(
+      "try expression catch clauses are not yet implemented in Hologram",
+    );
+  }
+
   static #matchConsPattern(right, left, vars, rootMatch) {
     if (!Type.isList(right) || right.data.length === 0) {
       throw new HologramMatchError(right);
@@ -534,6 +589,11 @@ export default class Interpreter {
     }
 
     return Interpreter.#handleMatchResult(right, vars, rootMatch);
+  }
+
+  // TODO: implement
+  static #matchRescueClause(_clause, _error, _vars) {
+    return false;
   }
 
   static #matchVariablePattern(right, left, vars, rootMatch) {
