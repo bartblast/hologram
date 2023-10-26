@@ -1258,16 +1258,168 @@ defmodule Hologram.Compiler.EncoderTest do
 
   describe "try" do
     test "body" do
+      # try do
+      #   :ok
+      # end
       ir = %IR.Try{
         body: %IR.Block{
           expressions: [%IR.AtomType{value: :ok}]
-        }
+        },
+        rescue_clauses: [],
+        catch_clauses: [],
+        else_clauses: [],
+        after_block: nil
       }
 
       assert encode(ir, %Context{}) == """
              Interpreter.try((vars) => {
              return Type.atom("ok");
-             })\
+             }, [])\
+             """
+    end
+
+    test "single rescue clause / without variable / with single module" do
+      # try do
+      #   :ok
+      # rescue
+      #   RuntimeError -> :error
+      # end
+      ir = %IR.Try{
+        body: %IR.Block{
+          expressions: [%IR.AtomType{value: :ok}]
+        },
+        rescue_clauses: [
+          %IR.TryRescueClause{
+            variable: nil,
+            modules: [%IR.AtomType{value: RuntimeError}],
+            body: %IR.Block{
+              expressions: [%IR.AtomType{value: :error}]
+            }
+          }
+        ],
+        catch_clauses: [],
+        else_clauses: [],
+        after_block: nil
+      }
+
+      assert encode(ir, %Context{}) == """
+             Interpreter.try((vars) => {
+             return Type.atom("ok");
+             }, [{variable: null, modules: [Type.atom("Elixir.RuntimeError")], body: (vars) => {
+             return Type.atom("error");
+             }}])\
+             """
+    end
+
+    test "multiple rescue clauses" do
+      # try do
+      #   :ok
+      # rescue
+      #   ArgumentError -> :error_1
+      #   RuntimeError -> :error_2
+      # end
+      ir = %IR.Try{
+        body: %IR.Block{
+          expressions: [%IR.AtomType{value: :ok}]
+        },
+        rescue_clauses: [
+          %IR.TryRescueClause{
+            variable: nil,
+            modules: [%IR.AtomType{value: ArgumentError}],
+            body: %IR.Block{
+              expressions: [%IR.AtomType{value: :error_1}]
+            }
+          },
+          %IR.TryRescueClause{
+            variable: nil,
+            modules: [%IR.AtomType{value: RuntimeError}],
+            body: %IR.Block{
+              expressions: [%IR.AtomType{value: :error_2}]
+            }
+          }
+        ],
+        catch_clauses: [],
+        else_clauses: [],
+        after_block: nil
+      }
+
+      assert encode(ir, %Context{}) == """
+             Interpreter.try((vars) => {
+             return Type.atom("ok");
+             }, [{variable: null, modules: [Type.atom("Elixir.ArgumentError")], body: (vars) => {
+             return Type.atom("error_1");
+             }}, {variable: null, modules: [Type.atom("Elixir.RuntimeError")], body: (vars) => {
+             return Type.atom("error_2");
+             }}])\
+             """
+    end
+
+    test "with variable" do
+      # try do
+      #   :ok
+      # rescue
+      #   e -> :error
+      # end
+      ir = %IR.Try{
+        body: %IR.Block{
+          expressions: [%IR.AtomType{value: :ok}]
+        },
+        rescue_clauses: [
+          %IR.TryRescueClause{
+            variable: %IR.Variable{name: :e},
+            modules: [],
+            body: %IR.Block{
+              expressions: [%IR.AtomType{value: :error}]
+            }
+          }
+        ],
+        catch_clauses: [],
+        else_clauses: [],
+        after_block: nil
+      }
+
+      assert encode(ir, %Context{}) == """
+             Interpreter.try((vars) => {
+             return Type.atom("ok");
+             }, [{variable: Type.variablePattern("e"), modules: [], body: (vars) => {
+             return Type.atom("error");
+             }}])\
+             """
+    end
+
+    test "with multiple modules" do
+      # try do
+      #   :ok
+      # rescue
+      #   [ArgumentError, RuntimeError]-> :error
+      # end
+      ir = %IR.Try{
+        body: %IR.Block{
+          expressions: [%IR.AtomType{value: :ok}]
+        },
+        rescue_clauses: [
+          %IR.TryRescueClause{
+            variable: nil,
+            modules: [
+              %IR.AtomType{value: ArgumentError},
+              %IR.AtomType{value: RuntimeError}
+            ],
+            body: %IR.Block{
+              expressions: [%IR.AtomType{value: :error}]
+            }
+          }
+        ],
+        catch_clauses: [],
+        else_clauses: [],
+        after_block: nil
+      }
+
+      assert encode(ir, %Context{}) == """
+             Interpreter.try((vars) => {
+             return Type.atom("ok");
+             }, [{variable: null, modules: [Type.atom("Elixir.ArgumentError"), Type.atom("Elixir.RuntimeError")], body: (vars) => {
+             return Type.atom("error");
+             }}])\
              """
     end
   end

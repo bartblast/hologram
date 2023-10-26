@@ -291,10 +291,26 @@ defmodule Hologram.Compiler.Encoder do
     encode_primitive_type(:bitstring, value, true)
   end
 
-  # TODO: implement
+  # TODO: catch_clauses, else_clauses, after_block
   def encode(%IR.Try{} = ir, context) do
     body_js = encode_closure(ir.body, context)
-    "Interpreter.try(#{body_js})"
+    rescue_clauses_js = encode_as_array(ir.rescue_clauses, context)
+
+    "Interpreter.try(#{body_js}, #{rescue_clauses_js})"
+  end
+
+  def encode(%IR.TryRescueClause{} = ir, context) do
+    variable_js =
+      if ir.variable do
+        encode(ir.variable, %{context | pattern?: true})
+      else
+        "null"
+      end
+
+    modules_js = encode_as_array(ir.modules, context)
+    body_js = encode_closure(ir.body, context)
+
+    "{variable: #{variable_js}, modules: #{modules_js}, body: #{body_js}}"
   end
 
   def encode(%IR.TupleType{data: data}, context) do
