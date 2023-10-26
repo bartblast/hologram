@@ -1953,7 +1953,7 @@ defmodule Hologram.Compiler.TransformerTest do
   end
 
   test "pid" do
-    pid = pid("0.11.222")
+    pid = self()
 
     assert transform(pid, %Context{}) == %IR.PIDType{value: pid}
   end
@@ -1968,6 +1968,12 @@ defmodule Hologram.Compiler.TransformerTest do
     port = port("0.11")
 
     assert transform(port, %Context{}) == %IR.PortType{value: port}
+  end
+
+  test "reference" do
+    reference = make_ref()
+
+    assert transform(reference, %Context{}) == %IR.ReferenceType{value: reference}
   end
 
   describe "remote function call" do

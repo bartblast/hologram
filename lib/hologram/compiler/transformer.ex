@@ -306,6 +306,10 @@ defmodule Hologram.Compiler.Transformer do
     %IR.PortType{value: value}
   end
 
+  def transform(value, _context) when is_reference(value) do
+    %IR.ReferenceType{value: value}
+  end
+
   def transform(value, _context) when is_binary(value) do
     %IR.StringType{value: value}
   end
