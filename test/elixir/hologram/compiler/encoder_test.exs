@@ -1274,7 +1274,7 @@ defmodule Hologram.Compiler.EncoderTest do
       assert encode(ir, %Context{}) == """
              Interpreter.try((vars) => {
              return Type.atom("ok");
-             }, [])\
+             }, [], [], [], null)\
              """
     end
 
@@ -1307,7 +1307,7 @@ defmodule Hologram.Compiler.EncoderTest do
              return Type.atom("ok");
              }, [{variable: null, modules: [Type.atom("Elixir.RuntimeError")], body: (vars) => {
              return Type.atom("error");
-             }}])\
+             }}], [], [], null)\
              """
     end
 
@@ -1350,7 +1350,7 @@ defmodule Hologram.Compiler.EncoderTest do
              return Type.atom("error_1");
              }}, {variable: null, modules: [Type.atom("Elixir.RuntimeError")], body: (vars) => {
              return Type.atom("error_2");
-             }}])\
+             }}], [], [], null)\
              """
     end
 
@@ -1383,7 +1383,7 @@ defmodule Hologram.Compiler.EncoderTest do
              return Type.atom("ok");
              }, [{variable: Type.variablePattern("e"), modules: [], body: (vars) => {
              return Type.atom("error");
-             }}])\
+             }}], [], [], null)\
              """
     end
 
@@ -1419,7 +1419,7 @@ defmodule Hologram.Compiler.EncoderTest do
              return Type.atom("ok");
              }, [{variable: null, modules: [Type.atom("Elixir.ArgumentError"), Type.atom("Elixir.RuntimeError")], body: (vars) => {
              return Type.atom("error");
-             }}])\
+             }}], [], [], null)\
              """
     end
   end
