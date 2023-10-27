@@ -31,7 +31,6 @@ defmodule Hologram.Compiler.Analyzer do
   def analyze(%IR.MatchOperator{left: left, right: right}, context, info) do
     left_info = analyze(left, %{context | pattern?: true}, info)
     right_info = analyze(right, context, info)
-
     merge_info(left_info, right_info)
   end
 
@@ -43,11 +42,15 @@ defmodule Hologram.Compiler.Analyzer do
   end
 
   def analyze(ir, context, info) when is_map(ir) do
-    analyze(Map.to_list(ir), context, info)
+    ir
+    |> Map.to_list()
+    |> analyze(context, info)
   end
 
   def analyze(ir, context, info) when is_tuple(ir) do
-    analyze(Tuple.to_list(ir), context, info)
+    ir
+    |> Tuple.to_list()
+    |> analyze(context, info)
   end
 
   def analyze(_ir, _context, info), do: info

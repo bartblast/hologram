@@ -30,12 +30,13 @@ defmodule Hologram.Runtime.AssetPathRegistry do
 
   @impl GenServer
   def init(nil) do
-    ets_table_name = impl().ets_table_name()
-    ETS.create_named_table(ets_table_name)
-
-    impl().static_dir_path()
-    |> find_assets()
-    |> Enum.each(fn {key, value} -> ETS.put(ets_table_name, key, value) end)
+    impl().ets_table_name()
+    |> tap(&ETS.create_named_table(&1))
+    |> then(fn ets_table_name ->
+      impl().static_dir_path()
+      |> find_assets()
+      |> Enum.each(fn {key, value} -> ETS.put(ets_table_name, key, value) end)
+    end)
 
     {:ok, nil}
   end
@@ -92,16 +93,19 @@ defmodule Hologram.Runtime.AssetPathRegistry do
   end
 
   defp find_assets(static_dir_path) do
-    regex = ~r"#{Regex.escape(static_dir_path)}/(.+)\-([0-9a-f]{32})(.+)$"
-
     static_dir_path
-    |> FileUtils.list_files_recursively()
-    |> Stream.map(&Regex.run(regex, &1))
-    |> Stream.filter(& &1)
-    |> Stream.map(&List.to_tuple/1)
-    |> stream_reject_page_bundles()
-    |> stream_build_asset_entries()
-    |> Enum.to_list()
+    |> Regex.escape()
+    |> then(&~r"#{&1}/(.+)\-([0-9a-f]{32})(.+)$")
+    |> then(fn regex ->
+      static_dir_path
+      |> FileUtils.list_files_recursively()
+      |> Stream.map(&Regex.run(regex, &1))
+      |> Stream.filter(& &1)
+      |> Stream.map(&List.to_tuple/1)
+      |> stream_reject_page_bundles()
+      |> stream_build_asset_entries()
+      |> Enum.to_list()
+    end)
   end
 
   defp impl do
@@ -115,8 +119,6 @@ defmodule Hologram.Runtime.AssetPathRegistry do
   end
 
   defp stream_reject_page_bundles(file_infos) do
-    Stream.reject(file_infos, fn {_file_path, prefix, _digest, _suffix} ->
-      prefix == "hologram/page"
-    end)
+    Stream.reject(file_infos, &(elem(&1, 1) == "hologram/page"))
   end
 end

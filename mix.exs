@@ -15,15 +15,12 @@ defmodule Hologram.MixProject do
   end
 
   def application do
+    opts = [extra_applications: [:logger]]
+
     if dep?() do
-      [
-        mod: {Hologram.Runtime.Application, []},
-        extra_applications: [:logger]
-      ]
+      [mod: {Hologram.Runtime.Application, []}] ++ opts
     else
-      [
-        extra_applications: [:logger]
-      ]
+      opts
     end
   end
 
@@ -90,19 +87,13 @@ defmodule Hologram.MixProject do
     ]
   end
 
-  defp test_js(args) do
-    cmd =
-      if Enum.empty?(args) do
-        ["test"]
-      else
-        ["run", "test-file", "../#{hd(args)}"]
-      end
+  defp test_js([]), do: do_test_js(["test"])
+  defp test_js(args), do: do_test_js(["run", "test-file", "../#{hd(args)}"])
 
-    opts = [cd: "assets", into: IO.stream(:stdio, :line)]
-    System.cmd("npm", ["install"], opts)
-    {_result, status} = System.cmd("npm", cmd, opts)
-
-    if status > 0 do
+  defp do_test_js(args) do
+    with opts <- [cd: "assets", into: IO.stream(:stdio, :line)],
+         System.cmd("npm", ~w"install --loglevel=warn --no-audit --no-fund --no-progress", opts),
+         {_result, status} when status > 0 <- System.cmd("npm", ["--quiet" | args], opts) do
       Mix.raise("JavaScript tests failed!")
     end
   end

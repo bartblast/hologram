@@ -4,7 +4,9 @@ defmodule Hologram.Commons.ProcessUtils do
   """
   @spec running?(atom) :: boolean
   def running?(name) do
-    pid = Process.whereis(name)
-    if pid, do: Process.alive?(pid), else: false
+    name
+    |> Process.whereis()
+    |> then(&(&1 && Process.alive?(&1)))
+    |> then(&(&1 || false))
   end
 end

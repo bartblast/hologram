@@ -8,11 +8,8 @@ defmodule Hologram.Router.Helpers do
   @spec asset_path(String.t()) :: String.t()
   def asset_path(static_path) do
     case AssetPathRegistry.lookup(static_path) do
-      {:ok, asset_path} ->
-        asset_path
-
-      :error ->
-        "/" <> static_path
+      {:ok, asset_path} -> asset_path
+      :error -> Path.join("/", static_path)
     end
   end
 end

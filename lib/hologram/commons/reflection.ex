@@ -30,7 +30,9 @@ defmodule Hologram.Commons.Reflection do
   """
   @spec build_dir() :: String.t()
   def build_dir do
-    "#{root_path()}/_build/#{env()}/lib/hologram/priv"
+    :hologram
+    |> :code.lib_dir(:priv)
+    |> to_string()
   end
 
   @doc """
@@ -71,17 +73,9 @@ defmodule Hologram.Commons.Reflection do
   def elixir_module?(term)
 
   def elixir_module?(term) when is_atom(term) do
-    if alias?(term) do
-      case Code.ensure_loaded(term) do
-        {:module, ^term} ->
-          true
-
-        _fallback ->
-          false
-      end
-    else
-      false
-    end
+    term
+    |> alias?()
+    |> ensure_loaded(term)
   end
 
   def elixir_module?(_term), do: false
@@ -115,25 +109,24 @@ defmodule Hologram.Commons.Reflection do
   def erlang_module?(term)
 
   def erlang_module?(term) when is_atom(term) do
-    starts_with_lowercase? =
-      term
-      |> to_string()
-      |> StringUtils.starts_with_lowercase?()
-
-    if starts_with_lowercase? do
-      case Code.ensure_loaded(term) do
-        {:module, ^term} ->
-          true
-
-        _fallback ->
-          false
-      end
-    else
-      false
-    end
+    term
+    |> to_string()
+    |> StringUtils.starts_with_lowercase?()
+    |> ensure_loaded(term)
   end
 
   def erlang_module?(_term), do: false
+
+  @spec ensure_loaded(boolean, module) :: boolean
+  defp ensure_loaded(result, term) do
+    result
+    |> then(&(&1 && Code.ensure_loaded(term)))
+    |> then(fn
+      {:module, ^term} -> true
+      {:error, _reason} -> false
+      false -> false
+    end)
+  end
 
   @doc """
   Returns true if the given term is a layout module (a module that has a "use Hologram.Layout" directive)
@@ -177,7 +170,7 @@ defmodule Hologram.Commons.Reflection do
     Application.ensure_loaded(otp_app())
 
     list_loaded_otp_apps()
-    |> Kernel.--([:hex])
+    |> then(&(&1 -- [:hex]))
     |> list_elixir_modules()
   end
 
@@ -192,10 +185,10 @@ defmodule Hologram.Commons.Reflection do
       app
       |> Application.spec()
       |> Keyword.fetch!(:modules)
-      |> Kernel.++(acc)
+      |> then(&(&1 ++ acc))
     end)
     |> Enum.filter(&alias?/1)
-    |> Kernel.--(@ignored_modules)
+    |> then(&(&1 -- @ignored_modules))
     |> Enum.filter(&BeamFile.exists?/1)
   end
 
@@ -215,8 +208,7 @@ defmodule Hologram.Commons.Reflection do
   """
   @spec list_loaded_otp_apps() :: list(:atom)
   def list_loaded_otp_apps do
-    apps_info = Application.loaded_applications()
-    Enum.map(apps_info, fn {app, _description, _version} -> app end)
+    Enum.map(Application.loaded_applications(), &elem(&1, 0))
   end
 
   @doc """
@@ -245,8 +237,7 @@ defmodule Hologram.Commons.Reflection do
 
     protocol
     |> Protocol.extract_impls(paths)
-    # credo:disable-for-next-line Credo.Check.Warning.UnsafeToAtom
-    |> Enum.map(&Module.concat(protocol, &1))
+    |> Enum.map(&Module.safe_concat(protocol, &1))
   end
 
   @doc """
@@ -289,22 +280,16 @@ defmodule Hologram.Commons.Reflection do
   """
   @spec module_beam_defs(module) :: list(tuple)
   def module_beam_defs(module) do
-    debug_info =
-      module
-      |> :code.which()
-      |> BeamFile.debug_info()
+    error_message = "BEAM file doesn't exist for module: #{module}"
 
-    case debug_info do
-      {:ok, %{definitions: definitions}} ->
-        definitions
-
-      {:error, :no_debug_info} ->
-        []
-
-      {:error, :non_existing} ->
-        raise Hologram.TemplateSyntaxError,
-          message: "BEAM file doesn't exist for module: #{module}"
-    end
+    module
+    |> :code.which()
+    |> BeamFile.debug_info()
+    |> then(fn
+      {:ok, %{definitions: definitions}} -> definitions
+      {:error, :no_debug_info} -> []
+      {:error, :non_existing} -> raise Hologram.TemplateSyntaxError, message: error_message
+    end)
   end
 
   @doc """
@@ -341,10 +326,8 @@ defmodule Hologram.Commons.Reflection do
       "Aaa.Bbb"
   """
   @spec module_name(module()) :: String.t()
-  def module_name(module) do
-    module
-    |> Module.split()
-    |> Enum.join(".")
+  def module_name(module) when is_atom(module) do
+    inspect(module)
   end
 
   @doc """
@@ -403,7 +386,7 @@ defmodule Hologram.Commons.Reflection do
   """
   @spec release_static_path() :: String.t()
   def release_static_path do
-    release_priv_path() <> "/static"
+    Path.join(release_priv_path(), "static")
   end
 
   @doc """

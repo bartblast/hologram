@@ -54,7 +54,7 @@ defmodule Hologram.Template.Helpers do
   """
   @spec void_element?(String.t()) :: boolean
   def void_element?(tag_name) do
-    void_html_element?(tag_name) || void_svg_element?(tag_name) || tag_name == "slot"
+    Enum.any?([&void_html_element?/1, &void_svg_element?/1, &(&1 == "slot")], & &1.(tag_name))
   end
 
   defp void_html_element?(tag_name) do

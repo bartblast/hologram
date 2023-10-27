@@ -1,15 +1,30 @@
 %{
   configs: [
     %{
+      color: true,
       name: "default",
       files: %{
-        # You can give explicit globs or simply directories.
-        # In the latter case `**/*.{ex,exs}` will be used.
-        included: ["*.{ex,exs}", "config/", "lib/", "priv/", "test/"],
-        excluded: [~r"/_build/", ~r"/deps/", ~r"/node_modules/", "test/features/"]
+        excluded: ~w[.elixir_ls _build assets deps test/features],
+        included: ~w[*.{ex,exs} config lib test]
       },
+      parse_timeout: 5000,
+      plugins: [],
+      requires: [],
       strict: true,
       checks: %{
+        disabled: [
+          # Disabled until 1.x release (?)
+          {Credo.Check.Design.TagTODO, []},
+          {Credo.Check.Readability.AliasAs, []},
+          {Credo.Check.Readability.ModuleDoc, []},
+          {Credo.Check.Refactor.MapMap, []},
+          {Credo.Check.Refactor.ModuleDependencies, []},
+          # TODO: enable when Credo issue #1034 is fixed, see: https://github.com/rrrene/credo/issues/1034
+          {Credo.Check.Readability.NestedFunctionCalls, []},
+          # Not compatible with Elixir ~> 1.15
+          {Credo.Check.Refactor.MapInto, []},
+          {Credo.Check.Warning.LazyLogging, []}
+        ],
         enabled: [
           {Credo.Check.Consistency.ExceptionNames, []},
           {Credo.Check.Consistency.LineEndings, []},
@@ -55,7 +70,7 @@
           {Credo.Check.Readability.VariableNames, []},
           {Credo.Check.Readability.WithCustomTaggedTuple, []},
           {Credo.Check.Readability.WithSingleClause, []},
-          {Credo.Check.Refactor.ABCSize, []},
+          {Credo.Check.Refactor.ABCSize, [excluded_functions: ~w[tap then]]},
           {Credo.Check.Refactor.AppendSingleItem, []},
           {Credo.Check.Refactor.Apply, []},
           {Credo.Check.Refactor.CondStatements, []},
@@ -107,15 +122,6 @@
           {Credo.Check.Warning.UnusedStringOperation, []},
           {Credo.Check.Warning.UnusedTupleOperation, []},
           {Credo.Check.Warning.WrongTestFileExtension, []}
-        ],
-        disabled: [
-          {Credo.Check.Design.TagTODO, []},
-          {Credo.Check.Readability.AliasAs, []},
-          {Credo.Check.Readability.ModuleDoc, []},
-          {Credo.Check.Refactor.MapMap, []},
-          {Credo.Check.Refactor.ModuleDependencies, []},
-          # TODO: enable when Credo issue #1034 is fixed, see: https://github.com/rrrene/credo/issues/1034
-          {Credo.Check.Readability.NestedFunctionCalls, []}
         ]
       }
     }

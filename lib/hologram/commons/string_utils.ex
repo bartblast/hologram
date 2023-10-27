@@ -1,5 +1,18 @@
 defmodule Hologram.Commons.StringUtils do
   @doc """
+  Appends the suffix to the given string.
+
+  ## Examples
+
+      iex> append("abc", "xyz")
+      "abcxyz"
+  """
+  @spec append(String.t(), String.t()) :: String.t()
+  def append(str, prefix) do
+    str <> prefix
+  end
+
+  @doc """
   Prepends the prefix to the given string.
 
   ## Examples
@@ -15,8 +28,8 @@ defmodule Hologram.Commons.StringUtils do
   @doc """
   Checks whether a string starts with a lowercase letter.
 
-  - This function uses the `String.next_grapheme/1` function to extract the first letter of the string.
-  - It converts the first letter to lowercase using `String.downcase/1` and compares it with the original first letter to determine if it is lowercase.
+  - This function uses a binary pattern matching to extract the first UTF-8 character of the string.
+  - It converts the first character to lowercase using `String.downcase/1` and compares it with the original character to determine if it is lowercase.
   - If the input string is empty, the function returns `false`.
 
   ## Parameters
@@ -36,14 +49,10 @@ defmodule Hologram.Commons.StringUtils do
       true
   """
   @spec starts_with_lowercase?(String.t()) :: boolean
-  def starts_with_lowercase?(str) do
-    case String.next_grapheme(str) do
-      {first_letter, _rest} ->
-        String.downcase(first_letter) == first_letter
+  def starts_with_lowercase?(""), do: false
 
-      nil ->
-        false
-    end
+  def starts_with_lowercase?(<<first_char::utf8, _rest::binary>>) do
+    String.downcase(<<first_char::utf8>>) == <<first_char::utf8>>
   end
 
   @doc """
@@ -56,6 +65,26 @@ defmodule Hologram.Commons.StringUtils do
   """
   @spec wrap(String.t(), String.t(), String.t()) :: String.t()
   def wrap(str, left, right) do
-    left <> str <> right
+    str
+    |> prepend(left)
+    |> append(right)
+  end
+
+  @doc """
+  Unwraps the given string with one string on the left side and another string on the right side.
+
+  ## Examples
+
+      iex> unwrap("cdabef", "cd", "ef")
+      "ab"
+
+      iex> unwrap("ab", "cd", "ef")
+      "ab"
+  """
+  @spec unwrap(String.t(), String.t(), String.t()) :: String.t()
+  def unwrap(str, left, right) do
+    str
+    |> String.replace_prefix(left, "")
+    |> String.replace_suffix(right, "")
   end
 end

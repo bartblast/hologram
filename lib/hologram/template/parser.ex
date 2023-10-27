@@ -23,6 +23,37 @@ defmodule Hologram.Template.Parser do
   and include a markup snippet that will allow us to reproduce the issue.
   """
 
+  @unclosed_tag_error_details """
+  Reason:
+  Unclosed start tag.
+
+  Hint:
+  Close the start tag with '>' character.
+  """
+
+  @missing_attribute_name_error_details """
+  Reason:
+  Missing attribute name.
+
+  Hint:
+  Specify the attribute name before the '=' character.
+  """
+
+  @unescaped_lt_character_error_details """
+  Reason:
+  Unescaped '<' character inside text node.
+
+  Hint:
+  To escape use HTML entity: '&lt;'.
+  """
+
+  @unescaped_gt_character_error_details """
+  Reason:
+  Unescaped '>' character inside text node.
+
+  Hint:
+  To escape use HTML entity: '&gt;'.
+  """
   @type parsed_tag ::
           {:block_end
            | :block_start
@@ -140,18 +171,22 @@ defmodule Hologram.Template.Parser do
   end
 
   def parse_tokens(%{raw?: true} = context, :attribute_assignment, [{:symbol, "{"} = token | rest]) do
-    tag_type = Helpers.tag_type(context.tag_name)
-    node_name = if tag_type == :element, do: "attribute", else: "property"
+    context.tag_name
+    |> Helpers.tag_type()
+    |> then(fn
+      :element -> "attribute"
+      _tag_type -> "property"
+    end)
+    |> then(fn type ->
+      """
+      Reason:
+      Expression #{type} value inside raw block detected.
 
-    details = """
-    Reason:
-    Expression #{node_name} value inside raw block detected.
-
-    Hint:
-    Either wrap the #{node_name} value with double quotes or remove the parent raw block".
-    """
-
-    raise_error(details, context, :attribute_assignment, token, rest)
+      Hint:
+      Either wrap the #{type} value with double quotes or remove the parent raw block".
+      """
+    end)
+    |> raise_error(context, :attribute_assignment, token, rest)
   end
 
   def parse_tokens(context, :attribute_assignment, [{:symbol, "{"} = token | rest]) do
@@ -383,15 +418,7 @@ defmodule Hologram.Template.Parser do
   # --- START TAG ---
 
   def parse_tokens(context, :start_tag, []) do
-    details = """
-    Reason:
-    Unclosed start tag.
-
-    Hint:
-    Close the start tag with '>' character.
-    """
-
-    raise_error(details, context, :start_tag, nil, [])
+    raise_error(@unclosed_tag_error_details, context, :start_tag, nil, [])
   end
 
   def parse_tokens(context, :start_tag, [{:whitespace, _} = token | rest]) do
@@ -401,15 +428,7 @@ defmodule Hologram.Template.Parser do
   end
 
   def parse_tokens(context, :start_tag, [{:symbol, "="} = token | rest]) do
-    details = """
-    Reason:
-    Missing attribute name.
-
-    Hint:
-    Specify the attribute name before the '=' character.
-    """
-
-    raise_error(details, context, :start_tag, token, rest)
+    raise_error(@missing_attribute_name_error_details, context, :start_tag, token, rest)
   end
 
   def parse_tokens(context, :start_tag, [{:symbol, "/>"} = token | rest]) do
@@ -593,27 +612,11 @@ defmodule Hologram.Template.Parser do
   end
 
   def parse_tokens(%{script?: false} = context, :text, [{:symbol, "<"} = token | rest]) do
-    details = """
-    Reason:
-    Unescaped '<' character inside text node.
-
-    Hint:
-    To escape use HTML entity: '&lt;'.
-    """
-
-    raise_error(details, context, :text, token, rest)
+    raise_error(@unescaped_lt_character_error_details, context, :text, token, rest)
   end
 
   def parse_tokens(%{script?: false} = context, :text, [{:symbol, ">"} = token | rest]) do
-    details = """
-    Reason:
-    Unescaped '>' character inside text node.
-
-    Hint:
-    To escape use HTML entity: '&gt;'.
-    """
-
-    raise_error(details, context, :text, token, rest)
+    raise_error(@unescaped_gt_character_error_details, context, :text, token, rest)
   end
 
   def parse_tokens(context, :text, [token | rest]) do
@@ -652,29 +655,30 @@ defmodule Hologram.Template.Parser do
   end
 
   defp add_attribute_value_part(context, type) do
-    part = {type, encode_tokens(context.token_buffer)}
-    %{context | attribute_value: [part | context.attribute_value]}
+    context.token_buffer
+    |> encode_tokens()
+    |> then(&%{context | attribute_value: [{type, &1} | context.attribute_value]})
   end
 
   defp add_block_start(context) do
-    expression = encode_tokens(context.token_buffer)
-    new_tag = {:block_start, {context.block_name, expression}}
-    add_processed_tag(context, new_tag)
+    context.token_buffer
+    |> encode_tokens()
+    |> then(&{:block_start, {context.block_name, &1}})
+    |> then(&add_processed_tag(context, &1))
   end
 
   defp add_block_end(context, block_name) do
-    new_tag = {:block_end, block_name}
-    add_processed_tag(context, new_tag)
+    add_processed_tag(context, {:block_end, block_name})
   end
 
   defp add_end_tag(context) do
-    new_tag = {:end_tag, context.tag_name}
-    add_processed_tag(context, new_tag)
+    add_processed_tag(context, {:end_tag, context.tag_name})
   end
 
   defp add_expression_tag(%{token_buffer: token_buffer} = context) do
-    new_tag = {:expression, encode_tokens(token_buffer)}
-    add_processed_tag(context, new_tag)
+    token_buffer
+    |> encode_tokens()
+    |> then(&add_processed_tag(context, {:expression, &1}))
   end
 
   defp add_processed_tag(%{processed_tags: processed_tags} = context, tag) do
@@ -685,16 +689,11 @@ defmodule Hologram.Template.Parser do
     %{context | processed_tokens: [token | processed_tokens]}
   end
 
-  defp add_self_closing_tag(context) do
-    attributes = Enum.reverse(context.attributes)
-    new_tag = {:self_closing_tag, {context.tag_name, attributes}}
-    add_processed_tag(context, new_tag)
-  end
-
-  defp add_start_tag(context) do
-    attributes = Enum.reverse(context.attributes)
-    new_tag = {:start_tag, {context.tag_name, attributes}}
-    add_processed_tag(context, new_tag)
+  defp add_tag(context, type) do
+    context.attributes
+    |> Enum.reverse()
+    |> then(&{type, {context.tag_name, &1}})
+    |> then(&add_processed_tag(context, &1))
   end
 
   defp buffer_token(%{token_buffer: token_buffer} = context, token) do
@@ -731,27 +730,23 @@ defmodule Hologram.Template.Parser do
   end
 
   defp flush_attribute(context) do
-    new_attr = {context.attribute_name, Enum.reverse(context.attribute_value)}
-
-    %{
-      context
-      | attribute_name: nil,
-        attribute_value: [],
-        attributes: [new_attr | context.attributes]
-    }
+    context.attribute_value
+    |> Enum.reverse()
+    |> then(&{context.attribute_name, &1})
+    |> then(&%{context | attributes: [&1 | context.attributes]})
+    |> then(&Map.merge(&1, %{attribute_name: nil, attribute_value: []}))
   end
 
   defp join_tokens(tokens) do
     Enum.map_join(tokens, "", fn {_type, value} -> value end)
   end
 
+  defp maybe_add_text_tag(%{token_buffer: []} = context), do: context
+
   defp maybe_add_text_tag(%{token_buffer: token_buffer} = context) do
-    if Enum.any?(token_buffer) do
-      text_tag = {:text, encode_tokens(token_buffer)}
-      add_processed_tag(context, text_tag)
-    else
-      context
-    end
+    token_buffer
+    |> encode_tokens()
+    |> then(&add_processed_tag(context, {:text, &1}))
   end
 
   defp maybe_disable_script_mode(context, "script") do
@@ -798,17 +793,13 @@ defmodule Hologram.Template.Parser do
   end
 
   defp parse_start_tag_end(context, token, rest, self_closing?) do
-    tag_type = Helpers.tag_type(context.tag_name)
-
-    add_tag_fun =
-      if (tag_type == :component && self_closing?) || Helpers.void_element?(context.tag_name) do
-        &add_self_closing_tag/1
-      else
-        &add_start_tag/1
-      end
-
-    context
-    |> add_tag_fun.()
+    context.tag_name
+    |> Helpers.tag_type()
+    |> then(&((&1 == :component and self_closing?) || Helpers.void_element?(context.tag_name)))
+    |> then(fn
+      true -> add_tag(context, :self_closing_tag)
+      false -> add_tag(context, :start_tag)
+    end)
     |> reset_token_buffer()
     |> add_processed_token(token)
     |> set_prev_status(:start_tag)
@@ -831,48 +822,59 @@ defmodule Hologram.Template.Parser do
     %{context | delimiter_stack: [delimiter | context.delimiter_stack]}
   end
 
+  @spec raise_error(String.t(), Context.t(), atom, Tokenizer.token(), list(Tokenizer.token())) ::
+          no_return
   defp raise_error(details, %{processed_tokens: processed_tokens} = context, status, token, rest) do
-    encoded_tokens = encode_tokens(processed_tokens)
-    encoded_tokens_len = String.length(encoded_tokens)
+    processed_tokens
+    |> encode_tokens()
+    |> get_error_fragments(token, rest)
+    |> then(fn fragments ->
+      fragments
+      |> List.first()
+      |> String.length()
+      |> then(&String.duplicate(" ", &1))
+      |> then(&{fragments, &1})
+    end)
+    |> then(fn {fragments, indent} ->
+      """
 
-    prev_fragment =
-      if encoded_tokens_len > 20 do
-        String.slice(encoded_tokens, -20..-1)
-      else
-        encoded_tokens
-      end
 
-    escaped_prev_fragment = escape_non_printable_chars(prev_fragment)
-    prev_fragment_len = String.length(escaped_prev_fragment)
-    indent = String.duplicate(" ", prev_fragment_len)
+      #{details}
+      #{Enum.join(fragments)}
+      #{indent}^
 
-    current_fragment =
+      status = #{inspect(status)}
+
+      token = #{inspect(token)}
+
+      context = #{inspect(context)}
+      """
+    end)
+    |> then(&raise TemplateSyntaxError, message: &1)
+  end
+
+  defp get_error_fragments(encode_tokens, token, rest) do
+    encode_tokens
+    |> then(&{&1, String.length(&1)})
+    |> then(fn
+      {encoded_tokens, length} when length > 20 -> String.slice(encoded_tokens, -20..-1)
+      {encoded_tokens, _length} -> encoded_tokens
+    end)
+    |> escape_non_printable_chars()
+    |> then(fn prev_fragment ->
       token
       |> List.wrap()
       |> encode_tokens()
       |> escape_non_printable_chars()
-
-    next_fragment =
+      |> then(&[prev_fragment, &1])
+    end)
+    |> then(fn [prev_fragment, current_fragment] ->
       rest
       |> join_tokens()
       |> String.slice(0, 20)
       |> escape_non_printable_chars()
-
-    message = """
-
-
-    #{details}
-    #{escaped_prev_fragment}#{current_fragment}#{next_fragment}
-    #{indent}^
-
-    status = #{inspect(status)}
-
-    token = #{inspect(token)}
-
-    context = #{inspect(context)}
-    """
-
-    raise TemplateSyntaxError, message: message
+      |> then(&[prev_fragment, current_fragment, &1])
+    end)
   end
 
   defp reset_attribute_value(context) do

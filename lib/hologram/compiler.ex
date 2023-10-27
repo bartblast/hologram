@@ -2,6 +2,7 @@ defmodule Hologram.Compiler do
   alias Hologram.Commons.CryptographicUtils
   alias Hologram.Commons.PLT
   alias Hologram.Commons.Reflection
+  alias Hologram.Commons.StringUtils
   alias Hologram.Compiler.CallGraph
   alias Hologram.Compiler.Context
   alias Hologram.Compiler.Encoder
@@ -14,25 +15,26 @@ defmodule Hologram.Compiler do
   def build_erlang_function_definition(module, function, arity, erlang_source_dir) do
     class = Encoder.encode_as_class_name(module)
 
-    file_path =
-      if module == :erlang do
-        "#{erlang_source_dir}/erlang.mjs"
-      else
-        "#{erlang_source_dir}/#{module}.mjs"
-      end
+    module
+    |> Atom.to_string()
+    |> StringUtils.append(".mjs")
+    |> then(&Path.join(erlang_source_dir, &1))
+    |> then(&{&1, File.exists?(&1)})
+    |> then(fn
+      {_file_path, false} -> nil
+      {file_path, true} -> extract_erlang_function_source_code(file_path, function, arity)
+    end)
+    |> build(module, class, function, arity)
+  end
 
-    source_code =
-      if File.exists?(file_path) do
-        extract_erlang_function_source_code(file_path, function, arity)
-      else
-        nil
-      end
+  @spec build(nil, module, String.t(), atom, arity) :: String.t()
+  defp build(nil, module, class, function, arity) do
+    ~s/Interpreter.defineNotImplementedErlangFunction("#{module}", "#{class}", "#{function}", #{arity});/
+  end
 
-    if source_code do
-      ~s/Interpreter.defineErlangFunction("#{class}", "#{function}", #{arity}, #{source_code});/
-    else
-      ~s/Interpreter.defineNotImplementedErlangFunction("#{module}", "#{class}", "#{function}", #{arity});/
-    end
+  @spec build(String.t(), module, String.t(), atom, arity) :: String.t()
+  defp build(source_code, _module, class, function, arity) do
+    ~s/Interpreter.defineErlangFunction("#{class}", "#{function}", #{arity}, #{source_code});/
   end
 
   @doc """
@@ -55,17 +57,8 @@ defmodule Hologram.Compiler do
   @spec build_page_js(module, CallGraph.t(), PLT.t(), String.t()) :: String.t()
   def build_page_js(page_module, call_graph, ir_plt, source_dir) do
     mfas = list_page_mfas(call_graph, page_module)
-    erlang_source_dir = source_dir <> "/erlang"
-
-    erlang_function_defs =
-      mfas
-      |> render_erlang_function_defs(erlang_source_dir)
-      |> render_block()
-
-    elixir_function_defs =
-      mfas
-      |> render_elixir_function_defs(ir_plt)
-      |> render_block()
+    erlang_source_dir = Path.join(source_dir, "erlang")
+    function_defs = render_function_defs(mfas, erlang_source_dir, ir_plt)
 
     """
     "use strict";
@@ -74,8 +67,7 @@ defmodule Hologram.Compiler do
       const HologramBoxedError = deps.HologramBoxedError;
       const HologramInterpreterError = deps.HologramInterpreterError;
       const Interpreter = deps.Interpreter;
-      const Type = deps.Type;#{erlang_function_defs}#{elixir_function_defs}
-
+      const Type = deps.Type;#{function_defs}
     }
 
     window.__hologramPageScriptLoaded__ = true;
@@ -89,16 +81,8 @@ defmodule Hologram.Compiler do
   @spec build_runtime_js(String.t(), CallGraph.t(), PLT.t()) :: String.t()
   def build_runtime_js(source_dir, call_graph, ir_plt) do
     mfas = list_runtime_mfas(call_graph)
-
-    erlang_function_defs =
-      mfas
-      |> render_erlang_function_defs("#{source_dir}/erlang")
-      |> render_block()
-
-    elixir_function_defs =
-      mfas
-      |> render_elixir_function_defs(ir_plt)
-      |> render_block()
+    erlang_source_dir = Path.join(source_dir, "erlang")
+    function_defs = render_function_defs(mfas, erlang_source_dir, ir_plt)
 
     """
     "use strict";
@@ -107,7 +91,7 @@ defmodule Hologram.Compiler do
     import HologramBoxedError from "#{source_dir}/errors/boxed_error.mjs";
     import HologramInterpreterError from "#{source_dir}/errors/interpreter_error.mjs";
     import Interpreter from "#{source_dir}/interpreter.mjs";
-    import Type from "#{source_dir}/type.mjs";#{erlang_function_defs}#{elixir_function_defs}
+    import Type from "#{source_dir}/type.mjs";#{function_defs}
 
     document.addEventListener("hologram:pageScriptLoaded", () => Hologram.run());
 
@@ -130,6 +114,7 @@ defmodule Hologram.Compiler do
   """
   @spec bundle(String.t(), keyword) :: {String.t(), String.t(), String.t()}
   # sobelow_skip ["CI.System"]
+
   def bundle(js, opts) do
     entry_name = opts[:entry_name]
     esbuild_path = opts[:esbuild_path]
@@ -140,45 +125,33 @@ defmodule Hologram.Compiler do
     File.mkdir_p!(tmp_dir)
     File.mkdir_p!(bundle_dir)
 
-    entry_file = tmp_dir <> "/#{entry_name}.entry.js"
+    entry_file = Path.join(tmp_dir, "#{entry_name}.entry.js")
     File.write!(entry_file, js)
+    bundle_file = Path.join(bundle_dir, "#{bundle_name}.js")
 
-    bundle_file = "#{bundle_dir}/#{bundle_name}.js"
-
-    cmd = [
-      entry_file,
-      "--bundle",
-      "--log-level=warning",
-      "--minify",
-      "--outfile=#{bundle_file}",
-      "--sourcemap",
-      "--target=es2020"
-    ]
-
-    System.cmd(esbuild_path, cmd, env: [])
+    then(
+      ~w[#{entry_file} --bundle --log-level=warning --minify --outfile=#{bundle_file} --sourcemap --target=es2020],
+      &System.cmd(esbuild_path, &1, env: [])
+    )
 
     digest =
       bundle_file
       |> File.read!()
       |> CryptographicUtils.digest(:md5, :hex)
 
-    bundle_file_with_digest = "#{bundle_dir}/#{bundle_name}-#{digest}.js"
-
-    source_map_file = bundle_file <> ".map"
+    bundle_file_with_digest = Path.join("#{bundle_dir}", "#{bundle_name}-#{digest}.js")
     source_map_file_with_digest = bundle_file_with_digest <> ".map"
 
     File.rename!(bundle_file, bundle_file_with_digest)
-    File.rename!(source_map_file, source_map_file_with_digest)
+    File.rename!(bundle_file <> ".map", source_map_file_with_digest)
 
-    js_with_replaced_source_map_url =
-      bundle_file_with_digest
-      |> File.read!()
-      |> String.replace(
-        "//# sourceMappingURL=#{bundle_name}.js.map",
-        "//# sourceMappingURL=#{bundle_name}-#{digest}.js.map"
-      )
-
-    File.write!(bundle_file_with_digest, js_with_replaced_source_map_url)
+    bundle_file_with_digest
+    |> File.read!()
+    |> String.replace(
+      "//# sourceMappingURL=#{bundle_name}.js.map",
+      "//# sourceMappingURL=#{bundle_name}-#{digest}.js.map"
+    )
+    |> tap(&File.write!(bundle_file_with_digest, &1))
 
     {digest, bundle_file_with_digest, source_map_file_with_digest}
   end
@@ -224,7 +197,11 @@ defmodule Hologram.Compiler do
   @spec install_js_deps(String.t()) :: :ok
   def install_js_deps(dir) do
     opts = [cd: dir, into: IO.stream(:stdio, :line)]
-    System.cmd("npm", ["install"], opts)
+
+    # do not show unrelevant audit/fund/progress information during tests
+    # leaving only warnings, errors and "up to date in Xs" message
+    # alternatively --loglevel=silent or --silent (short version) could be used
+    System.cmd("npm", ~w"install --loglevel=warn --no-audit --no-fund --no-progress", opts)
     :ok
   end
 
@@ -234,11 +211,11 @@ defmodule Hologram.Compiler do
   """
   @spec list_page_mfas(CallGraph.t(), module) :: list(mfa)
   def list_page_mfas(call_graph, page_module) do
-    call_graph_clone = CallGraph.clone(call_graph)
     layout_module = page_module.__layout_module__()
     runtime_mfas = list_runtime_mfas(call_graph)
 
-    call_graph_clone
+    call_graph
+    |> CallGraph.clone()
     |> CallGraph.add_edge(page_module, {page_module, :__layout_module__, 0})
     |> CallGraph.add_edge(page_module, {page_module, :__layout_props__, 0})
     |> CallGraph.add_edge(page_module, {page_module, :action, 3})
@@ -247,7 +224,7 @@ defmodule Hologram.Compiler do
     |> CallGraph.add_edge(page_module, {layout_module, :template, 0})
     |> CallGraph.reachable(page_module)
     |> Enum.filter(&is_tuple/1)
-    |> Kernel.--(runtime_mfas)
+    |> then(&(&1 -- runtime_mfas))
   end
 
   @doc """
@@ -329,51 +306,55 @@ defmodule Hologram.Compiler do
   Keeps only those IR expressions that are function definitions of the given reachable MFAs.
   """
   @spec prune_module_def(IR.ModuleDefinition.t(), list(mfa)) :: IR.ModuleDefinition.t()
-  def prune_module_def(module_def_ir, reachable_mfas) do
+  def prune_module_def(%{body: %{expressions: expressions}} = module_def_ir, reachable_mfas) do
     module = module_def_ir.module.value
 
-    module_reachable_mfas =
-      reachable_mfas
-      |> Enum.filter(fn {reachable_module, _function, _arity} -> reachable_module == module end)
-      |> MapSet.new()
+    expressions
+    |> Enum.filter(fn
+      %IR.FunctionDefinition{name: function, arity: arity} ->
+        reachable_mfas
+        |> Enum.filter(fn {reachable_module, _function, _arity} -> reachable_module == module end)
+        |> MapSet.new()
+        |> MapSet.member?({module, function, arity})
 
-    function_defs =
-      Enum.filter(module_def_ir.body.expressions, fn
-        %IR.FunctionDefinition{name: function, arity: arity} ->
-          MapSet.member?(module_reachable_mfas, {module, function, arity})
-
-        _fallback ->
-          false
-      end)
-
-    %IR.ModuleDefinition{
-      module: module_def_ir.module,
-      body: %IR.Block{expressions: function_defs}
-    }
+      _fallback ->
+        false
+    end)
+    |> then(&%IR.ModuleDefinition{module: module_def_ir.module, body: %IR.Block{expressions: &1}})
   end
 
   defp extract_erlang_function_source_code(file_path, function, arity) do
     key = "#{function}/#{arity}"
-    start_marker = "// start #{key}"
-    end_marker = "// end #{key}"
-
-    regex =
-      ~r/#{Regex.escape(start_marker)}[[:space:]]+"#{Regex.escape(key)}":[[:space:]]+(.+),[[:space:]]+#{Regex.escape(end_marker)}/s
-
+    start_marker = marker(key, "// start ")
+    end_marker = marker(key, "// end ")
     file_contents = File.read!(file_path)
 
-    case Regex.run(regex, file_contents) do
+    ~r/#{start_marker}[[:space:]]+"#{Regex.escape(key)}":[[:space:]]+(.+),[[:space:]]+#{end_marker}/s
+    |> Regex.run(file_contents)
+    |> then(fn
       [_full_capture, source_code] -> source_code
       nil -> nil
-    end
+    end)
+  end
+
+  @spec marker(String.t(), String.t()) :: String.t()
+  defp marker(key, prefix) do
+    key
+    |> StringUtils.prepend(prefix)
+    |> Regex.escape()
   end
 
   defp filter_elixir_mfas(mfas) do
-    Enum.filter(mfas, fn {module, _function, _arity} -> Reflection.alias?(module) end)
+    Enum.filter(mfas, &(not filter_erlang_mfa(&1)))
   end
 
   defp filter_erlang_mfas(mfas) do
-    Enum.filter(mfas, fn {module, _function, _arity} -> !Reflection.alias?(module) end)
+    Enum.filter(mfas, &filter_erlang_mfa/1)
+  end
+
+  @spec filter_erlang_mfa(mfa) :: boolean
+  defp filter_erlang_mfa({module, _function, _arity}) do
+    not Reflection.alias?(module)
   end
 
   defp mapset_from_plt(plt) do
@@ -388,23 +369,26 @@ defmodule Hologram.Compiler do
   end
 
   defp rebuild_module_digest_plt_entry(plt, module) do
-    data =
-      module
-      |> Reflection.module_beam_defs()
-      |> :erlang.term_to_binary(compressed: 0)
-
-    digest = CryptographicUtils.digest(data, :sha256, :binary)
-    PLT.put(plt, module, digest)
+    module
+    |> Reflection.module_beam_defs()
+    |> :erlang.term_to_binary(compressed: 0)
+    |> CryptographicUtils.digest(:sha256, :binary)
+    |> then(&PLT.put(plt, module, &1))
   end
 
   defp render_block(str) do
-    str = String.trim(str)
+    str
+    |> String.trim()
+    |> then(fn
+      "" -> ""
+      str -> StringUtils.prepend(str, "\n\n")
+    end)
+  end
 
-    if str != "" do
-      "\n\n" <> str
-    else
-      ""
-    end
+  defp render_function_defs(mfas, erlang_source_dir, ir_plt) do
+    erlang_function_defs = render_erlang_function_defs(mfas, erlang_source_dir)
+    elixir_function_defs = render_elixir_function_defs(mfas, ir_plt)
+    render_block(erlang_function_defs) <> render_block(elixir_function_defs)
   end
 
   defp render_elixir_function_defs(mfas, ir_plt) do

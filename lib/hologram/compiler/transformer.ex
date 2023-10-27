@@ -9,6 +9,7 @@ defmodule Hologram.Compiler.Transformer do
       }
   end
 
+  alias Hologram.Commons.StringUtils
   alias Hologram.Compiler.AST
   alias Hologram.Compiler.Context
   alias Hologram.Compiler.Helpers
@@ -36,18 +37,15 @@ defmodule Hologram.Compiler.Transformer do
   end
 
   def transform({:fn, _meta, clauses}, context) do
-    clauses_ir = Enum.map(clauses, &transform_anonymous_function_clause(&1, context))
-
-    arity =
+    clauses
+    |> Enum.map(&transform_anonymous_function_clause(&1, context))
+    |> then(fn clauses_ir ->
       clauses_ir
       |> hd()
       |> Map.fetch!(:params)
       |> Enum.count()
-
-    %IR.AnonymousFunctionType{
-      arity: arity,
-      clauses: clauses_ir
-    }
+      |> then(&%IR.AnonymousFunctionType{arity: &1, clauses: clauses_ir})
+    end)
   end
 
   # Local function capture
@@ -66,18 +64,20 @@ defmodule Hologram.Compiler.Transformer do
   # Partially applied function arg placeholder
   # sobelow_skip ["DOS.BinToAtom"]
   def transform({:&, meta, [index]}, context) when is_integer(index) do
+    index
+    |> to_string()
+    |> StringUtils.wrap("holo_arg_", "__")
     # credo:disable-for-next-line Credo.Check.Warning.UnsafeToAtom
-    ast = {:"holo_arg_#{index}__", meta, nil}
-    transform(ast, context)
+    |> String.to_atom()
+    |> then(&transform({&1, meta, nil}, context))
   end
 
   # Partially applied anonymous function
   def transform({:&, meta, body}, context) do
-    arity = determine_partially_applied_function_arity(body, 0)
-    args = build_function_capture_args(arity, meta)
-    ast = {:fn, meta, [{:->, meta, [args, {:__block__, [], body}]}]}
-
-    transform(ast, context)
+    body
+    |> determine_partially_applied_function_arity(0)
+    |> build_function_capture_args(meta)
+    |> then(&transform({:fn, meta, [{:->, meta, [&1, {:__block__, [], body}]}]}, context))
   end
 
   def transform(value, _context) when is_atom(value) do
@@ -85,17 +85,22 @@ defmodule Hologram.Compiler.Transformer do
   end
 
   def transform({:<<>>, _meta, segments}, context) do
-    segments_ir =
-      segments
-      |> Enum.map(&transform_bitstring_segment(&1, context))
-      |> flatten_bitstring_segments()
+    segments
+    |> Enum.map(&transform_bitstring_segment(&1, context))
+    |> Enum.flat_map(fn
+      %IR.BitstringSegment{value: %IR.BitstringType{segments: nested_segments}} ->
+        nested_segments
 
-    %IR.BitstringType{segments: segments_ir}
+      segment ->
+        [segment]
+    end)
+    |> then(&%IR.BitstringType{segments: &1})
   end
 
   def transform({:__block__, _meta, exprs}, context) do
-    exprs_ir = Enum.map(exprs, &transform(&1, context))
-    %IR.Block{expressions: exprs_ir}
+    exprs
+    |> Enum.map(&transform(&1, context))
+    |> then(&%IR.Block{expressions: &1})
   end
 
   def transform({:case, _meta, [condition, [do: clauses]]}, context) do
@@ -138,7 +143,7 @@ defmodule Hologram.Compiler.Transformer do
   end
 
   def transform({:for, _meta, parts}, context) when is_list(parts) do
-    initial_acc = %{
+    %IR.Comprehension{
       generators: [],
       filters: [],
       collectable: %IR.ListType{data: []},
@@ -146,29 +151,11 @@ defmodule Hologram.Compiler.Transformer do
       mapper: nil,
       reducer: nil
     }
-
-    %{
-      generators: generators,
-      filters: filters,
-      collectable: collectable,
-      unique: unique,
-      mapper: mapper,
-      reducer: reducer
-    } =
-      Enum.reduce(
-        parts,
-        initial_acc,
-        &transform_comprehension_part(&1, &2, context)
-      )
-
-    %IR.Comprehension{
-      generators: Enum.reverse(generators),
-      filters: Enum.reverse(filters),
-      collectable: collectable,
-      unique: unique,
-      mapper: mapper,
-      reducer: reducer
-    }
+    |> then(fn ir_comprehension ->
+      Enum.reduce(parts, ir_comprehension, &transform_comprehension_part(&1, &2, context))
+    end)
+    |> then(&%{&1 | filters: Enum.reverse(&1.filters)})
+    |> then(&%{&1 | generators: Enum.reverse(&1.generators)})
   end
 
   def transform({:for, _meta, module}, _context) when not is_list(module) do
@@ -176,9 +163,9 @@ defmodule Hologram.Compiler.Transformer do
   end
 
   def transform({:cond, _meta, [[do: clauses]]}, context) do
-    clauses_ir = Enum.map(clauses, &build_cond_clause_ir(&1, context))
-
-    %IR.Cond{clauses: clauses_ir}
+    clauses
+    |> Enum.map(&build_cond_clause_ir(&1, context))
+    |> then(&%IR.Cond{clauses: &1})
   end
 
   def transform([{:|, _meta, [head, tail]}], context) do
@@ -255,12 +242,11 @@ defmodule Hologram.Compiler.Transformer do
   end
 
   def transform({:%{}, _meta, data}, context) do
-    data_ir =
-      Enum.map(data, fn {key, value} ->
-        {transform(key, context), transform(value, context)}
-      end)
-
-    %IR.MapType{data: data_ir}
+    data
+    |> Enum.map(fn {key, value} ->
+      {transform(key, context), transform(value, context)}
+    end)
+    |> then(&%IR.MapType{data: &1})
   end
 
   def transform({:=, _meta, [left, right]}, context) do
@@ -316,24 +302,23 @@ defmodule Hologram.Compiler.Transformer do
 
   # Struct with cons operator is transformed to nested Map.merge/2 and __struct__/1 remote function calls.
   def transform({:%, _meta_1, [module, {:%{}, _meta_2, [{:|, _meta_3, [map, data]}]}]}, context) do
-    %IR.RemoteFunctionCall{
-      module: %IR.AtomType{value: Map},
-      function: :merge,
-      args: [
-        transform(map, context),
-        %IR.RemoteFunctionCall{
-          module: transform(module, context),
-          function: :__struct__,
-          args: [transform(data, context)]
-        }
-      ]
-    }
+    then(
+      %IR.RemoteFunctionCall{
+        module: transform(module, context),
+        function: :__struct__,
+        args: [transform(data, context)]
+      },
+      &%IR.RemoteFunctionCall{
+        module: %IR.AtomType{value: Map},
+        function: :merge,
+        args: [transform(map, context), &1]
+      }
+    )
   end
 
   # Struct without cons operator inside a pattern is transformed into map IR in place.
   def transform({:%, _meta, [module, {:%{}, meta, data}]}, %Context{pattern?: true} = context) do
-    new_data = [{:__struct__, module} | data]
-    transform({:%{}, meta, new_data}, context)
+    then([{:__struct__, module} | data], &transform({:%{}, meta, &1}, context))
   end
 
   # Struct without cons operator not in a pattern is transformed to __struct__/1 remote function call.
@@ -349,34 +334,11 @@ defmodule Hologram.Compiler.Transformer do
   end
 
   def transform({:try, _meta, [opts]}, context) do
-    initial_acc = %{
-      body: nil,
-      rescue_clauses: [],
-      catch_clauses: [],
-      else_clauses: [],
-      after_block: nil
-    }
-
-    %{
-      body: body,
-      rescue_clauses: rescue_clauses,
-      catch_clauses: catch_clauses,
-      else_clauses: else_clauses,
-      after_block: after_block
-    } =
-      Enum.reduce(
-        opts,
-        initial_acc,
-        &transform_try_opt(&1, &2, context)
-      )
-
-    %IR.Try{
-      body: body,
-      rescue_clauses: rescue_clauses,
-      catch_clauses: catch_clauses,
-      else_clauses: else_clauses,
-      after_block: after_block
-    }
+    Enum.reduce(
+      opts,
+      %IR.Try{catch_clauses: [], else_clauses: [], rescue_clauses: []},
+      &transform_try_opt(&1, &2, context)
+    )
   end
 
   def transform({:{}, _meta, data}, context) do
@@ -449,38 +411,17 @@ defmodule Hologram.Compiler.Transformer do
   end
 
   defp build_try_catch_clause(kind, value, guards, body, context) do
-    kind_ir =
-      if kind do
-        transform(kind, context)
-      else
-        nil
-      end
-
-    guards_ir =
-      if guards do
-        transform_guards(guards, context)
-      else
-        []
-      end
-
     %IR.TryCatchClause{
-      kind: kind_ir,
-      value: transform(value, context),
-      guards: guards_ir,
-      body: transform(body, context)
+      body: transform(body, context),
+      guards: transform_guards(guards, context),
+      kind: kind && transform(kind, context),
+      value: transform(value, context)
     }
   end
 
   defp build_try_rescue_clause(variable, modules, body, context) do
-    variable_ir =
-      if variable do
-        transform(variable, context)
-      else
-        nil
-      end
-
     %IR.TryRescueClause{
-      variable: variable_ir,
+      variable: variable && transform(variable, context),
       modules: transform_list(modules, context),
       body: transform(body, context)
     }
@@ -505,54 +446,49 @@ defmodule Hologram.Compiler.Transformer do
 
   defp determine_partially_applied_function_arity(_ast, arity), do: arity
 
-  defp flatten_bitstring_segments(segments) do
-    segments
-    |> Enum.reduce([], fn segment, acc ->
-      case segment do
-        %IR.BitstringSegment{value: %IR.BitstringType{segments: nested_segments}} ->
-          Enum.reverse(nested_segments) ++ acc
-
-        segment ->
-          [segment | acc]
-      end
-    end)
-    |> Enum.reverse()
-  end
-
   defp has_cons_operator?([]), do: false
 
   defp has_cons_operator?(list) do
     match?({:|, _meta, _args}, List.last(list))
   end
 
-  defp maybe_add_default_bitstring_type_modifier(modifiers, value) do
-    if Keyword.has_key?(modifiers, :type) do
-      modifiers
-    else
-      case value do
-        %IR.FloatType{} ->
-          [{:type, :float} | modifiers]
+  # N/A - nested bitstring and generators
+  defp maybe_add_default_bitstring_type_modifier(%type{}, modifiers)
+       when type in [IR.BitstringType, IR.Clause] do
+    modifiers
+  end
 
-        %IR.StringType{} ->
-          [{:type, :utf8} | modifiers]
+  # defaults to integer
+  defp maybe_add_default_bitstring_type_modifier(%type{}, modifiers)
+       when type in [IR.RemoteFunctionCall, IR.Variable] do
+    maybe_add_default_bitstring_type_modifier(%IR.IntegerType{}, modifiers)
+  end
 
-        _value ->
-          [{:type, :integer} | modifiers]
-      end
-    end
+  defp maybe_add_default_bitstring_type_modifier(%IR.FloatType{}, modifiers) do
+    [{:type, :float} | modifiers]
+  end
+
+  defp maybe_add_default_bitstring_type_modifier(%IR.IntegerType{}, modifiers) do
+    [{:type, :integer} | modifiers]
+  end
+
+  defp maybe_add_default_bitstring_type_modifier(%IR.StringType{}, modifiers) do
+    [{:type, :utf8} | modifiers]
   end
 
   defp transform_anonymous_function_clause(
          {:->, _meta_1, [[{:when, _meta_2, params_and_guards}], body]},
          context
        ) do
-    {guards, params} = List.pop_at(params_and_guards, -1)
-
-    %IR.FunctionClause{
-      params: transform_list(params, %{context | pattern?: true}),
-      guards: transform_guards(guards, context),
-      body: transform(body, context)
-    }
+    params_and_guards
+    |> List.pop_at(-1)
+    |> then(fn {guards, params} ->
+      %IR.FunctionClause{
+        params: transform_list(params, %{context | pattern?: true}),
+        guards: transform_guards(guards, context),
+        body: transform(body, context)
+      }
+    end)
   end
 
   defp transform_anonymous_function_clause({:->, _meta, [params, body]}, context) do
@@ -564,13 +500,15 @@ defmodule Hologram.Compiler.Transformer do
   end
 
   defp transform_bitstring_modifiers({:-, _meta, [left, right]}, context, modifiers) do
-    new_modifiers = transform_bitstring_modifiers(left, context, modifiers)
-    transform_bitstring_modifiers(right, context, new_modifiers)
+    left
+    |> transform_bitstring_modifiers(context, modifiers)
+    |> then(&transform_bitstring_modifiers(right, context, &1))
   end
 
   defp transform_bitstring_modifiers({:*, _meta, [size, unit]}, context, modifiers) do
-    size = transform(size, context)
-    [{:unit, unit} | [{:size, size} | modifiers]]
+    size
+    |> transform(context)
+    |> then(&[{:unit, unit} | [{:size, &1} | modifiers]])
   end
 
   defp transform_bitstring_modifiers({:big, _meta, nil}, _context, modifiers) do
@@ -638,30 +576,39 @@ defmodule Hologram.Compiler.Transformer do
   end
 
   defp transform_bitstring_modifiers(size, context, modifiers) do
-    [{:size, transform(size, context)} | modifiers]
+    size
+    |> transform(context)
+    |> then(&[{:size, &1} | modifiers])
   end
 
   defp transform_bitstring_segment({:"::", _meta, [left, right]}, context) do
-    value = transform(left, context)
-
-    modifiers =
-      right
-      |> transform_bitstring_modifiers(context, [])
-      |> maybe_add_default_bitstring_type_modifier(value)
-
-    %IR.BitstringSegment{value: value, modifiers: modifiers}
+    right
+    |> transform_bitstring_modifiers(context, [])
+    |> then(&transform_bitstring_segment(left, &1, context))
   end
 
   defp transform_bitstring_segment(ast, context) do
-    value = transform(ast, context)
-    modifiers = maybe_add_default_bitstring_type_modifier([], value)
+    transform_bitstring_segment(ast, [], context)
+  end
 
-    %IR.BitstringSegment{value: value, modifiers: modifiers}
+  defp transform_bitstring_segment(left, right, context) do
+    left
+    |> transform(context)
+    |> then(fn value ->
+      right
+      |> Keyword.has_key?(:type)
+      |> then(fn
+        true -> right
+        false -> maybe_add_default_bitstring_type_modifier(value, right)
+      end)
+      |> then(&%IR.BitstringSegment{modifiers: &1, value: value})
+    end)
   end
 
   defp transform_comprehension_part({:<-, _meta, _args} = ast, acc, context) do
-    clause = transform(ast, context)
-    %{acc | generators: [clause | acc.generators]}
+    ast
+    |> transform(context)
+    |> then(&%{acc | generators: [&1 | acc.generators]})
   end
 
   defp transform_comprehension_part(opts, acc, context) when is_list(opts) do
@@ -669,8 +616,9 @@ defmodule Hologram.Compiler.Transformer do
   end
 
   defp transform_comprehension_part(filter, acc, context) do
-    filter = %IR.ComprehensionFilter{expression: transform(filter, context)}
-    %{acc | filters: [filter | acc.filters]}
+    filter
+    |> transform(context)
+    |> then(&%{acc | filters: [%IR.ComprehensionFilter{expression: &1} | acc.filters]})
   end
 
   defp transform_comprehension_opt(
@@ -678,8 +626,9 @@ defmodule Hologram.Compiler.Transformer do
          acc,
          context
        ) do
-    reducer = %{acc.reducer | clauses: transform_list(clauses, context)}
-    %{acc | reducer: reducer}
+    clauses
+    |> transform_list(context)
+    |> then(&%{acc | reducer: %{acc.reducer | clauses: &1}})
   end
 
   defp transform_comprehension_opt({:do, block}, acc, context) do
@@ -691,12 +640,9 @@ defmodule Hologram.Compiler.Transformer do
   end
 
   defp transform_comprehension_opt({:reduce, initial_value}, acc, context) do
-    reducer = %{
-      initial_value: transform(initial_value, context),
-      clauses: []
-    }
-
-    %{acc | reducer: reducer}
+    initial_value
+    |> transform(context)
+    |> then(&%{acc | reducer: %{clauses: [], initial_value: &1}})
   end
 
   defp transform_comprehension_opt({:uniq, unique}, acc, context) do
@@ -704,39 +650,40 @@ defmodule Hologram.Compiler.Transformer do
   end
 
   defp transform_function_capture(function, arity, meta, context) do
-    args = build_function_capture_args(arity, meta)
-    ast = {:fn, meta, [{:->, meta, [args, {:__block__, [], [{function, meta, args}]}]}]}
-    transform(ast, context)
+    arity
+    |> build_function_capture_args(meta)
+    |> then(&[&1, {:__block__, [], [{function, meta, &1}]}])
+    |> then(&{:fn, meta, [{:->, meta, &1}]})
+    |> then(&transform(&1, context))
   end
 
   defp transform_function_definition(marker, name, params, guards, body, context) do
-    visibility =
-      if marker == :def do
-        :public
-      else
-        :private
-      end
-
-    guards_ir =
-      if guards do
-        transform_guards(guards, context)
-      else
-        []
-      end
-
-    params_ir = transform_list(params, %{context | pattern?: true})
-
-    %IR.FunctionDefinition{
-      name: name,
-      arity: Enum.count(params_ir),
-      visibility: visibility,
-      clause: %IR.FunctionClause{
-        params: params_ir,
-        guards: guards_ir,
-        body: transform(body, context)
-      }
-    }
+    marker
+    |> then(fn
+      :def -> :public
+      _marker -> :private
+    end)
+    |> then(&{&1, transform_guards(guards, context)})
+    |> then(fn {visibility, guards_ir} ->
+      params
+      |> transform_list(%{context | pattern?: true})
+      |> then(fn params_ir ->
+        body
+        |> transform(context)
+        |> then(&%IR.FunctionClause{params: params_ir, guards: guards_ir, body: &1})
+        |> then(
+          &%IR.FunctionDefinition{
+            name: name,
+            arity: Enum.count(params_ir),
+            visibility: visibility,
+            clause: &1
+          }
+        )
+      end)
+    end)
   end
+
+  defp transform_guards(nil, _context), do: []
 
   defp transform_guards({:when, _meta, [guard, rest]}, context) do
     [transform(guard, context) | transform_guards(rest, context)]
@@ -805,8 +752,9 @@ defmodule Hologram.Compiler.Transformer do
   end
 
   defp transform_try_opt({:catch, clauses}, acc, context) do
-    catch_clauses = Enum.map(clauses, &transform_try_catch_clause(&1, context))
-    %{acc | catch_clauses: catch_clauses}
+    clauses
+    |> Enum.map(&transform_try_catch_clause(&1, context))
+    |> then(&%{acc | catch_clauses: &1})
   end
 
   defp transform_try_opt({:do, block}, acc, context) do
@@ -818,8 +766,9 @@ defmodule Hologram.Compiler.Transformer do
   end
 
   defp transform_try_opt({:rescue, clauses}, acc, context) do
-    rescue_clauses = Enum.map(clauses, &transform_try_rescue_clause(&1, context))
-    %{acc | rescue_clauses: rescue_clauses}
+    clauses
+    |> Enum.map(&transform_try_rescue_clause(&1, context))
+    |> then(&%{acc | rescue_clauses: &1})
   end
 
   defp transform_try_rescue_clause(
@@ -846,12 +795,11 @@ defmodule Hologram.Compiler.Transformer do
   end
 
   defp transform_variable(name) do
-    case to_string(name) do
-      "_" <> _rest ->
-        %IR.MatchPlaceholder{}
-
-      _fallback ->
-        %IR.Variable{name: name}
-    end
+    name
+    |> to_string()
+    |> then(fn
+      "_" <> _rest -> %IR.MatchPlaceholder{}
+      _fallback -> %IR.Variable{name: name}
+    end)
   end
 end

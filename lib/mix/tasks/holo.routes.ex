@@ -1,3 +1,4 @@
+# credo:disable-for-this-file Credo.Check.Refactor.IoPuts
 defmodule Mix.Tasks.Holo.Routes do
   @moduledoc """
   Prints the list of page routes, ordered by route path.
@@ -16,7 +17,6 @@ defmodule Mix.Tasks.Holo.Routes do
   end
 
   defp print(output) do
-    # credo:disable-for-next-line Credo.Check.Refactor.IoPuts
     IO.puts(output)
   end
 

@@ -36,35 +36,34 @@ defmodule Hologram.Compiler.Encoder do
   def encode(%IR.AnonymousFunctionCall{function: function, args: args}, context) do
     function_js = encode(function, context)
     args_js = encode_as_array(args, context)
-
     "Interpreter.callAnonymousFunction(#{function_js}, #{args_js})"
   end
 
   def encode(%IR.AnonymousFunctionType{arity: arity, clauses: clauses}, context) do
-    clauses_js = encode_as_array(clauses, context)
-    "Type.anonymousFunction(#{arity}, #{clauses_js}, vars)"
+    clauses
+    |> encode_as_array(context)
+    |> then(&"Type.anonymousFunction(#{arity}, #{&1}, vars)")
   end
 
   def encode(%IR.AtomType{value: value}, _context) do
     encode_primitive_type(:atom, value, true)
   end
 
-  # See: https://hexdocs.pm/elixir/1.14.5/Kernel.SpecialForms.html#%3C%3C%3E%3E/1
+  # See: https://hexdocs.pm/elixir/1.14.5/Kernel.SpecialForms.html#<<>>/1
   def encode(
         %IR.BitstringSegment{value: %IR.StringType{value: value}, modifiers: modifiers},
         context
       ) do
-    value_str = encode_primitive_type(:string, value, true)
-    encode_bitstring_segment(value_str, modifiers, context)
+    :string
+    |> encode_primitive_type(value, true)
+    |> encode_bitstring_segment(modifiers, context)
   end
 
-  # See: https://hexdocs.pm/elixir/1.14.5/Kernel.SpecialForms.html#%3C%3C%3E%3E/1
-  def encode(
-        %IR.BitstringSegment{value: value, modifiers: modifiers},
-        context
-      ) do
-    value_str = encode(value, context)
-    encode_bitstring_segment(value_str, modifiers, context)
+  # See: https://hexdocs.pm/elixir/1.14.5/Kernel.SpecialForms.html#<<>>/1
+  def encode(%IR.BitstringSegment{value: value, modifiers: modifiers}, context) do
+    value
+    |> encode(context)
+    |> encode_bitstring_segment(modifiers, context)
   end
 
   def encode(%IR.BitstringType{segments: segments}, %{pattern?: true} = context) do
@@ -80,57 +79,19 @@ defmodule Hologram.Compiler.Encoder do
   end
 
   def encode(%IR.Block{expressions: exprs}, context) do
-    exprs =
-      if exprs == [] do
-        [%IR.AtomType{value: nil}]
-      else
-        exprs
-      end
+    exprs
+    |> then(fn
+      [] -> [%IR.AtomType{value: nil}]
+      exprs -> exprs
+    end)
+    |> then(fn exprs ->
+      expr_count = Enum.count(exprs)
 
-    expr_count = Enum.count(exprs)
-
-    body =
       exprs
       |> Enum.with_index()
-      |> Enum.map_join("", fn {expr, idx} ->
-        # If the expression contains variables that are used both as patterns (in match operator)
-        # and as values (value access), then we need to take a snapshot of these variables
-        # before evaluating the expression, and then use that snapshot for accessing variable values.
-
-        %{var_patterns: var_patterns, var_values: var_values} = Analyzer.analyze(expr)
-
-        use_vars_snapshot? =
-          var_patterns
-          |> MapSet.intersection(var_values)
-          |> Enum.any?()
-
-        output =
-          if use_vars_snapshot? do
-            "\nInterpreter.takeVarsSnapshot(vars);"
-          else
-            ""
-          end
-
-        context =
-          if use_vars_snapshot? do
-            %{context | use_vars_snapshot?: true}
-          else
-            context
-          end
-
-        expr_str = encode(expr, context)
-
-        output =
-          if idx == expr_count - 1 do
-            output <> "\nreturn "
-          else
-            output <> "\n"
-          end
-
-        output <> expr_str <> ";"
-      end)
-
-    "{#{body}\n}"
+      |> Enum.map_join("", &map_block_expr(&1, context, expr_count))
+      |> then(&StringUtils.wrap(&1, "{", "\n}"))
+    end)
   end
 
   def encode(%IR.Case{condition: condition, clauses: clauses}, context) do
@@ -141,7 +102,6 @@ defmodule Hologram.Compiler.Encoder do
       end
 
     clauses_js = encode_as_array(clauses, context)
-
     "Interpreter.case(#{condition_js}, #{clauses_js}, vars)"
   end
 
@@ -149,7 +109,6 @@ defmodule Hologram.Compiler.Encoder do
     match = encode(clause.match, %{context | pattern?: true})
     guards = encode_as_array(clause.guards, context, &encode_closure/2)
     body = encode_closure(clause.body, context)
-
     "{match: #{match}, guards: #{guards}, body: #{body}}"
   end
 
@@ -168,14 +127,14 @@ defmodule Hologram.Compiler.Encoder do
   end
 
   def encode(%IR.Cond{clauses: clauses_ir}, context) do
-    clauses_js = encode_as_array(clauses_ir, context)
-    "Interpreter.cond(#{clauses_js})"
+    clauses_ir
+    |> encode_as_array(context)
+    |> then(&StringUtils.wrap(&1, "Interpreter.cond(", ")"))
   end
 
   def encode(%IR.CondClause{condition: condition_ir, body: body_ir}, context) do
     condition_js = encode_closure(condition_ir, context)
     body_js = encode_closure(body_ir, context)
-
     "{condition: #{condition_js}, body: #{body_js}}"
   end
 
@@ -188,10 +147,7 @@ defmodule Hologram.Compiler.Encoder do
   end
 
   def encode(%IR.DotOperator{left: left, right: right}, context) do
-    left_js = encode(left, context)
-    right_js = encode(right, context)
-
-    "Interpreter.dotOperator(#{left_js}, #{right_js})"
+    "Interpreter.dotOperator(#{encode(left, context)}, #{encode(right, context)})"
   end
 
   def encode(%IR.FloatType{value: value}, _context) do
@@ -201,10 +157,8 @@ defmodule Hologram.Compiler.Encoder do
   def encode(%IR.FunctionClause{} = clause, context) do
     params_array = encode_as_array(clause.params, %{context | pattern?: true})
     params_closure = "(vars) => #{params_array}"
-
     guards = encode_as_array(clause.guards, context, &encode_closure/2)
     body = encode_closure(clause.body, context)
-
     "{params: #{params_closure}, guards: #{guards}, body: #{body}}"
   end
 
@@ -213,8 +167,9 @@ defmodule Hologram.Compiler.Encoder do
   end
 
   def encode(%IR.ListType{data: data}, context) do
-    data_str = encode_as_array(data, context)
-    "Type.list(#{data_str})"
+    data
+    |> encode_as_array(context)
+    |> then(&StringUtils.wrap(&1, "Type.list(", ")"))
   end
 
   def encode(%IR.LocalFunctionCall{function: function, args: args}, %{module: module} = context) do
@@ -233,14 +188,12 @@ defmodule Hologram.Compiler.Encoder do
   def encode(%IR.MatchOperator{left: left, right: right}, %{match_operator?: true} = context) do
     left = encode(left, %{context | pattern?: true})
     right = encode(right, context)
-
     "Interpreter.matchOperator(#{right}, #{left}, vars, false)"
   end
 
   def encode(%IR.MatchOperator{left: left, right: right}, context) do
     left = encode(left, %{context | match_operator?: true, pattern?: true})
     right = encode(right, %{context | match_operator?: true})
-
     "Interpreter.matchOperator(#{right}, #{left}, vars)"
   end
 
@@ -257,16 +210,10 @@ defmodule Hologram.Compiler.Encoder do
 
     body.expressions
     |> aggregate_module_functions()
-    |> Enum.reduce([], fn {{function, arity}, clauses}, acc ->
+    |> Enum.map_join("\n\n", fn {{function, arity}, clauses} ->
       clauses_js = encode_as_array(clauses, context)
-
-      [
-        ~s/Interpreter.defineElixirFunction("#{class}", "#{function}", #{arity}, #{clauses_js});/
-        | acc
-      ]
+      ~s/Interpreter.defineElixirFunction("#{class}", "#{function}", #{arity}, #{clauses_js});/
     end)
-    |> Enum.reverse()
-    |> Enum.join("\n\n")
   end
 
   def encode(%IR.PIDType{value: value}, _context) do
@@ -285,14 +232,7 @@ defmodule Hologram.Compiler.Encoder do
     encode_primitive_type(:reference, value, true)
   end
 
-  def encode(
-        %IR.RemoteFunctionCall{
-          module: module,
-          function: function,
-          args: args
-        },
-        context
-      ) do
+  def encode(%IR.RemoteFunctionCall{module: module, function: function, args: args}, context) do
     encode_named_function_call(module, function, args, context)
   end
 
@@ -323,13 +263,15 @@ defmodule Hologram.Compiler.Encoder do
   end
 
   def encode(%IR.TupleType{data: data}, context) do
-    data_js = encode_as_array(data, context)
-    "Type.tuple(#{data_js})"
+    data
+    |> encode_as_array(context)
+    |> then(&StringUtils.wrap(&1, "Type.tuple(", ")"))
   end
 
   def encode(%IR.Variable{name: name}, %{pattern?: true}) do
-    name_js = encode_as_string(name, true)
-    "Type.variablePattern(#{name_js})"
+    name
+    |> encode_as_string()
+    |> then(&StringUtils.wrap(&1, "Type.variablePattern(", ")"))
   end
 
   def encode(%IR.Variable{name: name}, %{pattern?: false, use_vars_snapshot?: use_vars_snapshot?}) do
@@ -339,6 +281,45 @@ defmodule Hologram.Compiler.Encoder do
   # TODO: finish implementing
   def encode(%IR.With{}, _context) do
     "Interpreter.with()"
+  end
+
+  defp map_block_expr({expr, idx}, context, expr_count) do
+    # If the expression contains variables that are used both as patterns (in match operator)
+    # and as values (value access), then we need to take a snapshot of these variables
+    # before evaluating the expression, and then use that snapshot for accessing variable values.
+
+    expr
+    |> Analyzer.analyze()
+    |> then(&MapSet.intersection(&1.var_patterns, &1.var_values))
+    |> map_block_expr(context, idx, expr_count, expr)
+  end
+
+  @empty_map_set MapSet.new()
+  defp map_block_expr(map_set, context, idx, expr_count, expr) when map_set == @empty_map_set do
+    map_block_expr("", context, idx, expr_count, expr)
+  end
+
+  defp map_block_expr(map_set, context, idx, expr_count, expr) when is_struct(map_set, MapSet) do
+    output = "\nInterpreter.takeVarsSnapshot(vars);"
+    map_block_expr(output, %{context | use_vars_snapshot?: true}, idx, expr_count, expr)
+  end
+
+  defp map_block_expr(output, context, idx, expr_count, expr) when idx == expr_count - 1 do
+    output
+    |> StringUtils.append("\nreturn ")
+    |> do_map_block_expr(context, expr)
+  end
+
+  defp map_block_expr(output, context, _idx, _expr_count, expr) do
+    output
+    |> StringUtils.append("\n")
+    |> do_map_block_expr(context, expr)
+  end
+
+  defp do_map_block_expr(output, context, expr) do
+    expr
+    |> encode(context)
+    |> StringUtils.wrap(output, ";")
   end
 
   @doc """
@@ -383,19 +364,14 @@ defmodule Hologram.Compiler.Encoder do
   def encode_as_class_name(:erlang), do: "Erlang"
 
   def encode_as_class_name(alias_atom) do
-    module_segments =
-      alias_atom
-      |> to_string()
-      |> String.split([".", "_"])
-
-    class_segments =
-      if hd(module_segments) == "Elixir" do
-        module_segments
-      else
-        ["Erlang" | module_segments]
-      end
-
-    Enum.map_join(class_segments, "_", &:string.titlecase/1)
+    alias_atom
+    |> to_string()
+    |> String.split([".", "_"])
+    |> then(fn
+      ["Elixir" | _rest] = module_segments -> module_segments
+      module_segments -> ["Erlang" | module_segments]
+    end)
+    |> Enum.map_join("_", &:string.titlecase/1)
   end
 
   @doc """
@@ -424,19 +400,24 @@ defmodule Hologram.Compiler.Encoder do
   def escape_js_identifier(identifier) do
     identifier
     |> String.to_charlist()
-    |> Enum.map_join("", fn code_point ->
-      if allowed_in_js_identifier?(code_point) do
-        to_string([code_point])
-      else
-        digit_count = IntegerUtils.count_digits(code_point)
-        "$#{digit_count}#{code_point}"
-      end
-    end)
+    |> Enum.map_join("", &escape_js_code_point/1)
+  end
+
+  @spec escape_js_code_point(non_neg_integer) :: String.t()
+  defp escape_js_code_point(code_point)
+       when code_point == ?_ or code_point in ?0..?9 or code_point in ?A..?Z or
+              code_point in ?a..?z do
+    to_string([code_point])
+  end
+
+  defp escape_js_code_point(code_point) when is_integer(code_point) do
+    code_point
+    |> IntegerUtils.count_digits()
+    |> then(&"$#{&1}#{code_point}")
   end
 
   defp aggregate_module_functions(exprs) do
-    exprs
-    |> Enum.reduce(%{}, fn
+    List.foldr(exprs, %{}, fn
       %IR.FunctionDefinition{name: name, arity: arity, clause: clause}, acc ->
         key = {name, arity}
 
@@ -449,25 +430,7 @@ defmodule Hologram.Compiler.Encoder do
       _expr, acc ->
         acc
     end)
-    |> Enum.map(fn {key, value} -> {key, Enum.reverse(value)} end)
   end
-
-  # _ = 95
-  # 0 = 48
-  # 9 = 57
-  # A = 65
-  # Z = 90
-  # a = 97
-  # z = 122
-  defp allowed_in_js_identifier?(code_point)
-
-  defp allowed_in_js_identifier?(code_point)
-       when code_point == 95 or code_point in 48..57 or code_point in 65..90 or
-              code_point in 97..122 do
-    true
-  end
-
-  defp allowed_in_js_identifier?(_code_point), do: false
 
   defp encode_as_array(data, context, encoder \\ &encode/2) do
     data
@@ -475,55 +438,35 @@ defmodule Hologram.Compiler.Encoder do
     |> StringUtils.wrap("[", "]")
   end
 
-  defp encode_as_string(value, wrap)
-
-  defp encode_as_string(nil, false) do
-    "nil"
-  end
-
-  defp encode_as_string(value, false) when is_pid(value) do
-    value
-    |> :erlang.pid_to_list()
-    |> List.delete_at(0)
-    |> List.delete_at(-1)
-    |> to_string()
-  end
-
-  defp encode_as_string(value, false) when is_port(value) do
-    value
-    |> :erlang.port_to_list()
-    |> Enum.drop(6)
-    |> List.delete_at(-1)
-    |> to_string()
-  end
-
-  defp encode_as_string(value, false) when is_reference(value) do
-    value
-    |> :erlang.ref_to_list()
-    |> Enum.drop(5)
-    |> List.delete_at(-1)
-    |> to_string()
-  end
-
-  defp encode_as_string(value, false) do
+  defp encode_as_string(value) when is_atom(value) and value not in [false, nil, true] do
     value
     |> to_string()
-    |> String.replace("\"", "\\\"")
-    |> String.replace("\n", "\\n")
+    |> encode_as_string()
   end
 
-  defp encode_as_string(value, true) do
+  defp encode_as_string(value) when is_binary(value) do
+    inspect(value)
+  end
+
+  defp encode_as_string(value) do
     value
-    |> encode_as_string(false)
-    |> StringUtils.wrap("\"", "\"")
+    |> inspect()
+    |> StringUtils.unwrap("#PID<", ">")
+    |> StringUtils.unwrap("#Port<", ">")
+    |> StringUtils.unwrap("#Reference<", ">")
+    |> encode_as_string()
   end
 
   defp encode_bitstring_modifier({:size, size}, context) do
-    "size: #{encode(size, context)}"
+    size
+    |> encode(context)
+    |> StringUtils.prepend("size: ")
   end
 
   defp encode_bitstring_modifier({:unit, unit}, _context) do
-    "unit: #{unit}n"
+    unit
+    |> Integer.to_string()
+    |> StringUtils.wrap("unit: ", "n")
   end
 
   defp encode_bitstring_modifier({name, value}, _context) do
@@ -531,12 +474,10 @@ defmodule Hologram.Compiler.Encoder do
   end
 
   defp encode_bitstring_segment(value_str, modifiers, context) do
-    modifiers_str =
-      modifiers
-      |> Enum.map_join(", ", &encode_bitstring_modifier(&1, context))
-      |> StringUtils.wrap("{", "}")
-
-    "Type.bitstringSegment(#{value_str}, #{modifiers_str})"
+    modifiers
+    |> Enum.map_join(", ", &encode_bitstring_modifier(&1, context))
+    |> StringUtils.wrap("{", "}")
+    |> then(&"Type.bitstringSegment(#{value_str}, #{&1})")
   end
 
   defp encode_bitstring_segments(segments, context) do
@@ -546,14 +487,15 @@ defmodule Hologram.Compiler.Encoder do
   defp encode_closure(nil, _context), do: "null"
 
   defp encode_closure(ir, context) do
-    "(vars) => #{encode(ir, context)}"
+    ir
+    |> encode(context)
+    |> StringUtils.prepend("(vars) => ")
   end
 
   defp encode_named_function_call(%IR.AtomType{} = module, function, args, context) do
     class = encode_as_class_name(module.value)
     arity = Enum.count(args)
     args_js = Enum.map_join(args, ", ", &encode(&1, context))
-
     "#{class}[\"#{function}/#{arity}\"](#{args_js})"
   end
 
@@ -561,15 +503,15 @@ defmodule Hologram.Compiler.Encoder do
     module_js = encode(module, context)
     function_arity_str = "#{function}/#{Enum.count(args)}"
     args_js = encode_as_array(args, context)
-
     "Interpreter.callNamedFunction(#{module_js}, \"#{function_arity_str}\", #{args_js})"
   end
 
   defp encode_primitive_type(type, value, as_string)
 
   defp encode_primitive_type(type, value, true) do
-    value_str = encode_as_string(value, true)
-    encode_primitive_type(type, value_str, false)
+    value
+    |> encode_as_string()
+    |> then(&encode_primitive_type(type, &1, false))
   end
 
   defp encode_primitive_type(type, value, false) do
@@ -579,11 +521,15 @@ defmodule Hologram.Compiler.Encoder do
   defp encode_var_value(name, use_vars_snapshot?)
 
   defp encode_var_value(name, true) do
-    "vars.__snapshot__.#{escape_var_name(name)}"
+    name
+    |> escape_var_name()
+    |> StringUtils.prepend("vars.__snapshot__.")
   end
 
   defp encode_var_value(name, false) do
-    "vars.#{escape_var_name(name)}"
+    name
+    |> escape_var_name()
+    |> StringUtils.prepend("vars.")
   end
 
   defp escape_var_name(name) do

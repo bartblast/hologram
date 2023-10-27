@@ -9,10 +9,9 @@ defmodule Hologram.Commons.SerializationUtils do
   """
   @spec deserialize(binary, boolean) :: term
   # sobelow_skip ["Misc.BinToTerm"]
-  def deserialize(binary, allow_non_existing_atoms? \\ false) do
-    opts = if allow_non_existing_atoms?, do: [], else: [:safe]
-    :erlang.binary_to_term(binary, opts)
-  end
+  def deserialize(binary, allow_non_existing_atoms? \\ false)
+  def deserialize(binary, true), do: :erlang.binary_to_term(binary, [])
+  def deserialize(binary, false), do: :erlang.binary_to_term(binary, [:safe])
 
   @doc """
   Serializes Elixir term to binary data.

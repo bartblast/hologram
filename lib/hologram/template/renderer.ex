@@ -36,18 +36,14 @@ defmodule Hologram.Template.Renderer do
   end
 
   def render_dom({:component, module, props_dom, children}, context, slots) do
-    children = expand_slots(children, slots)
-
-    props =
-      props_dom
-      |> cast_props(module)
-      |> inject_context_props(module, context)
-
-    if has_id_prop?(props) do
-      render_stateful_component(module, props, children, context)
-    else
-      render_stateless_component(module, props, children, context)
-    end
+    props_dom
+    |> cast_props(module)
+    |> inject_context_props(module, context)
+    |> then(&{&1, Map.has_key?(&1, :id), expand_slots(children, slots)})
+    |> then(fn
+      {props, true, children} -> render_stateful_component(module, props, children, context)
+      {props, false, children} -> render_stateless_component(module, props, children, context)
+    end)
   end
 
   def render_dom({:element, "slot", _attrs, []}, context, slots) do
@@ -55,18 +51,19 @@ defmodule Hologram.Template.Renderer do
   end
 
   def render_dom({:element, tag, attrs_dom, children}, context, slots) do
-    attrs_html = render_atributes(attrs_dom)
-
-    {children_html, children_clients} = render_dom(children, context, slots)
-
-    html =
-      if tag in @void_elems do
-        "<#{tag}#{attrs_html} />"
-      else
-        "<#{tag}#{attrs_html}>#{children_html}</#{tag}>"
-      end
-
-    {html, children_clients}
+    children
+    |> render_dom(context, slots)
+    |> then(fn {children_html, children_clients} ->
+      {render_atributes(attrs_dom), children_html, children_clients}
+    end)
+    |> then(fn {attrs_html, children_html, children_clients} ->
+      tag
+      |> then(fn
+        tag when tag in @void_elems -> StringUtils.wrap(attrs_html, "<#{tag}", " />")
+        tag -> StringUtils.wrap(children_html, "<#{tag}#{attrs_html}>", "</#{tag}>")
+      end)
+      |> then(&{&1, children_clients})
+    end)
   end
 
   def render_dom({:expression, {value}}, _context, _slots) do
@@ -92,42 +89,44 @@ defmodule Hologram.Template.Renderer do
   """
   @spec render_page(module, DOM.t()) :: {String.t(), %{atom => Component.Client.t()}}
   def render_page(page_module, params_dom) do
-    params = cast_props(params_dom, page_module)
-    {initial_page_client, _server} = init_component(page_module, params)
-
-    page_digest = PageDigestRegistry.lookup(page_module)
-
-    %{context: page_context, state: page_state} =
-      initial_page_client_with_injected_page_digest =
-      Templatable.put_context(initial_page_client, {Hologram.Runtime, :page_digest}, page_digest)
-
     layout_module = page_module.__layout_module__()
+    params = cast_props(params_dom, page_module)
 
-    layout_props_dom =
-      build_layout_props_dom(page_module, initial_page_client_with_injected_page_digest)
+    page_module
+    |> init_component(params)
+    |> then(fn {initial_page_client, _server} -> initial_page_client end)
+    |> then(&{&1, PageDigestRegistry.lookup(page_module)})
+    |> then(fn {initial_page_client, page_digest} ->
+      Templatable.put_context(initial_page_client, {Hologram.Runtime, :page_digest}, page_digest)
+    end)
+    |> render_page_initial(layout_module, page_module, params)
+    |> render_page_final(page_module, params)
+  end
 
-    vars = aggregate_vars(params, page_state)
-    page_dom = page_module.template().(vars)
-    layout_node = {:component, layout_module, layout_props_dom, page_dom}
+  defp render_page_initial(initial_page_client, layout_module, page_module, params) do
+    layout_props_dom = build_layout_props_dom(page_module, initial_page_client)
 
-    {initial_html, initial_clients} = render_dom(layout_node, page_context, [])
+    params
+    |> aggregate_vars(initial_page_client.state)
+    |> then(&page_module.template().(&1))
+    |> then(&{:component, layout_module, layout_props_dom, &1})
+    |> render_dom(initial_page_client.context, [])
+    |> then(fn {initial_html, initial_clients} ->
+      {initial_html, initial_clients, initial_page_client}
+    end)
+  end
 
-    final_page_client =
-      Templatable.put_context(
-        initial_page_client_with_injected_page_digest,
-        {Hologram.Runtime, :page_mounted?},
-        true
-      )
-
-    final_clients = Map.put(initial_clients, "page", final_page_client)
-
-    final_html =
-      initial_html
-      |> inject_runtime_clients_data(final_clients)
-      |> inject_runtime_page_module(page_module)
-      |> inject_runtime_page_params(params)
-
-    {final_html, final_clients}
+  defp render_page_final({html, clients, page_client}, page_module, params) do
+    page_client
+    |> Templatable.put_context({Hologram.Runtime, :page_mounted?}, true)
+    |> then(&Map.put(clients, "page", &1))
+    |> then(fn final_clients ->
+      html
+      |> inject_runtime("$INJECT_CLIENTS_DATA", final_clients)
+      |> inject_runtime("$INJECT_PAGE_MODULE", page_module)
+      |> inject_runtime("$INJECT_PAGE_PARAMS", params)
+      |> then(&{&1, final_clients})
+    end)
   end
 
   # Used both on the client and the server.
@@ -163,91 +162,69 @@ defmodule Hologram.Template.Renderer do
   defp expand_slots(dom, slots)
 
   defp expand_slots(nodes, slots) when is_list(nodes) do
-    nodes
-    |> Enum.map(&expand_slots(&1, slots))
-    |> List.flatten()
+    Enum.map(nodes, &expand_slot(&1, slots))
   end
 
-  defp expand_slots({:component, module, props, children}, slots) do
+  defp expand_slot({:component, module, props, children}, slots) do
     {:component, module, props, expand_slots(children, slots)}
   end
 
-  defp expand_slots({:element, "slot", _attrs, []}, slots) do
+  defp expand_slot({:element, "slot", _attrs, []}, slots) do
     slots[:default]
   end
 
-  defp expand_slots({:element, tag, attrs, children}, slots) do
+  defp expand_slot({:element, tag, attrs, children}, slots) do
     {:element, tag, attrs, expand_slots(children, slots)}
   end
 
-  defp expand_slots(node, _slots), do: node
+  defp expand_slot(node, _slots), do: node
 
   defp filter_allowed_props(props_dom, module) do
-    registered_prop_names =
-      module.__props__()
-      |> Enum.reject(fn {_name, _type, opts} -> opts[:from_context] end)
-      |> Enum.map(fn {name, _type, _opts} -> to_string(name) end)
-
-    allowed_props = ["id" | registered_prop_names]
-
-    Enum.filter(props_dom, fn {name, _value_parts} -> name in allowed_props end)
-  end
-
-  defp has_id_prop?(props) do
-    Enum.any?(props, fn {name, _value} -> name == :id end)
+    module.__props__()
+    |> Enum.reject(fn {_name, _type, opts} -> opts[:from_context] end)
+    |> Enum.map(fn {name, _type, _opts} -> to_string(name) end)
+    |> then(&["id" | &1])
+    |> then(&Enum.filter(props_dom, fn {name, _value_parts} -> name in &1 end))
   end
 
   defp init_component(module, props) do
-    init_result = module.init(props, %Component.Client{}, %Component.Server{})
-
-    case init_result do
-      {client, server} ->
-        {client, server}
-
-      %Component.Client{} = client ->
-        {client, %Component.Server{}}
-
-      %Component.Server{} = server ->
-        {%Component.Client{}, server}
-    end
+    props
+    |> module.init(%Component.Client{}, %Component.Server{})
+    |> then(fn
+      {client, server} -> {client, server}
+      %Component.Client{} = client -> {client, %Component.Server{}}
+      %Component.Server{} = server -> {%Component.Client{}, server}
+    end)
   end
 
   defp inject_context_props(props_from_template, module, context) do
-    props_from_context =
-      module.__props__()
-      |> Enum.filter(fn {_name, _type, opts} -> opts[:from_context] end)
-      |> Enum.map(fn {name, _type, opts} -> {name, context[opts[:from_context]]} end)
-      |> Enum.into(%{})
-
-    Map.merge(props_from_template, props_from_context)
+    Enum.reduce(module.__props__(), props_from_template, fn {name, _type, opts}, acc ->
+      inject_context_prop({name, opts[:from_context]}, context, acc)
+    end)
   end
 
-  defp inject_runtime_clients_data(html, clients) do
-    clients_js = Encoder.encode_term(clients)
-    String.replace(html, "$INJECT_CLIENTS_DATA", clients_js)
+  defp inject_context_prop({_name, nil}, _context, acc), do: acc
+
+  defp inject_context_prop({name, from_context}, context, acc) do
+    Map.put(acc, name, context[from_context])
   end
 
-  defp inject_runtime_page_module(html, page_module) do
-    page_module_js = Encoder.encode_term(page_module)
-    String.replace(html, "$INJECT_PAGE_MODULE", page_module_js)
-  end
-
-  defp inject_runtime_page_params(html, page_params) do
-    page_params_js = Encoder.encode_term(page_params)
-    String.replace(html, "$INJECT_PAGE_PARAMS", page_params_js)
+  defp inject_runtime(html, pattern, data) do
+    data
+    |> Encoder.encode_term()
+    |> then(&String.replace(html, pattern, &1))
   end
 
   defp normalize_prop_name({name, value}) do
     {String.to_existing_atom(name), value}
   end
 
-  defp render_attribute(name, value_parts)
+  defp render_attribute({name, []}), do: name
 
-  defp render_attribute(name, []), do: name
-
-  defp render_attribute(name, value_parts) do
-    {html, _clients} = render_dom(value_parts, %{}, [])
-    ~s(#{name}="#{html}")
+  defp render_attribute({name, value_parts}) do
+    value_parts
+    |> render_dom(%{}, [])
+    |> then(fn {html, _clients} -> ~s(#{name}="#{html}") end)
   end
 
   defp render_atributes(attrs_dom)
@@ -256,36 +233,42 @@ defmodule Hologram.Template.Renderer do
 
   defp render_atributes(attrs_dom) do
     attrs_dom
-    |> Enum.map_join(" ", fn {name, value_parts} ->
-      render_attribute(name, value_parts)
-    end)
+    |> Enum.map_join(" ", &render_attribute/1)
     |> StringUtils.prepend(" ")
   end
 
   defp render_stateful_component(module, props, children, context) do
-    {client, _server} = init_component(module, props)
-    vars = aggregate_vars(props, client.state)
-    context = Map.merge(context, client.context)
-
-    {html, children_clients} = render_template(module, vars, children, context)
-    clients = Map.put(children_clients, vars.id, client)
-
-    {html, clients}
+    module
+    |> init_component(props)
+    |> then(fn {client, _server} -> {client, aggregate_vars(props, client.state)} end)
+    |> then(fn {client, vars} ->
+      context
+      |> Map.merge(client.context)
+      |> then(&render_template(module, vars, children, &1))
+      |> then(fn {html, children_clients} -> {html, children_clients, vars.id, client} end)
+    end)
+    |> then(fn {html, children_clients, vars_id, client} ->
+      {html, Map.put(children_clients, vars_id, client)}
+    end)
   end
 
   defp render_stateless_component(module, props, children, context) do
     # We need to run the default init/3 to determine
     # if it's actually a stateful component that is missing the `id` prop.
-    {client, server} = init_component(module, props)
+    empty_client_server_init_state = {%Component.Client{}, %Component.Server{}}
 
-    if client != %Component.Client{} || server != %Component.Server{} do
-      raise Hologram.TemplateSyntaxError,
-        message: "Stateful component #{module} is missing the 'id' property."
-    end
+    module
+    |> init_component(props)
+    |> then(fn
+      ^empty_client_server_init_state ->
+        props
+        |> aggregate_vars(%{})
+        |> then(&render_template(module, &1, children, context))
 
-    vars = aggregate_vars(props, %{})
-
-    render_template(module, vars, children, context)
+      _stateful_component_with_id_missing ->
+        raise Hologram.TemplateSyntaxError,
+          message: "Stateful component #{module} is missing the 'id' property."
+    end)
   end
 
   defp render_template(module, vars, children, context) do

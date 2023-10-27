@@ -32,23 +32,27 @@ defmodule Hologram.Compiler.Normalizer do
   end
 
   def normalize({:for, meta, parts}) when is_list(parts) do
-    {:for, meta, Enum.map(parts, &normalize_comprehension_part/1)}
+    parts
+    |> Enum.map(&normalize_opts/1)
+    |> then(&{:for, meta, &1})
   end
 
-  def normalize({marker, meta, [name, [do: block]]}) when marker in [:def, :defp] do
-    {marker, meta, [normalize(name), [do: normalize_block(block)]]}
-  end
-
-  def normalize({:defmodule, meta, [name, [do: block]]}) do
-    {:defmodule, meta, [normalize(name), [do: normalize_block(block)]]}
+  def normalize({marker, meta, [name, opts]}) when marker in [:def, :defmodule, :defp] do
+    opts
+    |> normalize_opts()
+    |> then(&{marker, meta, [normalize(name), &1]})
   end
 
   def normalize({:try, meta, [opts]}) do
-    {:try, meta, [Enum.map(opts, &normalize_try_opt/1)]}
+    opts
+    |> normalize_opts()
+    |> then(&{:try, meta, [&1]})
   end
 
   def normalize({{:unquote, _meta_1, [marker]}, meta_2, children}) do
-    {marker, meta_2, normalize(children)}
+    children
+    |> normalize()
+    |> then(&{marker, meta_2, &1})
   end
 
   def normalize(ast) when is_list(ast) do
@@ -66,40 +70,34 @@ defmodule Hologram.Compiler.Normalizer do
 
   defp maybe_normalize_alias(module, meta, ast) do
     if Reflection.alias?(module) do
-      segments = Helpers.alias_segments(module)
-      {:__aliases__, meta, segments}
+      module
+      |> Helpers.alias_segments()
+      |> then(&{:__aliases__, meta, &1})
     else
       ast
     end
   end
 
   defp normalize_block({:__block__, meta, exprs}) do
-    {:__block__, meta, normalize(exprs)}
+    exprs
+    |> normalize()
+    |> then(&{:__block__, meta, &1})
   end
 
-  defp normalize_block(expr) do
-    {:__block__, [], [normalize(expr)]}
+  defp normalize_block(expr), do: normalize_block({:__block__, [], [expr]})
+
+  defp normalize_opts(opts) when is_list(opts) do
+    Enum.map(opts, fn
+      {key, block} when key in ~w[after do]a ->
+        block
+        |> normalize_block()
+        |> then(&{key, &1})
+
+      # key in ~w[catch else rescue]a
+      opt ->
+        normalize(opt)
+    end)
   end
 
-  defp normalize_comprehension_opt({:do, block}) do
-    {:do, normalize_block(block)}
-  end
-
-  defp normalize_comprehension_opt(opt), do: normalize(opt)
-
-  defp normalize_comprehension_part(opts) when is_list(opts) do
-    Enum.map(opts, &normalize_comprehension_opt/1)
-  end
-
-  defp normalize_comprehension_part(part), do: normalize(part)
-
-  defp normalize_try_opt({:after, block}) do
-    {:after, normalize_block(block)}
-  end
-
-  defp normalize_try_opt({:do, block}) do
-    {:do, normalize_block(block)}
-  end
-
-  defp normalize_try_opt(opt), do: normalize(opt)
+  defp normalize_opts(part), do: normalize(part)
 end

@@ -5,5 +5,6 @@ defmodule Hologram.Test.Fixtures.Commons.Reflection.Module5 do
 end
 
 defimpl String.Chars, for: Hologram.Test.Fixtures.Commons.Reflection.Module5 do
+  @spec to_string(String.t()) :: String.t()
   def to_string(_value), do: "..."
 end

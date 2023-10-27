@@ -1,5 +1,6 @@
 defmodule Hologram.Compiler.Helpers do
-  alias Hologram.Commons.Types, as: T
+  alias Hologram.Commons.StringUtils
+  alias Hologram.Commons.Types
 
   @doc """
   Returns alias segments list (without the "Elixir" segment at the beginning).
@@ -12,12 +13,11 @@ defmodule Hologram.Compiler.Helpers do
       iex> alias_segments(Aaa.Bbb)
       [:Aaa, :Bbb]
   """
-  @spec alias_segments(binary | module) :: T.alias_segments()
-  def alias_segments(term)
-
+  @spec alias_segments(binary | module) :: Types.alias_segments()
   # sobelow_skip ["DOS.StringToAtom"]
   def alias_segments(module_name) when is_binary(module_name) do
-    "Elixir.#{module_name}"
+    module_name
+    |> StringUtils.prepend("Elixir.")
     |> Module.split()
     |> Enum.map(&String.to_atom/1)
   end
@@ -37,10 +37,8 @@ defmodule Hologram.Compiler.Helpers do
       iex> module([:Aaa, :Bbb])
       Aaa.Bbb
   """
-  @spec module(T.alias_segments()) :: module
+  @spec module(Types.alias_segments()) :: module
   def module(alias_segs) do
-    [:"Elixir" | alias_segs]
-    |> Enum.join(".")
-    |> String.to_existing_atom()
+    Module.safe_concat(alias_segs)
   end
 end

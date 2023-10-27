@@ -18,9 +18,8 @@ defmodule Hologram.Commons.PLT do
   Deletes a key-value pair from the underlying ETS table.
   """
   @spec delete(PLT.t(), any) :: PLT.t()
-  def delete(%{table_ref: table_ref} = plt, key) do
-    ETS.delete(table_ref, key)
-    plt
+  def delete(plt, key) do
+    tap(plt, &ETS.delete(&1.table_ref, key))
   end
 
   @doc """
@@ -98,13 +97,11 @@ defmodule Hologram.Commons.PLT do
   """
   @spec load(PLT.t(), String.t()) :: PLT.t()
   def load(plt, dump_path) do
-    items =
-      dump_path
-      |> File.read!()
-      |> SerializationUtils.deserialize(true)
-      |> Map.to_list()
-
-    put(plt, items)
+    dump_path
+    |> File.read!()
+    |> SerializationUtils.deserialize(true)
+    |> Map.to_list()
+    |> then(&put(plt, &1))
   end
 
   @doc """
@@ -123,18 +120,16 @@ defmodule Hologram.Commons.PLT do
   Puts multiple items into the underlying ETS table.
   """
   @spec put(PLT.t(), list({any, any})) :: PLT.t()
-  def put(%{table_ref: table_ref} = plt, items) do
-    ETS.put(table_ref, items)
-    plt
+  def put(plt, items) do
+    tap(plt, &ETS.put(&1.table_ref, items))
   end
 
   @doc """
   Puts the given item into the underlying ETS table.
   """
   @spec put(PLT.t(), any, any) :: PLT.t()
-  def put(%PLT{table_ref: table_ref} = plt, key, value) do
-    ETS.put(table_ref, key, value)
-    plt
+  def put(plt, key, value) do
+    tap(plt, &ETS.put(&1.table_ref, key, value))
   end
 
   @doc """
@@ -142,11 +137,13 @@ defmodule Hologram.Commons.PLT do
   """
   @spec start(keyword) :: PLT.t()
   def start(opts \\ []) do
-    genserver_opts = Keyword.delete(opts, :table_name)
-
-    {:ok, pid} = GenServer.start_link(PLT, opts[:table_name], genserver_opts)
-    table_ref = GenServer.call(pid, :get_table_ref)
-
-    %PLT{pid: pid, table_ref: table_ref, table_name: opts[:table_name]}
+    opts
+    |> Keyword.delete(:table_name)
+    |> then(&GenServer.start_link(PLT, opts[:table_name], &1))
+    |> then(fn {:ok, pid} ->
+      pid
+      |> GenServer.call(:get_table_ref)
+      |> then(&%PLT{pid: pid, table_ref: &1, table_name: opts[:table_name]})
+    end)
   end
 end

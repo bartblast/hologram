@@ -1,3 +1,4 @@
+# credo:disable-for-this-file Credo.Check.Refactor.IoPuts
 defmodule Mix.Tasks.Holo.Test.CheckFileNames do
   @moduledoc """
   Checks if any test scripts have invalid file names.
@@ -13,6 +14,7 @@ defmodule Mix.Tasks.Holo.Test.CheckFileNames do
 
   use Mix.Task
   alias Hologram.Commons.FileUtils
+  alias Hologram.Commons.StringUtils
 
   @doc false
   @impl Mix.Task
@@ -28,32 +30,27 @@ defmodule Mix.Tasks.Holo.Test.CheckFileNames do
     |> Enum.reject(&String.ends_with?(&1, "_test.exs"))
   end
 
-  defp green(text) do
-    IO.ANSI.green() <> text <> IO.ANSI.reset()
-  end
-
   defp print_result_and_exit([]) do
-    "All test scripts have valid file names."
-    |> green()
-    # credo:disable-for-next-line Credo.Check.Refactor.IoPuts
-    |> IO.puts()
-
-    :ok
+    print_colored("All test scripts have valid file names.", :green)
   end
 
   defp print_result_and_exit(invalid_file_names) do
-    "Found test scripts with invalid file names:"
-    |> red()
-    # credo:disable-for-next-line Credo.Check.Refactor.IoPuts
-    |> IO.puts()
+    print_colored("Found test scripts with invalid file names:", :red)
 
-    # credo:disable-for-next-line Credo.Check.Refactor.IoPuts
-    Enum.each(invalid_file_names, &IO.puts(red("  * " <> &1)))
+    Enum.each(invalid_file_names, fn invalid_file_name ->
+      invalid_file_name
+      |> StringUtils.prepend("  * ")
+      |> print_colored(:red)
+    end)
 
     exit({:shutdown, 1})
   end
 
-  defp red(text) do
-    IO.ANSI.red() <> text <> IO.ANSI.reset()
+  @spec print_colored(String.t(), :green | :red) :: :ok
+  defp print_colored(text, color) when color in ~w[green red]a do
+    IO.ANSI
+    |> apply(color, [])
+    |> then(&StringUtils.wrap(text, &1, IO.ANSI.reset()))
+    |> IO.puts()
   end
 end

@@ -7,19 +7,22 @@ defmodule Hologram.Runtime.Controller do
   """
   @spec extract_params(String.t(), module) :: %{atom => any}
   def extract_params(url_path, page_module) do
-    route_segments = String.split(page_module.__route__(), "/")
-    url_path_segments = String.split(url_path, "/")
-
-    route_segments
-    |> Enum.zip(url_path_segments)
-    |> Enum.reduce([], fn
+    url_path
+    |> String.split("/")
+    |> then(fn url_path_segments ->
+      page_module.__route__()
+      |> String.split("/")
+      |> Enum.zip(url_path_segments)
+    end)
+    |> Enum.reduce(%{}, fn
       {":" <> key, value}, acc ->
-        [{String.to_existing_atom(key), value} | acc]
+        key
+        |> String.to_existing_atom()
+        |> then(&Map.put(acc, &1, value))
 
       _non_param_segment, acc ->
         acc
     end)
-    |> Enum.into(%{})
   end
 
   @doc """
@@ -28,17 +31,16 @@ defmodule Hologram.Runtime.Controller do
   @spec handle_request(Plug.Conn.t(), module) :: Plug.Conn.t()
   # sobelow_skip ["XSS.HTML"]
   def handle_request(conn, page_module) do
-    params_dom =
-      conn.request_path
-      |> extract_params(page_module)
-      |> Enum.map(fn {name, value} ->
-        {to_string(name), [text: value]}
-      end)
-
-    {html, _clients} = Renderer.render_page(page_module, params_dom)
-
-    conn
-    |> Controller.html(html)
-    |> Plug.Conn.halt()
+    conn.request_path
+    |> extract_params(page_module)
+    |> Enum.map(fn {name, value} ->
+      {to_string(name), [text: value]}
+    end)
+    |> then(&Renderer.render_page(page_module, &1))
+    |> then(fn {html, _clients} ->
+      html
+      |> then(&Controller.html(conn, &1))
+      |> Plug.Conn.halt()
+    end)
   end
 end

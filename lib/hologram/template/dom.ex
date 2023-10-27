@@ -24,16 +24,14 @@ defmodule Hologram.Template.DOM do
   """
   @spec build_ast(list(Parser.parsed_tag())) :: AST.t()
   def build_ast(tags) do
-    {code, _last_tag_type} =
-      Enum.reduce(tags, {"", nil}, fn tag, {code_acc, last_tag_type} ->
-        current_tag_type = elem(tag, 0)
-        current_tag_code = render_code(tag)
-        new_code_acc = append_code(code_acc, current_tag_code, last_tag_type)
-
-        {new_code_acc, current_tag_type}
-      end)
-
-    "[#{code}]"
+    tags
+    |> Enum.reduce({"", nil}, fn tag, {code_acc, last_tag_type} ->
+      current_tag_type = elem(tag, 0)
+      current_tag_code = render_code(tag)
+      new_code_acc = append_code(code_acc, current_tag_code, last_tag_type)
+      {new_code_acc, current_tag_type}
+    end)
+    |> then(fn {code, _last_tag_type} -> "[#{code}]" end)
     |> AST.for_code()
     |> substitute_module_attributes()
   end
@@ -86,26 +84,25 @@ defmodule Hologram.Template.DOM do
   end
 
   defp render_code({:start_tag, {tag_name, attributes}}) do
-    tag_type = Helpers.tag_type(tag_name)
-
-    tag_name_code =
-      if tag_type == :element do
-        "\"#{tag_name}\""
-      else
-        "alias!(#{tag_name})"
-      end
-
-    attributes_code =
-      Enum.map_join(attributes, ", ", fn {name, value_parts} ->
+    tag_name
+    |> Helpers.tag_type()
+    |> then(fn
+      :element -> {:element, "\"#{tag_name}\""}
+      tag_type -> {tag_type, "alias!(#{tag_name})"}
+    end)
+    |> then(fn {tag_type, tag_name_code} ->
+      attributes
+      |> Enum.map_join(", ", fn {name, value_parts} ->
         "{\"#{name}\", [" <> Enum.map_join(value_parts, ", ", &render_code/1) <> "]}"
       end)
-
-    "{:#{tag_type}, #{tag_name_code}, [#{attributes_code}], ["
+      |> then(&"{:#{tag_type}, #{tag_name_code}, [#{&1}], [")
+    end)
   end
 
   defp render_code({:text, str}) do
-    escaped_str = String.replace(str, ~s("), ~s(\\"))
-    ~s({:text, "#{escaped_str}"})
+    str
+    |> String.replace(~s("), ~s(\\"))
+    |> then(&~s({:text, "#{&1}"}))
   end
 
   defp substitute_module_attributes({:@, meta_1, [{name, _meta_2, _args}]}) do

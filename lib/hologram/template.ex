@@ -41,11 +41,10 @@ defmodule Hologram.Template do
   end
 
   defp remove_comments(markup) do
-    Regex.replace(~r/<!\-\-.*\-\->/sU, markup, "")
+    String.replace(markup, ~r/<!\-\-.*\-\->/sU, "")
   end
 
   defp remove_doctype(markup) do
-    regex = ~r/^\s*<!DOCTYPE[^>]*>\s*/i
-    String.replace(markup, regex, "")
+    String.replace(markup, ~r/^\s*<!DOCTYPE[^>]*>\s*/i, "")
   end
 end

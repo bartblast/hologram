@@ -14,27 +14,27 @@ defmodule Hologram.Compiler.CallGraph do
   Adds an edge between two vertices in the call graph.
   """
   @spec add_edge(CallGraph.t(), vertex, vertex) :: CallGraph.t()
-  def add_edge(%{pid: pid} = call_graph, from_vertex, to_vertex) do
-    Agent.update(pid, &Graph.add_edge(&1, from_vertex, to_vertex))
-    call_graph
+  def add_edge(call_graph, from_vertex, to_vertex) do
+    func = &Graph.add_edge(&1, from_vertex, to_vertex)
+    tap(call_graph, &Agent.update(&1.pid, func))
   end
 
   @doc """
   Adds multiple edges to the call graph.
   """
   @spec add_edges(CallGraph.t(), list(Graph.Edge.t())) :: CallGraph.t()
-  def add_edges(%{pid: pid} = call_graph, edges) do
-    Agent.update(pid, &Graph.add_edges(&1, edges))
-    call_graph
+  def add_edges(call_graph, edges) do
+    func = &Graph.add_edges(&1, edges)
+    tap(call_graph, &Agent.update(&1.pid, func))
   end
 
   @doc """
   Adds the vertex to the call graph.
   """
   @spec add_vertex(CallGraph.t(), vertex) :: CallGraph.t()
-  def add_vertex(%{pid: pid} = call_graph, vertex) do
-    Agent.update(pid, &Graph.add_vertex(&1, vertex))
-    call_graph
+  def add_vertex(call_graph, vertex) do
+    func = &Graph.add_vertex(&1, vertex)
+    tap(call_graph, &Agent.update(&1.pid, func))
   end
 
   @doc """
@@ -45,12 +45,13 @@ defmodule Hologram.Compiler.CallGraph do
 
   def build(call_graph, %IR.AtomType{value: value}, from_vertex) do
     if Reflection.elixir_module?(value) do
-      add_edge(call_graph, from_vertex, value)
-      maybe_add_protocol_call_graph_edges(call_graph, value)
-      maybe_add_templatable_call_graph_edges(call_graph, value)
+      call_graph
+      |> tap(&add_edge(&1, from_vertex, value))
+      |> tap(&maybe_add_protocol_call_graph_edges(&1, value))
+      |> tap(&maybe_add_templatable_call_graph_edges(&1, value))
+    else
+      call_graph
     end
-
-    call_graph
   end
 
   def build(
@@ -58,8 +59,7 @@ defmodule Hologram.Compiler.CallGraph do
         %IR.FunctionDefinition{name: name, arity: arity, clause: clause},
         from_vertex
       ) do
-    new_from_vertex = {from_vertex, name, arity}
-    build(call_graph, clause, new_from_vertex)
+    build(call_graph, clause, {from_vertex, name, arity})
   end
 
   def build(
@@ -68,9 +68,10 @@ defmodule Hologram.Compiler.CallGraph do
         {module, _function, _arity} = from_vertex
       ) do
     to_vertex = {module, function, Enum.count(args)}
-    add_edge(call_graph, from_vertex, to_vertex)
 
-    build(call_graph, args, from_vertex)
+    call_graph
+    |> tap(&add_edge(&1, from_vertex, to_vertex))
+    |> tap(&build(&1, args, from_vertex))
   end
 
   def build(
@@ -78,8 +79,9 @@ defmodule Hologram.Compiler.CallGraph do
         %IR.ModuleDefinition{module: %IR.AtomType{value: module}, body: body},
         _from_vertex
       ) do
-    maybe_add_templatable_call_graph_edges(call_graph, module)
-    build(call_graph, body, module)
+    call_graph
+    |> tap(&maybe_add_templatable_call_graph_edges(&1, module))
+    |> tap(&build(&1, body, module))
   end
 
   def build(
@@ -96,24 +98,22 @@ defmodule Hologram.Compiler.CallGraph do
         from_vertex
       ) do
     to_vertex = {module, function, Enum.count(args)}
-    add_edge(call_graph, from_vertex, to_vertex)
 
-    build(call_graph, args, from_vertex)
+    call_graph
+    |> tap(&add_edge(&1, from_vertex, to_vertex))
+    |> tap(&build(&1, args, from_vertex))
   end
 
   def build(
         call_graph,
-        %IR.RemoteFunctionCall{
-          module: %IR.AtomType{value: module},
-          function: function,
-          args: args
-        },
+        %IR.RemoteFunctionCall{module: %IR.AtomType{value: module}} = ir,
         from_vertex
       ) do
-    to_vertex = {module, function, Enum.count(args)}
-    add_edge(call_graph, from_vertex, to_vertex)
+    to_vertex = {module, ir.function, Enum.count(ir.args)}
 
-    build(call_graph, args, from_vertex)
+    call_graph
+    |> tap(&add_edge(&1, from_vertex, to_vertex))
+    |> tap(&build(&1, ir.args, from_vertex))
   end
 
   def build(call_graph, list, from_vertex) when is_list(list) do
@@ -125,19 +125,20 @@ defmodule Hologram.Compiler.CallGraph do
     map
     |> Map.to_list()
     |> Enum.each(fn {key, value} ->
-      build(call_graph, key, from_vertex)
-      build(call_graph, value, from_vertex)
+      call_graph
+      |> tap(&build(&1, key, from_vertex))
+      |> tap(&build(&1, value, from_vertex))
     end)
 
     call_graph
   end
 
   def build(call_graph, tuple, from_vertex) when is_tuple(tuple) do
-    tuple
-    |> Tuple.to_list()
-    |> Enum.each(&build(call_graph, &1, from_vertex))
-
-    call_graph
+    tap(call_graph, fn call_graph ->
+      tuple
+      |> Tuple.to_list()
+      |> Enum.each(&build(call_graph, &1, from_vertex))
+    end)
   end
 
   def build(call_graph, _ir, _from_vertex), do: call_graph
@@ -147,8 +148,9 @@ defmodule Hologram.Compiler.CallGraph do
   """
   @spec clone(CallGraph.t()) :: CallGraph.t()
   def clone(call_graph) do
-    graph = get_graph(call_graph)
-    put_graph(start(), graph)
+    call_graph
+    |> get_graph()
+    |> then(&put_graph(start(), &1))
   end
 
   @doc """
@@ -156,15 +158,16 @@ defmodule Hologram.Compiler.CallGraph do
   """
   @spec dump(CallGraph.t(), String.t()) :: CallGraph.t()
   def dump(call_graph, path) do
-    data =
+    tap(call_graph, fn call_graph ->
+      path
+      |> Path.dirname()
+      |> File.mkdir_p!()
+
       call_graph
       |> get_graph()
       |> SerializationUtils.serialize()
-
-    File.mkdir_p!(Path.dirname(path))
-    File.write!(path, data)
-
-    call_graph
+      |> tap(&File.write!(path, &1))
+    end)
   end
 
   @doc """
@@ -226,12 +229,10 @@ defmodule Hologram.Compiler.CallGraph do
   """
   @spec load(CallGraph.t(), String.t()) :: CallGraph.t()
   def load(call_graph, dump_path) do
-    graph =
-      dump_path
-      |> File.read!()
-      |> SerializationUtils.deserialize(true)
-
-    put_graph(call_graph, graph)
+    dump_path
+    |> File.read!()
+    |> SerializationUtils.deserialize(true)
+    |> then(&put_graph(call_graph, &1))
   end
 
   @doc """
@@ -325,9 +326,9 @@ defmodule Hologram.Compiler.CallGraph do
   Removes the vertex from the call graph.
   """
   @spec remove_vertex(CallGraph.t(), vertex) :: CallGraph.t()
-  def remove_vertex(%{pid: pid} = call_graph, vertex) do
-    Agent.update(pid, &Graph.delete_vertex(&1, vertex))
-    call_graph
+  def remove_vertex(call_graph, vertex) do
+    func = &Graph.delete_vertex(&1, vertex)
+    tap(call_graph, &Agent.update(&1.pid, func))
   end
 
   @doc """
@@ -355,8 +356,9 @@ defmodule Hologram.Compiler.CallGraph do
   """
   @spec start() :: CallGraph.t()
   def start do
-    {:ok, pid} = Agent.start_link(fn -> Graph.new() end)
-    %CallGraph{pid: pid}
+    fn -> Graph.new() end
+    |> Agent.start_link()
+    |> then(fn {:ok, pid} -> %CallGraph{pid: pid} end)
   end
 
   @doc """
@@ -368,9 +370,10 @@ defmodule Hologram.Compiler.CallGraph do
   end
 
   defp add_component_call_graph_edges(call_graph, module) do
-    add_edge(call_graph, module, {module, :action, 3})
-    add_edge(call_graph, module, {module, :init, 1})
-    add_edge(call_graph, module, {module, :template, 0})
+    call_graph
+    |> tap(&add_edge(&1, module, {module, :action, 3}))
+    |> tap(&add_edge(&1, module, {module, :init, 1}))
+    |> tap(&add_edge(&1, module, {module, :template, 0}))
   end
 
   defp add_page_call_graph_edges(call_graph, module) do
@@ -378,19 +381,16 @@ defmodule Hologram.Compiler.CallGraph do
   end
 
   defp add_protocol_call_graph_edges(call_graph, module) do
-    funs = module.__protocol__(:functions)
-    impls = Reflection.list_protocol_implementations(module)
-
-    Enum.each(impls, fn impl ->
-      Enum.each(funs, fn {name, arity} ->
-        add_edge(call_graph, {module, name, arity}, {impl, name, arity})
-      end)
-    end)
+    for impl <- Reflection.list_protocol_implementations(module),
+        {name, arity} <- module.__protocol__(:functions) do
+      add_edge(call_graph, {module, name, arity}, {impl, name, arity})
+    end
   end
 
   defp build_module(call_graph, ir_plt, module) do
-    module_def = PLT.get!(ir_plt, module)
-    build(call_graph, module_def)
+    ir_plt
+    |> PLT.get!(module)
+    |> then(&build(call_graph, &1))
   end
 
   defp inbound_edges(%{pid: pid}, vertex) do
@@ -404,13 +404,8 @@ defmodule Hologram.Compiler.CallGraph do
   end
 
   defp maybe_add_templatable_call_graph_edges(call_graph, module) do
-    if Reflection.page?(module) do
-      add_page_call_graph_edges(call_graph, module)
-    end
-
-    if Reflection.component?(module) do
-      add_component_call_graph_edges(call_graph, module)
-    end
+    Reflection.page?(module) && add_page_call_graph_edges(call_graph, module)
+    Reflection.component?(module) && add_component_call_graph_edges(call_graph, module)
   end
 
   defp remove_module_vertices(call_graph, module) do

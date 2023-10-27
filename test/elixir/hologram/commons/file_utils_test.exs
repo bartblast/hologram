@@ -49,9 +49,7 @@ defmodule Hologram.Commons.FileUtilsTest do
     end
 
     test "invalid path" do
-      assert_raise ArgumentError, ~s(Invalid path: "my/invalid/path"), fn ->
-        list_files_recursively("my/invalid/path")
-      end
+      assert list_files_recursively("my/invalid/path") == []
     end
   end
 end

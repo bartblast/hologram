@@ -41,18 +41,18 @@ defmodule Hologram.Runtime.AssetManifestCache do
   end
 
   defp build_manifest do
-    entries_js =
-      AssetPathRegistry.get_mapping()
-      |> Enum.sort()
-      |> Enum.map_join(",\n", fn {static_path, asset_path} ->
-        ~s("#{static_path}": "#{asset_path}")
-      end)
-
-    """
-    window.__hologramAssetManifest__ = {
-    #{entries_js}
-    };\
-    """
+    AssetPathRegistry.get_mapping()
+    |> Enum.sort()
+    |> Enum.map_join(",\n", fn {static_path, asset_path} ->
+      ~s("#{static_path}": "#{asset_path}")
+    end)
+    |> then(fn entries_js ->
+      """
+      window.__hologramAssetManifest__ = {
+      #{entries_js}
+      };\
+      """
+    end)
   end
 
   defp impl do

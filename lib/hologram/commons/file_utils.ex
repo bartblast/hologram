@@ -12,31 +12,23 @@ defmodule Hologram.Commons.FileUtils do
        "test/elixir/fixtures/commons/file_utils/list_files_recursively/dir_1/file_4.txt"]
   """
   @spec list_files_recursively(binary | list(binary)) :: list(binary)
-  def list_files_recursively(path_or_paths)
+  def list_files_recursively(paths), do: list_files_recursively(paths, true)
 
-  def list_files_recursively(paths) when is_list(paths) do
+  defp list_files_recursively(paths, true) when is_list(paths) do
     paths
-    |> Enum.map(&list_files_recursively/1)
-    |> Enum.concat()
-    |> Enum.uniq()
-    |> Enum.sort()
+    |> Enum.map_join(" ", &inspect/1)
+    |> list_files_recursively(false)
   end
 
-  def list_files_recursively(path) do
-    cond do
-      File.regular?(path) ->
-        [path]
+  defp list_files_recursively(paths, true) when is_binary(paths) do
+    paths
+    |> inspect()
+    |> list_files_recursively(false)
+  end
 
-      File.dir?(path) ->
-        path
-        |> File.ls!()
-        |> Enum.map(&Path.join(path, &1))
-        |> Enum.map(&list_files_recursively/1)
-        |> Enum.concat()
-        |> Enum.sort()
-
-      true ->
-        raise ArgumentError, ~s(Invalid path: "#{path}")
-    end
+  defp list_files_recursively(paths, false) when is_binary(paths) do
+    find_command = "find #{paths} -type f 2>/dev/null | sort | uniq"
+    {files, 0} = System.cmd("/bin/sh", ["-c", find_command], env: %{})
+    String.split(files, "\n", trim: true)
   end
 end
