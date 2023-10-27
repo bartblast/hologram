@@ -178,7 +178,7 @@ defmodule Hologram.CompilerTest do
   test "build_runtime_js/3" do
     call_graph = CallGraph.start()
     ir_plt = PLT.start()
-    modules = Reflection.list_std_lib_elixir_modules()
+    modules = Reflection.list_elixir_modules()
 
     Enum.each(modules, fn module ->
       ir = IR.for_module(module)
