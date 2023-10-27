@@ -377,6 +377,17 @@ defmodule Hologram.Compiler.CallGraph do
     add_edge(call_graph, module, {module, :__route__, 0})
   end
 
+  defp add_protocol_call_graph_edges(call_graph, module) do
+    funs = module.__protocol__(:functions)
+    impls = Reflection.list_protocol_implementations(module)
+
+    Enum.each(impls, fn impl ->
+      Enum.each(funs, fn {name, arity} ->
+        add_edge(call_graph, {module, name, arity}, {impl, name, arity})
+      end)
+    end)
+  end
+
   defp build_module(call_graph, ir_plt, module) do
     module_def = PLT.get!(ir_plt, module)
     build(call_graph, module_def)
@@ -388,14 +399,7 @@ defmodule Hologram.Compiler.CallGraph do
 
   defp maybe_add_protocol_call_graph_edges(call_graph, module) do
     if Reflection.protocol?(module) do
-      funs = module.__protocol__(:functions)
-      impls = Reflection.list_protocol_implementations(module)
-
-      Enum.each(impls, fn impl ->
-        Enum.each(funs, fn {name, arity} ->
-          add_edge(call_graph, {module, name, arity}, {impl, name, arity})
-        end)
-      end)
+      add_protocol_call_graph_edges(call_graph, module)
     end
   end
 

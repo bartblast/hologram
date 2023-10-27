@@ -1,3 +1,5 @@
+# credo:disable-for-this-file Credo.Check.Readability.Specs
+
 defmodule Hologram.Test.Fixtures.Commons.Reflection.Module5 do
   defstruct []
 end

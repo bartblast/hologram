@@ -245,6 +245,7 @@ defmodule Hologram.Commons.Reflection do
 
     protocol
     |> Protocol.extract_impls(paths)
+    # credo:disable-for-next-line Credo.Check.Warning.UnsafeToAtom
     |> Enum.map(&Module.concat(protocol, &1))
   end
 
