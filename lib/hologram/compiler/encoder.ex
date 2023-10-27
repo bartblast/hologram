@@ -134,7 +134,12 @@ defmodule Hologram.Compiler.Encoder do
   end
 
   def encode(%IR.Case{condition: condition, clauses: clauses}, context) do
-    condition_js = encode(condition, context)
+    condition_js =
+      case condition do
+        %IR.Block{} = block -> encode_closure(block, context)
+        expr -> encode(expr, context)
+      end
+
     clauses_js = encode_as_array(clauses, context)
 
     "Interpreter.case(#{condition_js}, #{clauses_js}, vars)"

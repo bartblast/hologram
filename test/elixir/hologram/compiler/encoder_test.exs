@@ -361,52 +361,86 @@ defmodule Hologram.Compiler.EncoderTest do
     end
   end
 
-  test "case" do
-    # case my_var do
-    #   x when x == 100 -> :ok
-    #   y -> y
-    # end
-    #
-    # case my_var do
-    #   x when :erlang.==(x, 100) -> :ok
-    #   y -> y
-    # end
-    ir = %IR.Case{
-      condition: %IR.Variable{name: :my_var},
-      clauses: [
-        %IR.Clause{
-          match: %IR.Variable{name: :x},
-          guards: [
-            %IR.RemoteFunctionCall{
-              module: %IR.AtomType{value: :erlang},
-              function: :==,
-              args: [
-                %IR.Variable{name: :x},
-                %IR.IntegerType{value: 100}
-              ]
+  describe "case" do
+    test "single-expression condition" do
+      # case my_var do
+      #   x when x == 100 -> :ok
+      #   y -> y
+      # end
+      #
+      # case my_var do
+      #   x when :erlang.==(x, 100) -> :ok
+      #   y -> y
+      # end
+      ir = %IR.Case{
+        condition: %IR.Variable{name: :my_var},
+        clauses: [
+          %IR.Clause{
+            match: %IR.Variable{name: :x},
+            guards: [
+              %IR.RemoteFunctionCall{
+                module: %IR.AtomType{value: :erlang},
+                function: :==,
+                args: [
+                  %IR.Variable{name: :x},
+                  %IR.IntegerType{value: 100}
+                ]
+              }
+            ],
+            body: %IR.Block{
+              expressions: [%IR.AtomType{value: :ok}]
             }
-          ],
-          body: %IR.Block{
-            expressions: [%IR.AtomType{value: :ok}]
+          },
+          %IR.Clause{
+            match: %IR.Variable{name: :y},
+            guards: [],
+            body: %IR.Block{
+              expressions: [%IR.Variable{name: :y}]
+            }
           }
-        },
-        %IR.Clause{
-          match: %IR.Variable{name: :y},
-          guards: [],
-          body: %IR.Block{
-            expressions: [%IR.Variable{name: :y}]
-          }
-        }
-      ]
-    }
+        ]
+      }
 
-    assert encode(ir, %Context{}) == """
-           Interpreter.case(vars.my_var, [{match: Type.variablePattern("x"), guards: [(vars) => Erlang["==/2"](vars.x, Type.integer(100n))], body: (vars) => {
-           return Type.atom("ok");
-           }}, {match: Type.variablePattern("y"), guards: [], body: (vars) => {
-           return vars.y;
-           }}], vars)\
-           """
+      assert encode(ir, %Context{}) == """
+             Interpreter.case(vars.my_var, [{match: Type.variablePattern("x"), guards: [(vars) => Erlang["==/2"](vars.x, Type.integer(100n))], body: (vars) => {
+             return Type.atom("ok");
+             }}, {match: Type.variablePattern("y"), guards: [], body: (vars) => {
+             return vars.y;
+             }}], vars)\
+             """
+    end
+
+    test "multiple-expression condition" do
+      # case (1; 2) do
+      #   2 -> :ok
+      # end
+      ir = %IR.Case{
+        condition: %IR.Block{
+          expressions: [
+            %IR.IntegerType{value: 1},
+            %IR.IntegerType{value: 2}
+          ]
+        },
+        clauses: [
+          %IR.Clause{
+            match: %IR.IntegerType{value: 2},
+            guards: [],
+            body: %IR.Block{
+              expressions: [%IR.AtomType{value: :ok}]
+            }
+          }
+        ]
+      }
+
+      assert encode(ir, %Context{}) == """
+             Interpreter.case((vars) => {
+             Type.integer(1n);
+             return Type.integer(2n);
+             }, [{match: Type.integer(2n), guards: [], body: (vars) => {
+             return Type.atom("ok");
+             }}], vars)
+             """
+    end
   end
 
   describe "clause" do
