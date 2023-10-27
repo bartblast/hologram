@@ -43,6 +43,7 @@ defmodule Hologram.Compiler.IR do
           | IR.TryRescueClause.t()
           | IR.TupleType.t()
           | IR.Variable.t()
+          | IR.With.t()
 
   defmodule AnonymousFunctionCall do
     defstruct [:function, :args]
@@ -299,6 +300,13 @@ defmodule Hologram.Compiler.IR do
     defstruct [:name]
 
     @type t :: %__MODULE__{name: atom}
+  end
+
+  # TODO: finish implementing
+  defmodule With do
+    defstruct []
+
+    @type t :: %__MODULE__{}
   end
 
   @doc """
