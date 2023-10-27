@@ -359,6 +359,14 @@ defmodule Hologram.Commons.Reflection do
   end
 
   @doc """
+  Returns true if the given term is a protocol module, or false otherwise.
+  """
+  @spec protocol?(any) :: boolean
+  def protocol?(term) do
+    alias?(term) && function_exported?(term, :__protocol__, 1)
+  end
+
+  @doc """
   Returns the release priv dir path.
   """
   @spec release_priv_path() :: String.t()

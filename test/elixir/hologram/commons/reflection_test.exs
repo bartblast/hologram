@@ -272,6 +272,20 @@ defmodule Hologram.Commons.ReflectionTest do
     assert release_static_path() == File.cwd!() <> "/_build/test/lib/hologram/priv/static"
   end
 
+  describe "protocol?/1" do
+    test "module which is a protocol" do
+      assert protocol?(String.Chars)
+    end
+
+    test "module which is not a protocol" do
+      refute protocol?(Calendar.ISO)
+    end
+
+    test "non-module" do
+      refute protocol?(123)
+    end
+  end
+
   test "root_path/0" do
     assert root_path() == File.cwd!()
   end
