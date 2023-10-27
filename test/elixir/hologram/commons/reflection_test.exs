@@ -168,22 +168,10 @@ defmodule Hologram.Commons.ReflectionTest do
   end
 
   test "list_protocol_implementations" do
-    assert list_protocol_implementations(String.Chars) == [
-             Hologram.Test.Fixtures.Commons.Reflection.Module5,
-             Float,
-             DateTime,
-             Time,
-             List,
-             Version.Requirement,
-             Atom,
-             Integer,
-             Version,
-             Date,
-             BitString,
-             NaiveDateTime,
-             URI,
-             Decimal
-           ]
+    result = list_protocol_implementations(String.Chars)
+
+    assert String.Chars.Atom in result
+    assert String.Chars.Hologram.Test.Fixtures.Commons.Reflection.Module5 in result
   end
 
   test "list_std_lib_elixir_modules/0" do

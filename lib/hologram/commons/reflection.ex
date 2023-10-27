@@ -243,7 +243,9 @@ defmodule Hologram.Commons.Reflection do
         end
       end)
 
-    Protocol.extract_impls(protocol, paths)
+    protocol
+    |> Protocol.extract_impls(paths)
+    |> Enum.map(&Module.concat(protocol, &1))
   end
 
   @doc """
