@@ -331,6 +331,11 @@ defmodule Hologram.Compiler.Encoder do
     encode_var_value(name, use_vars_snapshot?)
   end
 
+  # TODO: finish implementing
+  def encode(%IR.With{}, _context) do
+    "Interpreter.with()"
+  end
+
   @doc """
   Prints debug info for intercepted encode/2 calls.
   """

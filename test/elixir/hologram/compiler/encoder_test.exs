@@ -1468,6 +1468,11 @@ defmodule Hologram.Compiler.EncoderTest do
     end
   end
 
+  # TODO: finish implementing
+  test "with" do
+    assert encode(%IR.With{}, %Context{}) == "Interpreter.with()"
+  end
+
   describe "encode_as_class_name/1" do
     test "Elixir module alias without camel case segments" do
       assert encode_as_class_name(Aaa.Bbb.Ccc) == "Elixir_Aaa_Bbb_Ccc"
