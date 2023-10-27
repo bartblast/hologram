@@ -402,6 +402,11 @@ export default class Interpreter {
     }
   }
 
+  // TODO: finish implementing
+  static with() {
+    throw new Error('"with" expression is not yet implemented in Hologram');
+  }
+
   static #evaluateCatchClauses(clauses, error, vars) {
     for (const clause of clauses) {
       const varsClone = Interpreter.cloneVars(vars);

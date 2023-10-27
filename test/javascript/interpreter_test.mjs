@@ -4753,3 +4753,12 @@ describe("try()", () => {
     assert.deepStrictEqual(vars.a, Type.integer(1));
   });
 });
+
+// TODO: finish implementing
+it("with()", () => {
+  assert.throw(
+    () => Interpreter.with(),
+    Error,
+    '"with" expression is not yet implemented in Hologram',
+  );
+});
