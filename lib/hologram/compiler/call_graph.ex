@@ -46,6 +46,7 @@ defmodule Hologram.Compiler.CallGraph do
   def build(call_graph, %IR.AtomType{value: value}, from_vertex) do
     if Reflection.elixir_module?(value) do
       add_edge(call_graph, from_vertex, value)
+      maybe_add_protocol_call_graph_edges(call_graph, value)
       maybe_add_templatable_call_graph_edges(call_graph, value)
     end
 
@@ -383,6 +384,19 @@ defmodule Hologram.Compiler.CallGraph do
 
   defp inbound_edges(%{pid: pid}, vertex) do
     Agent.get(pid, &Graph.in_edges(&1, vertex))
+  end
+
+  defp maybe_add_protocol_call_graph_edges(call_graph, module) do
+    if Reflection.protocol?(module) do
+      funs = module.__protocol__(:functions)
+      impls = Reflection.list_protocol_implementations(module)
+
+      Enum.each(impls, fn impl ->
+        Enum.each(funs, fn {name, arity} ->
+          add_edge(call_graph, {module, name, arity}, {impl, name, arity})
+        end)
+      end)
+    end
   end
 
   defp maybe_add_templatable_call_graph_edges(call_graph, module) do

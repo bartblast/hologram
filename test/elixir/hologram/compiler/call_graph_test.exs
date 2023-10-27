@@ -610,6 +610,20 @@ defmodule Hologram.Compiler.CallGraphTest do
                }
              ]
     end
+
+    test "protocol (implementation edges are added)", %{call_graph: call_graph} do
+      ir = IR.for_module(String.Chars)
+      build(call_graph, ir)
+      from_vertex = {String.Chars, :to_string, 1}
+
+      assert has_edge?(call_graph, from_vertex, {String.Chars.Atom, :to_string, 1})
+
+      assert has_edge?(
+               call_graph,
+               from_vertex,
+               {String.Chars.Hologram.Test.Fixtures.Compiler.CallGraph.Module12, :to_string, 1}
+             )
+    end
   end
 
   test "clone/1", %{call_graph: call_graph} do
