@@ -483,6 +483,84 @@ describe("case()", () => {
       "my message",
     );
   });
+
+  it("mutliple-expression condition that is matched by one of the clauses", () => {
+    // case (1; 2) do
+    //   2 -> :ok
+    // end
+    const result = Interpreter.case(
+      (_vars) => {
+        Type.integer(1);
+        return Type.integer(2);
+      },
+      [
+        {
+          match: Type.integer(2),
+          guards: [],
+          body: (_vars) => {
+            return Type.atom("ok");
+          },
+        },
+      ],
+      vars,
+    );
+
+    assert.deepStrictEqual(result, Type.atom("ok"));
+  });
+
+  it("mutliple-expression condition that is not matched by any of the clauses", () => {
+    const condition = (_vars) => {
+      Type.integer(1);
+      return Type.integer(2);
+    };
+
+    const clauses = [
+      {
+        match: Type.integer(1),
+        guards: [],
+        body: (_vars) => {
+          return Type.atom("ok");
+        },
+      },
+    ];
+
+    assertBoxedError(
+      // case (1; 2) do
+      //   1 -> :ok
+      // end
+      () => Interpreter.case(condition, clauses, vars),
+      "CaseClauseError",
+      "no case clause matching: 2",
+    );
+  });
+
+  it("clauses have access to vars from condition", () => {
+    // (case x = 1; 2) do
+    //   2 -> x
+    // end
+    const result = Interpreter.case(
+      (vars) => {
+        Interpreter.matchOperator(
+          Type.integer(1),
+          Type.variablePattern("x"),
+          vars,
+        );
+        return Type.integer(2);
+      },
+      [
+        {
+          match: Type.integer(2),
+          guards: [],
+          body: (vars) => {
+            return vars.x;
+          },
+        },
+      ],
+      vars,
+    );
+
+    assert.deepStrictEqual(result, Type.integer(1));
+  });
 });
 
 describe("cloneVars()", () => {

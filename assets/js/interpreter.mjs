@@ -38,8 +38,17 @@ export default class Interpreter {
   }
 
   static case(condition, clauses, vars) {
+    let conditionVars;
+
+    if (typeof condition === "function") {
+      conditionVars = Interpreter.cloneVars(vars);
+      condition = condition(conditionVars);
+    } else {
+      conditionVars = vars;
+    }
+
     for (const clause of clauses) {
-      const varsClone = Interpreter.cloneVars(vars);
+      const varsClone = Interpreter.cloneVars(conditionVars);
 
       if (
         Interpreter.isMatched(clause.match, condition, varsClone) &&

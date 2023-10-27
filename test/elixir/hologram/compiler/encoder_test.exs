@@ -438,7 +438,7 @@ defmodule Hologram.Compiler.EncoderTest do
              return Type.integer(2n);
              }, [{match: Type.integer(2n), guards: [], body: (vars) => {
              return Type.atom("ok");
-             }}], vars)
+             }}], vars)\
              """
     end
   end
