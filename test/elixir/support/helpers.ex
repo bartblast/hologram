@@ -14,7 +14,7 @@ defmodule Hologram.Test.Helpers do
   alias Hologram.Template.Renderer
 
   defdelegate ast(code), to: AST, as: :for_code
-  defdelegate ir(code, context), to: IR, as: :for_code
+  defdelegate ir(code, context \\ %Context{}), to: IR, as: :for_code
   defdelegate parsed_tags(markup), to: Parser, as: :parse_markup
   defdelegate pid(str), to: IEx.Helpers
   defdelegate port(str), to: IEx.Helpers
