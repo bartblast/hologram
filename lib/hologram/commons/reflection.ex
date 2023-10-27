@@ -228,6 +228,25 @@ defmodule Hologram.Commons.Reflection do
   end
 
   @doc """
+  Returns the list of modules that are implementations of the given protocol.
+  """
+  @spec list_protocol_implementations(module) :: list(module)
+  def list_protocol_implementations(protocol) do
+    paths =
+      Enum.reduce(list_loaded_otp_apps(), [], fn app, acc ->
+        case :code.lib_dir(app, :ebin) do
+          {:error, :bad_name} ->
+            acc
+
+          path ->
+            [path | acc]
+        end
+      end)
+
+    Protocol.extract_impls(protocol, paths)
+  end
+
+  @doc """
   Lists standard library Elixir modules, e.g. DateTime, Kernel, Calendar.ISO, etc.
   Elixir modules listed in @ignored_modules module attribute, Elixir modules without a BEAM file, and Erlang modules are filtered out.
   """
