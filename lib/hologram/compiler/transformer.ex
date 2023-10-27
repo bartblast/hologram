@@ -389,6 +389,11 @@ defmodule Hologram.Compiler.Transformer do
     |> build_tuple_type_ir(context)
   end
 
+  # TODO: finish implementing
+  def transform({:with, _meta, parts}, _context) when is_list(parts) do
+    %IR.With{}
+  end
+
   # --- PRESERVE ORDER (BEGIN) ---
 
   def transform({{:., _meta_2, [module, function]}, _meta_1, args}, context) do

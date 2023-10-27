@@ -2880,5 +2880,29 @@ defmodule Hologram.Compiler.TransformerTest do
 
       assert transform(ast, %Context{}) == %IR.Variable{name: :try}
     end
+
+    test "variable 'with' with nil value in AST tuple" do
+      ast = ast("with")
+
+      assert transform(ast, %Context{}) == %IR.Variable{name: :with}
+    end
+
+    test "variable 'with' with non-nil value in AST tuple" do
+      ast = {:with, [line: 1], Application}
+
+      assert transform(ast, %Context{}) == %IR.Variable{name: :with}
+    end
+  end
+
+  # TODO: finish implementing
+  test "with" do
+    ast =
+      ast("""
+      with true <- true do
+        :ok
+      end
+      """)
+
+    assert transform(ast, %Context{}) == %Hologram.Compiler.IR.With{}
   end
 end
