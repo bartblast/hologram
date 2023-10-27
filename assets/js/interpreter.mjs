@@ -387,7 +387,7 @@ export default class Interpreter {
       if (afterBlock) {
         // eslint-disable-next-line no-unsafe-finally
         throw new Error(
-          "try expression after block is not yet implemented in Hologram",
+          '"try" expression after block is not yet implemented in Hologram',
         );
       }
     }
@@ -397,7 +397,7 @@ export default class Interpreter {
     } else {
       // TODO: handle else clauses
       throw new Error(
-        "try expression else clauses are not yet implemented in Hologram",
+        '"try" expression else clauses are not yet implemented in Hologram',
       );
     }
   }
@@ -535,7 +535,7 @@ export default class Interpreter {
   static #matchCatchClause(_clause, _error, _vars) {
     // TODO: handle catch clauses
     throw new Error(
-      "try expression catch clauses are not yet implemented in Hologram",
+      '"try" expression catch clauses are not yet implemented in Hologram',
     );
   }
 
@@ -600,7 +600,7 @@ export default class Interpreter {
   static #matchRescueClause(_clause, _error, _vars) {
     // TODO: handle rescue clauses
     throw new Error(
-      "try expression rescue clauses are not yet implemented in Hologram",
+      '"try" expression rescue clauses are not yet implemented in Hologram',
     );
   }
 
