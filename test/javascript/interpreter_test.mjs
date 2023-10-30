@@ -4729,6 +4729,14 @@ it("raiseError()", () => {
   );
 });
 
+it("raiseFunctionClauseError()", () => {
+  assertBoxedError(
+    () => Interpreter.raiseFunctionClauseError("abc"),
+    "FunctionClauseError",
+    "abc",
+  );
+});
+
 it("raiseKeyError()", () => {
   assertBoxedError(() => Interpreter.raiseKeyError("abc"), "KeyError", "abc");
 });

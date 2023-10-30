@@ -30,7 +30,7 @@ export default class Interpreter {
 
     // TODO: include parent module and function info, once context for error reporting is implemented.
     const message = "no function clause matching in anonymous fn/" + fun.arity;
-    return Interpreter.#raiseFunctionClauseError(message);
+    return Interpreter.raiseFunctionClauseError(message);
   }
 
   static callNamedFunction(alias, functionArityStr, args) {
@@ -167,7 +167,7 @@ export default class Interpreter {
 
       const inspectedModuleName = Interpreter.inspectModuleName(moduleName);
       const message = `no function clause matching in ${inspectedModuleName}.${functionName}/${arity}`;
-      Interpreter.#raiseFunctionClauseError(message);
+      Interpreter.raiseFunctionClauseError(message);
     };
   }
 
@@ -358,6 +358,10 @@ export default class Interpreter {
   static raiseError(aliasStr, message) {
     const errorStruct = Type.errorStruct(aliasStr, message);
     return Erlang["error/1"](errorStruct);
+  }
+
+  static raiseFunctionClauseError(message) {
+    return Interpreter.raiseError("FunctionClauseError", message);
   }
 
   static raiseKeyError(message) {
@@ -635,10 +639,6 @@ export default class Interpreter {
       "CondClauseError",
       "no cond clause evaluated to a truthy value",
     );
-  }
-
-  static #raiseFunctionClauseError(message) {
-    return Interpreter.raiseError("FunctionClauseError", message);
   }
 
   static #raiseUndefinedFunctionError(moduleName, functionName, arity) {
