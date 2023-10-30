@@ -646,6 +646,22 @@ describe(">/2", () => {
   });
 });
 
+describe("atom_to_binary/1", () => {
+  it("converts atom to (binary) bitstring", () => {
+    const result = Erlang["atom_to_binary/1"](Type.atom("abc"));
+
+    assert.deepStrictEqual(result, Type.bitstring("abc"));
+  });
+
+  it("raises ArgumentError if the argument is not an atom", () => {
+    assertBoxedError(
+      () => Erlang["atom_to_binary/1"](Type.integer(123)),
+      "ArgumentError",
+      "errors were found at the given arguments:\n\n  * 1st argument: not an atom\n",
+    );
+  });
+});
+
 it("error/1", () => {
   const reason = Type.errorStruct("MyError", "my message");
 

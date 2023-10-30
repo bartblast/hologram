@@ -7,6 +7,22 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
 
   use Hologram.Test.BasicCase, async: true
 
+  describe "atom_to_binary/1" do
+    test "converts atom to (binary) bitstring" do
+      assert :erlang.atom_to_binary(:abc) == <<"abc">>
+    end
+
+    test "raises ArgumentError if the argument is not an atom" do
+      assert_raise ArgumentError,
+                   "errors were found at the given arguments:\n\n  * 1st argument: not an atom\n",
+                   fn ->
+                     # wrap the code with anonymous function to avoid compiler warnings
+                     fun = fn x -> :erlang.atom_to_binary(x) end
+                     fun.(123)
+                   end
+    end
+  end
+
   describe "is_bitstring/1" do
     test "returns true if the term is a bistring" do
       assert :erlang.is_bitstring(<<2::size(7)>>) == true

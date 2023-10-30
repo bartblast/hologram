@@ -158,6 +158,19 @@ const Erlang = {
   // end >/2
   // deps: []
 
+  // start atom_to_binary/1
+  "atom_to_binary/1": (atom) => {
+    if (!Type.isAtom(atom)) {
+      Interpreter.raiseArgumentError(
+        "errors were found at the given arguments:\n\n  * 1st argument: not an atom\n",
+      );
+    }
+
+    return Type.bitstring(atom.value);
+  },
+  // end atom_to_binary/1
+  // deps: []
+
   // TODO: review this function after error reporting is implemented
   // start error/1
   "error/1": (reason) => {
