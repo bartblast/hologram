@@ -13,6 +13,10 @@ import Type from "../../../assets/js/type.mjs";
 before(() => linkModules());
 after(() => unlinkModules());
 
+// IMPORTANT!
+// Each JavaScript test has a related Elixir consistency test in test/elixir/hologram/ex_js_consistency/erlang/maps_test.exs
+// Always update both together.
+
 describe("fold/3", () => {
   let fun, map;
 
