@@ -2,6 +2,7 @@
 
 import {assert} from "chai";
 import Erlang from "./erlang/erlang.mjs";
+import Erlang_Lists from "./erlang/lists.mjs";
 import Erlang_Maps from "./erlang/maps.mjs";
 import HologramBoxedError from "./errors/boxed_error.mjs";
 import HologramMatchError from "./errors/match_error.mjs";
@@ -140,6 +141,7 @@ export function assertMatchError(callable, value) {
 
 export function linkModules() {
   globalThis.Erlang = Erlang;
+  globalThis.Erlang_Lists = Erlang_Lists;
   globalThis.Erlang_Maps = Erlang_Maps;
   globalThis.Elixir_Enum = {};
   globalThis.Elixir_Kernel = Elixir_Kernel;
@@ -147,6 +149,7 @@ export function linkModules() {
 
 export function unlinkModules() {
   delete globalThis.Erlang;
+  delete globalThis.Erlang_Lists;
   delete globalThis.Erlang_Maps;
   delete globalThis.Elixir_Enum;
   delete globalThis.Elixir_Kernel;
