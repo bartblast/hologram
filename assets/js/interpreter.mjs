@@ -391,10 +391,13 @@ export default class Interpreter {
     try {
       const varsClone = Interpreter.cloneVars(vars);
       result = body(varsClone);
+      // TODO: finish
+      // eslint-disable-next-line no-useless-catch
     } catch (error) {
       throw error;
 
       // TODO: handle errors
+      // eslint-disable-next-line no-unreachable
       result =
         Interpreter.#evaluateRescueClauses(rescueClauses, error, vars) ||
         Interpreter.#evaluateCatchClauses(catchClauses, error, vars);
