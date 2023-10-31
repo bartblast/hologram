@@ -814,7 +814,7 @@ describe("validateCodePoint()", () => {
     assert.isFalse(Bitstring.validateCodePoint(1114113n));
   });
 
-  it("not an integer or bigint", () => {
+  it("not an integer or a bigint", () => {
     assert.isFalse(Bitstring.validateCodePoint("abc"));
   });
 });
