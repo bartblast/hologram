@@ -392,6 +392,9 @@ export default class Interpreter {
       const varsClone = Interpreter.cloneVars(vars);
       result = body(varsClone);
     } catch (error) {
+      throw error;
+
+      // TODO: handle errors
       result =
         Interpreter.#evaluateRescueClauses(rescueClauses, error, vars) ||
         Interpreter.#evaluateCatchClauses(catchClauses, error, vars);
