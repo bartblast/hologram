@@ -750,6 +750,30 @@ describe("from()", () => {
   });
 });
 
+describe("merge()", () => {
+  it("no bitstrings", () => {
+    assert.deepStrictEqual(Bitstring.merge([]), Type.bitstring([]));
+  });
+
+  it("single bitstring", () => {
+    const bitstring = Type.bitstring([1, 0, 1]);
+    const result = Bitstring.merge([bitstring]);
+
+    assert.deepStrictEqual(result, bitstring);
+  });
+
+  it("multiple bitstrings", () => {
+    const bitstring1 = Type.bitstring([1, 1, 0]);
+    const bitstring2 = Type.bitstring([1, 0, 1]);
+    const bitstring3 = Type.bitstring([0, 1, 1]);
+
+    const result = Bitstring.merge([bitstring1, bitstring2, bitstring3]);
+    const expected = Type.bitstring([1, 1, 0, 1, 0, 1, 0, 1, 1]);
+
+    assert.deepStrictEqual(result, expected);
+  });
+});
+
 describe("toText()", () => {
   it("converts the bitstring to UTF-8 text if the number of its bits is divisible by 8", () => {
     const bitstring = Type.bitstring("全息图");

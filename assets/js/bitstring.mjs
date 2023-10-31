@@ -15,6 +15,25 @@ export default class Bitstring {
     return {type: "bitstring", bits: Utils.concatUint8Arrays(bitArrays)};
   }
 
+  // Using set() is much more performant than using spread operator,
+  // see: https://jsben.ch/jze3P
+  static merge(bitstrings) {
+    const length = bitstrings.reduce(
+      (acc, bitstring) => acc + bitstring.bits.length,
+      0,
+    );
+
+    const bits = new Uint8Array(length);
+    let offset = 0;
+
+    for (const bitstring of bitstrings) {
+      bits.set(bitstring.bits, offset);
+      offset += bitstring.bits.length;
+    }
+
+    return Type.bitstring(bits);
+  }
+
   static toText(bitstring) {
     const byteArray = Bitstring.#convertBitArrayToByteArray(bitstring.bits);
     const decoder = new TextDecoder("utf-8");
