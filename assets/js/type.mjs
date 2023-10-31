@@ -128,6 +128,10 @@ export default class Type {
     return boxed.type === "atom";
   }
 
+  static isBinary(boxed) {
+    return Type.isBitstring(boxed) && boxed.bits.length % 8 === 0;
+  }
+
   static isBitstring(boxed) {
     return boxed.type === "bitstring";
   }

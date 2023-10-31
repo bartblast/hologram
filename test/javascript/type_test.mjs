@@ -401,6 +401,23 @@ describe("isAtom()", () => {
   });
 });
 
+describe("isBinary()", () => {
+  it("returns true if the term is a binary bitsting", () => {
+    const term = Type.bitstring("abc");
+    assert.isTrue(Type.isBinary(term));
+  });
+
+  it("returns false if the term is a non-binary bitstring", () => {
+    const term = Type.bitstring([0, 1, 0]);
+    assert.isFalse(Type.isBinary(term));
+  });
+
+  it("returns false if the term is not a bitstring", () => {
+    const term = Type.atom("abc");
+    assert.isFalse(Type.isBinary(term));
+  });
+});
+
 describe("isBitstring()", () => {
   it("returns true if the term is a bitstring", () => {
     const term = Type.bitstring("abc");
