@@ -8,6 +8,28 @@ import Type from "../type.mjs";
 // Also, in such case add respective call graph edges in Hologram.Compiler.list_runtime_mfas/1.
 
 const Erlang_Lists = {
+  // start flatten/1
+  "flatten/1": (list) => {
+    if (!Type.isList(list)) {
+      Interpreter.raiseFunctionClauseError(
+        "no function clause matching in :lists.flatten/1",
+      );
+    }
+
+    const data = list.data.reduce((acc, elem) => {
+      if (Type.isList(elem)) {
+        elem = Erlang_Lists["flatten/1"](elem);
+        return acc.concat(elem.data);
+      } else {
+        return acc.concat(elem);
+      }
+    }, []);
+
+    return Type.list(data);
+  },
+  // end flatten/1
+  // deps: []
+
   // start reverse/1
   "reverse/1": (list) => {
     if (!Type.isList(list)) {
