@@ -15,7 +15,7 @@ export default class Bitstring {
     return {type: "bitstring", bits: Utils.concatUint8Arrays(bitArrays)};
   }
 
-  static isValidCodePoint(integer) {
+  static validateCodePoint(integer) {
     try {
       String.fromCodePoint(integer);
       return true;
