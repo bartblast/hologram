@@ -41,9 +41,13 @@ export default class Bitstring {
     return decoder.decode(byteArray);
   }
 
-  static validateCodePoint(integer) {
+  static validateCodePoint(codePoint) {
+    if (typeof codePoint === "bigint") {
+      codePoint = Number(codePoint);
+    }
+
     try {
-      String.fromCodePoint(integer);
+      String.fromCodePoint(codePoint);
       return true;
     } catch (error) {
       if (error instanceof RangeError) {

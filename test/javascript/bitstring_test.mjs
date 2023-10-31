@@ -804,7 +804,17 @@ describe("validateCodePoint()", () => {
     assert.isFalse(Bitstring.validateCodePoint(1114113));
   });
 
-  it("not an integer", () => {
+  it("bigint that is a valid code point", () => {
+    // a = 97
+    assert.isTrue(Bitstring.validateCodePoint(97n));
+  });
+
+  it("bigint that is not a valid code point", () => {
+    // Max Unicode code point value is 1,114,112
+    assert.isFalse(Bitstring.validateCodePoint(1114113n));
+  });
+
+  it("not an integer or bigint", () => {
     assert.isFalse(Bitstring.validateCodePoint("abc"));
   });
 });
