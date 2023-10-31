@@ -15,6 +15,13 @@ export default class Bitstring {
     return {type: "bitstring", bits: Utils.concatUint8Arrays(bitArrays)};
   }
 
+  static toText(bitstring) {
+    const byteArray = Bitstring.#convertBitArrayToByteArray(bitstring.bits);
+    const decoder = new TextDecoder("utf-8");
+
+    return decoder.decode(byteArray);
+  }
+
   static validateCodePoint(integer) {
     try {
       String.fromCodePoint(integer);
@@ -26,13 +33,6 @@ export default class Bitstring {
         throw error;
       }
     }
-  }
-
-  static toText(bitstring) {
-    const byteArray = Bitstring.#convertBitArrayToByteArray(bitstring.bits);
-    const decoder = new TextDecoder("utf-8");
-
-    return decoder.decode(byteArray);
   }
 
   static #buildBitArray(segment, index) {
