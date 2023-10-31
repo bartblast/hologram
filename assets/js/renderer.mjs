@@ -16,7 +16,8 @@ export default class Renderer {
       pageModule,
       pageClient,
     );
-    console.dir(layoutPropsDOM);
+
+    console.inspect(layoutPropsDOM);
   }
 
   static #buildLayoutPropsDOM(pageModule, pageClient) {
