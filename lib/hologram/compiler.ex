@@ -297,6 +297,7 @@ defmodule Hologram.Compiler do
     # Add call graph edges for Erlang functions depending on other Erlang functions.
     CallGraph.add_edge(call_graph, {:erlang, :"/=", 2}, {:erlang, :==, 2})
     CallGraph.add_edge(call_graph, {:erlang, :error, 1}, {:erlang, :error, 2})
+    CallGraph.add_edge(call_graph, {:unicode, :characters_to_binary, 3}, {:lists, :flatten, 1})
 
     call_graph
     |> CallGraph.reachable_mfas(entry_mfas)
