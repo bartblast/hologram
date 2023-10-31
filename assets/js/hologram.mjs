@@ -20,7 +20,9 @@ export default class Hologram {
   static pageParams = null;
 
   // TODO: implement
-  static init() {}
+  static init() {
+    window.console.inspect = (term) => Elixir_String_Chars["to_string/1"](term);
+  }
 
   static mountPage() {
     window.__hologramPageReachableFunctionDefs__(Hologram.deps);
