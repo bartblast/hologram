@@ -15,6 +15,19 @@ export default class Bitstring {
     return {type: "bitstring", bits: Utils.concatUint8Arrays(bitArrays)};
   }
 
+  static isValidCodePoint(codePoint) {
+    try {
+      String.fromCodePoint(codePoint);
+      return true;
+    } catch (error) {
+      if (error instanceof RangeError) {
+        return false;
+      } else {
+        throw error;
+      }
+    }
+  }
+
   static toText(bitstring) {
     const byteArray = Bitstring.#convertBitArrayToByteArray(bitstring.bits);
     const decoder = new TextDecoder("utf-8");

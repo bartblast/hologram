@@ -750,6 +750,22 @@ describe("from()", () => {
   });
 });
 
+describe("isValidCodePoint()", () => {
+  it("integer that is a valid code point", () => {
+    // a = 97
+    assert.isTrue(Bitstring.isValidCodePoint(97));
+  });
+
+  it("integer that is not a valid code point", () => {
+    // Max Unicode code point value is 1,114,112
+    assert.isFalse(Bitstring.isValidCodePoint(1114113));
+  });
+
+  it("not an integer", () => {
+    assert.isFalse(Bitstring.isValidCodePoint("abc"));
+  });
+});
+
 describe("toText()", () => {
   it("converts the bitstring to UTF-8 text if the number of its bits is divisible by 8", () => {
     const bitstring = Type.bitstring("全息图");
