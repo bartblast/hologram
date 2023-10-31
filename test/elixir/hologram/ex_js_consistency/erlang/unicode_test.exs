@@ -8,6 +8,11 @@ defmodule Hologram.ExJsConsistency.Erlang.UnicodeTest do
   use Hologram.Test.BasicCase, async: true
   import Hologram.Commons.BitstringUtils, only: [to_bit_list: 1]
 
+  test "characters_to_binary/1" do
+    assert :unicode.characters_to_binary("全息图") ==
+             :unicode.characters_to_binary("全息图", :utf8, :utf8)
+  end
+
   describe "characters_to_binary/3" do
     test "input is an empty list" do
       assert :unicode.characters_to_binary([], :utf8, :utf8) == <<>>

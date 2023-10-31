@@ -4,6 +4,7 @@ import {
   assert,
   assertBoxedError,
   linkModules,
+  sinon,
   unlinkModules,
 } from "../../../assets/js/test_support.mjs";
 
@@ -17,6 +18,33 @@ after(() => unlinkModules());
 // IMPORTANT!
 // Each JavaScript test has a related Elixir consistency test in test/elixir/hologram/ex_js_consistency/erlang/unicode_test.exs
 // Always update both together.
+
+describe("characters_to_binary/1", () => {
+  let prevCharactersToBinaryFun;
+
+  beforeEach(() => {
+    prevCharactersToBinaryFun =
+      globalThis.Erlang_Unicode["characters_to_binary/3"];
+  });
+
+  afterEach(() => {
+    globalThis.Erlang_Unicode["characters_to_binary/3"] =
+      prevCharactersToBinaryFun;
+  });
+
+  it("delegates to :unicode.characters_to_binary/3", () => {
+    const stub = sinon
+      .stub(Erlang_Unicode, "characters_to_binary/3")
+      .callsFake((_input, _inputEncoding, _outputEncoding) => "dummy");
+
+    const input = Type.bitstring("abc");
+    const encodingOpt = Type.atom("utf8");
+
+    Erlang_Unicode["characters_to_binary/1"](input);
+
+    sinon.assert.calledWith(stub, input, encodingOpt, encodingOpt);
+  });
+});
 
 describe("characters_to_binary/3", () => {
   const utf8Atom = Type.atom("utf8");
