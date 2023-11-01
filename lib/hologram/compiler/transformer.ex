@@ -51,15 +51,12 @@ defmodule Hologram.Compiler.Transformer do
   end
 
   # Local function capture
-  def transform({:&, meta, [{:/, meta, [{function, meta, nil}, arity]}]}, context) do
+  def transform({:&, meta, [{:/, _meta_2, [{function, _meta_3, nil}, arity]}]}, context) do
     transform_function_capture(function, arity, meta, context)
   end
 
   # Remote function capture
-  def transform(
-        {:&, meta, [{:/, meta, [{function, [{:no_parens, true} | meta], []}, arity]}]},
-        context
-      ) do
+  def transform({:&, meta, [{:/, _meta_2, [{function, _meta_3, []}, arity]}]}, context) do
     transform_function_capture(function, arity, meta, context)
   end
 
