@@ -35,9 +35,15 @@ jobs:
         otp-version: ${{ matrix.otp }}
         elixir-version: ${{ matrix.elixir }}
 
-    # Step: Check out the code.
+    # Step: Checkout the code.
     - name: Checkout code
       uses: actions/checkout@v3
+      
+    # Step: Setup Node.js using the version specified in .tool-versions file.
+    - name: Set up Node.JS
+      uses: actions/setup-node@v3
+      with:
+        node-version-file: .tool-versions    
       
     ### LIB CHECKS ###
 
