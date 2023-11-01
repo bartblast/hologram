@@ -45,14 +45,14 @@ describe("fold/3", () => {
     ]);
   });
 
-  it("reduces non-empty map", () => {
-    const result = Erlang_Maps["fold/3"](fun, Type.integer(10), map);
-    assert.deepStrictEqual(result, Type.integer(331));
-  });
-
   it("reduces empty map", () => {
     const result = Erlang_Maps["fold/3"](fun, Type.integer(10), Type.map([]));
     assert.deepStrictEqual(result, Type.integer(10));
+  });
+
+  it("reduces non-empty map", () => {
+    const result = Erlang_Maps["fold/3"](fun, Type.integer(10), map);
+    assert.deepStrictEqual(result, Type.integer(331));
   });
 
   it("raises ArgumentError if the first argument is not an anonymous function", () => {
