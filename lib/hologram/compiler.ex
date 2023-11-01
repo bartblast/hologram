@@ -294,19 +294,8 @@ defmodule Hologram.Compiler do
       {:maps, :get, 2}
     ]
 
-    # Add call graph edges for Erlang functions depending on other Erlang functions.
-    CallGraph.add_edge(call_graph, {:erlang, :"/=", 2}, {:erlang, :==, 2})
-    CallGraph.add_edge(call_graph, {:erlang, :error, 1}, {:erlang, :error, 2})
-
-    CallGraph.add_edge(
-      call_graph,
-      {:unicode, :characters_to_binary, 1},
-      {:unicode, :characters_to_binary, 3}
-    )
-
-    CallGraph.add_edge(call_graph, {:unicode, :characters_to_binary, 3}, {:lists, :flatten, 1})
-
     call_graph
+    |> add_call_graph_edges_for_erlang_functions()
     |> CallGraph.reachable_mfas(entry_mfas)
     # Some protocol implementations are referenced but not actually implemented, e.g. Collectable.Atom
     |> Enum.reject(fn {module, _function, _arity} -> !Reflection.module?(module) end)
@@ -358,6 +347,18 @@ defmodule Hologram.Compiler do
       module: module_def_ir.module,
       body: %IR.Block{expressions: function_defs}
     }
+  end
+
+  # Add call graph edges for Erlang functions depending on other Erlang functions.
+  defp add_call_graph_edges_for_erlang_functions(call_graph) do
+    call_graph
+    |> CallGraph.add_edge({:erlang, :"/=", 2}, {:erlang, :==, 2})
+    |> CallGraph.add_edge({:erlang, :error, 1}, {:erlang, :error, 2})
+    |> CallGraph.add_edge(
+      {:unicode, :characters_to_binary, 1},
+      {:unicode, :characters_to_binary, 3}
+    )
+    |> CallGraph.add_edge({:unicode, :characters_to_binary, 3}, {:lists, :flatten, 1})
   end
 
   defp extract_erlang_function_source_code(file_path, function, arity) do
