@@ -14,7 +14,6 @@ defmodule Hologram.Test.Helpers do
   alias Hologram.Template.Renderer
 
   defdelegate ast(code), to: AST, as: :for_code
-  defdelegate encode(code, context \\ %Context{}), to: Encoder
   defdelegate ir(code, context \\ %Context{}), to: IR, as: :for_code
   defdelegate parsed_tags(markup), to: Parser, as: :parse_markup
   defdelegate pid(str), to: IEx.Helpers
@@ -46,6 +45,16 @@ defmodule Hologram.Test.Helpers do
   @spec build_component_server() :: Component.Server.t()
   def build_component_server do
     %Component.Server{}
+  end
+
+  @doc """
+  Encodes the given Elixir source code to JavaScript.
+  """
+  @spec encode_code(String.t(), Context.t()) :: String.t()
+  def encode_code(code, context \\ %Context{}) do
+    code
+    |> ir(context)
+    |> Encoder.encode(context)
   end
 
   @doc """
