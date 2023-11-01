@@ -2,14 +2,11 @@
 
 import {
   assert,
-  assertBoxedError,
   linkModules,
-  sinon,
   unlinkModules,
 } from "../../../assets/js/test_support.mjs";
 
 import Erlang_Persistent_Term from "../../../assets/js/erlang/persistent_term.mjs";
-import HologramInterpreterError from "../../../assets/js/errors/interpreter_error.mjs";
 import MemoryStorage from "../../../assets/js/memory_storage.mjs";
 import Type from "../../../assets/js/type.mjs";
 
