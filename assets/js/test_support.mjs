@@ -12,7 +12,7 @@ import sinonESM from "../node_modules/sinon/pkg/sinon-esm.js";
 import Type from "./type.mjs";
 
 function buildElixirKernelInspectFunction() {
-  return (term, opts) => {
+  return (term) => {
     switch (term.type) {
       // TODO: handle correctly atoms which need to be double quoted, e.g. :"1"
       case "atom":
@@ -38,7 +38,7 @@ function buildElixirKernelInspectFunction() {
           return (
             "[" +
             term.data
-              .map((item) => Elixir_Kernel["inspect/2"](item, opts))
+              .map((item) => Elixir_Kernel["inspect/1"](item))
               .join(", ") +
             "]"
           );
@@ -47,10 +47,10 @@ function buildElixirKernelInspectFunction() {
             "[" +
             term.data
               .slice(0, -1)
-              .map((item) => Elixir_Kernel["inspect/2"](item, opts))
+              .map((item) => Elixir_Kernel["inspect/1"](item))
               .join(", ") +
             " | " +
-            Elixir_Kernel["inspect/2"](term.data.slice(-1)[0], opts) +
+            Elixir_Kernel["inspect/1"](term.data.slice(-1)[0]) +
             "]"
           );
         }
@@ -61,9 +61,7 @@ function buildElixirKernelInspectFunction() {
       case "tuple":
         return (
           "{" +
-          term.data
-            .map((item) => Elixir_Kernel["inspect/2"](item, opts))
-            .join(", ") +
+          term.data.map((item) => Elixir_Kernel["inspect/1"](item)).join(", ") +
           "}"
         );
 
@@ -77,7 +75,7 @@ function buildElixirKernelInspectFunction() {
 // The actual Elixir_Kernel is transpiled automatically during project build.
 function buildElixirKernelModule() {
   return {
-    "inspect/2": buildElixirKernelInspectFunction(),
+    "inspect/1": buildElixirKernelInspectFunction(),
   };
 }
 

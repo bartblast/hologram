@@ -1678,7 +1678,7 @@ it("fetchErrorType()", () => {
 });
 
 describe("inspect()", () => {
-  it("proxies to Kernel.inspect/2", () => {
+  it("delegates to Kernel.inspect/1", () => {
     const result = Interpreter.inspect(Type.integer(123));
     assert.equal(result, "123");
   });

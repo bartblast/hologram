@@ -21,7 +21,7 @@ export default class Hologram {
 
   // TODO: implement
   static init() {
-    window.console.inspect = (term) => Elixir_String_Chars["to_string/1"](term);
+    window.console.inspect = (term) => Interpreter.inspect(term);
   }
 
   static mountPage() {

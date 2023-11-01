@@ -276,7 +276,7 @@ defmodule Hologram.Compiler do
       {Hologram.Template.Renderer, :build_layout_props_dom, 2},
 
       # Interpreter.inspect()
-      {Kernel, :inspect, 2},
+      {Kernel, :inspect, 1},
 
       # Renderer.renderPage()
       {Map, :fetch!, 2},

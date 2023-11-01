@@ -233,7 +233,7 @@ export default class Interpreter {
   }
 
   static inspect(term) {
-    return Elixir_Kernel["inspect/2"](term, Type.list([]));
+    return Elixir_Kernel["inspect/1"](term);
   }
 
   static inspectModuleName(moduleName) {
