@@ -4,6 +4,7 @@ import Bitstring from "./bitstring.mjs";
 import HologramBoxedError from "./errors/boxed_error.mjs";
 import HologramInterpreterError from "./errors/interpreter_error.mjs";
 import Interpreter from "./interpreter.mjs";
+import MemoryStorage from "./memory_storage.mjs";
 import Renderer from "./renderer.mjs";
 import Type from "./type.mjs";
 
@@ -13,6 +14,7 @@ export default class Hologram {
     HologramBoxedError: HologramBoxedError,
     HologramInterpreterError: HologramInterpreterError,
     Interpreter: Interpreter,
+    MemoryStorage: MemoryStorage,
     Type: Type,
   };
 

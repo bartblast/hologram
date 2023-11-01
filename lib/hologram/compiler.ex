@@ -71,12 +71,14 @@ defmodule Hologram.Compiler do
     "use strict";
 
     window.__hologramPageReachableFunctionDefs__ = (deps) => {
-      const Bitstring = deps.Bitstring;
-      const HologramBoxedError = deps.HologramBoxedError;
-      const HologramInterpreterError = deps.HologramInterpreterError;
-      const Interpreter = deps.Interpreter;
-      const Type = deps.Type;#{erlang_function_defs}#{elixir_function_defs}
-
+      const {
+        Bitstring,
+        HologramBoxedError,
+        HologramInterpreterError,
+        Interpreter,
+        MemoryStorage,
+        Type,
+      } = deps;#{erlang_function_defs}#{elixir_function_defs}
     }
 
     window.__hologramPageScriptLoaded__ = true;
@@ -104,10 +106,12 @@ defmodule Hologram.Compiler do
     """
     "use strict";
 
+    import Bitstring from "#{source_dir}/bitstring.mjs";
     import Hologram from "#{source_dir}/hologram.mjs";
     import HologramBoxedError from "#{source_dir}/errors/boxed_error.mjs";
     import HologramInterpreterError from "#{source_dir}/errors/interpreter_error.mjs";
     import Interpreter from "#{source_dir}/interpreter.mjs";
+    import MemoryStorage from "#{source_dir}/memory_storage.mjs";
     import Type from "#{source_dir}/type.mjs";#{erlang_function_defs}#{elixir_function_defs}
 
     document.addEventListener("hologram:pageScriptLoaded", () => Hologram.run());
