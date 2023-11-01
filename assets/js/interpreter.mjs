@@ -58,10 +58,7 @@ export default class Interpreter {
       }
     }
 
-    const message =
-      "no case clause matching: " + Interpreter.inspect(condition);
-
-    return Interpreter.#raiseCaseClauseError(message);
+    return Interpreter.raiseCaseClauseError(condition);
   }
 
   static cloneVars(vars) {
@@ -351,6 +348,12 @@ export default class Interpreter {
     return Interpreter.raiseError("BadMapError", message);
   }
 
+  static raiseCaseClauseError(arg) {
+    const message = "no case clause matching: " + Interpreter.inspect(arg);
+
+    return Interpreter.raiseError("CaseClauseError", message);
+  }
+
   static raiseCompileError(message) {
     return Interpreter.raiseError("CompileError", message);
   }
@@ -634,10 +637,6 @@ export default class Interpreter {
     }
 
     return Interpreter.#handleMatchResult(right, vars, rootMatch);
-  }
-
-  static #raiseCaseClauseError(message) {
-    return Interpreter.raiseError("CaseClauseError", message);
   }
 
   static #raiseCondClauseError() {

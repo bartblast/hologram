@@ -4713,6 +4713,14 @@ it("raiseBadMapError()", () => {
   );
 });
 
+it("raiseCaseClauseError()", () => {
+  assertBoxedError(
+    () => Interpreter.raiseCaseClauseError(Type.atom("abc")),
+    "CaseClauseError",
+    "no case clause matching: :abc",
+  );
+});
+
 it("raiseCompileError()", () => {
   assertBoxedError(
     () => Interpreter.raiseCompileError("abc"),
