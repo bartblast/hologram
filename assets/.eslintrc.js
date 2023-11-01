@@ -9,6 +9,7 @@ module.exports = {
     Elixir_Enum: "readonly",
     Elixir_Hologram_Template_Renderer: "readonly",
     Elixir_Kernel: "readonly",
+    Erlang_Lists: "readonly",
     Elixir_Map: "readonly",
     Elixir_String_Chars: "readonly",
     Erlang: "readonly",
