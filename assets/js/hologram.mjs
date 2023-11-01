@@ -1,5 +1,6 @@
 "use strict";
 
+import Bitstring from "./bitstring.mjs";
 import HologramBoxedError from "./errors/boxed_error.mjs";
 import HologramInterpreterError from "./errors/interpreter_error.mjs";
 import Interpreter from "./interpreter.mjs";
@@ -8,6 +9,7 @@ import Type from "./type.mjs";
 
 export default class Hologram {
   static deps = {
+    Bitstring: Bitstring,
     HologramBoxedError: HologramBoxedError,
     HologramInterpreterError: HologramInterpreterError,
     Interpreter: Interpreter,

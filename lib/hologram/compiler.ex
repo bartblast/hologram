@@ -71,6 +71,7 @@ defmodule Hologram.Compiler do
     "use strict";
 
     window.__hologramPageReachableFunctionDefs__ = (deps) => {
+      const Bitstring = deps.Bitstring;
       const HologramBoxedError = deps.HologramBoxedError;
       const HologramInterpreterError = deps.HologramInterpreterError;
       const Interpreter = deps.Interpreter;
