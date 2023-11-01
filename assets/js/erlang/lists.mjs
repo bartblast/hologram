@@ -30,6 +30,26 @@ const Erlang_Lists = {
   // end flatten/1
   // deps: []
 
+  // start foldl/3
+  "foldl/3": (fun, initialAcc, list) => {
+    if (!Type.isAnonymousFunction(fun) || fun.arity !== 2) {
+      Interpreter.raiseFunctionClauseError(
+        "no function clause matching in :lists.foldl/3",
+      );
+    }
+
+    if (!Type.isList(list)) {
+      Interpreter.raiseCaseClauseError(list);
+    }
+
+    return list.data.reduce(
+      (acc, value) => Interpreter.callAnonymousFunction(fun, [value, acc]),
+      initialAcc,
+    );
+  },
+  // end foldl/3
+  // deps: []
+
   // start reverse/1
   "reverse/1": (list) => {
     if (!Type.isList(list)) {

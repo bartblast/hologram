@@ -67,6 +67,79 @@ describe("flatten/1", () => {
   });
 });
 
+describe("foldl/3", () => {
+  const fun = Type.anonymousFunction(
+    2,
+    [
+      {
+        params: (_vars) => [
+          Type.variablePattern("value"),
+          Type.variablePattern("acc"),
+        ],
+        guards: [],
+        body: (vars) => {
+          return Erlang["+/2"](vars.acc, vars.value);
+        },
+      },
+    ],
+    {},
+  );
+
+  const acc = Type.integer(0);
+  const emptyList = Type.list([]);
+
+  it("reduces empty list", () => {
+    const result = Erlang_Lists["foldl/3"](fun, acc, emptyList);
+
+    assert.deepStrictEqual(result, acc);
+  });
+
+  it("reduces non-empty list", () => {
+    const list = Type.list([Type.integer(1), Type.integer(2), Type.integer(3)]);
+    const result = Erlang_Lists["foldl/3"](fun, acc, list);
+
+    assert.deepStrictEqual(result, Type.integer(6));
+  });
+
+  it("raises FunctionClauseError if the first argument is not an anonymous function", () => {
+    assertBoxedError(
+      () => Erlang_Lists["foldl/3"](Type.atom("abc"), acc, emptyList),
+      "FunctionClauseError",
+      "no function clause matching in :lists.foldl/3",
+    );
+  });
+
+  it("raises FunctionClauseError if the first argument is an anonymous function with arity different than 2", () => {
+    const fun = Type.anonymousFunction(
+      1,
+      [
+        {
+          params: (_vars) => [Type.variablePattern("x")],
+          guards: [],
+          body: (vars) => {
+            return vars.x;
+          },
+        },
+      ],
+      {},
+    );
+
+    assertBoxedError(
+      () => Erlang_Lists["foldl/3"](fun, acc, emptyList),
+      "FunctionClauseError",
+      "no function clause matching in :lists.foldl/3",
+    );
+  });
+
+  it("raises CaseClauseError if the third argument is not a list", () => {
+    assertBoxedError(
+      () => Erlang_Lists["foldl/3"](fun, acc, Type.atom("abc")),
+      "CaseClauseError",
+      "no case clause matching: :abc",
+    );
+  });
+});
+
 describe("reverse/1", () => {
   it("returns a list with the elements in the argument in reverse order", () => {
     const arg = Type.list([Type.integer(1), Type.integer(2), Type.integer(3)]);
