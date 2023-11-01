@@ -4,6 +4,7 @@ import {assert} from "chai";
 import Erlang from "./erlang/erlang.mjs";
 import Erlang_Lists from "./erlang/lists.mjs";
 import Erlang_Maps from "./erlang/maps.mjs";
+import Erlang_Persistent_Term from "./erlang/persistent_term.mjs";
 import Erlang_Unicode from "./erlang/unicode.mjs";
 import HologramBoxedError from "./errors/boxed_error.mjs";
 import HologramMatchError from "./errors/match_error.mjs";
@@ -142,6 +143,7 @@ export function linkModules() {
   globalThis.Erlang = Erlang;
   globalThis.Erlang_Lists = Erlang_Lists;
   globalThis.Erlang_Maps = Erlang_Maps;
+  globalThis.Erlang_Persistent_Term = Erlang_Persistent_Term;
   globalThis.Erlang_Unicode = Erlang_Unicode;
   globalThis.Elixir_Enum = {};
   globalThis.Elixir_Kernel = Elixir_Kernel;
@@ -151,6 +153,7 @@ export function unlinkModules() {
   delete globalThis.Erlang;
   delete globalThis.Erlang_Lists;
   delete globalThis.Erlang_Maps;
+  delete globalThis.Erlang_Persistent_Term;
   delete globalThis.Erlang_Unicode;
   delete globalThis.Elixir_Enum;
   delete globalThis.Elixir_Kernel;
