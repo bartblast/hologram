@@ -96,7 +96,6 @@ defmodule Hologram.Compiler.Encoder do
         # If the expression contains variables that are used both as patterns (in match operator)
         # and as values (value access), then we need to take a snapshot of these variables
         # before evaluating the expression, and then use that snapshot for accessing variable values.
-
         %{var_patterns: var_patterns, var_values: var_values} = Analyzer.analyze(expr)
 
         use_vars_snapshot? =
