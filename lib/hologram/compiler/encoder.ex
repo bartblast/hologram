@@ -11,7 +11,6 @@ defmodule Hologram.Compiler.Encoder do
 
   alias Hologram.Commons.IntegerUtils
   alias Hologram.Commons.StringUtils
-  alias Hologram.Compiler.Analyzer
   alias Hologram.Compiler.Context
   alias Hologram.Compiler.IR
 
@@ -93,40 +92,12 @@ defmodule Hologram.Compiler.Encoder do
       exprs
       |> Enum.with_index()
       |> Enum.map_join("", fn {expr, idx} ->
-        # If the expression contains variables that are used both as patterns (in match operator)
-        # and as values (value access), then we need to take a snapshot of these variables
-        # before evaluating the expression, and then use that snapshot for accessing variable values.
-        %{var_patterns: var_patterns, var_values: var_values} = Analyzer.analyze(expr)
+        expr_js = encode(expr, context)
 
-        use_vars_snapshot? =
-          var_patterns
-          |> MapSet.intersection(var_values)
-          |> Enum.any?()
+        last_expr? = idx == expr_count - 1
+        has_match_operator? = has_match_operator?(expr)
 
-        output =
-          if use_vars_snapshot? do
-            "\nInterpreter.takeVarsSnapshot(vars);"
-          else
-            ""
-          end
-
-        context =
-          if use_vars_snapshot? do
-            %{context | use_vars_snapshot?: true}
-          else
-            context
-          end
-
-        expr_str = encode(expr, context)
-
-        output =
-          if idx == expr_count - 1 do
-            output <> "\nreturn "
-          else
-            output <> "\n"
-          end
-
-        output <> expr_str <> ";"
+        encode_block_expr(expr_js, last_expr?, has_match_operator?)
       end)
 
     "{#{body}\n}"
@@ -542,6 +513,33 @@ defmodule Hologram.Compiler.Encoder do
     Enum.map_join(segments, ", ", &encode(&1, context))
   end
 
+  defp encode_block_expr(expr_js, last_expr?, has_match_operator?)
+
+  defp encode_block_expr(expr_js, true, true) do
+    """
+
+    window.__hologramReturn__ = #{expr_js};
+    Interpreter.updateVarsToMatchedValues(vars);
+    return window.__hologramReturn__;\
+    """
+  end
+
+  defp encode_block_expr(expr_js, true, false) do
+    "\nreturn #{expr_js};"
+  end
+
+  defp encode_block_expr(expr_js, false, true) do
+    """
+
+    #{expr_js};
+    Interpreter.updateVarsToMatchedValues(vars);\
+    """
+  end
+
+  defp encode_block_expr(expr_js, false, false) do
+    "\n#{expr_js};"
+  end
+
   defp encode_closure(nil, _context), do: "null"
 
   defp encode_closure(ir, context) do
@@ -590,4 +588,30 @@ defmodule Hologram.Compiler.Encoder do
     |> to_string()
     |> escape_js_identifier()
   end
+
+  defp has_match_operator?(ir)
+
+  defp has_match_operator?(%IR.MatchOperator{}), do: true
+
+  defp has_match_operator?(ir) when is_list(ir) do
+    Enum.any?(ir, &has_match_operator?/1)
+  end
+
+  defp has_match_operator?(ir) when is_tuple(ir) do
+    ir
+    |> Tuple.to_list()
+    |> has_match_operator?()
+  end
+
+  defp has_match_operator?(%_struct{} = ir) do
+    ir
+    |> Map.from_struct()
+    |> has_match_operator?()
+  end
+
+  defp has_match_operator?(ir) when is_map(ir) do
+    Enum.any?(ir, fn {key, value} -> has_match_operator?(key) || has_match_operator?(value) end)
+  end
+
+  defp has_match_operator?(_ast), do: false
 end

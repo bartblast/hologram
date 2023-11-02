@@ -309,8 +309,55 @@ defmodule Hologram.Compiler.EncoderTest do
                """
     end
 
-    test "expression not using vars snapshot" do
+    test "the last expression in the block, having a nested match operator" do
       # x + (y = 123)
+      ir = %IR.Block{
+        expressions: [
+          %IR.RemoteFunctionCall{
+            module: %IR.AtomType{value: :erlang},
+            function: :+,
+            args: [
+              %IR.Variable{name: :x},
+              %IR.MatchOperator{left: %IR.Variable{name: :y}, right: %IR.IntegerType{value: 123}}
+            ]
+          }
+        ]
+      }
+
+      assert encode(ir, %Context{}) == """
+             {
+             window.__hologramReturn__ = Erlang["+/2"](vars.x, Interpreter.matchOperator(Type.integer(123n), Type.variablePattern("y"), vars));
+             Interpreter.updateVarsToMatchedValues(vars);
+             return window.__hologramReturn__;
+             }\
+             """
+    end
+
+    test "the last expression in the block, not having a nested match operator" do
+      # x + y
+      ir = %IR.Block{
+        expressions: [
+          %IR.RemoteFunctionCall{
+            module: %IR.AtomType{value: :erlang},
+            function: :+,
+            args: [
+              %IR.Variable{name: :x},
+              %IR.Variable{name: :y}
+            ]
+          }
+        ]
+      }
+
+      assert encode(ir, %Context{}) == """
+             {
+             return Erlang["+/2"](vars.x, vars.y);
+             }\
+             """
+    end
+
+    test "not the last expression in the block, having a nested match operator" do
+      # x + (y = 123)
+      # :ok
       ir = %IR.Block{
         expressions: [
           %IR.RemoteFunctionCall{
@@ -325,17 +372,18 @@ defmodule Hologram.Compiler.EncoderTest do
         ]
       }
 
-      assert encode(ir, %Context{}) ==
-               """
-               {
-               Erlang["+/2"](vars.x, Interpreter.matchOperator(Type.integer(123n), Type.variablePattern("y"), vars));
-               return Type.atom("ok");
-               }\
-               """
+      assert encode(ir, %Context{}) == """
+             {
+             Erlang["+/2"](vars.x, Interpreter.matchOperator(Type.integer(123n), Type.variablePattern("y"), vars));
+             Interpreter.updateVarsToMatchedValues(vars);
+             return Type.atom("ok");
+             }\
+             """
     end
 
-    test "expression using vars snapshot" do
-      # x + (x = 123)
+    test "not the last expression in the block, not having a nested match operator" do
+      # x + y
+      # :ok
       ir = %IR.Block{
         expressions: [
           %IR.RemoteFunctionCall{
@@ -343,21 +391,19 @@ defmodule Hologram.Compiler.EncoderTest do
             function: :+,
             args: [
               %IR.Variable{name: :x},
-              %IR.MatchOperator{left: %IR.Variable{name: :x}, right: %IR.IntegerType{value: 123}}
+              %IR.Variable{name: :y}
             ]
           },
           %IR.AtomType{value: :ok}
         ]
       }
 
-      assert encode(ir, %Context{}) ==
-               """
-               {
-               Interpreter.takeVarsSnapshot(vars);
-               Erlang["+/2"](vars.__snapshot__.x, Interpreter.matchOperator(Type.integer(123n), Type.variablePattern("x"), vars));
-               return Type.atom("ok");
-               }\
-               """
+      assert encode(ir, %Context{}) == """
+             {
+             Erlang["+/2"](vars.x, vars.y);
+             return Type.atom("ok");
+             }\
+             """
     end
   end
 
