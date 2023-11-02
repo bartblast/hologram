@@ -219,7 +219,7 @@ defmodule Hologram.Compiler.Encoder do
   end
 
   def encode(%IR.ModuleAttributeOperator{name: name}, _context) do
-    encode_var_value("@#{name}", false)
+    encode_var_value("@#{name}")
   end
 
   def encode(%IR.ModuleDefinition{module: module, body: body}, context) do
@@ -302,8 +302,8 @@ defmodule Hologram.Compiler.Encoder do
     "Type.variablePattern(#{name_js})"
   end
 
-  def encode(%IR.Variable{name: name}, %{pattern?: false, use_vars_snapshot?: use_vars_snapshot?}) do
-    encode_var_value(name, use_vars_snapshot?)
+  def encode(%IR.Variable{name: name}, %{pattern?: false}) do
+    encode_var_value(name)
   end
 
   # TODO: finish implementing
@@ -573,13 +573,7 @@ defmodule Hologram.Compiler.Encoder do
     "Type.#{type}(#{value})"
   end
 
-  defp encode_var_value(name, use_vars_snapshot?)
-
-  defp encode_var_value(name, true) do
-    "vars.__snapshot__.#{escape_var_name(name)}"
-  end
-
-  defp encode_var_value(name, false) do
+  defp encode_var_value(name) do
     "vars.#{escape_var_name(name)}"
   end
 
