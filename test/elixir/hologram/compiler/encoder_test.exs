@@ -1334,6 +1334,21 @@ defmodule Hologram.Compiler.EncoderTest do
              }}], vars), "my_fun!/2", [Type.integer(1n), Type.integer(2n)])\
              """
     end
+
+    test ":erlang.orelse/2 call" do
+      # :erlang.orelse(1, 2)
+      ir = %IR.RemoteFunctionCall{
+        module: %IR.AtomType{value: :erlang},
+        function: :orelse,
+        args: [
+          %IR.IntegerType{value: 1},
+          %IR.IntegerType{value: 2}
+        ]
+      }
+
+      assert encode(ir, %Context{}) ==
+               ~s'Erlang["orelse/2"]((vars) => Type.integer(1n), (vars) => Type.integer(2n), vars)'
+    end
   end
 
   test "string type" do

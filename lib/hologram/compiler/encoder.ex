@@ -546,6 +546,13 @@ defmodule Hologram.Compiler.Encoder do
     "(vars) => #{encode(ir, context)}"
   end
 
+  defp encode_named_function_call(%IR.AtomType{value: :erlang}, :orelse, [left, right], context) do
+    left_js = encode_closure(left, context)
+    right_js = encode_closure(right, context)
+
+    "Erlang[\"orelse/2\"](#{left_js}, #{right_js}, vars)"
+  end
+
   defp encode_named_function_call(%IR.AtomType{} = module, function, args, context) do
     class = encode_as_class_name(module.value)
     arity = Enum.count(args)
