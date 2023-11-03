@@ -265,10 +265,11 @@ defmodule Hologram.ExJsConsistency.MatchOperatorTest do
     end
   end
 
-  # test "match placeholder" do
-  #   result = _var = 2
-  #   assert result == 2
-  # end
+  # _var = 2
+  test "match placeholder" do
+    result = _var = 2
+    assert result == 2
+  end
 
   # describe "nested match operators" do
   #   test "x = 2 = 2" do

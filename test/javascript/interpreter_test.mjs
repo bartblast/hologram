@@ -3031,16 +3031,18 @@ describe.only("matchOperator()", () => {
     });
   });
 
-  // it("match placeholder", () => {
-  //   // _var = 2
-  //   const result = Interpreter.matchOperator(
-  //     Type.integer(2),
-  //     Type.matchPlaceholder(),
-  //     vars,
-  //   );
-  //   assert.deepStrictEqual(result, Type.integer(2));
-  //   assert.deepStrictEqual(vars, {a: Type.integer(9)});
-  // });
+  // _var = 2
+  it("match placeholder", () => {
+    const result = Interpreter.matchOperator(
+      Type.integer(2),
+      Type.matchPlaceholder(),
+      vars,
+    );
+
+    assert.deepStrictEqual(result, Type.integer(2));
+    assert.deepStrictEqual(vars, varsWithEmptyMatchedValues);
+  });
+
   // describe("nested match operators", () => {
   //   it("x = 2 = 2", () => {
   //     const result = Interpreter.matchOperator(
