@@ -13,9 +13,9 @@ defmodule Hologram.ExJsConsistency.MatchOperatorTest do
     ^left = right
   end
 
-  # defp build_value(value) do
-  #   value
-  # end
+  defp build_value(value) do
+    value
+  end
 
   describe "atom type" do
     # :abc = :abc
@@ -201,44 +201,69 @@ defmodule Hologram.ExJsConsistency.MatchOperatorTest do
   #   end
   # end
 
-  # # Order of keys in maps is undefined (consider this in regard to error messages).
-  # describe "map type" do
-  #   test "left and right maps have the same items" do
-  #     result = %{x: 1, y: 2} = %{x: 1, y: 2}
-  #     assert result == %{x: 1, y: 2}
-  #   end
+  # Order of keys in maps is undefined (consider this in regard to error messages).
+  describe "map type" do
+    # %{x: 1, y: 2} = %{x: 1, y: 2}
+    test "left and right maps have the same items" do
+      result = %{x: 1, y: 2} = %{x: 1, y: 2}
+      assert result == %{x: 1, y: 2}
+    end
 
-  #   test "right map have all the same items as the left map plus additional ones" do
-  #     result = %{x: 1, y: 2} = %{x: 1, y: 2, z: 3}
-  #     assert result == %{x: 1, y: 2, z: 3}
-  #   end
+    # %{x: 1, y: 2} = %{x: 1, y: 2, z: 3}
+    test "right map has all the same items as the left map plus additional ones" do
+      result = %{x: 1, y: 2} = %{x: 1, y: 2, z: 3}
+      assert result == %{x: 1, y: 2, z: 3}
+    end
 
-  #   test "right map is missing some some keys from the left map" do
-  #     assert_raise MatchError, "no match of right hand side value: %{y: 2, x: 1}", fn ->
-  #       %{x: 1, y: 2, z: 3} = build_value(%{x: 1, y: 2})
-  #     end
-  #   end
+    #  %{x: 1, y: 2, z: 3} = %{x: 1, y: 2}
+    test "right map is missing some some keys from the left map" do
+      assert_raise MatchError, "no match of right hand side value: %{y: 2, x: 1}", fn ->
+        %{x: 1, y: 2, z: 3} = build_value(%{x: 1, y: 2})
+      end
+    end
 
-  #   test "some left map item values don't match right map item values" do
-  #     assert_raise MatchError, "no match of right hand side value: %{y: 3, x: 1}", fn ->
-  #       %{x: 1, y: 2} = %{x: 1, y: 3}
-  #     end
-  #   end
+    # %{x: 1, y: 2} = %{x: 1, y: 3}
+    test "some values in the left map don't match values in the right map" do
+      assert_raise MatchError, "no match of right hand side value: %{y: 3, x: 1}", fn ->
+        %{x: 1, y: 2} = %{x: 1, y: 3}
+      end
+    end
 
-  #   test "left map != right non-map" do
-  #     assert_raise MatchError, "no match of right hand side value: :abc", fn ->
-  #       %{x: 1, y: 2} = build_value(:abc)
-  #     end
-  #   end
+    # %{x: 1, y: 2} = :abc
+    test "left map != right non-map" do
+      assert_raise MatchError, "no match of right hand side value: :abc", fn ->
+        %{x: 1, y: 2} = build_value(:abc)
+      end
+    end
 
-  #   test "left map has variables" do
-  #     result = %{k: x, m: 2, n: z} = %{k: 1, m: 2, n: 3}
+    # %{k: x, m: 2, n: z} = %{k: 1, m: 2, n: 3}
+    test "left map has variables" do
+      result = %{k: x, m: 2, n: z} = %{k: 1, m: 2, n: 3}
 
-  #     assert result == %{k: 1, m: 2, n: 3}
-  #     assert x == 1
-  #     assert z == 3
-  #   end
-  # end
+      assert result == %{k: 1, m: 2, n: 3}
+      assert x == 1
+      assert z == 3
+    end
+
+    # %{x: 1, y: 2} = %{}
+    test "left is a non-empty map, right is an empty map" do
+      assert_raise MatchError, "no match of right hand side value: %{}", fn ->
+        %{x: 1, y: 2} = build_value(%{})
+      end
+    end
+
+    # %{} = %{x: 1, y: 2}
+    test "left is an empty map, right is a non-empty map" do
+      result = %{} = %{x: 1, y: 2}
+      assert result == %{x: 1, y: 2}
+    end
+
+    # %{} = %{}
+    test "both left and right maps are empty" do
+      result = %{} = %{}
+      assert result == %{}
+    end
+  end
 
   # test "match placeholder" do
   #   result = _var = 2

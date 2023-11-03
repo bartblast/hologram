@@ -13,6 +13,8 @@ import HologramBoxedError from "../../assets/js/errors/boxed_error.mjs";
 import Interpreter from "../../assets/js/interpreter.mjs";
 import Type from "../../assets/js/type.mjs";
 
+const clone = Interpreter.cloneVars;
+
 before(() => linkModules());
 after(() => unlinkModules());
 
@@ -2893,108 +2895,142 @@ describe.only("matchOperator()", () => {
   //     assert.deepStrictEqual(vars, expectedVars);
   //   });
   // });
-  // describe("map type", () => {
-  //   let data;
-  //   beforeEach(() => {
-  //     data = [
-  //       [Type.atom("x"), Type.integer(1)],
-  //       [Type.atom("y"), Type.integer(2)],
-  //     ];
-  //   });
-  //   it("%{x: 1, y: 2} = %{x: 1, y: 2}", () => {
-  //     const left = Type.map(data);
-  //     const right = Type.map(data);
-  //     const result = Interpreter.matchOperator(right, left, vars);
-  //     assert.deepStrictEqual(result, right);
-  //     assert.deepStrictEqual(vars, {a: Type.integer(9)});
-  //   });
-  //   it("%{x: 1, y: 2} = %{x: 1, y: 2, z: 3}", () => {
-  //     const left = Type.map(data);
-  //     const data2 = [
-  //       [Type.atom("x"), Type.integer(1)],
-  //       [Type.atom("y"), Type.integer(2)],
-  //       [Type.atom("z"), Type.integer(3)],
-  //     ];
-  //     const right = Type.map(data2);
-  //     const result = Interpreter.matchOperator(right, left, vars);
-  //     assert.deepStrictEqual(result, right);
-  //     assert.deepStrictEqual(vars, {a: Type.integer(9)});
-  //   });
-  //   it("%{x: 1, y: 2, z: 3} = %{x: 1, y: 2}", () => {
-  //     const data1 = [
-  //       [Type.atom("x"), Type.integer(1)],
-  //       [Type.atom("y"), Type.integer(2)],
-  //       [Type.atom("z"), Type.integer(3)],
-  //     ];
-  //     const left = Type.map(data1);
-  //     const right = Type.map(data);
-  //     assertMatchError(
-  //       () => Interpreter.matchOperator(right, left, vars),
-  //       right,
-  //     );
-  //   });
-  //   it("%{x: 1, y: 2} = %{x: 1, y: 3}", () => {
-  //     const left = Type.map(data);
-  //     const data2 = [
-  //       [Type.atom("x"), Type.integer(1)],
-  //       [Type.atom("y"), Type.integer(3)],
-  //     ];
-  //     const right = Type.map(data2);
-  //     assertMatchError(
-  //       () => Interpreter.matchOperator(right, left, vars),
-  //       right,
-  //     );
-  //   });
-  //   it("%{x: 1, y: 2} = :abc", () => {
-  //     const left = Type.map(data);
-  //     const right = Type.atom("abc");
-  //     assertMatchError(
-  //       () => Interpreter.matchOperator(right, left, vars),
-  //       right,
-  //     );
-  //   });
-  //   it("%{x: 1, y: 2} = %{}", () => {
-  //     const left = Type.map(data);
-  //     const emptyMap = Type.map([]);
-  //     assertMatchError(
-  //       () => Interpreter.matchOperator(emptyMap, left, vars),
-  //       emptyMap,
-  //     );
-  //   });
-  //   it("%{} = %{x: 1, y: 2}", () => {
-  //     const emptyMap = Type.map([]);
-  //     const right = Type.map(data);
-  //     const result = Interpreter.matchOperator(right, emptyMap, vars);
-  //     assert.deepStrictEqual(result, right);
-  //     assert.deepStrictEqual(vars, {a: Type.integer(9)});
-  //   });
-  //   it("%{} = %{}", () => {
-  //     const emptyMap = Type.map([]);
-  //     const result = Interpreter.matchOperator(emptyMap, emptyMap, vars);
-  //     assert.deepStrictEqual(result, emptyMap);
-  //     assert.deepStrictEqual(vars, {a: Type.integer(9)});
-  //   });
-  //   it("%{k: x, m: 2, n: z} = %{k: 1, m: 2, n: 3}", () => {
-  //     const left = Type.map([
-  //       [Type.atom("k"), Type.variablePattern("x")],
-  //       [Type.atom("m"), Type.integer(2)],
-  //       [Type.atom("n"), Type.variablePattern("z")],
-  //     ]);
-  //     const right = Type.map([
-  //       [Type.atom("k"), Type.integer(1)],
-  //       [Type.atom("m"), Type.integer(2)],
-  //       [Type.atom("n"), Type.integer(3)],
-  //     ]);
-  //     const result = Interpreter.matchOperator(right, left, vars);
-  //     assert.deepStrictEqual(result, right);
-  //     const expectedVars = {
-  //       a: Type.integer(9),
-  //       x: Type.integer(1),
-  //       z: Type.integer(3),
-  //     };
-  //     assert.deepStrictEqual(vars, expectedVars);
-  //   });
-  // });
+
+  describe("map type", () => {
+    const map = Type.map([
+      [Type.atom("x"), Type.integer(1)],
+      [Type.atom("y"), Type.integer(2)],
+    ]);
+
+    const emptyMap = Type.map([]);
+
+    // %{x: 1, y: 2} = %{x: 1, y: 2}
+    it("left and right maps have the same items", () => {
+      const left = map;
+      const right = clone(map);
+      const result = Interpreter.matchOperator(right, left, vars);
+
+      assert.deepStrictEqual(result, right);
+      assert.deepStrictEqual(vars, varsWithEmptyMatchedValues);
+    });
+
+    // %{x: 1, y: 2} = %{x: 1, y: 2, z: 3}
+    it("right map has all the same items as the left map plus additional ones", () => {
+      const left = map;
+
+      const right = Type.map([
+        [Type.atom("x"), Type.integer(1)],
+        [Type.atom("y"), Type.integer(2)],
+        [Type.atom("z"), Type.integer(3)],
+      ]);
+
+      const result = Interpreter.matchOperator(right, left, vars);
+
+      assert.deepStrictEqual(result, right);
+      assert.deepStrictEqual(vars, varsWithEmptyMatchedValues);
+    });
+
+    // %{x: 1, y: 2, z: 3} = %{x: 1, y: 2}
+    it("right map is missing some some keys from the left map", () => {
+      const left = Type.map([
+        [Type.atom("x"), Type.integer(1)],
+        [Type.atom("y"), Type.integer(2)],
+        [Type.atom("z"), Type.integer(3)],
+      ]);
+
+      const right = map;
+
+      assertMatchError(
+        () => Interpreter.matchOperator(right, left, vars),
+        right,
+      );
+    });
+
+    // %{x: 1, y: 2} = %{x: 1, y: 3}
+    it("some values in the left map don't match values in the right map", () => {
+      const left = map;
+
+      const right = Type.map([
+        [Type.atom("x"), Type.integer(1)],
+        [Type.atom("y"), Type.integer(3)],
+      ]);
+
+      assertMatchError(
+        () => Interpreter.matchOperator(right, left, vars),
+        right,
+      );
+    });
+
+    // %{x: 1, y: 2} = :abc
+    it("left map != right non-map", () => {
+      const left = map;
+      const right = Type.atom("abc");
+
+      assertMatchError(
+        () => Interpreter.matchOperator(right, left, vars),
+        right,
+      );
+    });
+
+    // {k: x, m: 2, n: z} = %{k: 1, m: 2, n: 3}
+    it("left map has variables", () => {
+      const left = Type.map([
+        [Type.atom("k"), Type.variablePattern("x")],
+        [Type.atom("m"), Type.integer(2)],
+        [Type.atom("n"), Type.variablePattern("z")],
+      ]);
+
+      const right = Type.map([
+        [Type.atom("k"), Type.integer(1)],
+        [Type.atom("m"), Type.integer(2)],
+        [Type.atom("n"), Type.integer(3)],
+      ]);
+
+      const result = Interpreter.matchOperator(right, left, vars);
+
+      assert.deepStrictEqual(result, right);
+
+      assert.deepStrictEqual(vars, {
+        a: Type.integer(9),
+        __matched__: {
+          x: Type.integer(1),
+          z: Type.integer(3),
+        },
+      });
+    });
+
+    // %{x: 1, y: 2} = %{}
+    it("left is a non-empty map, right is an empty map", () => {
+      const left = map;
+      const right = emptyMap;
+
+      assertMatchError(
+        () => Interpreter.matchOperator(right, left, vars),
+        right,
+      );
+    });
+
+    // %{} = %{x: 1, y: 2}
+    it("left is an empty map, right is a non-empty map", () => {
+      const left = emptyMap;
+      const right = map;
+      const result = Interpreter.matchOperator(right, left, vars);
+
+      assert.deepStrictEqual(result, right);
+      assert.deepStrictEqual(vars, varsWithEmptyMatchedValues);
+    });
+
+    // %{} = %{}
+    it("both left and right maps are empty", () => {
+      const left = emptyMap;
+      const right = emptyMap;
+      const result = Interpreter.matchOperator(right, left, vars);
+
+      assert.deepStrictEqual(result, right);
+      assert.deepStrictEqual(vars, varsWithEmptyMatchedValues);
+    });
+  });
+
   // it("match placeholder", () => {
   //   // _var = 2
   //   const result = Interpreter.matchOperator(
