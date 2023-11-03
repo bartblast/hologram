@@ -158,6 +158,21 @@ const Erlang = {
   // end >/2
   // deps: []
 
+  // start andalso/2
+  "andalso/2": (leftFun, rightFun, vars) => {
+    const left = leftFun(vars);
+
+    if (!Type.isBoolean(left)) {
+      Interpreter.raiseArgumentError(
+        `argument error: ${Interpreter.inspect(left)}`,
+      );
+    }
+
+    return Type.isTrue(left) ? rightFun(vars) : left;
+  },
+  // end andalso/2
+  // deps: []
+
   // start atom_to_binary/1
   "atom_to_binary/1": (atom) => {
     if (!Type.isAtom(atom)) {

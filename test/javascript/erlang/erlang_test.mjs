@@ -646,6 +646,59 @@ describe(">/2", () => {
   });
 });
 
+describe("andalso/2", () => {
+  it("returns false if the first argument is false", () => {
+    const vars = {left: Type.boolean(false), right: Type.atom("abc")};
+
+    const result = Erlang["andalso/2"](
+      (vars) => vars.left,
+      (vars) => vars.right,
+      vars,
+    );
+
+    assertBoxedFalse(result);
+  });
+
+  it("returns the second argument if the first argument is true", () => {
+    const vars = {left: Type.boolean(true), right: Type.atom("abc")};
+
+    const result = Erlang["andalso/2"](
+      (vars) => vars.left,
+      (vars) => vars.right,
+      vars,
+    );
+
+    assert.deepStrictEqual(result, Type.atom("abc"));
+  });
+
+  it("doesn't evaluate the second argument if the first argument is false", () => {
+    const result = Erlang["andalso/2"](
+      (_vars) => Type.boolean(false),
+      (_vars) => {
+        throw new Error("impossible");
+      },
+      {},
+    );
+
+    assertBoxedFalse(result);
+  });
+
+  it("raises ArgumentError if the first argument is not a boolean", () => {
+    const vars = {left: Type.nil(), right: Type.boolean(true)};
+
+    assertBoxedError(
+      () =>
+        Erlang["andalso/2"](
+          (vars) => vars.left,
+          (vars) => vars.right,
+          vars,
+        ),
+      "ArgumentError",
+      "argument error: nil",
+    );
+  });
+});
+
 describe("atom_to_binary/1", () => {
   it("converts atom to (binary) bitstring", () => {
     const result = Erlang["atom_to_binary/1"](Type.atom("abc"));

@@ -7,6 +7,26 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
 
   use Hologram.Test.BasicCase, async: true
 
+  describe "andalso/2" do
+    test "returns false if the first argument is false" do
+      assert :erlang.andalso(false, :abc) == false
+    end
+
+    test "returns the second argument if the first argument is true" do
+      assert :erlang.andalso(true, :abc) == :abc
+    end
+
+    test "doesn't evaluate the second argument if the first argument is false" do
+      assert :erlang.andalso(false, raise("impossible")) == false
+    end
+
+    test "raises ArgumentError if the first argument is not a boolean" do
+      assert_raise ArgumentError, "argument error: nil", fn ->
+        :erlang.andalso(nil, true)
+      end
+    end
+  end
+
   describe "atom_to_binary/1" do
     test "converts atom to (binary) bitstring" do
       assert :erlang.atom_to_binary(:abc) == <<"abc">>
