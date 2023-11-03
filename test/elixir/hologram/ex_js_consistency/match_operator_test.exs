@@ -376,211 +376,211 @@ defmodule Hologram.ExJsConsistency.MatchOperatorTest do
     end
   end
 
-  # describe "nested match pattern (with uresolved variables)" do
-  #   test "[[a | b] = [c | d]] = [[1, 2, 3]]" do
-  #     result = [[a | b] = [c | d]] = [[1, 2, 3]]
+  describe "nested match pattern (with uresolved variables)" do
+    test "[[a | b] = [c | d]] = [[1, 2, 3]]" do
+      result = [[a | b] = [c | d]] = [[1, 2, 3]]
 
-  #     assert result == [[1, 2, 3]]
-  #     assert a == 1
-  #     assert b == [2, 3]
-  #     assert c == 1
-  #     assert d == [2, 3]
-  #   end
+      assert result == [[1, 2, 3]]
+      assert a == 1
+      assert b == [2, 3]
+      assert c == 1
+      assert d == [2, 3]
+    end
 
-  #   test "[[[a | b] = [c | d]] = [[e | f]]] = [[[1, 2, 3]]]" do
-  #     result = [[[a | b] = [c | d]] = [[e | f]]] = [[[1, 2, 3]]]
+    test "[[[a | b] = [c | d]] = [[e | f]]] = [[[1, 2, 3]]]" do
+      result = [[[a | b] = [c | d]] = [[e | f]]] = [[[1, 2, 3]]]
 
-  #     assert result == [[[1, 2, 3]]]
-  #     assert a == 1
-  #     assert b == [2, 3]
-  #     assert c == 1
-  #     assert d == [2, 3]
-  #     assert e == 1
-  #     assert f == [2, 3]
-  #   end
+      assert result == [[[1, 2, 3]]]
+      assert a == 1
+      assert b == [2, 3]
+      assert c == 1
+      assert d == [2, 3]
+      assert e == 1
+      assert f == [2, 3]
+    end
 
-  #   test "[[a, b] = [c, d]] = [[1, 2]]" do
-  #     result = [[a, b] = [c, d]] = [[1, 2]]
+    test "[[a, b] = [c, d]] = [[1, 2]]" do
+      result = [[a, b] = [c, d]] = [[1, 2]]
 
-  #     assert result == [[1, 2]]
-  #     assert a == 1
-  #     assert b == 2
-  #     assert c == 1
-  #     assert d == 2
-  #   end
+      assert result == [[1, 2]]
+      assert a == 1
+      assert b == 2
+      assert c == 1
+      assert d == 2
+    end
 
-  #   test "[[[a, b] = [c, d]] = [[e, f]]] = [[[1, 2]]]" do
-  #     result = [[[a, b] = [c, d]] = [[e, f]]] = [[[1, 2]]]
+    test "[[[a, b] = [c, d]] = [[e, f]]] = [[[1, 2]]]" do
+      result = [[[a, b] = [c, d]] = [[e, f]]] = [[[1, 2]]]
 
-  #     assert result == [[[1, 2]]]
-  #     assert a == 1
-  #     assert b == 2
-  #     assert c == 1
-  #     assert d == 2
-  #     assert e == 1
-  #     assert f == 2
-  #   end
+      assert result == [[[1, 2]]]
+      assert a == 1
+      assert b == 2
+      assert c == 1
+      assert d == 2
+      assert e == 1
+      assert f == 2
+    end
 
-  #   test "[x = y] = [1]" do
-  #     result = [x = y] = [1]
+    test "[x = y] = [1]" do
+      result = [x = y] = [1]
 
-  #     assert result == [1]
-  #     assert x == 1
-  #     assert y == 1
-  #   end
+      assert result == [1]
+      assert x == 1
+      assert y == 1
+    end
 
-  #   test "[1 = x] = [1]" do
-  #     result = [1 = x] = [1]
+    test "[1 = x] = [1]" do
+      result = [1 = x] = [1]
 
-  #     assert result == [1]
-  #     assert x == 1
-  #   end
+      assert result == [1]
+      assert x == 1
+    end
 
-  #   test "[x = 1] = [1]" do
-  #     result = [x = 1] = [1]
+    test "[x = 1] = [1]" do
+      result = [x = 1] = [1]
 
-  #     assert result == [1]
-  #     assert x == 1
-  #   end
+      assert result == [1]
+      assert x == 1
+    end
 
-  #   test "[x = y = z] = [1]" do
-  #     result = [x = y = z] = [1]
+    test "[x = y = z] = [1]" do
+      result = [x = y = z] = [1]
 
-  #     assert result == [1]
-  #     assert x == 1
-  #     assert y == 1
-  #     assert z == 1
-  #   end
+      assert result == [1]
+      assert x == 1
+      assert y == 1
+      assert z == 1
+    end
 
-  #   test "[1 = x = y] = [1]" do
-  #     result = [1 = x = y] = [1]
+    test "[1 = x = y] = [1]" do
+      result = [1 = x = y] = [1]
 
-  #     assert result == [1]
-  #     assert x == 1
-  #     assert y == 1
-  #   end
+      assert result == [1]
+      assert x == 1
+      assert y == 1
+    end
 
-  #   test "[x = 1 = y] = [1]" do
-  #     result = [x = 1 = y] = [1]
+    test "[x = 1 = y] = [1]" do
+      result = [x = 1 = y] = [1]
 
-  #     assert result == [1]
-  #     assert x == 1
-  #     assert y == 1
-  #   end
+      assert result == [1]
+      assert x == 1
+      assert y == 1
+    end
 
-  #   test "[x = y = 1] = [1]" do
-  #     result = [x = y = 1] = [1]
+    test "[x = y = 1] = [1]" do
+      result = [x = y = 1] = [1]
 
-  #     assert result == [1]
-  #     assert x == 1
-  #     assert y == 1
-  #   end
+      assert result == [1]
+      assert x == 1
+      assert y == 1
+    end
 
-  #   test "[v = x = y = z] = [1]" do
-  #     result = [v = x = y = z] = [1]
+    test "[v = x = y = z] = [1]" do
+      result = [v = x = y = z] = [1]
 
-  #     assert result == [1]
-  #     assert v == 1
-  #     assert x == 1
-  #     assert y == 1
-  #     assert z == 1
-  #   end
+      assert result == [1]
+      assert v == 1
+      assert x == 1
+      assert y == 1
+      assert z == 1
+    end
 
-  #   test "[1 = x = y = z] = [1]" do
-  #     result = [1 = x = y = z] = [1]
+    test "[1 = x = y = z] = [1]" do
+      result = [1 = x = y = z] = [1]
 
-  #     assert result == [1]
-  #     assert x == 1
-  #     assert y == 1
-  #     assert z == 1
-  #   end
+      assert result == [1]
+      assert x == 1
+      assert y == 1
+      assert z == 1
+    end
 
-  #   test "[x = 1 = y = z] = [1]" do
-  #     result = [x = 1 = y = z] = [1]
+    test "[x = 1 = y = z] = [1]" do
+      result = [x = 1 = y = z] = [1]
 
-  #     assert result == [1]
-  #     assert x == 1
-  #     assert y == 1
-  #     assert z == 1
-  #   end
+      assert result == [1]
+      assert x == 1
+      assert y == 1
+      assert z == 1
+    end
 
-  #   test "[x = y = 1 = z] = [1]" do
-  #     result = [x = y = 1 = z] = [1]
+    test "[x = y = 1 = z] = [1]" do
+      result = [x = y = 1 = z] = [1]
 
-  #     assert result == [1]
-  #     assert x == 1
-  #     assert y == 1
-  #     assert z == 1
-  #   end
+      assert result == [1]
+      assert x == 1
+      assert y == 1
+      assert z == 1
+    end
 
-  #   test "[x = y = z = 1] = [1]" do
-  #     result = [x = y = z = 1] = [1]
+    test "[x = y = z = 1] = [1]" do
+      result = [x = y = z = 1] = [1]
 
-  #     assert result == [1]
-  #     assert x == 1
-  #     assert y == 1
-  #     assert z == 1
-  #   end
+      assert result == [1]
+      assert x == 1
+      assert y == 1
+      assert z == 1
+    end
 
-  #   test "[x = y = z] = [a = b = c = 2]" do
-  #     result = [x = y = z] = [a = b = c = 2]
+    test "[x = y = z] = [a = b = c = 2]" do
+      result = [x = y = z] = [a = b = c = 2]
 
-  #     assert result == [2]
-  #     assert a == 2
-  #     assert b == 2
-  #     assert c == 2
-  #     assert x == 2
-  #     assert y == 2
-  #     assert z == 2
-  #   end
+      assert result == [2]
+      assert a == 2
+      assert b == 2
+      assert c == 2
+      assert x == 2
+      assert y == 2
+      assert z == 2
+    end
 
-  #   test "%{x: %{a: a, b: b} = %{a: c, b: d}} = %{x: %{a: 1, b: 2}}" do
-  #     result = %{x: %{a: a, b: b} = %{a: c, b: d}} = %{x: %{a: 1, b: 2}}
+    test "%{x: %{a: a, b: b} = %{a: c, b: d}} = %{x: %{a: 1, b: 2}}" do
+      result = %{x: %{a: a, b: b} = %{a: c, b: d}} = %{x: %{a: 1, b: 2}}
 
-  #     assert result == %{x: %{a: 1, b: 2}}
-  #     assert a == 1
-  #     assert b == 2
-  #     assert c == 1
-  #     assert d == 2
-  #   end
+      assert result == %{x: %{a: 1, b: 2}}
+      assert a == 1
+      assert b == 2
+      assert c == 1
+      assert d == 2
+    end
 
-  #   test "%{y: %{x: %{a: a, b: b} = %{a: c, b: d}} = %{x: %{a: e, b: f}}} = %{y: %{x: %{a: 1, b: 2}}}" do
-  #     result =
-  #       %{y: %{x: %{a: a, b: b} = %{a: c, b: d}} = %{x: %{a: e, b: f}}} = %{
-  #         y: %{x: %{a: 1, b: 2}}
-  #       }
+    test "%{y: %{x: %{a: a, b: b} = %{a: c, b: d}} = %{x: %{a: e, b: f}}} = %{y: %{x: %{a: 1, b: 2}}}" do
+      result =
+        %{y: %{x: %{a: a, b: b} = %{a: c, b: d}} = %{x: %{a: e, b: f}}} = %{
+          y: %{x: %{a: 1, b: 2}}
+        }
 
-  #     assert result == %{y: %{x: %{a: 1, b: 2}}}
-  #     assert a == 1
-  #     assert b == 2
-  #     assert c == 1
-  #     assert d == 2
-  #     assert e == 1
-  #     assert f == 2
-  #   end
+      assert result == %{y: %{x: %{a: 1, b: 2}}}
+      assert a == 1
+      assert b == 2
+      assert c == 1
+      assert d == 2
+      assert e == 1
+      assert f == 2
+    end
 
-  #   test "{{a, b} = {c, d}} = {{1, 2}}" do
-  #     result = {{a, b} = {c, d}} = {{1, 2}}
+    test "{{a, b} = {c, d}} = {{1, 2}}" do
+      result = {{a, b} = {c, d}} = {{1, 2}}
 
-  #     assert result == {{1, 2}}
-  #     assert a == 1
-  #     assert b == 2
-  #     assert c == 1
-  #     assert d == 2
-  #   end
+      assert result == {{1, 2}}
+      assert a == 1
+      assert b == 2
+      assert c == 1
+      assert d == 2
+    end
 
-  #   test "{{{a, b} = {c, d}} = {{e, f}}} = {{{1, 2}}}" do
-  #     result = {{{a, b} = {c, d}} = {{e, f}}} = {{{1, 2}}}
+    test "{{{a, b} = {c, d}} = {{e, f}}} = {{{1, 2}}}" do
+      result = {{{a, b} = {c, d}} = {{e, f}}} = {{{1, 2}}}
 
-  #     assert result == {{{1, 2}}}
-  #     assert a == 1
-  #     assert b == 2
-  #     assert c == 1
-  #     assert d == 2
-  #     assert e == 1
-  #     assert f == 2
-  #   end
-  # end
+      assert result == {{{1, 2}}}
+      assert a == 1
+      assert b == 2
+      assert c == 1
+      assert d == 2
+      assert e == 1
+      assert f == 2
+    end
+  end
 
   # describe "tuple type" do
   #   test "left tuple == right tuple" do
