@@ -564,9 +564,9 @@ describe("case()", () => {
 });
 
 describe("cloneVars()", () => {
-  it("clones vars recursively (deep clone) and removes __snapshot__ property", () => {
+  it("clones vars recursively (deep clone)", () => {
     const nested = {c: 3, d: 4};
-    const vars = {a: 1, b: nested, __snapshot__: "dummy"};
+    const vars = {a: 1, b: nested};
     const expected = {a: 1, b: nested};
     const result = Interpreter.cloneVars(vars);
 
@@ -4786,37 +4786,6 @@ describe("serialize()", () => {
   });
 });
 
-describe("takeVarsSnapshot()", () => {
-  let expected;
-
-  beforeEach(() => {
-    expected = {
-      __snapshot__: {a: Type.integer(1), b: Type.integer(2)},
-      a: Type.integer(1),
-      b: Type.integer(2),
-    };
-  });
-
-  it("when snapshot hasn't been taken yet", () => {
-    const vars = {a: Type.integer(1), b: Type.integer(2)};
-    Interpreter.takeVarsSnapshot(vars);
-
-    assert.deepStrictEqual(vars, expected);
-  });
-
-  it("when snapshot has already been taken", () => {
-    const vars = {
-      __snapshot__: "dummy",
-      a: Type.integer(1),
-      b: Type.integer(2),
-    };
-
-    Interpreter.takeVarsSnapshot(vars);
-
-    assert.deepStrictEqual(vars, expected);
-  });
-});
-
 describe("try()", () => {
   let vars;
 
@@ -4846,6 +4815,33 @@ describe("try()", () => {
     assert.deepStrictEqual(result, Type.atom("ok"));
     assert.deepStrictEqual(vars.a, Type.integer(1));
   });
+});
+
+it("updateVarsToMatchedValues()", () => {
+  const vars = {
+    a: 1,
+    b: 2,
+    c: 3,
+    __matched__: {
+      d: 4,
+      a: 11,
+      e: 5,
+      c: 33,
+    },
+  };
+
+  const result = Interpreter.updateVarsToMatchedValues(vars);
+
+  const expected = {
+    a: 11,
+    b: 2,
+    c: 33,
+    d: 4,
+    e: 5,
+  };
+
+  assert.equal(result, vars);
+  assert.deepStrictEqual(result, expected);
 });
 
 // TODO: finish implementing

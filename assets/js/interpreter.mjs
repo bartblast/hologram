@@ -3,7 +3,6 @@
 // See: https://www.blazemeter.com/blog/the-correct-way-to-import-lodash-libraries-a-benchmark
 import cloneDeep from "lodash/cloneDeep.js";
 import isEqual from "lodash/isEqual.js";
-import omit from "lodash/omit.js";
 import uniqWith from "lodash/uniqWith.js";
 
 import Bitstring from "./bitstring.mjs";
@@ -62,7 +61,7 @@ export default class Interpreter {
   }
 
   static cloneVars(vars) {
-    return cloneDeep(omit(vars, ["__snapshot__"]));
+    return cloneDeep(vars);
   }
 
   static comprehension(generators, filters, collectable, unique, mapper, vars) {
@@ -246,9 +245,9 @@ export default class Interpreter {
     return ":" + moduleName.slice(7).toLowerCase();
   }
 
-  static isMatched(left, right, vars, rootMatch = true) {
+  static isMatched(left, right, vars) {
     try {
-      Interpreter.matchOperator(right, left, vars, rootMatch);
+      Interpreter.matchOperator(right, left, vars);
       return true;
     } catch {
       return false;
@@ -265,10 +264,11 @@ export default class Interpreter {
 
   // vars.__matched__ keeps track of already pattern matched variables,
   // which enables to fail pattern matching if the variables with the same name
-  // are being pattern matched to different values.
+  // are being pattern matched to different values
+  // and to update the var values after pattern matching is finished.
   //
   // right param is before left param, because we need the right arg evaluated before left arg.
-  static matchOperator(right, left, vars, rootMatch = true) {
+  static matchOperator(right, left, vars) {
     if (!vars.__matched__) {
       vars.__matched__ = {};
     }
@@ -278,24 +278,24 @@ export default class Interpreter {
     }
 
     if (left.type === "match_pattern") {
-      Interpreter.matchOperator(right, left.right, vars, false);
-      return Interpreter.matchOperator(right, left.left, vars, false);
+      Interpreter.matchOperator(right, left.right, vars);
+      return Interpreter.matchOperator(right, left.left, vars);
     }
 
     if (Type.isMatchPlaceholder(left)) {
-      return Interpreter.#handleMatchResult(right, vars, rootMatch);
+      return right;
     }
 
     if (Type.isVariablePattern(left)) {
-      return Interpreter.#matchVariablePattern(right, left, vars, rootMatch);
+      return Interpreter.#matchVariablePattern(right, left, vars);
     }
 
     if (Type.isConsPattern(left)) {
-      return Interpreter.#matchConsPattern(right, left, vars, rootMatch);
+      return Interpreter.#matchConsPattern(right, left, vars);
     }
 
     if (Type.isBitstringPattern(left)) {
-      return Interpreter.#matchBitstringPattern(right, left, vars, rootMatch);
+      return Interpreter.#matchBitstringPattern(right, left);
     }
 
     if (left.type !== right.type) {
@@ -303,18 +303,18 @@ export default class Interpreter {
     }
 
     if (Type.isList(left) || Type.isTuple(left)) {
-      return Interpreter.#matchListOrTuple(right, left, vars, rootMatch);
+      return Interpreter.#matchListOrTuple(right, left, vars);
     }
 
     if (Type.isMap(left)) {
-      return Interpreter.#matchMap(right, left, vars, rootMatch);
+      return Interpreter.#matchMap(right, left, vars);
     }
 
     if (!Interpreter.isStrictlyEqual(left, right)) {
       throw new HologramMatchError(right);
     }
 
-    return Interpreter.#handleMatchResult(right, vars, rootMatch);
+    return right;
   }
 
   static module(alias) {
@@ -384,10 +384,6 @@ export default class Interpreter {
     );
   }
 
-  static takeVarsSnapshot(vars) {
-    vars.__snapshot__ = Interpreter.cloneVars(vars);
-  }
-
   static try(body, rescueClauses, catchClauses, elseClauses, afterBlock, vars) {
     let result;
 
@@ -422,6 +418,13 @@ export default class Interpreter {
         '"try" expression else clauses are not yet implemented in Hologram',
       );
     }
+  }
+
+  static updateVarsToMatchedValues(vars) {
+    Object.assign(vars, vars.__matched__);
+    delete vars.__matched__;
+
+    return vars;
   }
 
   // TODO: finish implementing
@@ -465,14 +468,6 @@ export default class Interpreter {
     }
 
     return false;
-  }
-
-  static #handleMatchResult(result, vars, rootMatch) {
-    if (rootMatch) {
-      delete vars.__matched__;
-    }
-
-    return result;
   }
 
   static #hasUnresolvedVariablePattern(term) {
@@ -527,7 +522,7 @@ export default class Interpreter {
     return false;
   }
 
-  static #matchBitstringPattern(right, left, vars, rootMatch) {
+  static #matchBitstringPattern(right, left) {
     let offset = 0;
 
     for (const segment of left.segments) {
@@ -551,7 +546,7 @@ export default class Interpreter {
       }
     }
 
-    return Interpreter.#handleMatchResult(right, vars, rootMatch);
+    return right;
   }
 
   static #matchCatchClause(_clause, _error, _vars) {
@@ -561,7 +556,7 @@ export default class Interpreter {
     );
   }
 
-  static #matchConsPattern(right, left, vars, rootMatch) {
+  static #matchConsPattern(right, left, vars) {
     if (!Type.isList(right) || right.data.length === 0) {
       throw new HologramMatchError(right);
     }
@@ -577,16 +572,16 @@ export default class Interpreter {
     const rightTail = Erlang["tl/1"](right);
 
     if (
-      !Interpreter.isMatched(left.head, rightHead, vars, false) ||
-      !Interpreter.isMatched(left.tail, rightTail, vars, false)
+      !Interpreter.isMatched(left.head, rightHead, vars) ||
+      !Interpreter.isMatched(left.tail, rightTail, vars)
     ) {
       throw new HologramMatchError(right);
     }
 
-    return Interpreter.#handleMatchResult(right, vars, rootMatch);
+    return right;
   }
 
-  static #matchListOrTuple(right, left, vars, rootMatch) {
+  static #matchListOrTuple(right, left, vars) {
     const count = left.data.length;
 
     if (left.data.length !== right.data.length) {
@@ -598,25 +593,25 @@ export default class Interpreter {
     }
 
     for (let i = 0; i < count; ++i) {
-      if (!Interpreter.isMatched(left.data[i], right.data[i], vars, false)) {
+      if (!Interpreter.isMatched(left.data[i], right.data[i], vars)) {
         throw new HologramMatchError(right);
       }
     }
 
-    return Interpreter.#handleMatchResult(right, vars, rootMatch);
+    return right;
   }
 
-  static #matchMap(right, left, vars, rootMatch) {
+  static #matchMap(right, left, vars) {
     for (const [key, value] of Object.entries(left.data)) {
       if (
         typeof right.data[key] === "undefined" ||
-        !Interpreter.isMatched(value[1], right.data[key][1], vars, false)
+        !Interpreter.isMatched(value[1], right.data[key][1], vars)
       ) {
         throw new HologramMatchError(right);
       }
     }
 
-    return Interpreter.#handleMatchResult(right, vars, rootMatch);
+    return right;
   }
 
   static #matchRescueClause(_clause, _error, _vars) {
@@ -626,17 +621,16 @@ export default class Interpreter {
     );
   }
 
-  static #matchVariablePattern(right, left, vars, rootMatch) {
+  static #matchVariablePattern(right, left, vars) {
     if (vars.__matched__[left.name]) {
       if (!Interpreter.isStrictlyEqual(vars.__matched__[left.name], right)) {
         throw new HologramMatchError(right);
       }
     } else {
-      vars[left.name] = right;
       vars.__matched__[left.name] = right;
     }
 
-    return Interpreter.#handleMatchResult(right, vars, rootMatch);
+    return right;
   }
 
   static #raiseCondClauseError() {

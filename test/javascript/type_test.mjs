@@ -41,15 +41,6 @@ describe("anonymousFunction()", () => {
 
     assert.deepStrictEqual(result, expected);
   });
-
-  it("stores a snapshot of vars", () => {
-    const anonFun = Type.anonymousFunction(arity, clauses, vars);
-    const expected = {a: Type.integer(1), b: Type.integer(2)};
-
-    vars.c = Type.integer(3);
-
-    assert.deepStrictEqual(anonFun.vars, expected);
-  });
 });
 
 it("atom()", () => {
