@@ -153,11 +153,12 @@ export default class Interpreter {
         const vars = {};
         const pattern = Type.list(clause.params(vars));
 
-        if (
-          Interpreter.isMatched(pattern, args, vars) &&
-          Interpreter.#evaluateGuards(clause.guards, vars)
-        ) {
-          return clause.body(vars);
+        if (Interpreter.isMatched(pattern, args, vars)) {
+          Interpreter.updateVarsToMatchedValues(vars);
+
+          if (Interpreter.#evaluateGuards(clause.guards, vars)) {
+            return clause.body(vars);
+          }
         }
       }
 
