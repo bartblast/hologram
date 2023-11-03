@@ -19,11 +19,12 @@ export default class Interpreter {
       const varsClone = Interpreter.cloneVars(fun.vars);
       const pattern = Type.list(clause.params(varsClone));
 
-      if (
-        Interpreter.isMatched(pattern, args, varsClone) &&
-        Interpreter.#evaluateGuards(clause.guards, varsClone)
-      ) {
-        return clause.body(varsClone);
+      if (Interpreter.isMatched(pattern, args, varsClone)) {
+        Interpreter.updateVarsToMatchedValues(varsClone);
+
+        if (Interpreter.#evaluateGuards(clause.guards, varsClone)) {
+          return clause.body(varsClone);
+        }
       }
     }
 
