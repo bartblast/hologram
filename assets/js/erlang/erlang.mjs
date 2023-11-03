@@ -208,6 +208,13 @@ const Erlang = {
   // end is_atom/1
   // deps: []
 
+  // start is_binary/1
+  "is_binary/1": (term) => {
+    return Type.boolean(Type.isBinary(term));
+  },
+  // end is_binary/1
+  // deps: []
+
   // start is_bitstring/1
   "is_bitstring/1": (term) => {
     return Type.boolean(Type.isBitstring(term));
