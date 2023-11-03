@@ -4183,52 +4183,62 @@ describe("matchOperator()", () => {
   //     assert.deepStrictEqual(vars, expectedVars);
   //   });
   // });
-  // describe("variable pattern", () => {
-  //   it("variable pattern == anything", () => {
-  //     // x = 2
-  //     const result = Interpreter.matchOperator(
-  //       Type.integer(2),
-  //       Type.variablePattern("x"),
-  //       vars,
-  //     );
-  //     assert.deepStrictEqual(result, Type.integer(2));
-  //     const expectedVars = {
-  //       a: Type.integer(9),
-  //       x: Type.integer(2),
-  //     };
-  //     assert.deepStrictEqual(vars, expectedVars);
-  //   });
-  //   it("multiple variables with the same name being matched to the same value", () => {
-  //     // [x, x] = [1, 1]
-  //     const result = Interpreter.matchOperator(
-  //       Type.list([Type.integer(1), Type.integer(1)]),
-  //       Type.list([Type.variablePattern("x"), Type.variablePattern("x")]),
-  //       vars,
-  //     );
-  //     assert.deepStrictEqual(
-  //       result,
-  //       Type.list([Type.integer(1), Type.integer(1)]),
-  //     );
-  //     const expectedVars = {
-  //       a: Type.integer(9),
-  //       x: Type.integer(1),
-  //     };
-  //     assert.deepStrictEqual(vars, expectedVars);
-  //   });
-  //   it("multiple variables with the same name being matched to the different values", () => {
-  //     const right = Type.list([Type.integer(1), Type.integer(2)]);
-  //     // [x, x] = [1, 2]
-  //     assertMatchError(
-  //       () =>
-  //         Interpreter.matchOperator(
-  //           right,
-  //           Type.list([Type.variablePattern("x"), Type.variablePattern("x")]),
-  //           vars,
-  //         ),
-  //       right,
-  //     );
-  //   });
-  // });
+
+  describe("variable pattern", () => {
+    // x = 2
+    it("variable pattern == anything", () => {
+      const result = Interpreter.matchOperator(
+        Type.integer(2),
+        Type.variablePattern("x"),
+        vars,
+      );
+
+      assert.deepStrictEqual(result, Type.integer(2));
+
+      assert.deepStrictEqual(vars, {
+        a: Type.integer(9),
+        __matched__: {
+          x: Type.integer(2),
+        },
+      });
+    });
+
+    // [x, x] = [1, 1]
+    it("multiple variables with the same name being matched to the same value", () => {
+      const result = Interpreter.matchOperator(
+        Type.list([Type.integer(1), Type.integer(1)]),
+        Type.list([Type.variablePattern("x"), Type.variablePattern("x")]),
+        vars,
+      );
+
+      assert.deepStrictEqual(
+        result,
+        Type.list([Type.integer(1), Type.integer(1)]),
+      );
+
+      assert.deepStrictEqual(vars, {
+        a: Type.integer(9),
+        __matched__: {
+          x: Type.integer(1),
+        },
+      });
+    });
+
+    // [x, x] = [1, 2]
+    it("multiple variables with the same name being matched to the different values", () => {
+      const left = Type.list([
+        Type.variablePattern("x"),
+        Type.variablePattern("x"),
+      ]);
+
+      const right = Type.list([Type.integer(1), Type.integer(2)]);
+
+      assertMatchError(
+        () => Interpreter.matchOperator(right, left, vars),
+        right,
+      );
+    });
+  });
 });
 
 it("module()", () => {

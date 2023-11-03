@@ -609,25 +609,28 @@ defmodule Hologram.ExJsConsistency.MatchOperatorTest do
   #   end
   # end
 
-  # describe "variable pattern" do
-  #   test "variable pattern == anything" do
-  #     result = x = 2
+  describe "variable pattern" do
+    # x = 2
+    test "variable pattern == anything" do
+      result = x = 2
 
-  #     assert result == 2
-  #     assert x == 2
-  #   end
+      assert result == 2
+      assert x == 2
+    end
 
-  #   test "multiple variables with the same name being matched to the same value" do
-  #     result = [x, x] = [1, 1]
+    # [x, x] = [1, 1]
+    test "multiple variables with the same name being matched to the same value" do
+      result = [x, x] = [1, 1]
 
-  #     assert result == [1, 1]
-  #     assert x == 1
-  #   end
+      assert result == [1, 1]
+      assert x == 1
+    end
 
-  #   test "multiple variables with the same name being matched to the different values" do
-  #     assert_raise MatchError, "no match of right hand side value: [1, 2]", fn ->
-  #       [x, x] = build_value([1, 2])
-  #     end
-  #   end
-  # end
+    # [x, x] = [1, 2]
+    test "multiple variables with the same name being matched to the different values" do
+      assert_raise MatchError, "no match of right hand side value: [1, 2]", fn ->
+        [x, x] = build_value([1, 2])
+      end
+    end
+  end
 end
