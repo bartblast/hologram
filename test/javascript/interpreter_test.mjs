@@ -1826,6 +1826,7 @@ describe("matchOperator()", () => {
     });
   });
 
+  // TODO: finish overhaul, remember about Elixir consistency tests
   // describe("bitstring type", () => {
   //   it("left bitstring == right bitstring", () => {
   //     const result = Interpreter.matchOperator(
@@ -1963,6 +1964,8 @@ describe("matchOperator()", () => {
   //     assert.deepStrictEqual(result, expected);
   //   });
   // });
+
+  // TODO: finish overhaul, remember about Elixir consistency tests
   // describe("cons pattern", () => {
   //   describe("[h | t]", () => {
   //     let left;
@@ -2769,6 +2772,8 @@ describe("matchOperator()", () => {
   //     });
   //   });
   // });
+
+  // TODO: finish overhaul, remember about Elixir consistency tests
   // describe("float type", () => {
   //   it("left float == right float", () => {
   //     // 2.0 = 2.0
@@ -2797,6 +2802,8 @@ describe("matchOperator()", () => {
   //     );
   //   });
   // });
+
+  // TODO: finish overhaul, remember about Elixir consistency tests
   // describe("integer type", () => {
   //   it("left integer == right integer", () => {
   //     // 2 = 2
@@ -2825,6 +2832,8 @@ describe("matchOperator()", () => {
   //     );
   //   });
   // });
+
+  // TODO: finish overhaul, remember about Elixir consistency tests
   // describe("list type", () => {
   //   let list1;
   //   beforeEach(() => {
@@ -4119,6 +4128,7 @@ describe("matchOperator()", () => {
     });
   });
 
+  // TODO: finish overhaul, remember about Elixir consistency tests
   // describe("tuple type", () => {
   //   let tuple1;
   //   beforeEach(() => {

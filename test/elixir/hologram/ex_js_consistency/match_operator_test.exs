@@ -39,6 +39,7 @@ defmodule Hologram.ExJsConsistency.MatchOperatorTest do
     end
   end
 
+  # TODO: finish overhaul, remember about JavaScript interpreter tests
   # describe "bistring type" do
   #   test "left bitstring == right bitstring" do
   #     result = <<1>> = <<1>>
@@ -82,6 +83,7 @@ defmodule Hologram.ExJsConsistency.MatchOperatorTest do
   #   end
   # end
 
+  # TODO: finish overhaul, remember about JavaScript interpreter tests
   # describe "cons pattern" do
   #   test "left cons pattern == right list, cons pattern head and tail are variables" do
   #     result = [h | t] = [1, 2, 3]
@@ -136,6 +138,7 @@ defmodule Hologram.ExJsConsistency.MatchOperatorTest do
   #   end
   # end
 
+  # TODO: finish overhaul, remember about JavaScript interpreter tests
   # describe "float type" do
   #   test "left float == right float" do
   #     result = 2.0 = 2.0
@@ -155,6 +158,7 @@ defmodule Hologram.ExJsConsistency.MatchOperatorTest do
   #   end
   # end
 
+  # TODO: finish overhaul, remember about JavaScript interpreter tests
   # describe "integer type" do
   #   test "left integer == right integer" do
   #     result = 2 = 2
@@ -174,6 +178,7 @@ defmodule Hologram.ExJsConsistency.MatchOperatorTest do
   #   end
   # end
 
+  # TODO: finish overhaul, remember about JavaScript interpreter tests
   # describe "list type" do
   #   test "left list == right list" do
   #     result = [1, 2] = [1, 2]
@@ -582,6 +587,7 @@ defmodule Hologram.ExJsConsistency.MatchOperatorTest do
     end
   end
 
+  # TODO: finish overhaul, remember about JavaScript interpreter tests
   # describe "tuple type" do
   #   test "left tuple == right tuple" do
   #     result = {1, 2} = {1, 2}
