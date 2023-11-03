@@ -1782,2849 +1782,2372 @@ describe("isStrictlyEqual()", () => {
 // left and right args are not stored in temporary variables but used directly in matchOperator() call,
 // to make the test as close as possible to real behaviour in which the matchOperator() call is encoded as a whole.
 describe("matchOperator()", () => {
-  let vars;
-
-  beforeEach(() => {
-    vars = {a: Type.integer(9)};
-  });
-
-  describe("atom type", () => {
-    it("left atom == right atom", () => {
-      // :abc = :abc
-      const result = Interpreter.matchOperator(
-        Type.atom("abc"),
-        Type.atom("abc"),
-        vars,
-      );
-
-      assert.deepStrictEqual(result, Type.atom("abc"));
-      assert.deepStrictEqual(vars, {a: Type.integer(9)});
-    });
-
-    it("left atom != right atom", () => {
-      const myAtom = Type.atom("xyz");
-
-      // :abc = :xyz
-      assertMatchError(
-        () => Interpreter.matchOperator(myAtom, Type.atom("abc"), vars),
-        myAtom,
-      );
-    });
-
-    it("left atom != right non-atom", () => {
-      const myInteger = Type.integer(2);
-
-      // :abc = 2
-      assertMatchError(
-        () => Interpreter.matchOperator(myInteger, Type.atom("abc"), vars),
-        myInteger,
-      );
-    });
-  });
-
-  describe("bitstring type", () => {
-    it("left bitstring == right bitstring", () => {
-      const result = Interpreter.matchOperator(
-        Type.bitstring([
-          Type.bitstringSegment(Type.integer(1), {type: "integer"}),
-        ]),
-        Type.bitstringPattern([
-          Type.bitstringSegment(Type.integer(1), {type: "integer"}),
-        ]),
-        vars,
-      );
-
-      const expected = Type.bitstring([
-        Type.bitstringSegment(Type.integer(1), {type: "integer"}),
-      ]);
-
-      assert.deepStrictEqual(result, expected);
-    });
-
-    it("left bitstring != right bitstring", () => {
-      const myBitstring = Type.bitstring([
-        Type.bitstringSegment(Type.integer(2), {type: "integer"}),
-      ]);
-
-      assertMatchError(
-        () =>
-          Interpreter.matchOperator(
-            myBitstring,
-            Type.bitstringPattern([
-              Type.bitstringSegment(Type.integer(1), {type: "integer"}),
-            ]),
-            vars,
-          ),
-        myBitstring,
-      );
-    });
-
-    it("left bitstring != right non-bitstring", () => {
-      const myAtom = Type.atom("abc");
-
-      assertMatchError(
-        () =>
-          Interpreter.matchOperator(
-            myAtom,
-            Type.bitstring([
-              Type.bitstringSegment(Type.integer(1), {type: "integer"}),
-            ]),
-            vars,
-          ),
-        myAtom,
-      );
-    });
-
-    it("literal bitstring segments", () => {
-      const result = Interpreter.matchOperator(
-        Type.bitstring([
-          Type.bitstringSegment(Type.integer(1), {
-            type: "integer",
-            size: Type.integer(1),
-          }),
-          Type.bitstringSegment(Type.integer(0), {
-            type: "integer",
-            size: Type.integer(1),
-          }),
-        ]),
-        Type.bitstringPattern([
-          Type.bitstringSegment(Type.integer(1), {
-            type: "integer",
-            size: Type.integer(1),
-          }),
-          Type.bitstringSegment(Type.integer(0), {
-            type: "integer",
-            size: Type.integer(1),
-          }),
-        ]),
-        vars,
-      );
-
-      const expected = Type.bitstring([
-        Type.bitstringSegment(Type.integer(1), {
-          type: "integer",
-          size: Type.integer(1),
-        }),
-        Type.bitstringSegment(Type.integer(0), {
-          type: "integer",
-          size: Type.integer(1),
-        }),
-      ]);
-
-      assert.deepStrictEqual(result, expected);
-    });
-
-    it("literal float segments", () => {
-      const result = Interpreter.matchOperator(
-        Type.bitstring([
-          Type.bitstringSegment(Type.float(1.0), {type: "float"}),
-          Type.bitstringSegment(Type.float(2.0), {type: "float"}),
-        ]),
-        Type.bitstringPattern([
-          Type.bitstringSegment(Type.float(1.0), {type: "float"}),
-          Type.bitstringSegment(Type.float(2.0), {type: "float"}),
-        ]),
-        vars,
-      );
-
-      const expected = Type.bitstring([
-        Type.bitstringSegment(Type.float(1.0), {type: "float"}),
-        Type.bitstringSegment(Type.float(2.0), {type: "float"}),
-      ]);
-
-      assert.deepStrictEqual(result, expected);
-    });
-
-    it("literal integer segments", () => {
-      const result = Interpreter.matchOperator(
-        Type.bitstring([
-          Type.bitstringSegment(Type.integer(1), {type: "integer"}),
-          Type.bitstringSegment(Type.integer(2), {type: "integer"}),
-        ]),
-        Type.bitstringPattern([
-          Type.bitstringSegment(Type.integer(1), {type: "integer"}),
-          Type.bitstringSegment(Type.integer(2), {type: "integer"}),
-        ]),
-        vars,
-      );
-
-      const expected = Type.bitstring([
-        Type.bitstringSegment(Type.integer(1), {type: "integer"}),
-        Type.bitstringSegment(Type.integer(2), {type: "integer"}),
-      ]);
-
-      assert.deepStrictEqual(result, expected);
-    });
-
-    it("literal string segments", () => {
-      const result = Interpreter.matchOperator(
-        Type.bitstring([
-          Type.bitstringSegment(Type.string("aaa"), {type: "utf8"}),
-          Type.bitstringSegment(Type.string("bbb"), {type: "utf8"}),
-        ]),
-        Type.bitstringPattern([
-          Type.bitstringSegment(Type.string("aaa"), {type: "utf8"}),
-          Type.bitstringSegment(Type.string("bbb"), {type: "utf8"}),
-        ]),
-        vars,
-      );
-
-      const expected = Type.bitstring([
-        Type.bitstringSegment(Type.string("aaa"), {type: "utf8"}),
-        Type.bitstringSegment(Type.string("bbb"), {type: "utf8"}),
-      ]);
-
-      assert.deepStrictEqual(result, expected);
-    });
-  });
-
-  describe("cons pattern", () => {
-    describe("[h | t]", () => {
-      let left;
-
-      beforeEach(() => {
-        left = Type.consPattern(
-          Type.variablePattern("h"),
-          Type.variablePattern("t"),
-        );
-      });
-
-      it("[h | t] = 1", () => {
-        const right = Type.integer(1);
-
-        assertMatchError(
-          () => Interpreter.matchOperator(right, left, vars),
-          right,
-        );
-      });
-
-      it("[h | t] = []", () => {
-        const right = Type.list([]);
-
-        assertMatchError(
-          () => Interpreter.matchOperator(right, left, vars),
-          right,
-        );
-      });
-
-      it("[h | t] = [1]", () => {
-        const right = Type.list([Type.integer(1)]);
-
-        const result = Interpreter.matchOperator(right, left, vars);
-
-        assert.deepStrictEqual(result, right);
-
-        assert.deepStrictEqual(vars, {
-          a: Type.integer(9),
-          h: Type.integer(1),
-          t: Type.list([]),
-        });
-      });
-
-      it("[h | t] = [1, 2]", () => {
-        const right = Type.list([Type.integer(1), Type.integer(2)]);
-
-        const result = Interpreter.matchOperator(right, left, vars);
-
-        assert.deepStrictEqual(result, right);
-
-        assert.deepStrictEqual(vars, {
-          a: Type.integer(9),
-          h: Type.integer(1),
-          t: Type.list([Type.integer(2)]),
-        });
-      });
-
-      it("[h | t] = [1 | 2]", () => {
-        const right = Type.improperList([Type.integer(1), Type.integer(2)]);
-
-        const result = Interpreter.matchOperator(right, left, vars);
-
-        assert.deepStrictEqual(result, right);
-
-        assert.deepStrictEqual(vars, {
-          a: Type.integer(9),
-          h: Type.integer(1),
-          t: Type.integer(2),
-        });
-      });
-
-      it("[h | t] = [1, 2, 3]", () => {
-        const right = Type.list([
-          Type.integer(1),
-          Type.integer(2),
-          Type.integer(3),
-        ]);
-
-        const result = Interpreter.matchOperator(right, left, vars);
-
-        assert.deepStrictEqual(result, right);
-
-        assert.deepStrictEqual(vars, {
-          a: Type.integer(9),
-          h: Type.integer(1),
-          t: Type.list([Type.integer(2), Type.integer(3)]),
-        });
-      });
-
-      it("[h | t] = [1, 2 | 3]", () => {
-        const right = Type.improperList([
-          Type.integer(1),
-          Type.integer(2),
-          Type.integer(3),
-        ]);
-
-        const result = Interpreter.matchOperator(right, left, vars);
-
-        assert.deepStrictEqual(result, right);
-
-        assert.deepStrictEqual(vars, {
-          a: Type.integer(9),
-          h: Type.integer(1),
-          t: Type.improperList([Type.integer(2), Type.integer(3)]),
-        });
-      });
-    });
-
-    describe("[1 | t]", () => {
-      let left;
-
-      beforeEach(() => {
-        left = Type.consPattern(Type.integer(1), Type.variablePattern("t"));
-      });
-
-      it("[1 | t] = 1", () => {
-        const right = Type.integer(1);
-
-        assertMatchError(
-          () => Interpreter.matchOperator(right, left, vars),
-          right,
-        );
-      });
-
-      it("[1 | t] = []", () => {
-        const right = Type.list([]);
-
-        assertMatchError(
-          () => Interpreter.matchOperator(right, left, vars),
-          right,
-        );
-      });
-
-      it("[1 | t] = [1]", () => {
-        const right = Type.list([Type.integer(1)]);
-
-        const result = Interpreter.matchOperator(right, left, vars);
-
-        assert.deepStrictEqual(result, right);
-
-        assert.deepStrictEqual(vars, {
-          a: Type.integer(9),
-          t: Type.list([]),
-        });
-      });
-
-      it("[1 | t] = [5]", () => {
-        const right = Type.list([Type.integer(5)]);
-
-        assertMatchError(
-          () => Interpreter.matchOperator(right, left, vars),
-          right,
-        );
-      });
-
-      it("[1 | t] = [1, 2]", () => {
-        const right = Type.list([Type.integer(1), Type.integer(2)]);
-
-        const result = Interpreter.matchOperator(right, left, vars);
-
-        assert.deepStrictEqual(result, right);
-
-        assert.deepStrictEqual(vars, {
-          a: Type.integer(9),
-          t: Type.list([Type.integer(2)]),
-        });
-      });
-
-      it("[1 | t] = [5, 2]", () => {
-        const right = Type.list([Type.integer(5), Type.integer(2)]);
-
-        assertMatchError(
-          () => Interpreter.matchOperator(right, left, vars),
-          right,
-        );
-      });
-
-      it("[1 | t] = [1 | 2]", () => {
-        const right = Type.improperList([Type.integer(1), Type.integer(2)]);
-
-        const result = Interpreter.matchOperator(right, left, vars);
-
-        assert.deepStrictEqual(result, right);
-
-        assert.deepStrictEqual(vars, {
-          a: Type.integer(9),
-          t: Type.integer(2),
-        });
-      });
-
-      it("[1 | t] = [5 | 2]", () => {
-        const right = Type.improperList([Type.integer(5), Type.integer(2)]);
-
-        assertMatchError(
-          () => Interpreter.matchOperator(right, left, vars),
-          right,
-        );
-      });
-
-      it("[1 | t] = [1, 2, 3]", () => {
-        const right = Type.list([
-          Type.integer(1),
-          Type.integer(2),
-          Type.integer(3),
-        ]);
-
-        const result = Interpreter.matchOperator(right, left, vars);
-
-        assert.deepStrictEqual(result, right);
-
-        assert.deepStrictEqual(vars, {
-          a: Type.integer(9),
-          t: Type.list([Type.integer(2), Type.integer(3)]),
-        });
-      });
-
-      it("[1 | t] = [5, 2, 3]", () => {
-        const right = Type.list([
-          Type.integer(5),
-          Type.integer(2),
-          Type.integer(3),
-        ]);
-
-        assertMatchError(
-          () => Interpreter.matchOperator(right, left, vars),
-          right,
-        );
-      });
-
-      it("[1 | t] = [1, 2 | 3]", () => {
-        const right = Type.improperList([
-          Type.integer(1),
-          Type.integer(2),
-          Type.integer(3),
-        ]);
-
-        const result = Interpreter.matchOperator(right, left, vars);
-
-        assert.deepStrictEqual(result, right);
-
-        assert.deepStrictEqual(vars, {
-          a: Type.integer(9),
-          t: Type.improperList([Type.integer(2), Type.integer(3)]),
-        });
-      });
-
-      it("[1 | t] = [5, 2 | 3]", () => {
-        const right = Type.improperList([
-          Type.integer(5),
-          Type.integer(2),
-          Type.integer(3),
-        ]);
-
-        assertMatchError(
-          () => Interpreter.matchOperator(right, left, vars),
-          right,
-        );
-      });
-    });
-
-    describe("[h | 3]", () => {
-      let left;
-
-      beforeEach(() => {
-        left = Type.consPattern(Type.variablePattern("h"), Type.integer(3));
-      });
-
-      it("[h | 3] = 3", () => {
-        const right = Type.integer(3);
-
-        assertMatchError(
-          () => Interpreter.matchOperator(right, left, vars),
-          right,
-        );
-      });
-
-      it("[h | 3] = []", () => {
-        const right = Type.list([]);
-
-        assertMatchError(
-          () => Interpreter.matchOperator(right, left, vars),
-          right,
-        );
-      });
-
-      it("[h | 3] = [3]", () => {
-        const right = Type.list([Type.integer(3)]);
-
-        assertMatchError(
-          () => Interpreter.matchOperator(right, left, vars),
-          right,
-        );
-      });
-
-      it("[h | 3] = [2, 3]", () => {
-        const right = Type.list([Type.integer(2), Type.integer(3)]);
-
-        assertMatchError(
-          () => Interpreter.matchOperator(right, left, vars),
-          right,
-        );
-      });
-
-      it("[h | 3] = [2 | 3]", () => {
-        const right = Type.improperList([Type.integer(2), Type.integer(3)]);
-
-        const result = Interpreter.matchOperator(right, left, vars);
-
-        assert.deepStrictEqual(result, right);
-
-        assert.deepStrictEqual(vars, {
-          a: Type.integer(9),
-          h: Type.integer(2),
-        });
-      });
-
-      it("[h | 3] = [1, 2, 3]", () => {
-        const right = Type.list([
-          Type.integer(1),
-          Type.integer(2),
-          Type.integer(3),
-        ]);
-
-        assertMatchError(
-          () => Interpreter.matchOperator(right, left, vars),
-          right,
-        );
-      });
-
-      it("[h | 3] = [1, 2 | 3]", () => {
-        const right = Type.improperList([
-          Type.integer(1),
-          Type.integer(2),
-          Type.integer(3),
-        ]);
-
-        assertMatchError(
-          () => Interpreter.matchOperator(right, left, vars),
-          right,
-        );
-      });
-    });
-
-    describe("[h | []]", () => {
-      let left;
-
-      beforeEach(() => {
-        left = Type.consPattern(Type.variablePattern("h"), Type.list([]));
-      });
-
-      it("[h | []] = 3", () => {
-        const right = Type.integer(3);
-
-        assertMatchError(
-          () => Interpreter.matchOperator(right, left, vars),
-          right,
-        );
-      });
-
-      it("[h | []] = []", () => {
-        const right = Type.list([]);
-
-        assertMatchError(
-          () => Interpreter.matchOperator(right, left, vars),
-          right,
-        );
-      });
-
-      it("[h | []] = [3]", () => {
-        const right = Type.list([Type.integer(3)]);
-
-        const result = Interpreter.matchOperator(right, left, vars);
-
-        assert.deepStrictEqual(result, right);
-
-        assert.deepStrictEqual(vars, {
-          a: Type.integer(9),
-          h: Type.integer(3),
-        });
-      });
-
-      it("[h | []] = [2, 3]", () => {
-        const right = Type.list([Type.integer(2), Type.integer(3)]);
-
-        assertMatchError(
-          () => Interpreter.matchOperator(right, left, vars),
-          right,
-        );
-      });
-
-      it("[h | []] = [2 | 3]", () => {
-        const right = Type.improperList([Type.integer(2), Type.integer(3)]);
-
-        assertMatchError(
-          () => Interpreter.matchOperator(right, left, vars),
-          right,
-        );
-      });
-
-      it("[h | []] = [1, 2, 3]", () => {
-        const right = Type.list([
-          Type.integer(1),
-          Type.integer(2),
-          Type.integer(3),
-        ]);
-
-        assertMatchError(
-          () => Interpreter.matchOperator(right, left, vars),
-          right,
-        );
-      });
-
-      it("[h | []] = [1, 2 | 3]", () => {
-        const right = Type.improperList([
-          Type.integer(1),
-          Type.integer(2),
-          Type.integer(3),
-        ]);
-
-        assertMatchError(
-          () => Interpreter.matchOperator(right, left, vars),
-          right,
-        );
-      });
-    });
-
-    describe("[h | [3]]", () => {
-      let left;
-
-      beforeEach(() => {
-        left = Type.consPattern(
-          Type.variablePattern("h"),
-          Type.list([Type.integer(3)]),
-        );
-      });
-
-      it("[h | [3]] = 3", () => {
-        const right = Type.integer(3);
-
-        assertMatchError(
-          () => Interpreter.matchOperator(right, left, vars),
-          right,
-        );
-      });
-
-      it("[h | [3]] = []", () => {
-        const right = Type.list([]);
-
-        assertMatchError(
-          () => Interpreter.matchOperator(right, left, vars),
-          right,
-        );
-      });
-
-      it("[h | [3]] = [3]", () => {
-        const right = Type.list([Type.integer(3)]);
-
-        assertMatchError(
-          () => Interpreter.matchOperator(right, left, vars),
-          right,
-        );
-      });
-
-      it("[h | [3]] = [2, 3]", () => {
-        const right = Type.list([Type.integer(2), Type.integer(3)]);
-
-        const result = Interpreter.matchOperator(right, left, vars);
-
-        assert.deepStrictEqual(result, right);
-
-        assert.deepStrictEqual(vars, {
-          a: Type.integer(9),
-          h: Type.integer(2),
-        });
-      });
-
-      it("[h | [3]] = [2 | 3]", () => {
-        const right = Type.improperList([Type.integer(2), Type.integer(3)]);
-
-        assertMatchError(
-          () => Interpreter.matchOperator(right, left, vars),
-          right,
-        );
-      });
-
-      it("[h | [3]] = [1, 2, 3]", () => {
-        const right = Type.list([
-          Type.integer(1),
-          Type.integer(2),
-          Type.integer(3),
-        ]);
-
-        assertMatchError(
-          () => Interpreter.matchOperator(right, left, vars),
-          right,
-        );
-      });
-
-      it("[h | [3]] = [1, 2 | 3]", () => {
-        const right = Type.improperList([
-          Type.integer(1),
-          Type.integer(2),
-          Type.integer(3),
-        ]);
-
-        assertMatchError(
-          () => Interpreter.matchOperator(right, left, vars),
-          right,
-        );
-      });
-    });
-
-    describe("[h | [2, 3]]", () => {
-      let left;
-
-      beforeEach(() => {
-        left = Type.consPattern(
-          Type.variablePattern("h"),
-          Type.list([Type.integer(2), Type.integer(3)]),
-        );
-      });
-
-      it("[h | [2, 3]] = 3", () => {
-        const right = Type.integer(3);
-
-        assertMatchError(
-          () => Interpreter.matchOperator(right, left, vars),
-          right,
-        );
-      });
-
-      it("[h | [2, 3]] = []", () => {
-        const right = Type.list([]);
-
-        assertMatchError(
-          () => Interpreter.matchOperator(right, left, vars),
-          right,
-        );
-      });
-
-      it("[h | [2, 3]] = [3]", () => {
-        const right = Type.list([Type.integer(3)]);
-
-        assertMatchError(
-          () => Interpreter.matchOperator(right, left, vars),
-          right,
-        );
-      });
-
-      it("[h | [2, 3]] = [2, 3]", () => {
-        const right = Type.list([Type.integer(2), Type.integer(3)]);
-
-        assertMatchError(
-          () => Interpreter.matchOperator(right, left, vars),
-          right,
-        );
-      });
-
-      it("[h | [2, 3]] = [2 | 3]", () => {
-        const right = Type.improperList([Type.integer(2), Type.integer(3)]);
-
-        assertMatchError(
-          () => Interpreter.matchOperator(right, left, vars),
-          right,
-        );
-      });
-
-      it("[h | [2, 3]] = [1, 2, 3]", () => {
-        const right = Type.list([
-          Type.integer(1),
-          Type.integer(2),
-          Type.integer(3),
-        ]);
-
-        const result = Interpreter.matchOperator(right, left, vars);
-
-        assert.deepStrictEqual(result, right);
-
-        assert.deepStrictEqual(vars, {
-          a: Type.integer(9),
-          h: Type.integer(1),
-        });
-      });
-
-      it("[h | [2, 3]] = [1, 2 | 3]", () => {
-        const right = Type.improperList([
-          Type.integer(1),
-          Type.integer(2),
-          Type.integer(3),
-        ]);
-
-        assertMatchError(
-          () => Interpreter.matchOperator(right, left, vars),
-          right,
-        );
-      });
-    });
-
-    describe("[h | [2 | 3]]", () => {
-      let left;
-
-      beforeEach(() => {
-        left = Type.consPattern(
-          Type.variablePattern("h"),
-          Type.consPattern(Type.integer(2), Type.integer(3)),
-        );
-      });
-
-      it("[h | [2 | 3]] = 3", () => {
-        const right = Type.integer(3);
-
-        assertMatchError(
-          () => Interpreter.matchOperator(right, left, vars),
-          right,
-        );
-      });
-
-      it("[h | [2 | 3]] = []", () => {
-        const right = Type.list([]);
-
-        assertMatchError(
-          () => Interpreter.matchOperator(right, left, vars),
-          right,
-        );
-      });
-
-      it("[h | [2 | 3]] = [3]", () => {
-        const right = Type.list([Type.integer(3)]);
-
-        assertMatchError(
-          () => Interpreter.matchOperator(right, left, vars),
-          right,
-        );
-      });
-
-      it("[h | [2 | 3]] = [2, 3]", () => {
-        const right = Type.list([Type.integer(2), Type.integer(3)]);
-
-        assertMatchError(
-          () => Interpreter.matchOperator(right, left, vars),
-          right,
-        );
-      });
-
-      it("[h | [2 | 3]] = [2 | 3]", () => {
-        const right = Type.improperList([Type.integer(2), Type.integer(3)]);
-
-        assertMatchError(
-          () => Interpreter.matchOperator(right, left, vars),
-          right,
-        );
-      });
-
-      it("[h | [2 | 3]] = [1, 2, 3]", () => {
-        const right = Type.list([
-          Type.integer(1),
-          Type.integer(2),
-          Type.integer(3),
-        ]);
-
-        assertMatchError(
-          () => Interpreter.matchOperator(right, left, vars),
-          right,
-        );
-      });
-
-      it("[h | [2 | 3]] = [1, 2 | 3]", () => {
-        const right = Type.improperList([
-          Type.integer(1),
-          Type.integer(2),
-          Type.integer(3),
-        ]);
-
-        const result = Interpreter.matchOperator(right, left, vars);
-
-        assert.deepStrictEqual(result, right);
-
-        assert.deepStrictEqual(vars, {
-          a: Type.integer(9),
-          h: Type.integer(1),
-        });
-      });
-    });
-
-    describe("[h | [1, 2, 3]]", () => {
-      let left;
-
-      beforeEach(() => {
-        left = Type.consPattern(
-          Type.variablePattern("h"),
-          Type.list([Type.integer(1), Type.integer(2), Type.integer(3)]),
-        );
-      });
-
-      it("[h | [1, 2, 3]] = 3", () => {
-        const right = Type.integer(3);
-
-        assertMatchError(
-          () => Interpreter.matchOperator(right, left, vars),
-          right,
-        );
-      });
-
-      it("[h | [1, 2, 3]] = []", () => {
-        const right = Type.list([]);
-
-        assertMatchError(
-          () => Interpreter.matchOperator(right, left, vars),
-          right,
-        );
-      });
-
-      it("[h | [1, 2, 3]] = [3]", () => {
-        const right = Type.list([Type.integer(3)]);
-
-        assertMatchError(
-          () => Interpreter.matchOperator(right, left, vars),
-          right,
-        );
-      });
-
-      it("[h | [1, 2, 3]] = [2, 3]", () => {
-        const right = Type.list([Type.integer(2), Type.integer(3)]);
-
-        assertMatchError(
-          () => Interpreter.matchOperator(right, left, vars),
-          right,
-        );
-      });
-
-      it("[h | [1, 2, 3]] = [2 | 3]", () => {
-        const right = Type.improperList([Type.integer(2), Type.integer(3)]);
-
-        assertMatchError(
-          () => Interpreter.matchOperator(right, left, vars),
-          right,
-        );
-      });
-
-      it("[h | [1, 2, 3]] = [1, 2, 3]", () => {
-        const right = Type.list([
-          Type.integer(1),
-          Type.integer(2),
-          Type.integer(3),
-        ]);
-
-        assertMatchError(
-          () => Interpreter.matchOperator(right, left, vars),
-          right,
-        );
-      });
-
-      it("[h | [1, 2, 3]] = [1, 2 | 3]", () => {
-        const right = Type.improperList([
-          Type.integer(1),
-          Type.integer(2),
-          Type.integer(3),
-        ]);
-
-        assertMatchError(
-          () => Interpreter.matchOperator(right, left, vars),
-          right,
-        );
-      });
-    });
-
-    describe("[h | [1, 2 | 3]]", () => {
-      let left;
-
-      beforeEach(() => {
-        left = Type.consPattern(
-          Type.variablePattern("h"),
-          Type.consPattern(
-            Type.integer(1),
-            Type.consPattern(Type.integer(2), Type.integer(3)),
-          ),
-        );
-      });
-
-      it("[h | [1, 2 | 3]] = 3", () => {
-        const right = Type.integer(3);
-
-        assertMatchError(
-          () => Interpreter.matchOperator(right, left, vars),
-          right,
-        );
-      });
-
-      it("[h | [1, 2 | 3]] = []", () => {
-        const right = Type.list([]);
-
-        assertMatchError(
-          () => Interpreter.matchOperator(right, left, vars),
-          right,
-        );
-      });
-
-      it("[h | [1, 2 | 3]] = [3]", () => {
-        const right = Type.list([Type.integer(3)]);
-
-        assertMatchError(
-          () => Interpreter.matchOperator(right, left, vars),
-          right,
-        );
-      });
-
-      it("[h | [1, 2 | 3]] = [2, 3]", () => {
-        const right = Type.list([Type.integer(2), Type.integer(3)]);
-
-        assertMatchError(
-          () => Interpreter.matchOperator(right, left, vars),
-          right,
-        );
-      });
-
-      it("[h | [1, 2 | 3]] = [2 | 3]", () => {
-        const right = Type.improperList([Type.integer(2), Type.integer(3)]);
-
-        assertMatchError(
-          () => Interpreter.matchOperator(right, left, vars),
-          right,
-        );
-      });
-
-      it("[h | [1, 2 | 3]] = [1, 2, 3]", () => {
-        const right = Type.list([
-          Type.integer(1),
-          Type.integer(2),
-          Type.integer(3),
-        ]);
-
-        assertMatchError(
-          () => Interpreter.matchOperator(right, left, vars),
-          right,
-        );
-      });
-
-      it("[h | [1, 2 | 3]] = [1, 2 | 3]", () => {
-        const right = Type.improperList([
-          Type.integer(1),
-          Type.integer(2),
-          Type.integer(3),
-        ]);
-
-        assertMatchError(
-          () => Interpreter.matchOperator(right, left, vars),
-          right,
-        );
-      });
-    });
-
-    describe("[1 | [2 | [3 | []]]]", () => {
-      let left;
-
-      beforeEach(() => {
-        left = Type.consPattern(
-          Type.integer(1),
-          Type.consPattern(
-            Type.integer(2),
-            Type.consPattern(Type.integer(3), Type.list([])),
-          ),
-        );
-      });
-
-      it("[1 | [2 | [3 | []]]] = [1, 2, 3, 4]", () => {
-        const right = Type.list([
-          Type.integer(1),
-          Type.integer(2),
-          Type.integer(3),
-          Type.integer(4),
-        ]);
-
-        assertMatchError(
-          () => Interpreter.matchOperator(right, left, vars),
-          right,
-        );
-      });
-
-      it("[1 | [2 | [3 | []]]] = [1, 2, 3 | 4]", () => {
-        const right = Type.improperList([
-          Type.integer(1),
-          Type.integer(2),
-          Type.integer(3),
-          Type.integer(4),
-        ]);
-
-        assertMatchError(
-          () => Interpreter.matchOperator(right, left, vars),
-          right,
-        );
-      });
-
-      it("[1 | [2 | [3 | []]]] = [1, 2, 3]", () => {
-        const right = Type.list([
-          Type.integer(1),
-          Type.integer(2),
-          Type.integer(3),
-        ]);
-
-        const result = Interpreter.matchOperator(right, left, vars);
-
-        assert.deepStrictEqual(result, right);
-        assert.deepStrictEqual(vars, {a: Type.integer(9)});
-      });
-    });
-
-    describe("[1 | [2 | [3 | 4]]]", () => {
-      let left;
-
-      beforeEach(() => {
-        left = Type.consPattern(
-          Type.integer(1),
-          Type.consPattern(
-            Type.integer(2),
-            Type.consPattern(Type.integer(3), Type.integer(4)),
-          ),
-        );
-      });
-
-      it("[1 | [2 | [3 | 4]]] = [1, 2, 3, 4]", () => {
-        const right = Type.list([
-          Type.integer(1),
-          Type.integer(2),
-          Type.integer(3),
-          Type.integer(4),
-        ]);
-
-        assertMatchError(
-          () => Interpreter.matchOperator(right, left, vars),
-          right,
-        );
-      });
-
-      it("[1 | [2 | [3 | 4]]] = [1, 2, 3 | 4]", () => {
-        const right = Type.improperList([
-          Type.integer(1),
-          Type.integer(2),
-          Type.integer(3),
-          Type.integer(4),
-        ]);
-
-        const result = Interpreter.matchOperator(right, left, vars);
-
-        assert.deepStrictEqual(result, right);
-        assert.deepStrictEqual(vars, {a: Type.integer(9)});
-      });
-
-      it("[1 | [2 | [3 | 4]]] = [1, 2, 3]", () => {
-        const right = Type.list([
-          Type.integer(1),
-          Type.integer(2),
-          Type.integer(3),
-        ]);
-
-        assertMatchError(
-          () => Interpreter.matchOperator(right, left, vars),
-          right,
-        );
-      });
-    });
-
-    describe("[1 | [2 | [3 | [4]]]]", () => {
-      let left;
-
-      beforeEach(() => {
-        left = Type.consPattern(
-          Type.integer(1),
-          Type.consPattern(
-            Type.integer(2),
-            Type.consPattern(Type.integer(3), Type.list([Type.integer(4)])),
-          ),
-        );
-      });
-
-      it("[1 | [2 | [3 | [4]]]] = [1, 2, 3, 4]", () => {
-        const right = Type.list([
-          Type.integer(1),
-          Type.integer(2),
-          Type.integer(3),
-          Type.integer(4),
-        ]);
-
-        const result = Interpreter.matchOperator(right, left, vars);
-
-        assert.deepStrictEqual(result, right);
-        assert.deepStrictEqual(vars, {a: Type.integer(9)});
-      });
-
-      it("[1 | [2 | [3 | [4]]]] = [1, 2, 3 | 4]", () => {
-        const right = Type.improperList([
-          Type.integer(1),
-          Type.integer(2),
-          Type.integer(3),
-          Type.integer(4),
-        ]);
-
-        assertMatchError(
-          () => Interpreter.matchOperator(right, left, vars),
-          right,
-        );
-      });
-
-      it("[1 | [2 | [3 | [4]]]] = [1, 2, 3]", () => {
-        const right = Type.list([
-          Type.integer(1),
-          Type.integer(2),
-          Type.integer(3),
-        ]);
-
-        assertMatchError(
-          () => Interpreter.matchOperator(right, left, vars),
-          right,
-        );
-      });
-    });
-  });
-
-  describe("float type", () => {
-    it("left float == right float", () => {
-      // 2.0 = 2.0
-      const result = Interpreter.matchOperator(
-        Type.float(2.0),
-        Type.float(2.0),
-        vars,
-      );
-
-      assert.deepStrictEqual(result, Type.float(2.0));
-      assert.deepStrictEqual(vars, {a: Type.integer(9)});
-    });
-
-    it("left float != right float", () => {
-      const myFloat = Type.float(3.0);
-
-      // 2.0 = 3.0
-      assertMatchError(
-        () => Interpreter.matchOperator(myFloat, Type.float(2.0), vars),
-        myFloat,
-      );
-    });
-
-    it("left float != right non-float", () => {
-      const myAtom = Type.atom("abc");
-
-      // 2.0 = :abc
-      assertMatchError(
-        () => Interpreter.matchOperator(myAtom, Type.float(2.0), vars),
-        myAtom,
-      );
-    });
-  });
-
-  describe("integer type", () => {
-    it("left integer == right integer", () => {
-      // 2 = 2
-      const result = Interpreter.matchOperator(
-        Type.integer(2),
-        Type.integer(2),
-        vars,
-      );
-
-      assert.deepStrictEqual(result, Type.integer(2));
-      assert.deepStrictEqual(vars, {a: Type.integer(9)});
-    });
-
-    it("left integer != right integer", () => {
-      const myInteger = Type.integer(3);
-
-      // 2 = 3
-      assertMatchError(
-        () => Interpreter.matchOperator(myInteger, Type.integer(2), vars),
-        myInteger,
-      );
-    });
-
-    it("left integer != right non-integer", () => {
-      const myAtom = Type.atom("abc");
-
-      // 2 = :abc
-      assertMatchError(
-        () => Interpreter.matchOperator(myAtom, Type.integer(2), vars),
-        myAtom,
-      );
-    });
-  });
-
-  describe("list type", () => {
-    let list1;
-
-    beforeEach(() => {
-      list1 = Type.list([Type.integer(1), Type.integer(2)]);
-    });
-
-    it("[1, 2] = [1, 2]", () => {
-      const result = Interpreter.matchOperator(list1, list1, vars);
-
-      assert.deepStrictEqual(result, list1);
-      assert.deepStrictEqual(vars, {a: Type.integer(9)});
-    });
-
-    it("[1, 2] = [1, 3]", () => {
-      const list2 = Type.list([Type.integer(1), Type.integer(3)]);
-
-      assertMatchError(
-        () => Interpreter.matchOperator(list2, list1, vars),
-        list2,
-      );
-    });
-
-    it("[1, 2] = [1 | 2]", () => {
-      const list2 = Type.improperList([Type.integer(1), Type.integer(2)]);
-
-      assertMatchError(
-        () => Interpreter.matchOperator(list2, list1, vars),
-        list2,
-      );
-    });
-
-    it("[1, 2] = :abc", () => {
-      const myAtom = Type.atom("abc");
-
-      assertMatchError(
-        () => Interpreter.matchOperator(myAtom, list1, vars),
-        myAtom,
-      );
-    });
-
-    it("[] = [1, 2]", () => {
-      assertMatchError(
-        () => Interpreter.matchOperator(list1, Type.list([]), vars),
-        list1,
-      );
-    });
-
-    it("[1, 2] = []", () => {
-      const emptyList = Type.list([]);
-
-      assertMatchError(
-        () => Interpreter.matchOperator(emptyList, list1, vars),
-        emptyList,
-      );
-    });
-
-    it("[] = []", () => {
-      const emptyList = Type.list([]);
-      const result = Interpreter.matchOperator(emptyList, emptyList, vars);
-
-      assert.deepStrictEqual(result, emptyList);
-      assert.deepStrictEqual(vars, {a: Type.integer(9)});
-    });
-
-    it("[x, 2, y] = [1, 2, 3]", () => {
-      const left = Type.list([
-        Type.variablePattern("x"),
-        Type.integer(2),
-        Type.variablePattern("y"),
-      ]);
-
-      const right = Type.list([
-        Type.integer(1),
-        Type.integer(2),
-        Type.integer(3),
-      ]);
-
-      const result = Interpreter.matchOperator(right, left, vars);
-      assert.deepStrictEqual(result, right);
-
-      const expectedVars = {
-        a: Type.integer(9),
-        x: Type.integer(1),
-        y: Type.integer(3),
-      };
-
-      assert.deepStrictEqual(vars, expectedVars);
-    });
-  });
-
-  describe("map type", () => {
-    let data;
-
-    beforeEach(() => {
-      data = [
-        [Type.atom("x"), Type.integer(1)],
-        [Type.atom("y"), Type.integer(2)],
-      ];
-    });
-
-    it("%{x: 1, y: 2} = %{x: 1, y: 2}", () => {
-      const left = Type.map(data);
-      const right = Type.map(data);
-
-      const result = Interpreter.matchOperator(right, left, vars);
-
-      assert.deepStrictEqual(result, right);
-      assert.deepStrictEqual(vars, {a: Type.integer(9)});
-    });
-
-    it("%{x: 1, y: 2} = %{x: 1, y: 2, z: 3}", () => {
-      const left = Type.map(data);
-
-      const data2 = [
-        [Type.atom("x"), Type.integer(1)],
-        [Type.atom("y"), Type.integer(2)],
-        [Type.atom("z"), Type.integer(3)],
-      ];
-
-      const right = Type.map(data2);
-
-      const result = Interpreter.matchOperator(right, left, vars);
-
-      assert.deepStrictEqual(result, right);
-      assert.deepStrictEqual(vars, {a: Type.integer(9)});
-    });
-
-    it("%{x: 1, y: 2, z: 3} = %{x: 1, y: 2}", () => {
-      const data1 = [
-        [Type.atom("x"), Type.integer(1)],
-        [Type.atom("y"), Type.integer(2)],
-        [Type.atom("z"), Type.integer(3)],
-      ];
-
-      const left = Type.map(data1);
-      const right = Type.map(data);
-
-      assertMatchError(
-        () => Interpreter.matchOperator(right, left, vars),
-        right,
-      );
-    });
-
-    it("%{x: 1, y: 2} = %{x: 1, y: 3}", () => {
-      const left = Type.map(data);
-
-      const data2 = [
-        [Type.atom("x"), Type.integer(1)],
-        [Type.atom("y"), Type.integer(3)],
-      ];
-
-      const right = Type.map(data2);
-
-      assertMatchError(
-        () => Interpreter.matchOperator(right, left, vars),
-        right,
-      );
-    });
-
-    it("%{x: 1, y: 2} = :abc", () => {
-      const left = Type.map(data);
-      const right = Type.atom("abc");
-
-      assertMatchError(
-        () => Interpreter.matchOperator(right, left, vars),
-        right,
-      );
-    });
-
-    it("%{x: 1, y: 2} = %{}", () => {
-      const left = Type.map(data);
-      const emptyMap = Type.map([]);
-
-      assertMatchError(
-        () => Interpreter.matchOperator(emptyMap, left, vars),
-        emptyMap,
-      );
-    });
-
-    it("%{} = %{x: 1, y: 2}", () => {
-      const emptyMap = Type.map([]);
-      const right = Type.map(data);
-      const result = Interpreter.matchOperator(right, emptyMap, vars);
-
-      assert.deepStrictEqual(result, right);
-      assert.deepStrictEqual(vars, {a: Type.integer(9)});
-    });
-
-    it("%{} = %{}", () => {
-      const emptyMap = Type.map([]);
-      const result = Interpreter.matchOperator(emptyMap, emptyMap, vars);
-
-      assert.deepStrictEqual(result, emptyMap);
-      assert.deepStrictEqual(vars, {a: Type.integer(9)});
-    });
-
-    it("%{k: x, m: 2, n: z} = %{k: 1, m: 2, n: 3}", () => {
-      const left = Type.map([
-        [Type.atom("k"), Type.variablePattern("x")],
-        [Type.atom("m"), Type.integer(2)],
-        [Type.atom("n"), Type.variablePattern("z")],
-      ]);
-
-      const right = Type.map([
-        [Type.atom("k"), Type.integer(1)],
-        [Type.atom("m"), Type.integer(2)],
-        [Type.atom("n"), Type.integer(3)],
-      ]);
-
-      const result = Interpreter.matchOperator(right, left, vars);
-      assert.deepStrictEqual(result, right);
-
-      const expectedVars = {
-        a: Type.integer(9),
-        x: Type.integer(1),
-        z: Type.integer(3),
-      };
-
-      assert.deepStrictEqual(vars, expectedVars);
-    });
-  });
-
-  it("match placeholder", () => {
-    // _var = 2
-    const result = Interpreter.matchOperator(
-      Type.integer(2),
-      Type.matchPlaceholder(),
-      vars,
-    );
-
-    assert.deepStrictEqual(result, Type.integer(2));
-    assert.deepStrictEqual(vars, {a: Type.integer(9)});
-  });
-
-  describe("nested match operators", () => {
-    it("x = 2 = 2", () => {
-      const result = Interpreter.matchOperator(
-        Interpreter.matchOperator(
-          Type.integer(2),
-          Type.integer(2),
-          vars,
-          false,
-        ),
-        Type.variablePattern("x"),
-        vars,
-      );
-
-      assert.deepStrictEqual(result, Type.integer(2));
-
-      const expectedVars = {
-        a: Type.integer(9),
-        x: Type.integer(2),
-      };
-
-      assert.deepStrictEqual(vars, expectedVars);
-    });
-
-    it("x = 2 = 3", () => {
-      const integer3 = Type.integer(3);
-
-      assertMatchError(
-        () =>
-          Interpreter.matchOperator(
-            Interpreter.matchOperator(integer3, Type.integer(2), vars, false),
-            Type.variablePattern("x"),
-            vars,
-          ),
-        integer3,
-      );
-    });
-
-    it("2 = x = 2", () => {
-      const result = Interpreter.matchOperator(
-        Interpreter.matchOperator(
-          Type.integer(2),
-          Type.variablePattern("x"),
-          vars,
-          false,
-        ),
-        Type.integer(2),
-        vars,
-      );
-
-      assert.deepStrictEqual(result, Type.integer(2));
-
-      const expectedVars = {
-        a: Type.integer(9),
-        x: Type.integer(2),
-      };
-
-      assert.deepStrictEqual(vars, expectedVars);
-    });
-
-    it("2 = x = 3", () => {
-      const integer3 = Type.integer(3);
-
-      assertMatchError(
-        () =>
-          Interpreter.matchOperator(
-            Interpreter.matchOperator(
-              integer3,
-              Type.variablePattern("x"),
-              vars,
-              false,
-            ),
-            Type.integer(2),
-            vars,
-          ),
-        integer3,
-      );
-    });
-
-    it("2 = 2 = x, (x = 2)", () => {
-      const vars = {
-        a: Type.integer(9),
-        x: Type.integer(2),
-      };
-
-      const result = Interpreter.matchOperator(
-        Interpreter.matchOperator(vars.x, Type.integer(2), vars, false),
-        Type.integer(2),
-        vars,
-      );
-
-      assert.deepStrictEqual(result, Type.integer(2));
-
-      const expectedVars = {
-        a: Type.integer(9),
-        x: Type.integer(2),
-      };
-
-      assert.deepStrictEqual(vars, expectedVars);
-    });
-
-    it("2 = 2 = x, (x = 3)", () => {
-      const vars = {
-        a: Type.integer(9),
-        x: Type.integer(3),
-      };
-
-      assertMatchError(
-        () =>
-          Interpreter.matchOperator(
-            Interpreter.matchOperator(vars.x, Type.integer(2), vars, false),
-            Type.integer(2),
-            vars,
-          ),
-        Type.integer(3),
-      );
-    });
-
-    it("1 = 2 = x, (x = 2)", () => {
-      const vars = {
-        a: Type.integer(9),
-        x: Type.integer(2),
-      };
-
-      assertMatchError(
-        () =>
-          Interpreter.matchOperator(
-            Interpreter.matchOperator(vars.x, Type.integer(2), vars, false),
-            Type.integer(1),
-            vars,
-          ),
-        Type.integer(2),
-      );
-    });
-
-    it("y = x + (x = 3) + x, (x = 11)", () => {
-      const vars = {
-        a: Type.integer(9),
-        x: Type.integer(11),
-      };
-
-      Interpreter.takeVarsSnapshot(vars);
-
-      const result = Interpreter.matchOperator(
-        Erlang["+/2"](
-          Erlang["+/2"](
-            vars.__snapshot__.x,
-            Interpreter.matchOperator(
-              Type.integer(3),
-              Type.variablePattern("x"),
-              vars,
-              false,
-            ),
-          ),
-          vars.__snapshot__.x,
-        ),
-        Type.variablePattern("y"),
-        vars,
-      );
-
-      assert.deepStrictEqual(result, Type.integer(25));
-
-      const expectedVars = {
-        __snapshot__: {
-          a: Type.integer(9),
-          x: Type.integer(11),
-        },
-        a: Type.integer(9),
-        x: Type.integer(3),
-        y: Type.integer(25),
-      };
-
-      assert.deepStrictEqual(vars, expectedVars);
-    });
-
-    it("[1 = 1] = [1 = 1]", () => {
-      const result = Interpreter.matchOperator(
-        Type.list([
-          Interpreter.matchOperator(
-            Type.integer(1),
-            Type.integer(1),
-            vars,
-            false,
-          ),
-        ]),
-        Type.list([
-          Interpreter.matchOperator(
-            Type.integer(1),
-            Type.integer(1),
-            vars,
-            false,
-          ),
-        ]),
-        vars,
-      );
-
-      assert.deepStrictEqual(result, Type.list([Type.integer(1)]));
-      assert.deepStrictEqual(vars, {a: Type.integer(9)});
-    });
-
-    it("[1 = 1] = [1 = 2]", () => {
-      const integer2 = Type.integer(2);
-
-      assertMatchError(
-        () =>
-          Interpreter.matchOperator(
-            Type.list([
-              Interpreter.matchOperator(integer2, Type.integer(1), vars, false),
-            ]),
-            Type.list([
-              Interpreter.matchOperator(
-                Type.integer(1),
-                Type.integer(1),
-                vars,
-                false,
-              ),
-            ]),
-            vars,
-          ),
-        integer2,
-      );
-    });
-
-    it("[1 = 1] = [2 = 1]", () => {
-      const integer1 = Type.integer(1);
-
-      assertMatchError(
-        () =>
-          Interpreter.matchOperator(
-            Type.list([
-              Interpreter.matchOperator(integer1, Type.integer(2), vars, false),
-            ]),
-            Type.list([
-              Interpreter.matchOperator(integer1, integer1, vars, false),
-            ]),
-            vars,
-          ),
-        integer1,
-      );
-    });
-
-    // TODO: JavaScript error message for this case is inconsistent with Elixir error message (see test/elixir/hologram/ex_js_consistency/match_operator_test.exs)
-    it("[1 = 2] = [1 = 1]", () => {
-      const integer2 = Type.integer(2);
-
-      assertMatchError(
-        () =>
-          Interpreter.matchOperator(
-            Type.list([
-              Interpreter.matchOperator(
-                Type.integer(1),
-                Type.integer(1),
-                vars,
-                false,
-              ),
-            ]),
-            Type.list([
-              Interpreter.matchOperator(integer2, Type.integer(1), vars, false),
-            ]),
-            vars,
-          ),
-        integer2,
-      );
-    });
-
-    // TODO: JavaScript error message for this case is inconsistent with Elixir error message (see test/elixir/hologram/ex_js_consistency/match_operator_test.exs)
-    it("[2 = 1] = [1 = 1]", () => {
-      const integer1 = Type.integer(1);
-
-      assertMatchError(
-        () =>
-          Interpreter.matchOperator(
-            Type.list([
-              Interpreter.matchOperator(integer1, integer1, vars, false),
-            ]),
-            Type.list([
-              Interpreter.matchOperator(integer1, Type.integer(2), vars, false),
-            ]),
-            vars,
-          ),
-        integer1,
-      );
-    });
-
-    it("{a = b, 2, 3} = {1, c = d, 3} = {1, 2, e = f}", () => {
-      const vars = {
-        a: Type.integer(9),
-        f: Type.integer(3),
-      };
-
-      const result = Interpreter.matchOperator(
-        Interpreter.matchOperator(
-          Type.tuple([
-            Type.integer(1),
-            Type.integer(2),
-            Interpreter.matchOperator(
-              vars.f,
-              Type.variablePattern("e"),
-              vars,
-              false,
-            ),
-          ]),
-          Type.tuple([
-            Type.integer(1),
-            Interpreter.matchOperator(
-              Type.variablePattern("d"),
-              Type.variablePattern("c"),
-              vars,
-              false,
-            ),
-            Type.integer(3),
-          ]),
-          vars,
-          false,
-        ),
-        Type.tuple([
-          Interpreter.matchOperator(
-            Type.variablePattern("b"),
-            Type.variablePattern("a"),
-            vars,
-            false,
-          ),
-          Type.integer(2),
-          Type.integer(3),
-        ]),
-        vars,
-      );
-
-      const expectedResult = Type.tuple([
-        Type.integer(1),
-        Type.integer(2),
-        Type.integer(3),
-      ]);
-
-      assert.deepStrictEqual(result, expectedResult);
-
-      const expectedVars = {
-        a: Type.integer(1),
-        b: Type.integer(1),
-        c: Type.integer(2),
-        d: Type.integer(2),
-        e: Type.integer(3),
-        f: Type.integer(3),
-      };
-
-      assert.deepStrictEqual(vars, expectedVars);
-    });
-  });
-
-  describe("nested match pattern (with uresolved variables)", () => {
-    it("[[a | b] = [c | d]] = [[1, 2, 3]]", () => {
-      const result = Interpreter.matchOperator(
-        Type.list([
-          Type.list([Type.integer(1), Type.integer(2), Type.integer(3)]),
-        ]),
-        Type.list([
-          Interpreter.matchOperator(
-            Type.consPattern(
-              Type.variablePattern("c"),
-              Type.variablePattern("d"),
-            ),
-            Type.consPattern(
-              Type.variablePattern("a"),
-              Type.variablePattern("b"),
-            ),
-            vars,
-            false,
-          ),
-        ]),
-        vars,
-      );
-
-      const expectedResult = Type.list([
-        Type.list([Type.integer(1), Type.integer(2), Type.integer(3)]),
-      ]);
-
-      assert.deepStrictEqual(result, expectedResult);
-
-      const expectedVars = {
-        a: Type.integer(1),
-        b: Type.list([Type.integer(2), Type.integer(3)]),
-        c: Type.integer(1),
-        d: Type.list([Type.integer(2), Type.integer(3)]),
-      };
-
-      assert.deepStrictEqual(vars, expectedVars);
-    });
-
-    it("[[[a | b] = [c | d]] = [[e | f]]] = [[[1, 2, 3]]]", () => {
-      const result = Interpreter.matchOperator(
-        Type.list([
-          Type.list([
-            Type.list([Type.integer(1), Type.integer(2), Type.integer(3)]),
-          ]),
-        ]),
-        Type.list([
-          Interpreter.matchOperator(
-            Type.list([
-              Type.consPattern(
-                Type.variablePattern("e"),
-                Type.variablePattern("f"),
-              ),
-            ]),
-            Type.list([
-              Interpreter.matchOperator(
-                Type.consPattern(
-                  Type.variablePattern("c"),
-                  Type.variablePattern("d"),
-                ),
-                Type.consPattern(
-                  Type.variablePattern("a"),
-                  Type.variablePattern("b"),
-                ),
-                vars,
-                false,
-              ),
-            ]),
-            vars,
-            false,
-          ),
-        ]),
-        vars,
-      );
-
-      const expectedResult = Type.list([
-        Type.list([
-          Type.list([Type.integer(1), Type.integer(2), Type.integer(3)]),
-        ]),
-      ]);
-
-      assert.deepStrictEqual(result, expectedResult);
-
-      const expectedVars = {
-        a: Type.integer(1),
-        b: Type.list([Type.integer(2), Type.integer(3)]),
-        c: Type.integer(1),
-        d: Type.list([Type.integer(2), Type.integer(3)]),
-        e: Type.integer(1),
-        f: Type.list([Type.integer(2), Type.integer(3)]),
-      };
-
-      assert.deepStrictEqual(vars, expectedVars);
-    });
-
-    it("[[a, b] = [c, d]] = [[1, 2]]", () => {
-      const result = Interpreter.matchOperator(
-        Type.list([Type.list([Type.integer(1), Type.integer(2)])]),
-        Type.list([
-          Interpreter.matchOperator(
-            Type.list([Type.variablePattern("c"), Type.variablePattern("d")]),
-            Type.list([Type.variablePattern("a"), Type.variablePattern("b")]),
-            vars,
-            false,
-          ),
-        ]),
-        vars,
-      );
-
-      const expectedResult = Type.list([
-        Type.list([Type.integer(1), Type.integer(2)]),
-      ]);
-
-      assert.deepStrictEqual(result, expectedResult);
-
-      const expectedVars = {
-        a: Type.integer(1),
-        b: Type.integer(2),
-        c: Type.integer(1),
-        d: Type.integer(2),
-      };
-
-      assert.deepStrictEqual(vars, expectedVars);
-    });
-
-    it("[[[a, b] = [c, d]] = [[e, f]]] = [[[1, 2]]]", () => {
-      const result = Interpreter.matchOperator(
-        Type.list([Type.list([Type.list([Type.integer(1), Type.integer(2)])])]),
-        Type.list([
-          Interpreter.matchOperator(
-            Type.list([
-              Type.list([Type.variablePattern("e"), Type.variablePattern("f")]),
-            ]),
-            Type.list([
-              Interpreter.matchOperator(
-                Type.list([
-                  Type.variablePattern("c"),
-                  Type.variablePattern("d"),
-                ]),
-                Type.list([
-                  Type.variablePattern("a"),
-                  Type.variablePattern("b"),
-                ]),
-                vars,
-                false,
-              ),
-            ]),
-            vars,
-            false,
-          ),
-        ]),
-        vars,
-      );
-
-      const expectedResult = Type.list([
-        Type.list([Type.list([Type.integer(1), Type.integer(2)])]),
-      ]);
-
-      assert.deepStrictEqual(result, expectedResult);
-
-      const expectedVars = {
-        a: Type.integer(1),
-        b: Type.integer(2),
-        c: Type.integer(1),
-        d: Type.integer(2),
-        e: Type.integer(1),
-        f: Type.integer(2),
-      };
-
-      assert.deepStrictEqual(vars, expectedVars);
-    });
-
-    it("[x = y] = [1]", () => {
-      const result = Interpreter.matchOperator(
-        Type.list([Type.integer(1n)]),
-        Type.list([
-          Interpreter.matchOperator(
-            Type.variablePattern("y"),
-            Type.variablePattern("x"),
-            vars,
-            false,
-          ),
-        ]),
-        vars,
-      );
-
-      const expectedResult = Type.list([Type.integer(1)]);
-
-      assert.deepStrictEqual(result, expectedResult);
-
-      const expectedVars = {
-        a: Type.integer(9),
-        x: Type.integer(1),
-        y: Type.integer(1),
-      };
-
-      assert.deepStrictEqual(vars, expectedVars);
-    });
-
-    it("[1 = x] = [1]", () => {
-      const result = Interpreter.matchOperator(
-        Type.list([Type.integer(1n)]),
-        Type.list([
-          Interpreter.matchOperator(
-            Type.variablePattern("x"),
-            Type.integer(1n),
-            vars,
-            false,
-          ),
-        ]),
-        vars,
-      );
-
-      const expectedResult = Type.list([Type.integer(1)]);
-
-      assert.deepStrictEqual(result, expectedResult);
-
-      const expectedVars = {
-        a: Type.integer(9),
-        x: Type.integer(1),
-      };
-
-      assert.deepStrictEqual(vars, expectedVars);
-    });
-
-    it("[x = 1] = [1]", () => {
-      const result = Interpreter.matchOperator(
-        Type.list([Type.integer(1n)]),
-        Type.list([
-          Interpreter.matchOperator(
-            Type.integer(1n),
-            Type.variablePattern("x"),
-            vars,
-            false,
-          ),
-        ]),
-        vars,
-      );
-
-      const expectedResult = Type.list([Type.integer(1)]);
-
-      assert.deepStrictEqual(result, expectedResult);
-
-      const expectedVars = {
-        a: Type.integer(9),
-        x: Type.integer(1),
-      };
-
-      assert.deepStrictEqual(vars, expectedVars);
-    });
-
-    it("[x = y = z] = [1]", () => {
-      const result = Interpreter.matchOperator(
-        Type.list([Type.integer(1n)]),
-        Type.list([
-          Interpreter.matchOperator(
-            Interpreter.matchOperator(
-              Type.variablePattern("z"),
-              Type.variablePattern("y"),
-              vars,
-              false,
-            ),
-            Type.variablePattern("x"),
-            vars,
-            false,
-          ),
-        ]),
-        vars,
-      );
-
-      const expectedResult = Type.list([Type.integer(1)]);
-
-      assert.deepStrictEqual(result, expectedResult);
-
-      const expectedVars = {
-        a: Type.integer(9),
-        x: Type.integer(1),
-        y: Type.integer(1),
-        z: Type.integer(1),
-      };
-
-      assert.deepStrictEqual(vars, expectedVars);
-    });
-
-    it("[1 = x = y] = [1]", () => {
-      const result = Interpreter.matchOperator(
-        Type.list([Type.integer(1n)]),
-        Type.list([
-          Interpreter.matchOperator(
-            Interpreter.matchOperator(
-              Type.variablePattern("y"),
-              Type.variablePattern("x"),
-              vars,
-              false,
-            ),
-            Type.integer(1n),
-            vars,
-            false,
-          ),
-        ]),
-        vars,
-      );
-
-      const expectedResult = Type.list([Type.integer(1)]);
-
-      assert.deepStrictEqual(result, expectedResult);
-
-      const expectedVars = {
-        a: Type.integer(9),
-        x: Type.integer(1),
-        y: Type.integer(1),
-      };
-
-      assert.deepStrictEqual(vars, expectedVars);
-    });
-
-    it("[x = 1 = y] = [1]", () => {
-      const result = Interpreter.matchOperator(
-        Type.list([Type.integer(1n)]),
-        Type.list([
-          Interpreter.matchOperator(
-            Interpreter.matchOperator(
-              Type.variablePattern("y"),
-              Type.integer(1n),
-              vars,
-              false,
-            ),
-            Type.variablePattern("x"),
-            vars,
-            false,
-          ),
-        ]),
-        vars,
-      );
-
-      const expectedResult = Type.list([Type.integer(1)]);
-
-      assert.deepStrictEqual(result, expectedResult);
-
-      const expectedVars = {
-        a: Type.integer(9),
-        x: Type.integer(1),
-        y: Type.integer(1),
-      };
-
-      assert.deepStrictEqual(vars, expectedVars);
-    });
-
-    it("[x = y = 1] = [1]", () => {
-      const result = Interpreter.matchOperator(
-        Type.list([Type.integer(1n)]),
-        Type.list([
-          Interpreter.matchOperator(
-            Interpreter.matchOperator(
-              Type.integer(1n),
-              Type.variablePattern("y"),
-              vars,
-              false,
-            ),
-            Type.variablePattern("x"),
-            vars,
-            false,
-          ),
-        ]),
-        vars,
-      );
-
-      const expectedResult = Type.list([Type.integer(1)]);
-
-      assert.deepStrictEqual(result, expectedResult);
-
-      const expectedVars = {
-        a: Type.integer(9),
-        x: Type.integer(1),
-        y: Type.integer(1),
-      };
-
-      assert.deepStrictEqual(vars, expectedVars);
-    });
-
-    it("[v = x = y = z] = [1]", () => {
-      const result = Interpreter.matchOperator(
-        Type.list([Type.integer(1n)]),
-        Type.list([
-          Interpreter.matchOperator(
-            Interpreter.matchOperator(
-              Interpreter.matchOperator(
-                Type.variablePattern("z"),
-                Type.variablePattern("y"),
-                vars,
-                false,
-              ),
-              Type.variablePattern("x"),
-              vars,
-              false,
-            ),
-            Type.variablePattern("v"),
-            vars,
-            false,
-          ),
-        ]),
-        vars,
-      );
-
-      const expectedResult = Type.list([Type.integer(1)]);
-
-      assert.deepStrictEqual(result, expectedResult);
-
-      const expectedVars = {
-        a: Type.integer(9),
-        v: Type.integer(1),
-        x: Type.integer(1),
-        y: Type.integer(1),
-        z: Type.integer(1),
-      };
-
-      assert.deepStrictEqual(vars, expectedVars);
-    });
-
-    it("[1 = x = y = z] = [1]", () => {
-      const result = Interpreter.matchOperator(
-        Type.list([Type.integer(1n)]),
-        Type.list([
-          Interpreter.matchOperator(
-            Interpreter.matchOperator(
-              Interpreter.matchOperator(
-                Type.variablePattern("z"),
-                Type.variablePattern("y"),
-                vars,
-                false,
-              ),
-              Type.variablePattern("x"),
-              vars,
-              false,
-            ),
-            Type.integer(1n),
-            vars,
-            false,
-          ),
-        ]),
-        vars,
-      );
-
-      const expectedResult = Type.list([Type.integer(1)]);
-
-      assert.deepStrictEqual(result, expectedResult);
-
-      const expectedVars = {
-        a: Type.integer(9),
-        x: Type.integer(1),
-        y: Type.integer(1),
-        z: Type.integer(1),
-      };
-
-      assert.deepStrictEqual(vars, expectedVars);
-    });
-
-    it("[x = 1 = y = z] = [1]", () => {
-      const result = Interpreter.matchOperator(
-        Type.list([Type.integer(1n)]),
-        Type.list([
-          Interpreter.matchOperator(
-            Interpreter.matchOperator(
-              Interpreter.matchOperator(
-                Type.variablePattern("z"),
-                Type.variablePattern("y"),
-                vars,
-                false,
-              ),
-              Type.integer(1n),
-              vars,
-              false,
-            ),
-            Type.variablePattern("x"),
-            vars,
-            false,
-          ),
-        ]),
-        vars,
-      );
-
-      const expectedResult = Type.list([Type.integer(1)]);
-
-      assert.deepStrictEqual(result, expectedResult);
-
-      const expectedVars = {
-        a: Type.integer(9),
-        x: Type.integer(1),
-        y: Type.integer(1),
-        z: Type.integer(1),
-      };
-
-      assert.deepStrictEqual(vars, expectedVars);
-    });
-
-    it("[x = y = 1 = z] = [1]", () => {
-      const result = Interpreter.matchOperator(
-        Type.list([Type.integer(1n)]),
-        Type.list([
-          Interpreter.matchOperator(
-            Interpreter.matchOperator(
-              Interpreter.matchOperator(
-                Type.variablePattern("z"),
-                Type.integer(1n),
-                vars,
-                false,
-              ),
-              Type.variablePattern("y"),
-              vars,
-              false,
-            ),
-            Type.variablePattern("x"),
-            vars,
-            false,
-          ),
-        ]),
-        vars,
-      );
-
-      const expectedResult = Type.list([Type.integer(1)]);
-
-      assert.deepStrictEqual(result, expectedResult);
-
-      const expectedVars = {
-        a: Type.integer(9),
-        x: Type.integer(1),
-        y: Type.integer(1),
-        z: Type.integer(1),
-      };
-
-      assert.deepStrictEqual(vars, expectedVars);
-    });
-
-    it("[x = y = z = 1] = [1]", () => {
-      const result = Interpreter.matchOperator(
-        Type.list([Type.integer(1n)]),
-        Type.list([
-          Interpreter.matchOperator(
-            Interpreter.matchOperator(
-              Interpreter.matchOperator(
-                Type.integer(1n),
-                Type.variablePattern("z"),
-                vars,
-                false,
-              ),
-              Type.variablePattern("y"),
-              vars,
-              false,
-            ),
-            Type.variablePattern("x"),
-            vars,
-            false,
-          ),
-        ]),
-        vars,
-      );
-
-      const expectedResult = Type.list([Type.integer(1)]);
-
-      assert.deepStrictEqual(result, expectedResult);
-
-      const expectedVars = {
-        a: Type.integer(9),
-        x: Type.integer(1),
-        y: Type.integer(1),
-        z: Type.integer(1),
-      };
-
-      assert.deepStrictEqual(vars, expectedVars);
-    });
-
-    it("[x = y = z] = [a = b = c = 2]", () => {
-      const result = Interpreter.matchOperator(
-        Type.list([
-          Interpreter.matchOperator(
-            Interpreter.matchOperator(
-              Interpreter.matchOperator(
-                Type.integer(2n),
-                Type.variablePattern("c"),
-                vars,
-                false,
-              ),
-              Type.variablePattern("b"),
-              vars,
-              false,
-            ),
-            Type.variablePattern("a"),
-            vars,
-            false,
-          ),
-        ]),
-        Type.list([
-          Interpreter.matchOperator(
-            Interpreter.matchOperator(
-              Type.variablePattern("z"),
-              Type.variablePattern("y"),
-              vars,
-              false,
-            ),
-            Type.variablePattern("x"),
-            vars,
-            false,
-          ),
-        ]),
-        vars,
-      );
-
-      const expectedResult = Type.list([Type.integer(2)]);
-
-      assert.deepStrictEqual(result, expectedResult);
-
-      const expectedVars = {
-        a: Type.integer(2),
-        b: Type.integer(2),
-        c: Type.integer(2),
-        x: Type.integer(2),
-        y: Type.integer(2),
-        z: Type.integer(2),
-      };
-
-      assert.deepStrictEqual(vars, expectedVars);
-    });
-
-    it("%{x: %{a: a, b: b} = %{a: c, b: d}} = %{x: %{a: 1, b: 2}}", () => {
-      const result = Interpreter.matchOperator(
-        Type.map([
-          [
-            Type.atom("x"),
-            Type.map([
-              [Type.atom("a"), Type.integer(1)],
-              [Type.atom("b"), Type.integer(2)],
-            ]),
-          ],
-        ]),
-        Type.map([
-          [
-            Type.atom("x"),
-            Interpreter.matchOperator(
-              Type.map([
-                [Type.atom("a"), Type.variablePattern("c")],
-                [Type.atom("b"), Type.variablePattern("d")],
-              ]),
-              Type.map([
-                [Type.atom("a"), Type.variablePattern("a")],
-                [Type.atom("b"), Type.variablePattern("b")],
-              ]),
-              vars,
-              false,
-            ),
-          ],
-        ]),
-        vars,
-      );
-
-      const expectedResult = Type.map([
-        [
-          Type.atom("x"),
-          Type.map([
-            [Type.atom("a"), Type.integer(1)],
-            [Type.atom("b"), Type.integer(2)],
-          ]),
-        ],
-      ]);
-
-      assert.deepStrictEqual(result, expectedResult);
-
-      const expectedVars = {
-        a: Type.integer(1),
-        b: Type.integer(2),
-        c: Type.integer(1),
-        d: Type.integer(2),
-      };
-
-      assert.deepStrictEqual(vars, expectedVars);
-    });
-
-    it("%{y: %{x: %{a: a, b: b} = %{a: c, b: d}} = %{x: %{a: e, b: f}}} = %{y: %{x: %{a: 1, b: 2}}}", () => {
-      const result = Interpreter.matchOperator(
-        Type.map([
-          [
-            Type.atom("y"),
-            Type.map([
-              [
-                Type.atom("x"),
-                Type.map([
-                  [Type.atom("a"), Type.integer(1)],
-                  [Type.atom("b"), Type.integer(2)],
-                ]),
-              ],
-            ]),
-          ],
-        ]),
-        Type.map([
-          [
-            Type.atom("y"),
-            Interpreter.matchOperator(
-              Type.map([
-                [
-                  Type.atom("x"),
-                  Type.map([
-                    [Type.atom("a"), Type.variablePattern("e")],
-                    [Type.atom("b"), Type.variablePattern("f")],
-                  ]),
-                ],
-              ]),
-              Type.map([
-                [
-                  Type.atom("x"),
-                  Interpreter.matchOperator(
-                    Type.map([
-                      [Type.atom("a"), Type.variablePattern("c")],
-                      [Type.atom("b"), Type.variablePattern("d")],
-                    ]),
-                    Type.map([
-                      [Type.atom("a"), Type.variablePattern("a")],
-                      [Type.atom("b"), Type.variablePattern("b")],
-                    ]),
-                    vars,
-                    false,
-                  ),
-                ],
-              ]),
-              vars,
-              false,
-            ),
-          ],
-        ]),
-        vars,
-      );
-
-      const expectedResult = Type.map([
-        [
-          Type.atom("y"),
-          Type.map([
-            [
-              Type.atom("x"),
-              Type.map([
-                [Type.atom("a"), Type.integer(1)],
-                [Type.atom("b"), Type.integer(2)],
-              ]),
-            ],
-          ]),
-        ],
-      ]);
-
-      assert.deepStrictEqual(result, expectedResult);
-
-      const expectedVars = {
-        a: Type.integer(1),
-        b: Type.integer(2),
-        c: Type.integer(1),
-        d: Type.integer(2),
-        e: Type.integer(1),
-        f: Type.integer(2),
-      };
-
-      assert.deepStrictEqual(vars, expectedVars);
-    });
-
-    it("{{a, b} = {c, d}} = {{1, 2}}", () => {
-      const result = Interpreter.matchOperator(
-        Type.tuple([Type.tuple([Type.integer(1), Type.integer(2)])]),
-        Type.tuple([
-          Interpreter.matchOperator(
-            Type.tuple([Type.variablePattern("c"), Type.variablePattern("d")]),
-            Type.tuple([Type.variablePattern("a"), Type.variablePattern("b")]),
-            vars,
-            false,
-          ),
-        ]),
-        vars,
-      );
-
-      const expectedResult = Type.tuple([
-        Type.tuple([Type.integer(1), Type.integer(2)]),
-      ]);
-
-      assert.deepStrictEqual(result, expectedResult);
-
-      const expectedVars = {
-        a: Type.integer(1),
-        b: Type.integer(2),
-        c: Type.integer(1),
-        d: Type.integer(2),
-      };
-
-      assert.deepStrictEqual(vars, expectedVars);
-    });
-
-    it("{{{a, b} = {c, d}} = {{e, f}}} = {{{1, 2}}}", () => {
-      const result = Interpreter.matchOperator(
-        Type.tuple([
-          Type.tuple([Type.tuple([Type.integer(1), Type.integer(2)])]),
-        ]),
-        Type.tuple([
-          Interpreter.matchOperator(
-            Type.tuple([
-              Type.tuple([
-                Type.variablePattern("e"),
-                Type.variablePattern("f"),
-              ]),
-            ]),
-            Type.tuple([
-              Interpreter.matchOperator(
-                Type.tuple([
-                  Type.variablePattern("c"),
-                  Type.variablePattern("d"),
-                ]),
-                Type.tuple([
-                  Type.variablePattern("a"),
-                  Type.variablePattern("b"),
-                ]),
-                vars,
-                false,
-              ),
-            ]),
-            vars,
-            false,
-          ),
-        ]),
-        vars,
-      );
-
-      const expectedResult = Type.tuple([
-        Type.tuple([Type.tuple([Type.integer(1), Type.integer(2)])]),
-      ]);
-
-      assert.deepStrictEqual(result, expectedResult);
-
-      const expectedVars = {
-        a: Type.integer(1),
-        b: Type.integer(2),
-        c: Type.integer(1),
-        d: Type.integer(2),
-        e: Type.integer(1),
-        f: Type.integer(2),
-      };
-
-      assert.deepStrictEqual(vars, expectedVars);
-    });
-  });
-
-  describe("tuple type", () => {
-    let tuple1;
-
-    beforeEach(() => {
-      tuple1 = Type.tuple([Type.integer(1), Type.integer(2)]);
-    });
-
-    it("{1, 2} = {1, 2}", () => {
-      const result = Interpreter.matchOperator(tuple1, tuple1, vars);
-
-      assert.deepStrictEqual(result, tuple1);
-      assert.deepStrictEqual(vars, {a: Type.integer(9)});
-    });
-
-    it("{1, 2} = {1, 3}", () => {
-      const tuple2 = Type.tuple([Type.integer(1), Type.integer(3)]);
-
-      assertMatchError(
-        () => Interpreter.matchOperator(tuple2, tuple1, vars),
-        tuple2,
-      );
-    });
-
-    it("{1, 2} = :abc", () => {
-      const myAtom = Type.atom("abc");
-
-      assertMatchError(
-        () => Interpreter.matchOperator(myAtom, tuple1, vars),
-        myAtom,
-      );
-    });
-
-    it("{} = {1, 2}", () => {
-      assertMatchError(
-        () => Interpreter.matchOperator(tuple1, Type.tuple([]), vars),
-        tuple1,
-      );
-    });
-
-    it("{1, 2} = {}", () => {
-      const emptyTuple = Type.tuple([]);
-
-      assertMatchError(
-        () => Interpreter.matchOperator(emptyTuple, tuple1, vars),
-        emptyTuple,
-      );
-    });
-
-    it("{} = {}", () => {
-      const emptyTuple = Type.tuple([]);
-      const result = Interpreter.matchOperator(emptyTuple, emptyTuple, vars);
-
-      assert.deepStrictEqual(result, emptyTuple);
-      assert.deepStrictEqual(vars, {a: Type.integer(9)});
-    });
-
-    it("{x, 2, y} = {1, 2, 3}", () => {
-      const left = Type.tuple([
-        Type.variablePattern("x"),
-        Type.integer(2),
-        Type.variablePattern("y"),
-      ]);
-
-      const right = Type.tuple([
-        Type.integer(1),
-        Type.integer(2),
-        Type.integer(3),
-      ]);
-
-      const result = Interpreter.matchOperator(right, left, vars);
-      assert.deepStrictEqual(result, right);
-
-      const expectedVars = {
-        a: Type.integer(9),
-        x: Type.integer(1),
-        y: Type.integer(3),
-      };
-
-      assert.deepStrictEqual(vars, expectedVars);
-    });
-  });
-
-  describe("variable pattern", () => {
-    it("variable pattern == anything", () => {
-      // x = 2
-      const result = Interpreter.matchOperator(
-        Type.integer(2),
-        Type.variablePattern("x"),
-        vars,
-      );
-
-      assert.deepStrictEqual(result, Type.integer(2));
-
-      const expectedVars = {
-        a: Type.integer(9),
-        x: Type.integer(2),
-      };
-
-      assert.deepStrictEqual(vars, expectedVars);
-    });
-
-    it("multiple variables with the same name being matched to the same value", () => {
-      // [x, x] = [1, 1]
-      const result = Interpreter.matchOperator(
-        Type.list([Type.integer(1), Type.integer(1)]),
-        Type.list([Type.variablePattern("x"), Type.variablePattern("x")]),
-        vars,
-      );
-
-      assert.deepStrictEqual(
-        result,
-        Type.list([Type.integer(1), Type.integer(1)]),
-      );
-
-      const expectedVars = {
-        a: Type.integer(9),
-        x: Type.integer(1),
-      };
-
-      assert.deepStrictEqual(vars, expectedVars);
-    });
-
-    it("multiple variables with the same name being matched to the different values", () => {
-      const right = Type.list([Type.integer(1), Type.integer(2)]);
-
-      // [x, x] = [1, 2]
-      assertMatchError(
-        () =>
-          Interpreter.matchOperator(
-            right,
-            Type.list([Type.variablePattern("x"), Type.variablePattern("x")]),
-            vars,
-          ),
-        right,
-      );
-    });
-  });
+  // let vars;
+  // beforeEach(() => {
+  //   vars = {a: Type.integer(9)};
+  // });
+  // describe("atom type", () => {
+  //   it("left atom == right atom", () => {
+  //     // :abc = :abc
+  //     const result = Interpreter.matchOperator(
+  //       Type.atom("abc"),
+  //       Type.atom("abc"),
+  //       vars,
+  //     );
+  //     assert.deepStrictEqual(result, Type.atom("abc"));
+  //     assert.deepStrictEqual(vars, {a: Type.integer(9)});
+  //   });
+  //   it("left atom != right atom", () => {
+  //     const myAtom = Type.atom("xyz");
+  //     // :abc = :xyz
+  //     assertMatchError(
+  //       () => Interpreter.matchOperator(myAtom, Type.atom("abc"), vars),
+  //       myAtom,
+  //     );
+  //   });
+  //   it("left atom != right non-atom", () => {
+  //     const myInteger = Type.integer(2);
+  //     // :abc = 2
+  //     assertMatchError(
+  //       () => Interpreter.matchOperator(myInteger, Type.atom("abc"), vars),
+  //       myInteger,
+  //     );
+  //   });
+  // });
+  // describe("bitstring type", () => {
+  //   it("left bitstring == right bitstring", () => {
+  //     const result = Interpreter.matchOperator(
+  //       Type.bitstring([
+  //         Type.bitstringSegment(Type.integer(1), {type: "integer"}),
+  //       ]),
+  //       Type.bitstringPattern([
+  //         Type.bitstringSegment(Type.integer(1), {type: "integer"}),
+  //       ]),
+  //       vars,
+  //     );
+  //     const expected = Type.bitstring([
+  //       Type.bitstringSegment(Type.integer(1), {type: "integer"}),
+  //     ]);
+  //     assert.deepStrictEqual(result, expected);
+  //   });
+  //   it("left bitstring != right bitstring", () => {
+  //     const myBitstring = Type.bitstring([
+  //       Type.bitstringSegment(Type.integer(2), {type: "integer"}),
+  //     ]);
+  //     assertMatchError(
+  //       () =>
+  //         Interpreter.matchOperator(
+  //           myBitstring,
+  //           Type.bitstringPattern([
+  //             Type.bitstringSegment(Type.integer(1), {type: "integer"}),
+  //           ]),
+  //           vars,
+  //         ),
+  //       myBitstring,
+  //     );
+  //   });
+  //   it("left bitstring != right non-bitstring", () => {
+  //     const myAtom = Type.atom("abc");
+  //     assertMatchError(
+  //       () =>
+  //         Interpreter.matchOperator(
+  //           myAtom,
+  //           Type.bitstring([
+  //             Type.bitstringSegment(Type.integer(1), {type: "integer"}),
+  //           ]),
+  //           vars,
+  //         ),
+  //       myAtom,
+  //     );
+  //   });
+  //   it("literal bitstring segments", () => {
+  //     const result = Interpreter.matchOperator(
+  //       Type.bitstring([
+  //         Type.bitstringSegment(Type.integer(1), {
+  //           type: "integer",
+  //           size: Type.integer(1),
+  //         }),
+  //         Type.bitstringSegment(Type.integer(0), {
+  //           type: "integer",
+  //           size: Type.integer(1),
+  //         }),
+  //       ]),
+  //       Type.bitstringPattern([
+  //         Type.bitstringSegment(Type.integer(1), {
+  //           type: "integer",
+  //           size: Type.integer(1),
+  //         }),
+  //         Type.bitstringSegment(Type.integer(0), {
+  //           type: "integer",
+  //           size: Type.integer(1),
+  //         }),
+  //       ]),
+  //       vars,
+  //     );
+  //     const expected = Type.bitstring([
+  //       Type.bitstringSegment(Type.integer(1), {
+  //         type: "integer",
+  //         size: Type.integer(1),
+  //       }),
+  //       Type.bitstringSegment(Type.integer(0), {
+  //         type: "integer",
+  //         size: Type.integer(1),
+  //       }),
+  //     ]);
+  //     assert.deepStrictEqual(result, expected);
+  //   });
+  //   it("literal float segments", () => {
+  //     const result = Interpreter.matchOperator(
+  //       Type.bitstring([
+  //         Type.bitstringSegment(Type.float(1.0), {type: "float"}),
+  //         Type.bitstringSegment(Type.float(2.0), {type: "float"}),
+  //       ]),
+  //       Type.bitstringPattern([
+  //         Type.bitstringSegment(Type.float(1.0), {type: "float"}),
+  //         Type.bitstringSegment(Type.float(2.0), {type: "float"}),
+  //       ]),
+  //       vars,
+  //     );
+  //     const expected = Type.bitstring([
+  //       Type.bitstringSegment(Type.float(1.0), {type: "float"}),
+  //       Type.bitstringSegment(Type.float(2.0), {type: "float"}),
+  //     ]);
+  //     assert.deepStrictEqual(result, expected);
+  //   });
+  //   it("literal integer segments", () => {
+  //     const result = Interpreter.matchOperator(
+  //       Type.bitstring([
+  //         Type.bitstringSegment(Type.integer(1), {type: "integer"}),
+  //         Type.bitstringSegment(Type.integer(2), {type: "integer"}),
+  //       ]),
+  //       Type.bitstringPattern([
+  //         Type.bitstringSegment(Type.integer(1), {type: "integer"}),
+  //         Type.bitstringSegment(Type.integer(2), {type: "integer"}),
+  //       ]),
+  //       vars,
+  //     );
+  //     const expected = Type.bitstring([
+  //       Type.bitstringSegment(Type.integer(1), {type: "integer"}),
+  //       Type.bitstringSegment(Type.integer(2), {type: "integer"}),
+  //     ]);
+  //     assert.deepStrictEqual(result, expected);
+  //   });
+  //   it("literal string segments", () => {
+  //     const result = Interpreter.matchOperator(
+  //       Type.bitstring([
+  //         Type.bitstringSegment(Type.string("aaa"), {type: "utf8"}),
+  //         Type.bitstringSegment(Type.string("bbb"), {type: "utf8"}),
+  //       ]),
+  //       Type.bitstringPattern([
+  //         Type.bitstringSegment(Type.string("aaa"), {type: "utf8"}),
+  //         Type.bitstringSegment(Type.string("bbb"), {type: "utf8"}),
+  //       ]),
+  //       vars,
+  //     );
+  //     const expected = Type.bitstring([
+  //       Type.bitstringSegment(Type.string("aaa"), {type: "utf8"}),
+  //       Type.bitstringSegment(Type.string("bbb"), {type: "utf8"}),
+  //     ]);
+  //     assert.deepStrictEqual(result, expected);
+  //   });
+  // });
+  // describe("cons pattern", () => {
+  //   describe("[h | t]", () => {
+  //     let left;
+  //     beforeEach(() => {
+  //       left = Type.consPattern(
+  //         Type.variablePattern("h"),
+  //         Type.variablePattern("t"),
+  //       );
+  //     });
+  //     it("[h | t] = 1", () => {
+  //       const right = Type.integer(1);
+  //       assertMatchError(
+  //         () => Interpreter.matchOperator(right, left, vars),
+  //         right,
+  //       );
+  //     });
+  //     it("[h | t] = []", () => {
+  //       const right = Type.list([]);
+  //       assertMatchError(
+  //         () => Interpreter.matchOperator(right, left, vars),
+  //         right,
+  //       );
+  //     });
+  //     it("[h | t] = [1]", () => {
+  //       const right = Type.list([Type.integer(1)]);
+  //       const result = Interpreter.matchOperator(right, left, vars);
+  //       assert.deepStrictEqual(result, right);
+  //       assert.deepStrictEqual(vars, {
+  //         a: Type.integer(9),
+  //         h: Type.integer(1),
+  //         t: Type.list([]),
+  //       });
+  //     });
+  //     it("[h | t] = [1, 2]", () => {
+  //       const right = Type.list([Type.integer(1), Type.integer(2)]);
+  //       const result = Interpreter.matchOperator(right, left, vars);
+  //       assert.deepStrictEqual(result, right);
+  //       assert.deepStrictEqual(vars, {
+  //         a: Type.integer(9),
+  //         h: Type.integer(1),
+  //         t: Type.list([Type.integer(2)]),
+  //       });
+  //     });
+  //     it("[h | t] = [1 | 2]", () => {
+  //       const right = Type.improperList([Type.integer(1), Type.integer(2)]);
+  //       const result = Interpreter.matchOperator(right, left, vars);
+  //       assert.deepStrictEqual(result, right);
+  //       assert.deepStrictEqual(vars, {
+  //         a: Type.integer(9),
+  //         h: Type.integer(1),
+  //         t: Type.integer(2),
+  //       });
+  //     });
+  //     it("[h | t] = [1, 2, 3]", () => {
+  //       const right = Type.list([
+  //         Type.integer(1),
+  //         Type.integer(2),
+  //         Type.integer(3),
+  //       ]);
+  //       const result = Interpreter.matchOperator(right, left, vars);
+  //       assert.deepStrictEqual(result, right);
+  //       assert.deepStrictEqual(vars, {
+  //         a: Type.integer(9),
+  //         h: Type.integer(1),
+  //         t: Type.list([Type.integer(2), Type.integer(3)]),
+  //       });
+  //     });
+  //     it("[h | t] = [1, 2 | 3]", () => {
+  //       const right = Type.improperList([
+  //         Type.integer(1),
+  //         Type.integer(2),
+  //         Type.integer(3),
+  //       ]);
+  //       const result = Interpreter.matchOperator(right, left, vars);
+  //       assert.deepStrictEqual(result, right);
+  //       assert.deepStrictEqual(vars, {
+  //         a: Type.integer(9),
+  //         h: Type.integer(1),
+  //         t: Type.improperList([Type.integer(2), Type.integer(3)]),
+  //       });
+  //     });
+  //   });
+  //   describe("[1 | t]", () => {
+  //     let left;
+  //     beforeEach(() => {
+  //       left = Type.consPattern(Type.integer(1), Type.variablePattern("t"));
+  //     });
+  //     it("[1 | t] = 1", () => {
+  //       const right = Type.integer(1);
+  //       assertMatchError(
+  //         () => Interpreter.matchOperator(right, left, vars),
+  //         right,
+  //       );
+  //     });
+  //     it("[1 | t] = []", () => {
+  //       const right = Type.list([]);
+  //       assertMatchError(
+  //         () => Interpreter.matchOperator(right, left, vars),
+  //         right,
+  //       );
+  //     });
+  //     it("[1 | t] = [1]", () => {
+  //       const right = Type.list([Type.integer(1)]);
+  //       const result = Interpreter.matchOperator(right, left, vars);
+  //       assert.deepStrictEqual(result, right);
+  //       assert.deepStrictEqual(vars, {
+  //         a: Type.integer(9),
+  //         t: Type.list([]),
+  //       });
+  //     });
+  //     it("[1 | t] = [5]", () => {
+  //       const right = Type.list([Type.integer(5)]);
+  //       assertMatchError(
+  //         () => Interpreter.matchOperator(right, left, vars),
+  //         right,
+  //       );
+  //     });
+  //     it("[1 | t] = [1, 2]", () => {
+  //       const right = Type.list([Type.integer(1), Type.integer(2)]);
+  //       const result = Interpreter.matchOperator(right, left, vars);
+  //       assert.deepStrictEqual(result, right);
+  //       assert.deepStrictEqual(vars, {
+  //         a: Type.integer(9),
+  //         t: Type.list([Type.integer(2)]),
+  //       });
+  //     });
+  //     it("[1 | t] = [5, 2]", () => {
+  //       const right = Type.list([Type.integer(5), Type.integer(2)]);
+  //       assertMatchError(
+  //         () => Interpreter.matchOperator(right, left, vars),
+  //         right,
+  //       );
+  //     });
+  //     it("[1 | t] = [1 | 2]", () => {
+  //       const right = Type.improperList([Type.integer(1), Type.integer(2)]);
+  //       const result = Interpreter.matchOperator(right, left, vars);
+  //       assert.deepStrictEqual(result, right);
+  //       assert.deepStrictEqual(vars, {
+  //         a: Type.integer(9),
+  //         t: Type.integer(2),
+  //       });
+  //     });
+  //     it("[1 | t] = [5 | 2]", () => {
+  //       const right = Type.improperList([Type.integer(5), Type.integer(2)]);
+  //       assertMatchError(
+  //         () => Interpreter.matchOperator(right, left, vars),
+  //         right,
+  //       );
+  //     });
+  //     it("[1 | t] = [1, 2, 3]", () => {
+  //       const right = Type.list([
+  //         Type.integer(1),
+  //         Type.integer(2),
+  //         Type.integer(3),
+  //       ]);
+  //       const result = Interpreter.matchOperator(right, left, vars);
+  //       assert.deepStrictEqual(result, right);
+  //       assert.deepStrictEqual(vars, {
+  //         a: Type.integer(9),
+  //         t: Type.list([Type.integer(2), Type.integer(3)]),
+  //       });
+  //     });
+  //     it("[1 | t] = [5, 2, 3]", () => {
+  //       const right = Type.list([
+  //         Type.integer(5),
+  //         Type.integer(2),
+  //         Type.integer(3),
+  //       ]);
+  //       assertMatchError(
+  //         () => Interpreter.matchOperator(right, left, vars),
+  //         right,
+  //       );
+  //     });
+  //     it("[1 | t] = [1, 2 | 3]", () => {
+  //       const right = Type.improperList([
+  //         Type.integer(1),
+  //         Type.integer(2),
+  //         Type.integer(3),
+  //       ]);
+  //       const result = Interpreter.matchOperator(right, left, vars);
+  //       assert.deepStrictEqual(result, right);
+  //       assert.deepStrictEqual(vars, {
+  //         a: Type.integer(9),
+  //         t: Type.improperList([Type.integer(2), Type.integer(3)]),
+  //       });
+  //     });
+  //     it("[1 | t] = [5, 2 | 3]", () => {
+  //       const right = Type.improperList([
+  //         Type.integer(5),
+  //         Type.integer(2),
+  //         Type.integer(3),
+  //       ]);
+  //       assertMatchError(
+  //         () => Interpreter.matchOperator(right, left, vars),
+  //         right,
+  //       );
+  //     });
+  //   });
+  //   describe("[h | 3]", () => {
+  //     let left;
+  //     beforeEach(() => {
+  //       left = Type.consPattern(Type.variablePattern("h"), Type.integer(3));
+  //     });
+  //     it("[h | 3] = 3", () => {
+  //       const right = Type.integer(3);
+  //       assertMatchError(
+  //         () => Interpreter.matchOperator(right, left, vars),
+  //         right,
+  //       );
+  //     });
+  //     it("[h | 3] = []", () => {
+  //       const right = Type.list([]);
+  //       assertMatchError(
+  //         () => Interpreter.matchOperator(right, left, vars),
+  //         right,
+  //       );
+  //     });
+  //     it("[h | 3] = [3]", () => {
+  //       const right = Type.list([Type.integer(3)]);
+  //       assertMatchError(
+  //         () => Interpreter.matchOperator(right, left, vars),
+  //         right,
+  //       );
+  //     });
+  //     it("[h | 3] = [2, 3]", () => {
+  //       const right = Type.list([Type.integer(2), Type.integer(3)]);
+  //       assertMatchError(
+  //         () => Interpreter.matchOperator(right, left, vars),
+  //         right,
+  //       );
+  //     });
+  //     it("[h | 3] = [2 | 3]", () => {
+  //       const right = Type.improperList([Type.integer(2), Type.integer(3)]);
+  //       const result = Interpreter.matchOperator(right, left, vars);
+  //       assert.deepStrictEqual(result, right);
+  //       assert.deepStrictEqual(vars, {
+  //         a: Type.integer(9),
+  //         h: Type.integer(2),
+  //       });
+  //     });
+  //     it("[h | 3] = [1, 2, 3]", () => {
+  //       const right = Type.list([
+  //         Type.integer(1),
+  //         Type.integer(2),
+  //         Type.integer(3),
+  //       ]);
+  //       assertMatchError(
+  //         () => Interpreter.matchOperator(right, left, vars),
+  //         right,
+  //       );
+  //     });
+  //     it("[h | 3] = [1, 2 | 3]", () => {
+  //       const right = Type.improperList([
+  //         Type.integer(1),
+  //         Type.integer(2),
+  //         Type.integer(3),
+  //       ]);
+  //       assertMatchError(
+  //         () => Interpreter.matchOperator(right, left, vars),
+  //         right,
+  //       );
+  //     });
+  //   });
+  //   describe("[h | []]", () => {
+  //     let left;
+  //     beforeEach(() => {
+  //       left = Type.consPattern(Type.variablePattern("h"), Type.list([]));
+  //     });
+  //     it("[h | []] = 3", () => {
+  //       const right = Type.integer(3);
+  //       assertMatchError(
+  //         () => Interpreter.matchOperator(right, left, vars),
+  //         right,
+  //       );
+  //     });
+  //     it("[h | []] = []", () => {
+  //       const right = Type.list([]);
+  //       assertMatchError(
+  //         () => Interpreter.matchOperator(right, left, vars),
+  //         right,
+  //       );
+  //     });
+  //     it("[h | []] = [3]", () => {
+  //       const right = Type.list([Type.integer(3)]);
+  //       const result = Interpreter.matchOperator(right, left, vars);
+  //       assert.deepStrictEqual(result, right);
+  //       assert.deepStrictEqual(vars, {
+  //         a: Type.integer(9),
+  //         h: Type.integer(3),
+  //       });
+  //     });
+  //     it("[h | []] = [2, 3]", () => {
+  //       const right = Type.list([Type.integer(2), Type.integer(3)]);
+  //       assertMatchError(
+  //         () => Interpreter.matchOperator(right, left, vars),
+  //         right,
+  //       );
+  //     });
+  //     it("[h | []] = [2 | 3]", () => {
+  //       const right = Type.improperList([Type.integer(2), Type.integer(3)]);
+  //       assertMatchError(
+  //         () => Interpreter.matchOperator(right, left, vars),
+  //         right,
+  //       );
+  //     });
+  //     it("[h | []] = [1, 2, 3]", () => {
+  //       const right = Type.list([
+  //         Type.integer(1),
+  //         Type.integer(2),
+  //         Type.integer(3),
+  //       ]);
+  //       assertMatchError(
+  //         () => Interpreter.matchOperator(right, left, vars),
+  //         right,
+  //       );
+  //     });
+  //     it("[h | []] = [1, 2 | 3]", () => {
+  //       const right = Type.improperList([
+  //         Type.integer(1),
+  //         Type.integer(2),
+  //         Type.integer(3),
+  //       ]);
+  //       assertMatchError(
+  //         () => Interpreter.matchOperator(right, left, vars),
+  //         right,
+  //       );
+  //     });
+  //   });
+  //   describe("[h | [3]]", () => {
+  //     let left;
+  //     beforeEach(() => {
+  //       left = Type.consPattern(
+  //         Type.variablePattern("h"),
+  //         Type.list([Type.integer(3)]),
+  //       );
+  //     });
+  //     it("[h | [3]] = 3", () => {
+  //       const right = Type.integer(3);
+  //       assertMatchError(
+  //         () => Interpreter.matchOperator(right, left, vars),
+  //         right,
+  //       );
+  //     });
+  //     it("[h | [3]] = []", () => {
+  //       const right = Type.list([]);
+  //       assertMatchError(
+  //         () => Interpreter.matchOperator(right, left, vars),
+  //         right,
+  //       );
+  //     });
+  //     it("[h | [3]] = [3]", () => {
+  //       const right = Type.list([Type.integer(3)]);
+  //       assertMatchError(
+  //         () => Interpreter.matchOperator(right, left, vars),
+  //         right,
+  //       );
+  //     });
+  //     it("[h | [3]] = [2, 3]", () => {
+  //       const right = Type.list([Type.integer(2), Type.integer(3)]);
+  //       const result = Interpreter.matchOperator(right, left, vars);
+  //       assert.deepStrictEqual(result, right);
+  //       assert.deepStrictEqual(vars, {
+  //         a: Type.integer(9),
+  //         h: Type.integer(2),
+  //       });
+  //     });
+  //     it("[h | [3]] = [2 | 3]", () => {
+  //       const right = Type.improperList([Type.integer(2), Type.integer(3)]);
+  //       assertMatchError(
+  //         () => Interpreter.matchOperator(right, left, vars),
+  //         right,
+  //       );
+  //     });
+  //     it("[h | [3]] = [1, 2, 3]", () => {
+  //       const right = Type.list([
+  //         Type.integer(1),
+  //         Type.integer(2),
+  //         Type.integer(3),
+  //       ]);
+  //       assertMatchError(
+  //         () => Interpreter.matchOperator(right, left, vars),
+  //         right,
+  //       );
+  //     });
+  //     it("[h | [3]] = [1, 2 | 3]", () => {
+  //       const right = Type.improperList([
+  //         Type.integer(1),
+  //         Type.integer(2),
+  //         Type.integer(3),
+  //       ]);
+  //       assertMatchError(
+  //         () => Interpreter.matchOperator(right, left, vars),
+  //         right,
+  //       );
+  //     });
+  //   });
+  //   describe("[h | [2, 3]]", () => {
+  //     let left;
+  //     beforeEach(() => {
+  //       left = Type.consPattern(
+  //         Type.variablePattern("h"),
+  //         Type.list([Type.integer(2), Type.integer(3)]),
+  //       );
+  //     });
+  //     it("[h | [2, 3]] = 3", () => {
+  //       const right = Type.integer(3);
+  //       assertMatchError(
+  //         () => Interpreter.matchOperator(right, left, vars),
+  //         right,
+  //       );
+  //     });
+  //     it("[h | [2, 3]] = []", () => {
+  //       const right = Type.list([]);
+  //       assertMatchError(
+  //         () => Interpreter.matchOperator(right, left, vars),
+  //         right,
+  //       );
+  //     });
+  //     it("[h | [2, 3]] = [3]", () => {
+  //       const right = Type.list([Type.integer(3)]);
+  //       assertMatchError(
+  //         () => Interpreter.matchOperator(right, left, vars),
+  //         right,
+  //       );
+  //     });
+  //     it("[h | [2, 3]] = [2, 3]", () => {
+  //       const right = Type.list([Type.integer(2), Type.integer(3)]);
+  //       assertMatchError(
+  //         () => Interpreter.matchOperator(right, left, vars),
+  //         right,
+  //       );
+  //     });
+  //     it("[h | [2, 3]] = [2 | 3]", () => {
+  //       const right = Type.improperList([Type.integer(2), Type.integer(3)]);
+  //       assertMatchError(
+  //         () => Interpreter.matchOperator(right, left, vars),
+  //         right,
+  //       );
+  //     });
+  //     it("[h | [2, 3]] = [1, 2, 3]", () => {
+  //       const right = Type.list([
+  //         Type.integer(1),
+  //         Type.integer(2),
+  //         Type.integer(3),
+  //       ]);
+  //       const result = Interpreter.matchOperator(right, left, vars);
+  //       assert.deepStrictEqual(result, right);
+  //       assert.deepStrictEqual(vars, {
+  //         a: Type.integer(9),
+  //         h: Type.integer(1),
+  //       });
+  //     });
+  //     it("[h | [2, 3]] = [1, 2 | 3]", () => {
+  //       const right = Type.improperList([
+  //         Type.integer(1),
+  //         Type.integer(2),
+  //         Type.integer(3),
+  //       ]);
+  //       assertMatchError(
+  //         () => Interpreter.matchOperator(right, left, vars),
+  //         right,
+  //       );
+  //     });
+  //   });
+  //   describe("[h | [2 | 3]]", () => {
+  //     let left;
+  //     beforeEach(() => {
+  //       left = Type.consPattern(
+  //         Type.variablePattern("h"),
+  //         Type.consPattern(Type.integer(2), Type.integer(3)),
+  //       );
+  //     });
+  //     it("[h | [2 | 3]] = 3", () => {
+  //       const right = Type.integer(3);
+  //       assertMatchError(
+  //         () => Interpreter.matchOperator(right, left, vars),
+  //         right,
+  //       );
+  //     });
+  //     it("[h | [2 | 3]] = []", () => {
+  //       const right = Type.list([]);
+  //       assertMatchError(
+  //         () => Interpreter.matchOperator(right, left, vars),
+  //         right,
+  //       );
+  //     });
+  //     it("[h | [2 | 3]] = [3]", () => {
+  //       const right = Type.list([Type.integer(3)]);
+  //       assertMatchError(
+  //         () => Interpreter.matchOperator(right, left, vars),
+  //         right,
+  //       );
+  //     });
+  //     it("[h | [2 | 3]] = [2, 3]", () => {
+  //       const right = Type.list([Type.integer(2), Type.integer(3)]);
+  //       assertMatchError(
+  //         () => Interpreter.matchOperator(right, left, vars),
+  //         right,
+  //       );
+  //     });
+  //     it("[h | [2 | 3]] = [2 | 3]", () => {
+  //       const right = Type.improperList([Type.integer(2), Type.integer(3)]);
+  //       assertMatchError(
+  //         () => Interpreter.matchOperator(right, left, vars),
+  //         right,
+  //       );
+  //     });
+  //     it("[h | [2 | 3]] = [1, 2, 3]", () => {
+  //       const right = Type.list([
+  //         Type.integer(1),
+  //         Type.integer(2),
+  //         Type.integer(3),
+  //       ]);
+  //       assertMatchError(
+  //         () => Interpreter.matchOperator(right, left, vars),
+  //         right,
+  //       );
+  //     });
+  //     it("[h | [2 | 3]] = [1, 2 | 3]", () => {
+  //       const right = Type.improperList([
+  //         Type.integer(1),
+  //         Type.integer(2),
+  //         Type.integer(3),
+  //       ]);
+  //       const result = Interpreter.matchOperator(right, left, vars);
+  //       assert.deepStrictEqual(result, right);
+  //       assert.deepStrictEqual(vars, {
+  //         a: Type.integer(9),
+  //         h: Type.integer(1),
+  //       });
+  //     });
+  //   });
+  //   describe("[h | [1, 2, 3]]", () => {
+  //     let left;
+  //     beforeEach(() => {
+  //       left = Type.consPattern(
+  //         Type.variablePattern("h"),
+  //         Type.list([Type.integer(1), Type.integer(2), Type.integer(3)]),
+  //       );
+  //     });
+  //     it("[h | [1, 2, 3]] = 3", () => {
+  //       const right = Type.integer(3);
+  //       assertMatchError(
+  //         () => Interpreter.matchOperator(right, left, vars),
+  //         right,
+  //       );
+  //     });
+  //     it("[h | [1, 2, 3]] = []", () => {
+  //       const right = Type.list([]);
+  //       assertMatchError(
+  //         () => Interpreter.matchOperator(right, left, vars),
+  //         right,
+  //       );
+  //     });
+  //     it("[h | [1, 2, 3]] = [3]", () => {
+  //       const right = Type.list([Type.integer(3)]);
+  //       assertMatchError(
+  //         () => Interpreter.matchOperator(right, left, vars),
+  //         right,
+  //       );
+  //     });
+  //     it("[h | [1, 2, 3]] = [2, 3]", () => {
+  //       const right = Type.list([Type.integer(2), Type.integer(3)]);
+  //       assertMatchError(
+  //         () => Interpreter.matchOperator(right, left, vars),
+  //         right,
+  //       );
+  //     });
+  //     it("[h | [1, 2, 3]] = [2 | 3]", () => {
+  //       const right = Type.improperList([Type.integer(2), Type.integer(3)]);
+  //       assertMatchError(
+  //         () => Interpreter.matchOperator(right, left, vars),
+  //         right,
+  //       );
+  //     });
+  //     it("[h | [1, 2, 3]] = [1, 2, 3]", () => {
+  //       const right = Type.list([
+  //         Type.integer(1),
+  //         Type.integer(2),
+  //         Type.integer(3),
+  //       ]);
+  //       assertMatchError(
+  //         () => Interpreter.matchOperator(right, left, vars),
+  //         right,
+  //       );
+  //     });
+  //     it("[h | [1, 2, 3]] = [1, 2 | 3]", () => {
+  //       const right = Type.improperList([
+  //         Type.integer(1),
+  //         Type.integer(2),
+  //         Type.integer(3),
+  //       ]);
+  //       assertMatchError(
+  //         () => Interpreter.matchOperator(right, left, vars),
+  //         right,
+  //       );
+  //     });
+  //   });
+  //   describe("[h | [1, 2 | 3]]", () => {
+  //     let left;
+  //     beforeEach(() => {
+  //       left = Type.consPattern(
+  //         Type.variablePattern("h"),
+  //         Type.consPattern(
+  //           Type.integer(1),
+  //           Type.consPattern(Type.integer(2), Type.integer(3)),
+  //         ),
+  //       );
+  //     });
+  //     it("[h | [1, 2 | 3]] = 3", () => {
+  //       const right = Type.integer(3);
+  //       assertMatchError(
+  //         () => Interpreter.matchOperator(right, left, vars),
+  //         right,
+  //       );
+  //     });
+  //     it("[h | [1, 2 | 3]] = []", () => {
+  //       const right = Type.list([]);
+  //       assertMatchError(
+  //         () => Interpreter.matchOperator(right, left, vars),
+  //         right,
+  //       );
+  //     });
+  //     it("[h | [1, 2 | 3]] = [3]", () => {
+  //       const right = Type.list([Type.integer(3)]);
+  //       assertMatchError(
+  //         () => Interpreter.matchOperator(right, left, vars),
+  //         right,
+  //       );
+  //     });
+  //     it("[h | [1, 2 | 3]] = [2, 3]", () => {
+  //       const right = Type.list([Type.integer(2), Type.integer(3)]);
+  //       assertMatchError(
+  //         () => Interpreter.matchOperator(right, left, vars),
+  //         right,
+  //       );
+  //     });
+  //     it("[h | [1, 2 | 3]] = [2 | 3]", () => {
+  //       const right = Type.improperList([Type.integer(2), Type.integer(3)]);
+  //       assertMatchError(
+  //         () => Interpreter.matchOperator(right, left, vars),
+  //         right,
+  //       );
+  //     });
+  //     it("[h | [1, 2 | 3]] = [1, 2, 3]", () => {
+  //       const right = Type.list([
+  //         Type.integer(1),
+  //         Type.integer(2),
+  //         Type.integer(3),
+  //       ]);
+  //       assertMatchError(
+  //         () => Interpreter.matchOperator(right, left, vars),
+  //         right,
+  //       );
+  //     });
+  //     it("[h | [1, 2 | 3]] = [1, 2 | 3]", () => {
+  //       const right = Type.improperList([
+  //         Type.integer(1),
+  //         Type.integer(2),
+  //         Type.integer(3),
+  //       ]);
+  //       assertMatchError(
+  //         () => Interpreter.matchOperator(right, left, vars),
+  //         right,
+  //       );
+  //     });
+  //   });
+  //   describe("[1 | [2 | [3 | []]]]", () => {
+  //     let left;
+  //     beforeEach(() => {
+  //       left = Type.consPattern(
+  //         Type.integer(1),
+  //         Type.consPattern(
+  //           Type.integer(2),
+  //           Type.consPattern(Type.integer(3), Type.list([])),
+  //         ),
+  //       );
+  //     });
+  //     it("[1 | [2 | [3 | []]]] = [1, 2, 3, 4]", () => {
+  //       const right = Type.list([
+  //         Type.integer(1),
+  //         Type.integer(2),
+  //         Type.integer(3),
+  //         Type.integer(4),
+  //       ]);
+  //       assertMatchError(
+  //         () => Interpreter.matchOperator(right, left, vars),
+  //         right,
+  //       );
+  //     });
+  //     it("[1 | [2 | [3 | []]]] = [1, 2, 3 | 4]", () => {
+  //       const right = Type.improperList([
+  //         Type.integer(1),
+  //         Type.integer(2),
+  //         Type.integer(3),
+  //         Type.integer(4),
+  //       ]);
+  //       assertMatchError(
+  //         () => Interpreter.matchOperator(right, left, vars),
+  //         right,
+  //       );
+  //     });
+  //     it("[1 | [2 | [3 | []]]] = [1, 2, 3]", () => {
+  //       const right = Type.list([
+  //         Type.integer(1),
+  //         Type.integer(2),
+  //         Type.integer(3),
+  //       ]);
+  //       const result = Interpreter.matchOperator(right, left, vars);
+  //       assert.deepStrictEqual(result, right);
+  //       assert.deepStrictEqual(vars, {a: Type.integer(9)});
+  //     });
+  //   });
+  //   describe("[1 | [2 | [3 | 4]]]", () => {
+  //     let left;
+  //     beforeEach(() => {
+  //       left = Type.consPattern(
+  //         Type.integer(1),
+  //         Type.consPattern(
+  //           Type.integer(2),
+  //           Type.consPattern(Type.integer(3), Type.integer(4)),
+  //         ),
+  //       );
+  //     });
+  //     it("[1 | [2 | [3 | 4]]] = [1, 2, 3, 4]", () => {
+  //       const right = Type.list([
+  //         Type.integer(1),
+  //         Type.integer(2),
+  //         Type.integer(3),
+  //         Type.integer(4),
+  //       ]);
+  //       assertMatchError(
+  //         () => Interpreter.matchOperator(right, left, vars),
+  //         right,
+  //       );
+  //     });
+  //     it("[1 | [2 | [3 | 4]]] = [1, 2, 3 | 4]", () => {
+  //       const right = Type.improperList([
+  //         Type.integer(1),
+  //         Type.integer(2),
+  //         Type.integer(3),
+  //         Type.integer(4),
+  //       ]);
+  //       const result = Interpreter.matchOperator(right, left, vars);
+  //       assert.deepStrictEqual(result, right);
+  //       assert.deepStrictEqual(vars, {a: Type.integer(9)});
+  //     });
+  //     it("[1 | [2 | [3 | 4]]] = [1, 2, 3]", () => {
+  //       const right = Type.list([
+  //         Type.integer(1),
+  //         Type.integer(2),
+  //         Type.integer(3),
+  //       ]);
+  //       assertMatchError(
+  //         () => Interpreter.matchOperator(right, left, vars),
+  //         right,
+  //       );
+  //     });
+  //   });
+  //   describe("[1 | [2 | [3 | [4]]]]", () => {
+  //     let left;
+  //     beforeEach(() => {
+  //       left = Type.consPattern(
+  //         Type.integer(1),
+  //         Type.consPattern(
+  //           Type.integer(2),
+  //           Type.consPattern(Type.integer(3), Type.list([Type.integer(4)])),
+  //         ),
+  //       );
+  //     });
+  //     it("[1 | [2 | [3 | [4]]]] = [1, 2, 3, 4]", () => {
+  //       const right = Type.list([
+  //         Type.integer(1),
+  //         Type.integer(2),
+  //         Type.integer(3),
+  //         Type.integer(4),
+  //       ]);
+  //       const result = Interpreter.matchOperator(right, left, vars);
+  //       assert.deepStrictEqual(result, right);
+  //       assert.deepStrictEqual(vars, {a: Type.integer(9)});
+  //     });
+  //     it("[1 | [2 | [3 | [4]]]] = [1, 2, 3 | 4]", () => {
+  //       const right = Type.improperList([
+  //         Type.integer(1),
+  //         Type.integer(2),
+  //         Type.integer(3),
+  //         Type.integer(4),
+  //       ]);
+  //       assertMatchError(
+  //         () => Interpreter.matchOperator(right, left, vars),
+  //         right,
+  //       );
+  //     });
+  //     it("[1 | [2 | [3 | [4]]]] = [1, 2, 3]", () => {
+  //       const right = Type.list([
+  //         Type.integer(1),
+  //         Type.integer(2),
+  //         Type.integer(3),
+  //       ]);
+  //       assertMatchError(
+  //         () => Interpreter.matchOperator(right, left, vars),
+  //         right,
+  //       );
+  //     });
+  //   });
+  // });
+  // describe("float type", () => {
+  //   it("left float == right float", () => {
+  //     // 2.0 = 2.0
+  //     const result = Interpreter.matchOperator(
+  //       Type.float(2.0),
+  //       Type.float(2.0),
+  //       vars,
+  //     );
+  //     assert.deepStrictEqual(result, Type.float(2.0));
+  //     assert.deepStrictEqual(vars, {a: Type.integer(9)});
+  //   });
+  //   it("left float != right float", () => {
+  //     const myFloat = Type.float(3.0);
+  //     // 2.0 = 3.0
+  //     assertMatchError(
+  //       () => Interpreter.matchOperator(myFloat, Type.float(2.0), vars),
+  //       myFloat,
+  //     );
+  //   });
+  //   it("left float != right non-float", () => {
+  //     const myAtom = Type.atom("abc");
+  //     // 2.0 = :abc
+  //     assertMatchError(
+  //       () => Interpreter.matchOperator(myAtom, Type.float(2.0), vars),
+  //       myAtom,
+  //     );
+  //   });
+  // });
+  // describe("integer type", () => {
+  //   it("left integer == right integer", () => {
+  //     // 2 = 2
+  //     const result = Interpreter.matchOperator(
+  //       Type.integer(2),
+  //       Type.integer(2),
+  //       vars,
+  //     );
+  //     assert.deepStrictEqual(result, Type.integer(2));
+  //     assert.deepStrictEqual(vars, {a: Type.integer(9)});
+  //   });
+  //   it("left integer != right integer", () => {
+  //     const myInteger = Type.integer(3);
+  //     // 2 = 3
+  //     assertMatchError(
+  //       () => Interpreter.matchOperator(myInteger, Type.integer(2), vars),
+  //       myInteger,
+  //     );
+  //   });
+  //   it("left integer != right non-integer", () => {
+  //     const myAtom = Type.atom("abc");
+  //     // 2 = :abc
+  //     assertMatchError(
+  //       () => Interpreter.matchOperator(myAtom, Type.integer(2), vars),
+  //       myAtom,
+  //     );
+  //   });
+  // });
+  // describe("list type", () => {
+  //   let list1;
+  //   beforeEach(() => {
+  //     list1 = Type.list([Type.integer(1), Type.integer(2)]);
+  //   });
+  //   it("[1, 2] = [1, 2]", () => {
+  //     const result = Interpreter.matchOperator(list1, list1, vars);
+  //     assert.deepStrictEqual(result, list1);
+  //     assert.deepStrictEqual(vars, {a: Type.integer(9)});
+  //   });
+  //   it("[1, 2] = [1, 3]", () => {
+  //     const list2 = Type.list([Type.integer(1), Type.integer(3)]);
+  //     assertMatchError(
+  //       () => Interpreter.matchOperator(list2, list1, vars),
+  //       list2,
+  //     );
+  //   });
+  //   it("[1, 2] = [1 | 2]", () => {
+  //     const list2 = Type.improperList([Type.integer(1), Type.integer(2)]);
+  //     assertMatchError(
+  //       () => Interpreter.matchOperator(list2, list1, vars),
+  //       list2,
+  //     );
+  //   });
+  //   it("[1, 2] = :abc", () => {
+  //     const myAtom = Type.atom("abc");
+  //     assertMatchError(
+  //       () => Interpreter.matchOperator(myAtom, list1, vars),
+  //       myAtom,
+  //     );
+  //   });
+  //   it("[] = [1, 2]", () => {
+  //     assertMatchError(
+  //       () => Interpreter.matchOperator(list1, Type.list([]), vars),
+  //       list1,
+  //     );
+  //   });
+  //   it("[1, 2] = []", () => {
+  //     const emptyList = Type.list([]);
+  //     assertMatchError(
+  //       () => Interpreter.matchOperator(emptyList, list1, vars),
+  //       emptyList,
+  //     );
+  //   });
+  //   it("[] = []", () => {
+  //     const emptyList = Type.list([]);
+  //     const result = Interpreter.matchOperator(emptyList, emptyList, vars);
+  //     assert.deepStrictEqual(result, emptyList);
+  //     assert.deepStrictEqual(vars, {a: Type.integer(9)});
+  //   });
+  //   it("[x, 2, y] = [1, 2, 3]", () => {
+  //     const left = Type.list([
+  //       Type.variablePattern("x"),
+  //       Type.integer(2),
+  //       Type.variablePattern("y"),
+  //     ]);
+  //     const right = Type.list([
+  //       Type.integer(1),
+  //       Type.integer(2),
+  //       Type.integer(3),
+  //     ]);
+  //     const result = Interpreter.matchOperator(right, left, vars);
+  //     assert.deepStrictEqual(result, right);
+  //     const expectedVars = {
+  //       a: Type.integer(9),
+  //       x: Type.integer(1),
+  //       y: Type.integer(3),
+  //     };
+  //     assert.deepStrictEqual(vars, expectedVars);
+  //   });
+  // });
+  // describe("map type", () => {
+  //   let data;
+  //   beforeEach(() => {
+  //     data = [
+  //       [Type.atom("x"), Type.integer(1)],
+  //       [Type.atom("y"), Type.integer(2)],
+  //     ];
+  //   });
+  //   it("%{x: 1, y: 2} = %{x: 1, y: 2}", () => {
+  //     const left = Type.map(data);
+  //     const right = Type.map(data);
+  //     const result = Interpreter.matchOperator(right, left, vars);
+  //     assert.deepStrictEqual(result, right);
+  //     assert.deepStrictEqual(vars, {a: Type.integer(9)});
+  //   });
+  //   it("%{x: 1, y: 2} = %{x: 1, y: 2, z: 3}", () => {
+  //     const left = Type.map(data);
+  //     const data2 = [
+  //       [Type.atom("x"), Type.integer(1)],
+  //       [Type.atom("y"), Type.integer(2)],
+  //       [Type.atom("z"), Type.integer(3)],
+  //     ];
+  //     const right = Type.map(data2);
+  //     const result = Interpreter.matchOperator(right, left, vars);
+  //     assert.deepStrictEqual(result, right);
+  //     assert.deepStrictEqual(vars, {a: Type.integer(9)});
+  //   });
+  //   it("%{x: 1, y: 2, z: 3} = %{x: 1, y: 2}", () => {
+  //     const data1 = [
+  //       [Type.atom("x"), Type.integer(1)],
+  //       [Type.atom("y"), Type.integer(2)],
+  //       [Type.atom("z"), Type.integer(3)],
+  //     ];
+  //     const left = Type.map(data1);
+  //     const right = Type.map(data);
+  //     assertMatchError(
+  //       () => Interpreter.matchOperator(right, left, vars),
+  //       right,
+  //     );
+  //   });
+  //   it("%{x: 1, y: 2} = %{x: 1, y: 3}", () => {
+  //     const left = Type.map(data);
+  //     const data2 = [
+  //       [Type.atom("x"), Type.integer(1)],
+  //       [Type.atom("y"), Type.integer(3)],
+  //     ];
+  //     const right = Type.map(data2);
+  //     assertMatchError(
+  //       () => Interpreter.matchOperator(right, left, vars),
+  //       right,
+  //     );
+  //   });
+  //   it("%{x: 1, y: 2} = :abc", () => {
+  //     const left = Type.map(data);
+  //     const right = Type.atom("abc");
+  //     assertMatchError(
+  //       () => Interpreter.matchOperator(right, left, vars),
+  //       right,
+  //     );
+  //   });
+  //   it("%{x: 1, y: 2} = %{}", () => {
+  //     const left = Type.map(data);
+  //     const emptyMap = Type.map([]);
+  //     assertMatchError(
+  //       () => Interpreter.matchOperator(emptyMap, left, vars),
+  //       emptyMap,
+  //     );
+  //   });
+  //   it("%{} = %{x: 1, y: 2}", () => {
+  //     const emptyMap = Type.map([]);
+  //     const right = Type.map(data);
+  //     const result = Interpreter.matchOperator(right, emptyMap, vars);
+  //     assert.deepStrictEqual(result, right);
+  //     assert.deepStrictEqual(vars, {a: Type.integer(9)});
+  //   });
+  //   it("%{} = %{}", () => {
+  //     const emptyMap = Type.map([]);
+  //     const result = Interpreter.matchOperator(emptyMap, emptyMap, vars);
+  //     assert.deepStrictEqual(result, emptyMap);
+  //     assert.deepStrictEqual(vars, {a: Type.integer(9)});
+  //   });
+  //   it("%{k: x, m: 2, n: z} = %{k: 1, m: 2, n: 3}", () => {
+  //     const left = Type.map([
+  //       [Type.atom("k"), Type.variablePattern("x")],
+  //       [Type.atom("m"), Type.integer(2)],
+  //       [Type.atom("n"), Type.variablePattern("z")],
+  //     ]);
+  //     const right = Type.map([
+  //       [Type.atom("k"), Type.integer(1)],
+  //       [Type.atom("m"), Type.integer(2)],
+  //       [Type.atom("n"), Type.integer(3)],
+  //     ]);
+  //     const result = Interpreter.matchOperator(right, left, vars);
+  //     assert.deepStrictEqual(result, right);
+  //     const expectedVars = {
+  //       a: Type.integer(9),
+  //       x: Type.integer(1),
+  //       z: Type.integer(3),
+  //     };
+  //     assert.deepStrictEqual(vars, expectedVars);
+  //   });
+  // });
+  // it("match placeholder", () => {
+  //   // _var = 2
+  //   const result = Interpreter.matchOperator(
+  //     Type.integer(2),
+  //     Type.matchPlaceholder(),
+  //     vars,
+  //   );
+  //   assert.deepStrictEqual(result, Type.integer(2));
+  //   assert.deepStrictEqual(vars, {a: Type.integer(9)});
+  // });
+  // describe("nested match operators", () => {
+  //   it("x = 2 = 2", () => {
+  //     const result = Interpreter.matchOperator(
+  //       Interpreter.matchOperator(
+  //         Type.integer(2),
+  //         Type.integer(2),
+  //         vars,
+  //         false,
+  //       ),
+  //       Type.variablePattern("x"),
+  //       vars,
+  //     );
+  //     assert.deepStrictEqual(result, Type.integer(2));
+  //     const expectedVars = {
+  //       a: Type.integer(9),
+  //       x: Type.integer(2),
+  //     };
+  //     assert.deepStrictEqual(vars, expectedVars);
+  //   });
+  //   it("x = 2 = 3", () => {
+  //     const integer3 = Type.integer(3);
+  //     assertMatchError(
+  //       () =>
+  //         Interpreter.matchOperator(
+  //           Interpreter.matchOperator(integer3, Type.integer(2), vars, false),
+  //           Type.variablePattern("x"),
+  //           vars,
+  //         ),
+  //       integer3,
+  //     );
+  //   });
+  //   it("2 = x = 2", () => {
+  //     const result = Interpreter.matchOperator(
+  //       Interpreter.matchOperator(
+  //         Type.integer(2),
+  //         Type.variablePattern("x"),
+  //         vars,
+  //         false,
+  //       ),
+  //       Type.integer(2),
+  //       vars,
+  //     );
+  //     assert.deepStrictEqual(result, Type.integer(2));
+  //     const expectedVars = {
+  //       a: Type.integer(9),
+  //       x: Type.integer(2),
+  //     };
+  //     assert.deepStrictEqual(vars, expectedVars);
+  //   });
+  //   it("2 = x = 3", () => {
+  //     const integer3 = Type.integer(3);
+  //     assertMatchError(
+  //       () =>
+  //         Interpreter.matchOperator(
+  //           Interpreter.matchOperator(
+  //             integer3,
+  //             Type.variablePattern("x"),
+  //             vars,
+  //             false,
+  //           ),
+  //           Type.integer(2),
+  //           vars,
+  //         ),
+  //       integer3,
+  //     );
+  //   });
+  //   it("2 = 2 = x, (x = 2)", () => {
+  //     const vars = {
+  //       a: Type.integer(9),
+  //       x: Type.integer(2),
+  //     };
+  //     const result = Interpreter.matchOperator(
+  //       Interpreter.matchOperator(vars.x, Type.integer(2), vars, false),
+  //       Type.integer(2),
+  //       vars,
+  //     );
+  //     assert.deepStrictEqual(result, Type.integer(2));
+  //     const expectedVars = {
+  //       a: Type.integer(9),
+  //       x: Type.integer(2),
+  //     };
+  //     assert.deepStrictEqual(vars, expectedVars);
+  //   });
+  //   it("2 = 2 = x, (x = 3)", () => {
+  //     const vars = {
+  //       a: Type.integer(9),
+  //       x: Type.integer(3),
+  //     };
+  //     assertMatchError(
+  //       () =>
+  //         Interpreter.matchOperator(
+  //           Interpreter.matchOperator(vars.x, Type.integer(2), vars, false),
+  //           Type.integer(2),
+  //           vars,
+  //         ),
+  //       Type.integer(3),
+  //     );
+  //   });
+  //   it("1 = 2 = x, (x = 2)", () => {
+  //     const vars = {
+  //       a: Type.integer(9),
+  //       x: Type.integer(2),
+  //     };
+  //     assertMatchError(
+  //       () =>
+  //         Interpreter.matchOperator(
+  //           Interpreter.matchOperator(vars.x, Type.integer(2), vars, false),
+  //           Type.integer(1),
+  //           vars,
+  //         ),
+  //       Type.integer(2),
+  //     );
+  //   });
+  //   it("y = x + (x = 3) + x, (x = 11)", () => {
+  //     const vars = {
+  //       a: Type.integer(9),
+  //       x: Type.integer(11),
+  //     };
+  //     Interpreter.takeVarsSnapshot(vars);
+  //     const result = Interpreter.matchOperator(
+  //       Erlang["+/2"](
+  //         Erlang["+/2"](
+  //           vars.__snapshot__.x,
+  //           Interpreter.matchOperator(
+  //             Type.integer(3),
+  //             Type.variablePattern("x"),
+  //             vars,
+  //             false,
+  //           ),
+  //         ),
+  //         vars.__snapshot__.x,
+  //       ),
+  //       Type.variablePattern("y"),
+  //       vars,
+  //     );
+  //     assert.deepStrictEqual(result, Type.integer(25));
+  //     const expectedVars = {
+  //       __snapshot__: {
+  //         a: Type.integer(9),
+  //         x: Type.integer(11),
+  //       },
+  //       a: Type.integer(9),
+  //       x: Type.integer(3),
+  //       y: Type.integer(25),
+  //     };
+  //     assert.deepStrictEqual(vars, expectedVars);
+  //   });
+  //   it("[1 = 1] = [1 = 1]", () => {
+  //     const result = Interpreter.matchOperator(
+  //       Type.list([
+  //         Interpreter.matchOperator(
+  //           Type.integer(1),
+  //           Type.integer(1),
+  //           vars,
+  //           false,
+  //         ),
+  //       ]),
+  //       Type.list([
+  //         Interpreter.matchOperator(
+  //           Type.integer(1),
+  //           Type.integer(1),
+  //           vars,
+  //           false,
+  //         ),
+  //       ]),
+  //       vars,
+  //     );
+  //     assert.deepStrictEqual(result, Type.list([Type.integer(1)]));
+  //     assert.deepStrictEqual(vars, {a: Type.integer(9)});
+  //   });
+  //   it("[1 = 1] = [1 = 2]", () => {
+  //     const integer2 = Type.integer(2);
+  //     assertMatchError(
+  //       () =>
+  //         Interpreter.matchOperator(
+  //           Type.list([
+  //             Interpreter.matchOperator(integer2, Type.integer(1), vars, false),
+  //           ]),
+  //           Type.list([
+  //             Interpreter.matchOperator(
+  //               Type.integer(1),
+  //               Type.integer(1),
+  //               vars,
+  //               false,
+  //             ),
+  //           ]),
+  //           vars,
+  //         ),
+  //       integer2,
+  //     );
+  //   });
+  //   it("[1 = 1] = [2 = 1]", () => {
+  //     const integer1 = Type.integer(1);
+  //     assertMatchError(
+  //       () =>
+  //         Interpreter.matchOperator(
+  //           Type.list([
+  //             Interpreter.matchOperator(integer1, Type.integer(2), vars, false),
+  //           ]),
+  //           Type.list([
+  //             Interpreter.matchOperator(integer1, integer1, vars, false),
+  //           ]),
+  //           vars,
+  //         ),
+  //       integer1,
+  //     );
+  //   });
+  //   // TODO: JavaScript error message for this case is inconsistent with Elixir error message (see test/elixir/hologram/ex_js_consistency/match_operator_test.exs)
+  //   it("[1 = 2] = [1 = 1]", () => {
+  //     const integer2 = Type.integer(2);
+  //     assertMatchError(
+  //       () =>
+  //         Interpreter.matchOperator(
+  //           Type.list([
+  //             Interpreter.matchOperator(
+  //               Type.integer(1),
+  //               Type.integer(1),
+  //               vars,
+  //               false,
+  //             ),
+  //           ]),
+  //           Type.list([
+  //             Interpreter.matchOperator(integer2, Type.integer(1), vars, false),
+  //           ]),
+  //           vars,
+  //         ),
+  //       integer2,
+  //     );
+  //   });
+  //   // TODO: JavaScript error message for this case is inconsistent with Elixir error message (see test/elixir/hologram/ex_js_consistency/match_operator_test.exs)
+  //   it("[2 = 1] = [1 = 1]", () => {
+  //     const integer1 = Type.integer(1);
+  //     assertMatchError(
+  //       () =>
+  //         Interpreter.matchOperator(
+  //           Type.list([
+  //             Interpreter.matchOperator(integer1, integer1, vars, false),
+  //           ]),
+  //           Type.list([
+  //             Interpreter.matchOperator(integer1, Type.integer(2), vars, false),
+  //           ]),
+  //           vars,
+  //         ),
+  //       integer1,
+  //     );
+  //   });
+  //   it("{a = b, 2, 3} = {1, c = d, 3} = {1, 2, e = f}", () => {
+  //     const vars = {
+  //       a: Type.integer(9),
+  //       f: Type.integer(3),
+  //     };
+  //     const result = Interpreter.matchOperator(
+  //       Interpreter.matchOperator(
+  //         Type.tuple([
+  //           Type.integer(1),
+  //           Type.integer(2),
+  //           Interpreter.matchOperator(
+  //             vars.f,
+  //             Type.variablePattern("e"),
+  //             vars,
+  //             false,
+  //           ),
+  //         ]),
+  //         Type.tuple([
+  //           Type.integer(1),
+  //           Interpreter.matchOperator(
+  //             Type.variablePattern("d"),
+  //             Type.variablePattern("c"),
+  //             vars,
+  //             false,
+  //           ),
+  //           Type.integer(3),
+  //         ]),
+  //         vars,
+  //         false,
+  //       ),
+  //       Type.tuple([
+  //         Interpreter.matchOperator(
+  //           Type.variablePattern("b"),
+  //           Type.variablePattern("a"),
+  //           vars,
+  //           false,
+  //         ),
+  //         Type.integer(2),
+  //         Type.integer(3),
+  //       ]),
+  //       vars,
+  //     );
+  //     const expectedResult = Type.tuple([
+  //       Type.integer(1),
+  //       Type.integer(2),
+  //       Type.integer(3),
+  //     ]);
+  //     assert.deepStrictEqual(result, expectedResult);
+  //     const expectedVars = {
+  //       a: Type.integer(1),
+  //       b: Type.integer(1),
+  //       c: Type.integer(2),
+  //       d: Type.integer(2),
+  //       e: Type.integer(3),
+  //       f: Type.integer(3),
+  //     };
+  //     assert.deepStrictEqual(vars, expectedVars);
+  //   });
+  // });
+  // describe("nested match pattern (with uresolved variables)", () => {
+  //   it("[[a | b] = [c | d]] = [[1, 2, 3]]", () => {
+  //     const result = Interpreter.matchOperator(
+  //       Type.list([
+  //         Type.list([Type.integer(1), Type.integer(2), Type.integer(3)]),
+  //       ]),
+  //       Type.list([
+  //         Interpreter.matchOperator(
+  //           Type.consPattern(
+  //             Type.variablePattern("c"),
+  //             Type.variablePattern("d"),
+  //           ),
+  //           Type.consPattern(
+  //             Type.variablePattern("a"),
+  //             Type.variablePattern("b"),
+  //           ),
+  //           vars,
+  //           false,
+  //         ),
+  //       ]),
+  //       vars,
+  //     );
+  //     const expectedResult = Type.list([
+  //       Type.list([Type.integer(1), Type.integer(2), Type.integer(3)]),
+  //     ]);
+  //     assert.deepStrictEqual(result, expectedResult);
+  //     const expectedVars = {
+  //       a: Type.integer(1),
+  //       b: Type.list([Type.integer(2), Type.integer(3)]),
+  //       c: Type.integer(1),
+  //       d: Type.list([Type.integer(2), Type.integer(3)]),
+  //     };
+  //     assert.deepStrictEqual(vars, expectedVars);
+  //   });
+  //   it("[[[a | b] = [c | d]] = [[e | f]]] = [[[1, 2, 3]]]", () => {
+  //     const result = Interpreter.matchOperator(
+  //       Type.list([
+  //         Type.list([
+  //           Type.list([Type.integer(1), Type.integer(2), Type.integer(3)]),
+  //         ]),
+  //       ]),
+  //       Type.list([
+  //         Interpreter.matchOperator(
+  //           Type.list([
+  //             Type.consPattern(
+  //               Type.variablePattern("e"),
+  //               Type.variablePattern("f"),
+  //             ),
+  //           ]),
+  //           Type.list([
+  //             Interpreter.matchOperator(
+  //               Type.consPattern(
+  //                 Type.variablePattern("c"),
+  //                 Type.variablePattern("d"),
+  //               ),
+  //               Type.consPattern(
+  //                 Type.variablePattern("a"),
+  //                 Type.variablePattern("b"),
+  //               ),
+  //               vars,
+  //               false,
+  //             ),
+  //           ]),
+  //           vars,
+  //           false,
+  //         ),
+  //       ]),
+  //       vars,
+  //     );
+  //     const expectedResult = Type.list([
+  //       Type.list([
+  //         Type.list([Type.integer(1), Type.integer(2), Type.integer(3)]),
+  //       ]),
+  //     ]);
+  //     assert.deepStrictEqual(result, expectedResult);
+  //     const expectedVars = {
+  //       a: Type.integer(1),
+  //       b: Type.list([Type.integer(2), Type.integer(3)]),
+  //       c: Type.integer(1),
+  //       d: Type.list([Type.integer(2), Type.integer(3)]),
+  //       e: Type.integer(1),
+  //       f: Type.list([Type.integer(2), Type.integer(3)]),
+  //     };
+  //     assert.deepStrictEqual(vars, expectedVars);
+  //   });
+  //   it("[[a, b] = [c, d]] = [[1, 2]]", () => {
+  //     const result = Interpreter.matchOperator(
+  //       Type.list([Type.list([Type.integer(1), Type.integer(2)])]),
+  //       Type.list([
+  //         Interpreter.matchOperator(
+  //           Type.list([Type.variablePattern("c"), Type.variablePattern("d")]),
+  //           Type.list([Type.variablePattern("a"), Type.variablePattern("b")]),
+  //           vars,
+  //           false,
+  //         ),
+  //       ]),
+  //       vars,
+  //     );
+  //     const expectedResult = Type.list([
+  //       Type.list([Type.integer(1), Type.integer(2)]),
+  //     ]);
+  //     assert.deepStrictEqual(result, expectedResult);
+  //     const expectedVars = {
+  //       a: Type.integer(1),
+  //       b: Type.integer(2),
+  //       c: Type.integer(1),
+  //       d: Type.integer(2),
+  //     };
+  //     assert.deepStrictEqual(vars, expectedVars);
+  //   });
+  //   it("[[[a, b] = [c, d]] = [[e, f]]] = [[[1, 2]]]", () => {
+  //     const result = Interpreter.matchOperator(
+  //       Type.list([Type.list([Type.list([Type.integer(1), Type.integer(2)])])]),
+  //       Type.list([
+  //         Interpreter.matchOperator(
+  //           Type.list([
+  //             Type.list([Type.variablePattern("e"), Type.variablePattern("f")]),
+  //           ]),
+  //           Type.list([
+  //             Interpreter.matchOperator(
+  //               Type.list([
+  //                 Type.variablePattern("c"),
+  //                 Type.variablePattern("d"),
+  //               ]),
+  //               Type.list([
+  //                 Type.variablePattern("a"),
+  //                 Type.variablePattern("b"),
+  //               ]),
+  //               vars,
+  //               false,
+  //             ),
+  //           ]),
+  //           vars,
+  //           false,
+  //         ),
+  //       ]),
+  //       vars,
+  //     );
+  //     const expectedResult = Type.list([
+  //       Type.list([Type.list([Type.integer(1), Type.integer(2)])]),
+  //     ]);
+  //     assert.deepStrictEqual(result, expectedResult);
+  //     const expectedVars = {
+  //       a: Type.integer(1),
+  //       b: Type.integer(2),
+  //       c: Type.integer(1),
+  //       d: Type.integer(2),
+  //       e: Type.integer(1),
+  //       f: Type.integer(2),
+  //     };
+  //     assert.deepStrictEqual(vars, expectedVars);
+  //   });
+  //   it("[x = y] = [1]", () => {
+  //     const result = Interpreter.matchOperator(
+  //       Type.list([Type.integer(1n)]),
+  //       Type.list([
+  //         Interpreter.matchOperator(
+  //           Type.variablePattern("y"),
+  //           Type.variablePattern("x"),
+  //           vars,
+  //           false,
+  //         ),
+  //       ]),
+  //       vars,
+  //     );
+  //     const expectedResult = Type.list([Type.integer(1)]);
+  //     assert.deepStrictEqual(result, expectedResult);
+  //     const expectedVars = {
+  //       a: Type.integer(9),
+  //       x: Type.integer(1),
+  //       y: Type.integer(1),
+  //     };
+  //     assert.deepStrictEqual(vars, expectedVars);
+  //   });
+  //   it("[1 = x] = [1]", () => {
+  //     const result = Interpreter.matchOperator(
+  //       Type.list([Type.integer(1n)]),
+  //       Type.list([
+  //         Interpreter.matchOperator(
+  //           Type.variablePattern("x"),
+  //           Type.integer(1n),
+  //           vars,
+  //           false,
+  //         ),
+  //       ]),
+  //       vars,
+  //     );
+  //     const expectedResult = Type.list([Type.integer(1)]);
+  //     assert.deepStrictEqual(result, expectedResult);
+  //     const expectedVars = {
+  //       a: Type.integer(9),
+  //       x: Type.integer(1),
+  //     };
+  //     assert.deepStrictEqual(vars, expectedVars);
+  //   });
+  //   it("[x = 1] = [1]", () => {
+  //     const result = Interpreter.matchOperator(
+  //       Type.list([Type.integer(1n)]),
+  //       Type.list([
+  //         Interpreter.matchOperator(
+  //           Type.integer(1n),
+  //           Type.variablePattern("x"),
+  //           vars,
+  //           false,
+  //         ),
+  //       ]),
+  //       vars,
+  //     );
+  //     const expectedResult = Type.list([Type.integer(1)]);
+  //     assert.deepStrictEqual(result, expectedResult);
+  //     const expectedVars = {
+  //       a: Type.integer(9),
+  //       x: Type.integer(1),
+  //     };
+  //     assert.deepStrictEqual(vars, expectedVars);
+  //   });
+  //   it("[x = y = z] = [1]", () => {
+  //     const result = Interpreter.matchOperator(
+  //       Type.list([Type.integer(1n)]),
+  //       Type.list([
+  //         Interpreter.matchOperator(
+  //           Interpreter.matchOperator(
+  //             Type.variablePattern("z"),
+  //             Type.variablePattern("y"),
+  //             vars,
+  //             false,
+  //           ),
+  //           Type.variablePattern("x"),
+  //           vars,
+  //           false,
+  //         ),
+  //       ]),
+  //       vars,
+  //     );
+  //     const expectedResult = Type.list([Type.integer(1)]);
+  //     assert.deepStrictEqual(result, expectedResult);
+  //     const expectedVars = {
+  //       a: Type.integer(9),
+  //       x: Type.integer(1),
+  //       y: Type.integer(1),
+  //       z: Type.integer(1),
+  //     };
+  //     assert.deepStrictEqual(vars, expectedVars);
+  //   });
+  //   it("[1 = x = y] = [1]", () => {
+  //     const result = Interpreter.matchOperator(
+  //       Type.list([Type.integer(1n)]),
+  //       Type.list([
+  //         Interpreter.matchOperator(
+  //           Interpreter.matchOperator(
+  //             Type.variablePattern("y"),
+  //             Type.variablePattern("x"),
+  //             vars,
+  //             false,
+  //           ),
+  //           Type.integer(1n),
+  //           vars,
+  //           false,
+  //         ),
+  //       ]),
+  //       vars,
+  //     );
+  //     const expectedResult = Type.list([Type.integer(1)]);
+  //     assert.deepStrictEqual(result, expectedResult);
+  //     const expectedVars = {
+  //       a: Type.integer(9),
+  //       x: Type.integer(1),
+  //       y: Type.integer(1),
+  //     };
+  //     assert.deepStrictEqual(vars, expectedVars);
+  //   });
+  //   it("[x = 1 = y] = [1]", () => {
+  //     const result = Interpreter.matchOperator(
+  //       Type.list([Type.integer(1n)]),
+  //       Type.list([
+  //         Interpreter.matchOperator(
+  //           Interpreter.matchOperator(
+  //             Type.variablePattern("y"),
+  //             Type.integer(1n),
+  //             vars,
+  //             false,
+  //           ),
+  //           Type.variablePattern("x"),
+  //           vars,
+  //           false,
+  //         ),
+  //       ]),
+  //       vars,
+  //     );
+  //     const expectedResult = Type.list([Type.integer(1)]);
+  //     assert.deepStrictEqual(result, expectedResult);
+  //     const expectedVars = {
+  //       a: Type.integer(9),
+  //       x: Type.integer(1),
+  //       y: Type.integer(1),
+  //     };
+  //     assert.deepStrictEqual(vars, expectedVars);
+  //   });
+  //   it("[x = y = 1] = [1]", () => {
+  //     const result = Interpreter.matchOperator(
+  //       Type.list([Type.integer(1n)]),
+  //       Type.list([
+  //         Interpreter.matchOperator(
+  //           Interpreter.matchOperator(
+  //             Type.integer(1n),
+  //             Type.variablePattern("y"),
+  //             vars,
+  //             false,
+  //           ),
+  //           Type.variablePattern("x"),
+  //           vars,
+  //           false,
+  //         ),
+  //       ]),
+  //       vars,
+  //     );
+  //     const expectedResult = Type.list([Type.integer(1)]);
+  //     assert.deepStrictEqual(result, expectedResult);
+  //     const expectedVars = {
+  //       a: Type.integer(9),
+  //       x: Type.integer(1),
+  //       y: Type.integer(1),
+  //     };
+  //     assert.deepStrictEqual(vars, expectedVars);
+  //   });
+  //   it("[v = x = y = z] = [1]", () => {
+  //     const result = Interpreter.matchOperator(
+  //       Type.list([Type.integer(1n)]),
+  //       Type.list([
+  //         Interpreter.matchOperator(
+  //           Interpreter.matchOperator(
+  //             Interpreter.matchOperator(
+  //               Type.variablePattern("z"),
+  //               Type.variablePattern("y"),
+  //               vars,
+  //               false,
+  //             ),
+  //             Type.variablePattern("x"),
+  //             vars,
+  //             false,
+  //           ),
+  //           Type.variablePattern("v"),
+  //           vars,
+  //           false,
+  //         ),
+  //       ]),
+  //       vars,
+  //     );
+  //     const expectedResult = Type.list([Type.integer(1)]);
+  //     assert.deepStrictEqual(result, expectedResult);
+  //     const expectedVars = {
+  //       a: Type.integer(9),
+  //       v: Type.integer(1),
+  //       x: Type.integer(1),
+  //       y: Type.integer(1),
+  //       z: Type.integer(1),
+  //     };
+  //     assert.deepStrictEqual(vars, expectedVars);
+  //   });
+  //   it("[1 = x = y = z] = [1]", () => {
+  //     const result = Interpreter.matchOperator(
+  //       Type.list([Type.integer(1n)]),
+  //       Type.list([
+  //         Interpreter.matchOperator(
+  //           Interpreter.matchOperator(
+  //             Interpreter.matchOperator(
+  //               Type.variablePattern("z"),
+  //               Type.variablePattern("y"),
+  //               vars,
+  //               false,
+  //             ),
+  //             Type.variablePattern("x"),
+  //             vars,
+  //             false,
+  //           ),
+  //           Type.integer(1n),
+  //           vars,
+  //           false,
+  //         ),
+  //       ]),
+  //       vars,
+  //     );
+  //     const expectedResult = Type.list([Type.integer(1)]);
+  //     assert.deepStrictEqual(result, expectedResult);
+  //     const expectedVars = {
+  //       a: Type.integer(9),
+  //       x: Type.integer(1),
+  //       y: Type.integer(1),
+  //       z: Type.integer(1),
+  //     };
+  //     assert.deepStrictEqual(vars, expectedVars);
+  //   });
+  //   it("[x = 1 = y = z] = [1]", () => {
+  //     const result = Interpreter.matchOperator(
+  //       Type.list([Type.integer(1n)]),
+  //       Type.list([
+  //         Interpreter.matchOperator(
+  //           Interpreter.matchOperator(
+  //             Interpreter.matchOperator(
+  //               Type.variablePattern("z"),
+  //               Type.variablePattern("y"),
+  //               vars,
+  //               false,
+  //             ),
+  //             Type.integer(1n),
+  //             vars,
+  //             false,
+  //           ),
+  //           Type.variablePattern("x"),
+  //           vars,
+  //           false,
+  //         ),
+  //       ]),
+  //       vars,
+  //     );
+  //     const expectedResult = Type.list([Type.integer(1)]);
+  //     assert.deepStrictEqual(result, expectedResult);
+  //     const expectedVars = {
+  //       a: Type.integer(9),
+  //       x: Type.integer(1),
+  //       y: Type.integer(1),
+  //       z: Type.integer(1),
+  //     };
+  //     assert.deepStrictEqual(vars, expectedVars);
+  //   });
+  //   it("[x = y = 1 = z] = [1]", () => {
+  //     const result = Interpreter.matchOperator(
+  //       Type.list([Type.integer(1n)]),
+  //       Type.list([
+  //         Interpreter.matchOperator(
+  //           Interpreter.matchOperator(
+  //             Interpreter.matchOperator(
+  //               Type.variablePattern("z"),
+  //               Type.integer(1n),
+  //               vars,
+  //               false,
+  //             ),
+  //             Type.variablePattern("y"),
+  //             vars,
+  //             false,
+  //           ),
+  //           Type.variablePattern("x"),
+  //           vars,
+  //           false,
+  //         ),
+  //       ]),
+  //       vars,
+  //     );
+  //     const expectedResult = Type.list([Type.integer(1)]);
+  //     assert.deepStrictEqual(result, expectedResult);
+  //     const expectedVars = {
+  //       a: Type.integer(9),
+  //       x: Type.integer(1),
+  //       y: Type.integer(1),
+  //       z: Type.integer(1),
+  //     };
+  //     assert.deepStrictEqual(vars, expectedVars);
+  //   });
+  //   it("[x = y = z = 1] = [1]", () => {
+  //     const result = Interpreter.matchOperator(
+  //       Type.list([Type.integer(1n)]),
+  //       Type.list([
+  //         Interpreter.matchOperator(
+  //           Interpreter.matchOperator(
+  //             Interpreter.matchOperator(
+  //               Type.integer(1n),
+  //               Type.variablePattern("z"),
+  //               vars,
+  //               false,
+  //             ),
+  //             Type.variablePattern("y"),
+  //             vars,
+  //             false,
+  //           ),
+  //           Type.variablePattern("x"),
+  //           vars,
+  //           false,
+  //         ),
+  //       ]),
+  //       vars,
+  //     );
+  //     const expectedResult = Type.list([Type.integer(1)]);
+  //     assert.deepStrictEqual(result, expectedResult);
+  //     const expectedVars = {
+  //       a: Type.integer(9),
+  //       x: Type.integer(1),
+  //       y: Type.integer(1),
+  //       z: Type.integer(1),
+  //     };
+  //     assert.deepStrictEqual(vars, expectedVars);
+  //   });
+  //   it("[x = y = z] = [a = b = c = 2]", () => {
+  //     const result = Interpreter.matchOperator(
+  //       Type.list([
+  //         Interpreter.matchOperator(
+  //           Interpreter.matchOperator(
+  //             Interpreter.matchOperator(
+  //               Type.integer(2n),
+  //               Type.variablePattern("c"),
+  //               vars,
+  //               false,
+  //             ),
+  //             Type.variablePattern("b"),
+  //             vars,
+  //             false,
+  //           ),
+  //           Type.variablePattern("a"),
+  //           vars,
+  //           false,
+  //         ),
+  //       ]),
+  //       Type.list([
+  //         Interpreter.matchOperator(
+  //           Interpreter.matchOperator(
+  //             Type.variablePattern("z"),
+  //             Type.variablePattern("y"),
+  //             vars,
+  //             false,
+  //           ),
+  //           Type.variablePattern("x"),
+  //           vars,
+  //           false,
+  //         ),
+  //       ]),
+  //       vars,
+  //     );
+  //     const expectedResult = Type.list([Type.integer(2)]);
+  //     assert.deepStrictEqual(result, expectedResult);
+  //     const expectedVars = {
+  //       a: Type.integer(2),
+  //       b: Type.integer(2),
+  //       c: Type.integer(2),
+  //       x: Type.integer(2),
+  //       y: Type.integer(2),
+  //       z: Type.integer(2),
+  //     };
+  //     assert.deepStrictEqual(vars, expectedVars);
+  //   });
+  //   it("%{x: %{a: a, b: b} = %{a: c, b: d}} = %{x: %{a: 1, b: 2}}", () => {
+  //     const result = Interpreter.matchOperator(
+  //       Type.map([
+  //         [
+  //           Type.atom("x"),
+  //           Type.map([
+  //             [Type.atom("a"), Type.integer(1)],
+  //             [Type.atom("b"), Type.integer(2)],
+  //           ]),
+  //         ],
+  //       ]),
+  //       Type.map([
+  //         [
+  //           Type.atom("x"),
+  //           Interpreter.matchOperator(
+  //             Type.map([
+  //               [Type.atom("a"), Type.variablePattern("c")],
+  //               [Type.atom("b"), Type.variablePattern("d")],
+  //             ]),
+  //             Type.map([
+  //               [Type.atom("a"), Type.variablePattern("a")],
+  //               [Type.atom("b"), Type.variablePattern("b")],
+  //             ]),
+  //             vars,
+  //             false,
+  //           ),
+  //         ],
+  //       ]),
+  //       vars,
+  //     );
+  //     const expectedResult = Type.map([
+  //       [
+  //         Type.atom("x"),
+  //         Type.map([
+  //           [Type.atom("a"), Type.integer(1)],
+  //           [Type.atom("b"), Type.integer(2)],
+  //         ]),
+  //       ],
+  //     ]);
+  //     assert.deepStrictEqual(result, expectedResult);
+  //     const expectedVars = {
+  //       a: Type.integer(1),
+  //       b: Type.integer(2),
+  //       c: Type.integer(1),
+  //       d: Type.integer(2),
+  //     };
+  //     assert.deepStrictEqual(vars, expectedVars);
+  //   });
+  //   it("%{y: %{x: %{a: a, b: b} = %{a: c, b: d}} = %{x: %{a: e, b: f}}} = %{y: %{x: %{a: 1, b: 2}}}", () => {
+  //     const result = Interpreter.matchOperator(
+  //       Type.map([
+  //         [
+  //           Type.atom("y"),
+  //           Type.map([
+  //             [
+  //               Type.atom("x"),
+  //               Type.map([
+  //                 [Type.atom("a"), Type.integer(1)],
+  //                 [Type.atom("b"), Type.integer(2)],
+  //               ]),
+  //             ],
+  //           ]),
+  //         ],
+  //       ]),
+  //       Type.map([
+  //         [
+  //           Type.atom("y"),
+  //           Interpreter.matchOperator(
+  //             Type.map([
+  //               [
+  //                 Type.atom("x"),
+  //                 Type.map([
+  //                   [Type.atom("a"), Type.variablePattern("e")],
+  //                   [Type.atom("b"), Type.variablePattern("f")],
+  //                 ]),
+  //               ],
+  //             ]),
+  //             Type.map([
+  //               [
+  //                 Type.atom("x"),
+  //                 Interpreter.matchOperator(
+  //                   Type.map([
+  //                     [Type.atom("a"), Type.variablePattern("c")],
+  //                     [Type.atom("b"), Type.variablePattern("d")],
+  //                   ]),
+  //                   Type.map([
+  //                     [Type.atom("a"), Type.variablePattern("a")],
+  //                     [Type.atom("b"), Type.variablePattern("b")],
+  //                   ]),
+  //                   vars,
+  //                   false,
+  //                 ),
+  //               ],
+  //             ]),
+  //             vars,
+  //             false,
+  //           ),
+  //         ],
+  //       ]),
+  //       vars,
+  //     );
+  //     const expectedResult = Type.map([
+  //       [
+  //         Type.atom("y"),
+  //         Type.map([
+  //           [
+  //             Type.atom("x"),
+  //             Type.map([
+  //               [Type.atom("a"), Type.integer(1)],
+  //               [Type.atom("b"), Type.integer(2)],
+  //             ]),
+  //           ],
+  //         ]),
+  //       ],
+  //     ]);
+  //     assert.deepStrictEqual(result, expectedResult);
+  //     const expectedVars = {
+  //       a: Type.integer(1),
+  //       b: Type.integer(2),
+  //       c: Type.integer(1),
+  //       d: Type.integer(2),
+  //       e: Type.integer(1),
+  //       f: Type.integer(2),
+  //     };
+  //     assert.deepStrictEqual(vars, expectedVars);
+  //   });
+  //   it("{{a, b} = {c, d}} = {{1, 2}}", () => {
+  //     const result = Interpreter.matchOperator(
+  //       Type.tuple([Type.tuple([Type.integer(1), Type.integer(2)])]),
+  //       Type.tuple([
+  //         Interpreter.matchOperator(
+  //           Type.tuple([Type.variablePattern("c"), Type.variablePattern("d")]),
+  //           Type.tuple([Type.variablePattern("a"), Type.variablePattern("b")]),
+  //           vars,
+  //           false,
+  //         ),
+  //       ]),
+  //       vars,
+  //     );
+  //     const expectedResult = Type.tuple([
+  //       Type.tuple([Type.integer(1), Type.integer(2)]),
+  //     ]);
+  //     assert.deepStrictEqual(result, expectedResult);
+  //     const expectedVars = {
+  //       a: Type.integer(1),
+  //       b: Type.integer(2),
+  //       c: Type.integer(1),
+  //       d: Type.integer(2),
+  //     };
+  //     assert.deepStrictEqual(vars, expectedVars);
+  //   });
+  //   it("{{{a, b} = {c, d}} = {{e, f}}} = {{{1, 2}}}", () => {
+  //     const result = Interpreter.matchOperator(
+  //       Type.tuple([
+  //         Type.tuple([Type.tuple([Type.integer(1), Type.integer(2)])]),
+  //       ]),
+  //       Type.tuple([
+  //         Interpreter.matchOperator(
+  //           Type.tuple([
+  //             Type.tuple([
+  //               Type.variablePattern("e"),
+  //               Type.variablePattern("f"),
+  //             ]),
+  //           ]),
+  //           Type.tuple([
+  //             Interpreter.matchOperator(
+  //               Type.tuple([
+  //                 Type.variablePattern("c"),
+  //                 Type.variablePattern("d"),
+  //               ]),
+  //               Type.tuple([
+  //                 Type.variablePattern("a"),
+  //                 Type.variablePattern("b"),
+  //               ]),
+  //               vars,
+  //               false,
+  //             ),
+  //           ]),
+  //           vars,
+  //           false,
+  //         ),
+  //       ]),
+  //       vars,
+  //     );
+  //     const expectedResult = Type.tuple([
+  //       Type.tuple([Type.tuple([Type.integer(1), Type.integer(2)])]),
+  //     ]);
+  //     assert.deepStrictEqual(result, expectedResult);
+  //     const expectedVars = {
+  //       a: Type.integer(1),
+  //       b: Type.integer(2),
+  //       c: Type.integer(1),
+  //       d: Type.integer(2),
+  //       e: Type.integer(1),
+  //       f: Type.integer(2),
+  //     };
+  //     assert.deepStrictEqual(vars, expectedVars);
+  //   });
+  // });
+  // describe("tuple type", () => {
+  //   let tuple1;
+  //   beforeEach(() => {
+  //     tuple1 = Type.tuple([Type.integer(1), Type.integer(2)]);
+  //   });
+  //   it("{1, 2} = {1, 2}", () => {
+  //     const result = Interpreter.matchOperator(tuple1, tuple1, vars);
+  //     assert.deepStrictEqual(result, tuple1);
+  //     assert.deepStrictEqual(vars, {a: Type.integer(9)});
+  //   });
+  //   it("{1, 2} = {1, 3}", () => {
+  //     const tuple2 = Type.tuple([Type.integer(1), Type.integer(3)]);
+  //     assertMatchError(
+  //       () => Interpreter.matchOperator(tuple2, tuple1, vars),
+  //       tuple2,
+  //     );
+  //   });
+  //   it("{1, 2} = :abc", () => {
+  //     const myAtom = Type.atom("abc");
+  //     assertMatchError(
+  //       () => Interpreter.matchOperator(myAtom, tuple1, vars),
+  //       myAtom,
+  //     );
+  //   });
+  //   it("{} = {1, 2}", () => {
+  //     assertMatchError(
+  //       () => Interpreter.matchOperator(tuple1, Type.tuple([]), vars),
+  //       tuple1,
+  //     );
+  //   });
+  //   it("{1, 2} = {}", () => {
+  //     const emptyTuple = Type.tuple([]);
+  //     assertMatchError(
+  //       () => Interpreter.matchOperator(emptyTuple, tuple1, vars),
+  //       emptyTuple,
+  //     );
+  //   });
+  //   it("{} = {}", () => {
+  //     const emptyTuple = Type.tuple([]);
+  //     const result = Interpreter.matchOperator(emptyTuple, emptyTuple, vars);
+  //     assert.deepStrictEqual(result, emptyTuple);
+  //     assert.deepStrictEqual(vars, {a: Type.integer(9)});
+  //   });
+  //   it("{x, 2, y} = {1, 2, 3}", () => {
+  //     const left = Type.tuple([
+  //       Type.variablePattern("x"),
+  //       Type.integer(2),
+  //       Type.variablePattern("y"),
+  //     ]);
+  //     const right = Type.tuple([
+  //       Type.integer(1),
+  //       Type.integer(2),
+  //       Type.integer(3),
+  //     ]);
+  //     const result = Interpreter.matchOperator(right, left, vars);
+  //     assert.deepStrictEqual(result, right);
+  //     const expectedVars = {
+  //       a: Type.integer(9),
+  //       x: Type.integer(1),
+  //       y: Type.integer(3),
+  //     };
+  //     assert.deepStrictEqual(vars, expectedVars);
+  //   });
+  // });
+  // describe("variable pattern", () => {
+  //   it("variable pattern == anything", () => {
+  //     // x = 2
+  //     const result = Interpreter.matchOperator(
+  //       Type.integer(2),
+  //       Type.variablePattern("x"),
+  //       vars,
+  //     );
+  //     assert.deepStrictEqual(result, Type.integer(2));
+  //     const expectedVars = {
+  //       a: Type.integer(9),
+  //       x: Type.integer(2),
+  //     };
+  //     assert.deepStrictEqual(vars, expectedVars);
+  //   });
+  //   it("multiple variables with the same name being matched to the same value", () => {
+  //     // [x, x] = [1, 1]
+  //     const result = Interpreter.matchOperator(
+  //       Type.list([Type.integer(1), Type.integer(1)]),
+  //       Type.list([Type.variablePattern("x"), Type.variablePattern("x")]),
+  //       vars,
+  //     );
+  //     assert.deepStrictEqual(
+  //       result,
+  //       Type.list([Type.integer(1), Type.integer(1)]),
+  //     );
+  //     const expectedVars = {
+  //       a: Type.integer(9),
+  //       x: Type.integer(1),
+  //     };
+  //     assert.deepStrictEqual(vars, expectedVars);
+  //   });
+  //   it("multiple variables with the same name being matched to the different values", () => {
+  //     const right = Type.list([Type.integer(1), Type.integer(2)]);
+  //     // [x, x] = [1, 2]
+  //     assertMatchError(
+  //       () =>
+  //         Interpreter.matchOperator(
+  //           right,
+  //           Type.list([Type.variablePattern("x"), Type.variablePattern("x")]),
+  //           vars,
+  //         ),
+  //       right,
+  //     );
+  //   });
+  // });
 });
 
 it("module()", () => {
