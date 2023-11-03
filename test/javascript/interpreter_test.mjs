@@ -1703,6 +1703,116 @@ describe("inspectModuleName()", () => {
   });
 });
 
+describe("isEqual()", () => {
+  // non-number == non-number
+  it("returns true for a boxed non-number equal to another boxed non-number", () => {
+    const left = Type.boolean(true);
+    const right = Type.boolean(true);
+    const result = Interpreter.isEqual(left, right);
+
+    assert.isTrue(result);
+  });
+
+  // non-number != non-number
+  it("returns false for a boxed non-number not equal to another boxed non-number", () => {
+    const left = Type.boolean(true);
+    const right = Type.string("abc");
+    const result = Interpreter.isEqual(left, right);
+
+    assert.isFalse(result);
+  });
+
+  // integer == integer
+  it("returns true for a boxed integer equal to another boxed integer", () => {
+    const left = Type.integer(1);
+    const right = Type.integer(1);
+    const result = Interpreter.isEqual(left, right);
+
+    assert.isTrue(result);
+  });
+
+  // integer != integer
+  it("returns false for a boxed integer not equal to another boxed integer", () => {
+    const left = Type.integer(1);
+    const right = Type.integer(2);
+    const result = Interpreter.isEqual(left, right);
+
+    assert.isFalse(result);
+  });
+
+  // integer == float
+  it("returns true for a boxed integer equal to a boxed float", () => {
+    const left = Type.integer(1);
+    const right = Type.float(1.0);
+    const result = Interpreter.isEqual(left, right);
+
+    assert.isTrue(result);
+  });
+
+  // integer != float
+  it("returns false for a boxed integer not equal to a boxed float", () => {
+    const left = Type.integer(1);
+    const right = Type.float(2.0);
+    const result = Interpreter.isEqual(left, right);
+
+    assert.isFalse(result);
+  });
+
+  // integer != non-number
+  it("returns false when a boxed integer is compared to a boxed value of non-number type", () => {
+    const left = Type.integer(1);
+    const right = Type.string("1");
+    const result = Interpreter.isEqual(left, right);
+
+    assert.isFalse(result);
+  });
+
+  // float == float
+  it("returns true for a boxed float equal to another boxed float", () => {
+    const left = Type.float(1.0);
+    const right = Type.float(1.0);
+    const result = Interpreter.isEqual(left, right);
+
+    assert.isTrue(result);
+  });
+
+  // float != float
+  it("returns false for a boxed float not equal to another boxed float", () => {
+    const left = Type.float(1.0);
+    const right = Type.float(2.0);
+    const result = Interpreter.isEqual(left, right);
+
+    assert.isFalse(result);
+  });
+
+  // float == integer
+  it("returns true for a boxed float equal to a boxed integer", () => {
+    const left = Type.float(1.0);
+    const right = Type.integer(1);
+    const result = Interpreter.isEqual(left, right);
+
+    assert.isTrue(result);
+  });
+
+  // float != integer
+  it("returns false for a boxed float not equal to a boxed integer", () => {
+    const left = Type.float(1.0);
+    const right = Type.integer(2);
+    const result = Interpreter.isEqual(left, right);
+
+    assert.isFalse(result);
+  });
+
+  // float != non-number
+  it("returns false when a boxed float is compared to a boxed value of non-number type", () => {
+    const left = Type.float(1.0);
+    const right = Type.string("1.0");
+    const result = Interpreter.isEqual(left, right);
+
+    assert.isFalse(result);
+  });
+});
+
 describe("isMatched()", () => {
   it("is matched", () => {
     assert.isTrue(Interpreter.isMatched(Type.integer(1), Type.integer(1), {}));

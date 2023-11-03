@@ -249,6 +249,18 @@ export default class Interpreter {
     return ":" + moduleName.slice(7).toLowerCase();
   }
 
+  static isEqual(left, right) {
+    if (Type.isNumber(left)) {
+      if (Type.isNumber(right)) {
+        return left.value == right.value;
+      } else {
+        return false;
+      }
+    }
+
+    return isEqual(left, right);
+  }
+
   static isMatched(left, right, vars) {
     try {
       Interpreter.matchOperator(right, left, vars);
