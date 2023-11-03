@@ -78,15 +78,16 @@ export default class Interpreter {
 
       for (let i = 0; i < generatorsCount; ++i) {
         if (
-          !Interpreter.isMatched(
-            generators[i].match,
-            combination[i],
-            varsClone,
-          ) ||
-          !Interpreter.#evaluateGuards(generators[i].guards, varsClone)
+          Interpreter.isMatched(generators[i].match, combination[i], varsClone)
         ) {
-          return acc;
+          Interpreter.updateVarsToMatchedValues(varsClone);
+
+          if (Interpreter.#evaluateGuards(generators[i].guards, varsClone)) {
+            continue;
+          }
         }
+
+        return acc;
       }
 
       for (const filter of filters) {
