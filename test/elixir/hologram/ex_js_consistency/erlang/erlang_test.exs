@@ -154,6 +154,10 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
       assert :erlang.orelse(false, :abc) == :abc
     end
 
+    test "doesn't evaluate the second argument if the first argument is true" do
+      assert :erlang.orelse(true, raise("impossible")) == true
+    end
+
     test "raises ArgumentError if the first argument is not a boolean" do
       assert_raise ArgumentError, "argument error: nil", fn ->
         :erlang.orelse(nil, true)

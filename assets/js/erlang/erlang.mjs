@@ -342,14 +342,16 @@ const Erlang = {
   // deps: []
 
   // start orelse/2
-  "orelse/2": (left, right) => {
+  "orelse/2": (leftFun, rightFun, vars) => {
+    const left = leftFun(vars);
+
     if (!Type.isBoolean(left)) {
       Interpreter.raiseArgumentError(
         `argument error: ${Interpreter.inspect(left)}`,
       );
     }
 
-    return Type.isTrue(left) ? left : right;
+    return Type.isTrue(left) ? left : rightFun(vars);
   },
   // end orelse/2
   // deps: []
