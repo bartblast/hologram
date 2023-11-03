@@ -1712,8 +1712,9 @@ describe("isMatched()", () => {
     assert.isFalse(Interpreter.isMatched(Type.integer(1), Type.integer(2), {}));
   });
 
-  it("mutates vars given in the argument", () => {
+  it("adds matched vars to __matched__ field", () => {
     const vars = {};
+
     const result = Interpreter.isMatched(
       Type.variablePattern("x"),
       Type.integer(9),
@@ -1721,7 +1722,7 @@ describe("isMatched()", () => {
     );
 
     assert.isTrue(result);
-    assert.deepStrictEqual(vars, {x: Type.integer(9)});
+    assert.deepStrictEqual(vars, {__matched__: {x: Type.integer(9)}});
   });
 });
 
@@ -1783,7 +1784,7 @@ describe("isStrictlyEqual()", () => {
 //
 // left and right args are not stored in temporary variables but used directly in matchOperator() call,
 // to make the test as close as possible to real behaviour in which the matchOperator() call is encoded as a whole.
-describe.only("matchOperator()", () => {
+describe("matchOperator()", () => {
   const varsWithEmptyMatchedValues = {a: Type.integer(9), __matched__: {}};
   let vars;
 
