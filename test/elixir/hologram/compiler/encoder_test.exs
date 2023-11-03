@@ -1335,6 +1335,21 @@ defmodule Hologram.Compiler.EncoderTest do
              """
     end
 
+    test ":erlang.andalso/2 call" do
+      # :erlang.andalso(1, 2)
+      ir = %IR.RemoteFunctionCall{
+        module: %IR.AtomType{value: :erlang},
+        function: :andalso,
+        args: [
+          %IR.IntegerType{value: 1},
+          %IR.IntegerType{value: 2}
+        ]
+      }
+
+      assert encode(ir, %Context{}) ==
+               ~s'Erlang["andalso/2"]((vars) => Type.integer(1n), (vars) => Type.integer(2n), vars)'
+    end
+
     test ":erlang.orelse/2 call" do
       # :erlang.orelse(1, 2)
       ir = %IR.RemoteFunctionCall{
