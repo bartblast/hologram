@@ -23,6 +23,44 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
     end
   end
 
+  describe "element/2" do
+    test "returns the element at the one-based index in the tuple" do
+      assert :erlang.element(2, {5, 6, 7}) == 6
+    end
+
+    test "raises ArgumentErorr if the first argument is not an integer" do
+      assert_raise ArgumentError,
+                   "errors were found at the given arguments:\n\n  * 1st argument: not an integer\n",
+                   fn ->
+                     :erlang.element(build_value(:abc), {5, 6, 7})
+                   end
+    end
+
+    test "raises ArgumentErorr if the second argument is not a tuple" do
+      assert_raise ArgumentError,
+                   "errors were found at the given arguments:\n\n  * 2nd argument: not a tuple\n",
+                   fn ->
+                     :erlang.element(1, build_value(:abc))
+                   end
+    end
+
+    test "raises ArgumentErorr if the given index is greater than the number of elements in the tuple" do
+      assert_raise ArgumentError,
+                   "errors were found at the given arguments:\n\n  * 1st argument: out of range\n",
+                   fn ->
+                     :erlang.element(build_value(10), {5, 6, 7})
+                   end
+    end
+
+    test "raises ArgumentErorr if the given index is smaller than 1" do
+      assert_raise ArgumentError,
+                   "errors were found at the given arguments:\n\n  * 1st argument: out of range\n",
+                   fn ->
+                     :erlang.element(build_value(0), {5, 6, 7})
+                   end
+    end
+  end
+
   describe "is_binary/1" do
     test "returns true if the term is a binary bitsting" do
       assert :erlang.is_binary("abc") == true

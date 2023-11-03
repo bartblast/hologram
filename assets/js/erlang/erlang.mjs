@@ -171,6 +171,31 @@ const Erlang = {
   // end atom_to_binary/1
   // deps: []
 
+  // start element/2
+  "element/2": (index, tuple) => {
+    if (!Type.isInteger(index)) {
+      Interpreter.raiseArgumentError(
+        "errors were found at the given arguments:\n\n  * 1st argument: not an integer\n",
+      );
+    }
+
+    if (!Type.isTuple(tuple)) {
+      Interpreter.raiseArgumentError(
+        "errors were found at the given arguments:\n\n  * 2nd argument: not a tuple\n",
+      );
+    }
+
+    if (index.value > tuple.data.length || index.value < 1) {
+      Interpreter.raiseArgumentError(
+        "errors were found at the given arguments:\n\n  * 1st argument: out of range\n",
+      );
+    }
+
+    return tuple.data[Number(index.value) - 1];
+  },
+  // end element/2
+  // deps: []
+
   // TODO: review this function after error reporting is implemented
   // start error/1
   "error/1": (reason) => {

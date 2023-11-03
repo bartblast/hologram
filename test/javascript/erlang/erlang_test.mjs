@@ -662,6 +662,47 @@ describe("atom_to_binary/1", () => {
   });
 });
 
+describe("element/2", () => {
+  const tuple = Type.tuple([Type.integer(5), Type.integer(6), Type.integer(7)]);
+
+  it("returns the element at the one-based index in the tuple", () => {
+    const result = Erlang["element/2"](Type.integer(2), tuple);
+    assert.deepStrictEqual(result, Type.integer(6));
+  });
+
+  it("raises ArgumentErorr if the first argument is not an integer", () => {
+    assertBoxedError(
+      () => Erlang["element/2"](Type.atom("abc"), tuple),
+      "ArgumentError",
+      "errors were found at the given arguments:\n\n  * 1st argument: not an integer\n",
+    );
+  });
+
+  it("raises ArgumentErorr if the second argument is not a tuple", () => {
+    assertBoxedError(
+      () => Erlang["element/2"](Type.integer(1), Type.atom("abc")),
+      "ArgumentError",
+      "errors were found at the given arguments:\n\n  * 2nd argument: not a tuple\n",
+    );
+  });
+
+  it("raises ArgumentErorr if the given index is greater than the number of elements in the tuple", () => {
+    assertBoxedError(
+      () => Erlang["element/2"](Type.integer(10), tuple),
+      "ArgumentError",
+      "errors were found at the given arguments:\n\n  * 1st argument: out of range\n",
+    );
+  });
+
+  it("raises ArgumentErorr if the given index is smaller than 1", () => {
+    assertBoxedError(
+      () => Erlang["element/2"](Type.integer(0), tuple),
+      "ArgumentError",
+      "errors were found at the given arguments:\n\n  * 1st argument: out of range\n",
+    );
+  });
+});
+
 it("error/1", () => {
   const reason = Type.errorStruct("MyError", "my message");
 
