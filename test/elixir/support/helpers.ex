@@ -48,6 +48,15 @@ defmodule Hologram.Test.Helpers do
   end
 
   @doc """
+  Returns the given argument.
+  It prevents compiler warnings in tests when the given value is not permitted is specific situation.
+  """
+  @spec build_value(any) :: any
+  def build_value(value) do
+    value
+  end
+
+  @doc """
   Encodes the given Elixir source code to JavaScript.
   """
   @spec encode_code(String.t(), Context.t()) :: String.t()

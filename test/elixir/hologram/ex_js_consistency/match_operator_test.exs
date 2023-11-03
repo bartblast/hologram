@@ -13,10 +13,6 @@ defmodule Hologram.ExJsConsistency.MatchOperatorTest do
     ^left = right
   end
 
-  defp build_value(value) do
-    value
-  end
-
   describe "atom type" do
     # :abc = :abc
     test "left atom == right atom" do
