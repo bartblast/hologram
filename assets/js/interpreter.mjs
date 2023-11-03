@@ -50,11 +50,12 @@ export default class Interpreter {
     for (const clause of clauses) {
       const varsClone = Interpreter.cloneVars(conditionVars);
 
-      if (
-        Interpreter.isMatched(clause.match, condition, varsClone) &&
-        Interpreter.#evaluateGuards(clause.guards, varsClone)
-      ) {
-        return clause.body(varsClone);
+      if (Interpreter.isMatched(clause.match, condition, varsClone)) {
+        Interpreter.updateVarsToMatchedValues(varsClone);
+
+        if (Interpreter.#evaluateGuards(clause.guards, varsClone)) {
+          return clause.body(varsClone);
+        }
       }
     }
 
