@@ -59,6 +59,40 @@ defmodule Hologram.ExJsConsistency.Erlang.ListsTest do
     end
   end
 
+  describe "keyfind/3" do
+    test "returns the tuple that contains the given value at the given one-based index" do
+      assert :lists.keyfind(7, 3, [{1, 2}, :abc, {5, 6, 7}]) == {5, 6, 7}
+    end
+
+    test "returns false if there is no tuple that fulfills the given conditions" do
+      assert :lists.keyfind(7, 3, [:abc]) == false
+    end
+
+    test "raises ArgumentError if the second argument (index) is not an integer" do
+      assert_raise ArgumentError,
+                   "errors were found at the given arguments:\n\n  * 2nd argument: not an integer\n",
+                   fn ->
+                     :lists.keyfind(:abc, :xyz, [])
+                   end
+    end
+
+    test "raises ArgumentError if the second argument (index) is smaller than 1" do
+      assert_raise ArgumentError,
+                   "errors were found at the given arguments:\n\n  * 2nd argument: out of range\n",
+                   fn ->
+                     :lists.keyfind(:abc, 0, [])
+                   end
+    end
+
+    test "raises ArgumentError if the third argument (tuples) is not a list" do
+      assert_raise ArgumentError,
+                   "errors were found at the given arguments:\n\n  * 3rd argument: not a list\n",
+                   fn ->
+                     :lists.keyfind(:abc, 1, :xyz)
+                   end
+    end
+  end
+
   describe "reverse/1" do
     test "returns a list with the elements in the argument in reverse order" do
       assert :lists.reverse([1, 2, 3]) == [3, 2, 1]

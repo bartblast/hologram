@@ -48,7 +48,7 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
       assert :erlang.element(2, {5, 6, 7}) == 6
     end
 
-    test "raises ArgumentErorr if the first argument is not an integer" do
+    test "raises ArgumentError if the first argument is not an integer" do
       assert_raise ArgumentError,
                    "errors were found at the given arguments:\n\n  * 1st argument: not an integer\n",
                    fn ->
@@ -56,7 +56,7 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
                    end
     end
 
-    test "raises ArgumentErorr if the second argument is not a tuple" do
+    test "raises ArgumentError if the second argument is not a tuple" do
       assert_raise ArgumentError,
                    "errors were found at the given arguments:\n\n  * 2nd argument: not a tuple\n",
                    fn ->
@@ -64,7 +64,7 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
                    end
     end
 
-    test "raises ArgumentErorr if the given index is greater than the number of elements in the tuple" do
+    test "raises ArgumentError if the given index is greater than the number of elements in the tuple" do
       assert_raise ArgumentError,
                    "errors were found at the given arguments:\n\n  * 1st argument: out of range\n",
                    fn ->
@@ -72,7 +72,7 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
                    end
     end
 
-    test "raises ArgumentErorr if the given index is smaller than 1" do
+    test "raises ArgumentError if the given index is smaller than 1" do
       assert_raise ArgumentError,
                    "errors were found at the given arguments:\n\n  * 1st argument: out of range\n",
                    fn ->

@@ -3,6 +3,7 @@
 import {
   assert,
   assertBoxedError,
+  assertBoxedFalse,
   linkModules,
   unlinkModules,
 } from "../../../assets/js/test_support.mjs";
@@ -136,6 +137,79 @@ describe("foldl/3", () => {
       () => Erlang_Lists["foldl/3"](fun, acc, Type.atom("abc")),
       "CaseClauseError",
       "no case clause matching: :abc",
+    );
+  });
+});
+
+describe("keyfind/3", () => {
+  it("returns the tuple that contains the given value at the given one-based index", () => {
+    const tuple = Type.tuple([
+      Type.integer(5),
+      Type.integer(6),
+      Type.integer(7),
+    ]);
+
+    const tuples = Type.list([
+      Type.tuple([Type.integer(1), Type.integer(2)]),
+      Type.atom("abc"),
+      tuple,
+    ]);
+
+    const result = Erlang_Lists["keyfind/3"](
+      Type.integer(7),
+      Type.integer(3),
+      tuples,
+    );
+
+    assert.deepStrictEqual(result, tuple);
+  });
+
+  it("returns false if there is no tuple that fulfills the given conditions", () => {
+    const result = Erlang_Lists["keyfind/3"](
+      Type.integer(7),
+      Type.integer(3),
+      Type.list([Type.atom("abc")]),
+    );
+
+    assertBoxedFalse(result);
+  });
+
+  it("raises ArgumentError if the second argument (index) is not an integer", () => {
+    assertBoxedError(
+      () =>
+        Erlang_Lists["keyfind/3"](
+          Type.atom("abc"),
+          Type.atom("xyz"),
+          Type.list([]),
+        ),
+      "ArgumentError",
+      "errors were found at the given arguments:\n\n  * 2nd argument: not an integer\n",
+    );
+  });
+
+  it("raises ArgumentError if the second argument (index) is smaller than 1", () => {
+    assertBoxedError(
+      () =>
+        Erlang_Lists["keyfind/3"](
+          Type.atom("abc"),
+          Type.integer(0),
+          Type.list([]),
+        ),
+      "ArgumentError",
+      "errors were found at the given arguments:\n\n  * 2nd argument: out of range\n",
+    );
+  });
+
+  it("raises ArgumentError if the third argument (tuples) is not a list", () => {
+    assertBoxedError(
+      () =>
+        Erlang_Lists["keyfind/3"](
+          Type.atom("abc"),
+          Type.integer(1),
+          Type.atom("xyz"),
+        ),
+      "ArgumentError",
+      "errors were found at the given arguments:\n\n  * 3rd argument: not a list\n",
     );
   });
 });

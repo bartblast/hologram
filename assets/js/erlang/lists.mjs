@@ -50,6 +50,42 @@ const Erlang_Lists = {
   // end foldl/3
   // deps: []
 
+  // start keyfind/3
+  "keyfind/3": (value, index, tuples) => {
+    if (!Type.isInteger(index)) {
+      Interpreter.raiseArgumentError(
+        "errors were found at the given arguments:\n\n  * 2nd argument: not an integer\n",
+      );
+    }
+
+    if (index.value < 1) {
+      Interpreter.raiseArgumentError(
+        "errors were found at the given arguments:\n\n  * 2nd argument: out of range\n",
+      );
+    }
+
+    if (!Type.isList(tuples)) {
+      Interpreter.raiseArgumentError(
+        "errors were found at the given arguments:\n\n  * 3rd argument: not a list\n",
+      );
+    }
+
+    for (const tuple of tuples.data) {
+      if (Type.isTuple(tuple)) {
+        if (
+          tuple.data.length >= index.value &&
+          Interpreter.isEqual(tuple.data[Number(index.value) - 1], value)
+        ) {
+          return tuple;
+        }
+      }
+    }
+
+    return Type.boolean(false);
+  },
+  // end keyfind/3
+  // deps: []
+
   // start reverse/1
   "reverse/1": (list) => {
     if (!Type.isList(list)) {

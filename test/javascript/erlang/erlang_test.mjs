@@ -723,7 +723,7 @@ describe("element/2", () => {
     assert.deepStrictEqual(result, Type.integer(6));
   });
 
-  it("raises ArgumentErorr if the first argument is not an integer", () => {
+  it("raises ArgumentError if the first argument is not an integer", () => {
     assertBoxedError(
       () => Erlang["element/2"](Type.atom("abc"), tuple),
       "ArgumentError",
@@ -731,7 +731,7 @@ describe("element/2", () => {
     );
   });
 
-  it("raises ArgumentErorr if the second argument is not a tuple", () => {
+  it("raises ArgumentError if the second argument is not a tuple", () => {
     assertBoxedError(
       () => Erlang["element/2"](Type.integer(1), Type.atom("abc")),
       "ArgumentError",
@@ -739,7 +739,7 @@ describe("element/2", () => {
     );
   });
 
-  it("raises ArgumentErorr if the given index is greater than the number of elements in the tuple", () => {
+  it("raises ArgumentError if the given index is greater than the number of elements in the tuple", () => {
     assertBoxedError(
       () => Erlang["element/2"](Type.integer(10), tuple),
       "ArgumentError",
@@ -747,7 +747,7 @@ describe("element/2", () => {
     );
   });
 
-  it("raises ArgumentErorr if the given index is smaller than 1", () => {
+  it("raises ArgumentError if the given index is smaller than 1", () => {
     assertBoxedError(
       () => Erlang["element/2"](Type.integer(0), tuple),
       "ArgumentError",
