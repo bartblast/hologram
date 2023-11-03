@@ -271,110 +271,110 @@ defmodule Hologram.ExJsConsistency.MatchOperatorTest do
     assert result == 2
   end
 
-  # describe "nested match operators" do
-  #   test "x = 2 = 2" do
-  #     result = x = 2 = 2
+  describe "nested match operators" do
+    test "x = 2 = 2" do
+      result = x = 2 = 2
 
-  #     assert result == 2
-  #     assert x == 2
-  #   end
+      assert result == 2
+      assert x == 2
+    end
 
-  #   test "x = 2 = 3" do
-  #     assert_raise MatchError, "no match of right hand side value: 3", fn ->
-  #       _x = 2 = build_value(3)
-  #     end
-  #   end
+    test "x = 2 = 3" do
+      assert_raise MatchError, "no match of right hand side value: 3", fn ->
+        _x = 2 = build_value(3)
+      end
+    end
 
-  #   test "2 = x = 2" do
-  #     result = 2 = x = 2
+    test "2 = x = 2" do
+      result = 2 = x = 2
 
-  #     assert result == 2
-  #     assert x == 2
-  #   end
+      assert result == 2
+      assert x == 2
+    end
 
-  #   test "2 = x = 3" do
-  #     assert_raise MatchError, "no match of right hand side value: 3", fn ->
-  #       2 = _x = build_value(3)
-  #     end
-  #   end
+    test "2 = x = 3" do
+      assert_raise MatchError, "no match of right hand side value: 3", fn ->
+        2 = _x = build_value(3)
+      end
+    end
 
-  #   test "2 = 2 = x, (x = 2)" do
-  #     x = 2
-  #     result = 2 = 2 = x
+    test "2 = 2 = x, (x = 2)" do
+      x = 2
+      result = 2 = 2 = x
 
-  #     assert result == 2
-  #     assert x == 2
-  #   end
+      assert result == 2
+      assert x == 2
+    end
 
-  #   test "2 = 2 = x, (x = 3)" do
-  #     assert_raise MatchError, "no match of right hand side value: 3", fn ->
-  #       x = 3
-  #       2 = 2 = build_value(x)
-  #     end
-  #   end
+    test "2 = 2 = x, (x = 3)" do
+      assert_raise MatchError, "no match of right hand side value: 3", fn ->
+        x = 3
+        2 = 2 = build_value(x)
+      end
+    end
 
-  #   test "1 = 2 = x, (x = 2)" do
-  #     assert_raise MatchError, "no match of right hand side value: 2", fn ->
-  #       x = 2
-  #       1 = 2 = build_value(x)
-  #     end
-  #   end
+    test "1 = 2 = x, (x = 2)" do
+      assert_raise MatchError, "no match of right hand side value: 2", fn ->
+        x = 2
+        1 = 2 = build_value(x)
+      end
+    end
 
-  #   test "y = x + (x = 3) + x, (x = 11)" do
-  #     x = 11
-  #     result = y = x + (x = 3) + x
+    test "y = x + (x = 3) + x, (x = 11)" do
+      x = 11
+      result = y = x + (x = 3) + x
 
-  #     assert result == 25
-  #     assert x == 3
-  #     assert y == 25
-  #   end
+      assert result == 25
+      assert x == 3
+      assert y == 25
+    end
 
-  #   test "[1 = 1] = [1 = 1]" do
-  #     result = [1 = 1] = [1 = 1]
-  #     assert result == [1]
-  #   end
+    test "[1 = 1] = [1 = 1]" do
+      result = [1 = 1] = [1 = 1]
+      assert result == [1]
+    end
 
-  #   test "[1 = 1] = [1 = 2]" do
-  #     assert_raise MatchError, "no match of right hand side value: 2", fn ->
-  #       [1 = 1] = [1 = build_value(2)]
-  #     end
-  #   end
+    test "[1 = 1] = [1 = 2]" do
+      assert_raise MatchError, "no match of right hand side value: 2", fn ->
+        [1 = 1] = [1 = build_value(2)]
+      end
+    end
 
-  #   test "[1 = 1] = [2 = 1]" do
-  #     assert_raise MatchError, "no match of right hand side value: 1", fn ->
-  #       [1 = 1] = [2 = build_value(1)]
-  #     end
-  #   end
+    test "[1 = 1] = [2 = 1]" do
+      assert_raise MatchError, "no match of right hand side value: 1", fn ->
+        [1 = 1] = [2 = build_value(1)]
+      end
+    end
 
-  #   # TODO: JavaScript error message for this case is inconsistent with Elixir error message (see test/javascript/interpreter_test.mjs)
-  #   test "[1 = 2] = [1 = 1]" do
-  #     assert_raise MatchError, "no match of right hand side value: [1]", fn ->
-  #       x = build_value(2)
-  #       [1 = ^x] = [1 = 1]
-  #     end
-  #   end
+    # TODO: JavaScript error message for this case is inconsistent with Elixir error message (see test/javascript/interpreter_test.mjs)
+    test "[1 = 2] = [1 = 1]" do
+      assert_raise MatchError, "no match of right hand side value: [1]", fn ->
+        x = build_value(2)
+        [1 = ^x] = [1 = 1]
+      end
+    end
 
-  #   # TODO: JavaScript error message for this case is inconsistent with Elixir error message (see test/javascript/interpreter_test.mjs)
-  #   test "[2 = 1] = [1 = 1]" do
-  #     assert_raise MatchError, "no match of right hand side value: [1]", fn ->
-  #       x = build_value(2)
-  #       [^x = 1] = [1 = 1]
-  #     end
-  #   end
+    # TODO: JavaScript error message for this case is inconsistent with Elixir error message (see test/javascript/interpreter_test.mjs)
+    test "[2 = 1] = [1 = 1]" do
+      assert_raise MatchError, "no match of right hand side value: [1]", fn ->
+        x = build_value(2)
+        [^x = 1] = [1 = 1]
+      end
+    end
 
-  #   test "{a = b, 2, 3} = {1, c = d, 3} = {1, 2, e = f}" do
-  #     f = 3
-  #     result = {a = b, 2, 3} = {1, c = d, 3} = {1, 2, e = f}
+    test "{a = b, 2, 3} = {1, c = d, 3} = {1, 2, e = f}" do
+      f = 3
+      result = {a = b, 2, 3} = {1, c = d, 3} = {1, 2, e = f}
 
-  #     assert result == {1, 2, 3}
-  #     assert a == 1
-  #     assert b == 1
-  #     assert c == 2
-  #     assert d == 2
-  #     assert e == 3
-  #     assert f == 3
-  #   end
-  # end
+      assert result == {1, 2, 3}
+      assert a == 1
+      assert b == 1
+      assert c == 2
+      assert d == 2
+      assert e == 3
+      assert f == 3
+    end
+  end
 
   # describe "nested match pattern (with uresolved variables)" do
   #   test "[[a | b] = [c | d]] = [[1, 2, 3]]" do

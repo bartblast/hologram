@@ -3043,311 +3043,298 @@ describe.only("matchOperator()", () => {
     assert.deepStrictEqual(vars, varsWithEmptyMatchedValues);
   });
 
-  // describe("nested match operators", () => {
-  //   it("x = 2 = 2", () => {
-  //     const result = Interpreter.matchOperator(
-  //       Interpreter.matchOperator(
-  //         Type.integer(2),
-  //         Type.integer(2),
-  //         vars,
-  //         false,
-  //       ),
-  //       Type.variablePattern("x"),
-  //       vars,
-  //     );
-  //     assert.deepStrictEqual(result, Type.integer(2));
-  //     const expectedVars = {
-  //       a: Type.integer(9),
-  //       x: Type.integer(2),
-  //     };
-  //     assert.deepStrictEqual(vars, expectedVars);
-  //   });
-  //   it("x = 2 = 3", () => {
-  //     const integer3 = Type.integer(3);
-  //     assertMatchError(
-  //       () =>
-  //         Interpreter.matchOperator(
-  //           Interpreter.matchOperator(integer3, Type.integer(2), vars, false),
-  //           Type.variablePattern("x"),
-  //           vars,
-  //         ),
-  //       integer3,
-  //     );
-  //   });
-  //   it("2 = x = 2", () => {
-  //     const result = Interpreter.matchOperator(
-  //       Interpreter.matchOperator(
-  //         Type.integer(2),
-  //         Type.variablePattern("x"),
-  //         vars,
-  //         false,
-  //       ),
-  //       Type.integer(2),
-  //       vars,
-  //     );
-  //     assert.deepStrictEqual(result, Type.integer(2));
-  //     const expectedVars = {
-  //       a: Type.integer(9),
-  //       x: Type.integer(2),
-  //     };
-  //     assert.deepStrictEqual(vars, expectedVars);
-  //   });
-  //   it("2 = x = 3", () => {
-  //     const integer3 = Type.integer(3);
-  //     assertMatchError(
-  //       () =>
-  //         Interpreter.matchOperator(
-  //           Interpreter.matchOperator(
-  //             integer3,
-  //             Type.variablePattern("x"),
-  //             vars,
-  //             false,
-  //           ),
-  //           Type.integer(2),
-  //           vars,
-  //         ),
-  //       integer3,
-  //     );
-  //   });
-  //   it("2 = 2 = x, (x = 2)", () => {
-  //     const vars = {
-  //       a: Type.integer(9),
-  //       x: Type.integer(2),
-  //     };
-  //     const result = Interpreter.matchOperator(
-  //       Interpreter.matchOperator(vars.x, Type.integer(2), vars, false),
-  //       Type.integer(2),
-  //       vars,
-  //     );
-  //     assert.deepStrictEqual(result, Type.integer(2));
-  //     const expectedVars = {
-  //       a: Type.integer(9),
-  //       x: Type.integer(2),
-  //     };
-  //     assert.deepStrictEqual(vars, expectedVars);
-  //   });
-  //   it("2 = 2 = x, (x = 3)", () => {
-  //     const vars = {
-  //       a: Type.integer(9),
-  //       x: Type.integer(3),
-  //     };
-  //     assertMatchError(
-  //       () =>
-  //         Interpreter.matchOperator(
-  //           Interpreter.matchOperator(vars.x, Type.integer(2), vars, false),
-  //           Type.integer(2),
-  //           vars,
-  //         ),
-  //       Type.integer(3),
-  //     );
-  //   });
-  //   it("1 = 2 = x, (x = 2)", () => {
-  //     const vars = {
-  //       a: Type.integer(9),
-  //       x: Type.integer(2),
-  //     };
-  //     assertMatchError(
-  //       () =>
-  //         Interpreter.matchOperator(
-  //           Interpreter.matchOperator(vars.x, Type.integer(2), vars, false),
-  //           Type.integer(1),
-  //           vars,
-  //         ),
-  //       Type.integer(2),
-  //     );
-  //   });
-  //   it("y = x + (x = 3) + x, (x = 11)", () => {
-  //     const vars = {
-  //       a: Type.integer(9),
-  //       x: Type.integer(11),
-  //     };
-  //     Interpreter.takeVarsSnapshot(vars);
-  //     const result = Interpreter.matchOperator(
-  //       Erlang["+/2"](
-  //         Erlang["+/2"](
-  //           vars.__snapshot__.x,
-  //           Interpreter.matchOperator(
-  //             Type.integer(3),
-  //             Type.variablePattern("x"),
-  //             vars,
-  //             false,
-  //           ),
-  //         ),
-  //         vars.__snapshot__.x,
-  //       ),
-  //       Type.variablePattern("y"),
-  //       vars,
-  //     );
-  //     assert.deepStrictEqual(result, Type.integer(25));
-  //     const expectedVars = {
-  //       __snapshot__: {
-  //         a: Type.integer(9),
-  //         x: Type.integer(11),
-  //       },
-  //       a: Type.integer(9),
-  //       x: Type.integer(3),
-  //       y: Type.integer(25),
-  //     };
-  //     assert.deepStrictEqual(vars, expectedVars);
-  //   });
-  //   it("[1 = 1] = [1 = 1]", () => {
-  //     const result = Interpreter.matchOperator(
-  //       Type.list([
-  //         Interpreter.matchOperator(
-  //           Type.integer(1),
-  //           Type.integer(1),
-  //           vars,
-  //           false,
-  //         ),
-  //       ]),
-  //       Type.list([
-  //         Interpreter.matchOperator(
-  //           Type.integer(1),
-  //           Type.integer(1),
-  //           vars,
-  //           false,
-  //         ),
-  //       ]),
-  //       vars,
-  //     );
-  //     assert.deepStrictEqual(result, Type.list([Type.integer(1)]));
-  //     assert.deepStrictEqual(vars, {a: Type.integer(9)});
-  //   });
-  //   it("[1 = 1] = [1 = 2]", () => {
-  //     const integer2 = Type.integer(2);
-  //     assertMatchError(
-  //       () =>
-  //         Interpreter.matchOperator(
-  //           Type.list([
-  //             Interpreter.matchOperator(integer2, Type.integer(1), vars, false),
-  //           ]),
-  //           Type.list([
-  //             Interpreter.matchOperator(
-  //               Type.integer(1),
-  //               Type.integer(1),
-  //               vars,
-  //               false,
-  //             ),
-  //           ]),
-  //           vars,
-  //         ),
-  //       integer2,
-  //     );
-  //   });
-  //   it("[1 = 1] = [2 = 1]", () => {
-  //     const integer1 = Type.integer(1);
-  //     assertMatchError(
-  //       () =>
-  //         Interpreter.matchOperator(
-  //           Type.list([
-  //             Interpreter.matchOperator(integer1, Type.integer(2), vars, false),
-  //           ]),
-  //           Type.list([
-  //             Interpreter.matchOperator(integer1, integer1, vars, false),
-  //           ]),
-  //           vars,
-  //         ),
-  //       integer1,
-  //     );
-  //   });
-  //   // TODO: JavaScript error message for this case is inconsistent with Elixir error message (see test/elixir/hologram/ex_js_consistency/match_operator_test.exs)
-  //   it("[1 = 2] = [1 = 1]", () => {
-  //     const integer2 = Type.integer(2);
-  //     assertMatchError(
-  //       () =>
-  //         Interpreter.matchOperator(
-  //           Type.list([
-  //             Interpreter.matchOperator(
-  //               Type.integer(1),
-  //               Type.integer(1),
-  //               vars,
-  //               false,
-  //             ),
-  //           ]),
-  //           Type.list([
-  //             Interpreter.matchOperator(integer2, Type.integer(1), vars, false),
-  //           ]),
-  //           vars,
-  //         ),
-  //       integer2,
-  //     );
-  //   });
-  //   // TODO: JavaScript error message for this case is inconsistent with Elixir error message (see test/elixir/hologram/ex_js_consistency/match_operator_test.exs)
-  //   it("[2 = 1] = [1 = 1]", () => {
-  //     const integer1 = Type.integer(1);
-  //     assertMatchError(
-  //       () =>
-  //         Interpreter.matchOperator(
-  //           Type.list([
-  //             Interpreter.matchOperator(integer1, integer1, vars, false),
-  //           ]),
-  //           Type.list([
-  //             Interpreter.matchOperator(integer1, Type.integer(2), vars, false),
-  //           ]),
-  //           vars,
-  //         ),
-  //       integer1,
-  //     );
-  //   });
-  //   it("{a = b, 2, 3} = {1, c = d, 3} = {1, 2, e = f}", () => {
-  //     const vars = {
-  //       a: Type.integer(9),
-  //       f: Type.integer(3),
-  //     };
-  //     const result = Interpreter.matchOperator(
-  //       Interpreter.matchOperator(
-  //         Type.tuple([
-  //           Type.integer(1),
-  //           Type.integer(2),
-  //           Interpreter.matchOperator(
-  //             vars.f,
-  //             Type.variablePattern("e"),
-  //             vars,
-  //             false,
-  //           ),
-  //         ]),
-  //         Type.tuple([
-  //           Type.integer(1),
-  //           Interpreter.matchOperator(
-  //             Type.variablePattern("d"),
-  //             Type.variablePattern("c"),
-  //             vars,
-  //             false,
-  //           ),
-  //           Type.integer(3),
-  //         ]),
-  //         vars,
-  //         false,
-  //       ),
-  //       Type.tuple([
-  //         Interpreter.matchOperator(
-  //           Type.variablePattern("b"),
-  //           Type.variablePattern("a"),
-  //           vars,
-  //           false,
-  //         ),
-  //         Type.integer(2),
-  //         Type.integer(3),
-  //       ]),
-  //       vars,
-  //     );
-  //     const expectedResult = Type.tuple([
-  //       Type.integer(1),
-  //       Type.integer(2),
-  //       Type.integer(3),
-  //     ]);
-  //     assert.deepStrictEqual(result, expectedResult);
-  //     const expectedVars = {
-  //       a: Type.integer(1),
-  //       b: Type.integer(1),
-  //       c: Type.integer(2),
-  //       d: Type.integer(2),
-  //       e: Type.integer(3),
-  //       f: Type.integer(3),
-  //     };
-  //     assert.deepStrictEqual(vars, expectedVars);
-  //   });
-  // });
+  describe("nested match operators", () => {
+    it("x = 2 = 2", () => {
+      const result = Interpreter.matchOperator(
+        Interpreter.matchOperator(Type.integer(2), Type.integer(2), vars),
+        Type.variablePattern("x"),
+        vars,
+      );
+
+      assert.deepStrictEqual(result, Type.integer(2));
+
+      assert.deepStrictEqual(vars, {
+        a: Type.integer(9),
+        __matched__: {
+          x: Type.integer(2),
+        },
+      });
+    });
+
+    it("x = 2 = 3", () => {
+      assertMatchError(
+        () =>
+          Interpreter.matchOperator(
+            Interpreter.matchOperator(Type.integer(3), Type.integer(2), vars),
+            Type.variablePattern("x"),
+            vars,
+          ),
+        Type.integer(3),
+      );
+    });
+
+    it("2 = x = 2", () => {
+      const result = Interpreter.matchOperator(
+        Interpreter.matchOperator(
+          Type.integer(2),
+          Type.variablePattern("x"),
+          vars,
+        ),
+        Type.integer(2),
+        vars,
+      );
+
+      assert.deepStrictEqual(result, Type.integer(2));
+
+      assert.deepStrictEqual(vars, {
+        a: Type.integer(9),
+        __matched__: {
+          x: Type.integer(2),
+        },
+      });
+    });
+
+    it("2 = x = 3", () => {
+      assertMatchError(
+        () =>
+          Interpreter.matchOperator(
+            Interpreter.matchOperator(
+              Type.integer(3),
+              Type.variablePattern("x"),
+              vars,
+            ),
+            Type.integer(2),
+            vars,
+          ),
+        Type.integer(3),
+      );
+    });
+
+    it("2 = 2 = x, (x = 2)", () => {
+      const vars = {
+        a: Type.integer(9),
+        x: Type.integer(2),
+      };
+
+      const result = Interpreter.matchOperator(
+        Interpreter.matchOperator(vars.x, Type.integer(2), vars),
+        Type.integer(2),
+        vars,
+      );
+
+      assert.deepStrictEqual(result, Type.integer(2));
+
+      assert.deepStrictEqual(vars, {
+        a: Type.integer(9),
+        x: Type.integer(2),
+        __matched__: {},
+      });
+    });
+
+    it("2 = 2 = x, (x = 3)", () => {
+      const vars = {
+        a: Type.integer(9),
+        x: Type.integer(3),
+      };
+
+      assertMatchError(
+        () =>
+          Interpreter.matchOperator(
+            Interpreter.matchOperator(vars.x, Type.integer(2), vars),
+            Type.integer(2),
+            vars,
+          ),
+        Type.integer(3),
+      );
+    });
+
+    it("1 = 2 = x, (x = 2)", () => {
+      const vars = {
+        a: Type.integer(9),
+        x: Type.integer(2),
+      };
+
+      assertMatchError(
+        () =>
+          Interpreter.matchOperator(
+            Interpreter.matchOperator(vars.x, Type.integer(2), vars),
+            Type.integer(1),
+            vars,
+          ),
+        Type.integer(2),
+      );
+    });
+
+    it("y = x + (x = 3) + x, (x = 11)", () => {
+      const vars = {
+        a: Type.integer(9),
+        x: Type.integer(11),
+      };
+
+      const result = Interpreter.matchOperator(
+        Erlang["+/2"](
+          Erlang["+/2"](
+            vars.x,
+            Interpreter.matchOperator(
+              Type.integer(3),
+              Type.variablePattern("x"),
+              vars,
+            ),
+          ),
+          vars.x,
+        ),
+        Type.variablePattern("y"),
+        vars,
+      );
+
+      assert.deepStrictEqual(result, Type.integer(25));
+
+      assert.deepStrictEqual(vars, {
+        a: Type.integer(9),
+        x: Type.integer(11),
+        __matched__: {
+          x: Type.integer(3),
+          y: Type.integer(25),
+        },
+      });
+    });
+
+    it("[1 = 1] = [1 = 1]", () => {
+      const result = Interpreter.matchOperator(
+        Type.list([
+          Interpreter.matchOperator(Type.integer(1), Type.integer(1), vars),
+        ]),
+        Type.list([
+          Interpreter.matchOperator(Type.integer(1), Type.integer(1), vars),
+        ]),
+        vars,
+      );
+
+      assert.deepStrictEqual(result, Type.list([Type.integer(1)]));
+      assert.deepStrictEqual(vars, varsWithEmptyMatchedValues);
+    });
+
+    it("[1 = 1] = [1 = 2]", () => {
+      assertMatchError(
+        () =>
+          Interpreter.matchOperator(
+            Type.list([
+              Interpreter.matchOperator(Type.integer(2), Type.integer(1), vars),
+            ]),
+            Type.list([
+              Interpreter.matchOperator(Type.integer(1), Type.integer(1), vars),
+            ]),
+            vars,
+          ),
+        Type.integer(2),
+      );
+    });
+
+    it("[1 = 1] = [2 = 1]", () => {
+      assertMatchError(
+        () =>
+          Interpreter.matchOperator(
+            Type.list([
+              Interpreter.matchOperator(Type.integer(1), Type.integer(2), vars),
+            ]),
+            Type.list([
+              Interpreter.matchOperator(Type.integer(1), Type.integer(1), vars),
+            ]),
+            vars,
+          ),
+        Type.integer(1),
+      );
+    });
+
+    // TODO: JavaScript error message for this case is inconsistent with Elixir error message (see test/elixir/hologram/ex_js_consistency/match_operator_test.exs)
+    it("[1 = 2] = [1 = 1]", () => {
+      assertMatchError(
+        () =>
+          Interpreter.matchOperator(
+            Type.list([
+              Interpreter.matchOperator(Type.integer(1), Type.integer(1), vars),
+            ]),
+            Type.list([
+              Interpreter.matchOperator(Type.integer(2), Type.integer(1), vars),
+            ]),
+            vars,
+          ),
+        Type.integer(2),
+      );
+    });
+
+    // TODO: JavaScript error message for this case is inconsistent with Elixir error message (see test/elixir/hologram/ex_js_consistency/match_operator_test.exs)
+    it("[2 = 1] = [1 = 1]", () => {
+      assertMatchError(
+        () =>
+          Interpreter.matchOperator(
+            Type.list([
+              Interpreter.matchOperator(Type.integer(1), Type.integer(1), vars),
+            ]),
+            Type.list([
+              Interpreter.matchOperator(Type.integer(1), Type.integer(2), vars),
+            ]),
+            vars,
+          ),
+        Type.integer(1),
+      );
+    });
+
+    it("{a = b, 2, 3} = {1, c = d, 3} = {1, 2, e = f}", () => {
+      const vars = {
+        a: Type.integer(9),
+        f: Type.integer(3),
+      };
+
+      const result = Interpreter.matchOperator(
+        Interpreter.matchOperator(
+          Type.tuple([
+            Type.integer(1),
+            Type.integer(2),
+            Interpreter.matchOperator(vars.f, Type.variablePattern("e"), vars),
+          ]),
+          Type.tuple([
+            Type.integer(1),
+            Interpreter.matchOperator(
+              Type.variablePattern("d"),
+              Type.variablePattern("c"),
+              vars,
+            ),
+            Type.integer(3),
+          ]),
+          vars,
+        ),
+        Type.tuple([
+          Interpreter.matchOperator(
+            Type.variablePattern("b"),
+            Type.variablePattern("a"),
+            vars,
+          ),
+          Type.integer(2),
+          Type.integer(3),
+        ]),
+        vars,
+      );
+
+      assert.deepStrictEqual(
+        result,
+        Type.tuple([Type.integer(1), Type.integer(2), Type.integer(3)]),
+      );
+
+      assert.deepStrictEqual(vars, {
+        a: Type.integer(9),
+        f: Type.integer(3),
+        __matched__: {
+          a: Type.integer(1),
+          b: Type.integer(1),
+          c: Type.integer(2),
+          d: Type.integer(2),
+          e: Type.integer(3),
+        },
+      });
+    });
+  });
+
   // describe("nested match pattern (with uresolved variables)", () => {
   //   it("[[a | b] = [c | d]] = [[1, 2, 3]]", () => {
   //     const result = Interpreter.matchOperator(
