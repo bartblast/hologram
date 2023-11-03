@@ -9,32 +9,35 @@ defmodule Hologram.ExJsConsistency.MatchOperatorTest do
   # The build_match_operator/2 and build_value/1 helpers
   # prevent warnings about incompatible types.
 
-  # defp build_match_operator(left, right) do
-  #   ^left = right
-  # end
+  defp build_match_operator(left, right) do
+    ^left = right
+  end
 
   # defp build_value(value) do
   #   value
   # end
 
-  # describe "atom type" do
-  #   test "left atom == right atom" do
-  #     result = :abc = :abc
-  #     assert result == :abc
-  #   end
+  describe "atom type" do
+    # :abc = :abc
+    test "left atom == right atom" do
+      result = :abc = :abc
+      assert result == :abc
+    end
 
-  #   test "left atom != right atom" do
-  #     assert_raise MatchError, "no match of right hand side value: :xyz", fn ->
-  #       build_match_operator(:abc, :xyz)
-  #     end
-  #   end
+    # :abc = :xyz
+    test "left atom != right atom" do
+      assert_raise MatchError, "no match of right hand side value: :xyz", fn ->
+        build_match_operator(:abc, :xyz)
+      end
+    end
 
-  #   test "left atom != right non-atom" do
-  #     assert_raise MatchError, "no match of right hand side value: 2", fn ->
-  #       build_match_operator(:abc, 2)
-  #     end
-  #   end
-  # end
+    # :abc = 2
+    test "left atom != right non-atom" do
+      assert_raise MatchError, "no match of right hand side value: 2", fn ->
+        build_match_operator(:abc, 2)
+      end
+    end
+  end
 
   # describe "bistring type" do
   #   test "left bitstring == right bitstring" do

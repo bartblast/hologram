@@ -1781,39 +1781,48 @@ describe("isStrictlyEqual()", () => {
 //
 // left and right args are not stored in temporary variables but used directly in matchOperator() call,
 // to make the test as close as possible to real behaviour in which the matchOperator() call is encoded as a whole.
-describe("matchOperator()", () => {
-  // let vars;
-  // beforeEach(() => {
-  //   vars = {a: Type.integer(9)};
-  // });
-  // describe("atom type", () => {
-  //   it("left atom == right atom", () => {
-  //     // :abc = :abc
-  //     const result = Interpreter.matchOperator(
-  //       Type.atom("abc"),
-  //       Type.atom("abc"),
-  //       vars,
-  //     );
-  //     assert.deepStrictEqual(result, Type.atom("abc"));
-  //     assert.deepStrictEqual(vars, {a: Type.integer(9)});
-  //   });
-  //   it("left atom != right atom", () => {
-  //     const myAtom = Type.atom("xyz");
-  //     // :abc = :xyz
-  //     assertMatchError(
-  //       () => Interpreter.matchOperator(myAtom, Type.atom("abc"), vars),
-  //       myAtom,
-  //     );
-  //   });
-  //   it("left atom != right non-atom", () => {
-  //     const myInteger = Type.integer(2);
-  //     // :abc = 2
-  //     assertMatchError(
-  //       () => Interpreter.matchOperator(myInteger, Type.atom("abc"), vars),
-  //       myInteger,
-  //     );
-  //   });
-  // });
+describe.only("matchOperator()", () => {
+  const varsWithEmptyMatchedValues = {a: Type.integer(9), __matched__: {}};
+  let vars;
+
+  beforeEach(() => {
+    vars = {a: Type.integer(9)};
+  });
+
+  describe("atom type", () => {
+    // :abc = :abc
+    it("left atom == right atom", () => {
+      const result = Interpreter.matchOperator(
+        Type.atom("abc"),
+        Type.atom("abc"),
+        vars,
+      );
+
+      assert.deepStrictEqual(result, Type.atom("abc"));
+      assert.deepStrictEqual(vars, varsWithEmptyMatchedValues);
+    });
+
+    // :abc = :xyz
+    it("left atom != right atom", () => {
+      const myAtom = Type.atom("xyz");
+
+      assertMatchError(
+        () => Interpreter.matchOperator(myAtom, Type.atom("abc"), vars),
+        myAtom,
+      );
+    });
+
+    // :abc = 2
+    it("left atom != right non-atom", () => {
+      const myInteger = Type.integer(2);
+
+      assertMatchError(
+        () => Interpreter.matchOperator(myInteger, Type.atom("abc"), vars),
+        myInteger,
+      );
+    });
+  });
+
   // describe("bitstring type", () => {
   //   it("left bitstring == right bitstring", () => {
   //     const result = Interpreter.matchOperator(
