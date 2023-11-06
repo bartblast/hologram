@@ -714,7 +714,7 @@ defmodule Hologram.Compiler.EncoderTest do
            return Type.integer(1n);
            }}, {condition: (vars) => Erlang["</2"](vars.x, Type.integer(2n)), body: (vars) => {
            return Type.integer(2n);
-           }}])\
+           }}], vars)\
            """
   end
 
