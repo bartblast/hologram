@@ -190,6 +190,7 @@ defmodule Hologram.Compiler do
     {digest, bundle_file_with_digest, source_map_file_with_digest}
   end
 
+  # sobelow_skip ["CI.System"]
   defp format_entry_file(entry_file, opts) do
     cmd = [
       entry_file,
