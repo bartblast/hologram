@@ -148,9 +148,11 @@ defmodule Hologram.Compiler do
     entry_file = tmp_dir <> "/#{entry_name}.entry.js"
     File.write!(entry_file, js)
 
+    format_entry_file(entry_file, opts)
+
     bundle_file = "#{bundle_dir}/#{bundle_name}.js"
 
-    cmd = [
+    esbuild_cmd = [
       entry_file,
       "--bundle",
       "--log-level=warning",
@@ -160,7 +162,7 @@ defmodule Hologram.Compiler do
       "--target=es2020"
     ]
 
-    System.cmd(esbuild_path, cmd, env: [])
+    System.cmd(esbuild_path, esbuild_cmd, env: [])
 
     digest =
       bundle_file
@@ -186,6 +188,23 @@ defmodule Hologram.Compiler do
     File.write!(bundle_file_with_digest, js_with_replaced_source_map_url)
 
     {digest, bundle_file_with_digest, source_map_file_with_digest}
+  end
+
+  defp format_entry_file(entry_file, opts) do
+    formatter_bin_path = opts[:js_formatter_bin_path]
+    formatter_config_path = opts[:js_formatter_config_path]
+
+    cmd = [
+      entry_file,
+      "--config=#{formatter_config_path}",
+      # "none" is not a valid path or a flag value,
+      # any non-existing path would work the same here, i.e. disable "ignore" functionality.
+      "--ignore-path=none",
+      "--no-error-on-unmatched-pattern",
+      "--write"
+    ]
+
+    System.cmd(formatter_bin_path, cmd, env: [])
   end
 
   @doc """

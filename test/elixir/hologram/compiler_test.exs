@@ -205,10 +205,22 @@ defmodule Hologram.CompilerTest do
 
   describe "bundle/4" do
     @esbuild_path Reflection.root_path() <> "/assets/node_modules/.bin/esbuild"
-    @js "const myVar = 123;"
+    @js_formatter_bin_path Reflection.root_path() <> "/assets/node_modules/.bin/prettier"
+    @js_formatter_config_path Reflection.root_path() <> "/assets/.prettierrc.json"
+    @js_code "const myVar  =  123"
     @entry_name "my_entry"
     @tmp_path "#{Reflection.tmp_path()}/#{__MODULE__}/build_4"
     @bundle_name "my_bundle"
+
+    @opts [
+      entry_name: @entry_name,
+      esbuild_path: @esbuild_path,
+      js_formatter_bin_path: @js_formatter_bin_path,
+      js_formatter_config_path: @js_formatter_config_path,
+      tmp_dir: @tmp_path,
+      bundle_dir: @tmp_path,
+      bundle_name: @bundle_name
+    ]
 
     setup do
       clean_dir(@tmp_path)
@@ -216,29 +228,25 @@ defmodule Hologram.CompilerTest do
     end
 
     test "creates tmp and bundle nested path dirs if they don't exist" do
-      opts = [
-        entry_name: @entry_name,
-        esbuild_path: @esbuild_path,
-        tmp_dir: "#{@tmp_path}/nested_1/nested_2/nested_3",
-        bundle_dir: "#{@tmp_path}/nested_4/nested_5/nested_6",
-        bundle_name: @bundle_name
-      ]
+      opts =
+        @opts
+        |> Keyword.put(:tmp_dir, "#{@tmp_path}/nested_1/nested_2/nested_3")
+        |> Keyword.put(:bundle_dir, "#{@tmp_path}/nested_4/nested_5/nested_6")
 
-      assert bundle(@js, opts)
+      assert bundle(@js_code, opts)
       assert File.exists?(opts[:tmp_dir])
       assert File.exists?(opts[:bundle_dir])
     end
 
-    test "bundles files" do
-      opts = [
-        entry_name: @entry_name,
-        esbuild_path: @esbuild_path,
-        tmp_dir: @tmp_path,
-        bundle_dir: @tmp_path,
-        bundle_name: @bundle_name
-      ]
+    test "formats entry file" do
+      bundle(@js_code, @opts)
 
-      assert bundle(@js, opts) ==
+      entry_file = "#{@tmp_path}/#{@entry_name}.entry.js"
+      assert File.read!(entry_file) == "const myVar = 123;\n"
+    end
+
+    test "bundles files" do
+      assert bundle(@js_code, @opts) ==
                {"957e59b82bd39eb76bb8c7fea2ca29a8",
                 bundle_file = "#{@tmp_path}/my_bundle-957e59b82bd39eb76bb8c7fea2ca29a8.js",
                 source_map_file = "#{@tmp_path}/my_bundle-957e59b82bd39eb76bb8c7fea2ca29a8.js.map"}

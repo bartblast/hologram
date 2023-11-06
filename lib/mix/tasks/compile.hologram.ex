@@ -24,6 +24,8 @@ defmodule Mix.Tasks.Compile.Hologram do
       build_dir: build_dir,
       bundle_dir: "#{root_path}/priv/static/hologram",
       esbuild_path: "#{root_path}/deps/hologram/assets/node_modules/.bin/esbuild",
+      js_formatter_bin_path: "#{root_path}/deps/hologram/assets/.prettierrc.json",
+      js_formatter_config_path: "#{root_path}/deps/hologram/assets/node_modules/.bin/prettier",
       js_source_dir: "#{assets_source_dir}/js",
       tmp_dir: "#{build_dir}/tmp"
     ]
@@ -114,6 +116,8 @@ defmodule Mix.Tasks.Compile.Hologram do
 
       page_bundle_opts = [
         esbuild_path: opts[:esbuild_path],
+        js_formatter_bin_path: opts[:js_formatter_bin_path],
+        js_formatter_config_path: opts[:js_formatter_config_path],
         entry_name: to_string(page_module),
         bundle_name: "page",
         tmp_dir: opts[:tmp_dir],
@@ -132,6 +136,8 @@ defmodule Mix.Tasks.Compile.Hologram do
   defp bundle_runtime(call_graph, ir_plt, opts) do
     runtime_bundle_opts = [
       esbuild_path: opts[:esbuild_path],
+      js_formatter_bin_path: opts[:js_formatter_bin_path],
+      js_formatter_config_path: opts[:js_formatter_config_path],
       entry_name: "runtime",
       bundle_name: "runtime",
       tmp_dir: opts[:tmp_dir],
