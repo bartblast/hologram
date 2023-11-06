@@ -24,8 +24,8 @@ defmodule Mix.Tasks.Compile.Hologram do
       build_dir: build_dir,
       bundle_dir: "#{root_path}/priv/static/hologram",
       esbuild_path: "#{root_path}/deps/hologram/assets/node_modules/.bin/esbuild",
-      js_formatter_bin_path: "#{root_path}/deps/hologram/assets/.prettierrc.json",
-      js_formatter_config_path: "#{root_path}/deps/hologram/assets/node_modules/.bin/prettier",
+      js_formatter_bin_path: "#{root_path}/deps/hologram/assets/node_modules/.bin/prettier",
+      js_formatter_config_path: "#{root_path}/deps/hologram/assets/.prettierrc.json",
       js_source_dir: "#{assets_source_dir}/js",
       tmp_dir: "#{build_dir}/tmp"
     ]
