@@ -191,12 +191,9 @@ defmodule Hologram.Compiler do
   end
 
   defp format_entry_file(entry_file, opts) do
-    formatter_bin_path = opts[:js_formatter_bin_path]
-    formatter_config_path = opts[:js_formatter_config_path]
-
     cmd = [
       entry_file,
-      "--config=#{formatter_config_path}",
+      "--config=#{opts[:js_formatter_config_path]}",
       # "none" is not a valid path or a flag value,
       # any non-existing path would work the same here, i.e. disable "ignore" functionality.
       "--ignore-path=none",
@@ -204,7 +201,7 @@ defmodule Hologram.Compiler do
       "--write"
     ]
 
-    System.cmd(formatter_bin_path, cmd, env: [])
+    System.cmd(opts[:js_formatter_bin_path], cmd, env: [])
   end
 
   @doc """
