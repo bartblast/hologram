@@ -18,6 +18,7 @@ MFAs for sorting:
   {:erlang, :"/=", 2},
   {:erlang, :<, 2},
   {:erlang, :"=:=", 2},
+  {:erlang, :"=<", 2},
   {:erlang, :==, 2},
   {:erlang, :>, 2},
   {:erlang, :>=, 2},
@@ -112,6 +113,31 @@ const Erlang = {
   },
   // end =:=/2
   // deps: []
+
+  // start =</2
+  "=</2": (left, right) => {
+    if (
+      (!Type.isFloat(left) && !Type.isInteger(left)) ||
+      (!Type.isFloat(right) && !Type.isInteger(right))
+    ) {
+      const message =
+        ":erlang.=</2 currently supports only floats and integers" +
+        ", left = " +
+        Interpreter.inspect(left) +
+        ", right = " +
+        Interpreter.inspect(right);
+
+      throw new HologramInterpreterError(message);
+    }
+
+    const result =
+      Type.isTrue(Erlang["==/2"](left, right)) ||
+      Type.isTrue(Erlang["</2"](left, right));
+
+    return Type.boolean(result);
+  },
+  // end =</2
+  // deps: [:erlang.</2, :erlang.==/2]
 
   // start ==/2
   "==/2": (left, right) => {

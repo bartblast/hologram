@@ -375,6 +375,8 @@ defmodule Hologram.Compiler do
   defp add_call_graph_edges_for_erlang_functions(call_graph) do
     call_graph
     |> CallGraph.add_edge({:erlang, :"/=", 2}, {:erlang, :==, 2})
+    |> CallGraph.add_edge({:erlang, :"=<", 2}, {:erlang, :<, 2})
+    |> CallGraph.add_edge({:erlang, :"=<", 2}, {:erlang, :==, 2})
     |> CallGraph.add_edge({:erlang, :>=, 2}, {:erlang, :==, 2})
     |> CallGraph.add_edge({:erlang, :>=, 2}, {:erlang, :>, 2})
     |> CallGraph.add_edge({:erlang, :error, 1}, {:erlang, :error, 2})

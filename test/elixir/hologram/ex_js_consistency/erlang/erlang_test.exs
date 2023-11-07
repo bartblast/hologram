@@ -7,6 +7,56 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
 
   use Hologram.Test.BasicCase, async: true
 
+  describe "=</2" do
+    test "returns true when left float argument is smaller than right float argument" do
+      assert :erlang."=<"(3.2, 5.6) == true
+    end
+
+    test "returns true when left float argument is smaller than right integer argument" do
+      assert :erlang."=<"(3.2, 5) == true
+    end
+
+    test "returns true when left integer argument is smaller than right float argument" do
+      assert :erlang."=<"(3, 5.6) == true
+    end
+
+    test "returns true when left integer argument is smaller than right integer argument" do
+      assert :erlang."=<"(3, 5) == true
+    end
+
+    test "returns true when left float argument is equal to right float argument" do
+      assert :erlang."=<"(3.0, 3.0) == true
+    end
+
+    test "returns true when left float argument is equal to right integer argument" do
+      assert :erlang."=<"(3.0, 3) == true
+    end
+
+    test "returns true when left integer argument is equal to right float argument" do
+      assert :erlang."=<"(3, 3.0) == true
+    end
+
+    test "returns true when left integer argument is equal to right integer argument" do
+      assert :erlang."=<"(3, 3) == true
+    end
+
+    test "returns false when left float argument is greater than right float argument" do
+      assert :erlang."=<"(5.6, 3.2) == false
+    end
+
+    test "returns false when left float argument is greater than right integer argument" do
+      assert :erlang."=<"(5.6, 3) == false
+    end
+
+    test "returns false when left integer argument is greater than right float argument" do
+      assert :erlang."=<"(5, 3.2) == false
+    end
+
+    test "returns false when left integer argument is greater than right integer argument" do
+      assert :erlang."=<"(5, 3) == false
+    end
+  end
+
   describe ">=/2" do
     test "returns true when left float argument is greater than right float argument" do
       assert :erlang.>=(5.6, 3.2) == true
