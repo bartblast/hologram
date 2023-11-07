@@ -415,6 +415,19 @@ const Erlang = {
   },
   // end tl/1
   // deps: []
+
+  // start tuple_to_list/1
+  "tuple_to_list/1": (tuple) => {
+    if (!Type.isTuple(tuple)) {
+      Interpreter.raiseArgumentError(
+        "errors were found at the given arguments:\n\n  * 1st argument: not a tuple\n",
+      );
+    }
+
+    return Type.list(tuple.data);
+  },
+  // end tuple_to_list/1
+  // deps: []
 };
 
 export default Erlang;

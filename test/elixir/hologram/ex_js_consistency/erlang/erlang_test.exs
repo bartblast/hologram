@@ -250,4 +250,18 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
       end
     end
   end
+
+  describe "tuple_to_list/1" do
+    test "returns a list corresponding to the given tuple" do
+      assert :erlang.tuple_to_list({1, 2, 3}) == [1, 2, 3]
+    end
+
+    test "raises ArgumentError if the argument is not a tuple" do
+      assert_raise ArgumentError,
+                   "errors were found at the given arguments:\n\n  * 1st argument: not a tuple\n",
+                   fn ->
+                     :erlang.tuple_to_list(build_value(:abc))
+                   end
+    end
+  end
 end

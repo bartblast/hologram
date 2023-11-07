@@ -1260,3 +1260,23 @@ describe("tl/1", () => {
     });
   });
 });
+
+describe("tuple_to_list/1", () => {
+  it("returns a list corresponding to the given tuple", () => {
+    const data = [Type.integer(1), Type.integer(2), Type.integer(3)];
+    const tuple = Type.tuple(data);
+
+    const result = Erlang["tuple_to_list/1"](tuple);
+    const expected = Type.list(data);
+
+    assert.deepStrictEqual(result, expected);
+  });
+
+  it("raises ArgumentError if the argument is not a tuple", () => {
+    assertBoxedError(
+      () => Erlang["tuple_to_list/1"](Type.atom("abc")),
+      "ArgumentError",
+      "errors were found at the given arguments:\n\n  * 1st argument: not a tuple\n",
+    );
+  });
+});
