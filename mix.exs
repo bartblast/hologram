@@ -36,14 +36,15 @@ defmodule Hologram.MixProject do
   defp deps do
     [
       {:beam_file, "~> 0.5"},
+      {:interceptor, "~> 0.5"},
+      {:libgraph, "~> 0.16"},
+      {:phoenix, "~> 1.7"},
+      {:mox, "~> 1.0", only: :test},
+      {:ex_check, "~> 0.15", only: [:dev, :test], runtime: false},
       {:credo, "~> 1.0", only: [:dev, :test], runtime: false},
       {:dialyxir, "~> 1.0", only: [:dev, :test], runtime: false},
       {:doctor, "~> 0.21", only: [:dev, :test], runtime: false},
-      {:interceptor, "~> 0.5"},
-      {:libgraph, "~> 0.16"},
       {:mix_audit, "~> 2.0", only: [:dev, :test], runtime: false},
-      {:mox, "~> 1.0", only: :test},
-      {:phoenix, "~> 1.7"},
       {:sobelow, "~> 0.12", only: [:dev, :test], runtime: false}
     ]
   end
