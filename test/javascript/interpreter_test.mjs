@@ -2061,10 +2061,12 @@ describe("matchOperator()", () => {
         ]),
         vars,
       );
+
       const expected = Type.bitstring([
         Type.bitstringSegment(Type.integer(1), {type: "integer"}),
         Type.bitstringSegment(Type.integer(2), {type: "integer"}),
       ]);
+
       assert.deepStrictEqual(result, expected);
     });
 
