@@ -53,6 +53,29 @@ export default class Bitstring {
     }
   }
 
+  static resolveSegmentUnit(segment) {
+    if (
+      ["binary", "float", "integer"].includes(segment.type) &&
+      segment.unit !== null
+    ) {
+      return segment.unit.value;
+    }
+
+    switch (segment.type) {
+      case "binary":
+        return 8n;
+
+      case "float":
+      case "integer":
+        return 1n;
+
+      default:
+        throw new HologramInterpreterError(
+          `resolving ${segment.type} segment unit is not yet implemented in Hologram`,
+        );
+    }
+  }
+
   static toText(bitstring) {
     const byteArray = Bitstring.#convertBitArrayToByteArray(bitstring.bits);
     const decoder = new TextDecoder("utf-8");
@@ -136,7 +159,7 @@ export default class Bitstring {
 
     const value = segment.value.value;
     const size = Bitstring.resolveSegmentSize(segment);
-    const unit = Bitstring.#resolveUnitModifierValue(segment, 1n);
+    const unit = Bitstring.resolveSegmentUnit(segment);
 
     return Bitstring.#convertDataToBitArray(value, size, unit);
   }
@@ -149,7 +172,7 @@ export default class Bitstring {
     ).map((byte) => Bitstring.#convertDataToBitArray(BigInt(byte), 8n, 1n));
 
     if (segment.size !== null) {
-      const unit = Bitstring.#resolveUnitModifierValue(segment, 8n);
+      const unit = Bitstring.resolveSegmentUnit({...segment, type: "binary"});
       const numBits = segment.size.value * unit;
 
       return Utils.concatUint8Arrays(bitArrays).subarray(0, Number(numBits));
@@ -253,14 +276,6 @@ export default class Bitstring {
     Interpreter.raiseArgumentError(message);
   }
 
-  static #resolveUnitModifierValue(segment, defaultValue) {
-    if (segment.unit === null) {
-      return defaultValue;
-    } else {
-      return segment.unit;
-    }
-  }
-
   static #validateBinarySegment(segment, index) {
     if (
       segment.value.type === "bitstring" &&
@@ -315,7 +330,7 @@ export default class Bitstring {
     }
 
     const size = Bitstring.resolveSegmentSize(segment);
-    const unit = Bitstring.#resolveUnitModifierValue(segment, 1n);
+    const unit = Bitstring.resolveSegmentUnit(segment);
     const numBits = size * unit;
 
     if (![16n, 32n, 64n].includes(numBits)) {

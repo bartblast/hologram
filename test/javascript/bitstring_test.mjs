@@ -774,7 +774,7 @@ describe("merge()", () => {
   });
 });
 
-describe.only("resolveSegmentSize()", () => {
+describe("resolveSegmentSize()", () => {
   it("size in float segment is specified", () => {
     const segment = Type.bitstringSegment(Type.float(1.23), {
       type: "float",
@@ -825,6 +825,80 @@ describe.only("resolveSegmentSize()", () => {
       () => Bitstring.resolveSegmentSize(segment),
       HologramInterpreterError,
       "resolving binary segment size is not yet implemented in Hologram",
+    );
+  });
+});
+
+describe("resolveSegmentUnit()", () => {
+  it("unit in binary segment is specified", () => {
+    const segment = Type.bitstringSegment(Type.bitstring("abc"), {
+      type: "binary",
+      unit: Type.integer(3),
+    });
+
+    assert.equal(Bitstring.resolveSegmentUnit(segment), 3n);
+  });
+
+  it("unit in binary segment is not specified", () => {
+    const segment = Type.bitstringSegment(Type.bitstring("abc"), {
+      type: "binary",
+    });
+
+    assert.equal(Bitstring.resolveSegmentUnit(segment), 8n);
+  });
+
+  it("unit in float segment is specified", () => {
+    const segment = Type.bitstringSegment(Type.float(1.23), {
+      type: "float",
+      unit: Type.integer(3),
+    });
+
+    assert.equal(Bitstring.resolveSegmentUnit(segment), 3n);
+  });
+
+  it("unit in float segment is not specified", () => {
+    const segment = Type.bitstringSegment(Type.float(1.23), {type: "float"});
+
+    assert.equal(Bitstring.resolveSegmentUnit(segment), 1n);
+  });
+
+  it("unit in integer segment is specified", () => {
+    const segment = Type.bitstringSegment(Type.integer(123), {
+      type: "integer",
+      unit: Type.integer(3),
+    });
+
+    assert.equal(Bitstring.resolveSegmentUnit(segment), 3n);
+  });
+
+  it("unit in integer segment is not specified", () => {
+    const segment = Type.bitstringSegment(Type.integer(123), {type: "integer"});
+
+    assert.equal(Bitstring.resolveSegmentUnit(segment), 1n);
+  });
+
+  it("unit in segment of type other than binary, float or integer is specified", () => {
+    const segment = Type.bitstringSegment(Type.bitstring([1, 0, 1]), {
+      type: "bitstring",
+      unit: Type.integer(3),
+    });
+
+    assert.throw(
+      () => Bitstring.resolveSegmentUnit(segment),
+      HologramInterpreterError,
+      "resolving bitstring segment unit is not yet implemented in Hologram",
+    );
+  });
+
+  it("unit in segment of type other than binary, float or integer is not specified", () => {
+    const segment = Type.bitstringSegment(Type.bitstring([1, 0, 1]), {
+      type: "bitstring",
+    });
+
+    assert.throw(
+      () => Bitstring.resolveSegmentUnit(segment),
+      HologramInterpreterError,
+      "resolving bitstring segment unit is not yet implemented in Hologram",
     );
   });
 });
