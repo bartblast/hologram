@@ -19,7 +19,7 @@ permissions:
 jobs:
   lib_test:
     runs-on: ubuntu-latest
-    name: Test on OTP ${{ matrix.otp }} / Elixir ${{ matrix.elixir }}
+    name: Lib Test on OTP ${{ matrix.otp }} / Elixir ${{ matrix.elixir }}
     strategy:
       # Specify the OTP and Elixir versions to use when building
       # and running the workflow steps.
@@ -170,7 +170,7 @@ jobs:
 
   feature_test:
     runs-on: ubuntu-latest
-    name: Test on OTP ${{ matrix.otp }} / Elixir ${{ matrix.elixir }}
+    name: Feature Test on OTP ${{ matrix.otp }} / Elixir ${{ matrix.elixir }}
     defaults:
       run:
         working-directory: test/features
