@@ -285,6 +285,15 @@ const Erlang = {
   // end is_function/1
   // deps: []
 
+  // start is_function/2
+  "is_function/2": (term, arity) => {
+    return Type.boolean(
+      Type.isAnonymousFunction(term) && term.arity === Number(arity.value),
+    );
+  },
+  // end is_function/2
+  // deps: []
+
   // start is_integer/1
   "is_integer/1": (term) => {
     return Type.boolean(Type.isInteger(term));
