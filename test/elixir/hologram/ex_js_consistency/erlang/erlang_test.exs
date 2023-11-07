@@ -7,6 +7,56 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
 
   use Hologram.Test.BasicCase, async: true
 
+  describe ">=/2" do
+    test "returns true when left float argument is greater than right float argument" do
+      assert :erlang.>=(5.6, 3.2) == true
+    end
+
+    test "returns true when left float argument is greater than right integer argument" do
+      assert :erlang.>=(5.6, 3) == true
+    end
+
+    test "returns true when left integer argument is greater than right float argument" do
+      assert :erlang.>=(5, 3.2) == true
+    end
+
+    test "returns true when left integer argument is greater than right integer argument" do
+      assert :erlang.>=(5, 3) == true
+    end
+
+    test "returns true when left float argument is equal to right float argument" do
+      assert :erlang.>=(3.0, 3.0) == true
+    end
+
+    test "returns true when left float argument is equal to right integer argument" do
+      assert :erlang.>=(3.0, 3) == true
+    end
+
+    test "returns true when left integer argument is equal to right float argument" do
+      assert :erlang.>=(3, 3.0) == true
+    end
+
+    test "returns true when left integer argument is equal to right integer argument" do
+      assert :erlang.>=(3, 3) == true
+    end
+
+    test "returns false when left float argument is smaller than right float argument" do
+      assert :erlang.>=(3.2, 5.6) == false
+    end
+
+    test "returns false when left float argument is smaller than right integer argument" do
+      assert :erlang.>=(3.2, 5) == false
+    end
+
+    test "returns false when left integer argument is smaller than right float argument" do
+      assert :erlang.>=(3, 5.6) == false
+    end
+
+    test "returns false when left integer argument is smaller than right integer argument" do
+      assert :erlang.>=(3, 5) == false
+    end
+  end
+
   describe "andalso/2" do
     test "returns false if the first argument is false" do
       assert :erlang.andalso(false, :abc) == false

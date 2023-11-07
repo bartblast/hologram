@@ -521,7 +521,7 @@ describe("==/2", () => {
 });
 
 describe(">/2", () => {
-  it("returns boxed true when left float argument is greater than right float argument", () => {
+  it("returns true when left float argument is greater than right float argument", () => {
     const left = Type.float(5.6);
     const right = Type.float(3.2);
     const result = Erlang[">/2"](left, right);
@@ -529,7 +529,7 @@ describe(">/2", () => {
     assertBoxedTrue(result);
   });
 
-  it("returns boxed true when left float argument is greater than right integer argument", () => {
+  it("returns true when left float argument is greater than right integer argument", () => {
     const left = Type.float(5.6);
     const right = Type.integer(3);
     const result = Erlang[">/2"](left, right);
@@ -537,7 +537,7 @@ describe(">/2", () => {
     assertBoxedTrue(result);
   });
 
-  it("returns boxed true when left integer argument is greater than right float argument", () => {
+  it("returns true when left integer argument is greater than right float argument", () => {
     const left = Type.integer(5);
     const right = Type.float(3.2);
     const result = Erlang[">/2"](left, right);
@@ -545,7 +545,7 @@ describe(">/2", () => {
     assertBoxedTrue(result);
   });
 
-  it("returns boxed true when left integer argument is greater than right integer argument", () => {
+  it("returns true when left integer argument is greater than right integer argument", () => {
     const left = Type.integer(5);
     const right = Type.integer(3);
     const result = Erlang[">/2"](left, right);
@@ -553,7 +553,7 @@ describe(">/2", () => {
     assertBoxedTrue(result);
   });
 
-  it("returns boxed false when left float argument is equal to right float argument", () => {
+  it("returns false when left float argument is equal to right float argument", () => {
     const left = Type.float(3.0);
     const right = Type.float(3.0);
     const result = Erlang[">/2"](left, right);
@@ -561,7 +561,7 @@ describe(">/2", () => {
     assertBoxedFalse(result);
   });
 
-  it("returns boxed false when left float argument is equal to right integer argument", () => {
+  it("returns false when left float argument is equal to right integer argument", () => {
     const left = Type.float(3.0);
     const right = Type.integer(3);
     const result = Erlang[">/2"](left, right);
@@ -569,7 +569,7 @@ describe(">/2", () => {
     assertBoxedFalse(result);
   });
 
-  it("returns boxed false when left integer argument is equal to right float argument", () => {
+  it("returns false when left integer argument is equal to right float argument", () => {
     const left = Type.integer(3);
     const right = Type.float(3.0);
     const result = Erlang[">/2"](left, right);
@@ -577,7 +577,7 @@ describe(">/2", () => {
     assertBoxedFalse(result);
   });
 
-  it("returns boxed false when left integer argument is equal to right integer argument", () => {
+  it("returns false when left integer argument is equal to right integer argument", () => {
     const left = Type.integer(3);
     const right = Type.integer(3);
     const result = Erlang[">/2"](left, right);
@@ -585,7 +585,7 @@ describe(">/2", () => {
     assertBoxedFalse(result);
   });
 
-  it("returns boxed false when left float argument is smaller than right float argument", () => {
+  it("returns false when left float argument is smaller than right float argument", () => {
     const left = Type.float(3.2);
     const right = Type.float(5.6);
     const result = Erlang[">/2"](left, right);
@@ -593,7 +593,7 @@ describe(">/2", () => {
     assertBoxedFalse(result);
   });
 
-  it("returns boxed false when left float argument is smaller than right integer argument", () => {
+  it("returns false when left float argument is smaller than right integer argument", () => {
     const left = Type.float(3.2);
     const right = Type.integer(5);
     const result = Erlang[">/2"](left, right);
@@ -601,7 +601,7 @@ describe(">/2", () => {
     assertBoxedFalse(result);
   });
 
-  it("returns boxed false when left integer argument is smaller than right float argument", () => {
+  it("returns false when left integer argument is smaller than right float argument", () => {
     const left = Type.integer(3);
     const right = Type.float(5.6);
     const result = Erlang[">/2"](left, right);
@@ -609,7 +609,7 @@ describe(">/2", () => {
     assertBoxedFalse(result);
   });
 
-  it("returns boxed false when left integer argument is smaller than right integer argument", () => {
+  it("returns false when left integer argument is smaller than right integer argument", () => {
     const left = Type.integer(3);
     const right = Type.integer(5);
     const result = Erlang[">/2"](left, right);
@@ -640,6 +640,132 @@ describe(">/2", () => {
 
     assert.throw(
       () => Erlang[">/2"](left, right),
+      HologramInterpreterError,
+      expectedMessage,
+    );
+  });
+});
+
+describe(">=/2", () => {
+  it("returns true when left float argument is greater than right float argument", () => {
+    const left = Type.float(5.6);
+    const right = Type.float(3.2);
+    const result = Erlang[">=/2"](left, right);
+
+    assertBoxedTrue(result);
+  });
+
+  it("returns true when left float argument is greater than right integer argument", () => {
+    const left = Type.float(5.6);
+    const right = Type.integer(3);
+    const result = Erlang[">=/2"](left, right);
+
+    assertBoxedTrue(result);
+  });
+
+  it("returns true when left integer argument is greater than right float argument", () => {
+    const left = Type.integer(5);
+    const right = Type.float(3.2);
+    const result = Erlang[">=/2"](left, right);
+
+    assertBoxedTrue(result);
+  });
+
+  it("returns true when left integer argument is greater than right integer argument", () => {
+    const left = Type.integer(5);
+    const right = Type.integer(3);
+    const result = Erlang[">=/2"](left, right);
+
+    assertBoxedTrue(result);
+  });
+
+  it("returns true when left float argument is equal to right float argument", () => {
+    const left = Type.float(3.0);
+    const right = Type.float(3.0);
+    const result = Erlang[">=/2"](left, right);
+
+    assertBoxedTrue(result);
+  });
+
+  it("returns true when left float argument is equal to right integer argument", () => {
+    const left = Type.float(3.0);
+    const right = Type.integer(3);
+    const result = Erlang[">=/2"](left, right);
+
+    assertBoxedTrue(result);
+  });
+
+  it("returns true when left integer argument is equal to right float argument", () => {
+    const left = Type.integer(3);
+    const right = Type.float(3.0);
+    const result = Erlang[">=/2"](left, right);
+
+    assertBoxedTrue(result);
+  });
+
+  it("returns true when left integer argument is equal to right integer argument", () => {
+    const left = Type.integer(3);
+    const right = Type.integer(3);
+    const result = Erlang[">=/2"](left, right);
+
+    assertBoxedTrue(result);
+  });
+
+  it("returns false when left float argument is smaller than right float argument", () => {
+    const left = Type.float(3.2);
+    const right = Type.float(5.6);
+    const result = Erlang[">=/2"](left, right);
+
+    assertBoxedFalse(result);
+  });
+
+  it("returns false when left float argument is smaller than right integer argument", () => {
+    const left = Type.float(3.2);
+    const right = Type.integer(5);
+    const result = Erlang[">=/2"](left, right);
+
+    assertBoxedFalse(result);
+  });
+
+  it("returns false when left integer argument is smaller than right float argument", () => {
+    const left = Type.integer(3);
+    const right = Type.float(5.6);
+    const result = Erlang[">=/2"](left, right);
+
+    assertBoxedFalse(result);
+  });
+
+  it("returns false when left integer argument is smaller than right integer argument", () => {
+    const left = Type.integer(3);
+    const right = Type.integer(5);
+    const result = Erlang[">=/2"](left, right);
+
+    assertBoxedFalse(result);
+  });
+
+  it("throws a not yet implemented error for non-integer and non-float left argument", () => {
+    const left = Type.string("abc");
+    const right = Type.integer(2);
+
+    const expectedMessage =
+      ':erlang.>=/2 currently supports only floats and integers, left = "abc", right = 2';
+
+    assert.throw(
+      () => Erlang[">=/2"](left, right),
+      HologramInterpreterError,
+      expectedMessage,
+    );
+  });
+
+  it("throws a not yet implemented error for non-integer and non-float right argument", () => {
+    const left = Type.integer(2);
+    const right = Type.string("abc");
+
+    const expectedMessage =
+      ':erlang.>=/2 currently supports only floats and integers, left = 2, right = "abc"';
+
+    assert.throw(
+      () => Erlang[">=/2"](left, right),
       HologramInterpreterError,
       expectedMessage,
     );
