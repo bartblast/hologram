@@ -774,6 +774,61 @@ describe("merge()", () => {
   });
 });
 
+describe.only("resolveSegmentSize()", () => {
+  it("size in float segment is specified", () => {
+    const segment = Type.bitstringSegment(Type.float(1.23), {
+      type: "float",
+      size: Type.integer(7),
+    });
+
+    assert.equal(Bitstring.resolveSegmentSize(segment), 7n);
+  });
+
+  it("size in float segment is not specified", () => {
+    const segment = Type.bitstringSegment(Type.float(1.23), {type: "float"});
+
+    assert.equal(Bitstring.resolveSegmentSize(segment), 64n);
+  });
+
+  it("size in integer segment is specified", () => {
+    const segment = Type.bitstringSegment(Type.integer(123), {
+      type: "integer",
+      size: Type.integer(7),
+    });
+
+    assert.equal(Bitstring.resolveSegmentSize(segment), 7n);
+  });
+
+  it("size in integer segment is not specified", () => {
+    const segment = Type.bitstringSegment(Type.integer(123), {type: "integer"});
+
+    assert.equal(Bitstring.resolveSegmentSize(segment), 8n);
+  });
+
+  it("size in segment of type other than float or integer is specified", () => {
+    const segment = Type.bitstringSegment(Type.string("abc"), {
+      type: "binary",
+      size: Type.integer(7),
+    });
+
+    assert.throw(
+      () => Bitstring.resolveSegmentSize(segment),
+      HologramInterpreterError,
+      "resolving binary segment size is not yet implemented in Hologram",
+    );
+  });
+
+  it("size in segment of type other than float or integer is not specified", () => {
+    const segment = Type.bitstringSegment(Type.string("abc"), {type: "binary"});
+
+    assert.throw(
+      () => Bitstring.resolveSegmentSize(segment),
+      HologramInterpreterError,
+      "resolving binary segment size is not yet implemented in Hologram",
+    );
+  });
+});
+
 describe("toText()", () => {
   it("converts the bitstring to UTF-8 text if the number of its bits is divisible by 8", () => {
     const bitstring = Type.bitstring("全息图");

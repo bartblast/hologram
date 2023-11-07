@@ -34,6 +34,25 @@ export default class Bitstring {
     return Type.bitstring(bits);
   }
 
+  static resolveSegmentSize(segment) {
+    if (["float", "integer"].includes(segment.type) && segment.size !== null) {
+      return segment.size.value;
+    }
+
+    switch (segment.type) {
+      case "float":
+        return 64n;
+
+      case "integer":
+        return 8n;
+
+      default:
+        throw new HologramInterpreterError(
+          `resolving ${segment.type} segment size is not yet implemented in Hologram`,
+        );
+    }
+  }
+
   static toText(bitstring) {
     const byteArray = Bitstring.#convertBitArrayToByteArray(bitstring.bits);
     const decoder = new TextDecoder("utf-8");
@@ -116,7 +135,7 @@ export default class Bitstring {
     }
 
     const value = segment.value.value;
-    const size = Bitstring.#resolveSizeModifierValue(segment, 8n);
+    const size = Bitstring.resolveSegmentSize(segment);
     const unit = Bitstring.#resolveUnitModifierValue(segment, 1n);
 
     return Bitstring.#convertDataToBitArray(value, size, unit);
@@ -234,14 +253,6 @@ export default class Bitstring {
     Interpreter.raiseArgumentError(message);
   }
 
-  static #resolveSizeModifierValue(segment, defaultValue) {
-    if (segment.size === null) {
-      return defaultValue;
-    } else {
-      return segment.size.value;
-    }
-  }
-
   static #resolveUnitModifierValue(segment, defaultValue) {
     if (segment.unit === null) {
       return defaultValue;
@@ -303,7 +314,7 @@ export default class Bitstring {
       );
     }
 
-    const size = Bitstring.#resolveSizeModifierValue(segment, 64n);
+    const size = Bitstring.resolveSegmentSize(segment);
     const unit = Bitstring.#resolveUnitModifierValue(segment, 1n);
     const numBits = size * unit;
 
