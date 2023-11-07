@@ -21,7 +21,7 @@ The Client communicates with the Server using WebSockets. There is no boilerplat
 
 ## I want to see some code!
 
-To see how a Hologram app is structured, and see some actual code, take a look at the Hologram’s test app: [hologram/test/e2e](https://github.com/bartblast/hologram/tree/master/test/e2e)
+To see how a Hologram app is structured, and see some actual code, take a look at the Hologram’s test app: [hologram/test/features](https://github.com/bartblast/hologram/tree/master/test/features)
 
 ## Basic example
 
@@ -94,7 +94,7 @@ Then I tried Crystal, but it was very hard to work with its AST. Then I moved to
 Then I found Elixir in 2018 and fell in love with it. I started work on Hologram in the summer of 2020.
 
 ## Roadmap
-This is a work in progress (although usable and used in production). To check what works and what is planned - take a look at the roadmap in the readme at [Github bartblast](https://github.com/bartblast/hologram#readme)/hologram](https://github.com/bartblast/hologram#readme)
+This is a work in progress (although usable and used in production). To check what works and what is planned - take a look at the roadmap in the readme at [Github bartblast/hologram](https://github.com/bartblast/hologram#readme)
 
 To meet the objective of being a very friendly developer experience, Hologram will provide out-of-the-box such things as UI component library (CSS framework agnostic),
 authentication, authorization, easy debugging (with time travel), caching, localization and some other features that you typically use in a web app.
