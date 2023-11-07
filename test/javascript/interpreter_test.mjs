@@ -1936,144 +1936,159 @@ describe("matchOperator()", () => {
     });
   });
 
-  // TODO: finish overhaul, remember about Elixir consistency tests
-  // describe("bitstring type", () => {
-  //   it("left bitstring == right bitstring", () => {
-  //     const result = Interpreter.matchOperator(
-  //       Type.bitstring([
-  //         Type.bitstringSegment(Type.integer(1), {type: "integer"}),
-  //       ]),
-  //       Type.bitstringPattern([
-  //         Type.bitstringSegment(Type.integer(1), {type: "integer"}),
-  //       ]),
-  //       vars,
-  //     );
-  //     const expected = Type.bitstring([
-  //       Type.bitstringSegment(Type.integer(1), {type: "integer"}),
-  //     ]);
-  //     assert.deepStrictEqual(result, expected);
-  //   });
-  //   it("left bitstring != right bitstring", () => {
-  //     const myBitstring = Type.bitstring([
-  //       Type.bitstringSegment(Type.integer(2), {type: "integer"}),
-  //     ]);
-  //     assertMatchError(
-  //       () =>
-  //         Interpreter.matchOperator(
-  //           myBitstring,
-  //           Type.bitstringPattern([
-  //             Type.bitstringSegment(Type.integer(1), {type: "integer"}),
-  //           ]),
-  //           vars,
-  //         ),
-  //       myBitstring,
-  //     );
-  //   });
-  //   it("left bitstring != right non-bitstring", () => {
-  //     const myAtom = Type.atom("abc");
-  //     assertMatchError(
-  //       () =>
-  //         Interpreter.matchOperator(
-  //           myAtom,
-  //           Type.bitstring([
-  //             Type.bitstringSegment(Type.integer(1), {type: "integer"}),
-  //           ]),
-  //           vars,
-  //         ),
-  //       myAtom,
-  //     );
-  //   });
-  //   it("literal bitstring segments", () => {
-  //     const result = Interpreter.matchOperator(
-  //       Type.bitstring([
-  //         Type.bitstringSegment(Type.integer(1), {
-  //           type: "integer",
-  //           size: Type.integer(1),
-  //         }),
-  //         Type.bitstringSegment(Type.integer(0), {
-  //           type: "integer",
-  //           size: Type.integer(1),
-  //         }),
-  //       ]),
-  //       Type.bitstringPattern([
-  //         Type.bitstringSegment(Type.integer(1), {
-  //           type: "integer",
-  //           size: Type.integer(1),
-  //         }),
-  //         Type.bitstringSegment(Type.integer(0), {
-  //           type: "integer",
-  //           size: Type.integer(1),
-  //         }),
-  //       ]),
-  //       vars,
-  //     );
-  //     const expected = Type.bitstring([
-  //       Type.bitstringSegment(Type.integer(1), {
-  //         type: "integer",
-  //         size: Type.integer(1),
-  //       }),
-  //       Type.bitstringSegment(Type.integer(0), {
-  //         type: "integer",
-  //         size: Type.integer(1),
-  //       }),
-  //     ]);
-  //     assert.deepStrictEqual(result, expected);
-  //   });
-  //   it("literal float segments", () => {
-  //     const result = Interpreter.matchOperator(
-  //       Type.bitstring([
-  //         Type.bitstringSegment(Type.float(1.0), {type: "float"}),
-  //         Type.bitstringSegment(Type.float(2.0), {type: "float"}),
-  //       ]),
-  //       Type.bitstringPattern([
-  //         Type.bitstringSegment(Type.float(1.0), {type: "float"}),
-  //         Type.bitstringSegment(Type.float(2.0), {type: "float"}),
-  //       ]),
-  //       vars,
-  //     );
-  //     const expected = Type.bitstring([
-  //       Type.bitstringSegment(Type.float(1.0), {type: "float"}),
-  //       Type.bitstringSegment(Type.float(2.0), {type: "float"}),
-  //     ]);
-  //     assert.deepStrictEqual(result, expected);
-  //   });
-  //   it("literal integer segments", () => {
-  //     const result = Interpreter.matchOperator(
-  //       Type.bitstring([
-  //         Type.bitstringSegment(Type.integer(1), {type: "integer"}),
-  //         Type.bitstringSegment(Type.integer(2), {type: "integer"}),
-  //       ]),
-  //       Type.bitstringPattern([
-  //         Type.bitstringSegment(Type.integer(1), {type: "integer"}),
-  //         Type.bitstringSegment(Type.integer(2), {type: "integer"}),
-  //       ]),
-  //       vars,
-  //     );
-  //     const expected = Type.bitstring([
-  //       Type.bitstringSegment(Type.integer(1), {type: "integer"}),
-  //       Type.bitstringSegment(Type.integer(2), {type: "integer"}),
-  //     ]);
-  //     assert.deepStrictEqual(result, expected);
-  //   });
-  //   it("literal string segments", () => {
-  //     const result = Interpreter.matchOperator(
-  //       Type.bitstring([
-  //         Type.bitstringSegment(Type.string("aaa"), {type: "utf8"}),
-  //         Type.bitstringSegment(Type.string("bbb"), {type: "utf8"}),
-  //       ]),
-  //       Type.bitstringPattern([
-  //         Type.bitstringSegment(Type.string("aaa"), {type: "utf8"}),
-  //         Type.bitstringSegment(Type.string("bbb"), {type: "utf8"}),
-  //       ]),
-  //       vars,
-  //     );
-  //     const expected = Type.bitstring([
-  //       Type.bitstringSegment(Type.string("aaa"), {type: "utf8"}),
-  //       Type.bitstringSegment(Type.string("bbb"), {type: "utf8"}),
-  //     ]);
-  //     assert.deepStrictEqual(result, expected);
-  //   });
-  // });
+  describe("bitstring type", () => {
+    it("left bitstring == right bitstring", () => {
+      const result = Interpreter.matchOperator(
+        Type.bitstring([
+          Type.bitstringSegment(Type.integer(1), {type: "integer"}),
+        ]),
+        Type.bitstringPattern([
+          Type.bitstringSegment(Type.integer(1), {type: "integer"}),
+        ]),
+        vars,
+      );
+
+      const expected = Type.bitstring([
+        Type.bitstringSegment(Type.integer(1), {type: "integer"}),
+      ]);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("left bitstring != right bitstring", () => {
+      const myBitstring = Type.bitstring([
+        Type.bitstringSegment(Type.integer(2), {type: "integer"}),
+      ]);
+
+      assertMatchError(
+        () =>
+          Interpreter.matchOperator(
+            myBitstring,
+            Type.bitstringPattern([
+              Type.bitstringSegment(Type.integer(1), {type: "integer"}),
+            ]),
+            vars,
+          ),
+        myBitstring,
+      );
+    });
+
+    it("left bitstring != right non-bitstring", () => {
+      const myAtom = Type.atom("abc");
+
+      assertMatchError(
+        () =>
+          Interpreter.matchOperator(
+            myAtom,
+            Type.bitstring([
+              Type.bitstringSegment(Type.integer(1), {type: "integer"}),
+            ]),
+            vars,
+          ),
+        myAtom,
+      );
+    });
+
+    it("literal bitstring segments", () => {
+      const result = Interpreter.matchOperator(
+        Type.bitstring([
+          Type.bitstringSegment(Type.integer(1), {
+            type: "integer",
+            size: Type.integer(1),
+          }),
+          Type.bitstringSegment(Type.integer(0), {
+            type: "integer",
+            size: Type.integer(1),
+          }),
+        ]),
+        Type.bitstringPattern([
+          Type.bitstringSegment(Type.integer(1), {
+            type: "integer",
+            size: Type.integer(1),
+          }),
+          Type.bitstringSegment(Type.integer(0), {
+            type: "integer",
+            size: Type.integer(1),
+          }),
+        ]),
+        vars,
+      );
+
+      const expected = Type.bitstring([
+        Type.bitstringSegment(Type.integer(1), {
+          type: "integer",
+          size: Type.integer(1),
+        }),
+        Type.bitstringSegment(Type.integer(0), {
+          type: "integer",
+          size: Type.integer(1),
+        }),
+      ]);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("literal float segments", () => {
+      const result = Interpreter.matchOperator(
+        Type.bitstring([
+          Type.bitstringSegment(Type.float(1.0), {type: "float"}),
+          Type.bitstringSegment(Type.float(2.0), {type: "float"}),
+        ]),
+        Type.bitstringPattern([
+          Type.bitstringSegment(Type.float(1.0), {type: "float"}),
+          Type.bitstringSegment(Type.float(2.0), {type: "float"}),
+        ]),
+        vars,
+      );
+
+      const expected = Type.bitstring([
+        Type.bitstringSegment(Type.float(1.0), {type: "float"}),
+        Type.bitstringSegment(Type.float(2.0), {type: "float"}),
+      ]);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("literal integer segments", () => {
+      const result = Interpreter.matchOperator(
+        Type.bitstring([
+          Type.bitstringSegment(Type.integer(1), {type: "integer"}),
+          Type.bitstringSegment(Type.integer(2), {type: "integer"}),
+        ]),
+        Type.bitstringPattern([
+          Type.bitstringSegment(Type.integer(1), {type: "integer"}),
+          Type.bitstringSegment(Type.integer(2), {type: "integer"}),
+        ]),
+        vars,
+      );
+      const expected = Type.bitstring([
+        Type.bitstringSegment(Type.integer(1), {type: "integer"}),
+        Type.bitstringSegment(Type.integer(2), {type: "integer"}),
+      ]);
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("literal string segments", () => {
+      const result = Interpreter.matchOperator(
+        Type.bitstring([
+          Type.bitstringSegment(Type.string("aaa"), {type: "utf8"}),
+          Type.bitstringSegment(Type.string("bbb"), {type: "utf8"}),
+        ]),
+        Type.bitstringPattern([
+          Type.bitstringSegment(Type.string("aaa"), {type: "utf8"}),
+          Type.bitstringSegment(Type.string("bbb"), {type: "utf8"}),
+        ]),
+        vars,
+      );
+
+      const expected = Type.bitstring([
+        Type.bitstringSegment(Type.string("aaa"), {type: "utf8"}),
+        Type.bitstringSegment(Type.string("bbb"), {type: "utf8"}),
+      ]);
+
+      assert.deepStrictEqual(result, expected);
+    });
+  });
 
   // TODO: finish overhaul, remember about Elixir consistency tests
   // describe("cons pattern", () => {

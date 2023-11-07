@@ -35,49 +35,48 @@ defmodule Hologram.ExJsConsistency.MatchOperatorTest do
     end
   end
 
-  # TODO: finish overhaul, remember about JavaScript interpreter tests
-  # describe "bistring type" do
-  #   test "left bitstring == right bitstring" do
-  #     result = <<1>> = <<1>>
-  #     assert result == <<1>>
-  #   end
+  describe "bistring type" do
+    test "left bitstring == right bitstring" do
+      result = <<1::integer>> = <<1::integer>>
+      assert result == <<1::integer>>
+    end
 
-  #   test "left bitstring != right bitstring" do
-  #     assert_raise MatchError, "no match of right hand side value: <<2>>", fn ->
-  #       <<1>> = <<2>>
-  #     end
-  #   end
+    test "left bitstring != right bitstring" do
+      assert_raise MatchError, "no match of right hand side value: <<2>>", fn ->
+        <<1::integer>> = <<2::integer>>
+      end
+    end
 
-  #   test "left bitstring != right non-bitstring" do
-  #     assert_raise MatchError, "no match of right hand side value: :abc", fn ->
-  #       <<1>> = build_value(:abc)
-  #     end
-  #   end
+    test "left bitstring != right non-bitstring" do
+      assert_raise MatchError, "no match of right hand side value: :abc", fn ->
+        <<1::integer>> = build_value(:abc)
+      end
+    end
 
-  #   test "literal bitstring segments" do
-  #     result = <<1::1, 0::1>> = <<1::1, 0::1>>
+    test "literal bitstring segments" do
+      result = <<1::1, 0::1>> = <<1::1, 0::1>>
 
-  #     assert result == <<1::1, 0::1>>
-  #   end
+      assert result == <<1::1, 0::1>>
+    end
 
-  #   test "literal float segments" do
-  #     result = <<1.0, 2.0>> = <<1.0, 2.0>>
+    test "literal float segments" do
+      result = <<1.0::float, 2.0::float>> = <<1.0::float, 2.0::float>>
 
-  #     assert result == <<1.0, 2.0>>
-  #   end
+      assert result == <<1.0::float, 2.0::float>>
+    end
 
-  #   test "literal integer segments" do
-  #     result = <<1, 2>> = <<1, 2>>
+    test "literal integer segments" do
+      result = <<1::integer, 2::integer>> = <<1::integer, 2::integer>>
 
-  #     assert result == <<1, 2>>
-  #   end
+      assert result == <<1::integer, 2::integer>>
+    end
 
-  #   test "literal string segments" do
-  #     result = <<"aaa", "bbb">> = <<"aaa", "bbb">>
+    test "literal string segments" do
+      result = <<"aaa"::utf8, "bbb"::utf8>> = <<"aaa"::utf8, "bbb"::utf8>>
 
-  #     assert result == <<"aaa", "bbb">>
-  #   end
-  # end
+      assert result == <<"aaa"::utf8, "bbb"::utf8>>
+    end
+  end
 
   # TODO: finish overhaul, remember about JavaScript interpreter tests
   # describe "cons pattern" do
