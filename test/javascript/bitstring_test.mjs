@@ -584,6 +584,68 @@ describe("from()", () => {
     });
   });
 
+  describe("unsigned signedness modifier", () => {
+    it("with bitstring value", () => {
+      const segment = Type.bitstringSegment(Type.bitstring([1, 0, 1, 0]), {
+        type: "bitstring",
+        signedness: "unsigned",
+      });
+
+      const expectedMessage = `construction of binary failed: segment 1 of type 'integer': expected an integer but got: {"type":"bitstring","bits":{"0":1,"1":0,"2":1,"3":0}}`;
+
+      assertBoxedError(
+        () => Bitstring.from([segment]),
+        "ArgumentError",
+        expectedMessage,
+      );
+    });
+
+    it("with float value", () => {
+      const segment = Type.bitstringSegment(Type.float(123.45), {
+        type: "float",
+        signedness: "unsigned",
+      });
+
+      const result = Bitstring.from([segment]);
+
+      const expected = Bitstring.from([
+        Type.bitstringSegment(Type.float(123.45), {type: "float"}),
+      ]);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("with integer value", () => {
+      const segment = Type.bitstringSegment(Type.integer(123), {
+        type: "integer",
+        signedness: "unsigned",
+      });
+
+      const result = Bitstring.from([segment]);
+
+      const expected = Bitstring.from([
+        Type.bitstringSegment(Type.integer(123), {type: "integer"}),
+      ]);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("with string value", () => {
+      const segment = Type.bitstringSegment(Type.string("abc"), {
+        type: "utf8",
+        signedness: "unsigned",
+      });
+
+      const expectedMessage = `construction of binary failed: segment 1 of type 'integer': expected an integer but got: "abc"`;
+
+      assertBoxedError(
+        () => Bitstring.from([segment]),
+        "ArgumentError",
+        expectedMessage,
+      );
+    });
+  });
+
   describe("utf8 type modifier", () => {
     it("with bitstring value", () => {
       // ?a == 97 == 0b01100001

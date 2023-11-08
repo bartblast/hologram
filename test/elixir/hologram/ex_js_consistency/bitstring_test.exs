@@ -36,6 +36,10 @@ defmodule Hologram.ExJsConsistency.BitstringTest do
     <<value::signed>>
   end
 
+  defp build_from_value_with_unsigned_signedness_modifier(value) do
+    <<value::signed>>
+  end
+
   defp build_from_value_with_utf8_type_modifier(value) do
     <<value::utf8>>
   end
@@ -338,6 +342,34 @@ defmodule Hologram.ExJsConsistency.BitstringTest do
                    "construction of binary failed: segment 1 of type 'integer': expected an integer but got: \"abc\"",
                    fn ->
                      build_from_value_with_signed_signedness_modifier("abc")
+                   end
+    end
+  end
+
+  describe "unsigned signedness modifier" do
+    test "with bitstring value" do
+      assert_raise ArgumentError,
+                   "construction of binary failed: segment 1 of type 'integer': expected an integer but got: <<10::size(4)>>",
+                   fn ->
+                     build_from_value_with_unsigned_signedness_modifier(
+                       <<1::1, 0::1, 1::1, 0::1>>
+                     )
+                   end
+    end
+
+    test "with float value" do
+      assert <<123.45::unsigned>> == <<123.45>>
+    end
+
+    test "with integer value" do
+      assert <<123::unsigned>> == <<123>>
+    end
+
+    test "with string value" do
+      assert_raise ArgumentError,
+                   "construction of binary failed: segment 1 of type 'integer': expected an integer but got: \"abc\"",
+                   fn ->
+                     build_from_value_with_unsigned_signedness_modifier("abc")
                    end
     end
   end

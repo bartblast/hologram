@@ -327,6 +327,15 @@ export default class Bitstring {
       );
     }
 
+    if (segment.signedness !== null) {
+      Bitstring.#raiseTypeMismatchError(
+        index,
+        "integer",
+        "an integer",
+        segment.value,
+      );
+    }
+
     return true;
   }
 
