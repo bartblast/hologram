@@ -6,6 +6,19 @@ import Type from "./type.mjs";
 import Utils from "./utils.mjs";
 
 export default class Bitstring {
+  static buildBigIntFromUnsignedBitArray(bitArray) {
+    const numBits = bitArray.length;
+    let result = 0n;
+
+    for (let i = 0; i < numBits; ++i) {
+      if (bitArray[i] === 1) {
+        result = Bitstring.#putBigIntBit(result, BigInt(numBits - 1 - i));
+      }
+    }
+
+    return result;
+  }
+
   static from(segments) {
     const bitArrays = segments.map((segment, index) => {
       Bitstring.#validateSegment(segment, index + 1);
@@ -194,7 +207,7 @@ export default class Bitstring {
     for (let i = 0; i < numBytes; ++i) {
       for (let j = 0; j < 8; ++j) {
         if (bitArray[i * 8 + j] === 1) {
-          byteArray[i] = Bitstring.#putBit(byteArray[i], 7 - j);
+          byteArray[i] = Bitstring.#putByteBit(byteArray[i], 7 - j);
         }
       }
     }
@@ -203,8 +216,6 @@ export default class Bitstring {
   }
 
   static #convertDataToBitArray(data, size, unit) {
-    console.dir(size);
-    console.dir(unit);
     // clamp to size number of bits
     const numBits = size * unit;
     const bitmask = 2n ** numBits - 1n;
@@ -253,7 +264,11 @@ export default class Bitstring {
     }
   }
 
-  static #putBit(value, position) {
+  static #putBigIntBit(value, position) {
+    return value | (1n << position);
+  }
+
+  static #putByteBit(value, position) {
     return value | (1 << position);
   }
 
