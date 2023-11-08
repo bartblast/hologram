@@ -58,7 +58,7 @@ export default class Bitstring {
       ["binary", "float", "integer"].includes(segment.type) &&
       segment.unit !== null
     ) {
-      return segment.unit.value;
+      return segment.unit;
     }
 
     switch (segment.type) {
@@ -203,6 +203,8 @@ export default class Bitstring {
   }
 
   static #convertDataToBitArray(data, size, unit) {
+    console.dir(size);
+    console.dir(unit);
     // clamp to size number of bits
     const numBits = size * unit;
     const bitmask = 2n ** numBits - 1n;

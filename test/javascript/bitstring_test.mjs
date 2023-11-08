@@ -833,7 +833,7 @@ describe("resolveSegmentUnit()", () => {
   it("unit in binary segment is specified", () => {
     const segment = Type.bitstringSegment(Type.bitstring("abc"), {
       type: "binary",
-      unit: Type.integer(3),
+      unit: 3n,
     });
 
     assert.equal(Bitstring.resolveSegmentUnit(segment), 3n);
@@ -850,7 +850,7 @@ describe("resolveSegmentUnit()", () => {
   it("unit in float segment is specified", () => {
     const segment = Type.bitstringSegment(Type.float(1.23), {
       type: "float",
-      unit: Type.integer(3),
+      unit: 3n,
     });
 
     assert.equal(Bitstring.resolveSegmentUnit(segment), 3n);
@@ -865,7 +865,7 @@ describe("resolveSegmentUnit()", () => {
   it("unit in integer segment is specified", () => {
     const segment = Type.bitstringSegment(Type.integer(123), {
       type: "integer",
-      unit: Type.integer(3),
+      unit: 3n,
     });
 
     assert.equal(Bitstring.resolveSegmentUnit(segment), 3n);
@@ -880,7 +880,7 @@ describe("resolveSegmentUnit()", () => {
   it("unit in segment of type other than binary, float or integer is specified", () => {
     const segment = Type.bitstringSegment(Type.bitstring([1, 0, 1]), {
       type: "bitstring",
-      unit: Type.integer(3),
+      unit: 3n,
     });
 
     assert.throw(

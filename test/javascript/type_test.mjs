@@ -131,7 +131,7 @@ describe("bitstringSegment()", () => {
     const result = Type.bitstringSegment(Type.integer(123), {
       endianness: "little",
       signedness: "unsigned",
-      unit: 3,
+      unit: 3n,
       size: Type.integer(8),
       type: "integer",
     });
@@ -140,7 +140,7 @@ describe("bitstringSegment()", () => {
       value: {type: "integer", value: 123n},
       type: "integer",
       size: Type.integer(8),
-      unit: 3,
+      unit: 3n,
       signedness: "unsigned",
       endianness: "little",
     };
