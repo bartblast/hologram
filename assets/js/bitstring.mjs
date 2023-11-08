@@ -354,6 +354,7 @@ export default class Bitstring {
       const message = `construction of binary failed: segment ${index} of type 'float': expected one of the supported sizes 16, 32, or 64 but got: ${Number(
         numBits,
       )}`;
+
       Interpreter.raiseArgumentError(message);
     }
 
@@ -413,6 +414,15 @@ export default class Bitstring {
     if (segment.size !== null || segment.unit !== null) {
       Interpreter.raiseCompileError(
         "size and unit are not supported on utf types",
+      );
+    }
+
+    if (segment.signedness !== null) {
+      Bitstring.#raiseTypeMismatchError(
+        index,
+        "integer",
+        "an integer",
+        segment.value,
       );
     }
 
