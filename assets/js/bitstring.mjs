@@ -327,7 +327,7 @@ export default class Bitstring {
       );
     }
 
-    if (segment.signedness !== null) {
+    if (segment.signedness !== null || segment.size !== null) {
       Bitstring.#raiseTypeMismatchError(
         index,
         "integer",
@@ -360,9 +360,12 @@ export default class Bitstring {
     const numBits = size * unit;
 
     if (![16n, 32n, 64n].includes(numBits)) {
-      const message = `construction of binary failed: segment ${index} of type 'float': expected one of the supported sizes 16, 32, or 64 but got: ${Number(
-        numBits,
-      )}`;
+      Bitstring.#raiseTypeMismatchError(
+        index,
+        "integer",
+        "an integer",
+        segment.value,
+      );
 
       Interpreter.raiseArgumentError(message);
     }
@@ -420,13 +423,11 @@ export default class Bitstring {
       );
     }
 
-    if (segment.size !== null || segment.unit !== null) {
-      Interpreter.raiseCompileError(
-        "size and unit are not supported on utf types",
-      );
-    }
-
-    if (segment.signedness !== null) {
+    if (
+      segment.signedness !== null ||
+      segment.size !== null ||
+      segment.unit !== null
+    ) {
       Bitstring.#raiseTypeMismatchError(
         index,
         "integer",

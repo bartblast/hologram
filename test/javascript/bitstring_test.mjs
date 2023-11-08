@@ -584,6 +584,83 @@ describe("from()", () => {
     });
   });
 
+  describe("size modifier", () => {
+    it("with bitstring value", () => {
+      const segment = Type.bitstringSegment(Type.bitstring([1, 0, 1, 0]), {
+        type: "bitstring",
+        size: Type.integer(3),
+      });
+
+      const expectedMessage = `construction of binary failed: segment 1 of type 'integer': expected an integer but got: {"type":"bitstring","bits":{"0":1,"1":0,"2":1,"3":0}}`;
+
+      assertBoxedError(
+        () => Bitstring.from([segment]),
+        "ArgumentError",
+        expectedMessage,
+      );
+    });
+
+    // TODO: update once 16-bit float bitstring segments are implemented in Hologram
+    it("with float value when size * unit results in 16, 32 or 64", () => {
+      const segment = Type.bitstringSegment(Type.float(123.45), {
+        type: "float",
+        size: Type.integer(16),
+      });
+
+      assert.throw(
+        () => Bitstring.from([segment]),
+        HologramInterpreterError,
+        "16-bit float bitstring segments are not yet implemented in Hologram",
+      );
+    });
+
+    it("with float value when size * unit doesn't result in 16, 32 or 64", () => {
+      const segment = Type.bitstringSegment(Type.float(123.45), {
+        type: "float",
+        size: Type.integer(7),
+      });
+
+      const expectedMessage = `construction of binary failed: segment 1 of type 'integer': expected an integer but got: 123.45`;
+
+      assertBoxedError(
+        () => Bitstring.from([segment]),
+        "ArgumentError",
+        expectedMessage,
+      );
+    });
+
+    it("with integer value", () => {
+      const segment = Type.bitstringSegment(Type.integer(183), {
+        type: "integer",
+        size: Type.integer(5),
+      });
+
+      const result = Bitstring.from([segment]);
+
+      const expected = {
+        type: "bitstring",
+        bits: new Uint8Array([1, 0, 1, 1, 1]),
+      };
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("with string value", () => {
+      const segment = Type.bitstringSegment(Type.string("abc"), {
+        type: "utf8",
+        size: Type.integer(7),
+      });
+
+      const expectedMessage = `construction of binary failed: segment 1 of type 'integer': expected an integer but got: "abc"`;
+
+      assertBoxedError(
+        () => Bitstring.from([segment]),
+        "ArgumentError",
+        expectedMessage,
+      );
+    });
+  });
+
   describe("unsigned signedness modifier", () => {
     it("with bitstring value", () => {
       const segment = Type.bitstringSegment(Type.bitstring([1, 0, 1, 0]), {

@@ -36,6 +36,10 @@ defmodule Hologram.ExJsConsistency.BitstringTest do
     <<value::signed>>
   end
 
+  defp build_from_value_with_size_modifier(value, size) do
+    <<value::size(size)>>
+  end
+
   defp build_from_value_with_unsigned_signedness_modifier(value) do
     <<value::signed>>
   end
@@ -342,6 +346,57 @@ defmodule Hologram.ExJsConsistency.BitstringTest do
                    "construction of binary failed: segment 1 of type 'integer': expected an integer but got: \"abc\"",
                    fn ->
                      build_from_value_with_signed_signedness_modifier("abc")
+                   end
+    end
+  end
+
+  describe "size modifier" do
+    test "with bitstring value" do
+      assert_raise ArgumentError,
+                   "construction of binary failed: segment 1 of type 'integer': expected an integer but got: <<10::size(4)>>",
+                   fn ->
+                     build_from_value_with_size_modifier(<<1::1, 0::1, 1::1, 0::1>>, 3)
+                   end
+    end
+
+    test "with float value when size * unit results in 16, 32 or 64" do
+      assert <<123.45::size(16)>> == <<87, 183>>
+
+      # 87 == 0b01010111
+      # 183 == 0b10110111
+
+      # Specified this way, because it's not possible to make the formatter ignore specific lines of code.
+      bits =
+        """
+        [
+          0, 1, 0, 1, 0, 1, 1, 1,
+          1, 0, 1, 1, 0, 1, 1, 1
+        ]
+        """
+        |> Code.eval_string()
+        |> elem(0)
+
+      assert to_bit_list(<<123.45::size(16)>>) == bits
+    end
+
+    test "with float value when size * unit doesn't result in 16, 32 or 64" do
+      assert_raise ArgumentError,
+                   "construction of binary failed: segment 1 of type 'integer': expected an integer but got: 123.45",
+                   fn ->
+                     build_from_value_with_size_modifier(123.45, 7)
+                   end
+    end
+
+    test "with integer value" do
+      assert <<183::size(5)>> == <<23::size(5)>>
+      assert to_bit_list(<<183::size(5)>>) == [1, 0, 1, 1, 1]
+    end
+
+    test "with string value" do
+      assert_raise ArgumentError,
+                   "construction of binary failed: segment 1 of type 'integer': expected an integer but got: \"abc\"",
+                   fn ->
+                     build_from_value_with_size_modifier("abc", 7)
                    end
     end
   end
