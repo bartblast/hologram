@@ -85,26 +85,43 @@ const Elixir_Kernel = buildElixirKernelModule();
 export {assert} from "chai";
 export const sinon = sinonESM;
 
-export function assertBoxedError(callable, errorAliasStr, message) {
-  const errorStruct = Type.errorStruct(errorAliasStr, message);
-
+export function assertBoxedError(
+  callable,
+  expectedErrorType,
+  expectedErrorMessage,
+) {
   let isErrorThrown = false;
   let isAnyAssertFailed = false;
+  let failMessage = `\nexpected:\n${expectedErrorType}: ${expectedErrorMessage}\n`;
 
   try {
     callable();
   } catch (error) {
     isErrorThrown = true;
 
+    const errorStruct = Type.errorStruct(
+      expectedErrorType,
+      expectedErrorMessage,
+    );
+
     if (!(error instanceof HologramBoxedError)) {
       isAnyAssertFailed = true;
+      failMessage += `but got:\n${error.name}: ${error.message}`;
     } else if (!Interpreter.isStrictlyEqual(error.struct, errorStruct)) {
       isAnyAssertFailed = true;
+
+      const receivedErrorType = Interpreter.fetchErrorType(error);
+      const receivedErrorMessage = Interpreter.fetchErrorMessage(error);
+      failMessage += `but got:\n${receivedErrorType}: ${receivedErrorMessage}`;
     }
   }
 
-  if (!isErrorThrown || isAnyAssertFailed) {
-    assert.fail(`expected ${errorAliasStr}: ${message}`);
+  if (isErrorThrown) {
+    if (isAnyAssertFailed) {
+      assert.fail(failMessage);
+    }
+  } else {
+    assert.fail(failMessage + "but got no error");
   }
 }
 
