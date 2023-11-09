@@ -366,8 +366,6 @@ export default class Bitstring {
         "an integer",
         segment.value,
       );
-
-      Interpreter.raiseArgumentError(message);
     }
 
     if (numBits !== 64n) {
