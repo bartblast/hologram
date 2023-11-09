@@ -311,7 +311,7 @@ export default class Interpreter {
     }
 
     if (Type.isBitstringPattern(left)) {
-      return Interpreter.#matchBitstringPattern(right, left);
+      return Interpreter.#matchBitstringPattern(right, left, vars);
     }
 
     if (left.type !== right.type) {
@@ -538,12 +538,20 @@ export default class Interpreter {
     return false;
   }
 
-  static #matchBitstringPattern(right, left) {
+  static #matchBitstringPattern(right, left, vars) {
     let offset = 0;
 
     for (const segment of left.segments) {
       if (segment.value.type === "variable_pattern") {
-        // TODO: implement
+        const [value, segmentLen] = Bitstring.buildValueFromBitstringChunk(
+          segment,
+          right.bits,
+          offset,
+        );
+
+        Interpreter.matchOperator(value, segment.value, vars);
+
+        offset += segmentLen;
       } else {
         const segmentBitstring = Type.bitstring([segment]);
         const segmentLen = segmentBitstring.bits.length;
@@ -656,6 +664,7 @@ export default class Interpreter {
     );
   }
 
+  // TODO: is this needed?
   static #raiseUndefinedFunctionError(moduleName, functionName, arity) {
     // TODO: include info about available alternative arities
     const inspectedModuleName = Interpreter.inspectModuleName(moduleName);
