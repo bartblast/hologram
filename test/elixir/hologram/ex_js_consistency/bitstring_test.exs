@@ -40,7 +40,7 @@ defmodule Hologram.ExJsConsistency.BitstringTest do
     <<value::size(size)>>
   end
 
-  def build_from_value_with_size_and_unit_modifier(value, size) do
+  defp build_from_value_with_size_and_unit_modifier(value, size) do
     <<value::size(size)-unit(2)>>
   end
 
