@@ -40,6 +40,10 @@ defmodule Hologram.ExJsConsistency.BitstringTest do
     <<value::size(size)>>
   end
 
+  def build_from_value_with_size_and_unit_modifier(value, size) do
+    <<value::size(size)-unit(2)>>
+  end
+
   defp build_from_value_with_unsigned_signedness_modifier(value) do
     <<value::signed>>
   end
@@ -388,6 +392,8 @@ defmodule Hologram.ExJsConsistency.BitstringTest do
     end
 
     test "with integer value" do
+      # 183 == 0b10110111
+      # 23 == 0b10111
       assert <<183::size(5)>> == <<23::size(5)>>
       assert to_bit_list(<<183::size(5)>>) == [1, 0, 1, 1, 1]
     end
@@ -397,6 +403,62 @@ defmodule Hologram.ExJsConsistency.BitstringTest do
                    "construction of binary failed: segment 1 of type 'integer': expected an integer but got: \"abc\"",
                    fn ->
                      build_from_value_with_size_modifier("abc", 7)
+                   end
+    end
+  end
+
+  describe "unit modifier (with size modifier)" do
+    test "with bitstring value" do
+      assert_raise ArgumentError,
+                   "construction of binary failed: segment 1 of type 'integer': expected an integer but got: <<10::size(4)>>",
+                   fn ->
+                     build_from_value_with_size_and_unit_modifier(
+                       <<1::1, 0::1, 1::1, 0::1, 1::1, 0::1, 1::1, 0::1>>,
+                       3
+                     )
+                   end
+    end
+
+    test "with float value when size * unit results in 16, 32 or 64" do
+      assert <<123.45::size(8)-unit(2)>> == <<87, 183>>
+
+      # 87 == 0b01010111
+      # 183 == 0b10110111
+
+      # Specified this way, because it's not possible to make the formatter ignore specific lines of code.
+      bits =
+        """
+        [
+          0, 1, 0, 1, 0, 1, 1, 1,
+          1, 0, 1, 1, 0, 1, 1, 1
+        ]
+        """
+        |> Code.eval_string()
+        |> elem(0)
+
+      assert to_bit_list(<<123.45::size(8)-unit(2)>>) == bits
+    end
+
+    test "with float value when size * unit doesn't result in 16, 32 or 64" do
+      assert_raise ArgumentError,
+                   "construction of binary failed: segment 1 of type 'integer': expected an integer but got: 123.45",
+                   fn ->
+                     build_from_value_with_size_and_unit_modifier(123.45, 7)
+                   end
+    end
+
+    test "with integer value" do
+      # 170 == 0b10101010
+      # 42 == 0b101010
+      assert <<170::size(3)-unit(2)>> == <<42::size(6)>>
+      assert to_bit_list(<<170::size(3)-unit(2)>>) == [1, 0, 1, 0, 1, 0]
+    end
+
+    test "with string value" do
+      assert_raise ArgumentError,
+                   "construction of binary failed: segment 1 of type 'integer': expected an integer but got: \"abc\"",
+                   fn ->
+                     build_from_value_with_size_and_unit_modifier("abc", 7)
                    end
     end
   end
