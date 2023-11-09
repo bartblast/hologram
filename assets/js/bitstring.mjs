@@ -6,17 +6,20 @@ import Type from "./type.mjs";
 import Utils from "./utils.mjs";
 
 export default class Bitstring {
-  static buildBigIntFromUnsignedBitArray(bitArray) {
-    const numBits = bitArray.length;
-    let result = 0n;
+  static buildValueFromBitstringChunk(segment, bitArray, offset) {
+    switch (segment.type) {
+      case "float":
+        return Bitstring.#buildFloatFromBitstringChunk(
+          segment,
+          bitArray,
+          offset,
+        );
 
-    for (let i = 0; i < numBits; ++i) {
-      if (bitArray[i] === 1) {
-        result = Bitstring.#putBigIntBit(result, BigInt(numBits - 1 - i));
-      }
+      default:
+        throw new HologramInterpreterError(
+          `building ${segment.type} value from a bitstring segment is not yet implemented in Hologram`,
+        );
     }
-
-    return result;
   }
 
   static from(segments) {
@@ -192,6 +195,34 @@ export default class Bitstring {
     } else {
       return Utils.concatUint8Arrays(bitArrays);
     }
+  }
+
+  static #buildFloatFromBitstringChunk(segment, bitArray, offset) {
+    let size = Bitstring.resolveSegmentSize(segment);
+
+    if (![16n, 32n, 64n].includes(size)) {
+      size = 64n;
+    }
+
+    if (size === 16n) {
+      throw new HologramInterpreterError(
+        "16-bit float bitstring segments are not yet implemented in Hologram",
+      );
+    }
+
+    const unit = Bitstring.resolveSegmentUnit(segment);
+    const segmentLen = size * unit;
+
+    const chunk = bitArray.slice(offset, offset + segmentLen);
+    const bytesArray = Bitstring.#convertBitArrayToByteArray(chunk);
+    const dataView = new DataView(bytesArray.buffer);
+
+    const value =
+      size === 64n
+        ? dataView.getFloat64(0, false)
+        : dataView.getFloat32(0, false);
+
+    return [value, segmentLen];
   }
 
   static #convertBitArrayToByteArray(bitArray) {

@@ -13,22 +13,6 @@ import Type from "../../assets/js/type.mjs";
 before(() => linkModules());
 after(() => unlinkModules());
 
-describe("buildBigIntFromUnsignedBitArray()", () => {
-  it("non-zero value", () => {
-    const bitArray = new Uint8Array([1, 0, 1, 0, 1, 0]);
-    const result = Bitstring.buildBigIntFromUnsignedBitArray(bitArray);
-
-    assert.equal(result, 42n);
-  });
-
-  it("zero value", () => {
-    const bitArray = new Uint8Array([0, 0, 0, 0, 0, 0]);
-    const result = Bitstring.buildBigIntFromUnsignedBitArray(bitArray);
-
-    assert.equal(result, 0n);
-  });
-});
-
 // IMPORTANT!
 // Each JavaScript test has a related Elixir consistency test in test/elixir/hologram/ex_js_consistency/bitstring_test.exs
 // Always update both together.
