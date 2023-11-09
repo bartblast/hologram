@@ -142,6 +142,70 @@ defmodule Hologram.ExJsConsistency.MatchOperatorTest do
     # test "utf32 type modifier"
   end
 
+  # TODO: implement JS version
+  describe "bitstring pattern, unsigned modifier" do
+    test "no type modifier" do
+      # 170 == 0b10101010
+      result = <<value::unsigned>> = <<1::1, 0::1, 1::1, 0::1, 1::1, 0::1, 1::1, 0::1>>
+
+      assert result == <<170>>
+      assert value == 170
+    end
+
+    # <<value::binary-unsigned>> won't compile
+    # test "binary type modifier"
+
+    # <<value::bitstring-unsigned>> won't compile
+    # test "bitstring type modifier"
+
+    test "float type modifier, 64-bit size modifier" do
+      result = <<value::float-size(64)-unsigned>> = <<123.45::size(64)>>
+
+      assert result == <<123.45::size(64)>>
+      assert value == 123.45
+    end
+
+    test "float type modifier, 32-bit size modifier" do
+      result = <<value::float-size(32)-unsigned>> = <<123.45::size(32)>>
+
+      assert result == <<123.45::size(32)>>
+      assert value == 123.44999694824219
+    end
+
+    test "float type modifier, 16-bit size modifier" do
+      result = <<value::float-size(16)-unsigned>> = <<123.45::size(16)>>
+
+      assert result == <<123.45::size(16)>>
+      assert value == 123.4375
+    end
+
+    test "float type modifier, unsupported size modifier" do
+      size = 8
+
+      # 170 == 0b10101010
+      assert_raise MatchError, "no match of right hand side value: <<170>>", fn ->
+        <<_value::float-size(size)-unsigned>> = <<1::1, 0::1, 1::1, 0::1, 1::1, 0::1, 1::1, 0::1>>
+      end
+    end
+
+    test "integer type modifier" do
+      # 170 == 0b10101010
+      result = <<value::integer-unsigned>> = <<1::1, 0::1, 1::1, 0::1, 1::1, 0::1, 1::1, 0::1>>
+
+      assert result == <<170>>
+      assert value == 170
+    end
+
+    # <value::utf8-unsigned>> won't compile
+    # test "utf8 type modifier"
+
+    # <value::utf16-unsigned>> won't compile
+    # test "utf16 type modifier"
+
+    # <value::utf32-unsigned>> won't compile
+    # test "utf32 type modifier"
+  end
+
   # TODO: finish overhaul, remember about JavaScript interpreter tests
   # describe "cons pattern" do
   #   test "left cons pattern == right list, cons pattern head and tail are variables" do

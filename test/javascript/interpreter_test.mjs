@@ -1936,7 +1936,7 @@ describe("matchOperator()", () => {
     });
   });
 
-  describe("bitstring type", () => {
+  describe("bistring value", () => {
     it("left bitstring == right bitstring", () => {
       const result = Interpreter.matchOperator(
         Type.bitstring([
