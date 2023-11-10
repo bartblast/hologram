@@ -410,8 +410,9 @@ defmodule Hologram.ExJsConsistency.BitstringTest do
   describe "unit modifier (with size modifier)" do
     test "with bitstring value" do
       assert_raise ArgumentError,
-                   "construction of binary failed: segment 1 of type 'integer': expected an integer but got: <<10::size(4)>>",
+                   "construction of binary failed: segment 1 of type 'integer': expected an integer but got: <<170>>",
                    fn ->
+                     # 170 == 0b10101010
                      build_from_value_with_size_and_unit_modifier(
                        <<1::1, 0::1, 1::1, 0::1, 1::1, 0::1, 1::1, 0::1>>,
                        3
