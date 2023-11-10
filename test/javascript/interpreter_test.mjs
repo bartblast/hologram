@@ -1936,6 +1936,110 @@ describe("matchOperator()", () => {
     });
   });
 
+  // TODO: finish (Elixir version already implemented)
+  describe("bitstring pattern, unsigned modifier", () => {
+    //   test "no type modifier" do
+    //     # 170 == 0b10101010
+    //     result = <<value::unsigned>> = <<1::1, 0::1, 1::1, 0::1, 1::1, 0::1, 1::1, 0::1>>
+
+    //     assert result == <<170>>
+    //     assert value == 170
+    //   end
+
+    // <<value::binary-unsigned>> won't compile
+    // it("binary type modifier")
+
+    // <<value::bitstring-unsigned>> won't compile
+    // it("bitstring type modifier")
+
+    // <<value::float-size(64)-unsigned>> = <<123.45::size(64)>>
+    it("float type modifier, 64-bit size modifier", () => {
+      const left = Type.bitstringPattern([
+        Type.bitstringSegment(Type.variablePattern("value"), {
+          type: "float",
+          size: Type.integer(64),
+          signedness: "unsigned",
+        }),
+      ]);
+
+      const right = Type.bitstring([
+        Type.bitstringSegment(Type.float(123.45), {
+          type: "float",
+          size: Type.integer(64),
+        }),
+      ]);
+
+      const result = Interpreter.matchOperator(right, left, vars);
+
+      assert.deepStrictEqual(result, right);
+
+      assert.deepStrictEqual(vars, {
+        a: Type.integer(9),
+        __matched__: {value: Type.float(123.45)},
+      });
+    });
+
+    // <<value::float-size(32)-unsigned>> = <<123.45::size(32)>>
+    it("float type modifier, 32-bit size modifier", () => {
+      const left = Type.bitstringPattern([
+        Type.bitstringSegment(Type.variablePattern("value"), {
+          type: "float",
+          size: Type.integer(32),
+          signedness: "unsigned",
+        }),
+      ]);
+
+      const right = Type.bitstring([
+        Type.bitstringSegment(Type.float(123.45), {
+          type: "float",
+          size: Type.integer(32),
+        }),
+      ]);
+
+      const result = Interpreter.matchOperator(right, left, vars);
+
+      assert.deepStrictEqual(result, right);
+
+      assert.deepStrictEqual(vars, {
+        a: Type.integer(9),
+        __matched__: {value: Type.float(123.44999694824219)},
+      });
+    });
+
+    //   test "float type modifier, 16-bit size modifier" do
+    //     result = <<value::float-size(16)-unsigned>> = <<123.45::size(16)>>
+
+    //     assert result == <<123.45::size(16)>>
+    //     assert value == 123.4375
+    //   end
+
+    //   test "float type modifier, unsupported size modifier" do
+    //     size = 8
+
+    //     # 170 == 0b10101010
+    //     assert_raise MatchError, "no match of right hand side value: <<170>>", fn ->
+    //       <<_value::float-size(size)-unsigned>> = <<1::1, 0::1, 1::1, 0::1, 1::1, 0::1, 1::1, 0::1>>
+    //     end
+    //   end
+
+    //   test "integer type modifier" do
+    //     # 170 == 0b10101010
+    //     result = <<value::integer-unsigned>> = <<1::1, 0::1, 1::1, 0::1, 1::1, 0::1, 1::1, 0::1>>
+
+    //     assert result == <<170>>
+    //     assert value == 170
+    //   end
+
+    // <value::utf8-unsigned>> won't compile
+    // it("utf8 type modifier")
+
+    // <value::utf16-unsigned>> won't compile
+    // it("utf16 type modifier")
+
+    // <value::utf32-unsigned>> won't compile
+    // it("utf32 type modifier")
+  });
+
   describe("bistring value", () => {
     it("left bitstring == right bitstring", () => {
       const result = Interpreter.matchOperator(

@@ -138,8 +138,9 @@ export default class Bitstring {
 
   static #buildBitArrayFromFloat(segment) {
     const value = segment.value.value;
+    const size = Bitstring.resolveSegmentSize(segment);
 
-    const bitArrays = Array.from(Bitstring.#getBytesFromFloat(value)).map(
+    const bitArrays = Array.from(Bitstring.#getBytesFromFloat(value, size)).map(
       (byte) => Bitstring.#convertDataToBitArray(BigInt(byte), 8n, 1n),
     );
 
@@ -211,7 +212,7 @@ export default class Bitstring {
     }
 
     const unit = Bitstring.resolveSegmentUnit(segment);
-    const segmentLen = size * unit;
+    const segmentLen = Number(size * unit);
 
     const chunk = bitArray.slice(offset, offset + segmentLen);
     const bytesArray = Bitstring.#convertBitArrayToByteArray(chunk);
@@ -222,7 +223,7 @@ export default class Bitstring {
         ? dataView.getFloat64(0, false)
         : dataView.getFloat32(0, false);
 
-    return [value, segmentLen];
+    return [Type.float(value), segmentLen];
   }
 
   static #convertBitArrayToByteArray(bitArray) {
@@ -278,8 +279,22 @@ export default class Bitstring {
     return (value & (1n << position)) === 0n ? 0 : 1;
   }
 
-  static #getBytesFromFloat(float) {
-    const floatArr = new Float64Array([float]);
+  static #getBytesFromFloat(float, size) {
+    let floatArr;
+
+    switch (size) {
+      case 64n:
+        floatArr = new Float64Array([float]);
+        break;
+
+      case 32n:
+        floatArr = new Float32Array([float]);
+        break;
+
+      case 16n:
+      // This case is not possible at the moment, since an error would be raised earlier.
+    }
+
     return new Uint8Array(floatArr.buffer).reverse();
   }
 
@@ -395,7 +410,7 @@ export default class Bitstring {
       );
     }
 
-    if (numBits !== 64n) {
+    if (numBits !== 64n && numBits !== 32n) {
       throw new HologramInterpreterError(
         `${numBits}-bit float bitstring segments are not yet implemented in Hologram`,
       );
