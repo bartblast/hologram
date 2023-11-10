@@ -1237,3 +1237,28 @@ describe("validateCodePoint()", () => {
     assert.isFalse(Bitstring.validateCodePoint("abc"));
   });
 });
+
+// The function is tested implicitely in bitstring and match operator consistency tests.
+describe("validateSegment()", () => {
+  it("valid segment", () => {
+    const segment = Type.bitstringSegment(Type.float(123.45), {
+      type: "float",
+      size: Type.integer(64),
+    });
+
+    assert.isTrue(Bitstring.validateSegment(segment, 1));
+  });
+
+  it("invalid segment", () => {
+    const segment = Type.bitstringSegment(Type.float(123.45), {
+      type: "float",
+      size: Type.integer(8),
+    });
+
+    assertBoxedError(
+      () => Bitstring.validateSegment(segment, 1),
+      "ArgumentError",
+      "construction of binary failed: segment 1 of type 'integer': expected an integer but got: 123.45",
+    );
+  });
+});

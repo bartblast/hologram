@@ -31,7 +31,7 @@ export default class Bitstring {
 
   static from(segments) {
     const bitArrays = segments.map((segment, index) => {
-      Bitstring.#validateSegment(segment, index + 1);
+      Bitstring.validateSegment(segment, index + 1);
       return Bitstring.#buildBitArray(segment, index + 1);
     });
 
@@ -120,6 +120,27 @@ export default class Bitstring {
       } else {
         throw error;
       }
+    }
+  }
+
+  static validateSegment(segment, index) {
+    switch (segment.type) {
+      case "binary":
+        return Bitstring.#validateBinarySegment(segment, index);
+
+      case "bitstring":
+        return Bitstring.#validateBitstringSegment(segment, index);
+
+      case "float":
+        return Bitstring.#validateFloatSegment(segment, index);
+
+      case "integer":
+        return Bitstring.#validateIntegerSegment(segment, index);
+
+      case "utf8":
+      case "utf16":
+      case "utf32":
+        return Bitstring.#validateUtfSegment(segment, index);
     }
   }
 
@@ -457,27 +478,6 @@ export default class Bitstring {
     }
 
     return true;
-  }
-
-  static #validateSegment(segment, index) {
-    switch (segment.type) {
-      case "binary":
-        return Bitstring.#validateBinarySegment(segment, index);
-
-      case "bitstring":
-        return Bitstring.#validateBitstringSegment(segment, index);
-
-      case "float":
-        return Bitstring.#validateFloatSegment(segment, index);
-
-      case "integer":
-        return Bitstring.#validateIntegerSegment(segment, index);
-
-      case "utf8":
-      case "utf16":
-      case "utf32":
-        return Bitstring.#validateUtfSegment(segment, index);
-    }
   }
 
   static #validateUtfSegment(segment, index) {
