@@ -10,6 +10,7 @@ import {
 } from "../../assets/js/test_support.mjs";
 import Erlang from "../../assets/js/erlang/erlang.mjs";
 import HologramBoxedError from "../../assets/js/errors/boxed_error.mjs";
+import HologramInterpreterError from "../../assets/js/errors/interpreter_error.mjs";
 import Interpreter from "../../assets/js/interpreter.mjs";
 import Type from "../../assets/js/type.mjs";
 
@@ -2002,8 +2003,31 @@ describe("matchOperator()", () => {
       });
     });
 
-    //   test "float type modifier, 16-bit size modifier" do
-    //     result = <<value::float-size(16)-unsigned>> = <<123.45::size(16)>>
+    // TODO: update once 16-bit float bitstring segments are implemented in Hologram
+    // <<value::float-size(16)-unsigned>> = <<123.45::size(16)>>
+    it("float type modifier, 16-bit size modifier", () => {
+      const left = Type.bitstringPattern([
+        Type.bitstringSegment(Type.variablePattern("value"), {
+          type: "float",
+          size: Type.integer(16),
+          signedness: "unsigned",
+        }),
+      ]);
+
+      assert.throw(
+        () =>
+          Type.bitstring([
+            Type.bitstringSegment(Type.float(123.45), {
+              type: "float",
+              size: Type.integer(16),
+            }),
+          ]),
+        HologramInterpreterError,
+        "16-bit float bitstring segments are not yet implemented in Hologram",
+      );
+    });
+
+    //     result =
 
     //     assert result == <<123.45::size(16)>>
     //     assert value == 123.4375
