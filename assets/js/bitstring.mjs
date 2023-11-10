@@ -15,6 +15,13 @@ export default class Bitstring {
           offset,
         );
 
+      case "integer":
+        return Bitstring.#buildIntegerFromBitstringChunk(
+          segment,
+          bitArray,
+          offset,
+        );
+
       default:
         throw new HologramInterpreterError(
           `building ${segment.type} value from a bitstring segment is not yet implemented in Hologram`,
@@ -226,6 +233,22 @@ export default class Bitstring {
     return [Type.float(value), segmentLen];
   }
 
+  static #buildIntegerFromBitstringChunk(segment, bitArray, offset) {
+    const size = Bitstring.resolveSegmentSize(segment);
+    const unit = Bitstring.resolveSegmentUnit(segment);
+    const segmentLen = Number(size * unit);
+
+    let value = 0n;
+
+    for (let i = 0; i < segmentLen; ++i) {
+      if (bitArray[offset + i] === 1) {
+        value = Bitstring.#putBigIntBit(value, BigInt(segmentLen - 1 - i));
+      }
+    }
+
+    return [Type.integer(value), segmentLen];
+  }
+
   static #convertBitArrayToByteArray(bitArray) {
     if (bitArray.length % 8 !== 0) {
       throw new HologramInterpreterError(
@@ -239,7 +262,7 @@ export default class Bitstring {
     for (let i = 0; i < numBytes; ++i) {
       for (let j = 0; j < 8; ++j) {
         if (bitArray[i * 8 + j] === 1) {
-          byteArray[i] = Bitstring.#putBit(byteArray[i], 7 - j);
+          byteArray[i] = Bitstring.#putNumberBit(byteArray[i], 7 - j);
         }
       }
     }
@@ -310,7 +333,11 @@ export default class Bitstring {
     }
   }
 
-  static #putBit(value, position) {
+  static #putBigIntBit(value, position) {
+    return value | (1n << position);
+  }
+
+  static #putNumberBit(value, position) {
     return value | (1 << position);
   }
 

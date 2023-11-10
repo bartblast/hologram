@@ -1938,13 +1938,9 @@ describe("matchOperator()", () => {
 
   // TODO: finish (Elixir version already implemented)
   describe("bitstring pattern, unsigned modifier", () => {
-    //   test "no type modifier" do
-    //     # 170 == 0b10101010
-    //     result = <<value::unsigned>> = <<1::1, 0::1, 1::1, 0::1, 1::1, 0::1, 1::1, 0::1>>
-
-    //     assert result == <<170>>
-    //     assert value == 170
-    //   end
+    // <<value::unsigned>> = <<1::1, 0::1, 1::1, 0::1, 1::1, 0::1, 1::1, 0::1>>
+    // The test would be the same as "integer type modifier", because the encoder always specifies the segment's type.
+    // it("no type modifier")
 
     // <<value::binary-unsigned>> won't compile
     // it("binary type modifier")
@@ -2022,13 +2018,27 @@ describe("matchOperator()", () => {
     //     end
     //   end
 
-    //   test "integer type modifier" do
-    //     # 170 == 0b10101010
-    //     result = <<value::integer-unsigned>> = <<1::1, 0::1, 1::1, 0::1, 1::1, 0::1, 1::1, 0::1>>
+    // <<value::integer-unsigned>> = <<1::1, 0::1, 1::1, 0::1, 1::1, 0::1, 1::1, 0::1>>
+    it("integer type modifier", () => {
+      const left = Type.bitstringPattern([
+        Type.bitstringSegment(Type.variablePattern("value"), {
+          type: "integer",
+          signedness: "unsigned",
+        }),
+      ]);
 
-    //     assert result == <<170>>
-    //     assert value == 170
-    //   end
+      // 170 == 0b10101010
+      const right = Type.bitstring([1, 0, 1, 0, 1, 0, 1, 0]);
+
+      const result = Interpreter.matchOperator(right, left, vars);
+
+      assert.deepStrictEqual(result, right);
+
+      assert.deepStrictEqual(vars, {
+        a: Type.integer(9),
+        __matched__: {value: Type.integer(170)},
+      });
+    });
 
     // <value::utf8-unsigned>> won't compile
     // it("utf8 type modifier")
