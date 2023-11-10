@@ -287,12 +287,13 @@ export default class Bitstring {
       return false;
     }
 
-    let value = 0n;
+    const bitArrayChunk = bitArray.slice(offset, offset + segmentLen);
+    let value;
 
-    for (let i = 0; i < segmentLen; ++i) {
-      if (bitArray[offset + i] === 1) {
-        value = Bitstring.#putBigIntBit(value, BigInt(segmentLen - 1 - i));
-      }
+    if (Bitstring.#resolveSegmentSignedness(segment) === "signed") {
+      value = Bitstring.buildSignedBigIntFromBitArray(bitArrayChunk);
+    } else {
+      value = Bitstring.buildUnsignedBigIntFromBitArray(bitArrayChunk);
     }
 
     return [Type.integer(value), segmentLen];
@@ -382,10 +383,6 @@ export default class Bitstring {
     }
   }
 
-  static #putBigIntBit(value, position) {
-    return value | (1n << position);
-  }
-
   static #putNumberBit(value, position) {
     return value | (1 << position);
   }
@@ -409,6 +406,14 @@ export default class Bitstring {
     const message = `construction of binary failed: segment ${index} of type '${segmentType}': expected ${expectedValueTypesStr} but got: ${inspectedValue}`;
 
     Interpreter.raiseArgumentError(message);
+  }
+
+  static #resolveSegmentSignedness(segment) {
+    if (segment.signedness !== null) {
+      return segment.signedness;
+    }
+
+    return "unsigned";
   }
 
   static #validateBinarySegment(segment, index) {
