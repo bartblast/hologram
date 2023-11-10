@@ -21,28 +21,28 @@ describe("buildSignedBigIntFromBitArray()", () => {
     assert.equal(result, 0n);
   });
 
-  it("42", () => {
+  it("0b0101010 == 42", () => {
     const bitArray = new Uint8Array([0, 1, 0, 1, 0, 1, 0]);
     const result = Bitstring.buildSignedBigIntFromBitArray(bitArray);
 
     assert.equal(result, 42n);
   });
 
-  it("-22", () => {
+  it("0b101010 == -22", () => {
     const bitArray = new Uint8Array([1, 0, 1, 0, 1, 0]);
     const result = Bitstring.buildSignedBigIntFromBitArray(bitArray);
 
     assert.equal(result, -22n);
   });
 
-  it("2730", () => {
+  it("0b0101010101010 == 2730", () => {
     const bitArray = new Uint8Array([0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0]);
     const result = Bitstring.buildSignedBigIntFromBitArray(bitArray);
 
     assert.equal(result, 2730n);
   });
 
-  it("-1366", () => {
+  it("0b101010101010 == -1366", () => {
     const bitArray = new Uint8Array([1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0]);
     const result = Bitstring.buildSignedBigIntFromBitArray(bitArray);
 
