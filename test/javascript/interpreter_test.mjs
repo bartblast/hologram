@@ -2005,13 +2005,13 @@ describe("matchOperator()", () => {
     // TODO: update once 16-bit float bitstring segments are implemented in Hologram
     // <<value::float-size(16)-unsigned>> = <<123.45::size(16)>>
     it("float type modifier, 16-bit size modifier", () => {
-      const left = Type.bitstringPattern([
-        Type.bitstringSegment(Type.variablePattern("value"), {
-          type: "float",
-          size: Type.integer(16),
-          signedness: "unsigned",
-        }),
-      ]);
+      // const left = Type.bitstringPattern([
+      //   Type.bitstringSegment(Type.variablePattern("value"), {
+      //     type: "float",
+      //     size: Type.integer(16),
+      //     signedness: "unsigned",
+      //   }),
+      // ]);
 
       assert.throw(
         () =>
