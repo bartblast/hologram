@@ -1937,6 +1937,146 @@ describe("matchOperator()", () => {
     });
   });
 
+  describe("bitstring pattern, signed modifier", () => {
+    // <<value::signed>> = <<1::1, 0::1, 1::1, 0::1, 1::1, 0::1, 1::1, 0::1>>
+    // The test would be the same as "integer type modifier", because the encoder always specifies the segment's type.
+    // it("no type modifier")
+
+    // <<value::binary-signed>> won't compile
+    // it("binary type modifier")
+
+    // <<value::bitstring-signed>> won't compile
+    // it("bitstring type modifier")
+
+    // <<value::float-size(64)-signed>> = <<123.45::size(64)>>
+    it("float type modifier, 64-bit size modifier", () => {
+      const left = Type.bitstringPattern([
+        Type.bitstringSegment(Type.variablePattern("value"), {
+          type: "float",
+          size: Type.integer(64),
+          signedness: "signed",
+        }),
+      ]);
+
+      const right = Type.bitstring([
+        Type.bitstringSegment(Type.float(123.45), {
+          type: "float",
+          size: Type.integer(64),
+        }),
+      ]);
+
+      const result = Interpreter.matchOperator(right, left, vars);
+
+      assert.deepStrictEqual(result, right);
+
+      assert.deepStrictEqual(vars, {
+        a: Type.integer(9),
+        __matched__: {value: Type.float(123.45)},
+      });
+    });
+
+    // <<value::float-size(32)-signed>> = <<123.45::size(32)>>
+    it("float type modifier, 32-bit size modifier", () => {
+      const left = Type.bitstringPattern([
+        Type.bitstringSegment(Type.variablePattern("value"), {
+          type: "float",
+          size: Type.integer(32),
+          signedness: "signed",
+        }),
+      ]);
+
+      const right = Type.bitstring([
+        Type.bitstringSegment(Type.float(123.45), {
+          type: "float",
+          size: Type.integer(32),
+        }),
+      ]);
+
+      const result = Interpreter.matchOperator(right, left, vars);
+
+      assert.deepStrictEqual(result, right);
+
+      assert.deepStrictEqual(vars, {
+        a: Type.integer(9),
+        __matched__: {value: Type.float(123.44999694824219)},
+      });
+    });
+
+    // TODO: update once 16-bit float bitstring segments are implemented in Hologram
+    // <<value::float-size(16)-signed>> = <<123.45::size(16)>>
+    it("float type modifier, 16-bit size modifier", () => {
+      // const left = Type.bitstringPattern([
+      //   Type.bitstringSegment(Type.variablePattern("value"), {
+      //     type: "float",
+      //     size: Type.integer(16),
+      //     signedness: "signed",
+      //   }),
+      // ]);
+
+      assert.throw(
+        () =>
+          Type.bitstring([
+            Type.bitstringSegment(Type.float(123.45), {
+              type: "float",
+              size: Type.integer(16),
+            }),
+          ]),
+        HologramInterpreterError,
+        "16-bit float bitstring segments are not yet implemented in Hologram",
+      );
+    });
+
+    // <<_value::float-size(size)-signed>> = <<1::1, 0::1, 1::1, 0::1, 1::1, 0::1, 1::1, 0::1>>
+    it("float type modifier, unsupported size modifier", () => {
+      const left = Type.bitstringPattern([
+        Type.bitstringSegment(Type.variablePattern("value"), {
+          type: "float",
+          size: Type.integer(8),
+          signedness: "signed",
+        }),
+      ]);
+
+      // 170 == 0b10101010
+      const right = Type.bitstring([1, 0, 1, 0, 1, 0, 1, 0]);
+
+      assertMatchError(
+        () => Interpreter.matchOperator(right, left, vars),
+        right,
+      );
+    });
+
+    // <<value::integer-signed>> = <<1::1, 0::1, 1::1, 0::1, 1::1, 0::1, 1::1, 0::1>>
+    it("integer type modifier", () => {
+      const left = Type.bitstringPattern([
+        Type.bitstringSegment(Type.variablePattern("value"), {
+          type: "integer",
+          signedness: "signed",
+        }),
+      ]);
+
+      // 170 == 0b10101010
+      const right = Type.bitstring([1, 0, 1, 0, 1, 0, 1, 0]);
+
+      const result = Interpreter.matchOperator(right, left, vars);
+
+      assert.deepStrictEqual(result, right);
+
+      assert.deepStrictEqual(vars, {
+        a: Type.integer(9),
+        __matched__: {value: Type.integer(-86)},
+      });
+    });
+
+    // <value::utf8-signed>> won't compile
+    // it("utf8 type modifier")
+
+    // <value::utf16-signed>> won't compile
+    // it("utf16 type modifier")
+
+    // <value::utf32-signed>> won't compile
+    // it("utf32 type modifier")
+  });
+
   describe("bitstring pattern, unsigned modifier", () => {
     // <<value::unsigned>> = <<1::1, 0::1, 1::1, 0::1, 1::1, 0::1, 1::1, 0::1>>
     // The test would be the same as "integer type modifier", because the encoder always specifies the segment's type.

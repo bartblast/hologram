@@ -35,7 +35,6 @@ defmodule Hologram.ExJsConsistency.MatchOperatorTest do
     end
   end
 
-  # TODO: implement JS version
   describe "bitstring pattern, signed modifier" do
     test "no type modifier" do
       # 170 == 0b10101010
