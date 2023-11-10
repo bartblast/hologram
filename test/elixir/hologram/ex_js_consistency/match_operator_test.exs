@@ -35,49 +35,6 @@ defmodule Hologram.ExJsConsistency.MatchOperatorTest do
     end
   end
 
-  describe "bistring value" do
-    test "left bitstring == right bitstring" do
-      result = <<1::integer>> = <<1::integer>>
-      assert result == <<1::integer>>
-    end
-
-    test "left bitstring != right bitstring" do
-      assert_raise MatchError, "no match of right hand side value: <<2>>", fn ->
-        <<1::integer>> = <<2::integer>>
-      end
-    end
-
-    test "left bitstring != right non-bitstring" do
-      assert_raise MatchError, "no match of right hand side value: :abc", fn ->
-        <<1::integer>> = build_value(:abc)
-      end
-    end
-
-    test "literal bitstring segments" do
-      result = <<1::1, 0::1>> = <<1::1, 0::1>>
-
-      assert result == <<1::1, 0::1>>
-    end
-
-    test "literal float segments" do
-      result = <<1.0::float, 2.0::float>> = <<1.0::float, 2.0::float>>
-
-      assert result == <<1.0::float, 2.0::float>>
-    end
-
-    test "literal integer segments" do
-      result = <<1::integer, 2::integer>> = <<1::integer, 2::integer>>
-
-      assert result == <<1::integer, 2::integer>>
-    end
-
-    test "literal string segments" do
-      result = <<"aaa"::utf8, "bbb"::utf8>> = <<"aaa"::utf8, "bbb"::utf8>>
-
-      assert result == <<"aaa"::utf8, "bbb"::utf8>>
-    end
-  end
-
   # TODO: implement JS version
   describe "bitstring pattern, signed modifier" do
     test "no type modifier" do
@@ -142,7 +99,6 @@ defmodule Hologram.ExJsConsistency.MatchOperatorTest do
     # test "utf32 type modifier"
   end
 
-  # TODO: implement JS version
   describe "bitstring pattern, unsigned modifier" do
     test "no type modifier" do
       # 170 == 0b10101010
@@ -204,6 +160,49 @@ defmodule Hologram.ExJsConsistency.MatchOperatorTest do
 
     # <value::utf32-unsigned>> won't compile
     # test "utf32 type modifier"
+  end
+
+  describe "bistring value" do
+    test "left bitstring == right bitstring" do
+      result = <<1::integer>> = <<1::integer>>
+      assert result == <<1::integer>>
+    end
+
+    test "left bitstring != right bitstring" do
+      assert_raise MatchError, "no match of right hand side value: <<2>>", fn ->
+        <<1::integer>> = <<2::integer>>
+      end
+    end
+
+    test "left bitstring != right non-bitstring" do
+      assert_raise MatchError, "no match of right hand side value: :abc", fn ->
+        <<1::integer>> = build_value(:abc)
+      end
+    end
+
+    test "literal bitstring segments" do
+      result = <<1::1, 0::1>> = <<1::1, 0::1>>
+
+      assert result == <<1::1, 0::1>>
+    end
+
+    test "literal float segments" do
+      result = <<1.0::float, 2.0::float>> = <<1.0::float, 2.0::float>>
+
+      assert result == <<1.0::float, 2.0::float>>
+    end
+
+    test "literal integer segments" do
+      result = <<1::integer, 2::integer>> = <<1::integer, 2::integer>>
+
+      assert result == <<1::integer, 2::integer>>
+    end
+
+    test "literal string segments" do
+      result = <<"aaa"::utf8, "bbb"::utf8>> = <<"aaa"::utf8, "bbb"::utf8>>
+
+      assert result == <<"aaa"::utf8, "bbb"::utf8>>
+    end
   end
 
   # TODO: finish overhaul, remember about JavaScript interpreter tests
