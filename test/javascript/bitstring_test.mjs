@@ -13,6 +13,43 @@ import Type from "../../assets/js/type.mjs";
 before(() => linkModules());
 after(() => unlinkModules());
 
+describe("buildSignedBigIntFromBitArray()", () => {
+  it("0", () => {
+    const bitArray = new Uint8Array([]);
+    const result = Bitstring.buildSignedBigIntFromBitArray(bitArray);
+
+    assert.equal(result, 0n);
+  });
+
+  it("42", () => {
+    const bitArray = new Uint8Array([0, 1, 0, 1, 0, 1, 0]);
+    const result = Bitstring.buildSignedBigIntFromBitArray(bitArray);
+
+    assert.equal(result, 42n);
+  });
+
+  it("-22", () => {
+    const bitArray = new Uint8Array([1, 0, 1, 0, 1, 0]);
+    const result = Bitstring.buildSignedBigIntFromBitArray(bitArray);
+
+    assert.equal(result, -22n);
+  });
+
+  it("2730", () => {
+    const bitArray = new Uint8Array([0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0]);
+    const result = Bitstring.buildSignedBigIntFromBitArray(bitArray);
+
+    assert.equal(result, 2730n);
+  });
+
+  it("-1366", () => {
+    const bitArray = new Uint8Array([1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0]);
+    const result = Bitstring.buildSignedBigIntFromBitArray(bitArray);
+
+    assert.equal(result, -1366n);
+  });
+});
+
 // IMPORTANT!
 // Each JavaScript test has a related Elixir consistency test in test/elixir/hologram/ex_js_consistency/bitstring_test.exs
 // Always update both together.

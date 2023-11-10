@@ -6,6 +6,20 @@ import Type from "./type.mjs";
 import Utils from "./utils.mjs";
 
 export default class Bitstring {
+  static buildSignedBigIntFromBitArray(bitArray) {
+    if (bitArray.length === 0) {
+      return 0n;
+    }
+
+    const signBit = bitArray[0];
+
+    const value = bitArray.slice(1).reduce((acc, bit, index) => {
+      return acc | BigInt(bit << (bitArray.length - index - 2));
+    }, 0n);
+
+    return signBit === 1 ? -BigInt(2 ** (bitArray.length - 1)) + value : value;
+  }
+
   static buildValueFromBitstringChunk(segment, bitArray, offset) {
     switch (segment.type) {
       case "float":
