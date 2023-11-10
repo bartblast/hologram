@@ -2,6 +2,7 @@
 
 import {
   assert,
+  assertBoxedError,
   linkModules,
   unlinkModules,
 } from "../../assets/js/test_support.mjs";
@@ -105,6 +106,7 @@ describe("bitstring()", () => {
 it("bitstringPattern()", () => {
   const segment1 = Type.bitstringSegment(Type.integer(1), {type: "integer"});
   const segment2 = Type.bitstringSegment(Type.integer(2), {type: "integer"});
+
   const result = Type.bitstringPattern([segment1, segment2]);
   const expected = {type: "bitstring_pattern", segments: [segment1, segment2]};
 

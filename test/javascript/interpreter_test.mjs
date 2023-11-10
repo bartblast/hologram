@@ -1937,7 +1937,6 @@ describe("matchOperator()", () => {
     });
   });
 
-  // TODO: finish (Elixir version already implemented)
   describe("bitstring pattern, unsigned modifier", () => {
     // <<value::unsigned>> = <<1::1, 0::1, 1::1, 0::1, 1::1, 0::1, 1::1, 0::1>>
     // The test would be the same as "integer type modifier", because the encoder always specifies the segment's type.
@@ -2027,20 +2026,24 @@ describe("matchOperator()", () => {
       );
     });
 
-    //     result =
+    // <<_value::float-size(size)-unsigned>> = <<1::1, 0::1, 1::1, 0::1, 1::1, 0::1, 1::1, 0::1>>
+    it("float type modifier, unsupported size modifier", () => {
+      const left = Type.bitstringPattern([
+        Type.bitstringSegment(Type.variablePattern("value"), {
+          type: "float",
+          size: Type.integer(8),
+          signedness: "unsigned",
+        }),
+      ]);
 
-    //     assert result == <<123.45::size(16)>>
-    //     assert value == 123.4375
-    //   end
+      // 170 == 0b10101010
+      const right = Type.bitstring([1, 0, 1, 0, 1, 0, 1, 0]);
 
-    //   test "float type modifier, unsupported size modifier" do
-    //     size = 8
-
-    //     # 170 == 0b10101010
-    //     assert_raise MatchError, "no match of right hand side value: <<170>>", fn ->
-    //       <<_value::float-size(size)-unsigned>> = <<1::1, 0::1, 1::1, 0::1, 1::1, 0::1, 1::1, 0::1>>
-    //     end
-    //   end
+      assertMatchError(
+        () => Interpreter.matchOperator(right, left, vars),
+        right,
+      );
+    });
 
     // <<value::integer-unsigned>> = <<1::1, 0::1, 1::1, 0::1, 1::1, 0::1, 1::1, 0::1>>
     it("integer type modifier", () => {

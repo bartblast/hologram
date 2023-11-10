@@ -543,14 +543,18 @@ export default class Interpreter {
 
     for (const segment of left.segments) {
       if (segment.value.type === "variable_pattern") {
-        const [value, segmentLen] = Bitstring.buildValueFromBitstringChunk(
+        const valueInfo = Bitstring.buildValueFromBitstringChunk(
           segment,
           right.bits,
           offset,
         );
 
-        Interpreter.matchOperator(value, segment.value, vars);
+        if (!valueInfo) {
+          throw new HologramMatchError(right);
+        }
 
+        const [value, segmentLen] = valueInfo;
+        Interpreter.matchOperator(value, segment.value, vars);
         offset += segmentLen;
       } else {
         const segmentBitstring = Type.bitstring([segment]);

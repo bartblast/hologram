@@ -242,6 +242,10 @@ export default class Bitstring {
     const unit = Bitstring.resolveSegmentUnit(segment);
     const segmentLen = Number(size * unit);
 
+    if (offset + segmentLen > bitArray.length) {
+      return false;
+    }
+
     const chunk = bitArray.slice(offset, offset + segmentLen);
     const bytesArray = Bitstring.#convertBitArrayToByteArray(chunk);
     const dataView = new DataView(bytesArray.buffer);
@@ -258,6 +262,10 @@ export default class Bitstring {
     const size = Bitstring.resolveSegmentSize(segment);
     const unit = Bitstring.resolveSegmentUnit(segment);
     const segmentLen = Number(size * unit);
+
+    if (offset + segmentLen > bitArray.length) {
+      return false;
+    }
 
     let value = 0n;
 
@@ -430,7 +438,9 @@ export default class Bitstring {
   }
 
   static #validateFloatSegment(segment, index) {
-    if (!["float", "integer"].includes(segment.value.type)) {
+    if (
+      !["float", "integer", "variable_pattern"].includes(segment.value.type)
+    ) {
       Bitstring.#raiseTypeMismatchError(
         index,
         "float",
@@ -468,7 +478,7 @@ export default class Bitstring {
   }
 
   static #validateIntegerSegment(segment, index) {
-    if (segment.value.type !== "integer") {
+    if (!["integer", "variable_pattern"].includes(segment.value.type)) {
       Bitstring.#raiseTypeMismatchError(
         index,
         "integer",
