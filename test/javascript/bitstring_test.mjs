@@ -87,6 +87,67 @@ describe("buildUnsignedBigIntFromBitArray()", () => {
   });
 });
 
+describe("fetchNextCodePointFromUtf8BitstringChunk()", () => {
+  it("$ (1 byte)", () => {
+    const bitArray = new Uint8Array([0, 0, 1, 0, 0, 1, 0, 0]);
+
+    const result = Bitstring.fetchNextCodePointFromUtf8BitstringChunk(
+      bitArray,
+      0,
+    );
+
+    assert.deepStrictEqual(result, [Type.integer(36), 8]);
+  });
+
+  it("£ (2 bytes)", () => {
+    // prettier-ignore
+    const bitArray = new Uint8Array([
+      1, 1, 0, 0, 0, 0, 1, 0,
+      1, 0, 1, 0, 0, 0, 1, 1,
+    ]);
+
+    const result = Bitstring.fetchNextCodePointFromUtf8BitstringChunk(
+      bitArray,
+      0,
+    );
+
+    assert.deepStrictEqual(result, [Type.integer(163), 16]);
+  });
+
+  it("€ (3 bytes)", () => {
+    // prettier-ignore
+    const bitArray = new Uint8Array([
+      1, 1, 1, 0, 0, 0, 1, 0,
+      1, 0, 0, 0, 0, 0, 1, 0,
+      1, 0, 1, 0, 1, 1, 0, 0,
+    ]);
+
+    const result = Bitstring.fetchNextCodePointFromUtf8BitstringChunk(
+      bitArray,
+      0,
+    );
+
+    assert.deepStrictEqual(result, [Type.integer(8364), 24]);
+  });
+
+  it("𐍈 (4 bytes)", () => {
+    // prettier-ignore
+    const bitArray = new Uint8Array([
+      1, 1, 1, 1, 0, 0, 0, 0,
+      1, 0, 0, 1, 0, 0, 0, 0,
+      1, 0, 0, 0, 1, 1, 0, 1,
+      1, 0, 0, 0, 1, 0, 0, 0,
+    ]);
+
+    const result = Bitstring.fetchNextCodePointFromUtf8BitstringChunk(
+      bitArray,
+      0,
+    );
+
+    assert.deepStrictEqual(result, [Type.integer(66376), 32]);
+  });
+});
+
 // IMPORTANT!
 // Each JavaScript test has a related Elixir consistency test in test/elixir/hologram/ex_js_consistency/bitstring_test.exs
 // Always update both together.

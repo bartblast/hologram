@@ -42,11 +42,88 @@ export default class Bitstring {
           offset,
         );
 
+      case "utf8":
+        return Bitstring.fetchNextCodePointFromUtf8BitstringChunk(
+          bitArray,
+          offset,
+        );
+
       default:
         throw new HologramInterpreterError(
           `building ${segment.type} value from a bitstring segment is not yet implemented in Hologram`,
         );
     }
+  }
+
+  // See: https://en.wikipedia.org/wiki/UTF-8#Encoding
+  static fetchNextCodePointFromUtf8BitstringChunk(bitArray, offset) {
+    if (offset + 8 > bitArray.length) {
+      return false;
+    }
+
+    let numBytes;
+
+    // 0xxxxxxx
+    if (bitArray[offset] === 0) {
+      numBytes = 1;
+      // 110xxxxx
+    } else if (bitArray[offset + 2] === 0) {
+      numBytes = 2;
+      //1110xxxx
+    } else if (bitArray[offset + 3] === 0) {
+      numBytes = 3;
+      // 11110xxx
+    } else {
+      numBytes = 4;
+    }
+
+    if (numBytes > 1 && offset + numBytes * 8 > bitArray.length) {
+      return false;
+    }
+
+    const chunks = [];
+
+    switch (numBytes) {
+      case 1:
+        chunks[0] = bitArray.slice(offset + 1, offset + 8);
+        break;
+
+      case 2:
+        chunks[0] = bitArray.slice(offset + 3, offset + 8);
+        chunks[1] = bitArray.slice(offset + 8 + 2, offset + 2 * 8);
+        break;
+
+      case 3:
+        chunks[0] = bitArray.slice(offset + 4, offset + 8);
+        chunks[1] = bitArray.slice(offset + 8 + 2, offset + 2 * 8);
+        chunks[2] = bitArray.slice(offset + 2 * 8 + 2, offset + 3 * 8);
+        break;
+
+      case 4:
+        chunks[0] = bitArray.slice(offset + 5, offset + 8);
+        chunks[1] = bitArray.slice(offset + 8 + 2, offset + 8 + 8);
+        chunks[2] = bitArray.slice(offset + 2 * 8 + 2, offset + 3 * 8);
+        chunks[3] = bitArray.slice(offset + 3 * 8 + 2, offset + 4 * 8);
+        break;
+    }
+
+    const codePointBitCount = chunks.reduce(
+      (acc, chunk) => acc + chunk.length,
+      0,
+    );
+
+    const codePointBitArray = new Uint8Array(codePointBitCount);
+    let codePointOffset = 0;
+
+    for (const chunk of chunks) {
+      codePointBitArray.set(chunk, codePointOffset);
+      codePointOffset += chunk.length;
+    }
+
+    const codePoint =
+      Bitstring.buildUnsignedBigIntFromBitArray(codePointBitArray);
+
+    return [Type.integer(codePoint), numBytes * 8];
   }
 
   static from(segments) {
