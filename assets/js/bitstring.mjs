@@ -20,6 +20,12 @@ export default class Bitstring {
     return signBit === 1 ? -BigInt(2 ** (bitArray.length - 1)) + value : value;
   }
 
+  static buildUnsignedBigIntFromBitArray(bitArray) {
+    return bitArray.reduce((acc, bit, index) => {
+      return acc | BigInt(bit << (bitArray.length - 1 - index));
+    }, 0n);
+  }
+
   static buildValueFromBitstringChunk(segment, bitArray, offset) {
     switch (segment.type) {
       case "float":

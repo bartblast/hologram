@@ -50,6 +50,43 @@ describe("buildSignedBigIntFromBitArray()", () => {
   });
 });
 
+describe("buildUnsignedBigIntFromBitArray()", () => {
+  it("0", () => {
+    const bitArray = new Uint8Array([]);
+    const result = Bitstring.buildUnsignedBigIntFromBitArray(bitArray);
+
+    assert.equal(result, 0n);
+  });
+
+  it("0b0101010 == 42", () => {
+    const bitArray = new Uint8Array([0, 1, 0, 1, 0, 1, 0]);
+    const result = Bitstring.buildUnsignedBigIntFromBitArray(bitArray);
+
+    assert.equal(result, 42n);
+  });
+
+  it("0b101010 == 42", () => {
+    const bitArray = new Uint8Array([1, 0, 1, 0, 1, 0]);
+    const result = Bitstring.buildUnsignedBigIntFromBitArray(bitArray);
+
+    assert.equal(result, 42n);
+  });
+
+  it("0b0101010101010 == 2730", () => {
+    const bitArray = new Uint8Array([0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0]);
+    const result = Bitstring.buildUnsignedBigIntFromBitArray(bitArray);
+
+    assert.equal(result, 2730n);
+  });
+
+  it("0b101010101010 == 2730", () => {
+    const bitArray = new Uint8Array([1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0]);
+    const result = Bitstring.buildUnsignedBigIntFromBitArray(bitArray);
+
+    assert.equal(result, 2730n);
+  });
+});
+
 // IMPORTANT!
 // Each JavaScript test has a related Elixir consistency test in test/elixir/hologram/ex_js_consistency/bitstring_test.exs
 // Always update both together.
