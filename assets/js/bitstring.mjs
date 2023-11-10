@@ -238,7 +238,7 @@ export default class Bitstring {
     for (let i = 0; i < numBytes; ++i) {
       for (let j = 0; j < 8; ++j) {
         if (bitArray[i * 8 + j] === 1) {
-          byteArray[i] = Bitstring.#putByteBit(byteArray[i], 7 - j);
+          byteArray[i] = Bitstring.#putBit(byteArray[i], 7 - j);
         }
       }
     }
@@ -295,11 +295,7 @@ export default class Bitstring {
     }
   }
 
-  static #putBigIntBit(value, position) {
-    return value | (1n << position);
-  }
-
-  static #putByteBit(value, position) {
+  static #putBit(value, position) {
     return value | (1 << position);
   }
 
