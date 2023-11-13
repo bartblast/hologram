@@ -2218,6 +2218,41 @@ describe("matchOperator()", () => {
   });
 
   describe("bistring value", () => {
+    const emptyBitstringPattern = Type.bitstringPattern([]);
+    const emptyBitstringValue = Type.bitstring([]);
+
+    // <<>> = <<>>
+    it("left empty bitstring == right empty bitstring", () => {
+      const result = Interpreter.matchOperator(
+        emptyBitstringValue,
+        emptyBitstringPattern,
+        vars,
+      );
+
+      assert.deepStrictEqual(result, emptyBitstringValue);
+    });
+
+    // <<>> = <<1::1, 0::1>>
+    it("left empty bitstring != right non-empty bitstring", () => {
+      const myBitstring = Type.bitstring([1, 0]);
+
+      assertMatchError(
+        () =>
+          Interpreter.matchOperator(myBitstring, emptyBitstringPattern, vars),
+        myBitstring,
+      );
+    });
+
+    // <<>> = :abc
+    it("left empty bitstring != right non-bitstring", () => {
+      const myAtom = Type.atom("abc");
+
+      assertMatchError(
+        () => Interpreter.matchOperator(myAtom, emptyBitstringPattern, vars),
+        myAtom,
+      );
+    });
+
     it("left bitstring == right bitstring", () => {
       const result = Interpreter.matchOperator(
         Type.bitstring([

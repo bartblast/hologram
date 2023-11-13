@@ -162,6 +162,26 @@ defmodule Hologram.ExJsConsistency.MatchOperatorTest do
   end
 
   describe "bistring value" do
+    # <<>> = <<>>
+    test "left empty bitstring == right empty bitstring" do
+      result = <<>> = <<>>
+      assert result == <<>>
+    end
+
+    # <<>> = <<1::1, 0::1>>
+    test "left empty bitstring != right non-empty bitstring" do
+      assert_raise MatchError, "no match of right hand side value: <<2::size(2)>>", fn ->
+        <<>> = <<1::1, 0::1>>
+      end
+    end
+
+    # <<>> = :abc
+    test "left empty bitstring != right non-bitstring" do
+      assert_raise MatchError, "no match of right hand side value: :abc", fn ->
+        <<>> = build_value(:abc)
+      end
+    end
+
     test "left bitstring == right bitstring" do
       result = <<1::integer>> = <<1::integer>>
       assert result == <<1::integer>>

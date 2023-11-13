@@ -539,6 +539,10 @@ export default class Interpreter {
   }
 
   static #matchBitstringPattern(right, left, vars) {
+    if (right.type !== "bitstring" && right.type !== "bitstring_pattern") {
+      throw new HologramMatchError(right);
+    }
+
     let offset = 0;
 
     for (const segment of left.segments) {
@@ -572,6 +576,10 @@ export default class Interpreter {
 
         offset += segmentLen;
       }
+    }
+
+    if (offset < right.bits.length) {
+      throw new HologramMatchError(right);
     }
 
     return right;
@@ -666,14 +674,5 @@ export default class Interpreter {
       "CondClauseError",
       "no cond clause evaluated to a truthy value",
     );
-  }
-
-  // TODO: is this needed?
-  static #raiseUndefinedFunctionError(moduleName, functionName, arity) {
-    // TODO: include info about available alternative arities
-    const inspectedModuleName = Interpreter.inspectModuleName(moduleName);
-    const message = `function ${inspectedModuleName}.${functionName}/${arity} is undefined or private`;
-
-    return Interpreter.raiseError("UndefinedFunctionError", message);
   }
 }
