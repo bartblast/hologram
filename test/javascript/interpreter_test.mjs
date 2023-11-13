@@ -2301,7 +2301,7 @@ describe("matchOperator()", () => {
         () =>
           Interpreter.matchOperator(
             myAtom,
-            Type.bitstring([
+            Type.bitstringPattern([
               Type.bitstringSegment(Type.integer(1), {type: "integer"}),
             ]),
             vars,
