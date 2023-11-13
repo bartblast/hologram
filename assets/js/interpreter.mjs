@@ -145,9 +145,6 @@ export default class Interpreter {
         )}.${functionName}/${functionArity}`,
       );
       console.dir(arguments);
-      console.log(
-        "--------------------------------------------------------------------------------",
-      );
 
       const args = Type.list([...arguments]);
       const arity = arguments.length;
@@ -160,7 +157,19 @@ export default class Interpreter {
           Interpreter.updateVarsToMatchedValues(vars);
 
           if (Interpreter.#evaluateGuards(clause.guards, vars)) {
-            return clause.body(vars);
+            const result = clause.body(vars);
+
+            // TODO: remove on release
+            console.log(
+              `RETURN: ${Interpreter.inspectModuleName(
+                moduleName,
+              )}.${functionName}/${functionArity}`,
+            );
+            console.log(
+              "--------------------------------------------------------------------------------",
+            );
+
+            return result;
           }
         }
       }
