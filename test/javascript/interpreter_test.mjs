@@ -2217,9 +2217,14 @@ describe("matchOperator()", () => {
     // it("utf32 type modifier")
   });
 
-  describe("bistring value", () => {
+  describe("bistring type", () => {
     const emptyBitstringPattern = Type.bitstringPattern([]);
     const emptyBitstringValue = Type.bitstring([]);
+
+    const multiSegmentBitstringValue = Type.bitstring([
+      Type.bitstringSegment(Type.integer(1), {type: "integer"}),
+      Type.bitstringSegment(Type.integer(2), {type: "integer"}),
+    ]);
 
     // <<>> = <<>>
     it("left empty bitstring == right empty bitstring", () => {
@@ -2253,7 +2258,7 @@ describe("matchOperator()", () => {
       );
     });
 
-    it("left bitstring == right bitstring", () => {
+    it("left literal single-segment bitstring == right literal single-segment bitstring", () => {
       const result = Interpreter.matchOperator(
         Type.bitstring([
           Type.bitstringSegment(Type.integer(1), {type: "integer"}),
@@ -2271,7 +2276,7 @@ describe("matchOperator()", () => {
       assert.deepStrictEqual(result, expected);
     });
 
-    it("left bitstring != right bitstring", () => {
+    it("left literal single-segment bitstring != right literal single-segment bitstring", () => {
       const myBitstring = Type.bitstring([
         Type.bitstringSegment(Type.integer(2), {type: "integer"}),
       ]);
@@ -2289,7 +2294,7 @@ describe("matchOperator()", () => {
       );
     });
 
-    it("left bitstring != right non-bitstring", () => {
+    it("left literal single-segment bitstring != right non-bitstring", () => {
       const myAtom = Type.atom("abc");
 
       assertMatchError(
@@ -2305,7 +2310,7 @@ describe("matchOperator()", () => {
       );
     });
 
-    it("literal bitstring segments", () => {
+    it("multiple literal bitstring segments", () => {
       const result = Interpreter.matchOperator(
         Type.bitstring([
           Type.bitstringSegment(Type.integer(1), {
@@ -2344,7 +2349,7 @@ describe("matchOperator()", () => {
       assert.deepStrictEqual(result, expected);
     });
 
-    it("literal float segments", () => {
+    it("multiple literal float segments", () => {
       const result = Interpreter.matchOperator(
         Type.bitstring([
           Type.bitstringSegment(Type.float(1.0), {type: "float"}),
@@ -2365,7 +2370,7 @@ describe("matchOperator()", () => {
       assert.deepStrictEqual(result, expected);
     });
 
-    it("literal integer segments", () => {
+    it("multiple literal integer segments", () => {
       const result = Interpreter.matchOperator(
         Type.bitstring([
           Type.bitstringSegment(Type.integer(1), {type: "integer"}),
@@ -2386,7 +2391,7 @@ describe("matchOperator()", () => {
       assert.deepStrictEqual(result, expected);
     });
 
-    it("literal string segments", () => {
+    it("multiple literal string segments", () => {
       const result = Interpreter.matchOperator(
         Type.bitstring([
           Type.bitstringSegment(Type.string("aaa"), {type: "utf8"}),
@@ -2405,6 +2410,108 @@ describe("matchOperator()", () => {
       ]);
 
       assert.deepStrictEqual(result, expected);
+    });
+
+    // <<x::integer>> = <<1>>
+    it("left single-segment bitstring with variable pattern == right bistring", () => {
+      const myBitstring = Type.bitstring([
+        Type.bitstringSegment(Type.integer(1), {type: "integer"}),
+      ]);
+
+      const result = Interpreter.matchOperator(
+        myBitstring,
+        Type.bitstringPattern([
+          Type.bitstringSegment(Type.variablePattern("x"), {type: "integer"}),
+        ]),
+        vars,
+      );
+
+      assert.deepStrictEqual(result, myBitstring);
+
+      assert.deepStrictEqual(vars, {
+        a: Type.integer(9),
+        __matched__: {
+          x: Type.integer(1),
+        },
+      });
+    });
+
+    // <<x::integer, y::integer>> = <<1, 2>>
+    it("left multiple-segment bitstring with variable patterns == right bitstring", () => {
+      const result = Interpreter.matchOperator(
+        multiSegmentBitstringValue,
+        Type.bitstringPattern([
+          Type.bitstringSegment(Type.variablePattern("x"), {type: "integer"}),
+          Type.bitstringSegment(Type.variablePattern("y"), {type: "integer"}),
+        ]),
+        vars,
+      );
+
+      assert.deepStrictEqual(result, multiSegmentBitstringValue);
+
+      assert.deepStrictEqual(vars, {
+        a: Type.integer(9),
+        __matched__: {
+          x: Type.integer(1),
+          y: Type.integer(2),
+        },
+      });
+    });
+
+    // <<3, y::integer>> = <<1, 2>>
+    it("first segment in left multi-segment bitstring doesn't match", () => {
+      assertMatchError(
+        () =>
+          Interpreter.matchOperator(
+            multiSegmentBitstringValue,
+            Type.bitstringPattern([
+              Type.bitstringSegment(Type.integer(3), {type: "integer"}),
+              Type.bitstringSegment(Type.variablePattern("y"), {
+                type: "integer",
+              }),
+            ]),
+            vars,
+          ),
+        multiSegmentBitstringValue,
+      );
+    });
+
+    // <<1, 2::size(7)>> = <<1, 2>>
+    it("last segment in left multi-segment bitstring doesn't match, because there are too few bits", () => {
+      assertMatchError(
+        () =>
+          Interpreter.matchOperator(
+            multiSegmentBitstringValue,
+            Type.bitstringPattern([
+              Type.bitstringSegment(Type.integer(1), {type: "integer"}),
+              Type.bitstringSegment(Type.integer(2), {
+                type: "integer",
+                size: Type.integer(7),
+              }),
+            ]),
+            vars,
+          ),
+        multiSegmentBitstringValue,
+      );
+    });
+
+    // <<1, 2::size(9)>> = <<1, 2>>
+    it("last segment in left multi-segment bitstring doesn't match, because there are too many bits", () => {
+      assertMatchError(
+        () =>
+          Interpreter.matchOperator(
+            multiSegmentBitstringValue,
+            Type.bitstringPattern([
+              Type.bitstringSegment(Type.integer(1), {type: "integer"}),
+              Type.bitstringSegment(Type.integer(2), {
+                type: "integer",
+                size: Type.integer(9),
+              }),
+            ]),
+            vars,
+          ),
+        multiSegmentBitstringValue,
+      );
     });
   });
 

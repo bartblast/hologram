@@ -161,7 +161,7 @@ defmodule Hologram.ExJsConsistency.MatchOperatorTest do
     # test "utf32 type modifier"
   end
 
-  describe "bistring value" do
+  describe "bistring type" do
     # <<>> = <<>>
     test "left empty bitstring == right empty bitstring" do
       result = <<>> = <<>>
@@ -182,45 +182,83 @@ defmodule Hologram.ExJsConsistency.MatchOperatorTest do
       end
     end
 
-    test "left bitstring == right bitstring" do
+    test "left literal single-segment bitstring == right literal single-segment bitstring" do
       result = <<1::integer>> = <<1::integer>>
       assert result == <<1::integer>>
     end
 
-    test "left bitstring != right bitstring" do
+    test "left literal single-segment bitstring != right literal single-segment bitstring" do
       assert_raise MatchError, "no match of right hand side value: <<2>>", fn ->
         <<1::integer>> = <<2::integer>>
       end
     end
 
-    test "left bitstring != right non-bitstring" do
+    test "left literal single-segment bitstring != right non-bitstring" do
       assert_raise MatchError, "no match of right hand side value: :abc", fn ->
         <<1::integer>> = build_value(:abc)
       end
     end
 
-    test "literal bitstring segments" do
+    test "multiple literal bitstring segments" do
       result = <<1::1, 0::1>> = <<1::1, 0::1>>
 
       assert result == <<1::1, 0::1>>
     end
 
-    test "literal float segments" do
+    test "multiple literal float segments" do
       result = <<1.0::float, 2.0::float>> = <<1.0::float, 2.0::float>>
 
       assert result == <<1.0::float, 2.0::float>>
     end
 
-    test "literal integer segments" do
+    test "multiple literal integer segments" do
       result = <<1::integer, 2::integer>> = <<1::integer, 2::integer>>
 
       assert result == <<1::integer, 2::integer>>
     end
 
-    test "literal string segments" do
+    test "multiple literal string segments" do
       result = <<"aaa"::utf8, "bbb"::utf8>> = <<"aaa"::utf8, "bbb"::utf8>>
 
       assert result == <<"aaa"::utf8, "bbb"::utf8>>
+    end
+
+    # <<x::integer>> = <<1>>
+    test "left single-segment bitstring with variable pattern == right bistring" do
+      result = <<x::integer>> = <<1>>
+
+      assert result == <<1>>
+      assert x == 1
+    end
+
+    # <<x::integer, y::integer>> = <<1, 2>>
+    test "left multiple-segment bitstring with variable patterns == right bitstring" do
+      result = <<x::integer, y::integer>> = <<1, 2>>
+
+      assert result == <<1, 2>>
+      assert x == 1
+      assert y == 2
+    end
+
+    # <<3, y::integer>> = <<1, 2>>
+    test "first segment in left multi-segment bitstring doesn't match" do
+      assert_raise MatchError, "no match of right hand side value: <<1, 2>>", fn ->
+        <<3, _y::integer>> = <<1, 2>>
+      end
+    end
+
+    # <<1, 2::size(7)>> = <<1, 2>>
+    test "last segment in left multi-segment bitstring doesn't match, because there are too few bits" do
+      assert_raise MatchError, "no match of right hand side value: <<1, 2>>", fn ->
+        <<1, 2::size(7)>> = <<1, 2>>
+      end
+    end
+
+    # <<1, 2::size(9)>> = <<1, 2>>
+    test "last segment in left multi-segment bitstring doesn't match, because there are too many bits" do
+      assert_raise MatchError, "no match of right hand side value: <<1, 2>>", fn ->
+        <<1, 2::size(9)>> = <<1, 2>>
+      end
     end
   end
 
