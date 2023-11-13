@@ -221,6 +221,19 @@ const Erlang = {
   // end atom_to_binary/1
   // deps: []
 
+  // start bit_size/1
+  "bit_size/1": (term) => {
+    if (!Type.isBitstring(term)) {
+      Interpreter.raiseArgumentError(
+        "errors were found at the given arguments:\n\n  * 1st argument: not a bitstring\n",
+      );
+    }
+
+    return Type.integer(term.bits.length);
+  },
+  // end bit_size/1
+  // deps: []
+
   // start element/2
   "element/2": (index, tuple) => {
     if (!Type.isInteger(index)) {

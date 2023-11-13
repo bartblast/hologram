@@ -967,6 +967,31 @@ describe("atom_to_binary/1", () => {
   });
 });
 
+describe("bit_size/1", () => {
+  it("bitstring", () => {
+    const myBitstring = Type.bitstring([
+      Type.bitstringSegment(Type.integer(2), {
+        type: "integer",
+        size: Type.integer(7),
+      }),
+    ]);
+
+    const result = Erlang["bit_size/1"](myBitstring);
+
+    assert.deepStrictEqual(result, Type.integer(7));
+  });
+
+  it("not bitstring", () => {
+    const myAtom = Type.atom("abc");
+
+    assertBoxedError(
+      () => Erlang["bit_size/1"](myAtom),
+      "ArgumentError",
+      "errors were found at the given arguments:\n\n  * 1st argument: not a bitstring\n",
+    );
+  });
+});
+
 describe("element/2", () => {
   const tuple = Type.tuple([Type.integer(5), Type.integer(6), Type.integer(7)]);
 
