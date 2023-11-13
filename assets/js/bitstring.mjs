@@ -26,6 +26,7 @@ export default class Bitstring {
     }, 0n);
   }
 
+  // TODO: test
   static buildValueFromBitstringChunk(segment, bitArray, offset) {
     switch (segment.type) {
       case "float":
