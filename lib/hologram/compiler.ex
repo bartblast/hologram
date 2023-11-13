@@ -380,6 +380,7 @@ defmodule Hologram.Compiler do
     |> CallGraph.add_edge({:erlang, :>=, 2}, {:erlang, :==, 2})
     |> CallGraph.add_edge({:erlang, :>=, 2}, {:erlang, :>, 2})
     |> CallGraph.add_edge({:erlang, :error, 1}, {:erlang, :error, 2})
+    |> CallGraph.add_edge({:erlang, :integer_to_binary, 1}, {:erlang, :integer_to_binary, 2})
     |> CallGraph.add_edge(
       {:unicode, :characters_to_binary, 1},
       {:unicode, :characters_to_binary, 3}

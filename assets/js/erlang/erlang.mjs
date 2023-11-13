@@ -289,6 +289,13 @@ const Erlang = {
   // end hd/1
   // deps: []
 
+  // start integer_to_binary/1
+  "integer_to_binary/1": (integer) => {
+    return Erlang["integer_to_binary/2"](integer, Type.integer(10));
+  },
+  // end integer_to_binary/1
+  // deps: [:erlang.integer_to_binary/2]
+
   // start integer_to_binary/2
   "integer_to_binary/2": (integer, base) => {
     if (!Type.isInteger(integer)) {
