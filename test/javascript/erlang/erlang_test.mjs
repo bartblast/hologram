@@ -1075,6 +1075,89 @@ describe("hd/1", () => {
   });
 });
 
+describe("integer_to_binary/2", () => {
+  describe("positive integer", () => {
+    it("base = 1", () => {
+      assertBoxedError(
+        () =>
+          Erlang["integer_to_binary/2"](Type.integer(123123), Type.integer(1)),
+        "ArgumentError",
+        "errors were found at the given arguments:\n\n  * 2nd argument: not an integer in the range 2 through 36\n",
+      );
+    });
+
+    it("base = 2", () => {
+      const result = Erlang["integer_to_binary/2"](
+        Type.integer(123123),
+        Type.integer(2),
+      );
+
+      const expected = Type.bitstring("11110000011110011");
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("base = 16", () => {
+      const result = Erlang["integer_to_binary/2"](
+        Type.integer(123123),
+        Type.integer(16),
+      );
+
+      const expected = Type.bitstring("1E0F3");
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("base = 36", () => {
+      const result = Erlang["integer_to_binary/2"](
+        Type.integer(123123),
+        Type.integer(36),
+      );
+
+      const expected = Type.bitstring("2N03");
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("base = 37", () => {
+      assertBoxedError(
+        () =>
+          Erlang["integer_to_binary/2"](Type.integer(123123), Type.integer(37)),
+        "ArgumentError",
+        "errors were found at the given arguments:\n\n  * 2nd argument: not an integer in the range 2 through 36\n",
+      );
+    });
+  });
+
+  it("negative integer", () => {
+    const result = Erlang["integer_to_binary/2"](
+      Type.integer(-123123),
+      Type.integer(16),
+    );
+
+    const expected = Type.bitstring("-1E0F3");
+
+    assert.deepStrictEqual(result, expected);
+  });
+
+  it("1st argument (integer) is not an integer", () => {
+    assertBoxedError(
+      () => Erlang["integer_to_binary/2"](Type.atom("abc"), Type.integer(16)),
+      "ArgumentError",
+      "errors were found at the given arguments:\n\n  * 1st argument: not an integer\n",
+    );
+  });
+
+  it("2nd argument (base) is not an integer", () => {
+    assertBoxedError(
+      () =>
+        Erlang["integer_to_binary/2"](Type.integer(123123), Type.atom("abc")),
+      "ArgumentError",
+      "errors were found at the given arguments:\n\n  * 2nd argument: not an integer in the range 2 through 36\n",
+    );
+  });
+});
+
 describe("is_atom/1", () => {
   it("proxies to Type.isAtom() and casts the result to boxed boolean", () => {
     const term = Type.atom("abc");

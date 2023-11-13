@@ -289,6 +289,27 @@ const Erlang = {
   // end hd/1
   // deps: []
 
+  // start integer_to_binary/2
+  "integer_to_binary/2": (integer, base) => {
+    if (!Type.isInteger(integer)) {
+      Interpreter.raiseArgumentError(
+        "errors were found at the given arguments:\n\n  * 1st argument: not an integer\n",
+      );
+    }
+
+    if (!Type.isInteger(base) || base.value < 2 || base.value > 36) {
+      Interpreter.raiseArgumentError(
+        "errors were found at the given arguments:\n\n  * 2nd argument: not an integer in the range 2 through 36\n",
+      );
+    }
+
+    const str = integer.value.toString(Number(base.value)).toUpperCase();
+
+    return Type.bitstring(str);
+  },
+  // end integer_to_binary/2
+  // deps: []
+
   // start is_atom/1
   "is_atom/1": (term) => {
     return Type.boolean(Type.isAtom(term));

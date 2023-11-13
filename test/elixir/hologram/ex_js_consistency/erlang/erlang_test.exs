@@ -197,6 +197,56 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
     end
   end
 
+  describe "integer_to_binary/2" do
+    test "positive integer, base = 1" do
+      assert_raise ArgumentError,
+                   "errors were found at the given arguments:\n\n  * 2nd argument: not an integer in the range 2 through 36\n",
+                   fn ->
+                     :erlang.integer_to_binary(123_123, 1)
+                   end
+    end
+
+    test "positive integer, base = 2" do
+      assert :erlang.integer_to_binary(123_123, 2) == "11110000011110011"
+    end
+
+    test "positive integer, base = 16" do
+      assert :erlang.integer_to_binary(123_123, 16) == "1E0F3"
+    end
+
+    test "positive integer, base = 36" do
+      assert :erlang.integer_to_binary(123_123, 36) == "2N03"
+    end
+
+    test "positive integer, base = 37" do
+      assert_raise ArgumentError,
+                   "errors were found at the given arguments:\n\n  * 2nd argument: not an integer in the range 2 through 36\n",
+                   fn ->
+                     :erlang.integer_to_binary(123_123, 37)
+                   end
+    end
+
+    test "negative integer" do
+      assert :erlang.integer_to_binary(-123_123, 16) == "-1E0F3"
+    end
+
+    test "1st argument (integer) is not an integer" do
+      assert_raise ArgumentError,
+                   "errors were found at the given arguments:\n\n  * 1st argument: not an integer\n",
+                   fn ->
+                     :erlang.integer_to_binary(:abc, 16)
+                   end
+    end
+
+    test "2nd argument (base) is not an integer" do
+      assert_raise ArgumentError,
+                   "errors were found at the given arguments:\n\n  * 2nd argument: not an integer in the range 2 through 36\n",
+                   fn ->
+                     :erlang.integer_to_binary(123_123, :abc)
+                   end
+    end
+  end
+
   describe "is_binary/1" do
     test "returns true if the term is a binary bitsting" do
       assert :erlang.is_binary("abc") == true
