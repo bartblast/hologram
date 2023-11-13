@@ -165,9 +165,7 @@ export default class Interpreter {
                 moduleName,
               )}.${functionName}/${functionArity}`,
             );
-            console.log(
-              "--------------------------------------------------------------------------------",
-            );
+            console.dir(result);
 
             return result;
           }
