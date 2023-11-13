@@ -1937,7 +1937,7 @@ describe("matchOperator()", () => {
     });
   });
 
-  describe("bitstring pattern, signed modifier", () => {
+  describe("bitstring modifier, signed", () => {
     // <<value::signed>> = <<1::1, 0::1, 1::1, 0::1, 1::1, 0::1, 1::1, 0::1>>
     // The test would be the same as "integer type modifier", because the encoder always specifies the segment's type.
     // it("no type modifier")
@@ -2077,7 +2077,7 @@ describe("matchOperator()", () => {
     // it("utf32 type modifier")
   });
 
-  describe("bitstring pattern, unsigned modifier", () => {
+  describe("bitstring modifier, unsigned", () => {
     // <<value::unsigned>> = <<1::1, 0::1, 1::1, 0::1, 1::1, 0::1, 1::1, 0::1>>
     // The test would be the same as "integer type modifier", because the encoder always specifies the segment's type.
     // it("no type modifier")

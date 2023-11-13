@@ -35,7 +35,7 @@ defmodule Hologram.ExJsConsistency.MatchOperatorTest do
     end
   end
 
-  describe "bitstring pattern, signed modifier" do
+  describe "bitstring modifier, signed" do
     test "no type modifier" do
       # 170 == 0b10101010
       result = <<value::signed>> = <<1::1, 0::1, 1::1, 0::1, 1::1, 0::1, 1::1, 0::1>>
@@ -98,7 +98,7 @@ defmodule Hologram.ExJsConsistency.MatchOperatorTest do
     # test "utf32 type modifier"
   end
 
-  describe "bitstring pattern, unsigned modifier" do
+  describe "bitstring modifier, unsigned" do
     test "no type modifier" do
       # 170 == 0b10101010
       result = <<value::unsigned>> = <<1::1, 0::1, 1::1, 0::1, 1::1, 0::1, 1::1, 0::1>>
