@@ -27,7 +27,8 @@ export default class Hologram {
   static init() {
     window.Elixir_Kernel = Elixir_Kernel;
 
-    window.console.inspect = (term) => Interpreter.inspect(term);
+    window.console.inspect = (term) =>
+      console.log("INSPECT: " + Interpreter.inspect(term));
   }
 
   static mountPage() {
