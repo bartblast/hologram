@@ -376,10 +376,6 @@ defmodule Hologram.CompilerTest do
       assert {Enum, :to_list, 1} in mfas
       assert {Enum, :reverse, 1} in mfas
       assert {:lists, :reverse, 1} in mfas
-
-      assert {Kernel, :inspect, 2} in mfas
-      assert {Inspect.Opts, :new, 1} in mfas
-      assert {:binary, :copy, 2} in mfas
     end
 
     test "includes MFAs that are reachable by Erlang functions used by the runtime", %{mfas: mfas} do
@@ -392,7 +388,7 @@ defmodule Hologram.CompilerTest do
       assert count == 1
     end
 
-    test "removes MFAs with non-existing modules", %{call_graph: call_graph} do
+    test "excludes MFAs with non-existing modules", %{call_graph: call_graph} do
       call_graph
       |> CallGraph.add_edge({Enum, :into, 2}, {Calendar.ISO, :dummy_function_1, 1})
       |> CallGraph.add_edge({Enum, :into, 2}, {NonExistingModuleFixture, :dummy_function_2, 2})
@@ -408,6 +404,16 @@ defmodule Hologram.CompilerTest do
       refute {NonExistingModuleFixture, :dummy_function_2, 2} in mfas
       assert {:maps, :dummy_function_3, 3} in mfas
       refute {:non_existing_module_fixture, :dummy_function_4, 4} in mfas
+    end
+
+    test "excludes Elixir MFAs which are transpiled manually", %{mfas: mfas} do
+      refute {Kernel, :inspect, 1} in mfas
+    end
+
+    test "excludes MFAs which are reachable only from manually transpiled Elixir MFAs", %{
+      mfas: mfas
+    } do
+      refute {Inspect.Algebra, :group, 1} in mfas
     end
 
     test "sorts results", %{mfas: mfas} do

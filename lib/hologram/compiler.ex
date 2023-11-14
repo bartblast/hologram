@@ -282,6 +282,7 @@ defmodule Hologram.Compiler do
 
   @doc """
   Lists MFAs required by the runtime JS script.
+  Manually transpiled Elixir functions are excluded.
   """
   @spec list_runtime_mfas(CallGraph.t()) :: list(mfa)
   def list_runtime_mfas(call_graph) do
@@ -318,6 +319,7 @@ defmodule Hologram.Compiler do
 
     call_graph
     |> add_call_graph_edges_for_erlang_functions()
+    |> remove_call_graph_vertices_of_manually_transpiled_elixir_functions()
     |> CallGraph.reachable_mfas(entry_mfas)
     # Some protocol implementations are referenced but not actually implemented, e.g. Collectable.Atom
     |> Enum.reject(fn {module, _function, _arity} -> !Reflection.module?(module) end)
@@ -431,6 +433,12 @@ defmodule Hologram.Compiler do
 
     digest = CryptographicUtils.digest(data, :sha256, :binary)
     PLT.put(plt, module, digest)
+  end
+
+  defp remove_call_graph_vertices_of_manually_transpiled_elixir_functions(call_graph) do
+    call_graph
+    |> CallGraph.remove_vertex({Kernel, :inspect, 1})
+    |> CallGraph.remove_vertex({Kernel, :inspect, 2})
   end
 
   defp render_block(str) do
