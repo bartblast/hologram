@@ -240,7 +240,7 @@ export default class Interpreter {
   }
 
   static inspect(term) {
-    return Elixir_Kernel["inspect/1"](term);
+    return Bitstring.toText(Elixir_Kernel["inspect/1"](term));
   }
 
   static inspectModuleName(moduleName) {
