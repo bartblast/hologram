@@ -951,6 +951,43 @@ describe("andalso/2", () => {
   });
 });
 
+describe("atom_to_list/1", () => {
+  it("empty atom", () => {
+    const result = Erlang["atom_to_list/1"](Type.atom(""));
+    assert.deepStrictEqual(result, Type.list([]));
+  });
+
+  it("ASCII atom", () => {
+    const result = Erlang["atom_to_list/1"](Type.atom("abc"));
+
+    assert.deepStrictEqual(
+      result,
+      Type.list([Type.integer(97), Type.integer(98), Type.integer(99)]),
+    );
+  });
+
+  it("Unicode atom", () => {
+    const result = Erlang["atom_to_list/1"](Type.atom("全息图"));
+
+    assert.deepStrictEqual(
+      result,
+      Type.list([
+        Type.integer(20840),
+        Type.integer(24687),
+        Type.integer(22270),
+      ]),
+    );
+  });
+
+  it("not an atom", () => {
+    assertBoxedError(
+      () => Erlang["atom_to_list/1"](Type.integer(123)),
+      "ArgumentError",
+      "errors were found at the given arguments:\n\n  * 1st argument: not an atom\n",
+    );
+  });
+});
+
 describe("atom_to_binary/1", () => {
   it("converts atom to (binary) bitstring", () => {
     const result = Erlang["atom_to_binary/1"](Type.atom("abc"));
@@ -963,6 +1000,31 @@ describe("atom_to_binary/1", () => {
       () => Erlang["atom_to_binary/1"](Type.integer(123)),
       "ArgumentError",
       "errors were found at the given arguments:\n\n  * 1st argument: not an atom\n",
+    );
+  });
+});
+
+describe("bit_size/1", () => {
+  it("bitstring", () => {
+    const myBitstring = Type.bitstring([
+      Type.bitstringSegment(Type.integer(2), {
+        type: "integer",
+        size: Type.integer(7),
+      }),
+    ]);
+
+    const result = Erlang["bit_size/1"](myBitstring);
+
+    assert.deepStrictEqual(result, Type.integer(7));
+  });
+
+  it("not bitstring", () => {
+    const myAtom = Type.atom("abc");
+
+    assertBoxedError(
+      () => Erlang["bit_size/1"](myAtom),
+      "ArgumentError",
+      "errors were found at the given arguments:\n\n  * 1st argument: not a bitstring\n",
     );
   });
 });
@@ -1046,6 +1108,113 @@ describe("hd/1", () => {
       () => Erlang["hd/1"](Type.integer(123)),
       "ArgumentError",
       "errors were found at the given arguments:\n\n* 1st argument: not a nonempty list",
+    );
+  });
+});
+
+describe("integer_to_binary/1", () => {
+  it("positive integer", () => {
+    const result = Erlang["integer_to_binary/1"](Type.integer(123123));
+    const expected = Type.bitstring("123123");
+
+    assert.deepStrictEqual(result, expected);
+  });
+
+  it("negative integer", () => {
+    const result = Erlang["integer_to_binary/1"](Type.integer(-123123));
+    const expected = Type.bitstring("-123123");
+
+    assert.deepStrictEqual(result, expected);
+  });
+
+  it("not an integer", () => {
+    assertBoxedError(
+      () => Erlang["integer_to_binary/1"](Type.atom("abc")),
+      "ArgumentError",
+      "errors were found at the given arguments:\n\n  * 1st argument: not an integer\n",
+    );
+  });
+});
+
+describe("integer_to_binary/2", () => {
+  describe("positive integer", () => {
+    it("base = 1", () => {
+      assertBoxedError(
+        () =>
+          Erlang["integer_to_binary/2"](Type.integer(123123), Type.integer(1)),
+        "ArgumentError",
+        "errors were found at the given arguments:\n\n  * 2nd argument: not an integer in the range 2 through 36\n",
+      );
+    });
+
+    it("base = 2", () => {
+      const result = Erlang["integer_to_binary/2"](
+        Type.integer(123123),
+        Type.integer(2),
+      );
+
+      const expected = Type.bitstring("11110000011110011");
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("base = 16", () => {
+      const result = Erlang["integer_to_binary/2"](
+        Type.integer(123123),
+        Type.integer(16),
+      );
+
+      const expected = Type.bitstring("1E0F3");
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("base = 36", () => {
+      const result = Erlang["integer_to_binary/2"](
+        Type.integer(123123),
+        Type.integer(36),
+      );
+
+      const expected = Type.bitstring("2N03");
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("base = 37", () => {
+      assertBoxedError(
+        () =>
+          Erlang["integer_to_binary/2"](Type.integer(123123), Type.integer(37)),
+        "ArgumentError",
+        "errors were found at the given arguments:\n\n  * 2nd argument: not an integer in the range 2 through 36\n",
+      );
+    });
+  });
+
+  it("negative integer", () => {
+    const result = Erlang["integer_to_binary/2"](
+      Type.integer(-123123),
+      Type.integer(16),
+    );
+
+    const expected = Type.bitstring("-1E0F3");
+
+    assert.deepStrictEqual(result, expected);
+  });
+
+  it("1st argument (integer) is not an integer", () => {
+    assertBoxedError(
+      () => Erlang["integer_to_binary/2"](Type.atom("abc"), Type.integer(16)),
+      "ArgumentError",
+      "errors were found at the given arguments:\n\n  * 1st argument: not an integer\n",
+    );
+  });
+
+  it("2nd argument (base) is not an integer", () => {
+    assertBoxedError(
+      () =>
+        Erlang["integer_to_binary/2"](Type.integer(123123), Type.atom("abc")),
+      "ArgumentError",
+      "errors were found at the given arguments:\n\n  * 2nd argument: not an integer in the range 2 through 36\n",
     );
   });
 });

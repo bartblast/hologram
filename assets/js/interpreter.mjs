@@ -145,9 +145,6 @@ export default class Interpreter {
         )}.${functionName}/${functionArity}`,
       );
       console.dir(arguments);
-      console.log(
-        "--------------------------------------------------------------------------------",
-      );
 
       const args = Type.list([...arguments]);
       const arity = arguments.length;
@@ -160,7 +157,17 @@ export default class Interpreter {
           Interpreter.updateVarsToMatchedValues(vars);
 
           if (Interpreter.#evaluateGuards(clause.guards, vars)) {
-            return clause.body(vars);
+            const result = clause.body(vars);
+
+            // TODO: remove on release
+            console.log(
+              `RETURN: ${Interpreter.inspectModuleName(
+                moduleName,
+              )}.${functionName}/${functionArity}`,
+            );
+            console.dir(result);
+
+            return result;
           }
         }
       }
@@ -311,7 +318,7 @@ export default class Interpreter {
     }
 
     if (Type.isBitstringPattern(left)) {
-      return Interpreter.#matchBitstringPattern(right, left);
+      return Interpreter.#matchBitstringPattern(right, left, vars);
     }
 
     if (left.type !== right.type) {
@@ -538,12 +545,28 @@ export default class Interpreter {
     return false;
   }
 
-  static #matchBitstringPattern(right, left) {
+  static #matchBitstringPattern(right, left, vars) {
+    if (right.type !== "bitstring" && right.type !== "bitstring_pattern") {
+      throw new HologramMatchError(right);
+    }
+
     let offset = 0;
 
     for (const segment of left.segments) {
       if (segment.value.type === "variable_pattern") {
-        // TODO: implement
+        const valueInfo = Bitstring.buildValueFromBitstringChunk(
+          segment,
+          right.bits,
+          offset,
+        );
+
+        if (!valueInfo) {
+          throw new HologramMatchError(right);
+        }
+
+        const [value, segmentLen] = valueInfo;
+        Interpreter.matchOperator(value, segment.value, vars);
+        offset += segmentLen;
       } else {
         const segmentBitstring = Type.bitstring([segment]);
         const segmentLen = segmentBitstring.bits.length;
@@ -560,6 +583,10 @@ export default class Interpreter {
 
         offset += segmentLen;
       }
+    }
+
+    if (offset < right.bits.length) {
+      throw new HologramMatchError(right);
     }
 
     return right;
@@ -654,13 +681,5 @@ export default class Interpreter {
       "CondClauseError",
       "no cond clause evaluated to a truthy value",
     );
-  }
-
-  static #raiseUndefinedFunctionError(moduleName, functionName, arity) {
-    // TODO: include info about available alternative arities
-    const inspectedModuleName = Interpreter.inspectModuleName(moduleName);
-    const message = `function ${inspectedModuleName}.${functionName}/${arity} is undefined or private`;
-
-    return Interpreter.raiseError("UndefinedFunctionError", message);
   }
 }

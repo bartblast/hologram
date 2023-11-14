@@ -221,6 +221,36 @@ const Erlang = {
   // end atom_to_binary/1
   // deps: []
 
+  // start atom_to_list/1
+  "atom_to_list/1": (atom) => {
+    if (!Type.isAtom(atom)) {
+      Interpreter.raiseArgumentError(
+        "errors were found at the given arguments:\n\n  * 1st argument: not an atom\n",
+      );
+    }
+
+    const codePoints = [...atom.value].map((cp) =>
+      Type.integer(cp.codePointAt(0)),
+    );
+
+    return Type.list(codePoints);
+  },
+  // end atom_to_list/1
+  // deps: []
+
+  // start bit_size/1
+  "bit_size/1": (term) => {
+    if (!Type.isBitstring(term)) {
+      Interpreter.raiseArgumentError(
+        "errors were found at the given arguments:\n\n  * 1st argument: not a bitstring\n",
+      );
+    }
+
+    return Type.integer(term.bits.length);
+  },
+  // end bit_size/1
+  // deps: []
+
   // start element/2
   "element/2": (index, tuple) => {
     if (!Type.isInteger(index)) {
@@ -274,6 +304,34 @@ const Erlang = {
     return list.data[0];
   },
   // end hd/1
+  // deps: []
+
+  // start integer_to_binary/1
+  "integer_to_binary/1": (integer) => {
+    return Erlang["integer_to_binary/2"](integer, Type.integer(10));
+  },
+  // end integer_to_binary/1
+  // deps: [:erlang.integer_to_binary/2]
+
+  // start integer_to_binary/2
+  "integer_to_binary/2": (integer, base) => {
+    if (!Type.isInteger(integer)) {
+      Interpreter.raiseArgumentError(
+        "errors were found at the given arguments:\n\n  * 1st argument: not an integer\n",
+      );
+    }
+
+    if (!Type.isInteger(base) || base.value < 2 || base.value > 36) {
+      Interpreter.raiseArgumentError(
+        "errors were found at the given arguments:\n\n  * 2nd argument: not an integer in the range 2 through 36\n",
+      );
+    }
+
+    const str = integer.value.toString(Number(base.value)).toUpperCase();
+
+    return Type.bitstring(str);
+  },
+  // end integer_to_binary/2
   // deps: []
 
   // start is_atom/1

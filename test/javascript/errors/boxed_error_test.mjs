@@ -2,9 +2,10 @@
 
 import {assert} from "../../../assets/js/test_support.mjs";
 import HologramBoxedError from "../../../assets/js/errors/boxed_error.mjs";
+import Type from "../../../assets/js/type.mjs";
 
 it("HologramBoxedError", () => {
-  const struct = {a: 1, b: 2};
+  const struct = Type.errorStruct("MyType", "my message");
 
   try {
     throw new HologramBoxedError(struct);

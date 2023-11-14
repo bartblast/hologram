@@ -35,46 +35,230 @@ defmodule Hologram.ExJsConsistency.MatchOperatorTest do
     end
   end
 
+  describe "bitstring modifier, signed" do
+    test "no type modifier" do
+      # 170 == 0b10101010
+      result = <<value::signed>> = <<1::1, 0::1, 1::1, 0::1, 1::1, 0::1, 1::1, 0::1>>
+
+      assert result == <<170>>
+      assert value == -86
+    end
+
+    # <<value::binary-signed>> won't compile
+    # test "binary type modifier"
+
+    # <<value::bitstring-signed>> won't compile
+    # test "bitstring type modifier"
+
+    test "float type modifier, 64-bit size modifier" do
+      result = <<value::float-size(64)-signed>> = <<123.45::size(64)>>
+
+      assert result == <<123.45::size(64)>>
+      assert value == 123.45
+    end
+
+    test "float type modifier, 32-bit size modifier" do
+      result = <<value::float-size(32)-signed>> = <<123.45::size(32)>>
+
+      assert result == <<123.45::size(32)>>
+      assert value == 123.44999694824219
+    end
+
+    test "float type modifier, 16-bit size modifier" do
+      result = <<value::float-size(16)-signed>> = <<123.45::size(16)>>
+
+      assert result == <<123.45::size(16)>>
+      assert value == 123.4375
+    end
+
+    test "float type modifier, unsupported size modifier" do
+      size = 8
+
+      # 170 == 0b10101010
+      assert_raise MatchError, "no match of right hand side value: <<170>>", fn ->
+        <<_value::float-size(size)-signed>> = <<1::1, 0::1, 1::1, 0::1, 1::1, 0::1, 1::1, 0::1>>
+      end
+    end
+
+    test "integer type modifier" do
+      # 170 == 0b10101010
+      result = <<value::integer-signed>> = <<1::1, 0::1, 1::1, 0::1, 1::1, 0::1, 1::1, 0::1>>
+
+      assert result == <<170>>
+      assert value == -86
+    end
+
+    # <value::utf8-signed>> won't compile
+    # test "utf8 type modifier"
+
+    # <value::utf16-signed>> won't compile
+    # test "utf16 type modifier"
+
+    # <value::utf32-signed>> won't compile
+    # test "utf32 type modifier"
+  end
+
+  describe "bitstring modifier, unsigned" do
+    test "no type modifier" do
+      # 170 == 0b10101010
+      result = <<value::unsigned>> = <<1::1, 0::1, 1::1, 0::1, 1::1, 0::1, 1::1, 0::1>>
+
+      assert result == <<170>>
+      assert value == 170
+    end
+
+    # <<value::binary-unsigned>> won't compile
+    # test "binary type modifier"
+
+    # <<value::bitstring-unsigned>> won't compile
+    # test "bitstring type modifier"
+
+    test "float type modifier, 64-bit size modifier" do
+      result = <<value::float-size(64)-unsigned>> = <<123.45::size(64)>>
+
+      assert result == <<123.45::size(64)>>
+      assert value == 123.45
+    end
+
+    test "float type modifier, 32-bit size modifier" do
+      result = <<value::float-size(32)-unsigned>> = <<123.45::size(32)>>
+
+      assert result == <<123.45::size(32)>>
+      assert value == 123.44999694824219
+    end
+
+    test "float type modifier, 16-bit size modifier" do
+      result = <<value::float-size(16)-unsigned>> = <<123.45::size(16)>>
+
+      assert result == <<123.45::size(16)>>
+      assert value == 123.4375
+    end
+
+    test "float type modifier, unsupported size modifier" do
+      size = 8
+
+      # 170 == 0b10101010
+      assert_raise MatchError, "no match of right hand side value: <<170>>", fn ->
+        <<_value::float-size(size)-unsigned>> = <<1::1, 0::1, 1::1, 0::1, 1::1, 0::1, 1::1, 0::1>>
+      end
+    end
+
+    test "integer type modifier" do
+      # 170 == 0b10101010
+      result = <<value::integer-unsigned>> = <<1::1, 0::1, 1::1, 0::1, 1::1, 0::1, 1::1, 0::1>>
+
+      assert result == <<170>>
+      assert value == 170
+    end
+
+    # <value::utf8-unsigned>> won't compile
+    # test "utf8 type modifier"
+
+    # <value::utf16-unsigned>> won't compile
+    # test "utf16 type modifier"
+
+    # <value::utf32-unsigned>> won't compile
+    # test "utf32 type modifier"
+  end
+
   describe "bistring type" do
-    test "left bitstring == right bitstring" do
+    # <<>> = <<>>
+    test "left empty bitstring == right empty bitstring" do
+      result = <<>> = <<>>
+      assert result == <<>>
+    end
+
+    # <<>> = <<1::1, 0::1>>
+    test "left empty bitstring != right non-empty bitstring" do
+      assert_raise MatchError, "no match of right hand side value: <<2::size(2)>>", fn ->
+        <<>> = <<1::1, 0::1>>
+      end
+    end
+
+    # <<>> = :abc
+    test "left empty bitstring != right non-bitstring" do
+      assert_raise MatchError, "no match of right hand side value: :abc", fn ->
+        <<>> = build_value(:abc)
+      end
+    end
+
+    test "left literal single-segment bitstring == right literal single-segment bitstring" do
       result = <<1::integer>> = <<1::integer>>
       assert result == <<1::integer>>
     end
 
-    test "left bitstring != right bitstring" do
+    test "left literal single-segment bitstring != right literal single-segment bitstring" do
       assert_raise MatchError, "no match of right hand side value: <<2>>", fn ->
         <<1::integer>> = <<2::integer>>
       end
     end
 
-    test "left bitstring != right non-bitstring" do
+    test "left literal single-segment bitstring != right non-bitstring" do
       assert_raise MatchError, "no match of right hand side value: :abc", fn ->
         <<1::integer>> = build_value(:abc)
       end
     end
 
-    test "literal bitstring segments" do
+    test "multiple literal bitstring segments" do
       result = <<1::1, 0::1>> = <<1::1, 0::1>>
 
       assert result == <<1::1, 0::1>>
     end
 
-    test "literal float segments" do
+    test "multiple literal float segments" do
       result = <<1.0::float, 2.0::float>> = <<1.0::float, 2.0::float>>
 
       assert result == <<1.0::float, 2.0::float>>
     end
 
-    test "literal integer segments" do
+    test "multiple literal integer segments" do
       result = <<1::integer, 2::integer>> = <<1::integer, 2::integer>>
 
       assert result == <<1::integer, 2::integer>>
     end
 
-    test "literal string segments" do
+    test "multiple literal string segments" do
       result = <<"aaa"::utf8, "bbb"::utf8>> = <<"aaa"::utf8, "bbb"::utf8>>
 
       assert result == <<"aaa"::utf8, "bbb"::utf8>>
+    end
+
+    # <<x::integer>> = <<1>>
+    test "left single-segment bitstring with variable pattern == right bistring" do
+      result = <<x::integer>> = <<1>>
+
+      assert result == <<1>>
+      assert x == 1
+    end
+
+    # <<x::integer, y::integer>> = <<1, 2>>
+    test "left multiple-segment bitstring with variable patterns == right bitstring" do
+      result = <<x::integer, y::integer>> = <<1, 2>>
+
+      assert result == <<1, 2>>
+      assert x == 1
+      assert y == 2
+    end
+
+    # <<3, y::integer>> = <<1, 2>>
+    test "first segment in left multi-segment bitstring doesn't match" do
+      assert_raise MatchError, "no match of right hand side value: <<1, 2>>", fn ->
+        <<3, _y::integer>> = <<1, 2>>
+      end
+    end
+
+    # <<1, 2::size(7)>> = <<1, 2>>
+    test "last segment in left multi-segment bitstring doesn't match, because there are too few bits" do
+      assert_raise MatchError, "no match of right hand side value: <<1, 2>>", fn ->
+        <<1, 2::size(7)>> = <<1, 2>>
+      end
+    end
+
+    # <<1, 2::size(9)>> = <<1, 2>>
+    test "last segment in left multi-segment bitstring doesn't match, because there are too many bits" do
+      assert_raise MatchError, "no match of right hand side value: <<1, 2>>", fn ->
+        <<1, 2::size(9)>> = <<1, 2>>
+      end
     end
   end
 

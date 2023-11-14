@@ -252,7 +252,7 @@ defmodule Hologram.Compiler do
 
   @doc """
   Returns the list of MFAs that are reachable by the given page.
-  MFAs required by the runtime are excluded.
+  Functions required by the runtime as well as manually transpiled Elixir functions are excluded.
   """
   @spec list_page_mfas(CallGraph.t(), module) :: list(mfa)
   def list_page_mfas(call_graph, page_module) do
@@ -267,6 +267,7 @@ defmodule Hologram.Compiler do
     |> CallGraph.add_edge(page_module, {page_module, :template, 0})
     |> CallGraph.add_edge(page_module, {layout_module, :action, 3})
     |> CallGraph.add_edge(page_module, {layout_module, :template, 0})
+    |> remove_call_graph_vertices_of_manually_transpiled_elixir_functions()
     |> CallGraph.reachable(page_module)
     |> Enum.filter(&is_tuple/1)
     |> Kernel.--(runtime_mfas)
@@ -282,9 +283,12 @@ defmodule Hologram.Compiler do
 
   @doc """
   Lists MFAs required by the runtime JS script.
+  Manually transpiled Elixir functions are excluded.
   """
   @spec list_runtime_mfas(CallGraph.t()) :: list(mfa)
   def list_runtime_mfas(call_graph) do
+    call_graph_clone = CallGraph.clone(call_graph)
+
     # These Elixir functions are used directly by the JS runtime:
     entry_mfas = [
       # Interpreter.comprehension()
@@ -316,8 +320,9 @@ defmodule Hologram.Compiler do
       {:maps, :get, 2}
     ]
 
-    call_graph
+    call_graph_clone
     |> add_call_graph_edges_for_erlang_functions()
+    |> remove_call_graph_vertices_of_manually_transpiled_elixir_functions()
     |> CallGraph.reachable_mfas(entry_mfas)
     # Some protocol implementations are referenced but not actually implemented, e.g. Collectable.Atom
     |> Enum.reject(fn {module, _function, _arity} -> !Reflection.module?(module) end)
@@ -380,6 +385,7 @@ defmodule Hologram.Compiler do
     |> CallGraph.add_edge({:erlang, :>=, 2}, {:erlang, :==, 2})
     |> CallGraph.add_edge({:erlang, :>=, 2}, {:erlang, :>, 2})
     |> CallGraph.add_edge({:erlang, :error, 1}, {:erlang, :error, 2})
+    |> CallGraph.add_edge({:erlang, :integer_to_binary, 1}, {:erlang, :integer_to_binary, 2})
     |> CallGraph.add_edge(
       {:unicode, :characters_to_binary, 1},
       {:unicode, :characters_to_binary, 3}
@@ -430,6 +436,12 @@ defmodule Hologram.Compiler do
 
     digest = CryptographicUtils.digest(data, :sha256, :binary)
     PLT.put(plt, module, digest)
+  end
+
+  defp remove_call_graph_vertices_of_manually_transpiled_elixir_functions(call_graph) do
+    call_graph
+    |> CallGraph.remove_vertex({Kernel, :inspect, 1})
+    |> CallGraph.remove_vertex({Kernel, :inspect, 2})
   end
 
   defp render_block(str) do

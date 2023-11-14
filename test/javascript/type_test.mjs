@@ -105,6 +105,7 @@ describe("bitstring()", () => {
 it("bitstringPattern()", () => {
   const segment1 = Type.bitstringSegment(Type.integer(1), {type: "integer"});
   const segment2 = Type.bitstringSegment(Type.integer(2), {type: "integer"});
+
   const result = Type.bitstringPattern([segment1, segment2]);
   const expected = {type: "bitstring_pattern", segments: [segment1, segment2]};
 
@@ -131,7 +132,7 @@ describe("bitstringSegment()", () => {
     const result = Type.bitstringSegment(Type.integer(123), {
       endianness: "little",
       signedness: "unsigned",
-      unit: 3,
+      unit: 3n,
       size: Type.integer(8),
       type: "integer",
     });
@@ -140,7 +141,7 @@ describe("bitstringSegment()", () => {
       value: {type: "integer", value: 123n},
       type: "integer",
       size: Type.integer(8),
-      unit: 3,
+      unit: 3n,
       signedness: "unsigned",
       endianness: "little",
     };

@@ -13,6 +13,141 @@ import Type from "../../assets/js/type.mjs";
 before(() => linkModules());
 after(() => unlinkModules());
 
+describe("buildSignedBigIntFromBitArray()", () => {
+  it("0", () => {
+    const bitArray = new Uint8Array([]);
+    const result = Bitstring.buildSignedBigIntFromBitArray(bitArray);
+
+    assert.equal(result, 0n);
+  });
+
+  it("0b0101010 == 42", () => {
+    const bitArray = new Uint8Array([0, 1, 0, 1, 0, 1, 0]);
+    const result = Bitstring.buildSignedBigIntFromBitArray(bitArray);
+
+    assert.equal(result, 42n);
+  });
+
+  it("0b101010 == -22", () => {
+    const bitArray = new Uint8Array([1, 0, 1, 0, 1, 0]);
+    const result = Bitstring.buildSignedBigIntFromBitArray(bitArray);
+
+    assert.equal(result, -22n);
+  });
+
+  it("0b0101010101010 == 2730", () => {
+    const bitArray = new Uint8Array([0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0]);
+    const result = Bitstring.buildSignedBigIntFromBitArray(bitArray);
+
+    assert.equal(result, 2730n);
+  });
+
+  it("0b101010101010 == -1366", () => {
+    const bitArray = new Uint8Array([1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0]);
+    const result = Bitstring.buildSignedBigIntFromBitArray(bitArray);
+
+    assert.equal(result, -1366n);
+  });
+});
+
+describe("buildUnsignedBigIntFromBitArray()", () => {
+  it("0", () => {
+    const bitArray = new Uint8Array([]);
+    const result = Bitstring.buildUnsignedBigIntFromBitArray(bitArray);
+
+    assert.equal(result, 0n);
+  });
+
+  it("0b0101010 == 42", () => {
+    const bitArray = new Uint8Array([0, 1, 0, 1, 0, 1, 0]);
+    const result = Bitstring.buildUnsignedBigIntFromBitArray(bitArray);
+
+    assert.equal(result, 42n);
+  });
+
+  it("0b101010 == 42", () => {
+    const bitArray = new Uint8Array([1, 0, 1, 0, 1, 0]);
+    const result = Bitstring.buildUnsignedBigIntFromBitArray(bitArray);
+
+    assert.equal(result, 42n);
+  });
+
+  it("0b0101010101010 == 2730", () => {
+    const bitArray = new Uint8Array([0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0]);
+    const result = Bitstring.buildUnsignedBigIntFromBitArray(bitArray);
+
+    assert.equal(result, 2730n);
+  });
+
+  it("0b101010101010 == 2730", () => {
+    const bitArray = new Uint8Array([1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0]);
+    const result = Bitstring.buildUnsignedBigIntFromBitArray(bitArray);
+
+    assert.equal(result, 2730n);
+  });
+});
+
+describe("fetchNextCodePointFromUtf8BitstringChunk()", () => {
+  it("$ (1 byte)", () => {
+    const bitArray = new Uint8Array([0, 0, 1, 0, 0, 1, 0, 0]);
+
+    const result = Bitstring.fetchNextCodePointFromUtf8BitstringChunk(
+      bitArray,
+      0,
+    );
+
+    assert.deepStrictEqual(result, [Type.integer(36), 8]);
+  });
+
+  it("£ (2 bytes)", () => {
+    // prettier-ignore
+    const bitArray = new Uint8Array([
+      1, 1, 0, 0, 0, 0, 1, 0,
+      1, 0, 1, 0, 0, 0, 1, 1,
+    ]);
+
+    const result = Bitstring.fetchNextCodePointFromUtf8BitstringChunk(
+      bitArray,
+      0,
+    );
+
+    assert.deepStrictEqual(result, [Type.integer(163), 16]);
+  });
+
+  it("€ (3 bytes)", () => {
+    // prettier-ignore
+    const bitArray = new Uint8Array([
+      1, 1, 1, 0, 0, 0, 1, 0,
+      1, 0, 0, 0, 0, 0, 1, 0,
+      1, 0, 1, 0, 1, 1, 0, 0,
+    ]);
+
+    const result = Bitstring.fetchNextCodePointFromUtf8BitstringChunk(
+      bitArray,
+      0,
+    );
+
+    assert.deepStrictEqual(result, [Type.integer(8364), 24]);
+  });
+
+  it("𐍈 (4 bytes)", () => {
+    // prettier-ignore
+    const bitArray = new Uint8Array([
+      1, 1, 1, 1, 0, 0, 0, 0,
+      1, 0, 0, 1, 0, 0, 0, 0,
+      1, 0, 0, 0, 1, 1, 0, 1,
+      1, 0, 0, 0, 1, 0, 0, 0,
+    ]);
+
+    const result = Bitstring.fetchNextCodePointFromUtf8BitstringChunk(
+      bitArray,
+      0,
+    );
+
+    assert.deepStrictEqual(result, [Type.integer(66376), 32]);
+  });
+});
+
 // IMPORTANT!
 // Each JavaScript test has a related Elixir consistency test in test/elixir/hologram/ex_js_consistency/bitstring_test.exs
 // Always update both together.
@@ -506,6 +641,296 @@ describe("from()", () => {
     });
   });
 
+  describe("signed signedness modifier", () => {
+    it("with bitstring value", () => {
+      const segment = Type.bitstringSegment(Type.bitstring([1, 0, 1, 0]), {
+        type: "bitstring",
+        signedness: "signed",
+      });
+
+      const expectedMessage = `construction of binary failed: segment 1 of type 'integer': expected an integer but got: {"type":"bitstring","bits":{"0":1,"1":0,"2":1,"3":0}}`;
+
+      assertBoxedError(
+        () => Bitstring.from([segment]),
+        "ArgumentError",
+        expectedMessage,
+      );
+    });
+
+    it("with float value", () => {
+      const segment = Type.bitstringSegment(Type.float(123.45), {
+        type: "float",
+        signedness: "signed",
+      });
+
+      const result = Bitstring.from([segment]);
+
+      const expected = Bitstring.from([
+        Type.bitstringSegment(Type.float(123.45), {type: "float"}),
+      ]);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("with integer value", () => {
+      const segment = Type.bitstringSegment(Type.integer(123), {
+        type: "integer",
+        signedness: "signed",
+      });
+
+      const result = Bitstring.from([segment]);
+
+      const expected = Bitstring.from([
+        Type.bitstringSegment(Type.integer(123), {type: "integer"}),
+      ]);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("with string value", () => {
+      const segment = Type.bitstringSegment(Type.string("abc"), {
+        type: "utf8",
+        signedness: "signed",
+      });
+
+      const expectedMessage = `construction of binary failed: segment 1 of type 'integer': expected an integer but got: "abc"`;
+
+      assertBoxedError(
+        () => Bitstring.from([segment]),
+        "ArgumentError",
+        expectedMessage,
+      );
+    });
+  });
+
+  describe("size modifier", () => {
+    it("with bitstring value", () => {
+      const segment = Type.bitstringSegment(Type.bitstring([1, 0, 1, 0]), {
+        type: "bitstring",
+        size: Type.integer(3),
+      });
+
+      const expectedMessage = `construction of binary failed: segment 1 of type 'integer': expected an integer but got: {"type":"bitstring","bits":{"0":1,"1":0,"2":1,"3":0}}`;
+
+      assertBoxedError(
+        () => Bitstring.from([segment]),
+        "ArgumentError",
+        expectedMessage,
+      );
+    });
+
+    // TODO: update once 16-bit float bitstring segments are implemented in Hologram
+    it("with float value when size * unit results in 16, 32 or 64", () => {
+      const segment = Type.bitstringSegment(Type.float(123.45), {
+        type: "float",
+        size: Type.integer(16),
+      });
+
+      assert.throw(
+        () => Bitstring.from([segment]),
+        HologramInterpreterError,
+        "16-bit float bitstring segments are not yet implemented in Hologram",
+      );
+    });
+
+    it("with float value when size * unit doesn't result in 16, 32 or 64", () => {
+      const segment = Type.bitstringSegment(Type.float(123.45), {
+        type: "float",
+        size: Type.integer(7),
+      });
+
+      const expectedMessage = `construction of binary failed: segment 1 of type 'integer': expected an integer but got: 123.45`;
+
+      assertBoxedError(
+        () => Bitstring.from([segment]),
+        "ArgumentError",
+        expectedMessage,
+      );
+    });
+
+    it("with integer value", () => {
+      // 183 == 0b10110111
+      // 23 == 0b10111
+      const segment = Type.bitstringSegment(Type.integer(183), {
+        type: "integer",
+        size: Type.integer(5),
+      });
+
+      const result = Bitstring.from([segment]);
+
+      const expected = {
+        type: "bitstring",
+        bits: new Uint8Array([1, 0, 1, 1, 1]),
+      };
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("with string value", () => {
+      const segment = Type.bitstringSegment(Type.string("abc"), {
+        type: "utf8",
+        size: Type.integer(7),
+      });
+
+      const expectedMessage = `construction of binary failed: segment 1 of type 'integer': expected an integer but got: "abc"`;
+
+      assertBoxedError(
+        () => Bitstring.from([segment]),
+        "ArgumentError",
+        expectedMessage,
+      );
+    });
+  });
+
+  describe("unit modifier (with size modifier)", () => {
+    it("with bitstring value", () => {
+      const segment = Type.bitstringSegment(
+        Type.bitstring([1, 0, 1, 0, 1, 0, 1, 0]),
+        {
+          type: "bitstring",
+          size: Type.integer(3),
+          unit: 2n,
+        },
+      );
+
+      const expectedMessage = `construction of binary failed: segment 1 of type 'integer': expected an integer but got: {"type":"bitstring","bits":{"0":1,"1":0,"2":1,"3":0,"4":1,"5":0,"6":1,"7":0}}`;
+
+      assertBoxedError(
+        () => Bitstring.from([segment]),
+        "ArgumentError",
+        expectedMessage,
+      );
+    });
+
+    // TODO: update once 16-bit float bitstring segments are implemented in Hologram
+    it("with float value when size * unit results in 16, 32 or 64", () => {
+      const segment = Type.bitstringSegment(Type.float(123.45), {
+        type: "float",
+        size: Type.integer(8),
+        unit: 2n,
+      });
+
+      assert.throw(
+        () => Bitstring.from([segment]),
+        HologramInterpreterError,
+        "16-bit float bitstring segments are not yet implemented in Hologram",
+      );
+    });
+
+    it("with float value when size * unit doesn't result in 16, 32 or 64", () => {
+      const segment = Type.bitstringSegment(Type.float(123.45), {
+        type: "float",
+        size: Type.integer(7),
+        unit: 2n,
+      });
+
+      const expectedMessage = `construction of binary failed: segment 1 of type 'integer': expected an integer but got: 123.45`;
+
+      assertBoxedError(
+        () => Bitstring.from([segment]),
+        "ArgumentError",
+        expectedMessage,
+      );
+    });
+
+    it("with integer value", () => {
+      // 170 == 0b10101010
+      // 42 == 0b101010
+      const segment = Type.bitstringSegment(Type.integer(170), {
+        type: "integer",
+        size: Type.integer(3),
+        unit: 2n,
+      });
+
+      const result = Bitstring.from([segment]);
+
+      const expected = {
+        type: "bitstring",
+        bits: new Uint8Array([1, 0, 1, 0, 1, 0]),
+      };
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("with string value", () => {
+      const segment = Type.bitstringSegment(Type.string("abc"), {
+        type: "utf8",
+        size: Type.integer(7),
+        unit: 2n,
+      });
+
+      const expectedMessage = `construction of binary failed: segment 1 of type 'integer': expected an integer but got: "abc"`;
+
+      assertBoxedError(
+        () => Bitstring.from([segment]),
+        "ArgumentError",
+        expectedMessage,
+      );
+    });
+  });
+
+  describe("unsigned signedness modifier", () => {
+    it("with bitstring value", () => {
+      const segment = Type.bitstringSegment(Type.bitstring([1, 0, 1, 0]), {
+        type: "bitstring",
+        signedness: "unsigned",
+      });
+
+      const expectedMessage = `construction of binary failed: segment 1 of type 'integer': expected an integer but got: {"type":"bitstring","bits":{"0":1,"1":0,"2":1,"3":0}}`;
+
+      assertBoxedError(
+        () => Bitstring.from([segment]),
+        "ArgumentError",
+        expectedMessage,
+      );
+    });
+
+    it("with float value", () => {
+      const segment = Type.bitstringSegment(Type.float(123.45), {
+        type: "float",
+        signedness: "unsigned",
+      });
+
+      const result = Bitstring.from([segment]);
+
+      const expected = Bitstring.from([
+        Type.bitstringSegment(Type.float(123.45), {type: "float"}),
+      ]);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("with integer value", () => {
+      const segment = Type.bitstringSegment(Type.integer(123), {
+        type: "integer",
+        signedness: "unsigned",
+      });
+
+      const result = Bitstring.from([segment]);
+
+      const expected = Bitstring.from([
+        Type.bitstringSegment(Type.integer(123), {type: "integer"}),
+      ]);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("with string value", () => {
+      const segment = Type.bitstringSegment(Type.string("abc"), {
+        type: "utf8",
+        signedness: "unsigned",
+      });
+
+      const expectedMessage = `construction of binary failed: segment 1 of type 'integer': expected an integer but got: "abc"`;
+
+      assertBoxedError(
+        () => Bitstring.from([segment]),
+        "ArgumentError",
+        expectedMessage,
+      );
+    });
+  });
+
   describe("utf8 type modifier", () => {
     it("with bitstring value", () => {
       // ?a == 97 == 0b01100001
@@ -774,6 +1199,135 @@ describe("merge()", () => {
   });
 });
 
+describe("resolveSegmentSize()", () => {
+  it("size in float segment is specified", () => {
+    const segment = Type.bitstringSegment(Type.float(1.23), {
+      type: "float",
+      size: Type.integer(7),
+    });
+
+    assert.equal(Bitstring.resolveSegmentSize(segment), 7n);
+  });
+
+  it("size in float segment is not specified", () => {
+    const segment = Type.bitstringSegment(Type.float(1.23), {type: "float"});
+
+    assert.equal(Bitstring.resolveSegmentSize(segment), 64n);
+  });
+
+  it("size in integer segment is specified", () => {
+    const segment = Type.bitstringSegment(Type.integer(123), {
+      type: "integer",
+      size: Type.integer(7),
+    });
+
+    assert.equal(Bitstring.resolveSegmentSize(segment), 7n);
+  });
+
+  it("size in integer segment is not specified", () => {
+    const segment = Type.bitstringSegment(Type.integer(123), {type: "integer"});
+
+    assert.equal(Bitstring.resolveSegmentSize(segment), 8n);
+  });
+
+  it("size in segment of type other than float or integer is specified", () => {
+    const segment = Type.bitstringSegment(Type.string("abc"), {
+      type: "binary",
+      size: Type.integer(7),
+    });
+
+    assert.throw(
+      () => Bitstring.resolveSegmentSize(segment),
+      HologramInterpreterError,
+      "resolving binary segment size is not yet implemented in Hologram",
+    );
+  });
+
+  it("size in segment of type other than float or integer is not specified", () => {
+    const segment = Type.bitstringSegment(Type.string("abc"), {type: "binary"});
+
+    assert.throw(
+      () => Bitstring.resolveSegmentSize(segment),
+      HologramInterpreterError,
+      "resolving binary segment size is not yet implemented in Hologram",
+    );
+  });
+});
+
+describe("resolveSegmentUnit()", () => {
+  it("unit in binary segment is specified", () => {
+    const segment = Type.bitstringSegment(Type.bitstring("abc"), {
+      type: "binary",
+      unit: 3n,
+    });
+
+    assert.equal(Bitstring.resolveSegmentUnit(segment), 3n);
+  });
+
+  it("unit in binary segment is not specified", () => {
+    const segment = Type.bitstringSegment(Type.bitstring("abc"), {
+      type: "binary",
+    });
+
+    assert.equal(Bitstring.resolveSegmentUnit(segment), 8n);
+  });
+
+  it("unit in float segment is specified", () => {
+    const segment = Type.bitstringSegment(Type.float(1.23), {
+      type: "float",
+      unit: 3n,
+    });
+
+    assert.equal(Bitstring.resolveSegmentUnit(segment), 3n);
+  });
+
+  it("unit in float segment is not specified", () => {
+    const segment = Type.bitstringSegment(Type.float(1.23), {type: "float"});
+
+    assert.equal(Bitstring.resolveSegmentUnit(segment), 1n);
+  });
+
+  it("unit in integer segment is specified", () => {
+    const segment = Type.bitstringSegment(Type.integer(123), {
+      type: "integer",
+      unit: 3n,
+    });
+
+    assert.equal(Bitstring.resolveSegmentUnit(segment), 3n);
+  });
+
+  it("unit in integer segment is not specified", () => {
+    const segment = Type.bitstringSegment(Type.integer(123), {type: "integer"});
+
+    assert.equal(Bitstring.resolveSegmentUnit(segment), 1n);
+  });
+
+  it("unit in segment of type other than binary, float or integer is specified", () => {
+    const segment = Type.bitstringSegment(Type.bitstring([1, 0, 1]), {
+      type: "bitstring",
+      unit: 3n,
+    });
+
+    assert.throw(
+      () => Bitstring.resolveSegmentUnit(segment),
+      HologramInterpreterError,
+      "resolving bitstring segment unit is not yet implemented in Hologram",
+    );
+  });
+
+  it("unit in segment of type other than binary, float or integer is not specified", () => {
+    const segment = Type.bitstringSegment(Type.bitstring([1, 0, 1]), {
+      type: "bitstring",
+    });
+
+    assert.throw(
+      () => Bitstring.resolveSegmentUnit(segment),
+      HologramInterpreterError,
+      "resolving bitstring segment unit is not yet implemented in Hologram",
+    );
+  });
+});
+
 describe("toText()", () => {
   it("converts the bitstring to UTF-8 text if the number of its bits is divisible by 8", () => {
     const bitstring = Type.bitstring("全息图");
@@ -819,268 +1373,27 @@ describe("validateCodePoint()", () => {
   });
 });
 
-// TODO: cleanup
-// describe("bitstring()", () => {
-//   describe("size & unit modifiers", () => {
-//     it("fails to build bitstring from 32-bit float segment", () => {
-//       const segment = Type.bitstringSegment(Type.float(123.45), {
-//         size: Type.integer(8),
-//         unit: 4n,
-//       });
+// The function is tested implicitely in bitstring and match operator consistency tests.
+describe("validateSegment()", () => {
+  it("valid segment", () => {
+    const segment = Type.bitstringSegment(Type.float(123.45), {
+      type: "float",
+      size: Type.integer(64),
+    });
 
-//       assert.throw(
-//         () => {
-//           Type.bitstring([segment]);
-//         },
-//         Error,
-//         "(Hologram.NotYetImplementedError) 32-bit float bitstring segments are not yet implemented in Hologram"
-//       );
-//     });
+    assert.isTrue(Bitstring.validateSegment(segment, 1));
+  });
 
-//     it("fails to build bitstring from 16-bit float segment", () => {
-//       const segment = Type.bitstringSegment(Type.float(123.45), {
-//         size: Type.integer(8),
-//         unit: 2n,
-//       });
+  it("invalid segment", () => {
+    const segment = Type.bitstringSegment(Type.float(123.45), {
+      type: "float",
+      size: Type.integer(8),
+    });
 
-//       assert.throw(
-//         () => {
-//           Type.bitstring([segment]);
-//         },
-//         Error,
-//         "(Hologram.NotYetImplementedError) 16-bit float bitstring segments are not yet implemented in Hologram"
-//       );
-//     });
-
-//     it("on positive 12-bit integer", () => {
-//       // 4010 (12 bits) -> 42 (6 bits)
-//       // 4010 == 0b111110101010
-//       // 42 == 0b101010
-
-//       const segment = Type.bitstringSegment(Type.integer(4010), {
-//         size: Type.integer(2),
-//         unit: 3n,
-//       });
-//       const result = Type.bitstring([segment]);
-
-//       const expected = {
-//         type: "bitstring",
-//         bits: new Uint8Array([1, 0, 1, 0, 1, 0]),
-//       };
-
-//       assert.deepStrictEqual(result, expected);
-//     });
-
-//     it("on negative 12-bit integer", () => {
-//       // -86 (12 bits) -> 42 (6 bits)
-//       // -86 == 0b111110101010
-//       // 42 == 0b101010
-
-//       const segment = Type.bitstringSegment(Type.integer(-86), {
-//         size: Type.integer(2),
-//         unit: 3n,
-//       });
-//       const result = Type.bitstring([segment]);
-
-//       const expected = {
-//         type: "bitstring",
-//         bits: new Uint8Array([1, 0, 1, 0, 1, 0]),
-//       };
-
-//       assert.deepStrictEqual(result, expected);
-//     });
-
-//     it("size modifier on string segment with binary type modifier", () => {
-//       // ?a == 97 == 0b01100001
-//       // ?b == 98 == 0b01100010
-//       // ?c == 99 == 0b01100011
-
-//       const segment = Type.bitstringSegment(Type.string("abc"), {
-//         type: "binary",
-//         size: Type.integer(2),
-//       });
-
-//       const result = Type.bitstring([segment]);
-
-//       const expected = {
-//         type: "bitstring",
-//         // prettier-ignore
-//         bits: new Uint8Array([
-//           0, 1, 1, 0, 0, 0, 0, 1,
-//           0, 1, 1, 0, 0, 0, 1, 0
-//         ]),
-//       };
-
-//       assert.deepStrictEqual(result, expected);
-//     });
-
-//     it("ignores unit modifier on string segment with binary type modifier if size modifier is not specified", () => {
-//       // ?a == 97 == 0b01100001
-//       // ?b == 98 == 0b01100010
-//       // ?c == 99 == 0b01100011
-
-//       const segment = Type.bitstringSegment(Type.string("abc"), {
-//         type: "binary",
-//         unit: Type.integer(2),
-//       });
-
-//       const result = Type.bitstring([segment]);
-
-//       const expected = {
-//         type: "bitstring",
-//         // prettier-ignore
-//         bits: new Uint8Array([
-//           0, 1, 1, 0, 0, 0, 0, 1,
-//           0, 1, 1, 0, 0, 0, 1, 0,
-//           0, 1, 1, 0, 0, 0, 1, 1
-//         ]),
-//       };
-
-//       assert.deepStrictEqual(result, expected);
-//     });
-
-//     it("size modifier with unit modifier on string segment with binary type modifier", () => {
-//       // ?a == 97 == 0b01100001
-//       // ?b == 98 == 0b01100010
-//       // ?c == 99 == 0b01100011
-
-//       const segment = Type.bitstringSegment(Type.string("abc"), {
-//         type: "binary",
-//         size: Type.integer(4),
-//         unit: 3n,
-//       });
-
-//       const result = Type.bitstring([segment]);
-
-//       const expected = {
-//         type: "bitstring",
-//         // prettier-ignore
-//         bits: new Uint8Array([
-//           0, 1, 1, 0, 0, 0, 0, 1,
-//           0, 1, 1, 0
-//         ]),
-//       };
-
-//       assert.deepStrictEqual(result, expected);
-//     });
-
-//     it("requires size modifier if unit modifier is specified on float segment", () => {
-//       const segment = Type.bitstringSegment(Type.float(123.45), {
-//         unit: Type.integer(1),
-//       });
-
-//       assert.throw(
-//         () => {
-//           Type.bitstring([segment]);
-//         },
-//         Error,
-//         "(CompileError) integer and float types require a size specifier if the unit specifier is given"
-//       );
-//     });
-
-//     it("size modifier on string segment with utf8 type modifier", () => {
-//       const segment = Type.bitstringSegment(Type.string("abcdefghi"), {
-//         type: "utf8",
-//         size: Type.integer(8),
-//       });
-
-//       assert.throw(
-//         () => {
-//           Type.bitstring([segment]);
-//         },
-//         Error,
-//         "(CompileError) size and unit are not supported on utf types"
-//       );
-//     });
-
-//     it("size modifier on string segment with utf16 type modifier", () => {
-//       const segment = Type.bitstringSegment(Type.string("abcdefghi"), {
-//         type: "utf16",
-//         size: Type.integer(8),
-//       });
-
-//       assert.throw(
-//         () => {
-//           Type.bitstring([segment]);
-//         },
-//         Error,
-//         "(CompileError) size and unit are not supported on utf types"
-//       );
-//     });
-
-//     it("size modifier on string segment with utf32 type modifier", () => {
-//       const segment = Type.bitstringSegment(Type.string("abcdefghi"), {
-//         type: "utf32",
-//         size: Type.integer(8),
-//       });
-
-//       assert.throw(
-//         () => {
-//           Type.bitstring([segment]);
-//         },
-//         Error,
-//         "(CompileError) size and unit are not supported on utf types"
-//       );
-//     });
-
-//     it("unit modifier on string segment with utf8 type modifier", () => {
-//       const segment = Type.bitstringSegment(Type.string("abcdefghi"), {
-//         type: "utf8",
-//         unit: Type.integer(1),
-//       });
-
-//       assert.throw(
-//         () => {
-//           Type.bitstring([segment]);
-//         },
-//         Error,
-//         "(CompileError) size and unit are not supported on utf types"
-//       );
-//     });
-
-//     it("unit modifier on string segment with utf16 type modifier", () => {
-//       const segment = Type.bitstringSegment(Type.string("abcdefghi"), {
-//         type: "utf16",
-//         unit: Type.integer(1),
-//       });
-
-//       assert.throw(
-//         () => {
-//           Type.bitstring([segment]);
-//         },
-//         Error,
-//         "(CompileError) size and unit are not supported on utf types"
-//       );
-//     });
-
-//     it("unit modifier on string segment with utf32 type modifier", () => {
-//       const segment = Type.bitstringSegment(Type.string("abcdefghi"), {
-//         type: "utf32",
-//         unit: Type.integer(1),
-//       });
-
-//       assert.throw(
-//         () => {
-//           Type.bitstring([segment]);
-//         },
-//         Error,
-//         "(CompileError) size and unit are not supported on utf types"
-//       );
-//     });
-//   });
-
-// describe("bitstringSegment()", () => {
-//   it("fails to build float segment which is not 16-bit, 32-bit or 64-bit", () => {
-//     const segment = Type.bitstringSegment(Type.float(123.45), {
-//       size: Type.integer(11),
-//     });
-
-//     assert.throw(
-//       () => {
-//         Type.bitstring([segment]);
-//       },
-//       Error,
-//       "(ArgumentError) construction of binary failed: segment 1 of type 'float': expected one of the supported sizes 16, 32, or 64 but got: 11"
-//     );
-//   });
-// });
+    assertBoxedError(
+      () => Bitstring.validateSegment(segment, 1),
+      "ArgumentError",
+      "construction of binary failed: segment 1 of type 'integer': expected an integer but got: 123.45",
+    );
+  });
+});

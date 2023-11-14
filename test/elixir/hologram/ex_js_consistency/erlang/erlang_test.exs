@@ -143,6 +143,46 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
     end
   end
 
+  describe "atom_to_list/1" do
+    test "empty atom" do
+      assert :erlang.atom_to_list(:"") == []
+    end
+
+    test "ASCII atom" do
+      assert :erlang.atom_to_list(:abc) == [97, 98, 99]
+    end
+
+    test "Unicode atom" do
+      assert :erlang.atom_to_list(:全息图) == [20840, 24687, 22270]
+    end
+
+    test "not an atom" do
+      assert_raise ArgumentError,
+                   "errors were found at the given arguments:\n\n  * 1st argument: not an atom\n",
+                   fn ->
+                     123
+                     |> build_value()
+                     |> :erlang.atom_to_list()
+                   end
+    end
+  end
+
+  describe "bit_size/1" do
+    test "bitstring" do
+      assert bit_size(<<2::7>>) == 7
+    end
+
+    test "not bitstring" do
+      assert_raise ArgumentError,
+                   "errors were found at the given arguments:\n\n  * 1st argument: not a bitstring\n",
+                   fn ->
+                     :abc
+                     |> build_value()
+                     |> bit_size()
+                   end
+    end
+  end
+
   describe "element/2" do
     test "returns the element at the one-based index in the tuple" do
       assert :erlang.element(2, {5, 6, 7}) == 6
@@ -177,6 +217,76 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
                    "errors were found at the given arguments:\n\n  * 1st argument: out of range\n",
                    fn ->
                      :erlang.element(build_value(0), {5, 6, 7})
+                   end
+    end
+  end
+
+  describe "integer_to_binary/1" do
+    test "positive integer" do
+      assert :erlang.integer_to_binary(123_123) == "123123"
+    end
+
+    test "negative integer" do
+      assert :erlang.integer_to_binary(-123_123) == "-123123"
+    end
+
+    test "not an integer" do
+      assert_raise ArgumentError,
+                   "errors were found at the given arguments:\n\n  * 1st argument: not an integer\n",
+                   fn ->
+                     :abc
+                     |> build_value()
+                     |> :erlang.integer_to_binary()
+                   end
+    end
+  end
+
+  describe "integer_to_binary/2" do
+    test "positive integer, base = 1" do
+      assert_raise ArgumentError,
+                   "errors were found at the given arguments:\n\n  * 2nd argument: not an integer in the range 2 through 36\n",
+                   fn ->
+                     :erlang.integer_to_binary(123_123, 1)
+                   end
+    end
+
+    test "positive integer, base = 2" do
+      assert :erlang.integer_to_binary(123_123, 2) == "11110000011110011"
+    end
+
+    test "positive integer, base = 16" do
+      assert :erlang.integer_to_binary(123_123, 16) == "1E0F3"
+    end
+
+    test "positive integer, base = 36" do
+      assert :erlang.integer_to_binary(123_123, 36) == "2N03"
+    end
+
+    test "positive integer, base = 37" do
+      assert_raise ArgumentError,
+                   "errors were found at the given arguments:\n\n  * 2nd argument: not an integer in the range 2 through 36\n",
+                   fn ->
+                     :erlang.integer_to_binary(123_123, 37)
+                   end
+    end
+
+    test "negative integer" do
+      assert :erlang.integer_to_binary(-123_123, 16) == "-1E0F3"
+    end
+
+    test "1st argument (integer) is not an integer" do
+      assert_raise ArgumentError,
+                   "errors were found at the given arguments:\n\n  * 1st argument: not an integer\n",
+                   fn ->
+                     :erlang.integer_to_binary(:abc, 16)
+                   end
+    end
+
+    test "2nd argument (base) is not an integer" do
+      assert_raise ArgumentError,
+                   "errors were found at the given arguments:\n\n  * 2nd argument: not an integer in the range 2 through 36\n",
+                   fn ->
+                     :erlang.integer_to_binary(123_123, :abc)
                    end
     end
   end

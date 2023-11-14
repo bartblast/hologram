@@ -199,7 +199,7 @@ defmodule Hologram.CompilerTest do
 
     assert String.contains?(
              js,
-             ~s/Interpreter.defineNotImplementedErlangFunction("binary", "Erlang_Binary", "compile_pattern", 1/
+             ~s/Interpreter.defineNotImplementedErlangFunction("erpc", "Erlang_Erpc", "call", 4/
            )
   end
 
@@ -323,32 +323,41 @@ defmodule Hologram.CompilerTest do
     assert install_js_deps(@assets_dir) == :ok
   end
 
-  test "list_page_mfas/2" do
-    module_5_ir = IR.for_module(Module5)
-    module_6_ir = IR.for_module(Module6)
-    module_7_ir = IR.for_module(Module7)
+  describe "list_page_mfas/2" do
+    setup do
+      module_5_ir = IR.for_module(Module5)
+      module_6_ir = IR.for_module(Module6)
+      module_7_ir = IR.for_module(Module7)
 
-    call_graph =
-      CallGraph.start()
-      |> CallGraph.build(module_5_ir)
-      |> CallGraph.build(module_6_ir)
-      |> CallGraph.build(module_7_ir)
+      call_graph =
+        CallGraph.start()
+        |> CallGraph.build(module_5_ir)
+        |> CallGraph.build(module_6_ir)
+        |> CallGraph.build(module_7_ir)
 
-    sorted_mfas =
-      call_graph
-      |> list_page_mfas(Module5)
-      |> Enum.sort()
+      [call_graph: call_graph, mfas: list_page_mfas(call_graph, Module5)]
+    end
 
-    assert sorted_mfas == [
-             {Module5, :__layout_module__, 0},
-             {Module5, :__layout_props__, 0},
-             {Module5, :__route__, 0},
-             {Module5, :action, 3},
-             {Module5, :template, 0},
-             {Module6, :action, 3},
-             {Module6, :template, 0},
-             {Module7, :my_fun_7a, 2}
-           ]
+    test "doesn't mutate the call graph given in the argument", %{call_graph: call_graph} do
+      refute CallGraph.has_edge?(call_graph, Module5, {Module5, :action, 3})
+    end
+
+    test "lists MFAs used by the page module which are not included in runtime MFAs", %{
+      mfas: mfas
+    } do
+      sorted_mfas = Enum.sort(mfas)
+
+      assert sorted_mfas == [
+               {Module5, :__layout_module__, 0},
+               {Module5, :__layout_props__, 0},
+               {Module5, :__route__, 0},
+               {Module5, :action, 3},
+               {Module5, :template, 0},
+               {Module6, :action, 3},
+               {Module6, :template, 0},
+               {Module7, :my_fun_7a, 2}
+             ]
+    end
   end
 
   describe "list_runtime_mfas/1" do
@@ -368,6 +377,10 @@ defmodule Hologram.CompilerTest do
       [call_graph: call_graph, mfas: list_runtime_mfas(call_graph)]
     end
 
+    test "doesn't mutate the call graph given in the argument", %{call_graph: call_graph} do
+      assert CallGraph.has_vertex?(call_graph, {Kernel, :inspect, 1})
+    end
+
     test "includes MFAs that are reachable by Elixir functions used by the runtime", %{mfas: mfas} do
       assert {Enum, :into, 2} in mfas
       assert {Enum, :into_protocol, 2} in mfas
@@ -376,10 +389,6 @@ defmodule Hologram.CompilerTest do
       assert {Enum, :to_list, 1} in mfas
       assert {Enum, :reverse, 1} in mfas
       assert {:lists, :reverse, 1} in mfas
-
-      assert {Kernel, :inspect, 2} in mfas
-      assert {Inspect.Opts, :new, 1} in mfas
-      assert {:binary, :copy, 2} in mfas
     end
 
     test "includes MFAs that are reachable by Erlang functions used by the runtime", %{mfas: mfas} do
@@ -392,7 +401,7 @@ defmodule Hologram.CompilerTest do
       assert count == 1
     end
 
-    test "removes MFAs with non-existing modules", %{call_graph: call_graph} do
+    test "excludes MFAs with non-existing modules", %{call_graph: call_graph} do
       call_graph
       |> CallGraph.add_edge({Enum, :into, 2}, {Calendar.ISO, :dummy_function_1, 1})
       |> CallGraph.add_edge({Enum, :into, 2}, {NonExistingModuleFixture, :dummy_function_2, 2})
@@ -408,6 +417,16 @@ defmodule Hologram.CompilerTest do
       refute {NonExistingModuleFixture, :dummy_function_2, 2} in mfas
       assert {:maps, :dummy_function_3, 3} in mfas
       refute {:non_existing_module_fixture, :dummy_function_4, 4} in mfas
+    end
+
+    test "excludes Elixir MFAs which are transpiled manually", %{mfas: mfas} do
+      refute {Kernel, :inspect, 1} in mfas
+    end
+
+    test "excludes MFAs which are reachable only from manually transpiled Elixir MFAs", %{
+      mfas: mfas
+    } do
+      refute {Inspect.Algebra, :group, 1} in mfas
     end
 
     test "sorts results", %{mfas: mfas} do

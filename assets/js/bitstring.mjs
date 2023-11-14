@@ -6,9 +6,130 @@ import Type from "./type.mjs";
 import Utils from "./utils.mjs";
 
 export default class Bitstring {
+  static buildSignedBigIntFromBitArray(bitArray) {
+    if (bitArray.length === 0) {
+      return 0n;
+    }
+
+    const signBit = bitArray[0];
+
+    const value = bitArray.slice(1).reduce((acc, bit, index) => {
+      return acc | BigInt(bit << (bitArray.length - index - 2));
+    }, 0n);
+
+    return signBit === 1 ? -BigInt(2 ** (bitArray.length - 1)) + value : value;
+  }
+
+  static buildUnsignedBigIntFromBitArray(bitArray) {
+    return bitArray.reduce((acc, bit, index) => {
+      return acc | BigInt(bit << (bitArray.length - 1 - index));
+    }, 0n);
+  }
+
+  // TODO: test
+  static buildValueFromBitstringChunk(segment, bitArray, offset) {
+    switch (segment.type) {
+      case "float":
+        return Bitstring.#buildFloatFromBitstringChunk(
+          segment,
+          bitArray,
+          offset,
+        );
+
+      case "integer":
+        return Bitstring.#buildIntegerFromBitstringChunk(
+          segment,
+          bitArray,
+          offset,
+        );
+
+      case "utf8":
+        return Bitstring.fetchNextCodePointFromUtf8BitstringChunk(
+          bitArray,
+          offset,
+        );
+
+      default:
+        throw new HologramInterpreterError(
+          `building ${segment.type} value from a bitstring segment is not yet implemented in Hologram`,
+        );
+    }
+  }
+
+  // See: https://en.wikipedia.org/wiki/UTF-8#Encoding
+  static fetchNextCodePointFromUtf8BitstringChunk(bitArray, offset) {
+    if (offset + 8 > bitArray.length) {
+      return false;
+    }
+
+    let numBytes;
+
+    // 0xxxxxxx
+    if (bitArray[offset] === 0) {
+      numBytes = 1;
+      // 110xxxxx
+    } else if (bitArray[offset + 2] === 0) {
+      numBytes = 2;
+      //1110xxxx
+    } else if (bitArray[offset + 3] === 0) {
+      numBytes = 3;
+      // 11110xxx
+    } else {
+      numBytes = 4;
+    }
+
+    if (numBytes > 1 && offset + numBytes * 8 > bitArray.length) {
+      return false;
+    }
+
+    const chunks = [];
+
+    switch (numBytes) {
+      case 1:
+        chunks[0] = bitArray.slice(offset + 1, offset + 8);
+        break;
+
+      case 2:
+        chunks[0] = bitArray.slice(offset + 3, offset + 8);
+        chunks[1] = bitArray.slice(offset + 8 + 2, offset + 2 * 8);
+        break;
+
+      case 3:
+        chunks[0] = bitArray.slice(offset + 4, offset + 8);
+        chunks[1] = bitArray.slice(offset + 8 + 2, offset + 2 * 8);
+        chunks[2] = bitArray.slice(offset + 2 * 8 + 2, offset + 3 * 8);
+        break;
+
+      case 4:
+        chunks[0] = bitArray.slice(offset + 5, offset + 8);
+        chunks[1] = bitArray.slice(offset + 8 + 2, offset + 8 + 8);
+        chunks[2] = bitArray.slice(offset + 2 * 8 + 2, offset + 3 * 8);
+        chunks[3] = bitArray.slice(offset + 3 * 8 + 2, offset + 4 * 8);
+        break;
+    }
+
+    const codePointBitCount = chunks.reduce(
+      (acc, chunk) => acc + chunk.length,
+      0,
+    );
+
+    const codePointBitArray = new Uint8Array(codePointBitCount);
+    let codePointOffset = 0;
+
+    for (const chunk of chunks) {
+      codePointBitArray.set(chunk, codePointOffset);
+      codePointOffset += chunk.length;
+    }
+
+    const codePoint =
+      Bitstring.buildUnsignedBigIntFromBitArray(codePointBitArray);
+
+    return [Type.integer(codePoint), numBytes * 8];
+  }
+
   static from(segments) {
     const bitArrays = segments.map((segment, index) => {
-      Bitstring.#validateSegment(segment, index + 1);
+      Bitstring.validateSegment(segment, index + 1);
       return Bitstring.#buildBitArray(segment, index + 1);
     });
 
@@ -32,6 +153,48 @@ export default class Bitstring {
     }
 
     return Type.bitstring(bits);
+  }
+
+  static resolveSegmentSize(segment) {
+    if (["float", "integer"].includes(segment.type) && segment.size !== null) {
+      return segment.size.value;
+    }
+
+    switch (segment.type) {
+      case "float":
+        return 64n;
+
+      case "integer":
+        return 8n;
+
+      default:
+        throw new HologramInterpreterError(
+          `resolving ${segment.type} segment size is not yet implemented in Hologram`,
+        );
+    }
+  }
+
+  static resolveSegmentUnit(segment) {
+    if (
+      ["binary", "float", "integer"].includes(segment.type) &&
+      segment.unit !== null
+    ) {
+      return segment.unit;
+    }
+
+    switch (segment.type) {
+      case "binary":
+        return 8n;
+
+      case "float":
+      case "integer":
+        return 1n;
+
+      default:
+        throw new HologramInterpreterError(
+          `resolving ${segment.type} segment unit is not yet implemented in Hologram`,
+        );
+    }
   }
 
   static toText(bitstring) {
@@ -58,6 +221,27 @@ export default class Bitstring {
     }
   }
 
+  static validateSegment(segment, index) {
+    switch (segment.type) {
+      case "binary":
+        return Bitstring.#validateBinarySegment(segment, index);
+
+      case "bitstring":
+        return Bitstring.#validateBitstringSegment(segment, index);
+
+      case "float":
+        return Bitstring.#validateFloatSegment(segment, index);
+
+      case "integer":
+        return Bitstring.#validateIntegerSegment(segment, index);
+
+      case "utf8":
+      case "utf16":
+      case "utf32":
+        return Bitstring.#validateUtfSegment(segment, index);
+    }
+  }
+
   static #buildBitArray(segment, index) {
     switch (segment.value.type) {
       case "bitstring":
@@ -80,8 +264,9 @@ export default class Bitstring {
 
   static #buildBitArrayFromFloat(segment) {
     const value = segment.value.value;
+    const size = Bitstring.resolveSegmentSize(segment);
 
-    const bitArrays = Array.from(Bitstring.#getBytesFromFloat(value)).map(
+    const bitArrays = Array.from(Bitstring.#getBytesFromFloat(value, size)).map(
       (byte) => Bitstring.#convertDataToBitArray(BigInt(byte), 8n, 1n),
     );
 
@@ -116,8 +301,8 @@ export default class Bitstring {
     }
 
     const value = segment.value.value;
-    const size = Bitstring.#resolveSizeModifierValue(segment, 8n);
-    const unit = Bitstring.#resolveUnitModifierValue(segment, 1n);
+    const size = Bitstring.resolveSegmentSize(segment);
+    const unit = Bitstring.resolveSegmentUnit(segment);
 
     return Bitstring.#convertDataToBitArray(value, size, unit);
   }
@@ -130,13 +315,66 @@ export default class Bitstring {
     ).map((byte) => Bitstring.#convertDataToBitArray(BigInt(byte), 8n, 1n));
 
     if (segment.size !== null) {
-      const unit = Bitstring.#resolveUnitModifierValue(segment, 8n);
+      const unit = Bitstring.resolveSegmentUnit({...segment, type: "binary"});
       const numBits = segment.size.value * unit;
 
       return Utils.concatUint8Arrays(bitArrays).subarray(0, Number(numBits));
     } else {
       return Utils.concatUint8Arrays(bitArrays);
     }
+  }
+
+  static #buildFloatFromBitstringChunk(segment, bitArray, offset) {
+    let size = Bitstring.resolveSegmentSize(segment);
+
+    if (![16n, 32n, 64n].includes(size)) {
+      size = 64n;
+    }
+
+    if (size === 16n) {
+      throw new HologramInterpreterError(
+        "16-bit float bitstring segments are not yet implemented in Hologram",
+      );
+    }
+
+    const unit = Bitstring.resolveSegmentUnit(segment);
+    const segmentLen = Number(size * unit);
+
+    if (offset + segmentLen > bitArray.length) {
+      return false;
+    }
+
+    const chunk = bitArray.slice(offset, offset + segmentLen);
+    const bytesArray = Bitstring.#convertBitArrayToByteArray(chunk);
+    const dataView = new DataView(bytesArray.buffer);
+
+    const value =
+      size === 64n
+        ? dataView.getFloat64(0, false)
+        : dataView.getFloat32(0, false);
+
+    return [Type.float(value), segmentLen];
+  }
+
+  static #buildIntegerFromBitstringChunk(segment, bitArray, offset) {
+    const size = Bitstring.resolveSegmentSize(segment);
+    const unit = Bitstring.resolveSegmentUnit(segment);
+    const segmentLen = Number(size * unit);
+
+    if (offset + segmentLen > bitArray.length) {
+      return false;
+    }
+
+    const bitArrayChunk = bitArray.slice(offset, offset + segmentLen);
+    let value;
+
+    if (Bitstring.#resolveSegmentSignedness(segment) === "signed") {
+      value = Bitstring.buildSignedBigIntFromBitArray(bitArrayChunk);
+    } else {
+      value = Bitstring.buildUnsignedBigIntFromBitArray(bitArrayChunk);
+    }
+
+    return [Type.integer(value), segmentLen];
   }
 
   static #convertBitArrayToByteArray(bitArray) {
@@ -152,7 +390,7 @@ export default class Bitstring {
     for (let i = 0; i < numBytes; ++i) {
       for (let j = 0; j < 8; ++j) {
         if (bitArray[i * 8 + j] === 1) {
-          byteArray[i] = Bitstring.#putBit(byteArray[i], 7 - j);
+          byteArray[i] = Bitstring.#putNumberBit(byteArray[i], 7 - j);
         }
       }
     }
@@ -192,8 +430,22 @@ export default class Bitstring {
     return (value & (1n << position)) === 0n ? 0 : 1;
   }
 
-  static #getBytesFromFloat(float) {
-    const floatArr = new Float64Array([float]);
+  static #getBytesFromFloat(float, size) {
+    let floatArr;
+
+    switch (size) {
+      case 64n:
+        floatArr = new Float64Array([float]);
+        break;
+
+      case 32n:
+        floatArr = new Float32Array([float]);
+        break;
+
+      case 16n:
+      // This case is not possible at the moment, since an error would be raised earlier.
+    }
+
     return new Uint8Array(floatArr.buffer).reverse();
   }
 
@@ -209,7 +461,7 @@ export default class Bitstring {
     }
   }
 
-  static #putBit(value, position) {
+  static #putNumberBit(value, position) {
     return value | (1 << position);
   }
 
@@ -234,20 +486,12 @@ export default class Bitstring {
     Interpreter.raiseArgumentError(message);
   }
 
-  static #resolveSizeModifierValue(segment, defaultValue) {
-    if (segment.size === null) {
-      return defaultValue;
-    } else {
-      return segment.size.value;
+  static #resolveSegmentSignedness(segment) {
+    if (segment.signedness !== null) {
+      return segment.signedness;
     }
-  }
 
-  static #resolveUnitModifierValue(segment, defaultValue) {
-    if (segment.unit === null) {
-      return defaultValue;
-    } else {
-      return segment.unit;
-    }
+    return "unsigned";
   }
 
   static #validateBinarySegment(segment, index) {
@@ -284,11 +528,22 @@ export default class Bitstring {
       );
     }
 
+    if (segment.signedness !== null || segment.size !== null) {
+      Bitstring.#raiseTypeMismatchError(
+        index,
+        "integer",
+        "an integer",
+        segment.value,
+      );
+    }
+
     return true;
   }
 
   static #validateFloatSegment(segment, index) {
-    if (!["float", "integer"].includes(segment.value.type)) {
+    if (
+      !["float", "integer", "variable_pattern"].includes(segment.value.type)
+    ) {
       Bitstring.#raiseTypeMismatchError(
         index,
         "float",
@@ -303,18 +558,20 @@ export default class Bitstring {
       );
     }
 
-    const size = Bitstring.#resolveSizeModifierValue(segment, 64n);
-    const unit = Bitstring.#resolveUnitModifierValue(segment, 1n);
+    const size = Bitstring.resolveSegmentSize(segment);
+    const unit = Bitstring.resolveSegmentUnit(segment);
     const numBits = size * unit;
 
     if (![16n, 32n, 64n].includes(numBits)) {
-      const message = `construction of binary failed: segment ${index} of type 'float': expected one of the supported sizes 16, 32, or 64 but got: ${Number(
-        numBits,
-      )}`;
-      Interpreter.raiseArgumentError(message);
+      Bitstring.#raiseTypeMismatchError(
+        index,
+        "integer",
+        "an integer",
+        segment.value,
+      );
     }
 
-    if (numBits !== 64n) {
+    if (numBits !== 64n && numBits !== 32n) {
       throw new HologramInterpreterError(
         `${numBits}-bit float bitstring segments are not yet implemented in Hologram`,
       );
@@ -324,7 +581,7 @@ export default class Bitstring {
   }
 
   static #validateIntegerSegment(segment, index) {
-    if (segment.value.type !== "integer") {
+    if (!["integer", "variable_pattern"].includes(segment.value.type)) {
       Bitstring.#raiseTypeMismatchError(
         index,
         "integer",
@@ -334,27 +591,6 @@ export default class Bitstring {
     }
 
     return true;
-  }
-
-  static #validateSegment(segment, index) {
-    switch (segment.type) {
-      case "binary":
-        return Bitstring.#validateBinarySegment(segment, index);
-
-      case "bitstring":
-        return Bitstring.#validateBitstringSegment(segment, index);
-
-      case "float":
-        return Bitstring.#validateFloatSegment(segment, index);
-
-      case "integer":
-        return Bitstring.#validateIntegerSegment(segment, index);
-
-      case "utf8":
-      case "utf16":
-      case "utf32":
-        return Bitstring.#validateUtfSegment(segment, index);
-    }
   }
 
   static #validateUtfSegment(segment, index) {
@@ -367,9 +603,16 @@ export default class Bitstring {
       );
     }
 
-    if (segment.size !== null || segment.unit !== null) {
-      Interpreter.raiseCompileError(
-        "size and unit are not supported on utf types",
+    if (
+      segment.signedness !== null ||
+      segment.size !== null ||
+      segment.unit !== null
+    ) {
+      Bitstring.#raiseTypeMismatchError(
+        index,
+        "integer",
+        "an integer",
+        segment.value,
       );
     }
 

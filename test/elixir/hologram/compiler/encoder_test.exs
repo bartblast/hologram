@@ -1078,9 +1078,16 @@ defmodule Hologram.Compiler.EncoderTest do
     assert encode(%IR.MatchPlaceholder{}, %Context{}) == "Type.matchPlaceholder()"
   end
 
-  test "module attribute operator" do
-    # @abc?
-    assert encode(%IR.ModuleAttributeOperator{name: :abc?}, %Context{}) == "vars.$264abc$263"
+  describe "module attribute operator" do
+    test "without special characters" do
+      # @abc
+      assert encode(%IR.ModuleAttributeOperator{name: :abc}, %Context{}) == ~s'vars["@abc"]'
+    end
+
+    test "with special characters" do
+      # @abc?
+      assert encode(%IR.ModuleAttributeOperator{name: :abc?}, %Context{}) == ~s'vars["@abc?"]'
+    end
   end
 
   test "module definition" do
@@ -1561,20 +1568,27 @@ defmodule Hologram.Compiler.EncoderTest do
   end
 
   describe "variable" do
-    test "not inside pattern" do
+    test "not inside pattern, without special characters" do
       # my_var
       assert encode(%IR.Variable{name: :my_var}, %Context{pattern?: false}) == "vars.my_var"
     end
 
-    test "inside pattern" do
+    test "not inside pattern, with special characters" do
+      # my_var?
+      assert encode(%IR.Variable{name: :my_var?}, %Context{pattern?: false}) ==
+               ~s'vars["my_var?"]'
+    end
+
+    test "inside pattern, without special characters" do
       # my_var
       assert encode(%IR.Variable{name: :my_var}, %Context{pattern?: true}) ==
                ~s/Type.variablePattern("my_var")/
     end
 
-    test "escape" do
+    test "inside pattern, with special characters" do
       # my_var?
-      assert encode(%IR.Variable{name: :my_var?}, %Context{}) == "vars.my_var$263"
+      assert encode(%IR.Variable{name: :my_var?}, %Context{pattern?: true}) ==
+               ~s/Type.variablePattern("my_var?")/
     end
   end
 
@@ -1608,20 +1622,5 @@ defmodule Hologram.Compiler.EncoderTest do
   test "encode_term/1" do
     my_var = 123
     assert encode_term(my_var) == "Type.integer(123n)"
-  end
-
-  describe "escape_js_identifier/1" do
-    test "escape characters which are not allowed in JS identifiers" do
-      assert escape_js_identifier("@[^`{") == "$264$291$294$296$3123"
-    end
-
-    test "escape $ (dollar sign) character" do
-      assert escape_js_identifier("$") == "$236"
-    end
-
-    test "does not escape characters which are allowed in JS identifiers" do
-      str = "059AKZakz_"
-      assert escape_js_identifier(str) == str
-    end
   end
 end

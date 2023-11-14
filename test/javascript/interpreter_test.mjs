@@ -10,6 +10,7 @@ import {
 } from "../../assets/js/test_support.mjs";
 import Erlang from "../../assets/js/erlang/erlang.mjs";
 import HologramBoxedError from "../../assets/js/errors/boxed_error.mjs";
+import HologramInterpreterError from "../../assets/js/errors/interpreter_error.mjs";
 import Interpreter from "../../assets/js/interpreter.mjs";
 import Type from "../../assets/js/type.mjs";
 
@@ -1936,8 +1937,328 @@ describe("matchOperator()", () => {
     });
   });
 
-  describe("bitstring type", () => {
-    it("left bitstring == right bitstring", () => {
+  describe("bitstring modifier, signed", () => {
+    // <<value::signed>> = <<1::1, 0::1, 1::1, 0::1, 1::1, 0::1, 1::1, 0::1>>
+    // The test would be the same as "integer type modifier", because the encoder always specifies the segment's type.
+    // it("no type modifier")
+
+    // <<value::binary-signed>> won't compile
+    // it("binary type modifier")
+
+    // <<value::bitstring-signed>> won't compile
+    // it("bitstring type modifier")
+
+    // <<value::float-size(64)-signed>> = <<123.45::size(64)>>
+    it("float type modifier, 64-bit size modifier", () => {
+      const left = Type.bitstringPattern([
+        Type.bitstringSegment(Type.variablePattern("value"), {
+          type: "float",
+          size: Type.integer(64),
+          signedness: "signed",
+        }),
+      ]);
+
+      const right = Type.bitstring([
+        Type.bitstringSegment(Type.float(123.45), {
+          type: "float",
+          size: Type.integer(64),
+        }),
+      ]);
+
+      const result = Interpreter.matchOperator(right, left, vars);
+
+      assert.deepStrictEqual(result, right);
+
+      assert.deepStrictEqual(vars, {
+        a: Type.integer(9),
+        __matched__: {value: Type.float(123.45)},
+      });
+    });
+
+    // <<value::float-size(32)-signed>> = <<123.45::size(32)>>
+    it("float type modifier, 32-bit size modifier", () => {
+      const left = Type.bitstringPattern([
+        Type.bitstringSegment(Type.variablePattern("value"), {
+          type: "float",
+          size: Type.integer(32),
+          signedness: "signed",
+        }),
+      ]);
+
+      const right = Type.bitstring([
+        Type.bitstringSegment(Type.float(123.45), {
+          type: "float",
+          size: Type.integer(32),
+        }),
+      ]);
+
+      const result = Interpreter.matchOperator(right, left, vars);
+
+      assert.deepStrictEqual(result, right);
+
+      assert.deepStrictEqual(vars, {
+        a: Type.integer(9),
+        __matched__: {value: Type.float(123.44999694824219)},
+      });
+    });
+
+    // TODO: update once 16-bit float bitstring segments are implemented in Hologram
+    // <<value::float-size(16)-signed>> = <<123.45::size(16)>>
+    it("float type modifier, 16-bit size modifier", () => {
+      // const left = Type.bitstringPattern([
+      //   Type.bitstringSegment(Type.variablePattern("value"), {
+      //     type: "float",
+      //     size: Type.integer(16),
+      //     signedness: "signed",
+      //   }),
+      // ]);
+
+      assert.throw(
+        () =>
+          Type.bitstring([
+            Type.bitstringSegment(Type.float(123.45), {
+              type: "float",
+              size: Type.integer(16),
+            }),
+          ]),
+        HologramInterpreterError,
+        "16-bit float bitstring segments are not yet implemented in Hologram",
+      );
+    });
+
+    // <<_value::float-size(size)-signed>> = <<1::1, 0::1, 1::1, 0::1, 1::1, 0::1, 1::1, 0::1>>
+    it("float type modifier, unsupported size modifier", () => {
+      const left = Type.bitstringPattern([
+        Type.bitstringSegment(Type.variablePattern("value"), {
+          type: "float",
+          size: Type.integer(8),
+          signedness: "signed",
+        }),
+      ]);
+
+      // 170 == 0b10101010
+      const right = Type.bitstring([1, 0, 1, 0, 1, 0, 1, 0]);
+
+      assertMatchError(
+        () => Interpreter.matchOperator(right, left, vars),
+        right,
+      );
+    });
+
+    // <<value::integer-signed>> = <<1::1, 0::1, 1::1, 0::1, 1::1, 0::1, 1::1, 0::1>>
+    it("integer type modifier", () => {
+      const left = Type.bitstringPattern([
+        Type.bitstringSegment(Type.variablePattern("value"), {
+          type: "integer",
+          signedness: "signed",
+        }),
+      ]);
+
+      // 170 == 0b10101010
+      const right = Type.bitstring([1, 0, 1, 0, 1, 0, 1, 0]);
+
+      const result = Interpreter.matchOperator(right, left, vars);
+
+      assert.deepStrictEqual(result, right);
+
+      assert.deepStrictEqual(vars, {
+        a: Type.integer(9),
+        __matched__: {value: Type.integer(-86)},
+      });
+    });
+
+    // <value::utf8-signed>> won't compile
+    // it("utf8 type modifier")
+
+    // <value::utf16-signed>> won't compile
+    // it("utf16 type modifier")
+
+    // <value::utf32-signed>> won't compile
+    // it("utf32 type modifier")
+  });
+
+  describe("bitstring modifier, unsigned", () => {
+    // <<value::unsigned>> = <<1::1, 0::1, 1::1, 0::1, 1::1, 0::1, 1::1, 0::1>>
+    // The test would be the same as "integer type modifier", because the encoder always specifies the segment's type.
+    // it("no type modifier")
+
+    // <<value::binary-unsigned>> won't compile
+    // it("binary type modifier")
+
+    // <<value::bitstring-unsigned>> won't compile
+    // it("bitstring type modifier")
+
+    // <<value::float-size(64)-unsigned>> = <<123.45::size(64)>>
+    it("float type modifier, 64-bit size modifier", () => {
+      const left = Type.bitstringPattern([
+        Type.bitstringSegment(Type.variablePattern("value"), {
+          type: "float",
+          size: Type.integer(64),
+          signedness: "unsigned",
+        }),
+      ]);
+
+      const right = Type.bitstring([
+        Type.bitstringSegment(Type.float(123.45), {
+          type: "float",
+          size: Type.integer(64),
+        }),
+      ]);
+
+      const result = Interpreter.matchOperator(right, left, vars);
+
+      assert.deepStrictEqual(result, right);
+
+      assert.deepStrictEqual(vars, {
+        a: Type.integer(9),
+        __matched__: {value: Type.float(123.45)},
+      });
+    });
+
+    // <<value::float-size(32)-unsigned>> = <<123.45::size(32)>>
+    it("float type modifier, 32-bit size modifier", () => {
+      const left = Type.bitstringPattern([
+        Type.bitstringSegment(Type.variablePattern("value"), {
+          type: "float",
+          size: Type.integer(32),
+          signedness: "unsigned",
+        }),
+      ]);
+
+      const right = Type.bitstring([
+        Type.bitstringSegment(Type.float(123.45), {
+          type: "float",
+          size: Type.integer(32),
+        }),
+      ]);
+
+      const result = Interpreter.matchOperator(right, left, vars);
+
+      assert.deepStrictEqual(result, right);
+
+      assert.deepStrictEqual(vars, {
+        a: Type.integer(9),
+        __matched__: {value: Type.float(123.44999694824219)},
+      });
+    });
+
+    // TODO: update once 16-bit float bitstring segments are implemented in Hologram
+    // <<value::float-size(16)-unsigned>> = <<123.45::size(16)>>
+    it("float type modifier, 16-bit size modifier", () => {
+      // const left = Type.bitstringPattern([
+      //   Type.bitstringSegment(Type.variablePattern("value"), {
+      //     type: "float",
+      //     size: Type.integer(16),
+      //     signedness: "unsigned",
+      //   }),
+      // ]);
+
+      assert.throw(
+        () =>
+          Type.bitstring([
+            Type.bitstringSegment(Type.float(123.45), {
+              type: "float",
+              size: Type.integer(16),
+            }),
+          ]),
+        HologramInterpreterError,
+        "16-bit float bitstring segments are not yet implemented in Hologram",
+      );
+    });
+
+    // <<_value::float-size(size)-unsigned>> = <<1::1, 0::1, 1::1, 0::1, 1::1, 0::1, 1::1, 0::1>>
+    it("float type modifier, unsupported size modifier", () => {
+      const left = Type.bitstringPattern([
+        Type.bitstringSegment(Type.variablePattern("value"), {
+          type: "float",
+          size: Type.integer(8),
+          signedness: "unsigned",
+        }),
+      ]);
+
+      // 170 == 0b10101010
+      const right = Type.bitstring([1, 0, 1, 0, 1, 0, 1, 0]);
+
+      assertMatchError(
+        () => Interpreter.matchOperator(right, left, vars),
+        right,
+      );
+    });
+
+    // <<value::integer-unsigned>> = <<1::1, 0::1, 1::1, 0::1, 1::1, 0::1, 1::1, 0::1>>
+    it("integer type modifier", () => {
+      const left = Type.bitstringPattern([
+        Type.bitstringSegment(Type.variablePattern("value"), {
+          type: "integer",
+          signedness: "unsigned",
+        }),
+      ]);
+
+      // 170 == 0b10101010
+      const right = Type.bitstring([1, 0, 1, 0, 1, 0, 1, 0]);
+
+      const result = Interpreter.matchOperator(right, left, vars);
+
+      assert.deepStrictEqual(result, right);
+
+      assert.deepStrictEqual(vars, {
+        a: Type.integer(9),
+        __matched__: {value: Type.integer(170)},
+      });
+    });
+
+    // <value::utf8-unsigned>> won't compile
+    // it("utf8 type modifier")
+
+    // <value::utf16-unsigned>> won't compile
+    // it("utf16 type modifier")
+
+    // <value::utf32-unsigned>> won't compile
+    // it("utf32 type modifier")
+  });
+
+  describe("bistring type", () => {
+    const emptyBitstringPattern = Type.bitstringPattern([]);
+    const emptyBitstringValue = Type.bitstring([]);
+
+    const multiSegmentBitstringValue = Type.bitstring([
+      Type.bitstringSegment(Type.integer(1), {type: "integer"}),
+      Type.bitstringSegment(Type.integer(2), {type: "integer"}),
+    ]);
+
+    // <<>> = <<>>
+    it("left empty bitstring == right empty bitstring", () => {
+      const result = Interpreter.matchOperator(
+        emptyBitstringValue,
+        emptyBitstringPattern,
+        vars,
+      );
+
+      assert.deepStrictEqual(result, emptyBitstringValue);
+    });
+
+    // <<>> = <<1::1, 0::1>>
+    it("left empty bitstring != right non-empty bitstring", () => {
+      const myBitstring = Type.bitstring([1, 0]);
+
+      assertMatchError(
+        () =>
+          Interpreter.matchOperator(myBitstring, emptyBitstringPattern, vars),
+        myBitstring,
+      );
+    });
+
+    // <<>> = :abc
+    it("left empty bitstring != right non-bitstring", () => {
+      const myAtom = Type.atom("abc");
+
+      assertMatchError(
+        () => Interpreter.matchOperator(myAtom, emptyBitstringPattern, vars),
+        myAtom,
+      );
+    });
+
+    it("left literal single-segment bitstring == right literal single-segment bitstring", () => {
       const result = Interpreter.matchOperator(
         Type.bitstring([
           Type.bitstringSegment(Type.integer(1), {type: "integer"}),
@@ -1955,7 +2276,7 @@ describe("matchOperator()", () => {
       assert.deepStrictEqual(result, expected);
     });
 
-    it("left bitstring != right bitstring", () => {
+    it("left literal single-segment bitstring != right literal single-segment bitstring", () => {
       const myBitstring = Type.bitstring([
         Type.bitstringSegment(Type.integer(2), {type: "integer"}),
       ]);
@@ -1973,14 +2294,14 @@ describe("matchOperator()", () => {
       );
     });
 
-    it("left bitstring != right non-bitstring", () => {
+    it("left literal single-segment bitstring != right non-bitstring", () => {
       const myAtom = Type.atom("abc");
 
       assertMatchError(
         () =>
           Interpreter.matchOperator(
             myAtom,
-            Type.bitstring([
+            Type.bitstringPattern([
               Type.bitstringSegment(Type.integer(1), {type: "integer"}),
             ]),
             vars,
@@ -1989,7 +2310,7 @@ describe("matchOperator()", () => {
       );
     });
 
-    it("literal bitstring segments", () => {
+    it("multiple literal bitstring segments", () => {
       const result = Interpreter.matchOperator(
         Type.bitstring([
           Type.bitstringSegment(Type.integer(1), {
@@ -2028,7 +2349,7 @@ describe("matchOperator()", () => {
       assert.deepStrictEqual(result, expected);
     });
 
-    it("literal float segments", () => {
+    it("multiple literal float segments", () => {
       const result = Interpreter.matchOperator(
         Type.bitstring([
           Type.bitstringSegment(Type.float(1.0), {type: "float"}),
@@ -2049,7 +2370,7 @@ describe("matchOperator()", () => {
       assert.deepStrictEqual(result, expected);
     });
 
-    it("literal integer segments", () => {
+    it("multiple literal integer segments", () => {
       const result = Interpreter.matchOperator(
         Type.bitstring([
           Type.bitstringSegment(Type.integer(1), {type: "integer"}),
@@ -2070,7 +2391,7 @@ describe("matchOperator()", () => {
       assert.deepStrictEqual(result, expected);
     });
 
-    it("literal string segments", () => {
+    it("multiple literal string segments", () => {
       const result = Interpreter.matchOperator(
         Type.bitstring([
           Type.bitstringSegment(Type.string("aaa"), {type: "utf8"}),
@@ -2089,6 +2410,108 @@ describe("matchOperator()", () => {
       ]);
 
       assert.deepStrictEqual(result, expected);
+    });
+
+    // <<x::integer>> = <<1>>
+    it("left single-segment bitstring with variable pattern == right bistring", () => {
+      const myBitstring = Type.bitstring([
+        Type.bitstringSegment(Type.integer(1), {type: "integer"}),
+      ]);
+
+      const result = Interpreter.matchOperator(
+        myBitstring,
+        Type.bitstringPattern([
+          Type.bitstringSegment(Type.variablePattern("x"), {type: "integer"}),
+        ]),
+        vars,
+      );
+
+      assert.deepStrictEqual(result, myBitstring);
+
+      assert.deepStrictEqual(vars, {
+        a: Type.integer(9),
+        __matched__: {
+          x: Type.integer(1),
+        },
+      });
+    });
+
+    // <<x::integer, y::integer>> = <<1, 2>>
+    it("left multiple-segment bitstring with variable patterns == right bitstring", () => {
+      const result = Interpreter.matchOperator(
+        multiSegmentBitstringValue,
+        Type.bitstringPattern([
+          Type.bitstringSegment(Type.variablePattern("x"), {type: "integer"}),
+          Type.bitstringSegment(Type.variablePattern("y"), {type: "integer"}),
+        ]),
+        vars,
+      );
+
+      assert.deepStrictEqual(result, multiSegmentBitstringValue);
+
+      assert.deepStrictEqual(vars, {
+        a: Type.integer(9),
+        __matched__: {
+          x: Type.integer(1),
+          y: Type.integer(2),
+        },
+      });
+    });
+
+    // <<3, y::integer>> = <<1, 2>>
+    it("first segment in left multi-segment bitstring doesn't match", () => {
+      assertMatchError(
+        () =>
+          Interpreter.matchOperator(
+            multiSegmentBitstringValue,
+            Type.bitstringPattern([
+              Type.bitstringSegment(Type.integer(3), {type: "integer"}),
+              Type.bitstringSegment(Type.variablePattern("y"), {
+                type: "integer",
+              }),
+            ]),
+            vars,
+          ),
+        multiSegmentBitstringValue,
+      );
+    });
+
+    // <<1, 2::size(7)>> = <<1, 2>>
+    it("last segment in left multi-segment bitstring doesn't match, because there are too few bits", () => {
+      assertMatchError(
+        () =>
+          Interpreter.matchOperator(
+            multiSegmentBitstringValue,
+            Type.bitstringPattern([
+              Type.bitstringSegment(Type.integer(1), {type: "integer"}),
+              Type.bitstringSegment(Type.integer(2), {
+                type: "integer",
+                size: Type.integer(7),
+              }),
+            ]),
+            vars,
+          ),
+        multiSegmentBitstringValue,
+      );
+    });
+
+    // <<1, 2::size(9)>> = <<1, 2>>
+    it("last segment in left multi-segment bitstring doesn't match, because there are too many bits", () => {
+      assertMatchError(
+        () =>
+          Interpreter.matchOperator(
+            multiSegmentBitstringValue,
+            Type.bitstringPattern([
+              Type.bitstringSegment(Type.integer(1), {type: "integer"}),
+              Type.bitstringSegment(Type.integer(2), {
+                type: "integer",
+                size: Type.integer(9),
+              }),
+            ]),
+            vars,
+          ),
+        multiSegmentBitstringValue,
+      );
     });
   });
 
