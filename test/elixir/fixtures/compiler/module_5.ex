@@ -22,4 +22,8 @@ defmodule Hologram.Test.Fixtures.Compiler.Module5 do
     |> Enum.to_list()
     |> :erlang.hd()
   end
+
+  def action(:action_5c, _params, _client) do
+    Kernel.inspect(123)
+  end
 end
