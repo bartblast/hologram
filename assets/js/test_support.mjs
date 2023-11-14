@@ -1,6 +1,7 @@
 "use strict";
 
 import {assert} from "chai";
+import Elixir_Kernel from "./elixir/kernel.mjs";
 import Erlang from "./erlang/erlang.mjs";
 import Erlang_Lists from "./erlang/lists.mjs";
 import Erlang_Maps from "./erlang/maps.mjs";
@@ -11,76 +12,6 @@ import HologramMatchError from "./errors/match_error.mjs";
 import Interpreter from "./interpreter.mjs";
 import sinonESM from "../node_modules/sinon/pkg/sinon-esm.js";
 import Type from "./type.mjs";
-
-function buildElixirKernelInspectFunction() {
-  return (term) => {
-    switch (term.type) {
-      // TODO: handle correctly atoms which need to be double quoted, e.g. :"1"
-      case "atom":
-        if (Type.isBoolean(term) || Type.isNil(term)) {
-          return term.value;
-        }
-        return ":" + term.value;
-
-      // TODO: case "bitstring"
-
-      case "float":
-        if (Number.isInteger(term.value)) {
-          return term.value.toString() + ".0";
-        } else {
-          return term.value.toString();
-        }
-
-      case "integer":
-        return term.value.toString();
-
-      case "list":
-        if (term.isProper) {
-          return (
-            "[" +
-            term.data
-              .map((item) => Elixir_Kernel["inspect/1"](item))
-              .join(", ") +
-            "]"
-          );
-        } else {
-          return (
-            "[" +
-            term.data
-              .slice(0, -1)
-              .map((item) => Elixir_Kernel["inspect/1"](item))
-              .join(", ") +
-            " | " +
-            Elixir_Kernel["inspect/1"](term.data.slice(-1)[0]) +
-            "]"
-          );
-        }
-
-      case "string":
-        return '"' + term.value.toString() + '"';
-
-      case "tuple":
-        return (
-          "{" +
-          term.data.map((item) => Elixir_Kernel["inspect/1"](item)).join(", ") +
-          "}"
-        );
-
-      default:
-        return Interpreter.serialize(term);
-    }
-  };
-}
-
-// This version of Elixir_Kernel is for tests only.
-// The actual Elixir_Kernel is transpiled automatically during project build.
-function buildElixirKernelModule() {
-  return {
-    "inspect/1": buildElixirKernelInspectFunction(),
-  };
-}
-
-const Elixir_Kernel = buildElixirKernelModule();
 
 export {assert} from "chai";
 export const sinon = sinonESM;
