@@ -199,7 +199,7 @@ defmodule Hologram.CompilerTest do
 
     assert String.contains?(
              js,
-             ~s/Interpreter.defineNotImplementedErlangFunction("binary", "Erlang_Binary", "compile_pattern", 1/
+             ~s/Interpreter.defineNotImplementedErlangFunction("erpc", "Erlang_Erpc", "call", 4/
            )
   end
 
