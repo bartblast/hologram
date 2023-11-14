@@ -4,6 +4,10 @@ import Interpreter from "../interpreter.mjs";
 import Type from "../type.mjs";
 
 const Elixir_Kernel = {
+  "inspect/1": (term) => {
+    return Elixir_Kernel["inspect/2"](term, Type.list([]));
+  },
+
   // TODO: finish (e.g. implement text detection in binaries and other types such as pid, etc.)
   "inspect/2": (term, opts) => {
     let output;

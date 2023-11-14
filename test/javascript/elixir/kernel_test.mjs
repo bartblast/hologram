@@ -16,6 +16,13 @@ after(() => unlinkModules());
 // Each JavaScript test has a related Elixir consistency test in test/elixir/hologram/ex_js_consistency/elixir/kernel_test.exs
 // Always update both together.
 
+describe("inspect/1", () => {
+  it("delegates to inspect/2", () => {
+    const result = Elixir_Kernel["inspect/1"](Type.boolean(true));
+    assert.deepStrictEqual(result, Type.bitstring("true"));
+  });
+});
+
 describe("inspect/2", () => {
   describe("atom", () => {
     it("true", () => {

@@ -7,6 +7,10 @@ defmodule Hologram.ExJsConsistency.Elixir.KernelTest do
 
   use Hologram.Test.BasicCase, async: true
 
+  test "inspect/1" do
+    assert Kernel.inspect(true) == "true"
+  end
+
   describe "inspect/2" do
     test "atom, true" do
       assert Kernel.inspect(true, []) == "true"
