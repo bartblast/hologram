@@ -17,31 +17,36 @@ after(() => unlinkModules());
 // Always update both together.
 
 describe("inspect/2", () => {
-  it("atom, true", () => {
-    const result = Elixir_Kernel["inspect/2"](
-      Type.boolean(true),
-      Type.list([]),
-    );
+  describe("atom", () => {
+    it("true", () => {
+      const result = Elixir_Kernel["inspect/2"](
+        Type.boolean(true),
+        Type.list([]),
+      );
 
-    assert.deepStrictEqual(result, Type.bitstring("true"));
-  });
+      assert.deepStrictEqual(result, Type.bitstring("true"));
+    });
 
-  it("atom, false", () => {
-    const result = Elixir_Kernel["inspect/2"](
-      Type.boolean(false),
-      Type.list([]),
-    );
+    it("false", () => {
+      const result = Elixir_Kernel["inspect/2"](
+        Type.boolean(false),
+        Type.list([]),
+      );
 
-    assert.deepStrictEqual(result, Type.bitstring("false"));
-  });
+      assert.deepStrictEqual(result, Type.bitstring("false"));
+    });
 
-  it("atom, nil", () => {
-    const result = Elixir_Kernel["inspect/2"](Type.nil(), Type.list([]));
-    assert.deepStrictEqual(result, Type.bitstring("nil"));
-  });
+    it("nil", () => {
+      const result = Elixir_Kernel["inspect/2"](Type.nil(), Type.list([]));
+      assert.deepStrictEqual(result, Type.bitstring("nil"));
+    });
 
-  it("atom, non-boolean and non-nil", () => {
-    const result = Elixir_Kernel["inspect/2"](Type.atom("abc"), Type.list([]));
-    assert.deepStrictEqual(result, Type.bitstring(":abc"));
+    it("non-boolean and non-nil", () => {
+      const result = Elixir_Kernel["inspect/2"](
+        Type.atom("abc"),
+        Type.list([]),
+      );
+      assert.deepStrictEqual(result, Type.bitstring(":abc"));
+    });
   });
 });
