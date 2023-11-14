@@ -286,6 +286,8 @@ defmodule Hologram.Compiler do
   """
   @spec list_runtime_mfas(CallGraph.t()) :: list(mfa)
   def list_runtime_mfas(call_graph) do
+    call_graph_clone = CallGraph.clone(call_graph)
+
     # These Elixir functions are used directly by the JS runtime:
     entry_mfas = [
       # Interpreter.comprehension()
@@ -317,7 +319,7 @@ defmodule Hologram.Compiler do
       {:maps, :get, 2}
     ]
 
-    call_graph
+    call_graph_clone
     |> add_call_graph_edges_for_erlang_functions()
     |> remove_call_graph_vertices_of_manually_transpiled_elixir_functions()
     |> CallGraph.reachable_mfas(entry_mfas)

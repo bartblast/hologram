@@ -368,6 +368,10 @@ defmodule Hologram.CompilerTest do
       [call_graph: call_graph, mfas: list_runtime_mfas(call_graph)]
     end
 
+    test "doesn't mutated the call graph given in the argument", %{call_graph: call_graph} do
+      assert CallGraph.has_vertex?(call_graph, {Kernel, :inspect, 1})
+    end
+
     test "includes MFAs that are reachable by Elixir functions used by the runtime", %{mfas: mfas} do
       assert {Enum, :into, 2} in mfas
       assert {Enum, :into_protocol, 2} in mfas
