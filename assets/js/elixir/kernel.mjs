@@ -60,8 +60,9 @@ const Elixir_Kernel = {
       //     "}"
       //   );
 
-      // default:
-      //   return Interpreter.serialize(term);
+      // TODO: remove when all types are supported
+      default:
+        output = Interpreter.serialize(term);
     }
 
     return Type.bitstring(output);

@@ -46,7 +46,14 @@ describe("inspect/2", () => {
         Type.atom("abc"),
         Type.list([]),
       );
+
       assert.deepStrictEqual(result, Type.bitstring(":abc"));
     });
+  });
+
+  // TODO: remove when all types are supported
+  it("default", () => {
+    const result = Elixir_Kernel["inspect/2"]({type: "x"}, Type.list([]));
+    assert.deepStrictEqual(result, Type.bitstring('{"type":"x"}'));
   });
 });
