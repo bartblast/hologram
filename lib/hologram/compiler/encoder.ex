@@ -9,7 +9,6 @@ defmodule Hologram.Compiler.Encoder do
       }
   end
 
-  alias Hologram.Commons.IntegerUtils
   alias Hologram.Commons.StringUtils
   alias Hologram.Compiler.Context
   alias Hologram.Compiler.IR
@@ -378,32 +377,6 @@ defmodule Hologram.Compiler.Encoder do
     |> encode(%Context{})
   end
 
-  # TODO: consider - remove
-  @doc """
-  Escapes chacters which are not allowed in JS identifiers with their Unicode code points.
-
-  Although $ (dollar sign) character is allowed in JS identifiers, we escape it as well,
-  because it is used as a marker for other escaped characters.
-
-  ## Examples
-
-      iex> escape_js_identifier("my_fun?")
-      "my_fun$263"
-  """
-  @spec escape_js_identifier(String.t()) :: String.t()
-  def escape_js_identifier(identifier) do
-    identifier
-    |> String.to_charlist()
-    |> Enum.map_join("", fn code_point ->
-      if allowed_in_js_identifier?(code_point) do
-        to_string([code_point])
-      else
-        digit_count = IntegerUtils.count_digits(code_point)
-        "$#{digit_count}#{code_point}"
-      end
-    end)
-  end
-
   defp aggregate_module_functions(exprs) do
     exprs
     |> Enum.reduce(%{}, fn
@@ -421,23 +394,6 @@ defmodule Hologram.Compiler.Encoder do
     end)
     |> Enum.map(fn {key, value} -> {key, Enum.reverse(value)} end)
   end
-
-  # _ = 95
-  # 0 = 48
-  # 9 = 57
-  # A = 65
-  # Z = 90
-  # a = 97
-  # z = 122
-  defp allowed_in_js_identifier?(code_point)
-
-  defp allowed_in_js_identifier?(code_point)
-       when code_point == 95 or code_point in 48..57 or code_point in 65..90 or
-              code_point in 97..122 do
-    true
-  end
-
-  defp allowed_in_js_identifier?(_code_point), do: false
 
   defp encode_as_array(data, context, encoder \\ &encode/2) do
     data
@@ -587,14 +543,14 @@ defmodule Hologram.Compiler.Encoder do
     "Type.#{type}(#{value})"
   end
 
-  defp encode_var_value(name) do
-    "vars.#{escape_var_name(name)}"
-  end
+  defp encode_var_value(var_name) do
+    var_name = to_string(var_name)
 
-  defp escape_var_name(name) do
-    name
-    |> to_string()
-    |> escape_js_identifier()
+    if String.match?(var_name, ~r/[^a-zA-Z0-9_]+/) do
+      ~s'vars["#{var_name}"]'
+    else
+      "vars.#{var_name}"
+    end
   end
 
   defp has_match_operator?(ir)
