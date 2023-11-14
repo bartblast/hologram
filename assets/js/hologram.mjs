@@ -1,6 +1,7 @@
 "use strict";
 
 import Bitstring from "./bitstring.mjs";
+import Elixir_Kernel from "./elixir/kernel.mjs";
 import HologramBoxedError from "./errors/boxed_error.mjs";
 import HologramInterpreterError from "./errors/interpreter_error.mjs";
 import Interpreter from "./interpreter.mjs";
@@ -23,8 +24,9 @@ export default class Hologram {
   static pageModule = null;
   static pageParams = null;
 
-  // TODO: implement
   static init() {
+    window.Elixir_Kernel = Elixir_Kernel;
+
     window.console.inspect = (term) => Interpreter.inspect(term);
   }
 
