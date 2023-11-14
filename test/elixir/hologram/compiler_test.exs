@@ -323,32 +323,41 @@ defmodule Hologram.CompilerTest do
     assert install_js_deps(@assets_dir) == :ok
   end
 
-  test "list_page_mfas/2" do
-    module_5_ir = IR.for_module(Module5)
-    module_6_ir = IR.for_module(Module6)
-    module_7_ir = IR.for_module(Module7)
+  describe "list_page_mfas/2" do
+    setup do
+      module_5_ir = IR.for_module(Module5)
+      module_6_ir = IR.for_module(Module6)
+      module_7_ir = IR.for_module(Module7)
 
-    call_graph =
-      CallGraph.start()
-      |> CallGraph.build(module_5_ir)
-      |> CallGraph.build(module_6_ir)
-      |> CallGraph.build(module_7_ir)
+      call_graph =
+        CallGraph.start()
+        |> CallGraph.build(module_5_ir)
+        |> CallGraph.build(module_6_ir)
+        |> CallGraph.build(module_7_ir)
 
-    sorted_mfas =
-      call_graph
-      |> list_page_mfas(Module5)
-      |> Enum.sort()
+      [call_graph: call_graph, mfas: list_page_mfas(call_graph, Module5)]
+    end
 
-    assert sorted_mfas == [
-             {Module5, :__layout_module__, 0},
-             {Module5, :__layout_props__, 0},
-             {Module5, :__route__, 0},
-             {Module5, :action, 3},
-             {Module5, :template, 0},
-             {Module6, :action, 3},
-             {Module6, :template, 0},
-             {Module7, :my_fun_7a, 2}
-           ]
+    test "doesn't mutate the call graph given in the argument", %{call_graph: call_graph} do
+      refute CallGraph.has_edge?(call_graph, Module5, {Module5, :action, 3})
+    end
+
+    test "lists MFAs used by the page module which are not included in runtime MFAs", %{
+      mfas: mfas
+    } do
+      sorted_mfas = Enum.sort(mfas)
+
+      assert sorted_mfas == [
+               {Module5, :__layout_module__, 0},
+               {Module5, :__layout_props__, 0},
+               {Module5, :__route__, 0},
+               {Module5, :action, 3},
+               {Module5, :template, 0},
+               {Module6, :action, 3},
+               {Module6, :template, 0},
+               {Module7, :my_fun_7a, 2}
+             ]
+    end
   end
 
   describe "list_runtime_mfas/1" do
@@ -368,7 +377,7 @@ defmodule Hologram.CompilerTest do
       [call_graph: call_graph, mfas: list_runtime_mfas(call_graph)]
     end
 
-    test "doesn't mutated the call graph given in the argument", %{call_graph: call_graph} do
+    test "doesn't mutate the call graph given in the argument", %{call_graph: call_graph} do
       assert CallGraph.has_vertex?(call_graph, {Kernel, :inspect, 1})
     end
 
