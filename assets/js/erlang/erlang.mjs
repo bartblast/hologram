@@ -221,6 +221,23 @@ const Erlang = {
   // end atom_to_binary/1
   // deps: []
 
+  // start atom_to_list/1
+  "atom_to_list/1": (atom) => {
+    if (!Type.isAtom(atom)) {
+      Interpreter.raiseArgumentError(
+        "errors were found at the given arguments:\n\n  * 1st argument: not an atom\n",
+      );
+    }
+
+    const codePoints = [...atom.value].map((cp) =>
+      Type.integer(cp.codePointAt(0)),
+    );
+
+    return Type.list(codePoints);
+  },
+  // end atom_to_list/1
+  // deps: []
+
   // start bit_size/1
   "bit_size/1": (term) => {
     if (!Type.isBitstring(term)) {

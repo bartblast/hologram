@@ -143,6 +143,30 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
     end
   end
 
+  describe "atom_to_list/1" do
+    test "empty atom" do
+      assert :erlang.atom_to_list(:"") == []
+    end
+
+    test "ASCII atom" do
+      assert :erlang.atom_to_list(:abc) == [97, 98, 99]
+    end
+
+    test "Unicode atom" do
+      assert :erlang.atom_to_list(:全息图) == [20840, 24687, 22270]
+    end
+
+    test "not an atom" do
+      assert_raise ArgumentError,
+                   "errors were found at the given arguments:\n\n  * 1st argument: not an atom\n",
+                   fn ->
+                     123
+                     |> build_value()
+                     |> :erlang.atom_to_list()
+                   end
+    end
+  end
+
   describe "bit_size/1" do
     test "bitstring" do
       assert bit_size(<<2::7>>) == 7
