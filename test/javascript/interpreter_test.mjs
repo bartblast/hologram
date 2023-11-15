@@ -1772,6 +1772,18 @@ describe("inspect()", () => {
       });
     });
 
+    describe("string", () => {
+      it("empty text", () => {
+        const result = Interpreter.inspect(Type.string(""), {});
+        assert.equal(result, '""');
+      });
+
+      it("ASCII text", () => {
+        const result = Interpreter.inspect(Type.string("abc"), {});
+        assert.equal(result, '"abc"');
+      });
+    });
+
     describe("tuple", () => {
       it("empty", () => {
         const result = Interpreter.inspect(Type.tuple([]), {});

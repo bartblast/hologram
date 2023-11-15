@@ -67,6 +67,9 @@ defmodule Hologram.ExJsConsistency.Elixir.KernelTest do
       assert Kernel.inspect([1, 2 | 3], []) == "[1, 2 | 3]"
     end
 
+    # Same as "bitstring".
+    # test "string"
+
     test "tuple, empty" do
       assert Kernel.inspect({}, []) == "{}"
     end

@@ -288,6 +288,9 @@ export default class Interpreter {
           );
         }
 
+      case "string":
+        return `"${term.value}"`;
+
       case "tuple":
         return (
           "{" +
