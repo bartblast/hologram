@@ -8,12 +8,12 @@ export default class Renderer {
   // Based on: render_page/2
   static renderPage(pageModule, pageParams, clientsData) {
     const pageModuleRef = Interpreter.module(pageModule);
-    const _layoutModule = pageModuleRef["__layout_module__/0"]();
+    const layoutModule = pageModuleRef["__layout_module__/0"]();
 
     const pageClient = Renderer.#mapFetch(clientsData, Type.bitstring("page"));
     const pageState = Renderer.#mapFetch(pageClient, Type.atom("state"));
 
-    const _layoutPropsDOM = Renderer.#buildLayoutPropsDOM(
+    const layoutPropsDOM = Renderer.#buildLayoutPropsDOM(
       pageModule,
       pageClient,
     );
@@ -25,7 +25,14 @@ export default class Renderer {
       [vars],
     );
 
-    console.inspect(pageDOM);
+    const layoutNode = Type.tuple([
+      Type.atom("component"),
+      layoutModule,
+      layoutPropsDOM,
+      pageDOM,
+    ]);
+
+    console.inspect(layoutNode);
   }
 
   static #aggregateVars(props, state) {
