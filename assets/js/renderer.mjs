@@ -39,7 +39,7 @@ export default class Renderer {
   }
 
   // Based on: render_dom/3
-  static #renderDOM(dom, _context, _slots) {
+  static #renderDOM(dom, context, slots) {
     if (Type.isList(dom)) {
       return "(todo: node list)";
     } else {
@@ -47,7 +47,7 @@ export default class Renderer {
 
       switch (nodeType) {
         case "component":
-          return "(todo: component)";
+          return Renderer.#renderComponentDOM(dom, context, slots);
 
         case "element":
           const tagName = dom.data[0].value;
@@ -76,7 +76,18 @@ export default class Renderer {
     );
   }
 
+  static #expandSlots(dom, slots) {
+    return Elixir_Hologram_Template_Renderer["expand_slots/2"](dom, slots);
+  }
+
   static #mapFetch(map, key) {
     return Elixir_Map["fetch!/2"](map, key);
+  }
+
+  static #renderComponentDOM(dom, _context, slots) {
+    let children = dom.data[3];
+    children = Renderer.#expandSlots(children, slots);
+
+    return "(todo: component)";
   }
 }

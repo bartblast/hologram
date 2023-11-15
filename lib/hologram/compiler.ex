@@ -285,6 +285,7 @@ defmodule Hologram.Compiler do
       # Functions used both on the client and the server.
       {Hologram.Template.Renderer, :aggregate_vars, 2},
       {Hologram.Template.Renderer, :build_layout_props_dom, 2},
+      {Hologram.Template.Renderer, :expand_slots, 2},
 
       # Interpreter.inspect()
       {Kernel, :inspect, 1},
