@@ -5,7 +5,7 @@ import Type from "./type.mjs";
 
 // Based on Hologram.Template.Renderer
 export default class Renderer {
-  // TODO: implement
+  // Based on: render_page/2
   static renderPage(pageModule, pageParams, clientsData) {
     const pageModuleRef = Interpreter.module(pageModule);
     const _layoutModule = pageModuleRef["__layout_module__/0"]();
@@ -19,7 +19,11 @@ export default class Renderer {
     );
 
     const vars = Renderer.#aggregateVars(pageParams, pageState);
-    const pageDOM = pageModuleRef["template/0"](vars);
+
+    const pageDOM = Interpreter.callAnonymousFunction(
+      pageModuleRef["template/0"](),
+      [vars],
+    );
 
     console.inspect(pageDOM);
   }
