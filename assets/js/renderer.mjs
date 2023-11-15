@@ -6,18 +6,24 @@ import Type from "./type.mjs";
 // Based on Hologram.Template.Renderer
 export default class Renderer {
   // TODO: implement
-  static renderPage(pageModule, _pageParams, clientsData) {
+  static renderPage(pageModule, pageParams, clientsData) {
     const _layoutModule =
       Interpreter.module(pageModule)["__layout_module__/0"]();
 
     const pageClient = Renderer.#mapFetch(clientsData, Type.bitstring("page"));
+    const pageState = Renderer.#mapFetch(pageClient, Type.atom("state"));
 
-    const layoutPropsDOM = Renderer.#buildLayoutPropsDOM(
+    const _layoutPropsDOM = Renderer.#buildLayoutPropsDOM(
       pageModule,
       pageClient,
     );
 
-    console.inspect(layoutPropsDOM);
+    const vars = Renderer.#aggregateVars(pageParams, pageState);
+    console.inspect(vars);
+  }
+
+  static #aggregateVars(props, state) {
+    return Elixir_Hologram_Template_Renderer["aggregate_vars/2"](props, state);
   }
 
   static #buildLayoutPropsDOM(pageModule, pageClient) {
