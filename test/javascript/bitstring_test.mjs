@@ -941,7 +941,7 @@ describe("from()", () => {
         },
       );
 
-      const expectedMessage = `construction of binary failed: segment 1 of type 'utf8': expected a non-negative integer encodable as utf8 but got: {"type":"bitstring","bits":{"0":0,"1":1,"2":1,"3":0,"4":0,"5":0,"6":0,"7":1}}`;
+      const expectedMessage = `construction of binary failed: segment 1 of type 'utf8': expected a non-negative integer encodable as utf8 but got: "a"`;
 
       assertBoxedError(
         () => Bitstring.from([segment]),
@@ -1008,7 +1008,7 @@ describe("from()", () => {
         type: "utf8",
       });
 
-      const expectedMessage = `construction of binary failed: segment 1 of type 'utf8': expected a non-negative integer encodable as utf8 but got: {"type":"bitstring","bits":{"0":0,"1":1,"2":1,"3":0,"4":0,"5":0,"6":0,"7":1,"8":0,"9":1,"10":1,"11":0,"12":0,"13":0,"14":1,"15":0,"16":0,"17":1,"18":1,"19":0,"20":0,"21":0,"22":1,"23":1}}`;
+      const expectedMessage = `construction of binary failed: segment 1 of type 'utf8': expected a non-negative integer encodable as utf8 but got: "abc"`;
 
       assertBoxedError(
         () => Bitstring.from([segment]),
@@ -1028,7 +1028,7 @@ describe("from()", () => {
         },
       );
 
-      const expectedMessage = `construction of binary failed: segment 1 of type 'utf16': expected a non-negative integer encodable as utf16 but got: {"type":"bitstring","bits":{"0":0,"1":1,"2":1,"3":0,"4":0,"5":0,"6":0,"7":1}}`;
+      const expectedMessage = `construction of binary failed: segment 1 of type 'utf16': expected a non-negative integer encodable as utf16 but got: "a"`;
 
       assertBoxedError(
         () => Bitstring.from([segment]),
@@ -1099,7 +1099,7 @@ describe("from()", () => {
         type: "utf16",
       });
 
-      const expectedMessage = `construction of binary failed: segment 1 of type 'utf16': expected a non-negative integer encodable as utf16 but got: {"type":"bitstring","bits":{"0":0,"1":1,"2":1,"3":0,"4":0,"5":0,"6":0,"7":1,"8":0,"9":1,"10":1,"11":0,"12":0,"13":0,"14":1,"15":0,"16":0,"17":1,"18":1,"19":0,"20":0,"21":0,"22":1,"23":1}}`;
+      const expectedMessage = `construction of binary failed: segment 1 of type 'utf16': expected a non-negative integer encodable as utf16 but got: "abc"`;
 
       assertBoxedError(
         () => Bitstring.from([segment]),
@@ -1115,7 +1115,7 @@ describe("from()", () => {
         type: "utf32",
       });
 
-      const expectedMessage = `construction of binary failed: segment 1 of type 'utf32': expected a non-negative integer encodable as utf32 but got: {"type":"bitstring","bits":{"0":0,"1":1,"2":1,"3":0,"4":0,"5":0,"6":0,"7":1,"8":0,"9":1,"10":1,"11":0,"12":0,"13":0,"14":1,"15":0,"16":0,"17":1,"18":1,"19":0,"20":0,"21":0,"22":1,"23":1}}`;
+      const expectedMessage = `construction of binary failed: segment 1 of type 'utf32': expected a non-negative integer encodable as utf32 but got: "abc"`;
 
       assertBoxedError(
         () => Bitstring.from([segment]),
