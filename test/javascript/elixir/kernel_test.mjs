@@ -28,34 +28,22 @@ describe("inspect/2", () => {
 
   describe("atom", () => {
     it("true", () => {
-      const result = Elixir_Kernel["inspect/2"](
-        Type.boolean(true),
-        Type.list([]),
-      );
-
+      const result = Elixir_Kernel["inspect/2"](Type.boolean(true), opts);
       assert.deepStrictEqual(result, Type.bitstring("true"));
     });
 
     it("false", () => {
-      const result = Elixir_Kernel["inspect/2"](
-        Type.boolean(false),
-        Type.list([]),
-      );
-
+      const result = Elixir_Kernel["inspect/2"](Type.boolean(false), opts);
       assert.deepStrictEqual(result, Type.bitstring("false"));
     });
 
     it("nil", () => {
-      const result = Elixir_Kernel["inspect/2"](Type.nil(), Type.list([]));
+      const result = Elixir_Kernel["inspect/2"](Type.nil(), opts);
       assert.deepStrictEqual(result, Type.bitstring("nil"));
     });
 
     it("non-boolean and non-nil", () => {
-      const result = Elixir_Kernel["inspect/2"](
-        Type.atom("abc"),
-        Type.list([]),
-      );
-
+      const result = Elixir_Kernel["inspect/2"](Type.atom("abc"), opts);
       assert.deepStrictEqual(result, Type.bitstring(":abc"));
     });
 
