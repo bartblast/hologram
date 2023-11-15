@@ -29,5 +29,13 @@ defmodule Hologram.ExJsConsistency.Elixir.KernelTest do
     test "atom, non-boolean and non-nil" do
       assert Kernel.inspect(:abc, []) == ":abc"
     end
+
+    test "float, integer-representable" do
+      assert Kernel.inspect(123.0, []) == "123.0"
+    end
+
+    test "float, not integer-representable" do
+      assert Kernel.inspect(123.45, []) == "123.45"
+    end
   end
 end

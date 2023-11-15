@@ -22,12 +22,13 @@ const Elixir_Kernel = {
         }
         break;
 
-      // case "float":
-      //   if (Number.isInteger(term.value)) {
-      //     output = term.value.toString() + ".0";
-      //   } else {
-      //     output = term.value.toString();
-      //   }
+      case "float":
+        if (Number.isInteger(term.value)) {
+          output = term.value.toString() + ".0";
+        } else {
+          output = term.value.toString();
+        }
+        break;
 
       // case "integer":
       //   output = term.value.toString();

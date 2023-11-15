@@ -24,6 +24,8 @@ describe("inspect/1", () => {
 });
 
 describe("inspect/2", () => {
+  const opts = Type.list([]);
+
   describe("atom", () => {
     it("true", () => {
       const result = Elixir_Kernel["inspect/2"](
@@ -55,6 +57,18 @@ describe("inspect/2", () => {
       );
 
       assert.deepStrictEqual(result, Type.bitstring(":abc"));
+    });
+
+    describe("float", () => {
+      it("integer-representable", () => {
+        const result = Elixir_Kernel["inspect/2"](Type.float(123.0), opts);
+        assert.deepStrictEqual(result, Type.bitstring("123.0"));
+      });
+
+      it("not integer-representable", () => {
+        const result = Elixir_Kernel["inspect/2"](Type.float(123.45), opts);
+        assert.deepStrictEqual(result, Type.bitstring("123.45"));
+      });
     });
   });
 
