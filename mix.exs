@@ -39,6 +39,7 @@ defmodule Hologram.MixProject do
       {:credo, "~> 1.0", only: [:dev, :test], runtime: false},
       {:dialyxir, "~> 1.0", only: [:dev, :test], runtime: false},
       {:doctor, "~> 0.21", only: [:dev, :test], runtime: false},
+      {:ex_check, "~> 0.15", only: [:dev, :test], runtime: false},
       {:interceptor, "~> 0.5"},
       {:libgraph, "~> 0.16"},
       {:mix_audit, "~> 2.0", only: [:dev, :test], runtime: false},
