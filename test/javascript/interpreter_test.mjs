@@ -1703,6 +1703,29 @@ describe("inspect()", () => {
       assert.deepStrictEqual(result, ":abc");
     });
 
+    describe("bitstring", () => {
+      it("empty text", () => {
+        const result = Interpreter.inspect(Type.bitstring(""), {});
+        assert.equal(result, '""');
+      });
+
+      it("ASCII text", () => {
+        const result = Interpreter.inspect(Type.bitstring("abc"), {});
+        assert.equal(result, '"abc"');
+      });
+
+      it("Unicode text", () => {
+        const result = Interpreter.inspect(Type.bitstring("全息图"), {});
+        assert.equal(result, '"全息图"');
+      });
+
+      // TODO: remove when all types are supported
+      it("not text", () => {
+        const result = Interpreter.inspect(Type.bitstring([1, 0, 1]), {});
+        assert.equal(result, '{"type":"bitstring","bits":{"0":1,"1":0,"2":1}}');
+      });
+    });
+
     describe("float", () => {
       it("integer-representable", () => {
         const result = Interpreter.inspect(Type.float(123.0), {});

@@ -31,6 +31,18 @@ defmodule Hologram.ExJsConsistency.Elixir.KernelTest do
       assert Kernel.inspect(:abc, []) == ":abc"
     end
 
+    test "bitstring, empty text" do
+      assert Kernel.inspect("", []) == ~s'""'
+    end
+
+    test "bitstring, ASCII text" do
+      assert Kernel.inspect("abc", []) == ~s'"abc"'
+    end
+
+    test "bitstring, Unicode text" do
+      assert Kernel.inspect("全息图", []) == ~s'"全息图"'
+    end
+
     test "float, integer-representable" do
       assert Kernel.inspect(123.0, []) == "123.0"
     end

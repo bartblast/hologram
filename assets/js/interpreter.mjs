@@ -250,6 +250,13 @@ export default class Interpreter {
         }
         return ":" + term.value;
 
+      case "bitstring":
+        if (Bitstring.isText(term)) {
+          return '"' + Bitstring.toText(term) + '"';
+        }
+        // TODO: support bitstrings which are not text
+        return Interpreter.serialize(term);
+
       case "float":
         if (Number.isInteger(term.value)) {
           return term.value.toString() + ".0";
@@ -280,9 +287,6 @@ export default class Interpreter {
             "]"
           );
         }
-
-      // case "string":
-      //   return '"' + term.value.toString() + '"';
 
       case "tuple":
         return (
