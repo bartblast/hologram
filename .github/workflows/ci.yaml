@@ -170,7 +170,7 @@ jobs:
 
   feature_tests:
     runs-on: ubuntu-latest
-    name: Feature Test on OTP ${{ matrix.otp }} / Elixir ${{ matrix.elixir }}
+    name: Feature Tests on OTP ${{ matrix.otp }} / Elixir ${{ matrix.elixir }}
     defaults:
       run:
         working-directory: test/features
