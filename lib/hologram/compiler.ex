@@ -190,21 +190,6 @@ defmodule Hologram.Compiler do
     {digest, bundle_file_with_digest, source_map_file_with_digest}
   end
 
-  # sobelow_skip ["CI.System"]
-  defp format_entry_file(entry_file, opts) do
-    cmd = [
-      entry_file,
-      "--config=#{opts[:js_formatter_config_path]}",
-      # "none" is not a valid path or a flag value,
-      # any non-existing path would work the same here, i.e. disable "ignore" functionality.
-      "--ignore-path=none",
-      "--no-error-on-unmatched-pattern",
-      "--write"
-    ]
-
-    System.cmd(opts[:js_formatter_bin_path], cmd, env: [])
-  end
-
   @doc """
   Compares two module digest PLTs and returns the added, removed, and updated modules lists.
   """
@@ -241,6 +226,14 @@ defmodule Hologram.Compiler do
   end
 
   @doc """
+  Groups the given MFAs by module.
+  """
+  @spec group_mfas_by_module(list(mfa)) :: %{module => mfa}
+  def group_mfas_by_module(mfas) do
+    Enum.group_by(mfas, fn {module, _function, _arity} -> module end)
+  end
+
+  @doc """
   Installs JavaScript deps specified in package.json located in the given dir.
   """
   @spec install_js_deps(String.t()) :: :ok
@@ -271,14 +264,6 @@ defmodule Hologram.Compiler do
     |> CallGraph.reachable(page_module)
     |> Enum.filter(&is_tuple/1)
     |> Kernel.--(runtime_mfas)
-  end
-
-  @doc """
-  Groups the given MFAs by module.
-  """
-  @spec group_mfas_by_module(list(mfa)) :: %{module => mfa}
-  def group_mfas_by_module(mfas) do
-    Enum.group_by(mfas, fn {module, _function, _arity} -> module end)
   end
 
   @doc """
@@ -415,6 +400,21 @@ defmodule Hologram.Compiler do
 
   defp filter_erlang_mfas(mfas) do
     Enum.filter(mfas, fn {module, _function, _arity} -> !Reflection.alias?(module) end)
+  end
+
+  # sobelow_skip ["CI.System"]
+  defp format_entry_file(entry_file, opts) do
+    cmd = [
+      entry_file,
+      "--config=#{opts[:js_formatter_config_path]}",
+      # "none" is not a valid path or a flag value,
+      # any non-existing path would work the same here, i.e. disable "ignore" functionality.
+      "--ignore-path=none",
+      "--no-error-on-unmatched-pattern",
+      "--write"
+    ]
+
+    System.cmd(opts[:js_formatter_bin_path], cmd, env: [])
   end
 
   defp mapset_from_plt(plt) do
