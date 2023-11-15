@@ -76,17 +76,40 @@ export default class Renderer {
     );
   }
 
+  static #castProps(propsDOM, module) {
+    return Elixir_Hologram_Template_Renderer["cast_props/2"](propsDOM, module);
+  }
+
   static #expandSlots(dom, slots) {
     return Elixir_Hologram_Template_Renderer["expand_slots/2"](dom, slots);
+  }
+
+  static #injectContextProps(propsFromTemplate, module, context) {
+    return Elixir_Hologram_Template_Renderer["inject_context_props/3"](
+      propsFromTemplate,
+      module,
+      context,
+    );
   }
 
   static #mapFetch(map, key) {
     return Elixir_Map["fetch!/2"](map, key);
   }
 
-  static #renderComponentDOM(dom, _context, slots) {
+  static #renderComponentDOM(dom, context, slots) {
+    const module = dom.data[1];
+    const propsDOM = dom.data[2];
     let children = dom.data[3];
+
     children = Renderer.#expandSlots(children, slots);
+
+    const props = Renderer.#injectContextProps(
+      Renderer.#castProps(propsDOM, module),
+      module,
+      context,
+    );
+
+    console.inspect(props);
 
     return "(todo: component)";
   }

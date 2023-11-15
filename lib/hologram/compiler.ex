@@ -288,7 +288,7 @@ defmodule Hologram.Compiler do
       {Hologram.Template.Renderer, :cast_props, 2},
       {Hologram.Template.Renderer, :expand_slots, 2},
       {Hologram.Template.Renderer, :has_id_prop?, 1},
-      {Hologram.Template.Renderer, :inject_context_props, 2},
+      {Hologram.Template.Renderer, :inject_context_props, 3},
 
       # Interpreter.inspect()
       {Kernel, :inspect, 1},
